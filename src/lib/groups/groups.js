@@ -229,11 +229,22 @@ export function buildGroupsListTemplate(existing, change) {
     groups.push(target);
   }
 
+  // The host's `r` (server) tag rides along with every add: Armada and
+  // Flotilla build their server rails from `r` tags ONLY, so a `group` entry
+  // without its host's `r` tag is invisible there (laoc, 2026-08-19).
+  // Deduped against existing spellings; never removed here — dropping one
+  // group says nothing about whether the user still wants the server.
+  const tags = [...keepTags];
+  if (change.add) {
+    const serverUrl = normal(change.add.relay);
+    const hasServer = tags.some((t) => t[0] === 'r' && normal(t[1]) === serverUrl);
+    if (!hasServer) tags.push(['r', serverUrl]);
+  }
   return {
     kind: GROUPS_LIST_KIND,
     content: existing?.content ?? '',
     created_at: Math.floor(Date.now() / 1000),
-    tags: [...keepTags, ...groups.map((g) => ['group', g.id, g.relay])]
+    tags: [...tags, ...groups.map((g) => ['group', g.id, g.relay])]
   };
 }
 

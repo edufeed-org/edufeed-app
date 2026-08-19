@@ -78,6 +78,9 @@ vi.mock('$lib/groups/group-management.js', () => ({
 const attachGroupChannel = vi.hoisted(() => vi.fn(async (/** @type {any} */ _args) => ({})));
 vi.mock('$lib/groups/community-attach.js', () => ({ attachGroupChannel }));
 
+const updatePersonalGroupsList = vi.hoisted(() => vi.fn(async () => {}));
+vi.mock('$lib/groups/personal-groups-list.js', () => ({ updatePersonalGroupsList }));
+
 const relayConnStub = { publish: vi.fn(), request: vi.fn() };
 const poolRelaySpy = vi.hoisted(() => vi.fn());
 vi.mock('$lib/stores/nostr-infrastructure.svelte', () => ({
@@ -507,6 +510,11 @@ describe('ChannelCreateWizard — NIP-29 groups', () => {
     await waitFor(() => expect(onCreated).toHaveBeenCalled());
     // put-user built for the selected invitee.
     expect(buildPutUserTemplate).toHaveBeenCalledWith('new-group-id', MEMBER_B);
+    // The creator's kind-10009 mirrors the fresh channel (r + group tags) —
+    // that's what makes it visible in Armada/Flotilla.
+    expect(updatePersonalGroupsList).toHaveBeenCalledWith(mockManager.active, {
+      add: { id: 'new-group-id', relay: GROUP_RELAY }
+    });
   });
 
   it('mixed-relay pointers: aborts with the shared-relay error toast, never calls create', async () => {

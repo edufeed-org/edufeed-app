@@ -28,6 +28,7 @@
     buildPutUserTemplate
   } from '$lib/groups/group-management.js';
   import { attachGroupChannel } from '$lib/groups/community-attach.js';
+  import { updatePersonalGroupsList } from '$lib/groups/personal-groups-list.js';
   import { pool } from '$lib/stores/nostr-infrastructure.svelte';
   import { unique } from '$lib/helpers/unique.js';
   import ProfileAvatar from '$lib/components/shared/ProfileAvatar.svelte';
@@ -267,6 +268,11 @@
           pointer: { id, relay, name: name.trim(), access },
           communitySigner
         });
+        // Mirror the fresh channel into the CREATOR's kind-10009 list —
+        // Armada/Flotilla build their UIs from it (r + group tags), and a
+        // created-but-unlisted group is invisible there (laoc, 2026-08-19).
+        // Best-effort: the channel exists and is attached either way.
+        await updatePersonalGroupsList(user, { add: { id, relay } }).catch(() => {});
       } catch (error) {
         console.error('groups: attach failed after group creation', error);
         showToast(m.wizard_attach_failed({ id }), 'warning');

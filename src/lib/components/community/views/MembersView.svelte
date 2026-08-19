@@ -33,7 +33,6 @@
     /** @type {Set<string>} */ (new Set())
   );
   let areaMembers = $derived([...getAreaMemberSet()]);
-  let mergedMembers = $derived(unique([...memberData.allMembers, ...areaMembers]));
 
   const getProfiles = useProfileMap(() => mergedMembers);
   let profiles = $derived(getProfiles());
@@ -47,6 +46,15 @@
   let communityType = $derived(deriveCommunityType(communikeyEvent));
   let isModerated = $derived(communityType === 'moderated');
   const getRootRoster = useRootRoster(() => communikeyEvent);
+
+  // Moderated: the ROOT-group roster IS the community membership — it must
+  // be listed even when no content section is gated (laoc, 2026-08-19: an
+  // all-"Alle" moderated community showed only the owner and claimed to be
+  // an open community).
+  let rosterMembers = $derived(isModerated ? [...getRootRoster().members] : []);
+  let mergedMembers = $derived(
+    unique([...memberData.allMembers, ...areaMembers, ...rosterMembers])
+  );
 
   /**
    * Role chips for a pubkey in a moderated community (bare admins show
@@ -108,7 +116,9 @@
             ? m.community_members_closed_community()
             : hasArea
               ? m.community_members_area_note()
-              : m.community_members_open_community()}
+              : isModerated
+                ? m.community_members_moderated_community()
+                : m.community_members_open_community()}
         </p>
       </div>
     </div>

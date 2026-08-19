@@ -177,6 +177,19 @@ describe('GroupMembersModal rendering', () => {
 });
 
 describe('GroupMembersModal admin actions', () => {
+  // MembershipPane hangs the members-tier channel fan-out on this hook — it
+  // must fire after every successful putUser, with that pubkey. Driven via
+  // promote here because it shares the exact putUser pipeline with add.
+  it('a successful put-user invokes onMemberAdded with the pubkey', async () => {
+    const onMemberAdded = vi.fn();
+    const { container } = renderModal({ onMemberAdded });
+    const promoteBtn = container.querySelector(
+      `[data-testid="member-promote"][data-pubkey="${MEMBER_A}"]`
+    );
+    await fireEvent.click(/** @type {Element} */ (promoteBtn));
+    await waitFor(() => expect(onMemberAdded).toHaveBeenCalledWith(MEMBER_A));
+  });
+
   it('promote publishes put-user with [admin] and refreshes the roster', async () => {
     const { container, onRosterChanged } = renderModal();
 

@@ -198,10 +198,43 @@ describe('join/leave request templates', () => {
 describe('buildGroupsListTemplate', () => {
   const pointer = { relay: 'wss://groups.example.com/', id: 'beechat' };
 
-  it('adds a group tag to an empty list (kind 10009)', () => {
+  // The `r` server tag rides along with every add: Armada's rail (and
+  // Flotilla's) is built from `r` tags ONLY — a `group` entry without its
+  // host's `r` tag is invisible there (laoc, 2026-08-19: joined channels
+  // never appeared in Armada).
+  it('adds a group tag AND the host r tag to an empty list (kind 10009)', () => {
     const template = buildGroupsListTemplate(null, { add: pointer });
     expect(template.kind).toBe(10009);
-    expect(template.tags).toEqual([['group', 'beechat', 'wss://groups.example.com/']]);
+    expect(template.tags).toContainEqual(['group', 'beechat', 'wss://groups.example.com/']);
+    expect(template.tags).toContainEqual(['r', 'wss://groups.example.com/']);
+  });
+
+  it('does not duplicate an r tag the list already carries, across spellings', () => {
+    const existing = {
+      kind: 10009,
+      pubkey: ME,
+      content: '',
+      created_at: 1,
+      tags: [['r', 'wss://groups.example.com']]
+    };
+    const template = buildGroupsListTemplate(existing, { add: pointer });
+    expect(template.tags.filter((t) => t[0] === 'r')).toHaveLength(1);
+  });
+
+  it('keeps the r tag when a group is removed — the server stays added', () => {
+    const existing = {
+      kind: 10009,
+      pubkey: ME,
+      content: '',
+      created_at: 1,
+      tags: [
+        ['r', 'wss://groups.example.com/'],
+        ['group', 'beechat', 'wss://groups.example.com/']
+      ]
+    };
+    const removed = buildGroupsListTemplate(existing, { remove: pointer });
+    expect(removed.tags).toContainEqual(['r', 'wss://groups.example.com/']);
+    expect(removed.tags.some((t) => t[0] === 'group')).toBe(false);
   });
 
   it('preserves existing group tags, dedupes on re-add, and removes on remove', () => {
@@ -217,7 +250,9 @@ describe('buildGroupsListTemplate', () => {
     };
     const readd = buildGroupsListTemplate(existing, { add: pointer });
     expect(readd.tags.filter((t) => t[1] === 'beechat')).toHaveLength(1);
-    expect(readd.tags).toHaveLength(2);
+    // other + beechat group tags, plus the add's r server tag
+    expect(readd.tags).toHaveLength(3);
+    expect(readd.tags).toContainEqual(['r', 'wss://groups.example.com/']);
 
     const removed = buildGroupsListTemplate(existing, { remove: pointer });
     expect(removed.tags).toEqual([['group', 'other', 'wss://other.example/']]);
@@ -235,7 +270,10 @@ describe('buildGroupsListTemplate', () => {
       tags: [['group', 'beechat', 'wss://groups.example.com']]
     };
     const readd = buildGroupsListTemplate(existing, { add: pointer });
-    expect(readd.tags).toEqual([['group', 'beechat', 'wss://groups.example.com/']]);
+    expect(readd.tags).toEqual([
+      ['r', 'wss://groups.example.com/'],
+      ['group', 'beechat', 'wss://groups.example.com/']
+    ]);
 
     const removed = buildGroupsListTemplate(existing, {
       remove: { id: 'beechat', relay: 'wss://groups.example.com/' }

@@ -103,6 +103,33 @@ export function fanOutPlan({ pubkey, pointers, membersByKey, adminsByKey = {} })
   });
 }
 
+/**
+ * The full repair plan for a community: every (channel, member) pair where a
+ * ROOT-roster member is missing from a members-tier channel's answered
+ * roster. Invite-code joiners land on the root group with no admin around to
+ * fan them out (laoc, 2026-08-19) — an admin runs this plan later instead.
+ * Built on fanOutPlan, so unanswered rosters are never planned against.
+ * @param {{
+ *   members: string[],
+ *   pointers: any[],
+ *   membersByKey: Record<string, Set<string>>,
+ *   adminsByKey?: Record<string, import('applesauce-common/helpers/groups').GroupAdmin[]>
+ * }} args
+ * @returns {Array<{pointer: any, pubkey: string}>}
+ */
+export function reconcilePlan({ members, pointers, membersByKey, adminsByKey = {} }) {
+  /** @type {Array<{pointer: any, pubkey: string}>} */
+  const plan = [];
+  for (const pointer of pointers) {
+    for (const pubkey of members) {
+      if (fanOutPlan({ pubkey, pointers: [pointer], membersByKey, adminsByKey }).length > 0) {
+        plan.push({ pointer, pubkey });
+      }
+    }
+  }
+  return plan;
+}
+
 /** @param {Array<{key: string, ok: boolean}>} results */
 export function aggregateFanOut(results) {
   return {

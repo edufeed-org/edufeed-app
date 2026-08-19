@@ -34,6 +34,10 @@
     generateInviteCode,
     publishToGroupRelay
   } from '$lib/groups/group-management.js';
+  import { stufe2Pointers, fanOutPlan } from '$lib/groups/area-members.js';
+  import { useChannelRosters } from '$lib/groups/channel-rosters.svelte.js';
+  import { channelKey } from '$lib/groups/community-pointer.js';
+  import { putUserOn, fanOut } from '$lib/groups/roster-fanout.js';
   import GroupMembersModal from '$lib/components/groups/GroupMembersModal.svelte';
   import * as m from '$lib/paraglide/messages';
 
@@ -67,6 +71,40 @@
   });
 
   let showMembersModal = $state(false);
+
+  // Members-tier channel rosters — the fan-out targets when an admin adds a
+  // member here. A channel's roster only counts once it has ANSWERED
+  // (fanOutPlan skips unanswered ones), so a slow roster is skipped, never
+  // double-added; the session reconcile (roster-reconcile.svelte.js) sweeps
+  // up whatever this pass had to skip.
+  const getChannelRosters = useChannelRosters(() => stufe2Pointers(communikeyEvent));
+
+  /** @param {string} pubkey */
+  async function fanOutNewMember(pubkey) {
+    const user = activeUser;
+    if (!user) return;
+    const targets = fanOutPlan({
+      pubkey,
+      pointers: stufe2Pointers(communikeyEvent),
+      membersByKey: getChannelRosters().membersByKey,
+      adminsByKey: getChannelRosters().adminsByKey
+    });
+    if (targets.length === 0) return;
+    const aggregate = await fanOut(
+      targets,
+      (pointer) => channelKey(pointer) ?? pointer.id,
+      (pointer) => putUserOn(pointer, pubkey, [], /** @type {any} */ (user))
+    );
+    if (aggregate.failed.length > 0) {
+      showToast(
+        m.area_members_fanout_partial({
+          failed: aggregate.failed.length,
+          total: targets.length
+        }),
+        'warning'
+      );
+    }
+  }
 
   // --- Invite code minting -------------------------------------------------
 
@@ -186,6 +224,7 @@
       {isAdmin}
       {roleOptions}
       onRosterChanged={roster.refresh}
+      onMemberAdded={fanOutNewMember}
       onClose={() => (showMembersModal = false)}
     />
   {/if}

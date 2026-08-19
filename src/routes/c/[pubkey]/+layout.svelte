@@ -29,6 +29,7 @@
   import { buildChannelRows } from '$lib/groups/community-channel-rows.js';
   import { useChannelMetadata } from '$lib/groups/channel-metadata.svelte.js';
   import { useRootRoster } from '$lib/groups/root-roster.svelte.js';
+  import { useRosterReconcile } from '$lib/groups/roster-reconcile.svelte.js';
   import { useActiveUser } from '$lib/stores/accounts.svelte';
   import { isCommunityOwner } from '$lib/helpers/community-signer.js';
   import { resolveZoneMembership } from '$lib/components/community/layout/community-nav.js';
@@ -215,6 +216,10 @@
   // `useRootRoster` no-ops harmlessly for an open community (no membership
   // pointer → null pointer → isMember() always false).
   const getRootRosterForNav = useRootRoster(() => communikeyEvent);
+  // Owner/admin-side roster reconcile (see the hook's header): whenever an
+  // admin opens a moderated community, invite-code joiners missing from
+  // members-tier channels are silently fanned out. Idles for everyone else.
+  useRosterReconcile(() => communikeyEvent);
   const getActiveUserForNav = useActiveUser();
   const zoneMember = $derived.by(() => {
     const activeUser = getActiveUserForNav();

@@ -36,6 +36,7 @@
    *   isAdmin: boolean,
    *   roleOptions?: string[],
    *   onRosterChanged?: () => void,
+   *   onMemberAdded?: ((pubkey: string) => void | Promise<void>) | null,
    *   onClose: () => void
    * }}
    */
@@ -48,7 +49,8 @@
     isAdmin,
     roleOptions = [],
     onRosterChanged,
-    onClose
+    onClose,
+    onMemberAdded = null
   } = $props();
 
   const getActiveUser = useActiveUser();
@@ -71,6 +73,10 @@
         user
       );
       onRosterChanged?.();
+      // AFTER the roster refresh kick-off: the caller may fan the fresh
+      // member out to further groups (MembershipPane → members-tier
+      // channels); a failing fan-out must not mask the successful add.
+      await onMemberAdded?.(pubkey);
     } catch (err) {
       console.error('groups: put-user failed', err);
       showToast(m.groups_members_action_failed(), 'error');

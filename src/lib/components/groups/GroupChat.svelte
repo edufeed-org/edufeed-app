@@ -48,6 +48,7 @@
   import { relayHref, relayLabel } from '$lib/groups/relay-directory.js';
   import { authenticateOnce, isRestrictedError } from '$lib/groups/relay-auth.js';
   import GroupBadges from '$lib/components/groups/GroupBadges.svelte';
+  import { PeopleIcon } from '$lib/components/icons';
   import GroupMembersModal from '$lib/components/groups/GroupMembersModal.svelte';
   import GroupSettingsSheet from '$lib/components/groups/GroupSettingsSheet.svelte';
   import { useRelayInformation } from '$lib/groups/relay-information.svelte.js';
@@ -615,20 +616,25 @@
              is another relay. -->
         <a href={relayHref(pointer.relay)} data-testid="group-host-link" class="link link-hover"
           >{relayLabel(pointer.relay)}</a
-        >{#if members.size || isAdmin}
-          <button
-            type="button"
-            class="link link-hover"
-            data-testid="group-members-open"
-            onclick={() => (membersOpen = true)}
-          >
-            {#if members.size}{` · ${members.size}`}{/if}
-          </button>
-        {/if}
-        {#if metadata?.about}&nbsp;— {metadata.about}{/if}
+        >{#if metadata?.about}&nbsp;— {metadata.about}{/if}
       </p>
       <GroupBadges access={accessBadges} host={hostBadges} class="mt-1" />
     </div>
+    {#if rosterAnswered}
+      <!-- Concord parity (ChannelChat's members button): the roster door,
+        with the count once there is one. Was a near-invisible "· N" text
+        link that rendered NOTHING while the roster was empty
+        (laoc, 2026-08-19). View-only for non-admins. -->
+      <button
+        type="button"
+        class="btn btn-ghost btn-xs"
+        data-testid="group-members-open"
+        onclick={() => (membersOpen = true)}
+      >
+        <PeopleIcon class_="w-4 h-4" title="" />
+        {#if members.size}{members.size}{/if}
+      </button>
+    {/if}
     {#if isAdmin}
       <button
         type="button"

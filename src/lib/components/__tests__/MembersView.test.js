@@ -17,6 +17,7 @@ vi.mock('$lib/paraglide/messages', () => ({
   community_members_title: () => 'Members',
   community_members_loading: () => 'Loading members...',
   community_members_open_community: () => 'This is an open community.',
+  community_members_moderated_community: () => 'This is a moderated community.',
   community_members_owner_badge: () => 'Owner',
   community_members_count: (/** @type {{count: number}} */ { count }) => `${count} members`,
   community_members_all_sections: () => 'All content sections',
@@ -52,7 +53,9 @@ const holders = vi.hoisted(() => ({
   /** @type {any} */
   areaCommunity: null,
   /** @type {Set<string> | null} */
-  areaMembers: null
+  areaMembers: null,
+  /** @type {Set<string>} */
+  members: new Set()
 }));
 
 vi.mock('svelte', async (importOriginal) => {
@@ -68,7 +71,7 @@ vi.mock('$lib/groups/root-roster.svelte.js', () => ({
   useRootRoster: () => () => ({
     pointer: null,
     refresh: vi.fn(),
-    members: new Set(),
+    members: holders.members,
     admins: holders.admins,
     isLoading: false,
     isMember: () => false,
@@ -103,6 +106,7 @@ beforeEach(() => {
   holders.admins = [];
   holders.areaCommunity = null;
   holders.areaMembers = null;
+  holders.members = new Set();
 });
 
 describe('MembersView — open community (unchanged)', () => {
@@ -115,6 +119,19 @@ describe('MembersView — open community (unchanged)', () => {
 });
 
 describe('MembersView — moderated community', () => {
+  // The ROOT roster IS the membership — it must be listed even when no
+  // content section is gated, and the banner must not claim "open community"
+  // (laoc, 2026-08-19: an all-"Alle" moderated community showed only the
+  // owner and "jeder kann beitragen").
+  it('lists root-roster members without gated sections, with the moderated banner', () => {
+    holders.admins = [{ pubkey: OWNER, roles: [] }];
+    holders.members = new Set([OWNER, ADMIN, REGULAR]);
+    render(MembersView, { props: { communikeyEvent: MODERATED_EVENT_OWNER_ONLY } });
+    expect(screen.queryByText('This is an open community.')).toBeNull();
+    const cards = screen.getAllByTestId('member-row');
+    expect(cards.length).toBeGreaterThanOrEqual(3);
+  });
+
   it('shows an admin chip on the owner-only branch for a bare (roles=[]) admin', () => {
     holders.admins = [{ pubkey: OWNER, roles: [] }];
     render(MembersView, { props: { communikeyEvent: MODERATED_EVENT_OWNER_ONLY } });

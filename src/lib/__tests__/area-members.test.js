@@ -4,7 +4,8 @@ import {
   stufe2Pointers,
   areaMemberRows,
   fanOutPlan,
-  aggregateFanOut
+  aggregateFanOut,
+  reconcilePlan
 } from '$lib/groups/area-members.js';
 import { channelKey } from '$lib/groups/community-pointer.js';
 
@@ -118,5 +119,52 @@ describe('aggregateFanOut', () => {
         { key: k2, ok: false }
       ])
     ).toEqual({ ok: [k1], failed: [k2] });
+  });
+});
+
+describe('reconcilePlan', () => {
+  const RELAY = 'wss://groups.example/';
+  const A = 'a'.repeat(64);
+  const B = 'b'.repeat(64);
+  const chan1 = { id: 'chan1', relay: RELAY };
+  const chan2 = { id: 'chan2', relay: RELAY };
+  const k = (/** @type {any} */ p) => /** @type {string} */ (channelKey(p));
+
+  // Community members who joined AFTER a members-tier channel was created
+  // (invite code: the relay adds them to the ROOT group, no admin around to
+  // fan out) are missing from the channel rosters — the plan is every
+  // (channel, member) pair an admin needs to put-user (laoc, 2026-08-19).
+  it('pairs every root member missing from an answered channel roster', () => {
+    const plan = reconcilePlan({
+      members: [A, B],
+      pointers: [chan1, chan2],
+      membersByKey: { [k(chan1)]: new Set([A]), [k(chan2)]: new Set() },
+      adminsByKey: {}
+    });
+    expect(plan).toEqual([
+      { pointer: chan1, pubkey: B },
+      { pointer: chan2, pubkey: A },
+      { pointer: chan2, pubkey: B }
+    ]);
+  });
+
+  it('never plans against a roster that has not answered ("no answer" is not "not a member")', () => {
+    const plan = reconcilePlan({
+      members: [A],
+      pointers: [chan1],
+      membersByKey: {},
+      adminsByKey: {}
+    });
+    expect(plan).toEqual([]);
+  });
+
+  it('counts channel admins as present', () => {
+    const plan = reconcilePlan({
+      members: [A],
+      pointers: [chan1],
+      membersByKey: { [k(chan1)]: new Set() },
+      adminsByKey: { [k(chan1)]: [{ pubkey: A, roles: ['admin'] }] }
+    });
+    expect(plan).toEqual([]);
   });
 });

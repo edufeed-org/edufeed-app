@@ -56,6 +56,25 @@ const {
   };
 });
 
+const { putUserOn, fanOut, channelRostersState } = vi.hoisted(() => ({
+  putUserOn: vi.fn(async (/** @type {any} */ _p, /** @type {string} */ _pk) => ({})),
+  // Real aggregate shape; every item "succeeds" so the pane stays quiet.
+  fanOut: vi.fn(
+    async (/** @type {any[]} */ items, /** @type {any} */ keyOf, /** @type {any} */ action) => {
+      for (const item of items) await action(item);
+      return { ok: items.map((/** @type {any} */ i) => keyOf(i)), failed: [] };
+    }
+  ),
+  channelRostersState: {
+    membersByKey: /** @type {any} */ ({}),
+    adminsByKey: /** @type {any} */ ({})
+  }
+}));
+vi.mock('$lib/groups/roster-fanout.js', () => ({ putUserOn, fanOut }));
+vi.mock('$lib/groups/channel-rosters.svelte.js', () => ({
+  useChannelRosters: () => () => channelRostersState
+}));
+
 const { poolMock } = vi.hoisted(() => {
   return {
     poolMock: {
@@ -147,6 +166,10 @@ beforeEach(() => {
   isCommunityOwner.mockClear().mockReturnValue(true);
   showToast.mockClear();
   publishToGroupRelay.mockClear();
+  putUserOn.mockClear();
+  fanOut.mockClear();
+  channelRostersState.membersByKey = {};
+  channelRostersState.adminsByKey = {};
   // jsdom has no navigator.clipboard; stub it
   Object.assign(navigator, {
     clipboard: {
@@ -258,6 +281,48 @@ describe('MembershipPane — access gating', () => {
     expect(screen.queryByTestId('membership-application-select')).toBeNull();
     expect(screen.queryByTestId('membership-application-create-default')).toBeNull();
     expect(screen.queryByTestId('stub-application-approvals')).toBeNull();
+  });
+});
+
+describe('MembershipPane — member-add fan-out', () => {
+  const GROUPS_RELAY_N = 'wss://groups.example/';
+  const NEW_MEMBER = 'f'.repeat(64);
+
+  // Adding a member to the ROOT group must also put them on the community's
+  // members-tier channels — separate NIP-29 groups whose rosters the relay
+  // checks independently (laoc, 2026-08-19: an invited user stood before a
+  // locked 'willkommen').
+  it('fans a freshly added member out to answered members-tier channel rosters', async () => {
+    const eventWithChannel = communikeyEvent([
+      ['membership', 'root1', GROUPS_RELAY],
+      ['group', 'chan1', GROUPS_RELAY, 'Willkommen', 'members']
+    ]);
+    channelRostersState.membersByKey = { [`chan1@${GROUPS_RELAY_N}`]: new Set() };
+    render(MembershipPane, {
+      props: { communikeyEvent: eventWithChannel, communityId: OWNER, profileEvent }
+    });
+    await fireEvent.click(screen.getByTestId('membership-manage-members'));
+    await fireEvent.click(screen.getByTestId('stub-group-members-added'));
+    await waitFor(() => expect(putUserOn).toHaveBeenCalledTimes(1));
+    expect(putUserOn.mock.calls[0][0]).toEqual(
+      expect.objectContaining({ id: 'chan1', relay: GROUPS_RELAY })
+    );
+    expect(putUserOn.mock.calls[0][1]).toBe(NEW_MEMBER);
+  });
+
+  it('skips channels whose roster has not answered (the reconcile sweeps later)', async () => {
+    const eventWithChannel = communikeyEvent([
+      ['membership', 'root1', GROUPS_RELAY],
+      ['group', 'chan1', GROUPS_RELAY, 'Willkommen', 'members']
+    ]);
+    channelRostersState.membersByKey = {};
+    render(MembershipPane, {
+      props: { communikeyEvent: eventWithChannel, communityId: OWNER, profileEvent }
+    });
+    await fireEvent.click(screen.getByTestId('membership-manage-members'));
+    await fireEvent.click(screen.getByTestId('stub-group-members-added'));
+    await new Promise((r) => setTimeout(r, 20));
+    expect(putUserOn).not.toHaveBeenCalled();
   });
 });
 

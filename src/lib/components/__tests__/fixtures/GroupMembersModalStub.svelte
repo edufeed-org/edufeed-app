@@ -5,8 +5,17 @@
   put-user/remove-user internals (covered by GroupMembersModal.test.js).
 -->
 <script>
-  let { pointer, admins, members, myPubkey, isAdmin, roleOptions, onRosterChanged, onClose } =
-    $props();
+  let {
+    pointer,
+    admins,
+    members,
+    myPubkey,
+    isAdmin,
+    roleOptions,
+    onRosterChanged,
+    onMemberAdded,
+    onClose
+  } = $props();
 </script>
 
 <div
@@ -19,5 +28,8 @@
   data-roleoptions={JSON.stringify(roleOptions ?? [])}
 ></div>
 <button data-testid="stub-group-members-refresh" onclick={() => onRosterChanged?.()}>refresh</button
+>
+<button data-testid="stub-group-members-added" onclick={() => onMemberAdded?.('f'.repeat(64))}
+  >added</button
 >
 <button data-testid="stub-group-members-close" onclick={() => onClose?.()}>close</button>

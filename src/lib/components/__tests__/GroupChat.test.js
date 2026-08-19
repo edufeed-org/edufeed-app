@@ -312,7 +312,7 @@ vi.mock(
 );
 vi.mock('$lib/components/shared/LinkPreviewList.svelte', () => ({ default: Stub }));
 vi.mock('$lib/components/shared/ProfileAvatar.svelte', () => ({ default: Stub }));
-vi.mock('$lib/components/icons', () => ({ ReplyIcon: Stub }));
+vi.mock('$lib/components/icons', () => ({ ReplyIcon: Stub, PeopleIcon: Stub }));
 vi.mock(
   '$lib/components/reactions/ReactionChips.svelte',
   () => import('./fixtures/ReactionChipsStub.svelte')

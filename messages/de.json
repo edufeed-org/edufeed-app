@@ -3372,5 +3372,6 @@
   "community_expand_private_usecase": "Gut für vertrauliche Absprachen im engeren Kreis.",
   "community_expand_xor_hint": "Eine Community kann nur einen dieser Wege gehen – beides zusammen ist nicht möglich.",
   "groups_restricted_note": "Nur Mitglieder können diesen Kanal lesen und schreiben.",
-  "groups_join_already": "Du bist bereits Mitglied."
+  "groups_join_already": "Du bist bereits Mitglied.",
+  "community_members_moderated_community": "Dies ist eine moderierte Community — neue Mitglieder kommen per Einladungscode dazu."
 }
