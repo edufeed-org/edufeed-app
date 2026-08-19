@@ -92,6 +92,7 @@
     "@mozilla/readability": "^0.6.0",
     "@napi-rs/canvas": "^1.0.2",
     "@noble/ciphers": "^2.2.0",
+    "@noble/hashes": "^1.8.0",
     "applesauce-common": "^6.2.0",
     "applesauce-common-concord": "npm:applesauce-common@0.0.0-concord-20260714212055",
     "applesauce-concord": "0.0.0-concord-20260714212055",
