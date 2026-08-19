@@ -71,4 +71,78 @@ describe('validateWizardStep interactive step 2', () => {
     };
     expect(validateWizardStep(2, formData, ctx)).toEqual({});
   });
+
+  it('edit mode: passes with an x-webxdc encoding even without a licenseEvent', () => {
+    // Edit mode hides the step-2 uploader (d-tag/package is immutable) — the
+    // attestation already exists on the network from the original publish.
+    const formData = {
+      identifier: 'https://blossom/x.xdc',
+      encodings: [{ type: 'application/x-webxdc', sha256: 'aa', licenseEvent: null }]
+    };
+    const editCtx = { ...ctx, isEditMode: true };
+    expect(validateWizardStep(2, formData, editCtx)).toEqual({});
+  });
+
+  it('edit mode: still fails when there is no x-webxdc encoding at all', () => {
+    const editCtx = { ...ctx, isEditMode: true };
+    const errors = validateWizardStep(2, { encodings: [] }, editCtx);
+    expect(errors.attachments).toBe('needs file');
+  });
+});
+
+describe('validateWizardStep interactive step 5', () => {
+  const messages = {
+    bildungsbereich: () => 'ERR_BILDUNGSBEREICH',
+    urlRequired: () => 'ERR_URL_REQUIRED',
+    identifier: () => 'ERR_IDENTIFIER_FORMAT',
+    title: () => 'ERR_TITLE',
+    description: () => 'ERR_DESCRIPTION',
+    resourceType: () => 'ERR_RESOURCE_TYPE',
+    subject: () => 'ERR_SUBJECT',
+    noUrlNeedsFile: () => 'needs file',
+    license: () => 'ERR_LICENSE',
+    imageLicenseMissing: () => 'ERR_IMAGE_LICENSE_MISSING',
+    encodingLicenseMissing: () => 'ERR_ENCODING_LICENSE_MISSING'
+  };
+
+  const ctx = {
+    isEkw: false,
+    hasNoUrl: false,
+    isEditMode: false,
+    hasSubjectVocab: true,
+    subjectsCount: 0,
+    isValidUrl: () => true,
+    messages,
+    variantId: 'interactive'
+  };
+
+  it('edit mode: passes even without a licenseEvent on the x-webxdc encoding', () => {
+    // Mirrors step 2's edit-mode exemption: the package is immutable once
+    // published, so the original attestation already covers it even if the
+    // rehydration fetch for the license event hasn't landed yet.
+    const formData = {
+      encodings: [{ type: 'application/x-webxdc', sha256: 'aa', licenseEvent: null }],
+      externalUrls: []
+    };
+    const errors = validateWizardStep(5, formData, { ...ctx, isEditMode: true });
+    expect(errors.encodings).toBeUndefined();
+  });
+
+  it('non-edit mode: still blocks when the x-webxdc encoding has no licenseEvent', () => {
+    const formData = {
+      encodings: [{ type: 'application/x-webxdc', sha256: 'aa', licenseEvent: null }],
+      externalUrls: []
+    };
+    const errors = validateWizardStep(5, formData, ctx);
+    expect(errors.encodings).toBe('ERR_ENCODING_LICENSE_MISSING');
+  });
+
+  it('edit mode: still blocks a non-webxdc encoding missing a licenseEvent', () => {
+    const formData = {
+      encodings: [{ type: 'application/pdf', sha256: 'bb', licenseEvent: null }],
+      externalUrls: []
+    };
+    const errors = validateWizardStep(5, formData, { ...ctx, isEditMode: true });
+    expect(errors.encodings).toBe('ERR_ENCODING_LICENSE_MISSING');
+  });
 });

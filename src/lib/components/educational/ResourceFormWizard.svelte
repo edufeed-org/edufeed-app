@@ -443,6 +443,26 @@
       if (lic) formData.imageLicenseEvent = lic;
     }
   });
+
+  // Edit mode: same rehydration for the interactive-variant package. The
+  // license/discovery event (kind 1063) isn't embedded in the kind-30142
+  // edit event — it lives on the network, keyed by the package's SHA-256 —
+  // so the prefill above seeds `interactivePackage.licenseEvent = null` and
+  // this effect fills it in once the loader finds it. Defense in depth:
+  // step 2/5 validation already exempt edit mode from requiring this, but
+  // rehydrating keeps the step-5 gate (and the UI) reflecting reality
+  // instead of silently trusting an unverified null forever.
+  // `interactivePackage` is only ever populated on the interactive variant
+  // (see the mapping effect above and the edit prefill below), so a plain
+  // null-check here already covers "not the interactive variant".
+  const getEditInteractiveLicense = useLicenseForHash(() =>
+    interactivePackage ? interactivePackage.sha256 : null
+  );
+  $effect(() => {
+    if (!interactivePackage || interactivePackage.licenseEvent) return;
+    const lic = getEditInteractiveLicense();
+    if (lic) interactivePackage = { ...interactivePackage, licenseEvent: lic };
+  });
   const previewResource = $derived.by(() => {
     if (currentStep < 3) return null;
     // `about` lives in the wizard-internal `aboutByVocab` (one bucket per

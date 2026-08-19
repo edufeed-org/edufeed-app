@@ -62,7 +62,13 @@ export function validateWizardStep(step, formData, ctx, subStepConfig) {
         const pkg = (formData.encodings ?? []).find(
           (/** @type {any} */ f) => f?.type === 'application/x-webxdc'
         );
-        if (!pkg || !pkg.licenseEvent) errors.attachments = m.noUrlNeedsFile();
+        // Edit mode hides the step-2 uploader (the d-tag/package is
+        // immutable), mirroring the no-URL branch's edit-mode exemption
+        // below: the requirement is satisfied by the already-published
+        // encoding even if its license event hasn't been rehydrated yet.
+        if (!pkg || (!pkg.licenseEvent && !ctx.isEditMode)) {
+          errors.attachments = m.noUrlNeedsFile();
+        }
         break;
       }
       if (!ctx.hasNoUrl) {
@@ -118,9 +124,15 @@ export function validateWizardStep(step, formData, ctx, subStepConfig) {
 
     case 5: {
       // License gate: any encoding with a sha256 but no license event blocks publish.
-      const missing = (formData.encodings ?? []).some(
-        (/** @type {any} */ e) => e?.sha256 && !e?.licenseEvent
-      );
+      // Exemption: an x-webxdc package in edit mode is immutable (its d-tag
+      // can't change), so the license already attested at original publish
+      // time covers it — mirrors the step-2 exemption above, and matters
+      // when the async license-event rehydration hasn't landed yet.
+      const missing = (formData.encodings ?? []).some((/** @type {any} */ e) => {
+        if (!e?.sha256 || e?.licenseEvent) return false;
+        if (ctx.isEditMode && e?.type === 'application/x-webxdc') return false;
+        return true;
+      });
       if (missing) {
         errors.encodings = m.encodingLicenseMissing();
       }
