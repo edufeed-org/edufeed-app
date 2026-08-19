@@ -53,7 +53,11 @@
   } from '$lib/helpers/scroll-memory.js';
   import { relayBadges, channelBadges } from '$lib/groups/group-badges.js';
   import { relayHref, relayLabel } from '$lib/groups/relay-directory.js';
-  import { authenticateOnce, isRestrictedError } from '$lib/groups/relay-auth.js';
+  import {
+    authenticateOnce,
+    isRestrictedError,
+    isAuthRequiredError
+  } from '$lib/groups/relay-auth.js';
   import GroupBadges from '$lib/components/groups/GroupBadges.svelte';
   import { PeopleIcon } from '$lib/components/icons';
   import GroupMembersModal from '$lib/components/groups/GroupMembersModal.svelte';
@@ -159,7 +163,22 @@
   // only the messages side ever set the flag).
   let messagesRestricted = $state(false);
   let rosterRestricted = $state(false);
-  const restricted = $derived(messagesRestricted || rosterRestricted);
+  // A THIRD way in, verified live against groups.edufeed.org: an anonymous
+  // viewer (no active user, so no signer to ever authenticate with) of a
+  // non-world-readable channel never gets messagesRestricted/rosterRestricted
+  // at all — the relay's `auth-required` CLOSE for the messages REQ simply
+  // never resolves to next/error/complete without a NIP-42 response, so the
+  // subscription hangs silently forever instead of refusing (measured: zero
+  // terminal events, ever). Waiting for the relay's answer is a dead end
+  // here by construction — no signer means no retry is ever possible — so
+  // this reads the same "not the world, not me" conclusion straight off the
+  // metadata that DOES load. `disclosureLevel` is `'unknown'` until that
+  // metadata arrives, so this only fires once we genuinely know it.
+  const restricted = $derived(
+    messagesRestricted ||
+      rosterRestricted ||
+      (!getActiveUser()?.pubkey && disclosureLevel !== 'world' && disclosureLevel !== 'unknown')
+  );
   let isLoading = $state(true);
   /** @type {any[]} */ let messages = $state([]);
   /** @type {any[]} */ let reactionEvents = $state([]);
@@ -217,8 +236,17 @@
           // NIP-29: authenticated, but not on this (private) group's roster
           // — the relay closes the REQ `restricted`. The relay HAS answered
           // ("you're not a member"), so this counts as answered too, not as
-          // still-loading.
+          // still-loading. `auth-required` retries the same one-shot NIP-42
+          // handshake as the messages effect below — measured live against
+          // groups.edufeed.org (pyramid) the roster REQ never actually
+          // refuses this way (it silently omits 39001/39002 for a
+          // non-member and EOSEs clean instead, both pre- and post-auth —
+          // see `restricted`'s own derivation for how that case is still
+          // covered), but another relay implementation may CLOSE it, and
+          // this branch is what keeps that relay from getting stuck on the
+          // unauthenticated answer forever.
           if (isRestrictedError(err)) rosterRestricted = true;
+          else if (isAuthRequiredError(err)) tryAuthRetry();
           rosterAnswered = true;
         },
         complete: () => {
@@ -228,9 +256,29 @@
     return () => sub.unsubscribe();
   });
 
-  // One-shot NIP-42 retry: when the relay closes the REQ auth-required,
-  // authenticate with the active signer and re-run the subscription effect.
+  // One-shot NIP-42 retry: when the relay closes a REQ auth-required,
+  // authenticate with the active signer and re-run both REQ effects (both
+  // read `retrySeq`). Shared by the roster and messages effects — reused
+  // rather than duplicated so both go through authenticateOnce's single
+  // module-scoped one-AUTH-per-challenge guard (see relay-auth.js: a
+  // redundant AUTH on an already-authenticated connection gets `ok:false`
+  // and marks it UNauthenticated, blocking every later read on it).
   let retrySeq = $state(0);
+  function tryAuthRetry() {
+    authRequired = true;
+    const user = getActiveUser();
+    if (!user?.signer) return; // anonymous — nothing more we can do here;
+    // `restricted`'s own derivation below covers this dead end for a
+    // non-world-readable channel.
+    authenticateOnce(pool.relay(pointer.relay), user.signer).then((response) => {
+      // A refusal used to land here as success, because authenticate()
+      // RESOLVES with {ok:false} rather than throwing — so the chat cleared
+      // its own warning and retried against a relay that had just said no.
+      if (!response.ok) return;
+      authRequired = false;
+      retrySeq++;
+    });
+  }
 
   // Live chat + reactions from the group relay (same storeEvents +
   // TimelineModel pattern as the public community chat). NOTE: the model
@@ -258,25 +306,7 @@
             messagesRestricted = true;
             return;
           }
-          if (String(err?.message ?? err).includes('auth-required')) {
-            authRequired = true;
-            const user = getActiveUser();
-            if (user?.signer) {
-              // Shared guard, not a local flag: the sidebar's directory hook
-              // authenticates against this same relay on this same route, and
-              // a second AUTH would make applesauce mark the connection
-              // unauthenticated and block every read on it.
-              authenticateOnce(pool.relay(pointer.relay), user.signer).then((response) => {
-                // A refusal used to land here as success, because
-                // authenticate() RESOLVES with {ok:false} rather than
-                // throwing — so the chat cleared its own warning and retried
-                // against a relay that had just said no.
-                if (!response.ok) return;
-                authRequired = false;
-                retrySeq++;
-              });
-            }
-          }
+          if (isAuthRequiredError(err)) tryAuthRetry();
         }
       });
 

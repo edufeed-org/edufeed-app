@@ -221,6 +221,13 @@ const relayCalls = vi.hoisted(() => /** @type {string[]} */ ([]));
 // roster. Two independent counters because the roster (`request`) and the
 // chat+reactions (`subscription`) calls are separate pool methods.
 const walledChatCalls = vi.hoisted(() => ({ roster: 0, messages: 0 }));
+// `rosteronlychat`: the same live-relay refusal sequence (auth-required then
+// restricted), but ONLY on the roster REQ — isolates the roster effect's own
+// tryAuthRetry wiring from the messages effect's (both are exercised
+// together by `walledChatCalls` above; this fixture is the regression test
+// for a relay that refuses ONLY the roster REQ, per the coordinator's
+// requirement 1).
+const rosterOnlyChatCalls = vi.hoisted(() => ({ roster: 0 }));
 // Mutable holder for the relay's NIP-11 document (finding 2's test needs to
 // flip auth_required per test) — same pattern as joinedCommunikeyEventsHolder
 // below. Defaults to auth-required, matching the badges test's expectation
@@ -294,6 +301,19 @@ vi.mock('$lib/stores/nostr-infrastructure.svelte', async () => {
                 : "restricted: you're trying to access a private group";
             return new rxObservable((/** @type {any} */ sub) => sub.error(new Error(message)));
           }
+          // rosteronlychat: ONLY the roster REQ is ever refused (auth-required
+          // then restricted) — the messages/reactions subscription below
+          // never errors at all for this id, so the roster's OWN
+          // auth-required retry (tryAuthRetry, not the messages effect's) is
+          // what has to drive the outcome here.
+          if (d === 'rosteronlychat') {
+            rosterOnlyChatCalls.roster++;
+            const message =
+              rosterOnlyChatCalls.roster === 1
+                ? 'auth-required: please authenticate'
+                : "restricted: you're trying to access a private group";
+            return new rxObservable((/** @type {any} */ sub) => sub.error(new Error(message)));
+          }
           return rxOf(metadataEvent, membersEvent);
         },
         // keep the subscription open after replay so unsubscribe paths run
@@ -322,6 +342,9 @@ vi.mock('$lib/stores/nostr-infrastructure.svelte', async () => {
             }
             return rxNever;
           }
+          // rosteronlychat: never answers, never errors — only the roster
+          // REQ above ever refuses anything for this id.
+          if (h === 'rosteronlychat') return rxNever;
           return rxMerge(
             rxOf(otherRoot, otherReply, chatEvent, firstReply, nestedReply, legacyNested),
             rxNever
@@ -361,8 +384,13 @@ const signEvent = vi.fn(async (/** @type {any} */ template) => {
   const { pubkey: _drop, ...rest } = template;
   return finalizeEvent({ ...rest }, MY_SK);
 });
+// Holder so the anonymous-viewer spec can null this out — every other test
+// keeps the default logged-in ME; reset in the outer `beforeEach` below.
+const activeUserHolder = vi.hoisted(() => ({
+  current: /** @type {{pubkey: string, signer: any} | null} */ (null)
+}));
 vi.mock('$lib/stores/accounts.svelte', () => ({
-  useActiveUser: () => () => ({ pubkey: ME, signer: { signEvent } }),
+  useActiveUser: () => () => activeUserHolder.current,
   // Only reached by useJoinedCommunikeyEvents' underlying
   // useJoinedCommunitiesList hook (mounted at GroupChat init for the
   // post-delete cascade). No community is joined in this fixture, so
@@ -456,12 +484,14 @@ describe('GroupChat', () => {
     publishMock.mockClear();
     publishOptimisticMock.mockClear();
     signEvent.mockClear();
+    activeUserHolder.current = { pubkey: ME, signer: { signEvent } };
     relayCalls.length = 0;
     requestCalls.length = 0;
     relayOwn9021.value = [];
     openchatJoinPublishedAt.ms = null;
     walledChatCalls.roster = 0;
     walledChatCalls.messages = 0;
+    rosterOnlyChatCalls.roster = 0;
     __resetAuthAttempts();
     joinedCommunikeyEventsHolder.events = [];
     relayInfoHolder.info = {
@@ -563,6 +593,42 @@ describe('GroupChat', () => {
 
     const input = /** @type {HTMLInputElement | null} */ (screen.queryByTestId('group-chat-input'));
     expect(input === null || input.disabled).toBe(true);
+  });
+
+  // Regression for the coordinator's live-relay finding: a relay that
+  // refuses ONLY the roster REQ (auth-required, then restricted on the
+  // retry) — the messages/reactions subscription never errors at all — must
+  // still reach the members-only notice. Before the roster effect's own
+  // tryAuthRetry wiring, this refusal was silently absorbed by the roster's
+  // unconditional `rosterAnswered = true` and never routed anywhere else.
+  it('a roster-only auth-required-then-restricted refusal still reaches the members-only notice', async () => {
+    render(GroupChat, { props: { pointer: { relay: GROUP_RELAY, id: 'rosteronlychat' } } });
+
+    const note = await screen.findByTestId('group-restricted-note');
+    expect(note.textContent).toContain('Only members can read and write in this channel.');
+    expect(screen.queryByTestId('group-chat-input')).toBeNull();
+    // The roster genuinely retried post-auth, not just answered once.
+    expect(rosterOnlyChatCalls.roster).toBeGreaterThanOrEqual(2);
+  });
+
+  // Live finding: an anonymous viewer (no active user — so no signer to
+  // ever authenticate with) of a private group. Measured against the real
+  // groups.edufeed.org relay: the messages REQ's `auth-required` CLOSE never
+  // resolves to next/error/complete without a NIP-42 response, so the
+  // subscription just hangs — a plain disabled composer with no explanation
+  // was the result, not a notice. The mock reproduces the same hang (a
+  // subscription that never terminates), so this only passes if the fix
+  // reads the answer off the metadata that DOES load instead of waiting on
+  // that REQ.
+  it('an anonymous viewer of a private group gets the members-only notice, not a dead composer', async () => {
+    activeUserHolder.current = null;
+    render(GroupChat, { props: { pointer } });
+
+    const note = await screen.findByTestId('group-restricted-note');
+    expect(note.textContent).toContain('Only members can read and write in this channel.');
+    // No identity to join with — the notice alone, no button.
+    expect(within(note).queryByRole('button')).toBeNull();
+    expect(screen.queryByTestId('group-chat-input')).toBeNull();
   });
 
   // A readable group the viewer hasn't joined: the relay would reject every
