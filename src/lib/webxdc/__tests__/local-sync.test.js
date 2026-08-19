@@ -39,4 +39,36 @@ describe('createLocalSync', () => {
     localStorage.setItem('webxdc:state:test', '{not json');
     expect(createLocalSync('webxdc:state:test').getUpdates()).toEqual([]);
   });
+
+  it('getUpdates returns a shallow copy, not the live array', () => {
+    const sync = createLocalSync('webxdc:state:test');
+    sync.sendState({ n: 1 });
+    const first = sync.getUpdates();
+    first.push({ payload: { n: 99 } }); // mutate the returned array
+    expect(sync.getUpdates().length).toBe(1); // internal array unaffected
+    expect(sync.getUpdates()[0].payload.n).toBe(1);
+  });
+
+  it('subscriber that throws does not prevent other subscribers from notifying', () => {
+    const sync = createLocalSync('webxdc:state:test');
+    const throwing = vi.fn(() => {
+      throw new Error('subscriber failed');
+    });
+    const working = vi.fn();
+    sync.subscribe(throwing);
+    sync.subscribe(working);
+    expect(() => sync.sendState({ n: 1 })).not.toThrow();
+    expect(throwing).toHaveBeenCalledTimes(1);
+    expect(working).toHaveBeenCalledTimes(1);
+  });
+
+  it('stores falsy-but-valid meta values (empty string, zero, false)', () => {
+    const sync = createLocalSync('webxdc:state:test');
+    sync.sendState({ n: 1 }, { info: '' });
+    expect(sync.getUpdates()[0].info).toBe('');
+    sync.sendState({ n: 2 }, { info: undefined });
+    expect(sync.getUpdates()[1]).not.toHaveProperty('info');
+    sync.sendState({ n: 3 }, { summary: 0 });
+    expect(sync.getUpdates()[2].summary).toBe(0);
+  });
 });

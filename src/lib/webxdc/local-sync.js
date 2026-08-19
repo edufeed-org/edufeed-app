@@ -28,15 +28,15 @@ export function createLocalSync(storageKey) {
   const subscribers = new Set();
 
   return {
-    getUpdates: () => updates,
+    getUpdates: () => [...updates],
     sendState(payload, meta) {
       updates = [
         ...updates,
         {
           payload,
-          ...(meta?.info && { info: meta.info }),
-          ...(meta?.document && { document: meta.document }),
-          ...(meta?.summary && { summary: meta.summary })
+          ...(meta?.info !== undefined && { info: meta.info }),
+          ...(meta?.document !== undefined && { document: meta.document }),
+          ...(meta?.summary !== undefined && { summary: meta.summary })
         }
       ];
       try {
@@ -44,7 +44,13 @@ export function createLocalSync(storageKey) {
       } catch {
         // quota exceeded — state stays in memory for this session
       }
-      for (const cb of subscribers) cb();
+      for (const cb of subscribers) {
+        try {
+          cb();
+        } catch (err) {
+          console.error('webxdc sync subscriber failed:', err);
+        }
+      }
     },
     sendRealtime() {
       // single participant: realtime frames go to *other* peers, so nothing to do
