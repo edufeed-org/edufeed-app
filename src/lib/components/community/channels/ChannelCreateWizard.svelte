@@ -53,8 +53,11 @@
   /** @type {'members' | 'invited'} */
   let tier = $state('invited');
   // "Weltoffen" sub-toggle: readable from outside the community. Only makes
-  // sense (and only renders) in NIP-29 mode while tier is 'members' — joining
-  // stays an admin action either way (accessChoiceToNip29 always isOpen:false).
+  // sense (and only renders) in NIP-29 mode while tier is 'members'. Checking
+  // it makes this a world channel: accessChoiceToNip29 returns isOpen:true,
+  // so relays auto-admit bare kind-9021 self-joins (no admin action needed).
+  // Unchecked (or tier 'invited') stays closed — joining still needs relay
+  // policy or an admin invite.
   let worldReadable = $state(false);
   // NOTE: no description field — CORD ChannelMetadata has no description and
   // createChannel only takes {private, voice}; don't collect what we can't store.
