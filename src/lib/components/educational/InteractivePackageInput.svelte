@@ -151,6 +151,22 @@
     };
   }
 
+  /** Discard the pending selection so no stale state (warning, card, refs)
+   *  survives a cancelled license flow. */
+  function onLicenseCancelled() {
+    modalOpen = false;
+    error = '';
+    sizeWarning = false;
+    pending = null;
+    pendingName = '';
+    pendingFileName = '';
+    pendingHash = '';
+    pendingSize = 0;
+    existingLicense = null;
+    iconUrl = '';
+    pendingBytes = null;
+  }
+
   /** @param {import('nostr-tools').NostrEvent} licenseEvent */
   function onLicenseSaved(licenseEvent) {
     if (!pending) return;
@@ -226,5 +242,5 @@
   {beforeAttest}
   attestExtras={{ alt: `Webxdc app: ${pendingName}`, image: iconUrl }}
   onsave={onLicenseSaved}
-  oncancel={() => (modalOpen = false)}
+  oncancel={onLicenseCancelled}
 />
