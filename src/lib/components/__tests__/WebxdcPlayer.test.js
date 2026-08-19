@@ -40,6 +40,25 @@ describe('WebxdcPlayer', () => {
     await waitFor(() => expect(container.querySelector('iframe')).toBeTruthy());
   });
 
+  it('cleans up the ready timer and sync subscription on unmount', async () => {
+    const { getByText, container, unmount } = render(WebxdcPlayer, {
+      props: { bytes: xdcBytes, name: 'Preview', appKey: 'unmount:k' }
+    });
+    await fireEvent.click(getByText(/Launch|Starten/));
+    await waitFor(() => expect(container.querySelector('iframe')).toBeTruthy());
+
+    const spy = vi.spyOn(globalThis, 'clearTimeout');
+    try {
+      unmount();
+      // close() unconditionally clears the 15s ready timer on unmount —
+      // observing that call is the cleanest signal that cleanup ran (the
+      // sync unsubscribe has no independently-observable side effect here).
+      expect(spy).toHaveBeenCalled();
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
   it('errors with retry when the frame never signals ready', async () => {
     vi.useFakeTimers();
     try {

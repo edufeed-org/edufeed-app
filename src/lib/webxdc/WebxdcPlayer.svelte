@@ -3,6 +3,7 @@
    * Launch card + sandboxed stage for a webxdc/H5P package. Verifies the
    * archive hash before execution; state persists locally (Phase 1 AppSync).
    */
+  import { onDestroy } from 'svelte';
   import * as m from '$lib/paraglide/messages';
   import { nip19 } from 'nostr-tools';
   import { manager } from '$lib/stores/accounts.svelte';
@@ -21,6 +22,8 @@
   let errorKind = $state(/** @type {'fetch'|'integrity'|'invalid'|'timeout'|null} */ (null));
   let fullscreen = $state(false);
   // Archive + host are plain refs — they never drive template updates directly.
+  // Invariant: every write to files/host is followed by a $state write in the
+  // same tick (keeps template reads fresh despite non-reactive refs).
   /** @type {Map<string, Uint8Array> | null} */
   let files = null;
   let host = null;
@@ -88,6 +91,9 @@
     stopHost?.();
     stopHost = host?.start(post) ?? null;
   }
+
+  // Unmounting mid-run must not leak the ready timer or the sync subscription.
+  onDestroy(() => close());
 </script>
 
 {#if phase === 'running' && files && host}
