@@ -2,6 +2,7 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { strToU8 } from 'fflate';
 import { isH5pArchive, wrapH5p } from '../h5p-wrap.js';
+import { ensureDefaultIcon, extractXdcMeta } from '../xdc-archive.js';
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -55,6 +56,21 @@ describe('h5p-wrap', () => {
     expect(html).toContain("frameCss: './h5p-standalone/styles/h5p.css'");
     expect(html).toContain("externalDispatcher.on('xAPI'");
     expect(html).toContain('webxdc.sendUpdate');
+  });
+
+  it('ships no icon of its own — ensureDefaultIcon + extractXdcMeta discover the injected default', async () => {
+    // wrapH5p namespaces the original package under h5p/, so even an H5P
+    // package that had its own icon won't surface it at the top level —
+    // the wrapped archive always needs the default injected.
+    stubAssets();
+    const { files } = await wrapH5p(fakeH5p(), 'fallback');
+    expect(files.get('icon.png')).toBeUndefined();
+    expect(files.get('icon.jpg')).toBeUndefined();
+
+    const withIcon = ensureDefaultIcon(files, new Uint8Array([1, 2, 3, 4]));
+    const meta = extractXdcMeta(withIcon);
+    expect(meta.iconMime).toBe('image/png');
+    expect(meta.iconBytes).toEqual(new Uint8Array([1, 2, 3, 4]));
   });
 
   it('falls back to the provided name when h5p.json is unreadable', async () => {

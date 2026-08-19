@@ -21,7 +21,8 @@
     zipXdc,
     extractXdcMeta,
     wrapHtml,
-    sha256Bytes
+    sha256Bytes,
+    ensureDefaultIcon
   } from '$lib/webxdc/xdc-archive.js';
   import { isH5pArchive, wrapH5p } from '$lib/webxdc/h5p-wrap.js';
 
@@ -84,6 +85,21 @@
       if (!files.get('index.html')) {
         error = m.interactive_input_invalid();
         return;
+      }
+
+      // Spec requires every wrapped archive to ship an icon. Fetched here
+      // (not inside wrapHtml/wrapH5p) so the pure archive modules stay
+      // network-free, and applied uniformly across all three input paths
+      // (raw .xdc passthrough included) rather than duplicated per-wrapper.
+      if (!files.get('icon.png') && !files.get('icon.jpg')) {
+        try {
+          const iconRes = await fetch('/icon-192x192.png');
+          if (iconRes.ok) {
+            files = ensureDefaultIcon(files, new Uint8Array(await iconRes.arrayBuffer()));
+          }
+        } catch {
+          // best-effort default icon — a missing one never blocks publishing
+        }
       }
 
       const meta = extractXdcMeta(files);

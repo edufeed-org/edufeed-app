@@ -9,7 +9,8 @@ import {
   wrapHtml,
   sha256Bytes,
   fetchAndVerifyXdc,
-  XdcIntegrityError
+  XdcIntegrityError,
+  ensureDefaultIcon
 } from '../xdc-archive.js';
 
 function makeXdc(extra = {}) {
@@ -122,6 +123,32 @@ describe('xdc-archive', () => {
     await expect(fetchAndVerifyXdc('https://x/app.xdc', '')).rejects.toBeInstanceOf(
       XdcIntegrityError
     );
+  });
+
+  it('ensureDefaultIcon injects icon.png when the package shipped none', () => {
+    const files = wrapHtml(strToU8('<p>x</p>'), 'Quiz');
+    expect(files.get('icon.png')).toBeUndefined();
+    const withIcon = ensureDefaultIcon(files, new Uint8Array([1, 2, 3, 4]));
+    const meta = extractXdcMeta(withIcon);
+    expect(meta.iconMime).toBe('image/png');
+    expect(meta.iconBytes).toEqual(new Uint8Array([1, 2, 3, 4]));
+  });
+
+  it('ensureDefaultIcon leaves an existing icon.png untouched', () => {
+    const files = unzipXdc(makeXdc());
+    const original = files.get('icon.png');
+    const result = ensureDefaultIcon(files, new Uint8Array([9, 9, 9]));
+    expect(result.get('icon.png')).toBe(original);
+  });
+
+  it('ensureDefaultIcon leaves an existing icon.jpg untouched (does not add icon.png too)', () => {
+    const files = new Map([
+      ['index.html', strToU8('<p>x</p>')],
+      ['icon.jpg', new Uint8Array([1, 1, 1])]
+    ]);
+    const result = ensureDefaultIcon(files, new Uint8Array([9, 9, 9]));
+    expect(result.get('icon.png')).toBeUndefined();
+    expect(result.get('icon.jpg')).toEqual(new Uint8Array([1, 1, 1]));
   });
 
   it('unzipXdc rejects colliding paths', () => {

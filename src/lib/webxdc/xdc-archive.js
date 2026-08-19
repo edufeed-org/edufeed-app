@@ -62,6 +62,22 @@ export function extractXdcMeta(files) {
   return { name, iconBytes, iconMime };
 }
 
+/**
+ * Ensure a file map ships an icon (webxdc spec requirement). Injects a
+ * default `icon.png` when the package brought neither `icon.png` nor
+ * `icon.jpg`; otherwise a no-op. Pure — the caller fetches/generates
+ * `defaultIconBytes` and passes it in, so this stays network-free like the
+ * rest of the module.
+ * @param {Map<string, Uint8Array>} files
+ * @param {Uint8Array} defaultIconBytes
+ * @returns {Map<string, Uint8Array>}
+ */
+export function ensureDefaultIcon(files, defaultIconBytes) {
+  if (files.has('icon.png') || files.has('icon.jpg')) return files;
+  files.set('icon.png', defaultIconBytes);
+  return files;
+}
+
 /** @param {string} name @returns {string} */
 export function buildManifest(name) {
   const escaped = name.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
