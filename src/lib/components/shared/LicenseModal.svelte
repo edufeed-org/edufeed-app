@@ -36,7 +36,13 @@
      * options without forking the modal. Not rendered on the accept-existing view.
      * @type {import('svelte').Snippet | null}
      */
-    extraOptions = null
+    extraOptions = null,
+    /**
+     * Extra NIP-94 fields spread into the kind-1063 attestation (NIP-DC
+     * discovery: alt + icon for webxdc packages). Null for plain images.
+     * @type {{ alt?: string, image?: string } | null}
+     */
+    attestExtras = null
   } = $props();
 
   let modalLicense = $state('https://creativecommons.org/licenses/by/4.0/');
@@ -178,7 +184,8 @@
           title: modalTitle || undefined,
           source: modalSource || undefined,
           creatorPubkey: modalSelfCreator ? effectiveSigner.pubkey : undefined,
-          description: modalDescription || undefined
+          description: modalDescription || undefined,
+          ...(attestExtras ?? {})
         },
         effectiveSigner
       );

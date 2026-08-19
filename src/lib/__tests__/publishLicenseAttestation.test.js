@@ -16,7 +16,11 @@ vi.mock('$lib/services/publish-service.js', () => ({
 vi.mock('$lib/helpers/event-factory.js', () => ({
   createAppEventFactory: () => ({ build: (tmpl) => buildSpy(tmpl) })
 }));
-vi.mock('$lib/helpers/relay-helper.js', () => ({ getAllLookupRelays: () => [] }));
+const educationalRelaysSpy = vi.fn(() => ['wss://amb.test/']);
+vi.mock('$lib/helpers/relay-helper.js', () => ({
+  getAllLookupRelays: () => [],
+  getEducationalRelays: () => educationalRelaysSpy()
+}));
 
 const { publishLicenseAttestation } = await import('$lib/helpers/image-license.js');
 
@@ -45,11 +49,37 @@ describe('publishLicenseAttestation', () => {
     expect(buildSpy.mock.calls[0][0]).toMatchObject({ kind: 1063 });
     expect(signEvent).toHaveBeenCalledTimes(1);
     expect(addSpy).toHaveBeenCalledWith(signed);
-    expect(publishSpy).toHaveBeenCalledWith(signed, [], {});
+    expect(publishSpy).toHaveBeenCalledWith(signed, [], { additionalRelays: [] });
     expect(signed.id).toBe('evid');
   });
 
   it('throws when no signer is provided', async () => {
     await expect(publishLicenseAttestation(input, null)).rejects.toThrow();
+  });
+
+  it('publishes webxdc attestations to the educational relays', async () => {
+    const signEvent = vi.fn(async (tmpl) => ({ ...tmpl, id: 'evid', sig: 'sig' }));
+    const signer = { pubkey: 'signerpub', signEvent };
+
+    await publishLicenseAttestation({ ...input, mime: 'application/x-webxdc' }, signer);
+
+    expect(publishSpy).toHaveBeenCalledWith(
+      expect.anything(),
+      [],
+      expect.objectContaining({ additionalRelays: ['wss://amb.test/'] })
+    );
+  });
+
+  it('publishes non-webxdc attestations without additional relays', async () => {
+    const signEvent = vi.fn(async (tmpl) => ({ ...tmpl, id: 'evid', sig: 'sig' }));
+    const signer = { pubkey: 'signerpub', signEvent };
+
+    await publishLicenseAttestation(input, signer);
+
+    expect(publishSpy).toHaveBeenCalledWith(
+      expect.anything(),
+      [],
+      expect.objectContaining({ additionalRelays: [] })
+    );
   });
 });

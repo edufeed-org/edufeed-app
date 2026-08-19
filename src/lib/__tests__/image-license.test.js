@@ -73,6 +73,31 @@ describe('buildLicenseTemplate', () => {
   });
 });
 
+describe('buildLicenseTemplate NIP-DC extras', () => {
+  const base = {
+    hash: 'ab'.repeat(32),
+    url: 'https://blossom/x.xdc',
+    mime: 'application/x-webxdc',
+    license: 'https://creativecommons.org/licenses/by/4.0/',
+    credit: 'Jane Doe'
+  };
+
+  it('emits alt and image tags when provided', () => {
+    const t = buildLicenseTemplate({
+      ...base,
+      alt: 'Webxdc app: Quiz',
+      image: 'https://blossom/icon.png'
+    });
+    expect(t.tags).toContainEqual(['alt', 'Webxdc app: Quiz']);
+    expect(t.tags).toContainEqual(['image', 'https://blossom/icon.png']);
+  });
+
+  it('omits them when absent', () => {
+    const t = buildLicenseTemplate(base);
+    expect(t.tags.some(([n]) => n === 'alt' || n === 'image')).toBe(false);
+  });
+});
+
 describe('getLicenseUrl', () => {
   const ev = (/** @type {string[][]} */ tags) => ({ tags, content: '' });
 
