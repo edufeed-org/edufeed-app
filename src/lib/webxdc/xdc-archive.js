@@ -15,6 +15,9 @@ export function unzipXdc(bytes) {
   for (const [path, content] of Object.entries(unzipped)) {
     const normalized = path.replace(/\\/g, '/').replace(/^\/+/, '');
     if (normalized.endsWith('/')) continue;
+    if (files.has(normalized)) {
+      throw new Error(`Invalid package: duplicate path after normalization: ${normalized}`);
+    }
     files.set(normalized, content);
   }
   return files;
@@ -69,11 +72,14 @@ export async function sha256Bytes(bytes) {
  * (spec requirement — never execute unverified bytes), unzip, require index.html.
  */
 export async function fetchAndVerifyXdc(url, expectedSha256) {
+  if (!expectedSha256) {
+    throw new XdcIntegrityError('No expected hash provided — refusing to run unverified package');
+  }
   const res = await fetch(url);
   if (!res.ok) throw new Error(`Failed to fetch package: ${res.status}`);
   const bytes = new Uint8Array(await res.arrayBuffer());
   const actual = await sha256Bytes(bytes);
-  if (expectedSha256 && actual !== expectedSha256.toLowerCase()) {
+  if (actual !== expectedSha256.toLowerCase()) {
     throw new XdcIntegrityError(`Package hash mismatch: expected ${expectedSha256}, got ${actual}`);
   }
   const files = unzipXdc(bytes);

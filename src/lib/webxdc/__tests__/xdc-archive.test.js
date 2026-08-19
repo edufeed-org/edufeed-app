@@ -87,4 +87,37 @@ describe('xdc-archive', () => {
     const h2 = await sha256Bytes(noIndex);
     await expect(fetchAndVerifyXdc('https://x/b.xdc', h2)).rejects.toThrow(/index\.html/);
   });
+
+  it('fetchAndVerifyXdc rejects missing hash (undefined)', async () => {
+    const bytes = makeXdc();
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response(bytes))
+    );
+    await expect(fetchAndVerifyXdc('https://x/app.xdc', undefined)).rejects.toBeInstanceOf(
+      XdcIntegrityError
+    );
+  });
+
+  it('fetchAndVerifyXdc rejects empty hash string', async () => {
+    const bytes = makeXdc();
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response(bytes))
+    );
+    await expect(fetchAndVerifyXdc('https://x/app.xdc', '')).rejects.toBeInstanceOf(
+      XdcIntegrityError
+    );
+  });
+
+  it('unzipXdc rejects colliding paths', () => {
+    // Create a zip with two entries that normalize to the same path
+    const collidingZip = zipSync({
+      'sub/dir/a.js': strToU8('1'),
+      'sub\\dir\\a.js': strToU8('2'),
+      'index.html': strToU8('hi'),
+      'manifest.toml': strToU8('name = "Test"')
+    });
+    expect(() => unzipXdc(collidingZip)).toThrow(/duplicate path/);
+  });
 });
