@@ -2,6 +2,13 @@
  * info/document/summary are pass-through webxdc update metadata — callers may
  * legitimately send falsy-but-valid values (empty string, 0, false), so the
  * type stays loose rather than string-only.
+ *
+ * `getUpdates()` MUST be append-only, in arrival order: `createWebxdcHost`
+ * derives each update's `serial` from its array index (index + 1), not from
+ * a stored field. Reordering the returned array (e.g. re-sorting by
+ * `created_at` after a late backfill) reshuffles serials out from under any
+ * listener that already saw earlier ones, and can drop mid-inserted updates
+ * a listener never gets notified about.
  * @typedef {Object} AppSync
  * @property {() => Array<{payload:any, info?:*, document?:*, summary?:*}>} getUpdates
  * @property {(payload:any, meta?:{info?:*, document?:*, summary?:*}) => void} sendState

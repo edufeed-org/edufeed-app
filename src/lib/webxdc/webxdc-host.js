@@ -114,6 +114,7 @@ function generateBridgeScript({ selfAddr, selfName }) {
   }
 
   window.addEventListener('message', function (event) {
+    if (event.source !== window.parent) return;
     var data = event.data;
     if (!data || typeof data !== 'object' || data.jsonrpc !== '2.0') return;
     if (data.id !== undefined && !data.method) {

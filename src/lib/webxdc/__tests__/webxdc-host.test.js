@@ -53,6 +53,17 @@ describe('createWebxdcHost', () => {
     expect(host.bridgeScript).toContain('128000');
   });
 
+  it('bridgeScript rejects messages not sourced from window.parent as the first check', () => {
+    const script = host.bridgeScript;
+    const listenerBody = script.slice(script.indexOf("addEventListener('message'"));
+    expect(listenerBody).toContain('if (event.source !== window.parent) return;');
+    // Must be the first statement in the handler body — a spoofed-source
+    // message must never reach the jsonrpc/id/method dispatch below it.
+    const guardIndex = listenerBody.indexOf('if (event.source !== window.parent) return;');
+    const firstBraceIndex = listenerBody.indexOf('{') + 1;
+    expect(listenerBody.slice(firstBraceIndex, guardIndex).trim()).toBe('');
+  });
+
   it('sendUpdate forwards payload and meta to sync', async () => {
     await host.handleRpc('webxdc.sendUpdate', { update: { payload: { a: 1 }, info: 'i' } }, post);
     expect(sync.sendState).toHaveBeenCalledWith(
