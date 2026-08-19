@@ -29,7 +29,9 @@ const {
     activeUser: { pubkey: 'a'.repeat(64), signer: {} },
     editTemplateSentinel,
     deleteTemplateSentinel,
-    buildEditGroupMetadataTemplate: vi.fn(() => editTemplateSentinel),
+    buildEditGroupMetadataTemplate: vi.fn(
+      (/** @type {string} */ _id, /** @type {any} */ _meta) => editTemplateSentinel
+    ),
     buildDeleteGroupTemplate: vi.fn(() => deleteTemplateSentinel),
     publishToGroupRelay: vi.fn(() => Promise.resolve({ id: 'signed' })),
     showToast: vi.fn()
