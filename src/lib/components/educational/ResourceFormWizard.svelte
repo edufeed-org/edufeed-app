@@ -31,6 +31,7 @@
   import SKOSDropdown from './SKOSDropdown.svelte';
   import LicensedFileInput from '../shared/LicensedFileInput.svelte';
   import LicensedImageInput from '$lib/components/shared/LicensedImageInput.svelte';
+  import InteractivePackageInput from './InteractivePackageInput.svelte';
   import CreatorInput from './CreatorInput.svelte';
   import ExternalUrlInput from './ExternalUrlInput.svelte';
   import MetadataFetchStep from './MetadataFetchStep.svelte';
@@ -105,7 +106,7 @@
 
   /**
    * @typedef {{ id: string, label: string }} CompactConcept
-   * @typedef {{ url: string, name: string, type: string, size: number, sha256: string }} UploadedFile
+   * @typedef {{ url: string, name: string, type: string, size: number, sha256: string, licenseEvent?: import('nostr-tools').NostrEvent | null }} UploadedFile
    * @typedef {{ name: string, type: 'Person' | 'Organization', pubkey?: string, affiliationName?: string, honorificPrefix?: string, orcid?: string }} Creator
    * @typedef {keyof typeof BILDUNGSBEREICHE} BildungsbereichKey
    * @typedef {{
@@ -198,6 +199,35 @@
   // Blossom URLs of files uploaded in the no-URL branch — the AI enrichment
   // sources once their license modals have completed each upload.
   const uploadedSourceUrls = $derived(selectUploadedSourceUrls(formData.encodings));
+
+  /**
+   * Interactive-variant package (maps onto encodings + identifier). Step-2
+   * field for `variantId === 'interactive'` — a single licensed webxdc
+   * package replaces the URL/upload flow the other variants use.
+   * @typedef {{ url: string, name: string, type: string, size: number,
+   *   sha256: string, licenseEvent: import('nostr-tools').NostrEvent | null,
+   *   iconUrl?: string }} InteractivePackage
+   * @type {InteractivePackage | null}
+   */
+  let interactivePackage = $state(null);
+  $effect(() => {
+    if (variantId !== 'interactive') return;
+    if (interactivePackage) {
+      formData.encodings = [
+        {
+          url: interactivePackage.url,
+          name: interactivePackage.name,
+          type: interactivePackage.type,
+          size: interactivePackage.size,
+          sha256: interactivePackage.sha256,
+          licenseEvent: interactivePackage.licenseEvent
+        }
+      ];
+      formData.identifier = interactivePackage.url;
+    } else {
+      formData.encodings = [];
+    }
+  });
 
   // Cover-color picker is greyed out once a thumbnail URL is set. This MUST be
   // an $effect-backed $state, not a $derived: the value is consumed only as the
@@ -818,6 +848,27 @@
       competencyRequired: getAMBCompetencyRequired(editEvent, getLocale())
     };
 
+    // Interactive-variant rehydration: seed the package input from the
+    // existing x-webxdc encoding. `editResource.encodings` come from
+    // `getAMBEncodings` (mimeType-keyed), unlike the wizard's own
+    // type-keyed UploadedFile shape assembled above.
+    if (variantId === 'interactive') {
+      const pkg = editResource?.encodings?.find(
+        (/** @type {any} */ e) => e.mimeType === 'application/x-webxdc'
+      );
+      if (pkg) {
+        interactivePackage = {
+          url: pkg.url,
+          name: pkg.name,
+          type: 'application/x-webxdc',
+          size: pkg.size,
+          sha256: pkg.sha256,
+          licenseEvent: null,
+          iconUrl: ''
+        };
+      }
+    }
+
     // Merge EKW fields parsed from ekw:* tags (no-op for non-EKW events).
     const ekw = parseEkwTagsToFormData(editEvent);
     formData = {
@@ -1154,6 +1205,7 @@
     isEkw,
     hasNoUrl,
     isEditMode,
+    variantId,
     hasSubjectVocab: subjectVocabFields.length > 0,
     subjectsCount: Object.values(aboutByVocab).reduce((n, arr) => n + arr.length, 0),
     isValidUrl,
@@ -1819,166 +1871,178 @@
 
       <!-- Step 2: URL / naddr -->
       {#if currentStep === 2}
-        <div class="space-y-3">
-          <!-- Shared enrich control: rendered for a pasted URL ([identifier])
+        {#if variantId === 'interactive'}
+          <InteractivePackageInput
+            bind:value={interactivePackage}
+            activeUserDisplayName={previewAuthorProfile?.display_name ??
+              previewAuthorProfile?.name ??
+              ''}
+          />
+          {#if showError('attachments')}
+            <p class="text-xs text-error">{fieldErrors.attachments}</p>
+          {/if}
+        {:else}
+          <div class="space-y-3">
+            <!-- Shared enrich control: rendered for a pasted URL ([identifier])
                and for uploaded files (their Blossom URLs). `sourceUrls` is the
                set that gets sent to /api/enrich as one grounded LLM call. -->
-          {#snippet enrichBlock(/** @type {string[]} */ sourceUrls)}
-            <div class="mt-3">
-              {#if enrichmentStatus === 'success' && enrichedForKey === dedupeKeyFor(sourceUrls)}
-                <div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
-                  <p class="flex items-center gap-2 text-success">
-                    <span aria-hidden="true">✓</span>
-                    {m.amb_form_enrich_done?.() ?? 'KI hat passende Felder ergänzt.'}
-                  </p>
-                </div>
-              {:else if enrichmentStatus === 'pending'}
-                <button type="button" class="btn btn-sm btn-primary" disabled>
-                  <span class="loading loading-xs loading-spinner"></span>
-                  {m.amb_form_enrich_running?.() ?? 'KI ergänzt Felder…'}
-                </button>
-              {:else}
-                <!-- Button + hint on a single horizontal row (wraps on
+            {#snippet enrichBlock(/** @type {string[]} */ sourceUrls)}
+              <div class="mt-3">
+                {#if enrichmentStatus === 'success' && enrichedForKey === dedupeKeyFor(sourceUrls)}
+                  <div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
+                    <p class="flex items-center gap-2 text-success">
+                      <span aria-hidden="true">✓</span>
+                      {m.amb_form_enrich_done?.() ?? 'KI hat passende Felder ergänzt.'}
+                    </p>
+                  </div>
+                {:else if enrichmentStatus === 'pending'}
+                  <button type="button" class="btn btn-sm btn-primary" disabled>
+                    <span class="loading loading-xs loading-spinner"></span>
+                    {m.amb_form_enrich_running?.() ?? 'KI ergänzt Felder…'}
+                  </button>
+                {:else}
+                  <!-- Button + hint on a single horizontal row (wraps on
                      narrow viewports). Keeps the call-to-action visually
                      paired with its explanation instead of stacking them. -->
-                <div class="flex flex-wrap items-center gap-x-3 gap-y-1">
-                  <button
-                    type="button"
-                    class="btn btn-sm btn-primary"
-                    onclick={() => runEnrichment(sourceUrls)}
-                  >
-                    {#if enrichmentStatus === 'error'}
-                      {m.amb_form_enrich_retry?.() ?? '✨ Erneut mit KI ergänzen'}
-                    {:else}
-                      {m.amb_form_enrich_button?.() ?? '✨ Mit KI ergänzen'}
-                    {/if}
-                  </button>
-                  {#if enrichmentStatus === 'error'}
-                    <p class="text-sm text-error">
-                      {#if enrichmentErrorCode === 'overloaded'}
-                        {m.amb_form_enrich_error_overloaded?.() ??
-                          'KI-Dienst gerade überlastet — bitte gleich nochmal versuchen.'}
-                      {:else if enrichmentErrorCode === 'page_too_large'}
-                        {m.amb_form_enrich_error_page_too_large?.() ??
-                          'Die Datei ist für die KI-Analyse zu groß — bitte manuell ausfüllen.'}
+                  <div class="flex flex-wrap items-center gap-x-3 gap-y-1">
+                    <button
+                      type="button"
+                      class="btn btn-sm btn-primary"
+                      onclick={() => runEnrichment(sourceUrls)}
+                    >
+                      {#if enrichmentStatus === 'error'}
+                        {m.amb_form_enrich_retry?.() ?? '✨ Erneut mit KI ergänzen'}
                       {:else}
-                        {m.amb_form_enrich_error?.() ?? 'KI-Ergänzung ist fehlgeschlagen.'}
+                        {m.amb_form_enrich_button?.() ?? '✨ Mit KI ergänzen'}
                       {/if}
-                    </p>
-                  {:else}
-                    <p class="text-sm text-base-content/60">
-                      {m.amb_form_enrich_hint?.() ??
-                        'Optional: KI füllt Klassifikationen vor — du behältst die Kontrolle.'}
-                    </p>
-                  {/if}
-                </div>
-              {/if}
-            </div>
-          {/snippet}
+                    </button>
+                    {#if enrichmentStatus === 'error'}
+                      <p class="text-sm text-error">
+                        {#if enrichmentErrorCode === 'overloaded'}
+                          {m.amb_form_enrich_error_overloaded?.() ??
+                            'KI-Dienst gerade überlastet — bitte gleich nochmal versuchen.'}
+                        {:else if enrichmentErrorCode === 'page_too_large'}
+                          {m.amb_form_enrich_error_page_too_large?.() ??
+                            'Die Datei ist für die KI-Analyse zu groß — bitte manuell ausfüllen.'}
+                        {:else}
+                          {m.amb_form_enrich_error?.() ?? 'KI-Ergänzung ist fehlgeschlagen.'}
+                        {/if}
+                      </p>
+                    {:else}
+                      <p class="text-sm text-base-content/60">
+                        {m.amb_form_enrich_hint?.() ??
+                          'Optional: KI füllt Klassifikationen vor — du behältst die Kontrolle.'}
+                      </p>
+                    {/if}
+                  </div>
+                {/if}
+              </div>
+            {/snippet}
 
-          {#if isEditMode}
-            <!-- Edit mode: the URL is the immutable identifier — render a
+            {#if isEditMode}
+              <!-- Edit mode: the URL is the immutable identifier — render a
                  read-only summary card instead of a bare (dead) input so the
                  step explains itself. -->
-            <div
-              class="space-y-2 rounded-lg border border-base-300 bg-base-200 p-4 text-sm"
-              data-testid="edit-url-summary"
-            >
-              {#if hasNoUrl}
-                <p>{m.amb_form_no_url_state_card()}</p>
-              {:else}
-                <p class="font-medium">
-                  {m.amb_form_step_url_label?.() ?? 'Resource URL'}
+              <div
+                class="space-y-2 rounded-lg border border-base-300 bg-base-200 p-4 text-sm"
+                data-testid="edit-url-summary"
+              >
+                {#if hasNoUrl}
+                  <p>{m.amb_form_no_url_state_card()}</p>
+                {:else}
+                  <p class="font-medium">
+                    {m.amb_form_step_url_label?.() ?? 'Resource URL'}
+                  </p>
+                  <!-- eslint-disable svelte/no-navigation-without-resolve -- external: resource URL -->
+                  <a
+                    href={formData.identifier}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    class="link break-all link-primary"
+                  >
+                    {formData.identifier}
+                  </a>
+                  <!-- eslint-enable svelte/no-navigation-without-resolve -->
+                {/if}
+                <p class="text-xs text-base-content/60">
+                  {m.amb_form_help_url_no_edit?.() ??
+                    'The resource URL cannot be changed after publishing.'}
                 </p>
-                <!-- eslint-disable svelte/no-navigation-without-resolve -- external: resource URL -->
-                <a
-                  href={formData.identifier}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  class="link break-all link-primary"
+              </div>
+            {:else if hasNoUrl}
+              <div
+                class="rounded-lg border border-base-300 bg-base-200 p-4 text-sm"
+                data-testid="no-url-state-card"
+              >
+                <p>{m.amb_form_no_url_state_card()}</p>
+                <button
+                  type="button"
+                  class="btn mt-2 btn-ghost btn-sm"
+                  onclick={() => {
+                    hasNoUrl = false;
+                    formData.urlInput = '';
+                    formData.identifier = '';
+                  }}
                 >
-                  {formData.identifier}
-                </a>
-                <!-- eslint-enable svelte/no-navigation-without-resolve -->
+                  {m.amb_form_no_url_cancel()}
+                </button>
+              </div>
+              <LicensedFileInput
+                bind:files={formData.encodings}
+                multiple={true}
+                accept={NO_URL_UPLOAD_ACCEPT}
+                label={m.amb_form_step2_upload_label()}
+                helpText={m.amb_form_step2_upload_help()}
+                activeUserDisplayName={previewAuthorProfile?.display_name ??
+                  previewAuthorProfile?.name ??
+                  ''}
+              />
+              {#if showError('attachments')}
+                <p class="text-xs text-error">{fieldErrors.attachments}</p>
               {/if}
-              <p class="text-xs text-base-content/60">
-                {m.amb_form_help_url_no_edit?.() ??
-                  'The resource URL cannot be changed after publishing.'}
-              </p>
-            </div>
-          {:else if hasNoUrl}
-            <div
-              class="rounded-lg border border-base-300 bg-base-200 p-4 text-sm"
-              data-testid="no-url-state-card"
-            >
-              <p>{m.amb_form_no_url_state_card()}</p>
+              {#if uploadedSourceUrls.length > 0}
+                {@render enrichBlock(uploadedSourceUrls)}
+              {/if}
+            {:else}
+              <MetadataFetchStep
+                bind:value={formData.urlInput}
+                activeUserPubkey={activeUser?.pubkey ?? null}
+                onresult={handleMetadataResult}
+                onbusychange={(busy) => (metadataFetchBusy = busy)}
+              />
+              {#if metadataFetchSource && metadataFetchSource !== 'amb-jsonld' && formData.identifier}
+                {@render enrichBlock([formData.identifier])}
+              {/if}
+              <div class="flex items-center gap-3 py-1 text-xs text-base-content/50 uppercase">
+                <span class="h-px flex-1 bg-base-300"></span>
+                <span>{m.amb_form_no_url_or_divider()}</span>
+                <span class="h-px flex-1 bg-base-300"></span>
+              </div>
               <button
                 type="button"
-                class="btn mt-2 btn-ghost btn-sm"
+                class="flex w-full cursor-pointer items-start gap-3 rounded-lg border border-base-300 p-4 text-left hover:bg-base-200"
+                data-testid="no-url-button"
                 onclick={() => {
-                  hasNoUrl = false;
+                  hasNoUrl = true;
                   formData.urlInput = '';
                   formData.identifier = '';
+                  // Hide any prior step-2 advance error; the user just
+                  // resolved the "URL required" branch by opting out. Stay on
+                  // Step 2 so they can upload files before advancing manually.
+                  advanceAttempted = false;
                 }}
               >
-                {m.amb_form_no_url_cancel()}
-              </button>
-            </div>
-            <LicensedFileInput
-              bind:files={formData.encodings}
-              multiple={true}
-              accept={NO_URL_UPLOAD_ACCEPT}
-              label={m.amb_form_step2_upload_label()}
-              helpText={m.amb_form_step2_upload_help()}
-              activeUserDisplayName={previewAuthorProfile?.display_name ??
-                previewAuthorProfile?.name ??
-                ''}
-            />
-            {#if showError('attachments')}
-              <p class="text-xs text-error">{fieldErrors.attachments}</p>
-            {/if}
-            {#if uploadedSourceUrls.length > 0}
-              {@render enrichBlock(uploadedSourceUrls)}
-            {/if}
-          {:else}
-            <MetadataFetchStep
-              bind:value={formData.urlInput}
-              activeUserPubkey={activeUser?.pubkey ?? null}
-              onresult={handleMetadataResult}
-              onbusychange={(busy) => (metadataFetchBusy = busy)}
-            />
-            {#if metadataFetchSource && metadataFetchSource !== 'amb-jsonld' && formData.identifier}
-              {@render enrichBlock([formData.identifier])}
-            {/if}
-            <div class="flex items-center gap-3 py-1 text-xs text-base-content/50 uppercase">
-              <span class="h-px flex-1 bg-base-300"></span>
-              <span>{m.amb_form_no_url_or_divider()}</span>
-              <span class="h-px flex-1 bg-base-300"></span>
-            </div>
-            <button
-              type="button"
-              class="flex w-full cursor-pointer items-start gap-3 rounded-lg border border-base-300 p-4 text-left hover:bg-base-200"
-              data-testid="no-url-button"
-              onclick={() => {
-                hasNoUrl = true;
-                formData.urlInput = '';
-                formData.identifier = '';
-                // Hide any prior step-2 advance error; the user just
-                // resolved the "URL required" branch by opting out. Stay on
-                // Step 2 so they can upload files before advancing manually.
-                advanceAttempted = false;
-              }}
-            >
-              <span class="flex-1">
-                <span class="block font-medium">{m.amb_form_no_url_button()}</span>
-                <span class="mt-1 block text-sm text-base-content/70">
-                  {m.amb_form_no_url_button_description()}
+                <span class="flex-1">
+                  <span class="block font-medium">{m.amb_form_no_url_button()}</span>
+                  <span class="mt-1 block text-sm text-base-content/70">
+                    {m.amb_form_no_url_button_description()}
+                  </span>
                 </span>
-              </span>
-              <span aria-hidden="true" class="text-base-content/40">→</span>
-            </button>
-          {/if}
-        </div>
+                <span aria-hidden="true" class="text-base-content/40">→</span>
+              </button>
+            {/if}
+          </div>
+        {/if}
       {/if}
 
       <!-- Step 3: Basic Info -->

@@ -35,6 +35,7 @@ import { subStepToFormFields, validateKonfiTopicOrDimension } from './konfiStep4
  *   isValidUrl: (s: string) => boolean,
  *   messages: ValidationMessages,
  *   schemeNaddrs?: Record<string, { address: string, relay: string }>,
+ *   variantId?: string,
  * }} ValidationContext
  */
 
@@ -55,6 +56,17 @@ export function validateWizardStep(step, formData, ctx, subStepConfig) {
       break;
 
     case 2:
+      if (ctx.variantId === 'interactive') {
+        // Interactive resources carry their content as a single licensed
+        // webxdc package (InteractivePackageInput), not a URL. `m` may be
+        // absent in tests that only exercise this branch; fall back to a
+        // plain truthy error so the check still gates publish.
+        const pkg = (formData.encodings ?? []).find(
+          (/** @type {any} */ f) => f?.type === 'application/x-webxdc'
+        );
+        if (!pkg || !pkg.licenseEvent) errors.attachments = m?.noUrlNeedsFile?.() ?? true;
+        break;
+      }
       if (!ctx.hasNoUrl) {
         if (!formData.identifier?.trim()) errors.identifier = m.urlRequired();
       } else if (!ctx.isEditMode && (formData.encodings?.length ?? 0) === 0) {

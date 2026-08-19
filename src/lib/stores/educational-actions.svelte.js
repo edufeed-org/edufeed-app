@@ -17,7 +17,8 @@ import { getPrimaryWriteRelay } from '$lib/services/relay-service.svelte.js';
 import {
   appendCreatorPTags,
   appendExternalUrlTags,
-  appendVariantLabelTags
+  appendVariantLabelTags,
+  appendInteractiveTags
 } from '$lib/helpers/educational/eventTags.js';
 import { appendCoverColorTag } from '$lib/helpers/educational/coverColor.js';
 import { BILDUNGSBEREICHE } from '$lib/helpers/educational/bildungsbereich.js';
@@ -260,6 +261,7 @@ export function createEducationalActions() {
         await appendCreatorPTags(tags, formData.creators, getPrimaryWriteRelay);
         appendExternalUrlTags(tags, formData.externalUrls);
         appendVariantLabelTags(tags, variantId);
+        appendInteractiveTags(tags, formData.files);
         appendCoverColorTag(tags, formData.coverHue);
 
         // Bildungsbereich NIP-32 detection tag (schule/hochschule/extra/konfi).
@@ -350,6 +352,7 @@ export function createEducationalActions() {
         await appendCreatorPTags(tags, formData.creators, getPrimaryWriteRelay);
         appendExternalUrlTags(tags, formData.externalUrls);
         appendVariantLabelTags(tags, variantId);
+        appendInteractiveTags(tags, formData.files);
         appendCoverColorTag(tags, formData.coverHue);
 
         // Bildungsbereich NIP-32 detection tag (schule/hochschule/extra/konfi).

@@ -63,6 +63,12 @@ export const ALL_VARIANTS = [
         bibleReference: 'amb_resource_ekw_bible_reference'
       }
     }
+  },
+  {
+    id: 'interactive',
+    labelKey: 'resource_form_variant_interactive_label',
+    descriptionKey: 'resource_form_variant_interactive_description',
+    bildungsbereichKeys: ['schule', 'hochschule', 'extra']
   }
 ];
 
