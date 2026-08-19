@@ -1,7 +1,6 @@
 /** @vitest-environment node */
 import { describe, it, expect } from 'vitest';
 import {
-  attachableAreaModes,
   buildGroupAttachTemplate,
   buildGroupDetachTemplate
 } from '$lib/groups/community-attach.js';
@@ -88,40 +87,6 @@ describe('buildGroupAttachTemplate', () => {
 // laoc 2026-08-05: a community is extended by EXACTLY ONE protected area — a
 // Concord area OR a set of NIP-29 groups. Mixing both is what the merge design
 // deliberately rules out, so the offer has to close once one side is taken.
-describe('attachableAreaModes', () => {
-  it('offers both on a community with no protected area yet', () => {
-    expect(attachableAreaModes(community())).toEqual({ concord: true, group: true });
-  });
-
-  it('closes the group side once a concord area is attached', () => {
-    const withConcord = community({
-      tags: [['concord', 'c'.repeat(64), 'wss://c.example']]
-    });
-    expect(attachableAreaModes(withConcord)).toEqual({ concord: true, group: false });
-  });
-
-  it('closes the concord side once a group channel is listed', () => {
-    const withGroup = community({ tags: [['group', 'allgemein', R]] });
-    expect(attachableAreaModes(withGroup)).toEqual({ concord: false, group: true });
-  });
-
-  // An unaddressable pointer is not a channel — it must not lock the community
-  // out of ever attaching an area.
-  it('ignores a group tag that carries no usable pointer', () => {
-    const junk = community({ tags: [['group', 'allgemein', 'not a url']] });
-    expect(attachableAreaModes(junk)).toEqual({ concord: true, group: true });
-  });
-
-  it('ignores a concord tag whose id is not a community id', () => {
-    const junk = community({ tags: [['concord', 'nope']] });
-    expect(attachableAreaModes(junk)).toEqual({ concord: true, group: true });
-  });
-
-  it('offers both when there is no community event at all', () => {
-    expect(attachableAreaModes(null)).toEqual({ concord: true, group: true });
-  });
-});
-
 describe('buildGroupDetachTemplate', () => {
   it('removes exactly that channel and keeps its siblings', () => {
     const tags = [

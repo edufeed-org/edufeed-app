@@ -37,7 +37,6 @@
   import { relayBadges } from '$lib/groups/group-badges.js';
   import { relayRequiresAuth } from '$lib/groups/relay-directory.js';
   import { useRelayInformation } from '$lib/groups/relay-information.svelte.js';
-  import { attachableAreaModes } from '$lib/groups/community-attach.js';
   import { buildChannelRows } from '$lib/groups/community-channel-rows.js';
   import { useChannelMetadata } from '$lib/groups/channel-metadata.svelte.js';
   import { groupHref } from '$lib/groups/groups.js';
@@ -52,7 +51,6 @@
   import ChannelOverview from './ChannelOverview.svelte';
   import ChannelChat from './ChannelChat.svelte';
   import ChannelCreateWizard from './ChannelCreateWizard.svelte';
-  import AreaAttachModal from './AreaAttachModal.svelte';
   import AreaMembersModal from './AreaMembersModal.svelte';
   import ChannelInviteSheet from './ChannelInviteSheet.svelte';
   import ChannelMembersModal from './ChannelMembersModal.svelte';
@@ -115,7 +113,7 @@
   /** @type {string|null} */
   let pendingOverlay = null;
 
-  /** @param {'create' | 'attach-area'} which */
+  /** @param {'create'} which */
   function openAreaOverlay(which) {
     if (isModeratedCommunity) {
       pendingOverlay = which;
@@ -211,7 +209,6 @@
   // pane and rail actions as extendedByGroups, never the Concord founding
   // offer (laoc, 2026-08-18).
   const isNip29Community = $derived(extendedByGroups || !!parseMembershipPointer(communikeyEvent));
-  const canAttachGroup = $derived(isCommunikeyOwner && attachableAreaModes(communikeyEvent).group);
   // Same population that sees a "+ Neuer Kanal" button somewhere — the shared
   // The locked pane's direct contact: the area owner (material.owner) —
   // always known, always able to invite.
@@ -236,9 +233,7 @@
 
   // create intent must not open the wizard for anyone the buttons exclude.
   const canOpenCreateWizard = $derived(
-    (concord.community && concord.canManageChannels && !concord.dissolved) ||
-      (extendedByGroups && canAttachGroup) ||
-      isCommunikeyOwner
+    (concord.community && concord.canManageChannels && !concord.dissolved) || isCommunikeyOwner
   );
   // Member/owner gate for the area-members-open entry (handoff #11c): a
   // visitor who merely follows the community (kind-30000, a social bookmark
@@ -486,15 +481,6 @@
           />
         {/if}
       {/each}
-      {#if isNip29Community && canAttachGroup}
-        <button
-          class="btn justify-start border-dashed btn-outline btn-sm"
-          data-testid="group-attach-open"
-          onclick={() => (overlay = 'attach-area')}
-        >
-          + {m.groups_attach_action()}
-        </button>
-      {/if}
       {#if groupPointers.length > 0 && isAreaMember}
         <button
           class="btn justify-start btn-outline btn-sm"
@@ -504,7 +490,7 @@
           {m.area_members_title()}
         </button>
       {/if}
-      {#if (concord.community && concord.canManageChannels && !concord.dissolved) || (isNip29Community && canAttachGroup)}
+      {#if (concord.community && concord.canManageChannels && !concord.dissolved) || (isNip29Community && isCommunikeyOwner)}
         <button
           class="btn justify-start border-dashed btn-outline btn-sm"
           data-testid="concord-new-channel"
@@ -649,28 +635,17 @@
           chat — but it must not be the Concord founding offer either, and a
           bare "pick a channel" placard said nothing the rail beside it did not
           already say. It is the channel overview instead (Armada parity:
-          ServerPage's welcome pane). The attach/members actions render here
-          on desktop because the rail carrying them is mobile-only now. -->
-        {#if canAttachGroup || (groupPointers.length > 0 && isAreaMember)}
+          ServerPage's welcome pane). The members action renders here on
+          desktop because the rail carrying it is mobile-only now. -->
+        {#if groupPointers.length > 0 && isAreaMember}
           <div class="hidden flex-wrap gap-2 p-3 pb-0 md:flex">
-            {#if canAttachGroup}
-              <button
-                class="btn border-dashed btn-outline btn-sm"
-                data-testid="group-attach-open-pane"
-                onclick={() => (overlay = 'attach-area')}
-              >
-                + {m.groups_attach_action()}
-              </button>
-            {/if}
-            {#if groupPointers.length > 0 && isAreaMember}
-              <button
-                class="btn btn-outline btn-sm"
-                data-testid="area-members-open-pane"
-                onclick={() => (overlay = 'area-members')}
-              >
-                {m.area_members_title()}
-              </button>
-            {/if}
+            <button
+              class="btn btn-outline btn-sm"
+              data-testid="area-members-open-pane"
+              onclick={() => (overlay = 'area-members')}
+            >
+              {m.area_members_title()}
+            </button>
           </div>
         {/if}
         <ChannelOverview rows={channelRows} hostBadges={channelHostBadges} />
@@ -685,9 +660,6 @@
               🔒 {m.concord_new_channel()}
             </button>
           </div>
-          <p class="mx-auto mt-3 max-w-sm text-xs text-base-content/60">
-            {m.concord_attach_pane_hint()}
-          </p>
         </ChannelStatePane>
       {:else if !concord.community}
         <ChannelStatePane
@@ -825,8 +797,6 @@
         </div>
       </div>
     </div>
-  {:else if overlay === 'attach-area'}
-    <AreaAttachModal {communikeyEvent} onClose={() => (overlay = null)} />
   {:else if overlay === 'area-members'}
     <AreaMembersModal {communikeyEvent} onClose={() => (overlay = null)} />
   {:else if overlay === 'invite' && concord.community && activeChannel}

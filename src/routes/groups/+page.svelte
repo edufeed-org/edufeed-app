@@ -13,8 +13,7 @@
   import { storeEvents } from 'applesauce-relay/operators';
   import { TimelineModel } from 'applesauce-core/models';
   import { GROUPS_LIST_KIND, getPublicGroups } from 'applesauce-common/helpers/groups';
-  import { groupHref } from '$lib/groups/groups.js';
-  import { parseGroupAddress } from '$lib/groups/attach-candidates.js';
+  import { groupHref, parseGroupAddress } from '$lib/groups/groups.js';
   import { showToast } from '$lib/helpers/toast';
   import * as m from '$lib/paraglide/messages';
 

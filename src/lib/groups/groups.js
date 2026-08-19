@@ -46,6 +46,30 @@ export function parseGroupInput(input) {
 }
 
 /**
+ * parseGroupInput, but forgiving about the scheme: people paste what their
+ * browser or other app gave them, and that is https more often than wss.
+ * @param {string} input
+ * @returns {{relay: string, id: string} | null}
+ */
+export function parseGroupAddress(input) {
+  const trimmed = (input ?? '').trim();
+  if (!trimmed) return null;
+
+  // Only accept schemes we recognize: wss, http, https (and bare host'id with no scheme).
+  // Reject ftp, gopher, etc.
+  const schemeMatch = trimmed.match(/^([a-z][a-z0-9+.-]*):\/\//i);
+  if (schemeMatch) {
+    const scheme = schemeMatch[1].toLowerCase();
+    if (!['wss', 'ws', 'http', 'https'].includes(scheme)) {
+      return null;
+    }
+  }
+
+  const mapped = trimmed.replace(/^(https?|ws):\/\//i, 'wss://');
+  return parseGroupInput(mapped);
+}
+
+/**
  * True when the relay URL carries a DNS-shaped host. Chrome's URL parser
  * percent-encodes forbidden host bytes (e.g. spaces) instead of throwing
  * like Node's does, so "new URL succeeded" proves nothing in a browser —

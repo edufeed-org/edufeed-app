@@ -162,32 +162,15 @@ describe('PrivateChannelsView — NIP-29 channels in the community rail', () => 
     expect(row.querySelector('[data-testid="world-readable-badge"]')).toBeNull();
   });
 
-  // Without this the feature is a dead end: the first channel can be attached
-  // from the founding pane, the second one has nowhere to come from.
-  it('lets the community owner add another channel once one is listed', async () => {
+  // The "+ Gruppe verknüpfen" attach entry was removed with the linking
+  // feature (YAGNI, laoc 2026-08-19) — channels come from the wizard only,
+  // and the rail must not resurrect an attach affordance for anyone.
+  it('offers no attach entry, not even to the owner', async () => {
     holders.concord = { ...holders.concord, enabled: false };
     holders.events = {};
 
     render(PrivateChannelsView, {
       props: { communikeyEvent: communityEvent([['group', 'allgemein', RELAY]]) }
-    });
-
-    expect(await screen.findByTestId('group-attach-open')).toBeTruthy();
-  });
-
-  // Only the community's own keypair can rewrite its 10222, so offering the
-  // button to anyone else is an offer that cannot be honoured.
-  it('does not offer that to someone who is not the community', async () => {
-    holders.concord = { ...holders.concord, enabled: false };
-    holders.events = {};
-
-    render(PrivateChannelsView, {
-      props: {
-        communikeyEvent: {
-          ...communityEvent([['group', 'allgemein', RELAY]]),
-          pubkey: 'b'.repeat(64)
-        }
-      }
     });
 
     await screen.findAllByTestId('group-channel-row');
@@ -196,7 +179,7 @@ describe('PrivateChannelsView — NIP-29 channels in the community rail', () => 
 
   // Task 4 (Stufe B "one wizard"): the same "+ New channel" opener now
   // covers the NIP-29 backend too — a community extended by groups offers it
-  // to its owner (same gate as "+ Attach group"), and the wizard mounted
+  // to its owner, and the wizard mounted
   // behind it picks the NIP-29 branch itself (parseGroupPointers.length > 0)
   // rather than founding a Concord area — the mixed state the design rules
   // out stays impossible, it just isn't enforced by hiding this button any

@@ -44,8 +44,9 @@ export function linkedChannelKeys(communikeyEvents) {
  * A single-value `name` tag off an untrusted kind:39000 metadata event.
  * Whitespace-only counts as absent — a group that writes `["name", "  "]`
  * has said nothing, and a row must fall back to the id rather than draw
- * blank. Shared by unlinkedGroups here and groupAttachCandidates
- * (attach-candidates.js) — was two near-identical private copies.
+ * blank. Once shared with the removed group-channel attach picker
+ * (attach-candidates.js, YAGNI 2026-08-19); unlinkedGroups below is the
+ * only consumer now.
  * @param {{tags?: string[][]} | null | undefined} metadata
  * @returns {string | undefined}
  */
@@ -63,12 +64,11 @@ export function metadataName(metadata) {
  */
 
 /**
- * The shared shaping behind both unlinkedGroups (sidebar) and
- * groupAttachCandidates (attach-candidates.js): dedupe by channelKey, drop
+ * The shaping behind unlinkedGroups (sidebar): dedupe by channelKey, drop
  * excluded and unaddressable pointers, resolve a display name + access level
- * off `metadataByKey`, sort by the name a reader actually sees. Was two
- * near-identical loops — this is the part that was identical; each caller
- * still decides how `level` becomes ITS OWN presentation fields (glyph vs.
+ * off `metadataByKey`, sort by the name a reader actually sees. (Once also
+ * fed the removed attach picker; the caller decides how `level` becomes
+ * presentation fields — glyph vs.
  * category label), which is where the two callers genuinely differ.
  * @param {{
  *   groups?: Array<{id: string, relay: string}> | null,
@@ -77,7 +77,7 @@ export function metadataName(metadata) {
  * }} input
  * @returns {GroupCandidateEntry[]} sorted by the name a reader actually sees
  */
-export function groupCandidateEntries({ groups, excludeKeys, metadataByKey = {} }) {
+function groupCandidateEntries({ groups, excludeKeys, metadataByKey = {} }) {
   /** @type {Map<string, GroupCandidateEntry>} */
   const byKey = new Map();
   for (const group of groups ?? []) {
