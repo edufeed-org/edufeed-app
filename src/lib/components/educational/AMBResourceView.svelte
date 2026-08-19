@@ -53,6 +53,13 @@
   import { getFormReferenceFromResource } from '$lib/helpers/educational/formReference.js';
   import { deleteEvent } from '$lib/helpers/eventDeletion.js';
   import { showToast } from '$lib/helpers/toast.js';
+  import WebxdcPlayer from '$lib/webxdc/WebxdcPlayer.svelte';
+  import { useLicenseForHash } from '$lib/stores/image-license.svelte.js';
+  import {
+    findInteractiveEncoding,
+    resourceAppKey,
+    deleteCompanionLicense
+  } from '$lib/helpers/educational/interactiveResource.js';
   import {
     EditIcon,
     ExternalLinkIcon,
@@ -124,6 +131,14 @@
   const getPublisherProfile = useUserProfile(() => event.pubkey);
   const attribution = $derived(getResourceAttribution(event, getPublisherProfile()));
 
+  // Interactive (webxdc) package encoding — drives the sandboxed player block
+  // and the companion kind-1063 license cleanup on delete.
+  const interactiveEncoding = $derived(findInteractiveEncoding(resource));
+  const getInteractiveLicense = useLicenseForHash(() => interactiveEncoding?.sha256);
+  const interactiveIconUrl = $derived(
+    getInteractiveLicense()?.tags.find((t) => t[0] === 'image')?.[1] ?? ''
+  );
+
   /**
    * Handle edit button click - navigate to edit page
    */
@@ -170,6 +185,9 @@
       const result = await deleteEvent(event, activeUser);
 
       if (result.success) {
+        if (interactiveEncoding?.sha256) {
+          await deleteCompanionLicense(interactiveEncoding.sha256, activeUser);
+        }
         showToast(m.toast_resource_deleted(), 'success');
         showDeleteConfirmation = false;
         // Navigate to discover page
@@ -883,6 +901,19 @@
     </section>
   {/if}
 
+  <!-- INTERACTIVE (webxdc) PLAYER -->
+  {#if interactiveEncoding}
+    <div class="mb-4">
+      <WebxdcPlayer
+        url={interactiveEncoding.url}
+        sha256={interactiveEncoding.sha256 ?? ''}
+        name={resource.name}
+        iconUrl={interactiveIconUrl}
+        appKey={resourceAppKey(event)}
+      />
+    </div>
+  {/if}
+
   <!-- UPLOADED FILES - Promoted for Nostr-native content -->
   {#if resource.encodings && resource.encodings.length > 0}
     <section class="ed-sect-plain {isNostrNativeOnly ? 'ed-files-native' : ''}">
@@ -922,7 +953,9 @@
             </a>
             <!-- eslint-enable svelte/no-navigation-without-resolve -->
           </div>
-          <EncodingPreview url={file.url} mimeType={file.mimeType} name={file.name} />
+          {#if file.mimeType !== 'application/x-webxdc'}
+            <EncodingPreview url={file.url} mimeType={file.mimeType} name={file.name} />
+          {/if}
         {/each}
       </div>
     </section>
