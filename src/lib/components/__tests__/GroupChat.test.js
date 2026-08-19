@@ -77,6 +77,23 @@ const metadataEventOpen = signWith(
   RELAY_SK
 );
 const membersEventOpen = signWith({ kind: 39002, tags: [['d', 'openchat']] }, RELAY_SK);
+// The roster AFTER an accepted self-join: the relay's own put-user (kind
+// 9000, not modelled here — only its RESULT, the updated 39002, is
+// observable to this component) lands ME on the roster. Served by the mock
+// once REAL wall-clock time has passed since the 9021 was actually
+// published (see `openchatJoinPublishedAt` / `pool.relay().request` below)
+// — simulating a relay slower than pyramid's ~100ms, to exercise the
+// join-specific follow-up bump rather than the immediate one.
+const membersEventOpenJoined = signWith(
+  {
+    kind: 39002,
+    tags: [
+      ['d', 'openchat'],
+      ['p', ME]
+    ]
+  },
+  RELAY_SK
+);
 // A THIRD group: no `private` tag (same shape as `openchat`), but reached
 // through a relay whose NIP-11 declares every read gated behind NIP-42 — the
 // live buzz-relay case (finding 2): the absence of `private` must NOT read as
@@ -186,6 +203,11 @@ const requestCalls = vi.hoisted(() => /** @type {any[]} */ ([]));
 // The viewer's own stored join request, served to the own-9021 filter that
 // rides along with the roster REQ (pending-state persistence).
 const relayOwn9021 = vi.hoisted(() => ({ value: /** @type {any[]} */ ([]) }));
+// Records the REAL Date.now() a 9021 to `openchat` actually landed on the
+// relay's `publish` — separate from `publishMock`'s own call history so the
+// instant-join test's timing is exact, not derived from event `created_at`
+// (whose Math.floor(Date.now()/1000) is only 1-second precise).
+const openchatJoinPublishedAt = vi.hoisted(() => ({ ms: /** @type {number | null} */ (null) }));
 const relayCalls = vi.hoisted(() => /** @type {string[]} */ ([]));
 // Mutable holder for the relay's NIP-11 document (finding 2's test needs to
 // flip auth_required per test) — same pattern as joinedCommunikeyEventsHolder
@@ -235,7 +257,16 @@ vi.mock('$lib/stores/nostr-infrastructure.svelte', async () => {
           // Roster REQ that never answers (gated relay, pre-auth): the join
           // button must not flash at a possible member meanwhile.
           if (d === 'silentchat') return rxNever;
-          if (d === 'openchat') return rxOf(metadataEventOpen, membersEventOpen);
+          if (d === 'openchat') {
+            // "Joined" flips 1.2s of REAL wall-clock time after the 9021 was
+            // actually published — slower than an immediate bump and the
+            // 800ms admin-op heal, inside the join-specific 1500ms window —
+            // so this exercises THAT follow-up bump, not the immediate one.
+            const joined =
+              openchatJoinPublishedAt.ms !== null &&
+              Date.now() - openchatJoinPublishedAt.ms >= 1200;
+            return rxOf(metadataEventOpen, joined ? membersEventOpenJoined : membersEventOpen);
+          }
           if (d === 'authchat') return rxOf(metadataEventAuthNoPrivate, membersEventAuthNoPrivate);
           if (d === 'emptychat') return rxOf(metadataEventEmptyRoster, membersEventEmptyRoster);
           // A group whose metadata REQ yields nothing (relay hiccup, race
@@ -259,7 +290,15 @@ vi.mock('$lib/stores/nostr-infrastructure.svelte', async () => {
             rxNever
           );
         },
-        publish: publishMock,
+        publish: (/** @type {any} */ event) => {
+          if (
+            event?.kind === 9021 &&
+            event.tags?.some((/** @type {string[]} */ t) => t[0] === 'h' && t[1] === 'openchat')
+          ) {
+            openchatJoinPublishedAt.ms = Date.now();
+          }
+          return publishMock(event);
+        },
         authenticate: vi.fn().mockResolvedValue({ ok: true }),
         // The header's badges (and the disclosure line's auth cap) read the
         // relay's NIP-11 document. A fake relay without it is not a relay:
@@ -376,6 +415,7 @@ describe('GroupChat', () => {
     relayCalls.length = 0;
     requestCalls.length = 0;
     relayOwn9021.value = [];
+    openchatJoinPublishedAt.ms = null;
     joinedCommunikeyEventsHolder.events = [];
     relayInfoHolder.info = {
       limitation: { auth_required: true },
@@ -542,6 +582,31 @@ describe('GroupChat', () => {
     expect(listEvent.kind).toBe(10009);
     expect(listEvent.tags).toContainEqual(['group', 'openchat', GROUP_RELAY]);
   });
+
+  // Pyramid: an accepted 9021 is followed within ~100ms by the relay's own
+  // put-user, and the composer should unlock without a reload. The mock
+  // relay here only materialises the roster update 1.2s of REAL time after
+  // the 9021 lands — slower than an immediate re-request and slower than the
+  // 800ms admin-op heal timer, but inside the join-specific 1500ms fallback
+  // — so this fails unless THAT follow-up bump exists (laoc, 2026-08-19).
+  it('unlocks the composer once a slower relay materialises the accepted self-join', async () => {
+    render(GroupChat, { props: { pointer: { relay: GROUP_RELAY, id: 'openchat' } } });
+    const joinButton = await screen.findByTestId('group-join');
+    await fireEvent.click(joinButton);
+    await waitFor(() => expect(publishMock).toHaveBeenCalledTimes(1));
+
+    // Too soon: the relay has not materialised the roster change yet, so
+    // the composer must still be gated behind the join bar.
+    expect(screen.queryByTestId('group-chat-input')).toBeNull();
+
+    await waitFor(
+      () => {
+        expect(screen.getByTestId('group-chat-input')).toBeTruthy();
+      },
+      { timeout: 3000, interval: 100 }
+    );
+    expect(screen.queryByTestId('group-join-bar')).toBeNull();
+  }, 6000);
 
   // laoc, 2026-08-19: a member whose roster read hadn't answered yet was
   // shown Beitreten, and clicking it surfaced the relay's 'duplicate:

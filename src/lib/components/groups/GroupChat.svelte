@@ -424,8 +424,25 @@
       rosterSeq++;
     }, 800);
   };
+  // A self-join gets its own, longer follow-up bump: on pyramid the relay's
+  // put-user lands within ~100ms of an accepted 9021, but the 800ms
+  // admin-op heal above is tuned for a different case and some relays are
+  // slower still — 1500ms gives the composer a real second chance to unlock
+  // without a reload (laoc, 2026-08-19).
+  /** @type {ReturnType<typeof setTimeout> | undefined} */
+  let joinRosterHealTimer;
+  const onJoinAccepted = () => {
+    rosterSeq++;
+    clearTimeout(joinRosterHealTimer);
+    joinRosterHealTimer = setTimeout(() => {
+      rosterSeq++;
+    }, 1500);
+  };
   $effect(() => {
-    return () => clearTimeout(rosterHealTimer);
+    return () => {
+      clearTimeout(rosterHealTimer);
+      clearTimeout(joinRosterHealTimer);
+    };
   });
 
   let text = $state('');
@@ -570,7 +587,7 @@
       await updateGroupsList({ add: pointer });
       // The relay adds you to 39002 on an open group — refresh the roster so
       // the button flips to Leave without a reload (laoc, 2026-08-11).
-      onRosterChanged();
+      onJoinAccepted();
       joinRequestedNow = true;
       showToast(m.groups_join_sent(), 'success');
     } catch (err) {
