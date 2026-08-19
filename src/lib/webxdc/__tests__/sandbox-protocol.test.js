@@ -44,6 +44,18 @@ describe('buildFetchResponse', () => {
   it('404s unknown paths', () => {
     expect(buildFetchResponse('/nope.png', files, opts).status).toBe(404);
   });
+
+  it('URL-decodes the pathname to match packaged asset names with spaces/umlauts', () => {
+    const filesWithSpecialName = new Map([...files, ['ü ber.png', enc('pixels')]]);
+    const res = buildFetchResponse('/%C3%BC%20ber.png', filesWithSpecialName, opts);
+    expect(res.status).toBe(200);
+    expect(dec(res.body)).toBe('pixels');
+  });
+
+  it('404s a malformed percent-escape instead of throwing', () => {
+    expect(() => buildFetchResponse('/%E0%A4%A', files, opts)).not.toThrow();
+    expect(buildFetchResponse('/%E0%A4%A', files, opts).status).toBe(404);
+  });
 });
 
 describe('helpers', () => {

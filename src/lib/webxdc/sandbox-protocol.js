@@ -81,8 +81,24 @@ export function injectScriptTag(html, src) {
  * @param {{ bridgeScript: string }} opts
  */
 export function buildFetchResponse(pathname, files, opts) {
-  const path = pathname.replace(/^\/+/, '') || 'index.html';
   const headers = { 'Content-Security-Policy': WEBXDC_CSP, 'Cache-Control': 'no-cache' };
+
+  // The caller passes url.pathname, which is percent-encoded (spaces,
+  // umlauts, …) while zip-entry names are the decoded, literal filenames —
+  // decode before matching. A malformed escape sequence falls through to
+  // the normal 404 path rather than throwing.
+  let decodedPathname;
+  try {
+    decodedPathname = decodeURIComponent(pathname);
+  } catch {
+    return {
+      status: 404,
+      statusText: 'Not Found',
+      headers: { ...headers, 'Content-Type': 'text/plain' },
+      body: utf8ToBase64('Not Found')
+    };
+  }
+  const path = decodedPathname.replace(/^\/+/, '') || 'index.html';
 
   // The host's webxdc bridge always shadows a bundled simulator copy.
   if (path === 'webxdc.js') {
