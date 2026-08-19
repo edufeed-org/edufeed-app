@@ -53,7 +53,7 @@
   let inviteCode = $state('');
   let isSendingInvite = $state(false);
 
-  // Task A6: a DM invite link carries `?view=channels&join=<code>` — open
+  // Task A6: a DM invite link carries `?join=<code>` — open
   // the invite-code modal prefilled with it. Redeeming still requires the
   // recipient's explicit submit click below (consent on arrival); this
   // effect never calls handleJoinWithCode itself. Read $page first (so the

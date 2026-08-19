@@ -10,48 +10,76 @@
  */
 
 /**
- * Newest pending request per applicant, sorted newest first.
+ * A group's known roster from `membersByGroup`, tolerating either a Map or a
+ * plain record — whichever shape a caller finds more natural to build.
+ * `undefined` means "roster unknown", distinct from an empty-but-known Set.
+ * @param {Map<string, Set<string>> | Record<string, Set<string>> | undefined | null} membersByGroup
+ * @param {string} groupId
+ * @returns {Set<string> | undefined}
+ */
+function rosterOf(membersByGroup, groupId) {
+  if (!membersByGroup) return undefined;
+  if (membersByGroup instanceof Map) return membersByGroup.get(groupId);
+  return membersByGroup[groupId];
+}
+
+/**
+ * Newest pending request per (applicant, group knocked on), sorted newest
+ * first.
  *
- * - Roster members (and admins — pass their pubkeys in `members` too if
- *   they're not in it) are dropped: approving via put-user empties the queue
- *   without any extra bookkeeping.
+ * - A request is dropped ONLY when the applicant is already a KNOWN member
+ *   of the exact group they knocked on (`membersByGroup.get(row.groupId)`,
+ *   falling back to `rootId` when the 9021 carried no `h` tag). A group
+ *   whose roster hasn't been resolved yet (no entry in `membersByGroup`) is
+ *   treated as "requester not a member" — showing an extra row a moment
+ *   longer is the safe direction, silently dropping a real request is not.
+ *   This is what makes an existing community member's knock on a closed
+ *   CHANNEL visible: their root membership does not clear the channel's own
+ *   roster check.
  * - `dismissed` holds locally ignored REQUEST ids (not pubkeys), so a newer
  *   re-request from an ignored applicant resurfaces — same rule as the old
  *   approvals panel's rejectedIds.
  *
  * @param {{
  *   events: Array<{id?: string, kind?: number, pubkey?: string, created_at?: number, content?: string} | null>,
- *   members: Set<string>,
+ *   membersByGroup: Map<string, Set<string>> | Record<string, Set<string>>,
+ *   rootId: string,
  *   dismissed: Set<string>
  * }} args
  * @returns {JoinRequestRow[]}
  */
-export function pendingJoinRequests({ events, members, dismissed }) {
+export function pendingJoinRequests({ events, membersByGroup, rootId, dismissed }) {
   /** @type {Map<string, JoinRequestRow>} */
-  const newestByPubkey = new Map();
+  const newestByKey = new Map();
   for (const event of events ?? []) {
     if (!event || event.kind !== 9021) continue;
     const { id, pubkey, created_at: createdAt } = event;
     if (typeof id !== 'string' || typeof pubkey !== 'string' || typeof createdAt !== 'number') {
       continue;
     }
-    if (members.has(pubkey)) continue;
-    const current = newestByPubkey.get(pubkey);
-    if (current && current.createdAt >= createdAt) continue;
-    // Which group the applicant knocked on (root or a channel) — approval
-    // honors a channel-specific request on top of the community admission.
-    const groupId = /** @type {any} */ (event).tags?.find(
+    // Which group the applicant knocked on (root or a channel) — a missing
+    // h-tag falls back to the root group, both for display and for the
+    // membership check below.
+    const hTag = /** @type {any} */ (event).tags?.find(
       (/** @type {string[]} */ t) => Array.isArray(t) && t[0] === 'h'
     )?.[1];
-    newestByPubkey.set(pubkey, {
+    const groupId = typeof hTag === 'string' && hTag ? hTag : (rootId ?? '');
+    const roster = rosterOf(membersByGroup, groupId);
+    if (roster && roster.has(pubkey)) continue;
+    // Per-(pubkey, group): a member's channel ask must not be shadowed by
+    // their older root request and vice versa.
+    const key = `${pubkey}\x1f${groupId}`;
+    const current = newestByKey.get(key);
+    if (current && current.createdAt >= createdAt) continue;
+    newestByKey.set(key, {
       id,
       pubkey,
       reason: typeof event.content === 'string' ? event.content : '',
       createdAt,
-      groupId: typeof groupId === 'string' ? groupId : ''
+      groupId
     });
   }
-  return [...newestByPubkey.values()]
+  return [...newestByKey.values()]
     .filter((row) => !dismissed.has(row.id))
     .sort((a, b) => b.createdAt - a.createdAt);
 }

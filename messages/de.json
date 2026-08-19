@@ -637,7 +637,7 @@
   "community_access_members": "Nur Mitglieder",
   "community_access_members_hint": "Nur Mitglieder dürfen veröffentlichen. Feinabstimmung pro Inhaltstyp folgt in den Einstellungen.",
   "community_type_provisioning_error": "Die Gruppe für die Mitgliederverwaltung konnte nicht angelegt werden: {reason}",
-  "community_groups_relay_membership_required": "Dieser Gruppen-Relay nimmt nur freigeschaltete Konten an. Bitte beim Betreiber freischalten lassen.",
+  "community_groups_relay_membership_required": "Dieses Gruppen-Relay nimmt nur freigeschaltete Konten an. Bitte beim Betreiber freischalten lassen.",
   "community_type_closed_confirm_note": "Geschlossene Community — keine öffentlichen Inhaltsbereiche.",
   "create_community_modal_keypair_selection_title": "Schlüsselpaar für Community wählen",
   "create_community_modal_current_keypair_title": "Aktuelles Schlüsselpaar verwenden",
@@ -3231,7 +3231,7 @@
   "group_invite_dm_npub_placeholder": "npub des Mitglieds",
   "group_invite_dm_invalid_npub": "Ungültiger npub",
   "group_invite_dm_send": "Einladung senden",
-  "group_invite_dm_body": "Du bist eingeladen, {name} beizutreten. Öffne diesen Link, um beizutreten:",
+  "group_invite_dm_body": "Du bist eingeladen, {name} beizutreten. Öffne diesen Link:",
   "group_invite_dm_sent": "Einladung per DM gesendet.",
   "group_invite_dm_failed": "Einladung fehlgeschlagen: {reason}",
   "group_invite_dm_failed_after_mint": "Einladung erstellt, aber die DM konnte nicht gesendet werden — Code: {code}",
@@ -3395,5 +3395,6 @@
   "community_join_request_approve_failed": "Aufnahme fehlgeschlagen: {reason}",
   "community_join_request": "Beitritt anfragen",
   "groups_composer_join_note": "Tritt bei, um hier zu schreiben.",
-  "community_join_requests_empty": "Keine offenen Anfragen."
+  "community_join_requests_empty": "Keine offenen Anfragen.",
+  "community_join_requests_error": "Anfragen konnten nicht geladen werden: {reason}"
 }

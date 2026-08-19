@@ -75,16 +75,23 @@ vi.mock('$lib/groups/channel-rosters.svelte.js', () => ({
   useChannelRosters: () => () => channelRostersState
 }));
 
-const { poolMock, relayRequestEvents } = vi.hoisted(() => {
+const { poolMock, relayRequestEvents, relayRequestError } = vi.hoisted(() => {
   /** 9021 fixtures the fake relay serves to the join-request REQ. */
   const relayRequestEvents = { value: /** @type {any[]} */ ([]) };
+  /** When set, the REQ errors instead of serving relayRequestEvents. */
+  const relayRequestError = { value: /** @type {any} */ (null) };
   return {
     relayRequestEvents,
+    relayRequestError,
     poolMock: {
       relay: vi.fn((_url) => ({
         publish: vi.fn(async () => ({ ok: true })),
         request: vi.fn(() => ({
           subscribe: (/** @type {any} */ observer) => {
+            if (relayRequestError.value) {
+              observer.error?.(relayRequestError.value);
+              return { unsubscribe: () => {} };
+            }
             for (const event of relayRequestEvents.value) observer.next?.(event);
             observer.complete?.();
             return { unsubscribe: () => {} };
@@ -147,7 +154,9 @@ vi.mock('$lib/paraglide/messages', () => ({
   community_join_requests_ignore: () => 'Ignorieren',
   community_join_request_approved: () => 'Aufgenommen.',
   community_join_request_approve_failed: (/** @type {{reason: string}} */ p) =>
-    `Aufnahme fehlgeschlagen: ${p.reason}`
+    `Aufnahme fehlgeschlagen: ${p.reason}`,
+  community_join_requests_error: (/** @type {{reason: string}} */ p) =>
+    `Anfragen konnten nicht geladen werden: ${p.reason}`
 }));
 
 const { default: MembershipPane } = await import(
@@ -198,6 +207,7 @@ beforeEach(() => {
   channelRostersState.membersByKey = {};
   channelRostersState.adminsByKey = {};
   relayRequestEvents.value = [];
+  relayRequestError.value = null;
   localStorage.clear();
   // jsdom has no navigator.clipboard; stub it
   Object.assign(navigator, {
@@ -417,6 +427,87 @@ describe('MembershipPane — Beitrittsanfragen (NIP-29 join requests)', () => {
       expect.anything()
     );
     await waitFor(() => expect(showToast).toHaveBeenCalledWith('Aufgenommen.', 'success'));
+  });
+
+  // Group-aware queue (final-review fix): a ROOT member's channel-hosted
+  // 9021 must survive the membership filter — their root membership does not
+  // clear the CHANNEL's own roster check.
+  it('shows a request from an existing ROOT member who knocked on a channel they are not a member of', async () => {
+    relayRequestEvents.value = [req(MEMBER, 100, 'req-1', 'chan1')];
+    // chan1's roster is KNOWN and does not contain MEMBER.
+    channelRostersState.membersByKey = { [`chan1@${GROUPS_RELAY}`]: new Set() };
+    render(MembershipPane, {
+      props: {
+        communikeyEvent: communikeyEvent([
+          ['membership', 'root1', GROUPS_RELAY],
+          ['group', 'chan1', GROUPS_RELAY, 'Willkommen', 'members']
+        ]),
+        communityId: OWNER,
+        profileEvent
+      }
+    });
+    const rows = await screen.findAllByTestId('join-request-row');
+    expect(rows).toHaveLength(1);
+    expect(rows[0].getAttribute('data-pubkey')).toBe(MEMBER);
+  });
+
+  it('drops a request from someone already a member of the SPECIFIC channel they knocked on', async () => {
+    relayRequestEvents.value = [req(MEMBER, 100, 'req-1', 'chan1')];
+    // chan1's roster is KNOWN and DOES contain MEMBER this time.
+    channelRostersState.membersByKey = { [`chan1@${GROUPS_RELAY}`]: new Set([MEMBER]) };
+    render(MembershipPane, {
+      props: {
+        communikeyEvent: communikeyEvent([
+          ['membership', 'root1', GROUPS_RELAY],
+          ['group', 'chan1', GROUPS_RELAY, 'Willkommen', 'members']
+        ]),
+        communityId: OWNER,
+        profileEvent
+      }
+    });
+    await new Promise((r) => setTimeout(r, 20));
+    expect(screen.queryByTestId('join-request-row')).toBeNull();
+  });
+
+  // approveRequest must tolerate a root put-user that answers "already a
+  // member" (a member re-knocking on a channel already has a root seat) —
+  // it must still carry through to the asked channel's grant instead of
+  // aborting via the outer catch.
+  it('approve tolerates the root put-user already answering "already a member" and still grants the asked channel', async () => {
+    relayRequestEvents.value = [req(MEMBER, 100, 'req-1', 'chan1')];
+    channelRostersState.membersByKey = { [`chan1@${GROUPS_RELAY}`]: new Set() };
+    putUserOn.mockImplementationOnce(async () => {
+      throw new Error('duplicate: already a member');
+    });
+    render(MembershipPane, {
+      props: {
+        communikeyEvent: communikeyEvent([
+          ['membership', 'root1', GROUPS_RELAY],
+          ['group', 'chan1', GROUPS_RELAY, 'Willkommen', 'members']
+        ]),
+        communityId: OWNER,
+        profileEvent
+      }
+    });
+    await fireEvent.click(await screen.findByTestId('join-request-approve'));
+    await waitFor(() => expect(putUserOn).toHaveBeenCalledTimes(2));
+    expect(putUserOn.mock.calls[0][0]).toEqual(expect.objectContaining({ id: 'root1' }));
+    expect(putUserOn.mock.calls[1][0]).toEqual(expect.objectContaining({ id: 'chan1' }));
+    expect(putUserOn.mock.calls[1][1]).toBe(MEMBER);
+    await waitFor(() => expect(showToast).toHaveBeenCalledWith('Aufgenommen.', 'success'));
+  });
+
+  // A non-auth REQ rejection (e.g. NIP-29 "restricted: ...") must not read
+  // as "no requests" — an empty queue and a broken queue must look
+  // different to the admin.
+  it('surfaces a non-auth REQ rejection as an inline error, not the empty state', async () => {
+    relayRequestError.value = new Error('restricted: not a member');
+    render(MembershipPane, {
+      props: { communikeyEvent: eventWithoutApplication, communityId: OWNER, profileEvent }
+    });
+    const error = await screen.findByTestId('join-requests-error');
+    expect(error.textContent).toContain('restricted: not a member');
+    expect(screen.queryByTestId('join-requests-empty')).toBeNull();
   });
 
   it('ignore hides the request and persists across a remount', async () => {

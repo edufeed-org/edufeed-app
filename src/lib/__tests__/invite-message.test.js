@@ -9,7 +9,7 @@ import { describe, it, expect, vi } from 'vitest';
 
 vi.mock('$lib/paraglide/messages', () => ({
   group_invite_dm_body: (/** @type {{name: string}} */ { name }) =>
-    `You're invited to join ${name}. Open this link to join:`
+    `You're invited to join ${name}. Open this link:`
 }));
 
 const { buildGroupInviteMessage } = await import('$lib/groups/invite-message.js');
@@ -21,7 +21,7 @@ describe('buildGroupInviteMessage', () => {
       joinUrl: 'https://edufeed.org/c/npub1abc?join=CODE123'
     });
 
-    expect(message).toContain("You're invited to join Bee Chat. Open this link to join:");
+    expect(message).toContain("You're invited to join Bee Chat. Open this link:");
     expect(message).toContain('https://edufeed.org/c/npub1abc?join=CODE123');
   });
 

@@ -3231,7 +3231,7 @@
   "group_invite_dm_npub_placeholder": "Member's npub",
   "group_invite_dm_invalid_npub": "Invalid npub",
   "group_invite_dm_send": "Send invite",
-  "group_invite_dm_body": "You're invited to join {name}. Open this link to join:",
+  "group_invite_dm_body": "You're invited to join {name}. Open this link:",
   "group_invite_dm_sent": "Invite sent via DM.",
   "group_invite_dm_failed": "Invite failed: {reason}",
   "group_invite_dm_failed_after_mint": "Invite created but the DM could not be sent — code: {code}",
@@ -3395,5 +3395,6 @@
   "community_join_request_approve_failed": "Approval failed: {reason}",
   "community_join_request": "Request to join",
   "groups_composer_join_note": "Join to write here.",
-  "community_join_requests_empty": "No open requests."
+  "community_join_requests_empty": "No open requests.",
+  "community_join_requests_error": "Requests could not be loaded: {reason}"
 }

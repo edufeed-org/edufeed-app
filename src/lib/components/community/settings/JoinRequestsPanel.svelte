@@ -16,6 +16,17 @@
   (A4, 2026-08-19: the members-tier blanket fan-out is retired; members join
   those channels themselves via their own 9021). Ignorieren = local
   dismissal by REQUEST id (a newer re-request resurfaces).
+
+  Group-aware queue (final-review fix, 2026-08-19): membership is checked
+  PER GROUP, not just against the root roster — an existing community member
+  knocking on a closed CHANNEL is not yet a member of that channel, and a
+  root-only check silently dropped their request before any admin saw it.
+  `membersByGroup` unions the root roster with every channel roster this
+  hook knows about (via useChannelRosters); a channel whose roster hasn't
+  answered yet is treated as "requester not a member" (pendingJoinRequests'
+  own safe-direction rule). approveRequest also tolerates the root put-user
+  coming back "already a member" — a member re-knocking on a channel would
+  otherwise abort before the channel grant ever went out.
 -->
 <script>
   import { pool } from '$lib/stores/nostr-infrastructure.svelte';
@@ -26,8 +37,10 @@
     writeDismissedJoinRequests
   } from '$lib/groups/join-requests.js';
   import { authenticateOnce, isAuthRequiredError } from '$lib/groups/relay-auth.js';
-  import { parseGroupPointers } from '$lib/groups/community-pointer.js';
+  import { parseGroupPointers, channelKey } from '$lib/groups/community-pointer.js';
+  import { useChannelRosters } from '$lib/groups/channel-rosters.svelte.js';
   import { putUserOn } from '$lib/groups/roster-fanout.js';
+  import { isAlreadyMemberError } from '$lib/groups/groups.js';
   import { useActiveUser } from '$lib/stores/accounts.svelte';
   import { useProfileMap } from '$lib/stores/profile-map.svelte.js';
   import { getUserDisplayName } from '$lib/helpers/message-utils.js';
@@ -56,10 +69,19 @@
   let joinRequestEvents = $state.raw([]);
   let dismissedIds = $state.raw(/** @type {Set<string>} */ (new Set()));
   let requestsSeq = $state(0);
+  // A non-auth REQ rejection (e.g. "restricted: ...") must not read as "no
+  // requests" — an empty queue and a broken queue look identical otherwise.
+  let requestsError = $state('');
 
   $effect(() => {
     dismissedIds = readDismissedJoinRequests(communityId);
   });
+
+  const channelPointers = $derived(parseGroupPointers(communikeyEvent));
+  // Per-channel rosters, so a group-aware membership check can tell "already
+  // a member of THIS channel" from "already a member of the community" —
+  // see the header comment.
+  const getChannelRosters = useChannelRosters(() => channelPointers);
 
   // Requests are stored per GROUP — one REQ per relay covering the root and
   // every channel id it hosts.
@@ -74,13 +96,14 @@
       byRelay.set(pointer.relay, ids);
     };
     add(roster.pointer);
-    for (const pointer of parseGroupPointers(communikeyEvent)) add(pointer);
+    for (const pointer of channelPointers) add(pointer);
     return byRelay;
   });
 
   $effect(() => {
     requestsSeq; // re-run after a successful NIP-42 authenticate
     const targets = groupTargets;
+    requestsError = '';
     if (targets.size === 0) return;
     /** @type {any[]} */
     const collected = [];
@@ -94,25 +117,54 @@
             joinRequestEvents = [...collected];
           },
           error: (/** @type {any} */ err) => {
-            if (!isAuthRequiredError(err) || !activeUser?.signer) return;
-            authenticateOnce(pool.relay(relayUrl), activeUser.signer).then((response) => {
-              if (response.ok) requestsSeq++;
-            });
+            if (isAuthRequiredError(err) && activeUser?.signer) {
+              authenticateOnce(pool.relay(relayUrl), activeUser.signer).then((response) => {
+                if (response.ok) requestsSeq++;
+              });
+              return;
+            }
+            // Not (successfully) recoverable via auth — surface it rather
+            // than let this relay's requests silently vanish from the queue.
+            requestsError = err instanceof Error ? err.message : String(err);
           }
         })
     );
     return () => subs.forEach((sub) => sub.unsubscribe());
   });
 
+  // Root roster + every known channel roster, keyed by bare group id (the
+  // same id space a 9021's `h` tag and JoinRequestRow.groupId use — NOT the
+  // relay-qualified channelKey). A channel absent from this map has an
+  // UNKNOWN roster; pendingJoinRequests treats that as "not a member" on
+  // purpose (overstating the queue beats silently dropping a real request).
+  const membersByGroup = $derived.by(() => {
+    /** @type {Map<string, Set<string>>} */
+    // eslint-disable-next-line svelte/prefer-svelte-reactivity -- rebuilt wholesale inside a $derived, never mutated after
+    const map = new Map();
+    // Admins + the community's own seat count as "already in" for the ROOT
+    // group only — a channel's own 39002 roster already reflects its
+    // members (including pre-joined admins), so it needs no such union.
+    if (roster.pointer?.id) {
+      map.set(
+        roster.pointer.id,
+        new Set([...roster.members, ...roster.admins.map((admin) => admin.pubkey), communityId])
+      );
+    }
+    const { membersByKey } = getChannelRosters();
+    for (const pointer of channelPointers) {
+      const key = channelKey(pointer);
+      if (!key) continue;
+      const known = membersByKey[key];
+      if (known) map.set(pointer.id, known);
+    }
+    return map;
+  });
+
   const pendingRequests = $derived(
     pendingJoinRequests({
       events: joinRequestEvents,
-      // Admins + the community's own seat count as "already in".
-      members: new Set([
-        ...roster.members,
-        ...roster.admins.map((admin) => admin.pubkey),
-        communityId
-      ]),
+      membersByGroup,
+      rootId: roster.pointer?.id ?? '',
       dismissed: dismissedIds
     })
   );
@@ -126,7 +178,14 @@
     if (!user || !roster.pointer || approving) return;
     approving = row.id;
     try {
-      await putUserOn(roster.pointer, row.pubkey, [], /** @type {any} */ (user));
+      try {
+        await putUserOn(roster.pointer, row.pubkey, [], /** @type {any} */ (user));
+      } catch (err) {
+        // A member re-knocking on a channel already has a root seat — the
+        // relay answers "already a member", not a failure. Continue to the
+        // asked-channel grant below instead of aborting via the outer catch.
+        if (!isAlreadyMemberError(err)) throw err;
+      }
       roster.refresh();
 
       // The applicant knocked on a SPECIFIC channel (root queue also
@@ -168,14 +227,20 @@
   }
 </script>
 
-{#if pendingRequests.length > 0 || showEmpty}
+{#if pendingRequests.length > 0 || showEmpty || requestsError}
   <h3 class="text-sm font-bold">{m.community_join_requests_title()}</h3>
   <p class="text-sm text-base-content/70">{m.community_join_requests_lead()}</p>
 
   {#if pendingRequests.length === 0}
-    <p class="mt-1 text-xs text-base-content/60" data-testid="join-requests-empty">
-      {m.community_join_requests_empty()}
-    </p>
+    {#if requestsError}
+      <p class="mt-1 text-xs text-error" data-testid="join-requests-error">
+        {m.community_join_requests_error({ reason: requestsError })}
+      </p>
+    {:else}
+      <p class="mt-1 text-xs text-base-content/60" data-testid="join-requests-empty">
+        {m.community_join_requests_empty()}
+      </p>
+    {/if}
   {:else}
     <div class="mt-2 flex flex-col gap-2">
       {#each pendingRequests as row (row.id)}
