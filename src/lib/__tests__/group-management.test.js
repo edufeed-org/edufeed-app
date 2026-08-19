@@ -72,6 +72,23 @@ describe('group management templates', () => {
     expect(t.tags).toEqual([['h', ID], ['public'], ['open'], ['restricted']]);
   });
 
+  it('edit-metadata carries a parent tag pointing at the community root group when given one', () => {
+    // NIP-29 Subgroups: a relay-side patch will auto-admit root-group
+    // members into channels that declare the root as their parent.
+    const t = buildEditGroupMetadataTemplate(ID, {
+      name: 'x',
+      isPublic: true,
+      isOpen: true,
+      parent: 'root1'
+    });
+    expect(t.tags).toContainEqual(['parent', 'root1']);
+  });
+
+  it('edit-metadata omits the parent tag when none is given', () => {
+    const t = buildEditGroupMetadataTemplate(ID, { name: 'x', isPublic: true, isOpen: true });
+    expect(t.tags.some((tag) => tag[0] === 'parent')).toBe(false);
+  });
+
   it('put-user matches applesauce shape with and without roles', () => {
     expect(buildPutUserTemplate(ID, PK, ['admin']).tags).toEqual([
       ['h', ID],

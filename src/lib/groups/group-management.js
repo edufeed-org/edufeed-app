@@ -24,7 +24,7 @@ const template = (kind, tags) => ({ kind, content: '', created_at: now(), tags }
  * The metadata tag block shared by create (9007) and edit (9002): fields only
  * when non-empty after trim, then BOTH marker sides so a flip always
  * overwrites.
- * @param {{name?: string, about?: string, picture?: string, isPublic: boolean, isOpen: boolean}} meta
+ * @param {{name?: string, about?: string, picture?: string, isPublic: boolean, isOpen: boolean, parent?: string}} meta
  * @returns {string[][]}
  */
 function metadataTags(meta) {
@@ -40,6 +40,11 @@ function metadataTags(meta) {
   // whole network WRITE into the group — design round 4 (buzz thread):
   // "restricted bleibt in allen drei Stufen gesetzt".
   tags.push(['restricted']);
+  // NIP-29 Subgroups: declares the community's root group as this channel's
+  // parent so a relay-side patch can auto-admit root-group members. Only
+  // meaningful when both groups live on the same relay (the tag is
+  // relay-scoped) — callers are responsible for that check.
+  if (meta.parent) tags.push(['parent', meta.parent]);
   return tags;
 }
 
@@ -49,7 +54,7 @@ function metadataTags(meta) {
  * relays that read metadata only from 9002 ignore the extra tags (khatru,
  * measured on groups.0xchat.com).
  * @param {string} groupId
- * @param {{name?: string, about?: string, picture?: string, isPublic: boolean, isOpen: boolean}} [meta]
+ * @param {{name?: string, about?: string, picture?: string, isPublic: boolean, isOpen: boolean, parent?: string}} [meta]
  */
 export function buildCreateGroupTemplate(groupId, meta) {
   return template(CREATE_GROUP_KIND, [['h', groupId], ...(meta ? metadataTags(meta) : [])]);
@@ -57,7 +62,7 @@ export function buildCreateGroupTemplate(groupId, meta) {
 
 /**
  * @param {string} groupId
- * @param {{name?: string, about?: string, picture?: string, isPublic: boolean, isOpen: boolean}} meta
+ * @param {{name?: string, about?: string, picture?: string, isPublic: boolean, isOpen: boolean, parent?: string}} meta
  */
 export function buildEditGroupMetadataTemplate(groupId, meta) {
   return template(EDIT_METADATA_KIND, [['h', groupId], ...metadataTags(meta)]);

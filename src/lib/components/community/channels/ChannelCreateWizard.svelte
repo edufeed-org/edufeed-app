@@ -31,6 +31,7 @@
   import { updatePersonalGroupsList } from '$lib/groups/personal-groups-list.js';
   import { pool } from '$lib/stores/nostr-infrastructure.svelte';
   import { unique } from '$lib/helpers/unique.js';
+  import { normalizeURL } from 'applesauce-core/helpers/url';
   import ProfileAvatar from '$lib/components/shared/ProfileAvatar.svelte';
   import ContactSearchInput from '$lib/components/shared/ContactSearchInput.svelte';
   import { getContext } from 'svelte';
@@ -253,10 +254,21 @@
       const id = generateGroupId();
       const { isPublic, isOpen, access } = accessChoiceToNip29({ tier, worldReadable });
       const relayConn = pool.relay(relay);
+      // NIP-29 Subgroups: declare the community root as this channel's
+      // parent so a relay-side patch can auto-admit root-group members —
+      // but only when both groups live on the same relay, since the tag is
+      // relay-scoped and a root on a different relay is meaningless there.
+      const sameRelay =
+        !!membershipPointer && normalizeURL(relay) === normalizeURL(membershipPointer.relay);
       await createGroupOnRelay({
         relayConn,
         id,
-        metadata: { name: name.trim(), isPublic, isOpen },
+        metadata: {
+          name: name.trim(),
+          isPublic,
+          isOpen,
+          parent: sameRelay ? membershipPointer.id : undefined
+        },
         user
       });
       // Past this point the group EXISTS on the relay — a retry must never

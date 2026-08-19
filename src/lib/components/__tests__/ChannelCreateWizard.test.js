@@ -456,11 +456,35 @@ describe('ChannelCreateWizard — NIP-29 groups', () => {
 
     await waitFor(() => expect(createGroupOnRelay).toHaveBeenCalledTimes(1));
     expect(poolRelaySpy).toHaveBeenCalledWith(GROUP_RELAY);
+    // NIP-29 Subgroups: same-relay membership pointer becomes the channel's
+    // `parent` — a later relay-side patch auto-admits root-group members.
+    const createArgs = createGroupOnRelay.mock.calls[0][0];
+    expect(createArgs.metadata).toEqual(expect.objectContaining({ parent: 'root-1' }));
     await waitFor(() => expect(attachGroupChannel).toHaveBeenCalledTimes(1));
     expect(attachGroupChannel.mock.calls[0][0].pointer).toEqual(
       expect.objectContaining({ relay: GROUP_RELAY })
     );
     await waitFor(() => expect(onCreated).toHaveBeenCalled());
+  });
+
+  it('a membership pointer on a DIFFERENT relay than the channel never becomes parent', async () => {
+    // The parent tag is relay-scoped per spec — a root group living
+    // elsewhere is meaningless to this relay's Subgroups handling.
+    const onCreated = vi.fn();
+    const communikeyEvent = nip29Community([['membership', 'root-1', GROUP_RELAY_B]]);
+    rosterState.membersByKey = { [CHAN_A_KEY]: new Set(), [CHAN_B_KEY]: new Set() };
+    render(ChannelCreateWizard, {
+      props: { communikeyEvent, onClose: () => {}, onCreated }
+    });
+
+    const nameInput = screen.getByPlaceholderText(/Staff room|Lehrer/);
+    await fireEvent.input(nameInput, { target: { value: 'Mathe' } });
+    await fireEvent.click(screen.getByRole('button', { name: /Next|Weiter/ }));
+    await fireEvent.click(screen.getByTestId('concord-wizard-create'));
+
+    await waitFor(() => expect(createGroupOnRelay).toHaveBeenCalledTimes(1));
+    const createArgs = createGroupOnRelay.mock.calls[0][0];
+    expect(createArgs.metadata.parent).toBeUndefined();
   });
 
   it('Concord mode: no weltoffen checkbox in either access state', async () => {
