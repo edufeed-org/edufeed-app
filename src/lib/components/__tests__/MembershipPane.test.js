@@ -315,36 +315,19 @@ describe('MembershipPane — access gating', () => {
 
 describe('MembershipPane — member-add fan-out', () => {
   const GROUPS_RELAY_N = 'wss://groups.example/';
-  const NEW_MEMBER = 'f'.repeat(64);
 
-  // Adding a member to the ROOT group must also put them on the community's
-  // members-tier channels — separate NIP-29 groups whose rosters the relay
-  // checks independently (laoc, 2026-08-19: an invited user stood before a
-  // locked 'willkommen').
-  it('fans a freshly added member out to answered members-tier channel rosters', async () => {
+  // A4 (2026-08-19): the blanket fan-out of a freshly added root member into
+  // every members-tier channel is retired — members join those channels
+  // themselves via their own 9021. onMemberAdded firing must not put-user
+  // ANY channel, answered roster or not; the session reconcile
+  // (roster-reconcile.svelte.js) is the only thing that still fans admins
+  // out, and only for admins.
+  it('no longer fans a freshly added member out to channels (members self-join)', async () => {
     const eventWithChannel = communikeyEvent([
       ['membership', 'root1', GROUPS_RELAY],
       ['group', 'chan1', GROUPS_RELAY, 'Willkommen', 'members']
     ]);
     channelRostersState.membersByKey = { [`chan1@${GROUPS_RELAY_N}`]: new Set() };
-    render(MembershipPane, {
-      props: { communikeyEvent: eventWithChannel, communityId: OWNER, profileEvent }
-    });
-    await fireEvent.click(screen.getByTestId('membership-manage-members'));
-    await fireEvent.click(screen.getByTestId('stub-group-members-added'));
-    await waitFor(() => expect(putUserOn).toHaveBeenCalledTimes(1));
-    expect(putUserOn.mock.calls[0][0]).toEqual(
-      expect.objectContaining({ id: 'chan1', relay: GROUPS_RELAY })
-    );
-    expect(putUserOn.mock.calls[0][1]).toBe(NEW_MEMBER);
-  });
-
-  it('skips channels whose roster has not answered (the reconcile sweeps later)', async () => {
-    const eventWithChannel = communikeyEvent([
-      ['membership', 'root1', GROUPS_RELAY],
-      ['group', 'chan1', GROUPS_RELAY, 'Willkommen', 'members']
-    ]);
-    channelRostersState.membersByKey = {};
     render(MembershipPane, {
       props: { communikeyEvent: eventWithChannel, communityId: OWNER, profileEvent }
     });
@@ -360,14 +343,15 @@ describe('MembershipPane — Beitrittsanfragen (NIP-29 join requests)', () => {
   const req = (
     /** @type {string} */ pubkey,
     /** @type {number} */ at,
-    id = `${pubkey.slice(0, 4)}-${at}`
+    id = `${pubkey.slice(0, 4)}-${at}`,
+    groupId = 'root1'
   ) => ({
     id,
     kind: 9021,
     pubkey,
     created_at: at,
     content: 'Ich möchte mitmachen',
-    tags: [['h', 'root1']]
+    tags: [['h', groupId]]
   });
 
   it('lists a stored 9021 from a non-member, hides one from an existing member', async () => {
@@ -380,7 +364,10 @@ describe('MembershipPane — Beitrittsanfragen (NIP-29 join requests)', () => {
     expect(rows[0].getAttribute('data-pubkey')).toBe(APPLICANT);
   });
 
-  it('approve put-users the applicant on the ROOT group and fans out to member channels', async () => {
+  // A4 (2026-08-19): approve no longer sweeps members-tier channels — a
+  // root-only 9021 (h-tag = the root group id, which has no matching
+  // `group` pointer) only put-users the ROOT.
+  it('approve put-users the applicant on the ROOT group only, no channel sweep', async () => {
     relayRequestEvents.value = [req(APPLICANT, 100)];
     channelRostersState.membersByKey = { [`chan1@wss://groups.example/`]: new Set() };
     render(MembershipPane, {
@@ -394,11 +381,41 @@ describe('MembershipPane — Beitrittsanfragen (NIP-29 join requests)', () => {
       }
     });
     await fireEvent.click(await screen.findByTestId('join-request-approve'));
+    await waitFor(() => expect(putUserOn).toHaveBeenCalledTimes(1));
+    expect(putUserOn.mock.calls[0][0]).toEqual(expect.objectContaining({ id: 'root1' }));
+    expect(putUserOn.mock.calls[0][1]).toBe(APPLICANT);
+    await waitFor(() => expect(showToast).toHaveBeenCalledWith('Aufgenommen.', 'success'));
+  });
+
+  // The applicant knocked on a SPECIFIC channel (9021 h-tagged to that
+  // channel's group id, not the root) — approve honors that one ask on top
+  // of the root admission, still with no further sweep.
+  it('approve honors a specifically-asked channel on top of the root admission', async () => {
+    relayRequestEvents.value = [req(APPLICANT, 100, 'req-1', 'chan1')];
+    render(MembershipPane, {
+      props: {
+        communikeyEvent: communikeyEvent([
+          ['membership', 'root1', GROUPS_RELAY],
+          ['group', 'chan1', GROUPS_RELAY, 'Willkommen', 'members'],
+          ['group', 'chan2', GROUPS_RELAY, 'Planung', 'members']
+        ]),
+        communityId: OWNER,
+        profileEvent
+      }
+    });
+    await fireEvent.click(await screen.findByTestId('join-request-approve'));
     await waitFor(() => expect(putUserOn).toHaveBeenCalledTimes(2));
-    // Root first, then the members-tier channel fan-out.
     expect(putUserOn.mock.calls[0][0]).toEqual(expect.objectContaining({ id: 'root1' }));
     expect(putUserOn.mock.calls[0][1]).toBe(APPLICANT);
     expect(putUserOn.mock.calls[1][0]).toEqual(expect.objectContaining({ id: 'chan1' }));
+    expect(putUserOn.mock.calls[1][1]).toBe(APPLICANT);
+    // chan2 never asked for — not swept.
+    expect(putUserOn).not.toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'chan2' }),
+      APPLICANT,
+      expect.anything(),
+      expect.anything()
+    );
     await waitFor(() => expect(showToast).toHaveBeenCalledWith('Aufgenommen.', 'success'));
   });
 

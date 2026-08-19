@@ -130,13 +130,13 @@ describe('reconcilePlan', () => {
   const chan2 = { id: 'chan2', relay: RELAY };
   const k = (/** @type {any} */ p) => /** @type {string} */ (channelKey(p));
 
-  // Community members who joined AFTER a members-tier channel was created
-  // (invite code: the relay adds them to the ROOT group, no admin around to
-  // fan out) are missing from the channel rosters — the plan is every
-  // (channel, member) pair an admin needs to put-user (laoc, 2026-08-19).
-  it('pairs every root member missing from an answered channel roster', () => {
+  // Root-group admins granted AFTER a channel was created (ChannelCreateWizard
+  // only pre-joins admins at CREATION time — A3) are missing from that
+  // channel's roster — the plan is every (channel, admin) pair an admin
+  // needs to put-user (laoc, 2026-08-19).
+  it('pairs every root admin missing from an answered channel roster', () => {
     const plan = reconcilePlan({
-      members: [A, B],
+      admins: [A, B],
       pointers: [chan1, chan2],
       membersByKey: { [k(chan1)]: new Set([A]), [k(chan2)]: new Set() },
       adminsByKey: {}
@@ -150,7 +150,7 @@ describe('reconcilePlan', () => {
 
   it('never plans against a roster that has not answered ("no answer" is not "not a member")', () => {
     const plan = reconcilePlan({
-      members: [A],
+      admins: [A],
       pointers: [chan1],
       membersByKey: {},
       adminsByKey: {}
@@ -160,11 +160,29 @@ describe('reconcilePlan', () => {
 
   it('counts channel admins as present', () => {
     const plan = reconcilePlan({
-      members: [A],
+      admins: [A],
       pointers: [chan1],
       membersByKey: { [k(chan1)]: new Set() },
       adminsByKey: { [k(chan1)]: [{ pubkey: A, roles: ['admin'] }] }
     });
     expect(plan).toEqual([]);
+  });
+
+  // A4: retired the members-tier blanket fan-out — members now join
+  // member-tier channels themselves via their own 9021. reconcilePlan's
+  // input switches from the root roster's MEMBERS to its ADMINS, and it now
+  // plans over ALL channel pointers (any tier), not just members-tier ones,
+  // since admins belong everywhere.
+  it('reconcilePlan targets admins missing from ANY answered channel, with no member sweep', () => {
+    const chMembers = { id: 'chan-members', relay: RELAY };
+    const chInvited = { id: 'chan-invited', relay: RELAY };
+    const key = (/** @type {any} */ p) => /** @type {string} */ (channelKey(p));
+    const plan = reconcilePlan({
+      admins: [A],
+      pointers: [chMembers, chInvited], // both answered below
+      membersByKey: { [key(chMembers)]: new Set(), [key(chInvited)]: new Set([A]) },
+      adminsByKey: { [key(chMembers)]: [], [key(chInvited)]: [] }
+    });
+    expect(plan).toEqual([{ pointer: chMembers, pubkey: A }]);
   });
 });

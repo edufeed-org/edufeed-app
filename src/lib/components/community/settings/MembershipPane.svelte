@@ -34,10 +34,6 @@
     generateInviteCode,
     publishToGroupRelay
   } from '$lib/groups/group-management.js';
-  import { stufe2Pointers, fanOutPlan } from '$lib/groups/area-members.js';
-  import { useChannelRosters } from '$lib/groups/channel-rosters.svelte.js';
-  import { channelKey } from '$lib/groups/community-pointer.js';
-  import { putUserOn, fanOut } from '$lib/groups/roster-fanout.js';
   import JoinRequestsPanel from '$lib/components/community/settings/JoinRequestsPanel.svelte';
   import GroupMembersModal from '$lib/components/groups/GroupMembersModal.svelte';
   import * as m from '$lib/paraglide/messages';
@@ -73,39 +69,16 @@
 
   let showMembersModal = $state(false);
 
-  // Members-tier channel rosters — the fan-out targets when an admin adds a
-  // member here. A channel's roster only counts once it has ANSWERED
-  // (fanOutPlan skips unanswered ones), so a slow roster is skipped, never
-  // double-added; the session reconcile (roster-reconcile.svelte.js) sweeps
-  // up whatever this pass had to skip.
-  const getChannelRosters = useChannelRosters(() => stufe2Pointers(communikeyEvent));
-
-  /** @param {string} pubkey */
-  async function fanOutNewMember(pubkey) {
-    const user = activeUser;
-    if (!user) return;
-    const targets = fanOutPlan({
-      pubkey,
-      pointers: stufe2Pointers(communikeyEvent),
-      membersByKey: getChannelRosters().membersByKey,
-      adminsByKey: getChannelRosters().adminsByKey
-    });
-    if (targets.length === 0) return;
-    const aggregate = await fanOut(
-      targets,
-      (pointer) => channelKey(pointer) ?? pointer.id,
-      (pointer) => putUserOn(pointer, pubkey, [], /** @type {any} */ (user))
-    );
-    if (aggregate.failed.length > 0) {
-      showToast(
-        m.area_members_fanout_partial({
-          failed: aggregate.failed.length,
-          total: targets.length
-        }),
-        'warning'
-      );
-    }
-  }
+  // Root-only concern now (A4, 2026-08-19): the blanket fan-out of a newly
+  // added root member into every members-tier channel is retired — members
+  // join those channels themselves via their own kind-9021 (auto-admitted on
+  // relays carrying the parent-tag patch, a pending application elsewhere).
+  // Admins added after a channel was created are still covered, by the
+  // session reconcile (roster-reconcile.svelte.js), not here. Kept as a
+  // no-op so GroupMembersModal's onMemberAdded hook still has somewhere to
+  // land.
+  /** @param {string} _pubkey */
+  async function fanOutNewMember(_pubkey) {}
 
   // --- Invite code minting -------------------------------------------------
 

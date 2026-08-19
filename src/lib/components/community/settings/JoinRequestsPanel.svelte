@@ -11,10 +11,11 @@
   (measured: CLOSED 'restricted: not a member' on groups.0xchat.com), so
   the REQs authenticate on demand.
 
-  Aufnehmen = put-user on the root (community admission) + the members-tier
-  channel fan-out + — when the applicant asked for a specific non-members
-  channel — a put-user on that channel as well. Ignorieren = local dismissal
-  by REQUEST id (a newer re-request resurfaces).
+  Aufnehmen = put-user on the root (community admission) + — when the
+  applicant asked for a specific channel — a put-user on that channel too
+  (A4, 2026-08-19: the members-tier blanket fan-out is retired; members join
+  those channels themselves via their own 9021). Ignorieren = local
+  dismissal by REQUEST id (a newer re-request resurfaces).
 -->
 <script>
   import { pool } from '$lib/stores/nostr-infrastructure.svelte';
@@ -25,10 +26,8 @@
     writeDismissedJoinRequests
   } from '$lib/groups/join-requests.js';
   import { authenticateOnce, isAuthRequiredError } from '$lib/groups/relay-auth.js';
-  import { parseGroupPointers, channelKey } from '$lib/groups/community-pointer.js';
-  import { stufe2Pointers, fanOutPlan } from '$lib/groups/area-members.js';
-  import { useChannelRosters } from '$lib/groups/channel-rosters.svelte.js';
-  import { putUserOn, fanOut } from '$lib/groups/roster-fanout.js';
+  import { parseGroupPointers } from '$lib/groups/community-pointer.js';
+  import { putUserOn } from '$lib/groups/roster-fanout.js';
   import { useActiveUser } from '$lib/stores/accounts.svelte';
   import { useProfileMap } from '$lib/stores/profile-map.svelte.js';
   import { getUserDisplayName } from '$lib/helpers/message-utils.js';
@@ -52,8 +51,6 @@
 
   const getActiveUser = useActiveUser();
   const activeUser = $derived(getActiveUser());
-
-  const getChannelRosters = useChannelRosters(() => stufe2Pointers(communikeyEvent));
 
   /** @type {any[]} */
   let joinRequestEvents = $state.raw([]);
@@ -132,36 +129,19 @@
       await putUserOn(roster.pointer, row.pubkey, [], /** @type {any} */ (user));
       roster.refresh();
 
-      // Members-tier channels: same propagation an admin-added member gets.
-      const targets = fanOutPlan({
-        pubkey: row.pubkey,
-        pointers: stufe2Pointers(communikeyEvent),
-        membersByKey: getChannelRosters().membersByKey,
-        adminsByKey: getChannelRosters().adminsByKey
-      });
-      // The applicant knocked on a SPECIFIC channel? Honor it even when the
-      // channel isn't members-tier (an invited-tier ask, personally granted
-      // by this approval).
+      // The applicant knocked on a SPECIFIC channel (root queue also
+      // collects channel-hosted 9021s, since a closed group only serves its
+      // OWN requests) — honor that one ask, whatever tier it is. No sweep
+      // beyond it: members-tier channels are self-joined via 9021 now (A4).
       const asked = parseGroupPointers(communikeyEvent).find(
         (pointer) => pointer.id === row.groupId
       );
-      if (asked && !targets.some((pointer) => channelKey(pointer) === channelKey(asked))) {
-        targets.push(asked);
-      }
-      if (targets.length > 0) {
-        const aggregate = await fanOut(
-          targets,
-          (pointer) => channelKey(pointer) ?? pointer.id,
-          (pointer) => putUserOn(pointer, row.pubkey, [], /** @type {any} */ (user))
-        );
-        if (aggregate.failed.length > 0) {
-          showToast(
-            m.area_members_fanout_partial({
-              failed: aggregate.failed.length,
-              total: targets.length
-            }),
-            'warning'
-          );
+      if (asked) {
+        try {
+          await putUserOn(asked, row.pubkey, [], /** @type {any} */ (user));
+        } catch (err) {
+          console.error('groups: channel put-user failed after approval', err);
+          showToast(m.groups_members_action_failed(), 'warning');
         }
       }
       showToast(m.community_join_request_approved(), 'success');

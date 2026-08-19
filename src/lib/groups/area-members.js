@@ -104,24 +104,29 @@ export function fanOutPlan({ pubkey, pointers, membersByKey, adminsByKey = {} })
 }
 
 /**
- * The full repair plan for a community: every (channel, member) pair where a
- * ROOT-roster member is missing from a members-tier channel's answered
- * roster. Invite-code joiners land on the root group with no admin around to
- * fan them out (laoc, 2026-08-19) — an admin runs this plan later instead.
+ * The full repair plan for a community: every (channel, admin) pair where a
+ * ROOT-group admin is missing from an ANSWERED channel roster, over every
+ * channel pointer (any tier — admins belong everywhere).
+ *
+ * Ordinary members are no longer swept here (A4, 2026-08-19): they join
+ * member-tier channels themselves via their own kind-9021 (auto-admitted on
+ * relays that carry the parent-tag patch; a pending application elsewhere).
+ * This plan exists for admins granted AFTER a channel was created —
+ * ChannelCreateWizard's pre-join (A3) only covers channel-creation time.
  * Built on fanOutPlan, so unanswered rosters are never planned against.
  * @param {{
- *   members: string[],
+ *   admins: string[],
  *   pointers: any[],
  *   membersByKey: Record<string, Set<string>>,
  *   adminsByKey?: Record<string, import('applesauce-common/helpers/groups').GroupAdmin[]>
  * }} args
  * @returns {Array<{pointer: any, pubkey: string}>}
  */
-export function reconcilePlan({ members, pointers, membersByKey, adminsByKey = {} }) {
+export function reconcilePlan({ admins, pointers, membersByKey, adminsByKey = {} }) {
   /** @type {Array<{pointer: any, pubkey: string}>} */
   const plan = [];
   for (const pointer of pointers) {
-    for (const pubkey of members) {
+    for (const pubkey of admins) {
       if (fanOutPlan({ pubkey, pointers: [pointer], membersByKey, adminsByKey }).length > 0) {
         plan.push({ pointer, pubkey });
       }

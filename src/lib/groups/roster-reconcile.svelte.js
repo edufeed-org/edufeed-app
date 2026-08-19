@@ -1,14 +1,18 @@
 // Owner/admin-side roster reconcile for moderated communities.
 //
-// Members-tier ("Alle in dieser Community") channels are ordinary NIP-29
-// groups: the relay checks THEIR roster, not the community's root roster,
-// and plain NIP-29 has no cross-group membership. The community roster is
-// mirrored into each channel at channel creation and on admin member-adds —
-// but invite-CODE joiners are added to the root group by the relay itself,
-// with no admin present to fan them out (laoc, 2026-08-19: an invited user
-// stood before a locked 'willkommen'). This hook closes that gap: whenever
-// an admin has the community open, it diffs the root roster against every
-// members-tier channel roster and silently put-users the missing.
+// Every channel is a standalone NIP-29 group: the relay checks THEIR roster,
+// not the community's root roster, and plain NIP-29 has no cross-group
+// membership. ChannelCreateWizard pre-joins the root group's admins into a
+// channel at CREATION time (A3), but an admin granted afterwards — or one
+// added while a channel roster hadn't answered yet — is not covered. This
+// hook closes that gap: whenever an admin has the community open, it diffs
+// the root roster's ADMINS against every channel roster (any tier) and
+// silently put-users the missing, with role ['admin'].
+//
+// Ordinary members get NO blanket fan-out here (A4, 2026-08-19): they join
+// member-tier channels themselves via their own kind-9021 — instantly
+// admitted on relays carrying the parent-tag patch, a pending application
+// elsewhere.
 //
 // Guard rails:
 // - Runs once per (community, account) per session — module-level ledger.
@@ -20,8 +24,8 @@
 // MUST be called during component init ($effect + wrapped hooks inside).
 import { useRootRoster } from './root-roster.svelte.js';
 import { useChannelRosters } from './channel-rosters.svelte.js';
-import { stufe2Pointers, reconcilePlan } from './area-members.js';
-import { channelKey } from './community-pointer.js';
+import { reconcilePlan } from './area-members.js';
+import { channelKey, parseGroupPointers } from './community-pointer.js';
 import { putUserOn, fanOut } from './roster-fanout.js';
 import { useActiveUser } from '$lib/stores/accounts.svelte';
 import { isCommunityOwner } from '$lib/helpers/community-signer.js';
@@ -40,7 +44,7 @@ export function __resetRosterReconcile() {
  */
 export function useRosterReconcile(getCommunikeyEvent) {
   const getRoster = useRootRoster(getCommunikeyEvent);
-  const getRosters = useChannelRosters(() => stufe2Pointers(getCommunikeyEvent()));
+  const getRosters = useChannelRosters(() => parseGroupPointers(getCommunikeyEvent()));
   const getActiveUser = useActiveUser();
 
   $effect(() => {
@@ -50,7 +54,7 @@ export function useRosterReconcile(getCommunikeyEvent) {
     const { membersByKey, adminsByKey } = getRosters();
     if (!communikeyEvent?.pubkey || !user?.signer || !roster.pointer) return;
 
-    const pointers = stufe2Pointers(communikeyEvent);
+    const pointers = parseGroupPointers(communikeyEvent);
     if (pointers.length === 0) return;
 
     const ledgerKey = `${communikeyEvent.pubkey} ${user.pubkey}`;
@@ -58,22 +62,21 @@ export function useRosterReconcile(getCommunikeyEvent) {
 
     // Channel-admin rights: the owner or a root-group admin. Anyone else
     // couldn't sign the put-users anyway.
-    const isAdmin =
-      isCommunityOwner(communikeyEvent.pubkey) ||
-      roster.admins.some((admin) => admin.pubkey === user.pubkey);
+    const admins = roster.admins.map((admin) => admin.pubkey);
+    const isAdmin = isCommunityOwner(communikeyEvent.pubkey) || admins.includes(user.pubkey);
     if (!isAdmin) return;
 
-    // Wait for EVERY members-tier roster to have answered — a partial diff
-    // would re-add on the next visit, but worse, it would mark the ledger
-    // done while channels were still unanswered.
+    // Wait for EVERY channel roster to have answered — a partial diff would
+    // re-add on the next visit, but worse, it would mark the ledger done
+    // while channels were still unanswered.
     const allAnswered = pointers.every((pointer) => {
       const key = channelKey(pointer);
       return key !== null && membersByKey[key] !== undefined;
     });
-    if (!allAnswered || roster.isLoading || roster.members.size === 0) return;
+    if (!allAnswered || roster.isLoading || admins.length === 0) return;
 
     const plan = reconcilePlan({
-      members: [...roster.members],
+      admins,
       pointers,
       membersByKey,
       adminsByKey
@@ -84,11 +87,11 @@ export function useRosterReconcile(getCommunikeyEvent) {
     void fanOut(
       plan,
       (item) => `${channelKey(item.pointer)} ${item.pubkey}`,
-      (item) => putUserOn(item.pointer, item.pubkey, [], /** @type {any} */ (user))
+      (item) => putUserOn(item.pointer, item.pubkey, ['admin'], /** @type {any} */ (user))
     ).then((aggregate) => {
       if (aggregate.ok.length > 0) {
         console.info(
-          `groups: reconciled ${aggregate.ok.length} roster entr${aggregate.ok.length === 1 ? 'y' : 'ies'} into members-tier channels`
+          `groups: reconciled ${aggregate.ok.length} admin roster entr${aggregate.ok.length === 1 ? 'y' : 'ies'} across channels`
         );
       }
     });
