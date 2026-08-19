@@ -3387,7 +3387,7 @@
   "community_members_moderated_community": "This is a moderated community — new members join via invite code.",
   "community_join_invite_lead": "Enter the invite code you received from the community.",
   "community_join_requests_title": "Join requests",
-  "community_join_requests_lead": "These people want to become members. Approving also adds them to all member channels.",
+  "community_join_requests_lead": "Open requests to join this community and its channels. Approving admits them to the community (and the specifically requested channel).",
   "community_join_requests_approve": "Approve",
   "community_join_requests_ignore": "Ignore",
   "community_join_request_approved": "Approved.",
