@@ -75,11 +75,21 @@ vi.mock('$lib/groups/channel-rosters.svelte.js', () => ({
   useChannelRosters: () => () => channelRostersState
 }));
 
-const { poolMock } = vi.hoisted(() => {
+const { poolMock, relayRequestEvents } = vi.hoisted(() => {
+  /** 9021 fixtures the fake relay serves to the join-request REQ. */
+  const relayRequestEvents = { value: /** @type {any[]} */ ([]) };
   return {
+    relayRequestEvents,
     poolMock: {
       relay: vi.fn((_url) => ({
-        publish: vi.fn(async () => ({ ok: true }))
+        publish: vi.fn(async () => ({ ok: true })),
+        request: vi.fn(() => ({
+          subscribe: (/** @type {any} */ observer) => {
+            for (const event of relayRequestEvents.value) observer.next?.(event);
+            observer.complete?.();
+            return { unsubscribe: () => {} };
+          }
+        }))
       }))
     }
   };
@@ -92,8 +102,17 @@ vi.mock('$lib/stores/accounts.svelte', () => ({
   useActiveUser: () => () => activeUserFixture.value
 }));
 vi.mock('$lib/stores/nostr-infrastructure.svelte', () => ({
-  pool: poolMock
+  pool: poolMock,
+  // ProfileAvatar (join-request rows) imports eventStore statically.
+  eventStore: {
+    model: vi.fn(() => ({ subscribe: () => ({ unsubscribe: () => {} }) })),
+    profile: vi.fn(() => ({ subscribe: () => ({ unsubscribe: () => {} }) }))
+  }
 }));
+vi.mock('$lib/stores/profile-map.svelte.js', () => ({
+  useProfileMap: () => () => new Map()
+}));
+vi.mock('$lib/components/shared/ProfileAvatar.svelte', () => ({ default: function Stub() {} }));
 vi.mock('$lib/helpers/community-signer.js', () => ({ getCommunitySigner, isCommunityOwner }));
 vi.mock('$lib/helpers/toast', () => ({ showToast }));
 vi.mock('$lib/groups/group-management.js', async () => {
@@ -120,7 +139,14 @@ vi.mock('$lib/paraglide/messages', () => ({
   community_invite_copied: () => 'Kopiert.',
   community_invite_failed: (/** @type {{reason: string}} */ p) =>
     `Code konnte nicht erstellt werden: ${p.reason}`,
-  community_invite_clipboard_unavailable: () => 'Zwischenablage nicht verfügbar'
+  community_invite_clipboard_unavailable: () => 'Zwischenablage nicht verfügbar',
+  community_join_requests_title: () => 'Beitrittsanfragen',
+  community_join_requests_lead: () => 'lead',
+  community_join_requests_approve: () => 'Aufnehmen',
+  community_join_requests_ignore: () => 'Ignorieren',
+  community_join_request_approved: () => 'Aufgenommen.',
+  community_join_request_approve_failed: (/** @type {{reason: string}} */ p) =>
+    `Aufnahme fehlgeschlagen: ${p.reason}`
 }));
 
 const { default: MembershipPane } = await import(
@@ -170,6 +196,8 @@ beforeEach(() => {
   fanOut.mockClear();
   channelRostersState.membersByKey = {};
   channelRostersState.adminsByKey = {};
+  relayRequestEvents.value = [];
+  localStorage.clear();
   // jsdom has no navigator.clipboard; stub it
   Object.assign(navigator, {
     clipboard: {
@@ -323,6 +351,70 @@ describe('MembershipPane — member-add fan-out', () => {
     await fireEvent.click(screen.getByTestId('stub-group-members-added'));
     await new Promise((r) => setTimeout(r, 20));
     expect(putUserOn).not.toHaveBeenCalled();
+  });
+});
+
+describe('MembershipPane — Beitrittsanfragen (NIP-29 join requests)', () => {
+  const APPLICANT = 'e'.repeat(64);
+  const req = (
+    /** @type {string} */ pubkey,
+    /** @type {number} */ at,
+    id = `${pubkey.slice(0, 4)}-${at}`
+  ) => ({
+    id,
+    kind: 9021,
+    pubkey,
+    created_at: at,
+    content: 'Ich möchte mitmachen',
+    tags: [['h', 'root1']]
+  });
+
+  it('lists a stored 9021 from a non-member, hides one from an existing member', async () => {
+    relayRequestEvents.value = [req(APPLICANT, 100), req(MEMBER, 200)];
+    render(MembershipPane, {
+      props: { communikeyEvent: eventWithoutApplication, communityId: OWNER, profileEvent }
+    });
+    const rows = await screen.findAllByTestId('join-request-row');
+    expect(rows).toHaveLength(1);
+    expect(rows[0].getAttribute('data-pubkey')).toBe(APPLICANT);
+  });
+
+  it('approve put-users the applicant on the ROOT group and fans out to member channels', async () => {
+    relayRequestEvents.value = [req(APPLICANT, 100)];
+    channelRostersState.membersByKey = { [`chan1@wss://groups.example/`]: new Set() };
+    render(MembershipPane, {
+      props: {
+        communikeyEvent: communikeyEvent([
+          ['membership', 'root1', GROUPS_RELAY],
+          ['group', 'chan1', GROUPS_RELAY, 'Willkommen', 'members']
+        ]),
+        communityId: OWNER,
+        profileEvent
+      }
+    });
+    await fireEvent.click(await screen.findByTestId('join-request-approve'));
+    await waitFor(() => expect(putUserOn).toHaveBeenCalledTimes(2));
+    // Root first, then the members-tier channel fan-out.
+    expect(putUserOn.mock.calls[0][0]).toEqual(expect.objectContaining({ id: 'root1' }));
+    expect(putUserOn.mock.calls[0][1]).toBe(APPLICANT);
+    expect(putUserOn.mock.calls[1][0]).toEqual(expect.objectContaining({ id: 'chan1' }));
+    await waitFor(() => expect(showToast).toHaveBeenCalledWith('Aufgenommen.', 'success'));
+  });
+
+  it('ignore hides the request and persists across a remount', async () => {
+    relayRequestEvents.value = [req(APPLICANT, 100)];
+    const first = render(MembershipPane, {
+      props: { communikeyEvent: eventWithoutApplication, communityId: OWNER, profileEvent }
+    });
+    await fireEvent.click(await screen.findByTestId('join-request-ignore'));
+    expect(screen.queryByTestId('join-request-row')).toBeNull();
+    first.unmount();
+
+    render(MembershipPane, {
+      props: { communikeyEvent: eventWithoutApplication, communityId: OWNER, profileEvent }
+    });
+    await new Promise((r) => setTimeout(r, 20));
+    expect(screen.queryByTestId('join-request-row')).toBeNull();
   });
 });
 

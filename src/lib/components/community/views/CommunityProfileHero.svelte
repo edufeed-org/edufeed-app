@@ -149,17 +149,17 @@
   let isRosterMember = $derived(!!activeUser && getRootRoster().isMember(activeUser.pubkey));
   // The root group's own kind:39000 "closed" marker (group-management.js's
   // metadataTags) — distinct from the read-access `private` tag
-  // channel-access.js reads. "Closed" here means bare 9021s are ignored;
-  // an invite code is still honoured, so that affordance is never gated on it.
+  // channel-access.js reads. Closed means bare 9021s don't auto-join —
+  // but they are STORED (verified live on groups.0xchat.com) and land in
+  // the admins' Beitrittsanfragen queue (MembershipPane), so the request
+  // button stays offered either way; only its wording flips between
+  // instant join and request-for-approval.
   let rootMetadataKey = $derived(rootPointer ? channelKey(rootPointer) : null);
   let rootMetadataEvent = $derived(
     rootMetadataKey ? getRootMetadata().byKey[rootMetadataKey] : null
   );
   // Same lock-direction default as channel-access.js: missing/unloaded
-  // metadata counts as CLOSED, never as open — a 39000 that hasn't arrived
-  // yet (or an unreachable relay) must not offer a bare join button whose
-  // 9021 the relay would silently ignore. The invite-code affordance is
-  // unaffected — it is always legitimate once the roster itself has loaded.
+  // metadata counts as CLOSED, never as open.
   let isRootClosed = $derived(
     !rootMetadataEvent ||
       !!rootMetadataEvent.tags?.some((/** @type {string[]} */ t) => t[0] === 'closed')
@@ -280,16 +280,20 @@
                    not instead of it: redeeming a code is always legitimate
                    even after a bare 9021 is already outstanding. -->
               <span class="text-sm text-base-content/60">{m.community_join_pending()}</span>
-            {:else if !isRootClosed}
+            {:else}
+              <!-- Open root: the relay adds you on the spot. Closed root:
+                   the 9021 lands in the admins' Beitrittsanfragen queue —
+                   say "anfragen", not "beitreten". -->
               <button
                 onclick={handleJoinGroup}
                 disabled={isSendingJoin}
                 class="btn btn-sm btn-primary"
+                data-testid="join-request-button"
               >
                 {#if isSendingJoin}
                   <span class="loading loading-xs loading-spinner"></span>
                 {:else}
-                  {m.community_join_group()}
+                  {isRootClosed ? m.community_join_request() : m.community_join_group()}
                 {/if}
               </button>
             {/if}

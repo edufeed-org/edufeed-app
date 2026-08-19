@@ -28,6 +28,7 @@ vi.mock('$lib/paraglide/messages', () => ({
   community_type_closed_title: () => 'Closed',
   community_hero_closed_hint: () => 'Invitation only',
   community_join_group: () => 'Join',
+  community_join_request: () => 'Request to join',
   community_join_pending: () => 'Request sent — waiting for approval.',
   community_join_member: () => 'Member',
   community_join_invite_toggle: () => 'Redeem invite code',
@@ -215,20 +216,25 @@ describe('CommunityProfileHero — moderated join lane', () => {
     expect(screen.getAllByText('Redeem invite code').length).toBeGreaterThan(0);
   });
 
-  it('non-member, root group closed: hides the bare Join button but keeps the invite-code affordance', () => {
+  // A closed root STORES bare 9021s (verified live on groups.0xchat.com) and
+  // they land in the admins' Beitrittsanfragen queue — so the request button
+  // stays, with request-for-approval wording instead of instant "Join".
+  it('non-member, root group closed: offers "Request to join" instead of instant Join', () => {
     holders.metadataByKey = {
       [ROOT_KEY]: { kind: 39000, tags: [['d', ROOT_ID], ['closed']] }
     };
     renderModerated();
 
+    expect(screen.getAllByText('Request to join').length).toBeGreaterThan(0);
     expect(screen.queryByText('Join')).toBeNull();
     expect(screen.getAllByText('Redeem invite code').length).toBeGreaterThan(0);
   });
 
-  it('root 39000 not yet loaded (empty byKey): counts as closed — invite-code only, no bare Join', () => {
+  it('root 39000 not yet loaded (empty byKey): counts as closed — request wording, no instant Join', () => {
     holders.metadataByKey = {};
     renderModerated();
 
+    expect(screen.getAllByText('Request to join').length).toBeGreaterThan(0);
     expect(screen.queryByText('Join')).toBeNull();
     expect(screen.getAllByText('Redeem invite code').length).toBeGreaterThan(0);
   });

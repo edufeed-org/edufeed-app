@@ -38,6 +38,15 @@
   import { useChannelRosters } from '$lib/groups/channel-rosters.svelte.js';
   import { channelKey } from '$lib/groups/community-pointer.js';
   import { putUserOn, fanOut } from '$lib/groups/roster-fanout.js';
+  import {
+    pendingJoinRequests,
+    readDismissedJoinRequests,
+    writeDismissedJoinRequests
+  } from '$lib/groups/join-requests.js';
+  import { authenticateOnce, isAuthRequiredError } from '$lib/groups/relay-auth.js';
+  import { useProfileMap } from '$lib/stores/profile-map.svelte.js';
+  import { getUserDisplayName } from '$lib/helpers/message-utils.js';
+  import ProfileAvatar from '$lib/components/shared/ProfileAvatar.svelte';
   import GroupMembersModal from '$lib/components/groups/GroupMembersModal.svelte';
   import * as m from '$lib/paraglide/messages';
 
@@ -155,6 +164,90 @@
       );
     }
   }
+
+  // --- Beitrittsanfragen: NIP-29's spec-native application queue ----------
+  // A bare kind-9021 on a CLOSED group is STORED by the relay (verified live
+  // on groups.0xchat.com) until an admin answers with put-user. This loads
+  // the stored requests off the root group's relay; pendingJoinRequests
+  // drops everyone already on the roster, so approval empties the queue on
+  // its own.
+  /** @type {any[]} */
+  let joinRequestEvents = $state.raw([]);
+  let dismissedIds = $state.raw(readDismissedJoinRequests(communityId));
+  let requestsSeq = $state(0);
+
+  $effect(() => {
+    requestsSeq; // re-run after a successful NIP-42 authenticate
+    const pointer = roster.pointer;
+    if (!pointer || !isAdmin) return;
+    /** @type {any[]} */
+    const collected = [];
+    const sub = pool
+      .relay(pointer.relay)
+      .request({ kinds: [9021], '#h': [pointer.id], limit: 100 }, { timeout: 8000 })
+      .subscribe({
+        next: (/** @type {any} */ event) => {
+          collected.push(event);
+          joinRequestEvents = [...collected];
+        },
+        error: (/** @type {any} */ err) => {
+          if (!isAuthRequiredError(err) || !activeUser?.signer) return;
+          authenticateOnce(pool.relay(pointer.relay), activeUser.signer).then((response) => {
+            if (response.ok) requestsSeq++;
+          });
+        }
+      });
+    return () => sub.unsubscribe();
+  });
+
+  const pendingRequests = $derived(
+    pendingJoinRequests({
+      events: joinRequestEvents,
+      // Admins + the community's own seat count as "already in".
+      members: new Set([
+        ...roster.members,
+        ...roster.admins.map((admin) => admin.pubkey),
+        communityId
+      ]),
+      dismissed: dismissedIds
+    })
+  );
+  const getRequestProfiles = useProfileMap(() => pendingRequests.map((row) => row.pubkey));
+
+  let approving = $state('');
+
+  /** @param {import('$lib/groups/join-requests.js').JoinRequestRow} row */
+  async function approveRequest(row) {
+    if (!activeUser || !roster.pointer || approving) return;
+    approving = row.id;
+    try {
+      await putUserOn(roster.pointer, row.pubkey, [], /** @type {any} */ (activeUser));
+      roster.refresh();
+      // Same propagation as an invite-code join would get from the session
+      // reconcile — immediately, since the approving admin is right here.
+      await fanOutNewMember(row.pubkey);
+      showToast(m.community_join_request_approved(), 'success');
+    } catch (error) {
+      console.error('join-request approval failed', error);
+      showToast(
+        m.community_join_request_approve_failed({
+          reason: error instanceof Error ? error.message : String(error)
+        }),
+        'error'
+      );
+    } finally {
+      approving = '';
+    }
+  }
+
+  /** @param {import('$lib/groups/join-requests.js').JoinRequestRow} row */
+  function ignoreRequest(row) {
+    // eslint-disable-next-line svelte/prefer-svelte-reactivity -- $state.raw Set, replaced wholesale (CLAUDE.md pattern)
+    const next = new Set(dismissedIds);
+    next.add(row.id);
+    dismissedIds = next;
+    writeDismissedJoinRequests(communityId, next);
+  }
 </script>
 
 {#if isAdmin}
@@ -211,6 +304,52 @@
           </div>
         {/if}
       </div>
+
+      {#if pendingRequests.length > 0}
+        <div class="divider"></div>
+
+        <h3 class="text-sm font-bold">{m.community_join_requests_title()}</h3>
+        <p class="text-sm text-base-content/70">{m.community_join_requests_lead()}</p>
+
+        <div class="mt-2 flex flex-col gap-2">
+          {#each pendingRequests as row (row.id)}
+            <div
+              class="flex items-center gap-3 rounded-lg bg-base-200 px-3 py-2"
+              data-testid="join-request-row"
+              data-pubkey={row.pubkey}
+            >
+              <ProfileAvatar
+                pubkey={row.pubkey}
+                profile={getRequestProfiles().get(row.pubkey)}
+                size="sm"
+              />
+              <div class="min-w-0 flex-1">
+                <p class="truncate text-sm font-semibold">
+                  {getUserDisplayName(row.pubkey, getRequestProfiles().get(row.pubkey))}
+                </p>
+                {#if row.reason}
+                  <p class="truncate text-xs text-base-content/60 italic">{row.reason}</p>
+                {/if}
+              </div>
+              <button
+                class="btn btn-ghost btn-sm"
+                data-testid="join-request-ignore"
+                onclick={() => ignoreRequest(row)}
+              >
+                {m.community_join_requests_ignore()}
+              </button>
+              <button
+                class="btn btn-sm btn-primary"
+                data-testid="join-request-approve"
+                disabled={!!approving}
+                onclick={() => approveRequest(row)}
+              >
+                {m.community_join_requests_approve()}
+              </button>
+            </div>
+          {/each}
+        </div>
+      {/if}
     </div>
   </div>
 

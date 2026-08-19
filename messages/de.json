@@ -3374,5 +3374,12 @@
   "groups_restricted_note": "Nur Mitglieder können diesen Kanal lesen und schreiben.",
   "groups_join_already": "Du bist bereits Mitglied.",
   "community_members_moderated_community": "Dies ist eine moderierte Community — neue Mitglieder kommen per Einladungscode dazu.",
-  "community_join_invite_lead": "Gib den Einladungscode ein, den du von der Community erhalten hast."
+  "community_join_invite_lead": "Gib den Einladungscode ein, den du von der Community erhalten hast.",
+  "community_join_requests_title": "Beitrittsanfragen",
+  "community_join_requests_lead": "Diese Personen möchten Mitglied werden. Aufnehmen trägt sie auch in alle Mitglieder-Kanäle ein.",
+  "community_join_requests_approve": "Aufnehmen",
+  "community_join_requests_ignore": "Ignorieren",
+  "community_join_request_approved": "Aufgenommen.",
+  "community_join_request_approve_failed": "Aufnahme fehlgeschlagen: {reason}",
+  "community_join_request": "Beitritt anfragen"
 }
