@@ -1087,6 +1087,7 @@
   "amb_resource_view_content": "View Content",
   "amb_resource_open_content": "Open Content",
   "amb_resource_free": "Free",
+  "interactive_badge": "Interactive",
   "amb_resource_access_content_title": "Access Content",
   "amb_resource_access_content_nostr_desc": "View this educational content within {appName}.",
   "amb_resource_access_content_external_desc": "Access the full educational content.",

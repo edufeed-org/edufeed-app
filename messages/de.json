@@ -1062,6 +1062,7 @@
   "amb_resource_view_content": "Inhalt anzeigen",
   "amb_resource_open_content": "Inhalt öffnen",
   "amb_resource_free": "Kostenlos",
+  "interactive_badge": "Interaktiv",
   "amb_resource_access_content_title": "Zugang zum Inhalt",
   "amb_resource_access_content_nostr_desc": "Diesen Bildungsinhalt innerhalb von {appName} anzeigen.",
   "amb_resource_access_content_external_desc": "Auf den vollständigen Bildungsinhalt zugreifen.",
