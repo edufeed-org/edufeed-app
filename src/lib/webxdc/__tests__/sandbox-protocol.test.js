@@ -9,7 +9,9 @@ import {
   buildFetchResponse
 } from '../sandbox-protocol.js';
 
+/** @param {string} s */
 const enc = (s) => new TextEncoder().encode(s);
+/** @param {string} b64 */
 const dec = (b64) => atob(b64);
 const files = new Map([
   ['index.html', enc('<html><head><title>t</title></head><body></body></html>')],

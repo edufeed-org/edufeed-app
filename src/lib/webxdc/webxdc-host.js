@@ -12,7 +12,9 @@ const REALTIME_MAX_BYTES = 128000;
  * @param {{ selfAddr: string, selfName: string }} identity
  */
 export function createWebxdcHost(sync, identity) {
+  /** @type {number | null} */
   let listenerSerial = null; // null until the app registers a listener
+  /** @type {(() => void) | null} */
   let realtimeOff = null;
 
   const serialized = () => {
@@ -20,6 +22,7 @@ export function createWebxdcHost(sync, identity) {
     return updates.map((u, i) => ({ ...u, serial: i + 1, max_serial: updates.length }));
   };
 
+  /** @param {(msg: object) => void} post */
   function deliverNew(post) {
     if (listenerSerial === null) return;
     for (const update of serialized()) {
@@ -33,11 +36,19 @@ export function createWebxdcHost(sync, identity) {
   return {
     bridgeScript: generateBridgeScript(identity),
 
-    /** Wire live update delivery. Returns an unsubscribe. */
+    /**
+     * Wire live update delivery. Returns an unsubscribe.
+     * @param {(msg: object) => void} post
+     */
     start(post) {
       return sync.subscribe(() => deliverNew(post));
     },
 
+    /**
+     * @param {string} method
+     * @param {any} params
+     * @param {(msg: object) => void} post
+     */
     async handleRpc(method, params, post) {
       switch (method) {
         case 'webxdc.sendUpdate': {

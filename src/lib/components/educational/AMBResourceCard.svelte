@@ -84,7 +84,9 @@
 
   // Interactive badge: check if resource has webxdc encodings
   const isInteractive = $derived(
-    (resource?.encodings ?? []).some((e) => e.mimeType === 'application/x-webxdc')
+    (resource?.encodings ?? []).some(
+      (/** @type {{ mimeType?: string }} */ e) => e.mimeType === 'application/x-webxdc'
+    )
   );
 
   /** @type {Record<import('$lib/helpers/educational/linkedMaterials.js').MaterialType, () => string>} */

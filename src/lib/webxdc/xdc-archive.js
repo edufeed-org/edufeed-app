@@ -53,7 +53,12 @@ export function buildManifest(name) {
   return `name = "${escaped}"\n`;
 }
 
-/** Wrap a self-contained HTML file into an .xdc file map. */
+/**
+ * Wrap a self-contained HTML file into an .xdc file map.
+ * @param {Uint8Array} htmlBytes
+ * @param {string} name
+ * @returns {Map<string, Uint8Array>}
+ */
 export function wrapHtml(htmlBytes, name) {
   return new Map([
     ['index.html', htmlBytes],
@@ -63,13 +68,19 @@ export function wrapHtml(htmlBytes, name) {
 
 /** @param {Uint8Array} bytes @returns {Promise<string>} hex */
 export async function sha256Bytes(bytes) {
-  const digest = await globalThis.crypto.subtle.digest('SHA-256', bytes);
+  const digest = await globalThis.crypto.subtle.digest(
+    'SHA-256',
+    /** @type {BufferSource} */ (bytes)
+  );
   return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, '0')).join('');
 }
 
 /**
  * Download an archive, verify its SHA-256 against the published `x` tag
  * (spec requirement — never execute unverified bytes), unzip, require index.html.
+ * @param {string} url
+ * @param {string | undefined} expectedSha256 - required; undefined/empty is rejected below
+ * @returns {Promise<Map<string, Uint8Array>>}
  */
 export async function fetchAndVerifyXdc(url, expectedSha256) {
   if (!expectedSha256) {

@@ -26,7 +26,9 @@
   // same tick (keeps template reads fresh despite non-reactive refs).
   /** @type {Map<string, Uint8Array> | null} */
   let files = null;
+  /** @type {ReturnType<typeof createWebxdcHost> | null} */
   let host = null;
+  /** @type {(() => void) | null} */
   let stopHost = null;
   /** @type {ReturnType<typeof setTimeout> | undefined} */
   let readyTimer;
@@ -86,6 +88,7 @@
     phase = 'idle';
   }
 
+  /** @param {(msg: object) => void} post */
   function onFrameReady(post) {
     clearTimeout(readyTimer);
     stopHost?.();

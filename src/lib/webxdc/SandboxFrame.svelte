@@ -16,6 +16,7 @@
 
   const origin = $derived(`https://${id}.${runtimeConfig.webxdc?.sandboxDomain || 'iframe.diy'}`);
 
+  /** @param {object} msg */
   function post(msg) {
     iframeEl?.contentWindow?.postMessage(msg, origin);
   }

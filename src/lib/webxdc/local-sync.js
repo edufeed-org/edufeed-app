@@ -1,7 +1,10 @@
 /**
+ * info/document/summary are pass-through webxdc update metadata — callers may
+ * legitimately send falsy-but-valid values (empty string, 0, false), so the
+ * type stays loose rather than string-only.
  * @typedef {Object} AppSync
- * @property {() => Array<{payload:any, info?:string, document?:string, summary?:string}>} getUpdates
- * @property {(payload:any, meta?:{info?:string, document?:string, summary?:string}) => void} sendState
+ * @property {() => Array<{payload:any, info?:*, document?:*, summary?:*}>} getUpdates
+ * @property {(payload:any, meta?:{info?:*, document?:*, summary?:*}) => void} sendState
  * @property {(bytes: Uint8Array) => void} sendRealtime
  * @property {(cb: (bytes: Uint8Array) => void) => (() => void)} onRealtime
  * @property {(cb: () => void) => (() => void)} subscribe

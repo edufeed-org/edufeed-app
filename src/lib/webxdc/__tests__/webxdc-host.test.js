@@ -2,28 +2,42 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { createWebxdcHost } from '../webxdc-host.js';
 
+/** @typedef {{payload: any, info?: any, document?: any, summary?: any}} FakeUpdate */
+
 function fakeSync() {
+  /** @type {FakeUpdate[]} */
   const updates = [];
+  /** @type {Set<() => void>} */
   const subs = new Set();
+  /** @type {Set<(bytes: Uint8Array) => void>} */
   const rt = new Set();
   return {
     updates,
     getUpdates: () => updates,
-    sendState: vi.fn((payload, meta) => {
+    sendState: vi.fn((/** @type {any} */ payload, /** @type {any} */ meta = undefined) => {
       updates.push({ payload, ...meta });
       for (const cb of subs) cb();
     }),
     sendRealtime: vi.fn(),
-    onRealtime: (cb) => (rt.add(cb), () => rt.delete(cb)),
-    emitRealtime: (bytes) => rt.forEach((cb) => cb(bytes)),
-    subscribe: (cb) => (subs.add(cb), () => subs.delete(cb))
+    onRealtime: (/** @type {(bytes: Uint8Array) => void} */ cb) => (
+      rt.add(cb), () => rt.delete(cb)
+    ),
+    emitRealtime: (/** @type {Uint8Array} */ bytes) => rt.forEach((cb) => cb(bytes)),
+    subscribe: (/** @type {() => void} */ cb) => (subs.add(cb), () => subs.delete(cb))
   };
 }
 
 const identity = { selfAddr: 'npub1abc', selfName: 'Tester' };
 
 describe('createWebxdcHost', () => {
-  let sync, host, posts, post;
+  /** @type {ReturnType<typeof fakeSync>} */
+  let sync;
+  /** @type {ReturnType<typeof createWebxdcHost>} */
+  let host;
+  /** @type {{method?: string, params?: any}[]} */
+  let posts;
+  /** @type {(msg: object) => void} */
+  let post;
   beforeEach(() => {
     sync = fakeSync();
     host = createWebxdcHost(sync, identity);
@@ -67,7 +81,7 @@ describe('createWebxdcHost', () => {
 
     sync.sendState({ n: 3 });
     const live = posts.filter((p) => p.method === 'webxdc.update');
-    expect(live.at(-1).params.update).toMatchObject({
+    expect(live.at(-1)?.params.update).toMatchObject({
       payload: { n: 3 },
       serial: 3,
       max_serial: 3

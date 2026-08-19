@@ -8,6 +8,7 @@ export const WEBXDC_CSP =
   "default-src 'self' 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval' data: blob:; " +
   "base-uri 'self'; form-action 'self'";
 
+/** @type {Record<string, string>} */
 const MIME = {
   html: 'text/html',
   htm: 'text/html',
@@ -59,12 +60,16 @@ export function utf8ToBase64(text) {
   return bytesToBase64(new TextEncoder().encode(text));
 }
 
-/** Insert a script tag right after <head>, or prepend when there is none. */
+/**
+ * Insert a script tag right after <head>, or prepend when there is none.
+ * @param {string} html
+ * @param {string} src
+ */
 export function injectScriptTag(html, src) {
   const tag = `<script src="${src}"></script>`;
   const match = html.match(/<head[^>]*>/i);
   if (match) {
-    const at = match.index + match[0].length;
+    const at = /** @type {number} */ (match.index) + match[0].length;
     return html.slice(0, at) + tag + html.slice(at);
   }
   return tag + html;
