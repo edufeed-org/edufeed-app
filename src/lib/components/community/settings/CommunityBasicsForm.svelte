@@ -34,8 +34,7 @@
     getCommunityGlobalRelays,
     hasStrictContentMarker
   } from '$lib/helpers/communityRelays.js';
-  import { deriveCommunityType, parseMembershipPointer } from '$lib/groups/community-membership.js';
-  import { syncRootGroupMetadata } from '$lib/groups/sync-group-metadata.js';
+  import { deriveCommunityType } from '$lib/groups/community-membership.js';
   import { getCommunikeyRelays } from '$lib/helpers/relay-helper.js';
   import { addressLoader } from '$lib/loaders/base.js';
 
@@ -264,36 +263,6 @@
         additionalRelays: getCommunityGlobalRelays(signedEvent)
       });
 
-      // Task A7: the 10222 save just succeeded — re-issue a 9002 so a
-      // moderated community's linked NIP-29 root group (whose 39000 Armada
-      // reads name/about/picture off) doesn't go stale. Best-effort: the
-      // community signer doubles as the community's own admin seat on the
-      // root group (seatCommunityAdmin in provision-root-group.js), so it's
-      // always a valid signer here — a relay refusal only warns, never
-      // blocks or unwinds the save that already went through.
-      const membershipPointer = parseMembershipPointer(signedEvent);
-      if (membershipPointer) {
-        const communityProfile = /** @type {any} */ (
-          eventStore.getReplaceable(0, communikeyEvent.pubkey)
-        );
-        let profile = {};
-        if (communityProfile?.content) {
-          try {
-            profile = JSON.parse(communityProfile.content);
-          } catch {
-            /* ignore parse errors — sync with whatever fields we have */
-          }
-        }
-        const syncResult = await syncRootGroupMetadata({
-          pointer: membershipPointer,
-          profile,
-          signerUser: { pubkey: communikeyEvent.pubkey, signer }
-        });
-        if (!syncResult.ok) {
-          showToast(m.community_group_metadata_sync_failed(), 'warning');
-        }
-      }
-
       // Legacy per-section profile lists (non-moderated only, and only where
       // a formRef already round-tripped in — see loadFormRefs).
       if (!isModerated) {
@@ -341,7 +310,10 @@
     modalStore.openModal('profile', {
       profile,
       pubkey: communikeyEvent.pubkey,
-      signer: communitySigner
+      signer: communitySigner,
+      // Task A7: lets EditProfileModal re-issue a 9002 for the community's
+      // linked NIP-29 root group (if any) after this profile save succeeds.
+      communikeyEvent
     });
   }
 </script>

@@ -42,7 +42,11 @@ const h = vi.hoisted(() => {
     },
     // The user's kind 10015 interests list as delivered by
     // eventStore.replaceable(10015, pubkey); null = no list published yet.
-    interestsList: { event: /** @type {any} */ (null) }
+    interestsList: { event: /** @type {any} */ (null) },
+    // Task A7: community-mode saves re-issue a 9002 group-metadata edit when
+    // the saved profile's community carries a NIP-29 membership pointer.
+    syncRootGroupMetadata: vi.fn(),
+    showToast: vi.fn()
   };
 });
 
@@ -139,6 +143,11 @@ vi.mock('$lib/stores/accounts.svelte', () => ({ manager: h.managerMock }));
 
 vi.mock('$lib/stores/modal.svelte.js', () => ({ modalStore: h.modalStoreMock }));
 
+vi.mock('$lib/groups/sync-group-metadata.js', () => ({
+  syncRootGroupMetadata: h.syncRootGroupMetadata
+}));
+vi.mock('$lib/helpers/toast', () => ({ showToast: h.showToast }));
+
 import EditProfileModal from '../EditProfileModal.svelte';
 import { ModifyListTags } from '$lib/actions/list-actions.js';
 
@@ -179,6 +188,8 @@ beforeEach(() => {
   h.modalStoreMock.closeModal.mockClear();
   h.modalStoreMock.modalProps = { profile: { name: 'Alice' }, pubkey: h.pub };
   h.interestsList.event = null;
+  h.syncRootGroupMetadata.mockReset().mockResolvedValue({ ok: true });
+  h.showToast.mockClear();
 });
 
 describe('EditProfileModal save (own profile)', () => {
@@ -357,5 +368,94 @@ describe('EditProfileModal save (community profile via signer override)', () => 
     expect(content.theme).toBe('blue');
     // Communities get no educator context section.
     expect(container.textContent).not.toContain('profile_edit_section_context');
+  });
+});
+
+// Task A7: a moderated community's linked NIP-29 root group carries
+// name/about/picture in its relay-generated 39000 — copied ONCE at
+// flip-to-moderated time. This modal is where those fields actually change
+// (community-mode kind-0 save), so it — not CommunityBasicsForm, which never
+// touches them — is the correct place to re-issue a 9002 afterward.
+describe('EditProfileModal save (community profile) — root group metadata sync', () => {
+  const MODERATED_COMMUNITY = {
+    pubkey: /** @type {any} */ (null),
+    tags: [['membership', 'root1', 'wss://groups.example.com']]
+  };
+
+  beforeEach(() => {
+    MODERATED_COMMUNITY.pubkey = h.communityPub;
+  });
+
+  it('re-issues the group metadata after a moderated community profile save', async () => {
+    h.modalStoreMock.modalProps = {
+      profile: { name: 'Comm', about: 'old about' },
+      pubkey: h.communityPub,
+      signer: h.communitySigner,
+      communikeyEvent: MODERATED_COMMUNITY
+    };
+    const { container } = render(EditProfileModal);
+    await waitForNameInput(container, 'Comm');
+
+    const aboutInput = /** @type {HTMLTextAreaElement} */ (
+      container.querySelector('#profile-about')
+    );
+    await fireEvent.input(aboutInput, { target: { value: 'new about' } });
+
+    await fireEvent.click(findButton(container, 'profile_edit_modal_save_button'));
+
+    await waitFor(() => {
+      expect(h.syncRootGroupMetadata).toHaveBeenCalledTimes(1);
+    });
+    const [args] = /** @type {any[]} */ (h.syncRootGroupMetadata.mock.calls[0]);
+    expect(args.pointer).toEqual({ id: 'root1', relay: 'wss://groups.example.com' });
+    expect(args.profile).toEqual({ name: 'Comm', about: 'new about', picture: '' });
+    expect(args.signerUser).toEqual({ pubkey: h.communityPub, signer: h.communitySigner });
+    expect(h.showToast).not.toHaveBeenCalled();
+  });
+
+  it('skips the sync when the community has no membership pointer (open community)', async () => {
+    h.modalStoreMock.modalProps = {
+      profile: { name: 'Comm' },
+      pubkey: h.communityPub,
+      signer: h.communitySigner,
+      communikeyEvent: { pubkey: h.communityPub, tags: [] }
+    };
+    const { container } = render(EditProfileModal);
+    await waitForNameInput(container, 'Comm');
+    await fireEvent.click(findButton(container, 'profile_edit_modal_save_button'));
+    await waitFor(() => {
+      expect(h.publishEvent).toHaveBeenCalledTimes(1);
+    });
+    expect(h.syncRootGroupMetadata).not.toHaveBeenCalled();
+  });
+
+  it('skips the sync for personal profile saves (no communikeyEvent at all)', async () => {
+    const { container } = render(EditProfileModal);
+    await waitForNameInput(container, 'Alice');
+    await fireEvent.click(findButton(container, 'profile_edit_modal_save_button'));
+    await waitFor(() => {
+      expect(h.runAction).toHaveBeenCalledTimes(1);
+    });
+    expect(h.syncRootGroupMetadata).not.toHaveBeenCalled();
+  });
+
+  it('shows the warning toast on sync failure but still succeeds the save', async () => {
+    h.syncRootGroupMetadata.mockResolvedValueOnce({ ok: false, error: 'restricted: no' });
+    h.modalStoreMock.modalProps = {
+      profile: { name: 'Comm' },
+      pubkey: h.communityPub,
+      signer: h.communitySigner,
+      communikeyEvent: MODERATED_COMMUNITY
+    };
+    const { container } = render(EditProfileModal);
+    await waitForNameInput(container, 'Comm');
+    await fireEvent.click(findButton(container, 'profile_edit_modal_save_button'));
+    await waitFor(() => {
+      expect(h.syncRootGroupMetadata).toHaveBeenCalledTimes(1);
+    });
+    expect(h.showToast).toHaveBeenCalledWith('community_group_metadata_sync_failed', 'warning');
+    await waitFor(() => {
+      expect(container.textContent).toContain('profile_edit_modal_success');
+    });
   });
 });

@@ -16,6 +16,9 @@
   } from '$lib/helpers/educational/educatorProfile.js';
   import { addressLoader } from '$lib/loaders/base.js';
   import { getAllLookupRelays } from '$lib/helpers/relay-helper.js';
+  import { parseMembershipPointer } from '$lib/groups/community-membership.js';
+  import { syncRootGroupMetadata } from '$lib/groups/sync-group-metadata.js';
+  import { showToast } from '$lib/helpers/toast';
   import { untrack } from 'svelte';
   import * as m from '$lib/paraglide/messages';
 
@@ -31,6 +34,10 @@
   const signer = $derived(modalProps.signer ?? manager.active?.signer ?? null);
   // True when the editor is editing their own profile.
   const isOwn = $derived(pubkey === manager.active?.pubkey);
+  // Task A7: only set when CommunityBasicsForm opened this modal in
+  // community mode — lets a successful community profile save re-issue a
+  // 9002 for the linked NIP-29 root group (if any).
+  const communikeyEvent = $derived(modalProps.communikeyEvent ?? null);
 
   // Initialize form data with current profile values
   let userData = $state(
@@ -281,6 +288,29 @@
         }
         // Add to EventStore for immediate UI updates
         eventStore.add(signedEvent);
+
+        // Task A7: the kind-0 save just succeeded — re-issue a 9002 so a
+        // moderated community's linked NIP-29 root group (whose 39000 Armada
+        // reads name/about/picture off) doesn't go stale. Best-effort: the
+        // profile save already went through, so a relay refusal here only
+        // warns, never blocks or unwinds it. Skipped entirely for open
+        // communities (no membership pointer) and personal profiles (no
+        // communikeyEvent at all).
+        const membershipPointer = communikeyEvent ? parseMembershipPointer(communikeyEvent) : null;
+        if (membershipPointer) {
+          const syncResult = await syncRootGroupMetadata({
+            pointer: membershipPointer,
+            profile: {
+              name: userData.name,
+              about: userData.about,
+              picture: userData.picture
+            },
+            signerUser: { pubkey, signer }
+          });
+          if (!syncResult.ok) {
+            showToast(m.community_group_metadata_sync_failed(), 'warning');
+          }
+        }
       }
 
       submitSuccess = true;
