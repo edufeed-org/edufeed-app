@@ -3373,5 +3373,6 @@
   "community_expand_xor_hint": "A community can take only one of these paths – both together is not possible.",
   "groups_restricted_note": "Only members can read and write in this channel.",
   "groups_join_already": "You are already a member.",
-  "community_members_moderated_community": "This is a moderated community — new members join via invite code."
+  "community_members_moderated_community": "This is a moderated community — new members join via invite code.",
+  "community_join_invite_lead": "Enter the invite code you received from the community."
 }

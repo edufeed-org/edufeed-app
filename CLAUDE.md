@@ -733,6 +733,16 @@ Single default theme: the **edufeed editorial** palette (warm beige page `base-2
 | `src/lib/stores/app-settings.svelte.js`      | Theme family state (colorMode fixed to light) |
 | `src/routes/+layout.svelte` + `src/app.html` | Apply `data-theme` (keep both in sync)        |
 
+## Buttons
+
+Always DaisyUI `btn` classes — never hand-rolled text buttons. Standard sizes:
+
+- `btn-sm` — chrome actions: hero buttons, settings rows, rail entries, card actions. This is the app default.
+- `btn` (md) — modal actions and full forms.
+- `btn-xs` — ONLY dense inline icon chrome (chat-header icon buttons). Never for standalone text actions: the shrunken label reads like a foreign typeface next to normal UI text (laoc, 2026-08-19).
+
+Small confirm/input dialogs use the shared modal grammar (`modal modal-open` + `modal-box max-w-sm`, ghost cancel + primary action) instead of inline expanding inputs.
+
 ## Icon System
 
 Icons live under `src/lib/components/icons/` (subfolders: `calendar/`, `ui/`, `actions/`, `social/`) with a shared `Icon.svelte` wrapper using `currentColor`. Import via the barrel: `import { SearchIcon } from '$lib/components/icons'`. Default size `w-5 h-5`; override via `class_` prop. New icons follow existing examples and must be re-exported from `index.js`.

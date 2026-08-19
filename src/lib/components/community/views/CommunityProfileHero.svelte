@@ -293,28 +293,13 @@
                 {/if}
               </button>
             {/if}
-            {#if !showInviteInput}
-              <button onclick={() => (showInviteInput = true)} class="btn btn-ghost btn-xs">
-                {m.community_join_invite_toggle()}
-              </button>
-            {:else}
-              <div class="flex items-center gap-1">
-                <input
-                  type="text"
-                  bind:value={inviteCode}
-                  placeholder={m.community_join_invite_placeholder()}
-                  aria-label={m.community_join_invite_placeholder()}
-                  class="input-bordered input input-xs w-20"
-                />
-                <button
-                  onclick={handleJoinWithCode}
-                  disabled={isSendingInvite || !inviteCode.trim()}
-                  class="btn btn-xs btn-primary"
-                >
-                  {m.community_join_invite_submit()}
-                </button>
-              </div>
-            {/if}
+            <button
+              onclick={() => (showInviteInput = true)}
+              class="btn btn-ghost btn-sm"
+              data-testid="invite-code-open"
+            >
+              {m.community_join_invite_toggle()}
+            </button>
           </div>
         {/if}
       </div>
@@ -353,3 +338,44 @@
     {/if}
   {/if}
 </div>
+
+{#if showInviteInput}
+  <!-- Small modal instead of a cramped inline input (laoc, 2026-08-19) —
+    same modal grammar as the app's other confirm dialogs. -->
+  <div class="modal-open modal" role="dialog">
+    <div class="modal-box max-w-sm">
+      <h3 class="text-lg font-extrabold">{m.community_join_invite_toggle()}</h3>
+      <p class="my-3 text-sm text-base-content/70">{m.community_join_invite_lead()}</p>
+      <input
+        type="text"
+        bind:value={inviteCode}
+        placeholder={m.community_join_invite_placeholder()}
+        aria-label={m.community_join_invite_placeholder()}
+        class="input-bordered input w-full"
+        data-testid="invite-code-input"
+      />
+      <div class="modal-action">
+        <button
+          class="btn btn-ghost"
+          onclick={() => {
+            showInviteInput = false;
+            inviteCode = '';
+          }}
+        >
+          {m.common_cancel()}
+        </button>
+        <button
+          onclick={handleJoinWithCode}
+          disabled={isSendingInvite || !inviteCode.trim()}
+          class="btn btn-primary"
+          data-testid="invite-code-submit"
+        >
+          {#if isSendingInvite}
+            <span class="loading loading-xs loading-spinner"></span>
+          {/if}
+          {m.community_join_invite_submit()}
+        </button>
+      </div>
+    </div>
+  </div>
+{/if}

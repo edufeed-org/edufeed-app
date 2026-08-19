@@ -399,8 +399,15 @@
           </button>
         {/if}
         {#if zones.showLockHint}
-          <p data-testid="nav-lock-hint" class="px-2 py-1 text-xs text-base-content/50">
-            {m.community_nav_lock_hint()}
+          <!-- Same inset grammar as the rows above (px-4 + w-5 glyph column
+            + gap-3), so the hint's text sits exactly under the row labels
+            instead of floating at its own indent (laoc, 2026-08-19). -->
+          <p
+            data-testid="nav-lock-hint"
+            class="flex items-center gap-3 px-4 py-2 text-xs text-base-content/50"
+          >
+            <span class="w-5 shrink-0" aria-hidden="true"></span>
+            <span>{m.community_nav_lock_hint()}</span>
           </p>
         {/if}
       </nav>
