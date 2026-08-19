@@ -219,6 +219,9 @@ vi.mock('$lib/stores/nostr-infrastructure.svelte', async () => {
           if (d === 'openchat') return rxOf(metadataEventOpen, membersEventOpen);
           if (d === 'authchat') return rxOf(metadataEventAuthNoPrivate, membersEventAuthNoPrivate);
           if (d === 'emptychat') return rxOf(metadataEventEmptyRoster, membersEventEmptyRoster);
+          // A group whose metadata REQ yields nothing (relay hiccup, race
+          // with NIP-42) — the fallback-name test renders this one.
+          if (d === 'ghostchat') return rxOf();
           return rxOf(metadataEvent, membersEvent);
         },
         // keep the subscription open after replay so unsubscribe paths run
@@ -360,6 +363,21 @@ describe('GroupChat', () => {
       expect(contents).toContain('hello from armada');
     });
     expect(relayCalls.every((url) => url === GROUP_RELAY)).toBe(true);
+  });
+
+  // The embedded community pane knows the channel's name from the 10222's
+  // group pointer tag; when the relay's kind:39000 does not arrive (races
+  // the NIP-42 handshake on gated hosts — laoc, 2026-08-19: the header read
+  // 'ce023508cb82bd3f' instead of 'willkommen'), that name must win over
+  // the cryptic id.
+  it('falls back to the given name, not the group id, while metadata is missing', async () => {
+    render(GroupChat, {
+      props: { pointer: { relay: GROUP_RELAY, id: 'ghostchat' }, fallbackName: 'willkommen' }
+    });
+    await waitFor(() => {
+      expect(screen.getByTestId('group-name').textContent).toContain('willkommen');
+    });
+    expect(screen.getByTestId('group-name').textContent).not.toContain('ghostchat');
   });
 
   it('sends a kind-9 h-tagged message to the group relay only', async () => {

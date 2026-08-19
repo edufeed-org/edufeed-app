@@ -71,8 +71,13 @@
   import { showToast } from '$lib/helpers/toast';
   import * as m from '$lib/paraglide/messages';
 
-  /** @type {{pointer: import('$lib/groups/groups.js').GroupPointer}} */
-  let { pointer } = $props();
+  /** fallbackName: the display name the CALLER already knows (the community
+   * pane reads it off the 10222's group pointer tag). Wins over the raw id
+   * while the relay's kind:39000 hasn't arrived — on gated hosts that REQ
+   * can race the NIP-42 handshake and come up empty, and a cryptic hex id
+   * in the header reads like landing in the wrong group (laoc, 2026-08-19).
+   * @type {{pointer: import('$lib/groups/groups.js').GroupPointer, fallbackName?: string}} */
+  let { pointer, fallbackName = '' } = $props();
 
   const getActiveUser = useActiveUser();
   // At component init, not inside a handler — hooks cannot be called from
@@ -85,6 +90,7 @@
   setContext(GROUP_MEDIA_AUTH, { relay: pointer.relay, getUser: getActiveUser });
 
   /** @type {any} */ let metadata = $state(null);
+  const displayTitle = $derived(metadata?.name ?? (fallbackName || pointer.id));
   // The RAW kind:39000 as well as the parsed metadata: the access badges read
   // the tags directly, because applesauce's parser drops `restricted`/`hidden`
   // and reads openness from the inverse tags of an older NIP-29 draft.
@@ -142,6 +148,9 @@
   $effect(() => {
     rosterSeq; // read first: an effect that early-returns before reading
     // reactive state captures no deps and never re-runs on a bump.
+    retrySeq; // a successful NIP-42 authenticate re-runs this REQ too — on
+    // gated hosts the first metadata REQ can race the handshake and come up
+    // empty (missing name/badges/roster), and it had no second chance.
     const sub = pool
       .relay(pointer.relay)
       .request(
@@ -565,7 +574,7 @@
     {/if}
     <div class="min-w-0 flex-1">
       <h2 class="truncate text-sm font-bold" data-testid="group-name">
-        {metadata?.name ?? pointer.id}
+        {displayTitle}
       </h2>
       <p class="truncate text-xs opacity-60">
         <!-- The host, as the way back to its OTHER channels. A channel is a
@@ -743,7 +752,7 @@
       {/if}
       <ChatComposer
         bind:value={text}
-        placeholder={m.groups_input_placeholder({ name: metadata?.name ?? pointer.id })}
+        placeholder={m.groups_input_placeholder({ name: displayTitle })}
         disabled={!myPubkey}
         {sending}
         onSubmit={send}

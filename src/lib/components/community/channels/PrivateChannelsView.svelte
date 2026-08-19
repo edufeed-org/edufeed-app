@@ -687,7 +687,10 @@
             ← {m.concord_rail_channels()}
           </button>
           {#key channelKey(selectedGroupPointer)}
-            <GroupChat pointer={selectedGroupPointer} />
+            <GroupChat
+              pointer={selectedGroupPointer}
+              fallbackName={selectedGroupPointer.name ?? ''}
+            />
           {/key}
         {:else}
           <!-- No channel picked: the channel overview (Armada parity:
