@@ -3152,5 +3152,11 @@
   "webxdc_error_integrity": "Das heruntergeladene Paket stimmt nicht mit der veröffentlichten Prüfsumme überein. Es wurde nicht gestartet.",
   "webxdc_error_invalid": "Dieses Paket ist keine gültige App (index.html fehlt).",
   "webxdc_error_timeout": "Die App ist nicht rechtzeitig gestartet.",
-  "webxdc_retry": "Erneut versuchen"
+  "webxdc_retry": "Erneut versuchen",
+  "interactive_input_label": "App-Paket (.h5p, .xdc oder .html)",
+  "interactive_input_help": "H5P-Exporte werden automatisch verpackt. Das Paket läuft vollständig offline in einer Sandbox.",
+  "interactive_input_invalid": "Diese Datei ist kein gültiges Paket (keine index.html gefunden).",
+  "interactive_input_too_large": "Dieses Paket ist größer als 50 MB — der Start wird langsam sein.",
+  "interactive_input_preview": "Vorschau",
+  "interactive_input_replace": "Paket ersetzen"
 }

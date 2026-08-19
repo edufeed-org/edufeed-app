@@ -3152,5 +3152,11 @@
   "webxdc_error_integrity": "The downloaded package does not match its published checksum. It was not started.",
   "webxdc_error_invalid": "This package is not a valid app (missing index.html).",
   "webxdc_error_timeout": "The app did not start in time.",
-  "webxdc_retry": "Retry"
+  "webxdc_retry": "Retry",
+  "interactive_input_label": "App package (.h5p, .xdc or .html)",
+  "interactive_input_help": "H5P exports are wrapped automatically. The package runs fully offline in a sandbox.",
+  "interactive_input_invalid": "This file is not a valid package (no index.html found).",
+  "interactive_input_too_large": "This package is larger than 50 MB — it will be slow to launch.",
+  "interactive_input_preview": "Preview",
+  "interactive_input_replace": "Replace package"
 }

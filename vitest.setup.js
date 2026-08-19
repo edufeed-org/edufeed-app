@@ -53,3 +53,16 @@ if (typeof Blob !== 'undefined' && typeof Blob.prototype.text !== 'function') {
     });
   };
 }
+
+// Same gap, same fix, for arrayBuffer() — needed by components that hash or
+// zip/unzip an uploaded File (e.g. InteractivePackageInput's webxdc packing).
+if (typeof Blob !== 'undefined' && typeof Blob.prototype.arrayBuffer !== 'function') {
+  Blob.prototype.arrayBuffer = function () {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = () => reject(reader.error);
+      reader.readAsArrayBuffer(this);
+    });
+  };
+}
