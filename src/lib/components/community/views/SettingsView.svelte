@@ -29,6 +29,7 @@
     withoutConcordPointer
   } from '$lib/concord/pointer.js';
   import { parseGroupPointers } from '$lib/groups/community-pointer.js';
+  import { useCommunityChannels } from '$lib/groups/community-channels.svelte.js';
   import {
     buildFlipToModeratedTags,
     buildFlipToOpenTags,
@@ -74,6 +75,10 @@
   // Shared by the Concord detach flow and the Typ-pane flips below — both
   // sign a rewritten 10222 with the community's own key.
   const communitySigner = $derived.by(() => getCommunitySigner(communikeyEvent?.pubkey));
+  // Channels to tear down are DISCOVERED from the relay subtree, not the 10222
+  // (they no longer carry `group` pointers). teardownCommunityGroups deletes
+  // each + the root and reverts the community to open.
+  const getTeardownChannels = useCommunityChannels(() => parseMembershipPointer(communikeyEvent));
 
   async function handleDetach() {
     if (detaching) return;
@@ -100,8 +105,13 @@
     communityType === 'closed' &&
       windowSectionKeys(communikeyEvent?.tags ?? [], communikeyEvent?.pubkey ?? '').length > 0
   );
+  // Channel names for the teardown confirm — DISCOVERED from the subtree, with
+  // any legacy kind-10222 `group` pointers folded in for old communities.
   const channelNames = $derived.by(() =>
-    unique(parseGroupPointers(communikeyEvent).map((pointer) => pointer.name || pointer.id))
+    unique([
+      ...getTeardownChannels().channels.map((c) => c.name || c.id),
+      ...parseGroupPointers(communikeyEvent).map((pointer) => pointer.name || pointer.id)
+    ])
   );
 
   /** @type {'flip-to-moderated' | 'flip-to-open' | null} */
@@ -271,7 +281,8 @@
       await teardownCommunityGroups({
         communikeyEvent,
         communitySigner,
-        user: { pubkey: activeUser.pubkey, signer: activeUser.signer }
+        user: { pubkey: activeUser.pubkey, signer: activeUser.signer },
+        channels: getTeardownChannels().channels.map((c) => ({ id: c.id, relay: c.relay }))
       });
       showToast(m.community_views_settings_teardown_done(), 'success');
       teardownOverlay = false;

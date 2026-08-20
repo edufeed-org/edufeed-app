@@ -22,12 +22,10 @@
   import { useCommunityMembership } from '$lib/stores/joined-communities-list.svelte.js';
   import { getCommunityWideFormRef } from '$lib/helpers/communityFormDefaults.js';
   import { useConcordCommunity, shouldShowChannelsTab } from '$lib/concord/community.svelte.js';
-  import { parseGroupPointers, sharedRelayOf } from '$lib/groups/community-pointer.js';
+  import { parseGroupPointers } from '$lib/groups/community-pointer.js';
   import { parseMembershipPointer } from '$lib/groups/community-membership.js';
-  import { relayRequiresAuth } from '$lib/groups/relay-directory.js';
-  import { useRelayInformation } from '$lib/groups/relay-information.svelte.js';
   import { buildChannelRows } from '$lib/groups/community-channel-rows.js';
-  import { useChannelMetadata } from '$lib/groups/channel-metadata.svelte.js';
+  import { useCommunityChannels } from '$lib/groups/community-channels.svelte.js';
   import { useRootRoster } from '$lib/groups/root-roster.svelte.js';
   import { useRosterReconcile } from '$lib/groups/roster-reconcile.svelte.js';
   import { useActiveUser } from '$lib/stores/accounts.svelte';
@@ -192,15 +190,16 @@
       hasMembershipPointer: !!parseMembershipPointer(communikeyEvent)
     });
   });
-  const groupPointersForNav = $derived(parseGroupPointers(communikeyEvent));
-  const getChannelMetaForNav = useChannelMetadata(() => groupPointersForNav);
-  const getNavRelayInfo = useRelayInformation(() => sharedRelayOf(groupPointersForNav));
+  // Nav Kanäle-zone rows, DISCOVERED from the relay subtree (the SAME source
+  // PrivateChannelsView uses; the two builders stay separate — known
+  // duplication). No General row here, matching the prior nav behavior.
+  const getCommunityChannelsForNav = useCommunityChannels(() =>
+    parseMembershipPointer(communikeyEvent)
+  );
   const channelRows = $derived(
     buildChannelRows({
       concordChannels: getConcordForNav().channels,
-      groupPointers: groupPointersForNav,
-      metadataByKey: getChannelMetaForNav().byKey,
-      hostRequiresAuth: relayRequiresAuth(getNavRelayInfo())
+      subtreeChannels: getCommunityChannelsForNav().channels
     })
   );
 

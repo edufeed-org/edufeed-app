@@ -37,8 +37,9 @@
     writeDismissedJoinRequests
   } from '$lib/groups/join-requests.js';
   import { authenticateOnce, isAuthRequiredError } from '$lib/groups/relay-auth.js';
-  import { parseGroupPointers, channelKey } from '$lib/groups/community-pointer.js';
+  import { channelKey } from '$lib/groups/community-pointer.js';
   import { useChannelRosters } from '$lib/groups/channel-rosters.svelte.js';
+  import { useCommunityChannels } from '$lib/groups/community-channels.svelte.js';
   import { putUserOn } from '$lib/groups/roster-fanout.js';
   import { isAlreadyMemberError } from '$lib/groups/groups.js';
   import { useActiveUser } from '$lib/stores/accounts.svelte';
@@ -49,7 +50,6 @@
 
   /**
    * @type {{
-   *   communikeyEvent: {pubkey?: string, tags?: string[][]} | null | undefined,
    *   communityId: string,
    *   roster: {
    *     pointer: {id: string, relay: string} | null,
@@ -60,7 +60,7 @@
    *   showEmpty?: boolean
    * }}
    */
-  let { communikeyEvent, communityId, roster, showEmpty = false } = $props();
+  let { communityId, roster, showEmpty = false } = $props();
 
   const getActiveUser = useActiveUser();
   const activeUser = $derived(getActiveUser());
@@ -77,7 +77,14 @@
     dismissedIds = readDismissedJoinRequests(communityId);
   });
 
-  const channelPointers = $derived(parseGroupPointers(communikeyEvent));
+  // The community's channels, DISCOVERED from the relay subtree (not from
+  // kind-10222 `group` pointers). An applicant who knocked on a channel sent
+  // their 9021 h-tagged to THAT channel's id, so the queue must know every
+  // channel id to aggregate them.
+  const getCommunityChannels = useCommunityChannels(() => roster.pointer);
+  const channelPointers = $derived(
+    getCommunityChannels().channels.map((c) => ({ id: c.id, relay: c.relay }))
+  );
   // Per-channel rosters, so a group-aware membership check can tell "already
   // a member of THIS channel" from "already a member of the community" —
   // see the header comment.
@@ -215,9 +222,7 @@
       // collects channel-hosted 9021s, since a closed group only serves its
       // OWN requests) — honor that one ask, whatever tier it is. No sweep
       // beyond it: members-tier channels are self-joined via 9021 now (A4).
-      const asked = parseGroupPointers(communikeyEvent).find(
-        (pointer) => pointer.id === row.groupId
-      );
+      const asked = channelPointers.find((pointer) => pointer.id === row.groupId);
       if (asked) {
         try {
           await putUserOn(asked, row.pubkey, [], /** @type {any} */ (user));

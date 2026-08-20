@@ -74,6 +74,18 @@ vi.mock('$lib/groups/roster-fanout.js', () => ({ putUserOn, fanOut }));
 vi.mock('$lib/groups/channel-rosters.svelte.js', () => ({
   useChannelRosters: () => () => channelRostersState
 }));
+// Channels are discovered from the relay subtree now (not kind-10222 pointers).
+const { communityChannelsState } = vi.hoisted(() => ({
+  communityChannelsState: {
+    channels: /** @type {any[]} */ ([]),
+    rootChannel: /** @type {any} */ (null),
+    fetched: true,
+    refresh: () => {}
+  }
+}));
+vi.mock('$lib/groups/community-channels.svelte.js', () => ({
+  useCommunityChannels: () => () => communityChannelsState
+}));
 
 const { poolMock, relayRequestEvents, relayRequestError } = vi.hoisted(() => {
   /** 9021 fixtures the fake relay serves to the join-request REQ. */
@@ -206,6 +218,8 @@ beforeEach(() => {
   fanOut.mockClear();
   channelRostersState.membersByKey = {};
   channelRostersState.adminsByKey = {};
+  communityChannelsState.channels = [];
+  communityChannelsState.rootChannel = null;
   relayRequestEvents.value = [];
   relayRequestError.value = null;
   localStorage.clear();
@@ -363,6 +377,15 @@ describe('MembershipPane — Beitrittsanfragen (NIP-29 join requests)', () => {
     content: 'Ich möchte mitmachen',
     tags: [['h', groupId]]
   });
+  // A subtree channel as useCommunityChannels yields it (only id/relay feed the
+  // panel's channelPointers; the rest mirrors the real shape).
+  const chanFix = (/** @type {string} */ id, /** @type {string} */ name) => ({
+    id,
+    relay: GROUPS_RELAY,
+    name,
+    level: 'invited',
+    metadata: { kind: 39000, tags: [['d', id]] }
+  });
 
   it('lists a stored 9021 from a non-member, hides one from an existing member', async () => {
     relayRequestEvents.value = [req(APPLICANT, 100), req(MEMBER, 200)];
@@ -402,6 +425,7 @@ describe('MembershipPane — Beitrittsanfragen (NIP-29 join requests)', () => {
   // of the root admission, still with no further sweep.
   it('approve honors a specifically-asked channel on top of the root admission', async () => {
     relayRequestEvents.value = [req(APPLICANT, 100, 'req-1', 'chan1')];
+    communityChannelsState.channels = [chanFix('chan1', 'Willkommen'), chanFix('chan2', 'Planung')];
     render(MembershipPane, {
       props: {
         communikeyEvent: communikeyEvent([
@@ -436,6 +460,7 @@ describe('MembershipPane — Beitrittsanfragen (NIP-29 join requests)', () => {
     relayRequestEvents.value = [req(MEMBER, 100, 'req-1', 'chan1')];
     // chan1's roster is KNOWN and does not contain MEMBER.
     channelRostersState.membersByKey = { [`chan1@${GROUPS_RELAY}`]: new Set() };
+    communityChannelsState.channels = [chanFix('chan1', 'Willkommen')];
     render(MembershipPane, {
       props: {
         communikeyEvent: communikeyEvent([
@@ -455,6 +480,7 @@ describe('MembershipPane — Beitrittsanfragen (NIP-29 join requests)', () => {
     relayRequestEvents.value = [req(MEMBER, 100, 'req-1', 'chan1')];
     // chan1's roster is KNOWN and DOES contain MEMBER this time.
     channelRostersState.membersByKey = { [`chan1@${GROUPS_RELAY}`]: new Set([MEMBER]) };
+    communityChannelsState.channels = [chanFix('chan1', 'Willkommen')];
     render(MembershipPane, {
       props: {
         communikeyEvent: communikeyEvent([
@@ -476,6 +502,7 @@ describe('MembershipPane — Beitrittsanfragen (NIP-29 join requests)', () => {
   it('approve tolerates the root put-user already answering "already a member" and still grants the asked channel', async () => {
     relayRequestEvents.value = [req(MEMBER, 100, 'req-1', 'chan1')];
     channelRostersState.membersByKey = { [`chan1@${GROUPS_RELAY}`]: new Set() };
+    communityChannelsState.channels = [chanFix('chan1', 'Willkommen')];
     putUserOn.mockImplementationOnce(async () => {
       throw new Error('duplicate: already a member');
     });

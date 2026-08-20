@@ -14,7 +14,8 @@
 // events from an external store, and a memoising helper writing its cache
 // Symbol onto one from inside a `$derived` crashes the runtime (061c05c9).
 import { buildChannelRows } from './community-channel-rows.js';
-import { channelKey } from './community-pointer.js';
+import { dTagOf, nameOf } from './subtree-channels.js';
+import { channelAccessLevel } from './channel-access.js';
 import { useMyGroups } from './unlinked-groups.svelte.js';
 import { useRelayDirectory } from './relay-directory.svelte.js';
 import { relayRequiresAuth } from './relay-directory.js';
@@ -73,18 +74,21 @@ export function useHostChannels(getRelay) {
  * @param {boolean} [hostRequiresAuth]
  */
 function rowsFrom(metadata, relay, hostRequiresAuth = false) {
-  /** @type {Record<string, any>} */
-  const metadataByKey = {};
-  /** @type {Array<{id: string, relay: string}>} */
-  const pointers = [];
+  // A flat host directory: every kind:39000 is a channel row (no parent/root
+  // filtering, unlike a community subtree). Map each into the SubtreeChannel
+  // shape buildChannelRows now consumes, with its level computed here.
+  /** @type {Array<import('./subtree-channels.js').SubtreeChannel>} */
+  const subtreeChannels = [];
   for (const event of metadata ?? []) {
-    const id = (event?.tags ?? []).find((/** @type {string[]} */ t) => t?.[0] === 'd')?.[1];
+    const id = dTagOf(event);
     if (!id) continue;
-    const pointer = { id, relay };
-    const key = channelKey(pointer);
-    if (!key) continue;
-    metadataByKey[key] = event;
-    pointers.push(pointer);
+    subtreeChannels.push({
+      id,
+      relay,
+      name: nameOf(event),
+      level: channelAccessLevel(event, undefined, hostRequiresAuth),
+      metadata: event
+    });
   }
-  return buildChannelRows({ groupPointers: pointers, metadataByKey, hostRequiresAuth });
+  return buildChannelRows({ subtreeChannels });
 }

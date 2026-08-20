@@ -187,7 +187,7 @@
       </div>
 
       <div class="divider"></div>
-      <JoinRequestsPanel {communikeyEvent} {communityId} {roster} showEmpty={true} />
+      <JoinRequestsPanel {communityId} {roster} showEmpty={true} />
     </div>
   </div>
 

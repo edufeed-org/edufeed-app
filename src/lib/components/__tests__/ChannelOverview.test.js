@@ -11,7 +11,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/svelte';
 import ChannelOverview from '$lib/components/community/channels/ChannelOverview.svelte';
 import { buildChannelRows } from '$lib/groups/community-channel-rows.js';
-import { channelKey } from '$lib/groups/community-pointer.js';
+import { channelAccessLevel } from '$lib/groups/channel-access.js';
 
 const RELAY = 'wss://groups.example';
 
@@ -20,11 +20,27 @@ const ptr = (/** @type {string} */ id, /** @type {any} */ extra = {}) => ({
   relay: RELAY,
   ...extra
 });
-const key = (/** @type {any} */ p) => /** @type {string} */ (channelKey(p));
 const meta = (/** @type {string} */ id, /** @type {string[][]} */ extra = []) => ({
   kind: 39000,
   tags: [['d', id], ...extra]
 });
+// A subtree channel from a pointer + its kind:39000 tags. Omit `tags` to model
+// "metadata not yet arrived" (level 'unknown' → still-loading).
+const sub = (/** @type {any} */ pointer, /** @type {string[][] | undefined} */ tags = undefined) =>
+  /** @type {any} */ (
+    tags === undefined
+      ? { id: pointer.id, relay: pointer.relay, level: 'unknown', metadata: null }
+      : (() => {
+          const metadata = meta(pointer.id, tags);
+          return {
+            id: pointer.id,
+            relay: pointer.relay,
+            name: metadata.tags.find((t) => t[0] === 'name')?.[1],
+            level: channelAccessLevel(metadata),
+            metadata
+          };
+        })()
+  );
 
 describe('ChannelOverview', () => {
   it('says the community has no channels rather than showing an empty grid', () => {
@@ -34,14 +50,11 @@ describe('ChannelOverview', () => {
   });
 
   it('gives each channel a card that links to its group', () => {
-    const open = ptr('ankuendigungen');
-    const shut = ptr('leitung', { access: 'invited' });
     const rows = buildChannelRows({
-      groupPointers: [open, shut],
-      metadataByKey: {
-        [key(open)]: meta('ankuendigungen', [['name', 'Ankündigungen'], ['restricted']]),
-        [key(shut)]: meta('leitung', [['name', 'Leitung'], ['private']])
-      }
+      subtreeChannels: [
+        sub(ptr('ankuendigungen'), [['name', 'Ankündigungen'], ['restricted']]),
+        sub(ptr('leitung'), [['name', 'Leitung'], ['private']])
+      ]
     });
     render(ChannelOverview, { props: { rows } });
     const cards = screen.getAllByTestId('channel-card');
@@ -56,12 +69,8 @@ describe('ChannelOverview', () => {
   // buttons, not links: leaving for /groups would drop the community frame
   // and load the host's whole directory (laoc, 2026-08-19).
   it('with onSelect, cards are buttons that hand back the pointer', async () => {
-    const open = { id: 'ankuendigungen', relay: RELAY };
     const rows = buildChannelRows({
-      groupPointers: [open],
-      metadataByKey: {
-        [key(open)]: meta('ankuendigungen', [['name', 'Ankündigungen'], ['restricted']])
-      }
+      subtreeChannels: [sub(ptr('ankuendigungen'), [['name', 'Ankündigungen'], ['restricted']])]
     });
     const onSelect = vi.fn();
     render(ChannelOverview, { props: { rows, onSelect } });
@@ -75,14 +84,11 @@ describe('ChannelOverview', () => {
   // card that only repeated the glyph would add nothing. These two rows share
   // the glyph and must still read differently.
   it('names the access level in words, where the glyph cannot tell two apart', () => {
-    const world = ptr('ankuendigungen');
-    const members = ptr('allgemein', { access: 'members' });
     const rows = buildChannelRows({
-      groupPointers: [world, members],
-      metadataByKey: {
-        [key(world)]: meta('ankuendigungen', [['restricted']]),
-        [key(members)]: meta('allgemein', [['private']])
-      }
+      subtreeChannels: [
+        sub(ptr('ankuendigungen'), [['restricted']]),
+        sub(ptr('allgemein'), [['private']])
+      ]
     });
     expect(new Set(rows.map((r) => r.symbol))).toEqual(new Set(['#']));
 
@@ -93,7 +99,7 @@ describe('ChannelOverview', () => {
 
   // Metadata still in flight must never read as open.
   it('says the access is still loading for a channel with no metadata yet', () => {
-    const rows = buildChannelRows({ groupPointers: [ptr('allgemein', { access: 'members' })] });
+    const rows = buildChannelRows({ subtreeChannels: [sub(ptr('allgemein'))] });
     render(ChannelOverview, { props: { rows } });
     expect(screen.getByTestId('channel-card-access').textContent).toMatch(
       /wird geladen|still loading/i
@@ -102,28 +108,22 @@ describe('ChannelOverview', () => {
   });
 
   it('marks only the world-readable channel with the globe', () => {
-    const world = ptr('ankuendigungen');
-    const members = ptr('allgemein', { access: 'members' });
     const rows = buildChannelRows({
-      groupPointers: [world, members],
-      metadataByKey: {
-        [key(world)]: meta('ankuendigungen', [['restricted']]),
-        [key(members)]: meta('allgemein', [['private']])
-      }
+      subtreeChannels: [
+        sub(ptr('ankuendigungen'), [['restricted']]),
+        sub(ptr('allgemein'), [['private']])
+      ]
     });
     render(ChannelOverview, { props: { rows } });
     expect(screen.getAllByTestId('world-readable-badge')).toHaveLength(1);
   });
 
   it('shows the group topic when there is one, and no empty line when there is not', () => {
-    const withTopic = ptr('a');
-    const without = ptr('b');
     const rows = buildChannelRows({
-      groupPointers: [withTopic, without],
-      metadataByKey: {
-        [key(withTopic)]: meta('a', [['private'], ['about', 'Alles Weitere']]),
-        [key(without)]: meta('b', [['private']])
-      }
+      subtreeChannels: [
+        sub(ptr('a'), [['private'], ['about', 'Alles Weitere']]),
+        sub(ptr('b'), [['private']])
+      ]
     });
     render(ChannelOverview, { props: { rows } });
     // Two cards, exactly ONE topic line — asserting only that the text is

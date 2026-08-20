@@ -15,25 +15,30 @@
  */
 import { describe, it, expect } from 'vitest';
 import { buildChannelRows } from '$lib/groups/community-channel-rows.js';
-import { channelKey } from '$lib/groups/community-pointer.js';
+import { channelAccessLevel } from '$lib/groups/channel-access.js';
 import { splitChannelSections } from '$lib/groups/channel-sections.js';
 
 const R = 'wss://groups.example';
-const ptr = (/** @type {string} */ id) => ({ id, relay: R });
-const key = (/** @type {any} */ p) => /** @type {string} */ (channelKey(p));
 const meta = (/** @type {string} */ id, /** @type {string[][]} */ extra = []) => ({
   kind: 39000,
   tags: [['d', id], ...extra]
 });
 
 /** Rows through the REAL builder: a hand-written row could carry a category
- * the builder never produces. */
+ * the builder never produces. Feeds it the subtree-channel shape the builder
+ * now consumes (id/relay/name/level/metadata). */
 const rowsFor = (/** @type {Record<string, string[][]>} */ byId) => {
-  const pointers = Object.keys(byId).map(ptr);
-  /** @type {Record<string, any>} */
-  const metadataByKey = {};
-  for (const [id, tags] of Object.entries(byId)) metadataByKey[key(ptr(id))] = meta(id, tags);
-  return buildChannelRows({ groupPointers: pointers, metadataByKey });
+  const subtreeChannels = Object.entries(byId).map(([id, tags]) => {
+    const metadata = meta(id, tags);
+    return {
+      id,
+      relay: R,
+      name: metadata.tags.find((t) => t[0] === 'name')?.[1],
+      level: channelAccessLevel(metadata),
+      metadata
+    };
+  });
+  return buildChannelRows({ subtreeChannels });
 };
 
 describe('buildChannelRows — what a group says it is', () => {

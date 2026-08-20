@@ -13,8 +13,7 @@
   import { useConcordArea } from '$lib/concord/community.svelte.js';
   import { parseConcordPointer } from '$lib/concord/pointer.js';
   import { useActiveUser } from '$lib/stores/accounts.svelte';
-  import { isCommunityOwner, getCommunitySigner } from '$lib/helpers/community-signer.js';
-  import { useJoinedCommunikeyEvents } from '$lib/helpers/joined-communikey-events.svelte.js';
+  import { isCommunityOwner } from '$lib/helpers/community-signer.js';
   import { deleteChannelCascade } from '$lib/groups/community-teardown.js';
   import { TrashIcon } from '$lib/components/icons';
   import {
@@ -43,10 +42,10 @@
   import { parseMembershipPointer } from '$lib/groups/community-membership.js';
   import { deriveCommunityType } from '$lib/groups/community-membership.js';
   import { relayBadges } from '$lib/groups/group-badges.js';
-  import { relayRequiresAuth } from '$lib/groups/relay-directory.js';
   import { useRelayInformation } from '$lib/groups/relay-information.svelte.js';
   import { buildChannelRows } from '$lib/groups/community-channel-rows.js';
-  import { useChannelMetadata } from '$lib/groups/channel-metadata.svelte.js';
+  import { useCommunityChannels } from '$lib/groups/community-channels.svelte.js';
+  import { communityGroupsEndpoint, flatGroupsRelay } from '$lib/groups/community-endpoint.js';
   import { useRootRoster } from '$lib/groups/root-roster.svelte.js';
   import { resolveZoneMembership } from '$lib/components/community/layout/community-nav.js';
   import ConcordUnreadDot from '$lib/components/shared/ConcordUnreadDot.svelte';
@@ -244,9 +243,15 @@
   const selectedGroupPointer = $derived.by(() => {
     const key = getSelectedGroupChannel(communikeyEvent?.pubkey);
     if (!key) return null;
-    // The root (General) pointer is selectable too, though it is not a `group`
-    // pointer — search it alongside the channel pointers.
-    const all = rootPointer ? [rootPointer, ...groupPointers] : groupPointers;
+    // Search the DISCOVERED subtree channels + the root — their pointers carry
+    // the /c endpoint relay the selection key was built from. The root pointer
+    // is left unnamed so GroupChat's fallback title reads "General", not the
+    // community name its own 39000 carries.
+    const root = getCommunityChannels().rootChannel;
+    const all = [
+      ...(root ? [{ id: root.id, relay: root.relay }] : []),
+      ...getCommunityChannels().channels.map((c) => ({ id: c.id, relay: c.relay, name: c.name }))
+    ];
     return all.find((pointer) => channelKey(pointer) === key) ?? null;
   });
   // GroupChat's fallback title: a channel pointer's own name, or "General" for
@@ -276,9 +281,21 @@
     await setToastsEnabled(!getToastsEnabled());
   }
 
+  const getRootRoster = useRootRoster(() => communikeyEvent);
+  // A 39001 admin of the ROOT group can create and manage channels even
+  // without holding the community key: a NIP-29 channel is a subgroup (9007 +
+  // 9002 with parent=rootId) signed by the admin's OWN key, and the relay
+  // enforces the admin-of-parent rule — no owner-signed kind-10222 edit is
+  // involved any more (channels are discovered from the subtree, not pointers).
+  const isRootAdmin = $derived.by(() => {
+    const user = getActiveUser();
+    return !!user && getRootRoster().admins.some((a) => a.pubkey === user.pubkey);
+  });
   // create intent must not open the wizard for anyone the buttons exclude.
   const canOpenCreateWizard = $derived(
-    (concord.community && concord.canManageChannels && !concord.dissolved) || isCommunikeyOwner
+    (concord.community && concord.canManageChannels && !concord.dissolved) ||
+      isRootAdmin ||
+      isCommunikeyOwner
   );
   // Member/owner gate for the area-members-open entry (handoff #11c): a
   // visitor who merely follows the community (kind-30000, a social bookmark
@@ -289,7 +306,6 @@
   // here rather than threaded through as a prop; +layout.svelte's own
   // comment already notes this duplication as a known, accepted trade-off
   // for this plan.
-  const getRootRoster = useRootRoster(() => communikeyEvent);
   const isAreaMember = $derived(
     resolveZoneMembership({
       isOwner: isCommunikeyOwner,
@@ -297,21 +313,19 @@
       concordIsMember: concord.membership === 'member'
     })
   );
-  const getChannelMeta = useChannelMetadata(() =>
-    rootPointer ? [rootPointer, ...groupPointers] : groupPointers
-  );
-  // Relay badges on the overview describe ONE host, so they are only fetched
-  // and shown when every channel of this community lives on the same relay —
-  // see sharedRelayOf. Two relays means the badges are dropped, never guessed.
-  const getOverviewRelayInfo = useRelayInformation(() => sharedRelayOf(groupPointers));
+  // The community's NIP-29 channels, DISCOVERED from the relay subtree
+  // (/c/<rootId> → {kinds:[39000]}, parent==rootId), not from kind-10222
+  // `group` pointers. Root is surfaced separately as the "General" row.
+  const getCommunityChannels = useCommunityChannels(() => rootPointer);
+  // Relay badges on the overview describe ONE host: the community's groups host
+  // (the root membership pointer's relay).
+  const getOverviewRelayInfo = useRelayInformation(() => rootPointer?.relay ?? null);
   const channelHostBadges = $derived(relayBadges(getOverviewRelayInfo()));
   const channelRows = $derived(
     buildChannelRows({
       concordChannels: channels,
-      groupPointers,
-      metadataByKey: getChannelMeta().byKey,
-      hostRequiresAuth: relayRequiresAuth(getOverviewRelayInfo()),
-      rootPointer,
+      subtreeChannels: getCommunityChannels().channels,
+      rootChannel: getCommunityChannels().rootChannel,
       rootLabel: m.groups_general_channel()
     })
   );
@@ -396,10 +410,9 @@
     }
   }
 
-  // Per-channel delete for NIP-29 group channels (owner only). Reuses the same
-  // cascade GroupChat's in-channel delete runs: 9008 on the relay, prune the
-  // owner's 10009, and detach the pointer from every community that lists it.
-  const getJoinedCommunities = useJoinedCommunikeyEvents();
+  // Per-channel delete for NIP-29 group channels (root admin ∪ owner). Reuses
+  // the same cascade GroupChat's in-channel delete runs: 9008 on the relay
+  // (the subgroup drops out of the /c subtree) + prune the owner's own 10009.
   /** @type {{id: string, relay: string, name?: string} | null} */
   let deletingGroup = $state(null);
   let deletingGroupBusy = $state(false);
@@ -409,18 +422,10 @@
     deletingGroupBusy = true;
     const pointer = deletingGroup;
     try {
-      // Ensure THIS community is in the detach set even if the owner never
-      // "joined" their own community (the pointer must leave its 10222).
-      const joined = getJoinedCommunities();
-      const joinedCommunities = joined.some((c) => c.pubkey === communikeyEvent?.pubkey)
-        ? joined
-        : [communikeyEvent, ...joined].filter(Boolean);
-      await deleteChannelCascade({
-        pointer,
-        user: getActiveUser(),
-        joinedCommunities,
-        getCommunitySigner
-      });
+      // A 9008 is all it takes: the relay drops the subgroup from the /c
+      // subtree, so it vanishes from every client's discovery — no 10222
+      // pointer to unlink. Any admin of the channel (or its parent) may do it.
+      await deleteChannelCascade({ pointer, user: getActiveUser() });
       showToast(m.groups_settings_deleted(), 'success');
       deletingGroup = null;
     } catch (error) {
@@ -580,7 +585,7 @@
             <!-- No delete on the General (root) row: it is the community's
                  membership group — removing it is the whole-community teardown
                  in Settings, not a per-channel delete. -->
-            {#if isNip29Community && isCommunikeyOwner && (!rootPointer || channelKey(row.pointer) !== channelKey(rootPointer))}
+            {#if isNip29Community && (isRootAdmin || isCommunikeyOwner) && row.pointer.id !== rootPointer?.id}
               <button
                 type="button"
                 class="btn btn-square opacity-0 btn-ghost transition-opacity btn-xs group-hover/ch:opacity-100 focus:opacity-100"
@@ -595,7 +600,7 @@
           </div>
         {/if}
       {/each}
-      {#if groupPointers.length > 0 && isAreaMember}
+      {#if (!!rootPointer || groupPointers.length > 0) && isAreaMember}
         <button
           class="btn justify-start btn-outline btn-sm"
           data-testid="area-members-open"
@@ -604,7 +609,7 @@
           {m.area_members_title()}
         </button>
       {/if}
-      {#if (concord.community && concord.canManageChannels && !concord.dissolved) || (isNip29Community && isCommunikeyOwner)}
+      {#if (concord.community && concord.canManageChannels && !concord.dissolved) || (isNip29Community && (isRootAdmin || isCommunikeyOwner))}
         <button
           class="btn justify-start border-dashed btn-outline btn-sm"
           data-testid="concord-new-channel"
@@ -908,12 +913,14 @@
         // channel lives inside this pane, selected via the shared store.
         if (isNip29Community) {
           // Select the fresh channel IN the community pane (no goto: the
-          // standalone /groups route is for directory browsing and drowns
-          // on big public hosts — laoc, 2026-08-19). The membership
-          // pointer's relay is the fallback for the very first channel,
-          // where the optimistic attach may not have landed yet.
-          const relay =
-            sharedRelayOf(groupPointers) ?? parseMembershipPointer(communikeyEvent)?.relay;
+          // standalone /groups route is for directory browsing and drowns on
+          // big public hosts — laoc, 2026-08-19). Discovered channels carry the
+          // /c/<rootId> endpoint relay, so the selection key must too. Refresh
+          // discovery so the new subgroup's 39000 is fetched into the store.
+          getCommunityChannels().refresh();
+          const relay = rootPointer
+            ? communityGroupsEndpoint(flatGroupsRelay(rootPointer.relay), rootPointer.id)
+            : (sharedRelayOf(groupPointers) ?? parseMembershipPointer(communikeyEvent)?.relay);
           const key = relay ? channelKey({ id: channelId, relay }) : null;
           if (key && communikeyEvent?.pubkey) {
             selectGroupChannel(communikeyEvent.pubkey, key);

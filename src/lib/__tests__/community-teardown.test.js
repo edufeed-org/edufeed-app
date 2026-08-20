@@ -58,8 +58,8 @@ const communikeyEvent = {
 beforeEach(() => {
   publishToGroupRelay.mockClear().mockResolvedValue({ kind: 9008 });
   buildDeleteGroupTemplate.mockClear();
-  publishCommunityUpdate.mockClear();
-  updatePersonalGroupsList.mockClear();
+  publishCommunityUpdate.mockClear().mockResolvedValue({ id: 'flip' });
+  updatePersonalGroupsList.mockClear().mockResolvedValue(undefined);
   detachGroupChannel.mockClear();
   clearRootGroupMarker.mockClear();
 });
@@ -108,37 +108,50 @@ describe('teardownCommunityGroups', () => {
       teardownCommunityGroups({ communikeyEvent, communitySigner: {}, user })
     ).rejects.toThrow('sign refused');
   });
+
+  // Channels are DISCOVERED from the subtree now, not the 10222 — the caller
+  // passes them. A community whose 10222 carries no `group` pointers still tears
+  // its channels down through the passed list.
+  it('deletes the caller-passed subtree channels + root (not the 10222 pointers)', async () => {
+    const bareRoot = {
+      kind: 10222,
+      pubkey: OWNER,
+      content: '',
+      tags: [
+        ['d', 'edufeed'],
+        ['membership', 'root0', GROUPS_RELAY]
+      ]
+    };
+    await teardownCommunityGroups({
+      communikeyEvent: bareRoot,
+      communitySigner: {},
+      user,
+      channels: [
+        { id: 'chanA', relay: 'wss://groups.example/c/root0' },
+        { id: 'chanB', relay: 'wss://groups.example/c/root0' }
+      ]
+    });
+    const deletedIds = buildDeleteGroupTemplate.mock.calls.map((c) => c[0]).sort();
+    expect(deletedIds).toEqual(['chanA', 'chanB', 'root0']);
+  });
 });
 
 describe('deleteChannelCascade', () => {
   const pointer = { id: 'chan1', relay: GROUPS_RELAY };
 
-  it('deletes one group, prunes it from 10009, detaches only where signable', async () => {
-    const otherCommunity = {
-      pubkey: 'c'.repeat(64),
-      tags: [['group', 'chan1', GROUPS_RELAY]]
-    };
-    const unlisted = { pubkey: 'd'.repeat(64), tags: [['group', 'other', GROUPS_RELAY]] };
-    const getCommunitySigner = vi.fn((pk) => (pk === otherCommunity.pubkey ? {} : null));
-
-    await deleteChannelCascade({
-      pointer,
-      user,
-      joinedCommunities: [otherCommunity, unlisted],
-      getCommunitySigner
-    });
+  it('deletes one group and prunes it from the user 10009 — no 10222 pointer to detach', async () => {
+    await deleteChannelCascade({ pointer, user });
 
     expect(buildDeleteGroupTemplate).toHaveBeenCalledWith('chan1');
+    expect(publishToGroupRelay).toHaveBeenCalledOnce();
     expect(updatePersonalGroupsList).toHaveBeenCalledWith(user, { remove: pointer });
-    // Detach only from the community that lists it AND we can sign for.
-    expect(detachGroupChannel).toHaveBeenCalledOnce();
-    expect(detachGroupChannel.mock.calls[0][0].communikeyEvent).toBe(otherCommunity);
+    // No owner-signed 10222 edit any more — the 9008 drops the subgroup from
+    // the /c subtree, so every client stops discovering it.
+    expect(detachGroupChannel).not.toHaveBeenCalled();
   });
 
   it('propagates a failed group delete (load-bearing step)', async () => {
     publishToGroupRelay.mockRejectedValue(new Error('not admin'));
-    await expect(
-      deleteChannelCascade({ pointer, user, joinedCommunities: [], getCommunitySigner: () => null })
-    ).rejects.toThrow('not admin');
+    await expect(deleteChannelCascade({ pointer, user })).rejects.toThrow('not admin');
   });
 });

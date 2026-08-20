@@ -1007,19 +1007,18 @@ describe('GroupChat', () => {
     expect(screen.queryByTestId('disclosure-line')).toBeNull();
   });
 
-  // Exercises the linkedAccess lookup itself (channelKey matching a real
-  // kind:10222's `group` pointer tag), not just the 'invited' fallback the
-  // two tests above take when no community is joined at all.
-  it('shows the members-wording disclosure line when a joined community lists this channel as `members`', async () => {
+  // The kind-10222 `group` pointer's access marker is RETIRED (2026-08-20):
+  // channels are discovered from the relay subtree, and a `private` channel is
+  // always 'invited' — whatever a joined community's (now-ignored) pointer
+  // marker says. The disclosure reads "selected members", never "all members".
+  // ("all community members, privately" is Concord's job now.)
+  it('ignores a joined community’s retired `members` pointer marker — a private channel stays invited-wording', async () => {
     joinedCommunikeyEventsHolder.events = [
       {
         kind: 10222,
         pubkey: 'f'.repeat(64),
         tags: [
           ['d', ''],
-          // Same id@relay as `pointer` below — this is the match channelKey
-          // must find. Name slot filled, access in the 5th slot (see
-          // buildGroupPointerTag/parseGroupPointers in community-pointer.js).
           ['group', pointer.id, pointer.relay, 'Bee Chat', 'members']
         ]
       }
@@ -1028,7 +1027,7 @@ describe('GroupChat', () => {
     await screen.findByTestId('group-name');
 
     const line = await screen.findByTestId('disclosure-line');
-    expect(line.textContent).toBe('Readable by all 2 members.');
+    expect(line.textContent).toBe('Readable by 2 selected members.');
   });
 
   // A channel opened from a host directory used to be a dead end: the chat

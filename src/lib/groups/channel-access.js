@@ -25,15 +25,16 @@ import { GROUP_METADATA_KIND } from 'applesauce-common/helpers/groups';
 /**
  * @param {{ kind?: number, tags?: string[][] } | null | undefined} metadata
  *   the channel's kind:39000, or null while it has not loaded
- * @param {{ access?: string } | null | undefined} pointer
- *   the community's ["group", id, relay, name, access] pointer
+ * @param {{ access?: string } | null | undefined} [_pointer]
+ *   IGNORED (retired): the old ["group", …, access] pointer marker. Kept in
+ *   the signature so existing 3-arg call sites don't have to change.
  * @param {boolean} [hostRequiresAuth] the HOST gates every read behind
  *   NIP-42 (NIP-11 auth_required, or a REQ closed auth-required). A group
  *   without `private` on such a relay is readable by whoever the relay
  *   admits — not by the world, whatever its own tags omit.
  * @returns {ChannelAccessLevel}
  */
-export function channelAccessLevel(metadata, pointer, hostRequiresAuth = false) {
+export function channelAccessLevel(metadata, _pointer = undefined, hostRequiresAuth = false) {
   if (!metadata || metadata.kind !== GROUP_METADATA_KIND || !Array.isArray(metadata.tags)) {
     return 'unknown';
   }
@@ -41,8 +42,17 @@ export function channelAccessLevel(metadata, pointer, hostRequiresAuth = false) 
   // isPublic/isOpen here: they come from the dropped inverse tags of an older
   // NIP-29 draft, so they are false on every spec-current relay.
   const isPrivate = metadata.tags.some((t) => t[0] === 'private');
-  if (!isPrivate) return hostRequiresAuth ? 'members' : 'world';
-  return pointer?.access === 'members' ? 'members' : 'invited';
+  // Retired: the pointer's members/invited marker. A private channel is always
+  // 'invited' now — the kind-10222 `group` pointer that carried the marker is
+  // dropped (channels are discovered from the relay subtree instead), and "all
+  // community members, privately" lives in Concord. `pointer` is kept in the
+  // signature only so the ~dozen 3-arg call sites don't have to change.
+  if (isPrivate) return 'invited';
+  // Not private → world-readable, UNLESS the host gates every read behind
+  // NIP-42 (foreign auth_required relays like buzz): then it is readable only
+  // by whoever the relay admits, not the world — a host-derived cap, not a
+  // per-channel tier. On groups.edufeed.org (no global auth) this is 'world'.
+  return hostRequiresAuth ? 'members' : 'world';
 }
 
 /**

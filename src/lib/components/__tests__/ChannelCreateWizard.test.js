@@ -75,11 +75,10 @@ vi.mock('$lib/groups/group-management.js', () => ({
   createGroupOnRelay,
   generateGroupId,
   publishToGroupRelay,
-  buildPutUserTemplate
+  buildPutUserTemplate,
+  isRelayMembershipRequired: (/** @type {any} */ err) =>
+    /only members of this relay can create a group/i.test(String(err?.message ?? err))
 }));
-
-const attachGroupChannel = vi.hoisted(() => vi.fn(async (/** @type {any} */ _args) => ({})));
-vi.mock('$lib/groups/community-attach.js', () => ({ attachGroupChannel }));
 
 const updatePersonalGroupsList = vi.hoisted(() => vi.fn(async () => {}));
 vi.mock('$lib/groups/personal-groups-list.js', () => ({ updatePersonalGroupsList }));
@@ -404,32 +403,28 @@ describe('ChannelCreateWizard — NIP-29 groups', () => {
     vi.clearAllMocks();
   });
 
-  it('NIP-29 mode: shows both access radios, weltoffen checkbox only while members is selected', async () => {
+  it('NIP-29 mode: shows world + invited radios — no members tier, no weltoffen', async () => {
     await toAccessStep(nip29Community());
 
-    expect(screen.getByTestId('wizard-access-members')).toBeTruthy();
+    // Two relay-observable tiers only. 'members' (relay-trust community-only)
+    // is retired to Concord; the weltoffen sub-toggle is gone with it.
+    expect(screen.getByTestId('wizard-access-world')).toBeTruthy();
     expect(screen.getByTestId('wizard-access-invited')).toBeTruthy();
-    // Default tier in NIP-29 mode is 'members' (a NORMAL community channel:
-    // everyone in the community reads + writes) — so the weltoffen checkbox,
-    // which only renders under 'members', is present from the start.
-    expect(screen.getByTestId('wizard-access-worldreadable')).toBeTruthy();
-
-    await fireEvent.click(screen.getByTestId('wizard-access-invited'));
+    expect(screen.queryByTestId('wizard-access-members')).toBeNull();
     expect(screen.queryByTestId('wizard-access-worldreadable')).toBeNull();
-
-    await fireEvent.click(screen.getByTestId('wizard-access-members'));
-    expect(screen.getByTestId('wizard-access-worldreadable')).toBeTruthy();
+    // A one-line steer: members-only-private lives in an encrypted channel.
+    expect(screen.getByTestId('wizard-access-concord-hint')).toBeTruthy();
   });
 
   it('moderated community with zero channels runs in NIP-29 mode', async () => {
     await toAccessStep(moderatedCommunity());
-    // The weltoffen checkbox is the NIP-29-only affordance — its presence
-    // under 'members' proves the wizard did not fall into Concord mode.
-    await fireEvent.click(screen.getByTestId('wizard-access-members'));
-    expect(screen.getByTestId('wizard-access-worldreadable')).toBeTruthy();
+    // The world radio is the NIP-29-only affordance (Concord mode shows a
+    // `members` radio instead) — its presence proves NIP-29 mode.
+    expect(screen.getByTestId('wizard-access-world')).toBeTruthy();
+    expect(screen.queryByTestId('wizard-access-members')).toBeNull();
   });
 
-  it('first channel of a moderated community: creates on the FLAT host, addresses via /c/<rootId>', async () => {
+  it('first channel of a moderated community: creates on the FLAT host, mirrors /c into 10009, NO 10222 pointer', async () => {
     const onCreated = vi.fn();
     render(ChannelCreateWizard, {
       props: { communikeyEvent: moderatedCommunity(), onClose: () => {}, onCreated }
@@ -444,16 +439,12 @@ describe('ChannelCreateWizard — NIP-29 groups', () => {
     // a group not yet in the subtree.
     expect(poolRelaySpy).toHaveBeenCalledWith(GROUP_RELAY);
     // NIP-29 Subgroups: same-host membership pointer becomes the channel's
-    // `parent` — the relay auto-admits root-group members.
+    // `parent` — the relay auto-admits root-group members AND this is how the
+    // /c/<rootId> subtree discovers the channel (no 10222 pointer needed).
     const createArgs = createGroupOnRelay.mock.calls[0][0];
     expect(createArgs.metadata).toEqual(expect.objectContaining({ parent: 'root-1' }));
-    // But the pointer + personal-list entry are ADDRESSED via the community's
-    // /c/<rootId> endpoint so Armada shows one dedicated space per community.
-    await waitFor(() => expect(attachGroupChannel).toHaveBeenCalledTimes(1));
-    expect(attachGroupChannel.mock.calls[0][0].pointer).toEqual(
-      // Default access is 'members' — a normal community channel, not invite-only.
-      expect.objectContaining({ relay: `${GROUP_RELAY}c/root-1`, access: 'members' })
-    );
+    // Only the creator's kind-10009 is mirrored (r + group tags, addressed via
+    // /c) — there is NO owner-signed kind-10222 `group` pointer write.
     await waitFor(() => expect(updatePersonalGroupsList).toHaveBeenCalledTimes(1));
     expect(updatePersonalGroupsList).toHaveBeenCalledWith(expect.anything(), {
       add: { id: 'new-group-id', relay: `${GROUP_RELAY}c/root-1` }
@@ -489,8 +480,6 @@ describe('ChannelCreateWizard — NIP-29 groups', () => {
     // unwrapped it → create connects to the flat host, not /c.
     expect(poolRelaySpy).toHaveBeenCalledWith(GROUP_RELAY);
     expect(createGroupOnRelay.mock.calls[0][0].metadata.parent).toBe('root-1');
-    await waitFor(() => expect(attachGroupChannel).toHaveBeenCalledTimes(1));
-    expect(attachGroupChannel.mock.calls[0][0].pointer.relay).toBe(`${GROUP_RELAY}c/root-1`);
   });
 
   it('a membership pointer on a DIFFERENT relay than the channel never becomes parent', async () => {
@@ -522,7 +511,7 @@ describe('ChannelCreateWizard — NIP-29 groups', () => {
     expect(screen.queryByTestId('wizard-access-worldreadable')).toBeNull();
   });
 
-  it('creates a NIP-29 group on the shared relay, attaches it, and fans out put-user', async () => {
+  it('creates a NIP-29 group signed by the ACTING admin (not the community key) and fans out put-user — no 10222 pointer', async () => {
     const onCreated = vi.fn();
     const communikeyEvent = nip29Community();
     render(ChannelCreateWizard, {
@@ -531,8 +520,7 @@ describe('ChannelCreateWizard — NIP-29 groups', () => {
 
     const nameInput = screen.getByPlaceholderText(/Staff room|Lehrer/);
     await fireEvent.input(nameInput, { target: { value: 'Mathe' } });
-    await fireEvent.click(screen.getByTestId('wizard-access-members'));
-    await fireEvent.click(screen.getByTestId('wizard-access-worldreadable'));
+    await fireEvent.click(screen.getByTestId('wizard-access-world'));
 
     // Group mode is 2 steps — this Next lands on step 1, which is the FINAL
     // step (invite + Create, no separate "good to know" step).
@@ -544,20 +532,17 @@ describe('ChannelCreateWizard — NIP-29 groups', () => {
     await waitFor(() => expect(createGroupOnRelay).toHaveBeenCalledTimes(1));
     const createArgs = createGroupOnRelay.mock.calls[0][0];
     expect(createArgs.relayConn).toBe(relayConnStub);
-    // members + worldReadable = world channel: open to self-join (bare 9021).
+    // world channel: not private, open to bare-9021 self-join.
     expect(createArgs.metadata).toEqual(expect.objectContaining({ isPublic: true, isOpen: true }));
+    // Signed with the ACTING user's key — NOT the community key. This is what
+    // lets a 39001 admin who isn't the key-holder create a channel.
     expect(createArgs.user).toBe(mockManager.active);
-
-    await waitFor(() => expect(attachGroupChannel).toHaveBeenCalledTimes(1));
-    expect(attachGroupChannel.mock.calls[0][0].pointer).toEqual(
-      expect.objectContaining({ access: 'members' })
-    );
 
     await waitFor(() => expect(onCreated).toHaveBeenCalled());
     // put-user built for the selected invitee.
     expect(buildPutUserTemplate).toHaveBeenCalledWith('new-group-id', MEMBER_B);
     // The creator's kind-10009 mirrors the fresh channel (r + group tags) —
-    // that's what makes it visible in Armada/Flotilla.
+    // that's what makes it visible in Armada/Flotilla. No kind-10222 pointer.
     expect(updatePersonalGroupsList).toHaveBeenCalledWith(mockManager.active, {
       add: { id: 'new-group-id', relay: GROUP_RELAY }
     });
@@ -591,38 +576,8 @@ describe('ChannelCreateWizard — NIP-29 groups', () => {
   // explicitly selected invitees (plus the admin pre-join, covered
   // separately below); no roster subscription is even consulted, so there is
   // nothing to wait for either.
-  it('fans out put-user only to explicitly selected invitees for a members-tier create — no roster-union seeding', async () => {
+  it('fans out put-user only to explicitly selected invitees — no roster-union seeding', async () => {
     const communikeyEvent = nip29Community();
-    render(ChannelCreateWizard, {
-      props: { communikeyEvent, onClose: () => {}, onCreated: () => {} }
-    });
-
-    const nameInput = screen.getByPlaceholderText(/Staff room|Lehrer/);
-    await fireEvent.input(nameInput, { target: { value: 'Mathe' } });
-    await fireEvent.click(screen.getByTestId('wizard-access-members'));
-    await fireEvent.click(screen.getByRole('button', { name: /Next|Weiter/ })); // → final step
-    // Create is never gated on any roster answer for a members-tier channel.
-    expect(
-      /** @type {HTMLButtonElement} */ (screen.getByTestId('concord-wizard-create')).disabled
-    ).toBe(false);
-    await fireEvent.click(screen.getByRole('button', { name: new RegExp(MEMBER_B.slice(0, 12)) }));
-
-    await fireEvent.click(screen.getByTestId('concord-wizard-create'));
-
-    await waitFor(() => expect(attachGroupChannel).toHaveBeenCalledTimes(1));
-    const putUserTargets = buildPutUserTemplate.mock.calls.map((args) => args[1]);
-    // Exactly the explicitly selected invitee — no community-member union.
-    expect(putUserTargets).toEqual([MEMBER_B]);
-  });
-
-  // Finding 3 (IMPORTANT): a createGroupOnRelay success followed by an
-  // attachGroupChannel failure must not read as "creation failed" — the
-  // group already exists on the relay, and a generic error toast invites a
-  // retry that mints a second orphan. It gets its own warning toast naming
-  // the id, the wizard stays open (no onCreated), and no put-user goes out.
-  it('warns with the group id and keeps the wizard open when attach fails after the group is created', async () => {
-    const communikeyEvent = nip29Community();
-    attachGroupChannel.mockRejectedValueOnce(new Error('publish failed'));
     const onCreated = vi.fn();
     render(ChannelCreateWizard, {
       props: { communikeyEvent, onClose: () => {}, onCreated }
@@ -630,18 +585,41 @@ describe('ChannelCreateWizard — NIP-29 groups', () => {
 
     const nameInput = screen.getByPlaceholderText(/Staff room|Lehrer/);
     await fireEvent.input(nameInput, { target: { value: 'Mathe' } });
-    await fireEvent.click(screen.getByTestId('wizard-access-members'));
     await fireEvent.click(screen.getByRole('button', { name: /Next|Weiter/ })); // → final step
+    // Create is never gated on any roster answer.
+    expect(
+      /** @type {HTMLButtonElement} */ (screen.getByTestId('concord-wizard-create')).disabled
+    ).toBe(false);
+    await fireEvent.click(screen.getByRole('button', { name: new RegExp(MEMBER_B.slice(0, 12)) }));
 
+    await fireEvent.click(screen.getByTestId('concord-wizard-create'));
+
+    await waitFor(() => expect(onCreated).toHaveBeenCalled());
+    const putUserTargets = buildPutUserTemplate.mock.calls.map((args) => args[1]);
+    // Exactly the explicitly selected invitee — no community-member union.
+    expect(putUserTargets).toEqual([MEMBER_B]);
+  });
+
+  it('surfaces the friendly relay-membership message when the groups relay rejects the create (admin not yet invited)', async () => {
+    const communikeyEvent = nip29Community();
+    createGroupOnRelay.mockRejectedValueOnce(
+      new Error('restricted: only members of this relay can create a group')
+    );
+    const onCreated = vi.fn();
+    render(ChannelCreateWizard, {
+      props: { communikeyEvent, onClose: () => {}, onCreated }
+    });
+
+    const nameInput = screen.getByPlaceholderText(/Staff room|Lehrer/);
+    await fireEvent.input(nameInput, { target: { value: 'Mathe' } });
+    await fireEvent.click(screen.getByRole('button', { name: /Next|Weiter/ })); // → final step
     await fireEvent.click(screen.getByTestId('concord-wizard-create'));
 
     await waitFor(() => expect(toastSpy).toHaveBeenCalled());
     const [message, type] = toastSpy.mock.calls[0];
-    expect(type).toBe('warning');
-    expect(message).toContain('new-group-id');
-
-    expect(createGroupOnRelay).toHaveBeenCalledTimes(1);
-    expect(publishToGroupRelay).not.toHaveBeenCalled();
+    expect(type).toBe('error');
+    // The "ask the operator to invite you" copy, not a raw "creation failed".
+    expect(message).toMatch(/approv|operator|zugelassen|betreiber/i);
     expect(onCreated).not.toHaveBeenCalled();
   });
 

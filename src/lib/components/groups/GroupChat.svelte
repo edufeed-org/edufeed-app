@@ -26,7 +26,6 @@
   import { goto } from '$app/navigation';
   import { eventStore, pool } from '$lib/stores/nostr-infrastructure.svelte';
   import { useActiveUser } from '$lib/stores/accounts.svelte';
-  import { getCommunitySigner } from '$lib/helpers/community-signer.js';
   import { useProfileMap } from '$lib/stores/profile-map.svelte.js';
   import { storeEvents } from 'applesauce-relay/operators';
   import { TimelineModel } from 'applesauce-core/models';
@@ -68,8 +67,7 @@
   import GroupSettingsSheet from '$lib/components/groups/GroupSettingsSheet.svelte';
   import { useRelayInformation } from '$lib/groups/relay-information.svelte.js';
   import { unlinkDeletedChannel } from '$lib/groups/community-teardown.js';
-  import { parseGroupPointers, channelKey } from '$lib/groups/community-pointer.js';
-  import { useJoinedCommunikeyEvents } from '$lib/helpers/joined-communikey-events.svelte.js';
+  import { channelKey } from '$lib/groups/community-pointer.js';
   import { channelAccessLevel } from '$lib/groups/channel-access.js';
   import { relayRequiresAuth } from '$lib/groups/relay-directory.js';
   import { aggregateChannelReactions } from '$lib/concord/chat-helpers.js';
@@ -97,9 +95,6 @@
   let { pointer, fallbackName = '' } = $props();
 
   const getActiveUser = useActiveUser();
-  // At component init, not inside a handler — hooks cannot be called from
-  // async handlers (CLAUDE.md). Feeds the post-delete detach cascade below.
-  const getJoinedCommunities = useJoinedCommunikeyEvents();
 
   // Media on this host is membership-gated (buzz answers 401 anonymously):
   // every ImageWithFallback below fetches same-host URLs with a signed
@@ -120,27 +115,14 @@
   const hostBadges = $derived(relayBadges(getRelayInfo()));
   const accessBadges = $derived(channelBadges(metadataEvent));
 
-  // The disclosure line's access slot: when this group is linked into a
-  // community, use THAT community's intent for it (members vs invited — the
-  // relay's own kind:39000 cannot express the split, see access-choice.js);
-  // a standalone group has no such pointer and falls back to `undefined`,
-  // which channelAccessLevel reads as the stricter 'invited'.
-  const linkedAccess = $derived.by(() => {
-    const target = channelKey({ id: pointer.id, relay: pointer.relay });
-    if (!target) return undefined;
-    for (const communikeyEvent of getJoinedCommunities()) {
-      const match = parseGroupPointers(communikeyEvent).find((p) => channelKey(p) === target);
-      if (match) return match.access;
-    }
-    return undefined;
-  });
   /** @type {Set<string>} */ let members = $state(new Set());
-  // Same accounting as the rail's access glyph (channel-access.js): a group
-  // without `private` on a host that gates every read behind NIP-42 is
-  // readable by whoever the relay admits, not by the world — overstating
-  // openness is the harmful direction.
+  // Access is the relay-observable split only (channel-access.js): `private` =
+  // invited, else world — capped to non-world when the host gates every read
+  // behind NIP-42 (overstating openness is the harmful direction). The old
+  // kind-10222 `group` pointer marker is retired, so nothing but the group's
+  // own kind:39000 feeds this.
   const disclosureLevel = $derived(
-    channelAccessLevel(metadataEvent, { access: linkedAccess }, relayRequiresAuth(getRelayInfo()))
+    channelAccessLevel(metadataEvent, undefined, relayRequiresAuth(getRelayInfo()))
   );
   // The numeric members/invited line reads "0" while the roster hasn't
   // arrived yet (or is genuinely empty) — indistinguishable from "not
@@ -748,12 +730,7 @@
    * never surfaced, never fatal to the cascade.
    */
   async function handleGroupDeleted() {
-    await unlinkDeletedChannel({
-      pointer,
-      user: getActiveUser(),
-      joinedCommunities: getJoinedCommunities(),
-      getCommunitySigner
-    });
+    await unlinkDeletedChannel({ pointer, user: getActiveUser() });
     goto('/');
   }
 </script>

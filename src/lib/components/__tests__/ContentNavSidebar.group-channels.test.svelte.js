@@ -14,7 +14,6 @@ import { describe, it, expect, vi, afterEach } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/svelte';
 import { GROUP_METADATA_KIND } from 'applesauce-common/helpers/groups';
 import { buildChannelRows } from '$lib/groups/community-channel-rows.js';
-import { channelKey } from '$lib/groups/community-pointer.js';
 
 const OWNER = 'a'.repeat(64);
 const STRANGER = 'b'.repeat(64);
@@ -99,12 +98,18 @@ function renderNav(props = {}) {
  * @returns {import('$lib/groups/community-channel-rows.js').GroupChannelRow}
  */
 function worldReadableGroupRow() {
-  const pointer = { id: 'chan-open', relay: RELAY, name: 'Open Channel' };
-  const metadata = { kind: GROUP_METADATA_KIND, tags: [['name', 'Open Channel']] };
+  const metadata = {
+    kind: GROUP_METADATA_KIND,
+    tags: [
+      ['d', 'chan-open'],
+      ['name', 'Open Channel']
+    ]
+  };
   return /** @type {any} */ (
     buildChannelRows({
-      groupPointers: [pointer],
-      metadataByKey: { [/** @type {string} */ (channelKey(pointer))]: metadata }
+      subtreeChannels: [
+        { id: 'chan-open', relay: RELAY, name: 'Open Channel', level: 'world', metadata }
+      ]
     })[0]
   );
 }
@@ -114,12 +119,18 @@ function worldReadableGroupRow() {
  * @returns {import('$lib/groups/community-channel-rows.js').GroupChannelRow}
  */
 function membersOnlyGroupRow() {
-  const pointer = { id: 'chan-private', relay: RELAY, name: 'Private Channel' };
-  const metadata = { kind: GROUP_METADATA_KIND, tags: [['private', '']] };
+  const metadata = {
+    kind: GROUP_METADATA_KIND,
+    tags: [
+      ['d', 'chan-private'],
+      ['private', '']
+    ]
+  };
   return /** @type {any} */ (
     buildChannelRows({
-      groupPointers: [pointer],
-      metadataByKey: { [/** @type {string} */ (channelKey(pointer))]: metadata }
+      subtreeChannels: [
+        { id: 'chan-private', relay: RELAY, name: 'Private Channel', level: 'invited', metadata }
+      ]
     })[0]
   );
 }

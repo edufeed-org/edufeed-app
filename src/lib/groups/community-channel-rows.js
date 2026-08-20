@@ -7,7 +7,13 @@
 // should have to think about.
 //
 // Rows are plain data. Rendering (PrivateChannelsView) stays presentational.
-import { channelAccessLevel, channelGlyph } from './channel-access.js';
+//
+// The NIP-29 rows come from the relay SUBTREE (useCommunityChannels →
+// buildSubtreeChannels), not from a kind-10222 `group` pointer: each channel
+// arrives with its id/relay/name, its access `level` already computed from the
+// relay's `private` flag, and its kind:39000 `metadata`. So this file no longer
+// resolves metadata or level itself — it just shapes rows and merges sources.
+import { channelGlyph } from './channel-access.js';
 import { channelKey } from './community-pointer.js';
 import { safeImageUrl } from './relay-directory.js';
 
@@ -31,7 +37,7 @@ import { safeImageUrl } from './relay-directory.js';
  *   level: import('./channel-access.js').ChannelAccessLevel,
  *   about?: string,
  *   picture?: string,
- *   pointer: {id: string, relay: string, name?: string, access?: string}
+ *   pointer: {id: string, relay: string, name?: string}
  * }} GroupChannelRow
  * @typedef {ConcordChannelRow | GroupChannelRow} ChannelRow
  */
@@ -42,26 +48,21 @@ import { safeImageUrl } from './relay-directory.js';
 /**
  * @param {{
  *   concordChannels?: Array<{channel_id: string, name?: string, private?: boolean, accessible?: boolean}>,
- *   groupPointers?: Array<{id: string, relay: string, name?: string, access?: string}>,
- *   metadataByKey?: Record<string, {kind?: number, tags?: string[][]}>,
- *   hostRequiresAuth?: boolean,
- *   rootPointer?: {id: string, relay: string, name?: string, access?: string} | null,
+ *   subtreeChannels?: Array<import('./subtree-channels.js').SubtreeChannel>,
+ *   rootChannel?: import('./subtree-channels.js').SubtreeChannel | null,
  *   rootLabel?: string
- * }} input `hostRequiresAuth`: the group relay gates every read behind
- *   NIP-42, so no channel on it may claim the globe (see channel-access.js).
- *   `rootPointer`: the community's NIP-29 root membership group. When present it
- *   is pinned FIRST as the "General" channel (`rootLabel`) — its own kind:39000
- *   name is the community name, and generic clients (Armada) list the root
- *   anyway, so naming it and placing it first makes it a purposeful #general
- *   instead of a confusing duplicate.
+ * }} input `subtreeChannels` / `rootChannel` come from useCommunityChannels
+ *   (the relay subtree). `rootChannel`, when present, is pinned FIRST as the
+ *   "General" channel (`rootLabel`) — its own kind:39000 name is the community
+ *   name, and generic clients (Armada) list the root anyway, so naming it and
+ *   placing it first makes it a purposeful #general instead of a confusing
+ *   duplicate.
  * @returns {ChannelRow[]}
  */
 export function buildChannelRows({
   concordChannels = [],
-  groupPointers = [],
-  metadataByKey = {},
-  hostRequiresAuth = false,
-  rootPointer = null,
+  subtreeChannels = [],
+  rootChannel = null,
   rootLabel = ''
 }) {
   /** @type {ChannelRow[]} */
@@ -84,34 +85,9 @@ export function buildChannelRows({
     });
   }
 
-  for (const pointer of groupPointers) {
-    const key = channelKey(pointer);
-    if (!key) continue; // unaddressable — better absent than a broken row
-    const metadata = metadataByKey[key];
-    const level = channelAccessLevel(metadata, pointer, hostRequiresAuth);
-    const glyph = channelGlyph(level);
-    rows.push({
-      key: `group:${key}`,
-      name: pointer.name || metadataName(metadata) || pointer.id,
-      symbol: glyph.symbol,
-      worldReadable: glyph.worldReadable,
-      locked: glyph.locked,
-      accessible: true,
-      // The relay has not told us yet what this channel is; the row is drawn
-      // locked meanwhile, and callers can show that it is still settling.
-      pending: level === 'unknown',
-      source: 'group',
-      category: channelCategory(metadata),
-      level,
-      ...(metadataTag(metadata, 'about') ? { about: metadataTag(metadata, 'about') } : {}),
-      // A channel's own picture, when its kind:39000 carries one. Absent is
-      // the norm, so the key is omitted rather than set to null — a card
-      // reserves no space for a picture nobody published.
-      ...(safeImageUrl(metadataTag(metadata, 'picture'))
-        ? { picture: /** @type {string} */ (safeImageUrl(metadataTag(metadata, 'picture'))) }
-        : {}),
-      pointer
-    });
+  for (const channel of subtreeChannels) {
+    const row = groupRow(channel);
+    if (row) rows.push(row);
   }
 
   const sorted = rows.sort((a, b) => a.name.localeCompare(b.name, 'de'));
@@ -119,31 +95,54 @@ export function buildChannelRows({
   // The root membership group, pinned first as "General" (its own name is the
   // community name; the label overrides it). Built like any group row so it
   // opens GroupChat on the root pointer. Skipped if it somehow already appears
-  // among the channels (a `group` pointer can't be the membership pointer, but
-  // guard anyway to never double-list it).
-  const rootKey = rootPointer ? channelKey(rootPointer) : null;
-  if (rootPointer && rootKey && !sorted.some((r) => r.key === `group:${rootKey}`)) {
-    const metadata = metadataByKey[rootKey];
-    const level = channelAccessLevel(metadata, rootPointer, hostRequiresAuth);
-    const glyph = channelGlyph(level);
-    /** @type {GroupChannelRow} */
-    const rootRow = {
-      key: `group:${rootKey}`,
-      name: rootLabel || metadataName(metadata) || rootPointer.id,
-      symbol: glyph.symbol,
-      worldReadable: glyph.worldReadable,
-      locked: glyph.locked,
-      accessible: true,
-      pending: level === 'unknown',
-      source: 'group',
-      category: 'channel',
-      level,
-      pointer: rootPointer
-    };
+  // among the channels (never should — buildSubtreeChannels returns the root
+  // separately — but guard anyway to never double-list it).
+  const rootRow = rootChannel ? groupRow(rootChannel, rootLabel) : null;
+  if (rootRow && !sorted.some((r) => r.key === rootRow.key)) {
     return [rootRow, ...sorted];
   }
 
   return sorted;
+}
+
+/**
+ * Shape one subtree channel (id/relay/name/level/metadata) into a GroupChannelRow.
+ * @param {import('./subtree-channels.js').SubtreeChannel} channel
+ * @param {string} [nameOverride] used for the root's "General" label
+ * @returns {GroupChannelRow | null}
+ */
+function groupRow(channel, nameOverride = '') {
+  const pointer = {
+    id: channel.id,
+    relay: channel.relay,
+    ...(channel.name ? { name: channel.name } : {})
+  };
+  const key = channelKey(pointer);
+  if (!key) return null; // unaddressable — better absent than a broken row
+  const metadata = channel.metadata;
+  const level = channel.level;
+  const glyph = channelGlyph(level);
+  return {
+    key: `group:${key}`,
+    name: nameOverride || channel.name || metadataName(metadata) || channel.id,
+    symbol: glyph.symbol,
+    worldReadable: glyph.worldReadable,
+    locked: glyph.locked,
+    accessible: true,
+    // Metadata not yet arrived → level 'unknown'; the row is drawn locked
+    // meanwhile and callers can show that it is still settling.
+    pending: level === 'unknown',
+    source: 'group',
+    category: channelCategory(metadata),
+    level,
+    ...(metadataTag(metadata, 'about') ? { about: metadataTag(metadata, 'about') } : {}),
+    // A channel's own picture, when its kind:39000 carries one. Absent is the
+    // norm, so the key is omitted rather than set to null.
+    ...(safeImageUrl(metadataTag(metadata, 'picture'))
+      ? { picture: /** @type {string} */ (safeImageUrl(metadataTag(metadata, 'picture'))) }
+      : {}),
+    pointer
+  };
 }
 
 /**

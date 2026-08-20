@@ -25,7 +25,9 @@
 import { useRootRoster } from './root-roster.svelte.js';
 import { useChannelRosters } from './channel-rosters.svelte.js';
 import { reconcilePlan } from './area-members.js';
-import { channelKey, parseGroupPointers } from './community-pointer.js';
+import { channelKey } from './community-pointer.js';
+import { parseMembershipPointer } from './community-membership.js';
+import { useCommunityChannels } from './community-channels.svelte.js';
 import { putUserOn, fanOut } from './roster-fanout.js';
 import { useActiveUser } from '$lib/stores/accounts.svelte';
 import { isCommunityOwner } from '$lib/helpers/community-signer.js';
@@ -44,7 +46,13 @@ export function __resetRosterReconcile() {
  */
 export function useRosterReconcile(getCommunikeyEvent) {
   const getRoster = useRootRoster(getCommunikeyEvent);
-  const getRosters = useChannelRosters(() => parseGroupPointers(getCommunikeyEvent()));
+  // Channels are DISCOVERED from the relay subtree, not the kind-10222.
+  const getCommunityChannels = useCommunityChannels(() =>
+    parseMembershipPointer(getCommunikeyEvent())
+  );
+  const channelPointersOf = () =>
+    getCommunityChannels().channels.map((c) => ({ id: c.id, relay: c.relay }));
+  const getRosters = useChannelRosters(channelPointersOf);
   const getActiveUser = useActiveUser();
 
   $effect(() => {
@@ -54,7 +62,7 @@ export function useRosterReconcile(getCommunikeyEvent) {
     const { membersByKey, adminsByKey } = getRosters();
     if (!communikeyEvent?.pubkey || !user?.signer || !roster.pointer) return;
 
-    const pointers = parseGroupPointers(communikeyEvent);
+    const pointers = channelPointersOf();
     if (pointers.length === 0) return;
 
     const ledgerKey = `${communikeyEvent.pubkey} ${user.pubkey}`;

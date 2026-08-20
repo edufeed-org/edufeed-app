@@ -28,18 +28,17 @@ describe('channelAccessLevel', () => {
     expect(channelAccessLevel(event, ptr('members'))).toBe('world');
   });
 
-  it('is "members" for a private group our community marks as open', () => {
-    expect(channelAccessLevel(meta([['private'], ['closed']]), ptr('members'))).toBe('members');
-  });
-
-  it('is "invited" for a private group our community marks as restricted', () => {
+  // The pointer's members/invited marker is retired (the kind-10222 `group`
+  // pointer it rode on is dropped): every private channel is now "invited".
+  // "All community members, privately" lives in Concord instead.
+  it('is "invited" for any private group, whatever the (ignored) pointer marker says', () => {
+    expect(channelAccessLevel(meta([['private'], ['closed']]), ptr('members'))).toBe('invited');
     expect(channelAccessLevel(meta([['private'], ['closed']]), ptr('invited'))).toBe('invited');
   });
 
   // Fail closed: a lock on something open understates it and misleads nobody;
   // a # on something locked tells people colleagues are reading when they are not.
-  it('falls back to "invited" when our pointer carries no marker', () => {
-    // A pointer written before the marker existed: no `access` at all.
+  it('is "invited" for a private group even with no pointer at all', () => {
     const unmarked = /** @type {any} */ ({ id: 'allgemein', relay: R });
     expect(channelAccessLevel(meta([['private']]), unmarked)).toBe('invited');
     expect(channelAccessLevel(meta([['private']]), ptr('nonsense'))).toBe('invited');
@@ -101,8 +100,8 @@ describe('channelAccessLevel on an auth-required host', () => {
     expect(channelAccessLevel(meta(), ptr('members'), true)).toBe('members');
   });
 
-  it('leaves private groups exactly as they were', () => {
-    expect(channelAccessLevel(meta([['private']]), ptr('members'), true)).toBe('members');
+  it('leaves private groups "invited", whatever the auth flag', () => {
+    expect(channelAccessLevel(meta([['private']]), ptr('members'), true)).toBe('invited');
     expect(channelAccessLevel(meta([['private']]), ptr('invited'), true)).toBe('invited');
   });
 

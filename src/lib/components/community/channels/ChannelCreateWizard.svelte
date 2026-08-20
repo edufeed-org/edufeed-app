@@ -24,16 +24,16 @@
     createGroupOnRelay,
     generateGroupId,
     publishToGroupRelay,
-    buildPutUserTemplate
+    buildPutUserTemplate,
+    isRelayMembershipRequired
   } from '$lib/groups/group-management.js';
-  import { attachGroupChannel } from '$lib/groups/community-attach.js';
   import { updatePersonalGroupsList } from '$lib/groups/personal-groups-list.js';
   import { putUserOn, fanOut } from '$lib/groups/roster-fanout.js';
   import { pool } from '$lib/stores/nostr-infrastructure.svelte';
   import { unique } from '$lib/helpers/unique.js';
   import ProfileAvatar from '$lib/components/shared/ProfileAvatar.svelte';
   import ContactSearchInput from '$lib/components/shared/ContactSearchInput.svelte';
-  import { getContext, untrack } from 'svelte';
+  import { getContext } from 'svelte';
   import * as m from '$lib/paraglide/messages';
 
   let {
@@ -51,30 +51,18 @@
 
   let step = $state(0);
   let name = $state('');
-  // The access question (design B2, buzz thread round 4): who can read/write
-  // here. The default depends on the mode: a NIP-29 community channel is a
-  // NORMAL community channel (everyone in the community reads + writes) →
-  // 'members'; the Concord flow keeps its private-by-default 'invited', so
-  // switching this wizard on changes nothing for a community that never grows
-  // group pointers. Computed once from props (the mode deriveds below are not
-  // yet declared here). laoc 2026-08-20: 'invited' as the NIP-29 default made a
-  // "normal" channel invite-only, the opposite of what users expect.
-  /** @type {'members' | 'invited'} */
-  let tier = $state(
-    untrack(
-      () =>
-        parseGroupPointers(communikeyEvent).length > 0 || !!parseMembershipPointer(communikeyEvent)
-    )
-      ? 'members'
-      : 'invited'
-  );
-  // "Weltoffen" sub-toggle: readable from outside the community. Only makes
-  // sense (and only renders) in NIP-29 mode while tier is 'members'. Checking
-  // it makes this a world channel: accessChoiceToNip29 returns isOpen:true,
-  // so relays auto-admit bare kind-9021 self-joins (no admin action needed).
-  // Unchecked (or tier 'invited') stays closed — joining still needs relay
-  // policy or an admin invite.
-  let worldReadable = $state(false);
+  // The access question. Two tiers PER MODE:
+  //   NIP-29 : 'world'   — not `private` (anyone reads) + open self-join
+  //            'invited' — `private` (only put-in members read) + closed
+  //   Concord: 'members' — encrypted, all area members
+  //            'invited' — encrypted, only selected
+  // Default 'invited' either way — fail closed: a moderated (gated) community's
+  // channel must not be public-to-the-internet unless the admin explicitly
+  // picks 'world', and Concord's default was already private. The relay-trust
+  // NIP-29 "members" tier (community-only-read, faked via the dropped 10222
+  // pointer marker) is retired — members-only-private is a Concord channel now.
+  /** @type {'members' | 'invited' | 'world'} */
+  let tier = $state('invited');
   // NOTE: no description field — CORD ChannelMetadata has no description and
   // createChannel only takes {private, voice}; don't collect what we can't store.
   /** @type {string[]} */
@@ -104,10 +92,7 @@
       // Concord: existing behavior, byte-for-byte.
       return isPrivate ? m.concord_wizard_subtitle() : m.concord_channel_visibility_public_hint();
     }
-    if (tier === 'invited') return m.wizard_access_invited_hint();
-    return worldReadable
-      ? m.wizard_access_worldreadable_hint()
-      : m.wizard_access_members_hint_closed();
+    return tier === 'invited' ? m.wizard_access_invited_hint() : m.wizard_access_world_hint();
   });
 
   // Invitable people: community members (kind-30000 profile lists + owner),
@@ -233,7 +218,7 @@
       const user = manager.active;
       if (!user) throw new Error('not signed in');
       const id = generateGroupId();
-      const { isPublic, isOpen, access } = accessChoiceToNip29({ tier, worldReadable });
+      const { isPublic, isOpen } = accessChoiceToNip29({ tier });
       const relayConn = pool.relay(flatBase);
       // NIP-29 Subgroups: declare the community root as this channel's parent
       // (same-host only, per `sameHost` above) so the relay auto-admits
@@ -251,27 +236,14 @@
         user
       });
       // Past this point the group EXISTS on the relay — a retry must never
-      // re-create it. Attach failure gets its OWN try/catch: it tells a
-      // different story from "nothing was created" (the group lives on,
-      // orphaned; a blind retry from the outer catch would mint a second
-      // one), so it gets a distinct warning toast, no fan-out, and the
-      // wizard stays open rather than closing via onCreated.
-      try {
-        await attachGroupChannel({
-          communikeyEvent,
-          pointer: { id, relay: pointerRelay, name: name.trim(), access },
-          communitySigner
-        });
-        // Mirror the fresh channel into the CREATOR's kind-10009 list —
-        // Armada/Flotilla build their UIs from it (r + group tags), and a
-        // created-but-unlisted group is invisible there (laoc, 2026-08-19).
-        // Best-effort: the channel exists and is attached either way.
-        await updatePersonalGroupsList(user, { add: { id, relay: pointerRelay } }).catch(() => {});
-      } catch (error) {
-        console.error('groups: attach failed after group creation', error);
-        showToast(m.wizard_attach_failed({ id }), 'warning');
-        return;
-      }
+      // re-create it. No kind-10222 `group` pointer is written any more:
+      // channels are DISCOVERED from the relay subtree (parent==rootId, via the
+      // /c/<rootId> endpoint), so a 39001 admin who is not the community
+      // key-holder can add one without an owner-signed 10222 edit. We only
+      // mirror the fresh channel into the CREATOR's kind-10009 (Armada/Flotilla
+      // build their rail from it, r + group tags) — best-effort: the channel
+      // lives on the relay regardless.
+      await updatePersonalGroupsList(user, { add: { id, relay: pointerRelay } }).catch(() => {});
       // Task A3: admins are pre-joined. The relay already made the CREATOR
       // an admin as part of createGroupOnRelay — only the OTHER root-group
       // admins need an explicit put-user, granted the admin role so they
@@ -318,7 +290,15 @@
       onCreated(id);
     } catch (error) {
       console.error('groups: channel creation failed', error);
-      showToast(m.concord_channel_create_failed(), 'error');
+      // A 39001 admin who isn't yet a member of the pyramid groups relay can't
+      // send a 9007 create-group (reject-event.go) — tell them to ask the
+      // operator for a relay invite, not that "creation failed".
+      showToast(
+        isRelayMembershipRequired(error)
+          ? m.community_groups_relay_membership_required()
+          : m.concord_channel_create_failed(),
+        'error'
+      );
     }
   }
 
@@ -366,31 +346,33 @@
       </label>
       <fieldset class="mb-3">
         <legend class="label-text mb-1 font-bold">{m.concord_channel_visibility_label()}</legend>
-        <label class="flex cursor-pointer items-start gap-2 py-1 text-sm">
-          <input
-            type="radio"
-            class="radio mt-0.5 radio-sm"
-            name="wizard-access"
-            data-testid="wizard-access-members"
-            checked={tier === 'members'}
-            onchange={() => (tier = 'members')}
-          />
-          <span
-            ># <b>{m.wizard_access_members()}</b> — {isGroupMode
-              ? m.wizard_access_members_hint_closed()
-              : m.wizard_access_members_hint_encrypted()}</span
-          >
-        </label>
-        {#if isGroupMode && tier === 'members'}
-          <label class="ml-6 flex cursor-pointer items-start gap-2 py-1 text-xs">
+        {#if isGroupMode}
+          <!-- NIP-29 channels: two relay-observable tiers only. `world` = not
+               `private` (anyone reads); `invited` = `private` (admin curates).
+               The retired "members" tier is a Concord channel now. -->
+          <label class="flex cursor-pointer items-start gap-2 py-1 text-sm">
             <input
-              type="checkbox"
-              class="checkbox mt-0.5 checkbox-xs"
-              data-testid="wizard-access-worldreadable"
-              bind:checked={worldReadable}
+              type="radio"
+              class="radio mt-0.5 radio-sm"
+              name="wizard-access"
+              data-testid="wizard-access-world"
+              checked={tier === 'world'}
+              onchange={() => (tier = 'world')}
+            />
+            <span>🌐 <b>{m.wizard_access_world()}</b> — {m.wizard_access_world_hint()}</span>
+          </label>
+        {:else}
+          <label class="flex cursor-pointer items-start gap-2 py-1 text-sm">
+            <input
+              type="radio"
+              class="radio mt-0.5 radio-sm"
+              name="wizard-access"
+              data-testid="wizard-access-members"
+              checked={tier === 'members'}
+              onchange={() => (tier = 'members')}
             />
             <span
-              >🌐 <b>{m.wizard_access_worldreadable()}</b> — {m.wizard_access_worldreadable_hint()}</span
+              ># <b>{m.wizard_access_members()}</b> — {m.wizard_access_members_hint_encrypted()}</span
             >
           </label>
         {/if}
@@ -406,7 +388,11 @@
           <span>🔒 <b>{m.wizard_access_invited()}</b> — {m.wizard_access_invited_hint()}</span>
         </label>
       </fieldset>
-      {#if !isGroupMode}
+      {#if isGroupMode}
+        <p class="mb-1 text-xs text-base-content/60" data-testid="wizard-access-concord-hint">
+          {m.wizard_access_concord_hint()}
+        </p>
+      {:else}
         <div class="alert text-sm">{m.concord_wizard_invisible_hint()}</div>
       {/if}
     {:else if step === 1}
@@ -477,7 +463,7 @@
           <button
             class="btn btn-neutral"
             data-testid="concord-wizard-create"
-            disabled={(!isGroupMode && !acknowledged) || (isGroupMode && !communitySigner) || busy}
+            disabled={(!isGroupMode && !acknowledged) || busy}
             onclick={create}
           >
             {#if busy}<span class="loading loading-sm loading-spinner"></span>{/if}

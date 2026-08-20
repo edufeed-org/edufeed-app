@@ -1,22 +1,26 @@
-// Design B2 (buzz thread, round 4): two answers plus a weltoffen sub-toggle
-// map onto NIP-29's markers. `restricted` rides along in metadataTags
-// (group-management.js).
-//
-// Superseded 2026-08-19 (laoc): world channels (tier 'members' +
-// worldReadable) are now also `isOpen` — relays auto-admit bare kind-9021
-// self-joins for them, so joining is no longer an admin action there.
-// members-only and invited channels stay `closed`: joining still needs
-// relay policy or an admin invite code.
+// Two relay-observable channel tiers map straight onto NIP-29's markers — no
+// pointer marker, nothing bolted on (design locked 2026-08-20, laoc):
+//   world   — NOT `private` (anyone reads) + `open` (bare kind-9021 self-join,
+//             the relay auto-admits)
+//   invited — `private` (only put-in members read) + `closed` (join needs an
+//             admin: put-user or an invite code)
+// `restricted` rides along in metadataTags (group-management.js). The old
+// relay-trust "members" tier (community-only-read, faked via the dropped
+// kind-10222 group-pointer marker) is retired — "all community members,
+// privately" is Concord's job (E2E-encrypted, stronger than a relay-trust
+// private group).
 
 /**
- * @param {{tier: 'members'|'invited', worldReadable?: boolean}} choice
- * @returns {{isPublic: boolean, isOpen: boolean, access: 'members'|'invited'}}
+ * @param {{tier: 'world'|'invited'|'members'}} choice `members` (a Concord-only
+ *   tier) never reaches this NIP-29 mapper in practice, but the wizard's shared
+ *   `tier` state carries the union — it fails closed here (not 'world' → private).
+ * @returns {{isPublic: boolean, isOpen: boolean}}
  */
-export function accessChoiceToNip29({ tier, worldReadable = false }) {
-  const isWorld = tier === 'members' && worldReadable === true;
+export function accessChoiceToNip29({ tier }) {
+  // Fail closed: anything that is not explicitly 'world' is private + closed.
+  const isWorld = tier === 'world';
   return {
     isPublic: isWorld,
-    isOpen: isWorld,
-    access: tier
+    isOpen: isWorld
   };
 }

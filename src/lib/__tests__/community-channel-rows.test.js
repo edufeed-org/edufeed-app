@@ -2,24 +2,34 @@
 import { describe, it, expect } from 'vitest';
 import { buildChannelRows } from '$lib/groups/community-channel-rows.js';
 import { channelKey } from '$lib/groups/community-pointer.js';
+import { channelAccessLevel } from '$lib/groups/channel-access.js';
 
-const R = 'wss://groups.example';
+const R = 'wss://groups.example/c/root0';
 
-// channelKey() is string|null by contract; every pointer in these fixtures is
-// addressable, so narrow once here rather than at each computed key.
+// channelKey() is string|null by contract; every fixture here is addressable.
 const key = (/** @type {any} */ p) => /** @type {string} */ (channelKey(p));
 
-const ptr = (/** @type {string} */ id, /** @type {any} */ extra = {}) => ({
-  id,
-  relay: R,
-  ...extra
-});
-
-/** kind:39000 as a spec-current relay emits it. */
-const meta = (/** @type {string} */ id, /** @type {string[][]} */ extra = []) => ({
-  kind: 39000,
-  tags: [['d', id], ...extra]
-});
+// A subtree channel, exactly as useCommunityChannels/buildSubtreeChannels
+// produce it: id + relay + name + the level ALREADY computed from the relay's
+// `private` flag + the kind:39000 metadata. buildChannelRows no longer resolves
+// level or metadata itself.
+const chan = (
+  /** @type {string} */ id,
+  /** @type {string[][]} */ tags = [],
+  /** @type {{relay?: string, hostRequiresAuth?: boolean}} */ {
+    relay = R,
+    hostRequiresAuth = false
+  } = {}
+) => {
+  const metadata = { kind: 39000, tags: [['d', id], ...tags] };
+  return {
+    id,
+    relay,
+    name: metadata.tags.find((t) => t[0] === 'name')?.[1],
+    level: channelAccessLevel(metadata, undefined, hostRequiresAuth),
+    metadata
+  };
+};
 
 /** the shape PrivateChannelsView already renders */
 const concord = (/** @type {string} */ name, /** @type {any} */ extra = {}) => ({
@@ -61,12 +71,8 @@ describe('buildChannelRows', () => {
     expect(rows.every((r) => r.worldReadable === false)).toBe(true);
   });
 
-  it('renders a group channel from its pointer and metadata', () => {
-    const p = ptr('allgemein');
-    const rows = buildChannelRows({
-      groupPointers: [p],
-      metadataByKey: { [key(p)]: meta('allgemein', [['private']]) }
-    });
+  it('renders a subtree channel from its precomputed level and metadata', () => {
+    const rows = buildChannelRows({ subtreeChannels: [chan('allgemein', [['private']])] });
     expect(rows[0]).toMatchObject({
       name: 'allgemein',
       symbol: '#',
@@ -75,161 +81,100 @@ describe('buildChannelRows', () => {
     });
   });
 
-  it('shows the globe for a group channel the relay leaves open', () => {
-    const p = ptr('ankuendigungen');
-    const rows = buildChannelRows({
-      groupPointers: [p],
-      metadataByKey: { [key(p)]: meta('ankuendigungen', [['restricted']]) }
-    });
+  it('shows the globe for a subtree channel the relay leaves open', () => {
+    const rows = buildChannelRows({ subtreeChannels: [chan('ankuendigungen', [['restricted']])] });
     expect(rows[0]).toMatchObject({ symbol: '#', worldReadable: true, locked: false });
   });
 
-  it('honours the community access marker for a private group channel', () => {
-    const open = ptr('allgemein', { access: 'members' });
-    const shut = ptr('leitung', { access: 'invited' });
+  it('locks every private subtree channel (the members/invited marker is retired)', () => {
     const rows = buildChannelRows({
-      groupPointers: [open, shut],
-      metadataByKey: {
-        [key(open)]: meta('allgemein', [['private']]),
-        [key(shut)]: meta('leitung', [['private']])
-      }
+      subtreeChannels: [chan('allgemein', [['private']]), chan('leitung', [['private']])]
     });
-    expect(rows.find((r) => r.name === 'allgemein')?.locked).toBe(false);
+    expect(rows.find((r) => r.name === 'allgemein')?.locked).toBe(true);
     expect(rows.find((r) => r.name === 'leitung')?.locked).toBe(true);
   });
 
-  // A channel whose metadata has not arrived must not be guessed open.
-  it('locks a group channel whose metadata has not loaded', () => {
-    const rows = buildChannelRows({ groupPointers: [ptr('allgemein', { access: 'members' })] });
-    expect(rows[0]).toMatchObject({ locked: true, worldReadable: false, pending: true });
-  });
-
-  it('names a group channel from the pointer, then metadata, then the id', () => {
-    const named = ptr('a', { name: 'Aus dem Zeiger' });
-    const fromMeta = ptr('b');
-    const bare = ptr('c');
+  it('names a subtree channel from its 39000 name, else its id', () => {
     const rows = buildChannelRows({
-      groupPointers: [named, fromMeta, bare],
-      metadataByKey: {
-        [key(named)]: meta('a', [['name', 'Aus den Metadaten']]),
-        [key(fromMeta)]: meta('b', [['name', 'Aus den Metadaten']])
-      }
+      subtreeChannels: [chan('a', [['name', 'Aus den Metadaten']]), chan('c')]
     });
-    expect(rows.map((r) => r.name).sort()).toEqual(['Aus dem Zeiger', 'Aus den Metadaten', 'c']);
+    expect(rows.map((r) => r.name).sort()).toEqual(['Aus den Metadaten', 'c']);
   });
 
   it('pins the root membership group first, labeled General (not its own name)', () => {
-    const root = ptr('root0');
-    const chan = ptr('willkommen', { name: 'Willkommen', access: 'members' });
     const rows = buildChannelRows({
-      rootPointer: root,
-      rootLabel: 'Allgemein',
-      groupPointers: [chan],
       // the root's own 39000 name is the community name — must be overridden.
-      metadataByKey: {
-        [key(root)]: meta('root0', [['name', 'laoc42']]),
-        [key(chan)]: meta('willkommen', [['private']])
-      }
+      rootChannel: chan('root0', [['name', 'laoc42']]),
+      rootLabel: 'Allgemein',
+      subtreeChannels: [chan('willkommen', [['name', 'Willkommen'], ['private']])]
     });
     expect(rows[0].name).toBe('Allgemein');
     expect(rows[0].source).toBe('group');
-    expect(rows[0].key).toBe(`group:${key(root)}`);
+    expect(rows[0].key).toBe(`group:${key({ id: 'root0', relay: R })}`);
     // @ts-expect-error narrowed by source above
     expect(rows[0].pointer.id).toBe('root0');
     // The real channel follows, sorted as usual.
     expect(rows[1].name).toBe('Willkommen');
   });
 
-  it('shows the root even before its metadata loads (pending), and only once', () => {
-    const root = ptr('root0');
-    const rows = buildChannelRows({ rootPointer: root, rootLabel: 'Allgemein' });
-    expect(rows).toHaveLength(1);
-    expect(rows[0]).toMatchObject({ name: 'Allgemein', pending: true, locked: true });
-  });
-
   it('sorts both sources together by name, not source', () => {
-    const b = ptr('b-gruppe');
     const rows = buildChannelRows({
       concordChannels: [concord('a-concord'), concord('c-concord')],
-      groupPointers: [b],
-      metadataByKey: { [key(b)]: meta('b-gruppe', [['private']]) }
+      subtreeChannels: [chan('b-gruppe', [['private']])]
     });
     expect(rows.map((r) => r.name)).toEqual(['a-concord', 'b-gruppe', 'c-concord']);
   });
 
   it('gives every row a distinct key, across sources', () => {
-    const p = ptr('allgemein');
     const rows = buildChannelRows({
       concordChannels: [concord('allgemein')],
-      groupPointers: [p],
-      metadataByKey: { [key(p)]: meta('allgemein', [['private']]) }
+      subtreeChannels: [chan('allgemein', [['private']])]
     });
     expect(rows).toHaveLength(2);
     expect(new Set(rows.map((r) => r.key)).size).toBe(2);
-    // Distinctness above holds by accident here — a concord channel_id and a
-    // group key are unrelated id-spaces that happen not to collide in this
-    // fixture. The namespace is what actually guarantees it, so assert THAT.
     expect(rows.every((r) => r.key.startsWith(`${r.source}:`))).toBe(true);
   });
 
-  it('drops a pointer that is not addressable rather than rendering a broken row', () => {
+  it('drops a channel that is not addressable rather than rendering a broken row', () => {
     const rows = buildChannelRows({
-      groupPointers: [/** @type {any} */ ({ id: 'x', relay: 'not a url' }), ptr('ok')]
+      subtreeChannels: [
+        /** @type {any} */ ({ id: 'x', relay: 'not a url', level: 'invited', metadata: null }),
+        chan('ok')
+      ]
     });
     expect(rows.map((r) => r.name)).toEqual(['ok']);
   });
 
   // The card grid says in words what the rail says with a glyph, so the level
-  // has to survive as data — a card cannot re-derive it from the symbol, which
-  // is '#' for two different levels.
+  // has to survive as data — a card cannot re-derive it from the '#' symbol.
   it('carries the access level, not just the glyph', () => {
-    const open = ptr('ankuendigungen');
-    const members = ptr('allgemein', { access: 'members' });
-    const invited = ptr('leitung', { access: 'invited' });
     const rows = buildChannelRows({
-      groupPointers: [open, members, invited, ptr('neu')],
-      metadataByKey: {
-        [key(open)]: meta('ankuendigungen', [['restricted']]),
-        [key(members)]: meta('allgemein', [['private']]),
-        [key(invited)]: meta('leitung', [['private']])
-      }
+      subtreeChannels: [chan('ankuendigungen', [['restricted']]), chan('leitung', [['private']])]
     });
-    // The union narrows on `source`; these fixtures are all group rows.
     const groupRows = /** @type {any[]} */ (rows);
     const level = (/** @type {string} */ name) => groupRows.find((r) => r.name === name)?.level;
     expect(level('ankuendigungen')).toBe('world');
-    expect(level('allgemein')).toBe('members');
     expect(level('leitung')).toBe('invited');
-    expect(level('neu')).toBe('unknown');
-    // 'members' and 'world' share the '#' glyph, so the glyph alone could not
-    // have told them apart.
-    expect(rows.find((r) => r.name === 'ankuendigungen')?.locked).toBe(
-      rows.find((r) => r.name === 'allgemein')?.locked
+    // 'world' and 'invited' share the '#' glyph symbol — only `level` tells apart.
+    expect(rows.find((r) => r.name === 'ankuendigungen')?.symbol).toBe(
+      rows.find((r) => r.name === 'leitung')?.symbol
     );
   });
 
   it('carries the group topic so a card can show it', () => {
-    const p = ptr('allgemein');
     const rows = buildChannelRows({
-      groupPointers: [p],
-      metadataByKey: { [key(p)]: meta('allgemein', [['private'], ['about', 'Alles Weitere']]) }
+      subtreeChannels: [chan('allgemein', [['private'], ['about', 'Alles Weitere']])]
     });
     expect(/** @type {any} */ (rows[0]).about).toBe('Alles Weitere');
   });
 
-  // Written with a channel that HAS a topic in the same fixture: without it
-  // this test passes on an implementation that never reads `about` at all.
   it('leaves the topic absent when the group states none or only blanks', () => {
-    const has = ptr('a');
-    const none = ptr('b');
-    const blank = ptr('c');
     const rows = buildChannelRows({
-      groupPointers: [has, none, blank],
-      metadataByKey: {
-        [key(has)]: meta('a', [['private'], ['about', 'Alles Weitere']]),
-        [key(none)]: meta('b', [['private']]),
-        [key(blank)]: meta('c', [['private'], ['about', '   ']])
-      }
+      subtreeChannels: [
+        chan('a', [['private'], ['about', 'Alles Weitere']]),
+        chan('b', [['private']]),
+        chan('c', [['private'], ['about', '   ']])
+      ]
     });
     const groupRows = /** @type {any[]} */ (rows);
     const about = (/** @type {string} */ name) => groupRows.find((r) => r.name === name)?.about;
@@ -239,60 +184,55 @@ describe('buildChannelRows', () => {
   });
 
   it('does not write a cache symbol onto any metadata event', () => {
-    const p = ptr('allgemein');
-    const event = meta('allgemein', [['private']]);
-    buildChannelRows({ groupPointers: [p], metadataByKey: { [key(p)]: event } });
-    expect(Object.getOwnPropertySymbols(event)).toEqual([]);
+    const c = chan('allgemein', [['private']]);
+    buildChannelRows({ subtreeChannels: [c] });
+    expect(Object.getOwnPropertySymbols(c.metadata)).toEqual([]);
   });
 });
 
 describe('channel pictures', () => {
-  const key = 'general@wss://r.example/';
-  const pointer = { id: 'general', relay: 'wss://r.example/' };
-  /** @param {string[][]} tags */
-  const meta = (tags) => ({ [key]: { kind: 39000, tags: [['d', 'general'], ...tags] } });
+  const withPicture = (/** @type {string[][]} */ tags) =>
+    /** @type {import('$lib/groups/subtree-channels.js').SubtreeChannel} */ ({
+      id: 'general',
+      relay: 'wss://r.example/',
+      name: undefined,
+      level: 'invited',
+      metadata: { kind: 39000, tags: [['d', 'general'], ...tags] }
+    });
 
   it('carries the picture a kind:39000 publishes', () => {
     const [row] = buildChannelRows({
-      groupPointers: [pointer],
-      metadataByKey: meta([['picture', 'https://example.test/a.png']])
+      subtreeChannels: [withPicture([['picture', 'https://example.test/a.png']])]
     });
     expect(/** @type {any} */ (row).picture).toBe('https://example.test/a.png');
   });
 
-  // Omitted, not null: a card must not reserve space for a picture nobody
-  // published, and "no key" is what the template checks.
   it('omits the key when there is no picture', () => {
-    const [row] = buildChannelRows({ groupPointers: [pointer], metadataByKey: meta([]) });
+    const [row] = buildChannelRows({ subtreeChannels: [withPicture([])] });
     expect('picture' in /** @type {any} */ (row)).toBe(false);
   });
 
   it('drops a picture that is not an http(s) URL', () => {
     const [row] = buildChannelRows({
-      groupPointers: [pointer],
-      metadataByKey: meta([['picture', 'javascript:alert(1)']])
+      subtreeChannels: [withPicture([['picture', 'javascript:alert(1)']])]
     });
     expect('picture' in /** @type {any} */ (row)).toBe(false);
   });
 });
 
-describe('buildChannelRows on an auth-required host', () => {
-  it('never shows the globe when the host gates reads behind auth', () => {
-    const p = ptr('offen');
+// The level is computed upstream (buildSubtreeChannels), so an auth-required
+// host still caps a not-private channel down to 'members' there; buildChannelRows
+// just renders whatever level it is handed.
+describe('buildChannelRows renders a host-capped members channel', () => {
+  it('never shows the globe for a members-level channel', () => {
     const rows = buildChannelRows({
-      groupPointers: [p],
-      metadataByKey: { [key(p)]: meta('offen') },
-      hostRequiresAuth: true
+      subtreeChannels: [chan('offen', [], { hostRequiresAuth: true })]
     });
     expect(rows[0]).toMatchObject({ worldReadable: false, level: 'members', locked: false });
   });
 
-  it('changes nothing on an open host', () => {
-    const p = ptr('offen');
-    const rows = buildChannelRows({
-      groupPointers: [p],
-      metadataByKey: { [key(p)]: meta('offen') }
-    });
+  it('shows the globe for a plain open channel', () => {
+    const rows = buildChannelRows({ subtreeChannels: [chan('offen')] });
     expect(rows[0].worldReadable).toBe(true);
   });
 });
