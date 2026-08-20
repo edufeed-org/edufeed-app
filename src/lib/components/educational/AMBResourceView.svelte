@@ -122,6 +122,21 @@
   let showDeleteConfirmation = $state(false);
   let isDeleting = $state(false);
 
+  // Refs for the interactive (webxdc) player: instance ref to launch it from
+  // the uploaded-files row, container ref to scroll it into view. Plain
+  // `let` — these are internal DOM/component references, not UI state.
+  /** @type {{ launchApp: () => void } | null} */
+  let webxdcPlayerRef = null;
+  /** @type {HTMLElement | null} */
+  let webxdcPlayerContainer = null;
+
+  /** Launch the interactive package from the uploaded-files row and scroll
+   *  the player card into view. */
+  function launchInteractiveFromFileRow() {
+    webxdcPlayerRef?.launchApp();
+    webxdcPlayerContainer?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }
+
   // Check if current user owns this resource
   const isOwner = $derived(activeUser?.pubkey === event.pubkey);
 
@@ -903,8 +918,9 @@
 
   <!-- INTERACTIVE (webxdc) PLAYER -->
   {#if interactiveEncoding}
-    <div class="mb-4">
+    <div class="mb-4" bind:this={webxdcPlayerContainer}>
       <WebxdcPlayer
+        bind:this={webxdcPlayerRef}
         url={interactiveEncoding.url}
         sha256={interactiveEncoding.sha256 ?? ''}
         name={resource.name}
@@ -943,10 +959,17 @@
               </div>
             </div>
             <!-- eslint-disable svelte/no-navigation-without-resolve -- external: uploaded file URLs -->
-            <a href={file.url} target="_blank" rel="noopener noreferrer" class="ed-file-btn">
-              <EyeIcon class_="ed-file-btn-ico" />
-              {m.amb_resource_view_file()}
-            </a>
+            {#if file.mimeType === 'application/x-webxdc'}
+              <button type="button" class="ed-file-btn" onclick={launchInteractiveFromFileRow}>
+                <EyeIcon class_="ed-file-btn-ico" />
+                {m.webxdc_launch()}
+              </button>
+            {:else}
+              <a href={file.url} target="_blank" rel="noopener noreferrer" class="ed-file-btn">
+                <EyeIcon class_="ed-file-btn-ico" />
+                {m.amb_resource_view_file()}
+              </a>
+            {/if}
             <a href={file.url} download class="ed-file-btn">
               <FilesIcon class_="ed-file-btn-ico" />
               {m.amb_resource_download_file()}

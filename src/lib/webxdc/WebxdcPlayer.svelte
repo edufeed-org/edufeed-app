@@ -78,6 +78,13 @@
     }
   }
 
+  /** Exposed on the component instance (bind:this) so callers elsewhere on
+   *  the page — e.g. the uploaded-files row's "Anzeigen" action — can launch
+   *  the same player instead of duplicating the launch flow. */
+  export function launchApp() {
+    return launch();
+  }
+
   function close() {
     clearTimeout(readyTimer);
     stopHost?.();

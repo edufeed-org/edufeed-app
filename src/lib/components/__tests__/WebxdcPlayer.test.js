@@ -59,6 +59,14 @@ describe('WebxdcPlayer', () => {
     }
   });
 
+  it('exposes launchApp() on the component instance to launch without clicking the button', async () => {
+    const { component, container } = render(WebxdcPlayer, {
+      props: { bytes: xdcBytes, name: 'Instance Launch', appKey: 'instance:k' }
+    });
+    await component.launchApp();
+    await waitFor(() => expect(container.querySelector('iframe')).toBeTruthy());
+  });
+
   it('errors with retry when the frame never signals ready', async () => {
     vi.useFakeTimers();
     try {
