@@ -9,7 +9,7 @@ import { buildGroupsListTemplate } from './groups.js';
 
 /**
  * @param {{pubkey: string, signer: any} | null | undefined} user
- * @param {{add?: {id: string, relay: string}, remove?: {id: string, relay: string}}} change
+ * @param {{add?: {id: string, relay: string}, remove?: {id: string, relay: string} | {id: string, relay: string}[]}} change
  */
 export async function updatePersonalGroupsList(user, change) {
   if (!user?.signer) return;

@@ -41,6 +41,7 @@
     clearRootGroupMarker
   } from '$lib/groups/provision-root-group.js';
   import { isRelayMembershipRequired } from '$lib/groups/group-management.js';
+  import { teardownCommunityGroups } from '$lib/groups/community-teardown.js';
   import { moderatedCreationAvailable } from '$lib/groups/feature.js';
   import { publishCommunityUpdate } from '$lib/helpers/publishCommunityUpdate.js';
   import { getGroupsRelays } from '$lib/helpers/relay-helper.js';
@@ -232,6 +233,49 @@
       );
     } finally {
       flipping = false;
+    }
+  }
+
+  // Destructive teardown (Gefahrenzone): unlike the reversible flip-to-open,
+  // this actually DELETES every channel group + the root membership group on
+  // the relay (9008), then reverts the 10222. Typed-confirm gated on the
+  // community name, mirroring Concord's dissolve.
+  let teardownOverlay = $state(false);
+  let teardownConfirmText = $state('');
+  let tearingDown = $state(false);
+  const teardownExpected = $derived(
+    getProfileContent(profileEvent)?.name || communityId?.slice(0, 12) || ''
+  );
+  const teardownConfirmed = $derived(teardownConfirmText.trim() === teardownExpected);
+
+  function closeTeardown() {
+    if (tearingDown) return;
+    teardownOverlay = false;
+    teardownConfirmText = '';
+  }
+
+  async function handleTeardown() {
+    if (tearingDown || !teardownConfirmed || !communitySigner || !activeUser) return;
+    tearingDown = true;
+    try {
+      await teardownCommunityGroups({
+        communikeyEvent,
+        communitySigner,
+        user: { pubkey: activeUser.pubkey, signer: activeUser.signer }
+      });
+      showToast(m.community_views_settings_teardown_done(), 'success');
+      teardownOverlay = false;
+      teardownConfirmText = '';
+    } catch (error) {
+      console.error('settings: teardown failed', error);
+      showToast(
+        m.community_views_settings_flip_failed({
+          reason: error instanceof Error ? error.message : String(error)
+        }),
+        'error'
+      );
+    } finally {
+      tearingDown = false;
     }
   }
 
@@ -561,6 +605,15 @@
                   {m.concord_settings_detach()}
                 </button>
               {/if}
+              {#if communityType === 'moderated'}
+                <button
+                  class="btn mb-3 w-full btn-outline btn-error"
+                  data-testid="settings-teardown"
+                  onclick={() => (teardownOverlay = true)}
+                >
+                  {m.community_views_settings_teardown_button()}
+                </button>
+              {/if}
               <button onclick={handleDeleteCommunity} class="btn w-full btn-outline btn-error">
                 {m.community_views_settings_delete_button()}
               </button>
@@ -655,6 +708,51 @@
         >
           {#if flipping}<span class="loading loading-xs loading-spinner"></span>{/if}
           {m.community_views_settings_flip_to_open()}
+        </button>
+      </div>
+    </div>
+  </div>
+{/if}
+
+{#if teardownOverlay}
+  <!-- Destructive teardown: same confirm skeleton, plus a typed-name gate
+       (mirrors PrivateChannelsView's dissolve dialog). -->
+  <div class="modal-open modal" role="dialog">
+    <div class="modal-box max-w-sm text-center">
+      <h3 class="text-lg font-extrabold text-error">
+        {m.community_views_settings_teardown_title()}
+      </h3>
+      <p class="my-3 text-sm text-base-content/70">
+        {channelNames.length > 0
+          ? m.community_views_settings_teardown_body({ channels: channelNames.join(', ') })
+          : m.community_views_settings_teardown_body_no_channels()}
+      </p>
+      <label
+        class="mb-3 block text-left text-xs text-base-content/60"
+        for="settings-teardown-input"
+      >
+        {m.community_views_settings_teardown_confirm_label({ name: teardownExpected })}
+      </label>
+      <input
+        id="settings-teardown-input"
+        class="input-bordered input mb-2 w-full"
+        data-testid="settings-teardown-input"
+        bind:value={teardownConfirmText}
+        disabled={tearingDown}
+        autocomplete="off"
+      />
+      <div class="modal-action justify-center">
+        <button class="btn btn-ghost" disabled={tearingDown} onclick={closeTeardown}
+          >{m.concord_cancel()}</button
+        >
+        <button
+          class="btn btn-error"
+          data-testid="settings-teardown-confirm"
+          disabled={tearingDown || !teardownConfirmed}
+          onclick={handleTeardown}
+        >
+          {#if tearingDown}<span class="loading loading-xs loading-spinner"></span>{/if}
+          {m.community_views_settings_teardown_action()}
         </button>
       </div>
     </div>

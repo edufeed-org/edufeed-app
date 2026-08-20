@@ -13,9 +13,10 @@
  * part of the wiring under test.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen } from '@testing-library/svelte';
+import { render, screen, fireEvent, waitFor } from '@testing-library/svelte';
 
 const OWNER = 'a'.repeat(64);
+const STRANGER = 'e'.repeat(64);
 const RELAY = 'wss://groups.example';
 const OTHER_RELAY = 'wss://andere.example';
 
@@ -36,6 +37,12 @@ vi.mock('$lib/stores/config.svelte.js', () => ({
   configReady: { subscribe: () => () => {} }
 }));
 vi.mock('$lib/helpers/toast', () => ({ showToast: vi.fn() }));
+
+const deleteChannelCascade = vi.hoisted(() => vi.fn(async () => {}));
+vi.mock('$lib/groups/community-teardown.js', () => ({ deleteChannelCascade }));
+vi.mock('$lib/helpers/joined-communikey-events.svelte.js', () => ({
+  useJoinedCommunikeyEvents: () => () => []
+}));
 
 const holders = vi.hoisted(() => ({
   // The Concord flag is OFF here on purpose: a community extended by groups
@@ -88,6 +95,7 @@ beforeEach(() => {
   holders.metadataByKey = {};
   holders.relayInfo = null;
   holders.relayAsked = [];
+  deleteChannelCascade.mockClear();
 });
 
 describe('PrivateChannelsView — a community extended by NIP-29 groups', () => {
@@ -153,5 +161,36 @@ describe('PrivateChannelsView — a community extended by NIP-29 groups', () => 
     expect(screen.getByTestId('group-badge-auth')).toBeTruthy();
     expect(screen.getByTestId('group-badge-nip29')).toBeTruthy();
     expect(screen.getByTestId('group-badge-software').textContent?.trim()).toBe('pyramid 1.2');
+  });
+
+  it('owner gets a per-channel delete that runs the cascade after confirm', async () => {
+    render(PrivateChannelsView, {
+      props: { communikeyEvent: community([['group', 'allgemein', RELAY, 'Allgemein']]) }
+    });
+    await fireEvent.click(await screen.findByTestId('group-channel-delete'));
+    await fireEvent.click(await screen.findByTestId('group-channel-delete-confirm'));
+    await waitFor(() => expect(deleteChannelCascade).toHaveBeenCalledOnce());
+    const [cascadeArg] = /** @type {any[]} */ (deleteChannelCascade.mock.calls[0]);
+    expect(cascadeArg.pointer.id).toBe('allgemein');
+  });
+
+  it('hides the per-channel delete for a non-owner', async () => {
+    render(PrivateChannelsView, {
+      props: {
+        // A community NOT owned by the signed-in account (STRANGER has no signer).
+        communikeyEvent: {
+          kind: 10222,
+          pubkey: STRANGER,
+          content: '',
+          tags: [
+            ['d', 'relilab'],
+            ['group', 'allgemein', RELAY, 'Allgemein']
+          ]
+        }
+      }
+    });
+    // The row renders (extended-by-groups), but the owner-only affordance does not.
+    await screen.findByTestId('group-channel-row');
+    expect(screen.queryByTestId('group-channel-delete')).toBeNull();
   });
 });

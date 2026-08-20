@@ -67,7 +67,7 @@
   import GroupMembersModal from '$lib/components/groups/GroupMembersModal.svelte';
   import GroupSettingsSheet from '$lib/components/groups/GroupSettingsSheet.svelte';
   import { useRelayInformation } from '$lib/groups/relay-information.svelte.js';
-  import { detachGroupChannel } from '$lib/groups/community-attach.js';
+  import { unlinkDeletedChannel } from '$lib/groups/community-teardown.js';
   import { parseGroupPointers, channelKey } from '$lib/groups/community-pointer.js';
   import { useJoinedCommunikeyEvents } from '$lib/helpers/joined-communikey-events.svelte.js';
   import { channelAccessLevel } from '$lib/groups/channel-access.js';
@@ -713,21 +713,12 @@
    * never surfaced, never fatal to the cascade.
    */
   async function handleGroupDeleted() {
-    try {
-      await updateGroupsList({ remove: pointer });
-    } catch (err) {
-      console.error('groups: post-delete 10009 removal failed', err);
-    }
-    for (const ck of getJoinedCommunities()) {
-      const listed = parseGroupPointers(ck).some((p) => channelKey(p) === channelKey(pointer));
-      const communitySigner = getCommunitySigner(ck.pubkey);
-      if (!listed || !communitySigner) continue;
-      try {
-        await detachGroupChannel({ communikeyEvent: ck, pointer, communitySigner });
-      } catch (err) {
-        console.error('groups: post-delete detach failed', err);
-      }
-    }
+    await unlinkDeletedChannel({
+      pointer,
+      user: getActiveUser(),
+      joinedCommunities: getJoinedCommunities(),
+      getCommunitySigner
+    });
     goto('/');
   }
 </script>

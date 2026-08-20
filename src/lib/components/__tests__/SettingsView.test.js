@@ -53,6 +53,9 @@ vi.mock('$lib/groups/provision-root-group.js', () => ({
   clearRootGroupMarker
 }));
 
+const teardownCommunityGroups = vi.hoisted(() => vi.fn(async () => {}));
+vi.mock('$lib/groups/community-teardown.js', () => ({ teardownCommunityGroups }));
+
 const moderatedAvailable = vi.hoisted(() => ({ value: true }));
 vi.mock('$lib/groups/feature.js', () => ({
   moderatedCreationAvailable: () => moderatedAvailable.value
@@ -131,6 +134,7 @@ beforeEach(() => {
   toastSpy.mockClear();
   publishCommunityUpdate.mockClear();
   provisionRootGroup.mockClear();
+  teardownCommunityGroups.mockClear();
   writeRootGroupMarker.mockClear();
   clearRootGroupMarker.mockClear();
   moderatedAvailable.value = true;
@@ -195,6 +199,55 @@ describe('SettingsView — Community-Typ pane', () => {
     await waitFor(() => expect(publishCommunityUpdate).toHaveBeenCalledOnce());
     const [template] = /** @type {any[]} */ (publishCommunityUpdate.mock.calls[0]);
     expect(deriveCommunityType(template)).toBe('open');
+    expect(toastSpy).toHaveBeenCalledWith(expect.any(String), 'success');
+  });
+
+  it('teardown: button shows in the danger zone for a moderated community, hidden for open', async () => {
+    const { unmount } = render(SettingsView, {
+      props: { communityId: OWNER, communikeyEvent: moderatedEvent, profileEvent }
+    });
+    expect(await screen.findByTestId('settings-teardown')).toBeTruthy();
+    unmount();
+    render(SettingsView, {
+      props: { communityId: OWNER, communikeyEvent: openEvent, profileEvent }
+    });
+    await screen.findByTestId('settings-flip-to-moderated'); // owner pane mounted
+    expect(screen.queryByTestId('settings-teardown')).toBeNull();
+  });
+
+  it('teardown: the typed-name gate blocks the destructive confirm until the name matches', async () => {
+    render(SettingsView, {
+      props: { communityId: OWNER, communikeyEvent: moderatedEvent, profileEvent }
+    });
+    await fireEvent.click(await screen.findByTestId('settings-teardown'));
+    const confirm = /** @type {HTMLButtonElement} */ (
+      await screen.findByTestId('settings-teardown-confirm')
+    );
+    expect(confirm.disabled).toBe(true);
+    await fireEvent.input(screen.getByTestId('settings-teardown-input'), {
+      target: { value: 'wrong' }
+    });
+    expect(confirm.disabled).toBe(true);
+    await fireEvent.input(screen.getByTestId('settings-teardown-input'), {
+      target: { value: 'Test Community' } // == getDisplayName(profileEvent)
+    });
+    expect(confirm.disabled).toBe(false);
+  });
+
+  it('teardown: confirming deletes the groups + reverts via teardownCommunityGroups', async () => {
+    render(SettingsView, {
+      props: { communityId: OWNER, communikeyEvent: moderatedEvent, profileEvent }
+    });
+    await fireEvent.click(await screen.findByTestId('settings-teardown'));
+    await fireEvent.input(await screen.findByTestId('settings-teardown-input'), {
+      target: { value: 'Test Community' }
+    });
+    await fireEvent.click(await screen.findByTestId('settings-teardown-confirm'));
+    await waitFor(() => expect(teardownCommunityGroups).toHaveBeenCalledOnce());
+    const [arg] = /** @type {any[]} */ (teardownCommunityGroups.mock.calls[0]);
+    expect(arg.communikeyEvent).toBe(moderatedEvent);
+    expect(arg.communitySigner).toBeTruthy(); // owner signs the 10222
+    expect(arg.user.pubkey).toBe(OWNER); // human signs the 9008s
     expect(toastSpy).toHaveBeenCalledWith(expect.any(String), 'success');
   });
 

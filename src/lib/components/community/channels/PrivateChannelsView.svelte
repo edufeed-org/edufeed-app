@@ -13,7 +13,10 @@
   import { useConcordArea } from '$lib/concord/community.svelte.js';
   import { parseConcordPointer } from '$lib/concord/pointer.js';
   import { useActiveUser } from '$lib/stores/accounts.svelte';
-  import { isCommunityOwner } from '$lib/helpers/community-signer.js';
+  import { isCommunityOwner, getCommunitySigner } from '$lib/helpers/community-signer.js';
+  import { useJoinedCommunikeyEvents } from '$lib/helpers/joined-communikey-events.svelte.js';
+  import { deleteChannelCascade } from '$lib/groups/community-teardown.js';
+  import { TrashIcon } from '$lib/components/icons';
   import {
     channelUnreadState,
     markChannelRead,
@@ -376,6 +379,41 @@
     }
   }
 
+  // Per-channel delete for NIP-29 group channels (owner only). Reuses the same
+  // cascade GroupChat's in-channel delete runs: 9008 on the relay, prune the
+  // owner's 10009, and detach the pointer from every community that lists it.
+  const getJoinedCommunities = useJoinedCommunikeyEvents();
+  /** @type {{id: string, relay: string, name?: string} | null} */
+  let deletingGroup = $state(null);
+  let deletingGroupBusy = $state(false);
+
+  async function confirmDeleteGroupChannel() {
+    if (!deletingGroup || deletingGroupBusy) return;
+    deletingGroupBusy = true;
+    const pointer = deletingGroup;
+    try {
+      // Ensure THIS community is in the detach set even if the owner never
+      // "joined" their own community (the pointer must leave its 10222).
+      const joined = getJoinedCommunities();
+      const joinedCommunities = joined.some((c) => c.pubkey === communikeyEvent?.pubkey)
+        ? joined
+        : [communikeyEvent, ...joined].filter(Boolean);
+      await deleteChannelCascade({
+        pointer,
+        user: getActiveUser(),
+        joinedCommunities,
+        getCommunitySigner
+      });
+      showToast(m.groups_settings_deleted(), 'success');
+      deletingGroup = null;
+    } catch (error) {
+      console.error('groups: channel delete failed', error);
+      showToast(m.groups_settings_delete_failed(), 'error');
+    } finally {
+      deletingGroupBusy = false;
+    }
+  }
+
   // Typed confirmation for the permanent, whole-area dissolve. The name to
   // re-type is the AREA's own (decrypted engine metadata) — communityProfile
   // is a linked-mode prop the standalone /private page never passes, so
@@ -500,23 +538,41 @@
             not on the standalone /groups route: that route's sidebar is the
             host's ENTIRE directory, which on a big public relay is a wall of
             foreign groups and a frozen tab (laoc, 2026-08-19). -->
-          <ChannelRailRow
-            testid="group-channel-row"
-            symbol={row.symbol}
-            name={row.name}
-            locked={row.locked}
-            active={!!selectedGroupPointer &&
-              channelKey(selectedGroupPointer) === channelKey(row.pointer)}
-            dimmed={row.pending}
-            worldReadable={row.worldReadable}
-            onclick={() => {
-              if (communikeyEvent?.pubkey) {
-                const key = channelKey(row.pointer);
-                if (key) selectGroupChannel(communikeyEvent.pubkey, key);
-              }
-              mobileChat = true;
-            }}
-          />
+          <!-- Owner rows get a hover/focus-revealed delete affordance beside
+               (never inside — nested interactive) the row. -->
+          <div class="group/ch flex items-center gap-1">
+            <div class="min-w-0 flex-1">
+              <ChannelRailRow
+                testid="group-channel-row"
+                symbol={row.symbol}
+                name={row.name}
+                locked={row.locked}
+                active={!!selectedGroupPointer &&
+                  channelKey(selectedGroupPointer) === channelKey(row.pointer)}
+                dimmed={row.pending}
+                worldReadable={row.worldReadable}
+                onclick={() => {
+                  if (communikeyEvent?.pubkey) {
+                    const key = channelKey(row.pointer);
+                    if (key) selectGroupChannel(communikeyEvent.pubkey, key);
+                  }
+                  mobileChat = true;
+                }}
+              />
+            </div>
+            {#if isNip29Community && isCommunikeyOwner}
+              <button
+                type="button"
+                class="btn btn-square opacity-0 btn-ghost transition-opacity btn-xs group-hover/ch:opacity-100 focus:opacity-100"
+                data-testid="group-channel-delete"
+                title={m.groups_channel_delete()}
+                aria-label={m.groups_channel_delete()}
+                onclick={() => (deletingGroup = row.pointer)}
+              >
+                <TrashIcon class="h-4 w-4" />
+              </button>
+            {/if}
+          </div>
         {/if}
       {/each}
       {#if groupPointers.length > 0 && isAreaMember}
@@ -963,6 +1019,35 @@
             disabled={dissolving || !dissolveConfirmed}
             onclick={dissolve}>{m.concord_dissolve_action()}</button
           >
+        </div>
+      </div>
+    </div>
+  {/if}
+
+  {#if deletingGroup}
+    <!-- Plain confirm (single channel) — the whole-community teardown lives in
+         Settings behind a typed gate. -->
+    <div class="modal-open modal" role="dialog">
+      <div class="modal-box max-w-sm text-center">
+        <h3 class="text-lg font-extrabold text-error">{m.groups_channel_delete_title()}</h3>
+        <p class="my-3 text-sm text-base-content/70">
+          {m.groups_channel_delete_confirm({ name: deletingGroup.name || deletingGroup.id })}
+        </p>
+        <div class="modal-action justify-center">
+          <button
+            class="btn btn-ghost"
+            disabled={deletingGroupBusy}
+            onclick={() => (deletingGroup = null)}>{m.concord_cancel()}</button
+          >
+          <button
+            class="btn btn-error"
+            data-testid="group-channel-delete-confirm"
+            disabled={deletingGroupBusy}
+            onclick={confirmDeleteGroupChannel}
+          >
+            {#if deletingGroupBusy}<span class="loading loading-xs loading-spinner"></span>{/if}
+            {m.groups_channel_delete_action()}
+          </button>
         </div>
       </div>
     </div>

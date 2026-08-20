@@ -197,9 +197,11 @@ export function buildLeaveRequestTemplate(groupId) {
 /**
  * Kind-10009 groups-list update: preserves every non-`group` tag and the
  * content (the NIP-51 hidden section) verbatim, then adds or removes ONE
- * public `["group", id, relay]` entry. Dedupe is by (id, relay).
+ * public `["group", id, relay]` entry. `remove` accepts one pointer or many —
+ * a community teardown prunes root + every channel in one rewrite. Dedupe is
+ * by (id, relay).
  * @param {{content?: string, tags?: string[][]} | null | undefined} existing the current 10009 event, if any
- * @param {{add?: GroupPointer, remove?: GroupPointer}} change
+ * @param {{add?: GroupPointer, remove?: GroupPointer | GroupPointer[]}} change
  * @returns {{kind: number, content: string, created_at: number, tags: string[][]}}
  */
 export function buildGroupsListTemplate(existing, change) {
@@ -220,8 +222,11 @@ export function buildGroupsListTemplate(existing, change) {
   groups = groups.map((g) => ({ ...g, relay: normal(g.relay) }));
 
   if (change.remove) {
-    const target = { id: change.remove.id, relay: normal(change.remove.relay) };
-    groups = groups.filter((g) => !(g.id === target.id && g.relay === target.relay));
+    const removals = (Array.isArray(change.remove) ? change.remove : [change.remove]).map((r) => ({
+      id: r.id,
+      relay: normal(r.relay)
+    }));
+    groups = groups.filter((g) => !removals.some((t) => g.id === t.id && g.relay === t.relay));
   }
   if (change.add) {
     const target = { id: change.add.id, relay: normal(change.add.relay) };
