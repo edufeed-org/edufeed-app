@@ -52,6 +52,11 @@ describe('h5p-wrap', () => {
     const html = new TextDecoder().decode(files.get('index.html'));
     expect(html).toContain('<script src="webxdc.js"></script>');
     expect(html).toContain("h5pJsonPath: './h5p'");
+    // Div embed keeps every subresource request on the SW-controlled app
+    // document — the default iframe embed's about:blank inner iframe bypasses
+    // iframe.diy's service worker in Chrome, so all H5P library scripts fall
+    // through to the host's HTML bootstrap page instead of the sandboxed app.
+    expect(html).toContain("embedType: 'div'");
     expect(html).toContain("frameJs: './h5p-standalone/frame.bundle.js'");
     expect(html).toContain("frameCss: './h5p-standalone/styles/h5p.css'");
     expect(html).toContain("externalDispatcher.on('xAPI'");

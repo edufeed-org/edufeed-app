@@ -65,6 +65,11 @@ function buildIndexHtml(title) {
 <script>
 new H5PStandalone.H5P(document.getElementById('h5p-container'), {
   h5pJsonPath: './h5p',
+  // about:blank iframes bypass the sandbox service worker — div embed keeps
+  // all requests SW-controlled (the default iframe embed's inner about:blank
+  // frame makes every H5P library request fall through to the host's HTML
+  // bootstrap page in Chrome, never hitting iframe.diy's SW).
+  embedType: 'div',
   frameJs: './h5p-standalone/frame.bundle.js',
   frameCss: './h5p-standalone/styles/h5p.css'
 }).then(function () {
