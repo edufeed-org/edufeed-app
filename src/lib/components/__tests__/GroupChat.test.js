@@ -261,6 +261,9 @@ const nestedReply = signWith(
 );
 
 const publishMock = vi.hoisted(() => vi.fn().mockResolvedValue({ ok: true }));
+// Shared across every fake relay object so a test can assert the component
+// authenticated at all (proactively, not only on an auth-required error).
+const authenticateSpy = vi.hoisted(() => vi.fn().mockResolvedValue({ ok: true }));
 const requestCalls = vi.hoisted(() => /** @type {any[]} */ ([]));
 // The viewer's own stored join request, served to the own-9021 filter that
 // rides along with the roster REQ (pending-state persistence).
@@ -424,7 +427,7 @@ vi.mock('$lib/stores/nostr-infrastructure.svelte', async () => {
           }
           return publishMock(event);
         },
-        authenticate: vi.fn().mockResolvedValue({ ok: true }),
+        authenticate: authenticateSpy,
         // authenticateOnce (relay-auth.js) needs a challenge to answer and a
         // `url` to key its per-relay attempt cache — both real applesauce
         // Relay exposes; a fake without them resolves 'no challenge' and the
@@ -549,6 +552,7 @@ describe('GroupChat', () => {
     publishMock.mockClear();
     publishOptimisticMock.mockClear();
     signEvent.mockClear();
+    authenticateSpy.mockClear();
     activeUserHolder.current = { pubkey: ME, signer: { signEvent } };
     relayCalls.length = 0;
     requestCalls.length = 0;
@@ -698,6 +702,20 @@ describe('GroupChat', () => {
   // still reach the members-only notice. Before the roster effect's own
   // tryAuthRetry wiring, this refusal was silently absorbed by the roster's
   // unconditional `rosterAnswered = true` and never routed anywhere else.
+  // Live finding (laoc 2026-08-20, edufeed on raum-1): a private channel's
+  // roster REQ is NOT closed auth-required — pyramid silently OMITS the 39002
+  // members list and EOSEs clean. So a real member, waiting for a reactive
+  // auth-required that never comes on the roster, read as a non-member (empty
+  // roster + "request to join", no messages) even though authenticating once
+  // served the whole roster + history. GroupChat now authenticates PROACTIVELY
+  // on open, not only in reaction to an error. `beechat` (ME is a member, no
+  // auth-required anywhere) would never have triggered auth reactively.
+  it('authenticates the groups relay proactively on open, without waiting for an auth-required error', async () => {
+    render(GroupChat, { props: { pointer } }); // beechat: ME is a member; nothing errors auth-required
+    await screen.findByTestId('group-name');
+    await waitFor(() => expect(authenticateSpy).toHaveBeenCalled());
+  });
+
   it('a roster-only auth-required-then-restricted refusal still reaches the members-only notice', async () => {
     render(GroupChat, { props: { pointer: { relay: GROUP_RELAY, id: 'rosteronlychat' } } });
 

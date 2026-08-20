@@ -309,6 +309,32 @@
     });
   }
 
+  // Proactive NIP-42 auth, not just reactive. The reactive path above only
+  // fires when a REQ is CLOSED `auth-required` — which the MESSAGES sub gets,
+  // but the ROSTER REQ does NOT: on pyramid (groups.edufeed.org) the roster
+  // REQ for a private channel silently OMITS the 39002 members list and EOSEs
+  // clean, with no challenge. So a real member's own roster answer comes back
+  // empty, they read as a non-member, and the channel shows "request to join"
+  // with no messages — even though authenticating once would serve the full
+  // roster + history (verified live: edufeed on raum-1, laoc 2026-08-20).
+  // Authenticate up front so the very first roster/messages reads run
+  // authenticated; authenticateOnce is idempotent (one AUTH per challenge) and
+  // resolves ok:false harmlessly on a relay that never challenges, so this is
+  // safe for world-readable channels too. `retrySeq` re-runs both read effects.
+  $effect(() => {
+    const user = getActiveUser();
+    if (!user?.signer) return;
+    let cancelled = false;
+    authenticateOnce(pool.relay(pointer.relay), user.signer).then((response) => {
+      if (cancelled || !response.ok) return;
+      authRequired = false;
+      retrySeq++;
+    });
+    return () => {
+      cancelled = true;
+    };
+  });
+
   // Live chat + reactions from the group relay (same storeEvents +
   // TimelineModel pattern as the public community chat). NOTE: the model
   // filter keys on `#h` only — two groups sharing an id on DIFFERENT relays
