@@ -16,7 +16,13 @@
   same "relay is the only source of truth" rule as GroupMembersModal.
 -->
 <script>
-  import { stufe2Pointers, areaMemberRows, fanOutPlan } from '$lib/groups/area-members.js';
+  import {
+    stufe2Pointers,
+    communityMembershipPointers,
+    areaMemberRows,
+    fanOutPlan
+  } from '$lib/groups/area-members.js';
+  import { parseMembershipPointer } from '$lib/groups/community-membership.js';
   import { useChannelRosters } from '$lib/groups/channel-rosters.svelte.js';
   import { putUserOn, removeUserOn, fanOut } from '$lib/groups/roster-fanout.js';
   import { channelKey } from '$lib/groups/community-pointer.js';
@@ -39,6 +45,13 @@
   // double every fan-out target — dedupe once, right where pointers enter
   // this modal.
   const pointers = $derived(uniqueBy(stufe2Pointers(communikeyEvent), (p) => channelKey(p)));
+  // The community's root membership group. Add/remove seat the member here too
+  // (not just the channels), so "add member" makes them a real community member
+  // — the sidebar gates channel visibility on the ROOT roster (laoc 2026-08-20).
+  // Kept OUT of `pointers` on purpose: the roster union/deviation display stays
+  // about the channels, so the community key (a root member) doesn't show up as
+  // a member row the modal would offer to add to every channel.
+  const rootPointer = $derived(parseMembershipPointer(communikeyEvent));
   const pointerKeys = $derived(
     pointers.map((pointer) => channelKey(pointer)).filter((key) => key !== null)
   );
@@ -197,10 +210,15 @@
     // since the create wizard filters self out of its own put-user
     // fan-out).
     const memberSet = new Set(row.memberKeys);
-    const targets = pointers.filter((pointer) => {
+    const channelTargets = pointers.filter((pointer) => {
       const key = channelKey(pointer);
       return key !== null && memberSet.has(key);
     });
+    // Remove from the root membership group too, so "remove" strips community
+    // membership, not just channel access. A root remove-user for a non-member
+    // is a harmless relay no-op (same rationale as the memberKeys filter above);
+    // for anyone added via addMember (now root-seated) it is the real removal.
+    const targets = rootPointer ? [rootPointer, ...channelTargets] : channelTargets;
     const adminOnlyNote =
       row.adminOnlyKeys.length > 0
         ? m.area_members_admin_only_note({ channels: channelNames(row.adminOnlyKeys) })
@@ -254,7 +272,11 @@
 
   /** @param {string} pubkey */
   async function addMember(pubkey) {
-    if (busy || !getActiveUser() || pointers.length === 0) return;
+    // Seat on the root membership group AND every members channel, so "add
+    // member" means "add to the community" (root roster is what the sidebar
+    // gates on), not just to the channels.
+    const targets = communityMembershipPointers(communikeyEvent);
+    if (busy || !getActiveUser() || targets.length === 0) return;
     busy = true;
     // An explicit add is the opposite intent of an earlier remove — a
     // pubkey re-added here should be eligible for "Repair" again on every
@@ -266,7 +288,7 @@
     }
     try {
       const aggregate = await fanOut(
-        pointers,
+        targets,
         (pointer) => channelKey(pointer) ?? pointer.id,
         (pointer) => putUserOn(pointer, pubkey, [], /** @type {any} */ (getActiveUser()))
       );

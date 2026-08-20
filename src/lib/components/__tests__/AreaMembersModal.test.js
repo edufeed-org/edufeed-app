@@ -134,6 +134,17 @@ const threeChannelEvent = {
   ]
 };
 
+// A moderated community: a root membership group + members channels. Adding a
+// member must seat them on the root too (community membership), not only the
+// channels.
+const moderatedEvent = {
+  tags: [
+    ['membership', 'root0', RELAY],
+    ['group', 'chan-a', RELAY, 'General', 'members'],
+    ['group', 'chan-b', RELAY, 'Announcements', 'members']
+  ]
+};
+
 /** @param {Record<string, any>} overrides */
 function renderModal(overrides = {}) {
   const onClose = vi.fn();
@@ -273,6 +284,22 @@ describe('AreaMembersModal add member', () => {
     } finally {
       process.off('unhandledRejection', unhandled);
     }
+  });
+
+  it('also seats the new member on the root membership group (community membership, not just channels)', async () => {
+    rosterState.membersByKey = { [KEY_A]: new Set([ADMIN]), [KEY_B]: new Set([ADMIN]) };
+    rosterState.adminsByKey = {
+      [KEY_A]: [{ pubkey: ADMIN, roles: ['admin'] }],
+      [KEY_B]: [{ pubkey: ADMIN, roles: ['admin'] }]
+    };
+    const { container } = renderModal({ communikeyEvent: moderatedEvent });
+    await fireEvent.click(
+      /** @type {Element} */ (container.querySelector('[data-testid="stub-select-a"]'))
+    );
+    // Root membership group seated, plus both members channels.
+    await waitFor(() => expect(buildPutUserTemplate).toHaveBeenCalledWith('root0', ADMIN, []));
+    await waitFor(() => expect(buildPutUserTemplate).toHaveBeenCalledWith('chan-a', ADMIN, []));
+    await waitFor(() => expect(buildPutUserTemplate).toHaveBeenCalledWith('chan-b', ADMIN, []));
   });
 });
 

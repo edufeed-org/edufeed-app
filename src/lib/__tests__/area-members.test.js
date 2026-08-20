@@ -2,6 +2,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   stufe2Pointers,
+  communityMembershipPointers,
   areaMemberRows,
   fanOutPlan,
   aggregateFanOut,
@@ -27,6 +28,22 @@ const k2 = /** @type {string} */ (channelKey(p2));
 describe('stufe2Pointers', () => {
   it('keeps only access=members pointers', () => {
     expect(stufe2Pointers(community).map((p) => p.id)).toEqual(['g1', 'g2']);
+  });
+});
+
+describe('communityMembershipPointers', () => {
+  it('prepends the root membership group to the members channels (invited excluded)', () => {
+    const withRoot = {
+      kind: 10222,
+      tags: [['membership', 'root0', R], ...community.tags]
+    };
+    const ptrs = communityMembershipPointers(withRoot);
+    expect(ptrs.map((p) => p.id)).toEqual(['root0', 'g1', 'g2']);
+    expect(ptrs[0]).toMatchObject({ id: 'root0', relay: R }); // root first
+  });
+
+  it('is just the members channels when there is no membership pointer', () => {
+    expect(communityMembershipPointers(community).map((p) => p.id)).toEqual(['g1', 'g2']);
   });
 });
 

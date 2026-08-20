@@ -4,10 +4,27 @@
 // send. Unknown rosters are excluded on both sides: "we have not heard" and
 // "not a member" are different sentences (same rule as host-unread).
 import { parseGroupPointers, channelKey } from './community-pointer.js';
+import { parseMembershipPointer } from './community-membership.js';
 
 /** @param {{tags?: string[][]} | null | undefined} communikeyEvent */
 export function stufe2Pointers(communikeyEvent) {
   return parseGroupPointers(communikeyEvent).filter((p) => p.access === 'members');
+}
+
+/**
+ * The full set of NIP-29 groups a COMMUNITY member should be seated on: the
+ * root membership group FIRST (the source of truth for community membership —
+ * the sidebar gates channel visibility on the ROOT roster), then every
+ * members-tier channel. "Add member" fans out over this whole set so it means
+ * "add to the community", not just to the channels — a channel-only seat leaves
+ * the person invisible in the community sidebar (laoc 2026-08-20).
+ * @param {{tags?: string[][]} | null | undefined} communikeyEvent
+ * @returns {Array<{id: string, relay: string, name?: string, access?: string}>}
+ */
+export function communityMembershipPointers(communikeyEvent) {
+  const root = parseMembershipPointer(communikeyEvent);
+  const channels = stufe2Pointers(communikeyEvent);
+  return root ? [root, ...channels] : channels;
 }
 
 /**
