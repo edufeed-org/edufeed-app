@@ -7,7 +7,9 @@ import {
   getGroupAdmins,
   getGroupMembers
 } from 'applesauce-common/helpers/groups';
-import { pool } from '$lib/stores/nostr-infrastructure.svelte';
+import { TimelineModel } from 'applesauce-core/models';
+import { storeEvents } from 'applesauce-relay/operators';
+import { pool, eventStore } from '$lib/stores/nostr-infrastructure.svelte';
 import {
   subscribeToProfileListMembers,
   buildProfileAccess
@@ -42,52 +44,67 @@ export function subscribeToCommunityAccess(communityEvent, relays, onUpdate) {
   let membersByKey = {};
   /** @type {Record<string, import('applesauce-common/helpers/groups').GroupAdmin[]>} */
   let adminsByKey = {};
+  // The relay has finished speaking (EOSE or timeout) — flips isLoading false
+  // WITHOUT fabricating an empty roster (see rosterView().isLoading and
+  // channel-rosters.svelte.js). Same eventStore-backed shape as useRootRoster:
+  // the request FEEDS the store, the roster is READ from it, so this gate and
+  // the community page's own roster read agree and can't diverge.
+  let fetched = false;
   const emit = () =>
-    onUpdate(buildRosterAccess(communityEvent, rosterView(pointer, membersByKey, adminsByKey)));
+    onUpdate(
+      buildRosterAccess(
+        communityEvent,
+        rosterView(pointer, membersByKey, adminsByKey, fetched && key ? new Set([key]) : new Set())
+      )
+    );
 
-  // A relay that has finished speaking — EOSE with no roster for this
-  // pointer, or the pool's own request timeout — must resolve the pointer
-  // to non-member rather than leave buildRosterAccess().isLoading (and thus
-  // the publish gate) stuck true forever. Only fills the key if still
-  // undefined: must not clobber a roster `next` already delivered this
-  // round. Wired to BOTH `complete` and `error` — see
-  // channel-rosters.svelte.js's resolveEmpty comment for why applesauce's
-  // pool.relay().request() can end either way.
-  const resolveEmpty = () => {
-    if (!key) return;
-    membersByKey = { ...membersByKey, [key]: membersByKey[key] ?? new Set() };
+  // Read the roster reactively from the eventStore — emits synchronously on
+  // subscribe with whatever the store already holds (e.g. from the community
+  // page's own fetch), so the dashboard gate is warm immediately.
+  const readSub = eventStore
+    .model(TimelineModel, { kinds: [GROUP_ADMINS_KIND, GROUP_MEMBERS_KIND], '#d': [pointer.id] })
+    .subscribe((/** @type {any[]} */ events) => {
+      if (!key) return;
+      /** @type {any} */ let member;
+      /** @type {any} */ let admin;
+      for (const ev of events) {
+        if (ev?.tags?.find((/** @type {string[]} */ t) => t[0] === 'd')?.[1] !== pointer.id)
+          continue;
+        if (ev.kind === GROUP_MEMBERS_KIND) {
+          if (!member || ev.created_at > member.created_at) member = ev;
+        } else if (ev.kind === GROUP_ADMINS_KIND) {
+          if (!admin || ev.created_at > admin.created_at) admin = ev;
+        }
+      }
+      membersByKey = member ? { [key]: new Set(getGroupMembers(member) ?? []) } : {};
+      adminsByKey = admin ? { [key]: getGroupAdmins(admin) ?? [] } : {};
+      emit();
+    });
+
+  // Feed the store. A dead/auth-walled relay must not break the dashboard feed
+  // (parity with the legacy path) nor leave the gate loading forever.
+  const markFetched = () => {
+    fetched = true;
     emit();
   };
-
-  let sub = { unsubscribe: () => {} };
+  let fetchSub = { unsubscribe: () => {} };
   try {
-    sub = pool
+    fetchSub = pool
       .relay(pointer.relay)
       .request(
         { kinds: [GROUP_ADMINS_KIND, GROUP_MEMBERS_KIND], '#d': [pointer.id] },
         { timeout: 8000 }
       )
-      .subscribe({
-        next: (/** @type {any} */ event) => {
-          if (!event || !Array.isArray(event.tags) || !key) return;
-          if (event.kind === GROUP_MEMBERS_KIND) {
-            membersByKey = { ...membersByKey, [key]: new Set(getGroupMembers(event) ?? []) };
-          } else if (event.kind === GROUP_ADMINS_KIND) {
-            adminsByKey = { ...adminsByKey, [key]: getGroupAdmins(event) ?? [] };
-          } else {
-            return;
-          }
-          emit();
-        },
-        complete: resolveEmpty,
-        // A dead group relay must not break the whole dashboard feed —
-        // parity with the legacy path, which also never errors the caller —
-        // but it must also not leave the gate loading forever; see
-        // resolveEmpty above.
-        error: resolveEmpty
-      });
+      .pipe(storeEvents(eventStore))
+      .subscribe({ complete: markFetched, error: markFetched });
   } catch {
     // malformed relay URL — leave access in its loading state
   }
-  return { cleanup: () => sub.unsubscribe(), hasRestrictedSections };
+  return {
+    cleanup: () => {
+      readSub.unsubscribe();
+      fetchSub.unsubscribe();
+    },
+    hasRestrictedSections
+  };
 }

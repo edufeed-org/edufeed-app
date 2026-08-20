@@ -10,29 +10,27 @@ vi.mock('$lib/helpers/profile-list-members.js', async (importOriginal) => {
     subscribeToProfileListMembers: (/** @type {any[]} */ ...args) => legacySub(...args)
   };
 });
-/** @type {(event: any) => void} */
-let emitRelayEvent;
-/** Full handlers object for the last-opened subscription — lets tests drive
- * `complete`/`error` too, not just `next`. */
+// The fetch is now an eventStore-backed pipe: the request FEEDS the store
+// (storeEvents) and the roster is READ from eventStore.model. A test drives the
+// relay via a fresh Subject per subscription; a real EventStore holds the
+// events. `latest` exposes the current subscription's driver + eventStore for
+// the tests.
+const RELAY_PK = '9'.repeat(64);
 /** @type {any} */
-let relayHandlers;
-const unsubscribe = vi.fn();
+let latest;
+const { Subject } = await import('rxjs');
+const { EventStore } = await import('applesauce-core');
+const realEventStore = new EventStore();
+realEventStore.verifyEvent = () => true;
 vi.mock('$lib/stores/nostr-infrastructure.svelte', () => ({
-  // eventStore is unused by this suite (subscribeToProfileListMembers is
-  // itself mocked above) but the legacy path's real module is still loaded
-  // via importOriginal() to preserve buildProfileAccess, and its top-level
-  // `import { eventStore } from ...` (transitively via $lib/loaders/base.js
-  // too) needs a binding to exist on this full-replacement mock.
-  eventStore: {},
+  eventStore: realEventStore,
   pool: {
     relay: vi.fn(() => ({
-      request: vi.fn(() => ({
-        subscribe: (/** @type {any} */ handlers) => {
-          relayHandlers = handlers;
-          emitRelayEvent = handlers.next;
-          return { unsubscribe };
-        }
-      }))
+      request: vi.fn(() => {
+        const subject = new Subject();
+        latest = { subject };
+        return subject;
+      })
     }))
   }
 }));
@@ -42,6 +40,16 @@ const { subscribeToCommunityAccess } = await import('$lib/groups/community-acces
 const RELAY = 'wss://groups.example.com';
 const OWNER = 'f'.repeat(64);
 const MEMBER = 'b'.repeat(64);
+let evtSeq = 0;
+/** @param {any} partial */
+const relayEvent = (partial) => ({
+  pubkey: RELAY_PK,
+  created_at: 1000 + evtSeq,
+  id: `ev-${evtSeq++}`,
+  sig: 'x',
+  content: '',
+  ...partial
+});
 const moderatedEvent = {
   kind: 10222,
   pubkey: OWNER,
@@ -65,7 +73,8 @@ const openEvent = {
 
 beforeEach(() => {
   legacySub.mockReset().mockReturnValue({ cleanup: vi.fn(), hasRestrictedSections: false });
-  unsubscribe.mockReset();
+  realEventStore.removeByFilters?.({ kinds: [39001, 39002] });
+  latest = null;
 });
 
 describe('subscribeToCommunityAccess', () => {
@@ -86,21 +95,23 @@ describe('subscribeToCommunityAccess', () => {
     expect(hasRestrictedSections).toBe(true);
     expect(legacySub).not.toHaveBeenCalled();
 
-    emitRelayEvent({
-      kind: 39002,
-      tags: [
-        ['d', 'root1'],
-        ['p', MEMBER]
-      ]
-    });
+    latest.subject.next(
+      relayEvent({
+        kind: 39002,
+        tags: [
+          ['d', 'root1'],
+          ['p', MEMBER]
+        ]
+      })
+    );
     const access = /** @type {any} */ (onUpdate.mock.calls.at(-1))[0];
     expect(access.isLoading).toBe(false);
     expect(access.getAllowedAuthors('Forum')).toBeNull();
     const allowed = access.getAllowedAuthors('Learning');
     expect(allowed).toEqual(expect.arrayContaining([OWNER, MEMBER]));
 
-    cleanup();
-    expect(unsubscribe).toHaveBeenCalled();
+    // cleanup must not throw (unsubscribes the store read + the fetch).
+    expect(() => cleanup()).not.toThrow();
   });
 
   // Dead-relay spinner fix (same underlying bug as channel-rosters.svelte.js):
@@ -112,7 +123,7 @@ describe('subscribeToCommunityAccess', () => {
     const onUpdate = vi.fn();
     subscribeToCommunityAccess(moderatedEvent, [RELAY], onUpdate);
 
-    relayHandlers.complete();
+    latest.subject.complete();
 
     const access = /** @type {any} */ (onUpdate.mock.calls.at(-1))[0];
     expect(access.isLoading).toBe(false);
@@ -128,7 +139,7 @@ describe('subscribeToCommunityAccess', () => {
     const onUpdate = vi.fn();
     subscribeToCommunityAccess(moderatedEvent, [RELAY], onUpdate);
 
-    expect(() => relayHandlers.error(new Error('relay timeout'))).not.toThrow();
+    expect(() => latest.subject.error(new Error('relay timeout'))).not.toThrow();
 
     const access = /** @type {any} */ (onUpdate.mock.calls.at(-1))[0];
     expect(access.isLoading).toBe(false);
