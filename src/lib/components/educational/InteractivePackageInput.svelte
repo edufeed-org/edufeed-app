@@ -48,6 +48,11 @@
   let existingLicense = $state(/** @type {import('nostr-tools').NostrEvent | null} */ (null));
   let iconUrl = $state('');
   let pendingBytes = $state.raw(/** @type {Uint8Array|null} */ (null));
+  // Prefill for the license modal, sourced from h5p.json metadata (license +
+  // authors). Null for non-h5p inputs (raw .xdc / wrapped .html) — the
+  // educator can still change everything in the modal, this is prefill only.
+  let pendingLicenseUrl = $state(/** @type {string | null} */ (null));
+  let pendingCredit = $state(/** @type {string | null} */ (null));
 
   /** @param {string} fileName */
   function stripExt(fileName) {
@@ -66,6 +71,8 @@
       const lower = file.name.toLowerCase();
       let files;
       let name = stripExt(file.name);
+      let licenseUrl = /** @type {string | null} */ (null);
+      let credit = /** @type {string | null} */ (null);
 
       if (lower.endsWith('.html') || lower.endsWith('.htm')) {
         files = wrapHtml(inputBytes, name);
@@ -75,6 +82,8 @@
           const wrapped = await wrapH5p(unzipped, name);
           files = wrapped.files;
           name = wrapped.name;
+          licenseUrl = wrapped.licenseUrl;
+          credit = wrapped.credit;
         } else {
           files = unzipped;
           const meta = extractXdcMeta(files);
@@ -128,6 +137,8 @@
       pendingSize = xdcBytes.byteLength;
       pendingBytes = xdcBytes;
       iconUrl = '';
+      pendingLicenseUrl = licenseUrl;
+      pendingCredit = credit;
       existingLicense = await findExistingLicense(hash);
       modalOpen = true;
     } catch (err) {
@@ -181,6 +192,8 @@
     existingLicense = null;
     iconUrl = '';
     pendingBytes = null;
+    pendingLicenseUrl = null;
+    pendingCredit = null;
   }
 
   /** @param {import('nostr-tools').NostrEvent} licenseEvent */
@@ -257,6 +270,8 @@
   fileName={pendingFileName}
   {activeUserDisplayName}
   {existingLicense}
+  initialLicense={pendingLicenseUrl}
+  initialCredit={pendingCredit}
   {beforeAttest}
   attestExtras={{ alt: `Webxdc app: ${pendingName}`, image: iconUrl }}
   onsave={onLicenseSaved}

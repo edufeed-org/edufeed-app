@@ -1,7 +1,7 @@
 /** @vitest-environment node */
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { strToU8 } from 'fflate';
-import { isH5pArchive, wrapH5p } from '../h5p-wrap.js';
+import { isH5pArchive, wrapH5p, h5pLicenseToUrl } from '../h5p-wrap.js';
 import { ensureDefaultIcon, extractXdcMeta } from '../xdc-archive.js';
 
 afterEach(() => vi.unstubAllGlobals());
@@ -83,5 +83,105 @@ describe('h5p-wrap', () => {
     const broken = new Map([['h5p.json', strToU8('{oops')]]);
     const { name } = await wrapH5p(broken, 'My Upload');
     expect(name).toBe('My Upload');
+  });
+
+  it('returns null licenseUrl/credit when h5p.json has no license/authors', async () => {
+    stubAssets();
+    const { licenseUrl, credit } = await wrapH5p(fakeH5p(), 'fallback');
+    expect(licenseUrl).toBeNull();
+    expect(credit).toBeNull();
+  });
+
+  it('prefills licenseUrl/credit from h5p.json license + licenseVersion + authors', async () => {
+    stubAssets();
+    const files = new Map([
+      [
+        'h5p.json',
+        strToU8(
+          JSON.stringify({
+            title: 'Peace Quiz',
+            license: 'CC BY-SA',
+            licenseVersion: '4.0',
+            authors: [{ name: 'Jane Doe', role: 'Author' }]
+          })
+        )
+      ]
+    ]);
+    const { licenseUrl, credit } = await wrapH5p(files, 'fallback');
+    expect(licenseUrl).toBe('https://creativecommons.org/licenses/by-sa/4.0/');
+    expect(credit).toBe('Jane Doe');
+  });
+
+  it('maps an unmappable H5P license code ("U") to a null licenseUrl', async () => {
+    stubAssets();
+    const files = new Map([
+      ['h5p.json', strToU8(JSON.stringify({ title: 'Peace Quiz', license: 'U' }))]
+    ]);
+    const { licenseUrl } = await wrapH5p(files, 'fallback');
+    expect(licenseUrl).toBeNull();
+  });
+
+  it('joins multiple authors\' names with ", "', async () => {
+    stubAssets();
+    const files = new Map([
+      [
+        'h5p.json',
+        strToU8(
+          JSON.stringify({
+            title: 'Peace Quiz',
+            authors: [{ name: 'Jane Doe' }, { name: 'John Smith', role: 'Editor' }]
+          })
+        )
+      ]
+    ]);
+    const { credit } = await wrapH5p(files, 'fallback');
+    expect(credit).toBe('Jane Doe, John Smith');
+  });
+});
+
+describe('h5pLicenseToUrl', () => {
+  it('maps the six CC BY* codes to versioned CC license URLs', () => {
+    expect(h5pLicenseToUrl('CC BY', '4.0')).toBe('https://creativecommons.org/licenses/by/4.0/');
+    expect(h5pLicenseToUrl('CC BY-SA', '4.0')).toBe(
+      'https://creativecommons.org/licenses/by-sa/4.0/'
+    );
+    expect(h5pLicenseToUrl('CC BY-ND', '4.0')).toBe(
+      'https://creativecommons.org/licenses/by-nd/4.0/'
+    );
+    expect(h5pLicenseToUrl('CC BY-NC', '4.0')).toBe(
+      'https://creativecommons.org/licenses/by-nc/4.0/'
+    );
+    expect(h5pLicenseToUrl('CC BY-NC-SA', '4.0')).toBe(
+      'https://creativecommons.org/licenses/by-nc-sa/4.0/'
+    );
+    expect(h5pLicenseToUrl('CC BY-NC-ND', '4.0')).toBe(
+      'https://creativecommons.org/licenses/by-nc-nd/4.0/'
+    );
+  });
+
+  it('defaults to version 4.0 when licenseVersion is missing', () => {
+    expect(h5pLicenseToUrl('CC BY-SA')).toBe('https://creativecommons.org/licenses/by-sa/4.0/');
+  });
+
+  it('is case-tolerant on the code', () => {
+    expect(h5pLicenseToUrl('cc by-sa', '4.0')).toBe(
+      'https://creativecommons.org/licenses/by-sa/4.0/'
+    );
+  });
+
+  it('maps CC0 1.0 and PD/CC PDM to public-domain URLs', () => {
+    expect(h5pLicenseToUrl('CC0 1.0')).toBe('https://creativecommons.org/publicdomain/zero/1.0/');
+    expect(h5pLicenseToUrl('PD')).toBe('https://creativecommons.org/publicdomain/mark/1.0/');
+    expect(h5pLicenseToUrl('CC PDM')).toBe('https://creativecommons.org/publicdomain/mark/1.0/');
+  });
+
+  it('returns null for unmappable codes (U, C, GNU GPL, ODC PDDL, unknown)', () => {
+    expect(h5pLicenseToUrl('U')).toBeNull();
+    expect(h5pLicenseToUrl('C')).toBeNull();
+    expect(h5pLicenseToUrl('GNU GPL')).toBeNull();
+    expect(h5pLicenseToUrl('ODC PDDL')).toBeNull();
+    expect(h5pLicenseToUrl('Something Else')).toBeNull();
+    expect(h5pLicenseToUrl(undefined)).toBeNull();
+    expect(h5pLicenseToUrl(null)).toBeNull();
   });
 });

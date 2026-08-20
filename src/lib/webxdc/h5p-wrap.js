@@ -11,18 +11,71 @@ export function isH5pArchive(files) {
   return files.has('h5p.json');
 }
 
+/** CC BY* H5P license codes → creativecommons.org URL path segment. */
+/** @type {Record<string, string>} */
+const CC_LICENSE_SLUGS = {
+  'cc by': 'by',
+  'cc by-sa': 'by-sa',
+  'cc by-nd': 'by-nd',
+  'cc by-nc': 'by-nc',
+  'cc by-nc-sa': 'by-nc-sa',
+  'cc by-nc-nd': 'by-nc-nd'
+};
+
+/**
+ * Map an H5P license code (+ optional version) to a license URL, or null
+ * when not mappable.
+ *
+ * The four CC BY/CC0/PD variants that carry a version-4.0-or-implicit URL in
+ * `licenseOptions.js`'s STATIC_LICENSE_OPTIONS (by, by-sa, by-nc, by-nc-sa,
+ * CC0) preselect the LicenseModal's dropdown directly; by-nd, by-nc-nd, and
+ * the CC-PDM/PD mark are outside that static list but still work because
+ * `getLicenseOptions()` synthesizes an `<option>` for any URL it's handed.
+ *
+ * @param {string | undefined | null} code
+ * @param {string} [version]
+ * @returns {string | null}
+ */
+export function h5pLicenseToUrl(code, version) {
+  if (typeof code !== 'string') return null;
+  const normalized = code.trim().toLowerCase();
+  const slug = CC_LICENSE_SLUGS[normalized];
+  if (slug) return `https://creativecommons.org/licenses/${slug}/${version || '4.0'}/`;
+  if (normalized === 'cc0 1.0') return 'https://creativecommons.org/publicdomain/zero/1.0/';
+  if (normalized === 'cc pdm' || normalized === 'pd') {
+    return 'https://creativecommons.org/publicdomain/mark/1.0/';
+  }
+  return null;
+}
+
+/**
+ * @param {Array<{ name?: string }>} [authors]
+ * @returns {string | null}
+ */
+function creditFromAuthors(authors) {
+  if (!Array.isArray(authors) || authors.length === 0) return null;
+  const names = authors
+    .map((a) => (typeof a?.name === 'string' ? a.name.trim() : ''))
+    .filter(Boolean);
+  return names.length ? names.join(', ') : null;
+}
+
 /**
  * @param {Map<string, Uint8Array>} files - unzipped .h5p contents
  * @param {string} fallbackName
- * @returns {Promise<{ files: Map<string, Uint8Array>, name: string }>}
+ * @returns {Promise<{ files: Map<string, Uint8Array>, name: string, licenseUrl: string | null, credit: string | null }>}
  */
 export async function wrapH5p(files, fallbackName) {
   let name = fallbackName;
+  let licenseUrl = /** @type {string | null} */ (null);
+  let credit = /** @type {string | null} */ (null);
   try {
     const meta = JSON.parse(new TextDecoder().decode(files.get('h5p.json')));
     if (typeof meta.title === 'string' && meta.title.trim()) name = meta.title.trim();
+    licenseUrl = h5pLicenseToUrl(meta.license, meta.licenseVersion);
+    credit = creditFromAuthors(meta.authors);
   } catch {
-    // unreadable h5p.json — keep the fallback name
+    // unreadable h5p.json — keep the fallback name, no license/credit prefill
   }
 
   const out = new Map();
@@ -43,7 +96,7 @@ export async function wrapH5p(files, fallbackName) {
   for (const [path, content] of files) {
     out.set(`h5p/${path}`, content);
   }
-  return { files: out, name };
+  return { files: out, name, licenseUrl, credit };
 }
 
 /** @param {string} title */

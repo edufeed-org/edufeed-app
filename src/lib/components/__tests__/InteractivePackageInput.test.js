@@ -1,6 +1,6 @@
 // @ts-nocheck
 /** @vitest-environment jsdom */
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 import { render, fireEvent } from '@testing-library/svelte';
 import { zipSync, strToU8 } from 'fflate';
 import * as m from '$lib/paraglide/messages';
@@ -21,6 +21,25 @@ function pick(container, file) {
   const input = container.querySelector('input[type="file"]');
   Object.defineProperty(input, 'files', { value: [file], configurable: true });
   return fireEvent.change(input);
+}
+
+afterEach(() => vi.unstubAllGlobals());
+
+/** Stubs the h5p-standalone asset fetches + default-icon fetch that wrapH5p
+ *  and the default-icon fallback need during onFileChange. */
+function stubH5pAssets() {
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async (url) => {
+      const u = String(url);
+      if (u.endsWith('manifest.json')) return Response.json(['main.bundle.js']);
+      if (u.startsWith('/h5p-standalone/')) return new Response('/* asset */');
+      if (u.endsWith('icon-192x192.png')) {
+        return new Response(new Uint8Array([1, 2, 3, 4]));
+      }
+      return new Response('', { status: 404 });
+    })
+  );
 }
 
 describe('InteractivePackageInput', () => {
@@ -60,6 +79,34 @@ describe('InteractivePackageInput', () => {
     // A fresh pick still works after cancelling.
     await pick(container, new File(['<p>hi again</p>'], 'redo.html', { type: 'text/html' }));
     expect(await findByText(/redo\.xdc/)).toBeTruthy();
+  });
+
+  it('prefills the license modal from h5p.json license/authors metadata', async () => {
+    stubH5pAssets();
+    const h5pBytes = zipSync({
+      'h5p.json': strToU8(
+        JSON.stringify({
+          title: 'Peace Quiz',
+          license: 'CC BY-SA',
+          licenseVersion: '4.0',
+          authors: [{ name: 'Jane Doe', role: 'Author' }]
+        })
+      ),
+      'content/content.json': strToU8('{}')
+    });
+    const { container, findByLabelText } = render(InteractivePackageInput, {
+      props: { value: null }
+    });
+    await pick(container, new File([h5pBytes], 'quiz.h5p'));
+
+    const licenseSelect = /** @type {HTMLSelectElement} */ (
+      await findByLabelText(/^(Lizenz|License)$/)
+    );
+    expect(licenseSelect.value).toBe('https://creativecommons.org/licenses/by-sa/4.0/');
+    const creditInput = /** @type {HTMLInputElement} */ (
+      await findByLabelText(/^(Urheber|Credit)/)
+    );
+    expect(creditInput.value).toBe('Jane Doe');
   });
 
   it('renders a restored value (no local bytes) without a dead Preview button', () => {

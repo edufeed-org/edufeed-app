@@ -180,4 +180,44 @@ describe('LicenseModal', () => {
     await waitFor(() => getByTestId('license-modal-save'));
     expect(() => getByTestId('license-modal-accept-existing')).toThrow();
   });
+
+  it('seeds the form from initialLicense/initialCredit on open (e.g. H5P metadata prefill)', async () => {
+    const { getByTestId, getByLabelText } = render(LicenseModal, {
+      props: {
+        open: true,
+        hash: 'a'.repeat(64),
+        url: 'https://blossom.example/app.xdc',
+        mime: 'image/jpeg',
+        size: 100,
+        existingLicense: null,
+        initialLicense: 'https://creativecommons.org/publicdomain/zero/1.0/',
+        initialCredit: 'Jane Doe'
+      }
+    });
+
+    await waitFor(() => getByTestId('license-modal-save'));
+    expect(/** @type {HTMLSelectElement} */ (getByLabelText('License')).value).toBe(
+      'https://creativecommons.org/publicdomain/zero/1.0/'
+    );
+    expect(/** @type {HTMLInputElement} */ (getByLabelText('Credit')).value).toBe('Jane Doe');
+  });
+
+  it('falls back to the hardcoded defaults when initialLicense/initialCredit are omitted (existing callers)', async () => {
+    const { getByTestId, getByLabelText } = render(LicenseModal, {
+      props: {
+        open: true,
+        hash: 'a'.repeat(64),
+        url: 'https://blossom.example/abc.jpg',
+        mime: 'image/jpeg',
+        size: 100,
+        existingLicense: null
+      }
+    });
+
+    await waitFor(() => getByTestId('license-modal-save'));
+    expect(/** @type {HTMLSelectElement} */ (getByLabelText('License')).value).toBe(
+      'https://creativecommons.org/licenses/by/4.0/'
+    );
+    expect(/** @type {HTMLInputElement} */ (getByLabelText('Credit')).value).toBe('');
+  });
 });

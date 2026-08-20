@@ -18,6 +18,20 @@
     defaultSelfCreator = false,
     existingLicense = /** @type {any} */ (null),
     /**
+     * Seed the create-license form's license select on open, instead of the
+     * hardcoded CC BY 4.0 default. URL string (must match a
+     * `getLicenseOptions()` option value or one it synthesizes). Null for
+     * existing callers, who get the old hardcoded default unchanged.
+     * @type {string | null}
+     */
+    initialLicense = /** @type {string | null} */ (null),
+    /**
+     * Seed the create-license form's credit field on open. Null for existing
+     * callers, who get the old empty-string default unchanged.
+     * @type {string | null}
+     */
+    initialCredit = /** @type {string | null} */ (null),
+    /**
      * Signer used to publish the kind 1063 attestation. Falls back to
      * `manager.active` when not provided. Set this to a community signer when
      * attesting the community's own uploads (avatar / banner) so the license
@@ -89,10 +103,11 @@
   // of `open` but the `if (open)` guard ensures we only reset on the rising edge.
   $effect(() => {
     if (open) {
-      modalLicense = 'https://creativecommons.org/licenses/by/4.0/';
+      modalLicense = initialLicense || 'https://creativecommons.org/licenses/by/4.0/';
       modalTitle = '';
       modalSelfCreator = defaultSelfCreator;
-      modalCredit = defaultSelfCreator && activeUserDisplayName ? activeUserDisplayName : '';
+      modalCredit =
+        defaultSelfCreator && activeUserDisplayName ? activeUserDisplayName : initialCredit || '';
       modalSource = '';
       modalDescription = '';
       modalError = '';
