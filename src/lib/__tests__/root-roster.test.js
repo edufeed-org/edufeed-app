@@ -48,6 +48,17 @@ describe('rosterView', () => {
     );
   });
 
+  it('fetchedKeys ends loading even with no roster stored (eventStore said nothing)', () => {
+    // The store holds no 39002/39001 for this key, but the relay has answered
+    // (key is in fetchedKeys) — so it is a genuinely empty roster, not loading.
+    const fetched = new Set([KEY]);
+    const view = rosterView(POINTER, {}, {}, fetched);
+    expect(view.isLoading).toBe(false);
+    expect(view.members.size).toBe(0);
+    // Not yet fetched → still loading.
+    expect(rosterView(POINTER, {}, {}, new Set()).isLoading).toBe(true);
+  });
+
   it('null pointer → empty, not loading', () => {
     const view = rosterView(null, {}, {});
     expect(view.isLoading).toBe(false);

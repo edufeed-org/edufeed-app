@@ -22,7 +22,7 @@ export function useRootRoster(getCommunikeyEvent) {
   });
   return () => {
     const pointer = parseMembershipPointer(getCommunikeyEvent());
-    const { membersByKey, adminsByKey, refresh } = getRosters();
-    return { pointer, refresh, ...rosterView(pointer, membersByKey, adminsByKey) };
+    const { membersByKey, adminsByKey, fetchedKeys, refresh } = getRosters();
+    return { pointer, refresh, ...rosterView(pointer, membersByKey, adminsByKey, fetchedKeys) };
   };
 }
