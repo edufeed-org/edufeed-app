@@ -22,7 +22,7 @@ function stubFetch() {
   );
 }
 
-/** @param {Record<string, Uint8Array>} entries */
+/** @param {string} name @param {Record<string, Uint8Array>} entries */
 function zipFile(name, entries) {
   const bytes = zipSync(entries);
   return new File([bytes], name);

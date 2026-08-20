@@ -1,17 +1,14 @@
 // @ts-nocheck
 /** @vitest-environment node */
+/**
+ * Interactive (webxdc) encodings in the generic resource flow: NIP-DC
+ * discovery tags on the kind-30142 and the step-5 license-gate exemptions.
+ * (The dedicated `interactive` form variant was removed — packages now enter
+ * through the normal upload flow.)
+ */
 import { describe, it, expect } from 'vitest';
 import { appendInteractiveTags } from '../eventTags.js';
 import { validateWizardStep } from '../validateWizardStep.js';
-import { ALL_VARIANTS } from '../../../config/resource-form-variants.js';
-
-describe('interactive variant registration', () => {
-  it('is registered with label keys', () => {
-    const v = ALL_VARIANTS.find((v) => v.id === 'interactive');
-    expect(v).toBeTruthy();
-    expect(v.labelKey).toBe('resource_form_variant_interactive_label');
-  });
-});
 
 describe('appendInteractiveTags', () => {
   it('adds m and x tags for an x-webxdc file', () => {
@@ -29,11 +26,7 @@ describe('appendInteractiveTags', () => {
   });
 });
 
-describe('validateWizardStep interactive step 2', () => {
-  // Mirrors the fixture pattern in src/lib/__tests__/validateWizardStep.test.js:
-  // predictable string-id messages + a full ctx (isEkw/hasSubjectVocab/
-  // subjectsCount included even though step 2 doesn't read them, for parity
-  // with how every other suite builds its ctx).
+describe('validateWizardStep — x-webxdc encodings on step 5', () => {
   const messages = {
     bildungsbereich: () => 'ERR_BILDUNGSBEREICH',
     urlRequired: () => 'ERR_URL_REQUIRED',
@@ -55,71 +48,13 @@ describe('validateWizardStep interactive step 2', () => {
     hasSubjectVocab: true,
     subjectsCount: 0,
     isValidUrl: () => true,
-    messages,
-    variantId: 'interactive'
-  };
-
-  it('requires a licensed package', () => {
-    const errors = validateWizardStep(2, { encodings: [] }, ctx);
-    expect(errors.attachments).toBe('needs file');
-  });
-
-  it('passes with a licensed x-webxdc encoding and set identifier', () => {
-    const formData = {
-      identifier: 'https://blossom/x.xdc',
-      encodings: [{ type: 'application/x-webxdc', sha256: 'aa', licenseEvent: { id: 'e' } }]
-    };
-    expect(validateWizardStep(2, formData, ctx)).toEqual({});
-  });
-
-  it('edit mode: passes with an x-webxdc encoding even without a licenseEvent', () => {
-    // Edit mode hides the step-2 uploader (d-tag/package is immutable) — the
-    // attestation already exists on the network from the original publish.
-    const formData = {
-      identifier: 'https://blossom/x.xdc',
-      encodings: [{ type: 'application/x-webxdc', sha256: 'aa', licenseEvent: null }]
-    };
-    const editCtx = { ...ctx, isEditMode: true };
-    expect(validateWizardStep(2, formData, editCtx)).toEqual({});
-  });
-
-  it('edit mode: still fails when there is no x-webxdc encoding at all', () => {
-    const editCtx = { ...ctx, isEditMode: true };
-    const errors = validateWizardStep(2, { encodings: [] }, editCtx);
-    expect(errors.attachments).toBe('needs file');
-  });
-});
-
-describe('validateWizardStep interactive step 5', () => {
-  const messages = {
-    bildungsbereich: () => 'ERR_BILDUNGSBEREICH',
-    urlRequired: () => 'ERR_URL_REQUIRED',
-    identifier: () => 'ERR_IDENTIFIER_FORMAT',
-    title: () => 'ERR_TITLE',
-    description: () => 'ERR_DESCRIPTION',
-    resourceType: () => 'ERR_RESOURCE_TYPE',
-    subject: () => 'ERR_SUBJECT',
-    noUrlNeedsFile: () => 'needs file',
-    license: () => 'ERR_LICENSE',
-    imageLicenseMissing: () => 'ERR_IMAGE_LICENSE_MISSING',
-    encodingLicenseMissing: () => 'ERR_ENCODING_LICENSE_MISSING'
-  };
-
-  const ctx = {
-    isEkw: false,
-    hasNoUrl: false,
-    isEditMode: false,
-    hasSubjectVocab: true,
-    subjectsCount: 0,
-    isValidUrl: () => true,
-    messages,
-    variantId: 'interactive'
+    messages
   };
 
   it('edit mode: passes even without a licenseEvent on the x-webxdc encoding', () => {
-    // Mirrors step 2's edit-mode exemption: the package is immutable once
-    // published, so the original attestation already covers it even if the
-    // rehydration fetch for the license event hasn't landed yet.
+    // The package is immutable once published (d-tag can't change), so the
+    // original attestation already covers it even if the rehydration fetch
+    // for the license event hasn't landed yet.
     const formData = {
       encodings: [{ type: 'application/x-webxdc', sha256: 'aa', licenseEvent: null }],
       externalUrls: []

@@ -19,41 +19,6 @@ export function findInteractiveEncoding(resource) {
 }
 
 /**
- * @typedef {{ url: string, name: string, type: string, size: number,
- *   sha256: string, licenseEvent: import('nostr-tools').NostrEvent | null,
- *   iconUrl?: string }} InteractivePackage
- */
-
-/**
- * @typedef {{url?: string, name?: string, type?: string, size?: number,
- *   sha256?: string, licenseEvent?: import('nostr-tools').NostrEvent | null}} UploadedFileWithLicense
- */
-
-/**
- * Rehydrate the wizard's `interactivePackage` step-2 state from an already
- * restored `formData.encodings` (the wizard's own `type`-keyed
- * UploadedFileWithLicense shape — draft persistence and the mapping $effect
- * both use it, unlike edit mode's mimeType-keyed AMB encodings). Used to
- * seed the field back from a restored draft, which only persists
- * `formData` and has no local package bytes to rebuild it from otherwise.
- * @param {UploadedFileWithLicense[] | null | undefined} encodings
- * @returns {InteractivePackage | null}
- */
-export function seedInteractivePackageFromEncodings(encodings) {
-  const pkg = encodings?.find((e) => e.type === 'application/x-webxdc');
-  if (!pkg) return null;
-  return {
-    url: pkg.url ?? '',
-    name: pkg.name ?? '',
-    type: 'application/x-webxdc',
-    size: pkg.size ?? 0,
-    sha256: pkg.sha256 ?? '',
-    licenseEvent: pkg.licenseEvent ?? null,
-    iconUrl: ''
-  };
-}
-
-/**
  * Stable addressable key for sandbox subdomain + local state storage.
  * @param {{kind: number, pubkey: string, tags?: string[][]}} event
  * @returns {string}
