@@ -3162,5 +3162,6 @@
   "interactive_input_replace": "Replace package",
   "interactive_html_confirm_question": "Treat this HTML file as an interactive app?",
   "interactive_html_confirm_yes": "Wrap as app",
-  "interactive_html_confirm_no": "Upload as plain file"
+  "interactive_html_confirm_no": "Upload as plain file",
+  "fab_create_interactive": "Share interactive material"
 }
