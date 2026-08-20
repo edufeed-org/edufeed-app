@@ -3161,5 +3161,8 @@
   "interactive_input_invalid": "This file is not a valid package (no index.html found).",
   "interactive_input_too_large": "This package is larger than 50 MB — it will be slow to launch.",
   "interactive_input_preview": "Preview",
-  "interactive_input_replace": "Replace package"
+  "interactive_input_replace": "Replace package",
+  "interactive_html_confirm_question": "Treat this HTML file as an interactive app?",
+  "interactive_html_confirm_yes": "Wrap as app",
+  "interactive_html_confirm_no": "Upload as plain file"
 }

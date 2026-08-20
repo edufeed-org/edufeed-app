@@ -23,6 +23,7 @@
   import LicenseModal from './LicenseModal.svelte';
   import MetadataCleanerModal from './MetadataCleanerModal.svelte';
   import { isPdfFile, isSupportedFile, cleanFileQuietly } from '$lib/helpers/metaclean.js';
+  import { isInteractiveCandidate } from '$lib/webxdc/interactive-detect.js';
   import * as m from '$lib/paraglide/messages';
 
   /**
@@ -37,7 +38,7 @@
    * @property {boolean} [metaCleanFailed] - display-only: quiet clean was requested but the service failed
    */
 
-  /** @type {{ files?: UploadedFileWithLicense[], multiple?: boolean, accept?: string, maxSize?: number, label?: string, helpText?: string, disabled?: boolean, activeUserDisplayName?: string }} */
+  /** @type {{ files?: UploadedFileWithLicense[], multiple?: boolean, accept?: string, maxSize?: number, label?: string, helpText?: string, disabled?: boolean, activeUserDisplayName?: string, detectInteractive?: boolean }} */
   let {
     files = $bindable([]),
     multiple = true,
@@ -46,7 +47,8 @@
     label = '',
     helpText = '',
     disabled = false,
-    activeUserDisplayName = ''
+    activeUserDisplayName = '',
+    detectInteractive = false
   } = $props();
 
   // ---------------------------------------------------------------------------
@@ -99,6 +101,55 @@
   let cleanCompress = $state('off');
   let inspectOpen = $state(false);
 
+  // ---------------------------------------------------------------------------
+  // Interactive (webxdc) detection — only active with `detectInteractive`.
+  // Prepared packages are kept per slot index for modal prefill, deferred
+  // icon+package upload, and the inline preview.
+  // ---------------------------------------------------------------------------
+  /** @type {SvelteMap<number, import('$lib/webxdc/interactive-upload.js').PreparedInteractivePackage>} */
+  let interactiveBySlot = new SvelteMap();
+  /** @type {SvelteMap<number, string>} Icon URLs, filled during beforeAttest. */
+  let interactiveIconUrls = new SvelteMap();
+  let interactiveSizeWarning = $state(false);
+  /** Slot index whose inline webxdc preview is open, or null. */
+  let previewIndex = $state(/** @type {number | null} */ (null));
+
+  // .html confirm interstitial (same promise pattern as the metadata cleaner):
+  // resolves true = wrap as app, false = plain file.
+  let htmlConfirmOpen = $state(false);
+  let htmlConfirmName = $state('');
+  /** @type {((wrap: boolean) => void) | null} */
+  let htmlConfirmResolve = null;
+
+  /** @param {boolean} wrap */
+  function answerHtmlConfirm(wrap) {
+    htmlConfirmOpen = false;
+    htmlConfirmResolve?.(wrap);
+    htmlConfirmResolve = null;
+  }
+
+  /**
+   * Run a picked file through the interactive pipeline when it is a
+   * candidate. Returns the prepared package, or null when the file should
+   * continue as a plain upload. Throws when a candidate package is invalid.
+   * @param {File} file
+   */
+  async function maybePrepareInteractive(file) {
+    if (!detectInteractive) return null;
+    const kind = isInteractiveCandidate(file.name);
+    if (!kind) return null;
+    if (kind === 'html') {
+      htmlConfirmName = file.name;
+      htmlConfirmOpen = true;
+      const wrap = await new Promise((resolve) => {
+        htmlConfirmResolve = resolve;
+      });
+      if (!wrap) return null;
+    }
+    const { prepareInteractivePackage } = await import('$lib/webxdc/interactive-upload.js');
+    return await prepareInteractivePackage(file);
+  }
+
   // Snapshot of `files` taken just before a brand-new upload appends/replaces.
   // Set ONLY when the modal is being opened for a mandatory (upload-loop) flow.
   // Null when the modal was opened from a row button (optional, replace-only
@@ -124,6 +175,20 @@
   // used to gate the metaclean options and feed the inspect modal.
   const modalTargetPendingFile = $derived(
     modalTargetIndex !== null ? (pendingFilesByIndex.get(modalTargetIndex) ?? null) : null
+  );
+
+  // Prepared interactive package for the current modal target — drives the
+  // license-modal prefill and the dual-purpose (NIP-DC) attestation extras.
+  const interactiveForModal = $derived(
+    modalTargetIndex !== null ? (interactiveBySlot.get(modalTargetIndex) ?? null) : null
+  );
+  const interactiveAttestExtras = $derived(
+    interactiveForModal && modalTargetIndex !== null
+      ? {
+          alt: `Webxdc app: ${interactiveForModal.name}`,
+          image: interactiveIconUrls.get(modalTargetIndex) ?? ''
+        }
+      : undefined
   );
 
   function notifyModalClosed() {
@@ -201,6 +266,7 @@
    * @returns {string}
    */
   function getFileIcon(mimeType) {
+    if (mimeType === 'application/x-webxdc') return '🧩';
     if (mimeType.startsWith('image/')) return '🖼️';
     if (mimeType.startsWith('video/')) return '🎬';
     if (mimeType.startsWith('audio/')) return '🎵';
@@ -259,8 +325,26 @@
     let preparedCount = 0;
 
     try {
-      for (const file of filesToUpload) {
-        const cleanerEligible = runtimeConfig.metadataCleaner?.enabled && isSupportedFile(file);
+      for (const pickedFile of filesToUpload) {
+        // Interactive candidates get normalized into an .xdc before the
+        // regular hash/license flow; everything downstream sees the
+        // normalized file.
+        /** @type {import('$lib/webxdc/interactive-upload.js').PreparedInteractivePackage | null} */
+        let prepared = null;
+        try {
+          prepared = await maybePrepareInteractive(pickedFile);
+        } catch (err) {
+          console.error('Interactive package processing failed:', err);
+          uploadError = m.interactive_input_invalid();
+          preparedCount++;
+          uploadProgress = Math.round((preparedCount / totalFiles) * 100);
+          continue;
+        }
+        if (prepared?.sizeWarning) interactiveSizeWarning = true;
+        const file = prepared?.file ?? pickedFile;
+
+        const cleanerEligible =
+          !prepared && runtimeConfig.metadataCleaner?.enabled && isSupportedFile(file);
         // The blocking interstitial is now ONLY the oversized-PDF rescue case:
         // an oversized PDF may still fit after the cleaner's compression, so
         // its size check moves to the resolved file below. Everything else —
@@ -323,6 +407,14 @@
           files = [descriptor];
         }
 
+        if (prepared) {
+          interactiveBySlot.set(targetIndex, prepared);
+        } else {
+          // single-file mode can replace an interactive slot with a plain file
+          interactiveBySlot.delete(targetIndex);
+        }
+        interactiveIconUrls.delete(targetIndex);
+
         // Stash the File for deferred upload only when there's no existing blob
         // to reuse. With no stash, the modal's beforeAttest prop stays null and
         // neither Save path uploads.
@@ -365,10 +457,11 @@
       // Quiet clean: only runs when the user opted in via the license
       // modal's checkbox/compression select. Never throws — a failed clean
       // falls back to uploading the original file, noted on the row.
+      const prep = interactiveBySlot.get(index);
       let uploadFile = file;
       let cleanedFields = 0;
       let cleanFailed = false;
-      if (cleanMetadata || cleanCompress !== 'off') {
+      if (!prep && (cleanMetadata || cleanCompress !== 'off')) {
         const result = await cleanFileQuietly(uploadFile, {
           strip: cleanMetadata,
           compress: cleanCompress
@@ -387,6 +480,19 @@
       };
       const serverUrl = getActiveBlossomServer(activeUser.pubkey, eventStore);
       const client = new BlossomClient(serverUrl, signerFn);
+
+      // Interactive package: ship the extracted app icon alongside so the
+      // kind-1063 discovery event can reference it.
+      if (prep?.iconBytes) {
+        const iconFile = new File(
+          [/** @type {BlobPart} */ (prep.iconBytes)],
+          prep.iconMime === 'image/jpeg' ? 'icon.jpg' : 'icon.png',
+          { type: prep.iconMime ?? 'image/png' }
+        );
+        const iconBlob = await client.uploadBlob(iconFile);
+        interactiveIconUrls.set(index, reconcileBlobUrlScheme(iconBlob.url, serverUrl));
+      }
+
       const blob = await client.uploadBlob(uploadFile);
       const finalUrl = reconcileBlobUrlScheme(blob.url, serverUrl);
 
@@ -407,14 +513,33 @@
       return {
         url: finalUrl,
         hash: blob.sha256,
-        mime: blob.type || uploadFile.type || 'application/octet-stream',
+        mime: prep
+          ? 'application/x-webxdc'
+          : blob.type || uploadFile.type || 'application/octet-stream',
         size: blob.size ?? uploadFile.size
       };
     };
   }
 
+  /**
+   * Drop `index` from an index-keyed map, shifting higher keys down — keeps
+   * per-slot maps aligned with `files` after a removal.
+   * @template T
+   * @param {SvelteMap<number, T>} map
+   * @param {number} index
+   */
+  function shiftSlotMap(map, index) {
+    const entries = [...map].filter(([i]) => i !== index);
+    map.clear();
+    for (const [i, v] of entries) map.set(i > index ? i - 1 : i, v);
+  }
+
   function removeFile(/** @type {number} */ index) {
     files = files.filter((_, i) => i !== index);
+    shiftSlotMap(pendingFilesByIndex, index);
+    shiftSlotMap(interactiveBySlot, index);
+    shiftSlotMap(interactiveIconUrls, index);
+    previewIndex = null;
   }
 
   function handleRemoveFile(/** @type {number} */ index) {
@@ -570,7 +695,12 @@
         <div class="flex items-start gap-3 rounded-lg bg-base-200 p-3">
           <span class="shrink-0 text-2xl leading-tight">{getFileIcon(file.type)}</span>
           <div class="min-w-0 flex-1">
-            <div class="truncate font-medium text-base-content">{getDisplayName(file)}</div>
+            <div class="flex min-w-0 items-center gap-2">
+              <div class="truncate font-medium text-base-content">{getDisplayName(file)}</div>
+              {#if file.type === 'application/x-webxdc'}
+                <span class="badge badge-xs badge-primary">{m.interactive_badge()}</span>
+              {/if}
+            </div>
             <div class="truncate text-xs text-base-content/60">
               {file.type} • {formatFileSize(file.size)}
             </div>
@@ -594,6 +724,16 @@
           </div>
 
           <div class="flex shrink-0 items-center gap-1">
+            {#if interactiveBySlot.has(index)}
+              <button
+                type="button"
+                class="btn btn-ghost btn-xs"
+                onclick={() => (previewIndex = previewIndex === index ? null : index)}
+                disabled={isUploading}
+              >
+                {m.interactive_input_preview()}
+              </button>
+            {/if}
             {#if file.licenseEvent}
               <button
                 type="button"
@@ -639,8 +779,24 @@
             </button>
           </div>
         </div>
+        {#if previewIndex === index}
+          {@const prep = interactiveBySlot.get(index)}
+          {#if prep}
+            {#await import('$lib/webxdc/WebxdcPlayer.svelte') then Player}
+              <Player.default
+                bytes={prep.bytes}
+                name={prep.name}
+                appKey={`preview:${file.sha256}`}
+              />
+            {/await}
+          {/if}
+        {/if}
       {/each}
     </div>
+  {/if}
+
+  {#if interactiveSizeWarning}
+    <p class="mt-2 text-sm text-warning">{m.interactive_input_too_large()}</p>
   {/if}
 
   {#if helpText}
@@ -691,6 +847,11 @@
   fileName={modalTargetFile?.name ?? ''}
   {activeUserDisplayName}
   existingLicense={pendingExistingLicense}
+  initialLicense={interactiveForModal?.licenseUrl ?? null}
+  initialCredit={interactiveForModal?.credit ?? null}
+  initialTitle={interactiveForModal?.name ?? null}
+  initialSource={interactiveForModal?.source ?? null}
+  attestExtras={interactiveAttestExtras}
   extraOptions={runtimeConfig.metadataCleaner?.enabled &&
   modalTargetPendingFile &&
   isSupportedFile(modalTargetPendingFile)
@@ -717,6 +878,12 @@
     // leaves preFileSnapshot null so files stays untouched.
     if (modalTargetIndex !== null) {
       pendingFilesByIndex.delete(modalTargetIndex);
+      if (preFileSnapshot !== null) {
+        // The appended/replaced slot is being reverted — drop its prepared
+        // interactive package so no stale prefill survives.
+        interactiveBySlot.delete(modalTargetIndex);
+        interactiveIconUrls.delete(modalTargetIndex);
+      }
     }
     if (preFileSnapshot !== null) {
       files = preFileSnapshot;
@@ -739,3 +906,24 @@
 />
 
 <MetadataCleanerModal bind:open={inspectOpen} file={modalTargetPendingFile} mode="inspect" />
+
+{#if htmlConfirmOpen}
+  <div class="modal-open modal" role="dialog">
+    <div class="modal-box max-w-sm">
+      <h3 class="text-lg font-bold">{m.interactive_html_confirm_question()}</h3>
+      <p class="py-2 text-sm text-base-content/70">{htmlConfirmName}</p>
+      <div class="modal-action">
+        <button type="button" class="btn btn-sm" onclick={() => answerHtmlConfirm(false)}>
+          {m.interactive_html_confirm_no()}
+        </button>
+        <button
+          type="button"
+          class="btn btn-sm btn-primary"
+          onclick={() => answerHtmlConfirm(true)}
+        >
+          {m.interactive_html_confirm_yes()}
+        </button>
+      </div>
+    </div>
+  </div>
+{/if}

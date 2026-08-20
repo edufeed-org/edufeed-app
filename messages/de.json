@@ -3161,5 +3161,8 @@
   "interactive_input_invalid": "Diese Datei ist kein gültiges Paket (keine index.html gefunden).",
   "interactive_input_too_large": "Dieses Paket ist größer als 50 MB — der Start wird langsam sein.",
   "interactive_input_preview": "Vorschau",
-  "interactive_input_replace": "Paket ersetzen"
+  "interactive_input_replace": "Paket ersetzen",
+  "interactive_html_confirm_question": "Diese HTML-Datei als interaktive App behandeln?",
+  "interactive_html_confirm_yes": "Als App verpacken",
+  "interactive_html_confirm_no": "Als normale Datei hochladen"
 }

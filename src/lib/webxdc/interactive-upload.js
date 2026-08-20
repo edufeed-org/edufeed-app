@@ -9,21 +9,11 @@
  */
 import { unzipXdc, zipXdc, extractXdcMeta, wrapHtml, ensureDefaultIcon } from './xdc-archive.js';
 import { isH5pArchive, wrapH5p } from './h5p-wrap.js';
+import { isInteractiveCandidate } from './interactive-detect.js';
+
+export { isInteractiveCandidate };
 
 export const SIZE_WARN_BYTES = 50 * 1024 * 1024;
-
-/**
- * Classify a filename for interactive handling.
- * @param {string} fileName
- * @returns {'package' | 'html' | null} 'package' auto-triggers the pipeline,
- *   'html' needs user confirmation first, null is not a candidate.
- */
-export function isInteractiveCandidate(fileName) {
-  const lower = (fileName || '').toLowerCase();
-  if (lower.endsWith('.h5p') || lower.endsWith('.xdc')) return 'package';
-  if (lower.endsWith('.html') || lower.endsWith('.htm')) return 'html';
-  return null;
-}
 
 /** @param {string} fileName */
 function stripExt(fileName) {
