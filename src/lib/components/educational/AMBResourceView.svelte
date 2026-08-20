@@ -66,7 +66,7 @@
     GraduationCapIcon,
     BookIcon,
     BookClosedIcon,
-    GlobeIcon,
+    EyeIcon,
     LinkIcon,
     TranslateIcon,
     PeopleIcon,
@@ -944,7 +944,7 @@
             </div>
             <!-- eslint-disable svelte/no-navigation-without-resolve -- external: uploaded file URLs -->
             <a href={file.url} target="_blank" rel="noopener noreferrer" class="ed-file-btn">
-              <GlobeIcon class_="ed-file-btn-ico" />
+              <EyeIcon class_="ed-file-btn-ico" />
               {m.amb_resource_view_file()}
             </a>
             <a href={file.url} download class="ed-file-btn">
