@@ -35,7 +35,6 @@ import { subStepToFormFields, validateKonfiTopicOrDimension } from './konfiStep4
  *   isValidUrl: (s: string) => boolean,
  *   messages: ValidationMessages,
  *   schemeNaddrs?: Record<string, { address: string, relay: string }>,
- *   variantId?: string,
  * }} ValidationContext
  */
 
@@ -56,21 +55,6 @@ export function validateWizardStep(step, formData, ctx, subStepConfig) {
       break;
 
     case 2:
-      if (ctx.variantId === 'interactive') {
-        // Interactive resources carry their content as a single licensed
-        // webxdc package (InteractivePackageInput), not a URL.
-        const pkg = (formData.encodings ?? []).find(
-          (/** @type {any} */ f) => f?.type === 'application/x-webxdc'
-        );
-        // Edit mode hides the step-2 uploader (the d-tag/package is
-        // immutable), mirroring the no-URL branch's edit-mode exemption
-        // below: the requirement is satisfied by the already-published
-        // encoding even if its license event hasn't been rehydrated yet.
-        if (!pkg || (!pkg.licenseEvent && !ctx.isEditMode)) {
-          errors.attachments = m.noUrlNeedsFile();
-        }
-        break;
-      }
       if (!ctx.hasNoUrl) {
         if (!formData.identifier?.trim()) errors.identifier = m.urlRequired();
       } else if (!ctx.isEditMode && (formData.encodings?.length ?? 0) === 0) {

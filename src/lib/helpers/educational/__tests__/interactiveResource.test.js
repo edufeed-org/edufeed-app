@@ -10,8 +10,7 @@ vi.mock('$lib/helpers/eventDeletion.js', () => ({
 import {
   findInteractiveEncoding,
   resourceAppKey,
-  deleteCompanionLicense,
-  seedInteractivePackageFromEncodings
+  deleteCompanionLicense
 } from '../interactiveResource.js';
 import { findExistingLicense } from '$lib/helpers/image-license.js';
 import { deleteEvent } from '$lib/helpers/eventDeletion.js';
@@ -27,39 +26,6 @@ describe('findInteractiveEncoding', () => {
     expect(findInteractiveEncoding(resource)?.sha256).toBe('aa');
     expect(findInteractiveEncoding({ encodings: [] })).toBeNull();
     expect(findInteractiveEncoding(null)).toBeNull();
-  });
-});
-
-describe('seedInteractivePackageFromEncodings', () => {
-  it('builds an InteractivePackage from the x-webxdc encoding (draft/formData shape)', () => {
-    const licenseEvent = { id: 'e', kind: 1063 };
-    const encodings = [
-      { url: 'https://blossom/a.pdf', name: 'a', type: 'application/pdf', size: 1, sha256: 'bb' },
-      {
-        url: 'https://blossom/x.xdc',
-        name: 'Quiz',
-        type: 'application/x-webxdc',
-        size: 42,
-        sha256: 'aa',
-        licenseEvent
-      }
-    ];
-    expect(seedInteractivePackageFromEncodings(encodings)).toEqual({
-      url: 'https://blossom/x.xdc',
-      name: 'Quiz',
-      type: 'application/x-webxdc',
-      size: 42,
-      sha256: 'aa',
-      licenseEvent,
-      iconUrl: ''
-    });
-  });
-
-  it('returns null when there is no x-webxdc encoding', () => {
-    expect(seedInteractivePackageFromEncodings([{ type: 'application/pdf' }])).toBeNull();
-    expect(seedInteractivePackageFromEncodings([])).toBeNull();
-    expect(seedInteractivePackageFromEncodings(undefined)).toBeNull();
-    expect(seedInteractivePackageFromEncodings(null)).toBeNull();
   });
 });
 

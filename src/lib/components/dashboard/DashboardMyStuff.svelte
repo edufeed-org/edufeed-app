@@ -18,7 +18,8 @@
     PollIcon,
     BookmarkIcon,
     PlusIcon,
-    ChevronDownIcon
+    ChevronDownIcon,
+    PuzzleIcon
   } from '$lib/components/icons';
   import * as m from '$lib/paraglide/messages';
 
@@ -31,6 +32,7 @@
   const CREATE_UI = {
     calendar: { icon: CalendarIcon, label: () => m.fab_create_event() },
     learning: { icon: GraduationCapIcon, label: () => m.fab_create_learning() },
+    interactive: { icon: PuzzleIcon, label: () => m.fab_create_interactive() },
     article: { icon: ScrollTextIcon, label: () => m.article_fab_write() },
     wiki: { icon: WikipediaIcon, label: () => m.wiki_fab_write() },
     form: { icon: FilesIcon, label: () => m.fab_create_form() },
@@ -45,7 +47,8 @@
       const el = /** @type {HTMLElement | null} */ (document.activeElement);
       el?.blur();
     }
-    navigateToCreate(key);
+    // Route via ctaKey — interactive has no create flow of its own (shares learning's).
+    navigateToCreate(getContentType(key)?.ctaKey ?? key);
   }
 </script>
 

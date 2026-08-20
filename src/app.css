@@ -281,6 +281,7 @@ body {
 
   --ct-calendar: oklch(52% 0.12 12);
   --ct-learning: oklch(50% 0.1 140);
+  --ct-interactive: oklch(52% 0.12 330);
   --ct-article: oklch(58% 0.12 64);
   --ct-wiki: oklch(52% 0.07 200);
   --ct-form: oklch(52% 0.12 300);

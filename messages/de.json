@@ -2350,8 +2350,6 @@
   "resource_form_variant_amb_description": "Allgemeines Metadatenprofil für Bildungsressourcen (Hochschule & Schule).",
   "resource_form_variant_ekw_label": "EKKW-Bildungsmaterial",
   "resource_form_variant_ekw_description": "Evangelische Kirche von Kurhessen-Waldeck – spezialisiertes Profil.",
-  "resource_form_variant_interactive_label": "Interaktive App (H5P)",
-  "resource_form_variant_interactive_description": "Lade eine H5P-Übung, webxdc-App oder eigenständige HTML-Datei hoch — sie läuft direkt in einer Sandbox.",
   "create_go_back": "Zurück",
   "create_edit_error_invalid_address": "Ungültiges Adressformat",
   "create_edit_error_resource_not_found": "Ressource nicht gefunden",
@@ -3161,5 +3159,9 @@
   "interactive_input_invalid": "Diese Datei ist kein gültiges Paket (keine index.html gefunden).",
   "interactive_input_too_large": "Dieses Paket ist größer als 50 MB — der Start wird langsam sein.",
   "interactive_input_preview": "Vorschau",
-  "interactive_input_replace": "Paket ersetzen"
+  "interactive_input_replace": "Paket ersetzen",
+  "interactive_html_confirm_question": "Diese HTML-Datei als interaktive App behandeln?",
+  "interactive_html_confirm_yes": "Als App verpacken",
+  "interactive_html_confirm_no": "Als normale Datei hochladen",
+  "fab_create_interactive": "Interaktives Material teilen"
 }
