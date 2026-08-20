@@ -18,6 +18,7 @@
   import { useProfileMap } from '$lib/stores/profile-map.svelte.js';
   import { parseGroupPointers, sharedRelayOf } from '$lib/groups/community-pointer.js';
   import { parseMembershipPointer } from '$lib/groups/community-membership.js';
+  import { communityGroupsEndpoint, flatGroupsRelay } from '$lib/groups/community-endpoint.js';
   import { accessChoiceToNip29 } from '$lib/groups/access-choice.js';
   import {
     createGroupOnRelay,
@@ -30,7 +31,6 @@
   import { putUserOn, fanOut } from '$lib/groups/roster-fanout.js';
   import { pool } from '$lib/stores/nostr-infrastructure.svelte';
   import { unique } from '$lib/helpers/unique.js';
-  import { normalizeURL } from 'applesauce-core/helpers/url';
   import ProfileAvatar from '$lib/components/shared/ProfileAvatar.svelte';
   import ContactSearchInput from '$lib/components/shared/ContactSearchInput.svelte';
   import { getContext } from 'svelte';
@@ -200,6 +200,21 @@
       showToast(m.wizard_no_shared_relay(), 'error');
       return;
     }
+    // Split the single relay into a CREATE host and an ADDRESS URL. Existing
+    // pointers may already carry the per-community endpoint (wss://host/c/<rootId>);
+    // CREATE and every moderation write must land on the FLAT host — the /c
+    // write guard rejects a create for a group not yet in the subtree — while
+    // the pointer + kind-10009 entry are ADDRESSED via /c so each community
+    // renders as its own dedicated space (Armada).
+    const flatBase = flatGroupsRelay(relay);
+    const rootId = membershipPointer?.id ?? null;
+    // The channel must land on the SAME host as the root group for the /c
+    // endpoint (and the relay-scoped `parent` tag) to be meaningful — a
+    // /c/<rootId> path only exists on the host that hosts that root. When the
+    // channel is on a different host (or the community has no root), address
+    // it flat.
+    const sameHost = !!membershipPointer && flatBase === flatGroupsRelay(membershipPointer.relay);
+    const pointerRelay = rootId && sameHost ? communityGroupsEndpoint(flatBase, rootId) : flatBase;
     try {
       // Narrowed to a local so TS carries the non-null check through the
       // whole flow — `manager.active` is a getter, so re-reading it inline
@@ -208,13 +223,11 @@
       if (!user) throw new Error('not signed in');
       const id = generateGroupId();
       const { isPublic, isOpen, access } = accessChoiceToNip29({ tier, worldReadable });
-      const relayConn = pool.relay(relay);
-      // NIP-29 Subgroups: declare the community root as this channel's
-      // parent so a relay-side patch can auto-admit root-group members —
-      // but only when both groups live on the same relay, since the tag is
-      // relay-scoped and a root on a different relay is meaningless there.
-      const sameRelay =
-        !!membershipPointer && normalizeURL(relay) === normalizeURL(membershipPointer.relay);
+      const relayConn = pool.relay(flatBase);
+      // NIP-29 Subgroups: declare the community root as this channel's parent
+      // (same-host only, per `sameHost` above) so the relay auto-admits
+      // root-group members — load-bearing for R2 self-join and R3 subtree
+      // scoping. `membershipPointer` is non-null whenever `sameHost` is true.
       await createGroupOnRelay({
         relayConn,
         id,
@@ -222,7 +235,7 @@
           name: name.trim(),
           isPublic,
           isOpen,
-          parent: sameRelay ? membershipPointer.id : undefined
+          parent: sameHost ? membershipPointer.id : undefined
         },
         user
       });
@@ -235,14 +248,14 @@
       try {
         await attachGroupChannel({
           communikeyEvent,
-          pointer: { id, relay, name: name.trim(), access },
+          pointer: { id, relay: pointerRelay, name: name.trim(), access },
           communitySigner
         });
         // Mirror the fresh channel into the CREATOR's kind-10009 list —
         // Armada/Flotilla build their UIs from it (r + group tags), and a
         // created-but-unlisted group is invisible there (laoc, 2026-08-19).
         // Best-effort: the channel exists and is attached either way.
-        await updatePersonalGroupsList(user, { add: { id, relay } }).catch(() => {});
+        await updatePersonalGroupsList(user, { add: { id, relay: pointerRelay } }).catch(() => {});
       } catch (error) {
         console.error('groups: attach failed after group creation', error);
         showToast(m.wizard_attach_failed({ id }), 'warning');
@@ -259,7 +272,7 @@
         const adminAggregate = await fanOut(
           otherAdmins,
           (/** @type {string} */ a) => a,
-          (/** @type {string} */ a) => putUserOn({ id, relay }, a, ['admin'], user)
+          (/** @type {string} */ a) => putUserOn({ id, relay: flatBase }, a, ['admin'], user)
         );
         if (adminAggregate.failed.length > 0) {
           // Dedicated key — area_members_fanout_partial's "{failed} of

@@ -427,7 +427,7 @@ describe('ChannelCreateWizard — NIP-29 groups', () => {
     expect(screen.getByTestId('wizard-access-worldreadable')).toBeTruthy();
   });
 
-  it('first channel of a moderated community: creates on the membership pointer relay', async () => {
+  it('first channel of a moderated community: creates on the FLAT host, addresses via /c/<rootId>', async () => {
     const onCreated = vi.fn();
     render(ChannelCreateWizard, {
       props: { communikeyEvent: moderatedCommunity(), onClose: () => {}, onCreated }
@@ -438,16 +438,56 @@ describe('ChannelCreateWizard — NIP-29 groups', () => {
     await fireEvent.click(screen.getByTestId('concord-wizard-create'));
 
     await waitFor(() => expect(createGroupOnRelay).toHaveBeenCalledTimes(1));
+    // CREATE lands on the FLAT host — the /c write guard rejects a create for
+    // a group not yet in the subtree.
     expect(poolRelaySpy).toHaveBeenCalledWith(GROUP_RELAY);
-    // NIP-29 Subgroups: same-relay membership pointer becomes the channel's
-    // `parent` — a later relay-side patch auto-admits root-group members.
+    // NIP-29 Subgroups: same-host membership pointer becomes the channel's
+    // `parent` — the relay auto-admits root-group members.
     const createArgs = createGroupOnRelay.mock.calls[0][0];
     expect(createArgs.metadata).toEqual(expect.objectContaining({ parent: 'root-1' }));
+    // But the pointer + personal-list entry are ADDRESSED via the community's
+    // /c/<rootId> endpoint so Armada shows one dedicated space per community.
     await waitFor(() => expect(attachGroupChannel).toHaveBeenCalledTimes(1));
     expect(attachGroupChannel.mock.calls[0][0].pointer).toEqual(
-      expect.objectContaining({ relay: GROUP_RELAY })
+      expect.objectContaining({ relay: `${GROUP_RELAY}c/root-1` })
     );
+    await waitFor(() => expect(updatePersonalGroupsList).toHaveBeenCalledTimes(1));
+    expect(updatePersonalGroupsList).toHaveBeenCalledWith(expect.anything(), {
+      add: { id: 'new-group-id', relay: `${GROUP_RELAY}c/root-1` }
+    });
     await waitFor(() => expect(onCreated).toHaveBeenCalled());
+  });
+
+  it('subsequent channel: existing /c pointers are unwrapped to the FLAT host for create, parent still set', async () => {
+    // A community whose channels are ALREADY addressed via /c (the steady
+    // state after the first channel) plus its membership pointer. sharedRelayOf
+    // returns the /c URL, but create must still connect to the flat host and
+    // the parent tag must still be set.
+    const onCreated = vi.fn();
+    const communikeyEvent = {
+      kind: 10222,
+      pubkey: PUBKEY,
+      tags: [
+        ['membership', 'root-1', GROUP_RELAY],
+        ['group', 'chan-a', `${GROUP_RELAY}c/root-1`, 'General', 'members']
+      ],
+      content: ''
+    };
+    render(ChannelCreateWizard, {
+      props: { communikeyEvent, onClose: () => {}, onCreated }
+    });
+    const nameInput = screen.getByPlaceholderText(/Staff room|Lehrer/);
+    await fireEvent.input(nameInput, { target: { value: 'Mathe' } });
+    await fireEvent.click(screen.getByRole('button', { name: /Next|Weiter/ }));
+    await fireEvent.click(screen.getByTestId('concord-wizard-create'));
+
+    await waitFor(() => expect(createGroupOnRelay).toHaveBeenCalledTimes(1));
+    // sharedRelayOf returned wss://groups.example/c/root-1, but flatGroupsRelay
+    // unwrapped it → create connects to the flat host, not /c.
+    expect(poolRelaySpy).toHaveBeenCalledWith(GROUP_RELAY);
+    expect(createGroupOnRelay.mock.calls[0][0].metadata.parent).toBe('root-1');
+    await waitFor(() => expect(attachGroupChannel).toHaveBeenCalledTimes(1));
+    expect(attachGroupChannel.mock.calls[0][0].pointer.relay).toBe(`${GROUP_RELAY}c/root-1`);
   });
 
   it('a membership pointer on a DIFFERENT relay than the channel never becomes parent', async () => {
