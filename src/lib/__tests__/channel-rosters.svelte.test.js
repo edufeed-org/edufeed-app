@@ -194,6 +194,29 @@ describe('useChannelRosters', () => {
     cleanup();
   });
 
+  // Cold-start guard: the first fetch races the relay connection and ends
+  // empty (fresh reload showing "0 members"); a bounded backed-off retry picks
+  // the roster up once the relay answers, instead of accepting the empty.
+  it('retries a cold fetch that ended empty until the roster lands', async () => {
+    const pointerA = { id: 'general', relay: RELAY };
+    holders.fixturesByRelay[RELAY] = []; // first round: relay answers nothing
+
+    let pointers = $state.raw([pointerA]);
+    const { getRosters, cleanup } = mountHook(() => pointers);
+    flushSync();
+    await settle();
+    const key = channelKey(pointerA);
+    expect(getRosters().membersByKey[key]).toBeUndefined(); // nothing yet
+
+    // The relay "warms up" and now has the roster; the scheduled retry re-fetches.
+    holders.fixturesByRelay[RELAY] = [membersEvent('general')];
+    await new Promise((r) => setTimeout(r, 1500)); // backed-off retry + 300ms debounce
+    flushSync();
+    expect(getRosters().membersByKey[key]).toEqual(new Set([MEMBER_1, MEMBER_2]));
+
+    cleanup();
+  });
+
   it('does not re-request when a same-content pointer array gets a fresh identity', async () => {
     const pointerA = { id: 'general', relay: RELAY };
     holders.fixturesByRelay[RELAY] = [membersEvent('general')];

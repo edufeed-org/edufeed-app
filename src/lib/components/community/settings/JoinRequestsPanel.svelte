@@ -132,6 +132,29 @@
     return () => subs.forEach((sub) => sub.unsubscribe());
   });
 
+  // Proactive NIP-42 auth, not just reactive. The 9021 read is admin-only, so
+  // the relay CLOSES the REQ `auth-required` — but that close can race the
+  // request's own 8s timeout, and the admin then saw "Timeout has occurred"
+  // instead of the queue (laoc, 2026-08-20). Authenticate each target relay up
+  // front so the first read already runs authenticated; a success re-runs the
+  // load (requestsSeq). authenticateOnce is idempotent (one AUTH per challenge)
+  // and resolves ok:false harmlessly on a relay that never challenges. Mirrors
+  // GroupChat's proactive auth for private channels.
+  $effect(() => {
+    const signer = activeUser?.signer;
+    if (!signer) return;
+    const targets = groupTargets;
+    let cancelled = false;
+    for (const relayUrl of targets.keys()) {
+      authenticateOnce(pool.relay(relayUrl), signer).then((response) => {
+        if (!cancelled && response.ok) requestsSeq++;
+      });
+    }
+    return () => {
+      cancelled = true;
+    };
+  });
+
   // Root roster + every known channel roster, keyed by bare group id (the
   // same id space a 9021's `h` tag and JoinRequestRow.groupId use — NOT the
   // relay-qualified channelKey). A channel absent from this map has an

@@ -61,6 +61,13 @@ import { normalizeURL } from 'applesauce-core/helpers/url';
 import { pool, eventStore } from '$lib/stores/nostr-infrastructure.svelte';
 import { channelKey } from './community-pointer.js';
 
+// Cold-start guard: the FIRST fetch of a group's roster can END (EOSE/timeout)
+// before the relay connection is ready and the events arrive — the (world-
+// readable) root roster then reads 0/empty on a fresh reload until some other
+// surface happens to re-fetch. Retry a bounded number of times, backing off,
+// when a fetch ended but the store still has NO roster for a requested id.
+const MAX_ROSTER_FETCH_RETRIES = 4;
+
 /**
  * @param {Array<{id: string, relay: string}>} pointers
  * @returns {Map<string, string[]>} relay (normalised) -> group ids to ask that relay for
@@ -115,6 +122,11 @@ export function useChannelRosters(getPointers) {
   // re-runs on a bump (svelte-effect-early-return-dead lesson).
   let seq = $state(0);
 
+  // Bounded cold-start retries for the current pointer SET (reset on change).
+  let retryCount = 0;
+  /** @type {ReturnType<typeof setTimeout> | undefined} */
+  let retryTimer;
+
   const pointersKey = $derived.by(() => {
     const pointers = getPointers() ?? [];
     const keys = pointers.map((pointer) => channelKey(pointer)).filter((key) => key !== null);
@@ -135,6 +147,7 @@ export function useChannelRosters(getPointers) {
     // re-fetches (stale-while-revalidate; the store keeps the old roster).
     // eslint-disable-next-line svelte/prefer-svelte-reactivity -- $state.raw Set, replaced wholesale
     if (keyChanged) fetchedKeys = new Set();
+    if (keyChanged) retryCount = 0;
     if (key === '') return;
 
     const requests = untrack(() => groupPointersByRelay(getPointers() ?? []));
@@ -158,6 +171,23 @@ export function useChannelRosters(getPointers) {
             if (rosterKey) next.add(rosterKey);
           }
           fetchedKeys = next;
+          // Cold-start guard: if this fetch ended but the store STILL has no
+          // roster for a requested id, the request likely raced the relay
+          // connection — retry (bounded, backing off) rather than accept an
+          // empty roster. A group always has ≥1 member (the creator), so "no
+          // 39002 stored" almost always means "the read raced", not "empty".
+          const missing = ids.some(
+            (id) =>
+              eventStore.getByFilters({
+                kinds: [GROUP_ADMINS_KIND, GROUP_MEMBERS_KIND],
+                '#d': [id]
+              }).length === 0
+          );
+          if (missing && retryCount < MAX_ROSTER_FETCH_RETRIES) {
+            retryCount++;
+            clearTimeout(retryTimer);
+            retryTimer = setTimeout(() => seq++, 400 * retryCount);
+          }
         };
         try {
           const sub = pool
@@ -238,7 +268,10 @@ export function useChannelRosters(getPointers) {
   /** @type {ReturnType<typeof setTimeout> | undefined} */
   let healTimer;
   $effect(() => {
-    return () => clearTimeout(healTimer);
+    return () => {
+      clearTimeout(healTimer);
+      clearTimeout(retryTimer);
+    };
   });
 
   /**
