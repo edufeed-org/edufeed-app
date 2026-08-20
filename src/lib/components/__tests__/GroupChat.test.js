@@ -158,6 +158,39 @@ const membersEventHang = signWith(
   },
   RELAY_SK
 );
+// `adminchat`: a private + closed channel where I am a 39001 ADMIN but the
+// 39002 member list does NOT include me. NIP-29 (and root-roster.js) count
+// admins as members, so the Join/Leave affordance must treat me as already-in
+// — the creator of a moderated community is seated as an admin and must NOT be
+// shown "request to join" their own channel (self-approval loop). Roster loads
+// cleanly here (isolating the header-button gate from the auth-race path).
+const metadataEventAdmin = signWith(
+  {
+    kind: 39000,
+    tags: [['d', 'adminchat'], ['name', 'Admin Chat'], ['private'], ['closed']]
+  },
+  RELAY_SK
+);
+const adminsEventAdmin = signWith(
+  {
+    kind: 39001,
+    tags: [
+      ['d', 'adminchat'],
+      ['p', ME, 'admin']
+    ]
+  },
+  RELAY_SK
+);
+const membersEventAdmin = signWith(
+  {
+    kind: 39002,
+    tags: [
+      ['d', 'adminchat'],
+      ['p', OTHER]
+    ]
+  },
+  RELAY_SK
+);
 // The two live reply shapes, both hanging off `chatEvent`: the 872-event form
 // (a lone `reply` marker pointing at the root) and the 3-event form (the
 // conformant root+reply pair). The nested one answers `firstReply`, so a
@@ -314,6 +347,8 @@ vi.mock('$lib/stores/nostr-infrastructure.svelte', async () => {
           // hangchat: metadata + a roster I'm not on, then silence forever —
           // the live non-member hang (no CLOSE, no error, no completion).
           if (d === 'hangchat') return rxMerge(rxOf(metadataEventHang, membersEventHang), rxNever);
+          if (d === 'adminchat')
+            return rxOf(metadataEventAdmin, adminsEventAdmin, membersEventAdmin);
           if (d === 'authchat') return rxOf(metadataEventAuthNoPrivate, membersEventAuthNoPrivate);
           if (d === 'emptychat') return rxOf(metadataEventEmptyRoster, membersEventEmptyRoster);
           // A group whose metadata REQ yields nothing (relay hiccup, race
@@ -691,6 +726,21 @@ describe('GroupChat', () => {
     // No identity to join with — the notice alone, no button.
     expect(within(note).queryByRole('button')).toBeNull();
     expect(screen.queryByTestId('group-chat-input')).toBeNull();
+  });
+
+  // An admin (39001) who is not on the 39002 member list is the community
+  // creator's own situation. Admins ARE members in NIP-29 — the header must
+  // show no "request to join", and the composer must render (canWrite).
+  it('admin who is not a listed member: no join affordance, composer renders', async () => {
+    render(GroupChat, { props: { pointer: { relay: GROUP_RELAY, id: 'adminchat' } } });
+    await screen.findByTestId('group-name');
+    // Composer is available (admin can write); no header join, no join bar.
+    await waitFor(() => expect(screen.queryByTestId('group-chat-input')).not.toBeNull(), {
+      timeout: 8000
+    });
+    expect(screen.queryByTestId('group-join')).toBeNull();
+    expect(screen.queryByTestId('group-join-bar')).toBeNull();
+    expect(screen.queryByTestId('group-restricted-note')).toBeNull();
   });
 
   // A readable group the viewer hasn't joined: the relay would reject every

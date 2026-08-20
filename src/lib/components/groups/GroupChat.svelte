@@ -483,7 +483,7 @@
   let joinRequestedNow = $state(false);
   let hasStoredJoinRequest = $state(false);
   const joinPending = $derived(
-    groupClosed && !isMember && (joinRequestedNow || hasStoredJoinRequest)
+    groupClosed && !canWrite && (joinRequestedNow || hasStoredJoinRequest)
   );
   const isAdmin = $derived(!!myPubkey && admins.some((a) => a.pubkey === myPubkey));
 
@@ -779,6 +779,10 @@
         >
           {m.groups_leave()}
         </button>
+      {:else if canWrite}
+        <!-- Admin (39001) without an explicit 39002 seat: NIP-29 counts admins
+          as members, so they are already in — no join/leave affordance. This is
+          the community creator's own situation (self-approval loop otherwise). -->
       {:else if joinPending}
         <span class="text-xs text-base-content/60" data-testid="group-join-pending"
           >{m.community_join_pending()}</span
@@ -928,7 +932,7 @@
               while reads stay restricted (verified live) — the same pending
               wording as the header/join-bar, not a dead end. -->
             <span class="text-xs text-base-content/60">{m.community_join_pending()}</span>
-          {:else if myPubkey && !isMember}
+          {:else if myPubkey && !canWrite}
             <button class="btn btn-sm btn-primary" onclick={join}
               >{groupClosed ? m.community_join_request() : m.groups_join()}</button
             >

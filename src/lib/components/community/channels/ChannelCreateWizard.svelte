@@ -33,7 +33,7 @@
   import { unique } from '$lib/helpers/unique.js';
   import ProfileAvatar from '$lib/components/shared/ProfileAvatar.svelte';
   import ContactSearchInput from '$lib/components/shared/ContactSearchInput.svelte';
-  import { getContext } from 'svelte';
+  import { getContext, untrack } from 'svelte';
   import * as m from '$lib/paraglide/messages';
 
   let {
@@ -52,11 +52,22 @@
   let step = $state(0);
   let name = $state('');
   // The access question (design B2, buzz thread round 4): who can read/write
-  // here. 'invited' is the default — same starting point the old isPrivate
-  // default gave Concord channels, so switching this wizard on changes
-  // nothing for a community that never grows group pointers.
+  // here. The default depends on the mode: a NIP-29 community channel is a
+  // NORMAL community channel (everyone in the community reads + writes) →
+  // 'members'; the Concord flow keeps its private-by-default 'invited', so
+  // switching this wizard on changes nothing for a community that never grows
+  // group pointers. Computed once from props (the mode deriveds below are not
+  // yet declared here). laoc 2026-08-20: 'invited' as the NIP-29 default made a
+  // "normal" channel invite-only, the opposite of what users expect.
   /** @type {'members' | 'invited'} */
-  let tier = $state('invited');
+  let tier = $state(
+    untrack(
+      () =>
+        parseGroupPointers(communikeyEvent).length > 0 || !!parseMembershipPointer(communikeyEvent)
+    )
+      ? 'members'
+      : 'invited'
+  );
   // "Weltoffen" sub-toggle: readable from outside the community. Only makes
   // sense (and only renders) in NIP-29 mode while tier is 'members'. Checking
   // it makes this a world channel: accessChoiceToNip29 returns isOpen:true,

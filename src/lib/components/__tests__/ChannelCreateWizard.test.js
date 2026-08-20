@@ -409,14 +409,16 @@ describe('ChannelCreateWizard — NIP-29 groups', () => {
 
     expect(screen.getByTestId('wizard-access-members')).toBeTruthy();
     expect(screen.getByTestId('wizard-access-invited')).toBeTruthy();
-    // Default tier is 'invited' (byte-for-byte with the old isPrivate default) — no checkbox yet.
-    expect(screen.queryByTestId('wizard-access-worldreadable')).toBeNull();
-
-    await fireEvent.click(screen.getByTestId('wizard-access-members'));
+    // Default tier in NIP-29 mode is 'members' (a NORMAL community channel:
+    // everyone in the community reads + writes) — so the weltoffen checkbox,
+    // which only renders under 'members', is present from the start.
     expect(screen.getByTestId('wizard-access-worldreadable')).toBeTruthy();
 
     await fireEvent.click(screen.getByTestId('wizard-access-invited'));
     expect(screen.queryByTestId('wizard-access-worldreadable')).toBeNull();
+
+    await fireEvent.click(screen.getByTestId('wizard-access-members'));
+    expect(screen.getByTestId('wizard-access-worldreadable')).toBeTruthy();
   });
 
   it('moderated community with zero channels runs in NIP-29 mode', async () => {
@@ -449,7 +451,8 @@ describe('ChannelCreateWizard — NIP-29 groups', () => {
     // /c/<rootId> endpoint so Armada shows one dedicated space per community.
     await waitFor(() => expect(attachGroupChannel).toHaveBeenCalledTimes(1));
     expect(attachGroupChannel.mock.calls[0][0].pointer).toEqual(
-      expect.objectContaining({ relay: `${GROUP_RELAY}c/root-1` })
+      // Default access is 'members' — a normal community channel, not invite-only.
+      expect.objectContaining({ relay: `${GROUP_RELAY}c/root-1`, access: 'members' })
     );
     await waitFor(() => expect(updatePersonalGroupsList).toHaveBeenCalledTimes(1));
     expect(updatePersonalGroupsList).toHaveBeenCalledWith(expect.anything(), {
