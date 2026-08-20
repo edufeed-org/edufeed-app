@@ -72,7 +72,18 @@ export async function teardownCommunityGroups({
   user,
   channels
 }) {
-  const chans = channels ?? parseGroupPointers(communikeyEvent);
+  // UNION the discovered subtree channels with any legacy kind-10222 `group`
+  // pointers (old communities predate subtree discovery, so their channels are
+  // not parent-tagged subgroups and never appear in `channels`) — deduped by
+  // id. A plain `channels ?? parseGroupPointers()` would be dead: the caller
+  // always passes a (possibly empty) array, so `[] ?? …` stays `[]` and legacy
+  // groups would dangle on the relay, never 9008-deleted.
+  const seen = new Set();
+  const chans = [...(channels ?? []), ...parseGroupPointers(communikeyEvent)].filter((c) => {
+    if (!c?.id || seen.has(c.id)) return false;
+    seen.add(c.id);
+    return true;
+  });
   const root = parseMembershipPointer(communikeyEvent);
   const targets = [...chans, ...(root ? [root] : [])];
 

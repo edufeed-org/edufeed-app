@@ -134,6 +134,25 @@ describe('teardownCommunityGroups', () => {
     const deletedIds = buildDeleteGroupTemplate.mock.calls.map((c) => c[0]).sort();
     expect(deletedIds).toEqual(['chanA', 'chanB', 'root0']);
   });
+
+  // Legacy community: some channels are still old-scheme kind-10222 `group`
+  // pointers (not subtree subgroups). Teardown must delete BOTH the passed
+  // subtree channels AND the legacy pointers, deduped by id.
+  it('unions passed subtree channels with legacy 10222 group pointers, deduped', async () => {
+    await teardownCommunityGroups({
+      communikeyEvent, // carries group pointers chan1, chan2 + membership root0
+      communitySigner: {},
+      user,
+      // chan1 also appears in the subtree (dedup), plus a subtree-only chanX.
+      channels: [
+        { id: 'chan1', relay: 'wss://groups.example/c/root0' },
+        { id: 'chanX', relay: 'wss://groups.example/c/root0' }
+      ]
+    });
+    const deletedIds = buildDeleteGroupTemplate.mock.calls.map((c) => c[0]).sort();
+    // chan1 once (deduped), chan2 (legacy only), chanX (subtree only), root0.
+    expect(deletedIds).toEqual(['chan1', 'chan2', 'chanX', 'root0']);
+  });
 });
 
 describe('deleteChannelCascade', () => {
