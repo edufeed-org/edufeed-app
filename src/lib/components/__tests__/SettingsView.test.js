@@ -212,6 +212,31 @@ describe('SettingsView — Community-Typ pane', () => {
     expect(deriveCommunityType(template)).toBe('moderated');
   });
 
+  it('flip-to-moderated: seeds the root group with the community picture + about from its kind-0', async () => {
+    const richProfile = {
+      kind: 0,
+      pubkey: OWNER,
+      tags: [],
+      content: JSON.stringify({
+        name: 'Test Community',
+        about: 'Building for better education',
+        picture: 'https://i.nostr.build/pic.jpg'
+      })
+    };
+    render(SettingsView, {
+      props: { communityId: OWNER, communikeyEvent: openEvent, profileEvent: richProfile }
+    });
+    await fireEvent.click(await screen.findByTestId('settings-flip-to-moderated'));
+    await fireEvent.click(await screen.findByTestId('settings-flip-confirm'));
+    await waitFor(() => expect(provisionRootGroup).toHaveBeenCalledOnce());
+    expect(provisionRootGroup).toHaveBeenCalledWith(
+      expect.objectContaining({
+        about: 'Building for better education',
+        picture: 'https://i.nostr.build/pic.jpg'
+      })
+    );
+  });
+
   it('flip-to-moderated: provisioning failure shows a toast and never publishes', async () => {
     provisionRootGroup.mockRejectedValueOnce(new Error('relay unreachable'));
     render(SettingsView, {

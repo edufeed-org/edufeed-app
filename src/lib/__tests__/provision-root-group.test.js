@@ -111,6 +111,26 @@ describe('provisionRootGroup', () => {
     );
   });
 
+  it('seeds the community picture + about onto the root group metadata', async () => {
+    // So the /c NIP-11 (synthesized from the root 39000) shows an icon +
+    // description in Armada. metadataTags drops empties, so an absent
+    // picture/about must not appear.
+    await provisionRootGroup({
+      relay: RELAY,
+      name: 'Musterschule',
+      about: 'Building for better education',
+      picture: 'https://i.nostr.build/pic.jpg',
+      user: USER
+    });
+    expect(createGroupOnRelay.mock.calls[0][0].metadata).toEqual({
+      name: 'Musterschule',
+      about: 'Building for better education',
+      picture: 'https://i.nostr.build/pic.jpg',
+      isPublic: true,
+      isOpen: false
+    });
+  });
+
   it('reuses a confirmed existing id when the user is a listed admin (idempotent re-run)', async () => {
     confirmGroupMetadata.mockResolvedValue({ kind: 39000 });
     confirmGroupAdmins.mockResolvedValue(adminsEvent(USER.pubkey));

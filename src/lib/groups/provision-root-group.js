@@ -99,12 +99,14 @@ async function seatCommunityAdmin(relayConn, groupId, user, communityPubkey) {
 }
 
 /**
- * @param {{relay: string, name: string, user: {pubkey: string, signer: any}, existingId?: string | null, communityPubkey?: string}} args
+ * @param {{relay: string, name: string, about?: string, picture?: string, user: {pubkey: string, signer: any}, existingId?: string | null, communityPubkey?: string}} args
  * @returns {Promise<{id: string, relay: string}>}
  */
 export async function provisionRootGroup({
   relay,
   name,
+  about,
+  picture,
   user,
   existingId = null,
   communityPubkey
@@ -127,10 +129,16 @@ export async function provisionRootGroup({
   // join flow decides open-vs-closed against live relay behavior. isPublic:
   // true → metadata/roster world-readable, which the public gating verifiability
   // story depends on.
+  // Seed the community's picture + about onto the root group's 39000 so the
+  // per-community /c NIP-11 (synthesized from it) shows an icon + description
+  // in clients like Armada. Same fields A7's syncRootGroupMetadata keeps in
+  // step on later profile edits, sourced from the community's kind-0 — seed
+  // from that same source so the first edit can't overwrite the seed.
+  // metadataTags drops empty values, so an absent picture/about emits no tag.
   await createGroupOnRelay({
     relayConn,
     id,
-    metadata: { name, isPublic: true, isOpen: false },
+    metadata: { name, about, picture, isPublic: true, isOpen: false },
     user
   });
   await seatCommunityAdmin(relayConn, id, user, communityPubkey);

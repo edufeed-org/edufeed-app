@@ -3,7 +3,7 @@
   import { goto } from '$app/navigation';
   import { resolve } from '$app/paths';
   import { manager } from '$lib/stores/accounts.svelte';
-  import { getDisplayName } from 'applesauce-core/helpers';
+  import { getDisplayName, getProfileContent } from 'applesauce-core/helpers';
   import { SimpleSigner } from 'applesauce-signers';
   import { SimpleAccount } from 'applesauce-accounts/accounts';
   import { generateSecretKey, getPublicKey, nip19 } from 'nostr-tools';
@@ -461,9 +461,17 @@
             eventStore.getReplaceable(0, activeAccount.pubkey)
           );
           const groupName = userData.name?.trim() || getDisplayName(cachedProfile) || 'Community';
+          // Seed the root group's 39000 with the community's picture + about so
+          // the /c space shows an icon + description in Armada. Same fallback
+          // shape as the name: the new-keypair flow collects these into
+          // userData; the "use current keypair" flow leaves them empty and
+          // sources them from the active account's cached kind 0.
+          const cachedContent = getProfileContent(cachedProfile);
           rootGroupPointer = await provisionRootGroup({
             relay: groupsRelay,
             name: groupName,
+            about: userData.about?.trim() || cachedContent?.about,
+            picture: userData.picture?.trim() || cachedContent?.picture,
             user: { pubkey: activeAccount.pubkey, signer: activeAccount.signer },
             existingId: readRootGroupMarker(communityPk),
             // Seats the community key itself on the 39001 — required so the

@@ -44,7 +44,7 @@
   import { moderatedCreationAvailable } from '$lib/groups/feature.js';
   import { publishCommunityUpdate } from '$lib/helpers/publishCommunityUpdate.js';
   import { getGroupsRelays } from '$lib/helpers/relay-helper.js';
-  import { getDisplayName } from 'applesauce-core/helpers';
+  import { getDisplayName, getProfileContent } from 'applesauce-core/helpers';
   import { unique } from '$lib/helpers/unique.js';
   import * as m from '$lib/paraglide/messages';
 
@@ -176,6 +176,11 @@
       const pointer = await provisionRootGroup({
         relay: getGroupsRelays()[0],
         name: getDisplayName(profileEvent) || 'Community',
+        // Seed the root group's 39000 with the community's picture + about
+        // (from its kind-0 — same source A7's re-sync uses) so the /c space
+        // shows an icon + description in Armada.
+        about: getProfileContent(profileEvent)?.about,
+        picture: getProfileContent(profileEvent)?.picture,
         user: { pubkey: activeUser.pubkey, signer: activeUser.signer },
         existingId: readRootGroupMarker(communityId)
       });
