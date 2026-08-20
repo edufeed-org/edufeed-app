@@ -242,6 +242,15 @@
         ],
         { timeout: 8000 }
       )
+      // Feed every roster/metadata event into the eventStore too, so the other
+      // roster readers (useChannelRosters → AreaMembersModal, the rail) share
+      // this channel's roster instead of re-fetching a divergent copy — the
+      // same "one source of truth" the root roster now uses. GroupChat still
+      // keeps its own `members`/`admins`/`metadata` from `next` below: that
+      // state is entangled with the rosterAnswered/auth lifecycle, and it holds
+      // exactly what the store would (same events), so there is nothing to
+      // reconcile — only the store to fill.
+      .pipe(storeEvents(eventStore))
       .subscribe({
         next: (/** @type {any} */ event) => {
           if (event.kind === 9021) {
