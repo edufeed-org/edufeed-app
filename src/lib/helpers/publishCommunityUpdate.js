@@ -7,29 +7,12 @@
 // instead of waiting for the event to come back from a relay.
 //
 // Extracted from concord/attach.js so the NIP-29 channel pointers publish
-// through exactly the same path rather than a second copy of it. Imports are
-// dynamic on purpose: callers can import this without adding a static edge
-// into the publish dep tree.
-
-/**
- * Plain (non-reactive) copy of a template's tags. The source 10222 lives in
- * Svelte component `$state`, so its tag entries — reused verbatim by the
- * flip/attach/access-tier builders — are deep reactive proxies. In-process
- * signers (nsec) sign those fine, but a NIP-07 extension signer serialises the
- * template through `window.postMessage`, and structuredClone throws
- * `DataCloneError` on a Svelte proxy. Rebuilding each tag as a plain string
- * array (elements are always strings) de-proxies it; nothing else in a 10222
- * template is a proxy (kind/created_at are numbers, content a string).
- * @param {any} template
- */
-function plainTemplate(template) {
-  return {
-    ...template,
-    tags: Array.isArray(template?.tags)
-      ? template.tags.map((/** @type {string[]} */ tag) => [...tag])
-      : template?.tags
-  };
-}
+// through exactly the same path rather than a second copy of it. The heavy
+// imports (publish-service etc.) are dynamic on purpose: callers can import
+// this without adding a static edge into the publish dep tree. plainTemplate is
+// the exception — an import-free pure helper, shared with the other direct
+// signEvent call sites (e.g. CommunityBasicsForm) so all de-proxy identically.
+import { plainTemplate } from './plain-template.js';
 
 /**
  * @param {any} template unsigned kind-10222

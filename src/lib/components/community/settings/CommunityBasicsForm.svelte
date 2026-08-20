@@ -17,6 +17,7 @@
   import { getCommunitySigner } from '$lib/helpers/community-signer.js';
   import { modalStore } from '$lib/stores/modal.svelte.js';
   import { publishEventOptimistic } from '$lib/services/publish-service.js';
+  import { plainTemplate } from '$lib/helpers/plain-template.js';
   import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
   import { showToast } from '$lib/helpers/toast';
   import EditableList from '$lib/components/shared/EditableList.svelte';
@@ -258,7 +259,10 @@
         tags: communityTags,
         content: ''
       };
-      const signedEvent = await signer.signEvent(template);
+      // De-proxy before signing: template.tags reuse communikeyEvent's Svelte
+      // $state proxy entries, which structuredClone (the extension signer's
+      // postMessage boundary) can't clone — DataCloneError otherwise.
+      const signedEvent = await signer.signEvent(plainTemplate(template));
       publishEventOptimistic(signedEvent, [], {
         additionalRelays: getCommunityGlobalRelays(signedEvent)
       });
@@ -278,7 +282,7 @@
             ],
             content: ''
           };
-          publishEventOptimistic(await signer.signEvent(profileListEvent));
+          publishEventOptimistic(await signer.signEvent(plainTemplate(profileListEvent)));
         }
       }
 
