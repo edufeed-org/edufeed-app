@@ -44,16 +44,25 @@ import { safeImageUrl } from './relay-directory.js';
  *   concordChannels?: Array<{channel_id: string, name?: string, private?: boolean, accessible?: boolean}>,
  *   groupPointers?: Array<{id: string, relay: string, name?: string, access?: string}>,
  *   metadataByKey?: Record<string, {kind?: number, tags?: string[][]}>,
- *   hostRequiresAuth?: boolean
+ *   hostRequiresAuth?: boolean,
+ *   rootPointer?: {id: string, relay: string, name?: string, access?: string} | null,
+ *   rootLabel?: string
  * }} input `hostRequiresAuth`: the group relay gates every read behind
  *   NIP-42, so no channel on it may claim the globe (see channel-access.js).
+ *   `rootPointer`: the community's NIP-29 root membership group. When present it
+ *   is pinned FIRST as the "General" channel (`rootLabel`) — its own kind:39000
+ *   name is the community name, and generic clients (Armada) list the root
+ *   anyway, so naming it and placing it first makes it a purposeful #general
+ *   instead of a confusing duplicate.
  * @returns {ChannelRow[]}
  */
 export function buildChannelRows({
   concordChannels = [],
   groupPointers = [],
   metadataByKey = {},
-  hostRequiresAuth = false
+  hostRequiresAuth = false,
+  rootPointer = null,
+  rootLabel = ''
 }) {
   /** @type {ChannelRow[]} */
   const rows = [];
@@ -105,7 +114,36 @@ export function buildChannelRows({
     });
   }
 
-  return rows.sort((a, b) => a.name.localeCompare(b.name, 'de'));
+  const sorted = rows.sort((a, b) => a.name.localeCompare(b.name, 'de'));
+
+  // The root membership group, pinned first as "General" (its own name is the
+  // community name; the label overrides it). Built like any group row so it
+  // opens GroupChat on the root pointer. Skipped if it somehow already appears
+  // among the channels (a `group` pointer can't be the membership pointer, but
+  // guard anyway to never double-list it).
+  const rootKey = rootPointer ? channelKey(rootPointer) : null;
+  if (rootPointer && rootKey && !sorted.some((r) => r.key === `group:${rootKey}`)) {
+    const metadata = metadataByKey[rootKey];
+    const level = channelAccessLevel(metadata, rootPointer, hostRequiresAuth);
+    const glyph = channelGlyph(level);
+    /** @type {GroupChannelRow} */
+    const rootRow = {
+      key: `group:${rootKey}`,
+      name: rootLabel || metadataName(metadata) || rootPointer.id,
+      symbol: glyph.symbol,
+      worldReadable: glyph.worldReadable,
+      locked: glyph.locked,
+      accessible: true,
+      pending: level === 'unknown',
+      source: 'group',
+      category: 'channel',
+      level,
+      pointer: rootPointer
+    };
+    return [rootRow, ...sorted];
+  }
+
+  return sorted;
 }
 
 /**

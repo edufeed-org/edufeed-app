@@ -174,6 +174,31 @@ describe('PrivateChannelsView — a community extended by NIP-29 groups', () => 
     expect(cascadeArg.pointer.id).toBe('allgemein');
   });
 
+  it('pins the root membership group as a "General" channel row with no delete', async () => {
+    render(PrivateChannelsView, {
+      props: {
+        communikeyEvent: {
+          kind: 10222,
+          pubkey: OWNER,
+          content: '',
+          tags: [
+            ['d', 'relilab'],
+            ['membership', 'root0', RELAY],
+            ['group', 'willkommen', RELAY, 'Willkommen']
+          ]
+        }
+      }
+    });
+    // Two rail rows: General (root) first, then the real channel.
+    const rows = await screen.findAllByTestId('group-channel-row');
+    expect(rows.length).toBe(2);
+    expect(rows[0].textContent).toContain('General'); // root pinned first, labeled General
+    expect(rows[1].textContent).toContain('Willkommen'); // the real channel follows
+    // The General row (first) exposes no delete affordance (owner view);
+    // the real channel does. One delete kebab, not two.
+    expect(screen.getAllByTestId('group-channel-delete').length).toBe(1);
+  });
+
   it('hides the per-channel delete for a non-owner', async () => {
     render(PrivateChannelsView, {
       props: {

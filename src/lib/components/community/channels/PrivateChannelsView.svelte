@@ -222,6 +222,11 @@
   // name; `channels` above stays as it is because the Concord chat pane,
   // deletion and unread logic all key off it.
   const groupPointers = $derived(parseGroupPointers(communikeyEvent));
+  // The NIP-29 root membership group (moderated communities only). Surfaced as
+  // the "General" channel — pinned first in buildChannelRows — so the community
+  // has a home for community-wide chat and the app agrees with what generic
+  // clients (Armada) already list for the root (laoc, 2026-08-20).
+  const rootPointer = $derived(parseMembershipPointer(communikeyEvent));
   // A community is extended by exactly ONE protected area, so once it carries
   // group channels the Concord founding offer has to stop — it would invite the
   // owner into precisely the mixed state the design rules out.
@@ -239,8 +244,16 @@
   const selectedGroupPointer = $derived.by(() => {
     const key = getSelectedGroupChannel(communikeyEvent?.pubkey);
     if (!key) return null;
-    return groupPointers.find((pointer) => channelKey(pointer) === key) ?? null;
+    // The root (General) pointer is selectable too, though it is not a `group`
+    // pointer — search it alongside the channel pointers.
+    const all = rootPointer ? [rootPointer, ...groupPointers] : groupPointers;
+    return all.find((pointer) => channelKey(pointer) === key) ?? null;
   });
+  // GroupChat's fallback title: a channel pointer's own name, or "General" for
+  // the root (which has no name — its 39000 name is the community name).
+  const selectedFallbackName = $derived(
+    /** @type {any} */ (selectedGroupPointer)?.name ?? m.groups_general_channel()
+  );
   // Same population that sees a "+ Neuer Kanal" button somewhere — the shared
   // The locked pane's direct contact: the area owner (material.owner) —
   // always known, always able to invite.
@@ -284,7 +297,9 @@
       concordIsMember: concord.membership === 'member'
     })
   );
-  const getChannelMeta = useChannelMetadata(() => groupPointers);
+  const getChannelMeta = useChannelMetadata(() =>
+    rootPointer ? [rootPointer, ...groupPointers] : groupPointers
+  );
   // Relay badges on the overview describe ONE host, so they are only fetched
   // and shown when every channel of this community lives on the same relay —
   // see sharedRelayOf. Two relays means the badges are dropped, never guessed.
@@ -295,7 +310,9 @@
       concordChannels: channels,
       groupPointers,
       metadataByKey: getChannelMeta().byKey,
-      hostRequiresAuth: relayRequiresAuth(getOverviewRelayInfo())
+      hostRequiresAuth: relayRequiresAuth(getOverviewRelayInfo()),
+      rootPointer,
+      rootLabel: m.groups_general_channel()
     })
   );
 
@@ -560,7 +577,10 @@
                 }}
               />
             </div>
-            {#if isNip29Community && isCommunikeyOwner}
+            <!-- No delete on the General (root) row: it is the community's
+                 membership group — removing it is the whole-community teardown
+                 in Settings, not a per-channel delete. -->
+            {#if isNip29Community && isCommunikeyOwner && (!rootPointer || channelKey(row.pointer) !== channelKey(rootPointer))}
               <button
                 type="button"
                 class="btn btn-square opacity-0 btn-ghost transition-opacity btn-xs group-hover/ch:opacity-100 focus:opacity-100"
@@ -743,10 +763,7 @@
             ← {m.concord_rail_channels()}
           </button>
           {#key channelKey(selectedGroupPointer)}
-            <GroupChat
-              pointer={selectedGroupPointer}
-              fallbackName={selectedGroupPointer.name ?? ''}
-            />
+            <GroupChat pointer={selectedGroupPointer} fallbackName={selectedFallbackName} />
           {/key}
         {:else}
           <!-- No channel picked: the channel overview (Armada parity:

@@ -118,6 +118,35 @@ describe('buildChannelRows', () => {
     expect(rows.map((r) => r.name).sort()).toEqual(['Aus dem Zeiger', 'Aus den Metadaten', 'c']);
   });
 
+  it('pins the root membership group first, labeled General (not its own name)', () => {
+    const root = ptr('root0');
+    const chan = ptr('willkommen', { name: 'Willkommen', access: 'members' });
+    const rows = buildChannelRows({
+      rootPointer: root,
+      rootLabel: 'Allgemein',
+      groupPointers: [chan],
+      // the root's own 39000 name is the community name — must be overridden.
+      metadataByKey: {
+        [key(root)]: meta('root0', [['name', 'laoc42']]),
+        [key(chan)]: meta('willkommen', [['private']])
+      }
+    });
+    expect(rows[0].name).toBe('Allgemein');
+    expect(rows[0].source).toBe('group');
+    expect(rows[0].key).toBe(`group:${key(root)}`);
+    // @ts-expect-error narrowed by source above
+    expect(rows[0].pointer.id).toBe('root0');
+    // The real channel follows, sorted as usual.
+    expect(rows[1].name).toBe('Willkommen');
+  });
+
+  it('shows the root even before its metadata loads (pending), and only once', () => {
+    const root = ptr('root0');
+    const rows = buildChannelRows({ rootPointer: root, rootLabel: 'Allgemein' });
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ name: 'Allgemein', pending: true, locked: true });
+  });
+
   it('sorts both sources together by name, not source', () => {
     const b = ptr('b-gruppe');
     const rows = buildChannelRows({

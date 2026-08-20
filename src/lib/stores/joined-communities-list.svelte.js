@@ -16,12 +16,14 @@ export function useJoinedCommunitiesList() {
   let activeUser = $state(manager.active);
   let joinedCommunities = $state(/** @type {string[]} */ ([]));
 
-  // Subscribe to account changes
+  // Subscribe to account changes. Guarded: a partial manager (a test double, or
+  // a transient pre-init state) without `active$` must not crash the effect —
+  // in that case activeUser simply stays at its initial `manager.active`.
   $effect(() => {
-    const subscription = manager.active$.subscribe((user) => {
+    const subscription = manager.active$?.subscribe((user) => {
       activeUser = user;
     });
-    return () => subscription.unsubscribe();
+    return () => subscription?.unsubscribe();
   });
 
   // Load follow set using addressLoader + replaceable subscription
