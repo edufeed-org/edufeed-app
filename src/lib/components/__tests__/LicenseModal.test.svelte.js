@@ -181,7 +181,7 @@ describe('LicenseModal', () => {
     expect(() => getByTestId('license-modal-accept-existing')).toThrow();
   });
 
-  it('seeds the form from initialLicense/initialCredit on open (e.g. H5P metadata prefill)', async () => {
+  it('seeds the form from initialLicense/initialCredit/initialTitle/initialSource on open (e.g. H5P metadata prefill)', async () => {
     const { getByTestId, getByLabelText } = render(LicenseModal, {
       props: {
         open: true,
@@ -191,7 +191,9 @@ describe('LicenseModal', () => {
         size: 100,
         existingLicense: null,
         initialLicense: 'https://creativecommons.org/publicdomain/zero/1.0/',
-        initialCredit: 'Jane Doe'
+        initialCredit: 'Jane Doe',
+        initialTitle: 'Peace Quiz',
+        initialSource: 'https://example.org/original'
       }
     });
 
@@ -200,9 +202,15 @@ describe('LicenseModal', () => {
       'https://creativecommons.org/publicdomain/zero/1.0/'
     );
     expect(/** @type {HTMLInputElement} */ (getByLabelText('Credit')).value).toBe('Jane Doe');
+    expect(/** @type {HTMLInputElement} */ (getByLabelText('Title of the work')).value).toBe(
+      'Peace Quiz'
+    );
+    expect(/** @type {HTMLInputElement} */ (getByLabelText('Source URL')).value).toBe(
+      'https://example.org/original'
+    );
   });
 
-  it('falls back to the hardcoded defaults when initialLicense/initialCredit are omitted (existing callers)', async () => {
+  it('falls back to the hardcoded defaults when initialLicense/initialCredit/initialTitle/initialSource are omitted (existing callers)', async () => {
     const { getByTestId, getByLabelText } = render(LicenseModal, {
       props: {
         open: true,
@@ -219,5 +227,7 @@ describe('LicenseModal', () => {
       'https://creativecommons.org/licenses/by/4.0/'
     );
     expect(/** @type {HTMLInputElement} */ (getByLabelText('Credit')).value).toBe('');
+    expect(/** @type {HTMLInputElement} */ (getByLabelText('Title of the work')).value).toBe('');
+    expect(/** @type {HTMLInputElement} */ (getByLabelText('Source URL')).value).toBe('');
   });
 });

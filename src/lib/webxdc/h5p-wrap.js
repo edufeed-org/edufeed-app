@@ -63,19 +63,21 @@ function creditFromAuthors(authors) {
 /**
  * @param {Map<string, Uint8Array>} files - unzipped .h5p contents
  * @param {string} fallbackName
- * @returns {Promise<{ files: Map<string, Uint8Array>, name: string, licenseUrl: string | null, credit: string | null }>}
+ * @returns {Promise<{ files: Map<string, Uint8Array>, name: string, licenseUrl: string | null, credit: string | null, source: string | null }>}
  */
 export async function wrapH5p(files, fallbackName) {
   let name = fallbackName;
   let licenseUrl = /** @type {string | null} */ (null);
   let credit = /** @type {string | null} */ (null);
+  let source = /** @type {string | null} */ (null);
   try {
     const meta = JSON.parse(new TextDecoder().decode(files.get('h5p.json')));
     if (typeof meta.title === 'string' && meta.title.trim()) name = meta.title.trim();
     licenseUrl = h5pLicenseToUrl(meta.license, meta.licenseVersion);
     credit = creditFromAuthors(meta.authors);
+    source = typeof meta.source === 'string' && meta.source.trim() ? meta.source.trim() : null;
   } catch {
-    // unreadable h5p.json — keep the fallback name, no license/credit prefill
+    // unreadable h5p.json — keep the fallback name, no license/credit/source prefill
   }
 
   const out = new Map();
@@ -96,7 +98,7 @@ export async function wrapH5p(files, fallbackName) {
   for (const [path, content] of files) {
     out.set(`h5p/${path}`, content);
   }
-  return { files: out, name, licenseUrl, credit };
+  return { files: out, name, licenseUrl, credit, source };
 }
 
 /** @param {string} title */

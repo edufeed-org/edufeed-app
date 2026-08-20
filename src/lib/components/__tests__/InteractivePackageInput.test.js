@@ -81,7 +81,7 @@ describe('InteractivePackageInput', () => {
     expect(await findByText(/redo\.xdc/)).toBeTruthy();
   });
 
-  it('prefills the license modal from h5p.json license/authors metadata', async () => {
+  it('prefills the license modal from h5p.json license/authors/title/source metadata', async () => {
     stubH5pAssets();
     const h5pBytes = zipSync({
       'h5p.json': strToU8(
@@ -89,7 +89,8 @@ describe('InteractivePackageInput', () => {
           title: 'Peace Quiz',
           license: 'CC BY-SA',
           licenseVersion: '4.0',
-          authors: [{ name: 'Jane Doe', role: 'Author' }]
+          authors: [{ name: 'Jane Doe', role: 'Author' }],
+          source: 'https://example.org/original'
         })
       ),
       'content/content.json': strToU8('{}')
@@ -107,6 +108,30 @@ describe('InteractivePackageInput', () => {
       await findByLabelText(/^(Urheber|Credit)/)
     );
     expect(creditInput.value).toBe('Jane Doe');
+    const titleInput = /** @type {HTMLInputElement} */ (
+      await findByLabelText(/^(Titel des Werks|Title of the work)/)
+    );
+    expect(titleInput.value).toBe('Peace Quiz');
+    const sourceInput = /** @type {HTMLInputElement} */ (
+      await findByLabelText(/^(Quell-URL|Source URL)/)
+    );
+    expect(sourceInput.value).toBe('https://example.org/original');
+  });
+
+  it('prefills the license modal title (but not source) from a non-h5p package name', async () => {
+    const { container, findByLabelText } = render(InteractivePackageInput, {
+      props: { value: null }
+    });
+    await pick(container, new File(['<p>hi</p>'], 'my-quiz.html', { type: 'text/html' }));
+
+    const titleInput = /** @type {HTMLInputElement} */ (
+      await findByLabelText(/^(Titel des Werks|Title of the work)/)
+    );
+    expect(titleInput.value).toBe('my-quiz');
+    const sourceInput = /** @type {HTMLInputElement} */ (
+      await findByLabelText(/^(Quell-URL|Source URL)/)
+    );
+    expect(sourceInput.value).toBe('');
   });
 
   it('renders a restored value (no local bytes) without a dead Preview button', () => {

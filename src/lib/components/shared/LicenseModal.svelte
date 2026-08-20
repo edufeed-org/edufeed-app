@@ -32,6 +32,18 @@
      */
     initialCredit = /** @type {string | null} */ (null),
     /**
+     * Seed the create-license form's title field on open. Null for existing
+     * callers, who get the old empty-string default unchanged.
+     * @type {string | null}
+     */
+    initialTitle = /** @type {string | null} */ (null),
+    /**
+     * Seed the create-license form's source field on open. Null for existing
+     * callers, who get the old empty-string default unchanged.
+     * @type {string | null}
+     */
+    initialSource = /** @type {string | null} */ (null),
+    /**
      * Signer used to publish the kind 1063 attestation. Falls back to
      * `manager.active` when not provided. Set this to a community signer when
      * attesting the community's own uploads (avatar / banner) so the license
@@ -104,11 +116,11 @@
   $effect(() => {
     if (open) {
       modalLicense = initialLicense || 'https://creativecommons.org/licenses/by/4.0/';
-      modalTitle = '';
+      modalTitle = initialTitle || '';
       modalSelfCreator = defaultSelfCreator;
       modalCredit =
         defaultSelfCreator && activeUserDisplayName ? activeUserDisplayName : initialCredit || '';
-      modalSource = '';
+      modalSource = initialSource || '';
       modalDescription = '';
       modalError = '';
       modalDisclosureChecked = false;

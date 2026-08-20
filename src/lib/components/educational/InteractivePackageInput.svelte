@@ -49,10 +49,12 @@
   let iconUrl = $state('');
   let pendingBytes = $state.raw(/** @type {Uint8Array|null} */ (null));
   // Prefill for the license modal, sourced from h5p.json metadata (license +
-  // authors). Null for non-h5p inputs (raw .xdc / wrapped .html) — the
-  // educator can still change everything in the modal, this is prefill only.
+  // authors + source). Null for non-h5p inputs (raw .xdc / wrapped .html) —
+  // the educator can still change everything in the modal, this is prefill
+  // only. pendingName (the package/title name) prefills for ALL input types.
   let pendingLicenseUrl = $state(/** @type {string | null} */ (null));
   let pendingCredit = $state(/** @type {string | null} */ (null));
+  let pendingSource = $state(/** @type {string | null} */ (null));
 
   /** @param {string} fileName */
   function stripExt(fileName) {
@@ -73,6 +75,7 @@
       let name = stripExt(file.name);
       let licenseUrl = /** @type {string | null} */ (null);
       let credit = /** @type {string | null} */ (null);
+      let source = /** @type {string | null} */ (null);
 
       if (lower.endsWith('.html') || lower.endsWith('.htm')) {
         files = wrapHtml(inputBytes, name);
@@ -84,6 +87,7 @@
           name = wrapped.name;
           licenseUrl = wrapped.licenseUrl;
           credit = wrapped.credit;
+          source = wrapped.source;
         } else {
           files = unzipped;
           const meta = extractXdcMeta(files);
@@ -139,6 +143,7 @@
       iconUrl = '';
       pendingLicenseUrl = licenseUrl;
       pendingCredit = credit;
+      pendingSource = source;
       existingLicense = await findExistingLicense(hash);
       modalOpen = true;
     } catch (err) {
@@ -194,6 +199,7 @@
     pendingBytes = null;
     pendingLicenseUrl = null;
     pendingCredit = null;
+    pendingSource = null;
   }
 
   /** @param {import('nostr-tools').NostrEvent} licenseEvent */
@@ -272,6 +278,8 @@
   {existingLicense}
   initialLicense={pendingLicenseUrl}
   initialCredit={pendingCredit}
+  initialTitle={pendingName}
+  initialSource={pendingSource}
   {beforeAttest}
   attestExtras={{ alt: `Webxdc app: ${pendingName}`, image: iconUrl }}
   onsave={onLicenseSaved}

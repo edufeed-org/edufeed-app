@@ -85,11 +85,33 @@ describe('h5p-wrap', () => {
     expect(name).toBe('My Upload');
   });
 
-  it('returns null licenseUrl/credit when h5p.json has no license/authors', async () => {
+  it('returns null licenseUrl/credit/source when h5p.json has no license/authors/source', async () => {
     stubAssets();
-    const { licenseUrl, credit } = await wrapH5p(fakeH5p(), 'fallback');
+    const { licenseUrl, credit, source } = await wrapH5p(fakeH5p(), 'fallback');
     expect(licenseUrl).toBeNull();
     expect(credit).toBeNull();
+    expect(source).toBeNull();
+  });
+
+  it('returns the source URL from h5p.json when present', async () => {
+    stubAssets();
+    const files = new Map([
+      [
+        'h5p.json',
+        strToU8(JSON.stringify({ title: 'Peace Quiz', source: 'https://example.org/original' }))
+      ]
+    ]);
+    const { source } = await wrapH5p(files, 'fallback');
+    expect(source).toBe('https://example.org/original');
+  });
+
+  it('returns null source when h5p.json has an empty/blank source field', async () => {
+    stubAssets();
+    const files = new Map([
+      ['h5p.json', strToU8(JSON.stringify({ title: 'Peace Quiz', source: '   ' }))]
+    ]);
+    const { source } = await wrapH5p(files, 'fallback');
+    expect(source).toBeNull();
   });
 
   it('prefills licenseUrl/credit from h5p.json license + licenseVersion + authors', async () => {
