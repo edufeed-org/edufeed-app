@@ -243,9 +243,19 @@
   let teardownOverlay = $state(false);
   let teardownConfirmText = $state('');
   let tearingDown = $state(false);
-  const teardownExpected = $derived(
-    getProfileContent(profileEvent)?.name || communityId?.slice(0, 12) || ''
-  );
+  // Pure content read — NOT getProfileContent(): that memoises onto a Symbol
+  // on the event, and a cache write from inside a $derived on a Svelte-state
+  // proxy throws state_unsafe_mutation (same hazard as getReplaceableAddress /
+  // getPublicGroups — see CLAUDE.md).
+  const teardownExpected = $derived.by(() => {
+    let name = '';
+    try {
+      name = JSON.parse(profileEvent?.content ?? '{}')?.name ?? '';
+    } catch {
+      name = '';
+    }
+    return name || communityId?.slice(0, 12) || '';
+  });
   const teardownConfirmed = $derived(teardownConfirmText.trim() === teardownExpected);
 
   function closeTeardown() {
