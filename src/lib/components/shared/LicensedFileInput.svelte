@@ -503,7 +503,10 @@
               url: finalUrl,
               sha256: blob.sha256,
               size: blob.size ?? f.size,
-              type: blob.type || f.type,
+              // Interactive slots keep their forced mime — Blossom servers
+              // may content-sniff the wrapped package as application/zip,
+              // which would strip the m/x tags, player, and shelf downstream.
+              type: prep ? 'application/x-webxdc' : blob.type || f.type,
               metaCleanedFields: cleanedFields,
               metaCleanFailed: cleanFailed
             }

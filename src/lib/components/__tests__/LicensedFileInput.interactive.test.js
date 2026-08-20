@@ -210,6 +210,26 @@ describe('LicensedFileInput — detectInteractive on', () => {
     expect(result.mime).toBe('application/x-webxdc');
   });
 
+  it('keeps the x-webxdc mime even when the Blossom server sniffs the blob as a zip', async () => {
+    // Some Blossom servers (e.g. haven) content-sniff uploads and report
+    // application/zip for the wrapped package — that must not clobber the
+    // slot's mime, or the resource loses its m/x tags, player, and shelf.
+    mocks.uploadBlob.mockImplementation(async (file) => ({
+      url: `https://blossom.example/${'e'.repeat(64)}.zip`,
+      sha256: 'e'.repeat(64),
+      size: file.size,
+      type: 'application/zip'
+    }));
+    const { container, findByText } = render(LicensedFileInput, {
+      props: { files: [], detectInteractive: true }
+    });
+    await pick(container, new File(['x'], 'quiz.h5p'));
+
+    await mocks.modalProps.beforeAttest();
+
+    await findByText('application/x-webxdc', { exact: false });
+  });
+
   it('shows the pipeline error and keeps the list clean when the package is invalid', async () => {
     mocks.prepareInteractivePackage.mockRejectedValueOnce(new Error('Invalid package'));
     const { container, findByText } = render(LicensedFileInput, {
