@@ -4,11 +4,11 @@ import { shouldShowChannelsTab, deriveVisibleChannels } from '$lib/concord/commu
 import { memberTier, ADMIN_PERMS, MOD_PERMS } from '$lib/concord/roles.js';
 
 describe('shouldShowChannelsTab', () => {
-  const base = { enabled: true, pointer: undefined, isOwner: false, isMember: false };
+  const base = { enabled: true, pointer: undefined, isMember: false };
   it('hidden when flag off, whatever the Concord side says', () => {
-    expect(
-      shouldShowChannelsTab({ ...base, enabled: false, pointer: {}, isOwner: true, isMember: true })
-    ).toBe(false);
+    expect(shouldShowChannelsTab({ ...base, enabled: false, pointer: {}, isMember: true })).toBe(
+      false
+    );
   });
   // A community extended by NIP-29 groups has no Concord area, no Concord
   // pointer and no Concord membership — every input above is false for it.
@@ -30,27 +30,35 @@ describe('shouldShowChannelsTab', () => {
     expect(shouldShowChannelsTab({ ...base, pointer: { communityId: 'x' } })).toBe(true);
   });
   // The founding affordance moved to the settings type card ("Privaten
-  // Bereich erstellen/verknüpfen") — a bare owner with no area must NOT see
-  // a channels tab, or "+ Neuer Kanal" founds an E2E area as a side effect
-  // before any type decision (laoc, 2026-08-18: the Edufeed community).
-  it('hidden for owner without pointer — founding lives in settings now', () => {
-    expect(shouldShowChannelsTab({ ...base, isOwner: true })).toBe(false);
+  // Bereich erstellen/verknüpfen") — before any type decision (no pointers
+  // at all) nobody sees a channels tab, the owner included: "+ Neuer Kanal"
+  // must not found an E2E area as a side effect (laoc, 2026-08-18: the
+  // Edufeed community). Owner status is no longer an input here at all.
+  it('hidden before the type decision — founding lives in settings now', () => {
+    expect(shouldShowChannelsTab({ ...base })).toBe(false);
   });
-  // A moderated community (membership pointer) with zero channels: the type
-  // decision HAS been made, so its owner needs the Kanäle zone — it carries
-  // the only "+ Neuer Kanal" path to the first channel (laoc, 2026-08-18:
-  // Edufeed flipped to moderated, no way to create a channel). Independent
-  // of the Concord flag — this is NIP-29 territory.
-  it('visible for the owner of a moderated community with zero channels, flag off', () => {
+  // A moderated community (membership pointer) opens the view independent of
+  // the Concord flag — this is NIP-29 territory. The owner's "+ Neuer Kanal"
+  // path (laoc, 2026-08-18) rides on the same clause.
+  it('visible for a moderated community with zero channels, flag off', () => {
+    expect(shouldShowChannelsTab({ ...base, enabled: false, hasMembershipPointer: true })).toBe(
+      true
+    );
+  });
+  // Since the root membership group doubles as the "General" channel, a
+  // moderated community is never channel-less — and subtree channels are
+  // pointer-free, so hasGroupChannels can no longer vouch for them. The
+  // membership pointer alone must open the view for EVERYONE, or members
+  // see channels listed in the Kanäle zone but every click bounces to home
+  // (laoc, 2026-08-21: only the key-holder could enter any channel).
+  it('visible for a member (non-owner) of a moderated community', () => {
     expect(
-      shouldShowChannelsTab({ ...base, enabled: false, isOwner: true, hasMembershipPointer: true })
+      shouldShowChannelsTab({ ...base, enabled: false, isMember: true, hasMembershipPointer: true })
     ).toBe(true);
   });
-  // Non-owners have nothing to see there until a channel exists — mobile
-  // would otherwise grow an empty Kanäle tab.
-  it('hidden for a visitor of a moderated community with zero channels', () => {
+  it('visible for an anonymous visitor of a moderated community', () => {
     expect(shouldShowChannelsTab({ ...base, enabled: false, hasMembershipPointer: true })).toBe(
-      false
+      true
     );
   });
   it('hidden otherwise', () => {

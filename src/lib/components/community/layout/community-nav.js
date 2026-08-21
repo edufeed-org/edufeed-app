@@ -22,7 +22,6 @@ import { uniqueBy } from '$lib/helpers/unique.js';
  *   communityEvent: any,
  *   concordEnabled: boolean,
  *   pointer: object | undefined,
- *   isOwner: boolean,
  *   isMember: boolean,
  *   hasGroupChannels: boolean
  * }} args
@@ -32,7 +31,6 @@ export function communityNavTabIds({
   communityEvent,
   concordEnabled,
   pointer,
-  isOwner,
   isMember,
   hasGroupChannels
 }) {
@@ -40,7 +38,6 @@ export function communityNavTabIds({
   const showChannels = shouldShowChannelsTab({
     enabled: concordEnabled,
     pointer,
-    isOwner,
     isMember,
     hasGroupChannels,
     // Derived here from the event itself (not a caller input) so

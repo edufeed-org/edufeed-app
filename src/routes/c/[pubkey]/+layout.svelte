@@ -184,7 +184,6 @@
     return shouldShowChannelsTab({
       enabled: concord.enabled,
       pointer: concord.pointer,
-      isOwner: isCommunityOwner(data.pubkey),
       isMember: concord.membership === 'member',
       hasGroupChannels: parseGroupPointers(communikeyEvent).length > 0,
       hasMembershipPointer: !!parseMembershipPointer(communikeyEvent)

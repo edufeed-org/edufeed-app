@@ -160,6 +160,10 @@ export function useCommunityChannels(getRootPointer) {
     const sub = eventStore
       .model(TimelineModel, { kinds: [GROUP_METADATA_KIND] })
       .subscribe((/** @type {any[]} */ events) => {
+        // TODO: pass hostRequiresAuth (4th arg) once this hook learns the
+        // host's auth posture the way useHostChannels does (NIP-11 claim OR a
+        // live auth-required CLOSE) — until then a fully NIP-42-gated host's
+        // world channels wear the globe badge one tier too openly. Badge-only.
         const { root, channels: derived } = buildSubtreeChannels(events, rootId, endpoint);
         channels = derived;
         rootChannel = root;

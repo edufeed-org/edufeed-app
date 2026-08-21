@@ -125,7 +125,6 @@
       communityEvent,
       concordEnabled: concord.enabled,
       pointer: concord.pointer,
-      isOwner,
       isMember: concord.membership === 'member',
       // Second source for the same tab, and not Concord: a community
       // extended by NIP-29 groups has none of the Concord inputs above.

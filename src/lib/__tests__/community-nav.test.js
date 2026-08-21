@@ -32,7 +32,6 @@ const closedCommunityEvent = (tags = []) => ({
 const baseArgs = {
   concordEnabled: false,
   pointer: undefined,
-  isOwner: false,
   isMember: false,
   hasGroupChannels: false
 };
@@ -88,36 +87,47 @@ describe('communityNavTabIds', () => {
   });
 
   // The bare-owner clause is gone (founding lives in the settings type
-  // card) — but once the type decision is made (membership pointer on the
-  // 10222), the owner's tab list must carry 'channels' again: it is the
-  // only path to "+ Neuer Kanal" for the FIRST channel (laoc, 2026-08-18).
-  // Derived from the event itself, so ContentNavSidebar/BottomTabBar need
-  // no extra prop.
-  it('hides channels for a bare owner — founding lives in settings now', () => {
+  // card) — before the type decision (no membership pointer on the 10222)
+  // NOBODY gets a channels tab; owner status is no longer an input. Once
+  // the pointer exists, the owner's "+ Neuer Kanal" path for the FIRST
+  // channel (laoc, 2026-08-18) rides on the everyone-clause below.
+  it('hides channels before the type decision — founding lives in settings now', () => {
     const ids = communityNavTabIds({
       communityEvent: openCommunityEvent(),
       ...baseArgs,
-      concordEnabled: true,
-      isOwner: true
+      concordEnabled: true
     });
     expect(ids).not.toContain('channels');
   });
 
-  it('shows channels for the owner of a moderated community with zero channels', () => {
-    const ids = communityNavTabIds({
-      communityEvent: openCommunityEvent([['membership', 'root-1', RELAY]]),
-      ...baseArgs,
-      isOwner: true
-    });
-    expect(ids).toContain('channels');
-  });
-
-  it('hides channels for a visitor of a moderated community with zero channels', () => {
+  it('shows channels for a moderated community with zero channels', () => {
     const ids = communityNavTabIds({
       communityEvent: openCommunityEvent([['membership', 'root-1', RELAY]]),
       ...baseArgs
     });
-    expect(ids).not.toContain('channels');
+    expect(ids).toContain('channels');
+  });
+
+  // Subtree channels are pointer-free (no 10222 `group` tags), so the
+  // membership pointer is the only signal a moderated community's channels
+  // exist — and the root group doubles as the "General" channel, so there
+  // is always something to show. Gating on isOwner bounced every member's
+  // channel click back to home (laoc, 2026-08-21).
+  it('shows channels for a member of a moderated community', () => {
+    const ids = communityNavTabIds({
+      communityEvent: openCommunityEvent([['membership', 'root-1', RELAY]]),
+      ...baseArgs,
+      isMember: true
+    });
+    expect(ids).toContain('channels');
+  });
+
+  it('shows channels for a visitor of a moderated community', () => {
+    const ids = communityNavTabIds({
+      communityEvent: openCommunityEvent([['membership', 'root-1', RELAY]]),
+      ...baseArgs
+    });
+    expect(ids).toContain('channels');
   });
 
   it('inserts channels before settings when the tab list has no chat tab', () => {

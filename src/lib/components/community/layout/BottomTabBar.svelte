@@ -20,7 +20,6 @@
   import { communityNavTabIds } from './community-nav.js';
   import { areaUnreadState } from '$lib/concord/notifications.svelte.js';
   import ConcordUnreadDot from '$lib/components/shared/ConcordUnreadDot.svelte';
-  import { isCommunityOwner } from '$lib/helpers/community-signer.js';
   import { onMount } from 'svelte';
   import * as m from '$lib/paraglide/messages';
 
@@ -84,7 +83,6 @@
       communityEvent,
       concordEnabled: concord.enabled,
       pointer: concord.pointer,
-      isOwner: isCommunityOwner(communityEvent?.pubkey),
       isMember: concord.membership === 'member',
       // Second source for the same tab, and not Concord: a community
       // extended by NIP-29 groups has none of the Concord inputs above.
