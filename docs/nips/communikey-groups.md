@@ -10,6 +10,11 @@ and publication. This document was edited alongside the implementation and
 now describes the shipped data model; drift found during the final
 read-through is called out inline below where it applies.
 
+The `publisher` role and the `kind:30223` content-section override were added
+2026-08-21, from the same branch: together they let a community's root-group
+admins run its public surface — which content types it offers, and who may
+publish into each — without holding the community key.
+
 Note on the E2E fixture: the in-process mock relay used for the
 moderated-lifecycle test retains a stale admin-only kind `39001` entry on
 `remove-user` (kind `9001`) rather than clearing the departed member from
@@ -76,6 +81,29 @@ Placed inside a `content` section (after the `content` tag, like `k` tags):
 
 `<role-name>` references a role defined in the root group.
 
+#### The `publisher` role
+
+`publisher` is the conventional role name for "may publish community
+content, nothing more". Clients SHOULD offer it as a first-class choice
+wherever they offer the `role` tier, and relays SHOULD advertise it in their
+`kind:39003` as a role carrying no privilege.
+
+Two consequences of NIP-29's data model are worth stating plainly, because
+they surprise implementers:
+
+1. **A publisher appears in `kind:39001`, the "admins" list.** NIP-29 has no
+   other place to record a role — 39002 carries bare pubkeys. Clients MUST
+   NOT infer moderation authority from 39001 membership alone; they should
+   read the role names and present a publisher as a publisher.
+2. **Relays MUST NOT grant moderation power on the strength of holding *a*
+   role.** A relay that authorises `kind:9000`-`9020` for "any member with
+   any role" hands every publisher the moderator's powers. Authorisation
+   belongs to specific role names.
+
+A `kind:9000` (`put-user`) replaces the target's entire role set, so clients
+granting or revoking one role MUST rebuild the set from the roles that member
+already holds.
+
 ### `application` (top-level, moderated only, optional)
 
 ```json
@@ -117,6 +145,61 @@ content sections — the public 10222 + kind-0 exist only as a discoverable shel
 ("invitation required"). Content sections on a closed community's 10222 MUST be
 ignored.
 
+## Kind 30223 — content-section override (moderated only)
+
+A community's content sections live on its `kind:10222`, which is addressable
+by the community pubkey and therefore signable only by whoever holds the
+community key. The people who run a moderated community are its root-group
+admins, who do not hold that key — so without this every change to the
+community's public surface has to go through the key-holder.
+
+A `kind:30223` carries a section block on its author's own signature:
+
+```json
+{
+  "kind": 30223,
+  "tags": [
+    ["d", "<community-pubkey>"],
+    ["h", "<community-pubkey>"],
+    ["content", "Materialien"],
+    ["k", "30142"],
+    ["access", "role", "publisher"]
+  ]
+}
+```
+
+The tag grammar inside the section block is exactly the 10222's, so one
+parser serves both.
+
+**Validity.** An override counts only if its `d` tag equals the community
+pubkey AND its author is, *at read time*, either the community pubkey itself
+or listed in the root group's current `kind:39001`. Judging against the
+current roster rather than the roster at signing time makes the rule
+retroactive in the same way `access` already is: demoting an admin revokes
+their override with nothing to delete. Communities with no `membership`
+pointer have no roster to judge against, so open and closed communities MUST
+ignore `kind:30223` entirely.
+
+**Precedence.** Among valid overrides the newest `created_at` wins, ties
+broken by the lower event id so every client picks the same one. That winner
+replaces the 10222's section block **as a whole** — never merged
+section-by-section — but only while it is newer than the `kind:10222` itself.
+An owner editing their community therefore reasserts control by the ordinary
+act of saving. Clients SHOULD seed the owner's editing UI from the *effective*
+sections so that save absorbs the admins' configuration rather than silently
+reverting it.
+
+**What an override may not carry.** Only `content`, `k` and `access` tags are
+honoured. Per-section `["r", <url>, "content"]` relays, profile-list `a` tags,
+badge requirements and form references MUST be ignored on a `kind:30223`, and
+clients MUST NOT write them there: where a community's content is stored, and
+its legacy gating, remain the key-holder's. The `["strict","content"]` marker
+likewise stays a property of the 10222.
+
+Because outsiders need the section block to render a community's tabs at all,
+a `kind:30223` is an ordinary public event and MUST NOT be published only to
+an auth-gated group relay.
+
 ## Semantics
 
 ### Gating is write-gating
@@ -152,7 +235,10 @@ type and is unrelated to membership. Membership exists only for moderated
   tightening is a separate deliberate act. Followers are not auto-added to the
   roster.
 - **moderated → open:** remove `membership`, all `access` tags, and all `group`
-  channel tags (the underlying groups persist on their relay).
+  channel tags (the underlying groups persist on their relay). Any
+  `kind:30223` overrides stop applying on their own — without a `membership`
+  pointer there is no roster to validate their authors against — so they need
+  no cleanup.
 - **closed** is fixed at creation. No transitions to or from closed.
 
 ### Legacy
