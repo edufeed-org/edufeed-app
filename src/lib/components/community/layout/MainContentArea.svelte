@@ -22,6 +22,8 @@
   import PublisherOfferBanner from '../PublisherOfferBanner.svelte';
   import { manager } from '$lib/stores/accounts.svelte';
   import { getSectionNameForContentType } from '$lib/helpers/contentTypes.js';
+  import { rosterGateForSection } from '$lib/helpers/share-permission.js';
+  import { roleLabel } from '$lib/groups/role-labels.js';
   import { deriveCommunityType } from '$lib/groups/community-membership.js';
   import * as m from '$lib/paraglide/messages';
 
@@ -81,9 +83,25 @@
       {@const formRef = sectionName ? profileAccess.getFormRef(sectionName) : null}
       {@const userPubkey = manager.active?.pubkey}
       {@const canPublish = sectionName ? profileAccess.canPublish(sectionName) : true}
+      {@const rosterGate = rosterGateForSection(communikeyEvent, sectionName)}
 
       {#if userPubkey && getIsMember() && !canPublish && formRef && !profileAccess.isLoading}
         <AccessGateBanner {formRef} {sectionName} {userPubkey} />
+      {:else if userPubkey && !canPublish && !formRef && !profileAccess.isLoading && rosterGate}
+        <!-- Moderated communities gate on the roster, and there is no
+             application flow to point at (the form-based join was removed as
+             YAGNI) — so this states the rule and stops, rather than offering
+             an action that does not exist. Without it a member simply finds
+             the composer missing with no explanation. -->
+        <div class="px-4 pt-3">
+          <div class="alert alert-info" data-testid="roster-gate-notice">
+            <span>
+              {rosterGate.access.tier === 'members'
+                ? m.community_roster_gate_members()
+                : m.community_roster_gate_role({ role: roleLabel(rosterGate.access.role ?? '') })}
+            </span>
+          </div>
+        </div>
       {/if}
 
       <!-- Publisher-window consent step (self-gates on an open offer) -->

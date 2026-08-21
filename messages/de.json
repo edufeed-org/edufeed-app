@@ -3301,6 +3301,8 @@
   "community_access_editor_title": "Inhalte & Rechte",
   "community_section_override_lead": "Als Admin der Gruppe legst du fest, welche Inhaltstypen die Community öffentlich anbietet und wer dort veröffentlichen darf.",
   "community_section_override_by": "Zuletzt geändert von {name}",
+  "community_roster_gate_members": "Nur Mitglieder dieser Community können hier veröffentlichen.",
+  "community_roster_gate_role": "Nur Mitglieder mit der Rolle „{role}“ können hier veröffentlichen.",
   "community_access_editor_lead": "Wer darf welche Inhaltstypen veröffentlichen?",
   "community_access_editor_role_placeholder": "Rollenname",
   "community_access_editor_role_required": "Rollenname erforderlich",
