@@ -82,9 +82,9 @@ describe('provisionRootGroup — community admin seat', () => {
       existingId: 'pending-id',
       communityPubkey: COMMUNITY_PK
     });
-    expect(publishToGroupRelay).toHaveBeenCalledOnce();
-    const [, template] = publishToGroupRelay.mock.calls[0];
-    expect(template.tags).toEqual([
+    const seatCalls = publishToGroupRelay.mock.calls.filter(([, t]) => t.kind === 9000);
+    expect(seatCalls).toHaveLength(1);
+    expect(seatCalls[0][1].tags).toEqual([
       ['h', 'pending-id'],
       ['p', COMMUNITY_PK, 'admin']
     ]);
@@ -142,6 +142,47 @@ describe('provisionRootGroup', () => {
     });
     expect(result).toEqual({ id: 'pending-id', relay: RELAY });
     expect(createGroupOnRelay).not.toHaveBeenCalled();
+  });
+
+  it('refreshes the reused group metadata (a group minted before the seeding fix can heal)', async () => {
+    // The reuse branch used to return early after re-seating, so a root group
+    // created name-only stayed name-only forever — re-running provisioning
+    // must re-issue the 9002 with the current kind-0 fields.
+    confirmGroupMetadata.mockResolvedValue({ kind: 39000, tags: [['d', 'pending-id']] });
+    confirmGroupAdmins.mockResolvedValue(adminsEvent(USER.pubkey));
+    await provisionRootGroup({
+      relay: RELAY,
+      name: 'Musterschule',
+      about: 'Building for better education',
+      picture: 'https://i.nostr.build/pic.jpg',
+      user: USER,
+      existingId: 'pending-id'
+    });
+    const metadataTemplates = publishToGroupRelay.mock.calls
+      .map(([, t]) => t)
+      .filter((t) => t.kind === 9002);
+    expect(metadataTemplates).toHaveLength(1);
+    expect(metadataTemplates[0].tags).toEqual(
+      expect.arrayContaining([
+        ['h', 'pending-id'],
+        ['name', 'Musterschule'],
+        ['about', 'Building for better education'],
+        ['picture', 'https://i.nostr.build/pic.jpg']
+      ])
+    );
+  });
+
+  it('still returns the reused id when the metadata refresh fails (best-effort)', async () => {
+    confirmGroupMetadata.mockResolvedValue({ kind: 39000 });
+    confirmGroupAdmins.mockResolvedValue(adminsEvent(USER.pubkey));
+    publishToGroupRelay.mockRejectedValue(new Error('relay says no'));
+    const result = await provisionRootGroup({
+      relay: RELAY,
+      name: 'x',
+      user: USER,
+      existingId: 'pending-id'
+    });
+    expect(result).toEqual({ id: 'pending-id', relay: RELAY });
   });
 
   it('creates fresh when the pending id is not confirmed on the relay', async () => {

@@ -46,7 +46,8 @@
   import { moderatedCreationAvailable } from '$lib/groups/feature.js';
   import { publishCommunityUpdate } from '$lib/helpers/publishCommunityUpdate.js';
   import { getGroupsRelays } from '$lib/helpers/relay-helper.js';
-  import { getDisplayName, getProfileContent } from 'applesauce-core/helpers';
+  import { getDisplayName } from 'applesauce-core/helpers';
+  import { getCommunityAbout, getCommunityProfileContent } from '$lib/helpers/communityRelays.js';
   import { unique } from '$lib/helpers/unique.js';
   import * as m from '$lib/paraglide/messages';
 
@@ -189,11 +190,17 @@
         name: getDisplayName(profileEvent) || 'Community',
         // Seed the root group's 39000 with the community's picture + about
         // (from its kind-0 — same source A7's re-sync uses) so the /c space
-        // shows an icon + description in Armada.
-        about: getProfileContent(profileEvent)?.about,
-        picture: getProfileContent(profileEvent)?.picture,
+        // shows an icon + description in Armada. Read through the dual-shape
+        // accessor: profileEvent arrives here as PARSED content from the /c
+        // layout, which applesauce's getProfileContent does not unwrap.
+        about: getCommunityProfileContent(profileEvent)?.about,
+        picture: getCommunityProfileContent(profileEvent)?.picture,
         user: { pubkey: activeUser.pubkey, signer: activeUser.signer },
-        existingId: readRootGroupMarker(communityId)
+        existingId: readRootGroupMarker(communityId),
+        // Seat the community key on the 39001 too (parity with the wizard):
+        // every later metadata re-sync is signed with the community signer,
+        // and the relay rejects it unless the community is an admin.
+        communityPubkey: communityId
       });
       writeRootGroupMarker(communityId, pointer.id);
 
@@ -256,11 +263,12 @@
   // Pure content read — NOT getProfileContent(): that memoises onto a Symbol
   // on the event, and a cache write from inside a $derived on a Svelte-state
   // proxy throws state_unsafe_mutation (same hazard as getReplaceableAddress /
-  // getPublicGroups — see CLAUDE.md).
+  // getPublicGroups — see CLAUDE.md). getCommunityProfileContent is pure AND
+  // dual-shape, so it also works on the layout's parsed profile.
   const teardownExpected = $derived.by(() => {
     let name = '';
     try {
-      name = JSON.parse(profileEvent?.content ?? '{}')?.name ?? '';
+      name = getCommunityProfileContent(profileEvent)?.name ?? '';
     } catch {
       name = '';
     }
@@ -309,6 +317,10 @@
 
   // Check if current user is the community owner
   let isOwner = $derived(isCommunityOwner(communikeyEvent?.pubkey));
+
+  // Single description source: the community's kind-0 `about` (see
+  // CommunityProfileHero) — the 10222 content is never written by this app.
+  let communityAbout = $derived(getCommunityAbout(profileEvent));
 
   function handleDeleteCommunity() {
     modalStore.openModal('deleteCommunity', {
@@ -364,11 +376,11 @@
             {m.community_settings_section_profile()}
           </h2>
           <CommunityBasicsForm {communikeyEvent} />
-        {:else if communikeyEvent?.content}
+        {:else if communityAbout}
           <div class="card mb-6 bg-base-100 shadow-xl">
             <div class="card-body">
               <h2 class="mb-2 card-title">{m.community_views_settings_info_title()}</h2>
-              <p class="text-base-content/80">{communikeyEvent.content}</p>
+              <p class="text-base-content/80">{communityAbout}</p>
             </div>
           </div>
         {/if}

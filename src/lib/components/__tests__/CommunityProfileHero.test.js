@@ -372,3 +372,55 @@ describe('CommunityProfileHero — moderated join lane', () => {
     );
   });
 });
+
+// The description shown on a community page is the community's kind-0 `about`
+// — the single source every other surface (cards, discover, OG, the NIP-29
+// 39000) already reads. The hero used to read `communikeyEvent.content`, which
+// every app write path leaves empty, so it silently showed nothing.
+describe('CommunityProfileHero — description + location', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    holders.joined = false;
+    holders.activeUser = null;
+    holders.rosterPointer = null;
+    holders.isMember = false;
+    holders.metadataByKey = {};
+    formRefHolder.value = null;
+  });
+
+  const renderHero = (/** @type {any} */ props) =>
+    render(CommunityProfileHero, {
+      props: {
+        communityId: 'x'.repeat(64),
+        communikeyEvent: OPEN_EVENT,
+        profileEvent: PROFILE_EVENT,
+        onNavigateToAbout: vi.fn(),
+        onMembersClick: vi.fn(),
+        ...props
+      }
+    });
+
+  it('shows the description from the community kind-0 about', () => {
+    renderHero({
+      profileEvent: {
+        content: JSON.stringify({ name: 'Test Community', about: 'Wir lernen gemeinsam' })
+      }
+    });
+    expect(screen.getByText('Wir lernen gemeinsam')).toBeTruthy();
+  });
+
+  it('ignores stale 10222 event content (never written by this app)', () => {
+    renderHero({
+      communikeyEvent: { ...OPEN_EVENT, content: 'legacy content blob' },
+      profileEvent: { content: JSON.stringify({ name: 'Test Community' }) }
+    });
+    expect(screen.queryByText('legacy content blob')).toBeNull();
+  });
+
+  it('shows the community location from the 10222 location tag', () => {
+    renderHero({
+      communikeyEvent: { kind: 10222, tags: [['location', 'Bremen, Deutschland']] }
+    });
+    expect(screen.getByText('Bremen, Deutschland')).toBeTruthy();
+  });
+});

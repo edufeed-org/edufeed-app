@@ -50,3 +50,36 @@ export async function syncRootGroupMetadata({ pointer, profile, signerUser }) {
     return { ok: false, error: err instanceof Error ? err.message : String(err) };
   }
 }
+
+/**
+ * The same sync, tried with each signer in turn until one is accepted. Every
+ * save path that can refresh the group metadata (the profile modal AND the
+ * settings card) needs the identical ladder: the community signer first, the
+ * human admin as backup — communities flipped to moderated before the
+ * admin-seat fix are missing from their own root group's 39001, so the relay
+ * refuses their community-signed 9002.
+ *
+ * Never throws; a caller that only wants to warn can look at `ok`. Returns
+ * `skipped` when there is nothing to sync (an open community has no pointer).
+ * @param {{
+ *   pointer: {id: string, relay: string} | null | undefined,
+ *   profile: {name?: string, about?: string, picture?: string},
+ *   signers: ({pubkey: string, signer: any} | null | undefined)[]
+ * }} args
+ * @returns {Promise<{ok: boolean, error?: string, skipped?: boolean}>}
+ */
+export async function syncRootGroupMetadataWithFallback({ pointer, profile, signers }) {
+  if (!pointer) return { ok: true, skipped: true };
+
+  /** @type {string | undefined} */
+  let error;
+  const tried = new Set();
+  for (const candidate of signers) {
+    if (!candidate?.signer || !candidate.pubkey || tried.has(candidate.pubkey)) continue;
+    tried.add(candidate.pubkey);
+    const result = await syncRootGroupMetadata({ pointer, profile, signerUser: candidate });
+    if (result.ok) return result;
+    error = result.error;
+  }
+  return { ok: false, error };
+}

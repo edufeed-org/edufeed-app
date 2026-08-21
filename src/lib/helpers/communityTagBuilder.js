@@ -23,7 +23,9 @@ import { parseCommunityContentTypes } from './communityRelays.js';
  * @property {(string | {url: string, enforced: boolean})[]} relays - Global relays
  * @property {string[]} blossomServers
  * @property {string} location
- * @property {string} description
+ * @property {string} [description] - Spec-level override of the kind-0 about.
+ *   No app form writes it anymore (one description, in the profile) — kept so
+ *   events carrying one still round-trip through the builder.
  * @property {string[]} [languages] - ISO-639-1 language codes (new-spec)
  * @property {string} [livekitUrl] - LiveKit operator URL for Meet rooms
  * @property {Record<string, ContentTypeFormData>} contentTypes

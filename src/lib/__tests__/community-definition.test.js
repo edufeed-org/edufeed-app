@@ -11,6 +11,8 @@ import { describe, it, expect } from 'vitest';
 import {
   parseCommunityContentTypes,
   parseCommunityMetadata,
+  getCommunityAbout,
+  getCommunityProfileContent,
   getCommunityGlobalRelays,
   getCommunityRelaysByEnforcement,
   getRelaysForKind,
@@ -436,5 +438,41 @@ describe('getKindBadgeRequirements', () => {
     ]);
     const result = getKindBadgeRequirements(event, 9);
     expect(result.hasBadgeGating).toBe(false);
+  });
+});
+
+// ─── getCommunityAbout ──────────────────────────────────────────────────────
+// The community description has exactly one home: the community's kind-0
+// `about`. Pure + null-safe on purpose — applesauce's getProfileContent caches
+// onto the event object (unsafe inside $derived) and throws on null.
+describe('getCommunityAbout', () => {
+  it('reads about out of a kind-0 event', () => {
+    const profile = { kind: 0, content: JSON.stringify({ name: 'C', about: 'Wir lernen' }) };
+    expect(getCommunityAbout(profile)).toBe('Wir lernen');
+  });
+
+  it('returns an empty string for a missing, empty or malformed profile', () => {
+    expect(getCommunityAbout(null)).toBe('');
+    expect(getCommunityAbout(undefined)).toBe('');
+    expect(getCommunityAbout({ kind: 0, content: '{}' })).toBe('');
+    expect(getCommunityAbout({ kind: 0, content: 'not json' })).toBe('');
+  });
+
+  // The /c layout delivers ALREADY-PARSED content (ProfileModel), while other
+  // call sites hold the kind-0 event. Both shapes must work — applesauce's own
+  // getDisplayName/getProfilePicture are dual-shape for the same reason, and
+  // getProfileContent (event-only) silently returned undefined on the parsed
+  // shape, which is how the group metadata lost its picture + about.
+  it('accepts already-parsed profile content as well as the event', () => {
+    expect(getCommunityAbout({ name: 'C', about: 'Wir lernen' })).toBe('Wir lernen');
+    expect(getCommunityProfileContent({ name: 'C', picture: 'https://x/p.jpg' })?.picture).toBe(
+      'https://x/p.jpg'
+    );
+    expect(
+      getCommunityProfileContent({
+        kind: 0,
+        content: JSON.stringify({ picture: 'https://y/q.jpg' })
+      })?.picture
+    ).toBe('https://y/q.jpg');
   });
 });

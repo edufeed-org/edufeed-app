@@ -26,7 +26,9 @@ vi.mock('$lib/stores/nostr-infrastructure.svelte', () => ({
   pool: { relay: vi.fn(() => relayConn) }
 }));
 
-const { syncRootGroupMetadata } = await import('$lib/groups/sync-group-metadata.js');
+const { syncRootGroupMetadata, syncRootGroupMetadataWithFallback } = await import(
+  '$lib/groups/sync-group-metadata.js'
+);
 
 const POINTER = { id: 'root1', relay: 'wss://groups.example.com' };
 const PROFILE = { name: 'New', about: 'about text', picture: 'https://x.example/pic.png' };
@@ -112,6 +114,75 @@ describe('syncRootGroupMetadata', () => {
       signerUser: USER
     });
     expect(result).toEqual({ ok: false, error: 'socket died' });
+    expect(publishToGroupRelay).not.toHaveBeenCalled();
+  });
+});
+
+// Both save paths (the profile modal AND the settings card) need the same
+// "community signer first, human admin as backup" behavior — communities
+// flipped before the admin-seat fix aren't on their own root group's 39001.
+describe('syncRootGroupMetadataWithFallback', () => {
+  const COMMUNITY = { pubkey: 'c'.repeat(64), signer: {} };
+  const HUMAN = { pubkey: 'a'.repeat(64), signer: {} };
+
+  beforeEach(() => {
+    relayConn = { request: vi.fn(() => EMPTY) };
+  });
+
+  it('stops after the first signer that is accepted', async () => {
+    const result = await syncRootGroupMetadataWithFallback({
+      pointer: POINTER,
+      profile: PROFILE,
+      signers: [COMMUNITY, HUMAN]
+    });
+    expect(result.ok).toBe(true);
+    expect(publishToGroupRelay).toHaveBeenCalledTimes(1);
+    expect(publishToGroupRelay.mock.calls[0][2]).toBe(COMMUNITY);
+  });
+
+  it('falls through to the next signer when the relay refuses', async () => {
+    publishToGroupRelay
+      .mockRejectedValueOnce(new Error('restricted: not an admin'))
+      .mockResolvedValueOnce({ id: 'signed' });
+    const result = await syncRootGroupMetadataWithFallback({
+      pointer: POINTER,
+      profile: PROFILE,
+      signers: [COMMUNITY, HUMAN]
+    });
+    expect(result.ok).toBe(true);
+    expect(publishToGroupRelay).toHaveBeenCalledTimes(2);
+    expect(publishToGroupRelay.mock.calls[1][2]).toBe(HUMAN);
+  });
+
+  it('reports the last error when every signer is refused', async () => {
+    publishToGroupRelay.mockRejectedValue(new Error('restricted: nope'));
+    const result = await syncRootGroupMetadataWithFallback({
+      pointer: POINTER,
+      profile: PROFILE,
+      signers: [COMMUNITY, HUMAN]
+    });
+    expect(result.ok).toBe(false);
+    expect(result.error).toContain('restricted: nope');
+  });
+
+  it('never signs twice with the same key, and skips empty signer slots', async () => {
+    const result = await syncRootGroupMetadataWithFallback({
+      pointer: POINTER,
+      profile: PROFILE,
+      signers: [COMMUNITY, { ...COMMUNITY }, null, { pubkey: HUMAN.pubkey, signer: null }]
+    });
+    expect(result.ok).toBe(true);
+    expect(publishToGroupRelay).toHaveBeenCalledTimes(1);
+  });
+
+  it('is a no-op without a pointer (open community)', async () => {
+    const result = await syncRootGroupMetadataWithFallback({
+      pointer: null,
+      profile: PROFILE,
+      signers: [COMMUNITY]
+    });
+    expect(result.ok).toBe(true);
+    expect(result.skipped).toBe(true);
     expect(publishToGroupRelay).not.toHaveBeenCalled();
   });
 });

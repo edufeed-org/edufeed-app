@@ -172,7 +172,6 @@
     relays: ['wss://relay.edufeed.org'],
     blossomServers: ['blossom.edufeed.org'],
     location: '',
-    description: '',
     livekitUrl: '',
     contentTypes: createDefaultContentTypes(DEFAULT_ENABLED_CONTENT_TYPES)
   });
@@ -248,7 +247,6 @@
           relays: ['wss://relay.edufeed.org'],
           blossomServers: ['blossom.edufeed.org'],
           location: '',
-          description: '',
           livekitUrl: '',
           contentTypes: createDefaultContentTypes(DEFAULT_ENABLED_CONTENT_TYPES)
         };
@@ -663,7 +661,6 @@
       relays: ['wss://relay.edufeed.org'],
       blossomServers: ['blossom.edufeed.org'],
       location: '',
-      description: '',
       livekitUrl: '',
       contentTypes: createDefaultContentTypes(DEFAULT_ENABLED_CONTENT_TYPES)
     };
@@ -849,20 +846,6 @@
             label={m.create_community_modal_location_label()}
             placeholder={m.create_community_modal_location_placeholder()}
           />
-
-          <!-- Community Description -->
-          <div class="form-control">
-            <label class="label" for="ccm-description-textarea">
-              <span class="label-text">{m.create_community_modal_description_label()}</span>
-              <span class="label-text-alt">{m.create_community_modal_description_alt()}</span>
-            </label>
-            <textarea
-              id="ccm-description-textarea"
-              bind:value={communityData.description}
-              placeholder={m.create_community_modal_description_placeholder()}
-              class="textarea-bordered textarea h-24 w-full"
-            ></textarea>
-          </div>
 
           <!-- Content Types (closed communities publish no sections — Concord
                channels replace them). The legacy form-gating ACL is retired
@@ -1075,12 +1058,6 @@
                     <p>
                       <strong>{m.create_community_modal_confirm_location()}</strong>
                       {communityData.location}
-                    </p>
-                  {/if}
-                  {#if communityData.description}
-                    <p>
-                      <strong>{m.create_community_modal_confirm_description()}</strong>
-                      {communityData.description}
                     </p>
                   {/if}
                 </div>

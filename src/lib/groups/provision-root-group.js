@@ -15,6 +15,7 @@ import {
   publishToGroupRelay
 } from './group-management.js';
 import { getGroupAdmins } from 'applesauce-common/helpers/groups';
+import { syncRootGroupMetadata } from './sync-group-metadata.js';
 import { pool } from '$lib/stores/nostr-infrastructure.svelte';
 
 const MARKER_PREFIX = 'groups:root-founding:';
@@ -121,6 +122,16 @@ export async function provisionRootGroup({
       // Re-seat on reuse: the pending group may predate the community-admin
       // seat (idempotent — 39001 is replaceable relay state).
       await seatCommunityAdmin(relayConn, existingId, user, communityPubkey);
+      // Same reasoning for the metadata: the pending group may predate the
+      // picture/about seeding, and without this it could never heal. `user`
+      // is a verified admin here (isConfirmedGroupAdmin just passed), and the
+      // sync preserves the group's current flags. Best-effort — a refusal must
+      // not cost us the reusable group.
+      await syncRootGroupMetadata({
+        pointer: { id: existingId, relay },
+        profile: { name, about, picture },
+        signerUser: user
+      });
       return { id: existingId, relay };
     }
   }

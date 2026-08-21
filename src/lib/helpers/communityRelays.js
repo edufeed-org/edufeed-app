@@ -141,6 +141,40 @@ export function parseCommunityContentTypes(event) {
 }
 
 /**
+ * A community's kind-0 metadata, from EITHER shape it reaches components in:
+ * the raw kind-0 event, or the already-parsed content the /c layout hands down
+ * (ProfileModel output). Dual-shape for the same reason applesauce's own
+ * getDisplayName/getProfilePicture are — applesauce's getProfileContent unwraps
+ * events ONLY, so on the parsed shape it silently returned undefined and the
+ * NIP-29 root group was seeded without picture/about (laoc, 2026-08-21).
+ *
+ * Also pure and null-safe, unlike getProfileContent, which caches onto the
+ * event object (unsafe inside `$derived`) and throws on null.
+ * @param {any} profile - kind-0 event or parsed profile content
+ * @returns {any | undefined} the profile content, or undefined when absent/malformed
+ */
+export function getCommunityProfileContent(profile) {
+  if (!profile) return undefined;
+  if (typeof profile.content !== 'string') return profile;
+  try {
+    return JSON.parse(profile.content) ?? undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * The community description, from its kind-0 `about` — the single source every
+ * surface reads (hero, cards, discover, OG previews, the NIP-29 root group's
+ * 39000).
+ * @param {any} profile - kind-0 event or parsed profile content
+ * @returns {string} the about text, or '' when absent/malformed
+ */
+export function getCommunityAbout(profile) {
+  return getCommunityProfileContent(profile)?.about || '';
+}
+
+/**
  * Parse global community metadata from a kind 10222 event.
  * Only parses tags before the first 'content' section.
  * @param {any} event - The kind 10222 community event

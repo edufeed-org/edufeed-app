@@ -1,5 +1,6 @@
 <script>
   import { getDisplayName, getProfilePicture } from 'applesauce-core/helpers';
+  import { parseCommunityMetadata, getCommunityAbout } from '$lib/helpers/communityRelays.js';
   import { useCommunityMembership } from '$lib/stores/joined-communities-list.svelte.js';
   import { joinCommunity } from '$lib/helpers/community';
   import { deriveCommunityType } from '$lib/groups/community-membership.js';
@@ -16,7 +17,7 @@
   import { getContext } from 'svelte';
   import ProfileAvatar from '$lib/components/shared/ProfileAvatar.svelte';
   import ImageWithFallback from '../../shared/ImageWithFallback.svelte';
-  import { ChevronRightIcon } from '$lib/components/icons';
+  import { ChevronRightIcon, LocationIcon } from '$lib/components/icons';
   import * as m from '$lib/paraglide/messages';
 
   let {
@@ -152,7 +153,11 @@
   let displayName = $derived(getDisplayName(profileEvent) || 'Community');
   let avatarUrl = $derived(getProfilePicture(profileEvent));
   let bannerUrl = $derived(profileEvent?.banner || null);
-  let description = $derived(communikeyEvent?.content || '');
+  // The community's kind-0 `about` is the single description source (cards,
+  // discover, OG previews and the NIP-29 39000 all read it). The 10222 event
+  // content is NOT a fallback: no app write path ever fills it.
+  let description = $derived(getCommunityAbout(profileEvent));
+  let location = $derived(parseCommunityMetadata(communikeyEvent).location || '');
   // Community type is derived from the event's pointer tags (never
   // declared) — closed communities have no kind-30000 follow-set join, so
   // the button block is skipped for them entirely.
@@ -357,6 +362,13 @@
         {m.community_profile_hero_more()}
       </button>
     {/if}
+  {/if}
+
+  {#if location}
+    <p class="mt-1 flex items-center gap-1 text-sm text-base-content/60">
+      <LocationIcon class_="h-3.5 w-3.5 shrink-0" />
+      <span>{location}</span>
+    </p>
   {/if}
 </div>
 

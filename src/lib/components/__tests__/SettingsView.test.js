@@ -234,6 +234,27 @@ describe('SettingsView — Community-Typ pane', () => {
     expect(confirm.disabled).toBe(false);
   });
 
+  it('teardown: the expected name also resolves from an already-parsed profile', async () => {
+    // Same dual-shape hazard as the flip seeding: with ProfileModel output the
+    // name read came back empty, so the confirm gate compared against ''.
+    render(SettingsView, {
+      props: {
+        communityId: OWNER,
+        communikeyEvent: moderatedEvent,
+        profileEvent: { name: 'Test Community' }
+      }
+    });
+    await fireEvent.click(await screen.findByTestId('settings-teardown'));
+    const confirm = /** @type {HTMLButtonElement} */ (
+      await screen.findByTestId('settings-teardown-confirm')
+    );
+    expect(confirm.disabled).toBe(true);
+    await fireEvent.input(screen.getByTestId('settings-teardown-input'), {
+      target: { value: 'Test Community' }
+    });
+    expect(confirm.disabled).toBe(false);
+  });
+
   it('teardown: confirming deletes the groups + reverts via teardownCommunityGroups', async () => {
     render(SettingsView, {
       props: { communityId: OWNER, communikeyEvent: moderatedEvent, profileEvent }
@@ -287,6 +308,49 @@ describe('SettingsView — Community-Typ pane', () => {
         about: 'Building for better education',
         picture: 'https://i.nostr.build/pic.jpg'
       })
+    );
+  });
+
+  it('flip-to-moderated: seeds picture + about from an ALREADY-PARSED profile (the runtime shape)', async () => {
+    // The /c layout hands SettingsView ProfileModel output — parsed content,
+    // not a kind-0 event. applesauce's getProfileContent only unwraps events,
+    // so it returned undefined here and the root group was minted name-only:
+    // the reported "group has no picture/description in other clients" bug.
+    render(SettingsView, {
+      props: {
+        communityId: OWNER,
+        communikeyEvent: openEvent,
+        profileEvent: {
+          name: 'Test Community',
+          about: 'Building for better education',
+          picture: 'https://i.nostr.build/pic.jpg'
+        }
+      }
+    });
+    await fireEvent.click(await screen.findByTestId('settings-flip-to-moderated'));
+    await fireEvent.click(await screen.findByTestId('settings-flip-confirm'));
+    await waitFor(() => expect(provisionRootGroup).toHaveBeenCalledOnce());
+    expect(provisionRootGroup).toHaveBeenCalledWith(
+      expect.objectContaining({
+        name: 'Test Community',
+        about: 'Building for better education',
+        picture: 'https://i.nostr.build/pic.jpg'
+      })
+    );
+  });
+
+  it('flip-to-moderated: passes the community pubkey so it gets seated as a root-group admin', async () => {
+    // Without the seat the community key is missing from the 39001, and every
+    // later metadata re-sync signed with the community signer is rejected by
+    // the relay — the wizard path passes it, the flip path must too.
+    render(SettingsView, {
+      props: { communityId: OWNER, communikeyEvent: openEvent, profileEvent }
+    });
+    await fireEvent.click(await screen.findByTestId('settings-flip-to-moderated'));
+    await fireEvent.click(await screen.findByTestId('settings-flip-confirm'));
+    await waitFor(() => expect(provisionRootGroup).toHaveBeenCalledOnce());
+    expect(provisionRootGroup).toHaveBeenCalledWith(
+      expect.objectContaining({ communityPubkey: OWNER })
     );
   });
 

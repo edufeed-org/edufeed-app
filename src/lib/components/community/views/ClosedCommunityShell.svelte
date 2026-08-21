@@ -13,6 +13,7 @@
 -->
 <script>
   import { getDisplayName, getProfilePicture } from 'applesauce-core/helpers';
+  import { getCommunityAbout } from '$lib/helpers/communityRelays.js';
   import { nip19 } from 'nostr-tools';
   import ImageWithFallback from '../../shared/ImageWithFallback.svelte';
   import * as m from '$lib/paraglide/messages';
@@ -26,7 +27,9 @@
 
   let displayName = $derived(getDisplayName(communityProfile) || 'Community');
   let avatarUrl = $derived(getProfilePicture(communityProfile));
-  let description = $derived(communikeyEvent?.content || '');
+  // Single description source: the community's kind-0 `about` (see
+  // CommunityProfileHero) — the 10222 content is never written by this app.
+  let description = $derived(getCommunityAbout(communityProfile));
 
   // /p/<npub> — the route accepts hex too, but npub is the canonical form
   // other components link to a profile with.

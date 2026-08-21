@@ -81,3 +81,21 @@ describe('ClosedCommunityShell', () => {
     expect(screen.getByRole('link', { name: 'Contact the owner' })).toBeTruthy();
   });
 });
+
+// Same single-source rule as CommunityProfileHero: the description comes from
+// the community's kind-0 `about`, never from the 10222 event content.
+describe('ClosedCommunityShell — description source', () => {
+  it('shows the kind-0 about and ignores stale 10222 content', () => {
+    render(ClosedCommunityShell, {
+      props: {
+        communikeyEvent: CLOSED_EVENT,
+        communityProfile: {
+          ...PROFILE_EVENT,
+          content: JSON.stringify({ name: 'Secret Society', about: 'Nur auf Einladung' })
+        }
+      }
+    });
+    expect(screen.getByText('Nur auf Einladung')).toBeTruthy();
+    expect(screen.queryByText('A private space for invited members only.')).toBeNull();
+  });
+});

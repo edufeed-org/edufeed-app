@@ -1,8 +1,12 @@
 <!--
   CommunityBasicsForm — the inline home of everything EditCommunityModal used
   to hold (settings redesign, laoc 2026-08-18): community profile entry,
-  location, description, content types, LiveKit, and the advanced
-  relay/blossom lists, saving the rebuilt 10222 with the community signer.
+  location, content types, LiveKit, and the advanced relay/blossom lists,
+  saving the rebuilt 10222 with the community signer.
+
+  The description is NOT here: it lives once, in the kind-0 profile
+  (getCommunityAbout) — the inline 10222 `description` override this card used
+  to offer was read by nothing the user could see (laoc, 2026-08-21).
 
   Being a PAGE section (not a modal) also dissolves the old modal-in-modal
   problem: opening the kind-0 profile editor no longer unmounts this form,
@@ -21,6 +25,8 @@
   import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
   import { showToast } from '$lib/helpers/toast';
   import EditableList from '$lib/components/shared/EditableList.svelte';
+  import ProfileAvatar from '$lib/components/shared/ProfileAvatar.svelte';
+  import { useUserProfile } from '$lib/stores/user-profile.svelte.js';
   import LocationInput from '$lib/components/shared/LocationInput.svelte';
   import ContentTypesAndACL from '$lib/components/shared/ContentTypesAndACL.svelte';
   import {
@@ -35,17 +41,24 @@
     getCommunityGlobalRelays,
     hasStrictContentMarker
   } from '$lib/helpers/communityRelays.js';
-  import { deriveCommunityType } from '$lib/groups/community-membership.js';
+  import { deriveCommunityType, parseMembershipPointer } from '$lib/groups/community-membership.js';
+  import { syncRootGroupMetadataWithFallback } from '$lib/groups/sync-group-metadata.js';
+  import { flatGroupsRelay, communityGroupsEndpoint } from '$lib/groups/community-endpoint.js';
+  import { manager } from '$lib/stores/accounts.svelte.js';
   import { getCommunikeyRelays } from '$lib/helpers/relay-helper.js';
   import { addressLoader } from '$lib/loaders/base.js';
 
   let { communikeyEvent } = $props();
 
+  // The community's kind-0 — previewed in the profile row so the card shows
+  // the name/picture/description it sends you to the modal to edit.
+  const getCommunityProfile = useUserProfile(() => communikeyEvent?.pubkey);
+  let communityProfile = $derived(getCommunityProfile());
+
   let communityData = $state({
     relays: /** @type {string[]} */ ([]),
     blossomServers: /** @type {string[]} */ ([]),
     location: '',
-    description: '',
     livekitUrl: '',
     contentTypes: createDefaultContentTypes()
   });
@@ -58,6 +71,21 @@
   // section tags over verbatim. Rebuilding them here would emit UNGATED
   // sections and silently flip the community to Offen.
   let isClosed = $derived(deriveCommunityType(communikeyEvent) === 'closed');
+  // The community's own relay address: the per-community virtual endpoint
+  // wss://<host>/c/<rootId>, whose NIP-11 carries this community's name,
+  // about and icon — that is what other clients (Armada) open it with. The
+  // membership pointer stores the FLAT host instead, because creates and
+  // moderation writes must land there (see community-endpoint.js), so it is
+  // shown as the host, not as the address.
+  let membershipPointer = $derived(parseMembershipPointer(communikeyEvent));
+  // Trailing slash trimmed: normalizeURL adds one, which reads as a typo next
+  // to the slash-free endpoint shown above it.
+  let groupRelayHost = $derived(
+    membershipPointer ? flatGroupsRelay(membershipPointer.relay).replace(/\/$/, '') : ''
+  );
+  let groupRelay = $derived(
+    membershipPointer ? communityGroupsEndpoint(membershipPointer.relay, membershipPointer.id) : ''
+  );
 
   let isPublishing = $state(false);
   let errors = $state(/** @type {Record<string, string>} */ ({}));
@@ -97,7 +125,6 @@
       .filter((/** @type {string[]} */ t) => t[0] === 'blossom')
       .map((/** @type {string[]} */ t) => t[1]);
     const location = tags.find((/** @type {string[]} */ t) => t[0] === 'location')?.[1] ?? '';
-    const description = tags.find((/** @type {string[]} */ t) => t[0] === 'description')?.[1] ?? '';
     const contentTypes = createDefaultContentTypes();
     const metadata = parseCommunityMetadata(communikeyEvent);
     const livekitUrl = metadata.livekitUrl || '';
@@ -141,7 +168,6 @@
       relays: relays.length > 0 ? relays : ['wss://relay.edufeed.org'],
       blossomServers,
       location,
-      description,
       livekitUrl,
       contentTypes: applyParsedAccessTiers(contentTypes, communikeyEvent)
     };
@@ -287,6 +313,24 @@
       }
 
       showToast(m.community_basics_saved(), 'success');
+
+      // Refresh the linked NIP-29 group's 39000 from the community's CURRENT
+      // kind-0. Nothing on this card edits those fields anymore, so this is a
+      // no-op in the common case — but it makes "Änderungen speichern" the
+      // repair action for a group whose metadata went stale, instead of that
+      // living only behind the profile modal (laoc, 2026-08-21). Best-effort:
+      // the 10222 is already published, so a refusal only warns.
+      const syncResult = await syncRootGroupMetadataWithFallback({
+        pointer: parseMembershipPointer(communikeyEvent),
+        profile: {
+          name: communityProfile?.name,
+          about: communityProfile?.about,
+          picture: communityProfile?.picture
+        },
+        // Community signer first, human admin as backup — see the helper.
+        signers: [{ pubkey: communikeyEvent.pubkey, signer }, manager.active]
+      });
+      if (!syncResult.ok) showToast(m.community_group_metadata_sync_failed(), 'warning');
     } catch (error) {
       console.error('Error updating community:', error);
       errors.publishing =
@@ -324,16 +368,24 @@
 
 <div class="card mb-6 bg-base-100 shadow-xl" data-testid="community-basics-form">
   <div class="card-body space-y-5">
-    <!-- Community profile (kind 0): avatar, banner, name … -->
-    <div class="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-base-200 p-4">
-      <div>
-        <h2 class="font-medium">
-          {m.edit_community_modal_profile_section_title?.() || 'Community profile'}
-        </h2>
-        <p class="text-xs text-base-content/60">
-          {m.edit_community_modal_profile_section_note?.() ||
-            'Avatar, banner, name, and other kind 0 metadata.'}
-        </p>
+    <!-- Community profile (kind 0): avatar, banner, name, description.
+      Previews what it owns — since the inline description override went away
+      this row is the single place those fields are edited. -->
+    <div class="flex flex-wrap items-center justify-between gap-3 rounded-lg bg-base-200 p-4">
+      <div class="flex min-w-0 items-center gap-3">
+        <ProfileAvatar profile={communityProfile} size="sm" />
+        <div class="min-w-0">
+          <h2 class="truncate font-medium">
+            {communityProfile?.name ||
+              m.edit_community_modal_profile_section_title?.() ||
+              'Community profile'}
+          </h2>
+          <p class="line-clamp-2 text-xs text-base-content/60">
+            {communityProfile?.about ||
+              m.edit_community_modal_profile_section_note?.() ||
+              'Avatar, banner, name, and other kind 0 metadata.'}
+          </p>
+        </div>
       </div>
       <button
         type="button"
@@ -343,19 +395,6 @@
       >
         {m.edit_community_modal_profile_section_button?.() || 'Edit community profile'}
       </button>
-    </div>
-
-    <div class="form-control">
-      <label class="label" for="basics-description">
-        <span class="label-text">{m.create_community_modal_description_label()}</span>
-        <span class="label-text-alt">{m.create_community_modal_description_alt()}</span>
-      </label>
-      <textarea
-        id="basics-description"
-        bind:value={communityData.description}
-        placeholder={m.create_community_modal_description_placeholder()}
-        class="textarea-bordered textarea h-24 w-full"
-      ></textarea>
     </div>
 
     <LocationInput
@@ -399,6 +438,24 @@
         {m.advanced_settings_label?.() || 'Advanced Settings'}
       </div>
       <div class="collapse-content space-y-4">
+        <!-- The NIP-29 relay holding the roster + channels. Read-only on
+          purpose: a group cannot move relays, only be founded anew there. -->
+        {#if groupRelay}
+          <div class="form-control" data-testid="basics-group-relay">
+            <div class="label">
+              <span class="label-text">{m.community_basics_group_relay_label()}</span>
+            </div>
+            <code
+              class="block truncate rounded-lg bg-base-100 px-3 py-2 font-mono text-sm text-base-content/80"
+              >{groupRelay}</code
+            >
+            <!-- Plain <p>, not label-text-alt: the .label flex row keeps a
+              sentence this long on one line and clips it at the card edge. -->
+            <p class="mt-1 text-xs text-base-content/60">
+              {m.community_basics_group_relay_help({ host: groupRelayHost })}
+            </p>
+          </div>
+        {/if}
         <EditableList
           bind:items={communityData.relays}
           label={m.create_community_modal_relays_label()}
