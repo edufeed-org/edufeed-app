@@ -230,6 +230,31 @@ describe('buildSidebarZones', () => {
     expect(zones.showCreateEntry).toBe(false);
   });
 
+  // 8d03f873 widened create/manage to root-39001-admin ∪ key-holding owner,
+  // but only on PrivateChannelsView's (mobile-only) rail — the desktop zone
+  // stayed owner-only, hiding creation from roster admins (laoc, 2026-08-21).
+  it('a non-owner root-39001 admin gets the create entry', () => {
+    const zones = buildSidebarZones({
+      tabs,
+      channelRows: [],
+      isMember: true,
+      isOwner: false,
+      isRootAdmin: true
+    });
+    expect(zones.showCreateEntry).toBe(true);
+  });
+
+  it('a root admin without a channels tab still gets no create entry', () => {
+    const zones = buildSidebarZones({
+      tabs: ['home', 'chat', 'settings'],
+      channelRows: [],
+      isMember: true,
+      isOwner: false,
+      isRootAdmin: true
+    });
+    expect(zones.showCreateEntry).toBe(false);
+  });
+
   it('owner with rows present ALSO gets the create entry (the zone is the only desktop surface)', () => {
     // Since the desktop layout dropped PrivateChannelsView's own rail
     // (2026-08-17, "double sidebar"), the zone carries channel creation

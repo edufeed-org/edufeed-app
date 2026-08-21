@@ -228,6 +228,14 @@
       concordIsMember: getConcordForNav().membership === 'member'
     });
   });
+  // Root-39001-admin signal for the sidebar's create entry — same gate as
+  // PrivateChannelsView's `canOpenCreateWizard` (8d03f873 widened create to
+  // root admins; the desktop zone stayed owner-only until laoc 2026-08-21).
+  // Reuses the roster subscription above, no extra network work.
+  const zoneRootAdmin = $derived.by(() => {
+    const activeUser = getActiveUserForNav();
+    return !!activeUser && getRootRosterForNav().admins.some((a) => a.pubkey === activeUser.pubkey);
+  });
 
   setContext('communikeyEvent', () => communikeyEvent);
   // The ONE availability-corrected content view (the $effect above). The
@@ -260,7 +268,8 @@
     accessibleTabs,
     communityEvent: communikeyEvent,
     channelRows,
-    isMember: zoneMember
+    isMember: zoneMember,
+    isRootAdmin: zoneRootAdmin
   }));
   $effect(() => () => setContentNavData?.(undefined));
 

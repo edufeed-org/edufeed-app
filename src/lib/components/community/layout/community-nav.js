@@ -65,25 +65,30 @@ export function communityNavTabIds({
  * when that filtering actually hid something — a visitor community with
  * nothing but world-readable channels gets no hint.
  *
- * Owner create-entry: buildSidebarZones drops the 'channels' tab id and the
+ * Create-entry: buildSidebarZones drops the 'channels' tab id and the
  * component only renders the zone when it has content — so a community with
  * ZERO channels had no desktop path to the channels view at all, and its
  * owner no way to create the first channel (laoc, 2026-08-14). When the
- * owner's tab list carries 'channels', `showCreateEntry` asks the component
- * to render a create row. Not gated on empty rows: since the desktop layout
- * dropped PrivateChannelsView's own rail (laoc, 2026-08-17 — the "double
- * sidebar"), this zone is the ONLY desktop channel surface, so the create
- * entry must be reachable with channels present too.
+ * tab list carries 'channels', `showCreateEntry` asks the component to
+ * render a create row for the key-holding owner OR a root-39001 admin —
+ * the same gate PrivateChannelsView's `canOpenCreateWizard` uses (8d03f873:
+ * the wizard signs 9007 as the active user, the relay enforces
+ * admin-of-parent, so no community key is required). Not gated on empty
+ * rows: since the desktop layout dropped PrivateChannelsView's own rail
+ * (laoc, 2026-08-17 — the "double sidebar"), this zone is the ONLY desktop
+ * channel surface, so the create entry must be reachable with channels
+ * present too.
  *
  * @param {{
  *   tabs: string[],
  *   channelRows: Array<{key: string, worldReadable: boolean}>,
  *   isMember: boolean,
- *   isOwner: boolean
+ *   isOwner: boolean,
+ *   isRootAdmin?: boolean
  * }} args
  * @returns {{inhalte: string[], kanaele: any[], footer: string[], showLockHint: boolean, showCreateEntry: boolean}}
  */
-export function buildSidebarZones({ tabs, channelRows, isMember, isOwner }) {
+export function buildSidebarZones({ tabs, channelRows, isMember, isOwner, isRootAdmin = false }) {
   const excluded = new Set(['home', 'channels', 'settings', 'members']);
   const inhalte = (tabs ?? []).filter((id) => !excluded.has(id));
 
@@ -91,7 +96,7 @@ export function buildSidebarZones({ tabs, channelRows, isMember, isOwner }) {
   const canSeeAll = isMember || isOwner;
   const kanaele = canSeeAll ? deduped : deduped.filter((row) => row.worldReadable);
   const showLockHint = !canSeeAll && kanaele.length < deduped.length;
-  const showCreateEntry = isOwner && (tabs ?? []).includes('channels');
+  const showCreateEntry = (isOwner || isRootAdmin) && (tabs ?? []).includes('channels');
 
   return {
     inhalte,

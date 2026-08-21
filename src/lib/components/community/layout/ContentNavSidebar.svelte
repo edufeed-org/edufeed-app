@@ -53,7 +53,8 @@
     accessibleTabs = /** @type {Set<string>} */ (new Set()),
     communityEvent = /** @type {any} */ (null),
     channelRows = /** @type {import('$lib/groups/community-channel-rows.js').ChannelRow[]} */ ([]),
-    isMember = false
+    isMember = false,
+    isRootAdmin = false
   } = $props();
 
   import { getProfilePicture } from 'applesauce-core/helpers';
@@ -130,7 +131,7 @@
       // extended by NIP-29 groups has none of the Concord inputs above.
       hasGroupChannels: parseGroupPointers(communityEvent).length > 0
     });
-    return buildSidebarZones({ tabs: tabIds, channelRows, isMember, isOwner });
+    return buildSidebarZones({ tabs: tabIds, channelRows, isMember, isOwner, isRootAdmin });
   });
 
   /**
@@ -384,8 +385,9 @@
           {/if}
         {/each}
         {#if zones.showCreateEntry}
-          <!-- The owner's desktop path to channel creation — the view's own
-            rail is mobile-only since the double-sidebar cleanup. -->
+          <!-- The owner's/root admin's desktop path to channel creation —
+            the view's own rail is mobile-only since the double-sidebar
+            cleanup. -->
           <button
             data-testid="nav-channels-create"
             onclick={() => {

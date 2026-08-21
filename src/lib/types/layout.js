@@ -17,7 +17,8 @@
  *   accessibleTabs: Set<string>,
  *   communityEvent: any,
  *   channelRows: import('$lib/groups/community-channel-rows.js').ChannelRow[],
- *   isMember: boolean
+ *   isMember: boolean,
+ *   isRootAdmin: boolean
  * }} ContentNavData
  */
 

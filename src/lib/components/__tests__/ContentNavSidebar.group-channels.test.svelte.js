@@ -277,6 +277,26 @@ describe('ContentNavSidebar — two-zone sidebar', () => {
     expect(onContentTypeSelect).toHaveBeenCalledWith('channels', undefined);
   });
 
+  // 8d03f873 widened create to root-39001 admins, but only on the mobile
+  // rail — the desktop zone's entry stayed key-holder-only. Pins that the
+  // isRootAdmin prop actually reaches buildSidebarZones (laoc, 2026-08-21).
+  it('a non-owner root-39001 admin of a moderated community gets the create entry', () => {
+    renderNav({
+      communityEvent: communityEvent([['membership', 'root-group', RELAY]]),
+      isMember: true,
+      isRootAdmin: true
+    });
+    expect(screen.queryByTestId('nav-channels-create')).not.toBeNull();
+  });
+
+  it('a plain member of a moderated community gets no create entry', () => {
+    renderNav({
+      communityEvent: communityEvent([['membership', 'root-group', RELAY]]),
+      isMember: true
+    });
+    expect(screen.queryByTestId('nav-channels-create')).toBeNull();
+  });
+
   it('the channels tab id never renders as a row in the Inhalte zone', () => {
     renderNav({
       channelRows: [worldReadableGroupRow()],
