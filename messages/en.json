@@ -3299,6 +3299,8 @@
   "community_access_publisher": "Publishers only",
   "community_access_role": "Role",
   "community_access_editor_title": "Content & Permissions",
+  "community_section_override_lead": "As a group admin you decide which content types the community offers publicly and who may publish there.",
+  "community_section_override_by": "Last changed by {name}",
   "community_access_editor_lead": "Who can publish which content types?",
   "community_access_editor_role_placeholder": "Role name",
   "community_access_editor_role_required": "Role name required",

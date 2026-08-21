@@ -27,6 +27,7 @@
   import { buildChannelRows } from '$lib/groups/community-channel-rows.js';
   import { useCommunityChannels } from '$lib/groups/community-channels.svelte.js';
   import { useRootRoster } from '$lib/groups/root-roster.svelte.js';
+  import { useEffectiveCommunity } from '$lib/groups/section-override.svelte.js';
   import { useRosterReconcile } from '$lib/groups/roster-reconcile.svelte.js';
   import { useActiveUser } from '$lib/stores/accounts.svelte';
   import { isCommunityOwner } from '$lib/helpers/community-signer.js';
@@ -148,22 +149,39 @@
     communityProfile?.name || communityProfile?.display_name || 'Community'
   );
   let avatarUrl = $derived(getProfilePicture(communityProfile));
-  let restrictedTabs = $derived(getRestrictedTabIds(communikeyEvent));
+
+  // A moderated community's root-group admins can reshape its content
+  // sections without holding the community key, via a kind-30223 override
+  // (src/lib/groups/section-override.js). `effectiveCommunityEvent` is the
+  // 10222 with that override's section block swapped in, so everything
+  // downstream — tabs, gating, share pickers, the FAB — picks it up without
+  // a signature change. `communikeyEvent` stays the raw event and is what
+  // any signing/editing path must use.
+  const getEffectiveCommunity = useEffectiveCommunity(() => communikeyEvent);
+  let effectiveCommunityEvent = $derived(getEffectiveCommunity().event);
+  let sectionSource = $derived(getEffectiveCommunity().source);
+  let sectionAuthor = $derived(getEffectiveCommunity().author);
+
+  let restrictedTabs = $derived(getRestrictedTabIds(effectiveCommunityEvent));
 
   const profileAccess = useCommunityAccess(
-    () => communikeyEvent,
+    () => effectiveCommunityEvent,
     () => getCommunikeyRelays()
   );
-  let accessibleTabs = $derived(getAccessibleTabIds(communikeyEvent, profileAccess));
+  let accessibleTabs = $derived(getAccessibleTabIds(effectiveCommunityEvent, profileAccess));
 
   // Provide shared data to child components via context
-  let sectionName = $derived(getSectionNameForContentType(communikeyEvent, selectedContentType));
+  let sectionName = $derived(
+    getSectionNameForContentType(effectiveCommunityEvent, selectedContentType)
+  );
   let allowedAuthors = $derived(
     sectionName && !profileAccess.isLoading ? profileAccess.getAllowedAuthors(sectionName) : null
   );
 
   let communityWideFormRef = $derived(
-    !profileAccess.isLoading ? getCommunityWideFormRef(profileAccess, communikeyEvent) : null
+    !profileAccess.isLoading
+      ? getCommunityWideFormRef(profileAccess, effectiveCommunityEvent)
+      : null
   );
 
   const getIsMember = useCommunityMembership(() => data.pubkey);
@@ -237,7 +255,14 @@
     return !!activeUser && getRootRosterForNav().admins.some((a) => a.pubkey === activeUser.pubkey);
   });
 
-  setContext('communikeyEvent', () => communikeyEvent);
+  // The EFFECTIVE community event (10222 with any admin section override
+  // applied), because every consumer of this context reads it for display.
+  // Community-level metadata is preserved verbatim, so metadata readers
+  // (MeetView's livekit URL) are unaffected. The settings forms receive it
+  // too, and that is deliberate: an owner save then absorbs the admins'
+  // section configuration into the 10222 instead of silently reverting it.
+  setContext('communikeyEvent', () => effectiveCommunityEvent);
+  setContext('sectionOverride', () => ({ source: sectionSource, author: sectionAuthor }));
   // The ONE availability-corrected content view (the $effect above). The
   // child page must render from THIS, not re-derive from $page.data — a
   // second source of truth is exactly how the sidebar hid the channels tab
@@ -266,7 +291,7 @@
     communityPubkey: data.pubkey,
     restrictedTabs,
     accessibleTabs,
-    communityEvent: communikeyEvent,
+    communityEvent: effectiveCommunityEvent,
     channelRows,
     isMember: zoneMember,
     isRootAdmin: zoneRootAdmin
@@ -305,7 +330,7 @@
 </script>
 
 <div class="px-4 pt-3 empty:hidden">
-  <LegacyContentTypesBanner communityEvent={communikeyEvent} />
+  <LegacyContentTypesBanner communityEvent={effectiveCommunityEvent} />
 </div>
 
 {@render children()}
@@ -315,7 +340,7 @@
   <BottomTabBar
     bind:selectedContentType
     onContentTypeSelect={handleContentTypeSelect}
-    communityEvent={communikeyEvent}
+    communityEvent={effectiveCommunityEvent}
     {restrictedTabs}
     {accessibleTabs}
   />

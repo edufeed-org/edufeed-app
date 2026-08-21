@@ -4,7 +4,9 @@ import {
   buildCommunityDefinitionTags,
   createDefaultContentTypes,
   preservePointerTags,
-  applyParsedAccessTiers
+  applyParsedAccessTiers,
+  contentTypesFromEvent,
+  sectionsFromContentTypes
 } from '$lib/helpers/communityTagBuilder.js';
 
 describe('buildCommunityDefinitionTags', () => {
@@ -505,5 +507,98 @@ describe('applyParsedAccessTiers', () => {
 
     applyParsedAccessTiers(contentTypes, communityEvent);
     expect(contentTypes.learning.access).toEqual({ tier: 'all' });
+  });
+});
+
+// contentTypesFromEvent is the read half of the chip picker, extracted from
+// CommunityBasicsForm so the owner form and the admins' section-override pane
+// seed from ONE implementation.
+describe('contentTypesFromEvent', () => {
+  test('enables the sections the event declares and keeps their display names', () => {
+    const event = {
+      kind: 10222,
+      tags: [
+        ['strict', 'content'],
+        ['content', 'Materialien'],
+        ['k', '30142'],
+        ['access', 'role', 'publisher'],
+        ['content', 'Termine'],
+        ['k', '31923']
+      ]
+    };
+
+    const result = contentTypesFromEvent(event);
+    expect(result.learning.enabled).toBe(true);
+    expect(result.learning.name).toBe('Materialien');
+    expect(result.learning.access).toEqual({ tier: 'role', role: 'publisher' });
+    expect(result.calendar.enabled).toBe(true);
+    expect(result.calendar.name).toBe('Termine');
+    expect(result.chat.enabled).toBe(false);
+  });
+
+  test('a legacy event without the strict marker fails open — everything enabled', () => {
+    // Matches the long-standing rule in hasStrictContentMarker: declarations
+    // on a pre-strict community are advisory, so saving must preserve the
+    // status quo rather than silently switching sections off.
+    const legacy = {
+      kind: 10222,
+      tags: [
+        ['content', 'Chat'],
+        ['k', '9']
+      ]
+    };
+    const result = contentTypesFromEvent(legacy);
+    expect(result.chat.enabled).toBe(true);
+    expect(result.learning.enabled).toBe(true);
+    // Meet is the exception: no LiveKit URL, no Meet.
+    expect(result.meet.enabled).toBe(false);
+  });
+
+  test('meet fails open only when the community declares a livekit url', () => {
+    const withLivekit = {
+      kind: 10222,
+      tags: [
+        ['livekit', 'wss://live.example/'],
+        ['content', 'Chat'],
+        ['k', '9']
+      ]
+    };
+    expect(contentTypesFromEvent(withLivekit).meet.enabled).toBe(true);
+  });
+
+  test('a null event yields the defaults with nothing enabled', () => {
+    const result = contentTypesFromEvent(null);
+    expect(Object.values(result).every((ct) => !ct.enabled)).toBe(true);
+  });
+});
+
+// sectionsFromContentTypes is the write half: the chip record back into the
+// {name, kinds, access} shape buildSectionOverrideTemplate consumes.
+describe('sectionsFromContentTypes', () => {
+  test('emits only enabled sections, with their canonical kinds and tier', () => {
+    const contentTypes = createDefaultContentTypes(['learning', 'chat']);
+    contentTypes.learning.name = 'Materialien';
+    contentTypes.learning.access = { tier: 'role', role: 'publisher' };
+
+    expect(sectionsFromContentTypes(contentTypes)).toEqual([
+      { name: 'Chat', kinds: [9], access: { tier: 'all' } },
+      { name: 'Materialien', kinds: [30142], access: { tier: 'role', role: 'publisher' } }
+    ]);
+  });
+
+  test('round-trips through contentTypesFromEvent', () => {
+    const event = {
+      kind: 10222,
+      tags: [
+        ['strict', 'content'],
+        ['content', 'Materialien'],
+        ['k', '30142'],
+        ['access', 'members']
+      ]
+    };
+    const sections = sectionsFromContentTypes(contentTypesFromEvent(event));
+    expect(sections).toEqual([
+      { name: 'Materialien', kinds: [30142], access: { tier: 'members' } }
+    ]);
   });
 });

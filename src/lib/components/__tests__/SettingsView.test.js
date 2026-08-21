@@ -430,6 +430,32 @@ describe('SettingsView — MembershipPane mount gate (Task 3: approvals reachabi
     // Owner-only cards (community key required) stay hidden.
     expect(screen.queryByTestId('settings-type-card')).toBeNull();
     expect(screen.queryByTestId('access-tier-editor')).toBeNull();
+    // …but the admin still reaches "Inhalte & Rechte", by the route that
+    // needs no community key: the kind-30223 section override.
+    expect(screen.getByTestId('section-override-pane')).toBeTruthy();
+  });
+
+  it('gives the key-holding owner the 10222 editor, never the override pane', async () => {
+    // Two routes to the same choices; nobody should see both, or the same
+    // settings would publish two different events.
+    rosterFixture.value = {
+      ...rosterFixture.value,
+      admins: [{ pubkey: OWNER, roles: ['admin'] }]
+    };
+    render(SettingsView, {
+      props: { communityId: OWNER, communikeyEvent: moderatedEvent, profileEvent }
+    });
+    expect(await screen.findByTestId('access-tier-editor')).toBeTruthy();
+    expect(screen.queryByTestId('section-override-pane')).toBeNull();
+  });
+
+  it('gives a plain member neither editor', async () => {
+    render(SettingsView, {
+      props: { communityId: STRANGER, communikeyEvent: moderatedStrangerEvent, profileEvent }
+    });
+    await screen.findByText('Community Settings');
+    expect(screen.queryByTestId('access-tier-editor')).toBeNull();
+    expect(screen.queryByTestId('section-override-pane')).toBeNull();
   });
 
   it('renders no MembershipPane content for a signed-in stranger (not a roster admin, not the owner)', async () => {

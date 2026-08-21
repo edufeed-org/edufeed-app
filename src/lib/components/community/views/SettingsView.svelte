@@ -1,5 +1,7 @@
 <script>
+  import { getContext } from 'svelte';
   import { SettingsIcon } from '$lib/components/icons';
+  import { useRootRoster } from '$lib/groups/root-roster.svelte.js';
   import { leaveCommunity } from '$lib/helpers/community';
   import { useCommunityMembership } from '$lib/stores/joined-communities-list.svelte.js';
   import { useActiveUser } from '$lib/stores/accounts.svelte';
@@ -16,6 +18,7 @@
   import ConcordAreaBadge from '$lib/components/shared/ConcordAreaBadge.svelte';
   import ChannelCreateWizard from '$lib/components/community/channels/ChannelCreateWizard.svelte';
   import AccessTierEditor from '$lib/components/community/settings/AccessTierEditor.svelte';
+  import SectionOverridePane from '$lib/components/community/settings/SectionOverridePane.svelte';
   import MembershipPane from '$lib/components/community/settings/MembershipPane.svelte';
   import CommunityBasicsForm from '$lib/components/community/settings/CommunityBasicsForm.svelte';
   import PublisherWindowPane from '$lib/components/community/settings/PublisherWindowPane.svelte';
@@ -318,6 +321,17 @@
   // Check if current user is the community owner
   let isOwner = $derived(isCommunityOwner(communikeyEvent?.pubkey));
 
+  // Root-group admins run a moderated community without holding its key, so
+  // they get the section-override route into "Inhalte & Rechte". Reuses the
+  // layout's roster/override state rather than opening a second subscription.
+  const getRootRoster = useRootRoster(() => communikeyEvent);
+  let isRootAdmin = $derived(
+    !!activeUser && getRootRoster().admins.some((admin) => admin.pubkey === activeUser.pubkey)
+  );
+  /** @type {() => {source: string, author: string | null}} */
+  const sectionOverride =
+    getContext('sectionOverride') ?? (() => ({ source: 'community', author: null }));
+
   // Single description source: the community's kind-0 `about` (see
   // CommunityProfileHero) — the 10222 content is never written by this app.
   let communityAbout = $derived(getCommunityAbout(profileEvent));
@@ -579,11 +593,23 @@
           />
         {/if}
 
-        <!-- Inhalte & Rechte (Task 7) — owner-only, moderated-only per-section
-             access tier editor. roleSuggestions comes from MembershipPane's
-             roster above (admins' roles + 'admin', deduped). -->
-        {#if isOwner && communityType === 'moderated'}
-          <AccessTierEditor {communikeyEvent} {communitySigner} {roleSuggestions} />
+        <!-- Inhalte & Rechte (Task 7) — moderated-only. Two routes to the
+             same choices, because they need different signatures: the owner
+             edits the 10222 in place, while a root-group admin holds no
+             community key and publishes a kind-30223 section override
+             instead (src/lib/groups/section-override.js). roleSuggestions
+             comes from MembershipPane's roster above (admins' roles +
+             'admin' + 'publisher', deduped). -->
+        {#if communityType === 'moderated'}
+          {#if isOwner}
+            <AccessTierEditor {communikeyEvent} {communitySigner} {roleSuggestions} />
+          {:else if isRootAdmin}
+            <SectionOverridePane
+              {communikeyEvent}
+              {roleSuggestions}
+              overrideAuthor={sectionOverride().author}
+            />
+          {/if}
         {/if}
 
         <!-- Publisher window (Schaufenster) — owner-only, only when a

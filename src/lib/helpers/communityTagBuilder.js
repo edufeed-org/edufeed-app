@@ -5,7 +5,11 @@
  * (profile list a-tags, enforced relays, languages).
  */
 
-import { parseCommunityContentTypes } from './communityRelays.js';
+import {
+  parseCommunityContentTypes,
+  parseCommunityMetadata,
+  hasStrictContentMarker
+} from './communityRelays.js';
 
 /**
  * @typedef {Object} ContentTypeFormData
@@ -80,6 +84,75 @@ export function createDefaultContentTypes(enabledKeys = []) {
     };
   }
   return result;
+}
+
+/** Kind number → content type key, the inverse of CONTENT_TYPE_KINDS.
+ * @type {Record<number, string>}
+ */
+const KIND_TO_KEY = Object.fromEntries(
+  Object.entries(CONTENT_TYPE_KINDS).flatMap(([key, kinds]) =>
+    kinds.map((kind) => [Number(kind), key])
+  )
+);
+
+/**
+ * Read a community event's declared sections back into the chip-picker
+ * record. The read half of the content-type editor, shared by the owner's
+ * CommunityBasicsForm and the root-group admins' section-override pane so
+ * both seed from one implementation.
+ *
+ * Legacy communities (no ["strict","content"] marker) fail open: their
+ * declarations are advisory, so everything is pre-enabled and saving
+ * preserves the status quo rather than silently switching sections off. Meet
+ * is the exception — without a LiveKit URL there is nothing to enable.
+ *
+ * @param {any} communityEvent kind 10222 (or null)
+ * @returns {Record<string, ContentTypeFormData & { formRef: string }>}
+ */
+export function contentTypesFromEvent(communityEvent) {
+  const contentTypes = createDefaultContentTypes();
+  if (!communityEvent) return contentTypes;
+
+  for (const section of parseCommunityContentTypes(communityEvent)) {
+    for (const kind of section.kinds) {
+      const key = KIND_TO_KEY[kind];
+      if (!key || !contentTypes[key]) continue;
+      contentTypes[key].enabled = true;
+      if (section.name) contentTypes[key].name = section.name;
+    }
+  }
+
+  if (!hasStrictContentMarker(communityEvent)) {
+    const livekitUrl = parseCommunityMetadata(communityEvent).livekitUrl;
+    for (const [key, ct] of Object.entries(contentTypes)) {
+      if (key === 'meet' && !livekitUrl && !ct.enabled) continue;
+      ct.enabled = true;
+    }
+  }
+
+  return applyParsedAccessTiers(contentTypes, communityEvent);
+}
+
+/**
+ * The write half: enabled chips back into the {name, kinds, access} shape
+ * buildSectionOverrideTemplate consumes.
+ * @param {Record<string, ContentTypeFormData>} contentTypes
+ * @returns {{name: string, kinds: number[], access: NonNullable<ContentTypeFormData['access']>}[]}
+ */
+export function sectionsFromContentTypes(contentTypes) {
+  /** @type {{name: string, kinds: number[], access: NonNullable<ContentTypeFormData['access']>}[]} */
+  const sections = [];
+  for (const [key, ct] of Object.entries(contentTypes ?? {})) {
+    if (!ct?.enabled) continue;
+    const kinds = CONTENT_TYPE_KINDS[key];
+    if (!kinds) continue;
+    sections.push({
+      name: ct.name,
+      kinds: kinds.map(Number),
+      access: ct.access ?? { tier: 'all' }
+    });
+  }
+  return sections;
 }
 
 /**
