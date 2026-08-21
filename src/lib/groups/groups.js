@@ -266,14 +266,18 @@ export function isMembershipRefusal(error) {
 }
 
 /**
- * A join request refused because the requester is ALREADY on the roster —
- * khatru answers 'duplicate: already a member'. Not a failure: membership is
- * exactly the state the click wanted (laoc, 2026-08-19 — a member whose
- * roster read lagged saw the join button and got a raw error for using it).
+ * A join or put-user refused because the target is ALREADY on the roster —
+ * not a failure: membership is exactly the state the action wanted (laoc,
+ * 2026-08-19 — a member whose roster read lagged saw the join button and got
+ * a raw error for using it). Pyramid words this differently per path:
+ * 'duplicate: already a member' for a member's own 9021, 'blocked: all
+ * targets are members already' for an admin's redundant 9000 — missing the
+ * second aborted approving a channel knock from anyone already seated in the
+ * root (laoc, 2026-08-21).
  * @param {unknown} error
  * @returns {boolean}
  */
 export function isAlreadyMemberError(error) {
   const message = String(/** @type {any} */ (error)?.message ?? '');
-  return /already a member/i.test(message);
+  return /already a member|members already/i.test(message);
 }

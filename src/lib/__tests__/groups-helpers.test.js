@@ -8,7 +8,8 @@ import {
   buildJoinRequestTemplate,
   buildLeaveRequestTemplate,
   buildGroupsListTemplate,
-  groupHref
+  groupHref,
+  isAlreadyMemberError
 } from '$lib/groups/groups.js';
 
 const ME = 'c'.repeat(64);
@@ -292,5 +293,24 @@ describe('buildGroupsListTemplate', () => {
     const template = buildGroupsListTemplate(existing, { add: pointer });
     expect(template.content).toBe('encrypted-hidden-groups');
     expect(template.tags).toContainEqual(['client', 'edufeed']);
+  });
+});
+
+describe('isAlreadyMemberError', () => {
+  // pyramid answers a redundant join with TWO different wordings depending on
+  // the path: a member's own 9021 gets "duplicate: already a member"
+  // (reject-event.go:108), an admin's redundant 9000 put-user gets
+  // "blocked: all targets are members already" (reject-event.go:297). The
+  // approve flow tolerates both — missing the second aborted a channel-knock
+  // approval for anyone already seated in the root (laoc, 2026-08-21).
+  it('matches the self-join duplicate wording', () => {
+    expect(isAlreadyMemberError(new Error('duplicate: already a member'))).toBe(true);
+  });
+  it('matches the redundant put-user wording', () => {
+    expect(isAlreadyMemberError(new Error('blocked: all targets are members already'))).toBe(true);
+  });
+  it('does not swallow real failures', () => {
+    expect(isAlreadyMemberError(new Error('restricted: not an admin'))).toBe(false);
+    expect(isAlreadyMemberError(undefined)).toBe(false);
   });
 });
