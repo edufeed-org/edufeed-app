@@ -89,7 +89,8 @@
   import { validateWizardStep } from '$lib/helpers/educational/validateWizardStep.js';
   // Share surfaces list joined ∪ area-linked communities — a private area's
   // member never (publicly) follow-set-joins, but must still be able to share.
-  import { useShareableCommunities } from '$lib/concord/shareable-communities.svelte.js';
+  import { useShareableCommunities } from '$lib/helpers/shareable-communities.svelte.js';
+  import { useShareRestrictions } from '$lib/stores/share-restrictions.svelte.js';
   import { useProfileMap } from '$lib/stores/profile-map.svelte.js';
   import { useLicenseForHash } from '$lib/stores/image-license.svelte.js';
   import { getDisplayName, getProfilePicture } from 'applesauce-core/helpers';
@@ -373,6 +374,27 @@
   const getJoinedCommunities = useShareableCommunities();
   const joinedCommunities = $derived(getJoinedCommunities());
 
+  // Which of them would swallow this resource: a section gated by a profile
+  // list or an `access` tier the user doesn't satisfy publishes fine and then
+  // renders for nobody. Every other share surface already marks these; this
+  // wizard was the one that never did, so a non-publisher could fill in the
+  // whole form and share into a gated section (laoc, 2026-08-21).
+  const getRestrictedCommunities = useShareRestrictions(
+    () => 30142,
+    () => joinedCommunities
+  );
+  const restrictedCommunities = $derived(getRestrictedCommunities());
+
+  // A row can become restricted after it was ticked — the roster or gate list
+  // arrives late, or the user is demoted mid-form. Drop it rather than carry a
+  // selection the share would silently lose.
+  $effect(() => {
+    const restricted = restrictedCommunities;
+    if (restricted.size === 0) return;
+    const kept = selectedCommunityPubkeys.filter((pubkey) => !restricted.has(pubkey));
+    if (kept.length !== selectedCommunityPubkeys.length) selectedCommunityPubkeys = kept;
+  });
+
   // Batch-load profiles for joined communities (used by the Share step to show
   // name + avatar instead of raw hex pubkeys).
   const getJoinedCommunityProfiles = useProfileMap(() => joinedCommunities);
@@ -417,6 +439,8 @@
     if (!communityPubkey || isEditMode) return;
     if (
       joinedCommunities.includes(communityPubkey) &&
+      // A deep link must not smuggle in a community the picker would disable.
+      !restrictedCommunities.has(communityPubkey) &&
       !selectedCommunityPubkeys.includes(communityPubkey)
     ) {
       selectedCommunityPubkeys = [...selectedCommunityPubkeys, communityPubkey];
@@ -2950,14 +2974,21 @@
                 {@const displayName =
                   getDisplayName(profile) || `${pubkey.slice(0, 12)}…${pubkey.slice(-8)}`}
                 {@const picture = profile ? getProfilePicture(profile) : undefined}
+                {@const isRestricted = restrictedCommunities.has(pubkey)}
                 <li>
                   <label
-                    class="flex cursor-pointer items-center gap-3 rounded-lg border border-base-300 p-3 hover:bg-base-200"
+                    class="flex items-center gap-3 rounded-lg border border-base-300 p-3 {isRestricted
+                      ? 'opacity-50'
+                      : 'cursor-pointer hover:bg-base-200'}"
+                    title={isRestricted ? m.share_restricted_hint() : undefined}
                   >
                     <input
                       type="checkbox"
                       class="checkbox checkbox-primary"
                       checked={selectedCommunityPubkeys.includes(pubkey)}
+                      disabled={isRestricted}
+                      data-testid="community-checkbox"
+                      data-pubkey={pubkey}
                       onchange={() => toggleCommunity(pubkey)}
                     />
                     {#if picture}
@@ -2973,6 +3004,12 @@
                       ></div>
                     {/if}
                     <span class="truncate text-sm" data-testid="community-name">{displayName}</span>
+                    {#if isRestricted}
+                      <span
+                        class="shrink-0 text-xs text-base-content/60"
+                        data-testid="share-restricted-badge">🔒 {m.share_restricted_label()}</span
+                      >
+                    {/if}
                   </label>
                 </li>
               {/each}

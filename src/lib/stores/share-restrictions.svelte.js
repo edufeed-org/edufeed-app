@@ -14,6 +14,9 @@
 import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
 import { addressLoader } from '$lib/loaders/base.js';
 import { getAllLookupRelays, getCommunikeyRelays } from '$lib/helpers/relay-helper.js';
+import { createTimelineLoader } from 'applesauce-loaders/loaders';
+import { TimelineModel } from 'applesauce-core/models';
+import { timedPool } from '$lib/loaders/base.js';
 import {
   sectionGateForKind,
   shareWouldBeVisible,
@@ -22,6 +25,9 @@ import {
 import { useChannelRosters } from '$lib/groups/channel-rosters.svelte.js';
 import { rosterView } from '$lib/groups/root-roster.js';
 import { canPublishSection } from '$lib/groups/roster-access.js';
+import { parseMembershipPointer } from '$lib/groups/community-membership.js';
+import { channelKey } from '$lib/groups/community-pointer.js';
+import { SECTION_OVERRIDE_KIND, applySectionOverride } from '$lib/groups/section-override.js';
 import { useActiveUser } from '$lib/stores/accounts.svelte';
 
 /** @param {string} address @returns {{kind: number, pubkey: string, identifier: string} | null} */
@@ -53,21 +59,53 @@ export function useShareRestrictions(getKind, getCommunityPubkeys) {
   /** @type {Set<string>} */
   const requested = new Set(); // eslint-disable-line svelte/prefer-svelte-reactivity -- session dedup, never rendered
 
-  // Root-group pointers of the moderated candidates, batched through the ONE
-  // roster loader (one REQ per relay covering all of them) rather than a
-  // subscription per community. Declared after `version` so the getter can
-  // depend on it — the 10222s it reads arrive asynchronously.
+  // Kind-30223 section overrides for the candidate communities. Batched into
+  // ONE timeline load rather than a useEffectiveCommunity per community —
+  // that hook owns a roster subscription and cannot be called in a loop.
+  // Without this the picker would gate on the OWNER's section block while the
+  // FAB and the /c layout gate on the effective one, so a row could be greyed
+  // as unpublishable that the FAB says is publishable.
+  let overrides = $state.raw(/** @type {any[]} */ ([]));
+
+  // Root-group pointers of EVERY candidate — not only the ones the raw 10222
+  // shows as gated. An override can introduce a gate the raw event doesn't
+  // have, and validating that override needs the very roster we would then
+  // have skipped fetching. Pointer tags survive applySectionOverride
+  // untouched, so reading them off the raw event is safe and breaks the cycle.
+  // Declared after `version` so the getter can depend on it — the 10222s it
+  // reads arrive asynchronously.
   const getRosters = useChannelRosters(() => {
     void version;
-    const kind = getKind();
     /** @type {{id: string, relay: string}[]} */
     const pointers = [];
     for (const pubkey of getCommunityPubkeys()) {
-      const gate = rosterGateForKind(eventStore.getReplaceable(10222, pubkey), kind);
-      if (gate) pointers.push(gate.pointer);
+      const pointer = parseMembershipPointer(eventStore.getReplaceable(10222, pubkey));
+      if (pointer) pointers.push(pointer);
     }
     return pointers;
   });
+
+  /**
+   * The community event as the app DISPLAYS it — 10222 with any valid admin
+   * section override applied. Mirrors useEffectiveCommunity for the batched
+   * case; both call the same pure applySectionOverride.
+   * @param {string} pubkey
+   * @param {ReturnType<typeof getRosters>} rosters
+   */
+  function effectiveCommunity(pubkey, rosters) {
+    const raw = eventStore.getReplaceable(10222, pubkey);
+    if (!raw) return null;
+    const pointer = parseMembershipPointer(raw);
+    const key = pointer ? channelKey(pointer) : null;
+    const admins = (key && rosters.adminsByKey[key]) || [];
+    return applySectionOverride(
+      raw,
+      overrides.filter(
+        (event) => event?.tags?.find((/** @type {string[]} */ t) => t[0] === 'd')?.[1] === pubkey
+      ),
+      admins.map((/** @type {any} */ admin) => admin.pubkey)
+    ).event;
+  }
 
   $effect(() => {
     const kind = getKind();
@@ -77,6 +115,18 @@ export function useShareRestrictions(getKind, getCommunityPubkeys) {
 
     /** @type {import('rxjs').Subscription[]} */
     const subs = [];
+
+    // One batched load + model for every candidate's section override.
+    const overrideFilter = { kinds: [SECTION_OVERRIDE_KIND], '#d': pubkeys };
+    subs.push(
+      createTimelineLoader(timedPool, relays, overrideFilter, { eventStore })().subscribe()
+    );
+    subs.push(
+      eventStore.model(TimelineModel, overrideFilter).subscribe((events) => {
+        overrides = events ?? [];
+      })
+    );
+
     /** @type {Set<string>} */
     const listSubscribed = new Set(); // eslint-disable-line svelte/prefer-svelte-reactivity -- effect-local dedup
     for (const pubkey of pubkeys) {
@@ -116,7 +166,9 @@ export function useShareRestrictions(getKind, getCommunityPubkeys) {
     /** @type {Set<string>} */
     const restricted = new Set(); // eslint-disable-line svelte/prefer-svelte-reactivity -- returned snapshot, rebuilt per read
     for (const pubkey of getCommunityPubkeys()) {
-      const event = eventStore.getReplaceable(10222, pubkey);
+      // The EFFECTIVE event: the same sections the FAB and the community page
+      // gate on, so the three surfaces cannot disagree.
+      const event = effectiveCommunity(pubkey, rosters);
 
       // Moderated: the section's `access` tier against the root-group roster.
       const rosterGate = rosterGateForKind(event, kind);

@@ -24,6 +24,10 @@ const holders = vi.hoisted(() => ({
   /** @type {Record<string, any[]>} */
   fixturesByRelay: {},
   errorRelays: /** @type {Set<string>} */ (new Set()),
+  /** Relays that refuse the REQ instead of answering it (NIP-42 / private
+   * group). Distinct from errorRelays: a refusal means the roster is
+   * UNKNOWN, not empty. */
+  refusingRelays: /** @type {Map<string, string>} */ (new Map()),
   /** @type {any} */ eventStore: null
 }));
 
@@ -39,6 +43,8 @@ vi.mock('$lib/stores/nostr-infrastructure.svelte', async () => {
       relay: (/** @type {string} */ url) => ({
         request: (/** @type {any} */ filter, /** @type {any} */ opts) => {
           holders.requestCalls.push({ url, filter, opts });
+          if (holders.refusingRelays.has(url))
+            return throwError(() => new Error(holders.refusingRelays.get(url)));
           if (holders.errorRelays.has(url)) return throwError(() => new Error('relay timeout'));
           return of(...(holders.fixturesByRelay[url] ?? []));
         }
@@ -110,6 +116,7 @@ describe('useChannelRosters', () => {
     holders.requestCalls = [];
     holders.fixturesByRelay = {};
     holders.errorRelays = new Set();
+    holders.refusingRelays = new Map();
     // Fresh store per test — no roster leaks across cases.
     holders.eventStore?.removeByFilters?.({ kinds: [39001, 39002] });
     holders.eventStore?.database?.clear?.();
@@ -314,6 +321,36 @@ describe('useChannelRosters', () => {
       const { membersByKey, adminsByKey, fetchedKeys } = getRosters();
       expect(fetchedKeys.has(key)).toBe(true);
       expect(rosterView(pointerA, membersByKey, adminsByKey, fetchedKeys).isLoading).toBe(false);
+
+      cleanup();
+    });
+
+    // A relay that REFUSES the REQ has not told us the roster is empty — it
+    // has told us nothing. Marking the key fetched turns "unknown" into
+    // "empty", and canPublishSection (roster-access.js:69) then denies a
+    // legitimate publisher. Which of the two happened used to depend on
+    // session ordering: on a fresh connection applesauce leaves the request
+    // hanging (isLoading stays true, gating fails open), but once anything
+    // else has tripped auth-required on that relay the REQ times out instead
+    // and the key was marked fetched with an empty roster.
+    it.each([
+      ['auth-required', 'auth-required: we do not serve unauthenticated reads'],
+      ['restricted', 'restricted: not a member of this group']
+    ])('a relay that refuses with %s leaves the key unfetched (fails open)', async (_l, reason) => {
+      const pointerA = { id: 'general', relay: RELAY };
+      holders.refusingRelays = new Map([[RELAY, reason]]);
+
+      let pointers = $state.raw([pointerA]);
+      const { getRosters, cleanup } = mountHook(() => pointers);
+      flushSync();
+      await settle();
+
+      const key = channelKey(pointerA);
+      const { membersByKey, adminsByKey, fetchedKeys } = getRosters();
+      expect(fetchedKeys.has(key)).toBe(false);
+      // isLoading true → every gate treats the roster as unknown rather than
+      // as a roster that excludes the viewer.
+      expect(rosterView(pointerA, membersByKey, adminsByKey, fetchedKeys).isLoading).toBe(true);
 
       cleanup();
     });

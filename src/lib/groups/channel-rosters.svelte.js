@@ -60,6 +60,7 @@ import { storeEvents } from 'applesauce-relay/operators';
 import { normalizeURL } from 'applesauce-core/helpers/url';
 import { pool, eventStore } from '$lib/stores/nostr-infrastructure.svelte';
 import { channelKey } from './community-pointer.js';
+import { isAuthRequiredError, isRestrictedError } from './relay-auth.js';
 
 // Cold-start guard: the FIRST fetch of a group's roster can END (EOSE/timeout)
 // before the relay connection is ready and the events arrive — the (world-
@@ -199,10 +200,25 @@ export function useChannelRosters(getPointers) {
             .pipe(storeEvents(eventStore))
             .subscribe({
               complete: markFetched,
-              // One unreachable/auth-walled relay must not blind the rest of
-              // the community's channels — but it must also not leave them
+              // One unreachable relay must not blind the rest of the
+              // community's channels — but it must also not leave them
               // spinning forever; see markFetched above.
-              error: markFetched
+              //
+              // A REFUSAL is the exception. auth-required/restricted means
+              // the relay declined to tell us the roster, not that the roster
+              // is empty, and marking the key fetched collapses those two
+              // into the same empty view — which canPublishSection
+              // (roster-access.js:69) reads as "this member is not on the
+              // roster" and uses to deny a legitimate publisher. Leaving the
+              // key unfetched keeps rosterView().isLoading true, i.e. "not
+              // known yet", which every gate already treats as a reason to
+              // fail open. Whether a refusal even surfaced as an error used
+              // to depend on session ordering, so this also makes the two
+              // paths behave the same.
+              error: (/** @type {unknown} */ err) => {
+                if (isAuthRequiredError(err) || isRestrictedError(err)) return;
+                markFetched();
+              }
             });
           open.push(sub);
         } catch (err) {

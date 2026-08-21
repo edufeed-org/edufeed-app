@@ -11,7 +11,7 @@
   import { manager } from '$lib/stores/accounts.svelte';
   // Share surfaces list joined ∪ area-linked communities — a private area's
   // member never (publicly) follow-set-joins, but must still be able to share.
-  import { useShareableCommunities } from '$lib/concord/shareable-communities.svelte.js';
+  import { useShareableCommunities } from '$lib/helpers/shareable-communities.svelte.js';
   import { useShareRestrictions } from '$lib/stores/share-restrictions.svelte.js';
   import { decodeNaddr } from '$lib/helpers/bookmark.js';
   import { createCommunityReposts } from '$lib/helpers/communityRepost.js';

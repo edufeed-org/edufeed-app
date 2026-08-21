@@ -101,7 +101,7 @@ vi.mock('$lib/stores/joined-communities-list.svelte.js', () => ({
 
 // Share surfaces now list joined ∪ area-linked (shareable-communities) — the
 // concord side is out of scope here, so the hook degrades to the joined list.
-vi.mock('$lib/concord/shareable-communities.svelte.js', () => ({
+vi.mock('$lib/helpers/shareable-communities.svelte.js', () => ({
   useShareableCommunities: () => () => mockJoinedCommunities
 }));
 
