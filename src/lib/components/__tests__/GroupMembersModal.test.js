@@ -101,6 +101,11 @@ vi.mock('$lib/paraglide/messages', () => ({
   groups_members_role_placeholder: () => 'Role',
   groups_role_admin: () => 'Admin',
   groups_role_king: () => 'Founder',
+  groups_role_moderator: () => 'Moderator',
+  groups_role_publisher: () => 'Publisher',
+  groups_members_publishers_heading: () => 'Publishers',
+  groups_members_grant_publisher: () => 'Make publisher',
+  groups_members_revoke_publisher: () => 'Remove publisher',
   group_invite_dm_action: () => 'Invite via DM',
   group_invite_dm_npub_placeholder: () => 'Member npub',
   group_invite_dm_invalid_npub: () => 'Invalid npub',
@@ -545,5 +550,113 @@ describe('GroupMembersModal — invite an npub via DM (Task A6)', () => {
     );
     expect(directBtn.className).not.toContain('btn-sm');
     expect(dmBtn.className).not.toContain('btn-sm');
+  });
+});
+
+// NIP-29 files every role holder into the one kind-39001 list, so a publisher
+// arrives here indistinguishable from a moderator. These pin the split the UI
+// has to make on top of that, and the put-user role sets behind it — a 9000
+// replaces a member's whole role set, so every mutation has to be built from
+// the roles they already hold.
+describe('GroupMembersModal publisher role', () => {
+  const PUBLISHER = 'f'.repeat(64);
+  const ADMIN_PUBLISHER = '1'.repeat(64);
+
+  /** @param {Record<string, any>} overrides */
+  const renderWithPublishers = (overrides = {}) =>
+    renderModal({
+      admins: [
+        { pubkey: ADMIN_SELF, roles: [] },
+        { pubkey: ADMIN_OTHER, roles: ['admin', 'custom-role'] },
+        { pubkey: PUBLISHER, roles: ['publisher'] },
+        { pubkey: ADMIN_PUBLISHER, roles: ['admin', 'publisher'] }
+      ],
+      members: new Set([ADMIN_SELF, ADMIN_OTHER, PUBLISHER, ADMIN_PUBLISHER, MEMBER_A, MEMBER_B]),
+      ...overrides
+    });
+
+  it('lists a publisher-only holder under publishers, not under admins', () => {
+    const { container } = renderWithPublishers();
+
+    const publisherRows = screen.getAllByTestId('publisher-row');
+    expect(publisherRows.map((row) => row.dataset.pubkey)).toEqual([PUBLISHER]);
+
+    // Someone who moderates AND publishes stays an admin — the stronger role wins.
+    const adminRows = screen.getAllByTestId('admin-row');
+    expect(adminRows.map((row) => row.dataset.pubkey)).toEqual([
+      ADMIN_SELF,
+      ADMIN_OTHER,
+      ADMIN_PUBLISHER
+    ]);
+    // And a publisher is never duplicated down in the plain members list.
+    expect(
+      container.querySelector(`[data-testid="member-row"][data-pubkey="${PUBLISHER}"]`)
+    ).toBeNull();
+  });
+
+  it('granting publisher to a plain member put-users them with [publisher]', async () => {
+    const { container, onRosterChanged } = renderWithPublishers();
+
+    const grantBtn = container.querySelector(
+      `[data-testid="member-toggle-publisher"][data-pubkey="${MEMBER_A}"]`
+    );
+    expect(grantBtn).not.toBeNull();
+    await fireEvent.click(/** @type {Element} */ (grantBtn));
+
+    await waitFor(() =>
+      expect(buildPutUserTemplate).toHaveBeenCalledWith('grp1', MEMBER_A, ['publisher'])
+    );
+    await waitFor(() => expect(onRosterChanged).toHaveBeenCalled());
+  });
+
+  it('revoking publisher keeps every other role the member holds', async () => {
+    const { container } = renderWithPublishers();
+
+    const revokeBtn = container.querySelector(
+      `[data-testid="member-toggle-publisher"][data-pubkey="${ADMIN_PUBLISHER}"]`
+    );
+    await fireEvent.click(/** @type {Element} */ (revokeBtn));
+
+    await waitFor(() =>
+      expect(buildPutUserTemplate).toHaveBeenCalledWith('grp1', ADMIN_PUBLISHER, ['admin'])
+    );
+  });
+
+  it('promote keeps the publisher role instead of replacing the whole role set', async () => {
+    const { container } = renderWithPublishers();
+
+    const promoteBtn = container.querySelector(
+      `[data-testid="member-promote"][data-pubkey="${PUBLISHER}"]`
+    );
+    expect(promoteBtn).not.toBeNull();
+    await fireEvent.click(/** @type {Element} */ (promoteBtn));
+
+    await waitFor(() =>
+      expect(buildPutUserTemplate).toHaveBeenCalledWith('grp1', PUBLISHER, ['admin', 'publisher'])
+    );
+  });
+
+  // Deliberately asymmetric with custom free-text roles, which a demote still
+  // wipes (see the ADMIN_OTHER case in "demote publishes put-user with []"):
+  // publisher is the one role with its own grant/revoke control and its own
+  // meaning to `access` gating, so it is the one that survives.
+  it('demote strips moderation roles but leaves the publisher role standing', async () => {
+    const { container } = renderWithPublishers();
+
+    const demoteBtn = container.querySelector(
+      `[data-testid="member-demote"][data-pubkey="${ADMIN_PUBLISHER}"]`
+    );
+    await fireEvent.click(/** @type {Element} */ (demoteBtn));
+
+    await waitFor(() =>
+      expect(buildPutUserTemplate).toHaveBeenCalledWith('grp1', ADMIN_PUBLISHER, ['publisher'])
+    );
+  });
+
+  it('a non-admin viewer gets no publisher toggle anywhere', () => {
+    // Matches the relay: only PRIMARY_ROLE_NAME may add or change user roles
+    // (pyramid groups/reject-event.go), so the control must not be offered.
+    renderWithPublishers({ isAdmin: false });
+    expect(screen.queryAllByTestId('member-toggle-publisher')).toHaveLength(0);
   });
 });

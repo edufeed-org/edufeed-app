@@ -295,4 +295,79 @@ describe('AccessTierEditor', () => {
     const rows = await screen.findAllByTestId('access-tier-row-Learning');
     expect(rows).toHaveLength(1);
   });
+
+  // `publisher` is an ordinary NIP-29 role on the wire — the select just spares
+  // an admin from typing the magic word, and has to round-trip an existing
+  // publisher gate back into that option rather than into the free-text row.
+  describe('publisher tier', () => {
+    const publisherEvent = {
+      kind: 10222,
+      pubkey: OWNER,
+      created_at: 1000,
+      content: 'desc',
+      tags: [
+        ['membership', 'rootgroup1', GROUPS_RELAY],
+        ['content', 'Learning'],
+        ['k', '30142'],
+        ['access', 'role', 'publisher'],
+        ['content', 'Forum'],
+        ['k', '11']
+      ]
+    };
+
+    it('an existing publisher gate selects the publisher option, not free-text role', async () => {
+      render(AccessTierEditor, {
+        props: { communikeyEvent: publisherEvent, communitySigner, roleSuggestions: [] }
+      });
+      await tick();
+
+      const row = screen.getByTestId('access-tier-row-Learning');
+      const select = /** @type {HTMLSelectElement} */ (row.querySelector('select'));
+      expect(select.value).toBe('publisher');
+      // No free-text role input while the publisher option is selected.
+      expect(row.querySelector('input[type="text"]')).toBeNull();
+    });
+
+    it('choosing publisher saves an access role publisher tag', async () => {
+      render(AccessTierEditor, {
+        props: { communikeyEvent, communitySigner, roleSuggestions: [] }
+      });
+      await tick();
+
+      const row = screen.getByTestId('access-tier-row-Forum');
+      const select = /** @type {HTMLSelectElement} */ (row.querySelector('select'));
+      await fireEvent.change(select, { target: { value: 'publisher' } });
+      await fireEvent.click(within(row).getByTestId('access-tier-save-Forum'));
+
+      await waitFor(() => expect(publishCommunityUpdate).toHaveBeenCalled());
+      const template = publishCommunityUpdate.mock.calls[0][0];
+      const sections = parseCommunityContentTypes({ ...template, pubkey: OWNER });
+      expect(findSection(sections, 'Forum').access).toEqual({ tier: 'role', role: 'publisher' });
+      // Sibling sections untouched by the surgical edit.
+      expect(findSection(sections, 'Learning').access).toEqual({
+        tier: 'role',
+        role: 'lehrkraft'
+      });
+    });
+
+    it('the publisher option never leaves a blank-role gate behind', async () => {
+      render(AccessTierEditor, {
+        props: { communikeyEvent, communitySigner, roleSuggestions: [] }
+      });
+      await tick();
+
+      const row = screen.getByTestId('access-tier-row-Forum');
+      const select = /** @type {HTMLSelectElement} */ (row.querySelector('select'));
+      await fireEvent.change(select, { target: { value: 'publisher' } });
+      await tick();
+
+      // The blank-role guard belongs to the free-text tier only — publisher
+      // carries its own role, so the save button must stay enabled.
+      const saveBtn = /** @type {HTMLButtonElement} */ (
+        within(row).getByTestId('access-tier-save-Forum')
+      );
+      expect(saveBtn.disabled).toBe(false);
+      expect(row.querySelector('[data-testid="access-tier-role-required-Forum"]')).toBeNull();
+    });
+  });
 });

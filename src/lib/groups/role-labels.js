@@ -6,6 +6,7 @@
 // role-gated section tiers match them literally and renaming them in one
 // surface but not the tier editor would be worse than showing them raw.
 import * as m from '$lib/paraglide/messages';
+import { PUBLISHER_ROLE } from './roles.js';
 
 /**
  * @param {string} role
@@ -17,6 +18,10 @@ export function roleLabel(role) {
       return m.groups_role_king();
     case 'admin':
       return m.groups_role_admin();
+    case 'moderator':
+      return m.groups_role_moderator();
+    case PUBLISHER_ROLE:
+      return m.groups_role_publisher();
     default:
       return role;
   }

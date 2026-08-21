@@ -15,6 +15,7 @@
   import { parseCommunityContentTypes } from '$lib/helpers/communityRelays.js';
   import { contentSectionLabel } from '$lib/helpers/content-section-label.js';
   import { withSectionAccess } from '$lib/groups/section-access.js';
+  import { PUBLISHER_ROLE } from '$lib/groups/roles.js';
   import { communityUpdateTemplate } from '$lib/groups/community-flips.js';
   import { publishCommunityUpdate } from '$lib/helpers/publishCommunityUpdate.js';
   import { showToast } from '$lib/helpers/toast';
@@ -53,7 +54,25 @@
     return (name ?? '').trim().replace(/[^a-zA-Z0-9_-]+/g, '-');
   }
 
-  /** @typedef {{tier: 'all'|'members'|'role', role: string}} Draft */
+  // `publisher` is a UI-level tier only: on the wire it is an ordinary
+  // `["access", "role", "publisher"]` gate. The extra option exists so an
+  // admin picks the community's publishers without having to know the magic
+  // role name, while the free-text `role` tier still serves custom roles.
+  /** @typedef {{tier: 'all'|'members'|'publisher'|'role', role: string}} Draft */
+
+  /**
+   * @param {{tier: string, role?: string}} access
+   * @returns {Draft}
+   */
+  function draftFromAccess(access) {
+    if (access.tier === 'role' && (access.role ?? '').trim().toLowerCase() === PUBLISHER_ROLE) {
+      return { tier: 'publisher', role: '' };
+    }
+    return {
+      tier: /** @type {Draft['tier']} */ (access.tier),
+      role: access.tier === 'role' ? (access.role ?? '') : ''
+    };
+  }
 
   /** Per-section editable state, keyed by section name (not the slug). @type {Record<string, Draft>} */
   let drafts = $state({});
@@ -86,11 +105,7 @@
     /** @type {Record<string, Draft>} */
     const nextBaselines = {};
     for (const section of currentSections) {
-      const access = section.access ?? { tier: 'all' };
-      const fresh = {
-        tier: access.tier,
-        role: access.tier === 'role' ? (access.role ?? '') : ''
-      };
+      const fresh = draftFromAccess(section.access ?? { tier: 'all' });
       const priorDraft = previousDrafts[section.name];
       const priorBaseline = baselines[section.name];
       // Compare role trimmed: saveSection() trims before publishing, so the
@@ -150,7 +165,11 @@
 
     /** @type {import('$lib/groups/section-access.js').AccessTier} */
     const access =
-      draft.tier === 'role' ? { tier: 'role', role: draft.role.trim() } : { tier: draft.tier };
+      draft.tier === 'role'
+        ? { tier: 'role', role: draft.role.trim() }
+        : draft.tier === 'publisher'
+          ? { tier: 'role', role: PUBLISHER_ROLE }
+          : { tier: draft.tier };
 
     savingSection = { ...savingSection, [section.name]: true };
     try {
@@ -201,6 +220,7 @@
             >
               <option value="all">{m.community_access_all()}</option>
               <option value="members">{m.community_access_members()}</option>
+              <option value="publisher">{m.community_access_publisher()}</option>
               <option value="role">{m.community_access_role()}</option>
             </select>
 

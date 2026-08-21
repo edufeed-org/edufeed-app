@@ -42,6 +42,7 @@ const {
           { pubkey: ADMIN2, roles: ['lehrkraft'] }
         ],
         members: new Set([OWNER, ADMIN2, MEMBER]),
+        publishers: new Set(),
         isLoading: false,
         isMember: () => true,
         rolesOf: () => []
@@ -150,6 +151,8 @@ vi.mock('$lib/paraglide/messages', () => ({
   community_membership_pane_manage: () => 'Mitglieder verwalten',
   community_membership_pane_member_count: (/** @type {{count: number}} */ p) =>
     `${p.count} Mitglieder`,
+  community_membership_pane_publisher_count: (/** @type {{count: number}} */ p) =>
+    `${p.count} Publisher`,
   community_invite_title: () => 'Einladungscode',
   community_invite_create: () => 'Code erstellen',
   community_invite_hint: () =>
@@ -206,6 +209,7 @@ beforeEach(() => {
       { pubkey: ADMIN2, roles: ['lehrkraft'] }
     ],
     members: new Set([OWNER, ADMIN2, MEMBER]),
+    publishers: new Set(),
     isLoading: false,
     isMember: () => true,
     rolesOf: () => []
@@ -256,9 +260,11 @@ describe('MembershipPane — roster', () => {
     );
     expect(stub.dataset.mypubkey).toBe(OWNER);
     expect(stub.dataset.isadmin).toBe('true');
-    // Union of admin roles + 'admin', deduped.
+    // Union of admin roles + the two well-known roles, deduped. 'publisher'
+    // is offered even though nobody holds it here: gating a section on it
+    // before granting it is a normal order of work.
     expect(JSON.parse(/** @type {string} */ (stub.dataset.roleoptions)).sort()).toEqual(
-      ['admin', 'lehrkraft'].sort()
+      ['admin', 'lehrkraft', 'publisher'].sort()
     );
   });
 
@@ -658,6 +664,21 @@ describe('MembershipPane — invite-code minting', () => {
 
     await waitFor(() =>
       expect(showToast).toHaveBeenCalledWith(expect.stringContaining('relay rejected'), 'error')
+    );
+  });
+
+  it('reports the publisher count only once someone holds the role', async () => {
+    render(MembershipPane, {
+      props: { communikeyEvent: eventWithoutApplication, communityId: OWNER, profileEvent }
+    });
+    expect(screen.queryByTestId('membership-publisher-count')).toBeNull();
+
+    rosterFixture.value = { ...rosterFixture.value, publishers: new Set([ADMIN2]) };
+    render(MembershipPane, {
+      props: { communikeyEvent: eventWithoutApplication, communityId: OWNER, profileEvent }
+    });
+    await waitFor(() =>
+      expect(screen.getByTestId('membership-publisher-count').textContent).toContain('1 Publisher')
     );
   });
 });

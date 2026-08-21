@@ -23,6 +23,7 @@
 -->
 <script>
   import { useRootRoster } from '$lib/groups/root-roster.svelte.js';
+  import { PUBLISHER_ROLE } from '$lib/groups/roles.js';
   import { useActiveUser } from '$lib/stores/accounts.svelte';
   import { isCommunityOwner } from '$lib/helpers/community-signer.js';
   import { pool } from '$lib/stores/nostr-infrastructure.svelte';
@@ -59,10 +60,14 @@
     (!!activeUser && roster.admins.some((admin) => admin.pubkey === activeUser.pubkey)) || isOwner
   );
 
-  // Union of every admin's roles + the bare 'admin' role, deduped — reported
-  // upward so SettingsView can feed AccessTierEditor's roleSuggestions
-  // without a second roster subscription there.
-  const roleOptions = $derived(unique([...roster.admins.flatMap((a) => a.roles ?? []), 'admin']));
+  // Union of every admin's roles + the bare 'admin' role and the well-known
+  // 'publisher' role, deduped — reported upward so SettingsView can feed
+  // AccessTierEditor's roleSuggestions without a second roster subscription
+  // there. 'publisher' is offered even when nobody holds it yet: an admin
+  // gating a section on it before granting it is a normal order of work.
+  const roleOptions = $derived(
+    unique([...roster.admins.flatMap((a) => a.roles ?? []), 'admin', PUBLISHER_ROLE])
+  );
   $effect(() => {
     onRolesChanged?.(roleOptions);
   });
@@ -141,6 +146,13 @@
           {roster.members.size === 1
             ? m.community_membership_pane_member_count_one()
             : m.community_membership_pane_member_count({ count: roster.members.size })}
+          {#if roster.publishers?.size}
+            <span data-testid="membership-publisher-count">
+              &middot; {m.community_membership_pane_publisher_count({
+                count: roster.publishers.size
+              })}
+            </span>
+          {/if}
         </p>
         <button
           class="btn btn-outline btn-sm"

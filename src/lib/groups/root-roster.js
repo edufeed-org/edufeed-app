@@ -6,12 +6,16 @@
 // NIP-29 counts users with privileged roles as members, and some relays
 // return 39001 without a 39002.
 import { channelKey } from './community-pointer.js';
+import { isPublisher } from './roles.js';
 
 /**
  * @typedef {import('applesauce-common/helpers/groups').GroupAdmin} GroupAdmin
  * @typedef {Object} RosterView
  * @property {Set<string>} members
  * @property {GroupAdmin[]} admins
+ * @property {Set<string>} publishers - 39001 entries holding the publisher
+ *   role, whether or not they also moderate. NIP-29 files every role holder
+ *   under 39001, so this is the only way to tell a publisher from an admin.
  * @property {boolean} isLoading - true until at least one roster event arrived
  * @property {(pubkey: string) => boolean} isMember
  * @property {(pubkey: string) => string[]} rolesOf
@@ -40,9 +44,13 @@ export function rosterView(pointer, membersByKey, adminsByKey, fetchedKeys) {
   const hasAdmins = !!(key && adminsByKey[key]);
   const fetched = !!(key && fetchedKeys?.has(key));
   const isLoading = !!key && memberSet === undefined && !hasAdmins && !fetched;
+  const publishers = new Set(
+    admins.filter((admin) => isPublisher(admin.roles)).map((admin) => admin.pubkey)
+  );
   return {
     members,
     admins,
+    publishers,
     isLoading,
     isMember: (pubkey) => members.has(pubkey),
     rolesOf: (pubkey) => admins.find((admin) => admin.pubkey === pubkey)?.roles ?? []

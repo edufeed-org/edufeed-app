@@ -26,6 +26,12 @@
   import { getUserDisplayName } from '$lib/helpers/message-utils.js';
   import { unique } from '$lib/helpers/unique.js';
   import { roleLabel } from '$lib/groups/role-labels.js';
+  import {
+    isPublisher,
+    isPublisherOnly,
+    withPublisherRole,
+    withoutPublisherRole
+  } from '$lib/groups/roles.js';
   import ContactSearchInput from '$lib/components/shared/ContactSearchInput.svelte';
   import ProfileAvatar from '$lib/components/shared/ProfileAvatar.svelte';
   import { showToast } from '$lib/helpers/toast';
@@ -67,6 +73,17 @@
   const memberPubkeys = $derived([...members].filter((p) => !adminPubkeys.has(p)));
   const getProfiles = useProfileMap(() => [...admins.map((a) => a.pubkey), ...memberPubkeys]);
 
+  // NIP-29 has one list for every role holder (39001), so publishers arrive
+  // mixed in with the moderators. Split them for display: someone who both
+  // moderates and publishes stays under Admins — the stronger role wins — and
+  // a role holder with no roles at all (some relays seat the creator that
+  // way) also stays an admin.
+  const publisherRows = $derived(admins.filter((a) => isPublisherOnly(a.roles)));
+  const adminRows = $derived(admins.filter((a) => !isPublisherOnly(a.roles)));
+
+  /** @param {string} pubkey */
+  const rolesOf = (pubkey) => admins.find((a) => a.pubkey === pubkey)?.roles ?? [];
+
   let busy = $state(false);
 
   /** @param {string} pubkey @param {string[]} roles */
@@ -99,10 +116,32 @@
   // relay-level nicety (custom named roles beyond the bare admin
   // convention); wiring a picker for it is YAGNI until a relay in the field
   // actually announces custom roles.
+  //
+  // A 9000 put-user REPLACES the member's whole role set, so promote/demote
+  // carry the publisher role across instead of sending a bare ['admin'] / [] —
+  // otherwise promoting a publisher would silently revoke their publishing
+  // rights, and demoting an admin-publisher would too.
+  //
+  // Deliberately publisher-only: custom free-text roles are still wiped by a
+  // demote, matching the assign-role input right beside it, which has always
+  // replaced the whole set. The publisher role is the one with its own
+  // grant/revoke control and its own meaning to `access` gating, so it is the
+  // one that has to survive an unrelated action.
   /** @param {string} pubkey */
-  const promote = (pubkey) => putUser(pubkey, ['admin']);
+  const promote = (pubkey) =>
+    putUser(pubkey, isPublisher(rolesOf(pubkey)) ? withPublisherRole(['admin']) : ['admin']);
   /** @param {string} pubkey */
-  const demote = (pubkey) => putUser(pubkey, []);
+  const demote = (pubkey) =>
+    putUser(pubkey, isPublisher(rolesOf(pubkey)) ? withPublisherRole([]) : []);
+
+  /** @param {string} pubkey */
+  function togglePublisher(pubkey) {
+    const current = rolesOf(pubkey);
+    putUser(
+      pubkey,
+      isPublisher(current) ? withoutPublisherRole(current) : withPublisherRole(current)
+    );
+  }
 
   // Compact role-assign control (Task 8): one free-text-with-suggestions
   // input per row, same select+free-text pattern AccessTierEditor already
@@ -266,7 +305,7 @@
       {m.groups_members_admins_heading()}
     </h4>
     <div class="divide-y divide-base-300">
-      {#each admins as admin (admin.pubkey)}
+      {#each adminRows as admin (admin.pubkey)}
         {@const self = admin.pubkey === myPubkey}
         <div
           class="flex flex-wrap items-center gap-3 py-2"
@@ -315,6 +354,17 @@
           {#if isAdmin && !self}
             <button
               class="btn btn-ghost btn-xs"
+              data-testid="member-toggle-publisher"
+              data-pubkey={admin.pubkey}
+              disabled={busy}
+              onclick={() => togglePublisher(admin.pubkey)}
+            >
+              {isPublisher(admin.roles)
+                ? m.groups_members_revoke_publisher()
+                : m.groups_members_grant_publisher()}
+            </button>
+            <button
+              class="btn btn-ghost btn-xs"
               data-testid="member-demote"
               data-pubkey={admin.pubkey}
               disabled={busy}
@@ -326,6 +376,65 @@
         </div>
       {/each}
     </div>
+
+    {#if publisherRows.length > 0}
+      <h4 class="mt-3 text-xs font-bold text-base-content/50 uppercase">
+        {m.groups_members_publishers_heading()}
+      </h4>
+      <div class="divide-y divide-base-300">
+        {#each publisherRows as publisher (publisher.pubkey)}
+          {@const self = publisher.pubkey === myPubkey}
+          <div
+            class="flex flex-wrap items-center gap-3 py-2"
+            data-testid="publisher-row"
+            data-pubkey={publisher.pubkey}
+          >
+            <ProfileAvatar
+              pubkey={publisher.pubkey}
+              profile={getProfiles().get(publisher.pubkey)}
+              size="sm"
+            />
+            <span class="flex-1 truncate text-sm font-semibold">
+              {getUserDisplayName(publisher.pubkey, getProfiles().get(publisher.pubkey))}
+            </span>
+            {#each unique(publisher.roles) as role (role)}
+              <span class="badge max-w-[7rem] truncate badge-ghost badge-sm" title={role}
+                >{roleLabel(role)}</span
+              >
+            {/each}
+            {#if isAdmin && !self}
+              <button
+                class="btn btn-ghost btn-xs"
+                data-testid="member-toggle-publisher"
+                data-pubkey={publisher.pubkey}
+                disabled={busy}
+                onclick={() => togglePublisher(publisher.pubkey)}
+              >
+                {m.groups_members_revoke_publisher()}
+              </button>
+              <button
+                class="btn btn-ghost btn-xs"
+                data-testid="member-promote"
+                data-pubkey={publisher.pubkey}
+                disabled={busy}
+                onclick={() => promote(publisher.pubkey)}
+              >
+                {m.groups_members_promote()}
+              </button>
+              <button
+                class="btn text-error btn-ghost btn-xs"
+                data-testid="member-remove"
+                data-pubkey={publisher.pubkey}
+                disabled={busy}
+                onclick={() => removeMember(publisher.pubkey)}
+              >
+                {m.groups_members_remove()}
+              </button>
+            {/if}
+          </div>
+        {/each}
+      </div>
+    {/if}
 
     <h4 class="mt-3 text-xs font-bold text-base-content/50 uppercase">
       {m.groups_members_members_heading()}
@@ -364,6 +473,15 @@
             </button>
           {/if}
           {#if isAdmin}
+            <button
+              class="btn btn-ghost btn-xs"
+              data-testid="member-toggle-publisher"
+              data-pubkey={pubkey}
+              disabled={busy}
+              onclick={() => togglePublisher(pubkey)}
+            >
+              {m.groups_members_grant_publisher()}
+            </button>
             <button
               class="btn btn-ghost btn-xs"
               data-testid="member-promote"

@@ -64,5 +64,30 @@ describe('rosterView', () => {
     expect(view.isLoading).toBe(false);
     expect(view.members.size).toBe(0);
     expect(view.admins).toEqual([]);
+    expect(view.publishers.size).toBe(0);
+  });
+
+  // NIP-29 has no list for non-moderating roles: a publisher lands in the
+  // 39001 admin list like everyone else holding a role. The roster projects
+  // them out so the UI can show publishers as publishers rather than filing
+  // them under Admins.
+  it('projects publishers out of the 39001 admin list', () => {
+    const PUBLISHER = 'd'.repeat(64);
+    const BOTH = 'e'.repeat(64);
+    const view = rosterView(
+      POINTER,
+      { [KEY]: new Set([MEMBER]) },
+      {
+        [KEY]: [
+          { pubkey: ADMIN, roles: ['admin'] },
+          { pubkey: PUBLISHER, roles: ['publisher'] },
+          { pubkey: BOTH, roles: ['admin', 'publisher'] }
+        ]
+      }
+    );
+    expect(view.publishers).toEqual(new Set([PUBLISHER, BOTH]));
+    // and they are members like any other role holder
+    expect(view.isMember(PUBLISHER)).toBe(true);
+    expect(view.isMember(STRANGER)).toBe(false);
   });
 });
