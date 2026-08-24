@@ -206,11 +206,19 @@
   </div>
 {/if}
 
-<!-- Identity Section -->
-<div class="px-4 pb-4" class:pt-5={!bannerUrl}>
-  <div class="flex items-start gap-3" class:-mt-6={bannerUrl}>
+<!-- Identity Section. Without a banner the identity row spans the shared
+     --community-header-h band and centres in it, so the hero avatar sits on
+     the same axis as the sidebar's community header and the icon rail. The
+     banner variant keeps its own geometry (the row is pulled up over the
+     banner) and makes no alignment claim. -->
+<div class="px-4 pb-4">
+  <div
+    class="flex gap-3 {bannerUrl
+      ? '-mt-6 items-start'
+      : 'min-h-(--community-header-h) items-center'}"
+  >
     <!-- Avatar -->
-    <div class="avatar">
+    <div class="avatar" data-testid="hero-avatar">
       <div class="w-14 rounded-full ring-2 ring-base-100" class:ring-4={bannerUrl}>
         {#if avatarUrl}
           <ImageWithFallback
@@ -230,7 +238,7 @@
     </div>
 
     <!-- Name + Meta -->
-    <div class="min-w-0 flex-1" class:mt-7={bannerUrl} class:mt-2={!bannerUrl}>
+    <div class="min-w-0 flex-1" class:mt-7={bannerUrl}>
       <div class="flex items-center gap-2">
         <h2 class="truncate text-2xl font-extrabold tracking-tight text-base-content">
           {displayName}
@@ -262,12 +270,12 @@
 
     <!-- Closed communities: no kind-30000 follow join, just the hint -->
     {#if isClosed}
-      <div class:mt-7={bannerUrl} class:mt-2={!bannerUrl}>
+      <div class:mt-7={bannerUrl}>
         <span class="text-sm text-base-content/60">{m.community_hero_closed_hint()}</span>
       </div>
     {:else if !getJoined()}
       <!-- Join Button (non-members) -->
-      <div class:mt-7={bannerUrl} class:mt-2={!bannerUrl}>
+      <div class:mt-7={bannerUrl}>
         {#if getCommunityWideFormRef?.()}
           <button onclick={handleRequestJoin} class="btn btn-sm btn-primary">
             {m.community_request_join()}
@@ -292,7 +300,7 @@
          first roster event arrives, so rendering join affordances before
          then would flash them at an actual member. -->
     {#if isModerated && activeUser && !isRosterMember}
-      <div class:mt-7={bannerUrl} class:mt-2={!bannerUrl}>
+      <div class:mt-7={bannerUrl}>
         {#if isRosterLoading}
           <span class="loading loading-xs loading-spinner text-base-content/40"></span>
         {:else}

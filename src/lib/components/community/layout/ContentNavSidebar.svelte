@@ -224,14 +224,17 @@
   }
 </script>
 
-{#snippet tabButton(/** @type {{id: string, label: string, icon: any}} */ type)}
+{#snippet tabButton(
+  /** @type {{id: string, label: string, icon: any}} */ type,
+  /** @type {string} */ testid
+)}
   {@const isActive = selectedContentType === type.id}
   {@const Icon = type.icon}
   <!-- The access badge trails at the row's right edge (Armada's rail
     pattern, laoc 2026-08-17) — a superscript lock floating over the label
     read as misalignment, not as a badge. -->
   <button
-    data-testid="content-nav-{type.id}"
+    data-testid={testid}
     onclick={() => handleContentTypeClick(type.id)}
     class="flex w-full items-center gap-3 rounded-lg px-4 py-3 transition-all duration-200 {isActive
       ? 'bg-primary text-primary-content'
@@ -271,7 +274,7 @@
         type="button"
         data-testid="nav-header-home"
         onclick={() => handleContentTypeClick('home')}
-        class="flex w-full items-center gap-3 p-4 text-left transition-all duration-200 {isHomeActive
+        class="flex h-(--community-header-h) w-full items-center gap-3 px-4 text-left transition-all duration-200 {isHomeActive
           ? 'bg-primary text-primary-content'
           : 'hover:bg-base-300/60'}"
       >
@@ -307,7 +310,7 @@
         {m.community_nav_inhalte()}
       </div>
       {#each zones.inhalte as id (id)}
-        {@render tabButton(tabRow(id))}
+        {@render tabButton(tabRow(id), `content-nav-${id}`)}
       {/each}
     </nav>
 
@@ -414,21 +417,12 @@
       </nav>
     {/if}
 
-    <nav class="menu mt-auto space-y-1 p-4">
+    <!-- `w-full` is load-bearing: DaisyUI's `.menu` is `width: fit-content`,
+      so without it the footer shrinks to its widest label and the rows stop
+      matching the INHALTE ones above. -->
+    <nav class="menu mt-auto w-full space-y-1 p-4">
       {#each zones.footer as id (id)}
-        {@const type = tabRow(id)}
-        {@const isActive = selectedContentType === type.id}
-        {@const Icon = type.icon}
-        <button
-          data-testid="nav-footer-{type.id}"
-          onclick={() => handleContentTypeClick(type.id)}
-          class="flex items-center gap-3 rounded-lg px-4 py-3 transition-all duration-200 {isActive
-            ? 'bg-primary text-primary-content'
-            : 'hover:bg-base-300/60'}"
-        >
-          <Icon class_="w-5 h-5" title="" />
-          <span class="text-sm font-medium">{type.label}</span>
-        </button>
+        {@render tabButton(tabRow(id), `nav-footer-${id}`)}
       {/each}
     </nav>
   {/if}

@@ -34,6 +34,7 @@
   } from '$lib/groups/roles.js';
   import ContactSearchInput from '$lib/components/shared/ContactSearchInput.svelte';
   import ProfileAvatar from '$lib/components/shared/ProfileAvatar.svelte';
+  import { MoreIcon } from '$lib/components/icons';
   import { showToast } from '$lib/helpers/toast';
   import { nip19 } from 'nostr-tools';
   import * as m from '$lib/paraglide/messages';
@@ -84,7 +85,23 @@
   /** @param {string} pubkey */
   const rolesOf = (pubkey) => admins.find((a) => a.pubkey === pubkey)?.roles ?? [];
 
+  /** @param {string} pubkey */
+  const nameOf = (pubkey) => getUserDisplayName(pubkey, getProfiles().get(pubkey));
+
   let busy = $state(false);
+
+  // The two row actions that need more than a click — a free-text role and a
+  // destructive removal — open their own small dialog instead of expanding
+  // inline (CLAUDE.md's modal grammar). Both hold the target pubkey.
+  /** @type {string | null} */
+  let roleDialogPubkey = $state(null);
+  /** @type {string | null} */
+  let removeDialogPubkey = $state(null);
+
+  // The row kebab is DaisyUI's focus-driven dropdown, so it only closes when
+  // focus leaves it — a dialog opened from a menu item would otherwise sit on
+  // top of a menu that is still visibly open (EventContextMenu does the same).
+  const closeRowMenu = () => /** @type {HTMLElement | null} */ (document.activeElement)?.blur();
 
   /** @param {string} pubkey @param {string[]} roles */
   async function putUser(pubkey, roles) {
@@ -161,6 +178,7 @@
   function assignRole(pubkey) {
     const role = (roleDrafts[pubkey] ?? '').trim();
     if (!role) return;
+    roleDialogPubkey = null;
     putUser(pubkey, [role]);
   }
 
@@ -266,6 +284,7 @@
   async function removeMember(pubkey) {
     const user = getActiveUser();
     if (!user) return;
+    removeDialogPubkey = null;
     busy = true;
     try {
       await publishToGroupRelay(
@@ -283,14 +302,161 @@
   }
 </script>
 
+<!--
+  One row shape for all three sections: identity on the left, role chips, and
+  every admin action folded into a trailing kebab. The actions are rendered
+  unconditionally into the dropdown (DaisyUI's focus-driven form, as in
+  EventContextMenu) rather than behind an {#if open} — a wrapping flex line of
+  five text buttons is what made this modal read as unstyled, and btn-xs text
+  labels are ruled out by CLAUDE.md's Buttons section.
+-->
+{#snippet memberRow(
+  /** @type {string} */ pubkey,
+  /** @type {string[]} */ roles,
+  /** @type {string} */ testid,
+  /** @type {{ togglePublisher?: boolean, promote?: boolean, demote?: boolean, remove?: boolean }} */ actions
+)}
+  {@const self = pubkey === myPubkey}
+  {@const canAssignRole = isAdmin && roleOptions.length > 0 && !self}
+  {@const hasMenu =
+    isAdmin &&
+    !self &&
+    (canAssignRole ||
+      actions.togglePublisher ||
+      actions.promote ||
+      actions.demote ||
+      actions.remove)}
+  <div class="flex items-center gap-3 py-2" data-testid={testid} data-pubkey={pubkey}>
+    <ProfileAvatar {pubkey} profile={getProfiles().get(pubkey)} size="sm" />
+    <span class="min-w-0 flex-1 truncate text-sm font-semibold">{nameOf(pubkey)}</span>
+    <div class="flex shrink-0 items-center gap-1">
+      {#if roles.length > 0}
+        {#each unique(roles) as role (role)}
+          <span class="badge max-w-[7rem] truncate badge-ghost badge-sm" title={role}
+            >{roleLabel(role)}</span
+          >
+        {/each}
+      {:else if testid === 'admin-row'}
+        <span class="badge badge-ghost badge-sm">{roleLabel('admin')}</span>
+      {/if}
+      {#if self}
+        <span class="badge badge-ghost badge-sm opacity-60">{m.groups_members_self_badge()}</span>
+      {/if}
+    </div>
+    {#if hasMenu}
+      <div class="dropdown dropdown-end shrink-0">
+        <button
+          tabindex="0"
+          class="btn btn-circle btn-ghost btn-sm"
+          aria-label={m.groups_members_row_menu({ name: nameOf(pubkey) })}
+        >
+          <MoreIcon class_="w-5 h-5" />
+        </button>
+        <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
+        <ul
+          tabindex="0"
+          class="dropdown-content menu z-50 w-60 rounded-box border border-base-300 bg-base-100 p-2 shadow-lg"
+        >
+          {#if actions.togglePublisher}
+            <li>
+              <button
+                data-testid="member-toggle-publisher"
+                data-pubkey={pubkey}
+                disabled={busy}
+                onclick={() => {
+                  closeRowMenu();
+                  togglePublisher(pubkey);
+                }}
+              >
+                {isPublisher(roles)
+                  ? m.groups_members_revoke_publisher()
+                  : m.groups_members_grant_publisher()}
+              </button>
+            </li>
+          {/if}
+          {#if actions.promote}
+            <li>
+              <button
+                data-testid="member-promote"
+                data-pubkey={pubkey}
+                disabled={busy}
+                onclick={() => {
+                  closeRowMenu();
+                  promote(pubkey);
+                }}
+              >
+                {m.groups_members_promote()}
+              </button>
+            </li>
+          {/if}
+          {#if actions.demote}
+            <li>
+              <button
+                data-testid="member-demote"
+                data-pubkey={pubkey}
+                disabled={busy}
+                onclick={() => {
+                  closeRowMenu();
+                  demote(pubkey);
+                }}
+              >
+                {m.groups_members_demote()}
+              </button>
+            </li>
+          {/if}
+          {#if canAssignRole}
+            <li>
+              <button
+                data-testid="member-assign-role"
+                data-pubkey={pubkey}
+                disabled={busy}
+                onclick={() => {
+                  closeRowMenu();
+                  roleDialogPubkey = pubkey;
+                }}
+              >
+                {m.groups_members_assign_role_open()}
+              </button>
+            </li>
+          {/if}
+          {#if actions.remove}
+            <div class="divider my-0"></div>
+            <li>
+              <button
+                class="text-error"
+                data-testid="member-remove"
+                data-pubkey={pubkey}
+                disabled={busy}
+                onclick={() => {
+                  closeRowMenu();
+                  removeDialogPubkey = pubkey;
+                }}
+              >
+                {m.groups_members_remove()}
+              </button>
+            </li>
+          {/if}
+        </ul>
+      </div>
+    {/if}
+  </div>
+{/snippet}
+
+{#snippet sectionHeading(/** @type {string} */ label, /** @type {number} */ count)}
+  <h4 class="mt-4 flex items-center gap-2 text-xs font-bold text-base-content/50 uppercase">
+    <span>{label}</span>
+    <span class="font-mono text-sm text-base-content/40 normal-case">{count}</span>
+  </h4>
+{/snippet}
+
 <div class="modal-open modal" role="dialog">
-  <div class="modal-box max-w-md">
+  <div class="modal-box max-w-lg">
     <button class="btn absolute top-3 right-3 btn-circle btn-ghost btn-sm" onclick={onClose}
       >✕</button
     >
     <h3 class="text-lg font-extrabold">{m.groups_members_title()}</h3>
     {#if metadata?.name}
-      <p class="mb-1 text-xs text-base-content/60">{metadata.name}</p>
+      <p class="text-xs text-base-content/60">{metadata.name}</p>
     {/if}
 
     {#if isAdmin && roleOptions.length > 0}
@@ -301,215 +467,49 @@
       </datalist>
     {/if}
 
-    <h4 class="mt-3 text-xs font-bold text-base-content/50 uppercase">
-      {m.groups_members_admins_heading()}
-    </h4>
+    {@render sectionHeading(m.groups_members_admins_heading(), adminRows.length)}
     <div class="divide-y divide-base-300">
       {#each adminRows as admin (admin.pubkey)}
-        {@const self = admin.pubkey === myPubkey}
-        <div
-          class="flex flex-wrap items-center gap-3 py-2"
-          data-testid="admin-row"
-          data-pubkey={admin.pubkey}
-        >
-          <ProfileAvatar
-            pubkey={admin.pubkey}
-            profile={getProfiles().get(admin.pubkey)}
-            size="sm"
-          />
-          <span class="flex-1 truncate text-sm font-semibold">
-            {getUserDisplayName(admin.pubkey, getProfiles().get(admin.pubkey))}
-          </span>
-          {#if admin.roles.length > 0}
-            {#each unique(admin.roles) as role (role)}
-              <span class="badge max-w-[7rem] truncate badge-ghost badge-sm" title={role}
-                >{roleLabel(role)}</span
-              >
-            {/each}
-          {:else}
-            <span class="badge badge-ghost badge-sm">{roleLabel('admin')}</span>
-          {/if}
-          {#if isAdmin && roleOptions.length > 0 && !self}
-            <input
-              type="text"
-              class="input-bordered input input-xs w-24"
-              list="group-members-role-options"
-              placeholder={m.groups_members_role_placeholder()}
-              data-testid="member-role-input"
-              data-pubkey={admin.pubkey}
-              value={roleDrafts[admin.pubkey] ?? ''}
-              oninput={(e) =>
-                setRoleDraft(admin.pubkey, /** @type {HTMLInputElement} */ (e.target).value)}
-            />
-            <button
-              class="btn btn-ghost btn-xs"
-              data-testid="member-assign-role"
-              data-pubkey={admin.pubkey}
-              disabled={busy || !(roleDrafts[admin.pubkey] ?? '').trim()}
-              onclick={() => assignRole(admin.pubkey)}
-            >
-              {m.groups_members_assign_role()}
-            </button>
-          {/if}
-          {#if isAdmin && !self}
-            <button
-              class="btn btn-ghost btn-xs"
-              data-testid="member-toggle-publisher"
-              data-pubkey={admin.pubkey}
-              disabled={busy}
-              onclick={() => togglePublisher(admin.pubkey)}
-            >
-              {isPublisher(admin.roles)
-                ? m.groups_members_revoke_publisher()
-                : m.groups_members_grant_publisher()}
-            </button>
-            <button
-              class="btn btn-ghost btn-xs"
-              data-testid="member-demote"
-              data-pubkey={admin.pubkey}
-              disabled={busy}
-              onclick={() => demote(admin.pubkey)}
-            >
-              {m.groups_members_demote()}
-            </button>
-          {/if}
-        </div>
+        {@render memberRow(admin.pubkey, admin.roles, 'admin-row', {
+          togglePublisher: true,
+          demote: true
+        })}
       {/each}
     </div>
 
     {#if publisherRows.length > 0}
-      <h4 class="mt-3 text-xs font-bold text-base-content/50 uppercase">
-        {m.groups_members_publishers_heading()}
-      </h4>
+      {@render sectionHeading(m.groups_members_publishers_heading(), publisherRows.length)}
       <div class="divide-y divide-base-300">
         {#each publisherRows as publisher (publisher.pubkey)}
-          {@const self = publisher.pubkey === myPubkey}
-          <div
-            class="flex flex-wrap items-center gap-3 py-2"
-            data-testid="publisher-row"
-            data-pubkey={publisher.pubkey}
-          >
-            <ProfileAvatar
-              pubkey={publisher.pubkey}
-              profile={getProfiles().get(publisher.pubkey)}
-              size="sm"
-            />
-            <span class="flex-1 truncate text-sm font-semibold">
-              {getUserDisplayName(publisher.pubkey, getProfiles().get(publisher.pubkey))}
-            </span>
-            {#each unique(publisher.roles) as role (role)}
-              <span class="badge max-w-[7rem] truncate badge-ghost badge-sm" title={role}
-                >{roleLabel(role)}</span
-              >
-            {/each}
-            {#if isAdmin && !self}
-              <button
-                class="btn btn-ghost btn-xs"
-                data-testid="member-toggle-publisher"
-                data-pubkey={publisher.pubkey}
-                disabled={busy}
-                onclick={() => togglePublisher(publisher.pubkey)}
-              >
-                {m.groups_members_revoke_publisher()}
-              </button>
-              <button
-                class="btn btn-ghost btn-xs"
-                data-testid="member-promote"
-                data-pubkey={publisher.pubkey}
-                disabled={busy}
-                onclick={() => promote(publisher.pubkey)}
-              >
-                {m.groups_members_promote()}
-              </button>
-              <button
-                class="btn text-error btn-ghost btn-xs"
-                data-testid="member-remove"
-                data-pubkey={publisher.pubkey}
-                disabled={busy}
-                onclick={() => removeMember(publisher.pubkey)}
-              >
-                {m.groups_members_remove()}
-              </button>
-            {/if}
-          </div>
+          {@render memberRow(publisher.pubkey, publisher.roles, 'publisher-row', {
+            togglePublisher: true,
+            promote: true,
+            remove: true
+          })}
         {/each}
       </div>
     {/if}
 
-    <h4 class="mt-3 text-xs font-bold text-base-content/50 uppercase">
-      {m.groups_members_members_heading()}
-    </h4>
+    {@render sectionHeading(m.groups_members_members_heading(), memberPubkeys.length)}
     <div class="divide-y divide-base-300">
       {#each memberPubkeys as pubkey (pubkey)}
-        <div
-          class="flex flex-wrap items-center gap-3 py-2"
-          data-testid="member-row"
-          data-pubkey={pubkey}
-        >
-          <ProfileAvatar {pubkey} profile={getProfiles().get(pubkey)} size="sm" />
-          <span class="flex-1 truncate text-sm font-semibold">
-            {getUserDisplayName(pubkey, getProfiles().get(pubkey))}
-          </span>
-          {#if isAdmin && roleOptions.length > 0}
-            <input
-              type="text"
-              class="input-bordered input input-xs w-24"
-              list="group-members-role-options"
-              placeholder={m.groups_members_role_placeholder()}
-              data-testid="member-role-input"
-              data-pubkey={pubkey}
-              value={roleDrafts[pubkey] ?? ''}
-              oninput={(e) =>
-                setRoleDraft(pubkey, /** @type {HTMLInputElement} */ (e.target).value)}
-            />
-            <button
-              class="btn btn-ghost btn-xs"
-              data-testid="member-assign-role"
-              data-pubkey={pubkey}
-              disabled={busy || !(roleDrafts[pubkey] ?? '').trim()}
-              onclick={() => assignRole(pubkey)}
-            >
-              {m.groups_members_assign_role()}
-            </button>
-          {/if}
-          {#if isAdmin}
-            <button
-              class="btn btn-ghost btn-xs"
-              data-testid="member-toggle-publisher"
-              data-pubkey={pubkey}
-              disabled={busy}
-              onclick={() => togglePublisher(pubkey)}
-            >
-              {m.groups_members_grant_publisher()}
-            </button>
-            <button
-              class="btn btn-ghost btn-xs"
-              data-testid="member-promote"
-              data-pubkey={pubkey}
-              disabled={busy}
-              onclick={() => promote(pubkey)}
-            >
-              {m.groups_members_promote()}
-            </button>
-            <button
-              class="btn text-error btn-ghost btn-xs"
-              data-testid="member-remove"
-              data-pubkey={pubkey}
-              disabled={busy}
-              onclick={() => removeMember(pubkey)}
-            >
-              {m.groups_members_remove()}
-            </button>
-          {/if}
-        </div>
+        {@render memberRow(pubkey, [], 'member-row', {
+          togglePublisher: true,
+          promote: true,
+          remove: true
+        })}
       {/each}
+      {#if memberPubkeys.length === 0}
+        <p class="py-3 text-sm text-base-content/50">{m.groups_members_empty()}</p>
+      {/if}
     </div>
 
     {#if isAdmin}
-      <div class="mt-3">
-        <div class="mb-2 flex gap-2">
+      <div class="mt-4">
+        <div role="tablist" class="tabs-border mb-3 tabs">
           <button
-            class="btn {addMode === 'direct' ? 'btn-primary' : 'btn-ghost'}"
+            role="tab"
+            class="tab {addMode === 'direct' ? 'tab-active' : ''}"
             data-testid="add-mode-direct"
             onclick={() => (addMode = 'direct')}
           >
@@ -523,7 +523,8 @@
                  detect root-vs-channel, keeps a channel context down to
                  direct-add only. -->
             <button
-              class="btn {addMode === 'dm' ? 'btn-primary' : 'btn-ghost'}"
+              role="tab"
+              class="tab {addMode === 'dm' ? 'tab-active' : ''}"
               data-testid="add-mode-dm"
               onclick={() => (addMode = 'dm')}
             >
@@ -536,7 +537,7 @@
           <div class="flex flex-col gap-2">
             <input
               type="text"
-              class="input-bordered input input-sm w-full"
+              class="input-bordered input w-full"
               placeholder={m.group_invite_dm_npub_placeholder()}
               aria-label={m.group_invite_dm_npub_placeholder()}
               data-testid="dm-invite-npub-input"
@@ -572,4 +573,76 @@
       </div>
     {/if}
   </div>
+  <div class="modal-backdrop">
+    <button onclick={onClose} aria-label={m.common_cancel()}></button>
+  </div>
 </div>
+
+<!-- Both dialogs are SIBLINGS of the modal above, never nested inside its
+     .modal-box: DaisyUI animates translate/scale on that box, which makes it a
+     containing block and would clip a nested fixed-position overlay
+     (ChannelMembersModal does the same). -->
+{#if roleDialogPubkey}
+  {@const pubkey = roleDialogPubkey}
+  {@const draft = (roleDrafts[pubkey] ?? '').trim()}
+  <div class="modal-open modal" role="dialog">
+    <div class="modal-box max-w-sm">
+      <h3 class="text-lg font-extrabold">{m.groups_members_assign_role_title()}</h3>
+      <p class="my-3 text-sm text-base-content/70">
+        {m.groups_members_assign_role_body({ name: nameOf(pubkey) })}
+      </p>
+      <input
+        type="text"
+        class="input-bordered input w-full"
+        list="group-members-role-options"
+        placeholder={m.groups_members_role_placeholder()}
+        aria-label={m.groups_members_role_placeholder()}
+        data-testid="member-role-input"
+        data-pubkey={pubkey}
+        value={roleDrafts[pubkey] ?? ''}
+        oninput={(e) => setRoleDraft(pubkey, /** @type {HTMLInputElement} */ (e.target).value)}
+      />
+      <div class="modal-action">
+        <button class="btn btn-ghost" onclick={() => (roleDialogPubkey = null)}>
+          {m.common_cancel()}
+        </button>
+        <button
+          class="btn btn-primary"
+          data-testid="member-assign-role-confirm"
+          data-pubkey={pubkey}
+          disabled={busy || !draft}
+          onclick={() => assignRole(pubkey)}
+        >
+          {m.groups_members_assign_role()}
+        </button>
+      </div>
+    </div>
+  </div>
+{/if}
+
+{#if removeDialogPubkey}
+  {@const pubkey = removeDialogPubkey}
+  {@const name = nameOf(pubkey)}
+  <div class="modal-open modal" role="dialog">
+    <div class="modal-box max-w-sm text-center">
+      <h3 class="text-lg font-extrabold">{m.groups_members_remove_confirm_title({ name })}</h3>
+      <p class="my-3 text-sm text-base-content/70">
+        {m.groups_members_remove_confirm_body({ name })}
+      </p>
+      <div class="modal-action justify-center">
+        <button class="btn btn-ghost" onclick={() => (removeDialogPubkey = null)}>
+          {m.common_cancel()}
+        </button>
+        <button
+          class="btn btn-error"
+          data-testid="member-remove-confirm"
+          data-pubkey={pubkey}
+          disabled={busy}
+          onclick={() => removeMember(pubkey)}
+        >
+          {m.groups_members_remove()}
+        </button>
+      </div>
+    </div>
+  </div>
+{/if}

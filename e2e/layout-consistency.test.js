@@ -311,6 +311,54 @@ test.describe('Unified content region layout', () => {
     expect(sidebarsAfter.nav).toBe(sidebarsBefore.nav);
   });
 
+  // The three columns of the community chrome row each used to invent their
+  // own top padding + avatar size (first-row centres at 40 / 34 / 48px), so
+  // the sidebar's community header and the main hero visibly sat on different
+  // axes. They now share --community-header-h and centre in it.
+  test('rail, sidebar header and hero avatar share one vertical axis', async ({
+    authenticatedPage: page
+  }) => {
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await page.goto(`/c/${TEST_AUTHOR.npub}`);
+    await page.waitForLoadState('domcontentloaded');
+    await page.locator('[data-testid="content-nav-sidebar"]').waitFor({ state: 'visible' });
+    await page.locator('[data-testid="nav-header-home"]').waitFor({ state: 'visible' });
+    await page.locator('[data-testid="hero-avatar"]').waitFor({ state: 'visible' });
+
+    const centres = await page.evaluate(() => {
+      /** @param {Element | null} el */
+      const centreY = (el) => {
+        if (!el) return null;
+        const r = el.getBoundingClientRect();
+        return r.height ? r.top + r.height / 2 : null;
+      };
+      return {
+        rail: centreY(document.querySelector('[data-testid="community-sidebar"] button')),
+        sidebar: centreY(document.querySelector('[data-testid="nav-header-home"] .avatar')),
+        hero: centreY(document.querySelector('[data-testid="hero-avatar"]'))
+      };
+    });
+
+    expect(centres.rail, 'rail home button must be present').not.toBeNull();
+    expect(centres.sidebar, 'sidebar community avatar must be present').not.toBeNull();
+    expect(centres.hero, 'hero avatar must be present').not.toBeNull();
+
+    // The hero only shares the band in its no-banner variant; a community with
+    // a banner pulls its identity row up over the image by design.
+    const heroHasBanner = await page.evaluate(
+      () =>
+        !!document
+          .querySelector('[data-testid="hero-avatar"]')
+          ?.closest('div')
+          ?.previousElementSibling?.querySelector('img')
+    );
+
+    expect(Math.abs(Number(centres.sidebar) - Number(centres.rail))).toBeLessThanOrEqual(2);
+    if (!heroHasBanner) {
+      expect(Math.abs(Number(centres.hero) - Number(centres.sidebar))).toBeLessThanOrEqual(2);
+    }
+  });
+
   test('FAB pins to the bottom of the viewport when content is shorter than viewport', async ({
     authenticatedPage: page
   }) => {

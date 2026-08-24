@@ -174,6 +174,19 @@ describe('ContentNavSidebar — two-zone sidebar', () => {
     expect(screen.queryByTestId('nav-footer-settings')).not.toBeNull();
   });
 
+  // DaisyUI's `.menu` is `width: fit-content`, so a footer <nav>/<button>
+  // without `w-full` shrinks to its widest label and the rows stop matching
+  // the INHALTE ones above (the highlight ended mid-sidebar).
+  it('footer rows are full-width, exactly like the INHALTE rows', () => {
+    renderNav({ channelRows: [], isMember: true });
+    const members = /** @type {HTMLElement} */ (screen.getByTestId('nav-footer-members'));
+    const chat = /** @type {HTMLElement} */ (screen.getByTestId('content-nav-chat'));
+
+    expect(members.className).toContain('w-full');
+    expect(members.className).toBe(chat.className);
+    expect(/** @type {HTMLElement} */ (members.closest('nav')).className).toContain('w-full');
+  });
+
   it('a visitor sees only world-readable rows, plus a lock hint', () => {
     renderNav({
       channelRows: [worldReadableGroupRow(), membersOnlyGroupRow()],

@@ -98,7 +98,19 @@ vi.mock('$lib/paraglide/messages', () => ({
   groups_members_remove: () => 'Remove',
   groups_members_action_failed: () => 'The relay refused the change',
   groups_members_assign_role: () => 'Assign role',
+  groups_members_assign_role_open: () => 'Assign role …',
+  groups_members_assign_role_title: () => 'Assign role',
+  groups_members_assign_role_body: (/** @type {{name: string}} */ { name }) =>
+    `New role for ${name}.`,
+  groups_members_remove_confirm_title: (/** @type {{name: string}} */ { name }) =>
+    `Remove ${name}?`,
+  groups_members_remove_confirm_body: (/** @type {{name: string}} */ { name }) =>
+    `${name} loses access to this group.`,
+  groups_members_row_menu: (/** @type {{name: string}} */ { name }) => `Actions for ${name}`,
+  groups_members_self_badge: () => 'You',
+  groups_members_empty: () => 'No members yet.',
   groups_members_role_placeholder: () => 'Role',
+  common_cancel: () => 'Cancel',
   groups_role_admin: () => 'Admin',
   groups_role_king: () => 'Founder',
   groups_role_moderator: () => 'Moderator',
@@ -291,13 +303,22 @@ describe('GroupMembersModal admin actions', () => {
     await waitFor(() => expect(onRosterChanged).toHaveBeenCalled());
   });
 
-  it('remove publishes remove-user and refreshes the roster', async () => {
+  it('remove asks for confirmation first, then publishes remove-user and refreshes', async () => {
     const { container, onRosterChanged } = renderModal();
 
     const removeBtn = container.querySelector(
       `[data-testid="member-remove"][data-pubkey="${MEMBER_B}"]`
     );
     await fireEvent.click(/** @type {Element} */ (removeBtn));
+
+    // The row action only opens the confirm — nothing is published yet.
+    expect(buildRemoveUserTemplate).not.toHaveBeenCalled();
+    expect(publishToGroupRelay).not.toHaveBeenCalled();
+
+    const confirmBtn = container.querySelector(
+      `[data-testid="member-remove-confirm"][data-pubkey="${MEMBER_B}"]`
+    );
+    await fireEvent.click(/** @type {Element} */ (confirmBtn));
 
     await waitFor(() => expect(buildRemoveUserTemplate).toHaveBeenCalledWith('grp1', MEMBER_B));
     await waitFor(() =>
@@ -321,13 +342,25 @@ describe('GroupMembersModal role assignment (roleOptions)', () => {
   it('non-empty roleOptions: an admin sees the assign control on member and admin rows', () => {
     const { container } = renderModal({ roleOptions: ['lehrkraft', 'admin'] });
     expect(
-      container.querySelector(`[data-testid="member-role-input"][data-pubkey="${MEMBER_A}"]`)
-    ).not.toBeNull();
-    expect(
       container.querySelector(`[data-testid="member-assign-role"][data-pubkey="${MEMBER_A}"]`)
     ).not.toBeNull();
     expect(
-      container.querySelector(`[data-testid="member-role-input"][data-pubkey="${ADMIN_OTHER}"]`)
+      container.querySelector(`[data-testid="member-assign-role"][data-pubkey="${ADMIN_OTHER}"]`)
+    ).not.toBeNull();
+  });
+
+  it('the role input lives in a dialog that only opens on the row action', async () => {
+    const { container } = renderModal({ roleOptions: ['lehrkraft', 'admin'] });
+    expect(container.querySelector('[data-testid="member-role-input"]')).toBeNull();
+
+    await fireEvent.click(
+      /** @type {Element} */ (
+        container.querySelector(`[data-testid="member-assign-role"][data-pubkey="${MEMBER_A}"]`)
+      )
+    );
+
+    expect(
+      container.querySelector(`[data-testid="member-role-input"][data-pubkey="${MEMBER_A}"]`)
     ).not.toBeNull();
   });
 
@@ -337,14 +370,8 @@ describe('GroupMembersModal role assignment (roleOptions)', () => {
     // active user's own admin capability irrecoverably if they picked a
     // non-admin role while being the sole admin. Mirror the demote guard.
     expect(
-      container.querySelector(`[data-testid="member-role-input"][data-pubkey="${ADMIN_SELF}"]`)
-    ).toBeNull();
-    expect(
       container.querySelector(`[data-testid="member-assign-role"][data-pubkey="${ADMIN_SELF}"]`)
     ).toBeNull();
-    expect(
-      container.querySelector(`[data-testid="member-role-input"][data-pubkey="${ADMIN_OTHER}"]`)
-    ).not.toBeNull();
     expect(
       container.querySelector(`[data-testid="member-assign-role"][data-pubkey="${ADMIN_OTHER}"]`)
     ).not.toBeNull();
@@ -363,15 +390,23 @@ describe('GroupMembersModal role assignment (roleOptions)', () => {
   it('assigning a role publishes put-user with [role] and refreshes the roster', async () => {
     const { container, onRosterChanged } = renderModal({ roleOptions: ['lehrkraft', 'admin'] });
 
+    const assignBtn = container.querySelector(
+      `[data-testid="member-assign-role"][data-pubkey="${MEMBER_A}"]`
+    );
+    await fireEvent.click(/** @type {Element} */ (assignBtn));
+
     const input = /** @type {HTMLInputElement} */ (
       container.querySelector(`[data-testid="member-role-input"][data-pubkey="${MEMBER_A}"]`)
     );
     await fireEvent.input(input, { target: { value: 'lehrkraft' } });
 
-    const assignBtn = container.querySelector(
-      `[data-testid="member-assign-role"][data-pubkey="${MEMBER_A}"]`
+    await fireEvent.click(
+      /** @type {Element} */ (
+        container.querySelector(
+          `[data-testid="member-assign-role-confirm"][data-pubkey="${MEMBER_A}"]`
+        )
+      )
     );
-    await fireEvent.click(/** @type {Element} */ (assignBtn));
 
     await waitFor(() =>
       expect(buildPutUserTemplate).toHaveBeenCalledWith('grp1', MEMBER_A, ['lehrkraft'])
@@ -391,12 +426,19 @@ describe('GroupMembersModal role assignment (roleOptions)', () => {
     await waitFor(() => expect(onRosterChanged).toHaveBeenCalled());
   });
 
-  it('assign button is disabled while the role input is blank', () => {
+  it('the dialog confirm is disabled while the role input is blank', async () => {
     const { container } = renderModal({ roleOptions: ['lehrkraft'] });
-    const assignBtn = /** @type {HTMLButtonElement} */ (
-      container.querySelector(`[data-testid="member-assign-role"][data-pubkey="${MEMBER_A}"]`)
+    await fireEvent.click(
+      /** @type {Element} */ (
+        container.querySelector(`[data-testid="member-assign-role"][data-pubkey="${MEMBER_A}"]`)
+      )
     );
-    expect(assignBtn.disabled).toBe(true);
+    const confirmBtn = /** @type {HTMLButtonElement} */ (
+      container.querySelector(
+        `[data-testid="member-assign-role-confirm"][data-pubkey="${MEMBER_A}"]`
+      )
+    );
+    expect(confirmBtn.disabled).toBe(true);
   });
 });
 
@@ -409,6 +451,11 @@ describe('GroupMembersModal error handling', () => {
       `[data-testid="member-remove"][data-pubkey="${MEMBER_A}"]`
     );
     await fireEvent.click(/** @type {Element} */ (removeBtn));
+    await fireEvent.click(
+      /** @type {Element} */ (
+        container.querySelector(`[data-testid="member-remove-confirm"][data-pubkey="${MEMBER_A}"]`)
+      )
+    );
 
     await waitFor(() =>
       expect(showToast).toHaveBeenCalledWith('The relay refused the change', 'error')

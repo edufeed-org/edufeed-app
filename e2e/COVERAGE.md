@@ -47,7 +47,7 @@ this total by a file or two between updates — `rail-layout-sync.test.js`
 | `mobile-navigation.test.js`          | 8                     | No   | Mobile hamburger menu, responsive layout                                                                                                                                                                                                                                                                                               |
 | `list-management.test.js`            | 9                     | Both | Dashboard Lists tab, New list modal, people-list CRUD affordances                                                                                                                                                                                                                                                                      |
 | `cache-warm-boot.test.js`            | 1                     | No   | Persistent event cache — warm reload renders calendar from IDB with WebSockets blocked                                                                                                                                                                                                                                                 |
-| `layout-consistency.test.js`         | 14                    | Yes  | Single overflow surface, no footer DOM, body non-scrolling, sticky mobile header, scroll restoration, flex-sibling sidebar guards                                                                                                                                                                                                      |
+| `layout-consistency.test.js`         | 15                    | Yes  | Single overflow surface, no footer DOM, body non-scrolling, sticky mobile header, scroll restoration, flex-sibling sidebar guards, shared community header axis                                                                                                                                                                        |
 | `poll-flow.test.js`                  | 2                     | Yes  | NIP-88 polls — FAB wiring smoke + full publish → vote → tally                                                                                                                                                                                                                                                                          |
 | `membership-application.test.js`     | 2                     | No   | Membership gate: wizard handle step only when enabled (4 vs 5 steps), admin route                                                                                                                                                                                                                                                      |
 | `npub-login.test.js`                 | 3                     | No   | Read-only npub login: flag-off hides method, flag-on login → readonly notice on /c/inbox, invalid input error                                                                                                                                                                                                                          |
@@ -1469,7 +1469,7 @@ correct.
 
 ---
 
-### layout-consistency.test.js (14 tests)
+### layout-consistency.test.js (15 tests)
 
 **Routes:** `/discover`, `/calendar`, `/c/`, `/c/[npub]`
 **Auth required:** Yes (all tests use `authenticatedPage` fixture)
@@ -1522,6 +1522,12 @@ correct.
 | main has no sidebar margin offset on desktop community route        | `<main>`'s computed `marginLeft === '0px'` — guards against re-introduction of `lg:ml-(--sidebar-*)` margin compensation                                                                                                                                                       |
 | desktop sidebars stay pinned during `<main>` scroll                 | CommunitySidebar + ContentNavSidebar `getBoundingClientRect().top` is unchanged before/after scrolling `<main>` — guards against re-introduction of `position: fixed` (or moving sidebars back inside `<main>`)                                                                |
 | ContentNavSidebar mounts on community routes, unmounts on dashboard | On `/c/`: `[data-testid="dashboard-nav-sidebar"]` visible, `[data-testid="content-nav-sidebar"]` count === 0. On `/c/[npub]`: inverse. Round-trip back to `/c/` restores dashboard sidebar — guards the `setContentNavData` context handoff between root and community layouts |
+
+#### Shared community header axis (1 test)
+
+| Test                                                         | What it verifies                                                                                                                                                                                                                                                                                                                                                           |
+| ------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| rail, sidebar header and hero avatar share one vertical axis | On `/c/[npub]` at 1280x800, the vertical centres of the icon rail's first button, `[data-testid="nav-header-home"] .avatar` and `[data-testid="hero-avatar"]` agree within 2px — guards the `--community-header-h` band the three columns centre in. The hero assertion is skipped for communities with a banner, whose identity row is pulled up over the image by design |
 
 #### FAB pinned to bottom on short pages (1 test)
 
