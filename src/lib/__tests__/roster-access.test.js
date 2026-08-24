@@ -72,3 +72,48 @@ describe('canPublishSection', () => {
     expect(canPublishSection(section({ tier: 'members' }), args(OWNER, loadingRoster))).toBe(true);
   });
 });
+
+/**
+ * Regression lock for the reported "publisher shared, nobody else sees it"
+ * case. That turned out to be a deleted target rather than a permission bug,
+ * but the whole read path was verified by hand against the live 39001 — this
+ * pins the half that lives here so it cannot silently regress (laoc,
+ * 2026-08-24).
+ *
+ * Shape is the real one: kind-10222 `["access","role","publisher"]`, and a
+ * 39001 that files the publisher next to the moderators, because NIP-29 has
+ * exactly one list for every role.
+ */
+describe('the publisher role, as deployed', () => {
+  const PUBLISHER = 'e'.repeat(64);
+  const ADMIN = 'd'.repeat(64);
+  const realRoster = rosterView(
+    POINTER,
+    { [KEY]: new Set([PUBLISHER, ADMIN, OWNER]) },
+    {
+      [KEY]: [
+        { pubkey: OWNER, roles: ['admin'] },
+        { pubkey: PUBLISHER, roles: ['publisher'] },
+        { pubkey: ADMIN, roles: ['admin'] }
+      ]
+    }
+  );
+  const learning = section({ tier: 'role', role: 'publisher' });
+
+  it('lets a publisher-role holder publish, and lists them as an allowed author', () => {
+    expect(
+      canPublishSection(learning, { pubkey: PUBLISHER, ownerPubkey: OWNER, roster: realRoster })
+    ).toBe(true);
+    expect(sectionAllowedAuthors(learning, realRoster, OWNER)).toContain(PUBLISHER);
+  });
+
+  // A plain admin holds no publisher role, so a role-gated section excludes
+  // them: moderation authority and publishing rights are separate on purpose.
+  it('does not let a bare admin through a publisher-gated section', () => {
+    expect(sectionAllowedAuthors(learning, realRoster, OWNER)).not.toContain(ADMIN);
+  });
+
+  it('keeps the owner allowed — the community moderates its own surface', () => {
+    expect(sectionAllowedAuthors(learning, realRoster, OWNER)).toContain(OWNER);
+  });
+});
