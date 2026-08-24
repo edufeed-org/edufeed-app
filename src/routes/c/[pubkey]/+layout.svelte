@@ -29,6 +29,7 @@
   import { useRootRoster } from '$lib/groups/root-roster.svelte.js';
   import { useEffectiveCommunity } from '$lib/groups/section-override.svelte.js';
   import { useRosterReconcile } from '$lib/groups/roster-reconcile.svelte.js';
+  import { useCommunityFollowReconcile } from '$lib/groups/community-follow-reconcile.svelte.js';
   import { useActiveUser } from '$lib/stores/accounts.svelte';
   import { isCommunityOwner } from '$lib/helpers/community-signer.js';
   import { resolveZoneMembership } from '$lib/components/community/layout/community-nav.js';
@@ -236,6 +237,11 @@
   // admin opens a moderated community, invite-code joiners missing from
   // members-tier channels are silently fanned out. Idles for everyone else.
   useRosterReconcile(() => communikeyEvent);
+  // Member-side counterpart: if the root roster already holds me but my
+  // kind-30000 `communities` set does not, follow. Without it, an accepted
+  // join or an admin-granted role leaves the community with no rail entry and
+  // its channels sitting in the rail as a bare relay tile instead.
+  useCommunityFollowReconcile(() => communikeyEvent);
   const getActiveUserForNav = useActiveUser();
   const zoneMember = $derived.by(() => {
     const activeUser = getActiveUserForNav();
