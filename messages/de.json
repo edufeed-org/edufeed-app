@@ -783,6 +783,7 @@
   "community_shell_invite_future": "Beitritt nur auf Einladung.",
   "community_upcoming_events_title": "Kommende Veranstaltungen",
   "community_shared_label": "{name} hat geteilt",
+  "community_share_deleted_event": "Dieser Inhalt wurde von seinem Verfasser gelöscht und kann nicht mehr geteilt werden.",
   "community_shared_multiple_suffix": "haben geteilt",
   "community_shared_multiple_overflow": "und {count} weitere haben geteilt",
   "community_shared_all_label": "Geteilt von {count} Personen",

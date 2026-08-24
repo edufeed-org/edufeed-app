@@ -829,6 +829,7 @@
   "community_shell_invite_future": "Joining is invite-only.",
   "community_upcoming_events_title": "Upcoming Events",
   "community_shared_label": "{name} shared",
+  "community_share_deleted_event": "This content was deleted by its author and can no longer be shared.",
   "community_shared_multiple_suffix": "shared",
   "community_shared_multiple_overflow": "and {count} more shared",
   "community_shared_all_label": "Shared by {count} people",

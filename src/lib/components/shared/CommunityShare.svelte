@@ -31,7 +31,7 @@
     getReplaceableAddress
   } from 'applesauce-core/helpers';
   import { parseAddressPointerFromATag } from '$lib/helpers/nostrUtils.js';
-  import { createCommunityReposts } from '$lib/helpers/communityRepost.js';
+  import { createCommunityReposts, isDeletedEvent } from '$lib/helpers/communityRepost.js';
   import { buildShareResultMessages } from '$lib/helpers/shareMessages.js';
   import { PlusIcon, CheckIcon, AlertIcon } from '../icons';
   import { getAllLookupRelays } from '$lib/helpers/relay-helper.js';
@@ -367,6 +367,15 @@
     try {
       // Separate into creates vs deletes (only deletable shares can be unshared)
       const toCreate = selectedCommunityIds.filter((id) => !deletableShares.has(id));
+
+      // Say why, instead of reporting every target as "failed": a repost of a
+      // deleted event publishes fine but resolves for nobody, so the sharer is
+      // the only person who would ever see it. Un-sharing stays available —
+      // cleaning up an old share of since-deleted content is exactly right.
+      if (toCreate.length > 0 && isDeletedEvent(event)) {
+        shareError = m.community_share_deleted_event();
+        return;
+      }
       const toDelete = selectedCommunityIds.filter((id) => deletableShares.has(id));
 
       // Batch create: ONE sign call for all new shares

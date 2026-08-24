@@ -136,3 +136,72 @@ describe('createCommunityRepost (single, backward compat)', () => {
     );
   });
 });
+
+/**
+ * A share of a DELETED event is a dangling pointer: the repost publishes fine,
+ * but no other user can resolve the target, so the content simply never
+ * appears for them. That is exactly what happened — a resource its author had
+ * deleted 17 days earlier was still sitting in the sharer's local eventStore,
+ * so the picker offered it and the share silently went nowhere (laoc,
+ * 2026-08-24).
+ */
+describe('sharing a deleted event', () => {
+  const AUTHOR = '65a652cbd6e2717da31f214ff417993260bc972136752ba1ab53dd3af5a21b02';
+  const deletedResource = {
+    id: 'bdaec4c05420d3e7230734cf7739e32d7a824eaa44a25bcbdb67ce70df5afb1a',
+    kind: 30142,
+    pubkey: AUTHOR,
+    created_at: 1780000000,
+    tags: [['d', 'https://phaidra.kphvie.ac.at/o:4192']],
+    content: '',
+    sig: 'author-sig'
+  };
+
+  it('refuses the share and signs nothing', async () => {
+    const { eventStore } = await import('$lib/stores/nostr-infrastructure.svelte.js');
+    eventStore.add({
+      kind: 5,
+      id: 'd'.repeat(64),
+      pubkey: AUTHOR,
+      created_at: 1786098496,
+      content: '',
+      sig: 'deletion-sig',
+      tags: [
+        ['k', '30142'],
+        ['e', deletedResource.id],
+        ['a', `30142:${AUTHOR}:https://phaidra.kphvie.ac.at/o:4192`]
+      ]
+    });
+
+    const result = await createCommunityReposts(deletedResource, ['community-abc'], fakeSigner);
+
+    expect(result).toBe(false);
+    expect(fakeSigner.signEvent).not.toHaveBeenCalled();
+    expect(mockPublishEventOptimistic).not.toHaveBeenCalled();
+  });
+
+  // The author's OTHER resources are untouched — a deletion names one address.
+  //
+  // Built as a fresh literal, NOT `{...deletedResource, tags: [...]}`: the
+  // deletion check memoises `Symbol(replaceable-identifier)` onto the event it
+  // inspects, and an object spread copies own symbols — so a sibling spread
+  // from a checked event inherits the ORIGINAL's address and is judged deleted.
+  // Measured, not reasoned about. Same family as the applesauce memoisation
+  // hazards in CLAUDE.md.
+  it('still shares a sibling the same author did not delete', async () => {
+    const sibling = {
+      id: 'f'.repeat(64),
+      kind: 30142,
+      pubkey: AUTHOR,
+      created_at: 1780000000,
+      tags: [['d', 'https://phaidra.kphvie.ac.at/o:4202']],
+      content: '',
+      sig: 'author-sig'
+    };
+
+    const result = await createCommunityReposts(sibling, ['community-abc'], fakeSigner);
+
+    expect(result).toBe(true);
+    expect(fakeSigner.signEvent).toHaveBeenCalledTimes(1);
+  });
+});
