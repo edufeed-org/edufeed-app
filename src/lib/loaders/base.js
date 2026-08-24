@@ -102,13 +102,36 @@ export const createCachedTimelineLoader = (relays, filter, opts = {}) =>
  *   console.log('Deletion event:', deletionEvent);
  * });
  */
-export const userDeletionLoader = (userPubkey) =>
+export const userDeletionLoader = (userPubkey) => authorsDeletionLoader([userPubkey]);
+
+/**
+ * Factory: Create a timeline loader for the deletion events (NIP-09) of SEVERAL
+ * authors at once.
+ *
+ * The batched form exists because deletions by OTHER people were never loaded
+ * anywhere: `userDeletionLoader` is called only by the calendar paths, and only
+ * for the active user. Everything else relied on `hydrateDeletions()`, which
+ * only replays kind-5s already sitting in IDB. The effect is that a resource
+ * its author deleted keeps rendering for anyone holding a stale copy — and
+ * stays shareable, which is how a repost pointing at a resource deleted 17 days
+ * earlier got published (laoc, 2026-08-24).
+ *
+ * Feeding the eventStore is the whole job: applesauce's DeleteManager then
+ * drops the deleted events out of every TimelineModel by itself.
+ *
+ * One filter for the whole batch, not one REQ per author — a REQ per rendered
+ * card is what starves a relay connection.
+ *
+ * @param {string[]} pubkeys - Authors whose deletions to load
+ * @returns {Function} Timeline loader function that returns an Observable
+ */
+export const authorsDeletionLoader = (pubkeys) =>
   createTimelineLoader(
     timedPool,
     getAllLookupRelays(), // Use all lookup relays to find deletions published anywhere
     {
       kinds: [5], // NIP-09 deletion events
-      authors: [userPubkey], // User's own deletions
+      authors: pubkeys,
       limit: 500 // Higher limit since deletions accumulate over time
     },
     { eventStore }

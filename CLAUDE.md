@@ -86,6 +86,8 @@ Canonical implementation: `src/routes/discover/+page.svelte`.
 
 Use `useProfileMap(getPubkeys)` from `src/lib/stores/profile-map.svelte.js` instead of manual `profileLoader` + `ProfileModel` subscriptions for batch profile loading.
 
+Pair it with `useAuthorDeletions(getPubkeys)` from `src/lib/stores/author-deletions.svelte.js` on any surface listing OTHER people's content. Nothing else fetches other authors' kind-5s (`userDeletionLoader` is calendar-only and self-only; `hydrateDeletions()` merely replays what IDB already has), so without it a deleted event keeps rendering from a stale local copy — and stays shareable, producing a repost nobody else can resolve. It returns nothing: feeding the eventStore is enough, and the DeleteManager drops the events from every `TimelineModel`. Both hooks take the same pubkey list — authors **and** `_sharedBy`/`_allSharers`, since a repost points at someone else's event.
+
 **Gotcha:** When the pubkey source is a `$state.raw()` array, the getter won't re-run on content changes (only on reassignment). Use a trigger counter:
 
 ```javascript
