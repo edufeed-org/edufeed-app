@@ -155,3 +155,54 @@ describe('unlinkedGroups', () => {
     expect(unlinkedGroups({ groups: null, linkedKeys: new Set() })).toEqual([]);
   });
 });
+
+// A community's channels are DISCOVERED from the relay subtree and addressed
+// at `wss://host/c/<rootId>` — no kind-10222 `group` pointer is written for
+// them any more (ChannelCreateWizard, 8d03f873). So linkedChannelKeys can
+// never claim them, and without a second rule every channel a user joins
+// draws a loose rail tile beside the community's own /c entry: the same
+// community, twice, once without its content types (laoc, 2026-08-24).
+describe('community-owned hosts', () => {
+  const ROOT = '0d55b35fba485756';
+  const ENDPOINT = `wss://groups.edufeed.org/c/${ROOT}`;
+
+  it('is not an unlinked group when addressed at a per-community endpoint', () => {
+    const rows = unlinkedGroups({
+      groups: [{ id: '1057f3c8cbd16568', relay: ENDPOINT }],
+      linkedKeys: new Set()
+    });
+    expect(rows).toEqual([]);
+  });
+
+  it('still lists a group on the flat host, which belongs to no community', () => {
+    const rows = unlinkedGroups({
+      groups: [{ id: 'allgemein', relay: 'wss://groups.edufeed.org' }],
+      linkedKeys: new Set()
+    });
+    expect(rows.map((r) => r.pointer.id)).toEqual(['allgemein']);
+  });
+
+  it('drops only the community-addressed rows, keeping their host siblings', () => {
+    const rows = unlinkedGroups({
+      groups: [
+        { id: '1057f3c8cbd16568', relay: ENDPOINT },
+        { id: '8c0fbe0b4039b190', relay: `${ENDPOINT}/` },
+        { id: 'a9021f402c0b36ce', relay: 'wss://groups.0xchat.com/' }
+      ],
+      linkedKeys: new Set()
+    });
+    expect(rows.map((r) => r.pointer.id)).toEqual(['a9021f402c0b36ce']);
+  });
+
+  it('leaves the legacy group-tag rule intact for communities that still write pointers', () => {
+    const linkedKeys = linkedChannelKeys([community([['group', 'leitung', R]])]);
+    const rows = unlinkedGroups({
+      groups: [
+        { id: 'leitung', relay: R },
+        { id: 'allgemein', relay: R }
+      ],
+      linkedKeys
+    });
+    expect(rows.map((r) => r.pointer.id)).toEqual(['allgemein']);
+  });
+});

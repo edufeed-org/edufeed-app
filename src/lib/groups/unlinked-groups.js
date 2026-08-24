@@ -6,10 +6,18 @@
 // different names. What is left over — a group joined from another client, or
 // by pasting an address — has no other home, so the sidebar is it.
 //
+// Two rules answer "already reachable through a community": the 10222's own
+// `group` pointers (linkedChannelKeys, legacy communities) and the address
+// shape (isCommunityEndpoint, everything created since channels moved to
+// subtree discovery). Communities stopped writing pointers, so the second rule
+// is the one that carries — see its docblock.
+//
 // Pure. The reactive plumbing (whose 10222s, whose 10009, which kind:39000)
 // lives in unlinked-groups.svelte.js.
+import { normalizeURL } from 'applesauce-core/helpers/url';
 import { parseGroupPointers, channelKey } from './community-pointer.js';
 import { channelAccessLevel, channelGlyph } from './channel-access.js';
+import { flatGroupsRelay } from './community-endpoint.js';
 
 /**
  * @typedef {{
@@ -38,6 +46,42 @@ export function linkedChannelKeys(communikeyEvents) {
     }
   }
   return keys;
+}
+
+/**
+ * Whether this relay URL addresses ONE community's subtree
+ * (`wss://host/c/<rootId>`) rather than a bare NIP-29 host.
+ *
+ * The second exclusion rule, and by now the load-bearing one. `linkedChannelKeys`
+ * asks the 10222 which channels it claims — but a community stopped claiming
+ * them: since 8d03f873 channels are DISCOVERED from the relay subtree and
+ * ChannelCreateWizard writes no `group` pointer at all. So for every community
+ * created since, `linkedKeys` is empty and each of its channels sitting in the
+ * user's kind-10009 reads as unclaimed, drawing a relay tile for the community's
+ * own endpoint beside its `/c/<npub>` entry: the same community twice, and the
+ * tile is a bare host directory that cannot show content sections (laoc,
+ * 2026-08-24). A channel addressed this way is by construction reachable
+ * through its community, so it is never a loose row.
+ *
+ * Path-shape based, deliberately: the rootId in the URL is not enough to
+ * resolve the community pubkey (`membership` is a multi-char tag, so no relay
+ * indexes it), and `/c/<id>` is the groups relay's only path convention —
+ * community-endpoint.js already rests on exactly that. The community itself is
+ * kept present by the roster→follow reconcile
+ * (community-follow-reconcile.svelte.js), so this never hides a channel whose
+ * community has no rail entry.
+ *
+ * @param {string} relay
+ * @returns {boolean} false for anything unparseable — a row we cannot judge
+ *   stays visible rather than vanishing silently.
+ */
+export function isCommunityEndpoint(relay) {
+  if (typeof relay !== 'string') return false;
+  try {
+    return flatGroupsRelay(relay) !== normalizeURL(relay);
+  } catch {
+    return false;
+  }
 }
 
 /**
@@ -83,8 +127,10 @@ function groupCandidateEntries({ groups, excludeKeys, metadataByKey = {} }) {
   for (const group of groups ?? []) {
     const key = channelKey(group);
     // Unaddressable entries are dropped rather than drawn: a row that cannot
-    // link anywhere is worse than an absent one.
+    // link anywhere is worse than an absent one. `key` is checked first so the
+    // endpoint test only ever runs on a relay URL channelKey already validated.
     if (!key || excludeKeys?.has(key) || byKey.has(key)) continue;
+    if (isCommunityEndpoint(group.relay)) continue;
     const metadata = metadataByKey[key];
     byKey.set(key, {
       key,
