@@ -86,6 +86,7 @@
   import ReactionChips from '$lib/components/reactions/ReactionChips.svelte';
   import WebxdcAttachmentCard from '$lib/components/groups/WebxdcAttachmentCard.svelte';
   import GroupAppStage from '$lib/components/groups/GroupAppStage.svelte';
+  import GroupAppsBar from '$lib/components/groups/GroupAppsBar.svelte';
   import WebxdcAppPicker from '$lib/components/groups/WebxdcAppPicker.svelte';
   import {
     mintSessionId,
@@ -1011,6 +1012,7 @@
           : 'hidden md:flex'
         : ''}"
     >
+      <GroupAppsBar {pointer} messages={displayed} onOpen={(s) => (activeSession = s)} />
       {#if activeSession}
         {#key activeSession.sessionId}
           <GroupAppStage

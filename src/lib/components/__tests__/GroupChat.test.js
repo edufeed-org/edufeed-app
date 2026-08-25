@@ -541,6 +541,7 @@ vi.mock('$lib/paraglide/messages', () => ({
     `Readable by all ${count} members.`,
   disclosure_invited: (/** @type {{ count: number }} */ { count }) =>
     `Readable by ${count} selected members.`,
+  webxdc_apps_bar_title: () => 'Apps in this channel',
   webxdc_apps_button: () => 'Apps',
   webxdc_apps_start_pad: () => 'Start pad',
   webxdc_apps_pick_title: () => 'Share an app',

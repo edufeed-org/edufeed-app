@@ -3465,6 +3465,7 @@
   "webxdc_export_as_article": "As article",
   "webxdc_export_as_wiki": "As wiki page",
   "webxdc_export_cancel": "Cancel",
+  "webxdc_apps_bar_title": "Apps in this channel",
   "interactive_input_label": "App package (.h5p, .xdc or .html)",
   "interactive_input_help": "H5P exports are wrapped automatically. The package runs fully offline in a sandbox.",
   "interactive_input_invalid": "This file is not a valid package (no index.html found).",
