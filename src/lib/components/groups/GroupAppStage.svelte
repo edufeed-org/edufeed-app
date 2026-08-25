@@ -9,6 +9,11 @@
    * createGroupSync as merged filters realtime frames by the caller's own
    * pubkey, so it needs to know who "self" is — GroupChat passes its
    * existing `myPubkey`.
+   *
+   * `authenticate` (optional): forwarded straight into createGroupSync's own
+   * one-shot read retry — GroupChat's proactive NIP-42 auth on mount usually
+   * wins the race, but this session's own first read can still land before
+   * that handshake resolves, and this is the fallback for that case.
    */
   import { onDestroy } from 'svelte';
   import * as m from '$lib/paraglide/messages';
@@ -18,20 +23,29 @@
 
   /** @type {{pointer: any, session: any, selfPubkey?: string,
    *          publish: (t: any) => Promise<any>,
+   *          authenticate?: () => Promise<any>,
    *          onShareText: (file: {name: string, plainText: string}) => void,
    *          onClose: () => void}} */
-  let { pointer, session, selfPubkey, publish, onShareText, onClose } = $props();
+  let { pointer, session, selfPubkey, publish, authenticate, onShareText, onClose } = $props();
 
+  // Read failures (backfill/live-sub) and write failures (state publish) are
+  // shown separately: a read failure means the session may be showing stale
+  // or empty state, a write failure means a local change didn't make it out
+  // — different messages, and no reason for one to clobber the other.
+  let loadError = $state('');
   let publishError = $state('');
   const sync = createGroupSync({
     relayConn: pool.relay(pointer.relay),
     groupId: pointer.id,
     sessionId: session.sessionId,
     publish,
-    onError: (err) => {
-      publishError = err instanceof Error ? err.message : String(err);
+    onError: (err, phase) => {
+      const message = err instanceof Error ? err.message : String(err);
+      if (phase === 'read') loadError = message;
+      else publishError = message;
     },
-    selfPubkey
+    selfPubkey,
+    authenticate
   });
   onDestroy(() => sync.stop());
 
@@ -66,6 +80,11 @@
       >{m.webxdc_session_stage_close()}</button
     >
   </div>
+  {#if loadError}
+    <div class="mb-1 alert py-1 text-xs alert-warning">
+      {m.webxdc_session_load_failed({ reason: loadError })}
+    </div>
+  {/if}
   {#if publishError}
     <div class="mb-1 alert py-1 text-xs alert-warning">
       {m.webxdc_session_publish_failed({ reason: publishError })}

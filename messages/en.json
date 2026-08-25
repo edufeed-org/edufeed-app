@@ -3456,6 +3456,8 @@
   "webxdc_session_shared_app": "Shared app",
   "webxdc_session_stage_close": "Close app",
   "webxdc_session_publish_failed": "Could not save app state: {reason}",
+  "webxdc_session_load_failed": "Could not load the shared session: {reason}",
+  "webxdc_export_too_large": "Export is too large to hand off",
   "webxdc_apps_button": "Apps",
   "webxdc_apps_start_pad": "Start pad",
   "webxdc_apps_pick_title": "Share an app",

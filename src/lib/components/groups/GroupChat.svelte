@@ -642,8 +642,13 @@
   /** @param {'article' | 'wiki'} target */
   function publishExport(target) {
     if (!pendingExport) return;
-    stashExport(pendingExport);
+    const stashed = stashExport(pendingExport);
     pendingExport = null;
+    if (!stashed) {
+      // Mirrors shareApp's own send-error surface: a toast, not a dead end.
+      showToast(m.webxdc_export_too_large(), 'error');
+      return;
+    }
     // eslint-disable-next-line svelte/prefer-svelte-reactivity -- local to this call, never rendered
     const params = new URLSearchParams({ prefill: 'webxdc' });
     if (communityPubkey) params.set('community', communityPubkey);
@@ -686,6 +691,19 @@
     const user = getActiveUser();
     if (!user) throw new Error('no active user');
     return publishToGroupRelay(pool.relay(pointer.relay), template, user);
+  }
+
+  /**
+   * Passed into GroupAppStage as `authenticate`, for createGroupSync's own
+   * one-shot read retry on an auth-required/restricted session read. Uses
+   * the exact same call this file's own proactive-auth $effect makes
+   * (pool.relay(pointer.relay), the active user's signer) — a session's
+   * first read can still land before that proactive handshake resolves.
+   */
+  function authenticateSession() {
+    const user = getActiveUser();
+    if (!user?.signer) return Promise.resolve({ ok: false, message: 'no signer' });
+    return authenticateOnce(pool.relay(pointer.relay), user.signer);
   }
 
   /**
@@ -1020,6 +1038,7 @@
             session={activeSession}
             selfPubkey={myPubkey}
             publish={signAndPublish}
+            authenticate={authenticateSession}
             onShareText={handleShareText}
             onClose={() => (activeSession = null)}
           />

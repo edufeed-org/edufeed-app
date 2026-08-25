@@ -29,32 +29,56 @@
   const relayUrl = $derived(pointer.relay);
   const groupId = $derived(pointer.id);
 
+  // Collapsed by default. The enrichment REQs below are one per session, so
+  // they only run once a reader actually opens the bar — most channel
+  // sessions are never inspected this closely, and firing on every message
+  // (the old behaviour, one bundled REQ) meant a REQ nobody asked for on
+  // every unrelated chat message.
+  let detailsOpen = $state(false);
+  /** @param {Event} e */
+  function handleToggle(e) {
+    detailsOpen = /** @type {HTMLDetailsElement} */ (e.target)?.open ?? false;
+  }
+
   // Latest 9450 per session for a live-ish subtitle (document/summary tags).
-  // relay.request(filter, {timeout}) emits events and completes at EOSE —
-  // same call shape as confirmGroupMetadata in group-management.js.
+  // One request() per session (kept scoped with '#i', unlike the old bundled
+  // '#h'-only REQ) — merged wholesale into sessionMeta as each answers.
+  // Fetched once per (sessionKey, opened) pair: `fetchedKey` gates re-fetch
+  // the same way the old sessionKey-only effect did, plus "opened" so
+  // toggling the bar shut and open again doesn't refire it.
   let sessionMeta = $state.raw(new Map());
+  let fetchedKey = '';
   $effect(() => {
-    if (!sessionKey) return;
-    const sub = pool
-      .relay(relayUrl)
-      .request({ kinds: [WEBXDC_STATE_KIND], '#h': [groupId], limit: 100 }, { timeout: 2500 })
-      .pipe(toArray())
-      .subscribe((events) => {
-        const meta = new Map(); // eslint-disable-line svelte/prefer-svelte-reactivity -- built up locally, then swapped into $state.raw wholesale
-        for (const ev of [...events].sort((a, b) => b.created_at - a.created_at)) {
-          const sid = ev.tags?.find((t) => t[0] === 'i')?.[1];
-          if (!sid || meta.has(sid)) continue;
-          const tag = (/** @type {string} */ n) => ev.tags.find((t) => t[0] === n)?.[1];
-          meta.set(sid, tag('document') || tag('summary') || '');
-        }
-        sessionMeta = meta;
-      });
-    return () => sub.unsubscribe();
+    if (!detailsOpen || !sessionKey) return;
+    const key = `${sessionKey}\x1f${relayUrl}\x1f${groupId}`;
+    if (fetchedKey === key) return;
+    fetchedKey = key;
+    const subs = sessionKey.split(',').map((sid) =>
+      pool
+        .relay(relayUrl)
+        .request(
+          { kinds: [WEBXDC_STATE_KIND], '#h': [groupId], '#i': [sid], limit: 1 },
+          { timeout: 2500 }
+        )
+        .pipe(toArray())
+        .subscribe((events) => {
+          const latest = [...events].sort((a, b) => b.created_at - a.created_at)[0];
+          if (!latest) return;
+          const tag = (/** @type {string} */ n) => latest.tags?.find((t) => t[0] === n)?.[1];
+          const next = new Map(sessionMeta); // eslint-disable-line svelte/prefer-svelte-reactivity -- rebuilt wholesale, then swapped in
+          next.set(sid, tag('document') || tag('summary') || '');
+          sessionMeta = next;
+        })
+    );
+    return () => subs.forEach((sub) => sub.unsubscribe());
   });
 </script>
 
 {#if sessions.length > 0}
-  <details class="border-b border-base-300 bg-base-200/40 px-3 py-1 text-sm">
+  <details
+    class="border-b border-base-300 bg-base-200/40 px-3 py-1 text-sm"
+    ontoggle={handleToggle}
+  >
     <summary class="cursor-pointer text-xs font-semibold opacity-70">
       {m.webxdc_apps_bar_title()} ({sessions.length})
     </summary>

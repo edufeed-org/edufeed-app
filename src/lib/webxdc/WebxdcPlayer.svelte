@@ -55,11 +55,12 @@
   /** Default sendToChat handling outside a channel: save the file locally.
    * @param {{name: string, plainText?: string, base64?: string, mime?: string}} file */
   function downloadShare(file) {
-    const blob = file.plainText
-      ? new Blob([file.plainText], { type: 'text/plain' })
-      : new Blob([Uint8Array.from(atob(file.base64 ?? ''), (c) => c.charCodeAt(0))], {
-          type: file.mime || 'application/octet-stream'
-        });
+    const blob =
+      typeof file.plainText === 'string'
+        ? new Blob([file.plainText], { type: 'text/plain' })
+        : new Blob([Uint8Array.from(atob(file.base64 ?? ''), (c) => c.charCodeAt(0))], {
+            type: file.mime || 'application/octet-stream'
+          });
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
     a.download = file.name;

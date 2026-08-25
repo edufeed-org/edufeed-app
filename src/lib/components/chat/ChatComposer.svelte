@@ -65,6 +65,7 @@
       class="btn btn-circle btn-ghost btn-sm"
       data-testid="chat-apps-button"
       title={m.webxdc_apps_button()}
+      aria-label={m.webxdc_apps_button()}
       onclick={onOpenApps}
       {disabled}>+</button
     >

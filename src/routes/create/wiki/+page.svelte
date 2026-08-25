@@ -34,6 +34,7 @@
     const exported = takeExport();
     if (exported) {
       title = exportTitle(exported.name);
+      topic = exportTitle(exported.name);
       editorContent = exported.plainText;
     }
   }
