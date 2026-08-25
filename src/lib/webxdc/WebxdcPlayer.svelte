@@ -13,7 +13,16 @@
   import { createWebxdcHost } from './webxdc-host.js';
   import SandboxFrame from './SandboxFrame.svelte';
 
-  let { url = '', sha256 = '', bytes = null, name = '', iconUrl = '', appKey } = $props();
+  let {
+    url = '',
+    sha256 = '',
+    bytes = null,
+    name = '',
+    iconUrl = '',
+    appKey,
+    sync = null,
+    onShareFile = null
+  } = $props();
 
   const READY_TIMEOUT_MS = 15000;
 
@@ -43,6 +52,20 @@
     return { selfAddr: npub, selfName: npub.slice(0, 12) + '…' };
   }
 
+  /** Default sendToChat handling outside a channel: save the file locally. */
+  function downloadShare(file) {
+    const blob = file.plainText
+      ? new Blob([file.plainText], { type: 'text/plain' })
+      : new Blob([Uint8Array.from(atob(file.base64), (c) => c.charCodeAt(0))], {
+          type: file.mime || 'application/octet-stream'
+        });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = file.name;
+    a.click();
+    URL.revokeObjectURL(a.href);
+  }
+
   async function launch() {
     phase = 'loading';
     errorKind = null;
@@ -53,8 +76,8 @@
       } else {
         files = await fetchAndVerifyXdc(url, sha256);
       }
-      const sync = createLocalSync(`webxdc:state:${appKey}`);
-      host = createWebxdcHost(sync, identity());
+      const appSync = sync ?? createLocalSync(`webxdc:state:${appKey}`);
+      host = createWebxdcHost(appSync, identity(), { onShareFile: onShareFile ?? downloadShare });
       filesReady++;
       phase = 'running';
       // A frame that never completes the ready/init handshake would leave a
