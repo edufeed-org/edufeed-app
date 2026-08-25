@@ -16,4 +16,16 @@ describe('export-share handoff', () => {
     expect(exportTitle('Sitzung.txt')).toBe('Sitzung');
     expect(exportTitle('no-extension')).toBe('no-extension');
   });
+
+  it('stashes a file at the size cap and reports success', () => {
+    const plainText = 'a'.repeat(2_000_000);
+    expect(stashExport({ name: 'big.txt', plainText })).toBe(true);
+    expect(takeExport()).toEqual({ name: 'big.txt', plainText });
+  });
+
+  it('refuses to stash an export over the size cap, and stashes nothing', () => {
+    const plainText = 'a'.repeat(2_000_001);
+    expect(stashExport({ name: 'huge.txt', plainText })).toBe(false);
+    expect(takeExport()).toBe(null);
+  });
 });

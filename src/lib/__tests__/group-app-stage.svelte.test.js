@@ -7,22 +7,19 @@
 // "everyone plays alone". See src/lib/webxdc/group-sync.js.
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, fireEvent } from '@testing-library/svelte';
+import { of, throwError } from 'rxjs';
 
 // Pool mock pattern follows src/lib/__tests__/my-groups-relays.svelte.test.js:
 // override just the pieces GroupAppStage/createGroupSync touch. `subscription`
 // is a shared spy so tests can prove a fresh createGroupSync() ran (each call
-// opens its state subscription immediately) without reaching into internals.
+// opens its state subscription once backfill resolves) without reaching into
+// internals. `poolHolder.relay` is per-test swappable (defaults set in
+// beforeEach) so the auth-retry/load-error tests can make `request()` fail.
 const holders = vi.hoisted(() => ({ subscriptionCalls: /** @type {any[][]} */ ([]) }));
+const poolHolder = vi.hoisted(() => ({ relay: /** @type {(url: any) => any} */ (null) }));
 
 vi.mock('$lib/stores/nostr-infrastructure.svelte', () => ({
-  pool: {
-    relay: () => ({
-      subscription: (...args) => {
-        holders.subscriptionCalls.push(args);
-        return { subscribe: () => ({ unsubscribe: () => {} }) };
-      }
-    })
-  }
+  pool: { relay: (/** @type {any} */ url) => poolHolder.relay(url) }
 }));
 
 vi.mock('$lib/stores/accounts.svelte', () => ({ manager: { active: null } }));
@@ -31,6 +28,8 @@ vi.mock('$lib/paraglide/messages', () => ({
   webxdc_session_stage_close: () => 'Close app',
   webxdc_session_publish_failed: (/** @type {{reason: string}} */ { reason }) =>
     `Could not save app state: ${reason}`,
+  webxdc_session_load_failed: (/** @type {{reason: string}} */ { reason }) =>
+    `Could not load the shared session: ${reason}`,
   webxdc_app_type: () => 'Interactive app',
   webxdc_launch: () => 'Launch',
   webxdc_loading: () => 'Loading app…',
@@ -56,6 +55,18 @@ const session = {
   }
 };
 
+/** Default relay: empty, immediately-completing backfill page + a tracked
+ * live subscription — no real network round trip. */
+function defaultRelay() {
+  return {
+    request: () => of(),
+    subscription: (/** @type {any[]} */ ...args) => {
+      holders.subscriptionCalls.push(args);
+      return { subscribe: () => ({ unsubscribe: () => {} }) };
+    }
+  };
+}
+
 function renderStage(overrides = {}) {
   return render(GroupAppStage, {
     props: {
@@ -74,6 +85,7 @@ describe('GroupAppStage', () => {
   beforeEach(() => {
     localStorage.clear();
     holders.subscriptionCalls = [];
+    poolHolder.relay = defaultRelay;
     // Auto-launch fires on mount (see brief step 4) and would otherwise hit
     // the real network in this jsdom environment — keep it deterministic.
     vi.stubGlobal(
@@ -110,16 +122,16 @@ describe('GroupAppStage', () => {
     expect(keys.some((k) => k.startsWith('webxdc:state:'))).toBe(false);
   });
 
-  it('opens a fresh session sync on remount with a different session (mirrors the {#key} remount in GroupChat)', () => {
-    // createGroupSync opens its state subscription synchronously at
-    // construction — one subscription() call per createGroupSync() call is
-    // a reliable proxy for "a fresh sync was built". GroupChat wraps the
+  it('opens a fresh session sync on remount with a different session (mirrors the {#key} remount in GroupChat)', async () => {
+    // createGroupSync opens its state subscription once its (paginated)
+    // backfill resolves — one subscription() call per createGroupSync() call
+    // is a reliable proxy for "a fresh sync was built". GroupChat wraps the
     // stage in {#key activeSession.sessionId}, so switching to a different
     // shared app destroys the old component (and its sync) and mounts a new
     // one — unmount()+render() here is the same lifecycle a key change
     // produces.
     const { unmount } = renderStage({ session });
-    expect(holders.subscriptionCalls.length).toBe(1);
+    await vi.waitFor(() => expect(holders.subscriptionCalls.length).toBe(1));
 
     unmount();
 
@@ -128,6 +140,41 @@ describe('GroupAppStage', () => {
       app: { ...session.app, name: 'Other App' }
     };
     renderStage({ session: otherSession });
-    expect(holders.subscriptionCalls.length).toBe(2);
+    await vi.waitFor(() => expect(holders.subscriptionCalls.length).toBe(2));
+  });
+
+  it('shows a load-failed banner (not the publish-failed one) when the backfill request errors', async () => {
+    poolHolder.relay = () => ({
+      request: () => throwError(() => new Error('boom: relay hiccup')),
+      subscription: (/** @type {any[]} */ ...args) => {
+        holders.subscriptionCalls.push(args);
+        return { subscribe: () => ({ unsubscribe: () => {} }) };
+      }
+    });
+    const { findByText, queryByText } = renderStage();
+    await findByText('Could not load the shared session: boom: relay hiccup');
+    expect(queryByText(/Could not save app state/)).toBeNull();
+  });
+
+  it('retries the backfill via the authenticate prop after an auth-required error, then loads cleanly', async () => {
+    let attempt = 0;
+    poolHolder.relay = () => ({
+      request: () => {
+        attempt++;
+        return attempt === 1
+          ? throwError(() => new Error('auth-required: please authenticate'))
+          : of();
+      },
+      subscription: (/** @type {any[]} */ ...args) => {
+        holders.subscriptionCalls.push(args);
+        return { subscribe: () => ({ unsubscribe: () => {} }) };
+      }
+    });
+    const authenticate = vi.fn(async () => ({ ok: true }));
+    const { queryByText } = renderStage({ authenticate });
+
+    await vi.waitFor(() => expect(authenticate).toHaveBeenCalledTimes(1));
+    await vi.waitFor(() => expect(holders.subscriptionCalls.length).toBe(1));
+    expect(queryByText(/Could not load the shared session/)).toBeNull();
   });
 });

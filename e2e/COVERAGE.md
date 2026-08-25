@@ -1772,9 +1772,10 @@ community profile).
 ## Channel webxdc sessions — no E2E in v1 (would need a NIP-29 relay fixture)
 
 Collaborative webxdc apps shared inside NIP-29 channels (session-scoped
-kind 9450 state deltas + 24450 announces, `GroupAppStage`/`GroupAppsBar`/
-`WebxdcAppPicker`, host `sendToChat`, export → article/wiki). Covered
-entirely by Vitest unit/component tests, no Playwright spec:
+kind 9450 durable state + 24450 ephemeral realtime frames,
+`GroupAppStage`/`GroupAppsBar`/`WebxdcAppPicker`, host `sendToChat`, export →
+article/wiki). Covered entirely by Vitest unit/component tests, no
+Playwright spec:
 
 - `src/lib/webxdc/__tests__/session-events.test.js` — 9450/24450 builders, imeta tags
 - `src/lib/webxdc/__tests__/group-sync.test.js` — relay-backed AppSync (channel session sync)
@@ -1786,7 +1787,11 @@ entirely by Vitest unit/component tests, no Playwright spec:
 - `src/lib/__tests__/group-apps-bar.svelte.test.js` — apps bar listing a channel's live sessions
 - `src/lib/webxdc/__tests__/export-share.test.js` — export → publish as article/wiki page
 - `src/lib/__tests__/api-config-webxdc.test.js` — `runtimeConfig.webxdc` (sandbox domain, pad app)
-- `src/lib/components/__tests__/GroupChat.test.js` — apps bar/picker/export wiring inside `GroupChat`
+- `src/lib/components/__tests__/GroupChat.test.js` — two GroupChat-level cases only: the composer apps
+  button's write-access gating, and the launch→share→export-dialog→create-route handoff (with
+  `GroupAppStage` itself stubbed). GroupChat's OWN wiring of the apps bar/picker/stage is otherwise
+  exercised only indirectly through those two cases plus the leaf-component tests listed above — there
+  is no dedicated "apps bar renders inside GroupChat" or "picker opens from GroupChat" case.
 
 No E2E in v1: exercising this end-to-end needs a real (or mocked) NIP-29
 group relay plus two connected clients trading 9450 state over it —

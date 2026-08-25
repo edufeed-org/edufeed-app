@@ -17,6 +17,7 @@ import { finalizeEvent, generateSecretKey, getPublicKey } from 'nostr-tools';
 // actual one-AUTH-per-challenge guard, so its attempt cache must be cleared
 // between tests the same way a fresh page load would start clean.
 import { __resetAuthAttempts } from '$lib/groups/relay-auth.js';
+import { buildAppShareTemplate } from '$lib/webxdc/session-events.js';
 
 // REAL keys + signatures: the mock feeds a real applesauce EventStore, which
 // rejects events whose id/sig don't verify — fakes would silently vanish and
@@ -191,6 +192,35 @@ const membersEventAdmin = signWith(
   },
   RELAY_SK
 );
+// `webxdcchat`: a private group with ME as a member, whose single message is
+// a webxdc app share — isolated from `beechat`'s shared default subscription
+// branch so this fixture's own message doesn't leak into every other test's
+// timeline/thread-count assertions. Used only by the export-handoff test.
+const metadataEventWebxdc = signWith(
+  { kind: 39000, tags: [['d', 'webxdcchat'], ['name', 'Webxdc Chat'], ['private']] },
+  RELAY_SK
+);
+const membersEventWebxdc = signWith(
+  {
+    kind: 39002,
+    tags: [
+      ['d', 'webxdcchat'],
+      ['p', ME]
+    ]
+  },
+  RELAY_SK
+);
+const webxdcShareEvent = signWith(
+  {
+    ...buildAppShareTemplate(
+      'webxdcchat',
+      { url: 'https://blossom.example/pad.xdc', sha256: 'a'.repeat(64), name: 'Pad', iconUrl: '' },
+      'session-export-1'
+    ),
+    created_at: 1700000005
+  },
+  OTHER_SK
+);
 // The two live reply shapes, both hanging off `chatEvent`: the 872-event form
 // (a lone `reply` marker pointing at the root) and the 3-event form (the
 // conformant root+reply pair). The nested one answers `firstReply`, so a
@@ -352,6 +382,7 @@ vi.mock('$lib/stores/nostr-infrastructure.svelte', async () => {
           if (d === 'hangchat') return rxMerge(rxOf(metadataEventHang, membersEventHang), rxNever);
           if (d === 'adminchat')
             return rxOf(metadataEventAdmin, adminsEventAdmin, membersEventAdmin);
+          if (d === 'webxdcchat') return rxOf(metadataEventWebxdc, membersEventWebxdc);
           if (d === 'authchat') return rxOf(metadataEventAuthNoPrivate, membersEventAuthNoPrivate);
           if (d === 'emptychat') return rxOf(metadataEventEmptyRoster, membersEventEmptyRoster);
           // A group whose metadata REQ yields nothing (relay hiccup, race
@@ -413,6 +444,8 @@ vi.mock('$lib/stores/nostr-infrastructure.svelte', async () => {
           if (h === 'rosteronlychat') return rxNever;
           // hangchat: the chat read hangs exactly like the roster read does.
           if (h === 'hangchat') return rxNever;
+          // webxdcchat: isolated timeline holding only the webxdc share.
+          if (h === 'webxdcchat') return rxMerge(rxOf(webxdcShareEvent), rxNever);
           return rxMerge(
             rxOf(otherRoot, otherReply, chatEvent, firstReply, nestedReply, legacyNested),
             rxNever
@@ -486,6 +519,7 @@ vi.mock('$lib/helpers/joined-communikey-events.svelte.js', () => ({
 }));
 vi.mock('$lib/helpers/toast', () => ({ showToast: vi.fn() }));
 vi.mock('$app/paths', () => ({ resolve: (/** @type {string} */ path) => path }));
+vi.mock('$app/navigation', () => ({ goto: vi.fn() }));
 const publishOptimisticMock = vi.hoisted(() => vi.fn());
 vi.mock('$lib/services/publish-service.js', () => ({
   publishEventOptimistic: publishOptimisticMock
@@ -506,6 +540,14 @@ vi.mock('$lib/components/icons', () => ({ ReplyIcon: Stub, PeopleIcon: Stub }));
 vi.mock(
   '$lib/components/reactions/ReactionChips.svelte',
   () => import('./fixtures/ReactionChipsStub.svelte')
+);
+// The real GroupAppStage would pull in createGroupSync's relay backfill and
+// WebxdcPlayer's sandbox iframe — both irrelevant to what's under test here
+// (GroupChat's OWN onShareText → export-dialog → create-route wiring). See
+// the stub for the (deliberately narrow) surface it exposes.
+vi.mock(
+  '$lib/components/groups/GroupAppStage.svelte',
+  () => import('./fixtures/GroupAppStageStub.svelte')
 );
 
 vi.mock('$lib/paraglide/messages', () => ({
@@ -543,6 +585,8 @@ vi.mock('$lib/paraglide/messages', () => ({
     `Readable by ${count} selected members.`,
   webxdc_apps_bar_title: () => 'Apps in this channel',
   webxdc_apps_button: () => 'Apps',
+  webxdc_session_launch: () => 'Open app',
+  webxdc_session_shared_app: () => 'Shared app',
   webxdc_apps_start_pad: () => 'Start pad',
   webxdc_apps_pick_title: () => 'Share an app',
   webxdc_apps_none: () => 'No published apps found',
@@ -1257,6 +1301,50 @@ describe('GroupChat', () => {
       expect(/** @type {HTMLInputElement} */ (screen.getByTestId('group-chat-input')).value).toBe(
         'timeline draft'
       );
+    });
+  });
+
+  describe('webxdc apps', () => {
+    // Composer apps-button gating: only a member/admin (canWrite) gets the
+    // "+" affordance — sharing an app publishes a kind-9, which a non-member
+    // would have rejected the same way any other send is.
+    it('shows the composer apps button for a member who can write', async () => {
+      render(GroupChat, { props: { pointer } }); // beechat: ME is a member
+      await waitFor(() => screen.getByTestId('group-chat-input'));
+      expect(screen.getByTestId('chat-apps-button')).toBeTruthy();
+    });
+
+    it('hides the composer apps button for a non-member without write access', async () => {
+      // openchat: authenticated but not a member — join bar, no composer at
+      // all, so no apps button either.
+      render(GroupChat, { props: { pointer: { relay: GROUP_RELAY, id: 'openchat' } } });
+      await screen.findByTestId('group-join-bar');
+      expect(screen.queryByTestId('chat-apps-button')).toBeNull();
+    });
+
+    // The export handoff, end to end through GroupChat's own state (pendingExport,
+    // the dialog, publishExport): launch a shared app from the timeline, trigger
+    // its (stubbed) stage's onShareText, then publish as an article and check the
+    // create-route URL. GroupAppStage itself is stubbed (see the mock above) —
+    // its own sendToChat/host wiring is covered by webxdc-host.test.js and
+    // group-app-stage.svelte.test.js.
+    it('turns a launched app share into an article-publish handoff via the create route', async () => {
+      const { goto } = await import('$app/navigation');
+      render(GroupChat, { props: { pointer: { relay: GROUP_RELAY, id: 'webxdcchat' } } });
+
+      const launchButton = await screen.findByText('Open app');
+      await fireEvent.click(launchButton);
+
+      const shareButton = await screen.findByTestId('stage-stub-share');
+      await fireEvent.click(shareButton);
+
+      const articleButton = await screen.findByText('As article');
+      await fireEvent.click(articleButton);
+
+      expect(goto).toHaveBeenCalledTimes(1);
+      const url = vi.mocked(goto).mock.calls[0][0];
+      expect(url).toContain('/create/article?');
+      expect(url).toContain('prefill=webxdc');
     });
   });
 

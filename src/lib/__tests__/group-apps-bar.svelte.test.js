@@ -71,7 +71,52 @@ describe('GroupAppsBar', () => {
     );
   });
 
-  it('does not re-issue the enrichment request when the session set is unchanged', async () => {
+  it('does not fetch enrichment while the bar is collapsed', () => {
+    const app = {
+      url: 'https://blossom.example/a.xdc',
+      sha256: 'a'.repeat(64),
+      name: 'Pad',
+      iconUrl: ''
+    };
+    const shareTemplate = buildAppShareTemplate(pointer.id, app, 'session-1');
+    const shareMessage = makeMessage({ ...shareTemplate, created_at: 2000 });
+
+    render(GroupAppsBar, { pointer, messages: [shareMessage], onOpen: vi.fn() });
+    expect(requestSpy).not.toHaveBeenCalled();
+  });
+
+  it('fetches one per-session enrichment request once the bar is opened', async () => {
+    const app = {
+      url: 'https://blossom.example/a.xdc',
+      sha256: 'a'.repeat(64),
+      name: 'Pad',
+      iconUrl: ''
+    };
+    const shareTemplate = buildAppShareTemplate(pointer.id, app, 'session-1');
+    const shareMessage = makeMessage({ ...shareTemplate, created_at: 2000 });
+
+    const { container } = render(GroupAppsBar, {
+      pointer,
+      messages: [shareMessage],
+      onOpen: vi.fn()
+    });
+    const details = /** @type {HTMLDetailsElement} */ (container.querySelector('details'));
+    details.open = true;
+    await fireEvent(details, new Event('toggle'));
+
+    expect(requestSpy).toHaveBeenCalledTimes(1);
+    expect(requestSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kinds: [9450],
+        '#h': [pointer.id],
+        '#i': ['session-1'],
+        limit: 1
+      }),
+      { timeout: 2500 }
+    );
+  });
+
+  it('does not re-issue the enrichment request when the session set is unchanged, even while open', async () => {
     const app = {
       url: 'https://blossom.example/a.xdc',
       sha256: 'a'.repeat(64),
@@ -82,11 +127,14 @@ describe('GroupAppsBar', () => {
     const shareMessage = makeMessage({ ...shareTemplate, created_at: 2000 });
     const plainMessage = makeMessage({ kind: 9, content: 'hi', tags: [['h', pointer.id]] });
 
-    const { rerender } = render(GroupAppsBar, {
+    const { container, rerender } = render(GroupAppsBar, {
       pointer,
       messages: [shareMessage],
       onOpen: vi.fn()
     });
+    const details = /** @type {HTMLDetailsElement} */ (container.querySelector('details'));
+    details.open = true;
+    await fireEvent(details, new Event('toggle'));
     expect(requestSpy).toHaveBeenCalledTimes(1);
 
     // A new, unrelated chat message arrives — `sessions` is a fresh array
@@ -98,6 +146,33 @@ describe('GroupAppsBar', () => {
       messages: [shareMessage, plainMessage, anotherPlainMessage],
       onOpen: vi.fn()
     });
+    expect(requestSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not refetch when the bar is closed and reopened for the same sessions', async () => {
+    const app = {
+      url: 'https://blossom.example/a.xdc',
+      sha256: 'a'.repeat(64),
+      name: 'Pad',
+      iconUrl: ''
+    };
+    const shareTemplate = buildAppShareTemplate(pointer.id, app, 'session-1');
+    const shareMessage = makeMessage({ ...shareTemplate, created_at: 2000 });
+
+    const { container } = render(GroupAppsBar, {
+      pointer,
+      messages: [shareMessage],
+      onOpen: vi.fn()
+    });
+    const details = /** @type {HTMLDetailsElement} */ (container.querySelector('details'));
+    details.open = true;
+    await fireEvent(details, new Event('toggle'));
+    expect(requestSpy).toHaveBeenCalledTimes(1);
+
+    details.open = false;
+    await fireEvent(details, new Event('toggle'));
+    details.open = true;
+    await fireEvent(details, new Event('toggle'));
     expect(requestSpy).toHaveBeenCalledTimes(1);
   });
 });
