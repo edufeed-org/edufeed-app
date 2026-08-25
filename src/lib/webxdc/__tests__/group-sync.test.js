@@ -83,9 +83,14 @@ describe('createGroupSync', () => {
 
   it('realtime: lazy 24450 subscription, own frames skipped', async () => {
     const relay = makeRelay();
-    let seq = 0;
-    const publish = vi.fn(async (t) => ({ ...t, id: `rt${++seq}` }));
-    const sync = createGroupSync({ relayConn: relay, groupId: GROUP, sessionId: SID, publish });
+    const publish = vi.fn(async (t) => ({ ...t, id: 'rt1' }));
+    const sync = createGroupSync({
+      relayConn: relay,
+      groupId: GROUP,
+      sessionId: SID,
+      publish,
+      selfPubkey: 'me'
+    });
     relay.subjects[0].next('EOSE');
     expect(relay.subjects).toHaveLength(1); // no realtime sub yet
 
@@ -93,16 +98,47 @@ describe('createGroupSync', () => {
     const off = sync.onRealtime((bytes) => frames.push([...bytes]));
     expect(relay.subjects).toHaveLength(2);
     sync.sendRealtime(Uint8Array.from([7]));
-    await vi.waitFor(() => expect(publish).toHaveBeenCalled());
+    // No wait-for-publish choreography: the own-frame filter is pubkey-based,
+    // not id-based, so it must work even if the echo arrives before publish()
+    // resolves (the race that made the old id-set mechanism unsafe).
     relay.subjects[1].next({
       ...buildRealtimeTemplate(GROUP, SID, Uint8Array.from([7])),
-      id: 'rt1'
+      id: 'rt1',
+      pubkey: 'me'
     });
     relay.subjects[1].next({
       ...buildRealtimeTemplate(GROUP, SID, Uint8Array.from([9])),
-      id: 'peer'
+      id: 'peer',
+      pubkey: 'peer'
     });
-    expect(frames).toEqual([[9]]); // own echo (id rt1) skipped
+    expect(frames).toEqual([[9]]); // own frame (pubkey 'me') skipped
     off();
+  });
+
+  it('freezes backfill on a 5s EOSE safety timeout when the relay never sends EOSE', () => {
+    vi.useFakeTimers();
+    try {
+      const relay = makeRelay();
+      const publish = vi.fn();
+      const sync = createGroupSync({ relayConn: relay, groupId: GROUP, sessionId: SID, publish });
+      const notified = vi.fn();
+      sync.subscribe(notified);
+
+      const s = relay.subjects[0];
+      s.next(stateEv('b', 200, 2));
+      s.next(stateEv('a', 100, 1));
+      expect(sync.getUpdates()).toEqual([]); // still buffering, no EOSE yet
+
+      vi.advanceTimersByTime(5000);
+
+      expect(sync.getUpdates().map((u) => u.payload)).toEqual([1, 2]);
+      expect(notified).toHaveBeenCalledTimes(1);
+
+      // A late EOSE after the timeout already froze must be a no-op.
+      s.next('EOSE');
+      expect(notified).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
