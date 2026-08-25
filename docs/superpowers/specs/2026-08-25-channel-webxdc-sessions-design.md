@@ -256,3 +256,8 @@ on this transport.
 - Phase-3 results/leaderboard panel (xAPI statements over this transport).
 - Session archival/compaction of long 9450 logs (Yjs snapshot-as-update is the
   known escape hatch if logs grow hot).
+- Pad deletion/moderation UI: protocol-wise the share message is deletable by
+  its author (kind-5, relay's 2h window) and by channel admins/mods (NIP-29
+  kind 9005; mods cannot delete admins' content); deleting the share hides
+  card + apps-bar entry, but the 9450 log lingers unless swept. An in-app
+  "remove pad" action belongs to the broader channel-moderation-UI feature.
