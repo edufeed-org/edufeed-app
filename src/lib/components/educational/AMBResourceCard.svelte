@@ -82,6 +82,13 @@
   // hover badge on the cover so users know what is behind the card.
   const linkedMaterials = $derived(describeLinkedMaterials(resource?.tags ?? []));
 
+  // Interactive badge: check if resource has webxdc encodings
+  const isInteractive = $derived(
+    (resource?.encodings ?? []).some(
+      (/** @type {{ mimeType?: string }} */ e) => e.mimeType === 'application/x-webxdc'
+    )
+  );
+
   /** @type {Record<import('$lib/helpers/educational/linkedMaterials.js').MaterialType, () => string>} */
   const MATERIAL_TYPE_LABEL = {
     pdf: m.amb_card_linked_material_type_pdf,
@@ -341,7 +348,7 @@
         </div>
       {/if}
       <!-- Metadata badges -->
-      {#if localizedEducationalLevels.length > 0 || resource.isFree || resource.languages.length > 0}
+      {#if localizedEducationalLevels.length > 0 || resource.isFree || resource.languages.length > 0 || isInteractive}
         <div class="mt-1 flex flex-wrap gap-1">
           {#if localizedEducationalLevels.length > 0}
             <span class="badge badge-xs badge-secondary">{localizedEducationalLevels[0].label}</span
@@ -353,6 +360,9 @@
           {#each resource.languages.slice(0, 2) as lang (lang)}
             <span class="badge badge-ghost badge-xs">{lang.toUpperCase()}</span>
           {/each}
+          {#if isInteractive}
+            <span class="badge badge-xs badge-primary">{m.interactive_badge()}</span>
+          {/if}
         </div>
       {/if}
       <!-- Subject tags (desktop only) -->
@@ -532,6 +542,11 @@
           {#each resource.languages.slice(0, 2) as lang (lang)}
             <div class="badge badge-ghost badge-sm">{lang.toUpperCase()}</div>
           {/each}
+
+          <!-- Interactive Badge -->
+          {#if isInteractive}
+            <div class="badge badge-sm badge-primary">{m.interactive_badge()}</div>
+          {/if}
         </div>
       {/if}
 

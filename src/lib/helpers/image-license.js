@@ -9,6 +9,8 @@
  *   - credit:  human-readable attribution
  *   - source:  (optional) where the image was originally found
  *   - p:       (optional) attribution to a Nostr pubkey
+ *   - alt:     (optional) NIP-94/NIP-DC alt text, e.g. `Webxdc app: <name>`
+ *   - image:   (optional) icon/preview URL
  *
  * @param {{
  *   hash: string,
@@ -21,13 +23,28 @@
  *   creatorPubkey?: string,
  *   description?: string,
  *   size?: number,
- *   dim?: string
+ *   dim?: string,
+ *   alt?: string,
+ *   image?: string
  * }} input
  * @returns {{ kind: 1063, content: string, tags: string[][] }}
  */
 export function buildLicenseTemplate(input) {
-  const { hash, url, mime, license, credit, title, source, creatorPubkey, description, size, dim } =
-    input;
+  const {
+    hash,
+    url,
+    mime,
+    license,
+    credit,
+    title,
+    source,
+    creatorPubkey,
+    description,
+    size,
+    dim,
+    alt,
+    image
+  } = input;
   if (!hash) throw new Error('buildLicenseTemplate: hash is required');
   if (!url) throw new Error('buildLicenseTemplate: url is required');
   if (!mime) throw new Error('buildLicenseTemplate: mime is required');
@@ -45,6 +62,8 @@ export function buildLicenseTemplate(input) {
   if (title && title.trim()) tags.push(['title', title.trim()]);
   tags.push(['license', license]);
   tags.push(['credit', credit]);
+  if (alt) tags.push(['alt', alt]);
+  if (image) tags.push(['image', image]);
   if (source) tags.push(['source', source]);
   if (creatorPubkey) tags.push(['p', creatorPubkey]);
 
@@ -66,7 +85,7 @@ export function getLicenseUrl(event) {
 }
 
 import { pool, eventStore } from '$lib/stores/nostr-infrastructure.svelte';
-import { getAllLookupRelays } from '$lib/helpers/relay-helper.js';
+import { getAllLookupRelays, getEducationalRelays } from '$lib/helpers/relay-helper.js';
 import { firstValueFrom, take, timeout, catchError, of } from 'rxjs';
 import { publishEventOptimistic } from '$lib/services/publish-service.js';
 import { createAppEventFactory } from '$lib/helpers/event-factory.js';
@@ -133,6 +152,10 @@ export async function publishLicenseAttestation(input, signer) {
   const eventTemplate = await factory.build(template);
   const signed = await signer.signEvent(eventTemplate);
   eventStore.add(signed);
-  publishEventOptimistic(signed, [], {});
+  // Webxdc packages get routed to the educational (AMB) relays too, so
+  // NIP-DC discovery pickers — which query those relays — find the
+  // attestation alongside the app's own kind-1063 discovery flow.
+  const additionalRelays = input.mime === 'application/x-webxdc' ? getEducationalRelays() : [];
+  publishEventOptimistic(signed, [], { additionalRelays });
   return signed;
 }

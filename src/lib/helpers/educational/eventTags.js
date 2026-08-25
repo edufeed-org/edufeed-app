@@ -64,3 +64,16 @@ export function appendVariantLabelTags(tags, variantId) {
   tags.push(['L', 'metadata-form']);
   tags.push(['l', variantId, 'metadata-form']);
 }
+
+/**
+ * Interactive (webxdc) resources: mark the event launchable and pin the
+ * package hash for execution-time integrity verification (NIP-DC).
+ * @param {string[][]} tags
+ * @param {Array<{type?: string, sha256?: string}> | undefined} files
+ */
+export function appendInteractiveTags(tags, files) {
+  const pkg = (files ?? []).find((f) => f.type === 'application/x-webxdc');
+  if (!pkg) return;
+  tags.push(['m', 'application/x-webxdc']);
+  if (pkg.sha256) tags.push(['x', pkg.sha256]);
+}

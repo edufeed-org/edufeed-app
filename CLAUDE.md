@@ -346,10 +346,10 @@ src/
 
 ### Regular Kinds
 
-| Kind | NIP    | Description                                                                                |
-| ---- | ------ | ------------------------------------------------------------------------------------------ |
-| 1063 | NIP-94 | File metadata — used for image license attestation (see Image License Attestation section) |
-| 8571 | —      | Kanban patch (config only)                                                                 |
+| Kind | NIP    | Description                                                                                                   |
+| ---- | ------ | ------------------------------------------------------------------------------------------------------------- |
+| 1063 | NIP-94 | File metadata — image license attestation; also NIP-DC webxdc discovery (`m application/x-webxdc`), see below |
+| 8571 | —      | Kanban patch (config only)                                                                                    |
 
 ## Image License Attestation (Kind 1063 convention)
 
@@ -376,6 +376,16 @@ Edufeed uses NIP-94 (kind 1063) events to attest licenses for images, keyed by S
 - `src/lib/stores/image-license.svelte.js` — `useLicenseForHash(getHash)` reactive hook.
 - `src/lib/components/shared/LicensedImageInput.svelte` — upload/paste field + license modal.
 - `src/lib/components/shared/LicenseBadge.svelte` — display badge for `AMBResourceCard` / `AMBResourceView`.
+
+## Interactive Resources (webxdc)
+
+Sandboxed interactive learning apps (webxdc `.xdc` packages, plus a `.h5p`→`.xdc` wrapper) published as AMB resources. Module: `src/lib/webxdc/` — `WebxdcPlayer.svelte` (launch card + stage), `SandboxFrame.svelte` (iframe.diy protocol client), `xdc-archive.js` (zip/unzip + hash verification, never executes unverified bytes), `webxdc-host.js` (window.webxdc bridge over a `local-sync.js` AppSync backend, Phase 1 solo/localStorage), `h5p-wrap.js` (wraps the vendored `static/h5p-standalone` player into an .xdc).
+
+Sandbox origin is configurable per deployment: `SANDBOX_DOMAIN` env → `runtimeConfig.webxdc.sandboxDomain` (default `iframe.diy`); cross-origin subdomain isolation is the primary security boundary, the iframe `sandbox` attribute is defense-in-depth.
+
+Publish flow: `resource-form-variants.js` adds an `interactive` variant (`InteractivePackageInput.svelte`); on save it uploads the package to Blossom and `image-license.js`'s `publishLicenseAttestation` emits **one** dual-purpose kind-1063 (license attestation + NIP-DC discovery, `m: application/x-webxdc`), explicitly routed to the educational (AMB) relays in addition to its normal kind-based routing.
+
+Spec: `docs/superpowers/specs/2026-08-19-webxdc-interactive-resources-design.md`.
 
 ## Communikey Protocol
 

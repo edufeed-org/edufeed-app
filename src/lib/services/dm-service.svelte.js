@@ -14,7 +14,7 @@
 import { mapEventsToStore } from 'applesauce-core/observable';
 import { filter, tap } from 'rxjs';
 import { GiftWrapsModel } from 'applesauce-common/models';
-import { WrappedMessagesGroups } from 'applesauce-common/models';
+import { WrappedMessagesGroups, WrappedMessagesModel } from 'applesauce-common/models';
 import { unlockGiftWrap, isGiftWrapUnlocked } from 'applesauce-common/helpers/gift-wrap';
 import {
   unlockLegacyMessage,
@@ -43,6 +43,9 @@ import {
 } from '$lib/services/relay-service.svelte.js';
 import { runtimeConfig } from '$lib/stores/config.svelte.js';
 import { authenticateOnce } from '$lib/groups/relay-auth.js';
+import { classifyDmConversations } from '$lib/helpers/dm-trust.js';
+import { getMutedPubkeys } from '$lib/stores/mute-list.svelte.js';
+import { parseDirectPubkeys } from '$lib/services/curated-authors-service.svelte.js';
 
 // --- Module-level reactive state ---
 let dmRelays = $state.raw(/** @type {string[]} */ ([]));
@@ -65,6 +68,30 @@ let wrappedConversations = $state.raw([]);
 let legacyConversations = $state.raw([]);
 /** Merged, recency-sorted view of wrapped + legacy conversations. */
 let dmConversations = $derived(mergeDmConversations(wrappedConversations, legacyConversations));
+
+// --- Trust classification (known vs. requests, muted dropped) ---
+
+/** Reactive mirror of activePubkey — classification must recompute on login. */
+let selfPubkey = $state(/** @type {string | null} */ (null));
+/** Pubkeys from the user's kind 3 contact list. @type {Set<string>} */
+let followsPubkeys = $state.raw(new Set());
+/** Peers of legacy kind-4 messages the user authored. @type {Set<string>} */
+let legacyOutboundPeers = $state.raw(new Set());
+/** Recipients of wrapped rumors the user authored. @type {Set<string>} */
+let wrappedOutboundPeers = $state.raw(new Set());
+/** Deployment allowlist (welcome-DM senders etc.), hex-normalized. */
+let trustedSenders = $derived(new Set(parseDirectPubkeys(runtimeConfig.dmTrustedSenders || [])));
+
+let conversationBuckets = $derived.by(() => {
+  if (!selfPubkey) return { known: dmConversations, requests: [] };
+  return classifyDmConversations(dmConversations, {
+    selfPubkey,
+    follows: followsPubkeys,
+    mutedPubkeys: getMutedPubkeys(),
+    outboundPeers: new Set([...legacyOutboundPeers, ...wrappedOutboundPeers]),
+    trustedSenders
+  });
+});
 /**
  * True while the DM service is still doing its initial fetch for the active
  * account: we've called initializeDMs but the gift-wrap subscription hasn't
@@ -105,7 +132,8 @@ const DM_RELAY_CHECK_SETTLE_MS = 5000;
 const dmRelayCheckWaiters = new Set();
 let unreadCount = $derived.by(() => {
   let count = 0;
-  for (const conv of dmConversations) {
+  // Only known conversations count toward the badge — requests stay quiet.
+  for (const conv of conversationBuckets.known) {
     if (isConversationUnread(conv.id, conv.lastMessage.created_at, readTimestamps)) {
       count++;
     }
@@ -301,6 +329,23 @@ export function getDmConversations() {
 }
 
 /**
+ * Conversations with known senders (followed, replied-to, trusted, or self).
+ * @returns {{ id: string, participants: string[], lastMessage: any, legacy?: boolean }[]}
+ */
+export function getKnownDmConversations() {
+  return conversationBuckets.known;
+}
+
+/**
+ * Message requests: conversations from strangers. Muted senders appear in
+ * neither list.
+ * @returns {{ id: string, participants: string[], lastMessage: any, legacy?: boolean }[]}
+ */
+export function getDmRequestConversations() {
+  return conversationBuckets.requests;
+}
+
+/**
  * @returns {boolean} True when the initial fetch window has closed — either
  * because the conversation model emitted a non-empty list or the deadline
  * expired. While true, an empty `dmConversations` means "no DMs"; while false,
@@ -312,7 +357,7 @@ export function hasInitialDmsLoaded() {
 
 /** @returns {{ id: string, participants: string[], lastMessage: any }[]} */
 export function getUnreadDmConversations() {
-  return dmConversations.filter((conv) =>
+  return conversationBuckets.known.filter((conv) =>
     isConversationUnread(conv.id, conv.lastMessage.created_at, readTimestamps)
   );
 }
@@ -457,9 +502,37 @@ export function initializeDMs(pubkey, signer) {
   cleanup(); // Clean up any previous session
 
   activePubkey = pubkey;
+  selfPubkey = pubkey;
   activeSigner = signer;
   readTimestamps = loadReadTimestamps(pubkey);
   failedUnlockIds = loadFailedUnlockIds(pubkey);
+
+  // Follows feed the known/requests classification. The kind 3 contact list
+  // is fetched into the EventStore at login by contact-list-loader; this only
+  // mirrors it reactively.
+  const followsSub = eventStore.replaceable(3, pubkey).subscribe((event) => {
+    // eslint-disable-next-line svelte/prefer-svelte-reactivity -- $state.raw set, replaced wholesale
+    followsPubkeys = new Set(
+      (event?.tags || []).filter((t) => t[0] === 'p' && t[1]).map((t) => t[1])
+    );
+  });
+  subscriptions.push(followsSub);
+
+  // Wrapped rumors the user authored mark their recipients as replied-to
+  // peers (an answered request is a known conversation from then on).
+  const outboundSub = eventStore.model(WrappedMessagesModel, pubkey).subscribe((rumors) => {
+    /** @type {Set<string>} */
+    // eslint-disable-next-line svelte/prefer-svelte-reactivity -- built locally, assigned to $state.raw
+    const peers = new Set();
+    for (const rumor of rumors || []) {
+      if (rumor.pubkey !== pubkey) continue;
+      for (const tag of rumor.tags || []) {
+        if (tag[0] === 'p' && tag[1] && tag[1] !== pubkey) peers.add(tag[1]);
+      }
+    }
+    wrappedOutboundPeers = peers;
+  });
+  subscriptions.push(outboundSub);
 
   // Open the initial-fetch window: while this is true, an empty conversation
   // list is interpreted as "still fetching" rather than "zero DMs". Closes on
@@ -619,6 +692,19 @@ export function initializeDMs(pubkey, signer) {
       { kinds: [4], authors: [pubkey] }
     ])
     .subscribe((/** @type {any[]} */ messages) => {
+      // Legacy kind-4s authored by the user mark their p-tagged peers as
+      // replied-to (mirrors the wrapped-rumor outbound tracking above).
+      /** @type {Set<string>} */
+      // eslint-disable-next-line svelte/prefer-svelte-reactivity -- built locally, assigned to $state.raw
+      const outbound = new Set();
+      for (const msg of messages || []) {
+        if (msg.pubkey !== pubkey) continue;
+        for (const tag of msg.tags || []) {
+          if (tag[0] === 'p' && tag[1] && tag[1] !== pubkey) outbound.add(tag[1]);
+        }
+      }
+      legacyOutboundPeers = outbound;
+
       /** @type {{ id: string, participants: string[], lastMessage: any }[]} */
       const list = groupLegacyConversations(messages || []);
       legacyConversations = list.map((conv) =>
@@ -670,7 +756,14 @@ export function cleanup() {
   }
 
   activePubkey = null;
+  selfPubkey = null;
   activeSigner = null;
+  // eslint-disable-next-line svelte/prefer-svelte-reactivity -- $state.raw set, replaced wholesale
+  followsPubkeys = new Set();
+  // eslint-disable-next-line svelte/prefer-svelte-reactivity -- $state.raw set, replaced wholesale
+  legacyOutboundPeers = new Set();
+  // eslint-disable-next-line svelte/prefer-svelte-reactivity -- $state.raw set, replaced wholesale
+  wrappedOutboundPeers = new Set();
   dmRelays = [];
   hasDedicatedDmRelays = false;
   lockedCount = 0;

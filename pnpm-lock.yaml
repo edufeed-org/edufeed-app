@@ -40,6 +40,9 @@ importers:
       '@noble/ciphers':
         specifier: ^2.2.0
         version: 2.2.0
+      '@noble/hashes':
+        specifier: ^1.8.0
+        version: 1.8.0
       applesauce-common:
         specifier: ^6.2.0
         version: 6.2.0(typescript@5.9.3)
@@ -58,6 +61,12 @@ importers:
       cally:
         specifier: ^0.9.2
         version: 0.9.2
+      fflate:
+        specifier: ^0.8.3
+        version: 0.8.3
+      h5p-standalone:
+        specifier: ^3.8.2
+        version: 3.8.2
       light-bolt11-decoder:
         specifier: 3.2.0
         version: 3.2.0
@@ -82,6 +91,9 @@ importers:
       sharp:
         specifier: ^0.34.5
         version: 0.34.5
+      smol-toml:
+        specifier: ^1.8.0
+        version: 1.8.0
       ts-mls:
         specifier: 2.0.0-rc.13
         version: 2.0.0-rc.13(@noble/ciphers@2.2.0)(@noble/curves@2.2.0)
@@ -133,7 +145,7 @@ importers:
         version: 6.9.1
       '@testing-library/svelte':
         specifier: ^5.3.1
-        version: 5.3.1(svelte@5.55.4)(vite@7.3.1(@types/node@25.2.1)(jiti@2.6.1)(lightningcss@1.32.0)(yaml@2.8.2))(vitest@4.1.5(@types/node@25.2.1)(jsdom@27.4.0(@noble/hashes@2.2.0))(vite@7.3.1(@types/node@25.2.1)(jiti@2.6.1)(lightningcss@1.32.0)(yaml@2.8.2)))
+        version: 5.3.1(svelte@5.55.4)(vite@7.3.1(@types/node@25.2.1)(jiti@2.6.1)(lightningcss@1.32.0)(yaml@2.8.2))(vitest@4.1.5(@types/node@25.2.1)(jsdom@27.4.0(@noble/hashes@1.8.0))(vite@7.3.1(@types/node@25.2.1)(jiti@2.6.1)(lightningcss@1.32.0)(yaml@2.8.2)))
       amb-nostr-converter:
         specifier: https://git.edufeed.org/api/packages/edufeed/npm/amb-nostr-converter/-/0.0.0-2f68a71/amb-nostr-converter-0.0.0-2f68a71.tgz
         version: https://git.edufeed.org/api/packages/edufeed/npm/amb-nostr-converter/-/0.0.0-2f68a71/amb-nostr-converter-0.0.0-2f68a71.tgz(typescript@5.9.3)(web-streams-polyfill@3.3.3)
@@ -199,7 +211,7 @@ importers:
         version: 9.1.7
       jsdom:
         specifier: ^27.4.0
-        version: 27.4.0(@noble/hashes@2.2.0)
+        version: 27.4.0(@noble/hashes@1.8.0)
       lint-staged:
         specifier: ^16.4.0
         version: 16.4.0
@@ -250,7 +262,7 @@ importers:
         version: 7.3.1(@types/node@25.2.1)(jiti@2.6.1)(lightningcss@1.32.0)(yaml@2.8.2)
       vitest:
         specifier: ^4.1.5
-        version: 4.1.5(@types/node@25.2.1)(jsdom@27.4.0(@noble/hashes@2.2.0))(vite@7.3.1(@types/node@25.2.1)(jiti@2.6.1)(lightningcss@1.32.0)(yaml@2.8.2))
+        version: 4.1.5(@types/node@25.2.1)(jsdom@27.4.0(@noble/hashes@1.8.0))(vite@7.3.1(@types/node@25.2.1)(jiti@2.6.1)(lightningcss@1.32.0)(yaml@2.8.2))
       ws:
         specifier: ^8.20.0
         version: 8.20.0
@@ -2302,8 +2314,8 @@ packages:
     resolution: {integrity: sha512-7yAQpD2UMJzLi1Dqv7qFYnPbaPx7ZfFK6PiIxQ4PfkGPyNyl2Ugx+a/umUonmKqjhM4DnfbMvdX6otXq83soQQ==}
     engines: {node: ^12.20 || >= 14.13}
 
-  fflate@0.8.2:
-    resolution: {integrity: sha512-cPJU47OaAoCbg0pBvzsgpTPhmhqI5eJjh/JIu8tPj5q+T7iLvW/JAYUqmE7KOB4R1ZyEhzBaIQpQpardBF5z8A==}
+  fflate@0.8.3:
+    resolution: {integrity: sha512-tbZNuJrLwGUp3zshBtdy4W+ORxZuIh8a5ilyIEQDC5rY1f3U20JMry0Ll3WBzU58EZKsEuJFXhb5gwv8CsPvgA==}
 
   file-entry-cache@8.0.0:
     resolution: {integrity: sha512-XXTUwCvisa5oacNGRP9SfNtYBNAMi+RPwBFmblZEF7N7swHYQS6/Zfk7SRwx4D5j3CH211YNRco1DEMNVfZCnQ==}
@@ -2400,6 +2412,9 @@ packages:
 
   graceful-fs@4.2.11:
     resolution: {integrity: sha512-RbJ5/jmFcNNCcDV5o9eTnBLJ/HszWV0P73bc+Ff4nS/rJj+YaS6IGyiOL0VoBYX+l1Wrl3k63h/KrH+nhJ0XvQ==}
+
+  h5p-standalone@3.8.2:
+    resolution: {integrity: sha512-r7eQtTzBk/dbaQZ+tA9XD5FeSmyMxlypRZXudiheCnC8zAT0/zNgUvO4MZtZaznwfYVo98o7do5uxLTUQrxxwg==}
 
   handlebars@4.7.9:
     resolution: {integrity: sha512-4E71E0rpOaQuJR2A3xDZ+GM1HyWYv1clR58tC8emQNeQe3RH7MAzSbat+V0wG78LQBo6m6bzSG/L4pBuCsgnUQ==}
@@ -3433,6 +3448,10 @@ packages:
     resolution: {integrity: sha512-iOBWFgUX7caIZiuutICxVgX1SdxwAVFFKwt1EvMYYec/NWO5meOJ6K5uQxhrYBdQJne4KxiqZc+KptFOWFSI9w==}
     engines: {node: '>=18'}
 
+  smol-toml@1.8.0:
+    resolution: {integrity: sha512-kCZr2V3ch9i00x8zXRhjUNVcjG9ijES5dDudkXvUVCT5QlJNQWElSJdZqyPemffHoLNUYwOcou0Fy+ojN0uHSQ==}
+    engines: {node: '>= 18'}
+
   sonic-boom@4.2.1:
     resolution: {integrity: sha512-w6AxtubXa2wTXAUsZMMWERrsIRAdrK0Sc+FUytWvYAhBJLyuI4llrMIC1DtlNSdI99EI86KZum2MMq3EAZlF9Q==}
 
@@ -4229,9 +4248,9 @@ snapshots:
       '@eslint/core': 0.17.0
       levn: 0.4.1
 
-  '@exodus/bytes@1.11.0(@noble/hashes@2.2.0)':
+  '@exodus/bytes@1.11.0(@noble/hashes@1.8.0)':
     optionalDependencies:
-      '@noble/hashes': 2.2.0
+      '@noble/hashes': 1.8.0
 
   '@fastify/busboy@2.1.1': {}
 
@@ -5000,14 +5019,14 @@ snapshots:
     dependencies:
       svelte: 5.55.4
 
-  '@testing-library/svelte@5.3.1(svelte@5.55.4)(vite@7.3.1(@types/node@25.2.1)(jiti@2.6.1)(lightningcss@1.32.0)(yaml@2.8.2))(vitest@4.1.5(@types/node@25.2.1)(jsdom@27.4.0(@noble/hashes@2.2.0))(vite@7.3.1(@types/node@25.2.1)(jiti@2.6.1)(lightningcss@1.32.0)(yaml@2.8.2)))':
+  '@testing-library/svelte@5.3.1(svelte@5.55.4)(vite@7.3.1(@types/node@25.2.1)(jiti@2.6.1)(lightningcss@1.32.0)(yaml@2.8.2))(vitest@4.1.5(@types/node@25.2.1)(jsdom@27.4.0(@noble/hashes@1.8.0))(vite@7.3.1(@types/node@25.2.1)(jiti@2.6.1)(lightningcss@1.32.0)(yaml@2.8.2)))':
     dependencies:
       '@testing-library/dom': 10.4.1
       '@testing-library/svelte-core': 1.0.0(svelte@5.55.4)
       svelte: 5.55.4
     optionalDependencies:
       vite: 7.3.1(@types/node@25.2.1)(jiti@2.6.1)(lightningcss@1.32.0)(yaml@2.8.2)
-      vitest: 4.1.5(@types/node@25.2.1)(jsdom@27.4.0(@noble/hashes@2.2.0))(vite@7.3.1(@types/node@25.2.1)(jiti@2.6.1)(lightningcss@1.32.0)(yaml@2.8.2))
+      vitest: 4.1.5(@types/node@25.2.1)(jsdom@27.4.0(@noble/hashes@1.8.0))(vite@7.3.1(@types/node@25.2.1)(jiti@2.6.1)(lightningcss@1.32.0)(yaml@2.8.2))
 
   '@types/aria-query@5.0.4': {}
 
@@ -5861,7 +5880,7 @@ snapshots:
       node-domexception: 1.0.0
       web-streams-polyfill: 3.3.3
 
-  fflate@0.8.2: {}
+  fflate@0.8.3: {}
 
   file-entry-cache@8.0.0:
     dependencies:
@@ -5956,6 +5975,8 @@ snapshots:
 
   graceful-fs@4.2.11: {}
 
+  h5p-standalone@3.8.2: {}
+
   handlebars@4.7.9:
     dependencies:
       minimist: 1.2.8
@@ -5979,9 +6000,9 @@ snapshots:
     dependencies:
       function-bind: 1.1.2
 
-  html-encoding-sniffer@6.0.0(@noble/hashes@2.2.0):
+  html-encoding-sniffer@6.0.0(@noble/hashes@1.8.0):
     dependencies:
-      '@exodus/bytes': 1.11.0(@noble/hashes@2.2.0)
+      '@exodus/bytes': 1.11.0(@noble/hashes@1.8.0)
     transitivePeerDependencies:
       - '@noble/hashes'
 
@@ -6106,15 +6127,15 @@ snapshots:
     dependencies:
       argparse: 2.0.1
 
-  jsdom@27.4.0(@noble/hashes@2.2.0):
+  jsdom@27.4.0(@noble/hashes@1.8.0):
     dependencies:
       '@acemir/cssom': 0.9.31
       '@asamuzakjp/dom-selector': 6.7.8
-      '@exodus/bytes': 1.11.0(@noble/hashes@2.2.0)
+      '@exodus/bytes': 1.11.0(@noble/hashes@1.8.0)
       cssstyle: 5.3.7
       data-urls: 6.0.1
       decimal.js: 10.6.0
-      html-encoding-sniffer: 6.0.0(@noble/hashes@2.2.0)
+      html-encoding-sniffer: 6.0.0(@noble/hashes@1.8.0)
       http-proxy-agent: 7.0.2
       https-proxy-agent: 7.0.6
       is-potential-custom-element-name: 1.0.1
@@ -6744,7 +6765,7 @@ snapshots:
   pmtiles@3.2.1:
     dependencies:
       '@types/leaflet': 1.9.21
-      fflate: 0.8.2
+      fflate: 0.8.3
 
   pngjs@5.0.0: {}
 
@@ -7111,6 +7132,8 @@ snapshots:
       ansi-styles: 6.2.3
       is-fullwidth-code-point: 5.1.0
 
+  smol-toml@1.8.0: {}
+
   sonic-boom@4.2.1:
     dependencies:
       atomic-sleep: 1.0.0
@@ -7391,7 +7414,7 @@ snapshots:
     optionalDependencies:
       vite: 7.3.1(@types/node@25.2.1)(jiti@2.6.1)(lightningcss@1.32.0)(yaml@2.8.2)
 
-  vitest@4.1.5(@types/node@25.2.1)(jsdom@27.4.0(@noble/hashes@2.2.0))(vite@7.3.1(@types/node@25.2.1)(jiti@2.6.1)(lightningcss@1.32.0)(yaml@2.8.2)):
+  vitest@4.1.5(@types/node@25.2.1)(jsdom@27.4.0(@noble/hashes@1.8.0))(vite@7.3.1(@types/node@25.2.1)(jiti@2.6.1)(lightningcss@1.32.0)(yaml@2.8.2)):
     dependencies:
       '@vitest/expect': 4.1.5
       '@vitest/mocker': 4.1.5(vite@7.3.1(@types/node@25.2.1)(jiti@2.6.1)(lightningcss@1.32.0)(yaml@2.8.2))
@@ -7415,7 +7438,7 @@ snapshots:
       why-is-node-running: 2.3.0
     optionalDependencies:
       '@types/node': 25.2.1
-      jsdom: 27.4.0(@noble/hashes@2.2.0)
+      jsdom: 27.4.0(@noble/hashes@1.8.0)
     transitivePeerDependencies:
       - msw
 

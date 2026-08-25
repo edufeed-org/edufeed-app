@@ -31,6 +31,7 @@
     SHELF_ORDER,
     ALL_CONTENT_KINDS,
     getContentType,
+    eventToContentType,
     groupItemsByType
   } from '$lib/helpers/myContentTypes.js';
   import {
@@ -42,7 +43,8 @@
     PollIcon,
     BookmarkIcon,
     GlobeIcon,
-    PlusIcon
+    PlusIcon,
+    PuzzleIcon
   } from '$lib/components/icons';
   import * as m from '$lib/paraglide/messages';
 
@@ -64,6 +66,11 @@
       icon: GraduationCapIcon,
       label: () => m.feed_badge_learning(),
       cta: () => m.fab_create_learning()
+    },
+    interactive: {
+      icon: PuzzleIcon,
+      label: () => m.interactive_badge(),
+      cta: () => m.fab_create_interactive()
     },
     article: {
       icon: ScrollTextIcon,
@@ -180,6 +187,13 @@
   /** @param {string} key */
   function accentOf(key) {
     return getContentType(key)?.accent ?? 'var(--color-base-content)';
+  }
+
+  // Route create CTAs through the type's ctaKey — types without a create
+  // flow of their own (interactive shares learning's) land in the right one.
+  /** @param {string} key */
+  function createFor(key) {
+    navigateToCreate(getContentType(key)?.ctaKey ?? key);
   }
 </script>
 
@@ -334,11 +348,7 @@
       <div class="myc-hub-grid">
         {#each SHELF_ORDER as key (key)}
           {@const Icon = TYPE_UI[key].icon}
-          <button
-            class="myc-hub-tile"
-            style="--ac: {accentOf(key)}"
-            onclick={() => navigateToCreate(key)}
-          >
+          <button class="myc-hub-tile" style="--ac: {accentOf(key)}" onclick={() => createFor(key)}>
             <span class="myc-hub-tile-icon"><Icon class_="h-5 w-5" /></span>
             <span class="myc-hub-tile-label">{TYPE_UI[key].label()}</span>
             <PlusIcon class_="myc-hub-tile-plus h-4 w-4" />
@@ -357,14 +367,14 @@
             <span class="myc-shelf-label">{TYPE_UI[key].label()}</span>
             <span class="myc-shelf-count">{shelfItems.length}</span>
             <span class="myc-shelf-rule"></span>
-            <button class="myc-shelf-add" onclick={() => navigateToCreate(key)}>
+            <button class="myc-shelf-add" onclick={() => createFor(key)}>
               <PlusIcon class_="h-3.5 w-3.5" />
               {TYPE_UI[key].cta()}
             </button>
           </div>
 
           {#if shelfItems.length === 0}
-            <button class="myc-empty-tile" onclick={() => navigateToCreate(key)}>
+            <button class="myc-empty-tile" onclick={() => createFor(key)}>
               <PlusIcon class_="h-4 w-4" />
               {TYPE_UI[key].cta()}
             </button>
@@ -394,7 +404,7 @@
     <div class="myc-card-grid">
       {#each filteredItems as event (event.id)}
         {@const card = getFeedCardData(event)}
-        {@const key = card.typeKey}
+        {@const key = eventToContentType(event) ?? card.typeKey}
         <button
           class="myc-card"
           style="--ac: {accentOf(key)}"
@@ -416,7 +426,7 @@
         <button
           class="myc-empty-tile myc-empty-tile-tall"
           style="--ac: {accentOf(activeFilter)}"
-          onclick={() => navigateToCreate(activeFilter)}
+          onclick={() => createFor(activeFilter)}
         >
           <PlusIcon class_="h-5 w-5" />
           {TYPE_UI[activeFilter]?.cta() ?? m.mycontent_create_new()}
@@ -428,7 +438,7 @@
     <div class="myc-list">
       {#each filteredItems as event (event.id)}
         {@const card = getFeedCardData(event)}
-        {@const key = card.typeKey}
+        {@const key = eventToContentType(event) ?? card.typeKey}
         {@const Icon = TYPE_UI[key]?.icon ?? GlobeIcon}
         <button
           class="myc-row"
@@ -451,7 +461,7 @@
       {/each}
       <button
         class="myc-row myc-row-create"
-        onclick={() => navigateToCreate(activeFilter === 'all' ? SHELF_ORDER[0] : activeFilter)}
+        onclick={() => createFor(activeFilter === 'all' ? SHELF_ORDER[0] : activeFilter)}
       >
         <span class="myc-row-icon"><PlusIcon class_="h-4 w-4" /></span>
         <span class="myc-row-main">

@@ -34,7 +34,20 @@ vi.mock('$lib/paraglide/messages.js', () => ({
   inbox_action_note_mention: () => 'mentioned you in a note',
   inbox_action_mention: (/** @type {any} */ { communityName }) =>
     `mentioned you in ${communityName}`,
-  inbox_mark_read: () => 'Mark as read'
+  inbox_action_reaction: () => 'reacted',
+  inbox_action_comment: () => 'commented',
+  inbox_action_rsvp: () => 'rsvped',
+  inbox_action_wave: () => 'waved',
+  inbox_action_poll_vote: () => 'voted',
+  inbox_action_form_request: () => 'form request',
+  inbox_action_form_response: () => 'form response',
+  inbox_mark_read: () => 'Mark as read',
+  inbox_block_success: () => 'blocked',
+  dm_block_sender: () => 'Block sender',
+  dm_block_failed: () => 'block failed',
+  wave_back_button: () => 'Wave back',
+  wave_success: () => 'waved back',
+  wave_error: () => 'wave failed'
 }));
 
 vi.mock('$app/paths', () => ({ resolve: (/** @type {string} */ path) => path }));

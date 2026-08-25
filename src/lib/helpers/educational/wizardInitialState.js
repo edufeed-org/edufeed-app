@@ -1,7 +1,7 @@
 /**
  * @typedef {import('./bildungsbereich.js').BildungsbereichKey} BildungsbereichKey
  * @typedef {{ id: string, label: string }} CompactConcept
- * @typedef {{ url: string, name: string, type: string, size: number, sha256: string }} UploadedFile
+ * @typedef {{ url: string, name: string, type: string, size: number, sha256: string, licenseEvent?: import('nostr-tools').NostrEvent | null }} UploadedFile
  * @typedef {{ name: string, type: 'Person' | 'Organization', pubkey?: string, affiliationName?: string, honorificPrefix?: string, orcid?: string }} Creator
  * @typedef {{
  *   coordinate: string,

@@ -53,13 +53,20 @@
   import { getFormReferenceFromResource } from '$lib/helpers/educational/formReference.js';
   import { deleteEvent } from '$lib/helpers/eventDeletion.js';
   import { showToast } from '$lib/helpers/toast.js';
+  import WebxdcPlayer from '$lib/webxdc/WebxdcPlayer.svelte';
+  import { useLicenseForHash } from '$lib/stores/image-license.svelte.js';
+  import {
+    findInteractiveEncoding,
+    resourceAppKey,
+    deleteCompanionLicense
+  } from '$lib/helpers/educational/interactiveResource.js';
   import {
     EditIcon,
     ExternalLinkIcon,
     GraduationCapIcon,
     BookIcon,
     BookClosedIcon,
-    GlobeIcon,
+    EyeIcon,
     LinkIcon,
     TranslateIcon,
     PeopleIcon,
@@ -115,6 +122,21 @@
   let showDeleteConfirmation = $state(false);
   let isDeleting = $state(false);
 
+  // Refs for the interactive (webxdc) player: instance ref to launch it from
+  // the uploaded-files row, container ref to scroll it into view. Plain
+  // `let` — these are internal DOM/component references, not UI state.
+  /** @type {{ launchApp: () => void } | null} */
+  let webxdcPlayerRef = null;
+  /** @type {HTMLElement | null} */
+  let webxdcPlayerContainer = null;
+
+  /** Launch the interactive package from the uploaded-files row and scroll
+   *  the player card into view. */
+  function launchInteractiveFromFileRow() {
+    webxdcPlayerRef?.launchApp();
+    webxdcPlayerContainer?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }
+
   // Check if current user owns this resource
   const isOwner = $derived(activeUser?.pubkey === event.pubkey);
 
@@ -123,6 +145,14 @@
   // metadata creator and the indexer gets its own "Indexed by" provenance row.
   const getPublisherProfile = useUserProfile(() => event.pubkey);
   const attribution = $derived(getResourceAttribution(event, getPublisherProfile()));
+
+  // Interactive (webxdc) package encoding — drives the sandboxed player block
+  // and the companion kind-1063 license cleanup on delete.
+  const interactiveEncoding = $derived(findInteractiveEncoding(resource));
+  const getInteractiveLicense = useLicenseForHash(() => interactiveEncoding?.sha256);
+  const interactiveIconUrl = $derived(
+    getInteractiveLicense()?.tags.find((t) => t[0] === 'image')?.[1] ?? ''
+  );
 
   /**
    * Handle edit button click - navigate to edit page
@@ -170,6 +200,9 @@
       const result = await deleteEvent(event, activeUser);
 
       if (result.success) {
+        if (interactiveEncoding?.sha256) {
+          await deleteCompanionLicense(interactiveEncoding.sha256, activeUser);
+        }
         showToast(m.toast_resource_deleted(), 'success');
         showDeleteConfirmation = false;
         // Navigate to discover page
@@ -883,6 +916,20 @@
     </section>
   {/if}
 
+  <!-- INTERACTIVE (webxdc) PLAYER -->
+  {#if interactiveEncoding}
+    <div class="mb-4" bind:this={webxdcPlayerContainer}>
+      <WebxdcPlayer
+        bind:this={webxdcPlayerRef}
+        url={interactiveEncoding.url}
+        sha256={interactiveEncoding.sha256 ?? ''}
+        name={resource.name}
+        iconUrl={interactiveIconUrl}
+        appKey={resourceAppKey(event)}
+      />
+    </div>
+  {/if}
+
   <!-- UPLOADED FILES - Promoted for Nostr-native content -->
   {#if resource.encodings && resource.encodings.length > 0}
     <section class="ed-sect-plain {isNostrNativeOnly ? 'ed-files-native' : ''}">
@@ -912,17 +959,26 @@
               </div>
             </div>
             <!-- eslint-disable svelte/no-navigation-without-resolve -- external: uploaded file URLs -->
-            <a href={file.url} target="_blank" rel="noopener noreferrer" class="ed-file-btn">
-              <GlobeIcon class_="ed-file-btn-ico" />
-              {m.amb_resource_view_file()}
-            </a>
+            {#if file.mimeType === 'application/x-webxdc'}
+              <button type="button" class="ed-file-btn" onclick={launchInteractiveFromFileRow}>
+                <EyeIcon class_="ed-file-btn-ico" />
+                {m.webxdc_launch()}
+              </button>
+            {:else}
+              <a href={file.url} target="_blank" rel="noopener noreferrer" class="ed-file-btn">
+                <EyeIcon class_="ed-file-btn-ico" />
+                {m.amb_resource_view_file()}
+              </a>
+            {/if}
             <a href={file.url} download class="ed-file-btn">
               <FilesIcon class_="ed-file-btn-ico" />
               {m.amb_resource_download_file()}
             </a>
             <!-- eslint-enable svelte/no-navigation-without-resolve -->
           </div>
-          <EncodingPreview url={file.url} mimeType={file.mimeType} name={file.name} />
+          {#if file.mimeType !== 'application/x-webxdc'}
+            <EncodingPreview url={file.url} mimeType={file.mimeType} name={file.name} />
+          {/if}
         {/each}
       </div>
     </section>

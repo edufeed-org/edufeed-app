@@ -108,7 +108,7 @@
 
   /**
    * @typedef {{ id: string, label: string }} CompactConcept
-   * @typedef {{ url: string, name: string, type: string, size: number, sha256: string }} UploadedFile
+   * @typedef {{ url: string, name: string, type: string, size: number, sha256: string, licenseEvent?: import('nostr-tools').NostrEvent | null }} UploadedFile
    * @typedef {{ name: string, type: 'Person' | 'Organization', pubkey?: string, affiliationName?: string, honorificPrefix?: string, orcid?: string }} Creator
    * @typedef {keyof typeof BILDUNGSBEREICHE} BildungsbereichKey
    * @typedef {{
@@ -188,9 +188,11 @@
   // Surfaced from the child via its `onbusychange` callback.
   let metadataFetchBusy = $state(false);
 
-  // Accepted upload types for the no-URL Step-2 uploader: PDF, slides, docs.
-  // These are the document formats the AI extractor can ground on.
-  const NO_URL_UPLOAD_ACCEPT = '.pdf,.ppt,.pptx,.odp,.key,.doc,.docx,.odt,application/pdf';
+  // Accepted upload types for the no-URL Step-2 uploader: PDF, slides, docs
+  // (the document formats the AI extractor can ground on) plus interactive
+  // packages (.h5p/.xdc/.html), which the uploader detects and normalizes.
+  const NO_URL_UPLOAD_ACCEPT =
+    '.pdf,.ppt,.pptx,.odp,.key,.doc,.docx,.odt,application/pdf,.h5p,.xdc,.html,.htm,application/x-webxdc';
 
   // Image preview error flag for step 3 image field
   let imagePreviewError = $state(false);
@@ -201,6 +203,20 @@
   // Blossom URLs of files uploaded in the no-URL branch — the AI enrichment
   // sources once their license modals have completed each upload.
   const uploadedSourceUrls = $derived(selectUploadedSourceUrls(formData.encodings));
+
+  // Prefill the resource title from an uploaded interactive package once its
+  // license modal completes (the modal's title field is itself prefilled from
+  // h5p metadata) — only while the user hasn't typed a title of their own.
+  $effect(() => {
+    if (formData.name?.trim()) return;
+    const pkg = (formData.encodings ?? []).find(
+      (/** @type {any} */ e) => e?.type === 'application/x-webxdc'
+    );
+    const title = pkg?.licenseEvent?.tags
+      ?.find((/** @type {string[]} */ t) => t[0] === 'title')?.[1]
+      ?.trim();
+    if (title) formData.name = title;
+  });
 
   // Cover-color picker is greyed out once a thumbnail URL is set. This MUST be
   // an $effect-backed $state, not a $derived: the value is consumed only as the
@@ -424,6 +440,7 @@
       if (lic) formData.imageLicenseEvent = lic;
     }
   });
+
   const previewResource = $derived.by(() => {
     if (currentStep < 3) return null;
     // `about` lives in the wizard-internal `aboutByVocab` (one bucket per
@@ -1954,6 +1971,7 @@
               bind:files={formData.encodings}
               multiple={true}
               accept={NO_URL_UPLOAD_ACCEPT}
+              detectInteractive={true}
               label={m.amb_form_step2_upload_label()}
               helpText={m.amb_form_step2_upload_help()}
               activeUserDisplayName={previewAuthorProfile?.display_name ??
@@ -2788,6 +2806,7 @@
             label={m.amb_form_label_content_files()}
             helpText={m.amb_form_help_content_files()}
             multiple={true}
+            detectInteractive={true}
             activeUserDisplayName={previewAuthorProfile?.display_name ??
               previewAuthorProfile?.name ??
               ''}

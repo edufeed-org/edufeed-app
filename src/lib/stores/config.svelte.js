@@ -24,6 +24,8 @@ const defaultConfig = {
   fallbackRelays: [],
   // Default NIP-17 DM relays (kind 10050) published for new users at signup
   dmRelays: [],
+  // DM senders (hex or npub) whose conversations always count as "known"
+  dmTrustedSenders: [],
   // App-specific relays (content goes here IN ADDITION to user's outbox)
   appRelays: {
     calendar: [], // kinds 31922-31925
@@ -219,6 +221,9 @@ const defaultConfig = {
   // Metadata cleaner availability (service URL stays server-side)
   metadataCleaner: {
     enabled: false
+  },
+  webxdc: {
+    sandboxDomain: 'iframe.diy'
   }
 };
 
@@ -267,6 +272,7 @@ export function initializeConfig(runtimeConfig) {
     indexerRelays: runtimeConfig.indexerRelays || defaultConfig.indexerRelays,
     fallbackRelays: runtimeConfig.fallbackRelays || defaultConfig.fallbackRelays,
     dmRelays: runtimeConfig.dmRelays || defaultConfig.dmRelays,
+    dmTrustedSenders: runtimeConfig.dmTrustedSenders || defaultConfig.dmTrustedSenders,
     appRelays: {
       calendar: runtimeConfig.calendarRelays || defaultConfig.appRelays.calendar,
       communikey: runtimeConfig.communikeyRelays || defaultConfig.appRelays.communikey,
@@ -394,7 +400,8 @@ export function initializeConfig(runtimeConfig) {
     metadataCleaner: {
       ...defaultConfig.metadataCleaner,
       ...runtimeConfig.metadataCleaner
-    }
+    },
+    webxdc: { ...defaultConfig.webxdc, ...runtimeConfig.webxdc }
   };
 
   // Signal that config is ready for dependent code
@@ -439,6 +446,9 @@ export const runtimeConfig = {
   },
   get dmRelays() {
     return config.dmRelays;
+  },
+  get dmTrustedSenders() {
+    return config.dmTrustedSenders;
   },
   get appRelays() {
     return config.appRelays;
@@ -511,5 +521,8 @@ export const runtimeConfig = {
   },
   get metadataCleaner() {
     return config.metadataCleaner;
+  },
+  get webxdc() {
+    return config.webxdc;
   }
 };

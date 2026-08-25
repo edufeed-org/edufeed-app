@@ -15,6 +15,10 @@ export default [
     // Ignore auto-generated paraglide files
     ignores: ['src/lib/paraglide/**', 'src/paraglide/**']
   },
+  {
+    // Vendored third-party dist output (scripts/vendor-h5p-standalone.mjs) — not our code
+    ignores: ['static/h5p-standalone/**']
+  },
   js.configs.recommended,
   ...svelte.configs.recommended,
   prettier,

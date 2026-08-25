@@ -53,7 +53,8 @@ vi.mock('applesauce-common/helpers/encrypted-content-cache', () => ({
 }));
 vi.mock('applesauce-common/models', () => ({
   GiftWrapsModel: 'GiftWrapsModel',
-  WrappedMessagesGroups: 'WrappedMessagesGroups'
+  WrappedMessagesGroups: 'WrappedMessagesGroups',
+  WrappedMessagesModel: 'WrappedMessagesModel'
 }));
 
 const { initializeDMs, cleanup, getDmRelayCheckStatus, waitForDmRelayCheck } = await import(
