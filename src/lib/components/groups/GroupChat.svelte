@@ -83,6 +83,8 @@
   import ChatComposer from '$lib/components/chat/ChatComposer.svelte';
   import ThreadPanel from '$lib/components/chat/ThreadPanel.svelte';
   import ReactionChips from '$lib/components/reactions/ReactionChips.svelte';
+  import WebxdcAttachmentCard from '$lib/components/groups/WebxdcAttachmentCard.svelte';
+  import { getWebxdcAttachment } from '$lib/webxdc/session-events.js';
   import { showToast } from '$lib/helpers/toast';
   import * as m from '$lib/paraglide/messages';
 
@@ -566,6 +568,28 @@
   /** @type {any} */
   let threadReplyTo = $state.raw(null);
 
+  // The webxdc app currently launched above the timeline. Not read anywhere
+  // in THIS file yet — the stage that renders it lands in Task 6, which adds
+  // the markup consuming it. `$state.raw` — same reasoning as
+  // replyTo/threadReplyTo above: this is always replaced wholesale, never
+  // mutated in place.
+  /** @type {{sessionId: string, app: {url: string, sha256: string, name: string, iconUrl: string}} | null} */
+  // eslint-disable-next-line no-unused-vars -- consumed by Task 6's stage
+  let activeSession = $state.raw(null);
+
+  /** @param {any} att */
+  function openSession(att) {
+    activeSession = {
+      sessionId: att.webxdc,
+      app: {
+        url: att.url,
+        sha256: att.sha256,
+        name: att.alt?.replace(/^Webxdc app: /, '') || '',
+        iconUrl: att.image || ''
+      }
+    };
+  }
+
   // Derived from the live index, so the panel follows the data: if the root
   // falls out of the window the panel closes itself rather than showing a
   // thread whose head is gone.
@@ -882,6 +906,12 @@
           onToggle={(emoji) => react(msg, emoji)}
           onPick={(emoji) => react(msg, emoji)}
         />
+      {/snippet}
+      {#snippet attachments(/** @type {any} */ msg)}
+        {@const xdc = getWebxdcAttachment(msg)}
+        {#if xdc}
+          <WebxdcAttachmentCard attachment={xdc} onLaunch={openSession} />
+        {/if}
       {/snippet}
     </ChatMessageRow>
   {/snippet}
