@@ -3454,6 +3454,8 @@
   "webxdc_retry": "Retry",
   "webxdc_session_launch": "Open app",
   "webxdc_session_shared_app": "Shared app",
+  "webxdc_session_stage_close": "Close app",
+  "webxdc_session_publish_failed": "Could not save app state: {reason}",
   "interactive_input_label": "App package (.h5p, .xdc or .html)",
   "interactive_input_help": "H5P exports are wrapped automatically. The package runs fully offline in a sandbox.",
   "interactive_input_invalid": "This file is not a valid package (no index.html found).",

@@ -84,6 +84,7 @@
   import ThreadPanel from '$lib/components/chat/ThreadPanel.svelte';
   import ReactionChips from '$lib/components/reactions/ReactionChips.svelte';
   import WebxdcAttachmentCard from '$lib/components/groups/WebxdcAttachmentCard.svelte';
+  import GroupAppStage from '$lib/components/groups/GroupAppStage.svelte';
   import { getWebxdcAttachment } from '$lib/webxdc/session-events.js';
   import { showToast } from '$lib/helpers/toast';
   import * as m from '$lib/paraglide/messages';
@@ -574,7 +575,6 @@
   // replyTo/threadReplyTo above: this is always replaced wholesale, never
   // mutated in place.
   /** @type {{sessionId: string, app: {url: string, sha256: string, name: string, iconUrl: string}} | null} */
-  // eslint-disable-next-line no-unused-vars -- consumed by Task 6's stage
   let activeSession = $state.raw(null);
 
   /** @param {any} att */
@@ -588,6 +588,12 @@
         iconUrl: att.image || ''
       }
     };
+  }
+
+  /** Placeholder: Task 8 replaces this with publish-as-article/wiki export. */
+  /** @param {{name: string, plainText: string}} file */
+  function handleShareText(file) {
+    console.warn('export not wired yet', file.name);
   }
 
   // Derived from the live index, so the panel follows the data: if the root
@@ -926,6 +932,16 @@
           : 'hidden md:flex'
         : ''}"
     >
+      {#if activeSession}
+        <GroupAppStage
+          {pointer}
+          session={activeSession}
+          selfPubkey={myPubkey}
+          publish={signAndPublish}
+          onShareText={handleShareText}
+          onClose={() => (activeSession = null)}
+        />
+      {/if}
       {#if !atBottom}
         <button
           type="button"

@@ -3454,6 +3454,8 @@
   "webxdc_retry": "Erneut versuchen",
   "webxdc_session_launch": "App öffnen",
   "webxdc_session_shared_app": "Geteilte App",
+  "webxdc_session_stage_close": "App schließen",
+  "webxdc_session_publish_failed": "App-Zustand konnte nicht gespeichert werden: {reason}",
   "interactive_input_label": "App-Paket (.h5p, .xdc oder .html)",
   "interactive_input_help": "H5P-Exporte werden automatisch verpackt. Das Paket läuft vollständig offline in einer Sandbox.",
   "interactive_input_invalid": "Diese Datei ist kein gültiges Paket (keine index.html gefunden).",
