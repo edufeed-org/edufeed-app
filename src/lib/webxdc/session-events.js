@@ -38,8 +38,9 @@ export function buildStateTemplate(groupId, sessionId, payload, meta) {
     ['h', groupId],
     ['i', sessionId]
   ];
+  const metaRecord = /** @type {Record<string, any>} */ (meta ?? {});
   for (const key of ['info', 'document', 'summary']) {
-    if (meta?.[key] !== undefined) tags.push([key, String(meta[key])]);
+    if (metaRecord[key] !== undefined) tags.push([key, String(metaRecord[key])]);
   }
   return {
     kind: WEBXDC_STATE_KIND,
@@ -74,9 +75,12 @@ export function parseStateEvent(event) {
     return null;
   }
   const out = { payload };
+  // Cast only for the dynamic-key writes below — `out`'s own declared shape
+  // (payload + optional info/document/summary) stays intact for callers.
+  const outIndexable = /** @type {Record<string, any>} */ (out);
   for (const key of ['info', 'document', 'summary']) {
     const tag = event.tags?.find((t) => t[0] === key);
-    if (tag) out[key] = tag[1];
+    if (tag) outIndexable[key] = tag[1];
   }
   return out;
 }

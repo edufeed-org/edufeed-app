@@ -569,11 +569,12 @@
   /** @type {any} */
   let threadReplyTo = $state.raw(null);
 
-  // The webxdc app currently launched above the timeline. Not read anywhere
-  // in THIS file yet — the stage that renders it lands in Task 6, which adds
-  // the markup consuming it. `$state.raw` — same reasoning as
-  // replyTo/threadReplyTo above: this is always replaced wholesale, never
-  // mutated in place.
+  // The webxdc app currently launched above the timeline, rendered by
+  // GroupAppStage (mounted below, keyed on sessionId so switching to a
+  // different shared app forces a clean remount — GroupAppStage owns a
+  // long-lived sync/subscription per session that must not survive a
+  // session swap). `$state.raw` — same reasoning as replyTo/threadReplyTo
+  // above: this is always replaced wholesale, never mutated in place.
   /** @type {{sessionId: string, app: {url: string, sha256: string, name: string, iconUrl: string}} | null} */
   let activeSession = $state.raw(null);
 
@@ -933,14 +934,16 @@
         : ''}"
     >
       {#if activeSession}
-        <GroupAppStage
-          {pointer}
-          session={activeSession}
-          selfPubkey={myPubkey}
-          publish={signAndPublish}
-          onShareText={handleShareText}
-          onClose={() => (activeSession = null)}
-        />
+        {#key activeSession.sessionId}
+          <GroupAppStage
+            {pointer}
+            session={activeSession}
+            selfPubkey={myPubkey}
+            publish={signAndPublish}
+            onShareText={handleShareText}
+            onClose={() => (activeSession = null)}
+          />
+        {/key}
       {/if}
       {#if !atBottom}
         <button

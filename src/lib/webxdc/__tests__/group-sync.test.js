@@ -8,6 +8,7 @@ const GROUP = 'deadbeef00000000';
 const SID = 'session-uuid-1';
 
 function makeRelay() {
+  /** @type {Subject<any>[]} */
   const subjects = [];
   return {
     subjects,
@@ -18,6 +19,7 @@ function makeRelay() {
     })
   };
 }
+/** @param {string} id @param {number} created_at @param {any} payload */
 const stateEv = (id, created_at, payload) => ({
   ...buildStateTemplate(GROUP, SID, payload),
   id,
@@ -94,6 +96,7 @@ describe('createGroupSync', () => {
     relay.subjects[0].next('EOSE');
     expect(relay.subjects).toHaveLength(1); // no realtime sub yet
 
+    /** @type {number[][]} */
     const frames = [];
     const off = sync.onRealtime((bytes) => frames.push([...bytes]));
     expect(relay.subjects).toHaveLength(2);

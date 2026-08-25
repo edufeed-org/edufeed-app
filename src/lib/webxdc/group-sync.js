@@ -71,7 +71,7 @@ export function createGroupSync({ relayConn, groupId, sessionId, publish, onErro
   const stateSub = relayConn
     .subscription([{ kinds: [WEBXDC_STATE_KIND], '#h': [groupId], '#i': [sessionId] }])
     .subscribe({
-      next: (response) => {
+      next: (/** @type {any} */ response) => {
         if (response === 'EOSE') {
           freeze();
           return;
@@ -82,7 +82,7 @@ export function createGroupSync({ relayConn, groupId, sessionId, publish, onErro
         }
         if (append(response)) notify();
       },
-      error: (err) => onError?.(err)
+      error: (/** @type {any} */ err) => onError?.(err)
     });
 
   /** @type {import('rxjs').Subscription | null} */
@@ -111,7 +111,7 @@ export function createGroupSync({ relayConn, groupId, sessionId, publish, onErro
         realtimeSub = relayConn
           .subscription([{ kinds: [WEBXDC_REALTIME_KIND], '#h': [groupId], '#i': [sessionId] }])
           .subscribe({
-            next: (response) => {
+            next: (/** @type {any} */ response) => {
               if (response === 'EOSE') return;
               // webxdc semantics: realtime frames go to OTHER peers only, so
               // any frame authored by us (echo or otherwise) is filtered —
@@ -121,7 +121,7 @@ export function createGroupSync({ relayConn, groupId, sessionId, publish, onErro
               if (!bytes) return;
               for (const listener of realtimeListeners) listener(bytes);
             },
-            error: (err) => onError?.(err)
+            error: (/** @type {any} */ err) => onError?.(err)
           });
       }
       return () => realtimeListeners.delete(cb);

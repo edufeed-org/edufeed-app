@@ -9,11 +9,18 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, fireEvent } from '@testing-library/svelte';
 
 // Pool mock pattern follows src/lib/__tests__/my-groups-relays.svelte.test.js:
-// override just the pieces GroupAppStage/createGroupSync touch.
+// override just the pieces GroupAppStage/createGroupSync touch. `subscription`
+// is a shared spy so tests can prove a fresh createGroupSync() ran (each call
+// opens its state subscription immediately) without reaching into internals.
+const holders = vi.hoisted(() => ({ subscriptionCalls: /** @type {any[][]} */ ([]) }));
+
 vi.mock('$lib/stores/nostr-infrastructure.svelte', () => ({
   pool: {
     relay: () => ({
-      subscription: () => ({ subscribe: () => ({ unsubscribe: () => {} }) })
+      subscription: (...args) => {
+        holders.subscriptionCalls.push(args);
+        return { subscribe: () => ({ unsubscribe: () => {} }) };
+      }
     })
   }
 }));
@@ -66,6 +73,7 @@ function renderStage(overrides = {}) {
 describe('GroupAppStage', () => {
   beforeEach(() => {
     localStorage.clear();
+    holders.subscriptionCalls = [];
     // Auto-launch fires on mount (see brief step 4) and would otherwise hit
     // the real network in this jsdom environment — keep it deterministic.
     vi.stubGlobal(
@@ -100,5 +108,26 @@ describe('GroupAppStage', () => {
     // WebxdcPlayer, that fallback would engage and touch localStorage.
     const keys = Object.keys(localStorage);
     expect(keys.some((k) => k.startsWith('webxdc:state:'))).toBe(false);
+  });
+
+  it('opens a fresh session sync on remount with a different session (mirrors the {#key} remount in GroupChat)', () => {
+    // createGroupSync opens its state subscription synchronously at
+    // construction — one subscription() call per createGroupSync() call is
+    // a reliable proxy for "a fresh sync was built". GroupChat wraps the
+    // stage in {#key activeSession.sessionId}, so switching to a different
+    // shared app destroys the old component (and its sync) and mounts a new
+    // one — unmount()+render() here is the same lifecycle a key change
+    // produces.
+    const { unmount } = renderStage({ session });
+    expect(holders.subscriptionCalls.length).toBe(1);
+
+    unmount();
+
+    const otherSession = {
+      sessionId: 'session-2',
+      app: { ...session.app, name: 'Other App' }
+    };
+    renderStage({ session: otherSession });
+    expect(holders.subscriptionCalls.length).toBe(2);
   });
 });
