@@ -441,7 +441,18 @@ export function GET() {
 
     // Webxdc sandbox host (interactive resources player)
     webxdc: {
-      sandboxDomain: env.SANDBOX_DOMAIN || 'iframe.diy'
+      sandboxDomain: env.SANDBOX_DOMAIN || 'iframe.diy',
+      // Curated "pad" app offered first in the composer's apps picker.
+      // Requires both URL and a valid 64-hex sha256 — otherwise null (hidden).
+      padApp:
+        env.PAD_APP_URL && /^[0-9a-f]{64}$/i.test(env.PAD_APP_SHA256 || '')
+          ? {
+              url: env.PAD_APP_URL,
+              sha256: (env.PAD_APP_SHA256 || '').toLowerCase(),
+              iconUrl: env.PAD_APP_ICON || '',
+              name: env.PAD_APP_NAME || 'Pad'
+            }
+          : null
     }
   };
 

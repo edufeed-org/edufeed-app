@@ -6,6 +6,8 @@
   caller.
 -->
 <script>
+  import * as m from '$lib/paraglide/messages';
+
   /**
    * @typedef {Object} Props
    * @property {string} value - bindable draft text
@@ -16,6 +18,10 @@
    * @property {{content: string} | null} [replyTo] - shows the quote strip when set
    * @property {(() => void) | null} [onCancelReply]
    * @property {string} [testid] - data-testid for the input
+   * @property {(() => void) | null} [onOpenApps] - opt-in: renders the "+" apps
+   *   button before the input. Only the timeline composer passes this; the
+   *   ThreadPanel composer leaves it null (webxdc sessions are channel-scoped,
+   *   not thread-scoped).
    */
 
   /** @type {Props} */
@@ -27,7 +33,8 @@
     onSubmit,
     replyTo = null,
     onCancelReply = null,
-    testid = undefined
+    testid = undefined,
+    onOpenApps = null
   } = $props();
 </script>
 
@@ -52,6 +59,16 @@
     onSubmit();
   }}
 >
+  {#if onOpenApps}
+    <button
+      type="button"
+      class="btn btn-circle btn-ghost btn-sm"
+      data-testid="chat-apps-button"
+      title={m.webxdc_apps_button()}
+      onclick={onOpenApps}
+      {disabled}>+</button
+    >
+  {/if}
   <input
     class="input flex-1 input-ghost focus:outline-none"
     data-testid={testid}

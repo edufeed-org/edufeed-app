@@ -85,7 +85,13 @@
   import ReactionChips from '$lib/components/reactions/ReactionChips.svelte';
   import WebxdcAttachmentCard from '$lib/components/groups/WebxdcAttachmentCard.svelte';
   import GroupAppStage from '$lib/components/groups/GroupAppStage.svelte';
-  import { getWebxdcAttachment } from '$lib/webxdc/session-events.js';
+  import WebxdcAppPicker from '$lib/components/groups/WebxdcAppPicker.svelte';
+  import {
+    mintSessionId,
+    buildAppShareTemplate,
+    getWebxdcAttachment
+  } from '$lib/webxdc/session-events.js';
+  import { runtimeConfig } from '$lib/stores/config.svelte.js';
   import { showToast } from '$lib/helpers/toast';
   import * as m from '$lib/paraglide/messages';
 
@@ -591,6 +597,32 @@
     };
   }
 
+  // Composer "+" apps menu (Task 7): pick the curated pad app or a discovered
+  // 1063 app, mint a session, publish the kind-9 share, then jump straight
+  // into the stage — sharing an app opens it for the sharer too.
+  let appPickerOpen = $state(false);
+
+  /** @param {{url: string, sha256: string, name: string, iconUrl: string}} app */
+  async function shareApp(app) {
+    appPickerOpen = false;
+    const sessionId = mintSessionId();
+    try {
+      const signed = await signAndPublish(buildAppShareTemplate(pointer.id, app, sessionId));
+      eventStore.add(signed);
+      activeSession = { sessionId, app };
+    } catch (err) {
+      // Mirrors publishMessage's catch (~line 650) — the app's own send-error
+      // surface, reused verbatim rather than inventing a second one.
+      console.error('group send failed', err);
+      if (isMembershipRefusal(err)) showToast(m.groups_join_required(), 'warning');
+      else
+        showToast(
+          m.webxdc_apps_share_failed({ reason: err instanceof Error ? err.message : String(err) }),
+          'error'
+        );
+    }
+  }
+
   /** Placeholder: Task 8 replaces this with publish-as-article/wiki export. */
   /** @param {{name: string, plainText: string}} file */
   function handleShareText(file) {
@@ -866,6 +898,13 @@
       onDeleted={handleGroupDeleted}
     />
   {/if}
+  {#if appPickerOpen}
+    <WebxdcAppPicker
+      padApp={runtimeConfig.webxdc?.padApp ?? null}
+      onSelect={shareApp}
+      onClose={() => (appPickerOpen = false)}
+    />
+  {/if}
 
   {#if authRequired}
     <div class="bg-warning/20 px-4 py-2 text-xs" data-testid="group-auth-banner">
@@ -1032,6 +1071,7 @@
           {replyTo}
           onCancelReply={() => (replyTo = null)}
           testid="group-chat-input"
+          onOpenApps={canWrite ? () => (appPickerOpen = true) : null}
         />
       {/if}
     </div>

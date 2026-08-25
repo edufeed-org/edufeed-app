@@ -223,7 +223,9 @@ const defaultConfig = {
     enabled: false
   },
   webxdc: {
-    sandboxDomain: 'iframe.diy'
+    sandboxDomain: 'iframe.diy',
+    /** @type {{url: string, sha256: string, iconUrl: string, name: string} | null} */
+    padApp: null
   }
 };
 
