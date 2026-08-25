@@ -658,13 +658,17 @@
     // The timeline composer's current draft becomes the share message when
     // non-blank ("here's the pad for today"), falling back to the bare url —
     // see buildAppShareTemplate. Only cleared once the publish actually
-    // succeeds, so a failed send leaves the draft intact to retry.
+    // succeeds, so a failed send leaves the draft intact to retry. Guarded by
+    // `text === draft` (not an unconditional clear): the publish is async, so
+    // a reader who typed a NEW message while this share was in flight must
+    // not have it wiped out from under them when the old draft's publish
+    // resolves after the fact.
     const draft = text;
     try {
       const signed = await signAndPublish(buildAppShareTemplate(pointer.id, app, sessionId, draft));
       eventStore.add(signed);
       activeSession = { sessionId, app };
-      text = '';
+      if (text === draft) text = '';
     } catch (err) {
       // Mirrors publishMessage's catch (~line 650) — the app's own send-error
       // surface, reused verbatim rather than inventing a second one.

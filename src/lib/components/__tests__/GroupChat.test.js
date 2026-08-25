@@ -1395,6 +1395,42 @@ describe('GroupChat', () => {
       );
     });
 
+    // The clear-on-success in shareApp is conditional (`text === draft`), not
+    // unconditional: the publish is async, so typing a NEW message while the
+    // OLD draft's share is still in flight must survive that old publish
+    // resolving after the fact.
+    it('does not clobber a new draft typed while an earlier share publish is still in flight', async () => {
+      /** @type {(value: any) => void} */
+      let resolvePublish = () => {};
+      publishMock.mockReturnValueOnce(
+        new Promise((resolve) => {
+          resolvePublish = resolve;
+        })
+      );
+      render(GroupChat, { props: { pointer } });
+      const input = /** @type {HTMLInputElement} */ (await screen.findByTestId('group-chat-input'));
+      await fireEvent.input(input, { target: { value: 'here is the pad for today' } });
+
+      await fireEvent.click(screen.getByTestId('chat-apps-button'));
+      const row = await screen.findByTestId('webxdc-app-picker-row');
+      await fireEvent.click(row);
+
+      // The share publish is still pending (mockReturnValueOnce above) — type
+      // something new before it resolves.
+      await fireEvent.input(input, { target: { value: 'new message while sharing' } });
+
+      resolvePublish({ ok: true });
+      // publishMock's call count is already 1 the instant it's invoked with
+      // the pending promise — waiting on it proves nothing about whether the
+      // *resolution* has been processed yet. Wait for the stage that only
+      // mounts once shareApp's continuation (eventStore.add, activeSession,
+      // then the conditional text clear, all in the same synchronous
+      // continuation) has actually run.
+      await screen.findByTestId('group-app-stage-stub');
+
+      expect(input.value).toBe('new message while sharing');
+    });
+
     it('keeps the composer draft when the share publish fails', async () => {
       publishMock.mockResolvedValueOnce({ ok: false, message: 'blocked: unknown member' });
       render(GroupChat, { props: { pointer } });
