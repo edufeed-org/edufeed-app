@@ -1769,6 +1769,31 @@ to change.
 `GroupMembersModal` (member row), `HomeView` (post-fix rendering with no
 community profile).
 
+## Channel webxdc sessions — no E2E in v1 (would need a NIP-29 relay fixture)
+
+Collaborative webxdc apps shared inside NIP-29 channels (session-scoped
+kind 9450 state deltas + 24450 announces, `GroupAppStage`/`GroupAppsBar`/
+`WebxdcAppPicker`, host `sendToChat`, export → article/wiki). Covered
+entirely by Vitest unit/component tests, no Playwright spec:
+
+- `src/lib/webxdc/__tests__/session-events.test.js` — 9450/24450 builders, imeta tags
+- `src/lib/webxdc/__tests__/group-sync.test.js` — relay-backed AppSync (channel session sync)
+- `src/lib/webxdc/__tests__/webxdc-host.test.js` — host `sendToChat` + injectable sync
+- `src/lib/__tests__/imeta.test.js` — shared NIP-92 parser, webxdc session property
+- `src/lib/__tests__/webxdc-attachment-card.svelte.test.js` — launch card on channel messages
+- `src/lib/__tests__/group-app-stage.svelte.test.js` — app stage above the timeline, remount on session switch
+- `src/lib/__tests__/webxdc-app-picker.svelte.test.js` — composer apps menu, pad config, 1063 picker
+- `src/lib/__tests__/group-apps-bar.svelte.test.js` — apps bar listing a channel's live sessions
+- `src/lib/webxdc/__tests__/export-share.test.js` — export → publish as article/wiki page
+- `src/lib/__tests__/api-config-webxdc.test.js` — `runtimeConfig.webxdc` (sandbox domain, pad app)
+- `src/lib/components/__tests__/GroupChat.test.js` — apps bar/picker/export wiring inside `GroupChat`
+
+No E2E in v1: exercising this end-to-end needs a real (or mocked) NIP-29
+group relay plus two connected clients trading 9450 state over it —
+`e2e/nip29-relay.js` (the in-process mock relay `moderated-community.test.js`
+uses for group creation/roster) doesn't yet fan out ephemeral 24450/9450
+session traffic. Revisit if that mock-relay harness grows session support.
+
 ## Google login (Pomegranate) — manual checklist (no E2E: external OAuth)
 
 - [ ] New account: Google popup → backup step → wizard → kind 0 signed via bunker

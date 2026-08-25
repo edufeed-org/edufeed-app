@@ -157,7 +157,8 @@ vi.mock('$lib/paraglide/messages', () => ({
   chat_thread_close: () => 'Close thread',
   chat_thread_reply_one: () => '1 reply',
   chat_thread_reply_many: (/** @type {{ count: number }} */ { count }) => `${count} replies`,
-  chat_thread_reply_placeholder: () => 'Reply in thread'
+  chat_thread_reply_placeholder: () => 'Reply in thread',
+  webxdc_apps_button: () => 'Apps'
 }));
 
 const { default: GroupChat } = await import('$lib/components/groups/GroupChat.svelte');
