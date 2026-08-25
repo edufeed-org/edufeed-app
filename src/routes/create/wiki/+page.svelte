@@ -9,9 +9,10 @@
   import { createWiki, updateWiki } from '$lib/stores/wiki-actions.svelte.js';
   import MarkdownEditor from '$lib/components/shared/MarkdownEditor.svelte';
   import EditableList from '$lib/components/shared/EditableList.svelte';
+  import { takeExport, exportTitle } from '$lib/webxdc/export-share.js';
   import * as m from '$lib/paraglide/messages';
 
-  /** @type {{ data: { communityPubkey: string, editNaddr: string } }} */
+  /** @type {{ data: { communityPubkey: string, editNaddr: string, prefill: string } }} */
   let { data } = $props();
 
   // Edit mode state
@@ -27,6 +28,15 @@
   let summary = $state('');
   let editorContent = $state('');
   let hashtags = $state(/** @type {string[]} */ ([]));
+
+  // Prefill from a channel app export (webxdc sendToChat → sessionStorage handoff).
+  if (data.prefill === 'webxdc') {
+    const exported = takeExport();
+    if (exported) {
+      title = exportTitle(exported.name);
+      editorContent = exported.plainText;
+    }
+  }
 
   // UI state
   let isPublishing = $state(false);

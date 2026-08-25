@@ -768,7 +768,11 @@
             ← {m.concord_rail_channels()}
           </button>
           {#key channelKey(selectedGroupPointer)}
-            <GroupChat pointer={selectedGroupPointer} fallbackName={selectedFallbackName} />
+            <GroupChat
+              pointer={selectedGroupPointer}
+              fallbackName={selectedFallbackName}
+              communityPubkey={communikeyEvent?.pubkey ?? ''}
+            />
           {/key}
         {:else}
           <!-- No channel picked: the channel overview (Armada parity:

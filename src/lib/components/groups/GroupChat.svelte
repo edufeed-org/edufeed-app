@@ -24,6 +24,7 @@
 
 <script>
   import { goto } from '$app/navigation';
+  import { resolve } from '$app/paths';
   import { eventStore, pool } from '$lib/stores/nostr-infrastructure.svelte';
   import { useActiveUser } from '$lib/stores/accounts.svelte';
   import { useProfileMap } from '$lib/stores/profile-map.svelte.js';
@@ -91,6 +92,7 @@
     buildAppShareTemplate,
     getWebxdcAttachment
   } from '$lib/webxdc/session-events.js';
+  import { stashExport } from '$lib/webxdc/export-share.js';
   import { runtimeConfig } from '$lib/stores/config.svelte.js';
   import { showToast } from '$lib/helpers/toast';
   import * as m from '$lib/paraglide/messages';
@@ -100,8 +102,12 @@
    * while the relay's kind:39000 hasn't arrived — on gated hosts that REQ
    * can race the NIP-42 handshake and come up empty, and a cryptic hex id
    * in the header reads like landing in the wrong group (laoc, 2026-08-19).
-   * @type {{pointer: import('$lib/groups/groups.js').GroupPointer, fallbackName?: string}} */
-  let { pointer, fallbackName = '' } = $props();
+   * communityPubkey: the hosting Communikey community's pubkey (if any), so a
+   * publish-as-article/wiki export can carry a `?community=` prefill — see
+   * publishExport below. The /groups/[pointer] route has no community
+   * context and leaves it at the default ''.
+   * @type {{pointer: import('$lib/groups/groups.js').GroupPointer, fallbackName?: string, communityPubkey?: string}} */
+  let { pointer, fallbackName = '', communityPubkey = '' } = $props();
 
   const getActiveUser = useActiveUser();
 
@@ -623,10 +629,24 @@
     }
   }
 
-  /** Placeholder: Task 8 replaces this with publish-as-article/wiki export. */
+  // Export → publish as article/wiki (Task 8): GroupAppStage's sendToChat
+  // hands us the exported file; we stash it in sessionStorage and hop to the
+  // create route, which prefills title + body from it (spec §5).
+  /** @type {{name: string, plainText: string} | null} */
+  let pendingExport = $state.raw(null);
   /** @param {{name: string, plainText: string}} file */
   function handleShareText(file) {
-    console.warn('export not wired yet', file.name);
+    pendingExport = file;
+  }
+  /** @param {'article' | 'wiki'} target */
+  function publishExport(target) {
+    if (!pendingExport) return;
+    stashExport(pendingExport);
+    pendingExport = null;
+    // eslint-disable-next-line svelte/prefer-svelte-reactivity -- local to this call, never rendered
+    const params = new URLSearchParams({ prefill: 'webxdc' });
+    if (communityPubkey) params.set('community', communityPubkey);
+    goto(`${resolve(`/create/${target}`)}?${params}`);
   }
 
   // Derived from the live index, so the panel follows the data: if the root
@@ -904,6 +924,25 @@
       onSelect={shareApp}
       onClose={() => (appPickerOpen = false)}
     />
+  {/if}
+  {#if pendingExport}
+    <div class="modal-open modal">
+      <div class="modal-box max-w-sm">
+        <h3 class="text-sm font-bold">{m.webxdc_export_title()}</h3>
+        <p class="truncate py-2 text-xs opacity-70">{pendingExport.name}</p>
+        <div class="modal-action">
+          <button class="btn btn-sm" onclick={() => (pendingExport = null)}
+            >{m.webxdc_export_cancel()}</button
+          >
+          <button class="btn btn-sm" onclick={() => publishExport('wiki')}
+            >{m.webxdc_export_as_wiki()}</button
+          >
+          <button class="btn btn-sm btn-primary" onclick={() => publishExport('article')}
+            >{m.webxdc_export_as_article()}</button
+          >
+        </div>
+      </div>
+    </div>
   {/if}
 
   {#if authRequired}

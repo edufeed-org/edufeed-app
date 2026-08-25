@@ -546,7 +546,11 @@ vi.mock('$lib/paraglide/messages', () => ({
   webxdc_apps_pick_title: () => 'Share an app',
   webxdc_apps_none: () => 'No published apps found',
   webxdc_apps_share_failed: (/** @type {{ reason: string }} */ { reason }) =>
-    `Could not share the app: ${reason}`
+    `Could not share the app: ${reason}`,
+  webxdc_export_title: () => 'Publish export',
+  webxdc_export_as_article: () => 'As article',
+  webxdc_export_as_wiki: () => 'As wiki page',
+  webxdc_export_cancel: () => 'Cancel'
 }));
 
 const { default: GroupChat } = await import('$lib/components/groups/GroupChat.svelte');
