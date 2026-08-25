@@ -13,15 +13,31 @@
 
   const sessions = $derived(deriveSessions(messages));
 
+  // `sessions` is a new array on every render of `messages` (i.e. any new
+  // chat message), which would retrigger the effect below on every message
+  // even when the set of sessions hasn't changed. Depend on this stable
+  // string key instead — a $derived primitive only marks dependents dirty
+  // when its VALUE changes, so unrelated messages no longer refetch; a
+  // genuinely new/removed session still does.
+  const sessionKey = $derived(sessions.map((s) => s.sessionId).join(','));
+
+  // Funnel `pointer` into primitive $derived values too: the effect below
+  // must depend ONLY on memoized-primitive deriveds (sessionKey/relayUrl/
+  // groupId), never on a raw object-prop read like `pointer.relay` directly
+  // — an unmemoized read short-circuits nothing and defeats the sessionKey
+  // guard's whole point the moment it's mixed into the same effect.
+  const relayUrl = $derived(pointer.relay);
+  const groupId = $derived(pointer.id);
+
   // Latest 9450 per session for a live-ish subtitle (document/summary tags).
   // relay.request(filter, {timeout}) emits events and completes at EOSE —
   // same call shape as confirmGroupMetadata in group-management.js.
   let sessionMeta = $state.raw(new Map());
   $effect(() => {
-    if (sessions.length === 0) return;
+    if (!sessionKey) return;
     const sub = pool
-      .relay(pointer.relay)
-      .request({ kinds: [WEBXDC_STATE_KIND], '#h': [pointer.id], limit: 100 }, { timeout: 2500 })
+      .relay(relayUrl)
+      .request({ kinds: [WEBXDC_STATE_KIND], '#h': [groupId], limit: 100 }, { timeout: 2500 })
       .pipe(toArray())
       .subscribe((events) => {
         const meta = new Map(); // eslint-disable-line svelte/prefer-svelte-reactivity -- built up locally, then swapped into $state.raw wholesale

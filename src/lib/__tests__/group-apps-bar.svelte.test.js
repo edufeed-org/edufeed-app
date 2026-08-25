@@ -6,14 +6,16 @@
 // src/lib/__tests__/my-groups-relays.svelte.test.js — the enrichment query
 // (kind 9450 subtitle) uses pool.relay(url).request(filter, {timeout}), the
 // same call shape as confirmGroupMetadata in group-management.js.
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, fireEvent } from '@testing-library/svelte';
 import { of } from 'rxjs';
 import { buildAppShareTemplate } from '$lib/webxdc/session-events.js';
 
+const requestSpy = vi.fn(() => of());
+
 vi.mock('$lib/stores/nostr-infrastructure.svelte', () => ({
   pool: {
-    relay: () => ({ request: () => of() })
+    relay: () => ({ request: requestSpy })
   }
 }));
 
@@ -31,6 +33,10 @@ function makeMessage(o) {
 }
 
 describe('GroupAppsBar', () => {
+  beforeEach(() => {
+    requestSpy.mockClear();
+  });
+
   it('renders nothing when there are no webxdc shares', () => {
     const messages = [makeMessage({ kind: 9, content: 'hello', tags: [['h', pointer.id]] })];
     const { container } = render(GroupAppsBar, { pointer, messages, onOpen: vi.fn() });
@@ -63,5 +69,35 @@ describe('GroupAppsBar', () => {
         app: expect.objectContaining({ name: 'Pad' })
       })
     );
+  });
+
+  it('does not re-issue the enrichment request when the session set is unchanged', async () => {
+    const app = {
+      url: 'https://blossom.example/a.xdc',
+      sha256: 'a'.repeat(64),
+      name: 'Pad',
+      iconUrl: ''
+    };
+    const shareTemplate = buildAppShareTemplate(pointer.id, app, 'session-1');
+    const shareMessage = makeMessage({ ...shareTemplate, created_at: 2000 });
+    const plainMessage = makeMessage({ kind: 9, content: 'hi', tags: [['h', pointer.id]] });
+
+    const { rerender } = render(GroupAppsBar, {
+      pointer,
+      messages: [shareMessage],
+      onOpen: vi.fn()
+    });
+    expect(requestSpy).toHaveBeenCalledTimes(1);
+
+    // A new, unrelated chat message arrives — `sessions` is a fresh array
+    // (deriveSessions runs again) but the set of session ids is identical, so
+    // the sessionKey-gated effect must not refetch.
+    const anotherPlainMessage = makeMessage({ kind: 9, content: 'bye', tags: [['h', pointer.id]] });
+    await rerender({
+      pointer,
+      messages: [shareMessage, plainMessage, anotherPlainMessage],
+      onOpen: vi.fn()
+    });
+    expect(requestSpy).toHaveBeenCalledTimes(1);
   });
 });
