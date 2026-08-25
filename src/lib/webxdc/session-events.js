@@ -20,13 +20,18 @@ export function mintSessionId() {
  * @param {string} groupId
  * @param {{url: string, sha256: string, name?: string, iconUrl?: string}} app
  * @param {string} sessionId
+ * @param {string} [text] the composer's draft at share time — becomes the
+ *   share message's content when non-blank, so sharing an app can carry a
+ *   note ("here's the pad for today") instead of a bare link. The imeta tag
+ *   is unchanged either way: it still carries the url as the launch source.
  */
-export function buildAppShareTemplate(groupId, app, sessionId) {
+export function buildAppShareTemplate(groupId, app, sessionId, text) {
   const imeta = ['imeta', `url ${app.url}`, `m ${WEBXDC_MIME}`, `x ${app.sha256}`];
   if (app.iconUrl) imeta.push(`image ${app.iconUrl}`);
   if (app.name) imeta.push(`alt Webxdc app: ${app.name}`);
   imeta.push(`webxdc ${sessionId}`);
-  return { kind: 9, content: app.url, created_at: now(), tags: [['h', groupId], imeta] };
+  const content = typeof text === 'string' && text.trim() ? text.trim() : app.url;
+  return { kind: 9, content, created_at: now(), tags: [['h', groupId], imeta] };
 }
 
 /**

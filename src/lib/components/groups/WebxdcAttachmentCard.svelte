@@ -10,11 +10,12 @@
   /**
    * @typedef {Object} Props
    * @property {{url: string, sha256: string, webxdc: string, alt?: string, image?: string}} attachment
+   * @property {string} [title] session title (9450 `document`/`summary` tag), when known
    * @property {(attachment: any) => void} onLaunch
    */
 
   /** @type {Props} */
-  let { attachment, onLaunch } = $props();
+  let { attachment, title = '', onLaunch } = $props();
 
   const appName = $derived(
     attachment.alt?.replace(/^Webxdc app: /, '') || m.webxdc_session_shared_app()
@@ -33,7 +34,14 @@
       ▦
     {/if}
   </div>
-  <span class="min-w-0 flex-1 truncate text-sm font-semibold text-base-content">{appName}</span>
+  <div class="min-w-0 flex-1">
+    {#if title}
+      <p class="truncate text-sm font-semibold text-base-content">{title}</p>
+      <p class="truncate text-xs text-base-content/60">{appName}</p>
+    {:else}
+      <p class="truncate text-sm font-semibold text-base-content">{appName}</p>
+    {/if}
+  </div>
   <button type="button" class="btn btn-sm btn-primary" onclick={() => onLaunch(attachment)}>
     {m.webxdc_session_launch()}
   </button>

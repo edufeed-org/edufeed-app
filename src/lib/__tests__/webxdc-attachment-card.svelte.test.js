@@ -19,4 +19,14 @@ describe('WebxdcAttachmentCard', () => {
     await fireEvent.click(getByRole('button'));
     expect(onLaunch).toHaveBeenCalledWith(attachment);
   });
+
+  it('shows the session title as the prominent line, with the app name secondary, when provided', () => {
+    const { getByText } = render(WebxdcAttachmentCard, {
+      attachment,
+      title: 'Meeting notes',
+      onLaunch: vi.fn()
+    });
+    expect(getByText('Meeting notes')).toBeTruthy();
+    expect(getByText('Pad')).toBeTruthy();
+  });
 });

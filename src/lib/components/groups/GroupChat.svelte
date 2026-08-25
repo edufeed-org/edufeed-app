@@ -91,8 +91,11 @@
   import {
     mintSessionId,
     buildAppShareTemplate,
-    getWebxdcAttachment
+    getWebxdcAttachment,
+    deriveSessions,
+    WEBXDC_STATE_KIND
   } from '$lib/webxdc/session-events.js';
+  import { toArray } from 'rxjs/operators';
   import { stashExport } from '$lib/webxdc/export-share.js';
   import { runtimeConfig } from '$lib/stores/config.svelte.js';
   import { showToast } from '$lib/helpers/toast';
@@ -604,6 +607,45 @@
     };
   }
 
+  // Session title enrichment (owned here, not GroupAppsBar — the bar is now
+  // presentational only): the 9450 state event's `document` tag carries the
+  // pad's first line, refreshed on every host update. This runs unconditionally
+  // whenever the timeline has webxdc sessions, because launch cards (unlike
+  // the collapsed apps bar) are ALWAYS visible in the timeline — upfront
+  // per-session limit:1 fetches are the point here. This is NOT a regression
+  // of the earlier apps-bar over-fetch fix (aa6d8546/b40db86d): that fix was
+  // about a bundled '#h'-only limit:100 full-body REQ refiring on every new
+  // chat message; this is a handful of tiny '#i'-scoped limit:1 REQs, fetched
+  // once per distinct session-id set (see sessionKey below), never per message.
+  const sessions = $derived(deriveSessions(displayed));
+  const sessionKey = $derived(sessions.map((s) => s.sessionId).join(','));
+  let sessionTitles = $state.raw(new Map());
+  let titlesFetchedKey = '';
+  $effect(() => {
+    if (!sessionKey) return;
+    const key = `${sessionKey}\x1f${pointer.relay}\x1f${pointer.id}`;
+    if (titlesFetchedKey === key) return;
+    titlesFetchedKey = key;
+    const subs = sessionKey.split(',').map((sid) =>
+      pool
+        .relay(pointer.relay)
+        .request(
+          { kinds: [WEBXDC_STATE_KIND], '#h': [pointer.id], '#i': [sid], limit: 1 },
+          { timeout: 2500 }
+        )
+        .pipe(toArray())
+        .subscribe((events) => {
+          const latest = [...events].sort((a, b) => b.created_at - a.created_at)[0];
+          if (!latest) return;
+          const tag = (/** @type {string} */ n) => latest.tags?.find((t) => t[0] === n)?.[1];
+          const next = new Map(sessionTitles); // eslint-disable-line svelte/prefer-svelte-reactivity -- rebuilt wholesale, then swapped in
+          next.set(sid, tag('document') || tag('summary') || '');
+          sessionTitles = next;
+        })
+    );
+    return () => subs.forEach((sub) => sub.unsubscribe());
+  });
+
   // Composer "+" apps menu (Task 7): pick the curated pad app or a discovered
   // 1063 app, mint a session, publish the kind-9 share, then jump straight
   // into the stage — sharing an app opens it for the sharer too.
@@ -613,10 +655,16 @@
   async function shareApp(app) {
     appPickerOpen = false;
     const sessionId = mintSessionId();
+    // The timeline composer's current draft becomes the share message when
+    // non-blank ("here's the pad for today"), falling back to the bare url —
+    // see buildAppShareTemplate. Only cleared once the publish actually
+    // succeeds, so a failed send leaves the draft intact to retry.
+    const draft = text;
     try {
-      const signed = await signAndPublish(buildAppShareTemplate(pointer.id, app, sessionId));
+      const signed = await signAndPublish(buildAppShareTemplate(pointer.id, app, sessionId, draft));
       eventStore.add(signed);
       activeSession = { sessionId, app };
+      text = '';
     } catch (err) {
       // Mirrors publishMessage's catch (~line 650) — the app's own send-error
       // surface, reused verbatim rather than inventing a second one.
@@ -1014,7 +1062,11 @@
       {#snippet attachments(/** @type {any} */ msg)}
         {@const xdc = getWebxdcAttachment(msg)}
         {#if xdc}
-          <WebxdcAttachmentCard attachment={xdc} onLaunch={openSession} />
+          <WebxdcAttachmentCard
+            attachment={xdc}
+            title={sessionTitles.get(xdc.webxdc) ?? ''}
+            onLaunch={openSession}
+          />
         {/if}
       {/snippet}
     </ChatMessageRow>
@@ -1030,7 +1082,12 @@
           : 'hidden md:flex'
         : ''}"
     >
-      <GroupAppsBar {pointer} messages={displayed} onOpen={(s) => (activeSession = s)} />
+      <GroupAppsBar
+        {pointer}
+        messages={displayed}
+        sessionMeta={sessionTitles}
+        onOpen={(s) => (activeSession = s)}
+      />
       {#if activeSession}
         {#key activeSession.sessionId}
           <GroupAppStage

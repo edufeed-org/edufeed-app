@@ -221,6 +221,41 @@ const webxdcShareEvent = signWith(
   },
   OTHER_SK
 );
+// Enrichment fixture for the session-title effect (moved from GroupAppsBar
+// into GroupChat itself): the latest 9450 state event's `document` tag,
+// returned by the fake pool's request() below when it sees the effect's own
+// {kinds:[9450], '#i':[...]} shape. Never touches eventStore (the effect
+// consumes the request() stream directly), so it doesn't need a real
+// signature.
+const webxdcStateEvent = {
+  id: 'fake-state-1',
+  kind: 9450,
+  pubkey: OTHER,
+  created_at: 1700000006,
+  content: '{}',
+  tags: [
+    ['h', 'webxdcchat'],
+    ['i', 'session-export-1'],
+    ['document', 'Meeting notes']
+  ]
+};
+// NIP-DC discovery fixture (kind 1063) for WebxdcAppPicker's own REQ
+// (pool.request(relays, filters) — a top-level pool call, distinct from
+// pool.relay(url).request() above), so the composer-share tests below have a
+// pickable row without needing runtimeConfig.webxdc.padApp set.
+const discoveredAppEvent = {
+  id: 'fake-1063-1',
+  kind: 1063,
+  pubkey: OTHER,
+  created_at: 1700000000,
+  content: '',
+  tags: [
+    ['url', 'https://blossom.example/widget.xdc'],
+    ['m', 'application/x-webxdc'],
+    ['x', 'b'.repeat(64)],
+    ['alt', 'Webxdc app: Widget']
+  ]
+};
 // The two live reply shapes, both hanging off `chatEvent`: the 872-event form
 // (a lone `reply` marker pointing at the root) and the 3-event form (the
 // conformant root+reply pair). The nested one answers `firstReply`, so a
@@ -361,6 +396,16 @@ vi.mock('$lib/stores/nostr-infrastructure.svelte', async () => {
           // rides along — normalize and read the `#d` off whichever filter
           // carries one.
           const filterList = Array.isArray(filters) ? filters : [filters];
+          // GroupChat's own session-title enrichment effect (moved out of
+          // GroupAppsBar): {kinds:[9450], '#h':[...], '#i':[sid], limit:1}.
+          // Routed ahead of the `#d` roster branch below since this filter
+          // shape carries no `#d` at all.
+          if (filterList.some((f) => f?.kinds?.includes(9450))) {
+            const sid = filterList.find((f) => f?.['#i'])?.['#i']?.[0];
+            return sid === webxdcStateEvent.tags.find((t) => t[0] === 'i')?.[1]
+              ? rxOf(webxdcStateEvent)
+              : rxOf();
+          }
           const d = filterList.find((f) => f?.['#d'])?.['#d']?.[0];
           const own = filterList.some((f) => f?.kinds?.includes(9021)) ? relayOwn9021.value : [];
           if (own.length && d === 'ghostchat') return rxOf(...own);
@@ -475,7 +520,12 @@ vi.mock('$lib/stores/nostr-infrastructure.svelte', async () => {
         information$: rxOf(relayInfoHolder.info)
       };
     },
-    group: () => ({ request: () => rxOf() })
+    group: () => ({ request: () => rxOf() }),
+    // WebxdcAppPicker's discovery REQ (pool.request(relays, filters), a
+    // DIFFERENT call shape from pool.relay(url).request(filters) above): one
+    // fixture kind-1063 NIP-DC app so the composer-share tests below have a
+    // row to click.
+    request: () => rxOf(discoveredAppEvent)
   };
   return { eventStore, pool };
 });
@@ -595,7 +645,8 @@ vi.mock('$lib/paraglide/messages', () => ({
   webxdc_export_title: () => 'Publish export',
   webxdc_export_as_article: () => 'As article',
   webxdc_export_as_wiki: () => 'As wiki page',
-  webxdc_export_cancel: () => 'Cancel'
+  webxdc_export_cancel: () => 'Cancel',
+  webxdc_close: () => 'Close'
 }));
 
 const { default: GroupChat } = await import('$lib/components/groups/GroupChat.svelte');
@@ -1312,6 +1363,52 @@ describe('GroupChat', () => {
       render(GroupChat, { props: { pointer } }); // beechat: ME is a member
       await waitFor(() => screen.getByTestId('group-chat-input'));
       expect(screen.getByTestId('chat-apps-button')).toBeTruthy();
+    });
+
+    // Session title enrichment (moved from GroupAppsBar into GroupChat, see
+    // followup-1): the launch card's prominent line becomes the 9450
+    // `document` tag, with the app name demoted to the secondary line.
+    it('shows the fetched session title on the launch card', async () => {
+      render(GroupChat, { props: { pointer: { relay: GROUP_RELAY, id: 'webxdcchat' } } });
+      const launchButton = await screen.findByText('Open app');
+      const card = launchButton.closest('div');
+      await waitFor(() => expect(card?.textContent).toContain('Meeting notes'));
+      expect(card?.textContent).toContain('Pad');
+    });
+
+    // Composer text becomes the share message (followup-2): the timeline
+    // composer's own draft, not the app's bare url, when the reader typed
+    // something before opening the picker.
+    it('sends the composer draft as the share message and clears it on success', async () => {
+      render(GroupChat, { props: { pointer } }); // beechat: ME is a member
+      const input = await screen.findByTestId('group-chat-input');
+      await fireEvent.input(input, { target: { value: 'here is the pad for today' } });
+
+      await fireEvent.click(screen.getByTestId('chat-apps-button'));
+      const row = await screen.findByTestId('webxdc-app-picker-row');
+      await fireEvent.click(row);
+
+      await waitFor(() => expect(publishMock).toHaveBeenCalledTimes(1));
+      expect(publishMock.mock.calls[0][0].content).toBe('here is the pad for today');
+      expect(/** @type {HTMLInputElement} */ (screen.getByTestId('group-chat-input')).value).toBe(
+        ''
+      );
+    });
+
+    it('keeps the composer draft when the share publish fails', async () => {
+      publishMock.mockResolvedValueOnce({ ok: false, message: 'blocked: unknown member' });
+      render(GroupChat, { props: { pointer } });
+      const input = await screen.findByTestId('group-chat-input');
+      await fireEvent.input(input, { target: { value: 'draft survives failure' } });
+
+      await fireEvent.click(screen.getByTestId('chat-apps-button'));
+      const row = await screen.findByTestId('webxdc-app-picker-row');
+      await fireEvent.click(row);
+
+      await waitFor(() => expect(publishMock).toHaveBeenCalledTimes(1));
+      expect(/** @type {HTMLInputElement} */ (screen.getByTestId('group-chat-input')).value).toBe(
+        'draft survives failure'
+      );
     });
 
     it('hides the composer apps button for a non-member without write access', async () => {

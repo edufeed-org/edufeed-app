@@ -40,6 +40,22 @@ describe('buildAppShareTemplate', () => {
     const att = getWebxdcAttachment(buildAppShareTemplate(GROUP, app, SID));
     expect(att).toMatchObject({ url: app.url, sha256: app.sha256, webxdc: SID });
   });
+  it('uses the composer draft as content when provided', () => {
+    const t = buildAppShareTemplate(GROUP, app, SID, "here's the pad for today");
+    expect(t.content).toBe("here's the pad for today");
+    // imeta still carries the url as the launch source, unaffected by content
+    const imeta = t.tags.find((tag) => tag[0] === 'imeta');
+    expect(imeta).toContain(`url ${app.url}`);
+  });
+  it('falls back to the app url when the draft is empty, whitespace, or absent', () => {
+    expect(buildAppShareTemplate(GROUP, app, SID, '').content).toBe(app.url);
+    expect(buildAppShareTemplate(GROUP, app, SID, '   ').content).toBe(app.url);
+    expect(buildAppShareTemplate(GROUP, app, SID).content).toBe(app.url);
+  });
+  it('trims the draft before using it as content', () => {
+    const t = buildAppShareTemplate(GROUP, app, SID, '  hello  ');
+    expect(t.content).toBe('hello');
+  });
   it('getWebxdcAttachment ignores non-xdc and session-less imeta', () => {
     expect(getWebxdcAttachment({ tags: [['imeta', 'url https://x/y.png', 'm image/png']] })).toBe(
       null
