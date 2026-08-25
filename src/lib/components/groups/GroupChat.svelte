@@ -609,14 +609,25 @@
 
   // Session title enrichment (owned here, not GroupAppsBar — the bar is now
   // presentational only): the 9450 state event's `document` tag carries the
-  // pad's first line, refreshed on every host update. This runs unconditionally
-  // whenever the timeline has webxdc sessions, because launch cards (unlike
-  // the collapsed apps bar) are ALWAYS visible in the timeline — upfront
-  // per-session limit:1 fetches are the point here. This is NOT a regression
-  // of the earlier apps-bar over-fetch fix (aa6d8546/b40db86d): that fix was
-  // about a bundled '#h'-only limit:100 full-body REQ refiring on every new
-  // chat message; this is a handful of tiny '#i'-scoped limit:1 REQs, fetched
-  // once per distinct session-id set (see sessionKey below), never per message.
+  // pad's first line, refreshed on every host update. Two layers feed the
+  // same `sessionTitles` map:
+  //
+  // 1. One-shot backfill below — a handful of tiny '#i'-scoped limit:1 REQs,
+  //    fetched once per distinct session-id set (see sessionKey), never per
+  //    message. Seeds titles for sessions that already have 9450 history when
+  //    the channel opens. This runs unconditionally whenever the timeline has
+  //    webxdc sessions, because launch cards (unlike the collapsed apps bar)
+  //    are ALWAYS visible in the timeline. This is NOT a regression of the
+  //    earlier apps-bar over-fetch fix (aa6d8546/b40db86d): that fix was
+  //    about a bundled '#h'-only limit:100 full-body REQ refiring on every
+  //    new chat message.
+  // 2. Live subscription further below — the backfill alone leaves two gaps:
+  //    a freshly-shared pad has zero 9450 events yet (nothing to backfill,
+  //    and nothing re-triggers the one-shot fetch once the first edit lands),
+  //    and edits made while the channel stays open (in the stage, or by
+  //    another member) never reach the map either. The live sub covers both:
+  //    it isn't gated on sessionKey, so it also seeds sessions the backfill
+  //    hasn't discovered yet, and it stays open for the channel's lifetime.
   const sessions = $derived(deriveSessions(displayed));
   const sessionKey = $derived(sessions.map((s) => s.sessionId).join(','));
   let sessionTitles = $state.raw(new Map());
@@ -644,6 +655,40 @@
         })
     );
     return () => subs.forEach((sub) => sub.unsubscribe());
+  });
+
+  // Layer 2 (see comment above): a live sub for the channel's whole lifetime,
+  // not gated on sessionKey/titlesFetchedKey, so a pad shared with no prior
+  // history (or edited after open) still gets a title without a reload. The
+  // `since` overlap (a few seconds) is deliberate slack for clock skew
+  // against the backfill's own window; last-received wins — no created_at
+  // bookkeeping needed for a subtitle, and the Map swap is idempotent.
+  $effect(() => {
+    const relay = pointer.relay;
+    const id = pointer.id;
+    const liveSub = pool
+      .relay(relay)
+      .subscription([
+        { kinds: [WEBXDC_STATE_KIND], '#h': [id], since: Math.floor(Date.now() / 1000) - 5 }
+      ])
+      .subscribe({
+        next: (/** @type {any} */ event) => {
+          if (event === 'EOSE') return;
+          const tag = (/** @type {string} */ n) =>
+            event.tags?.find((/** @type {string[]} */ t) => t[0] === n)?.[1];
+          const sid = tag('i');
+          const title = tag('document') || tag('summary');
+          if (!sid || !title) return;
+          const next = new Map(sessionTitles); // eslint-disable-line svelte/prefer-svelte-reactivity -- rebuilt wholesale, then swapped in
+          next.set(sid, title);
+          sessionTitles = next;
+        },
+        // Best-effort enrichment: a refusal here (auth-required, restricted)
+        // shouldn't break the channel — the one-shot backfill above already
+        // covers what it can, and the launch card degrades to the app name.
+        error: () => {}
+      });
+    return () => liveSub.unsubscribe();
   });
 
   // Composer "+" apps menu (Task 7): pick the curated pad app or a discovered

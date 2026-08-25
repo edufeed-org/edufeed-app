@@ -221,6 +221,38 @@ const webxdcShareEvent = signWith(
   },
   OTHER_SK
 );
+// `livetitlechat`: isolated fixture (followup-1) for the live-subscription
+// title layer — a session shared here has NO 9450 backfill history at all
+// (the fake pool's request() 9450 branch only answers `webxdcStateEvent`'s
+// own session id, so this one comes back empty), reproducing gap 1: a
+// freshly-shared pad with zero state events yet at open time. The test pushes
+// a 9450 event through the mocked live subscription and expects the launch
+// card's title to update without a reload.
+const metadataEventLiveTitle = signWith(
+  { kind: 39000, tags: [['d', 'livetitlechat'], ['name', 'Live Title Chat'], ['private']] },
+  RELAY_SK
+);
+const membersEventLiveTitle = signWith(
+  {
+    kind: 39002,
+    tags: [
+      ['d', 'livetitlechat'],
+      ['p', ME]
+    ]
+  },
+  RELAY_SK
+);
+const liveTitleShareEvent = signWith(
+  {
+    ...buildAppShareTemplate(
+      'livetitlechat',
+      { url: 'https://blossom.example/pad2.xdc', sha256: 'c'.repeat(64), name: 'Pad', iconUrl: '' },
+      'session-live-1'
+    ),
+    created_at: 1700000006
+  },
+  OTHER_SK
+);
 // Enrichment fixture for the session-title effect (moved from GroupAppsBar
 // into GroupChat itself): the latest 9450 state event's `document` tag,
 // returned by the fake pool's request() below when it sees the effect's own
@@ -354,6 +386,11 @@ const walledChatCalls = vi.hoisted(() => ({ roster: 0, messages: 0 }));
 // for a relay that refuses ONLY the roster REQ, per the coordinator's
 // requirement 1).
 const rosterOnlyChatCalls = vi.hoisted(() => ({ roster: 0 }));
+// The live 9450-title subscription (followup-1) is a real, long-lived RxJS
+// Subject rather than a static fixture list — the test drives it by hand
+// (`.next(...)`) to prove the map updates without a reload. Populated by the
+// fake pool's `subscription()` the moment `livetitlechat`'s effect mounts.
+const liveTitleSubjectHolder = vi.hoisted(() => /** @type {{ value: any }} */ ({ value: null }));
 // Mutable holder for the relay's NIP-11 document (finding 2's test needs to
 // flip auth_required per test) — same pattern as joinedCommunikeyEventsHolder
 // below. Defaults to auth-required, matching the badges test's expectation
@@ -375,7 +412,8 @@ vi.mock('$lib/stores/nostr-infrastructure.svelte', async () => {
     of: rxOf,
     NEVER: rxNever,
     merge: rxMerge,
-    Observable: rxObservable
+    Observable: rxObservable,
+    Subject: rxSubject
   } = await import('rxjs');
   const eventStore = new EventStore();
   // applesauce's default verifier (its own nostr-tools 2.19.4 / @noble 1.3.1)
@@ -428,6 +466,7 @@ vi.mock('$lib/stores/nostr-infrastructure.svelte', async () => {
           if (d === 'adminchat')
             return rxOf(metadataEventAdmin, adminsEventAdmin, membersEventAdmin);
           if (d === 'webxdcchat') return rxOf(metadataEventWebxdc, membersEventWebxdc);
+          if (d === 'livetitlechat') return rxOf(metadataEventLiveTitle, membersEventLiveTitle);
           if (d === 'authchat') return rxOf(metadataEventAuthNoPrivate, membersEventAuthNoPrivate);
           if (d === 'emptychat') return rxOf(metadataEventEmptyRoster, membersEventEmptyRoster);
           // A group whose metadata REQ yields nothing (relay hiccup, race
@@ -460,10 +499,27 @@ vi.mock('$lib/stores/nostr-infrastructure.svelte', async () => {
         },
         // keep the subscription open after replay so unsubscribe paths run
         subscription: (/** @type {any} */ filters) => {
+          const filterList = Array.isArray(filters) ? filters : [filters];
+          // GroupChat's own live session-title layer (followup-1): a
+          // long-lived {kinds:[9450], '#h':[...]} sub, mounted unconditionally
+          // for every channel. Routed ahead of the h-based chat/reactions
+          // branches below (same reason the request() 9450 branch is routed
+          // first) so it never collides with — or gets counted by — the
+          // walledchat/restrictedchat retry-counter fixtures further down,
+          // which model the KIND 9/7 messages subscription's own refusals.
+          if (filterList.some((/** @type {any} */ f) => f?.kinds?.includes(9450))) {
+            const h = filterList[0]?.['#h']?.[0];
+            if (h === 'livetitlechat') {
+              const subject = new rxSubject();
+              liveTitleSubjectHolder.value = subject;
+              return subject;
+            }
+            return rxNever;
+          }
           // A private group the active user is NOT a member of: the relay
           // answers the chat REQ with CLOSED restricted (NIP-29) — modelled
           // as an erroring observable, same as applesauce surfaces it.
-          const h = Array.isArray(filters) ? filters[0]?.['#h']?.[0] : filters?.['#h']?.[0];
+          const h = filterList[0]?.['#h']?.[0];
           if (h === 'restrictedchat') {
             return new rxObservable((/** @type {any} */ sub) =>
               sub.error(new Error('restricted: not a member'))
@@ -491,6 +547,9 @@ vi.mock('$lib/stores/nostr-infrastructure.svelte', async () => {
           if (h === 'hangchat') return rxNever;
           // webxdcchat: isolated timeline holding only the webxdc share.
           if (h === 'webxdcchat') return rxMerge(rxOf(webxdcShareEvent), rxNever);
+          // livetitlechat: isolated timeline holding only its own webxdc
+          // share (session-live-1), with zero 9450 history — see fixture.
+          if (h === 'livetitlechat') return rxMerge(rxOf(liveTitleShareEvent), rxNever);
           return rxMerge(
             rxOf(otherRoot, otherReply, chatEvent, firstReply, nestedReply, legacyNested),
             rxNever
@@ -1374,6 +1433,32 @@ describe('GroupChat', () => {
       const card = launchButton.closest('div');
       await waitFor(() => expect(card?.textContent).toContain('Meeting notes'));
       expect(card?.textContent).toContain('Pad');
+    });
+
+    // followup-1 fix: a freshly-shared pad has zero 9450 history at open
+    // time (the one-shot backfill above finds nothing for `session-live-1`),
+    // and nothing previously re-triggered that backfill once the first edit
+    // landed. The new live subscription (mounted unconditionally, not gated
+    // on sessionKey) must pick this up without a reload.
+    it('updates the launch card title from a live 9450 edit with no prior backfill', async () => {
+      render(GroupChat, { props: { pointer: { relay: GROUP_RELAY, id: 'livetitlechat' } } });
+      const launchButton = await screen.findByText('Open app');
+      const card = launchButton.closest('div');
+      // No backfill history: the title line hasn't appeared yet.
+      expect(card?.textContent).not.toContain('My Title');
+
+      await waitFor(() => expect(liveTitleSubjectHolder.value).toBeTruthy());
+      const subject = /** @type {any} */ (liveTitleSubjectHolder.value);
+      subject.next({
+        kind: 9450,
+        tags: [
+          ['h', 'livetitlechat'],
+          ['i', 'session-live-1'],
+          ['document', 'My Title']
+        ]
+      });
+
+      await waitFor(() => expect(card?.textContent).toContain('My Title'));
     });
 
     // Composer text becomes the share message (followup-2): the timeline
