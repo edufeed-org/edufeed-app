@@ -18,6 +18,7 @@ import { finalizeEvent, generateSecretKey, getPublicKey } from 'nostr-tools';
 // between tests the same way a fresh page load would start clean.
 import { __resetAuthAttempts } from '$lib/groups/relay-auth.js';
 import { buildAppShareTemplate } from '$lib/webxdc/session-events.js';
+import { goto } from '$app/navigation';
 
 // REAL keys + signatures: the mock feeds a real applesauce EventStore, which
 // rejects events whose id/sig don't verify — fakes would silently vanish and
@@ -718,6 +719,7 @@ describe('GroupChat', () => {
     publishOptimisticMock.mockClear();
     signEvent.mockClear();
     authenticateSpy.mockClear();
+    vi.mocked(goto).mockClear();
     activeUserHolder.current = { pubkey: ME, signer: { signEvent } };
     relayCalls.length = 0;
     requestCalls.length = 0;
@@ -1547,7 +1549,6 @@ describe('GroupChat', () => {
     // its own sendToChat/host wiring is covered by webxdc-host.test.js and
     // group-app-stage.svelte.test.js.
     it('turns a launched app share into an article-publish handoff via the create route', async () => {
-      const { goto } = await import('$app/navigation');
       render(GroupChat, { props: { pointer: { relay: GROUP_RELAY, id: 'webxdcchat' } } });
 
       const launchButton = await screen.findByText('Open app');

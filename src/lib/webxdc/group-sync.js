@@ -10,8 +10,8 @@
  * read failure itself (paging or the live subscription), for the case where
  * the proactive auth hadn't landed yet when the session's own reads started.
  */
-import { firstValueFrom } from 'rxjs';
-import { toArray } from 'rxjs/operators';
+import { timer } from 'rxjs';
+import { takeUntil, toArray } from 'rxjs/operators';
 import { isAuthRequiredError, isRestrictedError } from '$lib/groups/relay-auth.js';
 import {
   WEBXDC_STATE_KIND,
@@ -108,26 +108,70 @@ export function createGroupSync({
     return true;
   };
 
+  // The in-flight page request's subscription (and its resolver), so stop()
+  // can cancel a page that's still waiting and unstick the awaiting
+  // fetchBackfill loop instead of leaving it hung forever.
+  /** @type {import('rxjs').Subscription | null} */
+  let pageSub = null;
+  /** @type {((events: any[]) => void) | null} */
+  let resolvePendingPage = null;
+
   /** One page of stored 9450s, bounded above by `until` when given.
+   *
+   * Bounded below (completion, not just first-event) by `takeUntil(timer())`:
+   * applesauce's `Relay.request(filter, {timeout})` only bounds time-to-
+   * FIRST-event — once one event has arrived, completion depends solely on
+   * the relay's own EOSE. A relay that emits events but never EOSEs would
+   * otherwise leave `toArray()` never emitting and this page (and the whole
+   * backfill) hanging forever — the same `timedPool` idiom this codebase
+   * already uses elsewhere for exactly that failure class. The request's own
+   * `{timeout}` still covers the zero-event case (errors → caught by the
+   * caller → freeze-empty path).
    * @param {number} [until] */
-  async function fetchPage(until) {
+  function fetchPage(until) {
     const filter = {
       ...stateFilter(),
       limit: PAGE_LIMIT,
       ...(until !== undefined ? { until } : {})
     };
-    return firstValueFrom(relayConn.request(filter, { timeout: PAGE_TIMEOUT_MS }).pipe(toArray()));
+    return new Promise((resolve, reject) => {
+      resolvePendingPage = resolve;
+      pageSub = relayConn
+        .request(filter, { timeout: PAGE_TIMEOUT_MS })
+        .pipe(takeUntil(timer(PAGE_TIMEOUT_MS)), toArray())
+        .subscribe({
+          next: (/** @type {any[]} */ events) => resolve(events),
+          error: (/** @type {any} */ err) => reject(err)
+        });
+    }).finally(() => {
+      pageSub = null;
+      resolvePendingPage = null;
+    });
   }
 
-  /** Pages backward through stored state until a short page, or the cap. */
+  /** Pages backward through stored state until a short page, an
+   * already-fully-seen page (see below), or the page cap. */
   async function fetchBackfill() {
     /** @type {any[]} */
     let collected = [];
     /** @type {number | undefined} */
     let until;
+    // Tracks ids across pages within THIS backfill run (separate from the
+    // module's `seenIds`, which only fills in once the whole backfill is
+    // folded in at the end) — lets a page that returned nothing NEW stop the
+    // loop instead of refetching the same page forever.
+    const pageSeenIds = new Set();
     for (let page = 0; page < MAX_PAGES; page++) {
-      const events = await fetchPage(until);
-      collected = collected.concat(events);
+      const events = /** @type {any[]} */ (await fetchPage(until));
+      const newEvents = events.filter((ev) => ev?.id && !pageSeenIds.has(ev.id));
+      if (events.length > 0 && newEvents.length === 0) {
+        // `until` didn't advance the window — e.g. more than PAGE_LIMIT
+        // events share the exact oldest created_at, so the inclusive
+        // boundary below just hands back the same page again.
+        break;
+      }
+      for (const ev of newEvents) pageSeenIds.add(ev.id);
+      collected = collected.concat(newEvents);
       if (events.length < PAGE_LIMIT) break;
       if (page === MAX_PAGES - 1) {
         console.warn(
@@ -139,7 +183,11 @@ export function createGroupSync({
         (/** @type {number} */ min, /** @type {any} */ ev) => Math.min(min, ev.created_at),
         Infinity
       );
-      until = oldest - 1;
+      // Inclusive boundary (not `oldest - 1`): a page cut must not skip
+      // events sharing the oldest returned created_at. The overlap this
+      // creates is absorbed above (this run's pageSeenIds) and again at
+      // fold-in time (the module's seenIds).
+      until = oldest;
     }
     return collected;
   }
@@ -147,9 +195,13 @@ export function createGroupSync({
   /** @type {any} */
   let stateSub = null;
 
-  function openLiveSubscription() {
+  /** @param {number} [since] only set once the backfill collected at least
+   *   one event — the live sub then picks up where the backfill left off
+   *   instead of replaying the whole history it just fetched. */
+  function openLiveSubscription(since) {
     if (stopped) return;
-    stateSub = relayConn.subscription([stateFilter()]).subscribe({
+    const filter = { ...stateFilter(), ...(since !== undefined ? { since } : {}) };
+    stateSub = relayConn.subscription([filter]).subscribe({
       next: (/** @type {any} */ response) => {
         // Backfill already ran via fetchBackfill() above; a live-sub EOSE
         // (some relay implementations still send one) is a no-op now.
@@ -159,7 +211,7 @@ export function createGroupSync({
       error: (/** @type {any} */ err) => {
         if (claimAuthRetry(err)) {
           Promise.resolve(authenticate?.())
-            .then(openLiveSubscription)
+            .then(() => openLiveSubscription(since))
             .catch(() => onError?.(err, 'read'));
           return;
         }
@@ -188,10 +240,14 @@ export function createGroupSync({
       }
     }
     if (stopped) return;
+    const newest =
+      events.length > 0
+        ? events.reduce((/** @type {number} */ max, ev) => Math.max(max, ev.created_at), -Infinity)
+        : undefined;
     events.sort((a, b) => a.created_at - b.created_at || (a.id < b.id ? -1 : 1));
     for (const ev of events) append(ev);
     notify();
-    openLiveSubscription();
+    openLiveSubscription(newest);
   }
 
   startBackfill();
@@ -280,6 +336,13 @@ export function createGroupSync({
       if (realtimeCooldown) clearTimeout(realtimeCooldown);
       realtimeCooldown = null;
       realtimePending = null;
+      // Cancel an in-flight backfill page and unstick the `await fetchPage`
+      // inside fetchBackfill's loop (unsubscribing alone would never
+      // settle that promise) — the loop then sees a short/empty page,
+      // returns, and startBackfill's own `if (stopped) return;` guard stops
+      // it from folding in events or opening the live sub.
+      pageSub?.unsubscribe();
+      resolvePendingPage?.([]);
       stateSub?.unsubscribe();
       realtimeSub?.unsubscribe();
       realtimeSub = null;

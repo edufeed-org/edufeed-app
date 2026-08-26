@@ -22,7 +22,7 @@ function makeRelay(pages = [[]]) {
       requestCall++;
       return of(...page);
     }),
-    subscription: vi.fn(() => {
+    subscription: vi.fn((/** @type {any} */ _filters) => {
       const s = new Subject();
       subjects.push(s);
       return s.asObservable();
@@ -71,8 +71,37 @@ describe('createGroupSync', () => {
 
     await vi.waitFor(() => expect(sync.getUpdates()).toHaveLength(501));
     expect(relay.request).toHaveBeenCalledTimes(2);
-    // Second page's filter is bounded by the first page's oldest created_at - 1.
-    expect(relay.request.mock.calls[1][0]).toMatchObject({ until: 500 });
+    // Second page's filter is bounded by the first page's oldest created_at,
+    // INCLUSIVE — not `oldest - 1`, which would skip any other event sharing
+    // that same timestamp across the page cut (see the dedicated test below).
+    expect(relay.request.mock.calls[1][0]).toMatchObject({ until: 501 });
+  });
+
+  it('does not lose events sharing the oldest created_at across a page cut (inclusive `until`)', async () => {
+    // 500 events on the first page, the last two sharing the same oldest
+    // created_at (501). An exclusive `until = oldest - 1` would never ask
+    // for created_at 501 again, silently dropping whichever of the two
+    // didn't happen to land in the first page's own result set.
+    const fullPage = [
+      ...Array.from({ length: 498 }, (_, i) => stateEv(`p1-${i}`, 1000 - i, i)), // 1000..503
+      stateEv('p1-498', 501, 498),
+      stateEv('p1-499', 501, 499)
+    ];
+    // Second page: the relay re-includes the 501 event it already sent (the
+    // inclusive boundary's overlap) plus one genuinely new, older event.
+    const secondPage = [stateEv('p1-499', 501, 499), stateEv('p2-0', 400, 999)];
+    const relay = makeRelay([fullPage, secondPage]);
+    const sync = createGroupSync({
+      relayConn: relay,
+      groupId: GROUP,
+      sessionId: SID,
+      publish: vi.fn()
+    });
+
+    // 500 distinct ids from page one + exactly one new id from page two —
+    // the re-sent p1-499 must not be double-counted.
+    await vi.waitFor(() => expect(sync.getUpdates()).toHaveLength(501));
+    expect(relay.request).toHaveBeenCalledTimes(2);
   });
 
   it('sendState publishes and appends optimistically, deduped against echo', async () => {
@@ -127,6 +156,94 @@ describe('createGroupSync', () => {
     expect(sync.getUpdates()).toEqual([]);
     expect(onError).toHaveBeenCalledWith(expect.any(Error), 'read');
     await vi.waitFor(() => expect(relay.subjects).toHaveLength(1)); // live sub still opens
+  });
+
+  it('freezes with whatever arrived when a page emits events but never completes (no EOSE)', async () => {
+    // applesauce's Relay.request(filter, {timeout}) only bounds time-to-
+    // FIRST-event — once one event has arrived, completion depends solely
+    // on the relay's own EOSE. Without takeUntil(timer()) in fetchPage this
+    // relay shape (an event, then silence forever) would hang the backfill
+    // — and the whole session — forever.
+    vi.useFakeTimers();
+    try {
+      const relay = makeRelay();
+      const neverCompletes = new Subject();
+      relay.request = vi.fn(() => neverCompletes);
+      const onError = vi.fn();
+      const notified = vi.fn();
+      const sync = createGroupSync({
+        relayConn: relay,
+        groupId: GROUP,
+        sessionId: SID,
+        publish: vi.fn(),
+        onError
+      });
+      sync.subscribe(notified);
+
+      neverCompletes.next(stateEv('a', 100, 1)); // one event arrives...
+      // ...and then never an EOSE/complete.
+
+      await vi.advanceTimersByTimeAsync(5000);
+
+      expect(sync.getUpdates().map((u) => u.payload)).toEqual([1]);
+      expect(notified).toHaveBeenCalledTimes(1);
+      expect(onError).not.toHaveBeenCalled();
+      expect(relay.subjects).toHaveLength(1); // live sub opened once frozen
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('stop() cancels an in-flight backfill page instead of leaving it hung forever', async () => {
+    const relay = makeRelay();
+    const neverCompletes = new Subject();
+    relay.request = vi.fn(() => neverCompletes);
+    const notified = vi.fn();
+    const sync = createGroupSync({
+      relayConn: relay,
+      groupId: GROUP,
+      sessionId: SID,
+      publish: vi.fn()
+    });
+    sync.subscribe(notified);
+
+    sync.stop();
+    // Let the unstuck `await fetchPage(...)` and its continuation settle.
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(neverCompletes.observed).toBe(false); // the page subscription was actually torn down
+    expect(sync.getUpdates()).toEqual([]);
+    expect(notified).not.toHaveBeenCalled(); // stopped before the freeze/notify ever ran
+    expect(relay.subjects).toHaveLength(0); // live sub never opened
+  });
+
+  it('opens the live subscription bounded by `since` = the newest backfilled event', async () => {
+    const relay = makeRelay([[stateEv('a', 100, 1), stateEv('b', 200, 2)]]);
+    const sync = createGroupSync({
+      relayConn: relay,
+      groupId: GROUP,
+      sessionId: SID,
+      publish: vi.fn()
+    });
+
+    await vi.waitFor(() => expect(sync.getUpdates()).toHaveLength(2));
+    expect(relay.subscription).toHaveBeenCalledWith([expect.objectContaining({ since: 200 })]);
+  });
+
+  it('omits `since` on the live subscription when the backfill collected nothing', async () => {
+    const relay = makeRelay([[]]);
+    createGroupSync({
+      relayConn: relay,
+      groupId: GROUP,
+      sessionId: SID,
+      publish: vi.fn()
+    });
+
+    await vi.waitFor(() => expect(relay.subjects).toHaveLength(1));
+    const [filters] = relay.subscription.mock.calls[0];
+    expect(filters[0]).not.toHaveProperty('since');
   });
 
   it('retries the backfill once after authenticate() on an auth-required paging error', async () => {
