@@ -7,6 +7,8 @@
   import * as m from '$lib/paraglide/messages';
   import { nip19 } from 'nostr-tools';
   import { manager } from '$lib/stores/accounts.svelte';
+  import { useUserProfile } from '$lib/stores/user-profile.svelte.js';
+  import { getDisplayName } from 'applesauce-core/helpers';
   import { fetchAndVerifyXdc, unzipXdc, XdcIntegrityError } from './xdc-archive.js';
   import { sandboxSubdomain } from './subdomain.js';
   import { createLocalSync } from './local-sync.js';
@@ -45,11 +47,22 @@
 
   const subdomain = $derived(sandboxSubdomain(appKey));
 
+  // Reactive profile for the active pubkey; identity() reads it synchronously
+  // at launch time (see below).
+  const getOwnProfile = useUserProfile(() => manager.active?.pubkey);
+
   function identity() {
     const pubkey = manager.active?.pubkey;
     if (!pubkey) return { selfAddr: 'anonymous', selfName: 'Anonymous' };
     const npub = nip19.npubEncode(pubkey);
-    return { selfAddr: npub, selfName: npub.slice(0, 12) + '…' };
+    // selfAddr stays the full npub — STABLE identity the editor derives user
+    // colors from; do not change. selfName MAY map to the user's display
+    // name (NIP-DC flow §6) and is captured once per launch: a profile that
+    // loads mid-session applies on the next launch, which is acceptable.
+    return {
+      selfAddr: npub,
+      selfName: getDisplayName(getOwnProfile(), npub.slice(0, 12) + '…')
+    };
   }
 
   /** Default sendToChat handling outside a channel: save the file locally.
