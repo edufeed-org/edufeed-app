@@ -24,6 +24,17 @@ vi.mock('$lib/stores/nostr-infrastructure.svelte', () => ({
 
 vi.mock('$lib/stores/accounts.svelte', () => ({ manager: { active: null } }));
 
+// WebxdcPlayer (mounted by GroupAppStage) imports useUserProfile for the
+// collaborative-cursor display name. Its real module chain reaches
+// profile-subscription.js, which calls createAddressLoader(pool, ...) at
+// import time — against this file's mocked (pool-only) nostr-infrastructure
+// module, that throws during collection ("no eventStore export"), killing
+// every test in the file before any of them run. Same mock shape as
+// NoteCard.test.js and friends.
+vi.mock('$lib/stores/user-profile.svelte.js', () => ({
+  useUserProfile: () => () => null
+}));
+
 vi.mock('$lib/paraglide/messages', () => ({
   webxdc_session_stage_close: () => 'Close app',
   webxdc_session_publish_failed: (/** @type {{reason: string}} */ { reason }) =>
