@@ -1,5 +1,10 @@
 /** @vitest-environment node */
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
+
+vi.mock('$lib/paraglide/messages', () => ({ message_time_now: () => 'now' }));
+vi.mock('$lib/helpers/dates.js', () => ({
+  formatDate: (/** @type {Date} */ d, /** @type {any} */ o) => d.toLocaleDateString('de-DE', o)
+}));
 import {
   formatMessageTimestamp,
   getUserDisplayName,

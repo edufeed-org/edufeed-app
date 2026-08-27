@@ -19,6 +19,8 @@ import {
   LEAVE_REQUEST_KIND,
   getPublicGroups
 } from 'applesauce-common/helpers/groups';
+import { normalizeURL } from 'applesauce-core/helpers/url';
+import { buildReplyTags } from '$lib/helpers/threading.js';
 
 /**
  * @typedef {{relay: string, id: string}} GroupPointer
@@ -41,6 +43,30 @@ export function parseGroupInput(input) {
   } catch {
     return null;
   }
+}
+
+/**
+ * parseGroupInput, but forgiving about the scheme: people paste what their
+ * browser or other app gave them, and that is https more often than wss.
+ * @param {string} input
+ * @returns {{relay: string, id: string} | null}
+ */
+export function parseGroupAddress(input) {
+  const trimmed = (input ?? '').trim();
+  if (!trimmed) return null;
+
+  // Only accept schemes we recognize: wss, http, https (and bare host'id with no scheme).
+  // Reject ftp, gopher, etc.
+  const schemeMatch = trimmed.match(/^([a-z][a-z0-9+.-]*):\/\//i);
+  if (schemeMatch) {
+    const scheme = schemeMatch[1].toLowerCase();
+    if (!['wss', 'ws', 'http', 'https'].includes(scheme)) {
+      return null;
+    }
+  }
+
+  const mapped = trimmed.replace(/^(https?|ws):\/\//i, 'wss://');
+  return parseGroupInput(mapped);
 }
 
 /**
@@ -68,26 +94,75 @@ export function isValidRelayUrl(relay) {
 }
 
 /**
- * App route for a group, with the `host'id` pointer URL-encoded once.
+ * A relay URL is a `ws:`/`wss:` URL with a DNS-shaped host — the scheme NIP-29
+ * groups actually connect over. {@link isValidRelayUrl} deliberately skips the
+ * scheme check (its caller reaches it through `decodeGroupPointer`, which has
+ * already forced a scheme); this is for callers validating a raw, untrusted
+ * value — e.g. a user-typed relay URL in a "create group" form, which would
+ * otherwise happily accept `https://` and only fail once the group already
+ * exists on the relay.
+ * @param {string} relay
+ */
+export function isValidRelayWebsocketUrl(relay) {
+  /** @type {string} */
+  let protocol;
+  try {
+    protocol = new URL(relay).protocol;
+  } catch {
+    return false;
+  }
+  return (protocol === 'ws:' || protocol === 'wss:') && isValidRelayUrl(relay);
+}
+
+/**
+ * The pointer as a string, in the shortest form that still addresses the SAME
+ * relay.
+ *
+ * `encodeGroupPointer` emits `new URL(relay).hostname`, so a port and a `ws:`
+ * scheme are silently dropped — the resulting pointer then names a different
+ * relay, and the failure is a connection to nothing rather than an error.
+ * `decodeGroupPointer` reads the spelled-out relay losslessly, so fall back to
+ * that whenever the short form would not decode back to where we started.
+ * @param {GroupPointer} pointer
+ * @returns {string}
+ */
+export function groupPointerString(pointer) {
+  const short = encodeGroupPointer(pointer);
+  try {
+    const decoded = decodeGroupPointer(short);
+    if (decoded?.relay && normalizeURL(decoded.relay) === normalizeURL(pointer.relay)) return short;
+  } catch {
+    // unparseable short form — spell it out
+  }
+  return `${pointer.relay}'${pointer.id}`;
+}
+
+/**
+ * App route for a group, with the pointer URL-encoded once.
  * @param {GroupPointer} pointer
  */
 export function groupHref(pointer) {
-  return `/groups/${encodeURIComponent(encodeGroupPointer(pointer))}`;
+  return `/groups/${encodeURIComponent(groupPointerString(pointer))}`;
 }
 
 /**
  * Kind-9 group chat message: `h` tag first (same shape as the public
  * community chat), optional NIP-10 marked reply.
+ *
+ * `replyTo` is the message being replied to WITH ITS TAGS — the thread root is
+ * resolved from them (see helpers/threading.js). Passing only `{id, pubkey}`
+ * still works and yields the top-level shape, which is correct for a message
+ * that has no tags to inherit a root from.
  * @param {string} groupId
  * @param {string} content
- * @param {{id: string, pubkey: string} | null} [replyTo]
+ * @param {{id: string, pubkey: string, tags?: string[][]} | null} [replyTo]
  * @returns {{kind: number, content: string, created_at: number, tags: string[][]}}
  */
 export function buildGroupMessageTemplate(groupId, content, replyTo = null) {
   /** @type {string[][]} */
   const tags = [['h', groupId]];
   if (replyTo) {
-    tags.push(['e', replyTo.id, '', 'reply']);
+    tags.push(...buildReplyTags(replyTo));
     tags.push(['p', replyTo.pubkey]);
   }
   return { kind: 9, content, created_at: Math.floor(Date.now() / 1000), tags };
@@ -122,30 +197,87 @@ export function buildLeaveRequestTemplate(groupId) {
 /**
  * Kind-10009 groups-list update: preserves every non-`group` tag and the
  * content (the NIP-51 hidden section) verbatim, then adds or removes ONE
- * public `["group", id, relay]` entry. Dedupe is by (id, relay).
+ * public `["group", id, relay]` entry. `remove` accepts one pointer or many —
+ * a community teardown prunes root + every channel in one rewrite. Dedupe is
+ * by (id, relay).
  * @param {{content?: string, tags?: string[][]} | null | undefined} existing the current 10009 event, if any
- * @param {{add?: GroupPointer, remove?: GroupPointer}} change
+ * @param {{add?: GroupPointer, remove?: GroupPointer | GroupPointer[]}} change
  * @returns {{kind: number, content: string, created_at: number, tags: string[][]}}
  */
 export function buildGroupsListTemplate(existing, change) {
   const keepTags = (existing?.tags ?? []).filter((t) => t[0] !== 'group');
+  // Compare and serialize relays in normalized form: other clients write
+  // "wss://host" where we write "wss://host/", and a raw-string dedupe lets
+  // one group pile up twin entries — two rail tiles for one host. Rewriting
+  // the list is also the moment existing spellings get healed.
+  const normal = (/** @type {string} */ relay) => {
+    try {
+      return normalizeURL(relay);
+    } catch {
+      return relay;
+    }
+  };
   /** @type {GroupPointer[]} */
   let groups = existing ? (getPublicGroups(/** @type {any} */ (existing)) ?? []) : [];
+  groups = groups.map((g) => ({ ...g, relay: normal(g.relay) }));
 
   if (change.remove) {
-    const target = change.remove;
-    groups = groups.filter((g) => !(g.id === target.id && g.relay === target.relay));
+    const removals = (Array.isArray(change.remove) ? change.remove : [change.remove]).map((r) => ({
+      id: r.id,
+      relay: normal(r.relay)
+    }));
+    groups = groups.filter((g) => !removals.some((t) => g.id === t.id && g.relay === t.relay));
   }
   if (change.add) {
-    const target = change.add;
+    const target = { id: change.add.id, relay: normal(change.add.relay) };
     groups = groups.filter((g) => !(g.id === target.id && g.relay === target.relay));
     groups.push(target);
   }
 
+  // The host's `r` (server) tag rides along with every add: Armada and
+  // Flotilla build their server rails from `r` tags ONLY, so a `group` entry
+  // without its host's `r` tag is invisible there (laoc, 2026-08-19).
+  // Deduped against existing spellings; never removed here — dropping one
+  // group says nothing about whether the user still wants the server.
+  const tags = [...keepTags];
+  if (change.add) {
+    const serverUrl = normal(change.add.relay);
+    const hasServer = tags.some((t) => t[0] === 'r' && normal(t[1]) === serverUrl);
+    if (!hasServer) tags.push(['r', serverUrl]);
+  }
   return {
     kind: GROUPS_LIST_KIND,
     content: existing?.content ?? '',
     created_at: Math.floor(Date.now() / 1000),
-    tags: [...keepTags, ...groups.map((g) => ['group', g.id, g.relay])]
+    tags: [...tags, ...groups.map((g) => ['group', g.id, g.relay])]
   };
+}
+
+/**
+ * Whether a relay refusal means "you are not a member here". Wordings
+ * measured live: buzz answers "blocked: unknown member", hzrd149's blossom
+ * endpoint "relay membership required", khatru variants "not a member".
+ * @param {unknown} error
+ * @returns {boolean}
+ */
+export function isMembershipRefusal(error) {
+  const message = String(/** @type {any} */ (error)?.message ?? '');
+  return /unknown member|not a member|membership required/i.test(message);
+}
+
+/**
+ * A join or put-user refused because the target is ALREADY on the roster —
+ * not a failure: membership is exactly the state the action wanted (laoc,
+ * 2026-08-19 — a member whose roster read lagged saw the join button and got
+ * a raw error for using it). Pyramid words this differently per path:
+ * 'duplicate: already a member' for a member's own 9021, 'blocked: all
+ * targets are members already' for an admin's redundant 9000 — missing the
+ * second aborted approving a channel knock from anyone already seated in the
+ * root (laoc, 2026-08-21).
+ * @param {unknown} error
+ * @returns {boolean}
+ */
+export function isAlreadyMemberError(error) {
+  const message = String(/** @type {any} */ (error)?.message ?? '');
+  return /already a member|members already/i.test(message);
 }

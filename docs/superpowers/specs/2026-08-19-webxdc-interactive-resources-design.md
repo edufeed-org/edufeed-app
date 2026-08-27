@@ -199,6 +199,12 @@ educator-hostile.
 
 ## Section 5 — Phase 2: shared sessions in communities
 
+> **Superseded (2026-08-25):** session state is now scoped to the NIP-29
+> group id on the groups relay — see
+> `2026-08-25-channel-webxdc-sessions-design.md`. The kinds (9450/24450)
+> and AppSync seam below are unchanged; the `h` scoping and relay routing
+> are not.
+
 - **Sharing:** posting an interactive resource into community chat
   creates a kind-9 message with an `imeta` entry: `url`, `m
   application/x-webxdc`, `image` (icon), `webxdc <fresh-uuid>` —

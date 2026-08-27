@@ -11,17 +11,20 @@ import { render, fireEvent, screen, waitFor } from '@testing-library/svelte';
 // vi.mock factories below are hoisted above these consts, so PK_A/SELF must
 // be declared via vi.hoisted() to avoid a "Cannot access before
 // initialization" TDZ error at hoist time.
-const { PK_A, SELF } = vi.hoisted(() => ({
+const { PK_A, SELF, COMMUNITY_PK } = vi.hoisted(() => ({
   PK_A: 'a'.repeat(64),
-  SELF: 'f'.repeat(64)
+  SELF: 'f'.repeat(64),
+  COMMUNITY_PK: 'c'.repeat(64)
 }));
 
 vi.mock('$lib/concord/client.svelte.js', () => ({
   getConcordClient: () => ({ invites: { forCommunity: () => [] } })
 }));
-// No community members → exercises the empty quick-list + empty-state hint.
+// Members include self AND the community's own pubkey (a separate-keypair
+// owner scenario) — the empty-quick-list tests below expect both filtered
+// out, leaving nothing to pick.
 vi.mock('$lib/helpers/contentTypes.js', () => ({
-  getVerifiedMembers: () => ({ allMembers: [SELF], perSection: new Map() })
+  getVerifiedMembers: () => ({ allMembers: [SELF, COMMUNITY_PK], perSection: new Map() })
 }));
 vi.mock('$lib/stores/accounts.svelte', () => ({ manager: { active: { pubkey: SELF } } }));
 vi.mock('$lib/stores/profile-map.svelte.js', () => ({ useProfileMap: () => () => new Map() }));
@@ -65,7 +68,7 @@ function renderSheet(ch) {
     props: {
       community,
       channel: ch,
-      communikeyEvent: { pubkey: SELF },
+      communikeyEvent: { pubkey: COMMUNITY_PK },
       canDirect: true,
       onClose: () => {}
     }
@@ -99,6 +102,18 @@ describe('ChannelInviteSheet direct tab', () => {
   it('shows the empty-state hint when there are no quick-pick members', async () => {
     await openDirectTab();
     expect(screen.getByText(/Noch keine Mitglieder|No members to pick/)).toBeTruthy();
+  });
+
+  it('excludes the community pubkey (not just self) from both the quick-pick list and the search input', async () => {
+    await openDirectTab();
+    // Neither self nor the community's own pubkey should render as a
+    // quick-pick row — a separate-keypair owner must not be offered the
+    // community itself as an invitable "member" (handoff #12).
+    expect(screen.queryByText(SELF.slice(0, 12))).toBeNull();
+    expect(screen.queryByText(COMMUNITY_PK.slice(0, 12))).toBeNull();
+    const excludeText = (await screen.findByTestId('stub-exclude')).textContent;
+    expect(excludeText).toContain(SELF);
+    expect(excludeText).toContain(COMMUNITY_PK);
   });
 });
 

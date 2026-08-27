@@ -15,11 +15,11 @@
     LockIcon,
     LockOpenIcon
   } from '$lib/components/icons';
-  import { getCommunityTabs } from '$lib/helpers/contentTypes.js';
-  import { shouldShowChannelsTab, useConcordCommunity } from '$lib/concord/community.svelte.js';
+  import { useConcordCommunity } from '$lib/concord/community.svelte.js';
+  import { parseGroupPointers } from '$lib/groups/community-pointer.js';
+  import { communityNavTabIds } from './community-nav.js';
   import { areaUnreadState } from '$lib/concord/notifications.svelte.js';
   import ConcordUnreadDot from '$lib/components/shared/ConcordUnreadDot.svelte';
-  import { useActiveUser } from '$lib/stores/accounts.svelte';
   import { onMount } from 'svelte';
   import * as m from '$lib/paraglide/messages';
 
@@ -32,7 +32,6 @@
   } = $props();
 
   const getConcord = useConcordCommunity(() => communityEvent);
-  const getActiveUser = useActiveUser();
   // getConcord() isn't reachable in template scope here (the tab loop is a
   // plain {#each}, not inside the $derived.by above), so compute the rollup
   // flags at script level and read them from the template instead.
@@ -79,35 +78,21 @@
   let showRightScroll = $state(false);
 
   const contentTypes = $derived.by(() => {
-    const base = getCommunityTabs(communityEvent).map((id) => ({
+    const concord = getConcord();
+    const ids = communityNavTabIds({
+      communityEvent,
+      concordEnabled: concord.enabled,
+      pointer: concord.pointer,
+      isMember: concord.membership === 'member',
+      // Second source for the same tab, and not Concord: a community
+      // extended by NIP-29 groups has none of the Concord inputs above.
+      hasGroupChannels: parseGroupPointers(communityEvent).length > 0
+    });
+    return ids.map((id) => ({
       id,
       label: tabLabelMap[id]?.() ?? id,
       icon: iconMap[id] ?? ChatIcon
     }));
-    const concord = getConcord();
-    const isOwner = !!communityEvent?.pubkey && communityEvent.pubkey === getActiveUser()?.pubkey;
-    if (
-      shouldShowChannelsTab({
-        enabled: concord.enabled,
-        pointer: concord.pointer,
-        isOwner,
-        isMember: concord.membership === 'member'
-      })
-    ) {
-      // Insert after 'chat' to sit next to the public channels — but a
-      // strict-content community may not have a chat tab at all
-      // (getCommunityTabs can omit it), in which case chatIndex is -1 and
-      // `chatIndex + 1` would insert at index 0, BEFORE Home. Insert before
-      // 'settings' (the last tab) instead so Home always stays first.
-      const chatIndex = base.findIndex((t) => t.id === 'chat');
-      const insertAt = chatIndex === -1 ? base.length - 1 : chatIndex + 1;
-      base.splice(insertAt, 0, {
-        id: 'channels',
-        label: m.concord_tab_label(),
-        icon: LockIcon
-      });
-    }
-    return base;
   });
 
   /**

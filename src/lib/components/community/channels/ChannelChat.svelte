@@ -1,5 +1,6 @@
 <script>
   import { onMount, tick } from 'svelte';
+  import { PeopleIcon } from '$lib/components/icons';
   import { nip19 } from 'nostr-tools';
   // Imports directly from the concord submodule (not the barrel) — same
   // convention as PrivateChannelsView.svelte: bridge.svelte.js has no
@@ -8,6 +9,11 @@
   // this buys defense-in-depth + consistency with the rest of channels/, not
   // a load-bearing SSR requirement for this component specifically.
   import { useObservable } from '$lib/concord/bridge.svelte.js';
+  import {
+    saveScrollPosition,
+    recallScrollPosition,
+    isNearBottom
+  } from '$lib/helpers/scroll-memory.js';
   import { sendChannelMessage } from '$lib/concord/send-message.js';
   import { useProfileMap } from '$lib/stores/profile-map.svelte.js';
   import { useActiveUser } from '$lib/stores/accounts.svelte';
@@ -291,12 +297,67 @@
     showKeyBar = false;
   }
 
+  // Scroll behaviour (laoc, 2026-08-11): pinned to the newest message until
+  // the reader scrolls away — the timeline can rebuild non-monotonically
+  // while messages stream in, so a one-shot "scroll when messages arrive"
+  // lands mid-stream. A saved position from this session is restored instead
+  // when they left mid-scroll.
+  const scrollKey = $derived(channel?.channel_id ? `concord:${channel.channel_id}` : null);
+  let pinnedToBottom = true;
+  let restored = false;
+
+  // Late-loading media (authed blobs on buzz resolve seconds after the last
+  // message lands) grows the content without a count change and would strand
+  // the view above the bottom. `load` doesn't bubble, but a capture-phase
+  // listener on the container sees every descendant image/video finish.
+  function handleContentLoad() {
+    if (pinnedToBottom && scrollContainer) {
+      scrollContainer.scrollTop = scrollContainer.scrollHeight;
+    }
+  }
+
+  // Reactive mirror of pinnedToBottom, for the jump-to-bottom helper button
+  // (common chat UX — laoc, 2026-08-11).
+  let atBottom = $state(true);
+
+  function handleScroll() {
+    if (!scrollContainer) return;
+    pinnedToBottom = isNearBottom(scrollContainer);
+    atBottom = pinnedToBottom;
+  }
+
+  function jumpToBottom() {
+    if (!scrollContainer) return;
+    pinnedToBottom = true;
+    atBottom = true;
+    scrollContainer.scrollTop = scrollContainer.scrollHeight;
+  }
+
   $effect(() => {
     // Read the reactive dep BEFORE any early return (project gotcha: an
     // effect that returns before reading state captures no dependency and
     // never re-runs).
     const count = messages.length;
-    if (count > 0 && scrollContainer) scrollContainer.scrollTop = scrollContainer.scrollHeight;
+    if (count === 0 || !scrollContainer) return;
+    if (!restored) {
+      restored = true;
+      const saved = recallScrollPosition(scrollKey);
+      if (saved && !saved.atBottom) {
+        pinnedToBottom = false;
+        scrollContainer.scrollTop = saved.top;
+        return;
+      }
+    }
+    if (pinnedToBottom) scrollContainer.scrollTop = scrollContainer.scrollHeight;
+  });
+  $effect(() => {
+    return () => {
+      if (!scrollContainer || !restored) return;
+      saveScrollPosition(scrollKey, {
+        top: scrollContainer.scrollTop,
+        atBottom: isNearBottom(scrollContainer)
+      });
+    };
   });
 
   async function send() {
@@ -392,7 +453,8 @@
     data-testid="concord-members-button"
     onclick={() => openOverlay('members')}
   >
-    👥 {getMembers().size}
+    <PeopleIcon class_="w-4 h-4" title="" />
+    {getMembers().size}
   </button>
   <div class="dropdown dropdown-end">
     <button
@@ -489,7 +551,7 @@
     class="flex shrink-0 items-center gap-3 border-b border-warning/30 bg-warning/10 px-4 py-2 text-sm"
   >
     🔑 <span class="flex-1"><b>{m.concord_keybar_title()}</b> {m.concord_keybar_body()}</span>
-    <button class="btn btn-xs btn-neutral" onclick={() => openOverlay('backup')}
+    <button class="btn btn-xs btn-primary" onclick={() => openOverlay('backup')}
       >{m.concord_keybar_action()}</button
     >
     <button class="btn btn-circle btn-ghost btn-xs" onclick={dismissKeyBar}>✕</button>
@@ -507,7 +569,12 @@
   readOnly={dissolved}
   onRsvp={sendRsvp}
 />
-<div class="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-4" bind:this={scrollContainer}>
+<div
+  class="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-4"
+  bind:this={scrollContainer}
+  onscroll={handleScroll}
+  onloadcapture={handleContentLoad}
+>
   <div class="mx-auto max-w-md py-3 text-center text-sm text-base-content/60">
     <div class="text-lg">🔒</div>
     <b>{m.concord_genesis_title({ name: channel.name })}</b>
@@ -601,6 +668,20 @@
       </ChatMessageRow>
     {/snippet}
   </ChatMessageList>
+  {#if !atBottom}
+    <!-- sticky inside the scroller: floats at the bottom edge while reading
+         history, takes no layout height -->
+    <div class="sticky bottom-2 z-10 flex h-0 justify-end overflow-visible pr-2">
+      <button
+        type="button"
+        data-testid="chat-jump-to-bottom"
+        class="btn btn-circle -translate-y-full shadow-md btn-sm"
+        title={m.chat_jump_to_bottom()}
+        aria-label={m.chat_jump_to_bottom()}
+        onclick={jumpToBottom}>↓</button
+      >
+    </div>
+  {/if}
 </div>
 
 {#if dissolved}
@@ -616,6 +697,9 @@
       <button class="btn btn-circle btn-ghost btn-xs" onclick={() => (replyTo = null)}>✕</button>
     </div>
   {/if}
+  <p data-testid="disclosure-line" class="mx-4 px-1 text-xs text-base-content/60">
+    {m.disclosure_encrypted()}
+  </p>
   <div class="relative">
     <MentionAutocomplete
       candidates={mentionCandidates}

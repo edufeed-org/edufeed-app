@@ -7,13 +7,24 @@
   import * as m from '$lib/paraglide/messages';
   import { nip19 } from 'nostr-tools';
   import { manager } from '$lib/stores/accounts.svelte';
+  import { useUserProfile } from '$lib/stores/user-profile.svelte.js';
+  import { getDisplayName } from 'applesauce-core/helpers';
   import { fetchAndVerifyXdc, unzipXdc, XdcIntegrityError } from './xdc-archive.js';
   import { sandboxSubdomain } from './subdomain.js';
   import { createLocalSync } from './local-sync.js';
   import { createWebxdcHost } from './webxdc-host.js';
   import SandboxFrame from './SandboxFrame.svelte';
 
-  let { url = '', sha256 = '', bytes = null, name = '', iconUrl = '', appKey } = $props();
+  let {
+    url = '',
+    sha256 = '',
+    bytes = null,
+    name = '',
+    iconUrl = '',
+    appKey,
+    sync = null,
+    onShareFile = null
+  } = $props();
 
   const READY_TIMEOUT_MS = 15000;
 
@@ -36,11 +47,38 @@
 
   const subdomain = $derived(sandboxSubdomain(appKey));
 
+  // Reactive profile for the active pubkey; identity() reads it synchronously
+  // at launch time (see below).
+  const getOwnProfile = useUserProfile(() => manager.active?.pubkey);
+
   function identity() {
     const pubkey = manager.active?.pubkey;
     if (!pubkey) return { selfAddr: 'anonymous', selfName: 'Anonymous' };
     const npub = nip19.npubEncode(pubkey);
-    return { selfAddr: npub, selfName: npub.slice(0, 12) + '…' };
+    // selfAddr stays the full npub — STABLE identity the editor derives user
+    // colors from; do not change. selfName MAY map to the user's display
+    // name (NIP-DC flow §6) and is captured once per launch: a profile that
+    // loads mid-session applies on the next launch, which is acceptable.
+    return {
+      selfAddr: npub,
+      selfName: getDisplayName(getOwnProfile(), npub.slice(0, 12) + '…')
+    };
+  }
+
+  /** Default sendToChat handling outside a channel: save the file locally.
+   * @param {{name: string, plainText?: string, base64?: string, mime?: string}} file */
+  function downloadShare(file) {
+    const blob =
+      typeof file.plainText === 'string'
+        ? new Blob([file.plainText], { type: 'text/plain' })
+        : new Blob([Uint8Array.from(atob(file.base64 ?? ''), (c) => c.charCodeAt(0))], {
+            type: file.mime || 'application/octet-stream'
+          });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = file.name;
+    a.click();
+    URL.revokeObjectURL(a.href);
   }
 
   async function launch() {
@@ -53,8 +91,8 @@
       } else {
         files = await fetchAndVerifyXdc(url, sha256);
       }
-      const sync = createLocalSync(`webxdc:state:${appKey}`);
-      host = createWebxdcHost(sync, identity());
+      const appSync = sync ?? createLocalSync(`webxdc:state:${appKey}`);
+      host = createWebxdcHost(appSync, identity(), { onShareFile: onShareFile ?? downloadShare });
       filesReady++;
       phase = 'running';
       // A frame that never completes the ready/init handshake would leave a

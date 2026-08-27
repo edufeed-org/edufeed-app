@@ -10,8 +10,9 @@ const REALTIME_MAX_BYTES = 128000;
 /**
  * @param {import('./local-sync.js').AppSync} sync
  * @param {{ selfAddr: string, selfName: string }} identity
+ * @param {{ onShareFile?: (file: {name: string, plainText?: string, base64?: string, mime?: string}) => void }} [opts]
  */
-export function createWebxdcHost(sync, identity) {
+export function createWebxdcHost(sync, identity, opts = {}) {
   /** @type {number | null} */
   let listenerSerial = null; // null until the app registers a listener
   /** @type {(() => void) | null} */
@@ -90,6 +91,22 @@ export function createWebxdcHost(sync, identity) {
           realtimeOff = null;
           return null;
         }
+        case 'webxdc.sendToChat': {
+          if (!opts.onShareFile) throw new Error('sendToChat is not supported');
+          const file = params?.file ?? {};
+          const hasText = typeof file.plainText === 'string';
+          const hasBlob = typeof file.base64 === 'string';
+          if (typeof file.name !== 'string' || !file.name || (!hasText && !hasBlob)) {
+            throw new Error('sendToChat: file name and content required');
+          }
+          opts.onShareFile({
+            name: file.name,
+            ...(hasText && { plainText: file.plainText }),
+            ...(hasBlob && { base64: file.base64 }),
+            ...(typeof file.mime === 'string' && { mime: file.mime })
+          });
+          return null;
+        }
         default:
           throw new Error(`Unknown RPC method: ${method}`);
       }
@@ -147,8 +164,8 @@ function generateBridgeScript({ selfAddr, selfName }) {
     getAllUpdates: function () {
       return request('webxdc.getAllUpdates', {});
     },
-    sendToChat: function () {
-      return Promise.reject(new Error('sendToChat is not supported'));
+    sendToChat: function (message) {
+      return request('webxdc.sendToChat', message || {});
     },
     importFiles: function () {
       return Promise.resolve([]);

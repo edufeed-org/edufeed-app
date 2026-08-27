@@ -22,6 +22,7 @@
     "machine-translate": "inlang machine translate --project project.inlang",
     "publish:vocabs": "node scripts/publish-edufeed-vocabs.mjs",
     "publish:forms": "node scripts/publish-edufeed-forms.mjs",
+    "publish:webxdc-app": "node scripts/publish-webxdc-app.mjs",
     "cleanup:legacy-vocab": "node scripts/delete-legacy-concept-kinds.mjs"
   },
   "devDependencies": {

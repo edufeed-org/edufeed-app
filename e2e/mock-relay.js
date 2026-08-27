@@ -10,11 +10,11 @@ const NIP11 = JSON.stringify({
 
 /**
  * Check if an event matches a single Nostr filter
- * @param {object} event
- * @param {object} filter
+ * @param {import('nostr-tools').NostrEvent} event
+ * @param {import('nostr-tools').Filter} filter
  * @returns {boolean}
  */
-function matchesFilter(event, filter) {
+export function matchesFilter(event, filter) {
   if (filter.kinds && !filter.kinds.includes(event.kind)) return false;
   if (filter.authors && !filter.authors.includes(event.pubkey)) return false;
   if (filter.ids && !filter.ids.includes(event.id)) return false;
@@ -26,7 +26,7 @@ function matchesFilter(event, filter) {
     if (key.startsWith('#') && Array.isArray(values)) {
       const tagName = key.slice(1);
       const eventTagValues = event.tags.filter((t) => t[0] === tagName).map((t) => t[1]);
-      if (!values.some((v) => eventTagValues.includes(v))) return false;
+      if (!values.some((v) => eventTagValues.includes(String(v)))) return false;
     }
   }
 
@@ -36,11 +36,11 @@ function matchesFilter(event, filter) {
 /**
  * Query events matching any of the given filters (OR'd per Nostr spec).
  * Results sorted by created_at desc, limited by the smallest limit across filters.
- * @param {object[]} events
- * @param {object[]} filters
- * @returns {object[]}
+ * @param {import('nostr-tools').NostrEvent[]} events
+ * @param {import('nostr-tools').Filter[]} filters
+ * @returns {import('nostr-tools').NostrEvent[]}
  */
-function queryEvents(events, filters) {
+export function queryEvents(events, filters) {
   const matched = new Set();
   let limit = Infinity;
 
@@ -65,13 +65,14 @@ function queryEvents(events, filters) {
  * Serves both HTTP (NIP-11) and WebSocket (Nostr protocol).
  * Published events are stored at runtime and returned in subsequent queries.
  * @param {number} port
- * @param {object[]} events
+ * @param {import('nostr-tools').NostrEvent[]} events
  * @param {{hangEoseForKinds?: number[]}} [opts]
  * @returns {Promise<{server: http.Server, wss: WebSocketServer}>}
  */
 export function startRelay(port, events = [], opts = {}) {
   // Make events array mutable for runtime additions (published events)
   const storedEvents = [...events];
+  const hangEoseForKinds = opts.hangEoseForKinds ?? [];
 
   return new Promise((resolve) => {
     const server = http.createServer((req, res) => {
@@ -91,7 +92,8 @@ export function startRelay(port, events = [], opts = {}) {
     const wss = new WebSocketServer({ server });
 
     wss.on('connection', (ws) => {
-      ws.on('message', (raw) => {
+      /** @param {any} raw */
+      const onMessage = (raw) => {
         let message;
         try {
           message = JSON.parse(raw.toString());
@@ -110,8 +112,10 @@ export function startRelay(port, events = [], opts = {}) {
           }
           // Skip EOSE if any filter kind is in the hang list (simulates misbehaving relay)
           const shouldHang =
-            opts.hangEoseForKinds?.length > 0 &&
-            filters.some((f) => f.kinds?.some((k) => opts.hangEoseForKinds.includes(k)));
+            hangEoseForKinds.length > 0 &&
+            /** @type {import('nostr-tools').Filter[]} */ (filters).some((f) =>
+              f.kinds?.some((k) => hangEoseForKinds.includes(k))
+            );
           if (!shouldHang) {
             ws.send(JSON.stringify(['EOSE', subId]));
           }
@@ -125,7 +129,8 @@ export function startRelay(port, events = [], opts = {}) {
             ws.send(JSON.stringify(['OK', event.id, true, '']));
           }
         }
-      });
+      };
+      ws.on('message', onMessage);
     });
 
     server.listen(port, () => {
@@ -141,7 +146,7 @@ export function startRelay(port, events = [], opts = {}) {
  */
 export function stopRelay({ server, wss }) {
   return new Promise((resolve) => {
-    for (const client of wss.clients) {
+    for (const client of wss.clients ?? []) {
       client.terminate();
     }
     wss.close(() => {

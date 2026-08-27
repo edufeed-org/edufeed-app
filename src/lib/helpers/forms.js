@@ -17,6 +17,7 @@ export {
   signerCanNip44Encrypt
 } from './forms/crypto.js';
 import { FORM_TEMPLATE_KIND, FORM_RESPONSE_KIND, buildFormTemplateTags } from './forms/format.js';
+import { signerHasNip44 } from './forms/crypto.js';
 
 /** @typedef {import('./forms/format.js').FormField} FormField */
 /** @typedef {import('./forms/format.js').FormFieldOption} FormFieldOption */
@@ -183,48 +184,9 @@ export function decodeFormNaddr(naddrStr) {
 }
 
 /**
- * Returns the default membership form definition using current locale i18n messages.
- * @returns {{ dTag: string, name: string, fields: FormField[] }}
- */
-export function getDefaultMembershipForm() {
-  return {
-    dTag: 'membership',
-    name: m.default_form_name(),
-    fields: [
-      { id: 'name', type: 'text', label: m.default_form_field_name(), options: { required: true } },
-      {
-        id: 'email',
-        type: 'email',
-        label: m.default_form_field_email(),
-        options: { required: true }
-      },
-      {
-        id: 'motivation',
-        type: 'textarea',
-        label: m.default_form_field_motivation(),
-        options: { required: true }
-      }
-    ]
-  };
-}
-
-/**
- * Create and sign a default membership form template event (kind 30168).
- * @param {import('applesauce-signers').ISigner} signer
- * @returns {Promise<import('nostr-tools').NostrEvent>}
- */
-export async function createDefaultMembershipForm(signer) {
-  const { dTag, name, fields } = getDefaultMembershipForm();
-  const tags = buildFormTemplateTags(dTag, fields, { name });
-  const factory = createAppEventFactory({ signer });
-  const template = await factory.build({ kind: FORM_TEMPLATE_KIND, tags, content: '' });
-  return factory.sign(template);
-}
-
-/**
- * Returns the edufeed.org membership application form definition.
- * Separate from getDefaultMembershipForm() because that one is used by
- * per-community join templates (EditCommunityModal/CreateCommunityModal).
+ * Returns the edufeed.org membership application form definition (the
+ * deployment's NIP-05 handle application — unrelated to the removed
+ * per-community Beitrittsformular layer).
  * @returns {{ dTag: string, name: string, fields: FormField[] }}
  */
 export function getEdufeedMembershipForm() {
@@ -318,6 +280,37 @@ export function parseFormRequestMessage(content) {
   } catch {
     return '';
   }
+}
+
+/**
+ * Ordered list of signers to try when decrypting a (legacy) form response.
+ * Legacy kind-1069 responses are NIP-44 encrypted to the form author — i.e.
+ * the community's own pubkey. The active account can decrypt them directly
+ * when it IS the community, but a separate-keypair owner (personal account
+ * logged in, community key merely imported/held) cannot: their personal
+ * signer isn't the intended counterparty. Retry with whichever signer the
+ * manager holds for the community's own pubkey in that case — but only if
+ * it actually supports NIP-44 decrypt, since getCommunitySigner has no such
+ * guarantee and calling nip44DecryptWith on one that lacks it would just
+ * replace one failure with a less useful one.
+ * @param {any} activeSigner - manager.active?.signer, or undefined
+ * @param {string} formAuthorPubkey - the form template event's pubkey
+ * @param {(pubkey: string) => any} getCommunitySignerFn - e.g. getCommunitySigner from community-signer.js
+ * @returns {any[]} candidate signers, in try-order, deduped
+ */
+export function resolveFormResponseDecryptSigners(
+  activeSigner,
+  formAuthorPubkey,
+  getCommunitySignerFn
+) {
+  /** @type {any[]} */
+  const signers = [];
+  if (activeSigner) signers.push(activeSigner);
+  const communitySigner = getCommunitySignerFn(formAuthorPubkey);
+  if (communitySigner && communitySigner !== activeSigner && signerHasNip44(communitySigner)) {
+    signers.push(communitySigner);
+  }
+  return signers;
 }
 
 /**

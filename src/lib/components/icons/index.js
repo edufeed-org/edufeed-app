@@ -29,6 +29,7 @@ export { default as LockOpenIcon } from './ui/LockOpenIcon.svelte';
 export { default as GridIcon } from './ui/GridIcon.svelte';
 export { default as HomeIcon } from './ui/HomeIcon.svelte';
 export { default as BellIcon } from './ui/BellIcon.svelte';
+export { default as BellSlashIcon } from './ui/BellSlashIcon.svelte';
 export { default as FilesIcon } from './ui/FilesIcon.svelte';
 export { default as ScrollTextIcon } from './ui/ScrollTextIcon.svelte';
 export { default as ArticleIcon } from './ui/ArticleIcon.svelte';

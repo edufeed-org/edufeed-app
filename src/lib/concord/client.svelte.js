@@ -282,6 +282,37 @@ async function setup(account, myGeneration) {
         })
       );
     }
+    // Auto-read pending Direct Invites — same policy as the DM gift-wrap
+    // decrypt at startup and the community-list auto-unlock above: the app
+    // already performs automatic NIP-44 decryption for these, so making the
+    // recipient click "Entschlüsseln" for an invite was the odd one out
+    // (laoc, 2026-08-17). One attempt per wrap; the invite inbox's manual
+    // button stays as the fallback for a failed/rejected attempt.
+    if (account.signer?.nip44) {
+      /** @type {{unsubscribe: () => void} | undefined} */
+      let pendingSub;
+      // eslint-disable-next-line svelte/prefer-svelte-reactivity -- plain bookkeeping, never rendered
+      const attemptedWraps = new Set();
+      clientSubs.push(
+        client.directInviteWatcher$.subscribe((/** @type {any} */ watcher) => {
+          if (myGeneration !== generation) return;
+          pendingSub?.unsubscribe();
+          pendingSub = watcher?.pending$?.subscribe((/** @type {any[]} */ pending) => {
+            if (myGeneration !== generation) return;
+            const fresh = (pending ?? []).filter((record) => {
+              const key = record?.id ?? record?.wrap?.id;
+              return key && !attemptedWraps.has(key);
+            });
+            if (fresh.length === 0) return;
+            for (const record of fresh) attemptedWraps.add(record?.id ?? record?.wrap?.id);
+            void Promise.resolve(watcher.readPending()).catch((/** @type {unknown} */ err) => {
+              console.warn('concord: invite auto-decrypt failed', err);
+            });
+          });
+        }),
+        /** @type {any} */ ({ unsubscribe: () => pendingSub?.unsubscribe() })
+      );
+    }
     // Start the notifications service alongside the client (spec §2). Dynamic
     // import keeps module-load order unchanged; the service reuses the same
     // ConcordStorage the client got, so markers live in the same per-account

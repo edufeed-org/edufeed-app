@@ -28,11 +28,20 @@
   let isSubmitting = $state(false);
   let submitted = $state(false);
   let alreadyResponded = $state(false);
-
+  // Distinct from `error`: `error` drives the top-level {:else if error}
+  // ladder branch, which replaces the ENTIRE page (including the form) with
+  // a bare alert — correct for pre-submit load failures (bad naddr, no
+  // template found), where there is no form to preserve. A submit-time
+  // failure happens AFTER the applicant has typed into the form, so it must
+  // render above the still-mounted FormRenderer instead of tearing the
+  // whole page down and losing their input.
+  let submitError = $state('');
   /** @type {{ pubkey: string, identifier: string } | null} */
   let decodedForm = $state(null);
 
   let returnTo = $derived($page.url.searchParams.get('returnTo'));
+  // Still set by legacy gated-section links (AccessGateBanner) — drives the
+  // kind-30000 auto-join after submit, nothing else.
   let communityId = $derived($page.url.searchParams.get('communityId'));
   let parsedTemplate = $derived(formEvent ? parseFormTemplate(formEvent) : null);
 
@@ -94,10 +103,14 @@
 
   /** @param {Record<string, string>} values */
   async function handleSubmit(values) {
-    if (!manager.active || !formEvent || !decodedForm) return;
+    // FormRenderer stays mounted (and its Submit button clickable) through
+    // an in-flight submission, so typed input survives a submit-time error.
+    // That trades away the old "submit button disappears while sending"
+    // affordance for a double-click guard here instead.
+    if (isSubmitting || !manager.active || !formEvent || !decodedForm) return;
 
     isSubmitting = true;
-    error = '';
+    submitError = '';
 
     try {
       const { pubkey: creatorPubkey, identifier } = decodedForm;
@@ -138,7 +151,7 @@
 
       submitted = true;
     } catch (err) {
-      error = err instanceof Error ? err.message : m.forms_submit_failed();
+      submitError = err instanceof Error ? err.message : m.forms_submit_failed();
     } finally {
       isSubmitting = false;
     }
@@ -175,12 +188,19 @@
       <button class="btn btn-primary" onclick={() => history.back()}>{m.forms_go_back()}</button>
     {/if}
   {:else if formEvent}
-    {#if isSubmitting}
-      <div class="flex justify-center p-8">
-        <span class="loading loading-lg loading-spinner"></span>
+    {#if submitError}
+      <div class="mb-4 alert alert-error" data-testid="form-respond-submit-error">
+        {submitError}
       </div>
-    {:else}
-      <FormRenderer {formEvent} onsubmit={handleSubmit} />
+    {/if}
+    <!-- Stays mounted through an in-flight submit (isSubmitting no longer
+         swaps this out for a spinner) so typed input survives a
+         submit-time error instead of being wiped by an unmount/remount. -->
+    <FormRenderer {formEvent} onsubmit={handleSubmit} />
+    {#if isSubmitting}
+      <div class="mt-2 flex justify-center">
+        <span class="loading loading-sm loading-spinner"></span>
+      </div>
     {/if}
   {/if}
 </div>

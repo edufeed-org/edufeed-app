@@ -13,7 +13,7 @@
   import { storeEvents } from 'applesauce-relay/operators';
   import { TimelineModel } from 'applesauce-core/models';
   import { GROUPS_LIST_KIND, getPublicGroups } from 'applesauce-common/helpers/groups';
-  import { parseGroupInput, groupHref } from '$lib/groups/groups.js';
+  import { groupHref, parseGroupAddress } from '$lib/groups/groups.js';
   import { showToast } from '$lib/helpers/toast';
   import * as m from '$lib/paraglide/messages';
 
@@ -52,7 +52,10 @@
   let input = $state('');
 
   function open() {
-    const pointer = parseGroupInput(input);
+    // Forgiving about the scheme (handoff #7) — the attach modal already
+    // accepted `https?://host'id`, unify the join field on the same parser.
+    // parseGroupInput stays the strict form for internal/protocol callers.
+    const pointer = parseGroupAddress(input);
     if (!pointer) {
       showToast(m.groups_invalid_pointer(), 'error');
       return;

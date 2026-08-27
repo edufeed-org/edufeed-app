@@ -3,6 +3,7 @@ import tailwindcss from '@tailwindcss/vite';
 import { sveltekit } from '@sveltejs/kit/vite';
 import { svelteTesting } from '@testing-library/svelte/vite';
 import { defineConfig } from 'vitest/config';
+import { fileURLToPath } from 'node:url';
 
 export default defineConfig({
   server: {
@@ -33,6 +34,16 @@ export default defineConfig({
     environment: 'jsdom',
     globals: true,
     setupFiles: ['./vitest.setup.js'],
-    hookTimeout: 30000
+    hookTimeout: 30000,
+    // SvelteKit's vite plugin puts 'browser' ahead of 'node'/'require' in the
+    // client resolve.conditions list, and vitest's node-environment tests
+    // still go through that same resolver — so a bare `import ... from 'ws'`
+    // silently picks the browser stub (throws "does not work in the
+    // browser", or here just resolves undefined named exports) instead of
+    // the real server-capable module. Aliasing straight to ws's ESM entry
+    // file sidesteps package.json "exports" condition matching entirely.
+    alias: {
+      ws: fileURLToPath(new URL('./node_modules/ws/wrapper.mjs', import.meta.url))
+    }
   }
 });

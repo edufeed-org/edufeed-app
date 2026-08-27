@@ -2,8 +2,12 @@
 
 This document tracks what E2E tests exist, what features they cover, and identifies gaps for future testing.
 
-**Last updated:** 2026-08-07
-**Total tests:** 317
+**Last updated:** 2026-08-13
+**Total tests:** 323 (43 spec files — via `pnpm exec playwright test --list`,
+which is the authoritative count Playwright itself uses; the per-file counts
+in the Quick Summary table below are maintained by hand and may drift from
+this total by a file or two between updates — `rail-layout-sync.test.js`
+(1 test) is not yet listed as its own row)
 
 ## Quick Summary
 
@@ -29,7 +33,7 @@ This document tracks what E2E tests exist, what features they cover, and identif
 | `community.test.js`                  | 5                     | No   | Community Learning/Chat tabs                                                                                                                                                                                                                                                                                                           |
 | `community-access-filtering.test.js` | 3                     | No   | Profile-list gated forum filtering, open chat                                                                                                                                                                                                                                                                                          |
 | `community-membership.test.js`       | 12                    | Both | Join/leave flows, persistence, error handling                                                                                                                                                                                                                                                                                          |
-| `community-creation.test.js`         | 23                    | Yes  | Both keypair flows, all steps, settings                                                                                                                                                                                                                                                                                                |
+| `community-creation.test.js`         | 24                    | Yes  | Both keypair flows, all steps, settings, group-type step absent with flags off                                                                                                                                                                                                                                                         |
 | `discover.test.js`                   | 11                    | No   | Discovery tabs, infinite scroll, profiles                                                                                                                                                                                                                                                                                              |
 | `discover-events-filter.test.js`     | 9                     | No   | Events tab date range filter, URL persistence                                                                                                                                                                                                                                                                                          |
 | `learning-search.test.js`            | 14                    | No   | Search input, SKOS filters, tab visibility, layout                                                                                                                                                                                                                                                                                     |
@@ -43,13 +47,14 @@ This document tracks what E2E tests exist, what features they cover, and identif
 | `mobile-navigation.test.js`          | 8                     | No   | Mobile hamburger menu, responsive layout                                                                                                                                                                                                                                                                                               |
 | `list-management.test.js`            | 9                     | Both | Dashboard Lists tab, New list modal, people-list CRUD affordances                                                                                                                                                                                                                                                                      |
 | `cache-warm-boot.test.js`            | 1                     | No   | Persistent event cache — warm reload renders calendar from IDB with WebSockets blocked                                                                                                                                                                                                                                                 |
-| `layout-consistency.test.js`         | 14                    | Yes  | Single overflow surface, no footer DOM, body non-scrolling, sticky mobile header, scroll restoration, flex-sibling sidebar guards                                                                                                                                                                                                      |
+| `layout-consistency.test.js`         | 15                    | Yes  | Single overflow surface, no footer DOM, body non-scrolling, sticky mobile header, scroll restoration, flex-sibling sidebar guards, shared community header axis                                                                                                                                                                        |
 | `poll-flow.test.js`                  | 2                     | Yes  | NIP-88 polls — FAB wiring smoke + full publish → vote → tally                                                                                                                                                                                                                                                                          |
 | `membership-application.test.js`     | 2                     | No   | Membership gate: wizard handle step only when enabled (4 vs 5 steps), admin route                                                                                                                                                                                                                                                      |
 | `npub-login.test.js`                 | 3                     | No   | Read-only npub login: flag-off hides method, flag-on login → readonly notice on /c/inbox, invalid input error                                                                                                                                                                                                                          |
-| `cordn-groups.test.js`               | 1     | Yes  | Cordn groups (/c/groups, per-user opt-in seeded via localStorage): two-account MLS create → invite → welcome accept → bidirectional messages. Real-network (homelab coordinator via relay.contextvm.org); skips unless `CORDN_GROUPS_ENABLED=true` |
-| `concord-channels.test.js`           | 1     | Yes  | Concord private channels: create wizard, invite link, join-by-link, two-context chat, ban + key-rotation severance                                                                                                                                 |
-| `concord-notifications.test.js`      | 1     | Yes  | Concord unread/mention badges: tab rollup dot + channel-row dot (2 channels), clears on row open, survives reload (IDB markers), reply lights mention pill                                                                                         |
+| `cordn-groups.test.js`               | 1                     | Yes  | Cordn groups (/c/groups, per-user opt-in seeded via localStorage): two-account MLS create → invite → welcome accept → bidirectional messages. Real-network (homelab coordinator via relay.contextvm.org); skips unless `CORDN_GROUPS_ENABLED=true`                                                                                     |
+| `concord-channels.test.js`           | 1                     | Yes  | Concord private channels: create wizard, invite link, join-by-link, two-context chat, ban + key-rotation severance                                                                                                                                                                                                                     |
+| `concord-notifications.test.js`      | 1                     | Yes  | Concord unread/mention badges: tab rollup dot + channel-row dot (2 channels), clears on row open, survives reload (IDB markers), reply lights mention pill                                                                                                                                                                             |
+| `moderated-community.test.js`        | 2                     | Yes  | Moderated community (NIP-29) lifecycle: wizard-driven create → mint invite code → second-context guest redeems via the hero → owner's MembershipPane shows the new member; open↔moderated type-flip round trip via Settings                                                                                                           |
 
 ## Detailed Coverage
 
@@ -800,33 +805,33 @@ settings dropdown carries `data-testid="edit-profile"` as a second entry point.
 
 #### Unauthenticated (3 tests)
 
-| Test                                                         | What it verifies                  |
-| ------------------------------------------------------------ | --------------------------------- |
-| join button not visible on discover page when not logged in  | Button hidden for unauthenticated |
-| community header shows "Not Joined" badge when not logged in | Badge indicates non-member status |
-| join button in header is visible when not logged in          | Header shows join option          |
+| Test                                                           | What it verifies                                |
+| -------------------------------------------------------------- | ----------------------------------------------- |
+| join button not visible on discover page when not logged in    | Button hidden for unauthenticated               |
+| community header shows no "Following" badge when not logged in | No joined-member badge for a logged-out visitor |
+| join button in header is visible when not logged in            | Header shows "Follow Community" option          |
 
 #### Join Flow - Authenticated (4 tests)
 
-| Test                                                | What it verifies                      |
-| --------------------------------------------------- | ------------------------------------- |
-| join button visible on discover page when logged in | Button shown for authenticated user   |
-| can join community from discover page               | Button changes to "Leave" after join  |
-| can join community from community page header       | "Joined" badge appears                |
-| join shows loading state during publish             | Loading spinner visible during action |
+| Test                                                | What it verifies                        |
+| --------------------------------------------------- | --------------------------------------- |
+| join button visible on discover page when logged in | Button shown for authenticated user     |
+| can join community from discover page               | Button changes to "Unfollow" after join |
+| can join community from community page header       | "Following" badge appears               |
+| join shows loading state during publish             | Loading spinner visible during action   |
 
 #### Leave Flow - Authenticated (2 tests)
 
-| Test                                          | What it verifies              |
-| --------------------------------------------- | ----------------------------- |
-| can leave joined community from discover page | Button changes back to "Join" |
-| leave removes joined badge from card          | Card styling updates on leave |
+| Test                                          | What it verifies                |
+| --------------------------------------------- | ------------------------------- |
+| can leave joined community from discover page | Button changes back to "Follow" |
+| leave removes joined badge from card          | Card styling updates on leave   |
 
 #### Persistence (1 test)
 
-| Test                                             | What it verifies                     |
-| ------------------------------------------------ | ------------------------------------ |
-| membership state persists across page navigation | Leave button still visible after nav |
+| Test                                             | What it verifies                          |
+| ------------------------------------------------ | ----------------------------------------- |
+| membership state persists across page navigation | "Unfollow" button still visible after nav |
 
 #### Error Handling (2 tests)
 
@@ -835,22 +840,49 @@ settings dropdown carries `data-testid="edit-profile"` as a second entry point.
 | no critical JavaScript errors during join flow  | No JS errors joining |
 | no critical JavaScript errors during leave flow | No JS errors leaving |
 
-**Components exercised:** CommunikeyCard (join button), CommunikeyHeader (join button, badges), community.js helpers
+**Components exercised:** CommunikeyCard (join button, badges), community.js helpers
 
 ---
 
-### community-creation.test.js (23 tests)
+### community-creation.test.js (24 tests)
 
 **Route:** `/discover` (Communities tab), `/c/[pubkey]`
 **Auth required:** Yes (all tests use `authenticatedPage` fixture)
 
-#### Modal Access (3 tests)
+Runs with `concord.enabled` forced `false` for every page in this file (see
+the file header comment) so it stays hermetic against the shared webServer's
+`CONCORD_ENABLED=true` (needed by concord-channels.test.js /
+concord-notifications.test.js on the same server process) — without the
+override, CreateCommunityModal's flag-gated type step would insert itself
+into every wizard flow below and break the step-count assumptions.
 
-| Test                                                   | What it verifies                     |
-| ------------------------------------------------------ | ------------------------------------ |
-| Create Community button not visible when not logged in | Button hidden for unauthenticated    |
-| Create Community button visible when logged in         | Button shown for authenticated users |
-| clicking Create Community button opens modal           | Modal opens with keypair options     |
+The create-modal's legacy form-gating ACL step was retired in the plan-3
+settings/membership work (2026-08-12): open communities gate access via the
+community settings pane (Task 8's `MembershipPane`), moderated communities
+via the group roster, and creation no longer writes kind-30000 profile-list
+events at all. No test here asserted the removed ACL toggle/UI (verified by
+grep for `form_config`/"Configure access"/`showAccessConfig` before the
+change), so no test bodies changed for that removal.
+
+**Known pre-existing flake (unrelated to the above):** "created community
+shows user as joined" fails consistently, in isolation and in the full run,
+on both this branch and the pre-change baseline (`git stash` verified
+2026-08-12) — the confirm→create→navigate path works (URL lands on `/c/…`
+and the sibling "can complete community creation" test passes), but the
+`.badge-success` "Following" text never renders within the 10s timeout. Not
+caused by the ACL/kind-30000-loop removal; the join flow
+(`joinCommunity()`/kind 30000 follow set) and the badge component are
+untouched by that change. Root cause not investigated further here — flag
+for follow-up.
+
+#### Modal Access (4 tests)
+
+| Test                                                   | What it verifies                                      |
+| ------------------------------------------------------ | ----------------------------------------------------- |
+| Create Community button not visible when not logged in | Button hidden for unauthenticated                     |
+| Create Community button visible when logged in         | Button shown for authenticated users                  |
+| clicking Create Community button opens modal           | Modal opens with keypair options                      |
+| type step is absent when no group features are enabled | `[data-testid="community-type-open"]` renders 0 times |
 
 #### Step 0 - Keypair Selection (2 tests)
 
@@ -1355,20 +1387,20 @@ Tests use Docker Compose with three real Nostr relays plus a mock hanging relay:
 
 ### Partially Covered
 
-| Feature              | What's Covered                                                                  | What's Missing                                     |
-| -------------------- | ------------------------------------------------------------------------------- | -------------------------------------------------- |
-| Account management   | NSEC login, logout, persistence, switching                                      | NIP-07 extension, NIP-49 encrypted keys            |
-| Settings page        | Theme, gated/debug mode, relay editing, Blossom, kind 30002 relay overrides     | -                                                  |
-| Calendar events      | View, create, delete, edit (full CRUD)                                          | -                                                  |
-| AMB resources        | Full creation flow (page route), file upload, relay publish                     | Edit mode via naddr URL param                      |
-| Profile page         | View profile, notes, edit modal, save flow                                      | Avatar upload (Blossom integration)                |
-| Comments             | Post, reply, delete                                                             | Edit comment                                       |
-| Reactions            | Add, remove                                                                     | Custom emoji support                               |
-| NIP-50 Search        | Search input, SKOS filter UI, tab visibility                                    | Full search flow (depends on relay NIP-50 support) |
-| Community membership | Join/leave, chat message posting                                                | -                                                  |
-| Community creation   | Both keypair flows, all steps, settings, publish                                | Badge access control                               |
-| Signup (normie path) | 2-step flow happy path, login modal CTA structure, Termi backup hint appearance | Full backup/follow hint flows (covered by Vitest)  |
-| Discover pagination  | Basic infinite scroll, multi-relay with kind 30002                              | -                                                  |
+| Feature              | What's Covered                                                                                                                                                             | What's Missing                                     |
+| -------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------- |
+| Account management   | NSEC login, logout, persistence, switching                                                                                                                                 | NIP-07 extension, NIP-49 encrypted keys            |
+| Settings page        | Theme, gated/debug mode, relay editing, Blossom, kind 30002 relay overrides                                                                                                | -                                                  |
+| Calendar events      | View, create, delete, edit (full CRUD)                                                                                                                                     | -                                                  |
+| AMB resources        | Full creation flow (page route), file upload, relay publish                                                                                                                | Edit mode via naddr URL param                      |
+| Profile page         | View profile, notes, edit modal, save flow                                                                                                                                 | Avatar upload (Blossom integration)                |
+| Comments             | Post, reply, delete                                                                                                                                                        | Edit comment                                       |
+| Reactions            | Add, remove                                                                                                                                                                | Custom emoji support                               |
+| NIP-50 Search        | Search input, SKOS filter UI, tab visibility                                                                                                                               | Full search flow (depends on relay NIP-50 support) |
+| Community membership | Join/leave, chat message posting                                                                                                                                           | -                                                  |
+| Community creation   | Both keypair flows, all steps, settings, publish, type step absent with flags off; moderated create + invite/redeem + type flips (see `moderated-community.test.js` below) | Badge access control                               |
+| Signup (normie path) | 2-step flow happy path, login modal CTA structure, Termi backup hint appearance                                                                                            | Full backup/follow hint flows (covered by Vitest)  |
+| Discover pagination  | Basic infinite scroll, multi-relay with kind 30002                                                                                                                         | -                                                  |
 
 ---
 
@@ -1437,7 +1469,7 @@ correct.
 
 ---
 
-### layout-consistency.test.js (14 tests)
+### layout-consistency.test.js (15 tests)
 
 **Routes:** `/discover`, `/calendar`, `/c/`, `/c/[npub]`
 **Auth required:** Yes (all tests use `authenticatedPage` fixture)
@@ -1490,6 +1522,12 @@ correct.
 | main has no sidebar margin offset on desktop community route        | `<main>`'s computed `marginLeft === '0px'` — guards against re-introduction of `lg:ml-(--sidebar-*)` margin compensation                                                                                                                                                       |
 | desktop sidebars stay pinned during `<main>` scroll                 | CommunitySidebar + ContentNavSidebar `getBoundingClientRect().top` is unchanged before/after scrolling `<main>` — guards against re-introduction of `position: fixed` (or moving sidebars back inside `<main>`)                                                                |
 | ContentNavSidebar mounts on community routes, unmounts on dashboard | On `/c/`: `[data-testid="dashboard-nav-sidebar"]` visible, `[data-testid="content-nav-sidebar"]` count === 0. On `/c/[npub]`: inverse. Round-trip back to `/c/` restores dashboard sidebar — guards the `setContentNavData` context handoff between root and community layouts |
+
+#### Shared community header axis (1 test)
+
+| Test                                                         | What it verifies                                                                                                                                                                                                                                                                                                                                                           |
+| ------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| rail, sidebar header and hero avatar share one vertical axis | On `/c/[npub]` at 1280x800, the vertical centres of the icon rail's first button, `[data-testid="nav-header-home"] .avatar` and `[data-testid="hero-avatar"]` agree within 2px — guards the `--community-header-h` band the three columns centre in. The hero assertion is skipped for communities with a banner, whose identity row is pulled up over the image by design |
 
 #### FAB pinned to bottom on short pages (1 test)
 
@@ -1670,6 +1708,96 @@ Chromium's `Notification` support is unreliable in CI. The toast gate logic
 badges + `markChannelRead` on mount), ContentNavSidebar (Channels tab
 rollup), ChannelChat (reply UI, mention p-tag on send), the Concord
 notifications service (`src/lib/concord/notifications.svelte.js`).
+
+---
+
+### moderated-community.test.js (2 tests)
+
+**Routes:** `/discover`, `/c/[pubkey]`, `/c/[pubkey]?view=settings`
+**Auth required:** Yes (fresh nsec accounts per run; owner/guest spec uses
+two isolated browser contexts)
+
+Closes the moderated-community-lifecycle gap left open by
+`community-creation.test.js` (which forces `GROUPS_ENABLED`/`concord.enabled`
+off for its own step-count hermeticity — see that file's header comment).
+This file runs against the shared webServer's real `GROUPS_ENABLED=true` +
+`GROUPS_RELAYS=ws://localhost:17004` (the in-process NIP-29 mock relay from
+Task 9, `e2e/nip29-relay.js`), so the wizard's `type` step and the Settings
+type-flip UI are genuinely live here. Copies `concord-channels.test.js`'s
+scaffolding: `vis()` for the triple-mounted `/c/[pubkey]` tree,
+`bootstrapLogin`, and a `createCommunityWithCurrentKeypair`-shaped helper
+(`createCommunityViaWizard`, parameterized by community type since this file
+needs both 'open' and 'moderated' creates).
+
+1. **Moderated lifecycle** — owner drives the wizard through the `type` step
+   (moderated), the `people` step (skipped — invitees are added post-creation
+   via invite codes, not here), and creation; asserts the Settings
+   `[data-testid="settings-type-card"]` shows "Moderated"; mints an invite
+   code from `MembershipPane` (`membership-invite-create` /
+   `membership-invite-code`); a second browser context logs in with a fresh
+   key, visits the bare community page, confirms no "Member" badge and the
+   hero's "Redeem invite code" affordance; redeems the code
+   (`community_join_invite_toggle` → code input → submit); asserts the
+   "Member" badge appears (mock-relay roster fan-out, NIP-29 kind 9021 with
+   `code` tag → 39002 regenerate) and that the owner's `MembershipPane`
+   reflects the new member (both the "N members" count and a
+   `[data-testid="member-row"]` matching the guest's pubkey inside
+   `GroupMembersModal`).
+2. **Type flip lifecycle** — owner creates an OPEN community, flips it to
+   moderated via Settings (`settings-flip-to-moderated` → confirm — this
+   provisions a NIP-29 root group, same as the create-time path), asserts
+   the type card updates to "Moderated", then flips back
+   (`settings-flip-to-open` → confirm) and asserts it's "Open" again.
+
+**Bug found and fixed while writing this spec:** `HomeView.svelte` gated its
+entire body (including `CommunityProfileHero`, which owns the invite-redeem
+UI) behind `{#if profileEvent && communikeyEvent}`. A community founded via
+"Use Current Keypair" by an account with no published kind:0 (e.g. a fresh
+e2e nsec, or in practice any real user who hasn't set a profile yet before
+founding a community) has no `profileEvent` to ever resolve — the whole home
+view rendered permanently blank for every visitor, including the "Redeem
+invite code" affordance this spec needs. Fixed by dropping `profileEvent`
+from the gate (`{#if communikeyEvent}`); `CommunityProfileHero` already
+falls back to a generic display name/avatar (`getDisplayName(profileEvent)
+|| 'Community'`) when `profileEvent` is absent, so nothing downstream needed
+to change.
+
+**Components exercised:** `CreateCommunityModal` (type step, people step),
+`SettingsView` (type card, flip buttons + confirm dialogs), `MembershipPane`
+(invite mint, member count, manage-members entry point),
+`CommunityProfileHero` (member badge, invite-redeem affordance),
+`GroupMembersModal` (member row), `HomeView` (post-fix rendering with no
+community profile).
+
+## Channel webxdc sessions — no E2E in v1 (would need a NIP-29 relay fixture)
+
+Collaborative webxdc apps shared inside NIP-29 channels (session-scoped
+kind 9450 durable state + 24450 ephemeral realtime frames,
+`GroupAppStage`/`GroupAppsBar`/`WebxdcAppPicker`, host `sendToChat`, export →
+article/wiki). Covered entirely by Vitest unit/component tests, no
+Playwright spec:
+
+- `src/lib/webxdc/__tests__/session-events.test.js` — 9450/24450 builders, imeta tags
+- `src/lib/webxdc/__tests__/group-sync.test.js` — relay-backed AppSync (channel session sync)
+- `src/lib/webxdc/__tests__/webxdc-host.test.js` — host `sendToChat` + injectable sync
+- `src/lib/__tests__/imeta.test.js` — shared NIP-92 parser, webxdc session property
+- `src/lib/__tests__/webxdc-attachment-card.svelte.test.js` — launch card on channel messages
+- `src/lib/__tests__/group-app-stage.svelte.test.js` — app stage above the timeline, remount on session switch
+- `src/lib/__tests__/webxdc-app-picker.svelte.test.js` — composer apps menu, curated (WEBXDC_APPS) resolution + featured row, 1063 discovery picker
+- `src/lib/__tests__/group-apps-bar.svelte.test.js` — apps bar listing a channel's live sessions
+- `src/lib/webxdc/__tests__/export-share.test.js` — export → publish as article/wiki page
+- `src/lib/__tests__/api-config-webxdc.test.js` — `runtimeConfig.webxdc` (sandbox domain, curatedApps parsing from `WEBXDC_APPS`)
+- `src/lib/components/__tests__/GroupChat.test.js` — two GroupChat-level cases only: the composer apps
+  button's write-access gating, and the launch→share→export-dialog→create-route handoff (with
+  `GroupAppStage` itself stubbed). GroupChat's OWN wiring of the apps bar/picker/stage is otherwise
+  exercised only indirectly through those two cases plus the leaf-component tests listed above — there
+  is no dedicated "apps bar renders inside GroupChat" or "picker opens from GroupChat" case.
+
+No E2E in v1: exercising this end-to-end needs a real (or mocked) NIP-29
+group relay plus two connected clients trading 9450 state over it —
+`e2e/nip29-relay.js` (the in-process mock relay `moderated-community.test.js`
+uses for group creation/roster) doesn't yet fan out ephemeral 24450/9450
+session traffic. Revisit if that mock-relay harness grows session support.
 
 ## Google login (Pomegranate) — manual checklist (no E2E: external OAuth)
 

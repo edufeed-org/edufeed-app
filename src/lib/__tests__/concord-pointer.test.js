@@ -63,6 +63,23 @@ describe('parseConcordPointer', () => {
     expect(parseConcordPointer(null)).toBeUndefined();
     expect(parseConcordPointer(undefined)).toBeUndefined();
   });
+  it('never throws on malformed tag entries (untrusted network input)', () => {
+    expect(parseConcordPointer({ tags: /** @type {any} */ ([null]) })).toBeUndefined();
+    expect(
+      parseConcordPointer({
+        tags: /** @type {any} */ ([null, ['concord', CID, 'wss://c.example']])
+      })
+    ).toEqual({
+      communityId: CID,
+      relay: 'wss://c.example'
+    });
+    expect(
+      parseConcordPointer({ tags: /** @type {any} */ (['invalid', ['concord', CID]]) })
+    ).toEqual({
+      communityId: CID,
+      relay: undefined
+    });
+  });
 });
 
 describe('withConcordPointer', () => {
@@ -82,6 +99,29 @@ describe('withConcordPointer', () => {
   it('replaces an existing concord tag', () => {
     const out = withConcordPointer([['concord', 'b'.repeat(64)]], CID);
     expect(out).toEqual([['concord', CID]]);
+  });
+  it('handles malformed tag entries without throwing', () => {
+    const tagsWithNull = /** @type {any} */ ([null, ['d', ''], ['concord', 'b'.repeat(64)]]);
+    const out = withConcordPointer(tagsWithNull, CID);
+    expect(out).toContainEqual(['concord', CID]);
+    expect(out).toContainEqual(['d', '']);
+    // null should be filtered out by the guard
+    expect(out.filter((t) => t === null)).toHaveLength(0);
+  });
+  it('strips membership + application pointers (spec XOR — a linked area replaces NIP-29 membership)', () => {
+    // Writing both a concord and a membership pointer produces a spec-illegal
+    // 10222 that fail-opens to "Offen" while carrying a dangling roster
+    // (journey-test bug #7). The writer enforces the XOR.
+    const tags = [
+      ['d', ''],
+      ['membership', 'root123', 'wss://groups.example'],
+      ['application', '30168:pk:membership', 'wss://relay.example']
+    ];
+    const out = withConcordPointer(tags, CID, 'wss://c.example');
+    expect(out).toEqual([
+      ['d', ''],
+      ['concord', CID, 'wss://c.example']
+    ]);
   });
 });
 
@@ -105,5 +145,14 @@ describe('withoutConcordPointer', () => {
     const out = withoutConcordPointer(tags);
     expect(out).toEqual(tags);
     expect(out).not.toBe(tags);
+  });
+  it('handles malformed tag entries without throwing', () => {
+    const tagsWithNull = /** @type {any} */ ([null, ['d', ''], ['concord', CID], ['r', 'wss://x']]);
+    const out = withoutConcordPointer(tagsWithNull);
+    expect(out).toEqual([
+      ['d', ''],
+      ['r', 'wss://x']
+    ]);
+    expect(out.filter((t) => t === null)).toHaveLength(0);
   });
 });

@@ -485,3 +485,32 @@ describe('ContactSearchInput — regression: default flags preserve existing beh
     expect(container.querySelector('.absolute.z-50')).toBeNull();
   });
 });
+
+describe('ContactSearchInput — inlineList flag', () => {
+  it('renders the suggestion list in normal flow (no absolute positioning)', async () => {
+    const { container } = render(ContactSearchInput, {
+      props: { value: '', inlineList: true }
+    });
+    const input = container.querySelector('input');
+    await fireEvent.input(input, { target: { value: 'al' } });
+
+    expect(container.querySelector('.absolute.z-50')).toBeNull();
+    const list = container.querySelector('[data-testid="contact-search-list"]');
+    expect(list).toBeTruthy();
+    expect(list?.classList.contains('absolute')).toBe(false);
+    expect(list?.textContent).toContain('Alice Smith');
+  });
+
+  it('still selects a contact from the inline list', async () => {
+    const onselect = vi.fn();
+    const { container } = render(ContactSearchInput, {
+      props: { value: '', inlineList: true, onselect }
+    });
+    const input = container.querySelector('input');
+    await fireEvent.input(input, { target: { value: 'al' } });
+
+    const button = container.querySelector('[data-testid="contact-search-list"] button');
+    await fireEvent.click(button);
+    expect(onselect).toHaveBeenCalledWith(expect.objectContaining({ pubkey: 'abc123' }));
+  });
+});

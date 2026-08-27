@@ -86,6 +86,8 @@ Canonical implementation: `src/routes/discover/+page.svelte`.
 
 Use `useProfileMap(getPubkeys)` from `src/lib/stores/profile-map.svelte.js` instead of manual `profileLoader` + `ProfileModel` subscriptions for batch profile loading.
 
+Pair it with `useAuthorDeletions(getPubkeys)` from `src/lib/stores/author-deletions.svelte.js` on any surface listing OTHER people's content. Nothing else fetches other authors' kind-5s (`userDeletionLoader` is calendar-only and self-only; `hydrateDeletions()` merely replays what IDB already has), so without it a deleted event keeps rendering from a stale local copy — and stays shareable, producing a repost nobody else can resolve. It returns nothing: feeding the eventStore is enough, and the DeleteManager drops the events from every `TimelineModel`. Both hooks take the same pubkey list — authors **and** `_sharedBy`/`_allSharers`, since a repost points at someone else's event.
+
 **Gotcha:** When the pubkey source is a `$state.raw()` array, the getter won't re-run on content changes (only on reassignment). Use a trigger counter:
 
 ```javascript
@@ -529,7 +531,9 @@ Disabled by default. Unioned with curated in the same `getCuratedAuthors()` call
 | longform    | `LONGFORM_CONTENT_RELAY` | 30023                      |
 | kanban      | `KANBAN_RELAYS`          | 30301, 30302, 8571         |
 
-`kindToAppRelayCategory(kind)` and `getAppRelaysForCategory(category)` live in `$lib/services/app-relay-service.svelte.js`.
+`kindToAppRelayCategory(kind)` and `getAppRelaysForCategory(category)` live in `$lib/services/app-relay-service.svelte.js`. NIP-29 groups (kinds 9000-9009, 39000-39002) are a separate lane, not part of that helper's category set — see below.
+
+**Groups relay:** `GROUPS_RELAYS` (env), read via `getGroupsRelays()` in `relay-helper.js` (`runtimeConfig.appRelays.groups`, no user-override/NIP-65 union — `publishToGroupRelay` writes to that relay only). Default `wss://groups.edufeed.org`, a pyramid-based relay with two behaviors stock relays lack: only whitelisted accounts may create a group (rejection "restricted: only members of this relay can create a group" — surfaced as the friendly `community_groups_relay_membership_required` i18n key via `isRelayMembershipRequired()` in `group-management.js`), and moderation events (9000-9009) older than 60s are rejected ("too old") — `publishToGroupRelay` re-stamps `created_at` and retries once to cover slow NIP-46 bunker approvals.
 
 ### User Relay Overrides (Kind 30002)
 
@@ -742,6 +746,16 @@ Single default theme: the **edufeed editorial** palette (warm beige page `base-2
 | `src/app.css`                                | Theme definition + `:root` editorial aliases  |
 | `src/lib/stores/app-settings.svelte.js`      | Theme family state (colorMode fixed to light) |
 | `src/routes/+layout.svelte` + `src/app.html` | Apply `data-theme` (keep both in sync)        |
+
+## Buttons
+
+Always DaisyUI `btn` classes — never hand-rolled text buttons. Standard sizes:
+
+- `btn-sm` — chrome actions: hero buttons, settings rows, rail entries, card actions. This is the app default.
+- `btn` (md) — modal actions and full forms.
+- `btn-xs` — ONLY dense inline icon chrome (chat-header icon buttons). Never for standalone text actions: the shrunken label reads like a foreign typeface next to normal UI text (laoc, 2026-08-19).
+
+Small confirm/input dialogs use the shared modal grammar (`modal modal-open` + `modal-box max-w-sm`, ghost cancel + primary action) instead of inline expanding inputs.
 
 ## Icon System
 

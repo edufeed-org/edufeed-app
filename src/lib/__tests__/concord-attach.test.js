@@ -1,8 +1,7 @@
 /** @vitest-environment node */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { buildPointerRemoval, attachConcordArea, detachConcordArea } from '$lib/concord/attach.js';
+import { buildPointerRemoval, detachConcordArea } from '$lib/concord/attach.js';
 
-const CID = 'c'.repeat(64);
 const PUBKEY = 'a'.repeat(64);
 
 /** @type {{ publish: any, added: any[] }} */
@@ -55,53 +54,6 @@ describe('buildPointerRemoval', () => {
     expect(template.created_at).toBeGreaterThan(1000);
     expect(template).not.toHaveProperty('id');
     expect(template).not.toHaveProperty('sig');
-  });
-});
-
-describe('attachConcordArea', () => {
-  it('signs the pointer update with the community signer and publishes it', async () => {
-    const signer = fakeSigner();
-    await attachConcordArea({
-      communikeyEvent: communikeyEvent(),
-      communityId: CID,
-      relay: 'wss://c.example',
-      communitySigner: signer
-    });
-    const template = signer.signEvent.mock.calls[0][0];
-    expect(template.tags).toContainEqual(['concord', CID, 'wss://c.example']);
-    // publishes via the outbox path including the community's own relays
-    expect(mockState.publish).toHaveBeenCalledWith(
-      expect.objectContaining({ sig: 'f'.repeat(128) }),
-      [],
-      {
-        additionalRelays: ['wss://community.example']
-      }
-    );
-    // optimistic local echo so the channels tab flips immediately
-    expect(mockState.added).toHaveLength(1);
-  });
-
-  it('rejects malformed community ids before signing anything', async () => {
-    const signer = fakeSigner();
-    await expect(
-      attachConcordArea({
-        communikeyEvent: communikeyEvent(),
-        communityId: 'not-hex',
-        communitySigner: signer
-      })
-    ).rejects.toThrow();
-    expect(signer.signEvent).not.toHaveBeenCalled();
-    expect(mockState.publish).not.toHaveBeenCalled();
-  });
-
-  it('throws without a community signer', async () => {
-    await expect(
-      attachConcordArea({
-        communikeyEvent: communikeyEvent(),
-        communityId: CID,
-        communitySigner: null
-      })
-    ).rejects.toThrow();
   });
 });
 

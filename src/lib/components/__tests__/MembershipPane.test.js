@@ -1,0 +1,684 @@
+/** @vitest-environment jsdom */
+/**
+ * MembershipPane — Task 8. Root-group roster management (counts + a
+ * "Mitglieder verwalten" button wired to GroupMembersModal via the roster
+ * hook) and invite-code minting. The application-form layer was removed as
+ * YAGNI (laoc, 2026-08-18) — a legacy `application` tag on the 10222 must
+ * render NOTHING here. useRootRoster/GroupMembersModal internals are
+ * covered by their own suites; this only proves the wiring.
+ */
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { render, screen, fireEvent, waitFor } from '@testing-library/svelte';
+
+const OWNER = 'a'.repeat(64);
+const ADMIN2 = 'b'.repeat(64);
+const MEMBER = 'c'.repeat(64);
+const GROUPS_RELAY = 'wss://groups.example/';
+const COMMUNIKEY_RELAY = 'wss://communikey.example/';
+
+// vi.mock factories are hoisted above these consts, so anything a factory
+// closes over must be built via vi.hoisted() (TDZ, same as
+// GroupMembersModal.test.js's header comment explains).
+const {
+  rosterFixture,
+  activeUserFixture,
+  communitySigner,
+  isCommunityOwner,
+  getCommunitySigner,
+  showToast,
+  publishToGroupRelay
+} = vi.hoisted(() => {
+  const OWNER = 'a'.repeat(64);
+  const ADMIN2 = 'b'.repeat(64);
+  const MEMBER = 'c'.repeat(64);
+  const GROUPS_RELAY = 'wss://groups.example/';
+  return {
+    rosterFixture: /** @type {{ value: any }} */ ({
+      value: {
+        pointer: { id: 'root1', relay: GROUPS_RELAY },
+        refresh: vi.fn(),
+        admins: [
+          { pubkey: OWNER, roles: ['admin'] },
+          { pubkey: ADMIN2, roles: ['lehrkraft'] }
+        ],
+        members: new Set([OWNER, ADMIN2, MEMBER]),
+        publishers: new Set(),
+        isLoading: false,
+        isMember: () => true,
+        rolesOf: () => []
+      }
+    }),
+    activeUserFixture: /** @type {{ value: any }} */ ({ value: { pubkey: OWNER, signer: {} } }),
+    communitySigner: { signEvent: vi.fn(async (t) => ({ ...t, id: 'sig', pubkey: OWNER })) },
+    isCommunityOwner: vi.fn(() => true),
+    getCommunitySigner: vi.fn(() => communitySigner),
+    showToast: vi.fn(),
+    publishToGroupRelay: vi.fn(async () => ({}))
+  };
+});
+
+const { putUserOn, fanOut, channelRostersState } = vi.hoisted(() => ({
+  putUserOn: vi.fn(async (/** @type {any} */ _p, /** @type {string} */ _pk) => ({})),
+  // Real aggregate shape; every item "succeeds" so the pane stays quiet.
+  fanOut: vi.fn(
+    async (/** @type {any[]} */ items, /** @type {any} */ keyOf, /** @type {any} */ action) => {
+      for (const item of items) await action(item);
+      return { ok: items.map((/** @type {any} */ i) => keyOf(i)), failed: [] };
+    }
+  ),
+  channelRostersState: {
+    membersByKey: /** @type {any} */ ({}),
+    adminsByKey: /** @type {any} */ ({})
+  }
+}));
+vi.mock('$lib/groups/roster-fanout.js', () => ({ putUserOn, fanOut }));
+vi.mock('$lib/groups/channel-rosters.svelte.js', () => ({
+  useChannelRosters: () => () => channelRostersState
+}));
+// Channels are discovered from the relay subtree now (not kind-10222 pointers).
+const { communityChannelsState } = vi.hoisted(() => ({
+  communityChannelsState: {
+    channels: /** @type {any[]} */ ([]),
+    rootChannel: /** @type {any} */ (null),
+    fetched: true,
+    refresh: () => {}
+  }
+}));
+vi.mock('$lib/groups/community-channels.svelte.js', () => ({
+  useCommunityChannels: () => () => communityChannelsState
+}));
+
+const { poolMock, relayRequestEvents, relayRequestError } = vi.hoisted(() => {
+  /** 9021 fixtures the fake relay serves to the join-request REQ. */
+  const relayRequestEvents = { value: /** @type {any[]} */ ([]) };
+  /** When set, the REQ errors instead of serving relayRequestEvents. */
+  const relayRequestError = { value: /** @type {any} */ (null) };
+  return {
+    relayRequestEvents,
+    relayRequestError,
+    poolMock: {
+      relay: vi.fn((_url) => ({
+        publish: vi.fn(async () => ({ ok: true })),
+        request: vi.fn(() => ({
+          subscribe: (/** @type {any} */ observer) => {
+            if (relayRequestError.value) {
+              observer.error?.(relayRequestError.value);
+              return { unsubscribe: () => {} };
+            }
+            for (const event of relayRequestEvents.value) observer.next?.(event);
+            observer.complete?.();
+            return { unsubscribe: () => {} };
+          }
+        }))
+      }))
+    }
+  };
+});
+
+vi.mock('$lib/groups/root-roster.svelte.js', () => ({
+  useRootRoster: () => () => rosterFixture.value
+}));
+vi.mock('$lib/stores/accounts.svelte', () => ({
+  useActiveUser: () => () => activeUserFixture.value
+}));
+vi.mock('$lib/stores/nostr-infrastructure.svelte', () => ({
+  pool: poolMock,
+  // ProfileAvatar (join-request rows) imports eventStore statically.
+  eventStore: {
+    model: vi.fn(() => ({ subscribe: () => ({ unsubscribe: () => {} }) })),
+    profile: vi.fn(() => ({ subscribe: () => ({ unsubscribe: () => {} }) }))
+  }
+}));
+vi.mock('$lib/stores/profile-map.svelte.js', () => ({
+  useProfileMap: () => () => new Map()
+}));
+vi.mock('$lib/components/shared/ProfileAvatar.svelte', () => ({ default: function Stub() {} }));
+vi.mock('$lib/helpers/community-signer.js', () => ({ getCommunitySigner, isCommunityOwner }));
+vi.mock('$lib/helpers/toast', () => ({ showToast }));
+vi.mock('$lib/groups/group-management.js', async () => {
+  const actual = await vi.importActual('$lib/groups/group-management.js');
+  return {
+    ...actual,
+    publishToGroupRelay
+  };
+});
+vi.mock(
+  '$lib/components/groups/GroupMembersModal.svelte',
+  () => import('./fixtures/GroupMembersModalStub.svelte')
+);
+vi.mock('$lib/paraglide/messages', () => ({
+  community_membership_pane_title: () => 'Mitglieder & Rollen',
+  community_membership_pane_manage: () => 'Mitglieder verwalten',
+  community_membership_pane_member_count: (/** @type {{count: number}} */ p) =>
+    `${p.count} Mitglieder`,
+  community_membership_pane_publisher_count: (/** @type {{count: number}} */ p) =>
+    `${p.count} Publisher`,
+  community_invite_title: () => 'Einladungscode',
+  community_invite_create: () => 'Code erstellen',
+  community_invite_hint: () =>
+    'Der Code kann auf der Community-Seite unter „Einladungscode einlösen" verwendet werden.',
+  community_invite_copy: () => 'Kopieren',
+  community_invite_copied: () => 'Kopiert.',
+  community_invite_failed: (/** @type {{reason: string}} */ p) =>
+    `Code konnte nicht erstellt werden: ${p.reason}`,
+  community_invite_clipboard_unavailable: () => 'Zwischenablage nicht verfügbar',
+  community_join_requests_title: () => 'Beitrittsanfragen',
+  community_join_requests_empty: () => 'Keine offenen Anfragen.',
+  community_join_requests_lead: () => 'lead',
+  community_join_requests_approve: () => 'Aufnehmen',
+  community_join_requests_ignore: () => 'Ignorieren',
+  community_join_request_approved: () => 'Aufgenommen.',
+  community_join_request_approve_failed: (/** @type {{reason: string}} */ p) =>
+    `Aufnahme fehlgeschlagen: ${p.reason}`,
+  community_join_requests_error: (/** @type {{reason: string}} */ p) =>
+    `Anfragen konnten nicht geladen werden: ${p.reason}`
+}));
+
+const { default: MembershipPane } = await import(
+  '$lib/components/community/settings/MembershipPane.svelte'
+);
+
+// id/sig present so applesauce's getDisplayName treats this as a real event
+// (it gates event-vs-plain-metadata detection on those two fields).
+const profileEvent = {
+  kind: 0,
+  pubkey: OWNER,
+  tags: [],
+  content: JSON.stringify({ name: 'X' }),
+  id: 'profile-id',
+  sig: 'profile-sig'
+};
+
+/** @param {string[][]} tags */
+function communikeyEvent(tags) {
+  return { kind: 10222, pubkey: OWNER, created_at: 1000, content: 'desc', tags };
+}
+
+const eventWithApplication = communikeyEvent([
+  ['membership', 'root1', GROUPS_RELAY],
+  ['application', '30168:' + OWNER + ':membership', COMMUNIKEY_RELAY]
+]);
+const eventWithoutApplication = communikeyEvent([['membership', 'root1', GROUPS_RELAY]]);
+
+beforeEach(() => {
+  rosterFixture.value = {
+    pointer: { id: 'root1', relay: GROUPS_RELAY },
+    refresh: vi.fn(),
+    admins: [
+      { pubkey: OWNER, roles: ['admin'] },
+      { pubkey: ADMIN2, roles: ['lehrkraft'] }
+    ],
+    members: new Set([OWNER, ADMIN2, MEMBER]),
+    publishers: new Set(),
+    isLoading: false,
+    isMember: () => true,
+    rolesOf: () => []
+  };
+  activeUserFixture.value = { pubkey: OWNER, signer: {} };
+  isCommunityOwner.mockClear().mockReturnValue(true);
+  showToast.mockClear();
+  publishToGroupRelay.mockClear();
+  putUserOn.mockClear();
+  fanOut.mockClear();
+  channelRostersState.membersByKey = {};
+  channelRostersState.adminsByKey = {};
+  communityChannelsState.channels = [];
+  communityChannelsState.rootChannel = null;
+  relayRequestEvents.value = [];
+  relayRequestError.value = null;
+  localStorage.clear();
+  // jsdom has no navigator.clipboard; stub it
+  Object.assign(navigator, {
+    clipboard: {
+      writeText: vi.fn().mockResolvedValue(undefined)
+    }
+  });
+});
+
+describe('MembershipPane — roster', () => {
+  it('renders the member count and opens GroupMembersModal with roster-derived props', async () => {
+    render(MembershipPane, {
+      props: { communikeyEvent: eventWithoutApplication, communityId: OWNER, profileEvent }
+    });
+
+    expect(screen.getByTestId('membership-pane')).toBeTruthy();
+    expect(screen.getByText('3 Mitglieder')).toBeTruthy();
+
+    await fireEvent.click(screen.getByTestId('membership-manage-members'));
+
+    const stub = await screen.findByTestId('stub-group-members-modal');
+    expect(JSON.parse(/** @type {string} */ (stub.dataset.pointer))).toEqual({
+      id: 'root1',
+      relay: GROUPS_RELAY
+    });
+    expect(JSON.parse(/** @type {string} */ (stub.dataset.admins))).toEqual([
+      { pubkey: OWNER, roles: ['admin'] },
+      { pubkey: ADMIN2, roles: ['lehrkraft'] }
+    ]);
+    expect(JSON.parse(/** @type {string} */ (stub.dataset.members)).sort()).toEqual(
+      [OWNER, ADMIN2, MEMBER].sort()
+    );
+    expect(stub.dataset.mypubkey).toBe(OWNER);
+    expect(stub.dataset.isadmin).toBe('true');
+    // Union of admin roles + the two well-known roles, deduped. 'publisher'
+    // is offered even though nobody holds it here: gating a section on it
+    // before granting it is a normal order of work.
+    expect(JSON.parse(/** @type {string} */ (stub.dataset.roleoptions)).sort()).toEqual(
+      ['admin', 'lehrkraft', 'publisher'].sort()
+    );
+  });
+
+  it('manage-members button is disabled when the roster has no pointer', () => {
+    rosterFixture.value = { ...rosterFixture.value, pointer: null };
+    render(MembershipPane, {
+      props: { communikeyEvent: eventWithoutApplication, communityId: OWNER, profileEvent }
+    });
+    const button = /** @type {HTMLButtonElement} */ (
+      screen.getByTestId('membership-manage-members')
+    );
+    expect(button.disabled).toBe(true);
+  });
+
+  it('reports the role union upward via onRolesChanged', async () => {
+    const onRolesChanged = vi.fn();
+    render(MembershipPane, {
+      props: {
+        communikeyEvent: eventWithoutApplication,
+        communityId: OWNER,
+        profileEvent,
+        onRolesChanged
+      }
+    });
+    await waitFor(() =>
+      expect(onRolesChanged).toHaveBeenCalledWith(expect.arrayContaining(['admin', 'lehrkraft']))
+    );
+  });
+});
+
+// Task 3: the pane's own isAdmin gate — roster admins ∪ the key-holding
+// owner — no longer relies on SettingsView passing an owner-only mount
+// condition. These lock in the tiers: stranger (nothing), non-owner 39001
+// admin and key-holding owner (roster management + invite code).
+describe('MembershipPane — access gating', () => {
+  it('renders nothing for a signed-in user who is neither a roster admin nor the owner', () => {
+    isCommunityOwner.mockReturnValue(false);
+    activeUserFixture.value = { pubkey: MEMBER, signer: {} };
+    render(MembershipPane, {
+      props: { communikeyEvent: eventWithApplication, communityId: OWNER, profileEvent }
+    });
+    expect(screen.queryByTestId('membership-pane')).toBeNull();
+    expect(screen.queryByTestId('membership-manage-members')).toBeNull();
+  });
+
+  it('shows roster management for a non-owner 39001 admin', () => {
+    isCommunityOwner.mockReturnValue(false);
+    activeUserFixture.value = { pubkey: ADMIN2, signer: {} };
+    render(MembershipPane, {
+      props: { communikeyEvent: eventWithApplication, communityId: OWNER, profileEvent }
+    });
+
+    expect(screen.getByTestId('membership-pane')).toBeTruthy();
+    expect(screen.getByTestId('membership-manage-members')).toBeTruthy();
+  });
+
+  it('shows roster management + invite code for the key-holding owner', () => {
+    render(MembershipPane, {
+      props: { communikeyEvent: eventWithoutApplication, communityId: OWNER, profileEvent }
+    });
+
+    expect(screen.getByTestId('membership-pane')).toBeTruthy();
+    expect(screen.getByTestId('membership-manage-members')).toBeTruthy();
+    expect(screen.getByTestId('membership-invite-create')).toBeTruthy();
+  });
+
+  // The removed Beitrittsformular layer: a legacy `application` tag on the
+  // 10222 must not resurrect any form UI or approvals queue.
+  it('renders no application-form UI even when a legacy application tag exists', () => {
+    render(MembershipPane, {
+      props: { communikeyEvent: eventWithApplication, communityId: OWNER, profileEvent }
+    });
+    expect(screen.queryByTestId('membership-application-select')).toBeNull();
+    expect(screen.queryByTestId('membership-application-create-default')).toBeNull();
+    expect(screen.queryByTestId('stub-application-approvals')).toBeNull();
+  });
+});
+
+describe('MembershipPane — member-add fan-out', () => {
+  const GROUPS_RELAY_N = 'wss://groups.example/';
+
+  // A4 (2026-08-19): the blanket fan-out of a freshly added root member into
+  // every members-tier channel is retired — members join those channels
+  // themselves via their own 9021. onMemberAdded firing must not put-user
+  // ANY channel, answered roster or not; the session reconcile
+  // (roster-reconcile.svelte.js) is the only thing that still fans admins
+  // out, and only for admins.
+  it('no longer fans a freshly added member out to channels (members self-join)', async () => {
+    const eventWithChannel = communikeyEvent([
+      ['membership', 'root1', GROUPS_RELAY],
+      ['group', 'chan1', GROUPS_RELAY, 'Willkommen', 'members']
+    ]);
+    channelRostersState.membersByKey = { [`chan1@${GROUPS_RELAY_N}`]: new Set() };
+    render(MembershipPane, {
+      props: { communikeyEvent: eventWithChannel, communityId: OWNER, profileEvent }
+    });
+    await fireEvent.click(screen.getByTestId('membership-manage-members'));
+    await fireEvent.click(screen.getByTestId('stub-group-members-added'));
+    await new Promise((r) => setTimeout(r, 20));
+    expect(putUserOn).not.toHaveBeenCalled();
+  });
+});
+
+describe('MembershipPane — Beitrittsanfragen (NIP-29 join requests)', () => {
+  const APPLICANT = 'e'.repeat(64);
+  const req = (
+    /** @type {string} */ pubkey,
+    /** @type {number} */ at,
+    id = `${pubkey.slice(0, 4)}-${at}`,
+    groupId = 'root1'
+  ) => ({
+    id,
+    kind: 9021,
+    pubkey,
+    created_at: at,
+    content: 'Ich möchte mitmachen',
+    tags: [['h', groupId]]
+  });
+  // A subtree channel as useCommunityChannels yields it (only id/relay feed the
+  // panel's channelPointers; the rest mirrors the real shape).
+  const chanFix = (/** @type {string} */ id, /** @type {string} */ name) => ({
+    id,
+    relay: GROUPS_RELAY,
+    name,
+    level: 'invited',
+    metadata: { kind: 39000, tags: [['d', id]] }
+  });
+
+  it('lists a stored 9021 from a non-member, hides one from an existing member', async () => {
+    relayRequestEvents.value = [req(APPLICANT, 100), req(MEMBER, 200)];
+    render(MembershipPane, {
+      props: { communikeyEvent: eventWithoutApplication, communityId: OWNER, profileEvent }
+    });
+    const rows = await screen.findAllByTestId('join-request-row');
+    expect(rows).toHaveLength(1);
+    expect(rows[0].getAttribute('data-pubkey')).toBe(APPLICANT);
+  });
+
+  // A4 (2026-08-19): approve no longer sweeps members-tier channels — a
+  // root-only 9021 (h-tag = the root group id, which has no matching
+  // `group` pointer) only put-users the ROOT.
+  it('approve put-users the applicant on the ROOT group only, no channel sweep', async () => {
+    relayRequestEvents.value = [req(APPLICANT, 100)];
+    channelRostersState.membersByKey = { [`chan1@wss://groups.example/`]: new Set() };
+    render(MembershipPane, {
+      props: {
+        communikeyEvent: communikeyEvent([
+          ['membership', 'root1', GROUPS_RELAY],
+          ['group', 'chan1', GROUPS_RELAY, 'Willkommen', 'members']
+        ]),
+        communityId: OWNER,
+        profileEvent
+      }
+    });
+    await fireEvent.click(await screen.findByTestId('join-request-approve'));
+    await waitFor(() => expect(putUserOn).toHaveBeenCalledTimes(1));
+    expect(putUserOn.mock.calls[0][0]).toEqual(expect.objectContaining({ id: 'root1' }));
+    expect(putUserOn.mock.calls[0][1]).toBe(APPLICANT);
+    await waitFor(() => expect(showToast).toHaveBeenCalledWith('Aufgenommen.', 'success'));
+  });
+
+  // The applicant knocked on a SPECIFIC channel (9021 h-tagged to that
+  // channel's group id, not the root) — approve honors that one ask on top
+  // of the root admission, still with no further sweep.
+  it('approve honors a specifically-asked channel on top of the root admission', async () => {
+    relayRequestEvents.value = [req(APPLICANT, 100, 'req-1', 'chan1')];
+    communityChannelsState.channels = [chanFix('chan1', 'Willkommen'), chanFix('chan2', 'Planung')];
+    render(MembershipPane, {
+      props: {
+        communikeyEvent: communikeyEvent([
+          ['membership', 'root1', GROUPS_RELAY],
+          ['group', 'chan1', GROUPS_RELAY, 'Willkommen', 'members'],
+          ['group', 'chan2', GROUPS_RELAY, 'Planung', 'members']
+        ]),
+        communityId: OWNER,
+        profileEvent
+      }
+    });
+    await fireEvent.click(await screen.findByTestId('join-request-approve'));
+    await waitFor(() => expect(putUserOn).toHaveBeenCalledTimes(2));
+    expect(putUserOn.mock.calls[0][0]).toEqual(expect.objectContaining({ id: 'root1' }));
+    expect(putUserOn.mock.calls[0][1]).toBe(APPLICANT);
+    expect(putUserOn.mock.calls[1][0]).toEqual(expect.objectContaining({ id: 'chan1' }));
+    expect(putUserOn.mock.calls[1][1]).toBe(APPLICANT);
+    // chan2 never asked for — not swept.
+    expect(putUserOn).not.toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'chan2' }),
+      APPLICANT,
+      expect.anything(),
+      expect.anything()
+    );
+    await waitFor(() => expect(showToast).toHaveBeenCalledWith('Aufgenommen.', 'success'));
+  });
+
+  // Group-aware queue (final-review fix): a ROOT member's channel-hosted
+  // 9021 must survive the membership filter — their root membership does not
+  // clear the CHANNEL's own roster check.
+  it('shows a request from an existing ROOT member who knocked on a channel they are not a member of', async () => {
+    relayRequestEvents.value = [req(MEMBER, 100, 'req-1', 'chan1')];
+    // chan1's roster is KNOWN and does not contain MEMBER.
+    channelRostersState.membersByKey = { [`chan1@${GROUPS_RELAY}`]: new Set() };
+    communityChannelsState.channels = [chanFix('chan1', 'Willkommen')];
+    render(MembershipPane, {
+      props: {
+        communikeyEvent: communikeyEvent([
+          ['membership', 'root1', GROUPS_RELAY],
+          ['group', 'chan1', GROUPS_RELAY, 'Willkommen', 'members']
+        ]),
+        communityId: OWNER,
+        profileEvent
+      }
+    });
+    const rows = await screen.findAllByTestId('join-request-row');
+    expect(rows).toHaveLength(1);
+    expect(rows[0].getAttribute('data-pubkey')).toBe(MEMBER);
+  });
+
+  it('drops a request from someone already a member of the SPECIFIC channel they knocked on', async () => {
+    relayRequestEvents.value = [req(MEMBER, 100, 'req-1', 'chan1')];
+    // chan1's roster is KNOWN and DOES contain MEMBER this time.
+    channelRostersState.membersByKey = { [`chan1@${GROUPS_RELAY}`]: new Set([MEMBER]) };
+    communityChannelsState.channels = [chanFix('chan1', 'Willkommen')];
+    render(MembershipPane, {
+      props: {
+        communikeyEvent: communikeyEvent([
+          ['membership', 'root1', GROUPS_RELAY],
+          ['group', 'chan1', GROUPS_RELAY, 'Willkommen', 'members']
+        ]),
+        communityId: OWNER,
+        profileEvent
+      }
+    });
+    await new Promise((r) => setTimeout(r, 20));
+    expect(screen.queryByTestId('join-request-row')).toBeNull();
+  });
+
+  // approveRequest must tolerate a root put-user that answers "already a
+  // member" (a member re-knocking on a channel already has a root seat) —
+  // it must still carry through to the asked channel's grant instead of
+  // aborting via the outer catch.
+  it('approve tolerates the root put-user already answering "already a member" and still grants the asked channel', async () => {
+    relayRequestEvents.value = [req(MEMBER, 100, 'req-1', 'chan1')];
+    channelRostersState.membersByKey = { [`chan1@${GROUPS_RELAY}`]: new Set() };
+    communityChannelsState.channels = [chanFix('chan1', 'Willkommen')];
+    putUserOn.mockImplementationOnce(async () => {
+      throw new Error('duplicate: already a member');
+    });
+    render(MembershipPane, {
+      props: {
+        communikeyEvent: communikeyEvent([
+          ['membership', 'root1', GROUPS_RELAY],
+          ['group', 'chan1', GROUPS_RELAY, 'Willkommen', 'members']
+        ]),
+        communityId: OWNER,
+        profileEvent
+      }
+    });
+    await fireEvent.click(await screen.findByTestId('join-request-approve'));
+    await waitFor(() => expect(putUserOn).toHaveBeenCalledTimes(2));
+    expect(putUserOn.mock.calls[0][0]).toEqual(expect.objectContaining({ id: 'root1' }));
+    expect(putUserOn.mock.calls[1][0]).toEqual(expect.objectContaining({ id: 'chan1' }));
+    expect(putUserOn.mock.calls[1][1]).toBe(MEMBER);
+    await waitFor(() => expect(showToast).toHaveBeenCalledWith('Aufgenommen.', 'success'));
+  });
+
+  // A non-auth REQ rejection (e.g. NIP-29 "restricted: ...") must not read
+  // as "no requests" — an empty queue and a broken queue must look
+  // different to the admin.
+  it('surfaces a non-auth REQ rejection as an inline error, not the empty state', async () => {
+    relayRequestError.value = new Error('restricted: not a member');
+    render(MembershipPane, {
+      props: { communikeyEvent: eventWithoutApplication, communityId: OWNER, profileEvent }
+    });
+    const error = await screen.findByTestId('join-requests-error');
+    expect(error.textContent).toContain('restricted: not a member');
+    expect(screen.queryByTestId('join-requests-empty')).toBeNull();
+  });
+
+  it('ignore hides the request and persists across a remount', async () => {
+    relayRequestEvents.value = [req(APPLICANT, 100)];
+    const first = render(MembershipPane, {
+      props: { communikeyEvent: eventWithoutApplication, communityId: OWNER, profileEvent }
+    });
+    await fireEvent.click(await screen.findByTestId('join-request-ignore'));
+    expect(screen.queryByTestId('join-request-row')).toBeNull();
+    first.unmount();
+
+    render(MembershipPane, {
+      props: { communikeyEvent: eventWithoutApplication, communityId: OWNER, profileEvent }
+    });
+    await new Promise((r) => setTimeout(r, 20));
+    expect(screen.queryByTestId('join-request-row')).toBeNull();
+  });
+});
+
+describe('MembershipPane — invite-code minting', () => {
+  it('renders the invite-code block for admins', () => {
+    render(MembershipPane, {
+      props: { communikeyEvent: eventWithoutApplication, communityId: OWNER, profileEvent }
+    });
+
+    expect(screen.getByTestId('membership-invite-create')).toBeTruthy();
+  });
+
+  it('clicking create generates a code, publishes 9009 to the roster relay, and displays the code', async () => {
+    render(MembershipPane, {
+      props: { communikeyEvent: eventWithoutApplication, communityId: OWNER, profileEvent }
+    });
+
+    await fireEvent.click(screen.getByTestId('membership-invite-create'));
+
+    await waitFor(() => expect(publishToGroupRelay).toHaveBeenCalledOnce());
+    const [relayConn, template, user] = /** @type {any[]} */ (publishToGroupRelay.mock.calls[0]);
+
+    // Verify the relay connection points to the roster relay
+    expect(relayConn).toBeTruthy();
+    expect(poolMock.relay).toHaveBeenCalledWith(GROUPS_RELAY);
+
+    // Verify the template is kind 9009 with h-tag and code tag
+    expect(template.kind).toBe(9009);
+    expect(template.tags).toEqual([
+      ['h', 'root1'],
+      [
+        'code',
+        expect.stringMatching(/^[23456789ABCDEFGHJKMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz]{12}$/)
+      ]
+    ]);
+
+    // Verify user is the active user
+    expect(user.pubkey).toBe(OWNER);
+
+    // Verify the code is displayed
+    const codeElement = await screen.findByTestId('membership-invite-code');
+    expect(codeElement).toBeTruthy();
+  });
+
+  it('displays a copy button for the generated code', async () => {
+    render(MembershipPane, {
+      props: { communikeyEvent: eventWithoutApplication, communityId: OWNER, profileEvent }
+    });
+
+    await fireEvent.click(screen.getByTestId('membership-invite-create'));
+
+    await waitFor(() => {
+      const copyButton = screen.getByTestId('membership-invite-copy');
+      expect(copyButton).toBeTruthy();
+    });
+  });
+
+  it('copy button shows success toast', async () => {
+    render(MembershipPane, {
+      props: { communikeyEvent: eventWithoutApplication, communityId: OWNER, profileEvent }
+    });
+
+    await fireEvent.click(screen.getByTestId('membership-invite-create'));
+
+    await waitFor(() => {
+      const copyButton = screen.getByTestId('membership-invite-copy');
+      expect(copyButton).toBeTruthy();
+    });
+
+    const copyButton = screen.getByTestId('membership-invite-copy');
+    await fireEvent.click(copyButton);
+
+    await waitFor(() =>
+      expect(showToast).toHaveBeenCalledWith(expect.stringContaining('Kopiert'), 'success')
+    );
+  });
+
+  it('copy button shows an i18n clipboard-unavailable reason, not a hardcoded string', async () => {
+    // @ts-expect-error - simulating a browser with no Clipboard API
+    delete navigator.clipboard;
+    render(MembershipPane, {
+      props: { communikeyEvent: eventWithoutApplication, communityId: OWNER, profileEvent }
+    });
+
+    await fireEvent.click(screen.getByTestId('membership-invite-create'));
+    await waitFor(() => expect(screen.getByTestId('membership-invite-copy')).toBeTruthy());
+
+    await fireEvent.click(screen.getByTestId('membership-invite-copy'));
+
+    await waitFor(() =>
+      expect(showToast).toHaveBeenCalledWith(
+        expect.stringContaining('Zwischenablage nicht verfügbar'),
+        'error'
+      )
+    );
+  });
+
+  it('shows an error toast when publishing fails', async () => {
+    publishToGroupRelay.mockRejectedValueOnce(new Error('relay rejected'));
+    render(MembershipPane, {
+      props: { communikeyEvent: eventWithoutApplication, communityId: OWNER, profileEvent }
+    });
+
+    await fireEvent.click(screen.getByTestId('membership-invite-create'));
+
+    await waitFor(() =>
+      expect(showToast).toHaveBeenCalledWith(expect.stringContaining('relay rejected'), 'error')
+    );
+  });
+
+  it('reports the publisher count only once someone holds the role', async () => {
+    render(MembershipPane, {
+      props: { communikeyEvent: eventWithoutApplication, communityId: OWNER, profileEvent }
+    });
+    expect(screen.queryByTestId('membership-publisher-count')).toBeNull();
+
+    rosterFixture.value = { ...rosterFixture.value, publishers: new Set([ADMIN2]) };
+    render(MembershipPane, {
+      props: { communikeyEvent: eventWithoutApplication, communityId: OWNER, profileEvent }
+    });
+    await waitFor(() =>
+      expect(screen.getByTestId('membership-publisher-count').textContent).toContain('1 Publisher')
+    );
+  });
+});

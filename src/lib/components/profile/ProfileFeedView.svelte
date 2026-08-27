@@ -249,13 +249,15 @@
   /** @param {any} entry */
   async function togglePin(entry) {
     const event = entry?.data;
-    if (!event?.id || pinBusy) return;
+    // Only reachable when canPin (isOwnProfile) is true, so userPubkey is
+    // always set here — guarded explicitly for type-narrowing.
+    if (!event?.id || pinBusy || !userPubkey) return;
     pinBusy = event.id;
     try {
       if (isEntryPinned(entry, pinnedPointers)) {
-        await unpinEvent(event);
+        await unpinEvent(event, userPubkey);
       } else {
-        await pinEvent(event);
+        await pinEvent(event, userPubkey);
       }
     } catch (err) {
       console.error('ProfileFeedView: pin toggle failed:', err);

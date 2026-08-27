@@ -13,7 +13,10 @@
   import { getCalendarRelays } from '$lib/helpers/relay-helper.js';
   import { useCalendarActions } from '../../stores/calendar-actions.svelte.js';
   import { useCalendarManagement } from '../../stores/calendar-management-store.svelte.js';
-  import { useJoinedCommunitiesList } from '../../stores/joined-communities-list.svelte.js';
+  // Share surfaces list joined ∪ area-linked communities — a private area's
+  // member never (publicly) follow-set-joins, but must still be able to share.
+  import { useShareableCommunities } from '$lib/helpers/shareable-communities.svelte.js';
+  import { useShareRestrictions } from '$lib/stores/share-restrictions.svelte.js';
   import { manager } from '$lib/stores/accounts.svelte';
   import { modalStore } from '$lib/stores/modal.svelte.js';
   import CalendarSelector from './CalendarSelector.svelte';
@@ -115,7 +118,13 @@
   const getOwnProfile = $derived(activeUser ? useUserProfile(activeUser.pubkey) : null);
   const ownProfile = $derived(getOwnProfile ? getOwnProfile() : null);
 
-  const getJoinedCommunities = useJoinedCommunitiesList();
+  const getJoinedCommunities = useShareableCommunities();
+  // Calendar events land in the Calendar section either way — gate check
+  // follows the concrete kind the form will publish (31922 all-day / 31923).
+  const getRestricted = useShareRestrictions(
+    () => (formData.isAllDay ? 31922 : 31923),
+    () => joinedCommunities
+  );
   const joinedCommunities = $derived(getJoinedCommunities());
 
   // Calendar and community selection state
@@ -601,6 +610,7 @@
               communities={joinedCommunities}
               bind:selectedCommunityIds
               communitiesWithShares={new Set()}
+              restrictedCommunities={getRestricted()}
               title={m.event_modal_communities_title()}
               showSelectAll={true}
             />

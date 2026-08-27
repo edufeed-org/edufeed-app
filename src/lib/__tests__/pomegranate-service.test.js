@@ -2,7 +2,12 @@
 // @ts-nocheck
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { generateSecretKey, getPublicKey, nip19 } from 'nostr-tools';
-import { bytesToHex } from '@noble/hashes/utils.js';
+// Not from '@noble/hashes/utils.js': that package is only a transitive dep
+// and its hoisted top-level link vanished with a lockfile update — an
+// undeclared import breaks whenever pnpm re-layouts node_modules. Node's
+// own Buffer does the same job in this node-env test.
+/** @param {Uint8Array} bytes */
+const bytesToHex = (bytes) => Buffer.from(bytes).toString('hex');
 import { trustedKeyDeal, hexShard } from '@fiatjaf/promenade-trusted-dealer';
 import {
   getPomegranateAccount,

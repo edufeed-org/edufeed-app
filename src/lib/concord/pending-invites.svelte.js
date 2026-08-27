@@ -9,6 +9,8 @@ import { of, combineLatest } from 'rxjs';
 import { switchMap } from 'rxjs/operators';
 
 let pendingCount = $state(0);
+/** @type {{inviter?: string, areaName?: string} | null} */
+let firstInvite = $state.raw(null);
 let generation = 0;
 /** @type {import('rxjs').Subscription | undefined} */
 let sub;
@@ -30,6 +32,16 @@ export function startConcordPendingInvites({ client }) {
     .subscribe((/** @type {[any[], any[]]} */ [pending, invites]) => {
       if (myGeneration !== generation) return;
       pendingCount = (pending?.length ?? 0) + (invites?.length ?? 0);
+      // Details exist only for DECRYPTED invites — surfaces show them when
+      // available (auto-decrypt makes this the common case) and stay
+      // honest-generic while everything is still locked.
+      const first = invites?.[0];
+      firstInvite = first
+        ? {
+            inviter: first.inviter,
+            areaName: first.bundle?.label ?? first.bundle?.name ?? undefined
+          }
+        : null;
     });
 }
 
@@ -38,9 +50,15 @@ export function stopConcordPendingInvites() {
   sub?.unsubscribe();
   sub = undefined;
   pendingCount = 0;
+  firstInvite = null;
 }
 
 /** @returns {number} reactive pending-invite count */
 export function getPendingInviteCount() {
   return pendingCount;
+}
+
+/** Summary of the first DECRYPTED pending invite, or null while locked/none. */
+export function getFirstPendingInvite() {
+  return firstInvite;
 }

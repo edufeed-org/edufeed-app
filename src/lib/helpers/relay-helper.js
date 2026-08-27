@@ -204,3 +204,13 @@ export function getProfileLookupRelays() {
   ];
   return [...new Set(relays)];
 }
+
+/**
+ * NIP-29 group host relays for the create-group flow. Deliberately NO
+ * fallback union — fallback relays are not group hosts; empty means the
+ * deployment ships no default and the form requires a relay by hand.
+ * @returns {string[]}
+ */
+export function getGroupsRelays() {
+  return runtimeConfig.appRelays?.groups ?? [];
+}

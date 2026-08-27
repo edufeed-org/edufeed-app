@@ -1,4 +1,5 @@
 <script>
+  import { goto } from '$app/navigation';
   // Owner-only nudge for legacy kind 10222 definitions that predate the
   // ["strict", "content"] marker. Those fail open (all tabs visible), so the
   // owner should re-save their content-type settings once — the edit modal
@@ -7,7 +8,6 @@
   // device) as soon as the re-saved definition arrives.
   import * as m from '$lib/paraglide/messages';
   import { useActiveUser } from '$lib/stores/accounts.svelte';
-  import { modalStore } from '$lib/stores/modal.svelte.js';
   import { hasStrictContentMarker } from '$lib/helpers/communityRelays.js';
   import {
     isLegacyContentBannerDismissed,
@@ -30,7 +30,9 @@
   });
 
   function handleReview() {
-    modalStore.openModal('editCommunity', { communityEvent });
+    // The edit modal is retired — the settings page's inline basics form is
+    // the review surface now (settings redesign, laoc 2026-08-18).
+    goto('?view=settings');
   }
 
   function handleDismiss() {

@@ -14,7 +14,6 @@
   import CalendarCreationModal from './calendar/CalendarCreationModal.svelte';
   import CalendarEventModal from './calendar/CalendarEventModal.svelte';
   import CreateCommunityModal from './CreateCommunityModal.svelte';
-  import EditCommunityModal from './EditCommunityModal.svelte';
   import WebcalQRCodeModal from './calendar/WebcalQRCodeModal.svelte';
   import EditProfileModal from './EditProfileModal.svelte';
   import CommunityMigrationModal from './CommunityMigrationModal.svelte';
@@ -55,7 +54,6 @@
   const googleLoginModalId = 'global-google-login-modal';
   const signupModalId = 'global-signup-modal';
   const createCommunityModalId = 'create-community-modal';
-  const editCommunityModalId = 'edit-community-modal';
   const editProfileModalId = 'edit-profile-modal';
   const communityMigrationModalId = 'community-migration-modal';
   const addBookmarkModalId = 'add-bookmark-modal';
@@ -81,9 +79,6 @@
       const signupModal = /** @type {HTMLDialogElement} */ (document.getElementById(signupModalId));
       const createCommunityModal = /** @type {HTMLDialogElement} */ (
         document.getElementById(createCommunityModalId)
-      );
-      const editCommunityModal = /** @type {HTMLDialogElement} */ (
-        document.getElementById(editCommunityModalId)
       );
       const editProfileModal = /** @type {HTMLDialogElement} */ (
         document.getElementById(editProfileModalId)
@@ -116,9 +111,6 @@
       }
       if (createCommunityModal && createCommunityModal.open) {
         createCommunityModal.close();
-      }
-      if (editCommunityModal && editCommunityModal.open) {
-        editCommunityModal.close();
       }
       if (editProfileModal && editProfileModal.open) {
         editProfileModal.close();
@@ -219,14 +211,6 @@
       );
       if (editProfileModal && !editProfileModal.open) {
         editProfileModal.showModal();
-      }
-    } else if (currentModal === 'editCommunity') {
-      // Open edit community modal
-      const editCommunityModal = /** @type {HTMLDialogElement} */ (
-        document.getElementById(editCommunityModalId)
-      );
-      if (editCommunityModal && !editCommunityModal.open) {
-        editCommunityModal.showModal();
       }
     } else if (currentModal === 'communityMigration') {
       // Open community migration modal
@@ -373,8 +357,6 @@
   <CalendarEventDetailsModal />
 {:else if modal.activeModal === 'createCommunity'}
   <CreateCommunityModal modalId={createCommunityModalId} />
-{:else if modal.activeModal === 'editCommunity'}
-  <EditCommunityModal modalId={editCommunityModalId} />
 {:else if modal.activeModal === 'webcalQRCode'}
   <WebcalQRCodeModal />
 {:else if modal.activeModal === 'profile'}

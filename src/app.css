@@ -13,6 +13,11 @@ body {
      "Rail Fix" in the edufeed-comenius project). */
   --sidebar-icon-w: 4.75rem;
   --sidebar-nav-w: 15rem;
+  /* Shared first-row band for the three columns of the community chrome row:
+     the icon rail, the community sidebar header and the main hero all centre
+     their first row on this height, so their avatars sit on one axis. 5rem is
+     what the rail already spans (py-4 + h-12 button). */
+  --community-header-h: 5rem;
 }
 
 /* Hidden-but-scrollable (Discord icon-rail pattern): wheel/touch scrolling

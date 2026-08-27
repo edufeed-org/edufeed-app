@@ -17,6 +17,7 @@
   import ContentNavSidebar from '$lib/components/community/layout/ContentNavSidebar.svelte';
   import DashboardNavSidebar from '$lib/components/dashboard/DashboardNavSidebar.svelte';
   import DashboardBottomTabBar from '$lib/components/dashboard/DashboardBottomTabBar.svelte';
+  import { pageOwnsNavColumn } from '$lib/rail/rail-active.js';
   import { initializeConfig, runtimeConfig } from '$lib/stores/config.svelte.js';
   import { useActiveUser } from '$lib/stores/accounts.svelte';
   import { appSettings, initializeAppSettings } from '$lib/stores/app-settings.svelte.js';
@@ -61,6 +62,13 @@
   let isDashboardActive = $derived(isOnCommunityRoutes && !currentCommunityPubkey);
   let isInsideCommunity = $derived(isOnCommunityRoutes && !!currentCommunityPubkey);
   let showDashboardNav = $derived(!!getActiveUser() && !isInsideCommunity);
+  // Where the page renders its own channel column (a NIP-29 host's
+  // HostChannelSidebar, or a standalone private area's rail), the app's
+  // generic nav steps aside rather than making it a third nav column beside
+  // a chat. Deliberately separate from showDashboardNav, which also drives
+  // the MOBILE bottom bar and main's padding: the sidebar is desktop-only,
+  // so nothing about mobile should change here.
+  let pageOwnsNav = $derived(pageOwnsNavColumn($page.url.pathname));
 
   // Pages with master/detail patterns (e.g. /c/messages) can opt in to the
   // "own bottom UI" rule reactively, so the bottom nav stays visible on the
@@ -308,12 +316,26 @@
       import('$lib/services/wave-service.svelte.js').then(({ initializeWaveToasts }) => {
         initializeWaveToasts(account.pubkey);
       });
+      // The rail's arrangement, encrypted to the user themselves. Wired here
+      // rather than imported by the store so the store keeps no dependency on
+      // the signer or the relays.
+      Promise.all([
+        import('$lib/rail/rail-layout-sync.svelte.js'),
+        import('$lib/rail/rail-layout-store.svelte.js')
+      ]).then(([sync, store]) => {
+        sync.setRailLayoutMirror(store.writeRailLayoutCache);
+        store.setRailLayoutPublisher(sync.publishRailLayout);
+        sync.initializeRailLayoutSync(account.pubkey);
+      });
     } else {
       import('$lib/services/inbox-service.svelte.js').then(({ cleanup }) => {
         cleanup();
       });
       import('$lib/services/wave-service.svelte.js').then(({ cleanupWaveToasts }) => {
         cleanupWaveToasts();
+      });
+      import('$lib/rail/rail-layout-sync.svelte.js').then(({ cleanupRailLayoutSync }) => {
+        cleanupRailLayoutSync();
       });
     }
   });
@@ -338,9 +360,14 @@
 
 <div class="flex h-dvh flex-col overflow-hidden">
   <Navbar hideMobileNavbar={!!getActiveUser() && isOnCommunityRoutes} />
-  {#if $navigating}
-    <progress class="progress h-1 w-full progress-primary"></progress>
-  {/if}
+  <!-- Overlay, not flow: a flow progress bar pushed the whole chrome down
+    4px on every navigation — visible as a flicker/bump (laoc, 2026-08-17).
+    The relative wrapper pins it to the navbar's bottom edge instead. -->
+  <div class="relative z-20 h-0">
+    {#if $navigating}
+      <progress class="progress absolute top-0 left-0 h-1 w-full progress-primary"></progress>
+    {/if}
+  </div>
   <ModalManager />
   <!-- Chrome row: sidebars + main as flex siblings. -->
   <div class="flex min-h-0 flex-1 overflow-hidden">
@@ -350,13 +377,17 @@
       <div class="hidden lg:contents">
         <CommunitySidebar
           currentCommunityId={currentCommunityPubkey}
+          currentPath={$page.url.pathname}
           {isDashboardActive}
           onCommunitySelect={handleCommunitySelect}
           onHomeSelect={handleHomeSelect}
         />
       </div>
     {/if}
-    {#if showDashboardNav}
+    {#if pageOwnsNav}
+      <!-- The page's own channel column (HostChannelSidebar, or the
+        standalone private area's rail) stands here. -->
+    {:else if showDashboardNav}
       <DashboardNavSidebar />
     {:else if isInsideCommunity && contentNavData}
       <ContentNavSidebar {...contentNavData} />

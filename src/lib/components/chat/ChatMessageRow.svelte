@@ -29,6 +29,9 @@
    * @property {((message: any) => void) | null} [onReply] - shows a hover-reveal reply button in the header when provided
    * @property {string} [replyTitle] - title attribute for the reply button (default "Reply", override for i18n)
    * @property {boolean} [showLinkPreviews] - render LinkPreviewList below the message content (default false)
+   * @property {number} [replyCount] - shows an "N replies" affordance in the footer when > 0 and `onOpenThread` is set
+   * @property {string} [replyCountLabel] - pre-formatted label for that affordance (caller owns pluralisation/i18n)
+   * @property {((message: any) => void) | null} [onOpenThread] - opens the thread for this message
    * @property {import('svelte').Snippet<[any]>} [reactions] - rendered inside chat-footer, receives `message`
    * @property {import('svelte').Snippet<[any]>} [attachments] - rendered inside the bubble below the content, receives `message` (e.g. concord imeta media)
    */
@@ -45,9 +48,16 @@
     onReply = null,
     replyTitle = 'Reply',
     showLinkPreviews = false,
+    replyCount = 0,
+    replyCountLabel = '',
+    onOpenThread = null,
     reactions = undefined,
     attachments = undefined
   } = $props();
+
+  // The footer exists for reactions today; the thread affordance shares it so a
+  // message with replies but no reactions still gets one.
+  const showThreadLink = $derived(replyCount > 0 && !!onOpenThread);
 </script>
 
 <div class="group chat {isOwnMessage ? 'chat-end' : 'chat-start'}">
@@ -97,7 +107,9 @@
         <p class="truncate">{replyPreview.content}</p>
       </div>
     {/if}
-    <NostrContentRenderer event={message} />
+    <!-- Chat is the only surface that opts into restricted markdown; the
+         other seven NostrContentRenderer callers keep the plain walk. -->
+    <NostrContentRenderer event={message} markdown />
     {#if attachments}
       {@render attachments(message)}
     {/if}
@@ -106,9 +118,21 @@
     {/if}
   </div>
 
-  {#if reactions}
-    <div class="chat-footer mt-0.5">
-      {@render reactions(message)}
+  {#if reactions || showThreadLink}
+    <div class="chat-footer mt-0.5 flex items-center gap-2">
+      {#if reactions}
+        {@render reactions(message)}
+      {/if}
+      {#if showThreadLink}
+        <button
+          type="button"
+          class="link text-xs link-primary"
+          data-testid="thread-open"
+          onclick={() => onOpenThread?.(message)}
+        >
+          {replyCountLabel}
+        </button>
+      {/if}
     </div>
   {/if}
 </div>

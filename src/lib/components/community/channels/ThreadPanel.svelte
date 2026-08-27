@@ -9,6 +9,7 @@
   template itself (threads.js) matches Armada's buildV2CommentTags tag-for-tag.
 -->
 <script>
+  import { usePanelWidth } from '$lib/helpers/panel-width.svelte.js';
   import { useObservable } from '$lib/concord/bridge.svelte.js';
   import { threadRepliesFor, buildThreadReplyTemplate } from '$lib/concord/threads.js';
   import { getMessageAttachments, stripAttachmentUrls } from '$lib/concord/attachments.js';
@@ -30,6 +31,26 @@
   );
   const replies = $derived(threadRepliesFor(getComments(), root.id));
   const getProfiles = useProfileMap(() => [root.pubkey, ...replies.map((r) => r.pubkey)]);
+
+  // Resizable + expandable, same key as the NIP-29 thread panel so the two
+  // surfaces agree on the width (laoc, 2026-08-11).
+  const panel = usePanelWidth('chat:thread-panel-width');
+
+  // Opens at the newest reply; stays pinned while the reader is at the
+  // bottom (laoc, 2026-08-11).
+  /** @type {HTMLDivElement | undefined} */
+  let repliesEl;
+  let threadPinned = true;
+  $effect(() => {
+    void replies.length; // dep first — effect gotcha
+    if (!repliesEl) return;
+    if (threadPinned) repliesEl.scrollTop = repliesEl.scrollHeight;
+  });
+  function handleThreadScroll() {
+    if (!repliesEl) return;
+    threadPinned = repliesEl.scrollHeight - repliesEl.scrollTop - repliesEl.clientHeight < 120;
+  }
+  let expanded = $state(false);
 
   let text = $state('');
   let sending = $state(false);
@@ -70,11 +91,33 @@
 {/snippet}
 
 <aside
-  class="fixed inset-y-0 right-0 z-40 flex w-full max-w-md flex-col border-l border-base-300 bg-base-100 shadow-xl"
+  class="fixed inset-y-0 right-0 z-40 flex w-full max-w-md flex-col border-l border-base-300 bg-base-100 shadow-xl md:max-w-none {expanded
+    ? 'md:w-full'
+    : 'md:w-[var(--thread-panel-w)]'}"
+  style="--thread-panel-w: {panel.width}px"
   aria-label={m.concord_thread_title()}
 >
+  {#if !expanded}
+    <div
+      role="separator"
+      aria-orientation="vertical"
+      data-testid="thread-resize-handle"
+      class="absolute inset-y-0 left-0 z-10 hidden w-1.5 cursor-col-resize hover:bg-primary/30 md:block"
+      onpointerdown={panel.startResize}
+    ></div>
+  {/if}
   <header class="flex items-center justify-between border-b border-base-300 px-4 py-3">
-    <h3 class="text-sm font-bold">{m.concord_thread_title()}</h3>
+    <h3 class="flex-1 text-sm font-bold">{m.concord_thread_title()}</h3>
+    <button
+      type="button"
+      class="btn hidden btn-ghost btn-xs md:inline-flex"
+      data-testid="thread-panel-expand"
+      title={expanded ? m.chat_thread_collapse() : m.chat_thread_expand()}
+      aria-label={expanded ? m.chat_thread_collapse() : m.chat_thread_expand()}
+      onclick={() => (expanded = !expanded)}
+    >
+      {expanded ? '⇥' : '⇤'}
+    </button>
     <button
       type="button"
       class="btn btn-ghost btn-xs"
@@ -85,7 +128,13 @@
     </button>
   </header>
 
-  <div class="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-4">
+  <div
+    bind:this={repliesEl}
+    class="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-4"
+    onscroll={handleThreadScroll}
+    onloadcapture={() =>
+      threadPinned && repliesEl && (repliesEl.scrollTop = repliesEl.scrollHeight)}
+  >
     {@render threadRow(root)}
     {#if replies.length > 0}
       <div class="divider my-0 text-xs text-base-content/50">

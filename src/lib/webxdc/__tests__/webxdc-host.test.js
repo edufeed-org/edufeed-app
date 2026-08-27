@@ -129,3 +129,42 @@ describe('createWebxdcHost', () => {
     await expect(host.handleRpc('nope', {}, post)).rejects.toThrow(/unknown/i);
   });
 });
+
+describe('webxdc.sendToChat', () => {
+  const identity = { selfAddr: 'npub1x', selfName: 'x' };
+  const makeSync = () => ({
+    getUpdates: () => [],
+    sendState: () => {},
+    sendRealtime: () => {},
+    onRealtime: () => () => {},
+    subscribe: () => () => {}
+  });
+
+  it('forwards a validated text file to onShareFile', async () => {
+    const onShareFile = vi.fn();
+    const host = createWebxdcHost(makeSync(), identity, { onShareFile });
+    await host.handleRpc(
+      'webxdc.sendToChat',
+      { file: { name: 'Notes.txt', plainText: '# hi' } },
+      () => {}
+    );
+    expect(onShareFile).toHaveBeenCalledWith({ name: 'Notes.txt', plainText: '# hi' });
+  });
+
+  it('rejects when unsupported or malformed', async () => {
+    const host = createWebxdcHost(makeSync(), identity);
+    await expect(
+      host.handleRpc('webxdc.sendToChat', { file: { name: 'x', plainText: 'y' } }, () => {})
+    ).rejects.toThrow(/not supported/);
+    const host2 = createWebxdcHost(makeSync(), identity, { onShareFile: vi.fn() });
+    await expect(
+      host2.handleRpc('webxdc.sendToChat', { file: { name: 'x' } }, () => {})
+    ).rejects.toThrow(/name and content/);
+  });
+
+  it('bridge script routes sendToChat through the RPC channel', () => {
+    const host = createWebxdcHost(makeSync(), identity, { onShareFile: vi.fn() });
+    expect(host.bridgeScript).toContain("request('webxdc.sendToChat'");
+    expect(host.bridgeScript).not.toContain('sendToChat is not supported');
+  });
+});

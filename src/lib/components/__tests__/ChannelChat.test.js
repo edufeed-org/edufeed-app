@@ -85,7 +85,7 @@ vi.mock(
   () => import('./fixtures/PollMessageStub.svelte')
 );
 vi.mock('$lib/components/shared/ProfileAvatar.svelte', () => ({ default: Stub }));
-vi.mock('$lib/components/icons', () => ({ ReplyIcon: Stub }));
+vi.mock('$lib/components/icons', () => ({ ReplyIcon: Stub, PeopleIcon: Stub }));
 
 vi.mock(
   '$lib/components/reactions/ReactionChips.svelte',
@@ -93,6 +93,8 @@ vi.mock(
 );
 
 vi.mock('$lib/paraglide/messages', () => ({
+  chat_thread_expand: () => 'Expand',
+  chat_thread_collapse: () => 'Collapse',
   concord_chat_subtitle: () => 'subtitle',
   concord_how_it_works: () => 'how it works',
   concord_menu_invite: () => 'Invite',
@@ -122,7 +124,8 @@ vi.mock('$lib/paraglide/messages', () => ({
   concord_thread_reply_placeholder: () => 'Reply in thread…',
   concord_thread_send: () => 'Send',
   concord_thread_open: () => 'Reply in thread',
-  concord_events_title: (/** @type {{ count: number }} */ { count }) => `${count} upcoming events`
+  concord_events_title: (/** @type {{ count: number }} */ { count }) => `${count} upcoming events`,
+  disclosure_encrypted: () => 'End-to-end encrypted — only members can read along.'
 }));
 
 const { default: ChannelChat } = await import(
@@ -232,6 +235,24 @@ describe('ChannelChat reaction parity', () => {
     await Promise.resolve();
 
     expect(reactMock).not.toHaveBeenCalled();
+  });
+});
+
+describe('ChannelChat disclosure line', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('renders the constant encrypted disclosure line above the composer', async () => {
+    const community = makeCommunity([]);
+    const { container } = render(ChannelChat, {
+      props: { community, channel: CHANNEL, openOverlay: () => {}, onBack: () => {} }
+    });
+    await Promise.resolve();
+    await Promise.resolve();
+
+    const line = container.querySelector('[data-testid="disclosure-line"]');
+    expect(line?.textContent).toBe('End-to-end encrypted — only members can read along.');
   });
 });
 

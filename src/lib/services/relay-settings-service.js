@@ -3,7 +3,7 @@
  */
 
 import { publishEvent } from './publish-service.js';
-import { invalidateRelayListCache } from './relay-service.svelte.js';
+import { invalidateRelayListCache, getRelayListLookupRelays } from './relay-service.svelte.js';
 import { manager } from '$lib/stores/accounts.svelte.js';
 import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
 import { nextCreatedAt, cachePublishedEvent } from '$lib/helpers/replaceableUpdates.js';
@@ -69,8 +69,19 @@ export async function saveRelayList(relays, userPubkey) {
     // Invalidate cache BEFORE publishing so we use the new relays
     invalidateRelayListCache(userPubkey);
 
-    // Publish using the outbox model
-    const result = await publishEvent(signedEvent);
+    // Publish using the outbox model — PLUS, explicitly, the relays of the
+    // NEW list itself and the relay-list lookup indexers. The outbox set is
+    // resolved from the OLD list (or the fallbacks when none exists); when
+    // that old set is broken or unreachable, publishing only there means a
+    // user can never save their way OUT of a bad relay list (journey-test
+    // 2026-08-17: account without a 10002 + flaky fallbacks → 'Failed to
+    // publish to any relay' on the very save meant to fix it). NIP-65 also
+    // wants the list ON the listed relays and findable via indexers.
+    const additionalRelays = [
+      ...relays.filter((relay) => relay.write).map((relay) => relay.url),
+      ...getRelayListLookupRelays()
+    ];
+    const result = await publishEvent(signedEvent, [], { additionalRelays });
 
     if (!result.success) {
       throw new Error('Failed to publish to any relay');

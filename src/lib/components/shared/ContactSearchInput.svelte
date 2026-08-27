@@ -5,9 +5,16 @@
   - showExcluded: render excluded contacts disabled with a badge
   - acceptPubkeyInput: append a synthetic "add this pubkey" row when the
     input parses as a valid npub/hex and has no existing contact match
+  - inlineList: render the suggestion list in normal flow instead of as an
+    absolute overlay. Inside a DaisyUI modal-box the overlay form is clipped
+    by the box's overflow-y:auto (the box does not grow for absolute
+    children), so suggestions end up half-hidden behind a scrollbar
 -->
 
 <script>
+  import { useProfileMap } from '$lib/stores/profile-map.svelte.js';
+  import { getDisplayName } from 'applesauce-core/helpers';
+  import ProfileAvatar from './ProfileAvatar.svelte';
   import { nip19 } from 'nostr-tools';
   import { contactsStore } from '$lib/stores/contacts.svelte.js';
   import { normalizePubkey } from '$lib/helpers/pubkey.js';
@@ -24,9 +31,11 @@
    *   onblur?: () => void,
    *   inputClass?: string,
    *   id?: string,
+   *   testid?: string,
    *   exclude?: string[],
    *   showExcluded?: boolean,
    *   acceptPubkeyInput?: boolean,
+   *   inlineList?: boolean,
    *   excludedLabel?: string,
    *   addPubkeyLabel?: string
    * }}
@@ -40,9 +49,11 @@
     onblur,
     inputClass = '',
     id = undefined,
+    testid = undefined,
     exclude = [],
     showExcluded = false,
     acceptPubkeyInput = false,
+    inlineList = false,
     excludedLabel = '',
     addPubkeyLabel = ''
   } = $props();
@@ -52,6 +63,13 @@
    * @typedef {{ kind: 'pubkey', pubkey: string, npub: string, excluded: boolean }} PubkeyNavItem
    * @typedef {ContactNavItem | PubkeyNavItem} NavItem
    */
+
+  // Resolve the profile for a pasted npub/hex so the synthetic row shows the
+  // real avatar + name instead of a generic person glyph (journey-test
+  // 2026-08-17: the invite-by-npub flow never rendered who was being added).
+  const getPubkeyProfiles = useProfileMap(() =>
+    navItems.filter((item) => item.kind === 'pubkey').map((item) => item.pubkey)
+  );
 
   let showDropdown = $state(false);
   let selectedDropdownIndex = $state(-1);
@@ -153,6 +171,7 @@
 <div class="relative">
   <input
     {id}
+    data-testid={testid}
     type="text"
     class="input-bordered input w-full {inputClass}"
     {placeholder}
@@ -165,8 +184,11 @@
 
   {#if showDropdown && navItems.length > 0}
     <div
-      class="absolute z-50 mt-1 max-h-60 w-full overflow-y-auto rounded-lg border border-base-300 bg-base-100 shadow-lg"
-      style="top: 100%;"
+      data-testid="contact-search-list"
+      class="mt-1 max-h-60 w-full overflow-y-auto rounded-lg border border-base-300 bg-base-100 {inlineList
+        ? ''
+        : 'absolute z-50 shadow-lg'}"
+      style={inlineList ? undefined : 'top: 100%;'}
     >
       {#each navItems as item, index (item.kind + ':' + item.pubkey)}
         {#if item.kind === 'contact'}
@@ -208,27 +230,37 @@
             aria-disabled={item.excluded ? 'true' : undefined}
             onclick={() => selectItem(item)}
           >
-            <div
-              class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-base-300 text-base-content/60"
-              aria-hidden="true"
-            >
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke-width="1.5"
-                stroke="currentColor"
-                class="h-5 w-5"
+            {#if getPubkeyProfiles().get(item.pubkey)}
+              <ProfileAvatar
+                pubkey={item.pubkey}
+                profile={getPubkeyProfiles().get(item.pubkey)}
+                size="sm"
+              />
+            {:else}
+              <div
+                class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-base-300 text-base-content/60"
+                aria-hidden="true"
               >
-                <path
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                  d="M15.75 6a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0ZM4.5 20.25a7.5 7.5 0 0 1 15 0v.75h-15v-.75Z"
-                />
-              </svg>
-            </div>
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke-width="1.5"
+                  stroke="currentColor"
+                  class="h-5 w-5"
+                >
+                  <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    d="M15.75 6a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0ZM4.5 20.25a7.5 7.5 0 0 1 15 0v.75h-15v-.75Z"
+                  />
+                </svg>
+              </div>
+            {/if}
             <div class="min-w-0 flex-1">
-              <div class="truncate text-sm font-medium">{addPubkeyLabel}</div>
+              <div class="truncate text-sm font-medium">
+                {getDisplayName(getPubkeyProfiles().get(item.pubkey)) || addPubkeyLabel}
+              </div>
               <div class="truncate font-mono text-xs text-base-content/60">
                 {shortNpub(item.npub)}
               </div>

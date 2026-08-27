@@ -13,6 +13,38 @@ export const manager = $state(new AccountManager());
 registerCommonAccountTypes(manager);
 
 /**
+ * Version counter bridged from AccountManager's own `accounts$`/`active$`
+ * (real RxJS `BehaviorSubject`s — cheap, not polling) so code OUTSIDE a
+ * component's `$effect` can still register a reactive dependency on
+ * account-state changes (e.g. community-signer.js's $derived.by callers).
+ *
+ * NOT attached to `manager` itself: `$state(new AccountManager())` does
+ * NOT make `manager` a deeply-reactive proxy. Svelte's proxy() (see
+ * svelte/src/internal/client/proxy.js) only wraps values whose prototype
+ * is exactly Object.prototype or Array.prototype; a class instance like
+ * `AccountManager` has `AccountManager.prototype`, so proxy() bails and
+ * returns it unchanged. `manager` is therefore a PLAIN, non-reactive
+ * object — property writes on it (e.g. a would-be `manager.accountsVersion
+ * = 0; manager.accountsVersion++`) are ordinary JS mutations invisible to
+ * $derived/$effect. (An earlier revision of this bridge made exactly that
+ * mistake — a placebo that never re-ran any dependent.)
+ *
+ * `accountsMeta` is a plain object LITERAL, so $state() DOES proxy it —
+ * mutating `accountsMeta.version` through this binding is a real, tracked
+ * write. Subscribed once, here, at module init — `manager` and this
+ * counter share the module's lifetime, so there is nothing to unsubscribe.
+ * See accounts-version-bridge.test.js for a test that fails on the old
+ * (unproxied) design and passes on this one.
+ */
+export const accountsMeta = $state({ version: 0 });
+manager.accounts$.subscribe(() => {
+  accountsMeta.version++;
+});
+manager.active$.subscribe(() => {
+  accountsMeta.version++;
+});
+
+/**
  * How long to wait for a NIP-07 extension to respond before treating the request
  * as failed. Some extensions never settle `signEvent()` when the user dismisses the
  * popup (instead of explicitly rejecting); without a bound the calling UI would spin

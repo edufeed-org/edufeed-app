@@ -12,6 +12,7 @@ export function load({ url }) {
 
   return {
     communityPubkey,
-    editNaddr: url.searchParams.get('edit') || ''
+    editNaddr: url.searchParams.get('edit') || '',
+    prefill: url.searchParams.get('prefill') || ''
   };
 }

@@ -130,6 +130,12 @@ vi.mock('applesauce-concord', () => {
       // Auto-unlock (client.svelte.js) subscribes this at setup; a stub that
       // never emits means no auto-unlock fires in these tests.
       this.communityList$ = { subscribe: () => ({ unsubscribe() {} }) };
+      // Same for the pending-direct-invite auto-read (invite UX round 2).
+      this.directInviteWatcher$ = {
+        subscribe: () => ({ unsubscribe() {} }),
+        // pending-invites.svelte.js pipes this before subscribing.
+        pipe: () => ({ subscribe: () => ({ unsubscribe() {} }) })
+      };
       createdClients.push(this);
     }
     async start() {

@@ -7,7 +7,9 @@
   import Icon from '../Icon.svelte';
 
   export let class_ = 'w-5 h-5';
-  export let title = 'Lock Open';
+  // Decorative by default — a non-empty default leaks an English SVG
+  // <title> tooltip OVER the caller's translated wrapper title.
+  export let title = '';
 </script>
 
 <Icon {class_} {title} viewBox="0 0 16 16" fill="currentColor" stroke="none" strokeWidth={0}>

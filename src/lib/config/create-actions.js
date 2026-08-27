@@ -195,24 +195,47 @@ export const CREATE_ACTIONS = [
 ];
 
 /**
- * Filter actions by a community's allowed content kinds (kind 10222 content sections).
- * Fails open: with no community event, no declared content sections, or a legacy
- * definition lacking the ["strict", "content"] marker, everything is shown.
- * Entries with kinds === null are context-independent and never filtered.
+ * Filter actions by a community's allowed content kinds (kind 10222 content
+ * sections) and, optionally, by whether this user may publish there.
+ *
+ * The two questions are different: the kind filter answers "does this
+ * community host that content type", `canPublish` answers "may THIS user put
+ * it there". Without the second, the FAB walks someone through a whole
+ * creation form to publish into a section whose access tier excludes them —
+ * the post lands on relays and renders for nobody.
+ *
+ * Fails open: with no community event, no declared content sections, or a
+ * legacy definition lacking the ["strict", "content"] marker, everything is
+ * shown and `canPublish` is never consulted. Entries with kinds === null are
+ * context-independent, belong to no section, and are never filtered.
+ *
  * @param {CreateAction[]} actions
  * @param {import('nostr-tools').Event | null | undefined} communityEvent
+ * @param {{canPublish?: (sectionName: string) => boolean}} [opts]
  * @returns {CreateAction[]}
  */
-export function filterActionsForCommunity(actions, communityEvent) {
+export function filterActionsForCommunity(actions, communityEvent, opts = {}) {
   if (!communityEvent || !hasStrictContentMarker(communityEvent)) return actions;
 
+  const sections = parseCommunityContentTypes(communityEvent);
   const allowed = new Set();
-  for (const section of parseCommunityContentTypes(communityEvent)) {
+  for (const section of sections) {
     for (const kind of section.kinds) allowed.add(kind);
   }
   if (allowed.size === 0) return actions;
 
-  return actions.filter((a) => a.kinds === null || a.kinds.some((k) => allowed.has(k)));
+  const { canPublish } = opts;
+  return actions.filter((a) => {
+    const kinds = a.kinds;
+    if (kinds === null) return true;
+    const covering = sections.filter((s) => kinds.some((k) => s.kinds.includes(k)));
+    if (covering.length === 0) return false;
+    if (!canPublish) return true;
+    // Publishable via ANY covering section: one action can span sections
+    // (posts covers kinds 1 and 11), and being shut out of one is no reason
+    // to hide it when another is open.
+    return covering.some((s) => canPublish(s.name));
+  });
 }
 
 /** Community `?view=` param (or dashboard content view) → suggested action id */

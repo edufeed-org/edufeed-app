@@ -12,7 +12,13 @@
 -->
 
 <script>
+  import { getContext } from 'svelte';
   import { getProxiedImageUrl } from '$lib/helpers/image-proxy.js';
+  import {
+    GROUP_MEDIA_AUTH,
+    isSameMediaHost,
+    fetchAuthedMediaUrl
+  } from '$lib/groups/authed-media.js';
   import { PersonIcon, PeopleIcon, BadgeIcon, PhotoIcon, ArticleIcon } from '$lib/components/icons';
 
   /**
@@ -50,10 +56,35 @@
 
   const useRobohash = $derived(robohash ?? fallbackType === 'avatar');
 
+  // Inside a group surface (GroupChat / the relay page set this context),
+  // media on the group's own host is membership-gated: the anonymous proxy
+  // and plain stages can only 401, so the signed Blossom fetch replaces the
+  // whole chain for those URLs (see groups/authed-media.js).
+  /** @type {{relay: string, getUser: () => any} | null} */
+  const mediaAuth = getContext(GROUP_MEDIA_AUTH) ?? null;
+  const needsAuth = $derived(!!mediaAuth && isSameMediaHost(src, mediaAuth.relay));
+  /** '' while resolving, the object URL on success, null on refusal */
+  /** @type {string | null} */
+  let authedSrc = $state('');
+  $effect(() => {
+    const wanted = needsAuth ? src : null;
+    authedSrc = '';
+    if (!wanted || !mediaAuth) return;
+    let alive = true;
+    fetchAuthedMediaUrl(wanted, mediaAuth.getUser()).then((resolved) => {
+      if (alive) authedSrc = resolved;
+    });
+    return () => {
+      alive = false;
+    };
+  });
+  const authPending = $derived(needsAuth && authedSrc === '');
+
   // Source stages in order: proxy URL (when distinct) → original → robohash (avatars only).
   // Derived from props so SSR and the first paint already show the right thing.
   const stages = $derived.by(() => {
     if (!src) return [];
+    if (needsAuth) return authedSrc ? [authedSrc] : [];
     const list = [];
     const proxied = getProxiedImageUrl(src, size);
     if (proxied && proxied !== src) list.push(proxied);
@@ -98,9 +129,11 @@
   });
 
   // Tell the caller once the whole chain is spent. An empty `src` is not a
-  // failure — nothing was ever tried — so it stays silent there.
+  // failure — nothing was ever tried — and neither is an authed fetch still
+  // in flight.
   $effect(() => {
-    if (exhausted && stages.length > 0 && !notifiedExhausted) {
+    if (exhausted && !authPending && (stages.length > 0 || needsAuth) && !notifiedExhausted) {
+      if (!src) return;
       notifiedExhausted = true;
       onexhausted?.();
     }

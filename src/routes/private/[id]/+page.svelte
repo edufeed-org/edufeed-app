@@ -18,9 +18,18 @@
 -->
 <script>
   import { getConcordState } from '$lib/concord/client.svelte.js';
-  import { isConcordCommunityId } from '$lib/concord/pointer.js';
+  import { isConcordCommunityId, parseConcordPointer } from '$lib/concord/pointer.js';
   import { concordAreaDisplayName, privateAreaGate } from '$lib/concord/unlinked-areas.js';
   import { useActiveUser } from '$lib/stores/accounts.svelte';
+  import { useJoinedCommunitiesList } from '$lib/stores/joined-communities-list.svelte.js';
+  import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
+  import { addressLoader } from '$lib/loaders/base.js';
+  import { getAllLookupRelays, getCommunikeyRelays } from '$lib/helpers/relay-helper.js';
+  import { hexToNpub } from '$lib/helpers/nostrUtils.js';
+  import { goto } from '$app/navigation';
+  import { resolve } from '$app/paths';
+  import { page } from '$app/stores';
+  import { get } from 'svelte/store';
   import { runtimeConfig } from '$lib/stores/config.svelte.js';
   import PrivateChannelsView from '$lib/components/community/channels/PrivateChannelsView.svelte';
   import ConcordAreaBadge from '$lib/components/shared/ConcordAreaBadge.svelte';
@@ -30,6 +39,52 @@
 
   const getActiveUser = useActiveUser();
   const valid = $derived(isConcordCommunityId(data.communityId));
+
+  // This page is for UNLINKED areas — but it used to claim "gehört zu keiner
+  // Community" without ever checking (laoc, 2026-08-17: a member landed here
+  // for an area that IS a community's Privater Bereich, minus the whole
+  // community context). A tag like ["concord", id] is not relay-indexable, so
+  // reverse lookup goes through the communities the USER follows: load their
+  // 10222s (IDB-cached in practice) and match the pointer. On a hit, replace
+  // this page with the community's Kanäle view, carrying ?channel= along.
+  const getJoined = useJoinedCommunitiesList();
+  let redirected = false;
+  $effect(() => {
+    const communityId = data.communityId;
+    // Candidates: followed communities plus the area's own founder — a
+    // wizard-founded area's owner IS the community keypair in the
+    // current-keypair flow, so this finds the 10222 even for members who
+    // never follow-set-joined the community.
+    const owner = communityState?.material?.owner;
+    const joined = [...new Set([...getJoined(), ...(owner ? [owner] : [])])];
+    if (!valid || redirected || joined.length === 0) return;
+
+    const channelParam = get(page)?.url?.searchParams.get('channel');
+    const relays = [...new Set([...getAllLookupRelays(), ...getCommunikeyRelays()])];
+
+    const modelSub = eventStore
+      .timeline({ kinds: [10222], authors: joined })
+      .subscribe((/** @type {any[]} */ events) => {
+        if (redirected) return;
+        for (const event of events ?? []) {
+          if (parseConcordPointer(event)?.communityId !== communityId) continue;
+          const npub = hexToNpub(event.pubkey);
+          if (!npub) continue;
+          redirected = true;
+          const suffix = channelParam ? `&channel=${channelParam}` : '';
+          goto(resolve(`/c/${npub}?view=channels${suffix}`), { replaceState: true });
+          break;
+        }
+      });
+    const loaderSubs = joined.map((pubkey) =>
+      addressLoader({ kind: 10222, pubkey, relays }).subscribe()
+    );
+
+    return () => {
+      modelSub.unsubscribe();
+      loaderSubs.forEach((sub) => sub.unsubscribe());
+    };
+  });
   // Cascading gate (flag off > invalid id > logged out > render), pulled
   // into a pure/unit-tested function — see privateAreaGate's doc comment for
   // why the order matters.

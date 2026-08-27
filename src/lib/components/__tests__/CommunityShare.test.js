@@ -99,6 +99,30 @@ vi.mock('$lib/stores/joined-communities-list.svelte.js', () => ({
   useJoinedCommunitiesList: () => () => mockJoinedCommunities
 }));
 
+// Share surfaces now list joined ∪ area-linked (shareable-communities) — the
+// concord side is out of scope here, so the hook degrades to the joined list.
+vi.mock('$lib/helpers/shareable-communities.svelte.js', () => ({
+  useShareableCommunities: () => () => mockJoinedCommunities
+}));
+
+// Restriction marking pulls the address loader chain — out of scope here:
+// no community in this suite is profile-list gated, so nothing restricted.
+vi.mock('$lib/stores/share-restrictions.svelte.js', () => ({
+  useShareRestrictions: () => () => new Set()
+}));
+
+// Private in-group sharing pulls the concord client chain — out of scope
+// here: no concord area exists in this suite, so the affordance never shows.
+vi.mock('$lib/concord/client.svelte.js', () => ({
+  getConcordState: () => ({ communities: [] })
+}));
+vi.mock('$lib/concord/community.svelte.js', () => ({
+  useConcordArea: () => () => ({ community: undefined, channels: [] })
+}));
+vi.mock('$lib/concord/send-message.js', () => ({
+  sendChannelMessage: vi.fn()
+}));
+
 vi.mock('$lib/stores/user-profile.svelte.js', () => ({
   useUserProfile: () => () => null
 }));

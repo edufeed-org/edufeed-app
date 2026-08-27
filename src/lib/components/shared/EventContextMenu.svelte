@@ -121,12 +121,13 @@
   }
 
   async function togglePin() {
+    if (!activeUser) return;
     try {
       if (eventIsPinned) {
-        await unpinEvent(event);
+        await unpinEvent(event, activeUser.pubkey);
         showToast(m.event_menu_unfeatured_toast(), 'success');
       } else {
-        await pinEvent(event);
+        await pinEvent(event, activeUser.pubkey);
         showToast(m.event_menu_featured_toast(), 'success');
       }
     } catch (err) {

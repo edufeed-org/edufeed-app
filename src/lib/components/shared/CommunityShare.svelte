@@ -5,7 +5,21 @@
 -->
 
 <script>
-  import { useJoinedCommunitiesList } from '../../stores/joined-communities-list.svelte.js';
+  // Share surfaces list joined ∪ area-linked communities — a private area's
+  // member never (publicly) follow-set-joins, but must still be able to share.
+  import { useShareableCommunities } from '$lib/helpers/shareable-communities.svelte.js';
+  import { useShareRestrictions } from '$lib/stores/share-restrictions.svelte.js';
+  // Private in-group sharing: a member posts the content into the E2E area
+  // (only members can decrypt; authorship member-verified by construction) —
+  // the counterpart to the public window. Concord submodules imported
+  // DIRECTLY, never the barrel (src/lib/concord convention).
+  import { getConcordState } from '$lib/concord/client.svelte.js';
+  import { useConcordArea } from '$lib/concord/community.svelte.js';
+  import { sendChannelMessage } from '$lib/concord/send-message.js';
+  import { nostrShareUri, memberAreaIdFor, shareableChannels } from '$lib/concord/private-share.js';
+  import { runtimeConfig } from '$lib/stores/config.svelte.js';
+  import { showToast } from '$lib/helpers/toast';
+  import * as m from '$lib/paraglide/messages';
   import { useUserProfile } from '../../stores/user-profile.svelte.js';
   import { eventStore, pool } from '$lib/stores/nostr-infrastructure.svelte';
   import { createTimelineLoader } from 'applesauce-loaders/loaders';
@@ -17,7 +31,7 @@
     getReplaceableAddress
   } from 'applesauce-core/helpers';
   import { parseAddressPointerFromATag } from '$lib/helpers/nostrUtils.js';
-  import { createCommunityReposts } from '$lib/helpers/communityRepost.js';
+  import { createCommunityReposts, isDeletedEvent } from '$lib/helpers/communityRepost.js';
   import { buildShareResultMessages } from '$lib/helpers/shareMessages.js';
   import { PlusIcon, CheckIcon, AlertIcon } from '../icons';
   import { getAllLookupRelays } from '$lib/helpers/relay-helper.js';
@@ -34,8 +48,58 @@
   let { event, activeUser, compact = false, shareButtonText = 'Apply Changes' } = $props();
 
   // Get joined communities
-  const getJoinedCommunities = useJoinedCommunitiesList();
+  const getJoinedCommunities = useShareableCommunities();
   const joinedCommunities = $derived(getJoinedCommunities());
+  // Communities where this share would publish and then never render (the
+  // section for this kind is profile-list gated and the user is not on the
+  // list) — rows are disabled instead of letting the share vanish.
+  const getRestricted = useShareRestrictions(
+    () => event?.kind,
+    () => joinedCommunities
+  );
+
+  // ── Private in-group share (channel picker) ──
+  /** @param {string} communityPubkey */
+  function privateAreaIdFor(communityPubkey) {
+    if (!runtimeConfig.concord?.enabled) return null;
+    return memberAreaIdFor(
+      eventStore.getReplaceable(10222, communityPubkey),
+      getConcordState().communities
+    );
+  }
+  // Which community's picker is open (one at a time), and the chosen channel.
+  let privateShareFor = $state(/** @type {string | null} */ (null));
+  let privateChannelId = $state('');
+  let privateSending = $state(false);
+  const getPickerArea = useConcordArea(() =>
+    privateShareFor ? (privateAreaIdFor(privateShareFor) ?? undefined) : undefined
+  );
+
+  /** @param {string} communityPubkey */
+  function togglePrivateShare(communityPubkey) {
+    privateShareFor = privateShareFor === communityPubkey ? null : communityPubkey;
+    privateChannelId = '';
+  }
+
+  async function sendPrivateShare() {
+    const area = getPickerArea();
+    const channels = shareableChannels(area.channels);
+    const channelId = privateChannelId || channels[0]?.channel_id;
+    const uri = nostrShareUri(event);
+    if (privateSending || !area.community || !channelId || !uri) return;
+    privateSending = true;
+    try {
+      await sendChannelMessage(area.community, channelId, uri, null, activeUser?.pubkey);
+      const channelName = channels.find((c) => c.channel_id === channelId)?.name ?? '';
+      showToast(m.share_private_sent({ channel: channelName }), 'success');
+      privateShareFor = null;
+    } catch (error) {
+      console.error('private share failed', error);
+      showToast(m.share_private_failed(), 'error');
+    } finally {
+      privateSending = false;
+    }
+  }
 
   // State management
   let selectedCommunityIds = $state(/** @type {string[]} */ ([]));
@@ -303,6 +367,15 @@
     try {
       // Separate into creates vs deletes (only deletable shares can be unshared)
       const toCreate = selectedCommunityIds.filter((id) => !deletableShares.has(id));
+
+      // Say why, instead of reporting every target as "failed": a repost of a
+      // deleted event publishes fine but resolves for nobody, so the sharer is
+      // the only person who would ever see it. Un-sharing stays available —
+      // cleaning up an old share of since-deleted content is exactly right.
+      if (toCreate.length > 0 && isDeletedEvent(event)) {
+        shareError = m.community_share_deleted_event();
+        return;
+      }
       const toDelete = selectedCommunityIds.filter((id) => deletableShares.has(id));
 
       // Batch create: ONE sign call for all new shares
@@ -424,9 +497,15 @@
           {@const isDeletable = deletableShares.has(communityPubKey)}
           {@const isNonDeletable = isAlreadyShared && !isDeletable}
           {@const isSelected = selectedCommunityIds.includes(communityPubKey)}
+          {@const isRestricted = getRestricted().has(communityPubKey)}
           {@const getCommunityProfile = useUserProfile(communityPubKey)}
           {@const communityProfile = getCommunityProfile()}
-          <label class="flex cursor-pointer items-center gap-3 rounded p-2 hover:bg-base-200">
+          <label
+            class="flex items-center gap-3 rounded p-2 {isRestricted
+              ? 'opacity-50'
+              : 'cursor-pointer hover:bg-base-200'}"
+            title={isRestricted ? m.share_restricted_hint() : undefined}
+          >
             <!-- The checkbox shows the RESULTING state: shared communities are
                  checked; selecting a deletable share (pending unshare) unchecks
                  it, selecting an unshared one checks it. -->
@@ -434,13 +513,18 @@
               type="checkbox"
               class="checkbox checkbox-secondary {compact ? 'checkbox-sm' : ''}"
               checked={isDeletable ? !isSelected : isAlreadyShared || isSelected}
-              disabled={isProcessingShares}
+              disabled={isProcessingShares || isRestricted}
               onchange={() => toggleCommunitySelection(communityPubKey)}
             />
             <span class="font-medium {compact ? 'text-sm' : ''}">
               {getDisplayName(communityProfile) ||
                 `${communityPubKey.slice(0, 8)}...${communityPubKey.slice(-4)}`}
             </span>
+            {#if isRestricted}
+              <span class="text-xs text-base-content/60" data-testid="share-restricted-badge"
+                >🔒 {m.share_restricted_label()}</span
+              >
+            {/if}
             {#if isDeletable && isSelected}
               <span class="text-xs font-medium text-warning">(Will be unshared)</span>
             {:else if isDeletable}
@@ -450,7 +534,56 @@
             {:else if isSelected}
               <span class="text-xs font-medium text-info">(Will be shared)</span>
             {/if}
+            {#if privateAreaIdFor(communityPubKey)}
+              <button
+                type="button"
+                class="btn ml-auto shrink-0 btn-ghost btn-xs"
+                data-testid="share-private-toggle"
+                title={m.share_private_hint()}
+                onclick={(/** @type {Event} */ e) => {
+                  e.preventDefault();
+                  togglePrivateShare(communityPubKey);
+                }}
+              >
+                🔒 {m.share_private_action()}
+              </button>
+            {/if}
           </label>
+          {#if privateShareFor === communityPubKey}
+            {@const pickerChannels = shareableChannels(getPickerArea().channels)}
+            <div
+              class="mt-1 mb-2 ml-9 flex flex-wrap items-center gap-2"
+              data-testid="share-private-picker"
+            >
+              <span class="text-xs text-base-content/60">{m.share_private_channel_label()}</span>
+              <!-- Explicit value (not bind): the channel list arrives async,
+                so an empty bound value rendered a blank select — the shown
+                value falls back to the first channel, matching what
+                sendPrivateShare() sends when nothing was picked. -->
+              <select
+                class="select w-40 select-xs"
+                value={privateChannelId || pickerChannels[0]?.channel_id}
+                onchange={(/** @type {any} */ e) => (privateChannelId = e.currentTarget.value)}
+                data-testid="share-private-channel"
+              >
+                {#each pickerChannels as channel (channel.channel_id)}
+                  <option value={channel.channel_id}
+                    ># {channel.name ?? channel.channel_id.slice(0, 8)}</option
+                  >
+                {/each}
+              </select>
+              <button
+                class="btn btn-xs btn-primary"
+                data-testid="share-private-send"
+                disabled={privateSending || pickerChannels.length === 0}
+                onclick={sendPrivateShare}
+              >
+                {#if privateSending}<span class="loading loading-xs loading-spinner"></span>{/if}
+                {m.share_private_send()}
+              </button>
+              <span class="w-full text-xs text-base-content/50">{m.share_private_hint()}</span>
+            </div>
+          {/if}
         {/each}
       </div>
 

@@ -193,7 +193,22 @@ let rawMainNotifications = $state.raw([]);
 /** @type {import('nostr-tools').NostrEvent[]} */
 let mainNotifications = $derived.by(() => {
   const membershipFormAddress = runtimeConfig.membership?.formAddress;
-  return rawMainNotifications.filter((e) => !isMembershipApplication(e, membershipFormAddress));
+  const adminPubkeys = runtimeConfig.membership?.adminPubkeys || [];
+  return rawMainNotifications.filter((e) => {
+    if (!isMembershipApplication(e, membershipFormAddress)) return true;
+    // Collision guard: a community's own application form (the removed
+    // Beitrittsformular layer — copies from before 2026-08-18 still live on
+    // relays) can share this exact 30168 address with the deployment's
+    // membership form when a community reused that template —
+    // isMembershipApplication only matches on the `a` tag, so it can't tell
+    // the two apart. A REAL membership application is always p-tagged to a
+    // configured deployment admin (see MembershipApplicationForm.svelte); a
+    // community application copy is p-tagged to a root-group reviewer who
+    // usually isn't one. Only hide it here (in favor of the admin panel)
+    // when it's actually addressed to a deployment admin — otherwise it must
+    // stay visible.
+    return !e.tags.some((t) => t[0] === 'p' && adminPubkeys.includes(t[1]));
+  });
 });
 
 /** @type {import('nostr-tools').NostrEvent[]} */
@@ -543,7 +558,15 @@ export async function markAsRead(type) {
 export function cleanup() {
   for (const sub of subscriptions) sub.unsubscribe();
   subscriptions = [];
-  mainNotifications = [];
+  // `mainNotifications` is $derived FROM rawMainNotifications (see its
+  // declaration above) — it must never be assigned directly. Svelte 5 lets a
+  // $derived be reassigned as a one-off "override", but doing so permanently
+  // severs it from its source expression: it becomes a plain frozen value
+  // and stops recomputing when rawMainNotifications changes, FOREVER (this
+  // silently killed the entire membership-application collision guard from
+  // the very first initializeInbox() call, since cleanup() runs unconditionally
+  // at its top). Reset the raw state instead and let the derived follow it.
+  rawMainNotifications = [];
   rsvpNotifications = [];
   pollResponseNotifications = [];
   readMarkers = null;

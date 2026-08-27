@@ -9,13 +9,16 @@
  *
  * @typedef {{
  *   selectedContentType: string,
- *   onContentTypeSelect: (type: string) => void,
+ *   onContentTypeSelect: (type: string, channelId?: string) => void,
  *   communitySelected: boolean,
  *   communityProfile: any,
  *   communityPubkey: string,
  *   restrictedTabs: Set<string>,
  *   accessibleTabs: Set<string>,
- *   communityEvent: any
+ *   communityEvent: any,
+ *   channelRows: import('$lib/groups/community-channel-rows.js').ChannelRow[],
+ *   isMember: boolean,
+ *   isRootAdmin: boolean
  * }} ContentNavData
  */
 

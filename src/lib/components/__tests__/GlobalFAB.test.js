@@ -89,14 +89,50 @@ vi.mock('$lib/helpers/nostrUtils.js', () => ({
 // Community definition (kind 10222) — tests emit an event via __setCommunityEvent.
 const communityState = vi.hoisted(() => ({ event: /** @type {any} */ (null) }));
 vi.mock('$lib/stores/nostr-infrastructure.svelte', () => ({
+  // The FAB now resolves the community's effective sections (kind-30223
+  // override) and its access gate itself, so the store mock has to answer
+  // the timeline/model reads and expose `pool` for the loaders behind them.
   eventStore: {
     replaceable: () => ({
       subscribe: (/** @type {(event: any) => void} */ cb) => {
         cb(communityState.event);
         return { unsubscribe() {} };
       }
+    }),
+    getReplaceable: () => communityState.event,
+    model: () => ({
+      subscribe: (/** @type {(events: any) => void} */ cb) => {
+        cb([]);
+        return { unsubscribe() {} };
+      }
     })
-  }
+  },
+  pool: { request: () => ({ subscribe: () => ({ unsubscribe() {} }) }), relay: () => ({}) }
+}));
+
+// Publish permission is the FAB's second filter, on top of the kind filter:
+// offering "create" for a section whose access tier excludes you walks the
+// user through a whole form to publish something nobody will render.
+const accessState = vi.hoisted(() => ({
+  /** @type {{active: any}} */
+  manager: { active: null },
+  isLoading: false,
+  canPublish: /** @type {(name: string) => boolean} */ (() => true)
+}));
+vi.mock('$lib/stores/accounts.svelte', () => ({
+  manager: accessState.manager,
+  useActiveUser: () => () => accessState.manager.active
+}));
+vi.mock('$lib/stores/community-access.svelte.js', () => ({
+  useCommunityAccess: () => ({
+    get isLoading() {
+      return accessState.isLoading;
+    },
+    canPublish: (/** @type {string} */ name) => accessState.canPublish(name),
+    getMembers: () => [],
+    getAllowedAuthors: () => null,
+    getFormRef: () => null
+  })
 }));
 vi.mock('$lib/loaders/base.js', () => ({
   addressLoader: () => ({ subscribe: () => ({ unsubscribe() {} }) })
@@ -154,6 +190,9 @@ function makeCommunityEvent(sections, { strict = true } = {}) {
 beforeEach(() => {
   vi.clearAllMocks();
   communityState.event = null;
+  accessState.manager.active = null;
+  accessState.isLoading = false;
+  accessState.canPublish = () => true;
   setPage('/settings');
   __setVariants([
     {
@@ -425,6 +464,44 @@ describe('GlobalFAB — community filtering', () => {
     expect(container.querySelector('[aria-label="Write Article"]')).toBeFalsy();
     expect(container.querySelector('[aria-label="Write Wiki"]')).toBeFalsy();
     expect(container.querySelector('[aria-label="Create new learning content"]')).toBeFalsy();
+  });
+
+  it('hides actions the signed-in user may not publish, keeping the ones they may', async () => {
+    accessState.manager.active = { pubkey: 'b'.repeat(64) };
+    accessState.canPublish = (name) => name !== 'Learning';
+    communityState.event = makeCommunityEvent([
+      { name: 'Learning', kinds: [30142] },
+      { name: 'Calendar', kinds: [31922, 31923, 31924, 31925] }
+    ]);
+    setPage('/c/[pubkey]', { pubkey }, `/c/${pubkey}`);
+    const { container } = await renderOpen();
+
+    expect(container.querySelector('[aria-label="Create new learning content"]')).toBeFalsy();
+    expect(container.querySelector('[aria-label="Create new event"]')).toBeTruthy();
+  });
+
+  it('fails open for a signed-out visitor rather than emptying the sheet', async () => {
+    // canPublish is false for everyone without a pubkey, so applying it to a
+    // visitor would hide every section-bound action instead of letting the
+    // signing guard prompt for login.
+    accessState.manager.active = null;
+    accessState.canPublish = () => false;
+    communityState.event = makeCommunityEvent([{ name: 'Learning', kinds: [30142] }]);
+    setPage('/c/[pubkey]', { pubkey }, `/c/${pubkey}`);
+    const { container } = await renderOpen();
+
+    expect(container.querySelector('[aria-label="Create new learning content"]')).toBeTruthy();
+  });
+
+  it('fails open while the access check is still loading', async () => {
+    accessState.manager.active = { pubkey: 'b'.repeat(64) };
+    accessState.isLoading = true;
+    accessState.canPublish = () => false;
+    communityState.event = makeCommunityEvent([{ name: 'Learning', kinds: [30142] }]);
+    setPage('/c/[pubkey]', { pubkey }, `/c/${pubkey}`);
+    const { container } = await renderOpen();
+
+    expect(container.querySelector('[aria-label="Create new learning content"]')).toBeTruthy();
   });
 
   it('shows all actions for legacy definitions without the strict marker (fail open)', async () => {

@@ -1,9 +1,11 @@
 import { execSync } from 'child_process';
 import { startRelay } from './mock-relay.js';
+import { startRelay as startNip29Relay } from './nip29-relay.js';
 import { seedAllRelays, RELAY_URLS } from './seed-relays.js';
 import { generateTestEvents } from './test-data.js';
 
 const HANGING_RELAY_PORT = 19738;
+const NIP29_RELAY_PORT = 17004;
 const BLOSSOM_URL = 'http://localhost:13000';
 const DEBUG = process.env.DEBUG;
 
@@ -99,4 +101,10 @@ export default async function globalSetup() {
     console.log(`[E2E Setup] Hanging relay running on ws://localhost:${HANGING_RELAY_PORT}`);
 
   globalThis.__HANGING_RELAY__ = hangingRelay;
+
+  // Start in-process NIP-29 mock relay (moderated-lifecycle specs)
+  const nip29Relay = await startNip29Relay(NIP29_RELAY_PORT);
+  if (DEBUG) console.log(`[E2E Setup] NIP-29 relay running on ws://localhost:${NIP29_RELAY_PORT}`);
+
+  globalThis.__NIP29_RELAY__ = nip29Relay;
 }

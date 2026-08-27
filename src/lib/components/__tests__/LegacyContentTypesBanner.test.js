@@ -27,6 +27,8 @@ const mockOpenModal = vi.hoisted(() => vi.fn());
 vi.mock('$lib/stores/modal.svelte.js', () => ({
   modalStore: { openModal: mockOpenModal }
 }));
+const mockGoto = vi.hoisted(() => vi.fn());
+vi.mock('$app/navigation', () => ({ goto: mockGoto }));
 
 vi.mock('$lib/paraglide/messages', () =>
   Object.fromEntries(
@@ -107,13 +109,13 @@ describe('LegacyContentTypesBanner', () => {
     expect(container.querySelector(SEL)).toBeNull();
   });
 
-  it('review button opens the edit-community modal with the event', async () => {
+  it('review button navigates to the settings page (inline basics form)', async () => {
     const event = legacyEvent();
     const { container } = render(LegacyContentTypesBanner, {
       props: { communityEvent: event }
     });
     await fireEvent.click(container.querySelector('[data-testid="legacy-content-banner-review"]'));
-    expect(mockOpenModal).toHaveBeenCalledWith('editCommunity', { communityEvent: event });
+    expect(mockGoto).toHaveBeenCalledWith('?view=settings');
   });
 
   it('dismiss hides the banner and persists per community', async () => {

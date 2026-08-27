@@ -6,27 +6,10 @@
 import { of } from 'rxjs';
 import { map, switchMap } from 'rxjs/operators';
 import { getConcordState, getConcordClient } from './client.svelte.js';
-import {
-  unlinkedConcordAreas,
-  attachableConcordAreas,
-  linkedConcordIds
-} from './unlinked-areas.js';
+import { unlinkedConcordAreas, linkedConcordIds } from './unlinked-areas.js';
 import { useObservable } from './bridge.svelte.js';
-import { useJoinedCommunitiesList } from '$lib/stores/joined-communities-list.svelte.js';
-import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
-import { addressLoader } from '$lib/loaders/base.js';
-import { getAllLookupRelays } from '$lib/helpers/relay-helper.js';
+import { useJoinedCommunikeyEvents } from '$lib/helpers/joined-communikey-events.svelte.js';
 import { runtimeConfig } from '$lib/stores/config.svelte.js';
-
-// Module-level (not per-hook-instance): every mounted instance of this hook
-// shares one fetch-once budget per pubkey per session, so re-mounting the
-// sidebar (or any other chrome using this hook) never re-fires the same
-// one-shot addressLoader request. This only bounds the PROACTIVE fetch below
-// — the reactive eventStore.replaceable() subscription still picks up a
-// 10222 event from ANY source (this fetch, another loader, a fresh join)
-// regardless of what's in this Set.
-// eslint-disable-next-line svelte/prefer-svelte-reactivity -- internal tracking, not reactive state
-const requestedPubkeys = new Set();
 
 /**
  * Concord memberships NOT linked to any followed Communikey community —
@@ -46,93 +29,15 @@ const requestedPubkeys = new Set();
  * @returns {() => import('./unlinked-areas.js').UnlinkedArea[]}
  */
 export function useUnlinkedConcordAreas() {
-  const getCommunikeyEvents = useJoinedCommunikeyEvents();
+  // The Concord flag stays THIS side's gate: with it off there is no
+  // Concord surface to keep consistent, so nothing needs fetching.
+  const getCommunikeyEvents = useJoinedCommunikeyEvents(() => !!runtimeConfig.concord?.enabled);
 
   return () =>
     unlinkedConcordAreas({
       communities: getConcordState().communities,
       linkedIds: linkedConcordIds(getCommunikeyEvents())
     });
-}
-
-/**
- * Concord areas the active user OWNS, as candidates for the "attach existing
- * area" picker (settings card / founding pane). Same joined-10222 input as
- * {@link useUnlinkedConcordAreas} so `linkedToJoined` disabling and the
- * unlinked sidebar list can never disagree about what counts as linked.
- * @param {() => string | null | undefined} getOwnerPubkey reactive getter for the active user's pubkey
- * @returns {() => import('./unlinked-areas.js').AttachableArea[]}
- */
-export function useAttachableConcordAreas(getOwnerPubkey) {
-  const getCommunikeyEvents = useJoinedCommunikeyEvents();
-
-  return () =>
-    attachableConcordAreas({
-      communities: getConcordState().communities,
-      linkedIds: linkedConcordIds(getCommunikeyEvents()),
-      ownerPubkey: getOwnerPubkey()
-    });
-}
-
-/**
- * Shared source for both hooks above: the kind-10222 events of every joined
- * community, kept current reactively + via the bounded proactive fetch (see
- * the module doc comment on `requestedPubkeys`).
- * @returns {() => any[]}
- */
-function useJoinedCommunikeyEvents() {
-  const getJoinedCommunities = useJoinedCommunitiesList();
-
-  // Reset (not reuse) on every effect re-run: joined pubkeys can
-  // reorder/change length between runs, and stale entries at old indices
-  // must not survive under a new, differently-shaped pubkeys array.
-  let communikeyEvents = $state.raw(/** @type {any[]} */ ([]));
-  $effect(() => {
-    // Flag off: no subscriptions, no fetches. Reads runtimeConfig.concord
-    // reactively (it's backed by config.svelte.js's $state), so this effect
-    // re-runs and starts fetching the moment /api/config lands the flag on
-    // after this hook already mounted.
-    if (!runtimeConfig.concord?.enabled) {
-      communikeyEvents = [];
-      return;
-    }
-
-    const pubkeys = getJoinedCommunities();
-    if (pubkeys.length === 0) {
-      communikeyEvents = [];
-      return;
-    }
-
-    const relays = getAllLookupRelays();
-
-    // Effect-LOCAL accumulator (CRITICAL): each subscription callback below
-    // writes into THIS plain array, then reassigns `communikeyEvents` FROM
-    // it. It never reads `communikeyEvents` itself. eventStore.replaceable()
-    // replays synchronously when the event is already cached, so a callback
-    // reading the $state it also writes would register that state as a
-    // dependency of the very effect that's writing it — a self-triggered
-    // infinite re-run (`effect_update_depth_exceeded`; CLAUDE.md's "$state
-    // inside $effect causes re-triggers"). See
-    // concord-unlinked-areas-hook.svelte.test.js for the regression test.
-    const events = new Array(pubkeys.length);
-    /** @type {import('rxjs').Subscription[]} */
-    const subs = pubkeys.map((pubkey, index) => {
-      if (!requestedPubkeys.has(pubkey)) {
-        requestedPubkeys.add(pubkey);
-        // Bounded proactive fetch — CLAUDE.md "addressLoader Relay
-        // Configuration": relays MUST be in the pointer, not just loader
-        // config, or nothing gets queried.
-        addressLoader({ kind: 10222, pubkey, relays }).subscribe();
-      }
-      return eventStore.replaceable(10222, pubkey).subscribe((event) => {
-        events[index] = event;
-        communikeyEvents = [...events];
-      });
-    });
-    return () => subs.forEach((sub) => sub.unsubscribe());
-  });
-
-  return () => communikeyEvents;
 }
 
 /**

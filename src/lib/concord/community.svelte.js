@@ -15,13 +15,39 @@ import { memberTier } from './roles.js';
 
 /**
  * Visibility rule for the community "channels" tab (spec §7):
- * flag on AND (member OR pointer exists OR owner).
- * @param {{enabled: boolean, pointer: object|undefined, isOwner: boolean, isMember: boolean}} args
+ * flag on AND (member OR pointer exists).
+ *
+ * NIP-29 channels are a SECOND source for the same tab and are not Concord:
+ * a community extended by groups has no Concord pointer, no Concord
+ * membership and need not have the Concord flag on, so every Concord input
+ * here is false for it. Its channels open the tab on their own — otherwise
+ * the only list they have would be unreachable. Likewise a moderated
+ * community's membership pointer opens it for EVERYONE.
+ * @param {{enabled: boolean, pointer: object|undefined, isMember: boolean, hasGroupChannels?: boolean, hasMembershipPointer?: boolean}} args
  * @returns {boolean}
  */
-export function shouldShowChannelsTab({ enabled, pointer, isOwner, isMember }) {
+export function shouldShowChannelsTab({
+  enabled,
+  pointer,
+  isMember,
+  hasGroupChannels,
+  hasMembershipPointer
+}) {
+  if (hasGroupChannels) return true;
+  // A moderated community's membership pointer opens the view for everyone:
+  // subtree channels are pointer-free (no 10222 `group` tags), so this is
+  // the only signal they exist, and the root group doubles as the "General"
+  // channel, so there is always ≥1 row. The old owner-only carve-out made
+  // every member's channel click bounce back to home (laoc, 2026-08-21).
+  // Per-channel access stays with the chat pane / relay, per-row visibility
+  // with buildSidebarZones. Before the Concord gate — NIP-29 doesn't depend
+  // on that flag.
+  if (hasMembershipPointer) return true;
   if (!enabled) return false;
-  return isMember || !!pointer || isOwner;
+  // No bare-owner clause: founding an area is the settings type card's
+  // deliberate flow ("Privaten Bereich erstellen"), not a side effect of a
+  // channels tab that appears before any type decision (laoc, 2026-08-18).
+  return isMember || !!pointer;
 }
 
 /**

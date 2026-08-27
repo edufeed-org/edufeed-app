@@ -35,6 +35,7 @@
   import { getVerifiedMembers } from '$lib/helpers/contentTypes.js';
   import ContactSearchInput from '$lib/components/shared/ContactSearchInput.svelte';
   import { useProfileMap } from '$lib/stores/profile-map.svelte.js';
+  import { unique } from '$lib/helpers/unique.js';
   import { manager } from '$lib/stores/accounts.svelte';
   import ProfileAvatar from '$lib/components/shared/ProfileAvatar.svelte';
   import { showToast } from '$lib/helpers/toast';
@@ -150,10 +151,28 @@
   const profileAccess = getContext('profileAccess');
   const invitable = $derived.by(() => {
     const self = manager.active?.pubkey;
+    // Also exclude the community's own pubkey — a separate-keypair owner
+    // (active account distinct from the community) must not be offered the
+    // community itself as an invitable "member" (handoff #12; mirrors
+    // ChannelCreateWizard's identical exclusion).
+    const community = communikeyEvent?.pubkey;
     const { allMembers } = getVerifiedMembers(profileAccess, communikeyEvent);
-    return allMembers.filter((p) => p !== self);
+    return allMembers.filter((p) => p !== self && p !== community);
   });
-  const getProfiles = useProfileMap(() => invitable);
+  // Rows shown on the direct tab: community members PLUS anyone already
+  // invited by pasted npub — a non-member invite previously vanished with no
+  // row at all (journey-test 2026-08-17, same class as the create wizard).
+  const inviteRows = $derived(unique([...invitable, ...sent]));
+  const getProfiles = useProfileMap(() => inviteRows);
+
+  // Same exclusion set for the free-text/follow search below the quick-pick
+  // list — a pasted npub or search hit for the community's own pubkey must
+  // not be offered as a direct-invite target either.
+  const excludeFromSearch = $derived.by(() => {
+    const self = manager.active?.pubkey;
+    const community = communikeyEvent?.pubkey;
+    return [...sent, ...(self ? [self] : []), ...(community ? [community] : [])];
+  });
 </script>
 
 <div class="modal-open modal" role="dialog">
@@ -161,7 +180,13 @@
     <button class="btn absolute top-3 right-3 btn-circle btn-ghost btn-sm" onclick={onClose}
       >✕</button
     >
-    <h3 class="mb-3 text-lg font-extrabold">{m.concord_invite_title({ name: channel.name })}</h3>
+    <h3 class="mb-1 text-lg font-extrabold">{m.concord_invite_title({ name: channel.name })}</h3>
+    <!-- Journey-test 2026-08-17: senders could not tell whether they were
+      inviting to this channel or the whole area — say it: the invite always
+      grants AREA membership, plus this channel's access. -->
+    <p class="mb-3 text-xs text-base-content/60">
+      {m.concord_invite_scope_hint({ channel: channel.name })}
+    </p>
     <div class="tabs-boxed mb-4 tabs">
       <button class="tab {tab === 'link' ? 'tab-active' : ''}" onclick={() => (tab = 'link')}
         >{m.concord_invite_tab_link()}</button
@@ -214,13 +239,13 @@
       <ContactSearchInput
         acceptPubkeyInput
         placeholder={m.concord_invite_search_placeholder()}
-        exclude={manager.active?.pubkey ? [...sent, manager.active.pubkey] : sent}
+        exclude={excludeFromSearch}
         onselect={(/** @type {{ pubkey: string }} */ c) => directInvite(c.pubkey)}
         onrawpubkey={(/** @type {string} */ hex) => directInvite(hex)}
       />
-      {#if invitable.length > 0}
+      {#if inviteRows.length > 0}
         <div class="mt-3 flex max-h-64 flex-col gap-1 overflow-y-auto">
-          {#each invitable as pubkey (pubkey)}
+          {#each inviteRows as pubkey (pubkey)}
             <div class="flex items-center gap-2 px-2 py-1">
               <ProfileAvatar {pubkey} profile={getProfiles().get(pubkey)} size="sm" />
               <span class="flex-1 truncate text-sm"

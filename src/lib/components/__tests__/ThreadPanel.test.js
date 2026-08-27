@@ -42,6 +42,8 @@ vi.mock(
 );
 
 vi.mock('$lib/paraglide/messages', () => ({
+  chat_thread_expand: () => 'Expand',
+  chat_thread_collapse: () => 'Collapse',
   concord_thread_title: () => 'Thread',
   concord_thread_close: () => 'Close thread',
   concord_thread_replies: (/** @type {{ count: number }} */ { count }) => `${count} replies`,

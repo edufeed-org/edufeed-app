@@ -21,6 +21,35 @@ function parseArray(value, defaultValue = []) {
     .filter(Boolean);
 }
 
+const NEVENT_REF = /^nevent1[a-z0-9]+$/;
+const HEX_ID_REF = /^[0-9a-f]{64}$/i;
+
+/**
+ * Parse `WEBXDC_APPS` into an ordered list of kind-1063 event references
+ * (nevent or 64-hex event id; hex is case-normalized to lowercase). Order is
+ * preserved — the first entry is the picker's featured app. Invalid entries
+ * are dropped with a warning rather than failing the whole config response.
+ * @param {string | undefined} value
+ * @returns {string[]}
+ */
+function parseWebxdcApps(value) {
+  if (!value) return [];
+  const out = [];
+  for (const raw of value
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean)) {
+    if (NEVENT_REF.test(raw)) {
+      out.push(raw);
+    } else if (HEX_ID_REF.test(raw)) {
+      out.push(raw.toLowerCase());
+    } else {
+      console.warn(`[api/config] WEBXDC_APPS: dropping invalid event reference "${raw}"`);
+    }
+  }
+  return out;
+}
+
 /**
  * Parse integer with default
  * @param {string | undefined} value
@@ -178,6 +207,8 @@ export function GET() {
     ambRelays: parseArray(env.AMB_RELAYS),
     longformContentRelays: parseArray(env.LONGFORM_CONTENT_RELAY),
     kanbanRelays: parseArray(env.KANBAN_RELAYS),
+    groupsRelays: parseArray(env.GROUPS_RELAYS),
+    groupsEnabled: parseBool(env.GROUPS_ENABLED, false),
 
     // Dashboard relay feed picker (see relay-feed-options.svelte.js).
     // relaySources tokens: config | custom | nip65 | community
@@ -439,7 +470,12 @@ export function GET() {
 
     // Webxdc sandbox host (interactive resources player)
     webxdc: {
-      sandboxDomain: env.SANDBOX_DOMAIN || 'iframe.diy'
+      sandboxDomain: env.SANDBOX_DOMAIN || 'iframe.diy',
+      // Curated apps offered first ("Empfohlen") in the composer's apps
+      // picker, ordered — the first entry is featured. Each entry is a
+      // kind-1063 event reference (nevent or hex id); the picker resolves
+      // name/icon/hash from the event itself.
+      curatedApps: parseWebxdcApps(env.WEBXDC_APPS)
     }
   };
 
