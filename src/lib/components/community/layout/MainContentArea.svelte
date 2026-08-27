@@ -159,7 +159,7 @@
       {:else if selectedContentType === 'meet'}
         <MeetView communityPubkey={selectedCommunityId} {communityProfile} />
       {:else if selectedContentType === 'members'}
-        <MembersView {communikeyEvent} />
+        <MembersView {communikeyEvent} {communityProfile} />
       {:else if selectedContentType === 'settings'}
         <SettingsView
           communityId={selectedCommunityId}

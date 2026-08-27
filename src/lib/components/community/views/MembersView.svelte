@@ -14,11 +14,14 @@
   import { contentSectionLabel } from '$lib/helpers/content-section-label.js';
   import ProfileCard from '$lib/components/shared/ProfileCard.svelte';
   import JoinRequestsPanel from '$lib/components/community/settings/JoinRequestsPanel.svelte';
+  import GroupMembersModal from '$lib/components/groups/GroupMembersModal.svelte';
   import { useActiveUser } from '$lib/stores/accounts.svelte';
   import { isCommunityOwner } from '$lib/helpers/community-signer.js';
+  import { PUBLISHER_ROLE } from '$lib/groups/roles.js';
+  import { getDisplayName } from 'applesauce-core/helpers';
   import * as m from '$lib/paraglide/messages';
 
-  let { communikeyEvent } = $props();
+  let { communikeyEvent, communityProfile = null } = $props();
 
   /** @type {import('$lib/stores/profile-list-access.svelte.js').ProfileListAccess} */
   const profileAccess = getContext('profileAccess');
@@ -63,6 +66,17 @@
       getRootRoster().admins.some((admin) => admin.pubkey === me)
     );
   });
+
+  // Direct roster management from this page too, not only from Settings'
+  // MembershipPane (laoc, 2026-08-27). Same actor gate as the join queue
+  // (owner or root-39001 admin) plus a resolvable root pointer; the modal
+  // wiring mirrors MembershipPane 1:1 — including the retired-to-no-op
+  // onMemberAdded fan-out (see the comment there for why it's empty).
+  let showMembersModal = $state(false);
+  const rosterPointer = $derived(getRootRoster().pointer);
+  const roleOptions = $derived(
+    unique([...getRootRoster().admins.flatMap((a) => a.roles ?? []), 'admin', PUBLISHER_ROLE])
+  );
 
   // Moderated: the ROOT-group roster IS the community membership — it must
   // be listed even when no content section is gated (laoc, 2026-08-19: an
@@ -113,7 +127,18 @@
 </script>
 
 <div class="container mx-auto max-w-4xl px-4 py-8">
-  <h2 class="mb-6 text-xl font-bold">{m.community_members_title()}</h2>
+  <div class="mb-6 flex flex-wrap items-center justify-between gap-3">
+    <h2 class="text-xl font-bold">{m.community_members_title()}</h2>
+    {#if canModerateJoins && rosterPointer}
+      <button
+        class="btn btn-outline btn-sm"
+        data-testid="members-manage-button"
+        onclick={() => (showMembersModal = true)}
+      >
+        {m.community_membership_pane_manage()}
+      </button>
+    {/if}
+  </div>
 
   {#if canModerateJoins && communikeyEvent?.pubkey}
     <div class="mb-6">
@@ -239,3 +264,19 @@
     </div>
   {/if}
 </div>
+
+{#if showMembersModal && rosterPointer}
+  <GroupMembersModal
+    pointer={rosterPointer}
+    metadata={{ name: getDisplayName(communityProfile) }}
+    communityId={communikeyEvent?.pubkey}
+    admins={getRootRoster().admins}
+    members={getRootRoster().members}
+    myPubkey={getActiveUserForQueue()?.pubkey}
+    isAdmin={canModerateJoins}
+    {roleOptions}
+    onRosterChanged={getRootRoster().refresh}
+    onMemberAdded={async () => {}}
+    onClose={() => (showMembersModal = false)}
+  />
+{/if}

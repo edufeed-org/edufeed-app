@@ -24,7 +24,8 @@ vi.mock('$lib/paraglide/messages', () => ({
   groups_role_admin: () => 'Admin',
   groups_role_king: () => 'Founder',
   community_members_area_note: () => 'Area members are private.',
-  community_members_area_chip: () => 'Private area'
+  community_members_area_chip: () => 'Private area',
+  community_membership_pane_manage: () => 'Manage members'
 }));
 
 vi.mock('$lib/stores/profile-map.svelte.js', () => ({
@@ -45,6 +46,23 @@ vi.mock('$lib/components/shared/ProfileCard.svelte', () => ({
   default: function Stub() {}
 }));
 
+// Stubbed: both pull heavy relay/group dep trees, and their own behavior is
+// covered by MembershipPane.test.js / GroupMembersModal.test.js.
+vi.mock('$lib/components/community/settings/JoinRequestsPanel.svelte', () => ({
+  default: function Stub() {}
+}));
+vi.mock('$lib/components/groups/GroupMembersModal.svelte', () => ({
+  default: function Stub() {}
+}));
+
+// Signed-in viewer is configurable per test (default: signed out), with the
+// manager/accountsMeta shape community-signer.js reaches for.
+vi.mock('$lib/stores/accounts.svelte', () => ({
+  useActiveUser: () => () => (holders.activePubkey ? { pubkey: holders.activePubkey } : null),
+  manager: { getAccountForPubkey: () => undefined },
+  accountsMeta: { version: 0 }
+}));
+
 const holders = vi.hoisted(() => ({
   /** @type {{ isLoading: boolean, getMembers: (name: string) => string[] }} */
   profileAccess: { isLoading: false, getMembers: () => [] },
@@ -55,7 +73,11 @@ const holders = vi.hoisted(() => ({
   /** @type {Set<string> | null} */
   areaMembers: null,
   /** @type {Set<string>} */
-  members: new Set()
+  members: new Set(),
+  /** @type {{id: string, relay: string} | null} */
+  pointer: null,
+  /** @type {string | null} */
+  activePubkey: null
 }));
 
 vi.mock('svelte', async (importOriginal) => {
@@ -69,7 +91,7 @@ vi.mock('svelte', async (importOriginal) => {
 
 vi.mock('$lib/groups/root-roster.svelte.js', () => ({
   useRootRoster: () => () => ({
-    pointer: null,
+    pointer: holders.pointer,
     refresh: vi.fn(),
     members: holders.members,
     admins: holders.admins,
@@ -107,6 +129,8 @@ beforeEach(() => {
   holders.areaCommunity = null;
   holders.areaMembers = null;
   holders.members = new Set();
+  holders.pointer = null;
+  holders.activePubkey = null;
 });
 
 describe('MembersView — open community (unchanged)', () => {
@@ -260,5 +284,27 @@ describe('MembersView — community with a linked private area', () => {
     render(MembersView, { props: { communikeyEvent: AREA_EVENT } });
     expect(screen.getByText('Area members are private.')).toBeTruthy();
     expect(screen.queryByText('This is an open community.')).toBeNull();
+  });
+});
+
+// Admins manage the roster directly from the Mitglieder page too, not only
+// from Settings' MembershipPane (laoc, 2026-08-27).
+describe('MembersView — manage-members button', () => {
+  it('a root-39001 admin gets the manage button', () => {
+    holders.admins = [{ pubkey: ADMIN, roles: ['admin'] }];
+    holders.members = new Set([OWNER, ADMIN]);
+    holders.pointer = { id: 'root123', relay: 'wss://groups.example' };
+    holders.activePubkey = ADMIN;
+    render(MembersView, { props: { communikeyEvent: MODERATED_EVENT_OWNER_ONLY } });
+    expect(screen.getByTestId('members-manage-button')).toBeTruthy();
+  });
+
+  it('a signed-in non-admin member sees no manage button', () => {
+    holders.admins = [{ pubkey: ADMIN, roles: ['admin'] }];
+    holders.members = new Set([OWNER, ADMIN, REGULAR]);
+    holders.pointer = { id: 'root123', relay: 'wss://groups.example' };
+    holders.activePubkey = REGULAR;
+    render(MembersView, { props: { communikeyEvent: MODERATED_EVENT_OWNER_ONLY } });
+    expect(screen.queryByTestId('members-manage-button')).toBeNull();
   });
 });
