@@ -5,8 +5,9 @@
 // ["parent", rootId]. The pyramid fork serves that subtree as a per-community
 // virtual endpoint (wss://host/c/<rootId>, groups/virtual.go): a bare
 // {kinds:[39000]} REQ there returns the root + its children (private children
-// only to authenticated members). So we ask the endpoint ONCE for all 39000s,
-// feed them into the eventStore (storeEvents), and DERIVE the channel list from
+// only to authenticated members). So we hold ONE live subscription for all
+// 39000s (open past EOSE, so other admins' new channels stream in), feed them
+// into the eventStore (storeEvents), and DERIVE the channel list from
 // the store (buildSubtreeChannels) — the same eventStore treatment the rosters
 // (channel-rosters.svelte.js) and kind-9 chat (GroupChat.svelte) already get.
 //
@@ -96,8 +97,13 @@ export function useCommunityChannels(getRootPointer) {
     };
   });
 
-  // ── Fetch: feed every 39000 the endpoint serves into the eventStore, then
-  //    mark fetched when it stops speaking. ──
+  // ── Fetch: feed every 39000 the endpoint serves into the eventStore. A
+  //    LIVE subscription (kept open past EOSE, same pattern as GroupChat's
+  //    kind-9 feed), not a one-shot request: a channel another admin creates
+  //    while we're on the community streams straight into the store and the
+  //    read effect below re-derives the list — no refresh/navigation needed
+  //    (laoc, 2026-08-27). `fetched` flips on the relay's EOSE marker (or on
+  //    error / the fallback timer), since a subscription never completes. ──
   $effect(() => {
     void seq;
     const key = discoveryKey;
@@ -112,8 +118,11 @@ export function useCommunityChannels(getRootPointer) {
 
     /** @type {Array<{unsubscribe: () => void}>} */
     const open = [];
+    /** @type {ReturnType<typeof setTimeout> | undefined} */
+    let eoseFallback;
     const timer = setTimeout(() => {
       const markFetched = () => {
+        clearTimeout(eoseFallback);
         fetched = true;
         // Cold-start guard: a community ALWAYS has at least its root 39000, so
         // "fetched but the store has no root 39000" almost always means the
@@ -129,18 +138,29 @@ export function useCommunityChannels(getRootPointer) {
       try {
         const sub = pool
           .relay(endpoint)
-          .request({ kinds: [GROUP_METADATA_KIND] }, { timeout: 8000 })
+          .subscription({ kinds: [GROUP_METADATA_KIND] })
           .pipe(storeEvents(eventStore))
-          .subscribe({ complete: markFetched, error: markFetched });
+          .subscribe({
+            next: (/** @type {any} */ message) => {
+              if (message === 'EOSE') markFetched();
+            },
+            complete: markFetched,
+            error: markFetched
+          });
         open.push(sub);
+        // A relay that streams events but never says EOSE must not leave the
+        // caller in "loading" forever — the old request() bounded this with
+        // its 8s timeout, the subscription needs its own bound.
+        eoseFallback = setTimeout(markFetched, 8000);
       } catch (err) {
-        console.warn('[community-channels] failed to request subtree from', endpoint, err);
+        console.warn('[community-channels] failed to subscribe to subtree on', endpoint, err);
         markFetched();
       }
     }, 300);
 
     return () => {
       clearTimeout(timer);
+      clearTimeout(eoseFallback);
       for (const sub of open) sub.unsubscribe();
     };
   });

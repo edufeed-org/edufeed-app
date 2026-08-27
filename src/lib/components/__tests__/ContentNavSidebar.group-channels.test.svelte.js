@@ -70,6 +70,12 @@ vi.mock('$lib/concord/active-channel.svelte.js', () => ({
 }));
 
 import ContentNavSidebar from '$lib/components/community/layout/ContentNavSidebar.svelte';
+import {
+  selectGroupChannel,
+  getSelectedGroupChannel,
+  clearGroupChannelSelection
+} from '$lib/groups/group-channel-selection.svelte.js';
+import { channelKey } from '$lib/groups/community-pointer.js';
 
 /** @param {string[][]} tags */
 const communityEvent = (tags = []) => ({
@@ -154,6 +160,7 @@ describe('ContentNavSidebar — two-zone sidebar', () => {
     };
     selectedChannelFixture.value = '';
     selectConcordChannelSpy.mockReset();
+    clearGroupChannelSelection(OWNER);
   });
 
   it('a member sees both zones and the footer', () => {
@@ -345,6 +352,21 @@ describe('ContentNavSidebar — two-zone sidebar', () => {
       selectedContentType: 'chat'
     });
     expect(getByTestId('nav-header-home').className).not.toContain('bg-primary');
+  });
+
+  // The KANÄLE heading is the desktop path to the channel OVERVIEW pane
+  // (PrivateChannelsView renders ChannelOverview when no channel is
+  // selected) — without it, once any channel was picked there was no way
+  // back to the overview (laoc, 2026-08-27).
+  it('clicking the KANÄLE heading clears the selection and opens the channels view', async () => {
+    const row = worldReadableGroupRow();
+    const onContentTypeSelect = vi.fn();
+    selectGroupChannel(OWNER, /** @type {string} */ (channelKey(row.pointer)));
+    renderNav({ channelRows: [row], isMember: true, onContentTypeSelect });
+
+    await fireEvent.click(screen.getByTestId('nav-kanaele-overview'));
+    expect(onContentTypeSelect).toHaveBeenCalledWith('channels', undefined);
+    expect(getSelectedGroupChannel(OWNER)).toBe('');
   });
 });
 

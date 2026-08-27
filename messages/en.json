@@ -787,6 +787,7 @@
   "community_layout_content_nav_select_community": "Select a community to view content",
   "community_nav_inhalte": "Content",
   "community_nav_kanaele": "Channels",
+  "community_nav_kanaele_overview_title": "Show all channels",
   "community_nav_lock_hint": "More channels for members",
   "community_layout_main_content_welcome_title": "Welcome to {appName}",
   "community_layout_main_content_welcome_description": "Select a community from the sidebar to get started, or create a new one to begin your journey.",

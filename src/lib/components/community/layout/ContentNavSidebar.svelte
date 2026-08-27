@@ -35,7 +35,8 @@
   import { channelKey } from '$lib/groups/community-pointer.js';
   import {
     selectGroupChannel,
-    getSelectedGroupChannel
+    getSelectedGroupChannel,
+    clearGroupChannelSelection
   } from '$lib/groups/group-channel-selection.svelte.js';
   import ConcordUnreadDot from '$lib/components/shared/ConcordUnreadDot.svelte';
   import ChannelRailRow from '../channels/ChannelRailRow.svelte';
@@ -183,6 +184,19 @@
   }
 
   /**
+   * The KANÄLE heading itself opens the channel OVERVIEW pane:
+   * PrivateChannelsView renders ChannelOverview only while no channel is
+   * selected, so clearing the group selection here is what actually gets the
+   * user there once a channel was ever picked. Concord has no overview pane
+   * (its view falls back to the first channel), so its selection is left
+   * alone — the click still lands on the channels view.
+   */
+  function openChannelOverview() {
+    clearGroupChannelSelection(communityEvent?.pubkey);
+    handleContentTypeClick('channels');
+  }
+
+  /**
    * A channel row's key is untrusted network-derived data (pointer id/relay,
    * or a Concord channel_id) and may contain characters a data-testid must
    * not — collapse anything that isn't alphanumeric to a dash.
@@ -320,7 +334,14 @@
           data-testid="nav-zone-kanaele"
           class="flex items-center gap-1.5 px-4 pb-1 text-xs font-semibold text-base-content/50 uppercase"
         >
-          <span>{m.community_nav_kanaele()}</span>
+          <button
+            data-testid="nav-kanaele-overview"
+            class="cursor-pointer uppercase transition-colors hover:text-base-content"
+            title={m.community_nav_kanaele_overview_title()}
+            onclick={openChannelOverview}
+          >
+            {m.community_nav_kanaele()}
+          </button>
           <ConcordUnreadDot
             unread={concordAreaFlags.unread}
             mentioned={concordAreaFlags.mentioned}

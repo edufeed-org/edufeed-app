@@ -741,6 +741,7 @@
   "community_layout_content_nav_select_community": "Wählen Sie eine Community aus, um Inhalte anzuzeigen",
   "community_nav_inhalte": "Inhalte",
   "community_nav_kanaele": "Kanäle",
+  "community_nav_kanaele_overview_title": "Alle Kanäle anzeigen",
   "community_nav_lock_hint": "Weitere Kanäle für Mitglieder",
   "community_layout_main_content_welcome_title": "Willkommen bei {appName}",
   "community_layout_main_content_welcome_description": "Wählen Sie eine Community aus der Seitenleiste aus, um loszulegen, oder erstellen Sie eine neue, um Ihre Reise zu beginnen.",

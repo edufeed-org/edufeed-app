@@ -18,13 +18,16 @@ const holders = vi.hoisted(() => ({
   requestCalls: /** @type {any[]} */ ([]),
   /** @type {Record<string, any[]>} */
   fixturesByRelay: {},
+  /** Per-url live feed: tests push post-EOSE events here to model another
+   *  admin creating a channel while the subscription is open. */
+  liveByRelay: /** @type {Record<string, any>} */ ({}),
   errorRelays: /** @type {Set<string>} */ (new Set()),
   /** @type {any} */ eventStore: null
 }));
 
 vi.mock('$lib/stores/nostr-infrastructure.svelte', async () => {
   const { EventStore } = await import('applesauce-core');
-  const { of, throwError } = await import('rxjs');
+  const { of, merge, Subject, throwError } = await import('rxjs');
   const eventStore = new EventStore();
   eventStore.verifyEvent = () => true;
   holders.eventStore = eventStore;
@@ -32,10 +35,13 @@ vi.mock('$lib/stores/nostr-infrastructure.svelte', async () => {
     eventStore,
     pool: {
       relay: (/** @type {string} */ url) => ({
-        request: (/** @type {any} */ filter, /** @type {any} */ opts) => {
+        // Relay.subscription semantics: stored events, then "EOSE", then the
+        // stream STAYS OPEN and live events keep arriving.
+        subscription: (/** @type {any} */ filter, /** @type {any} */ opts) => {
           holders.requestCalls.push({ url, filter, opts });
           if (holders.errorRelays.has(url)) return throwError(() => new Error('relay timeout'));
-          return of(...(holders.fixturesByRelay[url] ?? []));
+          const live = (holders.liveByRelay[url] ??= new Subject());
+          return merge(of(...(holders.fixturesByRelay[url] ?? []), 'EOSE'), live);
         }
       })
     }
@@ -83,6 +89,7 @@ describe('useCommunityChannels', () => {
   beforeEach(() => {
     holders.requestCalls = [];
     holders.fixturesByRelay = {};
+    holders.liveByRelay = {};
     holders.errorRelays = new Set();
     holders.eventStore?.removeByFilters?.({ kinds: [39000] });
     holders.eventStore?.database?.clear?.();
@@ -176,6 +183,32 @@ describe('useCommunityChannels', () => {
 
     expect(get().fetched).toBe(true);
     expect(get().channels).toEqual([]);
+    cleanup();
+  });
+
+  // Live discovery (laoc, 2026-08-27): the subscription stays open past
+  // EOSE, so a channel another admin creates streams in without a refresh —
+  // the one-shot request() this replaced only ever saw the initial snapshot.
+  it('a 39000 arriving after EOSE appears live, with no new relay request', async () => {
+    holders.fixturesByRelay[ENDPOINT] = [meta(ROOT, [['name', 'Community']])];
+    const pointer = $state.raw({ id: ROOT, relay: RELAY });
+    const { get, cleanup } = mountHook(() => pointer);
+    flushSync();
+    await settle();
+    expect(get().fetched).toBe(true);
+    expect(get().channels).toEqual([]);
+    const callsAfterSettle = holders.requestCalls.length;
+
+    holders.liveByRelay[ENDPOINT].next(
+      meta('neu', [
+        ['parent', ROOT],
+        ['name', 'Neu']
+      ])
+    );
+    flushSync();
+
+    expect(get().channels.map((c) => c.id)).toEqual(['neu']);
+    expect(holders.requestCalls.length).toBe(callsAfterSettle);
     cleanup();
   });
 

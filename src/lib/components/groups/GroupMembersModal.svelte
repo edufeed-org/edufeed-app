@@ -450,7 +450,10 @@
 {/snippet}
 
 <div class="modal-open modal" role="dialog">
-  <div class="modal-box max-w-lg">
+  <!-- max-w-2xl (not the max-w-lg most modals use): three role sections plus
+       badge columns and row kebabs need the width, and the laoc 2026-08-27
+       report was literally "the modal is too small". -->
+  <div class="modal-box max-w-2xl">
     <button class="btn absolute top-3 right-3 btn-circle btn-ghost btn-sm" onclick={onClose}
       >✕</button
     >
@@ -563,6 +566,7 @@
         {:else}
           <ContactSearchInput
             acceptPubkeyInput
+            inlineList
             disabled={busy}
             placeholder={m.groups_members_add_placeholder()}
             exclude={[...members]}

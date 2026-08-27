@@ -5,6 +5,10 @@
   - showExcluded: render excluded contacts disabled with a badge
   - acceptPubkeyInput: append a synthetic "add this pubkey" row when the
     input parses as a valid npub/hex and has no existing contact match
+  - inlineList: render the suggestion list in normal flow instead of as an
+    absolute overlay. Inside a DaisyUI modal-box the overlay form is clipped
+    by the box's overflow-y:auto (the box does not grow for absolute
+    children), so suggestions end up half-hidden behind a scrollbar
 -->
 
 <script>
@@ -31,6 +35,7 @@
    *   exclude?: string[],
    *   showExcluded?: boolean,
    *   acceptPubkeyInput?: boolean,
+   *   inlineList?: boolean,
    *   excludedLabel?: string,
    *   addPubkeyLabel?: string
    * }}
@@ -48,6 +53,7 @@
     exclude = [],
     showExcluded = false,
     acceptPubkeyInput = false,
+    inlineList = false,
     excludedLabel = '',
     addPubkeyLabel = ''
   } = $props();
@@ -178,8 +184,11 @@
 
   {#if showDropdown && navItems.length > 0}
     <div
-      class="absolute z-50 mt-1 max-h-60 w-full overflow-y-auto rounded-lg border border-base-300 bg-base-100 shadow-lg"
-      style="top: 100%;"
+      data-testid="contact-search-list"
+      class="mt-1 max-h-60 w-full overflow-y-auto rounded-lg border border-base-300 bg-base-100 {inlineList
+        ? ''
+        : 'absolute z-50 shadow-lg'}"
+      style={inlineList ? undefined : 'top: 100%;'}
     >
       {#each navItems as item, index (item.kind + ':' + item.pubkey)}
         {#if item.kind === 'contact'}
