@@ -29,7 +29,7 @@ stage above the chat. We adopt its wire format byte-for-byte.
 | State scoping | `h` = **NIP-29 group id** on the groups relay (Armada-compatible; supersedes the 2026-08-19 spec's `h` = community pubkey — see Amendment) |
 | Base branch | Stacked on `feat/community-group-pointer` (contains dev) |
 | Channel types | NIP-29 only; Concord (E2E) is a future extension via the same AppSync seam |
-| App sources | Curated "Start pad" + app picker over kind-1063 discovery; no raw `.xdc` upload in v1 |
+| App sources | Curated `WEBXDC_APPS` (ordered kind-1063 event refs, first = featured) + app picker over kind-1063 discovery; no raw `.xdc` upload in v1 |
 | Persistence layers | Session resume (free) + apps bar (findability) + publish snapshot (artifact) |
 | Export mechanism | Implement the standard webxdc `sendToChat` API in our host |
 
@@ -198,19 +198,23 @@ from the same hook.
   **24450** in the relay29 `RestrictToSpecifiedKinds` set — the same two-line
   change Armada's relay makes. 24450 is in NIP-01's ephemeral range; khatru
   forwards without storing automatically. Redeploy via the homelab role.
-- **Curated pad app (ops step):** vendor + version-pin the webxdc/editor
-  build, publish it once to Blossom + kind-1063 (small script following the
-  `publish:vocabs` conventions), reference via env → `runtimeConfig`
-  (`PAD_APP_URL`, `PAD_APP_SHA256`, `PAD_APP_ICON`). *Start pad* is hidden
-  when unconfigured.
+- **Curated apps (ops step):** vendor + version-pin the webxdc/editor build
+  (or any other app), publish it once to Blossom + kind-1063 (`scripts/
+  publish-webxdc-app.mjs`, following the `publish:vocabs` conventions), then
+  add its `nevent`/event id to `WEBXDC_APPS` (`runtimeConfig.webxdc.
+  curatedApps`) — an ordered, comma-separated list of kind-1063 event
+  references. All metadata (name, icon, hash) resolves from the referenced
+  event; no separate URL/hash/name/icon env vars. The picker's "Empfohlen"
+  section is empty (hidden) when unconfigured, and its first entry is
+  rendered as the featured row.
 - **Discovery reliability:** the app picker queries the educational lookup
   relays; today the AMB relays hold zero 1063s (separate open task:
   relay-side kind-1063 admission, planned). The picker works via the fallback
   relays meanwhile; the AMB-relay fix makes it reliable and gated-mode-safe.
   The two initiatives interlock; neither blocks the other.
 - **Feature gating:** no new flag — the surface rides on the existing
-  `groupsFeatureAvailable()` gate; *Start pad* additionally requires the pad
-  config.
+  `groupsFeatureAvailable()` gate; the "Empfohlen" section additionally
+  requires `WEBXDC_APPS` to be configured.
 
 ## Amendment to the 2026-08-19 webxdc spec
 
@@ -244,7 +248,7 @@ on this transport.
    f996aaba). Implement in a worktree branched from it.
 2. Groups relay deployed with 9450/24450 whitelisted (fork tag edufeed-v1.1 +
    this change).
-3. Curated pad published + env configured (ops).
+3. Curated apps published + `WEBXDC_APPS` configured (ops).
 4. Interlocks with (does not block / is not blocked by) the AMB-relay
    kind-1063 admission task.
 

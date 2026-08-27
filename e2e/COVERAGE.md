@@ -1783,10 +1783,10 @@ Playwright spec:
 - `src/lib/__tests__/imeta.test.js` — shared NIP-92 parser, webxdc session property
 - `src/lib/__tests__/webxdc-attachment-card.svelte.test.js` — launch card on channel messages
 - `src/lib/__tests__/group-app-stage.svelte.test.js` — app stage above the timeline, remount on session switch
-- `src/lib/__tests__/webxdc-app-picker.svelte.test.js` — composer apps menu, pad config, 1063 picker
+- `src/lib/__tests__/webxdc-app-picker.svelte.test.js` — composer apps menu, curated (WEBXDC_APPS) resolution + featured row, 1063 discovery picker
 - `src/lib/__tests__/group-apps-bar.svelte.test.js` — apps bar listing a channel's live sessions
 - `src/lib/webxdc/__tests__/export-share.test.js` — export → publish as article/wiki page
-- `src/lib/__tests__/api-config-webxdc.test.js` — `runtimeConfig.webxdc` (sandbox domain, pad app)
+- `src/lib/__tests__/api-config-webxdc.test.js` — `runtimeConfig.webxdc` (sandbox domain, curatedApps parsing from `WEBXDC_APPS`)
 - `src/lib/components/__tests__/GroupChat.test.js` — two GroupChat-level cases only: the composer apps
   button's write-access gating, and the launch→share→export-dialog→create-route handoff (with
   `GroupAppStage` itself stubbed). GroupChat's OWN wiring of the apps bar/picker/stage is otherwise
