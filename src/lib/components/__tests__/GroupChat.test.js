@@ -275,7 +275,9 @@ const webxdcStateEvent = {
 // NIP-DC discovery fixture (kind 1063) for WebxdcAppPicker's own REQ
 // (pool.request(relays, filters) — a top-level pool call, distinct from
 // pool.relay(url).request() above), so the composer-share tests below have a
-// pickable row without needing runtimeConfig.webxdc.padApp set.
+// pickable row without needing runtimeConfig.webxdc.curatedApps set (it
+// defaults to [], so the picker's curated-resolution effect never fires a
+// pool.request here).
 const discoveredAppEvent = {
   id: 'fake-1063-1',
   kind: 1063,
@@ -695,10 +697,12 @@ vi.mock('$lib/paraglide/messages', () => ({
     `Readable by ${count} selected members.`,
   webxdc_apps_bar_title: () => 'Apps in this channel',
   webxdc_apps_button: () => 'Apps',
+  webxdc_launch: () => 'Starten',
   webxdc_session_launch: () => 'Open app',
   webxdc_session_shared_app: () => 'Shared app',
-  webxdc_apps_start_pad: () => 'Start pad',
   webxdc_apps_pick_title: () => 'Share an app',
+  webxdc_apps_featured: () => 'Recommended',
+  webxdc_apps_discovered: () => 'More apps',
   webxdc_apps_none: () => 'No published apps found',
   webxdc_apps_share_failed: (/** @type {{ reason: string }} */ { reason }) =>
     `Could not share the app: ${reason}`,

@@ -224,8 +224,8 @@ const defaultConfig = {
   },
   webxdc: {
     sandboxDomain: 'iframe.diy',
-    /** @type {{url: string, sha256: string, iconUrl: string, name: string} | null} */
-    padApp: null
+    /** @type {string[]} ordered kind-1063 event refs (nevent or hex id); first is featured */
+    curatedApps: []
   }
 };
 

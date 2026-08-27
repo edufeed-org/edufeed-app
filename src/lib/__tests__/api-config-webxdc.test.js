@@ -1,14 +1,15 @@
 /** @vitest-environment node */
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 describe('/api/config webxdc block', () => {
   beforeEach(() => vi.resetModules());
+  afterEach(() => vi.restoreAllMocks());
 
-  it('defaults sandboxDomain to iframe.diy', async () => {
+  it('defaults sandboxDomain to iframe.diy and curatedApps to []', async () => {
     vi.doMock('$env/dynamic/private', () => ({ env: {} }));
     const { GET } = await import('../../routes/api/config/+server.js');
     const body = await GET().json();
-    expect(body.webxdc).toEqual({ sandboxDomain: 'iframe.diy', padApp: null });
+    expect(body.webxdc).toEqual({ sandboxDomain: 'iframe.diy', curatedApps: [] });
   });
 
   it('uses SANDBOX_DOMAIN when set', async () => {
@@ -19,53 +20,54 @@ describe('/api/config webxdc block', () => {
   });
 
   const HASH64 = 'a'.repeat(64);
+  const NEVENT =
+    'nevent1qqsyz3fzge824jenrgcxg4nn0kqcphxjjmqvkgczfy9ee5ynxg8sr8spz3mhxue69uhk2mrgv46hguce';
 
-  it('builds padApp from PAD_APP_URL + a valid 64-hex PAD_APP_SHA256', async () => {
+  it('keeps a valid nevent entry', async () => {
+    vi.doMock('$env/dynamic/private', () => ({ env: { WEBXDC_APPS: NEVENT } }));
+    const { GET } = await import('../../routes/api/config/+server.js');
+    const body = await GET().json();
+    expect(body.webxdc.curatedApps).toEqual([NEVENT]);
+  });
+
+  it('keeps a valid 64-hex entry and lowercases it', async () => {
+    vi.doMock('$env/dynamic/private', () => ({ env: { WEBXDC_APPS: HASH64.toUpperCase() } }));
+    const { GET } = await import('../../routes/api/config/+server.js');
+    const body = await GET().json();
+    expect(body.webxdc.curatedApps).toEqual([HASH64]);
+  });
+
+  it('parses a comma-separated list, trims whitespace, and preserves order', async () => {
     vi.doMock('$env/dynamic/private', () => ({
-      env: { PAD_APP_URL: 'https://b/x.xdc', PAD_APP_SHA256: HASH64 }
+      env: { WEBXDC_APPS: ` ${NEVENT} , ${HASH64} ` }
     }));
     const { GET } = await import('../../routes/api/config/+server.js');
     const body = await GET().json();
-    expect(body.webxdc.padApp).toEqual({
-      url: 'https://b/x.xdc',
-      sha256: HASH64,
-      iconUrl: '',
-      name: 'Pad'
-    });
+    expect(body.webxdc.curatedApps).toEqual([NEVENT, HASH64]);
   });
 
-  it('lowercases the sha256 and honors PAD_APP_ICON / PAD_APP_NAME', async () => {
+  it('drops junk entries and warns, keeping valid ones', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     vi.doMock('$env/dynamic/private', () => ({
-      env: {
-        PAD_APP_URL: 'https://b/x.xdc',
-        PAD_APP_SHA256: HASH64.toUpperCase(),
-        PAD_APP_ICON: 'https://b/icon.png',
-        PAD_APP_NAME: 'Notizen'
-      }
+      env: { WEBXDC_APPS: `not-a-ref,${NEVENT},abc123` }
     }));
     const { GET } = await import('../../routes/api/config/+server.js');
     const body = await GET().json();
-    expect(body.webxdc.padApp).toEqual({
-      url: 'https://b/x.xdc',
-      sha256: HASH64,
-      iconUrl: 'https://b/icon.png',
-      name: 'Notizen'
-    });
+    expect(body.webxdc.curatedApps).toEqual([NEVENT]);
+    expect(warn).toHaveBeenCalled();
   });
 
-  it('is null when PAD_APP_URL is unset', async () => {
-    vi.doMock('$env/dynamic/private', () => ({ env: { PAD_APP_SHA256: HASH64 } }));
+  it('is [] when WEBXDC_APPS is unset', async () => {
+    vi.doMock('$env/dynamic/private', () => ({ env: {} }));
     const { GET } = await import('../../routes/api/config/+server.js');
     const body = await GET().json();
-    expect(body.webxdc.padApp).toBeNull();
+    expect(body.webxdc.curatedApps).toEqual([]);
   });
 
-  it('is null when PAD_APP_SHA256 has the wrong length', async () => {
-    vi.doMock('$env/dynamic/private', () => ({
-      env: { PAD_APP_URL: 'https://b/x.xdc', PAD_APP_SHA256: 'abc' }
-    }));
+  it('is [] when WEBXDC_APPS is blank', async () => {
+    vi.doMock('$env/dynamic/private', () => ({ env: { WEBXDC_APPS: '   ' } }));
     const { GET } = await import('../../routes/api/config/+server.js');
     const body = await GET().json();
-    expect(body.webxdc.padApp).toBeNull();
+    expect(body.webxdc.curatedApps).toEqual([]);
   });
 });

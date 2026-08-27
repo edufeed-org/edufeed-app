@@ -116,6 +116,28 @@ export function getWebxdcAttachment(message) {
   return null;
 }
 
+const HEX64 = /^[0-9a-f]{64}$/i;
+
+/**
+ * Map a kind-1063 webxdc file event to a launchable app, or null when it
+ * doesn't carry the required shape. Shared by the picker's live discovery
+ * REQ and its curated `WEBXDC_APPS` resolution so the tag-mapping lives in
+ * one place.
+ * @param {{tags?: string[][]} | null | undefined} event
+ * @returns {{url: string, sha256: string, name: string, iconUrl: string} | null}
+ */
+export function appFromFileEvent(event) {
+  if (!event?.tags) return null;
+  const tag = (/** @type {string} */ name) => event.tags?.find((t) => t[0] === name)?.[1];
+  const url = tag('url');
+  const x = tag('x');
+  const mime = tag('m');
+  if (!url || !x || !HEX64.test(x) || mime !== WEBXDC_MIME) return null;
+  const name =
+    tag('alt')?.replace(/^Webxdc app: /, '') || tag('title') || url.split('/').pop() || url;
+  return { url, sha256: x.toLowerCase(), name, iconUrl: tag('image') || '' };
+}
+
 /**
  * Channel session list for the apps bar, newest share first, deduped by
  * session uuid (a re-share of the same message id cannot happen; the same

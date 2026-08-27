@@ -21,6 +21,35 @@ function parseArray(value, defaultValue = []) {
     .filter(Boolean);
 }
 
+const NEVENT_REF = /^nevent1[a-z0-9]+$/;
+const HEX_ID_REF = /^[0-9a-f]{64}$/i;
+
+/**
+ * Parse `WEBXDC_APPS` into an ordered list of kind-1063 event references
+ * (nevent or 64-hex event id; hex is case-normalized to lowercase). Order is
+ * preserved — the first entry is the picker's featured app. Invalid entries
+ * are dropped with a warning rather than failing the whole config response.
+ * @param {string | undefined} value
+ * @returns {string[]}
+ */
+function parseWebxdcApps(value) {
+  if (!value) return [];
+  const out = [];
+  for (const raw of value
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean)) {
+    if (NEVENT_REF.test(raw)) {
+      out.push(raw);
+    } else if (HEX_ID_REF.test(raw)) {
+      out.push(raw.toLowerCase());
+    } else {
+      console.warn(`[api/config] WEBXDC_APPS: dropping invalid event reference "${raw}"`);
+    }
+  }
+  return out;
+}
+
 /**
  * Parse integer with default
  * @param {string | undefined} value
@@ -442,17 +471,11 @@ export function GET() {
     // Webxdc sandbox host (interactive resources player)
     webxdc: {
       sandboxDomain: env.SANDBOX_DOMAIN || 'iframe.diy',
-      // Curated "pad" app offered first in the composer's apps picker.
-      // Requires both URL and a valid 64-hex sha256 — otherwise null (hidden).
-      padApp:
-        env.PAD_APP_URL && /^[0-9a-f]{64}$/i.test(env.PAD_APP_SHA256 || '')
-          ? {
-              url: env.PAD_APP_URL,
-              sha256: (env.PAD_APP_SHA256 || '').toLowerCase(),
-              iconUrl: env.PAD_APP_ICON || '',
-              name: env.PAD_APP_NAME || 'Pad'
-            }
-          : null
+      // Curated apps offered first ("Empfohlen") in the composer's apps
+      // picker, ordered — the first entry is featured. Each entry is a
+      // kind-1063 event reference (nevent or hex id); the picker resolves
+      // name/icon/hash from the event itself.
+      curatedApps: parseWebxdcApps(env.WEBXDC_APPS)
     }
   };
 

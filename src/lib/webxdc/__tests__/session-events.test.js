@@ -10,7 +10,8 @@ import {
   parseStateEvent,
   parseRealtimeEvent,
   getWebxdcAttachment,
-  deriveSessions
+  deriveSessions,
+  appFromFileEvent
 } from '../session-events.js';
 
 const app = {
@@ -93,6 +94,122 @@ describe('realtime events', () => {
     const t = buildRealtimeTemplate(GROUP, SID, bytes);
     expect(t.kind).toBe(WEBXDC_REALTIME_KIND);
     expect(parseRealtimeEvent(t)).toEqual(bytes);
+  });
+});
+
+describe('appFromFileEvent', () => {
+  const HASH = 'c'.repeat(64);
+  /** @param {string[][]} tags */
+  const ev = (tags) => ({ kind: 1063, tags });
+
+  it('maps a well-formed kind-1063 into an app, name from alt with prefix stripped', () => {
+    const app = appFromFileEvent(
+      ev([
+        ['url', 'https://b/quiz.xdc'],
+        ['x', HASH],
+        ['m', 'application/x-webxdc'],
+        ['alt', 'Webxdc app: Quiz'],
+        ['image', 'https://b/quiz.png']
+      ])
+    );
+    expect(app).toEqual({
+      url: 'https://b/quiz.xdc',
+      sha256: HASH,
+      name: 'Quiz',
+      iconUrl: 'https://b/quiz.png'
+    });
+  });
+
+  it('falls back to title, then to the url basename, when alt is absent', () => {
+    const withTitle = appFromFileEvent(
+      ev([
+        ['url', 'https://b/quiz.xdc'],
+        ['x', HASH],
+        ['m', 'application/x-webxdc'],
+        ['title', 'Titled Quiz']
+      ])
+    );
+    expect(withTitle?.name).toBe('Titled Quiz');
+
+    const withNeither = appFromFileEvent(
+      ev([
+        ['url', 'https://b/quiz.xdc'],
+        ['x', HASH],
+        ['m', 'application/x-webxdc']
+      ])
+    );
+    expect(withNeither?.name).toBe('quiz.xdc');
+  });
+
+  it('defaults iconUrl to empty string when image is absent', () => {
+    const app = appFromFileEvent(
+      ev([
+        ['url', 'https://b/quiz.xdc'],
+        ['x', HASH],
+        ['m', 'application/x-webxdc']
+      ])
+    );
+    expect(app?.iconUrl).toBe('');
+  });
+
+  it('lowercases the sha256', () => {
+    const app = appFromFileEvent(
+      ev([
+        ['url', 'https://b/quiz.xdc'],
+        ['x', HASH.toUpperCase()],
+        ['m', 'application/x-webxdc']
+      ])
+    );
+    expect(app?.sha256).toBe(HASH);
+  });
+
+  it('returns null when url is missing', () => {
+    expect(
+      appFromFileEvent(
+        ev([
+          ['x', HASH],
+          ['m', 'application/x-webxdc']
+        ])
+      )
+    ).toBe(null);
+  });
+
+  it('returns null when x is missing or not 64-hex', () => {
+    expect(
+      appFromFileEvent(
+        ev([
+          ['url', 'https://b/quiz.xdc'],
+          ['m', 'application/x-webxdc']
+        ])
+      )
+    ).toBe(null);
+    expect(
+      appFromFileEvent(
+        ev([
+          ['url', 'https://b/quiz.xdc'],
+          ['x', 'abc'],
+          ['m', 'application/x-webxdc']
+        ])
+      )
+    ).toBe(null);
+  });
+
+  it('returns null when m is not the webxdc mime', () => {
+    expect(
+      appFromFileEvent(
+        ev([
+          ['url', 'https://b/quiz.png'],
+          ['x', HASH],
+          ['m', 'image/png']
+        ])
+      )
+    ).toBe(null);
+  });
+
+  it('returns null for a null/undefined/tagless event', () => {
+    expect(appFromFileEvent(null)).toBe(null);
+    expect(appFromFileEvent(undefined)).toBe(null);
+    expect(appFromFileEvent({})).toBe(null);
   });
 });
 

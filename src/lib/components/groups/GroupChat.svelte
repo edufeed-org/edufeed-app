@@ -1036,7 +1036,7 @@
   {/if}
   {#if appPickerOpen}
     <WebxdcAppPicker
-      padApp={runtimeConfig.webxdc?.padApp ?? null}
+      curatedApps={runtimeConfig.webxdc?.curatedApps ?? []}
       onSelect={shareApp}
       onClose={() => (appPickerOpen = false)}
     />
