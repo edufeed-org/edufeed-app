@@ -125,6 +125,38 @@ describe('WebxdcAppPicker', () => {
     expect(getByText('Quiz')).toBeTruthy();
   });
 
+  it('dedupes two curated refs that resolve to the same sha256, first occurrence wins', async () => {
+    const sharedHash = 'a1'.repeat(32);
+    const hexId1 = 'b1'.repeat(32);
+    const hexId2 = 'c1'.repeat(32);
+    holders.curatedEvents = [
+      makeFileEvent({
+        id: hexId1,
+        x: sharedHash,
+        url: 'https://b/pad.xdc',
+        alt: 'Webxdc app: Pad'
+      }),
+      makeFileEvent({
+        id: hexId2,
+        x: sharedHash,
+        url: 'https://b/pad-mirror.xdc',
+        alt: 'Webxdc app: Pad Mirror'
+      })
+    ];
+    const { getByTestId, queryAllByTestId, getByText, queryByText } = renderPicker({
+      curatedApps: [hexId1, hexId2]
+    });
+
+    await waitFor(() => expect(getByTestId('webxdc-app-picker-featured')).toBeTruthy());
+    // First occurrence (hexId1 → "Pad") wins; the duplicate ("Pad Mirror")
+    // is dropped rather than rendered as a second curated row — this also
+    // guards the keyed {#each curated as app, i (app.sha256)} from crashing
+    // on a duplicate key.
+    expect(getByText('Pad')).toBeTruthy();
+    expect(queryByText('Pad Mirror')).toBeNull();
+    expect(queryAllByTestId('webxdc-app-picker-row')).toHaveLength(0);
+  });
+
   it('dedupes a discovered app that is already curated (same sha256)', async () => {
     const sharedHash = '2'.repeat(64);
     const otherHash = '3'.repeat(64);

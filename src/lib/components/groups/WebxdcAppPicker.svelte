@@ -78,12 +78,26 @@
           const app = appFromFileEvent(ev);
           if (app) byId.set(ev.id, app);
         }
+        // Dedupe by sha256 (first occurrence — i.e. WEBXDC_APPS order —
+        // wins): a duplicated ref, or two distinct curated events resolving
+        // to the same file, would otherwise feed the keyed
+        // {#each curated as app, i (app.sha256)} a repeated key and crash
+        // the picker (each_key_duplicate). Mirrors the discovery path's
+        // byHash dedupe below.
+        /** @type {Set<string>} */
+        // eslint-disable-next-line svelte/prefer-svelte-reactivity
+        const seenHashes = new Set();
         /** @type {XdcApp[]} */
         const resolved = [];
         for (const d of decoded) {
           const app = byId.get(d.id);
-          if (app) resolved.push(app);
-          else console.warn(`WebxdcAppPicker: could not resolve curated app "${d.id}"`);
+          if (!app) {
+            console.warn(`WebxdcAppPicker: could not resolve curated app "${d.id}"`);
+            continue;
+          }
+          if (seenHashes.has(app.sha256)) continue;
+          seenHashes.add(app.sha256);
+          resolved.push(app);
         }
         curated = resolved;
         curatedLoading = false;
