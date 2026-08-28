@@ -15,7 +15,9 @@ export async function updatePersonalGroupsList(user, change) {
   if (!user?.signer) return;
   const existing = eventStore.getReplaceable(10009, user.pubkey) ?? null;
   const template = buildGroupsListTemplate(existing, change);
+  // No eventStore.add here: publishEventOptimistic captures the replaced
+  // version BEFORE its own add (#64 rollback) — a pre-add would make that
+  // capture see the replacement and roll a failed publish back to nothing.
   const signed = await user.signer.signEvent({ ...template, pubkey: user.pubkey });
-  eventStore.add(signed);
   publishEventOptimistic(signed);
 }
