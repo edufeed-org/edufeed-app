@@ -26,4 +26,13 @@ describe('shared imeta parser', () => {
   it('is null-safe', () => {
     expect(getMessageAttachments(null)).toEqual([]);
   });
+  // MessageAttachments keys its {#each} by att.url; a rumor repeating an
+  // imeta tag (untrusted network input) must not crash every viewer with
+  // each_key_duplicate. First occurrence wins.
+  it('dedupes attachments sharing a url', () => {
+    const tag = ['imeta', 'url https://blossom.example/a.png', 'm image/png'];
+    const atts = getMessageAttachments({ tags: [tag, [...tag]] });
+    expect(atts).toHaveLength(1);
+    expect(atts[0].url).toBe('https://blossom.example/a.png');
+  });
 });

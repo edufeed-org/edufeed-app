@@ -97,10 +97,16 @@ export function getMessageAttachments(message) {
   const tags = message?.tags;
   if (!Array.isArray(tags)) return [];
   const out = [];
+  // Deduped by url — the render layer keys on it, and a rumor repeating an
+  // imeta tag is untrusted input that must not crash the keyed {#each}.
+  const seen = new Set();
   for (const tag of tags) {
     if (tag[0] !== 'imeta') continue;
     const att = parseImetaTag(tag);
-    if (att) out.push(att);
+    if (att && !seen.has(att.url)) {
+      seen.add(att.url);
+      out.push(att);
+    }
   }
   return out;
 }

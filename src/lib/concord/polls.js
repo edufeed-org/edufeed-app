@@ -33,9 +33,15 @@ export function parsePoll(rumor) {
   /** @type {number | undefined} */
   let endsAt;
 
+  // Option ids key the render layer's {#each}; a rumor repeating an id is
+  // untrusted input that must not crash it — first occurrence wins.
+  const seenIds = new Set();
   for (const tag of rumor.tags ?? []) {
     if (tag[0] === 'option' && tag[1] && tag[2]) {
-      options.push({ id: tag[1], label: tag[2] });
+      if (!seenIds.has(tag[1])) {
+        seenIds.add(tag[1]);
+        options.push({ id: tag[1], label: tag[2] });
+      }
     } else if (tag[0] === 'polltype' && tag[1] === 'multiplechoice') {
       pollType = 'multiplechoice';
     } else if (tag[0] === 'endsAt' && tag[1]) {

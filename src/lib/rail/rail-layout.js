@@ -85,6 +85,10 @@ export function folderIdOf(anchor) {
 export function normalizeLayout(stored, liveKeys) {
   const live = new Set(Array.isArray(liveKeys) ? liveKeys : []);
   const placed = new Set();
+  // Folder ids key the sidebar's {#each}; a stored layout repeating one is
+  // untrusted input that must not crash the chrome — first folder wins, the
+  // duplicate's members fall through to the trailing live-append.
+  const folderIds = new Set();
   /** @type {RailNode[]} */
   const out = [];
 
@@ -99,13 +103,14 @@ export function normalizeLayout(stored, liveKeys) {
     }
     if (/** @type {any} */ (node).type !== 'folder') continue;
     const { id, name, keys } = /** @type {any} */ (node);
-    if (typeof id !== 'string' || !id) continue;
+    if (typeof id !== 'string' || !id || folderIds.has(id)) continue;
     const members = (Array.isArray(keys) ? keys : []).filter(
       (/** @type {any} */ k) => typeof k === 'string' && live.has(k) && !placed.has(k)
     );
     // A folder nobody can see into is a slot the user cannot use.
     if (members.length === 0) continue;
     for (const key of members) placed.add(key);
+    folderIds.add(id);
     out.push({ type: 'folder', id, name: typeof name === 'string' ? name : '', keys: members });
   }
 

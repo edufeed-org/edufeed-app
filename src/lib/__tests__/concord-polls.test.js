@@ -161,3 +161,24 @@ describe('isPollEnded', () => {
     expect(isPollEnded(Math.floor(Date.now() / 1000) - 3600)).toBe(true);
   });
 });
+
+// PollMessage keys its {#each} by option.id; a rumor repeating an option tag
+// (untrusted network input) must not crash every viewer with
+// each_key_duplicate. First occurrence wins.
+describe('parsePoll — duplicate option ids', () => {
+  it('keeps only the first option per id', () => {
+    const poll = parsePoll({
+      id: 'p1',
+      content: 'q?',
+      tags: [
+        ['option', 'x', 'first'],
+        ['option', 'x', 'second'],
+        ['option', 'y', 'other']
+      ]
+    });
+    expect(poll.options).toEqual([
+      { id: 'x', label: 'first' },
+      { id: 'y', label: 'other' }
+    ]);
+  });
+});

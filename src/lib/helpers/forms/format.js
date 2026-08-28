@@ -230,7 +230,13 @@ export function parseFormTemplate(event) {
     isPublic: !!settings.publicForm,
     confirmationMessage: settings.confirmationMessage || '',
     autoResponse: !!settings.autoResponse,
-    sections: uniqueBy(Array.isArray(settings.sections) ? settings.sections : [], (s) => s.id),
+    sections: uniqueBy(
+      // Non-object entries would throw on s.id below — never throw on garbage.
+      (Array.isArray(settings.sections) ? settings.sections : []).filter(
+        (s) => s && typeof s === 'object'
+      ),
+      (s) => s.id
+    ),
     forkOf: forkTag ? { address: forkTag[1], relay: forkTag[2] || '' } : undefined
   };
 }

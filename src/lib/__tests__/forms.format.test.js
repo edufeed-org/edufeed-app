@@ -230,4 +230,15 @@ describe('NIP-101 encoding', () => {
     expect(parsed.fields).toHaveLength(1);
     expect(parsed.fields[0].label).toBe('First');
   });
+
+  it('drops non-object sections entries instead of throwing', () => {
+    // The parser's contract is "never throws on garbage events" — a relay can
+    // hand us settings.sections entries that are null or primitives.
+    const broken = evt([
+      ['d', 'g'],
+      ['settings', JSON.stringify({ sections: [null, 'junk', 7, { id: 's1', title: 'Ok' }] })]
+    ]);
+    const parsed = parseFormTemplate(broken);
+    expect(parsed.sections).toEqual([{ id: 's1', title: 'Ok' }]);
+  });
 });

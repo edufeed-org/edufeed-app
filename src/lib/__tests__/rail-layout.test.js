@@ -342,3 +342,23 @@ describe('resolveDrop', () => {
     }
   });
 });
+
+// CommunitySidebar keys its {#each} by folderAnchor(node.id); a stored/synced
+// layout carrying two folders with the same id (corrupt localStorage, another
+// client) must not crash the /c chrome with each_key_duplicate. normalizeLayout
+// is the single reconciliation point, so it enforces id uniqueness: the first
+// folder keeps the id, later ones are dropped and their members fall through
+// to the trailing live-append as loose items.
+describe('normalizeLayout — duplicate folder ids', () => {
+  it('drops a second folder with the same id, keeping its members visible', () => {
+    const stored = [
+      { type: 'folder', id: 'f1', name: 'One', keys: ['a'] },
+      { type: 'folder', id: 'f1', name: 'Two', keys: ['b'] }
+    ];
+    const out = normalizeLayout(stored, ['a', 'b']);
+    expect(out).toEqual([
+      { type: 'folder', id: 'f1', name: 'One', keys: ['a'] },
+      { type: 'item', key: 'b' }
+    ]);
+  });
+});
