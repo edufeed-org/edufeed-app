@@ -233,7 +233,7 @@ export function parseFormTemplate(event) {
     sections: uniqueBy(
       // Non-object entries would throw on s.id below — never throw on garbage.
       (Array.isArray(settings.sections) ? settings.sections : []).filter(
-        (s) => s && typeof s === 'object'
+        (/** @type {any} */ s) => s && typeof s === 'object'
       ),
       (s) => s.id
     ),

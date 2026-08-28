@@ -13,7 +13,7 @@ describe('AsyncMutex', () => {
     const mutex = new AsyncMutex();
     /** @type {string[]} */
     const log = [];
-    const gate = /** @type {(() => void)[]} */ ([]);
+    const gate = /** @type {((value?: unknown) => void)[]} */ ([]);
     const blockOn = () => new Promise((resolve) => gate.push(resolve));
 
     const a = mutex.run(async () => {

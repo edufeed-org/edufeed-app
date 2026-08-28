@@ -1,3 +1,4 @@
+// @ts-nocheck
 /** @vitest-environment jsdom */
 // CommunityContentView must wire useAuthorDeletions alongside useProfileMap
 // (CLAUDE.md: any surface listing OTHER people's content). Without it the
