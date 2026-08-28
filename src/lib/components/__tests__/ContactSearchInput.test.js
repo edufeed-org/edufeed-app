@@ -58,7 +58,11 @@ vi.mock('$lib/stores/contacts.svelte.js', () => ({
             (c.display_name || '').toLowerCase().includes(t)
         )
         .slice(0, limit);
-    })
+    }),
+    // accounts.svelte.js's active$ subscription calls these on login/logout;
+    // omitting them turns every emission into an unhandled rejection.
+    loadContacts: vi.fn(),
+    clear: vi.fn()
   }
 }));
 

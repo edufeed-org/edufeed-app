@@ -5,7 +5,15 @@ import { render, fireEvent, waitFor } from '@testing-library/svelte';
 import { zipSync, strToU8 } from 'fflate';
 import WebxdcPlayer from '../../webxdc/WebxdcPlayer.svelte';
 
-vi.mock('$lib/stores/accounts.svelte', () => ({ manager: { active: null } }));
+vi.mock('$lib/stores/accounts.svelte', () => ({
+  manager: { active: null },
+  useActiveUser: () => () => null
+}));
+// The player previews the signed-in profile on the launch card; the tests
+// exercise launch/sandbox behavior, not the profile chrome.
+vi.mock('$lib/stores/user-profile.svelte.js', () => ({
+  useUserProfile: () => () => null
+}));
 
 afterEach(() => vi.unstubAllGlobals());
 

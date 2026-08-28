@@ -229,9 +229,11 @@ describe('GroupChat admin roster + management entry points', () => {
     await fireEvent.click(await screen.findByTestId('group-settings-open'));
     await fireEvent.click(await screen.findByTestId('stub-settings-trigger-deleted'));
 
+    // The removal now runs through the shared community-teardown helper, so
+    // assert the failure is logged without pinning the caller prefix.
     await waitFor(() =>
       expect(errorSpy).toHaveBeenCalledWith(
-        'groups: post-delete 10009 removal failed',
+        expect.stringContaining('10009 removal failed'),
         expect.anything()
       )
     );
