@@ -183,12 +183,54 @@ describe('createGroupSync', () => {
       neverCompletes.next(stateEv('a', 100, 1)); // one event arrives...
       // ...and then never an EOSE/complete.
 
+      // First page bound fires → truncated page → the backfill probes one
+      // more page (which stays empty), whose own bound then freezes it.
+      await vi.advanceTimersByTimeAsync(5000);
       await vi.advanceTimersByTimeAsync(5000);
 
       expect(sync.getUpdates().map((u) => u.payload)).toEqual([1]);
       expect(notified).toHaveBeenCalledTimes(1);
       expect(onError).not.toHaveBeenCalled();
       expect(relay.subjects).toHaveLength(1); // live sub opened once frozen
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('keeps paging past a page truncated by the page timeout instead of calling it final', async () => {
+    // A slow-but-healthy relay can deliver fewer than PAGE_LIMIT events
+    // before the 5s page bound fires. That is a TRUNCATED page, not a final
+    // short page — treating it as final silently drops the older history the
+    // since-bounded live sub can never repair.
+    vi.useFakeTimers();
+    try {
+      const relay = makeRelay();
+      const slowPage = new Subject();
+      let call = 0;
+      relay.request = vi.fn(() => {
+        call++;
+        if (call === 1) return slowPage; // emits 3 events, never completes
+        return of(stateEv('older', 50, 99)); // short page, completes → done
+      });
+      const sync = createGroupSync({
+        relayConn: relay,
+        groupId: GROUP,
+        sessionId: SID,
+        publish: vi.fn()
+      });
+
+      slowPage.next(stateEv('a', 300, 1));
+      slowPage.next(stateEv('b', 200, 2));
+      slowPage.next(stateEv('c', 100, 3));
+      // ...then silence: the page bound fires, but the page is truncated,
+      // so the backfill must ask for the next page (until = oldest seen).
+      await vi.advanceTimersByTimeAsync(5000);
+      await vi.waitFor(() => expect(relay.request).toHaveBeenCalledTimes(2));
+      expect(relay.request.mock.calls[1][0]).toMatchObject({ until: 100 });
+
+      await vi.waitFor(() =>
+        expect(sync.getUpdates().map((u) => u.payload)).toEqual([99, 3, 2, 1])
+      );
     } finally {
       vi.useRealTimers();
     }
@@ -219,8 +261,12 @@ describe('createGroupSync', () => {
     expect(relay.subjects).toHaveLength(0); // live sub never opened
   });
 
-  it('opens the live subscription bounded by `since` = the newest backfilled event', async () => {
-    const relay = makeRelay([[stateEv('a', 100, 1), stateEv('b', 200, 2)]]);
+  it('opens the live subscription with `since` an overlap window BEHIND the newest backfilled event', async () => {
+    // A peer whose clock runs behind stamps its 9450s older than our newest
+    // backfilled created_at. `since = newest` would filter those out forever
+    // (silent CRDT divergence, see ea56522f) — the live sub starts an overlap
+    // window earlier and seenIds absorbs the replayed duplicates.
+    const relay = makeRelay([[stateEv('a', 1_000_100, 1), stateEv('b', 1_000_200, 2)]]);
     const sync = createGroupSync({
       relayConn: relay,
       groupId: GROUP,
@@ -229,7 +275,24 @@ describe('createGroupSync', () => {
     });
 
     await vi.waitFor(() => expect(sync.getUpdates()).toHaveLength(2));
-    expect(relay.subscription).toHaveBeenCalledWith([expect.objectContaining({ since: 200 })]);
+    expect(relay.subscription).toHaveBeenCalledWith([
+      expect.objectContaining({ since: 1_000_200 - 300 })
+    ]);
+  });
+
+  it('delivers a live event stamped slightly older than the newest backfilled one', async () => {
+    const relay = makeRelay([[stateEv('b', 1_000_200, 2)]]);
+    const sync = createGroupSync({
+      relayConn: relay,
+      groupId: GROUP,
+      sessionId: SID,
+      publish: vi.fn()
+    });
+    await vi.waitFor(() => expect(relay.subjects).toHaveLength(1));
+
+    // 2 minutes behind our newest — inside the overlap window, must arrive.
+    relay.subjects[0].next(stateEv('skewed', 1_000_200 - 120, 3));
+    expect(sync.getUpdates().map((u) => u.payload)).toEqual([2, 3]);
   });
 
   it('omits `since` on the live subscription when the backfill collected nothing', async () => {

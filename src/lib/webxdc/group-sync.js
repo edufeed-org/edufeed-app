@@ -10,8 +10,6 @@
  * read failure itself (paging or the live subscription), for the case where
  * the proactive auth hadn't landed yet when the session's own reads started.
  */
-import { timer } from 'rxjs';
-import { takeUntil, toArray } from 'rxjs/operators';
 import { isAuthRequiredError, isRestrictedError } from '$lib/groups/relay-auth.js';
 import {
   WEBXDC_STATE_KIND,
@@ -37,6 +35,11 @@ const PAGE_TIMEOUT_MS = 5000;
  * frames each cost a signature+publish, which is ruinous for NIP-46
  * signers). */
 const REALTIME_THROTTLE_MS = 100;
+/** The live subscription's `since` starts this many seconds BEHIND the newest
+ * backfilled created_at. A peer whose clock runs behind stamps its events
+ * older than our newest — `since = newest` would filter them out forever
+ * (silent CRDT divergence). seenIds absorbs the replayed overlap. */
+const LIVE_OVERLAP_SEC = 300;
 
 /**
  * @param {{relayConn: any, groupId: string, sessionId: string,
@@ -118,35 +121,59 @@ export function createGroupSync({
 
   /** One page of stored 9450s, bounded above by `until` when given.
    *
-   * Bounded below (completion, not just first-event) by `takeUntil(timer())`:
+   * Bounded below (completion, not just first-event) by an own timer:
    * applesauce's `Relay.request(filter, {timeout})` only bounds time-to-
    * FIRST-event — once one event has arrived, completion depends solely on
    * the relay's own EOSE. A relay that emits events but never EOSEs would
-   * otherwise leave `toArray()` never emitting and this page (and the whole
-   * backfill) hanging forever — the same `timedPool` idiom this codebase
-   * already uses elsewhere for exactly that failure class. The request's own
+   * otherwise leave this page (and the whole backfill) hanging forever — the
+   * same failure class `timedPool` covers elsewhere. The request's own
    * `{timeout}` still covers the zero-event case (errors → caught by the
    * caller → freeze-empty path).
-   * @param {number} [until] */
+   *
+   * Resolves `{events, truncated}` — `truncated` marks a page cut short by
+   * OUR timer rather than completed by the relay. A truncated page must not
+   * be read as "final short page": a slow-but-healthy relay may hold more
+   * history, which the caller keeps paging for.
+   * @param {number} [until]
+   * @returns {Promise<{events: any[], truncated: boolean}>} */
   function fetchPage(until) {
     const filter = {
       ...stateFilter(),
       limit: PAGE_LIMIT,
       ...(until !== undefined ? { until } : {})
     };
-    return new Promise((resolve, reject) => {
-      resolvePendingPage = resolve;
-      pageSub = relayConn
-        .request(filter, { timeout: PAGE_TIMEOUT_MS })
-        .pipe(takeUntil(timer(PAGE_TIMEOUT_MS)), toArray())
-        .subscribe({
-          next: (/** @type {any[]} */ events) => resolve(events),
-          error: (/** @type {any} */ err) => reject(err)
+    return /** @type {Promise<{events: any[], truncated: boolean}>} */ (
+      new Promise((resolve, reject) => {
+        /** @type {any[]} */
+        const events = [];
+        let settled = false;
+        /** @param {{events: any[], truncated: boolean}} result */
+        const finish = (result) => {
+          if (settled) return;
+          settled = true;
+          clearTimeout(bound);
+          resolve(result);
+        };
+        const bound = setTimeout(() => {
+          pageSub?.unsubscribe();
+          finish({ events, truncated: true });
+        }, PAGE_TIMEOUT_MS);
+        resolvePendingPage = (evts) => finish({ events: evts, truncated: false });
+        pageSub = relayConn.request(filter, { timeout: PAGE_TIMEOUT_MS }).subscribe({
+          next: (/** @type {any} */ ev) => events.push(ev),
+          complete: () => finish({ events, truncated: false }),
+          error: (/** @type {any} */ err) => {
+            if (settled) return;
+            settled = true;
+            clearTimeout(bound);
+            reject(err);
+          }
         });
-    }).finally(() => {
-      pageSub = null;
-      resolvePendingPage = null;
-    });
+      }).finally(() => {
+        pageSub = null;
+        resolvePendingPage = null;
+      })
+    );
   }
 
   /** Pages backward through stored state until a short page, an
@@ -162,9 +189,10 @@ export function createGroupSync({
     // loop instead of refetching the same page forever.
     const pageSeenIds = new Set();
     for (let page = 0; page < MAX_PAGES; page++) {
-      const events = /** @type {any[]} */ (await fetchPage(until));
+      const { events, truncated } = await fetchPage(until);
+      if (events.length === 0) break;
       const newEvents = events.filter((ev) => ev?.id && !pageSeenIds.has(ev.id));
-      if (events.length > 0 && newEvents.length === 0) {
+      if (newEvents.length === 0) {
         // `until` didn't advance the window — e.g. more than PAGE_LIMIT
         // events share the exact oldest created_at, so the inclusive
         // boundary below just hands back the same page again.
@@ -172,7 +200,9 @@ export function createGroupSync({
       }
       for (const ev of newEvents) pageSeenIds.add(ev.id);
       collected = collected.concat(newEvents);
-      if (events.length < PAGE_LIMIT) break;
+      // Only a relay-completed short page proves the history is exhausted; a
+      // truncated one just means the relay was slow — keep paging.
+      if (!truncated && events.length < PAGE_LIMIT) break;
       if (page === MAX_PAGES - 1) {
         console.warn(
           'webxdc group-sync: backfill hit the 10-page cap without exhausting session history'
@@ -196,8 +226,9 @@ export function createGroupSync({
   let stateSub = null;
 
   /** @param {number} [since] only set once the backfill collected at least
-   *   one event — the live sub then picks up where the backfill left off
-   *   instead of replaying the whole history it just fetched. */
+   *   one event — the live sub then picks up an overlap window behind where
+   *   the backfill left off (LIVE_OVERLAP_SEC, clock-skewed peers) instead
+   *   of replaying the whole history it just fetched. */
   function openLiveSubscription(since) {
     if (stopped) return;
     const filter = { ...stateFilter(), ...(since !== undefined ? { since } : {}) };
@@ -247,7 +278,7 @@ export function createGroupSync({
     events.sort((a, b) => a.created_at - b.created_at || (a.id < b.id ? -1 : 1));
     for (const ev of events) append(ev);
     notify();
-    openLiveSubscription(newest);
+    openLiveSubscription(newest !== undefined ? Math.max(0, newest - LIVE_OVERLAP_SEC) : undefined);
   }
 
   startBackfill();
