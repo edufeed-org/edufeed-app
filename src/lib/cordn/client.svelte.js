@@ -22,6 +22,7 @@ import {
   unsealDocument
 } from './multidevice-sync.js';
 import { fetchBlossomText, fetchLatestTip } from './multidevice-net.js';
+import { AsyncMutex } from '$lib/helpers/async-mutex.js';
 import {
   addMember,
   SiblingCommitSkippedError,
@@ -100,6 +101,14 @@ export class CordnGroupsClient {
     /** @type {ReturnType<typeof setInterval> | undefined} */
     this.pollTimer = undefined;
     this.stopped = false;
+    /**
+     * Serializes every read-MLS-state → await → write-MLS-state section
+     * (send, addMemberToGroup, poll/#ingest, syncFromTip, acceptWelcome,
+     * createGroup). Without it, a poll ingesting a Commit during send()'s
+     * await is clobbered when send writes back its pre-Commit epoch, while
+     * fetchCursor stays advanced → the group can never decrypt again.
+     */
+    this.stateLock = new AsyncMutex();
   }
 
   /**
@@ -230,27 +239,29 @@ export class CordnGroupsClient {
    */
   async createGroup(name, coordinatorPubkey = this.coordinatorPubkeys[0]) {
     this.#rpc(coordinatorPubkey); // validate before doing MLS work
-    const records = await this.#loadKeyPackages();
-    const record = records.find((entry) => entry.coordinatorPubkey === coordinatorPubkey);
-    if (!record) throw new Error('Kein KeyPackage für diesen Koordinator');
-    const pair = decodeKeyPackagePair(record);
-    const state = await createInitialGroupState(pair);
-    const gid = getGid(state);
-    this.states.set(gid, state);
-    this.groups = [
-      ...this.groups,
-      {
-        gid,
-        name,
-        coordinatorPubkey,
-        members: listMemberPubkeys(state),
-        adminPubkeys: [],
-        fetchCursor: 0,
-        messages: []
-      }
-    ];
-    await this.#persistGroups();
-    return gid;
+    return this.stateLock.run(async () => {
+      const records = await this.#loadKeyPackages();
+      const record = records.find((entry) => entry.coordinatorPubkey === coordinatorPubkey);
+      if (!record) throw new Error('Kein KeyPackage für diesen Koordinator');
+      const pair = decodeKeyPackagePair(record);
+      const state = await createInitialGroupState(pair);
+      const gid = getGid(state);
+      this.states.set(gid, state);
+      this.groups = [
+        ...this.groups,
+        {
+          gid,
+          name,
+          coordinatorPubkey,
+          members: listMemberPubkeys(state),
+          adminPubkeys: [],
+          fetchCursor: 0,
+          messages: []
+        }
+      ];
+      await this.#persistGroups();
+      return gid;
+    });
   }
 
   /**
@@ -267,31 +278,33 @@ export class CordnGroupsClient {
       // (reconcile-before-commit + doc republish, §10.5) — not in the spike.
       throw new Error('Synchronisierte Gruppen werden in cordn.net verwaltet');
     }
-    const state = this.#state(gid);
-    const rpc = this.#rpc(this.#group(gid).coordinatorPubkey);
-    const { keyPackage: consumed } = await rpc.consumeKeyPackage({ id: pubkeyOrRef });
-    if (!consumed) throw new Error('Kein KeyPackage für diese Person auf dem Koordinator');
-    const memberKeyPackage = parseConsumedKeyPackage(consumed);
-    const result = await addMember({ state, memberKeyPackage });
-    const preCommitKey = await deriveGroupPayloadKey(state);
-    const sealed = sealPayload({
-      key: preCommitKey,
-      plaintext: Uint8Array.from(atob(result.commitMessageBase64), (c) => c.charCodeAt(0))
+    return this.stateLock.run(async () => {
+      const state = this.#state(gid);
+      const rpc = this.#rpc(this.#group(gid).coordinatorPubkey);
+      const { keyPackage: consumed } = await rpc.consumeKeyPackage({ id: pubkeyOrRef });
+      if (!consumed) throw new Error('Kein KeyPackage für diese Person auf dem Koordinator');
+      const memberKeyPackage = parseConsumedKeyPackage(consumed);
+      const result = await addMember({ state, memberKeyPackage });
+      const preCommitKey = await deriveGroupPayloadKey(state);
+      const sealed = sealPayload({
+        key: preCommitKey,
+        plaintext: Uint8Array.from(atob(result.commitMessageBase64), (c) => c.charCodeAt(0))
+      });
+      this.postedCiphertexts.add(sealed);
+      const posted = await rpc.postGroupMessage({ gid, msg_64: sealed });
+      this.states.set(gid, result.newState);
+      this.#updateGroup(gid, {
+        members: listMemberPubkeys(result.newState),
+        fetchCursor: Math.max(this.#group(gid).fetchCursor, posted.cursor)
+      });
+      await rpc.storeWelcome({
+        target_pk: consumed.pk,
+        kp_ref: consumed.kp_ref,
+        welcome_64: result.welcomeBase64,
+        after: posted.cursor
+      });
+      await this.#persistGroups();
     });
-    this.postedCiphertexts.add(sealed);
-    const posted = await rpc.postGroupMessage({ gid, msg_64: sealed });
-    this.states.set(gid, result.newState);
-    this.#updateGroup(gid, {
-      members: listMemberPubkeys(result.newState),
-      fetchCursor: Math.max(this.#group(gid).fetchCursor, posted.cursor)
-    });
-    await rpc.storeWelcome({
-      target_pk: consumed.pk,
-      kp_ref: consumed.kp_ref,
-      welcome_64: result.welcomeBase64,
-      after: posted.cursor
-    });
-    await this.#persistGroups();
   }
 
   /**
@@ -321,6 +334,12 @@ export class CordnGroupsClient {
    * the doc's MLS epoch is ahead, drop tombstoned groups. Never downgrades.
    */
   async syncFromTip() {
+    // Adopts/fast-forwards/drops MLS states — must not interleave with a
+    // send/addMember/poll-ingest reading-then-writing the same states.
+    return this.stateLock.run(() => this.#syncFromTipLocked());
+  }
+
+  async #syncFromTipLocked() {
     const config = /** @type {MultiDeviceConfig | undefined} */ (
       await this.storage.get(MULTI_DEVICE_KEY)
     );
@@ -550,44 +569,46 @@ export class CordnGroupsClient {
 
   /** @param {TaggedWelcome} welcome */
   async acceptWelcome(welcome) {
-    const records = await this.#loadKeyPackages();
-    const record = records.find(
-      (entry) =>
-        entry.keyPackageRef === welcome.kp_ref &&
-        entry.coordinatorPubkey === welcome.coordinatorPubkey
-    );
-    if (!record) throw new Error('Lokales KeyPackage für diese Einladung fehlt');
-    const pair = decodeKeyPackagePair(record);
-    const state = await joinFromWelcome({ welcomeBase64: welcome.welcome_64, ...pair });
-    const gid = getGid(state);
-    this.states.set(gid, state);
-    const metadata = findGroupMetadata(state);
-    this.groups = [
-      ...this.groups,
-      {
-        gid,
-        name: metadata?.name || `Gruppe ${gid.slice(0, 8)}`,
-        coordinatorPubkey: welcome.coordinatorPubkey,
-        members: listMemberPubkeys(state),
-        adminPubkeys: metadata?.adminPubkeys ?? [],
-        fetchCursor: welcome.after ?? 0,
-        messages: []
-      }
-    ];
-    await this.#persistGroups();
-    // Ack consumption so the coordinator retires the welcome, and rotate this
-    // coordinator's key package (the accepted one is used up).
-    const rpc = this.#rpc(welcome.coordinatorPubkey);
-    await rpc.fetchPendingWelcomes({ consumed: [{ kp_ref: welcome.kp_ref, at: welcome.at }] });
-    await this.storage.set(
-      KEY_PACKAGES_KEY,
-      records.filter((entry) => entry !== record)
-    );
-    await this.#ensureKeyPackages();
-    this.welcomes = this.welcomes.filter(
-      (w) => !(w.kp_ref === welcome.kp_ref && w.coordinatorPubkey === welcome.coordinatorPubkey)
-    );
-    return gid;
+    return this.stateLock.run(async () => {
+      const records = await this.#loadKeyPackages();
+      const record = records.find(
+        (entry) =>
+          entry.keyPackageRef === welcome.kp_ref &&
+          entry.coordinatorPubkey === welcome.coordinatorPubkey
+      );
+      if (!record) throw new Error('Lokales KeyPackage für diese Einladung fehlt');
+      const pair = decodeKeyPackagePair(record);
+      const state = await joinFromWelcome({ welcomeBase64: welcome.welcome_64, ...pair });
+      const gid = getGid(state);
+      this.states.set(gid, state);
+      const metadata = findGroupMetadata(state);
+      this.groups = [
+        ...this.groups,
+        {
+          gid,
+          name: metadata?.name || `Gruppe ${gid.slice(0, 8)}`,
+          coordinatorPubkey: welcome.coordinatorPubkey,
+          members: listMemberPubkeys(state),
+          adminPubkeys: metadata?.adminPubkeys ?? [],
+          fetchCursor: welcome.after ?? 0,
+          messages: []
+        }
+      ];
+      await this.#persistGroups();
+      // Ack consumption so the coordinator retires the welcome, and rotate this
+      // coordinator's key package (the accepted one is used up).
+      const rpc = this.#rpc(welcome.coordinatorPubkey);
+      await rpc.fetchPendingWelcomes({ consumed: [{ kp_ref: welcome.kp_ref, at: welcome.at }] });
+      await this.storage.set(
+        KEY_PACKAGES_KEY,
+        records.filter((entry) => entry !== record)
+      );
+      await this.#ensureKeyPackages();
+      this.welcomes = this.welcomes.filter(
+        (w) => !(w.kp_ref === welcome.kp_ref && w.coordinatorPubkey === welcome.coordinatorPubkey)
+      );
+      return gid;
+    });
   }
 
   /**
@@ -595,31 +616,33 @@ export class CordnGroupsClient {
    * @param {string} text
    */
   async send(gid, text) {
-    const state = this.#state(gid);
-    const rpc = this.#rpc(this.#group(gid).coordinatorPubkey);
-    const envelope = buildEnvelope({ pubkey: this.pubkey, kind: CORDN_CHAT_KIND, content: text });
-    const { newState, opaqueMessageBase64 } = await createChatMessage({
-      state,
-      envelopeJson: JSON.stringify(envelope),
-      senderPubkey: this.pubkey
+    return this.stateLock.run(async () => {
+      const state = this.#state(gid);
+      const rpc = this.#rpc(this.#group(gid).coordinatorPubkey);
+      const envelope = buildEnvelope({ pubkey: this.pubkey, kind: CORDN_CHAT_KIND, content: text });
+      const { newState, opaqueMessageBase64 } = await createChatMessage({
+        state,
+        envelopeJson: JSON.stringify(envelope),
+        senderPubkey: this.pubkey
+      });
+      const key = await deriveGroupPayloadKey(state);
+      const sealed = sealPayload({
+        key,
+        plaintext: Uint8Array.from(atob(opaqueMessageBase64), (c) => c.charCodeAt(0))
+      });
+      this.postedCiphertexts.add(sealed);
+      const posted = await rpc.postGroupMessage({ gid, msg_64: sealed });
+      this.states.set(gid, newState);
+      const group = this.#group(gid);
+      this.#updateGroup(gid, {
+        fetchCursor: Math.max(group.fetchCursor, posted.cursor),
+        messages: [
+          ...group.messages,
+          { cursor: posted.cursor, pubkey: this.pubkey, content: text, at: posted.at }
+        ]
+      });
+      await this.#persistGroups();
     });
-    const key = await deriveGroupPayloadKey(state);
-    const sealed = sealPayload({
-      key,
-      plaintext: Uint8Array.from(atob(opaqueMessageBase64), (c) => c.charCodeAt(0))
-    });
-    this.postedCiphertexts.add(sealed);
-    const posted = await rpc.postGroupMessage({ gid, msg_64: sealed });
-    this.states.set(gid, newState);
-    const group = this.#group(gid);
-    this.#updateGroup(gid, {
-      fetchCursor: Math.max(group.fetchCursor, posted.cursor),
-      messages: [
-        ...group.messages,
-        { cursor: posted.cursor, pubkey: this.pubkey, content: text, at: posted.at }
-      ]
-    });
-    await this.#persistGroups();
   }
 
   /** @param {string} gid */
@@ -658,12 +681,17 @@ export class CordnGroupsClient {
         this.error = error instanceof Error ? error.message : String(error);
       }
     }
-    let dirty = false;
-    for (const message of messages.sort((a, b) => a.cursor - b.cursor)) {
-      if (this.stopped) return;
-      dirty = (await this.#ingest(message)) || dirty;
-    }
-    if (dirty) await this.#persistGroups();
+    // Ingest under the state lock so a send/addMember/sync in flight can't be
+    // interleaved between an ingest's state read and its write (and vice
+    // versa). The read-only fetch above stays outside to keep the lock short.
+    await this.stateLock.run(async () => {
+      let dirty = false;
+      for (const message of messages.sort((a, b) => a.cursor - b.cursor)) {
+        if (this.stopped) return;
+        dirty = (await this.#ingest(message)) || dirty;
+      }
+      if (dirty) await this.#persistGroups();
+    });
   }
 
   /**
