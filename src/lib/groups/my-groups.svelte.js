@@ -41,16 +41,14 @@ export function useMyGroupPointers() {
     // captures nothing and never re-runs (CLAUDE.md: "Svelte effect
     // early-return goes dead").
     const pubkey = getActiveUser()?.pubkey;
-    if (!pubkey) {
-      pointers = [];
-      return;
-    }
+    // Reset on EVERY re-run, not only when signed out: a direct A→B account
+    // switch re-enters here with the new pubkey and no null in between
+    // (applesauce setActive), and B must not inherit A's roster.
+    pointers = [];
+    if (!pubkey) return;
 
     const relays = [...new Set(getGroupsRelays().map(normalizeURL))]; // eslint-disable-line svelte/prefer-svelte-reactivity -- dedup scratch
-    if (relays.length === 0) {
-      pointers = [];
-      return;
-    }
+    if (relays.length === 0) return;
 
     /** @type {Map<string, Set<string>>} relay -> group ids */
     const byRelay = new Map(); // eslint-disable-line svelte/prefer-svelte-reactivity -- effect-local accumulator

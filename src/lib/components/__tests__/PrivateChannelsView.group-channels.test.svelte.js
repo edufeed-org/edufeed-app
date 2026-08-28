@@ -48,7 +48,18 @@ const holders = vi.hoisted(() => ({
   }),
   /** @type {Record<string, any[]>} events the fake relay hands back per URL */
   events: /** @type {any} */ ({}),
-  /** @type {any} */ relayInfo: /** @type {any} */ (null)
+  /** @type {any} */ relayInfo: /** @type {any} */ (null),
+  /** @type {string | null} current page URL, for ?channel= deep-link tests */
+  pageUrl: /** @type {string | null} */ (null)
+}));
+
+vi.mock('$app/stores', () => ({
+  page: {
+    subscribe: (/** @type {any} */ cb) => {
+      cb(holders.pageUrl ? { url: new URL(holders.pageUrl) } : {});
+      return () => {};
+    }
+  }
 }));
 vi.mock('$lib/concord/community.svelte.js', () => ({
   useConcordArea: () => () => holders.concord
@@ -64,6 +75,9 @@ vi.mock('$lib/stores/nostr-infrastructure.svelte', async (importOriginal) => {
         // A real Observable — the discovery/roster hooks .pipe(storeEvents(...))
         // it. Emits each fixture event, then completes.
         request: () => of(...(holders.events[relay] ?? [])),
+        // The subtree discovery switched to a live subscription: fixture
+        // events, then the EOSE marker a real NIP-01 sub emits.
+        subscription: () => of(...(holders.events[relay] ?? []), 'EOSE'),
         information$: {
           subscribe: (/** @type {any} */ handlers) => {
             if (holders.relayInfo) handlers.next(holders.relayInfo);
@@ -77,6 +91,7 @@ vi.mock('$lib/stores/nostr-infrastructure.svelte', async (importOriginal) => {
 
 import PrivateChannelsView from '$lib/components/community/channels/PrivateChannelsView.svelte';
 import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
+import { clearGroupChannelSelection } from '$lib/groups/group-channel-selection.svelte.js';
 import { communityGroupsEndpoint, flatGroupsRelay } from '$lib/groups/community-endpoint.js';
 
 // Fixtures signed by a fake relay key — bypass signature verification.
@@ -114,6 +129,7 @@ beforeEach(() => {
   holders.concord = { ...holders.concord, enabled: false };
   holders.events = {};
   holders.relayInfo = null;
+  holders.pageUrl = null;
   eventStore.removeByFilters?.({ kinds: [39000] });
 });
 
@@ -185,5 +201,21 @@ describe('PrivateChannelsView — NIP-29 channels in the community rail', () => 
     });
 
     expect(screen.queryAllByTestId('group-channel-row')).toHaveLength(0);
+  });
+
+  it('seeds the ?channel= deep link from the DISCOVERED subtree channels', async () => {
+    // A subtree-discovered community has no legacy kind-10222 `group`
+    // pointers, so a seeding pass that only reads those silently lands every
+    // shared/toast channel link on the overview. The candidates must be the
+    // same list the selection validator uses (root + discovered channels,
+    // keys carrying the /c endpoint relay).
+    clearGroupChannelSelection(OWNER);
+    holders.pageUrl = 'https://app.example/c/relilab?channel=allgemein';
+    holders.events = { [ENDPOINT]: [root(), chan('allgemein', [['private']])] };
+
+    render(PrivateChannelsView, { props: { communikeyEvent: moderated() } });
+
+    const chat = await screen.findByTestId('group-chat-stub', {}, { timeout: 4000 });
+    expect(chat.textContent).toContain('allgemein');
   });
 });

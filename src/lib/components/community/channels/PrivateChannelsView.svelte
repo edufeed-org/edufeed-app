@@ -157,17 +157,33 @@
   });
 
   // Same one-shot seeding for NIP-29 channels: ?channel=<group id> picks the
-  // matching group pointer. Separate flag — a community has either engine,
-  // but the concord effect above only ever runs once an area id exists.
+  // matching channel. Separate flag — a community has either engine, but the
+  // concord effect above only ever runs once an area id exists. Candidates
+  // come from the SAME source the selection validator (selectedGroupPointer)
+  // reads — root + DISCOVERED subtree channels, whose keys carry the /c
+  // endpoint relay — because a subtree community has no legacy `group`
+  // pointers at all, and a legacy pointer's raw relay builds a key the
+  // validator would never match. Legacy pointers stay as a fallback.
   let groupDeepLinkChecked = false;
   $effect(() => {
     const communityPubkey = communikeyEvent?.pubkey;
-    const pointers = groupPointers;
-    if (!communityPubkey || pointers.length === 0 || groupDeepLinkChecked) return;
+    const { rootChannel, channels: discovered, fetched } = getCommunityChannels();
+    const legacy = groupPointers;
+    const discovering = !!rootPointer;
+    if (!communityPubkey || groupDeepLinkChecked) return;
+    // While the subtree discovery is still running, seeding would read a
+    // half-arrived list, miss the target and burn the one shot — wait.
+    if (discovering && !fetched) return;
+    if (!discovering && legacy.length === 0) return;
     groupDeepLinkChecked = true;
     const channelParam = get(page)?.url?.searchParams.get('channel');
     if (!channelParam || getSelectedGroupChannel(communityPubkey)) return;
-    const match = pointers.find((pointer) => pointer.id === channelParam);
+    const candidates = [
+      ...(rootChannel ? [{ id: rootChannel.id, relay: rootChannel.relay }] : []),
+      ...discovered.map((c) => ({ id: c.id, relay: c.relay })),
+      ...legacy
+    ];
+    const match = candidates.find((pointer) => pointer.id === channelParam);
     const key = match ? channelKey(match) : null;
     if (key) selectGroupChannel(communityPubkey, key);
   });

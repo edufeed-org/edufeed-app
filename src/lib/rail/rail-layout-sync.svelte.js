@@ -159,6 +159,10 @@ async function adoptRemoteEvent(event, pubkey) {
   try {
     payload = await unlockAppData(event, /** @type {any} */ (signer));
   } catch {
+    // Same staleness guard as the success path below: after the await the
+    // account may have switched, and the OLD account's unreadable event must
+    // not mark the NEW account locked.
+    if (activePubkey !== pubkey) return;
     // An event we cannot read is NOT an empty rail. Saying `locked` here is
     // what stops the default order being published over a layout that is
     // probably perfectly good and merely unreadable right now.

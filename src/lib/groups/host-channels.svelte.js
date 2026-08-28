@@ -17,6 +17,7 @@ import { buildChannelRows } from './community-channel-rows.js';
 import { dTagOf, nameOf } from './subtree-channels.js';
 import { channelAccessLevel } from './channel-access.js';
 import { useMyGroups } from './unlinked-groups.svelte.js';
+import { sameRelayUrl } from './relay-url.js';
 import { useRelayDirectory } from './relay-directory.svelte.js';
 import { relayRequiresAuth } from './relay-directory.js';
 import { useRelayInformation } from './relay-information.svelte.js';
@@ -35,9 +36,11 @@ export function useHostChannels(getRelay) {
   const getMyGroups = useMyGroups();
   // The user's own list, narrowed to THIS host: it is one of the three
   // sources, and the only one that can name a channel the relay hides.
+  // Normalized compare — a 10009 written by another client may lack the
+  // trailing slash, and a raw === would silently drop its channels here.
   const remembered = () =>
     getMyGroups()
-      .filter((group) => group.relay === getRelay())
+      .filter((group) => sameRelayUrl(group.relay, getRelay()))
       .map((group) => group.id);
 
   const getDirectory = useRelayDirectory(getRelay, remembered);

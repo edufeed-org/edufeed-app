@@ -414,4 +414,34 @@ describe('account switching', () => {
     expect(result.published).toBe(false);
     expect(state.published).toEqual([]);
   });
+
+  it('does not stamp locked on the NEXT account when a decrypt fails across a switch', async () => {
+    // The success path re-checks activePubkey after the decrypt await; the
+    // failure path must too — otherwise the OLD account's unreadable event
+    // marks the NEW account locked and silently blocks its rail publishing.
+    /** @type {(err: any) => void} */
+    let rejectDecrypt = () => {};
+    const base = realSigner();
+    state.signer = {
+      ...base,
+      nip44: {
+        encrypt: base.nip44.encrypt,
+        decrypt: () =>
+          new Promise((_, rej) => {
+            rejectDecrypt = rej;
+          })
+      }
+    };
+    initializeRailLayoutSync(ME);
+    const inFlight = deliver(await remoteEvent(LAYOUT)); // decrypt hangs
+
+    const other = getPublicKey(generateSecretKey());
+    initializeRailLayoutSync(other); // user switches mid-decrypt
+    expect(getRailSyncStatus()).toBe(RAIL_SYNC_STATUS.loading);
+
+    rejectDecrypt(new Error('old account, cannot decrypt'));
+    await inFlight;
+
+    expect(getRailSyncStatus()).toBe(RAIL_SYNC_STATUS.loading);
+  });
 });
