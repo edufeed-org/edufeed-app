@@ -81,8 +81,11 @@ export function safeHref(href) {
     return null;
   }
   if (!SAFE_SCHEMES.includes(url.protocol)) return null;
-  // `nostr:npub1…` addresses an app route, matching MarkdownRenderer's link rule.
-  if (url.protocol === 'nostr:') return '/' + href.slice('nostr:'.length);
+  // `nostr:npub1…` addresses an app route, matching MarkdownRenderer's link
+  // rule. Prefixing '/' re-opens every authority-relative escape one level
+  // deeper (`nostr://evil.example` → `///evil.example`), so the result goes
+  // back through the relative-href gate instead of straight to the caller.
+  if (url.protocol === 'nostr:') return safeHref('/' + href.slice('nostr:'.length));
   return href;
 }
 

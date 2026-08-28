@@ -145,6 +145,17 @@ describe('parseChatMarkdown — untrusted input', () => {
     expect(safeHref(href)).toBeNull();
   });
 
+  // The nostr: branch prefixes '/' to whatever follows the scheme, so the
+  // same authority-relative escapes reappear one level deeper: nostr://e.com
+  // becomes '///e.com', which the browser resolves off-origin.
+  it.each([
+    ['protocol-relative', 'nostr://evil.example'],
+    ['backslash', 'nostr:/\\evil.example'],
+    ['tab', 'nostr:/\t/evil.example']
+  ])('treats a nostr: %s href as unsafe', (_label, href) => {
+    expect(safeHref(href)).toBeNull();
+  });
+
   it.each([
     ['plain path', '/wiki/peace', '/wiki/peace'],
     ['entity route', '/npub1abc', '/npub1abc'],
