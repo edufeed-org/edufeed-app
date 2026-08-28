@@ -304,10 +304,24 @@ export async function processOpaqueMessage({ state, opaqueMessageBase64, skipOwn
       : undefined
   });
   if (result.kind === 'applicationMessage') {
+    // Sender identity comes from the SENDER'S LEAF CREDENTIAL (verified by
+    // the MLS layer), never from the authenticatedData: the AAD is chosen by
+    // the sender, so trusting it lets any member impersonate any pubkey.
+    // The leaf index rides on the result via our ts-mls patch
+    // (patches/ts-mls.patch) — the stock build drops it for application
+    // messages. An unresolvable leaf yields '' and the envelope's
+    // pubkey-match validation rejects the message downstream.
+    const senderCredential =
+      result.senderLeafIndex === undefined
+        ? null
+        : getCredentialFromLeafIndex(
+            /** @type {any} */ (state).ratchetTree,
+            result.senderLeafIndex
+          );
     return {
       kind: 'application',
       envelopeJson: decoder.decode(result.message),
-      senderPubkey: decoder.decode(result.aad),
+      senderPubkey: senderCredential ? credentialIdentity(senderCredential) : '',
       newState: result.newState
     };
   }

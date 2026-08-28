@@ -8,6 +8,9 @@ patchedDependencies:
   applesauce-content@6.2.0:
     hash: 809facd426729602632d9fd71810399d910081f429d7900da3c4e6204bf7d62f
     path: patches/applesauce-content@6.2.0.patch
+  ts-mls:
+    hash: 025c515ac4e3ff477cd2d740445af3c1086088e1c30e4ffb47e9b5614eec5ed4
+    path: patches/ts-mls.patch
 
 importers:
 
@@ -96,7 +99,7 @@ importers:
         version: 1.8.0
       ts-mls:
         specifier: 2.0.0-rc.13
-        version: 2.0.0-rc.13(@noble/ciphers@2.2.0)(@noble/curves@2.2.0)
+        version: 2.0.0-rc.13(patch_hash=025c515ac4e3ff477cd2d740445af3c1086088e1c30e4ffb47e9b5614eec5ed4)(@noble/ciphers@2.2.0)(@noble/curves@2.2.0)
     devDependencies:
       '@djot/djot':
         specifier: ^0.3.2
@@ -7298,7 +7301,7 @@ snapshots:
 
   trough@2.2.0: {}
 
-  ts-mls@2.0.0-rc.13(@noble/ciphers@2.2.0)(@noble/curves@2.2.0):
+  ts-mls@2.0.0-rc.13(patch_hash=025c515ac4e3ff477cd2d740445af3c1086088e1c30e4ffb47e9b5614eec5ed4)(@noble/ciphers@2.2.0)(@noble/curves@2.2.0):
     dependencies:
       '@hpke/core': 1.9.0
       '@noble/ciphers': 2.2.0

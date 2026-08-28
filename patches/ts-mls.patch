@@ -1,0 +1,32 @@
+diff --git a/dist/src/processMessages.d.ts b/dist/src/processMessages.d.ts
+index 96e0f9694d09e72548d1bc3b76f64aa84044cb93..41c5608ba925dd048281dae61ec9646606062b44 100644
+--- a/dist/src/processMessages.d.ts
++++ b/dist/src/processMessages.d.ts
+@@ -17,6 +17,7 @@ export type ProcessMessageResult = {
+     newState: ClientState;
+     consumed: Uint8Array[];
+     aad: Uint8Array;
++    senderLeafIndex: import("./treemath.js").LeafIndex | undefined;
+ };
+ /**
+  * Process private message and apply proposal or commit and return the updated ClientState or return an application message
+diff --git a/dist/src/processMessages.js b/dist/src/processMessages.js
+index 3b6c21b1200fcf38807111ccc40948182601b61c..2fe8d99e95a3d50af10f1eb570a0f90b8eb63d07 100644
+--- a/dist/src/processMessages.js
++++ b/dist/src/processMessages.js
+@@ -51,6 +51,7 @@ export async function processPrivateMessage(params) {
+                     newState,
+                     consumed: result.consumed,
+                     aad: result.content.content.authenticatedData,
++                    senderLeafIndex: getSenderLeafNodeIndex(result.content.content.sender),
+                 };
+             }
+             else {
+@@ -70,6 +71,7 @@ export async function processPrivateMessage(params) {
+             newState: updatedState,
+             consumed: result.consumed,
+             aad: result.content.content.authenticatedData,
++            senderLeafIndex: getSenderLeafNodeIndex(result.content.content.sender),
+         };
+     }
+     else if (result.content.content.contentType === contentTypes.commit) {

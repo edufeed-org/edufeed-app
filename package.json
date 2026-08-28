@@ -115,7 +115,8 @@
   },
   "pnpm": {
     "patchedDependencies": {
-      "applesauce-content@6.2.0": "patches/applesauce-content@6.2.0.patch"
+      "applesauce-content@6.2.0": "patches/applesauce-content@6.2.0.patch",
+      "ts-mls": "patches/ts-mls.patch"
     }
   },
   "lint-staged": {
