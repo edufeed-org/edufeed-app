@@ -329,3 +329,20 @@ export function preservePointerTags(sourceTags, rebuiltTags) {
   );
   return [...preserved, ...rebuiltTags];
 }
+
+/**
+ * Tags for republishing a section's kind-30000 profile list with a (possibly
+ * new) form reference. The list is an ACL: its p-tags are the approved
+ * members, so everything except `d` and `form` is carried over verbatim —
+ * rebuilding from scratch wipes every member's publish access.
+ * @param {string[][] | undefined} existingTags - tags of the current 30000, if any
+ * @param {string} name - section name (the list's d-tag)
+ * @param {string} formRef - form template coordinate for the `form` tag
+ * @returns {string[][]}
+ */
+export function mergeSectionProfileListTags(existingTags, name, formRef) {
+  const preserved = (Array.isArray(existingTags) ? existingTags : []).filter(
+    (tag) => Array.isArray(tag) && tag[0] !== 'd' && tag[0] !== 'form'
+  );
+  return [['d', name], ...preserved, ['form', formRef]];
+}

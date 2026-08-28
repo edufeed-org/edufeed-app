@@ -33,10 +33,20 @@ vi.mock('$lib/services/publish-service.js', () => ({ publishEventOptimistic }));
 const toastSpy = vi.hoisted(() => vi.fn());
 vi.mock('$lib/helpers/toast', () => ({ showToast: toastSpy }));
 
+// Holder for a section's kind-30000 profile list, emitted by the replaceable
+// model and returned by getReplaceable — the ACL save() must merge onto.
+const sectionList = vi.hoisted(() => ({ value: /** @type {any} */ (null) }));
 vi.mock('$lib/stores/nostr-infrastructure.svelte', () => ({
   eventStore: {
     add: vi.fn(),
-    replaceable: () => ({ subscribe: () => ({ unsubscribe: () => {} }) })
+    replaceable: (/** @type {number} */ kind) => ({
+      subscribe: (/** @type {(e: any) => void} */ cb) => {
+        if (kind === 30000) cb(sectionList.value);
+        return { unsubscribe: () => {} };
+      }
+    }),
+    getReplaceable: (/** @type {number} */ kind) =>
+      kind === 30000 ? (sectionList.value ?? undefined) : undefined
   },
   pool: {}
 }));
@@ -310,5 +320,80 @@ describe('CommunityBasicsForm — group relay info', () => {
     });
     await screen.findByTestId('basics-save');
     expect(screen.queryByTestId('basics-group-relay')).toBeNull();
+  });
+});
+
+// A form-gated section's kind-30000 profile list is the section's ACL: its
+// p-tags are the approved members. save() republishes it (to round-trip the
+// form ref), and that republish must carry the existing tags over — rebuilding
+// from just d+form silently revokes every member's publish access.
+describe('CommunityBasicsForm — form-gated section profile lists', () => {
+  const MEMBER = 'b'.repeat(64);
+  // Open, non-moderated legacy community with one form-gated Chat section.
+  const GATED = {
+    kind: 10222,
+    id: 'evt-form-gated',
+    pubkey: OWNER,
+    created_at: 1000,
+    content: '',
+    tags: [
+      ['d', 'edufeed'],
+      ['strict', 'content'],
+      ['content', 'Chat'],
+      ['k', '9'],
+      ['a', `30000:${OWNER}:Chat`],
+      ['a', `30168:${OWNER}:apply`, '', 'form']
+    ]
+  };
+
+  beforeEach(() => {
+    extensionSigner.signEvent.mockClear();
+    publishEventOptimistic.mockClear();
+    toastSpy.mockClear();
+    sectionList.value = null;
+  });
+
+  it('preserves the approved members (p-tags) when republishing the list', async () => {
+    sectionList.value = {
+      kind: 30000,
+      id: 'list1',
+      pubkey: OWNER,
+      created_at: 500,
+      content: '',
+      tags: [
+        ['d', 'Chat'],
+        ['p', MEMBER],
+        ['form', `30168:${OWNER}:apply`]
+      ]
+    };
+
+    render(CommunityBasicsForm, { props: { communikeyEvent: GATED } });
+    await fireEvent.click(await screen.findByTestId('basics-save'));
+    await waitFor(() => expect(extensionSigner.signEvent).toHaveBeenCalled());
+
+    const lists = extensionSigner.signEvent.mock.calls
+      .map((c) => c[0])
+      .filter((t) => t.kind === 30000);
+    expect(lists).toHaveLength(1);
+    expect(lists[0].tags).toEqual(
+      expect.arrayContaining([
+        ['d', 'Chat'],
+        ['p', MEMBER],
+        ['form', `30168:${OWNER}:apply`]
+      ])
+    );
+  });
+
+  it('republishes no list while the current one has not loaded yet', async () => {
+    // formRef only ever round-trips in FROM the list — if it is absent there
+    // is nothing to write, and writing would strip the ACL.
+    render(CommunityBasicsForm, { props: { communikeyEvent: GATED } });
+    await fireEvent.click(await screen.findByTestId('basics-save'));
+    await waitFor(() => expect(extensionSigner.signEvent).toHaveBeenCalled());
+
+    const lists = extensionSigner.signEvent.mock.calls
+      .map((c) => c[0])
+      .filter((t) => t.kind === 30000);
+    expect(lists).toHaveLength(0);
   });
 });

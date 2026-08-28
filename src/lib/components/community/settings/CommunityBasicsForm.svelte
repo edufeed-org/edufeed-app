@@ -33,7 +33,8 @@
     buildCommunityDefinitionTags,
     createDefaultContentTypes,
     preservePointerTags,
-    applyParsedAccessTiers
+    applyParsedAccessTiers,
+    mergeSectionProfileListTags
   } from '$lib/helpers/communityTagBuilder.js';
   import {
     parseCommunityContentTypes,
@@ -298,15 +299,22 @@
       if (!isModerated) {
         for (const [, ct] of Object.entries(communityData.contentTypes)) {
           if (!ct.enabled || !ct.formRef) continue;
+          // The list is the section's ACL — merge onto the current event so
+          // approved members' p-tags survive the republish (loadFormRefs has
+          // already pulled it into the eventStore). formRef itself only ever
+          // round-trips in from that same list, so if it hasn't arrived yet
+          // there is nothing to update — republishing without it would strip
+          // every member's p-tag.
+          const existing = /** @type {import('nostr-tools').Event | undefined} */ (
+            eventStore.getReplaceable(30000, communikeyEvent.pubkey, ct.name)
+          );
+          if (!existing) continue;
           /** @type {import('nostr-tools').EventTemplate} */
           const profileListEvent = {
             kind: 30000,
             created_at: Math.floor(Date.now() / 1000),
-            tags: [
-              ['d', ct.name],
-              ['form', ct.formRef]
-            ],
-            content: ''
+            tags: mergeSectionProfileListTags(existing?.tags, ct.name, ct.formRef),
+            content: existing?.content || ''
           };
           publishEventOptimistic(await signer.signEvent(plainTemplate(profileListEvent)));
         }

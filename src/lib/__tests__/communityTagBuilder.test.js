@@ -6,7 +6,8 @@ import {
   preservePointerTags,
   applyParsedAccessTiers,
   contentTypesFromEvent,
-  sectionsFromContentTypes
+  sectionsFromContentTypes,
+  mergeSectionProfileListTags
 } from '$lib/helpers/communityTagBuilder.js';
 
 describe('buildCommunityDefinitionTags', () => {
@@ -599,6 +600,44 @@ describe('sectionsFromContentTypes', () => {
     const sections = sectionsFromContentTypes(contentTypesFromEvent(event));
     expect(sections).toEqual([
       { name: 'Materialien', kinds: [30142], access: { tier: 'members' } }
+    ]);
+  });
+});
+
+// mergeSectionProfileListTags — save() republishes each form-gated section's
+// kind-30000 profile list; the merge must preserve every approved member's
+// p-tag (and any other tags) instead of rebuilding from just d + form.
+describe('mergeSectionProfileListTags', () => {
+  test('preserves existing p-tags and foreign tags, replacing only d and form', () => {
+    const existing = [
+      ['d', 'Materialien'],
+      ['p', 'aaaa'],
+      ['p', 'bbbb', 'wss://relay.example.com'],
+      ['form', '30168:pk:old-form'],
+      ['title', 'Publisher']
+    ];
+    expect(mergeSectionProfileListTags(existing, 'Materialien', '30168:pk:new-form')).toEqual([
+      ['d', 'Materialien'],
+      ['p', 'aaaa'],
+      ['p', 'bbbb', 'wss://relay.example.com'],
+      ['title', 'Publisher'],
+      ['form', '30168:pk:new-form']
+    ]);
+  });
+
+  test('builds the minimal list when there is no existing event', () => {
+    expect(mergeSectionProfileListTags(undefined, 'Chat', '30168:pk:f')).toEqual([
+      ['d', 'Chat'],
+      ['form', '30168:pk:f']
+    ]);
+  });
+
+  test('ignores malformed tag entries from the network', () => {
+    const existing = [['d', 'X'], 'garbage', null, ['p', 'cccc']];
+    expect(mergeSectionProfileListTags(/** @type {any} */ (existing), 'X', '30168:pk:f')).toEqual([
+      ['d', 'X'],
+      ['p', 'cccc'],
+      ['form', '30168:pk:f']
     ]);
   });
 });
