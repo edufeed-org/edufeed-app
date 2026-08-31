@@ -2,7 +2,8 @@ name: Build and Push Docker Image
 
 on:
   push:
-    branches: [main, dev]
+    branches: [main]
+    tags: ['v*']
 
 env:
   REGISTRY: git.edufeed.org
@@ -54,15 +55,22 @@ jobs:
             exit 1
           fi
 
+      # Release-based tagging: every push to main publishes :dev (staging,
+      # dev.edufeed.org tracks main HEAD). A v* tag publishes :vX.Y.Z and
+      # moves :latest, which prod's manual Ansible deploy pulls — so prod
+      # only ever advances when a release tag is cut.
       - name: Tag and push (only after smoke test passes)
         run: |
           REF_NAME="${{ github.ref_name }}"
-          TAG="latest"
-          if [ "$REF_NAME" != "main" ]; then
-            TAG="$REF_NAME"
-          fi
           REG=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
-          docker tag edufeed-app:ci-${{ github.sha }} $REG:${TAG}
+          if [ "${{ github.ref_type }}" = "tag" ]; then
+            TAGS="$REF_NAME latest"
+          else
+            TAGS="dev"
+          fi
           docker tag edufeed-app:ci-${{ github.sha }} $REG:sha-${{ github.sha }}
-          docker push $REG:${TAG}
           docker push $REG:sha-${{ github.sha }}
+          for TAG in $TAGS; do
+            docker tag edufeed-app:ci-${{ github.sha }} $REG:${TAG}
+            docker push $REG:${TAG}
+          done

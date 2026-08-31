@@ -663,6 +663,28 @@ and a default brand tag set (`static/og-default.png`, `APP_OG_DESCRIPTION`,
 
 ## Development Environment
 
+### Branching & Releases
+
+`main` is the only long-lived branch. The old integration branch `dev` was
+retired 2026-08-31 (merged into main) — never base new work on it.
+
+- **All work happens on `pr/<slug>` branches off `main`**, developed in
+  worktrees and merged via nostr PRs (`ngit`). The `pr/` prefix is what makes
+  a push open a PR — see Git Remotes below.
+- **Staging tracks main:** every push to `main` builds + smoke-tests the
+  Docker image and publishes the `:dev` image tag (plus `:sha-<sha>`), which
+  dev.edufeed.org runs. Image tag `:dev` is a staging label, not a branch.
+- **Releases are git tags `vX.Y.Z` on main.** Pushing a `v*` tag publishes
+  `:vX.Y.Z` and moves `:latest`. Prod deploys are manual Ansible (homelab
+  repo) pulling `:latest`, so prod only advances when a release tag is cut.
+  No changelog file for now — the tag history is the record.
+- **Unfinished features hide behind env feature flags** (e.g.
+  `CONCORD_ENABLED`, `MEMBERSHIP_ENABLED`), never behind branches. Merged
+  work must always leave main releasable.
+
+CI lives in `.forgejo/workflows/docker-build.yml` (Forgejo Actions only;
+GitHub is a passive mirror).
+
 ### Nix (Recommended)
 
 The dev shell (Node 22 + pnpm + Chromium + Playwright drivers) auto-activates via `direnv allow`, or enter manually with `nix develop`. **E2E tests require the nix shell** — Chromium is provided by nix, not installed via `npx playwright install`.
