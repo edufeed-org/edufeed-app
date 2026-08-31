@@ -25,6 +25,7 @@
     createDefaultContentTypes
   } from '$lib/helpers/communityTagBuilder.js';
   import { getCommunityGlobalRelays } from '$lib/helpers/communityRelays.js';
+  import { normalizeRelayInput } from '$lib/helpers/relay-input.js';
   import { runtimeConfig } from '$lib/stores/config.svelte.js';
   // Concord submodules imported DIRECTLY (never the barrel) — the convention
   // every Concord call site follows (see CLAUDE.md's Concord section).
@@ -337,19 +338,21 @@
   }
 
   /**
-   * Validate relay URL format
+   * Accept a bare hostname and supply the scheme. Community relays are stored
+   * as bare r-tags (no trailing slash) to match what other clients write.
+   * @param {string} url
+   */
+  function normalizeRelay(url) {
+    return normalizeRelayInput(url, { trailingSlash: false }) ?? url;
+  }
+
+  /**
+   * Validate relay URL format — runs on the already-normalized value, so it
+   * only fires for input no scheme can rescue.
    * @param {string} url
    */
   function validateRelayUrl(url) {
-    if (!url.startsWith('wss://') && !url.startsWith('ws://')) {
-      return m.create_community_modal_relays_validation();
-    }
-    try {
-      new URL(url);
-      return null;
-    } catch {
-      return m.create_community_modal_error_invalid_url();
-    }
+    return normalizeRelayInput(url) ? null : m.relay_url_invalid();
   }
 
   function nextStep() {
@@ -923,6 +926,7 @@
                 placeholder={m.create_community_modal_relays_placeholder()}
                 buttonText={m.create_community_modal_relays_button()}
                 itemType="relay"
+                normalize={normalizeRelay}
                 validator={validateRelayUrl}
                 minItems={1}
                 helpText={m.create_community_modal_relays_help()}

@@ -1,7 +1,7 @@
 /**
- * Relay feed helpers — pure logic for the dashboard relay feed:
- * user-input normalization, relay option assembly for the picker,
- * and provenance-based event filtering for the feed itself.
+ * Relay feed helpers — pure logic for the dashboard relay feed: relay option
+ * assembly for the picker and provenance-based event filtering for the feed
+ * itself. User-input normalization lives in relay-input.js.
  */
 import { getSeenRelays, normalizeURL } from 'applesauce-core/helpers';
 import { getNip10References } from 'applesauce-common/helpers';
@@ -20,37 +20,6 @@ export function resolveFeedRelaySources(feedConfig) {
     FEED_RELAY_SOURCE_TOKENS.includes(t)
   );
   return new Set(tokens.length ? tokens : ['config', 'custom']);
-}
-
-/**
- * Normalize free-text relay input to a canonical relay URL.
- * Lenient: bare hostnames get wss:// prepended. Only ws/wss allowed.
- * @param {string} input
- * @returns {string | null} normalized URL (trailing slash, lowercase host) or null if invalid
- */
-export function normalizeRelayInput(input) {
-  const trimmed = (input || '').trim();
-  // Internal whitespace is never valid — WHATWG parsers strip tabs/newlines
-  // and browsers percent-encode spaces instead of throwing.
-  if (!trimmed || /\s/.test(trimmed)) return null;
-
-  // Check if input already has a scheme
-  if (/^[a-z][a-z0-9+.-]*:\/\//i.test(trimmed)) {
-    // Has a scheme; only wss and ws are allowed
-    if (!/^wss?:\/\//i.test(trimmed)) return null;
-  }
-
-  const withScheme = /^wss?:\/\//i.test(trimmed) ? trimmed : `wss://${trimmed}`;
-  try {
-    const url = new URL(withScheme);
-    if (url.protocol !== 'wss:' && url.protocol !== 'ws:') return null;
-    // Browsers percent-encode invalid host characters instead of throwing
-    // (Node throws) — a % in the hostname means the input was never a hostname.
-    if (!url.hostname || url.hostname.includes('%')) return null;
-    return normalizeURL(url.toString());
-  } catch {
-    return null;
-  }
 }
 
 /**

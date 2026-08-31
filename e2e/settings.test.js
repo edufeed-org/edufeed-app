@@ -185,7 +185,7 @@ authTest.describe('Settings page - Authenticated', () => {
       await expect(addRelayDivider).toBeVisible({ timeout: 5000 });
 
       // Should see relay URL input
-      const relayInput = page.locator('input[placeholder*="wss://"]').first();
+      const relayInput = page.locator('input[placeholder*="relay.example.com"]').first();
       await expect(relayInput).toBeVisible();
     });
 
@@ -193,12 +193,27 @@ authTest.describe('Settings page - Authenticated', () => {
       await ensureRelayListExists(page);
 
       // Find relay URL input and type
-      const relayInput = page.locator('input[placeholder*="wss://"]').first();
+      const relayInput = page.locator('input[placeholder*="relay.example.com"]').first();
       await relayInput.fill('wss://test-relay.example.com');
 
       // Verify the input value
       await expect(relayInput).toHaveValue('wss://test-relay.example.com');
     });
+
+    authTest(
+      'adding a bare hostname stores it with the wss:// scheme',
+      async ({ authenticatedPage: page }) => {
+        await ensureRelayListExists(page);
+
+        const relayInput = page.locator('input[placeholder*="relay.example.com"]').first();
+        await relayInput.fill('bare-host-relay.example.com');
+        await page.locator('.join button:has-text("Add")').first().click();
+
+        await expect(page.locator('text=wss://bare-host-relay.example.com').first()).toBeVisible({
+          timeout: 5000
+        });
+      }
+    );
 
     authTest('Add button is visible next to relay input', async ({ authenticatedPage: page }) => {
       await ensureRelayListExists(page);

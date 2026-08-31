@@ -13,6 +13,7 @@
     buttonText = m.editable_list_default_button(),
     itemType = m.editable_list_default_item_type(),
     validator = null,
+    normalize = null,
     minItems = 0,
     helpText = ''
   } = $props();
@@ -24,12 +25,18 @@
    * Add a new item to the list
    */
   function addItem() {
-    const trimmedValue = inputValue.trim();
+    const rawValue = inputValue.trim();
 
-    if (!trimmedValue) {
+    if (!rawValue) {
       error = m.editable_list_error_empty({ itemType });
       return;
     }
+
+    // Normalize before the duplicate check — otherwise a bare "relay.example.org"
+    // slips past an entry already stored as "wss://relay.example.org". A
+    // normalizer that cannot handle the input returns it unchanged, leaving the
+    // validator to produce the error message.
+    const trimmedValue = normalize ? normalize(rawValue) : rawValue;
 
     // Check for duplicates
     if (items.includes(trimmedValue)) {

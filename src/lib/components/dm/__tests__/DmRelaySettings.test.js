@@ -19,7 +19,8 @@ vi.mock('$lib/paraglide/messages', () =>
       'dm_relay_add',
       'dm_relay_remove',
       'dm_relay_placeholder',
-      'dm_no_relays_title'
+      'dm_no_relays_title',
+      'relay_url_invalid'
     ].map((k) => [k, () => k])
   )
 );
@@ -54,10 +55,10 @@ describe('DmRelaySettings', () => {
     mockRun.mockClear();
   });
 
-  /** @param {HTMLElement} container */
-  async function addRelayViaUi(container) {
+  /** @param {HTMLElement} container @param {string} [value] */
+  async function addRelayViaUi(container, value = 'wss://dm.edufeed.org') {
     const input = /** @type {HTMLInputElement} */ (container.querySelector('input[type="text"]'));
-    await fireEvent.input(input, { target: { value: 'wss://dm.edufeed.org' } });
+    await fireEvent.input(input, { target: { value } });
     const addButton = /** @type {HTMLButtonElement} */ (
       [...container.querySelectorAll('button')].find((b) => b.textContent?.includes('dm_relay_add'))
     );
@@ -86,6 +87,34 @@ describe('DmRelaySettings', () => {
     await addRelayViaUi(container);
 
     expect(mockRun).toHaveBeenCalledWith('AddDirectMessageRelay', 'wss://dm.edufeed.org');
+  });
+
+  it('prepends wss:// to a bare hostname before adding', async () => {
+    mockReplaceable.mockReturnValue(of(undefined));
+
+    const { container } = render(DmRelaySettings);
+    await addRelayViaUi(container, 'dm.edufeed.org');
+
+    expect(mockRun).toHaveBeenCalledWith('AddDirectMessageRelay', 'wss://dm.edufeed.org');
+  });
+
+  it('stores the relay without a trailing slash so it matches existing r-tags', async () => {
+    mockReplaceable.mockReturnValue(of(undefined));
+
+    const { container } = render(DmRelaySettings);
+    await addRelayViaUi(container, 'wss://DM.Edufeed.org/');
+
+    expect(mockRun).toHaveBeenCalledWith('AddDirectMessageRelay', 'wss://dm.edufeed.org');
+  });
+
+  it('rejects a non-websocket scheme instead of publishing it', async () => {
+    mockReplaceable.mockReturnValue(of(undefined));
+
+    const { container, getByText } = render(DmRelaySettings);
+    await addRelayViaUi(container, 'https://dm.edufeed.org');
+
+    expect(mockRun).not.toHaveBeenCalled();
+    expect(getByText('relay_url_invalid')).toBeTruthy();
   });
 
   it('shows exactly the relays in the kind 10050 event, not the listening union', () => {
