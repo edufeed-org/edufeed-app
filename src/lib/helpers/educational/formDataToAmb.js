@@ -42,7 +42,17 @@ export function convertFormDataToAMB(formData) {
     license: { id: formData.license }
   };
 
-  if (formData.learningResourceType) {
+  // Multi-select in the wizard → `learningResourceTypes` (plural, preferred).
+  // `learningResourceType` remains as the legacy single-value form, mirroring
+  // the educationalLevels/educationalLevel pair below.
+  if (formData.learningResourceTypes && formData.learningResourceTypes.length > 0) {
+    amb.learningResourceType = formData.learningResourceTypes.map((uri, index) => ({
+      id: uri,
+      prefLabel: {
+        [lang]: formData.learningResourceTypeLabels?.[index]?.label || extractLabelFromUri(uri)
+      }
+    }));
+  } else if (formData.learningResourceType) {
     amb.learningResourceType = [
       {
         id: formData.learningResourceType,

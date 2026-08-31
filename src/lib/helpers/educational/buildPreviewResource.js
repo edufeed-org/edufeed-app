@@ -76,8 +76,13 @@ export function buildPreviewResource(formData, pubkey, locale = 'en') {
     /** @type {any} */
     const normalised = { ...formData };
 
-    // learningResourceType: object[] → string id + sidecar label
+    // learningResourceType: CompactConcept[] → string[] + label sidecar
     if (Array.isArray(lrt)) {
+      normalised.learningResourceTypes = lrt.map((/** @type {any} */ c) => c.id);
+      normalised.learningResourceTypeLabels = lrt.map((/** @type {any} */ c) => ({
+        id: c.id,
+        label: c.label
+      }));
       normalised.learningResourceType = lrt[0]?.id ?? '';
       normalised.learningResourceTypeLabel = lrt[0]?.label ?? '';
     }

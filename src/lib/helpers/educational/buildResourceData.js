@@ -62,6 +62,14 @@ export function buildResourceData(formData, { about, hasNoUrl }) {
     // Drives the Konfi required-field skip and the Bildungsbereich NIP-32
     // detection tag downstream in educational-actions.svelte.js.
     bildungsbereich: formData.bildungsbereich,
+    // Plural is the real payload — the wizard's LRT picker is multi-select.
+    // The scalar pair below stays for legacy single-value callers (see the
+    // `learningResourceType` fallback in `convertFormDataToAMB`).
+    learningResourceTypes: formData.learningResourceType.map((t) => t.id),
+    learningResourceTypeLabels: formData.learningResourceType.map((t) => ({
+      id: t.id,
+      label: t.label
+    })),
     learningResourceType: formData.learningResourceType[0]?.id || '',
     learningResourceTypeLabel: formData.learningResourceType[0]?.label || '',
     about: about.map((s) => s.id),
