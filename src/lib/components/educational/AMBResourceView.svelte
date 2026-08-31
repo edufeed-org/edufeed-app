@@ -388,6 +388,13 @@
   const metadataCards = $derived.by(() => {
     /** @type {import('$lib/helpers/educational/extensionMetadata.js').MetadataCard[]} */
     const core = [];
+    // The hero kicker only has room for the primary type; a resource may carry
+    // several (the form's picker is multi-select), so the grid lists them all.
+    if (localizedLearningResourceTypes.length > 0) {
+      core.push(
+        coreConceptCard('core:type', 'tag', m.amb_resource_type(), localizedLearningResourceTypes)
+      );
+    }
     if (localizedEducationalLevels.length > 0) {
       core.push(
         coreConceptCard(
