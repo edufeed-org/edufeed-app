@@ -6,11 +6,8 @@
   import { runtimeConfig } from '$lib/stores/config.svelte.js';
   import { parseCordnGroupsConfig } from '$lib/cordn';
   import { getRelayListLookupRelays } from '$lib/services/relay-service.svelte.js';
-  import {
-    saveRelayList,
-    validateRelayUrl,
-    parseRelayListEvent
-  } from '$lib/services/relay-settings-service.js';
+  import { saveRelayList, parseRelayListEvent } from '$lib/services/relay-settings-service.js';
+  import { normalizeRelayInput } from '$lib/helpers/relay-input.js';
   import { createRelayListLoader } from '$lib/loaders/relay-list-loader.js';
   import { createBlossomServerLoader } from '$lib/loaders/blossom-server-loader.js';
   import {
@@ -270,14 +267,15 @@
 
   // Add a new relay
   function addRelay() {
-    const validation = validateRelayUrl(newRelayUrl);
-    if (!validation.valid) {
-      validationError = validation.error || null;
+    // Bare URLs: kind 10002 r-tags are stored without the trailing slash, and
+    // the duplicate check below compares against what is already in the list.
+    const normalizedUrl = normalizeRelayInput(newRelayUrl, { trailingSlash: false });
+    if (!normalizedUrl) {
+      validationError = m.relay_url_invalid();
       return;
     }
 
     // Check for duplicates
-    const normalizedUrl = newRelayUrl.trim().replace(/\/$/, '');
     if (relays.some((r) => r.url.replace(/\/$/, '') === normalizedUrl)) {
       validationError = m.settings_relay_duplicate();
       return;
@@ -528,13 +526,14 @@
       return;
     }
 
-    const validation = validateRelayUrl(newAppRelayUrl);
-    if (!validation.valid) {
-      appRelayValidationError = validation.error || null;
+    // Bare URLs — the kind 30002 relay set and the server defaults it overrides
+    // are both stored without a trailing slash.
+    const normalizedUrl = normalizeRelayInput(newAppRelayUrl, { trailingSlash: false });
+    if (!normalizedUrl) {
+      appRelayValidationError = m.relay_url_invalid();
       return;
     }
 
-    const normalizedUrl = newAppRelayUrl.trim().replace(/\/$/, '');
     const currentRelays = getRelaysForCategory(category);
 
     if (currentRelays.includes(normalizedUrl)) {
@@ -722,7 +721,7 @@
                 <input
                   type="text"
                   class="input-bordered input join-item flex-1"
-                  placeholder="wss://relay.example.com"
+                  placeholder="relay.example.com"
                   bind:value={newRelayUrl}
                   onkeydown={handleKeyDown}
                 />
@@ -1006,7 +1005,7 @@
                         <input
                           type="text"
                           class="input-bordered input input-sm join-item flex-1"
-                          placeholder="wss://relay.example.com"
+                          placeholder="relay.example.com"
                           bind:value={newAppRelayUrl}
                           onkeydown={(e) => handleAppRelayKeyDown(e, category)}
                         />

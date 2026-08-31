@@ -1184,7 +1184,7 @@ detection, hint show/hide flags) is covered by Vitest component tests:
 
 ---
 
-### settings.test.js (20 tests)
+### settings.test.js (21 tests)
 
 **Route:** `/settings`
 **Auth required:** Both authenticated and unauthenticated flows
@@ -1211,15 +1211,16 @@ detection, hint show/hide flags) is covered by Vitest component tests:
 | shows Blossom servers section              | Blossom/media server section visible      |
 | shows app-specific relay categories        | Calendar/Educational categories visible   |
 
-#### Relay Editing - Authenticated (5 tests)
+#### Relay Editing - Authenticated (6 tests)
 
-| Test                                      | What it verifies                    |
-| ----------------------------------------- | ----------------------------------- |
-| can see Add Relay form                    | Add Relay divider and input visible |
-| can type relay URL in input               | Input accepts wss:// URL            |
-| Add button is visible next to relay input | Add button present                  |
-| read/write checkboxes visible in add form | Read/Write checkboxes visible       |
-| can toggle read/write checkboxes          | Checkbox state changes on click     |
+| Test                                         | What it verifies                                       |
+| -------------------------------------------- | ------------------------------------------------------ |
+| can see Add Relay form                       | Add Relay divider and input visible                    |
+| can type relay URL in input                  | Input accepts wss:// URL                               |
+| adding a bare hostname stores it with wss:// | Scheme auto-prepended before the relay enters the list |
+| Add button is visible next to relay input    | Add button present                                     |
+| read/write checkboxes visible in add form    | Read/Write checkboxes visible                          |
+| can toggle read/write checkboxes             | Checkbox state changes on click                        |
 
 #### Gated Mode - Authenticated (2 tests)
 

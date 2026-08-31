@@ -4,6 +4,7 @@
   import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
   import { useActiveUser } from '$lib/stores/accounts.svelte';
   import { getDmRelaysFromEvent } from '$lib/helpers/dm.js';
+  import { normalizeRelayInput } from '$lib/helpers/relay-input.js';
   import { TrashIcon, PlusIcon } from '$lib/components/icons';
   import * as m from '$lib/paraglide/messages';
 
@@ -36,11 +37,13 @@
 
   async function addRelay() {
     error = '';
-    const url = newRelayUrl.trim();
-    if (!url) return;
+    if (!newRelayUrl.trim()) return;
 
-    if (!url.startsWith('wss://') && !url.startsWith('ws://')) {
-      error = 'Relay URL must start with wss:// or ws://';
+    // r-tags in kind 10050 are stored bare (no trailing slash) — see the
+    // relay list this component renders back.
+    const url = normalizeRelayInput(newRelayUrl, { trailingSlash: false });
+    if (!url) {
+      error = m.relay_url_invalid();
       return;
     }
 
