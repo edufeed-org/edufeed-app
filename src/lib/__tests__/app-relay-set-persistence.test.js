@@ -197,6 +197,31 @@ describe('App relay set persistence: relay alignment', () => {
       expect(parseRelaySetEvent(undefined)).toEqual([]);
     });
 
+    it('should return each relay once when a relay tag is repeated', () => {
+      // The settings page renders these in a keyed {#each ... (relay)}. A kind
+      // 30002 is untrusted network input, so a repeated relay tag would hand
+      // Svelte a duplicate key and kill the whole page (each_key_duplicate).
+      const event = {
+        kind: 30002,
+        created_at: Math.floor(Date.now() / 1000),
+        tags: [
+          ['d', 'Edufeed/calendar'],
+          ['relay', 'wss://dup.example.com'],
+          ['relay', 'wss://other.example.com'],
+          ['relay', 'wss://dup.example.com']
+        ],
+        content: '',
+        id: 'test-id',
+        pubkey: 'test-pubkey',
+        sig: 'test-sig'
+      };
+
+      expect(parseRelaySetEvent(event)).toEqual([
+        'wss://dup.example.com',
+        'wss://other.example.com'
+      ]);
+    });
+
     it('should return empty array for event with no relay tags', () => {
       const event = {
         kind: 30002,

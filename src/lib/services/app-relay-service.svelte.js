@@ -7,6 +7,7 @@
 import { writable } from 'svelte/store';
 import { SvelteMap } from 'svelte/reactivity';
 import { runtimeConfig } from '$lib/stores/config.svelte.js';
+import { unique } from '$lib/helpers/unique.js';
 
 /**
  * App relay categories with their associated event kinds
@@ -149,15 +150,23 @@ export function kindToAppRelayCategory(kind) {
 }
 
 /**
- * Parse relay URLs from a kind 30002 event
+ * Parse relay URLs from a kind 30002 event.
+ *
+ * Deduped: the settings page renders these in a keyed {#each ... (relay)}, and
+ * a kind 30002 is untrusted network input — a repeated relay tag would hand
+ * Svelte a duplicate key and kill the page (each_key_duplicate). It also keeps
+ * the override cache from querying the same relay twice.
+ *
  * @param {import('nostr-tools').NostrEvent | null | undefined} event - Kind 30002 event
  * @returns {string[]} Array of relay URLs
  */
 export function parseRelaySetEvent(event) {
   if (!event?.tags) return [];
 
-  return event.tags
-    .filter((/** @type {string[]} */ t) => t[0] === 'relay')
-    .map((/** @type {string[]} */ t) => t[1])
-    .filter(Boolean);
+  return unique(
+    event.tags
+      .filter((/** @type {string[]} */ t) => t[0] === 'relay')
+      .map((/** @type {string[]} */ t) => t[1])
+      .filter(Boolean)
+  );
 }

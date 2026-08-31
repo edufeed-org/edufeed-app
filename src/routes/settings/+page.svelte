@@ -6,6 +6,7 @@
   import { runtimeConfig } from '$lib/stores/config.svelte.js';
   import { parseCordnGroupsConfig } from '$lib/cordn';
   import { getRelayListLookupRelays } from '$lib/services/relay-service.svelte.js';
+  import { unique } from '$lib/helpers/unique.js';
   import {
     saveRelayList,
     validateRelayUrl,
@@ -930,7 +931,11 @@
             {#each Object.entries(CATEGORIES) as [category, config] (category)}
               {@const override = appRelayOverrides.get(category) || []}
               {@const serverDefaults = getDefaultRelaysForCategory(category)}
-              {@const effectiveRelays = override.length > 0 ? override : serverDefaults}
+              <!-- unique(): keyed on the URL below. The override path is deduped
+                   by parseRelaySetEvent, but serverDefaults comes straight from
+                   env config, where a repeated relay would be a typo that takes
+                   the whole settings page down. -->
+              {@const effectiveRelays = unique(override.length > 0 ? override : serverDefaults)}
               {@const isEditing = editingCategory === category}
 
               <div class="mt-4 rounded-lg bg-base-100 p-4">
