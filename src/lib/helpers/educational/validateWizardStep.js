@@ -108,9 +108,15 @@ export function validateWizardStep(step, formData, ctx, subStepConfig) {
 
     case 5: {
       // License gate: any encoding with a sha256 but no license event blocks publish.
-      const missing = (formData.encodings ?? []).some(
-        (/** @type {any} */ e) => e?.sha256 && !e?.licenseEvent
-      );
+      // Exemption: an x-webxdc package in edit mode is immutable (its d-tag
+      // can't change), so the license already attested at original publish
+      // time covers it — mirrors the step-2 exemption above, and matters
+      // when the async license-event rehydration hasn't landed yet.
+      const missing = (formData.encodings ?? []).some((/** @type {any} */ e) => {
+        if (!e?.sha256 || e?.licenseEvent) return false;
+        if (ctx.isEditMode && e?.type === 'application/x-webxdc') return false;
+        return true;
+      });
       if (missing) {
         errors.encodings = m.encodingLicenseMissing();
       }

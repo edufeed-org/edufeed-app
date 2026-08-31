@@ -64,6 +64,52 @@ export function matchSuggestion(input, suggestions) {
 }
 
 /**
+ * Derive the nip05 hint's variant and state from the membership grant flow.
+ * Pure so the matrix is unit-testable; the reactive store feeds it live values.
+ *
+ * - `grantState` — the user's application: 'none' (never applied), 'pending'
+ *   (submitted, not yet in the upstream directory), 'granted' (the wished
+ *   handle resolves to the user's pubkey upstream).
+ * - `activated` — the granted address is on the user's kind 0 profile.
+ * - `hasNip05` — the profile carries any nip05 (granted or foreign).
+ * - Dismissals are separate: hiding the early apply reminder must not
+ *   suppress the later "your handle is ready" notice.
+ *
+ * @param {{
+ *   membershipEnabled: boolean,
+ *   profileSettled: boolean,
+ *   grantState: 'none' | 'pending' | 'granted',
+ *   activated: boolean,
+ *   hasNip05: boolean,
+ *   applyDismissed: boolean,
+ *   readyDismissed: boolean
+ * }} input
+ * @returns {{variant: 'apply' | 'pending' | 'ready', applicable: boolean, confirmed: boolean}}
+ */
+export function deriveNip05Hint({
+  membershipEnabled,
+  profileSettled,
+  grantState,
+  activated,
+  hasNip05,
+  applyDismissed,
+  readyDismissed
+}) {
+  if (grantState === 'granted') {
+    return {
+      variant: 'ready',
+      applicable: membershipEnabled && profileSettled && !activated && !readyDismissed,
+      confirmed: activated
+    };
+  }
+  return {
+    variant: grantState === 'pending' ? 'pending' : 'apply',
+    applicable: membershipEnabled && profileSettled && !hasNip05 && !applyDismissed,
+    confirmed: hasNip05
+  };
+}
+
+/**
  * Whether the "set up your profile" hint should show. Pure so the matrix is
  * unit-testable; the reactive store feeds it live values.
  *

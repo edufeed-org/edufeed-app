@@ -5,6 +5,12 @@
  * (profile list a-tags, enforced relays, languages).
  */
 
+import {
+  parseCommunityContentTypes,
+  parseCommunityMetadata,
+  hasStrictContentMarker
+} from './communityRelays.js';
+
 /**
  * @typedef {Object} ContentTypeFormData
  * @property {string} name - Display name (e.g. 'Calendar', 'Chat')
@@ -13,6 +19,7 @@
  * @property {string[]} relays - Per-section relays (old-spec only)
  * @property {string} [formRef] - Form template coordinate (new-spec: gates section when set)
  * @property {string} [formRefRelay] - Relay hint for the preferred-form a-tag
+ * @property {{tier: 'all'}|{tier: 'members'}|{tier: 'role', role: string}} [access] - Publish tier (new-spec; omitted or 'all' → open)
  */
 
 /**
@@ -20,7 +27,9 @@
  * @property {(string | {url: string, enforced: boolean})[]} relays - Global relays
  * @property {string[]} blossomServers
  * @property {string} location
- * @property {string} description
+ * @property {string} [description] - Spec-level override of the kind-0 about.
+ *   No app form writes it anymore (one description, in the profile) — kept so
+ *   events carrying one still round-trip through the builder.
  * @property {string[]} [languages] - ISO-639-1 language codes (new-spec)
  * @property {string} [livekitUrl] - LiveKit operator URL for Meet rooms
  * @property {Record<string, ContentTypeFormData>} contentTypes
@@ -70,23 +79,94 @@ export function createDefaultContentTypes(enabledKeys = []) {
       enabled: enabledKeys.includes(key),
       badges: { read: null, write: null },
       relays: [],
-      formRef: ''
+      formRef: '',
+      access: { tier: 'all' }
     };
   }
   return result;
+}
+
+/** Kind number → content type key, the inverse of CONTENT_TYPE_KINDS.
+ * @type {Record<number, string>}
+ */
+const KIND_TO_KEY = Object.fromEntries(
+  Object.entries(CONTENT_TYPE_KINDS).flatMap(([key, kinds]) =>
+    kinds.map((kind) => [Number(kind), key])
+  )
+);
+
+/**
+ * Read a community event's declared sections back into the chip-picker
+ * record. The read half of the content-type editor, shared by the owner's
+ * CommunityBasicsForm and the root-group admins' section-override pane so
+ * both seed from one implementation.
+ *
+ * Legacy communities (no ["strict","content"] marker) fail open: their
+ * declarations are advisory, so everything is pre-enabled and saving
+ * preserves the status quo rather than silently switching sections off. Meet
+ * is the exception — without a LiveKit URL there is nothing to enable.
+ *
+ * @param {any} communityEvent kind 10222 (or null)
+ * @returns {Record<string, ContentTypeFormData & { formRef: string }>}
+ */
+export function contentTypesFromEvent(communityEvent) {
+  const contentTypes = createDefaultContentTypes();
+  if (!communityEvent) return contentTypes;
+
+  for (const section of parseCommunityContentTypes(communityEvent)) {
+    for (const kind of section.kinds) {
+      const key = KIND_TO_KEY[kind];
+      if (!key || !contentTypes[key]) continue;
+      contentTypes[key].enabled = true;
+      if (section.name) contentTypes[key].name = section.name;
+    }
+  }
+
+  if (!hasStrictContentMarker(communityEvent)) {
+    const livekitUrl = parseCommunityMetadata(communityEvent).livekitUrl;
+    for (const [key, ct] of Object.entries(contentTypes)) {
+      if (key === 'meet' && !livekitUrl && !ct.enabled) continue;
+      ct.enabled = true;
+    }
+  }
+
+  return applyParsedAccessTiers(contentTypes, communityEvent);
+}
+
+/**
+ * The write half: enabled chips back into the {name, kinds, access} shape
+ * buildSectionOverrideTemplate consumes.
+ * @param {Record<string, ContentTypeFormData>} contentTypes
+ * @returns {{name: string, kinds: number[], access: NonNullable<ContentTypeFormData['access']>}[]}
+ */
+export function sectionsFromContentTypes(contentTypes) {
+  /** @type {{name: string, kinds: number[], access: NonNullable<ContentTypeFormData['access']>}[]} */
+  const sections = [];
+  for (const [key, ct] of Object.entries(contentTypes ?? {})) {
+    if (!ct?.enabled) continue;
+    const kinds = CONTENT_TYPE_KINDS[key];
+    if (!kinds) continue;
+    sections.push({
+      name: ct.name,
+      kinds: kinds.map(Number),
+      access: ct.access ?? { tier: 'all' }
+    });
+  }
+  return sections;
 }
 
 /**
  * Build tags array for a kind 10222 community definition event.
  *
  * @param {CommunityFormData} data - Form data from the modal
- * @param {{ communityPubkey?: string }} [opts] - When communityPubkey is set,
+ * @param {{ communityPubkey?: string, membership?: {id: string, relay: string} }} [opts] - When communityPubkey is set,
  *   writes new-spec tags (profile list a-tags, enforced relays, languages).
  *   When absent, writes old-spec tags (badge a-tags, per-section relays).
+ *   membership is new-spec only; ignored in old-spec mode.
  * @returns {string[][]}
  */
 export function buildCommunityDefinitionTags(data, opts = {}) {
-  const { communityPubkey } = opts;
+  const { communityPubkey, membership } = opts;
   const isNewSpec = !!communityPubkey;
 
   /** @type {string[][]} */
@@ -134,6 +214,12 @@ export function buildCommunityDefinitionTags(data, opts = {}) {
     tags.push(['livekit', data.livekitUrl.trim()]);
   }
 
+  // Moderated-community pointers (communikey-groups NIP draft) — top-level,
+  // and BEFORE the sections: section parsers absorb same-key tags positionally.
+  if (isNewSpec && membership) {
+    tags.push(['membership', membership.id, membership.relay]);
+  }
+
   // Strict content marker: the modals present the full content-type
   // vocabulary, so the sections below are an exhaustive, owner-reviewed
   // choice. Clients only filter navigation/creation UIs when this is present.
@@ -151,6 +237,19 @@ export function buildCommunityDefinitionTags(data, opts = {}) {
     if (kinds) {
       for (const k of kinds) {
         tags.push(['k', k]);
+      }
+    }
+
+    // Publish tier per communikey-groups NIP draft (new-spec only)
+    if (isNewSpec && ct.access && ct.access.tier !== 'all') {
+      if (ct.access.tier === 'members') {
+        tags.push(['access', 'members']);
+      } else if (
+        ct.access.tier === 'role' &&
+        typeof ct.access.role === 'string' &&
+        ct.access.role.trim()
+      ) {
+        tags.push(['access', 'role', ct.access.role.trim()]);
       }
     }
 
@@ -177,4 +276,73 @@ export function buildCommunityDefinitionTags(data, opts = {}) {
   }
 
   return tags;
+}
+
+/**
+ * Copy publish-tier access data — parsed from a kind 10222 event's `access`
+ * section tags — onto matching content-type form records, keyed by section
+ * name (same case-insensitive name match EditCommunityModal already uses
+ * for formRef round-tripping). Pure: returns a NEW record, never mutates
+ * `contentTypes`. Entries with no matching section (or when the event has
+ * none) keep their existing `access` untouched — typically the `{tier:
+ * 'all'}` default `createDefaultContentTypes` seeds.
+ *
+ * EditCommunityModal's load effect parses `content`/`k`/`a` (badge) tags but
+ * never `access` tags, so without this every access tier a moderated
+ * community had would silently revert to 'all' the moment the owner opened
+ * and saved the edit modal (final-review finding).
+ *
+ * @template {Record<string, ContentTypeFormData>} T
+ * @param {T} contentTypes
+ * @param {any} communityEvent - the kind 10222 event being edited
+ * @returns {T}
+ */
+export function applyParsedAccessTiers(contentTypes, communityEvent) {
+  const sections = parseCommunityContentTypes(communityEvent);
+  /** @type {Record<string, ContentTypeFormData>} */
+  const result = {};
+  for (const [key, ct] of Object.entries(contentTypes)) {
+    const section = sections.find(
+      (s) => typeof s.name === 'string' && s.name.toLowerCase() === ct.name?.toLowerCase()
+    );
+    result[key] = section ? { ...ct, access: section.access } : { ...ct };
+  }
+  return /** @type {T} */ (result);
+}
+
+/** Tag keys the community modals do not model — carried over verbatim on
+ * every rebuild so an edit cannot silently drop a community's group,
+ * membership engine, application form, or private-area pointer. */
+const POINTER_TAG_KEYS = ['membership', 'application', 'concord', 'group'];
+
+/**
+ * Prepend the source event's pointer tags to a rebuilt tag array.
+ * Prepended (not appended) so top-level pointers stay ahead of content
+ * sections, which absorb same-key tags positionally.
+ * @param {string[][]} sourceTags - tags of the event being edited
+ * @param {string[][]} rebuiltTags - fresh output of buildCommunityDefinitionTags
+ * @returns {string[][]}
+ */
+export function preservePointerTags(sourceTags, rebuiltTags) {
+  const preserved = (Array.isArray(sourceTags) ? sourceTags : []).filter(
+    (tag) => Array.isArray(tag) && POINTER_TAG_KEYS.includes(tag[0])
+  );
+  return [...preserved, ...rebuiltTags];
+}
+
+/**
+ * Tags for republishing a section's kind-30000 profile list with a (possibly
+ * new) form reference. The list is an ACL: its p-tags are the approved
+ * members, so everything except `d` and `form` is carried over verbatim —
+ * rebuilding from scratch wipes every member's publish access.
+ * @param {string[][] | undefined} existingTags - tags of the current 30000, if any
+ * @param {string} name - section name (the list's d-tag)
+ * @param {string} formRef - form template coordinate for the `form` tag
+ * @returns {string[][]}
+ */
+export function mergeSectionProfileListTags(existingTags, name, formRef) {
+  const preserved = (Array.isArray(existingTags) ? existingTags : []).filter(
+    (tag) => Array.isArray(tag) && tag[0] !== 'd' && tag[0] !== 'form'
+  );
+  return [['d', name], ...preserved, ['form', formRef]];
 }

@@ -18,6 +18,32 @@
     defaultSelfCreator = false,
     existingLicense = /** @type {any} */ (null),
     /**
+     * Seed the create-license form's license select on open, instead of the
+     * hardcoded CC BY 4.0 default. URL string (must match a
+     * `getLicenseOptions()` option value or one it synthesizes). Null for
+     * existing callers, who get the old hardcoded default unchanged.
+     * @type {string | null}
+     */
+    initialLicense = /** @type {string | null} */ (null),
+    /**
+     * Seed the create-license form's credit field on open. Null for existing
+     * callers, who get the old empty-string default unchanged.
+     * @type {string | null}
+     */
+    initialCredit = /** @type {string | null} */ (null),
+    /**
+     * Seed the create-license form's title field on open. Null for existing
+     * callers, who get the old empty-string default unchanged.
+     * @type {string | null}
+     */
+    initialTitle = /** @type {string | null} */ (null),
+    /**
+     * Seed the create-license form's source field on open. Null for existing
+     * callers, who get the old empty-string default unchanged.
+     * @type {string | null}
+     */
+    initialSource = /** @type {string | null} */ (null),
+    /**
      * Signer used to publish the kind 1063 attestation. Falls back to
      * `manager.active` when not provided. Set this to a community signer when
      * attesting the community's own uploads (avatar / banner) so the license
@@ -36,7 +62,13 @@
      * options without forking the modal. Not rendered on the accept-existing view.
      * @type {import('svelte').Snippet | null}
      */
-    extraOptions = null
+    extraOptions = null,
+    /**
+     * Extra NIP-94 fields spread into the kind-1063 attestation (NIP-DC
+     * discovery: alt + icon for webxdc packages). Null for plain images.
+     * @type {{ alt?: string, image?: string } | null}
+     */
+    attestExtras = null
   } = $props();
 
   let modalLicense = $state('https://creativecommons.org/licenses/by/4.0/');
@@ -83,11 +115,12 @@
   // of `open` but the `if (open)` guard ensures we only reset on the rising edge.
   $effect(() => {
     if (open) {
-      modalLicense = 'https://creativecommons.org/licenses/by/4.0/';
-      modalTitle = '';
+      modalLicense = initialLicense || 'https://creativecommons.org/licenses/by/4.0/';
+      modalTitle = initialTitle || '';
       modalSelfCreator = defaultSelfCreator;
-      modalCredit = defaultSelfCreator && activeUserDisplayName ? activeUserDisplayName : '';
-      modalSource = '';
+      modalCredit =
+        defaultSelfCreator && activeUserDisplayName ? activeUserDisplayName : initialCredit || '';
+      modalSource = initialSource || '';
       modalDescription = '';
       modalError = '';
       modalDisclosureChecked = false;
@@ -178,7 +211,8 @@
           title: modalTitle || undefined,
           source: modalSource || undefined,
           creatorPubkey: modalSelfCreator ? effectiveSigner.pubkey : undefined,
-          description: modalDescription || undefined
+          description: modalDescription || undefined,
+          ...(attestExtras ?? {})
         },
         effectiveSigner
       );

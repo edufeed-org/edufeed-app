@@ -10,6 +10,12 @@ export default async function globalTeardown() {
     if (DEBUG) console.log('[E2E Teardown] Hanging relay stopped');
   }
 
+  // Stop NIP-29 mock relay (same {server, wss} shape as mock-relay.js)
+  if (globalThis.__NIP29_RELAY__) {
+    await stopRelay(globalThis.__NIP29_RELAY__);
+    if (DEBUG) console.log('[E2E Teardown] NIP-29 relay stopped');
+  }
+
   // Stop Docker Compose and remove volumes for clean state
   if (DEBUG) console.log('[E2E Teardown] Stopping Docker Compose...');
   try {

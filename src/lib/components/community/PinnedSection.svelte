@@ -165,7 +165,7 @@
    */
   async function handleRemove(event) {
     try {
-      await unpinEvent(event);
+      await unpinEvent(event, communityId);
       showToast(m.pinned_removed_toast(), 'success');
     } catch (err) {
       console.error('Unpin failed:', err);
@@ -191,7 +191,7 @@
           () => eventStore.getReplaceable(kind, pubkey, identifier)
         );
         if (event) {
-          await pinEvent(event);
+          await pinEvent(event, communityId);
           showToast(m.pinned_added_toast(), 'success');
           addInput = '';
         } else {
@@ -207,7 +207,7 @@
           () => eventStore.getEvent(id)
         );
         if (event) {
-          await pinEvent(event);
+          await pinEvent(event, communityId);
           showToast(m.pinned_added_toast(), 'success');
           addInput = '';
         } else {

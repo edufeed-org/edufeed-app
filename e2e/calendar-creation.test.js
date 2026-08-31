@@ -4,7 +4,7 @@
  * Tests the FAB, modal, event creation, and deletion flows.
  * All tests require authentication.
  */
-import { test, expect, openEventCreationModal } from './fixtures.js';
+import { test, expect, openEventCreationModal, FAB_TRIGGER } from './fixtures.js';
 import { setupErrorCapture, waitForEventDetail } from './test-utils.js';
 
 // ============================================================================
@@ -19,7 +19,7 @@ test.describe('Calendar Event Creation - FAB and Modal UI', () => {
     await page.waitForTimeout(2000);
 
     // FAB should be visible
-    await expect(page.locator('.fab')).toBeVisible();
+    await expect(page.locator(FAB_TRIGGER)).toBeVisible();
   });
 
   test('clicking Create Event opens modal', async ({ authenticatedPage: page }) => {
@@ -156,8 +156,14 @@ test.describe('Calendar Event Creation - Happy Path', () => {
       timeout: 10000
     });
 
-    // Verify description/summary is visible
-    await expect(page.getByText(eventSummary)).toBeVisible({ timeout: 5000 });
+    // Scoped to the description card rather than a bare getByText: the summary
+    // is rendered through MarkdownRenderer, so the wrapper and the paragraph it
+    // produces both contain the text and a page-wide getByText resolves to two
+    // elements. Anchoring on the card also makes the assertion say what it
+    // means — the summary is in the description card, not merely on the page.
+    // See CalendarEventDetailView.svelte:218-224.
+    const descriptionCard = page.locator('.card-body').filter({ hasText: eventSummary });
+    await expect(descriptionCard).toBeVisible({ timeout: 5000 });
   });
 });
 
@@ -237,18 +243,23 @@ test.describe('Calendar Event Creation - Deletion', () => {
     await page.waitForURL(/\/calendar\/event\/naddr1/, { timeout: 15000 });
     await waitForEventDetail(page);
 
-    // Click the "Manage event" dropdown trigger button
-    const manageButton = page.locator('button[aria-label="Manage event"]');
-    await expect(manageButton).toBeVisible({ timeout: 5000 });
-    await manageButton.click();
+    // Open the event context menu. The detail page routes through
+    // CalendarEventDetailView -> DetailHeader -> EventContextMenu, whose trigger
+    // is aria-label="Event menu". The old "Manage event" button still exists but
+    // only inside CalendarEventDetailsModal, which this page does not render.
+    const menuButton = page.locator('button[aria-label="Event menu"]');
+    await expect(menuButton).toBeVisible({ timeout: 5000 });
+    await menuButton.click();
 
     // Wait for dropdown to open
     await page.waitForTimeout(300);
 
-    // Click "Delete Event" in the dropdown
+    // Click "Delete" in the dropdown. EventContextMenu labels the item with
+    // m.common_delete() — 'Delete', not the old 'Delete Event'. The *confirmation*
+    // dialog below still reads 'Delete Event?' (event_management_delete_confirm_title).
     const deleteOption = page
       .locator('.dropdown-content button')
-      .filter({ hasText: 'Delete Event' });
+      .filter({ hasText: /^\s*Delete\s*$/ });
     await expect(deleteOption).toBeVisible();
     await deleteOption.click();
 

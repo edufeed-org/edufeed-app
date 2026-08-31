@@ -255,6 +255,51 @@ describe('filterActionsForCommunity', () => {
     const ids = filterActionsForCommunity(CREATE_ACTIONS, event).map((a) => a.id);
     expect(ids).toEqual(['resource', 'article', 'form', 'bookmark', 'share']);
   });
+
+  // The kind filter answers "does this community host that content type";
+  // canPublish answers "may THIS user put it there". Offering the action to
+  // someone the section's access tier excludes just walks them through a
+  // whole creation form to publish something nobody will render.
+  describe('publish permission', () => {
+    const event = makeCommunityEvent([
+      { name: 'Learning', kinds: [30142] },
+      { name: 'Articles', kinds: [30023] }
+    ]);
+
+    it('drops actions whose section the user may not publish to', () => {
+      const ids = filterActionsForCommunity(CREATE_ACTIONS, event, {
+        canPublish: (name) => name !== 'Learning'
+      }).map((a) => a.id);
+      expect(ids).not.toContain('resource');
+      expect(ids).toContain('article');
+    });
+
+    it('keeps context-independent actions, which belong to no section', () => {
+      const ids = filterActionsForCommunity(CREATE_ACTIONS, event, {
+        canPublish: () => false
+      }).map((a) => a.id);
+      expect(ids).toEqual(['form', 'bookmark', 'share']);
+    });
+
+    it('fails open without a predicate, matching every other consumer', () => {
+      expect(filterActionsForCommunity(CREATE_ACTIONS, event)).toEqual(
+        filterActionsForCommunity(CREATE_ACTIONS, event, {})
+      );
+    });
+
+    it('never consults the predicate for a community it does not gate at all', () => {
+      // Legacy, no strict marker: the whole filter fails open, so a
+      // permission check would be answering a question nobody asked.
+      const legacy = makeCommunityEvent([{ name: 'Learning', kinds: [30142] }], {
+        strict: false
+      });
+      const canPublish = vi.fn(() => false);
+      expect(filterActionsForCommunity(CREATE_ACTIONS, legacy, { canPublish })).toEqual(
+        CREATE_ACTIONS
+      );
+      expect(canPublish).not.toHaveBeenCalled();
+    });
+  });
 });
 
 describe('suggestedActionIds', () => {

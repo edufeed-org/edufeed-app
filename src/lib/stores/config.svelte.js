@@ -24,14 +24,19 @@ const defaultConfig = {
   fallbackRelays: [],
   // Default NIP-17 DM relays (kind 10050) published for new users at signup
   dmRelays: [],
+  // DM senders (hex or npub) whose conversations always count as "known"
+  dmTrustedSenders: [],
   // App-specific relays (content goes here IN ADDITION to user's outbox)
   appRelays: {
     calendar: [], // kinds 31922-31925
     communikey: [], // kinds 10222, 30222
     educational: [], // kind 30142
     longform: [], // kind 30023
-    kanban: [] // kinds 30301, 30302, 8571
+    kanban: [], // kinds 30301, 30302, 8571
+    groups: [] // NIP-29 group hosts (creation targets)
   },
+  // Enable NIP-29 moderated communities (requires groupsRelays)
+  groupsEnabled: false,
   // Dashboard relay feed picker: deployment-curated relays + enabled sources
   // (tokens: config | custom | nip65 | community)
   feed: {
@@ -152,7 +157,12 @@ const defaultConfig = {
   // Resource form variants (AMB vs EKW, etc.). Order defines picker order + default.
   resourceFormVariants: {
     /** @type {string[]} */
-    enabled: ['amb']
+    enabled: ['amb'],
+    // naddr references to kind 30168 form templates, keyed by variant id. When
+    // set for a variant, that variant renders via the generic template-driven
+    // form instead of the hardcoded wizard. See resource-form-variants.js.
+    /** @type {Record<string, string>} */
+    templateNaddrs: {}
   },
   ui: {
     defaultLightTheme: 'light',
@@ -173,6 +183,19 @@ const defaultConfig = {
     handleDomain: '',
     formAddress: '',
     adminPubkeys: /** @type {string[]} */ ([])
+  },
+  // Cordn MLS private groups spike
+  cordnGroups: {
+    enabled: false,
+    /** @type {string[]} */
+    coordinatorPubkeys: [],
+    /** @type {string[]} */
+    relays: []
+  },
+  // Concord private channels
+  concord: {
+    enabled: false,
+    relays: /** @type {string[]} */ ([])
   },
   // Read-only npub login
   npubLogin: {
@@ -198,6 +221,11 @@ const defaultConfig = {
   // Metadata cleaner availability (service URL stays server-side)
   metadataCleaner: {
     enabled: false
+  },
+  webxdc: {
+    sandboxDomain: 'iframe.diy',
+    /** @type {string[]} ordered kind-1063 event refs (nevent or hex id); first is featured */
+    curatedApps: []
   }
 };
 
@@ -246,13 +274,16 @@ export function initializeConfig(runtimeConfig) {
     indexerRelays: runtimeConfig.indexerRelays || defaultConfig.indexerRelays,
     fallbackRelays: runtimeConfig.fallbackRelays || defaultConfig.fallbackRelays,
     dmRelays: runtimeConfig.dmRelays || defaultConfig.dmRelays,
+    dmTrustedSenders: runtimeConfig.dmTrustedSenders || defaultConfig.dmTrustedSenders,
     appRelays: {
       calendar: runtimeConfig.calendarRelays || defaultConfig.appRelays.calendar,
       communikey: runtimeConfig.communikeyRelays || defaultConfig.appRelays.communikey,
       educational: runtimeConfig.ambRelays || defaultConfig.appRelays.educational,
       longform: runtimeConfig.longformContentRelays || defaultConfig.appRelays.longform,
-      kanban: runtimeConfig.kanbanRelays || defaultConfig.appRelays.kanban
+      kanban: runtimeConfig.kanbanRelays || defaultConfig.appRelays.kanban,
+      groups: runtimeConfig.groupsRelays || defaultConfig.appRelays.groups
     },
+    groupsEnabled: runtimeConfig.groupsEnabled ?? defaultConfig.groupsEnabled,
     feed: {
       relays: runtimeConfig.feed?.relays || defaultConfig.feed.relays,
       relaySources: runtimeConfig.feed?.relaySources || defaultConfig.feed.relaySources
@@ -331,7 +362,10 @@ export function initializeConfig(runtimeConfig) {
     },
     resourceFormVariants: {
       enabled:
-        runtimeConfig.resourceFormVariants?.enabled || defaultConfig.resourceFormVariants.enabled
+        runtimeConfig.resourceFormVariants?.enabled || defaultConfig.resourceFormVariants.enabled,
+      templateNaddrs:
+        runtimeConfig.resourceFormVariants?.templateNaddrs ||
+        defaultConfig.resourceFormVariants.templateNaddrs
     },
     ui: {
       ...defaultConfig.ui,
@@ -344,6 +378,14 @@ export function initializeConfig(runtimeConfig) {
     membership: {
       ...defaultConfig.membership,
       ...runtimeConfig.membership
+    },
+    cordnGroups: {
+      ...defaultConfig.cordnGroups,
+      ...runtimeConfig.cordnGroups
+    },
+    concord: {
+      ...defaultConfig.concord,
+      ...runtimeConfig.concord
     },
     npubLogin: {
       ...defaultConfig.npubLogin,
@@ -360,7 +402,8 @@ export function initializeConfig(runtimeConfig) {
     metadataCleaner: {
       ...defaultConfig.metadataCleaner,
       ...runtimeConfig.metadataCleaner
-    }
+    },
+    webxdc: { ...defaultConfig.webxdc, ...runtimeConfig.webxdc }
   };
 
   // Signal that config is ready for dependent code
@@ -405,6 +448,9 @@ export const runtimeConfig = {
   },
   get dmRelays() {
     return config.dmRelays;
+  },
+  get dmTrustedSenders() {
+    return config.dmTrustedSenders;
   },
   get appRelays() {
     return config.appRelays;
@@ -457,6 +503,15 @@ export const runtimeConfig = {
   get membership() {
     return config.membership;
   },
+  get cordnGroups() {
+    return config.cordnGroups;
+  },
+  get concord() {
+    return config.concord;
+  },
+  get groupsEnabled() {
+    return config.groupsEnabled;
+  },
   get npubLogin() {
     return config.npubLogin;
   },
@@ -468,5 +523,8 @@ export const runtimeConfig = {
   },
   get metadataCleaner() {
     return config.metadataCleaner;
+  },
+  get webxdc() {
+    return config.webxdc;
   }
 };

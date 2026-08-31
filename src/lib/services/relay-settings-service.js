@@ -3,8 +3,13 @@
  */
 
 import { publishEvent } from './publish-service.js';
-import { invalidateRelayListCache } from './relay-service.svelte.js';
+import { invalidateRelayListCache, getRelayListLookupRelays } from './relay-service.svelte.js';
 import { manager } from '$lib/stores/accounts.svelte.js';
+import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
+import { nextCreatedAt, cachePublishedEvent } from '$lib/helpers/replaceableUpdates.js';
+
+/** NIP-65 relay list metadata. */
+const RELAY_LIST_KIND = 10002;
 
 /**
  * Save relay list by publishing a kind 10002 event
@@ -46,11 +51,13 @@ export async function saveRelayList(relays, userPubkey) {
     return tag;
   });
 
-  // Create the event (kind 10002 - replaceable)
+  // Create the event (kind 10002 - replaceable).
+  // created_at must be strictly newer than the relay list it replaces, or the
+  // save is dropped on a same-second tie — see nextCreatedAt for why. (#64)
   const event = {
-    kind: 10002,
+    kind: RELAY_LIST_KIND,
     pubkey: userPubkey,
-    created_at: Math.floor(Date.now() / 1000),
+    created_at: nextCreatedAt(eventStore.getReplaceable(RELAY_LIST_KIND, userPubkey)),
     tags,
     content: ''
   };
@@ -62,12 +69,29 @@ export async function saveRelayList(relays, userPubkey) {
     // Invalidate cache BEFORE publishing so we use the new relays
     invalidateRelayListCache(userPubkey);
 
-    // Publish using the outbox model
-    const result = await publishEvent(signedEvent);
+    // Publish using the outbox model — PLUS, explicitly, the relays of the
+    // NEW list itself and the relay-list lookup indexers. The outbox set is
+    // resolved from the OLD list (or the fallbacks when none exists); when
+    // that old set is broken or unreachable, publishing only there means a
+    // user can never save their way OUT of a bad relay list (journey-test
+    // 2026-08-17: account without a 10002 + flaky fallbacks → 'Failed to
+    // publish to any relay' on the very save meant to fix it). NIP-65 also
+    // wants the list ON the listed relays and findable via indexers.
+    const additionalRelays = [
+      ...relays.filter((relay) => relay.write).map((relay) => relay.url),
+      ...getRelayListLookupRelays()
+    ];
+    const result = await publishEvent(signedEvent, [], { additionalRelays });
 
     if (!result.success) {
       throw new Error('Failed to publish to any relay');
     }
+
+    // Kind 10002 is cacheable, and publishEvent never touches the EventStore —
+    // so without this the saved relay list never reaches IDB and the next read
+    // is served the PREVIOUS one from cache. That mis-routes every subsequent
+    // query, which is why this site is the worst of the set in #64.
+    cachePublishedEvent(signedEvent, result);
 
     return signedEvent;
   } catch (error) {

@@ -3,13 +3,17 @@
  * @vitest-environment jsdom
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render } from '@testing-library/svelte';
+import { render, fireEvent } from '@testing-library/svelte';
 
 // Stub the license-hook before importing the component so the module-level
 // $effect doesn't try to spin up a real applesauce loader during tests.
+// Tests that care about the overlay override `licenseState.current`.
+const licenseState = {
+  current: /** @type {any} */ ({ event: null, status: 'loading' })
+};
 vi.mock('$lib/stores/image-license.svelte.js', () => ({
   useLicenseForHash: () => () => null,
-  useLicenseStatus: () => () => ({ event: null, status: 'loading' })
+  useLicenseStatus: () => () => licenseState.current
 }));
 
 // Stub the SKOS cache — concept-side label resolution isn't under test here.
@@ -18,10 +22,13 @@ vi.mock('$lib/stores/skos-cache.svelte.js', () => ({
   ensureVocabularyLoaded: () => {}
 }));
 
-// Stub runtime so paraglide locale lookups don't blow up in jsdom.
-vi.mock('$lib/paraglide/runtime.js', () => ({
-  getLocale: () => 'en'
-}));
+// Pin the locale so label derivation is deterministic. The rest of the runtime
+// stays real — paraglide's message functions read other exports off it, and the
+// license overlay renders messages once an image branch is on screen.
+vi.mock('$lib/paraglide/runtime.js', async (importOriginal) => {
+  const actual = /** @type {any} */ (await importOriginal());
+  return { ...actual, getLocale: () => 'en' };
+});
 
 // Stub publisher-profile lookup. Tests that want to exercise the fallback
 // can override `mockedProfile` before rendering.
@@ -99,6 +106,127 @@ describe('ResourceCover — image branch', () => {
     });
     const wrapper = container.querySelector('[data-testid="resource-cover-image"]');
     expect(wrapper?.className ?? '').not.toMatch(/aspect-/);
+  });
+});
+
+describe('ResourceCover — unloadable cover image (issue #51)', () => {
+  beforeEach(() => {
+    licenseState.current = { event: null, status: 'loading' };
+  });
+
+  // A cover URL that cannot be fetched (dead host, 404, blocked hotlink) used
+  // to leave a grey placeholder box carrying the license pill. It now falls
+  // through to the same branches an absent cover uses.
+  /**
+   * Error out every source stage of the cover image (proxy stage then original
+   * stage — the chain is the same length for size="card" and size="thumbnail",
+   * only the proxy dimensions differ). Loops rather than counting stages, so it
+   * holds either way. Scoped to the image branch so a PDF-thumbnail img
+   * rendered afterwards isn't failed too.
+   * @param {Element} container
+   */
+  async function failEveryStage(container) {
+    let img;
+    while ((img = container.querySelector('[data-testid="resource-cover-image"] img'))) {
+      await fireEvent.error(img);
+    }
+  }
+
+  it('falls back to TypoCover once every image stage has failed', async () => {
+    const { container, queryByTestId } = render(ResourceCover, {
+      props: { resource: buildResource(), size: 'full', aspect: 'wide' }
+    });
+    expect(queryByTestId('resource-cover-image')).not.toBeNull();
+
+    await failEveryStage(container);
+
+    expect(queryByTestId('resource-cover-image')).toBeNull();
+    expect(queryByTestId('image-fallback-placeholder')).toBeNull();
+    expect(queryByTestId('typo-cover-card')).not.toBeNull();
+  });
+
+  it('drops the license overlay with the broken image', async () => {
+    licenseState.current = { event: null, status: 'missing' };
+    const { container, queryByTestId } = render(ResourceCover, {
+      props: { resource: buildResource(), size: 'full', aspect: 'wide' }
+    });
+    expect(queryByTestId('license-caution')).not.toBeNull();
+
+    await failEveryStage(container);
+
+    expect(queryByTestId('license-caution')).toBeNull();
+  });
+
+  // The list-variant card. `size` reaches ImageWithFallback only as the proxy
+  // dimension preset, so it cannot change the stage chain or when the chain is
+  // exhausted — but that is an argument from reading the code, and this branch
+  // is not reachable from Discover today (no list/grid toggle), so it went
+  // untested by hand. These two pin it.
+  it('falls back to TypoCover in the thumbnail variant too', async () => {
+    const { container, queryByTestId } = render(ResourceCover, {
+      props: { resource: buildResource(), size: 'thumbnail', aspect: 'wide' }
+    });
+    expect(queryByTestId('resource-cover-image')).not.toBeNull();
+
+    await failEveryStage(container);
+
+    expect(queryByTestId('resource-cover-image')).toBeNull();
+    expect(queryByTestId('image-fallback-placeholder')).toBeNull();
+    expect(queryByTestId('typo-cover-card')).not.toBeNull();
+  });
+
+  it('drops the dot-variant license caution with the broken image', async () => {
+    licenseState.current = { event: null, status: 'missing' };
+    const { container, queryByTestId } = render(ResourceCover, {
+      props: { resource: buildResource(), size: 'thumbnail', aspect: 'wide' }
+    });
+    const caution = queryByTestId('license-caution');
+    expect(caution).not.toBeNull();
+    // Guard against this silently re-testing the pill: at size="thumbnail" the
+    // overlay renders the icon alone, without the "No license info" label.
+    expect(caution?.textContent).not.toContain('No license info');
+
+    await failEveryStage(container);
+
+    expect(queryByTestId('license-caution')).toBeNull();
+  });
+
+  it('prefers the derived PDF thumbnail over TypoCover when the gate allows it', async () => {
+    const tags = [
+      ['d', 'r-pdf'],
+      ['license:id', 'https://creativecommons.org/licenses/by/4.0/'],
+      ['encoding:contentUrl', 'https://example.com/doc.pdf'],
+      ['encoding:encodingFormat', 'application/pdf']
+    ];
+    const { container, queryByTestId } = render(ResourceCover, {
+      props: {
+        resource: buildResource({ tags, identifier: 'r-pdf' }),
+        size: 'full',
+        aspect: 'wide'
+      }
+    });
+
+    await failEveryStage(container);
+
+    expect(queryByTestId('resource-cover-pdf-thumb')).not.toBeNull();
+    expect(queryByTestId('typo-cover-card')).toBeNull();
+  });
+
+  it('retries a new cover URL after a previous one failed', async () => {
+    const { container, queryByTestId, rerender } = render(ResourceCover, {
+      props: { resource: buildResource(), size: 'full', aspect: 'wide' }
+    });
+    await failEveryStage(container);
+    expect(queryByTestId('typo-cover-card')).not.toBeNull();
+
+    await rerender({
+      resource: buildResource({ image: 'https://example.com/other-cover.jpg' }),
+      size: 'full',
+      aspect: 'wide'
+    });
+
+    expect(queryByTestId('resource-cover-image')).not.toBeNull();
+    expect(queryByTestId('typo-cover-card')).toBeNull();
   });
 });
 

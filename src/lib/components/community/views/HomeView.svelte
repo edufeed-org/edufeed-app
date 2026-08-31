@@ -8,11 +8,13 @@
   import { filterEventsByAccess, getVerifiedMembers } from '$lib/helpers/contentTypes.js';
   import { getContext } from 'svelte';
   import AccessGateBanner from '$lib/components/forms/AccessGateBanner.svelte';
-  import { parseCommunityContentTypes } from '$lib/helpers/communityRelays.js';
+  import { parseCommunityContentTypes, sectionIsGated } from '$lib/helpers/communityRelays.js';
   import { getDisplayName, getProfilePicture } from 'applesauce-core/helpers';
   import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
   import { useProfileMap } from '$lib/stores/profile-map.svelte.js';
+  import { useAuthorDeletions } from '$lib/stores/author-deletions.svelte.js';
   import { useActiveUser } from '$lib/stores/accounts.svelte';
+  import { isCommunityOwner } from '$lib/helpers/community-signer.js';
   import { useCommunityActivityLoader } from '$lib/loaders/community-activity.js';
   import { useSocialBookmarksCommunityLoader } from '$lib/loaders/social-bookmarks.js';
   import {
@@ -45,7 +47,7 @@
   let canPublishAnywhere = $derived.by(() => {
     if (!communikeyEvent || profileAccess.isLoading) return true;
     const sections = parseCommunityContentTypes(communikeyEvent);
-    const gated = sections.filter((s) => s.profileList);
+    const gated = sections.filter(sectionIsGated);
     if (gated.length === 0) return true;
     return gated.every((s) => profileAccess.canPublish(s.name));
   });
@@ -53,7 +55,7 @@
   let accessDetail = $derived.by(() => {
     if (!communikeyEvent || profileAccess.isLoading) return null;
     const sections = parseCommunityContentTypes(communikeyEvent);
-    const gated = sections.filter((s) => s.profileList);
+    const gated = sections.filter(sectionIsGated);
     if (gated.length === 0) return null;
     const granted = gated.filter((s) => profileAccess.canPublish(s.name)).map((s) => s.name);
     const pending = gated.filter((s) => !profileAccess.canPublish(s.name)).map((s) => s.name);
@@ -69,7 +71,7 @@
 
   const getActiveUser = useActiveUser();
   let activeUser = $derived(getActiveUser());
-  let isAdmin = $derived(activeUser?.pubkey === communityId);
+  let isAdmin = $derived(isCommunityOwner(communityId));
 
   // Activity feed state — use $state.raw for event arrays (Symbol-based relay provenance)
   /** @type {any[]} */
@@ -77,7 +79,9 @@
   let allFeedItems = $state.raw(/** @type {any[]} */ ([]));
   let isLoadingFeed = $state(true);
 
-  const getAuthorProfiles = useProfileMap(() => {
+  // Authors AND sharers — a repost points at someone else's event, so both
+  // identities are on screen. Profiles and deletions want the same list.
+  const feedPubkeys = () => {
     const pubkeys = [];
     for (const i of feedItems) {
       pubkeys.push(i.pubkey);
@@ -88,8 +92,16 @@
       }
     }
     return pubkeys;
-  });
+  };
+
+  const getAuthorProfiles = useProfileMap(feedPubkeys);
   let authorProfiles = $derived(getAuthorProfiles());
+
+  // Their deletions too, for the same reason LearningView loads them: a
+  // resource its author deleted otherwise keeps rendering here from a stale
+  // local copy — measured on this very view, where a share of a resource
+  // deleted 17 days earlier was still listed (laoc, 2026-08-24).
+  useAuthorDeletions(feedPubkeys);
 
   // Plain let for internal refs — must NOT be $state to avoid infinite $effect loops
   /** @type {(() => void) | null} */
@@ -178,9 +190,16 @@
   });
 </script>
 
-{#if profileEvent && communikeyEvent}
+{#if communikeyEvent}
   <div>
-    <!-- Community Profile Hero -->
+    <!-- Community Profile Hero. profileEvent (the community's own kind-0) is
+         optional here on purpose — CommunityProfileHero already falls back
+         to a generic display name/avatar when it's absent (getDisplayName/
+         getProfilePicture). Gating the whole home view on it too meant a
+         community founded via "Use Current Keypair" by an account that
+         hasn't published a profile yet (a fresh nsec, no kind:0 anywhere)
+         rendered a permanently blank home view for every visitor — the
+         kind:0 fetch has nothing to ever resolve. -->
     <CommunityProfileHero
       {communityId}
       {communikeyEvent}

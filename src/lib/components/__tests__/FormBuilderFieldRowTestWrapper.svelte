@@ -2,8 +2,8 @@
   import { untrack } from 'svelte';
   import FormBuilderFieldRow from '../forms/FormBuilderFieldRow.svelte';
 
-  /** @type {{ initialField: any, fieldIndex?: number, existing?: boolean, onUpdate?: (field: any) => void }} */
-  let { initialField, fieldIndex = 0, existing = false, onUpdate } = $props();
+  /** @type {{ initialField: any, fieldIndex?: number, existing?: boolean, sections?: any[], onUpdate?: (field: any) => void }} */
+  let { initialField, fieldIndex = 0, existing = false, sections = [], onUpdate } = $props();
 
   // Wrap the field in $state so child mutations trigger reactive updates
   // in the preview block. Plain JS objects don't propagate mutations.
@@ -18,4 +18,4 @@
   });
 </script>
 
-<FormBuilderFieldRow bind:field fields={[field]} {fieldIndex} {existing} />
+<FormBuilderFieldRow bind:field fields={[field]} {fieldIndex} {existing} {sections} />

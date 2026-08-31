@@ -7,6 +7,8 @@
  * 3. Community relays: if event targets a community (h-tag present)
  */
 import { pool, eventStore } from '$lib/stores/nostr-infrastructure.svelte.js';
+import { uncacheEvent, recacheEvent } from '$lib/stores/event-cache.svelte.js';
+import { isAddressableKind, isReplaceableKind } from 'applesauce-core/helpers/event';
 import { getPublishRelays, getPrimaryWriteRelay } from './relay-service.svelte.js';
 import { getAppRelaysForCategory, kindToAppRelayCategory } from './app-relay-service.svelte.js';
 import { getFallbackRelays } from '$lib/helpers/relay-helper.js';
@@ -63,6 +65,60 @@ function notifyStatusUpdate(status) {
       publishStatusMap.delete(status.eventId);
     }, 10000);
   }
+}
+
+/**
+ * Publish a signed event to exactly the given relays — no outbox union, no
+ * app-relay or fallback expansion. This is the primitive the *scoped*
+ * publishers need: content that must not reach the author's public write
+ * relays (gift wraps, membership applications) picks its own relay set and
+ * hands it here.
+ *
+ * `publishEvent` below is the outbox-model counterpart: it computes a relay
+ * set and then does this same fan-out. It still carries its own copy of the
+ * loop; migrating it is a follow-up.
+ *
+ * @param {import('nostr-tools').NostrEvent} signedEvent - The signed Nostr event
+ * @param {string[]} relays - Exact relay URLs to publish to
+ * @param {Object} [opts] - Options
+ * @param {number} [opts.timeout] - Timeout per relay in ms (default 5000)
+ * @param {number} [opts.retries] - Transport-error retries per relay (default 2)
+ * @param {string} [opts.label] - Prefix for the rejection warning, e.g. '[membership]'
+ * @param {any} [opts.pool] - Relay pool (injectable for tests)
+ * @returns {Promise<{success: boolean, relays: string[], successCount: number}>}
+ */
+export async function publishToRelays(signedEvent, relays, opts = {}) {
+  const { timeout = 5000, retries = 2, label = '', pool: relayPool = pool } = opts;
+  const targets = [...new Set((relays || []).filter(Boolean))];
+  if (targets.length === 0) {
+    return { success: false, relays: [], successCount: 0 };
+  }
+
+  // pool.publish is applesauce's own multi-relay fan-out, and it does what our
+  // hand-rolled Promise.allSettled did plus one thing it could not: it retries
+  // a relay that failed to *reach*. Errors stay isolated per relay
+  // (errorToPublishResponse turns them into { ok: false }), so one dead relay
+  // still cannot reject the whole publish.
+  //
+  // Both defaults are overridden deliberately. The library's 30s timeout is far
+  // too long behind a submit button, and retries are capped so a fully dead
+  // relay set cannot stack 3 x 30s. Retries fire only on a *thrown* error —
+  // a relay that answers OK:false has made a decision, and resubscribing would
+  // just ask a second time and get the same no.
+  /** @type {{ ok: boolean, message?: string, from: string }[]} */
+  const responses = await relayPool.publish(targets, signedEvent, { timeout, retries });
+
+  for (const response of responses) {
+    if (!response?.ok) {
+      console.warn(
+        `${label} relay ${response?.from} rejected the event:`.trim(),
+        response?.message
+      );
+    }
+  }
+
+  const successCount = responses.filter((r) => r?.ok).length;
+  return { success: successCount > 0, relays: targets, successCount };
 }
 
 /**
@@ -171,6 +227,28 @@ export function publishEventInBackground(signedEvent, taggedPubkeys = [], onComp
 }
 
 /**
+ * The version an event is about to replace, or undefined if there is none.
+ *
+ * Only meaningful for replaceable and addressable kinds — a regular event
+ * replaces nothing, so there is nothing to put back if its publish fails.
+ *
+ * @param {import('nostr-tools').NostrEvent} signedEvent
+ * @returns {import('nostr-tools').NostrEvent | undefined}
+ */
+function getReplacedVersion(signedEvent) {
+  const { kind, pubkey, tags } = signedEvent;
+  if (!isReplaceableKind(kind) && !isAddressableKind(kind)) return undefined;
+  const identifier = isAddressableKind(kind)
+    ? (tags.find((t) => t[0] === 'd')?.[1] ?? '')
+    : undefined;
+  try {
+    return eventStore.getReplaceable(kind, pubkey, identifier);
+  } catch {
+    return undefined;
+  }
+}
+
+/**
  * Optimistic publish - adds event to EventStore immediately, publishes in background
  * Returns as soon as ONE relay succeeds. Shows alert if all relays fail.
  *
@@ -186,7 +264,16 @@ export function publishEventInBackground(signedEvent, taggedPubkeys = [], onComp
 export function publishEventOptimistic(signedEvent, taggedPubkeys = [], opts = {}) {
   const { timeout = 5000, communityEvent = null, additionalRelays = [], onStatusChange } = opts;
 
-  // 1. Immediately add to EventStore for instant UI update
+  // 1. Immediately add to EventStore for instant UI update.
+  //
+  // Capture the version this one replaces FIRST. Adding a replacement drops
+  // its predecessor from the EventStore (keepOldVersions is off) and, once
+  // the cache batch flushes, overwrites it in IDB too — nostr-idb keys
+  // replaceable events by `kind:pubkey:d`. So by the time a total publish
+  // failure is detected there is nothing left anywhere to fall back to, and
+  // removing the phantom would leave the address EMPTY rather than restored.
+  // This is the only moment the previous version is still reachable. (#64)
+  const previousVersion = getReplacedVersion(signedEvent);
   eventStore.add(signedEvent);
 
   // 2. Initialize status
@@ -277,6 +364,47 @@ export function publishEventOptimistic(signedEvent, taggedPubkeys = [], opts = {
 
       // Remove optimistically added event since publish failed completely
       eventStore.remove(signedEvent);
+
+      // `eventStore.remove` only clears memory. The event was offered to the
+      // IDB cache the moment it was added, and that pipeline is insert-only,
+      // so without this the phantom outlives the failure — and for a
+      // replaceable kind it OVERWRITES the last good version at its address
+      // (nostr-idb keys by `kind:pubkey:d`), which a cache hit then serves
+      // forever without asking a relay. Failure is detected only after
+      // `Promise.allSettled` against a 5000ms timeout while the cache batches
+      // at 1000ms. Measured in a browser by TestOER across four dead-relay
+      // modes: the phantom is in IDB every time, and this delete is what turns
+      // "renders fabricated data forever" into a cache miss. (#64)
+      await uncacheEvent(signedEvent);
+
+      // Put the replaced version back. Deleting the phantom on its own leaves
+      // the address EMPTY, not restored: the predecessor was evicted from
+      // memory when the replacement was added and overwritten in IDB when the
+      // batch flushed. Empty is not stuck — a cache miss falls through to the
+      // relays — but with the publish having just failed, the relays are
+      // exactly what is not answering, so the user would see their content
+      // vanish rather than revert.
+      //
+      // Ordering is load-bearing: this must run AFTER uncacheEvent, because
+      // nostr-idb only writes a replaceable event when it is newer than the
+      // entry at that address, and the phantom is newer than what it replaced.
+      // Restoring first would be silently rejected.
+      //
+      // Two writes, because the memory restore does NOT imply the durable one.
+      // `persistEventsToCache` drops anything carrying the from-cache marker,
+      // and a predecessor that reached the app through `cacheRequest` carries
+      // it — so on any normal page load (open app, open resource, edit) the
+      // `eventStore.add` below is correctly reflected in the UI and silently
+      // never reaches IDB, leaving the 404 this restore exists to prevent.
+      // `recacheEvent` writes it directly. (#64)
+      if (previousVersion && previousVersion.id !== signedEvent.id) {
+        try {
+          eventStore.add(previousVersion);
+        } catch (err) {
+          console.warn('Failed to restore the replaced event after a failed publish:', err);
+        }
+        await recacheEvent(previousVersion);
+      }
     }
   })();
 }

@@ -15,6 +15,10 @@ export default [
     // Ignore auto-generated paraglide files
     ignores: ['src/lib/paraglide/**', 'src/paraglide/**']
   },
+  {
+    // Vendored third-party dist output (scripts/vendor-h5p-standalone.mjs) — not our code
+    ignores: ['static/h5p-standalone/**']
+  },
   js.configs.recommended,
   ...svelte.configs.recommended,
   prettier,
@@ -41,6 +45,35 @@ export default [
     rules: {
       // Disable until base path support is needed — widespread pre-existing violations
       'svelte/no-navigation-without-resolve': 'off'
+    }
+  },
+  {
+    files: ['src/**/*.{js,svelte}'],
+    ignores: ['src/lib/cordn/**', 'src/lib/concord/**'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            {
+              group: ['ts-mls', 'ts-mls/*', '@contextvm/*', '@noble/ciphers', '@noble/ciphers/*'],
+              message:
+                'Import Cordn APIs via $lib/cordn only (spike wrapper isolates the MLS stack).'
+            },
+            {
+              group: [
+                'applesauce-concord',
+                'applesauce-concord/*',
+                'applesauce-core-concord',
+                'applesauce-core-concord/*',
+                'applesauce-common-concord',
+                'applesauce-common-concord/*'
+              ],
+              message: 'Import Concord APIs via $lib/concord only (wrapper contains pre-1.0 churn).'
+            }
+          ]
+        }
+      ]
     }
   }
 ];

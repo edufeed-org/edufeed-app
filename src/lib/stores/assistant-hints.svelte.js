@@ -25,6 +25,7 @@ import {
 import { publishDefaultRelayList } from '$lib/services/relay-list-backfill.js';
 import { ensureDmRelayList } from '$lib/services/dm-relay-backfill.js';
 import { getDmRelayCheckStatus } from '$lib/services/dm-service.svelte.js';
+import { getPendingInviteCount } from '$lib/concord/pending-invites.svelte.js';
 import { modalStore } from '$lib/stores/modal.svelte.js';
 import {
   isBackupDownloaded,
@@ -41,8 +42,13 @@ import {
 } from '$lib/stores/dm-relay-flags.svelte.js';
 import {
   isNip05HintDismissed,
-  markNip05HintDismissed
+  markNip05HintDismissed,
+  isNip05ReadyHintDismissed,
+  markNip05ReadyHintDismissed
 } from '$lib/stores/nip05-hint-flags.svelte.js';
+import { useMembershipGrantState } from '$lib/stores/membership-grant.svelte.js';
+import { actionRunner } from '$lib/stores/action-runner.svelte.js';
+import { UpdateProfile } from 'applesauce-actions/actions';
 import {
   isProfileHintDismissed,
   markProfileHintDismissed
@@ -50,22 +56,30 @@ import {
 import {
   deriveHintStatus,
   trackEverOpen,
-  isProfileHintApplicable
+  isProfileHintApplicable,
+  deriveNip05Hint
 } from '$lib/helpers/assistant-hints.js';
 import { getProfileNip05s } from '$lib/helpers/nip05-verify.js';
 import { runtimeConfig } from '$lib/stores/config.svelte.js';
 
-/** @typedef {'backup' | 'relays' | 'dm' | 'nip05' | 'profile'} HintId */
+/** @typedef {'backup' | 'relays' | 'dm' | 'nip05' | 'profile' | 'invites'} HintId */
 /** @typedef {import('$lib/helpers/assistant-hints.js').HintStatus} HintStatus */
 
-export const HINT_IDS = /** @type {HintId[]} */ (['backup', 'relays', 'dm', 'profile', 'nip05']);
+export const HINT_IDS = /** @type {HintId[]} */ ([
+  'backup',
+  'relays',
+  'dm',
+  'profile',
+  'nip05',
+  'invites'
+]);
 
 /**
  * Reactive hook for the assistant's hints. Must be called during component
  * initialization (it registers $effects).
  *
  * @returns {{
- *   getHints: () => Array<{id: HintId, status: HintStatus}>,
+ *   getHints: () => Array<{id: HintId, status: HintStatus, variant?: string, address?: string}>,
  *   getOpenCount: () => number,
  *   runHint: (id: HintId) => void,
  *   customizeHint: (id: HintId) => void,
@@ -109,20 +123,22 @@ export function useAssistantHints() {
   // the navbar) and only concludes "missing" once the profile arrived or the
   // settle timeout passed — never over a profile we simply haven't fetched.
   let profileSettled = $state(false);
-  let hasNip05 = $state(false);
+  /** @type {string[]} All nip05 addresses on the profile. */
+  let profileNip05s = $state.raw(/** @type {string[]} */ ([]));
   let hasProfile = $state(false);
+  const hasNip05 = $derived(profileNip05s.length > 0);
 
   $effect(() => {
     const user = getActiveUser();
     profileSettled = false;
-    hasNip05 = false;
+    profileNip05s = [];
     hasProfile = false;
     if (!user) return;
 
     const sub = eventStore.replaceable(0, user.pubkey).subscribe((event) => {
       if (!event) return;
       hasProfile = true;
-      hasNip05 = getProfileNip05s(event).length > 0;
+      profileNip05s = getProfileNip05s(event);
       profileSettled = true;
     });
     const timeout = setTimeout(() => {
@@ -133,6 +149,21 @@ export function useAssistantHints() {
       sub?.unsubscribe();
       clearTimeout(timeout);
     };
+  });
+
+  // Membership handle application state (none / pending / granted) — drives
+  // the nip05 hint's variant and the one-click activation.
+  const grant = useMembershipGrantState();
+
+  const nip05Meta = $derived.by(() => {
+    const grantState = grant.getState();
+    const address = grant.getAddress();
+    const lower = address.toLowerCase();
+    const activated = !!address && profileNip05s.some((a) => a.toLowerCase() === lower);
+    const hasOther = profileNip05s.some((a) => a.toLowerCase() !== lower);
+    const variant =
+      grantState === 'granted' ? 'ready' : grantState === 'pending' ? 'pending' : 'apply';
+    return { variant, address, activated, hasOther };
   });
 
   /** Hint ids whose primary action fired and awaits confirmation. */
@@ -155,7 +186,8 @@ export function useAssistantHints() {
 
   const statuses = $derived.by(() => {
     const user = getActiveUser();
-    if (!user) return { backup: null, relays: null, dm: null, nip05: null, profile: null };
+    if (!user)
+      return { backup: null, relays: null, dm: null, nip05: null, profile: null, invites: null };
 
     const backupConfirmed = isBackupDownloaded(user.pubkey);
     // Only nudge users who created their account via the in-app wizard —
@@ -175,12 +207,15 @@ export function useAssistantHints() {
 
     // Only membership-enabled deployments can offer a handle to request.
     const membership = runtimeConfig.membership;
-    const nip05Applicable =
-      profileSettled &&
-      !hasNip05 &&
-      !!membership?.enabled &&
-      !!membership?.handleDomain &&
-      !isNip05HintDismissed(user.pubkey);
+    const nip05Hint = deriveNip05Hint({
+      membershipEnabled: !!membership?.enabled && !!membership?.handleDomain,
+      profileSettled,
+      grantState: grant.getState(),
+      activated: nip05Meta.activated,
+      hasNip05,
+      applyDismissed: isNip05HintDismissed(user.pubkey),
+      readyDismissed: isNip05ReadyHintDismissed(user.pubkey)
+    });
 
     const dmStatus = getDmRelayCheckStatus();
     const dmApplicable =
@@ -216,9 +251,10 @@ export function useAssistantHints() {
         everOpen: everOpen.has('dm')
       }),
       nip05: deriveHintStatus({
-        applicable: nip05Applicable,
-        confirmed: hasNip05,
-        running: false, // the action navigates; the profile confirms reactively
+        applicable: nip05Hint.applicable,
+        confirmed: nip05Hint.confirmed,
+        // 'ready' publishes the profile update inline; other variants navigate.
+        running: running.has('nip05'),
         everOpen: everOpen.has('nip05')
       }),
       profile: deriveHintStatus({
@@ -226,6 +262,15 @@ export function useAssistantHints() {
         confirmed: hasProfile,
         running: false, // the action opens a modal; the kind 0 confirms reactively
         everOpen: everOpen.has('profile')
+      }),
+      invites: deriveHintStatus({
+        applicable: getPendingInviteCount() > 0,
+        // Opens a modal and returns before setRunning — no 'doing' state, like nip05/profile.
+        // No persistent dismiss on purpose: keep nudging while a real invite is pending; it
+        // self-clears once accepted/declined drops getPendingInviteCount() to 0.
+        running: false,
+        confirmed: false,
+        everOpen: everOpen.has('invites')
       })
     };
   });
@@ -252,8 +297,31 @@ export function useAssistantHints() {
       return;
     }
     if (id === 'nip05') {
-      // The settings page hosts the membership card with the handle request.
-      goto('/settings');
+      const meta = nip05Meta;
+      if (meta.variant === 'ready') {
+        if (meta.hasOther || !hasProfile) {
+          // Another nip05 exists (settings offers replace-or-add), or there is
+          // no kind 0 yet — UpdateProfile would throw without one, so hand
+          // over to the settings flow instead of failing silently.
+          goto('/settings');
+          return;
+        }
+        if (running.has(id) || !meta.address) return;
+        setRunning(id, true);
+        // One-click activation: publish the granted address to the profile.
+        // The kind 0 subscription confirms reactively ('done'); on failure
+        // clearing the running flag drops the hint back to 'open'.
+        actionRunner
+          .run(UpdateProfile, { nip05: meta.address })
+          .catch(() => {})
+          .then(() => setRunning(id, false));
+        return;
+      }
+      // 'apply' — open the application form right here. Routing to /settings
+      // meant a second click on a card the user had to find first, and left
+      // them unsure whether anything had happened. Submitting inside the modal
+      // feeds the shared grant hook, so this hint flips to 'pending' in place.
+      modalStore.openModal('membershipApply');
       return;
     }
     if (id === 'profile') {
@@ -263,13 +331,22 @@ export function useAssistantHints() {
       modalStore.openModal('profile', { profile: {}, pubkey: user.pubkey });
       return;
     }
+    if (id === 'invites') {
+      modalStore.openModal('concordInvites');
+      return;
+    }
     if (running.has(id)) return;
     setRunning(id, true);
     // Fire-and-forget like the banners: on success the underlying store flips
     // the confirmation reactively ('done'); on failure clearing the running
     // flag drops the hint back to 'open'.
+    // announce: false — the user tapped this hint themselves and the card
+    // flips to 'done' in front of them. A toast telling them we set up an
+    // inbox on their behalf belongs to the paths where they did not ask.
     const action =
-      id === 'relays' ? publishDefaultRelayList(manager.active?.signer) : ensureDmRelayList();
+      id === 'relays'
+        ? publishDefaultRelayList(manager.active?.signer)
+        : ensureDmRelayList({ announce: false });
     action.catch(() => {}).then(() => setRunning(id, false));
   }
 
@@ -292,8 +369,10 @@ export function useAssistantHints() {
       if (id === 'backup') markBackupDismissed(user.pubkey);
       else if (id === 'relays') markRelayListBannerDismissed(user.pubkey);
       else if (id === 'dm') markDmRelayBannerDismissed(user.pubkey);
-      else if (id === 'nip05') markNip05HintDismissed(user.pubkey);
-      else if (id === 'profile') markProfileHintDismissed(user.pubkey);
+      else if (id === 'nip05') {
+        if (nip05Meta.variant === 'ready') markNip05ReadyHintDismissed(user.pubkey);
+        else markNip05HintDismissed(user.pubkey);
+      } else if (id === 'profile') markProfileHintDismissed(user.pubkey);
     }
     const next = new Set(dismissed); // eslint-disable-line svelte/prefer-svelte-reactivity -- replaced wholesale below
     next.add(id);
@@ -304,7 +383,14 @@ export function useAssistantHints() {
     getHints: () =>
       HINT_IDS.flatMap((id) => {
         const status = statuses[id];
-        return status === null || dismissed.has(id) ? [] : [{ id, status }];
+        if (status === null || dismissed.has(id)) return [];
+        /** @type {{id: HintId, status: HintStatus, variant?: string, address?: string}} */
+        const entry = { id, status };
+        if (id === 'nip05') {
+          entry.variant = nip05Meta.variant;
+          entry.address = nip05Meta.address;
+        }
+        return [entry];
       }),
     getOpenCount: () =>
       HINT_IDS.filter(

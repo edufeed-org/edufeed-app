@@ -1,4 +1,4 @@
-import { test, expect } from './fixtures.js';
+import { test, expect, FAB_TRIGGER } from './fixtures.js';
 import { TEST_AUTHOR, TEST_COMMUNITY } from './test-data.js';
 
 const ROUTES = ['/discover', '/calendar', `/c/${TEST_AUTHOR.npub}`];
@@ -50,9 +50,11 @@ test.describe('Unified content region layout', () => {
   }) => {
     // Navigate to a real community (TEST_COMMUNITY). MainContentArea previously
     // wrapped non-chat views in an overflow-auto div, creating a nested scroll
-    // surface inside <main>. That silently broke the sticky ScrollToTopButton
-    // and GlobalFAB which are anchored to <main>. After the fix, <main> is
-    // the only scroller for non-chat views and the wrapper has overflow:visible.
+    // surface inside <main>. That silently broke sticky positioning for the
+    // floating controls that were then anchored to <main>. After the fix, <main>
+    // is the only scroller for non-chat views and the wrapper has
+    // overflow:visible. (GlobalFAB is now viewport-fixed outside <main>, so it
+    // no longer depends on this; the single-scroll-surface guarantee still does.)
     await page.goto(`/c/${TEST_COMMUNITY.npub}`);
     await page.waitForLoadState('domcontentloaded');
     await page.locator('nav').first().waitFor({ state: 'visible' });
@@ -309,17 +311,67 @@ test.describe('Unified content region layout', () => {
     expect(sidebarsAfter.nav).toBe(sidebarsBefore.nav);
   });
 
-  test('FAB pins to bottom of <main> when content is shorter than viewport', async ({
+  // The three columns of the community chrome row each used to invent their
+  // own top padding + avatar size (first-row centres at 40 / 34 / 48px), so
+  // the sidebar's community header and the main hero visibly sat on different
+  // axes. They now share --community-header-h and centre in it.
+  test('rail, sidebar header and hero avatar share one vertical axis', async ({
     authenticatedPage: page
   }) => {
-    // Regression: the FAB lives in a `sticky bottom-0 h-0` wrapper inside <main>.
-    // `position: sticky` only activates when natural-flow position would otherwise
-    // scroll past the boundary — on short pages (no overflow) it degrades to
-    // static and the wrapper sits in document flow, halfway up the viewport.
-    // Fix: `mt-auto` on the wrapper pushes it to the bottom of the flex column
-    // even when content is short, so the FAB lands at the bottom of the scroll
-    // port. On long pages `mt-auto` is a no-op (no free space) and sticky takes
-    // over normally.
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await page.goto(`/c/${TEST_AUTHOR.npub}`);
+    await page.waitForLoadState('domcontentloaded');
+    await page.locator('[data-testid="content-nav-sidebar"]').waitFor({ state: 'visible' });
+    await page.locator('[data-testid="nav-header-home"]').waitFor({ state: 'visible' });
+    await page.locator('[data-testid="hero-avatar"]').waitFor({ state: 'visible' });
+
+    const centres = await page.evaluate(() => {
+      /** @param {Element | null} el */
+      const centreY = (el) => {
+        if (!el) return null;
+        const r = el.getBoundingClientRect();
+        return r.height ? r.top + r.height / 2 : null;
+      };
+      return {
+        rail: centreY(document.querySelector('[data-testid="community-sidebar"] button')),
+        sidebar: centreY(document.querySelector('[data-testid="nav-header-home"] .avatar')),
+        hero: centreY(document.querySelector('[data-testid="hero-avatar"]'))
+      };
+    });
+
+    expect(centres.rail, 'rail home button must be present').not.toBeNull();
+    expect(centres.sidebar, 'sidebar community avatar must be present').not.toBeNull();
+    expect(centres.hero, 'hero avatar must be present').not.toBeNull();
+
+    // The hero only shares the band in its no-banner variant; a community with
+    // a banner pulls its identity row up over the image by design.
+    const heroHasBanner = await page.evaluate(
+      () =>
+        !!document
+          .querySelector('[data-testid="hero-avatar"]')
+          ?.closest('div')
+          ?.previousElementSibling?.querySelector('img')
+    );
+
+    expect(Math.abs(Number(centres.sidebar) - Number(centres.rail))).toBeLessThanOrEqual(2);
+    if (!heroHasBanner) {
+      expect(Math.abs(Number(centres.hero) - Number(centres.sidebar))).toBeLessThanOrEqual(2);
+    }
+  });
+
+  test('FAB pins to the bottom of the viewport when content is shorter than viewport', async ({
+    authenticatedPage: page
+  }) => {
+    // Original regression: the floating button lived in a `sticky bottom-0 h-0
+    // mt-auto` wrapper *inside* <main>, and on short pages sticky degraded to
+    // static so the button sat halfway up the viewport.
+    //
+    // GlobalFAB no longer uses that mechanism. It is mounted at the layout root
+    // (src/routes/+layout.svelte:379 — outside <main>) and positioned `fixed`
+    // against the viewport, so the old assertions (`main .fab`, wrapper top ==
+    // <main> bottom) can never resolve. What is still worth guarding is the
+    // user-visible property the regression was about: on a page too short to
+    // scroll, the button must still be at the bottom of the screen.
     //
     // Use a tall desktop viewport to guarantee <main> does not overflow on
     // /c/?view=communities (Communities view with empty/sparse test data).
@@ -328,62 +380,50 @@ test.describe('Unified content region layout', () => {
     await page.waitForLoadState('domcontentloaded');
     await page.locator('nav').first().waitFor({ state: 'visible' });
 
-    // Wait for the FAB to be in the DOM.
-    await page.locator('main .fab').waitFor({ state: 'visible', timeout: 10_000 });
+    await page.locator(FAB_TRIGGER).waitFor({ state: 'visible', timeout: 10_000 });
 
-    const layout = await page.evaluate(() => {
+    const layout = await page.evaluate((fabSelector) => {
       const main = /** @type {HTMLElement | null} */ (document.querySelector('main'));
-      const wrap = main?.querySelector(':scope > .sticky');
-      const fab = main?.querySelector('.fab');
-      if (!main || !wrap || !fab) return null;
+      const fab = /** @type {HTMLElement | null} */ (document.querySelector(fabSelector));
+      if (!main || !fab) return null;
+      const wrapper = /** @type {HTMLElement | null} */ (fab.parentElement);
       return {
         overflow: main.scrollHeight > main.clientHeight,
-        mainBottom: main.getBoundingClientRect().bottom,
-        wrapTop: wrap.getBoundingClientRect().top,
+        viewportHeight: window.innerHeight,
         fabBottom: fab.getBoundingClientRect().bottom,
-        wrapClassList: Array.from(wrap.classList)
+        fabRight: fab.getBoundingClientRect().right,
+        viewportWidth: window.innerWidth,
+        // The FAB must not be inside <main>: if it were, a scrolling <main>
+        // would carry it out of view.
+        insideMain: main.contains(fab),
+        wrapperPosition: wrapper ? getComputedStyle(wrapper).position : null
       };
-    });
-    expect(layout, 'main, sticky wrapper, and .fab must all be present').not.toBeNull();
+    }, FAB_TRIGGER);
+    expect(layout, 'main and the FAB trigger must both be present').not.toBeNull();
     if (!layout) return;
 
-    // Precondition for the regression scenario — the test is meaningful only
-    // when <main> does not overflow (otherwise sticky alone would already pin
-    // the wrapper). If the test environment somehow renders enough content to
-    // overflow even on a 2000px-tall viewport, skip rather than report a
-    // misleading pass.
+    // Precondition for the regression scenario: the test only means something
+    // when the page is too short to scroll. Skip rather than pass misleadingly.
     test.skip(
       layout.overflow,
       '<main> overflows even on 2000px viewport — regression scenario unreachable'
     );
 
-    // Class-presence check on `mt-auto`. We can't assert the computed
-    // margin-top value because for a flex item with `margin-top: auto`,
-    // `getComputedStyle().marginTop` returns the *used* value (the pixel
-    // amount absorbed), not the keyword "auto". The geometric check below
-    // is the behavioral assertion; this one documents the mechanism.
-    expect(
-      layout.wrapClassList,
-      'sticky wrapper must include `mt-auto` so it pushes to the bottom of <main> on short pages'
-    ).toContain('mt-auto');
+    expect(layout.insideMain, 'FAB must be mounted outside <main>').toBe(false);
+    expect(layout.wrapperPosition, 'FAB wrapper must be viewport-fixed, not sticky/static').toBe(
+      'fixed'
+    );
 
-    // The wrapper itself (h-0) should land at <main>'s bottom edge. Allow ~2px
-    // for sub-pixel rounding. This is the structural behavior the fix delivers
-    // — without `mt-auto`, the wrapper sits at its natural-flow position right
-    // after the content (halfway up the viewport on short pages).
+    // Bottom-right region of the viewport. Bounds rather than exact pixels: the
+    // offsets are responsive (`bottom-[calc(4rem+safe-area+0.75rem)]` vs
+    // `lg:bottom-6`) and btn-lg sizing varies with theme.
     expect(
-      Math.abs(layout.wrapTop - layout.mainBottom),
-      `wrapper top (${layout.wrapTop}) should be at <main> bottom (${layout.mainBottom})`
-    ).toBeLessThanOrEqual(2);
-
-    // The FAB itself should land near <main>'s bottom — within the speed-dial
-    // primary button height + the bottom-6/bottom-20 offset. We don't assert
-    // an exact pixel value because the offset is responsive (lg:bottom-6 vs
-    // bottom-20) and the button size depends on btn-lg sizing. The structural
-    // wrapTop check above is the strict assertion; this is a sanity bound.
+      layout.viewportHeight - layout.fabBottom,
+      `FAB bottom (${layout.fabBottom}) should be near the viewport bottom (${layout.viewportHeight})`
+    ).toBeLessThan(120);
     expect(
-      layout.mainBottom - layout.fabBottom,
-      `FAB bottom (${layout.fabBottom}) should be close to <main> bottom (${layout.mainBottom})`
+      layout.viewportWidth - layout.fabRight,
+      `FAB right (${layout.fabRight}) should be near the viewport right edge (${layout.viewportWidth})`
     ).toBeLessThan(120);
   });
 

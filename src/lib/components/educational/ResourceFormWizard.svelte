@@ -87,7 +87,10 @@
   import { buildResourceData } from '$lib/helpers/educational/buildResourceData.js';
   import { attachWizardHistoryNav } from '$lib/helpers/educational/wizardHistoryNav.js';
   import { validateWizardStep } from '$lib/helpers/educational/validateWizardStep.js';
-  import { useJoinedCommunitiesList } from '$lib/stores/joined-communities-list.svelte.js';
+  // Share surfaces list joined ∪ area-linked communities — a private area's
+  // member never (publicly) follow-set-joins, but must still be able to share.
+  import { useShareableCommunities } from '$lib/helpers/shareable-communities.svelte.js';
+  import { useShareRestrictions } from '$lib/stores/share-restrictions.svelte.js';
   import { useProfileMap } from '$lib/stores/profile-map.svelte.js';
   import { useLicenseForHash } from '$lib/stores/image-license.svelte.js';
   import { getDisplayName, getProfilePicture } from 'applesauce-core/helpers';
@@ -95,7 +98,6 @@
   import FieldAiSuggestionBadge from './FieldAiSuggestionBadge.svelte';
   import { inferBildungsbereich } from '$lib/helpers/educational/inferBildungsbereich.js';
   import { parseKonfiTagsToFormData } from '$lib/helpers/educational/parseKonfiTagsToFormData.js';
-  import { formDataToKonfiTags } from '$lib/helpers/educational/formDataToKonfiTags.js';
   import { subStepToFormFields } from '$lib/helpers/educational/konfiStep4.js';
   import {
     advanceStepOrSubStep,
@@ -106,7 +108,7 @@
 
   /**
    * @typedef {{ id: string, label: string }} CompactConcept
-   * @typedef {{ url: string, name: string, type: string, size: number, sha256: string }} UploadedFile
+   * @typedef {{ url: string, name: string, type: string, size: number, sha256: string, licenseEvent?: import('nostr-tools').NostrEvent | null }} UploadedFile
    * @typedef {{ name: string, type: 'Person' | 'Organization', pubkey?: string, affiliationName?: string, honorificPrefix?: string, orcid?: string }} Creator
    * @typedef {keyof typeof BILDUNGSBEREICHE} BildungsbereichKey
    * @typedef {{
@@ -186,9 +188,11 @@
   // Surfaced from the child via its `onbusychange` callback.
   let metadataFetchBusy = $state(false);
 
-  // Accepted upload types for the no-URL Step-2 uploader: PDF, slides, docs.
-  // These are the document formats the AI extractor can ground on.
-  const NO_URL_UPLOAD_ACCEPT = '.pdf,.ppt,.pptx,.odp,.key,.doc,.docx,.odt,application/pdf';
+  // Accepted upload types for the no-URL Step-2 uploader: PDF, slides, docs
+  // (the document formats the AI extractor can ground on) plus interactive
+  // packages (.h5p/.xdc/.html), which the uploader detects and normalizes.
+  const NO_URL_UPLOAD_ACCEPT =
+    '.pdf,.ppt,.pptx,.odp,.key,.doc,.docx,.odt,application/pdf,.h5p,.xdc,.html,.htm,application/x-webxdc';
 
   // Image preview error flag for step 3 image field
   let imagePreviewError = $state(false);
@@ -199,6 +203,20 @@
   // Blossom URLs of files uploaded in the no-URL branch — the AI enrichment
   // sources once their license modals have completed each upload.
   const uploadedSourceUrls = $derived(selectUploadedSourceUrls(formData.encodings));
+
+  // Prefill the resource title from an uploaded interactive package once its
+  // license modal completes (the modal's title field is itself prefilled from
+  // h5p metadata) — only while the user hasn't typed a title of their own.
+  $effect(() => {
+    if (formData.name?.trim()) return;
+    const pkg = (formData.encodings ?? []).find(
+      (/** @type {any} */ e) => e?.type === 'application/x-webxdc'
+    );
+    const title = pkg?.licenseEvent?.tags
+      ?.find((/** @type {string[]} */ t) => t[0] === 'title')?.[1]
+      ?.trim();
+    if (title) formData.name = title;
+  });
 
   // Cover-color picker is greyed out once a thumbnail URL is set. This MUST be
   // an $effect-backed $state, not a $derived: the value is consumed only as the
@@ -369,8 +387,29 @@
   let selectedCommunityPubkeys = $state(/** @type {string[]} */ ([]));
 
   // Joined communities (reactive).
-  const getJoinedCommunities = useJoinedCommunitiesList();
+  const getJoinedCommunities = useShareableCommunities();
   const joinedCommunities = $derived(getJoinedCommunities());
+
+  // Which of them would swallow this resource: a section gated by a profile
+  // list or an `access` tier the user doesn't satisfy publishes fine and then
+  // renders for nobody. Every other share surface already marks these; this
+  // wizard was the one that never did, so a non-publisher could fill in the
+  // whole form and share into a gated section (laoc, 2026-08-21).
+  const getRestrictedCommunities = useShareRestrictions(
+    () => 30142,
+    () => joinedCommunities
+  );
+  const restrictedCommunities = $derived(getRestrictedCommunities());
+
+  // A row can become restricted after it was ticked — the roster or gate list
+  // arrives late, or the user is demoted mid-form. Drop it rather than carry a
+  // selection the share would silently lose.
+  $effect(() => {
+    const restricted = restrictedCommunities;
+    if (restricted.size === 0) return;
+    const kept = selectedCommunityPubkeys.filter((pubkey) => !restricted.has(pubkey));
+    if (kept.length !== selectedCommunityPubkeys.length) selectedCommunityPubkeys = kept;
+  });
 
   // Batch-load profiles for joined communities (used by the Share step to show
   // name + avatar instead of raw hex pubkeys).
@@ -401,6 +440,7 @@
       if (lic) formData.imageLicenseEvent = lic;
     }
   });
+
   const previewResource = $derived.by(() => {
     if (currentStep < 3) return null;
     // `about` lives in the wizard-internal `aboutByVocab` (one bucket per
@@ -416,6 +456,8 @@
     if (!communityPubkey || isEditMode) return;
     if (
       joinedCommunities.includes(communityPubkey) &&
+      // A deep link must not smuggle in a community the picker would disable.
+      !restrictedCommunities.has(communityPubkey) &&
       !selectedCommunityPubkeys.includes(communityPubkey)
     ) {
       selectedCommunityPubkeys = [...selectedCommunityPubkeys, communityPubkey];
@@ -687,7 +729,7 @@
    * Adapt a compact `{id, label}` to the rich shape FormConceptPicker takes.
    * @param {CompactConcept} c
    * @param {string} [vocabRelay]
-   * @returns {import('$lib/helpers/form-to-amb.js').SelectedConcept}
+   * @returns {import('$lib/helpers/educational/formReference.js').SelectedConcept}
    */
   function toRichConcept(c, vocabRelay = '') {
     const locale = getLocale();
@@ -702,7 +744,7 @@
   /**
    * Inverse adapter — FormConceptPicker emits rich concepts; keep only the bits
    * the form data shape cares about.
-   * @param {import('$lib/helpers/form-to-amb.js').SelectedConcept} rich
+   * @param {import('$lib/helpers/educational/formReference.js').SelectedConcept} rich
    * @returns {CompactConcept}
    */
   function toCompactConcept(rich) {
@@ -835,7 +877,7 @@
       bibleReferences: ekw.bibleReferences.length > 0 ? ekw.bibleReferences : ['']
     };
 
-    // Merge Konfi facets parsed from ext:ekw:konfi:* tags (no-op for non-Konfi).
+    // Merge Konfi facets parsed from ext:org.edufeed.ekw.konfi:* tags (no-op for non-Konfi).
     if (inferred === 'konfi') {
       const subSteps = BILDUNGSBEREICHE.konfi.step4SubSteps ?? [];
       const konfi = parseKonfiTagsToFormData(editEvent, subSteps);
@@ -1309,11 +1351,6 @@
 
       const resourceData = buildResourceData(formData, {
         about: mergedAbout(),
-        konfiTags: formDataToKonfiTags(
-          formData,
-          bildungsbereichConfig?.step4SubSteps ?? [],
-          bildungsbereichConfig?.bildungsbereichTag
-        ),
         hasNoUrl
       });
 
@@ -1614,7 +1651,7 @@
 
   /**
    * FormConceptPicker change handler for the educationalLevel picker.
-   * @param {import('$lib/helpers/form-to-amb.js').SelectedConcept[]} rich
+   * @param {import('$lib/helpers/educational/formReference.js').SelectedConcept[]} rich
    */
   function handleEduLevelChange(rich) {
     formData.educationalLevels = rich.map(toCompactConcept);
@@ -1625,7 +1662,9 @@
    * @param {string} vocabKey
    */
   function makeAboutHandler(vocabKey) {
-    return (/** @type {import('$lib/helpers/form-to-amb.js').SelectedConcept[]} */ rich) => {
+    return (
+      /** @type {import('$lib/helpers/educational/formReference.js').SelectedConcept[]} */ rich
+    ) => {
       aboutByVocab = { ...aboutByVocab, [vocabKey]: rich.map(toCompactConcept) };
     };
   }
@@ -1639,7 +1678,9 @@
    * @param {'gradeLevelLabels'|'schoolTypeLabels'|'didacticConceptLabels'|'methodLabels'} labelsKey
    */
   function makeEkwPairHandler(idsKey, labelsKey) {
-    return (/** @type {import('$lib/helpers/form-to-amb.js').SelectedConcept[]} */ rich) => {
+    return (
+      /** @type {import('$lib/helpers/educational/formReference.js').SelectedConcept[]} */ rich
+    ) => {
       const compact = rich.map(toCompactConcept);
       formData[idsKey] = compact.map((c) => c.id);
       formData[labelsKey] = compact;
@@ -1930,6 +1971,7 @@
               bind:files={formData.encodings}
               multiple={true}
               accept={NO_URL_UPLOAD_ACCEPT}
+              detectInteractive={true}
               label={m.amb_form_step2_upload_label()}
               helpText={m.amb_form_step2_upload_help()}
               activeUserDisplayName={previewAuthorProfile?.display_name ??
@@ -2764,6 +2806,7 @@
             label={m.amb_form_label_content_files()}
             helpText={m.amb_form_help_content_files()}
             multiple={true}
+            detectInteractive={true}
             activeUserDisplayName={previewAuthorProfile?.display_name ??
               previewAuthorProfile?.name ??
               ''}
@@ -2950,14 +2993,21 @@
                 {@const displayName =
                   getDisplayName(profile) || `${pubkey.slice(0, 12)}…${pubkey.slice(-8)}`}
                 {@const picture = profile ? getProfilePicture(profile) : undefined}
+                {@const isRestricted = restrictedCommunities.has(pubkey)}
                 <li>
                   <label
-                    class="flex cursor-pointer items-center gap-3 rounded-lg border border-base-300 p-3 hover:bg-base-200"
+                    class="flex items-center gap-3 rounded-lg border border-base-300 p-3 {isRestricted
+                      ? 'opacity-50'
+                      : 'cursor-pointer hover:bg-base-200'}"
+                    title={isRestricted ? m.share_restricted_hint() : undefined}
                   >
                     <input
                       type="checkbox"
                       class="checkbox checkbox-primary"
                       checked={selectedCommunityPubkeys.includes(pubkey)}
+                      disabled={isRestricted}
+                      data-testid="community-checkbox"
+                      data-pubkey={pubkey}
                       onchange={() => toggleCommunity(pubkey)}
                     />
                     {#if picture}
@@ -2973,6 +3023,12 @@
                       ></div>
                     {/if}
                     <span class="truncate text-sm" data-testid="community-name">{displayName}</span>
+                    {#if isRestricted}
+                      <span
+                        class="shrink-0 text-xs text-base-content/60"
+                        data-testid="share-restricted-badge">🔒 {m.share_restricted_label()}</span
+                      >
+                    {/if}
                   </label>
                 </li>
               {/each}

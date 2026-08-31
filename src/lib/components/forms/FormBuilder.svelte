@@ -7,6 +7,12 @@
   import { goto } from '$app/navigation';
   import { getCommunikeyRelays } from '$lib/helpers/relay-helper.js';
   import { buildFormTemplateTags, parseFormTemplate, generateFieldId } from '$lib/helpers/forms.js';
+  import {
+    extractSections,
+    interleaveSections,
+    isSectionMarker,
+    LOCKED_FIELD_OUTPUTS
+  } from '$lib/helpers/forms/builder-sections.js';
   import { TrashIcon } from '$lib/components/icons';
   import FormBuilderFieldRow from './FormBuilderFieldRow.svelte';
   import { addressLoader } from '$lib/loaders/base.js';
@@ -26,8 +32,18 @@
     'select',
     'checkbox',
     'radio',
-    'date'
+    'date',
+    'creator',
+    'amb-relation',
+    'external-urls'
   ];
+
+  // Rich composite field types get a sensible default output so the author
+  // doesn't have to pick one manually (amb-relation is deliberately excluded
+  // — hasPart vs isPartOf is a meaningful choice the author must make).
+  // Also used to normalize on load — an existing event may carry a stale
+  // `amb:<id>` fallback that parseFormTemplate produced when the template
+  // had no field-output tag.
 
   // existingEvent is only used for initial population — it won't change after mount
   // svelte-ignore state_referenced_locally
@@ -57,12 +73,15 @@
    * @property {string} placeholder
    * @property {number | undefined} min
    * @property {number | undefined} max
-   * @property {string[]} selectOptions
+   * @property {import('$lib/helpers/forms.js').FormFieldOption[]} selectOptions
    * @property {boolean} multiple
    * @property {{ address: string, relay: string } | undefined} [vocab]
    * @property {string} [output]
    * @property {string} [vocabNaddrInput]
    * @property {string} [vocabError]
+   * @property {{ rules: { questionId: string, operator: string, value: string }[] } | undefined} [displayIf] - single-condition show-if rule, authored via FormBuilderConditionRow
+   * @property {string} [title] - only used when type === 'section'
+   * @property {string} [description] - only used when type === 'section'
    */
 
   /**
@@ -86,9 +105,13 @@
     }
   }
 
-  /** @type {FieldState[]} */
-  let fields = $state(
-    existing?.fields.map((f) => ({
+  /**
+   * Map a parsed FormField to builder FieldState.
+   * @param {import('$lib/helpers/forms.js').FormField} f
+   * @returns {FieldState}
+   */
+  function fieldToState(f) {
+    return {
       id: f.id,
       type: f.type,
       label: f.label,
@@ -100,10 +123,52 @@
       selectOptions: f.options?.options || [],
       multiple: f.options?.multiple || false,
       vocab: f.vocab,
-      output: f.output,
+      output: LOCKED_FIELD_OUTPUTS[f.type] ?? f.output,
       vocabNaddrInput: vocabToNaddr(f.vocab),
+      vocabError: '',
+      displayIf: f.options?.displayIf
+    };
+  }
+
+  /**
+   * Map a section marker (from interleaveSections) to builder FieldState.
+   * @param {import('$lib/helpers/forms/builder-sections.js').SectionMarker} m
+   * @returns {FieldState}
+   */
+  function markerToState(m) {
+    return {
+      id: m.id,
+      type: 'section',
+      title: m.title || '',
+      description: m.description || '',
+      label: '',
+      defaultValue: '',
+      required: false,
+      placeholder: '',
+      min: undefined,
+      max: undefined,
+      selectOptions: [],
+      multiple: false,
+      vocab: undefined,
+      output: '',
+      vocabNaddrInput: '',
       vocabError: ''
-    })) || []
+    };
+  }
+
+  /** @type {FieldState[]} */
+  let fields = $state(
+    existing
+      ? interleaveSections(existing.fields, existing.sections || []).map((it) =>
+          isSectionMarker(it) ? markerToState(it) : fieldToState(it)
+        )
+      : []
+  );
+
+  // Sections list handed to each FormBuilderFieldRow for option→section
+  // routing — recomputed whenever fields changes, shared across all rows.
+  const builderSections = $derived(
+    fields.filter((f) => f.type === 'section').map((f) => ({ id: f.id, title: f.title || '' }))
   );
 
   let isPublishing = $state(false);
@@ -124,6 +189,29 @@
     fields.push({
       id: generateFieldId(type, existingIds),
       type,
+      label: '',
+      defaultValue: '',
+      required: false,
+      placeholder: '',
+      min: undefined,
+      max: undefined,
+      selectOptions: [],
+      multiple: false,
+      vocab: undefined,
+      output: LOCKED_FIELD_OUTPUTS[type] || '',
+      vocabNaddrInput: '',
+      vocabError: ''
+    });
+  }
+
+  function addSection() {
+    const existingIds = fields.map((f) => f.id);
+    fields.push({
+      id: generateFieldId('section', existingIds),
+      type: 'section',
+      title: '',
+      description: '',
+      // unused-for-sections FieldState fields, kept for shape uniformity:
       label: '',
       defaultValue: '',
       required: false,
@@ -216,23 +304,10 @@
       }
       const parsed = parseFormTemplate(parentEvent);
 
-      // Copy fields into current builder state
-      fields = parsed.fields.map((f) => ({
-        id: f.id,
-        type: f.type,
-        label: f.label,
-        defaultValue: f.defaultValue || '',
-        required: f.options?.required || false,
-        placeholder: f.options?.placeholder || '',
-        min: f.options?.min,
-        max: f.options?.max,
-        selectOptions: f.options?.options || [],
-        multiple: f.options?.multiple || false,
-        vocab: f.vocab,
-        output: f.output,
-        vocabNaddrInput: vocabToNaddr(f.vocab),
-        vocabError: ''
-      }));
+      // Copy fields (+ sections) into current builder state
+      fields = interleaveSections(parsed.fields, parsed.sections || []).map((it) =>
+        isSectionMarker(it) ? markerToState(it) : fieldToState(it)
+      );
 
       // Pre-fill metadata when empty
       if (!formName) formName = parsed.name ? `${parsed.name} (fork)` : '';
@@ -270,30 +345,45 @@
     error = '';
 
     try {
-      const formFields = fields.map((f) => ({
-        id: f.id,
-        type: f.type,
-        label: f.label,
-        defaultValue: f.defaultValue,
-        options: {
-          ...(f.required && { required: true }),
-          ...(f.placeholder && { placeholder: f.placeholder }),
-          ...(f.min !== undefined && { min: f.min }),
-          ...(f.max !== undefined && { max: f.max }),
-          ...((f.type === 'select' || f.type === 'radio') &&
-            f.selectOptions.length > 0 && { options: f.selectOptions }),
-          ...(f.multiple && { multiple: true })
-        },
-        ...(f.vocab?.address ? { vocab: f.vocab } : {}),
-        ...(f.output ? { output: f.output } : {})
-      }));
+      /**
+       * @type {(import('$lib/helpers/forms.js').FormField | import('$lib/helpers/forms/builder-sections.js').SectionMarker)[]}
+       */
+      const items = fields.map((f) =>
+        f.type === 'section'
+          ? {
+              id: f.id,
+              type: 'section',
+              title: f.title || '',
+              ...(f.description ? { description: f.description } : {})
+            }
+          : {
+              id: f.id,
+              type: f.type,
+              label: f.label,
+              defaultValue: f.defaultValue,
+              options: {
+                ...(f.required && { required: true }),
+                ...(f.placeholder && { placeholder: f.placeholder }),
+                ...(f.min !== undefined && { min: f.min }),
+                ...(f.max !== undefined && { max: f.max }),
+                ...((f.type === 'select' || f.type === 'radio') &&
+                  f.selectOptions.length > 0 && { options: f.selectOptions }),
+                ...(f.multiple && { multiple: true }),
+                ...(f.displayIf ? { displayIf: f.displayIf } : {})
+              },
+              ...(f.vocab?.address ? { vocab: f.vocab } : {}),
+              ...(f.output ? { output: f.output } : {})
+            }
+      );
+      const { fields: formFields, sections } = extractSections(items);
 
       const tags = buildFormTemplateTags(dTag, formFields, {
         name: formName,
         description: formDescription,
         public: isPublic,
         confirmationMessage,
-        ...(forkOf ? { forkOf } : {})
+        ...(forkOf ? { forkOf } : {}),
+        ...(sections.length > 0 ? { sections } : {})
       });
 
       const factory = createAppEventFactory({ signer: manager.active.signer });
@@ -427,6 +517,7 @@
         draggable="true"
         role="listitem"
         data-index={i}
+        data-item-type={field.type === 'section' ? 'section' : 'field'}
         ondragstart={handleDragStart}
         ondragover={handleDragOver}
         ondrop={handleDrop}
@@ -452,13 +543,41 @@
             >
           </div>
 
-          <!-- Field config -->
-          <FormBuilderFieldRow
-            bind:field={fields[i]}
-            {fields}
-            fieldIndex={i}
-            existing={!!existing}
-          />
+          {#if field.type === 'section'}
+            <!-- Section divider -->
+            <div class="flex-1 space-y-2">
+              <input
+                type="text"
+                class="input-bordered input input-sm w-full font-semibold"
+                placeholder={m.form_builder_section_title_placeholder()}
+                bind:value={fields[i].title}
+              />
+              <input
+                type="text"
+                class="input-bordered input input-sm w-full"
+                placeholder={m.form_builder_section_description_placeholder()}
+                bind:value={fields[i].description}
+              />
+            </div>
+          {:else}
+            <!-- Field config -->
+            <FormBuilderFieldRow
+              bind:field={fields[i]}
+              {fields}
+              fieldIndex={i}
+              existing={!!existing}
+              sections={builderSections}
+              earlierQuestions={fields
+                .slice(0, i)
+                .filter((f) => f.type !== 'section')
+                .map((f) => ({
+                  id: f.id,
+                  label: f.label || f.id,
+                  type: f.type,
+                  selectOptions: f.selectOptions
+                }))}
+            />
+          {/if}
 
           <!-- Delete -->
           <button
@@ -479,6 +598,9 @@
         {#each FIELD_TYPES as type (type)}
           <button class="btn btn-outline btn-xs" onclick={() => addField(type)}>{type}</button>
         {/each}
+        <button class="btn btn-outline btn-sm" onclick={addSection}
+          >{m.form_builder_add_section()}</button
+        >
       </div>
     </div>
   </div>

@@ -31,6 +31,7 @@
   import { TimelineModel } from 'applesauce-core/models';
   import { AMBResourceModel, CalendarEventRangeModel } from '$lib/models';
   import { useProfileMap } from '$lib/stores/profile-map.svelte.js';
+  import { useAuthorDeletions } from '$lib/stores/author-deletions.svelte.js';
   import { getTagValue } from 'applesauce-core/helpers';
   import { getArticlePublished } from 'applesauce-common/helpers';
   import ArticleCard from '$lib/components/article/ArticleCard.svelte';
@@ -115,6 +116,20 @@
     ].filter(Boolean);
   });
   let authorProfiles = $derived(getAuthorProfiles());
+
+  // Deletion watcher for the CONTENT authors only (not the curated/WoT sets —
+  // those can be thousands of pubkeys with nothing rendered). Without this,
+  // Discover never loads other authors' kind-5s and deleted content keeps
+  // rendering from a stale local copy (CLAUDE.md convention).
+  useAuthorDeletions(() => {
+    const _ = profileTrigger; // re-run when the $state.raw arrays are replaced
+    return [
+      ...articles.map((a) => a.pubkey),
+      ...ambResources.map((r) => r.pubkey),
+      ...calendarEvents.map((e) => e.pubkey),
+      ...kanbanBoards.map((b) => b.pubkey)
+    ].filter(Boolean);
+  });
 
   const getCommunityProfiles = useProfileMap(() => allCommunities.map((c) => c.pubkey));
   let communityProfiles = $derived(getCommunityProfiles());

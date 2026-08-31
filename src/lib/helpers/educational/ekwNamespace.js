@@ -21,3 +21,14 @@ export const EKW_TAG_PREFIX = 'ext:ekw:';
 
 /** Legacy unprefixed shape — read-only fallback during migration. */
 export const EKW_LEGACY_TAG_PREFIX = 'ekw:';
+
+/**
+ * Reverse-DNS namespace for Konfi (confirmation-program) facets, used as the
+ * `ns` segment of the NIP-AMB `ext:<ns>:<facet>[:sub]` grammar.
+ *
+ * The legacy hand-appended shape put `konfi` in the FACET slot instead
+ * (`ext:ekw:konfi:<slug>:id`), which is an illegal 5-segment key — `ns` and
+ * `facet` MUST NOT contain `:`. Lifting `konfi` into its own namespace fixes
+ * the conformance bug: facets serialize as `ext:org.edufeed.ekw.konfi:<slug>:id`.
+ */
+export const EKW_KONFI_NS = 'org.edufeed.ekw.konfi';

@@ -3,21 +3,34 @@
   import { manager } from '$lib/stores/accounts.svelte';
   import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
   import { runtimeConfig } from '$lib/stores/config.svelte.js';
-  import { publishEvent } from '$lib/services/publish-service.js';
+  import { buildATagWithHint, buildPTagsWithHints } from '$lib/services/publish-service.js';
+  import {
+    publishApplicationCopy,
+    ensureApplicantRelayLists
+  } from '$lib/services/membership-publish.js';
   import { createAppEventFactory } from '$lib/helpers/event-factory.js';
   import { addressLoader } from '$lib/loaders/base.js';
   import { getCommunikeyRelays } from '$lib/helpers/relay-helper.js';
   import {
     buildResponseTags,
     buildUserResponseFilter,
-    parseResponseTags
+    parseResponseTags,
+    nip44EncryptWith,
+    nip44DecryptWith,
+    signerHasNip44,
+    signerCanNip44Encrypt
   } from '$lib/helpers/forms.js';
   import FormRenderer from '$lib/components/forms/FormRenderer.svelte';
   import { formatTimestamp } from '$lib/helpers/dates.js';
 
   /**
+   * `onsubmitted` receives the delivery outcome, because a host that unmounts
+   * this form on submit would otherwise destroy the partial-delivery warning
+   * on the tick it becomes visible — that warning is the only signal the
+   * applicant gets that a reviewer was missed.
+   *
    * @type {{
-   *   onsubmitted?: () => void,
+   *   onsubmitted?: (result: { partialDelivery: { delivered: number, total: number } | null }) => void,
    *   showHeader?: boolean
    * }}
    */
@@ -28,7 +41,14 @@
 
   const cfg = $derived(runtimeConfig.membership);
   const formAddress = $derived(cfg?.formAddress || '');
-  const adminPubkey = $derived(cfg?.adminPubkeys?.[0] || '');
+  const adminPubkeys = $derived(cfg?.adminPubkeys || []);
+  // The kind 30168 template author is embedded in the form address
+  // (30168:pubkey:d-tag) — independent of the admin list's order.
+  const formAuthorPubkey = $derived(formAddress.split(':')[1] || adminPubkeys[0] || '');
+  // d-tags may themselves contain colons, so rejoin everything after the pubkey.
+  const formIdentifier = $derived(
+    formAddress.split(':').slice(2).join(':') || 'edufeed-membership'
+  );
   const handleDomain = $derived(cfg?.handleDomain || '');
 
   /** @type {import('nostr-tools').NostrEvent | null} */
@@ -37,6 +57,10 @@
   let isSubmitting = $state(false);
   let submitted = $state(false);
   let error = $state('');
+  // Set when the application reached some admins but not all. Not an error —
+  // any one admin can act on it — but the applicant should know the review may
+  // be slower than usual rather than be told everything went perfectly.
+  let partialDelivery = $state(/** @type {{ delivered: number, total: number } | null} */ (null));
 
   /** @type {{ kind: number, pubkey: string, tags: string[][], content: string, created_at: number, id: string, sig: string } | null} */
   let existingResponse = $state(null);
@@ -67,20 +91,20 @@
 
   // Load the form template (kind 30168) from communikey relays
   $effect(() => {
-    if (!adminPubkey) {
+    if (!formAuthorPubkey) {
       isLoading = false;
       return;
     }
     const relays = getCommunikeyRelays();
     const loaderSub = addressLoader({
       kind: 30168,
-      pubkey: adminPubkey,
-      identifier: 'edufeed-membership',
+      pubkey: formAuthorPubkey,
+      identifier: formIdentifier,
       relays
     }).subscribe();
 
     const modelSub = eventStore
-      .replaceable(30168, adminPubkey, 'edufeed-membership')
+      .replaceable(30168, formAuthorPubkey, formIdentifier)
       .subscribe((event) => {
         if (event) {
           formEvent = event;
@@ -121,11 +145,20 @@
         /** @type {string[][]} */
         let tags;
         if (isEncrypted) {
-          if (!active.signer?.nip44) {
+          if (!signerHasNip44(active.signer)) {
             prefilledValues = {};
             return;
           }
-          const plaintext = await active.signer.nip44.decrypt(adminPubkey, response.content);
+          // Each copy is encrypted to the admin in its own p-tag — with several
+          // admins there is no single `adminPubkey` to decrypt against, and
+          // guessing the wrong one just fails to decrypt.
+          const counterparty =
+            response.tags.find((t) => t[0] === 'p')?.[1] || adminPubkeys[0] || '';
+          // Via the forms helper, which is the convention across every forms
+          // call site. Not a portability fix: every applesauce signer that has
+          // a flat nip44Decrypt also binds it into the nested namespace, and
+          // ExtensionSigner exposes only the nested one.
+          const plaintext = await nip44DecryptWith(active.signer, counterparty, response.content);
           tags = JSON.parse(plaintext);
         } else {
           tags = response.tags.filter((t) => t[0] === 'response');
@@ -195,38 +228,95 @@
 
   /** @param {Record<string, string>} values */
   async function handleSubmit(values) {
-    if (!manager.active || !formEvent || !adminPubkey || !formAddress) return;
+    if (!manager.active || !formEvent || !adminPubkeys.length || !formAddress) return;
     if (handleStatus === 'taken' || handleStatus === 'invalid') return;
 
     isSubmitting = true;
     error = '';
     try {
       const responseTags = buildResponseTags(values);
-
-      /** @type {string[][]} */
-      const tags = [
-        ['a', formAddress],
-        ['p', adminPubkey]
-      ];
-
-      let content = '';
       const signer = manager.active.signer;
-      if (signer?.nip44Encrypt) {
-        const plaintext = JSON.stringify(responseTags);
-        content = await signer.nip44Encrypt(adminPubkey, plaintext);
-        tags.push(['encrypted']);
-      } else {
-        tags.push(...responseTags);
+      // Applications carry name, affiliation and motivation — never publish
+      // them in the clear. Without NIP-44 we abort instead of downgrading.
+      //
+      // signerCanNip44Encrypt, not signerHasNip44: that one asks whether the
+      // signer can *decrypt*, which is the right question at the prefill site
+      // above and the wrong one here. A decrypt-only signer would sail past it
+      // and throw halfway through the submit.
+      if (!signerCanNip44Encrypt(signer)) {
+        error = m.membership_submit_encryption_unavailable();
+        return;
       }
+      // The single-admin tag/encrypt pair that used to sit here now happens
+      // once per admin below — NIP-44 is pairwise, so there is no one
+      // ciphertext or one p-tag that serves them all.
 
       const factory = createAppEventFactory({ signer });
-      const template = await factory.build({ kind: 1069, tags, content });
-      const signed = await factory.sign(template);
-      await publishEvent(signed, [adminPubkey]);
-      eventStore.add(signed);
+
+      // An approval is answered with a NIP-17 DM, and everything else about
+      // the applicant routes via NIP-65. Settle both lists before the
+      // application exists, so an admin can never approve someone the reply
+      // cannot reach. Never throws — see membership-publish.js.
+      //
+      // These three resolve relay hints for disjoint pubkeys — the applicant,
+      // the form author, the admins — so nothing here reads what another
+      // writes. Run together: each can sit out an 8s relay-lookup timeout, and
+      // serialized that is three of them before the form even starts signing.
+      const [, aTag, pTags] = await Promise.all([
+        ensureApplicantRelayLists(),
+        buildATagWithHint(formAddress),
+        buildPTagsWithHints(adminPubkeys)
+      ]);
+
+      // NIP-44 is pairwise, so there is one copy per admin — each encrypted to
+      // (and p-tagged with) its own recipient. Signing stays sequential: it is
+      // local work, and some signers (NIP-07 extensions) serialize requests
+      // anyway. Every copy is signed before any is published, so a failure
+      // while encrypting cannot leave one admin holding an application.
+      /** @type {import('nostr-tools').NostrEvent[]} */
+      const signedCopies = [];
+      for (const pTag of pTags) {
+        const admin = pTag[1];
+        /** @type {string[][]} */
+        const tags = [aTag, pTag];
+
+        const content = await nip44EncryptWith(signer, admin, JSON.stringify(responseTags));
+        tags.push(['encrypted']);
+
+        const template = await factory.build({ kind: 1069, tags, content });
+        signedCopies.push(await factory.sign(template));
+      }
+
+      // Publish the copies together rather than one after another. Sequentially,
+      // the first admin's relays failing meant the rest were never even tried,
+      // and anything that killed the page mid-loop left admin 1 holding an
+      // application admin 2 never saw. allSettled, not all: one admin's outcome
+      // must not cancel another's, and we need every result to report on.
+      // Scoped publisher, not the outbox model — an application must not be
+      // fanned out to the applicant's public write relays.
+      const results = await Promise.allSettled(signedCopies.map((s) => publishApplicationCopy(s)));
+      const delivered = results.filter((r) => r.status === 'fulfilled' && r.value?.success).length;
+
+      // Any single admin can act on an application, so one copy landing is
+      // enough to promise "we will be in touch". Zero is not: no admin would
+      // ever see it, and saying otherwise strands the applicant for good.
+      if (delivered === 0) throw new Error(m.membership_submit_failed());
+      if (delivered < signedCopies.length) {
+        // Reachable, but not by everyone. Say so rather than report a clean
+        // success — approvals may sit until the admin who has it looks.
+        console.warn(`[membership] application reached ${delivered}/${signedCopies.length} admins`);
+        partialDelivery = { delivered, total: signedCopies.length };
+      }
+
+      // Mirror into the local store only after the publishes have settled — an
+      // earlier add flips the "existing response" UI while the submit is still
+      // running. Only the copies that actually landed somewhere.
+      results.forEach((r, i) => {
+        if (r.status === 'fulfilled' && r.value?.success) eventStore.add(signedCopies[i]);
+      });
 
       submitted = true;
-      onsubmitted?.();
+      onsubmitted?.({ partialDelivery });
     } catch (err) {
       error = err instanceof Error ? err.message : m.membership_submit_failed();
     } finally {
@@ -319,6 +409,14 @@
   <div class="alert alert-warning">{m.membership_submit_login_required()}</div>
 {:else if submitted}
   <div class="alert alert-success">{m.membership_submit_success()}</div>
+  {#if partialDelivery}
+    <div class="mt-2 alert alert-warning" data-testid="membership-partial-delivery">
+      {m.membership_submit_partial({
+        delivered: partialDelivery.delivered,
+        total: partialDelivery.total
+      })}
+    </div>
+  {/if}
 {:else if formEvent}
   {#if showHeader && existingResponse}
     <div class="mb-4 alert alert-info">

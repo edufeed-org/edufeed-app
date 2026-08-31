@@ -4,7 +4,7 @@
  * @vitest-environment jsdom
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, fireEvent } from '@testing-library/svelte';
+import { render, fireEvent, waitFor } from '@testing-library/svelte';
 import { nip19 } from 'nostr-tools';
 import LoginWithNpub from '../LoginWithNpub.svelte';
 
@@ -79,5 +79,43 @@ describe('LoginWithNpub', () => {
     expect(mockManager.addAccount).not.toHaveBeenCalled();
     expect(mockManager.setActive).toHaveBeenCalledWith(existing);
     expect(getByText('already added')).toBeTruthy();
+  });
+
+  // Regression: a successful login used to hand control back to the parent
+  // *before* the dialog closed, and the parent transitioned back to the login
+  // modal — so the user ended up logged in with the login modal still on top.
+  // The contract is now: close this dialog, then end the whole flow.
+  it('closes its dialog and ends the login flow on success', async () => {
+    const calls = [];
+    const onAccountCreated = vi.fn(() => calls.push('onAccountCreated'));
+    const { getByTestId } = render(LoginWithNpub, { modalId: 't5', onAccountCreated });
+    document.getElementById('t5').close = vi.fn(() => calls.push('close'));
+
+    await fireEvent.input(getByTestId('npub-input'), { target: { value: NPUB } });
+    await fireEvent.submit(getByTestId('npub-login-form'));
+
+    // Order is the contract: the dialog must be gone before the parent is told
+    // the flow ended, otherwise the parent's modal swap races the close and the
+    // close lands on the wrong dialog.
+    expect(calls).toEqual(['close', 'onAccountCreated']);
+  });
+
+  it('lets the "already added" notice show before ending the flow', async () => {
+    mockManager.getAccountForPubkey.mockReturnValue({ id: 'x', pubkey: PUBKEY, type: 'readonly' });
+    const onAccountCreated = vi.fn();
+    const { getByTestId, getByText } = render(LoginWithNpub, { modalId: 't6', onAccountCreated });
+    const close = vi.fn();
+    document.getElementById('t6').close = close;
+
+    await fireEvent.input(getByTestId('npub-input'), { target: { value: NPUB } });
+    await fireEvent.submit(getByTestId('npub-login-form'));
+
+    // Still on screen — the parent unmounts this component once the flow ends.
+    expect(getByText('already added')).toBeTruthy();
+    expect(close).not.toHaveBeenCalled();
+    expect(onAccountCreated).not.toHaveBeenCalled();
+
+    await waitFor(() => expect(onAccountCreated).toHaveBeenCalledTimes(1), { timeout: 3000 });
+    expect(close).toHaveBeenCalledTimes(1);
   });
 });

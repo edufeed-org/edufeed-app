@@ -47,26 +47,31 @@ test.describe('Community Membership - Unauthenticated', () => {
     const cards = page.locator('.card').filter({ hasText: 'Community Host' });
     await expect(cards.first()).toBeVisible({ timeout: 15000 });
 
-    // Join buttons should NOT be visible (they only show for authenticated users)
-    // The button has class btn-primary or btn-outline and text Join/Leave
-    const joinButtons = cards.first().locator('button', { hasText: /Join|Leave/ });
+    // Join/leave buttons should NOT be visible (they only show for authenticated users)
+    // The button has class btn-primary or btn-outline and text "Follow"/"Unfollow"
+    // (CommunikeyCard.svelte, communikey_card_button_join/_leave)
+    const joinButtons = cards.first().locator('button', { hasText: /^(Follow|Unfollow)$/ });
     await expect(joinButtons).not.toBeVisible({ timeout: 3000 });
   });
 
-  test('community header shows "Not Joined" badge when not logged in', async ({ page }) => {
+  test('community header shows no "Following" badge when not logged in', async ({ page }) => {
     await navigateToCommunityPage(page);
 
-    // Should show "Not Joined" badge (use first() for desktop/mobile layouts)
-    const notJoinedBadge = page.locator('.badge', { hasText: 'Not Joined' }).first();
-    await expect(notJoinedBadge).toBeVisible({ timeout: 10000 });
+    // The joined indicator (badge-success "Following", CommunityProfileHero.svelte's
+    // communikey_header_joined_badge) must not render for a logged-out visitor — there
+    // is no separate "not joined" badge in the current UI, only the absence of this one
+    // plus the join button (covered by the next test).
+    const followingBadge = page.locator('.badge-success', { hasText: 'Following' }).first();
+    await expect(followingBadge).not.toBeVisible({ timeout: 5000 });
   });
 
   test('join button in header is visible when not logged in', async ({ page }) => {
     await navigateToCommunityPage(page);
 
-    // Join button should be visible in header (text is "Join Community")
+    // Join button should be visible in header (text is "Follow Community",
+    // CommunityProfileHero.svelte's communikey_header_join_button)
     // Use first() because there may be multiple (desktop/mobile layouts)
-    const joinButton = page.locator('button', { hasText: 'Join Community' }).first();
+    const joinButton = page.locator('button', { hasText: 'Follow Community' }).first();
     await expect(joinButton).toBeVisible({ timeout: 10000 });
   });
 });
@@ -85,24 +90,25 @@ test.describe('Community Membership - Join Flow', () => {
     const cards = page.locator('.card').filter({ hasText: 'Community Host' });
     await expect(cards.first()).toBeVisible({ timeout: 15000 });
 
-    // Join button should be visible for authenticated users
-    const joinButton = cards.first().locator('button', { hasText: 'Join' });
+    // Join button should be visible for authenticated users (text "Follow",
+    // exact match — "Follow" is a case-insensitive substring of "Unfollow" too)
+    const joinButton = cards.first().locator('button', { hasText: /^Follow$/ });
     await expect(joinButton).toBeVisible({ timeout: 5000 });
   });
 
   test('can join community from discover page', async ({ authenticatedPage: page }) => {
     await navigateToCommunitiesTab(page);
 
-    // Find a community card with a Join button (not already joined)
+    // Find a community card with a Follow button (not already joined)
     const cards = page.locator('.card').filter({ hasText: 'Community Host' });
     await expect(cards.first()).toBeVisible({ timeout: 15000 });
 
-    // Click the Join button
-    const joinButton = cards.first().locator('button', { hasText: 'Join' });
+    // Click the Follow button
+    const joinButton = cards.first().locator('button', { hasText: /^Follow$/ });
 
-    // Skip if already joined (button would say "Leave")
+    // Skip if already joined (button would say "Unfollow")
     const buttonText = await joinButton.textContent();
-    if (buttonText?.includes('Leave')) {
+    if (buttonText?.includes('Unfollow')) {
       test.skip();
       return;
     }
@@ -112,8 +118,8 @@ test.describe('Community Membership - Join Flow', () => {
     // Wait for the operation to complete
     await page.waitForTimeout(3000);
 
-    // Button should now say "Leave" (indicating joined state)
-    await expect(cards.first().locator('button', { hasText: 'Leave' })).toBeVisible({
+    // Button should now say "Unfollow" (indicating joined state)
+    await expect(cards.first().locator('button', { hasText: /^Unfollow$/ })).toBeVisible({
       timeout: 10000
     });
   });
@@ -121,8 +127,9 @@ test.describe('Community Membership - Join Flow', () => {
   test('can join community from community page header', async ({ authenticatedPage: page }) => {
     await navigateToCommunityPage(page);
 
-    // Check if already joined
-    const joinedBadge = page.locator('.badge-success', { hasText: 'Joined' });
+    // Check if already joined (badge-success "Following",
+    // CommunityProfileHero.svelte's communikey_header_joined_badge)
+    const joinedBadge = page.locator('.badge-success', { hasText: 'Following' });
     const isJoined = await joinedBadge.isVisible();
 
     if (isJoined) {
@@ -131,16 +138,16 @@ test.describe('Community Membership - Join Flow', () => {
       return;
     }
 
-    // Click the Join button in header (use first() for desktop/mobile layouts)
-    const joinButton = page.locator('button.btn-primary', { hasText: 'Join' }).first();
+    // Click the Follow Community button in header (use first() for desktop/mobile layouts)
+    const joinButton = page.locator('button.btn-primary', { hasText: 'Follow Community' }).first();
     await expect(joinButton).toBeVisible({ timeout: 5000 });
     await joinButton.click();
 
     // Wait for operation to complete
     await page.waitForTimeout(3000);
 
-    // Should now show "Joined" badge (use first() for desktop/mobile layouts)
-    await expect(page.locator('.badge-success', { hasText: 'Joined' }).first()).toBeVisible({
+    // Should now show "Following" badge (use first() for desktop/mobile layouts)
+    await expect(page.locator('.badge-success', { hasText: 'Following' }).first()).toBeVisible({
       timeout: 10000
     });
   });
@@ -151,7 +158,7 @@ test.describe('Community Membership - Join Flow', () => {
     const cards = page.locator('.card').filter({ hasText: 'Community Host' });
     await expect(cards.first()).toBeVisible({ timeout: 15000 });
 
-    const joinButton = cards.first().locator('button', { hasText: /Join|Leave/ });
+    const joinButton = cards.first().locator('button', { hasText: /^(Follow|Unfollow)$/ });
 
     // Click the button
     await joinButton.click();
@@ -176,28 +183,31 @@ test.describe('Community Membership - Leave Flow', () => {
     await expect(cards.first()).toBeVisible({ timeout: 15000 });
 
     // Find the button
-    const membershipButton = cards.first().locator('button', { hasText: /Join|Leave/ });
+    const membershipButton = cards.first().locator('button', { hasText: /^(Follow|Unfollow)$/ });
     const buttonText = await membershipButton.textContent();
 
     // If not joined, join first
-    if (buttonText?.includes('Join')) {
+    if (buttonText?.includes('Follow') && !buttonText?.includes('Unfollow')) {
       await membershipButton.click();
       await page.waitForTimeout(3000);
     }
 
-    // Now verify we're joined (button says Leave)
-    await expect(cards.first().locator('button', { hasText: 'Leave' })).toBeVisible({
+    // Now verify we're joined (button says Unfollow)
+    await expect(cards.first().locator('button', { hasText: /^Unfollow$/ })).toBeVisible({
       timeout: 10000
     });
 
-    // Click Leave
-    await cards.first().locator('button', { hasText: 'Leave' }).click();
+    // Click Unfollow
+    await cards
+      .first()
+      .locator('button', { hasText: /^Unfollow$/ })
+      .click();
 
     // Wait for operation to complete
     await page.waitForTimeout(3000);
 
-    // Button should now say "Join" again
-    await expect(cards.first().locator('button', { hasText: 'Join' })).toBeVisible({
+    // Button should now say "Follow" again
+    await expect(cards.first().locator('button', { hasText: /^Follow$/ })).toBeVisible({
       timeout: 10000
     });
   });
@@ -209,13 +219,13 @@ test.describe('Community Membership - Leave Flow', () => {
     await expect(cards.first()).toBeVisible({ timeout: 15000 });
 
     // Join first if needed
-    const membershipButton = cards.first().locator('button', { hasText: /Join|Leave/ });
+    const membershipButton = cards.first().locator('button', { hasText: /^(Follow|Unfollow)$/ });
     const buttonText = await membershipButton.textContent();
 
-    if (buttonText?.includes('Join')) {
+    if (buttonText?.includes('Follow') && !buttonText?.includes('Unfollow')) {
       await membershipButton.click();
-      // Wait for Leave button to confirm join completed
-      await expect(cards.first().locator('button', { hasText: 'Leave' })).toBeVisible({
+      // Wait for Unfollow button to confirm join completed
+      await expect(cards.first().locator('button', { hasText: /^Unfollow$/ })).toBeVisible({
         timeout: 10000
       });
     }
@@ -226,9 +236,12 @@ test.describe('Community Membership - Leave Flow', () => {
     await expect(cardElement).toHaveClass(/border-success/, { timeout: 5000 });
 
     // Now leave
-    await cards.first().locator('button', { hasText: 'Leave' }).click();
-    // Wait for Join button to confirm leave completed
-    await expect(cards.first().locator('button', { hasText: 'Join' })).toBeVisible({
+    await cards
+      .first()
+      .locator('button', { hasText: /^Unfollow$/ })
+      .click();
+    // Wait for Follow button to confirm leave completed
+    await expect(cards.first().locator('button', { hasText: /^Follow$/ })).toBeVisible({
       timeout: 10000
     });
 
@@ -250,13 +263,13 @@ test.describe('Community Membership - Persistence', () => {
     await expect(cards.first()).toBeVisible({ timeout: 15000 });
 
     // Ensure we're joined
-    const membershipButton = cards.first().locator('button', { hasText: /Join|Leave/ });
+    const membershipButton = cards.first().locator('button', { hasText: /^(Follow|Unfollow)$/ });
     const buttonText = await membershipButton.textContent();
 
-    if (buttonText?.includes('Join')) {
+    if (buttonText?.includes('Follow') && !buttonText?.includes('Unfollow')) {
       await membershipButton.click();
-      // Wait for Leave button to confirm join completed
-      await expect(cards.first().locator('button', { hasText: 'Leave' })).toBeVisible({
+      // Wait for Unfollow button to confirm join completed
+      await expect(cards.first().locator('button', { hasText: /^Unfollow$/ })).toBeVisible({
         timeout: 10000
       });
     }
@@ -268,10 +281,10 @@ test.describe('Community Membership - Persistence', () => {
     // Navigate back to communities tab
     await navigateToCommunitiesTab(page);
 
-    // Should still show as joined (Leave button visible)
+    // Should still show as joined (Unfollow button visible)
     const cardsAfterNav = page.locator('.card').filter({ hasText: 'Community Host' });
     await expect(cardsAfterNav.first()).toBeVisible({ timeout: 15000 });
-    await expect(cardsAfterNav.first().locator('button', { hasText: 'Leave' })).toBeVisible({
+    await expect(cardsAfterNav.first().locator('button', { hasText: /^Unfollow$/ })).toBeVisible({
       timeout: 10000
     });
   });
@@ -290,8 +303,8 @@ test.describe('Community Membership - Error Handling', () => {
     const cards = page.locator('.card').filter({ hasText: 'Community Host' });
     await expect(cards.first()).toBeVisible({ timeout: 15000 });
 
-    // Click join/leave button
-    const membershipButton = cards.first().locator('button', { hasText: /Join|Leave/ });
+    // Click follow/unfollow button
+    const membershipButton = cards.first().locator('button', { hasText: /^(Follow|Unfollow)$/ });
     await membershipButton.click();
     await page.waitForTimeout(3000);
 
@@ -307,19 +320,22 @@ test.describe('Community Membership - Error Handling', () => {
     await expect(cards.first()).toBeVisible({ timeout: 15000 });
 
     // Ensure we're joined first
-    const membershipButton = cards.first().locator('button', { hasText: /Join|Leave/ });
+    const membershipButton = cards.first().locator('button', { hasText: /^(Follow|Unfollow)$/ });
     const buttonText = await membershipButton.textContent();
 
-    if (buttonText?.includes('Join')) {
+    if (buttonText?.includes('Follow') && !buttonText?.includes('Unfollow')) {
       await membershipButton.click();
-      // Wait for Leave button to confirm join completed
-      await expect(cards.first().locator('button', { hasText: 'Leave' })).toBeVisible({
+      // Wait for Unfollow button to confirm join completed
+      await expect(cards.first().locator('button', { hasText: /^Unfollow$/ })).toBeVisible({
         timeout: 10000
       });
     }
 
     // Now leave
-    await cards.first().locator('button', { hasText: 'Leave' }).click();
+    await cards
+      .first()
+      .locator('button', { hasText: /^Unfollow$/ })
+      .click();
     await page.waitForTimeout(3000);
 
     errorCapture.assertNoCriticalErrors();

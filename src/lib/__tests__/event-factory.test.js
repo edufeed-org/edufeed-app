@@ -76,6 +76,19 @@ describe('createAppEventFactory (v6 compat wrapper)', () => {
       expect(draft.tags.some((/** @type {string[]} */ t) => t[0] === 'd' && t[1])).toBe(true);
     });
 
+    it('honours an explicit created_at instead of stamping now', async () => {
+      // calendar-actions' updateEvent depends on this to guarantee a
+      // replacement is strictly newer than the event it replaces — a
+      // same-second replacement is dropped by the relay, the EventStore and
+      // the IDB cache alike (#62). The default here is `unixNow()`, so a
+      // spread-order regression in build() would silently re-open that.
+      const factory = createAppEventFactory();
+      const pinned = 1700000000;
+      const draft = await factory.build({ kind: 31922, content: '', created_at: pinned });
+
+      expect(draft.created_at).toBe(pinned);
+    });
+
     it('applies operations in order', async () => {
       const factory = createAppEventFactory();
       const addFoo = (/** @type {any} */ d) => ({ ...d, tags: [...d.tags, ['foo', '1']] });

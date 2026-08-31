@@ -1,3 +1,5 @@
+import { VALID_CONTENT_VIEWS } from '$lib/helpers/contentTypes.js';
+
 /**
  * Community home page load function.
  * Layout already validates npub → hex pubkey.
@@ -5,24 +7,8 @@
  * @type {import('./$types').PageLoad}
  */
 export async function load({ url }) {
-  const validContentTypes = new Set([
-    'home',
-    'chat',
-    'calendar',
-    'learning',
-    'boards',
-    'articles',
-    'forum',
-    'polls',
-    'wikis',
-    'social-bookmarks',
-    'meet',
-    'members',
-    'settings'
-  ]);
-
   const viewParam = url.searchParams.get('view');
-  const contentView = viewParam && validContentTypes.has(viewParam) ? viewParam : undefined;
+  const contentView = viewParam && VALID_CONTENT_VIEWS.has(viewParam) ? viewParam : undefined;
 
   return { contentView };
 }

@@ -16,19 +16,21 @@ function stripTrailingSlash(path) {
 const resolvedBase = stripTrailingSlash(resolve('/c/'));
 const resolvedInbox = stripTrailingSlash(resolve('/c/inbox'));
 const resolvedMessages = stripTrailingSlash(resolve('/c/messages'));
+const resolvedGroups = stripTrailingSlash(resolve('/c/groups'));
 
 /**
  * Derive the active section for DashboardNavSidebar / DashboardBottomTabBar.
  *
  * @param {string} pathname - Current URL pathname
  * @param {URLSearchParams} searchParams - Current URL search params
- * @returns {'home' | 'feed' | 'inbox' | 'messages' | 'my-stuff' | 'communities' | null}
+ * @returns {'home' | 'feed' | 'inbox' | 'messages' | 'groups' | 'my-stuff' | 'communities' | null}
  */
 export function getDashboardActiveSection(pathname, searchParams) {
   const normalized = stripTrailingSlash(pathname);
   if (normalized !== resolvedBase && !normalized.startsWith(resolvedBase + '/')) return null;
   if (normalized === resolvedMessages || normalized.startsWith(resolvedMessages + '/'))
     return 'messages';
+  if (normalized === resolvedGroups || normalized.startsWith(resolvedGroups + '/')) return 'groups';
   if (normalized === resolvedInbox) return 'inbox';
   const view = searchParams.get('view') || 'home';
   // Backward compat: old 'your-content' URL maps to 'my-stuff'

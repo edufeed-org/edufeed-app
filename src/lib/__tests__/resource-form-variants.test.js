@@ -44,6 +44,10 @@ describe('resource-form-variants registry', () => {
     expect(ids).toContain('ekw');
   });
 
+  it('no longer registers the interactive variant (merged into the normal upload flow)', () => {
+    expect(ALL_VARIANTS.map((v) => v.id)).not.toContain('interactive');
+  });
+
   it('every registered variant has required i18n keys', () => {
     for (const v of ALL_VARIANTS) {
       expect(typeof v.labelKey).toBe('string');
@@ -171,6 +175,12 @@ describe('resolveVariantIdFromEvent', () => {
 
   it('returns the variant id when l-tag is scoped to metadata-form', () => {
     expect(resolveVariantIdFromEvent(makeEvent([['l', 'ekw', 'metadata-form']]))).toBe('ekw');
+  });
+
+  it('falls back to amb for events labeled with the removed interactive variant', () => {
+    expect(resolveVariantIdFromEvent(makeEvent([['l', 'interactive', 'metadata-form']]))).toBe(
+      'amb'
+    );
   });
 
   it('ignores l-tags with a different namespace', () => {

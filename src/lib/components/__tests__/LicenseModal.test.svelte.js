@@ -180,4 +180,54 @@ describe('LicenseModal', () => {
     await waitFor(() => getByTestId('license-modal-save'));
     expect(() => getByTestId('license-modal-accept-existing')).toThrow();
   });
+
+  it('seeds the form from initialLicense/initialCredit/initialTitle/initialSource on open (e.g. H5P metadata prefill)', async () => {
+    const { getByTestId, getByLabelText } = render(LicenseModal, {
+      props: {
+        open: true,
+        hash: 'a'.repeat(64),
+        url: 'https://blossom.example/app.xdc',
+        mime: 'image/jpeg',
+        size: 100,
+        existingLicense: null,
+        initialLicense: 'https://creativecommons.org/publicdomain/zero/1.0/',
+        initialCredit: 'Jane Doe',
+        initialTitle: 'Peace Quiz',
+        initialSource: 'https://example.org/original'
+      }
+    });
+
+    await waitFor(() => getByTestId('license-modal-save'));
+    expect(/** @type {HTMLSelectElement} */ (getByLabelText('License')).value).toBe(
+      'https://creativecommons.org/publicdomain/zero/1.0/'
+    );
+    expect(/** @type {HTMLInputElement} */ (getByLabelText('Credit')).value).toBe('Jane Doe');
+    expect(/** @type {HTMLInputElement} */ (getByLabelText('Title of the work')).value).toBe(
+      'Peace Quiz'
+    );
+    expect(/** @type {HTMLInputElement} */ (getByLabelText('Source URL')).value).toBe(
+      'https://example.org/original'
+    );
+  });
+
+  it('falls back to the hardcoded defaults when initialLicense/initialCredit/initialTitle/initialSource are omitted (existing callers)', async () => {
+    const { getByTestId, getByLabelText } = render(LicenseModal, {
+      props: {
+        open: true,
+        hash: 'a'.repeat(64),
+        url: 'https://blossom.example/abc.jpg',
+        mime: 'image/jpeg',
+        size: 100,
+        existingLicense: null
+      }
+    });
+
+    await waitFor(() => getByTestId('license-modal-save'));
+    expect(/** @type {HTMLSelectElement} */ (getByLabelText('License')).value).toBe(
+      'https://creativecommons.org/licenses/by/4.0/'
+    );
+    expect(/** @type {HTMLInputElement} */ (getByLabelText('Credit')).value).toBe('');
+    expect(/** @type {HTMLInputElement} */ (getByLabelText('Title of the work')).value).toBe('');
+    expect(/** @type {HTMLInputElement} */ (getByLabelText('Source URL')).value).toBe('');
+  });
 });

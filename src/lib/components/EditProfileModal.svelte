@@ -16,6 +16,9 @@
   } from '$lib/helpers/educational/educatorProfile.js';
   import { addressLoader } from '$lib/loaders/base.js';
   import { getAllLookupRelays } from '$lib/helpers/relay-helper.js';
+  import { parseMembershipPointer } from '$lib/groups/community-membership.js';
+  import { syncRootGroupMetadataWithFallback } from '$lib/groups/sync-group-metadata.js';
+  import { showToast } from '$lib/helpers/toast';
   import { untrack } from 'svelte';
   import * as m from '$lib/paraglide/messages';
 
@@ -31,6 +34,10 @@
   const signer = $derived(modalProps.signer ?? manager.active?.signer ?? null);
   // True when the editor is editing their own profile.
   const isOwn = $derived(pubkey === manager.active?.pubkey);
+  // Task A7: only set when CommunityBasicsForm opened this modal in
+  // community mode — lets a successful community profile save re-issue a
+  // 9002 for the linked NIP-29 root group (if any).
+  const communikeyEvent = $derived(modalProps.communikeyEvent ?? null);
 
   // Initialize form data with current profile values
   let userData = $state(
@@ -189,6 +196,34 @@
   }
 
   /**
+   * Task A7: the kind-0 save just succeeded — re-issue a 9002 so a moderated
+   * community's linked NIP-29 root group (whose 39000 Armada reads
+   * name/about/picture off) doesn't go stale. Best-effort: the profile save
+   * already went through, so a relay refusal here only warns, never blocks or
+   * unwinds it. No-op for open communities (no membership pointer).
+   *
+   * Signer ladder (community first, active human as backup) lives in
+   * syncRootGroupMetadataWithFallback — CommunityBasicsForm's save uses the
+   * same one.
+   * @param {any} communityEvent kind 10222, or null/undefined for personal profiles
+   * @param {{pubkey: string, signer: any}} primarySigner
+   */
+  async function syncGroupMetadataBestEffort(communityEvent, primarySigner) {
+    const result = await syncRootGroupMetadataWithFallback({
+      pointer: communityEvent ? parseMembershipPointer(communityEvent) : null,
+      profile: {
+        name: userData.name,
+        about: userData.about,
+        picture: userData.picture
+      },
+      signers: [primarySigner, manager.active]
+    });
+    if (!result.ok) {
+      showToast(m.community_group_metadata_sync_failed(), 'warning');
+    }
+  }
+
+  /**
    * Handle form submission
    */
   async function handleSubmit() {
@@ -254,6 +289,14 @@
         if (add.length || remove.length) {
           await actionRunner.run(ModifyListTags, { kind: 10015, add, remove });
         }
+
+        // The logged-in account may itself BE a moderated community (editing
+        // from /p/<community-npub> takes this branch, with no communikeyEvent
+        // prop) — its root group's 39000 needs the same A7 refresh.
+        await syncGroupMetadataBestEffort(eventStore.getReplaceable(10222, pubkey), {
+          pubkey,
+          signer
+        });
       } else {
         // Community profile: sign with the caller-supplied community signer.
         // Merge over the existing profile so unknown keys survive.
@@ -281,6 +324,8 @@
         }
         // Add to EventStore for immediate UI updates
         eventStore.add(signedEvent);
+
+        await syncGroupMetadataBestEffort(communikeyEvent, { pubkey, signer });
       }
 
       submitSuccess = true;

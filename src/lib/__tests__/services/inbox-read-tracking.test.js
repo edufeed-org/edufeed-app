@@ -213,6 +213,26 @@ describe('per-item read tracking', () => {
     });
   });
 
+  describe('event store model subscription', () => {
+    it('watches exactly the kinds the notification loader fetches', async () => {
+      const { eventStore } = await import('$lib/stores/nostr-infrastructure.svelte');
+      eventStore.model.mockClear();
+
+      service.initializeInbox('user123');
+
+      // The main notification model call is the one passing an array of filters
+      const call = eventStore.model.mock.calls.find((c) => Array.isArray(c[1]));
+      expect(call).toBeDefined();
+
+      // Same filters as buildMainFilter, minus the `since` bound (the store
+      // holds everything already fetched, so the model must not re-window it)
+      const expected = service
+        .buildMainFilter('user123', 0)
+        .map(({ since: _since, ...rest }) => rest);
+      expect(call[1]).toEqual(expected);
+    });
+  });
+
   describe('getIsNotificationUnread', () => {
     it('returns a function that checks unread status', () => {
       service.initializeInbox('user123');

@@ -21,6 +21,35 @@ function parseArray(value, defaultValue = []) {
     .filter(Boolean);
 }
 
+const NEVENT_REF = /^nevent1[a-z0-9]+$/;
+const HEX_ID_REF = /^[0-9a-f]{64}$/i;
+
+/**
+ * Parse `WEBXDC_APPS` into an ordered list of kind-1063 event references
+ * (nevent or 64-hex event id; hex is case-normalized to lowercase). Order is
+ * preserved — the first entry is the picker's featured app. Invalid entries
+ * are dropped with a warning rather than failing the whole config response.
+ * @param {string | undefined} value
+ * @returns {string[]}
+ */
+function parseWebxdcApps(value) {
+  if (!value) return [];
+  const out = [];
+  for (const raw of value
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean)) {
+    if (NEVENT_REF.test(raw)) {
+      out.push(raw);
+    } else if (HEX_ID_REF.test(raw)) {
+      out.push(raw.toLowerCase());
+    } else {
+      console.warn(`[api/config] WEBXDC_APPS: dropping invalid event reference "${raw}"`);
+    }
+  }
+  return out;
+}
+
 /**
  * Parse integer with default
  * @param {string | undefined} value
@@ -164,12 +193,22 @@ export function GET() {
     // NIP-17 DM relays (kind 10050) published as a default for new users
     dmRelays: parseArray(env.DM_RELAYS),
 
+    // DM senders (hex or npub) whose conversations always count as "known" —
+    // keeps platform welcome DMs out of the requests folder. Defaults to the
+    // Edufeed and VocabulOER platform accounts.
+    dmTrustedSenders: parseArray(env.DM_TRUSTED_SENDERS, [
+      'bdc21f93b1e2cb75608cecd7a0a00a779779d9367dc9798bd9f213f06c95bc48', // Edufeed
+      'd2689e2f41dabfba953da26655a94ce2aa4e029c383ee921c6a4deafab99a612' // VocabulOER
+    ]),
+
     // App-specific relays (content goes here IN ADDITION to user's outbox)
     calendarRelays: parseArray(env.CALENDAR_RELAYS),
     communikeyRelays: parseArray(env.COMMUNIKEY_RELAYS),
     ambRelays: parseArray(env.AMB_RELAYS),
     longformContentRelays: parseArray(env.LONGFORM_CONTENT_RELAY),
     kanbanRelays: parseArray(env.KANBAN_RELAYS),
+    groupsRelays: parseArray(env.GROUPS_RELAYS),
+    groupsEnabled: parseBool(env.GROUPS_ENABLED, false),
 
     // Dashboard relay feed picker (see relay-feed-options.svelte.js).
     // relaySources tokens: config | custom | nip65 | community
@@ -344,7 +383,15 @@ export function GET() {
     // Resource form variants (AMB vs EKW, etc.)
     // Order in the env var determines picker display order + default variant.
     resourceFormVariants: {
-      enabled: parseArray(env.RESOURCE_FORM_VARIANTS, ['amb'])
+      enabled: parseArray(env.RESOURCE_FORM_VARIANTS, ['amb']),
+      // naddr references to kind 30168 form templates, keyed by variant id.
+      // Env slug is `RESOURCE_FORM_TEMPLATE_NADDR_<VARIANT_ID upper-cased>`.
+      // When set for a variant, that variant renders via the generic
+      // template-driven form instead of the hardcoded wizard.
+      templateNaddrs: {
+        amb: env.RESOURCE_FORM_TEMPLATE_NADDR_AMB || '',
+        ekw: env.RESOURCE_FORM_TEMPLATE_NADDR_EKW || ''
+      }
     },
 
     // UI settings
@@ -370,6 +417,23 @@ export function GET() {
       handleDomain: env.NIP05_HANDLE_DOMAIN || '',
       formAddress: env.MEMBERSHIP_FORM_ADDRESS || '',
       adminPubkeys: parseArray(env.MEMBERSHIP_ADMIN_PUBKEYS)
+    },
+
+    // Cordn MLS private groups spike (evaluation track alongside Concord).
+    // Coordinator is reached over ContextVM via the listed relays; with the
+    // flag off there is zero Cordn UI and zero Cordn network traffic.
+    cordnGroups: {
+      enabled: parseBool(env.CORDN_GROUPS_ENABLED, false),
+      // Comma-separated list; first entry is the default coordinator.
+      coordinatorPubkeys: parseArray(env.CORDN_COORDINATOR_PUBKEY),
+      relays: parseArray(env.CORDN_CONTEXTVM_RELAYS, ['wss://relay.contextvm.org'])
+    },
+
+    // Concord E2E-encrypted private channels (Beta). Dedicated relay set —
+    // NEVER unioned with outbox/category relays.
+    concord: {
+      enabled: parseBool(env.CONCORD_ENABLED, false),
+      relays: parseArray(env.CONCORD_RELAYS)
     },
 
     // Read-only npub login ("browse as") — see docs/superpowers/specs/2026-07-16-google-and-npub-login-design.md
@@ -402,6 +466,16 @@ export function GET() {
     // upload). Only exposes whether it's enabled — the URL stays server-side.
     metadataCleaner: {
       enabled: Boolean(env.METADATA_CLEANER_URL)
+    },
+
+    // Webxdc sandbox host (interactive resources player)
+    webxdc: {
+      sandboxDomain: env.SANDBOX_DOMAIN || 'iframe.diy',
+      // Curated apps offered first ("Empfohlen") in the composer's apps
+      // picker, ordered — the first entry is featured. Each entry is a
+      // kind-1063 event reference (nevent or hex id); the picker resolves
+      // name/icon/hash from the event itself.
+      curatedApps: parseWebxdcApps(env.WEBXDC_APPS)
     }
   };
 

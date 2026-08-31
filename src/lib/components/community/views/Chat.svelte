@@ -1,5 +1,4 @@
 <script>
-  import { resolve } from '$app/paths';
   import { getContext } from 'svelte';
   import { eventStore, pool } from '$lib/stores/nostr-infrastructure.svelte';
   import { useActiveUser } from '$lib/stores/accounts.svelte';
@@ -14,17 +13,16 @@
     groupMessagesByDate
   } from '$lib/helpers/message-utils.js';
   import { TimelineModel } from 'applesauce-core/models';
-  import NostrContentRenderer from '$lib/components/shared/NostrContentRenderer.svelte';
-  import LinkPreviewList from '$lib/components/shared/LinkPreviewList.svelte';
   import ReactionBar from '$lib/components/reactions/ReactionBar.svelte';
   import EmojiPicker from '$lib/components/shared/EmojiPicker.svelte';
   import { SmilePlusIcon, SendIcon, ReplyIcon } from '$lib/components/icons';
   import * as m from '$lib/paraglide/messages';
-  import ProfileAvatar from '../../shared/ProfileAvatar.svelte';
+  import ChatMessageList from '$lib/components/chat/ChatMessageList.svelte';
+  import ChatMessageRow from '$lib/components/chat/ChatMessageRow.svelte';
   import { publishEventOptimistic } from '$lib/services/publish-service.js';
+  import { showToast } from '$lib/helpers/toast';
   import { getAppRelaysForCategory } from '$lib/services/app-relay-service.svelte.js';
   import { extractMentionPubkeys } from '$lib/helpers/inbox.js';
-  import { profileLink } from '$lib/helpers/nostrUtils.js';
 
   const getAllowedAuthors = getContext('allowedAuthors');
 
@@ -205,7 +203,17 @@
       eventStore.add(signedEvent);
 
       publishEventOptimistic(signedEvent, [derivedCommunityPubkey], {
-        communityEvent: communikeyEvent
+        communityEvent: communikeyEvent,
+        // Total publish failure removes the optimistic message from the
+        // store again — the bubble appears, then silently vanishes
+        // (journey-test 2026-08-17, "chat send failed" with zero feedback).
+        // Surface it and give the text back for a retry.
+        onStatusChange: (status) => {
+          if (status.status === 'failed') {
+            showToast(m.community_views_chat_send_failed(), 'error');
+            if (!newMessage.trim()) newMessage = messageContent;
+          }
+        }
       });
 
       // Clear reply and custom emoji state after sending
@@ -284,72 +292,39 @@
         {m.community_views_chat_empty()}
       </div>
     {:else}
-      {#each groupedMessages as item, i (item.type === 'separator' ? `sep-${item.date}-${i}` : item.message.id)}
-        {#if item.type === 'separator'}
-          <div class="divider text-xs text-base-content/40">{item.date}</div>
-        {:else}
-          {@const message = item.message}
+      <ChatMessageList items={groupedMessages}>
+        {#snippet row(/** @type {any} */ message)}
           {@const isOwnMessage = getActiveUser() && message.pubkey === getActiveUser()?.pubkey}
           {@const replyToId = getReplyParentId(message)}
-          <div class="group chat {isOwnMessage ? 'chat-end' : 'chat-start'}">
-            {#if !isOwnMessage}
-              <ProfileAvatar
-                pubkey={message.pubkey}
-                profile={userProfiles.get(message.pubkey)}
-                size="sm"
-                linkToProfile
-                class="chat-image"
-              />
-            {/if}
-
-            <div class="chat-header mb-1 flex items-center gap-1 text-xs opacity-70">
-              {#if !isOwnMessage}
-                <a href={resolve(profileLink(message.pubkey))} class="font-semibold hover:underline"
-                  >{getUserDisplayName(message.pubkey)}</a
-                >
-                <span>&middot;</span>
-              {/if}
-              <time datetime={new Date(message.created_at * 1000).toISOString()}>
-                {formatMessageTimestamp(message.created_at)}
-              </time>
-              {#if getActiveUser() && canPublish}
-                <button
-                  type="button"
-                  onclick={() => {
-                    replyingTo = message;
-                    messageInput?.focus();
-                  }}
-                  class="ml-1 opacity-0 transition-opacity group-hover:opacity-70 hover:!opacity-100"
-                  title="Reply"
-                >
-                  <ReplyIcon class="h-3.5 w-3.5" />
-                </button>
-              {/if}
-            </div>
-
-            <div class="chat-bubble {isOwnMessage ? 'chat-bubble-primary' : ''}">
-              <!-- Reply quote preview -->
-              {#if replyToId}
-                {@const parent = displayedMessages.find((msg) => msg.id === replyToId)}
-                {#if parent}
-                  <div
-                    class="mb-1 rounded border-l-2 border-primary/40 bg-base-300/50 px-2 py-1 text-xs text-base-content/70"
-                  >
-                    <span class="font-semibold">{getUserDisplayName(parent.pubkey)}</span>
-                    <p class="truncate">{parent.content}</p>
-                  </div>
-                {/if}
-              {/if}
-              <NostrContentRenderer event={message} />
-              <LinkPreviewList event={message} />
-            </div>
-
-            <div class="chat-footer mt-0.5">
-              <ReactionBar event={message} relays={chatRelays} lazy addButtonOnHover />
-            </div>
-          </div>
-        {/if}
-      {/each}
+          {@const replyParent = replyToId
+            ? displayedMessages.find((msg) => msg.id === replyToId)
+            : null}
+          <ChatMessageRow
+            {message}
+            {isOwnMessage}
+            displayName={getUserDisplayName(message.pubkey)}
+            timestamp={formatMessageTimestamp(message.created_at)}
+            profile={userProfiles.get(message.pubkey)}
+            replyPreview={replyParent
+              ? {
+                  displayName: getUserDisplayName(replyParent.pubkey),
+                  content: replyParent.content
+                }
+              : null}
+            onReply={getActiveUser() && canPublish
+              ? (msg) => {
+                  replyingTo = msg;
+                  messageInput?.focus();
+                }
+              : null}
+            showLinkPreviews
+          >
+            {#snippet reactions(/** @type {any} */ msg)}
+              <ReactionBar event={msg} relays={chatRelays} lazy addButtonOnHover />
+            {/snippet}
+          </ChatMessageRow>
+        {/snippet}
+      </ChatMessageList>
     {/if}
   </div>
 
@@ -371,7 +346,9 @@
 
       <!-- Reply preview bar -->
       {#if replyingTo}
-        <div class="flex items-center gap-2 rounded-t-2xl bg-base-200 px-4 py-2 text-sm shadow-md">
+        <div
+          class="flex items-center gap-2 rounded-t-2xl border border-b-0 border-base-300 bg-base-100 px-4 py-2 text-sm shadow-md"
+        >
           <ReplyIcon class="h-4 w-4 shrink-0 text-base-content/60" />
           <span class="font-medium text-base-content/60"
             >{getUserDisplayName(replyingTo.pubkey)}</span
@@ -383,11 +360,14 @@
         </div>
       {/if}
 
+      <!-- base-100 + border, NOT base-200: the chat sits on the page's
+        base-200 beige, so a base-200 pill was invisible on an empty chat
+        (journey-test finding — "input box is not good visible"). -->
       <form
         onsubmit={sendMessage}
         class="flex items-center gap-2 {replyingTo
           ? 'rounded-t-none rounded-b-full'
-          : 'rounded-full'} bg-base-200 px-2 py-1 shadow-md"
+          : 'rounded-full'} border border-base-300 bg-base-100 px-2 py-1 shadow-md"
       >
         <button
           type="button"
@@ -425,7 +405,13 @@
   {:else}
     <div class="px-4 pt-2 pb-4">
       <div class="text-center text-base-content/70">
-        <p>{m.community_views_chat_login_prompt()}</p>
+        <!-- A signed-in non-member must not be told to sign in (journey-test
+          bug #10) — the gate is membership, not authentication. -->
+        {#if getActiveUser()}
+          <p>{m.community_views_chat_members_only()}</p>
+        {:else}
+          <p>{m.community_views_chat_login_prompt()}</p>
+        {/if}
       </div>
     </div>
   {/if}

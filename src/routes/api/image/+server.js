@@ -1,5 +1,5 @@
 import sharp from 'sharp';
-import { isPrivateIp, fetchGuardedRedirects } from '$lib/server/httpUrl.js';
+import { isBlockedHost, fetchGuardedRedirects } from '$lib/server/httpUrl.js';
 
 const MAX_UPSTREAM_SIZE = 25 * 1024 * 1024; // 25MB
 const MAX_WIDTH = 1920;
@@ -38,7 +38,7 @@ export async function GET({ url }) {
     return new Response('URL must be http or https', { status: 400 });
   }
 
-  if (isPrivateIp(parsedUrl)) {
+  if (await isBlockedHost(parsedUrl)) {
     return new Response('Private/local URLs are not allowed', { status: 400 });
   }
 

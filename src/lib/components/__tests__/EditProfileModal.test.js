@@ -42,7 +42,15 @@ const h = vi.hoisted(() => {
     },
     // The user's kind 10015 interests list as delivered by
     // eventStore.replaceable(10015, pubkey); null = no list published yet.
-    interestsList: { event: /** @type {any} */ (null) }
+    interestsList: { event: /** @type {any} */ (null) },
+    // The active account's own kind 10222 (only set when logged in AS a community).
+    ownCommunityEvent: { event: /** @type {any} */ (null) },
+    // Task A7: community-mode saves re-issue a 9002 group-metadata edit when
+    // the saved profile's community carries a NIP-29 membership pointer.
+    // The modal delegates to the shared signer ladder; the ladder's own
+    // fallback/dedup behavior is covered in sync-group-metadata.test.js.
+    syncRootGroupMetadataWithFallback: vi.fn(),
+    showToast: vi.fn()
   };
 });
 
@@ -75,6 +83,11 @@ vi.mock('$lib/services/publish-service.js', () => ({
 vi.mock('$lib/stores/nostr-infrastructure.svelte', () => ({
   eventStore: {
     add: vi.fn(),
+    // The active account's own kind 10222 — set when the logged-in account IS
+    // a community (own-profile save must still re-sync the group metadata).
+    getReplaceable: vi.fn((/** @type {number} */ kind) =>
+      kind === 10222 ? h.ownCommunityEvent.event : null
+    ),
     replaceable: vi.fn((/** @type {number} */ kind) => ({
       subscribe(/** @type {(e: any) => void} */ cb) {
         if (kind === 10015) cb(h.interestsList.event);
@@ -113,7 +126,14 @@ vi.mock('$lib/loaders/base.js', () => ({
 vi.mock('$lib/helpers/relay-helper.js', () => ({
   getAllLookupRelays: () => [],
   getEventLoaderLookupRelays: () => [],
-  getCommunikeyRelays: () => []
+  getCommunikeyRelays: () => [],
+  // Read at import time by the shared loaders barrel (loaders/index.js),
+  // whose per-domain community loaders (articles.js, amb.js, calendar.js)
+  // resolve relays eagerly at module init — see c640a759 for the same
+  // pattern in other suites.
+  getArticleRelays: () => [],
+  getEducationalRelays: () => [],
+  getCalendarRelays: () => []
 }));
 
 vi.mock('$lib/stores/config.svelte.js', () => ({
@@ -131,6 +151,12 @@ vi.mock('$lib/stores/accounts.svelte.js', () => ({ manager: h.managerMock }));
 vi.mock('$lib/stores/accounts.svelte', () => ({ manager: h.managerMock }));
 
 vi.mock('$lib/stores/modal.svelte.js', () => ({ modalStore: h.modalStoreMock }));
+
+vi.mock('$lib/groups/sync-group-metadata.js', () => ({
+  syncRootGroupMetadata: vi.fn(),
+  syncRootGroupMetadataWithFallback: h.syncRootGroupMetadataWithFallback
+}));
+vi.mock('$lib/helpers/toast', () => ({ showToast: h.showToast }));
 
 import EditProfileModal from '../EditProfileModal.svelte';
 import { ModifyListTags } from '$lib/actions/list-actions.js';
@@ -172,6 +198,9 @@ beforeEach(() => {
   h.modalStoreMock.closeModal.mockClear();
   h.modalStoreMock.modalProps = { profile: { name: 'Alice' }, pubkey: h.pub };
   h.interestsList.event = null;
+  h.ownCommunityEvent.event = null;
+  h.syncRootGroupMetadataWithFallback.mockReset().mockResolvedValue({ ok: true });
+  h.showToast.mockClear();
 });
 
 describe('EditProfileModal save (own profile)', () => {
@@ -350,5 +379,140 @@ describe('EditProfileModal save (community profile via signer override)', () => 
     expect(content.theme).toBe('blue');
     // Communities get no educator context section.
     expect(container.textContent).not.toContain('profile_edit_section_context');
+  });
+});
+
+// Task A7: a moderated community's linked NIP-29 root group carries
+// name/about/picture in its relay-generated 39000 — copied ONCE at
+// flip-to-moderated time. This modal is where those fields actually change
+// (community-mode kind-0 save), so it — not CommunityBasicsForm, which never
+// touches them — is the correct place to re-issue a 9002 afterward.
+describe('EditProfileModal save (community profile) — root group metadata sync', () => {
+  const MODERATED_COMMUNITY = {
+    pubkey: /** @type {any} */ (null),
+    tags: [['membership', 'root1', 'wss://groups.example.com']]
+  };
+
+  beforeEach(() => {
+    MODERATED_COMMUNITY.pubkey = h.communityPub;
+  });
+
+  it('re-issues the group metadata after a moderated community profile save', async () => {
+    h.modalStoreMock.modalProps = {
+      profile: { name: 'Comm', about: 'old about' },
+      pubkey: h.communityPub,
+      signer: h.communitySigner,
+      communikeyEvent: MODERATED_COMMUNITY
+    };
+    const { container } = render(EditProfileModal);
+    await waitForNameInput(container, 'Comm');
+
+    const aboutInput = /** @type {HTMLTextAreaElement} */ (
+      container.querySelector('#profile-about')
+    );
+    await fireEvent.input(aboutInput, { target: { value: 'new about' } });
+
+    await fireEvent.click(findButton(container, 'profile_edit_modal_save_button'));
+
+    await waitFor(() => {
+      expect(h.syncRootGroupMetadataWithFallback).toHaveBeenCalledTimes(1);
+    });
+    const [args] = /** @type {any[]} */ (h.syncRootGroupMetadataWithFallback.mock.calls[0]);
+    expect(args.pointer).toEqual({ id: 'root1', relay: 'wss://groups.example.com' });
+    expect(args.profile).toEqual({ name: 'Comm', about: 'new about', picture: '' });
+    // Community signer first, human admin as the backup rung.
+    expect(args.signers[0]).toEqual({ pubkey: h.communityPub, signer: h.communitySigner });
+    expect(args.signers[1]).toEqual(h.managerMock.active);
+    expect(h.showToast).not.toHaveBeenCalled();
+  });
+
+  it('attempts no group write when the community has no membership pointer (open community)', async () => {
+    h.modalStoreMock.modalProps = {
+      profile: { name: 'Comm' },
+      pubkey: h.communityPub,
+      signer: h.communitySigner,
+      communikeyEvent: { pubkey: h.communityPub, tags: [] }
+    };
+    const { container } = render(EditProfileModal);
+    await waitForNameInput(container, 'Comm');
+    await fireEvent.click(findButton(container, 'profile_edit_modal_save_button'));
+    await waitFor(() => {
+      expect(h.publishEvent).toHaveBeenCalledTimes(1);
+    });
+    const [args] = /** @type {any[]} */ (h.syncRootGroupMetadataWithFallback.mock.calls[0] ?? [{}]);
+    expect(args.pointer).toBeNull();
+  });
+
+  it('re-issues the group metadata when the logged-in account IS the moderated community', async () => {
+    // Editing from /p/<community-npub> while signed in as the community takes
+    // the own-profile (UpdateProfile) branch, which never carried a
+    // communikeyEvent — the group metadata went stale silently.
+    h.ownCommunityEvent.event = {
+      pubkey: h.pub,
+      tags: [['membership', 'root1', 'wss://groups.example.com']]
+    };
+    const { container } = render(EditProfileModal);
+    await waitForNameInput(container, 'Alice');
+    await fireEvent.click(findButton(container, 'profile_edit_modal_save_button'));
+    await waitFor(() => {
+      expect(h.syncRootGroupMetadataWithFallback).toHaveBeenCalledTimes(1);
+    });
+    const [args] = /** @type {any[]} */ (h.syncRootGroupMetadataWithFallback.mock.calls[0]);
+    expect(args.pointer).toEqual({ id: 'root1', relay: 'wss://groups.example.com' });
+    expect(args.signers[0]).toEqual({ pubkey: h.pub, signer: h.signer });
+    expect(h.showToast).not.toHaveBeenCalled();
+  });
+
+  it('attempts no group write for personal profile saves (no community at all)', async () => {
+    const { container } = render(EditProfileModal);
+    await waitForNameInput(container, 'Alice');
+    await fireEvent.click(findButton(container, 'profile_edit_modal_save_button'));
+    await waitFor(() => {
+      expect(h.runAction).toHaveBeenCalledTimes(1);
+    });
+    const [args] = /** @type {any[]} */ (h.syncRootGroupMetadataWithFallback.mock.calls[0] ?? [{}]);
+    expect(args.pointer).toBeNull();
+  });
+
+  it('hands the ladder both signers so a refused community key falls through', async () => {
+    // Communities flipped to moderated before the seat fix are not on their
+    // own root group's 39001, so the relay rejects a community-signed 9002 —
+    // the human creator always is an admin. The fall-through itself is tested
+    // in sync-group-metadata.test.js; here we prove the rungs are handed over.
+    h.modalStoreMock.modalProps = {
+      profile: { name: 'Comm' },
+      pubkey: h.communityPub,
+      signer: h.communitySigner,
+      communikeyEvent: MODERATED_COMMUNITY
+    };
+    const { container } = render(EditProfileModal);
+    await waitForNameInput(container, 'Comm');
+    await fireEvent.click(findButton(container, 'profile_edit_modal_save_button'));
+    await waitFor(() => {
+      expect(h.syncRootGroupMetadataWithFallback).toHaveBeenCalledTimes(1);
+    });
+    const [args] = /** @type {any[]} */ (h.syncRootGroupMetadataWithFallback.mock.calls[0]);
+    expect(args.signers.map((/** @type {any} */ x) => x?.pubkey)).toEqual([h.communityPub, h.pub]);
+    expect(h.showToast).not.toHaveBeenCalled();
+  });
+
+  it('shows the warning toast when the ladder exhausts every signer', async () => {
+    h.syncRootGroupMetadataWithFallback.mockResolvedValue({ ok: false, error: 'restricted: no' });
+    h.modalStoreMock.modalProps = {
+      profile: { name: 'Comm' },
+      pubkey: h.communityPub,
+      signer: h.communitySigner,
+      communikeyEvent: MODERATED_COMMUNITY
+    };
+    const { container } = render(EditProfileModal);
+    await waitForNameInput(container, 'Comm');
+    await fireEvent.click(findButton(container, 'profile_edit_modal_save_button'));
+    await waitFor(() => {
+      expect(h.syncRootGroupMetadataWithFallback).toHaveBeenCalledTimes(1);
+    });
+    expect(h.showToast).toHaveBeenCalledWith('community_group_metadata_sync_failed', 'warning');
+    await waitFor(() => {
+      expect(container.textContent).toContain('profile_edit_modal_success');
+    });
   });
 });

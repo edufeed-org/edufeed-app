@@ -8,6 +8,7 @@
 
 import { extractLabelFromUri } from './skosLoader.js';
 import { normalizePubkey } from '$lib/helpers/pubkey.js';
+import { formDataToAmbExt } from './formDataToAmbExt.js';
 
 /**
  * @typedef {import('$lib/stores/educational-actions.svelte').EducationalFormData} EducationalFormData
@@ -163,6 +164,10 @@ export function convertFormDataToAMB(formData) {
   if (formData.isPartOf && formData.isPartOf.length > 0) {
     amb.isPartOf = formData.isPartOf.map((ref) => ({ id: ref.coordinate }));
   }
+
+  // EKW/Konfi extension facets (ext:<ns>:<facet>[:sub] tags via ambToNostr).
+  const ext = formDataToAmbExt(formData);
+  if (ext) amb.ext = ext;
 
   return amb;
 }

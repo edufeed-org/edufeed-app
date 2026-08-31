@@ -1,5 +1,5 @@
 /** @vitest-environment node */
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 
 import { nip19 } from 'nostr-tools';
 import {
@@ -16,8 +16,7 @@ import {
   decodeFormNaddr,
   getFormRequestFormAddress,
   parseFormRequestMessage,
-  getDefaultMembershipForm,
-  createDefaultMembershipForm
+  resolveFormResponseDecryptSigners
 } from '../helpers/forms.js';
 
 describe('forms — tag building', () => {
@@ -32,7 +31,8 @@ describe('forms — tag building', () => {
       description: 'A test form'
     });
     expect(tags).toContainEqual(['name', 'My Form']);
-    expect(tags).toContainEqual(['description', 'A test form']);
+    const settingsTag = /** @type {string[]} */ (tags.find((t) => t[0] === 'settings'));
+    expect(JSON.parse(settingsTag[1])).toEqual({ description: 'A test form' });
   });
 
   it('builds field tags with correct format', () => {
@@ -51,26 +51,28 @@ describe('forms — tag building', () => {
       'full-name',
       'text',
       'Full Name',
-      '',
-      '{"required":true}'
+      '[]',
+      '{"renderElement":"text","required":true}'
     ]);
   });
 
   it('includes public tag when specified', () => {
     const tags = buildFormTemplateTags('my-form', [], { public: true });
-    expect(tags).toContainEqual(['public']);
+    const settingsTag = /** @type {string[]} */ (tags.find((t) => t[0] === 'settings'));
+    expect(JSON.parse(settingsTag[1])).toEqual({ publicForm: true });
   });
 
   it('includes confirmation_message tag', () => {
     const tags = buildFormTemplateTags('my-form', [], { confirmationMessage: 'Thanks!' });
-    expect(tags).toContainEqual(['confirmation_message', 'Thanks!']);
+    const settingsTag = /** @type {string[]} */ (tags.find((t) => t[0] === 'settings'));
+    expect(JSON.parse(settingsTag[1])).toEqual({ confirmationMessage: 'Thanks!' });
   });
 
   it('omits optional tags when not provided', () => {
     const tags = buildFormTemplateTags('my-form', [], {});
     expect(tags.find((t) => t[0] === 'name')).toBeUndefined();
-    expect(tags.find((t) => t[0] === 'public')).toBeUndefined();
-    expect(tags.find((t) => t[0] === 'confirmation_message')).toBeUndefined();
+    const settingsTag = /** @type {string[]} */ (tags.find((t) => t[0] === 'settings'));
+    expect(JSON.parse(settingsTag[1])).toEqual({});
   });
 });
 
@@ -237,8 +239,8 @@ describe('forms — response tags', () => {
   it('builds response tags from field values', () => {
     const values = { 'full-name': 'Bob', reason: 'I want in' };
     const tags = buildResponseTags(values);
-    expect(tags).toContainEqual(['response', 'full-name', 'Bob']);
-    expect(tags).toContainEqual(['response', 'reason', 'I want in']);
+    expect(tags).toContainEqual(['response', 'full-name', 'Bob', '{}']);
+    expect(tags).toContainEqual(['response', 'reason', 'I want in', '{}']);
   });
 
   it('parses response tags back to values', () => {
@@ -357,67 +359,6 @@ describe('forms — FORM_TEMPLATE_KIND', () => {
   });
 });
 
-describe('forms — getDefaultMembershipForm', () => {
-  it('returns 3 fields with correct ids and types', () => {
-    const form = getDefaultMembershipForm();
-    expect(form.dTag).toBe('membership');
-    expect(form.name).toBeTruthy();
-    expect(form.fields).toHaveLength(3);
-
-    expect(form.fields[0].id).toBe('name');
-    expect(form.fields[0].type).toBe('text');
-    expect(/** @type {any} */ (form.fields[0]).options.required).toBe(true);
-
-    expect(form.fields[1].id).toBe('email');
-    expect(form.fields[1].type).toBe('email');
-    expect(/** @type {any} */ (form.fields[1]).options.required).toBe(true);
-
-    expect(form.fields[2].id).toBe('motivation');
-    expect(form.fields[2].type).toBe('textarea');
-    expect(/** @type {any} */ (form.fields[2]).options.required).toBe(true);
-  });
-
-  it('roundtrips through buildFormTemplateTags + parseFormTemplate', () => {
-    const form = getDefaultMembershipForm();
-    const tags = buildFormTemplateTags(form.dTag, form.fields, { name: form.name });
-    const mockEvent = { kind: 30168, pubkey: 'abc', tags, content: '', created_at: 1 };
-    const parsed = parseFormTemplate(mockEvent);
-
-    expect(parsed.dTag).toBe('membership');
-    expect(parsed.name).toBe(form.name);
-    expect(parsed.fields).toHaveLength(3);
-    expect(parsed.fields[0].id).toBe('name');
-    expect(parsed.fields[1].id).toBe('email');
-    expect(parsed.fields[2].id).toBe('motivation');
-  });
-});
-
-describe('forms — createDefaultMembershipForm', () => {
-  it('returns a valid signed kind 30168 event with correct d-tag', async () => {
-    // Use a real PrivateKeySigner for integration-style test
-    const { generateSecretKey } = await import('nostr-tools');
-    const { PrivateKeySigner } = await import('applesauce-signers');
-    const sk = generateSecretKey();
-    const signer = new PrivateKeySigner(sk);
-
-    const event = await createDefaultMembershipForm(signer);
-
-    expect(event.kind).toBe(30168);
-    expect(event.sig).toBeTruthy();
-    expect(event.pubkey).toBeTruthy();
-
-    // Verify d-tag
-    const dTag = event.tags.find((t) => t[0] === 'd');
-    expect(dTag?.[1]).toBe('membership');
-
-    // Verify fields roundtrip
-    const parsed = parseFormTemplate(event);
-    expect(parsed.name).toBeTruthy();
-    expect(parsed.fields).toHaveLength(3);
-    expect(parsed.fields.map((f) => f.id)).toEqual(['name', 'email', 'motivation']);
-  });
-});
-
 describe('forms — parseFormRequestMessage', () => {
   it('parses message from valid JSON content', () => {
     const content = JSON.stringify({ message: 'Please fill this out' });
@@ -434,5 +375,60 @@ describe('forms — parseFormRequestMessage', () => {
 
   it('returns empty string when message key is missing', () => {
     expect(parseFormRequestMessage(JSON.stringify({ foo: 'bar' }))).toBe('');
+  });
+});
+
+describe('resolveFormResponseDecryptSigners', () => {
+  const FORM_AUTHOR = 'f'.repeat(64);
+
+  it('tries only the active signer when it exists and there is no community signer', () => {
+    const active = { nip44: { decrypt: vi.fn() } };
+    const getCommunitySigner = vi.fn(() => null);
+    expect(resolveFormResponseDecryptSigners(active, FORM_AUTHOR, getCommunitySigner)).toEqual([
+      active
+    ]);
+    expect(getCommunitySigner).toHaveBeenCalledWith(FORM_AUTHOR);
+  });
+
+  it('appends the community signer as a fallback when it supports NIP-44 decrypt', () => {
+    const active = { nip44: { decrypt: vi.fn() } };
+    const community = { nip44Decrypt: vi.fn() };
+    const getCommunitySigner = vi.fn(() => community);
+    expect(resolveFormResponseDecryptSigners(active, FORM_AUTHOR, getCommunitySigner)).toEqual([
+      active,
+      community
+    ]);
+  });
+
+  it('does not append a community signer that lacks NIP-44 decrypt', () => {
+    const active = { nip44: { decrypt: vi.fn() } };
+    const community = { signEvent: vi.fn() }; // no nip44 surface at all
+    const getCommunitySigner = vi.fn(() => community);
+    expect(resolveFormResponseDecryptSigners(active, FORM_AUTHOR, getCommunitySigner)).toEqual([
+      active
+    ]);
+  });
+
+  it('does not duplicate the signer when the active account already IS the community', () => {
+    const active = { nip44: { decrypt: vi.fn() } };
+    const getCommunitySigner = vi.fn(() => active);
+    expect(resolveFormResponseDecryptSigners(active, FORM_AUTHOR, getCommunitySigner)).toEqual([
+      active
+    ]);
+  });
+
+  it('returns just the community signer when there is no active signer', () => {
+    const community = { nip44: { decrypt: vi.fn() } };
+    const getCommunitySigner = vi.fn(() => community);
+    expect(resolveFormResponseDecryptSigners(undefined, FORM_AUTHOR, getCommunitySigner)).toEqual([
+      community
+    ]);
+  });
+
+  it('returns an empty list when neither signer is available', () => {
+    const getCommunitySigner = vi.fn(() => null);
+    expect(resolveFormResponseDecryptSigners(undefined, FORM_AUTHOR, getCommunitySigner)).toEqual(
+      []
+    );
   });
 });

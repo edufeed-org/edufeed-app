@@ -74,9 +74,9 @@
 
 <div class="external-url-input form-control w-full">
   <!-- Label -->
-  {#if label || m.external_url_label()}
+  {#if label}
     <div class="label">
-      <span class="label-text font-medium">{label || m.external_url_label()}</span>
+      <span class="label-text font-medium">{label}</span>
     </div>
   {/if}
 

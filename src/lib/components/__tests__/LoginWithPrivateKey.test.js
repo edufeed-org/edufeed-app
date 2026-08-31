@@ -12,7 +12,7 @@
  * @vitest-environment jsdom
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, fireEvent } from '@testing-library/svelte';
+import { render, fireEvent, waitFor } from '@testing-library/svelte';
 import { nip19 } from 'nostr-tools';
 import LoginWithPrivateKey from '../LoginWithPrivateKey.svelte';
 
@@ -122,6 +122,8 @@ describe('LoginWithPrivateKey', () => {
     // The account passed to addAccount and setActive must be the same fresh object
     expect(mockManager.setActive.mock.calls[0][0]).toBe(mockManager.addAccount.mock.calls[0][0]);
 
+    // Signals the parent that the flow is over, so the modal stack closes
+    // rather than transitioning back to the login modal.
     expect(onAccountCreated).toHaveBeenCalledTimes(1);
     expect(queryByText('Failed to log in')).toBeNull();
     expect(queryByText('Already logged in — switching')).toBeNull();
@@ -152,7 +154,12 @@ describe('LoginWithPrivateKey', () => {
     expect(queryByText('Failed to log in')).toBeNull();
     await findByText('Already logged in — switching');
 
-    // The success callback should still fire so the parent UI updates.
-    expect(onAccountCreated).toHaveBeenCalledTimes(1);
+    // The notice gets its moment on screen BEFORE the flow ends — the parent
+    // tears this component down when onAccountCreated fires, so calling it
+    // eagerly would flash the message away.
+    expect(onAccountCreated).not.toHaveBeenCalled();
+
+    // …and once the delay elapses the flow finishes, closing the whole stack.
+    await waitFor(() => expect(onAccountCreated).toHaveBeenCalledTimes(1), { timeout: 3000 });
   });
 });

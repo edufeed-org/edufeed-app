@@ -11,8 +11,7 @@
   import { aggregateReactions, publishReactionForUrl } from '$lib/helpers/reactions.js';
   import { reactionsLoaderForUrl } from '$lib/loaders/reactions.js';
   import { deleteEvent } from '$lib/helpers/eventDeletion.js';
-  import ReactionButton from './ReactionButton.svelte';
-  import AddReactionButton from './AddReactionButton.svelte';
+  import ReactionChips from './ReactionChips.svelte';
 
   /** @type {{ url: string, lazy?: boolean, relays?: string[] }} */
   let { url, lazy = false, relays } = $props();
@@ -144,18 +143,6 @@
     class="flex min-h-[32px] flex-wrap items-center gap-2"
     data-testid="url-reaction-bar"
   >
-    {#each Array.from(aggregated.entries()) as [emoji, summary] (emoji)}
-      <ReactionButton
-        {emoji}
-        count={summary.count}
-        userReacted={summary.userReacted}
-        userReactionEvent={summary.userReactionEvent}
-        emojiUrl={summary.emojiUrl}
-        reactors={summary.reactors}
-        onToggle={() => toggleReaction(emoji, summary)}
-      />
-    {/each}
-
-    <AddReactionButton onPick={handlePick} />
+    <ReactionChips {aggregated} onToggle={toggleReaction} onPick={handlePick} />
   </div>
 {/if}

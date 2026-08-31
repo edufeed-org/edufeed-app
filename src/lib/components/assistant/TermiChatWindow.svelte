@@ -2,6 +2,7 @@
   // Termi chat window — popover (default) or side panel (expanded). Account
   // hints render as proactive bot messages with real actions; free-text input
   // is matched against canned suggestions (no LLM backend yet).
+  import { getFirstPendingInvite } from '$lib/concord/pending-invites.svelte.js';
   import * as m from '$lib/paraglide/messages';
   import { runtimeConfig } from '$lib/stores/config.svelte.js';
   import { useActiveUser } from '$lib/stores/accounts.svelte';
@@ -15,7 +16,7 @@
    *   expanded?: boolean,
    *   onToggleExpand: () => void,
    *   onClose: () => void,
-   *   hints: Array<{id: string, status: string}>,
+   *   hints: Array<{id: string, status: string, variant?: string, address?: string}>,
    *   openCount: number,
    *   runHint: (id: any) => void,
    *   customizeHint: (id: any) => void,
@@ -82,8 +83,51 @@
       action: m.termi_hint_profile_cta(),
       secondary: null,
       doing: null
+    },
+    invites: {
+      // Enriched once the invite is decrypted (auto-decrypt makes that the
+      // common case): name the area instead of a generic "private area".
+      title: getFirstPendingInvite()?.areaName
+        ? m.concord_invite_hint_title_known({
+            area: /** @type {string} */ (getFirstPendingInvite()?.areaName)
+          })
+        : m.concord_invite_hint_title(),
+      body: m.concord_invite_hint_body(),
+      action: m.concord_invite_hint_action(),
+      secondary: null,
+      doing: null
     }
   });
+
+  /**
+   * The nip05 hint tracks the membership application: the copy depends on the
+   * hint's variant ('apply' reminder, passive 'pending' note, celebratory
+   * 'ready' card with one-click activation). Other hints use hintCopy as-is.
+   * @param {{id: string, variant?: string, address?: string}} hint
+   */
+  function copyFor(hint) {
+    if (hint.id === 'nip05' && hint.variant === 'ready') {
+      return {
+        title: m.termi_hint_nip05_ready_title(),
+        body: m.termi_hint_nip05_ready_body({ address: hint.address || '' }),
+        action: m.termi_hint_nip05_ready_cta(),
+        secondary: null,
+        doing: m.termi_hint_nip05_ready_doing()
+      };
+    }
+    if (hint.id === 'nip05' && hint.variant === 'pending') {
+      return {
+        title: m.termi_hint_nip05_pending_title(),
+        body: m.termi_hint_nip05_pending_body(),
+        action: null,
+        secondary: null,
+        doing: null
+      };
+    }
+    return hintCopy[
+      /** @type {'backup' | 'relays' | 'dm' | 'nip05' | 'profile' | 'invites'} */ (hint.id)
+    ];
+  }
 
   const suggestions = $derived([
     { q: m.termi_sugg_1_q(), a: m.termi_sugg_1_a() },
@@ -211,8 +255,7 @@
     </div>
 
     {#each hints as hint (hint.id)}
-      {@const copy =
-        hintCopy[/** @type {'backup' | 'relays' | 'dm' | 'nip05' | 'profile'} */ (hint.id)]}
+      {@const copy = copyFor(hint)}
       <div class="flex items-end gap-2.5" data-testid="termi-hint-{hint.id}">
         <TermiAvatar />
         <div
@@ -244,7 +287,7 @@
               <span class="termi-typing"><i></i><i></i><i></i></span>
               {copy.doing}
             </div>
-          {:else}
+          {:else if copy.action}
             <div class="mt-2.5 flex flex-wrap gap-2">
               <button
                 type="button"

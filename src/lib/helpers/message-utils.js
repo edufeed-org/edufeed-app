@@ -1,6 +1,8 @@
 /**
  * Shared message formatting utilities used by community chat and DMs.
  */
+import * as m from '$lib/paraglide/messages';
+import { formatDate } from '$lib/helpers/dates.js';
 
 /**
  * Format a unix timestamp as a relative or absolute time string.
@@ -12,10 +14,10 @@ export function formatMessageTimestamp(timestamp) {
   const now = new Date();
   const diff = now.getTime() - date.getTime();
 
-  if (diff < 60000) return 'now';
+  if (diff < 60000) return m.message_time_now();
   if (diff < 3600000) return `${Math.floor(diff / 60000)}m`;
   if (diff < 86400000) return `${Math.floor(diff / 3600000)}h`;
-  return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+  return formatDate(date, { month: 'short', day: 'numeric' });
 }
 
 /**
@@ -56,7 +58,7 @@ export function groupMessagesByDate(messages) {
 
   for (const message of messages) {
     const date = new Date(message.created_at * 1000);
-    const dateStr = date.toLocaleDateString(undefined, {
+    const dateStr = formatDate(date, {
       year: 'numeric',
       month: 'short',
       day: 'numeric'

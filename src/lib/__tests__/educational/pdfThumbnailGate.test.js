@@ -3,7 +3,8 @@ import { describe, it, expect } from 'vitest';
 import {
   getThumbnailSourceUrl,
   canDeriveThumbnail,
-  pdfThumbnailEndpoint
+  pdfThumbnailEndpoint,
+  pdfInfoEndpoint
 } from '$lib/helpers/educational/pdfThumbnailGate.js';
 
 const CC_BY = 'https://creativecommons.org/licenses/by/4.0/';
@@ -92,6 +93,22 @@ describe('pdfThumbnailEndpoint', () => {
   it('builds the endpoint url', () => {
     expect(pdfThumbnailEndpoint('https://x.example/a b.pdf')).toBe(
       '/api/pdf-thumbnail?url=https%3A%2F%2Fx.example%2Fa%20b.pdf'
+    );
+  });
+});
+
+describe('pdfInfoEndpoint', () => {
+  it('builds the endpoint url', () => {
+    expect(pdfInfoEndpoint('https://x.example/a b.pdf')).toBe(
+      '/api/pdf-info?url=https%3A%2F%2Fx.example%2Fa%20b.pdf'
+    );
+  });
+
+  it('escapes a url that would otherwise inject another query parameter', () => {
+    // `&`/`?` in a filename must stay inside the `url` value — an unescaped one
+    // would hand the endpoint a second parameter it never validated.
+    expect(pdfInfoEndpoint('https://x.example/a?b=1&c=2.pdf')).toBe(
+      '/api/pdf-info?url=https%3A%2F%2Fx.example%2Fa%3Fb%3D1%26c%3D2.pdf'
     );
   });
 });

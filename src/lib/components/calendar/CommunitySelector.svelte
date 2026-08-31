@@ -18,6 +18,9 @@
     communities = [],
     selectedCommunityIds = $bindable([]),
     communitiesWithShares = new Set(),
+    // Communities where the caller knows the share would never render
+    // (profile-list-gated section, user not listed) — drawn disabled.
+    restrictedCommunities = /** @type {Set<string>} */ (new Set()),
     title = 'Select Communities',
     showSelectAll = true
   } = $props();
@@ -46,7 +49,7 @@
    */
   function selectAllCommunities() {
     const availableCommunities = communities.filter(
-      (pubkey) => pubkey && !communitiesWithShares.has(pubkey)
+      (pubkey) => pubkey && !communitiesWithShares.has(pubkey) && !restrictedCommunities.has(pubkey)
     );
     selectedCommunityIds = [...new Set([...hiddenSelections(), ...availableCommunities])];
   }
@@ -91,13 +94,20 @@
     {#each communities as communityPubKey (communityPubKey)}
       {@const isAlreadyShared = communitiesWithShares.has(communityPubKey)}
       {@const isSelected = selectedCommunityIds.includes(communityPubKey)}
+      {@const isRestricted = restrictedCommunities.has(communityPubKey)}
       {@const getCommunityProfile = useUserProfile(communityPubKey)}
       {@const communityProfile = getCommunityProfile()}
-      <label class="flex cursor-pointer items-center gap-3 rounded p-2 hover:bg-base-200">
+      <label
+        class="flex items-center gap-3 rounded p-2 {isRestricted
+          ? 'opacity-50'
+          : 'cursor-pointer hover:bg-base-200'}"
+        title={isRestricted ? m.share_restricted_hint() : undefined}
+      >
         <input
           type="checkbox"
           class="checkbox checkbox-secondary"
           checked={isSelected || isAlreadyShared}
+          disabled={isRestricted}
           onchange={() => toggleCommunitySelection(communityPubKey)}
         />
         <div class="flex-1">
@@ -106,6 +116,11 @@
               `${communityPubKey.slice(0, 8)}...${communityPubKey.slice(-4)}`}
           </span>
         </div>
+        {#if isRestricted}
+          <span class="text-xs text-base-content/60" data-testid="share-restricted-badge"
+            >🔒 {m.share_restricted_label()}</span
+          >
+        {/if}
         {#if isAlreadyShared && !isSelected}
           <span class="text-xs font-medium text-success">{m.community_selector_shared()}</span>
         {:else if isAlreadyShared && isSelected}

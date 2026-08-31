@@ -33,6 +33,7 @@
   import { encodeEventToNaddr, profileLink } from '$lib/helpers/nostrUtils.js';
   import { goto } from '$app/navigation';
   import { resolve } from '$app/paths';
+  import { showToast } from '$lib/helpers/toast';
   import * as m from '$lib/paraglide/messages';
   import { useList, useAllLists, isListsLoading } from '$lib/stores/personal-lists.svelte.js';
   import { STARTER_PACK_KIND } from '$lib/helpers/list-kinds.js';
@@ -137,15 +138,58 @@
   }
 
   /**
-   * Pure mute list parser.
-   * @param {import('nostr-tools').NostrEvent} event
+   * Pure mute list parser. Null-safe: the mute card renders even before the
+   * user has a kind 10000 (the word editor creates one on first add).
+   * @param {import('nostr-tools').NostrEvent | null} event
    */
   function parseMutedThings(event) {
-    const pubkeys = new Set(event.tags.filter((t) => t[0] === 'p').map((t) => t[1]));
-    const hashtags = new Set(event.tags.filter((t) => t[0] === 't').map((t) => t[1]));
-    const words = new Set(event.tags.filter((t) => t[0] === 'word').map((t) => t[1]));
-    const threads = new Set(event.tags.filter((t) => t[0] === 'e').map((t) => t[1]));
+    const tags = event?.tags || [];
+    const pubkeys = new Set(tags.filter((t) => t[0] === 'p').map((t) => t[1]));
+    const hashtags = new Set(tags.filter((t) => t[0] === 't').map((t) => t[1]));
+    const words = new Set(tags.filter((t) => t[0] === 'word').map((t) => t[1]));
+    const threads = new Set(tags.filter((t) => t[0] === 'e').map((t) => t[1]));
     return { pubkeys, hashtags, words, threads };
+  }
+
+  let newMuteWord = $state('');
+  let muteWordBusy = $state(false);
+  const mutedThings = $derived(parseMutedThings(muteList));
+  const mutedTotalCount = $derived(
+    mutedThings.pubkeys.size +
+      mutedThings.hashtags.size +
+      mutedThings.words.size +
+      mutedThings.threads.size
+  );
+
+  async function handleAddMuteWord() {
+    const word = newMuteWord.trim();
+    if (!word || muteWordBusy) return;
+    muteWordBusy = true;
+    try {
+      const { muteWord } = await import('$lib/stores/mute-list.svelte.js');
+      await muteWord(word);
+      newMuteWord = '';
+    } catch (err) {
+      console.error('Failed to mute word:', err);
+      showToast(m.dm_block_failed(), 'error');
+    } finally {
+      muteWordBusy = false;
+    }
+  }
+
+  /** @param {string} word */
+  async function handleRemoveMuteWord(word) {
+    if (muteWordBusy) return;
+    muteWordBusy = true;
+    try {
+      const { unmuteWord } = await import('$lib/stores/mute-list.svelte.js');
+      await unmuteWord(word);
+    } catch (err) {
+      console.error('Failed to unmute word:', err);
+      showToast(m.dm_block_failed(), 'error');
+    } finally {
+      muteWordBusy = false;
+    }
   }
 
   /**
@@ -511,62 +555,89 @@
         </ExpandableListCard>
       {/if}
 
-      <!-- Mute List (kind 10000) -->
-      {#if muteList}
-        {@const mutedThings = parseMutedThings(muteList)}
-        {@const totalCount =
-          mutedThings.pubkeys.size +
-          mutedThings.hashtags.size +
-          mutedThings.words.size +
-          mutedThings.threads.size}
-        <ExpandableListCard
-          title={m.dashboard_lists_mute()}
-          count={totalCount}
-          expanded={expandedListId === 'mute'}
-          toggle={() => toggleExpand('mute', null)}
-        >
-          {#snippet icon()}<span class="text-lg">🔇</span>{/snippet}
-          <div class="space-y-3">
-            {#if mutedThings.pubkeys.size > 0}
-              <div>
-                <p class="mb-1 text-sm font-medium text-base-content/60">
-                  {m.dashboard_lists_mute_pubkeys()}
-                </p>
-                {@render profileChips(Array.from(mutedThings.pubkeys).map((p) => ({ pubkey: p })))}
-              </div>
-            {/if}
-            {#if mutedThings.hashtags.size > 0}
-              <div>
-                <p class="mb-1 text-sm font-medium text-base-content/60">
-                  {m.dashboard_lists_mute_hashtags()}
-                </p>
-                {@render hashtagPills(Array.from(mutedThings.hashtags))}
-              </div>
-            {/if}
+      <!-- Mute List (kind 10000) — always shown so muted words can be managed
+           even before a mute list exists (first add creates it) -->
+      <ExpandableListCard
+        title={m.dashboard_lists_mute()}
+        count={mutedTotalCount}
+        expanded={expandedListId === 'mute'}
+        toggle={() => toggleExpand('mute', null)}
+      >
+        {#snippet icon()}<span class="text-lg">🔇</span>{/snippet}
+        <div class="space-y-3">
+          {#if mutedThings.pubkeys.size > 0}
+            <div>
+              <p class="mb-1 text-sm font-medium text-base-content/60">
+                {m.dashboard_lists_mute_pubkeys()}
+              </p>
+              {@render profileChips(Array.from(mutedThings.pubkeys).map((p) => ({ pubkey: p })))}
+            </div>
+          {/if}
+          {#if mutedThings.hashtags.size > 0}
+            <div>
+              <p class="mb-1 text-sm font-medium text-base-content/60">
+                {m.dashboard_lists_mute_hashtags()}
+              </p>
+              {@render hashtagPills(Array.from(mutedThings.hashtags))}
+            </div>
+          {/if}
+          <div>
+            <p class="mb-1 text-sm font-medium text-base-content/60">
+              {m.dashboard_lists_mute_words()}
+            </p>
+            <p class="mb-2 text-xs text-base-content/50">{m.mute_words_hint()}</p>
             {#if mutedThings.words.size > 0}
-              <div>
-                <p class="mb-1 text-sm font-medium text-base-content/60">
-                  {m.dashboard_lists_mute_words()}
-                </p>
-                <div class="flex flex-wrap gap-2">
-                  {#each Array.from(mutedThings.words) as word (word)}
-                    <span class="badge badge-outline badge-error">{word}</span>
-                  {/each}
-                </div>
+              <div class="mb-2 flex flex-wrap gap-2">
+                {#each Array.from(mutedThings.words) as word (word)}
+                  <span class="badge gap-1 badge-outline badge-error">
+                    {word}
+                    <button
+                      class="cursor-pointer hover:font-bold"
+                      title={m.mute_words_remove()}
+                      disabled={muteWordBusy}
+                      onclick={() => handleRemoveMuteWord(word)}
+                    >
+                      ✕
+                    </button>
+                  </span>
+                {/each}
               </div>
             {/if}
-            {#if mutedThings.threads.size > 0}
-              <div>
-                <p class="mb-1 text-sm font-medium text-base-content/60">
-                  {m.dashboard_lists_mute_threads()}
-                </p>
-                <p class="text-sm text-base-content/50">{mutedThings.threads.size} threads</p>
-              </div>
-            {/if}
+            <form
+              class="flex max-w-sm gap-2"
+              onsubmit={(e) => {
+                e.preventDefault();
+                handleAddMuteWord();
+              }}
+            >
+              <input
+                type="text"
+                class="input-bordered input input-sm flex-1"
+                placeholder={m.mute_words_placeholder()}
+                bind:value={newMuteWord}
+              />
+              <button
+                type="submit"
+                class="btn btn-sm"
+                disabled={muteWordBusy || !newMuteWord.trim()}
+              >
+                {m.mute_words_add()}
+              </button>
+            </form>
           </div>
+          {#if mutedThings.threads.size > 0}
+            <div>
+              <p class="mb-1 text-sm font-medium text-base-content/60">
+                {m.dashboard_lists_mute_threads()}
+              </p>
+              <p class="text-sm text-base-content/50">{mutedThings.threads.size} threads</p>
+            </div>
+          {/if}
+        </div>
+        {#if muteList}
           {@render detailLink(muteList)}
-        </ExpandableListCard>
-      {/if}
+        {/if}
+      </ExpandableListCard>
 
       <!-- Interests (kind 10015) -->
       {#if interestList}

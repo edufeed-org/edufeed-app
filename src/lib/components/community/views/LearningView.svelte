@@ -22,6 +22,7 @@
   } from '$lib/helpers/educational/searchQueryBuilder.js';
   import { SearchIcon } from '$lib/components/icons';
   import { useProfileMap } from '$lib/stores/profile-map.svelte.js';
+  import { useAuthorDeletions } from '$lib/stores/author-deletions.svelte.js';
   import { getPreferredFormForKind } from '$lib/helpers/communityRelays.js';
   import { formCoordinateToNaddr } from '$lib/helpers/forms.js';
   import { addressLoader } from '$lib/loaders/base.js';
@@ -91,9 +92,11 @@
   // Current SKOS filter selections
   let currentFilters = createEmptyFilters();
 
-  // Profile loading for all community items
+  // Everyone whose events are on screen: the resource authors AND the people
+  // who shared them, since a repost points at someone else's event. Profiles
+  // and deletions want exactly the same list.
   // $state.raw() reassignment triggers reactivity, no trigger counter needed
-  const getAuthorProfiles = useProfileMap(() => {
+  const itemPubkeys = () => {
     const pubkeys = [];
     for (const e of communityItems) {
       pubkeys.push(e.pubkey);
@@ -104,8 +107,17 @@
       }
     }
     return pubkeys;
-  });
+  };
+
+  // Profile loading for all community items
+  const getAuthorProfiles = useProfileMap(itemPubkeys);
   let authorProfiles = $derived(getAuthorProfiles());
+
+  // Their deletions too. Without this a resource its author deleted keeps
+  // rendering from a stale local copy — and can be shared, producing a repost
+  // nobody else can resolve. Returns nothing: the eventStore's DeleteManager
+  // drops the deleted events out of CommunityAMBResourceModel by itself.
+  useAuthorDeletions(itemPubkeys);
 
   // Subscription management (plain let, not $state)
   /** @type {import('rxjs').Subscription | null} */

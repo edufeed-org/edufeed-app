@@ -13,7 +13,10 @@
   import { getCalendarRelays } from '$lib/helpers/relay-helper.js';
   import { useCalendarActions } from '../../stores/calendar-actions.svelte.js';
   import { useCalendarManagement } from '../../stores/calendar-management-store.svelte.js';
-  import { useJoinedCommunitiesList } from '../../stores/joined-communities-list.svelte.js';
+  // Share surfaces list joined ∪ area-linked communities — a private area's
+  // member never (publicly) follow-set-joins, but must still be able to share.
+  import { useShareableCommunities } from '$lib/helpers/shareable-communities.svelte.js';
+  import { useShareRestrictions } from '$lib/stores/share-restrictions.svelte.js';
   import { manager } from '$lib/stores/accounts.svelte';
   import { modalStore } from '$lib/stores/modal.svelte.js';
   import CalendarSelector from './CalendarSelector.svelte';
@@ -115,7 +118,13 @@
   const getOwnProfile = $derived(activeUser ? useUserProfile(activeUser.pubkey) : null);
   const ownProfile = $derived(getOwnProfile ? getOwnProfile() : null);
 
-  const getJoinedCommunities = useJoinedCommunitiesList();
+  const getJoinedCommunities = useShareableCommunities();
+  // Calendar events land in the Calendar section either way — gate check
+  // follows the concrete kind the form will publish (31922 all-day / 31923).
+  const getRestricted = useShareRestrictions(
+    () => (formData.isAllDay ? 31922 : 31923),
+    () => joinedCommunities
+  );
   const joinedCommunities = $derived(getJoinedCommunities());
 
   // Calendar and community selection state
@@ -426,6 +435,15 @@
           <span class="mb-1 block text-sm font-medium text-base-content"
             >{m.event_modal_type_label()}</span
           >
+          <!--
+            The type is LOCKED when editing. All-day is NIP-52 kind 31922 and
+            timed is 31923, and a replaceable event is addressed by
+            (kind, pubkey, d-tag) — so switching would publish to a different
+            coordinate, leaving the original live and the naddr in the URL
+            still pointing at it. The user would see a save that did nothing.
+            `updateEvent` refuses the change too; this only stops the user
+            reaching a control that cannot work. (#65)
+          -->
           <div
             class="flex rounded-lg bg-base-200 p-1"
             role="group"
@@ -433,7 +451,9 @@
           >
             <button
               type="button"
-              class="focus:ring-opacity-50 flex-1 rounded-md px-3 py-2 text-sm font-medium transition-colors duration-200 focus:ring-2 focus:ring-primary focus:outline-none {formData.eventType ===
+              disabled={mode === 'edit'}
+              title={mode === 'edit' ? m.event_modal_type_locked_hint() : undefined}
+              class="focus:ring-opacity-50 flex-1 rounded-md px-3 py-2 text-sm font-medium transition-colors duration-200 focus:ring-2 focus:ring-primary focus:outline-none disabled:cursor-not-allowed disabled:opacity-60 {formData.eventType ===
               'date'
                 ? 'bg-base-100 text-primary shadow-sm'
                 : 'text-base-content/60 hover:bg-base-300 hover:text-base-content'}"
@@ -443,7 +463,9 @@
             </button>
             <button
               type="button"
-              class="focus:ring-opacity-50 flex-1 rounded-md px-3 py-2 text-sm font-medium transition-colors duration-200 focus:ring-2 focus:ring-primary focus:outline-none {formData.eventType ===
+              disabled={mode === 'edit'}
+              title={mode === 'edit' ? m.event_modal_type_locked_hint() : undefined}
+              class="focus:ring-opacity-50 flex-1 rounded-md px-3 py-2 text-sm font-medium transition-colors duration-200 focus:ring-2 focus:ring-primary focus:outline-none disabled:cursor-not-allowed disabled:opacity-60 {formData.eventType ===
               'time'
                 ? 'bg-base-100 text-primary shadow-sm'
                 : 'text-base-content/60 hover:bg-base-300 hover:text-base-content'}"
@@ -452,6 +474,9 @@
               {m.event_modal_type_timed()}
             </button>
           </div>
+          {#if mode === 'edit'}
+            <p class="mt-1 text-xs text-base-content/60">{m.event_modal_type_locked_hint()}</p>
+          {/if}
         </div>
 
         <!-- Event Title -->
@@ -585,6 +610,7 @@
               communities={joinedCommunities}
               bind:selectedCommunityIds
               communitiesWithShares={new Set()}
+              restrictedCommunities={getRestricted()}
               title={m.event_modal_communities_title()}
               showSelectAll={true}
             />

@@ -16,8 +16,41 @@ import {
   filterEventsByAccess,
   getSectionNameForContentType,
   getDefaultCommunityTabs,
-  getCommunityTabs
+  getCommunityTabs,
+  VALID_CONTENT_VIEWS
 } from '$lib/helpers/contentTypes.js';
+import { load as loadCommunityPage } from '../../routes/c/[pubkey]/+page.js';
+
+describe('VALID_CONTENT_VIEWS (shared nav/page view set)', () => {
+  it("includes 'channels' so ?view=channels highlights the Kanäle nav item", () => {
+    // Regression: the layout once kept its own copy of this set that omitted
+    // 'channels', so ?view=channels rendered the channels content but left the
+    // nav highlighting Startseite.
+    expect(VALID_CONTENT_VIEWS.has('channels')).toBe(true);
+  });
+
+  it('validates all first-class community views', () => {
+    for (const v of ['home', 'chat', 'members', 'settings', 'channels']) {
+      expect(VALID_CONTENT_VIEWS.has(v)).toBe(true);
+    }
+  });
+
+  // The load fn only reads `url`; cast the partial event + void-able return so
+  // svelte-check is happy without constructing a full SvelteKit LoadEvent.
+  /** @param {string} view */
+  const runLoad = (view) =>
+    /** @type {Promise<{ contentView?: string }>} */ (
+      loadCommunityPage(/** @type {any} */ ({ url: new URL(`http://x/c/npub1abc?view=${view}`) }))
+    );
+
+  it('the page load resolves ?view=channels to contentView "channels"', async () => {
+    expect((await runLoad('channels')).contentView).toBe('channels');
+  });
+
+  it('the page load drops an unknown ?view=', async () => {
+    expect((await runLoad('bogus')).contentView).toBeUndefined();
+  });
+});
 
 describe('CONTENT_TYPE_CONFIG', () => {
   it('has entry for kind 30818 (wikis)', () => {
@@ -387,6 +420,35 @@ describe('getCommunityTabs', () => {
       ]
     };
     expect(getCommunityTabs(event)).toEqual(getDefaultCommunityTabs());
+  });
+
+  it('closed shell (concord, no sections) collapses to home + settings', () => {
+    const event = {
+      pubkey: 'f'.repeat(64),
+      tags: [
+        ['strict', 'content'],
+        ['concord', 'c'.repeat(64), 'wss://concord.example']
+      ]
+    };
+    expect(getCommunityTabs(event)).toEqual(['home', 'settings']);
+  });
+
+  it('Privat mit Schaufenster: window sections surface as tabs on a closed community', () => {
+    const PK = 'f'.repeat(64);
+    const event = {
+      pubkey: PK,
+      tags: [
+        ['strict', 'content'],
+        ['concord', 'c'.repeat(64), 'wss://concord.example'],
+        ['content', 'Learning'],
+        ['k', '30142'],
+        ['a', `30000:${PK}:publishers`, 'wss://r.example'],
+        ['content', 'Articles'],
+        ['k', '30023'],
+        ['a', `30000:${PK}:publishers`, 'wss://r.example']
+      ]
+    };
+    expect(getCommunityTabs(event)).toEqual(['home', 'articles', 'learning', 'settings']);
   });
 
   it('keeps only declared content tabs plus home and settings (strict)', () => {

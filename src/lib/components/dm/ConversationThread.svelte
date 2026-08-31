@@ -9,7 +9,6 @@
   import { getLegacyMessageParent } from 'applesauce-common/helpers/legacy-messages';
   import { getEncryptedContent } from 'applesauce-core/helpers/encrypted-content';
   import {
-    SendWrappedMessage,
     ReplyToWrappedMessage,
     SendLegacyMessage,
     ReplyToLegacyMessage
@@ -25,14 +24,15 @@
     normalizeLegacyMessage,
     looksLikeNip04Ciphertext
   } from '$lib/helpers/dm.js';
-  import { ensureDmRelayList } from '$lib/services/dm-relay-backfill.js';
   import { ensureRecipientDmRelays } from '$lib/services/dm-recipient-relays.js';
+  import { sendWrappedDm } from '$lib/services/wrapped-dm.js';
   import {
     formatMessageTimestamp,
     getUserDisplayName as getDisplayName,
     groupMessagesByDate
   } from '$lib/helpers/message-utils.js';
   import { showToast } from '$lib/helpers/toast.js';
+  import { getMutedPubkeys, muteUser, unmuteUser } from '$lib/stores/mute-list.svelte.js';
   import { swipeable } from '$lib/helpers/swipe.js';
   import NostrContentRenderer from '$lib/components/shared/NostrContentRenderer.svelte';
   import ProfileAvatar from '$lib/components/shared/ProfileAvatar.svelte';
@@ -253,20 +253,26 @@
           await actionRunnerOptimistic.run(SendLegacyMessage, correspondent, content);
         }
       } else {
-        // Backfill the sender's kind 10050 DM relay list if they predate the
-        // signup-time default, so replies can reach them.
-        await ensureDmRelayList();
-        // Ensure recipient DM relays are in the EventStore so the action can route
-        // the gift wrap per NIP-17 (the prefetch effect may not have settled yet).
-        await ensureRecipientDmRelays(participants.filter((p) => p !== user.pubkey));
+        // sendWrappedDm settles both relay lists first: ours so replies can
+        // reach us if we predate the signup-time default, and the recipients'
+        // so the action can route the gift wrap per NIP-17 (the prefetch effect
+        // may not have settled yet).
+        //
         // actionRunnerOptimistic returns as soon as the gift wrap is signed and
         // added to EventStore — WrappedMessagesGroup picks it up immediately via
         // the synchronous rumor symbol, giving the user instant feedback without
         // a parallel pending state. Relay publish runs in the background.
+        const recipients = participants.filter((p) => p !== user.pubkey);
         if (replyingTo) {
-          await actionRunnerOptimistic.run(ReplyToWrappedMessage, replyingTo, content);
+          await sendWrappedDm(recipients, content, {
+            action: ReplyToWrappedMessage,
+            args: [replyingTo, content]
+          });
         } else {
-          await actionRunnerOptimistic.run(SendWrappedMessage, participants, content);
+          // The action still gets the full participant list — a group wrap is
+          // addressed to everyone, including us — but only the others need a
+          // relay-list lookup.
+          await sendWrappedDm(recipients, content, { args: [participants, content] });
         }
       }
       replyingTo = null;
@@ -324,6 +330,23 @@
     const others = participants.filter((p) => p !== activeUser?.pubkey);
     return others[0] || participants[0];
   }
+
+  let blockError = $state(false);
+
+  /**
+   * Add or remove the correspondent from the NIP-51 mute list (kind 10000).
+   * @param {string} pubkey
+   * @param {boolean} blocked
+   */
+  async function toggleBlock(pubkey, blocked) {
+    blockError = false;
+    try {
+      await (blocked ? unmuteUser(pubkey) : muteUser(pubkey));
+    } catch (err) {
+      console.error('[dm] failed to update mute list:', err);
+      blockError = true;
+    }
+  }
 </script>
 
 <div class="flex h-full min-h-0 flex-col">
@@ -344,7 +367,7 @@
         showHoverCard
       />
     {/if}
-    <h3 class="truncate font-bold">
+    <h3 class="min-w-0 flex-1 truncate font-bold">
       {#if getHeaderPubkey()}
         <a href={resolve(profileLink(getHeaderPubkey() ?? ''))} class="hover:underline">
           {getHeaderName()}
@@ -353,7 +376,21 @@
         {getHeaderName()}
       {/if}
     </h3>
+    {#if getHeaderPubkey() && getHeaderPubkey() !== getActiveUser()?.pubkey}
+      {@const headerPubkey = getHeaderPubkey() ?? ''}
+      {@const blocked = getMutedPubkeys().has(headerPubkey)}
+      <button
+        class="btn shrink-0 btn-ghost btn-xs {blocked ? '' : 'text-error'}"
+        onclick={() => toggleBlock(headerPubkey, blocked)}
+      >
+        {blocked ? m.dm_unblock_sender() : m.dm_block_sender()}
+      </button>
+    {/if}
   </div>
+
+  {#if blockError}
+    <div class="px-4 py-2 text-sm text-error">{m.dm_block_failed()}</div>
+  {/if}
 
   <!-- Legacy (NIP-04) insecure notice -->
   {#if isLegacy}

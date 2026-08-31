@@ -1,7 +1,8 @@
 import { EKW_TAG_PREFIX, EKW_LEGACY_TAG_PREFIX } from './ekwNamespace.js';
 
 /**
- * Inverse of `formDataToEkwTags`. Reads an existing kind-30142 event and
+ * Inverse of the EKW facets `formDataToAmbExt.js` builds (emitted on the wire
+ * by `ambToNostr` from `amb.ext.ekw`). Reads an existing kind-30142 event and
  * extracts the EKW form-state fragment so wizard edit-mode can prefill.
  *
  * Reads both the canonical `ext:ekw:*` shape (new) and the legacy unprefixed

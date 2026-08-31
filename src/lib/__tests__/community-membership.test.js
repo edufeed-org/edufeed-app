@@ -1,0 +1,153 @@
+/** @vitest-environment node */
+// src/lib/__tests__/community-membership.test.js
+import { describe, it, expect } from 'vitest';
+import {
+  parseMembershipPointer,
+  buildMembershipTag,
+  withMembershipPointer,
+  withoutMembershipPointer,
+  withoutApplicationRef,
+  deriveCommunityType
+} from '$lib/groups/community-membership.js';
+
+const RELAY = 'wss://groups.example.com';
+const PK = 'a'.repeat(64);
+/** @param {string[][]} tags */
+const event = (tags) => ({ kind: 10222, pubkey: PK, tags });
+
+describe('parseMembershipPointer', () => {
+  it('parses a valid membership tag', () => {
+    expect(parseMembershipPointer(event([['membership', 'root1', RELAY]]))).toEqual({
+      id: 'root1',
+      relay: RELAY
+    });
+  });
+  it('returns null without a membership tag, without event, or without tags', () => {
+    expect(parseMembershipPointer(event([['r', RELAY]]))).toBeNull();
+    expect(parseMembershipPointer(null)).toBeNull();
+    expect(parseMembershipPointer({})).toBeNull();
+  });
+  it('skips tags with empty id or invalid relay (fail open, first valid wins)', () => {
+    expect(parseMembershipPointer(event([['membership', '', RELAY]]))).toBeNull();
+    expect(parseMembershipPointer(event([['membership', 'root1', 'not-a-url']]))).toBeNull();
+    expect(parseMembershipPointer(event([['membership', 'root1']]))).toBeNull();
+    expect(
+      parseMembershipPointer(
+        event([
+          ['membership', 'bad', 'http://x'],
+          ['membership', 'good', RELAY],
+          ['membership', 'second', RELAY]
+        ])
+      )
+    ).toEqual({ id: 'good', relay: RELAY });
+  });
+});
+
+describe('membership tag writers', () => {
+  it('builds the tag', () => {
+    expect(buildMembershipTag({ id: 'root1', relay: RELAY })).toEqual([
+      'membership',
+      'root1',
+      RELAY
+    ]);
+  });
+  it('withMembershipPointer replaces any existing membership tags (singular)', () => {
+    const tags = [
+      ['r', RELAY],
+      ['membership', 'old', RELAY],
+      ['membership', 'older', RELAY]
+    ];
+    const out = withMembershipPointer(tags, { id: 'new', relay: RELAY });
+    expect(out.filter((t) => t[0] === 'membership')).toEqual([['membership', 'new', RELAY]]);
+    expect(out).toContainEqual(['r', RELAY]);
+    expect(tags).toHaveLength(3); // input untouched
+  });
+  it('withoutMembershipPointer strips all membership tags, leaves siblings', () => {
+    const out = withoutMembershipPointer([
+      ['membership', 'x', RELAY],
+      ['group', 'chan', RELAY]
+    ]);
+    expect(out).toEqual([['group', 'chan', RELAY]]);
+  });
+  it('withoutMembershipPointer never throws on malformed tags; passes through null entries', () => {
+    const out = withoutMembershipPointer(/** @type {any} */ ([null, ['membership', 'x', RELAY]]));
+    expect(out).toEqual([null]);
+  });
+  it('withMembershipPointer never throws on malformed tags; removes membership and preserves nulls', () => {
+    const out = withMembershipPointer(/** @type {any} */ ([null, ['membership', 'old', RELAY]]), {
+      id: 'new',
+      relay: RELAY
+    });
+    expect(out).toContainEqual(null);
+    expect(out.filter((t) => Array.isArray(t) && t[0] === 'membership')).toEqual([
+      ['membership', 'new', RELAY]
+    ]);
+  });
+});
+
+describe('withoutApplicationRef (legacy-tag cleanup)', () => {
+  const ADDR = `30168:${PK}:edufeed-membership`;
+  // The application-form layer is gone (YAGNI, 2026-08-18) — this survives
+  // solely so flip-to-open strips legacy `application` tags.
+  it('strips application tags, leaves siblings', () => {
+    const out = withoutApplicationRef([
+      ['application', ADDR, RELAY],
+      ['d', 'x']
+    ]);
+    expect(out).toEqual([['d', 'x']]);
+  });
+  it('never throws on malformed tags; passes through null entries', () => {
+    const out = withoutApplicationRef(/** @type {any} */ ([null, ['application', ADDR, RELAY]]));
+    expect(out).toEqual([null]);
+  });
+});
+
+describe('deriveCommunityType', () => {
+  const CONCORD_ID = 'b'.repeat(64);
+  it('is open without pointers, for null, and for events without tags', () => {
+    expect(deriveCommunityType(event([['r', RELAY]]))).toBe('open');
+    expect(deriveCommunityType(null)).toBe('open');
+    expect(deriveCommunityType({})).toBe('open');
+  });
+  it('is moderated with a membership pointer', () => {
+    expect(deriveCommunityType(event([['membership', 'root1', RELAY]]))).toBe('moderated');
+  });
+  it('is closed with a concord pointer and no public content sections', () => {
+    expect(deriveCommunityType(event([['concord', CONCORD_ID, RELAY]]))).toBe('closed');
+  });
+  it('is OPEN with a concord pointer when public content sections exist (area-linked community)', () => {
+    // An ordinary community that links/founds a private area stays a normal
+    // community "mit privatem Bereich" — only the wizard's Geschlossen type
+    // (concord pointer, ZERO sections) gets the closed shell. Without this,
+    // the demote-confirm flow (which strips membership and writes concord)
+    // would turn an open community into a shell hiding its public sections.
+    expect(
+      deriveCommunityType(
+        event([
+          ['concord', CONCORD_ID, RELAY],
+          ['content', 'Chat'],
+          ['access', 'members']
+        ])
+      )
+    ).toBe('open');
+  });
+  it('falls back to open on XOR violation (both pointers)', () => {
+    expect(
+      deriveCommunityType(
+        event([
+          ['concord', CONCORD_ID, RELAY],
+          ['membership', 'root1', RELAY]
+        ])
+      )
+    ).toBe('open');
+  });
+  it('an invalid membership tag does not make the community moderated', () => {
+    expect(deriveCommunityType(event([['membership', 'root1', 'garbage']]))).toBe('open');
+  });
+  it('never throws on malformed tag entries (untrusted network input)', () => {
+    expect(deriveCommunityType({ tags: /** @type {any} */ ([null]) })).toBe('open');
+    expect(
+      deriveCommunityType({ tags: /** @type {any} */ ([null, ['concord', CONCORD_ID, RELAY]]) })
+    ).toBe('closed');
+  });
+});

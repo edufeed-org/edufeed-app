@@ -13,13 +13,23 @@
  * @returns {() => void} dismiss — removes the toast immediately
  */
 export function showToast(message, type = 'info', duration = 3000) {
-  // Determine where to append the toast container
-  // If a modal is open, append to the modal to ensure proper stacking
-  const openModal = document.querySelector('.modal-open');
-  const targetElement = openModal || document.body;
+  // Targeting (journey-test regression 2026-08-14 — "silent" error toasts):
+  // - An OPEN native <dialog> renders in the browser's top layer, which sits
+  //   above ALL z-indexed body content — a body-appended toast is invisible
+  //   behind it, so the toast must live inside the dialog itself.
+  // - CSS modals (.modal-open divs) are ordinary stacking contexts our
+  //   z-[9999] beats, and appending INSIDE them puts the toast at the mercy
+  //   of the modal's transform/overflow (which clipped it entirely) — so
+  //   those get the plain body toast.
+  const openDialogs = document.querySelectorAll('dialog[open]');
+  const targetElement = openDialogs[openDialogs.length - 1] || document.body;
 
-  // Create toast container if it doesn't exist, or get existing one
-  let toastContainer = targetElement.querySelector('.toast-container');
+  // Reuse only a container that is a DIRECT child of the target — a subtree
+  // querySelector can find a stale container hidden inside a closed modal
+  // and silently swallow every toast appended there.
+  let toastContainer = /** @type {HTMLElement | undefined} */ (
+    [...targetElement.children].find((el) => el.classList.contains('toast-container'))
+  );
 
   if (!toastContainer) {
     toastContainer = document.createElement('div');

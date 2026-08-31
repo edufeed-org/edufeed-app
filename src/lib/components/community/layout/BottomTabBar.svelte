@@ -15,7 +15,11 @@
     LockIcon,
     LockOpenIcon
   } from '$lib/components/icons';
-  import { getCommunityTabs } from '$lib/helpers/contentTypes.js';
+  import { useConcordCommunity } from '$lib/concord/community.svelte.js';
+  import { parseGroupPointers } from '$lib/groups/community-pointer.js';
+  import { communityNavTabIds } from './community-nav.js';
+  import { areaUnreadState } from '$lib/concord/notifications.svelte.js';
+  import ConcordUnreadDot from '$lib/components/shared/ConcordUnreadDot.svelte';
   import { onMount } from 'svelte';
   import * as m from '$lib/paraglide/messages';
 
@@ -26,6 +30,12 @@
     restrictedTabs = /** @type {Set<string>} */ (new Set()),
     accessibleTabs = /** @type {Set<string>} */ (new Set())
   } = $props();
+
+  const getConcord = useConcordCommunity(() => communityEvent);
+  // getConcord() isn't reachable in template scope here (the tab loop is a
+  // plain {#each}, not inside the $derived.by above), so compute the rollup
+  // flags at script level and read them from the template instead.
+  const concordAreaFlags = $derived(areaUnreadState(getConcord().pointer?.communityId));
 
   // Icon mapping for content types
   /** @type {Record<string, any>} */
@@ -41,7 +51,8 @@
     'social-bookmarks': BookmarkShareIcon,
     meet: MeetIcon,
     polls: PollIcon,
-    settings: SettingsIcon
+    settings: SettingsIcon,
+    channels: LockIcon
   };
 
   /** @type {Record<string, () => string>} */
@@ -57,7 +68,8 @@
     'social-bookmarks': () => m.community_layout_bottom_tab_bar_social_bookmarks(),
     meet: () => m.community_layout_bottom_tab_bar_meet(),
     polls: () => m.community_layout_bottom_tab_bar_polls(),
-    settings: () => m.community_layout_bottom_tab_bar_settings()
+    settings: () => m.community_layout_bottom_tab_bar_settings(),
+    channels: () => m.concord_tab_label()
   };
 
   // State for scroll indicators
@@ -65,13 +77,23 @@
   let showLeftScroll = $state(false);
   let showRightScroll = $state(false);
 
-  const contentTypes = $derived(
-    getCommunityTabs(communityEvent).map((id) => ({
+  const contentTypes = $derived.by(() => {
+    const concord = getConcord();
+    const ids = communityNavTabIds({
+      communityEvent,
+      concordEnabled: concord.enabled,
+      pointer: concord.pointer,
+      isMember: concord.membership === 'member',
+      // Second source for the same tab, and not Concord: a community
+      // extended by NIP-29 groups has none of the Concord inputs above.
+      hasGroupChannels: parseGroupPointers(communityEvent).length > 0
+    });
+    return ids.map((id) => ({
       id,
       label: tabLabelMap[id]?.() ?? id,
       icon: iconMap[id] ?? ChatIcon
-    }))
-  );
+    }));
+  });
 
   /**
    * Handle content type selection
@@ -196,6 +218,14 @@
                   {:else}
                     <LockIcon class_="w-2.5 h-2.5 opacity-60" />
                   {/if}
+                </span>
+              {/if}
+              {#if type.id === 'channels'}
+                <span class="absolute -top-1 -right-1.5">
+                  <ConcordUnreadDot
+                    unread={concordAreaFlags.unread}
+                    mentioned={concordAreaFlags.mentioned}
+                  />
                 </span>
               {/if}
             </span>

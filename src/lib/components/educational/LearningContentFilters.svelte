@@ -42,21 +42,26 @@
   let about = $state(/** @type {SelectedConcept[]} */ ([]));
   let audience = $state(/** @type {SelectedConcept[]} */ ([]));
 
-  // Ext-field state keyed by full ext path "30168:<pub>:<d>:<fieldId>"
+  // Ext-field state keyed "<ns>:<facet>" — the NIP-AMB grammar the events use.
   let extFields = $state(/** @type {Record<string, ExtFieldValue[]>} */ ({}));
 
   // Parse the form (if provided) to extract ext fields
   let parsedForm = $derived(form ? parseFormTemplate(form) : null);
-  let formPubkey = $derived(form?.pubkey || '');
   let extFieldDefs = $derived(
     parsedForm ? parsedForm.fields.filter((f) => f.output === 'ext') : []
   );
 
   /**
+   * Filter key for a form-driven ext field, matching what the write path
+   * serializes: `formValuesToAmbJson.js` puts the value at
+   * `amb.ext[form.dTag][field.id]`, which `ambToNostr` emits as the tag key
+   * `ext:<dTag>:<fieldId>`. Anything else produces a filter the relay cannot
+   * match — the kind and the author pubkey are not part of the grammar.
+   *
    * @param {import('$lib/helpers/forms.js').FormField} field
    */
   function extKeyFor(field) {
-    return `30168:${formPubkey}:${parsedForm?.dTag || ''}:${field.id}`;
+    return `${parsedForm?.dTag || ''}:${field.id}`;
   }
 
   // Get current locale

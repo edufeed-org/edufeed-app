@@ -9,9 +9,12 @@
   import { reactionsLoader } from '$lib/loaders/reactions.js';
   import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
   import { useActiveUser } from '$lib/stores/accounts.svelte.js';
-  import { aggregateReactions } from '$lib/helpers/reactions.js';
-  import ReactionButton from './ReactionButton.svelte';
-  import AddReactionButton from './AddReactionButton.svelte';
+  import { aggregateReactions, deleteReaction } from '$lib/helpers/reactions.js';
+  import { reactionsStore } from '$lib/stores/reactions.svelte.js';
+  import { showToast } from '$lib/helpers/toast.js';
+  import { runtimeConfig } from '$lib/stores/config.svelte.js';
+  import ReactionChips from './ReactionChips.svelte';
+  import * as m from '$lib/paraglide/messages';
 
   /** @type {{ event: any, relays?: string[], lazy?: boolean, addButtonOnHover?: boolean }} */
   let { event, relays, lazy = false, addButtonOnHover = false } = $props();
@@ -24,8 +27,6 @@
   let removeSubscription;
   /** @type {any[]} */
   let reactions = $state([]);
-  // Keeps the hover-gated add button revealed while its picker is open.
-  let pickerOpen = $state(false);
   // Map to track loaded reactions and prevent duplicates
   // Use regular Map - SvelteMap in subscription callbacks can cause effect_update_depth_exceeded
   let loadedReactions = new Map();
@@ -109,6 +110,34 @@
       loaderSubscription?.unsubscribe();
     };
   });
+
+  /**
+   * Toggle a reaction: delete the user's own reaction if they already reacted
+   * with this emoji, otherwise publish it. Moved here (was ReactionButton's
+   * internal default) so ReactionChips can stay a dumb presentational
+   * component shared with UrlReactionBar + concord's ChannelChat.
+   * @param {string} emoji
+   * @param {import('$lib/helpers/reactions.js').ReactionSummary} summary
+   */
+  function toggleReaction(emoji, summary) {
+    if (!getActiveUser()) return;
+
+    if (summary.userReacted && summary.userReactionEvent) {
+      deleteReaction(summary.userReactionEvent, { relays: runtimeConfig.fallbackRelays || [] })
+        .then(() => showToast(m.reactions_remove_success(), 'success'))
+        .catch((err) => {
+          console.error('ReactionBar: Failed to remove reaction:', err);
+          showToast(m.reactions_remove_error(), 'error');
+        });
+    } else {
+      reactionsStore.react(event, emoji);
+    }
+  }
+
+  /** @param {string | { shortcode: string, url: string }} emoji */
+  function handlePick(emoji) {
+    reactionsStore.react(event, emoji);
+  }
 </script>
 
 {#if event?.id}
@@ -117,31 +146,6 @@
     class="flex flex-wrap items-center gap-2 {addButtonOnHover ? '' : 'min-h-[32px]'}"
     data-testid="reaction-bar"
   >
-    <!-- Display reaction buttons -->
-    {#each Array.from(aggregated.entries()) as [emoji, summary] (emoji)}
-      <ReactionButton
-        {event}
-        {emoji}
-        count={summary.count}
-        userReacted={summary.userReacted}
-        userReactionEvent={summary.userReactionEvent}
-        emojiUrl={summary.emojiUrl}
-        reactors={summary.reactors}
-      />
-    {/each}
-
-    <!-- Add reaction button -->
-    {#if addButtonOnHover}
-      <span
-        class={pickerOpen
-          ? 'inline-flex'
-          : 'hidden group-focus-within:inline-flex group-hover:inline-flex'}
-        data-testid="add-reaction-wrapper"
-      >
-        <AddReactionButton {event} onOpenChange={(open) => (pickerOpen = open)} />
-      </span>
-    {:else}
-      <AddReactionButton {event} />
-    {/if}
+    <ReactionChips {aggregated} {addButtonOnHover} onToggle={toggleReaction} onPick={handlePick} />
   </div>
 {/if}

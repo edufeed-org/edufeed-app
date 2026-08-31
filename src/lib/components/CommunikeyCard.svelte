@@ -9,6 +9,7 @@
   import { useCommunityMembership } from '$lib/stores/joined-communities-list.svelte.js';
   import { useUserProfile } from '$lib/stores/user-profile.svelte.js';
   import { useActiveUser } from '$lib/stores/accounts.svelte';
+  import { useCommunityType } from '$lib/stores/community-type.svelte.js';
   import BookmarkIcon from '$lib/components/icons/social/BookmarkIcon.svelte';
   import { hexToNpub } from '$lib/helpers/nostrUtils';
   import { joinCommunity, leaveCommunity } from '$lib/helpers/community';
@@ -20,6 +21,9 @@
 
   // Use the reusable community membership hook
   const getJoined = useCommunityMembership(() => pubkey);
+
+  // Use the community type hook
+  const getCommunityType = useCommunityType(() => pubkey);
 
   // Get active user for authentication
   const getActiveUser = useActiveUser();
@@ -97,11 +101,30 @@
     />
   </figure>
   <div class="card-body w-full items-center p-0 text-center">
-    <h2
-      class="font-community mb-2 card-title text-xl font-semibold text-base-content transition-colors duration-300 hover:text-primary"
-    >
-      {getProfile()?.name || m.communikey_card_unknown_user()}
-    </h2>
+    <div class="flex items-center justify-center gap-2">
+      <h2
+        class="font-community card-title text-xl font-semibold text-base-content transition-colors duration-300 hover:text-primary"
+      >
+        {getProfile()?.name || m.communikey_card_unknown_user()}
+      </h2>
+      {#if getCommunityType() === 'moderated'}
+        <span
+          data-testid="community-type-badge"
+          class="text-lg"
+          title={`${m.community_type_moderated_title()} — ${m.community_type_moderated_body()}`}
+        >
+          🛡️
+        </span>
+      {:else if getCommunityType() === 'closed'}
+        <span
+          data-testid="community-type-badge"
+          class="text-lg"
+          title={`${m.community_type_closed_title()} — ${m.community_type_closed_body()}`}
+        >
+          🔒
+        </span>
+      {/if}
+    </div>
     <p
       class="relative w-full text-sm leading-relaxed text-base-content/70"
       style="display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; mask-image: linear-gradient(to bottom, black 0%, black 70%, transparent 100%); -webkit-mask-image: linear-gradient(to bottom, black 0%, black 70%, transparent 100%);"
@@ -110,7 +133,7 @@
       {getProfile()?.about || m.communikey_card_no_bio()}
     </p>
 
-    {#if showJoinButton && activeUser}
+    {#if showJoinButton && activeUser && getCommunityType() !== 'closed'}
       <button
         onclick={handleJoinClick}
         disabled={isJoining}

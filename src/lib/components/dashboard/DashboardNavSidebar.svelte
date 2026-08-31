@@ -7,15 +7,20 @@
     BellIcon,
     MessageSquareIcon,
     BookmarkIcon,
-    PeopleIcon
+    PeopleIcon,
+    LockIcon
   } from '$lib/components/icons';
   import { getTotalUnreadCount } from '$lib/services/inbox-service.svelte.js';
   import { getUnreadDmCount } from '$lib/services/dm-service.svelte.js';
+  import { getPendingInviteCount } from '$lib/concord/pending-invites.svelte.js';
   import { getDashboardActiveSection } from '$lib/helpers/dashboardNavigation.js';
+  import { appSettings } from '$lib/stores/app-settings.svelte.js';
+  import { runtimeConfig } from '$lib/stores/config.svelte.js';
+  import { parseCordnGroupsConfig } from '$lib/cordn';
 
   import * as m from '$lib/paraglide/messages';
 
-  const sections = [
+  const baseSections = [
     { id: 'home', href: resolve('/c/'), icon: HomeIcon, label: () => m.dashboard_nav_home() },
     {
       id: 'feed',
@@ -49,6 +54,22 @@
     }
   ];
 
+  // «Gruppen» is deployment-gated (CORDN_GROUPS_ENABLED) AND per-user opt-in
+  // (settings toggle) — inserted right after Nachrichten, its IA peer.
+  const sections = $derived.by(() => {
+    const enabled =
+      parseCordnGroupsConfig(runtimeConfig.cordnGroups).enabled && appSettings.cordnGroupsEnabled;
+    if (!enabled) return baseSections;
+    const withGroups = [...baseSections];
+    withGroups.splice(withGroups.findIndex((s) => s.id === 'messages') + 1, 0, {
+      id: 'groups',
+      href: resolve('/c/groups'),
+      icon: LockIcon,
+      label: () => m.dashboard_nav_groups()
+    });
+    return withGroups;
+  });
+
   let activeSection = $derived(
     getDashboardActiveSection($page.url.pathname, $page.url.searchParams)
   );
@@ -81,6 +102,13 @@
               class="absolute -top-1.5 -right-2 badge h-4 min-w-4 badge-sm text-[10px] badge-secondary"
             >
               {getUnreadDmCount() > 99 ? '99+' : getUnreadDmCount()}
+            </span>
+          {:else if section.id === 'communities' && getPendingInviteCount() > 0}
+            <span
+              class="absolute -top-1.5 -right-2 badge h-4 min-w-4 badge-sm text-[10px] badge-secondary"
+              data-testid="communities-invite-badge"
+            >
+              {getPendingInviteCount() > 99 ? '99+' : getPendingInviteCount()}
             </span>
           {/if}
         </span>

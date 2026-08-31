@@ -94,4 +94,53 @@ describe('FieldsRenderer', () => {
     expect(getByText('My Label')).toBeTruthy();
     expect(getByText('*')).toBeTruthy();
   });
+
+  it('renders option objects and emits optionIds', async () => {
+    const field = {
+      id: 'color',
+      type: 'radio',
+      label: 'Colour',
+      options: {
+        options: [
+          { id: 'red', label: 'Rot' },
+          { id: 'blue', label: 'Blau' }
+        ]
+      }
+    };
+    const onchange = vi.fn();
+    const { getByText, getByDisplayValue } = render(FieldsRenderer, {
+      fields: [field],
+      values: {},
+      errors: {},
+      onchange
+    });
+    // labels are shown, ids are emitted
+    expect(getByText('Rot')).toBeTruthy();
+    await fireEvent.click(getByDisplayValue('red'));
+    expect(onchange).toHaveBeenCalledWith('color', 'red');
+  });
+
+  it('joins multi-select values with semicolons', async () => {
+    const field = {
+      id: 'topics',
+      type: 'select',
+      label: 'Topics',
+      options: {
+        multiple: true,
+        options: [
+          { id: 'a', label: 'Alpha' },
+          { id: 'b', label: 'Beta' }
+        ]
+      }
+    };
+    const onchange = vi.fn();
+    const { getByDisplayValue } = render(FieldsRenderer, {
+      fields: [field],
+      values: { topics: 'a' },
+      errors: {},
+      onchange
+    });
+    await fireEvent.click(getByDisplayValue('b'));
+    expect(onchange).toHaveBeenCalledWith('topics', 'a;b');
+  });
 });

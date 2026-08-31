@@ -8,8 +8,25 @@ body {
 
 /* Layout */
 :root {
-  --sidebar-icon-w: 4rem;
+  /* Icon rail must fit a 48px avatar + active ring (ring-2 + offset-2 = 56px)
+     with breathing room on both sides — 64px clipped the ring (design page
+     "Rail Fix" in the edufeed-comenius project). */
+  --sidebar-icon-w: 4.75rem;
   --sidebar-nav-w: 15rem;
+  /* Shared first-row band for the three columns of the community chrome row:
+     the icon rail, the community sidebar header and the main hero all centre
+     their first row on this height, so their avatars sit on one axis. 5rem is
+     what the rail already spans (py-4 + h-12 button). */
+  --community-header-h: 5rem;
+}
+
+/* Hidden-but-scrollable (Discord icon-rail pattern): wheel/touch scrolling
+   keeps working, no scrollbar eats into the fixed-width rail. */
+.scrollbar-none {
+  scrollbar-width: none;
+}
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
 }
 
 @plugin '@tailwindcss/typography';
@@ -269,6 +286,7 @@ body {
 
   --ct-calendar: oklch(52% 0.12 12);
   --ct-learning: oklch(50% 0.1 140);
+  --ct-interactive: oklch(52% 0.12 330);
   --ct-article: oklch(58% 0.12 64);
   --ct-wiki: oklch(52% 0.07 200);
   --ct-form: oklch(52% 0.12 300);

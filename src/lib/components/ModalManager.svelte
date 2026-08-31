@@ -14,7 +14,6 @@
   import CalendarCreationModal from './calendar/CalendarCreationModal.svelte';
   import CalendarEventModal from './calendar/CalendarEventModal.svelte';
   import CreateCommunityModal from './CreateCommunityModal.svelte';
-  import EditCommunityModal from './EditCommunityModal.svelte';
   import WebcalQRCodeModal from './calendar/WebcalQRCodeModal.svelte';
   import EditProfileModal from './EditProfileModal.svelte';
   import CommunityMigrationModal from './CommunityMigrationModal.svelte';
@@ -27,6 +26,8 @@
   import NoteCreateModal from './notes/NoteCreateModal.svelte';
   import RecoveryDownloadModal from './RecoveryDownloadModal.svelte';
   import DeleteCommunityModal from './community/DeleteCommunityModal.svelte';
+  import MembershipApplyModal from './membership/MembershipApplyModal.svelte';
+  import InviteInboxModal from './community/channels/InviteInboxModal.svelte';
 
   /**
    * ModalManager - Centralized modal rendering component
@@ -53,7 +54,6 @@
   const googleLoginModalId = 'global-google-login-modal';
   const signupModalId = 'global-signup-modal';
   const createCommunityModalId = 'create-community-modal';
-  const editCommunityModalId = 'edit-community-modal';
   const editProfileModalId = 'edit-profile-modal';
   const communityMigrationModalId = 'community-migration-modal';
   const addBookmarkModalId = 'add-bookmark-modal';
@@ -79,9 +79,6 @@
       const signupModal = /** @type {HTMLDialogElement} */ (document.getElementById(signupModalId));
       const createCommunityModal = /** @type {HTMLDialogElement} */ (
         document.getElementById(createCommunityModalId)
-      );
-      const editCommunityModal = /** @type {HTMLDialogElement} */ (
-        document.getElementById(editCommunityModalId)
       );
       const editProfileModal = /** @type {HTMLDialogElement} */ (
         document.getElementById(editProfileModalId)
@@ -114,9 +111,6 @@
       }
       if (createCommunityModal && createCommunityModal.open) {
         createCommunityModal.close();
-      }
-      if (editCommunityModal && editCommunityModal.open) {
-        editCommunityModal.close();
       }
       if (editProfileModal && editProfileModal.open) {
         editProfileModal.close();
@@ -218,14 +212,6 @@
       if (editProfileModal && !editProfileModal.open) {
         editProfileModal.showModal();
       }
-    } else if (currentModal === 'editCommunity') {
-      // Open edit community modal
-      const editCommunityModal = /** @type {HTMLDialogElement} */ (
-        document.getElementById(editCommunityModalId)
-      );
-      if (editCommunityModal && !editCommunityModal.open) {
-        editCommunityModal.showModal();
-      }
     } else if (currentModal === 'communityMigration') {
       // Open community migration modal
       const communityMigrationModal = /** @type {HTMLDialogElement} */ (
@@ -288,11 +274,16 @@
   }
 
   /**
-   * Handle successful account creation from LoginWithPrivateKey
-   * Transitions back to login modal to show account options or close flow
+   * Handle a finished login flow (private key / bunker / npub).
+   *
+   * These fire once the sub-modal has closed its own <dialog>, so the login
+   * flow is over and the whole stack must go away. Transitioning back to
+   * 'login' here (the previous behaviour) re-opened the login modal on top of
+   * the freshly authenticated app — the user appeared to be logged in but was
+   * still staring at the login dialog.
    */
   function handleAccountCreated() {
-    modal.transitionModal('privateKey', 'login');
+    modal.closeModal();
   }
 
   function handleBunkerTransition() {
@@ -304,7 +295,7 @@
   }
 
   function handleBunkerAccountCreated() {
-    modal.transitionModal('bunker', 'login');
+    modal.closeModal();
   }
 
   function handleNpubTransition() {
@@ -312,7 +303,7 @@
   }
 
   function handleNpubAccountCreated() {
-    modal.transitionModal('npubLogin', 'login');
+    modal.closeModal();
   }
 
   function handleGoogleTransition() {
@@ -366,8 +357,6 @@
   <CalendarEventDetailsModal />
 {:else if modal.activeModal === 'createCommunity'}
   <CreateCommunityModal modalId={createCommunityModalId} />
-{:else if modal.activeModal === 'editCommunity'}
-  <EditCommunityModal modalId={editCommunityModalId} />
 {:else if modal.activeModal === 'webcalQRCode'}
   <WebcalQRCodeModal />
 {:else if modal.activeModal === 'profile'}
@@ -396,6 +385,9 @@
   <RecoveryDownloadModal modalId={recoveryDownloadModalId} />
 {:else if modal.activeModal === 'deleteCommunity'}
   <DeleteCommunityModal modalId={deleteCommunityModalId} />
+{:else if modal.activeModal === 'membershipApply'}
+  <!-- CSS-only modal (no <dialog>.showModal()), so no id/effect plumbing needed -->
+  <MembershipApplyModal />
 {:else if modal.activeModal === 'resourceVariantPicker'}
   <!-- CSS-only modal (no <dialog>.showModal()), so no id/effect plumbing needed -->
   <ResourceVariantPickerModal
@@ -403,4 +395,7 @@
     onSelect={handleResourceVariantSelect}
     onClose={() => modal.closeModal()}
   />
+{:else if modal.activeModal === 'concordInvites'}
+  <!-- CSS-only modal (no <dialog>.showModal()), so no id/effect plumbing needed -->
+  <InviteInboxModal onClose={() => modal.closeModal()} />
 {/if}

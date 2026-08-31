@@ -4,6 +4,7 @@
   import { getNotificationType, getNotificationUrl } from '$lib/helpers/inbox.js';
   import { profileLink } from '$lib/helpers/nostrUtils.js';
   import { markItemAsRead } from '$lib/services/inbox-service.svelte.js';
+  import { muteUser } from '$lib/stores/mute-list.svelte.js';
   import { publishWave } from '$lib/helpers/waves.js';
   import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
   import { showToast } from '$lib/helpers/toast';
@@ -44,6 +45,7 @@
     wave: BellIcon,
     reaction: HeartIcon,
     comment: ChatIcon,
+    reply: ChatIcon,
     mention: BellIcon,
     rsvp: CalendarIcon,
     pollVote: PollIcon
@@ -84,6 +86,27 @@
         console.error('Failed to wave back:', err);
         wavedBack = false;
         showToast(m.wave_error(), 'error');
+      });
+  }
+
+  let blocking = $state(false);
+
+  /**
+   * Mute the notification's author (NIP-51 kind 10000). The inbox filter
+   * reacts to the mute list, so all of this author's rows disappear at once.
+   * @param {MouseEvent} e
+   */
+  function handleBlock(e) {
+    e.stopPropagation();
+    e.preventDefault();
+    if (blocking) return;
+    blocking = true;
+    muteUser(event.pubkey)
+      .then(() => showToast(m.inbox_block_success({ name: displayName }), 'success'))
+      .catch((err) => {
+        console.error('Failed to mute sender:', err);
+        blocking = false;
+        showToast(m.dm_block_failed(), 'error');
       });
   }
 
@@ -149,15 +172,20 @@
         &nbsp;{m.inbox_action_reaction({ contentTitle })}
       {:else if type === 'comment'}
         &nbsp;{m.inbox_action_comment({ contentTitle })}
+      {:else if type === 'reply'}
+        &nbsp;{m.inbox_action_reply()}
       {:else if type === 'mention'}
-        &nbsp;{m.inbox_action_mention({ communityName: contentTitle })}
+        <!-- kind 9 mentions happen inside a community, kind 1 mentions do not -->
+        &nbsp;{event.kind === 1
+          ? m.inbox_action_note_mention()
+          : m.inbox_action_mention({ communityName: contentTitle })}
       {:else if type === 'rsvp'}
         &nbsp;{m.inbox_action_rsvp({ eventTitle: contentTitle })}
       {:else if type === 'pollVote'}
         &nbsp;{m.inbox_action_poll_vote()}
       {/if}
     </div>
-    <div class="mt-0.5 flex items-center gap-2">
+    <div class="group mt-0.5 flex items-center gap-2">
       <span class="text-xs text-base-content/50">{formatTime(event.created_at)}</span>
       {#if type === 'wave'}
         <button
@@ -167,6 +195,14 @@
           👋 {wavedBack ? m.wave_success() : m.wave_back_button()}
         </button>
       {/if}
+      <button
+        class="btn text-base-content/40 btn-ghost btn-xs hover:text-error"
+        title={m.dm_block_sender()}
+        disabled={blocking}
+        onclick={handleBlock}
+      >
+        {m.dm_block_sender()}
+      </button>
     </div>
   </div>
   {#if unread}

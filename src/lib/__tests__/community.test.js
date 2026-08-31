@@ -201,6 +201,24 @@ describe('ensureFollowSetExists', () => {
     expect(mockPublishEvent).toHaveBeenCalledWith(SIGNED_FOLLOW_SET);
   });
 
+  it('back-dates the bootstrap so a same-second follow update wins the replaceable tie-break', async () => {
+    // joinCommunity runs bootstrap + AddUserToFollowSet within the same
+    // second. NIP-01 (and applesauce's EventStore) resolve equal-created_at
+    // replaceables by LOWEST id — a coin flip that silently kept the empty
+    // bootstrap over the actual follow half the time (journey-test bug #9:
+    // "Community folgen" never flips in-session). Back-dating the bootstrap
+    // by one second makes any subsequent update strictly newer.
+    mockGetReplaceable.mockReturnValue(undefined);
+
+    await ensureFollowSetExists();
+
+    expect(mockSign).toHaveBeenCalledOnce();
+    const template = mockSign.mock.calls[0][0];
+    const now = Math.floor(Date.now() / 1000);
+    expect(template.created_at).toBeLessThanOrEqual(now - 1);
+    expect(template.created_at).toBeGreaterThan(now - 10);
+  });
+
   it('inserts the signed event into EventStore before kicking off the publish', async () => {
     // Order matters — actionRunnerOptimistic.run, called next by joinCommunity,
     // must be able to read the freshly-added follow set synchronously.

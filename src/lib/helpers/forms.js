@@ -2,6 +2,26 @@ import { nip19 } from 'nostr-tools';
 import * as m from '$lib/paraglide/messages';
 import { createAppEventFactory } from '$lib/helpers/event-factory.js';
 
+export {
+  FORM_TEMPLATE_KIND,
+  FORM_RESPONSE_KIND,
+  buildFormTemplateTags,
+  parseFormTemplate,
+  generateFieldId,
+  generateOptionId
+} from './forms/format.js';
+export {
+  nip44EncryptWith,
+  nip44DecryptWith,
+  signerHasNip44,
+  signerCanNip44Encrypt
+} from './forms/crypto.js';
+import { FORM_TEMPLATE_KIND, FORM_RESPONSE_KIND, buildFormTemplateTags } from './forms/format.js';
+import { signerHasNip44 } from './forms/crypto.js';
+
+/** @typedef {import('./forms/format.js').FormField} FormField */
+/** @typedef {import('./forms/format.js').FormFieldOption} FormFieldOption */
+
 /**
  * Find kind 30000 events that link to a specific form via ['form', formAddress] tag.
  * @param {import('nostr-tools').NostrEvent[]} profileListEvents
@@ -19,158 +39,6 @@ export function findLinkedProfileLists(profileListEvents, formAddress) {
 
 /** Kind for form request events (peer-to-peer form sending) */
 export const FORM_REQUEST_KIND = 1070;
-
-/**
- * @typedef {Object} FormField
- * @property {string} id
- * @property {string} type - text|textarea|number|email|url|select|checkbox|radio|date|text-array
- * @property {string} label
- * @property {string} [defaultValue]
- * @property {Record<string, any>} [options] - { required, min, max, options, placeholder }
- * @property {{ address: string, relay: string }} [vocab] - kind-39737 ConceptScheme binding
- * @property {string} [output] - 'amb:<property>' or 'ext'. Defaults to 'amb:<id>' at parse time.
- */
-
-/**
- * @typedef {Object} ParsedFormTemplate
- * @property {string} dTag
- * @property {string} name
- * @property {string} description
- * @property {FormField[]} fields
- * @property {boolean} isPublic
- * @property {string} confirmationMessage
- * @property {boolean} autoResponse
- * @property {{ address: string, relay: string }} [forkOf] - parent form this one was forked from
- */
-
-/**
- * Build tags for a form template event (kind 30168).
- * @param {string} dTag
- * @param {FormField[]} fields
- * @param {{ name?: string, description?: string, public?: boolean, confirmationMessage?: string, autoResponse?: boolean, forkOf?: { address: string, relay: string } }} options
- * @returns {string[][]}
- */
-export function buildFormTemplateTags(dTag, fields, options = {}) {
-  /** @type {string[][]} */
-  const tags = [['d', dTag]];
-
-  if (options.name) tags.push(['name', options.name]);
-  if (options.description) tags.push(['description', options.description]);
-  if (options.forkOf?.address) {
-    tags.push(['a', options.forkOf.address, options.forkOf.relay || '', 'forkOf']);
-  }
-
-  for (const field of fields) {
-    tags.push([
-      'field',
-      field.id,
-      field.type,
-      field.label,
-      field.defaultValue || '',
-      JSON.stringify(field.options || {})
-    ]);
-    if (field.vocab) {
-      tags.push(['field-vocab', field.id, 'a', field.vocab.address, field.vocab.relay]);
-    }
-    if (field.output) {
-      tags.push(['field-output', field.id, field.output]);
-    }
-  }
-
-  if (options.public) tags.push(['public']);
-  if (options.confirmationMessage) tags.push(['confirmation_message', options.confirmationMessage]);
-  if (options.autoResponse) tags.push(['auto_response', 'true']);
-
-  return tags;
-}
-
-/**
- * Parse a form template event into structured data.
- * @param {{ kind: number, pubkey: string, tags: string[][], content: string, created_at: number }} event
- * @returns {ParsedFormTemplate}
- */
-export function parseFormTemplate(event) {
-  const tags = event.tags || [];
-
-  const dTag = tags.find((t) => t[0] === 'd')?.[1] || '';
-  const name = tags.find((t) => t[0] === 'name')?.[1] || '';
-  const description = tags.find((t) => t[0] === 'description')?.[1] || '';
-  const isPublic = tags.some((t) => t[0] === 'public');
-  const confirmationMessage = tags.find((t) => t[0] === 'confirmation_message')?.[1] || '';
-  const autoResponse = tags.find((t) => t[0] === 'auto_response')?.[1] === 'true';
-
-  /** @type {FormField[]} */
-  const fields = tags
-    .filter((t) => t[0] === 'field' && t.length >= 4)
-    .map((t) => {
-      let options = {};
-      try {
-        options = t[5] ? JSON.parse(t[5]) : {};
-      } catch {
-        options = {};
-      }
-      return {
-        id: t[1],
-        type: t[2],
-        label: t[3],
-        defaultValue: t[4] || '',
-        options
-      };
-    });
-
-  // Attach first field-vocab per field
-  for (const field of fields) {
-    const vt = tags.find((t) => t[0] === 'field-vocab' && t[1] === field.id && t[2] === 'a');
-    if (vt) field.vocab = { address: vt[3], relay: vt[4] || '' };
-  }
-
-  // Attach first field-output per field; default to amb:<id>
-  for (const field of fields) {
-    const ot = tags.find((t) => t[0] === 'field-output' && t[1] === field.id);
-    field.output = ot?.[2] || `amb:${field.id}`;
-  }
-
-  // Fork provenance: first ["a", "30168:...", relay, "forkOf"] wins
-  const forkTag = tags.find((t) => t[0] === 'a' && t[3] === 'forkOf' && t[1]?.startsWith('30168:'));
-  const forkOf = forkTag ? { address: forkTag[1], relay: forkTag[2] || '' } : undefined;
-
-  return {
-    dTag,
-    name,
-    description,
-    fields,
-    isPublic,
-    confirmationMessage,
-    autoResponse,
-    forkOf
-  };
-}
-
-/**
- * Generate a unique field ID from a label.
- * @param {string} label
- * @param {string[]} existingIds
- * @returns {string}
- */
-export function generateFieldId(label, existingIds) {
-  let base = label
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-|-$/g, '');
-
-  const isFallback = !base;
-  if (!base) base = 'field';
-
-  if (!isFallback) {
-    if (!existingIds.includes(base)) return base;
-  }
-
-  let suffix = isFallback ? 1 : 2;
-  while (existingIds.includes(`${base}-${suffix}`)) {
-    suffix++;
-  }
-  return `${base}-${suffix}`;
-}
 
 /**
  * Validate a field value against its constraints.
@@ -253,7 +121,7 @@ export function validateField(field, value) {
  * @returns {string[][]}
  */
 export function buildResponseTags(values) {
-  return Object.entries(values).map(([id, value]) => ['response', id, value]);
+  return Object.entries(values).map(([id, value]) => ['response', id, String(value ?? ''), '{}']);
 }
 
 /**
@@ -315,52 +183,10 @@ export function decodeFormNaddr(naddrStr) {
   return { pubkey, identifier, relays: relays || [] };
 }
 
-/** Kind for form template events */
-export const FORM_TEMPLATE_KIND = 30168;
-
 /**
- * Returns the default membership form definition using current locale i18n messages.
- * @returns {{ dTag: string, name: string, fields: FormField[] }}
- */
-export function getDefaultMembershipForm() {
-  return {
-    dTag: 'membership',
-    name: m.default_form_name(),
-    fields: [
-      { id: 'name', type: 'text', label: m.default_form_field_name(), options: { required: true } },
-      {
-        id: 'email',
-        type: 'email',
-        label: m.default_form_field_email(),
-        options: { required: true }
-      },
-      {
-        id: 'motivation',
-        type: 'textarea',
-        label: m.default_form_field_motivation(),
-        options: { required: true }
-      }
-    ]
-  };
-}
-
-/**
- * Create and sign a default membership form template event (kind 30168).
- * @param {import('applesauce-signers').ISigner} signer
- * @returns {Promise<import('nostr-tools').NostrEvent>}
- */
-export async function createDefaultMembershipForm(signer) {
-  const { dTag, name, fields } = getDefaultMembershipForm();
-  const tags = buildFormTemplateTags(dTag, fields, { name });
-  const factory = createAppEventFactory({ signer });
-  const template = await factory.build({ kind: FORM_TEMPLATE_KIND, tags, content: '' });
-  return factory.sign(template);
-}
-
-/**
- * Returns the edufeed.org membership application form definition.
- * Separate from getDefaultMembershipForm() because that one is used by
- * per-community join templates (EditCommunityModal/CreateCommunityModal).
+ * Returns the edufeed.org membership application form definition (the
+ * deployment's NIP-05 handle application — unrelated to the removed
+ * per-community Beitrittsformular layer).
  * @returns {{ dTag: string, name: string, fields: FormField[] }}
  */
 export function getEdufeedMembershipForm() {
@@ -429,7 +255,7 @@ export async function createEdufeedMembershipForm(signer) {
  * @returns {{ kinds: number[], authors: string[], '#a': string[] }}
  */
 export function buildUserResponseFilter(formAddress, userPubkey) {
-  return { kinds: [1069], authors: [userPubkey], '#a': [formAddress] };
+  return { kinds: [FORM_RESPONSE_KIND], authors: [userPubkey], '#a': [formAddress] };
 }
 
 /**
@@ -454,6 +280,37 @@ export function parseFormRequestMessage(content) {
   } catch {
     return '';
   }
+}
+
+/**
+ * Ordered list of signers to try when decrypting a (legacy) form response.
+ * Legacy kind-1069 responses are NIP-44 encrypted to the form author — i.e.
+ * the community's own pubkey. The active account can decrypt them directly
+ * when it IS the community, but a separate-keypair owner (personal account
+ * logged in, community key merely imported/held) cannot: their personal
+ * signer isn't the intended counterparty. Retry with whichever signer the
+ * manager holds for the community's own pubkey in that case — but only if
+ * it actually supports NIP-44 decrypt, since getCommunitySigner has no such
+ * guarantee and calling nip44DecryptWith on one that lacks it would just
+ * replace one failure with a less useful one.
+ * @param {any} activeSigner - manager.active?.signer, or undefined
+ * @param {string} formAuthorPubkey - the form template event's pubkey
+ * @param {(pubkey: string) => any} getCommunitySignerFn - e.g. getCommunitySigner from community-signer.js
+ * @returns {any[]} candidate signers, in try-order, deduped
+ */
+export function resolveFormResponseDecryptSigners(
+  activeSigner,
+  formAuthorPubkey,
+  getCommunitySignerFn
+) {
+  /** @type {any[]} */
+  const signers = [];
+  if (activeSigner) signers.push(activeSigner);
+  const communitySigner = getCommunitySignerFn(formAuthorPubkey);
+  if (communitySigner && communitySigner !== activeSigner && signerHasNip44(communitySigner)) {
+    signers.push(communitySigner);
+  }
+  return signers;
 }
 
 /**

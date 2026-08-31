@@ -70,7 +70,7 @@ describe('buildExtensionSections', () => {
     expect(grade?.label).toMatch(/Grade Level|Klassenstufe/i);
     const method = sections[0].facets.find((f) => f.facetName === 'methodOther');
     expect(method?.label).toMatch(/Method \(Free-text\)|Methode \(Freitext\)/i);
-    expect(method?.items).toEqual(['Freie Methode A', 'Freie Methode B']);
+    expect(method?.scalars).toEqual(['Freie Methode A', 'Freie Methode B']);
   });
 
   it('treats legacy ekw:* tags identically (regression)', () => {
@@ -95,13 +95,16 @@ describe('buildExtensionSections', () => {
   it('uses the form authors field labels when a 30168 form event is supplied', () => {
     const formPubkey = 'b'.repeat(64);
     const formDTag = 'my-form';
-    const ns = `30168:${formPubkey}:${formDTag}`;
+    const coord = `30168:${formPubkey}:${formDTag}`;
+    // Per the NIP-AMB grammar, form-emitted ext keys use the form's bare
+    // `d`-tag as <ns> — colon-free, no pubkey. The pubkey is discoverable only
+    // via the `a` back-ref below.
     const event = {
       tags: [
-        ['a', ns, 'wss://relay.example', 'form'],
-        [`ext:${ns}:kompetenzen:id`, 'https://example.org/komp/arg'],
-        [`ext:${ns}:kompetenzen:prefLabel:de`, 'Argumentieren'],
-        [`ext:${ns}:kompetenzen:type`, 'Concept']
+        ['a', coord, 'wss://relay.example', 'form'],
+        [`ext:${formDTag}:kompetenzen:id`, 'https://example.org/komp/arg'],
+        [`ext:${formDTag}:kompetenzen:prefLabel:de`, 'Argumentieren'],
+        [`ext:${formDTag}:kompetenzen:type`, 'Concept']
       ]
     };
     const formEvent = {
@@ -120,11 +123,11 @@ describe('buildExtensionSections', () => {
 
   it('resolves registered Konfi labels via EXTENSION_NAMESPACE_LABELS', () => {
     const sections = sectionsFrom([
-      ['ext:ekw:konfi:zielgruppen:id', 'urn:ku3'],
-      ['ext:ekw:konfi:zielgruppen:prefLabel:de', 'KU3'],
-      ['ext:ekw:konfi:zielgruppen:type', 'Concept'],
-      ['ext:ekw:konfi:subtitle', 'Eine Einheit zur Taufe'],
-      ['ext:ekw:konfi:plainLanguage', 'true']
+      ['ext:org.edufeed.ekw.konfi:zielgruppen:id', 'urn:ku3'],
+      ['ext:org.edufeed.ekw.konfi:zielgruppen:prefLabel:de', 'KU3'],
+      ['ext:org.edufeed.ekw.konfi:zielgruppen:type', 'Concept'],
+      ['ext:org.edufeed.ekw.konfi:subtitle', 'Eine Einheit zur Taufe'],
+      ['ext:org.edufeed.ekw.konfi:plainLanguage', 'true']
     ]);
     expect(sections[0].sectionLabel).toMatch(/Konfi-Arbeit-Metadaten|Confirmation Work Metadata/i);
     const zg = sections[0].facets.find((f) => f.facetName === 'zielgruppen');
@@ -154,12 +157,12 @@ describe('buildExtensionCards', () => {
   });
 
   it('renders a boolean-true facet as a checkmark card and hides boolean-false', () => {
-    const trueCards = cardsFrom([['ext:ekw:konfi:plainLanguage', 'true']]);
+    const trueCards = cardsFrom([['ext:org.edufeed.ekw.konfi:plainLanguage', 'true']]);
     const flag = trueCards.find((c) => c.key.endsWith(':plainLanguage'));
     expect(flag?.iconKey).toBe('check');
     expect(flag?.value).toBe('✓');
 
-    const falseCards = cardsFrom([['ext:ekw:konfi:plainLanguage', 'false']]);
+    const falseCards = cardsFrom([['ext:org.edufeed.ekw.konfi:plainLanguage', 'false']]);
     expect(falseCards.find((c) => c.key.endsWith(':plainLanguage'))).toBeUndefined();
   });
 
@@ -170,5 +173,37 @@ describe('buildExtensionCards', () => {
       ['ext:ekw:schoolType:type', 'Concept']
     ]);
     expect(cards[0].wide).toBe(true);
+  });
+
+  it('renders BOTH halves of a mixed facet on one card (vocab picks + custom value)', () => {
+    // The Konfi `allowCustom` shape. The custom value used to vanish here
+    // because the facet was locked to `concept` by the leading `:id` tag.
+    const NS = 'org.edufeed.ekw.konfi';
+    const cards = cardsFrom([
+      [`ext:${NS}:zeitstruktur:id`, 'urn:doppelstunde'],
+      [`ext:${NS}:zeitstruktur:prefLabel:de`, 'Doppelstunde'],
+      [`ext:${NS}:zeitstruktur:type`, 'Concept'],
+      [`ext:${NS}:zeitstruktur`, '2 x 90 Min.']
+    ]);
+
+    const card = cards.find((c) => c.key.endsWith(':zeitstruktur'));
+    expect(card).toBeDefined();
+    expect(card?.scalars?.map((s) => s.text)).toEqual(['Doppelstunde', '2 x 90 Min.']);
+  });
+
+  it('does not classify a mixed facet as a boolean flag', () => {
+    // A single 'true' scalar alongside concepts is not a boolean flag — the
+    // concepts would be thrown away with it.
+    const NS = 'org.edufeed.ekw.konfi';
+    const cards = cardsFrom([
+      [`ext:${NS}:lernformat:id`, 'urn:x'],
+      [`ext:${NS}:lernformat:prefLabel:de`, 'Freizeit'],
+      [`ext:${NS}:lernformat:type`, 'Concept'],
+      [`ext:${NS}:lernformat`, 'true']
+    ]);
+
+    const card = cards.find((c) => c.key.endsWith(':lernformat'));
+    expect(card?.value).not.toBe('✓');
+    expect(card?.scalars?.map((s) => s.text)).toEqual(['Freizeit', 'true']);
   });
 });

@@ -2,7 +2,39 @@
  * Content type configuration for community features
  * Maps event kinds to UI metadata and implementation status
  */
-import { parseCommunityContentTypes, hasStrictContentMarker } from './communityRelays.js';
+import {
+  parseCommunityContentTypes,
+  hasStrictContentMarker,
+  sectionIsGated
+} from './communityRelays.js';
+import { deriveCommunityType } from '$lib/groups/community-membership.js';
+
+/**
+ * Every valid `?view=` content-view id for a community page. The page load
+ * (`c/[pubkey]/+page.js`) validates the URL param against this, and the
+ * layout (`c/[pubkey]/+layout.svelte`) validates the same param to drive the
+ * left-nav active state. These MUST agree — keep the list here, in ONE place,
+ * so the two can't drift. (A prior drift omitted `'channels'` from the layout
+ * copy, so `?view=channels` rendered the channels content but left the nav
+ * highlighting "Startseite".)
+ * @type {Set<string>}
+ */
+export const VALID_CONTENT_VIEWS = new Set([
+  'home',
+  'chat',
+  'calendar',
+  'learning',
+  'boards',
+  'articles',
+  'forum',
+  'polls',
+  'wikis',
+  'social-bookmarks',
+  'meet',
+  'members',
+  'settings',
+  'channels'
+]);
 
 /**
  * @typedef {Object} ContentTypeConfig
@@ -389,7 +421,7 @@ export function getRestrictedTabIds(communikeyEvent) {
   const sections = parseCommunityContentTypes(communikeyEvent);
   const restricted = new Set();
   for (const section of sections) {
-    if (!section.profileList) continue;
+    if (!sectionIsGated(section)) continue;
     for (const kind of section.kinds) {
       const tabId = kindToContentType(kind);
       if (tabId) restricted.add(tabId);
@@ -409,7 +441,7 @@ export function getAccessibleTabIds(communikeyEvent, profileAccess) {
   const sections = parseCommunityContentTypes(communikeyEvent);
   const accessible = new Set();
   for (const section of sections) {
-    if (!section.profileList) continue;
+    if (!sectionIsGated(section)) continue;
     if (!profileAccess.canPublish(section.name)) continue;
     for (const kind of section.kinds) {
       const tabId = kindToContentType(kind);
@@ -448,10 +480,31 @@ export function getDefaultCommunityTabs() {
  * were written by UIs that showed all tabs regardless, so their declarations
  * are advisory only. Mirrors the FAB's filterActionsForCommunity semantics.
  * Home and settings are always included; chat only when kind 9 is declared.
+ *
+ * Closed communities (concord pointer, no membership pointer — see
+ * `deriveCommunityType`) are the one case that does NOT fail open: they have
+ * no readable content tabs for a non-member at all, so home+settings is the
+ * whole nav regardless of what the event otherwise declares.
  * @param {any} communityEvent - kind 10222 event (or null)
  * @returns {string[]} Tab IDs in default display order
  */
 export function getCommunityTabs(communityEvent) {
+  if (deriveCommunityType(communityEvent) === 'closed') {
+    // GESCHLOSSEN, but any content sections a closed community carries are
+    // its Schaufenster (publisher-gated by construction — ungated sections
+    // would have derived it 'open') and ARE the public surface, so they
+    // become tabs like anyone else's. The bare shell (zero sections) keeps
+    // collapsing to home + settings.
+    const declared = new Set(['home', 'settings']);
+    for (const section of parseCommunityContentTypes(communityEvent)) {
+      for (const kind of section.kinds) {
+        const tabId = kindToContentType(kind);
+        if (tabId) declared.add(tabId);
+      }
+    }
+    return getDefaultCommunityTabs().filter((id) => declared.has(id));
+  }
+
   const all = getDefaultCommunityTabs();
   if (!communityEvent || !hasStrictContentMarker(communityEvent)) return all;
 
@@ -488,7 +541,7 @@ export function getVerifiedMembers(profileAccess, communityEvent) {
   allSet.add(communityEvent.pubkey);
 
   for (const section of sections) {
-    if (!section.profileList) continue;
+    if (!sectionIsGated(section)) continue;
     const members = profileAccess.getMembers(section.name);
     if (members && members.length > 0) {
       perSection.set(section.name, members);

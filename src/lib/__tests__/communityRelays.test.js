@@ -3,7 +3,8 @@ import { describe, it, expect } from 'vitest';
 import {
   parseCommunityContentTypes,
   getPreferredFormForKind,
-  hasStrictContentMarker
+  hasStrictContentMarker,
+  sectionIsGated
 } from '../helpers/communityRelays.js';
 
 /**
@@ -113,5 +114,72 @@ describe('hasStrictContentMarker', () => {
   it('returns false for null/undefined events', () => {
     expect(hasStrictContentMarker(null)).toBe(false);
     expect(hasStrictContentMarker(undefined)).toBe(false);
+  });
+});
+
+describe('access section tiers (communikey-groups NIP draft)', () => {
+  /** @param {string[][]} extra */
+  const base = (extra) => ({
+    kind: 10222,
+    tags: [['content', 'Learning'], ['k', '30142'], ...extra, ['content', 'Chat'], ['k', '9']]
+  });
+
+  it('defaults to tier "all" when no access tag is present', () => {
+    const [learning, chat] = parseCommunityContentTypes(base([]));
+    expect(learning.access).toEqual({ tier: 'all' });
+    expect(chat.access).toEqual({ tier: 'all' });
+  });
+
+  it('parses ["access","members"] scoped to its section only', () => {
+    const [learning, chat] = parseCommunityContentTypes(base([['access', 'members']]));
+    expect(learning.access).toEqual({ tier: 'members' });
+    expect(chat.access).toEqual({ tier: 'all' });
+  });
+
+  it('parses ["access","role",<name>]', () => {
+    const [learning] = parseCommunityContentTypes(base([['access', 'role', 'lehrkraft']]));
+    expect(learning.access).toEqual({ tier: 'role', role: 'lehrkraft' });
+  });
+
+  it('fails open on malformed access tags; first valid tag wins', () => {
+    expect(parseCommunityContentTypes(base([['access', 'bogus']]))[0].access).toEqual({
+      tier: 'all'
+    });
+    expect(parseCommunityContentTypes(base([['access', 'role', '  ']]))[0].access).toEqual({
+      tier: 'all'
+    });
+    expect(
+      parseCommunityContentTypes(
+        base([
+          ['access', 'members'],
+          ['access', 'role', 'x']
+        ])
+      )[0].access
+    ).toEqual({ tier: 'members' });
+  });
+
+  it('ignores access tags before any content section', () => {
+    const sections = parseCommunityContentTypes({
+      kind: 10222,
+      tags: [
+        ['access', 'members'],
+        ['content', 'Learning'],
+        ['k', '30142']
+      ]
+    });
+    expect(sections[0].access).toEqual({ tier: 'all' });
+  });
+});
+
+describe('sectionIsGated', () => {
+  it('true for legacy profile-list sections and for non-all access tiers', () => {
+    expect(sectionIsGated({ profileList: '30000:x:y', access: { tier: 'all' } })).toBe(true);
+    expect(sectionIsGated({ profileList: null, access: { tier: 'members' } })).toBe(true);
+    expect(sectionIsGated({ profileList: null, access: { tier: 'role', role: 'r' } })).toBe(true);
+  });
+  it('false for open sections and robust against missing access field', () => {
+    expect(sectionIsGated({ profileList: null, access: { tier: 'all' } })).toBe(false);
+    expect(sectionIsGated({ profileList: null })).toBe(false);
+    expect(sectionIsGated(null)).toBe(false);
   });
 });

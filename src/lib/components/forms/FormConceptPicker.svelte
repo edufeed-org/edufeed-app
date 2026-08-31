@@ -18,8 +18,8 @@
   /**
    * @typedef {Object} Props
    * @property {import('$lib/helpers/forms.js').FormField} field
-   * @property {import('$lib/helpers/form-to-amb.js').SelectedConcept[]} [value]
-   * @property {(v: import('$lib/helpers/form-to-amb.js').SelectedConcept[]) => void} [onchange]
+   * @property {import('$lib/helpers/educational/formReference.js').SelectedConcept[]} [value]
+   * @property {(v: import('$lib/helpers/educational/formReference.js').SelectedConcept[]) => void} [onchange]
    * @property {boolean} [multiple]
    * @property {boolean} [disabled]
    */
@@ -77,11 +77,12 @@
   }
 
   /**
-   * Build the rich SelectedConcept shape expected by form-to-amb from a
-   * concept event. `nostrCoord` is built via `createReplaceableAddress` so it
-   * uses the canonical CONCEPT_KIND prefix regardless of any future NIP shift.
+   * Build the rich SelectedConcept shape expected by formValuesToAmbJson.js
+   * (via the `selectedConcepts` param) from a concept event. `nostrCoord` is
+   * built via `createReplaceableAddress` so it uses the canonical
+   * CONCEPT_KIND prefix regardless of any future NIP shift.
    * @param {import('nostr-tools').NostrEvent} evt
-   * @returns {import('$lib/helpers/form-to-amb.js').SelectedConcept}
+   * @returns {import('$lib/helpers/educational/formReference.js').SelectedConcept}
    */
   function toRichSelected(evt) {
     const parsed = /** @type {ParsedConcept} */ (parseConcept(evt));

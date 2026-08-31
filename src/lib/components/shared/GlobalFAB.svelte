@@ -9,6 +9,8 @@
   import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
   import { addressLoader } from '$lib/loaders/base.js';
   import { getCommunikeyRelays } from '$lib/helpers/relay-helper.js';
+  import { useCommunityAccess } from '$lib/stores/community-access.svelte.js';
+  import { useEffectiveCommunity } from '$lib/groups/section-override.svelte.js';
   import { manager } from '$lib/stores/accounts.svelte';
   import { requireSigningOrToast } from '$lib/helpers/signing-guard.js';
   import * as m from '$lib/paraglide/messages';
@@ -93,7 +95,30 @@
     };
   });
 
-  let visibleActions = $derived(filterActionsForCommunity(CREATE_ACTIONS, communityEvent));
+  // The FAB is mounted in the root chrome, outside the /c layout's context
+  // tree, so it resolves the override and the access check itself rather than
+  // reading the layout's. Both are eventStore-backed, so the extra
+  // subscriptions cost no extra round trips.
+  const getEffectiveCommunity = useEffectiveCommunity(() => communityEvent);
+  let effectiveCommunityEvent = $derived(getEffectiveCommunity().event);
+  const communityAccess = useCommunityAccess(
+    () => effectiveCommunityEvent,
+    () => getCommunikeyRelays()
+  );
+
+  let visibleActions = $derived(
+    filterActionsForCommunity(CREATE_ACTIONS, effectiveCommunityEvent, {
+      // Fail open while the roster/list is still loading, and for a
+      // signed-out visitor: canPublish is false for everyone without a
+      // pubkey, so applying it there would empty the FAB instead of letting
+      // the signing guard prompt for login. Hiding the create button from a
+      // legitimate publisher is worse than briefly offering it.
+      canPublish:
+        !manager.active || communityAccess.isLoading
+          ? undefined
+          : (sectionName) => communityAccess.canPublish(sectionName)
+    })
+  );
 
   let suggestedActions = $derived.by(() => {
     const ids = suggestedActionIds(

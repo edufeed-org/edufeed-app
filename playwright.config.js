@@ -5,14 +5,20 @@ const RELAY_URLS = {
   amb: 'ws://localhost:17001',
   calendar: 'ws://localhost:17002',
   strfry: 'ws://localhost:17003',
+  groups: 'ws://localhost:17004', // In-process NIP-29 mock relay (moderated-lifecycle specs)
   hanging: 'ws://localhost:19738' // Mock relay for timedPool timeout tests
 };
 
 // Blossom server for file uploads
 const BLOSSOM_SERVER_URL = 'http://localhost:13000';
 
-// Web server port - Using 14173 to avoid conflicts with other projects
-const WEB_SERVER_PORT = 14173;
+// Web server port - Using 14173 to avoid conflicts with other projects.
+// Overridable because the port was a hardcoded constant while
+// `reuseExistingServer` is true outside CI: a preview server left running by
+// another worktree on the same port gets *reused*, so the run silently
+// exercises that worktree's build instead of this one. Set E2E_PORT to a free
+// port when running two trees at once. Default unchanged.
+const WEB_SERVER_PORT = Number(process.env.E2E_PORT) || 14173;
 
 export default defineConfig({
   testDir: 'e2e',
@@ -43,14 +49,29 @@ export default defineConfig({
       use: {
         browserName: 'chromium',
         launchOptions: {
-          executablePath: process.env.CHROMIUM_BIN || 'chromium'
+          executablePath: process.env.CHROMIUM_BIN || 'chromium',
+          // Opt-in only: some hosts substitute a PNA-enforcing google-chrome
+          // build for CHROMIUM_BIN (broken nix chromium), which blocks the
+          // e2e mock relays' localhost WebSockets under Chrome's Local
+          // Network Access policy and silently hangs relay-publish specs.
+          // Set E2E_DISABLE_LNA_CHECKS=1 on those hosts only.
+          args: process.env.E2E_DISABLE_LNA_CHECKS
+            ? ['--disable-features=LocalNetworkAccessChecks']
+            : []
         }
       }
     }
   ],
 
   webServer: {
-    command: `pnpm run build && pnpm run preview --port ${WEB_SERVER_PORT}`,
+    // --strictPort is load-bearing, not tidiness. Without it vite silently
+    // binds the NEXT free port when this one is taken, while playwright goes on
+    // waiting for WEB_SERVER_PORT — which is then somebody else's server. The
+    // run does not crash; it tests another worktree's build and reports green
+    // or red with nothing in the output naming which build answered. Both of us
+    // hit that within one hour on 2026-08-07, in both directions. With the flag
+    // the preview refuses to start and the failure is immediate and legible.
+    command: `pnpm run build && pnpm run preview --port ${WEB_SERVER_PORT} --strictPort`,
     port: WEB_SERVER_PORT,
     reuseExistingServer: !process.env.CI,
     timeout: 120_000,
@@ -63,6 +84,10 @@ export default defineConfig({
       RELAY_LIST_LOOKUP_RELAYS: RELAY_URLS.strfry,
       INDEXER_RELAYS: RELAY_URLS.strfry,
       BLOSSOM_SERVER_URL: BLOSSOM_SERVER_URL,
+      CONCORD_ENABLED: 'true',
+      CONCORD_RELAYS: RELAY_URLS.strfry,
+      GROUPS_ENABLED: 'true',
+      GROUPS_RELAYS: RELAY_URLS.groups,
       GATED_MODE_DEFAULT: 'true',
       GATED_MODE_FORCE: 'true',
       ORIGIN: `http://localhost:${WEB_SERVER_PORT}`,

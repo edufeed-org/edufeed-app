@@ -1,6 +1,7 @@
 <script>
   import FormConceptPicker from './FormConceptPicker.svelte';
   import CustomValueAffordance from './CustomValueAffordance.svelte';
+  import { getFieldComponent } from '$lib/config/form-field-types.js';
 
   /**
    * @type {{
@@ -54,7 +55,16 @@
             onchange={(v) => oncustomchange(field.id, v)}
           />
         {/if}
-      {:else if field.type === 'text' || field.type === 'email' || field.type === 'url' || field.type === 'number' || field.type === 'date'}
+      {:else if getFieldComponent(field.type)}
+        {@const FieldComponent = getFieldComponent(field.type)}
+        <FieldComponent
+          {field}
+          value={values[field.id] ?? ''}
+          error={errors[field.id] ?? null}
+          {readonly}
+          onchange={(/** @type {any} */ v) => onchange(field.id, v)}
+        />
+      {:else if field.type === 'text' || field.type === 'email' || field.type === 'url' || field.type === 'number'}
         <input
           id={field.id}
           type={field.type}
@@ -130,26 +140,27 @@
         </div>
       {:else if field.type === 'select' && field.options?.multiple}
         <div class="mt-1 flex flex-col gap-2">
-          {#each field.options?.options || [] as opt (opt)}
-            {@const selected = (values[field.id] || '').split(',').filter(Boolean)}
+          {#each field.options?.options || [] as opt (opt.id)}
+            {@const selected = (values[field.id] || '').split(';').filter(Boolean)}
             <label class="label cursor-pointer justify-start gap-2">
               <input
                 type="checkbox"
                 class="checkbox checkbox-sm"
-                value={opt}
+                value={opt.id}
                 disabled={readonly}
-                checked={selected.includes(opt)}
+                checked={selected.includes(opt.id)}
                 onchange={(e) => {
-                  const current = (values[field.id] || '').split(',').filter(Boolean);
-                  if (/** @type {HTMLInputElement} */ (e.currentTarget).checked) current.push(opt);
+                  const current = (values[field.id] || '').split(';').filter(Boolean);
+                  if (/** @type {HTMLInputElement} */ (e.currentTarget).checked)
+                    current.push(opt.id);
                   else {
-                    const idx = current.indexOf(opt);
+                    const idx = current.indexOf(opt.id);
                     if (idx !== -1) current.splice(idx, 1);
                   }
-                  onchange(field.id, current.join(','));
+                  onchange(field.id, current.join(';'));
                 }}
               />
-              <span class="label-text">{opt}</span>
+              <span class="label-text">{opt.label}</span>
             </label>
           {/each}
         </div>
@@ -164,27 +175,39 @@
             onchange(field.id, /** @type {HTMLSelectElement} */ (e.currentTarget).value)}
         >
           <option value=""></option>
-          {#each field.options?.options || [] as opt (opt)}
-            <option value={opt}>{opt}</option>
+          {#each field.options?.options || [] as opt (opt.id)}
+            <option value={opt.id}>{opt.label}</option>
           {/each}
         </select>
       {:else if field.type === 'radio'}
         <div class="mt-1 flex flex-col gap-2">
-          {#each field.options?.options || [] as opt (opt)}
+          {#each field.options?.options || [] as opt (opt.id)}
             <label class="label cursor-pointer justify-start gap-2">
               <input
                 type="radio"
                 class="radio radio-sm"
                 name={field.id}
-                value={opt}
+                value={opt.id}
                 disabled={readonly}
-                checked={values[field.id] === opt}
-                onchange={() => onchange(field.id, opt)}
+                checked={values[field.id] === opt.id}
+                onchange={() => onchange(field.id, opt.id)}
               />
-              <span class="label-text">{opt}</span>
+              <span class="label-text">{opt.label}</span>
             </label>
           {/each}
         </div>
+      {:else}
+        <input
+          id={field.id}
+          type="text"
+          class="input-bordered input w-full"
+          class:input-error={errors[field.id]}
+          placeholder={field.options?.placeholder || ''}
+          disabled={readonly}
+          value={values[field.id] ?? ''}
+          oninput={(e) =>
+            onchange(field.id, /** @type {HTMLInputElement} */ (e.currentTarget).value)}
+        />
       {/if}
 
       {#if errors[field.id]}

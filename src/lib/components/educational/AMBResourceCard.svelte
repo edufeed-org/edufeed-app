@@ -34,6 +34,15 @@
   import { RepliesModel } from 'applesauce-common/models';
   import { ChatIcon } from '$lib/components/icons';
   import ResourceCover from './ResourceCover.svelte';
+  import {
+    describeLinkedMaterials,
+    formatMaterialSize
+  } from '$lib/helpers/educational/linkedMaterials.js';
+  import {
+    canDeriveThumbnail,
+    getThumbnailSourceUrl
+  } from '$lib/helpers/educational/pdfThumbnailGate.js';
+  import { loadPdfPageCount } from '$lib/helpers/educational/pdfPageCount.js';
 
   // Trigger SKOS vocabulary loading for label resolution
   ensureVocabularyLoaded('learningResourceType');
@@ -70,12 +79,80 @@
   const isList = $derived(variant === 'list');
 
   // Attached files (encoding:*) + external references (r tags) — shown as a
-  // hover badge on the cover so users know there is material behind the card.
-  const linkedMaterialsCount = $derived(
-    (resource?.tags ?? []).filter(
-      (/** @type {string[]} */ t) => t[0] === 'encoding:contentUrl' || t[0] === 'r'
-    ).length
+  // hover badge on the cover so users know what is behind the card.
+  const linkedMaterials = $derived(describeLinkedMaterials(resource?.tags ?? []));
+
+  // Interactive badge: check if resource has webxdc encodings
+  const isInteractive = $derived(
+    (resource?.encodings ?? []).some(
+      (/** @type {{ mimeType?: string }} */ e) => e.mimeType === 'application/x-webxdc'
+    )
   );
+
+  /** @type {Record<import('$lib/helpers/educational/linkedMaterials.js').MaterialType, () => string>} */
+  const MATERIAL_TYPE_LABEL = {
+    pdf: m.amb_card_linked_material_type_pdf,
+    image: m.amb_card_linked_material_type_image,
+    video: m.amb_card_linked_material_type_video,
+    audio: m.amb_card_linked_material_type_audio,
+    presentation: m.amb_card_linked_material_type_presentation,
+    spreadsheet: m.amb_card_linked_material_type_spreadsheet,
+    document: m.amb_card_linked_material_type_document,
+    archive: m.amb_card_linked_material_type_archive,
+    text: m.amb_card_linked_material_type_text,
+    link: m.amb_card_linked_material_type_link,
+    file: m.amb_card_linked_material_type_file
+  };
+
+  // Page count for a single linked PDF. Not on the event — AMB's encoding:* has
+  // no such field — so it comes from /api/pdf-info, gated by the same rights
+  // policy as the thumbnail because it means fetching the file. Only for
+  // attached files: an `r` link carries no attestation, so an external PDF
+  // deliberately gets no page count.
+  const pdfPageCountUrl = $derived.by(() => {
+    const { count, items } = linkedMaterials;
+    if (count !== 1 || items[0].source !== 'upload' || items[0].type !== 'pdf') return null;
+    if (!canDeriveThumbnail(resource?.tags)) return null;
+    return getThumbnailSourceUrl(resource?.tags);
+  });
+
+  let pdfPageCount = $state(/** @type {number | null} */ (null));
+
+  // Fetched on first hover rather than on render: the badge is hover-only, and a
+  // feed of cards must not fire a request per card just to sit there. Memoised
+  // per URL in the helper, so re-hovering costs nothing.
+  async function loadBadgePageCount() {
+    const url = pdfPageCountUrl;
+    if (!url || pdfPageCount !== null) return;
+    pdfPageCount = await loadPdfPageCount(url);
+  }
+
+  // A single material says what it is — "PDF · 12 Seiten · 2,4 MB" — which is
+  // the point of #57. Several fall back to the count: a per-item list does not
+  // fit in a badge, and the resource page already lists them. When the lone item
+  // told us nothing at all (no usable mime, no extension, no size) the count
+  // string is still the most honest thing to show.
+  const linkedMaterialsLabel = $derived.by(() => {
+    const { count, items } = linkedMaterials;
+    if (count === 0) return null;
+    if (count > 1) return m.amb_card_linked_materials({ count });
+
+    const item = items[0];
+    const size = formatMaterialSize(item.size, getLocale());
+    const typeIsKnown = item.type !== 'file' && item.type !== 'link';
+    if (!typeIsKnown && !size) return m.amb_card_linked_materials_one();
+
+    const parts = [MATERIAL_TYPE_LABEL[item.type]()];
+    if (pdfPageCount !== null) {
+      parts.push(
+        pdfPageCount === 1
+          ? m.amb_card_linked_material_pages_one()
+          : m.amb_card_linked_material_pages({ count: pdfPageCount })
+      );
+    }
+    if (size) parts.push(size);
+    return parts.join(' · ');
+  });
 
   // Get author info
   const authorName = $derived(getDisplayName(authorProfile, resource.pubkey.slice(0, 8) + '...'));
@@ -271,7 +348,7 @@
         </div>
       {/if}
       <!-- Metadata badges -->
-      {#if localizedEducationalLevels.length > 0 || resource.isFree || resource.languages.length > 0}
+      {#if localizedEducationalLevels.length > 0 || resource.isFree || resource.languages.length > 0 || isInteractive}
         <div class="mt-1 flex flex-wrap gap-1">
           {#if localizedEducationalLevels.length > 0}
             <span class="badge badge-xs badge-secondary">{localizedEducationalLevels[0].label}</span
@@ -283,6 +360,9 @@
           {#each resource.languages.slice(0, 2) as lang (lang)}
             <span class="badge badge-ghost badge-xs">{lang.toUpperCase()}</span>
           {/each}
+          {#if isInteractive}
+            <span class="badge badge-xs badge-primary">{m.interactive_badge()}</span>
+          {/if}
         </div>
       {/if}
       <!-- Subject tags (desktop only) -->
@@ -381,16 +461,28 @@
     </div>
 
     <!-- Resource cover — image at 2:1 when present, typo cover at 3:4 (capped) when absent.
-         On hover, a badge signals attached/linked materials behind the cover. -->
+         On hover, a badge names what is behind the cover (#57). The pointer
+         handler only fills in a linked PDF's page count, which cannot come off
+         the event; everything else in the badge is already rendered, so nothing
+         is hidden from a keyboard or touch user that CSS hover was not already
+         hiding. -->
     {#if !compact}
-      <div class="group relative mb-3">
+      <!-- eslint-disable-next-line svelte/a11y-mouse-events-have-key-events -- lazy enrichment of already-rendered text, not an interaction -->
+      <!-- Deliberately NOT given a role: this div is not interactive and must
+           not announce itself as one. `pointerenter` is a cache warm-up, and
+           the badge renders its type and size with or without it, so a user who
+           never produces a pointer event loses nothing that `group-hover` was
+           not already hiding. A role here would be the accessibility
+           regression. -->
+      <!-- svelte-ignore a11y_no_static_element_interactions -->
+      <div class="group relative mb-3" onpointerenter={loadBadgePageCount}>
         <ResourceCover {resource} size="full" aspect="wide" />
-        {#if linkedMaterialsCount > 0}
+        {#if linkedMaterialsLabel}
           <span
             class="absolute right-2 bottom-2 badge badge-sm opacity-0 shadow transition-opacity duration-150 badge-neutral group-hover:opacity-100"
             data-testid="linked-materials-badge"
           >
-            📎 {m.amb_card_linked_materials({ count: linkedMaterialsCount })}
+            📎 {linkedMaterialsLabel}
           </span>
         {/if}
       </div>
@@ -450,6 +542,11 @@
           {#each resource.languages.slice(0, 2) as lang (lang)}
             <div class="badge badge-ghost badge-sm">{lang.toUpperCase()}</div>
           {/each}
+
+          <!-- Interactive Badge -->
+          {#if isInteractive}
+            <div class="badge badge-sm badge-primary">{m.interactive_badge()}</div>
+          {/if}
         </div>
       {/if}
 

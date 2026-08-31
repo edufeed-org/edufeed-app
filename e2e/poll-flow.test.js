@@ -3,9 +3,9 @@
  *
  * Two tests:
  *
- * 1. **Smoke** — verifies the Create poll FAB button exists with correct
- *    aria-label / data-tip. Runs at the default viewport. Cheap insurance
- *    that the FAB → modalStore wiring is intact.
+ * 1. **Smoke** — verifies the Create poll tile exists in the GlobalFAB create
+ *    hub with the expected accessible name. Runs at the default viewport.
+ *    Cheap insurance that the FAB → modalStore wiring is intact.
  *
  * 2. **Full happy path** — drives the real flow end-to-end against the
  *    Docker strfry relay (ws://localhost:17003 — see playwright.config.js
@@ -14,11 +14,11 @@
  *    PollCard renders on the resulting nevent route, casts a vote (real
  *    kind 1018), and verifies the tally updates to 1 voter.
  *
- *    The full path uses an enlarged viewport (1280×1400) because the FAB
- *    column-reverse stack (9 btn-lg buttons) clips the default 720px
- *    height; making the Poll button (~7th up) outside the viewport for
- *    Playwright clicks. The clipping itself is a UX issue tracked
- *    separately — needs a design rethink (categorize / scroll / grid).
+ *    The enlarged viewport (1280×1400) is a leftover from the daisyUI
+ *    speed-dial, whose 9-button column-reverse stack clipped the default
+ *    720px height. GlobalFAB replaced it with a scrollable sectioned sheet
+ *    (max-h-[80vh]), so the clipping is gone; the viewport is kept only
+ *    because the rest of this test's geometry was tuned against it.
  *
  *    KNOWN FLAKINESS: the UI-driven nsec login flow (loginWithNsec) is
  *    globally flaky in this E2E env — sometimes the app stays in the
@@ -35,7 +35,7 @@
  *   - src/lib/components/__tests__/GlobalFAB.test.js  (poll button render)
  */
 import { test as base, expect } from '@playwright/test';
-import { loginWithNsec } from './fixtures.js';
+import { loginWithNsec, FAB_TRIGGER, openCreateHub, clickCreateAction } from './fixtures.js';
 import { TEST_AUTHOR } from './test-data.js';
 
 base.describe('Poll FAB - Smoke', () => {
@@ -58,16 +58,13 @@ base.describe('Poll FAB - Smoke', () => {
     await page.waitForFunction(() => document.body.classList.contains('app-ready'), null, {
       timeout: 30_000
     });
-    await expect(page.locator('.fab')).toBeVisible({ timeout: 15_000 });
+    await expect(page.locator(FAB_TRIGGER)).toBeVisible({ timeout: 15_000 });
 
-    // Focus the FAB trigger so :focus-within reveals action buttons.
-    await page.locator('.fab [role="button"]').click();
-    await page.waitForTimeout(300);
+    await openCreateHub(page);
 
-    await expect(page.locator('.fab button[data-tip="Create poll"]')).toHaveAttribute(
-      'aria-label',
-      /poll/i
-    );
+    // The tile is keyed on aria-label, not data-tip: the poll action has no
+    // `description` in create-actions.js, so no tooltip attribute is rendered.
+    await expect(page.locator('div[role="menu"] button[aria-label="Create poll"]')).toBeVisible();
   });
 });
 
@@ -88,14 +85,11 @@ base.describe('Poll - Full happy path', () => {
     await page.waitForFunction(() => document.body.classList.contains('app-ready'), null, {
       timeout: 30_000
     });
-    await expect(page.locator('.fab')).toBeVisible({ timeout: 15_000 });
-
-    // Reveal the FAB action buttons.
-    await page.locator('.fab [role="button"]').click();
-    await page.waitForTimeout(300);
+    await expect(page.locator(FAB_TRIGGER)).toBeVisible({ timeout: 15_000 });
 
     // Open the Create Poll modal.
-    await page.locator('.fab button[data-tip="Create poll"]').click();
+    await openCreateHub(page);
+    await clickCreateAction(page, 'Create poll');
     await expect(page.locator('dialog[open] .modal-box')).toBeVisible({ timeout: 5_000 });
     await expect(page.locator('dialog[open] h3:has-text("Create poll")')).toBeVisible();
 

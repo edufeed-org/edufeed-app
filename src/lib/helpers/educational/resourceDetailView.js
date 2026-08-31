@@ -82,7 +82,7 @@ export function formatCreatorsLine(names) {
  * @typedef {Object} ExtensionFact
  * @property {string} ns
  * @property {string} facetName
- * @property {'concept' | 'scalar' | 'boolean'} kind
+ * @property {'concept' | 'scalar' | 'boolean' | 'mixed'} kind
  * @property {string} value  All display values joined with ', ' (empty for booleans)
  * @property {string[]} items  All display values (scalar raw values / concept labels; empty for booleans)
  * @property {number} count  Number of items the facet carried
@@ -100,8 +100,10 @@ export function formatCreatorsLine(names) {
  *   tagged with three Schularten must show all three, not just the first.
  * - scalar facets surface every value the same way (long free-text is still
  *   returned so the caller can decide how to render it).
+ * - mixed facets (concepts *and* free-text scalars in one facet) surface both,
+ *   concept labels first, under kind `mixed`.
  *
- * @param {{ namespaces: Map<string, { facets: Map<string, { kind: 'concept'|'scalar', items: any[] }> }> } | null | undefined} parsed
+ * @param {{ namespaces: Map<string, { facets: Map<string, { kind: 'concept'|'scalar'|'mixed', concepts: any[], scalars: string[] }> }> } | null | undefined} parsed
  * @param {{ limit?: number, locale?: string }} [opts]
  * @returns {ExtensionFact[]}
  */
@@ -116,7 +118,7 @@ export function summarizeExtensionFacets(parsed, opts = {}) {
       if (out.length >= limit) return out;
 
       if (facet.kind === 'scalar') {
-        const items = facet.items.filter(Boolean);
+        const items = facet.scalars.filter(Boolean);
         if (items.length === 0) continue;
         if (items.length === 1 && items[0] === 'false') continue;
         if (items.length === 1 && items[0] === 'true') {
@@ -132,15 +134,19 @@ export function summarizeExtensionFacets(parsed, opts = {}) {
           count: items.length
         });
       } else {
-        const labels = facet.items.map((it) => pickConceptLabel(it, locale)).filter(Boolean);
-        if (labels.length === 0) continue;
+        // concept or mixed. A mixed facet surfaces its concept labels *and* its
+        // free-text scalars, concept labels first, so the summary never hides
+        // half a facet.
+        const labels = facet.concepts.map((it) => pickConceptLabel(it, locale)).filter(Boolean);
+        const items = [...labels, ...facet.scalars.filter(Boolean)];
+        if (items.length === 0) continue;
         out.push({
           ns,
           facetName,
-          kind: 'concept',
-          value: labels.join(', '),
-          items: labels,
-          count: facet.items.length
+          kind: facet.kind === 'mixed' ? 'mixed' : 'concept',
+          value: items.join(', '),
+          items,
+          count: items.length
         });
       }
     }

@@ -9,7 +9,10 @@
   import CommunitySelector from '$lib/components/calendar/CommunitySelector.svelte';
   import { modalStore } from '$lib/stores/modal.svelte.js';
   import { manager } from '$lib/stores/accounts.svelte';
-  import { useJoinedCommunitiesList } from '$lib/stores/joined-communities-list.svelte.js';
+  // Share surfaces list joined ∪ area-linked communities — a private area's
+  // member never (publicly) follow-set-joins, but must still be able to share.
+  import { useShareableCommunities } from '$lib/helpers/shareable-communities.svelte.js';
+  import { useShareRestrictions } from '$lib/stores/share-restrictions.svelte.js';
   import { decodeNaddr } from '$lib/helpers/bookmark.js';
   import { createCommunityReposts } from '$lib/helpers/communityRepost.js';
   import { addressLoader } from '$lib/loaders/base.js';
@@ -31,8 +34,12 @@
   );
 
   // Community selector
-  const getJoinedCommunities = useJoinedCommunitiesList();
+  const getJoinedCommunities = useShareableCommunities();
   let communities = $derived(getJoinedCommunities());
+  const getRestricted = useShareRestrictions(
+    () => /** @type {any} */ (fetchedEvent)?.kind,
+    () => communities
+  );
   let selectedCommunityIds = $state(/** @type {string[]} */ ([]));
 
   // Pre-select community from context
@@ -245,6 +252,7 @@
       <CommunitySelector
         {communities}
         bind:selectedCommunityIds
+        restrictedCommunities={getRestricted()}
         title={m.share_modal_community_label()}
         showSelectAll={true}
       />

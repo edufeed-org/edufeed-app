@@ -1,7 +1,14 @@
 <script>
   import * as m from '$lib/paraglide/messages';
 
-  let { userData = $bindable(), errors = $bindable({}), hideBanner = false } = $props();
+  let {
+    userData = $bindable(),
+    errors = $bindable({}),
+    hideBanner = false,
+    // The create-community modal replaces the raw URL field with
+    // LicensedImageInput; the form steps aside like it does for the banner.
+    hidePicture = false
+  } = $props();
 
   function validateStep() {
     errors = {};
@@ -88,24 +95,26 @@
   </div>
 
   <!-- Profile Picture URL -->
-  <div class="form-control flex flex-col">
-    <label class="label" for="profile-picture">
-      <span class="label-text w-full text-center">{m.profile_form_picture_label()}</span>
-    </label>
-    <input
-      id="profile-picture"
-      type="url"
-      bind:value={userData.picture}
-      placeholder={m.profile_form_picture_placeholder()}
-      class="input-bordered input w-full"
-      class:input-error={errors.picture}
-    />
-    {#if errors.picture}
-      <div class="label" aria-live="polite">
-        <span class="label-text-alt w-full text-center text-error">{errors.picture}</span>
-      </div>
-    {/if}
-  </div>
+  {#if !hidePicture}
+    <div class="form-control flex flex-col">
+      <label class="label" for="profile-picture">
+        <span class="label-text w-full text-center">{m.profile_form_picture_label()}</span>
+      </label>
+      <input
+        id="profile-picture"
+        type="url"
+        bind:value={userData.picture}
+        placeholder={m.profile_form_picture_placeholder()}
+        class="input-bordered input w-full"
+        class:input-error={errors.picture}
+      />
+      {#if errors.picture}
+        <div class="label" aria-live="polite">
+          <span class="label-text-alt w-full text-center text-error">{errors.picture}</span>
+        </div>
+      {/if}
+    </div>
+  {/if}
 
   <!-- Banner Image URL -->
   {#if !hideBanner}

@@ -8,8 +8,15 @@
   import MembershipApprovalsPanel from '$lib/components/membership/MembershipApprovalsPanel.svelte';
 
   const cfg = $derived(runtimeConfig.membership);
-  const adminPubkey = $derived(cfg?.adminPubkeys?.[0] || '');
   const adminPubkeys = $derived(cfg?.adminPubkeys || []);
+  const formAddress = $derived(cfg?.formAddress || '');
+  // The kind 30168 template author is embedded in the form address
+  // (30168:pubkey:d-tag) — independent of the admin list's order.
+  const formAuthorPubkey = $derived(formAddress.split(':')[1] || adminPubkeys[0] || '');
+  // d-tags may themselves contain colons, so rejoin everything after the pubkey.
+  const formIdentifier = $derived(
+    formAddress.split(':').slice(2).join(':') || 'edufeed-membership'
+  );
 
   // `manager.active` is an RxJS-backed property (not a Svelte rune), so we
   // subscribe to `manager.active$` and mirror into local $state for reactivity.
@@ -28,17 +35,17 @@
   let isLoadingForm = $state(true);
 
   $effect(() => {
-    if (!isAuthorized || !adminPubkey) return;
+    if (!isAuthorized || !formAuthorPubkey) return;
     const relays = getCommunikeyRelays();
     const loaderSub = addressLoader({
       kind: 30168,
-      pubkey: adminPubkey,
-      identifier: 'edufeed-membership',
+      pubkey: formAuthorPubkey,
+      identifier: formIdentifier,
       relays
     }).subscribe();
 
     const modelSub = eventStore
-      .replaceable(30168, adminPubkey, 'edufeed-membership')
+      .replaceable(30168, formAuthorPubkey, formIdentifier)
       .subscribe((event) => {
         if (event) {
           formEvent = event;
