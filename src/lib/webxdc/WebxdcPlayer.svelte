@@ -206,7 +206,7 @@
 {#if phase === 'running' && files && host}
   <div
     class={fullscreen
-      ? 'fixed inset-0 z-50 flex flex-col bg-base-100'
+      ? 'fixed inset-0 z-[80] flex flex-col bg-base-100'
       : fill
         ? 'flex min-h-0 flex-1 flex-col overflow-hidden'
         : 'overflow-hidden rounded-xl border border-base-300'}
