@@ -44,7 +44,7 @@ import {
 import { runtimeConfig } from '$lib/stores/config.svelte.js';
 import { authenticateOnce } from '$lib/groups/relay-auth.js';
 import { classifyDmConversations } from '$lib/helpers/dm-trust.js';
-import { getMutedPubkeys } from '$lib/stores/mute-list.svelte.js';
+import { getMutedPubkeys, getMutedWords } from '$lib/stores/mute-list.svelte.js';
 import { parseDirectPubkeys } from '$lib/services/curated-authors-service.svelte.js';
 
 // --- Module-level reactive state ---
@@ -89,7 +89,8 @@ let conversationBuckets = $derived.by(() => {
     follows: followsPubkeys,
     mutedPubkeys: getMutedPubkeys(),
     outboundPeers: new Set([...legacyOutboundPeers, ...wrappedOutboundPeers]),
-    trustedSenders
+    trustedSenders,
+    mutedWords: getMutedWords()
   });
 });
 /**

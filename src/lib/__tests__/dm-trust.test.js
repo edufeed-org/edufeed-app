@@ -113,6 +113,37 @@ describe('classifyDmConversations', () => {
     expect(requests).toHaveLength(1);
   });
 
+  it('drops a stranger conversation whose last message matches a muted word', () => {
+    const opts = { ...emptyOpts(), mutedWords: new Set(['botrift']) };
+    const spam = conv(SPAMMER, {
+      lastMessage: { pubkey: SPAMMER, created_at: 1000, content: 'Get Verified on Nostr @ Botrift' }
+    });
+    const { known, requests } = classifyDmConversations([spam], opts);
+    expect(known).toHaveLength(0);
+    expect(requests).toHaveLength(0);
+  });
+
+  it('keeps a known conversation whose last message matches a muted word', () => {
+    const opts = {
+      ...emptyOpts(),
+      follows: new Set([FRIEND]),
+      mutedWords: new Set(['botrift'])
+    };
+    const chat = conv(FRIEND, {
+      lastMessage: { pubkey: FRIEND, created_at: 1000, content: 'did you see the botrift spam?' }
+    });
+    const { known, requests } = classifyDmConversations([chat], opts);
+    expect(known).toHaveLength(1);
+    expect(requests).toHaveLength(0);
+  });
+
+  it('keeps a stranger conversation whose last message is not decrypted yet', () => {
+    const opts = { ...emptyOpts(), mutedWords: new Set(['botrift']) };
+    const locked = conv(STRANGER, { lastMessage: { pubkey: STRANGER, created_at: 1000 } });
+    const { requests } = classifyDmConversations([locked], opts);
+    expect(requests).toHaveLength(1);
+  });
+
   it('preserves input order within each bucket', () => {
     const opts = { ...emptyOpts(), follows: new Set([FRIEND, PLATFORM]) };
     const a = conv(FRIEND);

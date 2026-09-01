@@ -4,8 +4,11 @@
  * Splits the DM conversation list into "known" (main list) and "requests"
  * (strangers) and drops muted senders entirely. A conversation is known when
  * any peer is followed, has been replied to, or is a deployment-trusted
- * sender — or when it is a note-to-self thread. Display-side only: relay
- * subscriptions stay untouched so no message is ever lost, just re-shelved.
+ * sender — or when it is a note-to-self thread. Muted words additionally drop
+ * request conversations (strangers only, never known contacts), which is what
+ * catches a spam campaign that rotates pubkeys faster than a user can block
+ * them. Display-side only: relay subscriptions stay untouched so no message is
+ * ever lost, just re-shelved.
  */
 
 /**
@@ -19,19 +22,20 @@ export function getConversationPeers(participants, selfPubkey) {
 }
 
 /**
- * @template {{ participants: string[] }} T
+ * @template {{ participants: string[], lastMessage?: { content?: string, [k: string]: any } }} T
  * @param {T[]} conversations
  * @param {{
  *   selfPubkey: string,
  *   follows: Set<string>,
  *   mutedPubkeys: Set<string>,
  *   outboundPeers: Set<string>,
- *   trustedSenders: Set<string>
+ *   trustedSenders: Set<string>,
+ *   mutedWords?: Set<string>
  * }} opts
  * @returns {{ known: T[], requests: T[] }}
  */
 export function classifyDmConversations(conversations, opts) {
-  const { selfPubkey, follows, mutedPubkeys, outboundPeers, trustedSenders } = opts;
+  const { selfPubkey, follows, mutedPubkeys, outboundPeers, trustedSenders, mutedWords } = opts;
   /** @type {T[]} */
   const known = [];
   /** @type {T[]} */
@@ -49,7 +53,15 @@ export function classifyDmConversations(conversations, opts) {
     const isKnown = unmuted.some(
       (p) => follows.has(p) || outboundPeers.has(p) || trustedSenders.has(p)
     );
-    (isKnown ? known : requests).push(conv);
+    if (isKnown) {
+      known.push(conv);
+      continue;
+    }
+    // Muted words apply to strangers only — a campaign that rotates pubkeys
+    // outruns per-pubkey blocking, while a known contact must never vanish for
+    // quoting a muted word. Undecrypted content can't match and stays shelved.
+    if (matchesMutedWord(conv.lastMessage?.content, mutedWords)) continue;
+    requests.push(conv);
   }
 
   return { known, requests };
@@ -73,7 +85,7 @@ export function excludeMutedAuthors(events, mutedPubkeys) {
  * word-boundary) matching lets a single entry like "damus airdrop" catch a
  * whole campaign across rotating pubkeys, domains, and phrasings.
  * @param {string | undefined} content
- * @param {Set<string>} mutedWords - stored lowercase (normalized on parse)
+ * @param {Set<string> | undefined} mutedWords - stored lowercase (normalized on parse)
  * @returns {boolean}
  */
 export function matchesMutedWord(content, mutedWords) {
