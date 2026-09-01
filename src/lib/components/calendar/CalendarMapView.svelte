@@ -8,7 +8,7 @@
   import { MapLibre, Marker, Popup } from 'svelte-maplibre';
   import { parseLocation } from '$lib/helpers/geocoding.js';
   import { encodeEventToNaddr } from '$lib/helpers/nostrUtils.js';
-  import { formatCalendarDate, filterEventsByViewMode } from '$lib/helpers/calendar.js';
+  import { formatEventDateTime, filterEventsByViewMode } from '$lib/helpers/calendar.js';
   import { MapIcon, CalendarIcon, ClockIcon } from '$lib/components/icons';
   import * as m from '$lib/paraglide/messages';
 
@@ -63,21 +63,6 @@
   // haven't completed a pass). Subsequent event batches merge into the cache
   // without flipping the template off the <MapLibre> branch.
   let loading = $derived(!initialLoadComplete && eventsWithCoordinates.length === 0);
-
-  /**
-   * Format event date and time for display
-   * @param {CalendarEvent} event
-   * @returns {string}
-   */
-  function formatEventDateTime(event) {
-    if (!event.start) return '';
-
-    const startDate = new Date(event.start * 1000);
-    const dateStr = formatCalendarDate(startDate, 'short');
-    const timeStr = formatCalendarDate(startDate, 'time');
-
-    return `${dateStr} at ${timeStr}`;
-  }
 
   /**
    * Compute a bounding box for the given pins. For a single pin we emit a

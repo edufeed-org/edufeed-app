@@ -5,6 +5,7 @@ import {
   fetchEventFromRelays,
   fetchEventsFromRelays
 } from '$lib/server/nostr-fetch.js';
+import { getIcsEventTiming, dedupeReplaceableEvents } from '$lib/helpers/calendar-timing.js';
 
 /**
  * Server-side ICS feed for both NIP-52 calendars (`naddr`) and community
@@ -304,30 +305,20 @@ function generateICSContent(calendarMetadata, events, url) {
     `LAST-MODIFIED:${formatDateTime(now.getTime() / 1000)}`
   ];
 
-  for (const event of events) {
-    const startRaw = tagValue(event, 'start');
-    const startTimestamp = parseStartTimestamp(startRaw, event.kind);
-    if (!startTimestamp) continue;
-
-    const endRaw = tagValue(event, 'end');
-    const isAllDay = event.kind === 31922;
+  for (const event of dedupeReplaceableEvents(events)) {
+    const timing = getIcsEventTiming(event);
+    if (!timing) continue;
 
     let dtStartProperty;
     let dtEndProperty;
-    if (isAllDay) {
-      const startDate = formatDateOnly(startTimestamp);
-      const endTimestamp =
-        endRaw && isFinite(Number(endRaw)) ? Number(endRaw) + 86400 : startTimestamp + 86400;
-      const endDate = formatDateOnly(endTimestamp);
-      dtStartProperty = `DTSTART;VALUE=DATE:${startDate}`;
-      dtEndProperty = `DTEND;VALUE=DATE:${endDate}`;
+    if (timing.isAllDay) {
+      dtStartProperty = `DTSTART;VALUE=DATE:${formatDateOnly(timing.start)}`;
+      dtEndProperty = `DTEND;VALUE=DATE:${formatDateOnly(timing.end)}`;
     } else {
-      const startDate = formatDateTime(startTimestamp);
-      const endTimestamp =
-        endRaw && isFinite(Number(endRaw)) ? Number(endRaw) : startTimestamp + 3600;
-      const endDate = formatDateTime(endTimestamp);
-      dtStartProperty = `DTSTART:${startDate}`;
-      dtEndProperty = `DTEND:${endDate}`;
+      dtStartProperty = `DTSTART:${formatDateTime(timing.start)}`;
+      // No end tag = open end (NIP-52: ends same day) — omit DTEND rather
+      // than fabricating a duration.
+      dtEndProperty = timing.end ? `DTEND:${formatDateTime(timing.end)}` : '';
     }
 
     const eventNaddr = eventToNaddr(event);
@@ -353,23 +344,4 @@ function generateICSContent(calendarMetadata, events, url) {
 
   ics.push('END:VCALENDAR');
   return ics.filter((line) => line !== '').join('\r\n');
-}
-
-/**
- * Parse the `start` tag into a Unix timestamp (seconds). Per NIP-52, kind
- * 31922 uses an ISO date string (YYYY-MM-DD); kind 31923 uses a Unix
- * timestamp string. Returns 0 on failure.
- *
- * @param {string | undefined} value
- * @param {number} kind
- * @returns {number}
- */
-function parseStartTimestamp(value, kind) {
-  if (!value) return 0;
-  if (kind === 31922 && /^\d{4}-\d{2}-\d{2}$/.test(value)) {
-    const ms = Date.parse(`${value}T00:00:00Z`);
-    return isNaN(ms) ? 0 : Math.floor(ms / 1000);
-  }
-  const num = Number(value);
-  return Number.isFinite(num) && num > 0 ? num : 0;
 }

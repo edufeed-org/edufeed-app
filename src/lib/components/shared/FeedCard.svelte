@@ -20,8 +20,7 @@
     getResourceAttribution,
     formatCreatorNames
   } from '$lib/helpers/educational/resourceAttribution.js';
-  import { formatRelativeTime } from '$lib/helpers/calendar.js';
-  import { activeDateLocale } from '$lib/helpers/dates.js';
+  import { formatRelativeTime, parseCalendarStartParts } from '$lib/helpers/calendar.js';
   import { generateKindColorRGB, hexToNpub } from '$lib/helpers/nostrUtils.js';
   import * as m from '$lib/paraglide/messages';
 
@@ -109,30 +108,6 @@
   };
 
   let meta = $derived(typeMeta[typeKey]);
-
-  /**
-   * Parse a calendar start (unix timestamp string for timed events, ISO date
-   * for all-day events) into date-row display parts. Returns null when the
-   * value is unparseable so the caller can fall back to plain text.
-   *
-   * @param {string} startStr
-   * @returns {{ day: string, month: string, when: string } | null}
-   */
-  function parseCalendarStart(startStr) {
-    const num = Number(startStr);
-    const isTimed = !isNaN(num) && num > 0;
-    const date = isTimed ? new Date(num * 1000) : new Date(startStr);
-    if (isNaN(date.getTime())) return null;
-    const locale = activeDateLocale();
-    const when = isTimed
-      ? `${date.toLocaleDateString(locale, { year: 'numeric' })}, ${date.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' })}`
-      : `${date.toLocaleDateString(locale, { weekday: 'long' })}, ${date.toLocaleDateString(locale, { year: 'numeric' })}`;
-    return {
-      day: date.toLocaleDateString(locale, { day: 'numeric' }),
-      month: date.toLocaleDateString(locale, { month: 'short' }),
-      when
-    };
-  }
 </script>
 
 <div
@@ -220,7 +195,7 @@
 
     {#if subtitle}
       {#if typeKey === 'calendar'}
-        {@const dateParts = parseCalendarStart(subtitle)}
+        {@const dateParts = parseCalendarStartParts(subtitle, kind)}
         {#if dateParts}
           <div class="mt-2 mb-1 flex items-center gap-3.5 rounded-lg bg-base-200 px-3 py-2">
             <div class="min-w-7 text-center leading-none">

@@ -14,6 +14,7 @@
   import { timedPool } from '$lib/loaders/base.js';
   import { calendarSearchLoader, MIN_QUERY_LENGTH } from '$lib/loaders/calendar-search.js';
   import { useProfileMap } from '$lib/stores/profile-map.svelte.js';
+  import { useAuthorDeletions } from '$lib/stores/author-deletions.svelte.js';
   import {
     getViewDateRange,
     filterEventsByViewMode,
@@ -603,6 +604,11 @@
   // Batch-load profiles for the current event set so author-name search can
   // match display names without per-event hook calls.
   const searchProfiles = useProfileMap(() => allCalendarEvents.map((e) => e.pubkey));
+
+  // Fetch other authors' NIP-09 deletion events for everything on screen —
+  // without this, a deleted calendar event keeps rendering from a stale
+  // local copy (only community mode ran deletion loaders before).
+  useAuthorDeletions(() => allCalendarEvents.map((e) => e.pubkey));
 
   // Derived state: Apply relay filtering via seen-relay post-filter.
   // The loader only queries selected relays, but EventStore may still contain
