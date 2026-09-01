@@ -45,8 +45,9 @@
 
   // Moderated communities show role chips sourced from the root-group NIP-29
   // roster (kind 39001 admins). Rosters are public, so this is visible to
-  // visitors too, same as the rest of the member list — display only, no
-  // management (that lives in GroupMembersModal inside channel views).
+  // visitors too, same as the rest of the member list; management lives in
+  // GroupMembersModal, opened via the manage button below (and from Settings'
+  // MembershipPane).
   // useRootRoster wraps a $effect-based hook, so it's called unconditionally
   // here at component init; open/closed communities just never read it.
   let communityType = $derived(deriveCommunityType(communikeyEvent));

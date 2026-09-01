@@ -54,8 +54,8 @@ export function buildFlipToOpenTags(tags) {
 }
 
 /**
- * Unsigned 10222 replacement carrying the given tags. Same created_at bump
- * rule as buildGroupAttachTemplate: strictly newer than the source event.
+ * Unsigned 10222 replacement carrying the given tags. created_at bump rule:
+ * strictly newer than the source event, so relays replace rather than drop.
  * @param {{kind?: number, content?: string, created_at?: number, tags?: string[][]}} sourceEvent
  * @param {string[][]} tags
  * @returns {{kind: number, content: string, tags: string[][], created_at: number}}

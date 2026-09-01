@@ -21,9 +21,6 @@ vi.mock('$lib/helpers/publishCommunityUpdate.js', () => ({ publishCommunityUpdat
 const updatePersonalGroupsList = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
 vi.mock('$lib/groups/personal-groups-list.js', () => ({ updatePersonalGroupsList }));
 
-const detachGroupChannel = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
-vi.mock('$lib/groups/community-attach.js', () => ({ detachGroupChannel }));
-
 const clearRootGroupMarker = vi.hoisted(() => vi.fn());
 vi.mock('$lib/groups/provision-root-group.js', () => ({ clearRootGroupMarker }));
 
@@ -60,7 +57,6 @@ beforeEach(() => {
   buildDeleteGroupTemplate.mockClear();
   publishCommunityUpdate.mockClear().mockResolvedValue({ id: 'flip' });
   updatePersonalGroupsList.mockClear().mockResolvedValue(undefined);
-  detachGroupChannel.mockClear();
   clearRootGroupMarker.mockClear();
 });
 
@@ -165,8 +161,9 @@ describe('deleteChannelCascade', () => {
     expect(publishToGroupRelay).toHaveBeenCalledOnce();
     expect(updatePersonalGroupsList).toHaveBeenCalledWith(user, { remove: pointer });
     // No owner-signed 10222 edit any more — the 9008 drops the subgroup from
-    // the /c subtree, so every client stops discovering it.
-    expect(detachGroupChannel).not.toHaveBeenCalled();
+    // the /c subtree, so every client stops discovering it. (The old
+    // detachGroupChannel path is deleted outright — community-attach.js is
+    // gone, so there is nothing left to assert "not called" against.)
   });
 
   it('propagates a failed group delete (load-bearing step)', async () => {
