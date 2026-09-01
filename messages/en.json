@@ -3438,6 +3438,8 @@
   "dm_unblock_sender": "Unblock sender",
   "dm_block_failed": "Couldn't update your block list. Please try again.",
   "inbox_block_success": "{name} blocked",
+  "inbox_block_action": "Block",
+  "aria_inbox_item_menu": "Notification options",
   "mute_words_title": "Muted words",
   "mute_words_hint": "Notifications containing a muted word are hidden, no matter who sends them.",
   "mute_words_placeholder": "e.g. damus airdrop",

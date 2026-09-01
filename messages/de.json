@@ -3438,6 +3438,8 @@
   "dm_unblock_sender": "Blockierung aufheben",
   "dm_block_failed": "Blockierliste konnte nicht aktualisiert werden. Bitte erneut versuchen.",
   "inbox_block_success": "{name} blockiert",
+  "inbox_block_action": "Blockieren",
+  "aria_inbox_item_menu": "Benachrichtigungsoptionen",
   "mute_words_title": "Stummgeschaltete Wörter",
   "mute_words_hint": "Benachrichtigungen, die ein stummgeschaltetes Wort enthalten, werden ausgeblendet – egal von wem sie kommen.",
   "mute_words_placeholder": "z. B. damus airdrop",
