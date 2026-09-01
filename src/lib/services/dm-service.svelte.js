@@ -324,7 +324,14 @@ function settleDmRelayCheck(pubkey) {
   releaseDmRelayCheckWaiters();
 }
 
-/** @returns {{ id: string, participants: string[], lastMessage: any, legacy?: boolean }[]} */
+/**
+ * The RAW, unclassified conversation list — includes strangers' request
+ * conversations and muted-word spam. Notification surfaces (dashboard
+ * widget, inbox page, dropdown, summary card) must use
+ * getKnownDmConversations() instead: requests stay quiet everywhere outside
+ * the DM view's requests folder (botrift dashboard spam, laoc 2026-09-01).
+ * @returns {{ id: string, participants: string[], lastMessage: any, legacy?: boolean }[]}
+ */
 export function getDmConversations() {
   return dmConversations;
 }

@@ -28,10 +28,19 @@ vi.mock('$lib/services/inbox-service.svelte.js', () => ({
   isNotificationUnread: () => false
 }));
 
+// The widget must render the KNOWN bucket, never the raw list: request
+// conversations (strangers — the botrift-style rotating-pubkey spam) stay
+// quiet everywhere outside the DM view's requests folder.
+const dmLists = vi.hoisted(() => ({
+  /** @type {any[]} */ raw: [],
+  /** @type {any[]} */ known: []
+}));
+
 vi.mock('$lib/services/dm-service.svelte.js', () => ({
-  getDmConversations: () => [],
+  getDmConversations: () => dmLists.raw,
+  getKnownDmConversations: () => dmLists.known,
   getUnreadDmCount: () => 0,
-  isDmConversationUnread: () => false
+  isDmConversationUnread: () => true
 }));
 
 vi.mock('$lib/helpers/inbox.js', () => ({
@@ -52,7 +61,7 @@ vi.mock('$lib/components/icons', () => ({
 }));
 
 vi.mock('../inbox/InboxItem.svelte', () => ({ default: StubComponent }));
-vi.mock('../inbox/InboxDmItem.svelte', () => ({ default: StubComponent }));
+vi.mock('../inbox/InboxDmItem.svelte', () => import('./fixtures/InboxDmItemStub.svelte'));
 
 vi.mock('$lib/stores/modal.svelte.js', () => ({
   modalStore: { openModal: (/** @type {any[]} */ ...args) => mockOpenModal(...args) }
@@ -105,5 +114,28 @@ describe('HomeInboxCard Concord invite CTA', () => {
     mockGetPendingInviteCount.mockReturnValue(0);
     render(HomeInboxCard);
     expect(screen.queryByTestId('invite-inbox-cta')).toBeNull();
+  });
+});
+
+describe('HomeInboxCard DM list', () => {
+  const conv = (/** @type {string} */ id) => ({
+    id,
+    participants: ['a'.repeat(64)],
+    lastMessage: { created_at: 1000, content: 'hi' }
+  });
+
+  beforeEach(() => {
+    mockGetPendingInviteCount.mockReturnValue(0);
+    dmLists.raw = [conv('spam-from-stranger'), conv('friend-chat')];
+    dmLists.known = [conv('friend-chat')];
+  });
+
+  // Regression: the widget used the RAW conversation list, so a stranger's
+  // spam DM (botrift-style rotating pubkeys — never matched by pubkey mutes)
+  // showed as a loud unread row on the dashboard (laoc, 2026-09-01).
+  it('renders only KNOWN conversations — requests stay off the dashboard', () => {
+    render(HomeInboxCard);
+    const rows = screen.getAllByTestId('dm-item').map((el) => el.textContent);
+    expect(rows).toEqual(['friend-chat']);
   });
 });

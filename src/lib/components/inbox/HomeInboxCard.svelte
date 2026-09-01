@@ -14,7 +14,7 @@
     isNotificationUnread
   } from '$lib/services/inbox-service.svelte.js';
   import {
-    getDmConversations,
+    getKnownDmConversations,
     getUnreadDmCount,
     isDmConversationUnread
   } from '$lib/services/dm-service.svelte.js';
@@ -66,8 +66,8 @@
     if (activeFilter === 'all' || activeFilter === 'messages') {
       const conversations =
         activeFilter === 'messages'
-          ? getDmConversations()
-          : getDmConversations().filter((conv) =>
+          ? getKnownDmConversations()
+          : getKnownDmConversations().filter((conv) =>
               isDmConversationUnread(conv.id, conv.lastMessage.created_at)
             );
       for (const conv of conversations) {
