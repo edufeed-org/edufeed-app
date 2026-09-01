@@ -14,7 +14,8 @@
     CalendarIcon,
     BellIcon,
     ScrollTextIcon,
-    PollIcon
+    PollIcon,
+    MoreIcon
   } from '$lib/components/icons';
   import ProfileAvatar from '$lib/components/shared/ProfileAvatar.svelte';
   import UnreadDot from '$lib/components/shared/UnreadDot.svelte';
@@ -90,6 +91,52 @@
   }
 
   let blocking = $state(false);
+  let menuOpen = $state(false);
+
+  /** @type {HTMLButtonElement | undefined} */
+  let menuTrigger;
+  /** @type {HTMLElement | undefined} */
+  let menuEl;
+
+  /**
+   * Every surface that renders inbox rows wraps them in an `overflow-hidden`
+   * list, which would clip a normal absolutely-positioned dropdown. The menu
+   * is a popover so it renders in the top layer, positioned by hand against
+   * the trigger.
+   */
+  function positionMenu() {
+    if (!menuEl || !menuTrigger) return;
+    const anchor = menuTrigger.getBoundingClientRect();
+    const menu = menuEl.getBoundingClientRect();
+    const below = anchor.bottom + 4;
+    const top =
+      below + menu.height + 4 <= window.innerHeight ? below : anchor.top - menu.height - 4;
+    menuEl.style.top = `${Math.max(4, top)}px`;
+    menuEl.style.left = `${Math.max(4, anchor.right - menu.width)}px`;
+  }
+
+  /**
+   * The popover is positioned once, so scrolling would leave it floating over
+   * unrelated rows — dismiss it instead.
+   */
+  function closeMenu() {
+    if (typeof menuEl?.hidePopover === 'function') menuEl.hidePopover();
+  }
+
+  /** @param {MouseEvent} e */
+  function toggleMenu(e) {
+    e.stopPropagation();
+    e.preventDefault();
+    if (typeof menuEl?.showPopover !== 'function') return;
+    if (menuOpen) {
+      closeMenu();
+      return;
+    }
+    menuEl.showPopover();
+    positionMenu();
+    window.addEventListener('scroll', closeMenu, { capture: true, once: true });
+    window.addEventListener('resize', closeMenu, { once: true });
+  }
 
   /**
    * Mute the notification's author (NIP-51 kind 10000). The inbox filter
@@ -99,6 +146,7 @@
   function handleBlock(e) {
     e.stopPropagation();
     e.preventDefault();
+    closeMenu();
     if (blocking) return;
     blocking = true;
     muteUser(event.pubkey)
@@ -195,17 +243,42 @@
           👋 {wavedBack ? m.wave_success() : m.wave_back_button()}
         </button>
       {/if}
-      <button
-        class="btn text-base-content/40 btn-ghost btn-xs hover:text-error"
-        title={m.dm_block_sender()}
-        disabled={blocking}
-        onclick={handleBlock}
-      >
-        {m.dm_block_sender()}
-      </button>
     </div>
   </div>
-  {#if unread}
-    <UnreadDot onclick={() => markItemAsRead(event.id)} />
-  {/if}
+  <div class="flex flex-shrink-0 items-start gap-1">
+    <button
+      bind:this={menuTrigger}
+      class="btn btn-square text-base-content/40 btn-ghost btn-sm hover:text-base-content"
+      aria-label={m.aria_inbox_item_menu()}
+      aria-haspopup="true"
+      aria-expanded={menuOpen}
+      onclick={toggleMenu}
+    >
+      <MoreIcon class_="h-4 w-4" />
+    </button>
+    <ul
+      bind:this={menuEl}
+      popover="auto"
+      ontoggle={(e) => (menuOpen = /** @type {any} */ (e).newState === 'open')}
+      class="menu w-40 rounded-box border border-base-300 bg-base-100 p-2 shadow-lg"
+      style="position: fixed; inset: auto; margin: 0;"
+    >
+      <li>
+        <button class="text-error" disabled={blocking} onclick={handleBlock}>
+          {m.inbox_block_action()}
+        </button>
+      </li>
+    </ul>
+    {#if unread}
+      <UnreadDot onclick={() => markItemAsRead(event.id)} />
+    {/if}
+  </div>
 </a>
+
+<style>
+  /* DaisyUI's .menu sets display:flex, which beats the user-agent rule that
+     keeps a closed popover hidden. Restore it. */
+  ul[popover]:not(:popover-open) {
+    display: none;
+  }
+</style>
