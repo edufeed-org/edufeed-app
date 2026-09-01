@@ -118,11 +118,36 @@ describe('GroupSettingsSheet prefill', () => {
       'https://x.example/pic.png'
     );
 
-    // ['public'] present, ['open'] absent -> public checked, open unchecked.
-    // This is the case that catches reading metadata.isOpen/isPublic by
-    // mistake (applesauce's parser reads an older draft's inverse tags).
+    // Openness is the ABSENCE of private/closed (same rule as
+    // channel-access.js): no 'private', no 'closed' -> both checked.
     expect(/** @type {HTMLInputElement} */ (screen.getByTestId('group-edit-public')).checked).toBe(
       true
+    );
+    expect(/** @type {HTMLInputElement} */ (screen.getByTestId('group-edit-open')).checked).toBe(
+      true
+    );
+  });
+
+  // Issue c4f081fb: the pyramid relay's 39000 for a world-open group carries
+  // neither 'public' nor 'open' (verified live — just d + restricted).
+  // Presence-based prefill showed it unchecked, and a mere description edit
+  // then saved ['private']+['closed'], silently privatizing the group.
+  it('shows a spec-current world-open 39000 (no marker tags at all) as public + open', () => {
+    renderSheet({ metadataEvent: eventWithTags([['restricted']]) });
+
+    expect(/** @type {HTMLInputElement} */ (screen.getByTestId('group-edit-public')).checked).toBe(
+      true
+    );
+    expect(/** @type {HTMLInputElement} */ (screen.getByTestId('group-edit-open')).checked).toBe(
+      true
+    );
+  });
+
+  it('shows a private group (private + closed tags) as unchecked', () => {
+    renderSheet({ metadataEvent: eventWithTags([['private'], ['closed'], ['restricted']]) });
+
+    expect(/** @type {HTMLInputElement} */ (screen.getByTestId('group-edit-public')).checked).toBe(
+      false
     );
     expect(/** @type {HTMLInputElement} */ (screen.getByTestId('group-edit-open')).checked).toBe(
       false
@@ -133,11 +158,12 @@ describe('GroupSettingsSheet prefill', () => {
     renderSheet({ metadata: null, metadataEvent: eventWithTags([]) });
 
     expect(/** @type {HTMLInputElement} */ (screen.getByTestId('group-edit-name')).value).toBe('');
+    // No marker tags at all = world-open, per the absence rule.
     expect(/** @type {HTMLInputElement} */ (screen.getByTestId('group-edit-public')).checked).toBe(
-      false
+      true
     );
     expect(/** @type {HTMLInputElement} */ (screen.getByTestId('group-edit-open')).checked).toBe(
-      false
+      true
     );
   });
 });
@@ -158,7 +184,7 @@ describe('GroupSettingsSheet save', () => {
       expect.objectContaining({
         name: 'Bee Chat Renamed',
         isPublic: true,
-        isOpen: false
+        isOpen: true
       })
     );
     expect(publishToGroupRelay).toHaveBeenCalledWith(

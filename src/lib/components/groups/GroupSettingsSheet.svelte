@@ -7,6 +7,13 @@
   instead — applesauce's parser reads an older NIP-29 draft's inverse tags
   (see the comment on `metadataEvent` in GroupChat.svelte), so trusting
   `metadata.isPublic`/`isOpen` would silently invert the toggles.
+
+  Openness is stated by the ABSENCE of `private`/`closed`, the same rule
+  channel-access.js reads: the pyramid relay's 39000 for a world-open group
+  carries neither `public` nor `open` (verified live — only d + restricted).
+  Reading tag PRESENCE here showed such a group as unchecked, and since
+  metadataTags() emits `private`+`closed` for false toggles, saving a mere
+  description edit silently privatized it (issue c4f081fb, laoc 2026-09-01).
 -->
 <script>
   import {
@@ -43,10 +50,12 @@
   let picture = $state(metadata?.picture ?? '');
   // svelte-ignore state_referenced_locally
   let isPublic = $state(
-    !!metadataEvent?.tags?.some((/** @type {string[]} */ t) => t[0] === 'public')
+    !metadataEvent?.tags?.some((/** @type {string[]} */ t) => t[0] === 'private')
   );
   // svelte-ignore state_referenced_locally
-  let isOpen = $state(!!metadataEvent?.tags?.some((/** @type {string[]} */ t) => t[0] === 'open'));
+  let isOpen = $state(
+    !metadataEvent?.tags?.some((/** @type {string[]} */ t) => t[0] === 'closed')
+  );
   // NIP-29 Subgroups: a 9002 with no `parent` tag DETACHES the group
   // (promotes it back to root) — read the existing tag off the raw event so
   // every save preserves it verbatim. No UI to change/detach it here. Same
