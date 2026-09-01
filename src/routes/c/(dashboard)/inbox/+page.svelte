@@ -7,7 +7,7 @@
     isNotificationUnread
   } from '$lib/services/inbox-service.svelte.js';
   import {
-    getDmConversations,
+    getKnownDmConversations,
     getUnreadDmCount,
     isDmConversationUnread
   } from '$lib/services/dm-service.svelte.js';
@@ -48,7 +48,7 @@
   let mergedItems = $derived.by(() => {
     if (activeFilter === 'messages') {
       // Show all DM conversations (both read and unread), sorted by recency
-      return getDmConversations().map((conv) => ({
+      return getKnownDmConversations().map((conv) => ({
         type: /** @type {const} */ ('dm'),
         conversation: conv,
         timestamp: conv.lastMessage.created_at
@@ -67,7 +67,7 @@
 
     // For "all" filter, merge in unread DM conversations
     if (activeFilter === 'all') {
-      const unreadDms = getDmConversations().filter((conv) =>
+      const unreadDms = getKnownDmConversations().filter((conv) =>
         isDmConversationUnread(conv.id, conv.lastMessage.created_at)
       );
       for (const conv of unreadDms) {
