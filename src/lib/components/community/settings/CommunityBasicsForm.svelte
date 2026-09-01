@@ -47,6 +47,7 @@
   import { flatGroupsRelay, communityGroupsEndpoint } from '$lib/groups/community-endpoint.js';
   import { manager } from '$lib/stores/accounts.svelte.js';
   import { getCommunikeyRelays } from '$lib/helpers/relay-helper.js';
+  import { normalizeRelayInput } from '$lib/helpers/relay-input.js';
   import { addressLoader } from '$lib/loaders/base.js';
 
   let { communikeyEvent } = $props();
@@ -202,17 +203,18 @@
 
   const communitySigner = $derived.by(() => getCommunitySigner(communikeyEvent?.pubkey));
 
+  /**
+   * Accept a bare hostname and supply the scheme. Community relays are stored
+   * as bare r-tags (no trailing slash) to match what other clients write.
+   * @param {string} url
+   */
+  function normalizeRelay(url) {
+    return normalizeRelayInput(url, { trailingSlash: false }) ?? url;
+  }
+
   /** @param {string} url */
   function validateRelayUrl(url) {
-    if (!url.startsWith('wss://') && !url.startsWith('ws://')) {
-      return m.create_community_modal_relays_validation();
-    }
-    try {
-      new URL(url);
-      return null;
-    } catch {
-      return m.create_community_modal_error_invalid_url();
-    }
+    return normalizeRelayInput(url) ? null : m.relay_url_invalid();
   }
 
   function validate() {
@@ -470,6 +472,7 @@
           placeholder={m.create_community_modal_relays_placeholder()}
           buttonText={m.create_community_modal_relays_button()}
           itemType="relay"
+          normalize={normalizeRelay}
           validator={validateRelayUrl}
           minItems={1}
           helpText={m.create_community_modal_relays_help()}

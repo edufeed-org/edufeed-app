@@ -660,7 +660,7 @@ export async function addRelayOverride(page, category, relayUrl) {
   await page.waitForTimeout(500);
 
   // Wait for the input field to appear
-  const relayInput = categorySection.locator('input[placeholder*="wss://"]');
+  const relayInput = categorySection.locator('input[placeholder*="relay.example.com"]');
   await expect(relayInput).toBeVisible({ timeout: 5000 });
 
   // Type the relay URL

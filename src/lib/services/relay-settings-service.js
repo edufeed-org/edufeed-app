@@ -102,29 +102,8 @@ export async function saveRelayList(relays, userPubkey) {
   }
 }
 
-/**
- * Validate a relay URL
- * @param {string} url - Relay URL to validate
- * @returns {{valid: boolean, error?: string}}
- */
-export function validateRelayUrl(url) {
-  if (!url || typeof url !== 'string') {
-    return { valid: false, error: 'URL is required' };
-  }
-
-  const trimmed = url.trim();
-
-  if (!trimmed.startsWith('wss://') && !trimmed.startsWith('ws://')) {
-    return { valid: false, error: 'URL must start with wss:// or ws://' };
-  }
-
-  try {
-    new URL(trimmed);
-    return { valid: true };
-  } catch {
-    return { valid: false, error: 'Invalid URL format' };
-  }
-}
+// Relay URL validation lives in $lib/helpers/relay-input.js — normalizeRelayInput
+// validates and normalizes in one step, so callers never re-derive the URL.
 
 /**
  * Parse a relay list event (kind 10002) into a structured format.

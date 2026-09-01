@@ -4,7 +4,7 @@
   normalized URL.
 -->
 <script>
-  import { normalizeRelayInput } from '$lib/helpers/relay-feed.js';
+  import { normalizeRelayInput } from '$lib/helpers/relay-input.js';
   import * as m from '$lib/paraglide/messages';
 
   /** @type {{ open: boolean, onadd: (url: string) => void, onclose: () => void }} */

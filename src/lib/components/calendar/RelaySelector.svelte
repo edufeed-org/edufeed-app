@@ -9,6 +9,7 @@
 <script>
   import { calendarFilters } from '$lib/stores/calendar-filters.svelte.js';
   import { runtimeConfig } from '$lib/stores/config.svelte.js';
+  import { normalizeRelayInput } from '$lib/helpers/relay-input.js';
   import { CloseIcon, PlusIcon, RelayIcon } from '../icons';
   import * as m from '$lib/paraglide/messages';
 
@@ -42,23 +43,18 @@
     publish(next);
   }
 
-  function isValidRelayUrl(/** @type {string} */ url) {
-    const trimmed = url.trim();
-    return trimmed.startsWith('wss://') || trimmed.startsWith('ws://');
-  }
-
   function addCustomRelay() {
     error = null;
-    const trimmed = customRelayInput.trim();
-    if (!trimmed) return;
+    if (!customRelayInput.trim()) return;
 
-    if (!isValidRelayUrl(trimmed)) {
-      error = m.relay_filter_url_invalid();
+    // Bare URLs (no trailing slash): defaultRelays comes straight from
+    // runtimeConfig and the checkboxes below compare with ===, so a canonical
+    // "wss://host/" would read as a relay nobody has configured.
+    const relayUrl = normalizeRelayInput(customRelayInput, { trailingSlash: false });
+    if (!relayUrl) {
+      error = m.relay_url_invalid();
       return;
     }
-
-    // Auto-upgrade ws:// to wss://
-    const relayUrl = trimmed.startsWith('ws://') ? trimmed.replace('ws://', 'wss://') : trimmed;
 
     if (defaultRelays.includes(relayUrl) || customRelays.includes(relayUrl)) {
       error = m.relay_filter_already_exists();

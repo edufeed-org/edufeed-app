@@ -5,7 +5,6 @@
 import { describe, it, expect } from 'vitest';
 import { addSeenRelay } from 'applesauce-core/helpers';
 import {
-  normalizeRelayInput,
   relayHostLabel,
   buildRelayOptions,
   filterEventsForRelay,
@@ -26,47 +25,7 @@ function makeEvent(overrides = {}) {
   };
 }
 
-describe('normalizeRelayInput', () => {
-  it('prepends wss:// to bare hostnames', () => {
-    expect(normalizeRelayInput('relay.example.org')).toBe('wss://relay.example.org/');
-  });
-
-  it('normalizes an explicit wss URL (trailing slash, lowercase host)', () => {
-    expect(normalizeRelayInput('wss://Relay.Example.ORG')).toBe('wss://relay.example.org/');
-  });
-
-  it('accepts ws:// (e.g. localhost dev relays)', () => {
-    expect(normalizeRelayInput('ws://localhost:7777')).toBe('ws://localhost:7777/');
-  });
-
-  it('rejects non-websocket schemes', () => {
-    expect(normalizeRelayInput('https://relay.example.org')).toBeNull();
-  });
-
-  it('rejects empty and whitespace-only input', () => {
-    expect(normalizeRelayInput('')).toBeNull();
-    expect(normalizeRelayInput('   ')).toBeNull();
-  });
-
-  it('rejects unparseable garbage', () => {
-    expect(normalizeRelayInput('not a relay url')).toBeNull();
-  });
-
-  it('trims surrounding whitespace', () => {
-    expect(normalizeRelayInput('  relay.example.org  ')).toBe('wss://relay.example.org/');
-  });
-
-  it('rejects hostnames containing percent-encoding', () => {
-    expect(normalizeRelayInput('not%20a%20relay')).toBeNull();
-    expect(normalizeRelayInput('wss://not%20a%20relay')).toBeNull();
-  });
-
-  it('rejects input with internal whitespace even if the URL parser accepts it', () => {
-    expect(normalizeRelayInput('wss://not a relay')).toBeNull();
-    // WHATWG parsers (Node AND browsers) silently strip tabs/newlines
-    expect(normalizeRelayInput('wss://not\ta\trelay')).toBeNull();
-  });
-});
+// normalizeRelayInput moved to helpers/relay-input.js — see relay-input.test.js
 
 describe('relayHostLabel', () => {
   it('strips scheme and trailing slash', () => {
