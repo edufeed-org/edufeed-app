@@ -177,6 +177,25 @@ describe('AddBookmarkModal edit mode', () => {
     expect(screen.getByTestId('selected-communities').textContent).toBe('community1');
   });
 
+  it('hides the page field when editing a PDF bookmark — the address is immutable', async () => {
+    spies.modalProps = {
+      editEvent: {
+        ...existingBookmark,
+        tags: [
+          ['d', 'example.com/paper.pdf'],
+          ['r', 'https://example.com/paper.pdf#page=3'],
+          ['title', 'A Paper']
+        ]
+      }
+    };
+    render(AddBookmarkModal);
+
+    await waitFor(() => expect(urlField().value).toBe('https://example.com/paper.pdf#page=3'));
+    // handleUpdate never applies the page field, so offering it would
+    // silently drop the input.
+    expect(document.getElementById('bookmark-page')).toBeNull();
+  });
+
   it('still creates a fresh bookmark when no event is being edited', async () => {
     spies.modalProps = { communityPubkey: 'community2' };
     render(AddBookmarkModal);
