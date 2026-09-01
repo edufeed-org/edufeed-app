@@ -393,8 +393,11 @@
         {#snippet kanaeleRow(/** @type {any} */ row, /** @type {boolean} */ starred)}
           <!-- Star sits BESIDE the row (never inside — nested interactive),
             same shape as the rail's delete affordance: hidden until
-            hover/focus, always visible once starred. -->
-          <div class="group/ch flex items-center gap-1">
+            hover/focus, always visible once starred. w-full is load-bearing:
+            .menu is a WRAPPED column flex, so items size to their content
+            instead of stretching — without it a long channel name grows the
+            row past the rail and the star lands behind a horizontal scroll. -->
+          <div class="group/ch flex w-full min-w-0 items-center gap-1">
             <div class="min-w-0 flex-1">
               {#if row.source === 'concord'}
                 {@const flags = channelUnreadState(concordCommunityId, row.channel_id)}
