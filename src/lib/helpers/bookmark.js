@@ -264,3 +264,118 @@ export async function updateBookmarkContent(event, newContent, account) {
 
   return account.signEvent(template);
 }
+
+/**
+ * Derive the edit-form state for an existing bookmark event.
+ *
+ * The URL field is read-only in edit mode, but it is still shown so the user
+ * can see what they are editing: a web bookmark shows its `r` URL, an
+ * event-reference bookmark shows the naddr rebuilt from its `a` tag. When
+ * neither is present, the `d` tag (a scheme-stripped URL) is the last resort.
+ *
+ * @param {import('nostr-tools').NostrEvent | null | undefined} event
+ * @returns {{ input: string, title: string, description: string, communityPubkeys: string[] }}
+ */
+export function getBookmarkEditPrefill(event) {
+  const empty = { input: '', title: '', description: '', communityPubkeys: [] };
+  if (!event) return empty;
+
+  const tags = event.tags || [];
+  const findValue = (/** @type {string} */ name) => tags.find((t) => t[0] === name)?.[1] || '';
+
+  let input = findValue('r');
+
+  if (!input) {
+    const aTag = tags.find((t) => t[0] === 'a');
+    const pointer = aTag?.[1] ? parseEventCoordinate(aTag[1]) : null;
+    if (pointer) {
+      try {
+        input = nip19.naddrEncode({
+          kind: pointer.kind,
+          pubkey: pointer.pubkey,
+          identifier: pointer.identifier,
+          ...(aTag?.[2] ? { relays: [aTag[2]] } : {})
+        });
+      } catch {
+        // fall through to the d-tag
+      }
+    }
+  }
+
+  if (!input) {
+    const dTag = findValue('d');
+    if (dTag) input = /^https?:\/\//.test(dTag) ? dTag : `https://${dTag}`;
+  }
+
+  // h-tags come off the wire untrusted; a repeat would duplicate a key in the
+  // community selector's {#each}.
+  const communityPubkeys = [...new Set(tags.filter((t) => t[0] === 'h' && t[1]).map((t) => t[1]))];
+
+  return {
+    input,
+    title: findValue('title'),
+    description: event.content || '',
+    communityPubkeys
+  };
+}
+
+/**
+ * Build the tag array for an edited bookmark.
+ *
+ * Everything that addresses the bookmark stays untouched: the `d` tag (derived
+ * from the URL at creation time) and the `r`/`a` tags it points at. Changing
+ * them would publish a *different* addressable event instead of replacing this
+ * one, so the edit UI keeps the URL read-only. Only `title` and the `h`
+ * community targets are rewritten; any other tag is carried over verbatim.
+ *
+ * @param {import('nostr-tools').NostrEvent} event - The existing bookmark event
+ * @param {{ title: string, communityPubkeys: string[] }} updates
+ * @returns {string[][]}
+ */
+export function buildBookmarkEditTags(event, { title, communityPubkeys }) {
+  const preserved = (event.tags || []).filter((t) => t[0] !== 'title' && t[0] !== 'h');
+
+  const tags = [...preserved];
+
+  if (title?.trim()) {
+    tags.push(['title', title.trim()]);
+  }
+
+  for (const pubkey of communityPubkeys) {
+    tags.push(['h', pubkey]);
+  }
+
+  return tags;
+}
+
+/**
+ * Create and sign a replacement bookmark event with an edited title, comment
+ * and community targets. Kind 39701 is addressable, so republishing with the
+ * same d-tag overwrites the previous version.
+ *
+ * @param {Object} params
+ * @param {import('nostr-tools').NostrEvent} params.event - The existing bookmark event
+ * @param {string} params.title
+ * @param {string} params.description
+ * @param {string[]} params.communityPubkeys
+ * @param {{ signEvent: (template: any) => Promise<any> }} params.account
+ * @returns {Promise<import('nostr-tools').NostrEvent>}
+ */
+export async function updateBookmarkEvent({
+  event,
+  title,
+  description,
+  communityPubkeys,
+  account
+}) {
+  const tags = buildBookmarkEditTags(event, { title, communityPubkeys });
+
+  const eventFactory = createAppEventFactory();
+  const template = await eventFactory.build({
+    kind: BOOKMARK_KIND,
+    content: description || '',
+    tags
+  });
+
+  return account.signEvent(template);
+}

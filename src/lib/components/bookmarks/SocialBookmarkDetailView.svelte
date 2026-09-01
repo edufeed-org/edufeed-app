@@ -15,6 +15,7 @@
   import { getDisplayName } from 'applesauce-core/helpers';
   import { TimelineModel } from 'applesauce-core/models';
   import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
+  import { modalStore } from '$lib/stores/modal.svelte.js';
   import { createCachedTimelineLoader } from '$lib/loaders/base.js';
   import { reactionsLoader } from '$lib/loaders/reactions.js';
   import { reactionsStore } from '$lib/stores/reactions.svelte.js';
@@ -395,6 +396,13 @@
     } finally {
       saveBusy = false;
     }
+  }
+
+  // Three-dot menu edit: reuses the add-bookmark modal in edit mode, scoped to
+  // the active user's own bookmark of this article.
+  function handleEditBookmark() {
+    if (!myBookmark) return;
+    modalStore.openModal('addBookmark', { editEvent: myBookmark, communityPubkey });
   }
 
   // Three-dot menu delete: scoped to the active user's own bookmark of this article.
@@ -840,6 +848,7 @@
             </button>
             <EventContextMenu
               event={article}
+              onEdit={myBookmark ? handleEditBookmark : undefined}
               onDelete={myBookmark ? handleDeleteBookmark : undefined}
               deleteTitle={m.social_bookmarks_delete_confirm_title()}
               deleteItemName={title}
