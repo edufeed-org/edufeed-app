@@ -566,7 +566,10 @@
       {#snippet railRow(/** @type {any} */ row, /** @type {boolean} */ starred)}
         <!-- Row affordances (star, owner delete) sit BESIDE the row — never
              inside, that would nest interactive elements. -->
-        <div class="group/ch flex items-center gap-1">
+        <!-- w-full min-w-0 mirrors ContentNavSidebar's kanaeleRow wrapper:
+             without an explicit width a long channel name can grow the row
+             past the rail, pushing the star behind a horizontal scroll. -->
+        <div class="group/ch flex w-full min-w-0 items-center gap-1">
           <div class="min-w-0 flex-1">
             {#if row.source === 'concord'}
               {@const flags = channelUnreadState(concord.communityId, row.channel_id)}
