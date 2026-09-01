@@ -7,47 +7,28 @@
 <script>
   import { goto } from '$app/navigation';
   import { resolve } from '$app/paths';
-  import { eventStore, pool } from '$lib/stores/nostr-infrastructure.svelte';
-  import { useActiveUser } from '$lib/stores/accounts.svelte';
-  import { runtimeConfig } from '$lib/stores/config.svelte.js';
-  import { storeEvents } from 'applesauce-relay/operators';
-  import { TimelineModel } from 'applesauce-core/models';
-  import { GROUPS_LIST_KIND, getPublicGroups } from 'applesauce-common/helpers/groups';
   import { groupHref, parseGroupAddress } from '$lib/groups/groups.js';
+  import { useMyGroups } from '$lib/groups/unlinked-groups.svelte.js';
+  import { useChannelMetadata } from '$lib/groups/channel-metadata.svelte.js';
+  import { metadataName } from '$lib/groups/unlinked-groups.js';
+  import { channelKey } from '$lib/groups/community-pointer.js';
   import { showToast } from '$lib/helpers/toast';
   import * as m from '$lib/paraglide/messages';
 
-  const getActiveUser = useActiveUser();
-  // $state.raw: the events are external store objects — deep-proxying them
-  // makes applesauce's Symbol-cache writes (getPublicGroups) illegal inside
-  // $derived (state_unsafe_mutation) and breaks event identity. TimelineModel
-  // emits fresh arrays, so plain reassignment stays reactive.
-  /** @type {any[]} */ let listEvents = $state.raw([]);
+  // The same hook the sidebar rail uses: it also asks the user's NIP-65
+  // write relays — a kind-10009 is a USER-OWNED list, and fetching it from
+  // the fallback relays alone made an unfound list look like an empty one.
+  const getMyGroups = useMyGroups();
+  const groups = $derived(getMyGroups());
+  // Readable names live in each group's own kind:39000 — same map the rail
+  // builds; the raw id is only the fallback while (or if) none arrives.
+  const getChannelMeta = useChannelMetadata(() => groups);
 
-  $effect(() => {
-    const me = getActiveUser()?.pubkey;
-    if (!me) return;
-    const filter = { kinds: [GROUPS_LIST_KIND], authors: [me] };
-    /** @type {string[]} */
-    const relays = runtimeConfig.fallbackRelays || [];
-    const reqSub = pool
-      .group(relays)
-      .request(filter, { timeout: 8000 })
-      .pipe(storeEvents(eventStore))
-      .subscribe({ error: () => {} });
-    const modelSub = eventStore.model(TimelineModel, filter).subscribe((events) => {
-      listEvents = events;
-    });
-    return () => {
-      reqSub.unsubscribe();
-      modelSub.unsubscribe();
-    };
-  });
-
-  const groups = $derived.by(() => {
-    const latest = listEvents[0];
-    return latest ? (getPublicGroups(latest) ?? []) : [];
-  });
+  /** @param {{id: string, relay: string}} group */
+  function displayName(group) {
+    const key = channelKey(group);
+    return (key && metadataName(getChannelMeta().byKey[key])) || group.id;
+  }
 
   let input = $state('');
 
@@ -99,7 +80,7 @@
             href={resolve(/** @type {any} */ (groupHref(group)))}
             class="flex items-center gap-3 rounded border border-base-300 p-3 hover:bg-base-200"
           >
-            <span class="font-mono text-sm">{group.id}</span>
+            <span class="text-sm">{displayName(group)}</span>
             <span class="ml-auto text-xs opacity-60">{new URL(group.relay).hostname}</span>
           </a>
         </li>
