@@ -12,6 +12,8 @@ export { default as ChevronRightIcon } from './ui/ChevronRightIcon.svelte';
 export { default as ChevronDownIcon } from './ui/ChevronDownIcon.svelte';
 export { default as ChevronUpIcon } from './ui/ChevronUpIcon.svelte';
 export { default as CloseIcon } from './ui/CloseIcon.svelte';
+export { default as ExpandIcon } from './ui/ExpandIcon.svelte';
+export { default as CollapseIcon } from './ui/CollapseIcon.svelte';
 export { default as PlusIcon } from './ui/PlusIcon.svelte';
 export { default as MenuIcon } from './ui/MenuIcon.svelte';
 export { default as LocationIcon } from './ui/LocationIcon.svelte';

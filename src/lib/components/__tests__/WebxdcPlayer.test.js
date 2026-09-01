@@ -75,6 +75,67 @@ describe('WebxdcPlayer', () => {
     await waitFor(() => expect(container.querySelector('iframe')).toBeTruthy());
   });
 
+  // Issue "Fix layout issues in pad app": the running stage previously fixed
+  // the frame to a 4/3 aspect box, which overflowed the channel column and
+  // nested three scrollbars. `fill` lets a flex parent give it real height.
+  it('keeps the aspect-ratio frame in the default (card) mode', async () => {
+    const { getByText, container } = render(WebxdcPlayer, {
+      props: { bytes: xdcBytes, name: 'Card', appKey: 'card:k' }
+    });
+    await fireEvent.click(getByText(/Launch|Starten/));
+    const iframe = await waitFor(() => {
+      const el = container.querySelector('iframe');
+      expect(el).toBeTruthy();
+      return el;
+    });
+    expect(iframe.className).toContain('aspect-');
+  });
+
+  it('fill mode stretches the frame to the available height instead of the aspect box', async () => {
+    const { getByText, container } = render(WebxdcPlayer, {
+      props: { bytes: xdcBytes, name: 'Fill', appKey: 'fill:k', fill: true }
+    });
+    await fireEvent.click(getByText(/Launch|Starten/));
+    const iframe = await waitFor(() => {
+      const el = container.querySelector('iframe');
+      expect(el).toBeTruthy();
+      return el;
+    });
+    expect(iframe.className).toContain('flex-1');
+    expect(iframe.className).not.toContain('aspect-');
+  });
+
+  // One header, one close: the stage used to stack its own "Close app" above
+  // the player's "Close". The player's single close button now delegates to
+  // the host when it passes onClose.
+  it('delegates the header close button to onClose when provided', async () => {
+    const onClose = vi.fn();
+    const { getByText, findByTestId } = render(WebxdcPlayer, {
+      props: { bytes: xdcBytes, name: 'Closable', appKey: 'close:k', onClose }
+    });
+    await fireEvent.click(getByText(/Launch|Starten/));
+    await fireEvent.click(await findByTestId('webxdc-close'));
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows an open-in-new-tab button only when onOpenInNewTab is provided', async () => {
+    const onOpenInNewTab = vi.fn();
+    const withTab = render(WebxdcPlayer, {
+      props: { bytes: xdcBytes, name: 'Tab', appKey: 'tab:k', onOpenInNewTab }
+    });
+    await fireEvent.click(withTab.getByText(/Launch|Starten/));
+    await fireEvent.click(await withTab.findByTestId('webxdc-newtab'));
+    expect(onOpenInNewTab).toHaveBeenCalledTimes(1);
+    withTab.unmount();
+
+    const without = render(WebxdcPlayer, {
+      props: { bytes: xdcBytes, name: 'NoTab', appKey: 'notab:k' }
+    });
+    await fireEvent.click(without.getByText(/Launch|Starten/));
+    await waitFor(() => expect(without.container.querySelector('iframe')).toBeTruthy());
+    expect(without.queryByTestId('webxdc-newtab')).toBeNull();
+  });
+
   it('errors with retry when the frame never signals ready', async () => {
     vi.useFakeTimers();
     try {

@@ -1619,10 +1619,62 @@ describe('GroupChat', () => {
       const articleButton = await screen.findByText('As article');
       await fireEvent.click(articleButton);
 
-      expect(goto).toHaveBeenCalledTimes(1);
-      const url = vi.mocked(goto).mock.calls[0][0];
-      expect(url).toContain('/create/article?');
+      // Opening the session also syncs ?app= into the URL via goto, so pick
+      // the create-route navigation out instead of asserting a lone call.
+      const url = vi
+        .mocked(goto)
+        .mock.calls.map((c) => c[0])
+        .find((u) => String(u).includes('/create/article?'));
+      expect(url).toBeTruthy();
       expect(url).toContain('prefill=webxdc');
+    });
+
+    // Issue "Fix layout issues in pad app": while a session is open the chat
+    // body (timeline, disclosure line, composer) steps aside so the pad gets
+    // the full channel height — no more nested scrollbars and no disabled
+    // composer wasting space under the pad.
+    it('an open app session takes over the channel body and hides the chat until closed', async () => {
+      render(GroupChat, { props: { pointer: { relay: GROUP_RELAY, id: 'webxdcchat' } } });
+
+      const launchButton = await screen.findByText('Open app');
+      await fireEvent.click(launchButton);
+      await screen.findByTestId('group-app-stage-stub');
+      expect(screen.getByTestId('group-chat-body').className).toContain('hidden');
+
+      await fireEvent.click(screen.getByTestId('stage-stub-close'));
+      await waitFor(() =>
+        expect(screen.getByTestId('group-chat-body').className).not.toContain('hidden')
+      );
+    });
+
+    it('reflects the open session in the URL and clears it again on close', async () => {
+      render(GroupChat, { props: { pointer: { relay: GROUP_RELAY, id: 'webxdcchat' } } });
+
+      const launchButton = await screen.findByText('Open app');
+      await fireEvent.click(launchButton);
+      await screen.findByTestId('group-app-stage-stub');
+      const openCall = vi
+        .mocked(goto)
+        .mock.calls.map((c) => String(c[0]))
+        .find((u) => u.includes('app=session-export-1'));
+      expect(openCall).toBeTruthy();
+
+      await fireEvent.click(screen.getByTestId('stage-stub-close'));
+      const lastCall = String(vi.mocked(goto).mock.calls.at(-1)?.[0]);
+      expect(lastCall).not.toContain('app=');
+    });
+
+    // Deep link / open-in-new-tab target: a fresh mount with ?app=<sessionId>
+    // auto-opens that session once its share event arrives on the timeline.
+    it('opens the session referenced by an ?app= URL parameter once its share arrives', async () => {
+      window.history.replaceState(null, '', '/?app=session-export-1');
+      try {
+        render(GroupChat, { props: { pointer: { relay: GROUP_RELAY, id: 'webxdcchat' } } });
+        await screen.findByTestId('group-app-stage-stub');
+        expect(screen.getByTestId('group-chat-body').className).toContain('hidden');
+      } finally {
+        window.history.replaceState(null, '', '/');
+      }
     });
   });
 

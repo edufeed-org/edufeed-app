@@ -25,8 +25,18 @@
    *          publish: (t: any) => Promise<any>,
    *          authenticate?: () => Promise<any>,
    *          onShareText: (file: {name: string, plainText: string}) => void,
-   *          onClose: () => void}} */
-  let { pointer, session, selfPubkey, publish, authenticate, onShareText, onClose } = $props();
+   *          onClose: () => void,
+   *          onOpenInNewTab?: (() => void) | null}} */
+  let {
+    pointer,
+    session,
+    selfPubkey,
+    publish,
+    authenticate,
+    onShareText,
+    onClose,
+    onOpenInNewTab
+  } = $props();
 
   // Read failures (backfill/live-sub) and write failures (state publish) are
   // shown separately: a read failure means the session may be showing stale
@@ -73,20 +83,18 @@
   }
 </script>
 
-<div class="border-b border-base-300 bg-base-200/60 p-2" data-testid="group-app-stage">
-  <div class="mb-1 flex items-center gap-2">
-    <span class="flex-1 truncate text-sm font-semibold">{session.app.name}</span>
-    <button type="button" class="btn btn-xs" onclick={onClose}
-      >{m.webxdc_session_stage_close()}</button
-    >
-  </div>
+<!-- The stage IS the channel body while a session is open (issue "Fix layout
+     issues in pad app"): a flex column that hands its full height to the
+     player, whose single header carries the new-tab/fullscreen/close
+     controls — no second title row, no aspect-ratio overflow. -->
+<div class="flex min-h-0 flex-1 flex-col" data-testid="group-app-stage">
   {#if loadError}
-    <div class="mb-1 alert py-1 text-xs alert-warning">
+    <div class="alert rounded-none py-1 text-xs alert-warning">
       {m.webxdc_session_load_failed({ reason: loadError })}
     </div>
   {/if}
   {#if publishError}
-    <div class="mb-1 alert py-1 text-xs alert-warning">
+    <div class="alert rounded-none py-1 text-xs alert-warning">
       {m.webxdc_session_publish_failed({ reason: publishError })}
     </div>
   {/if}
@@ -99,5 +107,8 @@
     appKey={`session:${session.sessionId}`}
     {sync}
     onShareFile={handleShareFile}
+    fill
+    {onClose}
+    {onOpenInNewTab}
   />
 </div>

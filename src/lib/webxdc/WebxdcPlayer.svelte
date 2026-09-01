@@ -14,6 +14,7 @@
   import { createLocalSync } from './local-sync.js';
   import { createWebxdcHost } from './webxdc-host.js';
   import SandboxFrame from './SandboxFrame.svelte';
+  import { CloseIcon, ExpandIcon, CollapseIcon, ExternalLinkIcon } from '$lib/components/icons';
 
   let {
     url = '',
@@ -23,7 +24,15 @@
     iconUrl = '',
     appKey,
     sync = null,
-    onShareFile = null
+    onShareFile = null,
+    // `fill`: stretch the running stage to the height a flex parent grants it
+    // (channel takeover) instead of the standalone 4/3 card.
+    fill = false,
+    // Host-owned close (e.g. GroupAppStage unmounts the whole stage). The
+    // player then renders ONE close button instead of stacking its own under
+    // the host's.
+    onClose = null,
+    onOpenInNewTab = null
   } = $props();
 
   const READY_TIMEOUT_MS = 15000;
@@ -144,19 +153,65 @@
   onDestroy(() => close());
 </script>
 
+<svelte:window
+  onkeydown={(e) => {
+    if (fullscreen && e.key === 'Escape') fullscreen = false;
+  }}
+/>
+
+{#snippet header(/** @type {boolean} */ running)}
+  <div class="flex items-center gap-2 border-b border-base-300 bg-base-200 px-3 py-1.5">
+    {#if iconUrl}<img src={iconUrl} alt="" class="size-5 shrink-0 rounded" />{/if}
+    <span class="flex-1 truncate text-sm font-semibold">{name || m.webxdc_app_type()}</span>
+    {#if running && onOpenInNewTab && !fullscreen}
+      <button
+        type="button"
+        class="btn btn-square btn-ghost btn-xs"
+        data-testid="webxdc-newtab"
+        title={m.webxdc_open_new_tab()}
+        aria-label={m.webxdc_open_new_tab()}
+        onclick={onOpenInNewTab}
+      >
+        <ExternalLinkIcon class_="w-4 h-4" title="" />
+      </button>
+    {/if}
+    {#if running}
+      <button
+        type="button"
+        class="btn btn-square btn-ghost btn-xs"
+        data-testid="webxdc-fullscreen"
+        title={fullscreen ? m.webxdc_exit_fullscreen() : m.webxdc_fullscreen()}
+        aria-label={fullscreen ? m.webxdc_exit_fullscreen() : m.webxdc_fullscreen()}
+        onclick={() => (fullscreen = !fullscreen)}
+      >
+        {#if fullscreen}<CollapseIcon class_="w-4 h-4" title="" />{:else}<ExpandIcon
+            class_="w-4 h-4"
+            title=""
+          />{/if}
+      </button>
+    {/if}
+    <button
+      type="button"
+      class="btn btn-square btn-ghost btn-xs"
+      data-testid="webxdc-close"
+      title={m.webxdc_close()}
+      aria-label={m.webxdc_close()}
+      onclick={onClose ?? close}
+    >
+      <CloseIcon class_="w-4 h-4" title="" />
+    </button>
+  </div>
+{/snippet}
+
 {#if phase === 'running' && files && host}
   <div
     class={fullscreen
-      ? 'fixed inset-0 z-50 flex flex-col bg-base-100'
-      : 'overflow-hidden rounded-xl border border-base-300'}
+      ? 'fixed inset-0 z-[80] flex flex-col bg-base-100'
+      : fill
+        ? 'flex min-h-0 flex-1 flex-col overflow-hidden'
+        : 'overflow-hidden rounded-xl border border-base-300'}
   >
-    <div class="flex items-center gap-2 bg-base-200 px-3 py-1.5">
-      <span class="flex-1 truncate text-sm font-semibold">{name || m.webxdc_app_type()}</span>
-      <button class="btn btn-xs" onclick={() => (fullscreen = !fullscreen)}
-        >{m.webxdc_fullscreen()}</button
-      >
-      <button class="btn btn-xs" onclick={close}>{m.webxdc_close()}</button>
-    </div>
+    {@render header(true)}
     {#key filesReady}
       <SandboxFrame
         id={subdomain}
@@ -164,12 +219,15 @@
         bridgeScript={host.bridgeScript}
         onRpc={host.handleRpc}
         {onFrameReady}
-        class_={fullscreen ? 'flex-1 w-full' : 'w-full aspect-[4/3]'}
+        class_={fullscreen || fill ? 'min-h-0 w-full flex-1' : 'w-full aspect-[4/3]'}
       />
     {/key}
   </div>
 {:else if phase === 'error'}
-  <div class="rounded-xl border border-error/40 bg-error/5 p-4 text-sm">
+  <!-- fill hosts auto-launch, so their error/launch states must still offer
+       the header's close — otherwise a failed launch strands the stage. -->
+  {#if fill && onClose}{@render header(false)}{/if}
+  <div class="rounded-xl border border-error/40 bg-error/5 p-4 text-sm" class:m-3={fill}>
     {#if errorKind === 'integrity'}{m.webxdc_error_integrity()}
     {:else if errorKind === 'invalid'}{m.webxdc_error_invalid()}
     {:else if errorKind === 'timeout'}{m.webxdc_error_timeout()}
@@ -177,7 +235,11 @@
     <button class="btn mt-2 btn-sm" onclick={launch}>{m.webxdc_retry()}</button>
   </div>
 {:else}
-  <div class="flex max-w-md items-center gap-3 rounded-xl border border-base-300 bg-base-100 p-3">
+  {#if fill && onClose}{@render header(false)}{/if}
+  <div
+    class="flex max-w-md items-center gap-3 rounded-xl border border-base-300 bg-base-100 p-3"
+    class:m-3={fill}
+  >
     <div
       class="flex size-10 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-primary/10"
     >

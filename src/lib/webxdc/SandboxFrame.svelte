@@ -81,7 +81,7 @@
   bind:this={iframeEl}
   src={`${origin}/`}
   title="Interactive app"
-  class={class_}
+  class={`block ${class_}`}
   sandbox="allow-scripts allow-same-origin allow-forms allow-modals allow-popups allow-popups-to-escape-sandbox allow-downloads"
   allow="autoplay; fullscreen; gamepad; clipboard-write"
 ></iframe>
