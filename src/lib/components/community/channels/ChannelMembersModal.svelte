@@ -61,9 +61,13 @@
   // in this file. Both are still accepted (renamed with a `_` prefix,
   // unused-var-safe) rather than dropped from the prop type — call sites
   // still pass them.
+  // `channel` is optional: the Mitglieder page mounts this modal for the
+  // AREA (community-wide role management, issues 2+3 of the groups epic).
+  // Without a channel there is nothing for kick/ban to rotate, so those
+  // actions render only in a channel-scoped mount.
   let {
     community,
-    channel,
+    channel = null,
     isOwner: _isOwner = false,
     signerHasNip44 = false,
     canModerate: _canModerate = false,
@@ -116,7 +120,7 @@
   // moderation.js's header comment for why `.pubkey` is safe to read off
   // these (same ConcordRumorStore/RumorStore the rest of the chat pane uses).
   const getRumors = useObservable(
-    () => community?.channelStore(channel.channel_id).timeline([{}]),
+    () => (channel ? community?.channelStore(channel.channel_id).timeline([{}]) : undefined),
     /** @type {any[]} */ ([])
   );
   // community.banlist$ (Observable<Set<string>>, verified in
@@ -286,9 +290,10 @@
         </button>
       {/if}
     {/if}
-    {#if !self && canModerateTier(myTier, targetTier)}
+    {#if !self && channel && canModerateTier(myTier, targetTier)}
       <button
         class="btn btn-ghost btn-xs"
+        data-testid="concord-member-kick"
         title={signerHasNip44 ? m.concord_kick() : m.concord_moderate_needs_nip44()}
         disabled={!signerHasNip44}
         onclick={() => (confirm = { kind: 'kick', pubkey })}>−</button
@@ -313,7 +318,10 @@
       {m.concord_members_title()}
       <span class="font-mono text-sm text-base-content/50">{rosterCount}</span>
     </h3>
-    <p class="mb-3 text-xs text-base-content/60">{m.concord_members_note()}</p>
+    {#if channel}
+      <!-- "per-channel activity can lag" only makes sense next to a channel. -->
+      <p class="mb-3 text-xs text-base-content/60">{m.concord_members_note()}</p>
+    {/if}
     <div class="divide-y divide-base-300">
       {#each sections.leaders as leader (leader.pubkey)}
         {@render memberRow(leader.pubkey, leader.roleName, leader.isOwner)}

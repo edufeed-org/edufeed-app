@@ -25,7 +25,10 @@ vi.mock('$lib/paraglide/messages', () => ({
   groups_role_king: () => 'Founder',
   community_members_area_note: () => 'Area members are private.',
   community_members_area_chip: () => 'Private area',
-  community_membership_pane_manage: () => 'Manage members'
+  community_membership_pane_manage: () => 'Manage members',
+  concord_role_owner: () => 'Owner',
+  concord_role_admin: () => 'Admin',
+  concord_role_moderator: () => 'Moderator'
 }));
 
 vi.mock('$lib/stores/profile-map.svelte.js', () => ({
@@ -33,13 +36,21 @@ vi.mock('$lib/stores/profile-map.svelte.js', () => ({
 }));
 
 vi.mock('$lib/concord/community.svelte.js', () => ({
-  useConcordCommunity: () => () => ({ community: holders.areaCommunity })
+  useConcordCommunity: () => () => ({ community: holders.areaCommunity, ...holders.areaCaps })
 }));
 vi.mock('$lib/concord/bridge.svelte.js', () => ({
   // Mirrors the real hook's contract: a getter returning the observable's
-  // latest value — here just the fixture set.
-  useObservable: (/** @type {any} */ _getObservable, /** @type {any} */ initial) => () =>
-    holders.areaMembers ?? initial
+  // latest value. Fixture "observables" are plain `{ __value }` markers on
+  // the fake area community (members$/roles$/grants$).
+  useObservable: (/** @type {any} */ getObservable, /** @type {any} */ initial) => () => {
+    let obs;
+    try {
+      obs = getObservable();
+    } catch {
+      obs = undefined;
+    }
+    return obs && typeof obs === 'object' && '__value' in obs ? obs.__value : initial;
+  }
 }));
 
 vi.mock('$lib/components/shared/ProfileCard.svelte', () => ({
@@ -52,6 +63,9 @@ vi.mock('$lib/components/community/settings/JoinRequestsPanel.svelte', () => ({
   default: function Stub() {}
 }));
 vi.mock('$lib/components/groups/GroupMembersModal.svelte', () => ({
+  default: function Stub() {}
+}));
+vi.mock('$lib/components/community/channels/ChannelMembersModal.svelte', () => ({
   default: function Stub() {}
 }));
 
@@ -70,8 +84,8 @@ const holders = vi.hoisted(() => ({
   admins: /** @type {{pubkey: string, roles: string[]}[]} */ ([]),
   /** @type {any} */
   areaCommunity: null,
-  /** @type {Set<string> | null} */
-  areaMembers: null,
+  /** @type {Record<string, any>} */
+  areaCaps: {},
   /** @type {Set<string>} */
   members: new Set(),
   /** @type {{id: string, relay: string} | null} */
@@ -102,6 +116,7 @@ vi.mock('$lib/groups/root-roster.svelte.js', () => ({
 }));
 
 import MembersView from '$lib/components/community/views/MembersView.svelte';
+import { ADMIN_PERMS, MOD_PERMS } from '$lib/concord/roles.js';
 
 const OWNER = 'a'.repeat(64);
 const ADMIN = 'b'.repeat(64);
@@ -127,7 +142,7 @@ beforeEach(() => {
   holders.profileAccess = { isLoading: false, getMembers: () => [] };
   holders.admins = [];
   holders.areaCommunity = null;
-  holders.areaMembers = null;
+  holders.areaCaps = {};
   holders.members = new Set();
   holders.pointer = null;
   holders.activePubkey = null;
@@ -265,8 +280,7 @@ describe('MembersView — community with a linked private area', () => {
   };
 
   it('merges decrypted area members into the list with the area chip', () => {
-    holders.areaCommunity = {};
-    holders.areaMembers = new Set([OWNER, ADMIN]);
+    holders.areaCommunity = { members$: { __value: new Set([OWNER, ADMIN]) } };
 
     const { container } = render(MembersView, { props: { communikeyEvent: AREA_EVENT } });
 
@@ -284,6 +298,69 @@ describe('MembersView — community with a linked private area', () => {
     render(MembersView, { props: { communikeyEvent: AREA_EVENT } });
     expect(screen.getByText('Area members are private.')).toBeTruthy();
     expect(screen.queryByText('This is an open community.')).toBeNull();
+  });
+});
+
+// Epic follow-up (issues 2+3 of the groups epic): area members' CORD-04 tiers
+// were fetched but never rendered here, and role management had no entry
+// point outside a channel's own members modal.
+describe('MembersView — Concord area roles', () => {
+  const AREA_EVENT = {
+    pubkey: OWNER,
+    kind: 10222,
+    tags: [['concord', 'c'.repeat(64), 'wss://concord.example']]
+  };
+
+  /** Owner + one preset-admin + one preset-moderator, viewer-decryptable. */
+  const roledArea = () => ({
+    material: { owner: OWNER },
+    members$: { __value: new Set([OWNER, ADMIN, REGULAR]) },
+    roles$: {
+      __value: [
+        { role_id: 'r-admin', permissions: String(ADMIN_PERMS) },
+        { role_id: 'r-mod', permissions: String(MOD_PERMS) }
+      ]
+    },
+    grants$: {
+      __value: new Map([
+        [ADMIN, ['r-admin']],
+        [REGULAR, ['r-mod']]
+      ])
+    }
+  });
+
+  it('area members show their tier chips (admin / moderator)', () => {
+    holders.areaCommunity = roledArea();
+    const { container } = render(MembersView, { props: { communikeyEvent: AREA_EVENT } });
+    const chipOf = (/** @type {string} */ pubkey) => {
+      const row = /** @type {HTMLElement} */ (
+        container.querySelector(`[data-testid="member-row"][data-pubkey="${pubkey}"]`)
+      );
+      return row ? within(row).queryByTestId('member-area-tier-chip') : null;
+    };
+    expect(chipOf(ADMIN)?.textContent).toContain('Admin');
+    expect(chipOf(REGULAR)?.textContent).toContain('Moderator');
+    // The area owner is the community owner here — the Owner badge already
+    // marks that row; no duplicate tier chip.
+    expect(chipOf(OWNER)).toBeNull();
+  });
+
+  it('an actor with role capability gets the area manage button', () => {
+    holders.areaCommunity = roledArea();
+    holders.areaCaps = {
+      canManageRoles: true,
+      canPromoteAdmin: false,
+      myTier: 'admin',
+      signerHasNip44: true
+    };
+    render(MembersView, { props: { communikeyEvent: AREA_EVENT } });
+    expect(screen.getByTestId('members-manage-area-button')).toBeTruthy();
+  });
+
+  it('no manage button for a plain area member', () => {
+    holders.areaCommunity = roledArea();
+    render(MembersView, { props: { communikeyEvent: AREA_EVENT } });
+    expect(screen.queryByTestId('members-manage-area-button')).toBeNull();
   });
 });
 

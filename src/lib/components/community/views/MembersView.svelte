@@ -9,6 +9,8 @@
   import { useConcordCommunity } from '$lib/concord/community.svelte.js';
   import { useObservable } from '$lib/concord/bridge.svelte.js';
   import { parseConcordPointer } from '$lib/concord/pointer.js';
+  import { memberTier } from '$lib/concord/roles.js';
+  import ChannelMembersModal from '$lib/components/community/channels/ChannelMembersModal.svelte';
   import { unique } from '$lib/helpers/unique.js';
   import { roleLabel } from '$lib/groups/role-labels.js';
   import { contentSectionLabel } from '$lib/helpers/content-section-label.js';
@@ -39,6 +41,44 @@
     /** @type {Set<string>} */ (new Set())
   );
   let areaMembers = $derived([...getAreaMemberSet()]);
+
+  // CORD-04 tiers for the same rows (issues 2+3 of the groups epic): the
+  // machinery was already loaded by useConcordCommunity, only never read
+  // here. Like members$, roles$/grants$ are E2E — visitors see no tiers.
+  const getAreaRoles = useObservable(
+    () => getConcordArea().community?.roles$,
+    /** @type {any[]} */ ([])
+  );
+  const getAreaGrants = useObservable(
+    () => getConcordArea().community?.grants$,
+    /** @type {Map<string, string[]>} */ (new Map())
+  );
+
+  /** @returns {'owner'|'admin'|'moderator'|null} */
+  function getAreaTier(/** @type {string} */ pubkey) {
+    if (!hasArea) return null;
+    return memberTier(
+      getAreaRoles(),
+      getAreaGrants(),
+      getConcordArea().community?.material?.owner,
+      pubkey
+    );
+  }
+
+  /** @param {'owner'|'admin'|'moderator'} tier */
+  function areaTierLabel(tier) {
+    return tier === 'owner'
+      ? m.concord_role_owner()
+      : tier === 'admin'
+        ? m.concord_role_admin()
+        : m.concord_role_moderator();
+  }
+
+  // Area role management from this page too, mirroring the NIP-29 manage
+  // button below: ChannelMembersModal without a channel is the community-wide
+  // role surface (kick/ban need a channel and stay hidden there).
+  let showAreaModal = $state(false);
+  const areaCanManage = $derived(hasArea && !!getConcordArea().canManageRoles);
 
   const getProfiles = useProfileMap(() => mergedMembers);
   let profiles = $derived(getProfiles());
@@ -138,6 +178,15 @@
         {m.community_membership_pane_manage()}
       </button>
     {/if}
+    {#if areaCanManage}
+      <button
+        class="btn btn-outline btn-sm"
+        data-testid="members-manage-area-button"
+        onclick={() => (showAreaModal = true)}
+      >
+        {m.community_membership_pane_manage()}
+      </button>
+    {/if}
   </div>
 
   {#if canModerateJoins && communikeyEvent?.pubkey}
@@ -218,6 +267,7 @@
     <div class="flex max-w-2xl flex-col gap-2">
       {#each mergedMembers as pubkey (pubkey)}
         {@const sections = getSectionsForPubkey(pubkey)}
+        {@const areaTier = getAreaTier(pubkey)}
         <div class="rounded-lg bg-base-100 p-2" data-testid="member-row" data-pubkey={pubkey}>
           <div class="flex flex-wrap items-center gap-2">
             <div class="min-w-0 flex-1">
@@ -242,6 +292,14 @@
               {#if areaMembers.includes(pubkey)}
                 <span class="badge badge-outline badge-sm" data-testid="member-area-chip"
                   >🔒 {m.community_members_area_chip()}</span
+                >
+              {/if}
+              <!-- Skip the redundant 'owner' tier chip when the row already
+                carries the community Owner badge (the normal wizard-founded
+                case, where the area owner IS the community keypair). -->
+              {#if areaTier && !(areaTier === 'owner' && isOwner(pubkey))}
+                <span class="badge badge-ghost badge-sm" data-testid="member-area-tier-chip"
+                  >{areaTierLabel(areaTier)}</span
                 >
               {/if}
             </div>
@@ -278,5 +336,16 @@
     onRosterChanged={getRootRoster().refresh}
     onMemberAdded={async () => {}}
     onClose={() => (showMembersModal = false)}
+  />
+{/if}
+
+{#if showAreaModal}
+  <ChannelMembersModal
+    community={getConcordArea().community}
+    signerHasNip44={getConcordArea().signerHasNip44}
+    canManageRoles={getConcordArea().canManageRoles}
+    canPromoteAdmin={getConcordArea().canPromoteAdmin}
+    myTier={getConcordArea().myTier}
+    onClose={() => (showAreaModal = false)}
   />
 {/if}

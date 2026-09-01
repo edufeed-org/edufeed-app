@@ -189,6 +189,30 @@ function fakeRoledCommunity() {
   });
 }
 
+describe('ChannelMembersModal — community-wide mount (no channel)', () => {
+  // The Mitglieder page opens this modal for the AREA, outside any channel:
+  // the roster + role actions must work, while the channel-scoped kick/ban
+  // (they rotate a channel key) have no channel to act on and stay hidden.
+  it('renders the roster with role actions; kick/ban stay hidden', () => {
+    const community = fakeRoledCommunity();
+    render(ChannelMembersModal, {
+      props: {
+        community,
+        signerHasNip44: true,
+        canManageRoles: true,
+        canPromoteAdmin: true,
+        myTier: 'owner',
+        onClose: () => {}
+      }
+    });
+
+    expect(screen.getByText('Name-' + LURKER.slice(0, 4))).toBeTruthy();
+    expect(screen.getByTestId(`concord-make-admin-${LURKER}`)).toBeTruthy();
+    expect(screen.queryByTestId('concord-member-kick')).toBeNull();
+    expect(screen.queryByTestId('concord-member-ban')).toBeNull();
+  });
+});
+
 describe('ChannelMembersModal — role actions (capability-gated)', () => {
   it('owner actor: sees make-admin + make-moderator on a roleless member; make-admin assigns the admin tier', async () => {
     const community = fakeRoledCommunity();
