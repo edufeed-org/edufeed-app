@@ -3451,7 +3451,7 @@
   "dm_block_failed": "Couldn't update your block list. Please try again.",
   "inbox_block_success": "{name} blocked",
   "mute_words_title": "Muted words",
-  "mute_words_hint": "Notifications containing a muted word are hidden, no matter who sends them.",
+  "mute_words_hint": "Notifications and message requests containing a muted word are hidden, no matter who sends them. Chats with people you already know stay visible.",
   "mute_words_placeholder": "e.g. damus airdrop",
   "mute_words_add": "Mute word",
   "mute_words_remove": "Remove",
