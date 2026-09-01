@@ -48,7 +48,8 @@
   import { updatePersonalGroupsList } from '$lib/groups/personal-groups-list.js';
   import { publishToGroupRelay } from '$lib/groups/group-management.js';
   import { unique } from '$lib/helpers/unique.js';
-  import { setContext } from 'svelte';
+  import { setContext, tick } from 'svelte';
+  import { updateQueryParams } from '$lib/helpers/urlParams.js';
   import { GROUP_MEDIA_AUTH } from '$lib/groups/authed-media.js';
   import {
     saveScrollPosition,
@@ -594,9 +595,33 @@
   /** @type {{sessionId: string, app: {url: string, sha256: string, name: string, iconUrl: string}} | null} */
   let activeSession = $state.raw(null);
 
+  // While a session is open it takes over the channel body (the chat is
+  // display:none'd, not unmounted — scroll state and subscriptions survive).
+  // The open session is mirrored into ?app=<sessionId> so the pad is
+  // linkable and "open in new tab" is just the current URL.
+  /** @param {string | null} sessionId */
+  function syncAppParam(sessionId) {
+    updateQueryParams(new URLSearchParams(window.location.search), { app: sessionId });
+  }
+
+  /** @param {{sessionId: string, app: any}} session */
+  function openStage(session) {
+    activeSession = session;
+    syncAppParam(session.sessionId);
+  }
+
+  async function closeStage() {
+    activeSession = null;
+    syncAppParam(null);
+    // display:none zeroes the timeline's scrollHeight, so a pinned reader
+    // would otherwise get the chat back stranded at the top.
+    await tick();
+    if (pinnedToBottom) jumpToBottom();
+  }
+
   /** @param {any} att */
   function openSession(att) {
-    activeSession = {
+    openStage({
       sessionId: att.webxdc,
       app: {
         url: att.url,
@@ -604,7 +629,33 @@
         name: att.alt?.replace(/^Webxdc app: /, '') || '',
         iconUrl: att.image || ''
       }
-    };
+    });
+  }
+
+  // Deep link: a mount with ?app=<sessionId> (new-tab handoff, shared link)
+  // auto-opens that session once its share event shows up on the timeline.
+  // Consumed once — closing the pad must not immediately reopen it.
+  let pendingAppParam = $state(
+    typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('app') : null
+  );
+  $effect(() => {
+    if (!pendingAppParam || activeSession) return;
+    const match = sessions.find((s) => s.sessionId === pendingAppParam);
+    if (match) {
+      pendingAppParam = null;
+      activeSession = match;
+    }
+  });
+
+  function openInNewTab() {
+    if (!activeSession) return;
+    const params = new URLSearchParams(window.location.search); // eslint-disable-line svelte/prefer-svelte-reactivity -- transient local, serialized immediately
+    params.set('app', activeSession.sessionId);
+    // The community mount doesn't track channel selection in the URL, so the
+    // fresh tab needs ?channel= to land in this channel at all (harmless on
+    // the /groups route, which encodes the channel in the path).
+    params.set('channel', pointer.id);
+    window.open(`${window.location.pathname}?${params.toString()}`, '_blank', 'noopener');
   }
 
   // Session title enrichment (owned here, not GroupAppsBar — the bar is now
@@ -712,7 +763,7 @@
     try {
       const signed = await signAndPublish(buildAppShareTemplate(pointer.id, app, sessionId, draft));
       eventStore.add(signed);
-      activeSession = { sessionId, app };
+      openStage({ sessionId, app });
       if (text === draft) text = '';
     } catch (err) {
       // Mirrors publishMessage's catch (~line 650) — the app's own send-error
@@ -1131,12 +1182,7 @@
           : 'hidden md:flex'
         : ''}"
     >
-      <GroupAppsBar
-        {pointer}
-        messages={displayed}
-        sessionMeta={sessionTitles}
-        onOpen={(s) => (activeSession = s)}
-      />
+      <GroupAppsBar {pointer} messages={displayed} sessionMeta={sessionTitles} onOpen={openStage} />
       {#if activeSession}
         {#key activeSession.sessionId}
           <GroupAppStage
@@ -1146,100 +1192,106 @@
             publish={signAndPublish}
             authenticate={authenticateSession}
             onShareText={handleShareText}
-            onClose={() => (activeSession = null)}
+            onClose={closeStage}
+            onOpenInNewTab={openInNewTab}
           />
         {/key}
       {/if}
-      {#if !atBottom}
-        <button
-          type="button"
-          data-testid="chat-jump-to-bottom"
-          class="btn absolute right-6 bottom-20 z-10 btn-circle shadow-md btn-sm"
-          title={m.chat_jump_to_bottom()}
-          aria-label={m.chat_jump_to_bottom()}
-          onclick={jumpToBottom}>↓</button
-        >
-      {/if}
-      <div
-        bind:this={scrollContainer}
-        class="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-4"
-        onscroll={handleScroll}
-        onloadcapture={handleContentLoad}
-      >
-        {#if isLoading && displayed.length === 0}
-          <div class="mx-auto py-6"><span class="loading loading-md loading-dots"></span></div>
+      <!-- display:contents keeps the timeline/composer as direct flex items
+           of the column; while a session is open the whole chat body steps
+           aside (hidden, not unmounted) so the stage gets the full height. -->
+      <div class={activeSession ? 'hidden' : 'contents'} data-testid="group-chat-body">
+        {#if !atBottom}
+          <button
+            type="button"
+            data-testid="chat-jump-to-bottom"
+            class="btn absolute right-6 bottom-20 z-10 btn-circle shadow-md btn-sm"
+            title={m.chat_jump_to_bottom()}
+            aria-label={m.chat_jump_to_bottom()}
+            onclick={jumpToBottom}>↓</button
+          >
         {/if}
-        <ChatMessageList items={grouped}>
-          {#snippet row(/** @type {any} */ message)}
-            {@render messageRow(message, (msg) => (replyTo = msg), true)}
-          {/snippet}
-        </ChatMessageList>
-      </div>
-
-      {#if disclosure !== 'unknown'}
-        <p data-testid="disclosure-line" class="px-4 pb-1 text-xs opacity-60">
-          {#if disclosure === 'world'}
-            {m.disclosure_world()}
-          {:else if disclosure === 'members'}
-            {m.disclosure_members({ count: members.size })}
-          {:else}
-            {m.disclosure_invited({ count: members.size })}
-          {/if}
-        </p>
-      {/if}
-      {#if restricted}
         <div
-          class="flex items-center justify-between gap-3 rounded-xl border border-dashed border-base-300 px-4 py-3 text-sm text-base-content/70"
-          data-testid="group-restricted-note"
+          bind:this={scrollContainer}
+          class="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-4"
+          onscroll={handleScroll}
+          onloadcapture={handleContentLoad}
         >
-          <span>{m.groups_restricted_note()}</span>
-          {#if joinPending}
-            <!-- The relay accepts a pending 9021 to a closed group even
+          {#if isLoading && displayed.length === 0}
+            <div class="mx-auto py-6"><span class="loading loading-md loading-dots"></span></div>
+          {/if}
+          <ChatMessageList items={grouped}>
+            {#snippet row(/** @type {any} */ message)}
+              {@render messageRow(message, (msg) => (replyTo = msg), true)}
+            {/snippet}
+          </ChatMessageList>
+        </div>
+
+        {#if disclosure !== 'unknown'}
+          <p data-testid="disclosure-line" class="px-4 pb-1 text-xs opacity-60">
+            {#if disclosure === 'world'}
+              {m.disclosure_world()}
+            {:else if disclosure === 'members'}
+              {m.disclosure_members({ count: members.size })}
+            {:else}
+              {m.disclosure_invited({ count: members.size })}
+            {/if}
+          </p>
+        {/if}
+        {#if restricted}
+          <div
+            class="flex items-center justify-between gap-3 rounded-xl border border-dashed border-base-300 px-4 py-3 text-sm text-base-content/70"
+            data-testid="group-restricted-note"
+          >
+            <span>{m.groups_restricted_note()}</span>
+            {#if joinPending}
+              <!-- The relay accepts a pending 9021 to a closed group even
               while reads stay restricted (verified live) — the same pending
               wording as the header/join-bar, not a dead end. -->
-            <span class="text-xs text-base-content/60">{m.community_join_pending()}</span>
-          {:else if myPubkey && !canWrite}
-            <button class="btn btn-sm btn-primary" onclick={join}
-              >{groupClosed ? m.community_join_request() : m.groups_join()}</button
-            >
-          {/if}
-        </div>
-      {:else if myPubkey && rosterAnswered && !canWrite}
-        <!-- Readable, but not a member: the relay would reject every send
+              <span class="text-xs text-base-content/60">{m.community_join_pending()}</span>
+            {:else if myPubkey && !canWrite}
+              <button class="btn btn-sm btn-primary" onclick={join}
+                >{groupClosed ? m.community_join_request() : m.groups_join()}</button
+              >
+            {/if}
+          </div>
+        {:else if myPubkey && rosterAnswered && !canWrite}
+          <!-- Readable, but not a member: the relay would reject every send
           ("blocked: unknown member") — offer the join instead of a composer
           whose messages silently vanish (laoc, 2026-08-19). -->
-        <div
-          class="flex items-center justify-between gap-3 rounded-xl border border-dashed border-base-300 px-4 py-3 text-sm text-base-content/70"
-          data-testid="group-join-bar"
-        >
-          {#if joinPending}
-            <span>{m.community_join_pending()}</span>
-          {:else}
-            <span>{m.groups_composer_join_note()}</span>
-            <button
-              class="btn btn-sm btn-primary"
-              data-testid="group-join-bar-button"
-              onclick={join}>{groupClosed ? m.community_join_request() : m.groups_join()}</button
-            >
-          {/if}
-        </div>
-      {:else}
-        <!-- disabled while the roster hasn't answered yet, not just while
+          <div
+            class="flex items-center justify-between gap-3 rounded-xl border border-dashed border-base-300 px-4 py-3 text-sm text-base-content/70"
+            data-testid="group-join-bar"
+          >
+            {#if joinPending}
+              <span>{m.community_join_pending()}</span>
+            {:else}
+              <span>{m.groups_composer_join_note()}</span>
+              <button
+                class="btn btn-sm btn-primary"
+                data-testid="group-join-bar-button"
+                onclick={join}>{groupClosed ? m.community_join_request() : m.groups_join()}</button
+              >
+            {/if}
+          </div>
+        {:else}
+          <!-- disabled while the roster hasn't answered yet, not just while
           logged out: canWrite is unknown until then, and an enabled input a
           non-member could type into is a dead end the moment the roster
           finally does answer restricted (laoc, 2026-08-19). -->
-        <ChatComposer
-          bind:value={text}
-          placeholder={m.groups_input_placeholder({ name: displayTitle })}
-          disabled={!myPubkey || !rosterAnswered}
-          {sending}
-          onSubmit={send}
-          {replyTo}
-          onCancelReply={() => (replyTo = null)}
-          testid="group-chat-input"
-          onOpenApps={canWrite ? () => (appPickerOpen = true) : null}
-        />
-      {/if}
+          <ChatComposer
+            bind:value={text}
+            placeholder={m.groups_input_placeholder({ name: displayTitle })}
+            disabled={!myPubkey || !rosterAnswered}
+            {sending}
+            onSubmit={send}
+            {replyTo}
+            onCancelReply={() => (replyTo = null)}
+            testid="group-chat-input"
+            onOpenApps={canWrite ? () => (appPickerOpen = true) : null}
+          />
+        {/if}
+      </div>
     </div>
 
     {#if openThreadRoot}
