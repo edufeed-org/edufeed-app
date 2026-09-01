@@ -50,6 +50,13 @@ describe('GroupCreateModal', () => {
     expect(el('group-create-confirm').disabled).toBe(true);
   });
 
+  it('explains what a relay channel is — feature notice behind the info link', async () => {
+    render(GroupCreateModal, { props: { relay: RELAY, onClose: vi.fn() } });
+    expect(screen.queryByTestId('group-explainer')).toBeNull();
+    await fireEvent.click(screen.getByTestId('group-explainer-open'));
+    expect(screen.getByTestId('group-explainer')).toBeTruthy();
+  });
+
   it('creates on this relay, mirrors into the 10009 list, navigates in', async () => {
     const onClose = vi.fn();
     render(GroupCreateModal, { props: { relay: RELAY, onClose } });

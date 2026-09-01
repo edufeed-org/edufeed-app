@@ -14,6 +14,7 @@
   import { updatePersonalGroupsList } from '$lib/groups/personal-groups-list.js';
   import { groupHref } from '$lib/groups/groups.js';
   import { relayLabel } from '$lib/groups/relay-directory.js';
+  import GroupExplainer from '$lib/components/groups/GroupExplainer.svelte';
   import { goto } from '$app/navigation';
   import { showToast } from '$lib/helpers/toast';
   import * as m from '$lib/paraglide/messages';
@@ -29,6 +30,7 @@
   let isPublic = $state(false);
   let isOpen = $state(false);
   let busy = $state(false);
+  let explainerOpen = $state(false);
 
   const disabled = $derived(busy || !name.trim() || !getActiveUser()?.signer);
 
@@ -63,7 +65,17 @@
       >✕</button
     >
     <h3 class="text-lg font-extrabold">{m.groups_create_here_title()}</h3>
-    <p class="mt-1 mb-4 text-xs text-base-content/60">{relayLabel(relay)}</p>
+    <p class="mt-1 mb-4 text-xs text-base-content/60">
+      {relayLabel(relay)} ·
+      <button
+        type="button"
+        class="link link-hover"
+        data-testid="group-explainer-open"
+        onclick={() => (explainerOpen = true)}
+      >
+        {m.groups_explainer_link()}
+      </button>
+    </p>
 
     <label class="mb-1 block text-xs text-base-content/60" for="group-create-name">
       {m.groups_create_name_label()}
@@ -134,3 +146,7 @@
     </div>
   </div>
 </div>
+
+{#if explainerOpen}
+  <GroupExplainer onClose={() => (explainerOpen = false)} />
+{/if}
