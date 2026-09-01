@@ -48,8 +48,10 @@ import { bildungsbereichToNip32Tags } from '$lib/helpers/educational/bildungsber
  * @property {string} name - Resource title
  * @property {string} description - Resource description
  * @property {string} slug - URL-safe identifier (d-tag)
- * @property {string} learningResourceType - SKOS URI for resource type
- * @property {string} learningResourceTypeLabel - Human-readable label
+ * @property {string} learningResourceType - SKOS URI for resource type (singular, legacy)
+ * @property {string} learningResourceTypeLabel - Human-readable label (singular, legacy)
+ * @property {string[]} [learningResourceTypes] - SKOS URIs for resource types (plural, preferred)
+ * @property {{id: string, label: string}[]} [learningResourceTypeLabels] - Labels for `learningResourceTypes`
  * @property {string[]} about - Array of SKOS URIs for subjects
  * @property {{id: string, label: string}[]} aboutLabels - Array of {id, label} objects
  * @property {string} inLanguage - ISO 639-1 language code
@@ -237,7 +239,9 @@ export function createEducationalActions() {
       // the ext:org.edufeed.ekw.konfi:* namespace. Detect the Konfi path via
       // the wizard's step-1 Bildungsbereich pick.
       const isKonfi = /** @type any */ (formData).bildungsbereich === 'konfi';
-      if (!isKonfi && !formData.learningResourceType) {
+      const hasLearningResourceType =
+        (formData.learningResourceTypes?.length ?? 0) > 0 || !!formData.learningResourceType;
+      if (!isKonfi && !hasLearningResourceType) {
         throw new Error('Learning resource type is required');
       }
       // EKKW variant uses its own Fachrichtung field instead of the AMB about/Fach

@@ -95,4 +95,26 @@ describe('MetadataCardGrid', () => {
     const muted = getByText('(German)');
     expect(muted.classList.contains('mcg-muted')).toBe(true);
   });
+
+  // The grid sizes every glyph via `class_="w-7 h-7"`. An icon that only reads
+  // a bare `class` prop renders an unsized (invisible) svg — which is what the
+  // neutral `tag` fallback used to do, so unknown facets lost their icon.
+  it('sizes the icon on every card, including the neutral tag fallback', () => {
+    const { container } = render(MetadataCardGrid, {
+      props: {
+        cards: [
+          { key: 'core:type', iconKey: 'tag', label: 'Resource Type', value: 'Text, Video' },
+          { key: 'ext:unknown', iconKey: 'no-such-icon', label: 'Unknown', value: 'x' },
+          { key: 'core:subjects', iconKey: 'book', label: 'Subjects', value: 'Ethik' }
+        ]
+      }
+    });
+
+    const svgs = [...container.querySelectorAll('.mcg-ic svg')];
+    expect(svgs).toHaveLength(3);
+    for (const svg of svgs) {
+      expect(svg.getAttribute('class')).toContain('w-7');
+      expect(svg.getAttribute('class')).toContain('h-7');
+    }
+  });
 });

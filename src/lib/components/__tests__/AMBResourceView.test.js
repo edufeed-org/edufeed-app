@@ -44,6 +44,7 @@ vi.mock('$lib/paraglide/messages.js', () => ({
   amb_resource_educational_level: () => 'Educational Level',
   amb_resource_target_audience: () => 'Target Audience',
   amb_resource_subjects: () => 'Subjects',
+  amb_resource_type: () => 'Resource Type',
   amb_resource_available_languages: () => 'Languages',
   amb_resource_access: () => 'Access',
   amb_resource_free: () => 'Free',
@@ -123,7 +124,8 @@ vi.mock('$lib/helpers/educational/ambTransform.js', async (importOriginal) => {
   const actual = /** @type {any} */ (await importOriginal());
   return {
     ...actual,
-    getLabelsWithFallback: () => [],
+    // Real implementation (pure over tags) so concept-card tests can drive it
+    // from event tags; events without those tags still yield [].
     getLanguageDisplayName: (/** @type {string} */ code) => {
       /** @type {Record<string, string>} */
       const names = { de: 'German', en: 'English', fr: 'French' };
@@ -525,6 +527,54 @@ describe('AMBResourceView', () => {
       );
       expect(contribNames.filter((n) => n === 'Corinna Link')).toHaveLength(1);
       expect(contribNames.filter((n) => n === 'Second Author')).toHaveLength(1);
+    });
+  });
+
+  describe('resource type metadata card', () => {
+    /** @param {string[][]} typeTags */
+    function eventWithTypes(typeTags) {
+      return { ...mockEvent, tags: [['d', 'test-resource'], ...typeTags] };
+    }
+
+    /**
+     * The metadata grid card whose label matches, or undefined.
+     * @param {HTMLElement} container
+     * @param {string} label
+     */
+    function cardByLabel(container, label) {
+      return [...container.querySelectorAll('.mcg-card')].find(
+        (c) => c.querySelector('.mcg-lbl')?.textContent?.trim() === label
+      );
+    }
+
+    it('lists every learning resource type, not just the primary one', () => {
+      const { container } = render(AMBResourceView, {
+        props: {
+          event: eventWithTypes([
+            ['learningResourceType:id', 'https://w3id.org/kim/hcrt/slide'],
+            ['learningResourceType:prefLabel:en', 'Presentation'],
+            ['learningResourceType:id', 'https://w3id.org/kim/hcrt/video'],
+            ['learningResourceType:prefLabel:en', 'Video'],
+            ['learningResourceType:id', 'https://w3id.org/kim/hcrt/worksheet'],
+            ['learningResourceType:prefLabel:en', 'Worksheet']
+          ]),
+          resource: mockResource
+        }
+      });
+
+      const card = cardByLabel(container, 'Resource Type');
+      expect(card).toBeTruthy();
+      expect(card?.querySelector('.mcg-val')?.textContent).toContain('Presentation');
+      expect(card?.querySelector('.mcg-val')?.textContent).toContain('Video');
+      expect(card?.querySelector('.mcg-val')?.textContent).toContain('Worksheet');
+    });
+
+    it('omits the card entirely when the resource has no type', () => {
+      const { container } = render(AMBResourceView, {
+        props: { event: eventWithTypes([]), resource: mockResource }
+      });
+
+      expect(cardByLabel(container, 'Resource Type')).toBeUndefined();
     });
   });
 });
