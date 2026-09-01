@@ -416,6 +416,13 @@ describe('ChannelCreateWizard — NIP-29 groups', () => {
     expect(screen.getByTestId('wizard-access-concord-hint')).toBeTruthy();
   });
 
+  it('NIP-29 mode: the group explainer opens from the access step (Concord-notice parity)', async () => {
+    await toAccessStep(nip29Community());
+    expect(screen.queryByTestId('group-explainer')).toBeNull();
+    await fireEvent.click(screen.getByTestId('group-explainer-open'));
+    expect(screen.getByTestId('group-explainer')).toBeTruthy();
+  });
+
   it('moderated community with zero channels runs in NIP-29 mode', async () => {
     await toAccessStep(moderatedCommunity());
     // The world radio is the NIP-29-only affordance (Concord mode shows a

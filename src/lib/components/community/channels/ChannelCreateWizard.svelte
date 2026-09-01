@@ -33,6 +33,7 @@
   import { unique } from '$lib/helpers/unique.js';
   import ProfileAvatar from '$lib/components/shared/ProfileAvatar.svelte';
   import ContactSearchInput from '$lib/components/shared/ContactSearchInput.svelte';
+  import GroupExplainer from '$lib/components/groups/GroupExplainer.svelte';
   import { getContext } from 'svelte';
   import * as m from '$lib/paraglide/messages';
 
@@ -69,6 +70,7 @@
   let selected = $state.raw([]);
   let acknowledged = $state(false);
   let busy = $state(false);
+  let explainerOpen = $state(false);
 
   // Area detection: once the community's 10222 lists any group pointer,
   // every channel it grows from here is a NIP-29 group too (Stufe B) — else
@@ -392,6 +394,18 @@
         <p class="mb-1 text-xs text-base-content/60" data-testid="wizard-access-concord-hint">
           {m.wizard_access_concord_hint()}
         </p>
+        <!-- The Concord branch has its explainer + key-loss disclosure; this
+          is the NIP-29 counterpart (relay-hosted, unencrypted, relay-bound). -->
+        <p class="mb-1 text-xs">
+          <button
+            type="button"
+            class="link text-base-content/60 link-hover"
+            data-testid="group-explainer-open"
+            onclick={() => (explainerOpen = true)}
+          >
+            {m.groups_explainer_link()}
+          </button>
+        </p>
       {:else}
         <div class="alert text-sm">{m.concord_wizard_invisible_hint()}</div>
       {/if}
@@ -475,3 +489,7 @@
     </div>
   </div>
 </div>
+
+{#if explainerOpen}
+  <GroupExplainer onClose={() => (explainerOpen = false)} />
+{/if}
