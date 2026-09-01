@@ -84,9 +84,11 @@
     runtimeConfig.concord?.enabled ? getUnlinkedAreas() : /** @type {any[]} */ ([])
   );
 
-  // "Sync private areas" affordance (Fix 2) — see the matching comment in
-  // Sidebar.svelte for the full rationale. Shown even with zero unlinked
-  // areas: a locked list is exactly why the list looks empty.
+  // "Sync private areas" affordance (Fix 2): with autoUnlock:false the
+  // Community List (kind 13302) stays encrypted after initial sync — with no
+  // unlock action anywhere, a remote-only membership (e.g. created on another
+  // CORD client) never hydrates. Shown even with zero unlinked areas: a
+  // locked list is exactly why the list looks empty.
   const getListLocked = useConcordListLocked();
   const listLocked = $derived(runtimeConfig.concord?.enabled ? getListLocked() : false);
   const concordReady = $derived(getConcordState().phase === 'ready');
