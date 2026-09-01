@@ -23,12 +23,11 @@
 -->
 <script>
   import { useRootRoster } from '$lib/groups/root-roster.svelte.js';
-  import { PUBLISHER_ROLE } from '$lib/groups/roles.js';
+  import { roleOptionsFromAdmins } from '$lib/groups/roles.js';
   import { useActiveUser } from '$lib/stores/accounts.svelte';
   import { isCommunityOwner } from '$lib/helpers/community-signer.js';
   import { pool } from '$lib/stores/nostr-infrastructure.svelte';
   import { getDisplayName } from 'applesauce-core/helpers';
-  import { unique } from '$lib/helpers/unique.js';
   import { showToast } from '$lib/helpers/toast';
   import {
     buildCreateInviteTemplate,
@@ -65,9 +64,7 @@
   // AccessTierEditor's roleSuggestions without a second roster subscription
   // there. 'publisher' is offered even when nobody holds it yet: an admin
   // gating a section on it before granting it is a normal order of work.
-  const roleOptions = $derived(
-    unique([...roster.admins.flatMap((a) => a.roles ?? []), 'admin', PUBLISHER_ROLE])
-  );
+  const roleOptions = $derived(roleOptionsFromAdmins(roster.admins));
   $effect(() => {
     onRolesChanged?.(roleOptions);
   });

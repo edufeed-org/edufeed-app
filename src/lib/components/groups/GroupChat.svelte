@@ -47,6 +47,7 @@
   } from '$lib/groups/groups.js';
   import { updatePersonalGroupsList } from '$lib/groups/personal-groups-list.js';
   import { publishToGroupRelay } from '$lib/groups/group-management.js';
+  import { roleOptionsFromAdmins } from '$lib/groups/roles.js';
   import { unique } from '$lib/helpers/unique.js';
   import { setContext } from 'svelte';
   import { GROUP_MEDIA_AUTH } from '$lib/groups/authed-media.js';
@@ -1021,6 +1022,7 @@
       {members}
       {myPubkey}
       {isAdmin}
+      roleOptions={roleOptionsFromAdmins(admins)}
       {onRosterChanged}
       onClose={() => (membersOpen = false)}
     />
