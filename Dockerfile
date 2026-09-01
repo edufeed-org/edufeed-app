@@ -16,10 +16,11 @@ RUN pnpm install --frozen-lockfile
 # Copy source code
 COPY . .
 
-# Build the application. Raise Node's heap: the CI runner OOM-flakes the
-# Vite/SvelteKit build at the default ~2GB limit (same commit passed on one
-# run and failed on another purely from memory pressure).
-RUN NODE_OPTIONS=--max-old-space-size=4096 pnpm run build
+# Build the application. Raise Node's heap: the adapter-node server-bundling
+# phase deterministically OOMs at 4096 MB since the NIP-29 groups merge
+# (2026-08-27, CI runs 186-193; reproduced locally) and completes at 6144.
+# The runner VM carries a swapfile so this cap fits beside dockerd.
+RUN NODE_OPTIONS=--max-old-space-size=6144 pnpm run build
 
 # Production stage
 FROM node:22-alpine
