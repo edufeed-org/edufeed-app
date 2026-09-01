@@ -21,12 +21,17 @@ vi.hoisted(() => {
   }
 });
 
-/** @type {{ modalProps: any, publishSpy: any, signSpy: any, closeSpy: any }} */
+/** @type {{ modalProps: any, publishSpy: any, signSpy: any, closeSpy: any, deleteSpy: any }} */
 const spies = vi.hoisted(() => ({
   modalProps: null,
   publishSpy: null,
   signSpy: null,
-  closeSpy: null
+  closeSpy: null,
+  deleteSpy: null
+}));
+
+vi.mock('$lib/helpers/eventDeletion.js', () => ({
+  deleteEvent: (/** @type {any[]} */ ...args) => spies.deleteSpy(...args)
 }));
 
 vi.mock('$lib/stores/modal.svelte.js', () => ({
@@ -109,6 +114,7 @@ describe('AddBookmarkModal edit mode', () => {
     spies.modalProps = { editEvent: existingBookmark };
     spies.closeSpy = vi.fn();
     spies.publishSpy = vi.fn();
+    spies.deleteSpy = vi.fn(async () => ({ success: true }));
     spies.signSpy = vi.fn(async (/** @type {any} */ tmpl) => ({
       ...tmpl,
       id: 'new-id',
@@ -177,12 +183,12 @@ describe('AddBookmarkModal edit mode', () => {
     expect(screen.getByTestId('selected-communities').textContent).toBe('community1');
   });
 
-  it('hides the page field when editing a PDF bookmark — the address is immutable', async () => {
+  it('shows the page field prefilled when editing a PDF bookmark', async () => {
     spies.modalProps = {
       editEvent: {
         ...existingBookmark,
         tags: [
-          ['d', 'example.com/paper.pdf'],
+          ['d', 'example.com/paper.pdf#page=3'],
           ['r', 'https://example.com/paper.pdf#page=3'],
           ['title', 'A Paper']
         ]
@@ -191,9 +197,62 @@ describe('AddBookmarkModal edit mode', () => {
     render(AddBookmarkModal);
 
     await waitFor(() => expect(urlField().value).toBe('https://example.com/paper.pdf#page=3'));
-    // handleUpdate never applies the page field, so offering it would
-    // silently drop the input.
-    expect(document.getElementById('bookmark-page')).toBeNull();
+    const pageField = /** @type {HTMLInputElement} */ (document.getElementById('bookmark-page'));
+    expect(pageField).not.toBeNull();
+    expect(pageField.value).toBe('3');
+  });
+
+  it('changing the page MOVES the bookmark: new address published, old event deleted', async () => {
+    spies.modalProps = {
+      editEvent: {
+        ...existingBookmark,
+        tags: [
+          ['d', 'example.com/paper.pdf#page=3'],
+          ['r', 'https://example.com/paper.pdf#page=3'],
+          ['title', 'A Paper']
+        ]
+      }
+    };
+    render(AddBookmarkModal);
+    await waitFor(() => expect(urlField().value).toBe('https://example.com/paper.pdf#page=3'));
+
+    const pageField = /** @type {HTMLInputElement} */ (document.getElementById('bookmark-page'));
+    await fireEvent.input(pageField, { target: { value: '31' } });
+    await fireEvent.submit(/** @type {HTMLFormElement} */ (document.querySelector('form')));
+
+    await waitFor(() => expect(spies.publishSpy).toHaveBeenCalled());
+    const published = spies.publishSpy.mock.calls[0][0];
+    // A changed #page fragment is a different NIP-B0 address, so the edit
+    // publishes under the new d and deletes the old event.
+    expect(published.tags).toContainEqual(['d', 'example.com/paper.pdf#page=31']);
+    expect(published.tags).toContainEqual(['r', 'https://example.com/paper.pdf#page=31']);
+    expect(spies.deleteSpy).toHaveBeenCalledTimes(1);
+    expect(spies.deleteSpy.mock.calls[0][0].id).toBe('bookmark-id');
+    expect(spies.closeSpy).toHaveBeenCalled();
+  });
+
+  it('an unchanged page keeps the edit an in-place replace — nothing deleted', async () => {
+    spies.modalProps = {
+      editEvent: {
+        ...existingBookmark,
+        tags: [
+          ['d', 'example.com/paper.pdf#page=3'],
+          ['r', 'https://example.com/paper.pdf#page=3'],
+          ['title', 'A Paper']
+        ]
+      }
+    };
+    render(AddBookmarkModal);
+    await waitFor(() => expect(urlField().value).toBe('https://example.com/paper.pdf#page=3'));
+
+    await fireEvent.submit(/** @type {HTMLFormElement} */ (document.querySelector('form')));
+
+    await waitFor(() => expect(spies.publishSpy).toHaveBeenCalled());
+    expect(spies.publishSpy.mock.calls[0][0].tags).toContainEqual([
+      'd',
+      'example.com/paper.pdf#page=3'
+    ]);
+    expect(spies.deleteSpy).not.toHaveBeenCalled();
   });
 
   it('still creates a fresh bookmark when no event is being edited', async () => {

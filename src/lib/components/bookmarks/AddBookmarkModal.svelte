@@ -22,6 +22,7 @@
     applyPageToUrl
   } from '$lib/helpers/bookmark.js';
   import { publishEventOptimistic } from '$lib/services/publish-service.js';
+  import { deleteEvent } from '$lib/helpers/eventDeletion.js';
   import { addressLoader } from '$lib/loaders/base.js';
   import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
   import { getAllLookupRelays } from '$lib/helpers/relay-helper.js';
@@ -73,12 +74,10 @@
   let userEditedPage = $state(false);
 
   let inputType = $derived(input.trim() ? detectInputType(input) : 'invalid');
-  // Not in edit mode: the address (and with it the #page fragment) is
-  // immutable there — handleUpdate never applies the field, so showing it
-  // would silently drop whatever the user types into it.
-  let showPageInput = $derived(
-    !isEditMode && inputType === 'url' && supportsPageReference(input.trim())
-  );
+  // In edit mode `input` is the bookmark's stored r-URL, so the same check
+  // offers the field for existing PDF bookmarks. Changing the page there is a
+  // MOVE, not an in-place edit — see handleUpdate (laoc, 2026-09-01).
+  let showPageInput = $derived(inputType === 'url' && supportsPageReference(input.trim()));
 
   // A pasted URL may already carry `#page=N` — lift it into the field so the
   // user sees (and can change) it instead of it silently riding along. Tracks
@@ -284,15 +283,37 @@
   async function handleUpdate(event, account) {
     isSubmitting = true;
     try {
-      const signedEvent = await updateBookmarkEvent({
-        event,
-        title,
-        description,
-        communityPubkeys: selectedCommunityIds,
-        account
-      });
+      // The page field is the one address-affecting edit we allow: NIP-B0's
+      // d-tag carries the fragment, so a changed `#page=N` is a DIFFERENT
+      // address. Editing it therefore moves the bookmark — publish under the
+      // new address, delete the old event — instead of replacing in place.
+      const originalUrl = event.tags?.find((t) => t[0] === 'r')?.[1] || '';
+      const movedUrl =
+        originalUrl && supportsPageReference(originalUrl)
+          ? applyPageToUrl(originalUrl, page)
+          : originalUrl;
 
-      publishEventOptimistic(signedEvent);
+      if (movedUrl && movedUrl !== originalUrl) {
+        const signedEvent = await createBookmarkEvent({
+          url: movedUrl,
+          title,
+          description,
+          communityPubkeys: selectedCommunityIds,
+          account
+        });
+        publishEventOptimistic(signedEvent);
+        const result = await deleteEvent(event, account);
+        if (!result.success) throw new Error(result.error || m.bookmark_modal_error_update());
+      } else {
+        const signedEvent = await updateBookmarkEvent({
+          event,
+          title,
+          description,
+          communityPubkeys: selectedCommunityIds,
+          account
+        });
+        publishEventOptimistic(signedEvent);
+      }
       modalStore.closeModal();
     } catch (err) {
       error = err instanceof Error ? err.message : m.bookmark_modal_error_update();
