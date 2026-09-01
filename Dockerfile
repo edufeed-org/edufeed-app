@@ -53,9 +53,14 @@ USER nodejs
 # Expose port
 EXPOSE 3000
 
-# Health check
+# Health check. --max-http-header-size is load-bearing: the / response's
+# modulepreload Link header alone is ~20KB, over Node's 16KB client default —
+# without the flag every probe dies with "Parse Error: Header overflow" and
+# the container reports permanently unhealthy (Traefik then never routes it).
+# The .on('error') handler turns that class of failure into a clean exit 1
+# instead of an uncaught-exception crash.
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-    CMD node -e "require('http').get('http://localhost:3000/', (res) => { process.exit(res.statusCode === 200 ? 0 : 1); })"
+    CMD node --max-http-header-size=65536 -e "require('http').get('http://localhost:3000/', (res) => { process.exit(res.statusCode === 200 ? 0 : 1); }).on('error', () => process.exit(1))"
 
 # Start the application
 CMD ["node", "build"]

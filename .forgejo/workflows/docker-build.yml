@@ -41,8 +41,12 @@ jobs:
           # the docker-out-of-docker runner — curl localhost always got HTTP 000).
           # node is guaranteed present (it runs the server); localhost:3000 here is
           # the server's own namespace. Mirrors the Dockerfile HEALTHCHECK.
+          # --max-http-header-size: the / response's modulepreload Link header is
+          # ~20KB, over node's 16KB client default — without the flag every probe
+          # errored ("Header overflow"), printed 000, and the smoke test failed
+          # for a month (2026-07-29..09-01) against perfectly healthy images.
           for i in $(seq 1 45); do
-            code=$(docker exec edufeed-smoke node -e "require('http').get('http://localhost:3000/',r=>{console.log(r.statusCode);process.exit(0)}).on('error',()=>{console.log('000');process.exit(0)})" 2>/dev/null || echo 000)
+            code=$(docker exec edufeed-smoke node --max-http-header-size=65536 -e "require('http').get('http://localhost:3000/',r=>{console.log(r.statusCode);process.exit(0)}).on('error',(e)=>{console.error(e.message);console.log('000');process.exit(0)})" 2>/dev/null || echo 000)
             echo "attempt $i: HTTP $code"
             if [ "$code" = "200" ]; then ok=1; break; fi
             sleep 2
