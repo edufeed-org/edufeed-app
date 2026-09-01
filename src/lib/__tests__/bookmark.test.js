@@ -27,6 +27,10 @@ import {
   parseBookmarkUrlParam,
   getInternalBookmarkRedirectTarget,
   decodeNaddr,
+  looksLikePdfUrl,
+  parsePageFromUrl,
+  applyPageToUrl,
+  supportsPageReference,
   BOOKMARK_KIND
 } from '../helpers/bookmark.js';
 
@@ -178,6 +182,199 @@ describe('stripSchemeForDTag', () => {
 
   it('preserves path and query', () => {
     expect(stripSchemeForDTag('https://example.com/a/b?q=1')).toBe('example.com/a/b?q=1');
+  });
+});
+
+describe('looksLikePdfUrl', () => {
+  it('detects a plain .pdf URL', () => {
+    expect(looksLikePdfUrl('https://example.com/docs/paper.pdf')).toBe(true);
+  });
+
+  it('detects .pdf regardless of case', () => {
+    expect(looksLikePdfUrl('https://example.com/Paper.PDF')).toBe(true);
+  });
+
+  it('detects .pdf on a scheme-less URL', () => {
+    expect(looksLikePdfUrl('example.com/paper.pdf')).toBe(true);
+  });
+
+  it('ignores a query string after the path', () => {
+    expect(looksLikePdfUrl('https://example.com/paper.pdf?dl=1')).toBe(true);
+  });
+
+  it('ignores a fragment after the path', () => {
+    expect(looksLikePdfUrl('https://example.com/paper.pdf#page=31')).toBe(true);
+  });
+
+  it('rejects a normal web page', () => {
+    expect(looksLikePdfUrl('https://example.com/article')).toBe(false);
+  });
+
+  it('rejects a URL that merely mentions pdf', () => {
+    expect(looksLikePdfUrl('https://example.com/pdf/viewer')).toBe(false);
+  });
+
+  it('handles empty and nullish input', () => {
+    expect(looksLikePdfUrl('')).toBe(false);
+    expect(looksLikePdfUrl(undefined)).toBe(false);
+    expect(looksLikePdfUrl(null)).toBe(false);
+  });
+});
+
+describe('parsePageFromUrl', () => {
+  it('reads a #page fragment', () => {
+    expect(parsePageFromUrl('https://example.com/paper.pdf#page=31')).toBe(31);
+  });
+
+  it('reads #page when combined with other open parameters', () => {
+    expect(parsePageFromUrl('https://example.com/paper.pdf#page=7&zoom=100')).toBe(7);
+    expect(parsePageFromUrl('https://example.com/paper.pdf#zoom=100&page=7')).toBe(7);
+  });
+
+  it('returns null when there is no fragment', () => {
+    expect(parsePageFromUrl('https://example.com/paper.pdf')).toBeNull();
+  });
+
+  it('returns null for an opaque fragment', () => {
+    expect(parsePageFromUrl('https://example.com/article#section-2')).toBeNull();
+  });
+
+  it('returns null for a non-positive or non-numeric page', () => {
+    expect(parsePageFromUrl('https://example.com/paper.pdf#page=0')).toBeNull();
+    expect(parsePageFromUrl('https://example.com/paper.pdf#page=-3')).toBeNull();
+    expect(parsePageFromUrl('https://example.com/paper.pdf#page=abc')).toBeNull();
+  });
+
+  it('handles empty and nullish input', () => {
+    expect(parsePageFromUrl('')).toBeNull();
+    expect(parsePageFromUrl(undefined)).toBeNull();
+  });
+});
+
+describe('applyPageToUrl', () => {
+  it('appends a page fragment', () => {
+    expect(applyPageToUrl('https://example.com/paper.pdf', 31)).toBe(
+      'https://example.com/paper.pdf#page=31'
+    );
+  });
+
+  it('accepts a numeric string page', () => {
+    expect(applyPageToUrl('https://example.com/paper.pdf', '31')).toBe(
+      'https://example.com/paper.pdf#page=31'
+    );
+  });
+
+  it('replaces an existing page fragment instead of appending a second one', () => {
+    expect(applyPageToUrl('https://example.com/paper.pdf#page=5', 31)).toBe(
+      'https://example.com/paper.pdf#page=31'
+    );
+  });
+
+  it('preserves other PDF open parameters when replacing the page', () => {
+    expect(applyPageToUrl('https://example.com/paper.pdf#page=5&zoom=100', 31)).toBe(
+      'https://example.com/paper.pdf#page=31&zoom=100'
+    );
+    expect(applyPageToUrl('https://example.com/paper.pdf#zoom=100', 31)).toBe(
+      'https://example.com/paper.pdf#zoom=100&page=31'
+    );
+  });
+
+  it('removes the page fragment when the page is cleared', () => {
+    expect(applyPageToUrl('https://example.com/paper.pdf#page=31', '')).toBe(
+      'https://example.com/paper.pdf'
+    );
+    expect(applyPageToUrl('https://example.com/paper.pdf#page=31', null)).toBe(
+      'https://example.com/paper.pdf'
+    );
+  });
+
+  it('keeps other open parameters when only the page is cleared', () => {
+    expect(applyPageToUrl('https://example.com/paper.pdf#page=31&zoom=100', '')).toBe(
+      'https://example.com/paper.pdf#zoom=100'
+    );
+  });
+
+  it('leaves a URL without a page fragment untouched when no page is given', () => {
+    expect(applyPageToUrl('https://example.com/article#section-2', '')).toBe(
+      'https://example.com/article#section-2'
+    );
+    expect(applyPageToUrl('https://example.com/paper.pdf', undefined)).toBe(
+      'https://example.com/paper.pdf'
+    );
+  });
+
+  it('replaces an opaque fragment when a page is given', () => {
+    expect(applyPageToUrl('https://example.com/paper.pdf#section-2', 31)).toBe(
+      'https://example.com/paper.pdf#page=31'
+    );
+  });
+
+  it('ignores invalid page values', () => {
+    expect(applyPageToUrl('https://example.com/paper.pdf', 0)).toBe(
+      'https://example.com/paper.pdf'
+    );
+    expect(applyPageToUrl('https://example.com/paper.pdf', -2)).toBe(
+      'https://example.com/paper.pdf'
+    );
+    expect(applyPageToUrl('https://example.com/paper.pdf', 'abc')).toBe(
+      'https://example.com/paper.pdf'
+    );
+  });
+
+  it('preserves the query string', () => {
+    expect(applyPageToUrl('https://example.com/paper.pdf?dl=1', 12)).toBe(
+      'https://example.com/paper.pdf?dl=1#page=12'
+    );
+  });
+
+  it('round-trips with parsePageFromUrl', () => {
+    const url = applyPageToUrl('https://example.com/paper.pdf', 31);
+    expect(parsePageFromUrl(url)).toBe(31);
+  });
+
+  it('handles empty input', () => {
+    expect(applyPageToUrl('', 3)).toBe('');
+  });
+});
+
+describe('supportsPageReference', () => {
+  it('is true for PDF URLs', () => {
+    expect(supportsPageReference('https://example.com/paper.pdf')).toBe(true);
+  });
+
+  it('is true for any URL that already carries a page fragment', () => {
+    expect(supportsPageReference('https://example.com/viewer?doc=1#page=4')).toBe(true);
+  });
+
+  it('is false for an ordinary web page', () => {
+    expect(supportsPageReference('https://example.com/article')).toBe(false);
+  });
+
+  it('is false for empty input', () => {
+    expect(supportsPageReference('')).toBe(false);
+  });
+});
+
+describe('page-reference bookmarks (d-tag / dedup)', () => {
+  const pdf = 'https://schule.example.de/Lesepause-26_1.pdf';
+
+  it('keeps the page fragment in the d-tag so pages are distinct bookmarks', () => {
+    const tags = buildBookmarkTags(applyPageToUrl(pdf, 31), 'Lesepause', ['abc']);
+    expect(tags).toContainEqual(['d', 'schule.example.de/Lesepause-26_1.pdf#page=31']);
+    expect(tags).toContainEqual(['r', 'https://schule.example.de/Lesepause-26_1.pdf#page=31']);
+  });
+
+  it('yields different d-tags for different pages of the same document', () => {
+    const dOf = (/** @type {string} */ url) =>
+      buildBookmarkTags(url, '', []).find((t) => t[0] === 'd')?.[1];
+    expect(dOf(applyPageToUrl(pdf, 31))).not.toBe(dOf(applyPageToUrl(pdf, 5)));
+    expect(dOf(applyPageToUrl(pdf, 31))).not.toBe(dOf(pdf));
+  });
+
+  it('yields the same d-tag for the same page (idempotent re-bookmarking)', () => {
+    const dOf = (/** @type {string} */ url) =>
+      buildBookmarkTags(url, '', []).find((t) => t[0] === 'd')?.[1];
+    expect(dOf(applyPageToUrl(pdf, 31))).toBe(dOf(applyPageToUrl(applyPageToUrl(pdf, 31), 31)));
   });
 });
 

@@ -16,7 +16,10 @@
     decodeNaddr,
     createBookmarkEvent,
     updateBookmarkEvent,
-    getBookmarkEditPrefill
+    getBookmarkEditPrefill,
+    supportsPageReference,
+    parsePageFromUrl,
+    applyPageToUrl
   } from '$lib/helpers/bookmark.js';
   import { publishEventOptimistic } from '$lib/services/publish-service.js';
   import { addressLoader } from '$lib/loaders/base.js';
@@ -65,8 +68,21 @@
   let error = $state('');
   let isFetching = $state(false);
   let userEditedTitle = $state(false);
+  // Optional page reference for documents (PDFs) — appended as `#page=N`.
+  let page = $state('');
+  let userEditedPage = $state(false);
 
   let inputType = $derived(input.trim() ? detectInputType(input) : 'invalid');
+  let showPageInput = $derived(inputType === 'url' && supportsPageReference(input.trim()));
+
+  // A pasted URL may already carry `#page=N` — lift it into the field so the
+  // user sees (and can change) it instead of it silently riding along. Tracks
+  // the URL until the user touches the field, so swapping in a different
+  // document can't carry the previous document's page number over with it.
+  $effect(() => {
+    const pasted = parsePageFromUrl(input.trim());
+    if (!userEditedPage) page = pasted === null ? '' : String(pasted);
+  });
 
   // Prefill the form from the bookmark being edited. Guarded by id so a
   // re-run can never overwrite what the user has since typed.
@@ -117,7 +133,9 @@
    * @param {string} urlInput
    */
   async function fetchUrlMetadata(urlInput) {
-    let url = urlInput.trim();
+    // Fragments are never sent over HTTP — drop it so `#page=31` doesn't
+    // pointlessly vary the reader request (or its cache key).
+    let url = urlInput.trim().split('#')[0];
     if (!url.startsWith('http')) url = `https://${url}`;
 
     isFetching = true;
@@ -208,6 +226,9 @@
 
       if (type === 'url') {
         url = trimmedInput.startsWith('http') ? trimmedInput : `https://${trimmedInput}`;
+        // Optional page reference. Idempotent: replaces a `#page=N` the pasted
+        // URL already had, and removes it again if the field was cleared.
+        if (showPageInput) url = applyPageToUrl(url, page);
       } else if (type === 'naddr') {
         naddrData = decodeNaddr(trimmedInput) || undefined;
         if (!naddrData) {
@@ -321,6 +342,32 @@
           <span class="label-text-alt mt-1 text-info">{m.bookmark_modal_fetching()}</span>
         {/if}
       </div>
+
+      <!-- Optional page reference (documents / PDFs) -->
+      {#if showPageInput}
+        <div class="form-control mb-3">
+          <label class="label" for="bookmark-page">
+            <span class="label-text">{m.bookmark_modal_page_label()}</span>
+          </label>
+          <!-- Wrapper keeps the hint under the narrow input instead of beside it. -->
+          <div class="flex flex-col gap-1">
+            <input
+              id="bookmark-page"
+              type="number"
+              min="1"
+              step="1"
+              inputmode="numeric"
+              class="input-bordered input w-full sm:w-40"
+              placeholder={m.bookmark_modal_page_placeholder()}
+              bind:value={page}
+              oninput={() => {
+                userEditedPage = true;
+              }}
+            />
+            <span class="label-text-alt opacity-70">{m.bookmark_modal_page_hint()}</span>
+          </div>
+        </div>
+      {/if}
 
       <!-- Title -->
       <div class="form-control mb-3">
