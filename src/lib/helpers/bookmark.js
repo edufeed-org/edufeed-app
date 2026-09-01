@@ -144,6 +144,119 @@ export function stripSchemeForDTag(url) {
 }
 
 /**
+ * Split a URL into everything before the first `#` and the fragment after it.
+ * @param {string} url
+ * @returns {{ base: string, fragment: string }}
+ */
+function splitFragment(url) {
+  const hashIndex = url.indexOf('#');
+  if (hashIndex === -1) return { base: url, fragment: '' };
+  return { base: url.slice(0, hashIndex), fragment: url.slice(hashIndex + 1) };
+}
+
+/**
+ * Parse a fragment as PDF open parameters (`page=31&zoom=100`). Returns null
+ * when the fragment is an opaque anchor (`#section-2`) rather than parameters.
+ * @param {string} fragment
+ * @returns {[string, string][] | null}
+ */
+function parseOpenParameters(fragment) {
+  if (!fragment) return [];
+  /** @type {[string, string][]} */
+  const params = [];
+  for (const part of fragment.split('&')) {
+    const eq = part.indexOf('=');
+    if (eq <= 0) return null;
+    params.push([part.slice(0, eq), part.slice(eq + 1)]);
+  }
+  return params;
+}
+
+/**
+ * Coerce a page value to a positive integer, or null when it isn't one.
+ * @param {string | number | null | undefined} page
+ * @returns {number | null}
+ */
+function toPageNumber(page) {
+  if (page === null || page === undefined || page === '') return null;
+  if (typeof page === 'string' && !/^\d+$/.test(page.trim())) return null;
+  const n = Number(page);
+  return Number.isInteger(n) && n > 0 ? n : null;
+}
+
+/**
+ * True when the URL's path ends in `.pdf` (query string and fragment ignored).
+ * Works on scheme-less URLs too, since the bookmark form accepts bare domains.
+ * @param {string | null | undefined} url
+ * @returns {boolean}
+ */
+export function looksLikePdfUrl(url) {
+  if (!url) return false;
+  const path = splitFragment(url).base.split('?')[0];
+  return /\.pdf$/i.test(path);
+}
+
+/**
+ * Read the page number out of a `#page=N` URL fragment (PDF open parameter).
+ * Returns null when there is no such fragment or the value isn't a positive integer.
+ * @param {string | null | undefined} url
+ * @returns {number | null}
+ */
+export function parsePageFromUrl(url) {
+  if (!url) return null;
+  const params = parseOpenParameters(splitFragment(url).fragment);
+  if (!params) return null;
+  const entry = params.find(([key]) => key === 'page');
+  return entry ? toPageNumber(entry[1]) : null;
+}
+
+/**
+ * Set (or clear) the `#page=N` fragment on a URL.
+ *
+ * A blank/invalid page removes an existing `page` parameter but leaves any other
+ * fragment alone. Other PDF open parameters (`zoom`, `view`, …) are preserved.
+ * An opaque fragment (`#section-2`) is replaced when a page is given — a URL can
+ * only carry one fragment.
+ *
+ * @param {string} url
+ * @param {string | number | null | undefined} page
+ * @returns {string}
+ */
+export function applyPageToUrl(url, page) {
+  if (!url) return url;
+
+  const { base, fragment } = splitFragment(url);
+  const pageNumber = toPageNumber(page);
+  const params = parseOpenParameters(fragment);
+
+  if (pageNumber === null) {
+    // Nothing to clear when the fragment is opaque or has no page parameter.
+    if (!params) return url;
+    const kept = params.filter(([key]) => key !== 'page');
+    if (kept.length === params.length) return url;
+    return kept.length ? `${base}#${kept.map(([k, v]) => `${k}=${v}`).join('&')}` : base;
+  }
+
+  if (!params) return `${base}#page=${pageNumber}`;
+
+  const next = params.some(([key]) => key === 'page')
+    ? params.map((p) => (p[0] === 'page' ? ['page', String(pageNumber)] : p))
+    : [...params, ['page', String(pageNumber)]];
+  return `${base}#${next.map(([k, v]) => `${k}=${v}`).join('&')}`;
+}
+
+/**
+ * Whether to offer the optional "page" input for this URL: PDFs, plus anything
+ * that already carries a `#page=N` fragment (some viewers serve PDFs from paths
+ * that don't end in `.pdf`).
+ * @param {string | null | undefined} url
+ * @returns {boolean}
+ */
+export function supportsPageReference(url) {
+  return looksLikePdfUrl(url) || parsePageFromUrl(url) !== null;
+}
+
+/**
  * @typedef {Object} NaddrData
  * @property {number} kind
  * @property {string} pubkey
