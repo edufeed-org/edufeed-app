@@ -564,13 +564,24 @@
         itself lives in ChannelRailRow, shared with the host sidebar — the two
         rails must not drift apart channel by channel. -->
       {#snippet railRow(/** @type {any} */ row, /** @type {boolean} */ starred)}
-        <!-- Row affordances (star, owner delete) sit BESIDE the row — never
-             inside, that would nest interactive elements. -->
-        <!-- w-full min-w-0 mirrors ContentNavSidebar's kanaeleRow wrapper:
-             without an explicit width a long channel name can grow the row
-             past the rail, pushing the star behind a horizontal scroll. -->
-        <div class="group/ch flex w-full min-w-0 items-center gap-1">
-          <div class="min-w-0 flex-1">
+        {@const canDelete =
+          row.source !== 'concord' &&
+          isNip29Community &&
+          (isRootAdmin || isCommunikeyOwner) &&
+          row.pointer.id !== rootPointer?.id}
+        <!-- Row affordances (star, owner delete) OVERLAY the row's right edge
+             (never nested inside it — nested interactive): the row keeps its
+             full width until hover/focus, then pads right so the fading-in
+             buttons don't cover the trailing badges (laoc, 2026-09-01). A
+             starred row keeps the star (and its padding) permanently. -->
+        <div class="group/ch relative w-full min-w-0">
+          <div
+            class="w-full min-w-0 transition-[padding] duration-150 {starred
+              ? 'pr-7'
+              : ''} {canDelete
+              ? 'group-focus-within/ch:pr-14 group-hover/ch:pr-14'
+              : 'group-focus-within/ch:pr-7 group-hover/ch:pr-7'}"
+          >
             {#if row.source === 'concord'}
               {@const flags = channelUnreadState(concord.communityId, row.channel_id)}
               <ChannelRailRow
@@ -614,40 +625,44 @@
               />
             {/if}
           </div>
-          {#if favouritePubkey}
-            <button
-              type="button"
-              class="btn btn-square btn-ghost transition-opacity btn-xs {starred
-                ? 'text-accent'
-                : 'opacity-0 group-hover/ch:opacity-100 focus:opacity-100'}"
-              data-testid="channel-favourite-toggle"
-              aria-pressed={starred}
-              title={starred
-                ? m.groups_channel_favourite_remove()
-                : m.groups_channel_favourite_add()}
-              aria-label={starred
-                ? m.groups_channel_favourite_remove()
-                : m.groups_channel_favourite_add()}
-              onclick={() => toggleFavouriteChannel(favouritePubkey, row.key)}
-            >
-              <StarIcon class_="w-4 h-4" filled={starred} title="" />
-            </button>
-          {/if}
-          <!-- No delete on the General (root) row: it is the community's
+          <!-- Delete before star, so the always-visible star of a starred row
+               sits flush at the right edge and the delete fades in to its
+               left. No delete on the General (root) row: it is the community's
                membership group — removing it is the whole-community teardown
                in Settings, not a per-channel delete. -->
-          {#if row.source !== 'concord' && isNip29Community && (isRootAdmin || isCommunikeyOwner) && row.pointer.id !== rootPointer?.id}
-            <button
-              type="button"
-              class="btn btn-square opacity-0 btn-ghost transition-opacity btn-xs group-hover/ch:opacity-100 focus:opacity-100"
-              data-testid="group-channel-delete"
-              title={m.groups_channel_delete()}
-              aria-label={m.groups_channel_delete()}
-              onclick={() => (deletingGroup = row.pointer)}
-            >
-              <TrashIcon class="h-4 w-4" />
-            </button>
-          {/if}
+          <div class="absolute inset-y-0 right-0.5 flex items-center gap-0.5">
+            {#if canDelete}
+              <button
+                type="button"
+                class="btn btn-square pointer-events-none opacity-0 btn-ghost transition-opacity btn-xs group-hover/ch:pointer-events-auto group-hover/ch:opacity-100 focus:pointer-events-auto focus:opacity-100"
+                data-testid="group-channel-delete"
+                title={m.groups_channel_delete()}
+                aria-label={m.groups_channel_delete()}
+                onclick={() => (deletingGroup = row.pointer)}
+              >
+                <TrashIcon class="h-4 w-4" />
+              </button>
+            {/if}
+            {#if favouritePubkey}
+              <button
+                type="button"
+                class="btn btn-square btn-ghost transition-opacity btn-xs {starred
+                  ? 'text-accent'
+                  : 'pointer-events-none opacity-0 group-hover/ch:pointer-events-auto group-hover/ch:opacity-100 focus:pointer-events-auto focus:opacity-100'}"
+                data-testid="channel-favourite-toggle"
+                aria-pressed={starred}
+                title={starred
+                  ? m.groups_channel_favourite_remove()
+                  : m.groups_channel_favourite_add()}
+                aria-label={starred
+                  ? m.groups_channel_favourite_remove()
+                  : m.groups_channel_favourite_add()}
+                onclick={() => toggleFavouriteChannel(favouritePubkey, row.key)}
+              >
+                <StarIcon class_="w-4 h-4" filled={starred} title="" />
+              </button>
+            {/if}
+          </div>
         </div>
       {/snippet}
       {#if railSections.favourites.length > 0}

@@ -391,14 +391,20 @@
           {/if}
         </div>
         {#snippet kanaeleRow(/** @type {any} */ row, /** @type {boolean} */ starred)}
-          <!-- Star sits BESIDE the row (never inside — nested interactive),
-            same shape as the rail's delete affordance: hidden until
-            hover/focus, always visible once starred. w-full is load-bearing:
+          <!-- Star OVERLAYS the row's right edge (never nested inside it —
+            nested interactive): the row keeps its full width until
+            hover/focus, then pads right so the fading-in star doesn't cover
+            the trailing badges (laoc, 2026-09-01). A starred row keeps the
+            star and its padding permanently. w-full is load-bearing:
             .menu is a WRAPPED column flex, so items size to their content
             instead of stretching — without it a long channel name grows the
             row past the rail and the star lands behind a horizontal scroll. -->
-          <div class="group/ch flex w-full min-w-0 items-center gap-1">
-            <div class="min-w-0 flex-1">
+          <div class="group/ch relative w-full min-w-0">
+            <div
+              class="w-full min-w-0 transition-[padding] duration-150 {starred
+                ? 'pr-7'
+                : 'group-focus-within/ch:pr-7 group-hover/ch:pr-7'}"
+            >
               {#if row.source === 'concord'}
                 {@const flags = channelUnreadState(concordCommunityId, row.channel_id)}
                 <ChannelRailRow
@@ -433,9 +439,9 @@
             {#if favouritePubkey}
               <button
                 type="button"
-                class="btn btn-square btn-ghost transition-opacity btn-xs {starred
+                class="btn btn-square absolute top-1/2 right-0.5 -translate-y-1/2 btn-ghost transition-opacity btn-xs {starred
                   ? 'text-accent'
-                  : 'opacity-0 group-hover/ch:opacity-100 focus:opacity-100'}"
+                  : 'pointer-events-none opacity-0 group-hover/ch:pointer-events-auto group-hover/ch:opacity-100 focus:pointer-events-auto focus:opacity-100'}"
                 data-testid="channel-favourite-toggle"
                 aria-pressed={starred}
                 title={starred
