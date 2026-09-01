@@ -15,6 +15,7 @@
   import { getDisplayName } from 'applesauce-core/helpers';
   import { TimelineModel } from 'applesauce-core/models';
   import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
+  import { modalStore } from '$lib/stores/modal.svelte.js';
   import { createCachedTimelineLoader } from '$lib/loaders/base.js';
   import { createBookmarkEvent } from '$lib/helpers/bookmark.js';
   import { resolve } from '$app/paths';
@@ -391,6 +392,13 @@
     } finally {
       saveBusy = false;
     }
+  }
+
+  // Editing reuses the add-bookmark modal in edit mode; only the user's own
+  // bookmark can be edited, since 39701 is replaceable per (pubkey, d-tag).
+  function handleEditBookmark() {
+    if (!myBookmark) return;
+    modalStore.openModal('addBookmark', { editEvent: myBookmark, communityPubkey });
   }
 
   async function handleDeleteBookmark() {
@@ -809,6 +817,7 @@
           {#if menuEvent}
             <EventContextMenu
               event={menuEvent}
+              onEdit={myBookmark ? handleEditBookmark : undefined}
               onDelete={myBookmark ? handleDeleteBookmark : undefined}
               deleteTitle={m.social_bookmarks_delete_confirm_title()}
               deleteItemName={title}

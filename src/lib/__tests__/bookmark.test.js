@@ -19,10 +19,14 @@ vi.mock('$lib/helpers/event-factory.js', () => ({
 import {
   detectInputType,
   buildBookmarkTags,
+  buildBookmarkEditTags,
+  getBookmarkEditPrefill,
   stripSchemeForDTag,
   updateBookmarkContent,
+  updateBookmarkEvent,
   parseBookmarkUrlParam,
   getInternalBookmarkRedirectTarget,
+  decodeNaddr,
   BOOKMARK_KIND
 } from '../helpers/bookmark.js';
 
@@ -275,5 +279,267 @@ describe('updateBookmarkContent', () => {
 
     const result = await updateBookmarkContent(event, 'new content', mockAccount);
     expect(result.tags).toEqual(event.tags);
+  });
+});
+
+describe('buildBookmarkEditTags', () => {
+  /** @type {import('nostr-tools').NostrEvent} */
+  const existingEvent = {
+    kind: BOOKMARK_KIND,
+    pubkey: 'testpubkey',
+    content: 'Old description',
+    tags: [
+      ['d', 'example.com/article'],
+      ['r', 'https://example.com/article'],
+      ['title', 'Old Title'],
+      ['h', 'community1']
+    ],
+    created_at: 1000000,
+    id: 'abc123',
+    sig: 'sig123'
+  };
+
+  it('preserves the identity tags that address the event', () => {
+    const tags = buildBookmarkEditTags(existingEvent, {
+      title: 'New Title',
+      communityPubkeys: ['community1']
+    });
+
+    expect(tags).toContainEqual(['d', 'example.com/article']);
+    expect(tags).toContainEqual(['r', 'https://example.com/article']);
+  });
+
+  it('replaces the title tag', () => {
+    const tags = buildBookmarkEditTags(existingEvent, {
+      title: 'New Title',
+      communityPubkeys: ['community1']
+    });
+
+    expect(tags.filter((t) => t[0] === 'title')).toEqual([['title', 'New Title']]);
+  });
+
+  it('trims the title and drops the tag entirely when it is blank', () => {
+    expect(
+      buildBookmarkEditTags(existingEvent, { title: '  Padded  ', communityPubkeys: [] })
+    ).toContainEqual(['title', 'Padded']);
+
+    const cleared = buildBookmarkEditTags(existingEvent, { title: '   ', communityPubkeys: [] });
+    expect(cleared.some((t) => t[0] === 'title')).toBe(false);
+  });
+
+  it('replaces the full set of h-tags rather than merging with the old ones', () => {
+    const tags = buildBookmarkEditTags(existingEvent, {
+      title: 'New Title',
+      communityPubkeys: ['community2', 'community3']
+    });
+
+    expect(tags.filter((t) => t[0] === 'h')).toEqual([
+      ['h', 'community2'],
+      ['h', 'community3']
+    ]);
+  });
+
+  it('preserves the a-tag of an event-reference bookmark', () => {
+    /** @type {import('nostr-tools').NostrEvent} */
+    const eventRefBookmark = {
+      ...existingEvent,
+      tags: [
+        ['d', '30023:pubkey:id'],
+        ['a', '30023:pubkey:id', 'wss://relay.example.com'],
+        ['title', 'Old Title'],
+        ['h', 'community1']
+      ]
+    };
+
+    const tags = buildBookmarkEditTags(eventRefBookmark, {
+      title: 'New Title',
+      communityPubkeys: ['community1']
+    });
+
+    expect(tags).toContainEqual(['a', '30023:pubkey:id', 'wss://relay.example.com']);
+    expect(tags).toContainEqual(['d', '30023:pubkey:id']);
+  });
+
+  it('preserves unknown tags it does not understand', () => {
+    /** @type {import('nostr-tools').NostrEvent} */
+    const withExtras = {
+      ...existingEvent,
+      tags: [...existingEvent.tags, ['client', 'edufeed'], ['published_at', '1700000000']]
+    };
+
+    const tags = buildBookmarkEditTags(withExtras, { title: 'New', communityPubkeys: [] });
+
+    expect(tags).toContainEqual(['client', 'edufeed']);
+    expect(tags).toContainEqual(['published_at', '1700000000']);
+  });
+
+  it('tolerates an event with no tags', () => {
+    /** @type {import('nostr-tools').NostrEvent} */
+    const bare = { ...existingEvent, tags: [] };
+
+    expect(buildBookmarkEditTags(bare, { title: 'T', communityPubkeys: ['c1'] })).toEqual([
+      ['title', 'T'],
+      ['h', 'c1']
+    ]);
+  });
+});
+
+describe('updateBookmarkEvent', () => {
+  /** @type {import('nostr-tools').NostrEvent} */
+  const existingEvent = {
+    kind: BOOKMARK_KIND,
+    pubkey: 'testpubkey',
+    content: 'Old description',
+    tags: [
+      ['d', 'example.com/article'],
+      ['r', 'https://example.com/article'],
+      ['title', 'Old Title'],
+      ['h', 'community1']
+    ],
+    created_at: 1000000,
+    id: 'abc123',
+    sig: 'sig123'
+  };
+
+  const mockAccount = {
+    /** @param {any} template */
+    signEvent: async (template) => ({
+      ...template,
+      id: 'new-id',
+      pubkey: 'testpubkey',
+      sig: 'fake-sig'
+    })
+  };
+
+  it('signs a replacement event carrying the edited title, comment and communities', async () => {
+    const result = await updateBookmarkEvent({
+      event: existingEvent,
+      title: 'New Title',
+      description: 'New comment',
+      communityPubkeys: ['community2'],
+      account: mockAccount
+    });
+
+    expect(result.kind).toBe(BOOKMARK_KIND);
+    expect(result.content).toBe('New comment');
+    expect(result.tags).toContainEqual(['d', 'example.com/article']);
+    expect(result.tags).toContainEqual(['title', 'New Title']);
+    expect(result.tags.filter((/** @type {string[]} */ t) => t[0] === 'h')).toEqual([
+      ['h', 'community2']
+    ]);
+  });
+
+  it('writes an empty content when the comment is cleared', async () => {
+    const result = await updateBookmarkEvent({
+      event: existingEvent,
+      title: 'New Title',
+      description: '',
+      communityPubkeys: ['community1'],
+      account: mockAccount
+    });
+
+    expect(result.content).toBe('');
+  });
+});
+
+describe('getBookmarkEditPrefill', () => {
+  const hexPub = 'b'.repeat(64);
+
+  it('prefills a web bookmark from its r, title, content and h tags', () => {
+    /** @type {import('nostr-tools').NostrEvent} */
+    const event = {
+      kind: BOOKMARK_KIND,
+      pubkey: 'testpubkey',
+      content: 'Why I saved this',
+      tags: [
+        ['d', 'example.com/article'],
+        ['r', 'https://example.com/article'],
+        ['title', 'My Article'],
+        ['h', 'community1'],
+        ['h', 'community2']
+      ],
+      created_at: 1000000,
+      id: 'abc123',
+      sig: 'sig123'
+    };
+
+    expect(getBookmarkEditPrefill(event)).toEqual({
+      input: 'https://example.com/article',
+      title: 'My Article',
+      description: 'Why I saved this',
+      communityPubkeys: ['community1', 'community2']
+    });
+  });
+
+  it('prefills an event-reference bookmark with an naddr rebuilt from its a-tag', () => {
+    /** @type {import('nostr-tools').NostrEvent} */
+    const event = {
+      kind: BOOKMARK_KIND,
+      pubkey: 'testpubkey',
+      content: '',
+      tags: [
+        ['d', `30023:${hexPub}:my-article`],
+        ['a', `30023:${hexPub}:my-article`, 'wss://relay.example.com/'],
+        ['title', 'An Article']
+      ],
+      created_at: 1000000,
+      id: 'abc123',
+      sig: 'sig123'
+    };
+
+    const prefill = getBookmarkEditPrefill(event);
+
+    expect(prefill.input.startsWith('naddr1')).toBe(true);
+    expect(decodeNaddr(prefill.input)).toEqual({
+      kind: 30023,
+      pubkey: hexPub,
+      identifier: 'my-article',
+      relayHint: 'wss://relay.example.com/'
+    });
+    expect(prefill.communityPubkeys).toEqual([]);
+  });
+
+  it('falls back to the d-tag when there is no r-tag and no a-tag', () => {
+    /** @type {import('nostr-tools').NostrEvent} */
+    const event = {
+      kind: BOOKMARK_KIND,
+      pubkey: 'testpubkey',
+      content: '',
+      tags: [['d', 'example.com/page']],
+      created_at: 1000000,
+      id: 'abc123',
+      sig: 'sig123'
+    };
+
+    expect(getBookmarkEditPrefill(event).input).toBe('https://example.com/page');
+  });
+
+  it('returns empty defaults for a null event', () => {
+    expect(getBookmarkEditPrefill(null)).toEqual({
+      input: '',
+      title: '',
+      description: '',
+      communityPubkeys: []
+    });
+  });
+
+  it('deduplicates repeated h-tags so a keyed selector cannot crash', () => {
+    /** @type {import('nostr-tools').NostrEvent} */
+    const event = {
+      kind: BOOKMARK_KIND,
+      pubkey: 'testpubkey',
+      content: '',
+      tags: [
+        ['d', 'example.com'],
+        ['r', 'https://example.com'],
+        ['h', 'community1'],
+        ['h', 'community1']
+      ],
+      created_at: 1000000,
+      id: 'abc123',
+      sig: 'sig123'
+    };
+
+    expect(getBookmarkEditPrefill(event).communityPubkeys).toEqual(['community1']);
   });
 });
