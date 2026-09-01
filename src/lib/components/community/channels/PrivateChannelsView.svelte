@@ -15,7 +15,12 @@
   import { useActiveUser } from '$lib/stores/accounts.svelte';
   import { isCommunityOwner } from '$lib/helpers/community-signer.js';
   import { deleteChannelCascade } from '$lib/groups/community-teardown.js';
-  import { TrashIcon } from '$lib/components/icons';
+  import { TrashIcon, StarIcon } from '$lib/components/icons';
+  import { splitFavouriteRows } from '$lib/groups/channel-sections.js';
+  import {
+    readFavouriteChannels,
+    toggleFavouriteChannel
+  } from '$lib/groups/favourite-channels.svelte.js';
   import {
     channelUnreadState,
     markChannelRead,
@@ -345,6 +350,13 @@
       rootLabel: m.groups_general_channel()
     })
   );
+  // Starred channels float into their own rail section. Local per-device
+  // state (favourite-channels.svelte.js) — reads are reactive via the
+  // store's version counter, so a toggle re-splits immediately.
+  const favouritePubkey = $derived(getActiveUser()?.pubkey);
+  const railSections = $derived(
+    splitFavouriteRows(channelRows, readFavouriteChannels(favouritePubkey))
+  );
 
   // Mirror the on-screen channel into the shared active-channel store and
   // stamp it read. Reads deps BEFORE the early return (project gotcha:
@@ -551,35 +563,35 @@
       <!-- Tighter, list-style rows (Armada-parity cleanup). The row markup
         itself lives in ChannelRailRow, shared with the host sidebar — the two
         rails must not drift apart channel by channel. -->
-      {#each channelRows as row (row.key)}
-        {#if row.source === 'concord'}
-          {@const flags = channelUnreadState(concord.communityId, row.channel_id)}
-          <ChannelRailRow
-            symbol={row.symbol}
-            name={row.name}
-            locked={row.locked}
-            active={activeChannel?.channel_id === row.channel_id}
-            dimmed={!row.accessible}
-            bold={flags.unread}
-            onclick={() => {
-              if (concord.communityId && row.channel_id)
-                selectConcordChannel(concord.communityId, row.channel_id);
-              mobileChat = true;
-            }}
-          >
-            {#snippet trailing()}
-              <ConcordUnreadDot unread={flags.unread} mentioned={flags.mentioned} />
-            {/snippet}
-          </ChannelRailRow>
-        {:else}
-          <!-- A NIP-29 channel opens IN the community pane (selection store),
-            not on the standalone /groups route: that route's sidebar is the
-            host's ENTIRE directory, which on a big public relay is a wall of
-            foreign groups and a frozen tab (laoc, 2026-08-19). -->
-          <!-- Owner rows get a hover/focus-revealed delete affordance beside
-               (never inside — nested interactive) the row. -->
-          <div class="group/ch flex items-center gap-1">
-            <div class="min-w-0 flex-1">
+      {#snippet railRow(/** @type {any} */ row, /** @type {boolean} */ starred)}
+        <!-- Row affordances (star, owner delete) sit BESIDE the row — never
+             inside, that would nest interactive elements. -->
+        <div class="group/ch flex items-center gap-1">
+          <div class="min-w-0 flex-1">
+            {#if row.source === 'concord'}
+              {@const flags = channelUnreadState(concord.communityId, row.channel_id)}
+              <ChannelRailRow
+                symbol={row.symbol}
+                name={row.name}
+                locked={row.locked}
+                active={activeChannel?.channel_id === row.channel_id}
+                dimmed={!row.accessible}
+                bold={flags.unread}
+                onclick={() => {
+                  if (concord.communityId && row.channel_id)
+                    selectConcordChannel(concord.communityId, row.channel_id);
+                  mobileChat = true;
+                }}
+              >
+                {#snippet trailing()}
+                  <ConcordUnreadDot unread={flags.unread} mentioned={flags.mentioned} />
+                {/snippet}
+              </ChannelRailRow>
+            {:else}
+              <!-- A NIP-29 channel opens IN the community pane (selection store),
+                not on the standalone /groups route: that route's sidebar is the
+                host's ENTIRE directory, which on a big public relay is a wall of
+                foreign groups and a frozen tab (laoc, 2026-08-19). -->
               <ChannelRailRow
                 testid="group-channel-row"
                 symbol={row.symbol}
@@ -597,24 +609,58 @@
                   mobileChat = true;
                 }}
               />
-            </div>
-            <!-- No delete on the General (root) row: it is the community's
-                 membership group — removing it is the whole-community teardown
-                 in Settings, not a per-channel delete. -->
-            {#if isNip29Community && (isRootAdmin || isCommunikeyOwner) && row.pointer.id !== rootPointer?.id}
-              <button
-                type="button"
-                class="btn btn-square opacity-0 btn-ghost transition-opacity btn-xs group-hover/ch:opacity-100 focus:opacity-100"
-                data-testid="group-channel-delete"
-                title={m.groups_channel_delete()}
-                aria-label={m.groups_channel_delete()}
-                onclick={() => (deletingGroup = row.pointer)}
-              >
-                <TrashIcon class="h-4 w-4" />
-              </button>
             {/if}
           </div>
-        {/if}
+          {#if favouritePubkey}
+            <button
+              type="button"
+              class="btn btn-square btn-ghost transition-opacity btn-xs {starred
+                ? 'text-accent'
+                : 'opacity-40 group-hover/ch:opacity-100 focus:opacity-100'}"
+              data-testid="channel-favourite-toggle"
+              aria-pressed={starred}
+              title={starred
+                ? m.groups_channel_favourite_remove()
+                : m.groups_channel_favourite_add()}
+              aria-label={starred
+                ? m.groups_channel_favourite_remove()
+                : m.groups_channel_favourite_add()}
+              onclick={() => toggleFavouriteChannel(favouritePubkey, row.key)}
+            >
+              <StarIcon class_="w-4 h-4" filled={starred} title="" />
+            </button>
+          {/if}
+          <!-- No delete on the General (root) row: it is the community's
+               membership group — removing it is the whole-community teardown
+               in Settings, not a per-channel delete. -->
+          {#if row.source !== 'concord' && isNip29Community && (isRootAdmin || isCommunikeyOwner) && row.pointer.id !== rootPointer?.id}
+            <button
+              type="button"
+              class="btn btn-square opacity-0 btn-ghost transition-opacity btn-xs group-hover/ch:opacity-100 focus:opacity-100"
+              data-testid="group-channel-delete"
+              title={m.groups_channel_delete()}
+              aria-label={m.groups_channel_delete()}
+              onclick={() => (deletingGroup = row.pointer)}
+            >
+              <TrashIcon class="h-4 w-4" />
+            </button>
+          {/if}
+        </div>
+      {/snippet}
+      {#if railSections.favourites.length > 0}
+        <div
+          data-testid="rail-zone-favoriten"
+          class="px-4 pt-1 pb-0.5 text-[0.65rem] font-semibold tracking-wider text-base-content/40 uppercase"
+        >
+          {m.groups_rail_favourites()}
+        </div>
+        {#each railSections.favourites as row (row.key)}
+          {@render railRow(row, true)}
+        {/each}
+        <div class="my-1 border-t border-base-content/10"></div>
+      {/if}
+      {#each railSections.rest as row (row.key)}
+        {@render railRow(row, false)}
       {/each}
       {#if (!!rootPointer || groupPointers.length > 0) && isAreaMember}
         <button

@@ -16,7 +16,7 @@
 import { describe, it, expect } from 'vitest';
 import { buildChannelRows } from '$lib/groups/community-channel-rows.js';
 import { channelAccessLevel } from '$lib/groups/channel-access.js';
-import { splitChannelSections } from '$lib/groups/channel-sections.js';
+import { splitChannelSections, splitFavouriteRows } from '$lib/groups/channel-sections.js';
 
 const R = 'wss://groups.example';
 const meta = (/** @type {string} */ id, /** @type {string[][]} */ extra = []) => ({
@@ -127,5 +127,65 @@ describe('splitChannelSections', () => {
   it('survives an empty list', () => {
     expect(splitChannelSections([])).toEqual({ channels: [], dms: [] });
     expect(splitChannelSections(/** @type {any} */ (undefined))).toEqual({ channels: [], dms: [] });
+  });
+});
+
+describe('splitFavouriteRows', () => {
+  const rows = () =>
+    rowsFor({
+      allgemein: [
+        ['name', 'allgemein'],
+        ['t', 'stream']
+      ],
+      mathe: [
+        ['name', 'Mathe'],
+        ['t', 'stream']
+      ],
+      physik: [
+        ['name', 'Physik'],
+        ['t', 'stream']
+      ]
+    });
+
+  it('lifts starred rows into favourites, order preserved on both sides', () => {
+    const all = rows();
+    const starred = new Set([all[2].key, all[0].key]);
+    const { favourites, rest } = splitFavouriteRows(all, starred);
+    expect(favourites.map((r) => r.name)).toEqual(['allgemein', 'Physik']);
+    expect(rest.map((r) => r.name)).toEqual(['Mathe']);
+  });
+
+  it('has no favourites section when nothing is starred', () => {
+    const all = rows();
+    const { favourites, rest } = splitFavouriteRows(all, new Set());
+    expect(favourites).toEqual([]);
+    expect(rest).toEqual(all);
+  });
+
+  it('ignores a stale favourite key with no matching row', () => {
+    const all = rows();
+    const { favourites, rest } = splitFavouriteRows(all, new Set(['group:gone@wss://x.example/']));
+    expect(favourites).toEqual([]);
+    expect(rest).toEqual(all);
+  });
+
+  it('drops a hole in the list rather than sectioning it', () => {
+    const [row] = rows();
+    const { favourites, rest } = splitFavouriteRows(
+      /** @type {any} */ ([null, row, undefined]),
+      new Set([row.key])
+    );
+    expect(favourites).toEqual([row]);
+    expect(rest).toEqual([]);
+  });
+
+  it('survives an empty list and a missing set', () => {
+    expect(splitFavouriteRows([], new Set())).toEqual({ favourites: [], rest: [] });
+    expect(
+      splitFavouriteRows(/** @type {any} */ (undefined), /** @type {any} */ (undefined))
+    ).toEqual({
+      favourites: [],
+      rest: []
+    });
   });
 });

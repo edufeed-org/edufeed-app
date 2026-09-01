@@ -32,3 +32,29 @@ export function splitChannelSections(rows) {
   }
   return { channels, dms };
 }
+
+/**
+ * Lift the rows a user has starred into their own section, keeping the
+ * builder's order on both sides. Which rows are starred is decided in
+ * favourite-channels.svelte.js, off local per-account state — this function
+ * only groups, it never classifies.
+ *
+ * @param {import('./community-channel-rows.js').ChannelRow[] | null | undefined} rows
+ * @param {Set<string> | null | undefined} favouriteKeys row keys, as stored
+ * @returns {{
+ *   favourites: import('./community-channel-rows.js').ChannelRow[],
+ *   rest: import('./community-channel-rows.js').ChannelRow[]
+ * }}
+ */
+export function splitFavouriteRows(rows, favouriteKeys) {
+  /** @type {import('./community-channel-rows.js').ChannelRow[]} */
+  const favourites = [];
+  /** @type {import('./community-channel-rows.js').ChannelRow[]} */
+  const rest = [];
+  for (const row of rows ?? []) {
+    if (!row) continue;
+    if (favouriteKeys?.has(row.key)) favourites.push(row);
+    else rest.push(row);
+  }
+  return { favourites, rest };
+}

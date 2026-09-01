@@ -67,6 +67,7 @@ export { default as RefreshIcon } from './actions/RefreshIcon.svelte';
 export { default as ExternalLinkIcon } from './actions/ExternalLinkIcon.svelte';
 export { default as EditIcon } from './actions/EditIcon.svelte';
 export { default as PinIcon } from './ui/PinIcon.svelte';
+export { default as StarIcon } from './ui/StarIcon.svelte';
 export { default as EyeIcon } from './ui/EyeIcon.svelte';
 export { default as EyeOffIcon } from './ui/EyeOffIcon.svelte';
 export { default as GripIcon } from './ui/GripIcon.svelte';
