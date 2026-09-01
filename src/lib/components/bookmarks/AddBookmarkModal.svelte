@@ -73,7 +73,12 @@
   let userEditedPage = $state(false);
 
   let inputType = $derived(input.trim() ? detectInputType(input) : 'invalid');
-  let showPageInput = $derived(inputType === 'url' && supportsPageReference(input.trim()));
+  // Not in edit mode: the address (and with it the #page fragment) is
+  // immutable there — handleUpdate never applies the field, so showing it
+  // would silently drop whatever the user types into it.
+  let showPageInput = $derived(
+    !isEditMode && inputType === 'url' && supportsPageReference(input.trim())
+  );
 
   // A pasted URL may already carry `#page=N` — lift it into the field so the
   // user sees (and can change) it instead of it silently riding along. Tracks
