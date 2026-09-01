@@ -190,7 +190,8 @@ describe('AddBookmarkModal edit mode', () => {
         tags: [
           ['d', 'example.com/paper.pdf#page=3'],
           ['r', 'https://example.com/paper.pdf#page=3'],
-          ['title', 'A Paper']
+          ['title', 'A Paper'],
+          ['h', 'community1']
         ]
       }
     };
@@ -209,7 +210,8 @@ describe('AddBookmarkModal edit mode', () => {
         tags: [
           ['d', 'example.com/paper.pdf#page=3'],
           ['r', 'https://example.com/paper.pdf#page=3'],
-          ['title', 'A Paper']
+          ['title', 'A Paper'],
+          ['h', 'community1']
         ]
       }
     };
@@ -238,7 +240,8 @@ describe('AddBookmarkModal edit mode', () => {
         tags: [
           ['d', 'example.com/paper.pdf#page=3'],
           ['r', 'https://example.com/paper.pdf#page=3'],
-          ['title', 'A Paper']
+          ['title', 'A Paper'],
+          ['h', 'community1']
         ]
       }
     };
