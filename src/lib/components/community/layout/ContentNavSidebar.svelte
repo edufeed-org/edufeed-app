@@ -16,8 +16,14 @@
     BellSlashIcon,
     LockIcon,
     LockOpenIcon,
-    PeopleIcon
+    PeopleIcon,
+    StarIcon
   } from '$lib/components/icons';
+  import { splitFavouriteRows } from '$lib/groups/channel-sections.js';
+  import {
+    readFavouriteChannels,
+    toggleFavouriteChannel
+  } from '$lib/groups/favourite-channels.svelte.js';
   import { useConcordCommunity } from '$lib/concord/community.svelte.js';
   import { parseGroupPointers } from '$lib/groups/community-pointer.js';
   import { communityNavTabIds, buildSidebarZones } from './community-nav.js';
@@ -134,6 +140,14 @@
     });
     return buildSidebarZones({ tabs: tabIds, channelRows, isMember, isOwner, isRootAdmin });
   });
+
+  // Starred channels float into their own section above the list. Local
+  // per-device state (favourite-channels.svelte.js) — reads are reactive via
+  // the store's version counter, so a toggle re-splits immediately.
+  const favouritePubkey = $derived(getActiveUserForChip()?.pubkey);
+  const kanaeleSections = $derived(
+    splitFavouriteRows(zones.kanaele, readFavouriteChannels(favouritePubkey))
+  );
 
   /**
    * @param {string} id
@@ -376,37 +390,78 @@
             </button>
           {/if}
         </div>
-        {#each zones.kanaele as row (row.key)}
-          {#if row.source === 'concord'}
-            {@const flags = channelUnreadState(concordCommunityId, row.channel_id)}
-            <ChannelRailRow
-              symbol={row.symbol}
-              name={row.name}
-              locked={row.locked}
-              testid={rowTestId(row.key)}
-              active={selectedContentType === 'channels' &&
-                getSelectedConcordChannel(concordCommunityId) === row.channel_id}
-              dimmed={!row.accessible}
-              bold={flags.unread}
-              onclick={() => selectConcordRow(row.channel_id)}
-            >
-              {#snippet trailing()}
-                <ConcordUnreadDot unread={flags.unread} mentioned={flags.mentioned} />
-              {/snippet}
-            </ChannelRailRow>
-          {:else}
-            <ChannelRailRow
-              testid={rowTestId(row.key)}
-              symbol={row.symbol}
-              name={row.name}
-              locked={row.locked}
-              active={selectedContentType === 'channels' &&
-                getSelectedGroupChannel(communityEvent?.pubkey) === channelKey(row.pointer)}
-              dimmed={row.pending}
-              worldReadable={row.worldReadable}
-              onclick={() => selectGroupRow(row.pointer)}
-            />
-          {/if}
+        {#snippet kanaeleRow(/** @type {any} */ row, /** @type {boolean} */ starred)}
+          <!-- Star sits BESIDE the row (never inside — nested interactive),
+            same shape as the rail's delete affordance: hidden until
+            hover/focus, always visible once starred. -->
+          <div class="group/ch flex items-center gap-1">
+            <div class="min-w-0 flex-1">
+              {#if row.source === 'concord'}
+                {@const flags = channelUnreadState(concordCommunityId, row.channel_id)}
+                <ChannelRailRow
+                  symbol={row.symbol}
+                  name={row.name}
+                  locked={row.locked}
+                  testid={rowTestId(row.key)}
+                  active={selectedContentType === 'channels' &&
+                    getSelectedConcordChannel(concordCommunityId) === row.channel_id}
+                  dimmed={!row.accessible}
+                  bold={flags.unread}
+                  onclick={() => selectConcordRow(row.channel_id)}
+                >
+                  {#snippet trailing()}
+                    <ConcordUnreadDot unread={flags.unread} mentioned={flags.mentioned} />
+                  {/snippet}
+                </ChannelRailRow>
+              {:else}
+                <ChannelRailRow
+                  testid={rowTestId(row.key)}
+                  symbol={row.symbol}
+                  name={row.name}
+                  locked={row.locked}
+                  active={selectedContentType === 'channels' &&
+                    getSelectedGroupChannel(communityEvent?.pubkey) === channelKey(row.pointer)}
+                  dimmed={row.pending}
+                  worldReadable={row.worldReadable}
+                  onclick={() => selectGroupRow(row.pointer)}
+                />
+              {/if}
+            </div>
+            {#if favouritePubkey}
+              <button
+                type="button"
+                class="btn btn-square btn-ghost transition-opacity btn-xs {starred
+                  ? 'text-accent'
+                  : 'opacity-40 group-hover/ch:opacity-100 focus:opacity-100'}"
+                data-testid="channel-favourite-toggle"
+                aria-pressed={starred}
+                title={starred
+                  ? m.groups_channel_favourite_remove()
+                  : m.groups_channel_favourite_add()}
+                aria-label={starred
+                  ? m.groups_channel_favourite_remove()
+                  : m.groups_channel_favourite_add()}
+                onclick={() => toggleFavouriteChannel(favouritePubkey, row.key)}
+              >
+                <StarIcon class_="w-4 h-4" filled={starred} title="" />
+              </button>
+            {/if}
+          </div>
+        {/snippet}
+        {#if kanaeleSections.favourites.length > 0}
+          <div
+            data-testid="nav-zone-favoriten"
+            class="px-4 pt-1 pb-0.5 text-[0.65rem] font-semibold tracking-wider text-base-content/40 uppercase"
+          >
+            {m.groups_rail_favourites()}
+          </div>
+          {#each kanaeleSections.favourites as row (row.key)}
+            {@render kanaeleRow(row, true)}
+          {/each}
+          <div class="my-1 border-t border-base-content/10"></div>
+        {/if}
+        {#each kanaeleSections.rest as row (row.key)}
+          {@render kanaeleRow(row, false)}
         {/each}
         {#if zones.showCreateEntry}
           <!-- The owner's/root admin's desktop path to channel creation —
