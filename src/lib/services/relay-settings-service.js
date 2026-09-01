@@ -127,23 +127,44 @@ export function validateRelayUrl(url) {
 }
 
 /**
- * Parse a relay list event (kind 10002) into a structured format
+ * Parse a relay list event (kind 10002) into a structured format.
+ *
+ * One entry per URL. Kind 10002 is untrusted network input and three keyed
+ * {#each} blocks key on `entry.url` (settings editor, NIP51ListDetailView,
+ * DashboardLists), so a repeated r-tag would crash the page with
+ * each_key_duplicate — as would two bare `["r"]` tags, which both key as
+ * undefined. Repeats are MERGED, not dropped: NIP-65 lets a client express
+ * read+write as two separate marked tags, and the settings editor writes this
+ * parsed list straight back out, so keeping only the first tag would silently
+ * strip a marker from the user's published list.
+ *
  * @param {import('nostr-tools').NostrEvent | null | undefined} event - The kind 10002 event
  * @returns {Array<{url: string, read: boolean, write: boolean}>}
  */
 export function parseRelayListEvent(event) {
   if (!event || !event.tags) return [];
 
-  return event.tags
-    .filter((/** @type {string[]} */ tag) => tag[0] === 'r')
-    .map((/** @type {string[]} */ tag) => {
-      const url = tag[1];
-      const marker = tag[2];
+  /** @type {Map<string, {url: string, read: boolean, write: boolean}>} */
+  const byUrl = new Map();
 
-      return {
-        url,
-        read: !marker || marker === 'read',
-        write: !marker || marker === 'write'
-      };
-    });
+  for (const tag of event.tags) {
+    if (tag[0] !== 'r') continue;
+
+    const url = tag[1];
+    if (typeof url !== 'string' || !url) continue;
+
+    const marker = tag[2];
+    const read = !marker || marker === 'read';
+    const write = !marker || marker === 'write';
+
+    const existing = byUrl.get(url);
+    if (existing) {
+      existing.read ||= read;
+      existing.write ||= write;
+    } else {
+      byUrl.set(url, { url, read, write });
+    }
+  }
+
+  return [...byUrl.values()];
 }
