@@ -435,7 +435,7 @@
                 type="button"
                 class="btn btn-square btn-ghost transition-opacity btn-xs {starred
                   ? 'text-accent'
-                  : 'opacity-40 group-hover/ch:opacity-100 focus:opacity-100'}"
+                  : 'opacity-0 group-hover/ch:opacity-100 focus:opacity-100'}"
                 data-testid="channel-favourite-toggle"
                 aria-pressed={starred}
                 title={starred
