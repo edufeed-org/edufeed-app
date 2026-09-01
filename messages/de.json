@@ -1917,7 +1917,7 @@
   "amb_form_no_url_or_divider": "oder",
   "amb_form_no_url_cancel": "Doch eine URL eingeben",
   "amb_form_no_url_state_card": "Lade deine Inhalte direkt hier hoch.",
-  "amb_form_step2_upload_label": "Dateien hochladen (PDF, Folien, Dokumente)",
+  "amb_form_step2_upload_label": "Dateien hochladen (PDF, Folien, Dokumente, Bilder)",
   "amb_form_step2_upload_help": "Lade eine oder mehrere Dateien hoch. Nach dem Hochladen kann die KI passende Metadaten aus ihren Inhalten vorschlagen.",
   "amb_form_link_license_details": "Lizenzdetails anzeigen →",
   "amb_form_checkbox_free_access": "Diese Ressource ist kostenfrei zugänglich",

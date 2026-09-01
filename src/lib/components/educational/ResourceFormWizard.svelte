@@ -63,6 +63,7 @@
   import { getAllLookupRelays } from '$lib/helpers/relay-helper.js';
   import { ekwKeywordsFromConcepts } from '$lib/helpers/educational/ekwKeywordsFromConcepts.js';
   import { enrichFromUrls } from '$lib/helpers/educational/enrichFromUrl.js';
+  import { NO_URL_UPLOAD_ACCEPT } from '$lib/helpers/educational/uploadAccept.js';
   import {
     dedupeKeyFor,
     selectUploadedSourceUrls
@@ -187,12 +188,6 @@
   // True while MetadataFetchStep is fetching OG data for the current input.
   // Surfaced from the child via its `onbusychange` callback.
   let metadataFetchBusy = $state(false);
-
-  // Accepted upload types for the no-URL Step-2 uploader: PDF, slides, docs
-  // (the document formats the AI extractor can ground on) plus interactive
-  // packages (.h5p/.xdc/.html), which the uploader detects and normalizes.
-  const NO_URL_UPLOAD_ACCEPT =
-    '.pdf,.ppt,.pptx,.odp,.key,.doc,.docx,.odt,application/pdf,.h5p,.xdc,.html,.htm,application/x-webxdc';
 
   // Image preview error flag for step 3 image field
   let imagePreviewError = $state(false);
