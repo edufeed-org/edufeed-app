@@ -26,7 +26,8 @@ vi.mock('$lib/paraglide/messages', () => ({
   aria_jump_past_events: () => '',
   aria_back_to_top: () => ''
 }));
-vi.mock('$lib/helpers/calendar.js', () => ({
+vi.mock('$lib/helpers/calendar.js', async (importOriginal) => ({
+  .../** @type {any} */ (await importOriginal()),
   filterEventsByViewMode: (/** @type {any} */ events) => events
 }));
 vi.mock('$lib/stores/profile-map.svelte.js', () => ({
@@ -80,5 +81,24 @@ describe('CalendarEventsList', () => {
     for (const [props] of cardPropsSpy.mock.calls) {
       expect(props).not.toHaveProperty('onEventClick');
     }
+  });
+
+  it('keeps an ongoing open-ended event (no end tag) in Upcoming until its day ends', () => {
+    // Started 2h ago, no end tag: NIP-52 open end = ends the same day, so it
+    // is still running and must not be filed under "Past".
+    const nowSec = Math.floor(Date.now() / 1000);
+    const ongoingEvent = {
+      ...futureEvent,
+      id: 'c'.repeat(64),
+      // 2h ago, clamped to the current UTC day so the test can't straddle midnight
+      start: Math.max(nowSec - 2 * 3600, Math.floor(nowSec / 86400) * 86400),
+      end: 0
+    };
+    const { queryByText } = render(CalendarEventsList, {
+      props: { events: [ongoingEvent], viewMode: 'month', currentDate: new Date() }
+    });
+
+    expect(queryByText('No upcoming events')).toBeNull();
+    expect(queryByText('No past events')).not.toBeNull();
   });
 });

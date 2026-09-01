@@ -4,6 +4,7 @@
   import { addressLoader, eventLoader } from '$lib/loaders';
   import { CommunityPinListModel } from '$lib/models/pin-list.js';
   import { getFeedCardData } from '$lib/helpers/feedCardData.js';
+  import { formatCalendarSubtitle } from '$lib/helpers/calendar.js';
   import { unpinEvent, reorderPins, pinEvent } from '$lib/services/pin-list-service.js';
   import { showToast } from '$lib/helpers/toast.js';
   import { getCommunikeyRelays } from '$lib/helpers/relay-helper.js';
@@ -11,24 +12,6 @@
   import { nip19 } from 'nostr-tools';
 
   let { communityId, isAdmin = false, onNavigateToEvent } = $props();
-
-  /**
-   * @param {string} startStr
-   * @returns {string}
-   */
-  function formatCalendarSubtitle(startStr) {
-    const num = Number(startStr);
-    if (!isNaN(num) && num > 0) {
-      return new Date(num * 1000).toLocaleDateString(undefined, {
-        month: 'short',
-        day: 'numeric',
-        year: 'numeric',
-        hour: 'numeric',
-        minute: '2-digit'
-      });
-    }
-    return startStr;
-  }
 
   /** @type {Array<any>} */
   let pinPointers = $state.raw([]);
@@ -277,7 +260,7 @@
             <div class="mt-1 line-clamp-2 text-sm font-semibold">{cardData.title}</div>
             {#if cardData.typeKey === 'calendar' && cardData.subtitle}
               <div class="mt-1 text-xs text-base-content/60">
-                {formatCalendarSubtitle(cardData.subtitle)}
+                {formatCalendarSubtitle(cardData.subtitle, event.kind)}
               </div>
             {/if}
             {#if cardData.description}

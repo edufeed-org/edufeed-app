@@ -61,6 +61,14 @@ export function useReplaceableEvent(getPointer, options = {}) {
           event = e;
           loading = false;
           notFound = false;
+        } else if (event) {
+          // ReplaceableModel emits undefined when the event is removed from
+          // the store (NIP-09 deletion) — clear it instead of keeping a
+          // stale copy on screen. Initial cold-store undefined emissions
+          // (no event yet) are still ignored; the timeout handles those.
+          event = undefined;
+          loading = false;
+          notFound = true;
         }
       });
 

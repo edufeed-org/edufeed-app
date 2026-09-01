@@ -5,38 +5,21 @@
 
 import { runtimeConfig } from '$lib/stores/config.svelte.js';
 import { getSeenRelays, normalizeURL } from 'applesauce-core/helpers';
+import { activeDateLocale, formatDate } from '$lib/helpers/dates.js';
+import {
+  parseCalendarTimestamp,
+  getIcsEventTiming,
+  dedupeReplaceableEvents
+} from '$lib/helpers/calendar-timing.js';
+
+// Pure timing helpers live in calendar-timing.js (no store/config imports, so
+// server routes can use them too); re-exported here for client callers.
+export { parseCalendarTimestamp, getIcsEventTiming, dedupeReplaceableEvents };
 
 /**
  * @typedef {import('../types/calendar.js').CalendarEvent} CalendarEvent
  * @typedef {import('../types/calendar.js').EventFormData} EventFormData
  */
-
-/** ISO 8601 date pattern for NIP-52 kind 31922 (date-based) events */
-const ISO_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
-
-/**
- * Parse a NIP-52 calendar event time value to a Unix timestamp (seconds).
- * Handles both formats per NIP-52 spec:
- * - Kind 31922 (date-based): ISO 8601 date string "YYYY-MM-DD" → midnight UTC
- * - Kind 31923 (time-based): Unix timestamp string "1704067200"
- *
- * @param {string | undefined} value - The tag value to parse
- * @param {number} [_eventKind] - Optional event kind for format hints
- * @returns {number} Unix timestamp in seconds, or 0 if invalid
- */
-export function parseCalendarTimestamp(value, _eventKind) {
-  if (!value) return 0;
-
-  // Date-based format: "YYYY-MM-DD" → midnight UTC
-  if (ISO_DATE_PATTERN.test(value)) {
-    const date = new Date(value + 'T00:00:00Z');
-    return isNaN(date.getTime()) ? 0 : Math.floor(date.getTime() / 1000);
-  }
-
-  // Time-based format: Unix timestamp string
-  const num = parseInt(value, 10);
-  return isNaN(num) ? 0 : num;
-}
 
 /**
  * Format a unix timestamp as a relative time string (e.g. "3m ago", "2d ago")
@@ -57,13 +40,17 @@ export function formatRelativeTime(unixSeconds) {
  * Format a date for calendar display using configured locale
  * @param {Date} date - Date to format
  * @param {string} format - Format string ('YYYY-MM-DD', 'MM/DD', 'full', 'long', 'short', 'time')
+ * @param {{ utc?: boolean }} [options] - utc: format in UTC (date-based events
+ *   are anchored at UTC midnight, so local-time rendering shifts the day west
+ *   of UTC)
  * @returns {string} Formatted date string
  */
-export function formatCalendarDate(date, format) {
+export function formatCalendarDate(date, format, { utc = false } = {}) {
   if (!date || !(date instanceof Date)) return '';
 
   const locale = runtimeConfig.calendar.locale;
   const use24Hour = runtimeConfig.calendar.timeFormat === '24h';
+  const tz = utc ? { timeZone: 'UTC' } : {};
 
   switch (format) {
     case 'YYYY-MM-DD':
@@ -77,26 +64,30 @@ export function formatCalendarDate(date, format) {
         weekday: 'long',
         year: 'numeric',
         month: 'long',
-        day: 'numeric'
+        day: 'numeric',
+        ...tz
       });
     case 'short':
       return date.toLocaleDateString(locale, {
         month: 'short',
-        day: 'numeric'
+        day: 'numeric',
+        ...tz
       });
     case 'month':
       return date.toLocaleDateString(locale, {
         year: 'numeric',
-        month: 'long'
+        month: 'long',
+        ...tz
       });
     case 'time':
       return date.toLocaleTimeString(locale, {
         hour: 'numeric',
         minute: '2-digit',
-        hour12: !use24Hour
+        hour12: !use24Hour,
+        ...tz
       });
     default:
-      return date.toLocaleDateString(locale);
+      return date.toLocaleDateString(locale, tz);
   }
 }
 
@@ -219,6 +210,124 @@ export function getEventDaySpan(event, startTimestamp) {
     }
   }
   return { startDay, endDay };
+}
+
+/**
+ * NIP-52: kind 31922 is date-based (all-day) — no time may ever be displayed
+ * for it, not even 00:00. Times belong to kind 31923 only.
+ * @param {{ kind?: number } | undefined | null} event
+ * @returns {boolean}
+ */
+export function isAllDayEvent(event) {
+  return event?.kind === 31922;
+}
+
+/**
+ * When an event effectively ends, as a unix timestamp (seconds).
+ *
+ * A missing `end` tag means the event has an open end and ends on the same
+ * day as `start` (NIP-52 / issue "Better support for calendar appointments"),
+ * so we return the end of the start's UTC day. With an `end` present:
+ * 31923 ends exactly then; 31922 ends at the end of its (inclusive) end day
+ * via getEventDaySpan.
+ *
+ * @param {CalendarEvent} event
+ * @returns {number}
+ */
+export function getEffectiveEventEnd(event) {
+  const SECONDS_PER_DAY = 86400;
+  const start = typeof event.start === 'number' ? event.start : 0;
+  if (event.kind !== 31922 && event.end && event.end > start) return event.end;
+  const { endDay } = getEventDaySpan(event, start);
+  return (endDay + 1) * SECONDS_PER_DAY;
+}
+
+/**
+ * Parse a raw calendar `start` tag value into a Date plus display flags.
+ * Numeric values are unix timestamps, anything else is handed to Date()
+ * (ISO "YYYY-MM-DD" → UTC midnight). Whether a time may be shown is decided
+ * by the event kind — never by the value shape — falling back to the shape
+ * only for legacy callers that don't know the kind.
+ *
+ * @param {string | undefined | null} startStr
+ * @param {number | undefined} kind
+ * @returns {{ date: Date, showTime: boolean, utc: boolean } | null}
+ */
+function parseCalendarStartValue(startStr, kind) {
+  if (!startStr) return null;
+  const num = Number(startStr);
+  const numeric = !isNaN(num) && num > 0;
+  const date = numeric ? new Date(num * 1000) : new Date(startStr);
+  if (isNaN(date.getTime())) return null;
+  const showTime = kind === 31923 ? true : kind === 31922 ? false : numeric;
+  // ISO date strings parse as UTC midnight — render them in UTC so the day
+  // doesn't shift west of the prime meridian.
+  return { date, showTime, utc: !numeric || kind === 31922 };
+}
+
+/**
+ * Parse a calendar `start` tag into feed-card date-row parts.
+ * Returns null when the value is unparseable so callers can fall back to
+ * plain text.
+ *
+ * @param {string | undefined | null} startStr
+ * @param {number | undefined} [kind] - 31922 or 31923 when known
+ * @returns {{ day: string, month: string, when: string } | null}
+ */
+export function parseCalendarStartParts(startStr, kind) {
+  const parsed = parseCalendarStartValue(startStr, kind);
+  if (!parsed) return null;
+  const { date, showTime, utc } = parsed;
+  const locale = activeDateLocale();
+  const tz = utc ? { timeZone: 'UTC' } : {};
+  const when = showTime
+    ? `${date.toLocaleDateString(locale, { year: 'numeric', ...tz })}, ${date.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit', ...tz })}`
+    : `${date.toLocaleDateString(locale, { weekday: 'long', ...tz })}, ${date.toLocaleDateString(locale, { year: 'numeric', ...tz })}`;
+  return {
+    day: date.toLocaleDateString(locale, { day: 'numeric', ...tz }),
+    month: date.toLocaleDateString(locale, { month: 'short', ...tz }),
+    when
+  };
+}
+
+/**
+ * One-line date(/time) subtitle for a calendar event, from its raw `start`
+ * tag value. All-day events (31922) get the date only (DD.MM.YYYY); timed
+ * events (31923) get date + time. Unparseable input is returned as-is.
+ *
+ * @param {string | undefined | null} startStr
+ * @param {number | undefined} [kind]
+ * @returns {string}
+ */
+export function formatCalendarSubtitle(startStr, kind) {
+  const parsed = parseCalendarStartValue(startStr, kind);
+  if (!parsed) return startStr || '';
+  const { date, showTime, utc } = parsed;
+  const tz = utc ? { timeZone: 'UTC' } : {};
+  const dateStr = formatDate(date, { day: '2-digit', month: '2-digit', year: 'numeric', ...tz });
+  if (!showTime) return dateStr;
+  const timeStr = date.toLocaleTimeString(activeDateLocale(), {
+    hour: '2-digit',
+    minute: '2-digit',
+    ...tz
+  });
+  return `${dateStr}, ${timeStr}`;
+}
+
+/**
+ * Date(/time) line for a CalendarEvent wrapper (map popups etc.).
+ * All-day events show the date only — never a fabricated 00:00.
+ *
+ * @param {CalendarEvent} event
+ * @returns {string}
+ */
+export function formatEventDateTime(event) {
+  if (!event?.start) return '';
+  const allDay = isAllDayEvent(event);
+  const startDate = new Date(event.start * 1000);
+  const dateStr = formatCalendarDate(startDate, 'short', { utc: allDay });
+  if (allDay) return dateStr;
+  return `${dateStr} at ${formatCalendarDate(startDate, 'time')}`;
 }
 
 /**

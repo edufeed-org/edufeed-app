@@ -6,7 +6,7 @@
 
 <script>
   import { CalendarIcon, AlertIcon, ChevronDownIcon } from '$lib/components/icons';
-  import { filterEventsByViewMode } from '$lib/helpers/calendar.js';
+  import { filterEventsByViewMode, getEffectiveEventEnd } from '$lib/helpers/calendar.js';
   import { useProfileMap } from '$lib/stores/profile-map.svelte.js';
   import * as m from '$lib/paraglide/messages';
 
@@ -47,16 +47,19 @@
   // Current timestamp for comparison
   let now = $derived(Date.now());
 
-  // Upcoming events (start time is in the future)
+  // Upcoming = still running or in the future. Events without an end tag
+  // have an open end and count until their start day is over (NIP-52).
   let upcomingEvents = $derived.by(() => {
-    return filteredEvents.filter((/** @type {CalendarEvent} */ event) => event.start * 1000 >= now);
+    return filteredEvents.filter(
+      (/** @type {CalendarEvent} */ event) => getEffectiveEventEnd(event) * 1000 >= now
+    );
     // Already sorted chronologically (earliest first) from filteredEvents
   });
 
-  // Past events (start time is in the past)
+  // Past events (already over)
   let pastEvents = $derived.by(() => {
     const past = filteredEvents.filter(
-      (/** @type {CalendarEvent} */ event) => event.start * 1000 < now
+      (/** @type {CalendarEvent} */ event) => getEffectiveEventEnd(event) * 1000 < now
     );
     // Sort in reverse chronological order (most recent first)
     return past.reverse();

@@ -161,6 +161,46 @@ describe('useReplaceableEvent', () => {
     expect(getState().event).toBeUndefined();
   });
 
+  it('drops the event when the store signals removal (NIP-09 deletion)', () => {
+    // ReplaceableModel emits `undefined` when the event is deleted from the
+    // store. The hook must clear the rendered event instead of swallowing
+    // the signal — otherwise a deleted event stays on screen forever.
+    let getState;
+    const cleanup = $effect.root(() => {
+      getState = useReplaceableEvent(() => POINTER);
+    });
+    flushSync();
+
+    replaceableSubject.next(EVENT);
+    flushSync();
+    expect(getState().event).toBe(EVENT);
+
+    replaceableSubject.next(undefined);
+    flushSync();
+
+    expect(getState().event).toBeUndefined();
+    expect(getState().loading).toBe(false);
+    expect(getState().notFound).toBe(true);
+
+    cleanup();
+  });
+
+  it('ignores an initial undefined emission while the store is still cold', () => {
+    let getState;
+    const cleanup = $effect.root(() => {
+      getState = useReplaceableEvent(() => POINTER);
+    });
+    flushSync();
+
+    replaceableSubject.next(undefined);
+    flushSync();
+
+    expect(getState().loading).toBe(true);
+    expect(getState().notFound).toBe(false);
+
+    cleanup();
+  });
+
   it('does nothing when the pointer is null', () => {
     let getState;
     const cleanup = $effect.root(() => {
