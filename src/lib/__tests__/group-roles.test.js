@@ -5,6 +5,7 @@ import {
   PUBLISHER_ROLE,
   hasModerationRole,
   isPublisherOnly,
+  roleOptionsFromAdmins,
   withPublisherRole,
   withoutPublisherRole
 } from '$lib/groups/roles.js';
@@ -58,5 +59,24 @@ describe('withPublisherRole / withoutPublisherRole', () => {
     const roles = ['admin'];
     expect(withPublisherRole(roles)).not.toBe(roles);
     expect(roles).toEqual(['admin']);
+  });
+});
+
+describe('roleOptionsFromAdmins', () => {
+  it('always seeds admin and publisher, even with an empty roster', () => {
+    expect(roleOptionsFromAdmins([])).toEqual(['admin', PUBLISHER_ROLE]);
+    expect(roleOptionsFromAdmins(undefined)).toEqual(['admin', PUBLISHER_ROLE]);
+  });
+
+  it('collects custom roles from every admin, deduplicated, existing roles first', () => {
+    const admins = [
+      { pubkey: 'a', roles: ['lehrkraft', 'admin'] },
+      { pubkey: 'b', roles: ['lehrkraft'] }
+    ];
+    expect(roleOptionsFromAdmins(admins)).toEqual(['lehrkraft', 'admin', PUBLISHER_ROLE]);
+  });
+
+  it('tolerates roster entries without a roles array', () => {
+    expect(roleOptionsFromAdmins([{ pubkey: 'a' }])).toEqual(['admin', PUBLISHER_ROLE]);
   });
 });

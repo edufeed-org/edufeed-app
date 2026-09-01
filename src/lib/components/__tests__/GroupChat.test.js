@@ -648,7 +648,13 @@ vi.mock(
 );
 vi.mock('$lib/components/shared/LinkPreviewList.svelte', () => ({ default: Stub }));
 vi.mock('$lib/components/shared/ProfileAvatar.svelte', () => ({ default: Stub }));
-vi.mock('$lib/components/icons', () => ({ ReplyIcon: Stub, PeopleIcon: Stub }));
+vi.mock('$lib/components/icons', () => ({ ReplyIcon: Stub, PeopleIcon: Stub, MoreIcon: Stub }));
+// The members modal embeds the contact search; its autocomplete machinery is
+// out of scope here (GroupMembersModal.test.js covers it via the same stub).
+vi.mock(
+  '$lib/components/shared/ContactSearchInput.svelte',
+  () => import('./fixtures/ContactSearchInputStub.svelte')
+);
 vi.mock(
   '$lib/components/reactions/ReactionChips.svelte',
   () => import('./fixtures/ReactionChipsStub.svelte')
@@ -710,7 +716,42 @@ vi.mock('$lib/paraglide/messages', () => ({
   webxdc_export_as_article: () => 'As article',
   webxdc_export_as_wiki: () => 'As wiki page',
   webxdc_export_cancel: () => 'Cancel',
-  webxdc_close: () => 'Close'
+  webxdc_close: () => 'Close',
+  // GroupMembersModal keys (the header's members button opens it in-place)
+  groups_members_title: () => 'Members',
+  groups_members_admins_heading: () => 'Admins',
+  groups_members_publishers_heading: () => 'Publishers',
+  groups_members_members_heading: () => 'Members',
+  groups_members_add_placeholder: () => 'Add member by name or npub',
+  groups_members_add_direct_action: () => 'Add directly',
+  groups_members_promote: () => 'Make admin',
+  groups_members_demote: () => 'Remove admin',
+  groups_members_grant_publisher: () => 'Allow publishing',
+  groups_members_revoke_publisher: () => 'Revoke publishing',
+  groups_members_assign_role: () => 'Assign role',
+  groups_members_assign_role_open: () => 'Assign role…',
+  groups_members_assign_role_title: () => 'Assign role',
+  groups_members_assign_role_body: () => 'Pick or type a role',
+  groups_members_role_placeholder: () => 'Role',
+  groups_members_remove: () => 'Remove',
+  groups_members_remove_confirm_title: () => 'Remove member?',
+  groups_members_remove_confirm_body: () => 'Really remove?',
+  groups_members_row_menu: () => 'Member actions',
+  groups_members_self_badge: () => 'You',
+  groups_members_empty: () => 'No members yet',
+  groups_members_action_failed: () => 'Action failed',
+  group_invite_dm_action: () => 'Invite via DM',
+  group_invite_dm_send: () => 'Send invite',
+  group_invite_dm_sent: () => 'Invite sent',
+  group_invite_dm_failed: () => 'Invite failed',
+  group_invite_dm_failed_after_mint: () => 'Invite minted but DM failed',
+  group_invite_dm_invalid_npub: () => 'Invalid npub',
+  group_invite_dm_npub_placeholder: () => 'npub…',
+  common_cancel: () => 'Cancel',
+  groups_role_admin: () => 'Admin',
+  groups_role_king: () => 'Owner',
+  groups_role_moderator: () => 'Moderator',
+  groups_role_publisher: () => 'Publisher'
 }));
 
 const { default: GroupChat } = await import('$lib/components/groups/GroupChat.svelte');
@@ -930,6 +971,20 @@ describe('GroupChat', () => {
     expect(screen.queryByTestId('group-join')).toBeNull();
     expect(screen.queryByTestId('group-join-bar')).toBeNull();
     expect(screen.queryByTestId('group-restricted-note')).toBeNull();
+  });
+
+  // The members modal opened from the chat header must offer the same role
+  // assignment as the one opened from MembersView/MembershipPane — it used to
+  // omit roleOptions, silently dropping the assign-role action here only.
+  it('members modal from the chat header offers role assignment to an admin', async () => {
+    render(GroupChat, { props: { pointer: { relay: GROUP_RELAY, id: 'adminchat' } } });
+    await screen.findByTestId('group-name');
+    await fireEvent.click(await screen.findByTestId('group-members-open'));
+    await waitFor(() =>
+      expect(
+        document.querySelector(`[data-testid="member-assign-role"][data-pubkey="${OTHER}"]`)
+      ).not.toBeNull()
+    );
   });
 
   // A readable group the viewer hasn't joined: the relay would reject every

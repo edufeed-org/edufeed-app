@@ -17,7 +17,7 @@
   import GroupMembersModal from '$lib/components/groups/GroupMembersModal.svelte';
   import { useActiveUser } from '$lib/stores/accounts.svelte';
   import { isCommunityOwner } from '$lib/helpers/community-signer.js';
-  import { PUBLISHER_ROLE } from '$lib/groups/roles.js';
+  import { roleOptionsFromAdmins } from '$lib/groups/roles.js';
   import { getDisplayName } from 'applesauce-core/helpers';
   import * as m from '$lib/paraglide/messages';
 
@@ -74,9 +74,7 @@
   // onMemberAdded fan-out (see the comment there for why it's empty).
   let showMembersModal = $state(false);
   const rosterPointer = $derived(getRootRoster().pointer);
-  const roleOptions = $derived(
-    unique([...getRootRoster().admins.flatMap((a) => a.roles ?? []), 'admin', PUBLISHER_ROLE])
-  );
+  const roleOptions = $derived(roleOptionsFromAdmins(getRootRoster().admins));
 
   // Moderated: the ROOT-group roster IS the community membership — it must
   // be listed even when no content section is gated (laoc, 2026-08-19: an

@@ -52,6 +52,18 @@ export function isPublisherOnly(roles) {
 }
 
 /**
+ * Datalist suggestions for the assign-role dialog: every role already present
+ * on the 39001 roster, then the two built-ins. Every GroupMembersModal call
+ * site must derive its roleOptions through this — an omitted prop silently
+ * hides the assign-role action.
+ * @param {Array<{ pubkey: string, roles?: string[] }> | undefined | null} admins
+ * @returns {string[]}
+ */
+export function roleOptionsFromAdmins(admins) {
+  return [...new Set([...(admins ?? []).flatMap((a) => a.roles ?? []), 'admin', PUBLISHER_ROLE])];
+}
+
+/**
  * NEW role array with the publisher role present. A 9000 put-user replaces a
  * member's whole role set, so grants must be built from the current roles
  * rather than sent alone.
