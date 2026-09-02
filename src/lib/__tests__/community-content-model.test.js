@@ -1161,6 +1161,112 @@ describe('_allSharers collection', () => {
   });
 });
 
+describe('activity ordering (share-date sort)', () => {
+  /** @param {string} id @param {number} createdAt */
+  const repostOf = (id, createdAt) =>
+    mockEvent({
+      kind: 16,
+      created_at: createdAt,
+      tags: [
+        ['e', id],
+        ['h', COMMUNITY_PUBKEY]
+      ]
+    });
+
+  it('orders items by share time / publish time, newest activity first', () => {
+    const directEvent = mockEvent({
+      id: 'direct-mid',
+      kind: 30142,
+      created_at: 7000,
+      tags: [['h', COMMUNITY_PUBKEY]]
+    });
+    const oldEventA = mockEvent({ id: 'old-a', kind: 30142, created_at: 1000 });
+    const oldEventB = mockEvent({ id: 'old-b', kind: 30142, created_at: 2000 });
+
+    const store = createMockEventStore({
+      direct: [directEvent],
+      reposts: [repostOf('old-a', 9000), repostOf('old-b', 3000)],
+      all: [directEvent, oldEventA, oldEventB]
+    });
+
+    const Model = createCommunityContentModel([30142]);
+    /** @type {any} */
+    let result;
+    Model(COMMUNITY_PUBKEY)(/** @type {any} */ (store)).subscribe((items) => (result = items));
+
+    expect(result.map((/** @type {any} */ r) => r.id)).toEqual(['old-a', 'direct-mid', 'old-b']);
+  });
+
+  it('ranks a direct event shared again by its newest share time', () => {
+    const oldDirect = mockEvent({
+      id: 'old-direct',
+      kind: 30142,
+      created_at: 1000,
+      tags: [['h', COMMUNITY_PUBKEY]]
+    });
+    const newerDirect = mockEvent({
+      id: 'newer-direct',
+      kind: 30142,
+      created_at: 5000,
+      tags: [['h', COMMUNITY_PUBKEY]]
+    });
+
+    const store = createMockEventStore({
+      direct: [newerDirect, oldDirect],
+      reposts: [repostOf('old-direct', 9000)],
+      all: [newerDirect, oldDirect]
+    });
+
+    const Model = createCommunityContentModel([30142]);
+    /** @type {any} */
+    let result;
+    Model(COMMUNITY_PUBKEY)(/** @type {any} */ (store)).subscribe((items) => (result = items));
+
+    expect(result.map((/** @type {any} */ r) => r.id)).toEqual(['old-direct', 'newer-direct']);
+  });
+
+  it('sorts by source-event timestamps even when the transform drops created_at', () => {
+    const directCal = mockEvent({
+      id: 'cal-direct',
+      kind: 31923,
+      created_at: 7000,
+      tags: [
+        ['h', COMMUNITY_PUBKEY],
+        ['d', 'direct-cal'],
+        ['title', 'Direct'],
+        ['start', '1705334400']
+      ]
+    });
+    const oldCal = mockEvent({
+      id: 'cal-old',
+      kind: 31923,
+      created_at: 1000,
+      pubkey: 'author1',
+      tags: [
+        ['d', 'old-cal'],
+        ['title', 'Old but freshly shared'],
+        ['start', '1705334400']
+      ]
+    });
+
+    const store = createMockEventStore({
+      direct: [directCal],
+      reposts: [repostOf('cal-old', 9000)],
+      all: [directCal, oldCal]
+    });
+
+    /** @type {any} */
+    let result;
+    CommunityCalendarEventModel(COMMUNITY_PUBKEY)(/** @type {any} */ (store)).subscribe(
+      (items) => (result = items)
+    );
+
+    // getCalendarEventMetadata exposes createdAt (camelCase), not created_at —
+    // ordering must not depend on the transformed item's shape.
+    expect(result.map((/** @type {any} */ r) => r.id)).toEqual(['cal-old', 'cal-direct']);
+  });
+});
+
 describe('CommunityActivityModel', () => {
   it('returns events across multiple kinds', () => {
     const amb = mockEvent({ kind: 30142, tags: [['h', COMMUNITY_PUBKEY]] });
