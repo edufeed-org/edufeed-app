@@ -7,6 +7,7 @@
 -->
 <script>
   import * as m from '$lib/paraglide/messages';
+  import { PollIcon } from '$lib/components/icons';
 
   /**
    * @typedef {Object} Props
@@ -22,6 +23,9 @@
    *   button before the input. Only the timeline composer passes this; the
    *   ThreadPanel composer leaves it null (webxdc sessions are channel-scoped,
    *   not thread-scoped).
+   * @property {(() => void) | null} [onOpenPoll] - opt-in: renders the poll
+   *   button before the input. Same timeline-only rule as onOpenApps (a poll
+   *   is a room timeline row, not a thread reply).
    */
 
   /** @type {Props} */
@@ -34,7 +38,8 @@
     replyTo = null,
     onCancelReply = null,
     testid = undefined,
-    onOpenApps = null
+    onOpenApps = null,
+    onOpenPoll = null
   } = $props();
 </script>
 
@@ -68,6 +73,17 @@
       aria-label={m.webxdc_apps_button()}
       onclick={onOpenApps}
       {disabled}>+</button
+    >
+  {/if}
+  {#if onOpenPoll}
+    <button
+      type="button"
+      class="btn btn-circle btn-ghost btn-sm"
+      data-testid="chat-poll-button"
+      title={m.groups_poll_button()}
+      aria-label={m.groups_poll_button()}
+      onclick={onOpenPoll}
+      {disabled}><PollIcon class_="h-4 w-4" /></button
     >
   {/if}
   <input

@@ -130,7 +130,7 @@ vi.mock(
 );
 vi.mock('$lib/components/shared/LinkPreviewList.svelte', () => ({ default: Stub }));
 vi.mock('$lib/components/shared/ProfileAvatar.svelte', () => ({ default: Stub }));
-vi.mock('$lib/components/icons', () => ({ ReplyIcon: Stub, PeopleIcon: Stub }));
+vi.mock('$lib/components/icons', () => ({ ReplyIcon: Stub, PeopleIcon: Stub, PollIcon: Stub }));
 vi.mock(
   '$lib/components/reactions/ReactionChips.svelte',
   () => import('./fixtures/ReactionChipsStub.svelte')
@@ -158,7 +158,8 @@ vi.mock('$lib/paraglide/messages', () => ({
   chat_thread_reply_one: () => '1 reply',
   chat_thread_reply_many: (/** @type {{ count: number }} */ { count }) => `${count} replies`,
   chat_thread_reply_placeholder: () => 'Reply in thread',
-  webxdc_apps_button: () => 'Apps'
+  webxdc_apps_button: () => 'Apps',
+  groups_poll_button: () => 'Create poll'
 }));
 
 const { default: GroupChat } = await import('$lib/components/groups/GroupChat.svelte');

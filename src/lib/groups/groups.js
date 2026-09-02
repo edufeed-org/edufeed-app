@@ -169,6 +169,31 @@ export function buildGroupMessageTemplate(groupId, content, replyTo = null) {
 }
 
 /**
+ * Kind-1068 NIP-88 poll as a room timeline row (Armada interop, verified
+ * against a live Armada poll on groups.edufeed.org): `h` first — the same
+ * group binding as chat — then the option/polltype[/endsAt] tags, an `alt`,
+ * and ONE `relay` tag naming the group host. NIP-88 sends votes to the
+ * relays listed in `relay` tags; pointing that at the host relay keeps
+ * membership enforced for votes too. No NIP-29 `previous` tags, matching
+ * Armada (relay29's CheckPreviousTag rejects stale refs).
+ * @param {string} groupId
+ * @param {string} question
+ * @param {{id: string, label: string}[]} options
+ * @param {{pollType: 'singlechoice'|'multiplechoice', endsAt?: number, relayUrl: string}} opts
+ * @returns {{kind: number, content: string, created_at: number, tags: string[][]}}
+ */
+export function buildPollTemplate(groupId, question, options, { pollType, endsAt, relayUrl }) {
+  /** @type {string[][]} */
+  const tags = [['h', groupId]];
+  for (const option of options) tags.push(['option', option.id, option.label]);
+  tags.push(['polltype', pollType]);
+  if (endsAt !== undefined) tags.push(['endsAt', String(endsAt)]);
+  tags.push(['alt', `Poll: ${question}`]);
+  tags.push(['relay', relayUrl]);
+  return { kind: 1068, content: question, created_at: Math.floor(Date.now() / 1000), tags };
+}
+
+/**
  * Kind-9021 join request (NIP-29). The optional invite code rides as a
  * `code` tag.
  * @param {string} groupId

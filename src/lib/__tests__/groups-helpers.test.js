@@ -8,6 +8,7 @@ import {
   buildJoinRequestTemplate,
   buildLeaveRequestTemplate,
   buildGroupsListTemplate,
+  buildPollTemplate,
   groupHref,
   isAlreadyMemberError
 } from '$lib/groups/groups.js';
@@ -312,5 +313,48 @@ describe('isAlreadyMemberError', () => {
   it('does not swallow real failures', () => {
     expect(isAlreadyMemberError(new Error('restricted: not an admin'))).toBe(false);
     expect(isAlreadyMemberError(undefined)).toBe(false);
+  });
+});
+
+describe('buildPollTemplate', () => {
+  const OPTIONS = [
+    { id: 'aaa111', label: 'Yes' },
+    { id: 'bbb222', label: 'No' }
+  ];
+
+  // The Armada-interop shape, verified against a live Armada poll on
+  // groups.edufeed.org: h first, option tags, polltype always, alt, and a
+  // single relay tag naming the group host (NIP-88: votes go to the relays
+  // listed there — the host relay, so membership stays enforced).
+  it('builds an h-tagged kind-1068 with option/polltype/alt/relay tags', () => {
+    const template = buildPollTemplate('beechat', 'Pizza?', OPTIONS, {
+      pollType: 'singlechoice',
+      relayUrl: 'wss://groups.example.com/'
+    });
+    expect(template.kind).toBe(1068);
+    expect(template.content).toBe('Pizza?');
+    expect(template.tags[0]).toEqual(['h', 'beechat']);
+    expect(template.tags).toContainEqual(['option', 'aaa111', 'Yes']);
+    expect(template.tags).toContainEqual(['option', 'bbb222', 'No']);
+    expect(template.tags).toContainEqual(['polltype', 'singlechoice']);
+    expect(template.tags).toContainEqual(['alt', 'Poll: Pizza?']);
+    expect(template.tags).toContainEqual(['relay', 'wss://groups.example.com/']);
+    expect(typeof template.created_at).toBe('number');
+  });
+
+  it('carries endsAt as unix seconds when given, omits it when not', () => {
+    const withEnd = buildPollTemplate('beechat', 'Q', OPTIONS, {
+      pollType: 'multiplechoice',
+      endsAt: 1800000000,
+      relayUrl: 'wss://groups.example.com/'
+    });
+    expect(withEnd.tags).toContainEqual(['endsAt', '1800000000']);
+    expect(withEnd.tags).toContainEqual(['polltype', 'multiplechoice']);
+
+    const noEnd = buildPollTemplate('beechat', 'Q', OPTIONS, {
+      pollType: 'singlechoice',
+      relayUrl: 'wss://groups.example.com/'
+    });
+    expect(noEnd.tags.some((t) => t[0] === 'endsAt')).toBe(false);
   });
 });

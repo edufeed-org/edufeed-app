@@ -254,6 +254,56 @@ const liveTitleShareEvent = signWith(
   },
   OTHER_SK
 );
+// `pollchat`: isolated group with ME on the roster whose timeline carries an
+// Armada-shaped kind-1068 poll (h-tagged, option/polltype/alt/relay tags —
+// the exact live shape measured on groups.edufeed.org) plus one kind-1018
+// vote from OTHER. Isolated from `beechat` so the poll row doesn't leak into
+// every other test's timeline assertions.
+const metadataEventPoll = signWith(
+  { kind: 39000, tags: [['d', 'pollchat'], ['name', 'Poll Chat'], ['private']] },
+  RELAY_SK
+);
+const membersEventPoll = signWith(
+  {
+    kind: 39002,
+    tags: [
+      ['d', 'pollchat'],
+      ['p', ME],
+      ['p', OTHER]
+    ]
+  },
+  RELAY_SK
+);
+const pollEvent = signWith(
+  {
+    kind: 1068,
+    content: 'Which day suits?',
+    created_at: 1700000100,
+    tags: [
+      ['h', 'pollchat'],
+      ['option', 'opt-a', 'Monday'],
+      ['option', 'opt-b', 'Friday'],
+      ['polltype', 'singlechoice'],
+      ['alt', 'Poll: Which day suits?'],
+      ['relay', GROUP_RELAY],
+      ['client', 'Armada']
+    ]
+  },
+  OTHER_SK
+);
+const pollVoteOther = signWith(
+  {
+    kind: 1018,
+    content: '',
+    created_at: 1700000110,
+    tags: [
+      ['e', pollEvent.id],
+      ['h', 'pollchat'],
+      ['response', 'opt-b']
+    ]
+  },
+  OTHER_SK
+);
 // Enrichment fixture for the session-title effect (moved from GroupAppsBar
 // into GroupChat itself): the latest 9450 state event's `document` tag,
 // returned by the fake pool's request() below when it sees the effect's own
@@ -365,6 +415,11 @@ const publishMock = vi.hoisted(() => vi.fn().mockResolvedValue({ ok: true }));
 // authenticated at all (proactively, not only on an auth-required error).
 const authenticateSpy = vi.hoisted(() => vi.fn().mockResolvedValue({ ok: true }));
 const requestCalls = vi.hoisted(() => /** @type {any[]} */ ([]));
+// Filter arrays handed to pool.relay().subscription() — the room-polls tests
+// assert the RELAY-side filters carry 1068/1018, not just the model side (the
+// fake serves fixture events regardless of filters, so a forgotten relay
+// filter would otherwise pass here and fail live).
+const subscriptionCalls = vi.hoisted(() => /** @type {any[][]} */ ([]));
 // The viewer's own stored join request, served to the own-9021 filter that
 // rides along with the roster REQ (pending-state persistence).
 const relayOwn9021 = vi.hoisted(() => ({ value: /** @type {any[]} */ ([]) }));
@@ -469,6 +524,7 @@ vi.mock('$lib/stores/nostr-infrastructure.svelte', async () => {
           if (d === 'adminchat')
             return rxOf(metadataEventAdmin, adminsEventAdmin, membersEventAdmin);
           if (d === 'webxdcchat') return rxOf(metadataEventWebxdc, membersEventWebxdc);
+          if (d === 'pollchat') return rxOf(metadataEventPoll, membersEventPoll);
           if (d === 'livetitlechat') return rxOf(metadataEventLiveTitle, membersEventLiveTitle);
           if (d === 'authchat') return rxOf(metadataEventAuthNoPrivate, membersEventAuthNoPrivate);
           if (d === 'emptychat') return rxOf(metadataEventEmptyRoster, membersEventEmptyRoster);
@@ -503,6 +559,7 @@ vi.mock('$lib/stores/nostr-infrastructure.svelte', async () => {
         // keep the subscription open after replay so unsubscribe paths run
         subscription: (/** @type {any} */ filters) => {
           const filterList = Array.isArray(filters) ? filters : [filters];
+          subscriptionCalls.push(filterList);
           // GroupChat's own live session-title layer (followup-1): a
           // long-lived {kinds:[9450], '#h':[...]} sub, mounted unconditionally
           // for every channel. Routed ahead of the h-based chat/reactions
@@ -550,6 +607,8 @@ vi.mock('$lib/stores/nostr-infrastructure.svelte', async () => {
           if (h === 'hangchat') return rxNever;
           // webxdcchat: isolated timeline holding only the webxdc share.
           if (h === 'webxdcchat') return rxMerge(rxOf(webxdcShareEvent), rxNever);
+          // pollchat: isolated timeline holding the poll and one vote.
+          if (h === 'pollchat') return rxMerge(rxOf(pollEvent, pollVoteOther), rxNever);
           // livetitlechat: isolated timeline holding only its own webxdc
           // share (session-live-1), with zero 9450 history — see fixture.
           if (h === 'livetitlechat') return rxMerge(rxOf(liveTitleShareEvent), rxNever);
@@ -648,7 +707,12 @@ vi.mock(
 );
 vi.mock('$lib/components/shared/LinkPreviewList.svelte', () => ({ default: Stub }));
 vi.mock('$lib/components/shared/ProfileAvatar.svelte', () => ({ default: Stub }));
-vi.mock('$lib/components/icons', () => ({ ReplyIcon: Stub, PeopleIcon: Stub, MoreIcon: Stub }));
+vi.mock('$lib/components/icons', () => ({
+  ReplyIcon: Stub,
+  PeopleIcon: Stub,
+  MoreIcon: Stub,
+  PollIcon: Stub
+}));
 // The members modal embeds the contact search; its autocomplete machinery is
 // out of scope here (GroupMembersModal.test.js covers it via the same stub).
 vi.mock(
@@ -712,6 +776,20 @@ vi.mock('$lib/paraglide/messages', () => ({
   webxdc_apps_none: () => 'No published apps found',
   webxdc_apps_share_failed: (/** @type {{ reason: string }} */ { reason }) =>
     `Could not share the app: ${reason}`,
+  concord_poll_votes: (/** @type {{ count: number }} */ { count }) => `${count} votes`,
+  concord_poll_ended: () => 'Poll ended',
+  concord_poll_vote: () => 'Vote',
+  groups_poll_button: () => 'Create poll',
+  groups_poll_title: () => 'New poll',
+  groups_poll_question_placeholder: () => 'Ask a question…',
+  groups_poll_option_placeholder: (/** @type {{ number: number }} */ { number }) =>
+    `Option ${number}`,
+  groups_poll_add_option: () => 'Add option',
+  groups_poll_multiple: () => 'Allow multiple answers',
+  groups_poll_duration: () => 'Poll duration',
+  groups_poll_duration_none: () => 'No end',
+  groups_poll_duration_days: (/** @type {{ count: number }} */ { count }) => `${count} days`,
+  groups_poll_create: () => 'Create poll',
   webxdc_export_title: () => 'Publish export',
   webxdc_export_as_article: () => 'As article',
   webxdc_export_as_wiki: () => 'As wiki page',
@@ -768,6 +846,7 @@ describe('GroupChat', () => {
     activeUserHolder.current = { pubkey: ME, signer: { signEvent } };
     relayCalls.length = 0;
     requestCalls.length = 0;
+    subscriptionCalls.length = 0;
     relayOwn9021.value = [];
     openchatJoinPublishedAt.ms = null;
     walledChatCalls.roster = 0;
@@ -1472,6 +1551,97 @@ describe('GroupChat', () => {
       expect(/** @type {HTMLInputElement} */ (screen.getByTestId('group-chat-input')).value).toBe(
         'timeline draft'
       );
+    });
+  });
+
+  describe('room polls', () => {
+    const pollPointer = { relay: GROUP_RELAY, id: 'pollchat' };
+
+    // The relay-side contract: the fake serves fixture events regardless of
+    // filters, so the rendering tests below cannot catch a forgotten relay
+    // filter — this one pins the actual REQ shapes (Armada parity: 1068 rides
+    // the timeline filter, votes are their own h-scoped 1018 filter).
+    it('subscribes to polls and votes alongside chat on the group relay', async () => {
+      render(GroupChat, { props: { pointer: pollPointer } });
+      await waitFor(() => {
+        const chatSub = subscriptionCalls.find((filters) =>
+          filters.some((f) => f?.kinds?.includes(9) && f?.['#h']?.[0] === 'pollchat')
+        );
+        expect(chatSub).toBeTruthy();
+        const timelineFilter = chatSub?.find((f) => f?.kinds?.includes(9));
+        expect(timelineFilter?.kinds).toContain(1068);
+        const votesFilter = chatSub?.find((f) => f?.kinds?.includes(1018));
+        expect(votesFilter?.['#h']).toEqual(['pollchat']);
+      });
+    });
+
+    it('renders an Armada-shaped poll event as a poll row with its tally', async () => {
+      const { container } = render(GroupChat, { props: { pointer: pollPointer } });
+      // The question is the event content, rendered by the bubble itself.
+      await waitFor(() => {
+        const contents = [...container.querySelectorAll('[data-testid="ncr-content"]')].map(
+          (el) => el.textContent
+        );
+        expect(contents).toContain('Which day suits?');
+      });
+      // Options render as vote rows, with OTHER's vote already tallied.
+      const friday = await screen.findByText('Friday');
+      expect(screen.getByText('Monday')).toBeTruthy();
+      expect(friday.closest('button')?.textContent).toContain('1');
+      expect(screen.getByText('1 votes')).toBeTruthy();
+    });
+
+    it('voting publishes an h-tagged kind-1018 to the group relay', async () => {
+      render(GroupChat, { props: { pointer: pollPointer } });
+      const monday = await screen.findByText('Monday');
+      await fireEvent.click(/** @type {HTMLElement} */ (monday.closest('button')));
+
+      await waitFor(() => {
+        const vote = publishMock.mock.calls.map((c) => c[0]).find((e) => e?.kind === 1018);
+        expect(vote).toBeTruthy();
+        expect(vote.content).toBe('');
+        expect(vote.tags).toContainEqual(['e', pollEvent.id]);
+        expect(vote.tags).toContainEqual(['h', 'pollchat']);
+        expect(vote.tags).toContainEqual(['response', 'opt-a']);
+      });
+    });
+
+    it('creates an Armada-shaped poll from the composer poll modal', async () => {
+      render(GroupChat, { props: { pointer: pollPointer } });
+      await fireEvent.click(await screen.findByTestId('chat-poll-button'));
+
+      const question = await screen.findByTestId('group-poll-question');
+      await fireEvent.input(question, { target: { value: 'Pizza or pasta?' } });
+      const options = screen.getAllByTestId(/group-poll-option-/);
+      await fireEvent.input(options[0], { target: { value: 'Pizza' } });
+      await fireEvent.input(options[1], { target: { value: 'Pasta' } });
+      await fireEvent.click(screen.getByTestId('group-poll-create'));
+
+      await waitFor(() => {
+        const poll = publishMock.mock.calls.map((c) => c[0]).find((e) => e?.kind === 1068);
+        expect(poll).toBeTruthy();
+        expect(poll.content).toBe('Pizza or pasta?');
+        expect(poll.tags[0]).toEqual(['h', 'pollchat']);
+        const optionTags = poll.tags.filter((/** @type {string[]} */ t) => t[0] === 'option');
+        expect(optionTags.map((/** @type {string[]} */ t) => t[2])).toEqual(['Pizza', 'Pasta']);
+        // Distinct generated ids per option.
+        expect(optionTags[0][1]).toBeTruthy();
+        expect(optionTags[0][1]).not.toBe(optionTags[1][1]);
+        expect(poll.tags).toContainEqual(['polltype', 'singlechoice']);
+        expect(poll.tags).toContainEqual(['alt', 'Poll: Pizza or pasta?']);
+        expect(poll.tags).toContainEqual(['relay', GROUP_RELAY]);
+        // Default duration (7 days, Armada's default) lands as endsAt.
+        const endsAt = poll.tags.find((/** @type {string[]} */ t) => t[0] === 'endsAt')?.[1];
+        expect(Number(endsAt)).toBeGreaterThan(Math.floor(Date.now() / 1000));
+      });
+      // The modal closed after a successful publish.
+      expect(screen.queryByTestId('group-poll-question')).toBeNull();
+    });
+
+    it('hides the poll button for a non-member without write access', async () => {
+      render(GroupChat, { props: { pointer: { relay: GROUP_RELAY, id: 'openchat' } } });
+      await screen.findByTestId('group-join-bar');
+      expect(screen.queryByTestId('chat-poll-button')).toBeNull();
     });
   });
 
