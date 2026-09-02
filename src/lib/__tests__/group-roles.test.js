@@ -5,6 +5,7 @@ import {
   PUBLISHER_ROLE,
   hasModerationRole,
   isPublisherOnly,
+  moderationPubkeys,
   roleOptionsFromAdmins,
   withPublisherRole,
   withoutPublisherRole
@@ -78,5 +79,29 @@ describe('roleOptionsFromAdmins', () => {
 
   it('tolerates roster entries without a roles array', () => {
     expect(roleOptionsFromAdmins([{ pubkey: 'a' }])).toEqual(['admin', PUBLISHER_ROLE]);
+  });
+});
+
+// The kind-39001 list mixes moderators with publisher-only and custom-role
+// entries. Every ADMIN fan-out (channel pre-join, roster reconcile) must run
+// off this projection — passing raw 39001 pubkeys grants publishers literal
+// NIP-29 admin on channels (issue: "Publisher shows up as Admin in Armada").
+describe('moderationPubkeys', () => {
+  it('keeps only entries holding a moderation role', () => {
+    const admins = [
+      { pubkey: 'a'.repeat(64), roles: ['admin'] },
+      { pubkey: 'b'.repeat(64), roles: ['publisher'] },
+      { pubkey: 'c'.repeat(64), roles: ['publisher', 'moderator'] },
+      { pubkey: 'd'.repeat(64), roles: ['lehrkraft'] },
+      { pubkey: 'e'.repeat(64), roles: [] },
+      { pubkey: 'f'.repeat(64) }
+    ];
+    expect(moderationPubkeys(admins)).toEqual(['a'.repeat(64), 'c'.repeat(64)]);
+  });
+
+  it('is empty for an empty or missing roster', () => {
+    expect(moderationPubkeys([])).toEqual([]);
+    expect(moderationPubkeys(undefined)).toEqual([]);
+    expect(moderationPubkeys(null)).toEqual([]);
   });
 });

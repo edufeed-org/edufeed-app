@@ -52,6 +52,7 @@
   import { useCommunityChannels } from '$lib/groups/community-channels.svelte.js';
   import { communityGroupsEndpoint, flatGroupsRelay } from '$lib/groups/community-endpoint.js';
   import { useRootRoster } from '$lib/groups/root-roster.svelte.js';
+  import { moderationPubkeys } from '$lib/groups/roles.js';
   import { resolveZoneMembership } from '$lib/components/community/layout/community-nav.js';
   import ConcordUnreadDot from '$lib/components/shared/ConcordUnreadDot.svelte';
   import { page } from '$app/stores';
@@ -634,7 +635,7 @@
             {#if canDelete}
               <button
                 type="button"
-                class="btn btn-square pointer-events-none opacity-0 btn-ghost transition-opacity btn-xs group-hover/ch:pointer-events-auto group-hover/ch:opacity-100 focus:pointer-events-auto focus:opacity-100"
+                class="btn pointer-events-none btn-square opacity-0 btn-ghost transition-opacity btn-xs group-hover/ch:pointer-events-auto group-hover/ch:opacity-100 focus:pointer-events-auto focus:opacity-100"
                 data-testid="group-channel-delete"
                 title={m.groups_channel_delete()}
                 aria-label={m.groups_channel_delete()}
@@ -982,7 +983,7 @@
       {communikeyEvent}
       {communityProfile}
       community={concord.dissolved ? undefined : concord.community}
-      adminPubkeys={getRootRoster().admins.map((a) => a.pubkey)}
+      adminPubkeys={moderationPubkeys(getRootRoster().admins)}
       onClose={() => {
         overlay = null;
         clearChannelCreateRequest();
