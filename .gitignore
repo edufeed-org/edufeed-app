@@ -63,4 +63,6 @@ screenshots/
 
 # Local tooling
 .superpowers/
-docs/
+docs/*
+!docs/nips/
+!docs/guides/

@@ -447,6 +447,8 @@ Comcal uses the following Nostr event kinds:
 | 31925 | NIP-52     | Calendar RSVP                     |
 
 See `CLAUDE.md` for the full reference including implementation details.
+Guides for specific lanes live in `docs/guides/` — e.g.
+[Publishing to a NIP-29 Group](docs/guides/publishing-to-nip29-groups.md).
 
 ### Membership & NIP-05 Handle Provisioning
 
