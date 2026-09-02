@@ -16,11 +16,14 @@
   import { contentSectionLabel } from '$lib/helpers/content-section-label.js';
   import ProfileCard from '$lib/components/shared/ProfileCard.svelte';
   import JoinRequestsPanel from '$lib/components/community/settings/JoinRequestsPanel.svelte';
-  import GroupMembersModal from '$lib/components/groups/GroupMembersModal.svelte';
+  import MemberActionsMenu from '$lib/components/groups/MemberActionsMenu.svelte';
+  import AddMemberControl from '$lib/components/groups/AddMemberControl.svelte';
   import { useActiveUser } from '$lib/stores/accounts.svelte';
   import { isCommunityOwner } from '$lib/helpers/community-signer.js';
-  import { roleOptionsFromAdmins } from '$lib/groups/roles.js';
+  import { roleOptionsFromAdmins, isPublisherOnly } from '$lib/groups/roles.js';
+  import { getUserDisplayName } from '$lib/helpers/message-utils.js';
   import { getDisplayName } from 'applesauce-core/helpers';
+  import { nip19 } from 'nostr-tools';
   import * as m from '$lib/paraglide/messages';
 
   let { communikeyEvent, communityProfile = null } = $props();
@@ -108,14 +111,59 @@
     );
   });
 
-  // Direct roster management from this page too, not only from Settings'
-  // MembershipPane (laoc, 2026-08-27). Same actor gate as the join queue
-  // (owner or root-39001 admin) plus a resolvable root pointer; the modal
-  // wiring mirrors MembershipPane 1:1 — including the retired-to-no-op
-  // onMemberAdded fan-out (see the comment there for why it's empty).
-  let showMembersModal = $state(false);
+  // Inline roster management (issue 7ca94a65): the members list itself
+  // carries the admin actions — per-row MemberActionsMenu kebabs plus an
+  // inline add-member section — instead of the separate GroupMembersModal
+  // surface this page used to open. Same actor gate as the join queue
+  // (owner or root-39001 admin) plus a resolvable root pointer. Settings'
+  // MembershipPane keeps the modal for its compact layout.
   const rosterPointer = $derived(getRootRoster().pointer);
   const roleOptions = $derived(roleOptionsFromAdmins(getRootRoster().admins));
+  const canManageRoster = $derived(canModerateJoins && !!rosterPointer);
+
+  /** Root-roster roles of a pubkey ([] for plain members / non-roster rows). */
+  function rosterRolesOf(/** @type {string} */ pubkey) {
+    return getRootRoster().admins.find((a) => a.pubkey === pubkey)?.roles ?? [];
+  }
+
+  /**
+   * Action set for a row's kebab, mirroring GroupMembersModal's sections:
+   * admins get demote, publisher-only holders and plain members get
+   * promote + remove; everyone gets the publisher toggle. Rows outside the
+   * root roster (section-only or area-only members) and the viewer's own row
+   * get no menu.
+   * @param {string} pubkey
+   * @returns {{togglePublisher?: boolean, promote?: boolean, demote?: boolean, remove?: boolean} | null}
+   */
+  function getRosterRowActions(pubkey) {
+    if (!canManageRoster || pubkey === getActiveUserForQueue()?.pubkey) return null;
+    const roster = getRootRoster();
+    const admin = roster.admins.find((a) => a.pubkey === pubkey);
+    if (admin && !isPublisherOnly(admin.roles)) return { togglePublisher: true, demote: true };
+    if (admin || roster.members.has(pubkey))
+      return { togglePublisher: true, promote: true, remove: true };
+    return null;
+  }
+
+  // Member search (issue 7ca94a65): a flat list does not scale. Matches the
+  // profile display name, the hex pubkey, and — when the query looks like
+  // one — the npub encoding.
+  let searchQuery = $state('');
+  const normalizedQuery = $derived(searchQuery.trim().toLowerCase());
+
+  function matchesSearch(/** @type {string} */ pubkey) {
+    if (getUserDisplayName(pubkey, profiles.get(pubkey)).toLowerCase().includes(normalizedQuery))
+      return true;
+    if (pubkey.toLowerCase().includes(normalizedQuery)) return true;
+    if (normalizedQuery.startsWith('npub')) {
+      try {
+        return nip19.npubEncode(pubkey).includes(normalizedQuery);
+      } catch {
+        return false;
+      }
+    }
+    return false;
+  }
 
   // Moderated: the ROOT-group roster IS the community membership — it must
   // be listed even when no content section is gated (laoc, 2026-08-19: an
@@ -124,6 +172,9 @@
   let rosterMembers = $derived(isModerated ? [...getRootRoster().members] : []);
   let mergedMembers = $derived(
     unique([...memberData.allMembers, ...areaMembers, ...rosterMembers])
+  );
+  let visibleMembers = $derived(
+    normalizedQuery ? mergedMembers.filter(matchesSearch) : mergedMembers
   );
 
   /**
@@ -168,15 +219,6 @@
 <div class="container mx-auto max-w-4xl px-4 py-8">
   <div class="mb-6 flex flex-wrap items-center justify-between gap-3">
     <h2 class="text-xl font-bold">{m.community_members_title()}</h2>
-    {#if canModerateJoins && rosterPointer}
-      <button
-        class="btn btn-outline btn-sm"
-        data-testid="members-manage-button"
-        onclick={() => (showMembersModal = true)}
-      >
-        {m.community_membership_pane_manage()}
-      </button>
-    {/if}
     {#if areaCanManage}
       <button
         class="btn btn-outline btn-sm"
@@ -252,21 +294,38 @@
       </div>
     {/if}
   {:else}
-    <p class="mb-4 text-sm text-base-content/60">
-      {mergedMembers.length === 1
-        ? m.community_members_count_one()
-        : m.community_members_count({ count: mergedMembers.length })}
-    </p>
+    <div class="mb-4 flex max-w-2xl flex-wrap items-center justify-between gap-3">
+      <p class="text-sm text-base-content/60">
+        {mergedMembers.length === 1
+          ? m.community_members_count_one()
+          : m.community_members_count({ count: mergedMembers.length })}
+      </p>
+      <input
+        type="search"
+        class="input-bordered input input-sm w-full sm:max-w-xs"
+        placeholder={m.community_members_search_placeholder()}
+        aria-label={m.community_members_search_placeholder()}
+        data-testid="members-search"
+        value={searchQuery}
+        oninput={(e) => (searchQuery = /** @type {HTMLInputElement} */ (e.target).value)}
+      />
+    </div>
     {#if hasArea && areaMembers.length === 0}
       <!-- The viewer cannot decrypt the area's roster (not a member) — say
         why the count may look smaller than the channel header's. -->
       <p class="mb-4 text-sm text-base-content/60">{m.community_members_area_note()}</p>
     {/if}
 
+    {#if visibleMembers.length === 0}
+      <p class="text-sm text-base-content/60" data-testid="members-search-empty">
+        {m.community_members_search_empty()}
+      </p>
+    {/if}
     <div class="flex max-w-2xl flex-col gap-2">
-      {#each mergedMembers as pubkey (pubkey)}
+      {#each visibleMembers as pubkey (pubkey)}
         {@const sections = getSectionsForPubkey(pubkey)}
         {@const areaTier = getAreaTier(pubkey)}
+        {@const rowActions = getRosterRowActions(pubkey)}
         <div class="rounded-lg bg-base-100 p-2" data-testid="member-row" data-pubkey={pubkey}>
           <div class="flex flex-wrap items-center gap-2">
             <div class="min-w-0 flex-1">
@@ -302,6 +361,17 @@
                 >
               {/if}
             </div>
+            {#if rowActions && rosterPointer}
+              <MemberActionsMenu
+                pointer={rosterPointer}
+                {pubkey}
+                name={getUserDisplayName(pubkey, profiles.get(pubkey))}
+                roles={rosterRolesOf(pubkey)}
+                actions={rowActions}
+                {roleOptions}
+                onRosterChanged={getRootRoster().refresh}
+              />
+            {/if}
           </div>
           {#if sections.length > 0}
             <div class="mt-1.5 flex flex-wrap gap-1 px-2 pb-1">
@@ -320,23 +390,24 @@
       {/each}
     </div>
   {/if}
-</div>
 
-{#if showMembersModal && rosterPointer}
-  <GroupMembersModal
-    pointer={rosterPointer}
-    metadata={{ name: getDisplayName(communityProfile) }}
-    communityId={communikeyEvent?.pubkey}
-    admins={getRootRoster().admins}
-    members={getRootRoster().members}
-    myPubkey={getActiveUserForQueue()?.pubkey}
-    isAdmin={canModerateJoins}
-    {roleOptions}
-    onRosterChanged={getRootRoster().refresh}
-    onMemberAdded={async () => {}}
-    onClose={() => (showMembersModal = false)}
-  />
-{/if}
+  {#if canManageRoster && rosterPointer}
+    <div class="mt-6 max-w-2xl" data-testid="members-add-section">
+      <div class="card bg-base-100">
+        <div class="card-body">
+          <h3 class="card-title text-base">{m.community_members_add_title()}</h3>
+          <AddMemberControl
+            pointer={rosterPointer}
+            metadata={{ name: getDisplayName(communityProfile) }}
+            communityId={communikeyEvent?.pubkey}
+            members={getRootRoster().members}
+            onRosterChanged={getRootRoster().refresh}
+          />
+        </div>
+      </div>
+    </div>
+  {/if}
+</div>
 
 {#if showAreaModal}
   <ChannelMembersModal

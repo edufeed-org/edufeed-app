@@ -11,7 +11,7 @@
  * @vitest-environment jsdom
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, within } from '@testing-library/svelte';
+import { render, screen, within, fireEvent, waitFor } from '@testing-library/svelte';
 
 vi.mock('$lib/paraglide/messages', () => ({
   community_members_title: () => 'Members',
@@ -20,9 +20,33 @@ vi.mock('$lib/paraglide/messages', () => ({
   community_members_moderated_community: () => 'This is a moderated community.',
   community_members_owner_badge: () => 'Owner',
   community_members_count: (/** @type {{count: number}} */ { count }) => `${count} members`,
+  community_members_count_one: () => '1 member',
   community_members_all_sections: () => 'All content sections',
+  community_members_search_placeholder: () => 'Search members',
+  community_members_search_empty: () => 'No members match.',
+  community_members_add_title: () => 'Add member',
   groups_role_admin: () => 'Admin',
   groups_role_king: () => 'Founder',
+  groups_role_moderator: () => 'Moderator',
+  groups_role_publisher: () => 'Publisher',
+  groups_members_promote: () => 'Make admin',
+  groups_members_demote: () => 'Remove admin',
+  groups_members_remove: () => 'Remove',
+  groups_members_grant_publisher: () => 'Make publisher',
+  groups_members_revoke_publisher: () => 'Remove publisher',
+  groups_members_assign_role: () => 'Assign role',
+  groups_members_assign_role_open: () => 'Assign role …',
+  groups_members_assign_role_title: () => 'Assign role',
+  groups_members_assign_role_body: (/** @type {{name: string}} */ { name }) =>
+    `New role for ${name}.`,
+  groups_members_remove_confirm_title: (/** @type {{name: string}} */ { name }) =>
+    `Remove ${name}?`,
+  groups_members_remove_confirm_body: (/** @type {{name: string}} */ { name }) =>
+    `${name} loses access to this group.`,
+  groups_members_row_menu: (/** @type {{name: string}} */ { name }) => `Actions for ${name}`,
+  groups_members_role_placeholder: () => 'Role',
+  groups_members_action_failed: () => 'The relay refused the change',
+  common_cancel: () => 'Cancel',
   community_members_area_note: () => 'Area members are private.',
   community_members_area_chip: () => 'Private area',
   community_membership_pane_manage: () => 'Manage members',
@@ -32,7 +56,23 @@ vi.mock('$lib/paraglide/messages', () => ({
 }));
 
 vi.mock('$lib/stores/profile-map.svelte.js', () => ({
-  useProfileMap: () => () => new Map()
+  useProfileMap: () => () => holders.profileMap
+}));
+
+// MemberActionsMenu renders for real (its publish path is what the inline
+// consolidation is about), so its relay-facing deps are mocked like in
+// GroupMembersModal.test.js.
+vi.mock('$lib/groups/group-management.js', () => ({
+  buildPutUserTemplate: mgmtMocks.buildPutUserTemplate,
+  buildRemoveUserTemplate: mgmtMocks.buildRemoveUserTemplate,
+  publishToGroupRelay: mgmtMocks.publishToGroupRelay
+}));
+vi.mock('$lib/stores/nostr-infrastructure.svelte', () => ({
+  pool: { relay: () => ({}) }
+}));
+vi.mock('$lib/helpers/toast', () => ({ showToast: vi.fn() }));
+vi.mock('$lib/components/groups/AddMemberControl.svelte', () => ({
+  default: function Stub() {}
 }));
 
 vi.mock('$lib/concord/community.svelte.js', () => ({
@@ -77,9 +117,30 @@ vi.mock('$lib/stores/accounts.svelte', () => ({
   accountsMeta: { version: 0 }
 }));
 
+const mgmtMocks = vi.hoisted(() => ({
+  buildPutUserTemplate: vi.fn(
+    (
+      /** @type {string} */ groupId,
+      /** @type {string} */ pubkey,
+      /** @type {string[]} */ roles
+    ) => ({
+      groupId,
+      pubkey,
+      roles
+    })
+  ),
+  buildRemoveUserTemplate: vi.fn((/** @type {string} */ groupId, /** @type {string} */ pubkey) => ({
+    groupId,
+    pubkey
+  })),
+  publishToGroupRelay: vi.fn(() => Promise.resolve({ id: 'signed' }))
+}));
+
 const holders = vi.hoisted(() => ({
   /** @type {{ isLoading: boolean, getMembers: (name: string) => string[] }} */
   profileAccess: { isLoading: false, getMembers: () => [] },
+  /** @type {Map<string, any>} */
+  profileMap: new Map(),
   /** @type {{pubkey: string, roles: string[]}[]} */
   admins: /** @type {{pubkey: string, roles: string[]}[]} */ ([]),
   /** @type {any} */
@@ -140,6 +201,7 @@ const MODERATED_EVENT_WITH_SECTION = {
 
 beforeEach(() => {
   holders.profileAccess = { isLoading: false, getMembers: () => [] };
+  holders.profileMap = new Map();
   holders.admins = [];
   holders.areaCommunity = null;
   holders.areaCaps = {};
@@ -364,24 +426,129 @@ describe('MembersView — Concord area roles', () => {
   });
 });
 
-// Admins manage the roster directly from the Mitglieder page too, not only
-// from Settings' MembershipPane (laoc, 2026-08-27).
-describe('MembersView — manage-members button', () => {
-  it('a root-39001 admin gets the manage button', () => {
+// Consolidation (issue 7ca94a65): the members list itself carries the admin
+// actions inline — the separate "Mitglieder verwalten" modal surface on this
+// page is gone. Rows of roster members get the same kebab GroupMembersModal
+// used; adding members happens in an inline section instead of the modal.
+describe('MembersView — inline roster management', () => {
+  const asAdmin = () => {
     holders.admins = [{ pubkey: ADMIN, roles: ['admin'] }];
-    holders.members = new Set([OWNER, ADMIN]);
+    holders.members = new Set([OWNER, ADMIN, REGULAR]);
     holders.pointer = { id: 'root123', relay: 'wss://groups.example' };
     holders.activePubkey = ADMIN;
+  };
+
+  it('the separate manage-members button is gone for admins', () => {
+    asAdmin();
     render(MembersView, { props: { communikeyEvent: MODERATED_EVENT_OWNER_ONLY } });
-    expect(screen.getByTestId('members-manage-button')).toBeTruthy();
+    expect(screen.queryByTestId('members-manage-button')).toBeNull();
   });
 
-  it('a signed-in non-admin member sees no manage button', () => {
+  it('an admin sees the action kebab on other roster rows, but not on their own row', () => {
+    asAdmin();
+    const { container } = render(MembersView, {
+      props: { communikeyEvent: MODERATED_EVENT_OWNER_ONLY }
+    });
+    const rowOf = (/** @type {string} */ pubkey) =>
+      /** @type {HTMLElement} */ (
+        container.querySelector(`[data-testid="member-row"][data-pubkey="${pubkey}"]`)
+      );
+    expect(within(rowOf(REGULAR)).getByTestId('member-actions-menu')).toBeTruthy();
+    expect(within(rowOf(ADMIN)).queryByTestId('member-actions-menu')).toBeNull();
+  });
+
+  it('a signed-in non-admin member sees no kebabs and no add section', () => {
     holders.admins = [{ pubkey: ADMIN, roles: ['admin'] }];
     holders.members = new Set([OWNER, ADMIN, REGULAR]);
     holders.pointer = { id: 'root123', relay: 'wss://groups.example' };
     holders.activePubkey = REGULAR;
     render(MembersView, { props: { communikeyEvent: MODERATED_EVENT_OWNER_ONLY } });
-    expect(screen.queryByTestId('members-manage-button')).toBeNull();
+    expect(screen.queryAllByTestId('member-actions-menu')).toHaveLength(0);
+    expect(screen.queryByTestId('members-add-section')).toBeNull();
+  });
+
+  it('a section-only member outside the roster gets no kebab', () => {
+    asAdmin();
+    holders.profileAccess = {
+      isLoading: false,
+      getMembers: (name) => (name === 'General' ? ['e'.repeat(64)] : [])
+    };
+    const { container } = render(MembersView, {
+      props: { communikeyEvent: MODERATED_EVENT_WITH_SECTION }
+    });
+    const strangerRow = /** @type {HTMLElement} */ (
+      container.querySelector(`[data-testid="member-row"][data-pubkey="${'e'.repeat(64)}"]`)
+    );
+    expect(within(strangerRow).queryByTestId('member-actions-menu')).toBeNull();
+  });
+
+  it('an admin sees the inline add-member section, also on the owner-only branch', () => {
+    holders.admins = [{ pubkey: ADMIN, roles: ['admin'] }];
+    holders.members = new Set([OWNER]);
+    holders.pointer = { id: 'root123', relay: 'wss://groups.example' };
+    holders.activePubkey = ADMIN;
+    render(MembersView, { props: { communikeyEvent: MODERATED_EVENT_OWNER_ONLY } });
+    expect(screen.getByTestId('members-add-section')).toBeTruthy();
+    expect(screen.getByText('Add member')).toBeTruthy();
+  });
+
+  it('promote on a member row publishes a put-user against the root group', async () => {
+    asAdmin();
+    const { container } = render(MembersView, {
+      props: { communikeyEvent: MODERATED_EVENT_OWNER_ONLY }
+    });
+    const regularRow = /** @type {HTMLElement} */ (
+      container.querySelector(`[data-testid="member-row"][data-pubkey="${REGULAR}"]`)
+    );
+    await fireEvent.click(within(regularRow).getByTestId('member-promote'));
+    await waitFor(() => expect(mgmtMocks.publishToGroupRelay).toHaveBeenCalled());
+    expect(mgmtMocks.buildPutUserTemplate).toHaveBeenCalledWith('root123', REGULAR, ['admin']);
+  });
+});
+
+describe('MembersView — member search', () => {
+  const setupList = () => {
+    holders.admins = [{ pubkey: ADMIN, roles: ['admin'] }];
+    holders.members = new Set([OWNER, ADMIN, REGULAR]);
+    holders.profileMap = new Map([
+      [ADMIN, { name: 'Alice' }],
+      [REGULAR, { name: 'Bob' }]
+    ]);
+  };
+
+  it('filters rows by profile name, case-insensitively', async () => {
+    setupList();
+    const { container } = render(MembersView, {
+      props: { communikeyEvent: MODERATED_EVENT_OWNER_ONLY }
+    });
+    await fireEvent.input(screen.getByTestId('members-search'), { target: { value: 'ali' } });
+    expect(
+      container.querySelector(`[data-testid="member-row"][data-pubkey="${ADMIN}"]`)
+    ).not.toBeNull();
+    expect(
+      container.querySelector(`[data-testid="member-row"][data-pubkey="${REGULAR}"]`)
+    ).toBeNull();
+  });
+
+  it('matches on the hex pubkey too', async () => {
+    setupList();
+    const { container } = render(MembersView, {
+      props: { communikeyEvent: MODERATED_EVENT_OWNER_ONLY }
+    });
+    await fireEvent.input(screen.getByTestId('members-search'), { target: { value: 'ccc' } });
+    expect(
+      container.querySelector(`[data-testid="member-row"][data-pubkey="${REGULAR}"]`)
+    ).not.toBeNull();
+    expect(
+      container.querySelector(`[data-testid="member-row"][data-pubkey="${ADMIN}"]`)
+    ).toBeNull();
+  });
+
+  it('shows an empty note when nothing matches', async () => {
+    setupList();
+    render(MembersView, { props: { communikeyEvent: MODERATED_EVENT_OWNER_ONLY } });
+    await fireEvent.input(screen.getByTestId('members-search'), { target: { value: 'zzz' } });
+    expect(screen.getByText('No members match.')).toBeTruthy();
+    expect(screen.queryAllByTestId('member-row')).toHaveLength(0);
   });
 });
