@@ -31,6 +31,7 @@
   import { putUserOn, fanOut } from '$lib/groups/roster-fanout.js';
   import { pool } from '$lib/stores/nostr-infrastructure.svelte';
   import { unique } from '$lib/helpers/unique.js';
+  import { focusOnMount } from '$lib/helpers/focus.js';
   import ProfileAvatar from '$lib/components/shared/ProfileAvatar.svelte';
   import ContactSearchInput from '$lib/components/shared/ContactSearchInput.svelte';
   import GroupExplainer from '$lib/components/groups/GroupExplainer.svelte';
@@ -49,6 +50,13 @@
     onClose,
     onCreated
   } = $props();
+
+  // Radio groups are document-scoped, and the community route mounts
+  // responsive twins of this wizard — a shared group name lets the hidden
+  // twin steal the checked state, so the visible dialog opens with no
+  // visibility option selected. Scope the group per instance.
+  const uid = $props.id();
+  const radioGroup = `wizard-access-${uid}`;
 
   let step = $state(0);
   let name = $state('');
@@ -337,26 +345,30 @@
     </ul>
 
     {#if step === 0}
-      <label class="form-control mb-3">
-        <span class="label-text mb-1 font-bold">{m.concord_wizard_name_label()}</span>
+      <!-- DaisyUI 5 dropped form-control/label-text (no-op classes), so the
+        label/input stack needs its own layout — the gap also keeps the
+        focused input's outline clear of the label. -->
+      <label class="mb-4 flex flex-col gap-2">
+        <span class="text-sm font-bold">{m.concord_wizard_name_label()}</span>
         <input
-          class="input-bordered input"
+          class="input-bordered input w-full"
           data-testid="concord-channel-name-input"
           bind:value={name}
           placeholder={m.concord_wizard_name_placeholder()}
+          use:focusOnMount
         />
       </label>
-      <fieldset class="mb-3">
-        <legend class="label-text mb-1 font-bold">{m.concord_channel_visibility_label()}</legend>
+      <fieldset class="mb-4">
+        <legend class="mb-1.5 text-sm font-bold">{m.concord_channel_visibility_label()}</legend>
         {#if isGroupMode}
           <!-- NIP-29 channels: two relay-observable tiers only. `world` = not
                `private` (anyone reads); `invited` = `private` (admin curates).
                The retired "members" tier is a Concord channel now. -->
-          <label class="flex cursor-pointer items-start gap-2 py-1 text-sm">
+          <label class="flex cursor-pointer items-start gap-2 py-1.5 text-sm">
             <input
               type="radio"
               class="radio mt-0.5 radio-sm"
-              name="wizard-access"
+              name={radioGroup}
               data-testid="wizard-access-world"
               checked={tier === 'world'}
               onchange={() => (tier = 'world')}
@@ -364,11 +376,11 @@
             <span>🌐 <b>{m.wizard_access_world()}</b> — {m.wizard_access_world_hint()}</span>
           </label>
         {:else}
-          <label class="flex cursor-pointer items-start gap-2 py-1 text-sm">
+          <label class="flex cursor-pointer items-start gap-2 py-1.5 text-sm">
             <input
               type="radio"
               class="radio mt-0.5 radio-sm"
-              name="wizard-access"
+              name={radioGroup}
               data-testid="wizard-access-members"
               checked={tier === 'members'}
               onchange={() => (tier = 'members')}
@@ -378,11 +390,11 @@
             >
           </label>
         {/if}
-        <label class="flex cursor-pointer items-start gap-2 py-1 text-sm">
+        <label class="flex cursor-pointer items-start gap-2 py-1.5 text-sm">
           <input
             type="radio"
             class="radio mt-0.5 radio-sm"
-            name="wizard-access"
+            name={radioGroup}
             data-testid="wizard-access-invited"
             checked={tier === 'invited'}
             onchange={() => (tier = 'invited')}
