@@ -636,6 +636,20 @@ const publishOptimisticMock = vi.hoisted(() => vi.fn());
 vi.mock('$lib/services/publish-service.js', () => ({
   publishEventOptimistic: publishOptimisticMock
 }));
+// Blossom upload for chat attachments — the network is out of scope here;
+// chat-attachment-upload.test.js covers the real helper.
+const uploadChatAttachmentMock = vi.hoisted(() =>
+  vi.fn(async (/** @type {File} */ file) => ({
+    url: 'https://blossom.example/' + 'd'.repeat(64) + '.pdf',
+    type: file.type || 'application/octet-stream',
+    sha256: 'd'.repeat(64),
+    size: file.size,
+    name: file.name
+  }))
+);
+vi.mock('$lib/helpers/chat-attachment-upload.js', () => ({
+  uploadChatAttachment: uploadChatAttachmentMock
+}));
 vi.mock('$lib/helpers/message-utils.js', async () => {
   const actual = /** @type {any} */ (await vi.importActual('$lib/helpers/message-utils.js'));
   return { ...actual, formatMessageTimestamp: () => '12:00' };
@@ -689,6 +703,10 @@ vi.mock('$lib/paraglide/messages', () => ({
   groups_badge_invite_only: () => 'Invite only',
   groups_badge_auth_required: () => 'Sign-in required',
   groups_badge_nip29: () => 'NIP-29',
+  chat_attach_file: () => 'Attach file',
+  chat_attach_error_too_large: (/** @type {{ size: number }} */ { size }) =>
+    `File is too large (max ${size}MB)`,
+  chat_attach_error_upload_failed: () => 'Upload failed. Please try again.',
   chat_thread_title: () => 'Thread',
   chat_thread_expand: () => 'Expand',
   chat_thread_collapse: () => 'Collapse',
@@ -762,6 +780,7 @@ describe('GroupChat', () => {
   beforeEach(() => {
     publishMock.mockClear();
     publishOptimisticMock.mockClear();
+    uploadChatAttachmentMock.mockClear();
     signEvent.mockClear();
     authenticateSpy.mockClear();
     vi.mocked(goto).mockClear();
@@ -1040,6 +1059,78 @@ describe('GroupChat', () => {
     expect(signed.content).toBe('hi group');
     expect(signed.tags[0]).toEqual(['h', 'beechat']);
     expect(signed.pubkey).toBe(ME);
+  });
+
+  describe('file attachments', () => {
+    const FILE_URL = 'https://blossom.example/' + 'd'.repeat(64) + '.pdf';
+
+    /** @param {File} file */
+    async function attach(file) {
+      const input = /** @type {HTMLInputElement} */ (screen.getByTestId('chat-attach-input'));
+      Object.defineProperty(input, 'files', { value: [file], configurable: true });
+      await fireEvent.change(input);
+    }
+
+    it('uploads the picked file, drops its URL into the draft, and sends it as imeta', async () => {
+      render(GroupChat, { props: { pointer } });
+      await waitFor(() => screen.getByTestId('group-chat-input'));
+
+      await fireEvent.input(screen.getByTestId('group-chat-input'), {
+        target: { value: 'here you go' }
+      });
+      await attach(new File(['x'], 'worksheet.pdf', { type: 'application/pdf' }));
+
+      const draft = /** @type {HTMLInputElement} */ (screen.getByTestId('group-chat-input'));
+      await waitFor(() => expect(draft.value).toBe(`here you go ${FILE_URL}`));
+
+      await fireEvent.submit(/** @type {HTMLElement} */ (draft.closest('form')));
+      await waitFor(() => expect(publishMock).toHaveBeenCalledTimes(1));
+      const signed = publishMock.mock.calls[0][0];
+      expect(signed.kind).toBe(9);
+      expect(signed.content).toBe(`here you go ${FILE_URL}`);
+      expect(signed.tags).toContainEqual([
+        'imeta',
+        `url ${FILE_URL}`,
+        'm application/pdf',
+        `x ${'d'.repeat(64)}`,
+        'size 1',
+        'name worksheet.pdf'
+      ]);
+    });
+
+    it('a failed upload toasts and leaves the draft alone', async () => {
+      const { showToast } = await import('$lib/helpers/toast');
+      uploadChatAttachmentMock.mockRejectedValueOnce(new Error('server down'));
+      render(GroupChat, { props: { pointer } });
+      await waitFor(() => screen.getByTestId('group-chat-input'));
+
+      await fireEvent.input(screen.getByTestId('group-chat-input'), {
+        target: { value: 'my draft' }
+      });
+      await attach(new File(['x'], 'worksheet.pdf', { type: 'application/pdf' }));
+
+      await waitFor(() =>
+        expect(showToast).toHaveBeenCalledWith('Upload failed. Please try again.', 'error')
+      );
+      expect(/** @type {HTMLInputElement} */ (screen.getByTestId('group-chat-input')).value).toBe(
+        'my draft'
+      );
+    });
+
+    it('rejects a file over the blossom size cap without uploading', async () => {
+      const { showToast } = await import('$lib/helpers/toast');
+      render(GroupChat, { props: { pointer } });
+      await waitFor(() => screen.getByTestId('group-chat-input'));
+
+      const big = new File(['x'], 'huge.zip', { type: 'application/zip' });
+      Object.defineProperty(big, 'size', { value: 100 * 1024 * 1024 });
+      await attach(big);
+
+      await waitFor(() =>
+        expect(showToast).toHaveBeenCalledWith(expect.stringContaining('too large'), 'error')
+      );
+      expect(uploadChatAttachmentMock).not.toHaveBeenCalled();
+    });
   });
 
   it('a rejected reaction tells the user instead of failing silently', async () => {

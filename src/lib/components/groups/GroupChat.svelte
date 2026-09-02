@@ -46,6 +46,8 @@
     isAlreadyMemberError
   } from '$lib/groups/groups.js';
   import { updatePersonalGroupsList } from '$lib/groups/personal-groups-list.js';
+  import { uploadChatAttachment } from '$lib/helpers/chat-attachment-upload.js';
+  import { SvelteMap } from 'svelte/reactivity';
   import { publishToGroupRelay } from '$lib/groups/group-management.js';
   import { roleOptionsFromAdmins } from '$lib/groups/roles.js';
   import { unique } from '$lib/helpers/unique.js';
@@ -572,6 +574,43 @@
 
   let text = $state('');
   let sending = $state(false);
+  // Uploaded-but-not-yet-sent files, keyed by blob URL. Read at send time to
+  // build the imeta tags (only for URLs still present in the draft) — nothing
+  // renders from it; SvelteMap only to satisfy prefer-svelte-reactivity.
+  const pendingAttachments = new SvelteMap();
+  let uploadingAttachment = $state(false);
+
+  /**
+   * Upload a picked file to the user's Blossom server and drop its URL into
+   * the draft; the imeta tag rides along at send time (Armada-compatible).
+   * @param {File} file
+   * @param {'timeline' | 'thread'} target which composer's draft gets the URL
+   */
+  async function attachFile(file, target) {
+    const max = runtimeConfig.blossom?.maxFileSize;
+    if (max && file.size > max) {
+      showToast(m.chat_attach_error_too_large({ size: Math.round(max / (1024 * 1024)) }), 'error');
+      return;
+    }
+    const user = getActiveUser();
+    if (!user?.signer) return;
+    uploadingAttachment = true;
+    try {
+      const att = await uploadChatAttachment(file, { signer: user.signer });
+      pendingAttachments.set(att.url, att);
+      if (target === 'thread') threadText = appendToDraft(threadText, att.url);
+      else text = appendToDraft(text, att.url);
+    } catch (err) {
+      console.error('chat attachment upload failed', err);
+      showToast(m.chat_attach_error_upload_failed(), 'error');
+    }
+    uploadingAttachment = false;
+  }
+
+  /** @param {string} draft @param {string} url */
+  function appendToDraft(draft, url) {
+    return draft.trim() ? `${draft.trimEnd()} ${url}` : url;
+  }
   // The WHOLE message, not a {id, pubkey} projection: the thread root is read
   // off its tags. `$state.raw` because applesauce events must never be wrapped
   // in a deep state proxy (state_unsafe_mutation).
@@ -863,9 +902,14 @@
   async function publishMessage(value, replyTarget) {
     try {
       const signed = await signAndPublish(
-        buildGroupMessageTemplate(pointer.id, value, replyTarget)
+        buildGroupMessageTemplate(pointer.id, value, replyTarget, [...pendingAttachments.values()])
       );
       eventStore.add(signed);
+      // Attachments whose URL went out with this message are done; ones the
+      // user edited out stay pending for the next send.
+      for (const url of [...pendingAttachments.keys()]) {
+        if (value.includes(url)) pendingAttachments.delete(url);
+      }
       return true;
     } catch (err) {
       console.error('group send failed', err);
@@ -1291,6 +1335,8 @@
             onCancelReply={() => (replyTo = null)}
             testid="group-chat-input"
             onOpenApps={canWrite ? () => (appPickerOpen = true) : null}
+            onAttachFile={canWrite ? (file) => attachFile(file, 'timeline') : null}
+            uploading={uploadingAttachment}
           />
         {/if}
       </div>
@@ -1320,6 +1366,8 @@
             replyTo={threadReplyTo}
             onCancelReply={() => (threadReplyTo = null)}
             testid="thread-chat-input"
+            onAttachFile={canWrite ? (file) => attachFile(file, 'thread') : null}
+            uploading={uploadingAttachment}
           />
         {/snippet}
       </ThreadPanel>

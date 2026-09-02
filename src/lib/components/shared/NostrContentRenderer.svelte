@@ -6,7 +6,12 @@
 <script>
   import { parseEventContent } from '$lib/helpers/nostrContent.js';
   import { parseChatMarkdown } from '$lib/helpers/chatMarkdown.js';
-  import { getImetaByUrl, parseImetaDimensions } from '$lib/helpers/media-meta.js';
+  import {
+    getImetaByUrl,
+    parseImetaDimensions,
+    attachmentDisplayName,
+    formatFileSize
+  } from '$lib/helpers/media-meta.js';
   import { nostrIdFromUrl, truncateMiddle, splitNostrIds } from '$lib/helpers/link-render.js';
   import * as m from '$lib/paraglide/messages';
   import NostrIdentifier from './NostrIdentifier.svelte';
@@ -47,14 +52,29 @@
   const imageExts = /\.(jpe?g|png|gif|webp|svg|avif|bmp)(\?.*)?$/i;
   const videoExts = /\.(mp4|webm|mov|ogg)(\?.*)?$/i;
 
+  // Detection reads the extension OR the imeta-declared MIME: chat uploads
+  // (ours and Armada's) are content-addressed Blossom URLs that may carry no
+  // extension, with the type only in the NIP-92 imeta tag.
   /** @param {string} url */
   function isImageUrl(url) {
-    return imageExts.test(url);
+    return imageExts.test(url) || Boolean(imetaFor(url)?.type?.startsWith('image/'));
   }
 
   /** @param {string} url */
   function isVideoUrl(url) {
-    return videoExts.test(url);
+    return videoExts.test(url) || Boolean(imetaFor(url)?.type?.startsWith('video/'));
+  }
+
+  /**
+   * A non-media upload (PDF, zip, …) renders as a download file card. Gated on
+   * an imeta entry so ordinary pasted links stay plain links; webxdc shares are
+   * excluded — their launch card renders via the chat attachments snippet.
+   * @param {string} url
+   */
+  function fileCardFor(url) {
+    const meta = imetaFor(url);
+    if (!meta || meta.type === 'application/x-webxdc') return undefined;
+    return meta;
   }
 
   /** NIP-92 imeta fields for a media URL, if the event carries them. @param {string} href */
@@ -180,6 +200,27 @@
         </div>
       {:else if nostrIdFromUrl(node.href)}
         <NostrIdentifier identifier={nostrIdFromUrl(node.href)} inline={false} {depth} />
+      {:else if fileCardFor(node.href)}
+        {@const meta = fileCardFor(node.href)}
+        {@const sizeLabel = formatFileSize(meta?.size)}
+        <a
+          href={node.href}
+          target="_blank"
+          rel="noopener noreferrer"
+          download
+          data-testid="file-attachment-card"
+          class="mt-2 flex max-w-xs items-center gap-2 rounded-xl border border-base-300 bg-base-100 px-3 py-2 text-sm text-base-content no-underline"
+        >
+          <span aria-hidden="true">📎</span>
+          <span class="min-w-0">
+            <span class="block truncate font-medium">
+              {attachmentDisplayName(node.href, meta)}
+            </span>
+            {#if sizeLabel}
+              <span class="block text-xs opacity-60">{sizeLabel}</span>
+            {/if}
+          </span>
+        </a>
       {:else}
         <a
           href={node.href}
