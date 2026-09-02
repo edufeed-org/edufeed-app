@@ -26,6 +26,8 @@ import { publishDefaultRelayList } from '$lib/services/relay-list-backfill.js';
 import { ensureDmRelayList } from '$lib/services/dm-relay-backfill.js';
 import { getDmRelayCheckStatus } from '$lib/services/dm-service.svelte.js';
 import { getPendingInviteCount } from '$lib/concord/pending-invites.svelte.js';
+import { useAdminJoinRequestAlert } from '$lib/groups/join-request-alerts.svelte.js';
+import { nip19 } from 'nostr-tools';
 import { modalStore } from '$lib/stores/modal.svelte.js';
 import {
   isBackupDownloaded,
@@ -62,7 +64,7 @@ import {
 import { getProfileNip05s } from '$lib/helpers/nip05-verify.js';
 import { runtimeConfig } from '$lib/stores/config.svelte.js';
 
-/** @typedef {'backup' | 'relays' | 'dm' | 'nip05' | 'profile' | 'invites'} HintId */
+/** @typedef {'backup' | 'relays' | 'dm' | 'nip05' | 'profile' | 'invites' | 'joinRequests'} HintId */
 /** @typedef {import('$lib/helpers/assistant-hints.js').HintStatus} HintStatus */
 
 export const HINT_IDS = /** @type {HintId[]} */ ([
@@ -71,7 +73,8 @@ export const HINT_IDS = /** @type {HintId[]} */ ([
   'dm',
   'profile',
   'nip05',
-  'invites'
+  'invites',
+  'joinRequests'
 ]);
 
 /**
@@ -79,7 +82,7 @@ export const HINT_IDS = /** @type {HintId[]} */ ([
  * initialization (it registers $effects).
  *
  * @returns {{
- *   getHints: () => Array<{id: HintId, status: HintStatus, variant?: string, address?: string}>,
+ *   getHints: () => Array<{id: HintId, status: HintStatus, variant?: string, address?: string, count?: number}>,
  *   getOpenCount: () => number,
  *   runHint: (id: HintId) => void,
  *   customizeHint: (id: HintId) => void,
@@ -155,6 +158,11 @@ export function useAssistantHints() {
   // the nip05 hint's variant and the one-click activation.
   const grant = useMembershipGrantState();
 
+  // Pending NIP-29 Beitrittsanfragen across every group the user admins —
+  // the proactive counterpart of the members page's JoinRequestsPanel
+  // (issue 68669ba4: admins had to know to look there).
+  const getJoinRequestAlert = useAdminJoinRequestAlert();
+
   const nip05Meta = $derived.by(() => {
     const grantState = grant.getState();
     const address = grant.getAddress();
@@ -187,7 +195,15 @@ export function useAssistantHints() {
   const statuses = $derived.by(() => {
     const user = getActiveUser();
     if (!user)
-      return { backup: null, relays: null, dm: null, nip05: null, profile: null, invites: null };
+      return {
+        backup: null,
+        relays: null,
+        dm: null,
+        nip05: null,
+        profile: null,
+        invites: null,
+        joinRequests: null
+      };
 
     const backupConfirmed = isBackupDownloaded(user.pubkey);
     // Only nudge users who created their account via the in-app wizard —
@@ -271,6 +287,15 @@ export function useAssistantHints() {
         running: false,
         confirmed: false,
         everOpen: everOpen.has('invites')
+      }),
+      joinRequests: deriveHintStatus({
+        // Same lifecycle as invites: no persistent dismiss — the alert
+        // self-clears when the requests are approved (roster gains the
+        // applicant) or ignored (dismissed set), both reactive in the hook.
+        applicable: getJoinRequestAlert().count > 0,
+        running: false,
+        confirmed: false,
+        everOpen: everOpen.has('joinRequests')
       })
     };
   });
@@ -335,6 +360,14 @@ export function useAssistantHints() {
       modalStore.openModal('concordInvites');
       return;
     }
+    if (id === 'joinRequests') {
+      // The members page carries the actionable queue (JoinRequestsPanel).
+      // Multiple communities pending → the one with the newest request first;
+      // the count on the card tells the admin there may be more.
+      const community = getJoinRequestAlert().communities[0];
+      if (community) goto(`/c/${nip19.npubEncode(community.pubkey)}?view=members`);
+      return;
+    }
     if (running.has(id)) return;
     setRunning(id, true);
     // Fire-and-forget like the banners: on success the underlying store flips
@@ -384,11 +417,14 @@ export function useAssistantHints() {
       HINT_IDS.flatMap((id) => {
         const status = statuses[id];
         if (status === null || dismissed.has(id)) return [];
-        /** @type {{id: HintId, status: HintStatus, variant?: string, address?: string}} */
+        /** @type {{id: HintId, status: HintStatus, variant?: string, address?: string, count?: number}} */
         const entry = { id, status };
         if (id === 'nip05') {
           entry.variant = nip05Meta.variant;
           entry.address = nip05Meta.address;
+        }
+        if (id === 'joinRequests') {
+          entry.count = getJoinRequestAlert().count;
         }
         return [entry];
       }),

@@ -23,7 +23,7 @@ vi.mock('$lib/stores/user-profile.svelte.js', () => ({
 
 import TermiChatWindow from '../TermiChatWindow.svelte';
 
-/** @param {Array<{id: string, status: string, variant?: string, address?: string}>} hints */
+/** @param {Array<{id: string, status: string, variant?: string, address?: string, count?: number}>} hints */
 function renderWindow(hints) {
   return render(TermiChatWindow, {
     props: {
@@ -65,5 +65,23 @@ describe('TermiChatWindow nip05 hint variants', () => {
     expect(card.textContent).toContain('maria@edufeed.org');
     const action = getByTestId('termi-hint-nip05-action');
     expect(action.textContent).toMatch(/aktivieren|activate/i);
+  });
+});
+
+// The joinRequests hint (issue 68669ba4): a NIP-29 admin's pending
+// Beitrittsanfragen, with count-aware copy and a review action leading to
+// the members page.
+describe('TermiChatWindow joinRequests hint', () => {
+  it('renders the count and a review action', () => {
+    const { getByTestId } = renderWindow([{ id: 'joinRequests', status: 'open', count: 3 }]);
+    const card = getByTestId('termi-hint-joinRequests');
+    expect(card.textContent).toContain('3');
+    expect(getByTestId('termi-hint-joinRequests-action')).toBeTruthy();
+  });
+
+  it('uses the singular body for a single request', () => {
+    const { getByTestId } = renderWindow([{ id: 'joinRequests', status: 'open', count: 1 }]);
+    const card = getByTestId('termi-hint-joinRequests');
+    expect(card.textContent).toMatch(/Eine Beitrittsanfrage|One join request/);
   });
 });

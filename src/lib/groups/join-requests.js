@@ -84,12 +84,22 @@ export function pendingJoinRequests({ events, membersByGroup, rootId, dismissed 
     .sort((a, b) => b.createdAt - a.createdAt);
 }
 
+const DISMISSED_KEY_PREFIX = 'groups/join-requests/dismissed/';
+
+/**
+ * Same-tab signal that a dismissed set changed. localStorage 'storage' events
+ * only fire in OTHER tabs, so the global alert hook (join-request-alerts)
+ * would miss an "Ignorieren" done in the members page of this very tab
+ * without it.
+ */
+export const JOIN_REQUESTS_DISMISSED_EVENT = 'edufeed:join-requests-dismissed';
+
 /**
  * localStorage key for a community's dismissed join-request ids.
  * @param {string} communityId
  */
 export function dismissedJoinRequestsKey(communityId) {
-  return `groups/join-requests/dismissed/${communityId}`;
+  return `${DISMISSED_KEY_PREFIX}${communityId}`;
 }
 
 /** @param {string} communityId @returns {Set<string>} */
@@ -107,7 +117,31 @@ export function readDismissedJoinRequests(communityId) {
 export function writeDismissedJoinRequests(communityId, ids) {
   try {
     localStorage.setItem(dismissedJoinRequestsKey(communityId), JSON.stringify([...ids]));
+    window.dispatchEvent(new CustomEvent(JOIN_REQUESTS_DISMISSED_EVENT));
   } catch {
     // Quota/privacy-mode failures degrade to session-only dismissal.
   }
+}
+
+/**
+ * Union of EVERY community's dismissed request ids. The global alert hook
+ * works with group ids, not community ids, so it cannot pick one per-community
+ * set — but an id dismissed anywhere must not keep the alert badge alive.
+ * @returns {Set<string>}
+ */
+export function readAllDismissedJoinRequests() {
+  /** @type {Set<string>} */
+  const all = new Set();
+  try {
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (!key || !key.startsWith(DISMISSED_KEY_PREFIX)) continue;
+      for (const id of readDismissedJoinRequests(key.slice(DISMISSED_KEY_PREFIX.length))) {
+        all.add(id);
+      }
+    }
+  } catch {
+    // localStorage unavailable — nothing is dismissed.
+  }
+  return all;
 }

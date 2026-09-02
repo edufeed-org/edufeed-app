@@ -61,11 +61,21 @@ vi.mock('$lib/stores/nostr-infrastructure.svelte', () => ({
 vi.mock('$lib/loaders/relay-list-loader.js', () => ({
   createRelayListLoader: () => () => () => ({ subscribe: () => ({ unsubscribe: () => {} }) })
 }));
-vi.mock('$lib/services/relay-service.svelte.js', () => ({ getRelayListLookupRelays: () => [] }));
+vi.mock('$lib/services/relay-service.svelte.js', () => ({
+  getRelayListLookupRelays: () => [],
+  // Needed by the joinRequests hint's joined-communities lane; empty keeps it inert.
+  getWriteRelays: async () => []
+}));
 vi.mock('$lib/helpers/relay-helper.js', () => ({
   getDefaultRelayList: () => [],
   getDefaultDmRelays: () => [],
-  hasMailboxRelays: () => true
+  hasMailboxRelays: () => true,
+  // Pulled in by the joinRequests hint's hook chain (join-request-alerts →
+  // my-groups / joined-communikey-events → loaders/base). Empty relay lists
+  // keep every one of those lanes inert in this suite.
+  getEventLoaderLookupRelays: () => [],
+  getAllLookupRelays: () => [],
+  getGroupsRelays: () => []
 }));
 vi.mock('$lib/services/relay-list-backfill.js', () => ({
   publishDefaultRelayList: async () => {}

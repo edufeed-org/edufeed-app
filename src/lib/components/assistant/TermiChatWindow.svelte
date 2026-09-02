@@ -16,7 +16,7 @@
    *   expanded?: boolean,
    *   onToggleExpand: () => void,
    *   onClose: () => void,
-   *   hints: Array<{id: string, status: string, variant?: string, address?: string}>,
+   *   hints: Array<{id: string, status: string, variant?: string, address?: string, count?: number}>,
    *   openCount: number,
    *   runHint: (id: any) => void,
    *   customizeHint: (id: any) => void,
@@ -103,9 +103,24 @@
    * The nip05 hint tracks the membership application: the copy depends on the
    * hint's variant ('apply' reminder, passive 'pending' note, celebratory
    * 'ready' card with one-click activation). Other hints use hintCopy as-is.
-   * @param {{id: string, variant?: string, address?: string}} hint
+   * @param {{id: string, variant?: string, address?: string, count?: number}} hint
    */
   function copyFor(hint) {
+    if (hint.id === 'joinRequests') {
+      const count = hint.count ?? 0;
+      return {
+        title: m.termi_hint_join_requests_title(),
+        // Singular/plural picked here — plain {count} interpolation cannot
+        // bend the German noun.
+        body:
+          count === 1
+            ? m.termi_hint_join_requests_body_one()
+            : m.termi_hint_join_requests_body({ count }),
+        action: m.termi_hint_join_requests_cta(),
+        secondary: null,
+        doing: null
+      };
+    }
     if (hint.id === 'nip05' && hint.variant === 'ready') {
       return {
         title: m.termi_hint_nip05_ready_title(),
