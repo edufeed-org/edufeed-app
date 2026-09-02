@@ -193,6 +193,50 @@ const membersEventAdmin = signWith(
   },
   RELAY_SK
 );
+// A message from OTHER inside `adminchat`, so the moderation tests have
+// something for the admin (ME) to delete. h-scoped to adminchat only — the
+// shared beechat fixtures must not gain a deletable row in every other test.
+const adminChatMessage = signWith(
+  { kind: 9, content: 'spam in the admin channel', tags: [['h', 'adminchat']] },
+  OTHER_SK
+);
+// A relay-observed moderation deletion (kind 9005) for `modchat`'s only
+// message — the incoming-deletion test. Own fixture group rather than
+// beechat: a 9005 fed through the SHARED eventStore would hide the target
+// from every later test's timeline too.
+const metadataEventMod = signWith(
+  { kind: 39000, tags: [['d', 'modchat'], ['name', 'Mod Chat'], ['private']] },
+  RELAY_SK
+);
+const membersEventMod = signWith(
+  {
+    kind: 39002,
+    tags: [
+      ['d', 'modchat'],
+      ['p', ME]
+    ]
+  },
+  RELAY_SK
+);
+const modChatMessage = signWith(
+  { kind: 9, content: 'about to be moderated away', tags: [['h', 'modchat']] },
+  OTHER_SK
+);
+const modChatKeptMessage = signWith(
+  { kind: 9, content: 'this one stays', created_at: 1699999999, tags: [['h', 'modchat']] },
+  OTHER_SK
+);
+const modChatDeletion = signWith(
+  {
+    kind: 9005,
+    created_at: 1700000001,
+    tags: [
+      ['h', 'modchat'],
+      ['e', modChatMessage.id]
+    ]
+  },
+  RELAY_SK
+);
 // `webxdcchat`: a private group with ME as a member, whose single message is
 // a webxdc app share — isolated from `beechat`'s shared default subscription
 // branch so this fixture's own message doesn't leak into every other test's
@@ -468,6 +512,7 @@ vi.mock('$lib/stores/nostr-infrastructure.svelte', async () => {
           if (d === 'hangchat') return rxMerge(rxOf(metadataEventHang, membersEventHang), rxNever);
           if (d === 'adminchat')
             return rxOf(metadataEventAdmin, adminsEventAdmin, membersEventAdmin);
+          if (d === 'modchat') return rxOf(metadataEventMod, membersEventMod);
           if (d === 'webxdcchat') return rxOf(metadataEventWebxdc, membersEventWebxdc);
           if (d === 'livetitlechat') return rxOf(metadataEventLiveTitle, membersEventLiveTitle);
           if (d === 'authchat') return rxOf(metadataEventAuthNoPrivate, membersEventAuthNoPrivate);
@@ -548,6 +593,12 @@ vi.mock('$lib/stores/nostr-infrastructure.svelte', async () => {
           if (h === 'rosteronlychat') return rxNever;
           // hangchat: the chat read hangs exactly like the roster read does.
           if (h === 'hangchat') return rxNever;
+          // adminchat: one message from OTHER for the admin-deletion tests.
+          if (h === 'adminchat') return rxMerge(rxOf(adminChatMessage), rxNever);
+          // modchat: two messages plus a relay-observed 9005 deleting one of
+          // them — the incoming-moderation test.
+          if (h === 'modchat')
+            return rxMerge(rxOf(modChatMessage, modChatKeptMessage, modChatDeletion), rxNever);
           // webxdcchat: isolated timeline holding only the webxdc share.
           if (h === 'webxdcchat') return rxMerge(rxOf(webxdcShareEvent), rxNever);
           // livetitlechat: isolated timeline holding only its own webxdc
@@ -648,7 +699,12 @@ vi.mock(
 );
 vi.mock('$lib/components/shared/LinkPreviewList.svelte', () => ({ default: Stub }));
 vi.mock('$lib/components/shared/ProfileAvatar.svelte', () => ({ default: Stub }));
-vi.mock('$lib/components/icons', () => ({ ReplyIcon: Stub, PeopleIcon: Stub, MoreIcon: Stub }));
+vi.mock('$lib/components/icons', () => ({
+  ReplyIcon: Stub,
+  PeopleIcon: Stub,
+  MoreIcon: Stub,
+  TrashIcon: Stub
+}));
 // The members modal embeds the contact search; its autocomplete machinery is
 // out of scope here (GroupMembersModal.test.js covers it via the same stub).
 vi.mock(
@@ -684,6 +740,11 @@ vi.mock('$lib/paraglide/messages', () => ({
   groups_join_required: () => 'Join this group first',
   groups_auth_required: () => 'auth required',
   groups_reply: () => 'Reply',
+  groups_message_delete: () => 'Delete message',
+  groups_message_delete_confirm_title: () => 'Delete this message?',
+  groups_message_delete_confirm_body: () => 'The message is removed from the channel for everyone.',
+  groups_message_delete_confirm_action: () => 'Delete',
+  groups_message_delete_failed: () => 'Message could not be deleted',
   groups_input_placeholder: (/** @type {{ name: string }} */ { name }) => `Message ${name}`,
   groups_badge_members_only: () => 'Members only',
   groups_badge_invite_only: () => 'Invite only',
@@ -1675,6 +1736,54 @@ describe('GroupChat', () => {
       } finally {
         window.history.replaceState(null, '', '/');
       }
+    });
+  });
+
+  // NIP-29 moderation: admins remove others' chat messages via kind 9005
+  // (delete-event) published to the group relay; the row disappears locally
+  // without waiting for the relay to actually drop the event.
+  describe('moderation', () => {
+    /** The rendered text contents of every message bubble. @param {HTMLElement} container */
+    const bubbleTexts = (container) =>
+      [...container.querySelectorAll('[data-testid="ncr-content"]')].map((el) => el.textContent);
+
+    it('lets an admin delete another member’s message with a confirmed 9005 to the group relay', async () => {
+      const { container } = render(GroupChat, {
+        props: { pointer: { relay: GROUP_RELAY, id: 'adminchat' } }
+      });
+      await waitFor(() => expect(bubbleTexts(container)).toContain('spam in the admin channel'));
+      await fireEvent.click(await screen.findByTestId('chat-message-delete'));
+      // Two-step: the destructive publish only happens after the confirm.
+      expect(publishMock.mock.calls.some(([e]) => e?.kind === 9005)).toBe(false);
+      await fireEvent.click(await screen.findByTestId('group-message-delete-confirm'));
+      await waitFor(() => {
+        const deletion = publishMock.mock.calls.map(([e]) => e).find((e) => e?.kind === 9005);
+        expect(deletion).toBeTruthy();
+        expect(deletion.tags).toEqual(
+          expect.arrayContaining([
+            ['h', 'adminchat'],
+            ['e', adminChatMessage.id]
+          ])
+        );
+      });
+      // The row is gone from the local timeline immediately.
+      await waitFor(() =>
+        expect(bubbleTexts(container)).not.toContain('spam in the admin channel')
+      );
+    });
+
+    it('offers no delete action to a plain member', async () => {
+      const { container } = render(GroupChat, { props: { pointer } });
+      await waitFor(() => expect(bubbleTexts(container)).toContain('hello from armada'));
+      expect(screen.queryByTestId('chat-message-delete')).toBeNull();
+    });
+
+    it('hides a message the relay already served a 9005 for', async () => {
+      const { container } = render(GroupChat, {
+        props: { pointer: { relay: GROUP_RELAY, id: 'modchat' } }
+      });
+      await waitFor(() => expect(bubbleTexts(container)).toContain('this one stays'));
+      expect(bubbleTexts(container)).not.toContain('about to be moderated away');
     });
   });
 

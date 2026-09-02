@@ -9,6 +9,7 @@ import {
   EDIT_METADATA_KIND,
   CREATE_GROUP_KIND,
   DELETE_GROUP_KIND,
+  DELETE_EVENT_KIND,
   GROUP_METADATA_KIND,
   GROUP_ADMINS_KIND
 } from 'applesauce-common/helpers/groups';
@@ -85,6 +86,18 @@ export function buildRemoveUserTemplate(groupId, pubkey) {
 /** @param {string} groupId */
 export function buildDeleteGroupTemplate(groupId) {
   return template(DELETE_GROUP_KIND, [['h', groupId]]);
+}
+
+/**
+ * NIP-29 delete-event (9005): an admin removes someone else's event from the
+ * group. The relay drops it from its store; clients drop it from view.
+ * @param {string} groupId @param {string} eventId
+ */
+export function buildDeleteEventTemplate(groupId, eventId) {
+  return template(DELETE_EVENT_KIND, [
+    ['h', groupId],
+    ['e', eventId]
+  ]);
 }
 
 /** 16 hex chars — the short relay-scoped id style Armada uses. */

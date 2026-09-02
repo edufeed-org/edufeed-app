@@ -14,7 +14,7 @@
   import NostrContentRenderer from '$lib/components/shared/NostrContentRenderer.svelte';
   import LinkPreviewList from '$lib/components/shared/LinkPreviewList.svelte';
   import ProfileAvatar from '$lib/components/shared/ProfileAvatar.svelte';
-  import { ReplyIcon } from '$lib/components/icons';
+  import { ReplyIcon, TrashIcon } from '$lib/components/icons';
   import { profileLink } from '$lib/helpers/nostrUtils.js';
 
   /**
@@ -28,6 +28,8 @@
    * @property {{ displayName: string, content: string } | null} [replyPreview] - resolved reply-parent preview, or null
    * @property {((message: any) => void) | null} [onReply] - shows a hover-reveal reply button in the header when provided
    * @property {string} [replyTitle] - title attribute for the reply button (default "Reply", override for i18n)
+   * @property {((message: any) => void) | null} [onDelete] - shows a hover-reveal delete button in the header when provided (caller owns permission checks and confirmation)
+   * @property {string} [deleteTitle] - title attribute for the delete button (default "Delete", override for i18n)
    * @property {boolean} [showLinkPreviews] - render LinkPreviewList below the message content (default false)
    * @property {number} [replyCount] - shows an "N replies" affordance in the footer when > 0 and `onOpenThread` is set
    * @property {string} [replyCountLabel] - pre-formatted label for that affordance (caller owns pluralisation/i18n)
@@ -47,6 +49,8 @@
     replyPreview = null,
     onReply = null,
     replyTitle = 'Reply',
+    onDelete = null,
+    deleteTitle = 'Delete',
     showLinkPreviews = false,
     replyCount = 0,
     replyCountLabel = '',
@@ -93,6 +97,17 @@
         title={replyTitle}
       >
         <ReplyIcon class="h-3.5 w-3.5" />
+      </button>
+    {/if}
+    {#if onDelete}
+      <button
+        type="button"
+        data-testid="chat-message-delete"
+        onclick={() => onDelete(message)}
+        class="ml-1 text-error opacity-0 transition-opacity group-hover:opacity-70 hover:!opacity-100"
+        title={deleteTitle}
+      >
+        <TrashIcon class="h-3.5 w-3.5" />
       </button>
     {/if}
   </div>

@@ -113,6 +113,19 @@ describe('group management templates', () => {
     expect(buildDeleteGroupTemplate(ID)).toMatchObject({ kind: 9008, tags: [['h', ID]] });
   });
 
+  it('delete-event is a kind 9005 naming the group and the target event', async () => {
+    const { buildDeleteEventTemplate } = await import('$lib/groups/group-management.js');
+    const eventId = 'e'.repeat(64);
+    expect(buildDeleteEventTemplate(ID, eventId)).toMatchObject({
+      kind: 9005,
+      content: '',
+      tags: [
+        ['h', ID],
+        ['e', eventId]
+      ]
+    });
+  });
+
   it('generateGroupId yields 16 lowercase hex chars, unique-ish', () => {
     const a = generateGroupId();
     expect(a).toMatch(/^[0-9a-f]{16}$/);
