@@ -44,8 +44,10 @@ COPY --from=builder /app/build ./build
 RUN addgroup -g 1001 -S nodejs && \
     adduser -S nodejs -u 1001
 
-# Change ownership
-RUN chown -R nodejs:nodejs /app
+# No chown -R /app: a separate RUN chown duplicates every copied file into a
+# ~400MB layer (the registry's slowest blob), and the app never writes under
+# /app — root-owned world-readable files are exactly right for a read-only
+# runtime; the PDF cache writes to /tmp (pdfSource.js).
 
 # Switch to non-root user
 USER nodejs
