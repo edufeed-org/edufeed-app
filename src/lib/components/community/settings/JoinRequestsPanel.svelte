@@ -11,11 +11,15 @@
   (measured: CLOSED 'restricted: not a member' on groups.0xchat.com), so
   the REQs authenticate on demand.
 
-  Aufnehmen = put-user on the root (community admission) + — when the
-  applicant asked for a specific channel — a put-user on that channel too
-  (A4, 2026-08-19: the members-tier blanket fan-out is retired; members join
-  those channels themselves via their own 9021). Ignorieren = local
-  dismissal by REQUEST id (a newer re-request resurfaces).
+  One row per APPLICANT (dedupe fix, 2026-09-02): a user's retries and
+  channel asks arrive as separate 9021s, and per-request rows showed the
+  same person several times. pendingJoinRequests merges them; the row lists
+  the asked channels. Aufnehmen = put-user on the root (community admission)
+  + — for every channel the applicant specifically asked for — a put-user on
+  that channel too (A4, 2026-08-19: the members-tier blanket fan-out is
+  retired; members join those channels themselves via their own 9021).
+  Ignorieren = local dismissal of ALL of the row's REQUEST ids (a newer
+  re-request resurfaces).
 
   Group-aware queue (final-review fix, 2026-08-19): membership is checked
   PER GROUP, not just against the root roster — an existing community member
@@ -163,7 +167,7 @@
   });
 
   // Root roster + every known channel roster, keyed by bare group id (the
-  // same id space a 9021's `h` tag and JoinRequestRow.groupId use — NOT the
+  // same id space a 9021's `h` tag and JoinRequestRow.groupIds use — NOT the
   // relay-qualified channelKey). A channel absent from this map has an
   // UNKNOWN roster; pendingJoinRequests treats that as "not a member" on
   // purpose (overstating the queue beats silently dropping a real request).
@@ -218,14 +222,17 @@
       }
       roster.refresh();
 
-      // The applicant knocked on a SPECIFIC channel (root queue also
+      // The applicant knocked on SPECIFIC channels (root queue also
       // collects channel-hosted 9021s, since a closed group only serves its
-      // OWN requests) — honor that one ask, whatever tier it is. No sweep
-      // beyond it: members-tier channels are self-joined via 9021 now (A4).
-      const asked = channelPointers.find((pointer) => pointer.id === row.groupId);
-      if (asked) {
+      // OWN requests) — honor each of those asks, whatever tier they are.
+      // No sweep beyond them: members-tier channels are self-joined via
+      // 9021 now (A4).
+      const asked = row.groupIds
+        .map((groupId) => channelPointers.find((pointer) => pointer.id === groupId))
+        .filter((pointer) => pointer !== undefined);
+      for (const pointer of asked) {
         try {
-          await putUserOn(asked, row.pubkey, [], /** @type {any} */ (user));
+          await putUserOn(pointer, row.pubkey, [], /** @type {any} */ (user));
         } catch (err) {
           console.error('groups: channel put-user failed after approval', err);
           showToast(m.groups_members_action_failed(), 'warning');
@@ -249,9 +256,23 @@
   function ignoreRequest(row) {
     // eslint-disable-next-line svelte/prefer-svelte-reactivity -- $state.raw Set, replaced wholesale (CLAUDE.md pattern)
     const next = new Set(dismissedIds);
-    next.add(row.id);
+    // Every ask merged into this row — dismissing the person, not one event.
+    for (const id of row.ids) next.add(id);
     dismissedIds = next;
     writeDismissedJoinRequests(communityId, next);
+  }
+
+  /**
+   * Names of the channels a row asked for, for display — the root ask is
+   * implied by the row itself, and an asked channel we can't resolve to a
+   * discovered channel falls back to its bare group id.
+   * @param {import('$lib/groups/join-requests.js').JoinRequestRow} row
+   */
+  function askedChannelNames(row) {
+    const channels = getCommunityChannels().channels;
+    return row.groupIds
+      .filter((groupId) => groupId !== (roster.pointer?.id ?? ''))
+      .map((groupId) => channels.find((channel) => channel.id === groupId)?.name || groupId);
   }
 </script>
 
@@ -271,7 +292,8 @@
     {/if}
   {:else}
     <div class="mt-2 flex flex-col gap-2">
-      {#each pendingRequests as row (row.id)}
+      {#each pendingRequests as row (row.pubkey)}
+        {@const channelNames = askedChannelNames(row)}
         <div
           class="flex items-center gap-3 rounded-lg bg-base-200 px-3 py-2"
           data-testid="join-request-row"
@@ -288,6 +310,11 @@
             </p>
             {#if row.reason}
               <p class="truncate text-xs text-base-content/60 italic">{row.reason}</p>
+            {/if}
+            {#if channelNames.length > 0}
+              <p class="truncate text-xs text-base-content/60" data-testid="join-request-channels">
+                {m.community_join_requests_channels({ channels: channelNames.join(', ') })}
+              </p>
             {/if}
           </div>
           <button
