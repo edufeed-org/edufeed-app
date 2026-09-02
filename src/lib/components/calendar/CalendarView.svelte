@@ -2,7 +2,7 @@
   import { SvelteDate } from 'svelte/reactivity';
   import { onMount } from 'svelte';
   import { afterNavigate, replaceState } from '$app/navigation';
-  import { formatDateParam } from '$lib/helpers/urlParams.js';
+  import { formatDateParam, applyCalendarFilterState } from '$lib/helpers/urlParams.js';
   import { page } from '$app/stores';
   import {
     communityCalendarTimelineLoader,
@@ -360,6 +360,48 @@
     if ((url.searchParams.get('date') || '') === next) return;
     if (next) url.searchParams.set('date', next);
     else url.searchParams.delete('date');
+    try {
+      replaceState(url, {});
+    } catch {
+      // Router not initialized yet (first paint) — the default URL is fine.
+    }
+  });
+
+  // State → URL: mirror the selected filters into query params so a filtered
+  // view can be shared/bookmarked. This is the ONLY writer of filter params —
+  // filter controls write to the calendarFilters store and this effect picks
+  // the change up reactively (restore runs via syncInitialUrlState /
+  // afterNavigate above). Uses replaceState like the date effect so filter
+  // tweaks don't spam the history stack; params at their defaults are removed
+  // to keep the URL clean.
+  $effect(() => {
+    // Read every filter field first so the effect tracks them all as deps.
+    const filterState = {
+      tags: calendarFilters.selectedTags,
+      relays: calendarFilters.selectedRelays,
+      followListIds: calendarFilters.selectedFollowListIds,
+      search: calendarFilters.searchQuery,
+      featured: calendarFilters.selectedFeaturedAuthors,
+      people: calendarFilters.onlyFollowsMode,
+      hidden: calendarFilters.hiddenAuthorPubkeys,
+      publishers: calendarFilters.selectedAuthorPubkeys
+    };
+    if (typeof window === 'undefined') return;
+    // Community calendars render no filter UI — the singleton store may still
+    // hold filters from /calendar, which must not leak into community URLs.
+    if (communityMode) return;
+    // eslint-disable-next-line svelte/prefer-svelte-reactivity -- local, non-reactive URL work
+    const url = new URL(window.location.href);
+    const next = applyCalendarFilterState(url.searchParams, filterState);
+    // Order-insensitive comparison: skip the write when nothing changed.
+    // eslint-disable-next-line svelte/prefer-svelte-reactivity -- local comparison copy
+    const a = new URLSearchParams(next);
+    // eslint-disable-next-line svelte/prefer-svelte-reactivity -- local comparison copy
+    const b = new URLSearchParams(url.searchParams);
+    a.sort();
+    b.sort();
+    if (a.toString() === b.toString()) return;
+    url.search = next.toString();
     try {
       replaceState(url, {});
     } catch {

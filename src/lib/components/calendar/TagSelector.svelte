@@ -6,9 +6,7 @@
 <script>
   // @ts-ignore - SvelteMap/SvelteSet are valid reactive collections
   import { SvelteMap, SvelteSet } from 'svelte/reactivity';
-  import { page } from '$app/stores';
   import { calendarFilters } from '$lib/stores/calendar-filters.svelte.js';
-  import { updateQueryParams } from '$lib/helpers/urlParams.js';
   import { PlusIcon, TagIcon } from '../icons';
   import * as m from '$lib/paraglide/messages';
 
@@ -25,7 +23,8 @@
 
   /**
    * Add a user-typed tag. Trims, strips a leading `#`, lowercases, dedupes,
-   * then routes through the existing toggleTag() so store + URL stay in sync.
+   * then routes through the existing toggleTag() store update (CalendarView's
+   * filter effect mirrors the store into the URL).
    * The chip renders automatically because selectedNotPopular prepends any
    * selected-but-not-popular tag to displayedTags.
    */
@@ -111,11 +110,8 @@
       ? selectedTags.filter((t) => t !== tag)
       : [...selectedTags, tag];
 
-    // Update store
+    // Update store — CalendarView's filter effect mirrors it into the URL
     calendarFilters.setSelectedTags(newTags);
-
-    // Update URL
-    updateQueryParams($page.url.searchParams, { tags: newTags });
 
     // Notify parent
     onTagFilterChange(newTags);
@@ -125,11 +121,8 @@
    * Clear all selected tags
    */
   function clearTags() {
-    // Update store
+    // Update store — CalendarView's filter effect mirrors it into the URL
     calendarFilters.clearSelectedTags();
-
-    // Update URL (empty array removes the parameter)
-    updateQueryParams($page.url.searchParams, { tags: [] });
 
     // Notify parent
     onTagFilterChange([]);

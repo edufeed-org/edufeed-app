@@ -4,13 +4,13 @@
   Reads directly from `calendarFilters` so it stays in sync regardless of
   which control added the filter. Each chip's `×` calls the matching store
   helper, so removing a chip has the same effect as unchecking the source.
+  URL sync is centralized: CalendarView's filter effect mirrors the store
+  into the query params, so store writes here are all that's needed.
 -->
 
 <script>
-  import { page } from '$app/stores';
   import { calendarFilters } from '$lib/stores/calendar-filters.svelte.js';
   import { useProfileMap } from '$lib/stores/profile-map.svelte.js';
-  import { updateQueryParams } from '$lib/helpers/urlParams.js';
   import { CloseIcon } from '../icons';
   import * as m from '$lib/paraglide/messages';
 
@@ -20,17 +20,6 @@
 
   /** @type {Props} */
   let { onChange = () => {} } = $props();
-
-  // Push the current store state to the URL. `updateQueryParams` drops empty
-  // arrays and empty strings, so deselected filters disappear from the URL.
-  function syncUrl() {
-    updateQueryParams($page.url.searchParams, {
-      tags: calendarFilters.selectedTags,
-      relays: calendarFilters.selectedRelays,
-      authors: calendarFilters.selectedFollowListIds,
-      search: calendarFilters.searchQuery
-    });
-  }
 
   // Profile map for rendering friendly names on per-person chips.
   const getProfiles = useProfileMap(() => calendarFilters.selectedFeaturedAuthors);
@@ -51,29 +40,21 @@
 
   function removeTag(/** @type {string} */ tag) {
     calendarFilters.removeTag(tag);
-    syncUrl();
     onChange();
   }
 
   function removeSearch() {
     calendarFilters.clearSearchQuery();
-    syncUrl();
     onChange();
   }
 
   function removeOnlyFollows() {
     calendarFilters.setOnlyFollowsMode('off');
-    // onlyFollowsMode is not URL-mapped, but keep syncUrl so any other
-    // in-flight store changes are flushed to the URL consistently.
-    syncUrl();
     onChange();
   }
 
   function removePerson(/** @type {string} */ pubkey) {
     calendarFilters.removeFeaturedAuthor(pubkey);
-    // selectedFeaturedAuthors is not URL-mapped today; call syncUrl for
-    // consistency so any already-mutated store fields propagate.
-    syncUrl();
     onChange();
   }
 
@@ -81,13 +62,11 @@
     calendarFilters.setSelectedFollowListIds(
       calendarFilters.selectedFollowListIds.filter((id) => id !== listId)
     );
-    syncUrl();
     onChange();
   }
 
   function removeRelay(/** @type {string} */ url) {
     calendarFilters.removeRelay(url);
-    syncUrl();
     onChange();
   }
 
@@ -98,7 +77,6 @@
     calendarFilters.clearSelectedFeaturedAuthors();
     calendarFilters.clearSelectedFollowListIds();
     calendarFilters.clearSelectedRelays();
-    syncUrl();
     onChange();
   }
 
