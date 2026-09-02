@@ -3041,6 +3041,8 @@
   "wizard_access_worldreadable_hint": "Anyone on the network can read along — writing stays members-only.",
   "wizard_access_world": "Public — anyone can read",
   "wizard_access_world_hint": "Anyone on the network can read this channel; only community members can post.",
+  "wizard_hidden_label": "Hidden room",
+  "wizard_hidden_hint": "Doesn't appear in the channel list; only invited members see it.",
   "wizard_access_concord_hint": "Want a channel only community members can read? Create an encrypted channel instead.",
   "wizard_no_shared_relay": "This community's channels live on different relays — cannot create here.",
   "wizard_invite_lead": "Add people who should be in this channel from the start — members can be managed any time later.",

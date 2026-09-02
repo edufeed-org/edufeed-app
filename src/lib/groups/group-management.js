@@ -24,7 +24,7 @@ const template = (kind, tags) => ({ kind, content: '', created_at: now(), tags }
  * The metadata tag block shared by create (9007) and edit (9002): fields only
  * when non-empty after trim, then BOTH marker sides so a flip always
  * overwrites.
- * @param {{name?: string, about?: string, picture?: string, isPublic: boolean, isOpen: boolean, parent?: string}} meta
+ * @param {{name?: string, about?: string, picture?: string, isPublic: boolean, isOpen: boolean, isHidden?: boolean, parent?: string}} meta
  * @returns {string[][]}
  */
 function metadataTags(meta) {
@@ -36,6 +36,10 @@ function metadataTags(meta) {
   }
   tags.push([meta.isPublic ? 'public' : 'private']);
   tags.push([meta.isOpen ? 'open' : 'closed']);
+  // Unlisted room. Unlike the marker pairs above, `hidden` has NO negation
+  // tag in NIP-29 — the pyramid fork reads absence as "keep current", so
+  // only ever emit it, never a counterpart.
+  if (meta.isHidden) tags.push(['hidden']);
   // "Open" always means open to READ. Without `restricted`, NIP-29 lets the
   // whole network WRITE into the group — design round 4 (buzz thread):
   // "restricted bleibt in allen drei Stufen gesetzt".
@@ -54,7 +58,7 @@ function metadataTags(meta) {
  * relays that read metadata only from 9002 ignore the extra tags (khatru,
  * measured on groups.0xchat.com).
  * @param {string} groupId
- * @param {{name?: string, about?: string, picture?: string, isPublic: boolean, isOpen: boolean, parent?: string}} [meta]
+ * @param {{name?: string, about?: string, picture?: string, isPublic: boolean, isOpen: boolean, isHidden?: boolean, parent?: string}} [meta]
  */
 export function buildCreateGroupTemplate(groupId, meta) {
   return template(CREATE_GROUP_KIND, [['h', groupId], ...(meta ? metadataTags(meta) : [])]);
@@ -62,7 +66,7 @@ export function buildCreateGroupTemplate(groupId, meta) {
 
 /**
  * @param {string} groupId
- * @param {{name?: string, about?: string, picture?: string, isPublic: boolean, isOpen: boolean, parent?: string}} meta
+ * @param {{name?: string, about?: string, picture?: string, isPublic: boolean, isOpen: boolean, isHidden?: boolean, parent?: string}} meta
  */
 export function buildEditGroupMetadataTemplate(groupId, meta) {
   return template(EDIT_METADATA_KIND, [['h', groupId], ...metadataTags(meta)]);

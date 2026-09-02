@@ -64,6 +64,11 @@
   // pointer marker) is retired — members-only-private is a Concord channel now.
   /** @type {'members' | 'invited' | 'world'} */
   let tier = $state('invited');
+  // NIP-29 only: unlisted room (bare `hidden` metadata tag). The pyramid fork
+  // lists even private channels' names unless they carry `hidden` — this is
+  // the opt-out. Offered for the 'invited' tier alone; accessChoiceToNip29
+  // drops a stale flag should the tier switch back to 'world'.
+  let hiddenRoom = $state(false);
   // NOTE: no description field — CORD ChannelMetadata has no description and
   // createChannel only takes {private, voice}; don't collect what we can't store.
   /** @type {string[]} */
@@ -220,7 +225,7 @@
       const user = manager.active;
       if (!user) throw new Error('not signed in');
       const id = generateGroupId();
-      const { isPublic, isOpen } = accessChoiceToNip29({ tier });
+      const { isPublic, isOpen, isHidden } = accessChoiceToNip29({ tier, hidden: hiddenRoom });
       const relayConn = pool.relay(flatBase);
       // NIP-29 Subgroups: declare the community root as this channel's parent
       // (same-host only, per `sameHost` above) so the relay auto-admits
@@ -233,6 +238,7 @@
           name: name.trim(),
           isPublic,
           isOpen,
+          isHidden,
           parent: sameHost ? membershipPointer.id : undefined
         },
         user
@@ -389,6 +395,19 @@
           />
           <span>🔒 <b>{m.wizard_access_invited()}</b> — {m.wizard_access_invited_hint()}</span>
         </label>
+        {#if isGroupMode && tier === 'invited'}
+          <!-- NIP-29 only: Concord channels are invisible to outsiders by
+            construction, so an extra "hidden" switch would be noise there. -->
+          <label class="ml-6 flex cursor-pointer items-start gap-2 py-1 text-sm">
+            <input
+              type="checkbox"
+              class="checkbox mt-0.5 checkbox-sm"
+              data-testid="wizard-hidden-room"
+              bind:checked={hiddenRoom}
+            />
+            <span>🫥 <b>{m.wizard_hidden_label()}</b> — {m.wizard_hidden_hint()}</span>
+          </label>
+        {/if}
       </fieldset>
       {#if isGroupMode}
         <p class="mb-1 text-xs text-base-content/60" data-testid="wizard-access-concord-hint">

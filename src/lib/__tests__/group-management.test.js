@@ -90,6 +90,42 @@ describe('group management templates', () => {
     expect(t.tags.some((tag) => tag[0] === 'parent')).toBe(false);
   });
 
+  it('create-group carries a bare hidden tag when isHidden is set', () => {
+    // The pyramid fork (edufeed-v1.3) lists private channels unless their
+    // metadata carries `hidden` — an unlisted room must be born hidden, not
+    // hidden by a later edit that races the first listing.
+    const t = buildCreateGroupTemplate(ID, {
+      name: 'x',
+      isPublic: false,
+      isOpen: false,
+      isHidden: true
+    });
+    expect(t.tags).toContainEqual(['hidden']);
+  });
+
+  it('edit-metadata carries a bare hidden tag when isHidden is set', () => {
+    const t = buildEditGroupMetadataTemplate(ID, {
+      name: 'x',
+      isPublic: false,
+      isOpen: false,
+      isHidden: true
+    });
+    expect(t.tags).toContainEqual(['hidden']);
+  });
+
+  it('omits the hidden tag when isHidden is false — NIP-29 has no un-hide tag', () => {
+    // Unlike public|private and open|closed there is no negation marker:
+    // absence means "keep current" on the fork, so emitting anything for
+    // false would be wrong and emitting ['hidden'] would hide the room.
+    const t = buildEditGroupMetadataTemplate(ID, {
+      name: 'x',
+      isPublic: false,
+      isOpen: false,
+      isHidden: false
+    });
+    expect(t.tags.some((tag) => tag[0] === 'hidden')).toBe(false);
+  });
+
   it('put-user matches applesauce shape with and without roles', () => {
     expect(buildPutUserTemplate(ID, PK, ['admin']).tags).toEqual([
       ['h', ID],

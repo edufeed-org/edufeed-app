@@ -11,16 +11,21 @@
 // private group).
 
 /**
- * @param {{tier: 'world'|'invited'|'members'}} choice `members` (a Concord-only
- *   tier) never reaches this NIP-29 mapper in practice, but the wizard's shared
- *   `tier` state carries the union — it fails closed here (not 'world' → private).
- * @returns {{isPublic: boolean, isOpen: boolean}}
+ * @param {{tier: 'world'|'invited'|'members', hidden?: boolean}} choice
+ *   `members` (a Concord-only tier) never reaches this NIP-29 mapper in
+ *   practice, but the wizard's shared `tier` state carries the union — it
+ *   fails closed here (not 'world' → private). `hidden` (unlisted room) only
+ *   applies on top of a private tier: the wizard shows the checkbox for
+ *   `invited` alone, but its state survives a tier switch, so a stale flag
+ *   must never make a deliberately discoverable 'world' room unlisted.
+ * @returns {{isPublic: boolean, isOpen: boolean, isHidden: boolean}}
  */
-export function accessChoiceToNip29({ tier }) {
+export function accessChoiceToNip29({ tier, hidden = false }) {
   // Fail closed: anything that is not explicitly 'world' is private + closed.
   const isWorld = tier === 'world';
   return {
     isPublic: isWorld,
-    isOpen: isWorld
+    isOpen: isWorld,
+    isHidden: !isWorld && hidden
   };
 }

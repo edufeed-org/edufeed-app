@@ -555,6 +555,78 @@ describe('ChannelCreateWizard — NIP-29 groups', () => {
     });
   });
 
+  // Hidden rooms (pyramid fork edufeed-v1.3): even a private channel's NAME
+  // is listed unless its metadata carries `hidden` — the wizard offers the
+  // opt-out at creation time so the room is born unlisted, never briefly
+  // listed until a follow-up edit.
+  it('offers the hidden-room checkbox only for the invited tier in NIP-29 mode', async () => {
+    await toAccessStep(nip29Community());
+
+    // Default tier is 'invited' → checkbox present.
+    expect(screen.getByTestId('wizard-hidden-room')).toBeTruthy();
+
+    await fireEvent.click(screen.getByTestId('wizard-access-world'));
+    expect(screen.queryByTestId('wizard-hidden-room')).toBeNull();
+  });
+
+  it('Concord mode never shows the hidden-room checkbox — encrypted channels are unlisted by construction', async () => {
+    await toAccessStep(concordCommunity());
+    expect(screen.queryByTestId('wizard-hidden-room')).toBeNull();
+  });
+
+  it('creates the group with isHidden when the hidden-room checkbox is ticked', async () => {
+    const onCreated = vi.fn();
+    render(ChannelCreateWizard, {
+      props: { communikeyEvent: nip29Community(), onClose: () => {}, onCreated }
+    });
+    const nameInput = screen.getByPlaceholderText(/Staff room|Lehrer/);
+    await fireEvent.input(nameInput, { target: { value: 'Mathe' } });
+    await fireEvent.click(screen.getByTestId('wizard-hidden-room'));
+    await fireEvent.click(screen.getByRole('button', { name: /Next|Weiter/ })); // → final step
+    await fireEvent.click(screen.getByTestId('concord-wizard-create'));
+
+    await waitFor(() => expect(createGroupOnRelay).toHaveBeenCalledTimes(1));
+    expect(createGroupOnRelay.mock.calls[0][0].metadata).toEqual(
+      expect.objectContaining({ isPublic: false, isOpen: false, isHidden: true })
+    );
+  });
+
+  it('creates a listed group by default — isHidden false without the checkbox', async () => {
+    const onCreated = vi.fn();
+    render(ChannelCreateWizard, {
+      props: { communikeyEvent: nip29Community(), onClose: () => {}, onCreated }
+    });
+    const nameInput = screen.getByPlaceholderText(/Staff room|Lehrer/);
+    await fireEvent.input(nameInput, { target: { value: 'Mathe' } });
+    await fireEvent.click(screen.getByRole('button', { name: /Next|Weiter/ }));
+    await fireEvent.click(screen.getByTestId('concord-wizard-create'));
+
+    await waitFor(() => expect(createGroupOnRelay).toHaveBeenCalledTimes(1));
+    expect(createGroupOnRelay.mock.calls[0][0].metadata).toEqual(
+      expect.objectContaining({ isHidden: false })
+    );
+  });
+
+  it('a hidden flag ticked before switching to world never reaches the relay', async () => {
+    // The checkbox disappears when the tier flips to 'world', but its state
+    // survives — accessChoiceToNip29 (real, unmocked here) must drop it.
+    const onCreated = vi.fn();
+    render(ChannelCreateWizard, {
+      props: { communikeyEvent: nip29Community(), onClose: () => {}, onCreated }
+    });
+    const nameInput = screen.getByPlaceholderText(/Staff room|Lehrer/);
+    await fireEvent.input(nameInput, { target: { value: 'Mathe' } });
+    await fireEvent.click(screen.getByTestId('wizard-hidden-room'));
+    await fireEvent.click(screen.getByTestId('wizard-access-world'));
+    await fireEvent.click(screen.getByRole('button', { name: /Next|Weiter/ }));
+    await fireEvent.click(screen.getByTestId('concord-wizard-create'));
+
+    await waitFor(() => expect(createGroupOnRelay).toHaveBeenCalledTimes(1));
+    expect(createGroupOnRelay.mock.calls[0][0].metadata).toEqual(
+      expect.objectContaining({ isPublic: true, isOpen: true, isHidden: false })
+    );
+  });
+
   it('mixed-relay pointers: aborts with the shared-relay error toast, never calls create', async () => {
     const communikeyEvent = nip29Community([
       ['group', 'chan-c', GROUP_RELAY_B, 'Other', 'members']
