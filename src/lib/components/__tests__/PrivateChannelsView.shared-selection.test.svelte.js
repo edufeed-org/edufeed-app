@@ -55,6 +55,10 @@ vi.mock('$lib/stores/config.svelte.js', () => ({
 
 vi.mock('$lib/helpers/toast', () => ({ showToast: vi.fn() }));
 
+// Rail clicks mirror the channel into ?channel= via goto — the real
+// client-side goto rejects outside an initialized SvelteKit router.
+vi.mock('$app/navigation', () => ({ goto: vi.fn(() => Promise.resolve()) }));
+
 const markChannelRead = vi.fn();
 vi.mock('$lib/concord/notifications.svelte.js', () => ({
   channelUnreadState: () => ({ unread: false, mentioned: false }),

@@ -648,7 +648,12 @@ vi.mock(
 );
 vi.mock('$lib/components/shared/LinkPreviewList.svelte', () => ({ default: Stub }));
 vi.mock('$lib/components/shared/ProfileAvatar.svelte', () => ({ default: Stub }));
-vi.mock('$lib/components/icons', () => ({ ReplyIcon: Stub, PeopleIcon: Stub, MoreIcon: Stub }));
+vi.mock('$lib/components/icons', () => ({
+  ReplyIcon: Stub,
+  PeopleIcon: Stub,
+  MoreIcon: Stub,
+  LinkIcon: Stub
+}));
 // The members modal embeds the contact search; its autocomplete machinery is
 // out of scope here (GroupMembersModal.test.js covers it via the same stub).
 vi.mock(
@@ -689,6 +694,8 @@ vi.mock('$lib/paraglide/messages', () => ({
   groups_badge_invite_only: () => 'Invite only',
   groups_badge_auth_required: () => 'Sign-in required',
   groups_badge_nip29: () => 'NIP-29',
+  chat_copy_message_link: () => 'Copy message link',
+  chat_message_link_copied: () => 'Message link copied',
   chat_thread_title: () => 'Thread',
   chat_thread_expand: () => 'Expand',
   chat_thread_collapse: () => 'Collapse',
@@ -1687,5 +1694,63 @@ describe('GroupChat', () => {
     });
     const link = await screen.findByTestId('group-host-link');
     expect(link.textContent).toContain('groups.example.com:8443');
+  });
+
+  // Message deep links (issue: link to a specific message inside a room).
+  describe('message anchor + copy link', () => {
+    it('highlights the anchored timeline message once it renders', async () => {
+      const { container } = render(GroupChat, {
+        props: { pointer, anchorMessageId: chatEvent.id }
+      });
+      await waitFor(
+        () => {
+          const row = container.querySelector(`[data-message-id="${chatEvent.id}"]`);
+          expect(row?.classList.contains('chat-message-highlight')).toBe(true);
+        },
+        // The anchor scroll settles behind a 400ms debounce.
+        { timeout: 3000 }
+      );
+    });
+
+    it('opens the thread panel when the anchored message is a folded reply', async () => {
+      const { container } = render(GroupChat, {
+        props: { pointer, anchorMessageId: firstReply.id }
+      });
+      // firstReply hangs off chatEvent, so it never renders in the main
+      // timeline — the anchor must open its thread and highlight it there.
+      await waitFor(
+        () => {
+          const row = container.querySelector(`[data-message-id="${firstReply.id}"]`);
+          expect(row?.classList.contains('chat-message-highlight')).toBe(true);
+        },
+        { timeout: 3000 }
+      );
+    });
+
+    it('copies a channel+message deep link from the row affordance', async () => {
+      const writeText = vi.fn((/** @type {string} */ _url) => Promise.resolve());
+      Object.defineProperty(navigator, 'clipboard', {
+        value: { writeText },
+        configurable: true
+      });
+      const { container } = render(GroupChat, { props: { pointer } });
+      await waitFor(() => {
+        expect(
+          container.querySelector(
+            `[data-message-id="${chatEvent.id}"] [data-testid="message-copy-link"]`
+          )
+        ).not.toBeNull();
+      });
+      await fireEvent.click(
+        /** @type {Element} */ (
+          container.querySelector(
+            `[data-message-id="${chatEvent.id}"] [data-testid="message-copy-link"]`
+          )
+        )
+      );
+      const url = String(writeText.mock.calls[0]?.[0]);
+      expect(url).toContain('channel=beechat');
+      expect(url).toContain(`message=${chatEvent.id}`);
+    });
   });
 });

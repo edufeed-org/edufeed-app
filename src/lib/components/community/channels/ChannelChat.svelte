@@ -55,9 +55,12 @@
   import ReactionChips from '$lib/components/reactions/ReactionChips.svelte';
   import MentionAutocomplete from './MentionAutocomplete.svelte';
   import { showToast } from '$lib/helpers/toast';
+  import { buildMessageDeepLink, scrollToChatMessage } from '$lib/helpers/message-anchor.js';
   import { getChannelLevel, setChannelLevel } from '$lib/concord/notifications.svelte.js';
   import * as m from '$lib/paraglide/messages';
 
+  // anchorMessageId: a ?message= deep link — once that rumor is in the
+  // decrypted timeline it is scrolled into view and flashed (message-anchor.js).
   let {
     community,
     channel,
@@ -67,7 +70,8 @@
     canManageChannels = false,
     channelCount = 1,
     openOverlay,
-    onBack
+    onBack,
+    anchorMessageId = null
   } = $props();
 
   const communityId = $derived(community?.material?.community_id ?? '');
@@ -360,6 +364,43 @@
     };
   });
 
+  /**
+   * Copy a deep link to this message: current URL + channel/message params
+   * (the community mount carries the channel only in ?channel=). Concord
+   * parity with GroupChat.copyMessageLink.
+   * @param {any} message
+   */
+  function copyMessageLink(message) {
+    const url = buildMessageDeepLink(window.location, channel.channel_id, message.id);
+    navigator.clipboard.writeText(url).then(() => showToast(m.chat_message_link_copied(), 'info'));
+  }
+
+  // ?message= deep link: once the anchored rumor is in the decrypted
+  // timeline, scroll to it and flash it. The scroll is DEBOUNCED until the
+  // timeline stops rebuilding (same displacement hazard as GroupChat's
+  // anchor effect — see the comment there). Applied once per anchor value;
+  // afterwards the reader keeps scroll control. Thread replies live in the
+  // thread modal (separate kind, not in this timeline) and are not
+  // anchorable in v1 — the link a reader can copy is always a timeline row.
+  /** @type {string | null} */
+  let appliedAnchor = null;
+  /** @type {ReturnType<typeof setTimeout> | undefined} */
+  let anchorTimer;
+  $effect(() => {
+    const target = anchorMessageId;
+    const loaded = messages; // dep — retry/re-settle as rumors stream in
+    if (!target || target === appliedAnchor) return;
+    if (!loaded.some((rumor) => rumor.id === target)) return;
+    // The pin-to-bottom effect must not yank the view off the anchor.
+    pinnedToBottom = false;
+    clearTimeout(anchorTimer);
+    anchorTimer = setTimeout(() => {
+      appliedAnchor = target;
+      scrollToChatMessage(document, target);
+    }, 400);
+  });
+  $effect(() => () => clearTimeout(anchorTimer));
+
   async function send() {
     const body = text.trim();
     if (!body || sending) return;
@@ -606,6 +647,8 @@
         onReply={(msg) =>
           (replyTo = { id: msg.id, author: msg.pubkey, preview: msg.content.slice(0, 80) })}
         replyTitle={m.concord_reply()}
+        onCopyLink={copyMessageLink}
+        copyLinkTitle={m.chat_copy_message_link()}
       >
         {#snippet attachments()}
           {#if atts.length > 0}

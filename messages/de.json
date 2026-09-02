@@ -3318,6 +3318,8 @@
   "chat_thread_collapse": "Einklappen",
   "groups_join_required": "Tritt der Gruppe zuerst bei",
   "chat_jump_to_bottom": "Zum Ende springen",
+  "chat_copy_message_link": "Nachrichtenlink kopieren",
+  "chat_message_link_copied": "Nachrichtenlink kopiert",
   "rail_add_community": "Community erstellen",
   "community_access_publisher": "Nur Publisher",
   "community_access_role": "Rolle",

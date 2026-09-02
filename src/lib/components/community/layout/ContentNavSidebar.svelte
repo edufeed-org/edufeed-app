@@ -169,14 +169,13 @@
   }
 
   /**
-   * A Concord row click. The `?channel=` param on the resulting navigation
-   * only seeds PrivateChannelsView's deep-link effect, which is guarded by
-   * `!getSelectedConcordChannel(cid)` — after ANY channel has ever been
-   * selected in this community this session, that guard is permanently
-   * closed and later clicks would silently stop switching channels (bug:
-   * review of 187b4c0b, critical 1). Set the shared selection directly at
-   * the click source instead, so the row always drives the channel that
-   * ends up rendered, independent of the deep-link effect's one-shot guard.
+   * A Concord row click. The shared selection is set directly at the click
+   * source so the row always drives the channel that ends up rendered,
+   * independent of PrivateChannelsView's deep-link effect (bug history:
+   * review of 187b4c0b, critical 1 — the old one-shot seeding guard could
+   * permanently swallow later clicks). The channel id also rides along to
+   * the layout's navigation so it lands in ?channel= and the room is
+   * shareable as a URL.
    * @param {string} channelId
    */
   function selectConcordRow(channelId) {
@@ -194,7 +193,9 @@
   function selectGroupRow(pointer) {
     const key = channelKey(pointer);
     if (key && communityEvent?.pubkey) selectGroupChannel(communityEvent.pubkey, key);
-    handleContentTypeClick('channels');
+    // The id lands in ?channel= (via the layout's handleContentTypeSelect) so
+    // the selected room is linkable — same shape as selectConcordRow above.
+    handleContentTypeClick('channels', pointer.id);
   }
 
   /**
@@ -439,7 +440,7 @@
             {#if favouritePubkey}
               <button
                 type="button"
-                class="btn btn-square absolute top-1/2 right-0.5 -translate-y-1/2 btn-ghost transition-opacity btn-xs {starred
+                class="btn absolute top-1/2 right-0.5 btn-square -translate-y-1/2 btn-ghost transition-opacity btn-xs {starred
                   ? 'text-accent'
                   : 'pointer-events-none opacity-0 group-hover/ch:pointer-events-auto group-hover/ch:opacity-100 focus:pointer-events-auto focus:opacity-100'}"
                 data-testid="channel-favourite-toggle"

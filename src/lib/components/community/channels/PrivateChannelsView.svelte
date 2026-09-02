@@ -55,7 +55,7 @@
   import { resolveZoneMembership } from '$lib/components/community/layout/community-nav.js';
   import ConcordUnreadDot from '$lib/components/shared/ConcordUnreadDot.svelte';
   import { page } from '$app/stores';
-  import { get } from 'svelte/store';
+  import { updateQueryParams } from '$lib/helpers/urlParams.js';
   import ChannelRailRow from './ChannelRailRow.svelte';
   import ChannelStatePane from './ChannelStatePane.svelte';
   import ChannelOverview from './ChannelOverview.svelte';
@@ -143,65 +143,110 @@
   // Reading it as a $derived means every mounted instance agrees.
   const selectedChannelId = $derived(getSelectedConcordChannel(concord.communityId));
 
-  // ?channel= deep link (spec §6: toast click target; also makes channels
-  // linkable) — applied once per communityId, and only if no selection is
-  // stored yet, so double-mounted instances don't fight over seeding it (the
-  // second instance to run this effect finds a selection already present and
-  // no-ops). Optional-chained: component tests that render this component
-  // without a SvelteKit page context (see PrivateChannelsView.test.js) get
-  // `{}` back from `get(page)`, not a populated page object.
-  let deepLinkChecked = false;
+  // Reactive page-URL mirror, subscribed by hand: a shared channel/message
+  // link clicked while this component is already mounted is a query-only
+  // goto that never remounts it, so the deep-link effects below must re-run
+  // on URL changes — a one-shot `get(page)` read cannot see them. In
+  // component tests without a SvelteKit page context the store emits `{}`
+  // (see PrivateChannelsView.test.js), so pageUrl simply stays null.
+  /** @type {URL | null} */
+  let pageUrl = $state.raw(null);
+  $effect(() => {
+    const unsub = page.subscribe((p) => {
+      pageUrl = p?.url ?? null;
+    });
+    return unsub;
+  });
+
+  // ?channel= deep link (spec §6: toast click target; also makes rooms
+  // shareable as URLs). Tracks the last APPLIED param value per instance
+  // instead of a one-shot flag: the first sight of a param applies it, a
+  // later param change applies the new one, and double-mounted instances
+  // applying the same value are idempotent against the shared store. Row
+  // clicks write the same param (syncChannelParam below), so URL and store
+  // stay in agreement.
+  /** @type {string | null} */
+  let appliedConcordParam = null;
   $effect(() => {
     const cid = concord.communityId;
-    if (!cid || deepLinkChecked) return;
-    deepLinkChecked = true;
-    const channelParam = get(page)?.url?.searchParams.get('channel');
-    if (channelParam && !getSelectedConcordChannel(cid)) {
+    const channelParam = pageUrl?.searchParams.get('channel') ?? null;
+    if (!cid || !channelParam || channelParam === appliedConcordParam) return;
+    appliedConcordParam = channelParam;
+    if (getSelectedConcordChannel(cid) !== channelParam) {
       selectConcordChannel(cid, channelParam);
     }
   });
 
-  // Same one-shot seeding for NIP-29 channels: ?channel=<group id> picks the
-  // matching channel. Separate flag — a community has either engine, but the
+  // Same for NIP-29 channels: ?channel=<group id> picks the matching
+  // channel. Separate tracking — a community has either engine, but the
   // concord effect above only ever runs once an area id exists. Candidates
   // come from the SAME source the selection validator (selectedGroupPointer)
   // reads — root + DISCOVERED subtree channels, whose keys carry the /c
   // endpoint relay — because a subtree community has no legacy `group`
   // pointers at all, and a legacy pointer's raw relay builds a key the
   // validator would never match. Legacy pointers stay as a fallback.
-  let groupDeepLinkChecked = false;
+  /** @type {string | null} */
+  let appliedGroupParam = null;
   $effect(() => {
     const communityPubkey = communikeyEvent?.pubkey;
+    const channelParam = pageUrl?.searchParams.get('channel') ?? null;
     const { rootChannel, channels: discovered, fetched } = getCommunityChannels();
     const legacy = groupPointers;
     const discovering = !!rootPointer;
-    if (!communityPubkey || groupDeepLinkChecked) return;
-    // While the subtree discovery is still running, seeding would read a
-    // half-arrived list, miss the target and burn the one shot — wait.
+    if (!communityPubkey || !channelParam || channelParam === appliedGroupParam) return;
+    // While the subtree discovery is still running, matching would read a
+    // half-arrived list and miss the target — wait for the full list.
     if (discovering && !fetched) return;
     if (!discovering && legacy.length === 0) return;
-    groupDeepLinkChecked = true;
-    const channelParam = get(page)?.url?.searchParams.get('channel');
-    if (!channelParam || getSelectedGroupChannel(communityPubkey)) return;
     const candidates = [
       ...(rootChannel ? [{ id: rootChannel.id, relay: rootChannel.relay }] : []),
       ...discovered.map((c) => ({ id: c.id, relay: c.relay })),
       ...legacy
     ];
     const match = candidates.find((pointer) => pointer.id === channelParam);
-    const key = match ? channelKey(match) : null;
-    if (key) selectGroupChannel(communityPubkey, key);
+    // No match: a Concord id (the other effect's business) or a channel this
+    // reader can't see — leave the param unclaimed so a later list refresh
+    // can still resolve it.
+    if (!match) return;
+    appliedGroupParam = channelParam;
+    const key = channelKey(match);
+    if (key && getSelectedGroupChannel(communityPubkey) !== key) {
+      selectGroupChannel(communityPubkey, key);
+    }
   });
+
+  /**
+   * Mirror a channel pick into ?channel= so the open room is shareable from
+   * the address bar (replaceState'd — switching channels must not spam
+   * history). A ?message= anchor always refers to a message in ONE channel,
+   * so switching drops it. The applied trackers are pre-set so the effects
+   * above don't redundantly re-apply our own write.
+   * @param {string} channelId
+   */
+  function syncChannelParam(channelId) {
+    if (typeof window === 'undefined') return;
+    appliedConcordParam = channelId;
+    appliedGroupParam = channelId;
+    updateQueryParams(new URLSearchParams(window.location.search), {
+      channel: channelId,
+      message: null
+    });
+  }
+
+  // The chat scrolls to + highlights this message once it renders (?message=
+  // deep link — consumed by GroupChat/ChannelChat via scrollToChatMessage).
+  const anchorMessageId = $derived.by(() => pageUrl?.searchParams.get('message') ?? null);
 
   // ?invites=1 opens the invite inbox — the sidebar's KANÄLE zone links here
   // since the desktop rail (the inbox's old entry point) became mobile-only.
-  // One-shot like the channel deep link, and independent of communityId so it
-  // also works before/without a founded area.
+  // One-shot like the old channel deep link, and independent of communityId
+  // so it also works before/without a founded area.
   let invitesLinkChecked = false;
   $effect(() => {
-    if (invitesLinkChecked) return;
+    const url = pageUrl;
+    if (invitesLinkChecked || !url) return;
     invitesLinkChecked = true;
-    if (get(page)?.url?.searchParams.get('invites')) {
+    if (url.searchParams.get('invites')) {
       overlay = 'inbox';
     }
   });
@@ -592,8 +637,10 @@
                 dimmed={!row.accessible}
                 bold={flags.unread}
                 onclick={() => {
-                  if (concord.communityId && row.channel_id)
+                  if (concord.communityId && row.channel_id) {
                     selectConcordChannel(concord.communityId, row.channel_id);
+                    syncChannelParam(row.channel_id);
+                  }
                   mobileChat = true;
                 }}
               >
@@ -618,7 +665,10 @@
                 onclick={() => {
                   if (communikeyEvent?.pubkey) {
                     const key = channelKey(row.pointer);
-                    if (key) selectGroupChannel(communikeyEvent.pubkey, key);
+                    if (key) {
+                      selectGroupChannel(communikeyEvent.pubkey, key);
+                      syncChannelParam(row.pointer.id);
+                    }
                   }
                   mobileChat = true;
                 }}
@@ -634,7 +684,7 @@
             {#if canDelete}
               <button
                 type="button"
-                class="btn btn-square pointer-events-none opacity-0 btn-ghost transition-opacity btn-xs group-hover/ch:pointer-events-auto group-hover/ch:opacity-100 focus:pointer-events-auto focus:opacity-100"
+                class="btn pointer-events-none btn-square opacity-0 btn-ghost transition-opacity btn-xs group-hover/ch:pointer-events-auto group-hover/ch:opacity-100 focus:pointer-events-auto focus:opacity-100"
                 data-testid="group-channel-delete"
                 title={m.groups_channel_delete()}
                 aria-label={m.groups_channel_delete()}
@@ -852,6 +902,7 @@
               pointer={selectedGroupPointer}
               fallbackName={selectedFallbackName}
               communityPubkey={communikeyEvent?.pubkey ?? ''}
+              {anchorMessageId}
             />
           {/key}
         {:else}
@@ -875,7 +926,10 @@
             onSelect={(/** @type {{id: string, relay: string}} */ pointer) => {
               if (communikeyEvent?.pubkey) {
                 const key = channelKey(pointer);
-                if (key) selectGroupChannel(communikeyEvent.pubkey, key);
+                if (key) {
+                  selectGroupChannel(communikeyEvent.pubkey, key);
+                  syncChannelParam(pointer.id);
+                }
               }
               mobileChat = true;
             }}
@@ -929,6 +983,7 @@
             channelCount={channels.length}
             openOverlay={(/** @type {string} */ name) => (overlay = name)}
             onBack={() => (mobileChat = false)}
+            {anchorMessageId}
           />
         {/key}
       {:else if activeChannel}
@@ -1008,9 +1063,11 @@
           const key = relay ? channelKey({ id: channelId, relay }) : null;
           if (key && communikeyEvent?.pubkey) {
             selectGroupChannel(communikeyEvent.pubkey, key);
+            syncChannelParam(channelId);
           }
         } else if (concord.communityId) {
           selectConcordChannel(concord.communityId, channelId);
+          syncChannelParam(channelId);
         }
         mobileChat = true;
       }}

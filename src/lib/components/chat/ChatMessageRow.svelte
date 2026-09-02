@@ -14,7 +14,7 @@
   import NostrContentRenderer from '$lib/components/shared/NostrContentRenderer.svelte';
   import LinkPreviewList from '$lib/components/shared/LinkPreviewList.svelte';
   import ProfileAvatar from '$lib/components/shared/ProfileAvatar.svelte';
-  import { ReplyIcon } from '$lib/components/icons';
+  import { LinkIcon, ReplyIcon } from '$lib/components/icons';
   import { profileLink } from '$lib/helpers/nostrUtils.js';
 
   /**
@@ -28,6 +28,8 @@
    * @property {{ displayName: string, content: string } | null} [replyPreview] - resolved reply-parent preview, or null
    * @property {((message: any) => void) | null} [onReply] - shows a hover-reveal reply button in the header when provided
    * @property {string} [replyTitle] - title attribute for the reply button (default "Reply", override for i18n)
+   * @property {((message: any) => void) | null} [onCopyLink] - shows a hover-reveal copy-link button in the header when provided (message deep links)
+   * @property {string} [copyLinkTitle] - title attribute for the copy-link button (default "Copy link", override for i18n)
    * @property {boolean} [showLinkPreviews] - render LinkPreviewList below the message content (default false)
    * @property {number} [replyCount] - shows an "N replies" affordance in the footer when > 0 and `onOpenThread` is set
    * @property {string} [replyCountLabel] - pre-formatted label for that affordance (caller owns pluralisation/i18n)
@@ -47,6 +49,8 @@
     replyPreview = null,
     onReply = null,
     replyTitle = 'Reply',
+    onCopyLink = null,
+    copyLinkTitle = 'Copy link',
     showLinkPreviews = false,
     replyCount = 0,
     replyCountLabel = '',
@@ -60,7 +64,9 @@
   const showThreadLink = $derived(replyCount > 0 && !!onOpenThread);
 </script>
 
-<div class="group chat {isOwnMessage ? 'chat-end' : 'chat-start'}">
+<!-- data-message-id: DOM anchor for message deep links (?message= — see
+     helpers/message-anchor.js), on every row of both chat engines. -->
+<div class="group chat {isOwnMessage ? 'chat-end' : 'chat-start'}" data-message-id={message.id}>
   {#if !isOwnMessage}
     <ProfileAvatar
       pubkey={message.pubkey}
@@ -93,6 +99,17 @@
         title={replyTitle}
       >
         <ReplyIcon class="h-3.5 w-3.5" />
+      </button>
+    {/if}
+    {#if onCopyLink}
+      <button
+        type="button"
+        onclick={() => onCopyLink(message)}
+        class="ml-1 opacity-0 transition-opacity group-hover:opacity-70 hover:!opacity-100"
+        title={copyLinkTitle}
+        data-testid="message-copy-link"
+      >
+        <LinkIcon class_="h-3.5 w-3.5" />
       </button>
     {/if}
   </div>
@@ -136,3 +153,20 @@
     </div>
   {/if}
 </div>
+
+<style>
+  /* Flash for a deep-linked message (added/removed by scrollToChatMessage in
+     helpers/message-anchor.js — same visual language as comment-highlight). */
+  :global(.chat-message-highlight .chat-bubble) {
+    animation: chat-highlight-fade 2s ease-out;
+  }
+
+  @keyframes chat-highlight-fade {
+    0% {
+      box-shadow: 0 0 0 3px color-mix(in oklch, var(--color-info) 60%, transparent);
+    }
+    100% {
+      box-shadow: 0 0 0 3px transparent;
+    }
+  }
+</style>

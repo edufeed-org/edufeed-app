@@ -11,6 +11,7 @@
   — which is what makes the switch feel instant rather than merely work.
 -->
 <script>
+  import { page } from '$app/stores';
   import GroupChat from '$lib/components/groups/GroupChat.svelte';
   import HostChannelSidebar from '$lib/components/groups/HostChannelSidebar.svelte';
   import { parseGroupInput } from '$lib/groups/groups.js';
@@ -18,6 +19,9 @@
 
   let { data } = $props();
   const pointer = $derived(parseGroupInput(data.rawPointer));
+  // ?message= deep link (a copied message link carries ?channel= too, which
+  // is meaningless here — the channel is in the path — and stays ignored).
+  const anchorMessageId = $derived($page.url.searchParams.get('message'));
 </script>
 
 <svelte:head>
@@ -31,7 +35,7 @@
       <!-- Keyed on the channel: switching channels must remount the chat, or
            a draft typed in one would still be in the composer of the next. -->
       {#key `${pointer.relay}'${pointer.id}`}
-        <GroupChat {pointer} />
+        <GroupChat {pointer} {anchorMessageId} />
       {/key}
     </div>
   </div>

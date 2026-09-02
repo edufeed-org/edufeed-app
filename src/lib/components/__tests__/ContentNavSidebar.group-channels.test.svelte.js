@@ -287,14 +287,17 @@ describe('ContentNavSidebar — two-zone sidebar', () => {
   // render inside the community pane — the standalone /groups route with its
   // full host directory is for browsing a relay, not for a community's own
   // channels (laoc, 2026-08-19).
-  it('a NIP-29 row selects in place and switches to the channels view', async () => {
+  it('a NIP-29 row selects in place and switches to the channels view with the channel id', async () => {
     const row = worldReadableGroupRow();
     const onContentTypeSelect = vi.fn();
     renderNav({ channelRows: [row], isMember: true, onContentTypeSelect });
     const el = screen.getByTestId(`nav-channel-row-${sanitize(row.key)}`);
     expect(el.getAttribute('href')).toBeNull();
     await fireEvent.click(el);
-    expect(onContentTypeSelect).toHaveBeenCalledWith('channels', undefined);
+    // The channel id must reach the navigation payload — the layout writes it
+    // into ?channel=, which is what makes the room deep-linkable (issue: deep
+    // links to a specific room).
+    expect(onContentTypeSelect).toHaveBeenCalledWith('channels', 'chan-open');
   });
 
   // 8d03f873 widened create to root-39001 admins, but only on the mobile

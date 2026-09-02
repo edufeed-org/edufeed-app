@@ -3318,6 +3318,8 @@
   "chat_thread_collapse": "Collapse",
   "groups_join_required": "Join this group first",
   "chat_jump_to_bottom": "Jump to latest",
+  "chat_copy_message_link": "Copy message link",
+  "chat_message_link_copied": "Message link copied",
   "rail_add_community": "Create a community",
   "community_access_publisher": "Publishers only",
   "community_access_role": "Role",

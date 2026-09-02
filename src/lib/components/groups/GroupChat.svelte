@@ -101,6 +101,7 @@
   import { stashExport } from '$lib/webxdc/export-share.js';
   import { runtimeConfig } from '$lib/stores/config.svelte.js';
   import { showToast } from '$lib/helpers/toast';
+  import { buildMessageDeepLink, scrollToChatMessage } from '$lib/helpers/message-anchor.js';
   import * as m from '$lib/paraglide/messages';
 
   /** fallbackName: the display name the CALLER already knows (the community
@@ -112,8 +113,10 @@
    * publish-as-article/wiki export can carry a `?community=` prefill — see
    * publishExport below. The /groups/[pointer] route has no community
    * context and leaves it at the default ''.
-   * @type {{pointer: import('$lib/groups/groups.js').GroupPointer, fallbackName?: string, communityPubkey?: string}} */
-  let { pointer, fallbackName = '', communityPubkey = '' } = $props();
+   * anchorMessageId: a ?message= deep link — once that message is in the
+   * loaded window it is scrolled into view and flashed (message-anchor.js).
+   * @type {{pointer: import('$lib/groups/groups.js').GroupPointer, fallbackName?: string, communityPubkey?: string, anchorMessageId?: string | null}} */
+  let { pointer, fallbackName = '', communityPubkey = '', anchorMessageId = null } = $props();
 
   const getActiveUser = useActiveUser();
 
@@ -830,6 +833,57 @@
   }
 
   /**
+   * Copy a deep link to this message (current URL + channel/message params —
+   * on the community mount ?channel= is what lands a fresh tab in this
+   * channel at all, harmless on the /groups route which encodes it in the
+   * path; same reasoning as openInNewTab below).
+   * @param {any} message
+   */
+  function copyMessageLink(message) {
+    const url = buildMessageDeepLink(window.location, pointer.id, message.id);
+    navigator.clipboard.writeText(url).then(() => showToast(m.chat_message_link_copied(), 'info'));
+  }
+
+  // ?message= deep link: once the anchored message is in the loaded window,
+  // scroll to it and flash it (message-anchor.js). A folded thread reply
+  // never renders in the main timeline — its thread panel is opened and the
+  // anchor lands there instead. The scroll itself is DEBOUNCED until the
+  // relay replay burst settles: the timeline rebuilds non-monotonically
+  // while streaming (see the pin-to-bottom comment above), so a scroll fired
+  // the moment the target appears gets displaced by later-arriving rows
+  // (live-verified: the anchored row landed just below the fold). Applied
+  // once per anchor value; afterwards the reader keeps scroll control. A
+  // message older than the 100-event relay window is simply never found —
+  // the reader lands pinned at the bottom as usual (accepted v1 limit, no
+  // back-pagination in this chat).
+  /** @type {string | null} */
+  let appliedAnchor = null;
+  /** @type {ReturnType<typeof setTimeout> | undefined} */
+  let anchorTimer;
+  $effect(() => {
+    const target = anchorMessageId;
+    const index = threads; // dep — retry/re-settle as the timeline streams in
+    if (!target || target === appliedAnchor) return;
+    if (!displayed.some((event) => event.id === target)) return;
+    if (index.timeline.some((event) => event.id === target)) {
+      // The pin-to-bottom effect must not yank the view off the anchor.
+      pinnedToBottom = false;
+    } else {
+      const root = index.timeline.find((event) =>
+        index.repliesFor(event.id).some((reply) => reply.id === target)
+      );
+      if (!root) return; // orphan mid-resolution — retry on the next rebuild
+      if (openThreadId !== root.id) openThread(root);
+    }
+    clearTimeout(anchorTimer);
+    anchorTimer = setTimeout(() => {
+      appliedAnchor = target;
+      scrollToChatMessage(document, target);
+    }, 400);
+  });
+  $effect(() => () => clearTimeout(anchorTimer));
+
+  /**
    * Sign a template and publish it to the group relay only, with the shared
    * one-shot NIP-42 retry: relays like groups.hzrd149.com only recognise
    * members on AUTHed connections, and a write before the handshake comes
@@ -1149,6 +1203,8 @@
         : null}
       {onReply}
       replyTitle={m.groups_reply()}
+      onCopyLink={copyMessageLink}
+      copyLinkTitle={m.chat_copy_message_link()}
       replyCount={threads.replyCount(message.id)}
       replyCountLabel={replyCountLabel(threads.replyCount(message.id))}
       onOpenThread={offerThread ? openThread : null}

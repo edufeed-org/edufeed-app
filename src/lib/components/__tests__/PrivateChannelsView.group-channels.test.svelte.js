@@ -50,17 +50,32 @@ const holders = vi.hoisted(() => ({
   events: /** @type {any} */ ({}),
   /** @type {any} */ relayInfo: /** @type {any} */ (null),
   /** @type {string | null} current page URL, for ?channel= deep-link tests */
-  pageUrl: /** @type {string | null} */ (null)
+  pageUrl: /** @type {string | null} */ (null),
+  /** @type {Set<(value: any) => void>} live page-store subscribers */
+  pageSubscribers: new Set()
 }));
 
+// Reactive page mock: deep links must also work while the component stays
+// mounted (a query-only goto never remounts it), so tests can push a NEW
+// URL to every live subscriber via setPageUrl.
+const pageValue = () => (holders.pageUrl ? { url: new URL(holders.pageUrl) } : {});
+/** @param {string} url */
+function setPageUrl(url) {
+  holders.pageUrl = url;
+  for (const cb of holders.pageSubscribers) cb(pageValue());
+}
 vi.mock('$app/stores', () => ({
   page: {
     subscribe: (/** @type {any} */ cb) => {
-      cb(holders.pageUrl ? { url: new URL(holders.pageUrl) } : {});
-      return () => {};
+      holders.pageSubscribers.add(cb);
+      cb(pageValue());
+      return () => holders.pageSubscribers.delete(cb);
     }
   }
 }));
+
+const gotoMock = vi.hoisted(() => vi.fn(() => Promise.resolve()));
+vi.mock('$app/navigation', () => ({ goto: gotoMock }));
 vi.mock('$lib/concord/community.svelte.js', () => ({
   useConcordArea: () => () => holders.concord
 }));
@@ -130,6 +145,8 @@ beforeEach(() => {
   holders.events = {};
   holders.relayInfo = null;
   holders.pageUrl = null;
+  holders.pageSubscribers.clear();
+  gotoMock.mockClear();
   eventStore.removeByFilters?.({ kinds: [39000] });
 });
 
@@ -201,6 +218,45 @@ describe('PrivateChannelsView — NIP-29 channels in the community rail', () => 
     });
 
     expect(screen.queryAllByTestId('group-channel-row')).toHaveLength(0);
+  });
+
+  it('clicking a group rail row mirrors the channel into ?channel=', async () => {
+    holders.events = { [ENDPOINT]: [root(), chan('allgemein', [['private']])] };
+
+    render(PrivateChannelsView, { props: { communikeyEvent: moderated() } });
+
+    const rows = await screen.findAllByTestId('group-channel-row');
+    const row = /** @type {HTMLElement} */ (rows.find((r) => r.textContent?.includes('allgemein')));
+    await fireEvent.click(row);
+
+    // The room must be linkable from the address bar (issue: deep links to a
+    // specific room) — a rail click that only writes the selection store
+    // would leave the URL pointing at the overview.
+    expect(gotoMock).toHaveBeenCalledWith(
+      expect.stringContaining('channel=allgemein'),
+      expect.anything()
+    );
+  });
+
+  it('a ?channel= change AFTER mount switches the selection', async () => {
+    clearGroupChannelSelection(OWNER);
+    holders.pageUrl = 'https://app.example/c/relilab?channel=allgemein';
+    holders.events = {
+      [ENDPOINT]: [root(), chan('allgemein', [['private']]), chan('zweiter', [['private']])]
+    };
+
+    render(PrivateChannelsView, { props: { communikeyEvent: moderated() } });
+
+    const chat = await screen.findByTestId('group-chat-stub', {}, { timeout: 4000 });
+    expect(chat.textContent).toContain('allgemein');
+
+    // A shared message link clicked inside the app is a query-only goto —
+    // the component stays mounted, so the deep link must be applied
+    // reactively, not by a one-shot mount effect.
+    setPageUrl('https://app.example/c/relilab?channel=zweiter');
+    await vi.waitFor(() => {
+      expect(screen.getByTestId('group-chat-stub').textContent).toContain('zweiter');
+    });
   });
 
   it('seeds the ?channel= deep link from the DISCOVERED subtree channels', async () => {
