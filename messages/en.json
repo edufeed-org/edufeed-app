@@ -3221,6 +3221,8 @@
   "groups_create_picture_label": "Picture URL (optional)",
   "groups_create_public_toggle": "Visible to non-members",
   "groups_create_open_toggle": "Anyone can join",
+  "groups_create_hidden_toggle": "Hidden from the channel list",
+  "groups_settings_hidden_permanent": "Hidden rooms cannot be made visible again.",
   "groups_create_failed": "Creating the group failed",
   "groups_badge_members_only": "Members only",
   "groups_badge_invite_only": "Invite only",

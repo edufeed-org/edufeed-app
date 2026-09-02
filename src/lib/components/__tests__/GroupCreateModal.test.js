@@ -41,12 +41,13 @@ beforeEach(() => {
 });
 
 describe('GroupCreateModal', () => {
-  it('defaults to private+closed and submit stays disabled without a name', () => {
+  it('defaults to private+closed+listed and submit stays disabled without a name', () => {
     render(GroupCreateModal, { props: { relay: RELAY, onClose: vi.fn() } });
     const el = (/** @type {string} */ id) =>
       /** @type {HTMLInputElement} */ (screen.getByTestId(id));
     expect(el('group-create-public').checked).toBe(false);
     expect(el('group-create-open').checked).toBe(false);
+    expect(el('group-create-hidden').checked).toBe(false);
     expect(el('group-create-confirm').disabled).toBe(true);
   });
 
@@ -80,6 +81,38 @@ describe('GroupCreateModal', () => {
     );
     expect(goto).toHaveBeenCalledWith(expect.stringContaining(encodeURIComponent('gid123')));
     expect(showToast).toHaveBeenCalledWith(expect.any(String), 'success');
+  });
+
+  it('creates a listed room by default — isHidden false without the toggle', async () => {
+    const onClose = vi.fn();
+    render(GroupCreateModal, { props: { relay: RELAY, onClose } });
+    await fireEvent.input(screen.getByTestId('group-create-name'), {
+      target: { value: 'Mathe' }
+    });
+    await fireEvent.click(screen.getByTestId('group-create-confirm'));
+    await waitFor(() => expect(onClose).toHaveBeenCalled());
+
+    expect(createGroupOnRelay).toHaveBeenCalledWith(
+      expect.objectContaining({ metadata: expect.objectContaining({ isHidden: false }) })
+    );
+  });
+
+  it('creates a hidden (unlisted) room when the hidden toggle is on', async () => {
+    // Hidden rooms (pyramid fork edufeed-v1.3): the room must be BORN with
+    // the `hidden` metadata tag — a later 9002 would briefly leak its name
+    // into the relay listing.
+    const onClose = vi.fn();
+    render(GroupCreateModal, { props: { relay: RELAY, onClose } });
+    await fireEvent.input(screen.getByTestId('group-create-name'), {
+      target: { value: 'Mathe' }
+    });
+    await fireEvent.click(screen.getByTestId('group-create-hidden'));
+    await fireEvent.click(screen.getByTestId('group-create-confirm'));
+    await waitFor(() => expect(onClose).toHaveBeenCalled());
+
+    expect(createGroupOnRelay).toHaveBeenCalledWith(
+      expect.objectContaining({ metadata: expect.objectContaining({ isHidden: true }) })
+    );
   });
 
   it('keeps the modal open and toasts when the relay refuses', async () => {

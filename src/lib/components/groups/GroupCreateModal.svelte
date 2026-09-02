@@ -29,6 +29,10 @@
   let picture = $state('');
   let isPublic = $state(false);
   let isOpen = $state(false);
+  // Unlisted room: born with the bare `hidden` metadata tag (pyramid fork
+  // lists even private rooms' names without it). One-way on the wire — NIP-29
+  // has no un-hide tag — but free draft state until create.
+  let isHidden = $state(false);
   let busy = $state(false);
   let explainerOpen = $state(false);
 
@@ -43,7 +47,7 @@
       await createGroupOnRelay({
         relayConn: pool.relay(relay),
         id,
-        metadata: { name: name.trim(), about, picture, isPublic, isOpen },
+        metadata: { name: name.trim(), about, picture, isPublic, isOpen, isHidden },
         user
       });
       await updatePersonalGroupsList(user, { add: { id, relay } });
@@ -130,6 +134,16 @@
         disabled={busy}
       />
       {m.groups_create_open_toggle()}
+    </label>
+    <label class="mt-2 flex items-center gap-2 text-sm">
+      <input
+        type="checkbox"
+        class="toggle toggle-sm"
+        data-testid="group-create-hidden"
+        bind:checked={isHidden}
+        disabled={busy}
+      />
+      {m.groups_create_hidden_toggle()}
     </label>
 
     <div class="modal-action">

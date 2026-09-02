@@ -3221,6 +3221,8 @@
   "groups_create_picture_label": "Bild-URL (optional)",
   "groups_create_public_toggle": "Für Nicht-Mitglieder sichtbar",
   "groups_create_open_toggle": "Beitritt für alle offen",
+  "groups_create_hidden_toggle": "In der Kanalliste versteckt",
+  "groups_settings_hidden_permanent": "Versteckte Räume können nicht wieder sichtbar gemacht werden.",
   "groups_create_failed": "Gruppe konnte nicht erstellt werden",
   "groups_badge_members_only": "Nur für Mitglieder",
   "groups_badge_invite_only": "Beitritt nur mit Einladung",

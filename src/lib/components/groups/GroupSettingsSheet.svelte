@@ -53,9 +53,16 @@
     !metadataEvent?.tags?.some((/** @type {string[]} */ t) => t[0] === 'private')
   );
   // svelte-ignore state_referenced_locally
-  let isOpen = $state(
-    !metadataEvent?.tags?.some((/** @type {string[]} */ t) => t[0] === 'closed')
-  );
+  let isOpen = $state(!metadataEvent?.tags?.some((/** @type {string[]} */ t) => t[0] === 'closed'));
+  // Hidden reads tag PRESENCE — the fork's 39000 carries a bare `hidden`
+  // (nip29 Group.ToMetadataEvent), and unlike private/closed there is no
+  // absence-means-open ambiguity: no tag = listed. One-way: NIP-29 defines
+  // no un-hide tag, so once hidden the checkbox locks. Every save of a
+  // hidden room must RE-state the tag — a spec-literal relay treats a 9002
+  // without it as un-hiding.
+  // svelte-ignore state_referenced_locally
+  const wasHidden = !!metadataEvent?.tags?.some((/** @type {string[]} */ t) => t[0] === 'hidden');
+  let isHidden = $state(wasHidden);
   // NIP-29 Subgroups: a 9002 with no `parent` tag DETACHES the group
   // (promotes it back to root) — read the existing tag off the raw event so
   // every save preserves it verbatim. No UI to change/detach it here. Same
@@ -81,6 +88,7 @@
           picture,
           isPublic,
           isOpen,
+          isHidden,
           parent: existingParent
         }),
         user
@@ -178,6 +186,19 @@
         />
         {m.groups_create_open_toggle()}
       </label>
+      <label class="flex items-center gap-2 text-sm">
+        <input
+          type="checkbox"
+          class="checkbox checkbox-sm"
+          data-testid="group-edit-hidden"
+          bind:checked={isHidden}
+          disabled={busy || wasHidden}
+        />
+        {m.groups_create_hidden_toggle()}
+      </label>
+      {#if isHidden}
+        <p class="text-xs text-base-content/60">{m.groups_settings_hidden_permanent()}</p>
+      {/if}
 
       <button
         type="button"
