@@ -2277,6 +2277,7 @@
   "publish_status_publishing": "Publishing... {successCount}/{totalRelays}",
   "publish_status_success": "Published to {count} relays",
   "publish_status_failed": "Failed to publish",
+  "publish_status_failed_queued": "No relay reachable — will retry automatically",
   "follow_list_filter_title": "Filter by Follow Lists",
   "follow_list_login_required": "Login Required",
   "follow_list_login_hint": "Log in to filter events by people you follow",

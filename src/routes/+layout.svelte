@@ -23,6 +23,8 @@
   import { appSettings, initializeAppSettings } from '$lib/stores/app-settings.svelte.js';
   import { warmIdentity, hydrateDeletions } from '$lib/stores/event-cache.svelte.js';
   import { sessionEpoch } from '$lib/stores/session-epoch.svelte.js';
+  import { startPublishOutboxReplay } from '$lib/services/publish-service.js';
+  import { configReady } from '$lib/stores/config.svelte.js';
   import {
     initializeAllCuratedAuthors,
     initializeAllWotAuthors
@@ -283,6 +285,14 @@
   $effect(() => {
     if (!browser) return;
     hydrateDeletions();
+  });
+
+  // Replay signed events that never reached a relay (persistent publish
+  // outbox), once runtime config is in — the relay computation reads it.
+  // Idempotent; also re-runs on the browser's `online` event.
+  $effect(() => {
+    if (!browser || !$configReady) return;
+    startPublishOutboxReplay();
   });
 
   // Start the Concord private-channels session lifecycle (no-op unless

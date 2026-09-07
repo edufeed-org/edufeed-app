@@ -2277,6 +2277,7 @@
   "publish_status_publishing": "Veröffentlichen... {successCount}/{totalRelays}",
   "publish_status_success": "An {count} Relays veröffentlicht",
   "publish_status_failed": "Veröffentlichung fehlgeschlagen",
+  "publish_status_failed_queued": "Kein Relay erreichbar – wird automatisch erneut versucht",
   "follow_list_filter_title": "Nach Follow-Listen filtern",
   "follow_list_login_required": "Anmeldung erforderlich",
   "follow_list_login_hint": "Anmelden, um Events nach Follows zu filtern",
