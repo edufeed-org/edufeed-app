@@ -656,6 +656,7 @@
                   channelKey(selectedGroupPointer) === channelKey(row.pointer)}
                 dimmed={row.pending}
                 worldReadable={row.worldReadable}
+                hidden={row.hidden === true}
                 onclick={() => {
                   if (communikeyEvent?.pubkey) {
                     const key = channelKey(row.pointer);

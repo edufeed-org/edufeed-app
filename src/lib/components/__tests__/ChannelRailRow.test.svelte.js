@@ -14,6 +14,7 @@ vi.mock('$lib/paraglide/messages', () => ({
   concord_legend_public: () => 'public',
   concord_legend_private: () => 'private',
   channel_lock_tooltip: () => 'private channel tooltip',
+  channel_hidden_tooltip: () => 'hidden channel tooltip',
   groups_channel_world_readable: () => 'world-readable'
 }));
 
@@ -28,6 +29,15 @@ describe('ChannelRailRow', () => {
   it('shows no lock badge on an open row', () => {
     render(ChannelRailRow, { props: { symbol: '#', name: 'allgemein' } });
     expect(screen.queryByTestId('locked-badge')).toBeNull();
+  });
+
+  it('draws a hidden room with the crossed-eye badge IN PLACE of the lock', () => {
+    render(ChannelRailRow, { props: { symbol: '#', name: 'geheim', locked: true, hidden: true } });
+    const badge = screen.getByTestId('hidden-badge');
+    expect(badge.querySelector('svg')).toBeTruthy();
+    expect(badge.getAttribute('title')).toBe('hidden channel tooltip');
+    expect(screen.queryByTestId('locked-badge')).toBeNull();
+    expect(screen.getByText('#')).toBeTruthy();
   });
 
   it('keeps the globe badge for world-readable rows, without a lock', () => {

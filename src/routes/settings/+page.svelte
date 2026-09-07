@@ -1098,6 +1098,35 @@
         </div>
       </div>
 
+      <!-- Channel Apps Card -->
+      <div class="card mt-6 bg-base-100 shadow-xl" transition:fade={{ duration: 200 }}>
+        <div class="card-body">
+          <h2 class="mb-2 card-title text-2xl">
+            <span class="text-2xl">{m.settings_channel_apps_title()}</span>
+          </h2>
+          <p class="mb-6 text-base-content/70">
+            {m.settings_channel_apps_description()}
+          </p>
+
+          <div class="form-control">
+            <label class="label cursor-pointer justify-start gap-4">
+              <input
+                type="checkbox"
+                class="toggle toggle-primary"
+                data-testid="settings-webxdc-show-all-apps"
+                checked={appSettings.webxdcShowAllApps}
+                onchange={(e) => {
+                  appSettings.webxdcShowAllApps = /** @type {HTMLInputElement} */ (
+                    e.currentTarget
+                  ).checked;
+                }}
+              />
+              <span class="label-text font-medium">{m.settings_channel_apps_label()}</span>
+            </label>
+          </div>
+        </div>
+      </div>
+
       <!-- Cordn Private Groups Card (deployment-gated, per-user opt-in) -->
       {#if parseCordnGroupsConfig(runtimeConfig.cordnGroups).enabled}
         <div class="card mt-6 bg-base-100 shadow-xl" transition:fade={{ duration: 200 }}>

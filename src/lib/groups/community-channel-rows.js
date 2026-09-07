@@ -27,6 +27,7 @@ import { safeImageUrl } from './relay-directory.js';
  *   symbol: string,
  *   worldReadable: boolean,
  *   locked: boolean,
+ *   hidden?: boolean,
  *   accessible: boolean,
  *   pending: boolean
  * }} ChannelRowBase
@@ -78,6 +79,9 @@ export function buildChannelRows({
       symbol: channelGlyph(channel.private ? 'invited' : 'members').symbol,
       worldReadable: false,
       locked: channelGlyph(channel.private ? 'invited' : 'members').locked,
+      // Concord has no listing to hide from — private channels are simply
+      // invisible to outsiders by construction.
+      hidden: false,
       accessible: channel.accessible !== false,
       pending: false,
       source: 'concord',
@@ -128,6 +132,8 @@ function groupRow(channel, nameOverride = '') {
     symbol: glyph.symbol,
     worldReadable: glyph.worldReadable,
     locked: glyph.locked,
+    // Unlisted (NIP-29 `hidden`): drawn with its own badge in place of the lock.
+    hidden: channel.hidden === true,
     accessible: true,
     // Metadata not yet arrived → level 'unknown'; the row is drawn locked
     // meanwhile and callers can show that it is still settling.
