@@ -70,7 +70,15 @@ export function createCommunityContentModel(contentKinds, options = {}) {
           }
 
           const resultMap = new Map();
+          // Activity time per item id, tracked from SOURCE events (transforms
+          // may drop or rename created_at): own publish time or newest share.
+          const activityTs = new Map();
           const fmt = transform || ((e) => e);
+
+          /** @param {string} id @param {number} [ts] */
+          function bumpActivity(id, ts) {
+            if (ts && ts > (activityTs.get(id) || 0)) activityTs.set(id, ts);
+          }
 
           /** Append a sharer pubkey to an item's _allSharers (deduplicating)
            * and keep the newest share time — resolved items carry the ORIGINAL
@@ -85,6 +93,7 @@ export function createCommunityContentModel(contentKinds, options = {}) {
           // Add direct events first (highest priority)
           for (const event of directEvents) {
             resultMap.set(event.id, fmt(event));
+            bumpActivity(event.id, event.created_at);
           }
 
           // Resolve legacy targeted publication references
@@ -104,7 +113,9 @@ export function createCommunityContentModel(contentKinds, options = {}) {
                 _allSharers: [share.pubkey]
               };
               resultMap.set(resolved.id, item);
+              bumpActivity(resolved.id, resolved.created_at);
             }
+            bumpActivity(resolved.id, share.created_at);
           }
 
           // Resolve NIP-18 repost references (lowest priority)
@@ -124,10 +135,16 @@ export function createCommunityContentModel(contentKinds, options = {}) {
                 _allSharers: [repost.pubkey]
               };
               resultMap.set(resolved.id, item);
+              bumpActivity(resolved.id, resolved.created_at);
             }
+            bumpActivity(resolved.id, repost.created_at);
           }
 
-          return Array.from(resultMap.values());
+          // Newest activity first: a fresh share of an old event surfaces at
+          // the top instead of sinking to its original created_at position.
+          return Array.from(resultMap.entries())
+            .sort(([a], [b]) => (activityTs.get(b) || 0) - (activityTs.get(a) || 0))
+            .map(([, item]) => item);
         })
       );
     };
