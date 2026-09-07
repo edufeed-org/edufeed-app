@@ -85,7 +85,7 @@ vi.mock(
   () => import('./fixtures/PollMessageStub.svelte')
 );
 vi.mock('$lib/components/shared/ProfileAvatar.svelte', () => ({ default: Stub }));
-vi.mock('$lib/components/icons', () => ({ ReplyIcon: Stub, PeopleIcon: Stub }));
+vi.mock('$lib/components/icons', () => ({ ReplyIcon: Stub, PeopleIcon: Stub, LinkIcon: Stub }));
 
 vi.mock(
   '$lib/components/reactions/ReactionChips.svelte',
@@ -95,6 +95,8 @@ vi.mock(
 vi.mock('$lib/paraglide/messages', () => ({
   chat_thread_expand: () => 'Expand',
   chat_thread_collapse: () => 'Collapse',
+  chat_copy_message_link: () => 'Copy message link',
+  chat_message_link_copied: () => 'Message link copied',
   concord_chat_subtitle: () => 'subtitle',
   concord_how_it_works: () => 'how it works',
   concord_menu_invite: () => 'Invite',
@@ -978,5 +980,53 @@ describe('ChannelChat zaps', () => {
     await tick();
 
     expect(container.querySelector('[data-testid="zap-tally"]')).toBeNull();
+  });
+});
+
+// Message deep links (issue: link to a specific message inside a room) —
+// concord parity with GroupChat's anchor + copy affordance.
+describe('ChannelChat message anchor + copy link', () => {
+  it('highlights the anchored message once the timeline settles', async () => {
+    const community = makeCommunity([]);
+    const { container } = render(ChannelChat, {
+      props: {
+        community,
+        channel: CHANNEL,
+        openOverlay: () => {},
+        onBack: () => {},
+        anchorMessageId: 'msg-1'
+      }
+    });
+
+    // The anchor scroll is debounced until the timeline stops rebuilding
+    // (400ms) — poll instead of asserting right after the first render.
+    await vi.waitFor(
+      () => {
+        const row = container.querySelector('[data-message-id="msg-1"]');
+        expect(row?.classList.contains('chat-message-highlight')).toBe(true);
+      },
+      { timeout: 2000 }
+    );
+  });
+
+  it('copies a channel+message deep link from the row affordance', async () => {
+    const writeText = vi.fn((/** @type {string} */ _url) => Promise.resolve());
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
+    const community = makeCommunity([]);
+    const { container } = render(ChannelChat, {
+      props: { community, channel: CHANNEL, openOverlay: () => {}, onBack: () => {} }
+    });
+    await Promise.resolve();
+    await tick();
+
+    await fireEvent.click(
+      /** @type {Element} */ (
+        container.querySelector('[data-message-id="msg-1"] [data-testid="message-copy-link"]')
+      )
+    );
+
+    const url = String(writeText.mock.calls[0]?.[0]);
+    expect(url).toContain('channel=chan-1');
+    expect(url).toContain('message=msg-1');
   });
 });
