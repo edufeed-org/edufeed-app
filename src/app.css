@@ -309,9 +309,13 @@ body {
  * exceeds the default height, while matching native select otherwise.
  * Hides the DaisyUI CSS chevron since custom dropdowns render their own.
  */
-/* Ensure readable code blocks in prose across all themes */
+/* Ensure readable code blocks in prose across all themes.
+ * Tailwind Typography defaults <pre> to a dark background; forcing the text
+ * to base-content alone made code ink-on-ink wherever a surface didn't also
+ * override the background (e.g. the MarkdownEditor preview). Set both. */
 .prose pre {
   color: var(--color-base-content);
+  background-color: var(--color-base-200);
 }
 
 .prose :where(code):not(:where(pre *)) {

@@ -198,7 +198,7 @@
       {activeUser}
       {communityPubkey}
       {targetHighlightId}
-      class="prose prose-lg max-w-none prose-a:text-primary prose-blockquote:border-primary/50 prose-pre:rounded-lg prose-pre:bg-base-200 prose-img:rounded-lg"
+      class="prose prose-lg max-w-none prose-a:text-primary prose-blockquote:border-primary/50 prose-pre:rounded-lg prose-img:rounded-lg"
     />
   </div>
 
