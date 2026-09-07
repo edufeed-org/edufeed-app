@@ -218,8 +218,29 @@ async function initializeAccountPersistence() {
   try {
     // Step 1: Set pool on NostrConnectSigner BEFORE restoring accounts
     // so that restored bunker signers can communicate with relays
-    const { pool } = await import('$lib/stores/nostr-infrastructure.svelte');
+    const { pool, eventStore } = await import('$lib/stores/nostr-infrastructure.svelte');
     NostrConnectSigner.pool = pool;
+
+    // Step 1b: Flush identity-scoped session state when the active account
+    // changes (switch or logout). Registered BEFORE the restore in Step 3 so
+    // the boot emission is seen as the baseline (no flush), and before the
+    // per-account subscriptions below so the flush runs first on a switch —
+    // the new account's loaders then repopulate a clean store. Fixes
+    // member-only content (e.g. private NIP-29 rooms) staying visible to the
+    // next account until a full reload.
+    const { watchAccountSwitches, flushSessionState } = await import(
+      '$lib/services/session-flush.js'
+    );
+    const { bumpSessionEpoch } = await import('$lib/stores/session-epoch.svelte.js');
+    watchAccountSwitches({
+      active$: manager.active$,
+      flush: () => {
+        flushSessionState({ eventStore, pool });
+        // Remount the route tree so the current page refetches under the
+        // new identity instead of rendering the flushed (empty) store.
+        bumpSessionEpoch();
+      }
+    });
 
     // Step 2: Load existing accounts from localStorage
     const savedAccounts = localStorage.getItem('accounts');

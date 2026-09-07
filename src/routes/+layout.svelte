@@ -22,6 +22,7 @@
   import { useActiveUser } from '$lib/stores/accounts.svelte';
   import { appSettings, initializeAppSettings } from '$lib/stores/app-settings.svelte.js';
   import { warmIdentity, hydrateDeletions } from '$lib/stores/event-cache.svelte.js';
+  import { sessionEpoch } from '$lib/stores/session-epoch.svelte.js';
   import {
     initializeAllCuratedAuthors,
     initializeAllWotAuthors
@@ -405,7 +406,13 @@
              instead of killing the whole app. RenderErrorCard resets the
              boundary on retry and on navigation. -->
         <svelte:boundary onerror={(e) => console.error('Route render error:', e)}>
-          {@render children?.()}
+          <!-- Keyed on the session epoch: an account-switch flush (see
+               session-flush.js) empties the EventStore, so the current page
+               must remount and refetch under the new identity — its loaders
+               already ran and are not keyed on the active account. -->
+          {#key sessionEpoch.value}
+            {@render children?.()}
+          {/key}
           {#snippet failed(error, reset)}
             <RenderErrorCard {error} onretry={reset} />
           {/snippet}
