@@ -6,7 +6,11 @@
 // unlike the removed Beitrittsformular layer.
 
 /**
- * @typedef {{id: string, pubkey: string, reason: string, createdAt: number, groupId: string}} JoinRequestRow
+ * One queue row per APPLICANT — their surviving asks merged, newest first.
+ * `id`/`createdAt`/`reason` come from the newest ask (reason: newest
+ * non-empty); `ids` carries every underlying request id (the dismissal
+ * targets), `groupIds` every group knocked on.
+ * @typedef {{id: string, ids: string[], pubkey: string, reason: string, createdAt: number, groupIds: string[]}} JoinRequestRow
  */
 
 /**
@@ -24,8 +28,10 @@ function rosterOf(membersByGroup, groupId) {
 }
 
 /**
- * Newest pending request per (applicant, group knocked on), sorted newest
- * first.
+ * Pending requests grouped ONE ROW PER APPLICANT (dedupe fix: a user whose
+ * retries or channel asks produced several 9021s must not fill the queue
+ * with one row each), sorted newest first. Internally still deduped to the
+ * newest request per (applicant, group knocked on) before grouping.
  *
  * - A request is dropped ONLY when the applicant is already a KNOWN member
  *   of the exact group they knocked on (`membersByGroup.get(row.groupId)`,
@@ -49,7 +55,7 @@ function rosterOf(membersByGroup, groupId) {
  * @returns {JoinRequestRow[]}
  */
 export function pendingJoinRequests({ events, membersByGroup, rootId, dismissed }) {
-  /** @type {Map<string, JoinRequestRow>} */
+  /** @type {Map<string, {id: string, pubkey: string, reason: string, createdAt: number, groupId: string}>} */
   const newestByKey = new Map();
   for (const event of events ?? []) {
     if (!event || event.kind !== 9021) continue;
@@ -79,9 +85,34 @@ export function pendingJoinRequests({ events, membersByGroup, rootId, dismissed 
       groupId
     });
   }
-  return [...newestByKey.values()]
-    .filter((row) => !dismissed.has(row.id))
+  // Surviving asks, newest first, then merged into one row per applicant —
+  // insertion order into rowByPubkey makes each row's ids/groupIds
+  // newest-first and its id/createdAt the newest ask's for free. Dismissal
+  // stays per REQUEST id: ignoring an ask never hides a sibling ask, and a
+  // newer re-request still resurfaces.
+  const surviving = [...newestByKey.values()]
+    .filter((ask) => !dismissed.has(ask.id))
     .sort((a, b) => b.createdAt - a.createdAt);
+  /** @type {Map<string, JoinRequestRow>} */
+  const rowByPubkey = new Map();
+  for (const ask of surviving) {
+    const row = rowByPubkey.get(ask.pubkey);
+    if (!row) {
+      rowByPubkey.set(ask.pubkey, {
+        id: ask.id,
+        ids: [ask.id],
+        pubkey: ask.pubkey,
+        reason: ask.reason,
+        createdAt: ask.createdAt,
+        groupIds: [ask.groupId]
+      });
+      continue;
+    }
+    row.ids.push(ask.id);
+    row.groupIds.push(ask.groupId);
+    if (!row.reason) row.reason = ask.reason;
+  }
+  return [...rowByPubkey.values()];
 }
 
 /**

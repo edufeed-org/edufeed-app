@@ -171,7 +171,9 @@ vi.mock('$lib/paraglide/messages', () => ({
   community_join_request_approve_failed: (/** @type {{reason: string}} */ p) =>
     `Aufnahme fehlgeschlagen: ${p.reason}`,
   community_join_requests_error: (/** @type {{reason: string}} */ p) =>
-    `Anfragen konnten nicht geladen werden: ${p.reason}`
+    `Anfragen konnten nicht geladen werden: ${p.reason}`,
+  community_join_requests_channels: (/** @type {{channels: string}} */ p) =>
+    `Angefragte Kanäle: ${p.channels}`
 }));
 
 const { default: MembershipPane } = await import(
@@ -541,6 +543,62 @@ describe('MembershipPane — Beitrittsanfragen (NIP-29 join requests)', () => {
     const error = await screen.findByTestId('join-requests-error');
     expect(error.textContent).toContain('restricted: not a member');
     expect(screen.queryByTestId('join-requests-empty')).toBeNull();
+  });
+
+  // The dedupe bug (dev.edufeed.org v0.1.3): several 9021s from the SAME
+  // user (root retry + channel asks) rendered one row each. One row per
+  // applicant; approve honors EVERY asked channel; the row lists them.
+  it('renders ONE row for a user with root + channel requests, approve grants root and every asked channel', async () => {
+    relayRequestEvents.value = [
+      req(APPLICANT, 100, 'r-root', 'root1'),
+      req(APPLICANT, 200, 'r-chan1', 'chan1'),
+      req(APPLICANT, 300, 'r-chan2', 'chan2')
+    ];
+    communityChannelsState.channels = [chanFix('chan1', 'Willkommen'), chanFix('chan2', 'Planung')];
+    render(MembershipPane, {
+      props: {
+        communikeyEvent: communikeyEvent([['membership', 'root1', GROUPS_RELAY]]),
+        communityId: OWNER,
+        profileEvent
+      }
+    });
+    const rows = await screen.findAllByTestId('join-request-row');
+    expect(rows).toHaveLength(1);
+    expect(rows[0].getAttribute('data-pubkey')).toBe(APPLICANT);
+    // The merged row names the asked channels.
+    const channels = screen.getByTestId('join-request-channels');
+    expect(channels.textContent).toContain('Willkommen');
+    expect(channels.textContent).toContain('Planung');
+
+    await fireEvent.click(screen.getByTestId('join-request-approve'));
+    await waitFor(() => expect(putUserOn).toHaveBeenCalledTimes(3));
+    expect(putUserOn.mock.calls[0][0]).toEqual(expect.objectContaining({ id: 'root1' }));
+    const channelGrants = putUserOn.mock.calls.slice(1).map((call) => call[0].id);
+    expect(channelGrants.sort()).toEqual(['chan1', 'chan2']);
+    for (const call of putUserOn.mock.calls) expect(call[1]).toBe(APPLICANT);
+    await waitFor(() => expect(showToast).toHaveBeenCalledWith('Aufgenommen.', 'success'));
+  });
+
+  it('ignore on a merged row dismisses ALL of the user’s requests, persisting across a remount', async () => {
+    relayRequestEvents.value = [
+      req(APPLICANT, 100, 'r-root', 'root1'),
+      req(APPLICANT, 200, 'r-chan1', 'chan1')
+    ];
+    communityChannelsState.channels = [chanFix('chan1', 'Willkommen')];
+    const props = {
+      communikeyEvent: communikeyEvent([['membership', 'root1', GROUPS_RELAY]]),
+      communityId: OWNER,
+      profileEvent
+    };
+    const first = render(MembershipPane, { props });
+    await fireEvent.click(await screen.findByTestId('join-request-ignore'));
+    expect(screen.queryByTestId('join-request-row')).toBeNull();
+    first.unmount();
+
+    render(MembershipPane, { props });
+    await new Promise((r) => setTimeout(r, 20));
+    // Neither the root ask nor the channel ask resurfaces.
+    expect(screen.queryByTestId('join-request-row')).toBeNull();
   });
 
   it('ignore hides the request and persists across a remount', async () => {

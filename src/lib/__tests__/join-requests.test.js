@@ -131,7 +131,10 @@ describe('pendingJoinRequests', () => {
     expect(rows.map((r) => r.pubkey)).toEqual([A]);
   });
 
-  it('per-(pubkey, group) dedupe keeps both a root request and a channel request from the same person', () => {
+  // The dedupe bug (dev.edufeed.org v0.1.3): a root request plus a channel
+  // request from the SAME person rendered as two rows. One row per applicant,
+  // with every group they knocked on merged into it.
+  it('merges a root request and a channel request from the same person into ONE row', () => {
     const rows = pendingJoinRequests({
       events: [
         req(A, 100, { id: 'root-req', groupId: ROOT }),
@@ -141,12 +144,59 @@ describe('pendingJoinRequests', () => {
       rootId: ROOT,
       dismissed: new Set()
     });
-    expect(rows.map((r) => [r.groupId, r.id]).sort()).toEqual(
-      [
-        [ROOT, 'root-req'],
-        [CHAN, 'chan-req']
-      ].sort()
-    );
+    expect(rows).toHaveLength(1);
+    expect(rows[0].pubkey).toBe(A);
+    // Newest ask first, everywhere: groupIds, ids, and the row's own id/time.
+    expect(rows[0].groupIds).toEqual([CHAN, ROOT]);
+    expect(rows[0].ids).toEqual(['chan-req', 'root-req']);
+    expect(rows[0].id).toBe('chan-req');
+    expect(rows[0].createdAt).toBe(200);
+  });
+
+  it('keeps the newest non-empty reason across a person’s merged requests', () => {
+    const rows = pendingJoinRequests({
+      events: [
+        req(A, 100, { id: 'root-req', groupId: ROOT, content: 'please let me in' }),
+        req(A, 200, { id: 'chan-req', groupId: CHAN, content: '' })
+      ],
+      membersByGroup: new Map(),
+      rootId: ROOT,
+      dismissed: new Set()
+    });
+    expect(rows).toHaveLength(1);
+    expect(rows[0].reason).toBe('please let me in');
+  });
+
+  it('dismissing one of a person’s requests keeps the row with the remaining asks', () => {
+    const rows = pendingJoinRequests({
+      events: [
+        req(A, 100, { id: 'root-req', groupId: ROOT }),
+        req(A, 200, { id: 'chan-req', groupId: CHAN })
+      ],
+      membersByGroup: new Map(),
+      rootId: ROOT,
+      dismissed: new Set(['chan-req'])
+    });
+    expect(rows).toHaveLength(1);
+    expect(rows[0].groupIds).toEqual([ROOT]);
+    expect(rows[0].ids).toEqual(['root-req']);
+  });
+
+  it('drops only the groups the person is already a member of from their merged row', () => {
+    const rows = pendingJoinRequests({
+      events: [
+        req(A, 100, { id: 'root-req', groupId: ROOT }),
+        req(A, 200, { id: 'chan-req', groupId: CHAN })
+      ],
+      membersByGroup: new Map([
+        [ROOT, new Set()],
+        [CHAN, new Set([A])]
+      ]),
+      rootId: ROOT,
+      dismissed: new Set()
+    });
+    expect(rows).toHaveLength(1);
+    expect(rows[0].groupIds).toEqual([ROOT]);
   });
 
   it('falls back to rootId when the h-tag is missing, for both grouping and membership', () => {
