@@ -149,6 +149,26 @@ describe('ChannelCreateWizard', () => {
     vi.clearAllMocks();
   });
 
+  it('autofocuses the name field when the wizard opens', () => {
+    render(ChannelCreateWizard, { props: baseProps });
+    expect(document.activeElement).toBe(screen.getByTestId('concord-channel-name-input'));
+  });
+
+  it('scopes the visibility radio group per instance (route double-mount)', () => {
+    // The community route mounts responsive twins of the whole view. Radio
+    // groups are document-scoped, so twins sharing name="wizard-access" steal
+    // each other's checked state — the visible dialog then opens with NO
+    // visibility option selected (real-browser only; jsdom doesn't implement
+    // cross-tree radio exclusivity, hence this asserts the names differ).
+    const first = render(ChannelCreateWizard, { props: baseProps });
+    const second = render(ChannelCreateWizard, { props: baseProps });
+    const nameOf = (/** @type {{container: HTMLElement}} */ r) =>
+      /** @type {HTMLInputElement} */ (
+        r.container.querySelector('[data-testid="wizard-access-invited"]')
+      ).name;
+    expect(nameOf(first)).not.toBe(nameOf(second));
+  });
+
   it('disables Next until a name is entered', async () => {
     render(ChannelCreateWizard, { props: baseProps });
     const next = /** @type {HTMLButtonElement} */ (

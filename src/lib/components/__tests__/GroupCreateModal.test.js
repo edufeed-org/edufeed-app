@@ -50,6 +50,11 @@ describe('GroupCreateModal', () => {
     expect(el('group-create-confirm').disabled).toBe(true);
   });
 
+  it('autofocuses the name field when the modal opens', () => {
+    render(GroupCreateModal, { props: { relay: RELAY, onClose: vi.fn() } });
+    expect(document.activeElement).toBe(screen.getByTestId('group-create-name'));
+  });
+
   it('explains what a relay channel is — feature notice behind the info link', async () => {
     render(GroupCreateModal, { props: { relay: RELAY, onClose: vi.fn() } });
     expect(screen.queryByTestId('group-explainer')).toBeNull();

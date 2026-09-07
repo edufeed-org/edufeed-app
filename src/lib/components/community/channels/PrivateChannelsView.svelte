@@ -78,6 +78,7 @@
   import ProfileAvatar from '$lib/components/shared/ProfileAvatar.svelte';
   import { useProfileMap } from '$lib/stores/profile-map.svelte.js';
   import { getUserDisplayName } from '$lib/helpers/message-utils.js';
+  import { focusOnMount } from '$lib/helpers/focus.js';
   import { hexToNpub } from '$lib/helpers/nostrUtils.js';
   import InviteInboxModal from './InviteInboxModal.svelte';
   import { showToast } from '$lib/helpers/toast';
@@ -482,14 +483,6 @@
   $effect(() => {
     if (overlay !== 'dissolve' && dissolveConfirmText) dissolveConfirmText = '';
   });
-
-  // The dissolve confirm input is only ever created fresh when overlay ===
-  // 'dissolve' (no keyed reuse), so an on-mount focus is exactly the moment
-  // the modal opens — no autofocus attribute (a11y-lint-hostile).
-  /** @param {HTMLElement} node */
-  function focusOnMount(node) {
-    node.focus();
-  }
 </script>
 
 <!-- Flag off must hide the UI entirely (global constraint): the tab is
@@ -634,7 +627,7 @@
             {#if canDelete}
               <button
                 type="button"
-                class="btn btn-square pointer-events-none opacity-0 btn-ghost transition-opacity btn-xs group-hover/ch:pointer-events-auto group-hover/ch:opacity-100 focus:pointer-events-auto focus:opacity-100"
+                class="btn pointer-events-none btn-square opacity-0 btn-ghost transition-opacity btn-xs group-hover/ch:pointer-events-auto group-hover/ch:opacity-100 focus:pointer-events-auto focus:opacity-100"
                 data-testid="group-channel-delete"
                 title={m.groups_channel_delete()}
                 aria-label={m.groups_channel_delete()}

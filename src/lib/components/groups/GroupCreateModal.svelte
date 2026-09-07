@@ -16,6 +16,7 @@
   import { relayLabel } from '$lib/groups/relay-directory.js';
   import GroupExplainer from '$lib/components/groups/GroupExplainer.svelte';
   import { goto } from '$app/navigation';
+  import { focusOnMount } from '$lib/helpers/focus.js';
   import { showToast } from '$lib/helpers/toast';
   import * as m from '$lib/paraglide/messages';
 
@@ -77,7 +78,9 @@
       </button>
     </p>
 
-    <label class="mb-1 block text-xs text-base-content/60" for="group-create-name">
+    <!-- mb-1.5 (not mb-1): keeps the focused input's outline clear of the
+      label text — same breathing room across all three fields. -->
+    <label class="mb-1.5 block text-xs font-semibold text-base-content/70" for="group-create-name">
       {m.groups_create_name_label()}
     </label>
     <input
@@ -86,9 +89,13 @@
       data-testid="group-create-name"
       bind:value={name}
       disabled={busy}
+      use:focusOnMount
     />
 
-    <label class="mt-3 mb-1 block text-xs text-base-content/60" for="group-create-about">
+    <label
+      class="mt-4 mb-1.5 block text-xs font-semibold text-base-content/70"
+      for="group-create-about"
+    >
       {m.groups_create_about_label()}
     </label>
     <textarea
@@ -100,7 +107,10 @@
       disabled={busy}
     ></textarea>
 
-    <label class="mt-3 mb-1 block text-xs text-base-content/60" for="group-create-picture">
+    <label
+      class="mt-4 mb-1.5 block text-xs font-semibold text-base-content/70"
+      for="group-create-picture"
+    >
       {m.groups_create_picture_label()}
     </label>
     <input
@@ -111,7 +121,7 @@
       disabled={busy}
     />
 
-    <label class="mt-3 flex items-center gap-2 text-sm">
+    <label class="mt-4 flex items-center gap-2 text-sm">
       <input
         type="checkbox"
         class="toggle toggle-sm"
