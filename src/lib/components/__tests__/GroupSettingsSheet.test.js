@@ -63,7 +63,9 @@ vi.mock('$lib/paraglide/messages', () => ({
   groups_create_about_label: () => 'Description (optional)',
   groups_create_picture_label: () => 'Picture URL (optional)',
   groups_create_public_toggle: () => 'Visible to non-members',
-  groups_create_open_toggle: () => 'Anyone can join'
+  groups_create_open_toggle: () => 'Anyone can join',
+  groups_create_hidden_toggle: () => 'Hidden from the channel list',
+  groups_settings_hidden_permanent: () => 'Hidden rooms cannot be made visible again.'
 }));
 
 const { default: GroupSettingsSheet } = await import(
@@ -154,6 +156,27 @@ describe('GroupSettingsSheet prefill', () => {
     );
   });
 
+  // Hidden rooms: the fork's 39000 carries a bare `hidden` tag (nip29
+  // Group.ToMetadataEvent) — presence-read is correct here, unlike
+  // private/closed where the marker may be absent on spec-current events.
+  it('shows a hidden room as checked AND disabled — NIP-29 has no un-hide tag', () => {
+    renderSheet({ metadataEvent: eventWithTags([['private'], ['closed'], ['hidden']]) });
+
+    const hidden = /** @type {HTMLInputElement} */ (screen.getByTestId('group-edit-hidden'));
+    expect(hidden.checked).toBe(true);
+    expect(hidden.disabled).toBe(true);
+    // The one-way consequence is spelled out.
+    expect(screen.getByText('Hidden rooms cannot be made visible again.')).toBeTruthy();
+  });
+
+  it('shows a listed room as unchecked and editable', () => {
+    renderSheet({ metadataEvent: eventWithTags([['public']]) });
+
+    const hidden = /** @type {HTMLInputElement} */ (screen.getByTestId('group-edit-hidden'));
+    expect(hidden.checked).toBe(false);
+    expect(hidden.disabled).toBe(false);
+  });
+
   it('handles a null metadata prop without crashing', () => {
     renderSheet({ metadata: null, metadataEvent: eventWithTags([]) });
 
@@ -206,6 +229,46 @@ describe('GroupSettingsSheet save', () => {
     expect(buildEditGroupMetadataTemplate).toHaveBeenCalledWith(
       'grp1',
       expect.objectContaining({ parent: 'root-1' })
+    );
+  });
+
+  it('ticking the hidden checkbox saves isHidden — hides the room one-way', async () => {
+    renderSheet({ metadataEvent: eventWithTags([['private'], ['closed']]) });
+
+    await fireEvent.click(screen.getByTestId('group-edit-hidden'));
+    await fireEvent.click(screen.getByTestId('group-edit-save'));
+
+    await waitFor(() => expect(publishToGroupRelay).toHaveBeenCalledTimes(1));
+    expect(buildEditGroupMetadataTemplate).toHaveBeenCalledWith(
+      'grp1',
+      expect.objectContaining({ isHidden: true })
+    );
+  });
+
+  it('re-states isHidden on every save of an already-hidden room — a 9002 without the tag would UN-hide it on spec-literal relays', async () => {
+    renderSheet({ metadataEvent: eventWithTags([['private'], ['closed'], ['hidden']]) });
+
+    await fireEvent.input(screen.getByTestId('group-edit-name'), {
+      target: { value: 'Renamed' }
+    });
+    await fireEvent.click(screen.getByTestId('group-edit-save'));
+
+    await waitFor(() => expect(publishToGroupRelay).toHaveBeenCalledTimes(1));
+    expect(buildEditGroupMetadataTemplate).toHaveBeenCalledWith(
+      'grp1',
+      expect.objectContaining({ name: 'Renamed', isHidden: true })
+    );
+  });
+
+  it('saves isHidden false for a listed room left unticked', async () => {
+    renderSheet({ metadataEvent: eventWithTags([['public']]) });
+
+    await fireEvent.click(screen.getByTestId('group-edit-save'));
+
+    await waitFor(() => expect(publishToGroupRelay).toHaveBeenCalledTimes(1));
+    expect(buildEditGroupMetadataTemplate).toHaveBeenCalledWith(
+      'grp1',
+      expect.objectContaining({ isHidden: false })
     );
   });
 
