@@ -12,7 +12,7 @@
   `href` makes the row a link, otherwise it is a button. Nothing else changes.
 -->
 <script>
-  import { LockIcon } from '$lib/components/icons';
+  import { EyeOffIcon, LockIcon } from '$lib/components/icons';
   import * as m from '$lib/paraglide/messages';
 
   /**
@@ -26,6 +26,7 @@
    *   bold?: boolean,
    *   worldReadable?: boolean,
    *   locked?: boolean,
+   *   hidden?: boolean,
    *   testid?: string | null,
    *   trailing?: import('svelte').Snippet
    * }}
@@ -40,6 +41,7 @@
     bold = false,
     worldReadable = false,
     locked = false,
+    hidden = false,
     testid = null,
     trailing
   } = $props();
@@ -88,7 +90,17 @@
       class="shrink-0 text-[0.7rem] opacity-80">&#127760;</span
     >
   {/if}
-  {#if locked}
+  {#if hidden}
+    <!-- Unlisted (NIP-29 `hidden`): a hidden room is private too, but the
+         lock alone made it indistinguishable from an ordinary closed room in
+         the rail (laoc, 2026-09-07) — the crossed eye takes the lock's slot. -->
+    <span
+      aria-hidden="true"
+      data-testid="hidden-badge"
+      title={m.channel_hidden_tooltip()}
+      class="shrink-0 opacity-60"><EyeOffIcon class_="w-3 h-3" /></span
+    >
+  {:else if locked}
     <!-- Invite-only: same LockIcon as the INHALTE rows' restriction badge —
          the amber emoji read as a different vocabulary (laoc, 2026-08-18).
          Mutually exclusive with the globe by construction. -->

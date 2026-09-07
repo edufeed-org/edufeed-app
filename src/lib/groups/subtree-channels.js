@@ -10,7 +10,7 @@
 // invited (channelAccessLevel). The retired "members" tier lived on the dropped
 // pointer marker; "all community members, privately" is Concord's job now.
 import { GROUP_METADATA_KIND } from 'applesauce-common/helpers/groups';
-import { channelAccessLevel } from './channel-access.js';
+import { channelAccessLevel, channelHidden } from './channel-access.js';
 
 /** @param {any} event @returns {string | undefined} the `d` tag (group id) */
 export function dTagOf(event) {
@@ -33,6 +33,7 @@ export function nameOf(event) {
  *   relay: string,
  *   name: string | undefined,
  *   level: import('./channel-access.js').ChannelAccessLevel,
+ *   hidden?: boolean,
  *   metadata: any
  * }} SubtreeChannel
  */
@@ -78,6 +79,7 @@ export function buildSubtreeChannels(events, rootId, relay, hostRequiresAuth = f
     relay,
     name: nameOf(ev),
     level: channelAccessLevel(ev, undefined, hostRequiresAuth),
+    hidden: channelHidden(ev),
     metadata: ev
   });
 

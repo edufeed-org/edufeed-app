@@ -56,6 +56,22 @@ export function channelAccessLevel(metadata, _pointer = undefined, hostRequiresA
 }
 
 /**
+ * Whether a channel is unlisted: its kind:39000 carries the bare NIP-29
+ * `hidden` tag. Orthogonal to the access level — a hidden room is always
+ * private on the edufeed pyramid fork (the wizard only offers it on the
+ * invited tier), but the rail draws it with its own badge so it is not
+ * mistaken for an ordinary closed room (laoc, 2026-09-07).
+ * @param {{ kind?: number, tags?: string[][] } | null | undefined} metadata
+ * @returns {boolean}
+ */
+export function channelHidden(metadata) {
+  if (!metadata || metadata.kind !== GROUP_METADATA_KIND || !Array.isArray(metadata.tags)) {
+    return false;
+  }
+  return metadata.tags.some((t) => t[0] === 'hidden');
+}
+
+/**
  * How the channel row is drawn for a level. Every row leads with '#' — the
  * access level rides as trailing badges (globe for world, lock for invited),
  * so closedness never costs the row its channel affordance.

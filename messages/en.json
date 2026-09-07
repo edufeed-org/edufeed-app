@@ -3441,6 +3441,7 @@
   "area_settings_title": "Settings",
   "area_settings_notifications": "Notifications",
   "channel_lock_tooltip": "Private channel – only invited members can read and write.",
+  "channel_hidden_tooltip": "Hidden channel – unlisted, only invited members can see and read it.",
   "concord_locked_contact_lead": "Ask for an invitation from:",
   "community_settings_section_profile": "Profile & content",
   "community_settings_section_access": "Type & access",

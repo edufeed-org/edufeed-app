@@ -3441,6 +3441,7 @@
   "area_settings_title": "Einstellungen",
   "area_settings_notifications": "Benachrichtigungen",
   "channel_lock_tooltip": "Privater Kanal – nur eingeladene Mitglieder können ihn lesen und schreiben.",
+  "channel_hidden_tooltip": "Versteckter Kanal – nicht gelistet, nur eingeladene Mitglieder sehen und lesen ihn.",
   "concord_locked_contact_lead": "Frag nach einer Einladung bei:",
   "community_settings_section_profile": "Profil & Inhalte",
   "community_settings_section_access": "Typ & Zugang",

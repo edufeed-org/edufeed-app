@@ -2,7 +2,7 @@
 import { describe, it, expect } from 'vitest';
 import { buildChannelRows } from '$lib/groups/community-channel-rows.js';
 import { channelKey } from '$lib/groups/community-pointer.js';
-import { channelAccessLevel } from '$lib/groups/channel-access.js';
+import { channelAccessLevel, channelHidden } from '$lib/groups/channel-access.js';
 
 const R = 'wss://groups.example/c/root0';
 
@@ -27,6 +27,7 @@ const chan = (
     relay,
     name: metadata.tags.find((t) => t[0] === 'name')?.[1],
     level: channelAccessLevel(metadata, undefined, hostRequiresAuth),
+    hidden: channelHidden(metadata),
     metadata
   };
 };
@@ -92,6 +93,17 @@ describe('buildChannelRows', () => {
     });
     expect(rows.find((r) => r.name === 'allgemein')?.locked).toBe(true);
     expect(rows.find((r) => r.name === 'leitung')?.locked).toBe(true);
+  });
+
+  it('carries the NIP-29 hidden tag as its own flag next to the lock', () => {
+    const rows = buildChannelRows({
+      subtreeChannels: [chan('geheim', [['private'], ['hidden']]), chan('leitung', [['private']])]
+    });
+    expect(rows.find((r) => r.name === 'geheim')).toMatchObject({ locked: true, hidden: true });
+    expect(rows.find((r) => r.name === 'leitung')).toMatchObject({ locked: true, hidden: false });
+    expect(buildChannelRows({ concordChannels: [concord('c', { private: true })] })[0].hidden).toBe(
+      false
+    );
   });
 
   it('names a subtree channel from its 39000 name, else its id', () => {

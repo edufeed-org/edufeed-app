@@ -35,6 +35,17 @@ describe('tag helpers', () => {
 });
 
 describe('buildSubtreeChannels', () => {
+  it('reads the bare NIP-29 `hidden` tag into the hidden flag', () => {
+    const events = [
+      meta(ROOT, [['name', 'Community']]),
+      meta('geheim', [['parent', ROOT], ['name', 'geheim'], ['private'], ['hidden']]),
+      meta('leitung', [['parent', ROOT], ['name', 'leitung'], ['private']])
+    ];
+    const { channels } = buildSubtreeChannels(events, ROOT, R);
+    expect(channels.find((c) => c.id === 'geheim')?.hidden).toBe(true);
+    expect(channels.find((c) => c.id === 'leitung')?.hidden).toBe(false);
+  });
+
   it('surfaces the root as its own row and lists the parent==root children', () => {
     const events = [
       meta(ROOT, [['name', 'Community']]),

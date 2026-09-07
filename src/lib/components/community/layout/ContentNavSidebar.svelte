@@ -433,6 +433,7 @@
                     getSelectedGroupChannel(communityEvent?.pubkey) === channelKey(row.pointer)}
                   dimmed={row.pending}
                   worldReadable={row.worldReadable}
+                  hidden={row.hidden === true}
                   onclick={() => selectGroupRow(row.pointer)}
                 />
               {/if}
