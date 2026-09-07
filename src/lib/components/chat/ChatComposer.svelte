@@ -7,6 +7,7 @@
 -->
 <script>
   import * as m from '$lib/paraglide/messages';
+  import { PollIcon } from '$lib/components/icons';
 
   /**
    * @typedef {Object} Props
@@ -26,6 +27,9 @@
    *   the attach-file button. The caller owns the upload; `uploading` mirrors
    *   its in-flight state back onto the button.
    * @property {boolean} [uploading]
+   * @property {(() => void) | null} [onOpenPoll] - opt-in: renders the poll
+   *   button before the input. Same timeline-only rule as onOpenApps (a poll
+   *   is a room timeline row, not a thread reply).
    */
 
   /** @type {Props} */
@@ -40,7 +44,8 @@
     testid = undefined,
     onOpenApps = null,
     onAttachFile = null,
-    uploading = false
+    uploading = false,
+    onOpenPoll = null
   } = $props();
 
   let fileInput = $state(/** @type {HTMLInputElement | null} */ (null));
@@ -110,6 +115,17 @@
         📎
       {/if}
     </button>
+  {/if}
+  {#if onOpenPoll}
+    <button
+      type="button"
+      class="btn btn-circle btn-ghost btn-sm"
+      data-testid="chat-poll-button"
+      title={m.groups_poll_button()}
+      aria-label={m.groups_poll_button()}
+      onclick={onOpenPoll}
+      {disabled}><PollIcon class_="h-4 w-4" /></button
+    >
   {/if}
   <input
     class="input flex-1 input-ghost focus:outline-none"

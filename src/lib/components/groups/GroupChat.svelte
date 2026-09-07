@@ -43,9 +43,23 @@
     buildGroupMessageTemplate,
     buildJoinRequestTemplate,
     buildLeaveRequestTemplate,
+    buildPollTemplate,
     isMembershipRefusal,
     isAlreadyMemberError
   } from '$lib/groups/groups.js';
+  // Pure NIP-88 poll logic (parse/tally/vote template), shared with the
+  // Concord channel lane — semantics verified against Armada. The vote
+  // template deliberately omits the room binding; the `h` tag is appended
+  // in votePoll below, mirroring buildGroupMessageTemplate.
+  import {
+    parsePoll,
+    collectVotes,
+    tallyPollVotes,
+    buildVoteTemplate,
+    isPollEnded
+  } from '$lib/concord/polls.js';
+  import PollMessage from '$lib/components/community/channels/PollMessage.svelte';
+  import GroupPollModal from '$lib/components/groups/GroupPollModal.svelte';
   import { updatePersonalGroupsList } from '$lib/groups/personal-groups-list.js';
   import { publishToGroupRelay, buildDeleteEventTemplate } from '$lib/groups/group-management.js';
   import { uploadChatAttachment } from '$lib/helpers/chat-attachment-upload.js';
@@ -200,6 +214,7 @@
   // are hidden client-side; the relay itself drops the event from its store,
   // so this only bridges the gap for events already replayed/live in view.
   /** @type {any[]} */ let deletionEvents = $state.raw([]);
+  /** @type {any[]} */ let voteEvents = $state([]);
 
   // Bump to re-run the roster request below (e.g. after an admin action
   // changes the 39001/39002 events) without touching the chat subscription.
@@ -367,7 +382,10 @@
     isLoading = true;
     authRequired = false;
     messagesRestricted = false;
-    const filter = { kinds: [9], '#h': [pointer.id] };
+    // Kind-1068 NIP-88 polls are timeline rows alongside kind-9 messages
+    // (Armada renders both in the main chat; 1018 votes stay side events,
+    // h-scoped like reactions).
+    const filter = { kinds: [9, 1068], '#h': [pointer.id] };
     const fallbackTimer = setTimeout(() => (isLoading = false), 4000);
 
     const subSub = pool
@@ -375,7 +393,8 @@
       .subscription([
         { ...filter, limit: 100 },
         { kinds: [7], '#h': [pointer.id], limit: 200 },
-        { kinds: [DELETE_EVENT_KIND], '#h': [pointer.id], limit: 100 }
+        { kinds: [DELETE_EVENT_KIND], '#h': [pointer.id], limit: 100 },
+        { kinds: [1018], '#h': [pointer.id], limit: 500 }
       ])
       .pipe(storeEvents(eventStore))
       .subscribe({
@@ -403,6 +422,11 @@
       .subscribe((events) => {
         deletionEvents = events;
       });
+    const votesSub = eventStore
+      .model(TimelineModel, { kinds: [1018], '#h': [pointer.id] })
+      .subscribe((events) => {
+        voteEvents = events;
+      });
 
     return () => {
       clearTimeout(fallbackTimer);
@@ -410,6 +434,7 @@
       modelSub.unsubscribe();
       reactionsSub.unsubscribe();
       deletionsSub.unsubscribe();
+      votesSub.unsubscribe();
     };
   });
 
@@ -533,6 +558,9 @@
       sub?.unsubscribe();
     };
   });
+  // Kind-1018 votes bucketed by the poll they e-reference; the tally itself
+  // (latest-per-pubkey, endsAt cutoff) happens per poll row below.
+  const votesByPoll = $derived(collectVotes(voteEvents));
   const reactionsByTarget = $derived(
     aggregateChannelReactions(reactionEvents, getActiveUser()?.pubkey)
   );
@@ -1077,6 +1105,53 @@
     deleting = false;
   }
 
+  // NIP-88 polls in the room (Armada interop): the poll modal builds a
+  // kind-1068 timeline row, votes are kind-1018 side events — both h-tagged
+  // and published to the group relay ONLY, so membership stays enforced.
+  let pollModalOpen = $state(false);
+
+  /** @param {import('$lib/concord/polls.js').ParsedPoll} poll @param {string[]} optionIds */
+  async function votePoll(poll, optionIds) {
+    if (!canWrite) {
+      showToast(m.groups_join_required(), 'warning');
+      return;
+    }
+    const template = buildVoteTemplate(poll.id, optionIds);
+    template.tags.push(['h', pointer.id]);
+    try {
+      const signed = await signAndPublish(template);
+      eventStore.add(signed);
+    } catch (err) {
+      console.error('poll vote failed', err);
+      if (isMembershipRefusal(err)) showToast(m.groups_join_required(), 'warning');
+      else showToast(m.groups_send_failed(), 'error');
+    }
+  }
+
+  /**
+   * @param {{question: string, options: {id: string, label: string}[], pollType: 'singlechoice'|'multiplechoice', endsAt?: number}} details
+   * @returns {Promise<boolean>} whether it went out (the modal closes on true)
+   */
+  async function createPoll({ question, options, pollType, endsAt }) {
+    try {
+      const signed = await signAndPublish(
+        buildPollTemplate(pointer.id, question, options, {
+          pollType,
+          endsAt,
+          relayUrl: pointer.relay
+        })
+      );
+      eventStore.add(signed);
+      pollModalOpen = false;
+      return true;
+    } catch (err) {
+      console.error('poll create failed', err);
+      if (isMembershipRefusal(err)) showToast(m.groups_join_required(), 'warning');
+      else showToast(m.groups_send_failed(), 'error');
+      return false;
+    }
+  }
+
   /**
    * Mirror a join/leave into the user's kind-10009 GROUPS list (published to
    * the user's own relays, NOT the group relay) so joined groups roam.
@@ -1244,6 +1319,9 @@
       onClose={() => (appPickerOpen = false)}
     />
   {/if}
+  {#if pollModalOpen}
+    <GroupPollModal onCreate={createPoll} onClose={() => (pollModalOpen = false)} />
+  {/if}
   {#if pendingExport}
     <div class="modal-open modal">
       <div class="modal-box max-w-sm">
@@ -1345,6 +1423,20 @@
             attachment={xdc}
             title={sessionTitles.get(xdc.webxdc) ?? ''}
             onLaunch={openSession}
+          />
+        {/if}
+        {#if msg.kind === 1068}
+          {@const poll = parsePoll(msg)}
+          <PollMessage
+            {poll}
+            tally={tallyPollVotes(
+              votesByPoll.get(poll.id) ?? [],
+              poll.options,
+              poll.endsAt,
+              myPubkey
+            )}
+            ended={isPollEnded(poll.endsAt)}
+            onVote={(optionIds) => votePoll(poll, optionIds)}
           />
         {/if}
       {/snippet}
@@ -1470,6 +1562,7 @@
             onOpenApps={canWrite ? () => (appPickerOpen = true) : null}
             onAttachFile={canWrite ? (file) => attachFile(file, 'timeline') : null}
             uploading={uploadingAttachment}
+            onOpenPoll={canWrite ? () => (pollModalOpen = true) : null}
           />
         {/if}
       </div>
