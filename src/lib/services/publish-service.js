@@ -17,6 +17,7 @@ import {
   getCommunityGlobalRelays,
   getCommunityRelaysByEnforcement
 } from '$lib/helpers/communityRelays.js';
+import * as outbox from './publish-outbox.js';
 /**
  * @typedef {Object} PublishStatus
  * @property {string} eventId - Event ID being published
@@ -24,6 +25,7 @@ import {
  * @property {number} successCount - Number of successful relay publishes
  * @property {number} totalRelays - Total number of relays
  * @property {string} [error] - Error message if failed
+ * @property {boolean} [retryQueued] - On failure: at least one relay never answered, so the outbox will retry
  */
 
 /** @type {Map<string, PublishStatus>} */
@@ -85,13 +87,13 @@ function notifyStatusUpdate(status) {
  * @param {number} [opts.retries] - Transport-error retries per relay (default 2)
  * @param {string} [opts.label] - Prefix for the rejection warning, e.g. '[membership]'
  * @param {any} [opts.pool] - Relay pool (injectable for tests)
- * @returns {Promise<{success: boolean, relays: string[], successCount: number}>}
+ * @returns {Promise<{success: boolean, relays: string[], successCount: number, results: { ok: boolean, message?: string, from: string }[]}>}
  */
 export async function publishToRelays(signedEvent, relays, opts = {}) {
   const { timeout = 5000, retries = 2, label = '', pool: relayPool = pool } = opts;
   const targets = [...new Set((relays || []).filter(Boolean))];
   if (targets.length === 0) {
-    return { success: false, relays: [], successCount: 0 };
+    return { success: false, relays: [], successCount: 0, results: [] };
   }
 
   // pool.publish is applesauce's own multi-relay fan-out, and it does what our
@@ -118,7 +120,113 @@ export async function publishToRelays(signedEvent, relays, opts = {}) {
   }
 
   const successCount = responses.filter((r) => r?.ok).length;
-  return { success: successCount > 0, relays: targets, successCount };
+  return { success: successCount > 0, relays: targets, successCount, results: responses };
+}
+
+/**
+ * The relay set an outbox-model publish goes to. Shared by `publishEvent`,
+ * `publishEventOptimistic` and the outbox replay so all three agree.
+ *
+ * 1. Outbox model: author's write relays + tagged users' read relays
+ * 2. App-specific relays for the kind's category
+ * 3. Community relays (communikey app relay, per-kind, global, enforced)
+ * 4. Explicit additional relays
+ * 5. Safety net: a fresh account (no NIP-65 write relays) publishing a kind
+ *    without an app-relay category (kind 1 note, kind 1068 poll, kind 1063
+ *    attestation) can end up with an EMPTY set — the event would silently go
+ *    nowhere. Fall back to the deployment fallback relays (empty in gated
+ *    mode, where users are provisioned with proper relay lists).
+ *
+ * @param {import('nostr-tools').NostrEvent} signedEvent
+ * @param {string[]} taggedPubkeys
+ * @param {{ communityEvent?: import('nostr-tools').NostrEvent | null, additionalRelays?: string[] }} opts
+ * @returns {Promise<string[]>}
+ */
+export async function computePublishRelays(signedEvent, taggedPubkeys, opts = {}) {
+  const { communityEvent = null, additionalRelays = [] } = opts;
+  const relaySet = new Set();
+
+  const outboxRelays = await getPublishRelays(signedEvent.pubkey, taggedPubkeys);
+  outboxRelays.forEach((r) => relaySet.add(r));
+
+  const category = kindToAppRelayCategory(signedEvent.kind);
+  if (category) {
+    getAppRelaysForCategory(category).forEach((r) => relaySet.add(r));
+  }
+
+  if (communityEvent) {
+    getAppRelaysForCategory('communikey').forEach((r) => relaySet.add(r));
+    getRelaysForKind(communityEvent, signedEvent.kind).forEach((r) => relaySet.add(r));
+    getCommunityGlobalRelays(communityEvent).forEach((r) => relaySet.add(r));
+    const { enforced } = getCommunityRelaysByEnforcement(communityEvent);
+    enforced.forEach((r) => relaySet.add(r));
+  }
+
+  additionalRelays.forEach((r) => relaySet.add(r));
+
+  if (relaySet.size === 0) {
+    getFallbackRelays().forEach((r) => relaySet.add(r));
+  }
+
+  return Array.from(relaySet);
+}
+
+/**
+ * Publish to ONE relay and settle the outbox for it.
+ *
+ * `answered` separates the two ways this can fail: a relay that responded
+ * OK:false has made a decision and is cleared from the outbox (asking again
+ * gets the same no); a relay that threw (connection, timeout) never answered
+ * and stays pending for the replay.
+ *
+ * @param {string} relayUrl
+ * @param {import('nostr-tools').NostrEvent} signedEvent
+ * @param {number} timeout
+ * @returns {Promise<{ relay: string, success: boolean, answered: boolean, error?: any }>}
+ */
+async function publishToRelay(relayUrl, signedEvent, timeout) {
+  try {
+    const relay = pool.relay(relayUrl);
+    // relay.publish RESOLVES with {ok:false, message} when the relay
+    // rejects the event — it only throws on connection/timeout errors.
+    const response = await relay.publish(signedEvent, { timeout });
+    outbox.markRelayDone(signedEvent.id, relayUrl);
+    if (response && response.ok === false) {
+      console.warn(`Relay ${relayUrl} rejected event:`, response.message);
+      return { relay: relayUrl, success: false, answered: true, error: response.message };
+    }
+    return { relay: relayUrl, success: true, answered: true };
+  } catch (err) {
+    console.warn(`Failed to publish to ${relayUrl}:`, /** @type {any} */ (err)?.message || err);
+    return { relay: relayUrl, success: false, answered: false, error: err };
+  }
+}
+
+/**
+ * Rebroadcast events that must travel WITH a content event — a cover
+ * image's kind-1063 license attestation next to the article or resource that
+ * carries its hash in an `x` tag. The attestation was published on its own
+ * when the license modal saved, to the author's outbox; this sends it to the
+ * content's relay set too, so wherever the content is found the badge can
+ * resolve, and gives it a second chance if that first publish was lost.
+ *
+ * `pool.publish` folds transport errors into `ok:false`, so a companion's
+ * relay is cleared from the outbox only on `ok:true`.
+ *
+ * @param {import('nostr-tools').NostrEvent[]} companions
+ * @param {string[]} relays
+ * @param {number} timeout
+ */
+function publishCompanions(companions, relays, timeout) {
+  for (const companion of companions) {
+    if (!companion?.id) continue;
+    outbox.enqueue({ event: companion, pending: relays });
+    publishToRelays(companion, relays, { timeout, label: '[companion]' })
+      .then(({ results }) => {
+        for (const r of results) if (r.ok) outbox.markRelayDone(companion.id, r.from);
+      })
+      .catch((err) => console.warn('[companion] publish failed:', err));
+  }
 }
 
 /**
@@ -135,74 +243,26 @@ export async function publishToRelays(signedEvent, relays, opts = {}) {
 export async function publishEvent(signedEvent, taggedPubkeys = [], opts = {}) {
   // Reduced timeout from 15s to 5s - warm connections should be fast
   const { timeout = 5000, communityEvent = null, additionalRelays = [] } = opts;
-  const relaySet = new Set();
 
-  // 1. Outbox model: author's write relays + tagged users' read relays
-  const outboxRelays = await getPublishRelays(signedEvent.pubkey, taggedPubkeys);
-  outboxRelays.forEach((r) => relaySet.add(r));
+  // Durable copy BEFORE the first await — see publish-outbox.js.
+  outbox.enqueue({ event: signedEvent, taggedPubkeys, additionalRelays, communityEvent });
 
-  // 2. App-specific relay for content type
-  const category = kindToAppRelayCategory(signedEvent.kind);
-  if (category) {
-    getAppRelaysForCategory(category).forEach((r) => relaySet.add(r));
-  }
-
-  // 3. If community-targeted, add community's relays
-  if (communityEvent) {
-    // Add communikey app relay (for discoverability)
-    getAppRelaysForCategory('communikey').forEach((r) => relaySet.add(r));
-
-    // Add community's relays for this content type
-    getRelaysForKind(communityEvent, signedEvent.kind).forEach((r) => relaySet.add(r));
-
-    // Add community's global relays (including enforced)
-    getCommunityGlobalRelays(communityEvent).forEach((r) => relaySet.add(r));
-
-    // Ensure enforced relays are always included
-    const { enforced } = getCommunityRelaysByEnforcement(communityEvent);
-    enforced.forEach((r) => relaySet.add(r));
-  }
-
-  // 4. Additional relays (explicit)
-  additionalRelays.forEach((r) => relaySet.add(r));
-
-  // 5. Safety net: a fresh account (no NIP-65 write relays) publishing a
-  // kind without an app-relay category (e.g. kind 1 note, kind 1068 poll)
-  // can end up with an EMPTY set — the event would silently go nowhere.
-  // Fall back to the deployment fallback relays (empty in gated mode,
-  // where users are provisioned with proper relay lists).
-  if (relaySet.size === 0) {
-    getFallbackRelays().forEach((r) => relaySet.add(r));
-  }
-
-  const publishRelays = Array.from(relaySet);
-
-  // Publish to all calculated relays with timeout
-  const publishPromises = publishRelays.map(async (relayUrl) => {
-    try {
-      const relay = pool.relay(relayUrl);
-      // relay.publish RESOLVES with {ok:false, message} when the relay
-      // rejects the event — it only throws on connection/timeout errors.
-      const response = await relay.publish(signedEvent, { timeout });
-      if (response && response.ok === false) {
-        console.warn(`Relay ${relayUrl} rejected event:`, response.message);
-        return { relay: relayUrl, success: false, error: response.message };
-      }
-      return { relay: relayUrl, success: true };
-    } catch (err) {
-      console.warn(`Failed to publish to ${relayUrl}:`, err);
-      return { relay: relayUrl, success: false, error: err };
-    }
+  const publishRelays = await computePublishRelays(signedEvent, taggedPubkeys, {
+    communityEvent,
+    additionalRelays
   });
+  outbox.setPendingRelays(signedEvent.id, publishRelays);
 
-  const results = await Promise.allSettled(publishPromises);
-  const successCount = results.filter((r) => r.status === 'fulfilled' && r.value.success).length;
+  const results = await Promise.all(
+    publishRelays.map((relayUrl) => publishToRelay(relayUrl, signedEvent, timeout))
+  );
+  const successCount = results.filter((r) => r.success).length;
 
   return {
     success: successCount > 0,
     relays: publishRelays,
     successCount,
-    results: results.map((r) => (r.status === 'fulfilled' ? r.value : { success: false }))
+    results
   };
 }
 
@@ -259,10 +319,20 @@ function getReplacedVersion(signedEvent) {
  * @param {import('nostr-tools').NostrEvent | null} [opts.communityEvent] - Community definition event if community-targeted
  * @param {string[]} [opts.additionalRelays] - Additional relays to publish to
  * @param {(status: PublishStatus) => void} [opts.onStatusChange] - Callback for status updates
+ * @param {import('nostr-tools').NostrEvent[]} [opts.companions] - Already-signed events rebroadcast to the same relay set (e.g. the cover image's license attestation)
  * @returns {void} Returns immediately after adding to EventStore
  */
 export function publishEventOptimistic(signedEvent, taggedPubkeys = [], opts = {}) {
-  const { timeout = 5000, communityEvent = null, additionalRelays = [], onStatusChange } = opts;
+  const {
+    timeout = 5000,
+    communityEvent = null,
+    additionalRelays = [],
+    onStatusChange,
+    companions = []
+  } = opts;
+
+  // 0. Durable copy BEFORE anything else — see publish-outbox.js.
+  outbox.enqueue({ event: signedEvent, taggedPubkeys, additionalRelays, communityEvent });
 
   // 1. Immediately add to EventStore for instant UI update.
   //
@@ -277,7 +347,7 @@ export function publishEventOptimistic(signedEvent, taggedPubkeys = [], opts = {
   eventStore.add(signedEvent);
 
   // 2. Initialize status
-  /** @type {{eventId: string, status: 'pending' | 'publishing' | 'success' | 'failed', successCount: number, totalRelays: number, error?: string}} */
+  /** @type {PublishStatus} */
   const status = {
     eventId: signedEvent.id,
     status: 'pending',
@@ -289,76 +359,40 @@ export function publishEventOptimistic(signedEvent, taggedPubkeys = [], opts = {
 
   // 3. Calculate relays and publish in background
   (async () => {
-    const relaySet = new Set();
-
-    // Outbox model: author's write relays + tagged users' read relays
-    const outboxRelays = await getPublishRelays(signedEvent.pubkey, taggedPubkeys);
-    outboxRelays.forEach((r) => relaySet.add(r));
-
-    // App-specific relay for content type
-    const category = kindToAppRelayCategory(signedEvent.kind);
-    if (category) {
-      getAppRelaysForCategory(category).forEach((r) => relaySet.add(r));
-    }
-
-    // Community relays if community-targeted
-    if (communityEvent) {
-      getAppRelaysForCategory('communikey').forEach((r) => relaySet.add(r));
-      getRelaysForKind(communityEvent, signedEvent.kind).forEach((r) => relaySet.add(r));
-      getCommunityGlobalRelays(communityEvent).forEach((r) => relaySet.add(r));
-      const { enforced } = getCommunityRelaysByEnforcement(communityEvent);
-      enforced.forEach((r) => relaySet.add(r));
-    }
-
-    // Additional relays
-    additionalRelays.forEach((r) => relaySet.add(r));
-
-    const publishRelays = Array.from(relaySet);
+    const publishRelays = await computePublishRelays(signedEvent, taggedPubkeys, {
+      communityEvent,
+      additionalRelays
+    });
+    outbox.setPendingRelays(signedEvent.id, publishRelays);
     status.totalRelays = publishRelays.length;
     status.status = 'publishing';
     notifyStatusUpdate({ ...status });
     onStatusChange?.({ ...status });
 
-    let firstSuccess = false;
+    publishCompanions(companions, publishRelays, timeout);
 
     // Publish to all relays, update status as each completes
-    const publishPromises = publishRelays.map(async (relayUrl) => {
-      try {
-        const relay = pool.relay(relayUrl);
-        // relay.publish RESOLVES with {ok:false, message} when the relay
-        // rejects the event — it only throws on connection/timeout errors.
-        const response = await relay.publish(signedEvent, { timeout });
-        if (response && response.ok === false) {
-          console.warn(`Relay ${relayUrl} rejected event:`, response.message);
-          return { relay: relayUrl, success: false, error: response.message };
-        }
-
-        // Update success count
-        status.successCount++;
-
-        // Mark as success on first successful publish
-        if (!firstSuccess) {
-          firstSuccess = true;
+    const results = await Promise.all(
+      publishRelays.map(async (relayUrl) => {
+        const result = await publishToRelay(relayUrl, signedEvent, timeout);
+        if (result.success) {
+          status.successCount++;
+          // Mark as success on first successful publish
           status.status = 'success';
+          notifyStatusUpdate({ ...status });
+          onStatusChange?.({ ...status });
         }
-
-        notifyStatusUpdate({ ...status });
-        onStatusChange?.({ ...status });
-
-        return { relay: relayUrl, success: true };
-      } catch (err) {
-        console.warn(`Failed to publish to ${relayUrl}:`, /** @type {any} */ (err)?.message || err);
-        return { relay: relayUrl, success: false, error: err };
-      }
-    });
-
-    // Wait for all to complete
-    await Promise.allSettled(publishPromises);
+        return result;
+      })
+    );
 
     // If no relays succeeded, mark as failed and remove from EventStore
     if (status.successCount === 0) {
       status.status = 'failed';
       status.error = 'Failed to publish to any relay';
+      // A relay that never answered is still pending in the outbox and will
+      // be retried on the next boot / reconnect. A relay that said no is not.
+      status.retryQueued = results.some((r) => !r.answered);
       notifyStatusUpdate({ ...status });
       onStatusChange?.({ ...status });
 
@@ -407,6 +441,48 @@ export function publishEventOptimistic(signedEvent, taggedPubkeys = [], opts = {
       }
     }
   })();
+}
+
+let outboxReplayStarted = false;
+
+/**
+ * Replay whatever the outbox still holds, now and on every reconnect.
+ * Call once from the root layout after runtime config is ready (the relay
+ * computation reads it). Idempotent; a no-op outside the browser.
+ *
+ * @returns {void}
+ */
+export function startPublishOutboxReplay() {
+  if (outboxReplayStarted || typeof window === 'undefined') return;
+  outboxReplayStarted = true;
+
+  const replay = () =>
+    outbox
+      .replayOutbox({
+        publish: async (event, relays) =>
+          (await publishToRelays(event, relays, { label: '[outbox]' })).results,
+        computeRelays: (entry) =>
+          computePublishRelays(entry.event, entry.taggedPubkeys, {
+            communityEvent: entry.communityEvent,
+            additionalRelays: entry.additionalRelays
+          }),
+        // A failed optimistic publish rolled the event out of the store;
+        // now that a relay has it, the UI may show it again.
+        onDelivered: (event) => {
+          try {
+            eventStore.add(event);
+          } catch {
+            /* duplicate or superseded — nothing to show */
+          }
+        }
+      })
+      .then((s) => {
+        if (s.replayed || s.dropped) console.info('[publish-outbox] replay', s);
+      })
+      .catch((err) => console.warn('[publish-outbox] replay failed', err));
+
+  replay();
+  window.addEventListener('online', replay);
 }
 
 /**

@@ -149,6 +149,7 @@
         summary: summary.trim() || undefined,
         image: imageUrl || undefined,
         imageHash,
+        imageLicenseEvent: imageLicenseEvent ?? null,
         hashtags: hashtags.length > 0 ? hashtags : undefined
       };
 

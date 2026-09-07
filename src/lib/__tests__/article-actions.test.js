@@ -131,7 +131,7 @@ describe('createArticle', () => {
     expect(publishEventOptimistic).toHaveBeenCalledWith(
       expect.objectContaining({ kind: 30023 }),
       [],
-      { communityEvent }
+      expect.objectContaining({ communityEvent })
     );
   });
 
@@ -160,7 +160,7 @@ describe('createArticle', () => {
     expect(publishEventOptimistic).toHaveBeenCalledWith(
       expect.objectContaining({ id: 'event-id-123' }),
       [],
-      { communityEvent: null }
+      expect.objectContaining({ communityEvent: null })
     );
   });
 
@@ -170,6 +170,19 @@ describe('createArticle', () => {
     expect(encodeEventToNaddr).toHaveBeenCalledWith(
       expect.objectContaining({ id: 'event-id-123' }),
       ['wss://longform.relay']
+    );
+  });
+
+  it('republishes the cover license attestation alongside the article (fd042051)', async () => {
+    /** @type {any} */
+    const licenseEvent = { id: 'lic1', kind: 1063, tags: [['x', 'h'.repeat(64)]] };
+
+    await createArticle({ title: 'Test', content: 'Body', imageLicenseEvent: licenseEvent });
+
+    expect(publishEventOptimistic).toHaveBeenCalledWith(
+      expect.objectContaining({ kind: 30023 }),
+      [],
+      { communityEvent: null, companions: [licenseEvent] }
     );
   });
 });

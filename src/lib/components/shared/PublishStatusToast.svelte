@@ -86,7 +86,11 @@
                 d="M6 18L18 6M6 6l12 12"
               />
             </svg>
-            <span>{m.publish_status_failed()}</span>
+            <span
+              >{status.retryQueued
+                ? m.publish_status_failed_queued()
+                : m.publish_status_failed()}</span
+            >
           {/if}
         </div>
         <button class="btn btn-circle btn-ghost btn-xs" onclick={() => dismiss(status.eventId)}>

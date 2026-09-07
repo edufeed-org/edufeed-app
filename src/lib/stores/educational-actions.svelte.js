@@ -171,6 +171,18 @@ function buildAMBEventTagsFromFormData(formData, pubkey) {
 }
 
 /**
+ * Events that travel with the resource to the same relay set: the thumbnail's
+ * kind-1063 license attestation, whose hash the resource carries in its `x`
+ * tag. Rebroadcast so the relays that hold the resource can resolve the badge,
+ * and as a second chance if the modal-time publish was lost (fd042051).
+ * @param {any} formData
+ * @returns {import('nostr-tools').NostrEvent[]}
+ */
+function companionsOf(formData) {
+  return formData?.imageLicenseEvent ? [formData.imageLicenseEvent] : [];
+}
+
+/**
  * Resolve the SHA-256 hash for the resource's thumbnail image, if any.
  * Prefers the license-event's `x` tag (set via the upload+license flow).
  * Falls back to parsing the URL itself (only succeeds for Blossom-style
@@ -294,7 +306,7 @@ export function createEducationalActions() {
 
         // Sign and publish optimistically (adds to store immediately)
         const resourceEvent = await currentAccount.signEvent(eventTemplate);
-        publishEventOptimistic(resourceEvent, []);
+        publishEventOptimistic(resourceEvent, [], { companions: companionsOf(formData) });
 
         // Generate naddr using educational relays for hint
         const naddr = encodeEventToNaddr(resourceEvent, getAppRelaysForCategory('educational'));
@@ -387,7 +399,10 @@ export function createEducationalActions() {
 
         // Sign and publish optimistically (adds to store immediately)
         const updatedEvent = await currentAccount.signEvent(eventTemplate);
-        publishEventOptimistic(updatedEvent, [], { communityEvent });
+        publishEventOptimistic(updatedEvent, [], {
+          communityEvent,
+          companions: companionsOf(formData)
+        });
 
         // Generate naddr using educational relays for hint
         const naddr = encodeEventToNaddr(updatedEvent, getAppRelaysForCategory('educational'));

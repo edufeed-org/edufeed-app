@@ -21,8 +21,18 @@ const ARTICLE_KIND = 30023;
  * @property {string} [summary] - Optional summary
  * @property {string} [image] - Optional cover image URL
  * @property {string} [imageHash] - SHA-256 of the cover image (for NIP-94 license attestation lookup)
+ * @property {import('nostr-tools').NostrEvent | null} [imageLicenseEvent] - The cover's kind-1063 license attestation; rebroadcast with the article so its relays can resolve the badge
  * @property {string[]} [hashtags] - Optional hashtags
  */
+
+/**
+ * Events that travel with the article to the same relay set.
+ * @param {ArticleFormData} formData
+ * @returns {import('nostr-tools').NostrEvent[]}
+ */
+function companionsOf(formData) {
+  return formData.imageLicenseEvent ? [formData.imageLicenseEvent] : [];
+}
 
 /**
  * Generate a random 8-character identifier
@@ -108,7 +118,7 @@ export async function createArticle(formData, communityPubkey, communityEvent = 
   });
 
   const articleEvent = await currentAccount.signEvent(eventTemplate);
-  publishEventOptimistic(articleEvent, [], { communityEvent });
+  publishEventOptimistic(articleEvent, [], { communityEvent, companions: companionsOf(formData) });
 
   const naddr = encodeEventToNaddr(articleEvent, getAppRelaysForCategory('longform'));
 
@@ -160,7 +170,7 @@ export async function updateArticle(formData, existingEvent, communityEvent = nu
   });
 
   const updatedEvent = await currentAccount.signEvent(eventTemplate);
-  publishEventOptimistic(updatedEvent, [], { communityEvent });
+  publishEventOptimistic(updatedEvent, [], { communityEvent, companions: companionsOf(formData) });
 
   const naddr = encodeEventToNaddr(updatedEvent, getAppRelaysForCategory('longform'));
 
