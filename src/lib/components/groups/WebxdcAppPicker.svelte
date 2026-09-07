@@ -5,7 +5,11 @@
   in the prominent "Starten" style) and "Weitere Apps" (a one-shot discovery
   REQ across the educational relays for published kind-1063 webxdc apps,
   minus anything already curated — see CLAUDE.md's Interactive Resources
-  section). Picking a row hands the app back to the caller
+  section). Discovery is OFF by default: a normal user sees only the
+  deployment's curated apps (the pad); the "Weitere Apps" section and its
+  REQ exist only when the per-user setting `webxdcShowAllApps` is on
+  (Settings → Apps in channels) — dozens of foreign apps behind the "+" were
+  noise (laoc, 2026-09-07). Picking a row hands the app back to the caller
   (GroupChat.shareApp), which mints a session and publishes the kind-9 share.
 -->
 <script>
@@ -16,6 +20,7 @@
   import { timer } from 'rxjs';
   import { takeUntil, toArray } from 'rxjs/operators';
   import * as m from '$lib/paraglide/messages';
+  import { appSettings } from '$lib/stores/app-settings.svelte.js';
 
   /**
    * @typedef {{url: string, sha256: string, name: string, iconUrl: string}} XdcApp
@@ -105,7 +110,15 @@
     return () => sub.unsubscribe();
   });
 
+  const showAllApps = $derived(appSettings.webxdcShowAllApps);
+
   $effect(() => {
+    if (!showAllApps) {
+      discovered = [];
+      loading = false;
+      return;
+    }
+    loading = true;
     const sub = pool
       .request(getEducationalRelays(), [{ kinds: [1063], '#m': [WEBXDC_MIME], limit: 50 }])
       .pipe(takeUntil(timer(3000)), toArray())
@@ -169,7 +182,7 @@
         {/each}
       {/if}
 
-      {#if discoveredFiltered.length > 0}
+      {#if showAllApps && discoveredFiltered.length > 0}
         <p class="mt-2 px-2 text-xs font-semibold tracking-wide uppercase opacity-60">
           {m.webxdc_apps_discovered()}
         </p>

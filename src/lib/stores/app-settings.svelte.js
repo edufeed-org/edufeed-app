@@ -22,6 +22,7 @@ const CONFIG_DEFAULTS_KEY = 'app-settings-config-defaults';
  * @property {string[]} dashboardCustomRelays
  * @property {boolean} linkPreviewsEnabled
  * @property {boolean} cordnGroupsEnabled
+ * @property {boolean} webxdcShowAllApps
  */
 
 /**
@@ -100,7 +101,10 @@ function getDefaultSettings() {
     dashboardCustomRelays: [],
     linkPreviewsEnabled: true,
     // Cordn private groups are opt-in per user (deployment flag alone is not enough).
-    cordnGroupsEnabled: false
+    cordnGroupsEnabled: false,
+    // The channel app picker lists only the deployment's curated apps
+    // (WEBXDC_APPS) by default; relay-wide discovery is opt-in per user.
+    webxdcShowAllApps: false
   };
 }
 
@@ -126,7 +130,8 @@ function migrateSettings(stored) {
         ? stored.dashboardCustomRelays
         : defaults.dashboardCustomRelays,
       linkPreviewsEnabled: stored.linkPreviewsEnabled ?? defaults.linkPreviewsEnabled,
-      cordnGroupsEnabled: stored.cordnGroupsEnabled ?? defaults.cordnGroupsEnabled
+      cordnGroupsEnabled: stored.cordnGroupsEnabled ?? defaults.cordnGroupsEnabled,
+      webxdcShowAllApps: stored.webxdcShowAllApps ?? defaults.webxdcShowAllApps
     };
   }
 
@@ -170,7 +175,8 @@ function migrateSettings(stored) {
       ? stored.dashboardCustomRelays
       : defaults.dashboardCustomRelays,
     linkPreviewsEnabled: stored.linkPreviewsEnabled ?? defaults.linkPreviewsEnabled,
-    cordnGroupsEnabled: stored.cordnGroupsEnabled ?? defaults.cordnGroupsEnabled
+    cordnGroupsEnabled: stored.cordnGroupsEnabled ?? defaults.cordnGroupsEnabled,
+    webxdcShowAllApps: stored.webxdcShowAllApps ?? defaults.webxdcShowAllApps
   };
 }
 
@@ -481,6 +487,24 @@ export const appSettings = {
    */
   set cordnGroupsEnabled(value) {
     settings.cordnGroupsEnabled = value;
+    saveSettings(settings);
+  },
+
+  /**
+   * Whether the channel app picker also lists every webxdc app discovered on
+   * the relays (per-user opt-in; default shows only the curated WEBXDC_APPS)
+   * @returns {boolean}
+   */
+  get webxdcShowAllApps() {
+    return settings.webxdcShowAllApps;
+  },
+
+  /**
+   * Set whether the app picker lists discovered apps
+   * @param {boolean} value
+   */
+  set webxdcShowAllApps(value) {
+    settings.webxdcShowAllApps = value;
     saveSettings(settings);
   },
 
