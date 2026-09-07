@@ -34,6 +34,7 @@
     GROUP_METADATA_KIND,
     GROUP_ADMINS_KIND,
     GROUP_MEMBERS_KIND,
+    DELETE_EVENT_KIND,
     getGroupMetadata,
     getGroupAdmins,
     getGroupMembers
@@ -46,7 +47,7 @@
     isAlreadyMemberError
   } from '$lib/groups/groups.js';
   import { updatePersonalGroupsList } from '$lib/groups/personal-groups-list.js';
-  import { publishToGroupRelay } from '$lib/groups/group-management.js';
+  import { publishToGroupRelay, buildDeleteEventTemplate } from '$lib/groups/group-management.js';
   import { roleOptionsFromAdmins } from '$lib/groups/roles.js';
   import { unique } from '$lib/helpers/unique.js';
   import { setContext, tick } from 'svelte';
@@ -189,6 +190,11 @@
   let isLoading = $state(true);
   /** @type {any[]} */ let messages = $state([]);
   /** @type {any[]} */ let reactionEvents = $state([]);
+  // NIP-29 moderation deletions (kind 9005) for this group — same
+  // store-backed pattern as reactions. Timeline rows whose id a 9005 names
+  // are hidden client-side; the relay itself drops the event from its store,
+  // so this only bridges the gap for events already replayed/live in view.
+  /** @type {any[]} */ let deletionEvents = $state.raw([]);
 
   // Bump to re-run the roster request below (e.g. after an admin action
   // changes the 39001/39002 events) without touching the chat subscription.
@@ -363,7 +369,8 @@
       .relay(pointer.relay)
       .subscription([
         { ...filter, limit: 100 },
-        { kinds: [7], '#h': [pointer.id], limit: 200 }
+        { kinds: [7], '#h': [pointer.id], limit: 200 },
+        { kinds: [DELETE_EVENT_KIND], '#h': [pointer.id], limit: 100 }
       ])
       .pipe(storeEvents(eventStore))
       .subscribe({
@@ -386,17 +393,37 @@
       .subscribe((events) => {
         reactionEvents = events;
       });
+    const deletionsSub = eventStore
+      .model(TimelineModel, { kinds: [DELETE_EVENT_KIND], '#h': [pointer.id] })
+      .subscribe((events) => {
+        deletionEvents = events;
+      });
 
     return () => {
       clearTimeout(fallbackTimer);
       subSub.unsubscribe();
       modelSub.unsubscribe();
       reactionsSub.unsubscribe();
+      deletionsSub.unsubscribe();
     };
   });
 
+  // Read the `e` tags directly, not via getGroupDeleteEventInfo — that helper
+  // memoizes on the event (getOrComputeCachedValue), which is a mutation
+  // inside $derived (see CLAUDE.md on applesauce functions that mutate).
+  const deletedMessageIds = $derived(
+    new Set(
+      deletionEvents.flatMap((event) =>
+        (event.tags ?? [])
+          .filter((/** @type {string[]} */ t) => t[0] === 'e' && t[1])
+          .map((/** @type {string[]} */ t) => t[1])
+      )
+    )
+  );
   const displayed = $derived(
-    messages.filter((event) => event && event.id && event.pubkey).toReversed()
+    messages
+      .filter((event) => event && event.id && event.pubkey && !deletedMessageIds.has(event.id))
+      .toReversed()
   );
   // Replies live in their thread, not in the timeline. An orphan — a reply
   // whose root fell outside the 100-event window — stays in the timeline
@@ -927,6 +954,31 @@
     }
   }
 
+  // NIP-29 moderation: the message an admin asked to delete, pending the
+  // confirm dialog below. `$state.raw` — a whole applesauce event, never
+  // deep-proxied (same reasoning as replyTo).
+  /** @type {any} */
+  let deleteTarget = $state.raw(null);
+  let deleting = $state(false);
+
+  async function confirmDeleteMessage() {
+    const target = deleteTarget;
+    if (!target || deleting) return;
+    deleting = true;
+    try {
+      const signed = await signAndPublish(buildDeleteEventTemplate(pointer.id, target.id));
+      // Into the store like every other publish here: the deletions model
+      // above picks it up and the row disappears without waiting for the
+      // relay to echo the 9005 back.
+      eventStore.add(signed);
+      deleteTarget = null;
+    } catch (err) {
+      console.error('group message delete failed', err);
+      showToast(m.groups_message_delete_failed(), 'error');
+    }
+    deleting = false;
+  }
+
   /**
    * Mirror a join/leave into the user's kind-10009 GROUPS list (published to
    * the user's own relays, NOT the group relay) so joined groups roam.
@@ -1114,6 +1166,29 @@
     </div>
   {/if}
 
+  {#if deleteTarget}
+    <div class="modal-open modal" role="dialog">
+      <div class="modal-box max-w-sm">
+        <h3 class="text-sm font-bold">{m.groups_message_delete_confirm_title()}</h3>
+        <p class="py-2 text-xs opacity-70">{m.groups_message_delete_confirm_body()}</p>
+        <p class="truncate rounded bg-base-200 px-2 py-1 text-xs">{deleteTarget.content}</p>
+        <div class="modal-action">
+          <button class="btn btn-ghost btn-sm" onclick={() => (deleteTarget = null)}
+            >{m.common_cancel()}</button
+          >
+          <button
+            class="btn btn-sm btn-error"
+            data-testid="group-message-delete-confirm"
+            disabled={deleting}
+            onclick={confirmDeleteMessage}
+          >
+            {m.groups_message_delete_confirm_action()}
+          </button>
+        </div>
+      </div>
+    </div>
+  {/if}
+
   {#if authRequired}
     <div class="bg-warning/20 px-4 py-2 text-xs" data-testid="group-auth-banner">
       {m.groups_auth_required()}
@@ -1149,6 +1224,8 @@
         : null}
       {onReply}
       replyTitle={m.groups_reply()}
+      onDelete={isAdmin ? (msg) => (deleteTarget = msg) : null}
+      deleteTitle={m.groups_message_delete()}
       replyCount={threads.replyCount(message.id)}
       replyCountLabel={replyCountLabel(threads.replyCount(message.id))}
       onOpenThread={offerThread ? openThread : null}
