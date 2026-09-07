@@ -20,6 +20,7 @@ import { runtimeConfig } from '$lib/stores/config.svelte.js';
 import { applyCuratedFilter } from '$lib/services/curated-authors-service.svelte.js';
 import { calendarFilters } from '$lib/stores/calendar-filters.svelte.js';
 import { parseCalendarFilters, parseDateParam } from '$lib/helpers/urlParams.js';
+import { unique } from '$lib/helpers/unique.js';
 import { CommunityCalendarEventModel } from '$lib/models';
 
 /**
@@ -545,6 +546,33 @@ function syncFiltersToStore(urlFilters) {
   } else {
     calendarFilters.setSearchQuery('');
   }
+
+  // Sync individually picked featured authors (hex pubkeys)
+  calendarFilters.setSelectedFeaturedAuthors(sanitizePubkeyParams(urlFilters?.featured));
+
+  // Sync quick "people" toggle mode (invalid values fall back to 'off')
+  const people = urlFilters?.people;
+  calendarFilters.setOnlyFollowsMode(
+    people === 'follows' || people === 'featured' ? people : 'off'
+  );
+
+  // Sync publisher quick-filter (hidden + selected publishers)
+  calendarFilters.hiddenAuthorPubkeys = sanitizePubkeyParams(urlFilters?.hidden);
+  calendarFilters.selectedAuthorPubkeys = sanitizePubkeyParams(urlFilters?.publishers);
+}
+
+/**
+ * URL params are untrusted input: keep only valid 64-char hex pubkeys,
+ * lowercased and deduplicated.
+ * @param {unknown} values
+ * @returns {string[]}
+ */
+function sanitizePubkeyParams(values) {
+  if (!Array.isArray(values)) return [];
+  const valid = values
+    .filter((v) => typeof v === 'string' && /^[0-9a-f]{64}$/i.test(v))
+    .map((v) => v.toLowerCase());
+  return unique(valid);
 }
 
 /**

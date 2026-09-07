@@ -91,8 +91,72 @@ export function parseCalendarFilters(searchParams) {
     tags: searchParams.getAll('tags'),
     relays: searchParams.getAll('relays'),
     authors: searchParams.getAll('authors'),
-    search: searchParams.get('search') || ''
+    search: searchParams.get('search') || '',
+    featured: searchParams.getAll('featured'),
+    people: searchParams.get('people') || 'off',
+    hidden: searchParams.getAll('hidden'),
+    publishers: searchParams.getAll('publishers')
   };
+}
+
+/**
+ * Query param keys owned by the calendar filter state. Anything else in the
+ * URL (view, period, date, ...) is preserved untouched by
+ * `applyCalendarFilterState`.
+ */
+const CALENDAR_FILTER_PARAM_KEYS = [
+  'tags',
+  'relays',
+  'authors',
+  'search',
+  'featured',
+  'people',
+  'hidden',
+  'publishers'
+];
+
+/**
+ * @typedef {Object} CalendarFilterState
+ * @property {string[]} tags - Selected hashtag filters
+ * @property {string[]} relays - Selected relay URLs
+ * @property {string[]} followListIds - Selected follow-list IDs (`authors` param)
+ * @property {string} search - Free-text search query
+ * @property {string[]} featured - Individually picked author pubkeys (hex)
+ * @property {'off' | 'follows' | 'featured'} people - Quick "people" toggle mode
+ * @property {string[]} hidden - Hidden publisher pubkeys (hex)
+ * @property {string[]} publishers - Selected publisher pubkeys (hex)
+ */
+
+/**
+ * Apply the calendar filter state to URL search params (state -> URL).
+ *
+ * Returns a NEW URLSearchParams: filter params are replaced wholesale (params
+ * at their defaults are omitted so the URL stays clean), all other params are
+ * preserved. Counterpart of `parseCalendarFilters`.
+ *
+ * @param {URLSearchParams} currentParams - Current URL params (not mutated)
+ * @param {CalendarFilterState} state - Filter state snapshot
+ * @returns {URLSearchParams} - New params reflecting the filter state
+ */
+export function applyCalendarFilterState(currentParams, state) {
+  const params = new URLSearchParams(currentParams);
+  CALENDAR_FILTER_PARAM_KEYS.forEach((key) => params.delete(key));
+
+  (state.tags || []).forEach((tag) => params.append('tags', tag));
+  (state.relays || []).forEach((relay) => params.append('relays', relay));
+  (state.followListIds || []).forEach((id) => params.append('authors', id));
+
+  const query = (state.search || '').trim();
+  if (query) params.set('search', query);
+
+  (state.featured || []).forEach((pubkey) => params.append('featured', pubkey));
+  if (state.people === 'follows' || state.people === 'featured') {
+    params.set('people', state.people);
+  }
+  (state.hidden || []).forEach((pubkey) => params.append('hidden', pubkey));
+  (state.publishers || []).forEach((pubkey) => params.append('publishers', pubkey));
+
+  return params;
 }
 
 /**
