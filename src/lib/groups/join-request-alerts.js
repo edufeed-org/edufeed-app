@@ -100,8 +100,11 @@ export function groupToCommunityMap(communikeyEvents) {
 /**
  * Shape the pending rows into what the hint renders: a total count and a
  * per-community breakdown (newest request first — the navigation target is
- * the first entry). Rows whose group maps to NO known community are dropped:
- * the hint's action must always lead somewhere actionable.
+ * the first entry). A row is one applicant who may have knocked on several
+ * groups of the same community (root + channels); it is attributed to the
+ * first of its groups that maps to a known community and counted once. Rows
+ * none of whose groups map to a known community are dropped: the hint's
+ * action must always lead somewhere actionable.
  *
  * @param {{
  *   pending: import('./join-requests.js').JoinRequestRow[],
@@ -113,7 +116,7 @@ export function summarizeJoinRequestAlert({ pending, groupToCommunity }) {
   /** @type {Map<string, {pubkey: string, count: number, newest: number}>} */
   const byCommunity = new Map();
   for (const row of pending ?? []) {
-    const pubkey = groupToCommunity.get(row.groupId);
+    const pubkey = (row.groupIds ?? []).map((id) => groupToCommunity.get(id)).find(Boolean);
     if (!pubkey) continue;
     const entry = byCommunity.get(pubkey) ?? { pubkey, count: 0, newest: 0 };
     entry.count += 1;

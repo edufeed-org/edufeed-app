@@ -111,12 +111,14 @@ describe('groupToCommunityMap', () => {
 
 describe('summarizeJoinRequestAlert', () => {
   /** @param {string} groupId @param {number} createdAt @param {string} [id] */
+  /** @param {string | string[]} groupId @param {number} createdAt @param {string} [id] */
   const row = (groupId, createdAt, id = `${groupId}-${createdAt}`) => ({
     id,
+    ids: [id],
     pubkey: APPLICANT,
     reason: '',
     createdAt,
-    groupId
+    groupIds: Array.isArray(groupId) ? groupId : [groupId]
   });
 
   it('counts only rows whose group maps to a community, grouped per community, newest first', () => {
@@ -133,6 +135,18 @@ describe('summarizeJoinRequestAlert', () => {
       { pubkey: COMMUNITY2, count: 1, newest: 300 },
       { pubkey: COMMUNITY, count: 2, newest: 200 }
     ]);
+  });
+
+  it('counts an applicant once even when the row spans root and channel groups', () => {
+    const groupToCommunity = new Map([[ROOT.id, COMMUNITY]]);
+    const summary = summarizeJoinRequestAlert({
+      pending: [row(['unmapped-channel', ROOT.id, 'channel-1'], 500)],
+      groupToCommunity
+    });
+    expect(summary).toEqual({
+      count: 1,
+      communities: [{ pubkey: COMMUNITY, count: 1, newest: 500 }]
+    });
   });
 
   it('is empty when nothing is pending', () => {
