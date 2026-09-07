@@ -287,3 +287,51 @@ describe('video', () => {
     });
   });
 });
+
+// Chat uploads (ours and Armada's) declare the MIME in a NIP-92 imeta tag;
+// content-addressed Blossom URLs may have no extension, so detection must
+// also read the imeta. Non-media attachments become a download file card.
+describe('imeta-declared attachments', () => {
+  const bareUrl = 'https://blossom.example/' + 'c'.repeat(64);
+
+  it('renders an extension-less URL with an image imeta MIME as an inline image', async () => {
+    const { container } = await renderContent(bareUrl, [
+      ['imeta', `url ${bareUrl}`, 'm image/png']
+    ]);
+    // src goes through the /api/image proxy — assert the original URL rides inside
+    const src = q(container, '[data-testid="media-image"] img').getAttribute('src') ?? '';
+    expect(decodeURIComponent(src)).toContain(bareUrl);
+  });
+
+  it('renders an extension-less URL with a video imeta MIME as an inline video', async () => {
+    const { container } = await renderContent(bareUrl, [
+      ['imeta', `url ${bareUrl}`, 'm video/mp4']
+    ]);
+    expect(container.querySelector('[data-testid="media-video"]')).toBeTruthy();
+  });
+
+  it('renders a URL with a non-media imeta as a download file card', async () => {
+    const url = 'https://blossom.example/' + 'c'.repeat(64) + '.pdf';
+    const { container } = await renderContent(`here you go ${url}`, [
+      ['imeta', `url ${url}`, 'm application/pdf', 'size 2048', 'name worksheet.pdf']
+    ]);
+    const card = q(container, '[data-testid="file-attachment-card"]');
+    expect(card.getAttribute('href')).toBe(url);
+    expect(card.textContent).toContain('worksheet.pdf');
+    expect(card.textContent).toContain('2.0 KB');
+  });
+
+  it('leaves a pasted non-media URL without imeta as a plain link', async () => {
+    const { container } = await renderContent('read https://example.com/paper.pdf');
+    expect(container.querySelector('[data-testid="file-attachment-card"]')).toBeFalsy();
+    expect(container.querySelector('a.link')).toBeTruthy();
+  });
+
+  it('does not turn a webxdc share into a file card (its launch card renders elsewhere)', async () => {
+    const url = 'https://blossom.example/pad.xdc';
+    const { container } = await renderContent(url, [
+      ['imeta', `url ${url}`, 'm application/x-webxdc', 'webxdc session-1']
+    ]);
+    expect(container.querySelector('[data-testid="file-attachment-card"]')).toBeFalsy();
+  });
+});

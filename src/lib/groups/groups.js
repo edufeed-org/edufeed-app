@@ -153,17 +153,30 @@ export function groupHref(pointer) {
  * resolved from them (see helpers/threading.js). Passing only `{id, pubkey}`
  * still works and yields the top-level shape, which is correct for a message
  * that has no tags to inherit a root from.
+ * File attachments become NIP-92 `imeta` tags — the shape Armada reads and
+ * writes for NIP-29 chat uploads. Matched by exact URL against the content:
+ * an attachment whose URL the user edited out of the draft gets no tag.
  * @param {string} groupId
  * @param {string} content
  * @param {{id: string, pubkey: string, tags?: string[][]} | null} [replyTo]
+ * @param {Array<{url: string, type?: string, sha256?: string, size?: number, name?: string}>} [attachments]
  * @returns {{kind: number, content: string, created_at: number, tags: string[][]}}
  */
-export function buildGroupMessageTemplate(groupId, content, replyTo = null) {
+export function buildGroupMessageTemplate(groupId, content, replyTo = null, attachments = []) {
   /** @type {string[][]} */
   const tags = [['h', groupId]];
   if (replyTo) {
     tags.push(...buildReplyTags(replyTo));
     tags.push(['p', replyTo.pubkey]);
+  }
+  for (const att of attachments) {
+    if (!att?.url || !content.includes(att.url)) continue;
+    const fields = [`url ${att.url}`];
+    if (att.type) fields.push(`m ${att.type}`);
+    if (att.sha256) fields.push(`x ${att.sha256}`);
+    if (att.size) fields.push(`size ${att.size}`);
+    if (att.name) fields.push(`name ${att.name}`);
+    tags.push(['imeta', ...fields]);
   }
   return { kind: 9, content, created_at: Math.floor(Date.now() / 1000), tags };
 }

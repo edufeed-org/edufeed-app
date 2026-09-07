@@ -22,6 +22,10 @@
    *   button before the input. Only the timeline composer passes this; the
    *   ThreadPanel composer leaves it null (webxdc sessions are channel-scoped,
    *   not thread-scoped).
+   * @property {((file: File) => void) | null} [onAttachFile] - opt-in: renders
+   *   the attach-file button. The caller owns the upload; `uploading` mirrors
+   *   its in-flight state back onto the button.
+   * @property {boolean} [uploading]
    */
 
   /** @type {Props} */
@@ -34,8 +38,21 @@
     replyTo = null,
     onCancelReply = null,
     testid = undefined,
-    onOpenApps = null
+    onOpenApps = null,
+    onAttachFile = null,
+    uploading = false
   } = $props();
+
+  let fileInput = $state(/** @type {HTMLInputElement | null} */ (null));
+
+  /** @param {Event} e */
+  function handleFileChange(e) {
+    const input = /** @type {HTMLInputElement} */ (e.currentTarget);
+    const file = input.files?.[0];
+    // Reset so picking the same file again re-fires change.
+    input.value = '';
+    if (file) onAttachFile?.(file);
+  }
 </script>
 
 {#if replyTo}
@@ -69,6 +86,30 @@
       onclick={onOpenApps}
       {disabled}>+</button
     >
+  {/if}
+  {#if onAttachFile}
+    <input
+      bind:this={fileInput}
+      type="file"
+      class="hidden"
+      data-testid="chat-attach-input"
+      onchange={handleFileChange}
+    />
+    <button
+      type="button"
+      class="btn btn-circle btn-ghost btn-sm"
+      data-testid="chat-attach-button"
+      title={m.chat_attach_file()}
+      aria-label={m.chat_attach_file()}
+      onclick={() => fileInput?.click()}
+      disabled={disabled || uploading}
+    >
+      {#if uploading}
+        <span class="loading loading-xs loading-spinner"></span>
+      {:else}
+        📎
+      {/if}
+    </button>
   {/if}
   <input
     class="input flex-1 input-ghost focus:outline-none"

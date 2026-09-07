@@ -177,6 +177,52 @@ describe('buildGroupMessageTemplate', () => {
     expect(template.tags).toContainEqual(['e', 'parent-2', '', 'reply']);
     expect(template.tags.filter((t) => t[0] === 'e')).toHaveLength(2);
   });
+
+  // File attachments ride as NIP-92 imeta tags, the shape Armada reads and
+  // writes for NIP-29 chat uploads, so the two clients render each other's
+  // attachments.
+  describe('attachments', () => {
+    const att = {
+      url: 'https://blossom.example/abc.pdf',
+      type: 'application/pdf',
+      sha256: 'f'.repeat(64),
+      size: 1234,
+      name: 'worksheet.pdf'
+    };
+
+    it('adds an imeta tag for an attachment whose URL is in the content', () => {
+      const template = buildGroupMessageTemplate(
+        'beechat',
+        'here you go https://blossom.example/abc.pdf',
+        null,
+        [att]
+      );
+      expect(template.tags).toContainEqual([
+        'imeta',
+        'url https://blossom.example/abc.pdf',
+        'm application/pdf',
+        `x ${'f'.repeat(64)}`,
+        'size 1234',
+        'name worksheet.pdf'
+      ]);
+    });
+
+    it('skips an attachment whose URL was edited out of the content', () => {
+      const template = buildGroupMessageTemplate('beechat', 'changed my mind', null, [att]);
+      expect(template.tags.some((t) => t[0] === 'imeta')).toBe(false);
+    });
+
+    it('omits imeta fields the upload could not provide', () => {
+      const template = buildGroupMessageTemplate('beechat', 'https://blossom.example/xyz', null, [
+        { url: 'https://blossom.example/xyz', type: 'application/octet-stream' }
+      ]);
+      expect(template.tags).toContainEqual([
+        'imeta',
+        'url https://blossom.example/xyz',
+        'm application/octet-stream'
+      ]);
+    });
+  });
 });
 
 describe('join/leave request templates', () => {

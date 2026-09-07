@@ -139,6 +139,9 @@ vi.mock(
 vi.mock('$lib/paraglide/messages', () => ({
   groups_join: () => 'Join',
   groups_leave: () => 'Leave',
+  chat_attach_file: () => 'Attach file',
+  chat_attach_error_too_large: () => 'File is too large',
+  chat_attach_error_upload_failed: () => 'Upload failed. Please try again.',
   groups_join_sent: () => 'Join request sent',
   groups_leave_sent: () => 'Leave request sent',
   groups_join_failed: () => 'Request failed',
