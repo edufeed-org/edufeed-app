@@ -52,6 +52,7 @@
   import { useCommunityChannels } from '$lib/groups/community-channels.svelte.js';
   import { communityGroupsEndpoint, flatGroupsRelay } from '$lib/groups/community-endpoint.js';
   import { useRootRoster } from '$lib/groups/root-roster.svelte.js';
+  import { moderationPubkeys } from '$lib/groups/roles.js';
   import { resolveZoneMembership } from '$lib/components/community/layout/community-nav.js';
   import ConcordUnreadDot from '$lib/components/shared/ConcordUnreadDot.svelte';
   import { page } from '$app/stores';
@@ -975,7 +976,7 @@
       {communikeyEvent}
       {communityProfile}
       community={concord.dissolved ? undefined : concord.community}
-      adminPubkeys={getRootRoster().admins.map((a) => a.pubkey)}
+      adminPubkeys={moderationPubkeys(getRootRoster().admins)}
       onClose={() => {
         overlay = null;
         clearChannelCreateRequest();

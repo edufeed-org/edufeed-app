@@ -52,6 +52,19 @@ export function isPublisherOnly(roles) {
 }
 
 /**
+ * Pubkeys of the roster entries that actually moderate — the ONLY set any
+ * admin fan-out (channel pre-join, roster reconcile) may run off. Passing raw
+ * 39001 pubkeys instead put-users publisher-only members with the literal
+ * 'admin' role on channels, which the pyramid relay honours as real
+ * moderation rights (privilege escalation, issue 12e124f4).
+ * @param {Array<{ pubkey: string, roles?: string[] }> | undefined | null} admins
+ * @returns {string[]}
+ */
+export function moderationPubkeys(admins) {
+  return (admins ?? []).filter((a) => hasModerationRole(a.roles)).map((a) => a.pubkey);
+}
+
+/**
  * Datalist suggestions for the assign-role dialog: every role already present
  * on the 39001 roster, then the two built-ins. Every GroupMembersModal call
  * site must derive its roleOptions through this — an omitted prop silently

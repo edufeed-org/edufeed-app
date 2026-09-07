@@ -6,8 +6,11 @@
 // channel at CREATION time (A3), but an admin granted afterwards — or one
 // added while a channel roster hadn't answered yet — is not covered. This
 // hook closes that gap: whenever an admin has the community open, it diffs
-// the root roster's ADMINS against every channel roster (any tier) and
-// silently put-users the missing, with role ['admin'].
+// the root roster's MODERATION-role holders (never publisher-only or
+// custom-role 39001 entries — roles.js) against every channel roster (any
+// tier) and silently put-users the missing, with role ['admin']. It also
+// reverts admin grants the pre-fix fan-outs wrongly wrote for publisher-only
+// entries (demotePlan in area-members.js).
 //
 // Ordinary members get NO blanket fan-out here (A4, 2026-08-19): they join
 // member-tier channels themselves via their own kind-9021 — instantly
@@ -24,7 +27,8 @@
 // MUST be called during component init ($effect + wrapped hooks inside).
 import { useRootRoster } from './root-roster.svelte.js';
 import { useChannelRosters } from './channel-rosters.svelte.js';
-import { reconcilePlan } from './area-members.js';
+import { reconcilePlan, demotePlan } from './area-members.js';
+import { moderationPubkeys } from './roles.js';
 import { channelKey } from './community-pointer.js';
 import { parseMembershipPointer } from './community-membership.js';
 import { useCommunityChannels } from './community-channels.svelte.js';
@@ -68,9 +72,13 @@ export function useRosterReconcile(getCommunikeyEvent) {
     const ledgerKey = `${communikeyEvent.pubkey} ${user.pubkey}`;
     if (reconciled.has(ledgerKey)) return;
 
-    // Channel-admin rights: the owner or a root-group admin. Anyone else
-    // couldn't sign the put-users anyway.
-    const admins = roster.admins.map((admin) => admin.pubkey);
+    // Channel-admin rights: the owner or a root-group MODERATION-role holder.
+    // The root 39001 also lists publisher-only and custom-role entries
+    // (roles.js) — those have no channel-admin rights and get no fan-out:
+    // treating them as admins put-users them with the literal 'admin' role,
+    // which the pyramid relay honours as real moderation rights (privilege
+    // escalation, issue 12e124f4).
+    const admins = moderationPubkeys(roster.admins);
     const isAdmin = isCommunityOwner(communikeyEvent.pubkey) || admins.includes(user.pubkey);
     if (!isAdmin) return;
 
@@ -81,21 +89,26 @@ export function useRosterReconcile(getCommunikeyEvent) {
       const key = channelKey(pointer);
       return key !== null && membersByKey[key] !== undefined;
     });
-    if (!allAnswered || roster.isLoading || admins.length === 0) return;
+    if (!allAnswered || roster.isLoading) return;
 
-    const plan = reconcilePlan({
-      admins,
-      pointers,
-      membersByKey,
-      adminsByKey
-    });
+    // Grants for missing moderators, plus reverts of the admin role the
+    // pre-fix fan-outs wrongly wrote for publisher-only entries (demotePlan).
+    const plan = [
+      ...reconcilePlan({
+        admins,
+        pointers,
+        membersByKey,
+        adminsByKey
+      }).map((item) => ({ ...item, roles: ['admin'] })),
+      ...demotePlan({ rootAdmins: roster.admins, pointers, adminsByKey })
+    ];
     reconciled.add(ledgerKey);
     if (plan.length === 0) return;
 
     void fanOut(
       plan,
       (item) => `${channelKey(item.pointer)} ${item.pubkey}`,
-      (item) => putUserOn(item.pointer, item.pubkey, ['admin'], /** @type {any} */ (user))
+      (item) => putUserOn(item.pointer, item.pubkey, item.roles, /** @type {any} */ (user))
     ).then((aggregate) => {
       if (aggregate.ok.length > 0) {
         console.info(

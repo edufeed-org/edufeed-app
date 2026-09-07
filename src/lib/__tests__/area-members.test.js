@@ -6,7 +6,8 @@ import {
   areaMemberRows,
   fanOutPlan,
   aggregateFanOut,
-  reconcilePlan
+  reconcilePlan,
+  demotePlan
 } from '$lib/groups/area-members.js';
 import { channelKey } from '$lib/groups/community-pointer.js';
 
@@ -201,5 +202,57 @@ describe('reconcilePlan', () => {
       adminsByKey: { [key(chMembers)]: [], [key(chInvited)]: [] }
     });
     expect(plan).toEqual([{ pointer: chMembers, pubkey: A }]);
+  });
+});
+
+// Cleanup for the publisher→admin escalation bug: both fan-out paths used to
+// put-user EVERY root-39001 entry with role ['admin'] on channels, handing
+// publisher-only members literal NIP-29 moderation rights there. demotePlan
+// computes the revert — a re-put-user with the moderation roles stripped —
+// strictly for entries the bug can explain: publisher-only on the ROOT
+// roster yet holding a moderation role on a channel.
+describe('demotePlan', () => {
+  const RELAY = 'wss://groups.example/';
+  const ADMIN = 'a'.repeat(64);
+  const PUB = 'b'.repeat(64);
+  const STRANGER = 'c'.repeat(64);
+  const chan = { id: 'chan1', relay: RELAY };
+  const key = /** @type {string} */ (channelKey(chan));
+  const rootAdmins = [
+    { pubkey: ADMIN, roles: ['admin'] },
+    { pubkey: PUB, roles: ['publisher'] }
+  ];
+
+  it('demotes a publisher-only root entry that holds admin on a channel', () => {
+    const plan = demotePlan({
+      rootAdmins,
+      pointers: [chan],
+      adminsByKey: { [key]: [{ pubkey: PUB, roles: ['admin'] }] }
+    });
+    expect(plan).toEqual([{ pointer: chan, pubkey: PUB, roles: [] }]);
+  });
+
+  it('strips only moderation roles, preserving other channel roles', () => {
+    const plan = demotePlan({
+      rootAdmins,
+      pointers: [chan],
+      adminsByKey: { [key]: [{ pubkey: PUB, roles: ['admin', 'lehrkraft'] }] }
+    });
+    expect(plan).toEqual([{ pointer: chan, pubkey: PUB, roles: ['lehrkraft'] }]);
+  });
+
+  it('leaves real admins, strangers, and non-moderation channel entries alone', () => {
+    const plan = demotePlan({
+      rootAdmins,
+      pointers: [chan],
+      adminsByKey: {
+        [key]: [
+          { pubkey: ADMIN, roles: ['admin'] }, // real root admin
+          { pubkey: STRANGER, roles: ['admin'] }, // not on the root roster at all
+          { pubkey: PUB, roles: ['publisher'] } // no moderation role to strip
+        ]
+      }
+    });
+    expect(plan).toEqual([]);
   });
 });

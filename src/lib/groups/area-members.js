@@ -5,6 +5,7 @@
 // "not a member" are different sentences (same rule as host-unread).
 import { parseGroupPointers, channelKey } from './community-pointer.js';
 import { parseMembershipPointer } from './community-membership.js';
+import { hasModerationRole, isPublisherOnly, MODERATION_ROLES } from './roles.js';
 
 /** @param {{tags?: string[][]} | null | undefined} communikeyEvent */
 export function stufe2Pointers(communikeyEvent) {
@@ -147,6 +148,43 @@ export function reconcilePlan({ admins, pointers, membersByKey, adminsByKey = {}
       if (fanOutPlan({ pubkey, pointers: [pointer], membersByKey, adminsByKey }).length > 0) {
         plan.push({ pointer, pubkey });
       }
+    }
+  }
+  return plan;
+}
+
+/**
+ * Revert plan for the publisher→admin escalation bug: both admin fan-out
+ * paths used to put-user EVERY root-39001 entry with role ['admin'] on
+ * channels, including publisher-only members. This computes the re-put-user
+ * (moderation roles stripped) strictly for entries the bug can explain —
+ * publisher-only on the ROOT roster yet moderating a channel. Entries absent
+ * from the root roster are untouched: we cannot tell a deliberate
+ * channel-local admin from residue there.
+ * @param {{
+ *   rootAdmins: Array<{ pubkey: string, roles?: string[] }>,
+ *   pointers: any[],
+ *   adminsByKey?: Record<string, import('applesauce-common/helpers/groups').GroupAdmin[]>
+ * }} args
+ * @returns {Array<{pointer: any, pubkey: string, roles: string[]}>}
+ */
+export function demotePlan({ rootAdmins, pointers, adminsByKey = {} }) {
+  const rootRoles = new Map(rootAdmins.map((a) => [a.pubkey, a.roles ?? []]));
+  const plan = [];
+  for (const pointer of pointers) {
+    const key = channelKey(pointer);
+    if (key === null) continue;
+    for (const entry of adminsByKey[key] ?? []) {
+      if (!hasModerationRole(entry.roles)) continue;
+      const roles = rootRoles.get(entry.pubkey);
+      if (!roles || !isPublisherOnly(roles)) continue;
+      plan.push({
+        pointer,
+        pubkey: entry.pubkey,
+        roles: (entry.roles ?? []).filter(
+          (role) => !MODERATION_ROLES.includes(role?.toLowerCase?.())
+        )
+      });
     }
   }
   return plan;
