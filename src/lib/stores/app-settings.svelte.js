@@ -23,6 +23,7 @@ const CONFIG_DEFAULTS_KEY = 'app-settings-config-defaults';
  * @property {boolean} linkPreviewsEnabled
  * @property {boolean} cordnGroupsEnabled
  * @property {boolean} webxdcShowAllApps
+ * @property {boolean} instanceMutedWordsEnabled
  */
 
 /**
@@ -104,7 +105,10 @@ function getDefaultSettings() {
     cordnGroupsEnabled: false,
     // The channel app picker lists only the deployment's curated apps
     // (WEBXDC_APPS) by default; relay-wide discovery is opt-in per user.
-    webxdcShowAllApps: false
+    webxdcShowAllApps: false,
+    // The instance-wide muted words (/api/config moderation.mutedWords) apply
+    // by default; a user may switch them off and rely on their own list only.
+    instanceMutedWordsEnabled: true
   };
 }
 
@@ -131,7 +135,9 @@ function migrateSettings(stored) {
         : defaults.dashboardCustomRelays,
       linkPreviewsEnabled: stored.linkPreviewsEnabled ?? defaults.linkPreviewsEnabled,
       cordnGroupsEnabled: stored.cordnGroupsEnabled ?? defaults.cordnGroupsEnabled,
-      webxdcShowAllApps: stored.webxdcShowAllApps ?? defaults.webxdcShowAllApps
+      webxdcShowAllApps: stored.webxdcShowAllApps ?? defaults.webxdcShowAllApps,
+      instanceMutedWordsEnabled:
+        stored.instanceMutedWordsEnabled ?? defaults.instanceMutedWordsEnabled
     };
   }
 
@@ -176,7 +182,9 @@ function migrateSettings(stored) {
       : defaults.dashboardCustomRelays,
     linkPreviewsEnabled: stored.linkPreviewsEnabled ?? defaults.linkPreviewsEnabled,
     cordnGroupsEnabled: stored.cordnGroupsEnabled ?? defaults.cordnGroupsEnabled,
-    webxdcShowAllApps: stored.webxdcShowAllApps ?? defaults.webxdcShowAllApps
+    webxdcShowAllApps: stored.webxdcShowAllApps ?? defaults.webxdcShowAllApps,
+    instanceMutedWordsEnabled:
+      stored.instanceMutedWordsEnabled ?? defaults.instanceMutedWordsEnabled
   };
 }
 
@@ -505,6 +513,23 @@ export const appSettings = {
    */
   set webxdcShowAllApps(value) {
     settings.webxdcShowAllApps = value;
+    saveSettings(settings);
+  },
+
+  /**
+   * Whether the instance-wide muted words (spam filter) apply on top of the
+   * user's own mute list
+   * @returns {boolean}
+   */
+  get instanceMutedWordsEnabled() {
+    return settings.instanceMutedWordsEnabled;
+  },
+
+  /**
+   * @param {boolean} value
+   */
+  set instanceMutedWordsEnabled(value) {
+    settings.instanceMutedWordsEnabled = value;
     saveSettings(settings);
   },
 

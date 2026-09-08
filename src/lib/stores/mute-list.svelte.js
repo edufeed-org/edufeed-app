@@ -6,12 +6,18 @@
  * it; muting goes through applesauce's MuteUser action so the list stays in
  * sync across Nostr clients.
  *
- * v1 reads only the public p-tags — NIP-51 encrypted (hidden) entries are
- * written by other clients but deferred here.
+ * Both halves of the list count: the public tags, and the NIP-51 private
+ * (encrypted) entries other clients such as Damus or Amethyst write — those
+ * are unlocked with the account's signer (nip44, or nip04 for the legacy
+ * `?iv=` payloads) on every new version of the event. Edufeed itself only
+ * writes public entries. On top of the user's words sit the instance-wide
+ * muted words from /api/config, which the user can switch off in Settings.
  */
 import { MuteUser, UnmuteUser, MuteWord, UnmuteWord } from 'applesauce-actions/actions';
 import { runtimeConfig } from '$lib/stores/config.svelte.js';
-import { getPublicMutedThings } from 'applesauce-common/helpers/mute';
+import { getMutedThings, isHiddenMutesUnlocked } from 'applesauce-common/helpers/mute';
+import { unlockHiddenTags } from 'applesauce-core/helpers/hidden-tags';
+import { appSettings } from '$lib/stores/app-settings.svelte.js';
 import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
 import { addressLoader } from '$lib/loaders/base.js';
 import { getRelayListLookupRelays, getWriteRelays } from '$lib/services/relay-service.svelte.js';
@@ -32,13 +38,22 @@ let mutedWords = $state.raw(new Set());
  * user's list, read straight off the kind 10000.
  */
 const effectiveMutedWords = $derived.by(() => {
-  const instance = runtimeConfig.moderation?.mutedWords ?? [];
+  const instance = appSettings.instanceMutedWordsEnabled
+    ? (runtimeConfig.moderation?.mutedWords ?? [])
+    : [];
   if (instance.length === 0) return mutedWords;
   return new Set([...instance.map((w) => w.toLowerCase()), ...mutedWords]);
 });
 
 /** @type {string | null} */
 let activePubkey = null;
+
+/** Decrypting signer of the active account, or null for readonly sessions. @type {any} */
+let activeSigner = null;
+
+/** Event ids whose private entries were already tried — one signer prompt per version. @type {Set<string>} */
+// eslint-disable-next-line svelte/prefer-svelte-reactivity -- bookkeeping, never rendered
+const unlockAttempted = new Set();
 
 /** @type {{ unsubscribe: () => void }[]} */
 let subscriptions = [];
@@ -77,10 +92,12 @@ export function isMuted(pubkey) {
  * Load the user's kind 10000 and keep the muted set updated.
  * Called on login from accounts.svelte.js.
  * @param {string} pubkey
+ * @param {any} [signer] decrypts the private entries; omit for readonly accounts
  */
-export function initializeMuteList(pubkey) {
+export function initializeMuteList(pubkey, signer = null) {
   cleanupMuteList();
   activePubkey = pubkey;
+  activeSigner = signer;
 
   /** @type {() => void} */
   let settle = () => {};
@@ -112,13 +129,51 @@ export function initializeMuteList(pubkey) {
   subscriptions.push(
     eventStore.replaceable(MUTE_LIST_KIND, pubkey).subscribe((event) => {
       if (event) settle();
-      const things = event ? getPublicMutedThings(event) : undefined;
-      // eslint-disable-next-line svelte/prefer-svelte-reactivity -- $state.raw set, replaced wholesale
-      mutedPubkeys = things ? things.pubkeys : new Set();
-      // eslint-disable-next-line svelte/prefer-svelte-reactivity -- $state.raw set, replaced wholesale
-      mutedWords = new Set([...(things ? things.words : [])].map((w) => w.toLowerCase()));
+      applyMuteList(event);
+      if (event) unlockPrivateMutes(event);
     })
   );
+}
+
+/**
+ * Publish the event's muted things (public + whatever private entries are
+ * unlocked by now) into the reactive sets.
+ * @param {any} event
+ */
+function applyMuteList(event) {
+  const things = event ? getMutedThings(event) : undefined;
+
+  mutedPubkeys = things ? things.pubkeys : new Set();
+
+  mutedWords = new Set([...(things ? things.words : [])].map((w) => w.toLowerCase()));
+}
+
+/**
+ * Decrypt the NIP-51 private entries once per event version and re-apply.
+ * Silent on failure: a declined extension prompt or a signer without
+ * decryption simply leaves the public half in force.
+ * @param {any} event
+ */
+function unlockPrivateMutes(event) {
+  // Plain shape: isHiddenMutesUnlocked's type predicate would otherwise
+  // narrow `event` to never past the guard.
+  const { id, content } = /** @type {{id: string, content: string}} */ (event);
+  if (!activeSigner || !content || isHiddenMutesUnlocked(event)) return;
+  if (unlockAttempted.has(id)) return;
+  unlockAttempted.add(id);
+  const pubkey = activePubkey;
+  // Kind 10000 has no registered content encryption in applesauce; NIP-51
+  // says nip44 today, nip04 (`?iv=` payloads) for lists written by older
+  // clients — pick per event.
+  const method = content.includes('?iv=') ? 'nip04' : 'nip44';
+  unlockHiddenTags(event, activeSigner, method)
+    .then(() => {
+      if (activePubkey !== pubkey) return; // session switched while decrypting
+      applyMuteList(event);
+    })
+    .catch((err) => {
+      console.debug('[mute-list] private entries stay locked', err?.message ?? err);
+    });
 }
 
 /** Reset on logout. */
@@ -126,6 +181,8 @@ export function cleanupMuteList() {
   for (const sub of subscriptions) sub.unsubscribe();
   subscriptions = [];
   activePubkey = null;
+  activeSigner = null;
+  unlockAttempted.clear();
   // eslint-disable-next-line svelte/prefer-svelte-reactivity -- $state.raw set, replaced wholesale
   mutedPubkeys = new Set();
   // eslint-disable-next-line svelte/prefer-svelte-reactivity -- $state.raw set, replaced wholesale

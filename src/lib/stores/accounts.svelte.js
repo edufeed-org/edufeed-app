@@ -462,7 +462,9 @@ async function initializeAccountPersistence() {
     const { initializeMuteList, cleanupMuteList } = await import('$lib/stores/mute-list.svelte.js');
 
     if (account) {
-      initializeMuteList(account.pubkey);
+      // The signer unlocks NIP-51 private (encrypted) mute entries written by
+      // other clients; readonly accounts have nothing to decrypt with.
+      initializeMuteList(account.pubkey, account.type !== 'readonly' ? account.signer : null);
     } else {
       cleanupMuteList();
     }
