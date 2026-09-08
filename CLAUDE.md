@@ -355,16 +355,17 @@ src/
 
 Edufeed uses NIP-94 (kind 1063) events to attest licenses for images, keyed by SHA-256 hash. A license attestation has these tags:
 
-| Tag           | Required by NIP-94 | Required by edufeed | Notes                                 |
-| ------------- | ------------------ | ------------------- | ------------------------------------- |
-| `url`         | yes                | yes                 | Image location                        |
-| `x`           | yes                | yes                 | SHA-256 hex — the PK we look up by    |
-| `m`           | yes                | yes                 | MIME type                             |
-| `size`, `dim` | no                 | optional            | Bytes, "WxH"                          |
-| `license`     | no                 | **yes**             | License URL (CC, MIT, etc.)           |
-| `credit`      | no                 | **yes**             | Human-readable attribution            |
-| `source`      | no                 | optional            | Origin page where the image was found |
-| `p`           | no                 | optional            | Attribution to a Nostr pubkey         |
+| Tag           | Required by NIP-94 | Required by edufeed | Notes                                   |
+| ------------- | ------------------ | ------------------- | --------------------------------------- |
+| `url`         | yes                | yes                 | Image location                          |
+| `x`           | yes                | yes                 | SHA-256 hex — the PK we look up by      |
+| `m`           | yes                | yes                 | MIME type                               |
+| `size`, `dim` | no                 | optional            | Bytes, "WxH"                            |
+| `license`     | no                 | **yes**             | License URL (CC, MIT, etc.)             |
+| `credit`      | no                 | **yes**             | Human-readable attribution              |
+| `source`      | no                 | optional            | Origin page where the image was found   |
+| `p`           | no                 | optional            | Attribution to a Nostr pubkey           |
+| `ai`          | no                 | optional            | `generated` \| `modified` — EU AI label |
 
 **Lookup:** filter `{ kinds: [1063], '#x': [hash] }`. When multiple events exist, newest `created_at` wins; tie-break by lex order of `id`.
 
@@ -373,6 +374,7 @@ Edufeed uses NIP-94 (kind 1063) events to attest licenses for images, keyed by S
 **Helpers / files:**
 
 - `src/lib/helpers/image-license.js` — `buildLicenseTemplate(...)` pure helper.
+- `src/lib/helpers/ai-label.js` — `AI_LABELS` / `getAiLabel(event)`: the `ai` tag marks AI-generated (`generated`) or AI-modified (`modified`) files, chosen in `LicenseModal`; `ImageLicenseOverlay` renders the EU "AI" mark (`AiLabelIcon`) wherever the image shows.
 - `src/lib/stores/image-license.svelte.js` — `useLicenseForHash(getHash)` reactive hook.
 - `src/lib/components/shared/LicensedImageInput.svelte` — upload/paste field + license modal.
 - `src/lib/components/shared/LicenseBadge.svelte` — display badge for `AMBResourceCard` / `AMBResourceView`.

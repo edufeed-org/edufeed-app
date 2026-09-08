@@ -79,3 +79,46 @@ describe('ImageLicenseOverlay', () => {
     expect(queryByTestId('license-caution-popover')).toBeNull();
   });
 });
+
+describe('ImageLicenseOverlay — AI content label', () => {
+  it('shows no AI marker for a plain license', () => {
+    const { queryByTestId } = render(ImageLicenseOverlay, {
+      status: 'found',
+      licenseEvent: licenseEvent()
+    });
+    expect(queryByTestId('ai-label')).toBeNull();
+  });
+
+  it('marks AI-generated images inside the license badge', () => {
+    const { getByTestId } = render(ImageLicenseOverlay, {
+      status: 'found',
+      licenseEvent: licenseEvent([['ai', 'generated']])
+    });
+    const marker = getByTestId('ai-label');
+    expect(marker.textContent).toContain('AI generated');
+    expect(getByTestId('license-badge').textContent).toContain('CC BY 4.0');
+  });
+
+  it('marks AI-modified images', () => {
+    const { getByTestId } = render(ImageLicenseOverlay, {
+      status: 'found',
+      licenseEvent: licenseEvent([['ai', 'modified']])
+    });
+    expect(getByTestId('ai-label').textContent).toContain('AI modified');
+  });
+
+  it('ignores unknown ai tag values (untrusted input)', () => {
+    const { queryByTestId } = render(ImageLicenseOverlay, {
+      status: 'found',
+      licenseEvent: licenseEvent([['ai', 'robot']])
+    });
+    expect(queryByTestId('ai-label')).toBeNull();
+  });
+
+  it('still renders the AI marker when the attestation carries no license URL', () => {
+    const ev = licenseEvent([['ai', 'generated']]);
+    ev.tags = ev.tags.filter((t) => t[0] !== 'license');
+    const { getByTestId } = render(ImageLicenseOverlay, { status: 'found', licenseEvent: ev });
+    expect(getByTestId('ai-label')).toBeTruthy();
+  });
+});
