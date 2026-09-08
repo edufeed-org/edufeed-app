@@ -96,6 +96,21 @@ describe('HostChannelSidebar', () => {
   });
 
   // The whole point of the column: the row you are reading is the marked one.
+  // A deleted group survives on the relay as a "[deleted]" tombstone 39000
+  // and the open listing still returns it. It is not a channel anyone can
+  // open, so the column must not draw it.
+  it('does not list a deleted channel (relay tombstone)', () => {
+    holders.directory.metadata = [
+      meta('allgemein', [['name', 'allgemein']]),
+      meta('weg', [['name', '[deleted]'], ['private'], ['restricted'], ['hidden'], ['closed']])
+    ];
+    render(HostChannelSidebar, { props: { relay: RELAY } });
+    const names = rowNames();
+    expect(names).toHaveLength(1);
+    expect(names[0]).toContain('allgemein');
+    expect(names[0]).not.toContain('[deleted]');
+  });
+
   it('marks the channel that is open, and only that one', () => {
     holders.directory.metadata = [
       meta('allgemein', [['name', 'allgemein']]),

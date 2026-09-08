@@ -10,7 +10,7 @@
 // invited (channelAccessLevel). The retired "members" tier lived on the dropped
 // pointer marker; "all community members, privately" is Concord's job now.
 import { GROUP_METADATA_KIND } from 'applesauce-common/helpers/groups';
-import { channelAccessLevel, channelHidden } from './channel-access.js';
+import { channelAccessLevel, channelDeleted, channelHidden } from './channel-access.js';
 
 /** @param {any} event @returns {string | undefined} the `d` tag (group id) */
 export function dTagOf(event) {
@@ -83,9 +83,14 @@ export function buildSubtreeChannels(events, rootId, relay, hostRequiresAuth = f
     metadata: ev
   });
 
+  // Deletion is decided on the NEWEST 39000 per id (a group deleted after
+  // creation has a live 39000 followed by the tombstone), so it is applied
+  // after the newest-wins pass, not while iterating the bag.
   const channels = [...newestById.values()]
+    .filter((ev) => !channelDeleted(ev))
     .map(toRow)
     .sort((a, b) => (a.name ?? a.id).localeCompare(b.name ?? b.id));
 
-  return { root: rootEvent ? toRow(rootEvent) : null, channels };
+  const root = rootEvent && !channelDeleted(rootEvent) ? toRow(rootEvent) : null;
+  return { root, channels };
 }
