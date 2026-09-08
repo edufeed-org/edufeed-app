@@ -51,6 +51,13 @@ vi.mock('$lib/paraglide/messages.js', () => ({
   amb_resource_paid: () => 'Paid',
   amb_resource_license: () => 'License',
   amb_resource_view_license: () => 'View License',
+  amb_resource_citation_heading: () => 'Cite this resource',
+  amb_resource_citation_format: (/** @type {any} */ s) =>
+    `“${s.title}” by ${s.creator}, licensed under ${s.license}, via ${s.origin}`,
+  amb_resource_citation_copy: () => 'Copy citation',
+  amb_resource_citation_copied: () => 'Citation copied',
+  amb_resource_citation_copy_failed: () => 'Copy failed',
+  amb_resource_citation_hint: () => 'TULLU rule',
   amb_resource_topics_keywords: () => 'Topics',
   amb_resource_creators_heading: () => 'Creators',
   amb_resource_role_creator: () => 'Creator',
@@ -142,6 +149,9 @@ vi.mock('$lib/helpers/educational/ambJsonLd.js', () => ({
 }));
 vi.mock('$lib/stores/user-profile.svelte.js', () => ({
   useUserProfile: () => () => null
+}));
+vi.mock('$lib/stores/profile-map.svelte.js', () => ({
+  useProfileMap: () => () => new Map([['d'.repeat(64), { name: 'Profile Creator' }]])
 }));
 vi.mock('$lib/stores/accounts.svelte', () => ({
   useActiveUser: () => () =>
@@ -308,6 +318,64 @@ describe('AMBResourceView', () => {
       const href = link.getAttribute('href');
       expect(href).toBe('https://example.com/file.pdf');
     }
+  });
+
+  describe('TULLU citation note', () => {
+    it('cites structured creators as written and profile creators by display name', () => {
+      const eventWithCreators = {
+        ...mockEvent,
+        tags: [
+          ...mockEvent.tags,
+          ['creator:type', 'Person'],
+          ['creator:name', 'Jane Doe'],
+          ['p', 'd'.repeat(64), '', 'creator'],
+          ['p', 'e'.repeat(64), '', 'mention']
+        ]
+      };
+      const { container } = render(AMBResourceView, {
+        props: { event: eventWithCreators, resource: mockResource }
+      });
+
+      const note = container.querySelector('[data-testid="citation-note"]');
+      expect(note?.textContent).toContain(
+        '“Test Resource” by Jane Doe, Profile Creator, licensed under CC BY 4.0, via localhost'
+      );
+      // mention p-tag is not a creator
+      expect(note?.textContent).not.toContain('eeeeeeee');
+      const licenseLink = note?.querySelector(
+        'a[href="https://creativecommons.org/licenses/by/4.0/"]'
+      );
+      expect(licenseLink?.textContent).toBe('CC BY 4.0');
+      const originLink = note?.querySelector('a[href="http://localhost/test"]');
+      expect(originLink?.textContent).toBe('localhost');
+    });
+
+    it('falls back to the publisher when the resource names no creator', () => {
+      const { container } = render(AMBResourceView, {
+        props: { event: mockEvent, resource: mockResource }
+      });
+      const note = container.querySelector('[data-testid="citation-note"]');
+      expect(note?.textContent).toContain(`by ${mockEvent.pubkey.slice(0, 8)}…, licensed`);
+    });
+
+    it('cites an external resource via its primary URL host', () => {
+      const { container } = render(AMBResourceView, {
+        props: {
+          event: mockEvent,
+          resource: { ...mockResource, primaryURL: 'https://www.example.org/material/1' }
+        }
+      });
+      const note = container.querySelector('[data-testid="citation-note"]');
+      const originLink = note?.querySelector('a[href="https://www.example.org/material/1"]');
+      expect(originLink?.textContent).toBe('example.org');
+    });
+
+    it('renders no citation note for an unlicensed resource', () => {
+      const { container } = render(AMBResourceView, {
+        props: { event: mockEvent, resource: { ...mockResource, license: null } }
+      });
+      expect(container.querySelector('[data-testid="citation-note"]')).toBeNull();
+    });
   });
 
   it('renders contributor placeholders without broken robohash images', () => {

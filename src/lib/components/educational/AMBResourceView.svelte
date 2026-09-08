@@ -44,6 +44,8 @@
   import { toDieBibelUrl } from '$lib/helpers/educational/bibleReference.js';
   import { getAMBCreators } from '$lib/helpers/educational/ambHelpers.js';
   import { getResourceAttribution } from '$lib/helpers/educational/resourceAttribution.js';
+  import { buildTulluCitation, getCitationOrigin } from '$lib/helpers/educational/citation.js';
+  import { useProfileMap } from '$lib/stores/profile-map.svelte.js';
   import { ORCID_URI_PREFIX } from '$lib/helpers/educational/orcid.js';
   import { ALL_VARIANTS, EXTENSION_NAMESPACE_LABELS } from '$lib/config/resource-form-variants.js';
   import { page } from '$app/stores';
@@ -82,6 +84,7 @@
   import EncodingRowBadge from './EncodingRowBadge.svelte';
   import EncodingPreview from './EncodingPreview.svelte';
   import ResourceCover from './ResourceCover.svelte';
+  import CitationNote from './CitationNote.svelte';
 
   // Trigger SKOS vocabulary loading for label resolution
   ensureVocabularyLoaded('learningResourceType');
@@ -556,6 +559,40 @@
     '<script type="application/ld+json">' + JSON.stringify(jsonLd) + '</' + 'script>'
   );
 
+  // TULLU citation ("cite this resource"), only for licensed resources.
+  // Urheber = the creators in wire order — structured creator:* names as
+  // written, creator p-tags by profile display name; the publisher stands in
+  // when the resource names no creator at all (own content).
+  /** @param {{ pubkey?: string, role: string }} e */
+  const isCitedCreator = (e) => !e.pubkey || e.role === '' || e.role === 'creator';
+  const getCreatorProfiles = useProfileMap(() =>
+    contributorEntries.filter((e) => e.pubkey && isCitedCreator(e)).map((e) => e.pubkey)
+  );
+  const citation = $derived.by(() => {
+    if (!resource.license) return null;
+    const profiles = getCreatorProfiles();
+    const names = contributorEntries
+      .filter(isCitedCreator)
+      .map((e) =>
+        e.pubkey
+          ? getDisplayName(profiles.get(e.pubkey), e.pubkey.slice(0, 8) + '…')
+          : [e.honorificPrefix, e.name].filter(Boolean).join(' ')
+      );
+    const creators =
+      names.length > 0
+        ? names
+        : [getDisplayName(getPublisherProfile(), event.pubkey.slice(0, 8) + '…')];
+    return buildTulluCitation(
+      {
+        title: resource.name ?? '',
+        creators,
+        license: resource.license,
+        origin: getCitationOrigin(resource, { pageUrl, appName: runtimeConfig.appName ?? '' })
+      },
+      m.amb_resource_citation_format
+    );
+  });
+
   // Content type detection
   // Check if d-tag (identifier) contains a URL - this means the resource itself IS an external link
   const hasIdentifierUrl = $derived(
@@ -742,11 +779,13 @@
     </section>
   {/if}
 
-  <!-- TAGS + LICENSE — side-by-side panels -->
+  <!-- TAGS + LICENSE — a slim topics strip above a full-width license card.
+       A card for a handful of chips would stretch to the license card's
+       height and sit mostly empty; the strip only takes the room it needs. -->
   {#if resource.keywords.length > 0 || resource.license}
     <section class="ed-tagslicense">
       {#if resource.keywords.length > 0}
-        <div class="ed-panel">
+        <div class="ed-topics">
           <h3 class="ed-panel-head">
             <TagIcon class_="w-4 h-4" />
             {m.amb_resource_topics_keywords()}
@@ -756,19 +795,24 @@
       {/if}
 
       {#if resource.license}
-        <div class="ed-license-card">
-          <span class="pill"><CheckIcon class_="w-4 h-4" /> {resource.license.label}</span>
-          <h3 class="ed-panel-head">{m.amb_resource_license()}</h3>
-          <!-- eslint-disable svelte/no-navigation-without-resolve -- external: license URL -->
-          <a
-            href={resource.license.id}
-            target="_blank"
-            rel="noopener noreferrer"
-            class="ed-license-link"
-          >
-            {m.amb_resource_view_license()}
-          </a>
-          <!-- eslint-enable svelte/no-navigation-without-resolve -->
+        <div class="ed-license-card" class:ed-license-card--cite={!!citation}>
+          <div class="ed-license-main">
+            <span class="pill"><CheckIcon class_="w-4 h-4" /> {resource.license.label}</span>
+            <h3 class="ed-panel-head">{m.amb_resource_license()}</h3>
+            <!-- eslint-disable svelte/no-navigation-without-resolve -- external: license URL -->
+            <a
+              href={resource.license.id}
+              target="_blank"
+              rel="noopener noreferrer"
+              class="ed-license-link"
+            >
+              {m.amb_resource_view_license()}
+            </a>
+            <!-- eslint-enable svelte/no-navigation-without-resolve -->
+          </div>
+          {#if citation}
+            <CitationNote {citation} />
+          {/if}
         </div>
       {/if}
     </section>
@@ -1322,15 +1366,21 @@
 
   /* ── TAGS + LICENSE ───────────────────────────────────────────────── */
   .ed-tagslicense {
-    display: grid;
-    grid-template-columns: 1fr;
+    display: flex;
+    flex-direction: column;
     gap: 18px;
     margin-bottom: 28px;
   }
-  @media (min-width: 720px) {
-    .ed-tagslicense {
-      grid-template-columns: 1.6fr 1fr;
-    }
+  /* Topics strip: heading and chips share one wrapping row, no card. */
+  .ed-topics {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px 14px;
+    padding: 0 4px;
+  }
+  .ed-topics .ed-panel-head {
+    margin: 0;
   }
   .ed-license-card {
     background: linear-gradient(
@@ -1345,6 +1395,33 @@
     flex-direction: column;
     align-items: flex-start;
     gap: 12px;
+  }
+  .ed-license-main {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+  }
+  .ed-license-main .ed-panel-head {
+    margin: 0;
+  }
+  /* With a citation the card is wide enough to seat license and citation
+     side by side; the note's dashed top rule turns into a column divider. */
+  @media (min-width: 720px) {
+    .ed-license-card--cite {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1.6fr);
+      gap: 12px 40px;
+      align-items: start;
+    }
+    .ed-license-card--cite :global(.ed-cite) {
+      margin-top: 0;
+      padding-top: 0;
+      padding-left: 40px;
+      border-top: 0;
+      border-left: 1px dashed color-mix(in oklch, var(--color-primary) 35%, transparent);
+      align-self: stretch;
+    }
   }
   .ed-license-card .pill {
     display: inline-flex;
