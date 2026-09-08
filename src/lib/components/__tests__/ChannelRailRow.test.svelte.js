@@ -31,10 +31,10 @@ describe('ChannelRailRow', () => {
     expect(screen.queryByTestId('locked-badge')).toBeNull();
   });
 
-  it('draws a hidden room with the crossed-eye badge IN PLACE of the lock', () => {
+  it('draws a hidden room with the 🙈 badge IN PLACE of the lock', () => {
     render(ChannelRailRow, { props: { symbol: '#', name: 'geheim', locked: true, hidden: true } });
     const badge = screen.getByTestId('hidden-badge');
-    expect(badge.querySelector('svg')).toBeTruthy();
+    expect(badge.textContent).toBe('🙈');
     expect(badge.getAttribute('title')).toBe('hidden channel tooltip');
     expect(screen.queryByTestId('locked-badge')).toBeNull();
     expect(screen.getByText('#')).toBeTruthy();
