@@ -772,6 +772,13 @@ vi.mock(
 );
 vi.mock('$lib/components/shared/LinkPreviewList.svelte', () => ({ default: Stub }));
 vi.mock('$lib/components/shared/ProfileAvatar.svelte', () => ({ default: Stub }));
+// The app picker lists relay-discovered apps only behind the per-user
+// "show all apps" setting (curated WEBXDC_APPS are the default); these tests
+// pick a discovered row, so switch it on.
+vi.mock('$lib/stores/app-settings.svelte.js', async (importOriginal) => {
+  const actual = /** @type {any} */ (await importOriginal());
+  return { ...actual, appSettings: { ...actual.appSettings, webxdcShowAllApps: true } };
+});
 vi.mock('$lib/components/icons', () => ({
   ReplyIcon: Stub,
   PeopleIcon: Stub,

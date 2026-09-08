@@ -46,7 +46,15 @@ export function useCommunityAccess(getCommunityEvent, getRelays) {
       if (!isModerated()) return legacy.getMembers(sectionName);
       const section = sectionByName(sectionName);
       if (!sectionIsGated(section)) return [];
-      return [...getRoster().members];
+      // Same resolution as getAllowedAuthors: a role-gated section
+      // ("publisher") lists only the role holders (+ owner), not the whole
+      // roster — the members view drew a "Learning Content" chip on every
+      // member of laoc42's publisher-gated community (laoc, 2026-09-08).
+      return (
+        sectionAllowedAuthors(section, getRoster(), getCommunityEvent()?.pubkey) ?? [
+          ...getRoster().members
+        ]
+      );
     },
     getAllowedAuthors(sectionName) {
       if (!isModerated()) return legacy.getAllowedAuthors(sectionName);

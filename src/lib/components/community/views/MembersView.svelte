@@ -231,7 +231,7 @@
   </div>
 
   {#if canModerateJoins && communikeyEvent?.pubkey}
-    <div class="mb-6">
+    <div class="mb-6 max-w-2xl">
       <JoinRequestsPanel communityId={communikeyEvent.pubkey} roster={getRootRoster()} />
     </div>
   {/if}

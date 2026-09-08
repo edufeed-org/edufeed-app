@@ -101,6 +101,11 @@ describe('useCommunityAccess — moderated communities', () => {
     expect(access.getMembers('Forum')).toEqual([]);
   });
 
+  it('getMembers: a role-gated section lists only the role holders (+ owner)', () => {
+    expect(access.getMembers('Learning')).toEqual(expect.arrayContaining([OWNER, TEACHER]));
+    expect(access.getMembers('Learning')).not.toContain(ACTIVE);
+  });
+
   // The application-form layer is gone (YAGNI, 2026-08-18): moderated
   // communities never expose a form ref — even for gated sections, even
   // when a legacy `application` tag still sits on the 10222 — so no form

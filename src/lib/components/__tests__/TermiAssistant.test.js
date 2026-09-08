@@ -161,6 +161,10 @@ vi.mock('$lib/loaders/base.js', () => ({
 // The joinRequests hint's hook drags in the NIP-29 roster/relay-auth
 // machinery (my-groups, channel-rosters, pool.relay …); it has its own
 // tests, so stub it to "nothing pending" here.
+// The groupAdded hint reads the inbox's unread-by-type counter.
+vi.mock('$lib/services/inbox-service.svelte.js', () => ({
+  getUnreadByType: () => ({})
+}));
 vi.mock('$lib/groups/join-request-alerts.svelte.js', () => ({
   useAdminJoinRequestAlert: () => () => ({ count: 0, communities: [] })
 }));

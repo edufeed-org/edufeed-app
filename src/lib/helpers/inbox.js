@@ -14,7 +14,9 @@ const KIND_TO_TYPE = {
   1111: 'comment',
   9: 'mention',
   31925: 'rsvp',
-  1018: 'pollVote'
+  1018: 'pollVote',
+  // NIP-29 put-user: an admin added you to a group (community root or channel).
+  9000: 'groupAdded'
 };
 
 /**
@@ -89,10 +91,14 @@ export function isMembershipApplication(event, membershipFormAddress) {
 
 /**
  * @param {import('nostr-tools').NostrEvent} event
+ * @param {{ groupAddedHref?: string | null }} [opts] href for kind-9000 rows, resolved by the caller
  * @returns {string | null}
  */
-export function getNotificationUrl(event) {
+export function getNotificationUrl(event, { groupAddedHref = null } = {}) {
   const type = getNotificationType(event);
+
+  // Resolved by the caller (needs the store: community pointer or group host).
+  if (type === 'groupAdded') return groupAddedHref;
 
   if (type === 'formRequest' || type === 'formResponse') {
     const addr = event.tags.find((t) => t[0] === 'a')?.[1];

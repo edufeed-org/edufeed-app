@@ -24,7 +24,8 @@ vi.mock('$lib/helpers/relay-helper.js', () => ({
   getEducationalRelays: () => ['wss://relay3'],
   getNotificationFallbackRelays: () => [],
   getAllLookupRelays: () => ['wss://lookup1'],
-  getEventLoaderLookupRelays: () => []
+  getEventLoaderLookupRelays: () => [],
+  getGroupsRelays: () => []
 }));
 vi.mock('applesauce-loaders/loaders', () => ({
   createTimelineLoader: vi.fn(() => () => noopObservable)
@@ -224,11 +225,13 @@ describe('per-item read tracking', () => {
       const call = eventStore.model.mock.calls.find((c) => Array.isArray(c[1]));
       expect(call).toBeDefined();
 
-      // Same filters as buildMainFilter, minus the `since` bound (the store
+      // Same filters as buildMainFilter plus the kind-9000 "added you" filter
+      // (fetched from the groups host), minus the `since` bound (the store
       // holds everything already fetched, so the model must not re-window it)
-      const expected = service
-        .buildMainFilter('user123', 0)
-        .map(({ since: _since, ...rest }) => rest);
+      const expected = [
+        ...service.buildMainFilter('user123', 0),
+        { kinds: [9000], '#p': ['user123'] }
+      ].map(({ since: _since, ...rest }) => rest);
       expect(call[1]).toEqual(expected);
     });
   });
