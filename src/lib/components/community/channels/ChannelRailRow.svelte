@@ -12,7 +12,7 @@
   `href` makes the row a link, otherwise it is a button. Nothing else changes.
 -->
 <script>
-  import { EyeOffIcon, LockIcon } from '$lib/components/icons';
+  import { LockIcon } from '$lib/components/icons';
   import * as m from '$lib/paraglide/messages';
 
   /**
@@ -93,12 +93,13 @@
   {#if hidden}
     <!-- Unlisted (NIP-29 `hidden`): a hidden room is private too, but the
          lock alone made it indistinguishable from an ordinary closed room in
-         the rail (laoc, 2026-09-07) — the crossed eye takes the lock's slot. -->
+         the rail — the see-no-evil monkey takes the lock's slot, same emoji
+         styling as the globe (laoc, 2026-09-08). -->
     <span
       aria-hidden="true"
       data-testid="hidden-badge"
       title={m.channel_hidden_tooltip()}
-      class="shrink-0 opacity-60"><EyeOffIcon class_="w-3 h-3" /></span
+      class="shrink-0 text-[0.7rem] opacity-80">&#128584;</span
     >
   {:else if locked}
     <!-- Invite-only: same LockIcon as the INHALTE rows' restriction badge —
