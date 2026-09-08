@@ -106,6 +106,19 @@
    * @param {{id: string, variant?: string, address?: string, count?: number}} hint
    */
   function copyFor(hint) {
+    if (hint.id === 'groupAdded') {
+      const count = hint.count ?? 0;
+      return {
+        title: m.termi_hint_group_added_title(),
+        body:
+          count === 1
+            ? m.termi_hint_group_added_body_one()
+            : m.termi_hint_group_added_body({ count }),
+        action: m.termi_hint_group_added_cta(),
+        secondary: null,
+        doing: null
+      };
+    }
     if (hint.id === 'joinRequests') {
       const count = hint.count ?? 0;
       return {

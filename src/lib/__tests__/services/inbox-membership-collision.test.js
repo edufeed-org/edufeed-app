@@ -75,7 +75,8 @@ vi.mock('$lib/helpers/relay-helper.js', () => ({
   getEducationalRelays: () => ['wss://relay3'],
   getNotificationFallbackRelays: () => [],
   getAllLookupRelays: () => ['wss://lookup1'],
-  getEventLoaderLookupRelays: () => []
+  getEventLoaderLookupRelays: () => [],
+  getGroupsRelays: () => []
 }));
 vi.mock('applesauce-loaders/loaders', () => ({
   createTimelineLoader: vi.fn(() => () => noopObservable)

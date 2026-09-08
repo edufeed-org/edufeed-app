@@ -3,6 +3,9 @@
   import { goto } from '$app/navigation';
   import { getNotificationType, getNotificationUrl } from '$lib/helpers/inbox.js';
   import { profileLink } from '$lib/helpers/nostrUtils.js';
+  import { useGroupAddedTarget } from '$lib/groups/group-added.svelte.js';
+  import { useProfileMap } from '$lib/stores/profile-map.svelte.js';
+  import { getUserDisplayName } from '$lib/helpers/message-utils.js';
   import { markItemAsRead } from '$lib/services/inbox-service.svelte.js';
   import { muteUser } from '$lib/stores/mute-list.svelte.js';
   import { publishWave } from '$lib/helpers/waves.js';
@@ -15,7 +18,8 @@
     BellIcon,
     ScrollTextIcon,
     PollIcon,
-    MoreIcon
+    MoreIcon,
+    PeopleIcon
   } from '$lib/components/icons';
   import ProfileAvatar from '$lib/components/shared/ProfileAvatar.svelte';
   import UnreadDot from '$lib/components/shared/UnreadDot.svelte';
@@ -33,7 +37,22 @@
   let { event, profile, unread, contentTitle = '', formName = '' } = $props();
 
   const type = $derived(getNotificationType(event));
-  const url = $derived(getNotificationUrl(event));
+  // kind 9000: where the group lives (community page or group route) and
+  // what to call it — the community's profile name, else the group's own.
+  const getGroupAdded = useGroupAddedTarget(() => (type === 'groupAdded' ? event : null));
+  const getCommunityProfiles = useProfileMap(() => {
+    const pk = getGroupAdded().communityPubkey;
+    return pk ? [pk] : [];
+  });
+  const groupAddedName = $derived.by(() => {
+    if (type !== 'groupAdded') return '';
+    const { communityPubkey, groupName } = getGroupAdded();
+    if (communityPubkey) {
+      return getUserDisplayName(communityPubkey, getCommunityProfiles().get(communityPubkey));
+    }
+    return groupName || m.inbox_group_added_unnamed();
+  });
+  const url = $derived(getNotificationUrl(event, { groupAddedHref: getGroupAdded().href }));
   const href = $derived(url ? resolve(/** @type {any} */ (url)) : undefined);
   const displayName = $derived(profile?.display_name || profile?.name || event.pubkey.slice(0, 8));
 
@@ -49,7 +68,8 @@
     reply: ChatIcon,
     mention: BellIcon,
     rsvp: CalendarIcon,
-    pollVote: PollIcon
+    pollVote: PollIcon,
+    groupAdded: PeopleIcon
   };
 
   const TypeIcon = $derived(type ? iconMap[type] || BellIcon : BellIcon);
@@ -231,6 +251,8 @@
         &nbsp;{m.inbox_action_rsvp({ eventTitle: contentTitle })}
       {:else if type === 'pollVote'}
         &nbsp;{m.inbox_action_poll_vote()}
+      {:else if type === 'groupAdded'}
+        &nbsp;{m.inbox_action_group_added({ groupName: groupAddedName })}
       {/if}
     </div>
     <div class="group mt-0.5 flex items-center gap-2">

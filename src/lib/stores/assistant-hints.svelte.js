@@ -26,6 +26,7 @@ import { publishDefaultRelayList } from '$lib/services/relay-list-backfill.js';
 import { ensureDmRelayList } from '$lib/services/dm-relay-backfill.js';
 import { getDmRelayCheckStatus } from '$lib/services/dm-service.svelte.js';
 import { getPendingInviteCount } from '$lib/concord/pending-invites.svelte.js';
+import { getUnreadByType } from '$lib/services/inbox-service.svelte.js';
 import { useAdminJoinRequestAlert } from '$lib/groups/join-request-alerts.svelte.js';
 import { nip19 } from 'nostr-tools';
 import { modalStore } from '$lib/stores/modal.svelte.js';
@@ -64,7 +65,7 @@ import {
 import { getProfileNip05s } from '$lib/helpers/nip05-verify.js';
 import { runtimeConfig } from '$lib/stores/config.svelte.js';
 
-/** @typedef {'backup' | 'relays' | 'dm' | 'nip05' | 'profile' | 'invites' | 'joinRequests'} HintId */
+/** @typedef {'backup' | 'relays' | 'dm' | 'nip05' | 'profile' | 'invites' | 'joinRequests' | 'groupAdded'} HintId */
 /** @typedef {import('$lib/helpers/assistant-hints.js').HintStatus} HintStatus */
 
 export const HINT_IDS = /** @type {HintId[]} */ ([
@@ -74,7 +75,8 @@ export const HINT_IDS = /** @type {HintId[]} */ ([
   'profile',
   'nip05',
   'invites',
-  'joinRequests'
+  'joinRequests',
+  'groupAdded'
 ]);
 
 /**
@@ -202,7 +204,8 @@ export function useAssistantHints() {
         nip05: null,
         profile: null,
         invites: null,
-        joinRequests: null
+        joinRequests: null,
+        groupAdded: null
       };
 
     const backupConfirmed = isBackupDownloaded(user.pubkey);
@@ -296,6 +299,14 @@ export function useAssistantHints() {
         running: false,
         confirmed: false,
         everOpen: everOpen.has('joinRequests')
+      }),
+      groupAdded: deriveHintStatus({
+        // "An admin added you to a group": mirrors the inbox's unread
+        // kind-9000 notices and clears as they are opened/marked read.
+        applicable: (getUnreadByType().groupAdded ?? 0) > 0,
+        running: false,
+        confirmed: false,
+        everOpen: everOpen.has('groupAdded')
       })
     };
   });
@@ -358,6 +369,11 @@ export function useAssistantHints() {
     }
     if (id === 'invites') {
       modalStore.openModal('concordInvites');
+      return;
+    }
+    if (id === 'groupAdded') {
+      // The inbox rows carry the per-group targets; opening one marks it read.
+      goto('/inbox');
       return;
     }
     if (id === 'joinRequests') {
@@ -425,6 +441,9 @@ export function useAssistantHints() {
         }
         if (id === 'joinRequests') {
           entry.count = getJoinRequestAlert().count;
+        }
+        if (id === 'groupAdded') {
+          entry.count = getUnreadByType().groupAdded ?? 0;
         }
         return [entry];
       }),

@@ -17,7 +17,8 @@ import {
   getCalendarRelays,
   getEducationalRelays,
   getNotificationFallbackRelays,
-  getAllLookupRelays
+  getAllLookupRelays,
+  getGroupsRelays
 } from '$lib/helpers/relay-helper.js';
 import {
   getNotificationType,
@@ -367,7 +368,19 @@ export function initializeInbox(pubkey) {
   // Model subscription — watch eventStore for matching events. Derived from the
   // loader filters (minus `since`, the store already holds what was fetched) so
   // the two can never drift apart on kinds.
-  const modelFilters = filters.map(({ since: _since, ...rest }) => rest);
+  // NIP-29 put-user events live on the groups host only: "an admin added you
+  // to a group" (community root or channel) — see groups/group-added.js.
+  const groupAddedFilter = { kinds: [9000], '#p': [pubkey], since };
+  const groupRelays = getGroupsRelays();
+  if (groupRelays.length > 0) {
+    const groupAddedLoader = createTimelineLoader(timedPool, groupRelays, [groupAddedFilter], {
+      eventStore,
+      limit: 50
+    });
+    subscriptions.push(groupAddedLoader().subscribe());
+  }
+
+  const modelFilters = [...filters, groupAddedFilter].map(({ since: _since, ...rest }) => rest);
   const modelSub = eventStore.model(TimelineModel, modelFilters).subscribe((events) => {
     const filtered = filterSelfNotifications(events || [], pubkey);
     rawMainNotifications = filtered;
