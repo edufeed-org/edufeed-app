@@ -64,7 +64,7 @@
   import { publishToGroupRelay, buildDeleteEventTemplate } from '$lib/groups/group-management.js';
   import { uploadChatAttachment } from '$lib/helpers/chat-attachment-upload.js';
   import { SvelteMap } from 'svelte/reactivity';
-  import { roleOptionsFromAdmins } from '$lib/groups/roles.js';
+  import { isModerator, roleOptionsFromAdmins } from '$lib/groups/roles.js';
   import { unique } from '$lib/helpers/unique.js';
   import { setContext, tick } from 'svelte';
   import { updateQueryParams } from '$lib/helpers/urlParams.js';
@@ -583,7 +583,10 @@
   const joinPending = $derived(
     groupClosed && !canWrite && (joinRequestedNow || hasStoredJoinRequest)
   );
-  const isAdmin = $derived(!!myPubkey && admins.some((a) => a.pubkey === myPubkey));
+  // Moderation role, not bare 39001 membership: a publisher-only entry is a
+  // writer (canWrite above) but gets no settings gear or message delete —
+  // the relay refuses its 9002/9005 anyway (roles.js isModerator).
+  const isAdmin = $derived(isModerator(admins, myPubkey));
 
   // Management entry points: the members modal (Task 7) and the admin-only
   // settings sheet (Task 8) mount here once they exist.
