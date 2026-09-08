@@ -10,6 +10,7 @@
  * written by other clients but deferred here.
  */
 import { MuteUser, UnmuteUser, MuteWord, UnmuteWord } from 'applesauce-actions/actions';
+import { runtimeConfig } from '$lib/stores/config.svelte.js';
 import { getPublicMutedThings } from 'applesauce-common/helpers/mute';
 import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
 import { addressLoader } from '$lib/loaders/base.js';
@@ -20,8 +21,21 @@ const MUTE_LIST_KIND = 10000;
 /** @type {Set<string>} */
 let mutedPubkeys = $state.raw(new Set());
 
-/** Muted words, normalized to lowercase. @type {Set<string>} */
+/** The user's own muted words (NIP-51 public `word` tags), lowercase. @type {Set<string>} */
 let mutedWords = $state.raw(new Set());
+
+/**
+ * What the filters actually match against: the instance-wide muted words
+ * (/api/config `moderation.mutedWords`, e.g. a known spam campaign) plus the
+ * user's own. Users cannot unmute the instance-wide entries — they are the
+ * operator's call — and the dashboard's word editor keeps showing only the
+ * user's list, read straight off the kind 10000.
+ */
+const effectiveMutedWords = $derived.by(() => {
+  const instance = runtimeConfig.moderation?.mutedWords ?? [];
+  if (instance.length === 0) return mutedWords;
+  return new Set([...instance.map((w) => w.toLowerCase()), ...mutedWords]);
+});
 
 /** @type {string | null} */
 let activePubkey = null;
@@ -46,9 +60,9 @@ export function getMutedPubkeys() {
   return mutedPubkeys;
 }
 
-/** Reactive getter for muted words (lowercase). */
+/** Reactive getter for muted words (lowercase): instance-wide + the user's own. */
 export function getMutedWords() {
-  return mutedWords;
+  return effectiveMutedWords;
 }
 
 /**
