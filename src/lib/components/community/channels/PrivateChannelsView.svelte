@@ -52,6 +52,7 @@
   import { useCommunityChannels } from '$lib/groups/community-channels.svelte.js';
   import { communityGroupsEndpoint, flatGroupsRelay } from '$lib/groups/community-endpoint.js';
   import { useRootRoster } from '$lib/groups/root-roster.svelte.js';
+  import { isModerator } from '$lib/groups/roles.js';
   import { moderationPubkeys } from '$lib/groups/roles.js';
   import { resolveZoneMembership } from '$lib/components/community/layout/community-nav.js';
   import ConcordUnreadDot from '$lib/components/shared/ConcordUnreadDot.svelte';
@@ -355,10 +356,9 @@
   // 9002 with parent=rootId) signed by the admin's OWN key, and the relay
   // enforces the admin-of-parent rule — no owner-signed kind-10222 edit is
   // involved any more (channels are discovered from the subtree, not pointers).
-  const isRootAdmin = $derived.by(() => {
-    const user = getActiveUser();
-    return !!user && getRootRoster().admins.some((a) => a.pubkey === user.pubkey);
-  });
+  // Moderation role, not bare 39001 membership: publisher-only entries share
+  // the list but the relay refuses their 9007/9008 (roles.js isModerator).
+  const isRootAdmin = $derived(isModerator(getRootRoster().admins, getActiveUser()?.pubkey));
   // create intent must not open the wizard for anyone the buttons exclude.
   const canOpenCreateWizard = $derived(
     (concord.community && concord.canManageChannels && !concord.dissolved) ||

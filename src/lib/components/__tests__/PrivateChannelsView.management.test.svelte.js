@@ -10,6 +10,21 @@ const RELAY = 'wss://groups.example/';
 const gotoSpy = vi.hoisted(() => vi.fn());
 vi.mock('$app/navigation', () => ({ goto: gotoSpy }));
 
+/**
+ * Since 82ed1450 a channel pick is mirrored into `?channel=` via a
+ * replaceState goto (room deep links). That is not a navigation away from
+ * the pane, which is what the handoff-#10 cases guard against — so they
+ * accept only such same-page mirror writes and nothing else.
+ * @param {string} channelId
+ */
+function expectOnlyChannelParamMirror(channelId) {
+  for (const [url, opts] of gotoSpy.mock.calls) {
+    expect(String(url)).toContain(`channel=${channelId}`);
+    expect(String(url)).not.toContain('/groups');
+    expect(opts).toMatchObject({ replaceState: true });
+  }
+}
+
 // isCommunikeyOwner (getCommunitySigner) reads `manager` directly — only
 // `useActiveUser` was mocked before this file needed a communikeyEvent-based
 // owner check (the onCreated/group-mode test below). vi.hoisted's factory
@@ -129,6 +144,7 @@ describe('PrivateChannelsView management', () => {
 
 describe('PrivateChannelsView management — navigate into a freshly created channel (handoff #10)', () => {
   it('Concord creation: selects the new channel, no navigation', async () => {
+    gotoSpy.mockClear();
     concordFixture.value = base();
     render(PrivateChannelsView, {
       props: { communityId: 'cid', communityProfile: { name: 'Area' } }
@@ -136,10 +152,11 @@ describe('PrivateChannelsView management — navigate into a freshly created cha
     await fireEvent.click(await screen.findByTestId('stub-open-create'));
     await fireEvent.click(await screen.findByTestId('stub-fire-created'));
     expect(selectSpy).toHaveBeenCalledWith('cid', 'new-id');
-    expect(gotoSpy).not.toHaveBeenCalled();
+    expectOnlyChannelParamMirror('new-id');
   });
 
   it('NIP-29 group creation: selects the new channel in the pane, no goto, no concord select', async () => {
+    gotoSpy.mockClear();
     concordFixture.value = base({ community: undefined, enabled: false });
     const communikeyEvent = {
       kind: 10222,
@@ -155,7 +172,7 @@ describe('PrivateChannelsView management — navigate into a freshly created cha
     // leaving for /groups would load the host's entire directory
     // (laoc, 2026-08-19).
     expect(getSelectedGroupChannel(OWNER)).toBe(channelKey({ id: 'new-id', relay: RELAY }));
-    expect(gotoSpy).not.toHaveBeenCalled();
+    expectOnlyChannelParamMirror('new-id');
     expect(selectSpy).not.toHaveBeenCalled();
   });
 });

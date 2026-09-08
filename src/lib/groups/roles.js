@@ -65,6 +65,23 @@ export function moderationPubkeys(admins) {
 }
 
 /**
+ * Read-side twin of moderationPubkeys: does THIS pubkey hold a moderation
+ * role on the roster? Every "is the active user an admin?" UI gate (channel
+ * create/delete, members tools, settings panes, section overrides) must ask
+ * this rather than bare 39001 membership — a publisher-only or custom-role
+ * entry otherwise sees admin chrome the relay refuses to act on, and a
+ * publisher-authored kind-30223 section override would be honoured
+ * client-side (issue d3fb4d60).
+ * @param {Array<{ pubkey: string, roles?: string[] }> | undefined | null} admins
+ * @param {string | undefined | null} pubkey
+ * @returns {boolean}
+ */
+export function isModerator(admins, pubkey) {
+  if (!pubkey) return false;
+  return (admins ?? []).some((a) => a.pubkey === pubkey && hasModerationRole(a.roles));
+}
+
+/**
  * Datalist suggestions for the assign-role dialog: every role already present
  * on the 39001 roster, then the two built-ins. Every GroupMembersModal call
  * site must derive its roleOptions through this — an omitted prop silently

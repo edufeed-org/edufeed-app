@@ -28,6 +28,7 @@ import { canPublishSection } from '$lib/groups/roster-access.js';
 import { parseMembershipPointer } from '$lib/groups/community-membership.js';
 import { channelKey } from '$lib/groups/community-pointer.js';
 import { SECTION_OVERRIDE_KIND, applySectionOverride } from '$lib/groups/section-override.js';
+import { moderationPubkeys } from '$lib/groups/roles.js';
 import { useActiveUser } from '$lib/stores/accounts.svelte';
 
 /** @param {string} address @returns {{kind: number, pubkey: string, identifier: string} | null} */
@@ -98,12 +99,14 @@ export function useShareRestrictions(getKind, getCommunityPubkeys) {
     const pointer = parseMembershipPointer(raw);
     const key = pointer ? channelKey(pointer) : null;
     const admins = (key && rosters.adminsByKey[key]) || [];
+    // Moderation-role holders only, same as useEffectiveCommunity: a
+    // publisher-authored 30223 must not widen the publisher's own access.
     return applySectionOverride(
       raw,
       overrides.filter(
         (event) => event?.tags?.find((/** @type {string[]} */ t) => t[0] === 'd')?.[1] === pubkey
       ),
-      admins.map((/** @type {any} */ admin) => admin.pubkey)
+      moderationPubkeys(admins)
     ).event;
   }
 

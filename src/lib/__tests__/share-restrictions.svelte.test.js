@@ -223,6 +223,25 @@ describe('useShareRestrictions — kind-30223 section override', () => {
     cleanup();
   });
 
+  it('ignores an override from a publisher-only 39001 entry (issue d3fb4d60)', () => {
+    // PUBLISHER sits in the root 39001 with only the publisher role. That is
+    // not moderation authority, so their 30223 must not open the owner's
+    // gate — otherwise a publisher can widen their own write access.
+    holders.activeUser = { pubkey: OUTSIDER };
+    holders.eventStore.add(gatedCommunity());
+    holders.eventStore.add({
+      ...override(PUBLISHER),
+      tags: [
+        ['d', COMMUNITY],
+        ['content', 'Learning'],
+        ['k', '30142']
+      ]
+    });
+    const { getRestricted, cleanup } = mount();
+    expect(getRestricted().has(COMMUNITY)).toBe(true);
+    cleanup();
+  });
+
   it('an override that OPENS a section the owner gated lets everyone through', () => {
     holders.activeUser = { pubkey: OUTSIDER };
     holders.eventStore.add(gatedCommunity());

@@ -26,6 +26,7 @@
   import { useChannelRosters } from '$lib/groups/channel-rosters.svelte.js';
   import { putUserOn, removeUserOn, fanOut } from '$lib/groups/roster-fanout.js';
   import { channelKey } from '$lib/groups/community-pointer.js';
+  import { isModerator } from '$lib/groups/roles.js';
   import { useActiveUser } from '$lib/stores/accounts.svelte';
   import { useProfileMap } from '$lib/stores/profile-map.svelte.js';
   import { getUserDisplayName } from '$lib/helpers/message-utils.js';
@@ -95,8 +96,10 @@
     const keys = new Set();
     const my = myPubkey;
     if (!my) return keys;
+    // Moderation role per channel, not bare 39001 membership (roles.js
+    // isModerator): a publisher-only entry cannot put/remove users there.
     for (const [key, admins] of Object.entries(getRosters().adminsByKey)) {
-      if (admins.some((admin) => admin.pubkey === my)) keys.add(key);
+      if (isModerator(admins, my)) keys.add(key);
     }
     return keys;
   });

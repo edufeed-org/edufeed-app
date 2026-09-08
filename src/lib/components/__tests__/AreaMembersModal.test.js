@@ -212,6 +212,27 @@ describe('AreaMembersModal rendering', () => {
   });
 });
 
+describe('AreaMembersModal rendering — role gate (issue d3fb4d60)', () => {
+  it('publisher-only 39001 entries on every channel: no add input, no repair/remove/sync', () => {
+    rosterState.membersByKey = {
+      [KEY_A]: new Set([ADMIN, MEMBER_A]),
+      [KEY_B]: new Set([ADMIN])
+    };
+    // The acting user (ADMIN) sits in both 39001s, but only as publisher —
+    // no moderation role, so no admin affordances.
+    rosterState.adminsByKey = {
+      [KEY_A]: [{ pubkey: ADMIN, roles: ['publisher'] }],
+      [KEY_B]: [{ pubkey: ADMIN, roles: ['publisher'] }]
+    };
+    renderModal();
+
+    expect(screen.queryAllByTestId('area-member-repair')).toHaveLength(0);
+    expect(screen.queryAllByTestId('area-member-remove')).toHaveLength(0);
+    expect(screen.queryByTestId('stub-select-a')).toBeNull();
+    expect(screen.queryByTestId('area-members-sync')).toBeNull();
+  });
+});
+
 describe('AreaMembersModal repair', () => {
   it('repair fans out put-user ONLY to the missing channels, then refresh fires', async () => {
     rosterState.membersByKey = {

@@ -314,6 +314,13 @@ describe('MembershipPane — access gating', () => {
 
   it('shows roster management for a non-owner 39001 admin', () => {
     isCommunityOwner.mockReturnValue(false);
+    rosterFixture.value = {
+      ...rosterFixture.value,
+      admins: [
+        { pubkey: OWNER, roles: ['admin'] },
+        { pubkey: ADMIN2, roles: ['moderator'] }
+      ]
+    };
     activeUserFixture.value = { pubkey: ADMIN2, signer: {} };
     render(MembershipPane, {
       props: { communikeyEvent: eventWithApplication, communityId: OWNER, profileEvent }
@@ -321,6 +328,33 @@ describe('MembershipPane — access gating', () => {
 
     expect(screen.getByTestId('membership-pane')).toBeTruthy();
     expect(screen.getByTestId('membership-manage-members')).toBeTruthy();
+  });
+
+  it('renders nothing for a 39001 entry without a moderation role (issue d3fb4d60)', () => {
+    // NIP-29 files publisher-only and custom-role holders under 39001 next
+    // to the real admins. The default fixture seats ADMIN2 as 'lehrkraft' —
+    // a custom role, not moderation — so the pane must stay hidden for them,
+    // same as for a publisher-only entry.
+    isCommunityOwner.mockReturnValue(false);
+    activeUserFixture.value = { pubkey: ADMIN2, signer: {} };
+    const { unmount } = render(MembershipPane, {
+      props: { communikeyEvent: eventWithApplication, communityId: OWNER, profileEvent }
+    });
+    expect(screen.queryByTestId('membership-pane')).toBeNull();
+    unmount();
+
+    rosterFixture.value = {
+      ...rosterFixture.value,
+      admins: [
+        { pubkey: OWNER, roles: ['admin'] },
+        { pubkey: ADMIN2, roles: ['publisher'] }
+      ]
+    };
+    render(MembershipPane, {
+      props: { communikeyEvent: eventWithApplication, communityId: OWNER, profileEvent }
+    });
+    expect(screen.queryByTestId('membership-pane')).toBeNull();
+    expect(screen.queryByTestId('membership-manage-members')).toBeNull();
   });
 
   it('shows roster management + invite code for the key-holding owner', () => {

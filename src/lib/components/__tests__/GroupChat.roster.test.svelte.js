@@ -66,6 +66,8 @@ const emptyMembersEvent = signWith({ kind: 39002, tags: [['d', 'beechat']] }, RE
 let currentUser = null;
 // Overridable per test so the roster fixture can vary (I2 empty-39002 case).
 let currentMembersEvent = membersEvent;
+// Overridable too: the publisher-only 39001 case (issue d3fb4d60).
+let currentAdminsEvent = adminsEvent;
 
 vi.mock('$lib/stores/nostr-infrastructure.svelte', async () => {
   const { EventStore } = await import('applesauce-core');
@@ -77,7 +79,7 @@ vi.mock('$lib/stores/nostr-infrastructure.svelte', async () => {
   eventStore.verifyEvent = () => true;
   const pool = {
     relay: () => ({
-      request: () => rxOf(metadataEvent, adminsEvent, currentMembersEvent),
+      request: () => rxOf(metadataEvent, currentAdminsEvent, currentMembersEvent),
       subscription: () => rxNever,
       publish: vi.fn().mockResolvedValue({ ok: true }),
       authenticate: vi.fn().mockResolvedValue({ ok: true }),
@@ -173,6 +175,7 @@ describe('GroupChat admin roster + management entry points', () => {
   beforeEach(() => {
     currentUser = null;
     currentMembersEvent = membersEvent;
+    currentAdminsEvent = adminsEvent;
     gotoMock.mockClear();
   });
 
@@ -204,6 +207,27 @@ describe('GroupChat admin roster + management entry points', () => {
   });
 
   it('hides the settings gear for a non-admin member', async () => {
+    currentUser = { pubkey: NON_ADMIN_PUBKEY, signer: {} };
+    render(GroupChat, { props: { pointer } });
+
+    await screen.findByTestId('group-members-open');
+    expect(screen.queryByTestId('group-settings-open')).toBeNull();
+  });
+
+  it('hides the settings gear for a publisher-only 39001 entry (issue d3fb4d60)', async () => {
+    // NIP-29 files every role holder under 39001; only a moderation role
+    // (roles.js) is admin authority — the relay refuses a publisher's 9002.
+    currentAdminsEvent = signWith(
+      {
+        kind: 39001,
+        tags: [
+          ['d', 'beechat'],
+          ['p', ADMIN_PUBKEY, 'admin'],
+          ['p', NON_ADMIN_PUBKEY, 'publisher']
+        ]
+      },
+      RELAY_SK
+    );
     currentUser = { pubkey: NON_ADMIN_PUBKEY, signer: {} };
     render(GroupChat, { props: { pointer } });
 

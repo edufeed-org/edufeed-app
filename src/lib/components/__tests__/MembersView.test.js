@@ -467,6 +467,22 @@ describe('MembersView — inline roster management', () => {
     expect(screen.queryByTestId('members-add-section')).toBeNull();
   });
 
+  it('a publisher-only 39001 holder gets no kebabs and no add section (issue d3fb4d60)', () => {
+    // The publisher role lives in the same 39001 as the admins, but grants
+    // nothing beyond section write access — the roster tools must stay
+    // admin-only, or the relay refuses every action the UI just offered.
+    holders.admins = [
+      { pubkey: ADMIN, roles: ['admin'] },
+      { pubkey: REGULAR, roles: ['publisher'] }
+    ];
+    holders.members = new Set([OWNER, ADMIN, REGULAR]);
+    holders.pointer = { id: 'root123', relay: 'wss://groups.example' };
+    holders.activePubkey = REGULAR;
+    render(MembersView, { props: { communikeyEvent: MODERATED_EVENT_OWNER_ONLY } });
+    expect(screen.queryAllByTestId('member-actions-menu')).toHaveLength(0);
+    expect(screen.queryByTestId('members-add-section')).toBeNull();
+  });
+
   it('a section-only member outside the roster gets no kebab', () => {
     asAdmin();
     holders.profileAccess = {

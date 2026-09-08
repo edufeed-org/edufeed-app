@@ -187,6 +187,17 @@ describe('PrivateChannelsView — a community extended by NIP-29 groups', () => 
     expect(await screen.findByTestId('group-channel-delete')).toBeTruthy();
   });
 
+  it('hides create + per-channel delete for a publisher-only root-39001 entry (issue d3fb4d60)', async () => {
+    // Same 39001 list as the admins, but no moderation role: the relay would
+    // refuse the 9007/9008, so the UI must not offer them.
+    holders.rootAdmins = [{ pubkey: OWNER, roles: ['publisher'] }];
+    holders.subtreeChannels = [chan('allgemein', [['name', 'Allgemein']])];
+    render(PrivateChannelsView, { props: { communikeyEvent: moderated(STRANGER) } });
+    await screen.findByTestId('group-channel-row');
+    expect(screen.queryByTestId('group-channel-delete')).toBeNull();
+    expect(screen.queryByTestId('concord-new-channel')).toBeNull();
+  });
+
   it('hides create + per-channel delete for a non-owner, non-admin', async () => {
     holders.rootAdmins = []; // active account is neither owner nor a root admin
     holders.subtreeChannels = [chan('allgemein', [['name', 'Allgemein']])];

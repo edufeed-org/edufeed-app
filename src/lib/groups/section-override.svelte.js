@@ -16,6 +16,7 @@ import { getCommunityGlobalRelays } from '$lib/helpers/communityRelays.js';
 import { unique } from '$lib/helpers/unique.js';
 import { useRootRoster } from './root-roster.svelte.js';
 import { deriveCommunityType } from './community-membership.js';
+import { moderationPubkeys } from './roles.js';
 import { SECTION_OVERRIDE_KIND, applySectionOverride } from './section-override.js';
 
 /**
@@ -73,11 +74,10 @@ export function useEffectiveCommunity(getCommunityEvent) {
   });
 
   // An array, not a Set: resolveCommunitySections builds the lookup itself,
-  // which keeps this reactive module free of mutable built-ins.
+  // which keeps this reactive module free of mutable built-ins. Only the
+  // MODERATION-role holders may speak for the sections — the raw 39001 also
+  // lists publisher-only and custom-role entries, whose 30223 must not be
+  // honoured (issue d3fb4d60: client-side trust in a publisher's override).
   return () =>
-    applySectionOverride(
-      getCommunityEvent(),
-      overrides,
-      getRoster().admins.map((admin) => admin.pubkey)
-    );
+    applySectionOverride(getCommunityEvent(), overrides, moderationPubkeys(getRoster().admins));
 }
