@@ -12,6 +12,9 @@
   import { useChannelMetadata } from '$lib/groups/channel-metadata.svelte.js';
   import { metadataName } from '$lib/groups/unlinked-groups.js';
   import { channelKey } from '$lib/groups/community-pointer.js';
+  import { updatePersonalGroupsList } from '$lib/groups/personal-groups-list.js';
+  import { useActiveUser } from '$lib/stores/accounts.svelte';
+  import { CloseIcon } from '$lib/components/icons';
   import { showToast } from '$lib/helpers/toast';
   import * as m from '$lib/paraglide/messages';
 
@@ -28,6 +31,24 @@
   function displayName(group) {
     const key = channelKey(group);
     return (key && metadataName(getChannelMeta().byKey[key])) || group.id;
+  }
+
+  const getActiveUser = useActiveUser();
+
+  /**
+   * "Remove from my list" (issue 532c9210): drop the pointer from my own
+   * kind-10009 — no roster change, nothing sent to the group relay. The row
+   * disappears once the rewritten list lands in the store.
+   * @param {{id: string, relay: string}} group
+   */
+  async function removeFromList(group) {
+    try {
+      await updatePersonalGroupsList(getActiveUser(), { remove: group });
+      showToast(m.groups_list_removed(), 'success');
+    } catch (err) {
+      console.error('groups: 10009 update failed', err);
+      showToast(m.groups_list_update_failed(), 'error');
+    }
   }
 
   let input = $state('');
@@ -75,14 +96,25 @@
   {:else}
     <ul class="flex flex-col gap-2">
       {#each groups as group (group.relay + group.id)}
-        <li>
+        <li class="flex items-center gap-1">
           <a
             href={resolve(/** @type {any} */ (groupHref(group)))}
-            class="flex items-center gap-3 rounded border border-base-300 p-3 hover:bg-base-200"
+            class="flex min-w-0 flex-1 items-center gap-3 rounded border border-base-300 p-3 hover:bg-base-200"
           >
-            <span class="text-sm">{displayName(group)}</span>
-            <span class="ml-auto text-xs opacity-60">{new URL(group.relay).hostname}</span>
+            <span class="truncate text-sm">{displayName(group)}</span>
+            <span class="ml-auto shrink-0 text-xs opacity-60">{new URL(group.relay).hostname}</span>
           </a>
+          <!-- Beside the link, not inside it: an <a> may not nest a button. -->
+          <button
+            type="button"
+            class="btn btn-circle shrink-0 btn-ghost btn-sm"
+            data-testid="group-row-remove"
+            aria-label={m.groups_list_remove()}
+            title={m.groups_list_remove()}
+            onclick={() => removeFromList(group)}
+          >
+            <CloseIcon class_="w-4 h-4" />
+          </button>
         </li>
       {/each}
     </ul>

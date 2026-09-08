@@ -61,6 +61,7 @@
   import PollMessage from '$lib/components/community/channels/PollMessage.svelte';
   import GroupPollModal from '$lib/components/groups/GroupPollModal.svelte';
   import { updatePersonalGroupsList } from '$lib/groups/personal-groups-list.js';
+  import { useMyGroups } from '$lib/groups/unlinked-groups.svelte.js';
   import { publishToGroupRelay, buildDeleteEventTemplate } from '$lib/groups/group-management.js';
   import { uploadChatAttachment } from '$lib/helpers/chat-attachment-upload.js';
   import { SvelteMap } from 'svelte/reactivity';
@@ -82,7 +83,7 @@
     isAuthRequiredError
   } from '$lib/groups/relay-auth.js';
   import GroupBadges from '$lib/components/groups/GroupBadges.svelte';
-  import { PeopleIcon } from '$lib/components/icons';
+  import { PeopleIcon, MoreIcon } from '$lib/components/icons';
   import GroupMembersModal from '$lib/components/groups/GroupMembersModal.svelte';
   import GroupSettingsSheet from '$lib/components/groups/GroupSettingsSheet.svelte';
   import { useRelayInformation } from '$lib/groups/relay-information.svelte.js';
@@ -1196,6 +1197,29 @@
     }
   }
 
+  // "Remove from my list" (issue 532c9210, Armada: remove server). A group
+  // that only surfaces through the personal kind-10009 — joined from another
+  // client, or pasted by address — had no way OUT of the rail: Leave is a
+  // roster action and the settings sheet is admin-only. This rewrites MY
+  // list and touches nothing on the group relay, so it is offered to anyone
+  // signed in, whatever their roster state; the inverse keeps it reversible.
+  const getMyGroups = useMyGroups();
+  const myListKey = $derived(channelKey(pointer));
+  const inMyList = $derived(!!myListKey && getMyGroups().some((g) => channelKey(g) === myListKey));
+  const closeMoreMenu = () => /** @type {HTMLElement | null} */ (document.activeElement)?.blur();
+
+  /** @param {boolean} add */
+  async function toggleMyList(add) {
+    closeMoreMenu();
+    try {
+      await updateGroupsList(add ? { add: pointer } : { remove: pointer });
+      showToast(add ? m.groups_list_added() : m.groups_list_removed(), 'success');
+    } catch (err) {
+      console.error('groups: 10009 update failed', err);
+      showToast(m.groups_list_update_failed(), 'error');
+    }
+  }
+
   /**
    * Post-delete cascade: drop the group from the user's own 10009 list, then
    * best-effort unlist it from any joined community we can sign for, then
@@ -1256,6 +1280,37 @@
       >
         ⚙
       </button>
+    {/if}
+    {#if myPubkey}
+      <!-- Same focus-driven DaisyUI dropdown as MemberActionsMenu; one home
+        for actions that are neither roster nor admin operations. -->
+      <div class="dropdown dropdown-end shrink-0">
+        <button
+          tabindex="0"
+          class="btn btn-ghost btn-xs"
+          data-testid="group-more-menu"
+          aria-label={m.groups_more_menu()}
+        >
+          <MoreIcon class_="w-4 h-4" />
+        </button>
+        <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
+        <ul
+          tabindex="0"
+          class="dropdown-content menu z-50 w-60 rounded-box border border-base-300 bg-base-100 p-2 shadow-lg"
+        >
+          <li>
+            {#if inMyList}
+              <button data-testid="group-list-remove" onclick={() => toggleMyList(false)}>
+                {m.groups_list_remove()}
+              </button>
+            {:else}
+              <button data-testid="group-list-add" onclick={() => toggleMyList(true)}>
+                {m.groups_list_add()}
+              </button>
+            {/if}
+          </li>
+        </ul>
+      </div>
     {/if}
     {#if myPubkey && rosterAnswered}
       {#if isMember}
