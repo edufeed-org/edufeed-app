@@ -1,25 +1,59 @@
 /**
- * FAILING-FIRST probes for the PollMessage `state_referenced_locally` defect
- * (TestOER finding, 2026-08-04; confirmed at 07753b2f — PollMessage.svelte:18
- * seeds `selection` once at mount while ChannelChat.svelte:551 recomputes the
- * tally live). Drop into src/lib/components/__tests__/ ON the fix branch and
- * run against the UNFIXED tip first: probe 1 must FAIL there.
+ * PollMessage — late-hydrating votes. Kind-1018 votes stream in AFTER the
+ * poll row mounts, and ChannelChat / GroupChat rebuild the tally object on
+ * every render. Two hazards (TestOER finding, 2026-08-04, originally against
+ * the checkbox layout; re-asserted against the shared PollBody layout):
  *
- * Probe 2 guards against the naive fix: ChannelChat builds a NEW tally object
- * every render, so a blind $effect re-seed keyed on object identity would
- * clobber the user's in-flight toggles on every parent render. Re-seed must
- * key on vote CONTENT, and a user's explicit change must win over an
- * equal-content echo.
+ *  1. A vote that hydrates after mount must flip the row into its "voted"
+ *     state, and a later "Change vote" must start from that vote so a
+ *     partial re-submit cannot silently drop earlier choices (NIP-88
+ *     latest-per-pubkey REPLACES the vote).
+ *  2. A parent re-render with an equal-content tally must not clobber the
+ *     user's in-flight selection.
  *
  * @vitest-environment jsdom
  */
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/svelte';
 
-vi.mock('$lib/paraglide/messages', () => ({
-  concord_poll_votes: (/** @type {{ count: number }} */ { count }) => `${count} votes`,
-  concord_poll_ended: () => 'Poll ended',
-  concord_poll_vote: () => 'Vote'
+vi.hoisted(() => {
+  if (typeof window !== 'undefined' && !window.matchMedia) {
+    // @ts-ignore
+    window.matchMedia = () => ({
+      matches: false,
+      addEventListener: () => {},
+      removeEventListener: () => {}
+    });
+  }
+});
+
+vi.mock('$lib/paraglide/messages.js', () => ({
+  poll_type_single: () => 'Single choice',
+  poll_type_multiple: () => 'Multiple choice',
+  poll_voter_count_one: () => '1 voter',
+  poll_voter_count_other: (/** @type {{ count: number }} */ { count }) => `${count} voters`,
+  poll_you_voted: () => 'You voted',
+  poll_closed: () => 'Poll closed',
+  poll_ends_at: (/** @type {{ date: string }} */ { date }) => `Ends ${date}`,
+  poll_cast_vote: () => 'Cast vote',
+  poll_show_results: () => 'Show results without voting',
+  poll_back_to_vote: () => 'Back to vote',
+  poll_change_vote: () => 'Change vote',
+  poll_change_vote_cancel: () => 'Keep my vote',
+  poll_login_to_vote: () => 'Log in to vote'
+}));
+
+vi.mock('$lib/stores/profile-map.svelte.js', () => ({
+  useProfileMap: () => () => new Map()
+}));
+
+vi.mock('$lib/components/shared/ProfileAvatar.svelte', async () => {
+  const Stub = (await import('./PollCardProfileAvatarStub.svelte')).default;
+  return { default: Stub };
+});
+
+vi.mock('$lib/helpers/nostrUtils.js', () => ({
+  profileLink: (/** @type {string} */ pubkey) => (pubkey ? `/p/${pubkey}` : '#')
 }));
 
 const { default: PollMessage } = await import(
@@ -37,59 +71,71 @@ const poll = {
   endsAt: undefined
 };
 
-/** @param {Map<string, number>} counts @param {number} totalVoters @param {Set<string>} [myVote] */
-function tally(counts, totalVoters, myVote) {
-  return { counts, totalVoters, myVote };
+/** @param {Record<string, string[]>} votersByOption @param {number} totalVoters @param {Set<string>} [myVote] */
+function tally(votersByOption, totalVoters, myVote) {
+  const counts = new Map();
+  const voters = new Map();
+  for (const [id, pubkeys] of Object.entries(votersByOption)) {
+    counts.set(id, pubkeys.length);
+    voters.set(id, pubkeys);
+  }
+  return { counts, voters, totalVoters, myVote };
 }
 
 describe('PollMessage — late-hydrating myVote (kind-1018 votes arrive after mount)', () => {
-  it('re-seeds the checkboxes and a re-vote keeps the earlier choices', async () => {
-    const onVote = vi.fn();
+  it('flips into the voted state and a vote change starts from the hydrated vote', async () => {
+    const onVote = vi.fn().mockResolvedValue(true);
     const { rerender } = render(PollMessage, {
       poll,
       // Poll message renders before any votes hydrate from the relay.
-      tally: tally(new Map(), 0, undefined),
+      tally: tally({}, 0, undefined),
       ended: false,
       onVote
     });
+    expect(screen.getByRole('button', { name: 'Honey bee' })).toBeTruthy();
 
     // My earlier vote for opt-a streams in; parent recomputes the tally prop.
-    await rerender({ tally: tally(new Map([['opt-a', 1]]), 1, new Set(['opt-a'])) });
+    await rerender({ tally: tally({ 'opt-a': ['me'] }, 1, new Set(['opt-a'])) });
+    expect(screen.getByTestId('poll-you-voted')).toBeTruthy();
+    expect(screen.getByText('✓ Honey bee')).toBeTruthy();
 
-    // Cosmetic half: the checkbox must agree with data-my-vote.
-    const a = /** @type {HTMLInputElement} */ (screen.getByLabelText('Honey bee'));
-    expect(a.checked).toBe(true);
-
-    // Data-loss half: adding opt-b must submit {opt-a, opt-b}, not just {opt-b}
-    // (NIP-88 latest-per-pubkey REPLACES the vote, so a partial submit silently
-    // drops the earlier choices).
-    await fireEvent.click(screen.getByLabelText('Bumble bee'));
-    await fireEvent.click(screen.getByText('Vote'));
+    // Data-loss half: changing the vote must start from {opt-a}, so adding
+    // opt-b submits {opt-a, opt-b} rather than just {opt-b}.
+    await fireEvent.click(screen.getByRole('button', { name: 'Change vote' }));
+    expect(screen.getByRole('button', { name: 'Honey bee' }).getAttribute('aria-pressed')).toBe(
+      'true'
+    );
+    await fireEvent.click(screen.getByRole('button', { name: 'Bumble bee' }));
+    await fireEvent.click(screen.getByRole('button', { name: 'Cast vote' }));
     expect(onVote).toHaveBeenCalledTimes(1);
     expect([...onVote.mock.calls[0][0]].sort()).toEqual(['opt-a', 'opt-b']);
   });
 
-  it('an equal-content tally echo does not clobber an in-flight uncheck', async () => {
-    const onVote = vi.fn();
-    const seeded = () => tally(new Map([['opt-a', 1]]), 1, new Set(['opt-a']));
+  it('an equal-content tally echo does not clobber an in-flight vote change', async () => {
+    const seeded = () => tally({ 'opt-a': ['me'] }, 1, new Set(['opt-a']));
     const { rerender } = render(PollMessage, {
       poll,
       tally: seeded(),
       ended: false,
-      onVote
+      onVote: vi.fn()
     });
 
-    const a = /** @type {HTMLInputElement} */ (screen.getByLabelText('Honey bee'));
-    expect(a.checked).toBe(true);
+    await fireEvent.click(screen.getByRole('button', { name: 'Change vote' }));
+    const a = screen.getByRole('button', { name: 'Honey bee' });
+    expect(a.getAttribute('aria-pressed')).toBe('true');
 
-    // User unchecks their prior choice but has not submitted yet…
+    // User deselects their prior choice but has not submitted yet…
     await fireEvent.click(a);
-    expect(a.checked).toBe(false);
+    expect(a.getAttribute('aria-pressed')).toBe('false');
 
     // …and the parent re-renders with a NEW object carrying the SAME vote
     // content (ChannelChat rebuilds the tally every render). The user's
-    // in-flight toggle must survive.
+    // in-flight change must survive: still in the option view, still
+    // deselected.
     await rerender({ tally: seeded() });
-    expect(a.checked).toBe(false);
+    expect(screen.getByRole('button', { name: 'Honey bee' }).getAttribute('aria-pressed')).toBe(
+      'false'
+    );
+    expect(screen.getByRole('button', { name: 'Cast vote' })).toBeTruthy();
   });
 });

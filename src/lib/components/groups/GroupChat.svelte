@@ -1114,21 +1114,27 @@
   // and published to the group relay ONLY, so membership stays enforced.
   let pollModalOpen = $state(false);
 
-  /** @param {import('$lib/concord/polls.js').ParsedPoll} poll @param {string[]} optionIds */
+  /**
+   * Resolves true once the vote is on the relay (PollBody then clears its
+   * selection), false on refusal so the picked options stay for a retry.
+   * @param {import('$lib/concord/polls.js').ParsedPoll} poll @param {string[]} optionIds
+   */
   async function votePoll(poll, optionIds) {
     if (!canWrite) {
       showToast(m.groups_join_required(), 'warning');
-      return;
+      return false;
     }
     const template = buildVoteTemplate(poll.id, optionIds);
     template.tags.push(['h', pointer.id]);
     try {
       const signed = await signAndPublish(template);
       eventStore.add(signed);
+      return true;
     } catch (err) {
       console.error('poll vote failed', err);
       if (isMembershipRefusal(err)) showToast(m.groups_join_required(), 'warning');
       else showToast(m.groups_send_failed(), 'error');
+      return false;
     }
   }
 

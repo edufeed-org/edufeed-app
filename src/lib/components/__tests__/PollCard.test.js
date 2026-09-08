@@ -118,7 +118,20 @@ vi.mock('$lib/components/shared/EventContextMenu.svelte', async () => {
 });
 
 vi.mock('$lib/paraglide/messages.js', () => ({
-  poll_delete_confirm_title: () => 'Delete Poll?'
+  poll_delete_confirm_title: () => 'Delete Poll?',
+  poll_type_single: () => 'Single choice',
+  poll_type_multiple: () => 'Multiple choice',
+  poll_voter_count_one: () => '1 voter',
+  poll_voter_count_other: (/** @type {{ count: number }} */ { count }) => `${count} voters`,
+  poll_you_voted: () => 'You voted',
+  poll_closed: () => 'Poll closed',
+  poll_ends_at: (/** @type {{ date: string }} */ { date }) => `Ends ${date}`,
+  poll_cast_vote: () => 'Cast vote',
+  poll_show_results: () => 'Show results without voting',
+  poll_back_to_vote: () => 'Back to vote',
+  poll_change_vote: () => 'Change vote',
+  poll_change_vote_cancel: () => 'Keep my vote',
+  poll_login_to_vote: () => 'Log in to vote'
 }));
 
 vi.mock('$lib/helpers/nostrUtils.js', () => ({
