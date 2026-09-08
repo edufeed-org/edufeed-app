@@ -640,6 +640,20 @@ Single-variant deployments skip the picker modal (FAB navigates directly). Legac
 - Required tags: `d` (identifier), `title`, `start`
 - Always validate before display: `validateCalendarEvent(event)`
 
+## Root Layout Import Budget
+
+Everything `src/routes/+layout.svelte` reaches via static imports is preloaded
+on every first visit (SvelteKit emits a modulepreload hint per chunk in the
+route's static graph). Heavy chrome that only some surfaces need — every
+global modal, `CommunitySidebar`, `ContentNavSidebar`, `TermiAssistant` — is
+therefore loaded with `lazyComponent(() => import('...'))` from
+`src/lib/helpers/lazy-component.svelte.js` (reading `.Component` triggers the
+import; it is `null` until resolved). `ModalManager` keeps a per-type registry of
+these. `src/lib/__tests__/root-layout-imports.test.js` and the ModalManager test
+guard the budget — add new global modals to the registry, never as static
+imports. Measure with a production build: count `rel="modulepreload"` links in
+the SSR response for `/`.
+
 ## SSR Considerations
 
 Nostr-dependent routes must disable SSR:
