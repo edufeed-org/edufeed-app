@@ -26,6 +26,7 @@
   const resolve = /** @type {any} */ (_resolve);
   import { getLocale } from '$lib/paraglide/runtime.js';
   import * as m from '$lib/paraglide/messages';
+  import { resolveMessage } from '$lib/helpers/message-lookup.js';
   import { manager } from '$lib/stores/accounts.svelte';
   import { ChevronLeftIcon, ChevronRightIcon, CheckIcon, CloseIcon } from '$lib/components/icons';
   import SKOSDropdown from './SKOSDropdown.svelte';
@@ -2279,8 +2280,7 @@
         {#if currentSubStepConfig}
           {@const konfiFields = subStepToFormFields(currentSubStepConfig, schemeNaddrs)}
           {@const subStepHeading =
-            /** @type {any} */ (m)[currentSubStepConfig.titleKey]?.() ??
-            currentSubStepConfig.titleKey}
+            resolveMessage(currentSubStepConfig.titleKey) ?? currentSubStepConfig.titleKey}
           <div class="space-y-4">
             <h2 class="text-lg font-semibold text-base-content">{subStepHeading}</h2>
             {#if currentSubStepConfig.key === '4b' && fieldErrors._topicOrDimension}

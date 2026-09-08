@@ -13,6 +13,11 @@ const SCHEME_NADDRS = {
 
 // Mock Paraglide messages: only selected keys are "translated"; the
 // rest are intentionally missing to exercise the raw-key fallback path.
+// message-lookup goes through the same partial mock (see the double's header).
+vi.mock(
+  '$lib/helpers/message-lookup.js',
+  () => import('$lib/__tests__/__mocks__/message-lookup.js')
+);
 vi.mock('$lib/paraglide/messages', () => ({
   konfi_field_zielgruppen: () => 'Zielgruppen',
   konfi_field_zeitstruktur: () => 'Zeitstruktur',

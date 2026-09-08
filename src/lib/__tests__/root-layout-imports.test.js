@@ -12,15 +12,24 @@
  */
 import { describe, it, expect } from 'vitest';
 import layoutSource from '../../routes/+layout.svelte?raw';
+import navbarSource from '../components/Navbar.svelte?raw';
 
-/** @type {string[]} */
-const staticImports = layoutSource
-  .split('\n')
-  .filter((line) => /^\s*import\s/.test(line))
-  .flatMap((line) => {
-    const spec = line.match(/from\s+['"]([^'"]+)['"]/)?.[1] ?? line.match(/['"]([^'"]+)['"]/)?.[1];
-    return spec ? [spec] : [];
-  });
+/**
+ * @param {string} source
+ * @returns {string[]}
+ */
+function staticImportsOf(source) {
+  return source
+    .split('\n')
+    .filter((line) => /^\s*import\s/.test(line))
+    .flatMap((line) => {
+      const spec =
+        line.match(/from\s+['"]([^'"]+)['"]/)?.[1] ?? line.match(/['"]([^'"]+)['"]/)?.[1];
+      return spec ? [spec] : [];
+    });
+}
+
+const staticImports = staticImportsOf(layoutSource);
 
 describe('root layout static imports', () => {
   it.each([
@@ -29,5 +38,15 @@ describe('root layout static imports', () => {
     'community/layout/ContentNavSidebar.svelte'
   ])('does not statically import %s', (needle) => {
     expect(staticImports.filter((s) => s.endsWith(needle))).toEqual([]);
+  });
+
+  // Navbar is itself a static import of the layout; its dropdown bodies
+  // (inbox, account menu, mobile menu) only matter once opened.
+  it.each([
+    'inbox/InboxDropdown.svelte',
+    'shared/AccountMenuSection.svelte',
+    'shared/MobileNavMenu.svelte'
+  ])('Navbar does not statically import %s', (needle) => {
+    expect(staticImportsOf(navbarSource).filter((s) => s.endsWith(needle))).toEqual([]);
   });
 });

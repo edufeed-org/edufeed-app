@@ -6,6 +6,10 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, fireEvent } from '@testing-library/svelte';
 
+vi.mock(
+  '$lib/helpers/message-lookup.js',
+  () => import('$lib/__tests__/__mocks__/message-lookup.js')
+);
 // Mock paraglide messages for both variant i18n keys.
 vi.mock('$lib/paraglide/messages', () => ({
   resource_variant_picker_title: () => 'Welche Art?',

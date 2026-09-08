@@ -648,11 +648,21 @@ route's static graph). Heavy chrome that only some surfaces need — every
 global modal, `CommunitySidebar`, `ContentNavSidebar`, `TermiAssistant` — is
 therefore loaded with `lazyComponent(() => import('...'))` from
 `src/lib/helpers/lazy-component.svelte.js` (reading `.Component` triggers the
-import; it is `null` until resolved). `ModalManager` keeps a per-type registry of
-these. `src/lib/__tests__/root-layout-imports.test.js` and the ModalManager test
-guard the budget — add new global modals to the registry, never as static
-imports. Measure with a production build: count `rel="modulepreload"` links in
-the SSR response for `/`.
+import; it is `null` until resolved). For bodies that should only load on
+interaction (Navbar's dropdowns) read `.loaded` in the template and call
+`.load()` from the trigger's `onpointerenter`/`onfocusin`. `ModalManager` keeps
+a per-type registry of these. `src/lib/__tests__/root-layout-imports.test.js`
+and the ModalManager test guard the budget — add new global modals to the
+registry, never as static imports. Measure with a production build: count
+`rel="modulepreload"` links in the SSR response for `/`.
+
+**Never index the Paraglide namespace by a runtime key** (`m[key]`): it pins
+all ~3.5k messages in every locale (~340KB) into one shared chunk. Registry
+keys (`resource-form-variants.js`, Konfi `step4SubSteps`) resolve through the
+static table in `src/lib/helpers/message-lookup.js` (`resolveMessage(key)`);
+its drift test fails until a new registry key is added there. Tests that
+partially mock `$lib/paraglide/messages` must also mock `message-lookup.js`
+with `src/lib/__tests__/__mocks__/message-lookup.js`.
 
 ## SSR Considerations
 

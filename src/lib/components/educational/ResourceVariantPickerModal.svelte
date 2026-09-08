@@ -11,6 +11,7 @@
 
 <script>
   import * as m from '$lib/paraglide/messages';
+  import { resolveMessage } from '$lib/helpers/message-lookup.js';
   import { getEnabledVariants } from '$lib/config/resource-form-variants.js';
   import { CloseIcon } from '$lib/components/icons';
 
@@ -26,16 +27,16 @@
   const variants = $derived(getEnabledVariants());
 
   /**
-   * Resolve a Paraglide message key to its rendered string.
-   * We import the messages module as a namespace and look up keys
-   * dynamically so new variants can be added without touching this file.
+   * Resolve a variant's Paraglide message key to its rendered string, so new
+   * variants can be added without touching this file. Registry keys are
+   * listed in message-lookup.js (static, tree-shakeable); unknown keys render
+   * as-is.
    *
    * @param {string} key
    * @returns {string}
    */
   function tr(key) {
-    const fn = /** @type {any} */ (m)[key];
-    return typeof fn === 'function' ? fn() : key;
+    return resolveMessage(key) ?? key;
   }
 </script>
 
@@ -44,9 +45,9 @@
     <div class="modal-box max-w-lg">
       <div class="mb-4 flex items-start justify-between gap-4">
         <div>
-          <h3 class="text-lg font-bold">{tr('resource_variant_picker_title')}</h3>
+          <h3 class="text-lg font-bold">{m.resource_variant_picker_title()}</h3>
           <p class="mt-1 text-sm text-base-content/70">
-            {tr('resource_variant_picker_description')}
+            {m.resource_variant_picker_description()}
           </p>
         </div>
         <button class="btn btn-circle btn-ghost btn-sm" onclick={onClose} aria-label="Close">
@@ -72,7 +73,7 @@
 
       <div class="modal-action">
         <button type="button" class="btn" onclick={onClose}>
-          {tr('resource_variant_picker_cancel')}
+          {m.resource_variant_picker_cancel()}
         </button>
       </div>
     </div>

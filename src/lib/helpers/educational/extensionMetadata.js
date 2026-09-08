@@ -13,7 +13,7 @@ import { getFormReferenceFromResource } from './formReference.js';
 import { parseFormTemplate } from '../forms.js';
 import { toDieBibelUrl } from './bibleReference.js';
 import { ALL_VARIANTS, EXTENSION_NAMESPACE_LABELS } from '$lib/config/resource-form-variants.js';
-import * as m from '$lib/paraglide/messages.js';
+import { resolveMessage } from '$lib/helpers/message-lookup.js';
 
 // Registered-variant labels keyed by namespace id (e.g. "ekw").
 const variantLabelsByNs = new Map(
@@ -284,8 +284,5 @@ function humanize(s) {
  * @param {string} key
  */
 function translate(key) {
-  /** @type {any} */
-  const fn = /** @type {Record<string, any>} */ (m)[key];
-  if (typeof fn === 'function') return fn();
-  return humanize(key);
+  return resolveMessage(key) ?? humanize(key);
 }

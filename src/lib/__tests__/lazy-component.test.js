@@ -48,4 +48,20 @@ describe('lazyComponent', () => {
     await vi.waitFor(() => expect(lazy.Component).toBe(Stub));
     expect(load).toHaveBeenCalledTimes(2);
   });
+
+  it('exposes `loaded` as a peek that never triggers the import', async () => {
+    const load = vi.fn(async () => ({ default: Stub }));
+    const lazy = lazyComponent(load);
+    expect(lazy.loaded).toBeNull();
+    expect(load).not.toHaveBeenCalled();
+  });
+
+  it('load() starts the import and `loaded` reflects it once resolved', async () => {
+    const load = vi.fn(async () => ({ default: Stub }));
+    const lazy = lazyComponent(load);
+    lazy.load();
+    lazy.load();
+    expect(load).toHaveBeenCalledTimes(1);
+    await vi.waitFor(() => expect(lazy.loaded).toBe(Stub));
+  });
 });

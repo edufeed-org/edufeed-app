@@ -13,9 +13,7 @@
   } from './icons';
   import ProfileAvatar from './shared/ProfileAvatar.svelte';
   import ImageWithFallback from './shared/ImageWithFallback.svelte';
-  import AccountMenuSection from './shared/AccountMenuSection.svelte';
-  import MobileNavMenu from './shared/MobileNavMenu.svelte';
-  import InboxDropdown from './inbox/InboxDropdown.svelte';
+  import { lazyComponent } from '$lib/helpers/lazy-component.svelte.js';
   import LanguageSwitcher from './LanguageSwitcher.svelte';
   import { runtimeConfig } from '$lib/stores/config.svelte.js';
   import { prefetchCalendarData } from '$lib/loaders/calendar.js';
@@ -27,6 +25,15 @@
   // 2026-08-17; the dashboard card + Termi hint alone were missed in testing).
   const bellCount = $derived(getTotalUnreadCount() + getPendingInviteCount());
   import { getUnreadDmCount } from '$lib/services/dm-service.svelte.js';
+
+  // Dropdown bodies load on first hover/focus of their trigger rather than
+  // statically: Navbar is in the root layout, so a static import would put
+  // the inbox list, account menu and mobile menu (~85KB) into every page's
+  // preload set. DaisyUI dropdowns open on focus, so `focusin` on the trigger
+  // fires before the body is visible; `pointerenter` warms it on hover.
+  const lazyInboxDropdown = lazyComponent(() => import('./inbox/InboxDropdown.svelte'));
+  const lazyAccountMenu = lazyComponent(() => import('./shared/AccountMenuSection.svelte'));
+  const lazyMobileNavMenu = lazyComponent(() => import('./shared/MobileNavMenu.svelte'));
 
   /** @type {{ hideMobileNavbar?: boolean }} */
   let { hideMobileNavbar = false } = $props();
@@ -123,7 +130,12 @@
       </a>
       <!-- Inbox bell + dropdown -->
       <div class="dropdown dropdown-end">
-        <button class="btn relative btn-circle btn-ghost" aria-label={m.inbox_bell_label()}>
+        <button
+          class="btn relative btn-circle btn-ghost"
+          aria-label={m.inbox_bell_label()}
+          onpointerenter={lazyInboxDropdown.load}
+          onfocusin={lazyInboxDropdown.load}
+        >
           <BellIcon class_="w-5 h-5" />
           {#if bellCount > 0}
             <span
@@ -134,18 +146,30 @@
           {/if}
         </button>
         <div class="dropdown-content z-[60] mt-2">
-          <InboxDropdown />
+          {#if lazyInboxDropdown.loaded}
+            {@const InboxDropdown = lazyInboxDropdown.loaded}
+            <InboxDropdown />
+          {/if}
         </div>
       </div>
       <!-- Profile dropdown -->
       <div class="dropdown dropdown-end">
-        <div tabindex="0" role="button" class="btn btn-circle btn-ghost">
+        <div
+          tabindex="0"
+          role="button"
+          class="btn btn-circle btn-ghost"
+          onpointerenter={lazyAccountMenu.load}
+          onfocusin={lazyAccountMenu.load}
+        >
           <ProfileAvatar pubkey={activeAccount.pubkey} size="md" fallbackType="robohash" />
         </div>
         <ul
           class="dropdown-content menu z-[60] mt-3 w-56 menu-sm rounded-box bg-base-100 p-2 shadow"
         >
-          <AccountMenuSection onClose={closeDropdown} />
+          {#if lazyAccountMenu.loaded}
+            {@const AccountMenuSection = lazyAccountMenu.loaded}
+            <AccountMenuSection onClose={closeDropdown} />
+          {/if}
         </ul>
       </div>
     {:else}
@@ -157,11 +181,21 @@
   <!-- Mobile Hamburger Menu (visible below lg) -->
   <div class="lg:hidden">
     <div class="dropdown dropdown-end">
-      <div tabindex="0" role="button" class="btn btn-circle btn-ghost" aria-label={m.navbar_menu()}>
+      <div
+        tabindex="0"
+        role="button"
+        class="btn btn-circle btn-ghost"
+        aria-label={m.navbar_menu()}
+        onpointerenter={lazyMobileNavMenu.load}
+        onfocusin={lazyMobileNavMenu.load}
+      >
         <MenuIcon class_="w-6 h-6" />
       </div>
       <ul class="dropdown-content menu z-[60] mt-3 w-56 rounded-box bg-base-100 p-2 shadow-lg">
-        <MobileNavMenu onClose={closeDropdown} />
+        {#if lazyMobileNavMenu.loaded}
+          {@const MobileNavMenu = lazyMobileNavMenu.loaded}
+          <MobileNavMenu onClose={closeDropdown} />
+        {/if}
       </ul>
     </div>
   </div>
