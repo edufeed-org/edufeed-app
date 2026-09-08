@@ -5,7 +5,7 @@
  * The loaders connect the EventStore to the relay pool, enabling automatic
  * data fetching without explicit configuration in each component.
  */
-import { EMPTY } from 'rxjs';
+import { EMPTY, defer, of } from 'rxjs';
 import { catchError } from 'rxjs/operators';
 import {
   createAddressLoader,
@@ -33,17 +33,26 @@ import { cacheRequest } from '$lib/stores/event-cache.svelte.js';
 export const timedPool = (relays, filters) =>
   pool.request(relays, filters, { timeout: 10_000 }).pipe(catchError(() => EMPTY));
 
-// Standalone address loader for direct use in components/loaders
-// Uses a getter function for lookupRelays to ensure config updates are reflected.
 // lookupRelays is applesauce's fallback-on-miss slot and must include profile
 // indexer relays (e.g. purplepag.es) so kind 0 lookups can resolve when the
 // author's profile isn't on the app content relays.
+//
+// Resolved per request, NOT at loader creation: these loaders are built at
+// module load, before /api/config has been merged into runtimeConfig, and
+// applesauce v6 reads the `lookupRelays` option exactly once when the loader
+// is created. A plain getter here was therefore snapshotted as `[]`, which
+// left the EventStore fallback loader (`eventStore.replaceable()` /
+// `eventStore.profile()` on a cache miss) with nothing to ask — e.g. a
+// signed-out /c visit in gated mode could never see a community's newer
+// kind-10222 that only a fallback relay held. `unwrap()` re-subscribes an
+// Observable for every request, so `defer` reads the live config each time.
+const lookupRelays$ = defer(() => of(getEventLoaderLookupRelays()));
+
+// Standalone address loader for direct use in components/loaders
 export const addressLoader = createAddressLoader(pool, {
   eventStore,
   cacheRequest,
-  get lookupRelays() {
-    return getEventLoaderLookupRelays();
-  }
+  lookupRelays: lookupRelays$
 });
 
 // Standalone event-by-ID loader for direct use.
@@ -62,9 +71,7 @@ export const eventLoader = createEventLoader(pool, {
 const unifiedLoader = createUnifiedEventLoader(pool, {
   eventStore,
   cacheRequest,
-  get lookupRelays() {
-    return getEventLoaderLookupRelays();
-  }
+  lookupRelays: lookupRelays$
 });
 eventStore.eventLoader = unifiedLoader;
 
