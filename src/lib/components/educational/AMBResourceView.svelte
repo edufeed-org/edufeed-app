@@ -44,6 +44,8 @@
   import { toDieBibelUrl } from '$lib/helpers/educational/bibleReference.js';
   import { getAMBCreators } from '$lib/helpers/educational/ambHelpers.js';
   import { getResourceAttribution } from '$lib/helpers/educational/resourceAttribution.js';
+  import { buildTulluCitation, getCitationOrigin } from '$lib/helpers/educational/citation.js';
+  import { useProfileMap } from '$lib/stores/profile-map.svelte.js';
   import { ORCID_URI_PREFIX } from '$lib/helpers/educational/orcid.js';
   import { ALL_VARIANTS, EXTENSION_NAMESPACE_LABELS } from '$lib/config/resource-form-variants.js';
   import { page } from '$app/stores';
@@ -82,6 +84,7 @@
   import EncodingRowBadge from './EncodingRowBadge.svelte';
   import EncodingPreview from './EncodingPreview.svelte';
   import ResourceCover from './ResourceCover.svelte';
+  import CitationNote from './CitationNote.svelte';
 
   // Trigger SKOS vocabulary loading for label resolution
   ensureVocabularyLoaded('learningResourceType');
@@ -556,6 +559,40 @@
     '<script type="application/ld+json">' + JSON.stringify(jsonLd) + '</' + 'script>'
   );
 
+  // TULLU citation ("cite this resource"), only for licensed resources.
+  // Urheber = the creators in wire order — structured creator:* names as
+  // written, creator p-tags by profile display name; the publisher stands in
+  // when the resource names no creator at all (own content).
+  /** @param {{ pubkey?: string, role: string }} e */
+  const isCitedCreator = (e) => !e.pubkey || e.role === '' || e.role === 'creator';
+  const getCreatorProfiles = useProfileMap(() =>
+    contributorEntries.filter((e) => e.pubkey && isCitedCreator(e)).map((e) => e.pubkey)
+  );
+  const citation = $derived.by(() => {
+    if (!resource.license) return null;
+    const profiles = getCreatorProfiles();
+    const names = contributorEntries
+      .filter(isCitedCreator)
+      .map((e) =>
+        e.pubkey
+          ? getDisplayName(profiles.get(e.pubkey), e.pubkey.slice(0, 8) + '…')
+          : [e.honorificPrefix, e.name].filter(Boolean).join(' ')
+      );
+    const creators =
+      names.length > 0
+        ? names
+        : [getDisplayName(getPublisherProfile(), event.pubkey.slice(0, 8) + '…')];
+    return buildTulluCitation(
+      {
+        title: resource.name ?? '',
+        creators,
+        license: resource.license,
+        origin: getCitationOrigin(resource, { pageUrl, appName: runtimeConfig.appName ?? '' })
+      },
+      m.amb_resource_citation_format
+    );
+  });
+
   // Content type detection
   // Check if d-tag (identifier) contains a URL - this means the resource itself IS an external link
   const hasIdentifierUrl = $derived(
@@ -769,6 +806,9 @@
             {m.amb_resource_view_license()}
           </a>
           <!-- eslint-enable svelte/no-navigation-without-resolve -->
+          {#if citation}
+            <CitationNote {citation} />
+          {/if}
         </div>
       {/if}
     </section>
