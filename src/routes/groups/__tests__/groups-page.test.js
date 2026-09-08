@@ -45,14 +45,22 @@ vi.mock('$lib/stores/nostr-infrastructure.svelte', async () => {
   // applesauce's bundled verifier does an `instanceof Uint8Array` that fails
   // cross-realm under jsdom; the fixture is really signed, skip re-verification.
   eventStore.verifyEvent = () => true;
+  const { EMPTY } = await import('rxjs');
   const pool = {
     group: (/** @type {string[]} */ relays) => {
       groupCalls.push(relays);
       return { request: () => rxOf(listEvent) };
-    }
+    },
+    relay: () => ({ request: () => EMPTY })
   };
   return { eventStore, pool };
 });
+// The page's kind-39000 name lookup (useChannelMetadata) asks each group's
+// relay via pool.relay(url).request(); the user's NIP-65 mailbox lookup
+// (useMyGroups -> getWriteRelays) would otherwise reach the real address
+// loader with this fake pool ("Invalid upstream pool"). Neither is what this
+// test is about: names fall back to the raw id, and the mailbox adds no relay.
+vi.mock('$lib/services/relay-service.svelte.js', () => ({ getWriteRelays: async () => [] }));
 
 vi.mock('$lib/stores/accounts.svelte', () => ({
   useActiveUser: () => () => ({ pubkey: ME })
@@ -68,7 +76,10 @@ vi.mock('$lib/paraglide/messages', () => ({
   groups_join_placeholder: () => "groups.example.com'id",
   groups_add: () => 'Open',
   groups_empty: () => 'No groups yet — paste a group address to join one.',
-  groups_invalid_pointer: () => 'Not a valid group address'
+  groups_invalid_pointer: () => 'Not a valid group address',
+  groups_list_remove: () => 'Remove from my list',
+  groups_list_removed: () => 'Removed from your list',
+  groups_list_update_failed: () => 'Your list could not be updated'
 }));
 
 import Page from '../+page.svelte';

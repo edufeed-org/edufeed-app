@@ -19,6 +19,7 @@ import { finalizeEvent, generateSecretKey, getPublicKey } from 'nostr-tools';
 import { __resetAuthAttempts } from '$lib/groups/relay-auth.js';
 import { buildAppShareTemplate } from '$lib/webxdc/session-events.js';
 import { goto } from '$app/navigation';
+import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
 
 // REAL keys + signatures: the mock feeds a real applesauce EventStore, which
 // rejects events whose id/sig don't verify — fakes would silently vanish and
@@ -810,6 +811,12 @@ vi.mock('$lib/paraglide/messages', () => ({
   groups_join: () => 'Join',
   groups_restricted_note: () => 'Only members can read and write in this channel.',
   groups_leave: () => 'Leave',
+  groups_more_menu: () => 'More',
+  groups_list_remove: () => 'Remove from my list',
+  groups_list_removed: () => 'Removed from your list',
+  groups_list_add: () => 'Add to my list',
+  groups_list_added: () => 'Added to your list',
+  groups_list_update_failed: () => 'Your list could not be updated',
   groups_join_sent: () => 'Join request sent',
   groups_join_already: () => 'You are already a member.',
   groups_composer_join_note: () => 'Join to write here.',
@@ -2120,6 +2127,84 @@ describe('GroupChat', () => {
       const url = String(writeText.mock.calls[0]?.[0]);
       expect(url).toContain('channel=beechat');
       expect(url).toContain(`message=${chatEvent.id}`);
+    });
+  });
+  // Issue 532c9210: a group that only surfaces through the personal kind-10009
+  // list (joined from Armada, pasted by address) had no way OUT of the rail —
+  // Leave is a roster action and the settings sheet is admin-only. "Remove
+  // from my list" is Armada's "remove server": it rewrites MY 10009 and
+  // touches nothing on the group relay. Its inverse keeps it reversible.
+  describe('my-list menu', () => {
+    // Replaceable: each seed must be NEWER than anything the store already
+    // holds for ME — including the list the component itself signs at
+    // wall-clock time in the remove test — or the store keeps the old list
+    // and the menu shows the wrong action.
+    let listStamp = Math.floor(Date.now() / 1000) + 3600;
+    /** @param {string[][]} tags */
+    function seedMyList(tags) {
+      listStamp += 1;
+      eventStore.add(signWith({ kind: 10009, tags, created_at: listStamp }, MY_SK));
+    }
+
+    it('offers "Remove from my list" for a listed group and rewrites only the 10009', async () => {
+      seedMyList([
+        ['group', 'beechat', GROUP_RELAY],
+        ['group', 'other', GROUP_RELAY],
+        ['r', GROUP_RELAY]
+      ]);
+      render(GroupChat, { props: { pointer } });
+      await fireEvent.click(await screen.findByTestId('group-more-menu'));
+      const remove = await screen.findByTestId('group-list-remove');
+      expect(screen.queryByTestId('group-list-add')).toBeNull();
+      await fireEvent.click(remove);
+
+      await waitFor(() => expect(publishOptimisticMock).toHaveBeenCalledTimes(1));
+      const listEvent = publishOptimisticMock.mock.calls[0][0];
+      expect(listEvent.kind).toBe(10009);
+      expect(listEvent.pubkey).toBe(ME);
+      expect(listEvent.tags).not.toContainEqual(['group', 'beechat', GROUP_RELAY]);
+      // The other entry and the host survive: this is a pointer drop, not a wipe.
+      expect(listEvent.tags).toContainEqual(['group', 'other', GROUP_RELAY]);
+      expect(listEvent.tags).toContainEqual(['r', GROUP_RELAY]);
+      // Non-destructive: nothing goes to the group relay (no 9022 leave).
+      expect(publishMock).not.toHaveBeenCalled();
+      // And the menu flips to the inverse once the store holds a list
+      // without beechat (the real publishEventOptimistic adds the signed one;
+      // the mock here does not, so seed its content directly).
+      seedMyList(listEvent.tags);
+      await waitFor(() => expect(screen.getByTestId('group-list-add')).toBeTruthy());
+    });
+
+    it('offers "Add to my list" for a group that is not listed', async () => {
+      seedMyList([['group', 'other', GROUP_RELAY]]);
+      render(GroupChat, { props: { pointer } });
+      await fireEvent.click(await screen.findByTestId('group-more-menu'));
+      const add = await screen.findByTestId('group-list-add');
+      expect(screen.queryByTestId('group-list-remove')).toBeNull();
+      await fireEvent.click(add);
+
+      await waitFor(() => expect(publishOptimisticMock).toHaveBeenCalledTimes(1));
+      const listEvent = publishOptimisticMock.mock.calls[0][0];
+      expect(listEvent.kind).toBe(10009);
+      expect(listEvent.tags).toContainEqual(['group', 'beechat', GROUP_RELAY]);
+      expect(listEvent.tags).toContainEqual(['group', 'other', GROUP_RELAY]);
+      expect(publishMock).not.toHaveBeenCalled();
+    });
+
+    it('is independent of roster state: a non-member still sees the list action', async () => {
+      seedMyList([['group', 'openchat', GROUP_RELAY]]);
+      render(GroupChat, { props: { pointer: { relay: GROUP_RELAY, id: 'openchat' } } });
+      // Not on openchat's roster -> Join shows, but the list menu is there too.
+      await screen.findByTestId('group-join');
+      await fireEvent.click(screen.getByTestId('group-more-menu'));
+      expect(await screen.findByTestId('group-list-remove')).toBeTruthy();
+    });
+
+    it('shows no list menu to an anonymous viewer', async () => {
+      activeUserHolder.current = null;
+      render(GroupChat, { props: { pointer } });
+      await screen.findByTestId('group-name');
+      expect(screen.queryByTestId('group-more-menu')).toBeNull();
     });
   });
 });
