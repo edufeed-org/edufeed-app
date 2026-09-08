@@ -21,6 +21,26 @@ function parseArray(value, defaultValue = []) {
     .filter(Boolean);
 }
 
+/**
+ * Deployment-level muted words: notifications and DM requests whose content
+ * contains one of these (case-insensitive substring, like the user's own
+ * NIP-51 muted words) are dropped for EVERY user of this instance. Built for
+ * network-wide spam campaigns that rotate pubkeys ("Damus Airdrop") so each
+ * user does not have to discover the mute list on their own. `MUTED_WORDS`
+ * replaces the default when set; `MUTED_WORDS=none` disables the list.
+ */
+const DEFAULT_MUTED_WORDS = ['damus airdrop'];
+
+/**
+ * @param {string | undefined} value
+ * @returns {string[]} lowercased, deduped
+ */
+function parseMutedWords(value) {
+  if (value !== undefined && value.trim().toLowerCase() === 'none') return [];
+  const words = parseArray(value, DEFAULT_MUTED_WORDS).map((w) => w.toLowerCase());
+  return [...new Set(words)];
+}
+
 const NEVENT_REF = /^nevent1[a-z0-9]+$/;
 const HEX_ID_REF = /^[0-9a-f]{64}$/i;
 
@@ -476,6 +496,11 @@ export function GET() {
       // kind-1063 event reference (nevent or hex id); the picker resolves
       // name/icon/hash from the event itself.
       curatedApps: parseWebxdcApps(env.WEBXDC_APPS)
+    },
+
+    // Instance-wide moderation defaults applied on top of each user's lists
+    moderation: {
+      mutedWords: parseMutedWords(env.MUTED_WORDS)
     }
   };
 

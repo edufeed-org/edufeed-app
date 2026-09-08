@@ -226,6 +226,10 @@ const defaultConfig = {
     sandboxDomain: 'iframe.diy',
     /** @type {string[]} ordered kind-1063 event refs (nevent or hex id); first is featured */
     curatedApps: []
+  },
+  moderation: {
+    /** @type {string[]} instance-wide muted words (lowercase), merged with the user's NIP-51 words */
+    mutedWords: []
   }
 };
 
@@ -403,7 +407,8 @@ export function initializeConfig(runtimeConfig) {
       ...defaultConfig.metadataCleaner,
       ...runtimeConfig.metadataCleaner
     },
-    webxdc: { ...defaultConfig.webxdc, ...runtimeConfig.webxdc }
+    webxdc: { ...defaultConfig.webxdc, ...runtimeConfig.webxdc },
+    moderation: { ...defaultConfig.moderation, ...runtimeConfig.moderation }
   };
 
   // Signal that config is ready for dependent code
@@ -526,5 +531,8 @@ export const runtimeConfig = {
   },
   get webxdc() {
     return config.webxdc;
+  },
+  get moderation() {
+    return config.moderation;
   }
 };
