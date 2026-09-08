@@ -31,6 +31,20 @@ describe('formatLicenseUrl', () => {
     );
   });
 
+  it('does not mistake CC deed/legalcode pages for a jurisdiction', () => {
+    // 14 of 15 live AMB resources carry deed.de URLs — used to render "CC BY 4.0 DEE"
+    expect(formatLicenseUrl('https://creativecommons.org/licenses/by/4.0/deed.de')).toBe(
+      'CC BY 4.0'
+    );
+    expect(formatLicenseUrl('https://creativecommons.org/licenses/by-sa/4.0/deed.en')).toBe(
+      'CC BY-SA 4.0'
+    );
+    expect(formatLicenseUrl('https://creativecommons.org/licenses/by-nc-sa/3.0/de/legalcode')).toBe(
+      'CC BY-NC-SA 3.0 DE'
+    );
+    expect(formatLicenseUrl('https://creativecommons.org/licenses/by/4.0')).toBe('CC BY 4.0');
+  });
+
   it('formats CC0 public domain', () => {
     expect(formatLicenseUrl('https://creativecommons.org/publicdomain/zero/1.0/')).toBe(
       'CC0 (Public Domain)'

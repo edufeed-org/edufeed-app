@@ -59,7 +59,7 @@ export function formatLicenseUrl(url) {
 
   // CC license: /licenses/{suffix}/{version}[/{jurisdiction}]
   const ccMatch = trimmed.match(
-    /creativecommons\.org\/licenses\/([a-z-]+)\/(\d+\.\d+)(?:\/([a-z]{2,3}))?/i
+    /creativecommons\.org\/licenses\/([a-z-]+)\/(\d+\.\d+)(?:\/([a-z]{2,3}))?(?:\/|$)/i
   );
   if (ccMatch) {
     const [, suffix, version, jurisdiction] = ccMatch;
