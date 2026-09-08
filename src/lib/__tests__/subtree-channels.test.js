@@ -46,6 +46,50 @@ describe('buildSubtreeChannels', () => {
     expect(channels.find((c) => c.id === 'leitung')?.hidden).toBe(false);
   });
 
+  // The relay keeps a tombstone 39000 (name "[deleted]") for a deleted group,
+  // and the /c endpoint serves it with the rest of the subtree. A row named
+  // "[deleted]" is noise in the channel overview: drop it.
+  it('drops a deleted channel (relay tombstone) from the list', () => {
+    const events = [
+      meta(ROOT, [['name', 'Community']]),
+      meta('allgemein', [
+        ['parent', ROOT],
+        ['name', 'Allgemein']
+      ]),
+      meta('weg', [
+        ['parent', ROOT],
+        ['name', '[deleted]'],
+        ['private'],
+        ['restricted'],
+        ['hidden'],
+        ['closed']
+      ])
+    ];
+    const { channels } = buildSubtreeChannels(events, ROOT, R);
+    expect(channels.map((c) => c.id)).toEqual(['allgemein']);
+  });
+
+  it('drops a channel whose NEWEST 39000 is the tombstone (deleted after creation)', () => {
+    const events = [
+      meta(ROOT),
+      meta(
+        'kanal',
+        [
+          ['parent', ROOT],
+          ['name', 'Kanal']
+        ],
+        1000
+      ),
+      meta('kanal', [['parent', ROOT], ['name', '[deleted]'], ['private'], ['hidden']], 2000)
+    ];
+    expect(buildSubtreeChannels(events, ROOT, R).channels).toEqual([]);
+  });
+
+  it('reports no root when the root itself is the tombstone', () => {
+    const events = [meta(ROOT, [['name', '[deleted]'], ['private'], ['hidden'], ['closed']])];
+    expect(buildSubtreeChannels(events, ROOT, R).root).toBeNull();
+  });
+
   it('surfaces the root as its own row and lists the parent==root children', () => {
     const events = [
       meta(ROOT, [['name', 'Community']]),

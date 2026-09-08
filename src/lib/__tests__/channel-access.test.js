@@ -1,6 +1,6 @@
 /** @vitest-environment node */
 import { describe, it, expect } from 'vitest';
-import { channelAccessLevel, channelGlyph } from '$lib/groups/channel-access.js';
+import { channelAccessLevel, channelGlyph, channelDeleted } from '$lib/groups/channel-access.js';
 
 const R = 'wss://groups.example';
 
@@ -111,5 +111,28 @@ describe('channelAccessLevel on an auth-required host', () => {
 
   it('changes nothing when the flag is absent (default open relay)', () => {
     expect(channelAccessLevel(meta(), ptr('members'))).toBe('world');
+  });
+});
+
+// A deleted NIP-29 group does not vanish from the relay: the pyramid fork
+// (relay29 lineage) keeps a tombstone kind:39000 named "[deleted]" (plus
+// private/restricted/hidden/closed), as measured on groups.edufeed.org.
+describe('channelDeleted', () => {
+  const tombstone = () =>
+    meta([['name', '[deleted]'], ['private'], ['restricted'], ['hidden'], ['closed']]);
+
+  it('recognises the relay tombstone by its "[deleted]" name', () => {
+    expect(channelDeleted(tombstone())).toBe(true);
+  });
+
+  it('is false for a live channel, including a hidden private one', () => {
+    expect(channelDeleted(meta([['name', 'Leitung'], ['private'], ['hidden']]))).toBe(false);
+    expect(channelDeleted(meta([['private'], ['closed']]))).toBe(false);
+  });
+
+  it('is false for missing metadata and non-39000 events', () => {
+    expect(channelDeleted(null)).toBe(false);
+    expect(channelDeleted(undefined)).toBe(false);
+    expect(channelDeleted({ kind: 9, tags: [['name', '[deleted]']] })).toBe(false);
   });
 });

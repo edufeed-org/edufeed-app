@@ -71,6 +71,28 @@ export function channelHidden(metadata) {
   return metadata.tags.some((t) => t[0] === 'hidden');
 }
 
+/** The name the relay stamps on a deleted group's tombstone kind:39000. */
+export const DELETED_GROUP_NAME = '[deleted]';
+
+/**
+ * Whether a group has been deleted. A kind-9008 does not remove the group
+ * from the relay: the pyramid fork (relay29 lineage) keeps a tombstone
+ * kind:39000 whose name is the literal "[deleted]" (with private/restricted/
+ * hidden/closed set), and both its open listing and the /c/<rootId> subtree
+ * endpoint still serve it — measured on groups.edufeed.org, 2026-09-08.
+ * The name is the one marker every tombstone carries; the flag tags are also
+ * worn by live hidden rooms, so they cannot tell the two apart. Channel
+ * listings drop such rows entirely rather than drawing a "[deleted]" row.
+ * @param {{ kind?: number, tags?: string[][] } | null | undefined} metadata
+ * @returns {boolean}
+ */
+export function channelDeleted(metadata) {
+  if (!metadata || metadata.kind !== GROUP_METADATA_KIND || !Array.isArray(metadata.tags)) {
+    return false;
+  }
+  return metadata.tags.some((t) => t[0] === 'name' && t[1] === DELETED_GROUP_NAME);
+}
+
 /**
  * How the channel row is drawn for a level. Every row leads with '#' — the
  * access level rides as trailing badges (globe for world, lock for invited),
