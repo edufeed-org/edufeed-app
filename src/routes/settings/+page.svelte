@@ -1127,6 +1127,42 @@
         </div>
       </div>
 
+      <!-- Spam Filter Card -->
+      {#if runtimeConfig.moderation?.mutedWords?.length}
+        <div class="card mt-6 bg-base-100 shadow-xl" transition:fade={{ duration: 200 }}>
+          <div class="card-body">
+            <h2 class="mb-2 card-title text-2xl">
+              <span class="text-2xl">{m.settings_spam_filter_title()}</span>
+            </h2>
+            <p class="mb-2 text-base-content/70">
+              {m.settings_spam_filter_description()}
+            </p>
+            <div class="mb-6 flex flex-wrap gap-2" data-testid="settings-spam-filter-words">
+              {#each runtimeConfig.moderation.mutedWords as word (word)}
+                <span class="badge badge-ghost">{word}</span>
+              {/each}
+            </div>
+
+            <div class="form-control">
+              <label class="label cursor-pointer justify-start gap-4">
+                <input
+                  type="checkbox"
+                  class="toggle toggle-primary"
+                  data-testid="settings-instance-muted-words"
+                  checked={appSettings.instanceMutedWordsEnabled}
+                  onchange={(e) => {
+                    appSettings.instanceMutedWordsEnabled = /** @type {HTMLInputElement} */ (
+                      e.currentTarget
+                    ).checked;
+                  }}
+                />
+                <span class="label-text font-medium">{m.settings_spam_filter_label()}</span>
+              </label>
+            </div>
+          </div>
+        </div>
+      {/if}
+
       <!-- Cordn Private Groups Card (deployment-gated, per-user opt-in) -->
       {#if parseCordnGroupsConfig(runtimeConfig.cordnGroups).enabled}
         <div class="card mt-6 bg-base-100 shadow-xl" transition:fade={{ duration: 200 }}>
