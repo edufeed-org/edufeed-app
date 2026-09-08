@@ -449,6 +449,20 @@ describe('SettingsView — MembershipPane mount gate (Task 3: approvals reachabi
     expect(screen.queryByTestId('section-override-pane')).toBeNull();
   });
 
+  it('gives a publisher-only 39001 entry neither editor nor the membership pane (issue d3fb4d60)', async () => {
+    rosterFixture.value = {
+      ...rosterFixture.value,
+      admins: [{ pubkey: OWNER, roles: ['publisher'] }]
+    };
+    render(SettingsView, {
+      props: { communityId: STRANGER, communikeyEvent: moderatedStrangerEvent, profileEvent }
+    });
+    await screen.findByText('Community Settings');
+    expect(screen.queryByTestId('access-tier-editor')).toBeNull();
+    expect(screen.queryByTestId('section-override-pane')).toBeNull();
+    expect(screen.queryByTestId('membership-pane')).toBeNull();
+  });
+
   it('gives a plain member neither editor', async () => {
     render(SettingsView, {
       props: { communityId: STRANGER, communikeyEvent: moderatedStrangerEvent, profileEvent }

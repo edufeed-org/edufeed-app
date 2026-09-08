@@ -27,6 +27,7 @@
   import { buildChannelRows } from '$lib/groups/community-channel-rows.js';
   import { useCommunityChannels } from '$lib/groups/community-channels.svelte.js';
   import { useRootRoster } from '$lib/groups/root-roster.svelte.js';
+  import { isModerator } from '$lib/groups/roles.js';
   import { useEffectiveCommunity } from '$lib/groups/section-override.svelte.js';
   import { useRosterReconcile } from '$lib/groups/roster-reconcile.svelte.js';
   import { useCommunityFollowReconcile } from '$lib/groups/community-follow-reconcile.svelte.js';
@@ -256,10 +257,10 @@
   // PrivateChannelsView's `canOpenCreateWizard` (8d03f873 widened create to
   // root admins; the desktop zone stayed owner-only until laoc 2026-08-21).
   // Reuses the roster subscription above, no extra network work.
-  const zoneRootAdmin = $derived.by(() => {
-    const activeUser = getActiveUserForNav();
-    return !!activeUser && getRootRosterForNav().admins.some((a) => a.pubkey === activeUser.pubkey);
-  });
+  // Moderation role, not bare 39001 membership (roles.js isModerator).
+  const zoneRootAdmin = $derived(
+    isModerator(getRootRosterForNav().admins, getActiveUserForNav()?.pubkey)
+  );
 
   // The EFFECTIVE community event (10222 with any admin section override
   // applied), because every consumer of this context reads it for display.

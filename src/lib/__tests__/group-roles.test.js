@@ -4,6 +4,7 @@ import { describe, it, expect } from 'vitest';
 import {
   PUBLISHER_ROLE,
   hasModerationRole,
+  isModerator,
   isPublisherOnly,
   moderationPubkeys,
   roleOptionsFromAdmins,
@@ -103,5 +104,35 @@ describe('moderationPubkeys', () => {
     expect(moderationPubkeys([])).toEqual([]);
     expect(moderationPubkeys(undefined)).toEqual([]);
     expect(moderationPubkeys(null)).toEqual([]);
+  });
+});
+
+// The READ-side counterpart: every "is the active user an admin?" UI gate
+// must ask this, not bare 39001 membership — a publisher-only or custom-role
+// entry otherwise sees admin chrome the relay will refuse to act on
+// (issue d3fb4d60).
+describe('isModerator', () => {
+  const admins = [
+    { pubkey: 'a'.repeat(64), roles: ['admin'] },
+    { pubkey: 'b'.repeat(64), roles: ['publisher'] },
+    { pubkey: 'c'.repeat(64), roles: ['publisher', 'Moderator'] },
+    { pubkey: 'd'.repeat(64), roles: ['lehrkraft'] },
+    { pubkey: 'e'.repeat(64), roles: [] }
+  ];
+
+  it('is true only for entries holding a moderation role', () => {
+    expect(isModerator(admins, 'a'.repeat(64))).toBe(true);
+    expect(isModerator(admins, 'c'.repeat(64))).toBe(true);
+    expect(isModerator(admins, 'b'.repeat(64))).toBe(false);
+    expect(isModerator(admins, 'd'.repeat(64))).toBe(false);
+    expect(isModerator(admins, 'e'.repeat(64))).toBe(false);
+    expect(isModerator(admins, 'f'.repeat(64))).toBe(false);
+  });
+
+  it('is false for a missing pubkey or roster', () => {
+    expect(isModerator(admins, undefined)).toBe(false);
+    expect(isModerator(admins, null)).toBe(false);
+    expect(isModerator(undefined, 'a'.repeat(64))).toBe(false);
+    expect(isModerator(null, 'a'.repeat(64))).toBe(false);
   });
 });

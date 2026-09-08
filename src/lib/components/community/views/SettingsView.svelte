@@ -2,6 +2,7 @@
   import { getContext } from 'svelte';
   import { SettingsIcon } from '$lib/components/icons';
   import { useRootRoster } from '$lib/groups/root-roster.svelte.js';
+  import { isModerator } from '$lib/groups/roles.js';
   import { leaveCommunity } from '$lib/helpers/community';
   import { useCommunityMembership } from '$lib/stores/joined-communities-list.svelte.js';
   import { useActiveUser } from '$lib/stores/accounts.svelte';
@@ -325,9 +326,8 @@
   // they get the section-override route into "Inhalte & Rechte". Reuses the
   // layout's roster/override state rather than opening a second subscription.
   const getRootRoster = useRootRoster(() => communikeyEvent);
-  let isRootAdmin = $derived(
-    !!activeUser && getRootRoster().admins.some((admin) => admin.pubkey === activeUser.pubkey)
-  );
+  // Moderation role, not bare 39001 membership (roles.js isModerator).
+  let isRootAdmin = $derived(isModerator(getRootRoster().admins, activeUser?.pubkey));
   /** @type {() => {source: string, author: string | null}} */
   const sectionOverride =
     getContext('sectionOverride') ?? (() => ({ source: 'community', author: null }));

@@ -20,7 +20,7 @@
   import AddMemberControl from '$lib/components/groups/AddMemberControl.svelte';
   import { useActiveUser } from '$lib/stores/accounts.svelte';
   import { isCommunityOwner } from '$lib/helpers/community-signer.js';
-  import { roleOptionsFromAdmins, isPublisherOnly } from '$lib/groups/roles.js';
+  import { roleOptionsFromAdmins, isModerator, isPublisherOnly } from '$lib/groups/roles.js';
   import { getUserDisplayName } from '$lib/helpers/message-utils.js';
   import { getDisplayName } from 'applesauce-core/helpers';
   import { nip19 } from 'nostr-tools';
@@ -105,10 +105,8 @@
     if (!isModerated) return false;
     const me = getActiveUserForQueue()?.pubkey;
     if (!me) return false;
-    return (
-      isCommunityOwner(communikeyEvent?.pubkey) ||
-      getRootRoster().admins.some((admin) => admin.pubkey === me)
-    );
+    // Moderation role, not bare 39001 membership (roles.js isModerator).
+    return isCommunityOwner(communikeyEvent?.pubkey) || isModerator(getRootRoster().admins, me);
   });
 
   // Inline roster management (issue 7ca94a65): the members list itself

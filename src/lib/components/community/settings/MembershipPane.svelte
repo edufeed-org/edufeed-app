@@ -16,14 +16,14 @@
 
   Rendered by SettingsView for any signed-in user on a moderated community
   (no ownership check there — see there) — this component decides visibility
-  from its own roster: isAdmin (active user in roster.admins ∪ the
-  key-holding owner via isCommunityOwner) gates roster management, since a
+  from its own roster: isAdmin (active user holding a moderation role on
+  roster.admins ∪ the key-holding owner via isCommunityOwner) gates roster management, since a
   39001 admin's put-user ops are personal-key NIP-29 ops that need no
   community key. Renders nothing for a signed-in user who is neither.
 -->
 <script>
   import { useRootRoster } from '$lib/groups/root-roster.svelte.js';
-  import { roleOptionsFromAdmins } from '$lib/groups/roles.js';
+  import { isModerator, roleOptionsFromAdmins } from '$lib/groups/roles.js';
   import { useActiveUser } from '$lib/stores/accounts.svelte';
   import { isCommunityOwner } from '$lib/helpers/community-signer.js';
   import { pool } from '$lib/stores/nostr-infrastructure.svelte';
@@ -55,9 +55,8 @@
   const activeUser = $derived(getActiveUser());
 
   const isOwner = $derived(isCommunityOwner(communityId));
-  const isAdmin = $derived(
-    (!!activeUser && roster.admins.some((admin) => admin.pubkey === activeUser.pubkey)) || isOwner
-  );
+  // Moderation role, not bare 39001 membership (roles.js isModerator).
+  const isAdmin = $derived(isModerator(roster.admins, activeUser?.pubkey) || isOwner);
 
   // Union of every admin's roles + the bare 'admin' role and the well-known
   // 'publisher' role, deduped — reported upward so SettingsView can feed
