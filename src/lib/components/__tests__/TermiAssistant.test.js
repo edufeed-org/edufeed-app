@@ -158,6 +158,12 @@ const mockActionRun = vi.hoisted(() => vi.fn(async () => {}));
 vi.mock('$lib/loaders/base.js', () => ({
   timedPool: () => ({})
 }));
+// The joinRequests hint's hook drags in the NIP-29 roster/relay-auth
+// machinery (my-groups, channel-rosters, pool.relay …); it has its own
+// tests, so stub it to "nothing pending" here.
+vi.mock('$lib/groups/join-request-alerts.svelte.js', () => ({
+  useAdminJoinRequestAlert: () => () => ({ count: 0, communities: [] })
+}));
 vi.mock('applesauce-loaders/loaders', () => ({
   createTimelineLoader: () => () => ({ subscribe: () => ({ unsubscribe: vi.fn() }) })
 }));
