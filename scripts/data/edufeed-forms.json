@@ -253,7 +253,13 @@
       "name": "EKW Full (Edufeed default)",
       "description": "Vollständiges EKW-Formular für religionspädagogische Lernmaterialien — inklusive Klassenstufe, Schulart, Didaktik, Methode und Bibelstellen.",
       "fields": [
-        { "id": "name", "type": "text", "label": "Titel", "required": true, "output": "amb:name" },
+        {
+          "id": "name",
+          "type": "text",
+          "label": "Titel",
+          "required": true,
+          "output": "amb:name"
+        },
         {
           "id": "description",
           "type": "textarea",
@@ -409,6 +415,193 @@
           "type": "textarea",
           "label": "Warum möchtest du Mitglied von edufeed.org werden?",
           "required": true
+        }
+      ]
+    },
+    {
+      "d": "ekkw-hochschule",
+      "name": "Hochschulbildung (EKKW) — Wissenschaftliche Publikation & Lerninhalt",
+      "description": "Metadaten zu wissenschaftlichen Publikationen und Lerninhalten der Hochschulbildung, Schritt für Schritt.",
+      "sections": [
+        {
+          "id": "publikationstyp",
+          "title": "Publikationstyp",
+          "description": "Zuerst die Art der Publikation — danach richten sich die folgenden Angaben.",
+          "questionIds": ["pubtype"],
+          "order": 1
+        },
+        {
+          "id": "quelle",
+          "title": "Wissenschaftliche Publikation",
+          "description": "Angaben zur Quelle des Beitrags.",
+          "questionIds": ["doi", "erschienen-in", "band", "heft"],
+          "order": 2
+        },
+        {
+          "id": "inhalt",
+          "title": "Inhalt",
+          "questionIds": [
+            "titel",
+            "beschreibung",
+            "fachsystematik",
+            "ressourcentyp",
+            "bildungsstufe"
+          ],
+          "order": 3
+        },
+        {
+          "id": "personen",
+          "title": "Autoren & Herausgeber",
+          "questionIds": ["autoren", "herausgeber"],
+          "order": 4
+        }
+      ],
+      "fields": [
+        {
+          "id": "pubtype",
+          "type": "radio",
+          "label": "Art der Publikation",
+          "required": true,
+          "selectOptions": [
+            {
+              "id": "zeitschrift",
+              "label": "Zeitschrift"
+            },
+            {
+              "id": "sammelband",
+              "label": "Sammelband"
+            }
+          ],
+          "description": "Erscheint der Beitrag in einer Zeitschrift oder in einem Sammelband?",
+          "output": "ext"
+        },
+        {
+          "id": "doi",
+          "type": "text",
+          "label": "DOI",
+          "placeholder": "10.1234/beispiel",
+          "description": "Digital Object Identifier der Publikation. Automatisches Übernehmen der Metadaten aus der DOI ist in Arbeit.",
+          "output": "amb:id"
+        },
+        {
+          "id": "erschienen-in",
+          "type": "amb-relation",
+          "label": "Erschienen in",
+          "description": "Quellenangabe: Zeitschrift oder Sammelband, in dem der Beitrag erschienen ist. Freitext genügt; eine bestehende Ressource kann zusätzlich verknüpft werden.",
+          "output": "amb:isPartOf"
+        },
+        {
+          "id": "band",
+          "type": "text",
+          "label": "Band",
+          "description": "Bandzählung der Zeitschrift, falls vorhanden — präzisiert den Nachweis.",
+          "output": "ext"
+        },
+        {
+          "id": "heft",
+          "type": "text",
+          "label": "Heft",
+          "description": "Heftzählung, falls vorhanden.",
+          "output": "ext"
+        },
+        {
+          "id": "titel",
+          "type": "text",
+          "label": "Titel",
+          "required": true,
+          "output": "amb:name"
+        },
+        {
+          "id": "beschreibung",
+          "type": "textarea",
+          "label": "Beschreibung",
+          "description": "Kurze inhaltliche Beschreibung des Beitrags bzw. des Lerninhalts.",
+          "output": "amb:description"
+        },
+        {
+          "id": "fachsystematik",
+          "type": "select",
+          "label": "Fachsystematik",
+          "multiple": true,
+          "vocabRef": "fachsystematik-theologie",
+          "description": "Einordnung in die theologische Fachsystematik — Unterpunkte lassen sich aufklappen.",
+          "output": "amb:about"
+        },
+        {
+          "id": "ressourcentyp",
+          "type": "select",
+          "label": "Ressourcentyp",
+          "selectOptions": [
+            {
+              "id": "online-lexikon",
+              "label": "Online-Lexikon"
+            },
+            {
+              "id": "webseite",
+              "label": "Digitale Lernumgebung / Webseite"
+            },
+            {
+              "id": "artikel",
+              "label": "Artikel"
+            },
+            {
+              "id": "audio-podcast",
+              "label": "Audio / Podcast"
+            },
+            {
+              "id": "blogartikel",
+              "label": "Blogartikel"
+            },
+            {
+              "id": "digitale-ressource",
+              "label": "Digitale Ressource (Moodle, H5P, …)"
+            },
+            {
+              "id": "grafik",
+              "label": "Grafik"
+            }
+          ],
+          "output": "amb:learningResourceType"
+        },
+        {
+          "id": "bildungsstufe",
+          "type": "select",
+          "label": "Bildungsstufe",
+          "multiple": true,
+          "selectOptions": [
+            {
+              "id": "hochschule",
+              "label": "Hochschule"
+            },
+            {
+              "id": "bachelor-master",
+              "label": "Bachelor / Master"
+            },
+            {
+              "id": "berufliche-schulen",
+              "label": "Berufliche Schulen"
+            },
+            {
+              "id": "vorbereitungsdienst",
+              "label": "Vorbereitungsdienst / Referendariat / Pastorale Ausbildung"
+            }
+          ],
+          "output": "amb:educationalLevel"
+        },
+        {
+          "id": "autoren",
+          "type": "creator",
+          "label": "Autoren / Urheber",
+          "required": true,
+          "description": "Verfasserinnen und Verfasser, jeweils mit ORCID, sofern vorhanden.",
+          "output": "amb:creator"
+        },
+        {
+          "id": "herausgeber",
+          "type": "creator",
+          "label": "Herausgeber",
+          "description": "Der Herausgeber gehört zu den Verfasserangaben und wird getrennt von der Quellenangabe erfasst.",
+          "output": "amb:contributor"
         }
       ]
     }

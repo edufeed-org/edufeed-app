@@ -113,10 +113,21 @@ async function main() {
 
   const { schemes } = JSON.parse(readFileSync(VOCAB_DATA_PATH, 'utf8'));
 
+  // `--only d1,d2` publishes just the named schemes — publishing one NEW
+  // scheme must not re-sign and re-stamp `published_at` on every other one.
+  const onlyIdx = process.argv.indexOf('--only');
+  const only = onlyIdx !== -1 ? (process.argv[onlyIdx + 1] || '').split(',').filter(Boolean) : null;
+  if (only) {
+    const known = new Set(schemes.map((s) => s.d));
+    const unknown = only.filter((d) => !known.has(d));
+    if (unknown.length) throw new Error(`--only names unknown scheme(s): ${unknown.join(', ')}`);
+  }
+  const selected = only ? schemes.filter((s) => only.includes(s.d)) : schemes;
+
   /** @type {string[]} */
   const failed = [];
 
-  for (const scheme of schemes) {
+  for (const scheme of selected) {
     console.log(`\n=== ${scheme.d} (${scheme.source.type}) ===`);
     try {
       const drafts =

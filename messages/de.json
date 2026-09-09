@@ -2087,6 +2087,7 @@
   "form_builder_fields_label": "Felder",
   "form_builder_field_name_placeholder": "Feldname eingeben",
   "form_builder_field_placeholder_text": "Platzhaltertext",
+  "form_builder_field_description_text": "Beschreibung / Hilfetext (optional)",
   "form_builder_field_option_new": "Neue Option",
   "form_builder_field_options_label": "Optionen:",
   "form_builder_field_allow_multiple": "Mehrfachauswahl erlauben",
@@ -2145,6 +2146,8 @@
   "form_builder_field_output_amb_dateCreated": "Erstellungsdatum (amb:dateCreated)",
   "form_builder_field_output_amb_isAccessibleForFree": "Kostenfrei zugänglich (amb:isAccessibleForFree)",
   "form_builder_field_output_amb_creator": "Urheber:in (amb:creator)",
+  "form_builder_field_output_amb_contributor": "Beitragende / Herausgeber (amb:contributor)",
+  "form_relation_name_placeholder": "Oder Namen eintragen (Zeitschrift, Sammelband)…",
   "form_builder_field_output_amb_hasPart": "Enthält Teil (amb:hasPart)",
   "form_builder_field_output_amb_isPartOf": "Ist Teil von (amb:isPartOf)",
   "form_builder_field_output_amb_refs": "Verweise (amb:refs)",
@@ -2452,6 +2455,8 @@
   "resource_form_variant_amb_description": "Allgemeines Metadatenprofil für Bildungsressourcen (Hochschule & Schule).",
   "resource_form_variant_ekw_label": "EKKW-Bildungsmaterial",
   "resource_form_variant_ekw_description": "Evangelische Kirche von Kurhessen-Waldeck – spezialisiertes Profil.",
+  "resource_form_variant_hochschule_label": "Hochschulbildung (EKKW)",
+  "resource_form_variant_hochschule_description": "Wissenschaftliche Publikationen und Lerninhalte der Hochschulbildung — Schritt für Schritt.",
   "create_go_back": "Zurück",
   "create_edit_error_invalid_address": "Ungültiges Adressformat",
   "create_edit_error_resource_not_found": "Ressource nicht gefunden",
@@ -3569,5 +3574,9 @@
   "interactive_html_confirm_question": "Diese HTML-Datei als interaktive App behandeln?",
   "interactive_html_confirm_yes": "Als App verpacken",
   "interactive_html_confirm_no": "Als normale Datei hochladen",
-  "fab_create_interactive": "Interaktives Material teilen"
+  "fab_create_interactive": "Interaktives Material teilen",
+  "form_preview_notice": "Vorschau — so sieht das Formular für ausfüllende Personen aus. Es wird nichts veröffentlicht.",
+  "form_preview_empty": "Füge ein Feld hinzu, um die Vorschau zu sehen.",
+  "form_preview_submitted_notice": "Das ist die Bestätigung, die ausfüllende Personen sehen würden. Es wurde nichts veröffentlicht.",
+  "form_preview_restart": "Von vorn beginnen"
 }

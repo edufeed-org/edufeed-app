@@ -410,7 +410,8 @@ export function GET() {
       // template-driven form instead of the hardcoded wizard.
       templateNaddrs: {
         amb: env.RESOURCE_FORM_TEMPLATE_NADDR_AMB || '',
-        ekw: env.RESOURCE_FORM_TEMPLATE_NADDR_EKW || ''
+        ekw: env.RESOURCE_FORM_TEMPLATE_NADDR_EKW || '',
+        hochschule: env.RESOURCE_FORM_TEMPLATE_NADDR_HOCHSCHULE || ''
       }
     },
 

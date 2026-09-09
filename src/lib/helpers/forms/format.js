@@ -8,6 +8,18 @@ export const FORM_TEMPLATE_KIND = 30168;
 export const FORM_RESPONSE_KIND = 1069;
 
 /**
+ * Field types that carry a list of choices.
+ *
+ * One list, because it has to hold in three places at once: the builder shows
+ * an options editor for these types, the encoder serialises `options` for
+ * these types, and the renderer draws a choice control for these types. It
+ * previously lived only in FormBuilderFieldRow while the encoder spelled its
+ * own shorter version inline — so the builder collected checkbox options that
+ * publishing then dropped on the floor. Import it; don't restate it.
+ */
+export const CHOICE_TYPES = ['select', 'checkbox', 'radio'];
+
+/**
  * @typedef {Object} FormFieldOption
  * @property {string} id
  * @property {string} label
@@ -107,9 +119,15 @@ export function buildFormTemplateTags(dTag, fields, options = {}) {
 
   for (const field of fields) {
     const { options: choiceOptions, ...fieldSettings } = field.options || {};
-    const isOptionType = (field.type === 'select' || field.type === 'radio') && !field.vocab;
     /** @type {FormFieldOption[]} */
     const optionsList = choiceOptions || [];
+    // A checkbox is a choice field only once it actually carries choices; with
+    // none it is a boolean toggle and must serialise exactly as it always has.
+    // select/radio keep their previous behaviour including the empty-list case.
+    const isOptionType =
+      !field.vocab &&
+      CHOICE_TYPES.includes(field.type) &&
+      (field.type !== 'checkbox' || optionsList.length > 0);
     const optionEntries = isOptionType
       ? optionsList.map((o) =>
           o.nextSection

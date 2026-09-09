@@ -74,6 +74,47 @@ describe('FieldsRenderer', () => {
     expect(onchange).toHaveBeenCalledWith('plain', true);
   });
 
+  it('renders one box per option, with its label, for a checkbox field', async () => {
+    const field = {
+      id: 'chrj',
+      type: 'checkbox',
+      label: 'chr j',
+      options: {
+        options: [
+          { id: 'test', label: 'test' },
+          { id: 'test2', label: 'test2' },
+          { id: 'test3', label: 'test3' }
+        ]
+      }
+    };
+    const onchange = vi.fn();
+    const { container, getByDisplayValue, getByText } = render(FieldsRenderer, {
+      fields: [field],
+      values: { chrj: 'test' },
+      errors: {},
+      onchange
+    });
+    // a lone bare toggle is the bug: three options must render three boxes
+    expect(container.querySelectorAll('input[type="checkbox"]')).toHaveLength(3);
+    for (const label of ['test', 'test2', 'test3']) getByText(label);
+    await fireEvent.click(getByDisplayValue('test2'));
+    expect(onchange).toHaveBeenCalledWith('chrj', 'test;test2');
+  });
+
+  it('keeps the plain boolean toggle when a checkbox has no options', async () => {
+    const onchange = vi.fn();
+    const { container } = render(FieldsRenderer, {
+      fields: [{ id: 'terms', type: 'checkbox', label: 'Terms', options: {} }],
+      values: { terms: false },
+      errors: {},
+      onchange
+    });
+    const boxes = container.querySelectorAll('input[type="checkbox"]');
+    expect(boxes).toHaveLength(1);
+    await fireEvent.click(/** @type HTMLInputElement */ (boxes[0]));
+    expect(onchange).toHaveBeenCalledWith('terms', true);
+  });
+
   it('renders the error message under a field when present', () => {
     const { getByText } = render(FieldsRenderer, {
       fields: [{ id: 'x', type: 'text', label: 'X', options: { required: true } }],

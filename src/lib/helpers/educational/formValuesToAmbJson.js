@@ -31,7 +31,10 @@ export function formValuesToAmbJson(form, values, selectedConcepts) {
       continue;
     }
     if (field.type === 'creator') {
-      amb.creator = (Array.isArray(raw) ? raw : []).map((c) =>
+      // Herausgeber vs Autor: a creator-typed field routed to amb:contributor
+      // fills contributor; anything else keeps the historical creator target.
+      const personProp = out === 'amb:contributor' ? 'contributor' : 'creator';
+      amb[personProp] = (Array.isArray(raw) ? raw : []).map((c) =>
         c.pubkey
           ? {
               name: c.name || '',
@@ -52,12 +55,21 @@ export function formValuesToAmbJson(form, values, selectedConcepts) {
     }
     if (field.type === 'amb-relation') {
       const role = out === 'amb:isPartOf' ? 'isPartOf' : 'hasPart';
+      // An entry is either a relay resource (coordinate) or a free-text
+      // container ("Erschienen in") that exists only as a name — a scholarly
+      // article's journal or Sammelband is usually not an event on our relays.
       amb[role] = (Array.isArray(raw) ? raw : [])
-        .filter((r) => r?.coordinate)
-        .map((r) => ({
-          id: 'nostr:' + coordToNaddr(r.coordinate, r.relayHint),
-          type: 'LearningResource'
-        }));
+        .map((r) =>
+          r?.coordinate
+            ? {
+                id: 'nostr:' + coordToNaddr(r.coordinate, r.relayHint),
+                type: 'LearningResource'
+              }
+            : r?.name
+              ? { name: String(r.name), type: 'CreativeWork' }
+              : null
+        )
+        .filter(Boolean);
       continue;
     }
     if (out === 'ext') {

@@ -42,8 +42,16 @@ export const FORM_REQUEST_KIND = 1070;
 
 /**
  * Validate a field value against its constraints.
+ *
+ * `boolean` belongs in the value union: an optionless checkbox is rendered by
+ * FieldsRenderer as `input.checked`. In the app that boolean is stringified
+ * before it ever lands here (`FormRenderer.handleFieldChange`), so declaring
+ * only `string | string[]` was not wrong about the app — but it made this
+ * function's own contract narrower than its callers can honour, since nothing
+ * stops a caller passing the raw boolean.
+ *
  * @param {FormField} field
- * @param {string | string[]} value
+ * @param {string | string[] | boolean} value
  * @returns {string | null} Error message or null if valid
  */
 export function validateField(field, value) {
@@ -52,16 +60,33 @@ export function validateField(field, value) {
 
   // Required check
   if (options.required) {
-    if (field.type === 'checkbox' && value !== 'true') return `${label} is required`;
-    if (field.type === 'text-array') {
+    if (field.vocab) {
+      const arr = Array.isArray(value) ? value : [];
+      if (arr.length === 0) return `${label} is required`;
+    } else if (field.type === 'checkbox') {
+      // Two shapes behind one type. With options it is a multi-select group
+      // carrying ';'-joined ids; without, a boolean toggle.
+      //
+      // The group half is the load-bearing one: `value !== 'true'` rejected
+      // every selection a group could produce, and a required checkbox group
+      // had no other way to validate.
+      //
+      // Accepting a raw `true` alongside `'true'` is belt-and-braces, NOT a
+      // repair: `FormRenderer.handleFieldChange` stringifies the boolean at the
+      // boundary, and has since before this branch, so no caller in the app
+      // ever reached the old rule with one. Measured on the published /respond
+      // route, not read — see the e2e. Kept because this function's contract
+      // should not depend on a conversion happening two files away.
+      const isGroup = (options.options?.length ?? 0) > 0;
+      if (isGroup ? !value : value !== true && value !== 'true') {
+        return `${label} is required`;
+      }
+    } else if (field.type === 'text-array') {
       const arr = Array.isArray(value) ? value : [];
       if (!arr.some((v) => typeof v === 'string' && v.trim().length > 0)) {
         return `${label} is required`;
       }
-    } else if (field.vocab) {
-      const arr = Array.isArray(value) ? value : [];
-      if (arr.length === 0) return `${label} is required`;
-    } else if (field.type !== 'checkbox' && !value) {
+    } else if (!value) {
       return `${label} is required`;
     }
   }
@@ -69,6 +94,9 @@ export function validateField(field, value) {
   // Skip further checks if empty and not required
   if (field.type === 'text-array') return null;
   if (field.vocab) return null;
+  // Nothing below applies to a checkbox, and its value may be a boolean rather
+  // than the string the remaining checks assume.
+  if (field.type === 'checkbox') return null;
   if (!value) return null;
   // After this point, only scalar field types remain; treat value as string.
   const str = /** @type {string} */ (value);

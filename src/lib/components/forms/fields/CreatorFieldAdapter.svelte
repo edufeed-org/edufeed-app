@@ -15,7 +15,8 @@
 </script>
 
 {#if readonly}
-  <!-- Static, non-interactive view (preview route renders FormRenderer readonly). -->
+  <!-- Static, non-interactive view. Reached via FormResponses; NOT via the form
+       preview, which renders FormRenderer interactively since #77. -->
   <ul class="space-y-1">
     {#each creators as creator, i (i)}
       <li class="flex items-center gap-2 text-sm">

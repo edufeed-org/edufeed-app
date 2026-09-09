@@ -42,6 +42,7 @@ vi.mock('$lib/paraglide/messages', () => ({
   form_builder_field_name_placeholder: () => 'Field label',
   form_builder_field_required: () => 'Required',
   form_builder_field_placeholder_text: () => 'Placeholder',
+  form_builder_field_description_text: () => 'Description',
   form_builder_field_options_label: () => 'Options',
   form_builder_field_option_new: () => 'New option',
   form_builder_add_option: () => 'Add option',
@@ -86,6 +87,7 @@ vi.mock('$lib/paraglide/messages', () => ({
   form_builder_field_output_amb_isAccessibleForFree: () =>
     'Free to access (amb:isAccessibleForFree)',
   form_builder_field_output_amb_creator: () => 'Creator (amb:creator)',
+  form_builder_field_output_amb_contributor: () => 'Contributor (amb:contributor)',
   form_builder_field_output_amb_hasPart: () => 'Has part (amb:hasPart)',
   form_builder_field_output_amb_isPartOf: () => 'Is part of (amb:isPartOf)',
   form_builder_field_output_amb_refs: () => 'References (amb:refs)',
@@ -666,7 +668,9 @@ describe('FormBuilderFieldRow output picker (every field type)', () => {
 });
 
 describe('FormBuilderFieldRow rich field types (creator/amb-relation/external-urls)', () => {
-  it('shows a locked, disabled output select for creator with amb:creator selected', async () => {
+  it('creator output is a live picker: amb:creator default, amb:contributor offered', async () => {
+    // Changed contract (EKKW, 2026-08-03): creator was a locked select; it now
+    // picks between authors (amb:creator) and Herausgeber (amb:contributor).
     const field = makeField();
     field.type = 'creator';
     field.output = 'amb:creator';
@@ -679,8 +683,10 @@ describe('FormBuilderFieldRow rich field types (creator/amb-relation/external-ur
       container.querySelector('[data-testid="field-output-select"]')
     );
     expect(select).toBeTruthy();
-    expect(select.disabled).toBe(true);
+    expect(select.disabled).toBe(false);
     expect(select.value).toBe('amb:creator');
+    const opts = [...select.querySelectorAll('option')].map((o) => o.value);
+    expect(opts).toEqual(['amb:creator', 'amb:contributor']);
   });
 
   it('shows a locked, disabled output select for external-urls with amb:refs selected', async () => {

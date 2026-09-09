@@ -74,7 +74,10 @@ export default defineConfig({
     command: `pnpm run build && pnpm run preview --port ${WEB_SERVER_PORT} --strictPort`,
     port: WEB_SERVER_PORT,
     reuseExistingServer: !process.env.CI,
-    timeout: 120_000,
+    // `command` runs a full production build first, so this budget covers a
+    // COLD build, not just server startup. 120s assumed a warm one and expired
+    // before a single test ran in a freshly-installed worktree.
+    timeout: 300_000,
     env: {
       CALENDAR_RELAYS: RELAY_URLS.calendar,
       COMMUNIKEY_RELAYS: RELAY_URLS.strfry,
@@ -83,6 +86,15 @@ export default defineConfig({
       FALLBACK_RELAYS: RELAY_URLS.strfry,
       RELAY_LIST_LOOKUP_RELAYS: RELAY_URLS.strfry,
       INDEXER_RELAYS: RELAY_URLS.strfry,
+      // Every relay var the APP reads must be pinned here, or a populated local
+      // .env leaks a production host into the sandbox — measured: an unpinned
+      // KANBAN_RELAYS opened wss://relay-rpi.edufeed.org and issued a REQ for
+      // the test user. Reads only, and CI without a .env is unaffected, but the
+      // rule is the whole set, not the ones a current spec happens to exercise.
+      // (EDUFEED_PUBLISH_RELAYS is deliberately absent: read by scripts/ operator
+      // CLIs, never by the app, and the e2e never runs them.)
+      KANBAN_RELAYS: RELAY_URLS.strfry,
+      DM_RELAYS: RELAY_URLS.strfry,
       BLOSSOM_SERVER_URL: BLOSSOM_SERVER_URL,
       CONCORD_ENABLED: 'true',
       CONCORD_RELAYS: RELAY_URLS.strfry,
