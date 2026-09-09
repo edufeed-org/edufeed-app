@@ -2,7 +2,9 @@
   ImageLicenseOverlay
   One overlay for an image's license state:
     - 'found'   → known-license badge (CC label + credit), same look as the
-                  legacy LicenseBadge.
+                  legacy LicenseBadge. Attestations carrying an `ai` tag get
+                  the EU "AI" mark + "AI generated"/"AI modified" in front, so
+                  AI content is labelled wherever the image is shown.
     - 'missing' → neutral, non-alarming caution. 'pill' shows an "i" icon +
                   "No license info"; 'dot' shows the icon only. Both reveal a
                   keyboard-accessible popover (hover + focus, Esc to close) with
@@ -20,6 +22,8 @@
 
 <script>
   import { formatLicenseUrl } from '$lib/helpers/educational/licenseLabel.js';
+  import { getAiLabel } from '$lib/helpers/ai-label.js';
+  import { AiLabelIcon } from '$lib/components/icons';
   import * as m from '$lib/paraglide/messages';
 
   const tooltipId = `license-caution-tip-${popoverCounter++}`;
@@ -55,10 +59,19 @@
     licenseEvent?.tags.find(/** @param {string[]} t */ (t) => t[0] === 'p')?.[1] ?? null
   );
   const label = $derived(licenseUrl ? formatLicenseUrl(licenseUrl) : null);
+  const aiLabel = $derived(getAiLabel(licenseEvent));
+  const aiText = $derived(
+    aiLabel === 'generated'
+      ? m.image_ai_label_generated()
+      : aiLabel === 'modified'
+        ? m.image_ai_label_modified()
+        : null
+  );
 
   const foundTitle = $derived.by(() => {
     if (!licenseEvent) return '';
     const parts = [];
+    if (aiText) parts.push(aiText);
     if (credit) parts.push(`Credit: ${credit}`);
     if (source) parts.push(`Source: ${source}`);
     if (creatorP) parts.push(`Creator pubkey: ${creatorP}`);
@@ -72,13 +85,21 @@
   }
 </script>
 
-{#if status === 'found' && label}
+{#if status === 'found' && (label || aiText)}
   <span
     class="badge inline-flex max-w-full items-center gap-1 badge-ghost text-xs {position}"
     title={foundTitle}
     data-testid="license-badge"
   >
-    <span class="shrink-0 font-medium">{label}</span>
+    {#if aiText}
+      <span class="inline-flex shrink-0 items-center gap-1 font-medium" data-testid="ai-label">
+        <AiLabelIcon class_="h-3.5 w-3.5" title="" />
+        {aiText}
+      </span>
+    {/if}
+    {#if label}
+      <span class="shrink-0 font-medium">{aiText ? '· ' : ''}{label}</span>
+    {/if}
     {#if credit}
       <span class="min-w-0 truncate opacity-70">· {credit}</span>
     {/if}

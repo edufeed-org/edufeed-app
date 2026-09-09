@@ -117,3 +117,19 @@ describe('getLicenseUrl', () => {
     expect(getLicenseUrl({})).toBeNull();
   });
 });
+
+describe('buildLicenseTemplate — AI labelling', () => {
+  it('emits an `ai` tag for a known label', () => {
+    const tpl = buildLicenseTemplate({ ...required, ai: 'generated' });
+    expect(tpl.tags).toEqual(expect.arrayContaining([['ai', 'generated']]));
+    const mod = buildLicenseTemplate({ ...required, ai: 'modified' });
+    expect(mod.tags).toEqual(expect.arrayContaining([['ai', 'modified']]));
+  });
+
+  it('omits the `ai` tag when absent, null, or unknown', () => {
+    for (const ai of [undefined, null, '', 'none', 'robot']) {
+      const tpl = buildLicenseTemplate({ ...required, ai: /** @type {any} */ (ai) });
+      expect(tpl.tags.map((t) => t[0])).not.toContain('ai');
+    }
+  });
+});

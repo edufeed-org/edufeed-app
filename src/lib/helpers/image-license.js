@@ -1,3 +1,5 @@
+import { normalizeAiLabel } from './ai-label.js';
+
 /**
  * Builds a kind 1063 event template for an image license attestation.
  * Pure function: no I/O, no signing. Caller signs + publishes.
@@ -11,6 +13,7 @@
  *   - p:       (optional) attribution to a Nostr pubkey
  *   - alt:     (optional) NIP-94/NIP-DC alt text, e.g. `Webxdc app: <name>`
  *   - image:   (optional) icon/preview URL
+ *   - ai:      (optional) AI-content label, "generated" | "modified" (see ai-label.js)
  *
  * @param {{
  *   hash: string,
@@ -25,7 +28,8 @@
  *   size?: number,
  *   dim?: string,
  *   alt?: string,
- *   image?: string
+ *   image?: string,
+ *   ai?: import('./ai-label.js').AiLabel | string | null
  * }} input
  * @returns {{ kind: 1063, content: string, tags: string[][] }}
  */
@@ -43,7 +47,8 @@ export function buildLicenseTemplate(input) {
     size,
     dim,
     alt,
-    image
+    image,
+    ai
   } = input;
   if (!hash) throw new Error('buildLicenseTemplate: hash is required');
   if (!url) throw new Error('buildLicenseTemplate: url is required');
@@ -66,6 +71,8 @@ export function buildLicenseTemplate(input) {
   if (image) tags.push(['image', image]);
   if (source) tags.push(['source', source]);
   if (creatorPubkey) tags.push(['p', creatorPubkey]);
+  const aiLabel = normalizeAiLabel(ai);
+  if (aiLabel) tags.push(['ai', aiLabel]);
 
   return {
     kind: 1063,

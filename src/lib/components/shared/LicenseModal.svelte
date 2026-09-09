@@ -5,6 +5,7 @@
   import { publishLicenseAttestation } from '$lib/helpers/image-license.js';
   import { getLicenseOptions } from '$lib/helpers/educational/licenseOptions.js';
   import { formatLicenseUrl } from '$lib/helpers/educational/licenseLabel.js';
+  import { AI_LABELS, getAiLabel } from '$lib/helpers/ai-label.js';
 
   let {
     open = $bindable(false),
@@ -77,6 +78,8 @@
   let modalSelfCreator = $state(false);
   let modalSource = $state('');
   let modalDescription = $state('');
+  // AI-content label ('' = none, else one of AI_LABELS) → `ai` tag on the 1063.
+  let modalAi = $state('');
   let modalSaving = $state(false);
   let modalError = $state('');
   let modalDisclosureChecked = $state(false);
@@ -107,9 +110,14 @@
     existingLicense?.tags.find(/** @param {string[]} t */ (t) => t[0] === 'source')?.[1] ?? null
   );
   const existingDescription = $derived(existingLicense?.content || '');
+  const existingAi = $derived(getAiLabel(existingLicense));
   const existingLicenseLabel = $derived(
     existingLicenseUrl ? formatLicenseUrl(existingLicenseUrl) : null
   );
+
+  /** @param {import('$lib/helpers/ai-label.js').AiLabel} label */
+  const aiLabelText = (label) =>
+    label === 'generated' ? m.license_modal_ai_generated() : m.license_modal_ai_modified();
 
   // Reset modal fields each time it opens. The effect re-runs on every change
   // of `open` but the `if (open)` guard ensures we only reset on the rising edge.
@@ -122,6 +130,7 @@
         defaultSelfCreator && activeUserDisplayName ? activeUserDisplayName : initialCredit || '';
       modalSource = initialSource || '';
       modalDescription = '';
+      modalAi = '';
       modalError = '';
       modalDisclosureChecked = false;
       view = existingLicense ? 'existing' : 'form';
@@ -212,6 +221,7 @@
           source: modalSource || undefined,
           creatorPubkey: modalSelfCreator ? effectiveSigner.pubkey : undefined,
           description: modalDescription || undefined,
+          ai: modalAi || undefined,
           ...(attestExtras ?? {})
         },
         effectiveSigner
@@ -303,6 +313,12 @@
                 <dd>{existingDescription}</dd>
               </div>
             {/if}
+            {#if existingAi}
+              <div class="flex gap-2" data-testid="license-modal-existing-ai">
+                <dt class="w-24 font-medium">{m.license_modal_ai_label()}</dt>
+                <dd>{aiLabelText(existingAi)}</dd>
+              </div>
+            {/if}
             <div class="flex gap-2 text-xs opacity-60">
               <dt class="w-24 font-medium">{m.license_modal_attested_by()}</dt>
               <dd class="break-all">{existingLicense.pubkey}</dd>
@@ -363,6 +379,24 @@
           >
             {#each licenseOptions as opt (opt.id)}
               <option value={opt.id}>{opt.label}</option>
+            {/each}
+          </select>
+        </div>
+
+        <!-- AI involvement (EU AI-content labelling: generated vs. modified) -->
+        <div class="mb-3">
+          <label class="mb-1 block text-sm font-medium" for="license-modal-ai">
+            {m.license_modal_ai_label()}
+          </label>
+          <select
+            id="license-modal-ai"
+            class="select-bordered select w-full"
+            data-testid="license-modal-ai"
+            bind:value={modalAi}
+          >
+            <option value="">{m.license_modal_ai_none()}</option>
+            {#each AI_LABELS as label (label)}
+              <option value={label}>{aiLabelText(label)}</option>
             {/each}
           </select>
         </div>

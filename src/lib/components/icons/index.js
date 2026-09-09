@@ -51,6 +51,7 @@ export { default as PhotoIcon } from './ui/PhotoIcon.svelte';
 export { default as GearIcon } from './ui/GearIcon.svelte';
 export { default as ArrowLeftRightIcon } from './ui/ArrowLeftRightIcon.svelte';
 export { default as InfoCircleIcon } from './ui/InfoCircleIcon.svelte';
+export { default as AiLabelIcon } from './ui/AiLabelIcon.svelte';
 export { default as BadgeIcon } from './ui/BadgeIcon.svelte';
 export { default as BookOpenIcon } from './ui/BookOpenIcon.svelte';
 export { default as ChatTextIcon } from './ui/ChatTextIcon.svelte';
