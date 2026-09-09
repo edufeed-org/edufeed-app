@@ -11,6 +11,7 @@
    *   onchange: (id: string, value: any) => void,
    *   customValues?: Record<string, string>,
    *   oncustomchange?: (id: string, value: string) => void,
+   *   onprefill?: (id: string, prefill: any) => string[],
    *   readonly?: boolean
    * }}
    */
@@ -21,6 +22,7 @@
     onchange,
     customValues = {},
     oncustomchange = () => {},
+    onprefill = undefined,
     readonly = false
   } = $props();
 </script>
@@ -73,6 +75,7 @@
           error={errors[field.id] ?? null}
           {readonly}
           onchange={(/** @type {any} */ v) => onchange(field.id, v)}
+          onprefill={onprefill ? (/** @type {any} */ p) => onprefill(field.id, p) : undefined}
         />
       {:else if field.type === 'text' || field.type === 'email' || field.type === 'url' || field.type === 'number'}
         <input

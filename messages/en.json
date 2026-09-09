@@ -3578,5 +3578,11 @@
   "form_preview_notice": "Preview — this is how the form will look to someone filling it in. Nothing is published.",
   "form_preview_empty": "Add a field to see the preview.",
   "form_preview_submitted_notice": "This is the confirmation a respondent would see. Nothing was published.",
-  "form_preview_restart": "Start over"
+  "form_preview_restart": "Start over",
+  "form_doi_invalid": "Not a valid DOI (e.g. 10.1000/xyz123)",
+  "form_doi_fetching": "Loading metadata from the DOI …",
+  "form_doi_prefill_applied": "Filled from the DOI: {fields}",
+  "form_doi_prefill_none": "No metadata found for this DOI.",
+  "publication_form_doi_inspect_hint": "Metadata is fetched from Crossref automatically once you enter a DOI.",
+  "publication_form_doi_prefill_applied": "Metadata filled from the DOI – please check it."
 }

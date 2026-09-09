@@ -77,7 +77,7 @@ const BUILDER_STATE = [
     output: 'ext'
   }),
   { id: 'sec-pub', type: 'section', title: 'Wissenschaftliche Publikation' },
-  fs({ id: 'doi', type: 'text', label: 'DOI', output: 'amb:id' }),
+  fs({ id: 'doi', type: 'doi', label: 'DOI', output: 'amb:id' }),
   fs({
     id: 'container',
     type: 'amb-relation',
@@ -292,7 +292,10 @@ test.describe('EKKW metadata form (30168 template with steps → kind 30142)', (
     expect(tagsFor('about:id')[0]?.[1]).toBe(RELPAED_URI);
 
     // DOI landed on the id output
-    expect(event.tags.some((/** @type {string[]} */ t) => t.includes(doi))).toBe(true);
+    // The doi field stores the canonical resolver URL, which is what amb:id wants.
+    expect(
+      event.tags.some((/** @type {string[]} */ t) => t.includes(`https://doi.org/${doi}`))
+    ).toBe(true);
 
     // informative form back-reference
     expect(

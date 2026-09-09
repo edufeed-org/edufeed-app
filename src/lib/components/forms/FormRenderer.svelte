@@ -7,6 +7,7 @@
   } from '$lib/helpers/forms/branching.js';
   import * as m from '$lib/paraglide/messages';
   import FieldsRenderer from './FieldsRenderer.svelte';
+  import { applyDoiPrefill } from '$lib/helpers/forms/doi-prefill.js';
 
   /**
    * @type {{
@@ -60,6 +61,20 @@
     } else {
       values[id] = value;
     }
+  }
+
+  /**
+   * A doi field fetched Crossref metadata: route it to the empty sibling
+   * fields by output and tell the adapter which labels were filled.
+   * @param {string} _sourceId
+   * @param {import('$lib/helpers/publication/crossref.js').DoiPrefill} prefill
+   * @returns {string[]}
+   */
+  function handlePrefill(_sourceId, prefill) {
+    if (!form) return [];
+    const { values: next, filled } = applyDoiPrefill(form.fields, values, prefill);
+    for (const id of filled) values[id] = next[id];
+    return filled.map((id) => form.fields.find((f) => f.id === id)?.label || id);
   }
 
   const sections = $derived(form ? orderedSections(form) : []);
@@ -171,6 +186,7 @@
         {errors}
         {readonly}
         onchange={handleFieldChange}
+        onprefill={handlePrefill}
       />
     {/each}
   {:else}
@@ -192,6 +208,7 @@
       {errors}
       {readonly}
       onchange={handleFieldChange}
+      onprefill={handlePrefill}
     />
   {/if}
 
