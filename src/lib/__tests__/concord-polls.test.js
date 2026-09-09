@@ -138,6 +138,22 @@ describe('tallyPollVotes', () => {
     expect(tally.totalVoters).toBe(1);
     expect(tally.myVote).toBeUndefined();
   });
+
+  it('lists the voter pubkeys per option (latest vote only, one entry per voter)', () => {
+    const tally = tallyPollVotes(
+      [
+        { pubkey: ALICE, optionIds: ['opt-a'], ms: 1100_000 },
+        { pubkey: ALICE, optionIds: ['opt-a', 'opt-b'], ms: 1200_000 }, // supersedes
+        { pubkey: BOB, optionIds: ['opt-b', 'opt-b'], ms: 1150_000 } // duplicate id
+      ],
+      options,
+      undefined,
+      undefined
+    );
+    expect(tally.voters.get('opt-a')).toEqual([ALICE]);
+    expect(tally.voters.get('opt-b')).toEqual([ALICE, BOB]);
+    expect(tally.voters.get('bogus')).toBeUndefined();
+  });
 });
 
 describe('buildVoteTemplate', () => {

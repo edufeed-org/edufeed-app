@@ -1,118 +1,53 @@
 <!--
-  PollMessage — NIP-88 poll options, live tally, and vote controls inside a
-  chat bubble. The poll QUESTION is the rumor's content and is rendered by
-  the bubble itself (NostrContentRenderer) — this component starts below it.
+  PollMessage — NIP-88 poll inside a chat bubble (NIP-29 group rooms and
+  Concord channels). The poll QUESTION is the rumor's content and is rendered
+  by the bubble itself (NostrContentRenderer) — this component starts below
+  it and adapts the channel tally onto the shared PollBody, so chat polls use
+  the same layout and flow as the community poll cards (pick → "Cast vote",
+  bars + voter avatars afterwards, "Change vote" while the poll is open).
 
-  Single choice: an option row is itself the vote button (re-clicking another
-  row re-votes; latest-per-pubkey wins in the tally). Multiple choice:
-  checkboxes plus an explicit Vote button. An ended poll is read-only.
+  Voting stays the caller's business: `onVote` publishes through the room's
+  own transport (h-tagged group relay write / encrypted channel rumor) and
+  resolves truthy on success.
 -->
 <script>
-  import { SvelteSet } from 'svelte/reactivity';
-  import * as m from '$lib/paraglide/messages';
+  import PollBody from '$lib/components/polls/PollBody.svelte';
+  import { useProfileMap } from '$lib/stores/profile-map.svelte.js';
 
-  /** @type {{poll: import('$lib/concord/polls.js').ParsedPoll, tally: import('$lib/concord/polls.js').PollTally, ended: boolean, onVote: (optionIds: string[]) => void}} */
+  /** @type {{poll: import('$lib/concord/polls.js').ParsedPoll, tally: import('$lib/concord/polls.js').PollTally, ended: boolean, onVote: (optionIds: string[]) => (Promise<boolean | void> | boolean | void)}} */
   let { poll, tally, ended, onVote } = $props();
 
-  /**
-   * Local multi-choice selection, seeded from my prior vote. Kind-1018 votes
-   * can hydrate AFTER mount, so the $effect below re-seeds whenever the
-   * CONTENT of tally.myVote changes. It must key on content, not identity:
-   * ChannelChat rebuilds the tally object on every render, and an
-   * equal-content rebuild must not clobber in-flight user toggles.
-   */
-  // svelte-ignore state_referenced_locally
-  const initialVote = tally.myVote;
-  const selection = new SvelteSet(initialVote ?? []);
-  let seededFrom = voteKey(initialVote);
+  // Concord tally → PollBody shape (per-option count + voter list).
+  let byOption = $derived(
+    new Map(
+      poll.options.map((o) => [
+        o.id,
+        { count: tally.counts.get(o.id) ?? 0, voters: tally.voters?.get(o.id) ?? [] }
+      ])
+    )
+  );
+  let userVote = $derived(tally.myVote ? [...tally.myVote] : null);
 
-  function voteKey(/** @type {Set<string> | undefined} */ vote) {
-    return vote && vote.size ? [...vote].sort().join('\n') : '';
-  }
-
-  $effect(() => {
-    const key = voteKey(tally.myVote);
-    if (key === seededFrom) return;
-    seededFrom = key;
-    selection.clear();
-    for (const id of tally.myVote ?? []) selection.add(id);
-  });
-
-  function toggle(/** @type {string} */ id) {
-    if (selection.has(id)) selection.delete(id);
-    else selection.add(id);
-  }
-
-  function pct(/** @type {string} */ id) {
-    if (!tally.totalVoters) return 0;
-    return Math.round(((tally.counts.get(id) ?? 0) / tally.totalVoters) * 100);
-  }
+  const getProfiles = useProfileMap(() =>
+    Array.from(new Set(Array.from(byOption.values()).flatMap((s) => s.voters)))
+  );
 </script>
 
-<div class="mt-2 flex w-full min-w-48 flex-col gap-1.5">
-  {#each poll.options as option (option.id)}
-    {@const count = tally.counts.get(option.id) ?? 0}
-    {@const isMine = tally.myVote?.has(option.id) ?? false}
-    {#if poll.pollType === 'singlechoice'}
-      <button
-        type="button"
-        class="relative overflow-hidden rounded border border-base-300 px-2 py-1.5 text-left text-sm
-               {ended ? 'cursor-default' : 'hover:border-primary'}"
-        data-my-vote={isMine}
-        disabled={ended}
-        onclick={() => {
-          if (!ended) onVote([option.id]);
-        }}
-      >
-        <span
-          class="absolute inset-y-0 left-0 bg-primary/15"
-          style="width: {pct(option.id)}%"
-          aria-hidden="true"
-        ></span>
-        <span class="relative flex items-center justify-between gap-2">
-          <span>{isMine ? '✓ ' : ''}{option.label}</span>
-          <span class="text-xs opacity-60">{count}</span>
-        </span>
-      </button>
-    {:else}
-      <label
-        class="relative flex items-center gap-2 overflow-hidden rounded border border-base-300 px-2 py-1.5 text-sm"
-        data-my-vote={isMine}
-      >
-        <span
-          class="absolute inset-y-0 left-0 bg-primary/15"
-          style="width: {pct(option.id)}%"
-          aria-hidden="true"
-        ></span>
-        <input
-          type="checkbox"
-          class="checkbox relative checkbox-xs"
-          aria-label={option.label}
-          checked={selection.has(option.id)}
-          disabled={ended}
-          onchange={() => toggle(option.id)}
-        />
-        <span class="relative flex flex-1 items-center justify-between gap-2">
-          <span>{option.label}</span>
-          <span class="text-xs opacity-60">{count}</span>
-        </span>
-      </label>
-    {/if}
-  {/each}
-
-  <div class="flex items-center justify-between text-xs opacity-60">
-    <span>{m.concord_poll_votes({ count: tally.totalVoters })}</span>
-    {#if ended}
-      <span>{m.concord_poll_ended()}</span>
-    {:else if poll.pollType === 'multiplechoice'}
-      <button
-        type="button"
-        class="btn btn-xs btn-primary"
-        disabled={selection.size === 0}
-        onclick={() => onVote([...selection])}
-      >
-        {m.concord_poll_vote()}
-      </button>
-    {/if}
-  </div>
+<!-- Attachment-card grammar (cf. WebxdcAttachmentCard): paper surface with
+     ink text so the poll reads the same on a primary "own message" bubble. -->
+<div
+  data-testid="poll-message"
+  class="mt-2 w-full min-w-64 rounded-lg border border-base-300 bg-base-100 p-3 text-base-content"
+>
+  <PollBody
+    options={poll.options}
+    pollType={poll.pollType}
+    {byOption}
+    totalVoters={tally.totalVoters}
+    {userVote}
+    isClosed={ended}
+    endsAt={poll.endsAt ?? null}
+    onCastVote={onVote}
+    profiles={getProfiles()}
+  />
 </div>

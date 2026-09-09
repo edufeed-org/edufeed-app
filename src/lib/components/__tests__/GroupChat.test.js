@@ -868,9 +868,19 @@ vi.mock('$lib/paraglide/messages', () => ({
   webxdc_apps_none: () => 'No published apps found',
   webxdc_apps_share_failed: (/** @type {{ reason: string }} */ { reason }) =>
     `Could not share the app: ${reason}`,
-  concord_poll_votes: (/** @type {{ count: number }} */ { count }) => `${count} votes`,
-  concord_poll_ended: () => 'Poll ended',
-  concord_poll_vote: () => 'Vote',
+  poll_type_single: () => 'Single choice',
+  poll_type_multiple: () => 'Multiple choice',
+  poll_voter_count_one: () => '1 voter',
+  poll_voter_count_other: (/** @type {{ count: number }} */ { count }) => `${count} voters`,
+  poll_you_voted: () => 'You voted',
+  poll_closed: () => 'Poll closed',
+  poll_ends_at: (/** @type {{ date: string }} */ { date }) => `Ends ${date}`,
+  poll_cast_vote: () => 'Cast vote',
+  poll_show_results: () => 'Show results without voting',
+  poll_back_to_vote: () => 'Back to vote',
+  poll_change_vote: () => 'Change vote',
+  poll_change_vote_cancel: () => 'Keep my vote',
+  poll_login_to_vote: () => 'Log in to vote',
   groups_poll_button: () => 'Create poll',
   groups_poll_title: () => 'New poll',
   groups_poll_question_placeholder: () => 'Ask a question…',
@@ -1749,17 +1759,20 @@ describe('GroupChat', () => {
         );
         expect(contents).toContain('Which day suits?');
       });
-      // Options render as vote rows, with OTHER's vote already tallied.
+      // Options render as selectable buttons (shared PollBody layout); the
+      // tally stays hidden until revealed, with OTHER's vote already folded.
+      await screen.findByRole('button', { name: 'Friday' });
+      expect(screen.getByRole('button', { name: 'Monday' })).toBeTruthy();
+      expect(screen.getByText('1 voter')).toBeTruthy();
+      await fireEvent.click(screen.getByRole('button', { name: 'Show results without voting' }));
       const friday = await screen.findByText('Friday');
-      expect(screen.getByText('Monday')).toBeTruthy();
-      expect(friday.closest('button')?.textContent).toContain('1');
-      expect(screen.getByText('1 votes')).toBeTruthy();
+      expect(friday.parentElement?.textContent).toContain('100% · 1');
     });
 
     it('voting publishes an h-tagged kind-1018 to the group relay', async () => {
       render(GroupChat, { props: { pointer: pollPointer } });
-      const monday = await screen.findByText('Monday');
-      await fireEvent.click(/** @type {HTMLElement} */ (monday.closest('button')));
+      await fireEvent.click(await screen.findByRole('button', { name: 'Monday' }));
+      await fireEvent.click(screen.getByRole('button', { name: 'Cast vote' }));
 
       await waitFor(() => {
         const vote = publishMock.mock.calls.map((c) => c[0]).find((e) => e?.kind === 1018);

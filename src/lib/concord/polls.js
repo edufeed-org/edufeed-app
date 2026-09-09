@@ -16,7 +16,7 @@
  * @typedef {{id: string, label: string}} PollOption
  * @typedef {{id: string, question: string, options: PollOption[], pollType: 'singlechoice'|'multiplechoice', endsAt: number | undefined}} ParsedPoll
  * @typedef {{pubkey: string, optionIds: string[], ms: number}} PollVote
- * @typedef {{counts: Map<string, number>, totalVoters: number, myVote: Set<string> | undefined}} PollTally
+ * @typedef {{counts: Map<string, number>, voters: Map<string, string[]>, totalVoters: number, myVote: Set<string> | undefined}} PollTally
  */
 
 /**
@@ -84,7 +84,8 @@ export function collectVotes(voteRumors) {
 /**
  * Deterministic tally: latest vote per pubkey wins, votes after `endsAt` are
  * ignored, undeclared option ids are dropped. Counts are per distinct voter
- * (a multi-choice voter counts once per chosen option).
+ * (a multi-choice voter counts once per chosen option); `voters` lists the
+ * same voters per option so the UI can draw avatars.
  * @param {PollVote[]} votes
  * @param {PollOption[]} options
  * @param {number | undefined} endsAt
@@ -100,18 +101,22 @@ export function tallyPollVotes(votes, options, endsAt, selfPubkey) {
   }
 
   const counts = new Map();
+  /** @type {Map<string, string[]>} */
+  const voters = new Map();
   const validIds = new Set(options.map((o) => o.id));
   for (const vote of latest.values()) {
     for (const optionId of new Set(
       vote.optionIds.filter((/** @type {string} */ id) => validIds.has(id))
     )) {
       counts.set(optionId, (counts.get(optionId) ?? 0) + 1);
+      voters.set(optionId, [...(voters.get(optionId) ?? []), vote.pubkey]);
     }
   }
 
   const mine = selfPubkey ? latest.get(selfPubkey) : undefined;
   return {
     counts,
+    voters,
     totalVoters: latest.size,
     myVote: mine ? new Set(mine.optionIds) : undefined
   };

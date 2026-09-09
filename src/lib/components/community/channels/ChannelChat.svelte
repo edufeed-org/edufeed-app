@@ -137,13 +137,19 @@
   );
   const votesByPoll = $derived(collectVotes(getVotes()));
 
-  /** @param {import('$lib/concord/polls.js').ParsedPoll} poll @param {string[]} optionIds */
+  /**
+   * Resolves true once the vote rumor is sent (PollBody then clears its
+   * selection), false on failure so the picked options stay for a retry.
+   * @param {import('$lib/concord/polls.js').ParsedPoll} poll @param {string[]} optionIds
+   */
   async function votePoll(poll, optionIds) {
     try {
       await community.sendEvent(channel.channel_id, buildVoteTemplate(poll.id, optionIds));
+      return true;
     } catch (err) {
       console.error('poll vote failed', err);
       showToast(m.concord_send_failed(), 'error');
+      return false;
     }
   }
 
