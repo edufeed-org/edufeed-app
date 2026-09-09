@@ -22,6 +22,8 @@ const REGISTRY_MESSAGES = Object.freeze({
   resource_form_variant_amb_description: m.resource_form_variant_amb_description,
   resource_form_variant_ekw_label: m.resource_form_variant_ekw_label,
   resource_form_variant_ekw_description: m.resource_form_variant_ekw_description,
+  resource_form_variant_hochschule_label: m.resource_form_variant_hochschule_label,
+  resource_form_variant_hochschule_description: m.resource_form_variant_hochschule_description,
   // EKW extension section + facets
   amb_resource_ekw_metadata: m.amb_resource_ekw_metadata,
   amb_resource_ekw_grade_level: m.amb_resource_ekw_grade_level,
