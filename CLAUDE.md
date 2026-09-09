@@ -2,40 +2,7 @@
 
 ## Project Overview
 
-Edufeed-App (formerly ComCal / Communikey Calendar; the display name is deployment-configurable via `APP_NAME`, default `Edufeed`) is a decentralized social education platform built on the Nostr protocol using SvelteKit. It enables users to:
-
-- Create and interact in communities
-- Create and manage events/calendars (NIP-52)
-- Search through educational content (kind 30142 - AMB spec)
-- Organize content in lists and share with communities
-- Read and write long-form articles, wiki pages, publications, notes, and polls
-- Exchange NIP-17 private DMs and follow notifications in the inbox
-- Apply for a NIP-05 handle (membership application, admin-approved)
-
-## Tech Stack
-
-- **Framework:** SvelteKit with Svelte 5 (runes-based reactivity)
-- **Styling:** TailwindCSS 4.0 + DaisyUI 5.0
-- **Language:** JavaScript with JSDoc type annotations
-- **Build:** Vite 7.x
-- **i18n:** Paraglide.js
-- **Protocol:** Nostr (Network of Simple Transport Relays)
-
-### Key Dependencies
-
-```
-applesauce-core      # Event handling, models, stores, EventFactory
-applesauce-common    # NIP-specific helpers and models (v5+)
-applesauce-relay     # Relay pool and WebSocket management
-applesauce-accounts  # Account management
-applesauce-loaders   # Network data fetching
-applesauce-signers   # Event signing (NIP-07, NIP-46)
-applesauce-actions   # ActionRunner for event mutations (CRUD on existing events)
-applesauce-content   # Content rendering utilities
-nostr-tools          # Protocol utilities (DO NOT use directly for relay comm)
-blossom-client-sdk   # File uploads with NIP-98 auth
-rxjs                 # Reactive observables
-```
+Edufeed-App (formerly ComCal / Communikey Calendar; the display name is deployment-configurable via `APP_NAME`, default `Edufeed`) is a decentralized social education platform built on the Nostr protocol using SvelteKit..
 
 ## Critical Architecture Rules
 
@@ -248,50 +215,6 @@ async function handleClick() {
 {@const getProfile = useUserProfile(pubkey)}
 ```
 
-## Project Structure
-
-```
-src/
-├── lib/
-│   ├── components/     # Svelte components, one folder per domain:
-│   │   │               # calendar/, community/, educational/, article/,
-│   │   │               # publication/, wiki/, polls/, notes/, waves/, meet/,
-│   │   │               # dm/, inbox/, forms/, membership/, kanban/, thread/,
-│   │   │               # feed/, dashboard/, discover/, bookmarks/, badges/,
-│   │   │               # comments/, reactions/, assistant/ (Termi), landing/,
-│   │   │               # lists/, profile/, settings/, icons/, shared/
-│   │   └── __tests__/  # Component tests
-│   ├── config/         # Static registries (resource-form-variants, create-actions, oer-sources)
-│   ├── helpers/        # Utility functions
-│   │   └── educational/# SKOS loader, search builders, draft store
-│   ├── loaders/        # Applesauce loaders
-│   ├── models/         # Custom applesauce models
-│   ├── server/         # Server-only code (og.js link previews)
-│   ├── services/       # Publish, relay, DM, inbox, curated-authors services
-│   ├── stores/         # Svelte reactive stores
-│   │   ├── nostr-infrastructure.svelte.js  # EventStore, RelayPool
-│   │   ├── accounts.svelte.js              # User authentication
-│   │   ├── config.svelte.js                # Runtime configuration
-│   │   └── calendar-*.svelte.js            # Calendar domain
-│   └── types/          # JSDoc types
-├── routes/
-│   ├── api/            # Server endpoints (config, enrich, oer, curricula, nip05)
-│   ├── calendar/       # Calendar routes
-│   ├── dashboard/      # Feed dashboard (relay feed picker)
-│   ├── discover/       # Unified discovery page
-│   ├── inbox/          # Notifications + DMs
-│   ├── communities/    # Community directory
-│   ├── bookmarks/      # Personal + social bookmarks
-│   ├── wiki/           # Wiki articles
-│   ├── forms/          # Form templates / responses
-│   ├── admin/          # Admin panels (membership approvals)
-│   ├── create/         # Content creation flows
-│   ├── c/[pubkey]/     # Community pages
-│   ├── p/[pubkey]/     # Profile pages
-│   └── [naddr=naddr]/  # Dynamic Nostr address routes (+ [nevent], nostr shortcuts)
-└── params/             # SvelteKit param matchers
-```
-
 ## Event Kinds
 
 ### Core Kinds
@@ -351,43 +274,9 @@ src/
 | 1063 | NIP-94 | File metadata — image license attestation; also NIP-DC webxdc discovery (`m application/x-webxdc`), see below |
 | 8571 | —      | Kanban patch (config only)                                                                                    |
 
-## Image License Attestation (Kind 1063 convention)
+## Media Attestations (kind 1063) & webxdc
 
-Edufeed uses NIP-94 (kind 1063) events to attest licenses for images, keyed by SHA-256 hash. A license attestation has these tags:
-
-| Tag           | Required by NIP-94 | Required by edufeed | Notes                                   |
-| ------------- | ------------------ | ------------------- | --------------------------------------- |
-| `url`         | yes                | yes                 | Image location                          |
-| `x`           | yes                | yes                 | SHA-256 hex — the PK we look up by      |
-| `m`           | yes                | yes                 | MIME type                               |
-| `size`, `dim` | no                 | optional            | Bytes, "WxH"                            |
-| `license`     | no                 | **yes**             | License URL (CC, MIT, etc.)             |
-| `credit`      | no                 | **yes**             | Human-readable attribution              |
-| `source`      | no                 | optional            | Origin page where the image was found   |
-| `p`           | no                 | optional            | Attribution to a Nostr pubkey           |
-| `ai`          | no                 | optional            | `generated` \| `modified` — EU AI label |
-
-**Lookup:** filter `{ kinds: [1063], '#x': [hash] }`. When multiple events exist, newest `created_at` wins; tie-break by lex order of `id`.
-
-**Gate:** the resource form requires a license event for any image that came from an upload (`formData.imageWasUploaded === true`). Pasted URLs pass through with no gate; if the URL is a Blossom URL, `getSha256FromURL` extracts the hash and the resource event still gets an `["x", hash]` tag so the badge can render when a license event for that hash exists in the network.
-
-**Helpers / files:**
-
-- `src/lib/helpers/image-license.js` — `buildLicenseTemplate(...)` pure helper.
-- `src/lib/helpers/ai-label.js` — `AI_LABELS` / `getAiLabel(event)`: the `ai` tag marks AI-generated (`generated`) or AI-modified (`modified`) files, chosen in `LicenseModal`; `ImageLicenseOverlay` renders the EU "AI" mark (`AiLabelIcon`) wherever the image shows.
-- `src/lib/stores/image-license.svelte.js` — `useLicenseForHash(getHash)` reactive hook.
-- `src/lib/components/shared/LicensedImageInput.svelte` — upload/paste field + license modal.
-- `src/lib/components/shared/LicenseBadge.svelte` — display badge for `AMBResourceCard` / `AMBResourceView`.
-
-## Interactive Resources (webxdc)
-
-Sandboxed interactive learning apps (webxdc `.xdc` packages, plus a `.h5p`→`.xdc` wrapper) published as AMB resources. Module: `src/lib/webxdc/` — `WebxdcPlayer.svelte` (launch card + stage), `SandboxFrame.svelte` (iframe.diy protocol client), `xdc-archive.js` (zip/unzip + hash verification, never executes unverified bytes), `webxdc-host.js` (window.webxdc bridge over a `local-sync.js` AppSync backend, Phase 1 solo/localStorage), `h5p-wrap.js` (wraps the vendored `static/h5p-standalone` player into an .xdc).
-
-Sandbox origin is configurable per deployment: `SANDBOX_DOMAIN` env → `runtimeConfig.webxdc.sandboxDomain` (default `iframe.diy`); cross-origin subdomain isolation is the primary security boundary, the iframe `sandbox` attribute is defense-in-depth.
-
-Publish flow: `resource-form-variants.js` adds an `interactive` variant (`InteractivePackageInput.svelte`); on save it uploads the package to Blossom and `image-license.js`'s `publishLicenseAttestation` emits **one** dual-purpose kind-1063 (license attestation + NIP-DC discovery, `m: application/x-webxdc`), explicitly routed to the educational (AMB) relays in addition to its normal kind-based routing.
-
-Spec: `docs/superpowers/specs/2026-08-19-webxdc-interactive-resources-design.md`.
+Image license attestation and webxdc interactive resources are covered by the `kind-1063-media` skill (`.claude/skills/kind-1063-media/SKILL.md`) — load it before touching `LicensedImageInput`, `LicenseModal`, `ImageLicenseOverlay`, `image-license.js`, or `src/lib/webxdc/`.
 
 ## Communikey Protocol
 
@@ -417,56 +306,11 @@ This app implements the Communikey community specification. Use `/communikey` sk
 
 ## Concord Private Channels (CORD, Beta)
 
-E2E-encrypted channels inside communities via `applesauce-concord` (pre-release,
-exact-pinned together with the `applesauce-core-concord` and
-`applesauce-common-concord` aliases — bump all three in lockstep and review
-diffs; run the package's own vitest suite as a canary:
-`cd $(mktemp -d) && npm pack applesauce-concord@concord` or test in the
-applesauce repo's concord branch).
+E2E-encrypted channels via `applesauce-concord`, behind the `CONCORD_ENABLED` feature flag (default off). Full rules, relay semantics, and the notification/read-state design live in the `concord` skill (`.claude/skills/concord/SKILL.md`) — load it for any Concord/CORD/kind-1059/Kanäle work. Three rules apply everywhere:
 
-- All app access goes through `src/lib/concord/` (lint-enforced): never
-  import `applesauce-concord` or `applesauce-core-concord` outside it.
-  Within that, the actual rule (not an exception): every component imports
-  Concord submodules DIRECTLY (e.g. `community.svelte.js`, `moderation.js`,
-  `bridge.svelte.js`) rather than through the `src/lib/concord/index.js`
-  barrel. The barrel serves non-component/dynamic-import call sites (e.g.
-  `src/routes/+layout.svelte`'s `import('$lib/concord')` that boots
-  `initConcordService`) and is the canonical export list for the directory.
-  `storage.js` is intentionally NOT re-exported from the barrel — it
-  statically imports `applesauce-core-concord`, and re-exporting it would
-  pull that dependency tree into every barrel consumer's chunk (including
-  server chunks); reach it via `client.svelte.js`'s internal dynamic
-  `import('./storage.js')` or a direct test import instead.
-- One Concord community per Communikey community; pointer tag
-  `["concord", <id>, <relay>]` on kind 10222. Kanäle = CORD-03 private channels.
-- Kind 1059 traffic never uses outbox/category relays or curated/WoT
-  filtering, but not all of it stays on `CONCORD_RELAYS` alone: community
-  STREAM traffic (channel/control/guestbook) stays on the community's
-  `material.relays` (= `CONCORD_RELAYS` for wizard-founded areas), while the
-  self-encrypted Community/Invite List (13302/13303) sync — and the
-  direct-invite watcher — use the merged set that also includes CORD-05's
-  public stock relays (`mergeRelaySets()`, `relay-sets.js`). Deliberate
-  interop trade-off: list contents stay NIP-44-encrypted, but existence/timing
-  metadata is exposed on those public relays.
-- Feature flag `CONCORD_ENABLED` (default off). Spec:
-  `docs/superpowers/specs/2026-07-23-concord-private-channels-design.md`.
-- Concord code must never enter SSR chunks (dep tree has @noble/hashes v2 —
-  see commit a9af9c87); the wrapper uses browser-guarded dynamic imports.
-- Curated/WoT/gated modes need no Concord-specific code: Concord traffic never
-  flows through the app's loaders or feed queries (the client subscribes
-  directly with stream-author filters on its own relays), so author filtering
-  cannot touch it. Do not "fix" this by adding kind-1059 exclusions to feed
-  code.
-- Notifications/read-state (spec 2026-07-24): local-only per device, in the
-  per-account Concord IDB `kv` store (keys `notif:read`, `notif:mention-read`,
-  `notif:levels`, `notif:toasts-enabled`). Central service
-  `src/lib/concord/notifications.svelte.js` (started with the client); badge
-  components read `channelUnreadState`/`areaUnreadState` getters. Do NOT sync
-  Concord read-state via NIP-78 — deliberate metadata-leak avoidance
-  (mirrors Armada).
-- Concord replies must go through `sendChannelMessage`
-  (src/lib/concord/send-message.js), not community.sendMessage — the dist
-  omits the reply `p` tag that the mention tier depends on.
+- All app access goes through `src/lib/concord/` (lint-enforced): never import `applesauce-concord` or `applesauce-core-concord` outside it.
+- Concord code must never enter SSR chunks (dep tree has @noble/hashes v2 — see commit a9af9c87); the wrapper uses browser-guarded dynamic imports.
+- Concord traffic never flows through the app's loaders or feed queries. Do not "fix" curated/WoT/gated modes by adding kind-1059 exclusions to feed code.
 
 ## Configuration
 
@@ -604,31 +448,7 @@ Available actions live in `applesauce-actions/actions` — `AddEventToCalendar`/
 
 ## Educational Content (AMB - kind 30142)
 
-Educational content uses the AMB (Allgemeines Metadatenprofil) spec with JSON-flattening:
-
-- Search via NIP-50 `search` filter parameter
-- SKOS vocabularies for classification (learningResourceType, about, audience)
-- Special relay for AMB indexing: `runtimeConfig.educational.ambRelays`
-
-### NIP-50 Search Implementation
-
-**IMPORTANT:** Use `pool.request()` directly for NIP-50 searches, NOT `createTimelineLoader` — `createTimelineLoader` strips unknown filter fields including `search`. See `src/lib/loaders/amb-search.js` and `src/lib/helpers/educational/searchQueryBuilder.js`.
-
-### SKOS Filter Pattern
-
-```javascript
-// Use concept IDs, not labels
-parts.push(`learningResourceType.id:${concept.id}`);
-// Example: learningResourceType.id:https://w3id.org/kim/hcrt/text
-```
-
-### Resource Form Variants (kind 30142)
-
-The "Share Learning Resource" flow runs through `ResourceFormWizard.svelte` with a `variantId` prop. Variants are deployment-gated via `RESOURCE_FORM_VARIANTS` env (comma-separated, default `amb`).
-
-**NIP-32 labeling:** Published events carry `["L", "metadata-form"]` + `["l", variantId, "metadata-form"]` so edit flows can reopen the correct form. `resolveVariantFromEvent.js` falls back to `'amb'` when missing.
-
-Single-variant deployments skip the picker modal (FAB navigates directly). Legacy `/create/resource` always redirects via `+page.svelte`, preserving `?community=` and `?edit=`. Registry lives in `src/lib/config/resource-form-variants.js`.
+AMB resource search (NIP-50), SKOS filters, and the resource form variants are covered by the `amb-educational` skill (`.claude/skills/amb-educational/SKILL.md`) — load it before touching `amb-search.js`, `searchQueryBuilder.js`, `ResourceFormWizard`, or `resource-form-variants.js`.
 
 ## DMs & Inbox
 
@@ -731,18 +551,6 @@ See the `superpowers:using-git-worktrees` skill for the mechanics (creating, lis
 - The pre-push hook (`pnpm check`) runs once **per push destination** — pushing to all three via `origin` triggers svelte-check 3×. A real push can take 1-2+ minutes.
 - This repo has multiple nostr maintainers, each with their own storage bucket across `relay.ngit.dev` / `gitnostr.com` / `ngit.danconwaydev.com` — one `git push origin` can fan out to 6+ underlying targets. Run `ngit repo` to see current maintainers/servers.
 
-### Commands
-
-```bash
-pnpm install         # Install dependencies
-pnpm run dev         # Start dev server
-pnpm run build       # Production build
-pnpm run check       # TypeScript checking
-pnpm run lint        # Prettier + ESLint
-pnpm run format      # Auto-format code
-pnpm run machine-translate  # i18n translation
-```
-
 ## Testing
 
 This project uses **Test-Driven Development (TDD)** — write failing tests first, then implement.
@@ -781,9 +589,7 @@ For refactors that preserve behavior (like extracting a shared hook), add tests 
 
 ## Design Principles
 
-1. **Applesauce First** — always use applesauce for Nostr operations.
-2. **TDD + DRY + small comments** — see Testing for workflow.
-3. **Verify Applesauce APIs via MCP** before writing new loader/model/subscription code: `mcp__applesauce__search_methods`, `search_docs`, `read_doc`. Use `/applesauce-core` and `/applesauce-relay` skills for protocol-level guidance.
+Verify applesauce APIs via MCP before writing new loader/model/subscription code: `mcp__applesauce__search_methods`, `search_docs`, `read_doc`.
 
 ## Theming & Colors
 
@@ -814,6 +620,3 @@ Icons live under `src/lib/components/icons/` (subfolders: `calendar/`, `ui/`, `a
 ## Skills
 
 - `/communikey` - Communikey protocol (kinds 10222, 30000, 30222) for community management
-- `/applesauce-core` - EventStore operations, models, queries, deletion handling
-- `/applesauce-relay` - Relay connections, event publishing, NIP-42 authentication
-- `/applesauce-signers` - Event signing patterns and signer abstractions
