@@ -31,14 +31,9 @@
 // (061c05c9). Same rule as channel-metadata.svelte.js.
 import { pool } from '$lib/stores/nostr-infrastructure.svelte';
 import { useActiveUser } from '$lib/stores/accounts.svelte';
-import { useRelayInformation } from './relay-information.svelte.js';
-import {
-  relayChannelIds,
-  relayMetadataAuthors,
-  acceptsMetadata,
-  isTrustedSigner
-} from './relay-directory.js';
+import { relayChannelIds, acceptsMetadata, isTrustedSigner } from './relay-directory.js';
 import { authenticateOnce, isAuthRequiredError } from './relay-auth.js';
+import { raceRelayKey } from './relay-key-race.js';
 
 const GROUP_METADATA = 39000;
 const PUT_USER = 9000;
@@ -64,7 +59,6 @@ function metadataId(event) {
  */
 export function useRelayDirectory(getRelay, getRemembered) {
   const getActiveUser = useActiveUser();
-  const getInformation = useRelayInformation(getRelay);
 
   /** Plain, deliberately NOT reactive — see the note at the top. */
   /** @type {Record<string, any>} */
@@ -73,6 +67,16 @@ export function useRelayDirectory(getRelay, getRemembered) {
   let byId = $state.raw({});
   /** @type {any[]} */
   let memberships = $state.raw([]);
+  // This relay's own NIP-11 key, raced through the shared bounded primitive
+  // (same one channel-metadata.svelte.js uses — armada's C6 shape) instead of
+  // useRelayInformation: that hook nulls its document on every effect
+  // re-run, which regresses an already-resolved pin the instant either
+  // effect below reruns for an unrelated reason (retrySeq, getRemembered()).
+  // `authors` only ever changes on a real NIP-11 answer or the race timing
+  // out; `ready` becomes true exactly once per relay and stays true.
+  /** @type {string[]} */
+  let authors = $state.raw([]);
+  let ready = $state(false);
   let authRequired = $state(false);
   /** The relay's own words when it refuses us — far better than our guess. */
   let authRefused = $state(/** @type {string | null} */ (null));
@@ -154,11 +158,34 @@ export function useRelayDirectory(getRelay, getRemembered) {
     return () => sub.unsubscribe();
   });
 
+  // Effect A0 — races this relay's NIP-11 key (armada's C6 shape, shared
+  // with channel-metadata.svelte.js via relay-key-race.js). This effect's
+  // only dependency is `getRelay()`, so it reruns exactly when the relay
+  // identity changes — the one case where clearing `authors`/`ready` first
+  // is correct, unlike useRelayInformation's clear-on-every-rerun (which
+  // regressed an already-resolved pin on retrySeq/getRemembered() changes).
+  // Effects A and B below read `authors`/`ready` rather than calling
+  // relayMetadataAuthors directly, so neither can fire a pinnable request
+  // before this decides the relay has one — or genuinely does not.
+  $effect(() => {
+    const relay = getRelay();
+    authors = [];
+    ready = false;
+    if (!relay) return;
+    return raceRelayKey(relay, {
+      onAuthors: (resolved) => {
+        authors = resolved;
+      },
+      onReady: () => {
+        ready = true;
+      }
+    });
+  });
+
   // Effect A — the relay's own listing, and my membership events.
   $effect(() => {
     retrySeq;
     const relay = getRelay();
-    const info = getInformation();
     const me = getActiveUser()?.pubkey;
     // Clear first: another relay's channels must never linger under this
     // one's name while the new request is still in flight.
@@ -172,7 +199,6 @@ export function useRelayDirectory(getRelay, getRemembered) {
     }
     loading = true;
 
-    const authors = relayMetadataAuthors(info);
     /** @type {any[]} */
     const collectedMembers = [];
     /** @type {any[]} */
@@ -204,15 +230,20 @@ export function useRelayDirectory(getRelay, getRemembered) {
 
   // Effect B — metadata for the ids only my own records name. Reads
   // `memberships`, writes only `byId`, so it cannot re-trigger itself.
+  // Gated on `ready`: a relay Effect A0 has not yet decided about (key
+  // resolved, or genuinely none, or the race window expired) must not be
+  // asked for kind:39000 unpinned in that gap — that gap is exactly how a
+  // forged event got collected and rendered before the pin ever applied
+  // (measured, DOOR3_COMMUNITY_METADATA_TRUST.md and the directory-path
+  // arms in the same thread).
   $effect(() => {
     const relay = getRelay();
-    const authors = relayMetadataAuthors(getInformation());
     const indirect = relayChannelIds({
       remembered: getRemembered() ?? [],
       memberships,
       authors
     }).ids;
-    if (!relay || indirect.length === 0) return;
+    if (!relay || !ready || indirect.length === 0) return;
     const sub = ask(
       relay,
       authors.length
@@ -224,7 +255,6 @@ export function useRelayDirectory(getRelay, getRemembered) {
   });
 
   return () => {
-    const authors = relayMetadataAuthors(getInformation());
     const raw = relayChannelIds({
       listed: Object.values(byId),
       remembered: getRemembered() ?? [],
