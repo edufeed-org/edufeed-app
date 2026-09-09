@@ -703,7 +703,9 @@ retired 2026-08-31 (merged into main) — never base new work on it.
 - **Releases are git tags `vX.Y.Z` on main.** Pushing a `v*` tag publishes
   `:vX.Y.Z` and moves `:latest`. Prod deploys are manual Ansible (homelab
   repo) pulling `:latest`, so prod only advances when a release tag is cut.
-  No changelog file for now — the tag history is the record.
+  `CHANGELOG.md` (Keep a Changelog format) gets a section per release,
+  assembled from the merge commits since the previous tag; the release
+  commit bumps `package.json` and the changelog together.
 - **Unfinished features hide behind env feature flags** (e.g.
   `CONCORD_ENABLED`, `MEMBERSHIP_ENABLED`), never behind branches. Merged
   work must always leave main releasable.
