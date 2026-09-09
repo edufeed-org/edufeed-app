@@ -143,4 +143,54 @@ describe('subscribeChannelMetadata', () => {
     expect(pool.calls).toHaveLength(0);
     expect(() => stop()).not.toThrow();
   });
+
+  // 1a (LANE-1): second gate on the same rule the REQ filter states — a
+  // relay that does not strictly enforce its own `authors` filter (or
+  // mirrors another relay's events) must not get a forged kind:39000
+  // believed just because it slipped past the filter. Same pattern as
+  // relay-directory.js's `trusted()`.
+  describe('author pin — second gate', () => {
+    const RELAY_KEY = 'a'.repeat(64);
+    const OTHER_KEY = 'b'.repeat(64);
+    const pinnedReqs = [
+      {
+        relay: A,
+        filter: { kinds: [39000], '#d': ['allgemein'], authors: [RELAY_KEY] },
+        keys: [],
+        authors: [RELAY_KEY]
+      }
+    ];
+
+    it('drops an event from a signer outside the pin, even though it slipped past the REQ', () => {
+      const pool = fakePool();
+      const onMetadata = vi.fn();
+      subscribeChannelMetadata({ requests: pinnedReqs, subscribe: pool.subscribe, onMetadata });
+      pool.calls[0].handlers.next({ ...meta('allgemein'), pubkey: OTHER_KEY });
+      expect(onMetadata).not.toHaveBeenCalled();
+    });
+
+    it('accepts an event from the pinned signer', () => {
+      const pool = fakePool();
+      const onMetadata = vi.fn();
+      subscribeChannelMetadata({ requests: pinnedReqs, subscribe: pool.subscribe, onMetadata });
+      pool.calls[0].handlers.next({ ...meta('allgemein'), pubkey: RELAY_KEY });
+      expect(onMetadata).toHaveBeenCalledTimes(1);
+    });
+
+    it('is case-insensitive on the pubkey comparison', () => {
+      const pool = fakePool();
+      const onMetadata = vi.fn();
+      subscribeChannelMetadata({ requests: pinnedReqs, subscribe: pool.subscribe, onMetadata });
+      pool.calls[0].handlers.next({ ...meta('allgemein'), pubkey: RELAY_KEY.toUpperCase() });
+      expect(onMetadata).toHaveBeenCalledTimes(1);
+    });
+
+    it('accepts anything when the request carries no authors (unpinned, as before)', () => {
+      const pool = fakePool();
+      const onMetadata = vi.fn();
+      subscribeChannelMetadata({ requests: reqs, subscribe: pool.subscribe, onMetadata });
+      pool.calls[0].handlers.next({ ...meta('allgemein'), pubkey: OTHER_KEY });
+      expect(onMetadata).toHaveBeenCalledTimes(1);
+    });
+  });
 });

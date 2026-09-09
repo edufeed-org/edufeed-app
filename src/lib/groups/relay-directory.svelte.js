@@ -31,9 +31,9 @@
 // (061c05c9). Same rule as channel-metadata.svelte.js.
 import { pool } from '$lib/stores/nostr-infrastructure.svelte';
 import { useActiveUser } from '$lib/stores/accounts.svelte';
-import { useRelayInformation } from './relay-information.svelte.js';
-import { relayChannelIds, relayMetadataAuthors } from './relay-directory.js';
+import { relayChannelIds, acceptsMetadata, isTrustedSigner } from './relay-directory.js';
 import { authenticateOnce, isAuthRequiredError } from './relay-auth.js';
+import { raceRelayKey } from './relay-key-race.js';
 
 const GROUP_METADATA = 39000;
 const PUT_USER = 9000;
@@ -59,7 +59,6 @@ function metadataId(event) {
  */
 export function useRelayDirectory(getRelay, getRemembered) {
   const getActiveUser = useActiveUser();
-  const getInformation = useRelayInformation(getRelay);
 
   /** Plain, deliberately NOT reactive — see the note at the top. */
   /** @type {Record<string, any>} */
@@ -68,6 +67,16 @@ export function useRelayDirectory(getRelay, getRemembered) {
   let byId = $state.raw({});
   /** @type {any[]} */
   let memberships = $state.raw([]);
+  // This relay's own NIP-11 key, raced through the shared bounded primitive
+  // (same one channel-metadata.svelte.js uses — armada's C6 shape) instead of
+  // useRelayInformation: that hook nulls its document on every effect
+  // re-run, which regresses an already-resolved pin the instant either
+  // effect below reruns for an unrelated reason (retrySeq, getRemembered()).
+  // `authors` only ever changes on a real NIP-11 answer or the race timing
+  // out; `ready` becomes true exactly once per relay and stays true.
+  /** @type {string[]} */
+  let authors = $state.raw([]);
+  let ready = $state(false);
   let authRequired = $state(false);
   /** The relay's own words when it refuses us — far better than our guess. */
   let authRefused = $state(/** @type {string | null} */ (null));
@@ -94,9 +103,17 @@ export function useRelayDirectory(getRelay, getRemembered) {
         complete: () => (loading = false)
       });
 
-  const takeMetadata = (/** @type {any} */ event) => {
+  /**
+   * @param {any} event
+   * @param {string[]} authors the relay's own key(s) — passed through to
+   *   `acceptsMetadata` so an untrusted or stale event is rejected BEFORE
+   *   it can overwrite a trusted one. See that function's doc comment for
+   *   why a read-time filter cannot do this job.
+   */
+  const takeMetadata = (/** @type {any} */ event, /** @type {string[]} */ authors) => {
     const id = metadataId(event);
     if (!id) return;
+    if (!acceptsMetadata(collected[id], event, authors)) return;
     collected[id] = event;
     byId = { ...collected };
     loading = false;
@@ -141,11 +158,34 @@ export function useRelayDirectory(getRelay, getRemembered) {
     return () => sub.unsubscribe();
   });
 
+  // Effect A0 — races this relay's NIP-11 key (armada's C6 shape, shared
+  // with channel-metadata.svelte.js via relay-key-race.js). This effect's
+  // only dependency is `getRelay()`, so it reruns exactly when the relay
+  // identity changes — the one case where clearing `authors`/`ready` first
+  // is correct, unlike useRelayInformation's clear-on-every-rerun (which
+  // regressed an already-resolved pin on retrySeq/getRemembered() changes).
+  // Effects A and B below read `authors`/`ready` rather than calling
+  // relayMetadataAuthors directly, so neither can fire a pinnable request
+  // before this decides the relay has one — or genuinely does not.
+  $effect(() => {
+    const relay = getRelay();
+    authors = [];
+    ready = false;
+    if (!relay) return;
+    return raceRelayKey(relay, {
+      onAuthors: (resolved) => {
+        authors = resolved;
+      },
+      onReady: () => {
+        ready = true;
+      }
+    });
+  });
+
   // Effect A — the relay's own listing, and my membership events.
   $effect(() => {
     retrySeq;
     const relay = getRelay();
-    const info = getInformation();
     const me = getActiveUser()?.pubkey;
     // Clear first: another relay's channels must never linger under this
     // one's name while the new request is still in flight.
@@ -159,19 +199,22 @@ export function useRelayDirectory(getRelay, getRemembered) {
     }
     loading = true;
 
-    const authors = relayMetadataAuthors(info);
     /** @type {any[]} */
     const collectedMembers = [];
     /** @type {any[]} */
     const subs = [];
 
-    subs.push(
-      ask(
-        relay,
-        authors.length ? { kinds: [GROUP_METADATA], authors } : { kinds: [GROUP_METADATA] },
-        takeMetadata
-      )
-    );
+    // Only ask for the open listing when the relay's own key is known — an
+    // unscoped `{kinds:[GROUP_METADATA]}` read on a keyless relay is exactly
+    // how a forged channel that never existed gets believed as this host's
+    // own (measured: LANE-02's `GESCHMUGGELT`). Effect B below still finds
+    // every id the user's own records or memberships name, scoped by `#d`
+    // either way — that tier is unaffected by whether a key exists.
+    if (authors.length) {
+      subs.push(
+        ask(relay, { kinds: [GROUP_METADATA], authors }, (event) => takeMetadata(event, authors))
+      );
+    }
 
     if (me) {
       subs.push(
@@ -187,33 +230,66 @@ export function useRelayDirectory(getRelay, getRemembered) {
 
   // Effect B — metadata for the ids only my own records name. Reads
   // `memberships`, writes only `byId`, so it cannot re-trigger itself.
+  // Gated on `ready`: a relay Effect A0 has not yet decided about (key
+  // resolved, or genuinely none, or the race window expired) must not be
+  // asked for kind:39000 unpinned in that gap — that gap is exactly how a
+  // forged event got collected and rendered before the pin ever applied
+  // (measured, DOOR3_COMMUNITY_METADATA_TRUST.md and the directory-path
+  // arms in the same thread).
   $effect(() => {
     const relay = getRelay();
-    const authors = relayMetadataAuthors(getInformation());
     const indirect = relayChannelIds({
       remembered: getRemembered() ?? [],
       memberships,
       authors
     }).ids;
-    if (!relay || indirect.length === 0) return;
+    if (!relay || !ready || indirect.length === 0) return;
     const sub = ask(
       relay,
       authors.length
         ? { kinds: [GROUP_METADATA], '#d': indirect, authors }
         : { kinds: [GROUP_METADATA], '#d': indirect },
-      takeMetadata
+      (event) => takeMetadata(event, authors)
     );
     return () => sub.unsubscribe();
   });
 
   return () => {
-    const authors = relayMetadataAuthors(getInformation());
-    const { ids, bySource } = relayChannelIds({
+    const raw = relayChannelIds({
       listed: Object.values(byId),
       remembered: getRemembered() ?? [],
       memberships,
       authors
     });
+
+    // A kind:9000 roster names an id; that is a REQUEST for a channel, not
+    // one. Effect B already asks for kind:39000 metadata on every membership
+    // id (pinned, when a key is known). An id only counts as a channel once
+    // its own metadata has actually arrived AND passed the same trust check
+    // `listed` gets — mapping the roster straight into the rail (what
+    // relayChannelIds does, on purpose, so Effect B still knows what to
+    // fetch) would let an arbitrary signer inject an id into a user's own
+    // rail by forging a put-user event naming them. No relay
+    // misconfiguration required, unlike the `listed` fail-open case: the
+    // roster REQ itself is never pinnable (see the note above Effect A).
+    const trustedMembership = (/** @type {string} */ id) => {
+      const event = byId[id];
+      return Boolean(event) && isTrustedSigner(event, authors);
+    };
+    // Plain array, not Set, on purpose — same reason as the accumulators in
+    // channel-metadata.svelte.js: this is a hook-local scratch value, not
+    // reactive state.
+    const droppedMemberships = raw.bySource.memberships.filter((id) => !trustedMembership(id));
+    const ids = droppedMemberships.length
+      ? raw.ids.filter((id) => !droppedMemberships.includes(id))
+      : raw.ids;
+    const bySource = droppedMemberships.length
+      ? {
+          ...raw.bySource,
+          memberships: raw.bySource.memberships.filter((id) => !droppedMemberships.includes(id))
+        }
+      : raw.bySource;
+
     return {
       // Only ids we actually hold metadata for can be rendered: a card with no
       // name says less than no card at all.

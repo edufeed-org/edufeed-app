@@ -65,4 +65,42 @@ describe('metadataRequestsByRelay', () => {
     const [req] = metadataRequestsByRelay([ptr('a', 'wss://A.Example')]);
     expect(req.relay).toBe('wss://a.example/');
   });
+
+  // 1a (LANE-1): pin kind:39000 to the relay's own key, same rule
+  // relay-directory.js already applies to the directory read.
+  describe('author pin', () => {
+    const RELAY_KEY = 'a'.repeat(64);
+
+    it('has no authors key in the filter when the relay key is unknown — same shape as before', () => {
+      const [req] = metadataRequestsByRelay([ptr('a')]);
+      expect(req.filter).not.toHaveProperty('authors');
+      expect(req.authors).toEqual([]);
+    });
+
+    it('has no authors key when getAuthorsForRelay is simply omitted', () => {
+      const [req] = metadataRequestsByRelay([ptr('a')], undefined);
+      expect(req.filter).not.toHaveProperty('authors');
+    });
+
+    it('pins the filter to the resolved key for that relay', () => {
+      const [req] = metadataRequestsByRelay([ptr('a')], () => [RELAY_KEY]);
+      expect(req.filter.authors).toEqual([RELAY_KEY]);
+      expect(req.authors).toEqual([RELAY_KEY]);
+    });
+
+    it('resolves authors PER RELAY, not globally', () => {
+      const KEY_B = 'b'.repeat(64);
+      const out = metadataRequestsByRelay([ptr('x', A), ptr('y', B)], (relay) =>
+        relay === An ? [RELAY_KEY] : relay === Bn ? [KEY_B] : []
+      );
+      expect(out.find((r) => r.relay === An)?.filter.authors).toEqual([RELAY_KEY]);
+      expect(out.find((r) => r.relay === Bn)?.filter.authors).toEqual([KEY_B]);
+    });
+
+    it('leaves the filter unpinned when the callback returns nothing for that relay', () => {
+      const [req] = metadataRequestsByRelay([ptr('a')], () => undefined);
+      expect(req.filter).not.toHaveProperty('authors');
+      expect(req.authors).toEqual([]);
+    });
+  });
 });
