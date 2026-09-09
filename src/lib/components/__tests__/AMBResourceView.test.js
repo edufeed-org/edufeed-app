@@ -36,6 +36,10 @@ vi.mock('$app/stores', () => ({
 vi.mock('$app/navigation', () => ({
   goto: vi.fn()
 }));
+vi.mock(
+  '$lib/helpers/message-lookup.js',
+  () => import('$lib/__tests__/__mocks__/message-lookup.js')
+);
 vi.mock('$lib/paraglide/messages.js', () => ({
   amb_resource_access_content_title: () => 'Access Content',
   amb_resource_access_content_external_desc: () => 'External content',

@@ -1,4 +1,4 @@
-import * as m from '$lib/paraglide/messages';
+import { resolveMessage } from '$lib/helpers/message-lookup.js';
 
 /**
  * @typedef {import('./konfiTags.js').SubStepConfig} SubStepConfig
@@ -7,16 +7,15 @@ import * as m from '$lib/paraglide/messages';
 
 /**
  * Resolve a Paraglide message key to its translated string. Returns the raw
- * key as a fallback if the message doesn't exist (visible degradation, not a
- * crash). Same pattern used by `ExtensionMetadataPanel.svelte`'s `translate()`.
+ * key as a fallback if the message isn't registered (visible degradation, not
+ * a crash). Goes through the static table in message-lookup.js — indexing the
+ * messages namespace directly would pin every message into the bundle.
  *
  * @param {string} key
  * @returns {string}
  */
 function resolveLabel(key) {
-  const messages = /** @type {Record<string, any>} */ (m);
-  const fn = Object.prototype.hasOwnProperty.call(messages, key) ? messages[key] : undefined;
-  return typeof fn === 'function' ? fn() : key;
+  return resolveMessage(key) ?? key;
 }
 
 /**

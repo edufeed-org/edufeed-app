@@ -50,6 +50,7 @@
   import { ALL_VARIANTS, EXTENSION_NAMESPACE_LABELS } from '$lib/config/resource-form-variants.js';
   import { page } from '$app/stores';
   import * as m from '$lib/paraglide/messages.js';
+  import { resolveMessage } from '$lib/helpers/message-lookup.js';
   import MarkdownRenderer from '../shared/MarkdownRenderer.svelte';
   import ImageWithFallback from '../shared/ImageWithFallback.svelte';
   import { getFormReferenceFromResource } from '$lib/helpers/educational/formReference.js';
@@ -464,11 +465,8 @@
   function resolveFacetLabel(ns, facetName) {
     const nsLabels = EXTENSION_NAMESPACE_LABELS[ns] ?? variantExtLabels.get(ns);
     const key = nsLabels?.facets?.[facetName];
-    if (key) {
-      const fn = /** @type {Record<string, any>} */ (m)[key];
-      if (typeof fn === 'function') return fn();
-    }
-    return humanizeFacet(facetName);
+    const label = key ? resolveMessage(key) : undefined;
+    return label ?? humanizeFacet(facetName);
   }
 
   // The hero's key-fact strip: real core fields first, then extension facts.

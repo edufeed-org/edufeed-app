@@ -12,9 +12,7 @@
   import ScrollToTopButton from '$lib/components/shared/ScrollToTopButton.svelte';
   import RenderErrorCard from '$lib/components/shared/RenderErrorCard.svelte';
   import ImageWithFallback from '$lib/components/shared/ImageWithFallback.svelte';
-  import TermiAssistant from '$lib/components/assistant/TermiAssistant.svelte';
-  import CommunitySidebar from '$lib/components/community/layout/CommunitySidebar.svelte';
-  import ContentNavSidebar from '$lib/components/community/layout/ContentNavSidebar.svelte';
+  import { lazyComponent } from '$lib/helpers/lazy-component.svelte.js';
   import DashboardNavSidebar from '$lib/components/dashboard/DashboardNavSidebar.svelte';
   import DashboardBottomTabBar from '$lib/components/dashboard/DashboardBottomTabBar.svelte';
   import { pageOwnsNavColumn } from '$lib/rail/rail-active.js';
@@ -40,6 +38,20 @@
   import { buildCommunityPath } from '$lib/helpers/communityNavigation.js';
   import { getRandomQuote } from '$lib/data/loading-quotes.js';
   import { getLocale } from '$lib/paraglide/runtime.js';
+
+  // Per-surface chrome, loaded on first use instead of statically: these sit
+  // in the root layout, so a static import puts their whole dependency graph
+  // into every page's modulepreload list — including the logged-out landing
+  // page, which needs none of them.
+  const lazyCommunitySidebar = lazyComponent(
+    () => import('$lib/components/community/layout/CommunitySidebar.svelte')
+  );
+  const lazyContentNavSidebar = lazyComponent(
+    () => import('$lib/components/community/layout/ContentNavSidebar.svelte')
+  );
+  const lazyTermiAssistant = lazyComponent(
+    () => import('$lib/components/assistant/TermiAssistant.svelte')
+  );
 
   let { children, data } = $props();
 
@@ -383,16 +395,19 @@
   <!-- Chrome row: sidebars + main as flex siblings. -->
   <div class="flex min-h-0 flex-1 overflow-hidden">
     {#if getActiveUser()}
+      {@const CommunitySidebar = lazyCommunitySidebar.Component}
       <!-- lg:contents wrapper keeps the lg:hidden mobile drawer-content branch
            inside CommunitySidebar from rendering as a flex child on mobile. -->
       <div class="hidden lg:contents">
-        <CommunitySidebar
-          currentCommunityId={currentCommunityPubkey}
-          currentPath={$page.url.pathname}
-          {isDashboardActive}
-          onCommunitySelect={handleCommunitySelect}
-          onHomeSelect={handleHomeSelect}
-        />
+        {#if CommunitySidebar}
+          <CommunitySidebar
+            currentCommunityId={currentCommunityPubkey}
+            currentPath={$page.url.pathname}
+            {isDashboardActive}
+            onCommunitySelect={handleCommunitySelect}
+            onHomeSelect={handleHomeSelect}
+          />
+        {/if}
       </div>
     {/if}
     {#if pageOwnsNav}
@@ -401,7 +416,10 @@
     {:else if showDashboardNav}
       <DashboardNavSidebar />
     {:else if isInsideCommunity && contentNavData}
-      <ContentNavSidebar {...contentNavData} />
+      {@const ContentNavSidebar = lazyContentNavSidebar.Component}
+      {#if ContentNavSidebar}
+        <ContentNavSidebar {...contentNavData} />
+      {/if}
     {/if}
     <main
       bind:this={mainElement}
@@ -447,7 +465,10 @@
   <GlobalFAB />
 {/if}
 {#if !hasOwnBottomUI && getActiveUser() && curatedReady}
-  <TermiAssistant />
+  {@const TermiAssistant = lazyTermiAssistant.Component}
+  {#if TermiAssistant}
+    <TermiAssistant />
+  {/if}
 {/if}
 {#if showDashboardNav && !hasOwnBottomUI}
   <DashboardBottomTabBar />
