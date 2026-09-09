@@ -205,9 +205,13 @@ describe('PollBody — results', () => {
     expect(screen.getAllByText('0% · 0')).toHaveLength(2);
   });
 
-  it('an open poll with a deadline shows when it ends', () => {
-    render(PollBody, props({ endsAt: 4_102_444_800 }));
-    expect(screen.getByText(/^Ends /)).toBeTruthy();
+  it('an open poll with a deadline shows when it ends, in European date order without seconds', () => {
+    // 2026-03-05 14:07:09 local time — day and month differ so day-first
+    // order is provable. Tests run in the default (en) locale, which the
+    // dates helper maps to en-GB; de renders the same as 05.03.2026, 14:07.
+    const endsAt = Math.floor(new Date(2026, 2, 5, 14, 7, 9).getTime() / 1000);
+    render(PollBody, props({ endsAt }));
+    expect(screen.getByText('Ends 05/03/2026, 14:07')).toBeTruthy();
     expect(screen.queryByText('Poll closed')).toBeNull();
   });
 

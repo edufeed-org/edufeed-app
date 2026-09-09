@@ -17,6 +17,7 @@
   import ProfileAvatar from '$lib/components/shared/ProfileAvatar.svelte';
   import HoverCard from '$lib/components/shared/HoverCard.svelte';
   import { profileLink } from '$lib/helpers/nostrUtils.js';
+  import { formatTimestamp } from '$lib/helpers/dates.js';
 
   /**
    * @typedef {{id: string, label: string}} PollOption
@@ -102,9 +103,17 @@
     return Math.round((count / totalVoters) * 100);
   }
 
+  // European date order (DD.MM.YYYY) via the app's locale helper, minutes
+  // precision — the seconds of a poll deadline are noise in a meta line.
   function formatEndsAt(/** @type {number} */ ts) {
     try {
-      return new Date(ts * 1000).toLocaleString();
+      return formatTimestamp(ts, {
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+      });
     } catch {
       return String(ts);
     }
