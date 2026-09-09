@@ -9,6 +9,7 @@
 // store, and holding those in deep $state lets a memoising helper write a
 // Symbol onto them from inside a $derived — which crashes the runtime
 // (see 061c05c9, the /groups page).
+import { untrack } from 'svelte';
 import { normalizeURL } from 'applesauce-core/helpers/url';
 import { pool } from '$lib/stores/nostr-infrastructure.svelte';
 import { metadataRequestsByRelay } from './channel-metadata-requests.js';
@@ -26,9 +27,11 @@ export function useChannelMetadata(getPointers) {
   let failedRelays = $state.raw([]);
   // The relay's own NIP-11 key per relay, so kind:39000 is pinned to the
   // relay that would legitimately sign it — same rule relay-directory.js
-  // uses for the directory read. $state.raw: written only here, in effect
-  // 1; read only in effect 2 below. Neither effect reads what IT writes, so
-  // this can never loop (same split relay-directory.svelte.js documents).
+  // uses for the directory read. $state.raw: written by effect 1, read by
+  // effect 2. Effect 1 also carries earlier answers forward, and reads them
+  // UNTRACKED for that — a tracked read of a value the same effect assigns
+  // re-triggers it every run (Svelte's update-depth guard fired on any account
+  // with channel pointers, 2026-09-09).
   /** @type {Record<string, string[]>} */
   let authorsByRelay = $state.raw({});
   // Relays effect 2 may safely request metadata for: NIP-11 has answered
@@ -36,8 +39,8 @@ export function useChannelMetadata(getPointers) {
   // answer at all. A relay that WILL answer, just not yet, is deliberately
   // NOT ready — requesting its metadata unpinned in that gap is exactly how
   // a forged kind:39000 got collected (and drawn) before the pin ever
-  // applied. $state.raw, written only in effect 1, read only in effect 2 —
-  // same non-looping split as authorsByRelay above.
+  // applied. $state.raw, written by effect 1 (which reads it untracked, see
+  // above), read by effect 2.
   /** @type {string[]} */
   let readyRelays = $state.raw([]);
 
@@ -67,14 +70,18 @@ export function useChannelMetadata(getPointers) {
     }
 
     // Drop entries for relays no longer in the set; keep every other entry
-    // exactly as it is until a fresh answer replaces it.
+    // exactly as it is until a fresh answer replaces it. Both reads are
+    // untracked on purpose: this effect assigns these two values below, and a
+    // tracked read would make each run schedule the next one.
+    const previousAuthors = untrack(() => authorsByRelay);
+    const previousReady = untrack(() => readyRelays);
     /** @type {Record<string, string[]>} */
     const collected = {};
     for (const relay of relays)
-      if (relay in authorsByRelay) collected[relay] = authorsByRelay[relay];
+      if (relay in previousAuthors) collected[relay] = previousAuthors[relay];
     authorsByRelay = collected;
     /** @type {string[]} */
-    const ready = readyRelays.filter((relay) => relays.includes(relay));
+    const ready = previousReady.filter((relay) => relays.includes(relay));
     readyRelays = ready;
 
     /** @param {string} relay */
