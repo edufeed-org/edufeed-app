@@ -11,9 +11,15 @@ import { render, fireEvent } from '@testing-library/svelte';
 const licenseState = {
   current: /** @type {any} */ ({ event: null, status: 'loading' })
 };
+// Captures the hash getter ResourceCover hands to the hook, so tests can
+// assert which SHA-256 the license lookup would be keyed by.
+const licenseHook = { getHash: /** @type {(() => string | null) | null} */ (null) };
 vi.mock('$lib/stores/image-license.svelte.js', () => ({
   useLicenseForHash: () => () => null,
-  useLicenseStatus: () => () => licenseState.current
+  useLicenseStatus: (/** @type {() => string | null} */ getHash) => {
+    licenseHook.getHash = getHash;
+    return () => licenseState.current;
+  }
 }));
 
 // Stub the SKOS cache — concept-side label resolution isn't under test here.
@@ -496,5 +502,57 @@ describe('ResourceCover — class prop', () => {
     const root = container.firstElementChild;
     expect(root?.className).toMatch(/mb-3/);
     expect(root?.className).toMatch(/ring-2/);
+  });
+});
+
+describe('ResourceCover — license lookup hash', () => {
+  const BLOSSOM_HASH = '20a027ca751e79b5339cdef11fad2a19f145d576e6cfb43b50f78e107de09d0a';
+  const BLOSSOM_URL = `https://blossom.edufeed.org/${BLOSSOM_HASH}.jpeg`;
+
+  beforeEach(() => {
+    licenseHook.getHash = null;
+  });
+
+  it('prefers the resource x tag when present', () => {
+    render(ResourceCover, {
+      props: {
+        resource: buildResource({
+          image: BLOSSOM_URL,
+          tags: [
+            ['d', 'x'],
+            ['x', 'ab'.repeat(32)]
+          ]
+        }),
+        size: 'full'
+      }
+    });
+    expect(licenseHook.getHash?.()).toBe('ab'.repeat(32));
+  });
+
+  // Events published outside the app's own form (e.g. via the AMB MCP server)
+  // carry only the `image` tag — the article view already recovers the hash
+  // from a Blossom URL, the AMB cover must do the same.
+  it('falls back to the SHA-256 embedded in a Blossom image URL when no x tag exists', () => {
+    render(ResourceCover, {
+      props: { resource: buildResource({ image: BLOSSOM_URL, tags: [['d', 'x']] }), size: 'full' }
+    });
+    expect(licenseHook.getHash?.()).toBe(BLOSSOM_HASH);
+  });
+
+  it('yields null for a non-hash image URL without an x tag', () => {
+    render(ResourceCover, {
+      props: {
+        resource: buildResource({ image: 'https://example.com/cover.jpg', tags: [['d', 'x']] }),
+        size: 'full'
+      }
+    });
+    expect(licenseHook.getHash?.()).toBeNull();
+  });
+
+  it('does not throw on a malformed image URL', () => {
+    render(ResourceCover, {
+      props: { resource: buildResource({ image: 'not a url', tags: [['d', 'x']] }), size: 'full' }
+    });
+    expect(licenseHook.getHash?.()).toBeNull();
   });
 });

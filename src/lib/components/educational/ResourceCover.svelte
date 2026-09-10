@@ -21,6 +21,7 @@
   import { useProfileMap } from '$lib/stores/profile-map.svelte.js';
   import { unique } from '$lib/helpers/unique.js';
   import { getDisplayName } from 'applesauce-core/helpers';
+  import { getSha256FromURL } from 'applesauce-common/helpers';
   import { getLabelsWithFallback } from '$lib/helpers/educational/ambTransform.js';
   import { getCoverHue } from '$lib/helpers/educational/coverColor.js';
   import { getAMBCreatorNames } from '$lib/helpers/educational/ambHelpers.js';
@@ -89,10 +90,21 @@
   const hasImage = $derived(Boolean(resource?.image) && !imageFailed);
 
   // License-badge centralization: lookup the kind-1063 license event for the
-  // image's SHA-256 hash (if the resource carries an `x` tag).
-  const imageHash = $derived(
-    resource?.tags?.find((/** @type {string[]} */ t) => t[0] === 'x')?.[1] ?? null
-  );
+  // image's SHA-256 hash. Prefer the resource's `x` tag; events published
+  // outside the app's form (e.g. via the AMB MCP server) carry only the
+  // `image` tag, so fall back to the hash embedded in a Blossom-style URL —
+  // the same recovery ArticleView does for kind 30023 covers.
+  const imageHash = $derived.by(() => {
+    const xTag = resource?.tags?.find((/** @type {string[]} */ t) => t[0] === 'x')?.[1];
+    if (xTag) return xTag;
+    if (!resource?.image) return null;
+    try {
+      // getSha256FromURL does `new URL(...)` and throws on malformed input.
+      return getSha256FromURL(resource.image) ?? null;
+    } catch {
+      return null;
+    }
+  });
   const getLicenseStatus = useLicenseStatus(() => imageHash);
   const licenseStatus = $derived(getLicenseStatus());
   const cautionVariant = $derived(size === 'thumbnail' ? 'dot' : 'pill');
