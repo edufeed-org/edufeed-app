@@ -22,7 +22,7 @@ export function isSectionMarker(item) {
 // creator is deliberately NOT locked: it may target amb:creator (default)
 // or amb:contributor (Herausgeber). Locking it here would silently revert
 // a contributor field to creator via fieldToState on every edit.
-export const LOCKED_FIELD_OUTPUTS = { 'external-urls': 'amb:refs' };
+export const LOCKED_FIELD_OUTPUTS = { 'external-urls': 'amb:refs', doi: 'amb:id' };
 
 /**
  * Split an editing list into real fields + section grouping.

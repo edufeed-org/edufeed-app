@@ -39,7 +39,8 @@
     'date',
     'creator',
     'amb-relation',
-    'external-urls'
+    'external-urls',
+    'doi'
   ];
 
   // Rich composite field types get a sensible default output so the author

@@ -477,10 +477,10 @@
         },
         {
           "id": "doi",
-          "type": "text",
+          "type": "doi",
           "label": "DOI",
           "placeholder": "10.1234/beispiel",
-          "description": "Digital Object Identifier der Publikation. Automatisches Übernehmen der Metadaten aus der DOI ist in Arbeit.",
+          "description": "Digital Object Identifier der Publikation. Titel, Autor:innen, Zeitschrift, Band/Heft und Zusammenfassung werden nach Eingabe automatisch aus der DOI übernommen, soweit die Felder noch leer sind.",
           "output": "amb:id"
         },
         {

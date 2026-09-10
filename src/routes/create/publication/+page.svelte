@@ -9,6 +9,8 @@
   import { parsePublicationEvent } from '$lib/helpers/publication/publicationTags.js';
   import { normalizeDoi } from '$lib/helpers/publication/doi.js';
   import { fetchPublicationPrefill } from '$lib/helpers/publication/urlMetadata.js';
+  import { fetchDoiPrefill } from '$lib/helpers/publication/crossref.js';
+  import { mergePublicationPrefill } from '$lib/helpers/publication/prefill-merge.js';
   import { getLicenseOptions } from '$lib/helpers/educational/licenseOptions.js';
   import { resolveVocabField } from '$lib/helpers/educational/vocabResolver.js';
   import { getLocale } from '$lib/paraglide/runtime.js';
@@ -90,6 +92,53 @@
   /** @type {ReturnType<typeof setTimeout> | undefined} */
   let urlInspectTimer;
   let lastInspectedUrl = '';
+  // DOI → metadata prefill (Crossref); same fill-empty-only rule as the URL path
+  let isInspectingDoi = $state(false);
+  let doiPrefillApplied = $state(false);
+  /** @type {ReturnType<typeof setTimeout> | undefined} */
+  let doiInspectTimer;
+  let lastInspectedDoi = '';
+
+  /**
+   * Apply fetched metadata to the form: only empty fields are filled, so user
+   * input and edit-mode prefill are never overwritten.
+   * @param {import('$lib/helpers/publication/crossref.js').DoiPrefill} prefill
+   * @returns {boolean} whether any field was filled
+   */
+  function applyPrefill(prefill) {
+    const { patch, applied } = mergePublicationPrefill(
+      {
+        title,
+        creators,
+        doi: doiInput,
+        datePublished,
+        journal,
+        abstract,
+        keywords,
+        inLanguage,
+        url,
+        license,
+        fileUrl,
+        hasUploads: uploadedFiles.length > 0
+      },
+      prefill
+    );
+    if (patch.title !== undefined) title = patch.title;
+    if (patch.creators !== undefined) creators = patch.creators;
+    if (patch.doi !== undefined) doiInput = patch.doi;
+    if (patch.datePublished !== undefined) datePublished = patch.datePublished;
+    if (patch.journal !== undefined) journal = patch.journal;
+    if (patch.abstract !== undefined) abstract = patch.abstract;
+    if (patch.keywords !== undefined) keywords = patch.keywords;
+    if (patch.inLanguage !== undefined) inLanguage = patch.inLanguage;
+    if (patch.url !== undefined) url = patch.url;
+    if (patch.license !== undefined) license = patch.license;
+    if (patch.file !== undefined) {
+      fileUrl = patch.file.url;
+      fileMeta = patch.file;
+    }
+    return applied;
+  }
 
   const licenseOptions = $derived(getLicenseOptions(license));
   const subjectField = $derived(resolveVocabField('hochschulfaecher'));
@@ -187,44 +236,7 @@
       isInspectingUrl = true;
       try {
         const prefill = await fetchPublicationPrefill(current);
-        let applied = false;
-        if (prefill.title && !title.trim()) {
-          title = prefill.title;
-          applied = true;
-        }
-        if (prefill.creators?.length && creators.length === 0) {
-          creators = prefill.creators;
-          applied = true;
-        }
-        if (prefill.doi && !doiInput.trim()) {
-          doiInput = prefill.doi;
-          applied = true;
-        }
-        if (prefill.datePublished && !datePublished) {
-          datePublished = prefill.datePublished;
-          applied = true;
-        }
-        if (prefill.journal && !journal.trim()) {
-          journal = prefill.journal;
-          applied = true;
-        }
-        if (prefill.abstract && !abstract.trim()) {
-          abstract = prefill.abstract;
-          applied = true;
-        }
-        if (prefill.keywords?.length && keywords.length === 0) {
-          keywords = prefill.keywords;
-          applied = true;
-        }
-        if (prefill.inLanguage) {
-          inLanguage = prefill.inLanguage;
-        }
-        if (prefill.file && !fileUrl.trim() && uploadedFiles.length === 0) {
-          fileUrl = prefill.file.url;
-          fileMeta = prefill.file;
-          applied = true;
-        }
-        urlPrefillApplied = applied;
+        urlPrefillApplied = applyPrefill(prefill);
       } finally {
         isInspectingUrl = false;
       }
@@ -232,6 +244,28 @@
 
     return () => {
       if (urlInspectTimer) clearTimeout(urlInspectTimer);
+    };
+  });
+
+  // Debounced DOI lookup on Crossref, once the input parses as a DOI. Same
+  // contract as the URL inspect above: empty fields only, best-effort.
+  $effect(() => {
+    const doi = normalizeDoi(doiInput);
+    if (doiInspectTimer) clearTimeout(doiInspectTimer);
+    if (!doi || doi === lastInspectedDoi || isLoadingEdit) return;
+
+    doiInspectTimer = setTimeout(async () => {
+      lastInspectedDoi = doi;
+      isInspectingDoi = true;
+      try {
+        doiPrefillApplied = applyPrefill(await fetchDoiPrefill(doi));
+      } finally {
+        isInspectingDoi = false;
+      }
+    }, 600);
+
+    return () => {
+      if (doiInspectTimer) clearTimeout(doiInspectTimer);
     };
   });
 
@@ -357,7 +391,12 @@
       <div class="grid gap-4 sm:grid-cols-2">
         <div class="form-control">
           <label class="label" for="publication-doi">
-            <span class="label-text font-medium">DOI</span>
+            <span class="label-text flex items-center gap-2 font-medium">
+              DOI
+              {#if isInspectingDoi}
+                <span class="loading loading-xs loading-spinner"></span>
+              {/if}
+            </span>
           </label>
           <input
             id="publication-doi"
@@ -366,6 +405,10 @@
             placeholder={m.publication_form_placeholder_doi()}
             bind:value={doiInput}
           />
+          <p class="mt-1 text-xs text-base-content/60">{m.publication_form_doi_inspect_hint()}</p>
+          {#if doiPrefillApplied}
+            <p class="mt-1 text-xs text-success">{m.publication_form_doi_prefill_applied()}</p>
+          {/if}
         </div>
         <div class="form-control">
           <label class="label" for="publication-url">

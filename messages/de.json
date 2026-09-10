@@ -3578,5 +3578,11 @@
   "form_preview_notice": "Vorschau — so sieht das Formular für ausfüllende Personen aus. Es wird nichts veröffentlicht.",
   "form_preview_empty": "Füge ein Feld hinzu, um die Vorschau zu sehen.",
   "form_preview_submitted_notice": "Das ist die Bestätigung, die ausfüllende Personen sehen würden. Es wurde nichts veröffentlicht.",
-  "form_preview_restart": "Von vorn beginnen"
+  "form_preview_restart": "Von vorn beginnen",
+  "form_doi_invalid": "Keine gültige DOI (z. B. 10.1000/xyz123)",
+  "form_doi_fetching": "Metadaten werden aus der DOI geladen …",
+  "form_doi_prefill_applied": "Aus der DOI übernommen: {fields}",
+  "form_doi_prefill_none": "Zu dieser DOI wurden keine Metadaten gefunden.",
+  "publication_form_doi_inspect_hint": "Metadaten werden nach Eingabe einer DOI automatisch aus Crossref übernommen.",
+  "publication_form_doi_prefill_applied": "Metadaten aus der DOI übernommen – bitte prüfen."
 }
