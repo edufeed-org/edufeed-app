@@ -19,6 +19,8 @@
  * @property {string} abstract
  * @property {string[]} keywords
  * @property {string} inLanguage
+ * @property {string} url
+ * @property {string} license
  * @property {string} fileUrl
  * @property {boolean} hasUploads
  */
@@ -40,6 +42,8 @@ export function mergePublicationPrefill(current, prefill) {
   if (prefill.journal && blank(current.journal)) patch.journal = prefill.journal;
   if (prefill.abstract && blank(current.abstract)) patch.abstract = prefill.abstract;
   if (prefill.keywords?.length && !current.keywords?.length) patch.keywords = prefill.keywords;
+  if (prefill.url && blank(current.url)) patch.url = prefill.url;
+  if (prefill.license && blank(current.license)) patch.license = prefill.license;
   if (prefill.file && blank(current.fileUrl) && !current.hasUploads) patch.file = prefill.file;
   const applied = Object.keys(patch).length > 0;
   if (prefill.inLanguage) patch.inLanguage = prefill.inLanguage;

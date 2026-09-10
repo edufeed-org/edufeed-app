@@ -11,6 +11,8 @@ const empty = {
   abstract: '',
   keywords: [],
   inLanguage: 'de',
+  url: '',
+  license: '',
   fileUrl: '',
   hasUploads: false
 };
@@ -25,6 +27,8 @@ const prefill = {
   abstract: 'Abs',
   keywords: ['k'],
   inLanguage: 'en',
+  url: 'https://publisher.example/article',
+  license: 'https://creativecommons.org/licenses/by/4.0/',
   file: { url: 'https://x/y.pdf', mimeType: 'application/pdf' }
 };
 
@@ -40,6 +44,8 @@ describe('mergePublicationPrefill', () => {
       abstract: 'Abs',
       keywords: ['k'],
       inLanguage: 'en',
+      url: 'https://publisher.example/article',
+      license: 'https://creativecommons.org/licenses/by/4.0/',
       file: { url: 'https://x/y.pdf', mimeType: 'application/pdf' }
     });
     expect(applied).toBe(true);
@@ -69,6 +75,17 @@ describe('mergePublicationPrefill', () => {
     );
     expect(patch).toEqual({ inLanguage: 'fr' });
     expect(applied).toBe(false);
+  });
+
+  it('keeps an article URL and a licence the author already chose', () => {
+    const current = {
+      ...empty,
+      url: 'https://mine',
+      license: 'https://creativecommons.org/licenses/by-sa/4.0/'
+    };
+    const { patch } = mergePublicationPrefill(current, prefill);
+    expect(patch.url).toBeUndefined();
+    expect(patch.license).toBeUndefined();
   });
 
   it('an empty prefill yields an empty patch', () => {

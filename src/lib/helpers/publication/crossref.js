@@ -14,7 +14,7 @@ import { normalizeDoi } from './doi.js';
  * @typedef {import('./urlMetadata.js').PublicationPrefill} PublicationPrefill
  * @typedef {import('$lib/stores/educational-actions.svelte.js').Creator} Creator
  *
- * @typedef {PublicationPrefill & { volume?: string, issue?: string, publisher?: string }} DoiPrefill
+ * @typedef {PublicationPrefill & { volume?: string, issue?: string, publisher?: string, url?: string, license?: string }} DoiPrefill
  */
 
 /**
@@ -24,10 +24,37 @@ import { normalizeDoi } from './doi.js';
  * @returns {string}
  */
 function stripJats(s) {
-  return s
-    .replace(/<[^>]+>/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
+  return (
+    s
+      // Section headings ("Abstract", "Zusammenfassung") are labels, not prose.
+      .replace(/<jats:title[^>]*>[\s\S]*?<\/jats:title>/gi, ' ')
+      // Inline markup wraps words: drop it without inserting a space, or a
+      // trailing full stop ends up detached ("things .").
+      .replace(/<\/?jats:(?:italic|bold|sup|sub|sc|underline|monospace)[^>]*>/gi, '')
+      .replace(/<[^>]+>/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim()
+  );
+}
+
+/**
+ * The licence the form can actually use: the version-of-record entry when
+ * Crossref marks one, else the first — but only Creative Commons. Publishers
+ * also list their text-and-data-mining terms here, which are not a content
+ * licence and must never land in the licence field. Normalised to the
+ * trailing-slash https form the form's licence options use as ids.
+ * @param {any[] | undefined} entries
+ * @returns {string | undefined}
+ */
+function creativeCommonsLicense(entries) {
+  if (!Array.isArray(entries) || entries.length === 0) return undefined;
+  const pick = entries.find((l) => l?.['content-version'] === 'vor') ?? entries[0];
+  const url = typeof pick?.URL === 'string' ? pick.URL.trim() : '';
+  const m = url.match(
+    /^https?:\/\/creativecommons\.org\/(licenses|publicdomain)\/([a-z-]+)\/(\d+\.\d+)\/?$/i
+  );
+  if (!m) return undefined;
+  return `https://creativecommons.org/${m[1]}/${m[2].toLowerCase()}/${m[3]}/`;
 }
 
 /**
@@ -98,6 +125,26 @@ export function crossrefWorkToPrefill(work) {
   if (typeof work.abstract === 'string' && work.abstract.trim()) {
     const abstract = stripJats(work.abstract);
     if (abstract) prefill.abstract = abstract;
+  }
+
+  // The publisher's landing page, not `URL` (which is only the doi.org
+  // resolver and already covered by the DOI itself).
+  const landing = work.resource?.primary?.URL;
+  if (typeof landing === 'string' && /^https?:\/\//.test(landing)) prefill.url = landing;
+
+  const license = creativeCommonsLicense(work.license);
+  if (license) prefill.license = license;
+
+  // Crossref `link` entries are full-text locations; most publishers label
+  // the PDF only by its path, so accept either the content-type or a /pdf/
+  // path segment.
+  if (Array.isArray(work.link)) {
+    const pdf = work.link.find(
+      (/** @type {any} */ l) =>
+        typeof l?.URL === 'string' &&
+        (l['content-type'] === 'application/pdf' || /\/pdf\//i.test(l.URL))
+    );
+    if (pdf) prefill.file = { url: pdf.URL, mimeType: 'application/pdf' };
   }
 
   return prefill;

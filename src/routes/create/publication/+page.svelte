@@ -116,6 +116,8 @@
         abstract,
         keywords,
         inLanguage,
+        url,
+        license,
         fileUrl,
         hasUploads: uploadedFiles.length > 0
       },
@@ -129,6 +131,8 @@
     if (patch.abstract !== undefined) abstract = patch.abstract;
     if (patch.keywords !== undefined) keywords = patch.keywords;
     if (patch.inLanguage !== undefined) inLanguage = patch.inLanguage;
+    if (patch.url !== undefined) url = patch.url;
+    if (patch.license !== undefined) license = patch.license;
     if (patch.file !== undefined) {
       fileUrl = patch.file.url;
       fileMeta = patch.file;

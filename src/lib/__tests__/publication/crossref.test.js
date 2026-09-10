@@ -56,6 +56,14 @@ describe('crossrefWorkToPrefill', () => {
     });
   });
 
+  it('drops the JATS "Abstract" heading block instead of flattening it into the text', () => {
+    const work = {
+      abstract:
+        '<jats:title>Abstract</jats:title>\n<jats:p>This article analyses <jats:italic>things</jats:italic>.</jats:p>'
+    };
+    expect(crossrefWorkToPrefill(work).abstract).toBe('This article analyses things.');
+  });
+
   it('emits a year-only date when Crossref has no month/day', () => {
     const p = crossrefWorkToPrefill({ issued: { 'date-parts': [[2019]] } });
     expect(p.datePublished).toBe('2019');
@@ -116,5 +124,56 @@ describe('fetchDoiPrefill', () => {
     for (const fetchFn of cases) {
       expect(await fetchDoiPrefill('10.1000/xyz123', /** @type {any} */ (fetchFn))).toEqual({});
     }
+  });
+});
+
+describe('crossrefWorkToPrefill — landing page, licence, PDF', () => {
+  const RICH = {
+    ...WORK,
+    URL: 'https://doi.org/10.1000/xyz123',
+    resource: { primary: { URL: 'https://link.springer.com/10.1000/xyz123' } },
+    license: [
+      {
+        'content-version': 'tdm',
+        URL: 'https://www.springernature.com/gp/researchers/text-and-data-mining'
+      },
+      { 'content-version': 'vor', URL: 'https://creativecommons.org/licenses/by/4.0' }
+    ],
+    link: [
+      {
+        URL: 'https://link.springer.com/content/pdf/10.1000/xyz123',
+        'content-type': 'unspecified'
+      },
+      { URL: 'https://link.springer.com/article/10.1000/xyz123', 'content-type': 'text/html' }
+    ]
+  };
+
+  it('uses the publisher landing page as the article URL, not the doi.org resolver', () => {
+    expect(crossrefWorkToPrefill(RICH).url).toBe('https://link.springer.com/10.1000/xyz123');
+    expect(crossrefWorkToPrefill({ ...RICH, resource: undefined }).url).toBeUndefined();
+  });
+
+  it('takes the version-of-record licence, normalised to the trailing-slash id the form uses', () => {
+    expect(crossrefWorkToPrefill(RICH).license).toBe(
+      'https://creativecommons.org/licenses/by/4.0/'
+    );
+  });
+
+  it('falls back to the first licence when none is marked vor, but never to a non-CC one', () => {
+    const cc = [{ 'content-version': 'am', URL: 'http://creativecommons.org/licenses/by-sa/4.0/' }];
+    expect(crossrefWorkToPrefill({ ...RICH, license: cc }).license).toBe(
+      'https://creativecommons.org/licenses/by-sa/4.0/'
+    );
+    const tdmOnly = [{ 'content-version': 'tdm', URL: 'http://www.springer.com/tdm' }];
+    expect(crossrefWorkToPrefill({ ...RICH, license: tdmOnly }).license).toBeUndefined();
+  });
+
+  it('picks the PDF link as the article file and ignores HTML links', () => {
+    expect(crossrefWorkToPrefill(RICH).file).toEqual({
+      url: 'https://link.springer.com/content/pdf/10.1000/xyz123',
+      mimeType: 'application/pdf'
+    });
+    const htmlOnly = [{ URL: 'https://x/article', 'content-type': 'text/html' }];
+    expect(crossrefWorkToPrefill({ ...RICH, link: htmlOnly }).file).toBeUndefined();
   });
 });
