@@ -38,23 +38,24 @@
   // Report to the root layout that we have our own bottom UI (DM composer)
   // only when a thread is actually open. On the list view, the bottom nav
   // should remain visible so users can navigate away on mobile.
-  const setPageHasOwnBottomUI =
-    /** @type {((g: (() => boolean) | undefined) => void) | undefined} */ (
-      getContext('setPageHasOwnBottomUI')
-    );
-  setPageHasOwnBottomUI?.(() => selectedConversationId !== null);
-  onDestroy(() => setPageHasOwnBottomUI?.(undefined));
+  const setPageHasOwnBottomUI = /** @type {((g: () => boolean) => () => void) | undefined} */ (
+    getContext('setPageHasOwnBottomUI')
+  );
+  // The claim returns an owner-scoped release (owned-slot.svelte.js) — the
+  // session-epoch remount tears this instance down after its successor
+  // registered, so a bare unset would clobber the new page's registration.
+  const releaseOwnBottomUI = setPageHasOwnBottomUI?.(() => selectedConversationId !== null);
+  onDestroy(() => releaseOwnBottomUI?.());
 
   // We always have our own primary create action (the "Neu" button in
   // ConversationList, plus the in-thread composer). Suppress the global FAB
   // so users aren't presented with a generic "create anything" menu when the
   // contextual action is "start a new conversation".
-  const setPageHasOwnCreateAction =
-    /** @type {((g: (() => boolean) | undefined) => void) | undefined} */ (
-      getContext('setPageHasOwnCreateAction')
-    );
-  setPageHasOwnCreateAction?.(() => true);
-  onDestroy(() => setPageHasOwnCreateAction?.(undefined));
+  const setPageHasOwnCreateAction = /** @type {((g: () => boolean) => () => void) | undefined} */ (
+    getContext('setPageHasOwnCreateAction')
+  );
+  const releaseOwnCreateAction = setPageHasOwnCreateAction?.(() => true);
+  onDestroy(() => releaseOwnCreateAction?.());
 
   /**
    * @param {string} id

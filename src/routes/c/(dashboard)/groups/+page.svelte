@@ -43,20 +43,21 @@
 
   // Report our bottom composer to the root layout (same pattern as
   // /c/messages): once a chat is open, the global FAB/Termi/tab bar yield.
-  const setPageHasOwnBottomUI =
-    /** @type {((g: (() => boolean) | undefined) => void) | undefined} */ (
-      getContext('setPageHasOwnBottomUI')
-    );
-  setPageHasOwnBottomUI?.(() => mobileChat);
-  onDestroy(() => setPageHasOwnBottomUI?.(undefined));
+  const setPageHasOwnBottomUI = /** @type {((g: () => boolean) => () => void) | undefined} */ (
+    getContext('setPageHasOwnBottomUI')
+  );
+  // The claim returns an owner-scoped release (owned-slot.svelte.js) — the
+  // session-epoch remount tears this instance down after its successor
+  // registered, so a bare unset would clobber the new page's registration.
+  const releaseOwnBottomUI = setPageHasOwnBottomUI?.(() => mobileChat);
+  onDestroy(() => releaseOwnBottomUI?.());
 
   // The rail has its own create form — suppress the generic global FAB.
-  const setPageHasOwnCreateAction =
-    /** @type {((g: (() => boolean) | undefined) => void) | undefined} */ (
-      getContext('setPageHasOwnCreateAction')
-    );
-  setPageHasOwnCreateAction?.(() => true);
-  onDestroy(() => setPageHasOwnCreateAction?.(undefined));
+  const setPageHasOwnCreateAction = /** @type {((g: () => boolean) => () => void) | undefined} */ (
+    getContext('setPageHasOwnCreateAction')
+  );
+  const releaseOwnCreateAction = setPageHasOwnCreateAction?.(() => true);
+  onDestroy(() => releaseOwnCreateAction?.());
 
   const getProfiles = useProfileMap(() => {
     // eslint-disable-next-line svelte/prefer-svelte-reactivity -- transient dedupe inside a getter

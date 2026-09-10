@@ -287,10 +287,13 @@
   // Expose ContentNavSidebar's data so the root layout can mount the sidebar
   // in the chrome row. Register the getter once; it closes over reactive
   // reads (selectedContentType, communityProfile, etc.) so root's
-  // $derived(getContentNavData?.()) re-renders when any of them change.
-  /** @type {((getter: (() => ContentNavData) | undefined) => void) | undefined} */
+  // $derived(contentNavSlot.value?.()) re-renders when any of them change.
+  // The claim returns an owner-scoped release (owned-slot.svelte.js): on the
+  // account-switch remount this instance is torn down AFTER its successor
+  // registered, so an unconditional unset would remove the new sidebar.
+  /** @type {((getter: () => ContentNavData) => () => void) | undefined} */
   const setContentNavData = getContext('setContentNavData');
-  setContentNavData?.(() => ({
+  const releaseContentNavData = setContentNavData?.(() => ({
     selectedContentType,
     onContentTypeSelect: handleContentTypeSelect,
     communitySelected: true,
@@ -303,7 +306,7 @@
     isMember: zoneMember,
     isRootAdmin: zoneRootAdmin
   }));
-  $effect(() => () => setContentNavData?.(undefined));
+  $effect(() => releaseContentNavData);
 
   // Update parent layout's mobile header with community info
   const setMobileHeader =
