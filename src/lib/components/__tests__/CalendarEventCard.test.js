@@ -108,6 +108,22 @@ describe('CalendarEventCard', () => {
       expect(container.textContent).toContain('Test Conference Talk');
     });
 
+    it('uses an adaptive banner frame on narrow screens and keeps the square thumb on lg', () => {
+      const { container } = render(CalendarEventCard, {
+        props: { event: mockTimeEvent }
+      });
+
+      const frame = /** @type {HTMLElement} */ (
+        container.querySelector('[data-testid="event-cover-frame"]')
+      );
+      expect(frame).toBeTruthy();
+      expect(frame.className).toMatch(/aspect-video/);
+      expect(frame.className).not.toMatch(/aspect-\[5\/2\]/);
+      // The desktop thumbnail is a fixed square; it must beat the inline
+      // adaptive ratio, so the lg variant is marked important.
+      expect(frame.className).toMatch(/lg:aspect-square!/);
+    });
+
     it('renders a markdown summary as stripped plain text', () => {
       const { container } = render(CalendarEventCard, {
         props: {

@@ -20,6 +20,7 @@
   import ImageWithFallback from '../shared/ImageWithFallback.svelte';
   import ImageLicenseOverlay from '../shared/ImageLicenseOverlay.svelte';
   import { useLicenseStatus } from '$lib/stores/image-license.svelte.js';
+  import { useAdaptiveAspect } from '$lib/helpers/adaptive-aspect.svelte.js';
   import { getSha256FromURL } from 'applesauce-common/helpers';
   import { stripMarkdown } from '$lib/helpers/markdown.js';
   import ProfileAvatar from '../shared/ProfileAvatar.svelte';
@@ -58,6 +59,10 @@
   });
   const getImageStatus = useLicenseStatus(() => imageHash);
   const imageStatus = $derived(getImageStatus());
+
+  // Narrow-screen banner follows the image (square to 16:9) instead of
+  // cropping it to 5:2; the lg thumbnail stays a fixed square (see markup).
+  const cover = useAdaptiveAspect();
 
   // Author display name
   const authorName = $derived(
@@ -250,13 +255,20 @@
       <!-- Event Image (full mode only) -->
       {#if event.image && !compact}
         <div class="w-full lg:w-auto lg:flex-shrink-0">
-          <div class="relative aspect-[5/2] w-full lg:aspect-square lg:w-20">
+          <!-- The adaptive ratio is an inline style, so the desktop square
+               thumbnail must be marked important to win over it. -->
+          <div
+            class="relative aspect-video w-full lg:aspect-square! lg:w-20"
+            style:aspect-ratio={cover.ratio ?? undefined}
+            data-testid="event-cover-frame"
+          >
             <ImageWithFallback
               src={event.image}
               alt={event.title}
               fallbackType="event"
               size="card"
               class="h-full w-full max-w-full rounded-lg object-cover"
+              onload={cover.onload}
             />
             <ImageLicenseOverlay
               licenseEvent={imageStatus.event}

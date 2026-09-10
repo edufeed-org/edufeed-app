@@ -109,6 +109,79 @@ describe('ResourceCover — image branch', () => {
   });
 });
 
+/**
+ * Simulate the browser reporting an image's natural size, then firing load.
+ * jsdom never decodes images, so naturalWidth/Height are defined by hand.
+ *
+ * @param {HTMLImageElement} img
+ * @param {number} width
+ * @param {number} height
+ */
+async function loadImageAt(img, width, height) {
+  Object.defineProperty(img, 'naturalWidth', { value: width, configurable: true });
+  Object.defineProperty(img, 'naturalHeight', { value: height, configurable: true });
+  await fireEvent.load(img);
+}
+
+describe('ResourceCover — adaptive frames follow the artwork', () => {
+  /** @param {'adaptive' | 'adaptive-card'} aspect */
+  function renderAdaptive(aspect) {
+    const { container } = render(ResourceCover, {
+      props: { resource: buildResource(), size: 'full', aspect }
+    });
+    const wrapper = /** @type {HTMLElement} */ (
+      container.querySelector('[data-testid="resource-cover-image"]')
+    );
+    const img = /** @type {HTMLImageElement} */ (container.querySelector('img'));
+    return { wrapper, img };
+  }
+
+  it('adaptive-card renders a wide frame before the image reports its size', () => {
+    const { wrapper } = renderAdaptive('adaptive-card');
+    expect(wrapper.className).toMatch(/aspect-video/);
+    expect(wrapper.style.aspectRatio).toBe('');
+  });
+
+  it('adaptive-card sizes the frame to a square image instead of cropping it', async () => {
+    // The issue case: a 1:1 illustration lost the top and bottom in the 2:1 card frame.
+    const { wrapper, img } = renderAdaptive('adaptive-card');
+    await loadImageAt(img, 1024, 1024);
+    expect(Number(wrapper.style.aspectRatio)).toBeCloseTo(1);
+  });
+
+  it('adaptive-card never grows taller than square for portrait images', async () => {
+    const { wrapper, img } = renderAdaptive('adaptive-card');
+    await loadImageAt(img, 600, 800);
+    expect(Number(wrapper.style.aspectRatio)).toBeCloseTo(1);
+  });
+
+  it('adaptive-card follows landscape images up to 16:9', async () => {
+    const { wrapper, img } = renderAdaptive('adaptive-card');
+    await loadImageAt(img, 1920, 1080);
+    expect(Number(wrapper.style.aspectRatio)).toBeCloseTo(16 / 9);
+  });
+
+  it('adaptive (detail page) keeps the 3:4 portrait floor', async () => {
+    const { wrapper, img } = renderAdaptive('adaptive');
+    expect(wrapper.className).toMatch(/aspect-\[3\/4\]/);
+    await loadImageAt(img, 600, 800);
+    expect(Number(wrapper.style.aspectRatio)).toBeCloseTo(3 / 4);
+  });
+
+  it('fixed aspects ignore the natural size', async () => {
+    const { container } = render(ResourceCover, {
+      props: { resource: buildResource(), size: 'full', aspect: 'wide' }
+    });
+    const wrapper = /** @type {HTMLElement} */ (
+      container.querySelector('[data-testid="resource-cover-image"]')
+    );
+    const img = /** @type {HTMLImageElement} */ (container.querySelector('img'));
+    await loadImageAt(img, 1024, 1024);
+    expect(wrapper.style.aspectRatio).toBe('');
+    expect(wrapper.className).toMatch(/aspect-\[2\/1\]/);
+  });
+});
+
 describe('ResourceCover — unloadable cover image (issue #51)', () => {
   beforeEach(() => {
     licenseState.current = { event: null, status: 'loading' };

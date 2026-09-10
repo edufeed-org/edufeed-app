@@ -139,6 +139,38 @@ describe('ImageWithFallback', () => {
       expect(onload).toHaveBeenCalledTimes(1);
     });
 
+    it('forwards onload when the image was already complete at mount (missed load event)', async () => {
+      // A cached image can finish before the listener is attached; the caller
+      // (adaptive cover frames) still needs the natural size.
+      const proto = HTMLImageElement.prototype;
+      const complete = Object.getOwnPropertyDescriptor(proto, 'complete');
+      const naturalWidth = Object.getOwnPropertyDescriptor(proto, 'naturalWidth');
+      Object.defineProperty(proto, 'complete', { configurable: true, get: () => true });
+      Object.defineProperty(proto, 'naturalWidth', { configurable: true, get: () => 320 });
+      try {
+        /** @type {EventTarget[]} */
+        const targets = [];
+        const onload = vi.fn((/** @type {Event} */ e) => {
+          if (e.currentTarget) targets.push(e.currentTarget);
+        });
+        const { container } = render(ImageWithFallback, {
+          props: { src: SRC, alt: 'pic', onload }
+        });
+        await Promise.resolve();
+        expect(onload).toHaveBeenCalledTimes(1);
+        expect(targets).toEqual([getImg(container)]);
+        expect(getImg(container).className).not.toContain('bg-base-200');
+        // A late real load event must not notify the caller a second time.
+        await fireEvent.load(getImg(container));
+        expect(onload).toHaveBeenCalledTimes(1);
+      } finally {
+        if (complete) Object.defineProperty(proto, 'complete', complete);
+        else delete (/** @type {any} */ (proto).complete);
+        if (naturalWidth) Object.defineProperty(proto, 'naturalWidth', naturalWidth);
+        else delete (/** @type {any} */ (proto).naturalWidth);
+      }
+    });
+
     it('re-applies the skeleton tone when src changes', async () => {
       const { container, rerender } = render(ImageWithFallback, {
         props: { src: SRC, alt: 'pic' }
