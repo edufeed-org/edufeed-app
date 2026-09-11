@@ -121,4 +121,34 @@ describe('ImageLicenseOverlay — AI content label', () => {
     const { getByTestId } = render(ImageLicenseOverlay, { status: 'found', licenseEvent: ev });
     expect(getByTestId('ai-label')).toBeTruthy();
   });
+
+  it('surfaces tool, manual edits and AI-training permission in the badge tooltip', () => {
+    const { getByTestId } = render(ImageLicenseOverlay, {
+      status: 'found',
+      licenseEvent: licenseEvent([
+        ['ai', 'generated'],
+        ['ai-edited', 'true'],
+        [
+          'ai-tool',
+          'OpenAI ChatGPT',
+          'http://w3id.org/edu-sharing/vocabs/aiTools/4dd60dfa-9f8a-4cc9-b733-0125448f77a3'
+        ],
+        ['ai-training', 'disallowed']
+      ])
+    });
+    const title = getByTestId('license-badge').getAttribute('title') ?? '';
+    expect(title).toContain('AI generated');
+    expect(title).toContain('manually edited');
+    expect(title).toContain('OpenAI ChatGPT');
+    expect(title).toContain('AI training not permitted');
+  });
+
+  it('mentions an explicit AI-training permission even for human-made content', () => {
+    const { getByTestId } = render(ImageLicenseOverlay, {
+      status: 'found',
+      licenseEvent: licenseEvent([['ai-training', 'allowed']])
+    });
+    const title = getByTestId('license-badge').getAttribute('title') ?? '';
+    expect(title).toContain('AI training allowed');
+  });
 });

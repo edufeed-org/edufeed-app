@@ -5,7 +5,14 @@
   import { publishLicenseAttestation } from '$lib/helpers/image-license.js';
   import { getLicenseOptions } from '$lib/helpers/educational/licenseOptions.js';
   import { formatLicenseUrl } from '$lib/helpers/educational/licenseLabel.js';
-  import { AI_LABELS, getAiLabel } from '$lib/helpers/ai-label.js';
+  import {
+    AI_LABELS,
+    AI_TOOLS,
+    getAiLabel,
+    getAiTool,
+    getAiEdited,
+    getAiTraining
+  } from '$lib/helpers/ai-label.js';
 
   let {
     open = $bindable(false),
@@ -80,6 +87,14 @@
   let modalDescription = $state('');
   // AI-content label ('' = none, else one of AI_LABELS) → `ai` tag on the 1063.
   let modalAi = $state('');
+  // twillo-aligned provenance & usage ("Informationen zur KI-Herkunft & -Nutzung"):
+  // tool choice ('' = unknown, an AI_TOOLS concept id, or 'other' + free text),
+  // manually edited after generation, and the AI-training permission (twillo
+  // defaults it to allowed — "grundsätzlich der Fall, sofern nicht ausgeschlossen").
+  let modalAiToolChoice = $state('');
+  let modalAiToolOther = $state('');
+  let modalAiEdited = $state(false);
+  let modalAiTraining = $state(true);
   let modalSaving = $state(false);
   let modalError = $state('');
   let modalDisclosureChecked = $state(false);
@@ -111,6 +126,9 @@
   );
   const existingDescription = $derived(existingLicense?.content || '');
   const existingAi = $derived(getAiLabel(existingLicense));
+  const existingAiTool = $derived(existingAi ? getAiTool(existingLicense) : null);
+  const existingAiEdited = $derived(!!existingAi && getAiEdited(existingLicense));
+  const existingAiTraining = $derived(getAiTraining(existingLicense));
   const existingLicenseLabel = $derived(
     existingLicenseUrl ? formatLicenseUrl(existingLicenseUrl) : null
   );
@@ -118,6 +136,21 @@
   /** @param {import('$lib/helpers/ai-label.js').AiLabel} label */
   const aiLabelText = (label) =>
     label === 'generated' ? m.license_modal_ai_generated() : m.license_modal_ai_modified();
+
+  /**
+   * Resolve the picker state to the `aiTool` input of buildLicenseTemplate:
+   * a vocabulary concept (label + id), a free-text label, or undefined.
+   * @returns {{ label: string, id?: string } | undefined}
+   */
+  function selectedAiTool() {
+    if (!modalAi) return undefined;
+    if (modalAiToolChoice === 'other') {
+      const label = modalAiToolOther.trim();
+      return label ? { label } : undefined;
+    }
+    const tool = AI_TOOLS.find((t) => t.id === modalAiToolChoice);
+    return tool ? { label: tool.label, id: tool.id } : undefined;
+  }
 
   // Reset modal fields each time it opens. The effect re-runs on every change
   // of `open` but the `if (open)` guard ensures we only reset on the rising edge.
@@ -131,6 +164,10 @@
       modalSource = initialSource || '';
       modalDescription = '';
       modalAi = '';
+      modalAiToolChoice = '';
+      modalAiToolOther = '';
+      modalAiEdited = false;
+      modalAiTraining = true;
       modalError = '';
       modalDisclosureChecked = false;
       view = existingLicense ? 'existing' : 'form';
@@ -222,6 +259,9 @@
           creatorPubkey: modalSelfCreator ? effectiveSigner.pubkey : undefined,
           description: modalDescription || undefined,
           ai: modalAi || undefined,
+          aiTool: selectedAiTool(),
+          aiEdited: modalAi === 'generated' && modalAiEdited,
+          aiTraining: modalAiTraining ? 'allowed' : 'disallowed',
           ...(attestExtras ?? {})
         },
         effectiveSigner
@@ -316,7 +356,27 @@
             {#if existingAi}
               <div class="flex gap-2" data-testid="license-modal-existing-ai">
                 <dt class="w-24 font-medium">{m.license_modal_ai_label()}</dt>
-                <dd>{aiLabelText(existingAi)}</dd>
+                <dd>
+                  {aiLabelText(existingAi)}{existingAiEdited
+                    ? ` · ${m.license_modal_ai_edited_label()}`
+                    : ''}
+                </dd>
+              </div>
+            {/if}
+            {#if existingAiTool}
+              <div class="flex gap-2" data-testid="license-modal-existing-ai-tool">
+                <dt class="w-24 font-medium">{m.license_modal_ai_tool_label()}</dt>
+                <dd>{existingAiTool.label}</dd>
+              </div>
+            {/if}
+            {#if existingAiTraining}
+              <div class="flex gap-2" data-testid="license-modal-existing-ai-training">
+                <dt class="w-24 font-medium">{m.license_modal_ai_training_row_label()}</dt>
+                <dd>
+                  {existingAiTraining === 'allowed'
+                    ? m.license_modal_ai_training_allowed()
+                    : m.license_modal_ai_training_disallowed()}
+                </dd>
               </div>
             {/if}
             <div class="flex gap-2 text-xs opacity-60">
@@ -383,24 +443,6 @@
           </select>
         </div>
 
-        <!-- AI involvement (EU AI-content labelling: generated vs. modified) -->
-        <div class="mb-3">
-          <label class="mb-1 block text-sm font-medium" for="license-modal-ai">
-            {m.license_modal_ai_label()}
-          </label>
-          <select
-            id="license-modal-ai"
-            class="select-bordered select w-full"
-            data-testid="license-modal-ai"
-            bind:value={modalAi}
-          >
-            <option value="">{m.license_modal_ai_none()}</option>
-            {#each AI_LABELS as label (label)}
-              <option value={label}>{aiLabelText(label)}</option>
-            {/each}
-          </select>
-        </div>
-
         <div class="mb-3">
           <label class="flex cursor-pointer items-start gap-2 text-sm">
             <input
@@ -452,6 +494,92 @@
             bind:value={modalDescription}
           ></textarea>
         </div>
+
+        <!-- AI provenance & usage — same four facts twillo asks for in its
+             license dialog (ccm:commonlicense_ai_allow_usage / _generated /
+             _tool / _manually_modified), so both platforms label alike. -->
+        <fieldset
+          class="mt-4 mb-3 rounded-lg border border-base-300 bg-base-200/50 p-3"
+          data-testid="license-modal-ai-section"
+        >
+          <legend class="px-1 text-sm font-medium">{m.license_modal_ai_section_title()}</legend>
+
+          <label class="flex cursor-pointer items-start gap-2 text-sm">
+            <input
+              type="checkbox"
+              class="checkbox mt-0.5 checkbox-sm"
+              data-testid="license-modal-ai-training"
+              bind:checked={modalAiTraining}
+            />
+            <span>
+              <span class="font-medium">{m.license_modal_ai_training_label()}</span>
+              <span class="block text-xs opacity-70">{m.license_modal_ai_training_hint()}</span>
+            </span>
+          </label>
+
+          <!-- AI involvement (EU AI-content labelling: generated vs. modified) -->
+          <div class="mt-3">
+            <label class="mb-1 block text-sm font-medium" for="license-modal-ai">
+              {m.license_modal_ai_label()}
+            </label>
+            <select
+              id="license-modal-ai"
+              class="select-bordered select w-full"
+              data-testid="license-modal-ai"
+              bind:value={modalAi}
+            >
+              <option value="">{m.license_modal_ai_none()}</option>
+              {#each AI_LABELS as label (label)}
+                <option value={label}>{aiLabelText(label)}</option>
+              {/each}
+            </select>
+          </div>
+
+          {#if modalAi}
+            <div class="mt-3">
+              <label class="mb-1 block text-sm font-medium" for="license-modal-ai-tool">
+                {m.license_modal_ai_tool_label()}
+              </label>
+              <select
+                id="license-modal-ai-tool"
+                class="select-bordered select w-full"
+                data-testid="license-modal-ai-tool"
+                bind:value={modalAiToolChoice}
+              >
+                <option value="">{m.license_modal_ai_tool_unknown()}</option>
+                {#each AI_TOOLS as tool (tool.id)}
+                  <option value={tool.id}>{tool.label}</option>
+                {/each}
+                <option value="other">{m.license_modal_ai_tool_other()}</option>
+              </select>
+              {#if modalAiToolChoice === 'other'}
+                <input
+                  type="text"
+                  class="input-bordered input mt-2 w-full"
+                  data-testid="license-modal-ai-tool-other"
+                  aria-label={m.license_modal_ai_tool_label()}
+                  placeholder={m.license_modal_ai_tool_other_placeholder()}
+                  bind:value={modalAiToolOther}
+                />
+              {/if}
+            </div>
+          {/if}
+
+          {#if modalAi === 'generated'}
+            <label class="mt-3 flex cursor-pointer items-start gap-2 text-sm">
+              <input
+                type="checkbox"
+                class="checkbox mt-0.5 checkbox-sm"
+                data-testid="license-modal-ai-edited"
+                bind:checked={modalAiEdited}
+              />
+              <span>
+                <span class="font-medium">{m.license_modal_ai_edited_label()}</span>
+                <span class="block text-xs opacity-70">{m.license_modal_ai_edited_hint()}</span>
+              </span>
+            </label>
+          {/if}
+        </fieldset>
 
         {#if extraOptions}
           <div class="mt-4 mb-3 rounded-lg border border-base-300 bg-base-200/50 p-3">

@@ -22,7 +22,7 @@
 
 <script>
   import { formatLicenseUrl } from '$lib/helpers/educational/licenseLabel.js';
-  import { getAiLabel } from '$lib/helpers/ai-label.js';
+  import { getAiLabel, getAiTool, getAiEdited, getAiTraining } from '$lib/helpers/ai-label.js';
   import { AiLabelIcon } from '$lib/components/icons';
   import * as m from '$lib/paraglide/messages';
 
@@ -68,10 +68,18 @@
         : null
   );
 
+  // twillo-aligned provenance/usage details — tooltip only, the badge stays compact.
+  const aiTool = $derived(getAiTool(licenseEvent));
+  const aiEdited = $derived(getAiEdited(licenseEvent));
+  const aiTraining = $derived(getAiTraining(licenseEvent));
+
   const foundTitle = $derived.by(() => {
     if (!licenseEvent) return '';
     const parts = [];
-    if (aiText) parts.push(aiText);
+    if (aiText) parts.push(aiEdited ? `${aiText} (${m.image_ai_label_edited()})` : aiText);
+    if (aiText && aiTool) parts.push(`${m.image_ai_tool_label()}: ${aiTool.label}`);
+    if (aiTraining === 'allowed') parts.push(m.image_ai_training_allowed());
+    if (aiTraining === 'disallowed') parts.push(m.image_ai_training_disallowed());
     if (credit) parts.push(`Credit: ${credit}`);
     if (source) parts.push(`Source: ${source}`);
     if (creatorP) parts.push(`Creator pubkey: ${creatorP}`);
