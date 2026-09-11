@@ -4,7 +4,10 @@
     - 'found'   → known-license badge (CC label + credit), same look as the
                   legacy LicenseBadge. Attestations carrying an `ai` tag get
                   the EU "AI" mark + "AI generated"/"AI modified" in front, so
-                  AI content is labelled wherever the image is shown.
+                  AI content is labelled wherever the image is shown. Hover,
+                  tap or Enter opens a LicenseInfoCard popover with the full
+                  attestation (license link, credit, title, description,
+                  source, creator + attester as profile names).
     - 'missing' → neutral, non-alarming caution. 'pill' shows an "i" icon +
                   "No license info"; 'dot' shows the icon only. Both reveal a
                   keyboard-accessible popover (hover + focus, Esc to close) with
@@ -24,6 +27,8 @@
   import { formatLicenseUrl } from '$lib/helpers/educational/licenseLabel.js';
   import { getAiLabel } from '$lib/helpers/ai-label.js';
   import { AiLabelIcon } from '$lib/components/icons';
+  import HoverCard from './HoverCard.svelte';
+  import LicenseInfoCard from './LicenseInfoCard.svelte';
   import * as m from '$lib/paraglide/messages';
 
   const tooltipId = `license-caution-tip-${popoverCounter++}`;
@@ -52,12 +57,6 @@
   const credit = $derived(
     licenseEvent?.tags.find(/** @param {string[]} t */ (t) => t[0] === 'credit')?.[1] ?? null
   );
-  const source = $derived(
-    licenseEvent?.tags.find(/** @param {string[]} t */ (t) => t[0] === 'source')?.[1] ?? null
-  );
-  const creatorP = $derived(
-    licenseEvent?.tags.find(/** @param {string[]} t */ (t) => t[0] === 'p')?.[1] ?? null
-  );
   const label = $derived(licenseUrl ? formatLicenseUrl(licenseUrl) : null);
   const aiLabel = $derived(getAiLabel(licenseEvent));
   const aiText = $derived(
@@ -68,42 +67,44 @@
         : null
   );
 
-  const foundTitle = $derived.by(() => {
-    if (!licenseEvent) return '';
-    const parts = [];
-    if (aiText) parts.push(aiText);
-    if (credit) parts.push(`Credit: ${credit}`);
-    if (source) parts.push(`Source: ${source}`);
-    if (creatorP) parts.push(`Creator pubkey: ${creatorP}`);
-    parts.push(`Attested by: ${licenseEvent.pubkey}`);
-    return parts.join('\n');
-  });
-
   /** @param {KeyboardEvent} e */
   function onKeydown(e) {
     if (e.key === 'Escape') open = false;
   }
 </script>
 
-{#if status === 'found' && (label || aiText)}
-  <span
-    class="badge inline-flex max-w-full items-center gap-1 badge-ghost text-xs {position}"
-    title={foundTitle}
-    data-testid="license-badge"
+{#if status === 'found' && licenseEvent && (label || aiText)}
+  <!-- The badge itself is the hover-card trigger; the info card is portaled
+       and fixed-positioned so cover containers with overflow-hidden don't
+       clip it. -->
+  <HoverCard
+    fixed
+    stopPropagation
+    position="top"
+    enterDelay={100}
+    class="badge inline-flex max-w-full cursor-default items-center gap-1 badge-ghost text-xs {position}"
+    triggerClass="contents"
   >
-    {#if aiText}
-      <span class="inline-flex shrink-0 items-center gap-1 font-medium" data-testid="ai-label">
-        <AiLabelIcon class_="h-3.5 w-3.5" title="" />
-        {aiText}
+    {#snippet trigger()}
+      <span class="inline-flex max-w-full min-w-0 items-center gap-1" data-testid="license-badge">
+        {#if aiText}
+          <span class="inline-flex shrink-0 items-center gap-1 font-medium" data-testid="ai-label">
+            <AiLabelIcon class_="h-3.5 w-3.5" title="" />
+            {aiText}
+          </span>
+        {/if}
+        {#if label}
+          <span class="shrink-0 font-medium">{aiText ? '· ' : ''}{label}</span>
+        {/if}
+        {#if credit}
+          <span class="min-w-0 truncate opacity-70">· {credit}</span>
+        {/if}
       </span>
-    {/if}
-    {#if label}
-      <span class="shrink-0 font-medium">{aiText ? '· ' : ''}{label}</span>
-    {/if}
-    {#if credit}
-      <span class="min-w-0 truncate opacity-70">· {credit}</span>
-    {/if}
-  </span>
+    {/snippet}
+    {#snippet content()}
+      <LicenseInfoCard {licenseEvent} />
+    {/snippet}
+  </HoverCard>
 {:else if status === 'missing'}
   <!-- Deliberately focusable so keyboard users can open the popover; role="note"
        keeps it out of the tab order's interactive semantics. -->
