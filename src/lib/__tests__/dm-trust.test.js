@@ -5,6 +5,7 @@ import {
   classifyDmConversations,
   excludeMutedAuthors,
   matchesMutedWord,
+  foldConfusables,
   excludeMuted
 } from '$lib/helpers/dm-trust.js';
 
@@ -185,6 +186,54 @@ describe('matchesMutedWord', () => {
   it('handles empty word set and missing content', () => {
     expect(matchesMutedWord('anything', new Set())).toBe(false);
     expect(matchesMutedWord(undefined, words)).toBe(false);
+  });
+
+  // The 2026-09-11 campaign spelled the brand with Unicode small capitals
+  // (U+1D00 A, U+1D0D M, U+1D1C U) to slip past the plain substring filter.
+  it('matches through small-capital homoglyphs (the real 2026-09-11 spam)', () => {
+    const spam =
+      '🔔 Claim window is open. Dᴀᴍᴜs Airdrop is open. https://damusmainnet.xyz/check/ Final';
+    expect(matchesMutedWord(spam, words)).toBe(true);
+  });
+
+  it('matches through fullwidth and mathematical-alphanumeric letters', () => {
+    expect(matchesMutedWord('Ｄａｍｕｓ Ａｉｒｄｒｏｐ', words)).toBe(true);
+    expect(matchesMutedWord('𝐃𝐚𝐦𝐮𝐬 𝐀𝐢𝐫𝐝𝐫𝐨𝐩 today', words)).toBe(true);
+    expect(matchesMutedWord('𝓓𝓪𝓶𝓾𝓼 𝓐𝓲𝓻𝓭𝓻𝓸𝓹', words)).toBe(true);
+  });
+
+  it('matches through Cyrillic/Greek lookalike letters', () => {
+    // Cyrillic а (U+0430), о (U+043E), р (U+0440), Greek ο (U+03BF)
+    expect(matchesMutedWord('Dаmus Airdrοp is live', words)).toBe(true);
+  });
+
+  it('ignores zero-width characters and soft hyphens inside the word', () => {
+    expect(matchesMutedWord('Da\u200Bmus\u00AD Air\u200Ddrop', words)).toBe(true);
+  });
+
+  it('folds the muted words themselves too', () => {
+    const fancy = new Set(['dᴀᴍᴜs airdrop']);
+    expect(matchesMutedWord('damus airdrop', fancy)).toBe(true);
+  });
+
+  it('does not over-match after folding', () => {
+    expect(matchesMutedWord('ᴅᴀᴍᴘ ᴀɪʀ ᴅʀᴏᴘs on the window', words)).toBe(false);
+  });
+});
+
+describe('foldConfusables', () => {
+  it('lowercases, NFKC-normalizes and maps small caps to ASCII', () => {
+    expect(foldConfusables('Dᴀᴍᴜs Ｆｉｎａｌ 𝐗')).toBe('damus final x');
+  });
+
+  it('strips zero-width and soft-hyphen characters', () => {
+    expect(foldConfusables('a\u200Bb\u200Cc\u200Dd\uFEFFe\u00ADf')).toBe('abcdef');
+  });
+
+  it('leaves ordinary text (including umlauts) alone apart from lowercasing', () => {
+    expect(foldConfusables('Willkommen auf edufeed.org, Größe 3€')).toBe(
+      'willkommen auf edufeed.org, größe 3€'
+    );
   });
 });
 
