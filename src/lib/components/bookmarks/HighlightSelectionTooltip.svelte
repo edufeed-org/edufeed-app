@@ -8,7 +8,11 @@
   import { publishEventOptimistic } from '$lib/services/publish-service.js';
   import { getPrimaryWriteRelay } from '$lib/services/relay-service.svelte.js';
   import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
-  import { extractContext, normalizeWhitespace } from '$lib/helpers/highlightOverlay.js';
+  import {
+    extractContext,
+    normalizeWhitespace,
+    getMatchableText
+  } from '$lib/helpers/highlightOverlay.js';
   import * as m from '$lib/paraglide/messages';
 
   /**
@@ -110,7 +114,7 @@
 
     try {
       const context = container
-        ? extractContext(container.textContent || '', selectedText)
+        ? extractContext(getMatchableText(container), selectedText)
         : undefined;
 
       let highlightFactory = HighlightFactory.create(selectedText, source);

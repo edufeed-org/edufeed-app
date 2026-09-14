@@ -4,7 +4,11 @@
   and unmatched highlights display. Used by ReaderView, ArticleView, WikiView.
 -->
 <script>
-  import { matchHighlights, injectHighlightMarks } from '$lib/helpers/highlightOverlay.js';
+  import {
+    matchHighlights,
+    injectHighlightMarks,
+    getMatchableText
+  } from '$lib/helpers/highlightOverlay.js';
   import HighlightItem from '$lib/components/bookmarks/HighlightItem.svelte';
   import HighlightSelectionTooltip from '$lib/components/bookmarks/HighlightSelectionTooltip.svelte';
   import * as m from '$lib/paraglide/messages';
@@ -63,7 +67,9 @@
     container.innerHTML = htmlContent;
     /* eslint-enable svelte/no-dom-manipulating */
 
-    const containerText = container.textContent || '';
+    // Not textContent: <br> and block boundaries must count as whitespace,
+    // or highlights spanning a line break never match (see getMatchableText).
+    const containerText = getMatchableText(container);
     if (highlights.length > 0 && containerText) {
       const { matched, unmatched } = matchHighlights(containerText, highlights);
       matchedHighlights = matched;

@@ -5,8 +5,10 @@ import {
   injectHighlightMarks,
   extractContext,
   buildNormToRawMap,
-  normalizeWhitespace
+  normalizeWhitespace,
+  getMatchableText
 } from '$lib/helpers/highlightOverlay.js';
+import { renderMarkdown } from '$lib/helpers/markdown.js';
 
 /**
  * Create a fake kind 9802 highlight event.
@@ -323,10 +325,8 @@ describe('injectHighlightMarks', () => {
     const container = document.createElement('div');
     container.innerHTML = '<p>First paragraph.</p><p>Second paragraph.</p>';
 
-    // container.textContent = "First paragraph.Second paragraph."
-    // normalized = "First paragraph.Second paragraph."
-    // "Second" starts at index 16 in the raw text
-    const containerText = container.textContent || '';
+    // Block boundaries count as whitespace in the matchable text
+    const containerText = getMatchableText(container);
     const normText = normalizeWhitespace(containerText);
     const start = normText.indexOf('Second');
     const end = start + 'Second'.length;
@@ -343,7 +343,7 @@ describe('injectHighlightMarks', () => {
     const container = document.createElement('div');
     container.innerHTML = '<p>The quick brown fox.</p><p>Jumped over the lazy dog.</p>';
 
-    const containerText = container.textContent || '';
+    const containerText = getMatchableText(container);
     const hl = makeHighlight('brown fox');
     const { matched } = matchHighlights(containerText, [hl]);
 
@@ -359,8 +359,8 @@ describe('injectHighlightMarks', () => {
     const container = document.createElement('div');
     container.innerHTML = '<p>Some   text   with   spaces.</p>';
 
-    // container.textContent has extra spaces, but matchHighlights normalizes
-    const containerText = container.textContent || '';
+    // The DOM text has extra spaces, but matchHighlights normalizes
+    const containerText = getMatchableText(container);
     const hl = makeHighlight('text with spaces');
     const { matched } = matchHighlights(containerText, [hl]);
 
@@ -371,6 +371,107 @@ describe('injectHighlightMarks', () => {
     expect(marks).toHaveLength(1);
     // The marked text should contain the original whitespace from the DOM
     expect(normalizeWhitespace(marks[0].textContent || '')).toBe('text with spaces');
+  });
+});
+
+describe('getMatchableText', () => {
+  it('turns <br> into a newline like window.getSelection().toString() does', () => {
+    const container = document.createElement('div');
+    container.innerHTML = '<p>funding had ended.<br>Publicly financed content</p>';
+    // textContent would give "ended.Publicly" — no whitespace at all
+    expect(container.textContent).toBe('funding had ended.Publicly financed content');
+    // (the surrounding <p> contributes a boundary newline on each side)
+    expect(getMatchableText(container).trim()).toBe(
+      'funding had ended.\nPublicly financed content'
+    );
+  });
+
+  it('separates adjacent block elements even when the HTML has no whitespace between them', () => {
+    const container = document.createElement('div');
+    container.innerHTML = '<p>First.</p><p>Second.</p><ul><li>one</li><li>two</li></ul>';
+    expect(normalizeWhitespace(getMatchableText(container))).toBe('First. Second. one two');
+  });
+
+  it('adds nothing for inline elements', () => {
+    const container = document.createElement('div');
+    container.innerHTML = '<p>Hello <strong>world</strong>, <a href="#">link</a>!</p>';
+    expect(normalizeWhitespace(getMatchableText(container))).toBe('Hello world, link!');
+  });
+
+  it('returns empty string for a missing container', () => {
+    expect(getMatchableText(null)).toBe('');
+  });
+});
+
+describe('highlights spanning a <br> soft line break (issue: display of highlights broken)', () => {
+  // The article renderer uses marked with `breaks: true`, so a single "\n" in the
+  // markdown becomes <br>. The browser selection string keeps a "\n" there, so the
+  // published highlight content contains one — but textContent drops <br> entirely.
+  const HIGHLIGHT_TEXT =
+    'and found that almost half of them could no longer be found once their funding had ended.\nPublicly financed content, locked into publicly financed silos, gone when the project money runs out.';
+
+  it('matches and marks a highlight whose text crosses a <br>', () => {
+    const container = document.createElement('div');
+    container.innerHTML =
+      '<p>The problem is not hypothetical. Back in 2009 they examined projects and found that almost half of them could no longer be found once their funding had ended.<br>Publicly financed content, locked into publicly financed silos, gone when the project money runs out. That is the record.</p>';
+
+    const hl = makeHighlight(HIGHLIGHT_TEXT);
+    const { matched, unmatched } = matchHighlights(getMatchableText(container), [hl]);
+    expect(unmatched).toHaveLength(0);
+    expect(matched).toHaveLength(1);
+
+    injectHighlightMarks(container, matched);
+    const marks = Array.from(container.querySelectorAll('mark.reader-highlight'));
+    // One mark per text node on each side of the <br>
+    expect(marks).toHaveLength(2);
+    expect(marks[0].textContent).toBe(
+      'and found that almost half of them could no longer be found once their funding had ended.'
+    );
+    expect(marks[1].textContent).toBe(
+      'Publicly financed content, locked into publicly financed silos, gone when the project money runs out.'
+    );
+    // Nothing outside the highlight got wrapped
+    expect(container.textContent).toBe(
+      'The problem is not hypothetical. Back in 2009 they examined projects and found that almost half of them could no longer be found once their funding had ended.Publicly financed content, locked into publicly financed silos, gone when the project money runs out. That is the record.'
+    );
+  });
+
+  it('end to end: real markdown rendering of the reported article passage', () => {
+    const markdown =
+      'The problem is not hypothetical. Back [in 2009, Haug and Wedekind examined publicly funded e-learning projects](https://example.org/paper.pdf) — roughly 300 million euros of funding volume — and found that almost half of them could no longer be found once their funding had ended.\nPublicly financed content, locked into publicly financed silos, gone when the project money runs out. That is the actual sustainability record of the platform approach.\nThanks to André Dietrich and Sebastian Zug for pointing me at it (check out their [liascript](https://liascript.github.io/) project, its awesome). \n\nThat first article was a sketch.';
+    const container = document.createElement('div');
+    container.innerHTML = renderMarkdown(markdown);
+    expect(container.querySelectorAll('br').length).toBeGreaterThan(0);
+
+    // Verbatim content of the reported highlight event (3fd0e4f8…)
+    const hl = makeHighlight(
+      'The problem is not hypothetical. Back in 2009, Haug and Wedekind examined publicly funded e-learning projects — roughly 300 million euros of funding volume — and found that almost half of them could no longer be found once their funding had ended.\nPublicly financed content, locked into publicly financed silos, gone when the project money runs out. That is the actual sustainability record of the platform approach.\nThanks to André Dietrich and Sebastian Zug for pointing me at it (check out their liascript project, its awesome).'
+    );
+
+    const text = getMatchableText(container);
+    const { matched, unmatched } = matchHighlights(text, [hl]);
+    expect(unmatched).toHaveLength(0);
+    expect(matched).toHaveLength(1);
+
+    injectHighlightMarks(container, matched);
+    const marks = Array.from(container.querySelectorAll('mark.reader-highlight'));
+    expect(marks.length).toBeGreaterThan(1);
+    const markedText = marks.map((m) => m.textContent).join(' ');
+    expect(normalizeWhitespace(markedText)).toBe(normalizeWhitespace(hl.content));
+    // The trailing paragraph stays unmarked
+    expect(
+      container.querySelector('mark')?.closest('p')?.nextElementSibling?.querySelector('mark')
+    ).toBeNull();
+  });
+
+  it('extractContext finds a selection that crosses a <br> when given the matchable text', () => {
+    const container = document.createElement('div');
+    container.innerHTML = '<p>Alpha beta gamma.<br>Delta epsilon zeta.</p>';
+    const selected = 'gamma.\nDelta';
+    expect(extractContext(container.textContent || '', selected)).toBe('');
+    expect(extractContext(getMatchableText(container), selected)).toBe(
+      'Alpha beta gamma. Delta epsilon zeta.'
+    );
   });
 });
 
