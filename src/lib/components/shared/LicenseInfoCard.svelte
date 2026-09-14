@@ -3,7 +3,10 @@
   Readable body of the license-badge popover: what a kind-1063 attestation
   says about an image — license (linked), credit, title, description/alt,
   source (linked when http(s)), the creator (`p` tag) and the attester
-  (event author) as profile names linking to their profiles.
+  (event author) as profile names linking to their profiles. AI content
+  additionally shows the twillo-aligned provenance details: manual edits,
+  the generating tool (`ai-tool`) and the AI-training permission
+  (`ai-training`, also shown for human-made content when stated).
 
   Pubkeys never render as raw hex: while a profile is unknown the shortened
   npub stands in. Profiles are subscribed only while this card is mounted,
@@ -13,7 +16,7 @@
   import { resolve } from '$app/paths';
   import { getDisplayName } from 'applesauce-core/helpers';
   import { formatLicenseUrl } from '$lib/helpers/educational/licenseLabel.js';
-  import { getAiLabel } from '$lib/helpers/ai-label.js';
+  import { getAiLabel, getAiTool, getAiEdited, getAiTraining } from '$lib/helpers/ai-label.js';
   import { hexToNpub, normalizePubkey } from '$lib/helpers/pubkey.js';
   import { profileLink } from '$lib/helpers/nostrUtils.js';
   import { useProfileMap } from '$lib/stores/profile-map.svelte.js';
@@ -42,6 +45,9 @@
         ? m.image_ai_label_modified()
         : null
   );
+  const aiEdited = $derived(getAiEdited(licenseEvent));
+  const aiTool = $derived(getAiTool(licenseEvent));
+  const aiTraining = $derived(getAiTraining(licenseEvent));
 
   /** @param {string | null} url */
   const isHttpUrl = (url) => /^https?:\/\//i.test(url ?? '');
@@ -68,7 +74,21 @@
         data-testid="license-info-ai"
       >
         <AiLabelIcon class_="h-3.5 w-3.5 shrink-0" title="" />
-        {aiText}
+        {aiText}{aiEdited ? ` (${m.image_ai_label_edited()})` : ''}
+      </dd>
+    {/if}
+    {#if aiText && aiTool}
+      <dt class="text-base-content/60">{m.image_ai_tool_label()}</dt>
+      <dd class="min-w-0 break-words text-base-content" data-testid="license-info-ai-tool">
+        {aiTool.label}
+      </dd>
+    {/if}
+    {#if aiTraining}
+      <dt class="text-base-content/60">{m.license_modal_ai_training_row_label()}</dt>
+      <dd class="min-w-0 text-base-content" data-testid="license-info-ai-training">
+        {aiTraining === 'allowed'
+          ? m.license_modal_ai_training_allowed()
+          : m.license_modal_ai_training_disallowed()}
       </dd>
     {/if}
     {#if licenseUrl}

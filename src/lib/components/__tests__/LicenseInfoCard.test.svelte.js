@@ -128,4 +128,42 @@ describe('LicenseInfoCard', () => {
     });
     expect(getByTestId('license-info-ai').textContent).toContain('AI generated');
   });
+
+  it('shows manual edits, the generating tool and the AI-training permission for AI content', () => {
+    profiles = new Map();
+    const { getByTestId } = render(LicenseInfoCard, {
+      licenseEvent: licenseEvent([
+        ['ai', 'generated'],
+        ['ai-edited', 'true'],
+        [
+          'ai-tool',
+          'OpenAI ChatGPT',
+          'http://w3id.org/edu-sharing/vocabs/aiTools/4dd60dfa-9f8a-4cc9-b733-0125448f77a3'
+        ],
+        ['ai-training', 'disallowed']
+      ])
+    });
+    expect(getByTestId('license-info-ai').textContent).toContain('AI generated');
+    expect(getByTestId('license-info-ai').textContent).toContain('manually edited');
+    expect(getByTestId('license-info-ai-tool').textContent).toContain('OpenAI ChatGPT');
+    expect(getByTestId('license-info-ai-training').textContent?.trim()).toBe('not allowed');
+  });
+
+  it('shows an explicit AI-training permission even for human-made content', () => {
+    profiles = new Map();
+    const { getByTestId, queryByTestId } = render(LicenseInfoCard, {
+      licenseEvent: licenseEvent([['ai-training', 'allowed']])
+    });
+    expect(queryByTestId('license-info-ai')).toBeNull();
+    expect(queryByTestId('license-info-ai-tool')).toBeNull();
+    expect(getByTestId('license-info-ai-training').textContent?.trim()).toBe('allowed');
+  });
+
+  it('omits the AI rows when the attestation says nothing about AI', () => {
+    profiles = new Map();
+    const { queryByTestId } = render(LicenseInfoCard, { licenseEvent: licenseEvent() });
+    expect(queryByTestId('license-info-ai')).toBeNull();
+    expect(queryByTestId('license-info-ai-tool')).toBeNull();
+    expect(queryByTestId('license-info-ai-training')).toBeNull();
+  });
 });
