@@ -1,5 +1,11 @@
 <script>
-  let { account } = $props();
+  /**
+   * @type {{ account: any, onSwitch?: () => void }}
+   * `onSwitch` fires after this row's account became active — the login
+   * modal uses it to close itself instead of staying open over the switched
+   * session (laoc, 2026-09-14).
+   */
+  let { account, onSwitch = undefined } = $props();
 
   import { manager } from '$lib/stores/accounts.svelte';
   import { getProfilePicture } from 'applesauce-core/helpers';
@@ -56,7 +62,10 @@
   <button
     class="btn mr-2 ml-auto"
     disabled={account === activeAccount}
-    onclick={() => manager.setActive(account)}
+    onclick={() => {
+      manager.setActive(account);
+      onSwitch?.();
+    }}
   >
     {account === activeAccount
       ? m.account_profile_active_button()

@@ -164,7 +164,7 @@
           </h2>
           <ul class="space-y-2">
             {#each getAccounts() as account (account.id)}
-              <AccountProfile {account} />
+              <AccountProfile {account} onSwitch={() => modalStore.closeModal()} />
             {/each}
           </ul>
         </div>
