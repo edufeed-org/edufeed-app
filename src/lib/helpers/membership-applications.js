@@ -55,3 +55,19 @@ function supersedes(candidate, held) {
   if (candidate.created_at !== held.created_at) return candidate.created_at > held.created_at;
   return candidate.id < held.id;
 }
+
+/**
+ * Canonical form of a wished NIP-05 handle.
+ *
+ * NIP-05 restricts the local part to `a-z0-9-_.`, and the nip-05-service
+ * enforces exactly that (400 "name must match [a-z0-9-_.]+ pattern"). The
+ * generic form renderer hands us whatever the applicant typed, so every
+ * surface that stores, checks, displays or provisions the handle goes through
+ * this one normaliser — "Campus" and "campus" are the same address.
+ *
+ * @param {unknown} value
+ * @returns {string}
+ */
+export function normalizeHandle(value) {
+  return typeof value === 'string' ? value.trim().toLowerCase() : '';
+}

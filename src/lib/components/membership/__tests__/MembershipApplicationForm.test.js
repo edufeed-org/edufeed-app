@@ -371,6 +371,35 @@ describe('MembershipApplicationForm', () => {
     expect(JSON.stringify(builtTemplate.tags)).not.toContain('Maria Mustermann');
   });
 
+  it('lowercases the wished_handle before it is published', async () => {
+    // NIP-05 local parts are a-z0-9-_. only; the nip-05-service rejects
+    // "Campus" with 400 at approval time, so normalise at the source.
+    const { findByLabelText, findByRole } = render(MembershipApplicationForm);
+    const handleInput = /** @type {HTMLInputElement} */ (await findByLabelText(/Wunsch-Adresse/));
+    const nameInput = /** @type {HTMLInputElement} */ (await findByLabelText(/Vollständiger Name/));
+    const motivationInput = /** @type {HTMLTextAreaElement} */ (
+      await findByLabelText(/Warum möchtest du Mitglied/)
+    );
+
+    await fireEvent.input(handleInput, { target: { value: 'Campus' } });
+    await fireEvent.input(nameInput, { target: { value: 'Campus Community' } });
+    await fireEvent.input(motivationInput, { target: { value: 'Vernetzung' } });
+
+    await vi.advanceTimersByTimeAsync(500);
+    await vi.runAllTimersAsync();
+
+    const submitBtn = await findByRole('button', { name: /Antrag|Submit/i });
+    await fireEvent.click(submitBtn);
+    vi.useRealTimers();
+
+    await waitFor(() => expect(publishApplicationCopySpy).toHaveBeenCalled());
+
+    const plaintext = String(nip44EncryptSpy.mock.calls[0][1]);
+    const tags = JSON.parse(plaintext);
+    const handleTag = tags.find((/** @type {string[]} */ t) => t[1] === 'wished_handle');
+    expect(handleTag?.[2]).toBe('campus');
+  });
+
   it('refuses to submit rather than publishing answers in the clear', async () => {
     // A signer without NIP-44 at all: the applicant's name, affiliation and
     // motivation must never end up readable on the relay.

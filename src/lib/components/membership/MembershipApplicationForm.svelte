@@ -8,6 +8,7 @@
     publishApplicationCopy,
     ensureApplicantRelayLists
   } from '$lib/services/membership-publish.js';
+  import { normalizeHandle } from '$lib/helpers/membership-applications.js';
   import { createAppEventFactory } from '$lib/helpers/event-factory.js';
   import { addressLoader } from '$lib/loaders/base.js';
   import { getCommunikeyRelays } from '$lib/helpers/relay-helper.js';
@@ -169,7 +170,7 @@
         // Seed wishedHandle so the live status check reflects the pre-filled
         // value without waiting for the user to retype.
         if (typeof values?.wished_handle === 'string') {
-          scheduleHandleCheck(values.wished_handle.trim().toLowerCase());
+          scheduleHandleCheck(normalizeHandle(values.wished_handle));
         }
       } catch {
         if (!cancelled) prefilledValues = {};
@@ -223,7 +224,7 @@
   /** @param {Event} ev */
   function onWishedHandleInput(ev) {
     const target = /** @type {HTMLInputElement} */ (ev.target);
-    scheduleHandleCheck(target.value.trim().toLowerCase());
+    scheduleHandleCheck(normalizeHandle(target.value));
   }
 
   /** @param {Record<string, string>} values */
@@ -234,6 +235,11 @@
     isSubmitting = true;
     error = '';
     try {
+      // The live check ran on the normalised handle; publish that same form so
+      // the admin approves exactly what was checked (see normalizeHandle).
+      if (typeof values.wished_handle === 'string') {
+        values = { ...values, wished_handle: normalizeHandle(values.wished_handle) };
+      }
       const responseTags = buildResponseTags(values);
       const signer = manager.active.signer;
       // Applications carry name, affiliation and motivation — never publish
