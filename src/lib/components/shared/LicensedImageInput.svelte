@@ -9,6 +9,8 @@
   import { reconcileBlobUrlScheme } from '$lib/helpers/blossom-trust.js';
   import { sha256Hex } from '$lib/helpers/sha256.js';
   import LicenseBadge from './LicenseBadge.svelte';
+  import ImageWithFallback from './ImageWithFallback.svelte';
+  import { PersonIcon } from '$lib/components/icons';
   import LicenseModal from './LicenseModal.svelte';
   import ImageSourceChooserModal from './ImageSourceChooserModal.svelte';
   import ImageLibraryPickerModal from './ImageLibraryPickerModal.svelte';
@@ -22,7 +24,12 @@
     imageWasUploaded = $bindable(false),
     licenseEvent = $bindable(null),
     errors = {},
-    activeUserDisplayName = ''
+    activeUserDisplayName = '',
+    // 'avatar': a round live preview of imageUrl beside the field. A pasted
+    // URL gave no feedback at all before (issue f2763558: the tester assumed
+    // it was not taken and reached for the add button instead).
+    /** @type {'avatar' | null} */
+    previewShape = null
   } = $props();
 
   // Hash currently associated with imageUrl (from upload or paste-of-Blossom).
@@ -210,7 +217,26 @@
 </script>
 
 <div class="form-control">
-  <div class="flex items-stretch gap-2">
+  <div class="flex items-center gap-3">
+    {#if previewShape === 'avatar'}
+      <div
+        class="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-full border border-base-300 bg-base-200"
+        data-testid="licensed-image-preview"
+      >
+        {#if imageUrl}
+          <ImageWithFallback
+            src={imageUrl}
+            alt=""
+            size="avatar_md"
+            class="h-16 w-16 rounded-full object-cover"
+            fallbackType="avatar"
+            robohash={false}
+          />
+        {:else}
+          <PersonIcon class_="h-7 w-7 text-base-content/40" />
+        {/if}
+      </div>
+    {/if}
     <input
       data-testid="licensed-image-url-input"
       type="url"

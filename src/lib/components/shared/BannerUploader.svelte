@@ -5,7 +5,11 @@
   import { uploadAndFindLicense } from '$lib/helpers/upload-and-find-license.js';
   import LicenseModal from './LicenseModal.svelte';
 
-  let { userData = $bindable(), signer = null, errors = $bindable({}) } = $props();
+  // `hint`: one line under the label explaining what the banner IS (wide
+  // background image vs. the round profile picture). The create-community
+  // wizard passes it — the two image fields read as duplicates otherwise
+  // (issue f2763558: "Profilbild-URL & Bild-URL irgendwie doppelt oder?").
+  let { userData = $bindable(), signer = null, errors = $bindable({}), hint = '' } = $props();
 
   let uploading = $state(false);
   /** @type {string | null} */
@@ -91,6 +95,9 @@
   <label class="label" for="banner-upload-input">
     <span class="label-text">{m.banner_uploader_label()}</span>
   </label>
+  {#if hint}
+    <p class="mb-2 text-xs text-base-content/60">{hint}</p>
+  {/if}
 
   <div class="space-y-2">
     <div

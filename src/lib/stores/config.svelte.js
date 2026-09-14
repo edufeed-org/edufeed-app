@@ -20,6 +20,8 @@ const defaultConfig = {
   relayListLookupRelays: [],
   // Profile indexer relays for bulk profile lookups
   indexerRelays: [],
+  // NIP-50 capable relays for free-text profile search (PROFILE_SEARCH_RELAYS)
+  profileSearchRelays: [],
   // Fallback relays for users without kind 10002
   fallbackRelays: [],
   // Default NIP-17 DM relays (kind 10050) published for new users at signup
@@ -276,6 +278,7 @@ export function initializeConfig(runtimeConfig) {
     relayListLookupRelays:
       runtimeConfig.relayListLookupRelays || defaultConfig.relayListLookupRelays,
     indexerRelays: runtimeConfig.indexerRelays || defaultConfig.indexerRelays,
+    profileSearchRelays: runtimeConfig.profileSearchRelays || defaultConfig.profileSearchRelays,
     fallbackRelays: runtimeConfig.fallbackRelays || defaultConfig.fallbackRelays,
     dmRelays: runtimeConfig.dmRelays || defaultConfig.dmRelays,
     dmTrustedSenders: runtimeConfig.dmTrustedSenders || defaultConfig.dmTrustedSenders,
@@ -447,6 +450,9 @@ export const runtimeConfig = {
   },
   get indexerRelays() {
     return config.indexerRelays;
+  },
+  get profileSearchRelays() {
+    return config.profileSearchRelays;
   },
   get fallbackRelays() {
     return config.fallbackRelays;

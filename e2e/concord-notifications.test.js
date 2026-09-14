@@ -86,7 +86,7 @@ async function createCommunityWithCurrentKeypair(page) {
   await createButton.click();
   await page.waitForTimeout(500);
 
-  const useCurrentButton = page.locator('button', { hasText: 'Use Current Keypair' });
+  const useCurrentButton = page.locator('button', { hasText: 'Use this profile' });
   await useCurrentButton.click();
   await page.waitForTimeout(500);
 

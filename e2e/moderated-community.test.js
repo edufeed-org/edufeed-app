@@ -82,7 +82,7 @@ async function createCommunityViaWizard(page, communityType) {
 
   // selectCurrentKeypair() auto-advances past step 0, landing directly on
   // the 'type' step (typeStepVisible is true on this server).
-  const useCurrentButton = page.locator('button', { hasText: 'Use Current Keypair' });
+  const useCurrentButton = page.locator('button', { hasText: 'Use this profile' });
   await useCurrentButton.click();
   await page.waitForTimeout(500);
 

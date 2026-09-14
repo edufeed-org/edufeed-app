@@ -323,6 +323,7 @@ Top-level shape:
 - `fallbackRelays` — general-purpose, used when gated mode is OFF
 - `feedRelays` / feed relay sources — dashboard feed picker (`FEED_RELAYS`, `FEED_RELAY_SOURCES` env: `config,custom,nip65,community`)
 - `dmRelays` — NIP-17 DM relays (kind 10050) published as a default for new users at signup (`DM_RELAYS` env); falls back to `fallbackRelays` when unset. Use `getDefaultDmRelays()` from `relay-helper.js`.
+- `profileSearchRelays` — NIP-50 capable relays for free-text profile search (`PROFILE_SEARCH_RELAYS` env, default nostr.band + nostr.wine). Read via `getProfileSearchRelays()`; never union with lookup/fallback relays (strfry rejects the `search` filter field). Consumed by `ContactSearchInput`'s `searchProfiles` mode and the impersonation warning.
 - `gatedMode.{default,force}` — gated mode defaults / lockout
 - `curatedMode` — curated authors (`CURATED_PUBKEYS_SETS`, `CURATED_PUBKEYS`, per-category overrides)
 - `wotMode.{enabled,includeUserFollows,calendar,communikey,educational,longform,kanban}` — WoT config

@@ -4,7 +4,8 @@ import { describe, it, expect } from 'vitest';
 import {
   communityWizardSteps,
   applyDefaultAccess,
-  disableAllContentTypes
+  disableAllContentTypes,
+  identityChoiceVisible
 } from '$lib/components/community/create/wizard-logic.js';
 import { createDefaultContentTypes } from '$lib/helpers/communityTagBuilder.js';
 
@@ -98,5 +99,19 @@ describe('applyDefaultAccess / disableAllContentTypes', () => {
     const out = disableAllContentTypes(input);
     expect(Object.values(out).every((ct) => ct.enabled === false)).toBe(true);
     expect(input.learning.enabled).toBe(true);
+  });
+});
+
+describe('identityChoiceVisible', () => {
+  // A kind 10222 is replaceable: "use my current profile" on a profile that
+  // already IS a community would silently overwrite that community's
+  // definition. The choice screen is skipped and the wizard goes straight
+  // to the separate-profile flow (issue f2763558: "if the user already has
+  // a community with this profile this step might entirely be skipped").
+  it('shows the choice for a profile without a community', () => {
+    expect(identityChoiceVisible({ hasOwnCommunity: false })).toBe(true);
+  });
+  it('hides the choice when the active profile already is a community', () => {
+    expect(identityChoiceVisible({ hasOwnCommunity: true })).toBe(false);
   });
 });
