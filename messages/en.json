@@ -407,6 +407,7 @@
   "discover_sort_label": "Sort by:",
   "discover_sort_newest": "Newest First",
   "discover_sort_oldest": "Oldest First",
+  "discover_sort_relevance": "Relevance",
   "discover_community_label": "Community:",
   "discover_relay_label": "Source:",
   "discover_relay_all": "All",
