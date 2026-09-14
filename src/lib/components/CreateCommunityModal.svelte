@@ -853,7 +853,13 @@
             hint={m.create_community_modal_banner_hint()}
           />
 
-          <ProfileForm {userData} {errors} hideBanner={true} hidePicture={true} />
+          <ProfileForm
+            {userData}
+            {errors}
+            hideBanner={true}
+            hidePicture={true}
+            variant="community"
+          />
         </div>
       {:else if currentStepId === 'keys'}
         <!-- Keys Generation for New Keypair -->

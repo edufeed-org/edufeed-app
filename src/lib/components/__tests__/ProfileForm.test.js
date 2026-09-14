@@ -21,4 +21,24 @@ describe('ProfileForm', () => {
     expect(container.querySelector('#profile-picture')).toBeNull();
     expect(container.querySelector('#profile-name')).toBeTruthy();
   });
+
+  it('asks about the community, not the person, when variant is community', () => {
+    const { container } = render(ProfileForm, {
+      props: { userData, errors: {}, hidePicture: true, hideBanner: true, variant: 'community' }
+    });
+    const name = /** @type {HTMLInputElement} */ (container.querySelector('#profile-name'));
+    const about = /** @type {HTMLTextAreaElement} */ (container.querySelector('#profile-about'));
+    expect(container.querySelector('label[for="profile-name"]')?.textContent).toContain(
+      'Community'
+    );
+    expect(name.placeholder).not.toMatch(/your name|nickname/i);
+    expect(about.placeholder).not.toMatch(/yourself/i);
+    expect(about.placeholder).toMatch(/community/i);
+  });
+
+  it('keeps the personal wording by default', () => {
+    const { container } = render(ProfileForm, { props: { userData, errors: {} } });
+    const name = /** @type {HTMLInputElement} */ (container.querySelector('#profile-name'));
+    expect(name.placeholder).toMatch(/your name/i);
+  });
 });

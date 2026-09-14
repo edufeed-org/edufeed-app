@@ -7,8 +7,31 @@
     hideBanner = false,
     // The create-community modal replaces the raw URL field with
     // LicensedImageInput; the form steps aside like it does for the banner.
-    hidePicture = false
+    hidePicture = false,
+    // 'community': the form describes a community profile, not the person
+    // filling it in — "Your name or nickname" / "Tell us about yourself"
+    // would be the wrong question (laoc, 2026-09-14).
+    /** @type {'user' | 'community'} */
+    variant = 'user'
   } = $props();
+
+  const t = $derived(
+    variant === 'community'
+      ? {
+          nameLabel: m.profile_form_community_name_label(),
+          namePlaceholder: m.profile_form_community_name_placeholder(),
+          aboutLabel: m.profile_form_community_about_label(),
+          aboutPlaceholder: m.profile_form_community_about_placeholder(),
+          websitePlaceholder: m.profile_form_community_website_placeholder()
+        }
+      : {
+          nameLabel: m.profile_form_name_label(),
+          namePlaceholder: m.profile_form_name_placeholder(),
+          aboutLabel: m.profile_form_about_label(),
+          aboutPlaceholder: m.profile_form_about_placeholder(),
+          websitePlaceholder: m.profile_form_website_placeholder()
+        }
+  );
 
   function validateStep() {
     errors = {};
@@ -64,13 +87,13 @@
   <!-- Name -->
   <div class="form-control flex flex-col">
     <label class="label" for="profile-name">
-      <span class="label-text w-full text-center">{m.profile_form_name_label()}</span>
+      <span class="label-text w-full text-center">{t.nameLabel}</span>
     </label>
     <input
       id="profile-name"
       type="text"
       bind:value={userData.name}
-      placeholder={m.profile_form_name_placeholder()}
+      placeholder={t.namePlaceholder}
       class="input-bordered input w-full"
       class:input-error={errors.name}
     />
@@ -84,12 +107,12 @@
   <!-- About -->
   <div class="form-control flex flex-col">
     <label class="label" for="profile-about">
-      <span class="label-text w-full text-center">{m.profile_form_about_label()}</span>
+      <span class="label-text w-full text-center">{t.aboutLabel}</span>
     </label>
     <textarea
       id="profile-about"
       bind:value={userData.about}
-      placeholder={m.profile_form_about_placeholder()}
+      placeholder={t.aboutPlaceholder}
       class="textarea-bordered textarea h-24 w-full"
     ></textarea>
   </div>
@@ -147,7 +170,7 @@
       id="profile-website"
       type="url"
       bind:value={userData.website}
-      placeholder={m.profile_form_website_placeholder()}
+      placeholder={t.websitePlaceholder}
       class="input-bordered input w-full"
       class:input-error={errors.website}
     />
