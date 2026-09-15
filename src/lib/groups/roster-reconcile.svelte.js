@@ -19,6 +19,11 @@
 //
 // Guard rails:
 // - Runs once per (community, account) per session — module-level ledger.
+// - Every item that was published or DEFINITIVELY refused is remembered per
+//   account in localStorage (reconcile-ledger.js) and never re-attempted
+//   while the entry lives. Without that, a relay serving a stale 39001 turns
+//   the same refused demotion into signer prompts on every page load
+//   (laoc, 2026-09-15). Transient failures are not remembered.
 // - Only plans against ANSWERED channel rosters (reconcilePlan/fanOutPlan:
 //   "no answer" is not "not a member").
 // - Only acts when the active account is the community owner or on the root
@@ -33,6 +38,7 @@ import { channelKey } from './community-pointer.js';
 import { parseMembershipPointer } from './community-membership.js';
 import { useCommunityChannels } from './community-channels.svelte.js';
 import { putUserOn, fanOut } from './roster-fanout.js';
+import { ledgerItemKey, readLedger, recordLedger, withoutLedgered } from './reconcile-ledger.js';
 import { useActiveUser } from '$lib/stores/accounts.svelte';
 import { isCommunityOwner } from '$lib/helpers/community-signer.js';
 
@@ -93,23 +99,30 @@ export function useRosterReconcile(getCommunikeyEvent) {
 
     // Grants for missing moderators, plus reverts of the admin role the
     // pre-fix fan-outs wrongly wrote for publisher-only entries (demotePlan).
-    const plan = [
-      ...reconcilePlan({
-        admins,
-        pointers,
-        membersByKey,
-        adminsByKey
-      }).map((item) => ({ ...item, roles: ['admin'] })),
-      ...demotePlan({ rootAdmins: roster.admins, pointers, adminsByKey })
-    ];
+    /** @param {{pointer: {id: string, relay: string}, pubkey: string, roles: string[]}} item */
+    const keyOf = (item) => ledgerItemKey(item.pointer, item.pubkey, item.roles);
+    const plan = withoutLedgered(
+      [
+        ...reconcilePlan({
+          admins,
+          pointers,
+          membersByKey,
+          adminsByKey
+        }).map((item) => ({ ...item, roles: ['admin'] })),
+        ...demotePlan({ rootAdmins: roster.admins, pointers, adminsByKey })
+      ],
+      readLedger(user.pubkey),
+      keyOf
+    );
     reconciled.add(ledgerKey);
     if (plan.length === 0) return;
 
-    void fanOut(
-      plan,
-      (item) => `${channelKey(item.pointer)} ${item.pubkey}`,
-      (item) => putUserOn(item.pointer, item.pubkey, item.roles, /** @type {any} */ (user))
+    const accountPubkey = user.pubkey;
+    void fanOut(plan, keyOf, (item) =>
+      putUserOn(item.pointer, item.pubkey, item.roles, /** @type {any} */ (user))
     ).then((aggregate) => {
+      // Published or definitively refused → settled for this roster state.
+      recordLedger(accountPubkey, [...aggregate.ok, ...aggregate.refused]);
       if (aggregate.ok.length > 0) {
         console.info(
           `groups: reconciled ${aggregate.ok.length} admin roster entr${aggregate.ok.length === 1 ? 'y' : 'ies'} across channels`
