@@ -268,6 +268,71 @@ describe('buildCommentTree with missing k tag (interop)', () => {
   });
 });
 
+describe('buildCommentTree with kind 1111 replies to kind 1 comments (interop)', () => {
+  // Real-world shape (imwald, 2026-09-15): a kind 1111 reply whose parent is a
+  // kind 1 NIP-10 comment under a kind 1 root. Its lowercase k is "1", not "1111".
+  it('nests a k=1 comment under the kind 1 comment its e tag points at', () => {
+    const rootId = 'root-note';
+    const rootAuthor = 'root-author';
+    const kind1Comment = {
+      id: 'kind1-comment',
+      kind: 1,
+      created_at: 100,
+      content: 'do you have a little bit more info on that?',
+      tags: [
+        ['e', rootId, 'wss://nostr.wine/', 'root', rootAuthor],
+        ['p', rootAuthor]
+      ],
+      pubkey: 'commenter',
+      sig: 'sig'
+    };
+    const nip22Reply = {
+      id: 'nip22-reply',
+      kind: 1111,
+      created_at: 200,
+      content: "You're a 95, for me.",
+      tags: [
+        ['E', rootId, '', rootAuthor],
+        ['P', rootAuthor],
+        ['K', '1'],
+        ['e', 'kind1-comment', '', 'commenter'],
+        ['k', '1'],
+        ['p', 'commenter']
+      ],
+      pubkey: rootAuthor,
+      sig: 'sig'
+    };
+
+    const tree = buildCommentTree([kind1Comment, nip22Reply]);
+    expect(tree).toHaveLength(1);
+    expect(tree[0].id).toBe('kind1-comment');
+    expect(tree[0].replies).toHaveLength(1);
+    expect(tree[0].replies[0].id).toBe('nip22-reply');
+  });
+
+  it('keeps a k=1 comment top-level when its e tag equals the E root', () => {
+    const topLevel = {
+      id: 'top',
+      kind: 1111,
+      created_at: 100,
+      content: 'direct comment on the note',
+      tags: [
+        ['E', 'root-note', '', 'root-author'],
+        ['K', '1'],
+        ['e', 'root-note', '', 'root-author'],
+        ['k', '1']
+      ],
+      pubkey: 'x',
+      sig: 'sig'
+    };
+
+    const tree = buildCommentTree([topLevel]);
+    expect(tree).toHaveLength(1);
+    expect(tree[0].id).toBe('top');
+    expect(tree[0].replies).toEqual([]);
+  });
+});
+
 describe('buildCommentTree with kind 1 NIP-10 replies', () => {
   /**
    * Helper: create a kind 1 reply event with NIP-10 e-tags
