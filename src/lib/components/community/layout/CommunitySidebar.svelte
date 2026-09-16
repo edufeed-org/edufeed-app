@@ -31,6 +31,7 @@
   import {
     folderAnchor,
     dropIntent,
+    gapDropTarget,
     resolveDrop,
     renameFolder,
     dissolveFolder
@@ -192,8 +193,17 @@
    */
   function onRowDrop(event, anchor) {
     event.preventDefault();
+    commitDrop(anchor, dropAt?.anchor === anchor ? dropAt.intent : 'into');
+  }
+
+  /**
+   * Land the dragged entry and clear the gesture — shared by a drop on a row
+   * and a drop in the gap between rows.
+   * @param {string} anchor
+   * @param {string} intent
+   */
+  function commitDrop(anchor, intent) {
     const source = dragAnchor;
-    const intent = dropAt?.anchor === anchor ? dropAt.intent : 'into';
     dragAnchor = null;
     dropAt = null;
     if (!source) return;
@@ -206,6 +216,49 @@
       () => nextFolderId(layout)
     );
     if (next !== layout) writeRailLayout(me, next);
+  }
+
+  /**
+   * The rows a gap drop may land next to: every anchored row but the one
+   * being dragged, with its box as the browser lays it out right now.
+   */
+  function railRows() {
+    if (!railEl) return [];
+    return [...railEl.querySelectorAll('[data-rail-anchor]')]
+      .map((el) => {
+        const rect = el.getBoundingClientRect();
+        return {
+          anchor: el.getAttribute('data-rail-anchor') ?? '',
+          top: rect.top,
+          bottom: rect.bottom
+        };
+      })
+      .filter((row) => row.anchor && row.anchor !== dragAnchor);
+  }
+
+  /**
+   * The gap between two rows is where a hand lands when it means "between
+   * these two" — and it was nobody's target, so the browser refused the drop
+   * and flew the icon back (laoc, edufeed.org, 2026-09-16). The list answers
+   * for its gaps; a pointer ON a row is that row's business and bubbles up
+   * here already answered.
+   * @param {DragEvent} event
+   */
+  function onGapDragOver(event) {
+    if (!dragAnchor) return;
+    if (/** @type {Element} */ (event.target).closest?.('[data-rail-anchor]')) return;
+    const hit = gapDropTarget(event.clientY, railRows());
+    if (!hit) return;
+    event.preventDefault();
+    dropAt = hit;
+  }
+
+  /** @param {DragEvent} event */
+  function onGapDrop(event) {
+    if (/** @type {Element} */ (event.target).closest?.('[data-rail-anchor]')) return;
+    if (!dragAnchor || !dropAt) return endDrag();
+    event.preventDefault();
+    commitDrop(dropAt.anchor, dropAt.intent);
   }
 
   function endDrag() {
@@ -337,7 +390,13 @@
       ? 'opacity-100'
       : 'opacity-0'}"
   ></div>
-  <div class="flex flex-col items-center space-y-3 py-4">
+  <!-- svelte-ignore a11y_no_static_element_interactions -->
+  <div
+    class="flex flex-col items-center space-y-3 py-4"
+    data-testid="rail-list"
+    ondragover={onGapDragOver}
+    ondrop={onGapDrop}
+  >
     <!-- Home button. Native `title` tooltips throughout this rail (NOT
       DaisyUI .tooltip): the scroll container's overflow clips CSS
       pseudo-element tooltips at the rail edge — a browser-native title

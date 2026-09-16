@@ -275,6 +275,35 @@ export function dropIntent(offsetY, height) {
 }
 
 /**
+ * What a drop means when the pointer is over no row at all.
+ *
+ * The rows sit in a column with gaps between them, and the gap is exactly
+ * where a hand lands when it means "between these two". A gap that is nobody's
+ * target makes the browser refuse the drop and fly the icon back, so the list
+ * answers for its gaps: the nearest row, and the side of it the pointer is on.
+ * Never 'into' — folding is the row's own reading, for a pointer ON it.
+ *
+ * @param {number} clientY pointer position, in the rows' coordinate space
+ * @param {Array<{anchor: string, top: number, bottom: number}>} rows the
+ *   droppable rows, in any order
+ * @returns {{anchor: string, intent: 'before' | 'after'} | null} null for no rows
+ */
+export function gapDropTarget(clientY, rows) {
+  /** @type {{anchor: string, intent: 'before' | 'after'} | null} */
+  let best = null;
+  let bestDistance = Infinity;
+  for (const row of rows ?? []) {
+    if (!row || typeof row.anchor !== 'string') continue;
+    const middle = (row.top + row.bottom) / 2;
+    const distance = Math.abs(clientY - middle);
+    if (distance >= bestDistance) continue;
+    bestDistance = distance;
+    best = { anchor: row.anchor, intent: clientY < middle ? 'before' : 'after' };
+  }
+  return best;
+}
+
+/**
  * Apply a dragged entry to a row under one of {@link dropIntent}'s readings.
  *
  * 'into' is the only one that branches on what the target IS: an existing
