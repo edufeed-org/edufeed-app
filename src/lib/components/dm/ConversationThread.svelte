@@ -8,11 +8,10 @@
   import { getWrappedMessageParent } from 'applesauce-common/helpers/wrapped-messages';
   import { getLegacyMessageParent } from 'applesauce-common/helpers/legacy-messages';
   import { getEncryptedContent } from 'applesauce-core/helpers/encrypted-content';
-  import {
-    ReplyToWrappedMessage,
-    SendLegacyMessage,
-    ReplyToLegacyMessage
-  } from 'applesauce-actions/actions';
+  import { SendLegacyMessage, ReplyToLegacyMessage } from 'applesauce-actions/actions';
+  // Local NIP-17 actions: same rumor as applesauce's, plus NIP-30 `emoji`
+  // tags for picked custom emojis (the stock actions have no hook for them).
+  import { SendWrappedMessage, ReplyToWrappedMessage } from '$lib/actions/dm-actions.js';
   import { actionRunnerOptimistic } from '$lib/stores/action-runner.svelte.js';
   import {
     markConversationAsRead,
@@ -263,16 +262,22 @@
         // the synchronous rumor symbol, giving the user instant feedback without
         // a parallel pending state. Relay publish runs in the background.
         const recipients = participants.filter((p) => p !== user.pubkey);
+        // Custom emojis picked into this draft; the action tags only those
+        // whose :shortcode: is still in the text.
+        const emojis = Object.values(usedCustomEmojis);
         if (replyingTo) {
           await sendWrappedDm(recipients, content, {
             action: ReplyToWrappedMessage,
-            args: [replyingTo, content]
+            args: [replyingTo, content, { emojis }]
           });
         } else {
           // The action still gets the full participant list — a group wrap is
           // addressed to everyone, including us — but only the others need a
           // relay-list lookup.
-          await sendWrappedDm(recipients, content, { args: [participants, content] });
+          await sendWrappedDm(recipients, content, {
+            action: SendWrappedMessage,
+            args: [participants, content, { emojis }]
+          });
         }
       }
       replyingTo = null;
