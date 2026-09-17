@@ -1,6 +1,6 @@
 <script>
   import { SvelteDate } from 'svelte/reactivity';
-  import { onMount } from 'svelte';
+  import { onMount, getContext } from 'svelte';
   import { afterNavigate, replaceState } from '$app/navigation';
   import { formatDateParam, applyCalendarFilterState } from '$lib/helpers/urlParams.js';
   import { page } from '$app/stores';
@@ -42,6 +42,7 @@
   import CalendarGrid from '$lib/components/calendar/CalendarGrid.svelte';
   import TopPublishersFilter from './TopPublishersFilter.svelte';
   import { filterEventsByPublisherSelection } from '$lib/helpers/topPublishers.js';
+  import { filterByAllowedAuthors } from '$lib/helpers/communityContent.js';
   import CalendarDropdown from './CalendarDropdown.svelte';
   import CalendarFilterBar from './CalendarFilterBar.svelte';
   import CalendarFilterDrawer from './CalendarFilterDrawer.svelte';
@@ -656,8 +657,22 @@
   // The loader only queries selected relays, but EventStore may still contain
   // events fetched earlier from other relays — this keeps the displayed set
   // consistent with the user's relay selection.
-  let events = $derived(
+  let relayFilteredEvents = $derived(
     filterEventsBySelectedRelays(allCalendarEvents, calendarFilters.selectedRelays)
+  );
+
+  // Community mode: the section's write gate is enforced by the reader
+  // (communikey-groups). The community layout resolves the Calendar section's
+  // allowed authors against the CURRENT roster and provides them via context;
+  // an item stays only while its author or one of its sharers still passes,
+  // so a share by a non-member disappears once the section is restricted.
+  // Outside a community there is no context and nothing is filtered.
+  /** @type {(() => string[] | null) | undefined} */
+  const getAllowedAuthors = getContext('allowedAuthors');
+  let events = $derived(
+    communityMode
+      ? filterByAllowedAuthors(relayFilteredEvents, getAllowedAuthors?.())
+      : relayFilteredEvents
   );
 
   // Client-side filtering with tag buttons (OR logic) + text search (AND logic)
