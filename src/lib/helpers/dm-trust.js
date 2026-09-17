@@ -81,18 +81,110 @@ export function excludeMutedAuthors(events, mutedPubkeys) {
 }
 
 /**
+ * Letters that NFKC leaves alone but that spammers use as ASCII lookalikes:
+ * Unicode small capitals (Dᴀᴍᴜs) and Cyrillic / Greek letters that render
+ * identically to Latin ones. Fullwidth, mathematical-alphanumeric, circled
+ * and ligature forms are already folded by NFKC and need no entry here.
+ * @type {Record<string, string>}
+ */
+const LOOKALIKES = {
+  // Latin small capitals (Phonetic Extensions / IPA / Latin Extended-D)
+  ᴀ: 'a',
+  ʙ: 'b',
+  ᴄ: 'c',
+  ᴅ: 'd',
+  ᴇ: 'e',
+  ꜰ: 'f',
+  ɢ: 'g',
+  ʜ: 'h',
+  ɪ: 'i',
+  ᴊ: 'j',
+  ᴋ: 'k',
+  ʟ: 'l',
+  ᴍ: 'm',
+  ɴ: 'n',
+  ᴏ: 'o',
+  ᴘ: 'p',
+  ꞯ: 'q',
+  ʀ: 'r',
+  ꜱ: 's',
+  ᴛ: 't',
+  ᴜ: 'u',
+  ᴠ: 'v',
+  ᴡ: 'w',
+  ʏ: 'y',
+  ᴢ: 'z',
+  // Cyrillic lookalikes (lowercase; uppercase forms are lowercased first)
+  а: 'a',
+  в: 'b',
+  с: 'c',
+  ԁ: 'd',
+  е: 'e',
+  һ: 'h',
+  і: 'i',
+  ј: 'j',
+  к: 'k',
+  м: 'm',
+  н: 'h',
+  о: 'o',
+  р: 'p',
+  ѕ: 's',
+  т: 't',
+  у: 'y',
+  х: 'x',
+  ԛ: 'q',
+  ԝ: 'w',
+  // Greek lookalikes
+  α: 'a',
+  β: 'b',
+  ε: 'e',
+  ι: 'i',
+  κ: 'k',
+  ο: 'o',
+  ρ: 'p',
+  τ: 't',
+  υ: 'u',
+  ν: 'v',
+  χ: 'x'
+};
+
+/** Any non-ASCII character — only those can be lookalikes. */
+const NON_ASCII_RE = /\P{ASCII}/gu;
+
+/** Format characters (zero-width joiners/spaces, BOM, soft hyphen) and variation selectors. */
+const INVISIBLE_RE = /\p{Cf}|\p{Variation_Selector}/gu;
+
+/**
+ * Fold text so homoglyph spelling variants compare equal: NFKC (fullwidth,
+ * mathematical bold/script, circled, ligatures), lowercase, drop invisible
+ * characters, then map the small-capital / Cyrillic / Greek lookalikes NFKC
+ * does not touch. Ordinary text only gets lowercased.
+ * @param {string} text
+ * @returns {string}
+ */
+export function foldConfusables(text) {
+  return text
+    .normalize('NFKC')
+    .toLowerCase()
+    .replace(INVISIBLE_RE, '')
+    .replace(NON_ASCII_RE, (ch) => LOOKALIKES[ch] ?? ch);
+}
+
+/**
  * Case-insensitive substring match against NIP-51 muted words. Substring (not
  * word-boundary) matching lets a single entry like "damus airdrop" catch a
- * whole campaign across rotating pubkeys, domains, and phrasings.
+ * whole campaign across rotating pubkeys, domains, and phrasings. Both sides
+ * go through `foldConfusables`, so "Dᴀᴍᴜs Airdrop" (small capitals — the
+ * 2026-09-11 campaign) or "𝐃𝐚𝐦𝐮𝐬" still hit the plain "damus airdrop" entry.
  * @param {string | undefined} content
  * @param {Set<string> | undefined} mutedWords - stored lowercase (normalized on parse)
  * @returns {boolean}
  */
 export function matchesMutedWord(content, mutedWords) {
   if (!content || !mutedWords || mutedWords.size === 0) return false;
-  const haystack = content.toLowerCase();
+  const haystack = foldConfusables(content);
   for (const word of mutedWords) {
-    if (word && haystack.includes(word)) return true;
+    if (word && haystack.includes(foldConfusables(word))) return true;
   }
   return false;
 }
