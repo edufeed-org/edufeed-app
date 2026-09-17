@@ -132,13 +132,49 @@ vi.mock(
 );
 vi.mock('$lib/components/shared/LinkPreviewList.svelte', () => ({ default: Stub }));
 vi.mock('$lib/components/shared/ProfileAvatar.svelte', () => ({ default: Stub }));
-vi.mock('$lib/components/icons', () => ({ ReplyIcon: Stub, PeopleIcon: Stub, PollIcon: Stub }));
+vi.mock('$lib/components/icons', () => ({
+  ReplyIcon: Stub,
+  PeopleIcon: Stub,
+  PollIcon: Stub,
+  MoreIcon: Stub
+}));
 vi.mock(
   '$lib/components/reactions/ReactionChips.svelte',
   () => import('./fixtures/ReactionChipsStub.svelte')
 );
 
 vi.mock('$lib/paraglide/messages', () => ({
+  chat_copy_message_link: () => 'chat_copy_message_link',
+  chat_jump_to_bottom: () => 'chat_jump_to_bottom',
+  chat_message_link_copied: () => 'chat_message_link_copied',
+  chat_thread_collapse: () => 'chat_thread_collapse',
+  chat_thread_expand: () => 'chat_thread_expand',
+  common_cancel: () => 'common_cancel',
+  community_join_pending: () => 'community_join_pending',
+  community_join_request: () => 'community_join_request',
+  disclosure_invited: () => 'disclosure_invited',
+  groups_composer_join_note: () => 'groups_composer_join_note',
+  groups_join_already: () => 'groups_join_already',
+  groups_join_required: () => 'groups_join_required',
+  groups_list_add: () => 'groups_list_add',
+  groups_list_added: () => 'groups_list_added',
+  groups_list_remove: () => 'groups_list_remove',
+  groups_list_removed: () => 'groups_list_removed',
+  groups_list_update_failed: () => 'groups_list_update_failed',
+  groups_message_delete: () => 'groups_message_delete',
+  groups_message_delete_confirm_action: () => 'groups_message_delete_confirm_action',
+  groups_message_delete_confirm_body: () => 'groups_message_delete_confirm_body',
+  groups_message_delete_confirm_title: () => 'groups_message_delete_confirm_title',
+  groups_message_delete_failed: () => 'groups_message_delete_failed',
+  groups_more_menu: () => 'groups_more_menu',
+  groups_react_failed: () => 'groups_react_failed',
+  groups_restricted_note: () => 'groups_restricted_note',
+  webxdc_apps_share_failed: () => 'webxdc_apps_share_failed',
+  webxdc_export_as_article: () => 'webxdc_export_as_article',
+  webxdc_export_as_wiki: () => 'webxdc_export_as_wiki',
+  webxdc_export_cancel: () => 'webxdc_export_cancel',
+  webxdc_export_title: () => 'webxdc_export_title',
+  webxdc_export_too_large: () => 'webxdc_export_too_large',
   groups_join: () => 'Join',
   groups_leave: () => 'Leave',
   chat_attach_file: () => 'Attach file',

@@ -11,6 +11,7 @@ import {
 } from './group-management.js';
 import { pool } from '$lib/stores/nostr-infrastructure.svelte';
 import { aggregateFanOut } from './area-members.js';
+import { isDefinitiveRefusal } from './groups.js';
 
 /**
  * @param {{id: string, relay: string}} pointer
@@ -49,17 +50,36 @@ export function removeUserOn(pointer, pubkey, user) {
  * @param {(item: T) => Promise<any>} action
  */
 export async function tryOnce(item, label, action) {
+  return (await attempt(item, label, action)).ok;
+}
+
+/**
+ * tryOnce with the outcome attached: `refused` marks a definitive relay
+ * refusal (blocked:/restricted:/invalid:/duplicate:), which is NOT retried —
+ * the relay's answer will not change, and for a NIP-46 user every attempt is
+ * a signer prompt.
+ * @template T
+ * @param {T} item
+ * @param {string} label
+ * @param {(item: T) => Promise<any>} action
+ * @returns {Promise<{ok: boolean, refused: boolean, error?: unknown}>}
+ */
+export async function attempt(item, label, action) {
   try {
     await action(item);
-    return true;
+    return { ok: true, refused: false };
   } catch (err) {
+    if (isDefinitiveRefusal(err)) {
+      console.warn('groups: area fan-out action refused by relay', label, err);
+      return { ok: false, refused: true, error: err };
+    }
     console.warn('groups: area fan-out action failed, retrying once', label, err);
     try {
       await action(item);
-      return true;
+      return { ok: true, refused: false };
     } catch (err2) {
       console.error('groups: area fan-out retry failed', label, err2);
-      return false;
+      return { ok: false, refused: isDefinitiveRefusal(err2), error: err2 };
     }
   }
 }
@@ -80,8 +100,8 @@ export async function fanOut(items, keyOf, action) {
   const results = [];
   for (const item of items) {
     const key = keyOf(item);
-    const ok = await tryOnce(item, key, action);
-    results.push({ key, ok });
+    const { ok, refused } = await attempt(item, key, action);
+    results.push({ key, ok, refused });
   }
   return aggregateFanOut(results);
 }

@@ -190,10 +190,13 @@ export function demotePlan({ rootAdmins, pointers, adminsByKey = {} }) {
   return plan;
 }
 
-/** @param {Array<{key: string, ok: boolean}>} results */
+/** @param {Array<{key: string, ok: boolean, refused?: boolean}>} results */
 export function aggregateFanOut(results) {
   return {
     ok: results.filter((r) => r.ok).map((r) => r.key),
-    failed: results.filter((r) => !r.ok).map((r) => r.key)
+    failed: results.filter((r) => !r.ok).map((r) => r.key),
+    // definitive relay refusals (subset of `failed`): the relay's answer will
+    // not change for this roster state, so callers may treat them as settled
+    refused: results.filter((r) => !r.ok && r.refused).map((r) => r.key)
   };
 }

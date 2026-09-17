@@ -136,7 +136,7 @@ describe('aggregateFanOut', () => {
         { key: k1, ok: true },
         { key: k2, ok: false }
       ])
-    ).toEqual({ ok: [k1], failed: [k2] });
+    ).toEqual({ ok: [k1], failed: [k2], refused: [] });
   });
 });
 

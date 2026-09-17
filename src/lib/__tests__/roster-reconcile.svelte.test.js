@@ -114,4 +114,89 @@ describe('useRosterReconcile', () => {
     await settle();
     expect(putUserOnMock).not.toHaveBeenCalled();
   });
+
+  // The signer loop (laoc, 2026-09-15): the relay serves a stale channel
+  // 39001, so the same demotion is re-planned on every page load and refused
+  // with "blocked: all targets are members already" each time — two signer
+  // prompts per item per visit, forever. A refused or successful item is
+  // remembered per account across sessions and not attempted again.
+  describe('persisted ledger', () => {
+    const stalePlan = () => {
+      adminsByKey = {
+        [CHAN_KEY]: [
+          { pubkey: ADMIN, roles: ['admin'] },
+          { pubkey: PUB, roles: ['admin'] }
+        ]
+      };
+      membersByKey = { [CHAN_KEY]: new Set([ADMIN, PUB]) };
+    };
+    const newSession = async () => {
+      cleanup?.();
+      cleanup = undefined;
+      const mod = await import('$lib/groups/roster-reconcile.svelte.js');
+      mod.__resetRosterReconcile();
+      putUserOnMock.mockClear();
+    };
+
+    beforeEach(() => {
+      localStorage.clear();
+    });
+
+    it('a demotion the relay refuses as already-settled is not re-attempted in the next session', async () => {
+      stalePlan();
+      putUserOnMock.mockRejectedValue(new Error('blocked: all targets are members already'));
+      run();
+      await settle();
+      expect(putUserOnMock).toHaveBeenCalledTimes(1); // no retry on a definitive refusal
+
+      await newSession();
+      run();
+      await settle();
+      expect(putUserOnMock).not.toHaveBeenCalled();
+    });
+
+    it('a successful put-user is likewise remembered', async () => {
+      stalePlan();
+      putUserOnMock.mockResolvedValue(undefined);
+      run();
+      await settle();
+      expect(putUserOnMock).toHaveBeenCalledTimes(1);
+
+      await newSession();
+      run();
+      await settle();
+      expect(putUserOnMock).not.toHaveBeenCalled();
+    });
+
+    it('a transient failure (relay unreachable) is NOT remembered and is retried next session', async () => {
+      stalePlan();
+      putUserOnMock.mockRejectedValue(new Error('Timeout'));
+      run();
+      await settle();
+      expect(putUserOnMock).toHaveBeenCalledTimes(2); // tryOnce retries transient errors
+
+      await newSession();
+      putUserOnMock.mockResolvedValue(undefined);
+      run();
+      await settle();
+      expect(putUserOnMock).toHaveBeenCalledTimes(1);
+    });
+
+    it('the ledger is per account — another admin still gets their own attempt', async () => {
+      stalePlan();
+      putUserOnMock.mockRejectedValue(new Error('blocked: all targets are members already'));
+      run();
+      await settle();
+
+      await newSession();
+      const OTHER = 'c'.repeat(64);
+      rootRoster.admins.push({ pubkey: OTHER, roles: ['admin'] });
+      adminsByKey[CHAN_KEY].push({ pubkey: OTHER, roles: ['admin'] });
+      membersByKey[CHAN_KEY].add(OTHER);
+      activeUser = { pubkey: OTHER, signer: {} };
+      run();
+      await settle();
+      expect(putUserOnMock).toHaveBeenCalledTimes(1);
+    });
+  });
 });

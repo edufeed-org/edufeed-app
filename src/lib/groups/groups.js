@@ -304,6 +304,19 @@ export function isMembershipRefusal(error) {
 }
 
 /**
+ * A relay refusal that a second attempt cannot change: the NIP-01
+ * machine-readable prefixes for policy/validation rejections. Retrying these
+ * only doubles the signer prompts (laoc, 2026-09-15); callers should treat
+ * them as settled for this roster state (see reconcile-ledger.js).
+ * @param {unknown} error
+ * @returns {boolean}
+ */
+export function isDefinitiveRefusal(error) {
+  const message = String(/** @type {any} */ (error)?.message ?? '');
+  return /^(blocked|restricted|invalid|duplicate):/i.test(message) || isAlreadyMemberError(error);
+}
+
+/**
  * A join or put-user refused because the target is ALREADY on the roster —
  * not a failure: membership is exactly the state the action wanted (laoc,
  * 2026-08-19 — a member whose roster read lagged saw the join button and got

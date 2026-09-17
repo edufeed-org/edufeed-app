@@ -111,6 +111,27 @@ describe('tryOnce', () => {
     await expect(tryOnce('item', 'label', action)).resolves.toBe(false);
     expect(action).toHaveBeenCalledTimes(2);
   });
+
+  it('does NOT retry a definitive relay refusal — a second attempt cannot change "blocked:"', async () => {
+    const action = vi.fn().mockRejectedValue(new Error('blocked: all targets are members already'));
+    await expect(tryOnce('item', 'label', action)).resolves.toBe(false);
+    expect(action).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('isDefinitiveRefusal', () => {
+  it('recognises the NIP-01 machine-readable prefixes a retry cannot fix', async () => {
+    const { isDefinitiveRefusal } = await import('$lib/groups/groups.js');
+    expect(isDefinitiveRefusal(new Error('blocked: all targets are members already'))).toBe(true);
+    expect(
+      isDefinitiveRefusal(new Error('restricted: only members of this relay can create a group'))
+    ).toBe(true);
+    expect(isDefinitiveRefusal(new Error('invalid: bad tag'))).toBe(true);
+    expect(isDefinitiveRefusal(new Error('duplicate: already a member'))).toBe(true);
+    expect(isDefinitiveRefusal(new Error('Timeout'))).toBe(false);
+    expect(isDefinitiveRefusal(new Error('WebSocket closed'))).toBe(false);
+    expect(isDefinitiveRefusal(undefined)).toBe(false);
+  });
 });
 
 describe('fanOut', () => {
@@ -132,14 +153,27 @@ describe('fanOut', () => {
     // settled (y fails twice — start/fail, start/fail — with no interleaved
     // start from x or z).
     expect(order).toEqual(['start:x', 'end:x', 'start:y', 'start:y', 'start:z', 'end:z']);
-    expect(aggregate).toEqual({ ok: ['x', 'z'], failed: ['y'] });
+    expect(aggregate).toEqual({ ok: ['x', 'z'], failed: ['y'], refused: [] });
   });
 
   it('never throws even when every item fails both attempts', async () => {
     const action = vi.fn().mockRejectedValue(new Error('nope'));
     await expect(fanOut(['a', 'b'], (item) => item, action)).resolves.toEqual({
       ok: [],
-      failed: ['a', 'b']
+      failed: ['a', 'b'],
+      refused: []
+    });
+  });
+
+  it('lists definitive refusals under `refused` (a subset of `failed`) so callers can treat them as settled', async () => {
+    const action = vi.fn(async (/** @type {string} */ item) => {
+      if (item === 'r') throw new Error('blocked: all targets are members already');
+      if (item === 't') throw new Error('Timeout');
+    });
+    await expect(fanOut(['ok', 'r', 't'], (item) => item, action)).resolves.toEqual({
+      ok: ['ok'],
+      failed: ['r', 't'],
+      refused: ['r']
     });
   });
 });
