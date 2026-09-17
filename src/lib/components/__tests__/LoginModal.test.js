@@ -273,6 +273,24 @@ describe('LoginModal — cleaned-up layout (issue #49)', () => {
     }
   });
 
+  it('closes itself after switching to a saved account', async () => {
+    const accounts = [{ id: 'acc-1', pubkey: 'p1' }];
+    const mod = await import('$lib/stores/accounts.svelte.js');
+    const original = mod.useAccounts;
+    // @ts-ignore
+    mod.useAccounts = () => () => accounts;
+    try {
+      const { container } = render(LoginModal, { props: { modalId: 'login-modal-6' } });
+      const switchButton = container.querySelector('[data-testid="switch-mock"]');
+      expect(switchButton).not.toBeNull();
+      await fireEvent.click(/** @type {Element} */ (switchButton));
+      expect(mockModalStore.closeModal).toHaveBeenCalled();
+    } finally {
+      // @ts-ignore
+      mod.useAccounts = original;
+    }
+  });
+
   it('extension card is clickable without expanding anything', async () => {
     mockManager.getAccountForPubkey.mockReturnValue(undefined);
 
