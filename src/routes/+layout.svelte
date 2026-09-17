@@ -21,6 +21,7 @@
   import { appSettings, initializeAppSettings } from '$lib/stores/app-settings.svelte.js';
   import { warmIdentity, hydrateDeletions } from '$lib/stores/event-cache.svelte.js';
   import { sessionEpoch } from '$lib/stores/session-epoch.svelte.js';
+  import { createOwnedSlot } from '$lib/helpers/owned-slot.svelte.js';
   import { startPublishOutboxReplay } from '$lib/services/publish-service.js';
   import { configReady } from '$lib/stores/config.svelte.js';
   import {
@@ -89,21 +90,23 @@
   // "own bottom UI" rule reactively, so the bottom nav stays visible on the
   // list view but hides on the detail view where the page draws its own
   // bottom composer.
-  /** @type {(() => boolean) | undefined} */
-  let getPageHasOwnBottomUI = $state();
-  setContext('setPageHasOwnBottomUI', (/** @type {(() => boolean) | undefined} */ getter) => {
-    getPageHasOwnBottomUI = getter;
-  });
+  //
+  // These page → root registrations are owned slots: `claim(getter)` returns
+  // a release that is a no-op once a later claim took over. A bare
+  // `set(undefined)` on destroy is NOT safe here — the session-epoch {#key}
+  // below mounts the new route tree before destroying the old one, so the
+  // old teardown would wipe the new page's registration.
+  /** @type {ReturnType<typeof createOwnedSlot<() => boolean>>} */
+  const pageHasOwnBottomUISlot = createOwnedSlot();
+  setContext('setPageHasOwnBottomUI', pageHasOwnBottomUISlot.claim);
 
   // Separately, pages can declare they already provide a primary "create"
   // affordance (e.g. /c/messages has a "Neu" button to start a new DM).
   // When set, the global FAB is suppressed but the bottom nav stays visible.
-  /** @type {(() => boolean) | undefined} */
-  let getPageHasOwnCreateAction = $state();
-  setContext('setPageHasOwnCreateAction', (/** @type {(() => boolean) | undefined} */ getter) => {
-    getPageHasOwnCreateAction = getter;
-  });
-  let pageHasOwnCreateAction = $derived(getPageHasOwnCreateAction?.() ?? false);
+  /** @type {ReturnType<typeof createOwnedSlot<() => boolean>>} */
+  const pageHasOwnCreateActionSlot = createOwnedSlot();
+  setContext('setPageHasOwnCreateAction', pageHasOwnCreateActionSlot.claim);
+  let pageHasOwnCreateAction = $derived(pageHasOwnCreateActionSlot.value?.() ?? false);
 
   // Hide global floating buttons on views that manage their own bottom UI
   // (chat input, DM input, create/edit wizards whose own CTAs sit at the bottom right).
@@ -115,7 +118,7 @@
       }
       if (pathname.startsWith('/c/messages') || pathname.startsWith('/c/groups')) {
         // Page reports whether a thread/group chat is currently open
-        return getPageHasOwnBottomUI?.() ?? false;
+        return pageHasOwnBottomUISlot.value?.() ?? false;
       }
       return false;
     })()
@@ -142,14 +145,15 @@
   // ContentNavSidebar is mounted here in the chrome row. Its data
   // (selectedContentType, communityProfile, restrictedTabs, etc.) is loaded
   // by c/[pubkey]/+layout.svelte and exposed via this context getter so we
-  // don't lift community-data loading up to the root layout.
+  // don't lift community-data loading up to the root layout. Owned slot for
+  // the same remount reason as above — this is the registration that went
+  // missing on an account switch inside a community (sidebar with content
+  // types + channels gone until the next navigation).
   /** @typedef {import('$lib/types/layout.js').ContentNavData} ContentNavData */
-  /** @type {(() => ContentNavData) | undefined} */
-  let getContentNavData = $state();
-  setContext('setContentNavData', (/** @type {(() => ContentNavData) | undefined} */ getter) => {
-    getContentNavData = getter;
-  });
-  let contentNavData = $derived(getContentNavData?.());
+  /** @type {ReturnType<typeof createOwnedSlot<() => ContentNavData>>} */
+  const contentNavSlot = createOwnedSlot();
+  setContext('setContentNavData', contentNavSlot.claim);
+  let contentNavData = $derived(contentNavSlot.value?.());
 
   // Initialize runtime config synchronously before any child components render.
   // The initialized guard inside initializeConfig() prevents double-initialization.
