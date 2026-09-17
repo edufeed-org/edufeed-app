@@ -15,11 +15,12 @@
   } from '$lib/loaders/calendar.js';
   import { preWarmRelayCapabilitiesCache } from '$lib/services/relay-capabilities.js';
   import { timedPool } from '$lib/loaders/base.js';
-  import { ambSearchLoader } from '$lib/loaders/amb-search.js';
+  import { ambRankedSearchLoader } from '$lib/loaders/amb-search.js';
   import {
     hasActiveFilters,
     createEmptyFilters
   } from '$lib/helpers/educational/searchQueryBuilder.js';
+  import { buildRankIndex } from '$lib/helpers/educational/searchRank.js';
   import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
   import { createTimelineLoader } from 'applesauce-loaders/loaders';
   import {
@@ -186,6 +187,14 @@
   /** @type {ReturnType<typeof setTimeout> | null} */
   let searchingSafetyTimer = null;
   let learningSearchResults = $state(/** @type {import('nostr-tools').Event[]} */ ([]));
+  // Relevance order of the current search: `kind:pubkey:d` → merged position.
+  // Each relay ranks its own response; scores are not comparable across
+  // relays, so results are merged by per-relay rank (see searchRank.js).
+  // $state.raw because Map methods break through Svelte's deep proxy.
+  /** @type {Map<string, number>} */
+  let learningSearchRank = $state.raw(new Map());
+  /** @type {Map<string, import('nostr-tools').Event[]>} relay → relevance-ordered results */
+  let learningSearchByRelay = new Map(); // eslint-disable-line svelte/prefer-svelte-reactivity -- plain accumulator; learningSearchRank is the reactive projection
   /** @type {import('rxjs').Subscription | null} */
   let currentSearchSubscription = null;
 
@@ -391,6 +400,7 @@
       _learningFilters = createEmptyFilters();
       isLearningSearchActive = false;
       learningSearchResults = [];
+      resetLearningSearchRank();
       if (currentSearchSubscription) {
         currentSearchSubscription.unsubscribe();
         currentSearchSubscription = null;
@@ -426,6 +436,13 @@
     });
   }
 
+  /** Drop the relevance order of the previous search and leave relevance sort. */
+  function resetLearningSearchRank() {
+    learningSearchByRelay = new Map();
+    learningSearchRank = new Map();
+    if (sortBy === 'relevance') sortBy = 'newest';
+  }
+
   /**
    * Handle learning content filter changes
    * @param {import('$lib/helpers/educational/searchQueryBuilder.js').SearchFilters} filters
@@ -443,6 +460,11 @@
     if (hasActiveFilters(filters)) {
       isLearningSearchActive = true;
       learningSearchResults = []; // Clear previous results
+      learningSearchByRelay = new Map();
+      learningSearchRank = new Map();
+      // A search is a relevance query: default to the relays' ranking. The
+      // user can still switch back to a date order via the sort select.
+      if (contentType === 'learning') sortBy = 'relevance';
 
       // Show the spinner until the relay answers (or the safety timer fires —
       // the loader's own request timeout is 5s, so this is a pure backstop).
@@ -452,17 +474,26 @@
         isSearching = false;
       }, 8000);
 
-      // Start NIP-50 search - accumulate individual events into array
-      currentSearchSubscription = ambSearchLoader(filters, 100).subscribe({
-        next: (/** @type {import('nostr-tools').Event} */ event) => {
-          // Accumulate events as they arrive (createTimelineLoader emits one at a time)
-          // The events are already added to eventStore by the loader
-          learningSearchResults = [...learningSearchResults, event];
+      // Start NIP-50 search — one ranked stream per relay. Events are already
+      // added to eventStore by the loader; here we keep the per-relay order so
+      // the merged relevance index can be rebuilt as results arrive.
+      const seenIds = new Set(); // eslint-disable-line svelte/prefer-svelte-reactivity -- local accumulator, not reactive state
+      currentSearchSubscription = ambRankedSearchLoader(filters, 100).subscribe({
+        next: ({ event, relay }) => {
+          const list = learningSearchByRelay.get(relay) ?? [];
+          list.push(event);
+          learningSearchByRelay.set(relay, list);
+          learningSearchRank = buildRankIndex([...learningSearchByRelay.values()]);
+          if (!seenIds.has(event.id)) {
+            seenIds.add(event.id);
+            learningSearchResults = [...learningSearchResults, event];
+          }
         },
         error: (error) => {
           console.error('🔍 Learning search error:', error);
           isLearningSearchActive = false;
           isSearching = false;
+          resetLearningSearchRank();
         },
         complete: () => {
           isSearching = false;
@@ -474,6 +505,7 @@
       isLearningSearchActive = false;
       isSearching = false;
       learningSearchResults = [];
+      resetLearningSearchRank();
     }
   }
 
@@ -1446,10 +1478,36 @@
   });
 
   // Step 6: Sort (only runs when filtered items or sort order changes)
-  // Events tab defaults to 'oldest' (soonest first) - this is the expected behavior for calendar views
-  const effectiveSortBy = $derived(contentType === 'events' ? 'oldest' : sortBy);
+  // Events tab defaults to 'oldest' (soonest first) - this is the expected behavior for calendar views.
+  // 'relevance' only exists while a NIP-50 learning search is active; otherwise fall back to newest.
+  const canSortByRelevance = $derived(contentType === 'learning' && isLearningSearchActive);
+  const effectiveSortBy = $derived(
+    contentType === 'events'
+      ? 'oldest'
+      : sortBy === 'relevance' && !canSortByRelevance
+        ? 'newest'
+        : sortBy
+  );
+
+  /**
+   * Relevance key of a formatted AMB item — must match `searchRankKey(event)`.
+   * @param {{type: string, data: any}} item
+   */
+  function getItemRankKey(item) {
+    const r = item.data;
+    return r.identifier !== undefined ? `${r.kind}:${r.pubkey}:${r.identifier}` : r.id;
+  }
 
   const combinedContent = $derived.by(() => {
+    if (effectiveSortBy === 'relevance') {
+      const rank = learningSearchRank;
+      return [...searchFilteredItems].sort((a, b) => {
+        const aRank = rank.get(getItemRankKey(a)) ?? Infinity;
+        const bRank = rank.get(getItemRankKey(b)) ?? Infinity;
+        if (aRank !== bRank) return aRank - bRank;
+        return getItemTimestamp(b) - getItemTimestamp(a);
+      });
+    }
     return [...searchFilteredItems].sort((a, b) => {
       const aDate = getItemTimestamp(a);
       const bDate = getItemTimestamp(b);
@@ -1698,6 +1756,9 @@
             <span class="label-text font-medium">{m.discover_sort_label()}</span>
           </label>
           <select id="sort" bind:value={sortBy} class="select-bordered select w-full">
+            {#if canSortByRelevance}
+              <option value="relevance">{m.discover_sort_relevance()}</option>
+            {/if}
             <option value="newest">{m.discover_sort_newest()}</option>
             <option value="oldest">{m.discover_sort_oldest()}</option>
           </select>

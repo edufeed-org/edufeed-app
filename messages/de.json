@@ -1083,6 +1083,7 @@
   "discover_sort_label": "Sortieren nach",
   "discover_sort_newest": "Neueste zuerst",
   "discover_sort_oldest": "Älteste zuerst",
+  "discover_sort_relevance": "Relevanz",
   "discover_community_label": "Community:",
   "discover_relay_label": "Quelle:",
   "discover_relay_all": "Alle",
