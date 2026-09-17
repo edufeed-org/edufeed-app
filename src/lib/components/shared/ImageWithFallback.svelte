@@ -107,9 +107,16 @@
     failedStages += 1;
   }
 
+  // Whether the caller has been told about the current source loading. Plain
+  // let: written from the load handler and read by the already-complete
+  // effect below, which must not re-run on it.
+  let notifiedLoaded = false;
+
   /** @param {Event} event */
   function handleLoad(event) {
     imageLoaded = true;
+    if (notifiedLoaded) return;
+    notifiedLoaded = true;
     onload?.(event);
   }
 
@@ -125,6 +132,7 @@
       failedStages = 0;
       imageLoaded = false;
       notifiedExhausted = false;
+      notifiedLoaded = false;
     }
   });
 
@@ -139,10 +147,15 @@
     }
   });
 
-  // Images that finished loading before hydration attached the load listener
-  // (e.g. cached logo in SSR'd HTML) would otherwise keep the skeleton tone.
+  // Images that finished loading before the load listener was attached (a
+  // cached logo in SSR'd HTML, a memory-cached cover on a remounted card)
+  // would otherwise keep the skeleton tone and never hand the caller their
+  // natural size. Replaying `load` on the element routes through handleLoad,
+  // so the caller sees the same event shape and is notified exactly once.
   $effect(() => {
-    if (imgEl && imgEl.complete && imgEl.naturalWidth > 0) imageLoaded = true;
+    if (imgEl && imgEl.complete && imgEl.naturalWidth > 0 && !notifiedLoaded) {
+      imgEl.dispatchEvent(new Event('load'));
+    }
   });
 
   const PLACEHOLDER_ICONS = {

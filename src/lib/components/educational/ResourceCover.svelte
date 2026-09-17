@@ -31,13 +31,14 @@
   } from '$lib/helpers/educational/pdfThumbnailGate.js';
   import { getCachedConcepts, ensureVocabularyLoaded } from '$lib/stores/skos-cache.svelte.js';
   import { getLocale } from '$lib/paraglide/runtime.js';
-  import { clampCoverAspect } from '$lib/helpers/educational/coverAspect.js';
+  import { clampCoverAspect, clampCardAspect } from '$lib/helpers/educational/coverAspect.js';
+  import { useAdaptiveAspect } from '$lib/helpers/adaptive-aspect.svelte.js';
 
   /**
    * @typedef {Object} Props
    * @property {any} resource — AMB resource (same shape AMBResourceCard consumes)
    * @property {'thumbnail' | 'full'} [size]
-   * @property {'auto' | 'square' | 'video' | 'wide' | 'portrait' | 'adaptive'} [aspect] - 'adaptive' sizes the frame to the image's natural orientation (clamped 3:4 to 16:9); non-image branches treat it as portrait
+   * @property {'auto' | 'square' | 'video' | 'wide' | 'portrait' | 'adaptive' | 'adaptive-card'} [aspect] - 'adaptive' sizes the frame to the image's natural orientation (detail hero, clamped 3:4 to 16:9); 'adaptive-card' does the same for feed/grid cards (clamped 1:1 to 16:9). Non-image branches treat both as their loading class.
    * @property {string} [class]
    */
 
@@ -48,29 +49,35 @@
   ensureVocabularyLoaded('learningResourceType');
 
   // Aspect class map for the image branch. 'auto' = no aspect class.
-  // 'adaptive' renders as portrait until the image reports its natural size,
-  // then follows the artwork's orientation (see adaptiveRatio below).
+  // The adaptive modes render their loading class until the image reports
+  // its natural size, then follow the artwork's orientation (see below):
+  // portrait for the detail hero (common typo-cover case doesn't jump),
+  // 16:9 for cards (closest to the fixed banner they used to render).
   const ASPECT_CLASS = /** @type {Record<string, string>} */ ({
     auto: '',
     square: 'aspect-square',
     video: 'aspect-video',
     wide: 'aspect-[2/1]',
     portrait: 'aspect-[3/4]',
-    adaptive: 'aspect-[3/4]'
+    adaptive: 'aspect-[3/4]',
+    'adaptive-card': 'aspect-video'
   });
 
   const aspectClass = $derived(ASPECT_CLASS[aspect] ?? '');
 
   // Adaptive frame: measured natural ratio of the loaded image, clamped so
-  // the frame follows the artwork (landscape slides stay landscape) instead
-  // of center-cropping it. null until the image has loaded — the portrait
-  // aspect class above covers that window so the layout doesn't jump for
-  // the common portrait/typo case.
-  let adaptiveRatio = $state(/** @type {number | null} */ (null));
+  // the frame follows the artwork (a square illustration stays square, a
+  // landscape slide stays landscape) instead of center-cropping it.
+  const ADAPTIVE_CLAMP = /** @type {Record<string, (w?: number, h?: number) => number>} */ ({
+    adaptive: clampCoverAspect,
+    'adaptive-card': clampCardAspect
+  });
+  const adaptiveCover = useAdaptiveAspect((w, h) => ADAPTIVE_CLAMP[aspect](w, h));
+  const isAdaptive = $derived(aspect in ADAPTIVE_CLAMP);
+  const adaptiveRatio = $derived(isAdaptive ? adaptiveCover.ratio : null);
   function handleImageLoad(/** @type {Event} */ event) {
-    if (aspect !== 'adaptive') return;
-    const img = /** @type {HTMLImageElement} */ (event.currentTarget);
-    adaptiveRatio = clampCoverAspect(img.naturalWidth, img.naturalHeight);
+    if (!isAdaptive) return;
+    adaptiveCover.onload(event);
   }
 
   // A cover URL that cannot be shown (dead host, 404, hotlink block) is treated
@@ -184,7 +191,7 @@
 {#if hasImage}
   <div
     class="resource-cover-image relative w-full overflow-hidden rounded-lg bg-base-200 {aspectClass} {className}"
-    style:aspect-ratio={aspect === 'adaptive' && adaptiveRatio ? adaptiveRatio : undefined}
+    style:aspect-ratio={adaptiveRatio ?? undefined}
     data-testid="resource-cover-image"
   >
     <ImageWithFallback
@@ -206,6 +213,7 @@
 {:else if pdfThumbUrl}
   <div
     class="resource-cover-pdf-thumb relative w-full overflow-hidden rounded-lg bg-base-200 {aspectClass} {className}"
+    style:aspect-ratio={adaptiveRatio ?? undefined}
     data-testid="resource-cover-pdf-thumb"
   >
     <img
@@ -213,6 +221,7 @@
       alt={title}
       loading="lazy"
       class="h-full w-full object-cover object-top"
+      onload={handleImageLoad}
       onerror={() => (thumbFailed = true)}
     />
   </div>

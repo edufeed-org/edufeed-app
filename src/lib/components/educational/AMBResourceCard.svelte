@@ -460,7 +460,8 @@
       {/if}
     </div>
 
-    <!-- Resource cover — image at 2:1 when present, typo cover at 3:4 (capped) when absent.
+    <!-- Resource cover — image in an adaptive frame (follows the artwork,
+         square to 16:9) when present, typo cover at 3:4 (capped) when absent.
          On hover, a badge names what is behind the cover (#57). The pointer
          handler only fills in a linked PDF's page count, which cannot come off
          the event; everything else in the badge is already rendered, so nothing
@@ -478,7 +479,7 @@
            fight with a hover-revealed materials badge in the same spot. -->
       <!-- svelte-ignore a11y_no_static_element_interactions -->
       <div class="group relative mb-3" onpointerenter={loadBadgePageCount}>
-        <ResourceCover {resource} size="full" aspect="wide" />
+        <ResourceCover {resource} size="full" aspect="adaptive-card" />
         {#if linkedMaterialsLabel}
           <span
             class="absolute top-2 left-2 badge badge-sm shadow badge-neutral"

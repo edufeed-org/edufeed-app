@@ -124,6 +124,19 @@ describe('ArticleCard', () => {
 
       expect(container.textContent).toContain('Test Article Title');
     });
+
+    it('uses an adaptive cover frame instead of a fixed 2:1 crop', () => {
+      const { container } = render(ArticleCard, {
+        props: { article: mockArticle, authorProfile: mockAuthorProfile }
+      });
+
+      const frame = /** @type {HTMLElement} */ (
+        container.querySelector('[data-testid="article-cover-frame"]')
+      );
+      expect(frame).toBeTruthy();
+      expect(frame.className).toMatch(/aspect-video/);
+      expect(frame.className).not.toMatch(/aspect-\[2\/1\]/);
+    });
   });
 
   describe('list variant', () => {

@@ -204,6 +204,17 @@ describe('AMBResourceCard', () => {
 
       expect(container.textContent).toContain('Introduction to Mathematics');
     });
+
+    it('renders the cover in an adaptive card frame, not a fixed 2:1 crop', () => {
+      const { container } = render(AMBResourceCard, {
+        props: { resource: mockResource, authorProfile: mockAuthorProfile }
+      });
+
+      const cover = container.querySelector('[data-testid="resource-cover-image"]');
+      expect(cover).toBeTruthy();
+      expect(cover?.className).toMatch(/aspect-video/);
+      expect(cover?.className).not.toMatch(/aspect-\[2\/1\]/);
+    });
   });
 
   describe('list variant', () => {
@@ -224,6 +235,18 @@ describe('AMBResourceCard', () => {
       const listItem = /** @type {HTMLElement} */ (container.querySelector('.amb-card-list'));
       expect(listItem).toBeTruthy();
       expect(listItem.classList.contains('flex')).toBe(true);
+    });
+
+    it('keeps a fixed square thumbnail (only the full card cover is adaptive)', () => {
+      const { container } = render(AMBResourceCard, {
+        props: { resource: mockResource, authorProfile: mockAuthorProfile, variant: 'list' }
+      });
+
+      const thumbnail = /** @type {HTMLElement | null} */ (
+        container.querySelector('[data-testid="resource-cover-image"]')
+      );
+      expect(thumbnail?.className).toMatch(/aspect-square/);
+      expect(thumbnail?.style.aspectRatio ?? '').toBe('');
     });
 
     it('shows a small square thumbnail', () => {

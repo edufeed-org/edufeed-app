@@ -13,6 +13,7 @@
   import ImageWithFallback from '../shared/ImageWithFallback.svelte';
   import ImageLicenseOverlay from '../shared/ImageLicenseOverlay.svelte';
   import { useLicenseStatus } from '$lib/stores/image-license.svelte.js';
+  import { useAdaptiveAspect } from '$lib/helpers/adaptive-aspect.svelte.js';
   import { getSha256FromURL } from 'applesauce-common/helpers';
   import ReactionBar from '../reactions/ReactionBar.svelte';
   import EventTags from '../calendar/EventTags.svelte';
@@ -55,6 +56,9 @@
 
   const getCoverStatus = useLicenseStatus(() => imageHash);
   const coverStatus = $derived(getCoverStatus());
+
+  // Cover frame follows the image (square to 16:9) instead of cropping it to 2:1.
+  const cover = useAdaptiveAspect();
 
   // Get summary from tags or truncate content
   const summary = $derived.by(() => {
@@ -229,13 +233,18 @@
     <!-- Article Image -->
     {#if image && !compact}
       <div class="mb-3">
-        <div class="relative aspect-[2/1] w-full overflow-hidden rounded-lg">
+        <div
+          class="relative aspect-video w-full overflow-hidden rounded-lg bg-base-200"
+          style:aspect-ratio={cover.ratio ?? undefined}
+          data-testid="article-cover-frame"
+        >
           <ImageWithFallback
             src={image}
             alt={title}
             fallbackType="article"
             size="card"
             class="h-full w-full object-cover"
+            onload={cover.onload}
           />
           <ImageLicenseOverlay
             licenseEvent={coverStatus.event}

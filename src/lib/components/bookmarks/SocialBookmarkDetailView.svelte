@@ -51,6 +51,7 @@
   import ReactionPicker from '$lib/components/reactions/ReactionPicker.svelte';
   import ProfileAvatar from '$lib/components/shared/ProfileAvatar.svelte';
   import ImageWithFallback from '$lib/components/shared/ImageWithFallback.svelte';
+  import { useAdaptiveAspect } from '$lib/helpers/adaptive-aspect.svelte.js';
   import ShareMenu from '$lib/components/bookmarks/ShareMenu.svelte';
   import {
     HeartIcon,
@@ -96,6 +97,8 @@
     article ? getArticleTitle(article) || pointer.identifier : pointer.identifier
   );
   const image = $derived(article ? getArticleImage(article) : undefined);
+  // Hero frame follows the image (square to 16:9) instead of cropping it to 2:1.
+  const cover = useAdaptiveAspect();
   const summary = $derived.by(() => {
     const tag = article?.tags?.find((/** @type {string[]} */ t) => t[0] === 'summary');
     return tag?.[1] || '';
@@ -909,13 +912,17 @@
           </div>
 
           {#if image}
-            <div class="mt-6 aspect-[16/8] w-full overflow-hidden rounded-xl">
+            <div
+              class="mt-6 aspect-video w-full overflow-hidden rounded-xl bg-base-200"
+              style:aspect-ratio={cover.ratio ?? undefined}
+            >
               <ImageWithFallback
                 src={image}
                 alt={title}
                 fallbackType="article"
                 size="hero"
                 class="h-full w-full object-cover"
+                onload={cover.onload}
               />
             </div>
           {/if}
