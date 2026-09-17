@@ -236,6 +236,38 @@ describe('MembershipApprovalsPanel', () => {
     expect(body).toEqual({ name: 'maria', pubkey: APPLICANT_PUBKEY });
   });
 
+  it('lowercases a mixed-case wished_handle before checking and approving it', async () => {
+    // NIP-05 restricts the local part to a-z0-9-_. and the nip-05-service
+    // rejects anything else with 400 — an applicant who typed "Campus" must
+    // still be approvable as "campus".
+    timelineState.events = [makeResponse('Campus')];
+    nip44DecryptMock.mockResolvedValue(JSON.stringify([['response', 'wished_handle', 'Campus']]));
+    const fetchSpy = mockFetch({
+      wellKnown: emptyWellKnown(),
+      proxyPost: new Response(JSON.stringify({ name: 'campus', pubkey: APPLICANT_PUBKEY }), {
+        status: 201,
+        headers: { 'content-type': 'application/json' }
+      })
+    });
+
+    const { findByRole, findByText } = render(MembershipApprovalsPanel);
+    await findByText(/campus@/);
+    const btn = await findByRole('button', { name: /Approve|Genehmigen/i });
+    await fireEvent.click(btn);
+
+    await waitFor(() => {
+      expect(fetchSpy.mock.calls.some((c) => String(c[0]).endsWith('/api/nip05'))).toBe(true);
+    });
+    const wellKnownCall = /** @type {any[]} */ (
+      fetchSpy.mock.calls.find((c) => String(c[0]).includes('/.well-known/nostr.json'))
+    );
+    expect(String(wellKnownCall[0])).toMatch(/name=campus$/);
+    const proxyCall = /** @type {any[]} */ (
+      fetchSpy.mock.calls.find((c) => String(c[0]).endsWith('/api/nip05'))
+    );
+    expect(JSON.parse(proxyCall[1].body)).toEqual({ name: 'campus', pubkey: APPLICANT_PUBKEY });
+  });
+
   it('surfaces a friendly error on upstream 409 (handle already taken)', async () => {
     timelineState.events = [makeResponse('maria')];
     mockFetch({

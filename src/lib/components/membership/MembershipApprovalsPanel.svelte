@@ -20,7 +20,10 @@
   import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
   import { runtimeConfig } from '$lib/stores/config.svelte.js';
   import { formResponseLoader } from '$lib/loaders/community.js';
-  import { selectAdminApplications } from '$lib/helpers/membership-applications.js';
+  import {
+    normalizeHandle,
+    selectAdminApplications
+  } from '$lib/helpers/membership-applications.js';
   import { parseResponseTags, parseFormTemplate, nip44DecryptWith } from '$lib/helpers/forms.js';
   import { createNIP98AuthHeader } from '$lib/helpers/nip98.js';
   import { sendWrappedDm } from '$lib/services/wrapped-dm.js';
@@ -168,7 +171,7 @@
     if (!handleDomain) return;
     for (const response of responses) {
       const values = decrypted.get(response.id);
-      const name = values?.wished_handle?.trim();
+      const name = normalizeHandle(values?.wished_handle);
       if (!name) continue;
       if (approvalState.has(response.id)) continue;
       checkUpstream(response, name);
@@ -229,7 +232,7 @@
    */
   async function approve(response) {
     const values = decrypted.get(response.id);
-    const name = values?.wished_handle?.trim();
+    const name = normalizeHandle(values?.wished_handle);
     if (!name) {
       approvalState = new Map([...approvalState, [response.id, m.admin_membership_no_handle()]]);
       return;
@@ -327,7 +330,7 @@
    */
   async function revoke(response) {
     const values = decrypted.get(response.id);
-    const name = values?.wished_handle?.trim();
+    const name = normalizeHandle(values?.wished_handle);
     if (!name) return;
     if (!confirm(m.admin_membership_revoke_confirm({ handle: `${name}@${handleDomain}` }))) return;
 
@@ -437,7 +440,7 @@
             </a>
             {#if values?.wished_handle}
               <code class="self-center rounded bg-base-200 px-2 py-1 text-sm">
-                {values.wished_handle}@{cfg.handleDomain}
+                {normalizeHandle(values.wished_handle)}@{cfg.handleDomain}
               </code>
             {/if}
             <div class="flex flex-wrap items-center gap-2">
@@ -498,7 +501,7 @@
           <div class="flex flex-wrap items-center gap-3 p-3 text-sm">
             <span class="badge badge-sm badge-success">{m.admin_membership_approved()}</span>
             <code class="text-sm">
-              {values?.wished_handle ?? '…'}@{cfg.handleDomain}
+              {normalizeHandle(values?.wished_handle) || '…'}@{cfg.handleDomain}
             </code>
             <a
               href={resolve(profileLink(response.pubkey))}
