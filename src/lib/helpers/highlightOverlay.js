@@ -124,6 +124,115 @@ export function matchHighlights(articleText, highlights) {
 }
 
 /**
+ * Elements whose start/end acts as a line break in the browser's selection
+ * string (window.getSelection().toString()). <br> is listed too — it is a
+ * self-closing break, handled by the same code path.
+ */
+const BREAK_TAGS = new Set([
+  'BR',
+  'P',
+  'DIV',
+  'LI',
+  'UL',
+  'OL',
+  'DL',
+  'DT',
+  'DD',
+  'H1',
+  'H2',
+  'H3',
+  'H4',
+  'H5',
+  'H6',
+  'BLOCKQUOTE',
+  'PRE',
+  'HR',
+  'TABLE',
+  'THEAD',
+  'TBODY',
+  'TFOOT',
+  'TR',
+  'TD',
+  'TH',
+  'SECTION',
+  'ARTICLE',
+  'HEADER',
+  'FOOTER',
+  'FIGURE',
+  'FIGCAPTION',
+  'DETAILS',
+  'SUMMARY'
+]);
+
+/**
+ * @typedef {{ node: Text | null, start: number, length: number }} TextSegment
+ * A run of characters in the matchable text. `node` is the DOM text node that
+ * carries them, or null for a synthetic line break that has no DOM text.
+ */
+
+/**
+ * Walk a container and collect its text as segments, in document order.
+ *
+ * `container.textContent` is NOT usable for highlight matching: it drops <br>
+ * entirely and glues adjacent blocks together, so "ended.<br>Publicly" reads
+ * "ended.Publicly". A highlight created from a browser selection contains a
+ * "\n" at that spot (and so do highlights from clients like Boris, whose
+ * renderer keeps soft line breaks as literal newlines). Emitting a synthetic
+ * "\n" segment for <br> and for block boundaries makes the text mirror the
+ * selection string, and normalizeWhitespace() then matches both.
+ *
+ * @param {HTMLElement | null | undefined} container
+ * @returns {TextSegment[]}
+ */
+function collectTextSegments(container) {
+  /** @type {TextSegment[]} */
+  const segments = [];
+  if (!container) return segments;
+  let cumulative = 0;
+
+  /** @param {Text | null} node @param {number} length */
+  const push = (node, length) => {
+    segments.push({ node, start: cumulative, length });
+    cumulative += length;
+  };
+
+  /** @param {Node} parent */
+  const walk = (parent) => {
+    for (const child of Array.from(parent.childNodes)) {
+      if (child.nodeType === Node.TEXT_NODE) {
+        const len = (child.textContent || '').length;
+        if (len > 0) push(/** @type {Text} */ (child), len);
+      } else if (child.nodeType === Node.ELEMENT_NODE) {
+        const isBreak = BREAK_TAGS.has(/** @type {Element} */ (child).tagName);
+        if (isBreak) push(null, 1);
+        walk(child);
+        if (isBreak && /** @type {Element} */ (child).tagName !== 'BR') push(null, 1);
+      }
+    }
+  };
+
+  walk(container);
+  return segments;
+}
+
+/**
+ * Text of a rendered container as the browser selection would produce it:
+ * text nodes verbatim, "\n" for <br> and around block elements.
+ *
+ * This is the ONLY text that may be handed to matchHighlights() /
+ * extractContext() for a container that injectHighlightMarks() later
+ * operates on — both sides must count characters the same way.
+ *
+ * @param {HTMLElement | null | undefined} container
+ * @returns {string}
+ */
+export function getMatchableText(container) {
+  return collectTextSegments(container)
+    .map((seg) => (seg.node ? seg.node.textContent || '' : '\n'))
+    .join('');
+}
+
+/**
  * Build a mapping from normalized-text positions back to raw-text positions.
  * normalizeWhitespace collapses runs of whitespace to single spaces and trims.
  * This map lets us convert match positions (found in normalized space) to the
@@ -158,9 +267,10 @@ export function buildNormToRawMap(rawText) {
  * Inject <mark> elements into a rendered article container.
  * Uses TreeWalker to find text nodes and wrap matched ranges.
  *
- * Matches are in normalized-text positions (from matchHighlights).
- * This function converts them to raw DOM positions via buildNormToRawMap,
- * then walks text nodes using raw cumulative offsets.
+ * Matches are in normalized-text positions (from matchHighlights, computed
+ * against getMatchableText(container)). This function converts them to raw
+ * positions via buildNormToRawMap, then walks the same text segments using
+ * raw cumulative offsets.
  *
  * @param {HTMLElement} container
  * @param {Array<{start: number, end: number, events: any[]}>} matches - positions in normalized space
@@ -169,8 +279,10 @@ export function buildNormToRawMap(rawText) {
 export function injectHighlightMarks(container, matches, profiles) {
   if (!matches.length || !container) return;
 
-  // Convert match positions from normalized space to raw DOM space
-  const rawText = container.textContent || '';
+  // Same segmentation as getMatchableText(), so raw offsets line up with the
+  // text the matches were computed against.
+  const textNodes = collectTextSegments(container);
+  const rawText = textNodes.map((seg) => (seg.node ? seg.node.textContent || '' : '\n')).join('');
   const normToRaw = buildNormToRawMap(rawText);
 
   const rawMatches = matches.map((match) => ({
@@ -178,20 +290,6 @@ export function injectHighlightMarks(container, matches, profiles) {
     end: normToRaw[match.end] ?? rawText.length,
     events: match.events
   }));
-
-  // Build a list of text nodes with raw cumulative offsets
-  const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT);
-  /** @type {Array<{node: Text, start: number, length: number}>} */
-  const textNodes = [];
-  let cumulative = 0;
-
-  /** @type {Text | null} */
-  let current;
-  while ((current = /** @type {Text | null} */ (walker.nextNode()))) {
-    const len = (current.textContent || '').length;
-    textNodes.push({ node: current, start: cumulative, length: len });
-    cumulative += len;
-  }
 
   // For each match, find the text nodes that contain the range and wrap them
   // Process in reverse order to avoid invalidating offsets
@@ -214,7 +312,7 @@ export function injectHighlightMarks(container, matches, profiles) {
 
 /**
  * Wrap a character range across text nodes with a <mark> element.
- * @param {Array<{node: Text, start: number, length: number}>} textNodes
+ * @param {TextSegment[]} textNodes
  * @param {number} rangeStart
  * @param {number} rangeEnd
  * @param {string} tooltip
@@ -228,6 +326,8 @@ function wrapRange(textNodes, rangeStart, rangeEnd, tooltip, highlightIds) {
     if (nodeEnd <= rangeStart) continue;
     // Stop after range
     if (entry.start >= rangeEnd) break;
+    // Synthetic line break (<br> / block boundary) — nothing to wrap
+    if (!entry.node) continue;
 
     const node = entry.node;
     const text = node.textContent || '';
