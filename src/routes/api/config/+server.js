@@ -269,6 +269,14 @@ export function GET() {
     // Profile indexer relays for bulk profile lookups
     indexerRelays: parseArray(env.INDEXER_RELAYS),
 
+    // NIP-50 capable relays for free-text profile search (people pickers,
+    // impersonation check). Lookup/fallback relays are NOT used for this —
+    // strfry rejects the `search` filter field.
+    profileSearchRelays: parseArray(env.PROFILE_SEARCH_RELAYS, [
+      'wss://relay.nostr.band',
+      'wss://nostr.wine'
+    ]),
+
     // Default Blossom servers
     defaultBlossomServers: parseArray(env.DEFAULT_BLOSSOM_SERVERS, [
       'https://blossom.primal.net',

@@ -171,3 +171,38 @@ describe('LicensedImageInput — stale re-pick', () => {
     expect(callHashes.at(-1)).toBe('b'.repeat(64));
   });
 });
+
+describe('LicensedImageInput — previewShape="avatar"', () => {
+  // Issue f2763558: a pasted picture URL gave no feedback at all, so the
+  // tester assumed it was not taken and clicked "Add image" instead. The
+  // opt-in round preview mirrors the URL live.
+  it('renders no preview by default', () => {
+    const { queryByTestId } = render(LicensedImageInput, {
+      props: { imageUrl: 'https://example.com/pic.png' }
+    });
+    expect(queryByTestId('licensed-image-preview')).toBeNull();
+  });
+
+  it('shows a round preview slot even before a URL is entered', () => {
+    const { getByTestId } = render(LicensedImageInput, {
+      props: { imageUrl: '', previewShape: 'avatar' }
+    });
+    const preview = getByTestId('licensed-image-preview');
+    expect(preview).toBeTruthy();
+    expect(preview.querySelector('img')).toBeNull();
+  });
+
+  it('mirrors the typed URL into the preview image', async () => {
+    const { getByTestId } = render(LicensedImageInput, {
+      props: { imageUrl: '', previewShape: 'avatar' }
+    });
+    const urlInput = getByTestId('licensed-image-url-input');
+    await fireEvent.input(urlInput, { target: { value: 'https://example.com/pic.png' } });
+
+    const img = getByTestId('licensed-image-preview').querySelector('img');
+    expect(img).toBeTruthy();
+    expect(decodeURIComponent(img.getAttribute('src') ?? '')).toContain(
+      'https://example.com/pic.png'
+    );
+  });
+});

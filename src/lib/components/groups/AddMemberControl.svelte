@@ -216,12 +216,21 @@
     </button>
   </div>
 {:else}
+  <!-- showExcluded: a pasted npub that is already on the roster used to
+       yield NOTHING (the only row was filtered away), which reads as a dead
+       input (issue f2763558: "wollte dich hinzufügen, aber wie mache ich
+       das?"). Now it renders disabled with an "already a member" badge.
+       searchProfiles: suggest people beyond the admin's own follows. -->
   <ContactSearchInput
     acceptPubkeyInput
     inlineList
+    showExcluded
+    searchProfiles
     disabled={busy}
     placeholder={m.groups_members_add_placeholder()}
     exclude={[...members]}
+    excludedLabel={m.groups_members_already_member()}
+    addPubkeyLabel={m.list_detail_add_profile_add_pubkey()}
     onselect={(/** @type {{ pubkey: string }} */ c) => addMember(c.pubkey)}
     onrawpubkey={(/** @type {string} */ hex) => addMember(hex)}
   />

@@ -4,9 +4,11 @@
  *
  * @vitest-environment jsdom
  */
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, fireEvent } from '@testing-library/svelte';
 import { nip19 } from 'nostr-tools';
+import { Subject } from 'rxjs';
+import { tick } from 'svelte';
 import { contactsStore } from '$lib/stores/contacts.svelte.js';
 import ContactSearchInput from '../shared/ContactSearchInput.svelte';
 
@@ -69,7 +71,41 @@ vi.mock('$lib/stores/contacts.svelte.js', () => ({
 vi.mock('$lib/paraglide/messages', () => ({
   contact_search_hint: ({ count }) => `Search ${count} follows or enter npub`,
   contact_search_loading: () => 'Loading contacts...',
-  contact_search_enter_npub: () => 'Enter npub to search'
+  contact_search_enter_npub: () => 'Enter npub to search',
+  contact_search_profiles_hint: () => 'Search by name or enter npub',
+  contact_search_profiles_searching: () => 'Searching relays…'
+}));
+
+// `searchProfiles` mode: people outside the follow list, from the local
+// EventStore (searchKnownProfiles) and from NIP-50 relays
+// (profileNameSearchLoader). Both are driven per test.
+const profileSearch = vi.hoisted(() => ({
+  searchKnownProfiles: vi.fn(() => []),
+  profileNameSearchLoader: vi.fn(),
+  /** @type {import('rxjs').Subject<any> | null} */
+  remote: null
+}));
+
+vi.mock('$lib/loaders/profile-search.js', () => ({
+  searchKnownProfiles: profileSearch.searchKnownProfiles,
+  profileNameSearchLoader: profileSearch.profileNameSearchLoader,
+  profileToContact: (event) => {
+    const c = JSON.parse(event.content);
+    return {
+      pubkey: event.pubkey,
+      name: c.name ?? null,
+      display_name: c.display_name ?? null,
+      picture: c.picture ?? null,
+      nip05: c.nip05 ?? null,
+      about: null
+    };
+  },
+  profileMatches: (contact, term) => {
+    const t = term.toLowerCase();
+    return [contact.name, contact.display_name, contact.nip05].some((v) =>
+      (v || '').toLowerCase().includes(t)
+    );
+  }
 }));
 
 beforeEach(() => {
@@ -516,5 +552,196 @@ describe('ContactSearchInput — inlineList flag', () => {
     const button = container.querySelector('[data-testid="contact-search-list"] button');
     await fireEvent.click(button);
     expect(onselect).toHaveBeenCalledWith(expect.objectContaining({ pubkey: 'abc123' }));
+  });
+});
+
+describe('ContactSearchInput — Escape inside a <dialog>', () => {
+  it('prevents the default so an enclosing dialog does not cancel while the list is open', async () => {
+    const { container } = render(ContactSearchInput, { props: { value: '' } });
+    const input = container.querySelector('input');
+    await fireEvent.input(input, { target: { value: 'al' } });
+    expect(container.querySelector('.absolute.z-50')).toBeTruthy();
+
+    const event = new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true });
+    input.dispatchEvent(event);
+    expect(event.defaultPrevented).toBe(true);
+    await tick();
+    expect(container.querySelector('.absolute.z-50')).toBeNull();
+  });
+
+  it('leaves Escape alone when no list is open (dialog may cancel)', () => {
+    const { container } = render(ContactSearchInput, { props: { value: '' } });
+    const input = container.querySelector('input');
+    const event = new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true });
+    input.dispatchEvent(event);
+    expect(event.defaultPrevented).toBe(false);
+  });
+});
+
+describe('ContactSearchInput — searchProfiles flag', () => {
+  const COLIBRI = 'c'.repeat(64);
+  const FRAMA = 'f'.repeat(64);
+  const knownColibri = {
+    pubkey: COLIBRI,
+    name: 'colibri',
+    display_name: 'Colibri',
+    picture: null,
+    nip05: null,
+    about: null
+  };
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    profileSearch.remote = new Subject();
+    profileSearch.searchKnownProfiles.mockReset();
+    profileSearch.searchKnownProfiles.mockReturnValue([]);
+    profileSearch.profileNameSearchLoader.mockReset();
+    profileSearch.profileNameSearchLoader.mockImplementation(() => profileSearch.remote);
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('is off by default: never consults known profiles or NIP-50 relays', async () => {
+    const { container } = render(ContactSearchInput, { props: { value: '' } });
+    const input = container.querySelector('input');
+    await fireEvent.input(input, { target: { value: 'coli' } });
+    vi.advanceTimersByTime(1000);
+
+    expect(profileSearch.searchKnownProfiles).not.toHaveBeenCalled();
+    expect(profileSearch.profileNameSearchLoader).not.toHaveBeenCalled();
+  });
+
+  it('lists a locally known profile that is not a follow', async () => {
+    profileSearch.searchKnownProfiles.mockReturnValue([knownColibri]);
+    const onselect = vi.fn();
+    const { container } = render(ContactSearchInput, {
+      props: { value: '', searchProfiles: true, onselect }
+    });
+    const input = container.querySelector('input');
+    await fireEvent.input(input, { target: { value: 'coli' } });
+
+    const list = container.querySelector('[data-testid="contact-search-list"]');
+    expect(list?.textContent).toContain('Colibri');
+
+    await fireEvent.click(list.querySelector('button'));
+    expect(onselect).toHaveBeenCalledWith(expect.objectContaining({ pubkey: COLIBRI }));
+  });
+
+  it('lists follows before other profiles and never twice', async () => {
+    // Alice is a follow AND (stale copy) in the known-profile index.
+    profileSearch.searchKnownProfiles.mockReturnValue([
+      { ...knownColibri, pubkey: 'abc123', name: 'alice', display_name: 'Alice Smith' },
+      knownColibri
+    ]);
+    vi.mocked(contactsStore.searchContacts).mockReturnValueOnce([mockContacts[0]]);
+    const { container } = render(ContactSearchInput, {
+      props: { value: '', searchProfiles: true }
+    });
+    const input = container.querySelector('input');
+    await fireEvent.input(input, { target: { value: 'li' } });
+
+    const rows = [...container.querySelectorAll('[data-testid="contact-search-list"] button')];
+    expect(rows.map((r) => r.textContent?.trim())).toEqual([
+      expect.stringContaining('Alice Smith'),
+      expect.stringContaining('Colibri')
+    ]);
+  });
+
+  it('queries NIP-50 relays after a debounce and appends the results', async () => {
+    const { container } = render(ContactSearchInput, {
+      props: { value: '', searchProfiles: true }
+    });
+    const input = container.querySelector('input');
+    await fireEvent.input(input, { target: { value: 'fra' } });
+
+    // Not yet — debounced.
+    expect(profileSearch.profileNameSearchLoader).not.toHaveBeenCalled();
+    vi.advanceTimersByTime(400);
+    await tick();
+    expect(profileSearch.profileNameSearchLoader).toHaveBeenCalledWith('fra', expect.any(Number));
+    expect(container.textContent).toContain('Searching relays…');
+
+    profileSearch.remote.next({
+      kind: 0,
+      pubkey: FRAMA,
+      tags: [],
+      content: JSON.stringify({ name: 'Framasoft' })
+    });
+    await tick();
+
+    const list = container.querySelector('[data-testid="contact-search-list"]');
+    expect(list?.textContent).toContain('Framasoft');
+
+    profileSearch.remote.complete();
+    await tick();
+    expect(container.textContent).not.toContain('Searching relays…');
+  });
+
+  it('drops NIP-50 results that do not actually match the typed term', async () => {
+    const { container } = render(ContactSearchInput, {
+      props: { value: '', searchProfiles: true }
+    });
+    const input = container.querySelector('input');
+    await fireEvent.input(input, { target: { value: 'colibri' } });
+    vi.advanceTimersByTime(400);
+
+    // search.nos.today-style fuzzy hit for "Colibri"
+    profileSearch.remote.next({
+      kind: 0,
+      pubkey: FRAMA,
+      tags: [],
+      content: JSON.stringify({ name: 'Framasoft' })
+    });
+    await tick();
+
+    expect(container.querySelector('[data-testid="contact-search-list"]')).toBeNull();
+  });
+
+  it('does not hit the relays for a pasted npub or a one-character term', async () => {
+    const { container } = render(ContactSearchInput, {
+      props: { value: '', searchProfiles: true, acceptPubkeyInput: true }
+    });
+    const input = container.querySelector('input');
+    await fireEvent.input(input, { target: { value: nip19.npubEncode(COLIBRI) } });
+    vi.advanceTimersByTime(400);
+    await fireEvent.input(input, { target: { value: 'c' } });
+    vi.advanceTimersByTime(400);
+
+    expect(profileSearch.profileNameSearchLoader).not.toHaveBeenCalled();
+  });
+
+  it('cancels a pending relay search when the term changes', async () => {
+    const { container } = render(ContactSearchInput, {
+      props: { value: '', searchProfiles: true }
+    });
+    const input = container.querySelector('input');
+    await fireEvent.input(input, { target: { value: 'fr' } });
+    vi.advanceTimersByTime(200);
+    await fireEvent.input(input, { target: { value: 'fra' } });
+    vi.advanceTimersByTime(400);
+
+    expect(profileSearch.profileNameSearchLoader).toHaveBeenCalledTimes(1);
+    expect(profileSearch.profileNameSearchLoader).toHaveBeenCalledWith('fra', expect.any(Number));
+  });
+
+  it('respects the exclude list for profile rows', async () => {
+    profileSearch.searchKnownProfiles.mockReturnValue([knownColibri]);
+    const { container } = render(ContactSearchInput, {
+      props: { value: '', searchProfiles: true, exclude: [COLIBRI] }
+    });
+    const input = container.querySelector('input');
+    await fireEvent.input(input, { target: { value: 'coli' } });
+
+    expect(container.querySelector('[data-testid="contact-search-list"]')).toBeNull();
+  });
+
+  it('shows the broader hint instead of the follow count', () => {
+    const { container } = render(ContactSearchInput, {
+      props: { value: '', searchProfiles: true }
+    });
+    expect(container.textContent).toContain('Search by name or enter npub');
+    expect(container.textContent).not.toContain('Search 3 follows');
   });
 });

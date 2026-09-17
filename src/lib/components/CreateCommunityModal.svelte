@@ -39,8 +39,16 @@
   import {
     communityWizardSteps,
     applyDefaultAccess,
-    disableAllContentTypes
+    disableAllContentTypes,
+    identityChoiceVisible
   } from '$lib/components/community/create/wizard-logic.js';
+  import { useActiveUser } from '$lib/stores/accounts.svelte';
+  import { useUserProfile } from '$lib/stores/user-profile.svelte.js';
+  import { useProfileMap } from '$lib/stores/profile-map.svelte.js';
+  import { getUserDisplayName } from '$lib/helpers/message-utils.js';
+  import { addressLoader } from '$lib/loaders/base.js';
+  import { getCommunikeyRelays } from '$lib/helpers/relay-helper.js';
+  import ProfileAvatar from './shared/ProfileAvatar.svelte';
   import { moderatedCreationAvailable } from '$lib/groups/feature.js';
   import {
     provisionRootGroup,
@@ -58,8 +66,49 @@
   let { modalId } = $props();
 
   // Step management - improved flow
-  let currentStep = $state(0); // 0 = keypair selection, 1+ = actual steps
+  let currentStep = $state(0); // 0 = identity choice, 1+ = actual steps
   let useCurrentKeypair = $state(false);
+
+  // Identity screen (step 0), reframed from "keypair" to "which profile"
+  // (issue f2763558: testers had not grasped keypairs yet). The active
+  // profile is shown on the "your current profile" card so the choice is
+  // concrete, and the screen is skipped entirely when that profile already
+  // IS a community — a kind 10222 is replaceable, reusing the key would
+  // overwrite the existing community's definition.
+  const getActiveUser = useActiveUser();
+  const getActiveProfile = useUserProfile();
+  let hasOwnCommunity = $state(false);
+  const identityChoice = $derived(identityChoiceVisible({ hasOwnCommunity }));
+  $effect(() => {
+    const pubkey = getActiveUser()?.pubkey;
+    const isOpen = modalStore.activeModal === 'createCommunity';
+    hasOwnCommunity = false;
+    if (!pubkey || !isOpen) return;
+    // Auto-loads on a cache miss via the unified loader; the explicit
+    // communikey-relay fetch covers deployments whose lookup relays do not
+    // carry 10222s.
+    const fetchSub = addressLoader({
+      kind: 10222,
+      pubkey,
+      relays: getCommunikeyRelays()
+    }).subscribe();
+    const sub = eventStore.replaceable(10222, pubkey).subscribe((event) => {
+      hasOwnCommunity = !!event;
+    });
+    return () => {
+      fetchSub.unsubscribe();
+      sub.unsubscribe();
+    };
+  });
+  $effect(() => {
+    if (modalStore.activeModal === 'createCommunity' && currentStep === 0 && !identityChoice) {
+      selectNewKeypair();
+    }
+  });
+
+  // Invitee rows on the people + confirm steps show avatar + name instead
+  // of a bare npub (same profile map the picker's synthetic row uses).
+  const getInviteeProfiles = useProfileMap(() => invitees.map((i) => i.pubkey));
 
   // Community type, chosen on the wizard's 'type' step (design spec
   // 2026-08-12). Replaces the old private-area toggle — 'closed' now implies
@@ -380,9 +429,13 @@
 
   /** @param {string} pubkey */
   function addInvitee(pubkey) {
+    // A pick consumes the search text: the next name starts from an empty
+    // field instead of being appended to the previous one.
+    peopleSearch = '';
     if (invitees.some((i) => i.pubkey === pubkey)) return;
     invitees = [...invitees, { pubkey, role: '' }];
   }
+  let peopleSearch = $state('');
 
   /** @param {string} pubkey */
   function removeInvitee(pubkey) {
@@ -693,38 +746,60 @@
     <!-- Step content -->
     <div class="min-h-96">
       {#if currentStep === 0}
-        <!-- Keypair Selection Step -->
-        <div class="space-y-4">
+        <!-- Identity choice: which profile the community lives under -->
+        <div class="space-y-4" data-testid="wizard-identity-step">
           <h2 class="mb-4 text-xl font-semibold">
-            {m.create_community_modal_keypair_selection_title()}
+            {m.create_community_modal_identity_title()}
           </h2>
 
           <div class="space-y-4">
-            <!-- Use Current Keypair Option -->
-            <div class="card bg-base-200">
-              <div class="card-body">
-                <h3 class="card-title">{m.create_community_modal_current_keypair_title()}</h3>
-                <p class="text-sm opacity-70">
-                  {m.create_community_modal_current_keypair_description()}
-                </p>
-                <div class="mt-4 card-actions justify-end">
-                  <button class="btn btn-primary" onclick={selectCurrentKeypair}>
-                    {m.create_community_modal_current_keypair_button()}
-                  </button>
+            {#if identityChoice}
+              <!-- Your current profile -->
+              {@const activePubkey = getActiveUser()?.pubkey}
+              <div class="card bg-base-200" data-testid="identity-current-profile">
+                <div class="card-body">
+                  <div class="flex items-center gap-3">
+                    {#if activePubkey}
+                      <ProfileAvatar
+                        pubkey={activePubkey}
+                        profile={getActiveProfile()}
+                        size="md"
+                        loading="eager"
+                      />
+                    {/if}
+                    <div class="min-w-0">
+                      <h3 class="card-title">
+                        {m.create_community_modal_identity_current_title()}
+                      </h3>
+                      {#if activePubkey}
+                        <p class="truncate text-sm font-medium">
+                          {getUserDisplayName(activePubkey, getActiveProfile())}
+                        </p>
+                      {/if}
+                    </div>
+                  </div>
+                  <p class="text-sm opacity-70">
+                    {m.create_community_modal_identity_current_description()}
+                  </p>
+                  <div class="mt-4 card-actions justify-end">
+                    <button class="btn btn-primary" onclick={selectCurrentKeypair}>
+                      {m.create_community_modal_identity_current_button()}
+                    </button>
+                  </div>
                 </div>
               </div>
-            </div>
+            {/if}
 
-            <!-- Create New Keypair Option -->
-            <div class="card bg-base-200">
+            <!-- A separate community profile -->
+            <div class="card bg-base-200" data-testid="identity-new-profile">
               <div class="card-body">
-                <h3 class="card-title">{m.create_community_modal_new_keypair_title()}</h3>
+                <h3 class="card-title">{m.create_community_modal_identity_new_title()}</h3>
                 <p class="text-sm opacity-70">
-                  {m.create_community_modal_new_keypair_description()}
+                  {m.create_community_modal_identity_new_description()}
                 </p>
                 <div class="mt-4 card-actions justify-end">
                   <button class="btn btn-secondary" onclick={selectNewKeypair}>
-                    {m.create_community_modal_new_keypair_button()}
+                    {m.create_community_modal_identity_new_button()}
                   </button>
                 </div>
               </div>
@@ -743,24 +818,48 @@
             <p class="mb-4">
               {m.create_community_modal_profile_description()}
             </p>
+            {#if !identityChoice}
+              {@const activePubkey = getActiveUser()?.pubkey}
+              <p class="mb-4 text-sm text-base-content/70" data-testid="identity-already-community">
+                {m.create_community_modal_identity_already_community({
+                  name: activePubkey ? getUserDisplayName(activePubkey, getActiveProfile()) : ''
+                })}
+              </p>
+            {/if}
           </div>
 
           <!-- The community picture goes through the licensed image input
                (upload + paste + license attestation), replacing the old raw
-               uploader/URL pair (laoc, 2026-08-11). -->
+               uploader/URL pair (laoc, 2026-08-11). Round live preview +
+               one-line hints tell picture and banner apart (issue f2763558). -->
           <div class="form-control flex flex-col">
-            <span class="label-text mb-1 w-full text-center">{m.profile_form_picture_label()}</span>
+            <span class="label-text mb-1">{m.create_community_modal_picture_label()}</span>
+            <p class="mb-2 text-xs text-base-content/60">
+              {m.create_community_modal_picture_hint()}
+            </p>
             <LicensedImageInput
               bind:imageUrl={userData.picture}
               bind:imageWasUploaded={communityImageUploaded}
               bind:licenseEvent={communityImageLicense}
               {errors}
               activeUserDisplayName={userData.name}
+              previewShape="avatar"
             />
           </div>
-          <BannerUploader bind:userData signer={communitySigner} bind:errors />
+          <BannerUploader
+            bind:userData
+            signer={communitySigner}
+            bind:errors
+            hint={m.create_community_modal_banner_hint()}
+          />
 
-          <ProfileForm {userData} {errors} hideBanner={true} hidePicture={true} />
+          <ProfileForm
+            {userData}
+            {errors}
+            hideBanner={true}
+            hidePicture={true}
+            variant="community"
+          />
         </div>
       {:else if currentStepId === 'keys'}
         <!-- Keys Generation for New Keypair -->
@@ -949,10 +1048,20 @@
           <h2 class="mb-2 text-xl font-semibold">{m.create_community_modal_step_people()}</h2>
           <p class="text-sm text-base-content/70">{m.community_people_lead()}</p>
 
+          <!-- searchProfiles: suggestions beyond the founder's own follows
+               (issue f2763558). inlineList: an overlay list is clipped by
+               the modal-box's overflow. showExcluded: re-adding someone
+               explains itself instead of yielding nothing. -->
           <ContactSearchInput
+            bind:value={peopleSearch}
             acceptPubkeyInput
+            inlineList
+            showExcluded
+            searchProfiles
             placeholder={m.community_people_add_placeholder()}
             exclude={invitees.map((i) => i.pubkey)}
+            excludedLabel={m.list_detail_add_profile_already_added()}
+            addPubkeyLabel={m.list_detail_add_profile_add_pubkey()}
             testid="wizard-people-input"
             onselect={(/** @type {{ pubkey: string }} */ c) => addInvitee(c.pubkey)}
             onrawpubkey={(/** @type {string} */ hex) => addInvitee(hex)}
@@ -962,7 +1071,14 @@
             <div class="divide-y divide-base-300">
               {#each invitees as invitee (invitee.pubkey)}
                 <div class="flex flex-wrap items-center gap-2 py-2" data-pubkey={invitee.pubkey}>
-                  <code class="flex-1 truncate text-xs">{hexToNpub(invitee.pubkey)}</code>
+                  <ProfileAvatar
+                    pubkey={invitee.pubkey}
+                    profile={getInviteeProfiles().get(invitee.pubkey)}
+                    size="sm"
+                  />
+                  <span class="min-w-0 flex-1 truncate text-sm">
+                    {getUserDisplayName(invitee.pubkey, getInviteeProfiles().get(invitee.pubkey))}
+                  </span>
                   <select
                     class="select-bordered select select-xs"
                     data-testid="wizard-people-role-{invitee.pubkey}"
@@ -1115,8 +1231,18 @@
                   {:else}
                     <ul class="space-y-1 text-sm">
                       {#each invitees as invitee (invitee.pubkey)}
-                        <li>
-                          <code class="text-xs">{hexToNpub(invitee.pubkey)}</code>
+                        <li class="flex items-center gap-2">
+                          <ProfileAvatar
+                            pubkey={invitee.pubkey}
+                            profile={getInviteeProfiles().get(invitee.pubkey)}
+                            size="sm"
+                          />
+                          <span class="truncate">
+                            {getUserDisplayName(
+                              invitee.pubkey,
+                              getInviteeProfiles().get(invitee.pubkey)
+                            )}
+                          </span>
                           {#if invitee.role}
                             <span class="badge badge-ghost badge-sm">{invitee.role}</span>
                           {/if}

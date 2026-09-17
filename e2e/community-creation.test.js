@@ -199,7 +199,7 @@ test.describe('Community Creation - Modal Access', () => {
     await expect(modalHeading).toBeVisible({ timeout: 5000 });
 
     // Should show keypair selection options (step 0)
-    const useCurrentButton = page.locator('button', { hasText: 'Use Current Keypair' });
+    const useCurrentButton = page.locator('button', { hasText: 'Use this profile' });
     await expect(useCurrentButton).toBeVisible({ timeout: 5000 });
   });
 
@@ -208,7 +208,7 @@ test.describe('Community Creation - Modal Access', () => {
   }) => {
     await navigateToCommunitiesTab(page);
     await openCreateCommunityModal(page);
-    await page.locator('.modal-box button', { hasText: 'Use Current Keypair' }).click();
+    await page.locator('.modal-box button', { hasText: 'Use this profile' }).click();
     await expect(page.locator('[data-testid="community-type-open"]')).toHaveCount(0);
   });
 });
@@ -223,11 +223,11 @@ test.describe('Community Creation - Keypair Selection', () => {
     await openCreateCommunityModal(page);
 
     // Should show "Use Current Keypair" option
-    const useCurrentButton = page.locator('button', { hasText: 'Use Current Keypair' });
+    const useCurrentButton = page.locator('button', { hasText: 'Use this profile' });
     await expect(useCurrentButton).toBeVisible({ timeout: 5000 });
 
     // Should show "Create New Keypair" option
-    const createNewButton = page.locator('button', { hasText: 'Create New Keypair' });
+    const createNewButton = page.locator('button', { hasText: 'Create new profile' });
     await expect(createNewButton).toBeVisible({ timeout: 5000 });
   });
 
@@ -238,7 +238,7 @@ test.describe('Community Creation - Keypair Selection', () => {
     await openCreateCommunityModal(page);
 
     // Click "Use Current Keypair"
-    const useCurrentButton = page.locator('button', { hasText: 'Use Current Keypair' });
+    const useCurrentButton = page.locator('button', { hasText: 'Use this profile' });
     await useCurrentButton.click();
     await page.waitForTimeout(500);
 
@@ -266,7 +266,7 @@ test.describe('Community Creation - New Keypair Flow', () => {
     await openCreateCommunityModal(page);
 
     // Click "Create New Keypair"
-    const createNewButton = page.locator('button', { hasText: 'Create New Keypair' });
+    const createNewButton = page.locator('button', { hasText: 'Create new profile' });
     await createNewButton.click();
     await page.waitForTimeout(500);
   }
@@ -464,7 +464,7 @@ test.describe('Community Creation - Community Settings', () => {
     await openCreateCommunityModal(page);
 
     // Advance to step 1
-    const useCurrentButton = page.locator('button', { hasText: 'Use Current Keypair' });
+    const useCurrentButton = page.locator('button', { hasText: 'Use this profile' });
     await useCurrentButton.click();
     await page.waitForTimeout(500);
 
@@ -485,7 +485,7 @@ test.describe('Community Creation - Community Settings', () => {
     await openCreateCommunityModal(page);
 
     // Advance to step 1
-    const useCurrentButton = page.locator('button', { hasText: 'Use Current Keypair' });
+    const useCurrentButton = page.locator('button', { hasText: 'Use this profile' });
     await useCurrentButton.click();
     await page.waitForTimeout(500);
 
@@ -513,7 +513,7 @@ test.describe('Community Creation - Community Settings', () => {
     await openCreateCommunityModal(page);
 
     // Advance to step 1
-    const useCurrentButton = page.locator('button', { hasText: 'Use Current Keypair' });
+    const useCurrentButton = page.locator('button', { hasText: 'Use this profile' });
     await useCurrentButton.click();
     await page.waitForTimeout(500);
 
@@ -535,7 +535,7 @@ test.describe('Community Creation - Full Flow', () => {
     await openCreateCommunityModal(page);
 
     // Step 0: Select "Use Current Keypair"
-    const useCurrentButton = page.locator('button', { hasText: 'Use Current Keypair' });
+    const useCurrentButton = page.locator('button', { hasText: 'Use this profile' });
     await useCurrentButton.click();
     await page.waitForTimeout(500);
 
@@ -555,7 +555,7 @@ test.describe('Community Creation - Full Flow', () => {
     await openCreateCommunityModal(page);
 
     // Step 0: Select "Use Current Keypair"
-    const useCurrentButton = page.locator('button', { hasText: 'Use Current Keypair' });
+    const useCurrentButton = page.locator('button', { hasText: 'Use this profile' });
     await useCurrentButton.click();
     await page.waitForTimeout(500);
 
@@ -582,7 +582,7 @@ test.describe('Community Creation - Full Flow', () => {
     await openCreateCommunityModal(page);
 
     // Complete creation flow
-    const useCurrentButton = page.locator('button', { hasText: 'Use Current Keypair' });
+    const useCurrentButton = page.locator('button', { hasText: 'Use this profile' });
     await useCurrentButton.click();
     await page.waitForTimeout(500);
 
@@ -619,7 +619,7 @@ test.describe('Community Creation - Error Handling', () => {
     await openCreateCommunityModal(page);
 
     // Interact with the modal
-    const useCurrentButton = page.locator('button', { hasText: 'Use Current Keypair' });
+    const useCurrentButton = page.locator('button', { hasText: 'Use this profile' });
     await useCurrentButton.click();
     await page.waitForTimeout(500);
 

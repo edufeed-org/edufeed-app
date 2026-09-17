@@ -9,6 +9,13 @@
     absolute overlay. Inside a DaisyUI modal-box the overlay form is clipped
     by the box's overflow-y:auto (the box does not grow for absolute
     children), so suggestions end up half-hidden behind a scrollbar
+  - searchProfiles: also suggest people OUTSIDE the follow list — profiles
+    already in the EventStore (community members, chat authors, …) plus a
+    debounced NIP-50 search on the configured search relays. Follows always
+    come first; every pubkey appears once. Issue f2763558: a tester with one
+    follow typed a name on the community wizard's people step and got
+    nothing at all ("und hier hätte ich jetzt erwartet, dass ich Vorschläge
+    bekomme").
 -->
 
 <script>
@@ -18,8 +25,19 @@
   import { nip19 } from 'nostr-tools';
   import { contactsStore } from '$lib/stores/contacts.svelte.js';
   import { normalizePubkey } from '$lib/helpers/pubkey.js';
+  import {
+    searchKnownProfiles,
+    profileNameSearchLoader,
+    profileToContact,
+    profileMatches
+  } from '$lib/loaders/profile-search.js';
   import * as m from '$lib/paraglide/messages';
   import ImageWithFallback from './ImageWithFallback.svelte';
+
+  const MAX_ITEMS = 10;
+  // Keystroke → relay request debounce. Local legs (follows, known
+  // profiles) stay synchronous; only the network leg waits.
+  const REMOTE_DEBOUNCE_MS = 300;
 
   /**
    * @type {{
@@ -36,6 +54,7 @@
    *   showExcluded?: boolean,
    *   acceptPubkeyInput?: boolean,
    *   inlineList?: boolean,
+   *   searchProfiles?: boolean,
    *   excludedLabel?: string,
    *   addPubkeyLabel?: string
    * }}
@@ -54,6 +73,7 @@
     showExcluded = false,
     acceptPubkeyInput = false,
     inlineList = false,
+    searchProfiles = false,
     excludedLabel = '',
     addPubkeyLabel = ''
   } = $props();
@@ -75,16 +95,84 @@
   let selectedDropdownIndex = $state(-1);
   /** @type {NavItem[]} */
   let navItems = $state([]);
+  // True while a NIP-50 request is in flight (spinner in the hint line).
+  let remoteBusy = $state(false);
+
+  // Remote-leg bookkeeping — plain lets, never $state (internal refs).
+  /** @type {ReturnType<typeof setTimeout> | undefined} */
+  let remoteTimer;
+  /** @type {import('rxjs').Subscription | undefined} */
+  let remoteSub;
+  /** The term the current remoteMatches belong to. */
+  let remoteTerm = '';
+  /** @type {import('$lib/stores/contacts.svelte.js').EnrichedContact[]} */
+  let remoteMatches = [];
+
+  function cancelRemoteSearch() {
+    clearTimeout(remoteTimer);
+    remoteTimer = undefined;
+    remoteSub?.unsubscribe();
+    remoteSub = undefined;
+    remoteBusy = false;
+  }
+
+  $effect(() => cancelRemoteSearch);
 
   /**
-   * Recompute dropdown items for a given search term.
-   * @param {string} searchTerm
+   * Debounced NIP-50 leg. Results are merged into the list as they arrive;
+   * a newer term cancels the pending timer and any in-flight request.
+   * @param {string} term
    */
-  function searchContacts(searchTerm) {
-    selectedDropdownIndex = -1;
+  function scheduleRemoteSearch(term) {
+    cancelRemoteSearch();
+    remoteMatches = [];
+    remoteTerm = term;
+    // A pasted key is resolved by the synthetic pubkey row, not by name search.
+    if (term.length < 2 || normalizePubkey(term)) return;
+    remoteTimer = setTimeout(() => {
+      remoteBusy = true;
+      remoteSub = profileNameSearchLoader(term, MAX_ITEMS).subscribe({
+        next: (event) => {
+          const contact = profileToContact(event);
+          if (!profileMatches(contact, term)) return;
+          if (remoteMatches.some((c) => c.pubkey === event.pubkey)) return;
+          remoteMatches = [...remoteMatches, /** @type {any} */ (contact)];
+          rebuildItems(term);
+        },
+        error: () => {
+          remoteBusy = false;
+        },
+        complete: () => {
+          remoteBusy = false;
+        }
+      });
+    }, REMOTE_DEBOUNCE_MS);
+  }
 
-    const term = (searchTerm || '').trim();
-    const matches = term.length >= 2 ? contactsStore.searchContacts(term, 10) : [];
+  /**
+   * Recompute dropdown items for a given search term from every enabled
+   * source: follows → known profiles → remote results, each pubkey once,
+   * capped at MAX_ITEMS, plus the synthetic pubkey row.
+   * @param {string} term already trimmed
+   */
+  function rebuildItems(term) {
+    const follows = term.length >= 2 ? contactsStore.searchContacts(term, MAX_ITEMS) : [];
+    /** @type {import('$lib/stores/contacts.svelte.js').EnrichedContact[]} */
+    const merged = [...follows];
+    if (searchProfiles && term.length >= 2) {
+      // Local dedupe scratch inside one synchronous pass — nothing renders
+      // from it, so a reactive SvelteSet would only add proxy overhead.
+      // eslint-disable-next-line svelte/prefer-svelte-reactivity
+      const seen = new Set(merged.map((c) => c.pubkey));
+      const known = searchKnownProfiles(term, MAX_ITEMS, { exclude: [...seen] });
+      const extras = remoteTerm === term ? [...known, ...remoteMatches] : known;
+      for (const c of extras) {
+        if (seen.has(c.pubkey)) continue;
+        seen.add(c.pubkey);
+        merged.push(c);
+      }
+    }
+    const matches = merged.slice(0, MAX_ITEMS);
 
     /** @type {ContactNavItem[]} */
     const contactItems = (
@@ -115,6 +203,17 @@
   }
 
   /**
+   * Input handler: recompute synchronously, then kick off the remote leg.
+   * @param {string} searchTerm
+   */
+  function searchContacts(searchTerm) {
+    selectedDropdownIndex = -1;
+    const term = (searchTerm || '').trim();
+    if (searchProfiles) scheduleRemoteSearch(term);
+    rebuildItems(term);
+  }
+
+  /**
    * Handle keyboard navigation in dropdown.
    * @param {KeyboardEvent} event
    */
@@ -130,6 +229,11 @@
         event.preventDefault();
         selectItem(navItems[selectedDropdownIndex]);
       } else if (event.key === 'Escape') {
+        // Escape means "close the list", not "cancel the dialog": inside a
+        // <dialog> the un-prevented keydown would also fire the dialog's
+        // cancel and throw away every wizard field the user has filled in.
+        event.preventDefault();
+        event.stopPropagation();
         showDropdown = false;
         selectedDropdownIndex = -1;
       }
@@ -153,6 +257,9 @@
   }
 
   function handleBlur() {
+    // Late relay results must not pop the list open under a field the user
+    // has already left.
+    cancelRemoteSearch();
     setTimeout(() => {
       showDropdown = false;
     }, 200);
@@ -274,7 +381,18 @@
     </div>
   {/if}
 
-  {#if contactsStore.isLoaded && contactsStore.contacts.length > 0}
+  {#if searchProfiles}
+    <div class="label py-0">
+      <span class="label-text-alt flex items-center gap-1 text-xs text-base-content/60">
+        {#if remoteBusy}
+          <span class="loading loading-xs loading-spinner"></span>
+          {m.contact_search_profiles_searching()}
+        {:else}
+          {m.contact_search_profiles_hint()}
+        {/if}
+      </span>
+    </div>
+  {:else if contactsStore.isLoaded && contactsStore.contacts.length > 0}
     <div class="label py-0">
       <span class="label-text-alt text-xs text-base-content/60">
         {m.contact_search_hint({ count: contactsStore.contacts.length })}

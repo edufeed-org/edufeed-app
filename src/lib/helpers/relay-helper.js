@@ -206,6 +206,19 @@ export function getProfileLookupRelays() {
 }
 
 /**
+ * NIP-50 capable relays for free-text profile search (kind 0 + `search`).
+ * Deliberately NOT unioned with the lookup relays: strfry-based ones reject
+ * the `search` filter field outright ("bad req: unrecognised filter item"),
+ * so querying them only burns the request timeout. Configured via
+ * PROFILE_SEARCH_RELAYS; empty means no remote leg (ContactSearchInput's
+ * `searchProfiles` mode then only offers follows + locally known profiles).
+ * @returns {string[]}
+ */
+export function getProfileSearchRelays() {
+  return [...new Set(runtimeConfig.profileSearchRelays || [])];
+}
+
+/**
  * NIP-29 group host relays for the create-group flow. Deliberately NO
  * fallback union — fallback relays are not group hosts; empty means the
  * deployment ships no default and the form requires a relay by hand.

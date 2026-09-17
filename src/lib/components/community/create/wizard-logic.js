@@ -19,6 +19,20 @@ export function communityWizardSteps({ useCurrentKeypair, typeStepVisible, commu
 }
 
 /**
+ * Whether screen 0 (community identity: "your current profile" vs "a new
+ * community profile") is offered at all. A kind 10222 is replaceable — one
+ * per pubkey — so a profile that already IS a community must never be
+ * offered as the identity of a second one: choosing it would silently
+ * overwrite the existing community's definition. The wizard then starts
+ * directly in the separate-profile flow (issue f2763558).
+ * @param {{hasOwnCommunity: boolean}} args
+ * @returns {boolean}
+ */
+export function identityChoiceVisible({ hasOwnCommunity }) {
+  return !hasOwnCommunity;
+}
+
+/**
  * @template {Record<string, {access?: object}>} T
  * @param {T} contentTypes
  * @param {'all' | 'members'} tier
