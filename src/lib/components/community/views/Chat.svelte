@@ -15,6 +15,7 @@
   import { TimelineModel } from 'applesauce-core/models';
   import ReactionBar from '$lib/components/reactions/ReactionBar.svelte';
   import EmojiPicker from '$lib/components/shared/EmojiPicker.svelte';
+  import ComposerEmojiPreview from '$lib/components/shared/ComposerEmojiPreview.svelte';
   import { SmilePlusIcon, SendIcon, ReplyIcon } from '$lib/components/icons';
   import * as m from '$lib/paraglide/messages';
   import ChatMessageList from '$lib/components/chat/ChatMessageList.svelte';
@@ -54,7 +55,11 @@
   const getUserEmojiSets = useUserEmojiSets();
   let customEmojiSets = $derived(getUserEmojiSets());
   /** @type {Record<string, { shortcode: string, url: string }>} */
-  let usedCustomEmojis = {};
+  /** picked NIP-30 custom emojis by shortcode — $state.raw + reassign, so the
+   *  composer preview updates without deep-proxying objects that end up in tags */
+  let usedCustomEmojis = $state.raw(
+    /** @type {Record<string, {shortcode: string, url: string}>} */ ({})
+  );
 
   // Reply state
   /** @type {any} */
@@ -241,8 +246,16 @@
   /** Insert custom emoji shortcode and track for tagging */
   function insertCustomEmoji(/** @type {{ shortcode: string, url: string }} */ emoji) {
     newMessage += `:${emoji.shortcode}:`;
-    usedCustomEmojis[emoji.shortcode] = emoji;
+    usedCustomEmojis = { ...usedCustomEmojis, [emoji.shortcode]: emoji };
     showEmojiPicker = false;
+    messageInput?.focus();
+  }
+
+  /** Take a picked custom emoji out of the text and the pick map (preview chip ✕) */
+  function removeCustomEmoji(/** @type {string} */ shortcode) {
+    newMessage = newMessage.split(`:${shortcode}:`).join('');
+    const { [shortcode]: _removed, ...rest } = usedCustomEmojis;
+    usedCustomEmojis = rest;
     messageInput?.focus();
   }
 
@@ -363,6 +376,12 @@
       <!-- base-100 + border, NOT base-200: the chat sits on the page's
         base-200 beige, so a base-200 pill was invisible on an empty chat
         (journey-test finding — "input box is not good visible"). -->
+      <ComposerEmojiPreview
+        text={newMessage}
+        picks={usedCustomEmojis}
+        onRemove={removeCustomEmoji}
+      />
+
       <form
         onsubmit={sendMessage}
         class="flex items-center gap-2 {replyingTo

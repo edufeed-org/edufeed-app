@@ -767,6 +767,7 @@
   "community_views_chat_empty": "Noch keine Nachrichten. Sei der Erste, der etwas sagt!",
   "message_time_now": "jetzt",
   "community_views_chat_input_placeholder": "Nachricht eingeben...",
+  "composer_emoji_remove": ":{shortcode}: entfernen",
   "community_views_chat_send_button": "Senden",
   "community_views_chat_load_more": "Ältere Nachrichten laden",
   "community_views_chat_login_prompt": "Melde dich an, um am Chat teilzunehmen",

@@ -37,6 +37,7 @@
   import NostrContentRenderer from '$lib/components/shared/NostrContentRenderer.svelte';
   import ProfileAvatar from '$lib/components/shared/ProfileAvatar.svelte';
   import EmojiPicker from '$lib/components/shared/EmojiPicker.svelte';
+  import ComposerEmojiPreview from '$lib/components/shared/ComposerEmojiPreview.svelte';
   import {
     SmilePlusIcon,
     SendIcon,
@@ -91,7 +92,11 @@
   const getUserEmojiSets = useUserEmojiSets();
   let customEmojiSets = $derived(getUserEmojiSets());
   /** @type {Record<string, { shortcode: string, url: string }>} */
-  let usedCustomEmojis = {};
+  /** picked NIP-30 custom emojis by shortcode — $state.raw + reassign, so the
+   *  composer preview updates without deep-proxying objects that end up in tags */
+  let usedCustomEmojis = $state.raw(
+    /** @type {Record<string, {shortcode: string, url: string}>} */ ({})
+  );
 
   // Track last-marked timestamp to avoid redundant markConversationAsRead calls
   // (plain let, not $state, to avoid reactive tracking)
@@ -305,8 +310,16 @@
   /** @param {{ shortcode: string, url: string }} emoji */
   function insertCustomEmoji(emoji) {
     newMessage += `:${emoji.shortcode}:`;
-    usedCustomEmojis[emoji.shortcode] = emoji;
+    usedCustomEmojis = { ...usedCustomEmojis, [emoji.shortcode]: emoji };
     showEmojiPicker = false;
+    messageInput?.focus();
+  }
+
+  /** Take a picked custom emoji out of the text and the pick map (preview chip ✕) */
+  function removeCustomEmoji(/** @type {string} */ shortcode) {
+    newMessage = newMessage.split(`:${shortcode}:`).join('');
+    const { [shortcode]: _removed, ...rest } = usedCustomEmojis;
+    usedCustomEmojis = rest;
     messageInput?.focus();
   }
 
@@ -518,6 +531,8 @@
         </button>
       </div>
     {/if}
+
+    <ComposerEmojiPreview text={newMessage} picks={usedCustomEmojis} onRemove={removeCustomEmoji} />
 
     <form
       onsubmit={sendMessage}
