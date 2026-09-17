@@ -641,7 +641,7 @@ describe('AMBResourceCard', () => {
       expect(badgeText(container)).toBe('📎 3 linked materials');
     });
 
-    it('stays hover-only, which is the only reason a badge is an acceptable place for this', () => {
+    it('is always visible, top-left, so it never collides with the license badge bottom-right', () => {
       const { container } = render(AMBResourceCard, {
         props: {
           resource: withMaterialTags([
@@ -651,8 +651,10 @@ describe('AMBResourceCard', () => {
         }
       });
       const badge = container.querySelector('[data-testid="linked-materials-badge"]');
-      expect(badge?.className).toContain('opacity-0');
-      expect(badge?.className).toContain('group-hover:opacity-100');
+      expect(badge?.className).toContain('top-2');
+      expect(badge?.className).toContain('left-2');
+      expect(badge?.className).not.toContain('opacity-0');
+      expect(badge?.className).not.toContain('group-hover');
     });
   });
 });

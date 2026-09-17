@@ -471,15 +471,17 @@
       <!-- Deliberately NOT given a role: this div is not interactive and must
            not announce itself as one. `pointerenter` is a cache warm-up, and
            the badge renders its type and size with or without it, so a user who
-           never produces a pointer event loses nothing that `group-hover` was
-           not already hiding. A role here would be the accessibility
-           regression. -->
+           never produces a pointer event only misses the page count. A role
+           here would be the accessibility regression.
+           The badge is permanent and sits top-left: the license badge owns the
+           bottom-right corner of the cover and its hover card would otherwise
+           fight with a hover-revealed materials badge in the same spot. -->
       <!-- svelte-ignore a11y_no_static_element_interactions -->
       <div class="group relative mb-3" onpointerenter={loadBadgePageCount}>
         <ResourceCover {resource} size="full" aspect="wide" />
         {#if linkedMaterialsLabel}
           <span
-            class="absolute right-2 bottom-2 badge badge-sm opacity-0 shadow transition-opacity duration-150 badge-neutral group-hover:opacity-100"
+            class="absolute top-2 left-2 badge badge-sm shadow badge-neutral"
             data-testid="linked-materials-badge"
           >
             📎 {linkedMaterialsLabel}

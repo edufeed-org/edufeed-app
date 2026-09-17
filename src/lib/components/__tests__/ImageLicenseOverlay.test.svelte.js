@@ -1,7 +1,32 @@
 /** @vitest-environment jsdom */
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, fireEvent } from '@testing-library/svelte';
+
+vi.mock('$lib/stores/profile-map.svelte.js', () => ({
+  useProfileMap: () => () => new Map()
+}));
+vi.mock('$app/paths', () => ({
+  resolve: (/** @type {string} */ path) => path
+}));
+
 import ImageLicenseOverlay from '$lib/components/shared/ImageLicenseOverlay.svelte';
+import ImageLicenseOverlayInCardWrapper from './ImageLicenseOverlayInCardWrapper.svelte';
+
+// jsdom lacks Element.animate (used by Svelte transitions in HoverCard).
+if (!Element.prototype.animate) {
+  // @ts-ignore
+  Element.prototype.animate = () => {
+    const anim = {
+      onfinish: /** @type {(() => void) | null} */ (null),
+      cancel() {},
+      finished: Promise.resolve(),
+      currentTime: null,
+      playState: 'finished'
+    };
+    Promise.resolve().then(() => anim.onfinish?.());
+    return anim;
+  };
+}
 
 /** @param {string[][]} [extraTags] */
 function licenseEvent(extraTags = []) {
@@ -120,5 +145,71 @@ describe('ImageLicenseOverlay — AI content label', () => {
     ev.tags = ev.tags.filter((t) => t[0] !== 'license');
     const { getByTestId } = render(ImageLicenseOverlay, { status: 'found', licenseEvent: ev });
     expect(getByTestId('ai-label')).toBeTruthy();
+  });
+});
+
+describe('ImageLicenseOverlay — license info popover', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('does not rely on a native title tooltip with raw pubkeys', () => {
+    const { getByTestId } = render(ImageLicenseOverlay, {
+      status: 'found',
+      licenseEvent: licenseEvent([['p', '1'.repeat(64)]])
+    });
+    expect(getByTestId('license-badge').getAttribute('title')).toBeNull();
+  });
+
+  it('opens a readable info card on hover, without raw hex pubkeys', async () => {
+    const { container, queryByTestId, getByTestId } = render(ImageLicenseOverlay, {
+      status: 'found',
+      licenseEvent: licenseEvent([
+        ['p', '1'.repeat(64)],
+        ['title', 'Berlin skyline'],
+        ['source', 'https://example.org/photos/1']
+      ])
+    });
+    expect(queryByTestId('license-info-card')).toBeNull();
+    const trigger = /** @type {HTMLElement} */ (container.querySelector('[aria-haspopup]'));
+    await fireEvent.mouseEnter(trigger);
+    await vi.advanceTimersByTimeAsync(200);
+    const card = getByTestId('license-info-card');
+    expect(card.textContent).toContain('Jane Doe');
+    expect(card.textContent).toContain('Berlin skyline');
+    expect(card.textContent).not.toMatch(/[0-9a-f]{64}/);
+    expect(getByTestId('license-info-creator').textContent).toMatch(/^npub1/);
+  });
+
+  it('keeps badge clicks and Enter from bubbling to a clickable parent card', async () => {
+    const onCardClick = vi.fn();
+    const onCardKeydown = vi.fn();
+    const { container, getByTestId } = render(ImageLicenseOverlayInCardWrapper, {
+      licenseEvent: licenseEvent(),
+      onCardClick,
+      onCardKeydown
+    });
+    const trigger = /** @type {HTMLElement} */ (container.querySelector('[aria-haspopup]'));
+    await fireEvent.click(trigger);
+    await fireEvent.keyDown(trigger, { key: 'Enter' });
+    expect(onCardClick).not.toHaveBeenCalled();
+    expect(onCardKeydown).not.toHaveBeenCalled();
+    // Sanity: the card handlers do fire for clicks outside the badge.
+    await fireEvent.click(getByTestId('card'));
+    expect(onCardClick).toHaveBeenCalledTimes(1);
+  });
+
+  it('opens the info card with the keyboard (Enter on the focused badge)', async () => {
+    const { container, getByTestId } = render(ImageLicenseOverlay, {
+      status: 'found',
+      licenseEvent: licenseEvent()
+    });
+    const trigger = /** @type {HTMLElement} */ (container.querySelector('[aria-haspopup]'));
+    await fireEvent.keyDown(trigger, { key: 'Enter' });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(getByTestId('license-info-card')).toBeTruthy();
   });
 });

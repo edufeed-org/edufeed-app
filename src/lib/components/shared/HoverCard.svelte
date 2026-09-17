@@ -16,6 +16,15 @@
    * @property {number} [leaveDelay] - Delay before hiding (ms)
    * @property {'top' | 'bottom'} [position] - Popover position
    * @property {boolean} [fixed] - Use fixed positioning to escape overflow ancestors
+   * @property {string} [class] - Classes for the wrapper (replaces the default
+   *   `relative inline-block`; pass positioning/background classes here to make
+   *   the whole wrapper the visible trigger, e.g. a badge)
+   * @property {string} [triggerClass] - Classes for the inner trigger box
+   *   (default `inline-block`; use `contents` to let the wrapper lay out the
+   *   trigger's children directly)
+   * @property {boolean} [stopPropagation] - Stop the toggling click / Enter /
+   *   Space from bubbling, for triggers that sit inside a clickable card
+   *   (otherwise the card's own click handler would navigate away)
    */
 
   /** @type {Props} */
@@ -25,12 +34,18 @@
     enterDelay = 150,
     leaveDelay = 300,
     position = 'bottom',
-    fixed = false
+    fixed = false,
+    class: klass = 'relative inline-block',
+    triggerClass = 'inline-block',
+    stopPropagation = false
   } = $props();
 
   let isOpen = $state(false);
   let popupX = $state(0);
   let popupY = $state(0);
+  // Resolved side for fixed mode: a 'top' popover near the viewport top flips
+  // below the trigger so it stays on screen.
+  let placement = $state(position);
 
   /** @type {ReturnType<typeof setTimeout> | undefined} */
   let enterTimer;
@@ -38,8 +53,6 @@
   let leaveTimer;
   /** @type {HTMLDivElement | undefined} */
   let wrapperEl;
-  /** @type {HTMLDivElement | undefined} */
-  let triggerEl;
   /** @type {HTMLDivElement | undefined} */
   let popupEl = $state();
 
@@ -51,11 +64,15 @@
   }
 
   function updateFixedPosition() {
-    if (!fixed || !triggerEl) return;
-    const rect = triggerEl.getBoundingClientRect();
+    if (!fixed || !wrapperEl) return;
+    // The wrapper box equals the trigger box (the popup is out of flow), and
+    // stays measurable even when the trigger box is `display: contents`.
+    const rect = wrapperEl.getBoundingClientRect();
     const popupWidth = 288; // w-72 = 18rem
+    const minTopRoom = 240;
     popupX = Math.min(rect.left, window.innerWidth - popupWidth - 16);
-    if (position === 'top') {
+    placement = position === 'top' && rect.top < minTopRoom ? 'bottom' : position;
+    if (placement === 'top') {
       popupY = window.innerHeight - rect.top + 8;
     } else {
       popupY = rect.bottom + 8;
@@ -77,7 +94,9 @@
     }, leaveDelay);
   }
 
-  function handleClick() {
+  /** @param {Event} [e] */
+  function handleClick(e) {
+    if (stopPropagation) e?.stopPropagation();
     clearTimers();
     if (!isOpen) updateFixedPosition();
     isOpen = !isOpen;
@@ -86,6 +105,13 @@
   function handleKeyDown(/** @type {KeyboardEvent} */ e) {
     if (e.key === 'Escape' && isOpen) {
       isOpen = false;
+      return;
+    }
+    // Keyboard users toggle from the focused wrapper itself; a focused link or
+    // button inside the trigger keeps its own Enter/Space semantics.
+    if ((e.key === 'Enter' || e.key === ' ') && e.target === e.currentTarget) {
+      e.preventDefault();
+      handleClick(e);
     }
   }
 
@@ -171,7 +197,7 @@
 </script>
 
 <div
-  class="relative inline-block"
+  class={klass}
   bind:this={wrapperEl}
   onmouseenter={handleMouseEnter}
   onmouseleave={handleMouseLeave}
@@ -182,7 +208,7 @@
   role="button"
   tabindex="0"
 >
-  <div bind:this={triggerEl} class="inline-block">
+  <div class={triggerClass}>
     {@render trigger()}
   </div>
 
@@ -199,7 +225,7 @@
       class:top-full={!fixed && position !== 'top'}
       class:mt-2={!fixed && position !== 'top'}
       style={fixed
-        ? `left:${popupX}px;${position === 'top' ? 'bottom' : 'top'}:${popupY}px;min-width:16rem;`
+        ? `left:${popupX}px;${placement === 'top' ? 'bottom' : 'top'}:${popupY}px;min-width:16rem;`
         : ''}
       role="tooltip"
       transition:fade={{ duration: 150 }}
