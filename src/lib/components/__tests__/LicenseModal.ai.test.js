@@ -23,6 +23,18 @@ vi.mock('$lib/paraglide/messages', () => ({
   license_modal_ai_none: () => 'None',
   license_modal_ai_generated: () => 'Fully AI-generated',
   license_modal_ai_modified: () => 'Partially AI-modified',
+  license_modal_ai_section_title: () => 'AI provenance & usage',
+  license_modal_ai_training_label: () => 'Usable for AI training',
+  license_modal_ai_training_hint: () => 'training hint',
+  license_modal_ai_training_row_label: () => 'AI training',
+  license_modal_ai_training_allowed: () => 'allowed',
+  license_modal_ai_training_disallowed: () => 'not allowed',
+  license_modal_ai_tool_label: () => 'Tool / model',
+  license_modal_ai_tool_unknown: () => 'Not specified / unknown',
+  license_modal_ai_tool_other: () => 'Other…',
+  license_modal_ai_tool_other_placeholder: () => 'tool name',
+  license_modal_ai_edited_label: () => 'Manually edited afterwards',
+  license_modal_ai_edited_hint: () => 'edited hint',
   image_ai_label_generated: () => 'AI generated',
   image_ai_label_modified: () => 'AI modified',
   license_modal_save: () => 'Save',
@@ -145,5 +157,127 @@ describe('LicenseModal — AI involvement select', () => {
       props: { ...baseProps, existingLicense: existing }
     });
     expect(queryByTestId('license-modal-existing-ai')).toBeNull();
+    expect(queryByTestId('license-modal-existing-ai-tool')).toBeNull();
+    expect(queryByTestId('license-modal-existing-ai-training')).toBeNull();
+  });
+});
+
+/*
+ * twillo alignment ("Informationen zur KI-Herkunft & -Nutzung"): training
+ * permission (default on), generated, tool, manually edited afterwards.
+ */
+const CHATGPT_URI =
+  'http://w3id.org/edu-sharing/vocabs/aiTools/4dd60dfa-9f8a-4cc9-b733-0125448f77a3';
+
+describe('LicenseModal — AI provenance & usage (twillo-aligned)', () => {
+  it('AI-training permission defaults to allowed and is always published', async () => {
+    publishLicenseAttestation.mockClear();
+    const utils = render(LicenseModal, { props: { ...baseProps, onsave: vi.fn() } });
+    const training = utils.getByTestId('license-modal-ai-training');
+    expect(training.checked).toBe(true);
+    await fillAndSave(utils);
+    const input = publishLicenseAttestation.mock.calls[0][0];
+    expect(input.aiTraining).toBe('allowed');
+    expect(input.aiTool).toBeUndefined();
+    expect(input.aiEdited).toBeFalsy();
+  });
+
+  it('unchecking the training box publishes "disallowed"', async () => {
+    publishLicenseAttestation.mockClear();
+    const utils = render(LicenseModal, { props: { ...baseProps, onsave: vi.fn() } });
+    await fireEvent.click(utils.getByTestId('license-modal-ai-training'));
+    await fillAndSave(utils);
+    expect(publishLicenseAttestation.mock.calls[0][0].aiTraining).toBe('disallowed');
+  });
+
+  it('shows tool + edited controls only once AI involvement is chosen', async () => {
+    const utils = render(LicenseModal, { props: { ...baseProps, onsave: vi.fn() } });
+    expect(utils.queryByTestId('license-modal-ai-tool')).toBeNull();
+    expect(utils.queryByTestId('license-modal-ai-edited')).toBeNull();
+
+    await fireEvent.change(utils.getByLabelText('AI involvement'), {
+      target: { value: 'generated' }
+    });
+    expect(utils.getByTestId('license-modal-ai-tool')).toBeTruthy();
+    expect(utils.getByTestId('license-modal-ai-edited')).toBeTruthy();
+
+    // "Manually edited afterwards" only makes sense for generated content.
+    await fireEvent.change(utils.getByLabelText('AI involvement'), {
+      target: { value: 'modified' }
+    });
+    expect(utils.getByTestId('license-modal-ai-tool')).toBeTruthy();
+    expect(utils.queryByTestId('license-modal-ai-edited')).toBeNull();
+  });
+
+  it('publishes a vocabulary tool with its concept URI and the edited flag', async () => {
+    publishLicenseAttestation.mockClear();
+    const utils = render(LicenseModal, { props: { ...baseProps, onsave: vi.fn() } });
+    await fireEvent.change(utils.getByLabelText('AI involvement'), {
+      target: { value: 'generated' }
+    });
+    await fireEvent.change(utils.getByTestId('license-modal-ai-tool'), {
+      target: { value: CHATGPT_URI }
+    });
+    await fireEvent.click(utils.getByTestId('license-modal-ai-edited'));
+    await fillAndSave(utils);
+    const input = publishLicenseAttestation.mock.calls[0][0];
+    expect(input.ai).toBe('generated');
+    expect(input.aiTool).toEqual({ label: 'OpenAI ChatGPT', id: CHATGPT_URI });
+    expect(input.aiEdited).toBe(true);
+  });
+
+  it('publishes a free-text tool when "Other" is chosen', async () => {
+    publishLicenseAttestation.mockClear();
+    const utils = render(LicenseModal, { props: { ...baseProps, onsave: vi.fn() } });
+    await fireEvent.change(utils.getByLabelText('AI involvement'), {
+      target: { value: 'generated' }
+    });
+    expect(utils.queryByTestId('license-modal-ai-tool-other')).toBeNull();
+    await fireEvent.change(utils.getByTestId('license-modal-ai-tool'), {
+      target: { value: 'other' }
+    });
+    await fireEvent.input(utils.getByTestId('license-modal-ai-tool-other'), {
+      target: { value: 'Midjourney' }
+    });
+    await fillAndSave(utils);
+    expect(publishLicenseAttestation.mock.calls[0][0].aiTool).toEqual({ label: 'Midjourney' });
+  });
+
+  it('leaves the tool undefined for "unknown" and for an empty "Other" text', async () => {
+    publishLicenseAttestation.mockClear();
+    const utils = render(LicenseModal, { props: { ...baseProps, onsave: vi.fn() } });
+    await fireEvent.change(utils.getByLabelText('AI involvement'), {
+      target: { value: 'generated' }
+    });
+    await fireEvent.change(utils.getByTestId('license-modal-ai-tool'), {
+      target: { value: 'other' }
+    });
+    await fillAndSave(utils);
+    expect(publishLicenseAttestation.mock.calls[0][0].aiTool).toBeUndefined();
+  });
+
+  it('shows tool, edited flag and training permission on the Accept-existing view', () => {
+    const existing = {
+      id: 'e',
+      pubkey: 'p2',
+      kind: 1063,
+      content: '',
+      tags: [
+        ['license', 'https://creativecommons.org/licenses/by/4.0/'],
+        ['credit', 'Someone'],
+        ['ai', 'generated'],
+        ['ai-edited', 'true'],
+        ['ai-tool', 'OpenAI ChatGPT', CHATGPT_URI],
+        ['ai-training', 'disallowed']
+      ]
+    };
+    const { getByTestId } = render(LicenseModal, {
+      props: { ...baseProps, existingLicense: existing }
+    });
+    const aiRow = getByTestId('license-modal-existing-ai').textContent;
+    expect(aiRow).toContain('Fully AI-generated');
+    expect(aiRow).toContain('Manually edited afterwards');
+    expect(getByTestId('license-modal-existing-ai-tool').textContent).toContain('OpenAI ChatGPT');
+    expect(getByTestId('license-modal-existing-ai-training').textContent).toContain('not allowed');
   });
 });

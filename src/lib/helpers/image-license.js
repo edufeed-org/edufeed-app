@@ -1,4 +1,4 @@
-import { normalizeAiLabel } from './ai-label.js';
+import { normalizeAiLabel, normalizeAiTraining } from './ai-label.js';
 
 /**
  * Builds a kind 1063 event template for an image license attestation.
@@ -14,6 +14,10 @@ import { normalizeAiLabel } from './ai-label.js';
  *   - alt:     (optional) NIP-94/NIP-DC alt text, e.g. `Webxdc app: <name>`
  *   - image:   (optional) icon/preview URL
  *   - ai:      (optional) AI-content label, "generated" | "modified" (see ai-label.js)
+ *   - ai-tool: (optional, only with `ai`) generating tool: label + optional concept URI
+ *   - ai-edited: (optional, only with `ai`) "true" when manually edited after generation
+ *   - ai-training: (optional) "allowed" | "disallowed" — AI-training permission
+ *   The three twillo-aligned tags mirror edu-sharing's ccm:commonlicense_ai_* props.
  *
  * @param {{
  *   hash: string,
@@ -29,7 +33,10 @@ import { normalizeAiLabel } from './ai-label.js';
  *   dim?: string,
  *   alt?: string,
  *   image?: string,
- *   ai?: import('./ai-label.js').AiLabel | string | null
+ *   ai?: import('./ai-label.js').AiLabel | string | null,
+ *   aiTool?: { label: string, id?: string | null } | null,
+ *   aiEdited?: boolean,
+ *   aiTraining?: import('./ai-label.js').AiTraining | string | null
  * }} input
  * @returns {{ kind: 1063, content: string, tags: string[][] }}
  */
@@ -48,7 +55,10 @@ export function buildLicenseTemplate(input) {
     dim,
     alt,
     image,
-    ai
+    ai,
+    aiTool,
+    aiEdited,
+    aiTraining
   } = input;
   if (!hash) throw new Error('buildLicenseTemplate: hash is required');
   if (!url) throw new Error('buildLicenseTemplate: url is required');
@@ -72,7 +82,17 @@ export function buildLicenseTemplate(input) {
   if (source) tags.push(['source', source]);
   if (creatorPubkey) tags.push(['p', creatorPubkey]);
   const aiLabel = normalizeAiLabel(ai);
-  if (aiLabel) tags.push(['ai', aiLabel]);
+  if (aiLabel) {
+    tags.push(['ai', aiLabel]);
+    // Provenance details only make sense on AI-labelled content.
+    const toolLabel = aiTool?.label?.trim();
+    if (toolLabel) {
+      tags.push(aiTool?.id ? ['ai-tool', toolLabel, aiTool.id] : ['ai-tool', toolLabel]);
+    }
+    if (aiEdited) tags.push(['ai-edited', 'true']);
+  }
+  const training = normalizeAiTraining(aiTraining);
+  if (training) tags.push(['ai-training', training]);
 
   return {
     kind: 1063,

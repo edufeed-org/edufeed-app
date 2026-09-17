@@ -18,6 +18,11 @@ Edufeed uses NIP-94 (kind 1063) events to attest licenses for images, keyed by S
 | `source`      | no                 | optional            | Origin page where the image was found   |
 | `p`           | no                 | optional            | Attribution to a Nostr pubkey           |
 | `ai`          | no                 | optional            | `generated` \| `modified` — EU AI label |
+| `ai-tool`     | no                 | optional            | `[label, conceptUri?]` — only with `ai`  |
+| `ai-edited`   | no                 | optional            | `true` — manually edited after generation |
+| `ai-training` | no                 | optional            | `allowed` \| `disallowed` (form default: allowed) |
+
+**twillo alignment:** the three `ai-*` tags mirror edu-sharing's `ccm:commonlicense_ai_{generated,tool,manually_modified,allow_usage}` node properties (twillo "Informationen zur KI-Herkunft & -Nutzung"). `ai-tool` concept URIs come from edu-sharing's aiTools SKOS scheme (`AI_TOOLS` in `ai-label.js`, `http://w3id.org/edu-sharing/vocabs/aiTools/`). twillo does not export these into its AMB/OERSI metadata, so there is nothing to align on kind 30142 — file level only.
 
 **Lookup:** filter `{ kinds: [1063], '#x': [hash] }`. When multiple events exist, newest `created_at` wins; tie-break by lex order of `id`.
 
@@ -26,7 +31,7 @@ Edufeed uses NIP-94 (kind 1063) events to attest licenses for images, keyed by S
 **Helpers / files:**
 
 - `src/lib/helpers/image-license.js` — `buildLicenseTemplate(...)` pure helper.
-- `src/lib/helpers/ai-label.js` — `AI_LABELS` / `getAiLabel(event)`: the `ai` tag marks AI-generated (`generated`) or AI-modified (`modified`) files, chosen in `LicenseModal`; `ImageLicenseOverlay` renders the EU "AI" mark (`AiLabelIcon`) wherever the image shows.
+- `src/lib/helpers/ai-label.js` — `AI_LABELS` / `getAiLabel(event)`: the `ai` tag marks AI-generated (`generated`) or AI-modified (`modified`) files, chosen in `LicenseModal`; `ImageLicenseOverlay` renders the EU "AI" mark (`AiLabelIcon`) wherever the image shows. Also `AI_TOOLS` + `getAiTool`, `getAiEdited`, `getAiTraining` for the twillo-aligned tags (shown in the modal's Accept-existing view and the overlay tooltip).
 - `src/lib/stores/image-license.svelte.js` — `useLicenseForHash(getHash)` reactive hook.
 - `src/lib/components/shared/LicensedImageInput.svelte` — upload/paste field + license modal.
 - `src/lib/components/shared/LicenseBadge.svelte` — display badge for `AMBResourceCard` / `AMBResourceView`.

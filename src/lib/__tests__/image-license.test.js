@@ -133,3 +133,56 @@ describe('buildLicenseTemplate — AI labelling', () => {
     }
   });
 });
+
+describe('buildLicenseTemplate — twillo-aligned AI provenance & usage tags', () => {
+  const chatgpt = {
+    label: 'OpenAI ChatGPT',
+    id: 'http://w3id.org/edu-sharing/vocabs/aiTools/4dd60dfa-9f8a-4cc9-b733-0125448f77a3'
+  };
+
+  it('emits `ai-tool` with label and concept URI next to the ai label', () => {
+    const tpl = buildLicenseTemplate({ ...required, ai: 'generated', aiTool: chatgpt });
+    expect(tpl.tags).toContainEqual(['ai-tool', chatgpt.label, chatgpt.id]);
+  });
+
+  it('emits a label-only `ai-tool` for free-text tools', () => {
+    const tpl = buildLicenseTemplate({
+      ...required,
+      ai: 'modified',
+      aiTool: { label: '  Midjourney ' }
+    });
+    expect(tpl.tags).toContainEqual(['ai-tool', 'Midjourney']);
+  });
+
+  it('drops `ai-tool` / `ai-edited` without an ai label or with an empty label', () => {
+    const noAi = buildLicenseTemplate({ ...required, aiTool: chatgpt, aiEdited: true });
+    expect(noAi.tags.map((t) => t[0])).not.toContain('ai-tool');
+    expect(noAi.tags.map((t) => t[0])).not.toContain('ai-edited');
+    const empty = buildLicenseTemplate({ ...required, ai: 'generated', aiTool: { label: ' ' } });
+    expect(empty.tags.map((t) => t[0])).not.toContain('ai-tool');
+  });
+
+  it('emits `ai-edited` true only when set on AI-labelled content', () => {
+    const edited = buildLicenseTemplate({ ...required, ai: 'generated', aiEdited: true });
+    expect(edited.tags).toContainEqual(['ai-edited', 'true']);
+    const untouched = buildLicenseTemplate({ ...required, ai: 'generated', aiEdited: false });
+    expect(untouched.tags.map((t) => t[0])).not.toContain('ai-edited');
+  });
+
+  it('emits `ai-training` for both permission values, independent of the ai label', () => {
+    const allowed = buildLicenseTemplate({ ...required, aiTraining: 'allowed' });
+    expect(allowed.tags).toContainEqual(['ai-training', 'allowed']);
+    const disallowed = buildLicenseTemplate({ ...required, aiTraining: 'disallowed' });
+    expect(disallowed.tags).toContainEqual(['ai-training', 'disallowed']);
+  });
+
+  it('omits `ai-training` when absent or unknown', () => {
+    for (const aiTraining of [undefined, null, '', 'true', 'yes']) {
+      const tpl = buildLicenseTemplate({
+        ...required,
+        aiTraining: /** @type {any} */ (aiTraining)
+      });
+      expect(tpl.tags.map((t) => t[0])).not.toContain('ai-training');
+    }
+  });
+});
