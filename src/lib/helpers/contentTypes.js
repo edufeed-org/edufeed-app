@@ -8,6 +8,7 @@ import {
   sectionIsGated
 } from './communityRelays.js';
 import { deriveCommunityType } from '$lib/groups/community-membership.js';
+import { passesAllowedAuthors } from './communityContent.js';
 
 /**
  * Every valid `?view=` content-view id for a community page. The page load
@@ -379,7 +380,7 @@ export function filterEventsByAccess(events, communityEvent, profileAccess) {
     const allowed = profileAccess.getAllowedAuthors(sectionName);
     if (allowed === null) return true;
 
-    return allowed.includes(event.pubkey) || (event._sharedBy && allowed.includes(event._sharedBy));
+    return passesAllowedAuthors(event, allowed);
   });
 }
 

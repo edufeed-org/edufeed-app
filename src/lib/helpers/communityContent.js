@@ -34,12 +34,21 @@ function preserveRepostMeta(transformed, source) {
  */
 export function filterByAllowedAuthors(items, allowed) {
   if (!allowed) return items;
-  return items.filter((item) => {
-    const author = item.pubkey || item.event?.pubkey;
-    if (author && allowed.includes(author)) return true;
-    if (item._allSharers) return item._allSharers.some((pk) => allowed.includes(pk));
-    return !!item._sharedBy && allowed.includes(item._sharedBy);
-  });
+  return items.filter((item) => passesAllowedAuthors(item, allowed));
+}
+
+/**
+ * The per-item half of the rule above: author allowed, or ANY sharer allowed
+ * (`_allSharers` when the model tracked every share, else `_sharedBy`).
+ * @param {{pubkey?: string, event?: {pubkey?: string}, _sharedBy?: string, _allSharers?: string[]}} item
+ * @param {string[]} allowed
+ * @returns {boolean}
+ */
+export function passesAllowedAuthors(item, allowed) {
+  const author = item.pubkey || item.event?.pubkey;
+  if (author && allowed.includes(author)) return true;
+  if (item._allSharers) return item._allSharers.some((pk) => allowed.includes(pk));
+  return !!item._sharedBy && allowed.includes(item._sharedBy);
 }
 
 /**
