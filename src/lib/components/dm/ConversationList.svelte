@@ -12,6 +12,7 @@
   } from '$lib/services/dm-service.svelte.js';
   import { muteUser } from '$lib/stores/mute-list.svelte.js';
   import { formatMessageTimestamp } from '$lib/helpers/message-utils.js';
+  import { dmPreviewText } from '$lib/helpers/dm-preview.js';
   import ProfileAvatar from '$lib/components/shared/ProfileAvatar.svelte';
   import UnreadDot from '$lib/components/shared/UnreadDot.svelte';
   import { ChevronDownIcon, ChevronUpIcon } from '$lib/components/icons';
@@ -138,7 +139,7 @@
           ? 'font-medium text-base-content/80'
           : 'text-base-content/50'}"
       >
-        {conv.lastMessage.content}
+        {dmPreviewText(conv.lastMessage, { image: m.dm_preview_image, file: m.dm_preview_file })}
       </p>
     </div>
     {#if isRequest}

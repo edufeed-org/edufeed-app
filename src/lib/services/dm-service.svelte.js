@@ -7,14 +7,15 @@
  * - Tracks per-conversation read state in localStorage
  * - Provides reactive getters for UI components
  *
- * Components subscribe to applesauce models directly (WrappedMessagesGroups,
+ * Components subscribe to applesauce/local models directly (DmConversationsModel,
  * WrappedMessagesGroup) for conversation data — this service only handles
  * the plumbing that models can't: relay subscriptions, unlock flow, read state.
  */
 import { mapEventsToStore } from 'applesauce-core/observable';
 import { filter, tap } from 'rxjs';
 import { GiftWrapsModel } from 'applesauce-common/models';
-import { WrappedMessagesGroups, WrappedMessagesModel } from 'applesauce-common/models';
+import { WrappedMessagesModel } from 'applesauce-common/models';
+import { DmConversationsModel } from '$lib/models/wrapped-dm.js';
 import { unlockGiftWrap, isGiftWrapUnlocked } from 'applesauce-common/helpers/gift-wrap';
 import {
   unlockLegacyMessage,
@@ -56,7 +57,7 @@ let unlocking = $state(false);
 let unlockingLegacy = false;
 let readTimestamps = $state(/** @type {Record<string, number>} */ ({}));
 /**
- * NIP-17 (gift-wrapped) conversations from WrappedMessagesGroups.
+ * NIP-17 (gift-wrapped) conversations from DmConversationsModel.
  * @type {{ id: string, participants: string[], lastMessage: any }[]}
  */
 let wrappedConversations = $state.raw([]);
@@ -678,8 +679,15 @@ export function initializeDMs(pubkey, signer) {
   });
   subscriptions.push(lockedSub);
 
-  // 5. Watch NIP-17 (gift-wrapped) conversations for the list + unread count
-  const convSub = eventStore.model(WrappedMessagesGroups, pubkey).subscribe((conversations) => {
+  // 5. Watch NIP-17 (gift-wrapped) conversations for the list + unread count.
+  // DmConversationsModel's untyped params (wrapped-dm.js) leave its return type
+  // as `{}` under checkJs; cast the observable so the callback stays typed here
+  // without touching that file (Task 3's, out of scope for this change).
+  const convSub = /**
+   * @type {import('rxjs').Observable<
+   *   { id: string, participants: string[], lastMessage: any }[]
+   * >}
+   */ (eventStore.model(DmConversationsModel, pubkey)).subscribe((conversations) => {
     wrappedConversations = conversations || [];
     closeInitialFetchWindowIfReady();
   });

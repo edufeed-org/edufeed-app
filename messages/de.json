@@ -2568,6 +2568,8 @@
   "dm_relay_remove": "Entfernen",
   "dm_relay_placeholder": "relay.example.com",
   "dm_send_failed": "Nachricht konnte nicht gesendet werden. Bitte versuche es erneut.",
+  "dm_preview_image": "Foto",
+  "dm_preview_file": "Datei",
   "dm_no_relays_hint": "Für eine bessere Nachrichtenzustellung richte in den Einstellungen dedizierte DM-Relays ein.",
   "report_metadata_menu_item": "Metadaten-Problem melden",
   "report_metadata_modal_title": "Metadaten-Problem melden",

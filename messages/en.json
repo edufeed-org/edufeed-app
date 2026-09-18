@@ -2568,6 +2568,8 @@
   "dm_relay_remove": "Remove",
   "dm_relay_placeholder": "relay.example.com",
   "dm_send_failed": "Failed to send message. Please try again.",
+  "dm_preview_image": "Photo",
+  "dm_preview_file": "File",
   "dm_no_relays_hint": "For better message delivery, set up dedicated DM relays in Settings.",
   "report_metadata_menu_item": "Report metadata issue",
   "report_metadata_modal_title": "Report metadata issue",
