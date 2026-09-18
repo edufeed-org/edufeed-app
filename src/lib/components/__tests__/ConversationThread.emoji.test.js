@@ -17,7 +17,7 @@ const sendWrappedDm = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
 
 vi.mock('$app/paths', () => ({ resolve: (/** @type {string} */ p) => p }));
 vi.mock('$lib/stores/nostr-infrastructure.svelte', () => ({
-  eventStore: { model: () => of([]) }
+  eventStore: { model: () => of({ messages: [], reactionsByTarget: new Map() }) }
 }));
 vi.mock('$lib/stores/accounts.svelte', () => ({
   useActiveUser: () => () => ({ pubkey: ME })

@@ -3622,5 +3622,11 @@
   "form_doi_prefill_applied": "Filled from the DOI: {fields}",
   "form_doi_prefill_none": "No metadata found for this DOI.",
   "publication_form_doi_inspect_hint": "Metadata is fetched from Crossref automatically once you enter a DOI.",
-  "publication_form_doi_prefill_applied": "Metadata filled from the DOI – please check it."
+  "publication_form_doi_prefill_applied": "Metadata filled from the DOI – please check it.",
+  "dm_preview_image": "Photo",
+  "dm_preview_file": "File",
+  "dm_file_decrypting": "Decrypting…",
+  "dm_file_failed": "File could not be decrypted",
+  "dm_file_download": "Download",
+  "dm_file_image_alt": "Image sent in this conversation"
 }

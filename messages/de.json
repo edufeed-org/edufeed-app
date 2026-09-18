@@ -3622,5 +3622,11 @@
   "form_doi_prefill_applied": "Aus der DOI übernommen: {fields}",
   "form_doi_prefill_none": "Zu dieser DOI wurden keine Metadaten gefunden.",
   "publication_form_doi_inspect_hint": "Metadaten werden nach Eingabe einer DOI automatisch aus Crossref übernommen.",
-  "publication_form_doi_prefill_applied": "Metadaten aus der DOI übernommen – bitte prüfen."
+  "publication_form_doi_prefill_applied": "Metadaten aus der DOI übernommen – bitte prüfen.",
+  "dm_preview_image": "Foto",
+  "dm_preview_file": "Datei",
+  "dm_file_decrypting": "Wird entschlüsselt …",
+  "dm_file_failed": "Datei konnte nicht entschlüsselt werden",
+  "dm_file_download": "Herunterladen",
+  "dm_file_image_alt": "Bild aus dieser Unterhaltung"
 }
