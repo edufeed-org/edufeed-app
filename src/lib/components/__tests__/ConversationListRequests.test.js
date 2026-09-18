@@ -54,7 +54,10 @@ vi.mock('$lib/services/dm-service.svelte.js', () => ({
   isUnlockingDms: () => false,
   getLockedCount: () => 0,
   isDmConversationUnread: () => false,
-  markConversationAsRead: vi.fn()
+  markConversationAsRead: vi.fn(),
+  getUnlockFailureCount: () => 0,
+  isRetryingUnlocks: () => false,
+  retryFailedUnlocks: vi.fn()
 }));
 
 const mockMuteUser = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
