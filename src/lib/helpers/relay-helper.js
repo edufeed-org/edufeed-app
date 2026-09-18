@@ -58,6 +58,39 @@ export function getDefaultRelayList() {
 }
 
 /**
+ * Get the relays an identity event (kind 0/3/10002/10050/10063 — see
+ * `identity-kinds.js`) must reach, on top of the author's NIP-65 write relays.
+ *
+ * The write relays alone are not enough, and cannot be: a client that rewrites
+ * a user's kind 10002 down to one relay (measured in the wild, 2026-09-18)
+ * also narrows every profile update that follows to that one relay, so the
+ * user's name silently disappears from the rest of the network — and the very
+ * event that would say where to look is confined there too. NIP-65 therefore
+ * asks clients to spread identity events "to as many relays as viable, paying
+ * attention to relays that ... serve as well-known public indexers"; Amethyst
+ * broadcasts kind 0 and kind 10002 to its indexer list plus every relay it
+ * knows.
+ *
+ * Intentionally NOT gated, for the same reason as getDefaultRelayList() and
+ * getDefaultDmRelays(): gated mode narrows what a deployment's users *read*.
+ * Withholding their profile from the indexes would not protect anything — the
+ * kind 10002 they publish names those public relays anyway — it would only
+ * make them unresolvable in every other client. A deployment that must keep
+ * profiles in-house points INDEXER_RELAYS / FALLBACK_RELAYS at its own relays.
+ *
+ * @returns {string[]}
+ */
+export function getIdentityBroadcastRelays() {
+  return [
+    ...new Set([
+      ...(runtimeConfig.indexerRelays || []),
+      ...(runtimeConfig.relayListLookupRelays || []),
+      ...(runtimeConfig.fallbackRelays || [])
+    ])
+  ];
+}
+
+/**
  * Fallback relays for personal notification queries (inbox).
  * Intentionally NOT gated: notification queries are p-tagged to the user —
  * social signals, not content feeds — mirroring how WoT filtering exempts

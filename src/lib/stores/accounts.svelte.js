@@ -373,6 +373,14 @@ async function initializeAccountPersistence() {
       pubkey: account.pubkey,
       relays: lookupRelays
     }).subscribe();
+
+    // Heal identity events that are stranded on a single relay. A client that
+    // rewrote this user's kind 10002 down to one relay also pinned every
+    // profile publish that followed to it, so the profile can be missing from
+    // every index other clients read. Re-sending the copies we hold is free
+    // (already signed, nothing new is created) and runs once per session.
+    const { scheduleIdentityRebroadcast } = await import('$lib/services/identity-rebroadcast.js');
+    scheduleIdentityRebroadcast(account.pubkey);
   });
 
   // Step 7: Pre-warm relays and preload user emoji sets on login

@@ -19,7 +19,7 @@ import {
 import { getProfileContent } from 'applesauce-core/helpers';
 import { getFeedCardData } from '$lib/helpers/feedCardData.js';
 import { getTagValue } from '$lib/helpers/educational/ambTransform.js';
-import { normalizePubkey, hexToNpub } from '$lib/helpers/pubkey.js';
+import { normalizePubkey, shortNpub as abbreviateNpub } from '$lib/helpers/pubkey.js';
 
 // ─── Relay fetch ──────────────────────────────────────────────────────────────
 
@@ -353,8 +353,7 @@ export function extractMetadata(event) {
  * @returns {string}
  */
 function shortNpub(pubkey) {
-  const npub = hexToNpub(pubkey);
-  return npub ? npub.slice(0, 12) + '…' + npub.slice(-4) : 'Profile';
+  return abbreviateNpub(pubkey) || 'Profile';
 }
 
 /**

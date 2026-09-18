@@ -32,6 +32,19 @@ export function normalizePubkey(input) {
 }
 
 /**
+ * Abbreviated npub for display where a name is missing or unknown —
+ * `npub1abcdefg…xyz123`. Empty string when the input is not a hex pubkey, so
+ * callers can `||` their way to a further fallback.
+ *
+ * @param {unknown} pubkey - 64-char hex pubkey
+ * @returns {string}
+ */
+export function shortNpub(pubkey) {
+  const npub = hexToNpub(pubkey);
+  return npub ? `${npub.slice(0, 12)}…${npub.slice(-6)}` : '';
+}
+
+/**
  * Convert a 64-char hex pubkey to npub form.
  * Returns null for any input that is not a valid hex pubkey.
  *
