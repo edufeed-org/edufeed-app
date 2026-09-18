@@ -121,6 +121,28 @@ describe('<ProfileHeader>', () => {
     expect(pill.textContent.length).toBeLessThan(NPUB.length);
   });
 
+  // NIP-24: display_name is the rendered name, name the handle-style fallback.
+  // We had the precedence inverted and printed a hardcoded 'Anonymous User'
+  // when a profile carried only a picture — which other clients' users read as
+  // a name we had published (issue: kind 0 metadata interop).
+  it('prefers display_name over name', () => {
+    const { container } = render(
+      ProfileHeader,
+      baseProps({ profile: { display_name: 'ALPIKA Grundschule', name: 'alpika' } })
+    );
+    expect(container.querySelector('.pf-identity h1')?.textContent).toContain('ALPIKA Grundschule');
+  });
+
+  it('falls back to the short npub instead of a placeholder word', () => {
+    const { container } = render(
+      ProfileHeader,
+      baseProps({ profile: { picture: 'https://example.org/a.png' } })
+    );
+    const heading = container.querySelector('.pf-identity h1')?.textContent || '';
+    expect(heading).not.toMatch(/anonymous/i);
+    expect(heading).toContain('npub1');
+  });
+
   it('shows the posts stat only when a count is available', () => {
     const withCount = render(ProfileHeader, baseProps({ postsCount: 12 }));
     expect(withCount.container.querySelector('[data-testid="stat-posts"]')?.textContent).toContain(

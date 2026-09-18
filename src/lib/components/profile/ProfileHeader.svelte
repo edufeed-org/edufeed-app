@@ -20,6 +20,7 @@
     PlusIcon
   } from '$lib/components/icons';
   import * as m from '$lib/paraglide/messages';
+  import { getDisplayName } from '$lib/helpers/displayName.js';
 
   /**
    * @type {{
@@ -62,8 +63,11 @@
   let copied = $state(false);
 
   let bannerUrl = $derived(profile?.banner || null);
-  let displayName = $derived(profile?.name || profile?.display_name || 'Anonymous User');
   let npubShort = $derived(npub ? `${npub.slice(0, 12)}…${npub.slice(-6)}` : '');
+  // display_name first (NIP-24), then the handle, then the same short npub the
+  // pill below shows — never a placeholder word, which reads as a real name to
+  // anyone looking at the profile.
+  let displayName = $derived(getDisplayName(profile) || npubShort);
 
   async function copyNpub() {
     try {

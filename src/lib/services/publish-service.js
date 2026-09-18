@@ -11,7 +11,8 @@ import { uncacheEvent, recacheEvent } from '$lib/stores/event-cache.svelte.js';
 import { isAddressableKind, isReplaceableKind } from 'applesauce-core/helpers/event';
 import { getPublishRelays, getPrimaryWriteRelay } from './relay-service.svelte.js';
 import { getAppRelaysForCategory, kindToAppRelayCategory } from './app-relay-service.svelte.js';
-import { getFallbackRelays } from '$lib/helpers/relay-helper.js';
+import { getFallbackRelays, getIdentityBroadcastRelays } from '$lib/helpers/relay-helper.js';
+import { isIdentityKind } from '$lib/helpers/identity-kinds.js';
 import {
   getRelaysForKind,
   getCommunityGlobalRelays,
@@ -128,10 +129,15 @@ export async function publishToRelays(signedEvent, relays, opts = {}) {
  * `publishEventOptimistic` and the outbox replay so all three agree.
  *
  * 1. Outbox model: author's write relays + tagged users' read relays
- * 2. App-specific relays for the kind's category
- * 3. Community relays (communikey app relay, per-kind, global, enforced)
- * 4. Explicit additional relays
- * 5. Safety net: a fresh account (no NIP-65 write relays) publishing a kind
+ * 2. Identity kinds (0/3/10002/10050/10063): the identity broadcast relays —
+ *    profile indexers + relay-list indexers + deployment fallbacks. The outbox
+ *    alone strands a profile wherever the user's kind 10002 happens to point,
+ *    which is how a name set in this app stopped reaching other clients
+ *    entirely (see getIdentityBroadcastRelays).
+ * 3. App-specific relays for the kind's category
+ * 4. Community relays (communikey app relay, per-kind, global, enforced)
+ * 5. Explicit additional relays
+ * 6. Safety net: a fresh account (no NIP-65 write relays) publishing a kind
  *    without an app-relay category (kind 1 note, kind 1068 poll, kind 1063
  *    attestation) can end up with an EMPTY set — the event would silently go
  *    nowhere. Fall back to the deployment fallback relays (empty in gated
@@ -148,6 +154,10 @@ export async function computePublishRelays(signedEvent, taggedPubkeys, opts = {}
 
   const outboxRelays = await getPublishRelays(signedEvent.pubkey, taggedPubkeys);
   outboxRelays.forEach((r) => relaySet.add(r));
+
+  if (isIdentityKind(signedEvent.kind)) {
+    getIdentityBroadcastRelays().forEach((r) => relaySet.add(r));
+  }
 
   const category = kindToAppRelayCategory(signedEvent.kind);
   if (category) {
