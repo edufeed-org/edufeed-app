@@ -5,6 +5,24 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions are
 the `vX.Y.Z` git tags on `main`. Each release section is assembled from the
 merge commits of the nostr PRs that landed since the previous tag.
 
+## [0.1.6] - 2026-09-19
+
+### Fixed
+
+- **Profile metadata reaches other clients again.** A kind 0 written here went
+  only to the author's NIP-65 write relays, so a profile could end up on a
+  single relay — invisible to every other client, which then showed its own
+  placeholder, and a name retyped there overwrote the fields set in Edufeed.
+  Identity events (kinds 0, 3, 10002, 10050, 10063) now also go to the
+  configured profile indexers, relay-list indexers and fallback relays, as
+  NIP-65 asks and as other clients do. Once per session the app additionally
+  re-publishes the account's own kind 0 and kind 10002 to those relays, which
+  heals profiles that are already stranded (nothing is signed again, so it
+  works for read-only logins too).
+- **Profile page naming:** `display_name` is preferred over `name` (NIP-24),
+  and a profile without either now shows its shortened npub instead of the
+  hardcoded "Anonymous User", which read like a real name in other clients.
+
 ## [0.1.5] - 2026-09-18
 
 ### Added
@@ -179,6 +197,8 @@ stack and cannot ship themselves through CI.
 
 - First tagged release on `main`.
 
+[0.1.6]: https://git.edufeed.org/edufeed/edufeed-app/compare/v0.1.5...v0.1.6
+[0.1.5]: https://git.edufeed.org/edufeed/edufeed-app/compare/v0.1.4...v0.1.5
 [0.1.4]: https://git.edufeed.org/edufeed/edufeed-app/compare/v0.1.3...v0.1.4
 [0.1.3]: https://git.edufeed.org/edufeed/edufeed-app/compare/v0.1.2...v0.1.3
 [0.1.2]: https://git.edufeed.org/edufeed/edufeed-app/compare/v0.1.1...v0.1.2
