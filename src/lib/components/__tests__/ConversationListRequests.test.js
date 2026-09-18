@@ -24,6 +24,8 @@ vi.mock('$lib/paraglide/messages', () =>
       'dm_requests_hint',
       'dm_block_sender',
       'dm_block_failed',
+      'dm_preview_image',
+      'dm_preview_file',
       'profile_avatar_alt',
       'profile_avatar_fallback',
       'inbox_mark_read'

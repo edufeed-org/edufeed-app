@@ -2,6 +2,7 @@
   import { resolve } from '$app/paths';
   import { goto } from '$app/navigation';
   import { markConversationAsRead } from '$lib/services/dm-service.svelte.js';
+  import { dmPreviewText } from '$lib/helpers/dm-preview.js';
   import { profileLink } from '$lib/helpers/nostrUtils.js';
   import { useActiveUser } from '$lib/stores/accounts.svelte';
   import { MessageSquareIcon } from '$lib/components/icons';
@@ -31,6 +32,12 @@
 
   const displayName = $derived(
     profile?.display_name || profile?.name || otherPubkey.slice(0, 8) + '...'
+  );
+
+  // A kind-15 file message's content is the encrypted blob URL, never plain
+  // text — route through dmPreviewText the same way ConversationList does.
+  const previewText = $derived(
+    dmPreviewText(conversation.lastMessage, { image: m.dm_preview_image, file: m.dm_preview_file })
   );
 
   /**
@@ -96,9 +103,9 @@
         >{formatTime(conversation.lastMessage.created_at)}</span
       >
     </div>
-    {#if conversation.lastMessage.content}
+    {#if previewText}
       <p class="mt-0.5 truncate text-xs text-base-content/50">
-        {conversation.lastMessage.content}
+        {previewText}
       </p>
     {/if}
   </div>

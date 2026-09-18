@@ -4,9 +4,12 @@
   import { useActiveUser } from '$lib/stores/accounts.svelte';
   import { useProfileMap } from '$lib/stores/profile-map.svelte.js';
   import { useUserEmojiSets } from '$lib/stores/user-emoji-sets.svelte.js';
-  import { WrappedMessagesGroup, LegacyMessagesGroup } from 'applesauce-common/models';
+  import { LegacyMessagesGroup } from 'applesauce-common/models';
   import { getWrappedMessageParent } from 'applesauce-common/helpers/wrapped-messages';
   import { getLegacyMessageParent } from 'applesauce-common/helpers/legacy-messages';
+  import { DmThreadModel } from '$lib/models/wrapped-dm.js';
+  import { isDmFileRumor } from '$lib/helpers/dm-rumors.js';
+  import DmFileMessage from '$lib/components/dm/DmFileMessage.svelte';
   import { getEncryptedContent } from 'applesauce-core/helpers/encrypted-content';
   import { SendLegacyMessage, ReplyToLegacyMessage } from 'applesauce-actions/actions';
   // Local NIP-17 actions: same rumor as applesauce's, plus NIP-30 `emoji`
@@ -78,6 +81,9 @@
   // model, so the `messages` derivation must be retriggered explicitly or the
   // freshly-decrypted bubbles stay blank until the next open.
   let legacyDecryptTick = $state(0);
+  // NIP-17 only: private reactions (kind 7 rumors), keyed by the target
+  // message's rumor id. Map, so $state.raw per the project's reactivity rule.
+  let reactionsByTarget = $state.raw(new Map());
   let newMessage = $state('');
   let isSending = $state(false);
   let showEmojiPicker = $state(false);
@@ -137,13 +143,17 @@
       return () => sub.unsubscribe();
     }
 
-    const sub = eventStore
-      .model(WrappedMessagesGroup, user.pubkey, participants)
-      .subscribe((msgs) => {
-        // WrappedMessagesGroup returns newest-first, we need oldest-first
-        const next = (msgs || []).toReversed();
-        rawMessages = next;
-      });
+    // DmThreadModel's untyped params (wrapped-dm.js) leave its return type as
+    // `{}` under checkJs; cast the observable so the callback stays typed
+    // here without touching that file (Task 3's, out of scope for this change).
+    const sub = /**
+     * @type {import('rxjs').Observable<
+     *   { messages: any[], reactionsByTarget: Map<string, any[]> }
+     * >}
+     */ (eventStore.model(DmThreadModel, user.pubkey, participants)).subscribe((out) => {
+      rawMessages = out.messages; // already oldest-first
+      reactionsByTarget = out.reactionsByTarget;
+    });
 
     return () => sub.unsubscribe();
   });
@@ -484,10 +494,19 @@
               {/if}
               {#if message.decryptFailed}
                 <span class="text-sm text-base-content/50 italic">{m.dm_decrypt_failed()}</span>
+              {:else if isDmFileRumor(message)}
+                <div data-testid="dm-file-bubble"><DmFileMessage rumor={message} /></div>
               {:else}
                 <NostrContentRenderer event={message} />
               {/if}
             </div>
+            {#if reactionsByTarget.get(message.id)?.length}
+              <div class="mt-1 flex flex-wrap gap-1" data-testid="dm-message-reactions">
+                {#each reactionsByTarget.get(message.id) as reaction (reaction.id)}
+                  <span class="badge badge-ghost badge-sm">{reaction.content}</span>
+                {/each}
+              </div>
+            {/if}
           </div>
         {/if}
       {/each}
