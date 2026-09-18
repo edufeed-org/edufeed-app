@@ -78,14 +78,34 @@ describe('EmojiInput', () => {
     const { editor, value, findByRole, getAllByRole } = setup();
     await typeText(editor, ':dog');
     await findByRole('listbox');
+    // a real key press is keydown AND keyup; the keyup must not reset the
+    // highlight (laoc, 2026-09-18: "arrow keys always jump back")
     await fireEvent.keyDown(editor, { key: 'Tab' });
+    await fireEvent.keyUp(editor, { key: 'Tab' });
     expect(getAllByRole('option')[1].getAttribute('aria-selected')).toBe('true');
     await fireEvent.keyDown(editor, { key: 'ArrowUp' });
+    await fireEvent.keyUp(editor, { key: 'ArrowUp' });
     expect(getAllByRole('option')[0].getAttribute('aria-selected')).toBe('true');
     await fireEvent.keyDown(editor, { key: 'ArrowDown' });
+    await fireEvent.keyUp(editor, { key: 'ArrowDown' });
+    expect(getAllByRole('option')[1].getAttribute('aria-selected')).toBe('true');
     await fireEvent.keyDown(editor, { key: 'Enter' });
     await tick();
     expect(value()).toBe(':dogedance_sm: ');
+  });
+
+  it('keeps the highlight while the query is unchanged, resets it when the query changes', async () => {
+    const { editor, findByRole, getAllByRole } = setup();
+    await typeText(editor, ':dog');
+    await findByRole('listbox');
+    await fireEvent.keyDown(editor, { key: 'ArrowDown' });
+    await fireEvent.keyUp(editor, { key: 'ArrowDown' });
+    // caret-only events (click, keyup of a letter that did not change the query) keep it
+    await fireEvent.click(editor);
+    expect(getAllByRole('option')[1].getAttribute('aria-selected')).toBe('true');
+    // typing more narrows the list: highlight goes back to the top
+    await typeText(editor, ':doged');
+    expect(getAllByRole('option')[0].getAttribute('aria-selected')).toBe('true');
   });
 
   it('inserts a unicode suggestion as the character itself', async () => {

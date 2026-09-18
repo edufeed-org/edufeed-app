@@ -194,9 +194,23 @@
     value = rendered;
     refreshQuery();
   }
+  const NAV_KEYS = new Set(['ArrowDown', 'ArrowUp', 'Tab', 'Enter', 'Escape']);
+
+  /**
+   * Re-detect the `:query` at the caret. The highlight only resets when the
+   * query itself changed — a caret-only event (keyup, click) must not snap a
+   * selection made with the arrow keys back to the top (laoc, 2026-09-18).
+   */
   function refreshQuery() {
-    query = detectEmojiQuery(value, caretOffset());
-    highlight = 0;
+    const next = detectEmojiQuery(value, caretOffset());
+    const same = !!next && !!query && next.start === query.start && next.query === query.query;
+    query = next;
+    if (!same) highlight = 0;
+  }
+  /** @param {KeyboardEvent} event */
+  function onKeyup(event) {
+    if (NAV_KEYS.has(event.key)) return; // handled on keydown, caret unchanged
+    refreshQuery();
   }
   /** @param {string} nextText @param {number} caret */
   async function commit(nextText, caret) {
@@ -294,7 +308,7 @@
     tabindex="0"
     enterkeyhint={multiline ? undefined : 'send'}
     oninput={onInput}
-    onkeyup={refreshQuery}
+    onkeyup={onKeyup}
     onclick={refreshQuery}
     onkeydown={onKeydown}
     onpaste={onPaste}
