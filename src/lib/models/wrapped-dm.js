@@ -16,6 +16,7 @@ import {
   rumorParticipants,
   reactionTargetId
 } from '$lib/helpers/dm-rumors.js';
+import { uniqueBy } from '$lib/helpers/unique.js';
 
 const KEPT = [kinds.PrivateDirectMessage, kinds.FileMessage, kinds.Reaction];
 
@@ -40,6 +41,16 @@ export function DmRumorsModel(self) {
           .map((/** @type {any} */ wrap) => getGiftWrapRumor(wrap))
           .filter((rumor) => !!rumor && KEPT.includes(rumor.kind))
           .sort((/** @type {any} */ a, /** @type {any} */ b) => b.created_at - a.created_at)
+      ),
+      // Rumors are unsigned JSON out of a gift wrap: the id is attacker-chosen
+      // and may be missing, empty or repeated across wraps. It keys a
+      // {#each} in the thread, and a duplicate key there throws
+      // each_key_duplicate in production — so dedupe at the data boundary.
+      map((/** @type {any[]} */ rumors) =>
+        uniqueBy(
+          rumors.filter((rumor) => typeof rumor.id === 'string' && rumor.id.length > 0),
+          (rumor) => rumor.id
+        )
       )
     );
 }

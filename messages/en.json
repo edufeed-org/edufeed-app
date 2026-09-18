@@ -2573,6 +2573,7 @@
   "dm_file_decrypting": "Decrypting…",
   "dm_file_failed": "File could not be decrypted",
   "dm_file_download": "Download",
+  "dm_file_image_alt": "Image sent in this conversation",
   "dm_no_relays_hint": "For better message delivery, set up dedicated DM relays in Settings.",
   "report_metadata_menu_item": "Report metadata issue",
   "report_metadata_modal_title": "Report metadata issue",

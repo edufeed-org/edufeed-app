@@ -2573,6 +2573,7 @@
   "dm_file_decrypting": "Wird entschlüsselt …",
   "dm_file_failed": "Datei konnte nicht entschlüsselt werden",
   "dm_file_download": "Herunterladen",
+  "dm_file_image_alt": "Bild aus dieser Unterhaltung",
   "dm_no_relays_hint": "Für eine bessere Nachrichtenzustellung richte in den Einstellungen dedizierte DM-Relays ein.",
   "report_metadata_menu_item": "Metadaten-Problem melden",
   "report_metadata_modal_title": "Metadaten-Problem melden",

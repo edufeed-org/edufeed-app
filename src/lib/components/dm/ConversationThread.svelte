@@ -8,7 +8,7 @@
   import { getWrappedMessageParent } from 'applesauce-common/helpers/wrapped-messages';
   import { getLegacyMessageParent } from 'applesauce-common/helpers/legacy-messages';
   import { DmThreadModel } from '$lib/models/wrapped-dm.js';
-  import { isDmFileRumor } from '$lib/helpers/dm-rumors.js';
+  import { isDmFileRumor, reactionDisplayContent } from '$lib/helpers/dm-rumors.js';
   import DmFileMessage from '$lib/components/dm/DmFileMessage.svelte';
   import { getEncryptedContent } from 'applesauce-core/helpers/encrypted-content';
   import { SendLegacyMessage, ReplyToLegacyMessage } from 'applesauce-actions/actions';
@@ -503,7 +503,7 @@
             {#if reactionsByTarget.get(message.id)?.length}
               <div class="mt-1 flex flex-wrap gap-1" data-testid="dm-message-reactions">
                 {#each reactionsByTarget.get(message.id) as reaction (reaction.id)}
-                  <span class="badge badge-ghost badge-sm">{reaction.content}</span>
+                  <span class="badge badge-ghost badge-sm">{reactionDisplayContent(reaction)}</span>
                 {/each}
               </div>
             {/if}

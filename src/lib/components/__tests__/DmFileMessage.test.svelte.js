@@ -11,7 +11,8 @@ import { render, screen } from '@testing-library/svelte';
 vi.mock('$lib/paraglide/messages', () => ({
   dm_file_decrypting: () => 'Decrypting…',
   dm_file_failed: () => 'File could not be decrypted',
-  dm_file_download: () => 'Download'
+  dm_file_download: () => 'Download',
+  dm_file_image_alt: () => 'Image sent in this conversation'
 }));
 const decryptFileBytes = vi.hoisted(() => vi.fn());
 vi.mock('$lib/helpers/dm-file-crypto.js', () => ({
@@ -51,9 +52,11 @@ const rumorB = (mime = 'image/png') => ({
 
 beforeEach(() => {
   decryptFileBytes.mockReset();
-  globalThis.fetch = vi
-    .fn()
-    .mockResolvedValue({ ok: true, arrayBuffer: async () => new ArrayBuffer(8) });
+  globalThis.fetch = vi.fn().mockResolvedValue({
+    ok: true,
+    headers: { get: () => null },
+    arrayBuffer: async () => new ArrayBuffer(8)
+  });
   globalThis.URL.createObjectURL = vi.fn(() => 'blob:fake');
   globalThis.URL.revokeObjectURL = vi.fn();
 });
@@ -65,7 +68,10 @@ describe('DmFileMessage', () => {
     expect(screen.getByTestId('dm-file-loading')).toBeTruthy();
     const img = await screen.findByTestId('dm-file-image');
     expect(img.getAttribute('src')).toBe('blob:fake');
-    expect(globalThis.fetch).toHaveBeenCalledWith('https://blossom.example/a.bin');
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      'https://blossom.example/a.bin',
+      expect.objectContaining({ signal: expect.any(AbortSignal) })
+    );
   });
 
   it('offers a download for a non-image type', async () => {
@@ -144,5 +150,95 @@ describe('DmFileMessage', () => {
 
     expect(screen.getByTestId('dm-file-image').getAttribute('src')).toBe('blob:b');
     expect(globalThis.URL.createObjectURL).toHaveBeenCalledTimes(1);
+  });
+
+  // The URL comes out of an unsigned rumor, so the fetch is bounded: cancelled
+  // on teardown, capped at 25 MB, and the Blob never carries an attacker MIME
+  // unless it is an image we render inline.
+  describe('untrusted-URL hardening', () => {
+    const MAX = 25 * 1024 * 1024;
+
+    it('aborts the in-flight fetch when the component unmounts', async () => {
+      /** @type {AbortSignal | undefined} */
+      let signal;
+      globalThis.fetch = vi.fn((_url, init) => {
+        signal = init?.signal;
+        return new Promise(() => {}); // never settles
+      });
+      const { unmount } = render(DmFileMessage, { props: { rumor: rumor() } });
+      expect(signal?.aborted).toBe(false);
+      unmount();
+      expect(signal?.aborted).toBe(true);
+    });
+
+    it('refuses a file whose Content-Length is over the cap, before reading the body', async () => {
+      const arrayBuffer = vi.fn(async () => new ArrayBuffer(8));
+      globalThis.fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        headers: { get: () => String(MAX + 1) },
+        arrayBuffer
+      });
+      render(DmFileMessage, { props: { rumor: rumor() } });
+      expect(await screen.findByTestId('dm-file-error')).toBeTruthy();
+      expect(arrayBuffer).not.toHaveBeenCalled();
+      expect(decryptFileBytes).not.toHaveBeenCalled();
+    });
+
+    it('refuses a lying Content-Length: the received body is capped too', async () => {
+      globalThis.fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        headers: { get: () => '10' },
+        arrayBuffer: async () => new ArrayBuffer(MAX + 1)
+      });
+      render(DmFileMessage, { props: { rumor: rumor() } });
+      expect(await screen.findByTestId('dm-file-error')).toBeTruthy();
+      expect(decryptFileBytes).not.toHaveBeenCalled();
+    });
+
+    it('gives the download Blob application/octet-stream, not the rumor MIME', async () => {
+      /** @type {Blob | undefined} */
+      let blob;
+      globalThis.URL.createObjectURL = vi.fn((b) => {
+        blob = b;
+        return 'blob:fake';
+      });
+      decryptFileBytes.mockResolvedValue(new Uint8Array([1]));
+      render(DmFileMessage, { props: { rumor: rumor('text/html') } });
+      await screen.findByTestId('dm-file-download');
+      expect(blob?.type).toBe('application/octet-stream');
+    });
+
+    it('keeps the real MIME only for the inline image', async () => {
+      /** @type {Blob | undefined} */
+      let blob;
+      globalThis.URL.createObjectURL = vi.fn((b) => {
+        blob = b;
+        return 'blob:fake';
+      });
+      decryptFileBytes.mockResolvedValue(new Uint8Array([1]));
+      render(DmFileMessage, { props: { rumor: rumor('image/png') } });
+      await screen.findByTestId('dm-file-image');
+      expect(blob?.type).toBe('image/png');
+    });
+  });
+
+  describe('alt text', () => {
+    it('uses the rumor alt tag when present', async () => {
+      decryptFileBytes.mockResolvedValue(new Uint8Array([1]));
+      const withAlt = rumor('image/png');
+      withAlt.tags.push(['alt', 'a hand-drawn map']);
+      render(DmFileMessage, { props: { rumor: withAlt } });
+      expect((await screen.findByTestId('dm-file-image')).getAttribute('alt')).toBe(
+        'a hand-drawn map'
+      );
+    });
+
+    it('falls back to a translated generic string', async () => {
+      decryptFileBytes.mockResolvedValue(new Uint8Array([1]));
+      render(DmFileMessage, { props: { rumor: rumor('image/png') } });
+      expect((await screen.findByTestId('dm-file-image')).getAttribute('alt')).toBe(
+        'Image sent in this conversation'
+      );
+    });
   });
 });

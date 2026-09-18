@@ -13,7 +13,9 @@ import {
   rumorParticipants,
   rumorConversationId,
   parseFileRumor,
-  reactionTargetId
+  reactionTargetId,
+  reactionDisplayContent,
+  rumorContent
 } from '$lib/helpers/dm-rumors.js';
 
 const ME = 'a'.repeat(64);
@@ -134,5 +136,113 @@ describe('reactionTargetId', () => {
 
   it('is null without one', () => {
     expect(reactionTargetId(rumor(7, [['p', PEER]], '+'))).toBeNull();
+  });
+});
+
+describe('reactionDisplayContent', () => {
+  it('renders the NIP-25 sentinels as emoji, never literally', () => {
+    expect(reactionDisplayContent(rumor(7, [], '+'))).toBe('👍');
+    expect(reactionDisplayContent(rumor(7, [], '-'))).toBe('👎');
+    // NIP-25: empty content means "+"
+    expect(reactionDisplayContent(rumor(7, [], ''))).toBe('👍');
+    expect(reactionDisplayContent(rumor(7, [], '  '))).toBe('👍');
+  });
+
+  it('passes real emoji and NIP-30 shortcodes through unchanged', () => {
+    expect(reactionDisplayContent(rumor(7, [], '🔥'))).toBe('🔥');
+    expect(
+      reactionDisplayContent(rumor(7, [['emoji', 'party', 'https://x/p.png']], ':party:'))
+    ).toBe(':party:');
+  });
+
+  it('never throws on a malformed rumor', () => {
+    expect(reactionDisplayContent(null)).toBe('👍');
+    expect(reactionDisplayContent({ kind: 7, content: 42 })).toBe('👍');
+  });
+});
+
+/**
+ * A rumor is unsigned JSON decrypted out of a kind-1059 gift wrap — every
+ * field is attacker-controlled. InboxDmItem renders this data from the navbar,
+ * which sits OUTSIDE the route-level <svelte:boundary>, so a throw here blanks
+ * the entire app on every route and stays blank because the wrap is cached.
+ * Every exported helper must therefore be total.
+ */
+describe('malformed rumors (untrusted gift-wrap payloads)', () => {
+  const malformed = [
+    ['null', null],
+    ['undefined', undefined],
+    ['empty object', {}],
+    ['numeric content', { kind: 15, content: 42 }],
+    ['object content', { kind: 14, content: { toString: null } }],
+    ['string tags', { kind: 15, tags: 'nope' }],
+    ['ragged tags', { kind: 15, tags: [null, ['x'], 42, ['p'], ['p', 7]] }],
+    ['numeric kind missing', { tags: [['p', PEER]], content: 'hi' }],
+    ['string kind', { kind: '15', content: 'https://x/a.bin' }],
+    ['array', []],
+    ['string', 'not a rumor']
+  ];
+
+  for (const [label, value] of malformed) {
+    it(`survives ${label}`, () => {
+      expect(() => isDmMessageRumor(value)).not.toThrow();
+      expect(() => isDmFileRumor(value)).not.toThrow();
+      expect(() => isDmReactionRumor(value)).not.toThrow();
+      expect(() => rumorParticipants(value)).not.toThrow();
+      expect(() => rumorConversationId(value)).not.toThrow();
+      expect(() => parseFileRumor(value)).not.toThrow();
+      expect(() => reactionTargetId(value)).not.toThrow();
+      expect(() => reactionDisplayContent(value)).not.toThrow();
+      expect(() => rumorContent(value)).not.toThrow();
+
+      // documented fallbacks: the shape callers rely on, never undefined
+      expect(typeof isDmMessageRumor(value)).toBe('boolean');
+      expect(typeof isDmFileRumor(value)).toBe('boolean');
+      expect(typeof isDmReactionRumor(value)).toBe('boolean');
+      expect(Array.isArray(rumorParticipants(value))).toBe(true);
+      expect(typeof rumorConversationId(value)).toBe('string');
+      expect(typeof rumorContent(value)).toBe('string');
+      expect(typeof reactionDisplayContent(value)).toBe('string');
+      expect(reactionTargetId(value)).toBeNull();
+      expect(parseFileRumor(value)).toBeNull();
+    });
+  }
+
+  it('returns the documented fallback values', () => {
+    expect(isDmMessageRumor(null)).toBe(false);
+    expect(isDmFileRumor(undefined)).toBe(false);
+    expect(isDmReactionRumor({})).toBe(false);
+    expect(isDmFileRumor({ kind: '15' })).toBe(false);
+    expect(rumorParticipants(null)).toEqual([]);
+    expect(rumorParticipants({ kind: 15, tags: 'nope' })).toEqual([]);
+    expect(rumorParticipants({ pubkey: 42, tags: [null, ['p', PEER], ['p', 7]] })).toEqual([PEER]);
+    expect(rumorConversationId(undefined)).toBe('');
+    expect(parseFileRumor({ kind: 15, content: 42 })).toBeNull();
+    expect(parseFileRumor({ kind: 15, tags: 'nope' })).toBeNull();
+    expect(reactionTargetId({ kind: 7, tags: [null, 42, ['e']] })).toBeNull();
+    expect(rumorContent({ content: 42 })).toBe('');
+  });
+
+  it('still parses a good file rumor that also carries junk tags', () => {
+    const parsed = parseFileRumor({
+      kind: 15,
+      content: 'https://blossom.example/abc.bin',
+      tags: [
+        null,
+        42,
+        ['encryption-algorithm', 'aes-gcm'],
+        ['decryption-key', 'ab'.repeat(16)],
+        ['decryption-nonce', 'cd'.repeat(6)],
+        ['file-type', 'image/png'],
+        ['alt', 'a cat'],
+        ['dim', 7]
+      ]
+    });
+    expect(parsed).toMatchObject({
+      url: 'https://blossom.example/abc.bin',
+      mimeType: 'image/png',
+      alt: 'a cat',
+      dim: null
+    });
   });
 });

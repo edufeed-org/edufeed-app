@@ -56,6 +56,32 @@ describe('DmRumorsModel', () => {
     expect(out.map((r) => r.kind)).toEqual([15, 7, 14]);
   });
 
+  it('collapses duplicate rumor ids — they key a {#each} in the thread', async () => {
+    rumors.clear();
+    // Two distinct wraps carrying the same rumor id: a duplicate key in the
+    // reaction {#each} throws each_key_duplicate in production.
+    const a = wrap('w1', 7, 300, [['e', 'target']], '🔥');
+    const b = wrap('w2', 7, 200, [['e', 'target']], '👍');
+    rumors.get('w2').id = rumors.get('w1').id;
+    const out = await firstValueFrom(DmRumorsModel(ME)(storeWith([a, b])));
+    expect(out).toHaveLength(1);
+    // newest-first sort runs before the dedupe, so the newest wins
+    expect(out[0].content).toBe('🔥');
+  });
+
+  it('drops rumors with a missing or non-string id', async () => {
+    rumors.clear();
+    const good = wrap('w1', 14, 100);
+    const noId = wrap('w2', 14, 200);
+    delete rumors.get('w2').id;
+    const numeric = wrap('w3', 14, 300);
+    rumors.get('w3').id = 42;
+    const empty = wrap('w4', 14, 400);
+    rumors.get('w4').id = '';
+    const out = await firstValueFrom(DmRumorsModel(ME)(storeWith([good, noId, numeric, empty])));
+    expect(out.map((r) => r.id)).toEqual(['r-w1']);
+  });
+
   it('skips wraps that are still locked (no rumor yet)', async () => {
     rumors.clear();
     const locked = { id: 'w9', kind: 1059, created_at: 1, tags: [['p', ME]], content: '' };

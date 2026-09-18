@@ -5,6 +5,14 @@
   decrypted in the browser, so the relay/host never sees the plaintext.
   Images render inline, anything else becomes a download. Every failure is
   shown — a silent blank bubble is exactly the bug this work removes.
+
+  The URL is attacker-supplied, so the fetch is bounded on all three axes:
+  aborted on unmount/prop change, aborted after FETCH_TIMEOUT_MS, and refused
+  above MAX_FILE_BYTES (checked from Content-Length before the body is read,
+  and again on the bytes actually received). The Blob for the download path
+  gets application/octet-stream — an attacker-chosen MIME on a same-origin
+  blob: URL is a content-sniffing footgun; the real type is only used to
+  render an inline image, and only when it is an image type.
 -->
 <script>
   import { parseFileRumor } from '$lib/helpers/dm-rumors.js';
@@ -13,6 +21,10 @@
 
   /** @type {{ rumor: any }} */
   let { rumor } = $props();
+
+  /** 25 MB — comfortably above any sane DM attachment, far below "hangs the tab". */
+  const MAX_FILE_BYTES = 25 * 1024 * 1024;
+  const FETCH_TIMEOUT_MS = 30_000;
 
   const file = $derived(parseFileRumor(rumor));
   let objectUrl = $state(/** @type {string | null} */ (null));
@@ -34,14 +46,29 @@
       return;
     }
     let cancelled = false;
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+    // The Blob type is only ever the rumor's when we render it as an <img>.
+    const imageType = /^image\//.test(target.mimeType ?? '') ? target.mimeType : null;
     (async () => {
       try {
-        const response = await fetch(target.url);
+        const response = await fetch(target.url, { signal: controller.signal });
         if (!response.ok) throw new Error(`http ${response.status}`);
-        const plain = await decryptFileBytes(await response.arrayBuffer(), target);
+        const declared = Number(response.headers?.get?.('content-length'));
+        if (Number.isFinite(declared) && declared > MAX_FILE_BYTES) {
+          throw new Error(`file too large (${declared} bytes)`);
+        }
+        const encrypted = await response.arrayBuffer();
+        if (encrypted.byteLength > MAX_FILE_BYTES) {
+          throw new Error(`file too large (${encrypted.byteLength} bytes)`);
+        }
+        const plain = await decryptFileBytes(encrypted, target);
         if (cancelled) return;
+        if (plain.byteLength > MAX_FILE_BYTES) {
+          throw new Error(`file too large (${plain.byteLength} bytes)`);
+        }
         const url = URL.createObjectURL(
-          new Blob([new Uint8Array(plain)], { type: target.mimeType || 'application/octet-stream' })
+          new Blob([new Uint8Array(plain)], { type: imageType || 'application/octet-stream' })
         );
         created = url;
         objectUrl = url;
@@ -49,18 +76,22 @@
         if (!cancelled) failed = true;
         console.warn('[dm] file message could not be shown', err);
       } finally {
+        clearTimeout(timeout);
         if (!cancelled) loading = false;
       }
     })();
     return () => {
       cancelled = true;
+      clearTimeout(timeout);
+      controller.abort();
       if (created) URL.revokeObjectURL(created);
       created = null;
     };
   });
 
-  const isImage = $derived(!!file?.mimeType?.startsWith('image/'));
+  const isImage = $derived(/^image\//.test(file?.mimeType ?? ''));
   const fileName = $derived(file?.url?.split('/').pop() || 'file');
+  const imageAlt = $derived(file?.alt || m.dm_file_image_alt());
 </script>
 
 {#if loading}
@@ -72,7 +103,7 @@
 {:else if isImage}
   <img
     src={objectUrl}
-    alt=""
+    alt={imageAlt}
     class="max-h-80 max-w-full rounded-lg object-contain"
     data-testid="dm-file-image"
   />
