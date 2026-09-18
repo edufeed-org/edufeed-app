@@ -44,7 +44,8 @@ export function rumorConversationId(rumor) {
 }
 
 /** @param {any} rumor @param {string} name */
-const tag = (rumor, name) => rumor?.tags?.find((t) => t[0] === name && t[1])?.[1] ?? null;
+const tag = (rumor, name) =>
+  rumor?.tags?.find((/** @type {string[]} */ t) => t[0] === name && t[1])?.[1] ?? null;
 
 /**
  * NIP-17 encrypted file header (kind 15): the url is the content, the AES-GCM

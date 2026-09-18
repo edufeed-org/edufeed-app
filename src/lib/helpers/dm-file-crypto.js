@@ -23,7 +23,7 @@ function hexToBytes(hex, label) {
 }
 
 /**
- * @param {ArrayBuffer | Uint8Array} encrypted
+ * @param {BufferSource} encrypted
  * @param {{ algorithm: string, key: string, nonce: string }} material
  * @returns {Promise<Uint8Array>}
  */

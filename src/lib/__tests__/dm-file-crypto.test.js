@@ -1,3 +1,4 @@
+// @ts-nocheck
 /** @vitest-environment node */
 /**
  * NIP-17 kind-15 payloads are AES-256-GCM (12-byte nonce, 128-bit tag) —

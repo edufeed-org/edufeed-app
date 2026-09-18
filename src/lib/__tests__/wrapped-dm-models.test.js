@@ -1,3 +1,4 @@
+// @ts-nocheck
 /** @vitest-environment node */
 /**
  * Local replacements for applesauce's WrappedMessages* models, which keep

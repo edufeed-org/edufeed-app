@@ -19,23 +19,38 @@ import {
 
 const KEPT = [kinds.PrivateDirectMessage, kinds.FileMessage, kinds.Reaction];
 
-/** Every unlocked rumor we care about, newest first. @param {string} self */
+/**
+ * Every unlocked rumor we care about, newest first.
+ * @param {string} self
+ */
 export function DmRumorsModel(self) {
-  return (store) =>
+  // `any`: applesauce's own ModelConstructor type calls this with
+  // `IEventStore | IAsyncEventStore` (see event-store/interface.d.ts), and
+  // pinning to the sync-only IEventStore here breaks callers like
+  // dm-service.svelte.js that pass this model through that union type.
+  return (/** @type {any} */ store) =>
     store.timeline({ kinds: [kinds.GiftWrap], '#p': [self] }).pipe(
       watchEventsUpdates(store),
-      map((wraps) =>
+      map((/** @type {import('nostr-tools').Event[]} */ wraps) =>
         wraps
-          .map((wrap) => getGiftWrapRumor(wrap))
+          // getGiftWrapRumor returns applesauce's internal `Rumor | undefined` type,
+          // not a signed nostr-tools Event — `any` here rather than fighting that
+          // shape; the rest of this module treats a rumor as {kind, pubkey, tags,
+          // content, created_at} which both types satisfy at runtime.
+          .map((/** @type {any} */ wrap) => getGiftWrapRumor(wrap))
           .filter((rumor) => !!rumor && KEPT.includes(rumor.kind))
-          .sort((a, b) => b.created_at - a.created_at)
+          .sort((/** @type {any} */ a, /** @type {any} */ b) => b.created_at - a.created_at)
       )
     );
 }
 
-/** Conversation list: newest MESSAGE per conversation (a reaction is never a preview). */
+/**
+ * Conversation list: newest MESSAGE per conversation (a reaction is never a preview).
+ * @param {string} self
+ */
 export function DmConversationsModel(self) {
-  return (store) =>
+  // `any`: see the comment on DmRumorsModel's store param above.
+  return (/** @type {any} */ store) =>
     store.model(DmRumorsModel, self).pipe(
       map((all) => {
         /** @type {Record<string, any>} */
@@ -65,11 +80,16 @@ export function DmThreadModel(self, participants) {
   ]
     .sort()
     .join(':');
-  return (store) =>
+  // `any`: see the comment on DmRumorsModel's store param above.
+  return (/** @type {any} */ store) =>
     store.model(DmRumorsModel, self).pipe(
       map((all) => {
-        const mine = all.filter((rumor) => rumorConversationId(rumor) === identifier);
-        const messages = mine.filter(isDmMessageRumor).sort((a, b) => a.created_at - b.created_at);
+        const mine = all.filter(
+          (/** @type {any} */ rumor) => rumorConversationId(rumor) === identifier
+        );
+        const messages = mine
+          .filter(isDmMessageRumor)
+          .sort((/** @type {any} */ a, /** @type {any} */ b) => a.created_at - b.created_at);
         const reactionsByTarget = new Map();
         for (const rumor of mine) {
           if (!isDmReactionRumor(rumor)) continue;
