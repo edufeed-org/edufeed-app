@@ -96,7 +96,7 @@
   /** @type {string | null} */
   let expandedListId = $state(null);
   /** @type {import('nostr-tools').NostrEvent | null} */
-  let expandedListEvent = $state(null);
+  let expandedListEvent = $state.raw(null); // holds a Nostr event — never deep-proxy it
 
   /** @type {import('nostr-tools').NostrEvent[]} */
   let resolvedEvents = $state.raw([]);

@@ -27,9 +27,18 @@ import {
 // State
 // ---------------------------------------------------------------------------
 
-/** Singleton (replaceable) lists indexed by kind. */
+/**
+ * Singleton (replaceable) lists indexed by kind.
+ *
+ * `$state.raw` on purpose: a deep `$state({})` would wrap every event in a
+ * reactive proxy, and applesauce's list helpers (`getProfilePointersFromList`
+ * & co.) memoize by writing a Symbol onto the event on every call — through
+ * the proxy that is a state write, and inside a template `$derived` Svelte
+ * throws `state_unsafe_mutation` (killed the Lists tab for anyone with a
+ * contact list). The map is always reassigned wholesale, never mutated.
+ */
 /** @type {Record<number, import('nostr-tools').NostrEvent | null>} */
-let singletons = $state({});
+let singletons = $state.raw({});
 
 /** Addressable (parameterized) list events — flat array across all kinds. */
 /** @type {import('nostr-tools').NostrEvent[]} */
