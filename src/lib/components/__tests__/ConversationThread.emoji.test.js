@@ -73,10 +73,11 @@ describe('ConversationThread custom emoji send', () => {
     await fireEvent.click(screen.getByTitle('Emoji'));
     await fireEvent.click(await screen.findByTestId('custom-emoji-option'));
 
-    const textarea = /** @type {HTMLTextAreaElement} */ (screen.getByRole('textbox'));
-    expect(textarea.value).toBe(':dogedance_sm:');
+    const editor = screen.getByRole('textbox');
+    // rendered inline as the image; the serialised draft is what gets sent
+    expect(editor.querySelector('img[data-shortcode="dogedance_sm"]')).toBeTruthy();
 
-    await fireEvent.submit(/** @type {HTMLFormElement} */ (textarea.closest('form')));
+    await fireEvent.submit(/** @type {HTMLFormElement} */ (editor.closest('form')));
 
     await waitFor(() => expect(sendWrappedDm).toHaveBeenCalledTimes(1));
     expect(sendWrappedDm).toHaveBeenCalledWith([PEER], ':dogedance_sm:', {
