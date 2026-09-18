@@ -23,6 +23,35 @@ function preserveRepostMeta(transformed, source) {
 }
 
 /**
+ * Apply a section's write gate at read time (communikey-groups: the reader
+ * keeps only items whose author OR any sharer passes the CURRENT roster).
+ * `allowed === null` means the section is open; the same array reference is
+ * returned so `$derived` consumers do not re-render needlessly.
+ * @template {{pubkey?: string, event?: {pubkey?: string}, _sharedBy?: string, _allSharers?: string[]}} T
+ * @param {T[]} items
+ * @param {string[] | null | undefined} allowed
+ * @returns {T[]}
+ */
+export function filterByAllowedAuthors(items, allowed) {
+  if (!allowed) return items;
+  return items.filter((item) => passesAllowedAuthors(item, allowed));
+}
+
+/**
+ * The per-item half of the rule above: author allowed, or ANY sharer allowed
+ * (`_allSharers` when the model tracked every share, else `_sharedBy`).
+ * @param {{pubkey?: string, event?: {pubkey?: string}, _sharedBy?: string, _allSharers?: string[]}} item
+ * @param {string[]} allowed
+ * @returns {boolean}
+ */
+export function passesAllowedAuthors(item, allowed) {
+  const author = item.pubkey || item.event?.pubkey;
+  if (author && allowed.includes(author)) return true;
+  if (item._allSharers) return item._allSharers.some((pk) => allowed.includes(pk));
+  return !!item._sharedBy && allowed.includes(item._sharedBy);
+}
+
+/**
  * Map an event to a discover rawItems entry, applying per-kind transforms.
  * @param {any} event
  * @returns {{type: string, data: any} | null}

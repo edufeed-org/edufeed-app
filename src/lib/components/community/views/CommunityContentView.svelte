@@ -10,6 +10,7 @@
   import { useProfileMap } from '$lib/stores/profile-map.svelte.js';
   import { useAuthorDeletions } from '$lib/stores/author-deletions.svelte.js';
   import { matchesEventSearch } from '$lib/helpers/contentSearch.js';
+  import { filterByAllowedAuthors } from '$lib/helpers/communityContent.js';
   import { SearchIcon } from '$lib/components/icons';
   import EmptyState from '$lib/components/shared/EmptyState.svelte';
   import * as m from '$lib/paraglide/messages';
@@ -77,17 +78,7 @@
   useAuthorDeletions(contentPubkeys);
   let authorProfiles = $derived(getAuthorProfiles());
 
-  let accessFilteredItems = $derived.by(() => {
-    const allowed = getAllowedAuthors?.();
-    if (!allowed) return items;
-    return items.filter(
-      (item) =>
-        allowed.includes(item.pubkey || item.event?.pubkey) ||
-        (item._allSharers &&
-          item._allSharers.some((/** @type {string} */ pk) => allowed.includes(pk))) ||
-        (item._sharedBy && allowed.includes(item._sharedBy))
-    );
-  });
+  let accessFilteredItems = $derived(filterByAllowedAuthors(items, getAllowedAuthors?.()));
 
   let displayedItems = $derived.by(() => {
     if (!searchable || !searchQuery.trim()) return accessFilteredItems;

@@ -346,6 +346,42 @@ describe('filterEventsByAccess', () => {
     expect(result[0].id).toBe('shared1');
   });
 
+  it('allows shared content when a LATER sharer is allowed (_allSharers), even if the first is not', () => {
+    const communityEvent = {
+      tags: [
+        ['content', 'Learning'],
+        ['k', '30142'],
+        ['a', '30000:abc:learning-members', 'wss://relay.example.com']
+      ]
+    };
+    const events = [
+      makeEvent(
+        /** @type {any} */ ({
+          id: 'shared2',
+          kind: 30142,
+          pubkey: 'outsideAuthor',
+          _sharedBy: 'outsideSharer',
+          _allSharers: ['outsideSharer', 'allowedSharer']
+        })
+      ),
+      makeEvent(
+        /** @type {any} */ ({
+          id: 'shared3',
+          kind: 30142,
+          pubkey: 'outsideAuthor',
+          _sharedBy: 'outsideSharer',
+          _allSharers: ['outsideSharer']
+        })
+      )
+    ];
+    const profileAccess = {
+      getAllowedAuthors: () => ['allowedSharer'],
+      isLoading: false
+    };
+    const result = filterEventsByAccess(events, communityEvent, profileAccess);
+    expect(result.map((e) => e.id)).toEqual(['shared2']);
+  });
+
   it('keeps events from restricted sections when author IS allowed', () => {
     const communityEvent = {
       tags: [

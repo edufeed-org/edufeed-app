@@ -10,7 +10,8 @@
 import { describe, it, expect } from 'vitest';
 import {
   mapCommunityItemsToRawItems,
-  hasDisplayableCommunityProfile
+  hasDisplayableCommunityProfile,
+  filterByAllowedAuthors
 } from '$lib/helpers/communityContent.js';
 
 /** @param {Partial<{id:string,kind:number,pubkey:string,tags:string[][],created_at:number,content:string}>} o */
@@ -213,5 +214,48 @@ describe('hasDisplayableCommunityProfile', () => {
   it('rejects non-string name values from malformed kind 0 content', () => {
     expect(hasDisplayableCommunityProfile({ name: 42 })).toBe(false);
     expect(hasDisplayableCommunityProfile({ name: { text: 'x' } })).toBe(false);
+  });
+});
+
+describe('filterByAllowedAuthors', () => {
+  const own = { pubkey: 'member' };
+  const outsider = { pubkey: 'outsider' };
+  const sharedByMember = { pubkey: 'outsider', _sharedBy: 'member', _allSharers: ['member'] };
+  const sharedByOutsider = { pubkey: 'outsider', _sharedBy: 'stranger', _allSharers: ['stranger'] };
+  const laterMemberShare = {
+    pubkey: 'outsider',
+    _sharedBy: 'stranger',
+    _allSharers: ['stranger', 'member']
+  };
+  const wrapped = { event: { pubkey: 'member' } };
+
+  it('returns items unchanged when the section is open (null)', () => {
+    const items = [own, outsider, sharedByOutsider];
+    expect(filterByAllowedAuthors(items, null)).toBe(items);
+    expect(filterByAllowedAuthors(items, undefined)).toBe(items);
+  });
+
+  it('keeps items whose author is allowed', () => {
+    expect(filterByAllowedAuthors([own, outsider], ['member'])).toEqual([own]);
+  });
+
+  it('keeps a share when any sharer is allowed, drops it when none is', () => {
+    expect(
+      filterByAllowedAuthors([sharedByMember, sharedByOutsider, laterMemberShare], ['member'])
+    ).toEqual([sharedByMember, laterMemberShare]);
+  });
+
+  it('falls back to _sharedBy when _allSharers is absent', () => {
+    const legacy = { pubkey: 'outsider', _sharedBy: 'member' };
+    expect(filterByAllowedAuthors([legacy], ['member'])).toEqual([legacy]);
+  });
+
+  it('reads the author from item.event when the item wraps an event', () => {
+    expect(filterByAllowedAuthors([wrapped], ['member'])).toEqual([wrapped]);
+    expect(filterByAllowedAuthors([wrapped], ['other'])).toEqual([]);
+  });
+
+  it('drops everything but the owner when the allowed list is empty', () => {
+    expect(filterByAllowedAuthors([own, outsider, sharedByOutsider], [])).toEqual([]);
   });
 });

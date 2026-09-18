@@ -9,6 +9,8 @@
   import { kanbanTimelineLoader } from '$lib/loaders/kanban.js';
   import { useCommunityActivityLoader } from '$lib/loaders/community-activity.js';
   import { CommunityActivityModel } from '$lib/models/community-content.js';
+  import { subscribeToCommunityAccess } from '$lib/groups/community-access-subscription.js';
+  import { filterEventsByAccess } from '$lib/helpers/contentTypes.js';
   import {
     createDateRangeCalendarLoader,
     createPaginatedCalendarLoader
@@ -27,7 +29,8 @@
     getEducationalRelays,
     getArticleRelays,
     getCalendarRelays,
-    getKanbanRelays
+    getKanbanRelays,
+    getCommunikeyRelays
   } from '$lib/helpers/relay-helper.js';
   import { TimelineModel } from 'applesauce-core/models';
   import { AMBResourceModel, CalendarEventRangeModel } from '$lib/models';
@@ -837,6 +840,40 @@
     /** @type {Map<string, any[]>} */
     // eslint-disable-next-line svelte/prefer-svelte-reactivity -- local accumulator, not reactive state
     const perCommunity = new Map();
+    // Per-community section access (same wiring as DashboardCommunityFeed):
+    // a moderated community's `access` rules are write gating enforced by the
+    // reader, so a share by a non-member must not surface here either. Until
+    // the 10222/roster arrive the feed renders unfiltered rather than empty.
+    /** @type {Map<string, {communityEvent: any, access: {isLoading: boolean, getAllowedAuthors: (name: string) => string[] | null} | null}>} */
+    // eslint-disable-next-line svelte/prefer-svelte-reactivity -- local accumulator, not reactive state
+    const perCommunityAcl = new Map();
+
+    // The 10222 replaceable (and the access subscription it spawns) can emit
+    // synchronously while this effect is still running; the merge writes
+    // state (and `profileTrigger++` also READS it), so it must run untracked
+    // or the effect depends on its own output (effect_update_depth_exceeded).
+    function publishMerged() {
+      untrack(publishMergedNow);
+    }
+
+    function publishMergedNow() {
+      // Merge across all targeted communities, dedupe by id (direct beats reposted).
+      /** @type {Map<string, any>} */
+      // eslint-disable-next-line svelte/prefer-svelte-reactivity -- local accumulator, not reactive state
+      const merged = new Map();
+      for (const [pubkey, arr] of perCommunity) {
+        const acl = perCommunityAcl.get(pubkey);
+        const gated =
+          acl?.communityEvent && acl.access
+            ? filterEventsByAccess(arr, acl.communityEvent, acl.access)
+            : arr;
+        for (const item of gated) {
+          if (!merged.has(item.id)) merged.set(item.id, item);
+        }
+      }
+      communityScopedItems = Array.from(merged.values());
+      profileTrigger++;
+    }
 
     for (const pubkey of targets) {
       const { cleanup } = useCommunityActivityLoader(pubkey);
@@ -847,19 +884,31 @@
         .pipe(debounceTime(100))
         .subscribe((items) => {
           perCommunity.set(pubkey, items || []);
-          // Merge across all targeted communities, dedupe by id (direct beats reposted).
-          /** @type {Map<string, any>} */
-          // eslint-disable-next-line svelte/prefer-svelte-reactivity -- local accumulator, not reactive state
-          const merged = new Map();
-          for (const arr of perCommunity.values()) {
-            for (const item of arr) {
-              if (!merged.has(item.id)) merged.set(item.id, item);
-            }
-          }
-          communityScopedItems = Array.from(merged.values());
-          profileTrigger++;
+          publishMerged();
         });
       modelSubs.push(sub);
+
+      /** @type {(() => void) | undefined} */
+      let aclCleanup;
+      const aclSub = eventStore.replaceable(10222, pubkey).subscribe((communityEvent) => {
+        aclCleanup?.();
+        aclCleanup = undefined;
+        perCommunityAcl.set(pubkey, { communityEvent: communityEvent ?? null, access: null });
+        if (communityEvent) {
+          aclCleanup = subscribeToCommunityAccess(
+            communityEvent,
+            getCommunikeyRelays(),
+            (access) => {
+              const acl = perCommunityAcl.get(pubkey);
+              if (acl) acl.access = access;
+              publishMerged();
+            }
+          ).cleanup;
+        }
+        publishMerged();
+      });
+      modelSubs.push(aclSub);
+      cleanups.push(() => aclCleanup?.());
     }
 
     return () => {
