@@ -72,31 +72,29 @@ export function buildCommentTree(comments) {
  */
 function getParentCommentId(comment) {
   if (comment.kind === 1111) {
-    // NIP-22: lowercase 'k' tag = parent kind, lowercase 'e' tag = parent event id
-    // If parent kind is 1111, this is a reply to another comment
+    // NIP-22: lowercase 'e' = parent event id, uppercase 'E' = root event id.
+    // The parent is another comment whenever the two differ. The lowercase 'k'
+    // (parent kind) is deliberately NOT used to decide this: under a kind 1
+    // root, comments can themselves be kind 1 NIP-10 notes, so a kind 1111
+    // reply to one of them carries k=1 — treating "k !== 1111" as top-level
+    // flattened those replies (imwald interop, 2026-09-15).
+    const parentETag = comment.tags.find((/** @type {any[]} */ t) => t[0] === 'e');
+    if (!parentETag) return null;
+
+    const rootETag = comment.tags.find((/** @type {any[]} */ t) => t[0] === 'E');
+    if (rootETag && parentETag[1] === rootETag[1]) return null;
+
     const parentKindTag = comment.tags.find((/** @type {any[]} */ t) => t[0] === 'k');
-    const parentKind = parentKindTag ? parseInt(parentKindTag[1]) : null;
-
-    if (parentKind === 1111) {
-      // Explicit: k=1111 means parent is a comment
-      const parentETag = comment.tags.find((/** @type {any[]} */ t) => t[0] === 'e');
-      return parentETag ? parentETag[1] : null;
-    }
-
-    if (parentKind !== null) {
-      // k exists but is not 1111 — top-level comment (parent is root event)
+    const rootKindTag = comment.tags.find((/** @type {any[]} */ t) => t[0] === 'K');
+    // Addressable roots (A/a, no E): a top-level comment repeats the root kind
+    // in lowercase k while pointing e at the root's event id — that is not a
+    // nested reply. Only honour the e tag as a parent when kinds differ, or when
+    // the parent is itself a comment.
+    if (!rootETag && parentKindTag && rootKindTag && parentKindTag[1] === rootKindTag[1]) {
       return null;
     }
 
-    // No k tag: fallback — compare lowercase e with uppercase E
-    // If they differ, the lowercase e points to a parent comment
-    const parentETag = comment.tags.find((/** @type {any[]} */ t) => t[0] === 'e');
-    const rootETag = comment.tags.find((/** @type {any[]} */ t) => t[0] === 'E');
-    if (parentETag && rootETag && parentETag[1] !== rootETag[1]) {
-      return parentETag[1];
-    }
-
-    return null;
+    return parentETag[1];
   }
 
   if (comment.kind === 1) {
