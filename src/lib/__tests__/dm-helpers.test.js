@@ -19,6 +19,7 @@ import {
   buildDmRelayListEvent,
   computeBaseGiftWrapRelays,
   filterEventsNeedingSignerUnlock,
+  giftWrapSealCacheKeys,
   DM_READ_TIMESTAMPS_KEY,
   loadReadTimestamps,
   saveReadTimestamps,
@@ -179,6 +180,44 @@ describe('filterEventsNeedingSignerUnlock (decrypt-storm guard)', () => {
       () => false
     );
     expect(result.map((e) => e.id)).toEqual(['aa', 'cc']);
+  });
+
+  // A gift wrap is a TWO-stage decrypt: wrap -> seal -> rumor, each stage
+  // cached under its own event id. A hit on the wrap's id alone only proves
+  // the seal was recovered, so skipping on it stranded wraps whose seal was
+  // never opened — locked forever, no error raised, invisible in the thread
+  // while other clients showed the message (laoc, 2026-09-18).
+  const sealJson = (/** @type {string} */ id) =>
+    JSON.stringify({ id, kind: 13, pubkey: 'author', content: 'ciphertext', tags: [] });
+
+  it('keeps a gift wrap whose seal plaintext is missing from the cache', async () => {
+    const result = await filterEventsNeedingSignerUnlock(
+      [wrap('aa')],
+      cacheWith({ aa: sealJson('seal-aa') }),
+      () => false,
+      giftWrapSealCacheKeys
+    );
+    expect(result.map((e) => e.id)).toEqual(['aa']);
+  });
+
+  it('skips a gift wrap only when both wrap and seal plaintext are cached', async () => {
+    const result = await filterEventsNeedingSignerUnlock(
+      [wrap('aa')],
+      cacheWith({ aa: sealJson('seal-aa'), 'seal-aa': '{"kind":14,"content":"hi"}' }),
+      () => false,
+      giftWrapSealCacheKeys
+    );
+    expect(result).toEqual([]);
+  });
+
+  it('keeps a gift wrap whose cached plaintext is not a readable seal', async () => {
+    const result = await filterEventsNeedingSignerUnlock(
+      [wrap('aa'), wrap('bb')],
+      cacheWith({ aa: 'not json at all', bb: '{"kind":13}' }),
+      () => false,
+      giftWrapSealCacheKeys
+    );
+    expect(result.map((e) => e.id)).toEqual(['aa', 'bb']);
   });
 
   it('skips events the unlocked-predicate already covers', async () => {

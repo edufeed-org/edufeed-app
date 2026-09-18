@@ -30,12 +30,27 @@ export function getConversationPeers(participants, selfPubkey) {
  *   mutedPubkeys: Set<string>,
  *   outboundPeers: Set<string>,
  *   trustedSenders: Set<string>,
- *   mutedWords?: Set<string>
+ *   mutedWords?: Set<string>,
+ *   followsLoaded?: boolean
  * }} opts
  * @returns {{ known: T[], requests: T[] }}
  */
 export function classifyDmConversations(conversations, opts) {
-  const { selfPubkey, follows, mutedPubkeys, outboundPeers, trustedSenders, mutedWords } = opts;
+  const {
+    selfPubkey,
+    follows,
+    mutedPubkeys,
+    outboundPeers,
+    trustedSenders,
+    mutedWords,
+    // Until the kind-3 contact list has loaded, `follows` is empty and every
+    // peer looks like a stranger — which shelved real conversations into the
+    // collapsed requests section and took the selection highlight with them
+    // (laoc, 2026-09-18). Not knowing is not the same as knowing they are
+    // strangers: show them until we do. Muting still applies, because that
+    // one IS a decision the user made.
+    followsLoaded = true
+  } = opts;
   /** @type {T[]} */
   const known = [];
   /** @type {T[]} */
@@ -50,6 +65,10 @@ export function classifyDmConversations(conversations, opts) {
     }
     const unmuted = peers.filter((p) => !mutedPubkeys.has(p));
     if (unmuted.length === 0) continue; // every peer muted — drop entirely
+    if (!followsLoaded) {
+      known.push(conv);
+      continue;
+    }
     const isKnown = unmuted.some(
       (p) => follows.has(p) || outboundPeers.has(p) || trustedSenders.has(p)
     );

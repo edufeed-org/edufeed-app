@@ -154,6 +154,53 @@ describe('classifyDmConversations', () => {
   });
 });
 
+describe('classifyDmConversations while the follow list is still unknown', () => {
+  // Nothing loads the kind-3 contact list on the messages route, so landing
+  // there directly left `follows` empty — every conversation with someone the
+  // user had not replied to was shelved as a request, disappearing from the
+  // collapsed list and losing the selection highlight (laoc, 2026-09-18).
+  // Until we know the follows, a conversation must not be shelved.
+  it('keeps every unmuted conversation in the main list', () => {
+    const conversations = [
+      { participants: [SELF, FRIEND], lastMessage: { content: 'hi' } },
+      { participants: [SELF, STRANGER], lastMessage: { content: 'hello' } }
+    ];
+    const { known, requests } = classifyDmConversations(conversations, {
+      ...emptyOpts(),
+      followsLoaded: false
+    });
+    expect(known).toHaveLength(2);
+    expect(requests).toHaveLength(0);
+  });
+
+  it('still drops muted peers — muting is a decision, not a guess', () => {
+    const conversations = [{ participants: [SELF, SPAMMER], lastMessage: { content: 'spam' } }];
+    const { known, requests } = classifyDmConversations(conversations, {
+      ...emptyOpts(),
+      mutedPubkeys: new Set([SPAMMER]),
+      followsLoaded: false
+    });
+    expect(known).toHaveLength(0);
+    expect(requests).toHaveLength(0);
+  });
+
+  it('shelves strangers again once the follow list is known', () => {
+    const conversations = [{ participants: [SELF, STRANGER], lastMessage: { content: 'hello' } }];
+    const { known, requests } = classifyDmConversations(conversations, {
+      ...emptyOpts(),
+      followsLoaded: true
+    });
+    expect(known).toHaveLength(0);
+    expect(requests).toHaveLength(1);
+  });
+
+  it('defaults to the loaded behaviour when the flag is omitted', () => {
+    const conversations = [{ participants: [SELF, STRANGER], lastMessage: { content: 'hello' } }];
+    const { requests } = classifyDmConversations(conversations, emptyOpts());
+    expect(requests).toHaveLength(1);
+  });
+});
+
 describe('excludeMutedAuthors', () => {
   const events = [
     { id: '1', pubkey: FRIEND },

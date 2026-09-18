@@ -12,7 +12,7 @@
  * the plumbing that models can't: relay subscriptions, unlock flow, read state.
  */
 import { mapEventsToStore } from 'applesauce-core/observable';
-import { filter, tap } from 'rxjs';
+import { filter, tap, firstValueFrom, take } from 'rxjs';
 import { GiftWrapsModel } from 'applesauce-common/models';
 import { WrappedMessagesGroups, WrappedMessagesModel } from 'applesauce-common/models';
 import { unlockGiftWrap, isGiftWrapUnlocked } from 'applesauce-common/helpers/gift-wrap';
@@ -22,7 +22,7 @@ import {
 } from 'applesauce-common/helpers/legacy-messages';
 import { getEncryptedContent } from 'applesauce-core/helpers/encrypted-content';
 import { persistEncryptedContent } from 'applesauce-common/helpers/encrypted-content-cache';
-import { SvelteSet } from 'svelte/reactivity';
+import { SvelteMap, SvelteSet } from 'svelte/reactivity';
 import { eventStore, pool } from '$lib/stores/nostr-infrastructure.svelte';
 import { addressLoader } from '$lib/loaders/base.js';
 import {
@@ -34,7 +34,12 @@ import {
   normalizeLegacyConversation,
   groupLegacyConversations,
   mergeDmConversations,
-  filterEventsNeedingSignerUnlock
+  filterEventsNeedingSignerUnlock,
+  giftWrapSealCacheKeys,
+  shouldAttemptUnlock,
+  recordUnlockFailure,
+  countUnlockFailures,
+  LEGACY_FAILED_UNLOCK_KEY_PREFIX
 } from '$lib/helpers/dm.js';
 import {
   getRelayListLookupRelays,
@@ -75,6 +80,14 @@ let dmConversations = $derived(mergeDmConversations(wrappedConversations, legacy
 let selfPubkey = $state(/** @type {string | null} */ (null));
 /** Pubkeys from the user's kind 3 contact list. @type {Set<string>} */
 let followsPubkeys = $state.raw(new Set());
+/**
+ * Whether the kind-3 contact list has been resolved yet (event received, or
+ * the load settled without one). Until then no conversation is shelved as a
+ * request — see classifyDmConversations.
+ */
+let followsLoaded = $state(false);
+/** @type {ReturnType<typeof setTimeout> | undefined} */
+let followsSettleTimer;
 /** Peers of legacy kind-4 messages the user authored. @type {Set<string>} */
 let legacyOutboundPeers = $state.raw(new Set());
 /** Recipients of wrapped rumors the user authored. @type {Set<string>} */
@@ -87,6 +100,7 @@ let conversationBuckets = $derived.by(() => {
   return classifyDmConversations(dmConversations, {
     selfPubkey,
     follows: followsPubkeys,
+    followsLoaded,
     mutedPubkeys: getMutedPubkeys(),
     outboundPeers: new Set([...legacyOutboundPeers, ...wrappedOutboundPeers]),
     trustedSenders,
@@ -124,6 +138,8 @@ let dmRelayCheckStatus = $state('idle');
 let dmRelayCheckTimer = null;
 /** How long to wait for the user's 10050 before declaring it absent. */
 const DM_RELAY_CHECK_SETTLE_MS = 5000;
+/** Give the contact-list load this long before shelving strangers as requests. */
+const FOLLOWS_SETTLE_MS = 8000;
 /**
  * Callers parked in waitForDmRelayCheck(), released the moment the check
  * reaches a conclusion ('present' / 'absent') or the session ends ('idle').
@@ -185,48 +201,99 @@ let unlockDebounceTimer = null;
  * @type {Set<string>}
  */
 let subscribedRelays = new SvelteSet();
+
+/** DM relays whose NIP-42 handshake failed — retried by retryFailedUnlocks(). */
+// eslint-disable-next-line svelte/prefer-svelte-reactivity -- plain bookkeeping, never rendered
+let failedAuthRelays = new Set();
+
+/** True while a manual retry runs (drives the notice's button state). */
+let retryingUnlocks = $state(false);
 /**
- * IDs of gift wraps that previously threw during unlockGiftWrap (corrupt
- * wrap, key mismatch, etc.). Such wraps stay in GiftWrapsModel(_, false),
- * so without this guard a relay redelivery would loop batchUnlock forever
- * — flooding reactive state and tripping Svelte's effect-flush depth
- * guard. Mirrors the upstream applesauce gift-wrap example. Persisted per
- * pubkey to localStorage so a reload doesn't re-attempt the same wraps.
- * Cleared on cleanup() (logout / account switch).
- * @type {Set<string>}
+ * Gift wraps that threw during unlock, with their attempt count and reason.
+ * Such wraps stay in GiftWrapsModel(_, false), so without this guard a relay
+ * redelivery would loop batchUnlock forever — flooding reactive state and
+ * tripping Svelte's effect-flush depth guard.
+ *
+ * IN-MEMORY ONLY, deliberately. This used to be persisted per pubkey, which
+ * turned one transient signer hiccup (bunker asleep, extension locked) into a
+ * message that stayed missing across every future reload (laoc, 2026-09-18).
+ * The guard only has to survive a redelivery inside one session; a reload
+ * must always try again. Cleared on cleanup() and by retryFailedUnlocks().
+ * @type {Map<string, import('$lib/helpers/dm.js').UnlockFailure>}
  */
-let failedUnlockIds = new SvelteSet();
+let unlockFailures = new SvelteMap();
 
 /**
+ * Delete the retired persisted blacklist. Users carry one from before the
+ * in-memory switch; leaving it would keep hiding nothing (we no longer read
+ * it) but it is stale data about their private messages.
  * @param {string} pubkey
- * @returns {string}
  */
-function failedUnlockStorageKey(pubkey) {
-  return `comcal:dm:failed-gift-wraps:${pubkey}`;
-}
-
-/** @param {string} pubkey */
-function loadFailedUnlockIds(pubkey) {
+function dropLegacyFailedUnlockIds(pubkey) {
   try {
-    const raw = localStorage.getItem(failedUnlockStorageKey(pubkey));
-    if (!raw) return new SvelteSet();
-    const parsed = JSON.parse(raw);
-    return new SvelteSet(Array.isArray(parsed) ? parsed : []);
+    localStorage.removeItem(`${LEGACY_FAILED_UNLOCK_KEY_PREFIX}${pubkey}`);
   } catch {
-    return new SvelteSet();
-  }
-}
-
-/** @param {string} pubkey */
-function saveFailedUnlockIds(pubkey) {
-  try {
-    localStorage.setItem(failedUnlockStorageKey(pubkey), JSON.stringify([...failedUnlockIds]));
-  } catch {
-    // Storage might be unavailable (private mode, quota); in-memory guard still works
+    // storage unavailable (private mode) — nothing to clean up
   }
 }
 
 // --- Public reactive getters ---
+
+/**
+ * How many messages are currently hidden because their gift wrap (or legacy
+ * kind-4 payload) could not be decrypted. Surfaced by DmUnlockNotice so the
+ * loss is visible instead of a silently shorter thread.
+ */
+export function getUnlockFailureCount() {
+  return countUnlockFailures(unlockFailures);
+}
+
+/** True while retryFailedUnlocks() is working. */
+export function isRetryingUnlocks() {
+  return retryingUnlocks;
+}
+
+/**
+ * Hand every failed wrap to the signer again: forget the attempt counts and
+ * re-run the unlock over the wraps the store still holds locked. Also
+ * re-authenticates DM relays whose NIP-42 handshake failed, since an
+ * unauthenticated relay serves no wraps at all.
+ */
+export async function retryFailedUnlocks() {
+  if (retryingUnlocks || !activePubkey || !activeSigner) return;
+  retryingUnlocks = true;
+  try {
+    unlockFailures.clear();
+    for (const url of failedAuthRelays) {
+      const relay = pool.relay(url);
+      try {
+        const response = await authenticateOnce(relay, /** @type {any} */ (activeSigner));
+        if (response.ok) failedAuthRelays.delete(url);
+      } catch (err) {
+        console.warn('[dm] auth retry failed for', url, err);
+      }
+    }
+    const locked = await firstValueFrom(
+      eventStore.model(GiftWrapsModel, activePubkey, false).pipe(take(1))
+    );
+    if (locked && locked.length > 0) await batchUnlock(locked);
+  } finally {
+    retryingUnlocks = false;
+  }
+}
+
+/**
+ * Mark the follow list resolved, so strangers are shelved as requests again.
+ * @param {string} pubkey
+ */
+function settleFollows(pubkey) {
+  if (activePubkey !== pubkey) return;
+  followsLoaded = true;
+  if (followsSettleTimer) {
+    clearTimeout(followsSettleTimer);
+    followsSettleTimer = undefined;
+  }
+}
 
 /** @returns {string[]} */
 export function getDmRelays() {
@@ -428,7 +495,6 @@ export async function ensureLegacyMessagesUnlocked(messages) {
   const failedIds = new SvelteSet();
   if (!activeSigner || !activePubkey) return failedIds;
   const pubkey = activePubkey;
-  let savedNew = false;
   // Skip messages whose plaintext is cached — restore handles them promptless.
   // (plain local lookup set, not reactive state)
   // eslint-disable-next-line svelte/prefer-svelte-reactivity
@@ -440,20 +506,19 @@ export async function ensureLegacyMessagesUnlocked(messages) {
   for (const msg of messages) {
     if (activePubkey !== pubkey) return failedIds;
     if (!needSigner.has(msg.id)) continue;
-    if (failedUnlockIds.has(msg.id)) {
+    if (!shouldAttemptUnlock(unlockFailures, msg.id)) {
       failedIds.add(msg.id);
       continue;
     }
     try {
       await unlockLegacyMessage(msg, pubkey, /** @type {any} */ (activeSigner));
+      unlockFailures.delete(msg.id);
     } catch (err) {
       console.warn('[dm] failed to unlock legacy message:', msg.id, err);
-      failedUnlockIds.add(msg.id);
+      recordUnlockFailure(unlockFailures, msg.id, err);
       failedIds.add(msg.id);
-      savedNew = true;
     }
   }
-  if (savedNew) saveFailedUnlockIds(pubkey);
   return failedIds;
 }
 
@@ -513,18 +578,34 @@ export function initializeDMs(pubkey, signer) {
   selfPubkey = pubkey;
   activeSigner = signer;
   readTimestamps = loadReadTimestamps(pubkey);
-  failedUnlockIds = loadFailedUnlockIds(pubkey);
+  dropLegacyFailedUnlockIds(pubkey);
 
-  // Follows feed the known/requests classification. The kind 3 contact list
-  // is fetched into the EventStore at login by contact-list-loader; this only
-  // mirrors it reactively.
+  // Follows feed the known/requests classification. Nothing else on this route
+  // pulls the kind-3 contact list into the EventStore — the contacts store is
+  // only mounted by the dashboard/profile surfaces — so landing on /c/messages
+  // directly left `follows` empty and shelved real conversations as requests
+  // (laoc, 2026-09-18). Load it here as well as mirroring it.
+  const contactsLoadSub = addressLoader({
+    kind: 3,
+    pubkey,
+    relays: [...getRelayListLookupRelays(), ...(runtimeConfig.fallbackRelays || [])]
+  }).subscribe({
+    error: () => settleFollows(pubkey)
+  });
+  subscriptions.push(contactsLoadSub);
+
   const followsSub = eventStore.replaceable(3, pubkey).subscribe((event) => {
+    if (!event) return; // replaceable() emits undefined before anything loads
     // eslint-disable-next-line svelte/prefer-svelte-reactivity -- $state.raw set, replaced wholesale
     followsPubkeys = new Set(
       (event?.tags || []).filter((t) => t[0] === 'p' && t[1]).map((t) => t[1])
     );
+    settleFollows(pubkey);
   });
   subscriptions.push(followsSub);
+
+  // A user with no contact list at all would otherwise never shelve a request.
+  followsSettleTimer = setTimeout(() => settleFollows(pubkey), FOLLOWS_SETTLE_MS);
 
   // Wrapped rumors the user authored mark their recipients as replied-to
   // peers (an answered request is a known conversation from then on).
@@ -663,7 +744,7 @@ export function initializeDMs(pubkey, signer) {
   //    flipping reactive state and tripping Svelte's effect-flush depth
   //    guard. Pattern mirrors the upstream applesauce gift-wrap example.
   const lockedSub = eventStore.model(GiftWrapsModel, pubkey, false).subscribe((wraps) => {
-    const tryable = (wraps || []).filter((w) => !failedUnlockIds.has(w.id));
+    const tryable = (wraps || []).filter((w) => shouldAttemptUnlock(unlockFailures, w.id));
     lockedCount = tryable.length;
     if (tryable.length > 0 && !unlocking) {
       // Debounced: give persistEncryptedContent's async restore a head start
@@ -726,7 +807,7 @@ export function initializeDMs(pubkey, signer) {
           (msg) =>
             msg &&
             !isLegacyMessageUnlocked(msg) &&
-            !failedUnlockIds.has(/** @type {any} */ (msg).id)
+            shouldAttemptUnlock(unlockFailures, /** @type {any} */ (msg).id)
         );
       if (lockedLast.length > 0 && !unlockingLegacy) {
         batchUnlockLegacy(pubkey, lockedLast);
@@ -768,6 +849,11 @@ export function cleanup() {
   activeSigner = null;
   // eslint-disable-next-line svelte/prefer-svelte-reactivity -- $state.raw set, replaced wholesale
   followsPubkeys = new Set();
+  followsLoaded = false;
+  if (followsSettleTimer) {
+    clearTimeout(followsSettleTimer);
+    followsSettleTimer = undefined;
+  }
   // eslint-disable-next-line svelte/prefer-svelte-reactivity -- $state.raw set, replaced wholesale
   legacyOutboundPeers = new Set();
   // eslint-disable-next-line svelte/prefer-svelte-reactivity -- $state.raw set, replaced wholesale
@@ -793,8 +879,9 @@ export function cleanup() {
   // Nothing more will ever be concluded for this session — a waiter left
   // parked here would hang until its own timeout.
   releaseDmRelayCheckWaiters();
-  failedUnlockIds = new SvelteSet();
+  unlockFailures = new SvelteMap();
   subscribedRelays = new SvelteSet();
+  retryingUnlocks = false;
 }
 
 /**
@@ -871,7 +958,15 @@ function subscribeToGiftWraps(pubkey, relays) {
       // for unlocking gift wraps). The real account signer also implements
       // AuthSigner.signEvent — cast to access it.
       const response = await authenticateOnce(relay, /** @type {any} */ (activeSigner));
-      if (!response.ok) console.warn('[dm] auth failed for', url, response.message);
+      if (response.ok) {
+        failedAuthRelays.delete(url);
+      } else {
+        // A relay that refuses AUTH serves no gift wraps at all (Ditto and
+        // haven both close the REQ with `auth-required:`), so remember it for
+        // the manual retry instead of leaving a console line as the only trace.
+        failedAuthRelays.add(url);
+        console.warn('[dm] auth failed for', url, response.message);
+      }
     });
     subscriptions.push(authSub);
   }
@@ -889,7 +984,12 @@ async function batchUnlock(wraps) {
   const BATCH_SIZE = 5;
   // Skip wraps whose plaintext is already in the cache — the restore
   // pipeline unlocks those without any signer interaction.
-  wraps = await filterEventsNeedingSignerUnlock(wraps, dmContentCache, isGiftWrapUnlocked);
+  wraps = await filterEventsNeedingSignerUnlock(
+    wraps,
+    dmContentCache,
+    isGiftWrapUnlocked,
+    giftWrapSealCacheKeys
+  );
   let failedThisRun = 0;
 
   for (let i = 0; i < wraps.length; i += BATCH_SIZE) {
@@ -899,9 +999,10 @@ async function batchUnlock(wraps) {
       if (isGiftWrapUnlocked(wrap)) return;
       try {
         await unlockGiftWrap(wrap, /** @type {any} */ (activeSigner));
+        unlockFailures.delete(wrap.id);
       } catch (err) {
-        console.warn('Failed to unlock gift wrap:', wrap.id, err);
-        failedUnlockIds.add(wrap.id);
+        const { reason } = recordUnlockFailure(unlockFailures, wrap.id, err);
+        console.warn(`Failed to unlock gift wrap (${reason}):`, wrap.id, err);
         failedThisRun++;
       }
     });
@@ -913,8 +1014,11 @@ async function batchUnlock(wraps) {
     }
   }
 
-  if (failedThisRun > 0 && activePubkey) {
-    saveFailedUnlockIds(activePubkey);
+  if (failedThisRun > 0) {
+    console.warn(
+      `[dm] ${failedThisRun} gift wrap(s) could not be unlocked this run; ` +
+        'they stay visible as a retry prompt instead of being dropped'
+    );
   }
   unlocking = false;
 }

@@ -269,24 +269,167 @@ export function mergeDmConversations(wrapped, legacy) {
  * whose plaintext is already sitting in the cache. Skip those: the restore
  * pipeline unlocks them without any signer interaction moments later.
  *
+ * A cache hit on the event's own id is NOT proof the event is fully
+ * restorable when the payload nests another encrypted stage. A gift wrap
+ * decrypts twice — wrap -> seal, then seal -> rumor — and each stage is cached
+ * under its own event id. Skipping on the wrap's entry alone stranded wraps
+ * whose seal had never been opened: the restore pipeline recovered the seal,
+ * nothing ever asked the signer for the rumor, and the message stayed
+ * invisible with no error to show for it (laoc, 2026-09-18). Callers whose
+ * payload nests pass `nestedCacheKeys` so the skip requires the WHOLE chain.
+ *
  * @param {import('nostr-tools').NostrEvent[]} events
  * @param {{ getItem: (id: string) => Promise<string | null> }} cache
  * @param {(event: any) => boolean} isUnlocked - predicate for already-unlocked events
+ * @param {(event: any, cachedPlaintext: string) => string[] | null} [nestedCacheKeys]
+ *   Further cache keys that must ALSO be present before the event counts as
+ *   restorable. Return `null` when the cached plaintext cannot be read — the
+ *   event then goes to the signer rather than being silently skipped.
  * @returns {Promise<import('nostr-tools').NostrEvent[]>} events that require the signer
  */
-export async function filterEventsNeedingSignerUnlock(events, cache, isUnlocked) {
+export async function filterEventsNeedingSignerUnlock(events, cache, isUnlocked, nestedCacheKeys) {
+  /** @param {string} id */
+  const read = async (id) => {
+    try {
+      return await cache.getItem(id);
+    } catch {
+      // unreadable cache — treat as a miss so the signer gets a chance
+      return null;
+    }
+  };
+
   /** @type {import('nostr-tools').NostrEvent[]} */
   const needSigner = [];
   for (const event of events) {
     if (isUnlocked(event)) continue;
-    let cached = null;
-    try {
-      cached = await cache.getItem(event.id);
-    } catch {
-      // unreadable cache — fall through to a signer unlock
+    const cached = await read(event.id);
+    if (!cached) {
+      needSigner.push(event);
+      continue;
     }
-    if (cached) continue;
+
+    /** @type {string[] | null} */
+    let nested = [];
+    if (nestedCacheKeys) {
+      try {
+        nested = nestedCacheKeys(event, cached);
+      } catch {
+        nested = null;
+      }
+    }
+    if (nested === null) {
+      needSigner.push(event);
+      continue;
+    }
+
+    let chainComplete = true;
+    for (const key of nested) {
+      if (!(await read(key))) {
+        chainComplete = false;
+        break;
+      }
+    }
+    if (chainComplete) continue;
     needSigner.push(event);
   }
   return needSigner;
+}
+
+/**
+ * `nestedCacheKeys` for NIP-59 gift wraps: the cached plaintext of a wrap is
+ * the seal event, whose own plaintext is cached under the SEAL's id.
+ *
+ * The plaintext is decrypted network data, so every field is untrusted: a
+ * payload we cannot read yields `null` ("cannot verify"), never `[]`, because
+ * an empty list would wrongly certify the chain as complete.
+ *
+ * @param {unknown} _event
+ * @param {string} cachedPlaintext
+ * @returns {string[] | null}
+ */
+export function giftWrapSealCacheKeys(_event, cachedPlaintext) {
+  if (typeof cachedPlaintext !== 'string') return null;
+  let seal;
+  try {
+    seal = JSON.parse(cachedPlaintext);
+  } catch {
+    return null;
+  }
+  if (!seal || typeof seal !== 'object' || Array.isArray(seal)) return null;
+  const id = /** @type {{ id?: unknown }} */ (seal).id;
+  if (typeof id !== 'string' || id.length === 0) return null;
+  return [id];
+}
+
+/**
+ * Gift-wrap unlock retry policy.
+ *
+ * A failed unlock used to be written to localStorage and skipped forever, so
+ * one transient signer hiccup (bunker asleep, extension locked, tab
+ * backgrounded) hid that message permanently — it stayed missing across
+ * reloads (laoc, 2026-09-18). The guard below is deliberately IN-MEMORY
+ * ONLY: it exists to stop a relay redelivery from looping inside one
+ * session, never to hide a message from the next one.
+ */
+
+/** Attempts allowed per wrap per session before we stop retrying it. */
+export const UNLOCK_ATTEMPT_LIMIT = 3;
+
+/** Key prefix of the retired persisted blacklist; deleted on init. */
+export const LEGACY_FAILED_UNLOCK_KEY_PREFIX = 'comcal:dm:failed-gift-wraps:';
+
+/** Errors that mean the payload itself can never be decrypted by us. */
+const PERMANENT_FAILURE =
+  /\b(mac|padding|malformed|unsupported|invalid\s+(mac|padding|version|payload))\b/i;
+
+/**
+ * Why an unlock failed. Unknown errors count as transient on purpose: a wrong
+ * guess here hides a real message, while an unnecessary retry costs one
+ * signer call.
+ * @param {unknown} error
+ * @returns {'transient' | 'permanent'}
+ */
+export function classifyUnlockFailure(error) {
+  const message = String(/** @type {any} */ (error)?.message ?? '');
+  return PERMANENT_FAILURE.test(message) ? 'permanent' : 'transient';
+}
+
+/**
+ * @typedef {{ attempts: number, reason: 'transient' | 'permanent' }} UnlockFailure
+ */
+
+/**
+ * Should this wrap be handed to the signer again in THIS session?
+ * @param {Map<string, UnlockFailure>} failures
+ * @param {string} id
+ */
+export function shouldAttemptUnlock(failures, id) {
+  const failure = failures.get(id);
+  if (!failure) return true;
+  if (failure.reason === 'permanent') return false;
+  return failure.attempts < UNLOCK_ATTEMPT_LIMIT;
+}
+
+/**
+ * Record one failed attempt. Returns the updated entry.
+ * @param {Map<string, UnlockFailure>} failures
+ * @param {string} id
+ * @param {unknown} error
+ */
+export function recordUnlockFailure(failures, id, error) {
+  const previous = failures.get(id);
+  const entry = {
+    attempts: (previous?.attempts ?? 0) + 1,
+    reason: classifyUnlockFailure(error)
+  };
+  failures.set(id, entry);
+  return entry;
+}
+
+/**
+ * How many messages are currently hidden because they could not be unlocked.
+ * @param {Map<string, UnlockFailure>} failures
+ */
+export function countUnlockFailures(failures) {
+  return failures.size;
 }
