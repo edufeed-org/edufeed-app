@@ -26,6 +26,8 @@
   import { goto } from '$app/navigation';
   import { resolve } from '$app/paths';
   import { eventStore, pool } from '$lib/stores/nostr-infrastructure.svelte';
+  import { customEmojisIn } from '$lib/helpers/emoji-autocomplete.js';
+  import { useUserEmojiSets } from '$lib/stores/user-emoji-sets.svelte.js';
   import { useActiveUser } from '$lib/stores/accounts.svelte';
   import { useProfileMap } from '$lib/stores/profile-map.svelte.js';
   import { storeEvents } from 'applesauce-relay/operators';
@@ -635,6 +637,8 @@
   });
 
   let text = $state('');
+  const getUserEmojiSets = useUserEmojiSets();
+  const customEmojiSets = $derived(getUserEmojiSets());
   let sending = $state(false);
   // Uploaded-but-not-yet-sent files, keyed by blob URL. Read at send time to
   // build the imeta tags (only for URLs still present in the draft) — nothing
@@ -1015,7 +1019,13 @@
   async function publishMessage(value, replyTarget) {
     try {
       const signed = await signAndPublish(
-        buildGroupMessageTemplate(pointer.id, value, replyTarget, [...pendingAttachments.values()])
+        buildGroupMessageTemplate(
+          pointer.id,
+          value,
+          replyTarget,
+          [...pendingAttachments.values()],
+          customEmojisIn(value, customEmojiSets)
+        )
       );
       eventStore.add(signed);
       // Attachments whose URL went out with this message are done; ones the
@@ -1623,6 +1633,7 @@
             {replyTo}
             onCancelReply={() => (replyTo = null)}
             testid="group-chat-input"
+            {customEmojiSets}
             onOpenApps={canWrite ? () => (appPickerOpen = true) : null}
             onAttachFile={canWrite ? (file) => attachFile(file, 'timeline') : null}
             uploading={uploadingAttachment}
@@ -1649,6 +1660,7 @@
         {#snippet composer()}
           <ChatComposer
             bind:value={threadText}
+            {customEmojiSets}
             placeholder={m.chat_thread_reply_placeholder()}
             disabled={!myPubkey}
             {sending}

@@ -160,9 +160,16 @@ export function groupHref(pointer) {
  * @param {string} content
  * @param {{id: string, pubkey: string, tags?: string[][]} | null} [replyTo]
  * @param {Array<{url: string, type?: string, sha256?: string, size?: number, name?: string}>} [attachments]
+ * @param {Array<{shortcode: string, url: string}>} [emojis] NIP-30 custom emojis used in `content`
  * @returns {{kind: number, content: string, created_at: number, tags: string[][]}}
  */
-export function buildGroupMessageTemplate(groupId, content, replyTo = null, attachments = []) {
+export function buildGroupMessageTemplate(
+  groupId,
+  content,
+  replyTo = null,
+  attachments = [],
+  emojis = []
+) {
   /** @type {string[][]} */
   const tags = [['h', groupId]];
   if (replyTo) {
@@ -177,6 +184,13 @@ export function buildGroupMessageTemplate(groupId, content, replyTo = null, atta
     if (att.size) fields.push(`size ${att.size}`);
     if (att.name) fields.push(`name ${att.name}`);
     tags.push(['imeta', ...fields]);
+  }
+  // NIP-30: one tag per custom emoji the text still references, or every
+  // other client renders the bare :shortcode:.
+  for (const emoji of emojis) {
+    if (emoji?.shortcode && emoji.url && content.includes(`:${emoji.shortcode}:`)) {
+      tags.push(['emoji', emoji.shortcode, emoji.url]);
+    }
   }
   return { kind: 9, content, created_at: Math.floor(Date.now() / 1000), tags };
 }

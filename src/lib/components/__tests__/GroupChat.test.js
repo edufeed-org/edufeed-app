@@ -12,6 +12,7 @@
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor, within } from '@testing-library/svelte';
+import { typeIntoEditor } from './fixtures/editor.js';
 import { finalizeEvent, generateSecretKey, getPublicKey } from 'nostr-tools';
 // Real module (not mocked): the walledchat auth-required retry exercises the
 // actual one-AUTH-per-challenge guard, so its attempt cache must be cleared
@@ -1055,7 +1056,7 @@ describe('GroupChat', () => {
     await new Promise((r) => setTimeout(r, 50));
 
     const input = /** @type {HTMLInputElement | null} */ (screen.queryByTestId('group-chat-input'));
-    expect(input === null || input.disabled).toBe(true);
+    expect(input === null || input.getAttribute('aria-disabled') === 'true').toBe(true);
   });
 
   // The live hang (laoc, 2026-08-19, four reproductions on
@@ -1075,7 +1076,7 @@ describe('GroupChat', () => {
     const earlyInput = /** @type {HTMLInputElement | null} */ (
       screen.queryByTestId('group-chat-input')
     );
-    expect(earlyInput === null || earlyInput.disabled).toBe(true);
+    expect(earlyInput === null || earlyInput.getAttribute('aria-disabled') === 'true').toBe(true);
 
     const bar = await waitFor(() => screen.getByTestId('group-join-bar'), {
       timeout: 10000,
@@ -1209,9 +1210,7 @@ describe('GroupChat', () => {
     render(GroupChat, { props: { pointer } });
     await waitFor(() => screen.getByTestId('group-chat-input'));
 
-    await fireEvent.input(screen.getByTestId('group-chat-input'), {
-      target: { value: 'hi group' }
-    });
+    await typeIntoEditor(screen.getByTestId('group-chat-input'), 'hi group');
     await fireEvent.submit(
       /** @type {HTMLElement} */ (screen.getByTestId('group-chat-input').closest('form'))
     );
@@ -1238,13 +1237,11 @@ describe('GroupChat', () => {
       render(GroupChat, { props: { pointer } });
       await waitFor(() => screen.getByTestId('group-chat-input'));
 
-      await fireEvent.input(screen.getByTestId('group-chat-input'), {
-        target: { value: 'here you go' }
-      });
+      await typeIntoEditor(screen.getByTestId('group-chat-input'), 'here you go');
       await attach(new File(['x'], 'worksheet.pdf', { type: 'application/pdf' }));
 
       const draft = /** @type {HTMLInputElement} */ (screen.getByTestId('group-chat-input'));
-      await waitFor(() => expect(draft.value).toBe(`here you go ${FILE_URL}`));
+      await waitFor(() => expect(draft.textContent).toBe(`here you go ${FILE_URL}`));
 
       await fireEvent.submit(/** @type {HTMLElement} */ (draft.closest('form')));
       await waitFor(() => expect(publishMock).toHaveBeenCalledTimes(1));
@@ -1267,17 +1264,13 @@ describe('GroupChat', () => {
       render(GroupChat, { props: { pointer } });
       await waitFor(() => screen.getByTestId('group-chat-input'));
 
-      await fireEvent.input(screen.getByTestId('group-chat-input'), {
-        target: { value: 'my draft' }
-      });
+      await typeIntoEditor(screen.getByTestId('group-chat-input'), 'my draft');
       await attach(new File(['x'], 'worksheet.pdf', { type: 'application/pdf' }));
 
       await waitFor(() =>
         expect(showToast).toHaveBeenCalledWith('Upload failed. Please try again.', 'error')
       );
-      expect(/** @type {HTMLInputElement} */ (screen.getByTestId('group-chat-input')).value).toBe(
-        'my draft'
-      );
+      expect(screen.getByTestId('group-chat-input').textContent).toBe('my draft');
     });
 
     it('rejects a file over the blossom size cap without uploading', async () => {
@@ -1613,7 +1606,7 @@ describe('GroupChat', () => {
       await fireEvent.click(openLinks()[1]);
 
       const input = await screen.findByTestId('thread-chat-input');
-      await fireEvent.input(input, { target: { value: 'me too' } });
+      await typeIntoEditor(input, 'me too');
       await fireEvent.submit(/** @type {HTMLElement} */ (input.closest('form')));
 
       await waitFor(() => expect(publishMock).toHaveBeenCalledTimes(1));
@@ -1638,7 +1631,7 @@ describe('GroupChat', () => {
       await fireEvent.click(replyButtons[1]);
 
       const input = screen.getByTestId('thread-chat-input');
-      await fireEvent.input(input, { target: { value: 'answering the reply' } });
+      await typeIntoEditor(input, 'answering the reply');
       await fireEvent.submit(/** @type {HTMLElement} */ (input.closest('form')));
 
       await waitFor(() => expect(publishMock).toHaveBeenCalledTimes(1));
@@ -1672,7 +1665,7 @@ describe('GroupChat', () => {
       );
 
       const input = screen.getByTestId('thread-chat-input');
-      await fireEvent.input(input, { target: { value: 'over here now' } });
+      await typeIntoEditor(input, 'over here now');
       await fireEvent.submit(/** @type {HTMLElement} */ (input.closest('form')));
 
       await waitFor(() => expect(publishMock).toHaveBeenCalledTimes(1));
@@ -1699,7 +1692,7 @@ describe('GroupChat', () => {
       await screen.findByTestId('thread-panel');
 
       const input = screen.getByTestId('thread-chat-input');
-      await fireEvent.input(input, { target: { value: 'fresh start' } });
+      await typeIntoEditor(input, 'fresh start');
       await fireEvent.submit(/** @type {HTMLElement} */ (input.closest('form')));
 
       await waitFor(() => expect(publishMock).toHaveBeenCalledTimes(1));
@@ -1713,19 +1706,13 @@ describe('GroupChat', () => {
     it('keeps the timeline draft and the thread draft apart', async () => {
       render(GroupChat, { props: { pointer } });
       await waitFor(() => expect(screen.getAllByTestId('thread-open')).toHaveLength(2));
-      await fireEvent.input(screen.getByTestId('group-chat-input'), {
-        target: { value: 'timeline draft' }
-      });
+      await typeIntoEditor(screen.getByTestId('group-chat-input'), 'timeline draft');
       await fireEvent.click(openLinks()[1]);
 
-      const threadInput = /** @type {HTMLInputElement} */ (
-        await screen.findByTestId('thread-chat-input')
-      );
-      expect(threadInput.value).toBe('');
-      await fireEvent.input(threadInput, { target: { value: 'thread draft' } });
-      expect(/** @type {HTMLInputElement} */ (screen.getByTestId('group-chat-input')).value).toBe(
-        'timeline draft'
-      );
+      const threadInput = await screen.findByTestId('thread-chat-input');
+      expect(threadInput.textContent).toBe('');
+      await typeIntoEditor(threadInput, 'thread draft');
+      expect(screen.getByTestId('group-chat-input').textContent).toBe('timeline draft');
     });
   });
 
@@ -1876,7 +1863,7 @@ describe('GroupChat', () => {
     it('sends the composer draft as the share message and clears it on success', async () => {
       render(GroupChat, { props: { pointer } }); // beechat: ME is a member
       const input = await screen.findByTestId('group-chat-input');
-      await fireEvent.input(input, { target: { value: 'here is the pad for today' } });
+      await typeIntoEditor(input, 'here is the pad for today');
 
       await fireEvent.click(screen.getByTestId('chat-apps-button'));
       const row = await screen.findByTestId('webxdc-app-picker-row');
@@ -1884,9 +1871,7 @@ describe('GroupChat', () => {
 
       await waitFor(() => expect(publishMock).toHaveBeenCalledTimes(1));
       expect(publishMock.mock.calls[0][0].content).toBe('here is the pad for today');
-      expect(/** @type {HTMLInputElement} */ (screen.getByTestId('group-chat-input')).value).toBe(
-        ''
-      );
+      expect(screen.getByTestId('group-chat-input').textContent).toBe('');
     });
 
     // The clear-on-success in shareApp is conditional (`text === draft`), not
@@ -1903,7 +1888,7 @@ describe('GroupChat', () => {
       );
       render(GroupChat, { props: { pointer } });
       const input = /** @type {HTMLInputElement} */ (await screen.findByTestId('group-chat-input'));
-      await fireEvent.input(input, { target: { value: 'here is the pad for today' } });
+      await typeIntoEditor(input, 'here is the pad for today');
 
       await fireEvent.click(screen.getByTestId('chat-apps-button'));
       const row = await screen.findByTestId('webxdc-app-picker-row');
@@ -1911,7 +1896,7 @@ describe('GroupChat', () => {
 
       // The share publish is still pending (mockReturnValueOnce above) — type
       // something new before it resolves.
-      await fireEvent.input(input, { target: { value: 'new message while sharing' } });
+      await typeIntoEditor(input, 'new message while sharing');
 
       resolvePublish({ ok: true });
       // publishMock's call count is already 1 the instant it's invoked with
@@ -1922,23 +1907,21 @@ describe('GroupChat', () => {
       // continuation) has actually run.
       await screen.findByTestId('group-app-stage-stub');
 
-      expect(input.value).toBe('new message while sharing');
+      expect(input.textContent).toBe('new message while sharing');
     });
 
     it('keeps the composer draft when the share publish fails', async () => {
       publishMock.mockResolvedValueOnce({ ok: false, message: 'blocked: unknown member' });
       render(GroupChat, { props: { pointer } });
       const input = await screen.findByTestId('group-chat-input');
-      await fireEvent.input(input, { target: { value: 'draft survives failure' } });
+      await typeIntoEditor(input, 'draft survives failure');
 
       await fireEvent.click(screen.getByTestId('chat-apps-button'));
       const row = await screen.findByTestId('webxdc-app-picker-row');
       await fireEvent.click(row);
 
       await waitFor(() => expect(publishMock).toHaveBeenCalledTimes(1));
-      expect(/** @type {HTMLInputElement} */ (screen.getByTestId('group-chat-input')).value).toBe(
-        'draft survives failure'
-      );
+      expect(screen.getByTestId('group-chat-input').textContent).toBe('draft survives failure');
     });
 
     it('hides the composer apps button for a non-member without write access', async () => {

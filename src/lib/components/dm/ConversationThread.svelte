@@ -36,6 +36,8 @@
   import NostrContentRenderer from '$lib/components/shared/NostrContentRenderer.svelte';
   import ProfileAvatar from '$lib/components/shared/ProfileAvatar.svelte';
   import EmojiPicker from '$lib/components/shared/EmojiPicker.svelte';
+  import EmojiInput from '$lib/components/shared/EmojiInput.svelte';
+  import { customEmojisIn } from '$lib/helpers/emoji-autocomplete.js';
   import {
     SmilePlusIcon,
     SendIcon,
@@ -83,14 +85,12 @@
   let showEmojiPicker = $state(false);
   /** @type {any} */
   let replyingTo = $state(null);
-  /** @type {HTMLTextAreaElement | undefined} */
+  /** @type {ReturnType<typeof EmojiInput> | undefined} */
   let messageInput = $state(undefined);
 
   // Custom emoji state
   const getUserEmojiSets = useUserEmojiSets();
   let customEmojiSets = $derived(getUserEmojiSets());
-  /** @type {Record<string, { shortcode: string, url: string }>} */
-  let usedCustomEmojis = {};
 
   // Track last-marked timestamp to avoid redundant markConversationAsRead calls
   // (plain let, not $state, to avoid reactive tracking)
@@ -225,9 +225,9 @@
     }
   });
 
-  /** @param {Event} event */
+  /** @param {Event} [event] */
   async function sendMessage(event) {
-    event.preventDefault();
+    event?.preventDefault();
 
     const user = getActiveUser();
     if (!user || !newMessage.trim()) return;
@@ -262,9 +262,8 @@
         // the synchronous rumor symbol, giving the user instant feedback without
         // a parallel pending state. Relay publish runs in the background.
         const recipients = participants.filter((p) => p !== user.pubkey);
-        // Custom emojis picked into this draft; the action tags only those
-        // whose :shortcode: is still in the text.
-        const emojis = Object.values(usedCustomEmojis);
+        // NIP-30: the custom emojis the text still references become emoji tags
+        const emojis = customEmojisIn(content, customEmojiSets);
         if (replyingTo) {
           await sendWrappedDm(recipients, content, {
             action: ReplyToWrappedMessage,
@@ -281,7 +280,6 @@
         }
       }
       replyingTo = null;
-      usedCustomEmojis = {};
     } catch (err) {
       console.error('Failed to send DM:', err);
       newMessage = content;
@@ -291,28 +289,16 @@
     }
   }
 
-  /** @param {KeyboardEvent} event */
-  function handleKeydown(event) {
-    // Enter sends, Shift+Enter inserts a newline
-    if (event.key === 'Enter' && !event.shiftKey && !event.isComposing) {
-      event.preventDefault();
-      sendMessage(event);
-    }
+  /** Picker: insert a unicode emoji at the caret (EmojiInput renders it) */
+  function insertEmoji(/** @type {string} */ emoji) {
+    messageInput?.insert(emoji);
+    showEmojiPicker = false;
   }
 
-  /** @param {string} emoji */
-  function insertEmoji(emoji) {
-    newMessage += emoji;
+  /** Picker: insert a custom emoji at the caret — shown inline as its image */
+  function insertCustomEmoji(/** @type {{ shortcode: string, url: string }} */ emoji) {
+    messageInput?.insert(emoji);
     showEmojiPicker = false;
-    messageInput?.focus();
-  }
-
-  /** @param {{ shortcode: string, url: string }} emoji */
-  function insertCustomEmoji(emoji) {
-    newMessage += `:${emoji.shortcode}:`;
-    usedCustomEmojis[emoji.shortcode] = emoji;
-    showEmojiPicker = false;
-    messageInput?.focus();
   }
 
   /**
@@ -539,18 +525,18 @@
         <SmilePlusIcon class="h-5 w-5" />
       </button>
 
-      <textarea
+      <EmojiInput
         bind:this={messageInput}
         bind:value={newMessage}
-        rows="1"
+        {customEmojiSets}
+        multiline
         placeholder={m.dm_input_placeholder()}
-        class="max-h-40 min-h-[2rem] min-w-0 flex-1 resize-none border-none bg-transparent py-1.5 leading-snug focus:outline-none"
-        style="field-sizing: content;"
         disabled={isSending}
         onfocus={() => (showEmojiPicker = false)}
-        onkeydown={handleKeydown}
-        required
-      ></textarea>
+        onSubmit={() => sendMessage()}
+        class="min-h-[2rem] py-1.5 leading-snug"
+        testid="dm-input"
+      />
 
       <button
         type="submit"

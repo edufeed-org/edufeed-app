@@ -15,6 +15,8 @@
   import { TimelineModel } from 'applesauce-core/models';
   import ReactionBar from '$lib/components/reactions/ReactionBar.svelte';
   import EmojiPicker from '$lib/components/shared/EmojiPicker.svelte';
+  import EmojiInput from '$lib/components/shared/EmojiInput.svelte';
+  import { customEmojisIn } from '$lib/helpers/emoji-autocomplete.js';
   import { SmilePlusIcon, SendIcon, ReplyIcon } from '$lib/components/icons';
   import * as m from '$lib/paraglide/messages';
   import ChatMessageList from '$lib/components/chat/ChatMessageList.svelte';
@@ -53,14 +55,12 @@
   // Custom emoji state
   const getUserEmojiSets = useUserEmojiSets();
   let customEmojiSets = $derived(getUserEmojiSets());
-  /** @type {Record<string, { shortcode: string, url: string }>} */
-  let usedCustomEmojis = {};
 
   // Reply state
   /** @type {any} */
   let replyingTo = $state(null);
 
-  /** @type {HTMLInputElement | undefined} */
+  /** @type {ReturnType<typeof EmojiInput> | undefined} */
   let messageInput = $state(undefined);
 
   let displayedMessages = $derived.by(() => {
@@ -162,10 +162,10 @@
   }
 
   /**
-   * @param {Event} event
+   * @param {Event} [event]
    */
   async function sendMessage(event) {
-    event.preventDefault();
+    event?.preventDefault();
 
     const activeUser = getActiveUser();
     if (!activeUser || !newMessage.trim() || !derivedCommunityPubkey) return;
@@ -190,11 +190,9 @@
         chatEvent.tags.push(['p', replyingTo.pubkey]);
       }
 
-      // Add custom emoji tags for any shortcodes used in content
-      for (const shortcode of Object.keys(usedCustomEmojis)) {
-        if (messageContent.includes(`:${shortcode}:`)) {
-          chatEvent.tags.push(['emoji', shortcode, usedCustomEmojis[shortcode].url]);
-        }
+      // NIP-30: one emoji tag per custom shortcode the text still contains
+      for (const emoji of customEmojisIn(messageContent, customEmojiSets)) {
+        chatEvent.tags.push(['emoji', emoji.shortcode, emoji.url]);
       }
 
       const signedEvent = await activeUser.signer.signEvent(chatEvent);
@@ -216,9 +214,7 @@
         }
       });
 
-      // Clear reply and custom emoji state after sending
       replyingTo = null;
-      usedCustomEmojis = {};
     } catch (error) {
       console.error('Failed to send message:', error);
       newMessage = messageContent;
@@ -231,19 +227,16 @@
     return getDisplayName(pubkey, userProfiles.get(pubkey));
   }
 
-  /** Insert unicode emoji at cursor position in message input */
+  /** Picker: insert a unicode emoji at the caret (EmojiInput renders it) */
   function insertEmoji(/** @type {string} */ emoji) {
-    newMessage += emoji;
+    messageInput?.insert(emoji);
     showEmojiPicker = false;
-    messageInput?.focus();
   }
 
-  /** Insert custom emoji shortcode and track for tagging */
+  /** Picker: insert a custom emoji at the caret — shown inline as its image */
   function insertCustomEmoji(/** @type {{ shortcode: string, url: string }} */ emoji) {
-    newMessage += `:${emoji.shortcode}:`;
-    usedCustomEmojis[emoji.shortcode] = emoji;
+    messageInput?.insert(emoji);
     showEmojiPicker = false;
-    messageInput?.focus();
   }
 
   // Auto-scroll to bottom when new messages arrive (only if already near bottom)
@@ -378,15 +371,16 @@
           <SmilePlusIcon class="h-5 w-5" />
         </button>
 
-        <input
+        <EmojiInput
           bind:this={messageInput}
-          type="text"
           bind:value={newMessage}
+          {customEmojiSets}
           placeholder={m.community_views_chat_input_placeholder()}
-          class="min-w-0 flex-1 border-none bg-transparent focus:outline-none"
           disabled={isSending}
           onfocus={() => (showEmojiPicker = false)}
-          required
+          onSubmit={() => sendMessage()}
+          class="py-1"
+          testid="chat-input"
         />
 
         <button
