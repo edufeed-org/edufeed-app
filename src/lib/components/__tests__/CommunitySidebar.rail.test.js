@@ -169,6 +169,35 @@ describe('CommunitySidebar — the arrangeable rail', () => {
     ]);
   });
 
+  // The gap between two icons is where a hand lands when it means "between
+  // these two". It used to be nobody's target: the browser refused the drop
+  // and flew the icon back, and no arrangement was ever written (laoc,
+  // edufeed.org, 2026-09-16). The list itself now answers for the gaps.
+  it('writes a new order when an icon is dropped in the gap between two others', () => {
+    const COMMUNITY_C = 'c'.repeat(64);
+    holders.communities = [COMMUNITY_A, COMMUNITY_B, COMMUNITY_C];
+    render(CommunitySidebar, { props: PROPS });
+    // jsdom boxes are all zero; lay the rows out like the real rail does
+    // (48px rows, 12px gaps) so the gap has somewhere to be.
+    const rows = [...document.querySelectorAll('[data-rail-anchor]')];
+    rows.forEach((el, i) => {
+      el.getBoundingClientRect = () =>
+        /** @type {any} */ ({ top: i * 60, bottom: i * 60 + 48, height: 48 });
+    });
+    const list = screen.getAllByTestId('rail-list')[0];
+    rows[2].dispatchEvent(new Event('dragstart', { bubbles: true }));
+    const over = new Event('dragover', { bubbles: true, cancelable: true });
+    Object.defineProperty(over, 'clientY', { value: 54 }); // between row 0 and row 1
+    list.dispatchEvent(over);
+    expect(over.defaultPrevented).toBe(true);
+    list.dispatchEvent(new Event('drop', { bubbles: true, cancelable: true }));
+    expect(JSON.parse(localStorage.getItem(`rail-layout:${ME}`) ?? '[]')).toEqual([
+      { type: 'item', key: `community:${COMMUNITY_A}` },
+      { type: 'item', key: `community:${COMMUNITY_C}` },
+      { type: 'item', key: `community:${COMMUNITY_B}` }
+    ]);
+  });
+
   it('folds two icons into a folder when one is dropped onto the middle of the other', async () => {
     render(CommunitySidebar, { props: PROPS });
     drag(`community:${COMMUNITY_B}`, `community:${COMMUNITY_A}`, 0.5);

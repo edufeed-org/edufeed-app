@@ -19,6 +19,7 @@ import {
   renameFolder,
   dissolveFolder,
   dropIntent,
+  gapDropTarget,
   resolveDrop
 } from '$lib/rail/rail-layout.js';
 
@@ -360,5 +361,41 @@ describe('normalizeLayout — duplicate folder ids', () => {
       { type: 'folder', id: 'f1', name: 'One', keys: ['a'] },
       { type: 'item', key: 'b' }
     ]);
+  });
+});
+
+// The gap between two rows is where a hand lands when it means "between these
+// two" — and it is nobody's drop target, so the browser refused the drop and
+// flew the icon back (laoc, edufeed.org, 2026-09-16). The container answers
+// for the gaps by naming the nearest row and the side the pointer is on.
+describe('gapDropTarget', () => {
+  const rows = [
+    { anchor: 'a', top: 0, bottom: 48 },
+    { anchor: 'b', top: 60, bottom: 108 },
+    { anchor: 'c', top: 120, bottom: 168 }
+  ];
+
+  it('reads a gap as after the row above when the pointer is nearer to it', () => {
+    expect(gapDropTarget(52, rows)).toEqual({ anchor: 'a', intent: 'after' });
+  });
+
+  it('reads a gap as before the row below when the pointer is nearer to it', () => {
+    expect(gapDropTarget(57, rows)).toEqual({ anchor: 'b', intent: 'before' });
+  });
+
+  it('reads above the first row as before it and below the last as after it', () => {
+    expect(gapDropTarget(-10, rows)).toEqual({ anchor: 'a', intent: 'before' });
+    expect(gapDropTarget(200, rows)).toEqual({ anchor: 'c', intent: 'after' });
+  });
+
+  // Inside a row the row's own handler has already spoken; the fallback never
+  // folds, so a pointer that does land here still reads as a reorder.
+  it('never answers into, even for a pointer inside a row', () => {
+    expect(gapDropTarget(20, rows)).toEqual({ anchor: 'a', intent: 'before' });
+    expect(gapDropTarget(30, rows)).toEqual({ anchor: 'a', intent: 'after' });
+  });
+
+  it('has nothing to say about an empty rail', () => {
+    expect(gapDropTarget(10, [])).toBeNull();
   });
 });
