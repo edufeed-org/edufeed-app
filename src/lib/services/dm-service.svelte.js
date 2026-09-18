@@ -79,6 +79,14 @@ let dmConversations = $derived(mergeDmConversations(wrappedConversations, legacy
 let selfPubkey = $state(/** @type {string | null} */ (null));
 /** Pubkeys from the user's kind 3 contact list. @type {Set<string>} */
 let followsPubkeys = $state.raw(new Set());
+/**
+ * Whether the kind-3 contact list has been resolved yet (event received, or
+ * the load settled without one). Until then no conversation is shelved as a
+ * request — see classifyDmConversations.
+ */
+let followsLoaded = $state(false);
+/** @type {ReturnType<typeof setTimeout> | undefined} */
+let followsSettleTimer;
 /** Peers of legacy kind-4 messages the user authored. @type {Set<string>} */
 let legacyOutboundPeers = $state.raw(new Set());
 /** Recipients of wrapped rumors the user authored. @type {Set<string>} */
@@ -91,6 +99,7 @@ let conversationBuckets = $derived.by(() => {
   return classifyDmConversations(dmConversations, {
     selfPubkey,
     follows: followsPubkeys,
+    followsLoaded,
     mutedPubkeys: getMutedPubkeys(),
     outboundPeers: new Set([...legacyOutboundPeers, ...wrappedOutboundPeers]),
     trustedSenders,
@@ -128,6 +137,8 @@ let dmRelayCheckStatus = $state('idle');
 let dmRelayCheckTimer = null;
 /** How long to wait for the user's 10050 before declaring it absent. */
 const DM_RELAY_CHECK_SETTLE_MS = 5000;
+/** Give the contact-list load this long before shelving strangers as requests. */
+const FOLLOWS_SETTLE_MS = 8000;
 /**
  * Callers parked in waitForDmRelayCheck(), released the moment the check
  * reaches a conclusion ('present' / 'absent') or the session ends ('idle').
@@ -267,6 +278,19 @@ export async function retryFailedUnlocks() {
     if (locked && locked.length > 0) await batchUnlock(locked);
   } finally {
     retryingUnlocks = false;
+  }
+}
+
+/**
+ * Mark the follow list resolved, so strangers are shelved as requests again.
+ * @param {string} pubkey
+ */
+function settleFollows(pubkey) {
+  if (activePubkey !== pubkey) return;
+  followsLoaded = true;
+  if (followsSettleTimer) {
+    clearTimeout(followsSettleTimer);
+    followsSettleTimer = undefined;
   }
 }
 
@@ -555,16 +579,32 @@ export function initializeDMs(pubkey, signer) {
   readTimestamps = loadReadTimestamps(pubkey);
   dropLegacyFailedUnlockIds(pubkey);
 
-  // Follows feed the known/requests classification. The kind 3 contact list
-  // is fetched into the EventStore at login by contact-list-loader; this only
-  // mirrors it reactively.
+  // Follows feed the known/requests classification. Nothing else on this route
+  // pulls the kind-3 contact list into the EventStore — the contacts store is
+  // only mounted by the dashboard/profile surfaces — so landing on /c/messages
+  // directly left `follows` empty and shelved real conversations as requests
+  // (laoc, 2026-09-18). Load it here as well as mirroring it.
+  const contactsLoadSub = addressLoader({
+    kind: 3,
+    pubkey,
+    relays: [...getRelayListLookupRelays(), ...(runtimeConfig.fallbackRelays || [])]
+  }).subscribe({
+    error: () => settleFollows(pubkey)
+  });
+  subscriptions.push(contactsLoadSub);
+
   const followsSub = eventStore.replaceable(3, pubkey).subscribe((event) => {
+    if (!event) return; // replaceable() emits undefined before anything loads
     // eslint-disable-next-line svelte/prefer-svelte-reactivity -- $state.raw set, replaced wholesale
     followsPubkeys = new Set(
       (event?.tags || []).filter((t) => t[0] === 'p' && t[1]).map((t) => t[1])
     );
+    settleFollows(pubkey);
   });
   subscriptions.push(followsSub);
+
+  // A user with no contact list at all would otherwise never shelve a request.
+  followsSettleTimer = setTimeout(() => settleFollows(pubkey), FOLLOWS_SETTLE_MS);
 
   // Wrapped rumors the user authored mark their recipients as replied-to
   // peers (an answered request is a known conversation from then on).
@@ -808,6 +848,11 @@ export function cleanup() {
   activeSigner = null;
   // eslint-disable-next-line svelte/prefer-svelte-reactivity -- $state.raw set, replaced wholesale
   followsPubkeys = new Set();
+  followsLoaded = false;
+  if (followsSettleTimer) {
+    clearTimeout(followsSettleTimer);
+    followsSettleTimer = undefined;
+  }
   // eslint-disable-next-line svelte/prefer-svelte-reactivity -- $state.raw set, replaced wholesale
   legacyOutboundPeers = new Set();
   // eslint-disable-next-line svelte/prefer-svelte-reactivity -- $state.raw set, replaced wholesale
