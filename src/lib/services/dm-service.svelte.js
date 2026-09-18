@@ -35,6 +35,7 @@ import {
   groupLegacyConversations,
   mergeDmConversations,
   filterEventsNeedingSignerUnlock,
+  giftWrapSealCacheKeys,
   shouldAttemptUnlock,
   recordUnlockFailure,
   countUnlockFailures,
@@ -983,7 +984,12 @@ async function batchUnlock(wraps) {
   const BATCH_SIZE = 5;
   // Skip wraps whose plaintext is already in the cache — the restore
   // pipeline unlocks those without any signer interaction.
-  wraps = await filterEventsNeedingSignerUnlock(wraps, dmContentCache, isGiftWrapUnlocked);
+  wraps = await filterEventsNeedingSignerUnlock(
+    wraps,
+    dmContentCache,
+    isGiftWrapUnlocked,
+    giftWrapSealCacheKeys
+  );
   let failedThisRun = 0;
 
   for (let i = 0; i < wraps.length; i += BATCH_SIZE) {
