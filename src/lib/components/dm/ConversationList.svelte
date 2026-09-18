@@ -8,8 +8,12 @@
     getKnownDmConversations,
     getDmRequestConversations,
     hasInitialDmsLoaded,
-    markConversationAsRead
+    markConversationAsRead,
+    getUnlockFailureCount,
+    isRetryingUnlocks,
+    retryFailedUnlocks
   } from '$lib/services/dm-service.svelte.js';
+  import DmUnlockNotice from './DmUnlockNotice.svelte';
   import { muteUser } from '$lib/stores/mute-list.svelte.js';
   import { formatMessageTimestamp } from '$lib/helpers/message-utils.js';
   import ProfileAvatar from '$lib/components/shared/ProfileAvatar.svelte';
@@ -184,6 +188,14 @@
       {m.dm_unlocking()}
     </div>
   {/if}
+
+  <!-- Messages whose gift wrap could not be decrypted: shown with a retry
+       instead of silently shortening the thread (laoc, 2026-09-18). -->
+  <DmUnlockNotice
+    count={getUnlockFailureCount()}
+    retrying={isRetryingUnlocks()}
+    onRetry={() => retryFailedUnlocks()}
+  />
 
   {#if blockError}
     <div class="px-4 py-2 text-sm text-error">{m.dm_block_failed()}</div>

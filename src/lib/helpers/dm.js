@@ -290,3 +290,76 @@ export async function filterEventsNeedingSignerUnlock(events, cache, isUnlocked)
   }
   return needSigner;
 }
+
+/**
+ * Gift-wrap unlock retry policy.
+ *
+ * A failed unlock used to be written to localStorage and skipped forever, so
+ * one transient signer hiccup (bunker asleep, extension locked, tab
+ * backgrounded) hid that message permanently — it stayed missing across
+ * reloads (laoc, 2026-09-18). The guard below is deliberately IN-MEMORY
+ * ONLY: it exists to stop a relay redelivery from looping inside one
+ * session, never to hide a message from the next one.
+ */
+
+/** Attempts allowed per wrap per session before we stop retrying it. */
+export const UNLOCK_ATTEMPT_LIMIT = 3;
+
+/** Key prefix of the retired persisted blacklist; deleted on init. */
+export const LEGACY_FAILED_UNLOCK_KEY_PREFIX = 'comcal:dm:failed-gift-wraps:';
+
+/** Errors that mean the payload itself can never be decrypted by us. */
+const PERMANENT_FAILURE =
+  /\b(mac|padding|malformed|unsupported|invalid\s+(mac|padding|version|payload))\b/i;
+
+/**
+ * Why an unlock failed. Unknown errors count as transient on purpose: a wrong
+ * guess here hides a real message, while an unnecessary retry costs one
+ * signer call.
+ * @param {unknown} error
+ * @returns {'transient' | 'permanent'}
+ */
+export function classifyUnlockFailure(error) {
+  const message = String(/** @type {any} */ (error)?.message ?? '');
+  return PERMANENT_FAILURE.test(message) ? 'permanent' : 'transient';
+}
+
+/**
+ * @typedef {{ attempts: number, reason: 'transient' | 'permanent' }} UnlockFailure
+ */
+
+/**
+ * Should this wrap be handed to the signer again in THIS session?
+ * @param {Map<string, UnlockFailure>} failures
+ * @param {string} id
+ */
+export function shouldAttemptUnlock(failures, id) {
+  const failure = failures.get(id);
+  if (!failure) return true;
+  if (failure.reason === 'permanent') return false;
+  return failure.attempts < UNLOCK_ATTEMPT_LIMIT;
+}
+
+/**
+ * Record one failed attempt. Returns the updated entry.
+ * @param {Map<string, UnlockFailure>} failures
+ * @param {string} id
+ * @param {unknown} error
+ */
+export function recordUnlockFailure(failures, id, error) {
+  const previous = failures.get(id);
+  const entry = {
+    attempts: (previous?.attempts ?? 0) + 1,
+    reason: classifyUnlockFailure(error)
+  };
+  failures.set(id, entry);
+  return entry;
+}
+
+/**
+ * How many messages are currently hidden because they could not be unlocked.
+ * @param {Map<string, UnlockFailure>} failures
+ */
+export function countUnlockFailures(failures) {
+  return failures.size;
+}
