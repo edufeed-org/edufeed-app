@@ -5,6 +5,73 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions are
 the `vX.Y.Z` git tags on `main`. Each release section is assembled from the
 merge commits of the nostr PRs that landed since the previous tag.
 
+## [0.1.5] - 2026-09-18
+
+### Added
+
+- **Direct messages**
+  - NIP-17 encrypted file messages (kind 15) are decrypted and rendered:
+    images inline, everything else as a download card. Previously the app
+    only ever read kind 14 inside a gift wrap and dropped the rest silently,
+    so files other clients showed were invisible here.
+  - Private reactions (kind 7 inside a gift wrap) appear as badges on the
+    message they target, custom emoji included.
+  - A file message now shows readable preview text in the conversation list
+    and the inbox dropdown instead of a raw Blossom URL.
+- **Chat input:** typing `:` opens an emoji autocomplete covering the
+  standard set plus the user's own custom emojis (kind 10030 and its packs).
+  Arrow keys and Tab move through it, Enter inserts, and a custom emoji shows
+  as its image inline in the composer. Available in DMs and in community
+  group chats.
+- **Licensing**
+  - AI provenance and training tags on kind 1063 aligned with the twillo
+    model, including the EU marking in the image license overlay.
+  - A readable license info card on hover, replacing the old tooltip.
+- **Community:** reworked create-community wizard, with profile search for
+  picking members.
+- **Forms**
+  - A DOI field type with Crossref auto-fetch, and DOI prefill on the
+    publication page (title, licence, URL and PDF).
+  - Form preview, per-field descriptions and optional fields.
+
+### Fixed
+
+- **Direct messages**
+  - Messages could disappear in two separate ways, both silent. A gift wrap
+    that threw once during unlock was blacklisted in localStorage and never
+    retried, and a gift wrap whose seal had been restored from cache but
+    never opened was treated as done and never reached the signer. Both are
+    fixed, and unlock failures now surface a retry prompt instead of hiding
+    the message.
+  - Custom emojis render in NIP-17 DMs.
+- **Groups**
+  - Admins are no longer asked to re-sign the same kind-9000 roster
+    reconciles on every visit; refusals are remembered.
+  - The community rail no longer loops on a NIP-11 race.
+  - Kind-39000 channel metadata is pinned to the relay it came from.
+- **Community:** the section access gate now also applies to the calendar and
+  to discover, which were reading ungated.
+- **Comments:** kind-1111 replies whose parent is a kind-1 note thread
+  correctly.
+- **Lists:** the Lists tab no longer dies with `state_unsafe_mutation`.
+- **Discover:** NIP-50 search results are merged by per-relay rank, with a
+  relevance sort.
+- **Rail:** a drop landing in the gap between two icons is accepted instead
+  of being ignored.
+- **Auth:** the login modal closes after switching accounts.
+- **AMB:** a cover image hash is recovered from its Blossom URL.
+- **Layout:** the community sidebar keeps its registration across navigation.
+- **Cards:** adaptive cover frames stop cropping square and portrait images.
+- **Moderation:** Unicode lookalikes are folded before muted-word matching,
+  closing a homoglyph bypass.
+- **Membership:** wished NIP-05 handles are normalised to lowercase.
+- **Highlights:** a highlight spanning a line break matches again.
+
+### Changed
+
+- `CLAUDE.md` trimmed of content derivable from the code, with task-specific
+  material moved into skills.
+
 ## [0.1.4] - 2026-09-09
 
 ### Added
