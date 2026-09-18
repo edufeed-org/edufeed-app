@@ -8,6 +8,7 @@
 <script>
   import * as m from '$lib/paraglide/messages';
   import { PollIcon } from '$lib/components/icons';
+  import EmojiInput from '$lib/components/shared/EmojiInput.svelte';
 
   /**
    * @typedef {Object} Props
@@ -27,6 +28,8 @@
    *   the attach-file button. The caller owns the upload; `uploading` mirrors
    *   its in-flight state back onto the button.
    * @property {boolean} [uploading]
+   * @property {import('$lib/helpers/emoji-autocomplete.js').EmojiPack[]} [customEmojiSets]
+   *   the user's NIP-30 packs, for the ':' autocomplete and inline rendering
    * @property {(() => void) | null} [onOpenPoll] - opt-in: renders the poll
    *   button before the input. Same timeline-only rule as onOpenApps (a poll
    *   is a room timeline row, not a thread reply).
@@ -45,7 +48,8 @@
     onOpenApps = null,
     onAttachFile = null,
     uploading = false,
-    onOpenPoll = null
+    onOpenPoll = null,
+    customEmojiSets = []
   } = $props();
 
   let fileInput = $state(/** @type {HTMLInputElement | null} */ (null));
@@ -127,12 +131,14 @@
       {disabled}><PollIcon class_="h-4 w-4" /></button
     >
   {/if}
-  <input
-    class="input flex-1 input-ghost focus:outline-none"
-    data-testid={testid}
+  <EmojiInput
     bind:value
+    {customEmojiSets}
     {placeholder}
     {disabled}
+    onSubmit={() => !disabled && !sending && value.trim() && onSubmit()}
+    class="input flex items-center input-ghost focus:outline-none"
+    {testid}
   />
   <button
     class="btn btn-circle btn-sm btn-neutral"

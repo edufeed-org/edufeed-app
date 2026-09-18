@@ -301,6 +301,7 @@
       : 'overflow-hidden whitespace-nowrap'} {className}"
     contenteditable={!disabled}
     role="textbox"
+    aria-disabled={disabled}
     aria-multiline={multiline}
     aria-placeholder={placeholder}
     data-placeholder={placeholder}

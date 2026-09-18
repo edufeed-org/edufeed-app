@@ -404,3 +404,40 @@ describe('buildPollTemplate', () => {
     expect(noEnd.tags.some((t) => t[0] === 'endsAt')).toBe(false);
   });
 });
+
+describe('buildGroupMessageTemplate — NIP-30 custom emojis', () => {
+  // The group composer gained the ':' autocomplete, so a kind-9 message can
+  // carry :shortcode: — without an emoji tag every other client shows the raw
+  // text (laoc, 2026-09-18).
+  const DOGE = { shortcode: 'doge', url: 'https://x/doge.png' };
+  const CAT = { shortcode: 'cat', url: 'https://x/cat.png' };
+
+  it('adds one emoji tag per shortcode present in the content', () => {
+    const template = buildGroupMessageTemplate('g1', 'hi :doge:', null, [], [DOGE, CAT]);
+    const emojiTags = template.tags.filter((t) => t[0] === 'emoji');
+    expect(emojiTags).toEqual([['emoji', 'doge', 'https://x/doge.png']]);
+  });
+
+  it('adds no tag for an emoji the writer removed again', () => {
+    const template = buildGroupMessageTemplate('g1', 'plain text', null, [], [DOGE]);
+    expect(template.tags.some((t) => t[0] === 'emoji')).toBe(false);
+  });
+
+  it('keeps the h tag and reply tags alongside', () => {
+    const template = buildGroupMessageTemplate(
+      'g1',
+      ':doge:',
+      { id: 'b'.repeat(64), pubkey: 'c'.repeat(64) },
+      [],
+      [DOGE]
+    );
+    expect(template.tags[0]).toEqual(['h', 'g1']);
+    expect(template.tags.some((t) => t[0] === 'p')).toBe(true);
+    expect(template.tags.some((t) => t[0] === 'emoji')).toBe(true);
+  });
+
+  it('defaults to no emoji tags when the caller passes none', () => {
+    const template = buildGroupMessageTemplate('g1', 'hi :doge:');
+    expect(template.tags.some((t) => t[0] === 'emoji')).toBe(false);
+  });
+});
