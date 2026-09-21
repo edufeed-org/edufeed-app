@@ -53,6 +53,7 @@
   } from '$lib/services/curated-authors-service.svelte.js';
   import { getSeenRelays } from 'applesauce-core/helpers/relays';
   import { normalizeURL } from 'applesauce-core/helpers';
+  import PeopleResults from '$lib/components/discover/PeopleResults.svelte';
   import CommunikeyCard from '$lib/components/CommunikeyCard.svelte';
   import ContentCardSkeleton from '$lib/components/shared/ContentCardSkeleton.svelte';
   import LearningContentFilters from '$lib/components/educational/LearningContentFilters.svelte';
@@ -208,7 +209,15 @@
   let searchInputRef = $state(/** @type {HTMLInputElement | null} */ (null));
 
   // Valid content types
-  const VALID_CONTENT_TYPES = ['all', 'events', 'learning', 'articles', 'boards', 'communities'];
+  const VALID_CONTENT_TYPES = [
+    'all',
+    'events',
+    'learning',
+    'articles',
+    'boards',
+    'communities',
+    'people'
+  ];
 
   let communityFilter = $state(/** @type {string | null} */ (initialFilters.community));
   let relayFilter = $state(/** @type {string | null} */ (null));
@@ -1055,6 +1064,8 @@
    * Whether there are more items to show (either in display buffer or from network)
    */
   const hasMoreToShow = $derived.by(() => {
+    // People search is capped by its own loader; no paging
+    if (contentType === 'people') return false;
     // More items already loaded but not yet displayed
     if (displayLimit < combinedContent.length) return true;
     // More items available from network
@@ -1073,6 +1084,7 @@
    */
   function loadMoreContent() {
     if (isLoadingMore || !hasMoreToShow) return;
+    if (contentType === 'people') return;
 
     // Communities have their own display count logic
     if (contentType === 'communities') {
@@ -1704,6 +1716,13 @@
         >
           {m.discover_tab_communities()}
         </button>
+        <button
+          class="tab {contentType === 'people' ? 'tab-active' : ''}"
+          data-testid="tab-people"
+          onclick={() => handleContentTypeChange('people')}
+        >
+          {m.discover_tab_people()}
+        </button>
       </div>
     </div>
   </div>
@@ -1723,18 +1742,28 @@
         <input
           bind:this={searchInputRef}
           type="text"
-          placeholder={m.discover_content_search_placeholder()}
+          placeholder={contentType === 'people'
+            ? m.people_search_placeholder()
+            : m.discover_content_search_placeholder()}
           bind:value={searchQuery}
           onkeydown={handleSearchKeydown}
           oninput={() => {
-            if (searchQuery.length >= 2 && contentType !== 'communities') {
+            if (
+              searchQuery.length >= 2 &&
+              contentType !== 'communities' &&
+              contentType !== 'people'
+            ) {
               showAuthorDropdown = true;
             } else {
               showAuthorDropdown = false;
             }
           }}
           onfocus={() => {
-            if (searchQuery.length >= 2 && contentType !== 'communities') {
+            if (
+              searchQuery.length >= 2 &&
+              contentType !== 'communities' &&
+              contentType !== 'people'
+            ) {
               showAuthorDropdown = true;
             }
           }}
@@ -1798,8 +1827,8 @@
 
     <!-- Row 2: General filters (sort, community, relay) -->
     <div class="flex flex-wrap items-end gap-4" data-testid="general-filters">
-      <!-- Sort (not shown for communities) -->
-      {#if contentType !== 'communities'}
+      <!-- Sort (not shown for communities / people) -->
+      {#if contentType !== 'communities' && contentType !== 'people'}
         <div class="form-control w-full sm:w-auto sm:min-w-[160px]">
           <label for="sort" class="label">
             <span class="label-text font-medium">{m.discover_sort_label()}</span>
@@ -1814,8 +1843,8 @@
         </div>
       {/if}
 
-      <!-- Community Filter (shown for all except communities tab, only for logged-in users) -->
-      {#if activeUser && contentType !== 'communities'}
+      <!-- Community Filter (shown for all except communities / people tabs, only for logged-in users) -->
+      {#if activeUser && contentType !== 'communities' && contentType !== 'people'}
         <div class="w-full sm:w-auto sm:min-w-[200px]">
           <CommunityFilterDropdown
             value={communityFilter}
@@ -1972,6 +2001,9 @@
           </div>
         {/if}
       {/if}
+    {:else if contentType === 'people'}
+      <!-- People: profile search, follows first, then by NIP-85 trust rank -->
+      <PeopleResults query={activeSearchQuery} />
     {:else if isLoading || (isSearching && displayedContent.length === 0)}
       <!-- Loading / searching state — while a search is in flight, show the
            spinner instead of flashing the empty state before results arrive -->
