@@ -61,6 +61,7 @@ vi.mock('$lib/components/icons', () => ({
 }));
 
 vi.mock('../inbox/InboxItem.svelte', () => ({ default: StubComponent }));
+vi.mock('../inbox/Nip05ReadyRow.svelte', () => ({ default: StubComponent }));
 vi.mock('../inbox/InboxDmItem.svelte', () => import('./fixtures/InboxDmItemStub.svelte'));
 
 vi.mock('$lib/stores/modal.svelte.js', () => ({

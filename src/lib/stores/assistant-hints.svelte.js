@@ -49,9 +49,11 @@ import {
   isNip05ReadyHintDismissed,
   markNip05ReadyHintDismissed
 } from '$lib/stores/nip05-hint-flags.svelte.js';
-import { useMembershipGrantState } from '$lib/stores/membership-grant.svelte.js';
-import { actionRunner } from '$lib/stores/action-runner.svelte.js';
-import { UpdateProfile } from 'applesauce-actions/actions';
+import {
+  initNip05ReadyAlert,
+  getHandleGrant,
+  activateGrantedHandle
+} from '$lib/stores/nip05-ready-alert.svelte.js';
 import {
   isProfileHintDismissed,
   markProfileHintDismissed
@@ -157,8 +159,10 @@ export function useAssistantHints() {
   });
 
   // Membership handle application state (none / pending / granted) — drives
-  // the nip05 hint's variant and the one-click activation.
-  const grant = useMembershipGrantState();
+  // the nip05 hint's variant and the one-click activation. Shared with the
+  // bell count and the inbox rows through the app-wide alert store (the root
+  // layout starts it; this call is an idempotent safety net).
+  initNip05ReadyAlert();
 
   // Pending NIP-29 Beitrittsanfragen across every group the user admins —
   // the proactive counterpart of the members page's JoinRequestsPanel
@@ -166,8 +170,7 @@ export function useAssistantHints() {
   const getJoinRequestAlert = useAdminJoinRequestAlert();
 
   const nip05Meta = $derived.by(() => {
-    const grantState = grant.getState();
-    const address = grant.getAddress();
+    const { state: grantState, address } = getHandleGrant();
     const lower = address.toLowerCase();
     const activated = !!address && profileNip05s.some((a) => a.toLowerCase() === lower);
     const hasOther = profileNip05s.some((a) => a.toLowerCase() !== lower);
@@ -229,7 +232,7 @@ export function useAssistantHints() {
     const nip05Hint = deriveNip05Hint({
       membershipEnabled: !!membership?.enabled && !!membership?.handleDomain,
       profileSettled,
-      grantState: grant.getState(),
+      grantState: getHandleGrant().state,
       activated: nip05Meta.activated,
       hasNip05,
       applyDismissed: isNip05HintDismissed(user.pubkey),
@@ -335,22 +338,15 @@ export function useAssistantHints() {
     if (id === 'nip05') {
       const meta = nip05Meta;
       if (meta.variant === 'ready') {
-        if (meta.hasOther || !hasProfile) {
-          // Another nip05 exists (settings offers replace-or-add), or there is
-          // no kind 0 yet — UpdateProfile would throw without one, so hand
-          // over to the settings flow instead of failing silently.
-          goto('/settings');
-          return;
-        }
         if (running.has(id) || !meta.address) return;
         setRunning(id, true);
-        // One-click activation: publish the granted address to the profile.
-        // The kind 0 subscription confirms reactively ('done'); on failure
-        // clearing the running flag drops the hint back to 'open'.
-        actionRunner
-          .run(UpdateProfile, { nip05: meta.address })
-          .catch(() => {})
-          .then(() => setRunning(id, false));
+        // One-click activation shared with the bell/inbox row: publishes the
+        // granted address to the profile and opens the confirmation modal —
+        // or hands over to settings when another nip05 exists (replace-or-add
+        // lives there) or there is no kind 0 yet. The kind 0 subscription
+        // confirms reactively ('done'); clearing the running flag on any other
+        // outcome drops the hint back to 'open'.
+        activateGrantedHandle().finally(() => setRunning(id, false));
         return;
       }
       // 'apply' — open the application form right here. Routing to /settings

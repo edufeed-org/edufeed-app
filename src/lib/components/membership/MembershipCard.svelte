@@ -66,6 +66,7 @@
       await actionRunner.run(UpdateProfile, { nip05: addressForProfile });
       addState = 'saved';
       savedLocally = true;
+      modalStore.openModal('nip05Activated', { address: addressForProfile });
     } catch {
       addState = 'error';
     }
@@ -79,6 +80,7 @@
       await actionRunner.run(AddProfileNip05Tag, addressForProfile);
       addState = 'saved';
       savedLocally = true;
+      modalStore.openModal('nip05Activated', { address: addressForProfile });
     } catch {
       addState = 'error';
     }

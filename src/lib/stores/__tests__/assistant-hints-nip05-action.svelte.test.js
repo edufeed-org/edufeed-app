@@ -4,18 +4,16 @@
 // visibility matrix is covered by the pure helper tests; this pins the routing:
 //
 //   apply           → the application modal (no settings detour)
-//   ready           → one-click profile update, published in place
-//   ready + other   → settings, where replace-or-add is offered
+//   ready           → the shared one-click activation (nip05-ready-alert
+//                     store, which also owns the settings hand-over when
+//                     another nip05 exists — covered by its own suite)
 //
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { flushSync } from 'svelte';
 
 const gotoMock = vi.hoisted(() => vi.fn());
 const openModalMock = vi.hoisted(() => vi.fn());
-const actionRunnerRunMock = vi.hoisted(() =>
-  vi.fn(async (/** @type {any} */ _builder, /** @type {any} */ _options) => ({}))
-);
-const updateProfileMock = vi.hoisted(() => vi.fn());
+const activateMock = vi.hoisted(() => vi.fn(async () => 'activated'));
 const grantState = vi.hoisted(() => ({
   state: /** @type {'none' | 'pending' | 'granted'} */ ('none'),
   address: ''
@@ -33,13 +31,17 @@ vi.mock('$lib/stores/modal.svelte.js', () => ({
     closeModal: () => {}
   }
 }));
-vi.mock('$lib/stores/membership-grant.svelte.js', () => ({
-  useMembershipGrantState: () => ({
-    getState: () => grantState.state,
-    getAddress: () => grantState.address,
-    getWishedHandle: () => grantState.address.split('@')[0] || '',
-    getResponse: () => null
-  })
+vi.mock('$lib/stores/nip05-ready-alert.svelte.js', () => ({
+  initNip05ReadyAlert: () => {},
+  getHandleGrant: () => ({
+    state: grantState.state,
+    address: grantState.address,
+    activated: false,
+    hasOther: false,
+    hasProfile: true,
+    profileSettled: true
+  }),
+  activateGrantedHandle: () => activateMock()
 }));
 vi.mock('$lib/stores/accounts.svelte', () => ({
   useActiveUser: () => () => ({ pubkey: 'user-pub', type: 'nsec' }),
@@ -66,16 +68,18 @@ vi.mock('$lib/services/relay-service.svelte.js', () => ({
   // Needed by the joinRequests hint's joined-communities lane; empty keeps it inert.
   getWriteRelays: async () => []
 }));
-vi.mock('$lib/helpers/relay-helper.js', () => ({
+// The hints chain (join-request-alerts → my-groups → loaders/index) pulls in
+// every loader module, and each one reads its relay list at import time, so
+// the mock keeps the real helper and only pins what this suite cares about.
+vi.mock('$lib/helpers/relay-helper.js', async (importOriginal) => ({
+  .../** @type {any} */ (await importOriginal()),
   getDefaultRelayList: () => [],
   getDefaultDmRelays: () => [],
   hasMailboxRelays: () => true,
-  // Pulled in by the joinRequests hint's hook chain (join-request-alerts →
-  // my-groups / joined-communikey-events → loaders/base). Empty relay lists
-  // keep every one of those lanes inert in this suite.
   getEventLoaderLookupRelays: () => [],
   getAllLookupRelays: () => [],
-  getGroupsRelays: () => []
+  getGroupsRelays: () => [],
+  getCommunikeyRelays: () => []
 }));
 vi.mock('$lib/services/relay-list-backfill.js', () => ({
   publishDefaultRelayList: async () => {}
@@ -105,13 +109,6 @@ vi.mock('$lib/stores/profile-hint-flags.svelte.js', () => ({
   isProfileHintDismissed: () => true,
   markProfileHintDismissed: () => {}
 }));
-vi.mock('$lib/stores/action-runner.svelte.js', () => ({
-  actionRunner: {
-    run: (/** @type {any} */ builder, /** @type {any} */ options) =>
-      actionRunnerRunMock(builder, options)
-  }
-}));
-vi.mock('applesauce-actions/actions', () => ({ UpdateProfile: updateProfileMock }));
 vi.mock('$lib/helpers/nip05-verify.js', () => ({
   getProfileNip05s: () => profileState.nip05s
 }));
@@ -141,7 +138,7 @@ describe('assistant nip05 hint action', () => {
   beforeEach(() => {
     gotoMock.mockClear();
     openModalMock.mockClear();
-    actionRunnerRunMock.mockClear();
+    activateMock.mockClear();
     grantState.state = 'none';
     grantState.address = '';
     profileState.nip05s = [];
@@ -164,26 +161,25 @@ describe('assistant nip05 hint action', () => {
     });
   });
 
-  it('publishes the granted address to the profile in place', () => {
+  it('runs the shared one-click activation for a granted handle', () => {
     grantState.state = 'granted';
     grantState.address = 'maria@edufeed.org';
     withHints((hints) => {
       hints.runHint('nip05');
-      expect(actionRunnerRunMock).toHaveBeenCalledWith(updateProfileMock, {
-        nip05: 'maria@edufeed.org'
-      });
+      expect(activateMock).toHaveBeenCalledTimes(1);
       expect(openModalMock).not.toHaveBeenCalled();
+      expect(gotoMock).not.toHaveBeenCalled();
     });
   });
 
-  it('hands over to settings when another nip05 would be overwritten', () => {
+  it('does not start a second activation while one is in flight', () => {
     grantState.state = 'granted';
     grantState.address = 'maria@edufeed.org';
-    profileState.nip05s = ['maria@other.example'];
+    activateMock.mockImplementation(() => new Promise(() => {}));
     withHints((hints) => {
       hints.runHint('nip05');
-      expect(gotoMock).toHaveBeenCalledWith('/settings');
-      expect(actionRunnerRunMock).not.toHaveBeenCalled();
+      hints.runHint('nip05');
+      expect(activateMock).toHaveBeenCalledTimes(1);
     });
   });
 });

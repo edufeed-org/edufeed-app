@@ -30,6 +30,7 @@ import { runtimeConfig } from '$lib/stores/config.svelte.js';
 import { getRelayListLookupRelays, getReadRelays } from '$lib/services/relay-service.svelte.js';
 import { normalizeURL } from 'applesauce-core/helpers';
 import { getUnreadDmCount, markAllDmConversationsAsRead } from '$lib/services/dm-service.svelte.js';
+import { getNip05ReadyCount } from '$lib/stores/nip05-ready-alert.svelte.js';
 import { parseAddressPointerFromATag } from '$lib/helpers/nostrUtils.js';
 import { hasNip44 } from '$lib/helpers/nip44.js';
 
@@ -596,9 +597,18 @@ export function getNotifications() {
 export function getUnreadCount() {
   return unreadCount;
 }
-/** @returns {number} Combined inbox + DM unread count */
+/**
+ * Combined inbox + DM unread count, plus the granted-but-not-activated
+ * membership handle. That grant is polled from the well-known directory,
+ * never received as an event, so it cannot be an inbox item — but it is what
+ * every inbox badge (navbar bell, dashboard sidebar, bottom tab bar, mobile
+ * menu) must show, since before this the only surface that announced it was
+ * the Termi assistant. Not cleared by markAsRead: it is a to-do with its own
+ * dismiss (Nip05ReadyRow), like the Concord invites row.
+ * @returns {number}
+ */
 export function getTotalUnreadCount() {
-  return unreadCount + getUnreadDmCount();
+  return unreadCount + getUnreadDmCount() + getNip05ReadyCount();
 }
 export function getUnreadByType() {
   return unreadByType;

@@ -328,6 +328,17 @@
     });
   });
 
+  // Membership-handle grant detection ("your address is ready"): feeds the
+  // bell count, the inbox rows and Termi's hint. The grant is polled from the
+  // well-known directory, never received as an event, so no loader sees it.
+  // Idempotent; follows account switches internally.
+  $effect(() => {
+    if (!browser) return;
+    import('$lib/stores/nip05-ready-alert.svelte.js').then(({ initNip05ReadyAlert }) => {
+      initNip05ReadyAlert();
+    });
+  });
+
   // Initialize inbox + wave toasts on login, cleanup on logout
   // Also warm the persistent event cache with identity data
   $effect(() => {

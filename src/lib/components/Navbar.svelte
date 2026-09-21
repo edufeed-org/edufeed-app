@@ -23,6 +23,8 @@
   // Pending E2E invites ride the SAME bell as notifications — the one global
   // surface users check when they expect "something arrived" (UX consult
   // 2026-08-17; the dashboard card + Termi hint alone were missed in testing).
+  // The granted-but-not-activated membership handle is already part of
+  // getTotalUnreadCount (see inbox-service) for the same reason.
   const bellCount = $derived(getTotalUnreadCount() + getPendingInviteCount());
   import { getUnreadDmCount } from '$lib/services/dm-service.svelte.js';
 
