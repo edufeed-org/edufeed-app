@@ -1,6 +1,10 @@
 <script>
   import { getDisplayName, getProfilePicture } from 'applesauce-core/helpers';
-  import { parseCommunityMetadata, getCommunityAbout } from '$lib/helpers/communityRelays.js';
+  import {
+    parseCommunityMetadata,
+    getCommunityAbout,
+    getCommunityProfileContent
+  } from '$lib/helpers/communityRelays.js';
   import { useCommunityMembership } from '$lib/stores/joined-communities-list.svelte.js';
   import { joinCommunity } from '$lib/helpers/community';
   import { deriveCommunityType } from '$lib/groups/community-membership.js';
@@ -16,6 +20,10 @@
   import { nip19 } from 'nostr-tools';
   import { getContext } from 'svelte';
   import ProfileAvatar from '$lib/components/shared/ProfileAvatar.svelte';
+  import HoverCard from '$lib/components/shared/HoverCard.svelte';
+  import ProfileHoverCardContent from '$lib/components/shared/ProfileHoverCardContent.svelte';
+  import { resolve } from '$app/paths';
+  import { profileLink } from '$lib/helpers/nostrUtils.js';
   import ImageWithFallback from '../../shared/ImageWithFallback.svelte';
   import { ChevronRightIcon, LocationIcon } from '$lib/components/icons';
   import * as m from '$lib/paraglide/messages';
@@ -151,6 +159,11 @@
   }
 
   let displayName = $derived(getDisplayName(profileEvent) || 'Community');
+  // A community IS an npub, so its name gets the same hover card as any other
+  // identity. ProfileHoverCardContent wants PARSED profile content, and this
+  // prop arrives parsed from /c but as a kind-0 event elsewhere — normalise
+  // rather than assume (see getCommunityProfileContent's dual-shape note).
+  let profileContent = $derived(getCommunityProfileContent(profileEvent));
   let avatarUrl = $derived(getProfilePicture(profileEvent));
   let bannerUrl = $derived(profileEvent?.banner || null);
   // The community's kind-0 `about` is the single description source (cards,
@@ -217,32 +230,57 @@
       ? '-mt-6 items-start'
       : 'min-h-(--community-header-h) items-center'}"
   >
-    <!-- Avatar -->
-    <div class="avatar" data-testid="hero-avatar">
-      <div class="w-14 rounded-full ring-2 ring-base-100" class:ring-4={bannerUrl}>
-        {#if avatarUrl}
-          <ImageWithFallback
-            src={avatarUrl}
-            alt={displayName}
-            size="avatar_lg"
-            class="h-full w-full rounded-full object-cover"
-          />
-        {:else}
-          <div
-            class="flex h-full w-full items-center justify-center bg-primary/20 text-lg font-bold text-primary"
-          >
-            {displayName.charAt(0).toUpperCase()}
+    <!-- Avatar. Same hover card as the name; the link is a mouse convenience
+         that duplicates the heading link's destination, so it is kept out of
+         the tab order and the a11y tree rather than announcing the same
+         profile twice. -->
+    <HoverCard fixed>
+      {#snippet trigger()}
+        <a href={resolve(profileLink(communityId))} aria-hidden="true" tabindex="-1">
+          <div class="avatar" data-testid="hero-avatar">
+            <div class="w-14 rounded-full ring-2 ring-base-100" class:ring-4={bannerUrl}>
+              {#if avatarUrl}
+                <ImageWithFallback
+                  src={avatarUrl}
+                  alt={displayName}
+                  size="avatar_lg"
+                  class="h-full w-full rounded-full object-cover"
+                />
+              {:else}
+                <div
+                  class="flex h-full w-full items-center justify-center bg-primary/20 text-lg font-bold text-primary"
+                >
+                  {displayName.charAt(0).toUpperCase()}
+                </div>
+              {/if}
+            </div>
           </div>
-        {/if}
-      </div>
-    </div>
+        </a>
+      {/snippet}
+      {#snippet content()}
+        <ProfileHoverCardContent pubkey={communityId} profile={profileContent} />
+      {/snippet}
+    </HoverCard>
 
     <!-- Name + Meta -->
     <div class="min-w-0 flex-1" class:mt-7={bannerUrl}>
       <div class="flex items-center gap-2">
-        <h2 class="truncate text-2xl font-extrabold tracking-tight text-base-content">
-          {displayName}
-        </h2>
+        <!-- The name keeps its heading role; the link lives INSIDE the h2 so
+             the community still has a proper page heading. min-w-0 on both
+             wrapper and trigger so the h2 can still truncate in the flex row
+             now that HoverCard wraps it. -->
+        <HoverCard fixed class="relative min-w-0" triggerClass="block min-w-0">
+          {#snippet trigger()}
+            <h2 class="truncate text-2xl font-extrabold tracking-tight text-base-content">
+              <a href={resolve(profileLink(communityId))} class="hover:text-primary">
+                {displayName}
+              </a>
+            </h2>
+          {/snippet}
+          {#snippet content()}
+            <ProfileHoverCardContent pubkey={communityId} profile={profileContent} />
+          {/snippet}
+        </HoverCard>
         {#if isClosed}
           <div class="badge gap-1 badge-sm badge-neutral">
             {m.community_type_closed_title()}
