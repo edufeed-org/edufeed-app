@@ -36,7 +36,7 @@
   import { CalendarIcon, ChevronRightIcon, FilesIcon, SparkleIcon } from '$lib/components/icons';
   import EmptyState from '$lib/components/shared/EmptyState.svelte';
   import { getEventStartTimestamp } from '$lib/helpers/calendar';
-  import { activeDateLocale } from '$lib/helpers/dates.js';
+  import { getUpcomingDateParts } from '$lib/helpers/dates.js';
   import { feedStateCache } from '$lib/stores/feed-state-cache.js';
   import DashboardFeedSelector from '$lib/components/dashboard/DashboardFeedSelector.svelte';
   import FeedComposer from '$lib/components/dashboard/FeedComposer.svelte';
@@ -309,25 +309,6 @@
   function loadMore() {
     displayCount += 15;
     feedStateCache.set('dashboard-community-feed', { displayCount });
-  }
-
-  /**
-   * Date-square + time parts for the upcoming-events rail.
-   * @param {number} startTs
-   * @param {number} kind
-   */
-  function getUpcomingDateParts(startTs, kind) {
-    const date = new Date(startTs * 1000);
-    const locale = activeDateLocale();
-    return {
-      day: date.toLocaleDateString(locale, { day: 'numeric' }),
-      month: date.toLocaleDateString(locale, { month: 'short' }),
-      // Kind 31922 is all-day (date-based) — no meaningful time to show
-      time:
-        kind === 31923
-          ? date.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' })
-          : ''
-    };
   }
 </script>
 

@@ -88,3 +88,67 @@ describe('mergeCommunityActivity', () => {
     expect(result).toHaveLength(1);
   });
 });
+
+describe('cross-kind calendar twins on the dashboard', () => {
+  // One appointment, two live addresses: the publisher republished a timed
+  // 31923 as an all-day 31922 under the same d-tag. Replaceability is per
+  // kind:pubkey:d, so the EventStore rightly keeps both and the rail showed
+  // the appointment twice — with two different (and one fabricated) times.
+  /**
+   * @param {string} id
+   * @param {number} kind
+   * @param {number} created_at
+   * @param {string} start
+   */
+  const twin = (id, kind, created_at, start) => ({
+    id,
+    kind,
+    created_at,
+    pubkey: 'abc',
+    tags: [
+      ['d', 'shared-d'],
+      ['start', start]
+    ],
+    content: ''
+  });
+
+  it('filterUpcomingEvents keeps only the newest version', () => {
+    const result = filterUpcomingEvents(
+      [twin('timed', 31923, 100, '1100'), twin('allday', 31922, 200, '2026-09-17')],
+      1000
+    );
+    expect(result.map((e) => e.id)).toEqual(['allday']);
+  });
+
+  it('filterUpcomingEvents still lists distinct appointments', () => {
+    const other = {
+      ...twin('other', 31923, 50, '1200'),
+      tags: [
+        ['d', 'other-d'],
+        ['start', '1200']
+      ]
+    };
+    const result = filterUpcomingEvents([twin('timed', 31923, 100, '1100'), other], 1000);
+    expect(result).toHaveLength(2);
+  });
+
+  it('mergeCommunityActivity collapses a twin h-tagged into two communities', () => {
+    const merged = mergeCommunityActivity(
+      new Map([
+        ['community-a', [twin('timed', 31923, 100, '1100')]],
+        ['community-b', [twin('allday', 31922, 200, '2026-09-17')]]
+      ])
+    );
+    expect(merged.map((e) => e.id)).toEqual(['allday']);
+  });
+
+  it('mergeCommunityActivity leaves non-calendar content untouched', () => {
+    const merged = mergeCommunityActivity(
+      new Map([
+        ['community-a', [makeEvent(1, 100), makeEvent(30023, 200, [['d', 'shared-d']])]],
+        ['community-b', [makeEvent(30142, 150, [['d', 'shared-d']])]]
+      ])
+    );
+    expect(merged).toHaveLength(3);
+  });
+});

@@ -82,3 +82,54 @@ describe('selectUpcomingEvents', () => {
     expect(selectUpcomingEvents(items, (e) => e.start, NOW, 5)).toHaveLength(5);
   });
 });
+
+describe('selectUpcomingEvents — a kind flip must not read as two appointments', () => {
+  const PK = 'a'.repeat(64);
+  // The pair observed on relay.edufeed.org: one appointment published as a
+  // timed 31923, later republished as an all-day 31922 under the SAME d-tag.
+  // Nostr replaceability is per kind:pubkey:d, so both events stay alive.
+  const twin = (id, kind, created_at, start) => ({
+    id,
+    kind,
+    pubkey: PK,
+    created_at,
+    start,
+    tags: [['d', '8c70154304f66595']]
+  });
+
+  it('shows the appointment once, keeping the newest version', () => {
+    const items = [
+      twin('timed', 31923, 1_786_967_984, NOW + 100),
+      twin('allday', 31922, 1_789_565_614, NOW + 200)
+    ];
+
+    const upcoming = selectUpcomingEvents(items, (e) => e.start, NOW, 5);
+
+    expect(upcoming.map((e) => e.id)).toEqual(['allday']);
+  });
+
+  it('still lists genuinely different appointments by the same author', () => {
+    const other = {
+      id: 'other',
+      kind: 31922,
+      pubkey: PK,
+      created_at: 1_789_565_681,
+      start: NOW + 300,
+      tags: [['d', 'a6651111331b0a29']]
+    };
+    const items = [twin('timed', 31923, 1, NOW + 100), other];
+
+    expect(selectUpcomingEvents(items, (e) => e.start, NOW, 5).map((e) => e.id)).toEqual([
+      'timed',
+      'other'
+    ]);
+  });
+
+  it('leaves tag-less test/legacy items alone', () => {
+    const items = [
+      item('a', 10, { kind: 31923, start: NOW + 100 }),
+      item('b', 20, { kind: 31922, start: NOW + 200 })
+    ];
+    expect(selectUpcomingEvents(items, (e) => e.start, NOW, 5)).toHaveLength(2);
+  });
+});

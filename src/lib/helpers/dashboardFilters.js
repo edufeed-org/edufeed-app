@@ -1,4 +1,4 @@
-import { getEventStartTimestamp } from '$lib/helpers/calendar.js';
+import { getEventStartTimestamp, dedupeCalendarTwins } from '$lib/helpers/calendar.js';
 
 /**
  * Filter and sort upcoming calendar events (future only, by start time, max 4).
@@ -7,7 +7,9 @@ import { getEventStartTimestamp } from '$lib/helpers/calendar.js';
  * @returns {any[]}
  */
 export function filterUpcomingEvents(items, nowTs) {
-  return [...items]
+  // An appointment republished under the other NIP-52 kind keeps both
+  // addresses alive, so the rail would list it twice.
+  return dedupeCalendarTwins(items)
     .filter((e) => e.kind === 31922 || e.kind === 31923)
     .map((e) => ({ event: e, start: getEventStartTimestamp(e) }))
     .filter((e) => e.start > nowTs)
@@ -35,5 +37,7 @@ export function mergeCommunityActivity(perCommunityItems) {
     }
   }
 
-  return merged.sort((a, b) => b.created_at - a.created_at);
+  // Calendar twins (same d-tag, kind flipped between 31922/31923) have two
+  // ids, so the id-dedupe above lets both through.
+  return dedupeCalendarTwins(merged).sort((a, b) => b.created_at - a.created_at);
 }

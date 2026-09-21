@@ -155,3 +155,45 @@ function toValidIso(year, month, day) {
   const pad = (/** @type {number} */ n) => String(n).padStart(2, '0');
   return `${year}-${pad(month)}-${pad(day)}`;
 }
+
+/**
+ * Date/time parts for the compact "upcoming events" rails.
+ *
+ * Kind 31922 is date-based: its `start` tag is a bare "YYYY-MM-DD" that
+ * `parseCalendarTimestamp` resolves to midnight UTC. Two rules follow, and
+ * the community rail broke both — it showed "17. Sept., 02:00" for an
+ * all-day event in CEST:
+ *
+ * - No time may be shown for 31922, not even 00:00 (NIP-52).
+ * - The date must be rendered in UTC, or the displayed day drifts with the
+ *   viewer's zone (west of UTC it lands on the day before).
+ *
+ * Kind 31923 carries a real instant and is rendered in the viewer's zone.
+ *
+ * @param {number} startTs - start timestamp in unix seconds
+ * @param {number} kind - 31922 (all-day) or 31923 (time-based)
+ * @returns {{day: string, month: string, date: string, time: string, label: string}}
+ */
+export function getUpcomingDateParts(startTs, kind) {
+  const date = new Date(startTs * 1000);
+  const locale = activeDateLocale();
+  const timeZone = kind === 31923 ? undefined : 'UTC';
+
+  const day = date.toLocaleDateString(locale, { day: 'numeric', timeZone });
+  const month = date.toLocaleDateString(locale, { month: 'short', timeZone });
+  const dateLabel = date.toLocaleDateString(locale, {
+    month: 'short',
+    day: 'numeric',
+    timeZone
+  });
+  const time =
+    kind === 31923 ? date.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' }) : '';
+
+  return {
+    day,
+    month,
+    date: dateLabel,
+    time,
+    label: time ? `${dateLabel}, ${time}` : dateLabel
+  };
+}

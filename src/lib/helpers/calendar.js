@@ -9,12 +9,13 @@ import { activeDateLocale, formatDate } from '$lib/helpers/dates.js';
 import {
   parseCalendarTimestamp,
   getIcsEventTiming,
-  dedupeReplaceableEvents
+  dedupeReplaceableEvents,
+  dedupeCalendarTwins
 } from '$lib/helpers/calendar-timing.js';
 
 // Pure timing helpers live in calendar-timing.js (no store/config imports, so
 // server routes can use them too); re-exported here for client callers.
-export { parseCalendarTimestamp, getIcsEventTiming, dedupeReplaceableEvents };
+export { parseCalendarTimestamp, getIcsEventTiming, dedupeReplaceableEvents, dedupeCalendarTwins };
 
 /**
  * @typedef {import('../types/calendar.js').CalendarEvent} CalendarEvent

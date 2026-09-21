@@ -1,5 +1,5 @@
 import { getCalendarTitle, getCalendarEventImage } from 'applesauce-common/helpers';
-import { parseCalendarTimestamp } from '$lib/helpers/calendar.js';
+import { parseCalendarTimestamp, dedupeCalendarTwins } from '$lib/helpers/calendar.js';
 import { validateCalendarEvent } from '$lib/helpers/eventValidation.js';
 
 /**
@@ -13,7 +13,10 @@ import { validateCalendarEvent } from '$lib/helpers/eventValidation.js';
  * @returns {CalendarEvent[]}
  */
 export function validateAndTransformCalendarEvents(rawEvents) {
-  return rawEvents
+  // The EventStore replaces per kind:pubkey:d, so an appointment republished
+  // under the other NIP-52 kind keeps BOTH addresses alive and reaches every
+  // calendar view twice. Collapse those twins before validating.
+  return dedupeCalendarTwins(rawEvents)
     .filter((event) => validateCalendarEvent(event))
     .map((event) => getCalendarEventMetadata(event))
     .sort((a, b) => (a.start || 0) - (b.start || 0));

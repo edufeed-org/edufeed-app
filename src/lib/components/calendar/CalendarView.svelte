@@ -18,7 +18,8 @@
   import {
     getViewDateRange,
     filterEventsByViewMode,
-    filterEventsBySelectedRelays
+    filterEventsBySelectedRelays,
+    dedupeCalendarTwins
   } from '$lib/helpers/calendar.js';
   import { getCalendarRelays } from '$lib/helpers/relay-helper.js';
   import { relayUpdateSignal } from '$lib/services/app-relay-service.svelte.js';
@@ -653,12 +654,20 @@
   // local copy (only community mode ran deletion loaders before).
   useAuthorDeletions(() => allCalendarEvents.map((e) => e.pubkey));
 
+  // One appointment can hold TWO live addresses: NIP-52 splits it across kind
+  // 31922 (all-day) and 31923 (timed), and replaceability is per
+  // kind:pubkey:d — so a publisher that flips the kind under a stable d-tag
+  // leaves the old event alive and every view lists the appointment twice.
+  // Collapsed here rather than per loader: community, personal-calendar and
+  // global modes each fill `allCalendarEvents` through a different path.
+  let dedupedCalendarEvents = $derived(dedupeCalendarTwins(allCalendarEvents));
+
   // Derived state: Apply relay filtering via seen-relay post-filter.
   // The loader only queries selected relays, but EventStore may still contain
   // events fetched earlier from other relays — this keeps the displayed set
   // consistent with the user's relay selection.
   let relayFilteredEvents = $derived(
-    filterEventsBySelectedRelays(allCalendarEvents, calendarFilters.selectedRelays)
+    filterEventsBySelectedRelays(dedupedCalendarEvents, calendarFilters.selectedRelays)
   );
 
   // Community mode: the section's write gate is enforced by the reader
