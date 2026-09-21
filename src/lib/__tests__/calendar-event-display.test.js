@@ -25,7 +25,8 @@ const {
   formatCalendarSubtitle,
   formatEventDateTime,
   getIcsEventTiming,
-  dedupeReplaceableEvents
+  dedupeReplaceableEvents,
+  dedupeCalendarTwins
 } = await import('$lib/helpers/calendar.js');
 
 const DAY = 86400;
@@ -208,5 +209,128 @@ describe('dedupeReplaceableEvents — one appointment per address', () => {
     const a = { id: 'x', kind: 1, pubkey: PK, created_at: 1, tags: [] };
     const b = { id: 'y', kind: 1, pubkey: PK, created_at: 2, tags: [] };
     expect(dedupeReplaceableEvents([a, b, a])).toHaveLength(2);
+  });
+});
+
+describe('cross-kind twins — an appointment that changed kind is still one appointment', () => {
+  const PK = 'a'.repeat(64);
+  const OTHER_PK = 'b'.repeat(64);
+  /** A NIP-52 event at (kind, PK, d). */
+  const cal = (id, kind, created_at, dTag = 'shared-d', pubkey = PK) => ({
+    id,
+    kind,
+    pubkey,
+    created_at,
+    tags: [['d', dTag]]
+  });
+
+  describe('dedupeReplaceableEvents', () => {
+    it('collapses a 31923 that was republished as 31922 under the same d-tag', () => {
+      // Real data from relay.edufeed.org: the e-teaching importer rewrote its
+      // timed events as all-day ones, keeping the d-tag. Replaceability is
+      // per kind:pubkey:d, so the stale 31923 never dies and both render.
+      const out = dedupeReplaceableEvents([cal('timed', 31923, 100), cal('allday', 31922, 200)]);
+      expect(out.map((e) => e.id)).toEqual(['allday']);
+    });
+
+    it('keeps the newest twin regardless of input order', () => {
+      const out = dedupeReplaceableEvents([cal('allday', 31922, 200), cal('timed', 31923, 100)]);
+      expect(out.map((e) => e.id)).toEqual(['allday']);
+    });
+
+    it('does not collapse calendar events with different d-tags', () => {
+      const out = dedupeReplaceableEvents([
+        cal('a', 31923, 100, 'one'),
+        cal('b', 31922, 200, 'two')
+      ]);
+      expect(out).toHaveLength(2);
+    });
+
+    it('does not collapse calendar events from different authors', () => {
+      const out = dedupeReplaceableEvents([
+        cal('mine', 31923, 100),
+        cal('theirs', 31922, 200, 'shared-d', OTHER_PK)
+      ]);
+      expect(out).toHaveLength(2);
+    });
+
+    it('needs a d-tag to call two events twins', () => {
+      const noD = (id, kind, created_at) => ({ id, kind, pubkey: PK, created_at, tags: [] });
+      expect(dedupeReplaceableEvents([noD('x', 31923, 100), noD('y', 31922, 200)])).toHaveLength(2);
+    });
+
+    it('leaves other replaceable kinds keyed by their own kind', () => {
+      const out = dedupeReplaceableEvents([
+        cal('article', 30023, 100),
+        cal('resource', 30142, 200)
+      ]);
+      expect(out).toHaveLength(2);
+    });
+  });
+
+  describe('dedupeCalendarTwins', () => {
+    it('collapses the twin and passes everything else through untouched', () => {
+      const note = { id: 'note', kind: 1, pubkey: PK, created_at: 150, tags: [] };
+      const out = dedupeCalendarTwins([cal('timed', 31923, 100), note, cal('allday', 31922, 200)]);
+      expect(out.map((e) => e.id)).toEqual(['note', 'allday']);
+    });
+
+    it("leaves each survivor at its own position, not the loser's", () => {
+      const out = dedupeCalendarTwins([
+        cal('keep-a', 31923, 10, 'a'),
+        cal('timed', 31923, 100),
+        cal('keep-b', 31922, 20, 'b'),
+        cal('allday', 31922, 200)
+      ]);
+      expect(out.map((e) => e.id)).toEqual(['keep-a', 'keep-b', 'allday']);
+    });
+
+    it('does not drop same-id duplicates of unrelated kinds', () => {
+      const note = { id: 'note', kind: 1, pubkey: PK, created_at: 1, tags: [] };
+      expect(dedupeCalendarTwins([note, note])).toHaveLength(2);
+    });
+  });
+});
+
+describe('dedupeCalendarTwins on transformed CalendarEvent objects', () => {
+  // The community/personal calendar loaders hand the views app-shaped
+  // CalendarEvents (dTag / createdAt), not raw Nostr events — the same twin
+  // must be recognised there or /calendar keeps rendering it twice.
+  const PK = 'a'.repeat(64);
+  const calEvent = (id, kind, createdAt, dTag = 'shared-d') => ({
+    id,
+    kind,
+    pubkey: PK,
+    createdAt,
+    dTag,
+    title: 'EdTech Research Forum 2026'
+  });
+
+  it('collapses a twin given in the CalendarEvent shape', () => {
+    const out = dedupeCalendarTwins([
+      calEvent('timed', 31923, 1_786_967_984),
+      calEvent('allday', 31922, 1_789_565_614)
+    ]);
+    expect(out.map((e) => e.id)).toEqual(['allday']);
+  });
+
+  it('keeps CalendarEvents at different d-tags', () => {
+    const out = dedupeCalendarTwins([
+      calEvent('a', 31923, 100, 'one'),
+      calEvent('b', 31922, 200, 'two')
+    ]);
+    expect(out).toHaveLength(2);
+  });
+
+  it('collapses a mixed pair (raw event + transformed twin)', () => {
+    const raw = {
+      id: 'raw-timed',
+      kind: 31923,
+      pubkey: PK,
+      created_at: 100,
+      tags: [['d', 'shared-d']]
+    };
+    const out = dedupeCalendarTwins([raw, calEvent('allday', 31922, 200)]);
+    expect(out.map((e) => e.id)).toEqual(['allday']);
   });
 });

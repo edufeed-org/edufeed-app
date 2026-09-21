@@ -25,6 +25,7 @@
   import { generateKindColorRGB } from '$lib/helpers/nostrUtils.js';
   import { getContentEventRoute } from '$lib/helpers/contentNavigation.js';
   import { getEventStartTimestamp } from '$lib/helpers/calendar.js';
+  import { getUpcomingDateParts } from '$lib/helpers/dates.js';
   import { mergeFeedItems, selectUpcomingEvents } from '$lib/helpers/community-feed.js';
   import * as m from '$lib/paraglide/messages';
 
@@ -288,19 +289,16 @@
               {#each upcomingEvents as event (event.id)}
                 {@const cardData = getFeedCardData(event)}
                 {@const kindColor = generateKindColorRGB(event.kind)}
-                {@const startTs = getEventStartTimestamp(event)}
+                {@const dateParts = getUpcomingDateParts(getEventStartTimestamp(event), event.kind)}
                 <button
                   class="w-[200px] shrink-0 rounded-lg border border-l-4 border-base-300 bg-base-100 p-3 text-left shadow-sm transition-shadow hover:border-primary hover:shadow-md lg:w-full"
                   style:border-left-color="rgb({kindColor.r},{kindColor.g},{kindColor.b})"
                   onclick={() => navigateToEvent(event)}
                 >
+                  <!-- Kind-aware: 31922 is all-day, so no time and a UTC-rendered
+                       date (its start tag is a bare YYYY-MM-DD). -->
                   <div class="text-xs font-medium text-primary">
-                    {new Date(startTs * 1000).toLocaleDateString(undefined, {
-                      month: 'short',
-                      day: 'numeric',
-                      hour: 'numeric',
-                      minute: '2-digit'
-                    })}
+                    {dateParts.label}
                   </div>
                   <div class="mt-1 line-clamp-2 text-sm font-semibold">{cardData.title}</div>
                 </button>

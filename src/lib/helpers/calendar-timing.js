@@ -4,6 +4,21 @@
  * from `$lib/helpers/calendar.js` for client callers.
  */
 
+/**
+ * Either shape the app passes calendar events around in: a raw Nostr event
+ * (`tags`, `created_at`) or a transformed CalendarEvent (`dTag`, `createdAt`).
+ *
+ * @typedef {{
+ *   id: string,
+ *   kind: number,
+ *   pubkey: string,
+ *   tags?: string[][],
+ *   created_at?: number,
+ *   createdAt?: number,
+ *   dTag?: string
+ * }} AddressableLike
+ */
+
 /** ISO 8601 date pattern for NIP-52 kind 31922 (date-based) events */
 const ISO_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -63,13 +78,59 @@ export function getIcsEventTiming(event) {
 }
 
 /**
- * Collapse a raw event list to one event per replaceable address
- * (kind:pubkey:d), keeping the NIP-01 winner (newest created_at, ties broken
- * by lower id). Non-replaceable kinds are deduped by id. Needed wherever
- * events are collected outside the EventStore (e.g. the ICS export fetching
- * from several relays) — otherwise an edited appointment can appear twice.
+ * The address key two events must share to count as the same appointment.
  *
- * @template {import('nostr-tools').NostrEvent} T
+ * NIP-52 splits one appointment across two kinds — 31922 while it is all-day,
+ * 31923 once it has times — and replaceability is per kind:pubkey:d, so a
+ * publisher that flips the kind under a stable d-tag leaves the old event
+ * alive forever. (Observed on relay.edufeed.org: an importer rewrote its
+ * timed events as all-day ones, and every rail then showed both.) The two
+ * calendar kinds therefore share one key. A d-tag is required: without it
+ * there is nothing that identifies the appointment across the flip.
+ *
+ * Accepts both shapes the app passes around: a raw Nostr event (`tags`,
+ * `created_at`) and a transformed CalendarEvent (`dTag`, `createdAt`), so a
+ * single helper serves the loaders, the models and the views.
+ *
+ * @param {AddressableLike} event
+ * @returns {string | null} shared key, or null if the event has no twin identity
+ */
+function calendarTwinKey(event) {
+  if (event.kind !== 31922 && event.kind !== 31923) return null;
+  const dTag = event.dTag ?? event.tags?.find((/** @type {string[]} */ t) => t[0] === 'd')?.[1];
+  return dTag ? `calendar:${event.pubkey}:${dTag}` : null;
+}
+
+/** @param {AddressableLike} event */
+function publishedAt(event) {
+  return event.created_at ?? event.createdAt ?? 0;
+}
+
+/**
+ * True when `candidate` beats `current` for the same address: newest
+ * publish time wins, ties broken by lower id (NIP-01).
+ *
+ * @param {AddressableLike} candidate
+ * @param {AddressableLike | undefined} current
+ * @returns {boolean}
+ */
+function winsAddress(candidate, current) {
+  if (!current) return true;
+  if (publishedAt(candidate) !== publishedAt(current))
+    return publishedAt(candidate) > publishedAt(current);
+  return candidate.id < current.id;
+}
+
+/**
+ * Collapse a raw event list to one event per replaceable address
+ * (kind:pubkey:d, with the two calendar kinds sharing one address per
+ * `calendarTwinKey`), keeping the NIP-01 winner (newest created_at, ties
+ * broken by lower id). Non-replaceable kinds are deduped by id. Needed
+ * wherever events are collected outside the EventStore (e.g. the ICS export
+ * fetching from several relays) — otherwise an edited appointment can appear
+ * twice.
+ *
+ * @template {AddressableLike} T
  * @param {T[]} events
  * @returns {T[]}
  */
@@ -79,15 +140,39 @@ export function dedupeReplaceableEvents(events) {
   for (const event of events) {
     const replaceable = event.kind >= 30000 && event.kind < 40000;
     const dTag = event.tags?.find((/** @type {string[]} */ t) => t[0] === 'd')?.[1] || '';
-    const key = replaceable ? `${event.kind}:${event.pubkey}:${dTag}` : `id:${event.id}`;
-    const current = byKey.get(key);
-    if (
-      !current ||
-      event.created_at > current.created_at ||
-      (event.created_at === current.created_at && event.id < current.id)
-    ) {
-      byKey.set(key, event);
-    }
+    const key =
+      calendarTwinKey(event) ||
+      (replaceable ? `${event.kind}:${event.pubkey}:${dTag}` : `id:${event.id}`);
+    if (winsAddress(event, byKey.get(key))) byKey.set(key, event);
   }
   return [...byKey.values()];
+}
+
+/**
+ * Collapse only cross-kind calendar twins, leaving every other item — and the
+ * surviving order — exactly as it came in. Use this on mixed feeds, where
+ * `dedupeReplaceableEvents` would also re-key notes, articles and shares.
+ * Takes raw events or transformed CalendarEvents (see `calendarTwinKey`).
+ *
+ * @template {AddressableLike} T
+ * @param {T[]} events
+ * @returns {T[]}
+ */
+export function dedupeCalendarTwins(events) {
+  /** @type {Map<string, T>} */
+  const winners = new Map();
+  for (const event of events) {
+    const key = calendarTwinKey(event);
+    if (key && winsAddress(event, winners.get(key))) winners.set(key, event);
+  }
+  if (winners.size === 0) return [...events];
+  /** @type {Set<string>} */
+  const emitted = new Set();
+  return events.filter((event) => {
+    const key = calendarTwinKey(event);
+    if (!key) return true;
+    if (winners.get(key) !== event || emitted.has(key)) return false;
+    emitted.add(key);
+    return true;
+  });
 }
