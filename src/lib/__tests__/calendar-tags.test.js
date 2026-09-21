@@ -673,4 +673,126 @@ describe('buildCalendarEventTags', () => {
       expect(parsed.participants).toEqual(participants);
     });
   });
+
+  describe('named participants without a pubkey (custom "participant" tag)', () => {
+    // Issue: most speakers at real-world events have no npub. A plain name is
+    // stored as ["participant", name, "", role] — same slot layout as the
+    // NIP-52 p tag so parse/build stay symmetric; other clients ignore it.
+    const formBase = { startDate: '2024-06-15', eventType: 'date', title: 'Test Event' };
+    const eventBase = { kind: 31922, title: 'Test Event' };
+    const PK_A = 'a'.repeat(64);
+
+    it('emits ["participant", name, "", role] for a named entry with a role', () => {
+      const formData = {
+        ...formBase,
+        participants: [{ name: 'Markus Mustermann', role: 'speaker' }]
+      };
+      const tags = buildCalendarEventTags(
+        /** @type {any} */ (formData),
+        /** @type {any} */ (eventBase),
+        'd1'
+      );
+      expect(findTags(tags, 'participant')).toEqual([
+        ['participant', 'Markus Mustermann', '', 'speaker']
+      ]);
+      expect(findTags(tags, 'p')).toHaveLength(0);
+    });
+
+    it('emits ["participant", name] when there is no role and trims the name', () => {
+      const formData = { ...formBase, participants: [{ name: '  Erika Musterfrau ' }] };
+      const tags = buildCalendarEventTags(
+        /** @type {any} */ (formData),
+        /** @type {any} */ (eventBase),
+        'd1'
+      );
+      expect(findTags(tags, 'participant')).toEqual([['participant', 'Erika Musterfrau']]);
+    });
+
+    it('skips blank names and keeps p-tag entries in their own tag', () => {
+      const formData = {
+        ...formBase,
+        participants: [{ name: '   ' }, { pubkey: PK_A, role: 'organizer' }]
+      };
+      const tags = buildCalendarEventTags(
+        /** @type {any} */ (formData),
+        /** @type {any} */ (eventBase),
+        'd1'
+      );
+      expect(findTags(tags, 'participant')).toHaveLength(0);
+      expect(findTags(tags, 'p')).toEqual([['p', PK_A, '', 'organizer']]);
+    });
+
+    it('round-trips pubkey and named entries through getCalendarEventMetadata', async () => {
+      const { getCalendarEventMetadata } = await import('../helpers/eventUtils.js');
+      const participants = [
+        { pubkey: PK_A, relay: 'wss://relay.example.com/', role: 'speaker' },
+        { name: 'Markus Mustermann', role: 'speaker' },
+        { name: 'Erika Musterfrau', role: undefined }
+      ];
+      const tags = buildCalendarEventTags(
+        /** @type {any} */ ({ ...formBase, participants }),
+        /** @type {any} */ (eventBase),
+        'd1'
+      );
+      const parsed = getCalendarEventMetadata(
+        /** @type {any} */ ({
+          id: 'e1',
+          pubkey: 'c'.repeat(64),
+          kind: 31922,
+          content: '',
+          created_at: 1718452800,
+          tags
+        })
+      );
+      expect(parsed.participants).toEqual(participants);
+    });
+
+    it('drops malformed participant tags (empty or whitespace name) when parsing', async () => {
+      const { getCalendarEventMetadata } = await import('../helpers/eventUtils.js');
+      const parsed = getCalendarEventMetadata(
+        /** @type {any} */ ({
+          id: 'e1',
+          pubkey: 'c'.repeat(64),
+          kind: 31922,
+          content: '',
+          created_at: 1718452800,
+          tags: [
+            ['d', 'd1'],
+            ['title', 'T'],
+            ['start', '2024-06-15'],
+            ['participant'],
+            ['participant', '   '],
+            ['participant', ' Named ', '', 'moderator']
+          ]
+        })
+      );
+      expect(parsed.participants).toEqual([{ name: 'Named', role: 'moderator' }]);
+    });
+
+    it('dedupes repeated p and participant tags so keyed lists never collide', async () => {
+      const { getCalendarEventMetadata } = await import('../helpers/eventUtils.js');
+      const parsed = getCalendarEventMetadata(
+        /** @type {any} */ ({
+          id: 'e1',
+          pubkey: 'c'.repeat(64),
+          kind: 31922,
+          content: '',
+          created_at: 1718452800,
+          tags: [
+            ['d', 'd1'],
+            ['title', 'T'],
+            ['start', '2024-06-15'],
+            ['p', PK_A, '', 'speaker'],
+            ['p', PK_A],
+            ['participant', 'Twice'],
+            ['participant', 'Twice', '', 'speaker']
+          ]
+        })
+      );
+      expect(parsed.participants).toEqual([
+        { pubkey: PK_A, relay: undefined, role: 'speaker' },
+        { name: 'Twice', role: undefined }
+      ]);
+    });
+  });
 });

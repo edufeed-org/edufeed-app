@@ -1812,6 +1812,7 @@
   "contact_search_hint": "{count} Follows durchsuchen oder npub eingeben",
   "contact_search_loading": "Kontakte werden geladen...",
   "contact_search_enter_npub": "npub eingeben zum Suchen",
+  "contact_search_add_name": "„{name}“ als Name eintragen",
   "contact_search_profiles_hint": "Nach Name suchen oder npub eingeben",
   "contact_search_profiles_searching": "Suche auf Relays…",
   "dashboard_nav_home": "Home",

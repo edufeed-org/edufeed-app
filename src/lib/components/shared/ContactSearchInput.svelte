@@ -9,6 +9,9 @@
     absolute overlay. Inside a DaisyUI modal-box the overlay form is clipped
     by the box's overflow-y:auto (the box does not grow for absolute
     children), so suggestions end up half-hidden behind a scrollbar
+  - acceptNameInput: append a synthetic "add as name" row for any plain-text
+    term (>= 2 chars, not a pubkey) so a participant without an npub can be
+    entered verbatim — fires onrawname with the trimmed term
   - searchProfiles: also suggest people OUTSIDE the follow list — profiles
     already in the EventStore (community members, chat authors, …) plus a
     debounced NIP-50 search on the configured search relays. Follows always
@@ -46,6 +49,7 @@
    *   disabled?: boolean,
    *   onselect?: (contact: import('$lib/stores/contacts.svelte.js').EnrichedContact) => void,
    *   onrawpubkey?: (hex: string) => void,
+   *   onrawname?: (name: string) => void,
    *   onblur?: () => void,
    *   inputClass?: string,
    *   id?: string,
@@ -53,6 +57,7 @@
    *   exclude?: string[],
    *   showExcluded?: boolean,
    *   acceptPubkeyInput?: boolean,
+   *   acceptNameInput?: boolean,
    *   inlineList?: boolean,
    *   searchProfiles?: boolean,
    *   excludedLabel?: string,
@@ -65,6 +70,7 @@
     disabled = false,
     onselect,
     onrawpubkey,
+    onrawname,
     onblur,
     inputClass = '',
     id = undefined,
@@ -72,6 +78,7 @@
     exclude = [],
     showExcluded = false,
     acceptPubkeyInput = false,
+    acceptNameInput = false,
     inlineList = false,
     searchProfiles = false,
     excludedLabel = '',
@@ -81,7 +88,8 @@
   /**
    * @typedef {{ kind: 'contact', contact: import('$lib/stores/contacts.svelte.js').EnrichedContact, pubkey: string, excluded: boolean }} ContactNavItem
    * @typedef {{ kind: 'pubkey', pubkey: string, npub: string, excluded: boolean }} PubkeyNavItem
-   * @typedef {ContactNavItem | PubkeyNavItem} NavItem
+   * @typedef {{ kind: 'name', name: string, pubkey: string, excluded: false }} NameNavItem
+   * @typedef {ContactNavItem | PubkeyNavItem | NameNavItem} NavItem
    */
 
   // Resolve the profile for a pasted npub/hex so the synthetic row shows the
@@ -198,7 +206,19 @@
       }
     }
 
-    navItems = pubkeyItem ? [...contactItems, pubkeyItem] : contactItems;
+    /** @type {NameNavItem | null} */
+    let nameItem = null;
+    if (acceptNameInput && term.length >= 2 && !pubkeyItem && !normalizePubkey(term)) {
+      // `pubkey` doubles as the {#each} key; the prefix keeps it disjoint
+      // from real hex keys.
+      nameItem = { kind: 'name', name: term, pubkey: `name:${term}`, excluded: false };
+    }
+
+    navItems = [
+      ...contactItems,
+      ...(pubkeyItem ? [pubkeyItem] : []),
+      ...(nameItem ? [nameItem] : [])
+    ];
     showDropdown = navItems.length > 0;
   }
 
@@ -251,6 +271,8 @@
     selectedDropdownIndex = -1;
     if (item.kind === 'contact') {
       onselect?.(item.contact);
+    } else if (item.kind === 'name') {
+      onrawname?.(item.name);
     } else {
       onrawpubkey?.(item.pubkey);
     }
@@ -326,6 +348,24 @@
             {#if item.excluded && excludedLabel}
               <span class="badge badge-sm">{excludedLabel}</span>
             {/if}
+          </button>
+        {:else if item.kind === 'name'}
+          <button
+            type="button"
+            data-testid="contact-search-add-name"
+            class="flex w-full items-center gap-2 px-3 py-2 text-left transition-colors hover:bg-base-200"
+            class:bg-base-200={index === selectedDropdownIndex}
+            onclick={() => selectItem(item)}
+          >
+            <div
+              class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-base-300 text-sm font-medium text-base-content/70"
+              aria-hidden="true"
+            >
+              {item.name.charAt(0).toUpperCase()}
+            </div>
+            <div class="min-w-0 flex-1 truncate text-sm">
+              {m.contact_search_add_name({ name: item.name })}
+            </div>
           </button>
         {:else}
           <button

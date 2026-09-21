@@ -110,6 +110,53 @@ describe('ParticipantsEditor', () => {
     });
   });
 
+  it('adds a free-text name (no pubkey) with the selected role and no relay lookup', async () => {
+    getPrimaryWriteRelayMock.mockClear();
+    const { getByTestId, container } = render(Host);
+    const select = /** @type {HTMLSelectElement} */ (
+      container.querySelector('[data-testid="participant-role-select"]')
+    );
+    select.value = 'speaker';
+    select.dispatchEvent(new Event('change'));
+    await tick();
+    getByTestId('stub-name-markus').click();
+    await tick();
+    expect(readParticipants(getByTestId('participants-json'))).toEqual([
+      { name: 'Markus Mustermann', role: 'speaker' }
+    ]);
+    expect(getPrimaryWriteRelayMock).not.toHaveBeenCalled();
+    // the name is listed and can be removed like a pubkey entry
+    expect(container.textContent).toContain('Markus Mustermann');
+    const removeBtn = /** @type {HTMLButtonElement} */ (
+      container.querySelector('[data-testid="participant-remove"]')
+    );
+    removeBtn.click();
+    await tick();
+    expect(readParticipants(getByTestId('participants-json'))).toEqual([]);
+  });
+
+  it('does not add the same name twice (case-insensitive)', async () => {
+    const { getByTestId } = render(Host);
+    getByTestId('stub-name-markus').click();
+    await tick();
+    getByTestId('stub-name-markus-lower').click();
+    await tick();
+    expect(readParticipants(getByTestId('participants-json'))).toHaveLength(1);
+  });
+
+  it('keeps pubkey and named entries side by side and removes only the targeted one', async () => {
+    const initial = [
+      { pubkey: PK_B, relay: 'wss://r.example/', role: 'organizer' },
+      { name: 'Erika Musterfrau', role: 'moderator' }
+    ];
+    const { getByTestId, container } = render(Host, { initial });
+    const removeBtns = container.querySelectorAll('[data-testid="participant-remove"]');
+    expect(removeBtns).toHaveLength(2);
+    /** @type {HTMLButtonElement} */ (removeBtns[1]).click();
+    await tick();
+    expect(readParticipants(getByTestId('participants-json'))).toEqual([initial[0]]);
+  });
+
   it('removes a participant and prefills from initial value', async () => {
     const initial = [{ pubkey: PK_B, relay: 'wss://r.example/', role: 'organizer' }];
     const { getByTestId, container } = render(Host, { initial });

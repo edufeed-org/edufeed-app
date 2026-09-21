@@ -10,9 +10,12 @@
  */
 
 /**
+ * A participant is either a Nostr user (NIP-52 p tag, `pubkey` set) or a
+ * plain name without an npub (app-specific "participant" tag, `name` set).
  * @typedef {Object} CalendarEventParticipant
- * @property {string} pubkey - Public key of participant
- * @property {string} [relay] - Optional relay URL
+ * @property {string} [pubkey] - Public key of participant (p tag)
+ * @property {string} [name] - Display name of a participant without an npub
+ * @property {string} [relay] - Optional relay URL (pubkey entries only)
  * @property {string} [role] - Optional role description
  */
 
@@ -93,7 +96,7 @@
  * @property {boolean} isAllDay - Whether event is all day
  * @property {EventType} eventType - Event type (date or time)
  * @property {string[]} [references] - Optional array of reference URLs (r tags)
- * @property {Array<{pubkey: string, relay?: string, role?: string}>} [participants] - NIP-52 participants (p-tags)
+ * @property {CalendarEventParticipant[]} [participants] - NIP-52 participants (p-tags) and named participants
  */
 
 /**

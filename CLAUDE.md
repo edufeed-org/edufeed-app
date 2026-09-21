@@ -462,6 +462,7 @@ AMB resource search (NIP-50), SKOS filters, and the resource form variants are c
 - Kind 31923: Time-based (specific times)
 - Required tags: `d` (identifier), `title`, `start`
 - Always validate before display: `validateCalendarEvent(event)`
+- Participants: NIP-52 `p` tags for Nostr users; people without an npub are stored as the app-specific `["participant", name, "", role]` tag (same slot layout). Both parse into `participants` (`pubkey` xor `name`) in `getCalendarEventMetadata`, and the `ParticipantsEditor` adds names via `ContactSearchInput`'s `acceptNameInput` row.
 
 ## Root Layout Import Budget
 

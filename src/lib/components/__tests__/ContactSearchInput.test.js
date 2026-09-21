@@ -73,7 +73,8 @@ vi.mock('$lib/paraglide/messages', () => ({
   contact_search_loading: () => 'Loading contacts...',
   contact_search_enter_npub: () => 'Enter npub to search',
   contact_search_profiles_hint: () => 'Search by name or enter npub',
-  contact_search_profiles_searching: () => 'Searching relays…'
+  contact_search_profiles_searching: () => 'Searching relays…',
+  contact_search_add_name: ({ name }) => `Add “${name}” as a name`
 }));
 
 // `searchProfiles` mode: people outside the follow list, from the local
@@ -500,6 +501,74 @@ describe('ContactSearchInput — acceptPubkeyInput flag', () => {
 
     expect(onselect).not.toHaveBeenCalled();
     expect(onrawpubkey).toHaveBeenCalledWith(FRESH_HEX);
+  });
+});
+
+describe('ContactSearchInput — acceptNameInput flag', () => {
+  it('appends a synthetic "add as name" row for a plain-text term that is not a pubkey', async () => {
+    const onrawname = vi.fn();
+    const { container, getByTestId } = render(ContactSearchInput, {
+      props: { value: '', acceptNameInput: true, onrawname }
+    });
+    const input = container.querySelector('input');
+    await fireEvent.input(input, { target: { value: 'Markus Mustermann' } });
+
+    const row = getByTestId('contact-search-add-name');
+    expect(row.textContent).toContain('Markus Mustermann');
+    await fireEvent.click(row);
+    expect(onrawname).toHaveBeenCalledWith('Markus Mustermann');
+  });
+
+  it('lists the name row after contact matches and reaches it with ArrowDown + Enter', async () => {
+    const onrawname = vi.fn();
+    const onselect = vi.fn();
+    const { container } = render(ContactSearchInput, {
+      props: { value: '', acceptNameInput: true, onrawname, onselect }
+    });
+    const input = container.querySelector('input');
+    // "ali" matches Alice in the follow list; the name row must come last.
+    await fireEvent.input(input, { target: { value: 'ali' } });
+    const buttons = container.querySelectorAll('[data-testid="contact-search-list"] button');
+    expect(buttons.length).toBe(2);
+    expect(buttons[1].getAttribute('data-testid')).toBe('contact-search-add-name');
+
+    await fireEvent.keyDown(input, { key: 'ArrowDown' });
+    await fireEvent.keyDown(input, { key: 'ArrowDown' });
+    await fireEvent.keyDown(input, { key: 'Enter' });
+    expect(onrawname).toHaveBeenCalledWith('ali');
+    expect(onselect).not.toHaveBeenCalled();
+  });
+
+  it('does not offer a name row for a pasted npub or a one-character term', async () => {
+    const onrawname = vi.fn();
+    const { container, queryByTestId } = render(ContactSearchInput, {
+      props: { value: '', acceptNameInput: true, acceptPubkeyInput: true, onrawname }
+    });
+    const input = container.querySelector('input');
+    await fireEvent.input(input, { target: { value: FRESH_NPUB } });
+    expect(queryByTestId('contact-search-add-name')).toBeNull();
+
+    await fireEvent.input(input, { target: { value: 'M' } });
+    expect(queryByTestId('contact-search-add-name')).toBeNull();
+  });
+
+  it('trims the term before handing it to onrawname', async () => {
+    const onrawname = vi.fn();
+    const { container, getByTestId } = render(ContactSearchInput, {
+      props: { value: '', acceptNameInput: true, onrawname }
+    });
+    const input = container.querySelector('input');
+    await fireEvent.input(input, { target: { value: '  Erika Musterfrau  ' } });
+    await fireEvent.click(getByTestId('contact-search-add-name'));
+    expect(onrawname).toHaveBeenCalledWith('Erika Musterfrau');
+  });
+
+  it('is off by default: a plain-text term with no match shows no dropdown', async () => {
+    const { container, queryByTestId } = render(ContactSearchInput, { props: { value: '' } });
+    const input = container.querySelector('input');
+    await fireEvent.input(input, { target: { value: 'Markus Mustermann' } });
+    expect(queryByTestId('contact-search-add-name')).toBeNull();
+    expect(container.querySelector('.absolute.z-50')).toBeNull();
   });
 });
 

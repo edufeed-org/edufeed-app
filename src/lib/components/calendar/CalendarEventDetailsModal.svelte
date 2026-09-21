@@ -30,6 +30,7 @@
   import CommunityShare from '../shared/CommunityShare.svelte';
   import ReactionBar from '../reactions/ReactionBar.svelte';
   import ProfileCard from '../shared/ProfileCard.svelte';
+  import NamedParticipant from './NamedParticipant.svelte';
   import EventManagementActions from './EventManagementActions.svelte';
   import EventContextMenu from '../shared/EventContextMenu.svelte';
   import HeroImage from '$lib/components/shared/HeroImage.svelte';
@@ -418,9 +419,13 @@
               : m.event_details_participant()}
           </h3>
           <div class="space-y-2">
-            {#each event.participants as participant (participant.pubkey)}
+            {#each event.participants as participant (participant.pubkey || 'name:' + participant.name)}
               <div class="rounded-lg bg-base-200 p-3">
-                <ProfileCard pubkey={participant.pubkey} showNpub={false} onClose={handleClose} />
+                {#if participant.pubkey}
+                  <ProfileCard pubkey={participant.pubkey} showNpub={false} onClose={handleClose} />
+                {:else}
+                  <NamedParticipant name={participant.name || ''} />
+                {/if}
                 {#if participant.role}
                   <div class="mt-2 flex items-center gap-2">
                     <span class="badge badge-sm badge-primary">{participant.role}</span>
