@@ -11,6 +11,7 @@ import { Subject } from 'rxjs';
 import { tick } from 'svelte';
 import { contactsStore } from '$lib/stores/contacts.svelte.js';
 import ContactSearchInput from '../shared/ContactSearchInput.svelte';
+import { trust } from './fixtures/trust-scores-mock.svelte.js';
 
 // Mock contacts data
 const mockContacts = [
@@ -74,7 +75,9 @@ vi.mock('$lib/paraglide/messages', () => ({
   contact_search_enter_npub: () => 'Enter npub to search',
   contact_search_profiles_hint: () => 'Search by name or enter npub',
   contact_search_profiles_searching: () => 'Searching relays…',
-  contact_search_add_name: ({ name }) => `Add “${name}” as a name`
+  contact_search_add_name: ({ name }) => `Add “${name}” as a name`,
+  contact_search_wot_known: () => 'in web of trust',
+  contact_search_wot_title: ({ hops, followers }) => `${hops} hops · ${followers} followers`
 }));
 
 // `searchProfiles` mode: people outside the follow list, from the local
@@ -109,8 +112,16 @@ vi.mock('$lib/loaders/profile-search.js', () => ({
   }
 }));
 
+// NIP-85 trust scores: ContactSearchInput orders non-follow rows by rank and
+// badges scored ones. Driven per test through the reactive fixture.
+vi.mock(
+  '$lib/stores/trust-scores.svelte.js',
+  () => import('./fixtures/trust-scores-mock.svelte.js')
+);
+
 beforeEach(() => {
   vi.clearAllMocks();
+  trust.scores = new Map();
 });
 
 describe('ContactSearchInput', () => {
@@ -812,5 +823,125 @@ describe('ContactSearchInput — searchProfiles flag', () => {
     });
     expect(container.textContent).toContain('Search by name or enter npub');
     expect(container.textContent).not.toContain('Search 3 follows');
+  });
+});
+
+describe('ContactSearchInput — NIP-85 trust ranking (searchProfiles)', () => {
+  const REAL = 'd'.repeat(64);
+  const FAKE = 'e'.repeat(64);
+  const NOBODY = '9'.repeat(64);
+  /** @param {string} pubkey @param {string} name */
+  const known = (pubkey, name) => ({
+    pubkey,
+    name,
+    display_name: name,
+    picture: null,
+    nip05: null,
+    about: null
+  });
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    profileSearch.remote = new Subject();
+    profileSearch.searchKnownProfiles.mockReset();
+    profileSearch.searchKnownProfiles.mockReturnValue([]);
+    profileSearch.profileNameSearchLoader.mockReset();
+    profileSearch.profileNameSearchLoader.mockImplementation(() => profileSearch.remote);
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  const rowNames = (container) =>
+    [...container.querySelectorAll('[data-testid="contact-search-list"] button')].map((r) =>
+      r.querySelector('.font-medium')?.textContent?.trim()
+    );
+
+  it('orders non-follow rows by rank, unscored last, and keeps follows first', async () => {
+    // Impersonation case: two "Laeserin" profiles, one with a WoT rank.
+    profileSearch.searchKnownProfiles.mockReturnValue([
+      known(FAKE, 'Laeserin (fake)'),
+      known(NOBODY, 'Laeserin (new)'),
+      known(REAL, 'Laeserin')
+    ]);
+    trust.scores = new Map([
+      [REAL, { pubkey: REAL, rank: 69, hops: 2, followers: 3409 }],
+      [FAKE, { pubkey: FAKE, rank: 3, hops: 5, followers: 2 }]
+    ]);
+    vi.mocked(contactsStore.searchContacts).mockReturnValueOnce([mockContacts[0]]);
+    const { container } = render(ContactSearchInput, {
+      props: { value: '', searchProfiles: true }
+    });
+    await fireEvent.input(container.querySelector('input'), { target: { value: 'la' } });
+
+    expect(rowNames(container)).toEqual([
+      'Alice Smith',
+      'Laeserin',
+      'Laeserin (fake)',
+      'Laeserin (new)'
+    ]);
+  });
+
+  it('badges scored rows with the WoT label and a hops/followers title; unscored rows get nothing', async () => {
+    profileSearch.searchKnownProfiles.mockReturnValue([
+      known(REAL, 'Laeserin'),
+      known(NOBODY, 'Newcomer')
+    ]);
+    trust.scores = new Map([[REAL, { pubkey: REAL, rank: 69, hops: 2, followers: 3409 }]]);
+    const { container } = render(ContactSearchInput, {
+      props: { value: '', searchProfiles: true }
+    });
+    await fireEvent.input(container.querySelector('input'), { target: { value: 'e' } });
+    await fireEvent.input(container.querySelector('input'), { target: { value: 'er' } });
+
+    const rows = [...container.querySelectorAll('[data-testid="contact-search-list"] button')];
+    const badge = rows[0].querySelector('[data-testid="contact-search-wot-badge"]');
+    expect(badge?.textContent).toContain('in web of trust');
+    expect(badge?.getAttribute('title')).toBe('2 hops · 3409 followers');
+    expect(rows[1].querySelector('[data-testid="contact-search-wot-badge"]')).toBeNull();
+  });
+
+  it('re-sorts an open list when a score arrives after the relay results', async () => {
+    const { container } = render(ContactSearchInput, {
+      props: { value: '', searchProfiles: true }
+    });
+    await fireEvent.input(container.querySelector('input'), { target: { value: 'lae' } });
+    vi.advanceTimersByTime(400);
+    for (const [pk, name] of [
+      [NOBODY, 'Laeserin (new)'],
+      [REAL, 'Laeserin']
+    ]) {
+      profileSearch.remote.next({
+        kind: 0,
+        pubkey: pk,
+        tags: [],
+        content: JSON.stringify({ name })
+      });
+    }
+    await tick();
+    expect(rowNames(container)).toEqual(['Laeserin (new)', 'Laeserin']);
+
+    trust.scores = new Map([[REAL, { pubkey: REAL, rank: 69, hops: 2, followers: 1 }]]);
+    trust.bump();
+    await tick();
+    expect(rowNames(container)).toEqual(['Laeserin', 'Laeserin (new)']);
+  });
+
+  it('a late score does not re-open a list the user has already closed', async () => {
+    profileSearch.searchKnownProfiles.mockReturnValue([known(REAL, 'Laeserin')]);
+    const onselect = vi.fn();
+    const { container } = render(ContactSearchInput, {
+      props: { value: '', searchProfiles: true, onselect }
+    });
+    await fireEvent.input(container.querySelector('input'), { target: { value: 'lae' } });
+    await fireEvent.click(container.querySelector('[data-testid="contact-search-list"] button'));
+    expect(onselect).toHaveBeenCalled();
+    expect(container.querySelector('[data-testid="contact-search-list"]')).toBeNull();
+
+    trust.scores = new Map([[REAL, { pubkey: REAL, rank: 69, hops: 2, followers: 1 }]]);
+    trust.bump();
+    await tick();
+    expect(container.querySelector('[data-testid="contact-search-list"]')).toBeNull();
   });
 });

@@ -1815,6 +1815,8 @@
   "contact_search_add_name": "Add “{name}” as a name",
   "contact_search_profiles_hint": "Search by name or enter an npub",
   "contact_search_profiles_searching": "Searching relays…",
+  "contact_search_wot_known": "in web of trust",
+  "contact_search_wot_title": "{hops} hops away · {followers} verified followers",
   "dashboard_nav_home": "Home",
   "dashboard_nav_feed": "Feed",
   "home_greeting_hello": "Hello,",

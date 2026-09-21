@@ -11,6 +11,7 @@ import { runtimeConfig } from '$lib/stores/config.svelte.js';
 import { appSettings } from '$lib/stores/app-settings.svelte.js';
 import { getAppRelaysForCategory } from '$lib/services/app-relay-service.svelte.js';
 import { getInboxes, getOutboxes } from 'applesauce-core/helpers';
+import { normalizePubkey } from '$lib/helpers/pubkey.js';
 
 /**
  * Check if gated mode is currently active
@@ -249,6 +250,42 @@ export function getProfileLookupRelays() {
  */
 export function getProfileSearchRelays() {
   return [...new Set(runtimeConfig.profileSearchRelays || [])];
+}
+
+/**
+ * Point of view for WoT-ranked profile search (PROFILE_SEARCH_OBSERVER),
+ * as hex. `null` when unset or unparsable — the search then runs from the
+ * relay's own perspective.
+ * @returns {string | null}
+ */
+export function getProfileSearchObserver() {
+  const raw = runtimeConfig.profileSearchObserver;
+  if (typeof raw !== 'string' || !raw.trim()) return null;
+  return normalizePubkey(raw.trim()) || null;
+}
+
+/**
+ * Relays serving NIP-85 trusted assertions (kind 30382). Empty = the
+ * trust-score layer is off.
+ * @returns {string[]}
+ */
+export function getTrustAssertionRelays() {
+  return [...new Set(runtimeConfig.trustAssertions?.relays || [])];
+}
+
+/**
+ * Provider keys (hex) whose kind 30382 assertions the app trusts. Config
+ * may hold npub or hex; unparsable entries are dropped so a typo never
+ * reaches a relay filter.
+ * @returns {string[]}
+ */
+export function getTrustAssertionProviders() {
+  const out = new Set();
+  for (const raw of runtimeConfig.trustAssertions?.providers || []) {
+    const hex = typeof raw === 'string' ? normalizePubkey(raw.trim()) : null;
+    if (hex) out.add(hex);
+  }
+  return [...out];
 }
 
 /**

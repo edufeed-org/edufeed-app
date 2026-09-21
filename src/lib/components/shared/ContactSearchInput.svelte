@@ -18,11 +18,17 @@
     come first; every pubkey appears once. Issue f2763558: a tester with one
     follow typed a name on the community wizard's people step and got
     nothing at all ("und hier hätte ich jetzt erwartet, dass ich Vorschläge
-    bekomme").
+    bekomme"). Non-follow rows are ordered by NIP-85 trust rank (kind 30382
+    from the configured providers, see loaders/trust-assertions.js) and
+    scored rows carry a small "in web of trust" badge — so of two profiles
+    named alike, the one the network vouches for sits on top. Unscored
+    rows are never hidden: a teacher new to Nostr has no score anywhere.
 -->
 
 <script>
+  import { untrack } from 'svelte';
   import { useProfileMap } from '$lib/stores/profile-map.svelte.js';
+  import { useTrustScores } from '$lib/stores/trust-scores.svelte.js';
   import { getDisplayName } from 'applesauce-core/helpers';
   import ProfileAvatar from './ProfileAvatar.svelte';
   import { nip19 } from 'nostr-tools';
@@ -105,6 +111,34 @@
   let navItems = $state([]);
   // True while a NIP-50 request is in flight (spinner in the hint line).
   let remoteBusy = $state(false);
+  /** The term navItems were built for — plain let, re-read by the re-sort effect. */
+  let currentTerm = '';
+
+  // Trust scores for the contact rows on screen (searchProfiles only).
+  const getTrustScores = useTrustScores(() =>
+    searchProfiles
+      ? navItems.filter((item) => item.kind === 'contact').map((item) => item.pubkey)
+      : []
+  );
+
+  // A score that lands after the rows did re-sorts the OPEN list in place.
+  // Only the scores are tracked: navItems/showDropdown are read untracked so
+  // the rebuild's own writes cannot re-trigger this effect, and a closed
+  // list (row picked, field left) is never re-opened by a late score.
+  $effect(() => {
+    getTrustScores();
+    untrack(() => {
+      if (searchProfiles && showDropdown) rebuildItems(currentTerm);
+    });
+  });
+
+  /**
+   * Rank for ordering: unscored = -1 so it sorts after any scored row.
+   * @param {string} pubkey
+   */
+  function rankOf(pubkey) {
+    return getTrustScores().get(pubkey)?.rank ?? -1;
+  }
 
   // Remote-leg bookkeeping — plain lets, never $state (internal refs).
   /** @type {ReturnType<typeof setTimeout> | undefined} */
@@ -164,6 +198,7 @@
    * @param {string} term already trimmed
    */
   function rebuildItems(term) {
+    currentTerm = term;
     const follows = term.length >= 2 ? contactsStore.searchContacts(term, MAX_ITEMS) : [];
     /** @type {import('$lib/stores/contacts.svelte.js').EnrichedContact[]} */
     const merged = [...follows];
@@ -174,11 +209,16 @@
       const seen = new Set(merged.map((c) => c.pubkey));
       const known = searchKnownProfiles(term, MAX_ITEMS, { exclude: [...seen] });
       const extras = remoteTerm === term ? [...known, ...remoteMatches] : known;
+      /** @type {import('$lib/stores/contacts.svelte.js').EnrichedContact[]} */
+      const others = [];
       for (const c of extras) {
         if (seen.has(c.pubkey)) continue;
         seen.add(c.pubkey);
-        merged.push(c);
+        others.push(c);
       }
+      // Stable sort: ties (and the unscored tail) keep source order —
+      // known profiles before relay hits, relay hits in relay order.
+      merged.push(...others.toSorted((a, b) => rankOf(b.pubkey) - rankOf(a.pubkey)));
     }
     const matches = merged.slice(0, MAX_ITEMS);
 
@@ -347,6 +387,18 @@
             </div>
             {#if item.excluded && excludedLabel}
               <span class="badge badge-sm">{excludedLabel}</span>
+            {:else if searchProfiles && getTrustScores().get(item.pubkey)}
+              {@const score = getTrustScores().get(item.pubkey)}
+              <span
+                data-testid="contact-search-wot-badge"
+                class="badge shrink-0 badge-ghost badge-sm"
+                title={m.contact_search_wot_title({
+                  hops: score?.hops ?? '–',
+                  followers: score?.followers ?? '–'
+                })}
+              >
+                {m.contact_search_wot_known()}
+              </span>
             {/if}
           </button>
         {:else if item.kind === 'name'}

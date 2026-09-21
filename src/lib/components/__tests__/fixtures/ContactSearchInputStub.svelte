@@ -1,5 +1,12 @@
 <script>
-  let { value = $bindable(''), onselect, onrawpubkey, onrawname, exclude = [] } = $props();
+  let {
+    value = $bindable(''),
+    onselect,
+    onrawpubkey,
+    onrawname,
+    exclude = [],
+    searchProfiles = false
+  } = $props();
   const PK_A = 'a'.repeat(64);
   const PK_B = 'b'.repeat(64);
 </script>
@@ -15,3 +22,4 @@
 </button>
 <div data-testid="stub-exclude">{exclude.join(',')}</div>
 <div data-testid="stub-value">{value}</div>
+<div data-testid="stub-search-profiles">{String(searchProfiles)}</div>
