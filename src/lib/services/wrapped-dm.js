@@ -18,7 +18,10 @@
 import { ensureDmRelayList } from '$lib/services/dm-relay-backfill.js';
 import { ensureRecipientDmRelays } from '$lib/services/dm-recipient-relays.js';
 import { actionRunnerOptimistic } from '$lib/stores/action-runner.svelte.js';
-import { SendWrappedMessage } from 'applesauce-actions/actions';
+// The app's own variant, not applesauce's: it pins the rumor's p-tags to the
+// recipients (the stock pipeline p-tags every `nostr:` mention in the body,
+// which made a group relay's identity a DM participant) — see dm-actions.js.
+import { SendWrappedMessage } from '$lib/actions/dm-actions.js';
 
 /**
  * Send a NIP-17 wrapped DM, making sure both relay lists are in place first.
@@ -30,7 +33,7 @@ import { SendWrappedMessage } from 'applesauce-actions/actions';
  *   Passed to the action verbatim; applesauce accepts either shape.
  * @param {string} content - Message body. Ignored when `opts.args` is given.
  * @param {object} [opts]
- * @param {any} [opts.action] - Action to run (default `SendWrappedMessage`).
+ * @param {any} [opts.action] - Action to run (default the app's `SendWrappedMessage`).
  * @param {any[]} [opts.args] - Full argument list for a non-default action,
  *   e.g. `[replyingTo, content]` for `ReplyToWrappedMessage`.
  * @returns {Promise<any>} whatever the action runner returns
