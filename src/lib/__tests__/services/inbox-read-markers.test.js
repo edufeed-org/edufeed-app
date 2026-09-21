@@ -256,14 +256,20 @@ describe('inbox read markers', () => {
       expect(JSON.parse(draft.content.slice(7, -1)).global).toBe(Math.floor(Date.now() / 1000));
     });
 
-    it('falls back to plaintext when the signer cannot encrypt', async () => {
+    it('never publishes plaintext when the signer cannot encrypt', async () => {
       signer.nip44.encrypt.mockRejectedValueOnce(new Error('no nip44'));
 
       service.initializeInbox('user123');
       await service.markAsRead();
 
-      const draft = signer.signEvent.mock.calls.at(-1)[0];
-      expect(JSON.parse(draft.content).global).toBe(Math.floor(Date.now() / 1000));
+      // Read timestamps are activity metadata about the user: without NIP-44
+      // they stay on this device (localStorage mirror) and nothing is signed
+      // or sent to relays.
+      expect(signer.signEvent).not.toHaveBeenCalled();
+      expect(publishEvent).not.toHaveBeenCalled();
+      const now = Math.floor(Date.now() / 1000);
+      expect(service.getReadMarkers()?.global).toBe(now);
+      expect(JSON.parse(localStorageMock.raw()[MARKERS_KEY]).global).toBe(now);
     });
 
     it('keeps the read state locally even when publishing fails outright', async () => {

@@ -658,15 +658,12 @@ export async function markAsRead(type) {
     );
     signed = await signer.signEvent(draft);
   } catch (err) {
-    // Fallback: publish unencrypted (signer may not support NIP-44). Keeping
-    // the read state beats keeping it private, but say so rather than swallow.
-    console.warn('[inbox] read markers could not be encrypted, publishing plaintext:', err);
-    try {
-      const draft = await finalizeDraft(AppDataFactory.create(APP_DATA_D_TAG, merged, false));
-      signed = await signer.signEvent(draft);
-    } catch (signErr) {
-      console.error('Failed to sign read markers:', signErr);
-    }
+    // No plaintext fallback: per-category read timestamps are activity
+    // metadata about the user and must never sit unencrypted on public relays
+    // (laoc, 2026-09-21). Without NIP-44 the read state stays on this device
+    // via the localStorage mirror above; cross-device sync is simply off.
+    console.warn('[inbox] read markers not published: signer cannot NIP-44 encrypt:', err);
+    return;
   }
 
   if (!signed) return;
