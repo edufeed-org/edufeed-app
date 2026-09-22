@@ -22,6 +22,18 @@ function parseArray(value, defaultValue = []) {
 }
 
 /**
+ * Like parseArray, but the literal `none` yields [] — the way to switch a
+ * defaulted relay list OFF, since an empty env value means "use the default".
+ * @param {string | undefined} value
+ * @param {string[]} defaultValue
+ * @returns {string[]}
+ */
+function parseArrayOrNone(value, defaultValue = []) {
+  if (typeof value === 'string' && value.trim().toLowerCase() === 'none') return [];
+  return parseArray(value, defaultValue);
+}
+
+/**
  * Deployment-level muted words: notifications and DM requests whose content
  * contains one of these (case-insensitive substring, like the user's own
  * NIP-51 muted words) are dropped for EVERY user of this instance. Built for
@@ -271,11 +283,33 @@ export function GET() {
 
     // NIP-50 capable relays for free-text profile search (people pickers,
     // impersonation check). Lookup/fallback relays are NOT used for this —
-    // strfry rejects the `search` filter field.
-    profileSearchRelays: parseArray(env.PROFILE_SEARCH_RELAYS, [
-      'wss://relay.nostr.band',
-      'wss://nostr.wine'
+    // strfry rejects the `search` filter field. Default: Brainstorm's
+    // web-of-trust search relay, which ranks kind-0 hits by GrapeRank
+    // instead of returning the first substring match (nostr.wine handed
+    // back an empty junk "laoc" profile for "laoc"; laoc, 2026-09-21).
+    // `none` switches the remote leg off (follows + known profiles only).
+    profileSearchRelays: parseArrayOrNone(env.PROFILE_SEARCH_RELAYS, [
+      'wss://tags.brainstorm.world/relay'
     ]),
+
+    // Optional point of view for WoT-ranked profile search (npub or hex).
+    // Appended as `observer:<hex>` to the NIP-50 search string on relays
+    // that advertise the extension in NIP-11 (Brainstorm). Needs a
+    // Brainstorm account for that pubkey to have any effect; the relay
+    // falls back to its house perspective otherwise.
+    profileSearchObserver: env.PROFILE_SEARCH_OBSERVER?.trim() || null,
+
+    // NIP-85 trusted assertions (kind 30382): relays + provider keys whose
+    // rank/hops/followers scores order and annotate people-picker results.
+    // Never a hard filter — a teacher new to Nostr has no score anywhere.
+    // `none` for either switches the layer off.
+    trustAssertions: {
+      relays: parseArrayOrNone(env.TRUST_ASSERTION_RELAYS, ['wss://scores.brainstorm.world']),
+      providers: parseArrayOrNone(env.TRUST_ASSERTION_PROVIDERS, [
+        // Brainstorm house key ("Woody's Brainstorm Assistant")
+        'a64c7b8d9d89b9b399191c398002514c53cadf0712397a8ca0c36162813f4775'
+      ])
+    },
 
     // Default Blossom servers
     defaultBlossomServers: parseArray(env.DEFAULT_BLOSSOM_SERVERS, [

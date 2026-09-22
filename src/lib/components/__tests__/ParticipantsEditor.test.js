@@ -30,6 +30,14 @@ const PK_B = 'b'.repeat(64);
 const readParticipants = (el) => JSON.parse(el.textContent || '[]');
 
 describe('ParticipantsEditor', () => {
+  // Issue: the field only suggested the organiser's own follows, so anyone
+  // else on Nostr had to be pasted as an npub. Same mode as the community
+  // wizard's people step: known profiles + NIP-50 search, follows first.
+  it('searches profiles beyond the follow list', () => {
+    const { getByTestId } = render(Host);
+    expect(getByTestId('stub-search-profiles').textContent).toBe('true');
+  });
+
   it('adds a selected contact with default role and relay hint', async () => {
     const { getByTestId } = render(Host);
     getByTestId('stub-select-a').click();

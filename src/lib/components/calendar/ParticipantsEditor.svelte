@@ -149,6 +149,7 @@
         {disabled}
         acceptPubkeyInput={true}
         acceptNameInput={true}
+        searchProfiles={true}
         exclude={participants.map((p) => p.pubkey).filter((pk) => typeof pk === 'string')}
         onselect={(contact) => addParticipant(contact.pubkey)}
         onrawpubkey={(pubkey) => addParticipant(pubkey)}

@@ -11,11 +11,12 @@
  *     fields. Relays that reject `search` simply return nothing; callers
  *     must degrade gracefully.
  */
-import { Observable } from 'rxjs';
-import { tap } from 'rxjs/operators';
+import { Observable, from, merge } from 'rxjs';
+import { mergeMap, tap } from 'rxjs/operators';
 import { getProfileContent } from 'applesauce-core/helpers';
 import { pool, eventStore } from '$lib/stores/nostr-infrastructure.svelte';
-import { getProfileSearchRelays } from '$lib/helpers/relay-helper.js';
+import { getProfileSearchRelays, getProfileSearchObserver } from '$lib/helpers/relay-helper.js';
+import { getSearchExtensions } from '$lib/helpers/relay-search-extensions.js';
 
 /**
  * @typedef {import('$lib/stores/contacts.svelte.js').EnrichedContact} EnrichedContact
@@ -85,7 +86,23 @@ export function searchKnownProfiles(term, limit = 10, { exclude = [] } = {}) {
 }
 
 /**
+ * @param {string[]} relays
+ * @param {string} search
+ * @param {number} limit
+ */
+function searchLeg(relays, search, limit) {
+  return pool
+    .request(relays, { kinds: [0], search, limit }, /** @type {any} */ ({ timeout: 5000 }))
+    .pipe(tap((event) => eventStore.add(event)));
+}
+
+/**
  * Search kind-0 profiles by name on the NIP-50 search relays.
+ *
+ * With PROFILE_SEARCH_OBSERVER set, relays that advertise the `observer`
+ * search extension (NIP-11 `limitation.search_extensions`, e.g. Brainstorm)
+ * get `observer:<hex>` appended so hits are ranked from that pubkey's web
+ * of trust; every other relay receives the plain term.
  *
  * @param {string} name - free-text search term (profile name)
  * @param {number} [limit=10]
@@ -100,9 +117,22 @@ export function profileNameSearchLoader(name, limit = 10, relays = getProfileSea
     });
   }
 
-  const filter = { kinds: [0], search: trimmed, limit };
+  const observer = getProfileSearchObserver();
+  if (!observer) return searchLeg(relays, trimmed, limit);
 
-  return pool
-    .request(relays, filter, /** @type {any} */ ({ timeout: 5000 }))
-    .pipe(tap((event) => eventStore.add(event)));
+  const partition = Promise.all(
+    relays.map(async (url) => ({ url, wot: (await getSearchExtensions(url)).includes('observer') }))
+  ).then((probed) => ({
+    wot: probed.filter((r) => r.wot).map((r) => r.url),
+    plain: probed.filter((r) => !r.wot).map((r) => r.url)
+  }));
+
+  return from(partition).pipe(
+    mergeMap(({ wot, plain }) =>
+      merge(
+        ...(wot.length ? [searchLeg(wot, `${trimmed} observer:${observer}`, limit)] : []),
+        ...(plain.length ? [searchLeg(plain, trimmed, limit)] : [])
+      )
+    )
+  );
 }

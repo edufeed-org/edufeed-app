@@ -22,6 +22,11 @@ const defaultConfig = {
   indexerRelays: [],
   // NIP-50 capable relays for free-text profile search (PROFILE_SEARCH_RELAYS)
   profileSearchRelays: [],
+  profileSearchObserver: /** @type {string | null} */ (null),
+  trustAssertions: {
+    relays: /** @type {string[]} */ ([]),
+    providers: /** @type {string[]} */ ([])
+  },
   // Fallback relays for users without kind 10002
   fallbackRelays: [],
   // Default NIP-17 DM relays (kind 10050) published for new users at signup
@@ -279,6 +284,12 @@ export function initializeConfig(runtimeConfig) {
       runtimeConfig.relayListLookupRelays || defaultConfig.relayListLookupRelays,
     indexerRelays: runtimeConfig.indexerRelays || defaultConfig.indexerRelays,
     profileSearchRelays: runtimeConfig.profileSearchRelays || defaultConfig.profileSearchRelays,
+    profileSearchObserver:
+      runtimeConfig.profileSearchObserver || defaultConfig.profileSearchObserver,
+    trustAssertions: {
+      relays: runtimeConfig.trustAssertions?.relays || defaultConfig.trustAssertions.relays,
+      providers: runtimeConfig.trustAssertions?.providers || defaultConfig.trustAssertions.providers
+    },
     fallbackRelays: runtimeConfig.fallbackRelays || defaultConfig.fallbackRelays,
     dmRelays: runtimeConfig.dmRelays || defaultConfig.dmRelays,
     dmTrustedSenders: runtimeConfig.dmTrustedSenders || defaultConfig.dmTrustedSenders,
@@ -453,6 +464,12 @@ export const runtimeConfig = {
   },
   get profileSearchRelays() {
     return config.profileSearchRelays;
+  },
+  get profileSearchObserver() {
+    return config.profileSearchObserver;
+  },
+  get trustAssertions() {
+    return config.trustAssertions;
   },
   get fallbackRelays() {
     return config.fallbackRelays;
