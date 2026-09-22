@@ -27,6 +27,11 @@
   import { addressLoader } from '$lib/loaders/base.js';
   import { publishEvent } from '$lib/services/publish-service.js';
   import { appSettings } from '$lib/stores/app-settings.svelte.js';
+  import {
+    toggleSystemNotifications,
+    isNotificationPermissionDenied
+  } from '$lib/stores/notification-permission.svelte.js';
+  import { notificationsSupported } from '$lib/helpers/system-notifications.js';
   import DmRelaySettings from '$lib/components/dm/DmRelaySettings.svelte';
   import LocalCachePanel from '$lib/components/settings/LocalCachePanel.svelte';
   import { modalStore } from '$lib/stores/modal.svelte.js';
@@ -60,6 +65,19 @@
   /** @type {string|null} */
   let validationError = $state(null);
   let hasChanges = $state(false);
+
+  // System notifications: the browser offers no permission-change event, so
+  // the denied state is re-read after every toggle attempt.
+  let notificationsDenied = $state(isNotificationPermissionDenied());
+  /** @param {Event & {currentTarget: HTMLInputElement}} e */
+  async function onToggleNotifications(e) {
+    const input = e.currentTarget;
+    await toggleSystemNotifications();
+    notificationsDenied = isNotificationPermissionDenied();
+    // A refused prompt leaves the flag unchanged, so the `checked` binding
+    // has nothing to re-render — put the native checkbox back by hand.
+    input.checked = appSettings.systemNotificationsEnabled;
+  }
 
   // Blossom state
   let blossomLoading = $state(true);
@@ -1095,6 +1113,43 @@
               <span class="label-text font-medium">{m.settings_link_previews_label()}</span>
             </label>
           </div>
+        </div>
+      </div>
+
+      <!-- System notifications card -->
+      <div class="card mt-6 bg-base-100 shadow-xl" transition:fade={{ duration: 200 }}>
+        <div class="card-body">
+          <h2 class="mb-2 card-title text-2xl">
+            <span class="text-2xl">{m.settings_notifications_title()}</span>
+          </h2>
+          <p class="mb-6 text-base-content/70">
+            {m.settings_notifications_description()}
+          </p>
+
+          {#if !notificationsSupported()}
+            <p class="text-sm text-base-content/60" data-testid="notifications-unsupported">
+              {m.settings_notifications_unsupported()}
+            </p>
+          {:else}
+            <div class="form-control">
+              <label class="label cursor-pointer justify-start gap-4">
+                <input
+                  type="checkbox"
+                  class="toggle toggle-primary"
+                  data-testid="notifications-toggle"
+                  checked={appSettings.systemNotificationsEnabled}
+                  disabled={notificationsDenied}
+                  onchange={onToggleNotifications}
+                />
+                <span class="label-text font-medium">{m.settings_notifications_label()}</span>
+              </label>
+            </div>
+            {#if notificationsDenied}
+              <p class="mt-2 text-sm text-warning" data-testid="notifications-denied">
+                {m.settings_notifications_denied()}
+              </p>
+            {/if}
+          {/if}
         </div>
       </div>
 

@@ -98,24 +98,7 @@ export function resolveLevel(levels, communityId, channelId) {
   return level === 'mentions' || level === 'nothing' ? level : 'all';
 }
 
-/**
- * The complete OS-toast gate (spec §6), pure so every branch is unit-testable.
- * `startTime` is the service start in unix SECONDS (cache-replay guard);
- * `lastToastAt`/`now` are Date.now() MILLISECONDS (throttle).
- * @param {{createdAt: number, isMention: boolean, level: 'all'|'mentions'|'nothing',
- *   enabled: boolean, permissionGranted: boolean, tabVisible: boolean,
- *   isActiveChannel: boolean, marker: number, startTime: number,
- *   lastToastAt: number, now: number, throttleMs?: number}} args
- * @returns {boolean}
- */
-export function shouldToast(args) {
-  const throttleMs = args.throttleMs ?? 30_000;
-  if (!args.enabled || !args.permissionGranted) return false;
-  if (args.level === 'nothing') return false;
-  if (args.level === 'mentions' && !args.isMention) return false;
-  if (args.createdAt <= args.marker) return false;
-  if (args.createdAt <= args.startTime) return false;
-  if (args.tabVisible && args.isActiveChannel) return false;
-  if (args.now - args.lastToastAt < throttleMs) return false;
-  return true;
-}
+// The OS-toast gate (spec §6) is shared with the DM/inbox toasts — see
+// $lib/helpers/system-notifications.js; re-exported so Concord callers and
+// tests keep their import path.
+export { shouldToast } from '$lib/helpers/system-notifications.js';

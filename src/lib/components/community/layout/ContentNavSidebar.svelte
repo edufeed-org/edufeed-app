@@ -12,8 +12,6 @@
     BookmarkShareIcon,
     MeetIcon,
     PollIcon,
-    BellIcon,
-    BellSlashIcon,
     LockIcon,
     LockOpenIcon,
     PeopleIcon,
@@ -27,12 +25,7 @@
   import { useConcordCommunity } from '$lib/concord/community.svelte.js';
   import { parseGroupPointers } from '$lib/groups/community-pointer.js';
   import { communityNavTabIds, buildSidebarZones } from './community-nav.js';
-  import {
-    areaUnreadState,
-    channelUnreadState,
-    getToastsEnabled,
-    setToastsEnabled
-  } from '$lib/concord/notifications.svelte.js';
+  import { areaUnreadState, channelUnreadState } from '$lib/concord/notifications.svelte.js';
   import {
     getSelectedConcordChannel,
     selectConcordChannel,
@@ -221,12 +214,9 @@
     return `nav-channel-row-${key.replace(/[^a-zA-Z0-9]/g, '-')}`;
   }
 
-  // Notification bell + invite-inbox entry, moved here from
-  // PrivateChannelsView's rail when that rail became mobile-only
-  // (2026-08-17, "double sidebar") — on desktop this zone is the only
-  // channel surface, so its rail-only controls needed a home here. Same
-  // toggle logic as the rail's bell.
-  const concordSignerHasNip44 = $derived(getConcord().signerHasNip44);
+  // The per-channel notification bell that used to sit in this zone header
+  // is gone: system notifications are one app-wide, per-device opt-in on
+  // /settings (shared with DM and inbox toasts) — see notification-permission.
   // Area exists but hasn't caught up to the relay tip ('idle' pre-sync,
   // 'syncing' during; only 'live' means the row list is complete) — shown as
   // a small spinner in the zone header so an empty-looking zone right after
@@ -235,22 +225,6 @@
     const concord = getConcord();
     return !!concord.community && (concord.phase === 'syncing' || concord.phase === 'idle');
   });
-  const notificationSupported = typeof Notification !== 'undefined';
-  let permissionDenied = $state(notificationSupported && Notification.permission === 'denied');
-  const toastsOn = $derived(getToastsEnabled());
-
-  async function toggleToasts() {
-    if (getToastsEnabled()) {
-      await setToastsEnabled(false);
-      return;
-    }
-    if (Notification.permission !== 'granted') {
-      const permission = await Notification.requestPermission();
-      permissionDenied = permission === 'denied';
-      if (permission !== 'granted') return;
-    }
-    await setToastsEnabled(true);
-  }
 </script>
 
 {#snippet tabButton(
@@ -367,28 +341,6 @@
               data-testid="nav-kanaele-syncing"
               title={m.concord_sync_title()}
             ></span>
-          {/if}
-          {#if notificationSupported && concordSignerHasNip44}
-            <!-- Plain glyph, not btn-circle: the round button chrome pushed
-              the icon ~5px off the lock-badge column the rows above end in
-              (laoc, 2026-08-18). -->
-            <button
-              class="ml-auto cursor-pointer text-sm leading-none opacity-70 hover:opacity-100 disabled:cursor-not-allowed disabled:opacity-40"
-              data-testid="nav-concord-notif-bell"
-              disabled={permissionDenied}
-              title={permissionDenied
-                ? m.concord_notif_bell_denied()
-                : toastsOn
-                  ? m.concord_notif_bell_on()
-                  : m.concord_notif_bell_off()}
-              onclick={toggleToasts}
-            >
-              {#if toastsOn}
-                <BellIcon class_="w-3.5 h-3.5" title="" />
-              {:else}
-                <BellSlashIcon class_="w-3.5 h-3.5" title="" />
-              {/if}
-            </button>
           {/if}
         </div>
         {#snippet kanaeleRow(/** @type {any} */ row, /** @type {boolean} */ starred)}

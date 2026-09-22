@@ -8,6 +8,9 @@ vi.mock('$app/navigation', () => ({ goto: vi.fn() }));
 vi.mock('$lib/stores/nostr-infrastructure.svelte', () => ({
   eventStore: { getReplaceable: () => undefined }
 }));
+// The toast opt-in is the app-wide flag, not Concord storage any more.
+const settings = vi.hoisted(() => ({ systemNotificationsEnabled: false }));
+vi.mock('$lib/stores/app-settings.svelte.js', () => ({ appSettings: settings }));
 
 import {
   startConcordNotifications,
@@ -274,7 +277,8 @@ describe('concord notifications service', () => {
     }
     vi.stubGlobal('Notification', FakeNotification);
     const client = fakeClient();
-    const storage = fakeStorage({ 'notif:toasts-enabled': '1' });
+    settings.systemNotificationsEnabled = true;
+    const storage = fakeStorage();
     await startConcordNotifications({ client, storage, pubkey: ME });
     await flush();
     // Baseline fold (cache replay analog) — must NOT toast.
@@ -301,7 +305,8 @@ describe('concord notifications service', () => {
     vi.stubGlobal('Notification', FakeNotification);
     vi.spyOn(window, 'focus').mockImplementation(() => {});
     const client = fakeClient();
-    const storage = fakeStorage({ 'notif:toasts-enabled': '1' });
+    settings.systemNotificationsEnabled = true;
+    const storage = fakeStorage();
     await startConcordNotifications({ client, storage, pubkey: ME });
     await flush();
     // A DIFFERENT channel is already selected (mirrors a previously-viewed
@@ -333,7 +338,8 @@ describe('concord notifications service', () => {
     }
     vi.stubGlobal('Notification', FakeNotification);
     const client = fakeClient();
-    const storage = fakeStorage({ 'notif:toasts-enabled': '1' });
+    settings.systemNotificationsEnabled = true;
+    const storage = fakeStorage();
     await startConcordNotifications({ client, storage, pubkey: ME });
     await flush();
     client.timeline$.next([rumor({ created_at: 100 })]);
@@ -364,7 +370,8 @@ describe('concord notifications service', () => {
     }
     vi.stubGlobal('Notification', FakeNotification);
     const client = fakeClient();
-    const storage = fakeStorage({ 'notif:toasts-enabled': '1' });
+    settings.systemNotificationsEnabled = true;
+    const storage = fakeStorage();
     await startConcordNotifications({ client, storage, pubkey: ME });
     await flush();
     await setChannelLevel(CID, CH, 'mentions');

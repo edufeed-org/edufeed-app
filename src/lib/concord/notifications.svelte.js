@@ -26,12 +26,12 @@ import { goto } from '$app/navigation';
 import { getProfileContent } from 'applesauce-core/helpers';
 import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
 import { getUserDisplayName } from '$lib/helpers/message-utils.js';
+import { appSettings } from '$lib/stores/app-settings.svelte.js';
 import * as m from '$lib/paraglide/messages';
 
 const READ_KEY = 'notif:read';
 const MENTION_READ_KEY = 'notif:mention-read';
 const LEVELS_KEY = 'notif:levels';
-export const TOASTS_ENABLED_KEY = 'notif:toasts-enabled';
 
 /** @typedef {import('./notification-helpers.js').ChannelSummary} ChannelSummary */
 
@@ -40,7 +40,9 @@ let summaries = $state.raw(/** @type {Record<string, Record<string, ChannelSumma
 let readMarkers = $state.raw(/** @type {Record<string, number>} */ ({}));
 let mentionRead = $state.raw(/** @type {Record<string, number>} */ ({}));
 let levels = $state.raw(/** @type {Record<string, string>} */ ({}));
-let toastsEnabled = $state.raw(false);
+// The opt-in itself is the app-wide, per-device flag
+// appSettings.systemNotificationsEnabled (shared with DM and inbox toasts,
+// toggled on /settings) — Concord only keeps the per-channel levels.
 
 // Non-reactive service internals.
 /** @type {import('./storage.js').ConcordStorage | undefined} */
@@ -134,7 +136,7 @@ function maybeToast(communityId, channelId, rumors, prev, summary) {
     createdAt: newest.created_at ?? 0,
     isMention,
     level: resolveLevel(levels, communityId, channelId),
-    enabled: toastsEnabled,
+    enabled: appSettings.systemNotificationsEnabled,
     permissionGranted: Notification.permission === 'granted',
     tabVisible: typeof document !== 'undefined' && document.visibilityState === 'visible',
     isActiveChannel: active?.communityId === communityId && active?.channelId === channelId,
@@ -291,17 +293,15 @@ export async function startConcordNotifications({ client, storage: kv, pubkey })
   myPubkey = pubkey;
   startTime = Math.floor(Date.now() / 1000);
 
-  const [readRaw, mentionRaw, levelsRaw, enabledRaw] = await Promise.all([
+  const [readRaw, mentionRaw, levelsRaw] = await Promise.all([
     kv.getItem(READ_KEY).catch(() => null),
     kv.getItem(MENTION_READ_KEY).catch(() => null),
-    kv.getItem(LEVELS_KEY).catch(() => null),
-    kv.getItem(TOASTS_ENABLED_KEY).catch(() => null)
+    kv.getItem(LEVELS_KEY).catch(() => null)
   ]);
   if (myGeneration !== generation) return; // superseded while loading
   readMarkers = parseMap(readRaw);
   mentionRead = parseMap(mentionRaw);
   levels = parseMap(levelsRaw);
-  toastsEnabled = enabledRaw === '1';
 
   communitiesSub = client.communities$.subscribe((/** @type {any[]} */ communities) => {
     if (myGeneration !== generation) return;
@@ -379,7 +379,6 @@ export function stopConcordNotifications() {
   readMarkers = {};
   mentionRead = {};
   levels = {};
-  toastsEnabled = false;
   // eslint-disable-next-line svelte/prefer-svelte-reactivity -- internal throttle bookkeeping, not reactive state
   lastToastAt = new Map();
   clearConcordSelections();
@@ -449,21 +448,4 @@ export function getChannelLevel(communityId, channelId) {
 export async function setChannelLevel(communityId, channelId, level) {
   levels = { ...levels, [markerKey(communityId, channelId)]: level };
   persist(LEVELS_KEY, levels);
-}
-
-/** @returns {boolean} */
-export function getToastsEnabled() {
-  return toastsEnabled;
-}
-
-/** @param {boolean} enabled */
-export async function setToastsEnabled(enabled) {
-  toastsEnabled = enabled;
-  // Stored as the raw '1'/'0' string (not JSON) so callers/tests can assert
-  // the literal value; persist() would JSON-stringify it to '"1"'/'"0"'.
-  try {
-    await storage?.setItem(TOASTS_ENABLED_KEY, enabled ? '1' : '0');
-  } catch (error) {
-    console.warn('concord: notification state persist failed', error);
-  }
 }

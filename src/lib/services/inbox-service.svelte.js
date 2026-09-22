@@ -5,7 +5,7 @@
 import { createTimelineLoader } from 'applesauce-loaders/loaders';
 import { TimelineModel } from 'applesauce-core/models';
 import { finalizeDraft } from '$lib/helpers/event-factory.js';
-import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
+import { eventStore, pool } from '$lib/stores/nostr-infrastructure.svelte';
 import { timedPool, addressLoader, eventLoader } from '$lib/loaders/base.js';
 import { manager } from '$lib/stores/accounts.svelte';
 import { publishEvent } from '$lib/services/publish-service.js';
@@ -362,6 +362,29 @@ export function markItemAsRead(eventId) {
 }
 
 /**
+ * Open a standing REQ for live notifications and feed the event store; the
+ * TimelineModel subscription in initializeInbox() sees them like loaded ones.
+ * `group(relays, false)` rather than `pool.subscription`: the default drops
+ * relays whose socket is not ready yet, which on a fresh login is all of
+ * them (see subscribeToGiftWraps in dm-service for the full story).
+ * @param {string[]} relays
+ * @param {import('nostr-tools').Filter[]} filters
+ */
+function subscribeLive(relays, filters) {
+  if (!relays.length) return;
+  const sub = pool
+    .group(relays, false)
+    .subscription(filters)
+    .subscribe({
+      next: (event) => {
+        if (event && typeof event === 'object' && 'id' in event) eventStore.add(event);
+      },
+      error: (err) => console.warn('[inbox] live notification stream error', err)
+    });
+  subscriptions.push(sub);
+}
+
+/**
  * Initialize inbox for logged-in user.
  * @param {string} pubkey
  */
@@ -446,6 +469,15 @@ export function initializeInbox(pubkey) {
   const mainSub = mainLoader().subscribe();
   subscriptions.push(mainSub);
 
+  // Standing subscription from now on. The loaders above are one-shot
+  // (timedPool completes after 2 s), so without this the bell only learns
+  // about a new reaction or reply on the next page load — and the OS toasts
+  // (system-notifications.svelte.js) would never fire for the inbox. `since`
+  // is the moment we subscribe: history stays with the loaders.
+  const liveSince = Math.floor(Date.now() / 1000);
+  const liveFilters = buildMainFilter(pubkey, liveSince);
+  subscribeLive(relays, liveFilters);
+
   // Supplemental loader: the user's NIP-65 read relays. Reactions and other
   // p-tagged notifications are published outbox-model to these relays, which
   // may not overlap the app relay set (see issue #43). Read relays resolve
@@ -459,6 +491,7 @@ export function initializeInbox(pubkey) {
       limit: 50
     });
     subscriptions.push(supplementalLoader().subscribe());
+    subscribeLive(supplementalRelays, liveFilters);
   });
 
   // Model subscription — watch eventStore for matching events. Derived from the

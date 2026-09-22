@@ -354,6 +354,12 @@
       import('$lib/services/wave-service.svelte.js').then(({ initializeWaveToasts }) => {
         initializeWaveToasts(account.pubkey);
       });
+      // OS-level toasts for new DMs and inbox items (opt-in on /settings).
+      import('$lib/services/system-notifications.svelte.js').then(
+        ({ startSystemNotifications }) => {
+          startSystemNotifications(account.pubkey);
+        }
+      );
       // The rail's arrangement, encrypted to the user themselves. Wired here
       // rather than imported by the store so the store keeps no dependency on
       // the signer or the relays.
@@ -371,6 +377,9 @@
       });
       import('$lib/services/wave-service.svelte.js').then(({ cleanupWaveToasts }) => {
         cleanupWaveToasts();
+      });
+      import('$lib/services/system-notifications.svelte.js').then(({ stopSystemNotifications }) => {
+        stopSystemNotifications();
       });
       import('$lib/rail/rail-layout-sync.svelte.js').then(({ cleanupRailLayoutSync }) => {
         cleanupRailLayoutSync();
