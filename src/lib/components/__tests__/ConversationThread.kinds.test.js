@@ -7,9 +7,11 @@
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen } from '@testing-library/svelte';
 import { of } from 'rxjs';
+import { nip19 } from 'nostr-tools';
 
 const ME = 'a'.repeat(64);
 const PEER = 'b'.repeat(64);
+const COMMUNITY = 'c'.repeat(64);
 
 const threadEmission = vi.hoisted(() => ({
   value: { messages: [], reactionsByTarget: new Map() }
@@ -26,6 +28,7 @@ vi.mock('$lib/stores/nostr-infrastructure.svelte', () => ({
 }));
 vi.mock('$lib/stores/accounts.svelte', () => ({ useActiveUser: () => () => ({ pubkey: ME }) }));
 vi.mock('$lib/stores/profile-map.svelte.js', () => ({ useProfileMap: () => () => new Map() }));
+vi.mock('$lib/stores/user-profile.svelte.js', () => ({ useUserProfile: () => () => null }));
 vi.mock('$lib/stores/user-emoji-sets.svelte.js', () => ({ useUserEmojiSets: () => () => [] }));
 vi.mock('$lib/stores/action-runner.svelte.js', () => ({
   actionRunnerOptimistic: { run: vi.fn().mockResolvedValue(undefined) }
@@ -106,5 +109,27 @@ describe('ConversationThread message kinds', () => {
     });
     await screen.findByText('hallo');
     expect(screen.queryByTestId('dm-message-reactions')).toBeNull();
+  });
+
+  it('renders a group invite DM as an invite card with a join CTA', async () => {
+    const joinUrl = `https://dev.edufeed.org/c/${nip19.npubEncode(COMMUNITY)}?join=hMX6PYy4m37J`;
+    const invite = {
+      id: 'r4',
+      pubkey: PEER,
+      kind: 14,
+      created_at: 400,
+      tags: [['p', ME]],
+      content: `Du bist eingeladen, ALPIKA beizutreten. Öffne diesen Link:\n${joinUrl}`
+    };
+    threadEmission.value = { messages: [chat, invite], reactionsByTarget: new Map() };
+    render(ConversationThread, {
+      props: { conversationId: `${ME}:${PEER}`, participants: [ME, PEER] }
+    });
+    const card = await screen.findByTestId('dm-group-invite');
+    expect(card.querySelector('[data-testid="group-invite-cta"]')?.getAttribute('href')).toBe(
+      joinUrl
+    );
+    // The raw body is not rendered a second time underneath the card.
+    expect(screen.queryByText(/Öffne diesen Link/)).toBeNull();
   });
 });

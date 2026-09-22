@@ -10,6 +10,8 @@
   import { DmThreadModel } from '$lib/models/wrapped-dm.js';
   import { isDmFileRumor, reactionDisplayContent } from '$lib/helpers/dm-rumors.js';
   import DmFileMessage from '$lib/components/dm/DmFileMessage.svelte';
+  import GroupInviteCard from '$lib/components/dm/GroupInviteCard.svelte';
+  import { parseGroupInvite } from '$lib/groups/invite-link.js';
   import { getEncryptedContent } from 'applesauce-core/helpers/encrypted-content';
   import { SendLegacyMessage, ReplyToLegacyMessage } from 'applesauce-actions/actions';
   // Local NIP-17 actions: same rumor as applesauce's, plus NIP-30 `emoji`
@@ -485,7 +487,12 @@
               {:else if isDmFileRumor(message)}
                 <div data-testid="dm-file-bubble"><DmFileMessage rumor={message} /></div>
               {:else}
-                <NostrContentRenderer event={message} />
+                {@const invite = parseGroupInvite(message.content)}
+                {#if invite}
+                  <GroupInviteCard {invite} />
+                {:else}
+                  <NostrContentRenderer event={message} />
+                {/if}
               {/if}
             </div>
             {#if reactionsByTarget.get(message.id)?.length}
