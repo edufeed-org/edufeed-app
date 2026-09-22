@@ -2778,6 +2778,8 @@
   "licensed_image_input_add_button": "Choose image…",
   "profile_verified_chip": "Verified",
   "profile_unverified_chip": "Not verified",
+  "profile_community_chip": "Community",
+  "profile_open_community_button": "Open community",
   "profile_stat_posts": "Posts",
   "profile_message_button": "Message",
   "profile_zap_button": "Send a zap (tip)",

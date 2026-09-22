@@ -17,6 +17,7 @@
     GearIcon,
     LightningIcon,
     MessageSquareIcon,
+    PeopleIcon,
     PlusIcon
   } from '$lib/components/icons';
   import * as m from '$lib/paraglide/messages';
@@ -36,6 +37,7 @@
    *   followLoading: boolean,
    *   postsCount: number,
    *   editing: boolean,
+   *   isCommunity?: boolean,
    *   onFollow: () => void,
    *   onToggleEdit: () => void,
    *   onEditProfile: () => void
@@ -54,6 +56,7 @@
     followLoading,
     postsCount,
     editing,
+    isCommunity = false,
     onFollow,
     onToggleEdit,
     onEditProfile
@@ -68,6 +71,9 @@
   // pill below shows — never a placeholder word, which reads as a real name to
   // anyone looking at the profile.
   let displayName = $derived(getDisplayName(profile) || npubShort);
+  // A community is an npub, so its key also carries a plain kind 0 and lands
+  // here like any person. The community page lives at /c/<npub> (hex 308s).
+  let communityHref = $derived(resolve(`/c/${npub || pubkey}`));
 
   async function copyNpub() {
     try {
@@ -116,6 +122,12 @@
             {m.profile_unverified_chip()}
           </span>
         {/if}
+        {#if isCommunity}
+          <a class="pf-chip community" href={communityHref} data-testid="profile-community-chip">
+            <PeopleIcon class_="w-3 h-3" />
+            {m.profile_community_chip()}
+          </a>
+        {/if}
       </h1>
 
       {#if nip05Status === 'verified' && nip05s.length > 0}
@@ -145,6 +157,12 @@
     </div>
 
     <div class="pf-btns">
+      {#if isCommunity}
+        <a class="pf-btn ghost" href={communityHref} data-testid="open-community-button">
+          <PeopleIcon class_="w-4 h-4" />
+          {m.profile_open_community_button()}
+        </a>
+      {/if}
       {#if isOwnProfile}
         <button
           class="pf-btn solid"
@@ -275,7 +293,11 @@
   }
   .pf-identity {
     flex: 1;
-    min-width: 0;
+    /* Floor instead of 0: with the community button the action row can grow
+       to four buttons, which otherwise squeezes the identity column until the
+       nowrap npub pill overflows into the buttons. Below the floor the
+       button row wraps instead. */
+    min-width: min(300px, 100%);
     padding-bottom: 4px;
   }
   .pf-identity h1 {
@@ -312,6 +334,14 @@
   .pf-chip.unverified {
     background: var(--color-warning);
     color: var(--color-warning-content);
+  }
+  .pf-chip.community {
+    background: var(--color-accent);
+    color: var(--color-accent-content);
+    text-decoration: none;
+  }
+  .pf-chip.community:hover {
+    background: color-mix(in oklch, var(--color-accent) 85%, var(--c-ink));
   }
 
   .pf-nip05s {

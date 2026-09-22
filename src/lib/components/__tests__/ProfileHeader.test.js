@@ -27,6 +27,7 @@ function baseProps(overrides = {}) {
     followLoading: false,
     postsCount: 0,
     editing: false,
+    isCommunity: false,
     onFollow: vi.fn(),
     onToggleEdit: vi.fn(),
     onEditProfile: vi.fn(),
@@ -141,6 +142,54 @@ describe('<ProfileHeader>', () => {
     const heading = container.querySelector('.pf-identity h1')?.textContent || '';
     expect(heading).not.toMatch(/anonymous/i);
     expect(heading).toContain('npub1');
+  });
+
+  // A community IS an npub, so its key also carries a plain kind 0 and lands
+  // on /p like any person. Without a marker nothing tells the visitor that a
+  // community page exists for this key (issue: show community on profile).
+  describe('community marker', () => {
+    it('shows a community chip and an open-community button linking to /c/<npub>', () => {
+      const { container } = render(ProfileHeader, baseProps({ isCommunity: true }));
+      const chip = container.querySelector('[data-testid="profile-community-chip"]');
+      expect(chip).toBeTruthy();
+      expect(chip.getAttribute('href')).toContain(`/c/${NPUB}`);
+      const btn = container.querySelector('[data-testid="open-community-button"]');
+      expect(btn).toBeTruthy();
+      expect(btn.getAttribute('href')).toContain(`/c/${NPUB}`);
+    });
+
+    it('renders neither marker when the pubkey is not a community', () => {
+      const { container } = render(ProfileHeader, baseProps({ isCommunity: false }));
+      expect(container.querySelector('[data-testid="profile-community-chip"]')).toBeFalsy();
+      expect(container.querySelector('[data-testid="open-community-button"]')).toBeFalsy();
+    });
+
+    it('defaults to no marker when the prop is omitted', () => {
+      const props = baseProps();
+      delete props.isCommunity;
+      const { container } = render(ProfileHeader, props);
+      expect(container.querySelector('[data-testid="profile-community-chip"]')).toBeFalsy();
+    });
+
+    it('keeps the open-community button for anonymous visitors and for the owner', () => {
+      const anon = render(ProfileHeader, baseProps({ isCommunity: true, activeUser: null }));
+      expect(anon.container.querySelector('[data-testid="open-community-button"]')).toBeTruthy();
+      anon.unmount();
+      const owner = render(
+        ProfileHeader,
+        baseProps({ isCommunity: true, isOwnProfile: true, activeUser: { pubkey: PUBKEY } })
+      );
+      expect(owner.container.querySelector('[data-testid="open-community-button"]')).toBeTruthy();
+    });
+
+    it('coexists with the verified chip', () => {
+      const { container } = render(
+        ProfileHeader,
+        baseProps({ isCommunity: true, nip05Status: 'verified' })
+      );
+      expect(container.querySelector('[data-testid="profile-verified-chip"]')).toBeTruthy();
+      expect(container.querySelector('[data-testid="profile-community-chip"]')).toBeTruthy();
+    });
   });
 
   it('shows the posts stat only when a count is available', () => {

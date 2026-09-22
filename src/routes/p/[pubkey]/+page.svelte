@@ -15,6 +15,7 @@
   import { modalStore } from '$lib/stores/modal.svelte.js';
   import { showToast } from '$lib/helpers/toast';
   import { useProfileBadges } from '$lib/stores/badge-awards.svelte.js';
+  import { useCommunityType } from '$lib/stores/community-type.svelte.js';
   import { useProfileMap } from '$lib/stores/profile-map.svelte.js';
   import { useNip05Status } from '$lib/stores/nip05-status.svelte.js';
   import { getProfileNip05s } from '$lib/helpers/nip05-verify.js';
@@ -70,6 +71,11 @@
 
   // Accepted badges (NIP-58 profile_badges)
   const profileBadges = useProfileBadges(() => data.pubkey);
+  // Communities are npubs: a kind 10222 on this key means /c/<npub> exists.
+  // useCommunityType yields null while unknown and a type once the 10222 is
+  // in the store, so non-null doubles as the "is a community" signal.
+  const getCommunityType = useCommunityType(() => data.pubkey);
+  let isCommunity = $derived(getCommunityType() !== null);
   const getBadges = profileBadges.getBadges;
   const getIssuerProfiles = useProfileMap(() => getBadges().map((b) => b.issuerPubkey));
 
@@ -450,6 +456,7 @@
       {followLoading}
       postsCount={tabCounts.posts}
       editing={editingTabs}
+      {isCommunity}
       onFollow={handleFollow}
       onToggleEdit={toggleTabEditing}
       onEditProfile={openEditModal}
