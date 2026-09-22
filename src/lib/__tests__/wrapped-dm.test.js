@@ -16,13 +16,17 @@ const ensureDmRelayList = vi.hoisted(() => vi.fn().mockResolvedValue(undefined))
 const ensureRecipientDmRelays = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
 const run = vi.hoisted(() => vi.fn().mockResolvedValue('sent'));
 const SendWrappedMessage = vi.hoisted(() => ({ __action: 'SendWrappedMessage' }));
+const StockSendWrappedMessage = vi.hoisted(() => ({ __action: 'applesauce SendWrappedMessage' }));
 
 vi.mock('$lib/services/dm-relay-backfill.js', () => ({ ensureDmRelayList }));
 vi.mock('$lib/services/dm-recipient-relays.js', () => ({ ensureRecipientDmRelays }));
 vi.mock('$lib/stores/action-runner.svelte.js', () => ({
   actionRunnerOptimistic: { run }
 }));
-vi.mock('applesauce-actions/actions', () => ({ SendWrappedMessage }));
+// The default action is the app's own variant (`$lib/actions/dm-actions.js`),
+// which prunes mention-derived p-tags — never applesauce's stock one.
+vi.mock('$lib/actions/dm-actions.js', () => ({ SendWrappedMessage }));
+vi.mock('applesauce-actions/actions', () => ({ SendWrappedMessage: StockSendWrappedMessage }));
 
 const { sendWrappedDm } = await import('$lib/services/wrapped-dm.js');
 
@@ -69,6 +73,13 @@ describe('sendWrappedDm', () => {
 
     expect(ensureRecipientDmRelays).toHaveBeenCalledWith(['peer1']);
     expect(run).toHaveBeenCalledWith(SendWrappedMessage, 'peer1', 'hi');
+  });
+
+  it('defaults to the app DM action, not the stock applesauce one', async () => {
+    await sendWrappedDm('peer1', 'hi');
+
+    expect(run.mock.calls[0][0]).toBe(SendWrappedMessage);
+    expect(run.mock.calls[0][0]).not.toBe(StockSendWrappedMessage);
   });
 
   it('runs the action the caller asked for, e.g. a threaded reply', async () => {

@@ -13,6 +13,7 @@
 import { describe, it, expect } from 'vitest';
 import { SendWrappedMessage, ReplyToWrappedMessage } from '$lib/actions/dm-actions.js';
 import { parseEventContent } from '$lib/helpers/nostrContent.js';
+import { nip19 } from 'nostr-tools';
 
 const ME = 'a'.repeat(64);
 const PEER = 'b'.repeat(64);
@@ -120,6 +121,70 @@ describe('ReplyToWrappedMessage (with custom emojis)', () => {
     );
 
     expect(emojiTags(rumor)).toEqual([['emoji', 'dogedance_sm', DOGE.url]]);
+    expect(rumor.tags.some((t) => t[0] === 'e' && t[1] === parent.id)).toBe(true);
+  });
+});
+
+describe('mention-derived p-tags (issue: relay identity became a DM participant)', () => {
+  // applesauce builds the kind-14 rumor with `setShortTextContent`, which
+  // p-tags every pubkey behind a `nostr:` pointer in the body. A group invite
+  // carries `nostr:naddr…` whose author is the relay's NIP-11 `self` key, so
+  // the relay identity turned into a third conversation participant — shown
+  // as a nameless hex sender — and even received its own gift-wrap copy.
+  // NIP-17: the p-tags are the receivers, nothing else.
+  const RELAY = 'd'.repeat(64);
+  const THIRD = 'e'.repeat(64);
+  const groupNaddr = nip19.naddrEncode({
+    kind: 39000,
+    pubkey: RELAY,
+    identifier: 'abc123',
+    relays: ['wss://groups.example.org']
+  });
+  const invite = `Du bist eingeladen.\nhttps://app.example/join\nnostr:${groupNaddr}?invite=hMX6PYy4m37J`;
+
+  /** @param {{ tags: string[][] }} rumor */
+  const pTags = (rumor) => rumor.tags.filter((t) => t[0] === 'p').map((t) => t[1]);
+
+  it('does not p-tag the author of an naddr mentioned in the body', async () => {
+    const { rumor } = await runAction(SendWrappedMessage([ME, PEER], invite));
+
+    expect(pTags(rumor)).toEqual([ME, PEER]);
+    expect(rumor.content).toContain(`nostr:${groupNaddr}?invite=`);
+  });
+
+  it('does not p-tag a third party mentioned via nostr:npub', async () => {
+    const npub = nip19.npubEncode(THIRD);
+    const { rumor } = await runAction(SendWrappedMessage([ME, PEER], `schau mal nostr:${npub}`));
+
+    expect(pTags(rumor)).toEqual([ME, PEER]);
+  });
+
+  it('keeps a mentioned pubkey that is a participant anyway, once', async () => {
+    const npub = nip19.npubEncode(PEER);
+    const { rumor } = await runAction(SendWrappedMessage([ME, PEER], `hi nostr:${npub}`));
+
+    expect(pTags(rumor)).toEqual([ME, PEER]);
+  });
+
+  it('accepts a single recipient string and still prunes mentions', async () => {
+    const { rumor } = await runAction(SendWrappedMessage(PEER, invite));
+
+    expect(pTags(rumor)).toEqual([PEER]);
+  });
+
+  it('keeps a reply addressed to the parent sender only', async () => {
+    /** @type {import('applesauce-common/helpers/gift-wrap').Rumor} */
+    const parent = {
+      id: 'c'.repeat(64),
+      kind: 14,
+      pubkey: PEER,
+      content: 'hi',
+      created_at: 1_700_000_000,
+      tags: [['p', ME]]
+    };
+    const { rumor } = await runAction(ReplyToWrappedMessage(parent, invite));
+
+    expect(pTags(rumor)).toEqual([ME]);
     expect(rumor.tags.some((t) => t[0] === 'e' && t[1] === parent.id)).toBe(true);
   });
 });
