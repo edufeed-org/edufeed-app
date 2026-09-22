@@ -127,8 +127,7 @@ describe('inbox read markers', () => {
 
       const stored = JSON.parse(localStorageMock.raw()[MARKERS_KEY]);
       const now = Math.floor(Date.now() / 1000);
-      expect(stored.global).toBe(now);
-      expect(stored.reaction).toBe(now);
+      expect(stored).toEqual({ global: now });
     });
 
     it('restores them on the next init without any relay round trip', () => {
@@ -148,45 +147,63 @@ describe('inbox read markers', () => {
     });
   });
 
-  describe('the kind 30078 subscription never downgrades the state', () => {
-    /** @param {string} content */
-    const emit = async (content) => {
-      for (const cb of markerCallbacks) await cb({ kind: 30078, content, pubkey: 'user123' });
+  describe('the kind 30078 subscription reads created_at and never downgrades the state', () => {
+    /**
+     * The marker event carries its value in `created_at` (Jumble's model);
+     * the content is a constant sentence and is never interpreted.
+     * @param {number} created_at
+     * @param {string} [content]
+     */
+    const emit = async (created_at, content = service.READ_MARKER_CONTENT) => {
+      for (const cb of markerCallbacks) {
+        await cb({ kind: 30078, content, created_at, pubkey: 'user123' });
+      }
     };
 
     it('keeps the local markers when the relay copy is older', async () => {
-      localStorageMock.setItem(MARKERS_KEY, JSON.stringify({ global: 2000, reaction: 2000 }));
-      service.initializeInbox('user123');
-
-      await emit(JSON.stringify({ global: 1000, reaction: 1000 }));
-
-      expect(service.getReadMarkers()).toEqual({ global: 2000, reaction: 2000 });
-      expect(service.isNotificationUnread(notif(1500))).toBe(false);
-    });
-
-    it('takes the newest timestamp per type from either side', async () => {
-      localStorageMock.setItem(MARKERS_KEY, JSON.stringify({ global: 2000, reaction: 1000 }));
-      service.initializeInbox('user123');
-
-      await emit(JSON.stringify({ global: 1000, reaction: 3000, comment: 4000 }));
-
-      expect(service.getReadMarkers()).toEqual({ global: 2000, reaction: 3000, comment: 4000 });
-    });
-
-    it('does not wipe the markers when the content cannot be parsed', async () => {
       localStorageMock.setItem(MARKERS_KEY, JSON.stringify({ global: 2000 }));
       service.initializeInbox('user123');
 
-      await emit('!!! undecryptable garbage !!!');
+      await emit(1000);
 
       expect(service.getReadMarkers()).toEqual({ global: 2000 });
       expect(service.isNotificationUnread(notif(1500))).toBe(false);
     });
 
-    it('decrypts a NIP-44 encrypted marker', async () => {
+    it('takes the relay timestamp when it is newer', async () => {
+      localStorageMock.setItem(MARKERS_KEY, JSON.stringify({ global: 1000 }));
       service.initializeInbox('user123');
 
-      await emit(`CIPHER(${JSON.stringify({ global: 2000 })})`);
+      await emit(3000);
+
+      expect(service.getReadMarkers()).toEqual({ global: 3000 });
+      expect(service.isNotificationUnread(notif(2500))).toBe(false);
+    });
+
+    it('reads a legacy plaintext JSON marker by its created_at, not its content', async () => {
+      service.initializeInbox('user123');
+
+      await emit(2000, JSON.stringify({ global: 1990, reaction: 1990, comment: 5000 }));
+
+      expect(service.getReadMarkers()).toEqual({ global: 2000 });
+    });
+
+    it('reads a legacy NIP-44 encrypted marker without decrypting anything', async () => {
+      signer.nip44.decrypt.mockClear();
+      service.initializeInbox('user123');
+
+      await emit(2000, `CIPHER(${JSON.stringify({ global: 1990 })})`);
+
+      expect(service.getReadMarkers()).toEqual({ global: 2000 });
+      expect(signer.nip44.decrypt).not.toHaveBeenCalled();
+    });
+
+    it('ignores an event without a usable created_at', async () => {
+      localStorageMock.setItem(MARKERS_KEY, JSON.stringify({ global: 2000 }));
+      service.initializeInbox('user123');
+
+      await emit(/** @type {any} */ (undefined));
+      await emit(Number.NaN);
 
       expect(service.getReadMarkers()).toEqual({ global: 2000 });
     });
@@ -194,7 +211,7 @@ describe('inbox read markers', () => {
     it('writes what it learned back to the local mirror', async () => {
       service.initializeInbox('user123');
 
-      await emit(JSON.stringify({ global: 2000 }));
+      await emit(2000);
 
       expect(JSON.parse(localStorageMock.raw()[MARKERS_KEY])).toEqual({ global: 2000 });
     });
@@ -245,31 +262,51 @@ describe('inbox read markers', () => {
     });
   });
 
-  describe('encryption', () => {
-    it('encrypts the marker to the user instead of falling back to plaintext', async () => {
+  describe('publishing', () => {
+    it('publishes a constant content and carries the read time in created_at', async () => {
       service.initializeInbox('user123');
       await service.markAsRead();
 
-      expect(signer.signEvent).toHaveBeenCalled();
+      expect(signer.signEvent).toHaveBeenCalledTimes(1);
       const draft = signer.signEvent.mock.calls.at(-1)[0];
-      expect(draft.content.startsWith('CIPHER(')).toBe(true);
-      expect(JSON.parse(draft.content.slice(7, -1)).global).toBe(Math.floor(Date.now() / 1000));
+      expect(draft.kind).toBe(30078);
+      expect(draft.tags).toContainEqual(['d', 'comcal/inbox/last-seen']);
+      expect(draft.content).toBe(service.READ_MARKER_CONTENT);
+      expect(() => JSON.parse(draft.content)).toThrow();
+      expect(draft.created_at).toBe(Math.floor(Date.now() / 1000));
+      expect(signer.nip44.encrypt).not.toHaveBeenCalled();
     });
 
-    it('never publishes plaintext when the signer cannot encrypt', async () => {
-      signer.nip44.encrypt.mockRejectedValueOnce(new Error('no nip44'));
+    it('needs no NIP-44 from the signer', async () => {
+      const { manager } = await import('$lib/stores/accounts.svelte');
+      const plainSigner = { getPublicKey: signer.getPublicKey, signEvent: signer.signEvent };
+      const previous = manager.active;
+      manager.active = { signer: plainSigner };
+      try {
+        service.initializeInbox('user123');
+        await service.markAsRead();
+        expect(publishEvent).toHaveBeenCalledTimes(1);
+      } finally {
+        manager.active = previous;
+      }
+    });
 
+    it('throttles the relay publish to once per 10 minutes while the local state keeps moving', async () => {
       service.initializeInbox('user123');
       await service.markAsRead();
+      const first = Math.floor(Date.now() / 1000);
 
-      // Read timestamps are activity metadata about the user: without NIP-44
-      // they stay on this device (localStorage mirror) and nothing is signed
-      // or sent to relays.
-      expect(signer.signEvent).not.toHaveBeenCalled();
-      expect(publishEvent).not.toHaveBeenCalled();
-      const now = Math.floor(Date.now() / 1000);
-      expect(service.getReadMarkers()?.global).toBe(now);
-      expect(JSON.parse(localStorageMock.raw()[MARKERS_KEY]).global).toBe(now);
+      vi.advanceTimersByTime(5 * 60 * 1000);
+      await service.markAsRead();
+      expect(publishEvent).toHaveBeenCalledTimes(1);
+      expect(service.getReadMarkers()?.global).toBe(first + 5 * 60);
+      expect(JSON.parse(localStorageMock.raw()[MARKERS_KEY]).global).toBe(first + 5 * 60);
+
+      vi.advanceTimersByTime(6 * 60 * 1000);
+      await service.markAsRead();
+      expect(publishEvent).toHaveBeenCalledTimes(2);
+      const draft = signer.signEvent.mock.calls.at(-1)[0];
+      expect(draft.created_at).toBe(first + 11 * 60);
     });
 
     it('keeps the read state locally even when publishing fails outright', async () => {

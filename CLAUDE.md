@@ -455,7 +455,7 @@ AMB resource search (NIP-50), SKOS filters, and the resource form variants are c
 ## DMs & Inbox
 
 - **NIP-17 DMs:** `src/lib/services/dm-service.svelte.js` subscribes to kind 1059 gift wraps (`#p` = user) on the user's DM relays (kind 10050); sending goes through `gift-wrap-publish.js`. New users get a default kind 10050 pointing at `DM_RELAYS` at signup.
-- **Inbox/notifications:** `src/lib/services/inbox-service.svelte.js`. Last-seen is synced as NIP-78 app data (d-tag `comcal/inbox/last-seen` — legacy name, do not change; existing users' state depends on it), per-item read state in localStorage. Notifications are intentionally **ungated**: the inbox always queries fallback + user read relays even in gated mode — do not re-gate.
+- **Inbox/notifications:** `src/lib/services/inbox-service.svelte.js`. Last-seen is synced as NIP-78 app data (d-tag `comcal/inbox/last-seen` — legacy name, do not change; existing users' state depends on it): the marker's value is the event's `created_at`, its content is a constant string (never JSON, never encrypted — Jumble's model), and it is published at most every 10 minutes per pubkey; the exact state lives in a localStorage mirror (single `global` key). Per-item read state in localStorage. Notifications are intentionally **ungated**: the inbox always queries fallback + user read relays even in gated mode — do not re-gate.
 
 ## Calendar Events (NIP-52)
 
