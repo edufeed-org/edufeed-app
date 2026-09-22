@@ -367,6 +367,8 @@
                 roles={rosterRolesOf(pubkey)}
                 actions={rowActions}
                 {roleOptions}
+                communityId={communikeyEvent?.pubkey}
+                admins={getRootRoster().admins}
                 onRosterChanged={getRootRoster().refresh}
               />
             {/if}
@@ -398,6 +400,7 @@
             pointer={rosterPointer}
             metadata={{ name: getDisplayName(communityProfile) }}
             communityId={communikeyEvent?.pubkey}
+            admins={getRootRoster().admins}
             members={getRootRoster().members}
             onRosterChanged={getRootRoster().refresh}
           />

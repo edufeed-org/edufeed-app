@@ -7,7 +7,12 @@
  * @vitest-environment node
  */
 import { describe, it, expect } from 'vitest';
-import { nostrIdFromUrl, truncateMiddle, splitNostrIds } from '$lib/helpers/link-render.js';
+import {
+  nostrIdFromUrl,
+  previewableNostrId,
+  truncateMiddle,
+  splitNostrIds
+} from '$lib/helpers/link-render.js';
 
 describe('nostrIdFromUrl', () => {
   it('extracts an naddr from an app URL path', () => {
@@ -59,6 +64,34 @@ describe('splitNostrIds', () => {
     const b = 'naddr1' + 'b'.repeat(20);
     const segs = splitNostrIds(`${a} and ${b}`);
     expect(segs).toEqual([{ id: a }, { text: ' and ' }, { id: b }]);
+  });
+
+  // A `?join=` / `?invite=` query is the payload of a group invite — replacing
+  // the URL with a preview chip silently threw it away (laoc, 2026-09-22).
+  it('leaves an app URL with a query string as plain text', () => {
+    const text = 'Join: https://edufeed.org/c/npub1xyz789abc?join=hMX6PYy4m37J now';
+    expect(splitNostrIds(text)).toEqual([{ text }]);
+  });
+
+  it('leaves a nostr: URI with a query string as plain text', () => {
+    const text = 'nostr:naddr1qqqq?invite=hMX6PYy4m37J';
+    expect(splitNostrIds(text)).toEqual([{ text }]);
+  });
+
+  it('still splits an id that is followed by a bare question mark', () => {
+    const segs = splitNostrIds('seen nostr:npub1xyz789abc? yes');
+    expect(segs).toEqual([{ text: 'seen ' }, { id: 'npub1xyz789abc' }, { text: '? yes' }]);
+  });
+});
+
+describe('previewableNostrId', () => {
+  it('returns the id for a plain app URL', () => {
+    expect(previewableNostrId('https://edufeed.org/p/npub1xyz789abc')).toBe('npub1xyz789abc');
+  });
+
+  it('returns null when the URL carries a query string (the params would be lost)', () => {
+    expect(previewableNostrId('https://edufeed.org/c/npub1xyz789abc?join=hMX6PYy4m37J')).toBeNull();
+    expect(previewableNostrId('https://edufeed.org/naddr1qqqq?view=channels')).toBeNull();
   });
 });
 

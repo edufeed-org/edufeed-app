@@ -9,8 +9,13 @@ const NOSTR_ID_RE = /(?:nostr:)?(npub|nprofile|note|nevent|naddr)1[a-z0-9]+/i;
 // Matches a NIP-19 id optionally wrapped in a URL (e.g. an app link like
 // `http://localhost:5173/naddr1…`) or a `nostr:` URI. The leading URL prefix is
 // consumed so the whole token is replaced by the preview card, not left dangling.
+// A trailing `?query` is consumed too, so `hasQuery` can veto the preview: a
+// `?join=` / `?invite=` payload must not be thrown away for a chip.
 const URL_OR_NOSTR_ID_RE =
-  /(?:https?:\/\/\S*?)?(?:nostr:)?(?:npub|nprofile|note|nevent|naddr)1[a-z0-9]+/gi;
+  /(?:https?:\/\/\S*?)?(?:nostr:)?(?:npub|nprofile|note|nevent|naddr)1[a-z0-9]+(?:\?[^\s?]+)?/gi;
+
+/** @param {string} url */
+const hasQuery = (url) => /\?[^\s?]/.test(url);
 
 /**
  * Pull a bare NIP-19 identifier out of an app URL (or a `nostr:` URI) so the
@@ -25,6 +30,19 @@ export function nostrIdFromUrl(url) {
   const match = url.match(NOSTR_ID_RE);
   if (!match) return null;
   return match[0].replace(/^nostr:/i, '');
+}
+
+/**
+ * Like `nostrIdFromUrl`, but null when the URL carries a query string. Use it
+ * wherever the id would *replace* the link (preview chip/card): the query is
+ * often the payload — a group invite's `?join=<code>` — and a chip drops it.
+ *
+ * @param {string} url
+ * @returns {string|null}
+ */
+export function previewableNostrId(url) {
+  if (typeof url === 'string' && hasQuery(url)) return null;
+  return nostrIdFromUrl(url);
 }
 
 /**
@@ -48,7 +66,7 @@ export function splitNostrIds(text) {
   URL_OR_NOSTR_ID_RE.lastIndex = 0;
   let match;
   while ((match = URL_OR_NOSTR_ID_RE.exec(text)) !== null) {
-    const id = nostrIdFromUrl(match[0]);
+    const id = previewableNostrId(match[0]);
     if (!id) continue;
     if (match.index > lastIndex) segments.push({ text: text.slice(lastIndex, match.index) });
     segments.push({ id });

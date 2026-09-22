@@ -25,6 +25,7 @@ vi.mock('$lib/stores/accounts.svelte', () => ({
 vi.mock('$lib/stores/profile-map.svelte.js', () => ({
   useProfileMap: () => () => new Map()
 }));
+vi.mock('$lib/stores/user-profile.svelte.js', () => ({ useUserProfile: () => () => null }));
 vi.mock('$lib/stores/user-emoji-sets.svelte.js', () => ({
   useUserEmojiSets: () => () => [{ packName: 'Doge', emojis: [DOGE] }]
 }));

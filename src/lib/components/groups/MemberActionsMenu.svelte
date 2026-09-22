@@ -19,6 +19,7 @@
     buildRemoveUserTemplate,
     publishToGroupRelay
   } from '$lib/groups/group-management.js';
+  import { resolveGroupActor } from '$lib/groups/group-actor.js';
   import { pool } from '$lib/stores/nostr-infrastructure.svelte';
   import { useActiveUser } from '$lib/stores/accounts.svelte';
   import { isPublisher, withPublisherRole, withoutPublisherRole } from '$lib/groups/roles.js';
@@ -34,6 +35,8 @@
    *   roles?: string[],
    *   actions: { togglePublisher?: boolean, promote?: boolean, demote?: boolean, remove?: boolean },
    *   roleOptions?: string[],
+   *   communityId?: string | null,
+   *   admins?: {pubkey: string, roles: string[]}[],
    *   onRosterChanged?: () => void,
    *   onMemberAdded?: ((pubkey: string) => void | Promise<void>) | null
    * }}
@@ -45,6 +48,8 @@
     roles = [],
     actions,
     roleOptions = [],
+    communityId = null,
+    admins = [],
     onRosterChanged,
     onMemberAdded = null
   } = $props();
@@ -63,7 +68,7 @@
 
   /** @param {string[]} newRoles */
   async function putUser(newRoles) {
-    const user = getActiveUser();
+    const user = resolveGroupActor(getActiveUser(), admins, communityId);
     if (!user) return;
     busy = true;
     try {
@@ -98,7 +103,7 @@
   }
 
   async function removeMember() {
-    const user = getActiveUser();
+    const user = resolveGroupActor(getActiveUser(), admins, communityId);
     if (!user) return;
     removeDialogOpen = false;
     busy = true;

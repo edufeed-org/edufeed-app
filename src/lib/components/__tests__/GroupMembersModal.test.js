@@ -6,7 +6,7 @@
  * roster mutation: every action calls onRosterChanged so GroupChat re-requests
  * 39001/39002 from the relay.
  */
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/svelte';
 
 // vi.mock factories are hoisted above these consts, so everything the mock
@@ -75,6 +75,12 @@ vi.mock('$lib/groups/group-management.js', () => ({
 }));
 vi.mock('$lib/services/wrapped-dm.js', () => ({ sendWrappedDm }));
 vi.mock('$lib/groups/relay-self.js', () => ({ fetchRelaySelf }));
+// Key-holding owner state, settable per test (default: no community key).
+const communitySigner = vi.hoisted(() => ({ value: /** @type {any} */ (null) }));
+vi.mock('$lib/helpers/community-signer.js', () => ({
+  getCommunitySigner: () => communitySigner.value,
+  isCommunityOwner: () => communitySigner.value !== null
+}));
 vi.mock('$lib/stores/nostr-infrastructure.svelte', () => ({
   pool: { relay: vi.fn(() => relaySentinel) }
 }));
@@ -119,9 +125,7 @@ vi.mock('$lib/paraglide/messages', () => ({
   groups_members_grant_publisher: () => 'Make publisher',
   groups_members_revoke_publisher: () => 'Remove publisher',
   group_invite_dm_action: () => 'Invite via DM',
-  group_invite_dm_npub_placeholder: () => 'Member npub',
-  group_invite_dm_invalid_npub: () => 'Invalid npub',
-  group_invite_dm_send: () => 'Send invite',
+  group_invite_dm_hint: () => 'The person receives a DM with a single-use invite link.',
   group_invite_dm_body: (/** @type {{name: string}} */ { name }) =>
     `You're invited to join ${name}.`,
   group_invite_dm_sent: () => 'Invite sent via DM.',
@@ -134,7 +138,6 @@ vi.mock('$lib/paraglide/messages', () => ({
 const { default: GroupMembersModal } = await import(
   '$lib/components/groups/GroupMembersModal.svelte'
 );
-const { nip19 } = await import('nostr-tools');
 
 const pointer = { id: 'grp1', relay: 'wss://relay.example/' };
 const metadata = { name: 'Bee Chat' };
@@ -464,40 +467,98 @@ describe('GroupMembersModal error handling', () => {
   });
 });
 
-describe('GroupMembersModal — invite an npub via DM (Task A6)', () => {
-  const RECIPIENT_HEX = 'f'.repeat(64);
-  const RECIPIENT_NPUB = nip19.npubEncode(RECIPIENT_HEX);
+describe('GroupMembersModal — the key-holding owner signs as the community', () => {
+  // The relay checks the signing pubkey against the 39001. When the active
+  // account is not listed with a moderation role but holds the community
+  // key, roster events must be signed by the community (laoc, 2026-09-22).
+  const asCommunity = { pubkey: COMMUNITY_ID, signer: { sign: 'community' } };
+  const ownerOnlyRoster = { admins: [{ pubkey: COMMUNITY_ID, roles: ['admin'] }] };
+
+  beforeEach(() => {
+    communitySigner.value = asCommunity.signer;
+  });
+  afterEach(() => {
+    communitySigner.value = null;
+  });
+
+  it('direct add publishes put-user signed by the community', async () => {
+    renderModal(ownerOnlyRoster);
+    await fireEvent.click(screen.getByTestId('stub-select-a'));
+    await waitFor(() =>
+      expect(publishToGroupRelay).toHaveBeenCalledWith(
+        relaySentinel,
+        expect.objectContaining({ __sentinel: 'put' }),
+        asCommunity
+      )
+    );
+  });
+
+  it('the DM invite mints the code as the community but the DM still comes from the active account', async () => {
+    renderModal(ownerOnlyRoster);
+    await fireEvent.click(screen.getByTestId('add-mode-dm'));
+    await fireEvent.click(screen.getByTestId('stub-select-a'));
+    await waitFor(() =>
+      expect(publishToGroupRelay).toHaveBeenCalledWith(
+        relaySentinel,
+        expect.objectContaining({ __sentinel: 'create-invite' }),
+        asCommunity
+      )
+    );
+    await waitFor(() => expect(sendWrappedDm).toHaveBeenCalled());
+  });
+
+  it('a listed moderator keeps signing with their own account', async () => {
+    renderModal({ admins: [{ pubkey: ADMIN_SELF, roles: ['admin'] }] });
+    await fireEvent.click(screen.getByTestId('stub-select-a'));
+    await waitFor(() =>
+      expect(publishToGroupRelay).toHaveBeenCalledWith(
+        relaySentinel,
+        expect.objectContaining({ __sentinel: 'put' }),
+        activeUser
+      )
+    );
+  });
+});
+
+describe('GroupMembersModal — invite via DM (Task A6)', () => {
+  // The ContactSearchInput stub's "a" row.
+  const RECIPIENT_HEX = 'a'.repeat(64);
 
   it('direct-add is the default mode; the DM pane is hidden until toggled', () => {
     renderModal();
     expect(screen.getByTestId('add-mode-direct')).toBeTruthy();
     expect(screen.getByTestId('add-mode-dm')).toBeTruthy();
-    expect(screen.queryByTestId('dm-invite-npub-input')).toBeNull();
+    expect(screen.queryByTestId('dm-invite-pane')).toBeNull();
   });
 
-  it('an invalid npub shows an inline error and publishes/sends nothing', async () => {
+  // Same picker as direct add (laoc, 2026-09-22): name search beyond the
+  // admin's follows, pasted npubs accepted, current roster excluded.
+  it('the DM pane offers the same contact search as direct add', async () => {
     renderModal();
 
     await fireEvent.click(screen.getByTestId('add-mode-dm'));
-    const input = screen.getByTestId('dm-invite-npub-input');
-    await fireEvent.input(input, { target: { value: 'not-an-npub' } });
-    await fireEvent.click(screen.getByTestId('dm-invite-send'));
-
-    await waitFor(() =>
-      expect(screen.getByTestId('dm-invite-error').textContent).toBe('Invalid npub')
-    );
-    expect(buildCreateInviteTemplate).not.toHaveBeenCalled();
+    const pane = screen.getByTestId('dm-invite-pane');
+    expect(pane.querySelector('[data-testid="stub-search-profiles"]')?.textContent).toBe('true');
+    expect(pane.querySelector('[data-testid="stub-exclude"]')?.textContent).toContain(MEMBER_A);
     expect(publishToGroupRelay).not.toHaveBeenCalled();
     expect(sendWrappedDm).not.toHaveBeenCalled();
   });
 
-  it('a valid npub mints a fresh invite code on the group relay and DMs the recipient the code', async () => {
+  it('a pasted npub goes the same way as a picked contact', async () => {
     renderModal();
 
     await fireEvent.click(screen.getByTestId('add-mode-dm'));
-    const input = screen.getByTestId('dm-invite-npub-input');
-    await fireEvent.input(input, { target: { value: RECIPIENT_NPUB } });
-    await fireEvent.click(screen.getByTestId('dm-invite-send'));
+    await fireEvent.click(screen.getByTestId('stub-raw-a'));
+
+    await waitFor(() => expect(sendWrappedDm).toHaveBeenCalled());
+    expect(/** @type {any[]} */ (sendWrappedDm.mock.calls[0])[0]).toEqual([RECIPIENT_HEX]);
+  });
+
+  it('picking a contact mints a fresh invite code on the group relay and DMs the recipient the code', async () => {
+    renderModal();
+
+    await fireEvent.click(screen.getByTestId('add-mode-dm'));
+    await fireEvent.click(screen.getByTestId('stub-select-a'));
 
     await waitFor(() => expect(generateInviteCode).toHaveBeenCalled());
     await waitFor(() =>
@@ -530,9 +591,7 @@ describe('GroupMembersModal — invite an npub via DM (Task A6)', () => {
     renderModal();
 
     await fireEvent.click(screen.getByTestId('add-mode-dm'));
-    const input = screen.getByTestId('dm-invite-npub-input');
-    await fireEvent.input(input, { target: { value: RECIPIENT_NPUB } });
-    await fireEvent.click(screen.getByTestId('dm-invite-send'));
+    await fireEvent.click(screen.getByTestId('stub-select-a'));
 
     await waitFor(() => expect(sendWrappedDm).toHaveBeenCalled());
     const [, message] = /** @type {any[]} */ (sendWrappedDm.mock.calls[0]);
@@ -545,9 +604,7 @@ describe('GroupMembersModal — invite an npub via DM (Task A6)', () => {
     renderModal();
 
     await fireEvent.click(screen.getByTestId('add-mode-dm'));
-    const input = screen.getByTestId('dm-invite-npub-input');
-    await fireEvent.input(input, { target: { value: RECIPIENT_NPUB } });
-    await fireEvent.click(screen.getByTestId('dm-invite-send'));
+    await fireEvent.click(screen.getByTestId('stub-select-a'));
 
     await waitFor(() =>
       expect(showToast).toHaveBeenCalledWith('Invite failed: relay says no', 'error')
@@ -564,9 +621,7 @@ describe('GroupMembersModal — invite an npub via DM (Task A6)', () => {
     renderModal();
 
     await fireEvent.click(screen.getByTestId('add-mode-dm'));
-    const input = screen.getByTestId('dm-invite-npub-input');
-    await fireEvent.input(input, { target: { value: RECIPIENT_NPUB } });
-    await fireEvent.click(screen.getByTestId('dm-invite-send'));
+    await fireEvent.click(screen.getByTestId('stub-select-a'));
 
     await waitFor(() =>
       expect(showToast).toHaveBeenCalledWith(
@@ -582,7 +637,7 @@ describe('GroupMembersModal — invite an npub via DM (Task A6)', () => {
 
     expect(screen.getByTestId('add-mode-direct')).toBeTruthy();
     expect(screen.queryByTestId('add-mode-dm')).toBeNull();
-    expect(screen.queryByTestId('dm-invite-npub-input')).toBeNull();
+    expect(screen.queryByTestId('dm-invite-pane')).toBeNull();
     // Direct-add (ContactSearchInput stub) is still there.
     expect(screen.getByTestId('stub-select-a')).toBeTruthy();
   });

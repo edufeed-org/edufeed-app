@@ -1,5 +1,6 @@
 /** @vitest-environment node */
 import { describe, it, expect } from 'vitest';
+import { nip19 } from 'nostr-tools';
 import {
   getConversationPeers,
   classifyDmConversations,
@@ -304,5 +305,37 @@ describe('excludeMuted', () => {
   it('works with words only', () => {
     const result = excludeMuted(events, new Set(), new Set(['airdrop']));
     expect(result.map((e) => e.id)).toEqual(['1', '2', '4']);
+  });
+});
+
+describe('classifyDmConversations — group invites', () => {
+  // An invite is by nature from someone the recipient does not follow yet;
+  // shelving it in the collapsed requests folder is how it gets missed
+  // (laoc, 2026-09-22). Recognition is structural (the join URL shape).
+  const NPUB = nip19.npubEncode(PLATFORM);
+  const inviteBody = (/** @type {string} */ greeting) =>
+    `${greeting}\nhttps://edufeed.org/c/${NPUB}?join=hMX6PYy4m37J`;
+
+  it('keeps a group invite from a stranger in known (never shelved)', () => {
+    const invite = conv(STRANGER, {
+      lastMessage: {
+        pubkey: STRANGER,
+        created_at: 1000,
+        content: inviteBody('Du bist eingeladen.')
+      }
+    });
+    const { known, requests } = classifyDmConversations([invite, conv(SPAMMER)], emptyOpts());
+    expect(known.map((c) => c.id)).toEqual([invite.id]);
+    expect(requests.map((c) => c.id)).toEqual([conv(SPAMMER).id]);
+  });
+
+  it('still drops an invite-shaped message that matches a muted word', () => {
+    const invite = conv(STRANGER, {
+      lastMessage: { pubkey: STRANGER, created_at: 1000, content: inviteBody('Damus airdrop!') }
+    });
+    const opts = { ...emptyOpts(), mutedWords: new Set(['damus airdrop']) };
+    const { known, requests } = classifyDmConversations([invite], opts);
+    expect(known).toEqual([]);
+    expect(requests).toEqual([]);
   });
 });

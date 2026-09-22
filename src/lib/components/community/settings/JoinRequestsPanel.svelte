@@ -45,6 +45,7 @@
   import { useChannelRosters } from '$lib/groups/channel-rosters.svelte.js';
   import { useCommunityChannels } from '$lib/groups/community-channels.svelte.js';
   import { putUserOn } from '$lib/groups/roster-fanout.js';
+  import { resolveGroupActor } from '$lib/groups/group-actor.js';
   import { isAlreadyMemberError } from '$lib/groups/groups.js';
   import { useActiveUser } from '$lib/stores/accounts.svelte';
   import { useProfileMap } from '$lib/stores/profile-map.svelte.js';
@@ -208,7 +209,9 @@
 
   /** @param {import('$lib/groups/join-requests.js').JoinRequestRow} row */
   async function approveRequest(row) {
-    const user = activeUser;
+    // Root put-user: owner without a relay role signs as the community
+    // (group-actor.js). Channel grants below reuse the same identity.
+    const user = resolveGroupActor(activeUser, roster.admins, communityId);
     if (!user || !roster.pointer || approving) return;
     approving = row.id;
     try {

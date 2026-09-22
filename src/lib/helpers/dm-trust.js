@@ -10,6 +10,7 @@
  * them. Display-side only: relay subscriptions stay untouched so no message is
  * ever lost, just re-shelved.
  */
+import { parseGroupInvite } from '$lib/groups/invite-link.js';
 
 /**
  * All participants of a conversation except the active user.
@@ -80,6 +81,14 @@ export function classifyDmConversations(conversations, opts) {
     // outruns per-pubkey blocking, while a known contact must never vanish for
     // quoting a muted word. Undecrypted content can't match and stays shelved.
     if (matchesMutedWord(conv.lastMessage?.content, mutedWords)) continue;
+    // A group invite is by nature from someone not yet followed; shelving it
+    // in the collapsed, badge-silent requests folder is how it gets missed
+    // (laoc, 2026-09-22). Structural recognition: only a well-formed join URL
+    // unshelves, and the muted-word check above still applies to it.
+    if (parseGroupInvite(conv.lastMessage?.content)) {
+      known.push(conv);
+      continue;
+    }
     requests.push(conv);
   }
 

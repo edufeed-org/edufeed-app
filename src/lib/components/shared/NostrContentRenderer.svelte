@@ -12,7 +12,7 @@
     attachmentDisplayName,
     formatFileSize
   } from '$lib/helpers/media-meta.js';
-  import { nostrIdFromUrl, truncateMiddle, splitNostrIds } from '$lib/helpers/link-render.js';
+  import { previewableNostrId, truncateMiddle, splitNostrIds } from '$lib/helpers/link-render.js';
   import * as m from '$lib/paraglide/messages';
   import NostrIdentifier from './NostrIdentifier.svelte';
   import MediaLightbox from './MediaLightbox.svelte';
@@ -198,8 +198,8 @@
             height={dims?.height}
           />
         </div>
-      {:else if nostrIdFromUrl(node.href)}
-        <NostrIdentifier identifier={nostrIdFromUrl(node.href)} inline={false} {depth} />
+      {:else if previewableNostrId(node.href)}
+        <NostrIdentifier identifier={previewableNostrId(node.href)} inline={false} {depth} />
       {:else if fileCardFor(node.href)}
         {@const meta = fileCardFor(node.href)}
         {@const sizeLabel = formatFileSize(meta?.size)}
