@@ -33,6 +33,7 @@
   import LocationLink from '$lib/components/shared/LocationLink.svelte';
   import EventLocationMap from '$lib/components/calendar/EventLocationMap.svelte';
   import ProfileCard from '$lib/components/shared/ProfileCard.svelte';
+  import NamedParticipant from '$lib/components/calendar/NamedParticipant.svelte';
   import InlineRsvp from '$lib/components/calendar/InlineRsvp.svelte';
   import AttendeeIndicator from '$lib/components/calendar/AttendeeIndicator.svelte';
   import { useCalendarEventRsvps } from '$lib/stores/calendar-event-rsvps.svelte.js';
@@ -395,13 +396,17 @@
           Participant{#if event.participants.length > 1}s{/if}
         </h2>
         <div class="mt-4 space-y-2">
-          {#each event.participants as participant (participant.pubkey)}
+          {#each event.participants as participant (participant.pubkey || 'name:' + participant.name)}
             <div class="rounded-lg bg-base-100 p-3">
-              <ProfileCard
-                pubkey={participant.pubkey}
-                showNpub={false}
-                class="bg-transparent p-0"
-              />
+              {#if participant.pubkey}
+                <ProfileCard
+                  pubkey={participant.pubkey}
+                  showNpub={false}
+                  class="bg-transparent p-0"
+                />
+              {:else}
+                <NamedParticipant name={participant.name || ''} />
+              {/if}
               {#if participant.role}
                 <div class="mt-2 flex items-center gap-2">
                   <span class="badge badge-sm badge-primary">{participant.role}</span>

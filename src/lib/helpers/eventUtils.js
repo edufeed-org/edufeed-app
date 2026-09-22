@@ -1,6 +1,7 @@
 import { getCalendarTitle, getCalendarEventImage } from 'applesauce-common/helpers';
 import { parseCalendarTimestamp, dedupeCalendarTwins } from '$lib/helpers/calendar.js';
 import { validateCalendarEvent } from '$lib/helpers/eventValidation.js';
+import { uniqueBy } from '$lib/helpers/unique.js';
 
 /**
  * @typedef {import('$lib/types/calendar.js').CalendarEvent} CalendarEvent
@@ -49,6 +50,7 @@ export function getCalendarEventMetadata(event) {
 
   // Parse participants from p tags according to NIP-52
   // Format: ["p", "<pubkey>", "<optional relay>", "<optional role>"]
+  /** @type {import('$lib/types/calendar.js').CalendarEventParticipant[]} */
   const participants = event.tags
     .filter((/** @type {any[]} */ tag) => tag[0] === 'p')
     .map((/** @type {any[]} */ tag) => ({
@@ -57,6 +59,18 @@ export function getCalendarEventMetadata(event) {
       role: tag[3] || undefined
     }))
     .filter((/** @type {any} */ p) => p.pubkey); // Only include if pubkey exists
+
+  // Named participants without an npub (app-specific, mirrors the p-tag slots):
+  // ["participant", "<name>", "", "<optional role>"]
+  for (const tag of event.tags) {
+    if (tag[0] !== 'participant') continue;
+    const name = typeof tag[1] === 'string' ? tag[1].trim() : '';
+    if (!name) continue;
+    participants.push({ name, role: tag[3] || undefined });
+  }
+  // Tags are untrusted input: a repeated p/participant tag would collide in
+  // the keyed {#each} of the detail views (each_key_duplicate crashes the page).
+  const dedupedParticipants = uniqueBy(participants, (p) => p.pubkey ?? `name:${p.name}`);
 
   return {
     id: event.id,
@@ -70,7 +84,7 @@ export function getCalendarEventMetadata(event) {
     start,
     end,
     location: getTagValue('location'),
-    participants,
+    participants: dedupedParticipants,
     hashtags: getTagValues('t'),
     references: getTagValues('r'),
     eventReferences: getTagValues('a'),

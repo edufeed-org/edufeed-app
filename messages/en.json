@@ -1812,6 +1812,7 @@
   "contact_search_hint": "Search {count} follows or enter npub",
   "contact_search_loading": "Loading contacts...",
   "contact_search_enter_npub": "Enter npub to search",
+  "contact_search_add_name": "Add “{name}” as a name",
   "contact_search_profiles_hint": "Search by name or enter an npub",
   "contact_search_profiles_searching": "Searching relays…",
   "dashboard_nav_home": "Home",

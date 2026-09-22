@@ -985,15 +985,27 @@ export function buildCalendarEventTags(formData, eventData, dTag, hTag) {
   }
 
   // Participants (NIP-52): ["p", pubkey, relay hint, role]
+  // Named participants without an npub (most real-world speakers) use the
+  // app-specific ["participant", name, "", role] tag with the same slot
+  // layout, so parsing in getCalendarEventMetadata stays symmetric.
   if (formData.participants) {
     for (const participant of formData.participants) {
-      if (!participant?.pubkey) continue;
+      if (participant?.pubkey) {
+        if (participant.role) {
+          tags.push(['p', participant.pubkey, participant.relay || '', participant.role]);
+        } else if (participant.relay) {
+          tags.push(['p', participant.pubkey, participant.relay]);
+        } else {
+          tags.push(['p', participant.pubkey]);
+        }
+        continue;
+      }
+      const name = participant?.name?.trim();
+      if (!name) continue;
       if (participant.role) {
-        tags.push(['p', participant.pubkey, participant.relay || '', participant.role]);
-      } else if (participant.relay) {
-        tags.push(['p', participant.pubkey, participant.relay]);
+        tags.push(['participant', name, '', participant.role]);
       } else {
-        tags.push(['p', participant.pubkey]);
+        tags.push(['participant', name]);
       }
     }
   }

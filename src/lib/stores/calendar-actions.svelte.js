@@ -100,9 +100,10 @@ export function createCalendarActions(_communityPubkey) {
 
         // Publish optimistically in background (returns immediately).
         // Participants are tagged pubkeys: outbox model also targets their read relays.
+        // Named participants (no pubkey) have no relays to target.
         const participantPubkeys = (formData.participants || [])
-          .map((/** @type {{pubkey: string}} */ p) => p.pubkey)
-          .filter(Boolean);
+          .map((p) => p.pubkey)
+          .filter((pk) => typeof pk === 'string');
         publishEventOptimistic(calendarEvent, participantPubkeys, { communityEvent });
 
         // Return the created event so caller can handle sharing/adding to calendars
@@ -232,9 +233,10 @@ export function createCalendarActions(_communityPubkey) {
         // Await publish for updates to ensure event is saved before returning
         // Unlike creation which navigates away, updates reload the same page
         // and need the updated event to be available immediately
+        // Named participants (no pubkey) have no relays to target.
         const participantPubkeys = (formData.participants || [])
-          .map((/** @type {{pubkey: string}} */ p) => p.pubkey)
-          .filter(Boolean);
+          .map((p) => p.pubkey)
+          .filter((pk) => typeof pk === 'string');
         const publishResult = await publishEvent(updatedEvent, participantPubkeys, {
           communityEvent
         });
