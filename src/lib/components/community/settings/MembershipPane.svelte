@@ -26,6 +26,7 @@
   import { isModerator, roleOptionsFromAdmins } from '$lib/groups/roles.js';
   import { useActiveUser } from '$lib/stores/accounts.svelte';
   import { isCommunityOwner } from '$lib/helpers/community-signer.js';
+  import { resolveGroupActor } from '$lib/groups/group-actor.js';
   import { pool } from '$lib/stores/nostr-infrastructure.svelte';
   import { getDisplayName } from 'applesauce-core/helpers';
   import { showToast } from '$lib/helpers/toast';
@@ -93,7 +94,9 @@
       const code = generateInviteCode();
       const template = buildCreateInviteTemplate(roster.pointer.id, code);
       const relayConn = pool.relay(roster.pointer.relay);
-      await publishToGroupRelay(relayConn, template, activeUser);
+      // Owner without a relay role signs as the community (group-actor.js).
+      const actor = resolveGroupActor(activeUser, roster.admins, communityId) ?? activeUser;
+      await publishToGroupRelay(relayConn, template, actor);
       generatedCode = code;
     } catch (error) {
       console.error('invite code creation failed', error);

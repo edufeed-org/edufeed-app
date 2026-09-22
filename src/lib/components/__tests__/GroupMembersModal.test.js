@@ -6,7 +6,7 @@
  * roster mutation: every action calls onRosterChanged so GroupChat re-requests
  * 39001/39002 from the relay.
  */
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/svelte';
 
 // vi.mock factories are hoisted above these consts, so everything the mock
@@ -75,6 +75,12 @@ vi.mock('$lib/groups/group-management.js', () => ({
 }));
 vi.mock('$lib/services/wrapped-dm.js', () => ({ sendWrappedDm }));
 vi.mock('$lib/groups/relay-self.js', () => ({ fetchRelaySelf }));
+// Key-holding owner state, settable per test (default: no community key).
+const communitySigner = vi.hoisted(() => ({ value: /** @type {any} */ (null) }));
+vi.mock('$lib/helpers/community-signer.js', () => ({
+  getCommunitySigner: () => communitySigner.value,
+  isCommunityOwner: () => communitySigner.value !== null
+}));
 vi.mock('$lib/stores/nostr-infrastructure.svelte', () => ({
   pool: { relay: vi.fn(() => relaySentinel) }
 }));
@@ -458,6 +464,59 @@ describe('GroupMembersModal error handling', () => {
       expect(showToast).toHaveBeenCalledWith('The relay refused the change', 'error')
     );
     expect(onRosterChanged).not.toHaveBeenCalled();
+  });
+});
+
+describe('GroupMembersModal — the key-holding owner signs as the community', () => {
+  // The relay checks the signing pubkey against the 39001. When the active
+  // account is not listed with a moderation role but holds the community
+  // key, roster events must be signed by the community (laoc, 2026-09-22).
+  const asCommunity = { pubkey: COMMUNITY_ID, signer: { sign: 'community' } };
+  const ownerOnlyRoster = { admins: [{ pubkey: COMMUNITY_ID, roles: ['admin'] }] };
+
+  beforeEach(() => {
+    communitySigner.value = asCommunity.signer;
+  });
+  afterEach(() => {
+    communitySigner.value = null;
+  });
+
+  it('direct add publishes put-user signed by the community', async () => {
+    renderModal(ownerOnlyRoster);
+    await fireEvent.click(screen.getByTestId('stub-select-a'));
+    await waitFor(() =>
+      expect(publishToGroupRelay).toHaveBeenCalledWith(
+        relaySentinel,
+        expect.objectContaining({ __sentinel: 'put' }),
+        asCommunity
+      )
+    );
+  });
+
+  it('the DM invite mints the code as the community but the DM still comes from the active account', async () => {
+    renderModal(ownerOnlyRoster);
+    await fireEvent.click(screen.getByTestId('add-mode-dm'));
+    await fireEvent.click(screen.getByTestId('stub-select-a'));
+    await waitFor(() =>
+      expect(publishToGroupRelay).toHaveBeenCalledWith(
+        relaySentinel,
+        expect.objectContaining({ __sentinel: 'create-invite' }),
+        asCommunity
+      )
+    );
+    await waitFor(() => expect(sendWrappedDm).toHaveBeenCalled());
+  });
+
+  it('a listed moderator keeps signing with their own account', async () => {
+    renderModal({ admins: [{ pubkey: ADMIN_SELF, roles: ['admin'] }] });
+    await fireEvent.click(screen.getByTestId('stub-select-a'));
+    await waitFor(() =>
+      expect(publishToGroupRelay).toHaveBeenCalledWith(
+        relaySentinel,
+        expect.objectContaining({ __sentinel: 'put' }),
+        activeUser
+      )
+    );
   });
 });
 

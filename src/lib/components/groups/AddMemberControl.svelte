@@ -20,6 +20,7 @@
   import { sendWrappedDm } from '$lib/services/wrapped-dm.js';
   import { buildGroupInviteMessage } from '$lib/groups/invite-message.js';
   import { fetchRelaySelf } from '$lib/groups/relay-self.js';
+  import { resolveGroupActor } from '$lib/groups/group-actor.js';
   import { pool } from '$lib/stores/nostr-infrastructure.svelte';
   import { useActiveUser } from '$lib/stores/accounts.svelte';
   import ContactSearchInput from '$lib/components/shared/ContactSearchInput.svelte';
@@ -32,6 +33,7 @@
    *   pointer: {id: string, relay: string},
    *   metadata: any,
    *   communityId?: string | null,
+   *   admins?: {pubkey: string, roles: string[]}[],
    *   members: Set<string>,
    *   onRosterChanged?: () => void,
    *   onMemberAdded?: ((pubkey: string) => void | Promise<void>) | null
@@ -41,6 +43,7 @@
     pointer,
     metadata,
     communityId = null,
+    admins = [],
     members,
     onRosterChanged,
     onMemberAdded = null
@@ -52,7 +55,7 @@
 
   /** @param {string} pubkey */
   async function addMember(pubkey) {
-    const user = getActiveUser();
+    const user = resolveGroupActor(getActiveUser(), admins, communityId);
     if (!user) return;
     busy = true;
     try {
@@ -84,7 +87,7 @@
    * @param {string} hex - recipient pubkey, already validated by ContactSearchInput
    */
   async function sendInvite(hex) {
-    const user = getActiveUser();
+    const user = resolveGroupActor(getActiveUser(), admins, communityId);
     // communityId is required to build the join URL's npub — the toggle
     // that reaches this pane is hidden without one (see template), so this
     // is a defensive no-op, not a user-facing path.
