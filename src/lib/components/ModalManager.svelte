@@ -69,6 +69,7 @@
     'recovery-download': lazyComponent(() => import('./RecoveryDownloadModal.svelte')),
     deleteCommunity: lazyComponent(() => import('./community/DeleteCommunityModal.svelte')),
     membershipApply: lazyComponent(() => import('./membership/MembershipApplyModal.svelte')),
+    nip05Activated: lazyComponent(() => import('./membership/Nip05ActivatedModal.svelte')),
     resourceVariantPicker: lazyComponent(
       () => import('./educational/ResourceVariantPickerModal.svelte')
     ),
@@ -138,6 +139,8 @@
         };
       case 'concordInvites':
         return { onClose: () => modal.closeModal() };
+      case 'nip05Activated':
+        return { address: /** @type {string} */ (props?.address) || '' };
       default:
         return modalId ? { modalId } : {};
     }

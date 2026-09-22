@@ -1,6 +1,7 @@
 <script>
   import InboxItem from './InboxItem.svelte';
   import InboxDmItem from './InboxDmItem.svelte';
+  import Nip05ReadyRow from './Nip05ReadyRow.svelte';
   import { goto } from '$app/navigation';
   import { resolve } from '$app/paths';
   import {
@@ -8,7 +9,10 @@
     markAsRead,
     isNotificationUnread
   } from '$lib/services/inbox-service.svelte.js';
-  import { getKnownDmConversations, isDmConversationUnread } from '$lib/services/dm-service.svelte.js';
+  import {
+    getKnownDmConversations,
+    isDmConversationUnread
+  } from '$lib/services/dm-service.svelte.js';
   import { useProfileMap } from '$lib/stores/profile-map.svelte.js';
   import { useActiveUser } from '$lib/stores/accounts.svelte';
   import * as m from '$lib/paraglide/messages.js';
@@ -145,6 +149,11 @@
       <span class="text-sm font-semibold text-primary">{m.inbox_invites_row_action()}</span>
     </button>
   {/if}
+
+  <!-- Pinned like the invites row: the membership handle grant is not a Nostr
+    event (it is polled from the well-known directory), so it can never be an
+    inbox item — and the bell is where people look when "something arrived". -->
+  <Nip05ReadyRow class_="border-b border-base-300" />
 
   <div class="max-h-80 overflow-y-auto">
     {#if mergedItems.length === 0}

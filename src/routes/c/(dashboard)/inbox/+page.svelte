@@ -16,6 +16,7 @@
   import { useActiveUser } from '$lib/stores/accounts.svelte';
   import InboxItem from '$lib/components/inbox/InboxItem.svelte';
   import InboxDmItem from '$lib/components/inbox/InboxDmItem.svelte';
+  import Nip05ReadyRow from '$lib/components/inbox/Nip05ReadyRow.svelte';
   import EmptyState from '$lib/components/shared/EmptyState.svelte';
   import ReadonlyNotice from '$lib/components/shared/ReadonlyNotice.svelte';
   import * as m from '$lib/paraglide/messages.js';
@@ -146,6 +147,12 @@
       </button>
     {/each}
   </div>
+
+  {#if activeFilter === 'all'}
+    <!-- Not an inbox item (the handle grant is polled, not received as an
+      event) — pinned above the list, like the invites row in the dropdown. -->
+    <Nip05ReadyRow class_="mb-4 rounded-lg border border-base-300" />
+  {/if}
 
   <!-- Notification list -->
   {#if mergedItems.length === 0}

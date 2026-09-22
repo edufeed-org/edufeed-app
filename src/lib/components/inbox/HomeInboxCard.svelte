@@ -26,6 +26,7 @@
   import { BellIcon, ChevronRightIcon } from '$lib/components/icons';
   import InboxItem from './InboxItem.svelte';
   import InboxDmItem from './InboxDmItem.svelte';
+  import Nip05ReadyRow from './Nip05ReadyRow.svelte';
   import * as m from '$lib/paraglide/messages.js';
 
   const PREVIEW_COUNT = 4;
@@ -180,6 +181,8 @@
       <span class="text-sm font-semibold text-primary">{m.concord_invite_inbox_action()}</span>
     </button>
   {/if}
+
+  <Nip05ReadyRow class_="border-t border-base-300" />
 
   {#if mergedItems.length === 0}
     <div class="border-t border-base-300 p-5 text-center text-sm text-base-content/60">
