@@ -5,6 +5,35 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions are
 the `vX.Y.Z` git tags on `main`. Each release section is assembled from the
 merge commits of the nostr PRs that landed since the previous tag.
 
+## [0.1.8] - 2026-09-22
+
+### Added
+
+- **Group invites arrive as a card.** A NIP-29 group invite sent as a DM is
+  rendered as an invite card with a "Beitreten" button that keeps the join
+  link (and its invite code) intact, plus a copyable `naddr` for other
+  clients. Invite conversations count as known senders, so they show in the
+  main DM list with an unread badge instead of being shelved in the
+  "Anfragen" folder. Inviting someone by DM uses the same contact search as
+  adding a member directly (profile search, pasted npubs, roster excluded).
+
+### Fixed
+
+- **Cached content is refreshed and deletions stick.** The persistent event
+  cache never asked a relay again once it held a profile, community
+  definition, article, resource or calendar event, and it never learned
+  about deletions by other authors. Cached replaceable events are now
+  revalidated once per session (instant paint from the cache, newer version
+  from the relays), and network deletions are mirrored into the cache. This
+  also closes a moderation gap: the dashboard community feed could keep
+  gating against an outdated community definition and show calendar items
+  from authors who are not on a moderated community's roster.
+- **Community owners can moderate the roster.** Adding, removing and
+  inviting members from the community's members surfaces was signed by the
+  active account, which the groups relay refuses unless that account is a
+  group admin. The key-holding owner now signs these actions as the
+  community key; the invite DM itself still comes from the active account.
+
 ## [0.1.7] - 2026-09-22
 
 ### Added
@@ -273,6 +302,7 @@ stack and cannot ship themselves through CI.
 
 - First tagged release on `main`.
 
+[0.1.8]: https://git.edufeed.org/edufeed/edufeed-app/compare/v0.1.7...v0.1.8
 [0.1.7]: https://git.edufeed.org/edufeed/edufeed-app/compare/v0.1.6...v0.1.7
 [0.1.6]: https://git.edufeed.org/edufeed/edufeed-app/compare/v0.1.5...v0.1.6
 [0.1.5]: https://git.edufeed.org/edufeed/edufeed-app/compare/v0.1.4...v0.1.5
