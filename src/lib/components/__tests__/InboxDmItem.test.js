@@ -6,11 +6,23 @@
  *
  * @vitest-environment jsdom
  */
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen } from '@testing-library/svelte';
 
 const ME = 'a'.repeat(64);
 const PEER = 'b'.repeat(64);
+
+const configState = vi.hoisted(() => ({ adminPubkeys: /** @type {string[]} */ ([]) }));
+vi.mock('$lib/stores/config.svelte.js', () => ({
+  runtimeConfig: {
+    get membership() {
+      return { adminPubkeys: configState.adminPubkeys };
+    },
+    get appName() {
+      return 'Edufeed';
+    }
+  }
+}));
 
 vi.mock('$app/paths', () => ({ resolve: (/** @type {string} */ p) => p }));
 vi.mock('$app/navigation', () => ({ goto: vi.fn() }));
@@ -27,7 +39,9 @@ vi.mock('$lib/paraglide/messages.js', () => ({
   inbox_action_dm: () => 'sent you a message',
   inbox_mark_read: () => 'Mark as read',
   dm_preview_image: () => 'Image',
-  dm_preview_file: () => 'File'
+  dm_preview_file: () => 'File',
+  official_badge_label: () => 'Official',
+  official_badge_title: () => 'Official Edufeed account'
 }));
 
 import InboxDmItem from '$lib/components/inbox/InboxDmItem.svelte';
@@ -66,5 +80,35 @@ describe('InboxDmItem preview text', () => {
     };
     render(InboxDmItem, { props: { conversation, unread: false } });
     expect(screen.getByText('hallo')).toBeTruthy();
+  });
+});
+
+describe('InboxDmItem official sender', () => {
+  beforeEach(() => {
+    configState.adminPubkeys = [];
+  });
+
+  const conversation = {
+    id: `${ME}:${PEER}`,
+    participants: [ME, PEER],
+    lastMessage: {
+      id: 'r3',
+      kind: 14,
+      pubkey: PEER,
+      created_at: 100,
+      tags: [['p', ME]],
+      content: 'hi'
+    }
+  };
+
+  it('badges a DM from a configured platform account as official', () => {
+    configState.adminPubkeys = [PEER];
+    render(InboxDmItem, { props: { conversation, unread: false } });
+    expect(screen.getByText('Official')).toBeTruthy();
+  });
+
+  it('shows no badge for an ordinary sender', () => {
+    render(InboxDmItem, { props: { conversation, unread: false } });
+    expect(screen.queryByText('Official')).toBeNull();
   });
 });

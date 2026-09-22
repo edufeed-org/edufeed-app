@@ -18,6 +18,7 @@
   import { formatMessageTimestamp } from '$lib/helpers/message-utils.js';
   import { dmPreviewText } from '$lib/helpers/dm-preview.js';
   import ProfileAvatar from '$lib/components/shared/ProfileAvatar.svelte';
+  import OfficialBadge from '$lib/components/shared/OfficialBadge.svelte';
   import UnreadDot from '$lib/components/shared/UnreadDot.svelte';
   import { ChevronDownIcon, ChevronUpIcon } from '$lib/components/icons';
   import * as m from '$lib/paraglide/messages';
@@ -125,6 +126,7 @@
           >
             {getConversationName(conv.participants)}
           </span>
+          <OfficialBadge pubkey={otherPubkey} />
           {#if conv.legacy}
             <span
               class="badge shrink-0 badge-xs badge-warning"
