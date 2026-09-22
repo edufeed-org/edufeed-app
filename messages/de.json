@@ -2784,6 +2784,8 @@
   "licensed_image_input_add_button": "Bild auswählen…",
   "profile_verified_chip": "Verifiziert",
   "profile_unverified_chip": "Nicht verifiziert",
+  "profile_community_chip": "Community",
+  "profile_open_community_button": "Community öffnen",
   "profile_stat_posts": "Beiträge",
   "profile_message_button": "Nachricht",
   "profile_zap_button": "Zap senden (Trinkgeld)",
