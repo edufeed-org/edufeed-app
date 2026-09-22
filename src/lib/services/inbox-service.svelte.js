@@ -4,7 +4,6 @@
  */
 import { createTimelineLoader } from 'applesauce-loaders/loaders';
 import { TimelineModel } from 'applesauce-core/models';
-import { AppDataFactory } from 'applesauce-common/factories';
 import { finalizeDraft } from '$lib/helpers/event-factory.js';
 import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
 import { timedPool, addressLoader, eventLoader } from '$lib/loaders/base.js';
@@ -37,9 +36,25 @@ import { normalizeURL } from 'applesauce-core/helpers';
 import { getUnreadDmCount, markAllDmConversationsAsRead } from '$lib/services/dm-service.svelte.js';
 import { getNip05ReadyCount } from '$lib/stores/nip05-ready-alert.svelte.js';
 import { parseAddressPointerFromATag } from '$lib/helpers/nostrUtils.js';
-import { hasNip44 } from '$lib/helpers/nip44.js';
 
 const APP_DATA_D_TAG = 'comcal/inbox/last-seen';
+
+/**
+ * Content of the kind 30078 read marker. It is a constant on purpose: the
+ * marker's only payload is its `created_at` (Jumble's model), so there is
+ * nothing in the event worth encrypting and nothing a public relay can leak
+ * beyond "this user checked their notifications around then". That also frees
+ * cross-device sync from needing NIP-44 in the signer.
+ */
+export const READ_MARKER_CONTENT =
+  'Records when notifications were last seen, to sync read state across devices.';
+
+/** Minimum gap between two relay publishes of the marker, per pubkey. */
+const MARKER_PUBLISH_INTERVAL = 10 * 60;
+
+/** @type {Map<string, number>} pubkey -> unix seconds of the last relay publish */
+// eslint-disable-next-line svelte/prefer-svelte-reactivity -- throttle bookkeeping, not UI state
+const lastMarkerPublishAt = new Map();
 const DEFAULT_LOOKBACK = 604800; // 7 days
 
 /** @type {Set<string>} IDs of events already prefetched */
@@ -114,7 +129,7 @@ export function getSupplementalNotificationRelays(baseRelays, candidateRelays) {
 }
 
 /**
- * Parse read markers from decrypted kind 30078 content.
+ * Parse the locally mirrored read markers.
  * @param {string | null} content
  * @returns {Record<string, number> | null}
  */
@@ -406,23 +421,15 @@ export function initializeInbox(pubkey) {
     );
   });
 
-  const markerSub = eventStore
-    .replaceable(30078, pubkey, APP_DATA_D_TAG)
-    .subscribe(async (event) => {
-      if (!event) return;
-      let content = event.content;
-      // Try NIP-44 decrypt (read markers may be encrypted to self)
-      try {
-        if (manager.active && hasNip44(manager.active.signer)) {
-          content = await manager.active.signer.nip44.decrypt(pubkey, event.content);
-        }
-      } catch {
-        /* use raw content as fallback (may be unencrypted) */
-      }
-      // Merge, never assign: parseReadMarkers() returns null for anything it
-      // cannot read, and a null here used to mark every notification unread.
-      applyReadMarkers(pubkey, parseReadMarkers(content));
-    });
+  const markerSub = eventStore.replaceable(30078, pubkey, APP_DATA_D_TAG).subscribe((event) => {
+    // The value is the event's timestamp; the content is never interpreted.
+    // Legacy markers (plaintext or NIP-44 JSON with per-type keys) were always
+    // written seconds after the timestamps they carried, so reading them the
+    // same way needs no migration and no decryption.
+    if (!event || !Number.isFinite(event.created_at)) return;
+    // Merge, never assign: a stale relay copy must not move the state backwards.
+    applyReadMarkers(pubkey, { global: event.created_at });
+  });
   subscriptions.push(markerSub);
 
   // Always use 7-day default lookback for initial load.
@@ -600,70 +607,45 @@ export function loadPollResponseNotifications(pollIds) {
 }
 
 /**
- * Mark notifications as read.
- * @param {string} [type] - Specific type, or omit for all
+ * Mark all notifications as read.
+ *
+ * There is a single global marker. Per-type markers were never set by any
+ * caller (every "mark as read" surface marks everything), and a single
+ * timestamp is what lets the relay copy be just an event's `created_at`.
  */
-export async function markAsRead(type) {
+export async function markAsRead() {
   if (!activePubkey || !manager.active) return;
 
   const now = Math.floor(Date.now() / 1000);
-  /** @type {Record<string, number>} */
-  const updated = { ...(readMarkers || {}), global: readMarkers?.global || now };
-
-  if (type) {
-    updated[type] = now;
-  } else {
-    updated.global = now;
-    for (const t of [
-      'formRequest',
-      'formResponse',
-      'reaction',
-      'wave',
-      'comment',
-      'reply',
-      'mention',
-      'rsvp',
-      'pollVote'
-    ]) {
-      updated[t] = now;
-    }
-    // Also mark all DM conversations as read
-    markAllDmConversationsAsRead();
-  }
-
   const pubkey = activePubkey;
-  const merged = mergeReadMarkers(readMarkers, updated) || updated;
+  const merged = mergeReadMarkers(readMarkers, { global: now }) || { global: now };
   readMarkers = merged;
   // Mirror locally before touching the network. Publishing can fail for any
   // number of relay reasons, and when it does the read state must still stick
   // on this device rather than silently reverting on the next reload.
   persistReadMarkers(pubkey, merged);
+  markAllDmConversationsAsRead();
 
-  // Publish kind 30078 via AppDataFactory (v6). Note: the v5 code published
-  // the unsigned draft; the events are now properly signed before publishing.
+  // Relay copy, at most every MARKER_PUBLISH_INTERVAL: every bell click would
+  // otherwise raise a signer prompt. The other devices lag by at most that
+  // interval; this device is always exact via the mirror above.
+  const lastPublished = lastMarkerPublishAt.get(pubkey) ?? -1;
+  if (lastPublished >= 0 && now - lastPublished < MARKER_PUBLISH_INTERVAL) return;
+  lastMarkerPublishAt.set(pubkey, now);
+
   const signer = manager.active.signer;
   /** @type {import('nostr-tools').NostrEvent | null} */
   let signed = null;
   try {
-    // NOT `AppDataFactory.create(d, data, true)`: that bakes the encryption
-    // operation with an undefined signer at call time (applesauce-common 6.2.0
-    // forwards no signer from `.data()`), so it throws "Signer required for
-    // encrypted content" no matter what `.as()` is given afterwards — which is
-    // why every marker published since the v6 migration ended up as plaintext
-    // JSON on public relays. `.encryptedContent()` resolves the signer lazily
-    // from the shared ref and does work.
-    const draft = await finalizeDraft(
-      AppDataFactory.create(APP_DATA_D_TAG, merged, false)
-        .as(signer)
-        .encryptedContent(pubkey, JSON.stringify(merged))
-    );
+    const draft = await finalizeDraft({
+      kind: 30078,
+      content: READ_MARKER_CONTENT,
+      created_at: now,
+      tags: [['d', APP_DATA_D_TAG]]
+    });
     signed = await signer.signEvent(draft);
   } catch (err) {
-    // No plaintext fallback: per-category read timestamps are activity
-    // metadata about the user and must never sit unencrypted on public relays
-    // (laoc, 2026-09-21). Without NIP-44 the read state stays on this device
-    // via the localStorage mirror above; cross-device sync is simply off.
-    console.warn('[inbox] read markers not published: signer cannot NIP-44 encrypt:', err);
+    console.error('Failed to sign read marker:', err);
     return;
   }
 

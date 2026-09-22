@@ -61,7 +61,11 @@ export function filterNotificationsByType(events, filterKey) {
 export function isUnread(event, readMarkers) {
   if (!readMarkers) return true;
   const type = getNotificationType(event);
-  const marker = /** @type {number} */ ((type && readMarkers[type]) ?? readMarkers.global ?? 0);
+  // Only `global` is written today; per-type keys survive in older local
+  // mirrors and relay copies. The newer of the two is the one that counts —
+  // a later "mark all as read" covers every type.
+  const typeMarker = (type && readMarkers[type]) || 0;
+  const marker = Math.max(typeMarker, readMarkers.global ?? 0);
   return event.created_at > marker;
 }
 

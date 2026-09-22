@@ -83,7 +83,7 @@ describe('isUnread', () => {
   const readMarkers = { global: 1000, formRequest: 1100, reaction: 900 };
 
   it('returns true when event is newer than type-specific marker', () => {
-    expect(isUnread({ kind: 7, created_at: 950 }, readMarkers)).toBe(true);
+    expect(isUnread({ kind: 1070, created_at: 1150 }, readMarkers)).toBe(true);
   });
   it('returns false when event is older than type-specific marker', () => {
     expect(isUnread({ kind: 1070, created_at: 1050 }, readMarkers)).toBe(false);
@@ -99,6 +99,14 @@ describe('isUnread', () => {
   });
   it('returns true when readMarkers is null (first login)', () => {
     expect(isUnread({ kind: 7, created_at: 500 }, null)).toBe(true);
+  });
+
+  it('lets a newer global marker win over a stale per-type marker', () => {
+    // Legacy mirrors may still carry per-type keys; a "mark all as read" that
+    // only moved `global` must cover them.
+    const markers = { global: 2000, reaction: 1000 };
+    expect(isUnread({ kind: 7, created_at: 1500 }, markers)).toBe(false);
+    expect(isUnread({ kind: 7, created_at: 2500 }, markers)).toBe(true);
   });
 });
 
