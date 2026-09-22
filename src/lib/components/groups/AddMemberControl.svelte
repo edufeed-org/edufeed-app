@@ -76,34 +76,19 @@
 
   /** @type {'direct' | 'dm'} */
   let addMode = $state('direct');
-  let inviteNpub = $state('');
-  let inviteError = $state('');
   let sendingInvite = $state(false);
 
-  /** @param {string} value @returns {string | null} hex pubkey, or null if not a valid npub */
-  function decodeNpub(value) {
-    const trimmed = value.trim();
-    if (!trimmed) return null;
-    try {
-      const decoded = nip19.decode(trimmed);
-      return decoded.type === 'npub' ? /** @type {string} */ (decoded.data) : null;
-    } catch {
-      return null;
-    }
-  }
-
-  async function sendInvite() {
-    const hex = decodeNpub(inviteNpub);
-    if (!hex) {
-      inviteError = m.group_invite_dm_invalid_npub();
-      return;
-    }
+  /**
+   * Picking a contact (or pasting an npub) sends the invite straight away —
+   * the same one-step grammar as direct add (laoc, 2026-09-22).
+   * @param {string} hex - recipient pubkey, already validated by ContactSearchInput
+   */
+  async function sendInvite(hex) {
     const user = getActiveUser();
     // communityId is required to build the join URL's npub — the toggle
     // that reaches this pane is hidden without one (see template), so this
     // is a defensive no-op, not a user-facing path.
-    if (!user || !communityId) return;
-    inviteError = '';
+    if (!user || !communityId || sendingInvite) return;
     sendingInvite = true;
     try {
       // Mint first: a failure here means nothing was created — the generic
@@ -156,7 +141,6 @@
         });
         await sendWrappedDm([hex], message);
         showToast(m.group_invite_dm_sent(), 'success');
-        inviteNpub = '';
       } catch (err) {
         console.error('groups: dm invite send failed after a successful mint', err);
         showToast(m.group_invite_dm_failed_after_mint({ code }), 'error');
@@ -189,31 +173,28 @@
 </div>
 
 {#if addMode === 'dm' && communityId}
-  <div class="flex flex-col gap-2">
-    <input
-      type="text"
-      class="input-bordered input w-full"
-      placeholder={m.group_invite_dm_npub_placeholder()}
-      aria-label={m.group_invite_dm_npub_placeholder()}
-      data-testid="dm-invite-npub-input"
+  <!-- Same picker as direct add (laoc, 2026-09-22): a bare npub field made
+       admins hunt for keys. Picking a row sends the invite immediately. -->
+  <div class="flex flex-col gap-2" data-testid="dm-invite-pane">
+    <ContactSearchInput
+      acceptPubkeyInput
+      inlineList
+      showExcluded
+      searchProfiles
       disabled={sendingInvite}
-      value={inviteNpub}
-      oninput={(e) => (inviteNpub = /** @type {HTMLInputElement} */ (e.target).value)}
+      placeholder={m.groups_members_add_placeholder()}
+      exclude={[...members]}
+      excludedLabel={m.groups_members_already_member()}
+      addPubkeyLabel={m.list_detail_add_profile_add_pubkey()}
+      onselect={(/** @type {{ pubkey: string }} */ c) => sendInvite(c.pubkey)}
+      onrawpubkey={(/** @type {string} */ hex) => sendInvite(hex)}
     />
-    {#if inviteError}
-      <span class="text-xs text-error" data-testid="dm-invite-error">{inviteError}</span>
-    {/if}
-    <button
-      class="btn btn-primary"
-      data-testid="dm-invite-send"
-      disabled={sendingInvite || !inviteNpub.trim()}
-      onclick={sendInvite}
-    >
+    <span class="flex items-center gap-2 text-xs text-base-content/60">
       {#if sendingInvite}
         <span class="loading loading-xs loading-spinner"></span>
       {/if}
-      {m.group_invite_dm_send()}
-    </button>
+      {m.group_invite_dm_hint()}
+    </span>
   </div>
 {:else}
   <!-- showExcluded: a pasted npub that is already on the roster used to
