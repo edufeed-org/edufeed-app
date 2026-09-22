@@ -38,7 +38,9 @@ vi.mock('$lib/helpers/nostrUtils.js', () => ({
   parseAddressPointerFromATag: vi.fn()
 }));
 vi.mock('$lib/services/relay-service.svelte.js', () => ({
-  getRelayListLookupRelays: () => []
+  getRelayListLookupRelays: () => [],
+  getReadRelays: vi.fn(async () => []),
+  getWriteRelays: vi.fn(async () => [])
 }));
 vi.mock('$lib/services/dm-service.svelte.js', () => ({
   getUnreadDmCount: () => 0,

@@ -19,7 +19,8 @@ import {
   filterSelfNotifications,
   isMembershipApplication,
   getNotificationUrl,
-  extractMentionPubkeys
+  extractMentionPubkeys,
+  mergeReadMarkers
 } from '$lib/helpers/inbox.js';
 
 describe('getNotificationType', () => {
@@ -98,6 +99,38 @@ describe('isUnread', () => {
   });
   it('returns true when readMarkers is null (first login)', () => {
     expect(isUnread({ kind: 7, created_at: 500 }, null)).toBe(true);
+  });
+});
+
+describe('mergeReadMarkers', () => {
+  it('returns null when both sides are empty', () => {
+    expect(mergeReadMarkers(null, null)).toBe(null);
+  });
+  it('returns the non-null side untouched', () => {
+    expect(mergeReadMarkers({ global: 10 }, null)).toEqual({ global: 10 });
+    expect(mergeReadMarkers(null, { global: 10 })).toEqual({ global: 10 });
+  });
+  it('keeps the newest timestamp per key', () => {
+    expect(mergeReadMarkers({ global: 10, reaction: 50 }, { global: 30, reaction: 20 })).toEqual({
+      global: 30,
+      reaction: 50
+    });
+  });
+  it('unions keys present on only one side', () => {
+    expect(mergeReadMarkers({ global: 10 }, { reaction: 20 })).toEqual({
+      global: 10,
+      reaction: 20
+    });
+  });
+  it('never downgrades a known marker with a stale incoming record', () => {
+    const current = { global: 2000, reaction: 2000, comment: 2000 };
+    const stale = { global: 1000, reaction: 1000 };
+    expect(mergeReadMarkers(current, stale)).toEqual(current);
+  });
+  it('ignores non-numeric values', () => {
+    expect(mergeReadMarkers({ global: 10 }, { global: 'later', reaction: null })).toEqual({
+      global: 10
+    });
   });
 });
 

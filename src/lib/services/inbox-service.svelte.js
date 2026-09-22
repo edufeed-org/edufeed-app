@@ -24,10 +24,15 @@ import {
   getNotificationType,
   isUnread,
   filterSelfNotifications,
-  isMembershipApplication
+  isMembershipApplication,
+  mergeReadMarkers
 } from '$lib/helpers/inbox.js';
 import { runtimeConfig } from '$lib/stores/config.svelte.js';
-import { getRelayListLookupRelays, getReadRelays } from '$lib/services/relay-service.svelte.js';
+import {
+  getRelayListLookupRelays,
+  getReadRelays,
+  getWriteRelays
+} from '$lib/services/relay-service.svelte.js';
 import { normalizeURL } from 'applesauce-core/helpers';
 import { getUnreadDmCount, markAllDmConversationsAsRead } from '$lib/services/dm-service.svelte.js';
 import { parseAddressPointerFromATag } from '$lib/helpers/nostrUtils.js';
@@ -74,15 +79,18 @@ export function getNotificationRelays() {
 }
 
 /**
- * Get the user's read relays that are not already covered by the base
- * notification relays. Reactions (kind 7) are published outbox-model to the
- * target author's NIP-65 read relays and map to no app relay category, so the
- * inbox must also query the user's own read relays to see them.
- * @param {string[]} baseRelays
- * @param {string[]} readRelays
- * @returns {string[]} Normalized supplemental relay URLs
+ * Normalize a candidate relay list down to the entries the base set misses.
+ *
+ * Both of the inbox's outbox-model blind spots use this: reactions (kind 7)
+ * land on the target author's NIP-65 *read* relays, and read markers (kind
+ * 30078) land on the author's *write* relays — neither maps to an app relay
+ * category, so neither is reachable from the base relay set alone.
+ *
+ * @param {string[]} baseRelays - relays already being queried
+ * @param {string[]} candidateRelays
+ * @returns {string[]} Normalized relay URLs not already in baseRelays
  */
-export function getSupplementalNotificationRelays(baseRelays, readRelays) {
+export function getSupplementalNotificationRelays(baseRelays, candidateRelays) {
   /** @param {string} url */
   const safeNormalize = (url) => {
     try {
@@ -95,7 +103,7 @@ export function getSupplementalNotificationRelays(baseRelays, readRelays) {
   const base = new Set(baseRelays.map(safeNormalize).filter(Boolean));
   /** @type {string[]} */
   const supplemental = [];
-  for (const url of readRelays) {
+  for (const url of candidateRelays) {
     const normalized = safeNormalize(url);
     if (normalized && !base.has(normalized) && !supplemental.includes(normalized)) {
       supplemental.push(normalized);
@@ -271,6 +279,56 @@ let unreadByType = $derived.by(() => {
 });
 
 const LOCALSTORAGE_PREFIX = 'comcal:inbox:read-items:';
+const MARKERS_LOCALSTORAGE_PREFIX = 'comcal:inbox:read-markers:';
+
+/**
+ * Read the locally mirrored read markers for a user.
+ *
+ * The kind 30078 event is the cross-device record, but it is only as reliable
+ * as the relays holding it. This mirror is what makes "mark all as read" stick
+ * on the device that clicked it, instantly and regardless of relay weather.
+ *
+ * @param {string} pubkey
+ * @returns {Record<string, number> | null}
+ */
+function loadStoredReadMarkers(pubkey) {
+  try {
+    return parseReadMarkers(localStorage.getItem(MARKERS_LOCALSTORAGE_PREFIX + pubkey));
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * @param {string} pubkey
+ * @param {Record<string, number> | null} markers
+ */
+function persistReadMarkers(pubkey, markers) {
+  if (!markers) return;
+  try {
+    localStorage.setItem(MARKERS_LOCALSTORAGE_PREFIX + pubkey, JSON.stringify(markers));
+  } catch {
+    /* localStorage full or unavailable */
+  }
+}
+
+/**
+ * Fold newly learned markers into the current state and mirror the result.
+ *
+ * Merging (rather than assigning) is what keeps the badge from springing back:
+ * the relay copy, the local mirror and the just-clicked in-memory state arrive
+ * in no particular order, and a stale or unparseable one must never win.
+ *
+ * @param {string} pubkey - the pubkey the markers belong to
+ * @param {Record<string, number> | null} incoming
+ */
+function applyReadMarkers(pubkey, incoming) {
+  if (activePubkey !== pubkey) return; // account switched while we were decrypting
+  const merged = mergeReadMarkers(readMarkers, incoming);
+  if (!merged) return;
+  readMarkers = merged;
+  persistReadMarkers(pubkey, merged);
+}
 
 /**
  * Mark a single notification as read by event ID.
@@ -292,6 +350,13 @@ export function markItemAsRead(eventId) {
  * @param {string} pubkey
  */
 export function initializeInbox(pubkey) {
+  // The caller is a $effect on the active account (see routes/+layout.svelte),
+  // which re-runs whenever that account object changes identity. Re-running
+  // cleanup() for the account that is already live would drop the read markers
+  // on the floor and light every notification up as unread again until the
+  // relays answered — so a repeat call for the same pubkey is a no-op.
+  if (activePubkey === pubkey) return;
+
   cleanup();
   activePubkey = pubkey;
 
@@ -307,6 +372,10 @@ export function initializeInbox(pubkey) {
     /* ignore parse errors */
   }
 
+  // Read markers, local mirror first: available synchronously, so the badge is
+  // correct on the very first paint instead of after a relay round trip.
+  readMarkers = loadStoredReadMarkers(pubkey);
+
   // Load read markers (kind 30078) from relays
   const lookupRelays = getRelayListLookupRelays();
   if (lookupRelays.length > 0) {
@@ -318,6 +387,23 @@ export function initializeInbox(pubkey) {
     }).subscribe();
     subscriptions.push(markerLoaderSub);
   }
+
+  // ...and from the user's own write relays. markAsRead() publishes outbox-model
+  // (kind 30078 maps to no app relay category), so for anyone whose write relays
+  // don't overlap the lookup set, every marker ever written lives only there.
+  getWriteRelays(pubkey).then((writeRelays) => {
+    if (activePubkey !== pubkey) return;
+    const supplemental = getSupplementalNotificationRelays(lookupRelays, writeRelays);
+    if (!supplemental.length) return;
+    subscriptions.push(
+      addressLoader({
+        kind: 30078,
+        pubkey,
+        identifier: APP_DATA_D_TAG,
+        relays: supplemental
+      }).subscribe()
+    );
+  });
 
   const markerSub = eventStore
     .replaceable(30078, pubkey, APP_DATA_D_TAG)
@@ -332,7 +418,9 @@ export function initializeInbox(pubkey) {
       } catch {
         /* use raw content as fallback (may be unencrypted) */
       }
-      readMarkers = parseReadMarkers(content);
+      // Merge, never assign: parseReadMarkers() returns null for anything it
+      // cannot read, and a null here used to mark every notification unread.
+      applyReadMarkers(pubkey, parseReadMarkers(content));
     });
   subscriptions.push(markerSub);
 
@@ -542,28 +630,55 @@ export async function markAsRead(type) {
     markAllDmConversationsAsRead();
   }
 
-  readMarkers = updated;
+  const pubkey = activePubkey;
+  const merged = mergeReadMarkers(readMarkers, updated) || updated;
+  readMarkers = merged;
+  // Mirror locally before touching the network. Publishing can fail for any
+  // number of relay reasons, and when it does the read state must still stick
+  // on this device rather than silently reverting on the next reload.
+  persistReadMarkers(pubkey, merged);
 
   // Publish kind 30078 via AppDataFactory (v6). Note: the v5 code published
   // the unsigned draft; the events are now properly signed before publishing.
   const signer = manager.active.signer;
+  /** @type {import('nostr-tools').NostrEvent | null} */
+  let signed = null;
   try {
+    // NOT `AppDataFactory.create(d, data, true)`: that bakes the encryption
+    // operation with an undefined signer at call time (applesauce-common 6.2.0
+    // forwards no signer from `.data()`), so it throws "Signer required for
+    // encrypted content" no matter what `.as()` is given afterwards — which is
+    // why every marker published since the v6 migration ended up as plaintext
+    // JSON on public relays. `.encryptedContent()` resolves the signer lazily
+    // from the shared ref and does work.
     const draft = await finalizeDraft(
-      AppDataFactory.create(APP_DATA_D_TAG, updated, true).as(signer)
+      AppDataFactory.create(APP_DATA_D_TAG, merged, false)
+        .as(signer)
+        .encryptedContent(pubkey, JSON.stringify(merged))
     );
-    const signed = await signer.signEvent(draft);
-    eventStore.add(signed);
-    await publishEvent(signed);
-  } catch {
-    // Fallback: try without encryption (signer may not support NIP-44)
+    signed = await signer.signEvent(draft);
+  } catch (err) {
+    // Fallback: publish unencrypted (signer may not support NIP-44). Keeping
+    // the read state beats keeping it private, but say so rather than swallow.
+    console.warn('[inbox] read markers could not be encrypted, publishing plaintext:', err);
     try {
-      const draft = await finalizeDraft(AppDataFactory.create(APP_DATA_D_TAG, updated, false));
-      const signed = await signer.signEvent(draft);
-      eventStore.add(signed);
-      await publishEvent(signed);
-    } catch (err) {
-      console.error('Failed to publish read markers:', err);
+      const draft = await finalizeDraft(AppDataFactory.create(APP_DATA_D_TAG, merged, false));
+      signed = await signer.signEvent(draft);
+    } catch (signErr) {
+      console.error('Failed to sign read markers:', signErr);
     }
+  }
+
+  if (!signed) return;
+  eventStore.add(signed);
+  try {
+    // Kind 30078 maps to no app relay category, so publishEvent() would send it
+    // to the author's NIP-65 write relays alone — while initializeInbox() reads
+    // it back from the lookup relays. Those two sets overlapping was pure luck,
+    // and when they didn't the marker was written where nothing ever read it.
+    await publishEvent(signed, [], { additionalRelays: getRelayListLookupRelays() });
+  } catch (err) {
+    console.error('Failed to publish read markers:', err);
   }
 }
 

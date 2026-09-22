@@ -66,6 +66,34 @@ export function isUnread(event, readMarkers) {
 }
 
 /**
+ * Merge two sets of read markers, keeping the newest timestamp per key.
+ *
+ * Read markers arrive from three places that can each be stale relative to the
+ * others: the localStorage mirror, the kind 30078 copy on the relays, and the
+ * in-memory state a just-clicked "mark all as read" produced. Whichever order
+ * they land in, the result must never move a marker backwards — a stale copy
+ * winning makes already-read notifications pop back up as unread (the exact
+ * symptom of the bell-badge bug).
+ *
+ * @param {Record<string, number> | null | undefined} current
+ * @param {Record<string, number> | null | undefined} incoming
+ * @returns {Record<string, number> | null} Merged markers, or null if both sides are empty
+ */
+export function mergeReadMarkers(current, incoming) {
+  if (!current && !incoming) return null;
+  /** @type {Record<string, number>} */
+  const merged = {};
+  for (const source of [current, incoming]) {
+    if (!source) continue;
+    for (const [key, value] of Object.entries(source)) {
+      if (typeof value !== 'number' || !Number.isFinite(value)) continue;
+      if (merged[key] === undefined || value > merged[key]) merged[key] = value;
+    }
+  }
+  return merged;
+}
+
+/**
  * @param {import('nostr-tools').NostrEvent[]} events
  * @param {string} userPubkey
  * @returns {import('nostr-tools').NostrEvent[]}

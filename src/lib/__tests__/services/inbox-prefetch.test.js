@@ -34,7 +34,9 @@ vi.mock('$lib/services/publish-service.js', () => ({
   publishEvent: vi.fn()
 }));
 vi.mock('$lib/services/relay-service.svelte.js', () => ({
-  getRelayListLookupRelays: () => ['wss://lookup1']
+  getRelayListLookupRelays: () => ['wss://lookup1'],
+  getReadRelays: vi.fn(async () => []),
+  getWriteRelays: vi.fn(async () => [])
 }));
 vi.mock('$lib/services/dm-service.svelte.js', () => ({
   getUnreadDmCount: () => 0,
