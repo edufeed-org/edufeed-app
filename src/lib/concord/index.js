@@ -40,9 +40,7 @@ export {
   channelUnreadState,
   areaUnreadState,
   getChannelLevel,
-  setChannelLevel,
-  getToastsEnabled,
-  setToastsEnabled
+  setChannelLevel
 } from './notifications.svelte.js';
 export {
   getActiveConcordChannel,

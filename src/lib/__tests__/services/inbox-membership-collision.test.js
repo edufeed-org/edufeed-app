@@ -62,7 +62,8 @@ vi.mock('$lib/stores/nostr-infrastructure.svelte', () => ({
       };
     }),
     replaceable: vi.fn(() => noopObservable)
-  }
+  },
+  pool: { group: vi.fn(() => ({ subscription: vi.fn(() => noopObservable) })) }
 }));
 vi.mock('$lib/loaders/base.js', () => ({
   timedPool: vi.fn(),

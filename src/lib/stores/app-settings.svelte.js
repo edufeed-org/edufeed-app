@@ -21,6 +21,7 @@ const CONFIG_DEFAULTS_KEY = 'app-settings-config-defaults';
  * @property {string} dashboardFeedRelay
  * @property {string[]} dashboardCustomRelays
  * @property {boolean} linkPreviewsEnabled
+ * @property {boolean} systemNotificationsEnabled
  * @property {boolean} cordnGroupsEnabled
  * @property {boolean} webxdcShowAllApps
  * @property {boolean} instanceMutedWordsEnabled
@@ -101,6 +102,9 @@ function getDefaultSettings() {
     dashboardFeedRelay: '',
     dashboardCustomRelays: [],
     linkPreviewsEnabled: true,
+    // OS-level (browser Notification API) toasts for DMs, inbox items and
+    // Concord channels. Per device on purpose: the browser permission is too.
+    systemNotificationsEnabled: false,
     // Cordn private groups are opt-in per user (deployment flag alone is not enough).
     cordnGroupsEnabled: false,
     // The channel app picker lists only the deployment's curated apps
@@ -134,6 +138,8 @@ function migrateSettings(stored) {
         ? stored.dashboardCustomRelays
         : defaults.dashboardCustomRelays,
       linkPreviewsEnabled: stored.linkPreviewsEnabled ?? defaults.linkPreviewsEnabled,
+      systemNotificationsEnabled:
+        stored.systemNotificationsEnabled ?? defaults.systemNotificationsEnabled,
       cordnGroupsEnabled: stored.cordnGroupsEnabled ?? defaults.cordnGroupsEnabled,
       webxdcShowAllApps: stored.webxdcShowAllApps ?? defaults.webxdcShowAllApps,
       instanceMutedWordsEnabled:
@@ -181,6 +187,8 @@ function migrateSettings(stored) {
       ? stored.dashboardCustomRelays
       : defaults.dashboardCustomRelays,
     linkPreviewsEnabled: stored.linkPreviewsEnabled ?? defaults.linkPreviewsEnabled,
+    systemNotificationsEnabled:
+      stored.systemNotificationsEnabled ?? defaults.systemNotificationsEnabled,
     cordnGroupsEnabled: stored.cordnGroupsEnabled ?? defaults.cordnGroupsEnabled,
     webxdcShowAllApps: stored.webxdcShowAllApps ?? defaults.webxdcShowAllApps,
     instanceMutedWordsEnabled:
@@ -478,6 +486,23 @@ export const appSettings = {
    */
   set linkPreviewsEnabled(value) {
     settings.linkPreviewsEnabled = value;
+    saveSettings(settings);
+  },
+
+  /**
+   * Get OS-level notification toasts enabled (per device)
+   * @returns {boolean}
+   */
+  get systemNotificationsEnabled() {
+    return settings.systemNotificationsEnabled;
+  },
+
+  /**
+   * Set OS-level notification toasts enabled (per device)
+   * @param {boolean} value
+   */
+  set systemNotificationsEnabled(value) {
+    settings.systemNotificationsEnabled = value;
     saveSettings(settings);
   },
 

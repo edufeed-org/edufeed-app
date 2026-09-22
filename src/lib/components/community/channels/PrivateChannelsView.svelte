@@ -21,12 +21,11 @@
     readFavouriteChannels,
     toggleFavouriteChannel
   } from '$lib/groups/favourite-channels.svelte.js';
+  import { channelUnreadState, markChannelRead } from '$lib/concord/notifications.svelte.js';
   import {
-    channelUnreadState,
-    markChannelRead,
-    getToastsEnabled,
-    setToastsEnabled
-  } from '$lib/concord/notifications.svelte.js';
+    getSystemNotificationsEnabled,
+    toggleSystemNotifications
+  } from '$lib/stores/notification-permission.svelte.js';
   import {
     setActiveConcordChannel,
     clearActiveConcordChannel,
@@ -346,8 +345,11 @@
     );
   }
 
+  // One app-wide, per-device opt-in shared with DM and inbox toasts; the
+  // toggle asks the browser for permission on the way in (/settings has the
+  // same switch with the denied/unsupported hints).
   async function toggleAreaToasts() {
-    await setToastsEnabled(!getToastsEnabled());
+    await toggleSystemNotifications();
   }
 
   const getRootRoster = useRootRoster(() => communikeyEvent);
@@ -431,25 +433,6 @@
   // echo, so `concord.dissolved` (backed by `dissolved$`) flips before any
   // relay round-trip completes; Tasks 8/10 already render the resulting
   // tombstone banner + read-only composer off that same flag.
-  // Notification API state. permissionDenied is a $state refreshed on toggle
-  // attempts — the browser offers no permission-change event worth polling.
-  const notificationSupported = typeof Notification !== 'undefined';
-  let permissionDenied = $state(notificationSupported && Notification.permission === 'denied');
-  const toastsOn = $derived(getToastsEnabled());
-
-  async function toggleToasts() {
-    if (getToastsEnabled()) {
-      await setToastsEnabled(false);
-      return;
-    }
-    if (Notification.permission !== 'granted') {
-      const permission = await Notification.requestPermission();
-      permissionDenied = permission === 'denied';
-      if (permission !== 'granted') return;
-    }
-    await setToastsEnabled(true);
-  }
-
   let dissolving = $state(false);
   async function dissolve() {
     if (dissolving) return;
@@ -565,25 +548,6 @@
             class="loading loading-xs loading-spinner text-base-content/40"
             title={m.concord_sync_title()}
           ></span>
-        {/if}
-        {#if notificationSupported}
-          <button
-            class="ml-auto cursor-pointer text-sm leading-none opacity-70 hover:opacity-100 disabled:cursor-not-allowed disabled:opacity-40"
-            data-testid="concord-notif-bell"
-            disabled={permissionDenied}
-            title={permissionDenied
-              ? m.concord_notif_bell_denied()
-              : toastsOn
-                ? m.concord_notif_bell_on()
-                : m.concord_notif_bell_off()}
-            onclick={toggleToasts}
-          >
-            {#if toastsOn}
-              <BellIcon class_="w-3.5 h-3.5" title="" />
-            {:else}
-              <BellSlashIcon class_="w-3.5 h-3.5" title="" />
-            {/if}
-          </button>
         {/if}
       </div>
       {#if channels.length > 0}
@@ -830,7 +794,7 @@
                   data-testid="area-settings-toasts"
                   onclick={toggleAreaToasts}
                 >
-                  {#if getToastsEnabled()}
+                  {#if getSystemNotificationsEnabled()}
                     <BellIcon class_="w-5 h-5" title="" />
                   {:else}
                     <BellSlashIcon class_="w-5 h-5" title="" />
@@ -839,7 +803,9 @@
                     >{m.area_settings_notifications()}</span
                   >
                   <span class="badge badge-ghost badge-sm"
-                    >{getToastsEnabled() ? m.area_settings_on() : m.area_settings_off()}</span
+                    >{getSystemNotificationsEnabled()
+                      ? m.area_settings_on()
+                      : m.area_settings_off()}</span
                   >
                 </button>
                 <button

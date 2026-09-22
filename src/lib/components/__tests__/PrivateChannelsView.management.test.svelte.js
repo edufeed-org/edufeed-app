@@ -47,9 +47,7 @@ const toastSpy = vi.hoisted(() => vi.fn());
 vi.mock('$lib/helpers/toast', () => ({ showToast: toastSpy }));
 vi.mock('$lib/concord/notifications.svelte.js', () => ({
   channelUnreadState: () => ({ unread: false, mentioned: false }),
-  markChannelRead: vi.fn(),
-  getToastsEnabled: () => false,
-  setToastsEnabled: vi.fn()
+  markChannelRead: vi.fn()
 }));
 const selectSpy = vi.hoisted(() => vi.fn());
 vi.mock('$lib/concord/active-channel.svelte.js', () => ({

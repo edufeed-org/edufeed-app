@@ -62,9 +62,7 @@ vi.mock('$app/navigation', () => ({ goto: vi.fn(() => Promise.resolve()) }));
 const markChannelRead = vi.fn();
 vi.mock('$lib/concord/notifications.svelte.js', () => ({
   channelUnreadState: () => ({ unread: false, mentioned: false }),
-  markChannelRead: (/** @type {any[]} */ ...args) => markChannelRead(...args),
-  getToastsEnabled: () => false,
-  setToastsEnabled: vi.fn()
+  markChannelRead: (/** @type {any[]} */ ...args) => markChannelRead(...args)
 }));
 
 // Reactive fixture backing the mocked useConcordArea — a real $state.raw
