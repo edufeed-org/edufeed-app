@@ -1,7 +1,7 @@
 /** @vitest-environment jsdom */
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import 'fake-indexeddb/auto';
-import { EventStore } from 'applesauce-core';
+import { EventStore, DeleteManager } from 'applesauce-core';
 import { isCacheableKind } from '$lib/stores/event-cache.svelte.js';
 
 describe('isCacheableKind', () => {
@@ -868,5 +868,100 @@ describe('recacheEvent (#64, from-cache restore)', () => {
     vi.spyOn(nostrIDB, 'add').mockRejectedValueOnce(new Error('boom'));
 
     await expect(recacheEvent(version('1', 1000))).resolves.toBeUndefined();
+  });
+});
+
+describe('event-cache deletion sync', () => {
+  // nostr-idb validates events before writing: pubkeys must be hex.
+  const AUTHOR = '1'.repeat(64);
+  const resource = {
+    id: 'e'.repeat(64),
+    kind: 30142,
+    pubkey: AUTHOR,
+    created_at: 1000,
+    tags: [['d', 'res-1']],
+    content: '{}',
+    sig: 's'.repeat(128)
+  };
+  /**
+   * @param {Partial<import('nostr-tools').Event>} over
+   * @returns {import('nostr-tools').Event}
+   */
+  const deletion = (over = {}) => ({
+    id: 'f'.repeat(64),
+    kind: 5,
+    pubkey: AUTHOR,
+    created_at: 2000,
+    tags: [['a', `30142:${AUTHOR}:res-1`]],
+    content: '',
+    sig: 's'.repeat(128),
+    ...over
+  });
+
+  beforeEach(async () => {
+    // The app store exposes its DeleteManager (nostr-infrastructure) so the
+    // cache can mirror deletions into IDB — kind 5s never pass through insert$.
+    const deleteManager = new DeleteManager();
+    mockEventStore = Object.assign(new EventStore({ deleteManager }), { deleteManager });
+    mockEventStore.verifyEvent = () => true;
+    const FDBFactory = (await import('fake-indexeddb/lib/FDBFactory')).default;
+    globalThis.indexedDB = /** @type {IDBFactory} */ (/** @type {unknown} */ (new FDBFactory()));
+    vi.resetModules();
+  });
+
+  /** @type {NonNullable<import('$lib/stores/event-cache.svelte.js').nostrIDB>} */
+  let nostrIDB;
+
+  // Look the row up by address (the IDB key) rather than through query():
+  // nostr-idb's in-memory index cache records event *ids* on add() while the
+  // store keys replaceables by address, so a filter query that ran before the
+  // write-queue flushed keeps missing the row for the rest of the session.
+  const stored = () => nostrIDB.replaceable(30142, AUTHOR, 'res-1');
+
+  async function setup() {
+    const mod = await import('$lib/stores/event-cache.svelte.js');
+    await mod.dbReady;
+    nostrIDB = /** @type {NonNullable<typeof mod.nostrIDB>} */ (mod.nostrIDB);
+    await nostrIDB.add(resource);
+    await nostrIDB.writeQueue?.flush();
+    expect(await stored()).toBeDefined();
+  }
+
+  it('removes an addressable event from IDB when its author deletes it by address', async () => {
+    await setup();
+
+    mockEventStore.add(deletion());
+
+    await vi.waitFor(async () => {
+      expect(await stored()).toBeUndefined();
+    });
+  });
+
+  it('removes an event from IDB when its author deletes it by id', async () => {
+    await setup();
+
+    mockEventStore.add(deletion({ tags: [['e', resource.id]] }));
+
+    await vi.waitFor(async () => {
+      expect(await stored()).toBeUndefined();
+    });
+  });
+
+  it('keeps a cached version that is newer than the deletion', async () => {
+    await setup();
+
+    mockEventStore.add(deletion({ created_at: 500 }));
+
+    await new Promise((r) => setTimeout(r, 300));
+    expect(await stored()).toBeDefined();
+  });
+
+  it('ignores an id deletion signed by someone other than the author', async () => {
+    await setup();
+
+    mockEventStore.add(deletion({ pubkey: '2'.repeat(64), tags: [['e', resource.id]] }));
+
+    await new Promise((r) => setTimeout(r, 300));
+    expect(await stored()).toBeDefined();
   });
 });
