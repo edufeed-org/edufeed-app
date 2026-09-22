@@ -7,7 +7,7 @@
  */
 
 import { NostrIDB, getEventUID } from 'nostr-idb';
-import { persistEventsToCache } from 'applesauce-core/helpers';
+import { isAddressPointer, isEventPointer, persistEventsToCache } from 'applesauce-core/helpers';
 import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
 
 /**
@@ -96,10 +96,54 @@ export const dbReady = (async () => {
       },
       { batchTime: 1_000 }
     );
+    // Mirror NIP-09 deletions into IDB. Kind 5s never reach `insert$`, so the
+    // pipeline above cannot see them; without this, only the user's OWN
+    // deletions (persisted explicitly via `cacheDeletion`) survive a reload,
+    // and content another author deleted reappears from the cache on the next
+    // boot until some surface fetches their kind 5s again.
+    eventStore.deleteManager?.deleted$.subscribe((notification) => {
+      syncDeletionToCache(notification);
+    });
   } catch (err) {
     console.warn('[event-cache] IDB open failed; running network-only', err);
   }
 })();
+
+/**
+ * Remove the target of a deletion from IDB, mirroring what the EventStore's
+ * DeleteManager just did in memory. Applies the same guards as the store:
+ * address pointers already carry the deleting author (applesauce drops a-tags
+ * for other pubkeys), event pointers get `author` set to the deleter and must
+ * match the stored event's pubkey, and a version newer than the deletion is
+ * kept. Degrades to a no-op on any failure.
+ *
+ * @param {import('applesauce-core/event-store').DeleteEventNotification} notification
+ * @returns {Promise<void>}
+ */
+async function syncDeletionToCache({ pointer, until }) {
+  if (!nostrIDB) return;
+  try {
+    // A copy still sitting in nostr-idb's write queue would be written back
+    // after the delete.
+    await nostrIDB.writeQueue?.flush?.();
+    if (isAddressPointer(pointer)) {
+      const stored = await nostrIDB.replaceable(pointer.kind, pointer.pubkey, pointer.identifier);
+      if (!stored || stored.created_at > until) return;
+      await nostrIDB.deleteReplaceable(pointer.pubkey, pointer.kind, pointer.identifier);
+    } else if (isEventPointer(pointer)) {
+      // Not `query([{ ids }])`: nostr-idb resolves an ids filter against the
+      // row KEY, which is the address for replaceables, so a calendar event or
+      // resource deleted via e-tag would never be found. The `id` index is.
+      const stored = (await nostrIDB.db?.getFromIndex('events', 'id', pointer.id))?.event;
+      if (!stored || stored.created_at > until) return;
+      if (pointer.author && stored.pubkey !== pointer.author) return;
+      // Key by UID: a replaceable deleted via e-tag is stored under its address.
+      await nostrIDB.deleteEvent(getEventUID(stored));
+    }
+  } catch (err) {
+    console.warn('[event-cache] deletion sync failed', err);
+  }
+}
 
 /**
  * Loader cache-request function. Returns events matching the filters from IDB.
@@ -232,8 +276,9 @@ export async function recacheEvent(event) {
 /**
  * Replay cached NIP-09 deletion events (kind 5) into the event store on boot.
  *
- * nostr-idb has no deletion semantics — it stores events blindly, so the
- * deleted content event survives in IDB. The applesauce EventStore filters
+ * nostr-idb has no deletion semantics — it stores events blindly. The
+ * `deleted$` sync above removes a deleted row once the deletion is seen, but a
+ * deletion that arrives BEFORE its target is cached still needs replaying: The applesauce EventStore filters
  * deleted events only for deletions it knows about (its DeleteManager). On a
  * fresh reload the store starts empty, so without replaying the cached kind 5
  * events the content loaders read deleted events back from cache and they

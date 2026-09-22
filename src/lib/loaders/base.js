@@ -16,6 +16,7 @@ import {
 import { pool, eventStore } from '$lib/stores/nostr-infrastructure.svelte';
 import { getAllLookupRelays, getEventLoaderLookupRelays } from '$lib/helpers/relay-helper.js';
 import { cacheRequest } from '$lib/stores/event-cache.svelte.js';
+import { createRevalidatingCacheRequest } from '$lib/helpers/cache-revalidate.js';
 
 /**
  * Pool wrapper for use with createTimelineLoader.
@@ -48,10 +49,25 @@ export const timedPool = (relays, filters) =>
 // Observable for every request, so `defer` reads the live config each time.
 const lookupRelays$ = defer(() => of(getEventLoaderLookupRelays()));
 
+// Stale-while-revalidate: the address loader stops at the first source that
+// yields an address, so a plain `cacheRequest` would make every cached
+// replaceable final for as long as the row lives in IDB. This wrapper returns
+// the cached events untouched and re-requests each cached address once per
+// session with `cache: false`, which skips the cache step and goes straight to
+// the relay hints / lookup relays. Newer versions land in the EventStore (and
+// back in IDB) through the normal pipeline; an unchanged or missing relay copy
+// leaves the cached one in place. Regular events are immutable and get no
+// revalidation (see cache-revalidate.js).
+const revalidatingCacheRequest = createRevalidatingCacheRequest(cacheRequest, (pointers) => {
+  for (const pointer of pointers) {
+    addressLoader({ ...pointer, cache: false }).subscribe({ error: () => {} });
+  }
+});
+
 // Standalone address loader for direct use in components/loaders
 export const addressLoader = createAddressLoader(pool, {
   eventStore,
-  cacheRequest,
+  cacheRequest: revalidatingCacheRequest,
   lookupRelays: lookupRelays$
 });
 
@@ -68,9 +84,11 @@ export const eventLoader = createEventLoader(pool, {
 // Unified loader for EventStore - handles both EventPointer and AddressPointer.
 // Drives eventStore.profile() / eventStore.replaceable() auto-loading, so
 // lookupRelays must include profile indexer relays (see addressLoader above).
+// Shares the revalidating cache request so `eventStore.replaceable()` /
+// `eventStore.profile()` cache hits are refreshed too.
 const unifiedLoader = createUnifiedEventLoader(pool, {
   eventStore,
-  cacheRequest,
+  cacheRequest: revalidatingCacheRequest,
   lookupRelays: lookupRelays$
 });
 eventStore.eventLoader = unifiedLoader;
