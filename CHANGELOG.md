@@ -5,6 +5,82 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions are
 the `vX.Y.Z` git tags on `main`. Each release section is assembled from the
 merge commits of the nostr PRs that landed since the previous tag.
 
+## [0.1.7] - 2026-09-22
+
+### Added
+
+- **Browser notifications for DMs and inbox items.** One per-device opt-in on
+  `/settings` ("Notifications") asks for the browser permission and then
+  fires an OS toast for a new DM from a known sender and for new inbox items
+  (reactions, comments, replies, mentions, waves, RSVPs, poll votes, form
+  responses, group adds). Toasts name the sender and what happened, never the
+  content; a click focuses the app on the conversation or the inbox. Concord
+  private channels use the same opt-in and the same suppression rules
+  (nothing while the target surface is visible, 30 s throttle). The inbox now
+  keeps a standing relay subscription, so the bell badge updates live instead
+  of on the next reload.
+- **NIP-05 handle grants are announced.** An approved `@edufeed.org` address
+  shows up as a pinned "Deine Adresse ist fertig" row in the bell dropdown,
+  on `/inbox` and on the dashboard inbox card, counts on the bell, and can be
+  activated with one click. After activation a short modal explains what the
+  address enables. Previously the grant was only visible inside the Termi
+  assistant.
+- **Welcome DM after a handle grant speaks the applicant's language.** The
+  application stores the applicant's UI locale, the approval DM is rendered
+  in that locale (falling back to the deployment's base locale, never the
+  admin's), and the text introduces who is writing and on behalf of whom.
+  Configured membership admins carry an "Official" badge wherever a DM sender
+  is shown.
+- **People search on Discover.** A "Personen" tab searches profiles (own
+  follows, locally known profiles, then a NIP-50 relay search), ranked by
+  NIP-85 web-of-trust scores with an "im Vertrauensnetz" badge. The navbar
+  search icon lands there.
+- **Calendar participants.** The "Mitwirkende" field accepts plain names for
+  people without an npub (stored as an app-specific `participant` tag with the
+  NIP-52 slot layout) and searches non-followed profiles on the configured
+  search relays, ranked by web of trust. New config: `PROFILE_SEARCH_RELAYS`
+  (default Brainstorm's WoT search relay), `PROFILE_SEARCH_OBSERVER`,
+  `TRUST_ASSERTION_RELAYS`, `TRUST_ASSERTION_PROVIDERS`.
+- **Community keys on the profile page.** `/p/<npub>` of a community key
+  shows a "Community" chip next to the name and an "Open community" button
+  that leads to `/c/<npub>`. In the other direction, the community name and
+  avatar in the community hero open a profile hover card and link to the
+  key's profile page.
+- **`stil` deployment theme reworked for the editorial design.** The theme
+  now restates every editorial alias (hero, band, accent slots, display and
+  script fonts) with transferkiosk.net's palette and self-hosted Open Sans,
+  so THEME_DEFAULT_LIGHT=stil deployments follow the new layout instead of
+  the pre-redesign look. A drift test fails when a new alias lands on `:root`
+  without a `stil` counterpart.
+
+### Fixed
+
+- **"Mark all as read" in the inbox sticks.** The read marker (kind 30078)
+  was written to the author's write relays and read back from the lookup
+  relays, had no local copy, could be wiped by one undecryptable emission,
+  and was dropped on re-init. It is now mirrored in localStorage, published
+  to both relay sets, merged so nothing moves backwards, and (follow-up) its
+  value lives in the event's `created_at` with a constant content, so it
+  needs no encryption and is published at most every 10 minutes per pubkey.
+  Bell clicks no longer raise signer prompts.
+- **`nostr:` mentions in a DM body no longer become conversation
+  participants.** The kind-1 content pipeline p-tagged every pubkey behind a
+  `nostr:` pointer, including the author of an naddr, so a group invite
+  turned the groups relay's own identity into a third participant (and sent
+  it a gift-wrap copy). New DMs now carry exactly the named recipients.
+- **Upcoming-event rails show one row per appointment**, and all-day events
+  (kind 31922) no longer show a fabricated clock time. A publisher that flips
+  an appointment between kind 31922 and 31923 under the same d-tag produced
+  duplicates; the rails now collapse them.
+
+### Removed
+
+- **The kind 30382 community migration modal.** The one-off bridge to the
+  kind 30000 follow set has done its job. Its "done" flag was keyed by
+  `APP_NAME`, so every whitelabel deployment re-asked every user, and "Skip"
+  wrote nothing. The service, modal, messages and the per-login relay queries
+  are gone; existing migration flags stay on the relays unread.
+
 ## [0.1.6] - 2026-09-19
 
 ### Fixed
@@ -197,6 +273,7 @@ stack and cannot ship themselves through CI.
 
 - First tagged release on `main`.
 
+[0.1.7]: https://git.edufeed.org/edufeed/edufeed-app/compare/v0.1.6...v0.1.7
 [0.1.6]: https://git.edufeed.org/edufeed/edufeed-app/compare/v0.1.5...v0.1.6
 [0.1.5]: https://git.edufeed.org/edufeed/edufeed-app/compare/v0.1.4...v0.1.5
 [0.1.4]: https://git.edufeed.org/edufeed/edufeed-app/compare/v0.1.3...v0.1.4
