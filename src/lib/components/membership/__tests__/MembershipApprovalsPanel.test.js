@@ -26,7 +26,9 @@ const hoisted = vi.hoisted(() => ({
   sendWrappedMessageMock: vi.fn(
     /** @param {any[]} args */ (...args) => ({ __action: 'SendWrappedMessage', args })
   ),
-  ensureRecipientDmRelaysMock: vi.fn().mockResolvedValue(undefined)
+  ensureRecipientDmRelaysMock: vi.fn().mockResolvedValue(undefined),
+  /** Profiles the panel's useProfileMap returns (applicants + the admin). */
+  profileState: { map: new Map() }
 }));
 const {
   timelineState,
@@ -36,11 +38,15 @@ const {
   nip44DecryptMock,
   actionRunnerOptimisticRunMock,
   sendWrappedMessageMock,
-  ensureRecipientDmRelaysMock
+  ensureRecipientDmRelaysMock,
+  profileState
 } = hoisted;
 
 vi.mock('$lib/stores/config.svelte.js', () => ({
   runtimeConfig: {
+    get appName() {
+      return 'Edufeed';
+    },
     get membership() {
       return {
         enabled: true,
@@ -124,12 +130,13 @@ vi.mock('$lib/services/dm-recipient-relays.js', () => ({
   ensureRecipientDmRelays: hoisted.ensureRecipientDmRelaysMock
 }));
 
-vi.mock('applesauce-actions/actions', () => ({
-  SendWrappedMessage: hoisted.sendWrappedMessageMock
+vi.mock('$lib/actions/dm-actions.js', () => ({
+  SendWrappedMessage: hoisted.sendWrappedMessageMock,
+  ReplyToWrappedMessage: vi.fn()
 }));
 
 vi.mock('$lib/stores/profile-map.svelte.js', () => ({
-  useProfileMap: () => () => new Map()
+  useProfileMap: () => () => hoisted.profileState.map
 }));
 
 vi.mock('$lib/components/shared/ProfileAvatar.svelte', () => ({ default: () => ({}) }));
@@ -189,6 +196,7 @@ describe('MembershipApprovalsPanel', () => {
     actionRunnerOptimisticRunMock.mockResolvedValue(undefined);
     sendWrappedMessageMock.mockClear();
     ensureRecipientDmRelaysMock.mockClear();
+    profileState.map = new Map([[ADMIN_PUBKEY, { name: 'VocabulOER' }]]);
     vi.restoreAllMocks();
   });
 
@@ -334,6 +342,58 @@ describe('MembershipApprovalsPanel', () => {
     expect(recipient).toBe(APPLICANT_PUBKEY);
     expect(typeof body).toBe('string');
     expect(body).toMatch(/maria@edufeed\.org/);
+  });
+
+  /** Approve one application and return the DM body that went out. */
+  async function approveAndCaptureDm() {
+    mockFetch({
+      wellKnown: emptyWellKnown(),
+      proxyPost: new Response(JSON.stringify({ name: 'maria', pubkey: APPLICANT_PUBKEY }), {
+        status: 201,
+        headers: { 'content-type': 'application/json' }
+      })
+    });
+    const { findByRole } = render(MembershipApprovalsPanel);
+    await fireEvent.click(await findByRole('button', { name: /Approve|Genehmigen/i }));
+    await waitFor(() => expect(actionRunnerOptimisticRunMock).toHaveBeenCalled());
+    return /** @type {string} */ (actionRunnerOptimisticRunMock.mock.calls[0][2]);
+  }
+
+  it("writes the welcome DM in the applicant's language, not the admin's", async () => {
+    // The applicant filled the form with an English UI; the admin may be
+    // browsing in German. The stored ui_locale wins.
+    nip44DecryptMock.mockResolvedValue(
+      JSON.stringify([
+        ['response', 'wished_handle', 'maria'],
+        ['response', 'ui_locale', 'en']
+      ])
+    );
+    timelineState.events = [makeResponse('maria')];
+    const body = await approveAndCaptureDm();
+    expect(body).toMatch(/Welcome to edufeed\.org/);
+    expect(body).toMatch(/maria@edufeed\.org/);
+    expect(body).not.toMatch(/Willkommen/);
+  });
+
+  it('falls back to German for applications that carry no locale', async () => {
+    timelineState.events = [makeResponse('maria')];
+    const body = await approveAndCaptureDm();
+    expect(body).toMatch(/Willkommen auf edufeed\.org/);
+    expect(body).not.toMatch(/Welcome/);
+  });
+
+  it('introduces the sender as writing on behalf of the app team', async () => {
+    timelineState.events = [makeResponse('maria')];
+    const body = await approveAndCaptureDm();
+    expect(body).toMatch(/VocabulOER/);
+    expect(body).toMatch(/Edufeed-Team/);
+  });
+
+  it('names the admin by short npub when no profile is known', async () => {
+    profileState.map = new Map();
+    timelineState.events = [makeResponse('maria')];
+    const body = await approveAndCaptureDm();
+    expect(body).toMatch(/npub1/);
   });
 
   it('loads the applicant DM relay list before sending the notify-DM', async () => {

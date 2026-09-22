@@ -7,6 +7,7 @@
   import { useActiveUser } from '$lib/stores/accounts.svelte';
   import { MessageSquareIcon } from '$lib/components/icons';
   import ProfileAvatar from '$lib/components/shared/ProfileAvatar.svelte';
+  import OfficialBadge from '$lib/components/shared/OfficialBadge.svelte';
   import UnreadDot from '$lib/components/shared/UnreadDot.svelte';
   import * as m from '$lib/paraglide/messages.js';
 
@@ -96,6 +97,7 @@
           }
         }}>{displayName}</span
       >
+      <OfficialBadge pubkey={otherPubkey} class_="ml-1 align-middle" />
       &nbsp;{m.inbox_action_dm()}
     </div>
     <div class="mt-0.5 flex items-center gap-2">

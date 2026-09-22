@@ -8,7 +8,8 @@
     publishApplicationCopy,
     ensureApplicantRelayLists
   } from '$lib/services/membership-publish.js';
-  import { normalizeHandle } from '$lib/helpers/membership-applications.js';
+  import { APPLICANT_LOCALE_FIELD, normalizeHandle } from '$lib/helpers/membership-applications.js';
+  import { getLocale } from '$lib/paraglide/runtime.js';
   import { createAppEventFactory } from '$lib/helpers/event-factory.js';
   import { addressLoader } from '$lib/loaders/base.js';
   import { getCommunikeyRelays } from '$lib/helpers/relay-helper.js';
@@ -240,6 +241,10 @@
       if (typeof values.wished_handle === 'string') {
         values = { ...values, wished_handle: normalizeHandle(values.wished_handle) };
       }
+      // The approval DM is composed on the admin's side; record which language
+      // the applicant is using so it can be written in that one, not the
+      // admin's (see resolveApplicantLocale).
+      values = { ...values, [APPLICANT_LOCALE_FIELD]: getLocale() };
       const responseTags = buildResponseTags(values);
       const signer = manager.active.signer;
       // Applications carry name, affiliation and motivation — never publish

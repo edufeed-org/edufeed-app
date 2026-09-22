@@ -192,6 +192,7 @@ vi.mock('$lib/stores/config.svelte.js', () => ({
 }));
 
 import MembershipApplicationForm from '../MembershipApplicationForm.svelte';
+import { getLocale } from '$lib/paraglide/runtime.js';
 // Mocked above — imported to assert on the replaceable() spy.
 import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
 
@@ -369,6 +370,29 @@ describe('MembershipApplicationForm', () => {
     expect(builtTemplate.tags.some((/** @type {string[]} */ t) => t[0] === 'response')).toBe(false);
     expect(builtTemplate.content).toContain('encrypted:');
     expect(JSON.stringify(builtTemplate.tags)).not.toContain('Maria Mustermann');
+  });
+
+  it('stores the UI locale alongside the answers so the approval DM can match it', async () => {
+    const { findByLabelText, findByRole } = render(MembershipApplicationForm);
+    const handleInput = /** @type {HTMLInputElement} */ (await findByLabelText(/Wunsch-Adresse/));
+    const nameInput = /** @type {HTMLInputElement} */ (await findByLabelText(/Vollständiger Name/));
+    const motivationInput = /** @type {HTMLTextAreaElement} */ (
+      await findByLabelText(/Warum möchtest du Mitglied/)
+    );
+    await fireEvent.input(handleInput, { target: { value: 'maria' } });
+    await fireEvent.input(nameInput, { target: { value: 'Maria Mustermann' } });
+    await fireEvent.input(motivationInput, { target: { value: 'Ich bin Lehrerin und ...' } });
+    await vi.advanceTimersByTimeAsync(500);
+    await vi.runAllTimersAsync();
+    await fireEvent.click(await findByRole('button', { name: /Antrag|Submit/i }));
+    vi.useRealTimers();
+
+    await waitFor(() => expect(nip44EncryptSpy).toHaveBeenCalled());
+    const answers = JSON.parse(nip44EncryptSpy.mock.calls[0][1]);
+    // Whatever locale the runtime resolves under jsdom (the field labels come
+    // from the form template, not from paraglide, so they say nothing here).
+    expect(answers).toContainEqual(['response', 'ui_locale', getLocale(), '{}']);
+    expect(['de', 'en']).toContain(getLocale());
   });
 
   it('lowercases the wished_handle before it is published', async () => {

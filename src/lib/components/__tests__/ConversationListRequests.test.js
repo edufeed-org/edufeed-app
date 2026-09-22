@@ -28,7 +28,9 @@ vi.mock('$lib/paraglide/messages', () =>
       'dm_preview_file',
       'profile_avatar_alt',
       'profile_avatar_fallback',
-      'inbox_mark_read'
+      'inbox_mark_read',
+      'official_badge_label',
+      'official_badge_title'
     ].map((k) => [k, () => k])
   )
 );
@@ -39,6 +41,18 @@ const STRANGER = 'c'.repeat(64);
 
 vi.mock('$lib/stores/accounts.svelte', () => ({
   useActiveUser: () => () => ({ pubkey: SELF })
+}));
+
+const configState = vi.hoisted(() => ({ adminPubkeys: /** @type {string[]} */ ([]) }));
+vi.mock('$lib/stores/config.svelte.js', () => ({
+  runtimeConfig: {
+    get membership() {
+      return { adminPubkeys: configState.adminPubkeys };
+    },
+    get appName() {
+      return 'Edufeed';
+    }
+  }
 }));
 
 vi.mock('$lib/stores/profile-map.svelte.js', () => ({
@@ -84,6 +98,22 @@ beforeEach(() => {
   mockDmService.known = [];
   mockDmService.requests = [];
   mockMuteUser.mockClear();
+  configState.adminPubkeys = [];
+});
+
+describe('ConversationList official senders', () => {
+  it('badges a conversation with a configured platform account as official', () => {
+    configState.adminPubkeys = [FRIEND];
+    mockDmService.known = [conv(FRIEND)];
+    const { getByText } = render(ConversationList, { props: baseProps });
+    expect(getByText('official_badge_label')).toBeTruthy();
+  });
+
+  it('shows no official badge for an ordinary peer', () => {
+    mockDmService.known = [conv(FRIEND)];
+    const { queryByText } = render(ConversationList, { props: baseProps });
+    expect(queryByText('official_badge_label')).toBeNull();
+  });
 });
 
 describe('ConversationList requests split', () => {

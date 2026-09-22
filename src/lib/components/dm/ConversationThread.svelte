@@ -38,6 +38,7 @@
   import { swipeable } from '$lib/helpers/swipe.js';
   import NostrContentRenderer from '$lib/components/shared/NostrContentRenderer.svelte';
   import ProfileAvatar from '$lib/components/shared/ProfileAvatar.svelte';
+  import OfficialBadge from '$lib/components/shared/OfficialBadge.svelte';
   import EmojiPicker from '$lib/components/shared/EmojiPicker.svelte';
   import EmojiInput from '$lib/components/shared/EmojiInput.svelte';
   import { customEmojisIn } from '$lib/helpers/emoji-autocomplete.js';
@@ -368,13 +369,14 @@
         showHoverCard
       />
     {/if}
-    <h3 class="min-w-0 flex-1 truncate font-bold">
+    <h3 class="flex min-w-0 flex-1 items-center gap-1.5 font-bold">
       {#if getHeaderPubkey()}
-        <a href={resolve(profileLink(getHeaderPubkey() ?? ''))} class="hover:underline">
+        <a href={resolve(profileLink(getHeaderPubkey() ?? ''))} class="truncate hover:underline">
           {getHeaderName()}
         </a>
+        <OfficialBadge pubkey={getHeaderPubkey()} />
       {:else}
-        {getHeaderName()}
+        <span class="truncate">{getHeaderName()}</span>
       {/if}
     </h3>
     {#if getHeaderPubkey() && getHeaderPubkey() !== getActiveUser()?.pubkey}

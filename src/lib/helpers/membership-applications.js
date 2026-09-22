@@ -15,6 +15,33 @@
  *      the handle the applicant asked for *before* they edited it.
  */
 
+import { baseLocale, isLocale } from '$lib/paraglide/runtime.js';
+
+/**
+ * Key under which the application form stores the applicant's UI locale in
+ * the encrypted answers (a `response` tag like any field, so it travels and
+ * decrypts with them). Not a template field: the approvals panel renders only
+ * template fields, so it never shows up as an answer.
+ */
+export const APPLICANT_LOCALE_FIELD = 'ui_locale';
+
+/**
+ * Language for the approval DM: the one the applicant used when applying.
+ *
+ * The DM is composed in the *admin's* browser, and before this field existed
+ * it was rendered in the admin's UI language — a German applicant got an
+ * English welcome because the admin happened to browse in English. Older
+ * applications carry no locale; they fall back to the deployment's base
+ * locale, never the admin's.
+ *
+ * @param {Record<string, string> | undefined} values - decrypted answers
+ * @returns {import('$lib/paraglide/runtime.js').Locale}
+ */
+export function resolveApplicantLocale(values) {
+  const stored = values?.[APPLICANT_LOCALE_FIELD];
+  return isLocale(stored) ? stored : baseLocale;
+}
+
 /**
  * Copies of `formAddress` responses addressed to `adminPubkey`, reduced to the
  * newest submission per applicant.

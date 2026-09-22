@@ -22,8 +22,10 @@
   import { formResponseLoader } from '$lib/loaders/community.js';
   import {
     normalizeHandle,
+    resolveApplicantLocale,
     selectAdminApplications
   } from '$lib/helpers/membership-applications.js';
+  import { getDisplayName } from '$lib/helpers/displayName.js';
   import { parseResponseTags, parseFormTemplate, nip44DecryptWith } from '$lib/helpers/forms.js';
   import { createNIP98AuthHeader } from '$lib/helpers/nip98.js';
   import { sendWrappedDm } from '$lib/services/wrapped-dm.js';
@@ -101,7 +103,12 @@
   const approvedResponses = $derived(
     visibleResponses.filter((r) => approvalState.get(r.id) === 'approved')
   );
-  const getProfiles = useProfileMap(() => visibleResponses.map((r) => r.pubkey));
+  // Applicants for the cards, plus the admin themselves: the approval DM
+  // introduces its sender by profile name.
+  const getProfiles = useProfileMap(() => [
+    ...visibleResponses.map((r) => r.pubkey),
+    ...(activePubkey ? [activePubkey] : [])
+  ]);
 
   /**
    * Per-row expansion state. Pending applications default to expanded so the
@@ -266,9 +273,18 @@
         // not roll back the approval — the handle is provisioned upstream and
         // the row is already marked approved.
         try {
-          const dmBody = m.admin_membership_notify_dm({
-            address: `${name}@${handleDomain}`
-          });
+          // Written in the applicant's language, and it says who is writing:
+          // in another client the sender is just this admin's profile, which
+          // nothing marks as official (issue: "VocabulOER" welcome DM).
+          const dmBody = m.admin_membership_notify_dm(
+            {
+              address: `${name}@${handleDomain}`,
+              domain: handleDomain,
+              appName: runtimeConfig.appName,
+              adminName: getDisplayName(getProfiles()?.get(active.pubkey), active.pubkey)
+            },
+            { locale: resolveApplicantLocale(values) }
+          );
           // sendWrappedDm settles both relay lists first. The recipient one
           // matters most here: SendWrappedMessage resolves DM relays from the
           // EventStore and never hits the network, so without it the wrap
