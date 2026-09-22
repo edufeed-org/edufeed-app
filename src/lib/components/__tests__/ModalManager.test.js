@@ -50,6 +50,10 @@ describe('ModalManager lazy loading', () => {
     expect(staticModalImports).toEqual([]);
   });
 
+  it('no longer registers the retired community migration modal', () => {
+    expect(modalManagerSource).not.toMatch(/communityMigration|CommunityMigrationModal/);
+  });
+
   it('renders nothing while no modal is active', () => {
     const { container } = render(ModalManager);
     expect(container.querySelector('dialog')).toBeNull();
