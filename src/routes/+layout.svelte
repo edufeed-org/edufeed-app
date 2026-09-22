@@ -285,16 +285,6 @@
     requestAnimationFrame(tryRestore);
   });
 
-  // Check for community membership migration (old kind 30382 → kind 30000)
-  $effect(() => {
-    if (!browser) return;
-    import('$lib/services/migration-check-service.svelte.js').then(
-      ({ checkCommunityMigration }) => {
-        checkCommunityMigration();
-      }
-    );
-  });
-
   // Replay cached NIP-09 deletions into the event store once on boot so
   // deleted events stay filtered after a reload (the cache itself has no
   // deletion semantics). Runs for anonymous + logged-in users.

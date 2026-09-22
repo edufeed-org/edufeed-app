@@ -49,4 +49,10 @@ describe('root layout static imports', () => {
   ])('Navbar does not statically import %s', (needle) => {
     expect(staticImportsOf(navbarSource).filter((s) => s.endsWith(needle))).toEqual([]);
   });
+
+  // The one-off kind 30382 -> kind 30000 community migration bridge was removed;
+  // nothing in the root layout should wake it (statically or via import()).
+  it('does not reference the retired community migration check', () => {
+    expect(layoutSource).not.toMatch(/migration-check-service|checkCommunityMigration/);
+  });
 });
