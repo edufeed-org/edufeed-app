@@ -22,6 +22,8 @@ import {
 import { useTrustScores } from '$lib/stores/trust-scores.svelte.js';
 
 const MIN_TERM = 2;
+/** Known-profile and NIP-50 legs need this many chars regardless of minTerm. */
+const MIN_SEARCH_TERM = 2;
 
 /**
  * @typedef {import('$lib/stores/contacts.svelte.js').EnrichedContact} EnrichedContact
@@ -36,10 +38,15 @@ const MIN_TERM = 2;
 
 /**
  * @param {() => string} getQuery - reactive getter for the raw query
- * @param {{limit?: number, debounceMs?: number}} [options]
+ * @param {{limit?: number, debounceMs?: number, minTerm?: number}} [options]
+ *   `minTerm` — shortest term that yields results (default 2). `0` makes an
+ *   empty term list the user's follows (the @-mention picker's bare `@`).
  * @returns {() => PeopleSearchState}
  */
-export function usePeopleSearch(getQuery, { limit = 30, debounceMs = 300 } = {}) {
+export function usePeopleSearch(
+  getQuery,
+  { limit = 30, debounceMs = 300, minTerm = MIN_TERM } = {}
+) {
   let term = $state('');
   let busy = $state(false);
   /** Follows matching the term — always first. */
@@ -76,7 +83,7 @@ export function usePeopleSearch(getQuery, { limit = 30, debounceMs = 300 } = {})
     untrack(() => {
       cancelRemote();
       term = q;
-      if (q.length < MIN_TERM) {
+      if (q.length < minTerm) {
         follows = [];
         others = [];
         return;
@@ -87,14 +94,17 @@ export function usePeopleSearch(getQuery, { limit = 30, debounceMs = 300 } = {})
       // eslint-disable-next-line svelte/prefer-svelte-reactivity
       const seen = new Set(followHits.map((c) => c.pubkey));
       const known = [];
-      for (const c of searchKnownProfiles(q, limit, { exclude: [...seen] })) {
-        if (seen.has(c.pubkey)) continue;
-        seen.add(c.pubkey);
-        known.push(c);
+      if (q.length >= MIN_SEARCH_TERM) {
+        for (const c of searchKnownProfiles(q, limit, { exclude: [...seen] })) {
+          if (seen.has(c.pubkey)) continue;
+          seen.add(c.pubkey);
+          known.push(c);
+        }
       }
       follows = followHits;
       others = known;
 
+      if (q.length < MIN_SEARCH_TERM) return;
       timer = setTimeout(() => {
         busy = true;
         sub = profileNameSearchLoader(q, limit).subscribe({
@@ -119,7 +129,7 @@ export function usePeopleSearch(getQuery, { limit = 30, debounceMs = 300 } = {})
 
   return () => ({
     term,
-    tooShort: term.length < MIN_TERM,
+    tooShort: term.length < minTerm,
     busy,
     results,
     scores: getScores()
