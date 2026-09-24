@@ -1,5 +1,6 @@
 /** @vitest-environment node */
 import { describe, it, expect } from 'vitest';
+import { nip19 } from 'nostr-tools';
 import {
   parseGroupInput,
   isValidRelayUrl,
@@ -134,6 +135,21 @@ describe('buildGroupMessageTemplate', () => {
     expect(template.content).toBe('hello group');
     expect(template.tags[0]).toEqual(['h', 'beechat']);
     expect(typeof template.created_at).toBe('number');
+  });
+
+  it('p-tags people mentioned in the text, once, without duplicating the reply p tag', () => {
+    const alice = 'a'.repeat(64);
+    const npub = nip19.npubEncode(alice);
+    const template = buildGroupMessageTemplate('beechat', `hi nostr:${npub} nostr:${npub}`, {
+      id: 'parent-1',
+      pubkey: alice
+    });
+    expect(template.tags.filter((t) => t[0] === 'p')).toEqual([['p', alice]]);
+    const other = buildGroupMessageTemplate(
+      'beechat',
+      `hi nostr:${nip19.npubEncode('b'.repeat(64))}`
+    );
+    expect(other.tags).toContainEqual(['p', 'b'.repeat(64)]);
   });
 
   it('adds NIP-10 reply marker + p tag when replying', () => {

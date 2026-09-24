@@ -24,7 +24,7 @@
   import { publishEventOptimistic } from '$lib/services/publish-service.js';
   import { showToast } from '$lib/helpers/toast';
   import { getAppRelaysForCategory } from '$lib/services/app-relay-service.svelte.js';
-  import { extractMentionPubkeys } from '$lib/helpers/inbox.js';
+  import { mentionPubkeysIn, pTagPubkeys } from '$lib/helpers/mention-autocomplete.js';
 
   const getAllowedAuthors = getContext('allowedAuthors');
 
@@ -175,7 +175,8 @@
     isSending = true;
 
     try {
-      const mentionTags = extractMentionPubkeys(messageContent).map((pk) => ['p', pk]);
+      // NIP-27 mentions (npub + nprofile) become NIP-10 p tags
+      const mentionTags = mentionPubkeysIn(messageContent).map((pk) => ['p', pk]);
       const chatEvent = {
         kind: 9,
         content: messageContent,
@@ -184,10 +185,12 @@
         pubkey: activeUser.pubkey
       };
 
-      // Add reply tags (NIP-10 markers)
+      // Add reply tags (NIP-10 markers); a mentioned reply author is tagged once
       if (replyingTo) {
         chatEvent.tags.push(['e', replyingTo.id, '', 'reply']);
-        chatEvent.tags.push(['p', replyingTo.pubkey]);
+        if (!chatEvent.tags.some((t) => t[0] === 'p' && t[1] === replyingTo.pubkey)) {
+          chatEvent.tags.push(['p', replyingTo.pubkey]);
+        }
       }
 
       // NIP-30: one emoji tag per custom shortcode the text still contains
@@ -200,19 +203,27 @@
 
       eventStore.add(signedEvent);
 
-      publishEventOptimistic(signedEvent, [derivedCommunityPubkey], {
-        communityEvent: communikeyEvent,
-        // Total publish failure removes the optimistic message from the
-        // store again — the bubble appears, then silently vanishes
-        // (journey-test 2026-08-17, "chat send failed" with zero feedback).
-        // Surface it and give the text back for a retry.
-        onStatusChange: (status) => {
-          if (status.status === 'failed') {
-            showToast(m.community_views_chat_send_failed(), 'error');
-            if (!newMessage.trim()) newMessage = messageContent;
+      // Mentioned users get the message on their read relays too.
+      publishEventOptimistic(
+        signedEvent,
+        [
+          derivedCommunityPubkey,
+          ...pTagPubkeys(signedEvent).filter((p) => p !== derivedCommunityPubkey)
+        ],
+        {
+          communityEvent: communikeyEvent,
+          // Total publish failure removes the optimistic message from the
+          // store again — the bubble appears, then silently vanishes
+          // (journey-test 2026-08-17, "chat send failed" with zero feedback).
+          // Surface it and give the text back for a retry.
+          onStatusChange: (status) => {
+            if (status.status === 'failed') {
+              showToast(m.community_views_chat_send_failed(), 'error');
+              if (!newMessage.trim()) newMessage = messageContent;
+            }
           }
         }
-      });
+      );
 
       replyingTo = null;
     } catch (error) {

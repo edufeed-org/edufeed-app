@@ -21,6 +21,7 @@ import {
 } from 'applesauce-common/helpers/groups';
 import { normalizeURL } from 'applesauce-core/helpers/url';
 import { buildReplyTags } from '$lib/helpers/threading.js';
+import { mentionPubkeysIn } from '$lib/helpers/mention-autocomplete.js';
 
 /**
  * @typedef {{relay: string, id: string}} GroupPointer
@@ -175,6 +176,11 @@ export function buildGroupMessageTemplate(
   if (replyTo) {
     tags.push(...buildReplyTags(replyTo));
     tags.push(['p', replyTo.pubkey]);
+  }
+  // NIP-27 mentions become NIP-10 p tags (once each; the reply author may
+  // already be tagged above).
+  for (const pubkey of mentionPubkeysIn(content)) {
+    if (!tags.some((t) => t[0] === 'p' && t[1] === pubkey)) tags.push(['p', pubkey]);
   }
   for (const att of attachments) {
     if (!att?.url || !content.includes(att.url)) continue;
