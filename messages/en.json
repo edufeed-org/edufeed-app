@@ -821,6 +821,7 @@
   "message_time_now": "now",
   "community_views_chat_input_placeholder": "Type a message...",
   "emoji_suggestions_label": "Emoji suggestions",
+  "mention_suggestions_label": "People suggestions",
   "community_views_chat_send_button": "Send",
   "community_views_chat_load_more": "Load older messages",
   "community_views_chat_login_prompt": "Sign in to participate in the chat",

@@ -768,6 +768,7 @@
   "message_time_now": "jetzt",
   "community_views_chat_input_placeholder": "Nachricht eingeben...",
   "emoji_suggestions_label": "Emoji-Vorschläge",
+  "mention_suggestions_label": "Personen-Vorschläge",
   "community_views_chat_send_button": "Senden",
   "community_views_chat_load_more": "Ältere Nachrichten laden",
   "community_views_chat_login_prompt": "Melde dich an, um am Chat teilzunehmen",

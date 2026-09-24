@@ -1,12 +1,14 @@
 <!--
-  MentionAutocomplete — presentational @-mention dropdown for the Concord
-  composer (spec §5). ChannelChat owns detection state (detectMentionQuery on
-  the input) and keyboard handling; this component only renders candidates
+  MentionAutocomplete — presentational @-mention dropdown shared by
+  ComposerInput and the Concord channel composer. The host owns detection
+  (detectMentionQuery) and keyboard handling; this only renders candidates
   and reports a pick. mousedown (not click) so selection wins the race
-  against the input losing focus.
+  against the editor losing focus — same as EmojiAutocomplete. Anchored
+  above the host by a `relative` wrapper, full width.
 -->
 <script>
   import ProfileAvatar from '$lib/components/shared/ProfileAvatar.svelte';
+  import * as m from '$lib/paraglide/messages';
 
   /** @type {{candidates: Array<{pubkey: string, name: string, profile: any}>, highlightIndex: number, onSelect: (pubkey: string) => void}} */
   let { candidates = [], highlightIndex = 0, onSelect } = $props();
@@ -15,7 +17,9 @@
 {#if candidates.length > 0}
   <ul
     role="listbox"
-    class="absolute right-4 bottom-full left-4 z-40 mb-1 max-h-60 overflow-y-auto rounded-box border border-base-300 bg-base-100 p-1 shadow-lg"
+    aria-label={m.mention_suggestions_label()}
+    class="absolute bottom-full left-0 z-40 mb-1 max-h-60 w-full max-w-[calc(100vw-2rem)] min-w-64 overflow-y-auto rounded-box border border-base-300 bg-base-100 p-1 shadow-lg"
+    data-testid="mention-suggestions"
   >
     {#each candidates as candidate, i (candidate.pubkey)}
       <li
