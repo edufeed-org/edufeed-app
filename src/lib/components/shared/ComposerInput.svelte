@@ -21,7 +21,11 @@
 -->
 <script>
   import { tick } from 'svelte';
+  import { nip19 } from 'nostr-tools';
   import { detectEmojiQuery, searchEmojis, applyEmoji } from '$lib/helpers/emoji-autocomplete.js';
+  import { mentionPubkeysIn } from '$lib/helpers/mention-autocomplete.js';
+  import { useProfileMap } from '$lib/stores/profile-map.svelte.js';
+  import { getUserDisplayName } from '$lib/helpers/message-utils.js';
   import EmojiAutocomplete from './EmojiAutocomplete.svelte';
 
   /**
@@ -76,6 +80,88 @@
   const SHORTCODE_RE = /:([\w+-]+):/g;
   const BLOCK_TAGS = new Set(['DIV', 'P']);
 
+  // ---- mention chips ------------------------------------------------------
+  // A NIP-27 `nostr:npub…`/`nostr:nprofile…` token in the value renders as a
+  // non-editable `@Name` chip; the value keeps the raw reference.
+  const MENTION_RE = /nostr:((?:npub|nprofile)1[02-9ac-hj-np-z]+)/g;
+  /** Profiles for every mention in the value; chips get their label from here. */
+  const getProfiles = useProfileMap(() => mentionPubkeysIn(value));
+  /** Profiles handed over by a pick so the chip never flashes the hex label. */
+  let seededProfiles = $state.raw(/** @type {Record<string, any>} */ ({}));
+
+  /** @param {string} bech32 @returns {string | null} hex pubkey, or null when not a profile pointer */
+  function mentionPubkey(bech32) {
+    try {
+      const decoded = nip19.decode(bech32);
+      if (decoded.type === 'npub') return decoded.data;
+      if (decoded.type === 'nprofile') return decoded.data.pubkey;
+    } catch {
+      /* not a valid pointer — stays text */
+    }
+    return null;
+  }
+  /** @param {string} pubkey */
+  function chipLabel(pubkey) {
+    const profile = getProfiles().get(pubkey) ?? seededProfiles[pubkey];
+    if (profile?.display_name || profile?.name) return `@${getUserDisplayName(pubkey, profile)}`;
+    return `@${pubkey.slice(0, 8)}`;
+  }
+  /** @param {string} ref bech32 @param {string} pubkey hex */
+  function createChip(ref, pubkey) {
+    const chip = document.createElement('span');
+    chip.dataset.mention = pubkey;
+    chip.dataset.ref = ref;
+    chip.setAttribute('contenteditable', 'false');
+    chip.className = 'badge mx-px align-baseline badge-ghost badge-sm';
+    chip.textContent = chipLabel(pubkey);
+    return chip;
+  }
+
+  /**
+   * @typedef {{ type: 'text', text: string }
+   *   | { type: 'emoji', shortcode: string, url: string }
+   *   | { type: 'mention', ref: string, pubkey: string }} Piece
+   */
+  /**
+   * Split one line into text / emoji / mention pieces, in order.
+   * @param {string} line
+   * @returns {Piece[]}
+   */
+  function tokenizeLine(line) {
+    /** @type {Array<{ at: number, len: number, piece: Piece }>} */
+    const hits = [];
+    for (const match of line.matchAll(SHORTCODE_RE)) {
+      const url = urlByShortcode[match[1]];
+      if (!url) continue;
+      hits.push({
+        at: /** @type {number} */ (match.index),
+        len: match[0].length,
+        piece: { type: 'emoji', shortcode: match[1], url }
+      });
+    }
+    for (const match of line.matchAll(MENTION_RE)) {
+      const pubkey = mentionPubkey(match[1]);
+      if (!pubkey) continue;
+      hits.push({
+        at: /** @type {number} */ (match.index),
+        len: match[0].length,
+        piece: { type: 'mention', ref: match[1], pubkey }
+      });
+    }
+    hits.sort((a, b) => a.at - b.at);
+    /** @type {Piece[]} */
+    const out = [];
+    let last = 0;
+    for (const hit of hits) {
+      if (hit.at < last) continue; // overlapping match — keep the earlier one
+      if (hit.at > last) out.push({ type: 'text', text: line.slice(last, hit.at) });
+      out.push(hit.piece);
+      last = hit.at + hit.len;
+    }
+    if (last < line.length) out.push({ type: 'text', text: line.slice(last) });
+    return out;
+  }
+
   // ---- DOM → string ---------------------------------------------------
   /** @param {Node} node */
   function serializeNode(node) {
@@ -88,6 +174,8 @@
       } else if (child.nodeName === 'IMG') {
         const sc = /** @type {HTMLElement} */ (child).dataset.shortcode;
         out += sc ? `:${sc}:` : '';
+      } else if (child.nodeName === 'SPAN' && /** @type {HTMLElement} */ (child).dataset.ref) {
+        out += `nostr:${/** @type {HTMLElement} */ (child).dataset.ref}`;
       } else {
         if (out && !out.endsWith('\n') && BLOCK_TAGS.has(child.nodeName)) out += '\n';
         out += serializeNode(child);
@@ -102,6 +190,12 @@
     if (child.nodeName === 'IMG') {
       const sc = /** @type {HTMLElement} */ (child).dataset.shortcode;
       return sc ? sc.length + 2 : 0;
+    }
+    if (child.nodeName === 'SPAN' && /** @type {HTMLElement} */ (child).dataset.ref) {
+      return (
+        'nostr:'.length +
+        /** @type {string} */ (/** @type {HTMLElement} */ (child).dataset.ref).length
+      );
     }
     return serializeNode(child).length;
   }
@@ -121,23 +215,22 @@
     const lines = text.split('\n');
     lines.forEach((line, lineIndex) => {
       if (lineIndex > 0) editor?.appendChild(document.createElement('br'));
-      let last = 0;
-      for (const match of line.matchAll(SHORTCODE_RE)) {
-        const url = urlByShortcode[match[1]];
-        if (!url) continue;
-        const at = /** @type {number} */ (match.index);
-        if (at > last) editor?.appendChild(document.createTextNode(line.slice(last, at)));
-        const img = document.createElement('img');
-        img.src = url;
-        img.alt = match[0];
-        img.dataset.shortcode = match[1];
-        img.draggable = false;
-        img.setAttribute('contenteditable', 'false');
-        img.className = 'mx-px inline h-5 w-5 object-contain align-text-bottom';
-        editor?.appendChild(img);
-        last = at + match[0].length;
+      for (const piece of tokenizeLine(line)) {
+        if (piece.type === 'text') {
+          editor?.appendChild(document.createTextNode(piece.text));
+        } else if (piece.type === 'emoji') {
+          const img = document.createElement('img');
+          img.src = piece.url;
+          img.alt = `:${piece.shortcode}:`;
+          img.dataset.shortcode = piece.shortcode;
+          img.draggable = false;
+          img.setAttribute('contenteditable', 'false');
+          img.className = 'mx-px inline h-5 w-5 object-contain align-text-bottom';
+          editor?.appendChild(img);
+        } else {
+          editor?.appendChild(createChip(piece.ref, piece.pubkey));
+        }
       }
-      if (last < line.length) editor?.appendChild(document.createTextNode(line.slice(last)));
     });
   }
   /* eslint-enable svelte/no-dom-manipulating */
@@ -187,6 +280,19 @@
     if (next !== rendered) {
       renderValue(next);
       rendered = next;
+    }
+  });
+
+  // Profile names arrive after the chip rendered: patch the label in place
+  // (never re-render — the caret must not move while the user types).
+  $effect(() => {
+    void getProfiles();
+    void seededProfiles;
+    if (!editor) return;
+    for (const chip of editor.querySelectorAll('span[data-mention]')) {
+      const pubkey = /** @type {string} */ (/** @type {HTMLElement} */ (chip).dataset.mention);
+      const label = chipLabel(pubkey);
+      if (chip.textContent !== label) chip.textContent = label;
     }
   });
 

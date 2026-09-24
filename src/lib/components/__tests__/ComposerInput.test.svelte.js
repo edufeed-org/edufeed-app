@@ -7,10 +7,21 @@
  * image (the field is a contenteditable) and serialises back to
  * `:shortcode:` for the send path. Enter alone submits.
  */
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, fireEvent, waitFor } from '@testing-library/svelte';
 import { tick } from 'svelte';
+import { nip19 } from 'nostr-tools';
 import ComposerInputHost from './fixtures/ComposerInputHost.svelte';
+import { profiles } from './fixtures/profile-map-mock.svelte.js';
+
+vi.mock('$lib/stores/profile-map.svelte.js', () => import('./fixtures/profile-map-mock.svelte.js'));
+vi.mock(
+  '$lib/stores/mention-candidates.svelte.js',
+  () => import('./fixtures/mention-candidates-mock.svelte.js')
+);
+
+const ALICE = 'a'.repeat(64);
+const NPUB_ALICE = nip19.npubEncode(ALICE);
 
 const SETS = [
   {
@@ -153,5 +164,62 @@ describe('ComposerInput', () => {
     await tick();
     await waitFor(() => expect(editor.textContent).toBe(''));
     expect(editor.querySelector('img')).toBeNull();
+  });
+});
+
+describe('ComposerInput mention chips', () => {
+  beforeEach(() => {
+    profiles.map = new Map();
+    profiles.requested = [];
+  });
+
+  it('renders a nostr:npub token as a chip and keeps the raw value', () => {
+    profiles.map = new Map([[ALICE, { name: 'alice', display_name: 'Alice' }]]);
+    const { editor, value } = setup({ initial: `hi nostr:${NPUB_ALICE} there` });
+    const chip = editor.querySelector('span[data-mention]');
+    expect(chip?.getAttribute('data-mention')).toBe(ALICE);
+    expect(chip?.getAttribute('contenteditable')).toBe('false');
+    expect(chip?.textContent).toBe('@Alice');
+    expect(editor.textContent).not.toContain('npub1');
+    expect(value()).toBe(`hi nostr:${NPUB_ALICE} there`);
+    expect(profiles.requested).toEqual([ALICE]);
+  });
+
+  it('shows a short hex label until the profile arrives, then patches the chip in place', async () => {
+    const { editor } = setup({ initial: `nostr:${NPUB_ALICE}` });
+    const chip = editor.querySelector('span[data-mention]');
+    expect(chip?.textContent).toBe('@aaaaaaaa');
+    profiles.map = new Map([[ALICE, { name: 'alice' }]]);
+    profiles.bump();
+    await tick();
+    expect(editor.querySelector('span[data-mention]')).toBe(chip); // same node
+    expect(chip?.textContent).toBe('@alice');
+  });
+
+  it('keeps an invalid npub as plain text', () => {
+    const { editor, value } = setup({ initial: 'see nostr:npub1notvalid ok' });
+    expect(editor.querySelector('span[data-mention]')).toBeNull();
+    expect(editor.textContent).toContain('nostr:npub1notvalid');
+    expect(value()).toBe('see nostr:npub1notvalid ok');
+  });
+
+  it('serialises chips back into the value after the user types around them', async () => {
+    const { editor, value } = setup({ initial: `nostr:${NPUB_ALICE} ` });
+    editor.appendChild(document.createTextNode('hello'));
+    await fireEvent.input(editor);
+    expect(value()).toBe(`nostr:${NPUB_ALICE} hello`);
+  });
+
+  it('chip removal round-trips: deleting the chip node drops the whole token', async () => {
+    const { editor, value } = setup({ initial: `a nostr:${NPUB_ALICE} b` });
+    editor.querySelector('span[data-mention]')?.remove();
+    await fireEvent.input(editor);
+    expect(value()).toBe('a  b');
+  });
+
+  it('renders chips and custom emojis in the same line', () => {
+    const { editor } = setup({ initial: `:doge: nostr:${NPUB_ALICE}` });
+    expect(editor.querySelector('img[data-shortcode="doge"]')).toBeTruthy();
+    expect(editor.querySelector('span[data-mention]')).toBeTruthy();
   });
 });
