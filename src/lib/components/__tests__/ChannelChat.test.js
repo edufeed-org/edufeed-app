@@ -93,6 +93,7 @@ vi.mock(
 );
 
 vi.mock('$lib/paraglide/messages', () => ({
+  mention_suggestions_label: () => 'People suggestions',
   chat_thread_expand: () => 'Expand',
   chat_thread_collapse: () => 'Collapse',
   chat_copy_message_link: () => 'Copy message link',

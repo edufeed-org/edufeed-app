@@ -37,10 +37,12 @@ const MIN_SEARCH_TERM = 2;
  */
 
 /**
+ * `options.minTerm` is the shortest term that yields results (default 2);
+ * 0 makes an empty term list the user's follows (the mention picker's bare
+ * at-sign). The known-profile and relay legs always need two characters.
+ *
  * @param {() => string} getQuery - reactive getter for the raw query
  * @param {{limit?: number, debounceMs?: number, minTerm?: number}} [options]
- *   `minTerm` — shortest term that yields results (default 2). `0` makes an
- *   empty term list the user's follows (the @-mention picker's bare `@`).
  * @returns {() => PeopleSearchState}
  */
 export function usePeopleSearch(

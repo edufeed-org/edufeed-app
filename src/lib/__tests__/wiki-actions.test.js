@@ -38,6 +38,7 @@ import { publishEventOptimistic } from '$lib/services/publish-service.js';
 const ALICE = 'a'.repeat(64);
 const BOB = 'b'.repeat(64);
 
+/** @param {string} pubkey */
 function signAs(pubkey) {
   return {
     pubkey,
