@@ -54,6 +54,13 @@
   import { modalStore } from '$lib/stores/modal.svelte.js';
   import { PlusIcon } from '$lib/components/icons';
   import * as m from '$lib/paraglide/messages';
+  import { isDiscoverTypeEnabled } from '$lib/helpers/discover-content-types.js';
+
+  // The empty-state CTA deep-links into /discover?type=communities — hidden
+  // when that tab is disabled for this deployment (DISCOVER_CONTENT_TYPES).
+  const canDiscoverCommunities = $derived(
+    isDiscoverTypeEnabled('communities', runtimeConfig.discover?.contentTypes || [])
+  );
 
   let {
     currentCommunityId,
@@ -615,23 +622,25 @@
     {#if joinedCommunities.length === 0}
       <div class="py-8 text-center text-base-content/60">
         <p class="mb-3 text-sm">{m.community_layout_sidebar_no_communities()}</p>
-        <a href={resolve('/discover?type=communities')} class="btn btn-sm btn-primary">
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            class="h-4 w-4"
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke="currentColor"
-          >
-            <path
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              stroke-width="2"
-              d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
-            />
-          </svg>
-          {m.community_layout_sidebar_discover_button()}
-        </a>
+        {#if canDiscoverCommunities}
+          <a href={resolve('/discover?type=communities')} class="btn btn-sm btn-primary">
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              class="h-4 w-4"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+            >
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+              />
+            </svg>
+            {m.community_layout_sidebar_discover_button()}
+          </a>
+        {/if}
       </div>
     {/if}
 

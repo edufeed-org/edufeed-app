@@ -11,9 +11,16 @@
   import { modalStore } from '$lib/stores/modal.svelte.js';
   import CommunikeyCard from '$lib/components/CommunikeyCard.svelte';
   import { SearchIcon, PlusIcon } from '$lib/components/icons';
+  import { runtimeConfig } from '$lib/stores/config.svelte.js';
+  import { isDiscoverTypeEnabled } from '$lib/helpers/discover-content-types.js';
 
   const getJoinedCommunities = useJoinedCommunitiesList();
   let joinedCommunities = $derived(getJoinedCommunities());
+  // The Discover tile links into /discover?type=communities — a dead end when
+  // that tab is disabled for this deployment (DISCOVER_CONTENT_TYPES).
+  const canDiscoverCommunities = $derived(
+    isDiscoverTypeEnabled('communities', runtimeConfig.discover?.contentTypes || [])
+  );
 </script>
 
 <!--
@@ -66,7 +73,9 @@
     data-testid="dashboard-communities-grid"
     class="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3"
   >
-    {@render discoverCard()}
+    {#if canDiscoverCommunities}
+      {@render discoverCard()}
+    {/if}
     {@render createCard()}
     {#each joinedCommunities as pubkey (pubkey)}
       <CommunikeyCard {pubkey} />

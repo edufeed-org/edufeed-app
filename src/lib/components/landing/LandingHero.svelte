@@ -4,6 +4,13 @@
   import { modalStore } from '$lib/stores/modal.svelte.js';
   import { runtimeConfig } from '$lib/stores/config.svelte.js';
   import ImageWithFallback from '$lib/components/shared/ImageWithFallback.svelte';
+  import { isDiscoverTypeEnabled } from '$lib/helpers/discover-content-types.js';
+
+  // Feature badges deep-link into /discover tabs; hide the ones a deployment
+  // disabled via DISCOVER_CONTENT_TYPES so they never lead to a fallback tab.
+  const discoverTypes = $derived(runtimeConfig.discover?.contentTypes || []);
+  const showCommunities = $derived(isDiscoverTypeEnabled('communities', discoverTypes));
+  const showBoards = $derived(isDiscoverTypeEnabled('boards', discoverTypes));
 
   // Note: These functions are kept for future CTA buttons
   function _handleGetStarted() {
@@ -48,13 +55,15 @@
 
       <!-- Feature badges -->
       <div class="mb-10 flex flex-wrap justify-center gap-4">
-        <a
-          href={resolve('/discover?type=communities')}
-          class="flex items-center gap-2 rounded-full bg-white/20 px-4 py-2 text-white backdrop-blur-sm transition-opacity hover:opacity-80"
-        >
-          <span class="text-2xl">🏘️</span>
-          <span class="font-medium">{m.landing_features_communities()}</span>
-        </a>
+        {#if showCommunities}
+          <a
+            href={resolve('/discover?type=communities')}
+            class="flex items-center gap-2 rounded-full bg-white/20 px-4 py-2 text-white backdrop-blur-sm transition-opacity hover:opacity-80"
+          >
+            <span class="text-2xl">🏘️</span>
+            <span class="font-medium">{m.landing_features_communities()}</span>
+          </a>
+        {/if}
         <a
           href={resolve('/calendar')}
           class="flex items-center gap-2 rounded-full bg-white/20 px-4 py-2 text-white backdrop-blur-sm transition-opacity hover:opacity-80"
@@ -62,13 +71,15 @@
           <span class="text-2xl">📅</span>
           <span class="font-medium">{m.landing_features_calendar()}</span>
         </a>
-        <a
-          href={resolve('/discover?type=boards')}
-          class="flex items-center gap-2 rounded-full bg-white/20 px-4 py-2 text-white backdrop-blur-sm transition-opacity hover:opacity-80"
-        >
-          <span class="text-2xl">📋</span>
-          <span class="font-medium">{m.landing_features_kanban()}</span>
-        </a>
+        {#if showBoards}
+          <a
+            href={resolve('/discover?type=boards')}
+            class="flex items-center gap-2 rounded-full bg-white/20 px-4 py-2 text-white backdrop-blur-sm transition-opacity hover:opacity-80"
+          >
+            <span class="text-2xl">📋</span>
+            <span class="font-medium">{m.landing_features_kanban()}</span>
+          </a>
+        {/if}
       </div>
 
       <!-- Call to action buttons -->

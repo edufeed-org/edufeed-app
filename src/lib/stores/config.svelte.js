@@ -6,6 +6,10 @@
  * Configuration source of truth: .env file → /api/config endpoint → this store
  */
 import { writable } from 'svelte/store';
+import {
+  DISCOVER_CONTENT_TYPES,
+  parseDiscoverContentTypes
+} from '$lib/helpers/discover-content-types.js';
 
 /**
  * Default configuration structure
@@ -49,6 +53,11 @@ const defaultConfig = {
   feed: {
     relays: /** @type {string[]} */ ([]),
     relaySources: /** @type {string[]} */ (['config', 'custom'])
+  },
+  // /discover tabs offered by this deployment (DISCOVER_CONTENT_TYPES).
+  // "All" is derived from the enabled feed types, never configured.
+  discover: {
+    contentTypes: /** @type {string[]} */ ([...DISCOVER_CONTENT_TYPES])
   },
   // Gated mode: when enabled, fetch only from app relays (exclude fallback relays)
   gatedMode: {
@@ -306,6 +315,11 @@ export function initializeConfig(runtimeConfig) {
       relays: runtimeConfig.feed?.relays || defaultConfig.feed.relays,
       relaySources: runtimeConfig.feed?.relaySources || defaultConfig.feed.relaySources
     },
+    discover: {
+      contentTypes: parseDiscoverContentTypes(
+        runtimeConfig.discover?.contentTypes || defaultConfig.discover.contentTypes
+      )
+    },
     gatedMode: {
       default: runtimeConfig.gatedMode?.default ?? defaultConfig.gatedMode.default,
       force: runtimeConfig.gatedMode?.force ?? defaultConfig.gatedMode.force
@@ -485,6 +499,9 @@ export const runtimeConfig = {
   },
   get feed() {
     return config.feed;
+  },
+  get discover() {
+    return config.discover;
   },
   get defaultBlossomServers() {
     return config.defaultBlossomServers;
