@@ -5,6 +5,7 @@ import { getReactionAddressPointer, getReactionEventPointer } from 'applesauce-c
 import { getRSVPAddressPointer } from 'applesauce-common/helpers';
 import { encodePointer } from 'applesauce-core/helpers';
 import { isWave } from '$lib/helpers/waves.js';
+import { mentionPubkeysIn } from '$lib/helpers/mention-autocomplete.js';
 
 /** @type {Record<number, string>} */
 const KIND_TO_TYPE = {
@@ -192,20 +193,10 @@ export function getNotificationUrl(event, { groupAddedHref = null } = {}) {
 }
 
 /**
- * Extract pubkeys from nostr:npub1... mentions in text content.
+ * Extract pubkeys from nostr:npub1… / nostr:nprofile1… mentions in text content.
  * @param {string} content
  * @returns {string[]} hex pubkeys
  */
 export function extractMentionPubkeys(content) {
-  const matches = content.matchAll(/nostr:(npub1[a-z0-9]{58})/g);
-  const pubkeys = [];
-  for (const match of matches) {
-    try {
-      const decoded = nip19.decode(match[1]);
-      if (decoded.type === 'npub') pubkeys.push(decoded.data);
-    } catch {
-      /* skip invalid */
-    }
-  }
-  return [...new Set(pubkeys)];
+  return mentionPubkeysIn(content);
 }
