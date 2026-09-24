@@ -48,6 +48,12 @@ describe('MarkdownEditor — toolbar on the composer editor', () => {
     expect(editor.style.minHeight).toBe('300px');
   });
 
+  it('toolbar buttons do not steal the editor selection on mousedown', async () => {
+    const { getByTitle } = render(MarkdownEditor, { props: { content: 'hello' } });
+    // dispatchEvent returns false when the handler called preventDefault
+    expect(await fireEvent.mouseDown(getByTitle('Bold'))).toBe(false);
+  });
+
   it('Bold wraps the default text at the caret through the editor API', async () => {
     const { getByTitle, getByTestId } = render(MarkdownEditor, { props: { content: 'hello' } });
     const editor = getByTestId('markdown-editor-input');

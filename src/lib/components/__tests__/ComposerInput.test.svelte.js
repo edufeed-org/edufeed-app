@@ -302,6 +302,17 @@ describe('ComposerInput @ people picker', () => {
     expect(queryByTestId('emoji-suggestions')).toBeNull();
   });
 
+  it('leaves IME composition keys alone while the people list is open', async () => {
+    mentions.candidates = [{ pubkey: ALICE, name: 'Alice', profile: null }];
+    const { editor, value, findByTestId, queryByTestId } = setup();
+    await typeText(editor, '@');
+    await findByTestId('mention-suggestions');
+    await fireEvent.keyDown(editor, { key: 'Enter', isComposing: true });
+    await tick();
+    expect(value()).toBe('@');
+    expect(queryByTestId('mention-suggestions')).toBeTruthy();
+  });
+
   it('placement="caret" anchors the list below the caret instead of above the editor', async () => {
     mentions.candidates = [{ pubkey: ALICE, name: 'Alice', profile: null }];
     const { editor, findByTestId } = setup({ multiline: true, placement: 'caret' });

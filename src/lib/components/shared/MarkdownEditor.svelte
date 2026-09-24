@@ -196,6 +196,7 @@
         <button
           class="btn font-mono btn-ghost btn-xs"
           title={btn.label}
+          onmousedown={(e) => e.preventDefault()}
           onclick={btn.action}
           disabled={imageUploading && btn.label === 'Image'}
         >

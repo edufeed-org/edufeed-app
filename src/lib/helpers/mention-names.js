@@ -49,6 +49,19 @@ export function mentionNames(node) {
   const subscriptions = new Map();
   /** @type {Map<string, HTMLAnchorElement[]>} */
   const anchorsByPubkey = new Map();
+  /** last known label per pubkey — hosts that re-render (HighlightOverlay on
+   *  every highlights emission) get it applied on the next wire() without a
+   *  second profile callback */
+  /** @type {Map<string, string>} */
+  const labels = new Map();
+
+  /** @param {string} pubkey @param {string} label */
+  function applyLabel(pubkey, label) {
+    // drop anchors a host re-render has replaced (they left the subtree)
+    const anchors = (anchorsByPubkey.get(pubkey) ?? []).filter((a) => node.contains(a));
+    anchorsByPubkey.set(pubkey, anchors);
+    for (const anchor of anchors) anchor.textContent = label;
+  }
 
   function wire() {
     for (const el of node.querySelectorAll('a[href^="/npub1"], a[href^="/nprofile1"]')) {
@@ -62,15 +75,16 @@ export function mentionNames(node) {
       const list = anchorsByPubkey.get(ref.pubkey) ?? [];
       list.push(a);
       anchorsByPubkey.set(ref.pubkey, list);
+      const known = labels.get(ref.pubkey);
+      if (known) a.textContent = known;
       if (subscriptions.has(ref.pubkey)) continue;
       subscriptions.set(
         ref.pubkey,
         subscribeProfile(ref.pubkey, (profile) => {
           if (!profile?.display_name && !profile?.name) return;
           const label = `@${getUserDisplayName(ref.pubkey, profile)}`;
-          for (const anchor of anchorsByPubkey.get(ref.pubkey) ?? []) {
-            anchor.textContent = label;
-          }
+          labels.set(ref.pubkey, label);
+          applyLabel(ref.pubkey, label);
         })
       );
     }
@@ -86,6 +100,7 @@ export function mentionNames(node) {
       for (const sub of subscriptions.values()) sub.unsubscribe();
       subscriptions.clear();
       anchorsByPubkey.clear();
+      labels.clear();
     }
   };
 }

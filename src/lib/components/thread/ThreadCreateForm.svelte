@@ -156,6 +156,7 @@
           class="textarea-bordered textarea w-full"
           placeholder={m.thread_create_content_placeholder()}
           disabled={isPosting}
+          ariaLabelledby="thread-content-label"
           testid="thread-content-input"
         />
         <div class="label">

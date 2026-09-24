@@ -49,6 +49,21 @@ const ALICE = 'a'.repeat(64);
 const BOB = 'b'.repeat(64);
 
 describe('ThreadCreateForm', () => {
+  it('keeps an accessible name on the content editor', () => {
+    const { getByTestId } = render(ThreadCreateForm, {
+      props: {
+        communityPubkey: COMMUNITY,
+        activeUser: { pubkey: 'me', signer: {} },
+        open: true,
+        onclose: () => {}
+      }
+    });
+    const editor = getByTestId('thread-content-input');
+    const labelId = editor.getAttribute('aria-labelledby');
+    expect(labelId).toBe('thread-content-label');
+    expect(document.getElementById(labelId)?.textContent).toBe('Content');
+  });
+
   it('p-tags mentioned users, repairs bare npubs, and passes them to the outbox', async () => {
     const signer = {
       signEvent: vi.fn(async (t) => ({ ...t, id: 'id', pubkey: 'me', sig: 's' }))

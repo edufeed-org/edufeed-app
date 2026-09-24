@@ -57,6 +57,20 @@ describe('mentionNames action', () => {
     expect(node.querySelector('a')?.textContent).toBe('my friend');
   });
 
+  it('re-applies an already known name when the host replaces its HTML again (no second callback)', async () => {
+    const node = document.createElement('div');
+    node.innerHTML = `<a href="/${npub}">${truncated}</a>`;
+    const action = mentionNames(node);
+    subs.callbacks.get(ALICE)?.({ name: 'alice', display_name: 'Alice' });
+    expect(node.querySelector('a')?.textContent).toBe('@Alice');
+    // e.g. HighlightOverlay re-renders on every highlights emission
+    node.innerHTML = `<p><a href="/${npub}">${truncated}</a> again</p>`;
+    await new Promise((r) => setTimeout(r, 0));
+    expect(node.querySelector('a')?.textContent).toBe('@Alice');
+    expect(subs.callbacks.size).toBe(1); // still one subscription per pubkey
+    action.destroy();
+  });
+
   it('wires links added later (innerHTML replaced by the host)', async () => {
     const node = document.createElement('div');
     const action = mentionNames(node);

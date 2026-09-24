@@ -53,7 +53,8 @@
    *   testid?: string,
    *   minHeight?: string,
    *   submitOnEnter?: boolean,
-   *   placement?: 'above' | 'caret'
+   *   placement?: 'above' | 'caret',
+   *   ariaLabelledby?: string
    * }}
    */
   let {
@@ -75,7 +76,9 @@
      * sit at the bottom of the screen) or at the 'caret' (tall long-form
      * editors, whose container clips anything above the field).
      */
-    placement = /** @type {'above' | 'caret'} */ ('above')
+    placement = /** @type {'above' | 'caret'} */ ('above'),
+    /** id of the visible label element (a contenteditable cannot use <label for>) */
+    ariaLabelledby = undefined
   } = $props();
 
   /** @type {HTMLDivElement | undefined} */
@@ -474,7 +477,8 @@
 
   /** @param {KeyboardEvent} event */
   function onKeydown(event) {
-    if (query && candidateCount > 0) {
+    // an IME composing after `@` (CJK names) owns Enter/arrows until it commits
+    if (query && candidateCount > 0 && !event.isComposing) {
       const n = candidateCount;
       if (event.key === 'ArrowDown' || (event.key === 'Tab' && !event.shiftKey)) {
         event.preventDefault();
@@ -566,6 +570,7 @@
     aria-disabled={disabled}
     aria-multiline={multiline}
     aria-placeholder={placeholder}
+    aria-labelledby={ariaLabelledby}
     data-placeholder={placeholder}
     data-testid={testid}
     tabindex="0"

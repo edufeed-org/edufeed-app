@@ -8,7 +8,6 @@
   import { getArticleTitle, getArticleSummary, getArticleImage } from 'applesauce-common/helpers';
   import { createArticle, updateArticle } from '$lib/stores/article-actions.svelte.js';
   import MarkdownEditor from '$lib/components/shared/MarkdownEditor.svelte';
-  import ComposerInput from '$lib/components/shared/ComposerInput.svelte';
   import EditableList from '$lib/components/shared/EditableList.svelte';
   import LicensedImageInput from '$lib/components/shared/LicensedImageInput.svelte';
   import { useLicenseForHash } from '$lib/stores/image-license.svelte.js';
@@ -232,15 +231,14 @@
       </div>
 
       <!-- Summary -->
-      <ComposerInput
-        bind:value={summary}
-        multiline
-        submitOnEnter={false}
-        minHeight="3.5rem"
+      <!-- plain textarea on purpose: the summary is a metadata tag, not content —
+        a mention here would neither be p-tagged nor rendered as a name -->
+      <textarea
         class="textarea w-full"
+        rows="2"
         placeholder={m.article_editor_summary_placeholder()}
-        testid="article-summary-input"
-      />
+        bind:value={summary}
+      ></textarea>
 
       <!-- Markdown Editor -->
       <MarkdownEditor
