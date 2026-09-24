@@ -14,6 +14,10 @@ const KIND_TO_TYPE = {
   7: 'reaction',
   1111: 'comment',
   9: 'mention',
+  // @mentions in forum threads, articles and wiki pages
+  11: 'mention',
+  30023: 'mention',
+  30818: 'mention',
   31925: 'rsvp',
   1018: 'pollVote',
   // NIP-29 put-user: an admin added you to a group (community root or channel).
@@ -32,6 +36,33 @@ export function getNotificationType(event) {
     return event.tags?.some((t) => t[0] === 'e') ? 'reply' : 'mention';
   }
   return KIND_TO_TYPE[event.kind] ?? null;
+}
+
+/** @type {Record<number, 'note' | 'community' | 'thread' | 'article' | 'wiki'>} */
+const MENTION_SURFACES = {
+  1: 'note',
+  9: 'community',
+  11: 'thread',
+  30023: 'article',
+  30818: 'wiki'
+};
+
+/**
+ * Where a mention happened — drives the inbox row copy.
+ * @param {import('nostr-tools').NostrEvent} event
+ * @returns {'note' | 'community' | 'thread' | 'article' | 'wiki' | null}
+ */
+export function getMentionSurface(event) {
+  return MENTION_SURFACES[event.kind] ?? null;
+}
+
+/**
+ * The event's own `title` tag (articles, wikis, threads), or ''.
+ * @param {{ tags: string[][] }} event
+ * @returns {string}
+ */
+export function getEventTitle(event) {
+  return event.tags?.find((t) => t[0] === 'title')?.[1] ?? '';
 }
 
 /**
@@ -149,6 +180,17 @@ export function getNotificationUrl(event, { groupAddedHref = null } = {}) {
   // resolves its ancestors
   if (event.kind === 1) {
     return `/${encodePointer({ id: event.id, relays: [] })}`;
+  }
+
+  // Thread mentions open the thread itself
+  if (event.kind === 11) {
+    return `/${encodePointer({ id: event.id, relays: [] })}`;
+  }
+
+  // Article / wiki mentions open the page (addressable)
+  if (event.kind === 30023 || event.kind === 30818) {
+    const identifier = event.tags.find((t) => t[0] === 'd')?.[1] ?? '';
+    return `/${encodePointer({ kind: event.kind, pubkey: event.pubkey, identifier, relays: [] })}`;
   }
 
   if (type === 'mention') {
