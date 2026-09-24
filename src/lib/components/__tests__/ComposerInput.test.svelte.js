@@ -13,6 +13,7 @@ import { tick } from 'svelte';
 import { nip19 } from 'nostr-tools';
 import ComposerInputHost from './fixtures/ComposerInputHost.svelte';
 import { profiles } from './fixtures/profile-map-mock.svelte.js';
+import { mentions } from './fixtures/mention-candidates-mock.svelte.js';
 
 vi.mock('$lib/stores/profile-map.svelte.js', () => import('./fixtures/profile-map-mock.svelte.js'));
 vi.mock(
@@ -221,5 +222,87 @@ describe('ComposerInput mention chips', () => {
     const { editor } = setup({ initial: `:doge: nostr:${NPUB_ALICE}` });
     expect(editor.querySelector('img[data-shortcode="doge"]')).toBeTruthy();
     expect(editor.querySelector('span[data-mention]')).toBeTruthy();
+  });
+});
+
+describe('ComposerInput @ people picker', () => {
+  beforeEach(() => {
+    profiles.map = new Map();
+    mentions.candidates = [];
+    mentions.lastQuery = null;
+  });
+
+  it('opens the people list on @, filters by the typed query, inserts nostr:npub + space on Enter, chip shows the picked name', async () => {
+    mentions.candidates = [
+      {
+        pubkey: ALICE,
+        name: 'Alice',
+        profile: { name: 'alice', display_name: 'Alice', picture: null }
+      },
+      {
+        pubkey: 'b'.repeat(64),
+        name: 'Bob',
+        profile: { name: 'bob', display_name: null, picture: null }
+      }
+    ];
+    const { editor, value, findByTestId, getAllByRole, queryByTestId } = setup();
+    await typeText(editor, 'hey @');
+    expect(await findByTestId('mention-suggestions')).toBeTruthy();
+    expect(getAllByRole('option')).toHaveLength(2);
+    expect(mentions.lastQuery).toBe('');
+
+    await typeText(editor, 'hey @al');
+    expect(getAllByRole('option')).toHaveLength(1);
+    expect(getAllByRole('option')[0].textContent).toContain('Alice');
+
+    await fireEvent.keyDown(editor, { key: 'Enter' });
+    await tick();
+    expect(value()).toBe(`hey nostr:${NPUB_ALICE} `);
+    expect(editor.querySelector('span[data-mention]')?.textContent).toBe('@Alice');
+    expect(queryByTestId('mention-suggestions')).toBeNull();
+  });
+
+  it('cycles people with arrows (Tab cycles too) and Enter picks the highlighted one', async () => {
+    mentions.candidates = [
+      { pubkey: ALICE, name: 'Alice', profile: null },
+      { pubkey: 'b'.repeat(64), name: 'Bob', profile: null }
+    ];
+    const { editor, value, findByTestId, getAllByRole } = setup();
+    await typeText(editor, '@');
+    await findByTestId('mention-suggestions');
+    await fireEvent.keyDown(editor, { key: 'ArrowDown' });
+    await fireEvent.keyUp(editor, { key: 'ArrowDown' });
+    expect(getAllByRole('option')[1].getAttribute('aria-selected')).toBe('true');
+    await fireEvent.keyDown(editor, { key: 'Tab' });
+    await fireEvent.keyUp(editor, { key: 'Tab' });
+    expect(getAllByRole('option')[0].getAttribute('aria-selected')).toBe('true'); // wrapped
+    await fireEvent.keyDown(editor, { key: 'ArrowDown' });
+    await fireEvent.keyUp(editor, { key: 'ArrowDown' });
+    await fireEvent.keyDown(editor, { key: 'Enter' });
+    await tick();
+    expect(value()).toBe(`nostr:${nip19.npubEncode('b'.repeat(64))} `);
+  });
+
+  it('only one list opens: ":" after an "@" shows emojis, "@" after a ":" shows people', async () => {
+    mentions.candidates = [{ pubkey: ALICE, name: 'Alice', profile: null }];
+    const { editor, findByTestId, queryByTestId } = setup();
+    await typeText(editor, '@al :dog');
+    await findByTestId('emoji-suggestions');
+    expect(queryByTestId('mention-suggestions')).toBeNull();
+    await typeText(editor, ':dog @al');
+    await findByTestId('mention-suggestions');
+    expect(queryByTestId('emoji-suggestions')).toBeNull();
+  });
+
+  it('does not open for an email-like @ mid-word, and Escape closes the people list', async () => {
+    mentions.candidates = [{ pubkey: ALICE, name: 'Alice', profile: null }];
+    const { editor, queryByTestId, findByTestId, value } = setup();
+    await typeText(editor, 'mail a@b');
+    expect(queryByTestId('mention-suggestions')).toBeNull();
+    await typeText(editor, 'mail @');
+    await findByTestId('mention-suggestions');
+    await fireEvent.keyDown(editor, { key: 'Escape' });
+    expect(queryByTestId('mention-suggestions')).toBeNull();
+    expect(value()).toBe('mail @');
   });
 });

@@ -23,10 +23,16 @@
   import { tick } from 'svelte';
   import { nip19 } from 'nostr-tools';
   import { detectEmojiQuery, searchEmojis, applyEmoji } from '$lib/helpers/emoji-autocomplete.js';
-  import { mentionPubkeysIn } from '$lib/helpers/mention-autocomplete.js';
+  import {
+    detectMentionQuery,
+    applyMention,
+    mentionPubkeysIn
+  } from '$lib/helpers/mention-autocomplete.js';
   import { useProfileMap } from '$lib/stores/profile-map.svelte.js';
+  import { useMentionCandidates } from '$lib/stores/mention-candidates.svelte.js';
   import { getUserDisplayName } from '$lib/helpers/message-utils.js';
   import EmojiAutocomplete from './EmojiAutocomplete.svelte';
+  import MentionAutocomplete from './MentionAutocomplete.svelte';
 
   /**
    * @type {{
@@ -58,9 +64,21 @@
   /** what the DOM currently represents — plain let, bookkeeping only */
   let rendered = '';
 
-  let query = $state(/** @type {{ start: number, query: string } | null} */ (null));
+  /** The open autocomplete, if any: `:query` (emoji) or `@query` (people). */
+  let query = $state(
+    /** @type {{ kind: 'emoji' | 'mention', start: number, query: string } | null} */ (null)
+  );
   let highlight = $state(0);
-  const candidates = $derived(query ? searchEmojis(query.query, customEmojiSets) : []);
+  const getMentionCandidates = useMentionCandidates(() =>
+    query?.kind === 'mention' ? query.query : null
+  );
+  const emojiCandidates = $derived(
+    query?.kind === 'emoji' ? searchEmojis(query.query, customEmojiSets) : []
+  );
+  const mentionCandidates = $derived(query?.kind === 'mention' ? getMentionCandidates() : []);
+  const candidateCount = $derived(
+    query?.kind === 'emoji' ? emojiCandidates.length : mentionCandidates.length
+  );
   /** urls of custom emojis handed to insert() — a pick from a pack the caller
    *  does not list (or removed since) must still render inline */
   let extraUrls = $state.raw(/** @type {Record<string, string>} */ ({}));
@@ -304,13 +322,26 @@
   const NAV_KEYS = new Set(['ArrowDown', 'ArrowUp', 'Tab', 'Enter', 'Escape']);
 
   /**
-   * Re-detect the `:query` at the caret. The highlight only resets when the
-   * query itself changed — a caret-only event (keyup, click) must not snap a
-   * selection made with the arrow keys back to the top (laoc, 2026-09-18).
+   * Re-detect the trigger at the caret: `:query` (emoji) or `@query`
+   * (people). Should both match, the trigger nearest the caret wins. The
+   * highlight only resets when the query itself changed — a caret-only
+   * event (keyup, click) must not snap a selection made with the arrow keys
+   * back to the top (laoc, 2026-09-18).
    */
   function refreshQuery() {
-    const next = detectEmojiQuery(value, caretOffset());
-    const same = !!next && !!query && next.start === query.start && next.query === query.query;
+    const caret = caretOffset();
+    const emoji = detectEmojiQuery(value, caret);
+    const mention = detectMentionQuery(value, caret);
+    /** @type {typeof query} */
+    let next = null;
+    if (emoji && (!mention || emoji.start > mention.start)) next = { kind: 'emoji', ...emoji };
+    else if (mention) next = { kind: 'mention', ...mention };
+    const same =
+      !!next &&
+      !!query &&
+      next.kind === query.kind &&
+      next.start === query.start &&
+      next.query === query.query;
     query = next;
     if (!same) highlight = 0;
   }
@@ -330,10 +361,18 @@
     setCaret(caret);
   }
   /** @param {import('$lib/helpers/emoji-autocomplete.js').EmojiHit} hit */
-  function pick(hit) {
+  function pickEmoji(hit) {
     if (!query) return;
     const inserted = hit.type === 'custom' ? `:${hit.shortcode}:` : hit.char;
     const result = applyEmoji(value, query.start, caretOffset(), inserted);
+    void commit(result.text, result.caret);
+  }
+  /** @param {string} pubkey */
+  function pickMention(pubkey) {
+    if (!query) return;
+    const candidate = mentionCandidates.find((c) => c.pubkey === pubkey);
+    if (candidate?.profile) seededProfiles = { ...seededProfiles, [pubkey]: candidate.profile };
+    const result = applyMention(value, query.start, caretOffset(), nip19.npubEncode(pubkey));
     void commit(result.text, result.caret);
   }
 
@@ -359,8 +398,8 @@
 
   /** @param {KeyboardEvent} event */
   function onKeydown(event) {
-    if (query && candidates.length > 0) {
-      const n = candidates.length;
+    if (query && candidateCount > 0) {
+      const n = candidateCount;
       if (event.key === 'ArrowDown' || (event.key === 'Tab' && !event.shiftKey)) {
         event.preventDefault();
         highlight = (highlight + 1) % n;
@@ -373,7 +412,8 @@
       }
       if (event.key === 'Enter') {
         event.preventDefault();
-        pick(candidates[highlight]);
+        if (query.kind === 'emoji') pickEmoji(emojiCandidates[highlight]);
+        else pickMention(mentionCandidates[highlight].pubkey);
         return;
       }
       if (event.key === 'Escape') {
@@ -400,7 +440,19 @@
 </script>
 
 <div class="relative min-w-0 flex-1">
-  <EmojiAutocomplete {candidates} highlightIndex={highlight} onSelect={pick} />
+  {#if query?.kind === 'mention'}
+    <MentionAutocomplete
+      candidates={mentionCandidates}
+      highlightIndex={highlight}
+      onSelect={pickMention}
+    />
+  {:else}
+    <EmojiAutocomplete
+      candidates={emojiCandidates}
+      highlightIndex={highlight}
+      onSelect={pickEmoji}
+    />
+  {/if}
   <div
     bind:this={editor}
     class="emoji-input min-w-0 break-words whitespace-pre-wrap focus:outline-none {multiline
