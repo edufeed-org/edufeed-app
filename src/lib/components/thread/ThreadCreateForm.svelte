@@ -4,8 +4,11 @@
 -->
 
 <script>
+  import { repairNostrLinks, tagPubkeyMentions } from 'applesauce-core/operations';
   import { createAppEventFactory } from '$lib/helpers/event-factory.js';
+  import { pTagPubkeys } from '$lib/helpers/mention-autocomplete.js';
   import { publishEventOptimistic } from '$lib/services/publish-service.js';
+  import ComposerInput from '$lib/components/shared/ComposerInput.svelte';
   import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
   import { showToast } from '$lib/helpers/toast.js';
   import * as m from '$lib/paraglide/messages';
@@ -70,12 +73,17 @@
       }
 
       const factory = createAppEventFactory({ signer: activeUser.signer });
+      // NIP-27 references in the body become NIP-10 p tags (bare npubs repaired first).
       const signedEvent = await factory.sign(
-        await factory.build({
-          kind: 11,
-          content: content.trim(),
-          tags: eventTags
-        })
+        await factory.build(
+          {
+            kind: 11,
+            content: content.trim(),
+            tags: eventTags
+          },
+          repairNostrLinks(),
+          tagPubkeyMentions()
+        )
       );
       isPosting = false;
 
@@ -83,7 +91,11 @@
       eventStore.add(signedEvent);
 
       // Publish in background
-      publishEventOptimistic(signedEvent, [communityPubkey]);
+      // Mentioned users get the thread on their read relays too.
+      publishEventOptimistic(signedEvent, [
+        communityPubkey,
+        ...pTagPubkeys(signedEvent).filter((p) => p !== communityPubkey)
+      ]);
 
       showToast(m.thread_create_success(), 'success');
 
@@ -132,18 +144,20 @@
 
       <!-- Content -->
       <div class="form-control">
-        <label class="label" for="thread-content">
-          <span class="label-text">{m.thread_create_content_label()}</span>
-        </label>
-        <textarea
-          id="thread-content"
+        <div class="label">
+          <span class="label-text" id="thread-content-label">{m.thread_create_content_label()}</span
+          >
+        </div>
+        <ComposerInput
           bind:value={content}
+          multiline
+          submitOnEnter={false}
+          minHeight="9rem"
           class="textarea-bordered textarea w-full"
-          rows="6"
           placeholder={m.thread_create_content_placeholder()}
-          required
           disabled={isPosting}
-        ></textarea>
+          testid="thread-content-input"
+        />
         <div class="label">
           <span class="label-text-alt text-base-content/50">{m.thread_create_markdown_hint()}</span>
         </div>
