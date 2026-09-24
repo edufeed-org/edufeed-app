@@ -216,6 +216,7 @@
       bind:value={content}
       multiline
       submitOnEnter={false}
+      placement="caret"
       {minHeight}
       {placeholder}
       class="w-full bg-base-100 p-4 font-mono text-sm"

@@ -11,6 +11,7 @@
    *   multiline?: boolean,
    *   minHeight?: string,
    *   submitOnEnter?: boolean,
+   *   placement?: 'above' | 'caret',
    *   onSubmit?: () => void
    * }}
    */
@@ -20,6 +21,7 @@
     multiline = false,
     minHeight = undefined,
     submitOnEnter = true,
+    placement = 'above',
     onSubmit = () => {}
   } = $props();
   let value = $state(initial);
@@ -41,6 +43,7 @@
   {multiline}
   {minHeight}
   {submitOnEnter}
+  {placement}
   {onSubmit}
   placeholder="Nachricht"
   testid="emoji-input"

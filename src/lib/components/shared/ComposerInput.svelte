@@ -52,7 +52,8 @@
    *   class?: string,
    *   testid?: string,
    *   minHeight?: string,
-   *   submitOnEnter?: boolean
+   *   submitOnEnter?: boolean,
+   *   placement?: 'above' | 'caret'
    * }}
    */
   let {
@@ -68,7 +69,13 @@
     /** CSS length; when set, the multiline editor grows past the chat cap */
     minHeight = undefined,
     /** false for long-form bodies: Enter is a newline, never a submit */
-    submitOnEnter = true
+    submitOnEnter = true,
+    /**
+     * Where the autocomplete lists open: 'above' the field (chat composers
+     * sit at the bottom of the screen) or at the 'caret' (tall long-form
+     * editors, whose container clips anything above the field).
+     */
+    placement = /** @type {'above' | 'caret'} */ ('above')
   } = $props();
 
   /** @type {HTMLDivElement | undefined} */
@@ -91,6 +98,31 @@
   const candidateCount = $derived(
     query?.kind === 'emoji' ? emojiCandidates.length : mentionCandidates.length
   );
+  /** inline style of the caret-anchored popup wrapper (placement === 'caret') */
+  let popupStyle = $state('');
+
+  /**
+   * Place the popup just below the caret's line, relative to the wrapper.
+   * A collapsed range in an empty text node reports a zero rect — fall back
+   * to the editor's own box then.
+   */
+  function updatePopupStyle() {
+    if (placement !== 'caret' || !editor?.parentElement) return;
+    const host = editor.parentElement.getBoundingClientRect();
+    let rect = editor.getBoundingClientRect();
+    const sel = typeof window === 'undefined' ? null : window.getSelection();
+    if (sel && sel.rangeCount > 0 && editor.contains(sel.focusNode)) {
+      const range = sel.getRangeAt(0).cloneRange();
+      range.collapse(true);
+      // jsdom's Range has no getBoundingClientRect — keep the editor box then
+      const caretRect =
+        typeof range.getBoundingClientRect === 'function' ? range.getBoundingClientRect() : null;
+      if (caretRect && (caretRect.width || caretRect.height || caretRect.top)) rect = caretRect;
+    }
+    const top = rect.bottom - host.top + 4;
+    const left = Math.max(0, rect.left - host.left);
+    popupStyle = `top: ${top}px; left: ${left}px`;
+  }
   /** urls of custom emojis handed to insert() — a pick from a pack the caller
    *  does not list (or removed since) must still render inline */
   let extraUrls = $state.raw(/** @type {Record<string, string>} */ ({}));
@@ -387,6 +419,7 @@
       next.query === query.query;
     query = next;
     if (!same) highlight = 0;
+    if (next) updatePopupStyle();
   }
   /** @param {KeyboardEvent} event */
   function onKeyup(event) {
@@ -484,7 +517,30 @@
 </script>
 
 <div class="relative min-w-0 flex-1">
-  {#if query?.kind === 'mention'}
+  {#if placement === 'caret'}
+    <div
+      class="absolute z-40 w-72 max-w-full"
+      style={popupStyle}
+      data-testid="composer-popup"
+      hidden={!query || candidateCount === 0}
+    >
+      {#if query?.kind === 'mention'}
+        <MentionAutocomplete
+          candidates={mentionCandidates}
+          highlightIndex={highlight}
+          onSelect={pickMention}
+          anchored
+        />
+      {:else}
+        <EmojiAutocomplete
+          candidates={emojiCandidates}
+          highlightIndex={highlight}
+          onSelect={pickEmoji}
+          anchored
+        />
+      {/if}
+    </div>
+  {:else if query?.kind === 'mention'}
     <MentionAutocomplete
       candidates={mentionCandidates}
       highlightIndex={highlight}

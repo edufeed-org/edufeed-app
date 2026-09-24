@@ -10,15 +10,21 @@
   import ProfileAvatar from '$lib/components/shared/ProfileAvatar.svelte';
   import * as m from '$lib/paraglide/messages';
 
-  /** @type {{candidates: Array<{pubkey: string, name: string, profile: any}>, highlightIndex: number, onSelect: (pubkey: string) => void}} */
-  let { candidates = [], highlightIndex = 0, onSelect } = $props();
+  /**
+   * `anchored`: the host positions a wrapper at the caret; the list then
+   * fills that wrapper instead of hanging above the field.
+   * @type {{candidates: Array<{pubkey: string, name: string, profile: any}>, highlightIndex: number, onSelect: (pubkey: string) => void, anchored?: boolean}}
+   */
+  let { candidates = [], highlightIndex = 0, onSelect, anchored = false } = $props();
 </script>
 
 {#if candidates.length > 0}
   <ul
     role="listbox"
     aria-label={m.mention_suggestions_label()}
-    class="absolute bottom-full left-0 z-40 mb-1 max-h-60 w-full max-w-[calc(100vw-2rem)] min-w-64 overflow-y-auto rounded-box border border-base-300 bg-base-100 p-1 shadow-lg"
+    class="z-40 max-h-60 overflow-y-auto rounded-box border border-base-300 bg-base-100 p-1 shadow-lg {anchored
+      ? 'relative w-full'
+      : 'absolute bottom-full left-0 mb-1 w-full max-w-[calc(100vw-2rem)] min-w-64'}"
     data-testid="mention-suggestions"
   >
     {#each candidates as candidate, i (candidate.pubkey)}

@@ -11,10 +11,13 @@
    * @type {{
    *   candidates: import('$lib/helpers/emoji-autocomplete.js').EmojiHit[],
    *   highlightIndex: number,
-   *   onSelect: (hit: import('$lib/helpers/emoji-autocomplete.js').EmojiHit) => void
+   *   onSelect: (hit: import('$lib/helpers/emoji-autocomplete.js').EmojiHit) => void,
+   *   anchored?: boolean
    * }}
+   * `anchored`: the host positions a wrapper at the caret; the list then
+   * fills that wrapper instead of hanging above the field.
    */
-  let { candidates = [], highlightIndex = 0, onSelect } = $props();
+  let { candidates = [], highlightIndex = 0, onSelect, anchored = false } = $props();
 
   /** @param {import('$lib/helpers/emoji-autocomplete.js').EmojiHit} hit */
   const keyOf = (hit) => (hit.type === 'custom' ? `custom:${hit.shortcode}` : `u:${hit.char}`);
@@ -24,7 +27,9 @@
   <ul
     role="listbox"
     aria-label={m.emoji_suggestions_label()}
-    class="absolute bottom-full left-0 z-40 mb-1 max-h-60 w-full max-w-[calc(100vw-2rem)] min-w-64 overflow-y-auto rounded-box border border-base-300 bg-base-100 p-1 shadow-lg"
+    class="z-40 max-h-60 overflow-y-auto rounded-box border border-base-300 bg-base-100 p-1 shadow-lg {anchored
+      ? 'relative w-full'
+      : 'absolute bottom-full left-0 mb-1 w-full max-w-[calc(100vw-2rem)] min-w-64'}"
     data-testid="emoji-suggestions"
   >
     {#each candidates as hit, i (keyOf(hit))}

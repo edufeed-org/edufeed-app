@@ -302,6 +302,23 @@ describe('ComposerInput @ people picker', () => {
     expect(queryByTestId('emoji-suggestions')).toBeNull();
   });
 
+  it('placement="caret" anchors the list below the caret instead of above the editor', async () => {
+    mentions.candidates = [{ pubkey: ALICE, name: 'Alice', profile: null }];
+    const { editor, findByTestId } = setup({ multiline: true, placement: 'caret' });
+    await typeText(editor, 'hey @');
+    const list = await findByTestId('mention-suggestions');
+    const popup = list.parentElement;
+    expect(popup?.getAttribute('data-testid')).toBe('composer-popup');
+    expect(popup?.style.top).toMatch(/px$/);
+    expect(popup?.style.left).toMatch(/px$/);
+    expect(list.className).not.toContain('bottom-full');
+    // the emoji list uses the same anchor
+    await typeText(editor, 'hey :gri');
+    const emojiList = await findByTestId('emoji-suggestions');
+    expect(emojiList.parentElement?.getAttribute('data-testid')).toBe('composer-popup');
+    expect(emojiList.className).not.toContain('bottom-full');
+  });
+
   it('does not open for an email-like @ mid-word, and Escape closes the people list', async () => {
     mentions.candidates = [{ pubkey: ALICE, name: 'Alice', profile: null }];
     const { editor, queryByTestId, findByTestId, value } = setup();
