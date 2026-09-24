@@ -53,7 +53,9 @@ vi.mock('$lib/stores/nostr-infrastructure.svelte', () => ({
   eventStore: {
     add: (/** @type {any[]} */ ...args) => spies.addSpy(...args),
     getReplaceable: vi.fn().mockReturnValue(null)
-  }
+  },
+  // reached through ComposerInput → MentionAutocomplete → ProfileAvatar
+  pool: { request: vi.fn() }
 }));
 
 vi.mock('$lib/stores/joined-communities-list.svelte.js', () => ({
@@ -63,6 +65,21 @@ vi.mock('$lib/stores/joined-communities-list.svelte.js', () => ({
 vi.mock('$lib/stores/profile-map.svelte.js', () => ({
   useProfileMap: () => () => new Map()
 }));
+
+vi.mock(
+  '$lib/stores/mention-candidates.svelte.js',
+  () => import('./fixtures/mention-candidates-mock.svelte.js')
+);
+
+/**
+ * Type into the contenteditable composer the way a keyboard would.
+ * @param {HTMLElement} editor
+ * @param {string} text
+ */
+async function typeInto(editor, text) {
+  editor.textContent = text;
+  await fireEvent.input(editor);
+}
 
 function StubComponent() {}
 vi.mock('$lib/components/shared/NostrContentRenderer.svelte', () => ({
@@ -105,46 +122,48 @@ describe('NoteCreateModal', () => {
     expect(submit.disabled).toBe(true);
 
     const textarea = screen.getByTestId('note-content-input');
-    await fireEvent.input(textarea, { target: { value: 'Hello feed' } });
+    await typeInto(textarea, 'Hello feed');
     expect(submit.disabled).toBe(false);
 
-    await fireEvent.input(textarea, { target: { value: '   ' } });
+    await typeInto(textarea, '   ');
     expect(submit.disabled).toBe(true);
   });
 
   it('inserts a valid pasted reference into the content as a nostr: URI', async () => {
     render(NoteCreateModal, { props: {} });
 
-    const textarea = /** @type {HTMLTextAreaElement} */ (screen.getByTestId('note-content-input'));
-    await fireEvent.input(textarea, { target: { value: 'Check this out' } });
+    const textarea = screen.getByTestId('note-content-input');
+    await typeInto(textarea, 'Check this out');
 
     const refInput = screen.getByTestId('note-reference-input');
     await fireEvent.input(refInput, { target: { value: `nostr:${naddr}` } });
     await fireEvent.click(screen.getByTestId('note-reference-insert'));
 
-    expect(textarea.value).toBe(`Check this out\n\nnostr:${naddr}`);
+    // the two newlines render as <br><br>, which textContent does not carry;
+    // an naddr is not a profile pointer, so it stays text (no chip)
+    expect(textarea.textContent).toBe(`Check this outnostr:${naddr}`);
     expect(/** @type {HTMLInputElement} */ (refInput).value).toBe('');
   });
 
   it('shows an error for an invalid reference and does not touch content', async () => {
     render(NoteCreateModal, { props: {} });
 
-    const textarea = /** @type {HTMLTextAreaElement} */ (screen.getByTestId('note-content-input'));
-    await fireEvent.input(textarea, { target: { value: 'Original' } });
+    const textarea = screen.getByTestId('note-content-input');
+    await typeInto(textarea, 'Original');
 
     const refInput = screen.getByTestId('note-reference-input');
     await fireEvent.input(refInput, { target: { value: 'garbage-input' } });
     await fireEvent.click(screen.getByTestId('note-reference-insert'));
 
     expect(screen.getByTestId('note-reference-error')).toBeTruthy();
-    expect(textarea.value).toBe('Original');
+    expect(textarea.textContent).toBe('Original');
   });
 
   it('switches to the preview tab', async () => {
     render(NoteCreateModal, { props: {} });
 
     const textarea = screen.getByTestId('note-content-input');
-    await fireEvent.input(textarea, { target: { value: 'Preview me' } });
+    await typeInto(textarea, 'Preview me');
 
     await fireEvent.click(screen.getByTestId('note-tab-preview'));
     expect(screen.getByTestId('note-preview-pane')).toBeTruthy();
@@ -157,9 +176,7 @@ describe('NoteCreateModal', () => {
   it('publishes a kind 1 note and closes the modal', async () => {
     render(NoteCreateModal, { props: {} });
 
-    await fireEvent.input(screen.getByTestId('note-content-input'), {
-      target: { value: 'Hello feed' }
-    });
+    await typeInto(screen.getByTestId('note-content-input'), 'Hello feed');
     await fireEvent.click(screen.getByTestId('note-publish-button'));
 
     await waitFor(() => {
@@ -173,12 +190,21 @@ describe('NoteCreateModal', () => {
     expect(spies.closeSpy).toHaveBeenCalled();
   });
 
+  it('passes mentioned pubkeys to publishEvent so the outbox reaches their read relays', async () => {
+    render(NoteCreateModal, { props: {} });
+    const alice = 'a'.repeat(64);
+    await typeInto(screen.getByTestId('note-content-input'), `hi nostr:${nip19.npubEncode(alice)}`);
+    await fireEvent.click(screen.getByTestId('note-publish-button'));
+    await waitFor(() => expect(spies.publishSpy).toHaveBeenCalledTimes(1));
+    const [signed, tagged] = spies.publishSpy.mock.calls[0];
+    expect(signed.tags).toContainEqual(['p', alice]);
+    expect(tagged).toEqual([alice]);
+  });
+
   it('adds the community h-tag when composing with a community', async () => {
     render(NoteCreateModal, { props: { communityPubkey: COMMUNITY } });
 
-    await fireEvent.input(screen.getByTestId('note-content-input'), {
-      target: { value: 'Community note' }
-    });
+    await typeInto(screen.getByTestId('note-content-input'), 'Community note');
     await fireEvent.click(screen.getByTestId('note-publish-button'));
 
     await waitFor(() => {
@@ -192,9 +218,7 @@ describe('NoteCreateModal', () => {
   it('does not add an h-tag without community context', async () => {
     render(NoteCreateModal, { props: {} });
 
-    await fireEvent.input(screen.getByTestId('note-content-input'), {
-      target: { value: 'Global note' }
-    });
+    await typeInto(screen.getByTestId('note-content-input'), 'Global note');
     await fireEvent.click(screen.getByTestId('note-publish-button'));
 
     await waitFor(() => {
@@ -209,9 +233,7 @@ describe('NoteCreateModal', () => {
     spies.activeUser = null;
     render(NoteCreateModal, { props: {} });
 
-    await fireEvent.input(screen.getByTestId('note-content-input'), {
-      target: { value: 'No login' }
-    });
+    await typeInto(screen.getByTestId('note-content-input'), 'No login');
     await fireEvent.click(screen.getByTestId('note-publish-button'));
 
     expect(screen.getByRole('alert')).toBeTruthy();
@@ -222,9 +244,7 @@ describe('NoteCreateModal', () => {
     spies.publishSpy = vi.fn().mockResolvedValue({ success: false, relays: [], successCount: 0 });
     render(NoteCreateModal, { props: {} });
 
-    await fireEvent.input(screen.getByTestId('note-content-input'), {
-      target: { value: 'Nowhere to go' }
-    });
+    await typeInto(screen.getByTestId('note-content-input'), 'Nowhere to go');
     await fireEvent.click(screen.getByTestId('note-publish-button'));
 
     await waitFor(() => {
@@ -237,9 +257,7 @@ describe('NoteCreateModal', () => {
     spies.signEventSpy = vi.fn().mockRejectedValue(new Error('sign refused'));
     render(NoteCreateModal, { props: {} });
 
-    await fireEvent.input(screen.getByTestId('note-content-input'), {
-      target: { value: 'Will fail' }
-    });
+    await typeInto(screen.getByTestId('note-content-input'), 'Will fail');
     await fireEvent.click(screen.getByTestId('note-publish-button'));
 
     await waitFor(() => {
