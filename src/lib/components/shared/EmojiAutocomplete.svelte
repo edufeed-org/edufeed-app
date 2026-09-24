@@ -1,6 +1,6 @@
 <!--
-  EmojiAutocomplete — presentational suggestion list for EmojiInput's `:`
-  autocomplete. EmojiInput owns detection and keyboard handling; this only
+  EmojiAutocomplete — presentational suggestion list for ComposerInput's `:`
+  autocomplete. ComposerInput owns detection and keyboard handling; this only
   renders candidates and reports a pick. mousedown (not click) so the pick
   wins the race against the editor losing focus — same as MentionAutocomplete.
 -->

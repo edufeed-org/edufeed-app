@@ -1,5 +1,6 @@
 <!--
-  EmojiInput — the chat composer's text field with Slack-style emoji
+  ComposerInput — the composer text field shared by every composer (notes,
+  comments, threads, articles, chat, DMs) with Slack-style emoji
   handling (laoc, 2026-09-18):
 
   - typing `:xx` opens EmojiAutocomplete with the user's custom emojis first

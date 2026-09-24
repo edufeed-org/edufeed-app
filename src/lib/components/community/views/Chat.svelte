@@ -15,7 +15,7 @@
   import { TimelineModel } from 'applesauce-core/models';
   import ReactionBar from '$lib/components/reactions/ReactionBar.svelte';
   import EmojiPicker from '$lib/components/shared/EmojiPicker.svelte';
-  import EmojiInput from '$lib/components/shared/EmojiInput.svelte';
+  import ComposerInput from '$lib/components/shared/ComposerInput.svelte';
   import { customEmojisIn } from '$lib/helpers/emoji-autocomplete.js';
   import { SmilePlusIcon, SendIcon, ReplyIcon } from '$lib/components/icons';
   import * as m from '$lib/paraglide/messages';
@@ -60,7 +60,7 @@
   /** @type {any} */
   let replyingTo = $state(null);
 
-  /** @type {ReturnType<typeof EmojiInput> | undefined} */
+  /** @type {ReturnType<typeof ComposerInput> | undefined} */
   let messageInput = $state(undefined);
 
   let displayedMessages = $derived.by(() => {
@@ -227,7 +227,7 @@
     return getDisplayName(pubkey, userProfiles.get(pubkey));
   }
 
-  /** Picker: insert a unicode emoji at the caret (EmojiInput renders it) */
+  /** Picker: insert a unicode emoji at the caret (ComposerInput renders it) */
   function insertEmoji(/** @type {string} */ emoji) {
     messageInput?.insert(emoji);
     showEmojiPicker = false;
@@ -371,7 +371,7 @@
           <SmilePlusIcon class="h-5 w-5" />
         </button>
 
-        <EmojiInput
+        <ComposerInput
           bind:this={messageInput}
           bind:value={newMessage}
           {customEmojiSets}

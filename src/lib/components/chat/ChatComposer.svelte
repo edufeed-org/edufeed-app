@@ -8,7 +8,7 @@
 <script>
   import * as m from '$lib/paraglide/messages';
   import { PollIcon } from '$lib/components/icons';
-  import EmojiInput from '$lib/components/shared/EmojiInput.svelte';
+  import ComposerInput from '$lib/components/shared/ComposerInput.svelte';
 
   /**
    * @typedef {Object} Props
@@ -131,7 +131,7 @@
       {disabled}><PollIcon class_="h-4 w-4" /></button
     >
   {/if}
-  <EmojiInput
+  <ComposerInput
     bind:value
     {customEmojiSets}
     {placeholder}

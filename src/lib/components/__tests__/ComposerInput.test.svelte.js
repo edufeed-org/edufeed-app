@@ -1,7 +1,7 @@
 // @ts-nocheck
 /** @vitest-environment jsdom */
 /**
- * EmojiInput — Slack-style composer input (laoc, 2026-09-18): typing `:xx`
+ * ComposerInput — Slack-style composer input (laoc, 2026-09-18): typing `:xx`
  * opens a suggestion list of the user's custom emojis and unicode emojis;
  * Tab/arrows cycle, Enter inserts; a custom emoji is rendered INLINE as its
  * image (the field is a contenteditable) and serialises back to
@@ -10,7 +10,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { render, fireEvent, waitFor } from '@testing-library/svelte';
 import { tick } from 'svelte';
-import EmojiInputHost from './fixtures/EmojiInputHost.svelte';
+import ComposerInputHost from './fixtures/ComposerInputHost.svelte';
 
 const SETS = [
   {
@@ -36,13 +36,13 @@ async function typeText(editor, text) {
 }
 
 function setup(props = {}) {
-  const utils = render(EmojiInputHost, { props: { customEmojiSets: SETS, ...props } });
+  const utils = render(ComposerInputHost, { props: { customEmojiSets: SETS, ...props } });
   const editor = utils.getByTestId('emoji-input');
   const value = () => utils.getByTestId('value').textContent;
   return { ...utils, editor, value };
 }
 
-describe('EmojiInput', () => {
+describe('ComposerInput', () => {
   it('renders a known custom shortcode as an inline image and keeps unknown ones as text', () => {
     const { editor } = setup({ initial: 'hi :doge: and :nope:' });
     const img = editor.querySelector('img[data-shortcode="doge"]');

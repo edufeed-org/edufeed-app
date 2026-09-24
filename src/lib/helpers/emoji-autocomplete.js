@@ -1,4 +1,4 @@
-// Pure half of the Slack-style `:` emoji autocomplete used by EmojiInput
+// Pure half of the Slack-style `:` emoji autocomplete used by ComposerInput
 // (laoc, 2026-09-18): detect an in-progress `:query` before the caret, rank
 // matches from the user's custom packs (NIP-30, kind 30030) and the unicode
 // set, splice the pick into the text, and list the custom emojis a draft

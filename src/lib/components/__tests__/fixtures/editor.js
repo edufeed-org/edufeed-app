@@ -1,5 +1,5 @@
 /**
- * Typing into a contenteditable composer (EmojiInput). `fireEvent.input` with
+ * Typing into a contenteditable composer (ComposerInput). `fireEvent.input` with
  * `target.value` only works on <input>/<textarea>; a contenteditable needs its
  * text set, the caret placed, and then the input event.
  */

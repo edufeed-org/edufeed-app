@@ -1,7 +1,7 @@
-<!-- Test host for EmojiInput: binds `value`, mirrors it into an <output>, and
+<!-- Test host for ComposerInput: binds `value`, mirrors it into an <output>, and
      exposes the picker path (insert) through buttons. -->
 <script>
-  import EmojiInput from '$lib/components/shared/EmojiInput.svelte';
+  import ComposerInput from '$lib/components/shared/ComposerInput.svelte';
 
   /** @type {{ initial?: string, customEmojiSets?: any[], multiline?: boolean, onSubmit?: () => void }} */
   let { initial = '', customEmojiSets = [], multiline = false, onSubmit = () => {} } = $props();
@@ -10,7 +10,7 @@
   let input;
 </script>
 
-<EmojiInput
+<ComposerInput
   bind:this={input}
   bind:value
   {customEmojiSets}
