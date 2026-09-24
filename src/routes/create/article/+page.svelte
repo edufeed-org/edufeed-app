@@ -8,6 +8,7 @@
   import { getArticleTitle, getArticleSummary, getArticleImage } from 'applesauce-common/helpers';
   import { createArticle, updateArticle } from '$lib/stores/article-actions.svelte.js';
   import MarkdownEditor from '$lib/components/shared/MarkdownEditor.svelte';
+  import ComposerInput from '$lib/components/shared/ComposerInput.svelte';
   import EditableList from '$lib/components/shared/EditableList.svelte';
   import LicensedImageInput from '$lib/components/shared/LicensedImageInput.svelte';
   import { useLicenseForHash } from '$lib/stores/image-license.svelte.js';
@@ -231,12 +232,15 @@
       </div>
 
       <!-- Summary -->
-      <textarea
-        class="textarea w-full"
-        rows="2"
-        placeholder={m.article_editor_summary_placeholder()}
+      <ComposerInput
         bind:value={summary}
-      ></textarea>
+        multiline
+        submitOnEnter={false}
+        minHeight="3.5rem"
+        class="textarea w-full"
+        placeholder={m.article_editor_summary_placeholder()}
+        testid="article-summary-input"
+      />
 
       <!-- Markdown Editor -->
       <MarkdownEditor

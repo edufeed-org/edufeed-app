@@ -8,6 +8,7 @@
   import { runtimeConfig } from '$lib/stores/config.svelte.js';
   import { createWiki, updateWiki } from '$lib/stores/wiki-actions.svelte.js';
   import MarkdownEditor from '$lib/components/shared/MarkdownEditor.svelte';
+  import ComposerInput from '$lib/components/shared/ComposerInput.svelte';
   import EditableList from '$lib/components/shared/EditableList.svelte';
   import { takeExport, exportTitle } from '$lib/webxdc/export-share.js';
   import * as m from '$lib/paraglide/messages';
@@ -207,12 +208,15 @@
       </div>
 
       <!-- Summary -->
-      <textarea
-        class="textarea w-full"
-        rows="2"
-        placeholder={m.wiki_editor_summary_placeholder()}
+      <ComposerInput
         bind:value={summary}
-      ></textarea>
+        multiline
+        submitOnEnter={false}
+        minHeight="3.5rem"
+        class="textarea w-full"
+        placeholder={m.wiki_editor_summary_placeholder()}
+        testid="wiki-summary-input"
+      />
 
       <!-- Markdown Editor -->
       <MarkdownEditor

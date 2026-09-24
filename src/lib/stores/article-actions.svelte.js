@@ -3,7 +3,9 @@
  * Actions for creating and managing long-form articles (NIP-23, kind 30023)
  */
 
+import { repairNostrLinks, tagPubkeyMentions } from 'applesauce-core/operations';
 import { createAppEventFactory } from '$lib/helpers/event-factory.js';
+import { pTagPubkeys } from '$lib/helpers/mention-autocomplete.js';
 import { manager } from '$lib/stores/accounts.svelte';
 import { encodeEventToNaddr } from '$lib/helpers/nostrUtils.js';
 import { publishEventOptimistic } from '$lib/services/publish-service.js';
@@ -111,14 +113,23 @@ export async function createArticle(formData, communityPubkey, communityEvent = 
   const tags = buildArticleTags(formData, undefined, communityPubkey);
 
   const eventFactory = createAppEventFactory();
-  const eventTemplate = await eventFactory.build({
-    kind: ARTICLE_KIND,
-    content: formData.content,
-    tags
-  });
+  // NIP-27 references in the body become NIP-10 p tags (bare npubs repaired first).
+  const eventTemplate = await eventFactory.build(
+    {
+      kind: ARTICLE_KIND,
+      content: formData.content,
+      tags
+    },
+    repairNostrLinks(),
+    tagPubkeyMentions()
+  );
 
   const articleEvent = await currentAccount.signEvent(eventTemplate);
-  publishEventOptimistic(articleEvent, [], { communityEvent, companions: companionsOf(formData) });
+  // Mentioned users get the article on their read relays too.
+  publishEventOptimistic(articleEvent, pTagPubkeys(articleEvent), {
+    communityEvent,
+    companions: companionsOf(formData)
+  });
 
   const naddr = encodeEventToNaddr(articleEvent, getAppRelaysForCategory('longform'));
 
@@ -162,15 +173,22 @@ export async function updateArticle(formData, existingEvent, communityEvent = nu
   const eventFactory = createAppEventFactory();
   // Strictly newer than the version being replaced — a same-second edit is
   // dropped by the relay tie-break and deterministically by the cache. (#62/#64)
-  const eventTemplate = await eventFactory.build({
-    kind: ARTICLE_KIND,
-    content: formData.content,
-    tags,
-    created_at: nextCreatedAt(existingEvent)
-  });
+  const eventTemplate = await eventFactory.build(
+    {
+      kind: ARTICLE_KIND,
+      content: formData.content,
+      tags,
+      created_at: nextCreatedAt(existingEvent)
+    },
+    repairNostrLinks(),
+    tagPubkeyMentions()
+  );
 
   const updatedEvent = await currentAccount.signEvent(eventTemplate);
-  publishEventOptimistic(updatedEvent, [], { communityEvent, companions: companionsOf(formData) });
+  publishEventOptimistic(updatedEvent, pTagPubkeys(updatedEvent), {
+    communityEvent,
+    companions: companionsOf(formData)
+  });
 
   const naddr = encodeEventToNaddr(updatedEvent, getAppRelaysForCategory('longform'));
 
