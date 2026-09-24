@@ -148,6 +148,14 @@ describe('ComposerInput', () => {
     expect(onSubmit).toHaveBeenCalledTimes(1);
   });
 
+  it('with submitOnEnter=false Enter inserts a newline instead of submitting', async () => {
+    const onSubmit = vi.fn();
+    const { editor } = setup({ multiline: true, submitOnEnter: false, onSubmit });
+    await typeText(editor, 'line');
+    await fireEvent.keyDown(editor, { key: 'Enter' });
+    expect(onSubmit).not.toHaveBeenCalled();
+  });
+
   it('accepts picker inserts (custom and unicode) through insert()', async () => {
     const { editor, value, getByTestId } = setup({ initial: 'hey' });
     await fireEvent.click(getByTestId('insert-custom'));

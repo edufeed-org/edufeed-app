@@ -10,8 +10,14 @@
     is the view of one string: `value` (bindable) holds the NIP-30 text form
     (`:shortcode:`), the DOM shows text nodes plus <img data-shortcode> for
     every shortcode the caller's packs know. Unknown shortcodes stay text;
+  - typing `@` opens MentionAutocomplete (follows, known profiles, NIP-50
+    search); a pick inserts a NIP-27 `nostr:npub…` reference, rendered as a
+    non-editable `@Name` chip (<span data-mention>) while `value` keeps the
+    raw reference — publish pipelines turn it into a `p` tag;
   - Enter submits (`onSubmit`), Shift+Enter inserts a newline in multiline
-    mode; paste is plain text; the picker button feeds `insert()`.
+    mode (`submitOnEnter={false}` makes Enter a plain newline for long-form
+    bodies); paste is plain text; the picker button feeds `insert()`;
+    toolbar hosts use `getSelection()` / `replaceRange()` in value coordinates.
 
   Sync rules: user edits flow DOM → value (serialize on input, no re-render,
   so the caret is never touched); every programmatic change (a pick, insert(),
@@ -45,7 +51,8 @@
    *   onfocus?: () => void,
    *   class?: string,
    *   testid?: string,
-   *   minHeight?: string
+   *   minHeight?: string,
+   *   submitOnEnter?: boolean
    * }}
    */
   let {
@@ -59,7 +66,9 @@
     class: className = '',
     testid = 'emoji-input',
     /** CSS length; when set, the multiline editor grows past the chat cap */
-    minHeight = undefined
+    minHeight = undefined,
+    /** false for long-form bodies: Enter is a newline, never a submit */
+    submitOnEnter = true
   } = $props();
 
   /** @type {HTMLDivElement | undefined} */
@@ -457,6 +466,7 @@
       }
     }
     if (event.key === 'Enter' && !event.isComposing) {
+      if (!submitOnEnter) return; // newline (long-form bodies)
       if (multiline && event.shiftKey) return; // newline
       event.preventDefault();
       onSubmit?.();

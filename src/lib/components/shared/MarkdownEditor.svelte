@@ -12,6 +12,7 @@
   import MarkdownRenderer from './MarkdownRenderer.svelte';
   import ImageSourceChooserModal from './ImageSourceChooserModal.svelte';
   import ImageLibraryPickerModal from './ImageLibraryPickerModal.svelte';
+  import ComposerInput from './ComposerInput.svelte';
   import * as m from '$lib/paraglide/messages';
 
   /**
@@ -27,8 +28,9 @@
   let activeTab = $state(/** @type {'write' | 'preview'} */ ('write'));
   let imageUploading = $state(false);
 
-  /** @type {HTMLTextAreaElement | null} */
-  let textareaRef = $state(null);
+  /** The composer editor (contenteditable with @mentions), for toolbar inserts */
+  /** @type {any} */
+  let editorRef = $state(null);
   /** @type {HTMLInputElement | null} */
   let imageInputRef = $state(null);
 
@@ -44,29 +46,23 @@
   let libraryOpen = $state(false);
 
   /**
-   * Insert markdown syntax at cursor position in textarea
+   * Insert markdown syntax around the current selection (or the default text
+   * at the caret). Selection and replacement go through the composer editor's
+   * value-coordinate API, so mention chips count as their nostr: token.
    * @param {string} before - Text to insert before selection
    * @param {string} after - Text to insert after selection
    * @param {string} [defaultText] - Default text if nothing selected
    */
   function insertMarkdown(before, after, defaultText = '') {
-    if (!textareaRef) return;
-
-    const start = textareaRef.selectionStart;
-    const end = textareaRef.selectionEnd;
+    if (!editorRef) return;
+    const { start, end } = editorRef.getSelection();
     const selected = content.substring(start, end) || defaultText;
-
-    const newText =
-      content.substring(0, start) + before + selected + after + content.substring(end);
-
-    content = newText;
-
-    requestAnimationFrame(() => {
-      if (!textareaRef) return;
-      const cursorPos = start + before.length + selected.length;
-      textareaRef.focus();
-      textareaRef.setSelectionRange(cursorPos, cursorPos);
-    });
+    editorRef.replaceRange(
+      start,
+      end,
+      before + selected + after,
+      start + before.length + selected.length
+    );
   }
 
   function toolbarBold() {
@@ -215,13 +211,16 @@
 
   <!-- Editor / Preview area -->
   {#if activeTab === 'write'}
-    <textarea
-      bind:this={textareaRef}
-      class="w-full resize-y bg-base-100 p-4 font-mono text-sm focus:outline-none"
-      style="min-height: {minHeight};"
-      {placeholder}
+    <ComposerInput
+      bind:this={editorRef}
       bind:value={content}
-    ></textarea>
+      multiline
+      submitOnEnter={false}
+      {minHeight}
+      {placeholder}
+      class="w-full bg-base-100 p-4 font-mono text-sm"
+      testid="markdown-editor-input"
+    />
   {:else}
     <div class="p-4" style="min-height: {minHeight};">
       {#if content.trim()}

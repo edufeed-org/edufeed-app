@@ -32,8 +32,35 @@ vi.mock('$lib/helpers/upload-and-find-license.js', () => ({
 vi.mock('../shared/LicenseModal.svelte', () => ({ default: () => ({}) }));
 vi.mock('../shared/MarkdownRenderer.svelte', () => ({ default: () => ({}) }));
 vi.mock('../shared/ImageLibraryPickerModal.svelte', () => ({ default: () => ({}) }));
+vi.mock(
+  '$lib/stores/mention-candidates.svelte.js',
+  () => import('./fixtures/mention-candidates-mock.svelte.js')
+);
+vi.mock('$lib/stores/profile-map.svelte.js', () => ({ useProfileMap: () => () => new Map() }));
 
 import MarkdownEditor from '../shared/MarkdownEditor.svelte';
+
+describe('MarkdownEditor — toolbar on the composer editor', () => {
+  it('renders the body as the composer editor (contenteditable) with the editor min-height', () => {
+    const { getByTestId } = render(MarkdownEditor, { props: { content: '', minHeight: '300px' } });
+    const editor = getByTestId('markdown-editor-input');
+    expect(editor.getAttribute('contenteditable')).toBe('true');
+    expect(editor.style.minHeight).toBe('300px');
+  });
+
+  it('Bold wraps the default text at the caret through the editor API', async () => {
+    const { getByTitle, getByTestId } = render(MarkdownEditor, { props: { content: 'hello' } });
+    const editor = getByTestId('markdown-editor-input');
+    const range = document.createRange();
+    range.selectNodeContents(editor);
+    range.collapse(false);
+    window.getSelection()?.removeAllRanges();
+    window.getSelection()?.addRange(range);
+    await fireEvent.click(getByTitle('Bold'));
+    await new Promise((r) => setTimeout(r, 0));
+    expect(editor.textContent).toBe('hello**bold text**');
+  });
+});
 
 describe('MarkdownEditor — image source chooser', () => {
   it('does not show the chooser until the image toolbar button is clicked', () => {
