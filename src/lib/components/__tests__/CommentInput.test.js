@@ -40,10 +40,29 @@ vi.mock('$lib/services/publish-service.js', () => ({
 }));
 
 vi.mock('$lib/stores/nostr-infrastructure.svelte', () => ({
-  eventStore: { add: vi.fn() }
+  eventStore: { add: vi.fn() },
+  // reached through ComposerInput → MentionAutocomplete → ProfileAvatar
+  pool: { request: vi.fn() }
 }));
 
-vi.mock('$lib/paraglide/messages', () => ({
+vi.mock(
+  '$lib/stores/mention-candidates.svelte.js',
+  () => import('./fixtures/mention-candidates-mock.svelte.js')
+);
+vi.mock('$lib/stores/profile-map.svelte.js', () => ({ useProfileMap: () => () => new Map() }));
+
+/**
+ * Type into the contenteditable composer the way a keyboard would.
+ * @param {HTMLElement} editor
+ * @param {string} text
+ */
+async function typeInto(editor, text) {
+  editor.textContent = text;
+  await fireEvent.input(editor);
+}
+
+vi.mock('$lib/paraglide/messages', async (importOriginal) => ({
+  ...(await importOriginal()),
   article_editor_tab_write: () => 'Write',
   article_editor_tab_preview: () => 'Preview',
   comments_input_post_button: () => 'Post',
@@ -63,6 +82,7 @@ vi.mock('$lib/helpers/image-proxy.js', () => ({
 }));
 
 import CommentInput from '../comments/CommentInput.svelte';
+import { publishEventOptimistic } from '$lib/services/publish-service.js';
 
 // --- Stubs ---
 
@@ -86,7 +106,7 @@ beforeEach(() => {
 });
 
 describe('CommentInput preview/write toggle', () => {
-  it('renders textarea by default (Write tab active)', () => {
+  it('renders the composer editor by default (Write tab active)', () => {
     const { getByTestId, queryByTestId } = render(CommentInput, {
       props: { rootEvent: stubRoot, activeUser: stubUser }
     });
@@ -99,7 +119,7 @@ describe('CommentInput preview/write toggle', () => {
       props: { rootEvent: stubRoot, activeUser: stubUser }
     });
     const textarea = getByTestId('comment-input');
-    await fireEvent.input(textarea, { target: { value: 'Hello #world' } });
+    await typeInto(textarea, 'Hello #world');
 
     await fireEvent.click(getByRole('button', { name: 'Preview' }));
 
@@ -112,9 +132,7 @@ describe('CommentInput preview/write toggle', () => {
       props: { rootEvent: stubRoot, activeUser: stubUser }
     });
     const textarea = getByTestId('comment-input');
-    await fireEvent.input(textarea, {
-      target: { value: 'See https://example.com/page' }
-    });
+    await typeInto(textarea, 'See https://example.com/page');
 
     await fireEvent.click(getByRole('button', { name: 'Preview' }));
 
@@ -132,13 +150,13 @@ describe('CommentInput preview/write toggle', () => {
       props: { rootEvent: stubRoot, activeUser: stubUser }
     });
     const textarea = /** @type {HTMLTextAreaElement} */ (getByTestId('comment-input'));
-    await fireEvent.input(textarea, { target: { value: 'draft' } });
+    await typeInto(textarea, 'draft');
 
     await fireEvent.click(getByRole('button', { name: 'Preview' }));
     await fireEvent.click(getByRole('button', { name: 'Write' }));
 
     const restored = /** @type {HTMLTextAreaElement} */ (getByTestId('comment-input'));
-    expect(restored.value).toBe('draft');
+    expect(restored.textContent).toBe('draft');
   });
 
   it('shows placeholder when previewing empty content', async () => {
@@ -158,7 +176,7 @@ describe('CommentInput URL-rooted (page note) posting', () => {
     });
 
     const textarea = /** @type {HTMLTextAreaElement} */ (getByTestId('comment-input'));
-    await fireEvent.input(textarea, { target: { value: 'hello world' } });
+    await typeInto(textarea, 'hello world');
     await fireEvent.submit(/** @type {HTMLFormElement} */ (textarea.closest('form')));
 
     expect(createMock).toHaveBeenCalledOnce();
@@ -186,7 +204,7 @@ describe('CommentInput URL-rooted (page note) posting', () => {
     });
 
     const textarea = /** @type {HTMLTextAreaElement} */ (getByTestId('comment-input'));
-    await fireEvent.input(textarea, { target: { value: 'reply' } });
+    await typeInto(textarea, 'reply');
     await fireEvent.submit(/** @type {HTMLFormElement} */ (textarea.closest('form')));
 
     expect(createMock).toHaveBeenCalledOnce();
@@ -209,11 +227,37 @@ describe('CommentInput URL-rooted (page note) posting', () => {
     });
 
     const textarea = /** @type {HTMLTextAreaElement} */ (getByTestId('comment-input'));
-    await fireEvent.input(textarea, { target: { value: 'hi' } });
+    await typeInto(textarea, 'hi');
     await fireEvent.submit(/** @type {HTMLFormElement} */ (textarea.closest('form')));
 
     expect(createMock).toHaveBeenCalledOnce();
     const [parent] = /** @type {any[]} */ (createMock.mock.calls[0]);
     expect(parent).toBe(rootEvent);
+  });
+
+  it('dedupes tagged pubkeys: parent author mentioned in the reply is passed once', async () => {
+    const parentAuthor = 'p'.repeat(64);
+    createMock.mockResolvedValueOnce({ tags: [['p', parentAuthor]] });
+    const { getByTestId } = render(CommentInput, {
+      props: { rootEvent: { ...stubRoot, pubkey: parentAuthor }, activeUser }
+    });
+    const editor = getByTestId('comment-input');
+    await typeInto(editor, 'reply');
+    await fireEvent.submit(/** @type {HTMLFormElement} */ (editor.closest('form')));
+    await new Promise((r) => setTimeout(r, 0));
+    expect(publishEventOptimistic.mock.calls[0][1]).toEqual([parentAuthor]);
+  });
+
+  it('adds mentioned pubkeys from the signed comment to the outbox list', async () => {
+    const alice = 'a'.repeat(64);
+    createMock.mockResolvedValueOnce({ tags: [['p', alice]] });
+    const { getByTestId } = render(CommentInput, {
+      props: { rootEvent: stubRoot, activeUser }
+    });
+    const editor = getByTestId('comment-input');
+    await typeInto(editor, 'hi');
+    await fireEvent.submit(/** @type {HTMLFormElement} */ (editor.closest('form')));
+    await new Promise((r) => setTimeout(r, 0));
+    expect(publishEventOptimistic.mock.calls[0][1]).toEqual(['p1', alice]);
   });
 });
