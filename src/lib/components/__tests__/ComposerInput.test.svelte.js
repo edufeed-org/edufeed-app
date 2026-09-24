@@ -306,3 +306,41 @@ describe('ComposerInput @ people picker', () => {
     expect(value()).toBe('mail @');
   });
 });
+
+describe('ComposerInput selection API', () => {
+  it('reports the selection in value coordinates, counting chips by their token length', async () => {
+    const { editor, getByTestId } = setup({ initial: `nostr:${NPUB_ALICE} hello` });
+    const textNode = editor.lastChild; // " hello"
+    const range = document.createRange();
+    range.setStart(textNode, 1);
+    range.setEnd(textNode, 6);
+    const sel = window.getSelection();
+    sel?.removeAllRanges();
+    sel?.addRange(range);
+    await fireEvent.click(getByTestId('read-selection'));
+    const token = `nostr:${NPUB_ALICE}`.length;
+    expect(JSON.parse(getByTestId('selection').textContent)).toEqual({
+      start: token + 1,
+      end: token + 6
+    });
+  });
+
+  it('replaceRange wraps the selected text and re-renders', async () => {
+    const { editor, value, getByTestId } = setup({ initial: 'make me bold' });
+    const range = document.createRange();
+    range.setStart(editor.firstChild, 8);
+    range.setEnd(editor.firstChild, 12);
+    const sel = window.getSelection();
+    sel?.removeAllRanges();
+    sel?.addRange(range);
+    await fireEvent.click(getByTestId('wrap-bold'));
+    await tick();
+    expect(value()).toBe('make me **bold**');
+  });
+
+  it('applies minHeight and drops the multiline max-height cap', () => {
+    const { editor } = setup({ multiline: true, minHeight: '20rem' });
+    expect(editor.style.minHeight).toBe('20rem');
+    expect(editor.className).not.toContain('max-h-40');
+  });
+});

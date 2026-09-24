@@ -44,7 +44,8 @@
    *   onSubmit?: () => void,
    *   onfocus?: () => void,
    *   class?: string,
-   *   testid?: string
+   *   testid?: string,
+   *   minHeight?: string
    * }}
    */
   let {
@@ -56,7 +57,9 @@
     onSubmit = undefined,
     onfocus = undefined,
     class: className = '',
-    testid = 'emoji-input'
+    testid = 'emoji-input',
+    /** CSS length; when set, the multiline editor grows past the chat cap */
+    minHeight = undefined
   } = $props();
 
   /** @type {HTMLDivElement | undefined} */
@@ -254,6 +257,14 @@
   /* eslint-enable svelte/no-dom-manipulating */
 
   // ---- caret in serialized coordinates ----------------------------------
+  /** serialized offset of a DOM point inside the editor @param {Node} node @param {number} offset */
+  function offsetOf(node, offset) {
+    if (!editor) return 0;
+    const range = document.createRange();
+    range.setStart(editor, 0);
+    range.setEnd(node, offset);
+    return serializeNode(range.cloneContents()).length;
+  }
   function caretOffset() {
     const sel = typeof window === 'undefined' ? null : window.getSelection();
     if (
@@ -265,10 +276,33 @@
     ) {
       return serializeEditor().length;
     }
-    const range = document.createRange();
-    range.setStart(editor, 0);
-    range.setEnd(sel.focusNode, sel.focusOffset);
-    return serializeNode(range.cloneContents()).length;
+    return offsetOf(sel.focusNode, sel.focusOffset);
+  }
+  /** Current selection in value coordinates (collapsed = caret). */
+  export function getSelection() {
+    const sel = typeof window === 'undefined' ? null : window.getSelection();
+    if (
+      !editor ||
+      !sel ||
+      sel.rangeCount === 0 ||
+      !sel.anchorNode ||
+      !sel.focusNode ||
+      !editor.contains(sel.anchorNode) ||
+      !editor.contains(sel.focusNode)
+    ) {
+      const end = serializeEditor().length;
+      return { start: end, end };
+    }
+    const a = offsetOf(sel.anchorNode, sel.anchorOffset);
+    const f = offsetOf(sel.focusNode, sel.focusOffset);
+    return { start: Math.min(a, f), end: Math.max(a, f) };
+  }
+  /**
+   * Replace a value range (toolbar path: wrap the selection in markdown).
+   * @param {number} start @param {number} end @param {string} text @param {number} [caret]
+   */
+  export function replaceRange(start, end, text, caret = start + text.length) {
+    void commit(value.slice(0, start) + text + value.slice(end), caret);
   }
   /** @param {number} offset */
   function setCaret(offset) {
@@ -456,8 +490,11 @@
   <div
     bind:this={editor}
     class="emoji-input min-w-0 break-words whitespace-pre-wrap focus:outline-none {multiline
-      ? 'max-h-40 overflow-y-auto'
+      ? minHeight
+        ? 'overflow-y-auto'
+        : 'max-h-40 overflow-y-auto'
       : 'overflow-hidden whitespace-nowrap'} {className}"
+    style={minHeight ? `min-height: ${minHeight}` : undefined}
     contenteditable={!disabled}
     role="textbox"
     aria-disabled={disabled}
