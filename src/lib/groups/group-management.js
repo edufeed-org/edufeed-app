@@ -25,7 +25,7 @@ const template = (kind, tags) => ({ kind, content: '', created_at: now(), tags }
  * The metadata tag block shared by create (9007) and edit (9002): fields only
  * when non-empty after trim, then BOTH marker sides so a flip always
  * overwrites.
- * @param {{name?: string, about?: string, picture?: string, isPublic: boolean, isOpen: boolean, isHidden?: boolean, parent?: string}} meta
+ * @param {{name?: string, about?: string, picture?: string, isPublic: boolean, isOpen: boolean, isHidden?: boolean, livekit?: boolean, parent?: string}} meta
  * @returns {string[][]}
  */
 function metadataTags(meta) {
@@ -41,6 +41,12 @@ function metadataTags(meta) {
   // tag in NIP-29 — the pyramid fork reads absence as "keep current", so
   // only ever emit it, never a counterpart.
   if (meta.isHidden) tags.push(['hidden']);
+  // NIP-29 AV space: a bare `livekit` tag marks a group whose relay mints
+  // LiveKit tokens for it (see groups/livekit.js). Like `hidden` it has no
+  // negation tag — but unlike `hidden`, pyramid does NOT keep it on a 9002
+  // that omits it (nip29.EditMetadata.Apply overwrites the flag), so every
+  // edit must restate the CURRENT value; absence is how it is switched off.
+  if (meta.livekit) tags.push(['livekit']);
   // "Open" always means open to READ. Without `restricted`, NIP-29 lets the
   // whole network WRITE into the group — design round 4 (buzz thread):
   // "restricted bleibt in allen drei Stufen gesetzt".

@@ -13,6 +13,12 @@ let isConnecting = $state(false);
 let isMuted = $state(false);
 let isCameraOff = $state(true);
 let isScreenSharing = $state(false);
+// Whether the server lets the local participant publish tracks at all. A
+// NIP-29 relay hands a non-member of a public group a listen-only token
+// (canPublish=false); publishing would be refused, so the media setup and
+// the toggles skip it and the UI hides the controls. True until a room says
+// otherwise.
+let canPublish = $state(true);
 
 /** @type {import('livekit-client').RemoteParticipant[]} */
 let remoteParticipants = $state.raw([]);
@@ -184,6 +190,16 @@ export async function connectToRoom(token, url, opts = {}) {
       isConnected = false;
       updateParticipants();
     });
+    newRoom.on(
+      RoomEvent.ParticipantPermissionsChanged,
+      (
+        /** @type {any} */ _prev,
+        /** @type {import('livekit-client').Participant} */ participant
+      ) => {
+        if (participant !== newRoom.localParticipant) return;
+        canPublish = participant.permissions?.canPublish ?? true;
+      }
+    );
 
     await newRoom.connect(url, token);
 
@@ -192,16 +208,23 @@ export async function connectToRoom(token, url, opts = {}) {
     room = newRoom;
     isConnected = true;
     isMuted = false;
+    canPublish = newRoom.localParticipant.permissions?.canPublish ?? true;
     updateParticipants();
 
-    // Publish local tracks (failures are non-fatal)
-    try {
-      await newRoom.localParticipant.setMicrophoneEnabled(opts.audio !== false);
-    } catch (err) {
-      console.warn('Microphone not available:', err);
+    // Publish local tracks (failures are non-fatal). A listen-only token
+    // publishes nothing — the server would refuse the track anyway.
+    if (!canPublish) {
       isMuted = true;
+      isCameraOff = true;
+    } else {
+      try {
+        await newRoom.localParticipant.setMicrophoneEnabled(opts.audio !== false);
+      } catch (err) {
+        console.warn('Microphone not available:', err);
+        isMuted = true;
+      }
     }
-    if (opts.video) {
+    if (opts.video && canPublish) {
       try {
         await newRoom.localParticipant.setCameraEnabled(true);
         isCameraOff = false;
@@ -244,6 +267,7 @@ export async function disconnectFromRoom() {
   isMuted = false;
   isCameraOff = true;
   isScreenSharing = false;
+  canPublish = true;
   speakingParticipantIds = new SvelteSet();
   audioInputDevices = [];
   activeAudioDeviceId = '';
@@ -258,7 +282,7 @@ export async function disconnectFromRoom() {
  * Toggle local microphone.
  */
 export async function toggleMute() {
-  if (!room) return;
+  if (!room || !canPublish) return;
   const newState = !isMuted;
   await room.localParticipant.setMicrophoneEnabled(!newState);
   isMuted = newState;
@@ -268,7 +292,7 @@ export async function toggleMute() {
  * Toggle local camera.
  */
 export async function toggleCamera() {
-  if (!room) return;
+  if (!room || !canPublish) return;
   const newState = !isCameraOff;
   await room.localParticipant.setCameraEnabled(!newState);
   isCameraOff = newState;
@@ -278,7 +302,7 @@ export async function toggleCamera() {
  * Toggle screen sharing.
  */
 export async function toggleScreenShare() {
-  if (!room) return;
+  if (!room || !canPublish) return;
   try {
     const newState = !isScreenSharing;
     await room.localParticipant.setScreenShareEnabled(newState);
@@ -290,7 +314,7 @@ export async function toggleScreenShare() {
 
 /**
  * Get reactive connection state.
- * @returns {{ isConnected: boolean, isConnecting: boolean, isMuted: boolean, isCameraOff: boolean, isScreenSharing: boolean, localParticipant: import('livekit-client').LocalParticipant | null, remoteParticipants: import('livekit-client').RemoteParticipant[], room: Room | null, speakingParticipantIds: Set<string>, audioInputDevices: MediaDeviceInfo[], activeAudioDeviceId: string, audioOutputDevices: MediaDeviceInfo[], activeAudioOutputDeviceId: string, videoInputDevices: MediaDeviceInfo[], activeVideoDeviceId: string }}
+ * @returns {{ isConnected: boolean, isConnecting: boolean, isMuted: boolean, isCameraOff: boolean, isScreenSharing: boolean, canPublish: boolean, localParticipant: import('livekit-client').LocalParticipant | null, remoteParticipants: import('livekit-client').RemoteParticipant[], room: Room | null, speakingParticipantIds: Set<string>, audioInputDevices: MediaDeviceInfo[], activeAudioDeviceId: string, audioOutputDevices: MediaDeviceInfo[], activeAudioOutputDeviceId: string, videoInputDevices: MediaDeviceInfo[], activeVideoDeviceId: string }}
  */
 export function getLiveKitState() {
   return {
@@ -308,6 +332,9 @@ export function getLiveKitState() {
     },
     get isScreenSharing() {
       return isScreenSharing;
+    },
+    get canPublish() {
+      return canPublish;
     },
     get localParticipant() {
       return localParticipant;

@@ -66,6 +66,26 @@ describe('syncRootGroupMetadata', () => {
     expect(user).toBe(USER);
   });
 
+  it('mirrors a bare livekit tag through — a profile save must not switch AV off', async () => {
+    // pyramid overwrites the flag from whatever tags the 9002 carries; a
+    // name-only resync that forgot it would silently end the room.
+    relayConn = {
+      request: vi.fn(() => of({ kind: 39000, tags: [['d', POINTER.id], ['private'], ['livekit']] }))
+    };
+    await syncRootGroupMetadata({ pointer: POINTER, profile: PROFILE, signerUser: USER });
+    const [, template] = publishToGroupRelay.mock.calls[0];
+    expect(template.tags).toContainEqual(['livekit']);
+  });
+
+  it('does not invent a livekit tag when the current 39000 has none', async () => {
+    relayConn = {
+      request: vi.fn(() => of({ kind: 39000, tags: [['d', POINTER.id], ['private']] }))
+    };
+    await syncRootGroupMetadata({ pointer: POINTER, profile: PROFILE, signerUser: USER });
+    const [, template] = publishToGroupRelay.mock.calls[0];
+    expect(template.tags.some((/** @type {string[]} */ t) => t[0] === 'livekit')).toBe(false);
+  });
+
   it('mirrors public/open + an existing parent tag through unchanged', async () => {
     relayConn = {
       request: vi.fn(() =>

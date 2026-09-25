@@ -113,6 +113,41 @@ describe('group management templates', () => {
     expect(t.tags).toContainEqual(['hidden']);
   });
 
+  it('create-group carries a bare livekit tag when livekit is set (NIP-29 AV space)', () => {
+    const t = buildCreateGroupTemplate(ID, {
+      name: 'Standup',
+      isPublic: false,
+      isOpen: false,
+      livekit: true
+    });
+    expect(t.tags).toContainEqual(['livekit']);
+  });
+
+  it('edit-metadata carries a bare livekit tag when livekit is set', () => {
+    const t = buildEditGroupMetadataTemplate(ID, {
+      name: 'Standup',
+      isPublic: false,
+      isOpen: false,
+      livekit: true
+    });
+    expect(t.tags).toContainEqual(['livekit']);
+  });
+
+  it('omits the livekit tag when livekit is false or unset — absence switches AV off on the relay', () => {
+    // pyramid's edit-metadata overwrites the flag from the tags it sees
+    // (nip29.EditMetadata.Apply), so every 9002 must restate it; there is no
+    // negation tag, so "off" is simply the tag's absence.
+    for (const livekit of [false, undefined]) {
+      const t = buildEditGroupMetadataTemplate(ID, {
+        name: 'x',
+        isPublic: true,
+        isOpen: true,
+        livekit
+      });
+      expect(t.tags.some((tag) => tag[0] === 'livekit')).toBe(false);
+    }
+  });
+
   it('omits the hidden tag when isHidden is false — NIP-29 has no un-hide tag', () => {
     // Unlike public|private and open|closed there is no negation marker:
     // absence means "keep current" on the fork, so emitting anything for
