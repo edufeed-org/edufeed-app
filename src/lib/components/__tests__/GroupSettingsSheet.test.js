@@ -46,6 +46,13 @@ vi.mock('$lib/groups/group-management.js', () => ({
 vi.mock('$lib/stores/nostr-infrastructure.svelte', () => ({
   pool: { relay: vi.fn(() => relaySentinel) }
 }));
+const { probeRelayAvSupport } = vi.hoisted(() => ({
+  probeRelayAvSupport: vi.fn(async () => false)
+}));
+vi.mock('$lib/groups/livekit.js', async (importOriginal) => {
+  const actual = /** @type {any} */ (await importOriginal());
+  return { ...actual, probeRelayAvSupport };
+});
 vi.mock('$lib/stores/accounts.svelte', () => ({ useActiveUser: () => () => activeUser }));
 vi.mock('$lib/helpers/toast', () => ({ showToast }));
 vi.mock('$lib/paraglide/messages', () => ({
@@ -65,7 +72,9 @@ vi.mock('$lib/paraglide/messages', () => ({
   groups_create_public_toggle: () => 'Visible to non-members',
   groups_create_open_toggle: () => 'Anyone can join',
   groups_create_hidden_toggle: () => 'Hidden from the channel list',
-  groups_settings_hidden_permanent: () => 'Hidden rooms cannot be made visible again.'
+  groups_settings_hidden_permanent: () => 'Hidden rooms cannot be made visible again.',
+  groups_livekit_toggle: () => 'Live audio/video',
+  groups_livekit_hint: () => 'Members can join a call from the channel header.'
 }));
 
 const { default: GroupSettingsSheet } = await import(
@@ -97,6 +106,7 @@ function renderSheet(overrides = {}) {
 }
 
 beforeEach(() => {
+  probeRelayAvSupport.mockReset().mockResolvedValue(false);
   buildEditGroupMetadataTemplate.mockClear();
   buildEditGroupMetadataTemplate.mockReturnValue(editTemplateSentinel);
   buildDeleteGroupTemplate.mockClear();
@@ -187,6 +197,64 @@ describe('GroupSettingsSheet prefill', () => {
     );
     expect(/** @type {HTMLInputElement} */ (screen.getByTestId('group-edit-open')).checked).toBe(
       true
+    );
+  });
+});
+
+describe('GroupSettingsSheet live audio/video (NIP-29 AV)', () => {
+  it('hides the toggle when the relay does not mint LiveKit tokens and the group has no livekit tag', async () => {
+    renderSheet({ metadataEvent: eventWithTags([['public']]) });
+    await waitFor(() => expect(probeRelayAvSupport).toHaveBeenCalledWith(pointer.relay));
+    expect(screen.queryByTestId('group-edit-livekit')).toBeNull();
+  });
+
+  it('shows the toggle unchecked once the relay probe answers 204', async () => {
+    probeRelayAvSupport.mockResolvedValue(true);
+    renderSheet({ metadataEvent: eventWithTags([['public']]) });
+    const toggle = await screen.findByTestId('group-edit-livekit');
+    expect(/** @type {HTMLInputElement} */ (toggle).checked).toBe(false);
+  });
+
+  it('shows the toggle checked for a group that already carries the bare livekit tag, even if the probe fails', async () => {
+    // A probe hiccup must not hide an enabled flag: the 9002 always restates
+    // it, so the admin has to be able to see (and keep) it.
+    renderSheet({ metadataEvent: eventWithTags([['public'], ['livekit']]) });
+    const toggle = await screen.findByTestId('group-edit-livekit');
+    expect(/** @type {HTMLInputElement} */ (toggle).checked).toBe(true);
+  });
+
+  it('restates livekit: true on an unrelated save — pyramid drops the flag from any 9002 that omits it', async () => {
+    renderSheet({ metadataEvent: eventWithTags([['public'], ['livekit']]) });
+    await screen.findByTestId('group-edit-livekit');
+    await fireEvent.input(screen.getByTestId('group-edit-name'), {
+      target: { value: 'Renamed' }
+    });
+    await fireEvent.click(screen.getByTestId('group-edit-save'));
+    await waitFor(() => expect(publishToGroupRelay).toHaveBeenCalledTimes(1));
+    expect(buildEditGroupMetadataTemplate).toHaveBeenCalledWith(
+      'grp1',
+      expect.objectContaining({ name: 'Renamed', livekit: true })
+    );
+  });
+
+  it('sends livekit: false after the admin unticks it — absence is how AV is switched off', async () => {
+    renderSheet({ metadataEvent: eventWithTags([['public'], ['livekit']]) });
+    await fireEvent.click(await screen.findByTestId('group-edit-livekit'));
+    await fireEvent.click(screen.getByTestId('group-edit-save'));
+    await waitFor(() => expect(publishToGroupRelay).toHaveBeenCalledTimes(1));
+    expect(buildEditGroupMetadataTemplate).toHaveBeenCalledWith(
+      'grp1',
+      expect.objectContaining({ livekit: false })
+    );
+  });
+
+  it('sends livekit: false for a group without the tag when the toggle is hidden', async () => {
+    renderSheet({ metadataEvent: eventWithTags([['public']]) });
+    await fireEvent.click(screen.getByTestId('group-edit-save'));
+    await waitFor(() => expect(publishToGroupRelay).toHaveBeenCalledTimes(1));
+    expect(buildEditGroupMetadataTemplate).toHaveBeenCalledWith(
+      'grp1',
+      expect.objectContaining({ livekit: false })
     );
   });
 });

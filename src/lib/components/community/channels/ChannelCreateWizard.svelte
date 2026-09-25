@@ -13,6 +13,7 @@
   import { runtimeConfig } from '$lib/stores/config.svelte.js';
   import { manager } from '$lib/stores/accounts.svelte';
   import { getCommunitySigner } from '$lib/helpers/community-signer.js';
+  import { probeRelayAvSupport } from '$lib/groups/livekit.js';
   import { showToast } from '$lib/helpers/toast';
   import { getVerifiedMembers } from '$lib/helpers/contentTypes.js';
   import { useProfileMap } from '$lib/stores/profile-map.svelte.js';
@@ -77,6 +78,10 @@
   // the opt-out. Offered for the 'invited' tier alone; accessChoiceToNip29
   // drops a stale flag should the tier switch back to 'world'.
   let hiddenRoom = $state(false);
+  // NIP-29 only: AV space (bare `livekit` metadata tag) — offered for either
+  // tier, but only once the host relay has answered 204 on its LiveKit
+  // probe (see `avSupported` below).
+  let livekitRoom = $state(false);
   // NOTE: no description field — CORD ChannelMetadata has no description and
   // createChannel only takes {private, voice}; don't collect what we can't store.
   /** @type {string[]} */
@@ -101,6 +106,30 @@
   // a NIP-29 group holds no client-side secret) — the invite step doubles as
   // the final step, Create button and all.
   const lastStep = $derived(isGroupMode ? 1 : 2);
+
+  // The relay the new NIP-29 channel will be created on (same rule as
+  // createGroupChannel below) — probed once for LiveKit support so the AV
+  // checkbox only appears where it can work.
+  const groupRelay = $derived(
+    isGroupMode
+      ? groupPointers.length > 0
+        ? sharedRelayOf(groupPointers)
+        : (membershipPointer?.relay ?? null)
+      : null
+  );
+  let avSupported = $state(false);
+  $effect(() => {
+    const relay = groupRelay;
+    avSupported = false;
+    if (!relay) return;
+    let alive = true;
+    probeRelayAvSupport(relay).then((supported) => {
+      if (alive) avSupported = supported;
+    });
+    return () => {
+      alive = false;
+    };
+  });
 
   const topSubtitle = $derived.by(() => {
     if (!isGroupMode) {
@@ -247,6 +276,7 @@
           isPublic,
           isOpen,
           isHidden,
+          livekit: livekitRoom,
           parent: sameHost ? membershipPointer.id : undefined
         },
         user
@@ -418,6 +448,19 @@
               bind:checked={hiddenRoom}
             />
             <span>🫥 <b>{m.wizard_hidden_label()}</b> — {m.wizard_hidden_hint()}</span>
+          </label>
+        {/if}
+        {#if isGroupMode && avSupported}
+          <!-- NIP-29 AV space: the host relay mints LiveKit tokens for this
+            channel (spec: bare `livekit` tag on the 39000). Either tier. -->
+          <label class="ml-6 flex cursor-pointer items-start gap-2 py-1 text-sm">
+            <input
+              type="checkbox"
+              class="checkbox mt-0.5 checkbox-sm"
+              data-testid="wizard-livekit-room"
+              bind:checked={livekitRoom}
+            />
+            <span>🎧 <b>{m.groups_livekit_toggle()}</b> — {m.groups_livekit_hint()}</span>
           </label>
         {/if}
       </fieldset>

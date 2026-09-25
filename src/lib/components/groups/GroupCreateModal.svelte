@@ -14,6 +14,7 @@
   import { updatePersonalGroupsList } from '$lib/groups/personal-groups-list.js';
   import { groupHref } from '$lib/groups/groups.js';
   import { relayLabel } from '$lib/groups/relay-directory.js';
+  import { probeRelayAvSupport } from '$lib/groups/livekit.js';
   import GroupExplainer from '$lib/components/groups/GroupExplainer.svelte';
   import { goto } from '$app/navigation';
   import { focusOnMount } from '$lib/helpers/focus.js';
@@ -34,6 +35,19 @@
   // lists even private rooms' names without it). One-way on the wire — NIP-29
   // has no un-hide tag — but free draft state until create.
   let isHidden = $state(false);
+  // NIP-29 AV space: born with the bare `livekit` metadata tag. Only offered
+  // when this relay actually mints LiveKit tokens (204 on its probe URL).
+  let livekit = $state(false);
+  let avSupported = $state(false);
+  $effect(() => {
+    let alive = true;
+    probeRelayAvSupport(relay).then((supported) => {
+      if (alive) avSupported = supported;
+    });
+    return () => {
+      alive = false;
+    };
+  });
   let busy = $state(false);
   let explainerOpen = $state(false);
 
@@ -48,7 +62,7 @@
       await createGroupOnRelay({
         relayConn: pool.relay(relay),
         id,
-        metadata: { name: name.trim(), about, picture, isPublic, isOpen, isHidden },
+        metadata: { name: name.trim(), about, picture, isPublic, isOpen, isHidden, livekit },
         user
       });
       await updatePersonalGroupsList(user, { add: { id, relay } });
@@ -155,6 +169,19 @@
       />
       {m.groups_create_hidden_toggle()}
     </label>
+    {#if avSupported}
+      <label class="mt-2 flex items-center gap-2 text-sm">
+        <input
+          type="checkbox"
+          class="toggle toggle-sm"
+          data-testid="group-create-livekit"
+          bind:checked={livekit}
+          disabled={busy}
+        />
+        {m.groups_livekit_toggle()}
+      </label>
+      <p class="mt-1 text-xs text-base-content/60">{m.groups_livekit_hint()}</p>
+    {/if}
 
     <div class="modal-action">
       <button class="btn btn-ghost" onclick={onClose}>{m.concord_cancel()}</button>

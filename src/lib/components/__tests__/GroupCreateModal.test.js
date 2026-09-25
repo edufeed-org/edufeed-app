@@ -29,10 +29,16 @@ vi.mock('$lib/stores/nostr-infrastructure.svelte', () => ({
 vi.mock('$lib/stores/accounts.svelte', () => ({
   useActiveUser: () => () => ({ pubkey: SELF, signer: { signEvent: vi.fn() } })
 }));
+const probeRelayAvSupport = vi.hoisted(() => vi.fn(async () => false));
+vi.mock('$lib/groups/livekit.js', async (importOriginal) => {
+  const actual = /** @type {any} */ (await importOriginal());
+  return { ...actual, probeRelayAvSupport };
+});
 
 import GroupCreateModal from '$lib/components/groups/GroupCreateModal.svelte';
 
 beforeEach(() => {
+  probeRelayAvSupport.mockReset().mockResolvedValue(false);
   createGroupOnRelay.mockClear();
   createGroupOnRelay.mockResolvedValue({ kind: 39000 });
   updatePersonalGroupsList.mockClear();
@@ -117,6 +123,40 @@ describe('GroupCreateModal', () => {
 
     expect(createGroupOnRelay).toHaveBeenCalledWith(
       expect.objectContaining({ metadata: expect.objectContaining({ isHidden: true }) })
+    );
+  });
+
+  it('offers no live audio/video toggle when the relay probe is not 204, and creates with livekit: false', async () => {
+    const onClose = vi.fn();
+    render(GroupCreateModal, { props: { relay: RELAY, onClose } });
+    await waitFor(() => expect(probeRelayAvSupport).toHaveBeenCalledWith(RELAY));
+    expect(screen.queryByTestId('group-create-livekit')).toBeNull();
+    await fireEvent.input(screen.getByTestId('group-create-name'), {
+      target: { value: 'Mathe' }
+    });
+    await fireEvent.click(screen.getByTestId('group-create-confirm'));
+    await waitFor(() => expect(onClose).toHaveBeenCalled());
+    expect(createGroupOnRelay).toHaveBeenCalledWith(
+      expect.objectContaining({ metadata: expect.objectContaining({ livekit: false }) })
+    );
+  });
+
+  it('creates an AV group (bare livekit tag) when the relay supports it and the toggle is on', async () => {
+    probeRelayAvSupport.mockResolvedValue(true);
+    const onClose = vi.fn();
+    render(GroupCreateModal, { props: { relay: RELAY, onClose } });
+    const toggle = /** @type {HTMLInputElement} */ (
+      await screen.findByTestId('group-create-livekit')
+    );
+    expect(toggle.checked).toBe(false);
+    await fireEvent.input(screen.getByTestId('group-create-name'), {
+      target: { value: 'Standup' }
+    });
+    await fireEvent.click(toggle);
+    await fireEvent.click(screen.getByTestId('group-create-confirm'));
+    await waitFor(() => expect(onClose).toHaveBeenCalled());
+    expect(createGroupOnRelay).toHaveBeenCalledWith(
+      expect.objectContaining({ metadata: expect.objectContaining({ livekit: true }) })
     );
   });
 
