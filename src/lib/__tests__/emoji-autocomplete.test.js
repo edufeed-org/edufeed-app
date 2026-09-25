@@ -21,6 +21,18 @@ const SETS = [
   { packName: 'Doge', emojis: [DOGE, DOG2] },
   { packName: 'Cats', emojis: [CAT] }
 ];
+const GRIN = { u: '😀', g: 0, l: 'grinning face', t: ['face', 'smile'], s: ['grinning'] };
+const BEAM = { u: '😁', g: 0, l: 'beaming face', t: ['smile'], s: ['grin'] };
+const SMILE = { u: '😊', g: 0, l: 'smiling face', t: ['smile'], s: ['blush'] };
+const THUMBS = {
+  u: '👍',
+  g: 1,
+  l: 'thumbs up',
+  t: [],
+  s: ['+1', 'thumbsup'],
+  k: ['👍🏻', '👍🏼', '👍🏽', '👍🏾', '👍🏿']
+};
+const UNICODE = [GRIN, BEAM, SMILE, THUMBS];
 
 describe('detectEmojiQuery', () => {
   it('finds a :query at the text start and after whitespace', () => {
@@ -53,29 +65,31 @@ describe('detectEmojiQuery', () => {
 
 describe('searchEmojis', () => {
   it('lists custom emojis first, prefix matches before substring matches', () => {
-    const hits = searchEmojis('dog', SETS);
+    const hits = searchEmojis('dog', SETS, UNICODE);
     expect(hits.slice(0, 2).map((h) => h.type)).toEqual(['custom', 'custom']);
     expect(hits[0].shortcode).toBe('doge'); // shorter prefix match first
     expect(hits[1].shortcode).toBe('dogedance_sm');
   });
 
-  it('finds unicode emojis by keyword and reports the character', () => {
-    const hits = searchEmojis('grin', []);
-    expect(hits.length).toBeGreaterThan(0);
-    expect(hits[0].type).toBe('unicode');
-    expect(hits[0].char).toBe('😀');
-    expect(hits.every((h) => h.type === 'unicode')).toBe(true);
+  it('finds unicode emojis by shortcode/keyword — exact before prefix — with char, name and label', () => {
+    const hits = searchEmojis('grin', [], UNICODE);
+    expect(hits.map((h) => h.type === 'unicode' && h.char)).toEqual(['😁', '😀']);
+    expect(hits[0]).toEqual({ type: 'unicode', char: '😁', name: 'grin', label: 'beaming face' });
   });
 
-  it('is case-insensitive, bounded and never repeats a unicode emoji', () => {
-    const hits = searchEmojis('SMILE', SETS, 5);
-    expect(hits.length).toBeLessThanOrEqual(5);
-    const chars = hits.filter((h) => h.type === 'unicode').map((h) => h.char);
-    expect(new Set(chars).size).toBe(chars.length);
+  it('is case-insensitive and bounded', () => {
+    const hits = searchEmojis('SMILE', SETS, UNICODE, { limit: 2 });
+    expect(hits.map((h) => h.type === 'unicode' && h.char)).toEqual(['😀', '😁']);
   });
 
-  it('returns nothing for a query nothing matches', () => {
-    expect(searchEmojis('zzzzqq', SETS)).toEqual([]);
+  it('applies the chosen skin tone to the inserted character', () => {
+    const [hit] = searchEmojis('thumbs', [], UNICODE, { skinTone: 4 });
+    expect(hit).toMatchObject({ char: '👍🏾', name: '+1' });
+  });
+
+  it('returns nothing for a query nothing matches, and copes without a dataset', () => {
+    expect(searchEmojis('zzzzqq', SETS, UNICODE)).toEqual([]);
+    expect(searchEmojis('grin', SETS, [])).toEqual([]);
   });
 });
 

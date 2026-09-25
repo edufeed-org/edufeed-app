@@ -4,14 +4,17 @@
 // set, splice the pick into the text, and list the custom emojis a draft
 // still references (the send paths turn those into `emoji` tags). Mirrors
 // concord/chat-helpers.js's detectMentionQuery/applyMention so both
-// autocompletes feel the same. No Svelte/store imports — trivially testable.
-import { emojiMetadata } from '$lib/data/emojiMetadata.js';
+// autocompletes feel the same. No Svelte/store imports — the unicode dataset
+// (stores/emoji-data.svelte.js, locale-aware) is passed in — trivially testable.
+import { searchUnicodeEmojis, withSkinTone } from '$lib/helpers/emoji-data.js';
 
 /** @typedef {{ shortcode: string, url: string }} CustomEmoji */
 /** @typedef {{ packName: string, emojis: CustomEmoji[] }} EmojiPack */
 /**
  * @typedef {{ type: 'custom', shortcode: string, url: string, packName: string }
- *   | { type: 'unicode', char: string, name: string }} EmojiHit
+ *   | { type: 'unicode', char: string, name: string, label: string }} EmojiHit
+ *   `char` is what gets inserted (skin tone applied), `name` the English
+ *   shortcode shown as `:name:`, `label` the localized CLDR name
  */
 
 const SHORTCODE_CHARS = /^[\w+-]+$/;
@@ -38,13 +41,15 @@ export function detectEmojiQuery(text, caret) {
 /**
  * Rank matches for a query: the user's own custom emojis first (prefix
  * matches before substring matches, shorter shortcodes first), then unicode
- * emojis by keyword the same way. Case-insensitive, bounded by `limit`.
+ * emojis from `entries` (exact, prefix, substring — see emoji-data.js).
+ * Case-insensitive, bounded by `limit`.
  * @param {string} query
  * @param {EmojiPack[]} customSets
- * @param {number} [limit]
+ * @param {import('$lib/helpers/emoji-data.js').EmojiEntry[]} entries current locale's dataset
+ * @param {{ limit?: number, skinTone?: number }} [options]
  * @returns {EmojiHit[]}
  */
-export function searchEmojis(query, customSets, limit = 8) {
+export function searchEmojis(query, customSets, entries, { limit = 8, skinTone = 0 } = {}) {
   const q = query.toLowerCase();
   if (!q) return [];
   /** @type {Array<{ rank: number, hit: EmojiHit }>} */
@@ -60,23 +65,18 @@ export function searchEmojis(query, customSets, limit = 8) {
       });
     }
   }
-  /** @type {Array<{ rank: number, hit: EmojiHit }>} */
-  const unicode = [];
-  for (const [char, keywords] of Object.entries(emojiMetadata)) {
-    let best = -1;
-    for (const keyword of keywords) {
-      const k = keyword.toLowerCase();
-      const rank = k.startsWith(q) ? 0 : k.includes(q) ? 1 : -1;
-      if (rank !== -1 && (best === -1 || rank < best)) best = rank;
-    }
-    if (best === -1) continue;
-    unicode.push({ rank: best, hit: { type: 'unicode', char, name: keywords[0] } });
+  custom.sort((a, b) => a.rank - b.rank);
+  const hits = custom.map((entry) => entry.hit);
+  if (hits.length >= limit) return hits.slice(0, limit);
+  for (const entry of searchUnicodeEmojis(query, entries ?? [], limit - hits.length)) {
+    hits.push({
+      type: 'unicode',
+      char: withSkinTone(entry, skinTone),
+      name: entry.s[0] ?? entry.l,
+      label: entry.l
+    });
   }
-  const byRank = (/** @type {{rank: number}} */ a, /** @type {{rank: number}} */ b) =>
-    a.rank - b.rank;
-  custom.sort(byRank);
-  unicode.sort(byRank);
-  return [...custom, ...unicode].slice(0, limit).map((entry) => entry.hit);
+  return hits;
 }
 
 /**

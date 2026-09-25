@@ -452,6 +452,28 @@ Available actions live in `applesauce-actions/actions` — `AddEventToCalendar`/
 
 AMB resource search (NIP-50), SKOS filters, and the resource form variants are covered by the `amb-educational` skill (`.claude/skills/amb-educational/SKILL.md`) — load it before touching `amb-search.js`, `searchQueryBuilder.js`, `ResourceFormWizard`, or `resource-form-variants.js`.
 
+## Emojis
+
+Two kinds, both everywhere a composer or reaction picker exists (`EmojiPicker`,
+`EmojiInput` with its Slack-style `:xx` autocomplete, `ReactionPicker`):
+
+- **Custom emojis (NIP-30):** the user's kind 10030 list → kind 30030 packs via
+  `useUserEmojiSets()` (`stores/user-emoji-sets.svelte.js`); drafts keep the
+  `:shortcode:` text form and the send paths add `emoji` tags
+  (`customEmojisIn()` in `helpers/emoji-autocomplete.js`).
+- **Unicode emojis:** generated per-locale datasets in `src/lib/data/emoji/`
+  (`pnpm run generate:emoji`, from the `emojibase-data` devDependency: Unicode
+  17, CLDR label + keywords in that locale, English `:shortcode:` vocabulary,
+  skin-tone variants). Search matches localized keywords and English
+  shortcodes alike, so it IS locale dependent — a German UI finds "daumen hoch"
+  and `:thumbsup` both. The dataset loads lazily for the current Paraglide
+  locale through `stores/emoji-data.svelte.js` (`getEmojiEntries()`, plus the
+  per-device skin tone `getSkinTone()`); never import the JSON statically.
+  Emojis are emitted in the fully-qualified wire form (U+FE0F only for
+  text-default emojis like ❤️, none for 👍) so reactions match what other
+  clients send. Adding an app locale = add it to `EMOJI_LOCALES` in the
+  generator and re-run.
+
 ## DMs & Inbox
 
 - **NIP-17 DMs:** `src/lib/services/dm-service.svelte.js` subscribes to kind 1059 gift wraps (`#p` = user) on the user's DM relays (kind 10050); sending goes through `gift-wrap-publish.js`. New users get a default kind 10050 pointing at `DM_RELAYS` at signup.

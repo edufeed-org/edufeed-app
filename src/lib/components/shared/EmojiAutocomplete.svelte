@@ -47,6 +47,7 @@
         {:else}
           <span class="w-5 shrink-0 text-center text-lg leading-none">{hit.char}</span>
           <span class="min-w-0 flex-1 truncate">:{hit.name}:</span>
+          <span class="shrink-0 truncate text-xs text-base-content/50">{hit.label}</span>
         {/if}
       </li>
     {/each}

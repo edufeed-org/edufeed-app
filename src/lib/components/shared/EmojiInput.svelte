@@ -21,6 +21,7 @@
 <script>
   import { tick } from 'svelte';
   import { detectEmojiQuery, searchEmojis, applyEmoji } from '$lib/helpers/emoji-autocomplete.js';
+  import { ensureEmojiData, getEmojiEntries, getSkinTone } from '$lib/stores/emoji-data.svelte.js';
   import EmojiAutocomplete from './EmojiAutocomplete.svelte';
 
   /**
@@ -55,7 +56,13 @@
 
   let query = $state(/** @type {{ start: number, query: string } | null} */ (null));
   let highlight = $state(0);
-  const candidates = $derived(query ? searchEmojis(query.query, customEmojiSets) : []);
+  const candidates = $derived(
+    query
+      ? searchEmojis(query.query, customEmojiSets, getEmojiEntries(), { skinTone: getSkinTone() })
+      : []
+  );
+  // warm the locale's unicode dataset so the first `:xx` already has candidates
+  $effect(() => ensureEmojiData());
   /** urls of custom emojis handed to insert() — a pick from a pack the caller
    *  does not list (or removed since) must still render inline */
   let extraUrls = $state.raw(/** @type {Record<string, string>} */ ({}));
