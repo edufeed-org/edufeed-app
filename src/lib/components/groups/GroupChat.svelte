@@ -85,7 +85,16 @@
     isAuthRequiredError
   } from '$lib/groups/relay-auth.js';
   import GroupBadges from '$lib/components/groups/GroupBadges.svelte';
-  import { PeopleIcon, MoreIcon } from '$lib/components/icons';
+  import { PeopleIcon, MoreIcon, MeetIcon } from '$lib/components/icons';
+  import { lazyComponent } from '$lib/helpers/lazy-component.svelte.js';
+  import { hasLivekitTag, identityToPubkey } from '$lib/groups/livekit.js';
+  import { useCallPresence } from '$lib/groups/call-presence.svelte.js';
+  import {
+    getGroupCallState,
+    joinGroupCall,
+    leaveGroupCall,
+    callErrorMessage
+  } from '$lib/groups/group-call.svelte.js';
   import GroupMembersModal from '$lib/components/groups/GroupMembersModal.svelte';
   import GroupSettingsSheet from '$lib/components/groups/GroupSettingsSheet.svelte';
   import { useRelayInformation } from '$lib/groups/relay-information.svelte.js';
@@ -712,9 +721,48 @@
 
   /** @param {{sessionId: string, app: any}} session */
   function openStage(session) {
+    // The stage slot holds one thing at a time: a shared app OR the call.
+    if (inCallHere) leaveGroupCall();
     activeSession = session;
     syncAppParam(session.sessionId);
   }
+
+  // --- NIP-29 live audio/video (spec: bare `livekit` tag on the 39000) ---
+  // The in-call UI is loaded on demand: livekit-client is ~300KB and only a
+  // channel that actually starts a call needs it (root-layout-imports.test
+  // guards that it never enters a route's static graph).
+  const CallStage = lazyComponent(
+    () => import('$lib/components/groups/call/GroupCallStage.svelte')
+  );
+  const avEnabled = $derived(hasLivekitTag(metadataEvent));
+  // Relay-published kind 39004 ("who is live"), only subscribed while the
+  // group is an AV space at all.
+  const getCallPresence = useCallPresence(() => (avEnabled ? pointer : null));
+  const callParticipantCount = $derived(getCallPresence().participants.length);
+  const call = getGroupCallState();
+  // "In a call HERE" — the store holds one call app-wide; a call in another
+  // channel must not take over this channel's body.
+  const inCallHere = $derived(call.isActiveFor(pointer) && call.phase !== 'idle');
+
+  async function startCall() {
+    const user = getActiveUser();
+    if (!user?.signer) return;
+    if (activeSession) await closeStage();
+    await joinGroupCall(pointer, user);
+  }
+
+  async function toggleCall() {
+    if (inCallHere) await leaveGroupCall();
+    else await startCall();
+  }
+
+  // Leaving the channel (keyed remount on channel switch, route change) ends
+  // the call — same lifetime rule as the webxdc stage.
+  $effect(() => {
+    return () => {
+      if (call.isActiveFor(pointer)) leaveGroupCall();
+    };
+  });
 
   async function closeStage() {
     activeSession = null;
@@ -1290,6 +1338,28 @@
         {#if members.size}{members.size}{/if}
       </button>
     {/if}
+    {#if avEnabled}
+      <!-- NIP-29 AV space: join (or leave) the channel's call; the count is
+        the relay's own kind-39004 participant list. Icon + count, same
+        dense header chrome as the members button. -->
+      <button
+        type="button"
+        class="btn btn-ghost btn-xs {inCallHere ? 'text-primary' : ''}"
+        data-testid="group-call-join"
+        title={callParticipantCount > 0
+          ? m.groups_call_in_progress({ count: callParticipantCount })
+          : inCallHere
+            ? m.groups_call_leave()
+            : m.groups_call_join()}
+        aria-label={inCallHere ? m.groups_call_leave() : m.groups_call_join()}
+        aria-pressed={inCallHere}
+        disabled={!myPubkey}
+        onclick={toggleCall}
+      >
+        <MeetIcon class_="w-4 h-4" />
+        {#if callParticipantCount}{callParticipantCount}{/if}
+      </button>
+    {/if}
     {#if isAdmin}
       <button
         type="button"
@@ -1528,7 +1598,46 @@
         : ''}"
     >
       <GroupAppsBar {pointer} messages={displayed} sessionMeta={sessionTitles} onOpen={openStage} />
-      {#if activeSession}
+      {#if inCallHere}
+        {#if call.phase === 'ready' && call.token && call.serverUrl}
+          {#if CallStage.Component}
+            <CallStage.Component
+              token={call.token}
+              serverUrl={call.serverUrl}
+              title={displayTitle}
+              {identityToPubkey}
+              onLeave={leaveGroupCall}
+            />
+          {:else}
+            <div class="flex flex-1 items-center justify-center" data-testid="group-call-loading">
+              <span class="loading loading-lg loading-spinner text-primary"></span>
+            </div>
+          {/if}
+        {:else if call.phase === 'error'}
+          <div
+            class="flex flex-1 flex-col items-center justify-center gap-2"
+            data-testid="group-call-error"
+          >
+            <p class="text-sm text-error">{callErrorMessage(call.error)}</p>
+            <div class="flex gap-2">
+              <button type="button" class="btn btn-sm btn-primary" onclick={startCall}>
+                {m.groups_call_retry()}
+              </button>
+              <button type="button" class="btn btn-ghost btn-sm" onclick={leaveGroupCall}>
+                {m.groups_call_leave()}
+              </button>
+            </div>
+          </div>
+        {:else}
+          <div
+            class="flex flex-1 flex-col items-center justify-center gap-2"
+            data-testid="group-call-pending"
+          >
+            <span class="loading loading-lg loading-spinner text-primary"></span>
+            <p class="text-sm text-base-content/60">{m.groups_call_requesting()}</p>
+          </div>
+        {/if}
+      {:else if activeSession}
         {#key activeSession.sessionId}
           <GroupAppStage
             {pointer}
@@ -1545,7 +1654,10 @@
       <!-- display:contents keeps the timeline/composer as direct flex items
            of the column; while a session is open the whole chat body steps
            aside (hidden, not unmounted) so the stage gets the full height. -->
-      <div class={activeSession ? 'hidden' : 'contents'} data-testid="group-chat-body">
+      <div
+        class={activeSession || inCallHere ? 'hidden' : 'contents'}
+        data-testid="group-chat-body"
+      >
         {#if !atBottom}
           <button
             type="button"

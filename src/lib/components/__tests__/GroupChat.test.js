@@ -320,6 +320,23 @@ const membersEventPoll = signWith(
   },
   RELAY_SK
 );
+// `callchat`: a private group with ME on the roster whose 39000 carries the
+// bare `livekit` tag (NIP-29 AV space) — the header's call button fixture.
+// Isolated from `beechat`, which must keep proving the button's ABSENCE.
+const metadataEventCall = signWith(
+  { kind: 39000, tags: [['d', 'callchat'], ['name', 'Call Chat'], ['private'], ['livekit']] },
+  RELAY_SK
+);
+const membersEventCall = signWith(
+  {
+    kind: 39002,
+    tags: [
+      ['d', 'callchat'],
+      ['p', ME]
+    ]
+  },
+  RELAY_SK
+);
 const pollEvent = signWith(
   {
     kind: 1068,
@@ -572,6 +589,7 @@ vi.mock('$lib/stores/nostr-infrastructure.svelte', async () => {
           if (d === 'modchat') return rxOf(metadataEventMod, membersEventMod);
           if (d === 'webxdcchat') return rxOf(metadataEventWebxdc, membersEventWebxdc);
           if (d === 'pollchat') return rxOf(metadataEventPoll, membersEventPoll);
+          if (d === 'callchat') return rxOf(metadataEventCall, membersEventCall);
           if (d === 'livetitlechat') return rxOf(metadataEventLiveTitle, membersEventLiveTitle);
           if (d === 'authchat') return rxOf(metadataEventAuthNoPrivate, membersEventAuthNoPrivate);
           if (d === 'emptychat') return rxOf(metadataEventEmptyRoster, membersEventEmptyRoster);
@@ -787,8 +805,57 @@ vi.mock('$lib/components/icons', () => ({
   MoreIcon: Stub,
   TrashIcon: Stub,
   LinkIcon: Stub,
-  PollIcon: Stub
+  PollIcon: Stub,
+  MeetIcon: Stub
 }));
+// NIP-29 AV: the call store and the 39004 presence hook are stubbed at the
+// seams GroupChat imports — the token round-trip and the relay-key-pinned
+// subscription have their own unit tests (group-call.svelte.test.js,
+// call-presence.svelte.test.js). Holders so a test can put the chat "in a
+// call" or seed a participant count; reset in the outer beforeEach.
+const groupCallHolder = vi.hoisted(() => ({
+  state: {
+    activeKey: /** @type {string | null} */ (null),
+    phase: /** @type {'idle' | 'requesting' | 'ready' | 'error'} */ ('idle'),
+    error: /** @type {Error | null} */ (null),
+    serverUrl: /** @type {string | null} */ (null),
+    token: /** @type {string | null} */ (null)
+  },
+  participants: /** @type {string[]} */ ([])
+}));
+const joinGroupCallMock = vi.hoisted(() => vi.fn(async () => {}));
+const leaveGroupCallMock = vi.hoisted(() => vi.fn(async () => {}));
+vi.mock('$lib/groups/group-call.svelte.js', () => ({
+  getGroupCallState: () => ({
+    get activeKey() {
+      return groupCallHolder.state.activeKey;
+    },
+    get phase() {
+      return groupCallHolder.state.phase;
+    },
+    get error() {
+      return groupCallHolder.state.error;
+    },
+    get serverUrl() {
+      return groupCallHolder.state.serverUrl;
+    },
+    get token() {
+      return groupCallHolder.state.token;
+    },
+    isActiveFor: (/** @type {{id: string, relay: string}} */ pointer) =>
+      groupCallHolder.state.activeKey === `${pointer.id}@${pointer.relay}`
+  }),
+  joinGroupCall: (/** @type {any[]} */ ...args) => joinGroupCallMock(...args),
+  leaveGroupCall: (/** @type {any[]} */ ...args) => leaveGroupCallMock(...args),
+  callErrorMessage: () => 'call failed'
+}));
+vi.mock('$lib/groups/call-presence.svelte.js', () => ({
+  useCallPresence: () => () => ({ participants: groupCallHolder.participants, answered: true })
+}));
+vi.mock(
+  '$lib/components/groups/call/GroupCallStage.svelte',
+  () => import('./fixtures/GroupCallStageStub.svelte')
+);
 // The members modal embeds the contact search; its autocomplete machinery is
 // out of scope here (GroupMembersModal.test.js covers it via the same stub).
 vi.mock(
@@ -828,6 +895,11 @@ vi.mock('$lib/paraglide/messages', () => ({
   groups_send_failed: () => 'Message could not be sent',
   groups_react_failed: () => 'Reaction could not be sent',
   groups_join_required: () => 'Join this group first',
+  groups_call_join: () => 'Join call',
+  groups_call_in_progress: (/** @type {{ count: number }} */ { count }) => `${count} in call`,
+  groups_call_leave: () => 'Leave call',
+  groups_call_requesting: () => 'Requesting access…',
+  groups_call_retry: () => 'Try again',
   groups_auth_required: () => 'auth required',
   groups_reply: () => 'Reply',
   groups_message_delete: () => 'Delete message',
@@ -956,6 +1028,16 @@ describe('GroupChat', () => {
     rosterOnlyChatCalls.roster = 0;
     __resetAuthAttempts();
     joinedCommunikeyEventsHolder.events = [];
+    groupCallHolder.state = {
+      activeKey: null,
+      phase: 'idle',
+      error: null,
+      serverUrl: null,
+      token: null
+    };
+    groupCallHolder.participants = [];
+    joinGroupCallMock.mockClear();
+    leaveGroupCallMock.mockClear();
     relayInfoHolder.info = {
       limitation: { auth_required: true },
       supported_nips: [1, 29, 42],
@@ -2199,6 +2281,113 @@ describe('GroupChat', () => {
       render(GroupChat, { props: { pointer } });
       await screen.findByTestId('group-name');
       expect(screen.queryByTestId('group-more-menu')).toBeNull();
+    });
+  });
+
+  // NIP-29 live audio/video: a group whose 39000 carries the bare `livekit`
+  // tag gets a call button in the header; the call itself renders in the
+  // stage slot (where a shared webxdc app would), hiding the chat body.
+  describe('NIP-29 live audio/video', () => {
+    const callPointer = { relay: GROUP_RELAY, id: 'callchat' };
+    const inCallHere = () => {
+      groupCallHolder.state = {
+        activeKey: `callchat@${GROUP_RELAY}`,
+        phase: 'ready',
+        error: null,
+        serverUrl: 'wss://livekit.example',
+        token: 'jwt-1'
+      };
+    };
+
+    it('shows no call button for a group without the livekit tag', async () => {
+      render(GroupChat, { props: { pointer } });
+      await screen.findByTestId('group-name');
+      expect(screen.queryByTestId('group-call-join')).toBeNull();
+    });
+
+    it('shows the call button for an AV group and asks the call store to join with pointer + user', async () => {
+      render(GroupChat, { props: { pointer: callPointer } });
+      const button = await screen.findByTestId('group-call-join');
+      await fireEvent.click(button);
+      expect(joinGroupCallMock).toHaveBeenCalledWith(
+        expect.objectContaining({ id: 'callchat', relay: GROUP_RELAY }),
+        expect.objectContaining({ pubkey: ME })
+      );
+    });
+
+    it('shows the live participant count from the relay-published kind 39004', async () => {
+      groupCallHolder.participants = [OTHER, ME];
+      render(GroupChat, { props: { pointer: callPointer } });
+      const button = await screen.findByTestId('group-call-join');
+      expect(button.textContent).toContain('2');
+      expect(button.getAttribute('title')).toBe('2 in call');
+    });
+
+    it('disables the call button for an anonymous viewer — a token needs a signer', async () => {
+      activeUserHolder.current = null;
+      render(GroupChat, { props: { pointer: callPointer } });
+      const button = /** @type {HTMLButtonElement} */ (
+        await screen.findByTestId('group-call-join')
+      );
+      expect(button.disabled).toBe(true);
+    });
+
+    it('renders the call stage in place of the chat body while in a call here', async () => {
+      inCallHere();
+      render(GroupChat, { props: { pointer: callPointer } });
+      const stage = await screen.findByTestId('group-call-stage-stub');
+      expect(stage.getAttribute('data-token')).toBe('jwt-1');
+      expect(stage.getAttribute('data-server-url')).toBe('wss://livekit.example');
+      expect(screen.getByTestId('group-chat-body').className).toContain('hidden');
+    });
+
+    it('does not render the stage for a call that belongs to another channel', async () => {
+      groupCallHolder.state = {
+        activeKey: `elsewhere@${GROUP_RELAY}`,
+        phase: 'ready',
+        error: null,
+        serverUrl: 'wss://livekit.example',
+        token: 'jwt-2'
+      };
+      render(GroupChat, { props: { pointer: callPointer } });
+      await screen.findByTestId('group-call-join');
+      expect(screen.queryByTestId('group-call-stage-stub')).toBeNull();
+    });
+
+    it('the header button leaves the call while in one here', async () => {
+      inCallHere();
+      render(GroupChat, { props: { pointer: callPointer } });
+      await screen.findByTestId('group-call-stage-stub');
+      await fireEvent.click(screen.getByTestId('group-call-join'));
+      expect(leaveGroupCallMock).toHaveBeenCalledTimes(1);
+      expect(joinGroupCallMock).not.toHaveBeenCalled();
+    });
+
+    it('shows the pending state while the token is requested', async () => {
+      groupCallHolder.state = {
+        activeKey: `callchat@${GROUP_RELAY}`,
+        phase: 'requesting',
+        error: null,
+        serverUrl: null,
+        token: null
+      };
+      render(GroupChat, { props: { pointer: callPointer } });
+      expect(await screen.findByText('Requesting access…')).toBeTruthy();
+      expect(screen.queryByTestId('group-call-stage-stub')).toBeNull();
+    });
+
+    it('offers a retry when the token request failed', async () => {
+      groupCallHolder.state = {
+        activeKey: `callchat@${GROUP_RELAY}`,
+        phase: 'error',
+        error: new Error('nope'),
+        serverUrl: null,
+        token: null
+      };
+      render(GroupChat, { props: { pointer: callPointer } });
+      expect(await screen.findByText('call failed')).toBeTruthy();
+      await fireEvent.click(screen.getByText('Try again'));
+      expect(joinGroupCallMock).toHaveBeenCalledTimes(1);
     });
   });
 });
