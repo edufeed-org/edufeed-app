@@ -34,12 +34,14 @@ export async function load({ params, parent }) {
       throw error(404, 'Event not found');
     }
 
-    // Special case: meet rooms route to community meet view with query params.
+    // Legacy NIP-53 meet rooms (kind 30312/30313): the community Meet tab is
+    // gone (calls live on NIP-29 channels now), so an old room link lands on
+    // the community it belonged to.
     if (event.kind === 30312 || event.kind === 30313) {
       const communityPubkey = event.tags?.find((t) => t[0] === 'h')?.[1];
       if (communityPubkey) {
         const npub = nip19.npubEncode(communityPubkey);
-        redirect(307, `/c/${npub}?view=meet&room=${params.naddr}`);
+        redirect(307, `/c/${npub}`);
       }
     }
 

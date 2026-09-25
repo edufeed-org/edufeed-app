@@ -40,7 +40,6 @@ function makeFormData(overrides = {}) {
       posts: { name: 'Posts', enabled: false, badges: { read: null, write: null }, relays: [] },
       wikis: { name: 'Wikis', enabled: false, badges: { read: null, write: null }, relays: [] }
     },
-    livekitUrl: '',
     ...overrides
   });
 }
@@ -309,19 +308,13 @@ describe('buildCommunityDefinitionTags — relay format handling', () => {
     expect(tags).toContainEqual(['r', 'wss://r1.example.com']);
   });
 
-  it('writes livekit tag when livekitUrl is set', () => {
-    const data = makeFormData({ livekitUrl: 'https://operator.example.com' });
-    const tags = buildCommunityDefinitionTags(data);
-    expect(tags).toContainEqual(['livekit', 'https://operator.example.com']);
-  });
-
-  it('omits livekit tag when livekitUrl is empty', () => {
-    const data = makeFormData({ livekitUrl: '' });
+  it('never writes a livekit tag — calls moved to NIP-29 channels, so a legacy operator URL is dropped on save', () => {
+    const data = makeFormData(/** @type {any} */ ({ livekitUrl: 'https://operator.example.com' }));
     const tags = buildCommunityDefinitionTags(data);
     expect(tags.find((t) => t[0] === 'livekit')).toBeUndefined();
   });
 
-  it('writes meet content kinds when meet is enabled', () => {
+  it('knows no meet content type — an unknown key writes no section', () => {
     const data = makeFormData();
     data.contentTypes.meet = {
       name: 'Meet',
@@ -330,8 +323,9 @@ describe('buildCommunityDefinitionTags — relay format handling', () => {
       relays: []
     };
     const tags = buildCommunityDefinitionTags(data);
-    expect(tags).toContainEqual(['k', '30312']);
-    expect(tags).toContainEqual(['k', '30313']);
+    expect(
+      tags.find((t) => t[0] === 'k' && (t[1] === '30312' || t[1] === '30313'))
+    ).toBeUndefined();
   });
 
   it('enforced flag only written when communityPubkey provided', () => {
@@ -362,8 +356,7 @@ describe('createDefaultContentTypes', () => {
       'wikis',
       'learning',
       'polls',
-      'bookmarks',
-      'meet'
+      'bookmarks'
     ]);
     for (const ct of Object.values(types)) {
       expect(ct.enabled).toBe(false);

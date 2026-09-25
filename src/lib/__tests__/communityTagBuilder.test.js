@@ -551,11 +551,12 @@ describe('contentTypesFromEvent', () => {
     const result = contentTypesFromEvent(legacy);
     expect(result.chat.enabled).toBe(true);
     expect(result.learning.enabled).toBe(true);
-    // Meet is the exception: no LiveKit URL, no Meet.
-    expect(result.meet.enabled).toBe(false);
+    // No Meet content type any more (calls live on NIP-29 channels): a
+    // legacy `livekit` URL tag on the 10222 changes nothing.
+    expect('meet' in result).toBe(false);
   });
 
-  test('meet fails open only when the community declares a livekit url', () => {
+  test('a legacy livekit URL tag on the 10222 is ignored', () => {
     const withLivekit = {
       kind: 10222,
       tags: [
@@ -564,7 +565,9 @@ describe('contentTypesFromEvent', () => {
         ['k', '9']
       ]
     };
-    expect(contentTypesFromEvent(withLivekit).meet.enabled).toBe(true);
+    const result = contentTypesFromEvent(withLivekit);
+    expect('meet' in result).toBe(false);
+    expect(result.chat.enabled).toBe(true);
   });
 
   test('a null event yields the defaults with nothing enabled', () => {

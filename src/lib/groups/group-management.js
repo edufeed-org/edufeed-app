@@ -65,7 +65,7 @@ function metadataTags(meta) {
  * relays that read metadata only from 9002 ignore the extra tags (khatru,
  * measured on groups.0xchat.com).
  * @param {string} groupId
- * @param {{name?: string, about?: string, picture?: string, isPublic: boolean, isOpen: boolean, isHidden?: boolean, parent?: string}} [meta]
+ * @param {{name?: string, about?: string, picture?: string, isPublic: boolean, isOpen: boolean, isHidden?: boolean, livekit?: boolean, parent?: string}} [meta]
  */
 export function buildCreateGroupTemplate(groupId, meta) {
   return template(CREATE_GROUP_KIND, [['h', groupId], ...(meta ? metadataTags(meta) : [])]);
@@ -73,7 +73,7 @@ export function buildCreateGroupTemplate(groupId, meta) {
 
 /**
  * @param {string} groupId
- * @param {{name?: string, about?: string, picture?: string, isPublic: boolean, isOpen: boolean, isHidden?: boolean, parent?: string}} meta
+ * @param {{name?: string, about?: string, picture?: string, isPublic: boolean, isOpen: boolean, isHidden?: boolean, livekit?: boolean, parent?: string}} meta
  */
 export function buildEditGroupMetadataTemplate(groupId, meta) {
   return template(EDIT_METADATA_KIND, [['h', groupId], ...metadataTags(meta)]);

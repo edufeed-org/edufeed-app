@@ -1,3 +1,4 @@
+// @ts-nocheck
 /** @vitest-environment jsdom */
 /**
  * group-call.svelte.js — the single active NIP-29 group call. Owns the

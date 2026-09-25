@@ -823,7 +823,9 @@ const groupCallHolder = vi.hoisted(() => ({
   },
   participants: /** @type {string[]} */ ([])
 }));
-const joinGroupCallMock = vi.hoisted(() => vi.fn(async () => {}));
+const joinGroupCallMock = vi.hoisted(() =>
+  vi.fn(async (/** @type {any} */ _pointer, /** @type {any} */ _user) => {})
+);
 const leaveGroupCallMock = vi.hoisted(() => vi.fn(async () => {}));
 vi.mock('$lib/groups/group-call.svelte.js', () => ({
   getGroupCallState: () => ({
@@ -845,8 +847,9 @@ vi.mock('$lib/groups/group-call.svelte.js', () => ({
     isActiveFor: (/** @type {{id: string, relay: string}} */ pointer) =>
       groupCallHolder.state.activeKey === `${pointer.id}@${pointer.relay}`
   }),
-  joinGroupCall: (/** @type {any[]} */ ...args) => joinGroupCallMock(...args),
-  leaveGroupCall: (/** @type {any[]} */ ...args) => leaveGroupCallMock(...args),
+  joinGroupCall: (/** @type {any} */ pointer, /** @type {any} */ user) =>
+    joinGroupCallMock(pointer, user),
+  leaveGroupCall: () => leaveGroupCallMock(),
   callErrorMessage: () => 'call failed'
 }));
 vi.mock('$lib/groups/call-presence.svelte.js', () => ({

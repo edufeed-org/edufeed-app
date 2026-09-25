@@ -1,3 +1,4 @@
+// @ts-nocheck
 /** @vitest-environment jsdom */
 /* eslint-disable no-undef -- $effect.root is a Svelte rune, available in .svelte.test.js context */
 /**

@@ -204,8 +204,7 @@
     }
   });
 
-  // Content types enabled by default for new communities (Meet stays off
-  // because it needs a LiveKit operator URL)
+  // Content types enabled by default for new communities
   const DEFAULT_ENABLED_CONTENT_TYPES = [
     'calendar',
     'chat',
@@ -222,7 +221,6 @@
     relays: ['wss://relay.edufeed.org'],
     blossomServers: ['blossom.edufeed.org'],
     location: '',
-    livekitUrl: '',
     contentTypes: createDefaultContentTypes(DEFAULT_ENABLED_CONTENT_TYPES)
   });
 
@@ -297,7 +295,6 @@
           relays: ['wss://relay.edufeed.org'],
           blossomServers: ['blossom.edufeed.org'],
           location: '',
-          livekitUrl: '',
           contentTypes: createDefaultContentTypes(DEFAULT_ENABLED_CONTENT_TYPES)
         };
         communityType = 'open';
@@ -342,19 +339,14 @@
 
       // Closed communities publish no content sections at all — the
       // ContentTypesAndACL picker is hidden for them (see template below),
-      // so neither the "at least one content type" nor the Meet/LiveKit
-      // check applies; validating against it would block a user who had
+      // so the "at least one content type" check does not apply;
+      // validating against it would block a user who had
       // disabled all content types before switching to Geschlossen.
       if (communityType !== 'closed') {
         // Check if at least one content type is selected
         const hasContentType = Object.values(communityData.contentTypes).some((ct) => ct.enabled);
         if (!hasContentType) {
           errors.contentTypes = m.create_community_modal_error_content_types_required();
-          return false;
-        }
-
-        if (communityData.contentTypes.meet?.enabled && !communityData.livekitUrl?.trim()) {
-          errors.livekitUrl = m.meet_livekit_url_required();
           return false;
         }
       }
@@ -717,7 +709,6 @@
       relays: ['wss://relay.edufeed.org'],
       blossomServers: ['blossom.edufeed.org'],
       location: '',
-      livekitUrl: '',
       contentTypes: createDefaultContentTypes(DEFAULT_ENABLED_CONTENT_TYPES)
     };
     communityType = 'open';
@@ -988,28 +979,6 @@
                 >
               </label>
             </fieldset>
-          {/if}
-
-          <!-- LiveKit URL (shown when Meet is enabled) -->
-          {#if communityData.contentTypes.meet?.enabled}
-            <div class="form-control">
-              <label class="label" for="ccm-livekit-url">
-                <span class="label-text">{m.meet_livekit_url()}</span>
-              </label>
-              <input
-                id="ccm-livekit-url"
-                type="url"
-                class="input-bordered input"
-                placeholder={m.meet_livekit_url_placeholder()}
-                bind:value={communityData.livekitUrl}
-              />
-              <div class="label">
-                <span class="label-text-alt">{m.meet_livekit_url_help()}</span>
-              </div>
-              {#if errors.livekitUrl}
-                <p class="mt-1 text-sm text-error">{errors.livekitUrl}</p>
-              {/if}
-            </div>
           {/if}
 
           <!-- Advanced Settings -->

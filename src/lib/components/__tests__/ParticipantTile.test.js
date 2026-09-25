@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * ParticipantTile — one LiveKit participant. The Nostr identity is NOT the
  * raw LiveKit identity any more: NIP-29 relays mint `<64-hex>:<suffix>`

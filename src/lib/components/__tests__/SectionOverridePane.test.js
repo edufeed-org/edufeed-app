@@ -56,8 +56,7 @@ vi.mock('$lib/paraglide/messages', () => ({
   create_community_modal_content_wikis: () => 'Wikis',
   create_community_modal_content_learning: () => 'Materialien',
   create_community_modal_content_polls: () => 'Umfragen',
-  create_community_modal_content_bookmarks: () => 'Lesezeichen',
-  create_community_modal_content_meet: () => 'Meet'
+  create_community_modal_content_bookmarks: () => 'Lesezeichen'
 }));
 
 const { default: SectionOverridePane } = await import(

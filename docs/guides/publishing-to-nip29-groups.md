@@ -54,27 +54,28 @@ event goes to community relays — don't mix the two lanes.)
 
 Kinds the app **publishes to the group's host relay** (all h-tagged):
 
-| Kind         | Purpose                             | Built by                                                                                                                                                                                      |
-| ------------ | ----------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 9            | Chat message                        | `buildGroupMessageTemplate` (`groups.js`) — optional NIP-10 marked reply + `p` tag of the replied author (the `p` tag drives mention notifications; always send replies through the template) |
-| 9450 / 24450 | webxdc pad session state / realtime | `src/lib/webxdc/session-events.js` — scoped `["h", groupId]` + `["i", sessionId]`; the session itself is announced as a kind-9 `imeta` attachment                                             |
-| 9000         | put-user (add member/roles)         | `buildPutUserTemplate` (`group-management.js`)                                                                                                                                                |
-| 9001         | remove-user                         | `buildRemoveUserTemplate`                                                                                                                                                                     |
-| 9002         | edit group metadata                 | `buildEditGroupMetadataTemplate` — always emits BOTH marker sides (`public`/`private`, `open`/`closed`) plus `restricted`, so flipping a flag overwrites state                                |
-| 9007         | create group                        | `buildCreateGroupTemplate` — carries the metadata inline because name-validating relays reject a bare create                                                                                  |
-| 9008         | delete group                        | `buildDeleteGroupTemplate`                                                                                                                                                                    |
-| 9009         | create invite code                  | `buildCreateInviteTemplate` (`code` tag)                                                                                                                                                      |
-| 9021         | join request                        | `buildJoinRequestTemplate` (optional `code` tag)                                                                                                                                              |
-| 9022         | leave request                       | `buildLeaveRequestTemplate`                                                                                                                                                                   |
+| Kind         | Purpose                             | Built by                                                                                                                                                                                                               |
+| ------------ | ----------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 9            | Chat message                        | `buildGroupMessageTemplate` (`groups.js`) — optional NIP-10 marked reply + `p` tag of the replied author (the `p` tag drives mention notifications; always send replies through the template)                          |
+| 9450 / 24450 | webxdc pad session state / realtime | `src/lib/webxdc/session-events.js` — scoped `["h", groupId]` + `["i", sessionId]`; the session itself is announced as a kind-9 `imeta` attachment                                                                      |
+| 9000         | put-user (add member/roles)         | `buildPutUserTemplate` (`group-management.js`)                                                                                                                                                                         |
+| 9001         | remove-user                         | `buildRemoveUserTemplate`                                                                                                                                                                                              |
+| 9002         | edit group metadata                 | `buildEditGroupMetadataTemplate` — always emits BOTH marker sides (`public`/`private`, `open`/`closed`) plus `restricted`, so flipping a flag overwrites state; restates the bare `livekit` tag (see Live audio/video) |
+| 9007         | create group                        | `buildCreateGroupTemplate` — carries the metadata inline because name-validating relays reject a bare create                                                                                                           |
+| 9008         | delete group                        | `buildDeleteGroupTemplate`                                                                                                                                                                                             |
+| 9009         | create invite code                  | `buildCreateInviteTemplate` (`code` tag)                                                                                                                                                                               |
+| 9021         | join request                        | `buildJoinRequestTemplate` (optional `code` tag)                                                                                                                                                                       |
+| 9022         | leave request                       | `buildLeaveRequestTemplate`                                                                                                                                                                                            |
 
 Kinds the app only **reads** — they are generated and signed by the _relay's
 own key_, addressed by `d` tag = group id, never published by clients:
 
-| Kind  | Purpose        |
-| ----- | -------------- |
-| 39000 | Group metadata |
-| 39001 | Group admins   |
-| 39002 | Group members  |
+| Kind  | Purpose                                          |
+| ----- | ------------------------------------------------ |
+| 39000 | Group metadata                                   |
+| 39001 | Group admins                                     |
+| 39002 | Group members                                    |
+| 39004 | LiveKit participants (who is in the AV room now) |
 
 Related kinds that do **not** go to the group relay:
 
@@ -134,6 +135,44 @@ required to honor metadata on the 9007 itself), then confirm the relay
 materialized its 39000. A created-but-unconfirmed group is recoverable via
 the attach-existing flow.
 
+## Live audio/video (NIP-29 AV spaces)
+
+Calls follow the NIP-29 spec's "Live audio/video (AV) spaces" section — no
+NIP-53 rooms, no client-side presence, no per-community operator URL:
+
+1. **Capability.** The relay advertises AV support with HTTP `204` on
+   `https://<relay-host>/.well-known/nip29/livekit`. `probeRelayAvSupport()`
+   (`src/lib/groups/livekit.js`) checks it (cached per origin, only a positive
+   answer is kept) and gates the "Live audio/video" toggle in
+   `GroupCreateModal`, `ChannelCreateWizard` and `GroupSettingsSheet`.
+2. **Flag.** An AV group carries a bare `["livekit"]` tag on its kind 39000.
+   The app writes it through `metadataTags({ livekit: true })`; pyramid
+   overwrites the flag from whatever a 9002 carries, so **every** edit
+   restates the current value (`GroupSettingsSheet`, `sync-group-metadata.js`).
+   Switching AV off is a 9002 without the tag.
+3. **Token.** `requestGroupCallToken(relay, groupId, user)` GETs
+   `https://<relay-host>/.well-known/nip29/livekit/<group-id>` with
+   `Authorization: Nostr <base64 kind-27235>` whose `u` tag is that exact URL
+   (`createNIP98AuthHeader`, method `GET`, no payload). The relay answers
+   `{ "server_url", "participant_token" }`; group members get a publishing
+   token, non-members of a public group a listen-only one (`canPublish` on
+   the connection service), non-members of a private group a 403. The
+   `.well-known` paths hang off the relay **origin** — a community pointer's
+   `/c/<rootId>` path is stripped (`relayHttpOrigin`).
+4. **Identity.** The JWT identity is `<64-hex pubkey>:<random>`; one user may
+   sit in the room twice. `identityToPubkey()` takes the first 64 chars; tiles
+   are keyed by LiveKit `sid`.
+5. **Presence.** The relay's LiveKit webhook republishes kind 39004 (`d` =
+   group id, one `participant` tag per pubkey). `useCallPresence(getPointer)`
+   (`call-presence.svelte.js`) keeps a standing subscription pinned to the
+   relay's NIP-11 key, exactly like the 39000 reader — the header count in
+   `GroupChat` comes from there.
+
+The call itself is `components/groups/call/GroupCallStage.svelte`, mounted in
+the same stage slot a shared webxdc app uses; `group-call.svelte.js` owns the
+single active call app-wide. The stage is loaded lazily so `livekit-client`
+never enters a route's static graph.
+
 ## Key files
 
 | File                                     | Role                                                                                             |
@@ -144,3 +183,6 @@ the attach-existing flow.
 | `src/lib/groups/personal-groups-list.js` | Kind-10009 updates (outbox, not group relay)                                                     |
 | `src/lib/helpers/relay-helper.js`        | `getGroupsRelays()`                                                                              |
 | `src/lib/webxdc/session-events.js`       | Pad session kinds 9450/24450                                                                     |
+| `src/lib/groups/livekit.js`              | NIP-29 AV: relay probe, NIP-98 token request, `livekit` tag + identity helpers                   |
+| `src/lib/groups/call-presence*.js`       | Kind-39004 filter/parser and the relay-key-pinned live subscription                              |
+| `src/lib/groups/group-call.svelte.js`    | The single active call (token round-trip, which channel it belongs to)                           |

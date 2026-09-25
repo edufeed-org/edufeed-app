@@ -1,3 +1,4 @@
+// @ts-nocheck
 /** @vitest-environment node */
 /**
  * NIP-29 live audio/video transport (spec section "Live audio/video (AV)

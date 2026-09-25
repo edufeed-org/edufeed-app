@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * GroupCallStage — the in-call UI hosted in a channel's stage slot. It is
  * protocol-agnostic: it gets a LiveKit token + server url and connects,

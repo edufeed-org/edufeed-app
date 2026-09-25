@@ -57,7 +57,7 @@ export function livekitTokenUrl(relayUrl, groupId) {
  * Bare `livekit` tag on the RAW kind-39000 — same rule the settings sheet
  * uses for `hidden`/`private`/`closed` (applesauce's parsed metadata does
  * not surface it).
- * @param {{tags?: unknown} | null | undefined} metadataEvent
+ * @param {{kind?: unknown, tags?: unknown} | null | undefined} metadataEvent
  */
 export function hasLivekitTag(metadataEvent) {
   const tags = metadataEvent?.tags;

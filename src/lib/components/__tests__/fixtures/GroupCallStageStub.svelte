@@ -1,5 +1,8 @@
 <script>
-  /** Stand-in for the lazily loaded GroupCallStage: records its props only. */
+  /**
+   * Stand-in for the lazily loaded GroupCallStage: records its props only.
+   * @type {{token?: string, serverUrl?: string, title?: string, onLeave?: () => void}}
+   */
   let { token = '', serverUrl = '', title = '', onLeave = () => {} } = $props();
 </script>
 

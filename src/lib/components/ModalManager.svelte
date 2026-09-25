@@ -37,7 +37,6 @@
     addBookmark: 'add-bookmark-modal',
     shareByNaddr: 'share-by-naddr-modal',
     reportMetadata: 'report-metadata-modal',
-    createRoom: 'create-room-modal',
     'recovery-download': 'recovery-download-modal',
     deleteCommunity: 'delete-community-modal'
   };
@@ -61,7 +60,6 @@
     shareByNaddr: lazyComponent(() => import('./shared/ShareByNaddrModal.svelte')),
     inviteToEvent: lazyComponent(() => import('./calendar/InviteToEventModal.svelte')),
     reportMetadata: lazyComponent(() => import('./shared/ReportMetadataModal.svelte')),
-    createRoom: lazyComponent(() => import('./meet/CreateRoomModal.svelte')),
     createPoll: lazyComponent(() => import('./polls/PollCreateModal.svelte')),
     createNote: lazyComponent(() => import('./notes/NoteCreateModal.svelte')),
     'recovery-download': lazyComponent(() => import('./RecoveryDownloadModal.svelte')),
