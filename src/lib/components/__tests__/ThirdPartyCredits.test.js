@@ -51,4 +51,19 @@ describe('third-party credits on /imprint', () => {
     const hrefs = [...item.querySelectorAll('a')].map((a) => a.getAttribute('href'));
     expect(hrefs).toContain('https://www.unicode.org/license.txt');
   });
+
+  it('credits the Twemoji flag font per CC BY 4.0: creator, copyright, license link, source, modification', () => {
+    const { getByTestId } = render(ImprintPage);
+    const item = getByTestId('credit-flag-emojis');
+    expect(item.textContent).toMatch(/Twitter, Inc/);
+    expect(item.textContent).toMatch(/CC BY 4\.0/);
+    expect(item.textContent).toMatch(/TalkJS/);
+    const hrefs = [...item.querySelectorAll('a')].map((a) => a.getAttribute('href'));
+    expect(hrefs).toEqual(
+      expect.arrayContaining([
+        'https://github.com/twitter/twemoji',
+        'https://creativecommons.org/licenses/by/4.0/'
+      ])
+    );
+  });
 });

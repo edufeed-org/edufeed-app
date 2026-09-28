@@ -31,5 +31,20 @@ export const THIRD_PARTY_CREDITS = [
       { label: 'Unicode License V3', href: 'https://www.unicode.org/license.txt' },
       { label: 'emojibase', href: 'https://emojibase.dev/' }
     ]
+  },
+  {
+    // CC BY 4.0 §3(a): creator, copyright notice, license + link, link to
+    // the material, and a note that it was modified (converted to a font)
+    id: 'flag-emojis',
+    title: () => m.credits_flags_title(),
+    text: () => m.credits_flags_text(),
+    links: [
+      { label: 'Twemoji', href: 'https://github.com/twitter/twemoji' },
+      { label: 'CC BY 4.0', href: 'https://creativecommons.org/licenses/by/4.0/' },
+      {
+        label: 'country-flag-emoji-polyfill',
+        href: 'https://github.com/talkjs/country-flag-emoji-polyfill'
+      }
+    ]
   }
 ];
