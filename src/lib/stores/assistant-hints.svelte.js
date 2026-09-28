@@ -359,7 +359,7 @@ export function useAssistantHints() {
     if (id === 'profile') {
       const user = getActiveUser();
       if (!user) return;
-      // EditProfileModal creates the kind 0 when none exists (UpdateProfile).
+      // EditProfileModal creates the kind 0 when none exists (CreateProfile).
       modalStore.openModal('profile', { profile: {}, pubkey: user.pubkey });
       return;
     }
