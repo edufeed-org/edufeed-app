@@ -122,7 +122,7 @@ describe('ComposerInput', () => {
 
   it('inserts a unicode suggestion as the character itself', async () => {
     const { editor, value, findByRole } = setup();
-    await typeText(editor, ':grin');
+    await typeText(editor, ':grinning');
     await findByRole('listbox');
     await fireEvent.keyDown(editor, { key: 'Enter' });
     await tick();

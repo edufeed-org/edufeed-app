@@ -34,6 +34,7 @@
     applyMention,
     mentionPubkeysIn
   } from '$lib/helpers/mention-autocomplete.js';
+  import { ensureEmojiData, getEmojiEntries, getSkinTone } from '$lib/stores/emoji-data.svelte.js';
   import { useProfileMap } from '$lib/stores/profile-map.svelte.js';
   import { useMentionCandidates } from '$lib/stores/mention-candidates.svelte.js';
   import { getUserDisplayName } from '$lib/helpers/message-utils.js';
@@ -95,8 +96,12 @@
     query?.kind === 'mention' ? query.query : null
   );
   const emojiCandidates = $derived(
-    query?.kind === 'emoji' ? searchEmojis(query.query, customEmojiSets) : []
+    query?.kind === 'emoji'
+      ? searchEmojis(query.query, customEmojiSets, getEmojiEntries(), { skinTone: getSkinTone() })
+      : []
   );
+  // warm the locale's unicode dataset so the first `:xx` already has candidates
+  $effect(() => ensureEmojiData());
   const mentionCandidates = $derived(query?.kind === 'mention' ? getMentionCandidates() : []);
   const candidateCount = $derived(
     query?.kind === 'emoji' ? emojiCandidates.length : mentionCandidates.length
