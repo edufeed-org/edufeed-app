@@ -68,19 +68,24 @@
 
   // Connect on mount with the credentials we were handed — untracked so a
   // parent re-render never reconnects a live call.
+  //
+  // The connect call itself is untracked too: connectToRoom reads AND writes
+  // the service's `$state` (isConnecting/isConnected/room) synchronously, so
+  // a tracked call makes this effect depend on the very signals it flips —
+  // it then re-ran on the first write, tore the pending connect down and
+  // connected again, hundreds of Rooms a minute against the live server
+  // (2026-09-25; GroupCallStage.connect-once.test.js).
   $effect(() => {
     const jwt = untrack(() => token);
     const url = untrack(() => serverUrl);
     const withVideo = untrack(() => video);
 
-    (async () => {
-      try {
-        await connectToRoom(jwt, url, { video: withVideo, audio: true });
-      } catch (err) {
+    untrack(() => connectToRoom(jwt, url, { video: withVideo, audio: true })).catch(
+      (/** @type {unknown} */ err) => {
         console.error('Failed to join call:', err);
         error = err instanceof Error ? err.message : m.groups_call_connection_error();
       }
-    })();
+    );
 
     return () => {
       if (!leaving) disconnectFromRoom();
