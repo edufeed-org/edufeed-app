@@ -1,6 +1,7 @@
 <script>
   import { runtimeConfig } from '$lib/stores/config.svelte.js';
   import * as m from '$lib/paraglide/messages';
+  import ThirdPartyCredits from '$lib/components/shared/ThirdPartyCredits.svelte';
 
   let imprint = $derived(runtimeConfig.imprint);
 </script>
@@ -134,6 +135,9 @@
         {:else}
           <p class="text-lg">{m.imprint_not_available()}</p>
         {/if}
+
+        <!-- Third-party credits: license-required, so outside the operator block -->
+        <ThirdPartyCredits />
       </div>
     </div>
   </div>
