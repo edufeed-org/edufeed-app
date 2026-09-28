@@ -99,10 +99,20 @@ function searchLeg(relays, search, limit) {
 /**
  * Search kind-0 profiles by name on the NIP-50 search relays.
  *
- * With PROFILE_SEARCH_OBSERVER set, relays that advertise the `observer`
- * search extension (NIP-11 `limitation.search_extensions`, e.g. Brainstorm)
- * get `observer:<hex>` appended so hits are ranked from that pubkey's web
- * of trust; every other relay receives the plain term.
+ * Each relay gets at most one lens token, chosen from the NIP-50
+ * extensions its NIP-11 advertises (see relay-search-extensions.js):
+ *
+ *   - `observer:<hex>` when PROFILE_SEARCH_OBSERVER is set and the relay
+ *     advertises `observer` (Brainstorm) — hits ranked from that pubkey's
+ *     web of trust;
+ *   - otherwise `include:spam` when the relay advertises `include` —
+ *     NosFabrica's vespa-relay refuses an anonymous REQ that names neither
+ *     (CLOSED auth-required), and a lens-less search there has no spam
+ *     floor to lift, so the token only gets the query through;
+ *   - otherwise the plain term: a relay that advertises neither would
+ *     treat the token as one more search word and find nothing.
+ *
+ * Relays that end up with the same search string share one request.
  *
  * @param {string} name - free-text search term (profile name)
  * @param {number} [limit=10]
@@ -118,21 +128,26 @@ export function profileNameSearchLoader(name, limit = 10, relays = getProfileSea
   }
 
   const observer = getProfileSearchObserver();
-  if (!observer) return searchLeg(relays, trimmed, limit);
 
-  const partition = Promise.all(
-    relays.map(async (url) => ({ url, wot: (await getSearchExtensions(url)).includes('observer') }))
-  ).then((probed) => ({
-    wot: probed.filter((r) => r.wot).map((r) => r.url),
-    plain: probed.filter((r) => !r.wot).map((r) => r.url)
-  }));
+  /** @param {string[]} extensions */
+  const searchFor = (extensions) => {
+    if (observer && extensions.includes('observer')) return `${trimmed} observer:${observer}`;
+    if (extensions.includes('include')) return `${trimmed} include:spam`;
+    return trimmed;
+  };
 
-  return from(partition).pipe(
-    mergeMap(({ wot, plain }) =>
-      merge(
-        ...(wot.length ? [searchLeg(wot, `${trimmed} observer:${observer}`, limit)] : []),
-        ...(plain.length ? [searchLeg(plain, trimmed, limit)] : [])
-      )
-    )
+  const groups = Promise.all(
+    relays.map(async (url) => ({ url, search: searchFor(await getSearchExtensions(url)) }))
+  ).then((probed) => {
+    /** @type {Map<string, string[]>} search string → relays, first-seen order */
+    const bySearch = new Map();
+    for (const { url, search } of probed) {
+      bySearch.set(search, [...(bySearch.get(search) ?? []), url]);
+    }
+    return [...bySearch];
+  });
+
+  return from(groups).pipe(
+    mergeMap((entries) => merge(...entries.map(([search, urls]) => searchLeg(urls, search, limit))))
   );
 }

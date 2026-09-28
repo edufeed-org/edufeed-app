@@ -48,7 +48,7 @@ describe('profileNameSearchLoader observer token', () => {
     cfg.extensions = {};
   });
 
-  it('without an observer sends one plain request to all relays (no NIP-11 probe needed)', async () => {
+  it('without an observer and no relay advertising include:spam, sends one plain request to all relays', async () => {
     await drain(profileNameSearchLoader('lohrer', 5));
     expect(infra.request).toHaveBeenCalledTimes(1);
     expect(infra.request).toHaveBeenCalledWith(
@@ -80,6 +80,51 @@ describe('profileNameSearchLoader observer token', () => {
     await drain(profileNameSearchLoader('lohrer', 5));
     expect(infra.request).toHaveBeenCalledTimes(1);
     expect(infra.request.mock.calls[0][1].search).toBe('lohrer');
+  });
+
+  // vespa-relay's LensRequiredPolicy refuses an anonymous REQ whose filter
+  // names neither observer:<hex> nor include:spam (CLOSED auth-required).
+  // With no observer, include:spam is the only way through — and a no-op
+  // otherwise, since a lens-less vespa search has no spam floor to lift.
+  it('without an observer, appends include:spam only for relays advertising the extension', async () => {
+    cfg.extensions = { 'wss://wot.example/relay': ['observer', 'include', 'sort', 'filter'] };
+    await drain(profileNameSearchLoader('lohrer', 5));
+    expect(infra.request).toHaveBeenCalledTimes(2);
+    expect(infra.request).toHaveBeenCalledWith(
+      ['wss://wot.example/relay'],
+      { kinds: [0], search: 'lohrer include:spam', limit: 5 },
+      expect.anything()
+    );
+    expect(infra.request).toHaveBeenCalledWith(
+      ['wss://plain.example'],
+      { kinds: [0], search: 'lohrer', limit: 5 },
+      expect.anything()
+    );
+  });
+
+  it('with an observer, a relay advertising both gets the observer lens only, never include:spam too', async () => {
+    cfg.observer = OBSERVER;
+    cfg.extensions = { 'wss://wot.example/relay': ['observer', 'include'] };
+    await drain(profileNameSearchLoader('lohrer', 5));
+    const searches = infra.request.mock.calls.map((c) => c[1].search);
+    expect(searches).toContain(`lohrer observer:${OBSERVER}`);
+    expect(searches.some((q) => q.includes('include:spam'))).toBe(false);
+  });
+
+  it('with an observer, a relay advertising include but not observer still gets through with include:spam', async () => {
+    cfg.observer = OBSERVER;
+    cfg.extensions = { 'wss://plain.example': ['include'] };
+    await drain(profileNameSearchLoader('lohrer', 5));
+    expect(infra.request).toHaveBeenCalledWith(
+      ['wss://plain.example'],
+      { kinds: [0], search: 'lohrer include:spam', limit: 5 },
+      expect.anything()
+    );
+    expect(infra.request).toHaveBeenCalledWith(
+      ['wss://wot.example/relay'],
+      { kinds: [0], search: 'lohrer', limit: 5 },
+      expect.anything()
+    );
   });
 
   it('merges events from both legs and still feeds the EventStore', async () => {
