@@ -127,6 +127,10 @@ describe('ComposerInput', () => {
     await fireEvent.keyDown(editor, { key: 'Enter' });
     await tick();
     expect(value()).toBe('😀 ');
+    expect(JSON.parse(localStorage.getItem('emoji-recents:signed-out'))[0]).toEqual({
+      type: 'unicode',
+      u: '😀'
+    });
   });
 
   it('closes the suggestions on Escape without changing the text', async () => {

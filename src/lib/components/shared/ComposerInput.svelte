@@ -34,7 +34,13 @@
     applyMention,
     mentionPubkeysIn
   } from '$lib/helpers/mention-autocomplete.js';
-  import { ensureEmojiData, getEmojiEntries, getSkinTone } from '$lib/stores/emoji-data.svelte.js';
+  import {
+    ensureEmojiData,
+    getEmojiEntries,
+    getRecentEmojis,
+    getSkinTone,
+    recordEmojiUse
+  } from '$lib/stores/emoji-data.svelte.js';
   import { useProfileMap } from '$lib/stores/profile-map.svelte.js';
   import { useMentionCandidates } from '$lib/stores/mention-candidates.svelte.js';
   import { getUserDisplayName } from '$lib/helpers/message-utils.js';
@@ -97,7 +103,10 @@
   );
   const emojiCandidates = $derived(
     query?.kind === 'emoji'
-      ? searchEmojis(query.query, customEmojiSets, getEmojiEntries(), { skinTone: getSkinTone() })
+      ? searchEmojis(query.query, customEmojiSets, getEmojiEntries(), {
+          skinTone: getSkinTone(),
+          recent: new Set(getRecentEmojis().flatMap((r) => (r.type === 'unicode' ? [r.u] : [])))
+        })
       : []
   );
   // warm the locale's unicode dataset so the first `:xx` already has candidates
@@ -448,6 +457,11 @@
   function pickEmoji(hit) {
     if (!query) return;
     const inserted = hit.type === 'custom' ? `:${hit.shortcode}:` : hit.char;
+    recordEmojiUse(
+      hit.type === 'custom'
+        ? { type: 'custom', shortcode: hit.shortcode, url: hit.url }
+        : { type: 'unicode', u: hit.base }
+    );
     const result = applyEmoji(value, query.start, caretOffset(), inserted);
     void commit(result.text, result.caret);
   }
