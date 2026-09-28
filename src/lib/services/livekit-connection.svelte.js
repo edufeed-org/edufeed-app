@@ -250,10 +250,68 @@ export async function connectToRoom(token, url, opts = {}) {
   }
 }
 
+// --- Shared ownership of the one Room -------------------------------------
+// A call stage can have twins: under /c/* the community layout renders its
+// page 2-3× (responsive variants, CSS hides the inactive ones), and at the
+// lg breakpoint the visible twin swaps. Each twin acquires the call with the
+// token it was handed; the same token reuses the Room (in flight or live)
+// instead of opening a second session with the same identity — which the
+// server answers by kicking the first ("could not establish pc connection",
+// live 2026-09-28). Only the last owner's release disconnects. Plain lets:
+// bookkeeping, not UI state.
+/** @type {string | null} */
+let ownedToken = null;
+/** @type {Promise<void> | null} */
+let ownedConnect = null;
+let owners = 0;
+
+/**
+ * Join (or share) the call for this token.
+ * @param {string} token
+ * @param {string} url
+ * @param {{ video?: boolean, audio?: boolean }} [opts]
+ * @returns {Promise<void>}
+ */
+export function acquireRoom(token, url, opts = {}) {
+  if (ownedToken === token && ownedConnect) {
+    owners++;
+    return ownedConnect;
+  }
+  // connectToRoom's synchronous part may disconnect a previous call, which
+  // resets ownership — so claim it only after the call returns.
+  const attempt = connectToRoom(token, url, opts);
+  ownedToken = token;
+  ownedConnect = attempt;
+  owners = 1;
+  attempt.catch(() => {
+    if (ownedConnect !== attempt) return;
+    ownedToken = null;
+    ownedConnect = null;
+    owners = 0;
+  });
+  return attempt;
+}
+
+/**
+ * Give up one claim on the call; the last owner disconnects. A release for
+ * a token that is no longer the current call is a no-op, so a late cleanup
+ * can never end a newer call.
+ * @param {string} token
+ */
+export async function releaseRoom(token) {
+  if (token !== ownedToken || owners === 0) return;
+  owners--;
+  if (owners > 0) return;
+  await disconnectFromRoom();
+}
+
 /**
  * Disconnect from the current room.
  */
 export async function disconnectFromRoom() {
+  ownedToken = null;
+  ownedConnect = null;
+  owners = 0;
   // Remove device change listener
   if (typeof navigator !== 'undefined' && navigator.mediaDevices) {
     navigator.mediaDevices.removeEventListener('devicechange', handleDeviceChange);

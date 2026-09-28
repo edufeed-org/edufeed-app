@@ -744,6 +744,26 @@
   // channel must not take over this channel's body.
   const inCallHere = $derived(call.isActiveFor(pointer) && call.phase !== 'idle');
 
+  // The /c layout renders its page 2-3× (responsive variants, CSS hides the
+  // inactive ones) and every copy sees the same active call. Only the copy
+  // the user can see mounts the stage: a hidden twin connecting as well got
+  // the first session kicked as a duplicate identity ("could not establish
+  // pc connection", live 2026-09-28) and would play remote audio twice.
+  // Without IntersectionObserver (SSR, jsdom) every copy counts as visible.
+  /** @type {HTMLElement | undefined} */
+  let chatRootEl = $state(undefined);
+  let chatVisible = $state(typeof IntersectionObserver === 'undefined');
+  $effect(() => {
+    const el = chatRootEl;
+    if (!el || typeof IntersectionObserver === 'undefined') return;
+    const io = new IntersectionObserver((entries) => {
+      const last = entries[entries.length - 1];
+      if (last) chatVisible = last.isIntersecting;
+    });
+    io.observe(el);
+    return () => io.disconnect();
+  });
+
   async function startCall() {
     const user = getActiveUser();
     if (!user?.signer) return;
@@ -1302,7 +1322,7 @@
   }
 </script>
 
-<div class="flex h-full min-h-0 flex-col">
+<div bind:this={chatRootEl} class="flex h-full min-h-0 flex-col">
   <header class="flex items-center gap-3 border-b border-base-300 px-4 py-3">
     {#if metadata?.picture}
       <img src={metadata.picture} alt="" class="h-8 w-8 rounded-full object-cover" />
@@ -1600,7 +1620,7 @@
       <GroupAppsBar {pointer} messages={displayed} sessionMeta={sessionTitles} onOpen={openStage} />
       {#if inCallHere}
         {#if call.phase === 'ready' && call.token && call.serverUrl}
-          {#if CallStage.Component}
+          {#if chatVisible && CallStage.Component}
             <CallStage.Component
               token={call.token}
               serverUrl={call.serverUrl}

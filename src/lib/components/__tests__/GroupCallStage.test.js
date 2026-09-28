@@ -11,7 +11,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/svelte';
 
-const { lk, connectToRoom, disconnectFromRoom } = vi.hoisted(() => ({
+const { lk, acquireRoom, releaseRoom, disconnectFromRoom } = vi.hoisted(() => ({
   lk: {
     isConnected: true,
     isConnecting: false,
@@ -30,12 +30,14 @@ const { lk, connectToRoom, disconnectFromRoom } = vi.hoisted(() => ({
     videoInputDevices: [],
     activeVideoDeviceId: ''
   },
-  connectToRoom: vi.fn(async () => {}),
+  acquireRoom: vi.fn(async () => {}),
+  releaseRoom: vi.fn(async () => {}),
   disconnectFromRoom: vi.fn(async () => {})
 }));
 
 vi.mock('$lib/services/livekit-connection.svelte.js', () => ({
-  connectToRoom,
+  acquireRoom,
+  releaseRoom,
   disconnectFromRoom,
   toggleMute: vi.fn(),
   toggleCamera: vi.fn(),
@@ -95,7 +97,8 @@ const baseProps = {
 };
 
 beforeEach(() => {
-  connectToRoom.mockClear();
+  acquireRoom.mockClear();
+  releaseRoom.mockClear();
   disconnectFromRoom.mockClear();
   baseProps.onLeave.mockClear();
   lk.isConnected = true;
@@ -107,7 +110,7 @@ describe('GroupCallStage', () => {
   it('connects with the token and server url it is handed, video on by default', async () => {
     render(GroupCallStage, { props: baseProps });
     await Promise.resolve();
-    expect(connectToRoom).toHaveBeenCalledWith('jwt-token', 'wss://livekit.example', {
+    expect(acquireRoom).toHaveBeenCalledWith('jwt-token', 'wss://livekit.example', {
       video: true,
       audio: true
     });
@@ -116,14 +119,15 @@ describe('GroupCallStage', () => {
   it('passes video: false through', async () => {
     render(GroupCallStage, { props: { ...baseProps, video: false } });
     await Promise.resolve();
-    expect(connectToRoom.mock.calls[0][2]).toEqual({ video: false, audio: true });
+    expect(acquireRoom.mock.calls[0][2]).toEqual({ video: false, audio: true });
   });
 
-  it('disconnects when unmounted', async () => {
+  it('releases its claim on the call when unmounted (a twin may still hold it)', async () => {
     const { unmount } = render(GroupCallStage, { props: baseProps });
     await Promise.resolve();
     unmount();
-    expect(disconnectFromRoom).toHaveBeenCalledTimes(1);
+    expect(releaseRoom).toHaveBeenCalledWith('jwt-token');
+    expect(disconnectFromRoom).not.toHaveBeenCalled();
   });
 
   it('shows the title and the publish controls for a normal token', () => {

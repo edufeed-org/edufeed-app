@@ -12,7 +12,8 @@
   import { SvelteSet } from 'svelte/reactivity';
   import { untrack } from 'svelte';
   import {
-    connectToRoom,
+    acquireRoom,
+    releaseRoom,
     disconnectFromRoom,
     toggleMute,
     toggleCamera,
@@ -80,7 +81,10 @@
     const url = untrack(() => serverUrl);
     const withVideo = untrack(() => video);
 
-    untrack(() => connectToRoom(jwt, url, { video: withVideo, audio: true })).catch(
+    // acquire/release, not connect/disconnect: a twin of this stage (the
+    // /c layout renders its page 2-3×) shares the same Room instead of
+    // opening a second session with the same identity.
+    untrack(() => acquireRoom(jwt, url, { video: withVideo, audio: true })).catch(
       (/** @type {unknown} */ err) => {
         console.error('Failed to join call:', err);
         error = err instanceof Error ? err.message : m.groups_call_connection_error();
@@ -88,7 +92,7 @@
     );
 
     return () => {
-      if (!leaving) disconnectFromRoom();
+      if (!leaving) releaseRoom(jwt);
     };
   });
 

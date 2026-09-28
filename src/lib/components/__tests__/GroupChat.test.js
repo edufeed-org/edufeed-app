@@ -2379,6 +2379,46 @@ describe('GroupChat', () => {
       expect(screen.queryByTestId('group-call-stage-stub')).toBeNull();
     });
 
+    // The /c layout renders its page 2-3× (responsive variants hidden by
+    // CSS). Every copy of GroupChat sees the same "in a call here" state, so
+    // only the VISIBLE copy may mount the stage — a hidden twin connecting
+    // too got the first session kicked as a duplicate identity ("could not
+    // establish pc connection", live 2026-09-28) and would play remote audio
+    // a second time.
+    it('mounts the call stage only while this copy of the chat is visible', async () => {
+      /** @type {Array<{cb: (entries: any[]) => void, el?: Element}>} */
+      const observers = [];
+      class FakeIntersectionObserver {
+        /** @param {(entries: any[]) => void} cb */
+        constructor(cb) {
+          this.cb = cb;
+          observers.push(this);
+        }
+        /** @param {Element} el */
+        observe(el) {
+          this.el = el;
+        }
+        unobserve() {}
+        disconnect() {}
+      }
+      vi.stubGlobal('IntersectionObserver', FakeIntersectionObserver);
+      try {
+        inCallHere();
+        render(GroupChat, { props: { pointer: callPointer } });
+        await screen.findByTestId('group-call-join');
+        // Not reported visible yet (hidden twin): no stage, no connection.
+        expect(screen.queryByTestId('group-call-stage-stub')).toBeNull();
+
+        for (const o of observers) o.cb([{ isIntersecting: true, target: o.el }]);
+        expect(await screen.findByTestId('group-call-stage-stub')).toBeTruthy();
+
+        for (const o of observers) o.cb([{ isIntersecting: false, target: o.el }]);
+        await waitFor(() => expect(screen.queryByTestId('group-call-stage-stub')).toBeNull());
+      } finally {
+        vi.unstubAllGlobals();
+      }
+    });
+
     it('offers a retry when the token request failed', async () => {
       groupCallHolder.state = {
         activeKey: `callchat@${GROUP_RELAY}`,
