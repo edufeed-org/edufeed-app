@@ -5,10 +5,15 @@
 import { SvelteSet } from 'svelte/reactivity';
 import { Room, RoomEvent, Track } from 'livekit-client';
 import {
+  SCREEN_SHARE_QUALITIES,
   cameraCaptureOptions,
+  getParticipantVolume,
   getPreferredDevice,
+  getScreenShareQuality,
   micCaptureOptions,
-  rememberDevice
+  rememberDevice,
+  setAudioProcessing,
+  setParticipantVolume as storeParticipantVolume
 } from './call-prefs.js';
 import {
   playJoinSound,
@@ -59,6 +64,210 @@ let activeAudioOutputDeviceId = $state('');
 /** @type {MediaDeviceInfo[]} */
 let videoInputDevices = $state.raw([]);
 let activeVideoDeviceId = $state('');
+
+// --- Connection + participant state beyond the participant lists ---
+/** @type {'connected' | 'reconnecting' | 'disconnected'} */
+let connectionState = $state('disconnected');
+/** Remote seats whose microphone is off. @type {Set<string>} */
+let mutedIdentities = $state.raw(new Set());
+/** Seats with a raised hand (local included). @type {Set<string>} */
+let raisedHands = $state.raw(new Set());
+/** Floating reactions, newest last. @type {Array<{id: string, identity: string, emoji: string}>} */
+let reactions = $state.raw([]);
+// Data messages need canPublishData; a listen-only token may lack it.
+let canSignal = $state(true);
+let handRaised = false;
+
+// Remote audio is played HERE, one hidden element per subscribed track —
+// not by the tiles. A call can be drawn several times at once (the /c
+// layout's twins, the channel stage + the dock); tile-owned <audio> would
+// play every voice once per drawing.
+/** @type {Map<string, {track: any, el: HTMLMediaElement}>} */
+// eslint-disable-next-line svelte/prefer-svelte-reactivity -- bookkeeping, never rendered
+const audioSinks = new Map();
+
+// Raise hand / reactions travel as LiveKit data messages on this topic:
+// NIP-29 has no client presence plane (kind 39004 is relay-authored), and
+// the SFU already connects exactly the people in the call.
+const SIGNAL_TOPIC = 'edufeed.call';
+export const CALL_REACTIONS = ['👍', '❤️', '😂', '🎉', '😮', '👏', '🙏', '🤔'];
+const REACTION_TTL_MS = 4000;
+
+/**
+ * Per-person key for volumes: NIP-29 identities are `<64-hex pubkey>:<suffix>`,
+ * and one person may sit in the call twice.
+ * @param {string | undefined} identity
+ */
+function volumeKey(identity) {
+  const match = /^[0-9a-f]{64}/i.exec(identity ?? '');
+  return match ? match[0].toLowerCase() : (identity ?? '');
+}
+
+function recomputeMuted() {
+  /** @type {Set<string>} */
+  // eslint-disable-next-line svelte/prefer-svelte-reactivity -- built fresh, then assigned whole to a $state.raw
+  const next = new Set();
+  if (room) {
+    for (const p of room.remoteParticipants.values()) {
+      if (!p.isMicrophoneEnabled) next.add(p.identity);
+    }
+  }
+  mutedIdentities = next;
+}
+
+/** @param {any} track @param {any} participant @param {string | undefined} source */
+function attachRemoteAudio(track, participant, source) {
+  if (track?.kind !== 'audio' || !track.sid || audioSinks.has(track.sid)) return;
+  if (typeof document === 'undefined') return;
+  const el = track.attach();
+  el.hidden = true;
+  el.autoplay = true;
+  document.body.appendChild(el);
+  audioSinks.set(track.sid, { track, el });
+  if (source === Track.Source.Microphone && participant?.setVolume) {
+    participant.setVolume(
+      getParticipantVolume(volumeKey(participant.identity)),
+      Track.Source.Microphone
+    );
+  }
+}
+
+/** @param {any} track */
+function detachRemoteAudio(track) {
+  const sink = track?.sid ? audioSinks.get(track.sid) : undefined;
+  if (!sink) return;
+  try {
+    sink.track.detach(sink.el);
+  } catch {
+    // already gone
+  }
+  sink.el.remove();
+  audioSinks.delete(track.sid);
+}
+
+function detachAllRemoteAudio() {
+  for (const { track, el } of audioSinks.values()) {
+    try {
+      track.detach(el);
+    } catch {
+      // already gone
+    }
+    el.remove();
+  }
+  audioSinks.clear();
+}
+
+/**
+ * Playback volume for one person (0..2, every seat of theirs), remembered
+ * for later calls.
+ * @param {string} pubkey
+ * @param {number} volume
+ */
+export function setParticipantVolume(pubkey, volume) {
+  const value = storeParticipantVolume(pubkey, volume);
+  if (room) {
+    for (const p of room.remoteParticipants.values()) {
+      if (volumeKey(p.identity) === pubkey) p.setVolume(value, Track.Source.Microphone);
+    }
+  }
+  return value;
+}
+
+/** Whether a speaker can be picked: remote audio runs through Web Audio. */
+export function canSelectSpeaker() {
+  const Ctor =
+    typeof globalThis !== 'undefined' ? /** @type {any} */ (globalThis).AudioContext : undefined;
+  return typeof Ctor === 'function' && typeof Ctor.prototype?.setSinkId === 'function';
+}
+
+/**
+ * Change noise suppression / echo cancellation / auto gain. They bind at
+ * capture time, so a live mic is restarted with the new constraints.
+ * @param {Partial<import('./call-prefs.js').AudioProcessing>} partial
+ */
+export async function setAudioProcessingLive(partial) {
+  setAudioProcessing(partial);
+  const pub = room?.localParticipant.getTrackPublication(Track.Source.Microphone);
+  const track = /** @type {any} */ (pub?.track);
+  if (track?.restartTrack) await track.restartTrack(micCaptureOptions());
+}
+
+/** @param {Record<string, unknown>} payload @param {string[]} [destinationIdentities] */
+async function publishSignal(payload, destinationIdentities) {
+  if (!room || !canSignal) return;
+  const data = new TextEncoder().encode(JSON.stringify(payload));
+  try {
+    await room.localParticipant.publishData(data, {
+      reliable: true,
+      topic: SIGNAL_TOPIC,
+      ...(destinationIdentities ? { destinationIdentities } : {})
+    });
+  } catch (err) {
+    console.warn('call signal not sent:', err);
+  }
+}
+
+/** @param {string} identity @param {string} emoji @param {string} nonce */
+function addReaction(identity, emoji, nonce) {
+  const id = `${identity}:${nonce}`;
+  if (reactions.some((r) => r.id === id)) return;
+  reactions = [...reactions, { id, identity, emoji }];
+  setTimeout(() => {
+    reactions = reactions.filter((r) => r.id !== id);
+  }, REACTION_TTL_MS);
+}
+
+/** @param {boolean} raised */
+export async function setHandRaised(raised) {
+  if (!room || !canSignal) return;
+  handRaised = raised;
+  // eslint-disable-next-line svelte/prefer-svelte-reactivity -- built fresh, then assigned whole to a $state.raw
+  const next = new Set(raisedHands);
+  if (raised) next.add(room.localParticipant.identity);
+  else next.delete(room.localParticipant.identity);
+  raisedHands = next;
+  await publishSignal({ t: 'hand', v: raised });
+}
+
+/** @param {string} emoji one of CALL_REACTIONS */
+export async function sendReaction(emoji) {
+  if (!room || !canSignal || !CALL_REACTIONS.includes(emoji)) return;
+  const nonce = Math.random().toString(36).slice(2, 10);
+  addReaction(room.localParticipant.identity, emoji, nonce);
+  await publishSignal({ t: 'react', e: emoji, n: nonce });
+}
+
+/**
+ * @param {Uint8Array} payload
+ * @param {{identity: string} | undefined} participant
+ * @param {unknown} _kind
+ * @param {string | undefined} topic
+ */
+function handleSignal(payload, participant, _kind, topic) {
+  if (topic !== SIGNAL_TOPIC || !participant) return;
+  /** @type {any} */
+  let msg;
+  try {
+    msg = JSON.parse(new TextDecoder().decode(payload));
+  } catch {
+    return;
+  }
+  if (msg?.t === 'hand') {
+    // eslint-disable-next-line svelte/prefer-svelte-reactivity -- built fresh, then assigned whole to a $state.raw
+    const next = new Set(raisedHands);
+    if (msg.v === true) next.add(participant.identity);
+    else next.delete(participant.identity);
+    raisedHands = next;
+  } else if (
+    msg?.t === 'react' &&
+    CALL_REACTIONS.includes(msg.e) &&
+    typeof msg.n === 'string' &&
+    msg.n.length > 0 &&
+    msg.n.length <= 32
+  ) {
+    addReaction(participant.identity, msg.e, msg.n);
+  }
+}
 
 function updateParticipants() {
   if (!room) {
@@ -200,26 +409,54 @@ export async function connectToRoom(token, url, opts = {}) {
       publishDefaults: { dtx: true, red: true }
     });
 
-    newRoom.on(RoomEvent.ParticipantConnected, () => {
+    newRoom.on(RoomEvent.ParticipantConnected, (/** @type {any} */ participant) => {
       const now = Date.now();
       if (now - lastRemoteJoinCue > JOIN_CUE_DEBOUNCE_MS) {
         lastRemoteJoinCue = now;
         playJoinSound();
       }
+      // A late joiner learns about a hand that is already up.
+      if (handRaised && participant?.identity) {
+        publishSignal({ t: 'hand', v: true }, [participant.identity]);
+      }
       updateParticipants();
+      recomputeMuted();
     });
-    newRoom.on(RoomEvent.ParticipantDisconnected, () => {
+    newRoom.on(RoomEvent.ParticipantDisconnected, (/** @type {any} */ participant) => {
       playLeaveSound();
+      if (participant?.identity && raisedHands.has(participant.identity)) {
+        // eslint-disable-next-line svelte/prefer-svelte-reactivity -- built fresh, then assigned whole to a $state.raw
+        const next = new Set(raisedHands);
+        next.delete(participant.identity);
+        raisedHands = next;
+      }
       updateParticipants();
+      recomputeMuted();
     });
     newRoom.on(
       RoomEvent.TrackSubscribed,
-      (/** @type {any} */ _track, /** @type {any} */ publication) => {
+      (
+        /** @type {any} */ track,
+        /** @type {any} */ publication,
+        /** @type {any} */ participant
+      ) => {
         if (publication?.source === Track.Source.ScreenShare) playScreenShareSound();
+        attachRemoteAudio(track, participant, publication?.source);
         updateParticipants();
+        recomputeMuted();
       }
     );
-    newRoom.on(RoomEvent.TrackUnsubscribed, updateParticipants);
+    newRoom.on(RoomEvent.TrackUnsubscribed, (/** @type {any} */ track) => {
+      detachRemoteAudio(track);
+      updateParticipants();
+      recomputeMuted();
+    });
+    newRoom.on(RoomEvent.TrackMuted, recomputeMuted);
+    newRoom.on(RoomEvent.TrackUnmuted, recomputeMuted);
+    newRoom.on(RoomEvent.Reconnecting, () => (connectionState = 'reconnecting'));
+    newRoom.on(RoomEvent.SignalReconnecting, () => (connectionState = 'reconnecting'));
+    newRoom.on(RoomEvent.Reconnected, () => (connectionState = 'connected'));
+    newRoom.on(RoomEvent.DataReceived, handleSignal);
     newRoom.on(RoomEvent.LocalTrackPublished, updateParticipants);
     newRoom.on(RoomEvent.LocalTrackUnpublished, (publication) => {
       if (publication.source === Track.Source.ScreenShare) {
@@ -235,6 +472,7 @@ export async function connectToRoom(token, url, opts = {}) {
     );
     newRoom.on(RoomEvent.Disconnected, () => {
       isConnected = false;
+      connectionState = 'disconnected';
       updateParticipants();
     });
     newRoom.on(
@@ -245,6 +483,7 @@ export async function connectToRoom(token, url, opts = {}) {
       ) => {
         if (participant !== newRoom.localParticipant) return;
         canPublish = participant.permissions?.canPublish ?? true;
+        canSignal = participant.permissions?.canPublishData ?? true;
       }
     );
 
@@ -256,8 +495,11 @@ export async function connectToRoom(token, url, opts = {}) {
     isConnected = true;
     isMuted = true;
     isCameraOff = true;
+    connectionState = 'connected';
     canPublish = newRoom.localParticipant.permissions?.canPublish ?? true;
+    canSignal = newRoom.localParticipant.permissions?.canPublishData ?? true;
     updateParticipants();
+    recomputeMuted();
     playJoinSound();
 
     const speaker = getPreferredDevice('audiooutput');
@@ -303,82 +545,33 @@ export async function connectToRoom(token, url, opts = {}) {
   }
 }
 
-// --- Shared ownership of the one Room -------------------------------------
-// A call stage can have twins: under /c/* the community layout renders its
-// page 2-3× (responsive variants, CSS hides the inactive ones), and at the
-// lg breakpoint the visible twin swaps. Each twin acquires the call with the
-// token it was handed; the same token reuses the Room (in flight or live)
-// instead of opening a second session with the same identity — which the
-// server answers by kicking the first ("could not establish pc connection",
-// live 2026-09-28). Only the last owner's release disconnects. Plain lets:
-// bookkeeping, not UI state.
-/** @type {string | null} */
-let ownedToken = null;
-/** @type {Promise<void> | null} */
-let ownedConnect = null;
-let owners = 0;
-
-/**
- * Join (or share) the call for this token.
- * @param {string} token
- * @param {string} url
- * @param {{ video?: boolean, audio?: boolean }} [opts]
- * @returns {Promise<void>}
- */
-export function acquireRoom(token, url, opts = {}) {
-  if (ownedToken === token && ownedConnect) {
-    owners++;
-    return ownedConnect;
-  }
-  // connectToRoom's synchronous part may disconnect a previous call, which
-  // resets ownership — so claim it only after the call returns.
-  const attempt = connectToRoom(token, url, opts);
-  ownedToken = token;
-  ownedConnect = attempt;
-  owners = 1;
-  attempt.catch(() => {
-    if (ownedConnect !== attempt) return;
-    ownedToken = null;
-    ownedConnect = null;
-    owners = 0;
-  });
-  return attempt;
-}
-
-/**
- * Give up one claim on the call; the last owner disconnects. A release for
- * a token that is no longer the current call is a no-op, so a late cleanup
- * can never end a newer call.
- * @param {string} token
- */
-export async function releaseRoom(token) {
-  if (token !== ownedToken || owners === 0) return;
-  owners--;
-  if (owners > 0) return;
-  await disconnectFromRoom();
-}
-
 /**
  * Disconnect from the current room.
  */
 export async function disconnectFromRoom() {
-  ownedToken = null;
-  ownedConnect = null;
-  owners = 0;
   // Remove device change listener
   if (typeof navigator !== 'undefined' && navigator.mediaDevices) {
     navigator.mediaDevices.removeEventListener('devicechange', handleDeviceChange);
   }
 
+  detachAllRemoteAudio();
   if (room) {
     await room.disconnect();
     room = null;
   }
   isConnected = false;
+  connectionState = 'disconnected';
   isMuted = false;
   isCameraOff = true;
   isScreenSharing = false;
   canPublish = true;
+  canSignal = true;
+  handRaised = false;
+  // eslint-disable-next-line svelte/prefer-svelte-reactivity -- built fresh, then assigned whole to a $state.raw
+  mutedIdentities = new Set();
+  // eslint-disable-next-line svelte/prefer-svelte-reactivity -- built fresh, then assigned whole to a $state.raw
+  raisedHands = new Set();
+  reactions = [];
   speakingParticipantIds = new SvelteSet();
   audioInputDevices = [];
   activeAudioDeviceId = '';
@@ -442,7 +635,17 @@ export async function toggleScreenShare() {
   if (!room || !canPublish) return;
   const newState = !isScreenSharing;
   try {
-    await room.localParticipant.setScreenShareEnabled(newState);
+    if (newState) {
+      // No system audio: capturing it without the browser's own-audio
+      // restriction echoes the call back into itself.
+      await room.localParticipant.setScreenShareEnabled(true, {
+        audio: false,
+        resolution: SCREEN_SHARE_QUALITIES[getScreenShareQuality()],
+        contentHint: 'detail'
+      });
+    } else {
+      await room.localParticipant.setScreenShareEnabled(false);
+    }
     isScreenSharing = newState;
     if (newState) playScreenShareSound();
   } catch (err) {
@@ -453,7 +656,7 @@ export async function toggleScreenShare() {
 
 /**
  * Get reactive connection state.
- * @returns {{ isConnected: boolean, isConnecting: boolean, isMuted: boolean, isCameraOff: boolean, isScreenSharing: boolean, canPublish: boolean, localParticipant: import('livekit-client').LocalParticipant | null, remoteParticipants: import('livekit-client').RemoteParticipant[], room: Room | null, speakingParticipantIds: Set<string>, audioInputDevices: MediaDeviceInfo[], activeAudioDeviceId: string, audioOutputDevices: MediaDeviceInfo[], activeAudioOutputDeviceId: string, videoInputDevices: MediaDeviceInfo[], activeVideoDeviceId: string }}
+ * @returns {{ isConnected: boolean, isConnecting: boolean, isMuted: boolean, isCameraOff: boolean, isScreenSharing: boolean, canPublish: boolean, canSignal: boolean, connectionState: 'connected' | 'reconnecting' | 'disconnected', mutedIdentities: Set<string>, raisedHands: Set<string>, reactions: Array<{id: string, identity: string, emoji: string}>, localParticipant: import('livekit-client').LocalParticipant | null, remoteParticipants: import('livekit-client').RemoteParticipant[], room: Room | null, speakingParticipantIds: Set<string>, audioInputDevices: MediaDeviceInfo[], activeAudioDeviceId: string, audioOutputDevices: MediaDeviceInfo[], activeAudioOutputDeviceId: string, videoInputDevices: MediaDeviceInfo[], activeVideoDeviceId: string }}
  */
 export function getLiveKitState() {
   return {
@@ -474,6 +677,21 @@ export function getLiveKitState() {
     },
     get canPublish() {
       return canPublish;
+    },
+    get canSignal() {
+      return canSignal;
+    },
+    get connectionState() {
+      return connectionState;
+    },
+    get mutedIdentities() {
+      return mutedIdentities;
+    },
+    get raisedHands() {
+      return raisedHands;
+    },
+    get reactions() {
+      return reactions;
     },
     get localParticipant() {
       return localParticipant;

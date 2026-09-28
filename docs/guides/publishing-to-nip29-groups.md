@@ -166,12 +166,27 @@ NIP-53 rooms, no client-side presence, no per-community operator URL:
    group id, one `participant` tag per pubkey). `useCallPresence(getPointer)`
    (`call-presence.svelte.js`) keeps a standing subscription pinned to the
    relay's NIP-11 key, exactly like the 39000 reader — the header count in
-   `GroupChat` comes from there.
+   `GroupChat` and the "who's in the call" roster under an AV channel in the
+   channel lists (`ChannelCallRoster`) come from there.
+6. **In-call signals.** Raise hand and reactions are LiveKit data messages
+   (reliable, topic `edufeed.call`, JSON `{t:'hand', v}` / `{t:'react', e, n}`,
+   emoji from a fixed allowlist), not Nostr events: NIP-29 has no client
+   presence plane and the SFU already reaches exactly the people in the call.
+   A raised hand is re-sent to each late joiner. They need `canPublishData`
+   on the token.
+7. **Enabling from the channel.** An admin of a non-AV channel on a relay
+   whose probe answers 204 gets a one-click "Start call" in the header
+   (`enable-group-calls.js`): a 9002 that restates every field of the current
+   39000 plus `livekit`, then the join.
 
-The call itself is `components/groups/call/GroupCallStage.svelte`, mounted in
-the same stage slot a shared webxdc app uses; `group-call.svelte.js` owns the
-single active call app-wide. The stage is loaded lazily so `livekit-client`
-never enters a route's static graph.
+`group-call.svelte.js` owns the single active call app-wide, **including the
+LiveKit connection**: the call outlives the channel view. The in-call UI,
+`components/groups/call/GroupCallStage.svelte`, is a pure view mounted in the
+same stage slot a shared webxdc app uses; it registers itself with the store,
+and while no stage is registered (other channel, other page, or the user
+stepped back to the chat) the root layout shows `CallDock`. Remote audio is
+attached once, centrally, by the connection service, never by tiles. Stage and
+dock are loaded lazily so `livekit-client` never enters a route's static graph.
 
 ## Key files
 

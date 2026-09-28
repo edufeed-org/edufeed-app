@@ -38,6 +38,7 @@
   } from '$lib/groups/group-channel-selection.svelte.js';
   import ConcordUnreadDot from '$lib/components/shared/ConcordUnreadDot.svelte';
   import ChannelRailRow from '../channels/ChannelRailRow.svelte';
+  import ChannelCallRoster from '$lib/components/groups/call/ChannelCallRoster.svelte';
   import { isCommunityOwner } from '$lib/helpers/community-signer.js';
   import { useActiveUser } from '$lib/stores/accounts.svelte';
   import * as m from '$lib/paraglide/messages';
@@ -407,6 +408,13 @@
               </button>
             {/if}
           </div>
+          {#if row.source === 'group' && row.av}
+            <ChannelCallRoster
+              pointer={row.pointer}
+              name={row.name}
+              onOpen={() => selectGroupRow(row.pointer)}
+            />
+          {/if}
         {/snippet}
         {#if kanaeleSections.favourites.length > 0}
           <div

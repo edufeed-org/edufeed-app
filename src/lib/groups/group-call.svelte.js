@@ -1,16 +1,17 @@
 // The single active NIP-29 group call.
 //
-// Owns the token round-trip (groups/livekit.js) and WHICH channel the call
-// belongs to; the stage component (components/groups/call/GroupCallStage)
-// does the actual LiveKit connect with the token it is handed and
-// disconnects when it unmounts. One call at a time app-wide — the
-// connection service holds exactly one Room, and this module mirrors that.
+// Owns the token round-trip (groups/livekit.js), WHICH channel the call
+// belongs to, and the LiveKit connection itself. The call outlives the
+// channel view: navigating away keeps it running and the app-level CallDock
+// takes over, so no component may own the Room — the stage
+// (components/groups/call/GroupCallStage) is a pure view that registers
+// itself (registerCallStageView) so the dock knows when to step aside.
+// One call at a time app-wide — the connection service holds exactly one
+// Room, and this module mirrors that.
 //
 // Deliberately no static import of livekit-connection.svelte.js: that module
 // pulls livekit-client (~300KB) into whatever imports it, and this store is
-// imported by GroupChat, which sits in the /groups and /c route graphs. The
-// only thing needed outside the stage is the safety-net disconnect on leave,
-// loaded on demand.
+// imported by GroupChat and the root layout. It is loaded on join.
 import { channelKey } from './community-pointer.js';
 import { requestGroupCallToken, GroupCallTokenError } from './livekit.js';
 import * as m from '$lib/paraglide/messages';
@@ -27,6 +28,14 @@ let error = $state(null);
 let serverUrl = $state(null);
 /** @type {string | null} */
 let token = $state(null);
+// For the dock: what to call the call, and which page to return to.
+let title = $state('');
+/** @type {string | null} */
+let href = $state(null);
+// Mounted stage views (the dock shows while none is on screen) and whether
+// the user stepped from the stage back to the chat while staying in the call.
+let stageViews = $state(0);
+let stageHidden = $state(false);
 // Bumped on every join/leave so a token that lands after the user already
 // left (or joined elsewhere) is dropped instead of reviving the old call.
 let attempt = 0;
@@ -38,6 +47,10 @@ let attempt = 0;
  *   error: Error | null,
  *   serverUrl: string | null,
  *   token: string | null,
+ *   title: string,
+ *   href: string | null,
+ *   stageViews: number,
+ *   stageHidden: boolean,
  *   isActiveFor: (pointer: {id?: string, relay?: string} | null | undefined) => boolean
  * }}
  */
@@ -58,6 +71,18 @@ export function getGroupCallState() {
     get token() {
       return token;
     },
+    get title() {
+      return title;
+    },
+    get href() {
+      return href;
+    },
+    get stageViews() {
+      return stageViews;
+    },
+    get stageHidden() {
+      return stageHidden;
+    },
     isActiveFor(pointer) {
       const key = channelKey(pointer ?? {});
       return !!key && key === activeKey;
@@ -66,17 +91,20 @@ export function getGroupCallState() {
 }
 
 /**
- * Request a token for this channel and mark it the active call. Joining a
- * different channel leaves the current one first; re-joining the channel
- * that is already ready is a no-op; re-joining after an error retries.
+ * Request a token for this channel, mark it the active call and connect.
+ * Joining a different channel leaves the current one first; re-joining the
+ * channel that is already in a call is a no-op (it only brings the stage
+ * back); re-joining after an error retries. Joins muted, camera off.
  * @param {{id: string, relay: string}} pointer
  * @param {{pubkey: string, signer: any}} user
+ * @param {{title?: string, href?: string | null}} [view] for the dock
  */
-export async function joinGroupCall(pointer, user) {
+export async function joinGroupCall(pointer, user, view = {}) {
   const key = channelKey(pointer);
   if (!key || !user?.signer) return;
   if (activeKey && activeKey !== key) await leaveGroupCall();
-  if (activeKey === key && phase === 'ready') return;
+  stageHidden = false;
+  if (activeKey === key && (phase === 'ready' || phase === 'requesting')) return;
 
   const myAttempt = ++attempt;
   activeKey = key;
@@ -84,17 +112,55 @@ export async function joinGroupCall(pointer, user) {
   error = null;
   token = null;
   serverUrl = null;
+  title = view.title ?? '';
+  href = view.href ?? null;
   try {
     const result = await requestGroupCallToken(pointer.relay, pointer.id, user);
     if (myAttempt !== attempt) return;
     serverUrl = result.serverUrl;
     token = result.participantToken;
     phase = 'ready';
+    const lk = await import('$lib/services/livekit-connection.svelte.js');
+    if (myAttempt !== attempt) return;
+    await lk.connectToRoom(result.participantToken, result.serverUrl, {});
+    // Left (or moved on) while the handshake ran: leaveGroupCall's
+    // disconnect raced the connect, so tear the fresh Room down again.
+    if (myAttempt !== attempt) await lk.disconnectFromRoom();
   } catch (err) {
     if (myAttempt !== attempt) return;
+    console.error('Failed to join call:', err);
     error = err instanceof Error ? err : new Error(String(err));
     phase = 'error';
   }
+}
+
+/**
+ * A stage view is on screen; returns the matching unregister (idempotent).
+ * `viewHref` is the page it sits on: the dock's "back to call" returns to
+ * wherever the call was last shown (a channel opened from a list may reach
+ * its final URL only after the join started).
+ * @param {string} [viewHref]
+ * @returns {() => void}
+ */
+export function registerCallStageView(viewHref) {
+  stageViews++;
+  if (viewHref && activeKey) href = viewHref;
+  let done = false;
+  return () => {
+    if (done) return;
+    done = true;
+    stageViews--;
+  };
+}
+
+/** Step from the stage back to the channel's chat, staying in the call. */
+export function hideCallStage() {
+  stageHidden = true;
+}
+
+/** Bring the stage back (dock "back to call", header button). */
+export function showCallStage() {
+  stageHidden = false;
 }
 
 /** Reset to idle and make sure no Room is left connected. */
@@ -106,6 +172,9 @@ export async function leaveGroupCall() {
   error = null;
   token = null;
   serverUrl = null;
+  title = '';
+  href = null;
+  stageHidden = false;
   if (wasActive) {
     const { disconnectFromRoom } = await import('$lib/services/livekit-connection.svelte.js');
     await disconnectFromRoom();

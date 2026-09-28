@@ -31,6 +31,8 @@
   import { useHostChannels } from '$lib/groups/host-channels.svelte.js';
   import { useHostUnread } from '$lib/groups/host-unread.svelte.js';
   import ChannelRailRow from '$lib/components/community/channels/ChannelRailRow.svelte';
+  import ChannelCallRoster from '$lib/components/groups/call/ChannelCallRoster.svelte';
+  import { goto } from '$app/navigation';
   // The Concord-prefixed name is a wart, and reusing it anyway is the point:
   // the two rails have to be indistinguishable, and one component is the only
   // way that stays true. Renaming it would churn ten Concord chrome files for
@@ -178,6 +180,13 @@
                   <ConcordUnreadDot unread={flags.unread} mentioned={flags.mentioned} />
                 {/snippet}
               </ChannelRailRow>
+              {#if row.av}
+                <ChannelCallRoster
+                  pointer={row.pointer}
+                  name={row.name}
+                  onOpen={() => goto(groupHref(row.pointer))}
+                />
+              {/if}
             {/if}
           {/each}
         {/if}

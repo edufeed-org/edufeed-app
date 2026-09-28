@@ -819,12 +819,21 @@ const groupCallHolder = vi.hoisted(() => ({
     phase: /** @type {'idle' | 'requesting' | 'ready' | 'error'} */ ('idle'),
     error: /** @type {Error | null} */ (null),
     serverUrl: /** @type {string | null} */ (null),
-    token: /** @type {string | null} */ (null)
+    token: /** @type {string | null} */ (null),
+    stageHidden: /** @type {boolean | undefined} */ (false)
   },
   participants: /** @type {string[]} */ ([])
 }));
+const callViewMocks = vi.hoisted(() => ({
+  showCallStage: vi.fn(),
+  hideCallStage: vi.fn(),
+  unregister: vi.fn(),
+  registerCallStageView: vi.fn()
+}));
 const joinGroupCallMock = vi.hoisted(() =>
-  vi.fn(async (/** @type {any} */ _pointer, /** @type {any} */ _user) => {})
+  vi.fn(
+    async (/** @type {any} */ _pointer, /** @type {any} */ _user, /** @type {any} */ _view) => {}
+  )
 );
 const leaveGroupCallMock = vi.hoisted(() => vi.fn(async () => {}));
 vi.mock('$lib/groups/group-call.svelte.js', () => ({
@@ -844,13 +853,36 @@ vi.mock('$lib/groups/group-call.svelte.js', () => ({
     get token() {
       return groupCallHolder.state.token;
     },
+    get stageHidden() {
+      return groupCallHolder.state.stageHidden ?? false;
+    },
     isActiveFor: (/** @type {{id: string, relay: string}} */ pointer) =>
       groupCallHolder.state.activeKey === `${pointer.id}@${pointer.relay}`
   }),
-  joinGroupCall: (/** @type {any} */ pointer, /** @type {any} */ user) =>
-    joinGroupCallMock(pointer, user),
+  joinGroupCall: (/** @type {any} */ pointer, /** @type {any} */ user, /** @type {any} */ view) =>
+    joinGroupCallMock(pointer, user, view),
   leaveGroupCall: () => leaveGroupCallMock(),
+  showCallStage: () => callViewMocks.showCallStage(),
+  hideCallStage: () => callViewMocks.hideCallStage(),
+  registerCallStageView: () => {
+    callViewMocks.registerCallStageView();
+    return callViewMocks.unregister;
+  },
   callErrorMessage: () => 'call failed'
+}));
+// The relay's AV capability probe and the admin's "Start call" 9002 are
+// seams too (their own tests: groups-livekit.test.js, enable-group-calls.test.js).
+const avProbe = vi.hoisted(() => ({ supported: false }));
+vi.mock('$lib/groups/livekit.js', async (importOriginal) => ({
+  .../** @type {any} */ (await importOriginal()),
+  probeRelayAvSupport: async () => avProbe.supported
+}));
+const enableGroupCallsMock = vi.hoisted(() =>
+  vi.fn(async (/** @type {any} */ _pointer, /** @type {any} */ _user) => {})
+);
+vi.mock('$lib/groups/enable-group-calls.js', () => ({
+  enableGroupCalls: (/** @type {any} */ pointer, /** @type {any} */ user) =>
+    enableGroupCallsMock(pointer, user)
 }));
 vi.mock('$lib/groups/call-presence.svelte.js', () => ({
   useCallPresence: () => () => ({ participants: groupCallHolder.participants, answered: true })
@@ -903,6 +935,9 @@ vi.mock('$lib/paraglide/messages', () => ({
   groups_call_leave: () => 'Leave call',
   groups_call_requesting: () => 'Requesting access…',
   groups_call_retry: () => 'Try again',
+  groups_call_start: () => 'Start call',
+  groups_call_start_error: () => 'Calls could not be turned on',
+  groups_call_return: () => 'Back to call',
   groups_auth_required: () => 'auth required',
   groups_reply: () => 'Reply',
   groups_message_delete: () => 'Delete message',
@@ -1032,6 +1067,7 @@ describe('GroupChat', () => {
     __resetAuthAttempts();
     joinedCommunikeyEventsHolder.events = [];
     groupCallHolder.state = {
+      stageHidden: false,
       activeKey: null,
       phase: 'idle',
       error: null,
@@ -1041,6 +1077,10 @@ describe('GroupChat', () => {
     groupCallHolder.participants = [];
     joinGroupCallMock.mockClear();
     leaveGroupCallMock.mockClear();
+    for (const fn of Object.values(callViewMocks)) fn.mockClear();
+    avProbe.supported = false;
+    enableGroupCallsMock.mockReset();
+    enableGroupCallsMock.mockResolvedValue(undefined);
     relayInfoHolder.info = {
       limitation: { auth_required: true },
       supported_nips: [1, 29, 42],
@@ -2298,7 +2338,8 @@ describe('GroupChat', () => {
         phase: 'ready',
         error: null,
         serverUrl: 'wss://livekit.example',
-        token: 'jwt-1'
+        token: 'jwt-1',
+        stageHidden: false
       };
     };
 
@@ -2314,7 +2355,9 @@ describe('GroupChat', () => {
       await fireEvent.click(button);
       expect(joinGroupCallMock).toHaveBeenCalledWith(
         expect.objectContaining({ id: 'callchat', relay: GROUP_RELAY }),
-        expect.objectContaining({ pubkey: ME })
+        expect.objectContaining({ pubkey: ME }),
+        // For the app-level dock: what to show, and where "back" goes.
+        expect.objectContaining({ title: 'Call Chat', href: expect.any(String) })
       );
     });
 
@@ -2339,13 +2382,44 @@ describe('GroupChat', () => {
       inCallHere();
       render(GroupChat, { props: { pointer: callPointer } });
       const stage = await screen.findByTestId('group-call-stage-stub');
-      expect(stage.getAttribute('data-token')).toBe('jwt-1');
-      expect(stage.getAttribute('data-server-url')).toBe('wss://livekit.example');
+      expect(stage.textContent).toContain('Call Chat');
       expect(screen.getByTestId('group-chat-body').className).toContain('hidden');
+      // The stage registers as on-screen so the app-level dock steps aside.
+      expect(callViewMocks.registerCallStageView).toHaveBeenCalled();
+    });
+
+    it('leaving the channel keeps the call running (the dock takes over)', async () => {
+      inCallHere();
+      const { unmount } = render(GroupChat, { props: { pointer: callPointer } });
+      await screen.findByTestId('group-call-stage-stub');
+      unmount();
+      expect(leaveGroupCallMock).not.toHaveBeenCalled();
+    });
+
+    it('the stage can step back to the chat without leaving the call', async () => {
+      inCallHere();
+      render(GroupChat, { props: { pointer: callPointer } });
+      await screen.findByTestId('group-call-stage-stub');
+      await fireEvent.click(screen.getByTestId('group-call-stage-stub-chat'));
+      expect(callViewMocks.hideCallStage).toHaveBeenCalledTimes(1);
+      expect(leaveGroupCallMock).not.toHaveBeenCalled();
+    });
+
+    it('with the stage stepped aside, the chat shows and the header button brings the call back', async () => {
+      inCallHere();
+      groupCallHolder.state.stageHidden = true;
+      render(GroupChat, { props: { pointer: callPointer } });
+      await screen.findByTestId('group-call-join');
+      expect(screen.queryByTestId('group-call-stage-stub')).toBeNull();
+      expect(screen.getByTestId('group-chat-body').className).toContain('contents');
+      await fireEvent.click(screen.getByTestId('group-call-join'));
+      expect(callViewMocks.showCallStage).toHaveBeenCalledTimes(1);
+      expect(leaveGroupCallMock).not.toHaveBeenCalled();
     });
 
     it('does not render the stage for a call that belongs to another channel', async () => {
       groupCallHolder.state = {
+        stageHidden: false,
         activeKey: `elsewhere@${GROUP_RELAY}`,
         phase: 'ready',
         error: null,
@@ -2368,6 +2442,7 @@ describe('GroupChat', () => {
 
     it('shows the pending state while the token is requested', async () => {
       groupCallHolder.state = {
+        stageHidden: false,
         activeKey: `callchat@${GROUP_RELAY}`,
         phase: 'requesting',
         error: null,
@@ -2419,8 +2494,56 @@ describe('GroupChat', () => {
       }
     });
 
+    it('an admin of a non-AV channel gets a one-click Start call when the relay can host calls', async () => {
+      avProbe.supported = true;
+      const adminPointer = { relay: GROUP_RELAY, id: 'adminchat' };
+      render(GroupChat, { props: { pointer: adminPointer } });
+      const start = await screen.findByTestId('group-call-start');
+      expect(screen.queryByTestId('group-call-join')).toBeNull();
+      await fireEvent.click(start);
+      await waitFor(() => expect(joinGroupCallMock).toHaveBeenCalled());
+      expect(enableGroupCallsMock).toHaveBeenCalledWith(
+        expect.objectContaining({ id: 'adminchat', relay: GROUP_RELAY }),
+        expect.objectContaining({ pubkey: ME })
+      );
+      expect(joinGroupCallMock).toHaveBeenCalledWith(
+        expect.objectContaining({ id: 'adminchat' }),
+        expect.objectContaining({ pubkey: ME }),
+        expect.anything()
+      );
+    });
+
+    it('no Start call when the relay cannot host calls', async () => {
+      avProbe.supported = false;
+      render(GroupChat, { props: { pointer: { relay: GROUP_RELAY, id: 'adminchat' } } });
+      await screen.findByTestId('group-name');
+      await new Promise((r) => setTimeout(r, 0));
+      expect(screen.queryByTestId('group-call-start')).toBeNull();
+    });
+
+    it('no Start call for a member who is not an admin', async () => {
+      avProbe.supported = true;
+      render(GroupChat, { props: { pointer } });
+      await screen.findByTestId('group-name');
+      await new Promise((r) => setTimeout(r, 0));
+      expect(screen.queryByTestId('group-call-start')).toBeNull();
+    });
+
+    it('a refused Start call is explained and does not join', async () => {
+      avProbe.supported = true;
+      enableGroupCallsMock.mockRejectedValueOnce(new Error('blocked: not allowed'));
+      const { showToast } = await import('$lib/helpers/toast');
+      render(GroupChat, { props: { pointer: { relay: GROUP_RELAY, id: 'adminchat' } } });
+      await fireEvent.click(await screen.findByTestId('group-call-start'));
+      await waitFor(() =>
+        expect(showToast).toHaveBeenCalledWith('Calls could not be turned on', 'error')
+      );
+      expect(joinGroupCallMock).not.toHaveBeenCalled();
+    });
+
     it('offers a retry when the token request failed', async () => {
       groupCallHolder.state = {
+        stageHidden: false,
         activeKey: `callchat@${GROUP_RELAY}`,
         phase: 'error',
         error: new Error('nope'),

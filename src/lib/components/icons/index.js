@@ -97,3 +97,8 @@ export { default as FacebookIcon } from './social/FacebookIcon.svelte';
 export { default as TwitterXIcon } from './social/TwitterXIcon.svelte';
 export { default as WhatsappIcon } from './social/WhatsappIcon.svelte';
 export { default as GoogleIcon } from './social/GoogleIcon.svelte';
+export { default as MicIcon } from './ui/MicIcon.svelte';
+export { default as MicOffIcon } from './ui/MicOffIcon.svelte';
+export { default as HandIcon } from './ui/HandIcon.svelte';
+export { default as VideoIcon } from './ui/VideoIcon.svelte';
+export { default as ScreenShareIcon } from './ui/ScreenShareIcon.svelte';

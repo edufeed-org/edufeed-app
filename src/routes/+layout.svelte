@@ -14,6 +14,7 @@
   import RenderErrorCard from '$lib/components/shared/RenderErrorCard.svelte';
   import ImageWithFallback from '$lib/components/shared/ImageWithFallback.svelte';
   import { lazyComponent } from '$lib/helpers/lazy-component.svelte.js';
+  import { getGroupCallState } from '$lib/groups/group-call.svelte.js';
   import DashboardNavSidebar from '$lib/components/dashboard/DashboardNavSidebar.svelte';
   import DashboardBottomTabBar from '$lib/components/dashboard/DashboardBottomTabBar.svelte';
   import { pageOwnsNavColumn } from '$lib/rail/rail-active.js';
@@ -54,6 +55,11 @@
   const lazyTermiAssistant = lazyComponent(
     () => import('$lib/components/assistant/TermiAssistant.svelte')
   );
+  // A running call outlives the channel view (the call store owns the
+  // connection); while no call stage is on screen the dock shows it. Only
+  // loaded once a call starts — it pulls livekit-client.
+  const lazyCallDock = lazyComponent(() => import('$lib/components/groups/call/CallDock.svelte'));
+  const groupCall = getGroupCallState();
 
   let { children, data } = $props();
 
@@ -476,6 +482,12 @@
   </div>
 </div>
 <PublishStatusToast />
+{#if groupCall.phase !== 'idle' && groupCall.stageViews === 0}
+  {@const CallDock = lazyCallDock.Component}
+  {#if CallDock}
+    <CallDock />
+  {/if}
+{/if}
 {#if !hasOwnBottomUI && !pageHasOwnCreateAction && getActiveUser()}
   <GlobalFAB />
 {/if}

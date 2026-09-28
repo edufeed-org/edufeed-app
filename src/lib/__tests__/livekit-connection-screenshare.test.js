@@ -83,7 +83,10 @@ describe('screen sharing', () => {
     await toggleScreenShare();
 
     expect(lk.isScreenSharing).toBe(true);
-    expect(lk.room.localParticipant.setScreenShareEnabled).toHaveBeenCalledWith(true);
+    expect(lk.room.localParticipant.setScreenShareEnabled).toHaveBeenCalledWith(
+      true,
+      expect.objectContaining({ audio: false })
+    );
   });
 
   it('toggleScreenShare again disables screen sharing', async () => {

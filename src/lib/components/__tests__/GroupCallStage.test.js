@@ -1,17 +1,18 @@
 // @ts-nocheck
 /**
- * GroupCallStage — the in-call UI hosted in a channel's stage slot. It is
- * protocol-agnostic: it gets a LiveKit token + server url and connects,
- * disconnects when it unmounts, and hides publish controls for a
- * listen-only token. Who minted the token (NIP-29 relay today, a CORD-07
- * broker later) is not its business.
+ * GroupCallStage — the in-call UI hosted in a channel's stage slot. A pure
+ * view: the call store owns the connection (so the call survives leaving
+ * the channel), so mounting/unmounting never connects or disconnects. It
+ * registers itself as an on-screen view, hides publish controls for a
+ * listen-only token, and carries the call controls: mic/camera/screen with
+ * their menus, raise hand, reactions, reconnect bar and spotlight.
  *
  * @vitest-environment jsdom
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/svelte';
 
-const { lk, acquireRoom, releaseRoom, disconnectFromRoom } = vi.hoisted(() => ({
+const { lk, svc, media } = vi.hoisted(() => ({
   lk: {
     isConnected: true,
     isConnecting: false,
@@ -19,8 +20,13 @@ const { lk, acquireRoom, releaseRoom, disconnectFromRoom } = vi.hoisted(() => ({
     isCameraOff: true,
     isScreenSharing: false,
     canPublish: true,
+    canSignal: true,
+    connectionState: 'connected',
     localParticipant: null,
     remoteParticipants: [],
+    mutedIdentities: new Set(),
+    raisedHands: new Set(),
+    reactions: [],
     room: null,
     speakingParticipantIds: new Set(),
     audioInputDevices: [],
@@ -30,31 +36,44 @@ const { lk, acquireRoom, releaseRoom, disconnectFromRoom } = vi.hoisted(() => ({
     videoInputDevices: [],
     activeVideoDeviceId: ''
   },
-  acquireRoom: vi.fn(async () => {}),
-  releaseRoom: vi.fn(async () => {}),
-  disconnectFromRoom: vi.fn(async () => {})
+  svc: {
+    connectToRoom: vi.fn(),
+    disconnectFromRoom: vi.fn(async () => {}),
+    setHandRaised: vi.fn(async () => {}),
+    sendReaction: vi.fn(async () => {}),
+    setAudioProcessingLive: vi.fn(async () => {}),
+    setParticipantVolume: vi.fn((_pk, v) => v),
+    canSelectSpeaker: vi.fn(() => false),
+    refreshAudioDevices: vi.fn(),
+    refreshVideoDevices: vi.fn()
+  },
+  media: {
+    toggleMute: vi.fn(async () => {}),
+    toggleCamera: vi.fn(async () => {}),
+    toggleScreenShare: vi.fn(async () => {}),
+    showToast: vi.fn(),
+    playLeaveSound: vi.fn()
+  }
 }));
 
 vi.mock('$lib/services/livekit-connection.svelte.js', () => ({
-  acquireRoom,
-  releaseRoom,
-  disconnectFromRoom,
-  toggleMute: (/** @type {any[]} */ ...a) => media.toggleMute(...a),
-  toggleCamera: (/** @type {any[]} */ ...a) => media.toggleCamera(...a),
-  toggleScreenShare: (/** @type {any[]} */ ...a) => media.toggleScreenShare(...a),
-  refreshAudioDevices: vi.fn(),
+  CALL_REACTIONS: ['👍', '🎉'],
+  connectToRoom: svc.connectToRoom,
+  disconnectFromRoom: svc.disconnectFromRoom,
+  toggleMute: (...a) => media.toggleMute(...a),
+  toggleCamera: (...a) => media.toggleCamera(...a),
+  toggleScreenShare: (...a) => media.toggleScreenShare(...a),
+  refreshAudioDevices: svc.refreshAudioDevices,
   switchAudioDevice: vi.fn(),
   switchAudioOutputDevice: vi.fn(),
-  refreshVideoDevices: vi.fn(),
+  refreshVideoDevices: svc.refreshVideoDevices,
   switchVideoDevice: vi.fn(),
+  setParticipantVolume: svc.setParticipantVolume,
+  setAudioProcessingLive: svc.setAudioProcessingLive,
+  canSelectSpeaker: svc.canSelectSpeaker,
+  setHandRaised: svc.setHandRaised,
+  sendReaction: svc.sendReaction,
   getLiveKitState: () => lk
-}));
-const media = vi.hoisted(() => ({
-  toggleMute: vi.fn(async () => {}),
-  toggleCamera: vi.fn(async () => {}),
-  toggleScreenShare: vi.fn(async () => {}),
-  showToast: vi.fn(),
-  playLeaveSound: vi.fn()
 }));
 vi.mock('$lib/helpers/toast', () => ({ showToast: media.showToast }));
 vi.mock('$lib/services/call-sounds.js', () => ({ playLeaveSound: media.playLeaveSound }));
@@ -66,15 +85,21 @@ vi.mock('$lib/stores/profile-map.svelte.js', () => ({
 }));
 function Stub() {}
 vi.mock('$lib/components/groups/call/ParticipantTile.svelte', () => ({ default: Stub }));
+vi.mock('$lib/components/groups/call/ScreenShareTile.svelte', () => ({ default: Stub }));
 vi.mock('$lib/components/icons', () => ({
   MeetIcon: Stub,
   ChevronDownIcon: Stub,
-  VolumeUpIcon: Stub
+  MicIcon: Stub,
+  MicOffIcon: Stub,
+  VideoIcon: Stub,
+  ScreenShareIcon: Stub,
+  HandIcon: Stub,
+  SmilePlusIcon: Stub,
+  ChatIcon: Stub
 }));
 vi.mock('$lib/paraglide/messages', () => ({
   groups_call_leave: () => 'Leave call',
   groups_call_connecting: () => 'Connecting…',
-  groups_call_connection_error: () => 'Could not connect',
   groups_call_listen_only: () => 'You are listening only',
   groups_call_mute: () => 'Mute',
   groups_call_unmute: () => 'Unmute',
@@ -87,10 +112,21 @@ vi.mock('$lib/paraglide/messages', () => ({
   groups_call_screen_share_start: () => 'Share screen',
   groups_call_screen_share_stop: () => 'Stop sharing',
   groups_call_screen_share_you: () => 'You are sharing',
-  groups_call_screen_share_active: (/** @type {any} */ p) => `${p.name} is sharing`,
-  groups_call_screen_share_maximize: () => 'Maximize',
-  groups_call_screen_share_minimize: () => 'Minimize',
-  common_back: () => 'Back',
+  groups_call_screen_share_active: (p) => `${p.name} is sharing`,
+  groups_call_screen_share_quality: () => 'Sharing quality',
+  groups_call_screen_share_options: () => 'Screen options',
+  groups_call_camera_options: () => 'Camera options',
+  groups_call_mic_options: () => 'Mic options',
+  groups_call_audio_processing: () => 'Audio processing',
+  groups_call_noise_suppression: () => 'Noise suppression',
+  groups_call_echo_cancellation: () => 'Echo cancellation',
+  groups_call_auto_gain: () => 'Automatic volume',
+  groups_call_reconnecting: () => 'Reconnecting…',
+  groups_call_raise_hand: () => 'Raise hand',
+  groups_call_lower_hand: () => 'Lower hand',
+  groups_call_hands_raised: (p) => `${p.count} raised`,
+  groups_call_react: () => 'React',
+  groups_call_show_chat: () => 'Chat',
   groups_call_error_mic_denied: () => 'Microphone access denied',
   groups_call_error_mic_missing: () => 'No microphone',
   groups_call_error_camera_denied: () => 'Camera access denied',
@@ -100,38 +136,128 @@ vi.mock('$lib/paraglide/messages', () => ({
   groups_call_error_media_generic: () => 'Media failed'
 }));
 
+// bind:clientWidth measures through ResizeObserver, which jsdom lacks; an
+// unmeasured stage falls back to the CSS grid, which is what we assert on.
+globalThis.ResizeObserver ??= class {
+  observe() {}
+  unobserve() {}
+  disconnect() {}
+};
+
 const { default: GroupCallStage } = await import(
   '$lib/components/groups/call/GroupCallStage.svelte'
 );
 
+const HEX = 'b'.repeat(64);
 const baseProps = {
-  token: 'jwt-token',
-  serverUrl: 'wss://livekit.example',
   title: 'Standup',
-  identityToPubkey: (/** @type {string} */ id) => id.slice(0, 64),
+  identityToPubkey: (id) => id.slice(0, 64),
   onLeave: vi.fn()
 };
 
+function remote(identity, { screenShare = false } = {}) {
+  return {
+    identity,
+    sid: `sid-${identity}`,
+    getTrackPublication: (source) =>
+      screenShare && source === 'screen_share' ? { track: { sid: 'ss' } } : undefined
+  };
+}
+
 beforeEach(() => {
-  acquireRoom.mockClear();
-  releaseRoom.mockClear();
-  disconnectFromRoom.mockClear();
-  baseProps.onLeave.mockClear();
-  lk.isConnected = true;
-  lk.isConnecting = false;
-  lk.canPublish = true;
+  vi.clearAllMocks();
+  localStorage.clear();
+  Object.assign(lk, {
+    isConnected: true,
+    isConnecting: false,
+    isMuted: false,
+    canPublish: true,
+    canSignal: true,
+    connectionState: 'connected',
+    localParticipant: { identity: `${'a'.repeat(64)}:me`, getTrackPublication: () => undefined },
+    remoteParticipants: [],
+    raisedHands: new Set(),
+    reactions: []
+  });
 });
 
-describe('GroupCallStage', () => {
-  it('joins with the token and server url it is handed, muted and camera off', async () => {
-    render(GroupCallStage, { props: baseProps });
+describe('GroupCallStage — a view, not the connection owner', () => {
+  it('never connects or disconnects on mount / unmount', () => {
+    const { unmount } = render(GroupCallStage, { props: baseProps });
+    unmount();
+    expect(svc.connectToRoom).not.toHaveBeenCalled();
+    expect(svc.disconnectFromRoom).not.toHaveBeenCalled();
+  });
+
+  it('registers itself as an on-screen view while mounted', () => {
+    const off = vi.fn();
+    const registerView = vi.fn(() => off);
+    const { unmount } = render(GroupCallStage, { props: { ...baseProps, registerView } });
+    expect(registerView).toHaveBeenCalledTimes(1);
+    unmount();
+    expect(off).toHaveBeenCalledTimes(1);
+  });
+
+  // Regression (live 2026-09-28, effect_update_depth_exceeded on join): the
+  // REAL register reads and writes the store's `$state` counter; called
+  // tracked inside the mount effect it re-ran the effect forever.
+  it('registers with the real call store without an effect loop', async () => {
+    const { registerCallStageView, getGroupCallState } = await import(
+      '$lib/groups/group-call.svelte.js'
+    );
+    const { unmount } = render(GroupCallStage, {
+      props: { ...baseProps, registerView: () => registerCallStageView('/x') }
+    });
     await Promise.resolve();
-    expect(acquireRoom).toHaveBeenCalledWith('jwt-token', 'wss://livekit.example', {});
+    expect(getGroupCallState().stageViews).toBe(1);
+    unmount();
+    expect(getGroupCallState().stageViews).toBe(0);
+  });
+
+  it('leave plays the cue and hands the leave to the parent', async () => {
+    render(GroupCallStage, { props: baseProps });
+    await fireEvent.click(screen.getByRole('button', { name: 'Leave call' }));
+    expect(media.playLeaveSound).toHaveBeenCalledTimes(1);
+    expect(baseProps.onLeave).toHaveBeenCalledTimes(1);
+    expect(svc.disconnectFromRoom).not.toHaveBeenCalled();
+  });
+
+  it('offers a way back to the chat while staying in the call', async () => {
+    const onShowChat = vi.fn();
+    render(GroupCallStage, { props: { ...baseProps, onShowChat } });
+    await fireEvent.click(screen.getByTestId('group-call-show-chat'));
+    expect(onShowChat).toHaveBeenCalledTimes(1);
+  });
+
+  it('renders inside the stage layout with the title', () => {
+    render(GroupCallStage, { props: baseProps });
+    expect(screen.getByTestId('group-call-stage')).toBeTruthy();
+    expect(screen.getByText('Standup')).toBeTruthy();
+  });
+});
+
+describe('publish controls', () => {
+  it('shows mic, camera and screen for a normal token', () => {
+    render(GroupCallStage, { props: baseProps });
+    expect(screen.getByTitle('Mute')).toBeTruthy();
+    expect(screen.getByTitle('Camera on')).toBeTruthy();
+    expect(screen.getByTitle('Share screen')).toBeTruthy();
+    expect(screen.queryByText('You are listening only')).toBeNull();
   });
 
   it('hides the camera button for an audio-only call', () => {
     render(GroupCallStage, { props: { ...baseProps, video: false } });
     expect(screen.queryByTitle('Camera on')).toBeNull();
+  });
+
+  it('listen-only: no mic/camera/screen, a hint, but hands and reactions stay', () => {
+    lk.canPublish = false;
+    render(GroupCallStage, { props: baseProps });
+    expect(screen.queryByTitle('Mute')).toBeNull();
+    expect(screen.queryByTitle('Camera on')).toBeNull();
+    expect(screen.queryByTitle('Share screen')).toBeNull();
+    expect(screen.getByText('You are listening only')).toBeTruthy();
+    expect(screen.getByTitle('Raise hand')).toBeTruthy();
   });
 
   it('toasts why the microphone could not be enabled', async () => {
@@ -144,47 +270,83 @@ describe('GroupCallStage', () => {
     expect(media.showToast).toHaveBeenCalledWith('Microphone access denied', 'error');
   });
 
-  it('plays the leave cue when leaving', async () => {
+  it('the mic menu toggles audio processing live', async () => {
     render(GroupCallStage, { props: baseProps });
-    await fireEvent.click(screen.getByRole('button', { name: 'Leave call' }));
-    expect(media.playLeaveSound).toHaveBeenCalledTimes(1);
+    await fireEvent.click(screen.getByRole('button', { name: 'Mic options' }));
+    expect(svc.refreshAudioDevices).toHaveBeenCalled();
+    const toggle = screen.getByRole('checkbox', { name: 'Noise suppression' });
+    expect(toggle.checked).toBe(true);
+    await fireEvent.click(toggle);
+    expect(svc.setAudioProcessingLive).toHaveBeenCalledWith({ noiseSuppression: false });
   });
 
-  it('releases its claim on the call when unmounted (a twin may still hold it)', async () => {
-    const { unmount } = render(GroupCallStage, { props: baseProps });
-    await Promise.resolve();
-    unmount();
-    expect(releaseRoom).toHaveBeenCalledWith('jwt-token');
-    expect(disconnectFromRoom).not.toHaveBeenCalled();
+  it('only lists speakers where the output can actually be chosen', async () => {
+    lk.audioOutputDevices = [{ deviceId: 'spk', label: 'Headphones' }];
+    render(GroupCallStage, { props: baseProps });
+    await fireEvent.click(screen.getByRole('button', { name: 'Mic options' }));
+    expect(screen.queryByText('Select speaker')).toBeNull();
+    lk.audioOutputDevices = [];
   });
 
-  it('shows the title and the publish controls for a normal token', () => {
+  it('picks and remembers a screen share quality', async () => {
     render(GroupCallStage, { props: baseProps });
-    expect(screen.getByText('Standup')).toBeTruthy();
-    expect(screen.getByTitle('Mute')).toBeTruthy();
-    expect(screen.getByTitle('Camera on')).toBeTruthy();
-    expect(screen.getByTitle('Share screen')).toBeTruthy();
-    expect(screen.queryByText('You are listening only')).toBeNull();
+    await fireEvent.click(screen.getByRole('button', { name: 'Screen options' }));
+    await fireEvent.click(screen.getByRole('button', { name: '720p · 15 fps' }));
+    expect(localStorage.getItem('edufeed:call:screenShareQuality')).toBe('720p15');
+  });
+});
+
+describe('hands, reactions, connection state', () => {
+  it('raises and lowers my hand', async () => {
+    render(GroupCallStage, { props: baseProps });
+    await fireEvent.click(screen.getByTitle('Raise hand'));
+    expect(svc.setHandRaised).toHaveBeenCalledWith(true);
   });
 
-  it('hides mic/camera/screen controls and shows a hint for a listen-only token', () => {
-    lk.canPublish = false;
+  it('shows my hand as raised and lowers it', async () => {
+    lk.raisedHands = new Set([lk.localParticipant.identity]);
     render(GroupCallStage, { props: baseProps });
-    expect(screen.queryByTitle('Mute')).toBeNull();
-    expect(screen.queryByTitle('Camera on')).toBeNull();
-    expect(screen.queryByTitle('Share screen')).toBeNull();
-    expect(screen.getByText('You are listening only')).toBeTruthy();
+    expect(screen.getByTestId('group-call-hands').textContent).toContain('1 raised');
+    await fireEvent.click(screen.getByTitle('Lower hand'));
+    expect(svc.setHandRaised).toHaveBeenCalledWith(false);
   });
 
-  it('leave button disconnects and calls onLeave', async () => {
+  it('sends a reaction from the picker', async () => {
     render(GroupCallStage, { props: baseProps });
-    await fireEvent.click(screen.getByRole('button', { name: 'Leave call' }));
-    expect(disconnectFromRoom).toHaveBeenCalledTimes(1);
-    expect(baseProps.onLeave).toHaveBeenCalledTimes(1);
+    await fireEvent.click(screen.getByTitle('React'));
+    await fireEvent.click(screen.getByRole('button', { name: '🎉' }));
+    expect(svc.sendReaction).toHaveBeenCalledWith('🎉');
+    expect(screen.queryByTestId('group-call-reactions')).toBeNull();
   });
 
-  it('renders inside the stage layout', () => {
+  it('no hands or reactions when the token cannot send data', () => {
+    lk.canSignal = false;
     render(GroupCallStage, { props: baseProps });
-    expect(screen.getByTestId('group-call-stage')).toBeTruthy();
+    expect(screen.queryByTitle('Raise hand')).toBeNull();
+    expect(screen.queryByTitle('React')).toBeNull();
+  });
+
+  it('shows a reconnecting bar while the connection recovers', () => {
+    lk.connectionState = 'reconnecting';
+    render(GroupCallStage, { props: baseProps });
+    expect(screen.getByTestId('group-call-reconnecting')).toBeTruthy();
+  });
+});
+
+describe('layout', () => {
+  it('everyone in an auto-fit grid when nothing is spotlighted', () => {
+    lk.remoteParticipants = [remote(`${HEX}:x1`)];
+    render(GroupCallStage, { props: baseProps });
+    expect(screen.getByTestId('group-call-grid')).toBeTruthy();
+    expect(screen.getByTestId(`call-item-seat:${HEX}:x1`)).toBeTruthy();
+    expect(screen.queryByTestId('group-call-spotlight')).toBeNull();
+  });
+
+  it('a remote screen share takes the spotlight, seats move to the strip', () => {
+    lk.remoteParticipants = [remote(`${HEX}:x1`, { screenShare: true })];
+    render(GroupCallStage, { props: baseProps });
+    expect(screen.getByTestId('group-call-spotlight')).toBeTruthy();
+    expect(screen.getByTestId(`call-item-screen:${HEX}:x1`)).toBeTruthy();
+    expect(screen.getByTestId(`call-item-seat:${HEX}:x1`)).toBeTruthy();
   });
 });

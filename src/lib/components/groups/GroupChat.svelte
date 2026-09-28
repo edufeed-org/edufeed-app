@@ -87,13 +87,17 @@
   import GroupBadges from '$lib/components/groups/GroupBadges.svelte';
   import { PeopleIcon, MoreIcon, MeetIcon } from '$lib/components/icons';
   import { lazyComponent } from '$lib/helpers/lazy-component.svelte.js';
-  import { hasLivekitTag, identityToPubkey } from '$lib/groups/livekit.js';
+  import { hasLivekitTag, identityToPubkey, probeRelayAvSupport } from '$lib/groups/livekit.js';
+  import { enableGroupCalls } from '$lib/groups/enable-group-calls.js';
   import { useCallPresence } from '$lib/groups/call-presence.svelte.js';
   import {
     getGroupCallState,
     joinGroupCall,
     leaveGroupCall,
-    callErrorMessage
+    callErrorMessage,
+    showCallStage,
+    hideCallStage,
+    registerCallStageView
   } from '$lib/groups/group-call.svelte.js';
   import GroupMembersModal from '$lib/components/groups/GroupMembersModal.svelte';
   import GroupSettingsSheet from '$lib/components/groups/GroupSettingsSheet.svelte';
@@ -722,7 +726,8 @@
   /** @param {{sessionId: string, app: any}} session */
   function openStage(session) {
     // The stage slot holds one thing at a time: a shared app OR the call.
-    if (inCallHere) leaveGroupCall();
+    // The call keeps running behind the app (the dock brings it back).
+    if (inCallHere) hideCallStage();
     activeSession = session;
     syncAppParam(session.sessionId);
   }
@@ -743,6 +748,9 @@
   // "In a call HERE" — the store holds one call app-wide; a call in another
   // channel must not take over this channel's body.
   const inCallHere = $derived(call.isActiveFor(pointer) && call.phase !== 'idle');
+  // In the call but stepped back to the chat (or into a shared app): the
+  // call runs on and the app-level dock shows it.
+  const showCallHere = $derived(inCallHere && !call.stageHidden);
 
   // The /c layout renders its page 2-3× (responsive variants, CSS hides the
   // inactive ones) and every copy sees the same active call. Only the copy
@@ -768,21 +776,63 @@
     const user = getActiveUser();
     if (!user?.signer) return;
     if (activeSession) await closeStage();
-    await joinGroupCall(pointer, user);
+    // The call store owns the connection and outlives this view: leaving
+    // the channel keeps the call running in the app-level dock, which
+    // uses the title and this page to come back to.
+    await joinGroupCall(pointer, user, {
+      title: displayTitle,
+      href: `${window.location.pathname}${window.location.search}`
+    });
   }
 
-  async function toggleCall() {
-    if (inCallHere) await leaveGroupCall();
-    else await startCall();
-  }
-
-  // Leaving the channel (keyed remount on channel switch, route change) ends
-  // the call — same lifetime rule as the webxdc stage.
+  // An admin of a channel that is not an AV space yet gets a one-click
+  // "Start call" — offered only when the relay can mint tokens (probe 204).
+  let avSupported = $state(false);
+  let enablingCall = $state(false);
   $effect(() => {
+    const relay = pointer.relay;
+    if (!isAdmin || avEnabled) return;
+    let alive = true;
+    probeRelayAvSupport(relay).then((supported) => {
+      if (alive) avSupported = supported;
+    });
     return () => {
-      if (call.isActiveFor(pointer)) leaveGroupCall();
+      alive = false;
     };
   });
+  const canStartCall = $derived(isAdmin && !avEnabled && avSupported);
+
+  async function enableAndStartCall() {
+    const user = getActiveUser();
+    if (!user?.signer || enablingCall) return;
+    enablingCall = true;
+    try {
+      await enableGroupCalls(pointer, user);
+    } catch (err) {
+      console.error('groups: enabling calls failed', err);
+      showToast(m.groups_call_start_error(), 'error');
+      enablingCall = false;
+      return;
+    }
+    enablingCall = false;
+    await startCall();
+  }
+
+  const callButtonLabel = $derived(
+    inCallHere
+      ? call.stageHidden
+        ? m.groups_call_return()
+        : m.groups_call_leave()
+      : m.groups_call_join()
+  );
+
+  async function toggleCall() {
+    if (inCallHere && call.stageHidden) {
+      if (activeSession) await closeStage();
+      showCallStage();
+    } else if (inCallHere) await leaveGroupCall();
+    else await startCall();
+  }
 
   async function closeStage() {
     activeSession = null;
@@ -1368,16 +1418,32 @@
         data-testid="group-call-join"
         title={callParticipantCount > 0
           ? m.groups_call_in_progress({ count: callParticipantCount })
-          : inCallHere
-            ? m.groups_call_leave()
-            : m.groups_call_join()}
-        aria-label={inCallHere ? m.groups_call_leave() : m.groups_call_join()}
+          : callButtonLabel}
+        aria-label={callButtonLabel}
         aria-pressed={inCallHere}
         disabled={!myPubkey}
         onclick={toggleCall}
       >
         <MeetIcon class_="w-4 h-4" />
         {#if callParticipantCount}{callParticipantCount}{/if}
+      </button>
+    {:else if canStartCall}
+      <!-- Admin one-click: switch the channel's calls on (a 9002 restating
+           the current metadata plus `livekit`) and join right away. -->
+      <button
+        type="button"
+        class="btn btn-ghost btn-xs"
+        data-testid="group-call-start"
+        title={m.groups_call_start()}
+        aria-label={m.groups_call_start()}
+        disabled={enablingCall}
+        onclick={enableAndStartCall}
+      >
+        {#if enablingCall}
+          <span class="loading loading-xs loading-spinner"></span>
+        {:else}
+          <MeetIcon class_="w-4 h-4" />
+        {/if}
       </button>
     {/if}
     {#if isAdmin}
@@ -1618,15 +1684,16 @@
         : ''}"
     >
       <GroupAppsBar {pointer} messages={displayed} sessionMeta={sessionTitles} onOpen={openStage} />
-      {#if inCallHere}
+      {#if showCallHere}
         {#if call.phase === 'ready' && call.token && call.serverUrl}
           {#if chatVisible && CallStage.Component}
             <CallStage.Component
-              token={call.token}
-              serverUrl={call.serverUrl}
               title={displayTitle}
               {identityToPubkey}
               onLeave={leaveGroupCall}
+              onShowChat={hideCallStage}
+              registerView={() =>
+                registerCallStageView(`${window.location.pathname}${window.location.search}`)}
             />
           {:else}
             <div class="flex flex-1 items-center justify-center" data-testid="group-call-loading">
@@ -1675,7 +1742,7 @@
            of the column; while a session is open the whole chat body steps
            aside (hidden, not unmounted) so the stage gets the full height. -->
       <div
-        class={activeSession || inCallHere ? 'hidden' : 'contents'}
+        class={activeSession || showCallHere ? 'hidden' : 'contents'}
         data-testid="group-chat-body"
       >
         {#if !atBottom}
