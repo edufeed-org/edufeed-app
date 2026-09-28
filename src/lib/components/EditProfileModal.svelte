@@ -8,7 +8,7 @@
   import { publishEvent } from '$lib/services/publish-service.js';
   import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
   import { actionRunner } from '$lib/stores/action-runner.svelte.js';
-  import { UpdateProfile } from 'applesauce-actions/actions';
+  import { CreateProfile, UpdateProfile } from 'applesauce-actions/actions';
   import { ModifyListTags } from '$lib/actions/list-actions.js';
   import {
     parseEdufeedProfile,
@@ -268,7 +268,11 @@
         // object is replaced wholesale — always the full object, minus
         // interests, which live in the kind 10015 list (so legacy
         // edufeed.interests are dropped from the kind 0 on save).
-        await actionRunner.run(UpdateProfile, {
+        // UpdateProfile throws without an existing kind 0 (a key that never
+        // set up a profile), so create one instead. CreateProfile re-checks
+        // the relays and refuses if a kind 0 turns up — never an overwrite.
+        const profileAction = eventStore.getReplaceable(0, pubkey) ? UpdateProfile : CreateProfile;
+        await actionRunner.run(profileAction, {
           name: userData.name,
           about: userData.about,
           picture: userData.picture,

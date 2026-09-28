@@ -10,7 +10,7 @@
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, fireEvent, waitFor, cleanup } from '@testing-library/svelte';
-import { UpdateProfile } from 'applesauce-actions/actions';
+import { CreateProfile, UpdateProfile } from 'applesauce-actions/actions';
 
 // Shared mocks (hoisted so vi.mock factories can reference them).
 const h = vi.hoisted(() => {
@@ -45,6 +45,8 @@ const h = vi.hoisted(() => {
     interestsList: { event: /** @type {any} */ (null) },
     // The active account's own kind 10222 (only set when logged in AS a community).
     ownCommunityEvent: { event: /** @type {any} */ (null) },
+    // The active account's kind 0 in the store; null = never published one.
+    ownProfile: { event: /** @type {any} */ (null) },
     // Task A7: community-mode saves re-issue a 9002 group-metadata edit when
     // the saved profile's community carries a NIP-29 membership pointer.
     // The modal delegates to the shared signer ladder; the ladder's own
@@ -86,7 +88,7 @@ vi.mock('$lib/stores/nostr-infrastructure.svelte', () => ({
     // The active account's own kind 10222 — set when the logged-in account IS
     // a community (own-profile save must still re-sync the group metadata).
     getReplaceable: vi.fn((/** @type {number} */ kind) =>
-      kind === 10222 ? h.ownCommunityEvent.event : null
+      kind === 10222 ? h.ownCommunityEvent.event : kind === 0 ? h.ownProfile.event : null
     ),
     replaceable: vi.fn((/** @type {number} */ kind) => ({
       subscribe(/** @type {(e: any) => void} */ cb) {
@@ -199,11 +201,30 @@ beforeEach(() => {
   h.modalStoreMock.modalProps = { profile: { name: 'Alice' }, pubkey: h.pub };
   h.interestsList.event = null;
   h.ownCommunityEvent.event = null;
+  h.ownProfile.event = { kind: 0, pubkey: h.pub, content: '{"name":"Alice"}', tags: [] };
   h.syncRootGroupMetadataWithFallback.mockReset().mockResolvedValue({ ok: true });
   h.showToast.mockClear();
 });
 
 describe('EditProfileModal save (own profile)', () => {
+  it('creates the kind 0 through CreateProfile when the account has none yet', async () => {
+    // UpdateProfile throws "Unable to find profile metadata" without an
+    // existing kind 0 (e.g. a key that never set up a profile).
+    h.ownProfile.event = null;
+    const { container } = render(EditProfileModal);
+    await waitForNameInput(container, 'Alice');
+
+    await fireEvent.click(findButton(container, 'profile_edit_modal_save_button'));
+
+    await waitFor(() => {
+      expect(h.runAction).toHaveBeenCalledTimes(1);
+    });
+    const [action, content] = /** @type {any[]} */ (h.runAction.mock.calls[0]);
+    expect(action).toBe(CreateProfile);
+    expect(content).toMatchObject({ name: 'Alice' });
+    expect(container.textContent).toContain('profile_edit_modal_success');
+  });
+
   it('saves through the UpdateProfile action with an interests-free edufeed object', async () => {
     const { container } = render(EditProfileModal);
     await waitForNameInput(container, 'Alice');
