@@ -27,6 +27,9 @@
   } from '$lib/services/livekit-connection.svelte.js';
   import { Track } from 'livekit-client';
   import { useProfileMap } from '$lib/stores/profile-map.svelte.js';
+  import { showToast } from '$lib/helpers/toast';
+  import { playLeaveSound } from '$lib/services/call-sounds.js';
+  import { callMediaErrorMessage } from '$lib/groups/call-media-errors.js';
   import { MeetIcon, ChevronDownIcon, VolumeUpIcon } from '$lib/components/icons';
   import ParticipantTile from './ParticipantTile.svelte';
   import * as m from '$lib/paraglide/messages';
@@ -79,24 +82,39 @@
   $effect(() => {
     const jwt = untrack(() => token);
     const url = untrack(() => serverUrl);
-    const withVideo = untrack(() => video);
 
     // acquire/release, not connect/disconnect: a twin of this stage (the
     // /c layout renders its page 2-3×) shares the same Room instead of
     // opening a second session with the same identity.
-    untrack(() => acquireRoom(jwt, url, { video: withVideo, audio: true })).catch(
-      (/** @type {unknown} */ err) => {
-        console.error('Failed to join call:', err);
-        error = err instanceof Error ? err.message : m.groups_call_connection_error();
-      }
-    );
+    // Joins muted with the camera off: the mic/camera buttons are the opt-in.
+    untrack(() => acquireRoom(jwt, url, {})).catch((/** @type {unknown} */ err) => {
+      console.error('Failed to join call:', err);
+      error = err instanceof Error ? err.message : m.groups_call_connection_error();
+    });
 
     return () => {
       if (!leaving) releaseRoom(jwt);
     };
   });
 
+  // Mic / camera / screen actions: a failure (permission denied, no device,
+  // device in use) is explained in a toast instead of silently doing nothing.
+  /** @param {'mic' | 'camera' | 'screen'} kind @param {() => Promise<void>} action */
+  async function runMedia(kind, action) {
+    try {
+      await action();
+    } catch (err) {
+      console.warn(`call ${kind} action failed:`, err);
+      showToast(callMediaErrorMessage(err, kind), 'error');
+    }
+  }
+  const onToggleMute = () => runMedia('mic', toggleMute);
+  const onToggleCamera = () => runMedia('camera', toggleCamera);
+  const onToggleScreenShare = () => runMedia('screen', toggleScreenShare);
+
   async function handleLeave() {
+    // Played inside the click: the teardown below would cut it off.
+    playLeaveSound();
     leaving = true;
     await disconnectFromRoom();
     onLeave();
@@ -204,7 +222,7 @@
         {/if}
       </button>
       {#if activeScreenShare?.isLocal}
-        <button class="btn btn-xs btn-error" onclick={toggleScreenShare}
+        <button class="btn btn-xs btn-error" onclick={onToggleScreenShare}
           >{m.groups_call_screen_share_stop()}</button
         >
       {/if}
@@ -324,7 +342,7 @@
         <div class="flex items-center">
           <button
             class="btn btn-circle {lk.isMuted ? 'btn-error' : 'btn-ghost'}"
-            onclick={toggleMute}
+            onclick={onToggleMute}
             title={lk.isMuted ? m.groups_call_unmute() : m.groups_call_mute()}
           >
             {#if lk.isMuted}
@@ -414,7 +432,7 @@
           <div class="flex items-center">
             <button
               class="btn btn-circle {lk.isCameraOff ? 'btn-error' : 'btn-ghost'}"
-              onclick={toggleCamera}
+              onclick={onToggleCamera}
               title={lk.isCameraOff ? m.groups_call_camera_on() : m.groups_call_camera_off()}
             >
               <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -476,7 +494,7 @@
 
         <button
           class="btn btn-circle {lk.isScreenSharing ? 'btn-warning' : 'btn-ghost'}"
-          onclick={toggleScreenShare}
+          onclick={onToggleScreenShare}
           title={lk.isScreenSharing
             ? m.groups_call_screen_share_stop()
             : m.groups_call_screen_share_start()}

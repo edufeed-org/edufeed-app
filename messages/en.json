@@ -3630,5 +3630,12 @@
   "dm_file_decrypting": "Decrypting…",
   "dm_file_failed": "File could not be decrypted",
   "dm_file_download": "Download",
-  "dm_file_image_alt": "Image sent in this conversation"
+  "dm_file_image_alt": "Image sent in this conversation",
+  "groups_call_error_mic_denied": "Microphone access is blocked. Allow it in your browser’s site settings.",
+  "groups_call_error_mic_missing": "No microphone found.",
+  "groups_call_error_camera_denied": "Camera access is blocked. Allow it in your browser’s site settings.",
+  "groups_call_error_camera_missing": "No camera found.",
+  "groups_call_error_device_busy": "The device is in use by another app.",
+  "groups_call_error_screen_denied": "Screen sharing is blocked by your system settings.",
+  "groups_call_error_media_generic": "That did not work. Please try again."
 }

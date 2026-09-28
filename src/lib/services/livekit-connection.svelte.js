@@ -4,6 +4,23 @@
  */
 import { SvelteSet } from 'svelte/reactivity';
 import { Room, RoomEvent, Track } from 'livekit-client';
+import {
+  cameraCaptureOptions,
+  getPreferredDevice,
+  micCaptureOptions,
+  rememberDevice
+} from './call-prefs.js';
+import {
+  playJoinSound,
+  playLeaveSound,
+  playMuteSound,
+  playScreenShareSound,
+  playUnmuteSound
+} from './call-sounds.js';
+
+// A burst of joins (a class arriving) gets one cue, not twenty.
+const JOIN_CUE_DEBOUNCE_MS = 750;
+let lastRemoteJoinCue = 0;
 
 /** @type {Room | null} */
 let room = $state(null);
@@ -94,6 +111,7 @@ export async function switchAudioDevice(deviceId) {
   try {
     await room.switchActiveDevice('audioinput', deviceId);
     activeAudioDeviceId = deviceId;
+    rememberDevice('audioinput', deviceId);
   } catch (err) {
     console.error('Failed to switch audio device:', err);
   }
@@ -108,6 +126,7 @@ export async function switchAudioOutputDevice(deviceId) {
   try {
     await room.switchActiveDevice('audiooutput', deviceId);
     activeAudioOutputDeviceId = deviceId;
+    rememberDevice('audiooutput', deviceId);
   } catch (err) {
     console.error('Failed to switch audio output device:', err);
   }
@@ -141,6 +160,7 @@ export async function switchVideoDevice(deviceId) {
   try {
     await room.switchActiveDevice('videoinput', deviceId);
     activeVideoDeviceId = deviceId;
+    rememberDevice('videoinput', deviceId);
   } catch (err) {
     console.error('Failed to switch video device:', err);
   }
@@ -153,10 +173,12 @@ function handleDeviceChange() {
 }
 
 /**
- * Connect to a LiveKit room.
- * @param {string} token - JWT token from operator
+ * Connect to a LiveKit room. Joins MUTED with the camera off unless the
+ * caller asks otherwise — nobody goes on air by surprise; the mic button is
+ * the opt-in.
+ * @param {string} token - JWT token from the relay's token endpoint
  * @param {string} url - LiveKit server WebSocket URL
- * @param {{ video?: boolean, audio?: boolean }} [opts]
+ * @param {{ video?: boolean, audio?: boolean }} [opts] publish camera / mic right away
  */
 export async function connectToRoom(token, url, opts = {}) {
   // Force clean up any stale state from a previous session
@@ -167,11 +189,36 @@ export async function connectToRoom(token, url, opts = {}) {
 
   isConnecting = true;
   try {
-    const newRoom = new Room();
+    const newRoom = new Room({
+      adaptiveStream: true,
+      dynacast: true,
+      // Remote audio through Web Audio gain nodes: per-person volume above
+      // 100 % (setVolume) needs it; HTMLMediaElement.volume caps at 1.
+      webAudioMix: true,
+      audioCaptureDefaults: micCaptureOptions(),
+      videoCaptureDefaults: cameraCaptureOptions(),
+      publishDefaults: { dtx: true, red: true }
+    });
 
-    newRoom.on(RoomEvent.ParticipantConnected, updateParticipants);
-    newRoom.on(RoomEvent.ParticipantDisconnected, updateParticipants);
-    newRoom.on(RoomEvent.TrackSubscribed, updateParticipants);
+    newRoom.on(RoomEvent.ParticipantConnected, () => {
+      const now = Date.now();
+      if (now - lastRemoteJoinCue > JOIN_CUE_DEBOUNCE_MS) {
+        lastRemoteJoinCue = now;
+        playJoinSound();
+      }
+      updateParticipants();
+    });
+    newRoom.on(RoomEvent.ParticipantDisconnected, () => {
+      playLeaveSound();
+      updateParticipants();
+    });
+    newRoom.on(
+      RoomEvent.TrackSubscribed,
+      (/** @type {any} */ _track, /** @type {any} */ publication) => {
+        if (publication?.source === Track.Source.ScreenShare) playScreenShareSound();
+        updateParticipants();
+      }
+    );
     newRoom.on(RoomEvent.TrackUnsubscribed, updateParticipants);
     newRoom.on(RoomEvent.LocalTrackPublished, updateParticipants);
     newRoom.on(RoomEvent.LocalTrackUnpublished, (publication) => {
@@ -207,30 +254,36 @@ export async function connectToRoom(token, url, opts = {}) {
     // so a camera/mic failure doesn't leave a zombie connection
     room = newRoom;
     isConnected = true;
-    isMuted = false;
+    isMuted = true;
+    isCameraOff = true;
     canPublish = newRoom.localParticipant.permissions?.canPublish ?? true;
     updateParticipants();
+    playJoinSound();
 
-    // Publish local tracks (failures are non-fatal). A listen-only token
-    // publishes nothing — the server would refuse the track anyway.
-    if (!canPublish) {
-      isMuted = true;
-      isCameraOff = true;
-    } else {
+    const speaker = getPreferredDevice('audiooutput');
+    if (speaker) {
+      newRoom
+        .switchActiveDevice('audiooutput', speaker)
+        .then(() => (activeAudioOutputDeviceId = speaker))
+        .catch(() => {});
+    }
+
+    // Publish only what was asked for (failures are non-fatal here — the
+    // buttons stay available). A listen-only token publishes nothing.
+    if (canPublish && opts.audio) {
       try {
-        await newRoom.localParticipant.setMicrophoneEnabled(opts.audio !== false);
+        await newRoom.localParticipant.setMicrophoneEnabled(true, micCaptureOptions());
+        isMuted = false;
       } catch (err) {
         console.warn('Microphone not available:', err);
-        isMuted = true;
       }
     }
-    if (opts.video && canPublish) {
+    if (canPublish && opts.video) {
       try {
-        await newRoom.localParticipant.setCameraEnabled(true);
+        await newRoom.localParticipant.setCameraEnabled(true, cameraCaptureOptions());
         isCameraOff = false;
       } catch (err) {
         console.warn('Camera not available:', err);
-        isCameraOff = true;
       }
     }
 
@@ -337,36 +390,64 @@ export async function disconnectFromRoom() {
 }
 
 /**
- * Toggle local microphone.
+ * Toggle local microphone. Unmuting first resumes audio playback when the
+ * browser suspended it (autoplay policy), then captures with the remembered
+ * device and processing flags. A failure (permission denied, no device)
+ * throws so the UI can say why, and the call stays muted.
  */
 export async function toggleMute() {
   if (!room || !canPublish) return;
-  const newState = !isMuted;
-  await room.localParticipant.setMicrophoneEnabled(!newState);
-  isMuted = newState;
+  if (isMuted) {
+    if (!room.canPlaybackAudio) await room.startAudio().catch(() => {});
+    await room.localParticipant.setMicrophoneEnabled(true, micCaptureOptions());
+    isMuted = false;
+    playUnmuteSound();
+  } else {
+    await room.localParticipant.setMicrophoneEnabled(false);
+    isMuted = true;
+    playMuteSound();
+  }
 }
 
 /**
- * Toggle local camera.
+ * Toggle local camera. A failure throws and the camera stays off.
  */
 export async function toggleCamera() {
   if (!room || !canPublish) return;
-  const newState = !isCameraOff;
-  await room.localParticipant.setCameraEnabled(!newState);
-  isCameraOff = newState;
+  if (isCameraOff) {
+    await room.localParticipant.setCameraEnabled(true, cameraCaptureOptions());
+    isCameraOff = false;
+  } else {
+    await room.localParticipant.setCameraEnabled(false);
+    isCameraOff = true;
+  }
 }
 
 /**
- * Toggle screen sharing.
+ * Whether a screen-capture error is the user closing the browser picker —
+ * Chromium and Firefox report that as a plain NotAllowedError; an OS-level
+ * denial says so ("…denied by system").
+ * @param {unknown} err
+ */
+function isPickerCancel(err) {
+  const e = /** @type {{name?: string, message?: string}} */ (err ?? {});
+  return e.name === 'NotAllowedError' && !/system/i.test(e.message ?? '');
+}
+
+/**
+ * Toggle screen sharing. Closing the picker is not an error; anything else
+ * (OS denial, capture failure) throws for the UI to explain.
  */
 export async function toggleScreenShare() {
   if (!room || !canPublish) return;
+  const newState = !isScreenSharing;
   try {
-    const newState = !isScreenSharing;
     await room.localParticipant.setScreenShareEnabled(newState);
     isScreenSharing = newState;
-  } catch {
-    // User cancelled browser screen picker
+    if (newState) playScreenShareSound();
+  } catch (err) {
+    if (newState && isPickerCancel(err)) return;
+    throw err;
   }
 }
 

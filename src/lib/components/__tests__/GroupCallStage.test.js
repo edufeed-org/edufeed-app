@@ -39,9 +39,9 @@ vi.mock('$lib/services/livekit-connection.svelte.js', () => ({
   acquireRoom,
   releaseRoom,
   disconnectFromRoom,
-  toggleMute: vi.fn(),
-  toggleCamera: vi.fn(),
-  toggleScreenShare: vi.fn(),
+  toggleMute: (/** @type {any[]} */ ...a) => media.toggleMute(...a),
+  toggleCamera: (/** @type {any[]} */ ...a) => media.toggleCamera(...a),
+  toggleScreenShare: (/** @type {any[]} */ ...a) => media.toggleScreenShare(...a),
   refreshAudioDevices: vi.fn(),
   switchAudioDevice: vi.fn(),
   switchAudioOutputDevice: vi.fn(),
@@ -49,6 +49,15 @@ vi.mock('$lib/services/livekit-connection.svelte.js', () => ({
   switchVideoDevice: vi.fn(),
   getLiveKitState: () => lk
 }));
+const media = vi.hoisted(() => ({
+  toggleMute: vi.fn(async () => {}),
+  toggleCamera: vi.fn(async () => {}),
+  toggleScreenShare: vi.fn(async () => {}),
+  showToast: vi.fn(),
+  playLeaveSound: vi.fn()
+}));
+vi.mock('$lib/helpers/toast', () => ({ showToast: media.showToast }));
+vi.mock('$lib/services/call-sounds.js', () => ({ playLeaveSound: media.playLeaveSound }));
 vi.mock('livekit-client', () => ({
   Track: { Source: { Camera: 'camera', Microphone: 'microphone', ScreenShare: 'screen_share' } }
 }));
@@ -81,7 +90,14 @@ vi.mock('$lib/paraglide/messages', () => ({
   groups_call_screen_share_active: (/** @type {any} */ p) => `${p.name} is sharing`,
   groups_call_screen_share_maximize: () => 'Maximize',
   groups_call_screen_share_minimize: () => 'Minimize',
-  common_back: () => 'Back'
+  common_back: () => 'Back',
+  groups_call_error_mic_denied: () => 'Microphone access denied',
+  groups_call_error_mic_missing: () => 'No microphone',
+  groups_call_error_camera_denied: () => 'Camera access denied',
+  groups_call_error_camera_missing: () => 'No camera',
+  groups_call_error_device_busy: () => 'Device busy',
+  groups_call_error_screen_denied: () => 'Screen capture blocked',
+  groups_call_error_media_generic: () => 'Media failed'
 }));
 
 const { default: GroupCallStage } = await import(
@@ -107,19 +123,31 @@ beforeEach(() => {
 });
 
 describe('GroupCallStage', () => {
-  it('connects with the token and server url it is handed, video on by default', async () => {
+  it('joins with the token and server url it is handed, muted and camera off', async () => {
     render(GroupCallStage, { props: baseProps });
     await Promise.resolve();
-    expect(acquireRoom).toHaveBeenCalledWith('jwt-token', 'wss://livekit.example', {
-      video: true,
-      audio: true
-    });
+    expect(acquireRoom).toHaveBeenCalledWith('jwt-token', 'wss://livekit.example', {});
   });
 
-  it('passes video: false through', async () => {
+  it('hides the camera button for an audio-only call', () => {
     render(GroupCallStage, { props: { ...baseProps, video: false } });
+    expect(screen.queryByTitle('Camera on')).toBeNull();
+  });
+
+  it('toasts why the microphone could not be enabled', async () => {
+    media.toggleMute.mockRejectedValueOnce(
+      Object.assign(new Error('Permission denied'), { name: 'NotAllowedError' })
+    );
+    render(GroupCallStage, { props: baseProps });
+    await fireEvent.click(screen.getByTitle('Mute'));
     await Promise.resolve();
-    expect(acquireRoom.mock.calls[0][2]).toEqual({ video: false, audio: true });
+    expect(media.showToast).toHaveBeenCalledWith('Microphone access denied', 'error');
+  });
+
+  it('plays the leave cue when leaving', async () => {
+    render(GroupCallStage, { props: baseProps });
+    await fireEvent.click(screen.getByRole('button', { name: 'Leave call' }));
+    expect(media.playLeaveSound).toHaveBeenCalledTimes(1);
   });
 
   it('releases its claim on the call when unmounted (a twin may still hold it)', async () => {

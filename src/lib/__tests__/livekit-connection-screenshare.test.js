@@ -102,8 +102,9 @@ describe('screen sharing', () => {
     await connectTestRoom();
     const lk = getLiveKitState();
 
+    // What Chromium/Firefox raise when the user closes the picker.
     lk.room.localParticipant.setScreenShareEnabled.mockRejectedValueOnce(
-      new Error('Permission denied')
+      Object.assign(new Error('Permission denied'), { name: 'NotAllowedError' })
     );
 
     // Should not throw

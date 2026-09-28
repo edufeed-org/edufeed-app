@@ -3630,5 +3630,12 @@
   "dm_file_decrypting": "Wird entschlüsselt …",
   "dm_file_failed": "Datei konnte nicht entschlüsselt werden",
   "dm_file_download": "Herunterladen",
-  "dm_file_image_alt": "Bild aus dieser Unterhaltung"
+  "dm_file_image_alt": "Bild aus dieser Unterhaltung",
+  "groups_call_error_mic_denied": "Der Mikrofonzugriff ist blockiert. Erlaube ihn in den Website-Einstellungen deines Browsers.",
+  "groups_call_error_mic_missing": "Kein Mikrofon gefunden.",
+  "groups_call_error_camera_denied": "Der Kamerazugriff ist blockiert. Erlaube ihn in den Website-Einstellungen deines Browsers.",
+  "groups_call_error_camera_missing": "Keine Kamera gefunden.",
+  "groups_call_error_device_busy": "Das Gerät wird von einer anderen App verwendet.",
+  "groups_call_error_screen_denied": "Die Bildschirmfreigabe ist in deinen Systemeinstellungen blockiert.",
+  "groups_call_error_media_generic": "Das hat nicht geklappt. Bitte versuche es erneut."
 }
