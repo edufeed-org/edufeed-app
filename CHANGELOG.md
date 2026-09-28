@@ -5,6 +5,16 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions are
 the `vX.Y.Z` git tags on `main`. Each release section is assembled from the
 merge commits of the nostr PRs that landed since the previous tag.
 
+## [0.1.9] - 2026-09-28
+
+### Fixed
+
+- **Profiles can be set up from scratch.** Saving the profile editor failed
+  with "Unable to find profile metadata" for accounts that had never
+  published a profile (kind 0) — including the ones Termi's "set up your
+  profile" hint sends there. The editor now creates the profile in that case,
+  and still refuses to overwrite one that turns up on a relay meanwhile.
+
 ## [0.1.8] - 2026-09-22
 
 ### Added
@@ -302,6 +312,7 @@ stack and cannot ship themselves through CI.
 
 - First tagged release on `main`.
 
+[0.1.9]: https://git.edufeed.org/edufeed/edufeed-app/compare/v0.1.8...v0.1.9
 [0.1.8]: https://git.edufeed.org/edufeed/edufeed-app/compare/v0.1.7...v0.1.8
 [0.1.7]: https://git.edufeed.org/edufeed/edufeed-app/compare/v0.1.6...v0.1.7
 [0.1.6]: https://git.edufeed.org/edufeed/edufeed-app/compare/v0.1.5...v0.1.6
