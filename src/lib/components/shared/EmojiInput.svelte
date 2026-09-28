@@ -21,7 +21,13 @@
 <script>
   import { tick } from 'svelte';
   import { detectEmojiQuery, searchEmojis, applyEmoji } from '$lib/helpers/emoji-autocomplete.js';
-  import { ensureEmojiData, getEmojiEntries, getSkinTone } from '$lib/stores/emoji-data.svelte.js';
+  import {
+    ensureEmojiData,
+    getEmojiEntries,
+    getRecentEmojis,
+    getSkinTone,
+    recordEmojiUse
+  } from '$lib/stores/emoji-data.svelte.js';
   import EmojiAutocomplete from './EmojiAutocomplete.svelte';
 
   /**
@@ -58,7 +64,10 @@
   let highlight = $state(0);
   const candidates = $derived(
     query
-      ? searchEmojis(query.query, customEmojiSets, getEmojiEntries(), { skinTone: getSkinTone() })
+      ? searchEmojis(query.query, customEmojiSets, getEmojiEntries(), {
+          skinTone: getSkinTone(),
+          recent: new Set(getRecentEmojis().flatMap((r) => (r.type === 'unicode' ? [r.u] : [])))
+        })
       : []
   );
   // warm the locale's unicode dataset so the first `:xx` already has candidates
@@ -233,6 +242,11 @@
   function pick(hit) {
     if (!query) return;
     const inserted = hit.type === 'custom' ? `:${hit.shortcode}:` : hit.char;
+    recordEmojiUse(
+      hit.type === 'custom'
+        ? { type: 'custom', shortcode: hit.shortcode, url: hit.url }
+        : { type: 'unicode', u: hit.base }
+    );
     const result = applyEmoji(value, query.start, caretOffset(), inserted);
     void commit(result.text, result.caret);
   }

@@ -6,16 +6,27 @@
  * English shortcodes both searchable, skin tones applied to what is picked,
  * custom NIP-30 packs above it all.
  */
-import { describe, it, expect, vi, beforeAll } from 'vitest';
+import { describe, it, expect, vi, beforeAll, beforeEach } from 'vitest';
 import { render, fireEvent, waitFor } from '@testing-library/svelte';
 import { overwriteGetLocale } from '$lib/paraglide/runtime.js';
 import EmojiPicker from '$lib/components/shared/EmojiPicker.svelte';
+
+const account = vi.hoisted(() => ({ manager: { active: { pubkey: 'alice' } } }));
+vi.mock('$lib/stores/accounts.svelte', () => account);
 
 const SETS = [{ packName: 'Doge', emojis: [{ shortcode: 'doge', url: 'https://x/doge.png' }] }];
 
 beforeAll(() => {
   overwriteGetLocale(() => 'de');
 });
+beforeEach(() => {
+  localStorage.clear();
+  account.manager.active = { pubkey: 'alice' };
+});
+
+/** the grid button for an emoji, outside the recently-used row */
+const inGrid = (utils, title) =>
+  utils.getAllByTitle(title).find((el) => el.dataset.testid === 'emoji-option');
 
 async function setup(props = {}) {
   const onSelect = vi.fn();
@@ -63,7 +74,8 @@ describe('EmojiPicker', () => {
   });
 
   it('applies the chosen skin tone to tone-capable emojis and reports it on select', async () => {
-    const { getByTestId, getByTitle, onSelect } = await setup();
+    const utils = await setup();
+    const { getByTestId, getByTitle, onSelect } = utils;
     await fireEvent.change(getByTestId('emoji-skin-tone'), { target: { value: '3' } });
     await waitFor(() => expect(getByTitle('Daumen hoch').dataset.emoji).toBe('👍🏽'));
     expect(getByTitle('Feuer').dataset.emoji).toBe('🔥');
@@ -71,6 +83,48 @@ describe('EmojiPicker', () => {
     expect(onSelect).toHaveBeenCalledWith('👍🏽');
     expect(localStorage.getItem('emoji-skin-tone')).toBe('3');
     await fireEvent.change(getByTestId('emoji-skin-tone'), { target: { value: '0' } });
-    await waitFor(() => expect(getByTitle('Daumen hoch').dataset.emoji).toBe('👍'));
+    await waitFor(() => expect(inGrid(utils, 'Daumen hoch').dataset.emoji).toBe('👍'));
+  });
+
+  it('shows recently used emojis on top, newest first, custom ones included, in the current tone', async () => {
+    const utils = await setup();
+    expect(utils.queryByTestId('emoji-recents')).toBeNull();
+    await fireEvent.click(utils.getByTitle('Feuer'));
+    await fireEvent.click(utils.getByTitle('Daumen hoch'));
+    await fireEvent.click(utils.getByTitle(':doge:'));
+    const row = await utils.findByTestId('emoji-recents');
+    expect(utils.getAllByRole('heading', { level: 4 })[0].textContent).toBe('Zuletzt verwendet');
+    const items = () => [...row.querySelectorAll('[data-testid="recent-emoji-option"]')];
+    expect(items().map((el) => el.dataset.shortcode ?? el.dataset.emoji)).toEqual([
+      'doge',
+      '👍',
+      '🔥'
+    ]);
+    await fireEvent.change(utils.getByTestId('emoji-skin-tone'), { target: { value: '5' } });
+    await waitFor(() => expect(items()[1].dataset.emoji).toBe('👍🏿'));
+    await fireEvent.click(items()[1]);
+    expect(utils.onSelect).toHaveBeenLastCalledWith('👍🏿');
+    await waitFor(() => expect(items()[0].dataset.emoji).toBe('👍🏿'));
+  });
+
+  it('hides the row while searching', async () => {
+    const utils = await setup();
+    await fireEvent.click(utils.getByTitle('Feuer'));
+    await utils.findByTestId('emoji-recents');
+    await fireEvent.input(utils.getByTestId('emoji-search'), { target: { value: 'daumen' } });
+    await waitFor(() => expect(utils.queryByTestId('emoji-recents')).toBeNull());
+  });
+
+  it('keeps a separate history per account', async () => {
+    const first = await setup();
+    await fireEvent.click(first.getByTitle('Feuer'));
+    await first.findByTestId('emoji-recents');
+    first.unmount();
+    account.manager.active = { pubkey: 'bob' };
+    const second = await setup();
+    expect(second.queryByTestId('emoji-recents')).toBeNull();
+    expect(JSON.parse(localStorage.getItem('emoji-recents:alice'))).toEqual([
+      { type: 'unicode', u: '🔥' }
+    ]);
   });
 });

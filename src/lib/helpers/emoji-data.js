@@ -84,13 +84,16 @@ export function matchEmojiEntry(entry, q) {
 
 /**
  * Rank the dataset against a query: exact matches, then keyword prefix,
- * then inner-word prefix, then substring; ties keep emojibase order. Empty query → nothing.
+ * then inner-word prefix, then substring; within a rank, emojis in `boost`
+ * (the user's recently used ones) come first; remaining ties keep emojibase
+ * order. Empty query → nothing.
  * @param {string} query raw user input
  * @param {EmojiEntry[]} entries
  * @param {number} [limit]
+ * @param {Set<string>} [boost] base emojis (`u`) to prefer within a rank
  * @returns {EmojiEntry[]}
  */
-export function searchUnicodeEmojis(query, entries, limit = Infinity) {
+export function searchUnicodeEmojis(query, entries, limit = Infinity, boost) {
   const q = normalizeEmojiQuery(query);
   if (!q) return [];
   /** @type {Array<{ rank: number, entry: EmojiEntry }>} */
@@ -99,7 +102,8 @@ export function searchUnicodeEmojis(query, entries, limit = Infinity) {
     const rank = matchEmojiEntry(entry, q);
     if (rank !== -1) hits.push({ rank, entry });
   }
-  hits.sort((a, b) => a.rank - b.rank);
+  const boosted = (/** @type {EmojiEntry} */ e) => (boost?.has(e.u) ? 0 : 1);
+  hits.sort((a, b) => a.rank - b.rank || boosted(a.entry) - boosted(b.entry));
   return hits.slice(0, limit).map((h) => h.entry);
 }
 

@@ -109,6 +109,15 @@ describe('searchUnicodeEmojis', () => {
     expect(searchUnicodeEmojis('+1', ENTRIES)[0]).toBe(THUMBS);
   });
 
+  it('puts boosted emojis first within a rank only', () => {
+    expect(searchUnicodeEmojis('grin', ENTRIES, Infinity, new Set(['😁'])).map((e) => e.u)).toEqual(
+      ['😁', '😀']
+    );
+    expect(
+      searchUnicodeEmojis('grinn', ENTRIES, Infinity, new Set(['😁'])).map((e) => e.u)
+    ).toEqual(['😀']);
+  });
+
   it('is bounded and empty for blank queries', () => {
     expect(searchUnicodeEmojis('grin', ENTRIES, 1)).toHaveLength(1);
     expect(searchUnicodeEmojis('   ', ENTRIES)).toEqual([]);
