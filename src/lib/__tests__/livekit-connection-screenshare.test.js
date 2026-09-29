@@ -83,7 +83,10 @@ describe('screen sharing', () => {
     await toggleScreenShare();
 
     expect(lk.isScreenSharing).toBe(true);
-    expect(lk.room.localParticipant.setScreenShareEnabled).toHaveBeenCalledWith(true);
+    expect(lk.room.localParticipant.setScreenShareEnabled).toHaveBeenCalledWith(
+      true,
+      expect.objectContaining({ audio: false })
+    );
   });
 
   it('toggleScreenShare again disables screen sharing', async () => {
@@ -102,8 +105,9 @@ describe('screen sharing', () => {
     await connectTestRoom();
     const lk = getLiveKitState();
 
+    // What Chromium/Firefox raise when the user closes the picker.
     lk.room.localParticipant.setScreenShareEnabled.mockRejectedValueOnce(
-      new Error('Permission denied')
+      Object.assign(new Error('Permission denied'), { name: 'NotAllowedError' })
     );
 
     // Should not throw

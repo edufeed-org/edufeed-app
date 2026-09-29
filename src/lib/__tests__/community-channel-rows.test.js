@@ -106,6 +106,14 @@ describe('buildChannelRows', () => {
     );
   });
 
+  it('marks a channel whose 39000 carries the bare livekit tag as an AV space', () => {
+    const rows = buildChannelRows({
+      subtreeChannels: [chan('sprechstunde', [['livekit']]), chan('forum', [])]
+    });
+    expect(rows.find((r) => r.name === 'sprechstunde')).toMatchObject({ av: true });
+    expect(rows.find((r) => r.name === 'forum')).toMatchObject({ av: false });
+  });
+
   it('names a subtree channel from its 39000 name, else its id', () => {
     const rows = buildChannelRows({
       subtreeChannels: [chan('a', [['name', 'Aus den Metadaten']]), chan('c')]

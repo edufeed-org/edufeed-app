@@ -2,8 +2,9 @@
 /** @vitest-environment jsdom */
 /**
  * group-call.svelte.js — the single active NIP-29 group call. Owns the
- * token round-trip and which channel the call belongs to; the stage
- * component does the actual LiveKit connect with the token it is handed.
+ * token round-trip, which channel the call belongs to AND the LiveKit
+ * connection itself: the call outlives the channel view (navigating away
+ * leaves it running in the dock), so no component may own the Room.
  * One call at a time app-wide (the connection service holds one Room).
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
@@ -18,8 +19,10 @@ vi.mock('$lib/groups/livekit.js', async (importOriginal) => {
 });
 
 const disconnectFromRoom = vi.fn(async () => {});
+const connectToRoom = vi.fn(async () => {});
 vi.mock('$lib/services/livekit-connection.svelte.js', () => ({
-  disconnectFromRoom: () => disconnectFromRoom()
+  disconnectFromRoom: () => disconnectFromRoom(),
+  connectToRoom: (/** @type {any[]} */ ...args) => connectToRoom(...args)
 }));
 
 vi.mock('$lib/paraglide/messages', () => ({
@@ -30,9 +33,16 @@ vi.mock('$lib/paraglide/messages', () => ({
 }));
 
 const { GroupCallTokenError } = await import('$lib/groups/livekit.js');
-const { getGroupCallState, joinGroupCall, leaveGroupCall, callErrorMessage } = await import(
-  '$lib/groups/group-call.svelte.js'
-);
+const {
+  getGroupCallState,
+  joinGroupCall,
+  leaveGroupCall,
+  callErrorMessage,
+  registerCallStageView,
+  showCallStage,
+  hideCallStage,
+  toggleChatBeside
+} = await import('$lib/groups/group-call.svelte.js');
 
 const RELAY = 'wss://groups.example/';
 const P1 = { id: 'room-1', relay: RELAY };
@@ -43,6 +53,8 @@ beforeEach(async () => {
   await leaveGroupCall();
   requestGroupCallToken.mockReset();
   disconnectFromRoom.mockClear();
+  connectToRoom.mockReset();
+  connectToRoom.mockResolvedValue(undefined);
 });
 
 describe('joinGroupCall', () => {
@@ -109,6 +121,105 @@ describe('joinGroupCall', () => {
     const s = getGroupCallState();
     expect(s.phase).toBe('idle');
     expect(s.token).toBeNull();
+  });
+});
+
+describe('connection ownership', () => {
+  it('connects the one Room as soon as the token is in, joining muted', async () => {
+    requestGroupCallToken.mockResolvedValue({ serverUrl: 'wss://lk', participantToken: 'jwt' });
+    await joinGroupCall(P1, USER);
+    expect(connectToRoom).toHaveBeenCalledTimes(1);
+    expect(connectToRoom).toHaveBeenCalledWith('jwt', 'wss://lk', {});
+  });
+
+  it('re-joining the channel that is already in a call does not reconnect', async () => {
+    requestGroupCallToken.mockResolvedValue({ serverUrl: 'wss://lk', participantToken: 'jwt' });
+    await joinGroupCall(P1, USER);
+    await joinGroupCall(P1, USER);
+    expect(connectToRoom).toHaveBeenCalledTimes(1);
+  });
+
+  it('a failed connect becomes an error the UI can retry', async () => {
+    requestGroupCallToken.mockResolvedValue({ serverUrl: 'wss://lk', participantToken: 'jwt' });
+    connectToRoom.mockRejectedValueOnce(new Error('could not establish pc connection'));
+    await joinGroupCall(P1, USER);
+    const s = getGroupCallState();
+    expect(s.phase).toBe('error');
+    expect(s.isActiveFor(P1)).toBe(true);
+  });
+
+  it('a connect that completes after the user left is torn down again', async () => {
+    requestGroupCallToken.mockResolvedValue({ serverUrl: 'wss://lk', participantToken: 'jwt' });
+    let finish;
+    connectToRoom.mockReturnValueOnce(new Promise((r) => (finish = r)));
+    const pending = joinGroupCall(P1, USER);
+    await vi.waitFor(() => expect(connectToRoom).toHaveBeenCalled());
+    await leaveGroupCall();
+    disconnectFromRoom.mockClear();
+    finish();
+    await pending;
+    expect(disconnectFromRoom).toHaveBeenCalledTimes(1);
+    expect(getGroupCallState().phase).toBe('idle');
+  });
+
+  it('remembers the title and the page to return to (for the dock)', async () => {
+    requestGroupCallToken.mockResolvedValue({ serverUrl: 'wss://lk', participantToken: 'jwt' });
+    await joinGroupCall(P1, USER, { title: 'Standup', href: '/groups/abc' });
+    const s = getGroupCallState();
+    expect(s.title).toBe('Standup');
+    expect(s.href).toBe('/groups/abc');
+    await leaveGroupCall();
+    expect(s.title).toBe('');
+    expect(s.href).toBeNull();
+  });
+});
+
+describe('stage views', () => {
+  it('counts mounted stage views so the dock only shows when none is on screen', () => {
+    const s = getGroupCallState();
+    expect(s.stageViews).toBe(0);
+    const offA = registerCallStageView();
+    const offB = registerCallStageView();
+    expect(s.stageViews).toBe(2);
+    offA();
+    offA();
+    expect(s.stageViews).toBe(1);
+    offB();
+    expect(s.stageViews).toBe(0);
+  });
+
+  it('a stage view records the page it is on as the way back', async () => {
+    requestGroupCallToken.mockResolvedValue({ serverUrl: 'wss://lk', participantToken: 'jwt' });
+    await joinGroupCall(P1, USER, { title: 'Standup', href: '/c/x' });
+    const off = registerCallStageView('/c/x?view=channels&channel=room-1');
+    expect(getGroupCallState().href).toBe('/c/x?view=channels&channel=room-1');
+    off();
+  });
+
+  it('the stage can be stepped away from (chat while in the call) and back', async () => {
+    requestGroupCallToken.mockResolvedValue({ serverUrl: 'wss://lk', participantToken: 'jwt' });
+    await joinGroupCall(P1, USER);
+    const s = getGroupCallState();
+    expect(s.stageHidden).toBe(false);
+    hideCallStage();
+    expect(s.stageHidden).toBe(true);
+    showCallStage();
+    expect(s.stageHidden).toBe(false);
+    hideCallStage();
+    await leaveGroupCall();
+    expect(s.stageHidden).toBe(false);
+  });
+
+  // Wide screens: the chat opens as a column beside the stage instead of
+  // replacing it; the choice is a per-device preference.
+  it('toggles the chat beside the stage and remembers it on this device', () => {
+    const s = getGroupCallState();
+    expect(s.chatBeside).toBe(false);
+    toggleChatBeside();
+    expect(s.chatBeside).toBe(true);
+    expect(localStorage.getItem('edufeed:call:chatBeside')).toBe('1');
+    toggleChatBeside();
+    expect(s.chatBeside).toBe(false);
   });
 });
 

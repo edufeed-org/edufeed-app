@@ -64,11 +64,12 @@ describe('canPublish', () => {
     holders.permissions = undefined;
   });
 
-  it('defaults to true when the server states no permissions', async () => {
+  it('defaults to true when the server states no permissions (and still joins muted)', async () => {
     await connectToRoom('t', 'ws://x');
     const state = getLiveKitState();
     expect(state.canPublish).toBe(true);
-    expect(state.room.localParticipant.setMicrophoneEnabled).toHaveBeenCalledWith(true);
+    expect(state.isMuted).toBe(true);
+    expect(state.room.localParticipant.setMicrophoneEnabled).not.toHaveBeenCalled();
   });
 
   it('is false for a listen-only token and skips publishing the microphone', async () => {

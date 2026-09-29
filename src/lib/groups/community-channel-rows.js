@@ -38,6 +38,7 @@ import { safeImageUrl } from './relay-directory.js';
  *   level: import('./channel-access.js').ChannelAccessLevel,
  *   about?: string,
  *   picture?: string,
+ *   av: boolean,
  *   pointer: {id: string, relay: string, name?: string}
  * }} GroupChannelRow
  * @typedef {ConcordChannelRow | GroupChannelRow} ChannelRow
@@ -141,6 +142,10 @@ function groupRow(channel, nameOverride = '') {
     source: 'group',
     category: channelCategory(metadata),
     level,
+    // NIP-29 AV space (bare `livekit` tag): the rails show who is in the call.
+    av:
+      Array.isArray(metadata?.tags) &&
+      metadata.tags.some((/** @type {string[]} */ t) => t[0] === 'livekit'),
     ...(metadataTag(metadata, 'about') ? { about: metadataTag(metadata, 'about') } : {}),
     // A channel's own picture, when its kind:39000 carries one. Absent is the
     // norm, so the key is omitted rather than set to null.

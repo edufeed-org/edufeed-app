@@ -1,0 +1,133 @@
+// @ts-nocheck
+/**
+ * call-prefs — per-device call preferences (localStorage): remembered
+ * mic/speaker/camera, audio processing flags, per-person volume and screen
+ * share quality. Every read/write survives a throwing storage (private mode,
+ * blocked site data) by falling back to defaults.
+ *
+ * @vitest-environment jsdom
+ */
+import { describe, it, expect, beforeEach, vi } from 'vitest';
+import {
+  getPreferredDevice,
+  rememberDevice,
+  getAudioProcessing,
+  setAudioProcessing,
+  micCaptureOptions,
+  cameraCaptureOptions,
+  getParticipantVolume,
+  setParticipantVolume,
+  getScreenShareQuality,
+  setScreenShareQuality,
+  SCREEN_SHARE_QUALITIES,
+  getChatBeside,
+  setChatBeside
+} from '$lib/services/call-prefs.js';
+
+beforeEach(() => {
+  localStorage.clear();
+  vi.restoreAllMocks();
+});
+
+describe('devices', () => {
+  it('remembers a device per kind and returns null when none is stored', () => {
+    expect(getPreferredDevice('audioinput')).toBeNull();
+    rememberDevice('audioinput', 'mic-1');
+    rememberDevice('videoinput', 'cam-2');
+    expect(getPreferredDevice('audioinput')).toBe('mic-1');
+    expect(getPreferredDevice('videoinput')).toBe('cam-2');
+    expect(getPreferredDevice('audiooutput')).toBeNull();
+  });
+
+  it('forgets a device when remembered as empty', () => {
+    rememberDevice('audioinput', 'mic-1');
+    rememberDevice('audioinput', '');
+    expect(getPreferredDevice('audioinput')).toBeNull();
+  });
+
+  it('falls back to null when storage throws', () => {
+    vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
+      throw new Error('blocked');
+    });
+    expect(getPreferredDevice('audioinput')).toBeNull();
+  });
+});
+
+describe('audio processing', () => {
+  it('defaults every browser processing flag to on', () => {
+    expect(getAudioProcessing()).toEqual({
+      noiseSuppression: true,
+      echoCancellation: true,
+      autoGainControl: true
+    });
+  });
+
+  it('merges a partial update and persists it', () => {
+    setAudioProcessing({ noiseSuppression: false });
+    expect(getAudioProcessing()).toEqual({
+      noiseSuppression: false,
+      echoCancellation: true,
+      autoGainControl: true
+    });
+  });
+
+  it('builds mono mic capture options with the remembered device', () => {
+    rememberDevice('audioinput', 'mic-1');
+    setAudioProcessing({ autoGainControl: false });
+    expect(micCaptureOptions()).toEqual({
+      deviceId: 'mic-1',
+      noiseSuppression: true,
+      echoCancellation: true,
+      autoGainControl: false,
+      channelCount: 1
+    });
+  });
+
+  it('leaves the device out of the capture options when none is remembered', () => {
+    expect(micCaptureOptions().deviceId).toBeUndefined();
+    expect(cameraCaptureOptions()).toEqual({});
+    rememberDevice('videoinput', 'cam-2');
+    expect(cameraCaptureOptions()).toEqual({ deviceId: 'cam-2' });
+  });
+});
+
+describe('per-person volume', () => {
+  const PK = 'a'.repeat(64);
+
+  it('defaults to 1 and clamps stored values to 0..2', () => {
+    expect(getParticipantVolume(PK)).toBe(1);
+    setParticipantVolume(PK, 1.5);
+    expect(getParticipantVolume(PK)).toBe(1.5);
+    setParticipantVolume(PK, 7);
+    expect(getParticipantVolume(PK)).toBe(2);
+    setParticipantVolume(PK, -1);
+    expect(getParticipantVolume(PK)).toBe(0);
+  });
+
+  it('drops the entry when set back to 1, keeping storage small', () => {
+    setParticipantVolume(PK, 0.5);
+    setParticipantVolume(PK, 1);
+    expect(localStorage.getItem('edufeed:call:volumes')).toBe('{}');
+  });
+});
+
+describe('screen share quality', () => {
+  it('defaults to 1080p at 30 fps and only accepts known presets', () => {
+    expect(getScreenShareQuality()).toBe('1080p30');
+    setScreenShareQuality('720p15');
+    expect(getScreenShareQuality()).toBe('720p15');
+    setScreenShareQuality('8k240');
+    expect(getScreenShareQuality()).toBe('720p15');
+    expect(Object.keys(SCREEN_SHARE_QUALITIES)).toContain('1440p30');
+  });
+});
+
+describe('chat beside the call', () => {
+  it('defaults to off and remembers the choice', () => {
+    expect(getChatBeside()).toBe(false);
+    setChatBeside(true);
+    expect(getChatBeside()).toBe(true);
+    setChatBeside(false);
+    expect(getChatBeside()).toBe(false);
+  });
+});

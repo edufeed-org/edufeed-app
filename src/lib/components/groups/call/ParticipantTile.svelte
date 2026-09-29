@@ -1,7 +1,11 @@
 <!--
-  ParticipantTile — Renders a single LiveKit participant with video/audio
-  track attachment. Listens to LiveKit participant events to attach/detach
-  media tracks reactively.
+  ParticipantTile — one seat in a call: camera video (or avatar), speaking
+  ring, mic-off / raised-hand badges, floating reactions, and for remote
+  seats a per-person volume slider (0–200 %) and a pin button.
+
+  It never plays audio: the call service attaches every remote audio track
+  once, centrally, so a call drawn twice (the /c layout's twins, stage +
+  dock) is still heard once.
 
   `pubkey` is resolved by the parent (groups/livekit.js identityToPubkey):
   a NIP-29 relay mints identities as `<64-hex>:<suffix>` so one user can sit
@@ -15,6 +19,7 @@
   import ProfileAvatar from '$lib/components/shared/ProfileAvatar.svelte';
   import HoverCard from '$lib/components/shared/HoverCard.svelte';
   import ProfileHoverCardContent from '$lib/components/shared/ProfileHoverCardContent.svelte';
+  import { MicOffIcon, HandIcon, VolumeUpIcon, PinIcon } from '$lib/components/icons';
   import * as m from '$lib/paraglide/messages';
 
   /**
@@ -22,42 +27,45 @@
    *   participant: import('livekit-client').LocalParticipant | import('livekit-client').RemoteParticipant,
    *   pubkey?: string | null,
    *   isLocal?: boolean,
-   *   isMuted?: boolean,
+   *   isMicOff?: boolean,
    *   isSpeaking?: boolean,
+   *   handRaised?: boolean,
+   *   reactions?: Array<{id: string, emoji: string}>,
    *   profile?: any,
-   *   isRemoteMuted?: boolean,
-   *   onToggleMute?: () => void
+   *   volume?: number,
+   *   onVolumeChange?: (volume: number) => void,
+   *   pinned?: boolean,
+   *   onTogglePin?: () => void,
+   *   compact?: boolean
    * }}
    */
   let {
     participant,
     pubkey = null,
     isLocal = false,
-    isMuted = false,
+    isMicOff = false,
     isSpeaking = false,
+    handRaised = false,
+    reactions = [],
     profile = undefined,
-    isRemoteMuted = false,
-    onToggleMute = undefined
+    volume = 1,
+    onVolumeChange = undefined,
+    pinned = false,
+    onTogglePin = undefined,
+    compact = false
   } = $props();
 
   /** @type {import('livekit-client').Track | null} */
   let videoTrack = $state(null);
   let videoMuted = $state(true);
-  /** @type {import('livekit-client').Track | null} */
-  let audioTrack = $state(null);
 
   /** @type {HTMLVideoElement | undefined} */
   let videoEl = $state(undefined);
-  /** @type {HTMLAudioElement | undefined} */
-  let audioEl = $state(undefined);
 
   function updateTracks() {
     const cameraPub = participant.getTrackPublication(Track.Source.Camera);
     videoTrack = cameraPub?.track ?? null;
     videoMuted = cameraPub?.isMuted ?? true;
-    if (!isLocal) {
-      audioTrack = participant.getTrackPublication(Track.Source.Microphone)?.track ?? null;
-    }
   }
 
   /** @type {string[]} */
@@ -77,7 +85,6 @@
         ]
   );
 
-  // Setup listeners + initial track state; cleanup on destroy
   $effect(() => {
     updateTracks();
     for (const evt of events) {
@@ -90,7 +97,6 @@
     };
   });
 
-  // Attach/detach video track
   $effect(() => {
     const el = videoEl;
     const track = videoTrack;
@@ -99,52 +105,47 @@
     return () => track.detach(el);
   });
 
-  // Attach/detach remote audio track
-  $effect(() => {
-    const el = audioEl;
-    const track = audioTrack;
-    if (!el || !track) return;
-    track.attach(el);
-    return () => track.detach(el);
-  });
-
-  // Apply local mute to audio element
-  $effect(() => {
-    const el = audioEl;
-    if (!el) return;
-    el.muted = isRemoteMuted;
-  });
+  let volumeOpen = $state(false);
+  const volumePercent = $derived(Math.round(volume * 100));
+  const showVolume = $derived(!isLocal && !!onVolumeChange && !compact);
 
   const fallbackName = $derived(pubkey ? pubkey.slice(0, 8) : 'Participant');
   const displayName = $derived(
     isLocal ? 'You' : profile ? getDisplayName(profile, fallbackName) : fallbackName
   );
   // A hover card + profile link only make sense for a resolved Nostr identity.
-  const linkable = $derived(!!pubkey && !isLocal);
+  const linkable = $derived(!!pubkey && !isLocal && !compact);
+  const hasVideo = $derived(!!videoTrack && !videoMuted);
 </script>
 
 <div
   class="group/tile relative h-full min-h-0 transition-shadow duration-200"
   class:ring-2={isSpeaking}
   class:ring-primary={isSpeaking}
+  class:rounded-lg={isSpeaking}
 >
-  <!-- Inner: overflow-hidden for video/avatar rounding -->
   <div
-    class="absolute inset-0 flex items-center justify-center overflow-hidden rounded-lg bg-base-200"
+    class="absolute inset-0 flex items-center justify-center overflow-hidden rounded-lg bg-base-300"
   >
-    {#if videoTrack && !videoMuted}
+    {#if hasVideo}
       <video
         bind:this={videoEl}
         autoplay
         playsinline
-        muted={isLocal}
+        muted
         class="h-full w-full object-cover"
         class:scale-x-[-1]={isLocal}
       ></video>
-    {:else}
+    {:else if !linkable}
       <div class="text-center">
         {#if pubkey}
-          <ProfileAvatar {pubkey} {profile} size="lg" showHoverCard={false} linkToProfile={false} />
+          <ProfileAvatar
+            {pubkey}
+            {profile}
+            size={compact ? 'sm' : 'lg'}
+            showHoverCard={false}
+            linkToProfile={false}
+          />
         {:else}
           <div class="placeholder avatar">
             <div
@@ -156,15 +157,17 @@
             </div>
           </div>
         {/if}
-        <p class="mt-1 text-xs text-base-content/60">{displayName}</p>
+        {#if !compact}
+          <p class="mt-1 text-xs text-base-content/60">{displayName}</p>
+        {/if}
       </div>
     {/if}
   </div>
 
   <!-- Name overlay + hover card: OUTSIDE overflow-hidden -->
-  {#if videoTrack && !videoMuted}
+  {#if hasVideo}
     <div
-      class="absolute right-0 bottom-0 left-0 z-10 rounded-b-lg bg-gradient-to-t from-black/50 to-transparent px-2 py-1"
+      class="absolute right-0 bottom-0 left-0 z-10 truncate rounded-b-lg bg-gradient-to-t from-black/50 to-transparent px-2 py-1"
     >
       {#if linkable && pubkey}
         <HoverCard position="top" fixed={true}>
@@ -178,13 +181,10 @@
           {/snippet}
         </HoverCard>
       {:else}
-        <p class="text-xs text-white">{displayName}</p>
+        <p class="truncate text-xs text-white">{displayName}</p>
       {/if}
     </div>
-  {/if}
-
-  <!-- Video-off hover card: OUTSIDE overflow-hidden -->
-  {#if (!videoTrack || videoMuted) && linkable && pubkey}
+  {:else if linkable && pubkey}
     <div class="absolute inset-0 z-10 flex items-center justify-center">
       <HoverCard position="top" fixed={true}>
         {#snippet trigger()}
@@ -206,60 +206,115 @@
     </div>
   {/if}
 
-  {#if isLocal && isMuted}
-    <span class="absolute top-2 right-2 z-10 badge badge-sm badge-error">
-      {m.groups_call_mute()}
-    </span>
-  {/if}
+  <!-- Status badges (top right) -->
+  <div class="absolute top-1.5 right-1.5 z-20 flex items-center gap-1">
+    {#if handRaised}
+      <span
+        class="badge badge-sm badge-warning"
+        title={m.groups_call_hand_raised()}
+        data-testid="call-tile-hand"
+      >
+        <HandIcon class_="h-3.5 w-3.5" title="" />
+      </span>
+    {/if}
+    {#if isMicOff}
+      <span class="badge badge-sm badge-neutral" title={m.groups_call_mic_off()}>
+        <MicOffIcon class_="h-3.5 w-3.5" title="" />
+      </span>
+    {/if}
+  </div>
 
-  {#if !isLocal && isRemoteMuted}
-    <span class="absolute top-2 right-2 z-10 badge badge-sm badge-warning">
-      {m.groups_call_mute_participant()}
-    </span>
-  {/if}
-
-  {#if !isLocal && onToggleMute}
-    <button
-      class="btn absolute right-1 bottom-1 z-10 btn-circle opacity-0 btn-ghost transition-opacity btn-xs group-hover/tile:opacity-100"
-      class:opacity-100={isRemoteMuted}
-      onclick={onToggleMute}
-      title={isRemoteMuted ? m.groups_call_unmute_participant() : m.groups_call_mute_participant()}
+  <!-- Hover controls (top left): pin + volume -->
+  {#if onTogglePin || showVolume}
+    <div
+      class="absolute top-1.5 left-1.5 z-20 flex items-center gap-1 opacity-0 transition-opacity group-focus-within/tile:opacity-100 group-hover/tile:opacity-100"
+      class:opacity-100={volumeOpen || pinned}
     >
-      {#if isRemoteMuted}
-        <svg class="h-4 w-4 text-warning" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            stroke-width="2"
-            d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z"
-          />
-          <path
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            stroke-width="2"
-            d="M17 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2"
-          />
-        </svg>
-      {:else}
-        <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            stroke-width="2"
-            d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z"
-          />
-          <path
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            stroke-width="2"
-            d="M15.536 8.464a5 5 0 010 7.072M18.364 5.636a9 9 0 010 12.728"
-          />
-        </svg>
+      {#if onTogglePin}
+        <button
+          class="btn btn-circle bg-base-100/80 btn-ghost btn-xs"
+          class:text-primary={pinned}
+          aria-label={pinned ? m.groups_call_unpin() : m.groups_call_pin()}
+          title={pinned ? m.groups_call_unpin() : m.groups_call_pin()}
+          onclick={onTogglePin}
+        >
+          <PinIcon class_="h-3.5 w-3.5" title="" />
+        </button>
       {/if}
-    </button>
+      {#if showVolume}
+        <button
+          class="btn btn-circle bg-base-100/80 btn-ghost btn-xs"
+          class:text-warning={volume !== 1}
+          aria-label={m.groups_call_volume()}
+          aria-expanded={volumeOpen}
+          title={`${m.groups_call_volume()} ${volumePercent} %`}
+          onclick={() => (volumeOpen = !volumeOpen)}
+        >
+          <VolumeUpIcon class_="h-3.5 w-3.5" title="" />
+        </button>
+      {/if}
+    </div>
+    {#if volumeOpen && showVolume}
+      <div
+        class="absolute top-9 left-1.5 z-30 flex w-44 flex-col gap-1 rounded-box bg-base-100 p-2 shadow-lg"
+      >
+        <div class="flex items-center justify-between text-xs">
+          <span>{m.groups_call_volume()}</span>
+          <span class="tabular-nums">{volumePercent} %</span>
+        </div>
+        <input
+          type="range"
+          class="range range-primary range-xs"
+          min="0"
+          max="200"
+          step="5"
+          value={volumePercent}
+          aria-label={m.groups_call_volume()}
+          oninput={(e) => onVolumeChange?.(Number(e.currentTarget.value) / 100)}
+        />
+        <button
+          class="btn btn-ghost btn-sm"
+          disabled={volume === 1}
+          onclick={() => onVolumeChange?.(1)}
+        >
+          {m.groups_call_volume_reset()}
+        </button>
+      </div>
+    {/if}
   {/if}
 
-  {#if !isLocal}
-    <audio bind:this={audioEl} autoplay></audio>
-  {/if}
+  <!-- Floating reactions -->
+  {#each reactions as reaction (reaction.id)}
+    <span class="call-reaction pointer-events-none absolute bottom-6 left-1/2 z-30 text-3xl">
+      {reaction.emoji}
+    </span>
+  {/each}
 </div>
+
+<style>
+  .call-reaction {
+    animation: call-reaction-float 3.5s ease-out forwards;
+  }
+  @keyframes call-reaction-float {
+    0% {
+      opacity: 0;
+      transform: translate(-50%, 0) scale(0.6);
+    }
+    10% {
+      opacity: 1;
+      transform: translate(-50%, -8px) scale(1.1);
+    }
+    80% {
+      opacity: 1;
+    }
+    100% {
+      opacity: 0;
+      transform: translate(-50%, -90px) scale(1);
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .call-reaction {
+      animation: none;
+    }
+  }
+</style>

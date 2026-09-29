@@ -1,0 +1,310 @@
+// @ts-nocheck
+/**
+ * LiveKit Connection Service — call features beyond join/leave:
+ * live audio processing, central remote-audio playback with per-person
+ * volume, reconnect + remote-mute state, screen share quality, and the
+ * raise-hand / reaction signals (LiveKit data messages, topic
+ * "edufeed.call" — NIP-29 has no client presence plane to carry them).
+ *
+ * @vitest-environment jsdom
+ */
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+
+const { rooms } = vi.hoisted(() => ({ rooms: [] }));
+
+vi.mock('$lib/services/call-sounds.js', () => ({
+  playJoinSound: vi.fn(),
+  playLeaveSound: vi.fn(),
+  playMuteSound: vi.fn(),
+  playUnmuteSound: vi.fn(),
+  playScreenShareSound: vi.fn()
+}));
+
+vi.mock('livekit-client', () => {
+  const RoomEvent = {
+    ParticipantConnected: 'participantConnected',
+    ParticipantDisconnected: 'participantDisconnected',
+    TrackSubscribed: 'trackSubscribed',
+    TrackUnsubscribed: 'trackUnsubscribed',
+    TrackMuted: 'trackMuted',
+    TrackUnmuted: 'trackUnmuted',
+    LocalTrackPublished: 'localTrackPublished',
+    LocalTrackUnpublished: 'localTrackUnpublished',
+    ActiveSpeakersChanged: 'activeSpeakersChanged',
+    ParticipantPermissionsChanged: 'participantPermissionsChanged',
+    Disconnected: 'disconnected',
+    Reconnecting: 'reconnecting',
+    SignalReconnecting: 'signalReconnecting',
+    Reconnected: 'reconnected',
+    DataReceived: 'dataReceived'
+  };
+  const Track = {
+    Source: {
+      Camera: 'camera',
+      Microphone: 'microphone',
+      ScreenShare: 'screen_share',
+      ScreenShareAudio: 'screen_share_audio'
+    },
+    Kind: { Audio: 'audio', Video: 'video' }
+  };
+  class MockRoom {
+    handlers = {};
+    canPlaybackAudio = true;
+    startAudio = vi.fn(async () => {});
+    switchActiveDevice = vi.fn(async () => true);
+    micTrack = { restartTrack: vi.fn(async () => {}) };
+    micPublished = false;
+    localParticipant = {
+      identity: 'e'.repeat(64) + ':me',
+      permissions: undefined,
+      setMicrophoneEnabled: vi.fn(async (on) => {
+        this.micPublished = on;
+      }),
+      setCameraEnabled: vi.fn(async () => {}),
+      setScreenShareEnabled: vi.fn(async () => {}),
+      publishData: vi.fn(async () => {}),
+      getTrackPublication: vi.fn((source) =>
+        source === 'microphone' && this.micPublished ? { track: this.micTrack } : undefined
+      ),
+      activeDeviceMap: new Map()
+    };
+    remoteParticipants = new Map();
+    constructor(options) {
+      this.options = options;
+      rooms.push(this);
+    }
+    on(event, handler) {
+      (this.handlers[event] ??= []).push(handler);
+      return this;
+    }
+    emit(event, ...args) {
+      for (const h of this.handlers[event] ?? []) h(...args);
+    }
+    async connect() {}
+    async disconnect() {}
+    static getLocalDevices = vi.fn(async () => []);
+  }
+  return { Room: MockRoom, RoomEvent, Track };
+});
+
+const { RoomEvent } = await import('livekit-client');
+const svc = await import('$lib/services/livekit-connection.svelte.js');
+const prefs = await import('$lib/services/call-prefs.js');
+
+const ALICE = 'a'.repeat(64);
+
+function remote(identity, { micOn = true } = {}) {
+  return {
+    identity,
+    sid: 'PA_' + identity.slice(-3),
+    isMicrophoneEnabled: micOn,
+    setVolume: vi.fn()
+  };
+}
+
+function audioTrack(sid) {
+  const el = document.createElement('audio');
+  return {
+    kind: 'audio',
+    sid,
+    el,
+    attach: vi.fn(() => el),
+    detach: vi.fn(() => [el])
+  };
+}
+
+const decode = (bytes) => JSON.parse(new TextDecoder().decode(bytes));
+const encode = (obj) => new TextEncoder().encode(JSON.stringify(obj));
+
+let room;
+beforeEach(async () => {
+  await svc.disconnectFromRoom();
+  rooms.length = 0;
+  localStorage.clear();
+  await svc.connectToRoom('t', 'wss://lk');
+  room = rooms[0];
+});
+afterEach(() => vi.useRealTimers());
+
+describe('audio processing, applied live', () => {
+  it('stores the flags and restarts the published mic with the new constraints', async () => {
+    await svc.toggleMute(); // publish the mic
+    await svc.setAudioProcessingLive({ noiseSuppression: false });
+    expect(prefs.getAudioProcessing().noiseSuppression).toBe(false);
+    expect(room.micTrack.restartTrack).toHaveBeenCalledWith(
+      expect.objectContaining({ noiseSuppression: false, channelCount: 1 })
+    );
+  });
+
+  it('only stores them while the mic is not published', async () => {
+    await svc.setAudioProcessingLive({ echoCancellation: false });
+    expect(prefs.getAudioProcessing().echoCancellation).toBe(false);
+    expect(room.micTrack.restartTrack).not.toHaveBeenCalled();
+  });
+
+  it('offers speaker selection only where Web Audio can pick an output', () => {
+    // Remote audio runs through Web Audio (webAudioMix), so the output is
+    // chosen on the AudioContext, not on a media element.
+    class FakeAudioContext {}
+    vi.stubGlobal('AudioContext', FakeAudioContext);
+    try {
+      expect(svc.canSelectSpeaker()).toBe(false);
+      FakeAudioContext.prototype.setSinkId = () => {};
+      expect(svc.canSelectSpeaker()).toBe(true);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+});
+
+describe('remote audio playback + per-person volume', () => {
+  it('plays each remote audio track through ONE hidden element and applies the stored volume', () => {
+    prefs.setParticipantVolume(ALICE, 1.6);
+    const alice = remote(ALICE + ':x1');
+    const track = audioTrack('TR_1');
+    room.emit(RoomEvent.TrackSubscribed, track, { source: 'microphone' }, alice);
+
+    expect(track.attach).toHaveBeenCalledTimes(1);
+    expect(document.body.contains(track.el)).toBe(true);
+    expect(track.el.hidden).toBe(true);
+    expect(alice.setVolume).toHaveBeenCalledWith(1.6, 'microphone');
+
+    room.emit(RoomEvent.TrackUnsubscribed, track, { source: 'microphone' }, alice);
+    expect(track.detach).toHaveBeenCalled();
+    expect(document.body.contains(track.el)).toBe(false);
+  });
+
+  it('removes every playback element on disconnect', async () => {
+    const track = audioTrack('TR_2');
+    room.emit(RoomEvent.TrackSubscribed, track, { source: 'microphone' }, remote(ALICE + ':x1'));
+    await svc.disconnectFromRoom();
+    expect(document.body.contains(track.el)).toBe(false);
+  });
+
+  it('setParticipantVolume stores and applies to every seat of that person', () => {
+    const seat1 = remote(ALICE + ':x1');
+    const seat2 = remote(ALICE + ':x2');
+    room.remoteParticipants.set(seat1.identity, seat1);
+    room.remoteParticipants.set(seat2.identity, seat2);
+    room.emit(RoomEvent.ParticipantConnected, seat1);
+
+    svc.setParticipantVolume(ALICE, 0.4);
+    expect(prefs.getParticipantVolume(ALICE)).toBe(0.4);
+    expect(seat1.setVolume).toHaveBeenLastCalledWith(0.4, 'microphone');
+    expect(seat2.setVolume).toHaveBeenLastCalledWith(0.4, 'microphone');
+  });
+});
+
+describe('connection + remote mute state', () => {
+  it('reports reconnecting until the room is back', () => {
+    expect(svc.getLiveKitState().connectionState).toBe('connected');
+    room.emit(RoomEvent.Reconnecting);
+    expect(svc.getLiveKitState().connectionState).toBe('reconnecting');
+    room.emit(RoomEvent.Reconnected);
+    expect(svc.getLiveKitState().connectionState).toBe('connected');
+  });
+
+  it('tracks which remote participants have their mic off', () => {
+    const bob = remote('b'.repeat(64) + ':x1', { micOn: false });
+    room.remoteParticipants.set(bob.identity, bob);
+    room.emit(RoomEvent.TrackMuted, {}, bob);
+    expect(svc.getLiveKitState().mutedIdentities.has(bob.identity)).toBe(true);
+    bob.isMicrophoneEnabled = true;
+    room.emit(RoomEvent.TrackUnmuted, {}, bob);
+    expect(svc.getLiveKitState().mutedIdentities.has(bob.identity)).toBe(false);
+  });
+});
+
+describe('screen share quality', () => {
+  it('captures with the remembered preset and no system audio', async () => {
+    prefs.setScreenShareQuality('720p15');
+    await svc.toggleScreenShare();
+    expect(room.localParticipant.setScreenShareEnabled).toHaveBeenCalledWith(
+      true,
+      expect.objectContaining({
+        audio: false,
+        resolution: { width: 1280, height: 720, frameRate: 15 },
+        contentHint: 'detail'
+      })
+    );
+  });
+});
+
+describe('raise hand + reactions (data messages)', () => {
+  it('raising a hand publishes it and marks the local seat', async () => {
+    await svc.setHandRaised(true);
+    const [bytes, opts] = room.localParticipant.publishData.mock.calls[0];
+    expect(decode(bytes)).toEqual({ t: 'hand', v: true });
+    expect(opts).toEqual(expect.objectContaining({ reliable: true, topic: 'edufeed.call' }));
+    expect(svc.getLiveKitState().raisedHands.has(room.localParticipant.identity)).toBe(true);
+    await svc.setHandRaised(false);
+    expect(svc.getLiveKitState().raisedHands.has(room.localParticipant.identity)).toBe(false);
+  });
+
+  it('shows a remote hand until lowered or the participant leaves', () => {
+    const bob = remote('b'.repeat(64) + ':x1');
+    room.emit(
+      RoomEvent.DataReceived,
+      encode({ t: 'hand', v: true }),
+      bob,
+      undefined,
+      'edufeed.call'
+    );
+    expect(svc.getLiveKitState().raisedHands.has(bob.identity)).toBe(true);
+    room.emit(RoomEvent.ParticipantDisconnected, bob);
+    expect(svc.getLiveKitState().raisedHands.has(bob.identity)).toBe(false);
+  });
+
+  it('ignores messages on other topics and malformed payloads', () => {
+    const bob = remote('b'.repeat(64) + ':x1');
+    room.emit(RoomEvent.DataReceived, encode({ t: 'hand', v: true }), bob, undefined, 'other');
+    room.emit(RoomEvent.DataReceived, new Uint8Array([1, 2, 3]), bob, undefined, 'edufeed.call');
+    expect(svc.getLiveKitState().raisedHands.size).toBe(0);
+  });
+
+  it('re-sends a raised hand to someone who joins later', async () => {
+    await svc.setHandRaised(true);
+    room.localParticipant.publishData.mockClear();
+    const carol = remote('c'.repeat(64) + ':x1');
+    room.emit(RoomEvent.ParticipantConnected, carol);
+    const [bytes, opts] = room.localParticipant.publishData.mock.calls[0];
+    expect(decode(bytes)).toEqual({ t: 'hand', v: true });
+    expect(opts.destinationIdentities).toEqual([carol.identity]);
+  });
+
+  it('sends an allowed reaction, shows it locally and prunes it after a few seconds', async () => {
+    vi.useFakeTimers();
+    await svc.sendReaction('👍');
+    expect(decode(room.localParticipant.publishData.mock.calls[0][0])).toEqual(
+      expect.objectContaining({ t: 'react', e: '👍' })
+    );
+    expect(svc.getLiveKitState().reactions.map((r) => r.emoji)).toEqual(['👍']);
+    vi.advanceTimersByTime(4500);
+    expect(svc.getLiveKitState().reactions).toEqual([]);
+  });
+
+  it('refuses reactions outside the allowlist (sent or received)', async () => {
+    await svc.sendReaction('💣 boom');
+    expect(room.localParticipant.publishData).not.toHaveBeenCalled();
+    const bob = remote('b'.repeat(64) + ':x1');
+    room.emit(
+      RoomEvent.DataReceived,
+      encode({ t: 'react', e: '💣', n: 'x' }),
+      bob,
+      undefined,
+      'edufeed.call'
+    );
+    expect(svc.getLiveKitState().reactions).toEqual([]);
+  });
+
+  it('cannot signal on a listen-only token without data rights', async () => {
+    await svc.disconnectFromRoom();
+    rooms.length = 0;
+    const promise = svc.connectToRoom('t', 'wss://lk');
+    rooms[0].localParticipant.permissions = { canPublish: false, canPublishData: false };
+    await promise;
+    expect(svc.getLiveKitState().canSignal).toBe(false);
+    await svc.setHandRaised(true);
+    expect(rooms[0].localParticipant.publishData).not.toHaveBeenCalled();
+  });
+});

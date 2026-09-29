@@ -1,0 +1,97 @@
+<!--
+  ChannelCallRoster — drawn under an AV channel's row in a channel list:
+  who is in its call right now and a one-click Join. The roster is the
+  relay-signed kind 39004 (the relay knows who is in the LiveKit room),
+  so it works without being in the call. Renders nothing while the call
+  is empty.
+
+  A sibling of the row, never inside it: the row is itself a link/button.
+-->
+<script>
+  import { useCallPresence } from '$lib/groups/call-presence.svelte.js';
+  import {
+    getGroupCallState,
+    joinGroupCall,
+    showCallStage
+  } from '$lib/groups/group-call.svelte.js';
+  import { useActiveUser } from '$lib/stores/accounts.svelte';
+  import ProfileAvatar from '$lib/components/shared/ProfileAvatar.svelte';
+  import * as m from '$lib/paraglide/messages';
+
+  /**
+   * @type {{
+   *   pointer: {id: string, relay: string},
+   *   name: string,
+   *   onOpen: () => void | Promise<void>
+   * }}
+   */
+  let { pointer, name, onOpen } = $props();
+
+  const MAX_AVATARS = 3;
+  const getPresence = useCallPresence(() => pointer);
+  const participants = $derived(getPresence().participants);
+  const shown = $derived(participants.slice(0, MAX_AVATARS));
+  const overflow = $derived(Math.max(0, participants.length - MAX_AVATARS));
+
+  const call = getGroupCallState();
+  const inThisCall = $derived(call.isActiveFor(pointer) && call.phase !== 'idle');
+  const getActiveUser = useActiveUser();
+  let busy = $state(false);
+
+  async function join() {
+    if (busy) return;
+    busy = true;
+    try {
+      if (inThisCall) {
+        showCallStage();
+        await onOpen();
+        return;
+      }
+      const user = getActiveUser();
+      if (!user?.signer) return;
+      await onOpen();
+      await joinGroupCall(pointer, user, {
+        title: name,
+        href: `${window.location.pathname}${window.location.search}`
+      });
+    } finally {
+      busy = false;
+    }
+  }
+</script>
+
+{#if participants.length > 0}
+  <div
+    class="flex items-center gap-2 pr-2 pb-1 pl-12"
+    data-testid="channel-call-roster"
+    title={m.groups_call_people_in_call({ count: participants.length })}
+  >
+    <span class="relative flex h-2 w-2 shrink-0" aria-hidden="true">
+      <span
+        class="absolute inline-flex h-full w-full animate-ping rounded-full bg-success opacity-60 motion-reduce:animate-none"
+      ></span>
+      <span class="relative inline-flex h-2 w-2 rounded-full bg-success"></span>
+    </span>
+    <span class="sr-only">{m.groups_call_live()}</span>
+    <div class="flex min-w-0 flex-1 items-center -space-x-1.5">
+      {#each shown as pubkey (pubkey)}
+        <span class="rounded-full ring-2 ring-base-200">
+          <ProfileAvatar {pubkey} size="2xs" showHoverCard={false} linkToProfile={false} />
+        </span>
+      {/each}
+      {#if overflow > 0}
+        <span class="pl-2.5 text-xs text-base-content/60">+{overflow}</span>
+      {/if}
+    </div>
+    {#if getActiveUser()?.signer}
+      <button
+        type="button"
+        class="btn text-primary btn-ghost btn-sm"
+        disabled={busy}
+        onclick={join}
+      >
+        {inThisCall ? m.groups_call_return() : m.groups_call_join()}
+      </button>
+    {/if}
+  </div>
+{/if}

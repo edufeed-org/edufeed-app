@@ -36,7 +36,10 @@ describe('root layout static imports', () => {
   it.each([
     'assistant/TermiAssistant.svelte',
     'community/layout/CommunitySidebar.svelte',
-    'community/layout/ContentNavSidebar.svelte'
+    'community/layout/ContentNavSidebar.svelte',
+    // The running-call dock: only loaded while a call is active.
+    'groups/call/CallDock.svelte',
+    'services/livekit-connection.svelte.js'
   ])('does not statically import %s', (needle) => {
     expect(staticImports.filter((s) => s.endsWith(needle))).toEqual([]);
   });
