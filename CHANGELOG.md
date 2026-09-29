@@ -5,6 +5,56 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions are
 the `vX.Y.Z` git tags on `main`. Each release section is assembled from the
 merge commits of the nostr PRs that landed since the previous tag.
 
+## [0.2.0] - 2026-09-29
+
+### Added
+
+- **Calls live in group channels.** Live audio/video follows the NIP-29 AV
+  spec: a channel with calls switched on gets a call button in its header,
+  the relay (groups.edufeed.org) hands out the LiveKit token and publishes
+  who is in the call (kind 39004). Admins can switch calls on for a channel
+  with one click. The call keeps running while you move around the app — a
+  small dock brings you back — and it offers raised hands, reactions,
+  per-person volume, remembered devices, join/leave sounds and readable
+  camera/microphone errors. On wide screens the chat opens beside the call,
+  and in Chrome/Edge the call can move into its own always-on-top window.
+- **@mentions everywhere.** Typing `@` in notes, comments, forum threads,
+  articles, wiki pages, community chat, group chat and DMs opens a people
+  picker; the pick shows as an @Name chip, is stored as a `nostr:npub…`
+  reference, p-tags the person (except in DMs) and reaches their inbox.
+  Rendered text shows @Name for mentions.
+- **The full emoji set.** All Unicode emojis with search in the interface
+  language (German keywords work alongside `:shortcodes`), skin tones, a
+  "Zuletzt verwendet" row and country flags on Windows via a self-hosted
+  flag font. The imprint page lists the third-party credits and licences.
+- **Configurable Discover tabs.** `DISCOVER_CONTENT_TYPES` chooses which
+  content types /discover offers; the "All" tab appears when at least two
+  feed types are enabled.
+- **New groups get UUID ids,** so Buzz clients can address them.
+- **Metadata forms guide** (`docs/guides/metadata-forms.md`) documenting forms
+  as Nostr events for outside review.
+
+### Changed
+
+- **Profile search finds new edufeed accounts.** The default profile search
+  relays are Brainstorm plus `wss://amb-relay.edufeed.org`, and search reads
+  NIP-50 extensions from both NIP-11 spellings; lens-gated search relays get
+  `include:spam` when no observer is configured.
+- **Channel header buttons** use the regular button size and the settings
+  icon.
+
+### Removed
+
+- **Communikey Meet** (kind 30312/10312 rooms and the operator token proxy) —
+  calls now live in NIP-29 channels.
+
+### Fixed
+
+- **Lists:** adding people searches beyond your follows, and list pages no
+  longer crash with `state_unsafe_mutation`.
+- **Discover search:** Enter searches the typed text instead of picking the
+  first suggested profile.
+
 ## [0.1.9] - 2026-09-28
 
 ### Fixed
