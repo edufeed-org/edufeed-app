@@ -47,13 +47,11 @@
     return Array.from(deduped.values()).slice(0, 8);
   });
 
-  // Reset selected index when matches change
+  // Nothing is highlighted until the user arrows into the list, so Enter
+  // searches the typed text instead of picking the first suggestion.
   $effect(() => {
-    if (matches.length > 0) {
-      selectedIndex = 0;
-    } else {
-      selectedIndex = -1;
-    }
+    void matches;
+    selectedIndex = -1;
   });
 
   /**
@@ -70,7 +68,7 @@
     }
     if (event.key === 'ArrowUp') {
       event.preventDefault();
-      selectedIndex = (selectedIndex - 1 + matches.length) % matches.length;
+      selectedIndex = selectedIndex <= 0 ? matches.length - 1 : selectedIndex - 1;
       return true;
     }
     if (event.key === 'Enter' && selectedIndex >= 0) {
