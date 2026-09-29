@@ -3,9 +3,15 @@
   (follow set 30000 / starter pack 39089).
 
   Thin wrapper around ContactSearchInput with combobox flags enabled:
-  the dropdown surfaces contact-name matches (excluded entries visible
-  but disabled with an "Already added" badge) plus a synthetic row when
-  the input parses as an npub/hex pubkey.
+  the dropdown surfaces name matches (excluded entries visible but
+  disabled with an "Already added" badge) plus a synthetic row when the
+  input parses as an npub/hex pubkey.
+
+  Name matches come from the follow list AND, via `searchProfiles`, from
+  profiles already in the EventStore plus a NIP-50 search on the profile
+  search relays — a list is for anyone, not just people you follow
+  ("Gendering MINT digital" was not in the owner's follows and could not
+  be found by name).
 
   Both selection paths fan into `onadd(pubkey)` with a hex pubkey.
 -->
@@ -44,6 +50,7 @@
     exclude={excludePubkeys}
     showExcluded
     acceptPubkeyInput
+    searchProfiles
     excludedLabel={m.list_detail_add_profile_already_added()}
     addPubkeyLabel={m.list_detail_add_profile_add_pubkey()}
     onselect={handleSelect}

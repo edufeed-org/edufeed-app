@@ -4,23 +4,31 @@
  * The defaults point at Brainstorm (brainstorm.world): its NIP-50 relay
  * ranks kind-0 hits by web of trust instead of returning the first
  * substring match, and its public scores relay serves kind 30382 trusted
- * assertions any client may read. Both are plain env overrides; an empty
+ * assertions any client may read. Profile search also asks the edufeed
+ * AMB relay, which indexes edufeed accounts Brainstorm has not seen yet. Both are plain env overrides; an empty
  * value switches the feature off, never breaks the picker.
  *
  * @vitest-environment node
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
+const DEFAULT_PROFILE_SEARCH_RELAYS = [
+  'wss://tags.brainstorm.world/relay',
+  'wss://amb-relay.edufeed.org'
+];
 const HOUSE_PROVIDER = 'a64c7b8d9d89b9b399191c398002514c53cadf0712397a8ca0c36162813f4775';
 
 describe('GET /api/config — profile search + trust assertions', () => {
   beforeEach(() => vi.resetModules());
 
-  it('defaults PROFILE_SEARCH_RELAYS to the Brainstorm WoT search relay only', async () => {
+  it('defaults PROFILE_SEARCH_RELAYS to Brainstorm (WoT-ranked) + the edufeed AMB relay', async () => {
+    // Brainstorm alone misses accounts it has not indexed yet (new edufeed
+    // users like "Gendering MINT digital"); amb-relay.edufeed.org answers
+    // NIP-50 kind-0 searches for them.
     vi.doMock('$env/dynamic/private', () => ({ env: {} }));
     const { GET } = await import('../../routes/api/config/+server.js');
     const body = await GET().json();
-    expect(body.profileSearchRelays).toEqual(['wss://tags.brainstorm.world/relay']);
+    expect(body.profileSearchRelays).toEqual(DEFAULT_PROFILE_SEARCH_RELAYS);
     expect(body.profileSearchObserver).toBeNull();
   });
 
@@ -58,7 +66,7 @@ describe('GET /api/config — profile search + trust assertions', () => {
     const { GET } = await import('../../routes/api/config/+server.js');
     const body = await GET().json();
     expect(body.trustAssertions).toEqual({ relays: [], providers: ['abc'] });
-    expect(body.profileSearchRelays).toEqual(['wss://tags.brainstorm.world/relay']);
+    expect(body.profileSearchRelays).toEqual(DEFAULT_PROFILE_SEARCH_RELAYS);
   });
 
   it('PROFILE_SEARCH_RELAYS=none disables the remote search leg', async () => {
