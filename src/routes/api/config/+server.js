@@ -5,6 +5,7 @@
  */
 
 import { json } from '@sveltejs/kit';
+import { parseDiscoverContentTypes } from '$lib/helpers/discover-content-types.js';
 import { env } from '$env/dynamic/private';
 
 /**
@@ -455,6 +456,12 @@ export function GET() {
         ekw: env.RESOURCE_FORM_TEMPLATE_NADDR_EKW || '',
         hochschule: env.RESOURCE_FORM_TEMPLATE_NADDR_HOCHSCHULE || ''
       }
+    },
+
+    // /discover tabs offered by this deployment (see discover-content-types.js);
+    // the "All" tab is derived client-side from the enabled feed types.
+    discover: {
+      contentTypes: parseDiscoverContentTypes(env.DISCOVER_CONTENT_TYPES)
     },
 
     // UI settings

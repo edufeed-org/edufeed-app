@@ -83,6 +83,38 @@
   import AuthorSearchDropdown from '$lib/components/discover/AuthorSearchDropdown.svelte';
   import ProfileAvatar from '$lib/components/shared/ProfileAvatar.svelte';
   import * as m from '$lib/paraglide/messages';
+  import {
+    DISCOVER_CONTENT_TYPES,
+    DISCOVER_FEED_TYPES,
+    getDiscoverTabs,
+    resolveDiscoverType,
+    isDiscoverTypeEnabled
+  } from '$lib/helpers/discover-content-types.js';
+
+  // Content types this deployment offers (DISCOVER_CONTENT_TYPES → runtimeConfig).
+  // Read once at mount: the root layout resolves /api/config before any page
+  // renders, and a deployment setting never changes at runtime.
+  const enabledContentTypes = runtimeConfig.discover?.contentTypes || [...DISCOVER_CONTENT_TYPES];
+  // Tabs to render. "all" leads only when it merges ≥2 feed types.
+  const discoverTabs = getDiscoverTabs(enabledContentTypes);
+  const defaultContentType = discoverTabs[0];
+  const hasAnyFeedType = DISCOVER_FEED_TYPES.some((t) =>
+    isDiscoverTypeEnabled(t, enabledContentTypes)
+  );
+  /** Static label table — never index the Paraglide namespace by a runtime key. */
+  const TAB_LABELS = {
+    all: m.discover_tab_all,
+    events: m.discover_tab_events,
+    learning: m.discover_tab_learning,
+    articles: m.discover_tab_articles,
+    boards: m.discover_tab_boards,
+    communities: m.discover_tab_communities,
+    people: m.discover_tab_people
+  };
+  /** @param {string} type */
+  function isEnabled(type) {
+    return isDiscoverTypeEnabled(type, enabledContentTypes);
+  }
 
   // State management
   // Use $state.raw() for event data arrays to avoid deep proxying.
@@ -138,7 +170,9 @@
 
   const getCommunityProfiles = useProfileMap(() => allCommunities.map((c) => c.pubkey));
   let communityProfiles = $derived(getCommunityProfiles());
-  let isLoading = $state(true);
+  // Cleared by the first feed loader/model emission; with no feed type enabled
+  // nothing would ever clear it, so start false.
+  let isLoading = $state(hasAnyFeedType);
   let isLoadingMore = $state(false);
   const DISPLAY_BATCH = 20;
   let displayLimit = $state(DISPLAY_BATCH);
@@ -208,17 +242,6 @@
   // Search input reference for auto-focus
   let searchInputRef = $state(/** @type {HTMLInputElement | null} */ (null));
 
-  // Valid content types
-  const VALID_CONTENT_TYPES = [
-    'all',
-    'events',
-    'learning',
-    'articles',
-    'boards',
-    'communities',
-    'people'
-  ];
-
   let communityFilter = $state(/** @type {string | null} */ (initialFilters.community));
   let relayFilter = $state(/** @type {string | null} */ (null));
 
@@ -231,11 +254,25 @@
   /** @type {import('rxjs').Subscription | undefined} */
   let dateRangeLoaderSub;
 
-  // Initialize contentType from URL, with validation
-  const initialContentType = VALID_CONTENT_TYPES.includes(initialFilters.type)
-    ? initialFilters.type
-    : 'all';
-  let contentType = $state(initialContentType); // 'events', 'learning', 'articles', 'communities', 'all'
+  // Initialize contentType from URL; unknown or disabled types fall back to the default tab
+  let contentType = $state(resolveDiscoverType(initialFilters.type, discoverTabs));
+
+  /** Raw feed item `type` → discover content type (for the "all" tab gate). */
+  const RAW_ITEM_CONTENT_TYPE = /** @type {Record<string, string>} */ ({
+    event: 'events',
+    amb: 'learning',
+    article: 'articles',
+    board: 'boards'
+  });
+
+  /**
+   * Whether items of `type` belong on the current tab: the tab itself, or the
+   * "all" feed when the type is enabled for this deployment.
+   * @param {string} type
+   */
+  function showsType(type) {
+    return contentType === type || (contentType === 'all' && isEnabled(type));
+  }
 
   // Author filter state (multi-author: array of hex pubkeys)
   /** @type {string[]} */
@@ -343,9 +380,9 @@
       communityFilter = urlCommunity;
     }
 
-    // Sync content type from URL
-    const urlType = $page.url.searchParams.get('type') || 'all';
-    if (VALID_CONTENT_TYPES.includes(urlType) && urlType !== contentType) {
+    // Sync content type from URL (disabled/unknown types resolve to the default tab)
+    const urlType = resolveDiscoverType($page.url.searchParams.get('type'), discoverTabs);
+    if (urlType !== contentType) {
       contentType = urlType;
     }
 
@@ -404,8 +441,10 @@
       updateQueryParams($page.url.searchParams, { author: null });
     }
 
-    // Update URL - use null for 'all' to keep URL clean
-    updateQueryParams($page.url.searchParams, { type: newType === 'all' ? null : newType });
+    // Update URL - use null for the default tab to keep URL clean
+    updateQueryParams($page.url.searchParams, {
+      type: newType === defaultContentType ? null : newType
+    });
 
     // Reset learning filters when switching away from learning tab
     if (newType !== 'learning') {
@@ -532,40 +571,47 @@
   const kanbanLoader = kanbanTimelineLoader(BATCH_SIZE);
   // Calendar events use date range loader (not stateful pagination)
 
-  // Step 2: Initial load (subscriptions captured for cleanup on destroy)
-  const initialArticleSub = articleLoader().subscribe({
-    complete: () => {
-      isLoading = false;
-    },
-    error: (/** @type {any} */ error) => {
-      console.error('🔍 Discover: Article loader error:', error);
-      isLoading = false;
-    }
-  });
+  // Step 2: Initial load (subscriptions captured for cleanup on destroy).
+  // Disabled content types never hit the network.
+  const initialArticleSub = !isEnabled('articles')
+    ? undefined
+    : articleLoader().subscribe({
+        complete: () => {
+          isLoading = false;
+        },
+        error: (/** @type {any} */ error) => {
+          console.error('🔍 Discover: Article loader error:', error);
+          isLoading = false;
+        }
+      });
 
-  const initialAmbSub = ambLoader().subscribe({
-    complete: () => {
-      isLoading = false;
-    },
-    error: (/** @type {any} */ error) => {
-      console.error('🔍 Discover: AMB loader error:', error);
-      isLoading = false;
-    }
-  });
+  const initialAmbSub = !isEnabled('learning')
+    ? undefined
+    : ambLoader().subscribe({
+        complete: () => {
+          isLoading = false;
+        },
+        error: (/** @type {any} */ error) => {
+          console.error('🔍 Discover: AMB loader error:', error);
+          isLoading = false;
+        }
+      });
 
-  const initialKanbanSub = kanbanLoader().subscribe({
-    complete: () => {
-      isLoading = false;
-    },
-    error: (/** @type {any} */ error) => {
-      console.error('🔍 Discover: Kanban loader error:', error);
-      isLoading = false;
-    }
-  });
+  const initialKanbanSub = !isEnabled('boards')
+    ? undefined
+    : kanbanLoader().subscribe({
+        complete: () => {
+          isLoading = false;
+        },
+        error: (/** @type {any} */ error) => {
+          console.error('🔍 Discover: Kanban loader error:', error);
+          isLoading = false;
+        }
+      });
 
   // Pre-warm relay capabilities cache for calendar relays
   // This ensures pagination doesn't wait 2-3s for NIP-52 detection on each scroll
-  preWarmRelayCapabilitiesCache(getCalendarRelays());
+  if (isEnabled('events')) preWarmRelayCapabilitiesCache(getCalendarRelays());
 
   // Initial calendar load - load events within the default date range
   // Uses createDateRangeCalendarLoader with full NIP-52 filter support
@@ -574,15 +620,17 @@
     rangeStart: eventsDateRangeStart,
     rangeEnd: eventsDateRangeEnd
   });
-  const initialCalendarSub = initialCalendarLoader().subscribe({
-    complete: () => {
-      isLoading = false;
-    },
-    error: (/** @type {any} */ error) => {
-      console.error('🔍 Discover: Calendar loader error:', error);
-      isLoading = false;
-    }
-  });
+  const initialCalendarSub = !isEnabled('events')
+    ? undefined
+    : initialCalendarLoader().subscribe({
+        complete: () => {
+          isLoading = false;
+        },
+        error: (/** @type {any} */ error) => {
+          console.error('🔍 Discover: Calendar loader error:', error);
+          isLoading = false;
+        }
+      });
 
   // Supplemental relay loading: when user override relays arrive (kind 30002),
   // the initial loaders above won't include them because they resolved relays
@@ -597,7 +645,7 @@
     /** @type {import('rxjs').Subscription[]} */
     const supplementalSubs = [];
 
-    const currentEducational = getEducationalRelays();
+    const currentEducational = isEnabled('learning') ? getEducationalRelays() : [];
     const newEducational = currentEducational.filter((r) => !initialEducationalRelays.has(r));
     if (newEducational.length > 0) {
       newEducational.forEach((r) => initialEducationalRelays.add(r));
@@ -609,7 +657,7 @@
       supplementalSubs.push(loader().subscribe());
     }
 
-    const currentArticle = getArticleRelays();
+    const currentArticle = isEnabled('articles') ? getArticleRelays() : [];
     const newArticle = currentArticle.filter((r) => !initialArticleRelays.has(r));
     if (newArticle.length > 0) {
       newArticle.forEach((r) => initialArticleRelays.add(r));
@@ -621,7 +669,7 @@
       supplementalSubs.push(loader().subscribe());
     }
 
-    const currentCalendar = getCalendarRelays();
+    const currentCalendar = isEnabled('events') ? getCalendarRelays() : [];
     const newCalendar = currentCalendar.filter((r) => !initialCalendarRelays.has(r));
     if (newCalendar.length > 0) {
       newCalendar.forEach((r) => initialCalendarRelays.add(r));
@@ -630,7 +678,7 @@
       supplementalSubs.push(loader().subscribe());
     }
 
-    const currentKanban = getKanbanRelays();
+    const currentKanban = isEnabled('boards') ? getKanbanRelays() : [];
     const newKanban = currentKanban.filter((r) => !initialKanbanRelays.has(r));
     if (newKanban.length > 0) {
       newKanban.forEach((r) => initialKanbanRelays.add(r));
@@ -650,11 +698,11 @@
   // Supplemental curated author loading: when new authors join the curated set
   // (user login, WoT anchor load, user follows), fetch their content from relays.
   const CURATED_CONTENT_CONFIGS = [
-    { category: 'educational', kinds: [30142], getRelays: getEducationalRelays },
-    { category: 'longform', kinds: [30023], getRelays: getArticleRelays },
-    { category: 'calendar', kinds: [31922, 31923], getRelays: getCalendarRelays },
-    { category: 'kanban', kinds: [30301], getRelays: getKanbanRelays }
-  ];
+    { type: 'learning', category: 'educational', kinds: [30142], getRelays: getEducationalRelays },
+    { type: 'articles', category: 'longform', kinds: [30023], getRelays: getArticleRelays },
+    { type: 'events', category: 'calendar', kinds: [31922, 31923], getRelays: getCalendarRelays },
+    { type: 'boards', category: 'kanban', kinds: [30301], getRelays: getKanbanRelays }
+  ].filter((c) => isEnabled(c.type));
 
   const baselineCuratedAuthors = Object.fromEntries(
     CURATED_CONTENT_CONFIGS.map((c) => [c.category, new Set(getCuratedAuthors(c.category) || [])])
@@ -693,7 +741,7 @@
     /** @type {import('rxjs').Subscription[]} */
     const subs = [];
 
-    if (contentType === 'articles' || contentType === 'all') {
+    if (showsType('articles')) {
       const loader = createTimelineLoader(
         timedPool,
         getArticleRelays(),
@@ -703,7 +751,7 @@
       subs.push(loader().subscribe());
     }
 
-    if (contentType === 'learning' || contentType === 'all') {
+    if (showsType('learning')) {
       const loader = createTimelineLoader(
         timedPool,
         getEducationalRelays(),
@@ -713,7 +761,7 @@
       subs.push(loader().subscribe());
     }
 
-    if (contentType === 'events' || contentType === 'all') {
+    if (showsType('events')) {
       const loader = createDateRangeCalendarLoader(
         { rangeStart: eventsDateRangeStart, rangeEnd: eventsDateRangeEnd },
         { authors }
@@ -721,7 +769,7 @@
       subs.push(loader().subscribe());
     }
 
-    if (contentType === 'boards' || contentType === 'all') {
+    if (showsType('boards')) {
       const loader = createTimelineLoader(
         timedPool,
         getKanbanRelays(),
@@ -735,69 +783,73 @@
   });
 
   // Subscribe to articles (debounced via RxJS)
-  const articleModelSub = eventStore
-    .model(TimelineModel, { kinds: [30023] })
-    .pipe(debounceTime(100))
-    .subscribe((timeline) => {
-      articles = timeline || [];
-      isLoading = false;
-      profileTrigger++; // Trigger profile loading for new articles
-    });
+  const articleModelSub = !isEnabled('articles')
+    ? undefined
+    : eventStore
+        .model(TimelineModel, { kinds: [30023] })
+        .pipe(debounceTime(100))
+        .subscribe((timeline) => {
+          articles = timeline || [];
+          isLoading = false;
+          profileTrigger++; // Trigger profile loading for new articles
+        });
 
   // Subscribe to kanban boards (debounced via RxJS)
   // Filter out boards with pub=private (only show published/unset)
-  const kanbanModelSub = eventStore
-    .model(TimelineModel, { kinds: [30301] })
-    .pipe(debounceTime(100))
-    .subscribe((timeline) => {
-      kanbanBoards =
-        (timeline || []).filter((/** @type {any} */ b) => {
-          const pub = getTagValue(b, 'pub');
-          return !pub || pub !== 'private';
-        }) || [];
-      isLoading = false;
-      profileTrigger++; // Trigger profile loading for new boards
-    });
+  const kanbanModelSub = !isEnabled('boards')
+    ? undefined
+    : eventStore
+        .model(TimelineModel, { kinds: [30301] })
+        .pipe(debounceTime(100))
+        .subscribe((timeline) => {
+          kanbanBoards =
+            (timeline || []).filter((/** @type {any} */ b) => {
+              const pub = getTagValue(b, 'pub');
+              return !pub || pub !== 'private';
+            }) || [];
+          isLoading = false;
+          profileTrigger++; // Trigger profile loading for new boards
+        });
 
   // Subscribe to AMB resources (debounced via RxJS)
-  const ambModelSub = /** @type {import('rxjs').Observable<any[]>} */ (
-    eventStore.model(AMBResourceModel, [])
-  )
-    .pipe(debounceTime(100))
-    .subscribe((resources) => {
-      ambResources = resources || [];
-      isLoading = false;
-      profileTrigger++; // Trigger profile loading for new resources
+  const ambModelSub = !isEnabled('learning')
+    ? undefined
+    : /** @type {import('rxjs').Observable<any[]>} */ (eventStore.model(AMBResourceModel, []))
+        .pipe(debounceTime(100))
+        .subscribe((resources) => {
+          ambResources = resources || [];
+          isLoading = false;
+          profileTrigger++; // Trigger profile loading for new resources
 
-      // Track per-relay oldest timestamps for pagination.
-      // This uses getSeenRelays() to determine which relay each event came from.
-      if (resources && resources.length > 0) {
-        const newMap = new Map(perRelayOldestTimestamp); // eslint-disable-line svelte/prefer-svelte-reactivity
-        let mapUpdated = false;
+          // Track per-relay oldest timestamps for pagination.
+          // This uses getSeenRelays() to determine which relay each event came from.
+          if (resources && resources.length > 0) {
+            const newMap = new Map(perRelayOldestTimestamp); // eslint-disable-line svelte/prefer-svelte-reactivity
+            let mapUpdated = false;
 
-        for (const resource of resources) {
-          const event = resource.event || resource;
-          const ts = event?.created_at;
-          if (!ts) continue;
+            for (const resource of resources) {
+              const event = resource.event || resource;
+              const ts = event?.created_at;
+              if (!ts) continue;
 
-          // Get which relay(s) this event was seen on
-          const seenRelays = getSeenRelays(event);
-          if (!seenRelays || seenRelays.size === 0) continue;
+              // Get which relay(s) this event was seen on
+              const seenRelays = getSeenRelays(event);
+              if (!seenRelays || seenRelays.size === 0) continue;
 
-          for (const relay of seenRelays) {
-            const existing = newMap.get(relay);
-            if (existing === undefined || ts < existing) {
-              newMap.set(relay, ts);
-              mapUpdated = true;
+              for (const relay of seenRelays) {
+                const existing = newMap.get(relay);
+                if (existing === undefined || ts < existing) {
+                  newMap.set(relay, ts);
+                  mapUpdated = true;
+                }
+              }
+            }
+
+            if (mapUpdated) {
+              perRelayOldestTimestamp = newMap; // Reassign to trigger reactivity
             }
           }
-        }
-
-        if (mapUpdated) {
-          perRelayOldestTimestamp = newMap; // Reassign to trigger reactivity
-        }
-      }
-    });
+        });
 
   // Subscribe to calendar events with date range filtering (reactive)
   // Re-subscribes when date range changes to filter events appropriately
@@ -806,6 +858,7 @@
   let calendarModelSub;
 
   $effect(() => {
+    if (!isEnabled('events')) return;
     calendarModelSub?.unsubscribe();
     calendarModelSub = /** @type {import('rxjs').Observable<any[]>} */ (
       eventStore.model(CalendarEventRangeModel, eventsDateRangeStart, eventsDateRangeEnd)
@@ -1044,10 +1097,7 @@
   // This directly calls handleLearningFilterChange instead of relying on
   // LearningContentFilters component's $effect propagation
   $effect(() => {
-    if (
-      (contentType === 'learning' || contentType === 'all') &&
-      activeSearchQuery !== previousActiveSearchQuery
-    ) {
+    if (showsType('learning') && activeSearchQuery !== previousActiveSearchQuery) {
       previousActiveSearchQuery = activeSearchQuery;
       // Build filters with current search text and any selected SKOS filters
       const filters = {
@@ -1075,7 +1125,12 @@
     if (contentType === 'boards') return hasMoreKanban;
     if (contentType === 'communities') return hasMoreCommunities;
     if (contentType === 'all')
-      return hasMoreArticles || hasMoreAMB || hasMoreCalendarEvents || hasMoreKanban;
+      return (
+        (isEnabled('articles') && hasMoreArticles) ||
+        (isEnabled('learning') && hasMoreAMB) ||
+        (isEnabled('events') && hasMoreCalendarEvents) ||
+        (isEnabled('boards') && hasMoreKanban)
+      );
     return false;
   });
 
@@ -1142,7 +1197,7 @@
       }
     }
 
-    if (contentType === 'events' || contentType === 'all') {
+    if (showsType('events')) {
       if (hasMoreCalendarEvents) {
         pendingLoaders++;
         let count = 0;
@@ -1184,7 +1239,7 @@
       }
     }
 
-    if (contentType === 'articles' || contentType === 'all') {
+    if (showsType('articles')) {
       if (hasMoreArticles) {
         pendingLoaders++;
         let count = 0;
@@ -1207,7 +1262,7 @@
       }
     }
 
-    if (contentType === 'learning' || contentType === 'all') {
+    if (showsType('learning')) {
       // Skip AMB pagination when learning search is active - search results are a single batch
       if (hasMoreAMB && !(contentType === 'learning' && isLearningSearchActive)) {
         // Get non-exhausted relays for pagination
@@ -1295,7 +1350,7 @@
       }
     }
 
-    if (contentType === 'boards' || contentType === 'all') {
+    if (showsType('boards')) {
       if (hasMoreKanban) {
         pendingLoaders++;
         let count = 0;
@@ -1358,18 +1413,18 @@
   $effect(() => {
     return () => {
       // Unsubscribe initial loader subscriptions
-      initialArticleSub.unsubscribe();
-      initialAmbSub.unsubscribe();
-      initialCalendarSub.unsubscribe();
-      initialKanbanSub.unsubscribe();
+      initialArticleSub?.unsubscribe();
+      initialAmbSub?.unsubscribe();
+      initialCalendarSub?.unsubscribe();
+      initialKanbanSub?.unsubscribe();
 
       // Unsubscribe date range loader subscription
       dateRangeLoaderSub?.unsubscribe();
 
       // Unsubscribe model subscriptions
-      articleModelSub.unsubscribe();
-      kanbanModelSub.unsubscribe();
-      ambModelSub.unsubscribe();
+      articleModelSub?.unsubscribe();
+      kanbanModelSub?.unsubscribe();
+      ambModelSub?.unsubscribe();
       calendarModelSub?.unsubscribe();
     };
   });
@@ -1440,7 +1495,7 @@
       const items = mapCommunityItemsToRawItems(
         communityScopedItems,
         /** @type {'all'|'events'|'learning'|'articles'|'boards'} */ (contentType)
-      );
+      ).filter((i) => showsType(RAW_ITEM_CONTENT_TYPE[i.type] || i.type));
       // Apply learning NIP-50 search intersection when active.
       if (
         contentType === 'learning' &&
@@ -1458,7 +1513,7 @@
     /** @type {Array<{type: string, data: any}>} */
     let items = [];
 
-    if (contentType === 'events' || contentType === 'all') {
+    if (showsType('events')) {
       items = [
         ...items,
         ...calendarEvents
@@ -1467,7 +1522,7 @@
       ];
     }
 
-    if (contentType === 'learning' || contentType === 'all') {
+    if (showsType('learning')) {
       if (isLearningSearchActive) {
         const searchResultIds = new Set(learningSearchResults.map((e) => e.id));
         const filteredAmbResources = ambResources.filter((r) =>
@@ -1484,7 +1539,7 @@
       }
     }
 
-    if (contentType === 'articles' || contentType === 'all') {
+    if (showsType('articles')) {
       items = [
         ...items,
         ...articles
@@ -1493,7 +1548,7 @@
       ];
     }
 
-    if (contentType === 'boards' || contentType === 'all') {
+    if (showsType('boards')) {
       items = [
         ...items,
         ...kanbanBoards
@@ -1670,62 +1725,24 @@
     </div>
   {/if}
 
-  <!-- Content Type Tabs -->
-  <div class="border-b border-base-300">
-    <div class="container mx-auto px-4">
-      <div class="tabs-boxed tabs justify-center bg-transparent py-4">
-        <button
-          class="tab {contentType === 'all' ? 'tab-active' : ''}"
-          data-testid="tab-all"
-          onclick={() => handleContentTypeChange('all')}
-        >
-          {m.discover_tab_all()}
-        </button>
-        <button
-          class="tab {contentType === 'events' ? 'tab-active' : ''}"
-          data-testid="tab-events"
-          onclick={() => handleContentTypeChange('events')}
-        >
-          {m.discover_tab_events()}
-        </button>
-        <button
-          class="tab {contentType === 'learning' ? 'tab-active' : ''}"
-          data-testid="tab-learning"
-          onclick={() => handleContentTypeChange('learning')}
-        >
-          {m.discover_tab_learning()}
-        </button>
-        <button
-          class="tab {contentType === 'articles' ? 'tab-active' : ''}"
-          data-testid="tab-articles"
-          onclick={() => handleContentTypeChange('articles')}
-        >
-          {m.discover_tab_articles()}
-        </button>
-        <button
-          class="tab {contentType === 'boards' ? 'tab-active' : ''}"
-          data-testid="tab-boards"
-          onclick={() => handleContentTypeChange('boards')}
-        >
-          {m.discover_tab_boards()}
-        </button>
-        <button
-          class="tab {contentType === 'communities' ? 'tab-active' : ''}"
-          data-testid="tab-communities"
-          onclick={() => handleContentTypeChange('communities')}
-        >
-          {m.discover_tab_communities()}
-        </button>
-        <button
-          class="tab {contentType === 'people' ? 'tab-active' : ''}"
-          data-testid="tab-people"
-          onclick={() => handleContentTypeChange('people')}
-        >
-          {m.discover_tab_people()}
-        </button>
+  <!-- Content Type Tabs (only the types this deployment enables; a single tab needs no bar) -->
+  {#if discoverTabs.length > 1}
+    <div class="border-b border-base-300">
+      <div class="container mx-auto px-4">
+        <div class="tabs-boxed tabs justify-center bg-transparent py-4">
+          {#each discoverTabs as tab (tab)}
+            <button
+              class="tab {contentType === tab ? 'tab-active' : ''}"
+              data-testid="tab-{tab}"
+              onclick={() => handleContentTypeChange(tab)}
+            >
+              {TAB_LABELS[/** @type {keyof typeof TAB_LABELS} */ (tab)]()}
+            </button>
+          {/each}
+        </div>
       </div>
     </div>
-  </div>
+  {/if}
 
   <!-- Unified Filter Section (shown for all content types) -->
   <div class="container mx-auto space-y-4 px-4 py-6">

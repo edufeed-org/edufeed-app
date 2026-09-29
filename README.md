@@ -304,6 +304,10 @@ Sandboxed interactive learning apps (webxdc `.xdc` packages) run in the resource
 - `SANDBOX_DOMAIN`: Cross-origin sandbox host for running apps (default: `iframe.diy`). Self-hosting is the documented fallback
 - `WEBXDC_APPS`: Curated apps for the channel app picker — comma-separated kind-1063 event references (`nevent1…` or 64-char hex event ids). Ordered; the **first entry is featured** prominently (e.g. the collaborative pad). Name, icon, file hash and license all resolve from each referenced event. Publish an app's kind-1063 with `node scripts/publish-webxdc-app.mjs --url <blossom-url> --name <name> [--icon <url>] [--license <url>] [--credit <text>]` (signs with `EDUFEED_PUBLISHER_NSEC`, prints the nevent to paste here). Leave empty to offer only live-discovered apps. The published collaborative pad (webxdc/editor v4.0.0, GPL-3.0, hosted on `blossom.edufeed.org`) is available as a ready-made first entry — see the `WEBXDC_APPS` example in `.env.example` for its nevent
 
+**Discover Page**
+
+- `DISCOVER_CONTENT_TYPES`: Which tabs `/discover` offers, comma-separated from `events`, `learning`, `articles`, `boards`, `communities`, `people` (default: all six). The "All" tab is derived, not configured: it shows up whenever at least two of the feed types (`events`, `learning`, `articles`, `boards`) are enabled and merges exactly those. Disabled types are not fetched, their tabs and the landing/dashboard links into them are hidden, and `?type=<disabled>` falls back to the first tab
+
 **NIP-29 Channels (Groups)**
 
 - `GROUPS_ENABLED`: Feature flag for community channels backed by a NIP-29 groups relay (true/false, default: false)

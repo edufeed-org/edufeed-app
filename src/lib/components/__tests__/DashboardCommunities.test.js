@@ -33,6 +33,22 @@ vi.mock('$lib/stores/joined-communities-list.svelte.js', () => ({
   useJoinedCommunitiesList: () => () => mockJoinedCommunities()
 }));
 
+let mockDiscoverContentTypes = [
+  'events',
+  'learning',
+  'articles',
+  'boards',
+  'communities',
+  'people'
+];
+vi.mock('$lib/stores/config.svelte.js', () => ({
+  runtimeConfig: {
+    get discover() {
+      return { contentTypes: mockDiscoverContentTypes };
+    }
+  }
+}));
+
 function StubComponent() {}
 
 vi.mock('$lib/components/CommunikeyCard.svelte', () => ({
@@ -48,6 +64,7 @@ vi.mock('$lib/components/icons', () => ({
 beforeEach(() => {
   vi.clearAllMocks();
   mockJoinedCommunities.mockReturnValue([]);
+  mockDiscoverContentTypes = ['events', 'learning', 'articles', 'boards', 'communities', 'people'];
 });
 
 describe('DashboardCommunities', () => {
@@ -74,6 +91,13 @@ describe('DashboardCommunities', () => {
     expect(card).toBeTruthy();
     expect(card.tagName).toBe('A');
     expect(card.getAttribute('href')).toBe('/discover?type=communities');
+  });
+
+  it('hides the Discover tile when the Discover communities tab is disabled', () => {
+    mockDiscoverContentTypes = ['events', 'learning'];
+    const { queryByTestId } = render(DashboardCommunities);
+    expect(queryByTestId('dashboard-communities-discover-card')).toBeNull();
+    expect(queryByTestId('dashboard-communities-create-card')).toBeTruthy();
   });
 
   it('renders the Create community tile as a button', () => {
