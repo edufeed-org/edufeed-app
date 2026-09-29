@@ -1,9 +1,18 @@
 /**
- * NIP-50 search-string extensions a relay advertises in its NIP-11 document
- * (`limitation.search_extensions`). Brainstorm's tags relay lists
- * `observer` / `sort` / `filter`; a plain search relay lists nothing and
- * would treat `observer:<hex>` as one more search word, so the profile
- * search loader asks here before appending tokens.
+ * NIP-50 search-string extensions a relay advertises in its NIP-11 document.
+ * Two spellings exist, and the tags relay may move from one to the other:
+ *
+ *   - `limitation.search_extensions: ["observer", "sort", "filter"]` —
+ *     Brainstorm's current strfry + nip50-proxy deployment.
+ *   - top-level `nip50: ["ext observer", "ext filter:rank", "query negate"]`
+ *     — NosFabrica/vespa-relay (RelayInfo.kt), "<class> <token>" entries.
+ *     Only `ext` entries are search-string tokens; the name is the part
+ *     before any colon (`ext filter:rank` → `filter`).
+ *
+ * A plain search relay lists nothing under either key and would treat
+ * `observer:<hex>` as one more search word, so the profile search loader
+ * asks here before appending tokens. Both lists are unioned, deduped, in
+ * document order (`limitation` first).
  *
  * One fetch per relay, cached for the page lifetime. Failures resolve to []
  * and are NOT cached, so a relay that was briefly unreachable is probed
@@ -30,6 +39,31 @@ function toHttpUrl(url) {
 }
 
 /**
+ * Pure: the extension names a NIP-11 document advertises, both spellings
+ * unioned. Exported for tests and for anyone holding a document already.
+ * @param {any} doc - parsed NIP-11 JSON
+ * @returns {string[]}
+ */
+export function parseSearchExtensions(doc) {
+  /** @type {string[]} */
+  const names = [];
+  const legacy = doc?.limitation?.search_extensions;
+  if (Array.isArray(legacy)) {
+    for (const e of legacy) if (typeof e === 'string' && e) names.push(e);
+  }
+  const nip50 = doc?.nip50;
+  if (Array.isArray(nip50)) {
+    for (const entry of nip50) {
+      if (typeof entry !== 'string') continue;
+      const [cls, token] = entry.trim().split(/\s+/, 2);
+      if (cls !== 'ext' || !token) continue;
+      names.push(token.split(':', 1)[0]);
+    }
+  }
+  return [...new Set(names)];
+}
+
+/**
  * @param {string} relayUrl - wss:// relay URL
  * @returns {Promise<string[]>} advertised extension names, [] when unknown
  */
@@ -48,9 +82,7 @@ export function getSearchExtensions(relayUrl) {
       });
       if (!response.ok) return null;
       const doc = await response.json();
-      const ext = doc?.limitation?.search_extensions;
-      if (!Array.isArray(ext)) return [];
-      return ext.filter((e) => typeof e === 'string');
+      return parseSearchExtensions(doc);
     } catch {
       return null;
     } finally {

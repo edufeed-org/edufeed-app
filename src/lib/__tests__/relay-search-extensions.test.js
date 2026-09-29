@@ -56,6 +56,47 @@ describe('getSearchExtensions', () => {
     await expect(getSearchExtensions('wss://odd.example')).resolves.toEqual([]);
   });
 
+  it('reads the vespa-relay `nip50` list: only `ext` entries count, named by the token before any colon', async () => {
+    // NosFabrica/vespa-relay RelayInfo.kt: top-level `nip50` array in
+    // "<class> <token>" spelling, no `limitation.search_extensions` at all.
+    fetchMock.mockReturnValue(
+      okJson({
+        supported_nips: [1, 50],
+        nip50: [
+          'ext observer',
+          'ext include:spam',
+          'ext sort',
+          'ext filter:rank',
+          'query negate',
+          'query exact-phrase-match'
+        ],
+        limitation: { max_limit: 500 }
+      })
+    );
+    const { getSearchExtensions } = await import('$lib/helpers/relay-search-extensions.js');
+    await expect(getSearchExtensions('wss://vespa.example')).resolves.toEqual([
+      'observer',
+      'include',
+      'sort',
+      'filter'
+    ]);
+  });
+
+  it('unions both spellings without duplicates when a document carries both', async () => {
+    fetchMock.mockReturnValue(
+      okJson({
+        nip50: ['ext observer', 'ext filter:rank', 42, 'ext'],
+        limitation: { search_extensions: ['observer', 'sort'] }
+      })
+    );
+    const { getSearchExtensions } = await import('$lib/helpers/relay-search-extensions.js');
+    await expect(getSearchExtensions('wss://both.example')).resolves.toEqual([
+      'observer',
+      'sort',
+      'filter'
+    ]);
+  });
+
   it('does not cache a failure, so a relay that was briefly down is re-probed', async () => {
     const { getSearchExtensions } = await import('$lib/helpers/relay-search-extensions.js');
     fetchMock.mockReturnValueOnce(Promise.reject(new Error('offline')));
