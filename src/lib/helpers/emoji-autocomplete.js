@@ -12,8 +12,9 @@ import { searchUnicodeEmojis, withSkinTone } from '$lib/helpers/emoji-data.js';
 /** @typedef {{ packName: string, emojis: CustomEmoji[] }} EmojiPack */
 /**
  * @typedef {{ type: 'custom', shortcode: string, url: string, packName: string }
- *   | { type: 'unicode', char: string, name: string, label: string }} EmojiHit
- *   `char` is what gets inserted (skin tone applied), `name` the English
+ *   | { type: 'unicode', char: string, base: string, name: string, label: string }} EmojiHit
+ *   `char` is what gets inserted (skin tone applied), `base` the emoji
+ *   without skin tone (what "recently used" records), `name` the English
  *   shortcode shown as `:name:`, `label` the localized CLDR name
  */
 
@@ -46,10 +47,16 @@ export function detectEmojiQuery(text, caret) {
  * @param {string} query
  * @param {EmojiPack[]} customSets
  * @param {import('$lib/helpers/emoji-data.js').EmojiEntry[]} entries current locale's dataset
- * @param {{ limit?: number, skinTone?: number }} [options]
+ * @param {{ limit?: number, skinTone?: number, recent?: Set<string> }} [options]
+ *   `recent`: base emojis to prefer within a match rank
  * @returns {EmojiHit[]}
  */
-export function searchEmojis(query, customSets, entries, { limit = 8, skinTone = 0 } = {}) {
+export function searchEmojis(
+  query,
+  customSets,
+  entries,
+  { limit = 8, skinTone = 0, recent = undefined } = {}
+) {
   const q = query.toLowerCase();
   if (!q) return [];
   /** @type {Array<{ rank: number, hit: EmojiHit }>} */
@@ -68,10 +75,11 @@ export function searchEmojis(query, customSets, entries, { limit = 8, skinTone =
   custom.sort((a, b) => a.rank - b.rank);
   const hits = custom.map((entry) => entry.hit);
   if (hits.length >= limit) return hits.slice(0, limit);
-  for (const entry of searchUnicodeEmojis(query, entries ?? [], limit - hits.length)) {
+  for (const entry of searchUnicodeEmojis(query, entries ?? [], limit - hits.length, recent)) {
     hits.push({
       type: 'unicode',
       char: withSkinTone(entry, skinTone),
+      base: entry.u,
       name: entry.s[0] ?? entry.l,
       label: entry.l
     });

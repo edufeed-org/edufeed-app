@@ -74,7 +74,13 @@ describe('searchEmojis', () => {
   it('finds unicode emojis by shortcode/keyword — exact before prefix — with char, name and label', () => {
     const hits = searchEmojis('grin', [], UNICODE);
     expect(hits.map((h) => h.type === 'unicode' && h.char)).toEqual(['😁', '😀']);
-    expect(hits[0]).toEqual({ type: 'unicode', char: '😁', name: 'grin', label: 'beaming face' });
+    expect(hits[0]).toEqual({
+      type: 'unicode',
+      char: '😁',
+      base: '😁',
+      name: 'grin',
+      label: 'beaming face'
+    });
   });
 
   it('is case-insensitive and bounded', () => {
@@ -82,9 +88,24 @@ describe('searchEmojis', () => {
     expect(hits.map((h) => h.type === 'unicode' && h.char)).toEqual(['😀', '😁']);
   });
 
-  it('applies the chosen skin tone to the inserted character', () => {
+  it('prefers recently used emojis within the same match rank', () => {
+    const plain = searchEmojis('smile', [], UNICODE).map((h) => h.char);
+    expect(plain).toEqual(['😀', '😁', '😊']);
+    const boosted = searchEmojis('smile', [], UNICODE, { recent: new Set(['😊']) });
+    expect(boosted.map((h) => h.char)).toEqual(['😊', '😀', '😁']);
+  });
+
+  it('never lets a recent emoji jump a better match', () => {
+    const hits = searchEmojis('grin', [], UNICODE, { recent: new Set(['😀']) });
+    // 😁 has the exact shortcode "grin", 😀 only a prefix match: recency must not reorder that
+    expect(hits.map((h) => h.char)).toEqual(['😁', '😀']);
+    const prefix = searchEmojis('grinn', [], UNICODE, { recent: new Set(['😁']) });
+    expect(prefix.map((h) => h.char)).toEqual(['😀']);
+  });
+
+  it('applies the chosen skin tone to the inserted character, keeping the base emoji', () => {
     const [hit] = searchEmojis('thumbs', [], UNICODE, { skinTone: 4 });
-    expect(hit).toMatchObject({ char: '👍🏾', name: '+1' });
+    expect(hit).toMatchObject({ char: '👍🏾', base: '👍', name: '+1' });
   });
 
   it('returns nothing for a query nothing matches, and copes without a dataset', () => {

@@ -3,7 +3,8 @@
    * EmojiPicker - Reusable emoji grid with search, groups and skin tones
    * over the full unicode set for the current locale (Unicode 17 via the
    * generated datasets in src/lib/data/emoji/, see emoji-data.js), plus the
-   * user's NIP-30 custom emoji packs above it. Search matches the locale's
+   * user's NIP-30 custom emoji packs above it and a "recently used" row on
+   * top while browsing (per device + account). Search matches the locale's
    * CLDR keywords and the English `:shortcode:` vocabulary alike.
    * Consumer provides the container (modal, dropdown, etc.)
    * @component
@@ -14,7 +15,13 @@
     searchUnicodeEmojis,
     withSkinTone
   } from '$lib/helpers/emoji-data.js';
-  import { getEmojiEntries, getSkinTone, setSkinTone } from '$lib/stores/emoji-data.svelte.js';
+  import {
+    getEmojiEntries,
+    getRecentEmojis,
+    getSkinTone,
+    recordEmojiUse,
+    setSkinTone
+  } from '$lib/stores/emoji-data.svelte.js';
   import * as m from '$lib/paraglide/messages';
   import ImageWithFallback from '$lib/components/shared/ImageWithFallback.svelte';
 
@@ -91,6 +98,32 @@
   /** Search view: one ranked list across all groups (null while browsing). */
   const results = $derived(query ? searchUnicodeEmojis(query, entries) : null);
 
+  /** Recently used, resolved against the dataset (label + skin tones);
+   *  an emoji the dataset does not know (yet) still renders as-is. */
+  const recents = $derived.by(() => {
+    const byU = new Map(entries.map((e) => [e.u, e]));
+    return getRecentEmojis().map((r) =>
+      r.type === 'custom'
+        ? r
+        : {
+            type: /** @type {const} */ ('unicode'),
+            entry: byU.get(r.u) ?? { u: r.u, g: -1, l: '', t: [], s: [] }
+          }
+    );
+  });
+
+  /** @param {import('$lib/helpers/emoji-data.js').EmojiEntry} entry */
+  function pickUnicode(entry) {
+    recordEmojiUse({ type: 'unicode', u: entry.u });
+    onSelect(withSkinTone(entry, skinTone));
+  }
+  /** @param {CustomEmoji} emoji */
+  function pickCustom(emoji) {
+    recordEmojiUse({ type: 'custom', shortcode: emoji.shortcode, url: emoji.url });
+    if (onSelectCustom) onSelectCustom(emoji);
+    else onSelect(`:${emoji.shortcode}:`);
+  }
+
   /** Custom emoji packs filtered by shortcode */
   const filteredCustomSets = $derived.by(() => {
     if (!customEmojiSets || customEmojiSets.length === 0) return [];
@@ -141,6 +174,47 @@
 
 <!-- Emoji grid -->
 <div class="flex-1 overflow-y-auto p-3">
+  <!-- Recently used (browsing only) -->
+  {#if !query && recents.length > 0}
+    <div class="mb-4" data-testid="emoji-recents">
+      <h4 class="mb-1 text-xs font-medium text-base-content/60">{m.emoji_group_recent()}</h4>
+      <div class="grid grid-cols-8 gap-1">
+        {#each recents as recent (recent.type === 'custom' ? `c:${recent.shortcode}` : `u:${recent.entry.u}`)}
+          {#if recent.type === 'custom'}
+            <button
+              type="button"
+              onclick={() => pickCustom(recent)}
+              class="flex items-center justify-center rounded p-1 transition-colors hover:bg-base-300"
+              title=":{recent.shortcode}:"
+              data-testid="recent-emoji-option"
+              data-shortcode={recent.shortcode}
+            >
+              <ImageWithFallback
+                src={recent.url}
+                alt=":{recent.shortcode}:"
+                loading="lazy"
+                fallbackType="generic"
+                class="inline h-6 w-6 object-contain"
+              />
+            </button>
+          {:else}
+            {@const emoji = withSkinTone(recent.entry, skinTone)}
+            <button
+              type="button"
+              onclick={() => pickUnicode(recent.entry)}
+              class="rounded p-1 text-xl leading-none transition-colors hover:bg-base-300"
+              title={recent.entry.l || emoji}
+              data-testid="recent-emoji-option"
+              data-emoji={emoji}
+            >
+              {emoji}
+            </button>
+          {/if}
+        {/each}
+      </div>
+    </div>
+  {/if}
+
   <!-- Custom emoji packs (above unicode) -->
   {#each filteredCustomSets as pack (pack.packName)}
     <div class="mb-4">
@@ -149,13 +223,7 @@
         {#each pack.emojis as emoji (emoji.shortcode)}
           <button
             type="button"
-            onclick={() => {
-              if (onSelectCustom) {
-                onSelectCustom(emoji);
-              } else {
-                onSelect(`:${emoji.shortcode}:`);
-              }
-            }}
+            onclick={() => pickCustom(emoji)}
             class="flex items-center justify-center rounded p-1 transition-colors hover:bg-base-300"
             title=":{emoji.shortcode}:"
             data-testid="custom-emoji-option"
@@ -182,7 +250,7 @@
           {@const emoji = withSkinTone(entry, skinTone)}
           <button
             type="button"
-            onclick={() => onSelect(emoji)}
+            onclick={() => pickUnicode(entry)}
             class="rounded p-1 text-xl leading-none transition-colors hover:bg-base-300"
             title={entry.l}
             data-testid="emoji-option"
