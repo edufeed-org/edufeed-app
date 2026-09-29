@@ -197,9 +197,10 @@ describe('group management templates', () => {
     });
   });
 
-  it('generateGroupId yields 16 lowercase hex chars, unique-ish', () => {
+  it('generateGroupId yields a lowercase v4 UUID, unique-ish', () => {
+    // Buzz (relay, desktop, buzz-acp agents) only addresses channels by UUID.
     const a = generateGroupId();
-    expect(a).toMatch(/^[0-9a-f]{16}$/);
+    expect(a).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
     expect(generateGroupId()).not.toBe(a);
   });
 });

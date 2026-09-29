@@ -110,10 +110,19 @@ export function buildDeleteEventTemplate(groupId, eventId) {
   ]);
 }
 
-/** 16 hex chars — the short relay-scoped id style Armada uses. */
+/**
+ * A lowercase v4 UUID. Buzz (its relay, desktop and buzz-acp agents) only
+ * addresses channels by UUID, so groups created with the old 16-hex ids stay
+ * invisible to Buzz clients forever — the id is baked into every signed `h`
+ * tag. Built from getRandomValues rather than crypto.randomUUID(), which is
+ * missing outside secure contexts (dev server over a LAN IP).
+ */
 export function generateGroupId() {
-  const bytes = crypto.getRandomValues(new Uint8Array(8));
-  return Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
+  const bytes = crypto.getRandomValues(new Uint8Array(16));
+  bytes[6] = (bytes[6] & 0x0f) | 0x40; // version 4
+  bytes[8] = (bytes[8] & 0x3f) | 0x80; // RFC 4122 variant
+  const hex = Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
 }
 
 /**

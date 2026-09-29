@@ -33,6 +33,13 @@ describe('communityGroupsEndpoint', () => {
     expect(ep).toBe(`${BASE}/c/root-1`);
     expect(flatGroupsRelay(ep)).toBe(`${BASE}/`);
   });
+
+  it('round-trips a UUID root id (new groups since the Buzz-compatible id switch)', () => {
+    const uuid = '3f2b9c1e-8d4a-4b6f-9e21-5c7d0a1b2c3d';
+    const ep = communityGroupsEndpoint(BASE, uuid);
+    expect(ep).toBe(`${BASE}/c/${uuid}`);
+    expect(flatGroupsRelay(ep)).toBe(`${BASE}/`);
+  });
 });
 
 describe('flatGroupsRelay', () => {
