@@ -6,6 +6,7 @@
  * @vitest-environment node
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { nip19 } from 'nostr-tools';
 
 // Track signed events
 /** @type {any} */
@@ -58,6 +59,19 @@ describe('createArticle', () => {
         return lastSignedEvent;
       })
     };
+  });
+
+  it('p-tags people mentioned in the body (bare npubs repaired) and hands them to the outbox', async () => {
+    const alice = 'a'.repeat(64);
+    const bob = 'b'.repeat(64);
+    await createArticle({
+      title: 'T',
+      content: `Thanks nostr:${nip19.npubEncode(alice)} and ${nip19.npubEncode(bob)}`
+    });
+    expect(lastSignedEvent.tags).toContainEqual(['p', alice]);
+    expect(lastSignedEvent.tags).toContainEqual(['p', bob]);
+    expect(lastSignedEvent.content).toContain(`nostr:${nip19.npubEncode(bob)}`);
+    expect(/** @type {any} */ (publishEventOptimistic).mock.calls[0][1]).toEqual([alice, bob]);
   });
 
   it('builds correct NIP-23 tags', async () => {
@@ -218,6 +232,16 @@ describe('updateArticle', () => {
         return lastSignedEvent;
       })
     };
+  });
+
+  it('p-tags people mentioned in the updated body and hands them to the outbox', async () => {
+    const alice = 'a'.repeat(64);
+    await updateArticle(
+      { title: 'New Title', content: `Hi nostr:${nip19.npubEncode(alice)}` },
+      existingEvent
+    );
+    expect(lastSignedEvent.tags).toContainEqual(['p', alice]);
+    expect(/** @type {any} */ (publishEventOptimistic).mock.calls[0][1]).toEqual([alice]);
   });
 
   it('preserves existing d-tag', async () => {

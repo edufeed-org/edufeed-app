@@ -214,4 +214,39 @@ describe('usePeopleSearch', () => {
     cleanup = undefined;
     expect(profileSearch.unsubscribed).toBe(1);
   });
+
+  function mountWithOptions(initial, options) {
+    let query = $state(initial);
+    let get;
+    cleanup = $effect.root(() => {
+      get = usePeopleSearch(() => query, options);
+    });
+    flushSync();
+    return {
+      get: () => get(),
+      set: (q) => {
+        query = q;
+        flushSync();
+      }
+    };
+  }
+
+  it('with minTerm 0 lists follows for an empty term and never fires the remote leg under two chars', () => {
+    contacts.searchContacts.mockReturnValue([contact(ALICE, 'Alice')]);
+    const { get, set } = mountWithOptions('', { minTerm: 0, limit: 8 });
+    expect(get().tooShort).toBe(false);
+    expect(get().results.map((c) => c.pubkey)).toEqual([ALICE]);
+    expect(contacts.searchContacts).toHaveBeenCalledWith('', 8);
+    vi.advanceTimersByTime(1000);
+    expect(profileSearch.profileNameSearchLoader).not.toHaveBeenCalled();
+
+    set('a');
+    vi.advanceTimersByTime(1000);
+    expect(profileSearch.profileNameSearchLoader).not.toHaveBeenCalled();
+
+    set('al');
+    vi.advanceTimersByTime(350);
+    flushSync();
+    expect(profileSearch.profileNameSearchLoader).toHaveBeenCalledWith('al', 8);
+  });
 });

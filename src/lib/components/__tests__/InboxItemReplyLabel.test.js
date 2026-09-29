@@ -34,6 +34,13 @@ vi.mock('$lib/paraglide/messages.js', () => ({
   inbox_action_note_mention: () => 'mentioned you in a note',
   inbox_action_mention: (/** @type {any} */ { communityName }) =>
     `mentioned you in ${communityName}`,
+  inbox_action_thread_mention: (/** @type {any} */ { title }) =>
+    `mentioned you in the thread ${title}`,
+  inbox_action_article_mention: (/** @type {any} */ { title }) =>
+    `mentioned you in the article ${title}`,
+  inbox_action_wiki_mention: (/** @type {any} */ { title }) =>
+    `mentioned you in the wiki page ${title}`,
+  inbox_action_untitled: () => 'Untitled',
   inbox_action_reaction: () => 'reacted',
   inbox_action_comment: () => 'commented',
   inbox_action_rsvp: () => 'rsvped',
@@ -96,5 +103,26 @@ describe('InboxItem kind 1 labels', () => {
       }
     });
     expect(screen.getByText(/mentioned you in Mathe AG/)).toBeTruthy();
+  });
+
+  it('labels article, wiki and thread mentions with the event title', () => {
+    render(InboxItem, {
+      props: { event: makeEvent(30023, [['title', 'Big News']]), unread: true }
+    });
+    expect(screen.getByText(/mentioned you in the article Big News/)).toBeTruthy();
+  });
+
+  it('falls back to untitled when the page has no title tag', () => {
+    render(InboxItem, {
+      props: { event: makeEvent(30818, [['d', 'x']]), unread: true }
+    });
+    expect(screen.getByText(/mentioned you in the wiki page Untitled/)).toBeTruthy();
+  });
+
+  it('labels a thread mention', () => {
+    render(InboxItem, {
+      props: { event: makeEvent(11, [['title', 'Ausflug']]), unread: true }
+    });
+    expect(screen.getByText(/mentioned you in the thread Ausflug/)).toBeTruthy();
   });
 });

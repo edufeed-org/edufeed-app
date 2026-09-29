@@ -20,7 +20,9 @@
     buildReferenceUri,
     insertReferenceIntoContent
   } from '$lib/helpers/noteReferences.js';
+  import { pTagPubkeys } from '$lib/helpers/mention-autocomplete.js';
   import NostrContentRenderer from '$lib/components/shared/NostrContentRenderer.svelte';
+  import ComposerInput from '$lib/components/shared/ComposerInput.svelte';
   import * as m from '$lib/paraglide/messages';
 
   /**
@@ -105,7 +107,9 @@
       const signed = await activeUser.signer.signEvent(draft);
 
       eventStore.add(signed);
-      const result = await publishEvent(signed, [], { communityEvent });
+      // Mentioned users (p tags from nostr:npub references) get the note on
+      // their read relays too.
+      const result = await publishEvent(signed, pTagPubkeys(signed), { communityEvent });
       if (!result.success) {
         submitError = m.note_create_modal_error_publish();
         return;
@@ -147,13 +151,15 @@
     </div>
 
     {#if activeTab === 'write'}
-      <textarea
-        class="textarea-bordered textarea w-full"
-        rows="5"
-        placeholder={m.note_create_modal_content_placeholder()}
-        data-testid="note-content-input"
+      <ComposerInput
         bind:value={content}
-      ></textarea>
+        multiline
+        submitOnEnter={false}
+        minHeight="7rem"
+        class="textarea-bordered textarea w-full"
+        placeholder={m.note_create_modal_content_placeholder()}
+        testid="note-content-input"
+      />
     {:else}
       <div
         class="min-h-32 rounded-lg border border-base-300 bg-base-200/30 p-3"

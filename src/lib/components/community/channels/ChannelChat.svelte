@@ -53,7 +53,7 @@
   import PollMessage from './PollMessage.svelte';
   import ChannelEventsBar from './ChannelEventsBar.svelte';
   import ReactionChips from '$lib/components/reactions/ReactionChips.svelte';
-  import MentionAutocomplete from './MentionAutocomplete.svelte';
+  import MentionAutocomplete from '$lib/components/shared/MentionAutocomplete.svelte';
   import { showToast } from '$lib/helpers/toast';
   import { buildMessageDeepLink, scrollToChatMessage } from '$lib/helpers/message-anchor.js';
   import { getChannelLevel, setChannelLevel } from '$lib/concord/notifications.svelte.js';

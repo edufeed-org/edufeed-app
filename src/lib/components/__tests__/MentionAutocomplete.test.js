@@ -1,7 +1,12 @@
 /** @vitest-environment jsdom */
 import { describe, it, expect, vi } from 'vitest';
 import { render, fireEvent } from '@testing-library/svelte';
-import MentionAutocomplete from '$lib/components/community/channels/MentionAutocomplete.svelte';
+import MentionAutocomplete from '$lib/components/shared/MentionAutocomplete.svelte';
+
+vi.mock('$lib/paraglide/messages', async (importOriginal) => ({
+  .../** @type {any} */ (await importOriginal()),
+  mention_suggestions_label: () => 'People suggestions'
+}));
 
 const CANDIDATES = [
   { pubkey: 'a'.repeat(64), name: 'Alice', profile: null },
@@ -38,5 +43,17 @@ describe('MentionAutocomplete', () => {
       onSelect: () => {}
     });
     expect(container.querySelector('[role="listbox"]')).toBeNull();
+  });
+
+  it('is addressable by testid, labelled for screen readers, and full width', () => {
+    const { getByTestId } = render(MentionAutocomplete, {
+      candidates: CANDIDATES,
+      highlightIndex: 0,
+      onSelect: () => {}
+    });
+    const list = getByTestId('mention-suggestions');
+    expect(list.getAttribute('aria-label')).toBe('People suggestions');
+    expect(list.className).toContain('left-0');
+    expect(list.className).not.toContain('right-4');
   });
 });

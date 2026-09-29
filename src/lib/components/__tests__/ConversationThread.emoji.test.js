@@ -60,6 +60,11 @@ vi.mock('$lib/components/shared/NostrContentRenderer.svelte', async () => {
   return { default: mock.default };
 });
 
+vi.mock(
+  '$lib/stores/mention-candidates.svelte.js',
+  () => import('./fixtures/mention-candidates-mock.svelte.js')
+);
+
 import ConversationThread from '$lib/components/dm/ConversationThread.svelte';
 import { SendWrappedMessage } from '$lib/actions/dm-actions.js';
 

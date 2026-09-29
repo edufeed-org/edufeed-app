@@ -1,7 +1,12 @@
 <script>
   import { resolve } from '$app/paths';
   import { goto } from '$app/navigation';
-  import { getNotificationType, getNotificationUrl } from '$lib/helpers/inbox.js';
+  import {
+    getNotificationType,
+    getNotificationUrl,
+    getMentionSurface,
+    getEventTitle
+  } from '$lib/helpers/inbox.js';
   import { profileLink } from '$lib/helpers/nostrUtils.js';
   import { useGroupAddedTarget } from '$lib/groups/group-added.svelte.js';
   import { useProfileMap } from '$lib/stores/profile-map.svelte.js';
@@ -37,6 +42,9 @@
   let { event, profile, unread, contentTitle = '', formName = '' } = $props();
 
   const type = $derived(getNotificationType(event));
+  // Where a mention happened; threads/articles/wikis name themselves via their title tag.
+  const surface = $derived(getMentionSurface(event));
+  const ownTitle = $derived(getEventTitle(event) || m.inbox_action_untitled());
   // kind 9000: where the group lives (community page or group route) and
   // what to call it — the community's profile name, else the group's own.
   const getGroupAdded = useGroupAddedTarget(() => (type === 'groupAdded' ? event : null));
@@ -243,10 +251,16 @@
       {:else if type === 'reply'}
         &nbsp;{m.inbox_action_reply()}
       {:else if type === 'mention'}
-        <!-- kind 9 mentions happen inside a community, kind 1 mentions do not -->
-        &nbsp;{event.kind === 1
+        <!-- kind 9 mentions happen inside a community; notes, threads, articles and wikis do not -->
+        &nbsp;{surface === 'note'
           ? m.inbox_action_note_mention()
-          : m.inbox_action_mention({ communityName: contentTitle })}
+          : surface === 'thread'
+            ? m.inbox_action_thread_mention({ title: ownTitle })
+            : surface === 'article'
+              ? m.inbox_action_article_mention({ title: ownTitle })
+              : surface === 'wiki'
+                ? m.inbox_action_wiki_mention({ title: ownTitle })
+                : m.inbox_action_mention({ communityName: contentTitle })}
       {:else if type === 'rsvp'}
         &nbsp;{m.inbox_action_rsvp({ eventTitle: contentTitle })}
       {:else if type === 'pollVote'}

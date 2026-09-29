@@ -5,6 +5,7 @@ import { getReactionAddressPointer, getReactionEventPointer } from 'applesauce-c
 import { getRSVPAddressPointer } from 'applesauce-common/helpers';
 import { encodePointer } from 'applesauce-core/helpers';
 import { isWave } from '$lib/helpers/waves.js';
+import { mentionPubkeysIn } from '$lib/helpers/mention-autocomplete.js';
 
 /** @type {Record<number, string>} */
 const KIND_TO_TYPE = {
@@ -13,6 +14,10 @@ const KIND_TO_TYPE = {
   7: 'reaction',
   1111: 'comment',
   9: 'mention',
+  // @mentions in forum threads, articles and wiki pages
+  11: 'mention',
+  30023: 'mention',
+  30818: 'mention',
   31925: 'rsvp',
   1018: 'pollVote',
   // NIP-29 put-user: an admin added you to a group (community root or channel).
@@ -31,6 +36,33 @@ export function getNotificationType(event) {
     return event.tags?.some((t) => t[0] === 'e') ? 'reply' : 'mention';
   }
   return KIND_TO_TYPE[event.kind] ?? null;
+}
+
+/** @type {Record<number, 'note' | 'community' | 'thread' | 'article' | 'wiki'>} */
+const MENTION_SURFACES = {
+  1: 'note',
+  9: 'community',
+  11: 'thread',
+  30023: 'article',
+  30818: 'wiki'
+};
+
+/**
+ * Where a mention happened — drives the inbox row copy.
+ * @param {import('nostr-tools').NostrEvent} event
+ * @returns {'note' | 'community' | 'thread' | 'article' | 'wiki' | null}
+ */
+export function getMentionSurface(event) {
+  return MENTION_SURFACES[event.kind] ?? null;
+}
+
+/**
+ * The event's own `title` tag (articles, wikis, threads), or ''.
+ * @param {{ tags: string[][] }} event
+ * @returns {string}
+ */
+export function getEventTitle(event) {
+  return event.tags?.find((t) => t[0] === 'title')?.[1] ?? '';
 }
 
 /**
@@ -150,6 +182,17 @@ export function getNotificationUrl(event, { groupAddedHref = null } = {}) {
     return `/${encodePointer({ id: event.id, relays: [] })}`;
   }
 
+  // Thread mentions open the thread itself
+  if (event.kind === 11) {
+    return `/${encodePointer({ id: event.id, relays: [] })}`;
+  }
+
+  // Article / wiki mentions open the page (addressable)
+  if (event.kind === 30023 || event.kind === 30818) {
+    const identifier = event.tags.find((t) => t[0] === 'd')?.[1] ?? '';
+    return `/${encodePointer({ kind: event.kind, pubkey: event.pubkey, identifier, relays: [] })}`;
+  }
+
   if (type === 'mention') {
     const community = event.tags.find((t) => t[0] === 'h')?.[1];
     return community ? `/c/${community}` : null;
@@ -192,20 +235,10 @@ export function getNotificationUrl(event, { groupAddedHref = null } = {}) {
 }
 
 /**
- * Extract pubkeys from nostr:npub1... mentions in text content.
+ * Extract pubkeys from nostr:npub1… / nostr:nprofile1… mentions in text content.
  * @param {string} content
  * @returns {string[]} hex pubkeys
  */
 export function extractMentionPubkeys(content) {
-  const matches = content.matchAll(/nostr:(npub1[a-z0-9]{58})/g);
-  const pubkeys = [];
-  for (const match of matches) {
-    try {
-      const decoded = nip19.decode(match[1]);
-      if (decoded.type === 'npub') pubkeys.push(decoded.data);
-    } catch {
-      /* skip invalid */
-    }
-  }
-  return [...new Set(pubkeys)];
+  return mentionPubkeysIn(content);
 }

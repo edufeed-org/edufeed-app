@@ -231,6 +231,8 @@
       </div>
 
       <!-- Summary -->
+      <!-- plain textarea on purpose: the summary is a metadata tag, not content —
+        a mention here would neither be p-tagged nor rendered as a name -->
       <textarea
         class="textarea w-full"
         rows="2"

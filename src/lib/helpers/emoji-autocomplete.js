@@ -1,9 +1,9 @@
-// Pure half of the Slack-style `:` emoji autocomplete used by EmojiInput
+// Pure half of the Slack-style `:` emoji autocomplete used by ComposerInput
 // (laoc, 2026-09-18): detect an in-progress `:query` before the caret, rank
 // matches from the user's custom packs (NIP-30, kind 30030) and the unicode
 // set, splice the pick into the text, and list the custom emojis a draft
 // still references (the send paths turn those into `emoji` tags). Mirrors
-// concord/chat-helpers.js's detectMentionQuery/applyMention so both
+// helpers/mention-autocomplete.js's detectMentionQuery/applyMention so both
 // autocompletes feel the same. No Svelte/store imports — trivially testable.
 import { emojiMetadata } from '$lib/data/emojiMetadata.js';
 

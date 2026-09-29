@@ -75,7 +75,8 @@ describe('getNotificationType', () => {
     expect(getNotificationType({ kind: 1 })).toBe('mention');
   });
   it('returns null for unknown kind', () => {
-    expect(getNotificationType({ kind: 30023 })).toBe(null);
+    // 30023 (articles) became a mention surface; use a kind nothing maps
+    expect(getNotificationType({ kind: 424242 })).toBe(null);
   });
 });
 

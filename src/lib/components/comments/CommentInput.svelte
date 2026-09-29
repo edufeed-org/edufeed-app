@@ -3,7 +3,9 @@
   import { CommentFactory } from 'applesauce-common/factories';
   import { publishEventOptimistic } from '$lib/services/publish-service.js';
   import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
+  import { pTagPubkeys } from '$lib/helpers/mention-autocomplete.js';
   import NostrContentRenderer from '$lib/components/shared/NostrContentRenderer.svelte';
+  import ComposerInput from '$lib/components/shared/ComposerInput.svelte';
   import * as m from '$lib/paraglide/messages';
 
   /**
@@ -35,7 +37,8 @@
   let content = $state('');
   let isPosting = $state(false);
   let error = $state('');
-  let textareaElement = $state(/** @type {HTMLTextAreaElement|null} */ (null));
+  /** The composer editor (contenteditable with @mentions) */
+  let editorRef = $state(/** @type {any} */ (null));
   let activeTab = $state(/** @type {'write' | 'preview'} */ ('write'));
 
   // Fresh object per derive so applesauce's Symbol-keyed parse cache stays correct.
@@ -55,8 +58,8 @@
 
   // Auto-focus if requested
   $effect(() => {
-    if (autoFocus && textareaElement) {
-      textareaElement.focus();
+    if (autoFocus && editorRef) {
+      editorRef.focus();
     }
   });
 
@@ -107,9 +110,13 @@
       // Tag the relevant author so the post reaches their read relays:
       // root event author for event-rooted threads, parent comment author for
       // replies in URL-rooted threads (no root event to tag).
+      // Mentioned users (p tags from nostr:npub references) are added once.
       const taggedPubkeys = [];
       if (rootEvent?.pubkey) taggedPubkeys.push(rootEvent.pubkey);
       if (!rootEvent && parentItem?.pubkey) taggedPubkeys.push(parentItem.pubkey);
+      for (const pubkey of pTagPubkeys(signedEvent)) {
+        if (!taggedPubkeys.includes(pubkey)) taggedPubkeys.push(pubkey);
+      }
       publishEventOptimistic(signedEvent, taggedPubkeys);
     } catch (err) {
       console.error('Failed to post comment:', err);
@@ -142,16 +149,17 @@
   </div>
 
   {#if activeTab === 'write'}
-    <textarea
-      bind:this={textareaElement}
+    <ComposerInput
+      bind:this={editorRef}
       bind:value={content}
+      multiline
+      submitOnEnter={false}
+      minHeight="5.5rem"
       {placeholder}
       class="textarea-bordered textarea w-full"
-      rows="3"
       disabled={isPosting}
-      required
-      data-testid="comment-input"
-    ></textarea>
+      testid="comment-input"
+    />
   {:else}
     <div
       class="textarea-bordered textarea min-h-[5.5rem] w-full cursor-default"

@@ -3,7 +3,9 @@
  * Actions for creating and managing wiki articles (NIP-54, kind 30818)
  */
 
+import { repairNostrLinks, tagPubkeyMentions } from 'applesauce-core/operations';
 import { createAppEventFactory } from '$lib/helpers/event-factory.js';
+import { pTagPubkeys } from '$lib/helpers/mention-autocomplete.js';
 import { normalizeIdentifier } from 'nostr-tools/nip54';
 import { manager } from '$lib/stores/accounts.svelte';
 import { encodeEventToNaddr } from '$lib/helpers/nostrUtils.js';
@@ -82,14 +84,20 @@ export async function createWiki(formData, communityPubkey, communityEvent = nul
   const tags = buildWikiTags(formData, dTag, communityPubkey);
 
   const eventFactory = createAppEventFactory();
-  const eventTemplate = await eventFactory.build({
-    kind: WIKI_KIND,
-    content: formData.content,
-    tags
-  });
+  // NIP-27 references in the body become NIP-10 p tags (bare npubs repaired first).
+  const eventTemplate = await eventFactory.build(
+    {
+      kind: WIKI_KIND,
+      content: formData.content,
+      tags
+    },
+    repairNostrLinks(),
+    tagPubkeyMentions()
+  );
 
   const wikiEvent = await currentAccount.signEvent(eventTemplate);
-  publishEventOptimistic(wikiEvent, [], { communityEvent });
+  // Mentioned users get the page on their read relays too.
+  publishEventOptimistic(wikiEvent, pTagPubkeys(wikiEvent), { communityEvent });
 
   const naddr = encodeEventToNaddr(wikiEvent, getAppRelaysForCategory('communikey'));
 
@@ -133,15 +141,19 @@ export async function updateWiki(formData, existingEvent, communityEvent = null)
   const eventFactory = createAppEventFactory();
   // Strictly newer than the version being replaced — a same-second edit is
   // dropped by the relay tie-break and deterministically by the cache. (#62/#64)
-  const eventTemplate = await eventFactory.build({
-    kind: WIKI_KIND,
-    content: formData.content,
-    tags,
-    created_at: nextCreatedAt(existingEvent)
-  });
+  const eventTemplate = await eventFactory.build(
+    {
+      kind: WIKI_KIND,
+      content: formData.content,
+      tags,
+      created_at: nextCreatedAt(existingEvent)
+    },
+    repairNostrLinks(),
+    tagPubkeyMentions()
+  );
 
   const updatedEvent = await currentAccount.signEvent(eventTemplate);
-  publishEventOptimistic(updatedEvent, [], { communityEvent });
+  publishEventOptimistic(updatedEvent, pTagPubkeys(updatedEvent), { communityEvent });
 
   const naddr = encodeEventToNaddr(updatedEvent, getAppRelaysForCategory('communikey'));
 

@@ -8,6 +8,7 @@
 <script>
   import { mount, unmount } from 'svelte';
   import { renderMarkdown } from '$lib/helpers/markdown.js';
+  import { mentionNames } from '$lib/helpers/mention-names.js';
   import BodyImageLicense from './BodyImageLicense.svelte';
 
   let { content = '', class: className = 'prose prose-lg max-w-none' } = $props();
@@ -94,7 +95,7 @@
   }
 </script>
 
-<div class={className} use:bodyImageLicenseAction>
+<div class={className} use:bodyImageLicenseAction use:mentionNames>
   <!-- eslint-disable-next-line svelte/no-at-html-tags -- safe: sanitized with DOMPurify -->
   {@html html}
 </div>

@@ -76,7 +76,9 @@ export function buildMainFilter(pubkey, since) {
   return [
     { kinds: [1, 1070, 1069, 7, 9], '#p': [pubkey], since },
     { kinds: [1111], '#p': [pubkey], since },
-    { kinds: [1111], '#P': [pubkey], since }
+    { kinds: [1111], '#P': [pubkey], since },
+    // @mentions in forum threads, long-form articles and wiki pages
+    { kinds: [11, 30023, 30818], '#p': [pubkey], since }
   ];
 }
 

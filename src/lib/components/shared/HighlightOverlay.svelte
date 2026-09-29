@@ -9,6 +9,7 @@
     injectHighlightMarks,
     getMatchableText
   } from '$lib/helpers/highlightOverlay.js';
+  import { mentionNames } from '$lib/helpers/mention-names.js';
   import HighlightItem from '$lib/components/bookmarks/HighlightItem.svelte';
   import HighlightSelectionTooltip from '$lib/components/bookmarks/HighlightSelectionTooltip.svelte';
   import * as m from '$lib/paraglide/messages';
@@ -189,7 +190,8 @@
 <!-- svelte-ignore a11y_click_events_have_key_events -->
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <div class="highlight-overlay relative" onclick={handleMarkClick}>
-  <article class={className} bind:this={container}></article>
+  <!-- mentionNames: `nostr:npub…` links in the rendered body show @Name once the profile loads -->
+  <article class={className} bind:this={container} use:mentionNames></article>
   <!-- Highlighting works outside community context too — the h-tag on the
        published highlight is simply omitted then. -->
   {#if activeUser && container && source}

@@ -16,6 +16,12 @@ vi.mock('$lib/paraglide/messages', () => ({
   groups_poll_create: () => 'Poll'
 }));
 
+vi.mock(
+  '$lib/stores/mention-candidates.svelte.js',
+  () => import('./fixtures/mention-candidates-mock.svelte.js')
+);
+vi.mock('$lib/stores/profile-map.svelte.js', () => ({ useProfileMap: () => () => new Map() }));
+
 import ChatComposer from '$lib/components/chat/ChatComposer.svelte';
 
 const SETS = [{ packName: 'Doge', emojis: [{ shortcode: 'doge', url: 'https://x/doge.png' }] }];

@@ -199,3 +199,68 @@ describe('updateWiki', () => {
     expect(lastSignedEvent.created_at).toBe(future.created_at + 1);
   });
 });
+
+// --- @mentions: NIP-27 references in the body become NIP-10 p tags ---------
+import { nip19 } from 'nostr-tools';
+
+describe('createWiki / updateWiki mentions', () => {
+  const ALICE = 'a'.repeat(64);
+  const BOB = 'b'.repeat(64);
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    lastSignedEvent = null;
+    /** @type {any} */ (manager).active = {
+      pubkey: 'testpubkey123',
+      signEvent: vi.fn(async (/** @type {any} */ event) => {
+        lastSignedEvent = {
+          ...event,
+          id: 'signed-event-id',
+          sig: 'test-sig',
+          pubkey: 'testpubkey123'
+        };
+        return lastSignedEvent;
+      })
+    };
+  });
+
+  it('p-tags people mentioned in the body (bare npubs repaired) and hands them to the outbox', async () => {
+    await createWiki({
+      title: 'Topic',
+      topic: 'topic',
+      content: `See nostr:${nip19.npubEncode(ALICE)} and ${nip19.npubEncode(BOB)}`
+    });
+    expect(lastSignedEvent.tags).toContainEqual(['p', ALICE]);
+    expect(lastSignedEvent.tags).toContainEqual(['p', BOB]);
+    expect(lastSignedEvent.content).toContain(`nostr:${nip19.npubEncode(BOB)}`);
+    expect(/** @type {any} */ (publishEventOptimistic).mock.calls[0][1]).toEqual([ALICE, BOB]);
+  });
+
+  it('adds no p tags without mentions', async () => {
+    await createWiki({ title: 'Topic', topic: 'topic', content: 'plain text' });
+    expect(lastSignedEvent.tags.some((/** @type {any} */ t) => t[0] === 'p')).toBe(false);
+    expect(/** @type {any} */ (publishEventOptimistic).mock.calls[0][1]).toEqual([]);
+  });
+
+  it('p-tags people mentioned in the updated body and hands them to the outbox', async () => {
+    const existingEvent = {
+      id: 'existing-id',
+      kind: 30818,
+      pubkey: 'testpubkey123',
+      content: 'Old content',
+      created_at: 1699000000,
+      tags: [
+        ['d', 'topic'],
+        ['title', 'Old Title']
+      ],
+      sig: 'sig-old'
+    };
+    await updateWiki(
+      { title: 'New Title', topic: 'topic', content: `Hi nostr:${nip19.npubEncode(ALICE)}` },
+      existingEvent
+    );
+    expect(lastSignedEvent.tags).toContainEqual(['p', ALICE]);
+    expect(lastSignedEvent.tags).toContainEqual(['d', 'topic']);
+    expect(/** @type {any} */ (publishEventOptimistic).mock.calls[0][1]).toEqual([ALICE]);
+  });
+});
