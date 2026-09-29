@@ -29,16 +29,30 @@ unaffected.
   public; the self-encrypted content lets the author's other devices rebuild
   the link.
 - `scope=call`: the pass is valid only while the group's call is running and
-  the relay deletes it when the call ends. A relay MUST additionally cap a
-  `scope=call` pass's lifetime at 12 hours (regardless of its `expiration`
-  tag), and SHOULD delete call-scoped passes when the call's participant
-  list becomes empty, besides on room end.
+  the relay deletes it when the call ends. A relay MUST reject a `scope=call`
+  pass while no call is running, MUST reject one whose `expiration` is more
+  than 12 hours ahead, and SHOULD delete call-scoped passes when the call's
+  participant list becomes empty, besides on room end.
 
-Relays MUST accept a pass only from a member of the group (kind 39002 or
-39001) of a group with live audio/video, with an `expiration` in the future
-and within the relay's maximum lifetime, and SHOULD cap the number of active
-passes per group. Relays SHOULD show pass events only to their author and to
-the group's moderators.
+Relays MUST accept a pass only
+
+- from a member of the group (kind 39002 or 39001) of a group with live
+  audio/video,
+- carrying exactly one `h` tag (a relay resolves a group event by its first
+  `h` tag but matches a `#h` query against any of them, so a second `h`
+  would let a pass reach a group it was never authorized for),
+- with an `expiration` in the future and within the relay's maximum
+  lifetime,
+
+and SHOULD cap the number of active passes per group. A relay counts only
+unexpired passes against that cap and MAY delete expired passes whenever it
+comes across them. A relay SHOULD refuse to accept again, verbatim, a pass
+it has just deleted.
+
+Relays SHOULD show pass events only to their author, to the group's
+moderators and to the relay's own administrators (roots), and MUST NOT
+serve them through any other channel, such as a search index, that bypasses
+this restriction.
 
 ## Using a pass
 
@@ -50,19 +64,33 @@ the code in the signed event:
 ```
 
 - A requester who is a member is treated as before; the code is ignored.
-- A non-member with a valid code (`not-before <= now < expiration`, and for
-  `scope=call` a running call) receives a full token, also for private
-  groups. The call is all that is granted: reading the group's events
-  remains governed by membership.
+- A non-member with a valid code (`not-before <= now < expiration`, for
+  `scope=call` a running call, and an author who is still a member of the
+  group) receives a full token, also for private groups. The call is all
+  that is granted: reading the group's events remains governed by
+  membership.
+- A pass stops working as soon as its author is no longer a member of the
+  group: from then on it reads as `unknown`.
 - A non-member with an unusable code receives `403` with body
   `call pass <reason>`.
+- A pubkey that was removed from the group (its newest kind 9001 in the
+  group is not a `self-removal`) receives `403` with body
+  `call pass blocked: you were removed`, whoever's code it presents.
 - Guest tokens carry participant metadata `{"guest":true,"pass":"<pass event id>"}`.
+- Guest tokens are short-lived (5 minutes on the reference relay). A
+  connected client keeps receiving refreshed tokens from LiveKit itself;
+  the short lifetime bounds how long a revoked guest could reconnect with a
+  token it already holds, since LiveKit does not invalidate a token when it
+  removes the participant. Member and listener tokens are unchanged.
 
 ## Revocation and expiry
 
 - The author revokes a pass with a NIP-09 deletion, a moderator with a
   NIP-29 kind 9005. The relay then removes every call participant whose
   metadata names the pass.
+- The revoking kind 5 SHOULD carry the pass's `h` tag. A relay MUST apply
+  the rules below to any kind 5 that targets a stored pass, with or without
+  an `h` tag.
 - The revoking connection MUST be NIP-42-authenticated as the pass's
   author before the relay accepts the deletion. A relay that hides pass
   events from unauthenticated readers (as above) MUST reject an
@@ -79,13 +107,20 @@ the code in the signed event:
 `GET /.well-known/nip29/livekit/<group-id>/pass/<code-hash>` (no auth, CORS open):
 
 ```json
-{"valid": true, "reason": "ok", "not_before": 0, "expiration": 1790000000,
- "scope": "call", "name": "Weekly", "picture": "", "live_count": 3}
+{"valid": true, "reason": "ok", "expiration": 1790000000, "scope": "call",
+ "name": "Weekly", "picture": "https://example.com/weekly.png", "live_count": 3}
 ```
 
-`reason` is one of `ok`, `not_yet`, `expired`, `call_ended`, `unknown`.
-Group details are returned only for a matching hash. A relay supports call
-passes if and only if this endpoint answers JSON for the group (any hash).
+`valid`, `reason` and `live_count` are always present. `not_before`,
+`expiration`, `scope`, `name` and `picture` are omitted when empty (no
+`not-before` tag, no `scope` tag, a group without name or picture) and
+whenever the reason is `unknown`.
+
+`reason` is one of `ok`, `not_yet`, `expired`, `call_ended`, `unknown`. A
+revoked pass, a pass whose author is no longer a member, and a pass the
+relay has already pruned after it expired all read as `unknown`. Group
+details are returned only for a matching hash. A relay supports call passes
+if and only if this endpoint answers JSON for the group (any hash).
 
 A relay that also exposes a group under a community relay URL (e.g.
 `wss://host/c/<rootId>`) serves the same pass-check endpoint under that
