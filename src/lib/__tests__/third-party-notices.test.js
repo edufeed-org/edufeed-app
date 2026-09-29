@@ -18,4 +18,11 @@ describe('static/third-party-notices.txt', () => {
     expect(notices).toContain('Copyright (c) 2017-2019 Miles Johnson');
     expect(notices).toContain('Permission is hereby granted, free of charge');
   });
+
+  it('carries the Twemoji CC BY 4.0 attribution and the TalkJS MIT notice for the flag font', () => {
+    expect(notices).toContain('Copyright 2019 Twitter, Inc and other contributors');
+    expect(notices).toContain('https://creativecommons.org/licenses/by/4.0/');
+    expect(notices).toMatch(/Modification: converted/);
+    expect(notices).toContain('Copyright (c) 2022 TalkJS');
+  });
 });

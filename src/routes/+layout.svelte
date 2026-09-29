@@ -36,11 +36,17 @@
   import { recordNavigation } from '$lib/helpers/navigationHistory.js';
   import { hasStaticOwnBottomUI } from '$lib/helpers/bottomUiVisibility.js';
   import { page, navigating } from '$app/stores';
-  import { setContext } from 'svelte';
+  import { onMount, setContext } from 'svelte';
   import { hexToNpub } from '$lib/helpers/nostrUtils.js';
   import { buildCommunityPath } from '$lib/helpers/communityNavigation.js';
   import { getRandomQuote } from '$lib/data/loading-quotes.js';
   import { getLocale } from '$lib/paraglide/runtime.js';
+
+  // Flag emojis on Windows (letters instead of flags) — lazy, browser-only;
+  // see $lib/helpers/flag-emoji-polyfill.js
+  onMount(() => {
+    import('$lib/helpers/flag-emoji-polyfill.js').then((mod) => mod.installFlagEmojiPolyfill());
+  });
 
   // Per-surface chrome, loaded on first use instead of statically: these sit
   // in the root layout, so a static import puts their whole dependency graph

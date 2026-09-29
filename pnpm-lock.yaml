@@ -67,6 +67,9 @@ importers:
       cally:
         specifier: ^0.9.2
         version: 0.9.2
+      country-flag-emoji-polyfill:
+        specifier: 0.1.10
+        version: 0.1.10
       fflate:
         specifier: ^0.8.3
         version: 0.8.3
@@ -2016,6 +2019,9 @@ packages:
 
   core-util-is@1.0.3:
     resolution: {integrity: sha512-ZQBvi1DcpJ4GDqanjucZ2Hj3wEO5pZDS89BWbkcrvdxksJorwUDDZamX9ldFkp9aw2lmBDLgkObEA4DWNJ9FYQ==}
+
+  country-flag-emoji-polyfill@0.1.10:
+    resolution: {integrity: sha512-5O50p2mq/d8+4AfHz3monRQaBA4TIQ0XcKqJUhCYR6SMsLqlO4m8f87og6R1D68Z1sNXGkjLkcEccuzC6T9i5g==}
 
   cross-spawn@7.0.6:
     resolution: {integrity: sha512-uV2QOWP2nWzsy2aMp8aRibhi9dlzF5Hgh5SHaB9OiTGEyDTiJJyx0uy51QXdyWbtAHNua4XJzUKca3OzKUd3vA==}
@@ -5652,6 +5658,8 @@ snapshots:
   cookie@0.6.0: {}
 
   core-util-is@1.0.3: {}
+
+  country-flag-emoji-polyfill@0.1.10: {}
 
   cross-spawn@7.0.6:
     dependencies:

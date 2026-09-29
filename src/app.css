@@ -85,7 +85,8 @@ body {
 /* Editorial theme font — Outfit for display and body (see rpi override below
    for the same mechanism). */
 [data-theme='light'] {
-  --font-sans: 'Outfit Variable', 'Outfit', ui-sans-serif, system-ui, sans-serif;
+  --font-sans: 'Twemoji Country Flags', 'Outfit Variable', 'Outfit', ui-sans-serif, system-ui,
+    sans-serif;
 }
 
 /* STIL theme — Stiftung Innovation in der Hochschullehre / transferkiosk.net.
@@ -261,8 +262,9 @@ body {
 /* RPI Theme Font Overrides */
 [data-theme='rpi'],
 [data-theme='rpi-dark'] {
-  --font-sans: 'Roboto Condensed Variable', 'Roboto Condensed', sans-serif;
-  --font-community: 'Yanone Kaffeesatz Variable', 'Yanone Kaffeesatz', sans-serif;
+  --font-sans: 'Twemoji Country Flags', 'Roboto Condensed Variable', 'Roboto Condensed', sans-serif;
+  --font-community: 'Twemoji Country Flags', 'Yanone Kaffeesatz Variable', 'Yanone Kaffeesatz',
+    sans-serif;
 }
 
 /* Community font utility - resolves to Yanone Kaffeesatz in rpi theme, inherits otherwise */
@@ -289,8 +291,9 @@ body {
   --c-cta-ink: var(--color-accent-content);
   --c-rule: color-mix(in oklch, var(--color-base-content) 16%, transparent);
   --c-on-dark: var(--color-base-100);
-  --font-display: 'Outfit Variable', 'Outfit', ui-sans-serif, system-ui, sans-serif;
-  --font-script: 'Caveat Variable', 'Caveat', cursive;
+  --font-display: 'Twemoji Country Flags', 'Outfit Variable', 'Outfit', ui-sans-serif, system-ui,
+    sans-serif;
+  --font-script: 'Twemoji Country Flags', 'Caveat Variable', 'Caveat', cursive;
 
   /* Categorical accents for the authored content types ("Meine Inhalte"
      stripes/tags — see myContentTypes.js). Defined here so env-gated themes
@@ -328,9 +331,12 @@ body {
   --c-cta-ink: var(--color-accent-content);
   --c-rule: #ebebeb; /* tfk-light-grey */
   --c-on-dark: var(--color-base-100);
-  --font-sans: 'Open Sans Variable', 'Open Sans', ui-sans-serif, system-ui, sans-serif;
-  --font-display: 'Open Sans Variable', 'Open Sans', ui-sans-serif, system-ui, sans-serif;
-  --font-script: 'Open Sans Variable', 'Open Sans', ui-sans-serif, system-ui, sans-serif;
+  --font-sans: 'Twemoji Country Flags', 'Open Sans Variable', 'Open Sans', ui-sans-serif, system-ui,
+    sans-serif;
+  --font-display: 'Twemoji Country Flags', 'Open Sans Variable', 'Open Sans', ui-sans-serif,
+    system-ui, sans-serif;
+  --font-script: 'Twemoji Country Flags', 'Open Sans Variable', 'Open Sans', ui-sans-serif,
+    system-ui, sans-serif;
 }
 
 /* Pages sit on the theme's page background (design: beige page, paper cards).

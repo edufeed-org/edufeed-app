@@ -2446,6 +2446,8 @@
   "imprint_credits_full_texts": "Full license texts",
   "credits_emoji_data_title": "Emoji names and search keywords",
   "credits_emoji_data_text": "Unicode CLDR annotations, © 1991–2026 Unicode, Inc., licensed under the Unicode License V3. Prepared with emojibase, © 2017–2019 Miles Johnson, MIT License.",
+  "credits_flags_title": "Flag emojis",
+  "credits_flags_text": "Graphics from Twemoji, © 2019 Twitter, Inc and other contributors, licensed under CC BY 4.0. Converted into a flags-only font by TalkJS (country-flag-emoji-polyfill, © 2022 TalkJS, MIT License); used unchanged, only on devices that lack flag emojis.",
   "error_publish_failed": "Failed to publish to any relay",
   "toast_calendar_link_error": "Calendar link error",
   "toast_publish_failed": "Publishing failed",
