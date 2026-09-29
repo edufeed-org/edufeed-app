@@ -42,8 +42,12 @@
 
   // Subscribe to eventStore for the latest version of this replaceable event
   // so mutations (reorder, remove, edit) are immediately reactive.
+  // `$state.raw`: a deep `$state` would hand the store's event out as a
+  // reactive proxy, and applesauce's Symbol-memoizing list helpers
+  // (getEventPointersFromList & co.) then write state on every call —
+  // `state_unsafe_mutation` as soon as one runs in a `$derived`.
   /** @type {import('nostr-tools').NostrEvent | null} */
-  let liveEvent = $state(null);
+  let liveEvent = $state.raw(null);
   $effect(() => {
     const dTag = initialEvent.tags.find((t) => t[0] === 'd')?.[1] || '';
     const sub = eventStore
@@ -155,7 +159,7 @@
 
   // Optimistic reorder: swap items instantly before async sign+publish completes
   /** @type {import('nostr-tools').NostrEvent[] | null} */
-  let optimisticEvents = $state(null);
+  let optimisticEvents = $state.raw(null); // store events — never deep-proxy them
   let displayEvents = $derived(optimisticEvents || resolvedEvents);
 
   const getProfiles = useProfileMap(() => displayEvents.map((e) => e.pubkey));
@@ -207,7 +211,7 @@
 
   // Item removal confirmation
   /** @type {import('nostr-tools').NostrEvent | null} */
-  let itemToRemove = $state(null);
+  let itemToRemove = $state.raw(null); // a store event — never deep-proxy it
   let isRemovingItem = $state(false);
 
   async function confirmRemoveItem() {
