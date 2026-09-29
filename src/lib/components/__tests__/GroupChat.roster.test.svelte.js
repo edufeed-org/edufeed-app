@@ -136,7 +136,8 @@ vi.mock('$lib/components/icons', () => ({
   ReplyIcon: Stub,
   PeopleIcon: Stub,
   PollIcon: Stub,
-  MoreIcon: Stub
+  MoreIcon: Stub,
+  SettingsIcon: Stub
 }));
 vi.mock(
   '$lib/components/reactions/ReactionChips.svelte',
@@ -144,6 +145,7 @@ vi.mock(
 );
 
 vi.mock('$lib/paraglide/messages', () => ({
+  groups_settings_title: () => 'Group settings',
   chat_copy_message_link: () => 'chat_copy_message_link',
   chat_jump_to_bottom: () => 'chat_jump_to_bottom',
   chat_message_link_copied: () => 'chat_message_link_copied',

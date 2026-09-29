@@ -40,7 +40,8 @@ const {
   callErrorMessage,
   registerCallStageView,
   showCallStage,
-  hideCallStage
+  hideCallStage,
+  toggleChatBeside
 } = await import('$lib/groups/group-call.svelte.js');
 
 const RELAY = 'wss://groups.example/';
@@ -207,6 +208,18 @@ describe('stage views', () => {
     hideCallStage();
     await leaveGroupCall();
     expect(s.stageHidden).toBe(false);
+  });
+
+  // Wide screens: the chat opens as a column beside the stage instead of
+  // replacing it; the choice is a per-device preference.
+  it('toggles the chat beside the stage and remembers it on this device', () => {
+    const s = getGroupCallState();
+    expect(s.chatBeside).toBe(false);
+    toggleChatBeside();
+    expect(s.chatBeside).toBe(true);
+    expect(localStorage.getItem('edufeed:call:chatBeside')).toBe('1');
+    toggleChatBeside();
+    expect(s.chatBeside).toBe(false);
   });
 });
 

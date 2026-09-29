@@ -3665,5 +3665,9 @@
   "groups_call_start_error": "Anrufe konnten für diesen Kanal nicht eingeschaltet werden.",
   "groups_call_live": "Anruf läuft",
   "groups_call_people_in_call": "{count} im Anruf",
-  "groups_call_show_chat": "Chat"
+  "groups_call_show_chat": "Chat",
+  "groups_call_pop_out": "Anruf in eigenem Fenster öffnen",
+  "groups_call_pop_in": "Zurück in den Tab",
+  "groups_call_popped_out": "Der Anruf läuft in einem eigenen Fenster.",
+  "groups_call_bring_back": "Zurückholen"
 }

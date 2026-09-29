@@ -14,6 +14,7 @@
 // imported by GroupChat and the root layout. It is loaded on join.
 import { channelKey } from './community-pointer.js';
 import { requestGroupCallToken, GroupCallTokenError } from './livekit.js';
+import { getChatBeside, setChatBeside } from '$lib/services/call-prefs.js';
 import * as m from '$lib/paraglide/messages';
 
 /** @typedef {'idle' | 'requesting' | 'ready' | 'error'} GroupCallPhase */
@@ -36,6 +37,8 @@ let href = $state(null);
 // the user stepped from the stage back to the chat while staying in the call.
 let stageViews = $state(0);
 let stageHidden = $state(false);
+// Wide screens: the chat as a column beside the stage (per-device pref).
+let chatBeside = $state(getChatBeside());
 // Bumped on every join/leave so a token that lands after the user already
 // left (or joined elsewhere) is dropped instead of reviving the old call.
 let attempt = 0;
@@ -51,6 +54,7 @@ let attempt = 0;
  *   href: string | null,
  *   stageViews: number,
  *   stageHidden: boolean,
+ *   chatBeside: boolean,
  *   isActiveFor: (pointer: {id?: string, relay?: string} | null | undefined) => boolean
  * }}
  */
@@ -82,6 +86,9 @@ export function getGroupCallState() {
     },
     get stageHidden() {
       return stageHidden;
+    },
+    get chatBeside() {
+      return chatBeside;
     },
     isActiveFor(pointer) {
       const key = channelKey(pointer ?? {});
@@ -156,6 +163,12 @@ export function registerCallStageView(viewHref) {
 /** Step from the stage back to the channel's chat, staying in the call. */
 export function hideCallStage() {
   stageHidden = true;
+}
+
+/** Wide screens: open / close the chat as a column beside the stage. */
+export function toggleChatBeside() {
+  chatBeside = !chatBeside;
+  setChatBeside(chatBeside);
 }
 
 /** Bring the stage back (dock "back to call", header button). */

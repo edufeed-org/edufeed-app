@@ -3665,5 +3665,9 @@
   "groups_call_start_error": "Calls could not be turned on for this channel.",
   "groups_call_live": "Call live",
   "groups_call_people_in_call": "{count} in the call",
-  "groups_call_show_chat": "Chat"
+  "groups_call_show_chat": "Chat",
+  "groups_call_pop_out": "Open the call in its own window",
+  "groups_call_pop_in": "Back to tab",
+  "groups_call_popped_out": "The call is open in its own window.",
+  "groups_call_bring_back": "Bring back"
 }

@@ -7,6 +7,10 @@
   away (channel switch, route change — the app-level CallDock takes over).
   Mounting or unmounting it never connects or disconnects anything.
 
+  Also mounted into the call's pop-out window (groups/call-popout), a
+  second document: window listeners and size measurement therefore go
+  through the document the stage is rendered in, never the global one.
+
   Protocol-agnostic on purpose: it gets a title, an identity→pubkey
   resolver and callbacks. Who minted the token — a NIP-29 relay today, a
   CORD-07 broker later — is the parent's business.
@@ -54,7 +58,8 @@
     ScreenShareIcon,
     HandIcon,
     SmilePlusIcon,
-    ChatIcon
+    ChatIcon,
+    ExternalLinkIcon
   } from '$lib/components/icons';
   import ParticipantTile from './ParticipantTile.svelte';
   import ScreenShareTile from './ScreenShareTile.svelte';
@@ -67,8 +72,14 @@
    *   video?: boolean,
    *   onLeave: () => void,
    *   onShowChat?: () => void,
+   *   chatOpen?: boolean,
+   *   onPopOut?: () => void,
+   *   onPopIn?: () => void,
    *   registerView?: () => () => void
    * }}
+   * `chatOpen`: the chat sits beside the stage (wide screens);
+   * `onPopOut`: offered where the call can move to its own window;
+   * `onPopIn`: this stage IS that window — the way back to the tab.
    */
   let {
     title,
@@ -76,8 +87,14 @@
     video = true,
     onLeave,
     onShowChat = undefined,
+    chatOpen = false,
+    onPopOut = undefined,
+    onPopIn = undefined,
     registerView = undefined
   } = $props();
+
+  /** @type {HTMLDivElement | undefined} */
+  let rootEl = $state(undefined);
 
   const lk = getLiveKitState();
 
@@ -216,6 +233,19 @@
   const PAD = 12; // the grid box's p-3, inside the measured frame
   let gridWidth = $state(0);
   let gridHeight = $state(0);
+  // bind:clientWidth would observe through the opener's ResizeObserver,
+  // which stops reporting inside the pop-out once the opener tab is hidden.
+  /** @param {HTMLElement} node */
+  function measureGrid(node) {
+    const Observer = node.ownerDocument.defaultView?.ResizeObserver;
+    if (!Observer) return;
+    const observer = new Observer(() => {
+      gridWidth = node.clientWidth;
+      gridHeight = node.clientHeight;
+    });
+    observer.observe(node);
+    return () => observer.disconnect();
+  }
   // The measured frame's grid sits in an absolutely positioned layer, so
   // the pixel-sized tiles never feed back into the width being measured
   // (they did: the stage grew past its column, 2026-09-28).
@@ -269,11 +299,26 @@
     if (name === 'camera') refreshVideoDevices();
     openMenu = name;
   }
-  /** @param {PointerEvent} event */
-  function onWindowPointerDown(event) {
-    const target = /** @type {Element | null} */ (event.target);
-    if (openMenu && !target?.closest?.('[data-call-menu]')) openMenu = null;
-  }
+  // Outside click / Escape, on the window the stage is rendered in.
+  $effect(() => {
+    const win = rootEl?.ownerDocument.defaultView;
+    if (!win) return;
+    /** @param {PointerEvent} event */
+    const onPointerDown = (event) => {
+      const target = /** @type {Element | null} */ (event.target);
+      if (!target?.closest?.('[data-call-menu]')) openMenu = null;
+    };
+    /** @param {KeyboardEvent} event */
+    const onKeyDown = (event) => {
+      if (event.key === 'Escape') openMenu = null;
+    };
+    win.addEventListener('pointerdown', onPointerDown);
+    win.addEventListener('keydown', onKeyDown);
+    return () => {
+      win.removeEventListener('pointerdown', onPointerDown);
+      win.removeEventListener('keydown', onKeyDown);
+    };
+  });
 
   /** @typedef {'noiseSuppression' | 'echoCancellation' | 'autoGainControl'} ProcessingKey */
   let processing = $state(getAudioProcessing());
@@ -317,13 +362,6 @@
     openMenu = null;
   }
 </script>
-
-<svelte:window
-  onpointerdown={onWindowPointerDown}
-  onkeydown={(e) => {
-    if (e.key === 'Escape') openMenu = null;
-  }}
-/>
 
 {#snippet item(/** @type {any} */ it, /** @type {boolean} */ compact)}
   {#if it.kind === 'screen'}
@@ -372,7 +410,7 @@
 
 <!-- The stage IS the channel body while the call is open (same rule as
      GroupAppStage): a flex column handing its full height to the grid. -->
-<div class="flex min-h-0 min-w-0 flex-1 flex-col" data-testid="group-call-stage">
+<div bind:this={rootEl} class="flex min-h-0 min-w-0 flex-1 flex-col" data-testid="group-call-stage">
   <!-- Header -->
   <div class="flex items-center justify-between gap-2 border-b border-base-300 px-4 py-2">
     <div class="flex min-w-0 items-center gap-2">
@@ -391,10 +429,27 @@
       {/if}
     </div>
     <div class="flex shrink-0 items-center gap-2">
+      {#if onPopOut}
+        <button
+          class="btn btn-square btn-ghost btn-sm"
+          onclick={onPopOut}
+          title={m.groups_call_pop_out()}
+          aria-label={m.groups_call_pop_out()}
+          data-testid="group-call-pop-out"
+        >
+          <ExternalLinkIcon class_="h-4 w-4" title="" />
+        </button>
+      {/if}
+      {#if onPopIn}
+        <button class="btn btn-ghost btn-sm" onclick={onPopIn} data-testid="group-call-pop-in">
+          {m.groups_call_pop_in()}
+        </button>
+      {/if}
       {#if onShowChat}
         <button
-          class="btn btn-ghost btn-sm"
+          class="btn btn-ghost btn-sm {chatOpen ? 'btn-active' : ''}"
           onclick={onShowChat}
+          aria-pressed={chatOpen}
           data-testid="group-call-show-chat"
         >
           <ChatIcon class_="h-4 w-4" />
@@ -442,11 +497,7 @@
       {/if}
     </div>
   {:else}
-    <div
-      class="relative min-h-0 min-w-0 flex-1"
-      bind:clientWidth={gridWidth}
-      bind:clientHeight={gridHeight}
-    >
+    <div class="relative min-h-0 min-w-0 flex-1" {@attach measureGrid}>
       <div class="absolute inset-0 flex items-center justify-center overflow-hidden p-3">
         <div
           class="grid content-center justify-center"

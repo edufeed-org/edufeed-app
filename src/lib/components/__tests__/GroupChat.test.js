@@ -10,7 +10,7 @@
  *
  * @vitest-environment jsdom
  */
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, waitFor, within } from '@testing-library/svelte';
 import { typeIntoEditor } from './fixtures/editor.js';
 import { finalizeEvent, generateSecretKey, getPublicKey } from 'nostr-tools';
@@ -806,7 +806,8 @@ vi.mock('$lib/components/icons', () => ({
   TrashIcon: Stub,
   LinkIcon: Stub,
   PollIcon: Stub,
-  MeetIcon: Stub
+  MeetIcon: Stub,
+  SettingsIcon: Stub
 }));
 // NIP-29 AV: the call store and the 39004 presence hook are stubbed at the
 // seams GroupChat imports — the token round-trip and the relay-key-pinned
@@ -814,21 +815,40 @@ vi.mock('$lib/components/icons', () => ({
 // call-presence.svelte.test.js). Holders so a test can put the chat "in a
 // call" or seed a participant count; reset in the outer beforeEach.
 const groupCallHolder = vi.hoisted(() => ({
-  state: {
-    activeKey: /** @type {string | null} */ (null),
-    phase: /** @type {'idle' | 'requesting' | 'ready' | 'error'} */ ('idle'),
-    error: /** @type {Error | null} */ (null),
-    serverUrl: /** @type {string | null} */ (null),
-    token: /** @type {string | null} */ (null),
-    stageHidden: /** @type {boolean | undefined} */ (false)
-  },
+  state:
+    /** @type {{activeKey: string | null, phase: 'idle' | 'requesting' | 'ready' | 'error', error: Error | null, serverUrl: string | null, token: string | null, stageHidden?: boolean, chatBeside?: boolean}} */ ({
+      activeKey: null,
+      phase: 'idle',
+      error: null,
+      serverUrl: null,
+      token: null,
+      stageHidden: false
+    }),
   participants: /** @type {string[]} */ ([])
 }));
 const callViewMocks = vi.hoisted(() => ({
   showCallStage: vi.fn(),
   hideCallStage: vi.fn(),
   unregister: vi.fn(),
-  registerCallStageView: vi.fn()
+  registerCallStageView: vi.fn(),
+  toggleChatBeside: vi.fn()
+}));
+// The pop-out window (Document PiP) is a seam too: call-popout.svelte.test.js.
+const popoutHolder = vi.hoisted(() => ({
+  supported: false,
+  open: false,
+  popOutCall: vi.fn(async (/** @type {any} */ _view) => {}),
+  popInCall: vi.fn()
+}));
+vi.mock('$lib/groups/call-popout.svelte.js', () => ({
+  canPopOutCall: () => popoutHolder.supported,
+  getCallPopoutState: () => ({
+    get open() {
+      return popoutHolder.open;
+    }
+  }),
+  popOutCall: (/** @type {any} */ view) => popoutHolder.popOutCall(view),
+  popInCall: () => popoutHolder.popInCall()
 }));
 const joinGroupCallMock = vi.hoisted(() =>
   vi.fn(
@@ -856,6 +876,9 @@ vi.mock('$lib/groups/group-call.svelte.js', () => ({
     get stageHidden() {
       return groupCallHolder.state.stageHidden ?? false;
     },
+    get chatBeside() {
+      return groupCallHolder.state.chatBeside ?? false;
+    },
     isActiveFor: (/** @type {{id: string, relay: string}} */ pointer) =>
       groupCallHolder.state.activeKey === `${pointer.id}@${pointer.relay}`
   }),
@@ -864,6 +887,7 @@ vi.mock('$lib/groups/group-call.svelte.js', () => ({
   leaveGroupCall: () => leaveGroupCallMock(),
   showCallStage: () => callViewMocks.showCallStage(),
   hideCallStage: () => callViewMocks.hideCallStage(),
+  toggleChatBeside: () => callViewMocks.toggleChatBeside(),
   registerCallStageView: () => {
     callViewMocks.registerCallStageView();
     return callViewMocks.unregister;
@@ -933,6 +957,9 @@ vi.mock('$lib/paraglide/messages', () => ({
   groups_call_join: () => 'Join call',
   groups_call_in_progress: (/** @type {{ count: number }} */ { count }) => `${count} in call`,
   groups_call_leave: () => 'Leave call',
+  groups_call_popped_out: () => 'The call is open in its own window.',
+  groups_call_bring_back: () => 'Bring back',
+  groups_settings_title: () => 'Group settings',
   groups_call_requesting: () => 'Requesting access…',
   groups_call_retry: () => 'Try again',
   groups_call_start: () => 'Start call',
@@ -1078,6 +1105,10 @@ describe('GroupChat', () => {
     joinGroupCallMock.mockClear();
     leaveGroupCallMock.mockClear();
     for (const fn of Object.values(callViewMocks)) fn.mockClear();
+    popoutHolder.supported = false;
+    popoutHolder.open = false;
+    popoutHolder.popOutCall.mockClear();
+    popoutHolder.popInCall.mockClear();
     avProbe.supported = false;
     enableGroupCallsMock.mockReset();
     enableGroupCallsMock.mockResolvedValue(undefined);
@@ -2253,6 +2284,21 @@ describe('GroupChat', () => {
   // Leave is a roster action and the settings sheet is admin-only. "Remove
   // from my list" is Armada's "remove server": it rewrites MY 10009 and
   // touches nothing on the group relay. Its inverse keeps it reversible.
+  // The channel header is chrome like the Concord channel header next door:
+  // btn-sm buttons with icons from the icon set. It was btn-xs with a text
+  // "⚙" glyph and a shrunken "Verlassen" (laoc, 2026-09-29).
+  describe('header chrome', () => {
+    it('uses btn-sm buttons and the settings icon, no glyph', async () => {
+      render(GroupChat, { props: { pointer: { relay: GROUP_RELAY, id: 'adminchat' } } });
+      const settings = await screen.findByTestId('group-settings-open');
+      const header = /** @type {HTMLElement} */ (settings.closest('header'));
+      expect(settings.className).toContain('btn-sm');
+      expect(settings.textContent).not.toContain('⚙');
+      expect(settings.getAttribute('aria-label')).toBeTruthy();
+      expect(header.querySelectorAll('.btn-xs')).toHaveLength(0);
+    });
+  });
+
   describe('my-list menu', () => {
     // Replaceable: each seed must be NEWER than anything the store already
     // holds for ME — including the list the component itself signs at
@@ -2415,6 +2461,91 @@ describe('GroupChat', () => {
       await fireEvent.click(screen.getByTestId('group-call-join'));
       expect(callViewMocks.showCallStage).toHaveBeenCalledTimes(1);
       expect(leaveGroupCallMock).not.toHaveBeenCalled();
+    });
+
+    // Wide screens: the chat opens BESIDE the stage (the call stays in
+    // view); narrow screens keep switching between the two.
+    describe('chat beside the call', () => {
+      /** @param {boolean} wide */
+      const stubViewport = (wide) =>
+        vi.stubGlobal(
+          'matchMedia',
+          vi.fn(() => ({
+            matches: wide,
+            addEventListener() {},
+            removeEventListener() {}
+          }))
+        );
+      afterEach(() => vi.unstubAllGlobals());
+
+      it('on a wide screen the chat button toggles the chat beside the stage', async () => {
+        stubViewport(true);
+        inCallHere();
+        render(GroupChat, { props: { pointer: callPointer } });
+        await fireEvent.click(await screen.findByTestId('group-call-stage-stub-chat'));
+        expect(callViewMocks.toggleChatBeside).toHaveBeenCalledTimes(1);
+        expect(callViewMocks.hideCallStage).not.toHaveBeenCalled();
+      });
+
+      it('on a narrow screen the chat button still steps to the chat', async () => {
+        stubViewport(false);
+        inCallHere();
+        render(GroupChat, { props: { pointer: callPointer } });
+        await fireEvent.click(await screen.findByTestId('group-call-stage-stub-chat'));
+        expect(callViewMocks.hideCallStage).toHaveBeenCalledTimes(1);
+        expect(callViewMocks.toggleChatBeside).not.toHaveBeenCalled();
+      });
+
+      it('with the chat beside, stage and chat render together (the chat as a wide-screen column)', async () => {
+        stubViewport(true);
+        inCallHere();
+        groupCallHolder.state.chatBeside = true;
+        render(GroupChat, { props: { pointer: callPointer } });
+        const stage = await screen.findByTestId('group-call-stage-stub');
+        expect(stage.getAttribute('data-chat-open')).toBe('true');
+        const body = screen.getByTestId('group-chat-body');
+        expect(body.className).toContain('md:flex');
+        expect(body.className).toContain('md:w-96');
+      });
+
+      it('without it, the stage alone fills the channel', async () => {
+        stubViewport(true);
+        inCallHere();
+        render(GroupChat, { props: { pointer: callPointer } });
+        const stage = await screen.findByTestId('group-call-stage-stub');
+        expect(stage.getAttribute('data-chat-open')).toBe('false');
+        expect(screen.getByTestId('group-chat-body').className).not.toContain('md:flex');
+      });
+    });
+
+    describe('pop-out window', () => {
+      it('is offered where the browser can open one, with the title and resolver', async () => {
+        popoutHolder.supported = true;
+        inCallHere();
+        render(GroupChat, { props: { pointer: callPointer } });
+        await fireEvent.click(await screen.findByTestId('group-call-stage-stub-popout'));
+        expect(popoutHolder.popOutCall).toHaveBeenCalledWith(
+          expect.objectContaining({ title: 'Call Chat', identityToPubkey: expect.any(Function) })
+        );
+      });
+
+      it('is not offered elsewhere', async () => {
+        inCallHere();
+        render(GroupChat, { props: { pointer: callPointer } });
+        await screen.findByTestId('group-call-stage-stub');
+        expect(screen.queryByTestId('group-call-stage-stub-popout')).toBeNull();
+      });
+
+      it('while popped out the chat fills the channel and a bar brings the call back', async () => {
+        inCallHere();
+        popoutHolder.open = true;
+        render(GroupChat, { props: { pointer: callPointer } });
+        const bar = await screen.findByTestId('group-call-popped-out');
+        expect(screen.queryByTestId('group-call-stage-stub')).toBeNull();
+        expect(screen.getByTestId('group-chat-body').className).toContain('contents');
+        await fireEvent.click(within(bar).getByRole('button'));
+        expect(popoutHolder.popInCall).toHaveBeenCalledTimes(1);
+      });
     });
 
     it('does not render the stage for a call that belongs to another channel', async () => {

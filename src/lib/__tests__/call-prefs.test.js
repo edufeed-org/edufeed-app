@@ -19,7 +19,9 @@ import {
   setParticipantVolume,
   getScreenShareQuality,
   setScreenShareQuality,
-  SCREEN_SHARE_QUALITIES
+  SCREEN_SHARE_QUALITIES,
+  getChatBeside,
+  setChatBeside
 } from '$lib/services/call-prefs.js';
 
 beforeEach(() => {
@@ -117,5 +119,15 @@ describe('screen share quality', () => {
     setScreenShareQuality('8k240');
     expect(getScreenShareQuality()).toBe('720p15');
     expect(Object.keys(SCREEN_SHARE_QUALITIES)).toContain('1440p30');
+  });
+});
+
+describe('chat beside the call', () => {
+  it('defaults to off and remembers the choice', () => {
+    expect(getChatBeside()).toBe(false);
+    setChatBeside(true);
+    expect(getChatBeside()).toBe(true);
+    setChatBeside(false);
+    expect(getChatBeside()).toBe(false);
   });
 });

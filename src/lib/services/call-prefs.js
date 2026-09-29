@@ -1,9 +1,10 @@
 // Per-device call preferences, kept in localStorage: remembered mic /
 // speaker / camera, browser audio processing flags, per-person playback
-// volume and the screen share quality preset. These are conveniences for
-// this browser only — every read falls back to a default and every write is
-// best effort, because storage can be blocked (private mode, cleared site
-// data) and a call must still work without it.
+// volume, the screen share quality preset and whether the chat sits beside
+// the call. These are conveniences for this browser only — every read falls
+// back to a default and every write is best effort, because storage can be
+// blocked (private mode, cleared site data) and a call must still work
+// without it.
 
 const PREFIX = 'edufeed:call:';
 const DEVICE_KEYS = {
@@ -153,4 +154,14 @@ export function getScreenShareQuality() {
 /** @param {string} quality */
 export function setScreenShareQuality(quality) {
   if (quality in SCREEN_SHARE_QUALITIES) write('screenShareQuality', quality);
+}
+
+/** Wide screens: chat as a column beside the call stage (off = stage only). */
+export function getChatBeside() {
+  return read('chatBeside') === '1';
+}
+
+/** @param {boolean} beside */
+export function setChatBeside(beside) {
+  write('chatBeside', beside ? '1' : null);
 }

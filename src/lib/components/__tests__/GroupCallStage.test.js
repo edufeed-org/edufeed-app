@@ -95,7 +95,8 @@ vi.mock('$lib/components/icons', () => ({
   ScreenShareIcon: Stub,
   HandIcon: Stub,
   SmilePlusIcon: Stub,
-  ChatIcon: Stub
+  ChatIcon: Stub,
+  ExternalLinkIcon: Stub
 }));
 vi.mock('$lib/paraglide/messages', () => ({
   groups_call_leave: () => 'Leave call',
@@ -127,6 +128,8 @@ vi.mock('$lib/paraglide/messages', () => ({
   groups_call_hands_raised: (p) => `${p.count} raised`,
   groups_call_react: () => 'React',
   groups_call_show_chat: () => 'Chat',
+  groups_call_pop_out: () => 'Pop out',
+  groups_call_pop_in: () => 'Back to tab',
   groups_call_error_mic_denied: () => 'Microphone access denied',
   groups_call_error_mic_missing: () => 'No microphone',
   groups_call_error_camera_denied: () => 'Camera access denied',
@@ -227,6 +230,38 @@ describe('GroupCallStage — a view, not the connection owner', () => {
     render(GroupCallStage, { props: { ...baseProps, onShowChat } });
     await fireEvent.click(screen.getByTestId('group-call-show-chat'));
     expect(onShowChat).toHaveBeenCalledTimes(1);
+  });
+
+  it('marks the chat button pressed while the chat is open beside the stage', () => {
+    render(GroupCallStage, { props: { ...baseProps, onShowChat: vi.fn(), chatOpen: true } });
+    expect(screen.getByTestId('group-call-show-chat').getAttribute('aria-pressed')).toBe('true');
+  });
+
+  it('offers the pop-out window only when the parent can open one', async () => {
+    const { unmount } = render(GroupCallStage, { props: baseProps });
+    expect(screen.queryByTestId('group-call-pop-out')).toBeNull();
+    unmount();
+    const onPopOut = vi.fn();
+    render(GroupCallStage, { props: { ...baseProps, onPopOut } });
+    await fireEvent.click(screen.getByRole('button', { name: 'Pop out' }));
+    expect(onPopOut).toHaveBeenCalledTimes(1);
+  });
+
+  it('inside the pop-out: a way back to the tab', async () => {
+    const onPopIn = vi.fn();
+    render(GroupCallStage, { props: { ...baseProps, onPopIn } });
+    await fireEvent.click(screen.getByRole('button', { name: 'Back to tab' }));
+    expect(onPopIn).toHaveBeenCalledTimes(1);
+  });
+
+  // The pop-out is another document: menus must close on clicks in the
+  // document the stage is rendered in, not only the opener's.
+  it('closes an open menu on a click outside it', async () => {
+    render(GroupCallStage, { props: baseProps });
+    await fireEvent.click(screen.getByTitle('React'));
+    expect(screen.getByTestId('group-call-reactions')).toBeTruthy();
+    await fireEvent.pointerDown(screen.getByTestId('group-call-stage'));
+    expect(screen.queryByTestId('group-call-reactions')).toBeNull();
   });
 
   it('renders inside the stage layout with the title', () => {
