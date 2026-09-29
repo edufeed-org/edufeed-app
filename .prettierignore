@@ -11,3 +11,6 @@ bun.lockb
 # Auto-generated
 src/lib/paraglide/
 src/paraglide/
+
+# generated emoji datasets (scripts/generate-emoji-data.mjs), one line each
+src/lib/data/emoji/

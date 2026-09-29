@@ -21,6 +21,7 @@
     "test:e2e": "playwright test",
     "machine-translate": "inlang machine translate --project project.inlang",
     "publish:vocabs": "node scripts/publish-edufeed-vocabs.mjs",
+    "generate:emoji": "node scripts/generate-emoji-data.mjs",
     "publish:forms": "node scripts/publish-edufeed-forms.mjs",
     "publish:webxdc-app": "node scripts/publish-webxdc-app.mjs",
     "cleanup:legacy-vocab": "node scripts/delete-legacy-concept-kinds.mjs"
@@ -57,6 +58,7 @@
     "dotenv": "^17.4.2",
     "embla-carousel": "^8.6.0",
     "embla-carousel-svelte": "^8.6.0",
+    "emojibase-data": "17.0.0",
     "eslint": "^9.18.0",
     "eslint-config-prettier": "^10.0.1",
     "eslint-plugin-svelte": "^3.17.1",
