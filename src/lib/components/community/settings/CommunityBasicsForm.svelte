@@ -1,7 +1,7 @@
 <!--
   CommunityBasicsForm — the inline home of everything EditCommunityModal used
   to hold (settings redesign, laoc 2026-08-18): community profile entry,
-  location, content types, LiveKit, and the advanced relay/blossom lists,
+  location, content types, and the advanced relay/blossom lists,
   saving the rebuilt 10222 with the community signer.
 
   The description is NOT here: it lives once, in the kind-0 profile
@@ -38,7 +38,6 @@
   } from '$lib/helpers/communityTagBuilder.js';
   import {
     parseCommunityContentTypes,
-    parseCommunityMetadata,
     getCommunityGlobalRelays,
     hasStrictContentMarker
   } from '$lib/helpers/communityRelays.js';
@@ -61,7 +60,6 @@
     relays: /** @type {string[]} */ ([]),
     blossomServers: /** @type {string[]} */ ([]),
     location: '',
-    livekitUrl: '',
     contentTypes: createDefaultContentTypes()
   });
 
@@ -107,9 +105,7 @@
     30142: 'learning',
     1068: 'polls',
     39701: 'bookmarks',
-    9802: 'bookmarks',
-    30312: 'meet',
-    30313: 'meet'
+    9802: 'bookmarks'
   };
 
   // Initialize from the event; re-initialize when a NEW 10222 replaces it
@@ -128,8 +124,6 @@
       .map((/** @type {string[]} */ t) => t[1]);
     const location = tags.find((/** @type {string[]} */ t) => t[0] === 'location')?.[1] ?? '';
     const contentTypes = createDefaultContentTypes();
-    const metadata = parseCommunityMetadata(communikeyEvent);
-    const livekitUrl = metadata.livekitUrl || '';
 
     /** @type {string|null} */
     let currentSection = null;
@@ -158,19 +152,15 @@
     }
 
     // Legacy definitions (no strict marker) fail open — pre-enable everything
-    // so saving preserves the status quo. Meet only when a LiveKit URL exists.
+    // so saving preserves the status quo.
     if (!hasStrictContentMarker(communikeyEvent)) {
-      for (const [key, ct] of Object.entries(contentTypes)) {
-        if (key === 'meet' && !livekitUrl && !ct.enabled) continue;
-        ct.enabled = true;
-      }
+      for (const ct of Object.values(contentTypes)) ct.enabled = true;
     }
 
     communityData = {
       relays: relays.length > 0 ? relays : ['wss://relay.edufeed.org'],
       blossomServers,
       location,
-      livekitUrl,
       contentTypes: applyParsedAccessTiers(contentTypes, communikeyEvent)
     };
 
@@ -226,10 +216,6 @@
     if (isClosed) return true; // sections are the window picker's business
     if (!Object.values(communityData.contentTypes).some((ct) => ct.enabled)) {
       errors.contentTypes = m.create_community_modal_error_content_types_required();
-      return false;
-    }
-    if (communityData.contentTypes.meet?.enabled && !communityData.livekitUrl?.trim()) {
-      errors.livekitUrl = m.meet_livekit_url_required();
       return false;
     }
     return true;
@@ -419,27 +405,6 @@
       <p class="rounded-lg bg-base-200 p-3 text-xs text-base-content/60">
         {m.community_basics_closed_sections_hint()}
       </p>
-    {/if}
-
-    {#if !isClosed && communityData.contentTypes.meet?.enabled}
-      <div class="form-control">
-        <label class="label" for="basics-livekit-url">
-          <span class="label-text">{m.meet_livekit_url()}</span>
-        </label>
-        <input
-          id="basics-livekit-url"
-          type="url"
-          class="input-bordered input"
-          placeholder={m.meet_livekit_url_placeholder()}
-          bind:value={communityData.livekitUrl}
-        />
-        <div class="label">
-          <span class="label-text-alt">{m.meet_livekit_url_help()}</span>
-        </div>
-        {#if errors.livekitUrl}
-          <p class="mt-1 text-sm text-error">{errors.livekitUrl}</p>
-        {/if}
-      </div>
     {/if}
 
     <div class="collapse-arrow collapse bg-base-200">

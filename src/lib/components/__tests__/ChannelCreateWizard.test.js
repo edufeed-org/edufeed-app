@@ -83,6 +83,14 @@ vi.mock('$lib/groups/group-management.js', () => ({
 const updatePersonalGroupsList = vi.hoisted(() => vi.fn(async () => {}));
 vi.mock('$lib/groups/personal-groups-list.js', () => ({ updatePersonalGroupsList }));
 
+// NIP-29 AV: the wizard only offers the live audio/video checkbox when the
+// host relay answers 204 on /.well-known/nip29/livekit. Default: it does not.
+const probeRelayAvSupport = vi.hoisted(() => vi.fn(async () => false));
+vi.mock('$lib/groups/livekit.js', async (importOriginal) => {
+  const actual = /** @type {any} */ (await importOriginal());
+  return { ...actual, probeRelayAvSupport };
+});
+
 const relayConnStub = { publish: vi.fn(), request: vi.fn() };
 const poolRelaySpy = vi.hoisted(() => vi.fn());
 vi.mock('$lib/stores/nostr-infrastructure.svelte', () => ({
@@ -587,6 +595,61 @@ describe('ChannelCreateWizard — NIP-29 groups', () => {
 
     await fireEvent.click(screen.getByTestId('wizard-access-world'));
     expect(screen.queryByTestId('wizard-hidden-room')).toBeNull();
+  });
+
+  // NIP-29 AV spaces: a channel born with the bare `livekit` metadata tag
+  // gets a call button in its header. The checkbox only appears when the
+  // host relay actually mints LiveKit tokens (probe 204), for either tier.
+  it('offers no live audio/video checkbox when the host relay probe is not 204', async () => {
+    await toAccessStep(nip29Community());
+    await waitFor(() => expect(probeRelayAvSupport).toHaveBeenCalled());
+    expect(screen.queryByTestId('wizard-livekit-room')).toBeNull();
+  });
+
+  it('offers the live audio/video checkbox for both tiers once the probe answers 204', async () => {
+    probeRelayAvSupport.mockResolvedValue(true);
+    await toAccessStep(nip29Community());
+    expect(await screen.findByTestId('wizard-livekit-room')).toBeTruthy();
+    await fireEvent.click(screen.getByTestId('wizard-access-world'));
+    expect(screen.getByTestId('wizard-livekit-room')).toBeTruthy();
+  });
+
+  it('Concord mode never shows the live audio/video checkbox', async () => {
+    probeRelayAvSupport.mockResolvedValue(true);
+    await toAccessStep(concordCommunity());
+    expect(screen.queryByTestId('wizard-livekit-room')).toBeNull();
+  });
+
+  it('creates the group with livekit: true when the checkbox is ticked, false otherwise', async () => {
+    probeRelayAvSupport.mockResolvedValue(true);
+    render(ChannelCreateWizard, {
+      props: { communikeyEvent: nip29Community(), onClose: () => {}, onCreated: vi.fn() }
+    });
+    const nameInput = screen.getByPlaceholderText(/Staff room|Lehrer/);
+    await fireEvent.input(nameInput, { target: { value: 'Standup' } });
+    await fireEvent.click(await screen.findByTestId('wizard-livekit-room'));
+    await fireEvent.click(screen.getByRole('button', { name: /Next|Weiter/ }));
+    await fireEvent.click(screen.getByTestId('concord-wizard-create'));
+
+    await waitFor(() => expect(createGroupOnRelay).toHaveBeenCalledTimes(1));
+    expect(createGroupOnRelay.mock.calls[0][0].metadata).toEqual(
+      expect.objectContaining({ livekit: true })
+    );
+  });
+
+  it('creates a plain (no-AV) group by default — livekit false without the checkbox', async () => {
+    render(ChannelCreateWizard, {
+      props: { communikeyEvent: nip29Community(), onClose: () => {}, onCreated: vi.fn() }
+    });
+    const nameInput = screen.getByPlaceholderText(/Staff room|Lehrer/);
+    await fireEvent.input(nameInput, { target: { value: 'Mathe' } });
+    await fireEvent.click(screen.getByRole('button', { name: /Next|Weiter/ }));
+    await fireEvent.click(screen.getByTestId('concord-wizard-create'));
+
+    await waitFor(() => expect(createGroupOnRelay).toHaveBeenCalledTimes(1));
+    expect(createGroupOnRelay.mock.calls[0][0].metadata).toEqual(
+      expect.objectContaining({ livekit: false })
+    );
   });
 
   it('Concord mode never shows the hidden-room checkbox — encrypted channels are unlisted by construction', async () => {

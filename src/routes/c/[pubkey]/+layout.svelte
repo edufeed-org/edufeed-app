@@ -265,7 +265,7 @@
   // The EFFECTIVE community event (10222 with any admin section override
   // applied), because every consumer of this context reads it for display.
   // Community-level metadata is preserved verbatim, so metadata readers
-  // (MeetView's livekit URL) are unaffected. The settings forms receive it
+  // (relays, blossom servers, location) are unaffected. The settings forms receive it
   // too, and that is deliberate: an owner save then absorbs the admins'
   // section configuration into the 10222 instead of silently reverting it.
   setContext('communikeyEvent', () => effectiveCommunityEvent);

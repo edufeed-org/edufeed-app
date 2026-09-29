@@ -10,7 +10,6 @@
   import PollsView from '../views/PollsView.svelte';
   import WikisView from '../views/WikisView.svelte';
   import SocialBookmarksView from '../views/SocialBookmarksView.svelte';
-  import MeetView from '$lib/components/meet/MeetView.svelte';
   import MembersView from '../views/MembersView.svelte';
   import HomeView from '../views/HomeView.svelte';
   import ClosedCommunityShell from '../views/ClosedCommunityShell.svelte';
@@ -156,8 +155,6 @@
         <WikisView communityPubkey={selectedCommunityId} {communityProfile} />
       {:else if selectedContentType === 'social-bookmarks'}
         <SocialBookmarksView communityPubkey={selectedCommunityId} {communityProfile} />
-      {:else if selectedContentType === 'meet'}
-        <MeetView communityPubkey={selectedCommunityId} {communityProfile} />
       {:else if selectedContentType === 'members'}
         <MembersView {communikeyEvent} {communityProfile} />
       {:else if selectedContentType === 'settings'}

@@ -31,7 +31,6 @@ describe('community +page.js load', () => {
       'polls',
       'wikis',
       'social-bookmarks',
-      'meet',
       'members',
       'settings'
     ]) {

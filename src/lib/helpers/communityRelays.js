@@ -28,7 +28,6 @@
  * @property {string|null} location
  * @property {string|null} geohash
  * @property {string[]} languages
- * @property {string|null} livekitUrl
  */
 
 /**
@@ -189,8 +188,7 @@ export function parseCommunityMetadata(event) {
     tos: null,
     location: null,
     geohash: null,
-    languages: [],
-    livekitUrl: null
+    languages: []
   };
 
   if (!event || !Array.isArray(event.tags)) return metadata;
@@ -214,9 +212,9 @@ export function parseCommunityMetadata(event) {
       metadata.geohash = tag[1];
     } else if (key === 'l' && tag[2] === 'ISO-639-1') {
       metadata.languages.push(tag[1]);
-    } else if (key === 'livekit') {
-      metadata.livekitUrl = tag[1];
     }
+    // A legacy `livekit` operator-URL tag is deliberately not parsed: calls
+    // moved to NIP-29 channels (bare `livekit` tag on the kind-39000).
   }
 
   return metadata;

@@ -31,7 +31,6 @@ export const VALID_CONTENT_VIEWS = new Set([
   'polls',
   'wikis',
   'social-bookmarks',
-  'meet',
   'members',
   'settings',
   'channels'
@@ -168,22 +167,6 @@ export const CONTENT_TYPE_CONFIG = {
     supported: true,
     component: 'ForumView',
     description: 'Forum discussions'
-  },
-  30312: {
-    kind: 30312,
-    name: 'Meet',
-    icon: 'M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z',
-    supported: true,
-    component: 'MeetView',
-    description: 'Video and audio rooms'
-  },
-  30313: {
-    kind: 30313,
-    name: 'Meet',
-    icon: 'M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z',
-    supported: true,
-    component: 'MeetView',
-    description: 'Meet room participants'
   }
 };
 
@@ -195,8 +178,6 @@ export const CONTENT_TYPE_CONFIG = {
 export function getCommunityAvailableContentTypes(communikeyEvent) {
   // NIP-52 calendar kinds that should enable calendar functionality
   const CALENDAR_KINDS = [31922, 31923, 31924, 31925];
-  // Meet kinds that should consolidate into a single Meet tab
-  const MEET_KINDS = [30312, 30313, 10312];
 
   // Always include Chat as a core feature
   const alwaysAvailable = [9];
@@ -208,13 +189,9 @@ export function getCommunityAvailableContentTypes(communikeyEvent) {
 
   // Check if community has any calendar-related kinds
   let hasCalendarKinds = false;
-  let hasMeetKinds = false;
   for (const contentType of definedContentTypes) {
     if (contentType.kinds.some((kind) => CALENDAR_KINDS.includes(kind))) {
       hasCalendarKinds = true;
-    }
-    if (contentType.kinds.some((kind) => MEET_KINDS.includes(kind))) {
-      hasMeetKinds = true;
     }
   }
 
@@ -226,12 +203,6 @@ export function getCommunityAvailableContentTypes(communikeyEvent) {
 
       // Skip calendar kinds - they'll be represented by a single Calendar tab
       if (CALENDAR_KINDS.includes(kind)) {
-        processedKinds.add(kind);
-        continue;
-      }
-
-      // Skip meet kinds - they'll be represented by a single Meet tab
-      if (MEET_KINDS.includes(kind)) {
         processedKinds.add(kind);
         continue;
       }
@@ -300,19 +271,6 @@ export function getCommunityAvailableContentTypes(communikeyEvent) {
     });
   }
 
-  // Add consolidated meet tab if any meet kinds are present
-  if (hasMeetKinds) {
-    const config = CONTENT_TYPE_CONFIG[30312];
-    result.push({
-      kind: 30312,
-      name: config.name,
-      icon: config.icon,
-      supported: config.supported,
-      enabled: config.supported,
-      description: config.description
-    });
-  }
-
   // Sort: enabled first, then by kind number
   return result.sort((a, b) => {
     if (a.enabled !== b.enabled) return a.enabled ? -1 : 1;
@@ -330,7 +288,6 @@ export const CONTENT_TYPE_TO_SECTION = {
   learning: 'Learning',
   boards: 'Boards',
   'social-bookmarks': 'Social Bookmarks',
-  meet: 'Meet',
   polls: 'Polls'
 };
 
@@ -404,10 +361,7 @@ export function kindToContentType(kind) {
     31922: 'calendar',
     31924: 'calendar',
     31925: 'calendar',
-    39701: 'social-bookmarks',
-    30312: 'meet',
-    30313: 'meet',
-    10312: 'meet'
+    39701: 'social-bookmarks'
   };
   return mapping[kind] || null;
 }

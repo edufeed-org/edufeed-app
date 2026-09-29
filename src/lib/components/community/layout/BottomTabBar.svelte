@@ -10,7 +10,6 @@
     ScrollTextIcon,
     ForumIcon,
     BookmarkShareIcon,
-    MeetIcon,
     PollIcon,
     LockIcon,
     LockOpenIcon
@@ -49,7 +48,6 @@
     forum: ForumIcon,
     wikis: WikipediaIcon,
     'social-bookmarks': BookmarkShareIcon,
-    meet: MeetIcon,
     polls: PollIcon,
     settings: SettingsIcon,
     channels: LockIcon
@@ -66,7 +64,6 @@
     forum: () => m.community_layout_bottom_tab_bar_forum(),
     wikis: () => m.community_wikis_title(),
     'social-bookmarks': () => m.community_layout_bottom_tab_bar_social_bookmarks(),
-    meet: () => m.community_layout_bottom_tab_bar_meet(),
     polls: () => m.community_layout_bottom_tab_bar_polls(),
     settings: () => m.community_layout_bottom_tab_bar_settings(),
     channels: () => m.concord_tab_label()

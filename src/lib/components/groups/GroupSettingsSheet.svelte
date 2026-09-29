@@ -23,6 +23,7 @@
   } from '$lib/groups/group-management.js';
   import { pool } from '$lib/stores/nostr-infrastructure.svelte';
   import { useActiveUser } from '$lib/stores/accounts.svelte';
+  import { hasLivekitTag, probeRelayAvSupport } from '$lib/groups/livekit.js';
   import { showToast } from '$lib/helpers/toast';
   import * as m from '$lib/paraglide/messages';
 
@@ -63,6 +64,25 @@
   // svelte-ignore state_referenced_locally
   const wasHidden = !!metadataEvent?.tags?.some((/** @type {string[]} */ t) => t[0] === 'hidden');
   let isHidden = $state(wasHidden);
+  // NIP-29 AV space (bare `livekit` tag): presence-read like `hidden`, but
+  // NOT one-way — absence on a 9002 switches it off (pyramid overwrites the
+  // flag from whatever the edit carries), so every save restates the
+  // current toggle. The toggle is offered when the relay mints tokens
+  // (probe 204) OR the group already has the tag: a probe hiccup must not
+  // hide an enabled flag the admin then cannot see or keep.
+  // svelte-ignore state_referenced_locally
+  const wasLivekit = hasLivekitTag(metadataEvent);
+  let livekit = $state(wasLivekit);
+  let avSupported = $state(false);
+  $effect(() => {
+    let alive = true;
+    probeRelayAvSupport(pointer.relay).then((supported) => {
+      if (alive) avSupported = supported;
+    });
+    return () => {
+      alive = false;
+    };
+  });
   // NIP-29 Subgroups: a 9002 with no `parent` tag DETACHES the group
   // (promotes it back to root) — read the existing tag off the raw event so
   // every save preserves it verbatim. No UI to change/detach it here. Same
@@ -89,6 +109,7 @@
           isPublic,
           isOpen,
           isHidden,
+          livekit,
           parent: existingParent
         }),
         user
@@ -198,6 +219,19 @@
       </label>
       {#if isHidden}
         <p class="text-xs text-base-content/60">{m.groups_settings_hidden_permanent()}</p>
+      {/if}
+      {#if avSupported || wasLivekit}
+        <label class="flex items-center gap-2 text-sm">
+          <input
+            type="checkbox"
+            class="checkbox checkbox-sm"
+            data-testid="group-edit-livekit"
+            bind:checked={livekit}
+            disabled={busy}
+          />
+          {m.groups_livekit_toggle()}
+        </label>
+        <p class="text-xs text-base-content/60">{m.groups_livekit_hint()}</p>
       {/if}
 
       <button

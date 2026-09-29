@@ -35,6 +35,9 @@ export async function syncRootGroupMetadata({ pointer, profile, signerUser }) {
     // The ROOT group has no parent, but mirror one through if somehow present
     // — same cheap-safety pattern GroupSettingsSheet uses for its own edits.
     const parent = tags.find((/** @type {string[]} */ t) => t[0] === 'parent')?.[1];
+    // Same for the AV flag: pyramid overwrites it from the tags it sees, so a
+    // profile resync that forgot it would silently end the room.
+    const livekit = tags.some((/** @type {string[]} */ t) => t[0] === 'livekit');
 
     const template = buildEditGroupMetadataTemplate(pointer.id, {
       name: profile?.name,
@@ -42,6 +45,7 @@ export async function syncRootGroupMetadata({ pointer, profile, signerUser }) {
       picture: profile?.picture,
       isPublic,
       isOpen,
+      livekit,
       ...(parent ? { parent } : {})
     });
     await publishToGroupRelay(relayConn, template, signerUser);

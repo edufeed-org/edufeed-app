@@ -1,6 +1,11 @@
 <!--
-  ParticipantTile — Renders a single participant with video/audio track attachment.
-  Listens to LiveKit participant events to attach/detach media tracks reactively.
+  ParticipantTile — Renders a single LiveKit participant with video/audio
+  track attachment. Listens to LiveKit participant events to attach/detach
+  media tracks reactively.
+
+  `pubkey` is resolved by the parent (groups/livekit.js identityToPubkey):
+  a NIP-29 relay mints identities as `<64-hex>:<suffix>` so one user can sit
+  in the room twice, and the raw identity is never a pubkey by itself.
 -->
 
 <script>
@@ -15,6 +20,7 @@
   /**
    * @type {{
    *   participant: import('livekit-client').LocalParticipant | import('livekit-client').RemoteParticipant,
+   *   pubkey?: string | null,
    *   isLocal?: boolean,
    *   isMuted?: boolean,
    *   isSpeaking?: boolean,
@@ -25,6 +31,7 @@
    */
   let {
     participant,
+    pubkey = null,
     isLocal = false,
     isMuted = false,
     isSpeaking = false,
@@ -108,13 +115,12 @@
     el.muted = isRemoteMuted;
   });
 
+  const fallbackName = $derived(pubkey ? pubkey.slice(0, 8) : 'Participant');
   const displayName = $derived(
-    isLocal
-      ? 'You'
-      : profile
-        ? getDisplayName(profile, participant?.identity?.slice(0, 8) || 'Participant')
-        : participant?.identity?.slice(0, 8) || 'Participant'
+    isLocal ? 'You' : profile ? getDisplayName(profile, fallbackName) : fallbackName
   );
+  // A hover card + profile link only make sense for a resolved Nostr identity.
+  const linkable = $derived(!!pubkey && !isLocal);
 </script>
 
 <div
@@ -137,14 +143,8 @@
       ></video>
     {:else}
       <div class="text-center">
-        {#if participant?.identity}
-          <ProfileAvatar
-            pubkey={participant.identity}
-            {profile}
-            size="lg"
-            showHoverCard={false}
-            linkToProfile={false}
-          />
+        {#if pubkey}
+          <ProfileAvatar {pubkey} {profile} size="lg" showHoverCard={false} linkToProfile={false} />
         {:else}
           <div class="placeholder avatar">
             <div
@@ -166,15 +166,15 @@
     <div
       class="absolute right-0 bottom-0 left-0 z-10 rounded-b-lg bg-gradient-to-t from-black/50 to-transparent px-2 py-1"
     >
-      {#if participant?.identity && !isLocal}
+      {#if linkable && pubkey}
         <HoverCard position="top" fixed={true}>
           {#snippet trigger()}
-            <a href={profileLink(participant.identity)} class="text-xs text-white hover:underline">
+            <a href={profileLink(pubkey)} class="text-xs text-white hover:underline">
               {displayName}
             </a>
           {/snippet}
           {#snippet content()}
-            <ProfileHoverCardContent pubkey={participant.identity} {profile} />
+            <ProfileHoverCardContent {pubkey} {profile} />
           {/snippet}
         </HoverCard>
       {:else}
@@ -184,13 +184,13 @@
   {/if}
 
   <!-- Video-off hover card: OUTSIDE overflow-hidden -->
-  {#if (!videoTrack || videoMuted) && participant?.identity && !isLocal}
+  {#if (!videoTrack || videoMuted) && linkable && pubkey}
     <div class="absolute inset-0 z-10 flex items-center justify-center">
       <HoverCard position="top" fixed={true}>
         {#snippet trigger()}
-          <a href={profileLink(participant.identity)} class="text-center">
+          <a href={profileLink(pubkey)} class="text-center">
             <ProfileAvatar
-              pubkey={participant.identity}
+              {pubkey}
               {profile}
               size="lg"
               showHoverCard={false}
@@ -200,7 +200,7 @@
           </a>
         {/snippet}
         {#snippet content()}
-          <ProfileHoverCardContent pubkey={participant.identity} {profile} />
+          <ProfileHoverCardContent {pubkey} {profile} />
         {/snippet}
       </HoverCard>
     </div>
@@ -208,13 +208,13 @@
 
   {#if isLocal && isMuted}
     <span class="absolute top-2 right-2 z-10 badge badge-sm badge-error">
-      {m.meet_mute()}
+      {m.groups_call_mute()}
     </span>
   {/if}
 
   {#if !isLocal && isRemoteMuted}
     <span class="absolute top-2 right-2 z-10 badge badge-sm badge-warning">
-      {m.meet_mute_participant()}
+      {m.groups_call_mute_participant()}
     </span>
   {/if}
 
@@ -223,7 +223,7 @@
       class="btn absolute right-1 bottom-1 z-10 btn-circle opacity-0 btn-ghost transition-opacity btn-xs group-hover/tile:opacity-100"
       class:opacity-100={isRemoteMuted}
       onclick={onToggleMute}
-      title={isRemoteMuted ? m.meet_unmute_participant() : m.meet_mute_participant()}
+      title={isRemoteMuted ? m.groups_call_unmute_participant() : m.groups_call_mute_participant()}
     >
       {#if isRemoteMuted}
         <svg class="h-4 w-4 text-warning" fill="none" stroke="currentColor" viewBox="0 0 24 24">

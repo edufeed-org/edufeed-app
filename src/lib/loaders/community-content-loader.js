@@ -13,7 +13,7 @@ import { parseAddressPointerFromATag } from '$lib/helpers/nostrUtils.js';
 import { addressLoader, createCachedTimelineLoader } from './base.js';
 import { communityTargetedPublicationsLoader } from './targeted-publications.js';
 import { getCommunityGlobalRelays } from '$lib/helpers/communityRelays.js';
-import { getAllLookupRelays, getCommunikeyRelays } from '$lib/helpers/relay-helper.js';
+import { getAllLookupRelays } from '$lib/helpers/relay-helper.js';
 import { fetchEventsByIds, resolveRepostReferences } from '$lib/helpers/repost-resolution.js';
 
 /**
@@ -151,6 +151,3 @@ export function createCommunityContentLoader(kinds, getRelays) {
     return { subscriptions, cleanup };
   };
 }
-
-/** Community meet room loader for kinds 30312/30313 */
-export const useMeetRoomLoader = createCommunityContentLoader([30312, 30313], getCommunikeyRelays);

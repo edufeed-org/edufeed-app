@@ -43,8 +43,7 @@
     wikis: () => m.create_community_modal_content_wikis(),
     learning: () => m.create_community_modal_content_learning(),
     polls: () => m.create_community_modal_content_polls(),
-    bookmarks: () => m.create_community_modal_content_bookmarks(),
-    meet: () => m.create_community_modal_content_meet()
+    bookmarks: () => m.create_community_modal_content_bookmarks()
   };
 </script>
 

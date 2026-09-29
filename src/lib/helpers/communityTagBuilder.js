@@ -5,11 +5,7 @@
  * (profile list a-tags, enforced relays, languages).
  */
 
-import {
-  parseCommunityContentTypes,
-  parseCommunityMetadata,
-  hasStrictContentMarker
-} from './communityRelays.js';
+import { parseCommunityContentTypes, hasStrictContentMarker } from './communityRelays.js';
 
 /**
  * @typedef {Object} ContentTypeFormData
@@ -31,7 +27,6 @@ import {
  *   No app form writes it anymore (one description, in the profile) — kept so
  *   events carrying one still round-trip through the builder.
  * @property {string[]} [languages] - ISO-639-1 language codes (new-spec)
- * @property {string} [livekitUrl] - LiveKit operator URL for Meet rooms
  * @property {Record<string, ContentTypeFormData>} contentTypes
  */
 
@@ -46,8 +41,7 @@ const CONTENT_TYPE_KINDS = {
   wikis: ['30818'],
   learning: ['30142'],
   polls: ['1068'],
-  bookmarks: ['39701'],
-  meet: ['30312', '30313']
+  bookmarks: ['39701']
 };
 
 /** Content type key → default section display name
@@ -61,8 +55,7 @@ const CONTENT_TYPE_NAMES = {
   wikis: 'Wikis',
   learning: 'Learning',
   polls: 'Polls',
-  bookmarks: 'Social Bookmarks',
-  meet: 'Meet'
+  bookmarks: 'Social Bookmarks'
 };
 
 /**
@@ -123,11 +116,7 @@ export function contentTypesFromEvent(communityEvent) {
   }
 
   if (!hasStrictContentMarker(communityEvent)) {
-    const livekitUrl = parseCommunityMetadata(communityEvent).livekitUrl;
-    for (const [key, ct] of Object.entries(contentTypes)) {
-      if (key === 'meet' && !livekitUrl && !ct.enabled) continue;
-      ct.enabled = true;
-    }
+    for (const ct of Object.values(contentTypes)) ct.enabled = true;
   }
 
   return applyParsedAccessTiers(contentTypes, communityEvent);
@@ -209,10 +198,10 @@ export function buildCommunityDefinitionTags(data, opts = {}) {
     }
   }
 
-  // LiveKit operator URL
-  if (data.livekitUrl?.trim()) {
-    tags.push(['livekit', data.livekitUrl.trim()]);
-  }
+  // (No `livekit` tag: calls live on NIP-29 channels now — the bare tag on
+  // the group's kind-39000, see groups/livekit.js. A legacy 10222 `livekit`
+  // URL tag is ignored on read and, since nothing re-emits it, dropped on
+  // the next save.)
 
   // Moderated-community pointers (communikey-groups NIP draft) — top-level,
   // and BEFORE the sections: section parsers absorb same-key tags positionally.
