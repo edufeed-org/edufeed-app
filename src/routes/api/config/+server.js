@@ -286,10 +286,14 @@ export function GET() {
     // strfry rejects the `search` filter field. Default: Brainstorm's
     // web-of-trust search relay, which ranks kind-0 hits by GrapeRank
     // instead of returning the first substring match (nostr.wine handed
-    // back an empty junk "laoc" profile for "laoc"; laoc, 2026-09-21).
-    // `none` switches the remote leg off (follows + known profiles only).
+    // back an empty junk "laoc" profile for "laoc"; laoc, 2026-09-21),
+    // plus the edufeed AMB relay, which indexes kind 0 and finds edufeed
+    // accounts Brainstorm has not picked up yet ("Gendering MINT digital";
+    // 2026-09-29). `none` switches the remote leg off (follows + known
+    // profiles only).
     profileSearchRelays: parseArrayOrNone(env.PROFILE_SEARCH_RELAYS, [
-      'wss://tags.brainstorm.world/relay'
+      'wss://tags.brainstorm.world/relay',
+      'wss://amb-relay.edufeed.org'
     ]),
 
     // Optional point of view for WoT-ranked profile search (npub or hex).
