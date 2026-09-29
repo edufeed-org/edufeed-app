@@ -63,6 +63,15 @@ the code in the signed event:
 - The author revokes a pass with a NIP-09 deletion, a moderator with a
   NIP-29 kind 9005. The relay then removes every call participant whose
   metadata names the pass.
+- The revoking connection MUST be NIP-42-authenticated as the pass's
+  author before the relay accepts the deletion. A relay that hides pass
+  events from unauthenticated readers (as above) MUST reject an
+  unauthenticated revocation explicitly — `auth-required: ...`, or
+  `restricted: ...` when a different key is already authenticated — rather
+  than accept it (`OK: true`) and silently do nothing: since the deletion's
+  own existence-lookup goes through that same read restriction, an
+  unauthenticated connection would otherwise appear to have revoked the
+  pass while it stays fully valid.
 - Expiry only stops new joins.
 
 ## Pass check
@@ -77,3 +86,8 @@ the code in the signed event:
 `reason` is one of `ok`, `not_yet`, `expired`, `call_ended`, `unknown`.
 Group details are returned only for a matching hash. A relay supports call
 passes if and only if this endpoint answers JSON for the group (any hash).
+
+A relay that also exposes a group under a community relay URL (e.g.
+`wss://host/c/<rootId>`) serves the same pass-check endpoint under that
+path too: `GET /c/<rootId>/.well-known/nip29/livekit/<group-id>/pass/<code-hash>`,
+for groups that belong to that community only.
