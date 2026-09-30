@@ -58,6 +58,7 @@ export { default as ChatTextIcon } from './ui/ChatTextIcon.svelte';
 export { default as VolumeUpIcon } from './ui/VolumeUpIcon.svelte';
 export { default as SchoolIcon } from './ui/SchoolIcon.svelte';
 export { default as LightbulbIcon } from './ui/LightbulbIcon.svelte';
+export { default as BotIcon } from './ui/BotIcon.svelte';
 export { default as SparkleIcon } from './ui/SparkleIcon.svelte';
 export { default as BibleIcon } from './ui/BibleIcon.svelte';
 export { default as PuzzleIcon } from './ui/PuzzleIcon.svelte';

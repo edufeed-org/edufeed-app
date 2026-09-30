@@ -32,7 +32,7 @@
     try {
       const agentPubkey = await pairWithCompanion(request);
       phase = 'done';
-      await goto(resolve(/** @type {any} */ ('/c/agents/new')) + '?agent=' + agentPubkey);
+      await goto(resolve('/c/agents/new') + '?agent=' + agentPubkey);
     } catch (error) {
       phase = 'error';
       errorText = error instanceof Error ? error.message : String(error);
@@ -67,9 +67,7 @@
       <p class="mb-4 text-error">{m.agents_connect_failed({ reason: errorText })}</p>
     {/if}
     <div class="flex gap-2">
-      <a href={resolve(/** @type {any} */ ('/c/agents'))} class="btn btn-ghost"
-        >{m.agents_connect_cancel()}</a
-      >
+      <a href={resolve('/c/agents')} class="btn btn-ghost">{m.agents_connect_cancel()}</a>
       <button
         type="button"
         class="btn btn-primary"
