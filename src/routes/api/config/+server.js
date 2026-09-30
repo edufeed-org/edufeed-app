@@ -14,7 +14,7 @@ import { env } from '$env/dynamic/private';
  * @param {string[]} defaultValue
  * @returns {string[]}
  */
-function parseArray(value, defaultValue = []) {
+export function parseArray(value, defaultValue = []) {
   if (!value) return defaultValue;
   return value
     .split(',')
@@ -101,7 +101,7 @@ function parseInt(value, defaultValue) {
  * @param {boolean} defaultValue
  * @returns {boolean}
  */
-function parseBool(value, defaultValue) {
+export function parseBool(value, defaultValue) {
   if (value === undefined || value === null || value === '') return defaultValue;
   return value === 'true' || value === '1';
 }
@@ -508,6 +508,15 @@ export function GET() {
     concord: {
       enabled: parseBool(env.CONCORD_ENABLED, false),
       relays: parseArray(env.CONCORD_RELAYS)
+    },
+
+    // AI agents (buzz-acp companions): the Agents pages, the agent badge and
+    // /api/agent-config. Pairing relays carry NIP-46 traffic (kind 24133) and
+    // default to the groups relays, which accept ephemeral events from anyone.
+    agents: {
+      enabled: parseBool(env.AGENTS_ENABLED, false),
+      pairingRelays: parseArray(env.AGENT_PAIRING_RELAYS, parseArray(env.GROUPS_RELAYS)),
+      downloadUrl: env.AGENT_DOWNLOAD_URL || null
     },
 
     // Read-only npub login ("browse as") — see docs/superpowers/specs/2026-07-16-google-and-npub-login-design.md
