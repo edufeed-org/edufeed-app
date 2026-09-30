@@ -27,6 +27,12 @@ describe('personaSlug', () => {
     expect(personaSlug('!!!')).toBe('');
     expect(personaSlug('')).toBe('');
   });
+  it('never starts with an underscore or dash (NIP-AP grammar)', () => {
+    expect(personaSlug('_bot')).toBe('bot');
+    expect(personaSlug('__helper-7b')).toBe('helper-7b');
+    expect(personaSlug('___')).toBe('');
+    expect(personaSlug('bot_')).toBe('bot_');
+  });
 });
 
 describe('validatePersona', () => {
@@ -49,6 +55,9 @@ describe('validatePersona', () => {
       ok: false,
       error: 'respondTo'
     });
+  });
+  it('refuses a name whose slug would be empty after trimming underscores', () => {
+    expect(validatePersona({ ...good, displayName: '___' })).toEqual({ ok: false, error: 'name' });
   });
 });
 

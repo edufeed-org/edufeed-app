@@ -45,7 +45,7 @@ export function personaSlug(name) {
   return String(name ?? '')
     .toLowerCase()
     .replace(/[^a-z0-9_-]+/g, '-')
-    .replace(/^-+|-+$/g, '')
+    .replace(/^[-_]+|-+$/g, '')
     .slice(0, SLUG_MAX)
     .replace(/-+$/g, '');
 }
@@ -102,7 +102,9 @@ export function buildAgentRecordTemplate(record) {
       name: record.name,
       definition: record.definition,
       respond_to: record.respondTo,
-      respond_to_allowlist: record.respondToAllowlist ?? []
+      respond_to_allowlist: Array.isArray(record.respondToAllowlist)
+        ? record.respondToAllowlist
+        : []
     })
   };
 }
