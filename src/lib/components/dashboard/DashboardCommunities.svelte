@@ -7,15 +7,16 @@
 <script>
   import { resolve } from '$app/paths';
   import * as m from '$lib/paraglide/messages';
-  import { useJoinedCommunitiesList } from '$lib/stores/joined-communities-list.svelte.js';
+  import { useJoinedCommunitiesState } from '$lib/stores/joined-communities-list.svelte.js';
   import { modalStore } from '$lib/stores/modal.svelte.js';
   import CommunikeyCard from '$lib/components/CommunikeyCard.svelte';
   import { SearchIcon, PlusIcon } from '$lib/components/icons';
   import { runtimeConfig } from '$lib/stores/config.svelte.js';
   import { isDiscoverTypeEnabled } from '$lib/helpers/discover-content-types.js';
 
-  const getJoinedCommunities = useJoinedCommunitiesList();
-  let joinedCommunities = $derived(getJoinedCommunities());
+  const joined = useJoinedCommunitiesState();
+  let joinedCommunities = $derived(joined.list());
+  let status = $derived(joined.status());
   // The Discover tile links into /discover?type=communities — a dead end when
   // that tab is disabled for this deployment (DISCOVER_CONTENT_TYPES).
   const canDiscoverCommunities = $derived(
@@ -65,8 +66,29 @@
     <h2 class="text-lg font-bold">{m.dashboard_communities_title()}</h2>
   </div>
 
-  {#if joinedCommunities.length === 0}
-    <p class="mb-4 text-sm text-base-content/60">{m.dashboard_communities_empty()}</p>
+  <!-- An empty list only means "you follow nothing" once it's confirmed.
+       Showing that for a list that failed to load made a user re-follow and
+       overwrite their real memberships (2026-09-30). -->
+  {#if status === 'unavailable'}
+    <div
+      role="alert"
+      data-testid="dashboard-communities-unavailable"
+      class="mb-4 alert alert-warning"
+    >
+      <span class="text-sm">{m.dashboard_communities_unavailable()}</span>
+      <button
+        type="button"
+        data-testid="dashboard-communities-retry"
+        class="btn shrink-0 whitespace-nowrap btn-sm"
+        onclick={() => joined.retry()}
+      >
+        {m.dashboard_communities_retry()}
+      </button>
+    </div>
+  {:else if joinedCommunities.length === 0}
+    <p class="mb-4 text-sm text-base-content/60">
+      {status === 'loading' ? m.dashboard_communities_loading() : m.dashboard_communities_empty()}
+    </p>
   {/if}
 
   <div

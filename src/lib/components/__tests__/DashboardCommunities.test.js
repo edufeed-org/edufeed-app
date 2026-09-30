@@ -11,6 +11,8 @@ import DashboardCommunities from '../dashboard/DashboardCommunities.svelte';
 // Mock dependencies
 const mockOpenModal = vi.fn();
 const mockJoinedCommunities = vi.fn(() => []);
+const mockStatus = vi.fn(() => 'ready');
+const mockRetry = vi.fn();
 
 vi.mock('$lib/stores/modal.svelte.js', () => ({
   modalStore: { openModal: (/** @type {any[]} */ ...args) => mockOpenModal(...args) }
@@ -26,11 +28,18 @@ vi.mock('$lib/paraglide/messages', () => ({
   dashboard_communities_discover_subtitle: () => 'Find more communities',
   dashboard_communities_create: () => 'Create',
   dashboard_communities_create_subtitle: () => 'Start your own community',
-  dashboard_communities_empty: () => "You haven't joined any communities yet."
+  dashboard_communities_empty: () => "You haven't joined any communities yet.",
+  dashboard_communities_loading: () => 'Loading your communities…',
+  dashboard_communities_unavailable: () => "Your communities couldn't be loaded.",
+  dashboard_communities_retry: () => 'Try again'
 }));
 
 vi.mock('$lib/stores/joined-communities-list.svelte.js', () => ({
-  useJoinedCommunitiesList: () => () => mockJoinedCommunities()
+  useJoinedCommunitiesState: () => ({
+    list: () => mockJoinedCommunities(),
+    status: () => mockStatus(),
+    retry: () => mockRetry()
+  })
 }));
 
 let mockDiscoverContentTypes = [
@@ -64,6 +73,7 @@ vi.mock('$lib/components/icons', () => ({
 beforeEach(() => {
   vi.clearAllMocks();
   mockJoinedCommunities.mockReturnValue([]);
+  mockStatus.mockReturnValue('ready');
   mockDiscoverContentTypes = ['events', 'learning', 'articles', 'boards', 'communities', 'people'];
 });
 
@@ -144,5 +154,25 @@ describe('DashboardCommunities', () => {
     const { getByTestId } = render(DashboardCommunities);
     expect(getByTestId('dashboard-communities-discover-card')).toBeTruthy();
     expect(getByTestId('dashboard-communities-create-card')).toBeTruthy();
+  });
+
+  // 2026-09-30: an unreachable list rendered as "you follow nothing", the
+  // user re-followed one community, and that replaced the real list.
+  it('shows a loading hint, not the empty hint, while the list is loading', () => {
+    mockStatus.mockReturnValue('loading');
+    const { getByText, container } = render(DashboardCommunities);
+    expect(getByText('Loading your communities…')).toBeTruthy();
+    expect(container.textContent).not.toContain("haven't joined");
+  });
+
+  it('shows an unavailable warning with a retry button instead of the empty hint', async () => {
+    mockStatus.mockReturnValue('unavailable');
+    const { getByTestId, container } = render(DashboardCommunities);
+    const alert = getByTestId('dashboard-communities-unavailable');
+    expect(alert.textContent).toContain("couldn't be loaded");
+    expect(container.textContent).not.toContain("haven't joined");
+
+    await fireEvent.click(getByTestId('dashboard-communities-retry'));
+    expect(mockRetry).toHaveBeenCalledOnce();
   });
 });

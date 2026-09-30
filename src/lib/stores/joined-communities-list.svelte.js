@@ -4,8 +4,17 @@ import { addressLoader } from '$lib/loaders/base.js';
 import { getProfilePointersFromList } from 'applesauce-common/helpers';
 import { getAllLookupRelays } from '$lib/helpers/relay-helper.js';
 import { getWriteRelays } from '$lib/services/relay-service.svelte.js';
+import { probeCommunitiesFollowSet } from '$lib/helpers/follow-set-probe.js';
 
 const COMMUNITIES_SET_ID = 'communities';
+
+/**
+ * @typedef {'loading' | 'ready' | 'unavailable'} JoinedCommunitiesStatus
+ * - 'loading'     — nothing known yet
+ * - 'ready'       — the list is loaded, or the network confirmed there is none
+ * - 'unavailable' — the relays didn't answer; an empty list here means
+ *                   "unknown", NOT "you follow no communities"
+ */
 
 /**
  * Custom hook for loading and managing joined communities list
@@ -13,8 +22,32 @@ const COMMUNITIES_SET_ID = 'communities';
  * @returns {() => string[]} - Function returning reactive array of joined community pubkeys
  */
 export function useJoinedCommunitiesList() {
+  return useJoinedCommunities(false).list;
+}
+
+/**
+ * The joined-communities list plus whether it can be trusted. Surfaces that
+ * render an empty state must use this: showing "you follow no communities"
+ * for a list that merely failed to load is what made a user re-follow and
+ * overwrite their real membership list (2026-09-30).
+ *
+ * @returns {{ list: () => string[], status: () => JoinedCommunitiesStatus, retry: () => void }}
+ */
+export function useJoinedCommunitiesState() {
+  return useJoinedCommunities(true);
+}
+
+/**
+ * @param {boolean} withStatus - probe the network so status() can tell an
+ *   empty list from an unreachable one. List-only consumers skip it: they'd
+ *   re-probe every relay on each mount for users who have no list.
+ */
+function useJoinedCommunities(withStatus) {
   let activeUser = $state(manager.active);
   let joinedCommunities = $state(/** @type {string[]} */ ([]));
+  let hasEvent = $state(false);
+  let probe = $state(/** @type {'pending' | 'found' | 'absent' | 'unknown'} */ ('pending'));
+  let attempt = $state(0);
 
   // Subscribe to account changes. Guarded: a partial manager (a test double, or
   // a transient pre-init state) without `active$` must not crash the effect —
@@ -30,6 +63,7 @@ export function useJoinedCommunitiesList() {
   $effect(() => {
     if (!activeUser?.pubkey) {
       joinedCommunities = [];
+      hasEvent = false;
       return;
     }
 
@@ -73,6 +107,7 @@ export function useJoinedCommunitiesList() {
         } else {
           joinedCommunities = [];
         }
+        hasEvent = Boolean(event);
       });
 
     return () => {
@@ -82,7 +117,40 @@ export function useJoinedCommunitiesList() {
     };
   });
 
-  return () => joinedCommunities;
+  // 4. Find out whether an empty list is real. The loaders above can't say:
+  // they end the same way whether relays answered "none" or never answered.
+  $effect(() => {
+    const pubkey = activeUser?.pubkey;
+    void attempt; // retry() re-runs this effect
+    if (!withStatus || !pubkey) return;
+
+    let cancelled = false;
+    probe = 'pending';
+    probeCommunitiesFollowSet(pubkey).then((result) => {
+      if (!cancelled) probe = result;
+    });
+    return () => {
+      cancelled = true;
+    };
+  });
+
+  const status = $derived(
+    /** @type {JoinedCommunitiesStatus} */ (
+      hasEvent || probe === 'absent' || !activeUser?.pubkey
+        ? 'ready'
+        : probe === 'unknown'
+          ? 'unavailable'
+          : 'loading'
+    )
+  );
+
+  return {
+    list: () => joinedCommunities,
+    status: () => status,
+    retry: () => {
+      attempt++;
+    }
+  };
 }
 
 /**

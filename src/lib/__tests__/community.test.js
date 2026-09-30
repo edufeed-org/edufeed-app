@@ -9,10 +9,13 @@
  *   1. If the follow set is already in EventStore, the helper does a synchronous
  *      lookup and returns immediately — no signing, no publishing.
  *   2. If absent locally, the helper must CONFIRM absence against the network
- *      (IDB cache + lookup relays + the user's NIP-65 write relays) before
- *      bootstrapping — a kind 30000 with a newer created_at REPLACES the old
- *      list on every relay, so creating an empty set on a mere local-cache
- *      miss destroys the user's memberships (2026-07-16 incident).
+ *      (probeCommunitiesFollowSet) before bootstrapping — a kind 30000 with a
+ *      newer created_at REPLACES the old list on every relay, so creating an
+ *      empty set on a mere local-cache miss destroys the user's memberships
+ *      (2026-07-16 incident). Silence is not absence either: when the probe
+ *      can't tell ('unknown'), the helper throws and creates nothing
+ *      (2026-09-30 incident). The probe's relay mechanics are covered in
+ *      follow-set-probe.test.js.
  *   3. Only when the network confirms absence: sign an empty follow set,
  *      insert it into EventStore synchronously, and fire `publishEvent` in the
  *      background WITHOUT awaiting it.
@@ -27,34 +30,19 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 const mockGetReplaceable = vi.fn();
 const mockEventStoreAdd = vi.fn();
-const mockReplaceableSubscribe = vi.fn();
 
 vi.mock('$lib/stores/nostr-infrastructure.svelte', () => ({
   eventStore: {
     getReplaceable: (/** @type {any[]} */ ...args) => mockGetReplaceable(...args),
-    add: (/** @type {any} */ event) => mockEventStoreAdd(event),
-    replaceable: (/** @type {any[]} */ ...args) => ({
-      subscribe: (/** @type {any} */ cb) => mockReplaceableSubscribe(cb, ...args)
-    })
+    add: (/** @type {any} */ event) => mockEventStoreAdd(event)
   }
 }));
 
-const mockAddressLoader = vi.fn();
+/** @type {import('vitest').Mock<(pubkey: string) => Promise<'found' | 'absent' | 'unknown'>>} */
+const mockProbe = vi.fn();
 
-vi.mock('$lib/loaders/base.js', () => ({
-  addressLoader: (/** @type {any} */ pointer) => mockAddressLoader(pointer)
-}));
-
-const mockGetAllLookupRelays = vi.fn(() => ['wss://lookup.example']);
-
-vi.mock('$lib/helpers/relay-helper.js', () => ({
-  getAllLookupRelays: () => mockGetAllLookupRelays()
-}));
-
-const mockGetWriteRelays = vi.fn(async (/** @type {string} */ _pubkey) => ['wss://write.example']);
-
-vi.mock('$lib/services/relay-service.svelte.js', () => ({
-  getWriteRelays: (/** @type {string} */ pubkey) => mockGetWriteRelays(pubkey)
+vi.mock('$lib/helpers/follow-set-probe.js', () => ({
+  probeCommunitiesFollowSet: (/** @type {string} */ pubkey) => mockProbe(pubkey)
 }));
 
 const TEST_PUBKEY = '0000000000000000000000000000000000000000000000000000000000000001';
@@ -92,12 +80,16 @@ vi.mock('$lib/services/publish-service.js', () => ({
 // actionRunnerOptimistic is imported by community.js but only used by
 // joinCommunity/leaveCommunity, not by ensureFollowSetExists. Stub it so the
 // module loads.
+const mockRun = vi.fn();
+
 vi.mock('$lib/stores/action-runner.svelte.js', () => ({
-  actionRunnerOptimistic: { run: vi.fn() }
+  actionRunnerOptimistic: { run: (/** @type {any[]} */ ...args) => mockRun(...args) }
 }));
 
 // Import AFTER mocks are wired up.
-const { ensureFollowSetExists } = await import('../helpers/community.js');
+const m = await import('$lib/paraglide/messages');
+const { ensureFollowSetExists, joinCommunity, leaveCommunity, FollowSetUnavailableError } =
+  await import('../helpers/community.js');
 
 // --- Helpers --------------------------------------------------------------
 
@@ -110,19 +102,6 @@ const SIGNED_FOLLOW_SET = {
   created_at: 1234567890,
   sig: 'fake-sig'
 };
-
-/** Observable-like whose subscribe immediately signals completion (EOSE everywhere, no event). */
-const completedLoader = () => ({
-  subscribe: (/** @type {any} */ observer) => {
-    observer?.complete?.();
-    return { unsubscribe: () => {} };
-  }
-});
-
-/** Observable-like that never emits and never completes (hanging relay). */
-const hangingLoader = () => ({
-  subscribe: () => ({ unsubscribe: () => {} })
-});
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -140,15 +119,9 @@ beforeEach(() => {
   mockSign.mockResolvedValue(SIGNED_FOLLOW_SET);
   // Default: publish never resolves — proves we don't await it.
   mockPublishEvent.mockReturnValue(new Promise(() => {}));
-  // Default network check: EventStore subscription emits "nothing yet",
-  // loader completes without finding the event → absence confirmed.
-  mockReplaceableSubscribe.mockImplementation((/** @type {any} */ cb) => {
-    cb(undefined);
-    return { unsubscribe: () => {} };
-  });
-  mockAddressLoader.mockImplementation(() => completedLoader());
-  mockGetAllLookupRelays.mockReturnValue(['wss://lookup.example']);
-  mockGetWriteRelays.mockResolvedValue(['wss://write.example']);
+  // Default: the network confirms the user has no follow set yet.
+  mockProbe.mockResolvedValue('absent');
+  mockRun.mockResolvedValue(undefined);
 });
 
 afterEach(() => {
@@ -236,77 +209,34 @@ describe('ensureFollowSetExists', () => {
     expect(callOrder).toEqual(['add', 'publish']);
   });
 
-  it('does NOT bootstrap when the network delivers an existing follow set', async () => {
-    // Local store misses, but the loader finds the user's real follow set on a
+  it('does NOT bootstrap when the network finds an existing follow set', async () => {
+    // Local store misses, but the probe finds the user's real follow set on a
     // relay. Creating an empty set here would wipe their memberships.
     mockGetReplaceable.mockReturnValue(undefined);
-    mockAddressLoader.mockImplementation(() => hangingLoader());
-    mockReplaceableSubscribe.mockImplementation((/** @type {any} */ cb) => {
-      cb(undefined);
-      // Event arrives from the network shortly after subscribing.
-      setTimeout(
-        () =>
-          cb({
-            ...SIGNED_FOLLOW_SET,
-            tags: [
-              ['d', 'communities'],
-              ['p', 'x']
-            ]
-          }),
-        0
-      );
-      return { unsubscribe: () => {} };
-    });
+    mockProbe.mockResolvedValue('found');
 
     await ensureFollowSetExists();
 
+    expect(mockProbe).toHaveBeenCalledWith(TEST_PUBKEY);
     expect(mockBuild).not.toHaveBeenCalled();
     expect(mockSign).not.toHaveBeenCalled();
     expect(mockPublishEvent).not.toHaveBeenCalled();
     expect(mockEventStoreAdd).not.toHaveBeenCalled();
   });
 
-  it('queries the network on both lookup relays and the user NIP-65 write relays', async () => {
+  it('throws and creates NOTHING when the network cannot confirm absence (2026-09-30 wipe)', async () => {
+    // Relays silent or failing: the list may well exist. The old code
+    // bootstrapped after a timeout, and the join that followed replaced a
+    // whole membership list with a single entry.
     mockGetReplaceable.mockReturnValue(undefined);
+    mockProbe.mockResolvedValue('unknown');
 
-    await ensureFollowSetExists();
+    await expect(ensureFollowSetExists()).rejects.toBeInstanceOf(FollowSetUnavailableError);
 
-    expect(mockAddressLoader).toHaveBeenCalledWith({
-      kind: 30000,
-      pubkey: TEST_PUBKEY,
-      identifier: 'communities',
-      relays: ['wss://lookup.example', 'wss://write.example']
-    });
-  });
-
-  it('bootstraps after the timeout when relays hang and no event arrives', async () => {
-    vi.useFakeTimers();
-    mockGetReplaceable.mockReturnValue(undefined);
-    mockAddressLoader.mockImplementation(() => hangingLoader());
-
-    const promise = ensureFollowSetExists();
-    await vi.advanceTimersByTimeAsync(10_000);
-    await promise;
-
-    expect(mockSign).toHaveBeenCalledTimes(1);
-    expect(mockEventStoreAdd).toHaveBeenCalledWith(SIGNED_FOLLOW_SET);
-    expect(mockPublishEvent).toHaveBeenCalledWith(SIGNED_FOLLOW_SET);
-  });
-
-  it('still confirms absence via lookup relays when getWriteRelays rejects', async () => {
-    mockGetReplaceable.mockReturnValue(undefined);
-    mockGetWriteRelays.mockRejectedValue(new Error('relay list fetch failed'));
-
-    await ensureFollowSetExists();
-
-    expect(mockAddressLoader).toHaveBeenCalledWith({
-      kind: 30000,
-      pubkey: TEST_PUBKEY,
-      identifier: 'communities',
-      relays: ['wss://lookup.example']
-    });
-    // Absence confirmed → bootstrap proceeds
-    expect(mockSign).toHaveBeenCalledTimes(1);
+    expect(mockBuild).not.toHaveBeenCalled();
+    expect(mockSign).not.toHaveBeenCalled();
+    expect(mockPublishEvent).not.toHaveBeenCalled();
+    expect(mockEventStoreAdd).not.toHaveBeenCalled();
   });
 
   it('does not propagate background publish failures', async () => {
@@ -329,22 +259,16 @@ describe('ensureFollowSetExists', () => {
     // The network confirmation can take seconds. If the user switches
     // accounts mid-flight, bootstrapping now would sign an empty follow set
     // for the NEW account, whose absence was never confirmed.
-    vi.useFakeTimers();
     mockGetReplaceable.mockReturnValue(undefined);
-    mockAddressLoader.mockImplementation(() => hangingLoader());
-    // Store never emits an event either.
-    mockReplaceableSubscribe.mockImplementation((/** @type {any} */ cb) => {
-      cb(undefined);
-      return { unsubscribe: () => {} };
+    mockProbe.mockImplementation(async () => {
+      mockManager.active = {
+        pubkey: 'ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff',
+        signer: { signEvent: vi.fn() }
+      };
+      return 'absent';
     });
 
-    const promise = ensureFollowSetExists();
-    mockManager.active = {
-      pubkey: 'ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff',
-      signer: { signEvent: vi.fn() }
-    };
-    await vi.advanceTimersByTimeAsync(10_000);
-    await promise;
+    await ensureFollowSetExists();
 
     expect(mockBuild).not.toHaveBeenCalled();
     expect(mockSign).not.toHaveBeenCalled();
@@ -360,35 +284,38 @@ describe('ensureFollowSetExists', () => {
     expect(mockSign).toHaveBeenCalledTimes(1);
     expect(mockPublishEvent).toHaveBeenCalledTimes(1);
   });
+});
 
-  it('does not bootstrap on an immediate loader error, only after the timeout confirms absence', async () => {
-    // An error can fire near-instantly (offline, malformed relay URL) — that
-    // must NOT count as confirmed absence.
-    vi.useFakeTimers();
+describe('joinCommunity / leaveCommunity when the follow set is unavailable', () => {
+  beforeEach(() => {
     mockGetReplaceable.mockReturnValue(undefined);
-    mockAddressLoader.mockImplementation(() => ({
-      subscribe: (/** @type {any} */ observer) => {
-        observer?.error?.(new Error('offline'));
-        return { unsubscribe: () => {} };
-      }
-    }));
-    mockReplaceableSubscribe.mockImplementation((/** @type {any} */ cb) => {
-      cb(undefined);
-      return { unsubscribe: () => {} };
-    });
-    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    mockProbe.mockResolvedValue('unknown');
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+  });
 
-    const promise = ensureFollowSetExists();
+  it('join fails with a localized message and never runs the follow action', async () => {
+    const result = await joinCommunity('c'.repeat(64));
 
-    await vi.advanceTimersByTimeAsync(1_000);
-    expect(mockSign).not.toHaveBeenCalled();
+    expect(result.success).toBe(false);
+    expect(result.error).toBe(m.communities_list_unavailable());
+    expect(mockRun).not.toHaveBeenCalled();
+    expect(mockPublishEvent).not.toHaveBeenCalled();
+  });
 
-    await vi.advanceTimersByTimeAsync(4_500);
-    await promise;
+  it('leave fails the same way instead of publishing a list built from nothing', async () => {
+    const result = await leaveCommunity('c'.repeat(64));
 
+    expect(result.success).toBe(false);
+    expect(mockRun).not.toHaveBeenCalled();
+  });
+
+  it('join still works once the list is confirmed absent (first-ever follow)', async () => {
+    mockProbe.mockResolvedValue('absent');
+
+    const result = await joinCommunity('c'.repeat(64));
+
+    expect(result.success).toBe(true);
     expect(mockSign).toHaveBeenCalledTimes(1);
-    expect(mockEventStoreAdd).toHaveBeenCalledWith(SIGNED_FOLLOW_SET);
-
-    warnSpy.mockRestore();
+    expect(mockRun).toHaveBeenCalledTimes(1);
   });
 });

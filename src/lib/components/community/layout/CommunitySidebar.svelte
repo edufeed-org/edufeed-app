@@ -1,6 +1,6 @@
 <script>
   import { getDisplayName, getProfilePicture } from 'applesauce-core/helpers';
-  import { useJoinedCommunitiesList } from '$lib/stores/joined-communities-list.svelte.js';
+  import { useJoinedCommunitiesState } from '$lib/stores/joined-communities-list.svelte.js';
   import { useUserProfile } from '$lib/stores/user-profile.svelte';
   import { runtimeConfig } from '$lib/stores/config.svelte.js';
   // Directly from the concord submodule, never the $lib/concord barrel —
@@ -75,8 +75,9 @@
     currentPath = ''
   } = $props();
 
-  const getJoinedCommunities = useJoinedCommunitiesList();
-  const joinedCommunities = $derived(getJoinedCommunities());
+  const joined = useJoinedCommunitiesState();
+  const joinedCommunities = $derived(joined.list());
+  const joinedStatus = $derived(joined.status());
 
   // Create non-mutating copy to avoid Svelte 5 state mutation error
   const sortedCommunities = $derived([...joinedCommunities]);
@@ -619,8 +620,26 @@
       <span class="flex-1 truncate text-left text-sm font-medium">{m.rail_add_community()}</span>
     </button>
 
-    {#if joinedCommunities.length === 0}
-      <div class="py-8 text-center text-base-content/60">
+    {#if joinedStatus === 'unavailable'}
+      <!-- Not "no communities": the list failed to load. Claiming it's empty
+           made a user re-follow and overwrite their real list (2026-09-30). -->
+      <div
+        role="alert"
+        data-testid="rail-communities-unavailable"
+        class="py-8 text-center text-sm text-warning"
+      >
+        <p class="mb-3">{m.dashboard_communities_unavailable()}</p>
+        <button
+          type="button"
+          data-testid="rail-communities-retry"
+          class="btn btn-sm"
+          onclick={() => joined.retry()}
+        >
+          {m.dashboard_communities_retry()}
+        </button>
+      </div>
+    {:else if joinedStatus === 'ready' && joinedCommunities.length === 0}
+      <div data-testid="rail-communities-empty" class="py-8 text-center text-base-content/60">
         <p class="mb-3 text-sm">{m.community_layout_sidebar_no_communities()}</p>
         {#if canDiscoverCommunities}
           <a href={resolve('/discover?type=communities')} class="btn btn-sm btn-primary">
