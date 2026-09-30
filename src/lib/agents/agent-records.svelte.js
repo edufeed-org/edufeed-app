@@ -43,8 +43,16 @@ export function useAgentRecords(getPubkeys) {
     return () => subs.forEach((sub) => sub.unsubscribe());
   });
 
+  // Content-keyed, order-independent: reading this $derived (instead of
+  // calling getPubkeys() directly inside the effect below) means the
+  // TimelineModel subscription is only torn down and rebuilt when the actual
+  // set of pubkeys changes — not on every unrelated EventStore update (e.g. a
+  // new chat message from an already-known author) that happens to produce a
+  // new getPubkeys() array with the same content.
+  const recordsKey = $derived([...new Set(getPubkeys() ?? [])].sort().join('\x1f')); // eslint-disable-line svelte/prefer-svelte-reactivity -- scratch, collapsed to a primitive string immediately
+
   $effect(() => {
-    const pubkeys = [...new Set(getPubkeys() ?? [])]; // eslint-disable-line svelte/prefer-svelte-reactivity -- scratch
+    const pubkeys = recordsKey ? recordsKey.split('\x1f') : [];
     if (pubkeys.length === 0) {
       records = [];
       return;

@@ -6,7 +6,7 @@
  * old". The companion only ever reads the groups relay, so the outbox model
  * (publishEvent) is deliberately not used here.
  */
-import { pool } from '$lib/stores/nostr-infrastructure.svelte';
+import { pool, eventStore } from '$lib/stores/nostr-infrastructure.svelte';
 import { getGroupsRelays } from '$lib/helpers/relay-helper.js';
 import {
   publishToGroupRelay,
@@ -20,14 +20,15 @@ import {
 } from './persona.js';
 
 /** @typedef {{id: string, relay: string}} GroupPointer */
-/** @typedef {{relayFor?: (url: string) => any, relays?: string[], publish?: typeof publishToGroupRelay}} Deps */
+/** @typedef {{relayFor?: (url: string) => any, relays?: string[], publish?: typeof publishToGroupRelay, store?: {add: (event: any) => any}}} Deps */
 
 /** @param {Deps} deps */
 function resolveDeps(deps) {
   return {
     relayFor: deps.relayFor ?? ((/** @type {string} */ url) => pool.relay(url)),
     relays: deps.relays ?? getGroupsRelays(),
-    publish: deps.publish ?? publishToGroupRelay
+    publish: deps.publish ?? publishToGroupRelay,
+    store: deps.store ?? eventStore
   };
 }
 
@@ -44,6 +45,7 @@ function message(error) {
  * @param {{pubkey: string, signer: any}} user
  */
 async function publishEverywhere(d, template, user) {
+  if (d.relays.length === 0) throw new Error('no groups relay configured');
   /** @type {unknown} */
   let lastError;
   /** @type {any} */
@@ -98,7 +100,9 @@ export async function publishAgent(
 ) {
   const d = resolveDeps(deps);
   const recordEvent = await publishEverywhere(d, buildAgentRecordTemplate(record), user);
+  d.store.add(recordEvent);
   const personaEvent = await publishEverywhere(d, buildPersonaTemplate(persona), user);
+  d.store.add(personaEvent);
   const failedGroups = [
     ...(await publishPerGroup(
       d,
@@ -135,5 +139,6 @@ export async function removeAgent({ user, agentPubkey, slug, groups }, deps = {}
     buildAgentDeletionTemplate({ ownerPubkey: user.pubkey, agentPubkey, slug }),
     user
   );
+  d.store.add(deletionEvent);
   return { deletionEvent, failedGroups };
 }

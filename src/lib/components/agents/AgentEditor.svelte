@@ -5,11 +5,24 @@
    * publishing is the caller's job (onSave), so this component is testable
    * without relays.
    */
-  import { validatePersona, RUNTIMES, RESPOND_TO } from '$lib/agents/persona.js';
+  import {
+    validatePersona,
+    RUNTIMES,
+    RESPOND_TO,
+    personaSlugForAgent
+  } from '$lib/agents/persona.js';
   import * as m from '$lib/paraglide/messages';
 
-  /** @type {{ agentPubkey: string, initial?: import('$lib/agents/agent-index.js').AgentEntry | null, groups: import('$lib/agents/admin-groups.svelte.js').AdminGroup[], busy?: boolean, onSave: (draft: {persona: any, addToGroups: Array<{id: string, relay: string}>, removeFromGroups: Array<{id: string, relay: string}>}) => Promise<void>, onCancel: () => void }} */
-  let { agentPubkey, initial = null, groups, busy = false, onSave, onCancel } = $props();
+  /** @type {{ agentPubkey: string, initial?: import('$lib/agents/agent-index.js').AgentEntry | null, groups: import('$lib/agents/admin-groups.svelte.js').AdminGroup[], busy?: boolean, loading?: boolean, onSave: (draft: {persona: any, addToGroups: Array<{id: string, relay: string}>, removeFromGroups: Array<{id: string, relay: string}>}) => Promise<void>, onCancel: () => void }} */
+  let {
+    agentPubkey,
+    initial = null,
+    groups,
+    busy = false,
+    loading = false,
+    onSave,
+    onCancel
+  } = $props();
 
   let displayName = $state(initial?.persona?.displayName ?? initial?.name ?? '');
   let avatarUrl = $state(initial?.persona?.avatarUrl ?? '');
@@ -27,31 +40,44 @@
   /** @type {'name' | 'runtime' | 'respondTo' | ''} */
   let error = $state('');
 
-  // Groups the agent is in right now (from the rosters) seed the checkboxes.
+  // Groups the agent is in right now, always recomputed off the `groups`
+  // prop — never frozen at mount, so a roster that finishes loading after
+  // this component first renders (kind 30177 put-user events load
+  // asynchronously) is reflected correctly on the very next render.
   const currentIds = $derived(
     new Set(groups.filter((g) => g.members.has(agentPubkey)).map((g) => g.id))
   );
-  // Seeded synchronously from the initial props (not via $effect): an
-  // effect-based seed can race the very first click in tests (and in a fast
-  // click right after mount in the real app), leaving selectedIds at ∅ when
-  // the click handler already toggled off a group the effect had not yet
-  // seeded. `groups` here are always what the caller already resolved by the
-  // time this component renders (see the (dashboard)/agents pages, which
-  // hand down `getAdminGroups().groups` reactively — a later prop update to
-  // `groups` still feeds the *toggle* logic correctly since `currentIds` and
-  // `adminGroups` stay derived).
-  let selectedIds = $state.raw(/** @type {Set<string>} */ (new Set(currentIds)));
+
+  // What the user has actually clicked, as a diff against currentIds — NOT
+  // an absolute selection snapshot. Keeping only the diff means a save that
+  // happens before `groups`/`initial` finished loading can never remove a
+  // membership the user never touched: isSelected() combines the always-
+  // fresh currentIds with this (empty-until-clicked) diff on every render,
+  // instead of copying currentIds once into a selection set at mount.
+  let toggled = $state.raw(/** @type {Set<string>} */ (new Set()));
+
+  /** @param {string} id */
+  const isSelected = (id) => currentIds.has(id) !== toggled.has(id);
+
+  /** @param {string} id */
+  function toggle(id) {
+    const next = new Set(toggled); // eslint-disable-line svelte/prefer-svelte-reactivity -- local accumulator, reassigned to $state.raw below
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
+    toggled = next;
+  }
 
   const adminGroups = $derived(groups.filter((g) => g.isAdmin));
   const loadingGroups = $derived(groups.filter((g) => !g.loaded));
 
-  /** @param {string} id */
-  function toggle(id) {
-    const next = new Set(selectedIds); // eslint-disable-line svelte/prefer-svelte-reactivity -- local accumulator, reassigned to $state.raw below
-    if (next.has(id)) next.delete(id);
-    else next.add(id);
-    selectedIds = next;
-  }
+  /** @param {{id: string, relay: string}} g */
+  const pointer = (g) => ({ id: g.id, relay: g.relay });
+  const addToGroups = $derived(
+    adminGroups.filter((g) => toggled.has(g.id) && !currentIds.has(g.id)).map(pointer)
+  );
+  const removeFromGroups = $derived(
+    adminGroups.filter((g) => toggled.has(g.id) && currentIds.has(g.id)).map(pointer)
+  );
 
   async function save() {
     const result = validatePersona({
@@ -66,17 +92,8 @@
       return;
     }
     error = '';
-    const pointer = (/** @type {{id: string, relay: string}} */ g) => ({
-      id: g.id,
-      relay: g.relay
-    });
-    const addToGroups = adminGroups
-      .filter((g) => selectedIds.has(g.id) && !currentIds.has(g.id))
-      .map(pointer);
-    const removeFromGroups = adminGroups
-      .filter((g) => !selectedIds.has(g.id) && currentIds.has(g.id))
-      .map(pointer);
-    await onSave({ persona: result.value, addToGroups, removeFromGroups });
+    const persona = { ...result.value, slug: personaSlugForAgent(agentPubkey) };
+    await onSave({ persona, addToGroups, removeFromGroups });
   }
 </script>
 
@@ -157,7 +174,7 @@
         <input
           type="checkbox"
           class="checkbox checkbox-sm"
-          checked={selectedIds.has(group.id)}
+          checked={isSelected(group.id)}
           onchange={() => toggle(group.id)}
           aria-label={group.name}
         />
@@ -175,7 +192,7 @@
     <button type="button" class="btn btn-ghost" onclick={onCancel} disabled={busy}
       >{m.agents_editor_cancel()}</button
     >
-    <button type="submit" class="btn btn-primary" disabled={busy}>
+    <button type="submit" class="btn btn-primary" disabled={busy || loading}>
       {#if busy}<span class="loading loading-sm loading-spinner"></span>{/if}
       {m.agents_editor_save()}
     </button>

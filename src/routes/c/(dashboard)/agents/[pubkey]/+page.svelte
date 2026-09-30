@@ -72,13 +72,18 @@
     <p class="mb-4 text-sm text-base-content/70">
       {m.agents_editor_agent_id({ id: agentPubkey.slice(0, 12) })}
     </p>
-    <AgentEditor
-      {agentPubkey}
-      {initial}
-      groups={getAdminGroups().groups}
-      {busy}
-      onSave={save}
-      onCancel={() => goto(resolve('/c/agents'))}
-    />
+    {#if !initial}
+      <span class="loading loading-lg loading-spinner text-primary"></span>
+    {:else}
+      <AgentEditor
+        {agentPubkey}
+        {initial}
+        groups={getAdminGroups().groups}
+        {busy}
+        loading={getAdminGroups().loading}
+        onSave={save}
+        onCancel={() => goto(resolve('/c/agents'))}
+      />
+    {/if}
   {/if}
 </div>

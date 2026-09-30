@@ -3,7 +3,7 @@ import { describe, it, expect } from 'vitest';
 import {
   PERSONA_KIND,
   AGENT_RECORD_KIND,
-  personaSlug,
+  personaSlugForAgent,
   validatePersona,
   buildPersonaTemplate,
   buildAgentRecordTemplate,
@@ -17,21 +17,9 @@ import {
 const OWNER = 'a'.repeat(64);
 const AGENT = 'b'.repeat(64);
 
-describe('personaSlug', () => {
-  it('lowercases, keeps [a-z0-9_-], joins with dashes, trims to 64', () => {
-    expect(personaSlug('Lehrbot Klasse 7b')).toBe('lehrbot-klasse-7b');
-    expect(personaSlug('  Ärger & Co  ')).toBe('rger-co');
-    expect(personaSlug('x'.repeat(80))).toHaveLength(64);
-  });
-  it('is empty when nothing usable remains', () => {
-    expect(personaSlug('!!!')).toBe('');
-    expect(personaSlug('')).toBe('');
-  });
-  it('never starts with an underscore or dash (NIP-AP grammar)', () => {
-    expect(personaSlug('_bot')).toBe('bot');
-    expect(personaSlug('__helper-7b')).toBe('helper-7b');
-    expect(personaSlug('___')).toBe('');
-    expect(personaSlug('bot_')).toBe('bot_');
+describe('personaSlugForAgent', () => {
+  it('derives an NIP-AP grammar-safe slug from the agent pubkey', () => {
+    expect(personaSlugForAgent(AGENT)).toBe('agent-' + 'b'.repeat(12));
   });
 });
 
@@ -43,11 +31,21 @@ describe('validatePersona', () => {
     avatarUrl: '',
     respondTo: 'owner-only'
   };
-  it('accepts a complete persona and derives the slug', () => {
-    expect(validatePersona(good)).toEqual({ ok: true, value: { ...good, slug: 'lehrbot' } });
+  it('accepts a complete persona', () => {
+    expect(validatePersona(good)).toEqual({ ok: true, value: good });
   });
-  it('refuses a name with no usable slug', () => {
-    expect(validatePersona({ ...good, displayName: '!!!' })).toEqual({ ok: false, error: 'name' });
+  it('accepts any non-empty name, including punctuation-only text', () => {
+    expect(validatePersona({ ...good, displayName: '!!!' })).toEqual({
+      ok: true,
+      value: { ...good, displayName: '!!!' }
+    });
+  });
+  it('refuses a blank or whitespace-only name', () => {
+    expect(validatePersona({ ...good, displayName: '   ' })).toEqual({
+      ok: false,
+      error: 'name'
+    });
+    expect(validatePersona({ ...good, displayName: '' })).toEqual({ ok: false, error: 'name' });
   });
   it('refuses unknown runtime and respond-to values', () => {
     expect(validatePersona({ ...good, runtime: 'goose' })).toEqual({ ok: false, error: 'runtime' });
@@ -55,9 +53,6 @@ describe('validatePersona', () => {
       ok: false,
       error: 'respondTo'
     });
-  });
-  it('refuses a name whose slug would be empty after trimming underscores', () => {
-    expect(validatePersona({ ...good, displayName: '___' })).toEqual({ ok: false, error: 'name' });
   });
 });
 

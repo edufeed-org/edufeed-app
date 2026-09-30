@@ -10,7 +10,7 @@ export const PRESENCE_TTL_SECONDS = 5 * 60;
 
 /**
  * @typedef {{
- *   agentPubkey: string, ownerPubkey: string, name: string, respondTo: string,
+ *   agentPubkey: string, ownerPubkey: string, name: string, definition: string, respondTo: string,
  *   persona: ReturnType<typeof parsePersona>, recordEvent: any, personaEvent: any
  * }} AgentEntry
  */
@@ -54,6 +54,7 @@ export function indexAgents(recordEvents, personaEvents) {
       agentPubkey: record.agentPubkey,
       ownerPubkey: record.ownerPubkey,
       name: record.name,
+      definition: record.definition,
       respondTo: record.respondTo,
       persona: personaEvent ? parsePersona(personaEvent) : null,
       recordEvent,

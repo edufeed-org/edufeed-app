@@ -77,6 +77,7 @@
       {initial}
       groups={getAdminGroups().groups}
       {busy}
+      loading={getAdminGroups().loading}
       onSave={save}
       onCancel={() => goto(resolve('/c/agents'))}
     />

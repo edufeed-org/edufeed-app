@@ -19,10 +19,27 @@ export function useAgentPresence(getPubkeys) {
     // eslint-disable-next-line svelte/prefer-svelte-reactivity -- $state.raw() with a plain Map
     (new Map())
   );
+  // Bumped every 30s so presenceIsOnline's TTL check re-evaluates even when
+  // no new presence event has arrived (an entry ages from online to offline
+  // purely by the clock).
+  let tick = $state(0);
+
+  // A primitive string, content-keyed and order-independent (sorted): Svelte
+  // only reruns effects that read a $derived when its VALUE changes, so this
+  // — unlike calling getPubkeys() directly inside the effect — does not
+  // retrigger the subscription effect below just because getPubkeys()
+  // returned a new array with the same pubkeys (e.g. unrelated agent fields
+  // changed upstream). That would otherwise tear down and rebuild every
+  // relay subscription, and wipe `presence`, on every unrelated re-render.
+  const key = $derived([...new Set(getPubkeys() ?? [])].sort().join('\x1f')); // eslint-disable-line svelte/prefer-svelte-reactivity -- scratch, collapsed to a primitive string immediately
 
   $effect(() => {
-    const pubkeys = [...new Set(getPubkeys() ?? [])]; // eslint-disable-line svelte/prefer-svelte-reactivity -- scratch
-    presence = new Map(); // eslint-disable-line svelte/prefer-svelte-reactivity -- replaced wholesale
+    const pubkeys = key ? key.split('\x1f') : [];
+    const set = new Set(pubkeys); // eslint-disable-line svelte/prefer-svelte-reactivity -- scratch
+    // Keep whatever we already know about pubkeys still of interest instead
+    // of wiping everything — only entries for pubkeys that dropped out of
+    // the set are discarded.
+    presence = new Map([...presence].filter(([pk]) => set.has(pk))); // eslint-disable-line svelte/prefer-svelte-reactivity -- replaced wholesale
     if (pubkeys.length === 0) return;
     const relays = [...new Set(getGroupsRelays().map(normalizeURL))]; // eslint-disable-line svelte/prefer-svelte-reactivity -- scratch
     /** @type {import('rxjs').Subscription[]} */
@@ -58,5 +75,15 @@ export function useAgentPresence(getPubkeys) {
     return () => subs.forEach((sub) => sub.unsubscribe());
   });
 
-  return () => presence;
+  $effect(() => {
+    const interval = setInterval(() => {
+      tick++;
+    }, 30_000);
+    return () => clearInterval(interval);
+  });
+
+  return () => {
+    void tick;
+    return presence;
+  };
 }

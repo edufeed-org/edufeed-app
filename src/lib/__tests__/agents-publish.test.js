@@ -33,20 +33,23 @@ function fakeDeps(rejectGroupId = null) {
     if (rejectGroupId && h === rejectGroupId) throw new Error('blocked: unknown member');
     return { ...template, id: 'signed', pubkey: OWNER, sig: 'sig' };
   });
+  const store = { add: vi.fn() };
   return {
     deps: {
       /** @param {string} url */
       relayFor: (url) => ({ url }),
       relays: ['wss://groups.example'],
-      publish
+      publish,
+      store
     },
-    published
+    published,
+    store
   };
 }
 
 describe('publishAgent', () => {
   it('publishes record, persona and one 9000 per group, in that order', async () => {
-    const { deps, published } = fakeDeps();
+    const { deps, published, store } = fakeDeps();
     const result = await publishAgent(
       {
         user,
@@ -64,6 +67,20 @@ describe('publishAgent', () => {
     ]);
     expect(result.failedGroups).toEqual([]);
     expect(result.recordEvent.kind).toBe(30177);
+    expect(store.add).toHaveBeenCalledWith(result.recordEvent);
+    expect(store.add).toHaveBeenCalledWith(result.personaEvent);
+  });
+
+  it('throws before publishing anything when no groups relay is configured', async () => {
+    const { deps, published, store } = fakeDeps();
+    await expect(
+      publishAgent(
+        { user, persona, record, addToGroups: [], removeFromGroups: [] },
+        { ...deps, relays: [] }
+      )
+    ).rejects.toThrow('no groups relay configured');
+    expect(published).toEqual([]);
+    expect(store.add).not.toHaveBeenCalled();
   });
 
   it('collects a rejected 9000 instead of failing the whole save', async () => {
@@ -114,13 +131,17 @@ describe('publishAgent', () => {
       /** @param {string} url */
       relayFor: (url) => ({ url }),
       relays: ['wss://a', 'wss://b'],
-      publish
+      publish,
+      store: { add: vi.fn() }
     };
     const ok = await publishAgent(
       { user, persona, record, addToGroups: [], removeFromGroups: [] },
       deps
     );
     expect(ok.recordEvent).toBeTruthy();
+    expect(publish.mock.calls.map((c) => c[0].url)).toEqual(
+      expect.arrayContaining(['wss://a', 'wss://b'])
+    );
 
     const allDown = {
       ...deps,
@@ -136,7 +157,7 @@ describe('publishAgent', () => {
 
 describe('removeAgent', () => {
   it('sends the 9001s first, then the deletion, and reports failed groups', async () => {
-    const { deps, published } = fakeDeps('g2');
+    const { deps, published, store } = fakeDeps('g2');
     const result = await removeAgent(
       {
         user,
@@ -151,6 +172,7 @@ describe('removeAgent', () => {
     );
     expect(published.map((p) => p.template.kind)).toEqual([9001, 9001, 5]);
     expect(result.failedGroups.map((g) => g.id)).toEqual(['g2']);
+    expect(store.add).toHaveBeenCalledWith(result.deletionEvent);
     expect(result.deletionEvent.tags).toEqual([
       ['a', `30177:${OWNER}:${AGENT}`],
       ['a', `30175:${OWNER}:lehrbot`]

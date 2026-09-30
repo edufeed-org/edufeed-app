@@ -87,7 +87,7 @@ describe('AgentEditor', () => {
     const onSave = vi.fn();
     render(AgentEditor, { props: { agentPubkey: AGENT, groups, onSave, onCancel: vi.fn() } });
     await fireEvent.input(screen.getByLabelText('agents_editor_name'), {
-      target: { value: '!!!' }
+      target: { value: '   ' }
     });
     await fireEvent.click(screen.getByText('agents_editor_save'));
     expect(onSave).not.toHaveBeenCalled();
@@ -105,13 +105,50 @@ describe('AgentEditor', () => {
     expect(onSave).toHaveBeenCalledTimes(1);
     const draft = onSave.mock.calls[0][0];
     expect(draft.persona).toMatchObject({
-      slug: 'lehrbot',
+      slug: 'agent-' + AGENT.slice(0, 12),
       displayName: 'Lehrbot',
       runtime: 'claude',
       respondTo: 'owner-only'
     });
     expect(draft.addToGroups).toEqual([{ id: 'g1', relay: 'wss://groups.example' }]);
     expect(draft.removeFromGroups).toEqual([]);
+  });
+
+  it('disables Save while groups are still loading', () => {
+    render(AgentEditor, {
+      props: { agentPubkey: AGENT, groups, loading: true, onSave: vi.fn(), onCancel: vi.fn() }
+    });
+    expect(/** @type {HTMLButtonElement} */ (screen.getByText('agents_editor_save')).disabled).toBe(
+      true
+    );
+  });
+
+  it('never wipes memberships the user did not touch when `groups` arrives late', async () => {
+    const onSave = vi.fn(async () => {});
+    const initial = {
+      agentPubkey: AGENT,
+      ownerPubkey: 'a'.repeat(64),
+      name: 'Lehrbot',
+      respondTo: 'anyone',
+      persona: {
+        slug: 'agent-' + AGENT.slice(0, 12),
+        displayName: 'Lehrbot',
+        systemPrompt: 'x',
+        runtime: 'codex',
+        avatarUrl: null,
+        respondTo: 'anyone'
+      },
+      recordEvent: null,
+      personaEvent: null
+    };
+    const inG1 = groups.map((g) => (g.id === 'g1' ? { ...g, members: new Set([AGENT]) } : g));
+    const { rerender } = render(AgentEditor, {
+      props: { agentPubkey: AGENT, initial, groups: [], onSave, onCancel: vi.fn() }
+    });
+    await rerender({ agentPubkey: AGENT, initial, groups: inG1, onSave, onCancel: vi.fn() });
+    await fireEvent.click(screen.getByText('agents_editor_save'));
+    expect(onSave.mock.calls[0][0].addToGroups).toEqual([]);
+    expect(onSave.mock.calls[0][0].removeFromGroups).toEqual([]);
   });
 
   it("computes removals against the agent's current membership when editing", async () => {

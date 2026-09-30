@@ -7,6 +7,7 @@
   import { useAgentPresence } from '$lib/agents/agent-presence.svelte.js';
   import { presenceIsOnline } from '$lib/agents/agent-index.js';
   import { removeAgent } from '$lib/agents/agent-publish.js';
+  import { personaSlugForAgent } from '$lib/agents/persona.js';
   import { showToast } from '$lib/helpers/toast.js';
   import * as m from '$lib/paraglide/messages';
 
@@ -32,7 +33,7 @@
       const result = await removeAgent({
         user,
         agentPubkey: target.agentPubkey,
-        slug: target.persona?.slug ?? target.name,
+        slug: target.persona?.slug ?? target.definition ?? personaSlugForAgent(target.agentPubkey),
         groups
       });
       if (result.failedGroups.length > 0) {
@@ -130,7 +131,13 @@
       <h3 class="text-lg font-semibold">
         {m.agents_remove_confirm_title({ name: removeTarget.name })}
       </h3>
-      <p class="py-2 text-sm">{m.agents_remove_confirm_body()}</p>
+      <p class="py-2 text-sm">
+        {#if getAdminGroups().loading}
+          {m.agents_remove_loading()}
+        {:else}
+          {m.agents_remove_confirm_body()}
+        {/if}
+      </p>
       <div class="modal-action">
         <button
           type="button"
@@ -138,8 +145,11 @@
           onclick={() => (removeTarget = null)}
           disabled={removing}>{m.agents_editor_cancel()}</button
         >
-        <button type="button" class="btn btn-error" onclick={confirmRemove} disabled={removing}
-          >{m.agents_remove()}</button
+        <button
+          type="button"
+          class="btn btn-error"
+          onclick={confirmRemove}
+          disabled={removing || getAdminGroups().loading}>{m.agents_remove()}</button
         >
       </div>
     </div>

@@ -1298,6 +1298,7 @@
   "agents_remove": "Remove",
   "agents_remove_confirm_title": "Remove {name}?",
   "agents_remove_confirm_body": "The agent leaves its groups and stops. Its key stays in the desktop app until you delete it there.",
+  "agents_remove_loading": "Loading the agent's groups…",
   "agents_remove_done": "Agent removed.",
   "agents_remove_partial": "Agent removed, but {count} group(s) could not be updated.",
   "agents_remove_failed": "Removing failed: {reason}",

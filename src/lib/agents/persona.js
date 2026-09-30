@@ -16,7 +16,6 @@ export const AGENT_RECORD_KIND = 30177;
 export const RUNTIMES = /** @type {const} */ (['claude', 'codex', 'buzz-agent']);
 export const RESPOND_TO = /** @type {const} */ (['owner-only', 'anyone']);
 
-const SLUG_MAX = 64;
 const HEX64 = /^[0-9a-f]{64}$/;
 
 const now = () => Math.floor(Date.now() / 1000);
@@ -37,17 +36,13 @@ function parseJSONObject(content) {
 }
 
 /**
- * NIP-AP slug from a display name: lowercase, `[a-z0-9_-]` only, runs of
- * anything else become one dash, trimmed to 64 chars. '' when nothing is left.
- * @param {string} name
+ * NIP-AP grammar-safe persona slug, derived from the agent's own pubkey
+ * rather than its (editable, non-unique) display name — a rename can never
+ * orphan the persona a record's `definition` points at.
+ * @param {string} agentPubkey
  */
-export function personaSlug(name) {
-  return String(name ?? '')
-    .toLowerCase()
-    .replace(/[^a-z0-9_-]+/g, '-')
-    .replace(/^[-_]+|-+$/g, '')
-    .slice(0, SLUG_MAX)
-    .replace(/-+$/g, '');
+export function personaSlugForAgent(agentPubkey) {
+  return 'agent-' + agentPubkey.slice(0, 12);
 }
 
 /**
@@ -56,16 +51,15 @@ export function personaSlug(name) {
 
 /**
  * @param {PersonaInput} input
- * @returns {{ok: true, value: PersonaInput & {slug: string}} | {ok: false, error: 'name' | 'runtime' | 'respondTo'}}
+ * @returns {{ok: true, value: PersonaInput} | {ok: false, error: 'name' | 'runtime' | 'respondTo'}}
  */
 export function validatePersona(input) {
-  const slug = personaSlug(input.displayName);
-  if (!slug) return { ok: false, error: 'name' };
+  if (!String(input.displayName ?? '').trim()) return { ok: false, error: 'name' };
   if (!RUNTIMES.includes(/** @type {any} */ (input.runtime)))
     return { ok: false, error: 'runtime' };
   if (!RESPOND_TO.includes(/** @type {any} */ (input.respondTo)))
     return { ok: false, error: 'respondTo' };
-  return { ok: true, value: { ...input, slug } };
+  return { ok: true, value: input };
 }
 
 /**

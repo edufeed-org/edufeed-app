@@ -1298,6 +1298,7 @@
   "agents_remove": "Entfernen",
   "agents_remove_confirm_title": "{name} entfernen?",
   "agents_remove_confirm_body": "Der Agent verlässt seine Gruppen und stoppt. Sein Schlüssel bleibt in der Desktop-App, bis du ihn dort löschst.",
+  "agents_remove_loading": "Gruppen des Agenten werden geladen…",
   "agents_remove_done": "Agent entfernt.",
   "agents_remove_partial": "Agent entfernt, aber {count} Gruppe(n) konnten nicht aktualisiert werden.",
   "agents_remove_failed": "Entfernen fehlgeschlagen: {reason}",
