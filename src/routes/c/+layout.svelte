@@ -3,6 +3,7 @@
   import { resolve } from '$app/paths';
   import { page } from '$app/stores';
   import { getContext, setContext } from 'svelte';
+  import { MediaQuery } from 'svelte/reactivity';
   import { useActiveUser } from '$lib/stores/accounts.svelte';
   import { hexToNpub } from '$lib/helpers/nostrUtils.js';
   import { buildCommunityPath } from '$lib/helpers/communityNavigation.js';
@@ -18,6 +19,13 @@
   let { children } = $props();
 
   const activeUser = useActiveUser();
+
+  // Pick ONE layout branch for the viewport (Tailwind's lg breakpoint).
+  // Rendering the page in a desktop AND a mobile branch and hiding one with
+  // CSS mounted every /c page twice — hidden twins still ran their effects
+  // and click handlers, so one Follow click toasted and published twice.
+  // /c is ssr = false, so the viewport is known on first render.
+  const isDesktop = new MediaQuery('(min-width: 1024px)');
   const hasWorkspaceShell = getContext('workspaceShell');
 
   let leftDrawerOpen = $state(false);
@@ -71,23 +79,23 @@
   }
 </script>
 
-<!-- Desktop Layout -->
-<div class="hidden lg:contents">
-  {#if activeUser() && !hasWorkspaceShell}
-    <CommunitySidebar
-      currentCommunityId={currentCommunityPubkey}
-      currentPath={$page.url.pathname}
-      {isDashboardActive}
-      onCommunitySelect={handleCommunitySelect}
-      onHomeSelect={handleHomeSelect}
-    />
-  {/if}
-  {@render children()}
-</div>
-
-<!-- Mobile Layout -->
-{#if activeUser()}
-  <div class="lg:hidden">
+{#if isDesktop.current}
+  <!-- Desktop Layout -->
+  <div class="contents">
+    {#if activeUser() && !hasWorkspaceShell}
+      <CommunitySidebar
+        currentCommunityId={currentCommunityPubkey}
+        currentPath={$page.url.pathname}
+        {isDashboardActive}
+        onCommunitySelect={handleCommunitySelect}
+        onHomeSelect={handleHomeSelect}
+      />
+    {/if}
+    {@render children()}
+  </div>
+{:else if activeUser()}
+  <!-- Mobile Layout -->
+  <div>
     <div class="drawer">
       <input
         id="community-drawer"
@@ -188,7 +196,7 @@
     </div>
   </div>
 {:else}
-  <div class="flex flex-col lg:hidden">
+  <div class="flex flex-col">
     {@render children()}
   </div>
 {/if}
