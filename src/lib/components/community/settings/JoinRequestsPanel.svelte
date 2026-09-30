@@ -47,7 +47,9 @@
   import { putUserOn } from '$lib/groups/roster-fanout.js';
   import { resolveGroupActor } from '$lib/groups/group-actor.js';
   import { isAlreadyMemberError } from '$lib/groups/groups.js';
-  import { useActiveUser } from '$lib/stores/accounts.svelte';
+  import { useActiveUser, manager } from '$lib/stores/accounts.svelte';
+  import { getCommunitySigner } from '$lib/helpers/community-signer.js';
+  import { isModerator } from '$lib/groups/roles.js';
   import { useProfileMap } from '$lib/stores/profile-map.svelte.js';
   import { getUserDisplayName } from '$lib/helpers/message-utils.js';
   import ProfileAvatar from '$lib/components/shared/ProfileAvatar.svelte';
@@ -60,6 +62,7 @@
    *     pointer: {id: string, relay: string} | null,
    *     members: Set<string>,
    *     admins: Array<{pubkey: string, roles: string[]}>,
+   *     isLoading?: boolean,
    *     refresh: () => void
    *   },
    *   showEmpty?: boolean
@@ -69,6 +72,29 @@
 
   const getActiveUser = useActiveUser();
   const activeUser = $derived(getActiveUser());
+
+  // The relay serves 9021s only to a session authenticated as the community
+  // itself or a 39001 moderator, and the read authenticates as the ACTIVE
+  // account. Holding the community key in ANOTHER account makes this panel
+  // render (owner = key holder; writes sign with that key), but the read
+  // can't follow: a second AUTH on an already-authenticated connection is
+  // refused and stalls the connection (relay-auth.js). So that case gets a
+  // switch-account hint instead of a request that is bound to fail
+  // ("restricted: you're trying to access join requests you can't see",
+  // laoc 2026-09-30). Decided only once the roster has loaded: an empty
+  // admin list would flash the hint at a real moderator.
+  const readAccess = $derived.by(() => {
+    const me = activeUser?.pubkey;
+    if (!me) return 'none';
+    if (me === communityId || isModerator(roster.admins, me)) return 'read';
+    if (roster.isLoading) return 'pending';
+    return getCommunitySigner(communityId) ? 'switch' : 'none';
+  });
+
+  function switchToCommunityAccount() {
+    const account = manager.getAccountForPubkey(communityId);
+    if (account) manager.setActive(account);
+  }
 
   /** @type {any[]} */
   let joinRequestEvents = $state.raw([]);
@@ -115,8 +141,9 @@
   $effect(() => {
     requestsSeq; // re-run after a successful NIP-42 authenticate
     const targets = groupTargets;
+    const canRead = readAccess === 'read';
     requestsError = '';
-    if (targets.size === 0) return;
+    if (!canRead || targets.size === 0) return;
     /** @type {any[]} */
     const collected = [];
     const subs = [...targets.entries()].map(([relayUrl, ids]) =>
@@ -154,8 +181,8 @@
   // GroupChat's proactive auth for private channels.
   $effect(() => {
     const signer = activeUser?.signer;
-    if (!signer) return;
     const targets = groupTargets;
+    if (!signer || readAccess !== 'read') return;
     let cancelled = false;
     for (const relayUrl of targets.keys()) {
       authenticateOnce(pool.relay(relayUrl), signer).then((response) => {
@@ -279,7 +306,20 @@
   }
 </script>
 
-{#if pendingRequests.length > 0 || showEmpty || requestsError}
+{#if readAccess === 'switch'}
+  <h3 class="text-sm font-bold">{m.community_join_requests_title()}</h3>
+  <div class="mt-1 flex flex-wrap items-center gap-3" data-testid="join-requests-other-account">
+    <p class="text-sm text-base-content/70">{m.community_join_requests_other_account()}</p>
+    <button
+      type="button"
+      class="btn btn-sm"
+      data-testid="join-requests-switch-account"
+      onclick={switchToCommunityAccount}
+    >
+      {m.community_join_requests_switch_account()}
+    </button>
+  </div>
+{:else if readAccess === 'read' && (pendingRequests.length > 0 || showEmpty || requestsError)}
   <h3 class="text-sm font-bold">{m.community_join_requests_title()}</h3>
   <p class="text-sm text-base-content/70">{m.community_join_requests_lead()}</p>
 
