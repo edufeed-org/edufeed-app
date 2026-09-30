@@ -4,6 +4,7 @@
  * groups relay for the pubkeys of interest; the Map holds the latest status
  * and when it arrived (presenceIsOnline applies the TTL).
  */
+import { untrack } from 'svelte';
 import { normalizeURL } from 'applesauce-core/helpers/url';
 import { pool } from '$lib/stores/nostr-infrastructure.svelte';
 import { getGroupsRelays } from '$lib/helpers/relay-helper.js';
@@ -38,8 +39,11 @@ export function useAgentPresence(getPubkeys) {
     const set = new Set(pubkeys); // eslint-disable-line svelte/prefer-svelte-reactivity -- scratch
     // Keep whatever we already know about pubkeys still of interest instead
     // of wiping everything — only entries for pubkeys that dropped out of
-    // the set are discarded.
-    presence = new Map([...presence].filter(([pk]) => set.has(pk))); // eslint-disable-line svelte/prefer-svelte-reactivity -- replaced wholesale
+    // the set are discarded. Read `presence` UNTRACKED: this effect writes it
+    // right after, and a tracked read would make that write re-run the effect
+    // (effect_update_depth_exceeded).
+    const known = untrack(() => presence);
+    presence = new Map([...known].filter(([pk]) => set.has(pk))); // eslint-disable-line svelte/prefer-svelte-reactivity -- replaced wholesale
     if (pubkeys.length === 0) return;
     const relays = [...new Set(getGroupsRelays().map(normalizeURL))]; // eslint-disable-line svelte/prefer-svelte-reactivity -- scratch
     /** @type {import('rxjs').Subscription[]} */
