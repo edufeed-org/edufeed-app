@@ -2,6 +2,7 @@
   import { goto } from '$app/navigation';
   import { resolve } from '$app/paths';
   import { page } from '$app/state';
+  import { runtimeConfig, configReady } from '$lib/stores/config.svelte.js';
   import { useActiveUser } from '$lib/stores/accounts.svelte';
   import { useMyAgents } from '$lib/agents/my-agents.svelte.js';
   import { useAdminGroups } from '$lib/agents/admin-groups.svelte.js';
@@ -63,7 +64,9 @@
 
 <div class="mx-auto max-w-2xl px-4 py-6">
   <h1 class="mb-4 text-2xl font-semibold">{m.agents_editor_title()}</h1>
-  {#if !HEX64.test(agentPubkey)}
+  {#if $configReady && !runtimeConfig.agents?.enabled}
+    <p class="text-base-content/70">{m.agents_disabled()}</p>
+  {:else if !HEX64.test(agentPubkey)}
     <p class="text-error">{m.agents_editor_error_agent()}</p>
   {:else}
     <p class="mb-4 text-sm text-base-content/70">
