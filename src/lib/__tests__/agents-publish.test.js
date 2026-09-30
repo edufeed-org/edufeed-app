@@ -23,6 +23,7 @@ const record = {
   respondTo: 'owner-only'
 };
 
+/** @param {string | null} [rejectGroupId] */
 function fakeDeps(rejectGroupId = null) {
   /** @type {Array<{relay: string, template: any}>} */
   const published = [];
@@ -33,7 +34,12 @@ function fakeDeps(rejectGroupId = null) {
     return { ...template, id: 'signed', pubkey: OWNER, sig: 'sig' };
   });
   return {
-    deps: { relayFor: (url) => ({ url }), relays: ['wss://groups.example'], publish },
+    deps: {
+      /** @param {string} url */
+      relayFor: (url) => ({ url }),
+      relays: ['wss://groups.example'],
+      publish
+    },
     published
   };
 }
@@ -104,7 +110,12 @@ describe('publishAgent', () => {
       if (relayConn.url === 'wss://a' && template.kind !== 9000) throw new Error('down');
       return { ...template, id: 'x', pubkey: OWNER, sig: 's' };
     });
-    const deps = { relayFor: (url) => ({ url }), relays: ['wss://a', 'wss://b'], publish };
+    const deps = {
+      /** @param {string} url */
+      relayFor: (url) => ({ url }),
+      relays: ['wss://a', 'wss://b'],
+      publish
+    };
     const ok = await publishAgent(
       { user, persona, record, addToGroups: [], removeFromGroups: [] },
       deps

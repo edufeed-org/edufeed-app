@@ -31,5 +31,8 @@ await signer.waitForSigner();
 const owner = await signer.getPublicKey();
 console.log('paired. owner pubkey:', owner);
 console.log('agent pubkey:', await agentKey.getPublicKey());
-console.log('agent secret key (hex, for BUZZ_PRIVATE_KEY):', agentKey.key ? Buffer.from(agentKey.key).toString('hex') : '(see PrivateKeySigner API)');
+console.log(
+  'agent secret key (hex, for BUZZ_PRIVATE_KEY):',
+  agentKey.key ? Buffer.from(agentKey.key).toString('hex') : '(see PrivateKeySigner API)'
+);
 process.exit(0);

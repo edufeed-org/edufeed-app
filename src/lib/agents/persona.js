@@ -51,8 +51,12 @@ export function personaSlug(name) {
 }
 
 /**
- * @param {{displayName: string, systemPrompt: string, runtime: string, avatarUrl: string | null, respondTo: string}} input
- * @returns {{ok: true, value: typeof input & {slug: string}} | {ok: false, error: 'name' | 'runtime' | 'respondTo'}}
+ * @typedef {{displayName: string, systemPrompt: string, runtime: string, avatarUrl: string | null, respondTo: string}} PersonaInput
+ */
+
+/**
+ * @param {PersonaInput} input
+ * @returns {{ok: true, value: PersonaInput & {slug: string}} | {ok: false, error: 'name' | 'runtime' | 'respondTo'}}
  */
 export function validatePersona(input) {
   const slug = personaSlug(input.displayName);

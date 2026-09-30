@@ -7,12 +7,14 @@ const OWNER = 'a'.repeat(64);
 const A1 = 'b'.repeat(64);
 const A2 = 'c'.repeat(64);
 
+/** @param {string} agent @param {string} name @param {string} definition @param {number} [created_at] */
 const rec = (agent, name, definition, created_at = 1) => ({
   ...buildAgentRecordTemplate({ agentPubkey: agent, name, definition, respondTo: 'anyone' }),
   pubkey: OWNER,
   id: agent + created_at,
   created_at
 });
+/** @param {string} slug @param {string} name */
 const per = (slug, name) => ({
   ...buildPersonaTemplate({
     slug,
