@@ -108,6 +108,52 @@ describe('CallInviteDialog', () => {
     expect(screen.getByTestId('call-invite-list-error')).toBeTruthy();
   });
 
+  it('clears the latest-url input only when that specific pass is revoked, keeping other rows', async () => {
+    const passB = { id: 'pB', pubkey: ME, created_at: 1, tags: [['h', 'g1']] };
+    listCallPasses.mockResolvedValue([passB]);
+    passLinkFor.mockResolvedValue('https://x/call/p#B');
+    createCallLink.mockResolvedValue({
+      code: 'A',
+      url: 'https://x/call/p#A',
+      event: { id: 'pA', pubkey: ME, created_at: 2, tags: [['h', 'g1']] }
+    });
+    revokeCallPass.mockResolvedValue(undefined);
+
+    render(CallInviteDialog, { props });
+    await screen.findByTestId('call-invite-pass'); // B listed
+    await fireEvent.click(screen.getByTestId('call-invite-create'));
+    await waitFor(() =>
+      expect(screen.getByTestId('call-invite-url').value).toBe('https://x/call/p#A')
+    );
+
+    // A is unshifted to the front of the rows list.
+    const revokeButtons = screen.getAllByTestId('call-invite-revoke');
+    await fireEvent.click(revokeButtons[0]);
+    await waitFor(() => expect(screen.queryByTestId('call-invite-url')).toBeNull());
+    // B's row is still there.
+    expect(screen.getByTestId('call-invite-pass')).toBeTruthy();
+    expect(screen.queryByTestId('call-invite-revoke')).toBeTruthy();
+  });
+
+  it('keeps a link created while the initial listing is still in flight (no clobber on resolve)', async () => {
+    let resolveList;
+    listCallPasses.mockReturnValue(new Promise((r) => (resolveList = r)));
+    createCallLink.mockResolvedValue({
+      code: 'A',
+      url: 'https://x/call/p#A',
+      event: { id: 'pA', pubkey: ME, created_at: 2, tags: [['h', 'g1']] }
+    });
+    render(CallInviteDialog, { props });
+    await fireEvent.click(screen.getByTestId('call-invite-create'));
+    await waitFor(() =>
+      expect(screen.getByTestId('call-invite-url').value).toBe('https://x/call/p#A')
+    );
+
+    resolveList([]);
+    await waitFor(() => expect(screen.queryByTestId('call-invite-pass')).toBeTruthy());
+    expect(screen.getAllByTestId('call-invite-pass')).toHaveLength(1);
+  });
+
   it('does not revoke twice on a double-click of the same pass', async () => {
     const pass = { id: 'p1', pubkey: ME, created_at: 1, tags: [['h', 'g1']] };
     listCallPasses.mockResolvedValue([pass]);

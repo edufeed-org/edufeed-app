@@ -46,12 +46,19 @@
   onMount(async () => {
     try {
       const passes = await listCallPasses(relay(), pointer.id, user);
-      rows = await Promise.all(
+      const fetched = await Promise.all(
         passes.map(async (pass) => ({
           pass,
           url: await passLinkFor(pass, user, pointer, location.origin)
         }))
       );
+      // A link created (via "Link erstellen") while this listing was still
+      // in flight must not be clobbered by the fetched list — merge by pass
+      // id, keeping anything created meanwhile that the fetch doesn't know
+      // about yet.
+      const fetchedIds = new Set(fetched.map((r) => r.pass.id));
+      const createdMeanwhile = rows.filter((r) => !fetchedIds.has(r.pass.id));
+      rows = [...createdMeanwhile, ...fetched];
     } catch (err) {
       console.warn('call links: listing failed', err);
       listError = true;
@@ -116,8 +123,12 @@
     revoking.add(pass.id);
     try {
       await revokeCallPass(relay(), pass, user, { asAdmin: isAdmin });
+      const revokedRow = rows.find((r) => r.pass.id === pass.id);
       rows = rows.filter((r) => r.pass.id !== pass.id);
-      if (rows.length === 0) latestUrl = null;
+      // Never show a URL whose pass is no longer in `rows` — clear it
+      // specifically when the revoked row is the one currently displayed,
+      // not just when the whole list emptied out.
+      if (revokedRow && revokedRow.url === latestUrl) latestUrl = null;
       showToast(m.groups_call_invite_revoked(), 'success');
     } catch (err) {
       failure(err);
