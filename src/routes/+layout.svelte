@@ -90,7 +90,9 @@
   );
   let isDashboardActive = $derived(isOnCommunityRoutes && !currentCommunityPubkey);
   let isInsideCommunity = $derived(isOnCommunityRoutes && !!currentCommunityPubkey);
-  let showDashboardNav = $derived(!!getActiveUser() && !isInsideCommunity);
+  // Guest link landing page: the guest sees the call, not the app's navigation.
+  let isCallLanding = $derived($page.url.pathname.startsWith('/call/'));
+  let showDashboardNav = $derived(!!getActiveUser() && !isInsideCommunity && !isCallLanding);
   // Where the page renders its own channel column (a NIP-29 host's
   // HostChannelSidebar, or a standalone private area's rail), the app's
   // generic nav steps aside rather than making it a third nav column beside
@@ -421,7 +423,7 @@
   <ModalManager />
   <!-- Chrome row: sidebars + main as flex siblings. -->
   <div class="flex min-h-0 flex-1 overflow-hidden">
-    {#if getActiveUser()}
+    {#if getActiveUser() && !isCallLanding}
       {@const CommunitySidebar = lazyCommunitySidebar.Component}
       <!-- lg:contents wrapper keeps the lg:hidden mobile drawer-content branch
            inside CommunitySidebar from rendering as a flex child on mobile. -->
