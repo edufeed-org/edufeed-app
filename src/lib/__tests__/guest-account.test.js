@@ -52,7 +52,7 @@ vi.mock('$lib/helpers/signupKeypair.js', () => ({
   generateSignupKeypair: (...args) => generateSignupKeypair(...args)
 }));
 
-const { createGuestAccount, isCallGuest, forgetGuestAccount } = await import(
+const { createGuestAccount, isCallGuest, forgetGuestAccount, clearCallGuest } = await import(
   '$lib/groups/guest-account.js'
 );
 
@@ -107,5 +107,16 @@ describe('forgetGuestAccount', () => {
     expect(manager.removeAccount).toHaveBeenCalled();
     expect(isCallGuest(user.pubkey)).toBe(false);
     expect(localStorage.getItem(`signed-up-here:${user.pubkey}`)).toBeNull();
+  });
+});
+
+describe('clearCallGuest', () => {
+  it('clears only the call-guest flag, keeping the signed-up-here backup hint', async () => {
+    const user = await createGuestAccount('Ada');
+    clearCallGuest(user.pubkey);
+    expect(isCallGuest(user.pubkey)).toBe(false);
+    expect(localStorage.getItem(`signed-up-here:${user.pubkey}`)).toBe('1');
+    // Does not log the account out — a full user stays logged in.
+    expect(manager.removeAccount).not.toHaveBeenCalled();
   });
 });

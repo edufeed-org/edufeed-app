@@ -1,4 +1,5 @@
 <script>
+  import { untrack } from 'svelte';
   import * as m from '$lib/paraglide/messages';
   import { manager } from '$lib/stores/accounts.svelte';
   import { SimpleAccount } from 'applesauce-accounts/accounts';
@@ -11,6 +12,7 @@
   import { modalStore } from '$lib/stores/modal.svelte.js';
   import { publishEvent } from '$lib/services/publish-service.js';
   import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
+  import { clearCallGuest } from '$lib/groups/guest-account.js';
   import { SvelteSet } from 'svelte/reactivity';
   import { nip19 } from 'nostr-tools';
   import { communikeyTimelineLoader } from '$lib/loaders/community.js';
@@ -35,7 +37,12 @@
   const membershipEnabled = $derived(!!runtimeConfig.membership?.enabled);
 
   let userData = $state({
-    name: initialName,
+    // `initialName` only ever seeds the initial value (call-link guest flow
+    // completing their profile): reading it inside the $state initializer
+    // directly trips Svelte's `state_referenced_locally` warning since
+    // props are themselves reactive. `untrack` says explicitly "yes, only
+    // the value at creation time" without disabling the warning elsewhere.
+    name: untrack(() => initialName),
     about: '',
     picture: '',
     publicKey: '',
@@ -338,6 +345,11 @@
       if (signedFollowSet) eventStore.add(signedFollowSet);
       if (signedDmRelayList) eventStore.add(signedDmRelayList);
       if (signedRelayList) eventStore.add(signedRelayList);
+
+      // A guest from a call link who completes the full profile is now a
+      // real user — stop showing the guest-only "Vergessen" hint on later
+      // calls (keeps the signed-up-here backup hint, which still applies).
+      clearCallGuest(userData.publicKey);
 
       isPublishing = false;
       if (membershipEnabled) {

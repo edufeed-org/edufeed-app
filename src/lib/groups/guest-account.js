@@ -86,3 +86,15 @@ export function forgetGuestAccount(pubkey) {
   setFlag(GUEST_FLAG(pubkey), null);
   setFlag(SIGNUP_FLAG(pubkey), null);
 }
+
+/**
+ * Clear only the "joined this device as a call guest" flag — used once the
+ * guest completes a full profile (SignupModal's finishSignup), so a full
+ * user never sees the guest-only "Vergessen" hint again on a later call.
+ * Keeps the `signed-up-here:` backup hint untouched (unlike
+ * `forgetGuestAccount`, this does not log the account out).
+ * @param {string} pubkey
+ */
+export function clearCallGuest(pubkey) {
+  setFlag(GUEST_FLAG(pubkey), null);
+}

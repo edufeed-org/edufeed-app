@@ -538,6 +538,18 @@ describe('SignupModal — Step 4 (Communities)', () => {
     // Reset for other tests.
     /** @type {any} */ (config).runtimeConfig.signup.suggestedCommunities = [];
   });
+
+  it('clears the call-guest flag for this pubkey after finishing (a full user stops seeing "Vergessen")', async () => {
+    const pubkey = 'a'.repeat(64); // matches the stubbed generateSignupKeypair's publicKey
+    localStorage.setItem(`call-guest:${pubkey}`, '1');
+    const utils = render(SignupModal, { props: { modalId: 'signup-modal' } });
+    await advanceToCommunities(utils);
+    await fireEvent.click(utils.getByText('auth_signup_modal_step3_skip'));
+
+    await new Promise((r) => setTimeout(r, 0));
+    expect(localStorage.getItem(`call-guest:${pubkey}`)).toBeNull();
+    localStorage.removeItem(`call-guest:${pubkey}`);
+  });
 });
 
 describe('SignupModal — Step 5 (edufeed handle, membership-gated)', () => {
