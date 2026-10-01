@@ -188,6 +188,27 @@ stepped back to the chat) the root layout shows `CallDock`. Remote audio is
 attached once, centrally, by the connection service, never by tiles. Stage and
 dock are loaded lazily so `livekit-client` never enters a route's static graph.
 
+## Guest links (call passes)
+
+A member of a live AV channel can mint a **call pass** (kind 9025,
+`docs/nips/nip29-call-passes.md`) and hand out `/call/<group pointer>#<code>`
+(`src/lib/groups/call-passes.js`). The code lives in the URL fragment, never
+a query param, so it never reaches a server log or `Referer` header. Only a
+member can create (`createCallLink`) or revoke one — author via NIP-09 kind
+5, moderator via NIP-29 kind 9005 (`revokeCallPass`), both through
+`publishToGroupRelay`. The holder's NIP-98 token request carries the
+plaintext code as `["code", <code>]` in the signed event, never the URL; a
+403 `call pass <reason>` maps to the `'pass'` failure reason in
+`group-call.svelte.js`. `CallInviteDialog.svelte` offers the link, and
+`/call/<pointer>` (`CallLanding.svelte`) lets a guest join, only once the
+relay's pass-check endpoint (`GET …/livekit/<group-id>/pass/<code-hash>`)
+answers JSON for the channel — no separate feature flag. Guests get a token
+with metadata `{"guest":true,"pass":"<id>"}` but never a 9000/9021: they
+never join the roster, so member counts/lists are untouched and call tiles
+show a "Gast" badge instead. Calls also carry an ephemeral LiveKit-data chat
+(topic `edufeed.call.chat`) separate from the group's normal "Kanal" chat,
+which guests never see.
+
 ## Key files
 
 | File                                     | Role                                                                                             |
@@ -201,3 +222,4 @@ dock are loaded lazily so `livekit-client` never enters a route's static graph.
 | `src/lib/groups/livekit.js`              | NIP-29 AV: relay probe, NIP-98 token request, `livekit` tag + identity helpers                   |
 | `src/lib/groups/call-presence*.js`       | Kind-39004 filter/parser and the relay-key-pinned live subscription                              |
 | `src/lib/groups/group-call.svelte.js`    | The single active call (token round-trip, which channel it belongs to)                           |
+| `src/lib/groups/call-passes.js`          | Guest call passes: code/hash/link helpers, pass check, create/list/revoke                        |
