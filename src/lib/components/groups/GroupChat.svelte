@@ -750,6 +750,11 @@
   const CallInviteDialog = lazyComponent(
     () => import('$lib/components/groups/call/CallInviteDialog.svelte')
   );
+  const CallChatPanel = lazyComponent(
+    () => import('$lib/components/groups/call/CallChatPanel.svelte')
+  );
+  /** @type {'channel' | 'call'} */
+  let chatTab = $state('channel');
   const avEnabled = $derived(hasLivekitTag(metadataEvent));
   // Relay-published kind 39004 ("who is live"), only subscribed while the
   // group is an AV space at all.
@@ -759,6 +764,11 @@
   // "In a call HERE" — the store holds one call app-wide; a call in another
   // channel must not take over this channel's body.
   const inCallHere = $derived(call.isActiveFor(pointer) && call.phase !== 'idle');
+  // The call-chat tab only makes sense while the call here is live; once it
+  // ends, land back on the channel chat rather than a dead tab.
+  $effect(() => {
+    if (!inCallHere) chatTab = 'channel';
+  });
   // The call moved to its own window (Document PiP): the channel shows its
   // chat, with a bar to bring the call back.
   const callPopout = getCallPopoutState();
@@ -1831,101 +1841,129 @@
                 : 'contents'}
           data-testid="group-chat-body"
         >
-          {#if !atBottom}
-            <button
-              type="button"
-              data-testid="chat-jump-to-bottom"
-              class="btn absolute right-6 bottom-20 z-10 btn-circle shadow-md btn-sm"
-              title={m.chat_jump_to_bottom()}
-              aria-label={m.chat_jump_to_bottom()}
-              onclick={jumpToBottom}>↓</button
-            >
+          {#if inCallHere}
+            <div role="tablist" class="tabs-border tabs border-b border-base-300 px-2 tabs-sm">
+              <button
+                role="tab"
+                class="tab {chatTab === 'call' ? 'tab-active' : ''}"
+                aria-selected={chatTab === 'call'}
+                data-testid="chat-tab-call"
+                onclick={() => (chatTab = 'call')}>{m.groups_call_chat_tab()}</button
+              >
+              <button
+                role="tab"
+                class="tab {chatTab === 'channel' ? 'tab-active' : ''}"
+                aria-selected={chatTab === 'channel'}
+                data-testid="chat-tab-channel"
+                onclick={() => (chatTab = 'channel')}>{m.groups_call_chat_channel_tab()}</button
+              >
+            </div>
+          {/if}
+          {#if inCallHere && chatTab === 'call' && CallChatPanel.Component}
+            <CallChatPanel.Component {identityToPubkey} />
           {/if}
           <div
-            bind:this={scrollContainer}
-            class="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-4"
-            onscroll={handleScroll}
-            onloadcapture={handleContentLoad}
+            class={inCallHere && chatTab === 'call' ? 'hidden' : 'contents'}
+            data-testid="channel-chat-body"
           >
-            {#if isLoading && displayed.length === 0}
-              <div class="mx-auto py-6"><span class="loading loading-md loading-dots"></span></div>
+            {#if !atBottom}
+              <button
+                type="button"
+                data-testid="chat-jump-to-bottom"
+                class="btn absolute right-6 bottom-20 z-10 btn-circle shadow-md btn-sm"
+                title={m.chat_jump_to_bottom()}
+                aria-label={m.chat_jump_to_bottom()}
+                onclick={jumpToBottom}>↓</button
+              >
             {/if}
-            <ChatMessageList items={grouped}>
-              {#snippet row(/** @type {any} */ message)}
-                {@render messageRow(message, (msg) => (replyTo = msg), true)}
-              {/snippet}
-            </ChatMessageList>
-          </div>
-
-          {#if disclosure !== 'unknown'}
-            <p data-testid="disclosure-line" class="px-4 pb-1 text-xs opacity-60">
-              {#if disclosure === 'world'}
-                {m.disclosure_world()}
-              {:else if disclosure === 'members'}
-                {m.disclosure_members({ count: members.size })}
-              {:else}
-                {m.disclosure_invited({ count: members.size })}
-              {/if}
-            </p>
-          {/if}
-          {#if restricted}
             <div
-              class="flex items-center justify-between gap-3 rounded-xl border border-dashed border-base-300 px-4 py-3 text-sm text-base-content/70"
-              data-testid="group-restricted-note"
+              bind:this={scrollContainer}
+              class="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-4"
+              onscroll={handleScroll}
+              onloadcapture={handleContentLoad}
             >
-              <span>{m.groups_restricted_note()}</span>
-              {#if joinPending}
-                <!-- The relay accepts a pending 9021 to a closed group even
+              {#if isLoading && displayed.length === 0}
+                <div class="mx-auto py-6">
+                  <span class="loading loading-md loading-dots"></span>
+                </div>
+              {/if}
+              <ChatMessageList items={grouped}>
+                {#snippet row(/** @type {any} */ message)}
+                  {@render messageRow(message, (msg) => (replyTo = msg), true)}
+                {/snippet}
+              </ChatMessageList>
+            </div>
+
+            {#if disclosure !== 'unknown'}
+              <p data-testid="disclosure-line" class="px-4 pb-1 text-xs opacity-60">
+                {#if disclosure === 'world'}
+                  {m.disclosure_world()}
+                {:else if disclosure === 'members'}
+                  {m.disclosure_members({ count: members.size })}
+                {:else}
+                  {m.disclosure_invited({ count: members.size })}
+                {/if}
+              </p>
+            {/if}
+            {#if restricted}
+              <div
+                class="flex items-center justify-between gap-3 rounded-xl border border-dashed border-base-300 px-4 py-3 text-sm text-base-content/70"
+                data-testid="group-restricted-note"
+              >
+                <span>{m.groups_restricted_note()}</span>
+                {#if joinPending}
+                  <!-- The relay accepts a pending 9021 to a closed group even
               while reads stay restricted (verified live) — the same pending
               wording as the header/join-bar, not a dead end. -->
-                <span class="text-xs text-base-content/60">{m.community_join_pending()}</span>
-              {:else if myPubkey && !canWrite}
-                <button class="btn btn-sm btn-primary" onclick={join}
-                  >{groupClosed ? m.community_join_request() : m.groups_join()}</button
-                >
-              {/if}
-            </div>
-          {:else if myPubkey && rosterAnswered && !canWrite}
-            <!-- Readable, but not a member: the relay would reject every send
+                  <span class="text-xs text-base-content/60">{m.community_join_pending()}</span>
+                {:else if myPubkey && !canWrite}
+                  <button class="btn btn-sm btn-primary" onclick={join}
+                    >{groupClosed ? m.community_join_request() : m.groups_join()}</button
+                  >
+                {/if}
+              </div>
+            {:else if myPubkey && rosterAnswered && !canWrite}
+              <!-- Readable, but not a member: the relay would reject every send
           ("blocked: unknown member") — offer the join instead of a composer
           whose messages silently vanish (laoc, 2026-08-19). -->
-            <div
-              class="flex items-center justify-between gap-3 rounded-xl border border-dashed border-base-300 px-4 py-3 text-sm text-base-content/70"
-              data-testid="group-join-bar"
-            >
-              {#if joinPending}
-                <span>{m.community_join_pending()}</span>
-              {:else}
-                <span>{m.groups_composer_join_note()}</span>
-                <button
-                  class="btn btn-sm btn-primary"
-                  data-testid="group-join-bar-button"
-                  onclick={join}
-                  >{groupClosed ? m.community_join_request() : m.groups_join()}</button
-                >
-              {/if}
-            </div>
-          {:else}
-            <!-- disabled while the roster hasn't answered yet, not just while
+              <div
+                class="flex items-center justify-between gap-3 rounded-xl border border-dashed border-base-300 px-4 py-3 text-sm text-base-content/70"
+                data-testid="group-join-bar"
+              >
+                {#if joinPending}
+                  <span>{m.community_join_pending()}</span>
+                {:else}
+                  <span>{m.groups_composer_join_note()}</span>
+                  <button
+                    class="btn btn-sm btn-primary"
+                    data-testid="group-join-bar-button"
+                    onclick={join}
+                    >{groupClosed ? m.community_join_request() : m.groups_join()}</button
+                  >
+                {/if}
+              </div>
+            {:else}
+              <!-- disabled while the roster hasn't answered yet, not just while
           logged out: canWrite is unknown until then, and an enabled input a
           non-member could type into is a dead end the moment the roster
           finally does answer restricted (laoc, 2026-08-19). -->
-            <ChatComposer
-              bind:value={text}
-              placeholder={m.groups_input_placeholder({ name: displayTitle })}
-              disabled={!myPubkey || !rosterAnswered}
-              {sending}
-              onSubmit={send}
-              {replyTo}
-              onCancelReply={() => (replyTo = null)}
-              testid="group-chat-input"
-              {customEmojiSets}
-              onOpenApps={canWrite ? () => (appPickerOpen = true) : null}
-              onAttachFile={canWrite ? (file) => attachFile(file, 'timeline') : null}
-              uploading={uploadingAttachment}
-              onOpenPoll={canWrite ? () => (pollModalOpen = true) : null}
-            />
-          {/if}
+              <ChatComposer
+                bind:value={text}
+                placeholder={m.groups_input_placeholder({ name: displayTitle })}
+                disabled={!myPubkey || !rosterAnswered}
+                {sending}
+                onSubmit={send}
+                {replyTo}
+                onCancelReply={() => (replyTo = null)}
+                testid="group-chat-input"
+                {customEmojiSets}
+                onOpenApps={canWrite ? () => (appPickerOpen = true) : null}
+                onAttachFile={canWrite ? (file) => attachFile(file, 'timeline') : null}
+                uploading={uploadingAttachment}
+                onOpenPoll={canWrite ? () => (pollModalOpen = true) : null}
+              />
+            {/if}
+          </div>
         </div>
       </div>
     </div>

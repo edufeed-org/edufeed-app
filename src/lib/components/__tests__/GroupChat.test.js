@@ -915,6 +915,13 @@ vi.mock(
   '$lib/components/groups/call/GroupCallStage.svelte',
   () => import('./fixtures/GroupCallStageStub.svelte')
 );
+// Its own test (CallChatPanel.test.js) covers rendering/sending; the real
+// file imports livekit-connection.svelte.js (and transitively
+// livekit-client), which this test's module graph doesn't otherwise need.
+vi.mock(
+  '$lib/components/groups/call/CallChatPanel.svelte',
+  () => import('./fixtures/CallChatPanelStub.svelte')
+);
 // The members modal embeds the contact search; its autocomplete machinery is
 // out of scope here (GroupMembersModal.test.js covers it via the same stub).
 vi.mock(
@@ -965,6 +972,8 @@ vi.mock('$lib/paraglide/messages', () => ({
   groups_call_start: () => 'Start call',
   groups_call_start_error: () => 'Calls could not be turned on',
   groups_call_return: () => 'Back to call',
+  groups_call_chat_tab: () => 'Anruf-Chat',
+  groups_call_chat_channel_tab: () => 'Kanal',
   groups_auth_required: () => 'auth required',
   groups_reply: () => 'Reply',
   groups_message_delete: () => 'Delete message',
@@ -2461,6 +2470,48 @@ describe('GroupChat', () => {
       await fireEvent.click(screen.getByTestId('group-call-join'));
       expect(callViewMocks.showCallStage).toHaveBeenCalledTimes(1);
       expect(leaveGroupCallMock).not.toHaveBeenCalled();
+    });
+
+    describe('call chat tab', () => {
+      it('shows Anruf-Chat / Kanal tabs while in the call here and switches to the call chat', async () => {
+        inCallHere();
+        groupCallHolder.state.stageHidden = true;
+        render(GroupChat, { props: { pointer: callPointer } });
+        await fireEvent.click(await screen.findByTestId('chat-tab-call'));
+        expect(await screen.findByTestId('call-chat-panel')).toBeTruthy();
+        await fireEvent.click(screen.getByTestId('chat-tab-channel'));
+        expect(screen.queryByTestId('call-chat-panel')).toBeNull();
+      });
+
+      it('shows no tabs outside a call', async () => {
+        render(GroupChat, { props: { pointer: callPointer } });
+        await screen.findByTestId('group-name');
+        expect(screen.queryByTestId('chat-tab-call')).toBeNull();
+      });
+
+      it('hides (not unmounts) the channel timeline/composer while the call chat tab is active', async () => {
+        inCallHere();
+        groupCallHolder.state.stageHidden = true;
+        render(GroupChat, { props: { pointer: callPointer } });
+        const channelBody = await screen.findByTestId('channel-chat-body');
+        expect(channelBody.className).toContain('contents');
+        await fireEvent.click(await screen.findByTestId('chat-tab-call'));
+        // Hidden via CSS, not removed — the wrapper stays in the DOM.
+        expect(screen.getByTestId('channel-chat-body').className).toContain('hidden');
+      });
+
+      it('resets to the channel tab when the call here ends', async () => {
+        inCallHere();
+        groupCallHolder.state.stageHidden = true;
+        const { rerender } = render(GroupChat, { props: { pointer: callPointer } });
+        await fireEvent.click(await screen.findByTestId('chat-tab-call'));
+        expect(await screen.findByTestId('call-chat-panel')).toBeTruthy();
+        // The call ends here: isActiveFor(pointer) goes false reactively
+        // when the channel's own pointer no longer matches the active call.
+        await rerender({ pointer: { relay: GROUP_RELAY, id: 'elsewhere' } });
+        await waitFor(() => expect(screen.queryByTestId('chat-tab-call')).toBeNull());
+        expect(screen.queryByTestId('call-chat-panel')).toBeNull();
+      });
     });
 
     // Wide screens: the chat opens BESIDE the stage (the call stays in
