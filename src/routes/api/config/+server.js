@@ -7,20 +7,7 @@
 import { json } from '@sveltejs/kit';
 import { parseDiscoverContentTypes } from '$lib/helpers/discover-content-types.js';
 import { env } from '$env/dynamic/private';
-
-/**
- * Parse comma-separated string into array
- * @param {string | undefined} value
- * @param {string[]} defaultValue
- * @returns {string[]}
- */
-export function parseArray(value, defaultValue = []) {
-  if (!value) return defaultValue;
-  return value
-    .split(',')
-    .map((s) => s.trim())
-    .filter(Boolean);
-}
+import { parseArray, parseBool } from '$lib/server/env-parse.js';
 
 /**
  * Like parseArray, but the literal `none` yields [] — the way to switch a
@@ -93,17 +80,6 @@ function parseInt(value, defaultValue) {
   if (!value) return defaultValue;
   const parsed = Number.parseInt(value);
   return isNaN(parsed) ? defaultValue : parsed;
-}
-
-/**
- * Parse boolean with default
- * @param {string | undefined} value
- * @param {boolean} defaultValue
- * @returns {boolean}
- */
-export function parseBool(value, defaultValue) {
-  if (value === undefined || value === null || value === '') return defaultValue;
-  return value === 'true' || value === '1';
 }
 
 /**

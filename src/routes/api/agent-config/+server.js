@@ -7,7 +7,7 @@
  */
 import { json } from '@sveltejs/kit';
 import { env } from '$env/dynamic/private';
-import { parseArray, parseBool } from '../config/+server.js';
+import { parseArray, parseBool } from '$lib/server/env-parse.js';
 
 /** @param {{ url: URL }} event */
 export function GET({ url }) {
