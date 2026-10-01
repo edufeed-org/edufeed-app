@@ -93,6 +93,14 @@ const SIGNAL_TOPIC = 'edufeed.call';
 export const CALL_REACTIONS = ['👍', '❤️', '😂', '🎉', '😮', '👏', '🙏', '🤔'];
 const REACTION_TTL_MS = 4000;
 
+// In-call chat: everyone in the call, guests included (who never see the
+// channel chat). Ephemeral by design — nothing is stored anywhere.
+const CHAT_TOPIC = 'edufeed.call.chat';
+const CHAT_MAX_CHARS = 2000;
+const CHAT_KEEP = 200;
+/** @type {Array<{id: string, identity: string, text: string, at: number}>} */
+let callChat = $state.raw([]);
+
 /**
  * Per-person key for volumes: NIP-29 identities are `<64-hex pubkey>:<suffix>`,
  * and one person may sit in the call twice.
@@ -237,6 +245,31 @@ export async function sendReaction(emoji) {
   await publishSignal({ t: 'react', e: emoji, n: nonce });
 }
 
+/** @param {string} identity @param {string} text @param {string} nonce */
+function addChat(identity, text, nonce) {
+  const id = `${identity}:${nonce}`;
+  if (callChat.some((c) => c.id === id)) return;
+  callChat = [...callChat, { id, identity, text, at: Date.now() }].slice(-CHAT_KEEP);
+}
+
+/** @param {string} text */
+export async function sendCallChat(text) {
+  const body = String(text ?? '')
+    .trim()
+    .slice(0, CHAT_MAX_CHARS);
+  if (!room || !canSignal || !body) return;
+  const nonce = Math.random().toString(36).slice(2, 12);
+  addChat(room.localParticipant.identity, body, nonce);
+  try {
+    await room.localParticipant.publishData(
+      new TextEncoder().encode(JSON.stringify({ t: 'chat', text: body, n: nonce })),
+      { reliable: true, topic: CHAT_TOPIC }
+    );
+  } catch (err) {
+    console.warn('call chat not sent:', err);
+  }
+}
+
 /**
  * @param {Uint8Array} payload
  * @param {{identity: string} | undefined} participant
@@ -244,7 +277,29 @@ export async function sendReaction(emoji) {
  * @param {string | undefined} topic
  */
 function handleSignal(payload, participant, _kind, topic) {
-  if (topic !== SIGNAL_TOPIC || !participant) return;
+  if (!participant) return;
+  if (topic === CHAT_TOPIC) {
+    /** @type {any} */
+    let chat;
+    try {
+      chat = JSON.parse(new TextDecoder().decode(payload));
+    } catch {
+      return;
+    }
+    if (
+      chat?.t === 'chat' &&
+      typeof chat.text === 'string' &&
+      chat.text.trim() &&
+      chat.text.length <= CHAT_MAX_CHARS &&
+      typeof chat.n === 'string' &&
+      chat.n.length > 0 &&
+      chat.n.length <= 32
+    ) {
+      addChat(participant.identity, chat.text.trim(), chat.n);
+    }
+    return;
+  }
+  if (topic !== SIGNAL_TOPIC) return;
   /** @type {any} */
   let msg;
   try {
@@ -572,6 +627,7 @@ export async function disconnectFromRoom() {
   // eslint-disable-next-line svelte/prefer-svelte-reactivity -- built fresh, then assigned whole to a $state.raw
   raisedHands = new Set();
   reactions = [];
+  callChat = [];
   speakingParticipantIds = new SvelteSet();
   audioInputDevices = [];
   activeAudioDeviceId = '';
@@ -656,7 +712,7 @@ export async function toggleScreenShare() {
 
 /**
  * Get reactive connection state.
- * @returns {{ isConnected: boolean, isConnecting: boolean, isMuted: boolean, isCameraOff: boolean, isScreenSharing: boolean, canPublish: boolean, canSignal: boolean, connectionState: 'connected' | 'reconnecting' | 'disconnected', mutedIdentities: Set<string>, raisedHands: Set<string>, reactions: Array<{id: string, identity: string, emoji: string}>, localParticipant: import('livekit-client').LocalParticipant | null, remoteParticipants: import('livekit-client').RemoteParticipant[], room: Room | null, speakingParticipantIds: Set<string>, audioInputDevices: MediaDeviceInfo[], activeAudioDeviceId: string, audioOutputDevices: MediaDeviceInfo[], activeAudioOutputDeviceId: string, videoInputDevices: MediaDeviceInfo[], activeVideoDeviceId: string }}
+ * @returns {{ isConnected: boolean, isConnecting: boolean, isMuted: boolean, isCameraOff: boolean, isScreenSharing: boolean, canPublish: boolean, canSignal: boolean, connectionState: 'connected' | 'reconnecting' | 'disconnected', mutedIdentities: Set<string>, raisedHands: Set<string>, reactions: Array<{id: string, identity: string, emoji: string}>, callChat: Array<{id: string, identity: string, text: string, at: number}>, localParticipant: import('livekit-client').LocalParticipant | null, remoteParticipants: import('livekit-client').RemoteParticipant[], room: Room | null, speakingParticipantIds: Set<string>, audioInputDevices: MediaDeviceInfo[], activeAudioDeviceId: string, audioOutputDevices: MediaDeviceInfo[], activeAudioOutputDeviceId: string, videoInputDevices: MediaDeviceInfo[], activeVideoDeviceId: string }}
  */
 export function getLiveKitState() {
   return {
@@ -692,6 +748,9 @@ export function getLiveKitState() {
     },
     get reactions() {
       return reactions;
+    },
+    get callChat() {
+      return callChat;
     },
     get localParticipant() {
       return localParticipant;

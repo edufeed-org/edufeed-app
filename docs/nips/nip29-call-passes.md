@@ -17,10 +17,10 @@ unaffected.
   "tags": [
     ["h", "<group-id>"],
     ["code-hash", "<sha256 hex of the code>"],
-    ["expiration", "<unix seconds>"],       // NIP-40, required
-    ["not-before", "<unix seconds>"],       // optional
-    ["scope", "call"],                      // optional
-    ["a", "31923:<pubkey>:<d>", "<relay>"]  // optional: the NIP-52 meeting it belongs to
+    ["expiration", "<unix seconds>"], // NIP-40, required
+    ["not-before", "<unix seconds>"], // optional
+    ["scope", "call"], // optional
+    ["a", "31923:<pubkey>:<d>", "<relay>"] // optional: the NIP-52 meeting it belongs to
   ]
 }
 ```
@@ -107,8 +107,15 @@ the code in the signed event:
 `GET /.well-known/nip29/livekit/<group-id>/pass/<code-hash>` (no auth, CORS open):
 
 ```json
-{"valid": true, "reason": "ok", "expiration": 1790000000, "scope": "call",
- "name": "Weekly", "picture": "https://example.com/weekly.png", "live_count": 3}
+{
+  "valid": true,
+  "reason": "ok",
+  "expiration": 1790000000,
+  "scope": "call",
+  "name": "Weekly",
+  "picture": "https://example.com/weekly.png",
+  "live_count": 3
+}
 ```
 
 `valid`, `reason` and `live_count` are always present. `not_before`,
@@ -126,3 +133,11 @@ A relay that also exposes a group under a community relay URL (e.g.
 `wss://host/c/<rootId>`) serves the same pass-check endpoint under that
 path too: `GET /c/<rootId>/.well-known/nip29/livekit/<group-id>/pass/<code-hash>`,
 for groups that belong to that community only.
+
+## In-call chat (edufeed extension, optional)
+
+Guests do not read the group's events, so a call carries its own chat as
+LiveKit data messages: reliable, topic `edufeed.call.chat`, payload
+`{"t":"chat","text":"<≤2000 chars>","n":"<nonce ≤32 chars>"}`. Receivers
+dedupe on `(sender identity, n)` and drop anything else. Nothing is stored;
+the chat ends with the call. Clients that ignore the topic are unaffected.

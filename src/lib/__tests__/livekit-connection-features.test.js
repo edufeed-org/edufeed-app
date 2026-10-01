@@ -308,3 +308,37 @@ describe('raise hand + reactions (data messages)', () => {
     expect(rooms[0].localParticipant.publishData).not.toHaveBeenCalled();
   });
 });
+
+describe('in-call chat (data messages)', () => {
+  it('sends a call chat message on the chat topic and keeps it locally', async () => {
+    await svc.sendCallChat('  hallo  ');
+    const [bytes, opts] = room.localParticipant.publishData.mock.calls.at(-1);
+    expect(opts).toMatchObject({ reliable: true, topic: 'edufeed.call.chat' });
+    expect(decode(bytes)).toMatchObject({ t: 'chat', text: 'hallo' });
+    expect(svc.getLiveKitState().callChat.at(-1)).toMatchObject({ text: 'hallo' });
+  });
+
+  it('receives chat, drops garbage and oversized text, dedupes by nonce', () => {
+    const bob = remote('b'.repeat(64) + ':x');
+    const emit = (payload) =>
+      room.emit(
+        RoomEvent.DataReceived,
+        new TextEncoder().encode(payload),
+        bob,
+        undefined,
+        'edufeed.call.chat'
+      );
+    emit(JSON.stringify({ t: 'chat', text: 'hi', n: 'n1' }));
+    emit(JSON.stringify({ t: 'chat', text: 'hi', n: 'n1' }));
+    emit('not json');
+    emit(JSON.stringify({ t: 'chat', text: 'x'.repeat(2001), n: 'n2' }));
+    emit(JSON.stringify({ t: 'chat', text: 42, n: 'n3' }));
+    expect(svc.getLiveKitState().callChat.map((c) => c.text)).toEqual(['hi']);
+  });
+
+  it('clears the call chat on disconnect', async () => {
+    await svc.sendCallChat('bye');
+    await svc.disconnectFromRoom();
+    expect(svc.getLiveKitState().callChat).toEqual([]);
+  });
+});
