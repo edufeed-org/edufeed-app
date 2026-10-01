@@ -7,8 +7,13 @@
 // token request carries it in the signed NIP-98 event (livekit.js).
 //
 // Plain module (no runes): called from click handlers and tested in node.
+import { firstValueFrom, of } from 'rxjs';
+import { catchError, toArray } from 'rxjs/operators';
 import { livekitProbeUrl } from './livekit.js';
 import { groupPointerString } from './groups.js';
+import { publishToGroupRelay, buildDeleteEventTemplate } from './group-management.js';
+import { authenticateOnce } from './relay-auth.js';
+import { hasNip44 } from '$lib/helpers/nip44.js';
 
 export const CALL_PASS_KIND = 9025;
 /** The relay rejects a call-scoped pass expiring later than this. */
@@ -147,4 +152,108 @@ export async function checkCallPass(relayUrl, groupId, code) {
 export async function probeCallPassSupport(relayUrl, groupId) {
   const json = await fetchJson(passCheckUrl(relayUrl, groupId, ZERO_HASH));
   return !!json && typeof json === 'object' && typeof json.reason === 'string';
+}
+
+const LIST_TIMEOUT_MS = 5000;
+
+/**
+ * Mint an ad-hoc link for the running call: valid until the call ends (the
+ * relay deletes call-scoped passes then), 12 h at most.
+ * @param {any} relayConn pool.relay(pointer.relay)
+ * @param {{id: string, relay: string}} pointer
+ * @param {{pubkey: string, signer: any}} user
+ * @param {string} origin
+ */
+export async function createCallLink(relayConn, pointer, user, origin) {
+  if (!hasNip44(user.signer)) throw new Error('nip44-unsupported');
+  const code = generatePassCode();
+  const template = buildCallPassTemplate({
+    groupId: pointer.id,
+    codeHash: await hashPassCode(code),
+    encryptedCode: await user.signer.nip44.encrypt(user.pubkey, code),
+    expiration: Math.floor(Date.now() / 1000) + CALL_SCOPE_TTL_S,
+    scopeCall: true
+  });
+  const event = await publishToGroupRelay(relayConn, template, user);
+  return { code, url: callLinkUrl(origin, pointer, code), event };
+}
+
+/** @param {any} event */
+function expirationOf(event) {
+  const raw = event?.tags?.find((/** @type {string[]} */ t) => t[0] === 'expiration')?.[1];
+  const n = Number(raw);
+  return Number.isFinite(n) ? n : 0;
+}
+
+/**
+ * Passes of this channel the relay lets me see (my own; all of them for a
+ * moderator). The relay hides 9025 from unauthenticated readers, so auth
+ * comes first. Expired passes are dropped client-side as a courtesy — the
+ * relay is expected to delete them, but a slow sweep must not surface a
+ * dead link.
+ * @param {any} relayConn @param {string} groupId @param {{pubkey: string, signer: any}} user
+ */
+export async function listCallPasses(relayConn, groupId, user) {
+  await authenticateOnce(relayConn, user.signer);
+  const events = await firstValueFrom(
+    relayConn
+      .request({ kinds: [CALL_PASS_KIND], '#h': [groupId] }, { timeout: LIST_TIMEOUT_MS })
+      .pipe(
+        catchError(() => of()),
+        toArray()
+      )
+  );
+  const now = Math.floor(Date.now() / 1000);
+  const byId = new Map();
+  for (const e of /** @type {any[]} */ (events)) {
+    if (e?.kind === CALL_PASS_KIND && expirationOf(e) > now) byId.set(e.id, e);
+  }
+  return [...byId.values()].sort((a, b) => b.created_at - a.created_at);
+}
+
+/**
+ * The link of one of MY passes (the content is the code, self-encrypted).
+ * @param {any} pass @param {{pubkey: string, signer: any}} user
+ * @param {{id: string, relay: string}} pointer @param {string} origin
+ */
+export async function passLinkFor(pass, user, pointer, origin) {
+  if (pass?.pubkey !== user.pubkey || !hasNip44(user.signer)) return null;
+  try {
+    const code = await user.signer.nip44.decrypt(user.pubkey, pass.content);
+    return isPassCode(code) ? callLinkUrl(origin, pointer, code) : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Revoke: the relay deletes the pass and removes everyone who joined with
+ * it. The author signs a NIP-09 kind 5; a moderator revoking someone else's
+ * pass signs a NIP-29 kind 9005. publishToGroupRelay answers the relay's
+ * auth-required rejection (the relay demands NIP-42 auth for this).
+ * @param {any} relayConn @param {any} pass @param {{pubkey: string, signer: any}} user
+ * @param {{asAdmin?: boolean}} [opts]
+ */
+export async function revokeCallPass(relayConn, pass, user, { asAdmin = false } = {}) {
+  const groupId = pass?.tags?.find((/** @type {string[]} */ t) => t[0] === 'h')?.[1];
+  if (!groupId) throw new Error('pass without h tag');
+  if (pass.pubkey === user.pubkey) {
+    await publishToGroupRelay(
+      relayConn,
+      {
+        kind: 5,
+        content: '',
+        created_at: Math.floor(Date.now() / 1000),
+        tags: [
+          ['e', pass.id],
+          ['h', groupId],
+          ['k', String(CALL_PASS_KIND)]
+        ]
+      },
+      user
+    );
+    return;
+  }
+  if (!asAdmin) throw new Error('only the author or a moderator can revoke this link');
+  await publishToGroupRelay(relayConn, buildDeleteEventTemplate(groupId, pass.id), user);
 }
