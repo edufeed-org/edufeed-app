@@ -11,7 +11,7 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/svelte';
 
 const { presence, call, fns, user } = vi.hoisted(() => ({
   presence: { participants: [] },
-  call: { active: false },
+  call: { active: false, stageViews: 0, stageHidden: false, popout: false },
   fns: {
     joinGroupCall: vi.fn(async () => {}),
     showCallStage: vi.fn(),
@@ -31,10 +31,23 @@ vi.mock('$lib/groups/group-call.svelte.js', () => ({
     isActiveFor: () => call.active,
     get phase() {
       return call.active ? 'ready' : 'idle';
+    },
+    get stageViews() {
+      return call.stageViews;
+    },
+    get stageHidden() {
+      return call.stageHidden;
     }
   }),
   joinGroupCall: (...a) => fns.joinGroupCall(...a),
   showCallStage: (...a) => fns.showCallStage(...a)
+}));
+vi.mock('$lib/groups/call-popout.svelte.js', () => ({
+  getCallPopoutState: () => ({
+    get open() {
+      return call.popout;
+    }
+  })
 }));
 vi.mock('$lib/stores/accounts.svelte', () => ({ useActiveUser: () => () => user.current }));
 vi.mock(
@@ -43,8 +56,10 @@ vi.mock(
 );
 vi.mock('$lib/paraglide/messages', () => ({
   groups_call_people_in_call: (p) => `${p.count} in the call`,
-  groups_call_join: () => 'Join call',
-  groups_call_return: () => 'Back to call',
+  groups_join: () => 'Join',
+  groups_call_join_running: (p) => `Join the running call (${p.count})`,
+  groups_call_return: () => 'Show call',
+  groups_call_in_this_call: (p) => `You're in the call · ${p.count}`,
   groups_call_live: () => 'Call live'
 }));
 
@@ -59,6 +74,9 @@ beforeEach(() => {
   vi.clearAllMocks();
   presence.participants = [];
   call.active = false;
+  call.stageViews = 0;
+  call.stageHidden = false;
+  call.popout = false;
   user.current = { pubkey: P('a'), signer: {} };
 });
 
@@ -85,7 +103,9 @@ describe('ChannelCallRoster', () => {
     render(ChannelCallRoster, {
       props: { pointer: POINTER, name: 'Sprechstunde', onOpen: fns.onOpen }
     });
-    await fireEvent.click(screen.getByRole('button', { name: 'Join call' }));
+    const button = screen.getByRole('button', { name: 'Join the running call (1)' });
+    expect(button.textContent.trim()).toBe('Join');
+    await fireEvent.click(button);
     await waitFor(() => expect(fns.joinGroupCall).toHaveBeenCalled());
     expect(fns.onOpen).toHaveBeenCalledTimes(1);
     expect(fns.joinGroupCall).toHaveBeenCalledWith(
@@ -95,13 +115,31 @@ describe('ChannelCallRoster', () => {
     );
   });
 
-  it('already in that call: the button goes back to it instead', async () => {
-    presence.participants = [P('a')];
+  it('in that call with its stage on screen: a status line, no button', () => {
+    presence.participants = [P('a'), P('b')];
     call.active = true;
+    call.stageViews = 1;
     render(ChannelCallRoster, {
       props: { pointer: POINTER, name: 'Sprechstunde', onOpen: fns.onOpen }
     });
-    await fireEvent.click(screen.getByRole('button', { name: 'Back to call' }));
+    expect(screen.queryByRole('button')).toBeNull();
+    expect(screen.getByTestId('channel-call-roster-here').textContent).toContain(
+      "You're in the call · 2"
+    );
+  });
+
+  it.each([
+    ['no stage mounted (other channel or route)', { stageViews: 0 }],
+    ['stage stepped behind the chat', { stageViews: 1, stageHidden: true }],
+    ['call popped out into its own window', { stageViews: 1, popout: true }]
+  ])('in that call, %s: "Show call" brings it back', async (_label, state) => {
+    presence.participants = [P('a')];
+    call.active = true;
+    Object.assign(call, state);
+    render(ChannelCallRoster, {
+      props: { pointer: POINTER, name: 'Sprechstunde', onOpen: fns.onOpen }
+    });
+    await fireEvent.click(screen.getByRole('button', { name: 'Show call' }));
     expect(fns.showCallStage).toHaveBeenCalledTimes(1);
     expect(fns.onOpen).toHaveBeenCalledTimes(1);
     expect(fns.joinGroupCall).not.toHaveBeenCalled();
@@ -113,7 +151,7 @@ describe('ChannelCallRoster', () => {
     render(ChannelCallRoster, {
       props: { pointer: POINTER, name: 'Sprechstunde', onOpen: fns.onOpen }
     });
-    expect(screen.queryByRole('button', { name: 'Join call' })).toBeNull();
+    expect(screen.queryByRole('button')).toBeNull();
     expect(screen.getByTestId('channel-call-roster')).toBeTruthy();
   });
 });

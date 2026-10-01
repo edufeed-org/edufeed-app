@@ -58,6 +58,7 @@
   import { page } from '$app/stores';
   import { updateQueryParams } from '$lib/helpers/urlParams.js';
   import ChannelRailRow from './ChannelRailRow.svelte';
+  import ChannelCallRoster from '$lib/components/groups/call/ChannelCallRoster.svelte';
   import ChannelStatePane from './ChannelStatePane.svelte';
   import ChannelOverview from './ChannelOverview.svelte';
   import ChannelChat from './ChannelChat.svelte';
@@ -216,6 +217,22 @@
       selectGroupChannel(communityPubkey, key);
     }
   });
+
+  /**
+   * Open a NIP-29 channel IN the community pane (selection store + ?channel=)
+   * — rail rows, overview cards and the rail's call roster all land here.
+   * @param {{id: string, relay: string}} pointer
+   */
+  function openGroupChannel(pointer) {
+    if (communikeyEvent?.pubkey) {
+      const key = channelKey(pointer);
+      if (key) {
+        selectGroupChannel(communikeyEvent.pubkey, key);
+        syncChannelParam(pointer.id);
+      }
+    }
+    mobileChat = true;
+  }
 
   /**
    * Mirror a channel pick into ?channel= so the open room is shareable from
@@ -621,16 +638,7 @@
                 dimmed={row.pending}
                 worldReadable={row.worldReadable}
                 hidden={row.hidden === true}
-                onclick={() => {
-                  if (communikeyEvent?.pubkey) {
-                    const key = channelKey(row.pointer);
-                    if (key) {
-                      selectGroupChannel(communikeyEvent.pubkey, key);
-                      syncChannelParam(row.pointer.id);
-                    }
-                  }
-                  mobileChat = true;
-                }}
+                onclick={() => openGroupChannel(row.pointer)}
               />
             {/if}
           </div>
@@ -673,6 +681,16 @@
             {/if}
           </div>
         </div>
+        <!-- Below lg this rail is the channel list, so a running call shows
+          here as in the desktop sidebar (laoc, 2026-10-02). AV channels only:
+          each roster holds a standing kind-39004 subscription. -->
+        {#if row.source === 'group' && row.av}
+          <ChannelCallRoster
+            pointer={row.pointer}
+            name={row.name}
+            onOpen={() => openGroupChannel(row.pointer)}
+          />
+        {/if}
       {/snippet}
       {#if railSections.favourites.length > 0}
         <div
@@ -884,16 +902,7 @@
           <ChannelOverview
             rows={channelRows}
             hostBadges={channelHostBadges}
-            onSelect={(/** @type {{id: string, relay: string}} */ pointer) => {
-              if (communikeyEvent?.pubkey) {
-                const key = channelKey(pointer);
-                if (key) {
-                  selectGroupChannel(communikeyEvent.pubkey, key);
-                  syncChannelParam(pointer.id);
-                }
-              }
-              mobileChat = true;
-            }}
+            onSelect={openGroupChannel}
           />
         {/if}
       {:else if !concord.community && isCommunikeyOwner}

@@ -987,7 +987,9 @@ vi.mock('$lib/paraglide/messages', () => ({
   common_close: () => 'Close',
   groups_call_start: () => 'Start call',
   groups_call_start_error: () => 'Calls could not be turned on',
-  groups_call_return: () => 'Back to call',
+  groups_call_return: () => 'Show call',
+  groups_call_join_running: (/** @type {{ count: number }} */ { count }) =>
+    `Join the running call (${count})`,
   groups_call_chat_tab: () => 'Anruf-Chat',
   groups_call_chat_channel_tab: () => 'Kanal',
   groups_auth_required: () => 'auth required',
@@ -2441,7 +2443,44 @@ describe('GroupChat', () => {
       render(GroupChat, { props: { pointer: callPointer } });
       const button = await screen.findByTestId('group-call-join');
       expect(button.textContent).toContain('2');
-      expect(button.getAttribute('title')).toBe('2 in call');
+    });
+
+    // The header button names what a click does (laoc, 2026-10-02: it said
+    // "Join call" while nobody was in one).
+    describe('call button wording', () => {
+      const label = async () => {
+        const button = await screen.findByTestId('group-call-join');
+        return [button.getAttribute('aria-label'), button.getAttribute('title')];
+      };
+
+      it('no call running: "Start call"', async () => {
+        groupCallHolder.participants = [];
+        render(GroupChat, { props: { pointer: callPointer } });
+        expect(await label()).toEqual(['Start call', 'Start call']);
+      });
+
+      it('a call running without me: join it, with the count', async () => {
+        groupCallHolder.participants = [OTHER];
+        render(GroupChat, { props: { pointer: callPointer } });
+        expect(await label()).toEqual(['Join the running call (1)', 'Join the running call (1)']);
+      });
+
+      it('in it with the stage on screen: "Leave call"', async () => {
+        inCallHere();
+        groupCallHolder.participants = [ME];
+        render(GroupChat, { props: { pointer: callPointer } });
+        // Let the lazily imported stage land inside this test.
+        await screen.findByTestId('group-call-stage-stub');
+        expect(await label()).toEqual(['Leave call', 'Leave call']);
+      });
+
+      it('in it with the stage stepped aside: "Show call"', async () => {
+        inCallHere();
+        groupCallHolder.state.stageHidden = true;
+        groupCallHolder.participants = [ME];
+        render(GroupChat, { props: { pointer: callPointer } });
+        expect(await label()).toEqual(['Show call', 'Show call']);
+      });
     });
 
     it('disables the call button for an anonymous viewer — a token needs a signer', async () => {

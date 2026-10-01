@@ -9,6 +9,14 @@
  */
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/svelte';
+// Kind-39004 presence, stubbed per channel id: the cards only render it.
+const presence = vi.hoisted(() => ({ byId: /** @type {Record<string, string[]>} */ ({}) }));
+vi.mock('$lib/groups/call-presence.svelte.js', () => ({
+  useCallPresence: (/** @type {() => any} */ getPointer) => () => ({
+    participants: presence.byId[getPointer()?.id] ?? [],
+    answered: true
+  })
+}));
 import ChannelOverview from '$lib/components/community/channels/ChannelOverview.svelte';
 import { buildChannelRows } from '$lib/groups/community-channel-rows.js';
 import { channelAccessLevel } from '$lib/groups/channel-access.js';
@@ -161,5 +169,26 @@ describe('ChannelOverview', () => {
     });
     render(ChannelOverview, { props: { rows } });
     expect(screen.queryAllByTestId('channel-card')).toHaveLength(0);
+  });
+
+  // Between md and lg there is no sidebar: these cards are the channel list,
+  // so a running call shows on its card (laoc, 2026-10-02).
+  it('marks a running call on an AV channel card, with the head count', () => {
+    presence.byId = { sprechstunde: ['b'.repeat(64), 'c'.repeat(64)], stumm: [] };
+    const rows = buildChannelRows({
+      subtreeChannels: [
+        sub(ptr('sprechstunde'), [['name', 'sprechstunde'], ['livekit']]),
+        sub(ptr('stumm'), [['name', 'stumm'], ['livekit']]),
+        sub(ptr('text'), [['name', 'text']])
+      ]
+    });
+    render(ChannelOverview, { props: { rows } });
+    const badges = screen.getAllByTestId('channel-card-call');
+    expect(badges).toHaveLength(1);
+    expect(badges[0].closest('[data-testid="channel-card"]')?.textContent).toContain(
+      'sprechstunde'
+    );
+    expect(badges[0].textContent).toMatch(/2 (im Anruf|in the call)/);
+    presence.byId = {};
   });
 });

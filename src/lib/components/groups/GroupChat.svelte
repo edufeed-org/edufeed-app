@@ -899,12 +899,17 @@
     await startCall();
   }
 
+  // What a click does: start a call nobody is in yet, join the running one
+  // (with its head count), bring the stepped-aside stage back, or leave
+  // (laoc, 2026-10-02: it said "Join call" while no call was running).
   const callButtonLabel = $derived(
     inCallHere
       ? call.stageHidden
         ? m.groups_call_return()
         : m.groups_call_leave()
-      : m.groups_call_join()
+      : callParticipantCount > 0
+        ? m.groups_call_join_running({ count: callParticipantCount })
+        : m.groups_call_start()
   );
 
   async function toggleCall() {
@@ -1497,9 +1502,7 @@
         type="button"
         class="btn btn-ghost btn-sm {inCallHere ? 'text-primary' : ''}"
         data-testid="group-call-join"
-        title={callParticipantCount > 0
-          ? m.groups_call_in_progress({ count: callParticipantCount })
-          : callButtonLabel}
+        title={callButtonLabel}
         aria-label={callButtonLabel}
         aria-pressed={inCallHere}
         disabled={!myPubkey}

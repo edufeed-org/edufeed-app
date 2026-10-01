@@ -14,6 +14,7 @@
     joinGroupCall,
     showCallStage
   } from '$lib/groups/group-call.svelte.js';
+  import { getCallPopoutState } from '$lib/groups/call-popout.svelte.js';
   import { useActiveUser } from '$lib/stores/accounts.svelte';
   import ProfileAvatar from '$lib/components/shared/ProfileAvatar.svelte';
   import * as m from '$lib/paraglide/messages';
@@ -35,6 +36,14 @@
 
   const call = getGroupCallState();
   const inThisCall = $derived(call.isActiveFor(pointer) && call.phase !== 'idle');
+  // The user is looking at this call right now: a stage view is mounted, not
+  // stepped behind the chat, and the call is not in its own window. Then a
+  // "back to the call" button would point at the screen they are on
+  // (laoc, 2026-10-02) — the row only says where they are.
+  const popout = getCallPopoutState();
+  const stageOnScreen = $derived(
+    inThisCall && call.stageViews > 0 && !call.stageHidden && !popout.open
+  );
   const getActiveUser = useActiveUser();
   let busy = $state(false);
 
@@ -83,14 +92,26 @@
         <span class="pl-2.5 text-xs text-base-content/60">+{overflow}</span>
       {/if}
     </div>
-    {#if getActiveUser()?.signer}
+    {#if stageOnScreen}
+      <span
+        class="shrink-0 text-xs font-medium text-primary"
+        data-testid="channel-call-roster-here"
+      >
+        {m.groups_call_in_this_call({ count: participants.length })}
+      </span>
+    {:else if getActiveUser()?.signer}
+      {@const label = inThisCall
+        ? m.groups_call_return()
+        : m.groups_call_join_running({ count: participants.length })}
       <button
         type="button"
-        class="btn text-primary btn-ghost btn-sm"
+        class="btn shrink-0 text-primary btn-ghost btn-sm"
         disabled={busy}
+        aria-label={label}
+        title={label}
         onclick={join}
       >
-        {inThisCall ? m.groups_call_return() : m.groups_call_join()}
+        {inThisCall ? m.groups_call_return() : m.groups_join()}
       </button>
     {/if}
   </div>

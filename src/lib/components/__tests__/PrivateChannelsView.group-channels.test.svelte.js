@@ -29,6 +29,10 @@ vi.mock('$lib/stores/accounts.svelte', () => ({
 vi.mock('$lib/stores/config.svelte.js', () => ({ runtimeConfig: { concord: { enabled: true } } }));
 vi.mock('$lib/helpers/toast', () => ({ showToast: vi.fn() }));
 vi.mock('$lib/components/groups/GroupChat.svelte', () => import('./fixtures/GroupChatStub.svelte'));
+vi.mock(
+  '$lib/components/groups/call/ChannelCallRoster.svelte',
+  () => import('./fixtures/ChannelCallRosterStub.svelte')
+);
 // The /c endpoint reveals private children only to authed members — the hook
 // authenticates proactively. The fake pool has no auth surface, so stub it.
 vi.mock('$lib/groups/relay-auth.js', () => ({
@@ -172,6 +176,24 @@ describe('PrivateChannelsView — NIP-29 channels in the community rail', () => 
 
     const chat = await screen.findByTestId('group-chat-stub');
     expect(chat.textContent).toContain('allgemein');
+  });
+
+  // Below lg this rail IS the channel list: a running call shows here the
+  // same way it does in the desktop sidebar (laoc, 2026-10-02) — and only AV
+  // channels open a presence subscription.
+  it('draws the call roster under AV channels only, and its Join opens that channel', async () => {
+    holders.events = {
+      [ENDPOINT]: [root(), chan('sprechstunde', [['livekit']]), chan('allgemein', [['private']])]
+    };
+
+    render(PrivateChannelsView, { props: { communikeyEvent: moderated() } });
+
+    await screen.findAllByTestId('group-channel-row');
+    const rosters = await screen.findAllByTestId('channel-call-roster-stub');
+    expect(rosters.map((r) => r.textContent)).toEqual(['sprechstunde']);
+    await fireEvent.click(rosters[0]);
+    const chat = await screen.findByTestId('group-chat-stub');
+    expect(chat.textContent).toContain('sprechstunde');
   });
 
   it('shows the globe only for a channel the relay leaves open', async () => {

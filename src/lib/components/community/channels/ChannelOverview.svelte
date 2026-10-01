@@ -19,6 +19,7 @@
   import { groupHref } from '$lib/groups/groups.js';
   import GroupBadges from '$lib/components/groups/GroupBadges.svelte';
   import ImageWithFallback from '$lib/components/shared/ImageWithFallback.svelte';
+  import ChannelCallBadge from '$lib/components/groups/call/ChannelCallBadge.svelte';
   import * as m from '$lib/paraglide/messages';
 
   /**
@@ -137,9 +138,16 @@
                 class="line-clamp-2 text-sm text-base-content/60">{row.about}</span
               >
             {/if}
-            <span class="badge badge-outline badge-xs" data-testid="channel-card-access"
-              >{accessLabel(row.level)}</span
-            >
+            <span class="flex flex-wrap items-center gap-2">
+              <span class="badge badge-outline badge-xs" data-testid="channel-card-access"
+                >{accessLabel(row.level)}</span
+              >
+              <!-- Between md and lg these cards are the channel list (no
+                sidebar): a running call shows here too (laoc, 2026-10-02). -->
+              {#if row.av}
+                <ChannelCallBadge pointer={row.pointer} />
+              {/if}
+            </span>
           </svelte:element>
         {/each}
       </div>
