@@ -10,6 +10,7 @@
    *   chatOpen?: boolean,
    *   onPopOut?: () => void,
    *   onPopIn?: () => void,
+   *   onInvite?: () => void,
    *   registerView?: () => () => void
    * }}
    */
@@ -20,6 +21,7 @@
     chatOpen = false,
     onPopOut = undefined,
     onPopIn = undefined,
+    onInvite = undefined,
     registerView = undefined
   } = $props();
 
@@ -41,6 +43,11 @@
   {/if}
   {#if onPopIn}
     <button type="button" data-testid="group-call-stage-stub-popin" onclick={onPopIn}>pop in</button
+    >
+  {/if}
+  {#if onInvite}
+    <button type="button" data-testid="group-call-stage-stub-invite" onclick={onInvite}
+      >invite</button
     >
   {/if}
 </div>

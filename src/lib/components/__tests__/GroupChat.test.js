@@ -894,6 +894,15 @@ vi.mock('$lib/groups/group-call.svelte.js', () => ({
   },
   callErrorMessage: () => 'call failed'
 }));
+// Guest-link discovery probe (own tests: call-passes.test.js).
+const probeCallPassSupport = vi.hoisted(() =>
+  vi.fn(async (/** @type {string} */ _relay, /** @type {string} */ _id) => false)
+);
+vi.mock('$lib/groups/call-passes.js', async (importOriginal) => ({
+  .../** @type {any} */ (await importOriginal()),
+  probeCallPassSupport: (/** @type {string} */ relay, /** @type {string} */ id) =>
+    probeCallPassSupport(relay, id)
+}));
 // The relay's AV capability probe and the admin's "Start call" 9002 are
 // seams too (their own tests: groups-livekit.test.js, enable-group-calls.test.js).
 const avProbe = vi.hoisted(() => ({ supported: false }));
@@ -2470,6 +2479,36 @@ describe('GroupChat', () => {
       await fireEvent.click(screen.getByTestId('group-call-join'));
       expect(callViewMocks.showCallStage).toHaveBeenCalledTimes(1);
       expect(leaveGroupCallMock).not.toHaveBeenCalled();
+    });
+
+    describe('call pass invite probe', () => {
+      beforeEach(() => {
+        probeCallPassSupport.mockReset();
+        probeCallPassSupport.mockResolvedValue(false);
+      });
+
+      it('resets passesSupported before re-probing on every pointer change, so a stale true never survives', async () => {
+        probeCallPassSupport.mockResolvedValue(true);
+        inCallHere();
+        const { rerender } = render(GroupChat, { props: { pointer: callPointer } });
+        await screen.findByTestId('group-call-stage-stub');
+        await waitFor(() =>
+          expect(screen.getByTestId('group-call-stage-stub-invite')).toBeTruthy()
+        );
+
+        // A pointer change re-runs the probe — while THIS one is still
+        // pending, the previous channel's `true` must not leak through.
+        /** @type {(value: boolean) => void} */
+        let resolveProbe = () => {};
+        probeCallPassSupport.mockReturnValueOnce(new Promise((r) => (resolveProbe = r)));
+        await rerender({ pointer: { ...callPointer } });
+        expect(screen.queryByTestId('group-call-stage-stub-invite')).toBeNull();
+
+        resolveProbe(false);
+        await waitFor(() =>
+          expect(screen.queryByTestId('group-call-stage-stub-invite')).toBeNull()
+        );
+      });
     });
 
     describe('call chat tab', () => {

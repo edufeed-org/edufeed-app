@@ -16,6 +16,7 @@ const callState = {
   token: null,
   serverUrl: null,
   code: null,
+  connected: false,
   isActiveFor: () => false
 };
 const joinGroupCall = vi.fn(async () => {});
@@ -32,15 +33,27 @@ vi.mock('$lib/stores/accounts.svelte', () => ({
   useActiveUser: () => () => activeUser,
   manager: {}
 }));
+const forgetGuestAccount = vi.fn();
 const createGuestAccount = vi.fn(
   async (_name) => (activeUser = { pubkey: 'a'.repeat(64), signer: {} })
 );
 vi.mock('$lib/groups/guest-account.js', () => ({
   createGuestAccount: (...a) => createGuestAccount(...a),
   isCallGuest: () => true,
-  forgetGuestAccount: vi.fn()
+  forgetGuestAccount: (...a) => forgetGuestAccount(...a)
 }));
-vi.mock('$lib/stores/modal.svelte.js', () => ({ modalStore: { openModal: vi.fn() } }));
+const mockModalStore = { openModal: vi.fn() };
+vi.mock('$lib/stores/modal.svelte.js', () => ({ modalStore: mockModalStore }));
+const getProfile = vi.fn(() => null);
+vi.mock('$lib/stores/user-profile.svelte.js', () => ({ useUserProfile: () => getProfile }));
+vi.mock(
+  '$lib/components/groups/call/GroupCallStage.svelte',
+  () => import('./fixtures/GroupCallStageStub.svelte')
+);
+vi.mock(
+  '$lib/components/groups/call/CallChatPanel.svelte',
+  () => import('./fixtures/CallChatPanelStub.svelte')
+);
 
 const { default: CallLanding } = await import('$lib/components/groups/call/CallLanding.svelte');
 const POINTER = { id: 'g1', relay: 'wss://groups.example/' };
@@ -50,7 +63,9 @@ beforeEach(() => {
   vi.clearAllMocks();
   activeUser = null;
   callState.phase = 'idle';
+  callState.connected = false;
   callState.isActiveFor = () => false;
+  getProfile.mockReturnValue(null);
   window.location.hash = '#' + CODE;
 });
 
@@ -139,5 +154,92 @@ describe('CallLanding', () => {
     checkCallPass.mockResolvedValue({ valid: true, reason: 'ok', liveCount: 2 });
     await fireEvent.click(screen.getByTestId('call-landing-recheck'));
     expect(await screen.findByTestId('call-landing-join')).toBeTruthy();
+  });
+
+  it('disables the recheck button while in flight and ignores a stale result after unmount', async () => {
+    checkCallPass.mockResolvedValueOnce({ valid: false, reason: 'unreachable', liveCount: 0 });
+    const { unmount } = render(CallLanding, { props: { pointer: POINTER } });
+    await screen.findByTestId('call-landing-unreachable');
+
+    let resolveRecheck;
+    checkCallPass.mockReturnValueOnce(new Promise((r) => (resolveRecheck = r)));
+    const recheckButton = screen.getByTestId('call-landing-recheck');
+    await fireEvent.click(recheckButton);
+    expect(/** @type {HTMLButtonElement} */ (recheckButton).disabled).toBe(true);
+    await fireEvent.click(recheckButton); // double-click guard: no second request
+    expect(checkCallPass).toHaveBeenCalledTimes(2);
+
+    unmount();
+    resolveRecheck({ valid: true, reason: 'ok', liveCount: 1 });
+    await new Promise((r) => setTimeout(r, 0)); // must not throw on the unmounted component
+  });
+
+  it('requires confirmation before forgetting a guest stuck on a failed join', async () => {
+    callState.phase = 'error';
+    callState.isActiveFor = () => true;
+    activeUser = { pubkey: 'f'.repeat(64), signer: {} };
+    checkCallPass.mockResolvedValue({ valid: true, reason: 'ok', liveCount: 0 });
+    render(CallLanding, { props: { pointer: POINTER } });
+    const forgetButton = await screen.findByTestId('call-landing-forget');
+
+    await fireEvent.click(forgetButton);
+    expect(forgetGuestAccount).not.toHaveBeenCalled();
+    expect(screen.getByTestId('call-landing-forget-confirm')).toBeTruthy();
+
+    await fireEvent.click(screen.getByTestId('call-landing-forget-cancel'));
+    expect(screen.queryByTestId('call-landing-forget-confirm')).toBeNull();
+    expect(forgetGuestAccount).not.toHaveBeenCalled();
+
+    await fireEvent.click(await screen.findByTestId('call-landing-forget'));
+    await fireEvent.click(screen.getByTestId('call-landing-forget-confirm'));
+    expect(forgetGuestAccount).toHaveBeenCalledWith(activeUser.pubkey);
+  });
+
+  it('shows an inline message and a login button when the active account cannot sign', async () => {
+    activeUser = { pubkey: 'h'.repeat(64), signer: null };
+    checkCallPass.mockResolvedValue({ valid: true, reason: 'ok', liveCount: 2 });
+    render(CallLanding, { props: { pointer: POINTER } });
+    expect(await screen.findByTestId('call-landing-no-signer')).toBeTruthy();
+    expect(screen.queryByTestId('call-landing-join-as')).toBeNull();
+
+    await fireEvent.click(screen.getByTestId('call-landing-switch-login'));
+    expect(mockModalStore.openModal).toHaveBeenCalledWith('login');
+  });
+
+  it.each([
+    [0, () => m.call_landing_live_empty()],
+    [1, () => m.call_landing_live_one()],
+    [4, () => m.call_landing_live({ count: 4 })]
+  ])('shows the live-count copy for %i participant(s)', async (count, expected) => {
+    checkCallPass.mockResolvedValue({ valid: true, reason: 'ok', liveCount: count });
+    render(CallLanding, { props: { pointer: POINTER } });
+    await screen.findByTestId('call-landing-join');
+    expect(screen.getByText(expected())).toBeTruthy();
+  });
+
+  it('offers "Profil vervollständigen" with the active account\'s kind-0 name when the input is empty', async () => {
+    checkCallPass.mockResolvedValue({ valid: true, reason: 'ok', liveCount: 1 });
+    activeUser = { pubkey: 'g'.repeat(64), signer: {} };
+    getProfile.mockReturnValue({ name: 'Ada Account' });
+
+    const { rerender } = render(CallLanding, { props: { pointer: POINTER } });
+
+    // Actually connect (phase 'ready' AND connected) ...
+    callState.phase = 'ready';
+    callState.connected = true;
+    callState.isActiveFor = () => true;
+    await rerender({ pointer: { ...POINTER } });
+    await screen.findByTestId('group-call-stage-stub');
+
+    // ... then leave: only now does the post-call screen latch.
+    callState.isActiveFor = () => false;
+    callState.phase = 'idle';
+    await rerender({ pointer: { ...POINTER } });
+
+    await fireEvent.click(await screen.findByTestId('call-landing-complete'));
+    expect(mockModalStore.openModal).toHaveBeenCalledWith('signup', {
+      externalSignup: true,
+      initialName: 'Ada Account'
+    });
   });
 });

@@ -133,6 +133,40 @@ describe('connection ownership', () => {
     expect(connectToRoom).toHaveBeenCalledWith('jwt', 'wss://lk', {});
   });
 
+  // `phase` flips to 'ready' as soon as the TOKEN is in, before LiveKit has
+  // actually connected — CallLanding's "was the guest ever really in the
+  // call" check must not rely on phase alone (a failed connect would then
+  // look identical to a successful one). `connected` closes that gap.
+  it('is not connected while the token request is in flight, becomes connected once connectToRoom resolves, and disconnects on leave', async () => {
+    let resolveToken;
+    requestGroupCallToken.mockReturnValue(new Promise((r) => (resolveToken = r)));
+    let resolveConnect;
+    connectToRoom.mockReturnValueOnce(new Promise((r) => (resolveConnect = r)));
+    const s = getGroupCallState();
+
+    const pending = joinGroupCall(P1, USER);
+    expect(s.connected).toBe(false);
+
+    resolveToken({ serverUrl: 'wss://lk', participantToken: 'jwt' });
+    await vi.waitFor(() => expect(s.phase).toBe('ready'));
+    // Token is in and phase is 'ready', but LiveKit hasn't connected yet.
+    expect(s.connected).toBe(false);
+
+    resolveConnect();
+    await pending;
+    expect(s.connected).toBe(true);
+
+    await leaveGroupCall();
+    expect(s.connected).toBe(false);
+  });
+
+  it('never reports connected after a failed connect', async () => {
+    requestGroupCallToken.mockResolvedValue({ serverUrl: 'wss://lk', participantToken: 'jwt' });
+    connectToRoom.mockRejectedValueOnce(new Error('could not establish pc connection'));
+    await joinGroupCall(P1, USER);
+    expect(getGroupCallState().connected).toBe(false);
+  });
+
   it('re-joining the channel that is already in a call does not reconnect', async () => {
     requestGroupCallToken.mockResolvedValue({ serverUrl: 'wss://lk', participantToken: 'jwt' });
     await joinGroupCall(P1, USER);

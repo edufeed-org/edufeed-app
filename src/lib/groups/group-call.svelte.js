@@ -23,6 +23,12 @@ import * as m from '$lib/paraglide/messages';
 let activeKey = $state(null);
 /** @type {GroupCallPhase} */
 let phase = $state('idle');
+// `phase` becomes 'ready' as soon as the token is in — BEFORE LiveKit has
+// actually connected. A page that needs to know "did this guest really end
+// up in the call" (CallLanding's post-call screen) must check `connected`,
+// not `phase`, or a join whose token succeeds but whose handshake then
+// fails looks identical to a real join.
+let connected = $state(false);
 /** @type {Error | null} */
 let error = $state(null);
 /** @type {string | null} */
@@ -60,6 +66,7 @@ let attempt = 0;
  *   stageViews: number,
  *   stageHidden: boolean,
  *   chatBeside: boolean,
+ *   connected: boolean,
  *   isActiveFor: (pointer: {id?: string, relay?: string} | null | undefined) => boolean
  * }}
  */
@@ -70,6 +77,9 @@ export function getGroupCallState() {
     },
     get phase() {
       return phase;
+    },
+    get connected() {
+      return connected;
     },
     get error() {
       return error;
@@ -127,6 +137,7 @@ export async function joinGroupCall(pointer, user, view = {}) {
   error = null;
   token = null;
   serverUrl = null;
+  connected = false;
   title = view.title ?? '';
   href = view.href ?? null;
   code = view.code ?? null;
@@ -143,12 +154,17 @@ export async function joinGroupCall(pointer, user, view = {}) {
     await lk.connectToRoom(result.participantToken, result.serverUrl, {});
     // Left (or moved on) while the handshake ran: leaveGroupCall's
     // disconnect raced the connect, so tear the fresh Room down again.
-    if (myAttempt !== attempt) await lk.disconnectFromRoom();
+    if (myAttempt !== attempt) {
+      await lk.disconnectFromRoom();
+    } else {
+      connected = true;
+    }
   } catch (err) {
     if (myAttempt !== attempt) return;
     console.error('Failed to join call:', err);
     error = err instanceof Error ? err : new Error(String(err));
     phase = 'error';
+    connected = false;
   }
 }
 
@@ -196,6 +212,7 @@ export async function leaveGroupCall() {
   error = null;
   token = null;
   serverUrl = null;
+  connected = false;
   title = '';
   href = null;
   code = null;

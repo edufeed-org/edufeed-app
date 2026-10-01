@@ -857,6 +857,11 @@
   $effect(() => {
     const relay = pointer.relay;
     const id = pointer.id;
+    // Reset first: a channel switch (pointer changes) must never show the
+    // invite button carried over from the previous channel's probe while
+    // this one's probe (or its skip, on a relay without call support) is
+    // still pending.
+    passesSupported = false;
     if (!avEnabled || !inCallHere) return;
     let alive = true;
     probeCallPassSupport(relay, id).then((ok) => {

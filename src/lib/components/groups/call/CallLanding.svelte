@@ -23,6 +23,7 @@
     forgetGuestAccount
   } from '$lib/groups/guest-account.js';
   import { useActiveUser } from '$lib/stores/accounts.svelte';
+  import { useUserProfile } from '$lib/stores/user-profile.svelte.js';
   import { modalStore } from '$lib/stores/modal.svelte.js';
   import { lazyComponent } from '$lib/helpers/lazy-component.svelte.js';
   import { formatTimestamp } from '$lib/helpers/dates.js';
@@ -34,6 +35,7 @@
   const CallStage = lazyComponent(() => import('./GroupCallStage.svelte'));
   const CallChatPanel = lazyComponent(() => import('./CallChatPanel.svelte'));
   const getActiveUser = useActiveUser();
+  const getMyProfile = useUserProfile();
   const call = getGroupCallState();
 
   const code = typeof window !== 'undefined' ? readPassCodeFromHash(window.location.hash) : null;
@@ -43,8 +45,20 @@
   let joining = $state(false);
   let wasInCall = $state(false);
   let chatOpen = $state(false);
+  let rechecking = $state(false);
+  let forgetConfirmOpen = $state(false);
   /** @type {string | null} */
   let guestError = $state(null);
+
+  // Guard against `recheckPass`'s result landing after the component is
+  // gone (e.g. the visitor navigated away while "Erneut versuchen" was
+  // still in flight).
+  let destroyed = false;
+  $effect(() => {
+    return () => {
+      destroyed = true;
+    };
+  });
 
   $effect(() => {
     const p = pointer;
@@ -60,11 +74,12 @@
 
   const inCallHere = $derived(!!pointer && call.isActiveFor(pointer) && call.phase !== 'idle');
   // Only a call that actually connected counts as "was in call" for the
-  // post-call thank-you view — a failed-then-left join (phase 'requesting'
-  // or 'error') must fall back to the check-driven views instead of
-  // claiming the guest attended.
+  // post-call thank-you view — `phase` flips to 'ready' as soon as the
+  // token is in, BEFORE LiveKit has connected, so a failed-then-left join
+  // (token ok, handshake failed) must fall back to the check-driven views
+  // instead of claiming the guest attended.
   const readyInCallHere = $derived(
-    !!pointer && call.isActiveFor(pointer) && call.phase === 'ready'
+    !!pointer && call.isActiveFor(pointer) && call.phase === 'ready' && call.connected
   );
   $effect(() => {
     if (readyInCallHere) untrack(() => (wasInCall = true));
@@ -84,11 +99,22 @@
     return 'invalid';
   });
 
-  /** Re-run the pass check (the "the server could not be reached" retry). */
+  /**
+   * Re-run the pass check (the "the server could not be reached" retry).
+   * Deliberately does NOT null out `check` first: that would flip `view` to
+   * 'checking' and unmount the retry button itself mid-request. Keeping the
+   * current view up with the button disabled (via `rechecking`) is both the
+   * double-click guard and the clearer UI.
+   */
   async function recheckPass() {
-    if (!pointer || !code) return;
-    check = null;
-    check = await checkCallPass(pointer.relay, pointer.id, code);
+    if (!pointer || !code || rechecking) return;
+    rechecking = true;
+    try {
+      const result = await checkCallPass(pointer.relay, pointer.id, code);
+      if (!destroyed) check = result;
+    } finally {
+      if (!destroyed) rechecking = false;
+    }
   }
 
   /** @param {{pubkey: string, signer: any}} user */
@@ -136,7 +162,15 @@
     }
   }
 
+  /** "Vergessen" always asks first — the key is gone from this browser for good. */
+  function openForgetConfirm() {
+    forgetConfirmOpen = true;
+  }
+  function cancelForget() {
+    forgetConfirmOpen = false;
+  }
   function forget() {
+    forgetConfirmOpen = false;
     const user = getActiveUser();
     if (user) forgetGuestAccount(user.pubkey);
     location.href = '/';
@@ -181,6 +215,15 @@
           >
             {m.call_landing_back()}
           </button>
+          {#if guestHere}
+            <button
+              class="btn text-error btn-ghost btn-sm"
+              onclick={openForgetConfirm}
+              data-testid="call-landing-forget"
+            >
+              {m.call_landing_forget()}
+            </button>
+          {/if}
         </div>
       </div>
     {:else}
@@ -200,6 +243,7 @@
               <button
                 class="btn mt-2 btn-sm"
                 onclick={recheckPass}
+                disabled={rechecking}
                 data-testid="call-landing-recheck"
               >
                 {m.groups_call_retry()}
@@ -235,23 +279,42 @@
           {:else if view === 'ready'}
             <h1 class="text-xl font-bold">{m.call_landing_invited({ title })}</h1>
             <p class="text-sm text-base-content/70">
-              {m.call_landing_live({ count: check?.liveCount ?? 0 })}
+              {#if (check?.liveCount ?? 0) === 0}
+                {m.call_landing_live_empty()}
+              {:else if check?.liveCount === 1}
+                {m.call_landing_live_one()}
+              {:else}
+                {m.call_landing_live({ count: check?.liveCount ?? 0 })}
+              {/if}
             </p>
             {#if me}
-              <button
-                class="btn btn-primary"
-                onclick={joinWithAccount}
-                data-testid="call-landing-join-as"
-              >
-                {m.call_landing_join_as()}
-              </button>
-              <a
-                class="link text-sm"
-                href={pointer ? groupHref(pointer) : '/'}
-                data-testid="call-landing-channel"
-              >
-                {m.call_landing_open_channel()}
-              </a>
+              {#if me.signer}
+                <button
+                  class="btn btn-primary"
+                  onclick={joinWithAccount}
+                  data-testid="call-landing-join-as"
+                >
+                  {m.call_landing_join_as()}
+                </button>
+                <a
+                  class="link text-sm"
+                  href={pointer ? groupHref(pointer) : '/'}
+                  data-testid="call-landing-channel"
+                >
+                  {m.call_landing_open_channel()}
+                </a>
+              {:else}
+                <p class="text-sm text-error" data-testid="call-landing-no-signer">
+                  {m.call_landing_no_signer()}
+                </p>
+                <button
+                  class="btn btn-sm"
+                  onclick={() => modalStore.openModal('login')}
+                  data-testid="call-landing-switch-login"
+                >
+                  {m.call_landing_login()}
+                </button>
+              {/if}
             {:else}
               <form
                 class="flex flex-col gap-2"
@@ -313,14 +376,17 @@
                 <button
                   class="btn"
                   onclick={() =>
-                    modalStore.openModal('signup', { externalSignup: true, initialName: name })}
+                    modalStore.openModal('signup', {
+                      externalSignup: true,
+                      initialName: getMyProfile()?.name || name
+                    })}
                   data-testid="call-landing-complete"
                 >
                   {m.call_landing_complete_profile()}
                 </button>
                 <button
                   class="btn text-error btn-ghost"
-                  onclick={forget}
+                  onclick={openForgetConfirm}
                   data-testid="call-landing-forget"
                 >
                   {m.call_landing_forget()}
@@ -337,3 +403,24 @@
     </div>
   {/if}
 </div>
+
+{#if forgetConfirmOpen}
+  <div class="modal-open modal" role="dialog">
+    <div class="modal-box max-w-sm text-center">
+      <h3 class="text-lg font-extrabold">{m.call_landing_forget_confirm_title()}</h3>
+      <p class="my-3 text-sm text-base-content/70">{m.call_landing_forget_confirm_text()}</p>
+      <div class="modal-action justify-center">
+        <button
+          class="btn btn-ghost"
+          onclick={cancelForget}
+          data-testid="call-landing-forget-cancel"
+        >
+          {m.call_landing_cancel()}
+        </button>
+        <button class="btn btn-error" onclick={forget} data-testid="call-landing-forget-confirm">
+          {m.call_landing_forget()}
+        </button>
+      </div>
+    </div>
+  </div>
+{/if}
