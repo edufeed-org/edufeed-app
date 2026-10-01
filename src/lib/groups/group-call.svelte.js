@@ -17,7 +17,8 @@ import { requestGroupCallToken, GroupCallTokenError } from './livekit.js';
 import { getChatBeside, setChatBeside } from '$lib/services/call-prefs.js';
 import * as m from '$lib/paraglide/messages';
 
-/** @typedef {'idle' | 'requesting' | 'ready' | 'error'} GroupCallPhase */
+/** @typedef {'idle' | 'requesting' | 'ready' | 'error' | 'ended'} GroupCallPhase */
+/** @typedef {'removed' | 'dropped'} GroupCallEndReason */
 
 /** @type {string | null} */
 let activeKey = $state(null);
@@ -31,6 +32,11 @@ let phase = $state('idle');
 let connected = $state(false);
 /** @type {Error | null} */
 let error = $state(null);
+// Why the call ended on its own (phase 'ended'): the server took us out
+// (revoked call pass, kick, deleted room) or the connection was lost.
+// The channel stays active (activeKey) until the user leaves or rejoins.
+/** @type {GroupCallEndReason | null} */
+let endReason = $state(null);
 /** @type {string | null} */
 let serverUrl = $state(null);
 /** @type {string | null} */
@@ -52,12 +58,17 @@ let chatBeside = $state(getChatBeside());
 // Bumped on every join/leave so a token that lands after the user already
 // left (or joined elsewhere) is dropped instead of reviving the old call.
 let attempt = 0;
+// Unsubscribe of the connection service's disconnect listener for the
+// current attempt. Plain `let`: bookkeeping, never rendered.
+/** @type {(() => void) | null} */
+let stopDisconnectListener = null;
 
 /**
  * @returns {{
  *   activeKey: string | null,
  *   phase: GroupCallPhase,
  *   error: Error | null,
+ *   endReason: GroupCallEndReason | null,
  *   serverUrl: string | null,
  *   token: string | null,
  *   title: string,
@@ -83,6 +94,9 @@ export function getGroupCallState() {
     },
     get error() {
       return error;
+    },
+    get endReason() {
+      return endReason;
     },
     get serverUrl() {
       return serverUrl;
@@ -135,6 +149,7 @@ export async function joinGroupCall(pointer, user, view = {}) {
   activeKey = key;
   phase = 'requesting';
   error = null;
+  endReason = null;
   token = null;
   serverUrl = null;
   connected = false;
@@ -151,6 +166,15 @@ export async function joinGroupCall(pointer, user, view = {}) {
     phase = 'ready';
     const lk = await import('$lib/services/livekit-connection.svelte.js');
     if (myAttempt !== attempt) return;
+    // The server (or the network) ending the seat: show a readable end
+    // state instead of a stage stuck on "Connecting…".
+    stopDisconnectListener?.();
+    stopDisconnectListener = lk.onRoomDisconnected((reason) => {
+      if (myAttempt !== attempt) return;
+      connected = false;
+      phase = 'ended';
+      endReason = lk.isRemovalReason(reason) ? 'removed' : 'dropped';
+    });
     await lk.connectToRoom(result.participantToken, result.serverUrl, {});
     // Left (or moved on) while the handshake ran: leaveGroupCall's
     // disconnect raced the connect, so tear the fresh Room down again.
@@ -210,6 +234,9 @@ export async function leaveGroupCall() {
   activeKey = null;
   phase = 'idle';
   error = null;
+  endReason = null;
+  stopDisconnectListener?.();
+  stopDisconnectListener = null;
   token = null;
   serverUrl = null;
   connected = false;

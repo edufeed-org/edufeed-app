@@ -3747,5 +3747,9 @@
   "groups_call_invite_nip44": "Your login method cannot encrypt data (NIP-44). Log in another way to create links.",
   "groups_call_invite_failed": "That did not work: {reason}",
   "groups_call_invite_list_failed": "Could not load active links.",
-  "groups_call_invite_title_placeholder": "Name for the link (optional), e.g. Parents' evening"
+  "groups_call_invite_title_placeholder": "Name for the link (optional), e.g. Parents' evening",
+  "groups_call_ended_removed": "You were removed from the call.",
+  "groups_call_ended_dropped": "The connection to the call was lost.",
+  "groups_call_rejoin": "Rejoin",
+  "call_landing_removed": "The invitation link was revoked or you were removed from the call."
 }

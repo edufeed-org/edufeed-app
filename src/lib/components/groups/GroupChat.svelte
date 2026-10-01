@@ -780,7 +780,12 @@
   const poppedOutHere = $derived(inCallHere && callPopout.open);
   // In the call but stepped back to the chat (or into a shared app): the
   // call runs on and the app-level dock shows it.
-  const showCallHere = $derived(inCallHere && !call.stageHidden && !poppedOutHere);
+  // A call the server ended (removed / dropped) always shows its end state
+  // here, even if the user had stepped back to the chat: the dock hides for
+  // an ended call, so this is the only place that says what happened.
+  const showCallHere = $derived(
+    inCallHere && (call.phase === 'ended' || (!call.stageHidden && !poppedOutHere))
+  );
   // Wide screens: the chat as a column beside the stage (per-device pref),
   // so the call stays in view. Narrow screens keep switching between the two.
   let wideScreen = $state(false);
@@ -1799,6 +1804,36 @@
                 <span class="loading loading-lg loading-spinner text-primary"></span>
               </div>
             {/if}
+          {:else if call.phase === 'ended'}
+            <div
+              class="flex flex-1 flex-col items-center justify-center gap-2 p-4 text-center"
+              role="status"
+              data-testid="group-call-ended"
+            >
+              <p class="text-sm text-base-content/70">
+                {call.endReason === 'removed'
+                  ? m.groups_call_ended_removed()
+                  : m.groups_call_ended_dropped()}
+              </p>
+              <div class="flex gap-2">
+                <button
+                  type="button"
+                  class="btn btn-sm btn-primary"
+                  onclick={startCall}
+                  data-testid="group-call-rejoin"
+                >
+                  {m.groups_call_rejoin()}
+                </button>
+                <button
+                  type="button"
+                  class="btn btn-ghost btn-sm"
+                  onclick={leaveGroupCall}
+                  data-testid="group-call-ended-close"
+                >
+                  {m.common_close()}
+                </button>
+              </div>
+            </div>
           {:else if call.phase === 'error'}
             <div
               class="flex flex-1 flex-col items-center justify-center gap-2"

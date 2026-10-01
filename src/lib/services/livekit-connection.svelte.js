@@ -3,7 +3,7 @@
  * Manages the LiveKit room connection and exposes reactive participant state.
  */
 import { SvelteSet } from 'svelte/reactivity';
-import { Room, RoomEvent, Track } from 'livekit-client';
+import { DisconnectReason, Room, RoomEvent, Track } from 'livekit-client';
 import {
   SCREEN_SHARE_QUALITIES,
   cameraCaptureOptions,
@@ -68,6 +68,17 @@ let activeVideoDeviceId = $state('');
 // --- Connection + participant state beyond the participant lists ---
 /** @type {'connected' | 'reconnecting' | 'disconnected'} */
 let connectionState = $state('disconnected');
+// Why the last Room ended (livekit-client's DisconnectReason), null while
+// connected or after our own disconnectFromRoom.
+/** @type {import('livekit-client').DisconnectReason | null} */
+let disconnectReason = $state(null);
+// Our own disconnectFromRoom is running: its Disconnected event is expected
+// and must not reach the listener below.
+let disconnecting = false;
+// One external listener (the call store) for disconnects the server or the
+// network caused: a revoked call pass, a kick, a deleted room, a dead link.
+/** @type {((reason: import('livekit-client').DisconnectReason | undefined) => void) | null} */
+let disconnectListener = null;
 /** Remote seats whose microphone is off. @type {Set<string>} */
 let mutedIdentities = $state.raw(new Set());
 /** Seats with a raised hand (local included). @type {Set<string>} */
@@ -100,6 +111,31 @@ const CHAT_MAX_CHARS = 2000;
 const CHAT_KEEP = 200;
 /** @type {Array<{id: string, identity: string, text: string, at: number}>} */
 let callChat = $state.raw([]);
+
+/**
+ * Listen for disconnects NOT initiated by disconnectFromRoom(). One listener
+ * at a time (the call store); returns the matching unsubscribe.
+ * @param {(reason: import('livekit-client').DisconnectReason | undefined) => void} cb
+ * @returns {() => void}
+ */
+export function onRoomDisconnected(cb) {
+  disconnectListener = cb;
+  return () => {
+    if (disconnectListener === cb) disconnectListener = null;
+  };
+}
+
+/**
+ * Whether a disconnect reason means "taken out of the call" (removed by the
+ * server, e.g. a revoked call pass, or the room deleted) rather than a lost
+ * connection.
+ * @param {unknown} reason
+ */
+export function isRemovalReason(reason) {
+  return (
+    reason === DisconnectReason.PARTICIPANT_REMOVED || reason === DisconnectReason.ROOM_DELETED
+  );
+}
 
 /**
  * Per-person key for volumes: NIP-29 identities are `<64-hex pubkey>:<suffix>`,
@@ -452,6 +488,7 @@ export async function connectToRoom(token, url, opts = {}) {
   }
 
   isConnecting = true;
+  disconnectReason = null;
   try {
     const newRoom = new Room({
       adaptiveStream: true,
@@ -525,11 +562,17 @@ export async function connectToRoom(token, url, opts = {}) {
         speakingParticipantIds = new SvelteSet(speakers.map((s) => s.identity));
       }
     );
-    newRoom.on(RoomEvent.Disconnected, () => {
-      isConnected = false;
-      connectionState = 'disconnected';
-      updateParticipants();
-    });
+    newRoom.on(
+      RoomEvent.Disconnected,
+      (/** @type {import('livekit-client').DisconnectReason | undefined} */ reason) => {
+        isConnected = false;
+        connectionState = 'disconnected';
+        disconnectReason = reason ?? null;
+        updateParticipants();
+        // Only the live Room, and only when we did not ask for it.
+        if (!disconnecting && room === newRoom) disconnectListener?.(reason);
+      }
+    );
     newRoom.on(
       RoomEvent.ParticipantPermissionsChanged,
       (
@@ -610,10 +653,16 @@ export async function disconnectFromRoom() {
   }
 
   detachAllRemoteAudio();
-  if (room) {
-    await room.disconnect();
-    room = null;
+  disconnecting = true;
+  try {
+    if (room) {
+      await room.disconnect();
+      room = null;
+    }
+  } finally {
+    disconnecting = false;
   }
+  disconnectReason = null;
   isConnected = false;
   connectionState = 'disconnected';
   isMuted = false;
@@ -712,7 +761,7 @@ export async function toggleScreenShare() {
 
 /**
  * Get reactive connection state.
- * @returns {{ isConnected: boolean, isConnecting: boolean, isMuted: boolean, isCameraOff: boolean, isScreenSharing: boolean, canPublish: boolean, canSignal: boolean, connectionState: 'connected' | 'reconnecting' | 'disconnected', mutedIdentities: Set<string>, raisedHands: Set<string>, reactions: Array<{id: string, identity: string, emoji: string}>, callChat: Array<{id: string, identity: string, text: string, at: number}>, localParticipant: import('livekit-client').LocalParticipant | null, remoteParticipants: import('livekit-client').RemoteParticipant[], room: Room | null, speakingParticipantIds: Set<string>, audioInputDevices: MediaDeviceInfo[], activeAudioDeviceId: string, audioOutputDevices: MediaDeviceInfo[], activeAudioOutputDeviceId: string, videoInputDevices: MediaDeviceInfo[], activeVideoDeviceId: string }}
+ * @returns {{ isConnected: boolean, isConnecting: boolean, isMuted: boolean, isCameraOff: boolean, isScreenSharing: boolean, canPublish: boolean, canSignal: boolean, connectionState: 'connected' | 'reconnecting' | 'disconnected', disconnectReason: import('livekit-client').DisconnectReason | null, mutedIdentities: Set<string>, raisedHands: Set<string>, reactions: Array<{id: string, identity: string, emoji: string}>, callChat: Array<{id: string, identity: string, text: string, at: number}>, localParticipant: import('livekit-client').LocalParticipant | null, remoteParticipants: import('livekit-client').RemoteParticipant[], room: Room | null, speakingParticipantIds: Set<string>, audioInputDevices: MediaDeviceInfo[], activeAudioDeviceId: string, audioOutputDevices: MediaDeviceInfo[], activeAudioOutputDeviceId: string, videoInputDevices: MediaDeviceInfo[], activeVideoDeviceId: string }}
  */
 export function getLiveKitState() {
   return {
@@ -739,6 +788,9 @@ export function getLiveKitState() {
     },
     get connectionState() {
       return connectionState;
+    },
+    get disconnectReason() {
+      return disconnectReason;
     },
     get mutedIdentities() {
       return mutedIdentities;

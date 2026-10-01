@@ -114,6 +114,14 @@ describe('CallDock', () => {
     expect(fns.leaveGroupCall).toHaveBeenCalledTimes(1);
   });
 
+  // The server ended the seat (removed / dropped): no live dock for a
+  // call that is over — the channel itself says what happened.
+  it('renders nothing for an ended call', () => {
+    call.phase = 'ended';
+    render(CallDock);
+    expect(screen.queryByTestId('call-dock')).toBeNull();
+  });
+
   it('shows reconnecting and failed states', async () => {
     lk.connectionState = 'reconnecting';
     const { unmount } = render(CallDock);

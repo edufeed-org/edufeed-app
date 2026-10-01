@@ -17,6 +17,7 @@ const callState = {
   serverUrl: null,
   code: null,
   connected: false,
+  endReason: null,
   isActiveFor: () => false
 };
 const joinGroupCall = vi.fn(async () => {});
@@ -64,6 +65,7 @@ beforeEach(() => {
   activeUser = null;
   callState.phase = 'idle';
   callState.connected = false;
+  callState.endReason = null;
   callState.isActiveFor = () => false;
   getProfile.mockReturnValue(null);
   window.location.hash = '#' + CODE;
@@ -241,5 +243,50 @@ describe('CallLanding', () => {
       externalSignup: true,
       initialName: 'Ada Account'
     });
+  });
+
+  it('a guest removed from the call (revoked link) leaves the stage for the end screen and is told why', async () => {
+    checkCallPass.mockResolvedValue({ valid: true, reason: 'ok', liveCount: 1 });
+    activeUser = { pubkey: 'h'.repeat(64), signer: {} };
+    const { rerender } = render(CallLanding, { props: { pointer: POINTER } });
+
+    callState.phase = 'ready';
+    callState.connected = true;
+    callState.isActiveFor = () => true;
+    await rerender({ pointer: { ...POINTER } });
+    await screen.findByTestId('group-call-stage-stub');
+
+    // The relay removed the guest: the store ends the call (still active
+    // for this channel until left).
+    callState.phase = 'ended';
+    callState.connected = false;
+    callState.endReason = 'removed';
+    await rerender({ pointer: { ...POINTER } });
+
+    expect(await screen.findByTestId('call-landing-ended')).toBeTruthy();
+    expect(screen.queryByTestId('group-call-stage-stub')).toBeNull();
+    expect(screen.getByTestId('call-landing-removed').textContent).toContain(
+      m.call_landing_removed()
+    );
+    // still offered the guest's keep/forget choices
+    expect(screen.getByTestId('call-landing-backup')).toBeTruthy();
+    expect(screen.getByTestId('call-landing-forget')).toBeTruthy();
+  });
+
+  it('a dropped connection shows the end screen without the removal note', async () => {
+    checkCallPass.mockResolvedValue({ valid: true, reason: 'ok', liveCount: 1 });
+    activeUser = { pubkey: 'h'.repeat(64), signer: {} };
+    const { rerender } = render(CallLanding, { props: { pointer: POINTER } });
+    callState.phase = 'ready';
+    callState.connected = true;
+    callState.isActiveFor = () => true;
+    await rerender({ pointer: { ...POINTER } });
+    await screen.findByTestId('group-call-stage-stub');
+    callState.phase = 'ended';
+    callState.connected = false;
+    callState.endReason = 'dropped';
+    await rerender({ pointer: { ...POINTER } });
+    expect(await screen.findByTestId('call-landing-ended')).toBeTruthy();
+    expect(screen.queryByTestId('call-landing-removed')).toBeNull();
   });
 });

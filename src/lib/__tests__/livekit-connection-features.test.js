@@ -81,13 +81,25 @@ vi.mock('livekit-client', () => {
       for (const h of this.handlers[event] ?? []) h(...args);
     }
     async connect() {}
-    async disconnect() {}
+    // Like livekit-client: a local disconnect() emits Disconnected too.
+    async disconnect() {
+      this.emit('disconnected', 1);
+    }
     static getLocalDevices = vi.fn(async () => []);
   }
-  return { Room: MockRoom, RoomEvent, Track };
+  const DisconnectReason = {
+    UNKNOWN_REASON: 0,
+    CLIENT_INITIATED: 1,
+    DUPLICATE_IDENTITY: 2,
+    SERVER_SHUTDOWN: 3,
+    PARTICIPANT_REMOVED: 4,
+    ROOM_DELETED: 5,
+    SIGNAL_CLOSE: 9
+  };
+  return { Room: MockRoom, RoomEvent, Track, DisconnectReason };
 });
 
-const { RoomEvent } = await import('livekit-client');
+const { RoomEvent, DisconnectReason } = await import('livekit-client');
 const svc = await import('$lib/services/livekit-connection.svelte.js');
 const prefs = await import('$lib/services/call-prefs.js');
 
@@ -340,5 +352,44 @@ describe('in-call chat (data messages)', () => {
     await svc.sendCallChat('bye');
     await svc.disconnectFromRoom();
     expect(svc.getLiveKitState().callChat).toEqual([]);
+  });
+});
+
+// The server can end a seat on its own: a revoked call pass makes the relay
+// remove the guest, a moderator kicks someone, the room is deleted, or the
+// connection just dies. The call store must hear about it (live 2026-10-01:
+// the stage said "Connecting…" forever) — but not about our own leave.
+describe('unexpected disconnects', () => {
+  it('records the reason and tells the listener when the server ends the seat', () => {
+    const seen = [];
+    const off = svc.onRoomDisconnected((reason) => seen.push(reason));
+    room.emit(RoomEvent.Disconnected, DisconnectReason.PARTICIPANT_REMOVED);
+    expect(seen).toEqual([DisconnectReason.PARTICIPANT_REMOVED]);
+    const state = svc.getLiveKitState();
+    expect(state.disconnectReason).toBe(DisconnectReason.PARTICIPANT_REMOVED);
+    expect(state.isConnected).toBe(false);
+    off();
+  });
+
+  it('does not call the listener for our own disconnectFromRoom', async () => {
+    const listener = vi.fn();
+    const off = svc.onRoomDisconnected(listener);
+    await svc.disconnectFromRoom();
+    expect(listener).not.toHaveBeenCalled();
+    off();
+  });
+
+  it('stops calling a listener once unsubscribed', () => {
+    const listener = vi.fn();
+    svc.onRoomDisconnected(listener)();
+    room.emit(RoomEvent.Disconnected, DisconnectReason.SIGNAL_CLOSE);
+    expect(listener).not.toHaveBeenCalled();
+  });
+
+  it('classifies removal vs. a dropped connection', () => {
+    expect(svc.isRemovalReason(DisconnectReason.PARTICIPANT_REMOVED)).toBe(true);
+    expect(svc.isRemovalReason(DisconnectReason.ROOM_DELETED)).toBe(true);
+    expect(svc.isRemovalReason(DisconnectReason.SIGNAL_CLOSE)).toBe(false);
+    expect(svc.isRemovalReason(undefined)).toBe(false);
   });
 });

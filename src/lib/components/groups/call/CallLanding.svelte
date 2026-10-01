@@ -72,7 +72,15 @@
     };
   });
 
-  const inCallHere = $derived(!!pointer && call.isActiveFor(pointer) && call.phase !== 'idle');
+  // An 'ended' call (the relay removed the guest — e.g. the link was
+  // revoked — or the connection died) leaves the in-call shell for the end
+  // screen; it was connected before, so `wasInCall` already latched.
+  const inCallHere = $derived(
+    !!pointer && call.isActiveFor(pointer) && call.phase !== 'idle' && call.phase !== 'ended'
+  );
+  const removedHere = $derived(
+    !!pointer && call.isActiveFor(pointer) && call.phase === 'ended' && call.endReason === 'removed'
+  );
   // Only a call that actually connected counts as "was in call" for the
   // post-call thank-you view — `phase` flips to 'ready' as soon as the
   // token is in, BEFORE LiveKit has connected, so a failed-then-left join
@@ -364,6 +372,11 @@
           {:else if view === 'ended'}
             <div data-testid="call-landing-ended" class="flex flex-col gap-3">
               <h1 class="text-xl font-bold">{m.call_landing_after_title()}</h1>
+              {#if removedHere}
+                <p class="text-sm text-base-content/70" data-testid="call-landing-removed">
+                  {m.call_landing_removed()}
+                </p>
+              {/if}
               {#if guestHere}
                 <p class="text-sm text-base-content/70">{m.call_landing_keep_identity()}</p>
                 <button

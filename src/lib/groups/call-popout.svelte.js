@@ -66,11 +66,12 @@ export async function popOutCall(view) {
   });
   open = true;
 
-  // The call ended (left here, in the tab, or dropped): nothing to show.
+  // The call ended (left here, in the tab, or dropped / removed by the
+  // server — the channel then shows why): nothing to show.
   const call = getGroupCallState();
   stopWatching = $effect.root(() => {
     $effect(() => {
-      if (call.phase === 'idle') popInCall();
+      if (call.phase === 'idle' || call.phase === 'ended') popInCall();
     });
   });
 }

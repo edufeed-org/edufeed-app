@@ -12,13 +12,19 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { flushSync } from 'svelte';
 
 const requestGroupCallToken = vi.fn();
+const lkListener = vi.hoisted(() => ({ cb: /** @type {any} */ (null) }));
 vi.mock('$lib/groups/livekit.js', async (importOriginal) => ({
   .../** @type {any} */ (await importOriginal()),
   requestGroupCallToken: (/** @type {any[]} */ ...args) => requestGroupCallToken(...args)
 }));
 vi.mock('$lib/services/livekit-connection.svelte.js', () => ({
   disconnectFromRoom: async () => {},
-  connectToRoom: async () => {}
+  connectToRoom: async () => {},
+  onRoomDisconnected: (/** @type {any} */ cb) => {
+    lkListener.cb = cb;
+    return () => {};
+  },
+  isRemovalReason: () => true
 }));
 vi.mock('$lib/paraglide/messages', () => ({}));
 vi.mock(
@@ -129,6 +135,15 @@ describe('closing the pop-out', () => {
   it('"back to tab" closes the window', async () => {
     await popOutCall(VIEW);
     pip.document.querySelector('[data-testid="group-call-stage-stub-popin"]').click();
+    expect(pip.close).toHaveBeenCalled();
+    expect(getCallPopoutState().open).toBe(false);
+  });
+
+  it('the server ending the call closes the window (the channel shows why)', async () => {
+    await popOutCall(VIEW);
+    lkListener.cb?.(4);
+    flushSync();
+    expect(getGroupCallState().phase).toBe('ended');
     expect(pip.close).toHaveBeenCalled();
     expect(getCallPopoutState().open).toBe(false);
   });

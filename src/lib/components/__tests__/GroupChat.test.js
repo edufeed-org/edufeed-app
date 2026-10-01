@@ -816,7 +816,7 @@ vi.mock('$lib/components/icons', () => ({
 // call" or seed a participant count; reset in the outer beforeEach.
 const groupCallHolder = vi.hoisted(() => ({
   state:
-    /** @type {{activeKey: string | null, phase: 'idle' | 'requesting' | 'ready' | 'error', error: Error | null, serverUrl: string | null, token: string | null, stageHidden?: boolean, chatBeside?: boolean}} */ ({
+    /** @type {{activeKey: string | null, phase: 'idle' | 'requesting' | 'ready' | 'error' | 'ended', error: Error | null, endReason?: 'removed' | 'dropped' | null, serverUrl: string | null, token: string | null, stageHidden?: boolean, chatBeside?: boolean}} */ ({
       activeKey: null,
       phase: 'idle',
       error: null,
@@ -866,6 +866,9 @@ vi.mock('$lib/groups/group-call.svelte.js', () => ({
     },
     get error() {
       return groupCallHolder.state.error;
+    },
+    get endReason() {
+      return groupCallHolder.state.endReason ?? null;
     },
     get serverUrl() {
       return groupCallHolder.state.serverUrl;
@@ -978,6 +981,10 @@ vi.mock('$lib/paraglide/messages', () => ({
   groups_settings_title: () => 'Group settings',
   groups_call_requesting: () => 'Requesting access…',
   groups_call_retry: () => 'Try again',
+  groups_call_ended_removed: () => 'You were removed from the call.',
+  groups_call_ended_dropped: () => 'The connection to the call was lost.',
+  groups_call_rejoin: () => 'Rejoin',
+  common_close: () => 'Close',
   groups_call_start: () => 'Start call',
   groups_call_start_error: () => 'Calls could not be turned on',
   groups_call_return: () => 'Back to call',
@@ -2674,6 +2681,42 @@ describe('GroupChat', () => {
       await fireEvent.click(screen.getByTestId('group-call-join'));
       expect(leaveGroupCallMock).toHaveBeenCalledTimes(1);
       expect(joinGroupCallMock).not.toHaveBeenCalled();
+    });
+
+    // The server ended the seat (pass revoked / kicked / room deleted, or
+    // the connection died): a readable end state, not "Connecting…".
+    describe('call ended by the server', () => {
+      /** @param {'removed' | 'dropped'} reason */
+      const endedHere = (reason) => {
+        inCallHere();
+        groupCallHolder.state.phase = 'ended';
+        groupCallHolder.state.endReason = reason;
+      };
+
+      it('says the user was removed and offers rejoin and close', async () => {
+        endedHere('removed');
+        render(GroupChat, { props: { pointer: callPointer } });
+        const ended = await screen.findByTestId('group-call-ended');
+        expect(ended.textContent).toContain('You were removed from the call.');
+        expect(screen.queryByTestId('group-call-stage-stub')).toBeNull();
+        expect(screen.queryByTestId('group-call-pending')).toBeNull();
+        await fireEvent.click(screen.getByTestId('group-call-rejoin'));
+        expect(joinGroupCallMock).toHaveBeenCalledWith(
+          expect.objectContaining({ id: 'callchat', relay: GROUP_RELAY }),
+          expect.anything(),
+          expect.anything()
+        );
+        await fireEvent.click(screen.getByTestId('group-call-ended-close'));
+        expect(leaveGroupCallMock).toHaveBeenCalledTimes(1);
+      });
+
+      it('says the connection was lost for a dropped call', async () => {
+        endedHere('dropped');
+        render(GroupChat, { props: { pointer: callPointer } });
+        expect((await screen.findByTestId('group-call-ended')).textContent).toContain(
+          'The connection to the call was lost.'
+        );
+      });
     });
 
     it('shows the pending state while the token is requested', async () => {

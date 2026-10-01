@@ -20,9 +20,19 @@ vi.mock('$lib/groups/livekit.js', async (importOriginal) => {
 
 const disconnectFromRoom = vi.fn(async () => {});
 const connectToRoom = vi.fn(async () => {});
+// The store's one disconnect listener (onRoomDisconnected), so a test can
+// play "the server dropped / removed us".
+const lkListener = { cb: /** @type {((reason: any) => void) | null} */ (null) };
 vi.mock('$lib/services/livekit-connection.svelte.js', () => ({
   disconnectFromRoom: () => disconnectFromRoom(),
-  connectToRoom: (/** @type {any[]} */ ...args) => connectToRoom(...args)
+  connectToRoom: (/** @type {any[]} */ ...args) => connectToRoom(...args),
+  onRoomDisconnected: (/** @type {(reason: any) => void} */ cb) => {
+    lkListener.cb = cb;
+    return () => {
+      if (lkListener.cb === cb) lkListener.cb = null;
+    };
+  },
+  isRemovalReason: (/** @type {any} */ reason) => reason === 'removed-reason'
 }));
 
 vi.mock('$lib/paraglide/messages', () => ({
@@ -301,5 +311,63 @@ describe('call pass code', () => {
     expect(callErrorMessage(new GroupCallTokenError('pass', 'call pass expired', 403))).toBe(
       'pass-msg'
     );
+  });
+});
+
+// Live 2026-10-01: a revoked pass made the relay remove the guest; LiveKit
+// said 'disconnected' but the store stayed 'ready' and the stage spun on
+// "Connecting…" forever.
+describe('server-side end of the call', () => {
+  beforeEach(() => {
+    requestGroupCallToken.mockResolvedValue({ serverUrl: 'wss://x', participantToken: 't' });
+  });
+
+  it('a removal ends the call with endReason "removed", keeping the channel active', async () => {
+    await joinGroupCall(P1, USER);
+    const s = getGroupCallState();
+    expect(s.connected).toBe(true);
+    lkListener.cb?.('removed-reason');
+    expect(s.phase).toBe('ended');
+    expect(s.endReason).toBe('removed');
+    expect(s.connected).toBe(false);
+    expect(s.isActiveFor(P1)).toBe(true);
+  });
+
+  it('any other unexpected disconnect ends it as "dropped"', async () => {
+    await joinGroupCall(P1, USER);
+    lkListener.cb?.('signal-close');
+    const s = getGroupCallState();
+    expect(s.phase).toBe('ended');
+    expect(s.endReason).toBe('dropped');
+  });
+
+  it('leaving resets the ended state and stops listening', async () => {
+    await joinGroupCall(P1, USER);
+    lkListener.cb?.('removed-reason');
+    await leaveGroupCall();
+    const s = getGroupCallState();
+    expect(s.phase).toBe('idle');
+    expect(s.endReason).toBeNull();
+    expect(lkListener.cb).toBeNull();
+  });
+
+  it('rejoining after the end connects again and clears endReason', async () => {
+    await joinGroupCall(P1, USER);
+    lkListener.cb?.('signal-close');
+    await joinGroupCall(P1, USER);
+    const s = getGroupCallState();
+    expect(connectToRoom).toHaveBeenCalledTimes(2);
+    expect(s.phase).toBe('ready');
+    expect(s.connected).toBe(true);
+    expect(s.endReason).toBeNull();
+  });
+
+  it('a disconnect reported for an attempt the user already left is ignored', async () => {
+    await joinGroupCall(P1, USER);
+    const stale = lkListener.cb;
+    await leaveGroupCall();
+    await joinGroupCall(P2, USER);
+    stale?.('removed-reason');
+    expect(getGroupCallState().phase).toBe('ready');
   });
 });
