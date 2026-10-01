@@ -110,6 +110,12 @@ vi.mock('$lib/stores/accounts.svelte', () => ({
 vi.mock('$lib/stores/profile-map.svelte.js', () => ({
   useProfileMap: () => () => new Map()
 }));
+vi.mock('$lib/agents/agent-records.svelte.js', () => ({
+  useAgentRecords: () => () => new Map()
+}));
+vi.mock('$lib/agents/agent-presence.svelte.js', () => ({
+  useAgentPresence: () => () => new Map()
+}));
 vi.mock('$lib/helpers/toast', () => ({ showToast: vi.fn() }));
 vi.mock('$app/paths', () => ({ resolve: (/** @type {string} */ path) => path }));
 vi.mock('$app/navigation', () => ({ goto: gotoMock }));

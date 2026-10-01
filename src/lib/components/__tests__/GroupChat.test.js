@@ -747,6 +747,12 @@ vi.mock('$lib/stores/accounts.svelte', () => ({
 vi.mock('$lib/stores/profile-map.svelte.js', () => ({
   useProfileMap: () => () => new Map()
 }));
+vi.mock('$lib/agents/agent-records.svelte.js', () => ({
+  useAgentRecords: () => () => new Map()
+}));
+vi.mock('$lib/agents/agent-presence.svelte.js', () => ({
+  useAgentPresence: () => () => new Map()
+}));
 // GroupChat calls useJoinedCommunikeyEvents() directly (not just through the
 // post-delete cascade's useJoinedCommunitiesList chain) to resolve the
 // disclosure line's linked-community access. Stubbed at this seam — the

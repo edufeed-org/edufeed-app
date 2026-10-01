@@ -6,6 +6,7 @@
  */
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/svelte';
+import { createRawSnippet } from 'svelte';
 import ChatMessageRow from '$lib/components/chat/ChatMessageRow.svelte';
 
 const message = {
@@ -42,5 +43,19 @@ describe('ChatMessageRow message anchor', () => {
   it('renders no copy-link button without onCopyLink', () => {
     render(ChatMessageRow, { props: baseProps });
     expect(screen.queryByTitle('Link kopieren')).toBeNull();
+  });
+
+  it('renders the nameBadge snippet after the author name', () => {
+    render(ChatMessageRow, {
+      props: {
+        ...baseProps,
+        isOwnMessage: false,
+        displayName: 'Lehrbot',
+        nameBadge: createRawSnippet((/** @type {() => string} */ getPubkey) => ({
+          render: () => `<span data-testid="badge">${getPubkey()}</span>`
+        }))
+      }
+    });
+    expect(screen.getByTestId('badge').textContent).toBe(baseProps.message.pubkey);
   });
 });

@@ -8,7 +8,8 @@
     MessageSquareIcon,
     BookmarkIcon,
     PeopleIcon,
-    LockIcon
+    LockIcon,
+    BotIcon
   } from '$lib/components/icons';
   import { getTotalUnreadCount } from '$lib/services/inbox-service.svelte.js';
   import { getUnreadDmCount } from '$lib/services/dm-service.svelte.js';
@@ -56,18 +57,33 @@
 
   // «Gruppen» is deployment-gated (CORDN_GROUPS_ENABLED) AND per-user opt-in
   // (settings toggle) — inserted right after Nachrichten, its IA peer.
+  // «Agents» is deployment-gated (runtimeConfig.agents.enabled) — inserted
+  // right after My Stuff. Both insertions apply to the same copied array so
+  // neither optional entry clobbers the other.
   const sections = $derived.by(() => {
-    const enabled =
+    const next = [...baseSections];
+
+    const cordnGroupsEnabled =
       parseCordnGroupsConfig(runtimeConfig.cordnGroups).enabled && appSettings.cordnGroupsEnabled;
-    if (!enabled) return baseSections;
-    const withGroups = [...baseSections];
-    withGroups.splice(withGroups.findIndex((s) => s.id === 'messages') + 1, 0, {
-      id: 'groups',
-      href: resolve('/c/groups'),
-      icon: LockIcon,
-      label: () => m.dashboard_nav_groups()
-    });
-    return withGroups;
+    if (cordnGroupsEnabled) {
+      next.splice(next.findIndex((s) => s.id === 'messages') + 1, 0, {
+        id: 'groups',
+        href: resolve('/c/groups'),
+        icon: LockIcon,
+        label: () => m.dashboard_nav_groups()
+      });
+    }
+
+    if (runtimeConfig.agents?.enabled) {
+      next.splice(next.findIndex((s) => s.id === 'my-stuff') + 1, 0, {
+        id: 'agents',
+        href: resolve('/c/agents'),
+        icon: BotIcon,
+        label: () => m.dashboard_nav_agents()
+      });
+    }
+
+    return next;
   });
 
   let activeSection = $derived(
