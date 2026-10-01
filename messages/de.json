@@ -2525,8 +2525,6 @@
   "aria_scroll_tabs_left": "Tabs nach links scrollen",
   "aria_scroll_tabs_right": "Tabs nach rechts scrollen",
   "form_min_characters": "Min. {min} Zeichen",
-  "groups_call_join": "Anruf beitreten",
-  "groups_call_in_progress": "{count} im Anruf",
   "groups_call_leave": "Anruf verlassen",
   "groups_call_connecting": "Verbindung wird hergestellt…",
   "groups_call_connection_error": "Verbindung zum Anruf fehlgeschlagen",

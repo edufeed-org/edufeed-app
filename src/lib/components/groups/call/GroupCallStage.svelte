@@ -104,11 +104,47 @@
 
   const lk = getLiveKitState();
 
-  // Tell the call store a stage is on screen (the dock steps aside). The
+  // Tell the call store a stage is on screen (the dock steps aside, the
+  // channel lists say "you're in the call" instead of "show call"). The
   // CALL is untracked too: the store's register reads and writes its own
   // `$state` counter, and a tracked call made this effect depend on the
   // signal it bumps — effect_update_depth_exceeded on join (2026-09-28).
-  $effect(() => untrack(() => registerView?.()));
+  $effect(() => {
+    const node = rootEl;
+    if (!node) return;
+    return untrack(() => trackOnScreen(node));
+  });
+
+  /**
+   * Registered only while the stage has layout: below md the channel's
+   * "← Kanäle" hides the chat with display:none and the stage stays mounted,
+   * which must not keep the dock away (review 2026-10-02). The observer
+   * comes from the node's own document, so a stage in the pop-out window
+   * reports its own size. Without ResizeObserver it counts as on screen.
+   * @param {HTMLElement} node
+   */
+  function trackOnScreen(node) {
+    if (!registerView) return;
+    let off = /** @type {(() => void) | null} */ (registerView());
+    const Observer = node.ownerDocument.defaultView?.ResizeObserver;
+    const observer = Observer
+      ? new Observer((entries) => {
+          const box = entries[entries.length - 1]?.contentRect;
+          const visible = !!box && box.width > 0 && box.height > 0;
+          if (visible && !off) off = registerView();
+          else if (!visible && off) {
+            off();
+            off = null;
+          }
+        })
+      : null;
+    observer?.observe(node);
+    return () => {
+      observer?.disconnect();
+      off?.();
+      off = null;
+    };
+  }
 
   /** @param {{identity?: string} | null | undefined} participant */
   function pubkeyOf(participant) {
@@ -418,7 +454,7 @@
 <!-- The stage IS the channel body while the call is open (same rule as
      GroupAppStage): a flex column handing its full height to the grid. -->
 <!-- A size container: beside the chat column the stage is narrow even in a
-  wide window, so the header's labels answer to the STAGE's width (@md:),
+  wide window, so the header's labels answer to the STAGE's width (@lg:),
   not the viewport's (laoc, 2026-10-02: the button row widened the page). -->
 <div
   bind:this={rootEl}
@@ -451,7 +487,7 @@
           data-testid="group-call-invite"
         >
           <LinkIcon class_="h-4 w-4" title="" />
-          <span class="hidden @md:inline">{m.groups_call_invite_button()}</span>
+          <span class="hidden @lg:inline">{m.groups_call_invite_button()}</span>
         </button>
       {/if}
       {#if onPopOut}
@@ -478,7 +514,7 @@
           data-testid="group-call-show-chat"
         >
           <ChatIcon class_="h-4 w-4" />
-          <span class="hidden @md:inline">{m.groups_call_show_chat()}</span>
+          <span class="hidden @lg:inline">{m.groups_call_show_chat()}</span>
         </button>
       {/if}
       <button class="btn btn-sm btn-error" onclick={handleLeave} data-testid="group-call-leave">

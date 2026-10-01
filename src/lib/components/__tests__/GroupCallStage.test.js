@@ -208,6 +208,44 @@ describe('GroupCallStage — a view, not the connection owner', () => {
     expect(off).toHaveBeenCalledTimes(1);
   });
 
+  // Below md the channel's "← Kanäle" only hides the chat (display:none):
+  // the stage stays mounted. A stage without layout is not on screen — the
+  // dock and the channel list's "Anruf anzeigen" must come back (review
+  // 2026-10-02).
+  it('counts as on screen only while it has a size', () => {
+    /** @type {((entries: any[]) => void)[]} */
+    const callbacks = [];
+    const Original = globalThis.ResizeObserver;
+    globalThis.ResizeObserver = class {
+      constructor(cb) {
+        callbacks.push(cb);
+      }
+      observe() {}
+      unobserve() {}
+      disconnect() {}
+    };
+    try {
+      const off = vi.fn();
+      const registerView = vi.fn(() => off);
+      const { unmount } = render(GroupCallStage, { props: { ...baseProps, registerView } });
+      expect(registerView).toHaveBeenCalledTimes(1);
+      const report = (width, height) =>
+        callbacks.forEach((cb) => cb([{ contentRect: { width, height } }]));
+      report(0, 0);
+      expect(off).toHaveBeenCalledTimes(1);
+      report(0, 0);
+      expect(off).toHaveBeenCalledTimes(1);
+      report(400, 300);
+      expect(registerView).toHaveBeenCalledTimes(2);
+      report(400, 320);
+      expect(registerView).toHaveBeenCalledTimes(2);
+      unmount();
+      expect(off).toHaveBeenCalledTimes(2);
+    } finally {
+      globalThis.ResizeObserver = Original;
+    }
+  });
+
   // Regression (live 2026-09-28, effect_update_depth_exceeded on join): the
   // REAL register reads and writes the store's `$state` counter; called
   // tracked inside the mount effect it re-ran the effect forever.
@@ -428,7 +466,7 @@ describe('layout', () => {
     for (const id of ['group-call-invite', 'group-call-show-chat']) {
       const label = screen.getByTestId(id).querySelector('span');
       expect(label.classList.contains('hidden')).toBe(true);
-      expect(label.classList.contains('@md:inline')).toBe(true);
+      expect(label.classList.contains('@lg:inline')).toBe(true);
     }
     // The title side gives way (truncates) before the buttons do.
     const title = stage.querySelector('h2');

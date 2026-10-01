@@ -2525,8 +2525,6 @@
   "aria_scroll_tabs_left": "Scroll tabs left",
   "aria_scroll_tabs_right": "Scroll tabs right",
   "form_min_characters": "Min {min} characters",
-  "groups_call_join": "Join call",
-  "groups_call_in_progress": "{count} in call",
   "groups_call_leave": "Leave call",
   "groups_call_connecting": "Connecting…",
   "groups_call_connection_error": "Could not connect to the call",
