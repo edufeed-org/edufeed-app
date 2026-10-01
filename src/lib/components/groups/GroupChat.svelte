@@ -1758,9 +1758,12 @@
 
   <div class="flex min-h-0 flex-1">
     <!-- On a narrow viewport the panel takes the whole width; the timeline
-         steps aside rather than being squeezed into a column of its own. -->
+         steps aside rather than being squeezed into a column of its own.
+         min-w-0: a flex item is at least as wide as its content's
+         min-content by default — with the call stage and the chat column
+         side by side that widened the whole page (laoc, 2026-10-02). -->
     <div
-      class="relative flex min-h-0 flex-1 flex-col {openThreadRoot
+      class="relative flex min-h-0 min-w-0 flex-1 flex-col {openThreadRoot
         ? threadExpanded
           ? 'hidden'
           : 'hidden md:flex'

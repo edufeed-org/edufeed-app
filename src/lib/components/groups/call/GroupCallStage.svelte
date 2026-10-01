@@ -417,19 +417,26 @@
 
 <!-- The stage IS the channel body while the call is open (same rule as
      GroupAppStage): a flex column handing its full height to the grid. -->
-<div bind:this={rootEl} class="flex min-h-0 min-w-0 flex-1 flex-col" data-testid="group-call-stage">
+<!-- A size container: beside the chat column the stage is narrow even in a
+  wide window, so the header's labels answer to the STAGE's width (@md:),
+  not the viewport's (laoc, 2026-10-02: the button row widened the page). -->
+<div
+  bind:this={rootEl}
+  class="@container flex min-h-0 min-w-0 flex-1 flex-col"
+  data-testid="group-call-stage"
+>
   <!-- Header -->
   <div class="flex items-center justify-between gap-2 border-b border-base-300 px-4 py-2">
-    <div class="flex min-w-0 items-center gap-2">
-      <MeetIcon class_="w-5 h-5 text-primary" />
+    <div class="flex min-w-0 flex-1 items-center gap-2 overflow-hidden">
+      <MeetIcon class_="w-5 h-5 shrink-0 text-primary" />
       <h2 class="truncate font-semibold">{title}</h2>
       {#if !lk.canPublish}
-        <span class="badge badge-ghost badge-sm" data-testid="group-call-listen-only">
+        <span class="badge shrink-0 badge-ghost badge-sm" data-testid="group-call-listen-only">
           {m.groups_call_listen_only()}
         </span>
       {/if}
       {#if handCount > 0}
-        <span class="badge gap-1 badge-sm badge-warning" data-testid="group-call-hands">
+        <span class="badge shrink-0 gap-1 badge-sm badge-warning" data-testid="group-call-hands">
           <HandIcon class_="h-3 w-3" title="" />
           {m.groups_call_hands_raised({ count: handCount })}
         </span>
@@ -444,7 +451,7 @@
           data-testid="group-call-invite"
         >
           <LinkIcon class_="h-4 w-4" title="" />
-          <span class="hidden sm:inline">{m.groups_call_invite_button()}</span>
+          <span class="hidden @md:inline">{m.groups_call_invite_button()}</span>
         </button>
       {/if}
       {#if onPopOut}
@@ -471,7 +478,7 @@
           data-testid="group-call-show-chat"
         >
           <ChatIcon class_="h-4 w-4" />
-          <span class="hidden sm:inline">{m.groups_call_show_chat()}</span>
+          <span class="hidden @md:inline">{m.groups_call_show_chat()}</span>
         </button>
       {/if}
       <button class="btn btn-sm btn-error" onclick={handleLeave} data-testid="group-call-leave">

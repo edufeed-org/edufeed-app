@@ -188,8 +188,9 @@
       class="scrollbar-hide snap-x snap-mandatory overflow-x-auto"
       style="scroll-behavior: smooth;"
     >
-      <!-- DaisyUI Dock Component -->
-      <div class="flex w-max items-center gap-3 px-4 py-2">
+      <!-- Centred while the tabs fit (mx-auto on a w-max row); once they
+        overflow the auto margins collapse to 0 and the row scrolls. -->
+      <div class="mx-auto flex w-max items-center gap-3 px-4 py-2">
         {#each contentTypes as type (type.id)}
           {@const isActive = selectedContentType === type.id}
           {@const Icon = type.icon}

@@ -416,6 +416,27 @@ describe('layout', () => {
     expect(videoArea.classList.contains('flex-1')).toBe(true);
   });
 
+  it('the header shrinks with the stage, not the viewport: labels collapse to icons', () => {
+    // laoc 2026-10-02: beside the chat column the stage is narrow even on a
+    // wide window; the header's fixed button row widened the page. The stage
+    // is a size container and the labels answer to ITS width.
+    render(GroupCallStage, {
+      props: { ...baseProps, onShowChat: vi.fn(), onInvite: vi.fn(), onPopOut: vi.fn() }
+    });
+    const stage = screen.getByTestId('group-call-stage');
+    expect(stage.classList.contains('@container')).toBe(true);
+    for (const id of ['group-call-invite', 'group-call-show-chat']) {
+      const label = screen.getByTestId(id).querySelector('span');
+      expect(label.classList.contains('hidden')).toBe(true);
+      expect(label.classList.contains('@md:inline')).toBe(true);
+    }
+    // The title side gives way (truncates) before the buttons do.
+    const title = stage.querySelector('h2');
+    expect(title.classList.contains('truncate')).toBe(true);
+    expect(title.parentElement.classList.contains('min-w-0')).toBe(true);
+    expect(title.parentElement.classList.contains('flex-1')).toBe(true);
+  });
+
   it('a remote screen share takes the spotlight, seats move to the strip', () => {
     lk.remoteParticipants = [remote(`${HEX}:x1`, { screenShare: true })];
     render(GroupCallStage, { props: baseProps });
