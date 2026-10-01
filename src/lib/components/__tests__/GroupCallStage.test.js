@@ -394,6 +394,28 @@ describe('layout', () => {
     expect(screen.queryByTestId('group-call-spotlight')).toBeNull();
   });
 
+  it('tiles start at the top of the video area, not centred in a tall box', () => {
+    // laoc 2026-10-01: in a tall channel the centred grid sat far below the
+    // header (and below the fold while the page itself grew).
+    lk.remoteParticipants = [remote(`${HEX}:x1`)];
+    render(GroupCallStage, { props: baseProps });
+    const grid = screen.getByTestId('group-call-grid');
+    expect(grid.classList.contains('content-start')).toBe(true);
+    expect(grid.classList.contains('content-center')).toBe(false);
+    const layer = grid.parentElement;
+    expect(layer.classList.contains('items-start')).toBe(true);
+    expect(layer.classList.contains('items-center')).toBe(false);
+  });
+
+  it('the control bar never shrinks away: the video area gives way instead', () => {
+    render(GroupCallStage, { props: baseProps });
+    const controls = screen.getByTestId('group-call-controls');
+    expect(controls.classList.contains('shrink-0')).toBe(true);
+    const videoArea = screen.getByTestId('group-call-grid').parentElement.parentElement;
+    expect(videoArea.classList.contains('min-h-0')).toBe(true);
+    expect(videoArea.classList.contains('flex-1')).toBe(true);
+  });
+
   it('a remote screen share takes the spotlight, seats move to the strip', () => {
     lk.remoteParticipants = [remote(`${HEX}:x1`, { screenShare: true })];
     render(GroupCallStage, { props: baseProps });

@@ -516,9 +516,11 @@
     </div>
   {:else}
     <div class="relative min-h-0 min-w-0 flex-1" {@attach measureGrid}>
-      <div class="absolute inset-0 flex items-center justify-center overflow-hidden p-3">
+      <!-- Top-aligned: in a tall stage the tiles belong under the header,
+        not centred in empty space (laoc, 2026-10-01). -->
+      <div class="absolute inset-0 flex items-start justify-center overflow-hidden p-3">
         <div
-          class="grid content-center justify-center"
+          class="grid content-start justify-center"
           style={gridStyle}
           data-testid="group-call-grid"
         >
@@ -539,7 +541,8 @@
   <!-- Controls -->
   {#if lk.isConnected}
     <div
-      class="mt-auto flex flex-wrap items-center justify-center gap-3 border-t border-base-300 px-4 py-3"
+      class="mt-auto flex shrink-0 flex-wrap items-center justify-center gap-3 border-t border-base-300 px-4 py-3"
+      data-testid="group-call-controls"
     >
       {#if lk.canPublish}
         <!-- Microphone + devices + processing -->
