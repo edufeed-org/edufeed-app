@@ -41,12 +41,11 @@ export async function createGuestAccount(name) {
   // EventTemplate type rejects the `pubkey` field we pass alongside kind/
   // created_at/tags/content (same shape the signup wizard signs).
   const anySigner = /** @type {any} */ (signer);
-  const account = new SimpleAccount(publicKey, signer);
-  manager.addAccount(account);
-  manager.setActive(account);
-  setFlag(SIGNUP_FLAG(publicKey), '1');
-  setFlag(GUEST_FLAG(publicKey), '1');
 
+  // Sign BEFORE touching the manager/flags/eventStore: the signer exists
+  // independently of account registration, so a signing failure (e.g. a
+  // broken NIP-46 bridge, though guests are always local nsec keys today)
+  // must leave no trace — no active account, no flags, no nameless guest.
   const kind0 = await anySigner.signEvent({
     kind: 0,
     created_at: Math.floor(Date.now() / 1000),
@@ -54,6 +53,13 @@ export async function createGuestAccount(name) {
     content: JSON.stringify({ name: trimmed }),
     pubkey: publicKey
   });
+
+  const account = new SimpleAccount(publicKey, signer);
+  manager.addAccount(account);
+  manager.setActive(account);
+  setFlag(SIGNUP_FLAG(publicKey), '1');
+  setFlag(GUEST_FLAG(publicKey), '1');
+
   eventStore.add(kind0);
   publishEvent(kind0).catch((err) => console.warn('guest kind 0 publish failed:', err));
   const relayList = await buildSignedDefaultRelayList(signer).catch(() => null);

@@ -29,22 +29,27 @@ vi.mock('$lib/services/relay-list-backfill.js', () => ({
 // path under jsdom (see SignupModal.test.js for the same workaround). Stub
 // the keypair helper with a lightweight fake signer so this test exercises
 // guest-account.js's own logic, not that unrelated environment gap.
+//
+// Defined as a `vi.fn()` (default implementation below) so a single test can
+// override it with `mockReturnValueOnce` to hand back a signer whose
+// `signEvent` rejects, without disturbing the other tests' happy-path keys.
 const GUEST_PUBKEY = 'a'.repeat(64);
+const generateSignupKeypair = vi.fn(() => ({
+  privateKey: new Uint8Array(32).fill(1),
+  publicKey: GUEST_PUBKEY,
+  nsec: 'nsec1stub',
+  npub: 'npub1stub',
+  signer: {
+    signEvent: vi.fn(async (event) => ({
+      ...event,
+      id: 'b'.repeat(64),
+      sig: 'c'.repeat(128),
+      pubkey: GUEST_PUBKEY
+    }))
+  }
+}));
 vi.mock('$lib/helpers/signupKeypair.js', () => ({
-  generateSignupKeypair: () => ({
-    privateKey: new Uint8Array(32).fill(1),
-    publicKey: GUEST_PUBKEY,
-    nsec: 'nsec1stub',
-    npub: 'npub1stub',
-    signer: {
-      signEvent: vi.fn(async (event) => ({
-        ...event,
-        id: 'b'.repeat(64),
-        sig: 'c'.repeat(128),
-        pubkey: GUEST_PUBKEY
-      }))
-    }
-  })
+  generateSignupKeypair: (...args) => generateSignupKeypair(...args)
 }));
 
 const { createGuestAccount, isCallGuest, forgetGuestAccount } = await import(
@@ -73,6 +78,25 @@ describe('createGuestAccount', () => {
   it('refuses a blank name', async () => {
     await expect(createGuestAccount('   ')).rejects.toThrow('name-required');
     expect(manager.addAccount).not.toHaveBeenCalled();
+  });
+  it('leaves no trace when signing the kind 0 fails', async () => {
+    const brokenPubkey = 'd'.repeat(64);
+    generateSignupKeypair.mockReturnValueOnce({
+      privateKey: new Uint8Array(32).fill(2),
+      publicKey: brokenPubkey,
+      nsec: 'nsec1broken',
+      npub: 'npub1broken',
+      signer: { signEvent: vi.fn(async () => Promise.reject(new Error('sign failed'))) }
+    });
+
+    await expect(createGuestAccount('Ada')).rejects.toThrow('sign failed');
+
+    expect(manager.addAccount).not.toHaveBeenCalled();
+    expect(manager.setActive).not.toHaveBeenCalled();
+    expect(localStorage.getItem(`signed-up-here:${brokenPubkey}`)).toBeNull();
+    expect(localStorage.getItem(`call-guest:${brokenPubkey}`)).toBeNull();
+    expect(added).toHaveLength(0);
+    expect(publishEvent).not.toHaveBeenCalled();
   });
 });
 
