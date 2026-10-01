@@ -319,6 +319,17 @@ describe('SignupModal — Step 1 (Account)', () => {
     // step 1 — covered structurally by the addAccount call count above.
     expect(mockManager.addAccount).toHaveBeenCalledTimes(1);
   });
+
+  it('prefills the name input from the initialName prop (call-link guest flow)', async () => {
+    const { container } = render(SignupModal, {
+      props: { modalId: 'signup-test-initial-name', initialName: 'Ada' }
+    });
+
+    const nameInput = /** @type {HTMLInputElement} */ (
+      container.querySelector('#signup-name-input')
+    );
+    expect(nameInput.value).toBe('Ada');
+  });
 });
 
 describe('SignupModal — Step 2 (Profile)', () => {

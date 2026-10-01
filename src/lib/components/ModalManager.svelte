@@ -123,7 +123,11 @@
           onBack: () => modal.transitionModal('bunker', 'login')
         };
       case 'signup':
-        return { modalId, externalSignup: !!props?.externalSignup };
+        return {
+          modalId,
+          externalSignup: !!props?.externalSignup,
+          initialName: props?.initialName ?? ''
+        };
       case 'createPoll':
       case 'createNote':
         return { communityPubkey };

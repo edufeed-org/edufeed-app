@@ -20,7 +20,7 @@
   import EducatorContextFields from './shared/EducatorContextFields.svelte';
   import MembershipApplicationForm from './membership/MembershipApplicationForm.svelte';
 
-  let { modalId, externalSignup = false } = $props();
+  let { modalId, externalSignup = false, initialName = '' } = $props();
 
   // Educator-friendly wizard:
   //   Step 1 = name → creates SimpleAccount and activates it (user is logged in)
@@ -35,7 +35,7 @@
   const membershipEnabled = $derived(!!runtimeConfig.membership?.enabled);
 
   let userData = $state({
-    name: '',
+    name: initialName,
     about: '',
     picture: '',
     publicKey: '',
