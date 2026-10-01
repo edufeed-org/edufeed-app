@@ -222,11 +222,12 @@
     {:else}
       <ul class="mt-2 flex flex-col gap-2">
         {#each rows as row (row.pass.id)}
+          {@const rowTitle = passTitle(row.pass)}
           <li class="flex items-center gap-2 text-sm" data-testid="call-invite-pass">
             <span class="min-w-0 flex-1">
-              {#if passTitle(row.pass)}
+              {#if rowTitle}
                 <span class="font-medium break-words" data-testid="call-invite-pass-title"
-                  >{passTitle(row.pass)}</span
+                  >{rowTitle}</span
                 > ·
               {/if}
               {new Date(row.pass.created_at * 1000).toLocaleTimeString([], {

@@ -412,6 +412,21 @@ describe('in-call chat (data messages)', () => {
     expect(chat[0].at).toBe(9_000_000);
   });
 
+  it('clamps a replayed send time older than a call pass can live (12 h) to that floor', () => {
+    vi.useFakeTimers();
+    const now = 100_000_000_000;
+    vi.setSystemTime(new Date(now));
+    const bob = remote('b'.repeat(64) + ':x');
+    room.emit(
+      RoomEvent.DataReceived,
+      encode({ t: 'chat', text: 'uralt', n: 'o1', ts: 1 }),
+      bob,
+      undefined,
+      'edufeed.call.chat'
+    );
+    expect(svc.getLiveKitState().callChat.at(-1).at).toBe(now - 12 * 3600 * 1000);
+  });
+
   it('clamps a send time in the future to now', () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date(10_000_000));
@@ -447,6 +462,23 @@ describe('unexpected disconnects', () => {
     expect(state.disconnectReason).toBe(DisconnectReason.PARTICIPANT_REMOVED);
     expect(state.isConnected).toBe(false);
     off();
+  });
+
+  it('tears the dead Room down but keeps the call chat readable; nothing more is sent', async () => {
+    await svc.sendCallChat('vorher');
+    const track = audioTrack('TR_dead');
+    room.emit(RoomEvent.TrackSubscribed, track, { source: 'microphone' }, remote(ALICE + ':x'));
+    room.localParticipant.publishData.mockClear();
+    room.emit(RoomEvent.Disconnected, DisconnectReason.PARTICIPANT_REMOVED);
+    const state = svc.getLiveKitState();
+    expect(state.room).toBeNull();
+    expect(state.isConnected).toBe(false);
+    expect(state.canSignal).toBe(false);
+    expect(track.detach).toHaveBeenCalled();
+    expect(state.callChat.map((c) => c.text)).toEqual(['vorher']);
+    await svc.sendCallChat('danach');
+    expect(room.localParticipant.publishData).not.toHaveBeenCalled();
+    expect(svc.getLiveKitState().callChat.map((c) => c.text)).toEqual(['vorher']);
   });
 
   it('does not call the listener for our own disconnectFromRoom', async () => {

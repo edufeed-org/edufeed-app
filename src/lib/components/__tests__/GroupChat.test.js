@@ -1096,6 +1096,10 @@ vi.mock('$lib/paraglide/messages', () => ({
 }));
 
 const { default: GroupChat } = await import('$lib/components/groups/GroupChat.svelte');
+// Warm the lazily imported call-chat panel (its stub) once up front: its
+// first transform under a parallel run took longer than any findBy timeout,
+// so the first call-chat test failed only when other files ran alongside.
+await import('$lib/components/groups/call/CallChatPanel.svelte');
 
 const pointer = { relay: GROUP_RELAY, id: 'beechat' };
 
@@ -2524,7 +2528,7 @@ describe('GroupChat', () => {
         groupCallHolder.state.stageHidden = true;
         render(GroupChat, { props: { pointer: callPointer } });
         await fireEvent.click(await screen.findByTestId('chat-tab-call'));
-        expect(await screen.findByTestId('call-chat-panel')).toBeTruthy();
+        expect(await screen.findByTestId('call-chat-panel', {}, { timeout: 3000 })).toBeTruthy();
         await fireEvent.click(screen.getByTestId('chat-tab-channel'));
         expect(screen.queryByTestId('call-chat-panel')).toBeNull();
       });
@@ -2533,7 +2537,7 @@ describe('GroupChat', () => {
         inCallHere();
         groupCallHolder.state.stageHidden = true;
         render(GroupChat, { props: { pointer: callPointer } });
-        expect(await screen.findByTestId('call-chat-panel')).toBeTruthy();
+        expect(await screen.findByTestId('call-chat-panel', {}, { timeout: 3000 })).toBeTruthy();
         expect(screen.getByTestId('chat-tab-call').getAttribute('aria-selected')).toBe('true');
         await fireEvent.click(screen.getByTestId('chat-tab-channel'));
         await waitFor(() => expect(screen.queryByTestId('call-chat-panel')).toBeNull());
@@ -2566,7 +2570,7 @@ describe('GroupChat', () => {
         groupCallHolder.state.stageHidden = true;
         const { rerender } = render(GroupChat, { props: { pointer: callPointer } });
         await fireEvent.click(await screen.findByTestId('chat-tab-call'));
-        expect(await screen.findByTestId('call-chat-panel')).toBeTruthy();
+        expect(await screen.findByTestId('call-chat-panel', {}, { timeout: 3000 })).toBeTruthy();
         // The call ends here: isActiveFor(pointer) goes false reactively
         // when the channel's own pointer no longer matches the active call.
         await rerender({ pointer: { relay: GROUP_RELAY, id: 'elsewhere' } });

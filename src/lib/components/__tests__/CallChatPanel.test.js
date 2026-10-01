@@ -1,11 +1,12 @@
 // @ts-nocheck
 /** @vitest-environment jsdom */
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/svelte';
 
 const state = {
   callChat: [{ id: 'a:1', identity: 'b'.repeat(64) + ':1', text: 'Hallo zusammen', at: 1 }],
-  canSignal: true
+  canSignal: true,
+  isConnected: true
 };
 const sendCallChat = vi.fn(async () => {});
 vi.mock('$lib/services/livekit-connection.svelte.js', () => ({
@@ -18,6 +19,12 @@ vi.mock('$lib/stores/profile-map.svelte.js', () => ({
 
 const { default: CallChatPanel } = await import('$lib/components/groups/call/CallChatPanel.svelte');
 const props = { identityToPubkey: (id) => id.slice(0, 64) };
+
+beforeEach(() => {
+  state.canSignal = true;
+  state.isConnected = true;
+  sendCallChat.mockClear();
+});
 
 describe('CallChatPanel', () => {
   it('shows messages with the sender name', () => {
@@ -34,5 +41,18 @@ describe('CallChatPanel', () => {
     await fireEvent.keyDown(input, { key: 'Enter' });
     expect(sendCallChat).toHaveBeenCalledWith('Moin');
     expect(input.value).toBe('');
+  });
+
+  // The server ended the call (removed / dropped): the messages stay
+  // readable, but nothing can be sent into a dead Room.
+  it('disables the composer while not connected', async () => {
+    state.isConnected = false;
+    render(CallChatPanel, { props });
+    const input = screen.getByTestId('call-chat-input');
+    expect(input.disabled).toBe(true);
+    expect(screen.getByTestId('call-chat-send').disabled).toBe(true);
+    expect(screen.getByTestId('call-chat-message')).toBeTruthy();
+    await fireEvent.submit(input.closest('form'));
+    expect(sendCallChat).not.toHaveBeenCalled();
   });
 });

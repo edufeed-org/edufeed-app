@@ -40,7 +40,12 @@
     });
   });
 
+  // Not connected (the server ended the call): the messages stay readable,
+  // nothing can be sent.
+  const canSend = $derived(lk.isConnected && lk.canSignal);
+
   async function send() {
+    if (!canSend) return;
     const text = draft;
     draft = '';
     await sendCallChat(text);
@@ -71,7 +76,7 @@
       maxlength="2000"
       placeholder={m.groups_call_chat_placeholder()}
       bind:value={draft}
-      disabled={!lk.canSignal}
+      disabled={!canSend}
       data-testid="call-chat-input"
       onkeydown={(e) => {
         if (e.key === 'Enter' && !e.shiftKey) {
@@ -83,7 +88,7 @@
     <button
       type="submit"
       class="btn btn-sm btn-primary"
-      disabled={!lk.canSignal}
+      disabled={!canSend}
       data-testid="call-chat-send"
     >
       {m.groups_call_chat_send()}

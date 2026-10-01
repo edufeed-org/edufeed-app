@@ -111,6 +111,9 @@ const CHAT_MAX_CHARS = 2000;
 const CHAT_KEEP = 200;
 // Late joiners get each present participant's own recent messages (G).
 const CHAT_REPLAY_MAX = 50;
+// No call outlives a call pass (12 h): a replayed send time older than that
+// is bogus and is clamped, like one from the future.
+const CHAT_MAX_AGE_MS = 12 * 3600 * 1000;
 /** @type {Array<{id: string, identity: string, n: string, text: string, at: number}>} */
 let callChat = $state.raw([]);
 
@@ -286,14 +289,17 @@ export async function sendReaction(emoji) {
 /**
  * Keep a chat message, deduped by (identity, nonce) and ordered by send time.
  * `ts` is the sender's clock (a replay to a late joiner); without it the
- * message counts as sent now, and a `ts` in the future is clamped to now.
+ * message counts as sent now; a `ts` is clamped to [now - 12 h, now].
  * @param {string} identity @param {string} text @param {string} nonce @param {number} [ts]
  */
 function addChat(identity, text, nonce, ts) {
   const id = `${identity}:${nonce}`;
   if (callChat.some((c) => c.id === id)) return;
   const now = Date.now();
-  const at = typeof ts === 'number' && Number.isFinite(ts) && ts > 0 ? Math.min(ts, now) : now;
+  const at =
+    typeof ts === 'number' && Number.isFinite(ts)
+      ? Math.min(Math.max(ts, now - CHAT_MAX_AGE_MS), now)
+      : now;
   callChat = [...callChat, { id, identity, n: nonce, text, at }]
     .sort((a, b) => a.at - b.at)
     .slice(-CHAT_KEEP);
@@ -327,7 +333,7 @@ export async function sendCallChat(text) {
   const body = String(text ?? '')
     .trim()
     .slice(0, CHAT_MAX_CHARS);
-  if (!room || !canSignal || !body) return;
+  if (!room || !isConnected || !canSignal || !body) return;
   const nonce = Math.random().toString(36).slice(2, 12);
   addChat(room.localParticipant.identity, body, nonce);
   try {
@@ -606,12 +612,14 @@ export async function connectToRoom(token, url, opts = {}) {
     newRoom.on(
       RoomEvent.Disconnected,
       (/** @type {import('livekit-client').DisconnectReason | undefined} */ reason) => {
+        // Only the live Room, and only when we did not ask for it.
+        const unexpected = !disconnecting && room === newRoom;
         isConnected = false;
         connectionState = 'disconnected';
         disconnectReason = reason ?? null;
+        if (unexpected) dropDeadRoom();
         updateParticipants();
-        // Only the live Room, and only when we did not ask for it.
-        if (!disconnecting && room === newRoom) disconnectListener?.(reason);
+        if (unexpected) disconnectListener?.(reason);
       }
     );
     newRoom.on(
@@ -682,6 +690,29 @@ export async function connectToRoom(token, url, opts = {}) {
   } finally {
     isConnecting = false;
   }
+}
+
+/**
+ * The server or the network ended the Room: tear it down like
+ * disconnectFromRoom does, so nothing is sent into it any more, but keep
+ * the call chat readable on the end screen (cleared on leave / next join).
+ */
+function dropDeadRoom() {
+  if (typeof navigator !== 'undefined' && navigator.mediaDevices) {
+    navigator.mediaDevices.removeEventListener('devicechange', handleDeviceChange);
+  }
+  detachAllRemoteAudio();
+  room = null;
+  isConnected = false;
+  connectionState = 'disconnected';
+  isScreenSharing = false;
+  canPublish = false;
+  canSignal = false;
+  handRaised = false;
+  mutedIdentities = new Set();
+  raisedHands = new Set();
+  reactions = [];
+  speakingParticipantIds = new SvelteSet();
 }
 
 /**
