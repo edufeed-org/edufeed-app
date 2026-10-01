@@ -84,7 +84,10 @@ vi.mock('$lib/stores/profile-map.svelte.js', () => ({
   useProfileMap: () => () => new Map()
 }));
 function Stub() {}
-vi.mock('$lib/components/groups/call/ParticipantTile.svelte', () => ({ default: Stub }));
+vi.mock(
+  '$lib/components/groups/call/ParticipantTile.svelte',
+  () => import('./fixtures/ParticipantTileStub.svelte')
+);
 vi.mock('$lib/components/groups/call/ScreenShareTile.svelte', () => ({ default: Stub }));
 vi.mock('$lib/components/icons', () => ({
   MeetIcon: Stub,
@@ -158,10 +161,11 @@ const baseProps = {
   onLeave: vi.fn()
 };
 
-function remote(identity, { screenShare = false } = {}) {
+function remote(identity, { screenShare = false, metadata } = {}) {
   return {
     identity,
     sid: `sid-${identity}`,
+    metadata,
     getTrackPublication: (source) =>
       screenShare && source === 'screen_share' ? { track: { sid: 'ss' } } : undefined
   };
@@ -383,5 +387,23 @@ describe('layout', () => {
     expect(screen.getByTestId('group-call-spotlight')).toBeTruthy();
     expect(screen.getByTestId(`call-item-screen:${HEX}:x1`)).toBeTruthy();
     expect(screen.getByTestId(`call-item-seat:${HEX}:x1`)).toBeTruthy();
+  });
+
+  it('marks guests who joined through a call link', () => {
+    const GUEST = 'b'.repeat(64);
+    const MEMBER = 'c'.repeat(64);
+    lk.remoteParticipants = [
+      remote(`${GUEST}:1`, { metadata: '{"guest":true,"pass":"p"}' }),
+      remote(`${MEMBER}:1`)
+    ];
+    render(GroupCallStage, { props: baseProps });
+    const guestTile = screen
+      .getByTestId(`call-item-seat:${GUEST}:1`)
+      .querySelector('[data-testid="participant-tile-stub"]');
+    const memberTile = screen
+      .getByTestId(`call-item-seat:${MEMBER}:1`)
+      .querySelector('[data-testid="participant-tile-stub"]');
+    expect(guestTile.getAttribute('data-guest')).toBe('true');
+    expect(memberTile.getAttribute('data-guest')).toBe('false');
   });
 });

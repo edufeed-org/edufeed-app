@@ -30,6 +30,7 @@
    *   isMicOff?: boolean,
    *   isSpeaking?: boolean,
    *   handRaised?: boolean,
+   *   isGuest?: boolean,
    *   reactions?: Array<{id: string, emoji: string}>,
    *   profile?: any,
    *   volume?: number,
@@ -46,6 +47,7 @@
     isMicOff = false,
     isSpeaking = false,
     handRaised = false,
+    isGuest = false,
     reactions = [],
     profile = undefined,
     volume = 1,
@@ -220,6 +222,11 @@
     {#if isMicOff}
       <span class="badge badge-sm badge-neutral" title={m.groups_call_mic_off()}>
         <MicOffIcon class_="h-3.5 w-3.5" title="" />
+      </span>
+    {/if}
+    {#if isGuest}
+      <span class="badge badge-sm badge-info" data-testid="call-guest-badge">
+        {m.groups_call_guest_badge()}
       </span>
     {/if}
   </div>

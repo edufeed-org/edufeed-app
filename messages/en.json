@@ -3664,6 +3664,7 @@
   "groups_call_volume": "Volume",
   "groups_call_volume_reset": "Reset volume",
   "groups_call_mic_off": "Microphone off",
+  "groups_call_guest_badge": "Guest",
   "groups_call_pin": "Pin to the stage",
   "groups_call_unpin": "Unpin",
   "groups_call_fullscreen": "Full screen",

@@ -34,7 +34,8 @@ vi.mock('$lib/paraglide/messages', () => ({
   groups_call_volume: () => 'Volume',
   groups_call_volume_reset: () => 'Reset volume',
   groups_call_pin: () => 'Pin',
-  groups_call_unpin: () => 'Unpin'
+  groups_call_unpin: () => 'Unpin',
+  groups_call_guest_badge: () => 'Gast'
 }));
 
 const { default: ParticipantTile } = await import(
@@ -100,6 +101,21 @@ describe('ParticipantTile', () => {
     });
     expect(screen.getByTitle('Microphone off')).toBeTruthy();
     expect(screen.getByTitle('Hand raised')).toBeTruthy();
+  });
+
+  it('shows a Gast badge for a participant who joined through a call link', () => {
+    render(ParticipantTile, {
+      props: { participant: fakeParticipant(`${HEX}:x1`), pubkey: HEX, isGuest: true }
+    });
+    const badge = screen.getByTestId('call-guest-badge');
+    expect(badge.textContent).toContain('Gast');
+  });
+
+  it('shows no Gast badge for a regular member', () => {
+    render(ParticipantTile, {
+      props: { participant: fakeParticipant(`${HEX}:x1`), pubkey: HEX }
+    });
+    expect(screen.queryByTestId('call-guest-badge')).toBeNull();
   });
 
   it('floats reactions sent from this seat', () => {

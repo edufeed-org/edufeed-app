@@ -44,6 +44,7 @@
     setScreenShareQuality
   } from '$lib/services/call-prefs.js';
   import { fitGrid, nextSpotlight } from '$lib/groups/call-layout.js';
+  import { isGuestParticipant } from '$lib/groups/livekit.js';
   import { Track } from 'livekit-client';
   import { useProfileMap } from '$lib/stores/profile-map.svelte.js';
   import { showToast } from '$lib/helpers/toast';
@@ -385,6 +386,7 @@
       isMicOff={it.isLocal ? lk.isMuted : lk.mutedIdentities.has(it.participant.identity)}
       isSpeaking={lk.speakingParticipantIds.has(it.participant.identity)}
       handRaised={lk.raisedHands.has(it.participant.identity)}
+      isGuest={isGuestParticipant(it.participant)}
       reactions={reactionsOf(it.participant.identity)}
       profile={getProfiles().get(pk ?? '')}
       volume={volumeFor(pk)}
