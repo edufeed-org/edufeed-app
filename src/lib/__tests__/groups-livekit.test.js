@@ -19,6 +19,7 @@ const {
   identityToPubkey,
   probeRelayAvSupport,
   requestGroupCallToken,
+  isGuestParticipant,
   GroupCallTokenError,
   __resetAvProbeCache
 } = await import('$lib/groups/livekit.js');
@@ -222,5 +223,52 @@ describe('requestGroupCallToken', () => {
     const err = await requestGroupCallToken('nope', 'g', user).catch((e) => e);
     expect(err.reason).toBe('network');
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+});
+
+describe('requestGroupCallToken with a call pass code', () => {
+  it('puts ["code", code] into the signed NIP-98 event, not the URL', async () => {
+    const signEvent = vi.fn(async (draft) => ({ ...draft, id: 'x', sig: 'y' }));
+    const fetchMock = vi.fn(
+      async () =>
+        new Response(JSON.stringify({ server_url: 'wss://lk', participant_token: 't' }), {
+          status: 200
+        })
+    );
+    vi.stubGlobal('fetch', fetchMock);
+    await requestGroupCallToken(
+      'wss://groups.example',
+      'g1',
+      { pubkey: HEX, signer: { signEvent } },
+      { code: 'C'.repeat(22) }
+    );
+    const signed = signEvent.mock.calls[0][0];
+    expect(signed.tags).toContainEqual(['code', 'C'.repeat(22)]);
+    expect(fetchMock.mock.calls[0][0]).not.toContain('C'.repeat(22));
+  });
+  it('maps "403 call pass …" to reason pass', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response('call pass expired', { status: 403 }))
+    );
+    const signEvent = vi.fn(async (d) => d);
+    await expect(
+      requestGroupCallToken(
+        'wss://groups.example',
+        'g1',
+        { pubkey: HEX, signer: { signEvent } },
+        { code: 'C'.repeat(22) }
+      )
+    ).rejects.toMatchObject({ reason: 'pass', message: 'call pass expired' });
+  });
+});
+
+describe('isGuestParticipant', () => {
+  it('reads {"guest":true} from participant metadata', () => {
+    expect(isGuestParticipant({ metadata: '{"guest":true,"pass":"abc"}' })).toBe(true);
+    expect(isGuestParticipant({ metadata: '{"guest":false}' })).toBe(false);
+    expect(isGuestParticipant({ metadata: 'not json' })).toBe(false);
+    expect(isGuestParticipant({})).toBe(false);
+    expect(isGuestParticipant(null)).toBe(false);
   });
 });

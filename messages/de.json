@@ -2537,6 +2537,7 @@
   "groups_call_error_forbidden": "Nur Mitglieder dieses Kanals können dem Anruf beitreten.",
   "groups_call_error_not_enabled": "Anrufe sind für diesen Kanal ausgeschaltet.",
   "groups_call_error_generic": "Der Anruf konnte nicht gestartet werden. Bitte versuche es erneut.",
+  "groups_call_error_pass": "Dieser Einladungslink gilt nicht mehr.",
   "groups_call_mute": "Stummschalten",
   "groups_call_unmute": "Stummschaltung aufheben",
   "groups_call_mute_participant": "Teilnehmer stummschalten",

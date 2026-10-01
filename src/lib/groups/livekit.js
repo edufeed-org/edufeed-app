@@ -76,6 +76,21 @@ export function identityToPubkey(identity) {
   return /^[0-9a-f]{64}$/i.test(head) ? head.toLowerCase() : null;
 }
 
+/**
+ * A seat that joined through a call pass: the relay mints those tokens with
+ * participant metadata `{"guest":true,"pass":"<id>"}`.
+ * @param {{metadata?: string} | null | undefined} participant
+ */
+export function isGuestParticipant(participant) {
+  const raw = participant?.metadata;
+  if (typeof raw !== 'string' || !raw) return false;
+  try {
+    return JSON.parse(raw)?.guest === true;
+  } catch {
+    return false;
+  }
+}
+
 /** @type {Map<string, Promise<boolean>>} */
 const probeCache = new Map();
 
@@ -118,7 +133,7 @@ export function probeRelayAvSupport(relayUrl) {
   return promise;
 }
 
-/** @typedef {'unauthorized' | 'forbidden' | 'not-enabled' | 'server' | 'network'} GroupCallTokenReason */
+/** @typedef {'unauthorized' | 'forbidden' | 'not-enabled' | 'pass' | 'server' | 'network'} GroupCallTokenReason */
 
 export class GroupCallTokenError extends Error {
   /**
@@ -139,17 +154,26 @@ export class GroupCallTokenError extends Error {
  * signer}` shape publishToGroupRelay takes. The NIP-98 event is signed
  * against the token URL itself (the relay compares its `u` tag to
  * `<scheme><domain>/.well-known/nip29/livekit/<id>` byte for byte).
+ *
+ * `opts.code`: a call pass code (call-passes.js). It rides in the SIGNED
+ * NIP-98 event as `["code", …]` — the relay checks `u` against the path
+ * only, and a signed tag cannot be swapped.
  * @param {string} relayUrl
  * @param {string} groupId
  * @param {{pubkey: string, signer: {signEvent: (draft: any) => Promise<any>}}} user
+ * @param {{code?: string}} [opts]
  * @returns {Promise<{serverUrl: string, participantToken: string}>}
  */
-export async function requestGroupCallToken(relayUrl, groupId, user) {
+export async function requestGroupCallToken(relayUrl, groupId, user, opts = {}) {
   const url = livekitTokenUrl(relayUrl, groupId);
   if (!url) throw new GroupCallTokenError('network', `not a relay url: ${relayUrl}`);
 
-  const authorization = await createNIP98AuthHeader(url, 'GET', null, (draft) =>
-    user.signer.signEvent({ ...draft, pubkey: user.pubkey })
+  const authorization = await createNIP98AuthHeader(
+    url,
+    'GET',
+    null,
+    (draft) => user.signer.signEvent({ ...draft, pubkey: user.pubkey }),
+    opts.code ? [['code', opts.code]] : []
   );
 
   const controller = new AbortController();
@@ -175,7 +199,11 @@ export async function requestGroupCallToken(relayUrl, groupId, user) {
     let reason = 'server';
     if (response.status === 401) reason = 'unauthorized';
     else if (response.status === 403)
-      reason = /not enabled/i.test(body) ? 'not-enabled' : 'forbidden';
+      reason = /not enabled/i.test(body)
+        ? 'not-enabled'
+        : /^call pass/i.test(body.trim())
+          ? 'pass'
+          : 'forbidden';
     throw new GroupCallTokenError(reason, message, response.status);
   }
 

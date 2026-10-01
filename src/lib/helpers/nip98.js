@@ -22,9 +22,10 @@ async function sha256Hex(str) {
  * @param {string} method - HTTP method (GET, POST, etc.)
  * @param {string|null} body - Request body (for payload hash)
  * @param {(draft: any) => Promise<any>} signer - Signs the event draft
+ * @param {string[][]} [extraTags] - appended after u/method/payload (e.g. a call pass `code`)
  * @returns {Promise<string>} "Nostr <base64-encoded-signed-event>"
  */
-export async function createNIP98AuthHeader(url, method, body, signer) {
+export async function createNIP98AuthHeader(url, method, body, signer, extraTags = []) {
   /** @type {string[][]} */
   const tags = [
     ['u', url],
@@ -35,6 +36,8 @@ export async function createNIP98AuthHeader(url, method, body, signer) {
     const hash = await sha256Hex(body);
     tags.push(['payload', hash]);
   }
+
+  tags.push(...extraTags);
 
   const draft = {
     kind: 27235,

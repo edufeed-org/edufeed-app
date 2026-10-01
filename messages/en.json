@@ -2537,6 +2537,7 @@
   "groups_call_error_forbidden": "Only members of this channel can join its call.",
   "groups_call_error_not_enabled": "Calls are switched off for this channel.",
   "groups_call_error_generic": "The call could not be started. Please try again.",
+  "groups_call_error_pass": "This invitation link is no longer valid.",
   "groups_call_mute": "Mute",
   "groups_call_unmute": "Unmute",
   "groups_call_mute_participant": "Mute participant",

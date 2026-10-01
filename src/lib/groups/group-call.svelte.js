@@ -33,6 +33,10 @@ let token = $state(null);
 let title = $state('');
 /** @type {string | null} */
 let href = $state(null);
+// The call pass code (if the active call was joined as a guest) — kept so
+// a retry after a failed token request can reuse it.
+/** @type {string | null} */
+let code = $state(null);
 // Mounted stage views (the dock shows while none is on screen) and whether
 // the user stepped from the stage back to the chat while staying in the call.
 let stageViews = $state(0);
@@ -52,6 +56,7 @@ let attempt = 0;
  *   token: string | null,
  *   title: string,
  *   href: string | null,
+ *   code: string | null,
  *   stageViews: number,
  *   stageHidden: boolean,
  *   chatBeside: boolean,
@@ -81,6 +86,9 @@ export function getGroupCallState() {
     get href() {
       return href;
     },
+    get code() {
+      return code;
+    },
     get stageViews() {
       return stageViews;
     },
@@ -104,7 +112,7 @@ export function getGroupCallState() {
  * back); re-joining after an error retries. Joins muted, camera off.
  * @param {{id: string, relay: string}} pointer
  * @param {{pubkey: string, signer: any}} user
- * @param {{title?: string, href?: string | null}} [view] for the dock
+ * @param {{title?: string, href?: string | null, code?: string}} [view] for the dock
  */
 export async function joinGroupCall(pointer, user, view = {}) {
   const key = channelKey(pointer);
@@ -121,8 +129,11 @@ export async function joinGroupCall(pointer, user, view = {}) {
   serverUrl = null;
   title = view.title ?? '';
   href = view.href ?? null;
+  code = view.code ?? null;
   try {
-    const result = await requestGroupCallToken(pointer.relay, pointer.id, user);
+    const result = await requestGroupCallToken(pointer.relay, pointer.id, user, {
+      code: view.code
+    });
     if (myAttempt !== attempt) return;
     serverUrl = result.serverUrl;
     token = result.participantToken;
@@ -187,6 +198,7 @@ export async function leaveGroupCall() {
   serverUrl = null;
   title = '';
   href = null;
+  code = null;
   stageHidden = false;
   if (wasActive) {
     const { disconnectFromRoom } = await import('$lib/services/livekit-connection.svelte.js');
@@ -208,6 +220,8 @@ export function callErrorMessage(err) {
       return m.groups_call_error_forbidden();
     case 'not-enabled':
       return m.groups_call_error_not_enabled();
+    case 'pass':
+      return m.groups_call_error_pass();
     default:
       return m.groups_call_error_generic();
   }

@@ -29,7 +29,8 @@ vi.mock('$lib/paraglide/messages', () => ({
   groups_call_error_unauthorized: () => 'unauthorized-msg',
   groups_call_error_forbidden: () => 'forbidden-msg',
   groups_call_error_not_enabled: () => 'not-enabled-msg',
-  groups_call_error_generic: () => 'generic-msg'
+  groups_call_error_generic: () => 'generic-msg',
+  groups_call_error_pass: () => 'pass-msg'
 }));
 
 const { GroupCallTokenError } = await import('$lib/groups/livekit.js');
@@ -72,7 +73,7 @@ describe('joinGroupCall', () => {
     const pending = joinGroupCall(P1, USER);
     expect(s.phase).toBe('requesting');
     expect(s.activeKey).not.toBeNull();
-    expect(requestGroupCallToken).toHaveBeenCalledWith(RELAY, 'room-1', USER);
+    expect(requestGroupCallToken).toHaveBeenCalledWith(RELAY, 'room-1', USER, { code: undefined });
 
     resolve({ serverUrl: 'wss://livekit.example', participantToken: 'jwt' });
     await pending;
@@ -248,5 +249,23 @@ describe('callErrorMessage', () => {
   });
   it('maps a plain Error to the generic message', () => {
     expect(callErrorMessage(new Error('boom'))).toBe('generic-msg');
+  });
+});
+
+describe('call pass code', () => {
+  it('passes the code to the token request and keeps it for retry', async () => {
+    requestGroupCallToken.mockResolvedValue({ serverUrl: 'wss://lk', participantToken: 't' });
+    await joinGroupCall(P1, USER, { title: 'x', code: 'C'.repeat(22) });
+    expect(requestGroupCallToken).toHaveBeenCalledWith(RELAY, 'room-1', USER, {
+      code: 'C'.repeat(22)
+    });
+    expect(getGroupCallState().code).toBe('C'.repeat(22));
+    await leaveGroupCall();
+    expect(getGroupCallState().code).toBeNull();
+  });
+  it('explains a refused pass', () => {
+    expect(callErrorMessage(new GroupCallTokenError('pass', 'call pass expired', 403))).toBe(
+      'pass-msg'
+    );
   });
 });
