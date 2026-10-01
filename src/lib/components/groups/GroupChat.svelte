@@ -764,10 +764,15 @@
   // "In a call HERE" — the store holds one call app-wide; a call in another
   // channel must not take over this channel's body.
   const inCallHere = $derived(call.isActiveFor(pointer) && call.phase !== 'idle');
-  // The call-chat tab only makes sense while the call here is live; once it
-  // ends, land back on the channel chat rather than a dead tab.
+  // A call starting here opens on its chat (that is where the people in the
+  // call talk, guests included); once it ends, land back on the channel chat
+  // rather than a dead tab. Only on the edge — a user who picks "Kanal"
+  // during the call stays there. Plain `let`: bookkeeping, never rendered.
+  let wasInCallHere = false;
   $effect(() => {
-    if (!inCallHere) chatTab = 'channel';
+    const now = inCallHere;
+    if (now !== wasInCallHere) chatTab = now ? 'call' : 'channel';
+    wasInCallHere = now;
   });
   // The call moved to its own window (Document PiP): the channel shows its
   // chat, with a bar to bring the call back.

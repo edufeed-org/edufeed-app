@@ -2522,6 +2522,20 @@ describe('GroupChat', () => {
         expect(screen.queryByTestId('call-chat-panel')).toBeNull();
       });
 
+      it('opens on the call chat when the call here starts, and the channel tab then sticks', async () => {
+        inCallHere();
+        groupCallHolder.state.stageHidden = true;
+        render(GroupChat, { props: { pointer: callPointer } });
+        expect(await screen.findByTestId('call-chat-panel')).toBeTruthy();
+        expect(screen.getByTestId('chat-tab-call').getAttribute('aria-selected')).toBe('true');
+        await fireEvent.click(screen.getByTestId('chat-tab-channel'));
+        await waitFor(() => expect(screen.queryByTestId('call-chat-panel')).toBeNull());
+        // Still in the call: nothing pulls the user back to the call chat.
+        await new Promise((r) => setTimeout(r, 20));
+        expect(screen.queryByTestId('call-chat-panel')).toBeNull();
+        expect(screen.getByTestId('channel-chat-body').className).toContain('contents');
+      });
+
       it('shows no tabs outside a call', async () => {
         render(GroupChat, { props: { pointer: callPointer } });
         await screen.findByTestId('group-name');
@@ -2532,6 +2546,7 @@ describe('GroupChat', () => {
         inCallHere();
         groupCallHolder.state.stageHidden = true;
         render(GroupChat, { props: { pointer: callPointer } });
+        await fireEvent.click(await screen.findByTestId('chat-tab-channel'));
         const channelBody = await screen.findByTestId('channel-chat-body');
         expect(channelBody.className).toContain('contents');
         await fireEvent.click(await screen.findByTestId('chat-tab-call'));
