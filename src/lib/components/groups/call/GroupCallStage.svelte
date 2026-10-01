@@ -60,7 +60,8 @@
     HandIcon,
     SmilePlusIcon,
     ChatIcon,
-    ExternalLinkIcon
+    ExternalLinkIcon,
+    LinkIcon
   } from '$lib/components/icons';
   import ParticipantTile from './ParticipantTile.svelte';
   import ScreenShareTile from './ScreenShareTile.svelte';
@@ -76,11 +77,14 @@
    *   chatOpen?: boolean,
    *   onPopOut?: () => void,
    *   onPopIn?: () => void,
+   *   onInvite?: () => void,
    *   registerView?: () => () => void
    * }}
    * `chatOpen`: the chat sits beside the stage (wide screens);
    * `onPopOut`: offered where the call can move to its own window;
    * `onPopIn`: this stage IS that window — the way back to the tab.
+   * `onInvite`: offered when the parent has resolved guest links are
+   * available for this channel (relay support + membership).
    */
   let {
     title,
@@ -91,6 +95,7 @@
     chatOpen = false,
     onPopOut = undefined,
     onPopIn = undefined,
+    onInvite = undefined,
     registerView = undefined
   } = $props();
 
@@ -431,6 +436,17 @@
       {/if}
     </div>
     <div class="flex shrink-0 items-center gap-2">
+      {#if onInvite}
+        <button
+          class="btn btn-ghost btn-sm"
+          onclick={onInvite}
+          title={m.groups_call_invite_title()}
+          data-testid="group-call-invite"
+        >
+          <LinkIcon class_="h-4 w-4" title="" />
+          <span class="hidden sm:inline">{m.groups_call_invite_button()}</span>
+        </button>
+      {/if}
       {#if onPopOut}
         <button
           class="btn btn-square btn-ghost btn-sm"

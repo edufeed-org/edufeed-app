@@ -88,6 +88,7 @@
   import { PeopleIcon, MoreIcon, MeetIcon, SettingsIcon } from '$lib/components/icons';
   import { lazyComponent } from '$lib/helpers/lazy-component.svelte.js';
   import { hasLivekitTag, identityToPubkey, probeRelayAvSupport } from '$lib/groups/livekit.js';
+  import { probeCallPassSupport } from '$lib/groups/call-passes.js';
   import { enableGroupCalls } from '$lib/groups/enable-group-calls.js';
   import { useCallPresence } from '$lib/groups/call-presence.svelte.js';
   import {
@@ -746,6 +747,9 @@
   const CallStage = lazyComponent(
     () => import('$lib/components/groups/call/GroupCallStage.svelte')
   );
+  const CallInviteDialog = lazyComponent(
+    () => import('$lib/components/groups/call/CallInviteDialog.svelte')
+  );
   const avEnabled = $derived(hasLivekitTag(metadataEvent));
   // Relay-published kind 39004 ("who is live"), only subscribed while the
   // group is an AV space at all.
@@ -835,6 +839,24 @@
     };
   });
   const canStartCall = $derived(isAdmin && !avEnabled && avSupported);
+
+  // Guest links: members of an AV channel on a relay that speaks call
+  // passes (docs/nips/nip29-call-passes.md). Probed once the call is on.
+  let passesSupported = $state(false);
+  let inviteOpen = $state(false);
+  $effect(() => {
+    const relay = pointer.relay;
+    const id = pointer.id;
+    if (!avEnabled || !inCallHere) return;
+    let alive = true;
+    probeCallPassSupport(relay, id).then((ok) => {
+      if (alive) passesSupported = ok;
+    });
+    return () => {
+      alive = false;
+    };
+  });
+  const canInvite = $derived(passesSupported && canWrite && inCallHere);
 
   async function enableAndStartCall() {
     const user = getActiveUser();
@@ -1748,6 +1770,7 @@
                 onShowChat={showChatFromStage}
                 chatOpen={call.chatBeside && wideScreen}
                 onPopOut={canPopOut ? popOutHere : undefined}
+                onInvite={canInvite ? () => (inviteOpen = true) : undefined}
                 registerView={() =>
                   registerCallStageView(`${window.location.pathname}${window.location.search}`)}
               />
@@ -1939,4 +1962,17 @@
       </ThreadPanel>
     {/if}
   </div>
+
+  {#if inviteOpen && CallInviteDialog.Component}
+    {@const user = getActiveUser()}
+    {#if user?.signer}
+      <CallInviteDialog.Component
+        {pointer}
+        {user}
+        {isAdmin}
+        title={displayTitle}
+        onClose={() => (inviteOpen = false)}
+      />
+    {/if}
+  {/if}
 </div>

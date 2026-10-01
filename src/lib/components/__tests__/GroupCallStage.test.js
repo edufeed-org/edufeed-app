@@ -99,7 +99,8 @@ vi.mock('$lib/components/icons', () => ({
   HandIcon: Stub,
   SmilePlusIcon: Stub,
   ChatIcon: Stub,
-  ExternalLinkIcon: Stub
+  ExternalLinkIcon: Stub,
+  LinkIcon: Stub
 }));
 vi.mock('$lib/paraglide/messages', () => ({
   groups_call_leave: () => 'Leave call',
@@ -133,6 +134,8 @@ vi.mock('$lib/paraglide/messages', () => ({
   groups_call_show_chat: () => 'Chat',
   groups_call_pop_out: () => 'Pop out',
   groups_call_pop_in: () => 'Back to tab',
+  groups_call_invite_title: () => 'Invite guests',
+  groups_call_invite_button: () => 'Invite link',
   groups_call_error_mic_denied: () => 'Microphone access denied',
   groups_call_error_mic_missing: () => 'No microphone',
   groups_call_error_camera_denied: () => 'Camera access denied',
@@ -256,6 +259,16 @@ describe('GroupCallStage — a view, not the connection owner', () => {
     render(GroupCallStage, { props: { ...baseProps, onPopIn } });
     await fireEvent.click(screen.getByRole('button', { name: 'Back to tab' }));
     expect(onPopIn).toHaveBeenCalledTimes(1);
+  });
+
+  it('offers Einladungslink only when the parent passes onInvite', async () => {
+    const { unmount } = render(GroupCallStage, { props: baseProps });
+    expect(screen.queryByTestId('group-call-invite')).toBeNull();
+    unmount();
+    const onInvite = vi.fn();
+    render(GroupCallStage, { props: { ...baseProps, onInvite } });
+    await fireEvent.click(screen.getByTestId('group-call-invite'));
+    expect(onInvite).toHaveBeenCalled();
   });
 
   // The pop-out is another document: menus must close on clicks in the
