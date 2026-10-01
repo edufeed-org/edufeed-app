@@ -87,15 +87,21 @@
 
 <!-- Mobile Layout -->
 {#if activeUser()}
-  <div class="lg:hidden">
-    <div class="drawer">
+  <!-- Every box from the root <main> down to the child layout keeps a
+    definite height (flex-1 + min-h-0, h-full): bounded views — the channel
+    chat and the call stage inside it — resolve h-full against this chain.
+    A plain block here let them grow with their content, so the page scrolled
+    instead of the timeline (laoc, 2026-10-01). Long views still overflow
+    into <main>, which stays the scroll surface. -->
+  <div class="flex min-h-0 flex-1 flex-col lg:hidden">
+    <div class="drawer min-h-0 flex-1">
       <input
         id="community-drawer"
         type="checkbox"
         class="drawer-toggle"
         bind:checked={leftDrawerOpen}
       />
-      <div class="drawer-content flex h-dvh flex-col">
+      <div class="drawer-content flex h-full min-h-0 flex-col">
         <!-- Unified Mobile Header -->
         <div
           data-testid="mobile-community-header"
@@ -155,7 +161,7 @@
         </div>
 
         <!-- Main Content (child layout renders here) -->
-        <div class="flex-1">
+        <div class="flex min-h-0 flex-1 flex-col">
           {@render children()}
         </div>
       </div>
@@ -188,7 +194,7 @@
     </div>
   </div>
 {:else}
-  <div class="flex flex-col lg:hidden">
+  <div class="flex min-h-0 flex-1 flex-col lg:hidden">
     {@render children()}
   </div>
 {/if}
