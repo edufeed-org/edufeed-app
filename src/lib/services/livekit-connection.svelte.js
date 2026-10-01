@@ -109,7 +109,9 @@ const REACTION_TTL_MS = 4000;
 const CHAT_TOPIC = 'edufeed.call.chat';
 const CHAT_MAX_CHARS = 2000;
 const CHAT_KEEP = 200;
-/** @type {Array<{id: string, identity: string, text: string, at: number}>} */
+// Late joiners get each present participant's own recent messages (G).
+const CHAT_REPLAY_MAX = 50;
+/** @type {Array<{id: string, identity: string, n: string, text: string, at: number}>} */
 let callChat = $state.raw([]);
 
 /**
@@ -281,11 +283,43 @@ export async function sendReaction(emoji) {
   await publishSignal({ t: 'react', e: emoji, n: nonce });
 }
 
-/** @param {string} identity @param {string} text @param {string} nonce */
-function addChat(identity, text, nonce) {
+/**
+ * Keep a chat message, deduped by (identity, nonce) and ordered by send time.
+ * `ts` is the sender's clock (a replay to a late joiner); without it the
+ * message counts as sent now, and a `ts` in the future is clamped to now.
+ * @param {string} identity @param {string} text @param {string} nonce @param {number} [ts]
+ */
+function addChat(identity, text, nonce, ts) {
   const id = `${identity}:${nonce}`;
   if (callChat.some((c) => c.id === id)) return;
-  callChat = [...callChat, { id, identity, text, at: Date.now() }].slice(-CHAT_KEEP);
+  const now = Date.now();
+  const at = typeof ts === 'number' && Number.isFinite(ts) && ts > 0 ? Math.min(ts, now) : now;
+  callChat = [...callChat, { id, identity, n: nonce, text, at }]
+    .sort((a, b) => a.at - b.at)
+    .slice(-CHAT_KEEP);
+}
+
+/**
+ * Hand a newcomer MY recent messages (never anyone else's: a receiver takes
+ * the sender identity from LiveKit, so only the author can vouch for a
+ * message). Oldest first, with the original send time.
+ * @param {string} identity the newcomer
+ */
+async function replayOwnChat(identity) {
+  if (!room || !canSignal || !identity) return;
+  const local = room.localParticipant;
+  const mine = callChat.filter((c) => c.identity === local.identity).slice(-CHAT_REPLAY_MAX);
+  for (const c of mine) {
+    try {
+      await local.publishData(
+        new TextEncoder().encode(JSON.stringify({ t: 'chat', text: c.text, n: c.n, ts: c.at })),
+        { reliable: true, topic: CHAT_TOPIC, destinationIdentities: [identity] }
+      );
+    } catch (err) {
+      console.warn('call chat history not sent:', err);
+      return;
+    }
+  }
 }
 
 /** @param {string} text */
@@ -331,7 +365,12 @@ function handleSignal(payload, participant, _kind, topic) {
       chat.n.length > 0 &&
       chat.n.length <= 32
     ) {
-      addChat(participant.identity, chat.text.trim(), chat.n);
+      addChat(
+        participant.identity,
+        chat.text.trim(),
+        chat.n,
+        typeof chat.ts === 'number' ? chat.ts : undefined
+      );
     }
     return;
   }
@@ -511,6 +550,8 @@ export async function connectToRoom(token, url, opts = {}) {
       if (handRaised && participant?.identity) {
         publishSignal({ t: 'hand', v: true }, [participant.identity]);
       }
+      // ... and the chat so far, as far as it is mine to tell.
+      if (participant?.identity) replayOwnChat(participant.identity);
       updateParticipants();
       recomputeMuted();
     });
@@ -761,7 +802,7 @@ export async function toggleScreenShare() {
 
 /**
  * Get reactive connection state.
- * @returns {{ isConnected: boolean, isConnecting: boolean, isMuted: boolean, isCameraOff: boolean, isScreenSharing: boolean, canPublish: boolean, canSignal: boolean, connectionState: 'connected' | 'reconnecting' | 'disconnected', disconnectReason: import('livekit-client').DisconnectReason | null, mutedIdentities: Set<string>, raisedHands: Set<string>, reactions: Array<{id: string, identity: string, emoji: string}>, callChat: Array<{id: string, identity: string, text: string, at: number}>, localParticipant: import('livekit-client').LocalParticipant | null, remoteParticipants: import('livekit-client').RemoteParticipant[], room: Room | null, speakingParticipantIds: Set<string>, audioInputDevices: MediaDeviceInfo[], activeAudioDeviceId: string, audioOutputDevices: MediaDeviceInfo[], activeAudioOutputDeviceId: string, videoInputDevices: MediaDeviceInfo[], activeVideoDeviceId: string }}
+ * @returns {{ isConnected: boolean, isConnecting: boolean, isMuted: boolean, isCameraOff: boolean, isScreenSharing: boolean, canPublish: boolean, canSignal: boolean, connectionState: 'connected' | 'reconnecting' | 'disconnected', disconnectReason: import('livekit-client').DisconnectReason | null, mutedIdentities: Set<string>, raisedHands: Set<string>, reactions: Array<{id: string, identity: string, emoji: string}>, callChat: Array<{id: string, identity: string, n: string, text: string, at: number}>, localParticipant: import('livekit-client').LocalParticipant | null, remoteParticipants: import('livekit-client').RemoteParticipant[], room: Room | null, speakingParticipantIds: Set<string>, audioInputDevices: MediaDeviceInfo[], activeAudioDeviceId: string, audioOutputDevices: MediaDeviceInfo[], activeAudioOutputDeviceId: string, videoInputDevices: MediaDeviceInfo[], activeVideoDeviceId: string }}
  */
 export function getLiveKitState() {
   return {

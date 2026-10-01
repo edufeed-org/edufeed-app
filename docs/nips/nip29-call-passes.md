@@ -143,6 +143,17 @@ for groups that belong to that community only.
 
 Guests do not read the group's events, so a call carries its own chat as
 LiveKit data messages: reliable, topic `edufeed.call.chat`, payload
-`{"t":"chat","text":"<≤2000 chars>","n":"<nonce ≤32 chars>"}`. Receivers
-dedupe on `(sender identity, n)` and drop anything else. Nothing is stored;
-the chat ends with the call. Clients that ignore the topic are unaffected.
+`{"t":"chat","text":"<≤2000 chars>","n":"<nonce ≤32 chars>","ts":<ms>}`,
+`ts` (the sender's send time, unix milliseconds) optional. Receivers dedupe
+on `(sender identity, n)`, drop anything else, and order the chat by `ts`
+where present (a message without one counts as sent on receipt; a `ts` in
+the future is clamped to now). Nothing is stored; the chat ends with the
+call. Clients that ignore the topic are unaffected.
+
+Late joiners: when a participant joins, every participant already present
+sends the newcomer (`destinationIdentities`) its OWN recent messages, oldest
+first, at most the last 50, as ordinary chat payloads with `ts` set to the
+original send time. A client MUST NOT relay anyone else's messages — the
+sender identity a receiver sees is the one LiveKit verified, so only the
+author can vouch for a message. Messages of people who already left are
+therefore not recoverable.

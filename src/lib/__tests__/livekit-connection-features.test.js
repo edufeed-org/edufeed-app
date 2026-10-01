@@ -348,6 +348,84 @@ describe('in-call chat (data messages)', () => {
     expect(svc.getLiveKitState().callChat.map((c) => c.text)).toEqual(['hi']);
   });
 
+  // Late joiners: the chat is ephemeral, so each present participant hands a
+  // newcomer its OWN recent messages (never anyone else's — the sender
+  // identity must stay LiveKit-verified), with their original send time.
+  it('sends a newcomer only my own recent messages, oldest first, with their send time', async () => {
+    const me = room.localParticipant.identity;
+    const bob = remote('b'.repeat(64) + ':x');
+    await svc.sendCallChat('erste');
+    room.emit(
+      RoomEvent.DataReceived,
+      encode({ t: 'chat', text: 'von bob', n: 'b1' }),
+      bob,
+      undefined,
+      'edufeed.call.chat'
+    );
+    await svc.sendCallChat('zweite');
+    const mine = svc.getLiveKitState().callChat.filter((c) => c.identity === me);
+    room.localParticipant.publishData.mockClear();
+
+    const carol = remote('c'.repeat(64) + ':y');
+    room.emit(RoomEvent.ParticipantConnected, carol);
+    await new Promise((r) => setTimeout(r, 0));
+
+    const replays = room.localParticipant.publishData.mock.calls.filter(
+      ([, opts]) => opts.topic === 'edufeed.call.chat'
+    );
+    expect(replays).toHaveLength(2);
+    for (const [, opts] of replays) {
+      expect(opts).toMatchObject({ reliable: true, destinationIdentities: [carol.identity] });
+    }
+    const payloads = replays.map(([bytes]) => decode(bytes));
+    expect(payloads.map((p) => p.text)).toEqual(['erste', 'zweite']);
+    expect(payloads.map((p) => p.ts)).toEqual(mine.map((c) => c.at));
+    expect(payloads.map((p) => `${me}:${p.n}`)).toEqual(mine.map((c) => c.id));
+  });
+
+  it('replays at most my last 50 messages', async () => {
+    for (let i = 0; i < 55; i++) await svc.sendCallChat(`m${i}`);
+    room.localParticipant.publishData.mockClear();
+    room.emit(RoomEvent.ParticipantConnected, remote('c'.repeat(64) + ':y'));
+    await new Promise((r) => setTimeout(r, 0));
+    const texts = room.localParticipant.publishData.mock.calls
+      .filter(([, opts]) => opts.topic === 'edufeed.call.chat')
+      .map(([bytes]) => decode(bytes).text);
+    expect(texts).toHaveLength(50);
+    expect(texts[0]).toBe('m5');
+    expect(texts.at(-1)).toBe('m54');
+  });
+
+  it('orders received messages by their send time and ignores a replayed duplicate', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(10_000_000));
+    const bob = remote('b'.repeat(64) + ':x');
+    const emit = (obj) =>
+      room.emit(RoomEvent.DataReceived, encode(obj), bob, undefined, 'edufeed.call.chat');
+    emit({ t: 'chat', text: 'live', n: 'n2' });
+    // bob's replay of history after we (re)joined: older, so it goes first
+    emit({ t: 'chat', text: 'earlier', n: 'n1', ts: 9_000_000 });
+    // the same message again (live copy + replay): shown once
+    emit({ t: 'chat', text: 'live', n: 'n2', ts: 10_000_000 });
+    const chat = svc.getLiveKitState().callChat;
+    expect(chat.map((c) => c.text)).toEqual(['earlier', 'live']);
+    expect(chat[0].at).toBe(9_000_000);
+  });
+
+  it('clamps a send time in the future to now', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(10_000_000));
+    const bob = remote('b'.repeat(64) + ':x');
+    room.emit(
+      RoomEvent.DataReceived,
+      encode({ t: 'chat', text: 'from the future', n: 'f1', ts: 99_000_000 }),
+      bob,
+      undefined,
+      'edufeed.call.chat'
+    );
+    expect(svc.getLiveKitState().callChat.at(-1).at).toBe(10_000_000);
+  });
+
   it('clears the call chat on disconnect', async () => {
     await svc.sendCallChat('bye');
     await svc.disconnectFromRoom();
