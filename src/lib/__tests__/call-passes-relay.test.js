@@ -1,7 +1,7 @@
 // @ts-nocheck
 /** @vitest-environment node */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { of } from 'rxjs';
+import { of, throwError } from 'rxjs';
 
 const publishToGroupRelay = vi.fn(async (_relay, template, user) => ({
   ...template,
@@ -98,6 +98,14 @@ describe('listCallPasses', () => {
     // single filter object plus a timeout option, not an array of filters.
     expect(conn.request).toHaveBeenCalledWith({ kinds: [9025], '#h': ['g1'] }, { timeout: 5000 });
     expect(list.map((p) => p.id)).toEqual(['new', 'old']);
+  });
+
+  it('rejects when the relay errors or times out, rather than reading it as empty', async () => {
+    const conn = {
+      url: POINTER.relay,
+      request: vi.fn(() => throwError(() => new Error('boom')))
+    };
+    await expect(listCallPasses(conn, 'g1', USER)).rejects.toThrow('boom');
   });
 });
 

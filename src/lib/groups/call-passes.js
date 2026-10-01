@@ -7,8 +7,8 @@
 // token request carries it in the signed NIP-98 event (livekit.js).
 //
 // Plain module (no runes): called from click handlers and tested in node.
-import { firstValueFrom, of } from 'rxjs';
-import { catchError, toArray } from 'rxjs/operators';
+import { firstValueFrom } from 'rxjs';
+import { toArray } from 'rxjs/operators';
 import { livekitProbeUrl } from './livekit.js';
 import { groupPointerString } from './groups.js';
 import { publishToGroupRelay, buildDeleteEventTemplate } from './group-management.js';
@@ -190,18 +190,20 @@ function expirationOf(event) {
  * moderator). The relay hides 9025 from unauthenticated readers, so auth
  * comes first. Expired passes are dropped client-side as a courtesy — the
  * relay is expected to delete them, but a slow sweep must not surface a
- * dead link.
+ * dead link. Rejects if the relay errors or times out (same convention as
+ * confirmGroupMetadata/confirmGroupAdmins in group-management.js) — a
+ * failure must not read as "no passes".
  * @param {any} relayConn @param {string} groupId @param {{pubkey: string, signer: any}} user
  */
 export async function listCallPasses(relayConn, groupId, user) {
   await authenticateOnce(relayConn, user.signer);
+  // Relay#request's {timeout} only bounds the FIRST emission (rxjs
+  // `timeout({first: ms})` under the hood) — once at least one event has
+  // arrived, a stalled EOSE no longer times out this call.
   const events = await firstValueFrom(
     relayConn
       .request({ kinds: [CALL_PASS_KIND], '#h': [groupId] }, { timeout: LIST_TIMEOUT_MS })
-      .pipe(
-        catchError(() => of()),
-        toArray()
-      )
+      .pipe(toArray())
   );
   const now = Math.floor(Date.now() / 1000);
   const byId = new Map();
