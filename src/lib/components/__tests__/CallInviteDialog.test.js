@@ -93,4 +93,33 @@ describe('CallInviteDialog', () => {
     expect(await screen.findByTestId('call-invite-list-error')).toBeTruthy();
     expect(screen.getByTestId('call-invite-create')).toBeTruthy();
   });
+
+  it('keeps a link created after a listing failure revokable, alongside the error line', async () => {
+    listCallPasses.mockRejectedValue(new Error('relay timeout'));
+    createCallLink.mockResolvedValue({
+      code: 'C',
+      url: 'https://x/call/p#C',
+      event: { id: 'p1', pubkey: ME, created_at: 1, tags: [['h', 'g1']] }
+    });
+    render(CallInviteDialog, { props });
+    await screen.findByTestId('call-invite-list-error');
+    await fireEvent.click(screen.getByTestId('call-invite-create'));
+    expect(await screen.findByTestId('call-invite-revoke')).toBeTruthy();
+    expect(screen.getByTestId('call-invite-list-error')).toBeTruthy();
+  });
+
+  it('does not revoke twice on a double-click of the same pass', async () => {
+    const pass = { id: 'p1', pubkey: ME, created_at: 1, tags: [['h', 'g1']] };
+    listCallPasses.mockResolvedValue([pass]);
+    passLinkFor.mockResolvedValue('https://x/call/p#C');
+    let resolveRevoke;
+    revokeCallPass.mockImplementation(() => new Promise((resolve) => (resolveRevoke = resolve)));
+    render(CallInviteDialog, { props });
+    const revokeButton = await screen.findByTestId('call-invite-revoke');
+    await fireEvent.click(revokeButton);
+    await fireEvent.click(revokeButton);
+    resolveRevoke();
+    await waitFor(() => expect(screen.queryByTestId('call-invite-pass')).toBeNull());
+    expect(revokeCallPass).toHaveBeenCalledTimes(1);
+  });
 });

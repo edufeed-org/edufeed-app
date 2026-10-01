@@ -6,6 +6,7 @@
 -->
 <script>
   import { onMount } from 'svelte';
+  import { SvelteSet } from 'svelte/reactivity';
   import {
     createCallLink,
     listCallPasses,
@@ -31,8 +32,14 @@
   let sending = $state(false);
   // listCallPasses REJECTS on relay error/timeout (not an empty list) — a
   // relay hiccup must not look like "nobody has a link yet", and "Link
-  // erstellen" must keep working even though the list failed.
+  // erstellen" must keep working even though the list failed. A pass
+  // created after the failure still goes into `rows`, so the error is
+  // shown ALONGSIDE the list, never in place of it (otherwise a freshly
+  // created link's only "Zurückziehen" button would be unreachable).
   let listError = $state(false);
+  // Per-pass in-flight guard: a double-click on "Zurückziehen" must not
+  // fire two revocations for the same pass.
+  let revoking = $state.raw(new SvelteSet());
 
   const relay = () => pool.relay(pointer.relay);
 
@@ -105,6 +112,8 @@
 
   /** @param {any} pass */
   async function revoke(pass) {
+    if (revoking.has(pass.id)) return;
+    revoking.add(pass.id);
     try {
       await revokeCallPass(relay(), pass, user, { asAdmin: isAdmin });
       rows = rows.filter((r) => r.pass.id !== pass.id);
@@ -112,6 +121,8 @@
       showToast(m.groups_call_invite_revoked(), 'success');
     } catch (err) {
       failure(err);
+    } finally {
+      revoking.delete(pass.id);
     }
   }
 </script>
@@ -168,10 +179,13 @@
       <p class="mt-1 text-sm text-error" data-testid="call-invite-list-error">
         {m.groups_call_invite_list_failed()}
       </p>
-    {:else if loading}
+    {/if}
+    {#if loading}
       <span class="loading loading-sm loading-dots"></span>
     {:else if rows.length === 0}
-      <p class="text-sm text-base-content/60">{m.groups_call_invite_none()}</p>
+      {#if !listError}
+        <p class="text-sm text-base-content/60">{m.groups_call_invite_none()}</p>
+      {/if}
     {:else}
       <ul class="mt-2 flex flex-col gap-2">
         {#each rows as row (row.pass.id)}
@@ -195,6 +209,7 @@
               <button
                 class="btn text-error btn-ghost btn-sm"
                 onclick={() => revoke(row.pass)}
+                disabled={revoking.has(row.pass.id)}
                 data-testid="call-invite-revoke"
               >
                 {m.groups_call_invite_revoke()}
