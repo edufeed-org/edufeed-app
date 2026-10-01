@@ -15,6 +15,7 @@ const listCallPasses = vi.fn();
 const passLinkFor = vi.fn();
 const revokeCallPass = vi.fn();
 vi.mock('$lib/groups/call-passes.js', () => ({
+  TITLE_MAX_CHARS: 80,
   createCallLink: (...a) => createCallLink(...a),
   listCallPasses: (...a) => listCallPasses(...a),
   passLinkFor: (...a) => passLinkFor(...a),
@@ -58,6 +59,53 @@ describe('CallInviteDialog', () => {
     await waitFor(() =>
       expect(screen.getByTestId('call-invite-url').value).toBe('https://x/call/p#C')
     );
+  });
+
+  it('sends the typed link name with the create and shows it in the new row', async () => {
+    createCallLink.mockResolvedValue({
+      code: 'C',
+      url: 'https://x/call/p#C',
+      event: {
+        id: 'p1',
+        pubkey: ME,
+        created_at: 1,
+        tags: [
+          ['h', 'g1'],
+          ['title', 'Elternabend']
+        ]
+      }
+    });
+    render(CallInviteDialog, { props });
+    const input = screen.getByTestId('call-invite-title');
+    expect(input.getAttribute('maxlength')).toBe('80');
+    await fireEvent.input(input, { target: { value: 'Elternabend' } });
+    await fireEvent.click(screen.getByTestId('call-invite-create'));
+    await waitFor(() => expect(createCallLink).toHaveBeenCalled());
+    expect(createCallLink.mock.calls[0][4]).toEqual({ title: 'Elternabend' });
+    await waitFor(() => expect(screen.getByTestId('call-invite-url')).toBeTruthy());
+    expect(screen.getByTestId('call-invite-pass').textContent).toContain('Elternabend');
+  });
+
+  it('shows a pass title in its row, and only the time for an untitled pass', async () => {
+    listCallPasses.mockResolvedValue([
+      {
+        id: 'p1',
+        pubkey: ME,
+        created_at: 2,
+        tags: [
+          ['h', 'g1'],
+          ['title', 'Sprechstunde']
+        ]
+      },
+      { id: 'p2', pubkey: ME, created_at: 1, tags: [['h', 'g1']] }
+    ]);
+    render(CallInviteDialog, { props });
+    await waitFor(() => expect(screen.getAllByTestId('call-invite-pass')).toHaveLength(2));
+    const [titled, untitled] = screen.getAllByTestId('call-invite-pass');
+    expect(titled.querySelector('[data-testid="call-invite-pass-title"]').textContent).toBe(
+      'Sprechstunde'
+    );
+    expect(untitled.querySelector('[data-testid="call-invite-pass-title"]')).toBeNull();
   });
 
   it('lists my existing link and revokes it', async () => {

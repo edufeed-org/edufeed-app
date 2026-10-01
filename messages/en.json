@@ -3746,5 +3746,6 @@
   "groups_call_invite_close": "Close",
   "groups_call_invite_nip44": "Your login method cannot encrypt data (NIP-44). Log in another way to create links.",
   "groups_call_invite_failed": "That did not work: {reason}",
-  "groups_call_invite_list_failed": "Could not load active links."
+  "groups_call_invite_list_failed": "Could not load active links.",
+  "groups_call_invite_title_placeholder": "Name for the link (optional), e.g. Parents' evening"
 }

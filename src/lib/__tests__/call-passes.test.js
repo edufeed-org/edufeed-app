@@ -75,6 +75,19 @@ describe('buildCallPassTemplate', () => {
     expect(t.tags.filter((x) => x[0] === 'h')).toHaveLength(1);
     expect(t.tags.some((x) => x[0] === 'scope')).toBe(false);
   });
+  it('adds a trimmed title tag, capped at 80 chars, only when non-empty', () => {
+    const base = { groupId: 'g1', codeHash: 'f'.repeat(64), encryptedCode: 'c', expiration: 2000 };
+    expect(buildCallPassTemplate({ ...base, title: '  Elternabend  ' }).tags).toContainEqual([
+      'title',
+      'Elternabend'
+    ]);
+    const long = buildCallPassTemplate({ ...base, title: 'x'.repeat(100) });
+    expect(long.tags.find((t) => t[0] === 'title')[1]).toBe('x'.repeat(80));
+    expect(
+      buildCallPassTemplate({ ...base, title: '   ' }).tags.some((t) => t[0] === 'title')
+    ).toBe(false);
+    expect(buildCallPassTemplate(base).tags.some((t) => t[0] === 'title')).toBe(false);
+  });
 });
 
 describe('links', () => {

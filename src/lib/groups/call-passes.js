@@ -23,6 +23,8 @@ const CHECK_TIMEOUT_MS = 5000;
 const CODE_RE = /^[A-Za-z0-9_-]{22,64}$/;
 const REASONS = new Set(['ok', 'not_yet', 'expired', 'call_ended', 'unknown']);
 const ZERO_HASH = '0'.repeat(64);
+/** Cap for a link's optional name (`title` tag). */
+export const TITLE_MAX_CHARS = 80;
 
 /** 16 random bytes, base64url without padding (22 chars, 128 bits). */
 export function generatePassCode() {
@@ -48,7 +50,7 @@ export async function hashPassCode(code) {
  * Exactly one `h` tag: a relay resolves a group event by its first `h` but
  * matches `#h` against all of them.
  * @param {{groupId: string, codeHash: string, encryptedCode: string, expiration: number,
- *   notBefore?: number, scopeCall?: boolean, meeting?: [string, string]}} p
+ *   notBefore?: number, scopeCall?: boolean, meeting?: [string, string], title?: string}} p
  */
 export function buildCallPassTemplate({
   groupId,
@@ -57,7 +59,8 @@ export function buildCallPassTemplate({
   expiration,
   notBefore,
   scopeCall = false,
-  meeting
+  meeting,
+  title
 }) {
   /** @type {string[][]} */
   const tags = [
@@ -68,6 +71,10 @@ export function buildCallPassTemplate({
   if (notBefore) tags.push(['not-before', String(notBefore)]);
   if (scopeCall) tags.push(['scope', 'call']);
   if (meeting) tags.push(['a', meeting[0], meeting[1]]);
+  // Author-chosen label for management UIs ("Elternabend"); never shown to
+  // whoever holds the link.
+  const label = typeof title === 'string' ? title.trim().slice(0, TITLE_MAX_CHARS) : '';
+  if (label) tags.push(['title', label]);
   return {
     kind: CALL_PASS_KIND,
     content: encryptedCode,
@@ -163,8 +170,9 @@ const LIST_TIMEOUT_MS = 5000;
  * @param {{id: string, relay: string}} pointer
  * @param {{pubkey: string, signer: any}} user
  * @param {string} origin
+ * @param {{title?: string}} [opts] an optional name for the link
  */
-export async function createCallLink(relayConn, pointer, user, origin) {
+export async function createCallLink(relayConn, pointer, user, origin, { title } = {}) {
   if (!hasNip44(user.signer)) throw new Error('nip44-unsupported');
   const code = generatePassCode();
   const template = buildCallPassTemplate({
@@ -172,7 +180,8 @@ export async function createCallLink(relayConn, pointer, user, origin) {
     codeHash: await hashPassCode(code),
     encryptedCode: await user.signer.nip44.encrypt(user.pubkey, code),
     expiration: Math.floor(Date.now() / 1000) + CALL_SCOPE_TTL_S,
-    scopeCall: true
+    scopeCall: true,
+    title
   });
   const event = await publishToGroupRelay(relayConn, template, user);
   return { code, url: callLinkUrl(origin, pointer, code), event };

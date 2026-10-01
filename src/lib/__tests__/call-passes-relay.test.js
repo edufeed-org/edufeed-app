@@ -55,6 +55,12 @@ describe('createCallLink', () => {
     expect(url.startsWith('https://app.example/call/')).toBe(true);
     expect(url.endsWith(`#${code}`)).toBe(true);
   });
+  it('passes an optional link name through as a title tag', async () => {
+    await createCallLink(relayConn, POINTER, USER, 'https://app.example', {
+      title: 'Elternabend'
+    });
+    expect(publishToGroupRelay.mock.calls[0][1].tags).toContainEqual(['title', 'Elternabend']);
+  });
   it('refuses a signer without NIP-44 before publishing anything', async () => {
     await expect(
       createCallLink(

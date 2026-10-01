@@ -8,6 +8,7 @@
   import { onMount } from 'svelte';
   import { SvelteSet } from 'svelte/reactivity';
   import {
+    TITLE_MAX_CHARS,
     createCallLink,
     listCallPasses,
     passLinkFor,
@@ -26,6 +27,8 @@
   let rows = $state.raw([]);
   let loading = $state(true);
   let creating = $state(false);
+  // Optional name for the next link ("Elternabend"), shown in "Aktive Links".
+  let linkTitle = $state('');
   /** @type {string | null} */
   let latestUrl = $state(null);
   let dmOpen = $state(false);
@@ -67,6 +70,12 @@
     }
   });
 
+  /** @param {any} pass @returns {string} */
+  function passTitle(pass) {
+    const value = pass?.tags?.find((/** @type {string[]} */ t) => t[0] === 'title')?.[1];
+    return typeof value === 'string' ? value.trim() : '';
+  }
+
   /** @param {unknown} err */
   function failure(err) {
     const reason = err instanceof Error ? err.message : String(err);
@@ -82,8 +91,11 @@
     if (creating) return;
     creating = true;
     try {
-      const { url, event } = await createCallLink(relay(), pointer, user, location.origin);
+      const { url, event } = await createCallLink(relay(), pointer, user, location.origin, {
+        title: linkTitle
+      });
       latestUrl = url;
+      linkTitle = '';
       rows = [{ pass: event, url }, ...rows];
     } catch (err) {
       failure(err);
@@ -174,8 +186,18 @@
         />
       {/if}
     {:else}
+      <input
+        class="input-bordered input mt-4 w-full"
+        type="text"
+        maxlength={TITLE_MAX_CHARS}
+        placeholder={m.groups_call_invite_title_placeholder()}
+        aria-label={m.groups_call_invite_title_placeholder()}
+        bind:value={linkTitle}
+        disabled={creating}
+        data-testid="call-invite-title"
+      />
       <button
-        class="btn mt-4 btn-primary"
+        class="btn mt-2 btn-primary"
         onclick={create}
         disabled={creating}
         data-testid="call-invite-create"
@@ -201,7 +223,12 @@
       <ul class="mt-2 flex flex-col gap-2">
         {#each rows as row (row.pass.id)}
           <li class="flex items-center gap-2 text-sm" data-testid="call-invite-pass">
-            <span class="flex-1">
+            <span class="min-w-0 flex-1">
+              {#if passTitle(row.pass)}
+                <span class="font-medium break-words" data-testid="call-invite-pass-title"
+                  >{passTitle(row.pass)}</span
+                > ·
+              {/if}
               {new Date(row.pass.created_at * 1000).toLocaleTimeString([], {
                 hour: '2-digit',
                 minute: '2-digit'

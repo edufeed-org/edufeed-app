@@ -3746,5 +3746,6 @@
   "groups_call_invite_close": "Schließen",
   "groups_call_invite_nip44": "Dein Anmeldeverfahren kann keine verschlüsselten Daten erzeugen (NIP-44). Melde dich mit einer anderen Methode an, um Links zu erstellen.",
   "groups_call_invite_failed": "Das hat nicht geklappt: {reason}",
-  "groups_call_invite_list_failed": "Aktive Links konnten nicht geladen werden."
+  "groups_call_invite_list_failed": "Aktive Links konnten nicht geladen werden.",
+  "groups_call_invite_title_placeholder": "Name für den Link (optional), z. B. Elternabend"
 }

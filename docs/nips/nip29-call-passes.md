@@ -20,7 +20,8 @@ unaffected.
     ["expiration", "<unix seconds>"], // NIP-40, required
     ["not-before", "<unix seconds>"], // optional
     ["scope", "call"], // optional
-    ["a", "31923:<pubkey>:<d>", "<relay>"] // optional: the NIP-52 meeting it belongs to
+    ["a", "31923:<pubkey>:<d>", "<relay>"], // optional: the NIP-52 meeting it belongs to
+    ["title", "<label>"] // optional: author-chosen name for the link
   ]
 }
 ```
@@ -33,6 +34,10 @@ unaffected.
   pass while no call is running, MUST reject one whose `expiration` is more
   than 12 hours ahead, and SHOULD delete call-scoped passes when the call's
   participant list becomes empty, besides on room end.
+- `title`: an optional label the author picks ("Parents' evening") so
+  management UIs can tell several links apart. It is readable only by those
+  who can read the pass (see below), never by the link's holder, and clients
+  SHOULD keep it short (edufeed caps it at 80 characters).
 
 Relays MUST accept a pass only
 
