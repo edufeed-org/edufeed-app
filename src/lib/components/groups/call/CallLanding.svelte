@@ -59,8 +59,15 @@
   });
 
   const inCallHere = $derived(!!pointer && call.isActiveFor(pointer) && call.phase !== 'idle');
+  // Only a call that actually connected counts as "was in call" for the
+  // post-call thank-you view — a failed-then-left join (phase 'requesting'
+  // or 'error') must fall back to the check-driven views instead of
+  // claiming the guest attended.
+  const readyInCallHere = $derived(
+    !!pointer && call.isActiveFor(pointer) && call.phase === 'ready'
+  );
   $effect(() => {
-    if (inCallHere) untrack(() => (wasInCall = true));
+    if (readyInCallHere) untrack(() => (wasInCall = true));
   });
 
   const title = $derived(check?.name || pointer?.id || '');
@@ -71,8 +78,18 @@
     if (!check) return 'checking';
     if (check.reason === 'ok') return 'ready';
     if (check.reason === 'not_yet') return 'not_yet';
+    // 'unreachable' (the relay's pass endpoint could not be reached) is not
+    // the same as an invalid/revoked link — it may well still work on retry.
+    if (check.reason === 'unreachable') return 'unreachable';
     return 'invalid';
   });
+
+  /** Re-run the pass check (the "the server could not be reached" retry). */
+  async function recheckPass() {
+    if (!pointer || !code) return;
+    check = null;
+    check = await checkCallPass(pointer.relay, pointer.id, code);
+  }
 
   /** @param {{pubkey: string, signer: any}} user */
   async function joinAs(user) {
@@ -92,10 +109,12 @@
       const user = await createGuestAccount(name);
       await joinAs(user);
     } catch (err) {
-      guestError =
-        err instanceof Error && err.message === 'name-required'
-          ? m.call_landing_name_required()
-          : String(err);
+      if (err instanceof Error && err.message === 'name-required') {
+        guestError = m.call_landing_name_required();
+      } else {
+        console.error('Call guest join failed:', err);
+        guestError = m.call_landing_join_failed();
+      }
     } finally {
       joining = false;
     }
@@ -151,7 +170,18 @@
         data-testid="call-landing-error"
       >
         <p class="text-error">{callErrorMessage(call.error)}</p>
-        <button class="btn btn-sm btn-primary" onclick={retry}>{m.groups_call_retry()}</button>
+        <div class="flex gap-2">
+          <button class="btn btn-sm btn-primary" onclick={retry} data-testid="call-landing-retry">
+            {m.groups_call_retry()}
+          </button>
+          <button
+            class="btn btn-ghost btn-sm"
+            onclick={leaveGroupCall}
+            data-testid="call-landing-back"
+          >
+            {m.call_landing_back()}
+          </button>
+        </div>
       </div>
     {:else}
       <div class="m-auto">
@@ -164,6 +194,17 @@
         <div class="card-body gap-4">
           {#if view === 'checking'}
             <span class="loading mx-auto loading-md loading-dots"></span>
+          {:else if view === 'unreachable'}
+            <div data-testid="call-landing-unreachable">
+              <p class="text-sm text-base-content/70">{m.call_landing_unreachable()}</p>
+              <button
+                class="btn mt-2 btn-sm"
+                onclick={recheckPass}
+                data-testid="call-landing-recheck"
+              >
+                {m.groups_call_retry()}
+              </button>
+            </div>
           {:else if view === 'invalid'}
             <div data-testid="call-landing-invalid">
               <h1 class="text-xl font-bold">{m.call_landing_invalid_title()}</h1>

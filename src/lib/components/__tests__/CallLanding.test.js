@@ -19,10 +19,11 @@ const callState = {
   isActiveFor: () => false
 };
 const joinGroupCall = vi.fn(async () => {});
+const leaveGroupCall = vi.fn(async () => {});
 vi.mock('$lib/groups/group-call.svelte.js', () => ({
   getGroupCallState: () => callState,
   joinGroupCall: (...a) => joinGroupCall(...a),
-  leaveGroupCall: vi.fn(async () => {}),
+  leaveGroupCall: (...a) => leaveGroupCall(...a),
   callErrorMessage: () => 'err-msg',
   registerCallStageView: () => () => {}
 }));
@@ -110,5 +111,33 @@ describe('CallLanding', () => {
     await waitFor(() => expect(createGuestAccount).toHaveBeenCalled());
     expect(joinGroupCall).not.toHaveBeenCalled();
     expect(screen.getByText(m.call_landing_name_required())).toBeTruthy();
+  });
+  it('shows a retry and a back button when already in a failed call for this pointer', async () => {
+    callState.phase = 'error';
+    callState.isActiveFor = () => true;
+    activeUser = { pubkey: 'd'.repeat(64), signer: {} };
+    checkCallPass.mockResolvedValue({ valid: true, reason: 'ok', liveCount: 0 });
+    render(CallLanding, { props: { pointer: POINTER } });
+    expect(await screen.findByTestId('call-landing-error')).toBeTruthy();
+
+    await fireEvent.click(screen.getByTestId('call-landing-retry'));
+    expect(joinGroupCall).toHaveBeenCalledWith(
+      POINTER,
+      activeUser,
+      expect.objectContaining({ code: CODE })
+    );
+
+    await fireEvent.click(screen.getByTestId('call-landing-back'));
+    expect(leaveGroupCall).toHaveBeenCalled();
+  });
+  it('tells an unreachable relay apart from an invalid/revoked link, and offers a recheck', async () => {
+    checkCallPass.mockResolvedValue({ valid: false, reason: 'unreachable', liveCount: 0 });
+    render(CallLanding, { props: { pointer: POINTER } });
+    expect(await screen.findByTestId('call-landing-unreachable')).toBeTruthy();
+    expect(screen.queryByTestId('call-landing-invalid')).toBeNull();
+
+    checkCallPass.mockResolvedValue({ valid: true, reason: 'ok', liveCount: 2 });
+    await fireEvent.click(screen.getByTestId('call-landing-recheck'));
+    expect(await screen.findByTestId('call-landing-join')).toBeTruthy();
   });
 });
