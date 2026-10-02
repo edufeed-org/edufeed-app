@@ -89,16 +89,27 @@ export function channelMeetingHref(communityNpub, channelId) {
  * Raw kind-31923 events → CalendarEvents for the community calendar, keeping
  * only valid meetings of one of the community's channels (exactly one `h`,
  * naming that channel). Each carries `channelMeeting` with the channel's
- * name and link.
+ * name and link. Meetings a moderator removed (kind-9005 `e` tags, as
+ * GroupChat's deletedMessageIds reads them — the group relay accepts 9005
+ * from moderators only) are left out; author kind-5s already leave through
+ * the eventStore's DeleteManager.
  *
  * @param {any[]} rawEvents
  * @param {ChannelCalendarPointer[]} pointers
- * @param {{communityNpub: string}} opts
+ * @param {{communityNpub: string, deletions?: any[]}} opts
  * @returns {Array<import('$lib/types/calendar.js').CalendarEvent & {channelMeeting: ChannelMeetingRef}>}
  */
-export function toChannelMeetings(rawEvents, pointers, { communityNpub }) {
+export function toChannelMeetings(rawEvents, pointers, { communityNpub, deletions = [] }) {
+  const deleted = new Set(
+    deletions.flatMap((deletion) =>
+      (deletion?.tags ?? [])
+        .filter((/** @type {string[]} */ t) => t[0] === 'e' && t[1])
+        .map((/** @type {string[]} */ t) => t[1])
+    )
+  );
   const out = [];
   for (const event of rawEvents) {
+    if (deleted.has(event?.id)) continue;
     const pointer = pointers.find((p) => isMeetingForGroup(event, p.id));
     if (!pointer || !validateCalendarEvent(event)) continue;
     out.push({

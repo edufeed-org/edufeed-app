@@ -133,6 +133,25 @@ describe('toChannelMeetings', () => {
     expect(out).toEqual([]);
   });
 
+  it('drops meetings a moderator deleted (kind 9005 e-tag), keeps the rest', () => {
+    const gone = meeting('gone', [['h', 'chan1']]);
+    const kept = meeting('kept', [['h', 'chan1']]);
+    const out = toChannelMeetings([gone, kept], pointers, {
+      communityNpub: 'npub1community',
+      deletions: [
+        {
+          kind: 9005,
+          tags: [
+            ['h', 'chan1'],
+            ['e', gone.id]
+          ]
+        },
+        { kind: 9005, tags: [['e']] }
+      ]
+    });
+    expect(out.map((e) => e.title)).toEqual(['Meeting kept']);
+  });
+
   it('encodes the channel id in the link', () => {
     const out = toChannelMeetings(
       [meeting('m1', [['h', 'a b&c']])],

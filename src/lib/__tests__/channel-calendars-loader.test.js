@@ -6,7 +6,7 @@
  * @vitest-environment jsdom
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { of, lastValueFrom, toArray } from 'rxjs';
+import { of, throwError, lastValueFrom, toArray } from 'rxjs';
 
 if (typeof window !== 'undefined' && !window.matchMedia) {
   // @ts-expect-error minimal shim for module-load-time calls
@@ -30,9 +30,12 @@ vi.mock('applesauce-loaders/loaders', async (importOriginal) => {
   const orig = /** @type {any} */ (await importOriginal());
   return {
     ...orig,
-    createTimelineLoader: vi.fn((_pool, relays) => () => {
+    createTimelineLoader: vi.fn((_pool, relays, filter) => () => {
+      const id = filter['#h'][0];
       order.push(`load ${relays.join(',')}`);
-      return of({ id: `event-from-${relays[0]}` });
+      // pyramid CLOSEs a REQ naming a private group for a non-member
+      if (id === 'private') return throwError(() => new Error('auth-required'));
+      return of({ id: `event-${id}-from-${relays[0]}` });
     })
   };
 });
@@ -71,7 +74,7 @@ describe('channelCalendarsLoader', () => {
     vi.mocked(authenticateOnce).mockClear();
   });
 
-  it('opens one timeline loader per relay with the channel ids as #h', async () => {
+  it('opens one timeline loader per channel (one #h each) on its relay', async () => {
     const events = await lastValueFrom(
       channelCalendarsLoader([
         { id: 'a', relay: R1 },
@@ -80,21 +83,45 @@ describe('channelCalendarsLoader', () => {
       ])().pipe(toArray())
     );
 
-    expect(createTimelineLoader).toHaveBeenCalledTimes(2);
+    expect(createTimelineLoader).toHaveBeenCalledTimes(3);
     expect(vi.mocked(createTimelineLoader).mock.calls[0]).toEqual([
       timedPool,
       [R1],
-      [
-        { kinds: [31923], '#h': ['a', 'b'], limit: 250 },
-        { kinds: [5], '#h': ['a', 'b'], limit: 100 }
-      ],
+      { kinds: [31923, 5, 9005], '#h': ['a'], limit: 250 },
       { eventStore }
     ]);
-    expect(vi.mocked(createTimelineLoader).mock.calls[1][1]).toEqual([R2]);
-    expect(/** @type {any} */ (vi.mocked(createTimelineLoader).mock.calls[1][2])[0]['#h']).toEqual([
-      'z'
+    const calls = vi
+      .mocked(createTimelineLoader)
+      .mock.calls.map((c) => [c[1][0], /** @type {any} */ (c[2])['#h']]);
+    expect(calls).toEqual([
+      [R1, ['a']],
+      [R1, ['b']],
+      [R2, ['z']]
     ]);
-    expect(events).toHaveLength(2);
+    expect(events).toHaveLength(3);
+  });
+
+  it("a channel the relay refuses (CLOSED) does not hide another channel's meetings", async () => {
+    const events = await lastValueFrom(
+      channelCalendarsLoader([
+        { id: 'private', relay: R1 },
+        { id: 'open', relay: R1 }
+      ])().pipe(toArray())
+    );
+    expect(events.map((e) => e.id)).toEqual([`event-open-from-${R1}`]);
+  });
+
+  it('authenticates once per relay, not per channel', async () => {
+    await lastValueFrom(
+      channelCalendarsLoader(
+        [
+          { id: 'a', relay: R1 },
+          { id: 'b', relay: R1 }
+        ],
+        { signer: {} }
+      )().pipe(toArray())
+    );
+    expect(authenticateOnce).toHaveBeenCalledTimes(1);
   });
 
   it('does not authenticate without a signer', async () => {

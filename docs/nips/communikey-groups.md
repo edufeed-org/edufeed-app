@@ -233,13 +233,17 @@ type and is unrelated to membership. Membership exists only for moderated
 A community calendar shows the NIP-52 calendar events h-tagged with the
 community pubkey **and** the ones h-tagged with the id of one of its channels:
 the root `membership` group, the channels discovered under it, and every
-`group` pointer. Clients read the latter from each channel's group relay
-(`{"kinds":[31923],"#h":[<channel ids on that relay>]}`), authenticating
-with NIP-42 first so private channels answer. A channel meeting carries
-exactly one `h` tag — never a community-pubkey `h` and a group-id `h` on
-one event. It lives only on the group relay, so clients show it read-only:
-named by its channel, linked to the channel, and kept out of every surface
-that would republish, share, repost, RSVP to or cache it.
+`group` pointer. Clients read the latter from each channel's group relay with
+**one REQ per channel** (`{"kinds":[31923,5,9005],"#h":["<channel id>"]}`),
+authenticating with NIP-42 first: a private channel answers its members only,
+and a relay closes a REQ that names any group the reader may not see — so
+combining channels in one REQ would hide the readable ones too. Meetings
+named by a `5` (author) or `9005` (moderator) deletion are dropped. A channel
+meeting carries exactly one `h` tag — never a community-pubkey `h` and a
+group-id `h` on one event. It lives only on the group relay, so clients show
+it read-only: named by its channel, linked to the channel, and kept out of
+every surface that would republish, share, repost, RSVP to, geocode or cache
+it.
 
 ### Type transitions
 
@@ -292,10 +296,11 @@ public subset** of the private membership:
   Because only the community key signs this list, updates happen when a
   key-holding client is online — acceptance-to-listing latency is expected.
 - **Section gating.** The community's public sections reference the list with
-  the standard profile-list form `["a", "30000:<community-pubkey>:publishers",
-"<relay-url>"]`. Readers verify the public window exactly as for any
-  profile-list-gated section: only posts authored by listed publishers (or
-  the community key itself) belong to the section.
+  the standard profile-list form
+  `["a", "30000:<community-pubkey>:publishers", "<relay-url>"]`. Readers
+  verify the public window exactly as for any profile-list-gated section:
+  only posts authored by listed publishers (or the community key itself)
+  belong to the section.
 
 Privacy properties: the public list discloses ONLY consenting publishers —
 never the membership size or any other member. A publisher self-discloses by

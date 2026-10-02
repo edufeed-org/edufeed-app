@@ -19,6 +19,7 @@
   import { parseGroupPointers } from '$lib/groups/community-pointer.js';
   import { hexToNpub } from '$lib/helpers/nostrUtils.js';
   import { TimelineModel } from 'applesauce-core/models';
+  import { combineLatest } from 'rxjs';
   import { createTimelineLoader } from 'applesauce-loaders/loaders';
   import { timedPool } from '$lib/loaders/base.js';
   import { calendarSearchLoader, MIN_QUERY_LENGTH } from '$lib/loaders/calendar-search.js';
@@ -738,11 +739,15 @@
       }
     });
     const ids = [...new Set(pointers.map((p) => p.id))];
-    const modelSub = eventStore
-      .model(TimelineModel, { kinds: [31923], '#h': ids })
-      .subscribe((/** @type {any[]} */ raw) => {
-        channelMeetings = toChannelMeetings(raw || [], pointers, { communityNpub });
+    const modelSub = combineLatest([
+      eventStore.model(TimelineModel, { kinds: [31923], '#h': ids }),
+      eventStore.model(TimelineModel, { kinds: [9005], '#h': ids })
+    ]).subscribe(([raw, deletions]) => {
+      channelMeetings = toChannelMeetings(raw || [], pointers, {
+        communityNpub,
+        deletions: deletions || []
       });
+    });
     return () => {
       loaderSub.unsubscribe();
       modelSub.unsubscribe();
