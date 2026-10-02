@@ -153,6 +153,15 @@ describe('isConversationUnread', () => {
   it('returns true when conversation has no read timestamp', () => {
     expect(isConversationUnread('conv1', 1000, {})).toBe(true);
   });
+
+  // QA round 3 B2: an invitation sent from the schedule dialog set no marker.
+  it("is never unread when the newest message is the user's own", () => {
+    expect(isConversationUnread('conv1', 1000, {}, { lastAuthor: 'me', self: 'me' })).toBe(false);
+    expect(isConversationUnread('conv1', 1000, {}, { lastAuthor: 'peer', self: 'me' })).toBe(true);
+    expect(isConversationUnread('conv1', 1000, {}, { lastAuthor: undefined, self: null })).toBe(
+      true
+    );
+  });
 });
 
 describe('filterEventsNeedingSignerUnlock (decrypt-storm guard)', () => {

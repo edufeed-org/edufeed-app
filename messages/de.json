@@ -1817,6 +1817,7 @@
   "inbox_filter_rsvps": "RSVPs",
   "inbox_filter_messages": "Nachrichten",
   "inbox_action_dm": "hat dir eine Nachricht gesendet",
+  "inbox_action_dm_sent": "– du hast geschrieben",
   "system_notif_reaction": "hat auf deinen Inhalt reagiert",
   "system_notif_comment": "hat deinen Inhalt kommentiert",
   "system_notif_mention": "hat dich erwähnt",

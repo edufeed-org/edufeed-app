@@ -37,6 +37,7 @@ vi.mock('$lib/components/shared/ProfileAvatar.svelte', async () => {
 });
 vi.mock('$lib/paraglide/messages.js', () => ({
   inbox_action_dm: () => 'sent you a message',
+  inbox_action_dm_sent: () => '– you wrote',
   inbox_mark_read: () => 'Mark as read',
   dm_preview_image: () => 'Image',
   dm_preview_file: () => 'File',
@@ -110,5 +111,27 @@ describe('InboxDmItem official sender', () => {
   it('shows no badge for an ordinary sender', () => {
     render(InboxDmItem, { props: { conversation, unread: false } });
     expect(screen.queryByText('Official')).toBeNull();
+  });
+});
+
+// QA round 3 B2: the organiser's own invitation read "<invitee> sent you a
+// message" in the inbox's messages list.
+describe('InboxDmItem attribution', () => {
+  it('never says the peer sent a message the user wrote', () => {
+    const conversation = {
+      id: `${ME}:${PEER}`,
+      participants: [ME, PEER],
+      lastMessage: {
+        id: 'r3',
+        kind: 14,
+        pubkey: ME,
+        created_at: 100,
+        tags: [['p', PEER]],
+        content: 'Einladung'
+      }
+    };
+    render(InboxDmItem, { props: { conversation, unread: false } });
+    expect(screen.queryByText(/sent you a message/)).toBeNull();
+    expect(screen.getByText(/you wrote/)).toBeTruthy();
   });
 });
