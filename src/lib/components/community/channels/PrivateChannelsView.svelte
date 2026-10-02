@@ -374,6 +374,15 @@
     ];
     return all.find((pointer) => channelKey(pointer) === key) ?? null;
   });
+  // Below md the pane replaces the rail. A selected NIP-29 channel opens on
+  // every width — whether it was picked by a tap, a ?channel= deep link, a
+  // reload, or before the window shrank (QA 2026-10-02 B2: those drew the
+  // rail with the channel merely highlighted). The breadcrumb and the
+  // Kanäle tab clear the selection, which is the way back.
+  const groupChannelOpen = $derived(
+    isNip29Community && !concord.community && !!selectedGroupPointer
+  );
+  const paneOnMobile = $derived(mobileChat || groupChannelOpen);
   // The root (membership) group is open: leaving it leaves the community.
   const selectedIsRoot = $derived.by(() => {
     const root = getCommunityChannels().rootChannel;
@@ -594,7 +603,7 @@
     <aside
       class="w-full shrink-0 flex-col gap-1 overflow-y-auto bg-base-200 p-3 {communikeyEvent
         ? 'md:hidden'
-        : 'md:flex md:w-72'} {mobileChat ? 'hidden' : 'flex'}"
+        : 'md:flex md:w-72'} {paneOnMobile ? 'hidden' : 'flex'}"
     >
       <!-- Same header grammar as the linked sidebar's KANÄLE zone: px-4
         inset matching the rows, plain bell glyph on the badge column, no
@@ -807,7 +816,7 @@
     <!-- pane — the paper content surface (base-100), matching the public
       community chat; the beige rail beside it reads as chrome. -->
     <section
-      class="flex min-w-0 flex-1 flex-col bg-base-100 {mobileChat ? 'flex' : 'hidden md:flex'}"
+      class="flex min-w-0 flex-1 flex-col bg-base-100 {paneOnMobile ? 'flex' : 'hidden md:flex'}"
     >
       {#if overlay === 'area-settings'}
         <!-- Standalone-area settings as a PANE, not a modal — same visual

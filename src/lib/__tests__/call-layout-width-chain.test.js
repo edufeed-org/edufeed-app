@@ -27,7 +27,7 @@ describe('channel view never widens the page', () => {
 describe('community bottom tab bar', () => {
   test('its tabs are centred when they fit, and still scroll when they do not', () => {
     const source = read('src/lib/components/community/layout/BottomTabBar.svelte');
-    const row = source.match(/<div class="([^"]*w-max[^"]*)">/);
+    const row = source.match(/<div[^>]*\sclass="([^"]*w-max[^"]*)"[^>]*>/);
     expect(row?.[1].split(/\s+/)).toEqual(expect.arrayContaining(['mx-auto', 'w-max', 'flex']));
   });
 });

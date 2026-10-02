@@ -1411,7 +1411,9 @@
       // the button flips to Leave without a reload (laoc, 2026-08-11).
       onJoinAccepted();
       joinRequestedNow = true;
-      showToast(m.groups_join_sent(), 'success');
+      // An open NIP-29 group admits on the accepted 9021 (QA C1: "request
+      // sent" read like a pending approval); a closed one queues it.
+      showToast(groupClosed ? m.groups_join_sent() : m.groups_join_joined(), 'success');
     } catch (err) {
       if (isAlreadyMemberError(err)) {
         // Membership is exactly what the click wanted — the button only
@@ -1631,8 +1633,17 @@
         >
           <li>
             {#if inMyList}
-              <button data-testid="group-list-remove" onclick={() => toggleMyList(false)}>
-                {m.groups_list_remove()}
+              <!-- QA C6: says which list and that nothing else changes. -->
+              <button
+                class="flex flex-col items-start gap-0.5"
+                data-testid="group-list-remove"
+                onclick={() => toggleMyList(false)}
+              >
+                <span>{m.groups_list_remove()}</span>
+                <span
+                  class="text-xs font-normal text-base-content/60"
+                  data-testid="group-list-remove-hint">{m.groups_list_remove_hint()}</span
+                >
               </button>
             {:else}
               <button data-testid="group-list-add" onclick={() => toggleMyList(true)}>
@@ -1642,7 +1653,7 @@
           </li>
           {#if rosterAnswered && isMember}
             <!-- Destructive last, set apart, and confirmed (design 1a). -->
-            <li class="mt-1 border-t border-base-300 pt-1">
+            <li class="mt-2 border-t border-base-300 pt-2">
               <button class="font-semibold text-error" data-testid="group-leave" onclick={askLeave}>
                 {leaveLabel}
               </button>

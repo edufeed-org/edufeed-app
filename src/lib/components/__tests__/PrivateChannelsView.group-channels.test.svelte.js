@@ -112,8 +112,10 @@ import PrivateChannelsView from '$lib/components/community/channels/PrivateChann
 import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
 import {
   clearGroupChannelSelection,
-  requestChannelList
+  requestChannelList,
+  selectGroupChannel
 } from '$lib/groups/group-channel-selection.svelte.js';
+import { channelKey } from '$lib/groups/community-pointer.js';
 import { flushSync } from 'svelte';
 import { communityGroupsEndpoint, flatGroupsRelay } from '$lib/groups/community-endpoint.js';
 
@@ -386,6 +388,31 @@ describe('PrivateChannelsView — NIP-29 channels in the community rail', () => 
       chat = await screen.findByTestId('group-chat-stub');
       expect(chat.textContent).toContain("'allgemein");
       expect(chat.dataset.communityRoot).toBe('false');
+    });
+
+    // QA 2026-10-02 B2: below md a deep link or a reload drew the rail with
+    // the channel highlighted instead of the channel — `mobileChat` only
+    // flipped on a row tap. A selected channel opens on every width.
+    it('a deep-linked channel opens the pane below md, not the rail', async () => {
+      clearGroupChannelSelection(OWNER);
+      holders.pageUrl = 'https://app.example/c/relilab?view=channels&channel=allgemein';
+      holders.events = { [ENDPOINT]: [root(), chan('allgemein', [['private']])] };
+      const view = render(PrivateChannelsView, { props: { communikeyEvent: moderated() } });
+      await screen.findByTestId('group-chat-stub', {}, { timeout: 4000 });
+      expect(rail(view).className.split(/\s+/)).toContain('hidden');
+      const pane = /** @type {HTMLElement} */ (view.container.querySelector('section'));
+      expect(pane.className.split(/\s+/)).not.toContain('hidden');
+    });
+
+    it('a channel already selected when the view mounts (reload) opens the pane', async () => {
+      holders.events = { [ENDPOINT]: [root(), chan('allgemein', [['private']])] };
+      selectGroupChannel(
+        OWNER,
+        /** @type {string} */ (channelKey({ id: 'allgemein', relay: ENDPOINT }))
+      );
+      const view = render(PrivateChannelsView, { props: { communikeyEvent: moderated() } });
+      await screen.findByTestId('group-chat-stub', {}, { timeout: 4000 });
+      expect(rail(view).className.split(/\s+/)).toContain('hidden');
     });
 
     it('a re-tap of the Kanäle tab (requestChannelList) goes back to the list', async () => {

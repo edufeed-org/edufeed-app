@@ -968,11 +968,13 @@ vi.mock('$lib/paraglide/messages', () => ({
   groups_breadcrumb_channels_aria: () => 'Back to the channel list',
   groups_more_menu: () => 'More',
   groups_list_remove: () => 'Remove from my list',
+  groups_list_remove_hint: () => 'The channel stays, you stay a member.',
   groups_list_removed: () => 'Removed from your list',
   groups_list_add: () => 'Add to my list',
   groups_list_added: () => 'Added to your list',
   groups_list_update_failed: () => 'Your list could not be updated',
   groups_join_sent: () => 'Join request sent',
+  groups_join_joined: () => 'You joined the channel',
   groups_join_already: () => 'You are already a member.',
   groups_composer_join_note: () => 'Join to write here.',
   community_join_request: () => 'Request to join',
@@ -1523,6 +1525,28 @@ describe('GroupChat', () => {
       },
       { timeout: 2000 }
     );
+  });
+
+  // QA C1: an open channel admits on the spot — "Join request sent" read
+  // like a pending approval.
+  it('joining an open channel says you joined, not that a request was sent', async () => {
+    const { showToast } = await import('$lib/helpers/toast');
+    /** @type {any} */ (showToast).mockClear();
+    render(GroupChat, { props: { pointer: { relay: GROUP_RELAY, id: 'openchat' } } });
+    await fireEvent.click(await screen.findByTestId('group-join'));
+    await waitFor(() =>
+      expect(showToast).toHaveBeenCalledWith('You joined the channel', 'success')
+    );
+    expect(showToast).not.toHaveBeenCalledWith('Join request sent', 'success');
+  });
+
+  it('requesting to join a closed channel keeps the request wording', async () => {
+    const { showToast } = await import('$lib/helpers/toast');
+    /** @type {any} */ (showToast).mockClear();
+    render(GroupChat, { props: { pointer: { relay: GROUP_RELAY, id: 'walledchat' } } });
+    const note = await screen.findByTestId('group-restricted-note');
+    await fireEvent.click(within(note).getByRole('button', { name: 'Request to join' }));
+    await waitFor(() => expect(showToast).toHaveBeenCalledWith('Join request sent', 'success'));
   });
 
   it('join publishes a 9021 to the group relay and mirrors the group into the 10009 list', async () => {
@@ -2455,6 +2479,10 @@ describe('GroupChat', () => {
       await fireEvent.click(await screen.findByTestId('group-more-menu'));
       const remove = await screen.findByTestId('group-list-remove');
       expect(screen.queryByTestId('group-list-add')).toBeNull();
+      // QA C6: says what it does, inside the item (part of its name).
+      expect(within(remove).getByTestId('group-list-remove-hint').textContent).toBe(
+        'The channel stays, you stay a member.'
+      );
       await fireEvent.click(remove);
 
       await waitFor(() => expect(publishOptimisticMock).toHaveBeenCalledTimes(1));

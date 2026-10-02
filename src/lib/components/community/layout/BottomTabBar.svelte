@@ -21,7 +21,6 @@
   import { requestChannelList } from '$lib/groups/group-channel-selection.svelte.js';
   import { areaUnreadState } from '$lib/concord/notifications.svelte.js';
   import ConcordUnreadDot from '$lib/components/shared/ConcordUnreadDot.svelte';
-  import { onMount } from 'svelte';
   import * as m from '$lib/paraglide/messages';
 
   let {
@@ -73,6 +72,7 @@
 
   // State for scroll indicators
   let scrollContainer = $state(/** @type {HTMLElement|null} */ (null));
+  let tabRow = $state(/** @type {HTMLElement|null} */ (null));
   let showLeftScroll = $state(false);
   let showRightScroll = $state(false);
 
@@ -137,17 +137,25 @@
     });
   }
 
-  onMount(() => {
-    if (scrollContainer) {
-      updateScrollIndicators();
-      scrollContainer.addEventListener('scroll', updateScrollIndicators);
-      window.addEventListener('resize', updateScrollIndicators);
-
-      return () => {
-        scrollContainer?.removeEventListener('scroll', updateScrollIndicators);
-        window.removeEventListener('resize', updateScrollIndicators);
-      };
-    }
+  // Re-measure whenever the bar or the tab row changes size, not only on
+  // mount and window resize: labels and icons settle after the first
+  // measurement, which left a stale right arrow on a row that fits
+  // (QA 2026-10-02 K7).
+  $effect(() => {
+    const container = scrollContainer;
+    if (!container) return;
+    updateScrollIndicators();
+    container.addEventListener('scroll', updateScrollIndicators);
+    window.addEventListener('resize', updateScrollIndicators);
+    const observer =
+      typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(updateScrollIndicators);
+    observer?.observe(container);
+    if (tabRow) observer?.observe(tabRow);
+    return () => {
+      observer?.disconnect();
+      container.removeEventListener('scroll', updateScrollIndicators);
+      window.removeEventListener('resize', updateScrollIndicators);
+    };
   });
 </script>
 
@@ -195,7 +203,7 @@
     >
       <!-- Centred while the tabs fit (mx-auto on a w-max row); once they
         overflow the auto margins collapse to 0 and the row scrolls. -->
-      <div class="mx-auto flex w-max items-center gap-3 px-4 py-2">
+      <div bind:this={tabRow} class="mx-auto flex w-max items-center gap-3 px-4 py-2">
         {#each contentTypes as type (type.id)}
           {@const isActive = selectedContentType === type.id}
           {@const Icon = type.icon}
