@@ -34,7 +34,7 @@
   import { useUserProfile } from '$lib/stores/user-profile.svelte.js';
   import { modalStore } from '$lib/stores/modal.svelte.js';
   import { lazyComponent } from '$lib/helpers/lazy-component.svelte.js';
-  import { formatTimestamp } from '$lib/helpers/dates.js';
+  import { formatTimestamp, formatTimeOfDay } from '$lib/helpers/dates.js';
   import { MeetIcon } from '$lib/components/icons';
   import * as m from '$lib/paraglide/messages';
   import { runtimeConfig } from '$lib/stores/config.svelte.js';
@@ -159,6 +159,10 @@
   const meetingEnd = $derived(
     typeof check?.expiration === 'number' ? check.expiration - GUEST_LATE_S : null
   );
+  // The "Beginnt am ..." display instant: the real meeting start once known,
+  // else the raw pass `notBefore` (a non-meeting pass, or before `check` has
+  // settled at all).
+  const notYetStartTs = $derived(meetingStart ?? check?.notBefore ?? 0);
   // QA K-new-5: an empty document.title made the route announcer read
   // "untitled page". The meeting's name once the pass check has it — never
   // the raw group id (`title`'s fallback): plain "Einladung" until then and
@@ -205,17 +209,22 @@
   // when checkCallPass starts answering 'ok', not the later, displayed
   // meeting start (see meetingStart above) — plus a 60 s fallback interval
   // for a skipped exact timer (clock drift, a backgrounded tab) or a wait
-  // longer than setTimeout's ~24.8-day cap.
+  // longer than setTimeout's own cap (a signed 32-bit ms count).
   const NOT_YET_FALLBACK_MS = 60_000;
-  const NOT_YET_MAX_TIMEOUT_MS = 24 * 3600 * 1000;
+  const NOT_YET_MAX_TIMEOUT_MS = 2 ** 31 - 1;
+  // Guards the exact timer and the 60 s fallback against a race: if both
+  // fire close together, only the response to the LATEST request is ever
+  // applied, however the two in-flight requests resolve.
+  let notYetRecheckSeq = 0;
   $effect(() => {
     if (view !== 'not_yet' || !pointer || !code) return;
     const p = pointer;
     const c = code;
     const notBefore = check?.notBefore;
     function recheck() {
+      const seq = ++notYetRecheckSeq;
       checkCallPass(p.relay, p.id, c).then((/** @type {any} */ r) => {
-        if (!destroyed) check = r;
+        if (!destroyed && seq === notYetRecheckSeq) check = r;
       });
     }
     /** @type {ReturnType<typeof setTimeout> | undefined} */
@@ -490,13 +499,12 @@
               <h1 class="text-xl font-bold">{m.call_landing_invited({ title })}</h1>
               <p class="text-sm">
                 {m.call_landing_starts({
-                  when: formatTimestamp(meetingStart ?? check?.notBefore ?? 0, {
+                  date: formatTimestamp(notYetStartTs, {
                     day: '2-digit',
                     month: '2-digit',
-                    year: 'numeric',
-                    hour: '2-digit',
-                    minute: '2-digit'
-                  })
+                    year: 'numeric'
+                  }),
+                  time: formatTimeOfDay(notYetStartTs)
                 })}
               </p>
               {#if meetingStart !== null && meetingEnd !== null}

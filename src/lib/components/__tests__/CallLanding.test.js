@@ -3,7 +3,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/svelte';
 import * as m from '$lib/paraglide/messages';
-import { formatTimestamp } from '$lib/helpers/dates.js';
+import { formatTimestamp, formatTimeOfDay } from '$lib/helpers/dates.js';
 
 const checkCallPass = vi.fn();
 vi.mock('$lib/groups/call-passes.js', async (orig) => ({
@@ -204,13 +204,12 @@ describe('CallLanding', () => {
     render(CallLanding, { props: { pointer: POINTER } });
     await screen.findByTestId('call-landing-not-yet');
     const expected = m.call_landing_starts({
-      when: formatTimestamp(2_000_000_000 + 900, {
+      date: formatTimestamp(2_000_000_000 + 900, {
         day: '2-digit',
         month: '2-digit',
-        year: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit'
-      })
+        year: 'numeric'
+      }),
+      time: formatTimeOfDay(2_000_000_000 + 900)
     });
     expect(screen.getByText(expected)).toBeTruthy();
   });
@@ -303,6 +302,75 @@ describe('CallLanding', () => {
       checkCallPass.mockResolvedValue({ valid: true, reason: 'ok', name: 'Weekly', liveCount: 2 });
       await vi.advanceTimersByTimeAsync(60_000);
       expect(screen.getByTestId('call-landing-join')).toBeTruthy();
+    });
+
+    it('schedules the exact recheck for a wait beyond the old (buggy) 24h cap', async () => {
+      // 25h: exceeds the OLD `24 * 3600 * 1000` cap but is far under the
+      // real limit (setTimeout's own ~24.8-day/2^31-1 ms ceiling) — with the
+      // bug this delay would never get an exact setTimeout at all, only the
+      // 60s fallback interval.
+      const delayS = 25 * 3600;
+      const setTimeoutSpy = vi.spyOn(globalThis, 'setTimeout');
+      checkCallPass.mockResolvedValue({
+        valid: false,
+        reason: 'not_yet',
+        notBefore: Math.floor(Date.now() / 1000) + delayS,
+        liveCount: 0
+      });
+      render(CallLanding, { props: { pointer: POINTER } });
+      await vi.advanceTimersByTimeAsync(0);
+      expect(screen.getByTestId('call-landing-not-yet')).toBeTruthy();
+
+      const longDelayCall = setTimeoutSpy.mock.calls.find(
+        ([, ms]) => typeof ms === 'number' && ms > 24 * 3600 * 1000
+      );
+      expect(longDelayCall).toBeTruthy();
+      expect(longDelayCall[1]).toBeLessThanOrEqual(2 ** 31 - 1);
+      setTimeoutSpy.mockRestore();
+    });
+
+    it('applies only the latest of two in-flight rechecks (stale response discarded)', async () => {
+      checkCallPass.mockResolvedValueOnce({
+        valid: false,
+        reason: 'not_yet',
+        notBefore: Math.floor(Date.now() / 1000) + 60,
+        liveCount: 0
+      });
+      render(CallLanding, { props: { pointer: POINTER } });
+      await vi.advanceTimersByTimeAsync(0);
+      expect(screen.getByTestId('call-landing-not-yet')).toBeTruthy();
+
+      // The 60s fallback interval and the exact 60s timer both fire at the
+      // same instant, both calling checkCallPass. The stale (first-sent, but
+      // slower) response must not clobber the fresher one, whichever settles
+      // last.
+      let resolveStale;
+      let resolveFresh;
+      let call = 0;
+      checkCallPass.mockImplementation(
+        () =>
+          new Promise((r) => {
+            call += 1;
+            if (call === 1) resolveStale = r;
+            else resolveFresh = r;
+          })
+      );
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect(call).toBe(2);
+      // Fresh (latest) resolves first with 'ok'; the stale one resolves
+      // after with a 'not_yet' that must be ignored.
+      resolveFresh({ valid: true, reason: 'ok', name: 'Weekly', liveCount: 1 });
+      await vi.advanceTimersByTimeAsync(0);
+      expect(screen.getByTestId('call-landing-join')).toBeTruthy();
+      resolveStale({
+        valid: false,
+        reason: 'not_yet',
+        notBefore: Math.floor(Date.now() / 1000) + 60,
+        liveCount: 0
+      });
+      await vi.advanceTimersByTimeAsync(0);
+      expect(screen.getByTestId('call-landing-join')).toBeTruthy();
+      expect(screen.queryByTestId('call-landing-not-yet')).toBeNull();
     });
 
     it('cleans up timers on unmount (no stray recheck after the component is gone)', async () => {
