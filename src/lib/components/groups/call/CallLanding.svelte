@@ -166,20 +166,21 @@
   // "Am 02.10.2026, 15:20–16:20 Uhr (MESZ)" — the pass check names only the
   // channel (pyramid's callPassCheck returns no meeting title), so the time
   // carries the meeting (QA round 3 C2).
-  const whenLabel = $derived(
-    meetingStart !== null && meetingEnd !== null
-      ? m.call_landing_when({
-          date: formatTimestamp(meetingStart, {
-            day: '2-digit',
-            month: '2-digit',
-            year: 'numeric'
-          }),
-          start: formatTimeOfDay(meetingStart),
-          end: formatTimeOfDay(meetingEnd),
-          zone: formatTimeZoneName(meetingStart)
-        })
-      : ''
-  );
+  /** @param {number} ts */
+  const fullDate = (ts) =>
+    formatTimestamp(ts, { day: '2-digit', month: '2-digit', year: 'numeric' });
+  const whenLabel = $derived.by(() => {
+    if (meetingStart === null || meetingEnd === null) return '';
+    const zone = formatTimeZoneName(meetingStart);
+    const start = formatTimeOfDay(meetingStart);
+    const end = formatTimeOfDay(meetingEnd);
+    const startDate = fullDate(meetingStart);
+    const endDate = fullDate(meetingEnd);
+    // Past midnight: both days, or "23:30–00:30" would read as backwards.
+    return startDate === endDate
+      ? m.call_landing_when({ date: startDate, start, end, zone })
+      : m.call_landing_when_multiday({ startDate, start, endDate, end, zone });
+  });
   // Join window open but the meeting not started yet: "Beginnt um …", not
   // "Läuft gerade" (QA round 3 C3). A timer flips it at the start.
   let nowS = $state(Math.floor(Date.now() / 1000));
@@ -282,6 +283,10 @@
     function recheck() {
       const seq = ++notYetRecheckSeq;
       checkCallPass(p.relay, p.id, c).then((/** @type {any} */ r) => {
+        // A background hiccup (network error, 5xx) is no answer: keep the
+        // last real one, or the page would leave the waiting view for
+        // "unreachable" and stop re-checking for good (final review 1).
+        if (r?.reason === 'unreachable') return;
         if (!destroyed && seq === notYetRecheckSeq) check = r;
       });
     }

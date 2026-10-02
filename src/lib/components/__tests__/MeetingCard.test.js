@@ -305,6 +305,19 @@ describe('MeetingCard', () => {
       expect(screen.getAllByTestId('meeting-card-delete')).toHaveLength(2);
     });
 
+    // Final review 4: same dialog semantics as CallSwitchConfirmModal.
+    it('the confirm is a labelled modal alertdialog', async () => {
+      render(MeetingCard, {
+        props: { event: meetingIn(3600), pointer: POINTER, user: me, isAdmin: true }
+      });
+      await fireEvent.click(screen.getByTestId('meeting-card-delete'));
+      const dialog = screen.getByTestId('meeting-card-delete-dialog');
+      expect(dialog.getAttribute('role')).toBe('alertdialog');
+      expect(dialog.getAttribute('aria-modal')).toBe('true');
+      const heading = document.getElementById(dialog.getAttribute('aria-labelledby'));
+      expect(heading?.textContent).toBe(m.meeting_card_delete_confirm_title());
+    });
+
     it('asks first, then deletes on the group relay and drops the meeting locally', async () => {
       const event = meetingIn(3600);
       eventStore.add(event);

@@ -49,6 +49,8 @@
   /** @type {Props} */
   let { event, pointer, user, isAdmin, onJoin = undefined, callRunning = false } = $props();
 
+  // Unique per card: several cards can sit in one timeline.
+  const uid = $props.id();
   const TICK_MS = 30_000;
   let nowS = $state(Math.floor(Date.now() / 1000));
   $effect(() => {
@@ -308,9 +310,15 @@
 </div>
 
 {#if confirmDelete}
-  <div class="modal-open modal" role="dialog" data-testid="meeting-card-delete-dialog">
+  <div
+    class="modal-open modal"
+    role="alertdialog"
+    aria-modal="true"
+    aria-labelledby="{uid}-delete-title"
+    data-testid="meeting-card-delete-dialog"
+  >
     <div class="modal-box max-w-sm text-base-content">
-      <h3 class="font-bold">{m.meeting_card_delete_confirm_title()}</h3>
+      <h3 id="{uid}-delete-title" class="font-bold">{m.meeting_card_delete_confirm_title()}</h3>
       <p class="py-2 text-sm opacity-70">{m.meeting_card_delete_confirm_body()}</p>
       <p class="truncate rounded bg-base-200 px-2 py-1 text-xs">{title} · {timeLabel}</p>
       <div class="modal-action">

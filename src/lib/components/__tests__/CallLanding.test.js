@@ -216,6 +216,32 @@ describe('CallLanding', () => {
     expect(screen.getByText(expected)).toBeTruthy();
   });
 
+  // Final review 5: a meeting past midnight names both days.
+  it('names both dates when the meeting ends on another day', async () => {
+    const start = new Date(2033, 4, 18, 23, 30).getTime() / 1000;
+    const end = start + 3600;
+    checkCallPass.mockResolvedValue({
+      valid: false,
+      reason: 'not_yet',
+      notBefore: start - 900,
+      expiration: end + 1800,
+      liveCount: 0
+    });
+    render(CallLanding, { props: { pointer: POINTER } });
+    const day = (s) => formatTimestamp(s, { day: '2-digit', month: '2-digit', year: 'numeric' });
+    const when = await screen.findByTestId('call-landing-when');
+    expect(when.textContent.trim()).toBe(
+      m.call_landing_when_multiday({
+        startDate: day(start),
+        start: formatTimeOfDay(start),
+        endDate: day(end),
+        end: formatTimeOfDay(end),
+        zone: formatTimeZoneName(start)
+      })
+    );
+    expect(day(start)).not.toBe(day(end));
+  });
+
   // QA round 3 K2: no coordinate on the guest side — the UID is derived from
   // the pass, so re-downloading the same link updates the same entry.
   it('the guest .ics UID is stable per link (derived from the pass hash)', async () => {
@@ -412,6 +438,26 @@ describe('CallLanding', () => {
       expect(/** @type {HTMLInputElement} */ (screen.getByTestId('call-landing-name')).value).toBe(
         'Ada'
       );
+    });
+
+    // Final review 1: one failed background recheck (network error / 5xx)
+    // flipped the page to "unreachable" and stopped the waiting for good.
+    it('a failed background recheck keeps waiting; the window still opens', async () => {
+      checkCallPass.mockResolvedValueOnce({
+        valid: false,
+        reason: 'not_yet',
+        notBefore: Math.floor(Date.now() / 1000) + 90,
+        liveCount: 0
+      });
+      render(CallLanding, { props: { pointer: POINTER } });
+      await vi.advanceTimersByTimeAsync(0);
+      checkCallPass.mockResolvedValueOnce({ valid: false, reason: 'unreachable', liveCount: 0 });
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect(screen.getByTestId('call-landing-not-yet')).toBeTruthy();
+      expect(screen.queryByTestId('call-landing-unreachable')).toBeNull();
+      checkCallPass.mockResolvedValue({ valid: true, reason: 'ok', name: 'Weekly', liveCount: 0 });
+      await vi.advanceTimersByTimeAsync(30_000);
+      expect(screen.getByTestId('call-landing-join')).toBeTruthy();
     });
 
     it('auto-switches to the join screen at the pass not-before, without a reload', async () => {

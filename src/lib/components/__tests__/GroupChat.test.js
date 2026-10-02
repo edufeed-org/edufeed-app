@@ -2205,6 +2205,31 @@ describe('GroupChat', () => {
       await waitFor(() => expect(container.textContent).toContain('↩ Elternabend'));
     });
 
+    // Final review 3: the dialog offers guest links only where the relay
+    // speaks call passes — probed for the AV channel, handed in with the props.
+    it.each([true, false])(
+      'hands the call-pass probe result (%s) to the meeting dialog',
+      async (supported) => {
+        probeCallPassSupport.mockResolvedValue(supported);
+        const { modalStore } = await import('$lib/stores/modal.svelte.js');
+        const openModal = vi.spyOn(modalStore, 'openModal').mockImplementation(() => {});
+        try {
+          render(GroupChat, { props: { pointer: meetPointer } });
+          await waitFor(() =>
+            expect(probeCallPassSupport).toHaveBeenCalledWith(GROUP_RELAY, 'meetchat')
+          );
+          await new Promise((r) => setTimeout(r, 0));
+          await fireEvent.click(await screen.findByTestId('group-more-menu'));
+          await fireEvent.click(await screen.findByTestId('group-meeting-schedule'));
+          const props = /** @type {any} */ (openModal.mock.calls[0][1]);
+          expect(props.groupMeeting.passesSupported).toBe(supported);
+        } finally {
+          openModal.mockRestore();
+          probeCallPassSupport.mockResolvedValue(false);
+        }
+      }
+    );
+
     it('offers no "Termin planen" to a non-member', async () => {
       render(GroupChat, { props: { pointer: { relay: GROUP_RELAY, id: 'openchat' } } });
       await fireEvent.click(await screen.findByTestId('group-more-menu'));

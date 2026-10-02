@@ -959,7 +959,8 @@
   const canStartCall = $derived(isAdmin && !avEnabled && avSupported);
 
   // Guest links: members of an AV channel on a relay that speaks call
-  // passes (docs/nips/nip29-call-passes.md). Probed once the call is on.
+  // passes (docs/nips/nip29-call-passes.md). Probed for every AV channel:
+  // the in-call invite and the meeting dialog's guest toggle both need it.
   let passesSupported = $state(false);
   let inviteOpen = $state(false);
   $effect(() => {
@@ -970,7 +971,7 @@
     // this one's probe (or its skip, on a relay without call support) is
     // still pending.
     passesSupported = false;
-    if (!avEnabled || !inCallHere) return;
+    if (!avEnabled) return;
     let alive = true;
     probeCallPassSupport(relay, id).then((ok) => {
       if (alive) passesSupported = ok;
@@ -1058,7 +1059,8 @@
         pointer: { id: pointer.id, relay: pointer.relay },
         channelName: displayTitle,
         channelUrl: buildChannelLink(window.location, pointer.id),
-        memberPubkeys: [...members]
+        memberPubkeys: [...members],
+        passesSupported
       }
     });
   }
