@@ -780,6 +780,7 @@
   "community_join_pending": "Anfrage gesendet — wartet auf Freigabe.",
   "community_join_member": "Mitglied",
   "community_member_follow_button": "Zu meinen Communities hinzufügen",
+  "community_member_follow_done": "Zu deinen Communities hinzugefügt",
   "community_member_follow_hint": "Du bist Mitglied. Folgen zeigt die Community zusätzlich in deiner Community-Liste.",
   "community_join_invite_toggle": "Einladungscode einlösen",
   "community_join_invite_placeholder": "Code",

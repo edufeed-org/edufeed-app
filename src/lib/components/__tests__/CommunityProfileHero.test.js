@@ -33,6 +33,7 @@ vi.mock('$lib/paraglide/messages', () => ({
   community_join_member: () => 'Member',
   community_member_follow_button: () => 'Add to my communities',
   community_member_follow_hint: () => 'You are a member. Following lists it.',
+  community_member_follow_done: () => 'Added to your communities',
   community_join_invite_toggle: () => 'Redeem invite code',
   community_join_invite_placeholder: () => 'Code',
   community_join_invite_lead: () => 'Enter the invite code.',
@@ -182,6 +183,22 @@ describe('CommunityProfileHero — community type', () => {
     expect(screen.queryByText('Closed')).toBeNull();
     expect(screen.queryByText('Invitation only')).toBeNull();
   });
+
+  it('open: following toasts "Follow Community ✓"', async () => {
+    const { joinCommunity } = await import('$lib/helpers/community');
+    /** @type {any} */ (joinCommunity).mockResolvedValue({ success: true });
+    render(CommunityProfileHero, {
+      props: {
+        communityId: 'x'.repeat(64),
+        communikeyEvent: OPEN_EVENT,
+        profileEvent: PROFILE_EVENT,
+        onNavigateToAbout: vi.fn(),
+        onMembersClick: vi.fn()
+      }
+    });
+    await fireEvent.click(screen.getByText('Follow Community'));
+    await waitFor(() => expect(showToast).toHaveBeenCalledWith('Follow Community ✓', 'success'));
+  });
 });
 
 const ROOT_KEY = /** @type {string} */ (channelKey(ROOT_POINTER));
@@ -245,6 +262,10 @@ describe('CommunityProfileHero — moderated join lane', () => {
     expect(joinCommunity).not.toHaveBeenCalled();
     await fireEvent.click(add);
     expect(joinCommunity).toHaveBeenCalledTimes(1);
+    // The toast says what the button said, not "Follow Community ✓".
+    await waitFor(() =>
+      expect(showToast).toHaveBeenCalledWith('Added to your communities', 'success')
+    );
   });
 
   it('non-member who follows keeps the Following badge beside the join lane', () => {

@@ -833,6 +833,7 @@
   "community_join_pending": "Request sent — waiting for approval.",
   "community_join_member": "Member",
   "community_member_follow_button": "Add to my communities",
+  "community_member_follow_done": "Added to your communities",
   "community_member_follow_hint": "You are a member. Following also lists the community in your community list.",
   "community_join_invite_toggle": "Redeem invite code",
   "community_join_invite_placeholder": "Code",

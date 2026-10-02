@@ -98,13 +98,15 @@
     }
   }
 
-  async function handleJoin() {
+  /** @param {string} [successMessage] toast text — the member's "add to my
+   * communities" says that, not "Community folgen ✓" (same follow-set write) */
+  async function handleJoin(successMessage = m.communikey_header_join_button() + ' ✓') {
     if (isJoining) return;
     isJoining = true;
     try {
       const result = await joinCommunity(communityId);
       if (result.success) {
-        showToast(m.communikey_header_join_button() + ' ✓', 'success');
+        showToast(successMessage, 'success');
       } else {
         showToast(result.error || 'Failed to follow', 'error');
       }
@@ -339,7 +341,7 @@
            secondary, and worded as what it does, not as joining. -->
       <div class:mt-7={bannerUrl}>
         <button
-          onclick={handleJoin}
+          onclick={() => handleJoin(m.community_member_follow_done())}
           disabled={isJoining}
           class="btn btn-outline btn-sm"
           title={m.community_member_follow_hint()}
@@ -362,7 +364,7 @@
           </button>
         {:else}
           <button
-            onclick={handleJoin}
+            onclick={() => handleJoin()}
             disabled={isJoining}
             class="btn btn-sm {showsJoinLane ? 'btn-outline' : 'btn-primary'}"
           >
