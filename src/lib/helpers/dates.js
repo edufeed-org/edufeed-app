@@ -52,6 +52,21 @@ export function formatTimestamp(seconds, options) {
 }
 
 /**
+ * Time of day of a Nostr timestamp (seconds) as a 24-hour `HH:MM` in the
+ * active European locale — never the runtime's 12-hour "09:14 AM".
+ *
+ * @param {number} seconds
+ * @returns {string}
+ */
+export function formatTimeOfDay(seconds) {
+  return new Date(seconds * 1000).toLocaleTimeString(activeDateLocale(), {
+    hour: '2-digit',
+    minute: '2-digit',
+    hourCycle: 'h23'
+  });
+}
+
+/**
  * Convert an ISO date (`YYYY-MM-DD`) to the German display form `DD.MM.YYYY`.
  * Returns '' for empty/unparseable input. The leading date portion of a full
  * datetime is accepted (`2018-05-03T...` → `03.05.2018`).

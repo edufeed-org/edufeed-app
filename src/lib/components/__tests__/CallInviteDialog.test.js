@@ -21,6 +21,8 @@ vi.mock('$lib/groups/call-passes.js', () => ({
   passLinkFor: (...a) => passLinkFor(...a),
   revokeCallPass: (...a) => revokeCallPass(...a)
 }));
+const callState = { connected: false };
+vi.mock('$lib/groups/group-call.svelte.js', () => ({ getGroupCallState: () => callState }));
 vi.mock('$lib/stores/nostr-infrastructure.svelte', () => ({ pool: { relay: (url) => ({ url }) } }));
 vi.mock('$lib/services/wrapped-dm.js', () => ({ sendWrappedDm: vi.fn(async () => {}) }));
 vi.mock('$lib/helpers/toast', () => ({ showToast: vi.fn() }));
@@ -44,9 +46,15 @@ const props = {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  callState.connected = false;
   listCallPasses.mockResolvedValue([]);
   passLinkFor.mockResolvedValue(null);
 });
+
+/** "Zurückziehen" asks first (QA round 2 C-new-2). */
+async function confirmRevoke() {
+  await fireEvent.click(await screen.findByTestId('call-invite-revoke-confirm'));
+}
 
 describe('CallInviteDialog', () => {
   it('creates a link and shows it', async () => {
@@ -116,6 +124,7 @@ describe('CallInviteDialog', () => {
     revokeCallPass.mockResolvedValue(undefined);
     render(CallInviteDialog, { props });
     await fireEvent.click(await screen.findByTestId('call-invite-revoke'));
+    await confirmRevoke();
     await waitFor(() =>
       expect(revokeCallPass).toHaveBeenCalledWith({ url: props.pointer.relay }, pass, props.user, {
         asAdmin: false
@@ -206,6 +215,7 @@ describe('CallInviteDialog', () => {
     // A is unshifted to the front of the rows list.
     const revokeButtons = screen.getAllByTestId('call-invite-revoke');
     await fireEvent.click(revokeButtons[0]);
+    await confirmRevoke();
     await waitFor(() => expect(screen.queryByTestId('call-invite-url')).toBeNull());
     // B's row is still there.
     expect(screen.getByTestId('call-invite-pass')).toBeTruthy();
@@ -240,9 +250,104 @@ describe('CallInviteDialog', () => {
     render(CallInviteDialog, { props });
     const revokeButton = await screen.findByTestId('call-invite-revoke');
     await fireEvent.click(revokeButton);
+    await confirmRevoke();
     await fireEvent.click(revokeButton);
+    expect(screen.queryByTestId('call-invite-revoke-confirm')).toBeNull();
     resolveRevoke();
     await waitFor(() => expect(screen.queryByTestId('call-invite-pass')).toBeNull());
     expect(revokeCallPass).toHaveBeenCalledTimes(1);
+  });
+
+  // QA round 2 C-new-2
+  it('asks before revoking, and cancelling keeps the link', async () => {
+    const pass = { id: 'p1', pubkey: ME, created_at: 1, tags: [['h', 'g1']] };
+    listCallPasses.mockResolvedValue([pass]);
+    revokeCallPass.mockResolvedValue(undefined);
+    render(CallInviteDialog, { props });
+    await fireEvent.click(await screen.findByTestId('call-invite-revoke'));
+    const confirm = await screen.findByTestId('call-invite-revoke-dialog');
+    expect(confirm.textContent).toContain(m.groups_call_invite_revoke_confirm_title());
+    expect(confirm.textContent).toContain(m.groups_call_invite_revoke_confirm_text());
+    expect(screen.getByTestId('call-invite-revoke-confirm').className).toContain('btn-error');
+    expect(revokeCallPass).not.toHaveBeenCalled();
+    await fireEvent.click(screen.getByTestId('call-invite-revoke-cancel'));
+    expect(screen.queryByTestId('call-invite-revoke-dialog')).toBeNull();
+    expect(revokeCallPass).not.toHaveBeenCalled();
+    expect(screen.getByTestId('call-invite-pass')).toBeTruthy();
+  });
+
+  // QA round 2 C-new-4
+  it('says under the empty list that links end with the call', async () => {
+    render(CallInviteDialog, { props });
+    expect(await screen.findByText(m.groups_call_invite_none())).toBeTruthy();
+    expect(screen.getByText(m.groups_call_invite_scope_hint())).toBeTruthy();
+  });
+
+  // QA round 2 K-new-2
+  it('lists the link time as a 24-hour HH:MM', async () => {
+    const evening = Math.floor(new Date(2026, 5, 3, 21, 5).getTime() / 1000);
+    listCallPasses.mockResolvedValue([
+      { id: 'p1', pubkey: ME, created_at: evening, tags: [['h', 'g1']] }
+    ]);
+    render(CallInviteDialog, { props });
+    const row = await screen.findByTestId('call-invite-pass');
+    expect(row.textContent).toContain('21:05');
+    expect(row.textContent).not.toMatch(/AM|PM/);
+  });
+
+  // QA round 2 K-new-4
+  it('keeps the name field after creating, so a second link needs no reopen', async () => {
+    createCallLink
+      .mockResolvedValueOnce({
+        code: 'A',
+        url: 'https://x/call/p#A',
+        event: { id: 'pA', pubkey: ME, created_at: 1, tags: [['h', 'g1']] }
+      })
+      .mockResolvedValueOnce({
+        code: 'B',
+        url: 'https://x/call/p#B',
+        event: { id: 'pB', pubkey: ME, created_at: 2, tags: [['h', 'g1']] }
+      });
+    render(CallInviteDialog, { props });
+    await fireEvent.click(screen.getByTestId('call-invite-create'));
+    await waitFor(() =>
+      expect(screen.getByTestId('call-invite-url').value).toBe('https://x/call/p#A')
+    );
+    expect(screen.getByTestId('call-invite-title').value).toBe('');
+    await fireEvent.click(screen.getByTestId('call-invite-create'));
+    await waitFor(() =>
+      expect(screen.getByTestId('call-invite-url').value).toBe('https://x/call/p#B')
+    );
+    expect(screen.getAllByTestId('call-invite-pass')).toHaveLength(2);
+  });
+
+  // Task 15 review, B1 webhook window: the relay learns about the call
+  // from LiveKit's webhook a moment after the client is connected.
+  it('retries a "no call is running" refusal once after a moment while connected', async () => {
+    callState.connected = true;
+    createCallLink
+      .mockRejectedValueOnce(new Error('blocked: no call is running'))
+      .mockResolvedValueOnce({
+        code: 'A',
+        url: 'https://x/call/p#A',
+        event: { id: 'pA', pubkey: ME, created_at: 1, tags: [['h', 'g1']] }
+      });
+    render(CallInviteDialog, { props });
+    await fireEvent.click(screen.getByTestId('call-invite-create'));
+    await waitFor(
+      () => expect(screen.getByTestId('call-invite-url').value).toBe('https://x/call/p#A'),
+      { timeout: 3000 }
+    );
+    expect(createCallLink).toHaveBeenCalledTimes(2);
+    expect(screen.queryByTestId('call-invite-create-error')).toBeNull();
+  });
+  it('shows the error when the retry is refused too', async () => {
+    callState.connected = true;
+    createCallLink.mockRejectedValue(new Error('blocked: no call is running'));
+    render(CallInviteDialog, { props });
+    await fireEvent.click(screen.getByTestId('call-invite-create'));
+    const err = await screen.findByTestId('call-invite-create-error', {}, { timeout: 3000 });
+    expect(err.textContent.trim()).toBe(m.groups_call_invite_not_running());
+    expect(createCallLink).toHaveBeenCalledTimes(2);
   });
 });

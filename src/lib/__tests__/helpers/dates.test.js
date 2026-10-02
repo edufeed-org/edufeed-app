@@ -9,6 +9,7 @@ vi.mock('$lib/paraglide/runtime.js', () => ({
 import {
   formatDate,
   formatTimestamp,
+  formatTimeOfDay,
   isoToGermanDate,
   germanDateToIso,
   parseDateInput,
@@ -200,5 +201,15 @@ describe('parseTimeInput', () => {
     expect(parseTimeInput('')).toBe('');
     expect(parseTimeInput(undefined)).toBe('');
     expect(parseTimeInput(null)).toBe('');
+  });
+});
+
+// QA round 2 K-new-2: the call-link list showed "09:14 AM" in German.
+describe('formatTimeOfDay', () => {
+  // 21:05 local time — a 12-hour clock would print "09:05 PM".
+  const EVENING = Math.floor(new Date(2026, 5, 3, 21, 5).getTime() / 1000);
+  it.each(['de', 'en'])('prints a 24-hour HH:MM for locale %s', (locale) => {
+    mockGetLocale.mockReturnValue(locale);
+    expect(formatTimeOfDay(EVENING)).toBe('21:05');
   });
 });

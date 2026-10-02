@@ -14,6 +14,8 @@
     passLinkFor,
     revokeCallPass
   } from '$lib/groups/call-passes.js';
+  import { getGroupCallState } from '$lib/groups/group-call.svelte.js';
+  import { formatTimeOfDay } from '$lib/helpers/dates.js';
   import { pool } from '$lib/stores/nostr-infrastructure.svelte';
   import { sendWrappedDm } from '$lib/services/wrapped-dm.js';
   import ContactSearchInput from '$lib/components/shared/ContactSearchInput.svelte';
@@ -45,6 +47,11 @@
   let revoking = $state.raw(new SvelteSet());
 
   const relay = () => pool.relay(pointer.relay);
+  const call = getGroupCallState();
+  // The relay learns that the call runs from LiveKit's webhook, a moment
+  // after this client is connected: one quiet retry covers that window
+  // (Task 15 review, B1).
+  const NOT_RUNNING_RETRY_MS = 1500;
 
   onMount(async () => {
     try {
@@ -97,14 +104,29 @@
   /** @type {string | null} */
   let createError = $state(null);
 
+  /** @param {unknown} err */
+  function isNotRunning(err) {
+    return /no call is running/i.test(err instanceof Error ? err.message : String(err));
+  }
+
+  async function createOnce() {
+    return createCallLink(relay(), pointer, user, location.origin, { title: linkTitle });
+  }
+
   async function create() {
     if (creating) return;
     creating = true;
     createError = null;
     try {
-      const { url, event } = await createCallLink(relay(), pointer, user, location.origin, {
-        title: linkTitle
-      });
+      let created;
+      try {
+        created = await createOnce();
+      } catch (err) {
+        if (!isNotRunning(err) || !call.connected) throw err;
+        await new Promise((resolve) => setTimeout(resolve, NOT_RUNNING_RETRY_MS));
+        created = await createOnce();
+      }
+      const { url, event } = created;
       latestUrl = url;
       linkTitle = '';
       rows = [{ pass: event, url }, ...rows];
@@ -139,6 +161,16 @@
     } finally {
       sending = false;
     }
+  }
+
+  // "Zurückziehen" removes everyone who joined with the link: ask first
+  // (QA round 2 C-new-2).
+  /** @type {any} */
+  let confirmPass = $state.raw(null);
+  function confirmRevoke() {
+    const pass = confirmPass;
+    confirmPass = null;
+    if (pass) revoke(pass);
   }
 
   /** @param {any} pass */
@@ -197,31 +229,38 @@
           onrawpubkey={(/** @type {string} */ hex) => sendDm(hex)}
         />
       {/if}
-    {:else}
-      <input
-        class="input-bordered input mt-4 w-full"
-        type="text"
-        maxlength={TITLE_MAX_CHARS}
-        placeholder={m.groups_call_invite_title_placeholder()}
-        aria-label={m.groups_call_invite_title_placeholder()}
-        bind:value={linkTitle}
-        disabled={creating}
-        data-testid="call-invite-title"
-      />
-      <button
-        class="btn mt-2 btn-primary"
-        onclick={create}
-        disabled={creating}
-        data-testid="call-invite-create"
-      >
-        {#if creating}<span class="loading loading-sm loading-spinner"></span>{/if}
-        {m.groups_call_invite_create()}
-      </button>
-      {#if createError}
-        <p class="mt-2 text-sm text-error" role="alert" data-testid="call-invite-create-error">
-          {createError}
-        </p>
-      {/if}
+    {/if}
+    <!-- The name field stays after a create: a second link needs no reopen
+      (QA round 2 K-new-4). -->
+    <input
+      class="input-bordered input mt-4 w-full"
+      type="text"
+      maxlength={TITLE_MAX_CHARS}
+      placeholder={m.groups_call_invite_title_placeholder()}
+      aria-label={m.groups_call_invite_title_placeholder()}
+      bind:value={linkTitle}
+      disabled={creating}
+      onkeydown={(e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          create();
+        }
+      }}
+      data-testid="call-invite-title"
+    />
+    <button
+      class="btn mt-2 {latestUrl ? '' : 'btn-primary'}"
+      onclick={create}
+      disabled={creating}
+      data-testid="call-invite-create"
+    >
+      {#if creating}<span class="loading loading-sm loading-spinner"></span>{/if}
+      {m.groups_call_invite_create()}
+    </button>
+    {#if createError}
+      <p class="mt-2 text-sm text-error" role="alert" data-testid="call-invite-create-error">
+        {createError}
+      </p>
     {/if}
 
     <h4 class="mt-6 text-sm font-semibold">{m.groups_call_invite_active()}</h4>
@@ -235,6 +274,8 @@
     {:else if rows.length === 0}
       {#if !listError}
         <p class="text-sm text-base-content/60">{m.groups_call_invite_none()}</p>
+        <!-- An earlier call's links are gone with that call (C-new-4). -->
+        <p class="mt-1 text-xs text-base-content/60">{m.groups_call_invite_scope_hint()}</p>
       {/if}
     {:else}
       <ul class="mt-2 flex flex-col gap-2">
@@ -247,10 +288,7 @@
                   >{rowTitle}</span
                 > ·
               {/if}
-              {new Date(row.pass.created_at * 1000).toLocaleTimeString([], {
-                hour: '2-digit',
-                minute: '2-digit'
-              })}
+              {formatTimeOfDay(row.pass.created_at)}
               {#if row.pass.pubkey !== user.pubkey}· {m.groups_call_invite_by_other()}{/if}
             </span>
             {#if row.url}
@@ -264,7 +302,9 @@
             {#if row.pass.pubkey === user.pubkey || isAdmin}
               <button
                 class="btn text-error btn-ghost btn-sm"
-                onclick={() => revoke(row.pass)}
+                onclick={() => {
+                  if (!revoking.has(row.pass.id)) confirmPass = row.pass;
+                }}
                 disabled={revoking.has(row.pass.id)}
                 data-testid="call-invite-revoke"
               >
@@ -283,3 +323,41 @@
   <button class="modal-backdrop" aria-label={m.groups_call_invite_close()} onclick={onClose}
   ></button>
 </div>
+
+{#if confirmPass}
+  <div
+    class="modal-open modal"
+    role="alertdialog"
+    aria-modal="true"
+    aria-labelledby="call-invite-revoke-title"
+    data-testid="call-invite-revoke-dialog"
+  >
+    <div class="modal-box max-w-sm">
+      <h3 id="call-invite-revoke-title" class="text-lg font-bold">
+        {m.groups_call_invite_revoke_confirm_title()}
+      </h3>
+      <p class="mt-2 text-sm text-base-content/70">{m.groups_call_invite_revoke_confirm_text()}</p>
+      <div class="modal-action">
+        <button
+          class="btn btn-ghost"
+          onclick={() => (confirmPass = null)}
+          data-testid="call-invite-revoke-cancel"
+        >
+          {m.common_cancel()}
+        </button>
+        <button
+          class="btn btn-error"
+          onclick={confirmRevoke}
+          data-testid="call-invite-revoke-confirm"
+        >
+          {m.groups_call_invite_revoke()}
+        </button>
+      </div>
+    </div>
+    <button
+      class="modal-backdrop"
+      aria-label={m.common_cancel()}
+      onclick={() => (confirmPass = null)}
+    ></button>
+  </div>
+{/if}
