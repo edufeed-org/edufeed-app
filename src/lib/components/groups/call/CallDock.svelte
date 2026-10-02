@@ -74,7 +74,10 @@
           : 'bg-success'}"
       ></span>
     </span>
-    <MeetIcon class_="h-4 w-4 shrink-0 text-primary" title="" />
+    <!-- Icon only from sm: at 390 px the title needs the room. -->
+    <span class="hidden shrink-0 sm:inline-flex"
+      ><MeetIcon class_="h-4 w-4 text-primary" title="" /></span
+    >
     <div class="flex min-w-0 flex-1 flex-col leading-tight">
       <span class="truncate text-sm font-medium">{call.title || m.groups_call_in_call()}</span>
       <span class="truncate text-xs text-base-content/60">

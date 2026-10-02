@@ -438,8 +438,11 @@
   data-testid="group-call-stage"
 >
   <!-- Header -->
-  <div class="flex items-center justify-between gap-2 border-b border-base-300 px-4 py-2">
-    <div class="flex min-w-0 flex-1 items-center gap-2 overflow-hidden">
+  <!-- Tighter below the stage's @lg so the title keeps its letters (QA K4). -->
+  <div
+    class="flex items-center justify-between gap-1.5 border-b border-base-300 px-3 py-2 @lg:gap-2 @lg:px-4"
+  >
+    <div class="flex min-w-0 flex-1 items-center gap-1.5 overflow-hidden @lg:gap-2">
       <MeetIcon class_="w-5 h-5 shrink-0 text-primary" />
       <h2 class="min-w-0 flex-1 truncate font-semibold">{title}</h2>
       {#if !lk.canPublish}
@@ -457,7 +460,7 @@
     <div class="flex shrink-0 items-center gap-1 @lg:gap-2">
       {#if onInvite}
         <button
-          class="btn px-2 btn-ghost btn-sm @lg:px-3"
+          class="btn btn-square btn-ghost btn-sm @lg:w-auto @lg:px-3"
           onclick={onInvite}
           title={m.groups_call_invite_title()}
           aria-label={m.groups_call_invite_title()}
@@ -485,7 +488,7 @@
       {/if}
       {#if onShowChat}
         <button
-          class="btn px-2 btn-ghost btn-sm @lg:px-3 {chatOpen ? 'btn-active' : ''}"
+          class="btn btn-square btn-ghost btn-sm @lg:w-auto @lg:px-3 {chatOpen ? 'btn-active' : ''}"
           onclick={onShowChat}
           aria-pressed={chatOpen}
           aria-label={m.groups_call_show_chat()}
