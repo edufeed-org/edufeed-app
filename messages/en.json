@@ -2550,7 +2550,7 @@
   "call_landing_login": "I already have an account – log in",
   "call_landing_full_profile": "Create a full profile",
   "call_landing_invalid_title": "This link does not work",
-  "call_landing_invalid": "The link is invalid or was revoked.",
+  "call_landing_invalid": "This link no longer works – the call has ended or the link was revoked.",
   "call_landing_checking": "Checking the link…",
   "call_landing_ended_call": "This call has ended.",
   "call_landing_expired": "This link has expired.",
@@ -3765,5 +3765,12 @@
   "groups_call_ended_removed": "You were removed from the call.",
   "groups_call_ended_dropped": "The connection to the call was lost.",
   "groups_call_rejoin": "Rejoin",
-  "call_landing_removed": "The invitation link was revoked or you were removed from the call."
+  "call_landing_removed": "The invitation link was revoked or you were removed from the call.",
+  "call_landing_removed_title": "Call ended",
+  "call_landing_rejoin": "Rejoin",
+  "call_landing_forgotten": "Your identity was deleted from this browser.",
+  "groups_call_invite_scope_hint": "Links only work for the running call and end with it.",
+  "groups_call_invite_revoke_confirm_title": "Revoke link?",
+  "groups_call_invite_revoke_confirm_text": "Everyone in the call through this link will be removed.",
+  "groups_call_tile_you": "You"
 }

@@ -2550,7 +2550,7 @@
   "call_landing_login": "Ich habe schon ein Konto – Anmelden",
   "call_landing_full_profile": "Richtiges Profil anlegen",
   "call_landing_invalid_title": "Dieser Link funktioniert nicht",
-  "call_landing_invalid": "Der Link ist ungültig oder wurde zurückgezogen.",
+  "call_landing_invalid": "Dieser Link gilt nicht mehr – der Anruf ist beendet oder der Link wurde zurückgezogen.",
   "call_landing_checking": "Link wird geprüft…",
   "call_landing_ended_call": "Dieser Anruf ist beendet.",
   "call_landing_expired": "Dieser Link ist abgelaufen.",
@@ -3765,5 +3765,12 @@
   "groups_call_ended_removed": "Du wurdest aus dem Anruf entfernt.",
   "groups_call_ended_dropped": "Die Verbindung zum Anruf wurde getrennt.",
   "groups_call_rejoin": "Erneut beitreten",
-  "call_landing_removed": "Der Einladungslink wurde zurückgezogen oder du wurdest aus dem Anruf entfernt."
+  "call_landing_removed": "Der Einladungslink wurde zurückgezogen oder du wurdest aus dem Anruf entfernt.",
+  "call_landing_removed_title": "Anruf beendet",
+  "call_landing_rejoin": "Wieder beitreten",
+  "call_landing_forgotten": "Deine Identität wurde aus diesem Browser gelöscht.",
+  "groups_call_invite_scope_hint": "Links gelten nur für den laufenden Anruf und enden mit ihm.",
+  "groups_call_invite_revoke_confirm_title": "Link zurückziehen?",
+  "groups_call_invite_revoke_confirm_text": "Alle, die mit diesem Link im Anruf sind, werden entfernt.",
+  "groups_call_tile_you": "Du"
 }

@@ -139,16 +139,39 @@ describe('checkCallPass', () => {
       liveCount: 3
     });
   });
-  it('reads a 404 / network failure / non-JSON as unreachable', async () => {
+  // QA round 2 C-new-1: a truncated group id in the path 404s — that is a
+  // broken link, not a server that is down.
+  it('reads a 404 (unknown or non-AV group) as an unknown link', async () => {
     vi.stubGlobal(
       'fetch',
       vi.fn(async () => new Response('not found', { status: 404 }))
+    );
+    const r = await checkCallPass(RELAY, 'g1', 'C'.repeat(22));
+    expect(r.reason).toBe('unknown');
+    expect(r.valid).toBe(false);
+  });
+  it('reads a network failure / 5xx / non-JSON / timeout as unreachable', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => {
+        throw new Error('offline');
+      })
+    );
+    expect((await checkCallPass(RELAY, 'g1', 'C'.repeat(22))).reason).toBe('unreachable');
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response('bad gateway', { status: 502 }))
+    );
+    expect((await checkCallPass(RELAY, 'g1', 'C'.repeat(22))).reason).toBe('unreachable');
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response('<html>', { status: 200 }))
     );
     expect((await checkCallPass(RELAY, 'g1', 'C'.repeat(22))).reason).toBe('unreachable');
     vi.stubGlobal(
       'fetch',
       vi.fn(async () => {
-        throw new Error('offline');
+        throw new DOMException('aborted', 'AbortError');
       })
     );
     expect((await checkCallPass(RELAY, 'g1', 'C'.repeat(22))).reason).toBe('unreachable');

@@ -110,30 +110,44 @@ export function passCheckUrl(relayUrl, groupId, codeHash) {
  *   liveCount: number}} PassCheck
  */
 
-/** @param {string | null} url @returns {Promise<any | null>} JSON body, or null */
+/**
+ * @param {string | null} url
+ * @returns {Promise<{status: number, json: any | null}>} `status` 0 for a
+ *   network error / timeout; `json` null for a non-2xx or non-JSON answer
+ */
 async function fetchJson(url) {
-  if (!url) return null;
+  if (!url) return { status: 0, json: null };
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), CHECK_TIMEOUT_MS);
   try {
     const response = await fetch(url, { method: 'GET', signal: controller.signal });
-    if (!response.ok) return null;
-    return await response.json();
+    if (!response.ok) return { status: response.status, json: null };
+    try {
+      return { status: response.status, json: await response.json() };
+    } catch {
+      return { status: response.status, json: null };
+    }
   } catch {
-    return null;
+    return { status: 0, json: null };
   } finally {
     clearTimeout(timer);
   }
 }
 
 /**
- * The public pass check. Anything that is not the relay's JSON answer reads
- * as `unreachable`; an unrecognised reason never reads as valid.
+ * The public pass check. The relay answers 404 for a group it does not
+ * know (or one without `livekit`) — a truncated or foreign link, so
+ * `unknown` (QA round 2 C-new-1). Everything else that is not the relay's
+ * JSON answer (network error, timeout, 5xx, non-JSON) reads as
+ * `unreachable`; an unrecognised reason never reads as valid.
  * @param {string} relayUrl @param {string} groupId @param {string} code
  * @returns {Promise<PassCheck>}
  */
 export async function checkCallPass(relayUrl, groupId, code) {
-  const json = await fetchJson(passCheckUrl(relayUrl, groupId, await hashPassCode(code)));
+  const { status, json } = await fetchJson(
+    passCheckUrl(relayUrl, groupId, await hashPassCode(code))
+  );
+  if (status === 404) return { valid: false, reason: 'unknown', liveCount: 0 };
   if (!json || typeof json !== 'object')
     return { valid: false, reason: 'unreachable', liveCount: 0 };
   const reason = REASONS.has(json.reason) ? json.reason : 'unknown';
@@ -157,7 +171,7 @@ export async function checkCallPass(relayUrl, groupId, code) {
  * @param {string} relayUrl @param {string} groupId
  */
 export async function probeCallPassSupport(relayUrl, groupId) {
-  const json = await fetchJson(passCheckUrl(relayUrl, groupId, ZERO_HASH));
+  const { json } = await fetchJson(passCheckUrl(relayUrl, groupId, ZERO_HASH));
   return !!json && typeof json === 'object' && typeof json.reason === 'string';
 }
 

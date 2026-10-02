@@ -15,8 +15,10 @@
     joinGroupCall,
     leaveGroupCall,
     callErrorMessage,
-    registerCallStageView
+    registerCallStageView,
+    toggleChatBeside
   } from '$lib/groups/group-call.svelte.js';
+  import { trackOnScreen } from '$lib/groups/track-on-screen.js';
   import {
     createGuestAccount,
     isCallGuest,
@@ -27,7 +29,20 @@
   import { modalStore } from '$lib/stores/modal.svelte.js';
   import { lazyComponent } from '$lib/helpers/lazy-component.svelte.js';
   import { formatTimestamp } from '$lib/helpers/dates.js';
+  import { MeetIcon } from '$lib/components/icons';
   import * as m from '$lib/paraglide/messages';
+
+  const FORGOTTEN_NOTE_KEY = 'call-landing-forgotten';
+  const FORGOTTEN_NOTE_MS = 10_000;
+  function takeForgottenNote() {
+    try {
+      const at = Number(sessionStorage.getItem(FORGOTTEN_NOTE_KEY));
+      sessionStorage.removeItem(FORGOTTEN_NOTE_KEY);
+      return Date.now() - at < FORGOTTEN_NOTE_MS;
+    } catch {
+      return false;
+    }
+  }
 
   /** @type {{pointer: {id: string, relay: string} | null}} */
   let { pointer } = $props();
@@ -37,6 +52,8 @@
   const getActiveUser = useActiveUser();
   const getMyProfile = useUserProfile();
   const call = getGroupCallState();
+  const me = $derived(getActiveUser());
+  const guestHere = $derived(!!me && isCallGuest(me.pubkey));
 
   const code = typeof window !== 'undefined' ? readPassCodeFromHash(window.location.hash) : null;
   /** @type {any} */
@@ -44,9 +61,32 @@
   let name = $state('');
   let joining = $state(false);
   let wasInCall = $state(false);
-  let chatOpen = $state(false);
+  // Phones: the call chat REPLACES the stage (QA round 2 N1: side by side
+  // at 390 px the stage collapsed into a 30 px strip). md+: it sits beside
+  // the stage, open by default — the same per-device pref as the member
+  // page (call.chatBeside, QA round 2 C-new-3).
+  let narrowChatOpen = $state(false);
+  let wideScreen = $state(false);
+  $effect(() => {
+    const query = window.matchMedia?.('(min-width: 768px)');
+    if (!query) return;
+    wideScreen = query.matches;
+    const onChange = () => (wideScreen = query.matches);
+    query.addEventListener('change', onChange);
+    return () => query.removeEventListener('change', onChange);
+  });
+  const chatOpen = $derived(wideScreen ? call.chatBeside : narrowChatOpen);
+  function toggleChat() {
+    if (wideScreen) toggleChatBeside();
+    else narrowChatOpen = !narrowChatOpen;
+  }
   let rechecking = $state(false);
   let forgetConfirmOpen = $state(false);
+  // "Vergessen" done: say so here instead of a silent redirect (C-new-5).
+  // Removing the account re-mounts the route (the app's account-switch
+  // reset), so the note crosses that one re-mount through sessionStorage —
+  // read once and only briefly, so a later visit never inherits it.
+  let forgotten = $state(takeForgottenNote());
   /** @type {string | null} */
   let guestError = $state(null);
 
@@ -62,7 +102,8 @@
 
   $effect(() => {
     const p = pointer;
-    if (!p || !code) return;
+    // After the call the end screen runs its own check (below).
+    if (!p || !code || untrack(() => wasInCall)) return;
     let alive = true;
     checkCallPass(p.relay, p.id, code).then((/** @type {any} */ r) => {
       if (alive) check = r;
@@ -95,6 +136,7 @@
 
   const title = $derived(check?.name || pointer?.id || '');
   const view = $derived.by(() => {
+    if (forgotten) return 'forgotten';
     if (!pointer || !code) return 'invalid';
     if (inCallHere) return 'in-call';
     if (wasInCall) return 'ended';
@@ -106,6 +148,42 @@
     if (check.reason === 'unreachable') return 'unreachable';
     return 'invalid';
   });
+
+  // The end screen asks the relay again: a guest who hung up by mistake
+  // can come back while the pass still works ("Wieder beitreten"); after the
+  // call ended or the link was revoked the relay no longer knows it
+  // (C-new-5). `check` is cleared first so the pre-call "ok" never shows
+  // the button — the end screen does not depend on `check` otherwise.
+  $effect(() => {
+    if (view !== 'ended' || !pointer || !code) return;
+    const p = pointer;
+    let alive = true;
+    untrack(() => (check = null));
+    checkCallPass(p.relay, p.id, code).then((/** @type {any} */ r) => {
+      if (alive && !destroyed) check = r;
+    });
+    return () => {
+      alive = false;
+    };
+  });
+  const canRejoin = $derived(view === 'ended' && check?.reason === 'ok' && !!me?.signer);
+
+  async function rejoin() {
+    const user = getActiveUser();
+    if (user?.signer) await joinAs(user);
+  }
+
+  // Every call view of this page (stage, chat in its place, connecting,
+  // failed) is "the call on screen": the app-level dock never shows on top
+  // of the landing page that hosts the call (QA round 2 N1). Untracked like
+  // the stage's own registration: the store bumps its own $state.
+  /** @param {HTMLElement} node */
+  function callViewOnScreen(node) {
+    const stop = untrack(() =>
+      trackOnScreen(node, () => registerCallStageView(`${location.pathname}${location.hash}`))
+    );
+    return { destroy: stop };
+  }
 
   /**
    * Re-run the pass check (the "the server could not be reached" retry).
@@ -180,65 +258,93 @@
   function forget() {
     forgetConfirmOpen = false;
     const user = getActiveUser();
+    if (pointer && call.isActiveFor(pointer)) leaveGroupCall();
+    forgotten = true;
+    try {
+      sessionStorage.setItem(FORGOTTEN_NOTE_KEY, String(Date.now()));
+    } catch {
+      /* storage blocked: this instance still shows the note */
+    }
     if (user) forgetGuestAccount(user.pubkey);
-    location.href = '/';
   }
-
-  const me = $derived(getActiveUser());
-  const guestHere = $derived(!!me && isCallGuest(me.pubkey));
 </script>
 
 <div class="flex min-h-0 flex-1 flex-col" data-testid="call-landing">
   {#if view === 'in-call'}
-    {#if call.phase === 'ready' && CallStage.Component}
-      <div class="flex min-h-0 flex-1 flex-row">
-        <CallStage.Component
-          {title}
-          {identityToPubkey}
-          onLeave={leaveGroupCall}
-          onShowChat={() => (chatOpen = !chatOpen)}
-          {chatOpen}
-          registerView={() => registerCallStageView(`${location.pathname}${location.hash}`)}
-        />
-        {#if chatOpen && CallChatPanel.Component}
-          <div class="flex min-h-0 w-full flex-col border-l border-base-300 md:w-96">
-            <CallChatPanel.Component {identityToPubkey} />
-          </div>
-        {/if}
-      </div>
-    {:else if call.phase === 'error'}
-      <div
-        class="m-auto flex flex-col items-center gap-3 p-6 text-center"
-        data-testid="call-landing-error"
-      >
-        <p class="text-error">{callErrorMessage(call.error)}</p>
-        <div class="flex gap-2">
-          <button class="btn btn-sm btn-primary" onclick={retry} data-testid="call-landing-retry">
-            {m.groups_call_retry()}
-          </button>
-          <button
-            class="btn btn-ghost btn-sm"
-            onclick={leaveGroupCall}
-            data-testid="call-landing-back"
-          >
-            {m.call_landing_back()}
-          </button>
-          {#if guestHere}
-            <button
-              class="btn text-error btn-ghost btn-sm"
-              onclick={openForgetConfirm}
-              data-testid="call-landing-forget"
+    <div
+      class="flex min-h-0 flex-1 flex-col"
+      data-testid="call-landing-in-call"
+      use:callViewOnScreen
+    >
+      {#if call.phase === 'ready' && CallStage.Component}
+        <div class="flex min-h-0 flex-1 flex-row">
+          {#if wideScreen || !chatOpen}
+            <CallStage.Component
+              {title}
+              {identityToPubkey}
+              onLeave={leaveGroupCall}
+              onShowChat={toggleChat}
+              chatOpen={wideScreen && chatOpen}
+              registerView={() => registerCallStageView(`${location.pathname}${location.hash}`)}
+            />
+          {/if}
+          {#if chatOpen && CallChatPanel.Component}
+            <div
+              class="flex min-h-0 w-full flex-col md:w-96 md:shrink-0 md:border-l md:border-base-300"
             >
-              {m.call_landing_forget()}
-            </button>
+              {#if !wideScreen}
+                <!-- The way back to the stage while the chat stands in for it. -->
+                <div class="flex items-center gap-2 border-b border-base-300 px-3 py-2">
+                  <span class="min-w-0 flex-1 truncate text-sm font-semibold">{title}</span>
+                  <button
+                    type="button"
+                    class="btn btn-sm btn-primary"
+                    onclick={toggleChat}
+                    data-testid="call-landing-chat-back"
+                  >
+                    <MeetIcon class_="w-4 h-4" title="" />
+                    {m.groups_call_return()}
+                  </button>
+                </div>
+              {/if}
+              <CallChatPanel.Component {identityToPubkey} />
+            </div>
           {/if}
         </div>
-      </div>
-    {:else}
-      <div class="m-auto">
-        <span class="loading loading-lg loading-spinner text-primary"></span>
-      </div>
-    {/if}
+      {:else if call.phase === 'error'}
+        <div
+          class="m-auto flex flex-col items-center gap-3 p-6 text-center"
+          data-testid="call-landing-error"
+        >
+          <p class="text-error">{callErrorMessage(call.error)}</p>
+          <div class="flex gap-2">
+            <button class="btn btn-sm btn-primary" onclick={retry} data-testid="call-landing-retry">
+              {m.groups_call_retry()}
+            </button>
+            <button
+              class="btn btn-ghost btn-sm"
+              onclick={leaveGroupCall}
+              data-testid="call-landing-back"
+            >
+              {m.call_landing_back()}
+            </button>
+            {#if guestHere}
+              <button
+                class="btn text-error btn-ghost btn-sm"
+                onclick={openForgetConfirm}
+                data-testid="call-landing-forget"
+              >
+                {m.call_landing_forget()}
+              </button>
+            {/if}
+          </div>
+        </div>
+      {:else}
+        <div class="m-auto">
+          <span class="loading loading-lg loading-spinner text-primary"></span>
+        </div>
+      {/if}
+    </div>
   {:else}
     <div class="mx-auto w-full max-w-md p-6">
       <div class="card bg-base-100 shadow">
@@ -380,16 +486,23 @@
             {/if}
           {:else if view === 'ended'}
             <div data-testid="call-landing-ended" class="flex flex-col gap-3">
-              <h1 class="text-xl font-bold">{m.call_landing_after_title()}</h1>
+              <h1 class="text-xl font-bold">
+                {removedHere ? m.call_landing_removed_title() : m.call_landing_after_title()}
+              </h1>
               {#if removedHere}
                 <p class="text-sm text-base-content/70" data-testid="call-landing-removed">
                   {m.call_landing_removed()}
                 </p>
               {/if}
+              {#if canRejoin}
+                <button class="btn btn-primary" onclick={rejoin} data-testid="call-landing-rejoin">
+                  {m.call_landing_rejoin()}
+                </button>
+              {/if}
               {#if guestHere}
                 <p class="text-sm text-base-content/70">{m.call_landing_keep_identity()}</p>
                 <button
-                  class="btn btn-primary"
+                  class="btn {canRejoin ? '' : 'btn-primary'}"
                   onclick={() => modalStore.openModal('recovery-download')}
                   data-testid="call-landing-backup"
                 >
@@ -414,10 +527,16 @@
                   {m.call_landing_forget()}
                 </button>
               {:else}
-                <a class="btn btn-primary" href={pointer ? groupHref(pointer) : '/'}
-                  >{m.call_landing_open_channel()}</a
+                <a
+                  class="btn {canRejoin ? '' : 'btn-primary'}"
+                  href={pointer ? groupHref(pointer) : '/'}>{m.call_landing_open_channel()}</a
                 >
               {/if}
+            </div>
+          {:else if view === 'forgotten'}
+            <div data-testid="call-landing-forgotten" class="flex flex-col gap-3" role="status">
+              <p class="text-sm">{m.call_landing_forgotten()}</p>
+              <a class="btn btn-sm" href="/">{m.call_landing_to_app()}</a>
             </div>
           {/if}
         </div>

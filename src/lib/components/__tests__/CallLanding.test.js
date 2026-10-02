@@ -18,8 +18,13 @@ const callState = {
   code: null,
   connected: false,
   endReason: null,
+  chatBeside: true,
   isActiveFor: () => false
 };
+const registerCallStageView = vi.fn(() => () => {});
+const toggleChatBeside = vi.fn(() => {
+  callState.chatBeside = !callState.chatBeside;
+});
 const joinGroupCall = vi.fn(async () => {});
 const leaveGroupCall = vi.fn(async () => {});
 vi.mock('$lib/groups/group-call.svelte.js', () => ({
@@ -27,7 +32,8 @@ vi.mock('$lib/groups/group-call.svelte.js', () => ({
   joinGroupCall: (...a) => joinGroupCall(...a),
   leaveGroupCall: (...a) => leaveGroupCall(...a),
   callErrorMessage: () => 'err-msg',
-  registerCallStageView: () => () => {}
+  registerCallStageView: (...a) => registerCallStageView(...a),
+  toggleChatBeside: () => toggleChatBeside()
 }));
 let activeUser = null;
 vi.mock('$lib/stores/accounts.svelte', () => ({
@@ -67,9 +73,35 @@ beforeEach(() => {
   callState.connected = false;
   callState.endReason = null;
   callState.isActiveFor = () => false;
+  callState.chatBeside = true;
+  registerCallStageView.mockImplementation(() => () => {});
   getProfile.mockReturnValue(null);
   window.location.hash = '#' + CODE;
+  sessionStorage.clear();
+  setWide(false);
 });
+
+/** md+ (768 px) or a phone: the landing reads window.matchMedia. */
+function setWide(wide) {
+  window.matchMedia = vi.fn(() => ({
+    matches: wide,
+    addEventListener: () => {},
+    removeEventListener: () => {}
+  }));
+}
+
+/** Render, connect, and wait for the stage. */
+async function renderInCall() {
+  checkCallPass.mockResolvedValue({ valid: true, reason: 'ok', liveCount: 1 });
+  activeUser = { pubkey: 'h'.repeat(64), signer: {} };
+  const view = render(CallLanding, { props: { pointer: POINTER } });
+  callState.phase = 'ready';
+  callState.connected = true;
+  callState.isActiveFor = () => true;
+  await view.rerender({ pointer: { ...POINTER } });
+  await screen.findByTestId('group-call-stage-stub');
+  return view;
+}
 
 describe('CallLanding', () => {
   it('rejects a link without a valid code without asking the relay', async () => {
@@ -301,5 +333,148 @@ describe('CallLanding', () => {
     await rerender({ pointer: { ...POINTER } });
     expect(await screen.findByTestId('call-landing-ended')).toBeTruthy();
     expect(screen.queryByTestId('call-landing-removed')).toBeNull();
+  });
+
+  // QA round 2 N1: at 390 the chat squeezed the stage into a 30 px strip.
+  it('on a phone the call chat replaces the stage, and the chat bar brings it back', async () => {
+    await renderInCall();
+    await fireEvent.click(screen.getByTestId('group-call-stage-stub-chat'));
+    expect(await screen.findByTestId('call-chat-panel')).toBeTruthy();
+    expect(screen.queryByTestId('group-call-stage-stub')).toBeNull();
+    expect(toggleChatBeside).not.toHaveBeenCalled();
+
+    await fireEvent.click(screen.getByTestId('call-landing-chat-back'));
+    expect(await screen.findByTestId('group-call-stage-stub')).toBeTruthy();
+    expect(screen.queryByTestId('call-chat-panel')).toBeNull();
+  });
+  it("the landing's call view stays registered as on screen while the chat replaces the stage (no dock)", async () => {
+    let live = 0;
+    registerCallStageView.mockImplementation(() => {
+      live++;
+      let done = false;
+      return () => {
+        if (!done) live--;
+        done = true;
+      };
+    });
+    await renderInCall();
+    await fireEvent.click(screen.getByTestId('group-call-stage-stub-chat'));
+    await screen.findByTestId('call-chat-panel');
+    expect(screen.queryByTestId('group-call-stage-stub')).toBeNull();
+    expect(live).toBeGreaterThan(0);
+  });
+  it('registers the in-call view with the landing href for the stage, failure and spinner phases', async () => {
+    checkCallPass.mockResolvedValue({ valid: true, reason: 'ok', liveCount: 1 });
+    activeUser = { pubkey: 'h'.repeat(64), signer: {} };
+    callState.phase = 'requesting';
+    callState.isActiveFor = () => true;
+    render(CallLanding, { props: { pointer: POINTER } });
+    await screen.findByTestId('call-landing-in-call');
+    expect(registerCallStageView).toHaveBeenCalledWith(
+      `${window.location.pathname}${window.location.hash}`
+    );
+  });
+  // QA round 2 C-new-3: wide screens open the chat beside the stage.
+  it('on md+ the call chat opens beside the stage by default (chatBeside pref)', async () => {
+    setWide(true);
+    await renderInCall();
+    expect(await screen.findByTestId('call-chat-panel')).toBeTruthy();
+    expect(screen.getByTestId('group-call-stage-stub').dataset.chatOpen).toBe('true');
+    expect(screen.queryByTestId('call-landing-chat-back')).toBeNull();
+    await fireEvent.click(screen.getByTestId('group-call-stage-stub-chat'));
+    expect(toggleChatBeside).toHaveBeenCalled();
+  });
+  it('on md+ a closed chatBeside pref keeps the chat closed', async () => {
+    setWide(true);
+    callState.chatBeside = false;
+    await renderInCall();
+    expect(screen.queryByTestId('call-chat-panel')).toBeNull();
+  });
+  // QA round 2 N2: the relay deletes call-scoped passes when the call ends.
+  it('an unknown pass says the call ended or the link was revoked', async () => {
+    checkCallPass.mockResolvedValue({ valid: false, reason: 'unknown', liveCount: 0 });
+    render(CallLanding, { props: { pointer: POINTER } });
+    const card = await screen.findByTestId('call-landing-invalid');
+    expect(card.textContent).toContain(m.call_landing_invalid());
+  });
+  it('keeps the specific copy for call_ended and expired', async () => {
+    checkCallPass.mockResolvedValue({ valid: false, reason: 'expired', liveCount: 0 });
+    render(CallLanding, { props: { pointer: POINTER } });
+    expect((await screen.findByTestId('call-landing-invalid')).textContent).toContain(
+      m.call_landing_expired()
+    );
+  });
+  // QA round 2 C-new-5: rejoin while the pass still works.
+  it('the end screen re-checks the pass and offers "Wieder beitreten" only while it is ok', async () => {
+    const { rerender } = await renderInCall();
+    checkCallPass.mockClear();
+    checkCallPass.mockResolvedValue({ valid: true, reason: 'ok', liveCount: 2 });
+    callState.isActiveFor = () => false;
+    callState.phase = 'idle';
+    callState.connected = false;
+    await rerender({ pointer: { ...POINTER } });
+    await fireEvent.click(await screen.findByTestId('call-landing-rejoin'));
+    expect(checkCallPass).toHaveBeenCalled();
+    expect(joinGroupCall).toHaveBeenCalledWith(
+      POINTER,
+      activeUser,
+      expect.objectContaining({ code: CODE })
+    );
+  });
+  it('no "Wieder beitreten" once the pass is gone', async () => {
+    const { rerender } = await renderInCall();
+    checkCallPass.mockResolvedValue({ valid: false, reason: 'unknown', liveCount: 0 });
+    callState.isActiveFor = () => false;
+    callState.phase = 'idle';
+    callState.connected = false;
+    await rerender({ pointer: { ...POINTER } });
+    await screen.findByTestId('call-landing-ended');
+    await waitFor(() => expect(checkCallPass.mock.calls.length).toBeGreaterThan(1));
+    await new Promise((r) => setTimeout(r, 0));
+    expect(screen.queryByTestId('call-landing-rejoin')).toBeNull();
+  });
+  it('after "Vergessen" it says the identity was deleted from this browser', async () => {
+    const { rerender } = await renderInCall();
+    callState.isActiveFor = () => false;
+    callState.phase = 'idle';
+    callState.connected = false;
+    await rerender({ pointer: { ...POINTER } });
+    await fireEvent.click(await screen.findByTestId('call-landing-forget'));
+    await fireEvent.click(screen.getByTestId('call-landing-forget-confirm'));
+    expect(forgetGuestAccount).toHaveBeenCalledWith('h'.repeat(64));
+    expect((await screen.findByTestId('call-landing-forgotten')).textContent).toContain(
+      m.call_landing_forgotten()
+    );
+  });
+  // QA round 2 C-new-6
+  it('a removed guest\'s end screen is titled neutrally, not "thanks for joining"', async () => {
+    const { rerender } = await renderInCall();
+    callState.phase = 'ended';
+    callState.connected = false;
+    callState.endReason = 'removed';
+    await rerender({ pointer: { ...POINTER } });
+    const ended = await screen.findByTestId('call-landing-ended');
+    expect(ended.textContent).toContain(m.call_landing_removed_title());
+    expect(ended.textContent).not.toContain(m.call_landing_after_title());
+  });
+  // Live 2026-10-02: removing the account re-mounts the route, which lost
+  // the in-component "forgotten" state and showed the invalid-link page.
+  it('the "identity deleted" note survives the re-mount that removing the account causes', async () => {
+    const first = await renderInCall();
+    callState.isActiveFor = () => false;
+    callState.phase = 'idle';
+    callState.connected = false;
+    await first.rerender({ pointer: { ...POINTER } });
+    await fireEvent.click(await screen.findByTestId('call-landing-forget'));
+    await fireEvent.click(screen.getByTestId('call-landing-forget-confirm'));
+    first.unmount();
+    activeUser = null;
+    checkCallPass.mockResolvedValue({ valid: false, reason: 'unknown', liveCount: 0 });
+    const second = render(CallLanding, { props: { pointer: POINTER } });
+    expect(await screen.findByTestId('call-landing-forgotten')).toBeTruthy();
+    second.unmount();
+    // only once: a later visit starts fresh
+    render(CallLanding, { props: { pointer: POINTER } });
+    expect(await screen.findByTestId('call-landing-invalid')).toBeTruthy();
   });
 });
