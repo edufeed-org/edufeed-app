@@ -365,6 +365,29 @@ describe('PrivateChannelsView — NIP-29 channels in the community rail', () => 
       await screen.findByTestId('group-chat-stub');
     });
 
+    // Controller ruling (Task 14 review): leaving the ROOT group leaves the
+    // community — the pane tells GroupChat which one it is showing.
+    it('marks only the root channel as the community root', async () => {
+      clearGroupChannelSelection(OWNER);
+      holders.events = { [ENDPOINT]: [root(), chan('allgemein', [['private']])] };
+      render(PrivateChannelsView, { props: { communikeyEvent: moderated() } });
+      const rows = await screen.findAllByTestId('group-channel-row');
+      // Root is pinned first ("General").
+      await fireEvent.click(rows[0]);
+      let chat = await screen.findByTestId('group-chat-stub');
+      expect(chat.textContent).toContain("'root0");
+      expect(chat.dataset.communityRoot).toBe('true');
+
+      await fireEvent.click(screen.getByTestId('group-chat-stub-back'));
+      const again = await screen.findAllByTestId('group-channel-row');
+      await fireEvent.click(
+        /** @type {HTMLElement} */ (again.find((r) => r.textContent?.includes('allgemein')))
+      );
+      chat = await screen.findByTestId('group-chat-stub');
+      expect(chat.textContent).toContain("'allgemein");
+      expect(chat.dataset.communityRoot).toBe('false');
+    });
+
     it('a re-tap of the Kanäle tab (requestChannelList) goes back to the list', async () => {
       const view = await openAllgemein();
 

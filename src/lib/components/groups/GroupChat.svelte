@@ -165,13 +165,16 @@
    * onBack: the community pane's "back to the channel list" (design 1a). Only
    * a host that HAS a channel list to go back to passes it — the standalone
    * /groups route keeps its host sidebar and renders no breadcrumb.
-   * @type {{pointer: import('$lib/groups/groups.js').GroupPointer, fallbackName?: string, communityPubkey?: string, anchorMessageId?: string | null, onBack?: () => void}} */
+   * isCommunityRoot: this is the community's ROOT (membership) group — leaving
+   * it leaves the community, so the leave entry and its confirm say so.
+   * @type {{pointer: import('$lib/groups/groups.js').GroupPointer, fallbackName?: string, communityPubkey?: string, anchorMessageId?: string | null, onBack?: () => void, isCommunityRoot?: boolean}} */
   let {
     pointer,
     fallbackName = '',
     communityPubkey = '',
     anchorMessageId = null,
-    onBack = undefined
+    onBack = undefined,
+    isCommunityRoot = false
   } = $props();
 
   const getActiveUser = useActiveUser();
@@ -1427,6 +1430,18 @@
   // one stray click away, and on a closed channel the way back in is a new
   // request an admin has to approve.
   let leaveConfirmOpen = $state(false);
+  // The root group IS the community's membership: leaving it leaves the
+  // community (controller ruling, Task 14 review) — same 9022, other words.
+  const leaveLabel = $derived(
+    isCommunityRoot ? m.groups_leave_community() : m.groups_leave_channel()
+  );
+  const leaveConfirmTitle = $derived(
+    isCommunityRoot ? m.groups_leave_community_confirm_title() : m.groups_leave_confirm_title()
+  );
+  const leaveConfirmBody = $derived.by(() => {
+    if (isCommunityRoot) return m.groups_leave_community_confirm_body();
+    return groupClosed ? m.groups_leave_confirm_body_closed() : m.groups_leave_confirm_body_open();
+  });
   let leaving = $state(false);
 
   function askLeave() {
@@ -1629,21 +1644,20 @@
             <!-- Destructive last, set apart, and confirmed (design 1a). -->
             <li class="mt-1 border-t border-base-300 pt-1">
               <button class="font-semibold text-error" data-testid="group-leave" onclick={askLeave}>
-                {m.groups_leave_channel()}
+                {leaveLabel}
               </button>
             </li>
           {/if}
         </ul>
       </div>
     {/if}
-    {#if myPubkey && rosterAnswered}
-      {#if isMember}
-        <!-- Leave lives in the ⋯ menu behind a confirm (design 1a). -->
-      {:else if canWrite}
-        <!-- Admin (39001) without an explicit 39002 seat: NIP-29 counts admins
-          as members, so they are already in — no join/leave affordance. This is
-          the community creator's own situation (self-approval loop otherwise). -->
-      {:else if joinPending}
+    <!-- Join affordance for non-members only. A member's Leave lives in the ⋯
+      menu behind a confirm (design 1a); an admin (39001) without an explicit
+      39002 seat is a member too — NIP-29 counts admins as members, so no
+      join/leave here (the community creator's own situation; a self-approval
+      loop otherwise). -->
+    {#if myPubkey && rosterAnswered && !isMember && !canWrite}
+      {#if joinPending}
         <span class="text-xs text-base-content/60" data-testid="group-join-pending"
           >{m.community_join_pending()}</span
         >
@@ -1717,10 +1731,8 @@
   {#if leaveConfirmOpen}
     <div class="modal-open modal" role="dialog" data-testid="group-leave-confirm">
       <div class="modal-box max-w-sm">
-        <h3 class="font-bold">{m.groups_leave_confirm_title()}</h3>
-        <p class="py-2 text-sm opacity-70">
-          {groupClosed ? m.groups_leave_confirm_body_closed() : m.groups_leave_confirm_body_open()}
-        </p>
+        <h3 class="font-bold">{leaveConfirmTitle}</h3>
+        <p class="py-2 text-sm opacity-70">{leaveConfirmBody}</p>
         <div class="modal-action">
           <button class="btn btn-ghost" onclick={() => (leaveConfirmOpen = false)}
             >{m.common_cancel()}</button
@@ -1731,7 +1743,7 @@
             disabled={leaving}
             onclick={confirmLeave}
           >
-            {m.groups_leave_channel()}
+            {leaveLabel}
           </button>
         </div>
       </div>

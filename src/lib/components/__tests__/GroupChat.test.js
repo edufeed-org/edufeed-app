@@ -961,6 +961,9 @@ vi.mock('$lib/paraglide/messages', () => ({
   groups_leave_confirm_title: () => 'Really leave this channel?',
   groups_leave_confirm_body_open: () => 'You can join again later.',
   groups_leave_confirm_body_closed: () => 'Rejoining needs approval.',
+  groups_leave_community: () => 'Leave community',
+  groups_leave_community_confirm_title: () => 'Really leave this community?',
+  groups_leave_community_confirm_body: () => 'You lose access to all channels of this community.',
   groups_breadcrumb_channels: () => 'Channels',
   groups_breadcrumb_channels_aria: () => 'Back to the channel list',
   groups_more_menu: () => 'More',
@@ -2392,11 +2395,35 @@ describe('GroupChat', () => {
 
       // Confirm sends the 9022.
       await fireEvent.click(screen.getByTestId('group-leave'));
-      await fireEvent.click(await screen.findByTestId('group-leave-confirm-action'));
+      const action = await screen.findByTestId('group-leave-confirm-action');
+      expect(action.textContent?.trim()).toBe('Leave channel');
+      await fireEvent.click(action);
       await waitFor(() => expect(publishMock).toHaveBeenCalledTimes(1));
       const sent = publishMock.mock.calls[0][0];
       expect(sent.kind).toBe(9022);
       await waitFor(() => expect(screen.queryByTestId('group-leave-confirm')).toBeNull());
+    });
+
+    // The community's ROOT group is its membership: leaving it leaves the
+    // community, and the entry + confirm must say so (same 9022 underneath).
+    it('on the community root, the entry and confirm say "Leave community"', async () => {
+      render(GroupChat, { props: { pointer, isCommunityRoot: true } });
+      await fireEvent.click(await screen.findByTestId('group-more-menu'));
+      const item = await screen.findByTestId('group-leave');
+      expect(item.textContent?.trim()).toBe('Leave community');
+
+      await fireEvent.click(item);
+      const dialog = await screen.findByTestId('group-leave-confirm');
+      expect(dialog.textContent).toContain('Really leave this community?');
+      expect(dialog.textContent).toContain('You lose access to all channels of this community.');
+      expect(dialog.textContent).not.toContain('Really leave this channel?');
+      const action = screen.getByTestId('group-leave-confirm-action');
+      expect(action.textContent?.trim()).toBe('Leave community');
+      expect(publishMock).not.toHaveBeenCalled();
+
+      await fireEvent.click(action);
+      await waitFor(() => expect(publishMock).toHaveBeenCalledTimes(1));
+      expect(publishMock.mock.calls[0][0].kind).toBe(9022);
     });
 
     it('offers no leave entry to a non-member', async () => {

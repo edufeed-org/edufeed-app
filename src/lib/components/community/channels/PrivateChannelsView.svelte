@@ -374,6 +374,15 @@
     ];
     return all.find((pointer) => channelKey(pointer) === key) ?? null;
   });
+  // The root (membership) group is open: leaving it leaves the community.
+  const selectedIsRoot = $derived.by(() => {
+    const root = getCommunityChannels().rootChannel;
+    return (
+      !!selectedGroupPointer &&
+      !!root &&
+      channelKey(selectedGroupPointer) === channelKey({ id: root.id, relay: root.relay })
+    );
+  });
   // GroupChat's fallback title: a channel pointer's own name, or "General" for
   // the root (which has no name — its 39000 name is the community name).
   const selectedFallbackName = $derived(
@@ -910,6 +919,7 @@
               communityPubkey={communikeyEvent?.pubkey ?? ''}
               {anchorMessageId}
               onBack={backToChannelList}
+              isCommunityRoot={selectedIsRoot}
             />
           {/key}
         {:else}
