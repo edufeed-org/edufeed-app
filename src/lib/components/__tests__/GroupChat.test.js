@@ -2392,6 +2392,22 @@ describe('GroupChat', () => {
       expect(onBack).toHaveBeenCalledTimes(1);
     });
 
+    // QA K-new-5: the standalone /groups/<pointer> route had no meaningful
+    // title. Only a host that asks (ownsDocumentTitle) gets one — inside a
+    // community the layout titles the page.
+    it('titles the document with the channel name only when asked', async () => {
+      document.title = 'unchanged';
+      const first = render(GroupChat, { props: { pointer } });
+      await screen.findByTestId('group-name');
+      expect(document.title).toBe('unchanged');
+      first.unmount();
+
+      render(GroupChat, { props: { pointer, ownsDocumentTitle: true } });
+      const name = (await screen.findByTestId('group-name')).textContent?.trim() ?? '';
+      expect(name).not.toBe('');
+      await vi.waitFor(() => expect(document.title.startsWith(name)).toBe(true));
+    });
+
     it('has no Leave button in the header for a member', async () => {
       render(GroupChat, { props: { pointer } });
       // beechat: ME is on the roster, so the menu entry shows once it answered.

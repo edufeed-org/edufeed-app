@@ -123,6 +123,16 @@ describe('CallLanding', () => {
     expect(await screen.findByTestId('call-landing-invalid')).toBeTruthy();
     expect(screen.queryByTestId('call-landing-checking')).toBeNull();
   });
+  // QA K-new-5: the page left document.title empty ("untitled page").
+  it('titles the page "Einladung: <call name>"', async () => {
+    document.title = '';
+    checkCallPass.mockResolvedValue({ valid: true, reason: 'ok', name: 'Weekly', liveCount: 1 });
+    render(CallLanding, { props: { pointer: POINTER } });
+    await screen.findByTestId('call-landing-name');
+    await waitFor(() =>
+      expect(document.title.startsWith(m.call_page_title({ name: 'Weekly' }))).toBe(true)
+    );
+  });
   it('explains an ended call / revoked link', async () => {
     checkCallPass.mockResolvedValue({ valid: false, reason: 'call_ended', liveCount: 0 });
     render(CallLanding, { props: { pointer: POINTER } });

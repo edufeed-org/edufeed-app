@@ -17,6 +17,8 @@
   import { CloseIcon } from '$lib/components/icons';
   import { showToast } from '$lib/helpers/toast';
   import * as m from '$lib/paraglide/messages';
+  import { runtimeConfig } from '$lib/stores/config.svelte.js';
+  import { pageTitle } from '$lib/helpers/page-title.js';
 
   // The same hook the sidebar rail uses: it also asks the user's NIP-65
   // write relays — a kind-10009 is a USER-OWNED list, and fetching it from
@@ -67,7 +69,7 @@
 </script>
 
 <svelte:head>
-  <title>{m.groups_title()} — edufeed</title>
+  <title>{pageTitle([m.groups_title()], runtimeConfig.appName)}</title>
 </svelte:head>
 
 <div class="mx-auto max-w-2xl p-4">

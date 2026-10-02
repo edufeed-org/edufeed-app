@@ -35,6 +35,9 @@
   import { isCommunityOwner } from '$lib/helpers/community-signer.js';
   import { resolveZoneMembership } from '$lib/components/community/layout/community-nav.js';
   import * as m from '$lib/paraglide/messages';
+  import { runtimeConfig } from '$lib/stores/config.svelte.js';
+  import { getSelectedGroupChannel } from '$lib/groups/group-channel-selection.svelte.js';
+  import { communityPageTitle } from '$lib/helpers/page-title.js';
 
   /** @type {{ data: any, children: import('svelte').Snippet }} */
   let { data, children } = $props();
@@ -228,6 +231,24 @@
     })
   );
 
+  // Document title (QA 2026-10-02 K-new-5: channel pages had none, so the
+  // route announcer read "untitled page"). The open NIP-29 channel's name
+  // comes from the same rows the sidebar lists (General included).
+  const openChannelName = $derived.by(() => {
+    const key = getSelectedGroupChannel(communikeyEvent?.pubkey ?? data.pubkey);
+    if (!key) return '';
+    return channelRows.find((row) => row.key === `group:${key}`)?.name ?? '';
+  });
+  const documentTitle = $derived(
+    communityPageTitle({
+      communityName: displayName,
+      appName: runtimeConfig.appName,
+      view: selectedContentType,
+      channelName: openChannelName,
+      channelsLabel: m.concord_tab_label()
+    })
+  );
+
   // Zone-membership signal for the sidebar's Kanäle zone (review of
   // 187b4c0b, critical 2) — deliberately NOT `getIsMember()` (kind-30000
   // follow set, a social bookmark unrelated to roster/Concord access; that
@@ -344,6 +365,10 @@
     }
   }
 </script>
+
+<svelte:head>
+  <title>{documentTitle}</title>
+</svelte:head>
 
 <div class="px-4 pt-3 empty:hidden">
   <LegacyContentTypesBanner communityEvent={effectiveCommunityEvent} />

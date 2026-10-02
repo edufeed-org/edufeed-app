@@ -153,6 +153,7 @@
   import { showToast } from '$lib/helpers/toast';
   import { buildMessageDeepLink, scrollToChatMessage } from '$lib/helpers/message-anchor.js';
   import * as m from '$lib/paraglide/messages';
+  import { pageTitle } from '$lib/helpers/page-title.js';
 
   /** fallbackName: the display name the CALLER already knows (the community
    * pane reads it off the 10222's group pointer tag). Wins over the raw id
@@ -170,14 +171,18 @@
    * /groups route keeps its host sidebar and renders no breadcrumb.
    * isCommunityRoot: this is the community's ROOT (membership) group — leaving
    * it leaves the community, so the leave entry and its confirm say so.
-   * @type {{pointer: import('$lib/groups/groups.js').GroupPointer, fallbackName?: string, communityPubkey?: string, anchorMessageId?: string | null, onBack?: () => void, isCommunityRoot?: boolean}} */
+   * ownsDocumentTitle: the standalone /groups/<pointer> route has no other
+   * source for the channel's name, so the chat titles the page there. Inside
+   * a community the layout does it (and two writers would race).
+   * @type {{pointer: import('$lib/groups/groups.js').GroupPointer, fallbackName?: string, communityPubkey?: string, anchorMessageId?: string | null, onBack?: () => void, isCommunityRoot?: boolean, ownsDocumentTitle?: boolean}} */
   let {
     pointer,
     fallbackName = '',
     communityPubkey = '',
     anchorMessageId = null,
     onBack = undefined,
-    isCommunityRoot = false
+    isCommunityRoot = false,
+    ownsDocumentTitle = false
   } = $props();
 
   const getActiveUser = useActiveUser();
@@ -189,6 +194,7 @@
 
   /** @type {any} */ let metadata = $state(null);
   const displayTitle = $derived(metadata?.name ?? (fallbackName || pointer.id));
+  const documentTitle = $derived(pageTitle([displayTitle], runtimeConfig.appName));
   // The RAW kind:39000 as well as the parsed metadata: the access badges read
   // the tags directly, because applesauce's parser drops `restricted`/`hidden`
   // and reads openness from the inverse tags of an older NIP-29 draft.
@@ -1560,6 +1566,12 @@
     goto('/');
   }
 </script>
+
+<svelte:head>
+  {#if ownsDocumentTitle}
+    <title>{documentTitle}</title>
+  {/if}
+</svelte:head>
 
 <div bind:this={chatRootEl} class="flex h-full min-h-0 flex-col">
   {#if onBack}

@@ -2536,6 +2536,8 @@
   "groups_call_error_not_enabled": "Calls are switched off for this channel.",
   "groups_call_error_generic": "The call could not be started. Please try again.",
   "groups_call_error_pass": "This invitation link is no longer valid.",
+  "call_page_title": "Invitation: {name}",
+  "call_page_title_plain": "Invitation",
   "call_landing_invited": "Invitation to {title}",
   "call_landing_live": "Live now · {count} people",
   "call_landing_live_one": "Live now · 1 person",

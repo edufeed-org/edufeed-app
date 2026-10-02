@@ -31,6 +31,8 @@
   import { formatTimestamp } from '$lib/helpers/dates.js';
   import { MeetIcon } from '$lib/components/icons';
   import * as m from '$lib/paraglide/messages';
+  import { runtimeConfig } from '$lib/stores/config.svelte.js';
+  import { pageTitle } from '$lib/helpers/page-title.js';
 
   const FORGOTTEN_NOTE_KEY = 'call-landing-forgotten';
   const FORGOTTEN_NOTE_MS = 10_000;
@@ -135,6 +137,14 @@
   });
 
   const title = $derived(check?.name || pointer?.id || '');
+  // QA K-new-5: an empty document.title made the route announcer read
+  // "untitled page". The meeting's name once the pass check has it.
+  const documentTitle = $derived(
+    pageTitle(
+      [title ? m.call_page_title({ name: title }) : m.call_page_title_plain()],
+      runtimeConfig.appName
+    )
+  );
   const view = $derived.by(() => {
     if (forgotten) return 'forgotten';
     if (!pointer || !code) return 'invalid';
@@ -268,6 +278,10 @@
     if (user) forgetGuestAccount(user.pubkey);
   }
 </script>
+
+<svelte:head>
+  <title>{documentTitle}</title>
+</svelte:head>
 
 <div class="flex min-h-0 flex-1 flex-col" data-testid="call-landing">
   {#if view === 'in-call'}
