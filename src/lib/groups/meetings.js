@@ -142,8 +142,8 @@ function formatIcsDateTimeUtc(tsSeconds) {
  * non-printable-ASCII characters dropped (a coordinate is plain
  * `kind:pubkey:d` so this never touches real content).
  *
- * @param {string} value
- * @returns {string}
+ * @param {string | undefined} value
+ * @returns {string} `''` when `value` is missing/empty
  */
 function sanitizeIcsUid(value) {
   return String(value ?? '')
