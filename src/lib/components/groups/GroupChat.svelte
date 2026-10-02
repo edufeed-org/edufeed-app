@@ -1438,6 +1438,13 @@
     await updatePersonalGroupsList(getActiveUser(), change);
   }
 
+  // Set on unmount so the join's roster wait stops and stays silent.
+  // Plain `let`: bookkeeping, never rendered.
+  let destroyed = false;
+  $effect(() => () => {
+    destroyed = true;
+  });
+
   /**
    * Resolves true as soon as I show up on the roster (the join's roster
    * refreshes land in `members`), false once `ms` passed without.
@@ -1445,7 +1452,7 @@
    */
   async function waitForMembership(ms) {
     const until = Date.now() + ms;
-    while (!(myPubkey && members.has(myPubkey)) && Date.now() < until) {
+    while (!destroyed && !(myPubkey && members.has(myPubkey)) && Date.now() < until) {
       await new Promise((resolve) => setTimeout(resolve, 100));
     }
     return !!myPubkey && members.has(myPubkey);
@@ -1463,6 +1470,9 @@
       // C1: "request sent" read like a pending approval on an open group);
       // the `closed` marker only decides when the roster cannot be read.
       const onRoster = await waitForMembership(JOIN_ROSTER_HEAL_DELAY_MS + 500);
+      // Left meanwhile: the outcome belongs to this channel's page, never
+      // to whatever page came next (it would read stale there).
+      if (destroyed) return;
       const outcome = joinOutcome({
         onRoster,
         rosterReadable: rosterAnswered && !rosterRestricted,

@@ -1545,6 +1545,23 @@ describe('GroupChat', () => {
       () => expect(showToast).toHaveBeenCalledWith('You joined the channel', 'success'),
       { timeout: 5000 }
     );
+    expect(showToast).not.toHaveBeenCalledWith('Join request sent', 'success');
+  });
+
+  // Task 16 review: leaving within the roster window used to toast the
+  // stale outcome ("request sent") on whatever page came next.
+  it('a join left before the roster answered toasts nothing after unmount', async () => {
+    const { showToast } = await import('$lib/helpers/toast');
+    const { unmount } = render(GroupChat, {
+      props: { pointer: { relay: GROUP_RELAY, id: 'openchat' } }
+    });
+    await fireEvent.click(await screen.findByTestId('group-join'));
+    await waitFor(() => expect(publishMock).toHaveBeenCalled());
+    /** @type {any} */ (showToast).mockClear();
+    unmount();
+    await new Promise((r) => setTimeout(r, 2500));
+    expect(showToast).not.toHaveBeenCalledWith('Join request sent', 'success');
+    expect(showToast).not.toHaveBeenCalledWith('You joined the channel', 'success');
   });
 
   it('requesting to join a closed channel keeps the request wording', async () => {
