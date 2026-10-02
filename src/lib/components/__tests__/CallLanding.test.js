@@ -1,8 +1,9 @@
 // @ts-nocheck
 /** @vitest-environment jsdom */
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/svelte';
 import * as m from '$lib/paraglide/messages';
+import { formatTimestamp } from '$lib/helpers/dates.js';
 
 const checkCallPass = vi.fn();
 vi.mock('$lib/groups/call-passes.js', async (orig) => ({
@@ -190,6 +191,136 @@ describe('CallLanding', () => {
     });
     render(CallLanding, { props: { pointer: POINTER } });
     expect(await screen.findByTestId('call-landing-not-yet')).toBeTruthy();
+  });
+  it('shows the meeting start (notBefore + 15 min), not the guest-window open time', async () => {
+    checkCallPass.mockResolvedValue({
+      valid: false,
+      reason: 'not_yet',
+      notBefore: 2_000_000_000,
+      expiration: 2_000_010_000,
+      name: 'Elternabend',
+      liveCount: 0
+    });
+    render(CallLanding, { props: { pointer: POINTER } });
+    await screen.findByTestId('call-landing-not-yet');
+    const expected = m.call_landing_starts({
+      when: formatTimestamp(2_000_000_000 + 900, {
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+      })
+    });
+    expect(screen.getByText(expected)).toBeTruthy();
+  });
+  it('offers an .ics download once the meeting end is known too', async () => {
+    checkCallPass.mockResolvedValueOnce({
+      valid: false,
+      reason: 'not_yet',
+      notBefore: 2_000_000_000,
+      liveCount: 0
+    });
+    const { rerender } = render(CallLanding, { props: { pointer: POINTER } });
+    await screen.findByTestId('call-landing-not-yet');
+    expect(screen.queryByTestId('call-landing-ics')).toBeNull();
+
+    URL.createObjectURL = vi.fn(() => 'blob:ics');
+    URL.revokeObjectURL = vi.fn();
+    const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
+    checkCallPass.mockResolvedValue({
+      valid: false,
+      reason: 'not_yet',
+      notBefore: 2_000_000_000,
+      expiration: 2_000_010_000,
+      name: 'Elternabend',
+      liveCount: 0
+    });
+    // A new pointer identity re-triggers the initial pass check (same
+    // pattern as `renderInCall`'s rerender below), landing the richer
+    // not_yet result with `expiration` this time.
+    await rerender({ pointer: { ...POINTER } });
+    await waitFor(() => expect(screen.getByTestId('call-landing-ics')).toBeTruthy());
+    await fireEvent.click(screen.getByTestId('call-landing-ics'));
+    expect(click).toHaveBeenCalled();
+    click.mockRestore();
+  });
+
+  describe('not_yet auto-switch timer', () => {
+    beforeEach(() => {
+      vi.useFakeTimers();
+    });
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it('lets a guest type their name ahead of the join window; the join form keeps it', async () => {
+      checkCallPass.mockResolvedValueOnce({
+        valid: false,
+        reason: 'not_yet',
+        notBefore: Math.floor(Date.now() / 1000) + 5,
+        liveCount: 0
+      });
+      render(CallLanding, { props: { pointer: POINTER } });
+      await vi.advanceTimersByTimeAsync(0);
+      const earlyName = screen.getByTestId('call-landing-name-early');
+      await fireEvent.input(earlyName, { target: { value: 'Ada' } });
+
+      checkCallPass.mockResolvedValue({ valid: true, reason: 'ok', name: 'Weekly', liveCount: 0 });
+      await vi.advanceTimersByTimeAsync(5_000);
+      expect(screen.getByTestId('call-landing-join')).toBeTruthy();
+      expect(/** @type {HTMLInputElement} */ (screen.getByTestId('call-landing-name')).value).toBe(
+        'Ada'
+      );
+    });
+
+    it('auto-switches to the join screen at the pass not-before, without a reload', async () => {
+      checkCallPass.mockResolvedValueOnce({
+        valid: false,
+        reason: 'not_yet',
+        notBefore: Math.floor(Date.now() / 1000) + 10,
+        liveCount: 0
+      });
+      render(CallLanding, { props: { pointer: POINTER } });
+      await vi.advanceTimersByTimeAsync(0);
+      expect(screen.getByTestId('call-landing-not-yet')).toBeTruthy();
+
+      checkCallPass.mockResolvedValue({ valid: true, reason: 'ok', name: 'Weekly', liveCount: 2 });
+      await vi.advanceTimersByTimeAsync(10_000);
+      expect(screen.getByTestId('call-landing-join')).toBeTruthy();
+    });
+
+    it('falls back to a 60s interval recheck when no exact timer is scheduled', async () => {
+      checkCallPass.mockResolvedValueOnce({
+        valid: false,
+        reason: 'not_yet',
+        liveCount: 0
+      });
+      render(CallLanding, { props: { pointer: POINTER } });
+      await vi.advanceTimersByTimeAsync(0);
+      expect(screen.getByTestId('call-landing-not-yet')).toBeTruthy();
+
+      checkCallPass.mockResolvedValue({ valid: true, reason: 'ok', name: 'Weekly', liveCount: 2 });
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect(screen.getByTestId('call-landing-join')).toBeTruthy();
+    });
+
+    it('cleans up timers on unmount (no stray recheck after the component is gone)', async () => {
+      checkCallPass.mockResolvedValueOnce({
+        valid: false,
+        reason: 'not_yet',
+        notBefore: Math.floor(Date.now() / 1000) + 10,
+        liveCount: 0
+      });
+      const { unmount } = render(CallLanding, { props: { pointer: POINTER } });
+      await vi.advanceTimersByTimeAsync(0);
+      expect(screen.getByTestId('call-landing-not-yet')).toBeTruthy();
+      const callsBeforeUnmount = checkCallPass.mock.calls.length;
+
+      unmount();
+      await vi.advanceTimersByTimeAsync(120_000);
+      expect(checkCallPass.mock.calls.length).toBe(callsBeforeUnmount);
+    });
   });
   it('shows a name-required message and does not join when the name is blank', async () => {
     checkCallPass.mockResolvedValue({ valid: true, reason: 'ok', name: 'Weekly', liveCount: 4 });

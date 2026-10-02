@@ -8,6 +8,12 @@
 <script>
   import { untrack } from 'svelte';
   import { checkCallPass, readPassCodeFromHash } from '$lib/groups/call-passes.js';
+  import {
+    buildMeetingIcs,
+    icsFileName,
+    GUEST_EARLY_S,
+    GUEST_LATE_S
+  } from '$lib/groups/meetings.js';
   import { groupHref } from '$lib/groups/groups.js';
   import { identityToPubkey } from '$lib/groups/livekit.js';
   import {
@@ -141,6 +147,18 @@
   });
 
   const title = $derived(check?.name || pointer?.id || '');
+  // A meeting pass's `notBefore`/`expiration` ARE the guest-join window
+  // (GUEST_EARLY_S before the meeting's real `start`, GUEST_LATE_S after its
+  // `end` — guestWindow() in meetings.js), not the meeting's own start/end.
+  // Derive the actual start/end for display and the .ics download; null
+  // until the pass check has both fields (a plain call-scoped link, which
+  // has no notBefore/expiration windowing, never does).
+  const meetingStart = $derived(
+    typeof check?.notBefore === 'number' ? check.notBefore + GUEST_EARLY_S : null
+  );
+  const meetingEnd = $derived(
+    typeof check?.expiration === 'number' ? check.expiration - GUEST_LATE_S : null
+  );
   // QA K-new-5: an empty document.title made the route announcer read
   // "untitled page". The meeting's name once the pass check has it — never
   // the raw group id (`title`'s fallback): plain "Einladung" until then and
@@ -182,6 +200,58 @@
       alive = false;
     };
   });
+  // 'not_yet': switch to the join screen without a reload. Schedule an
+  // exact recheck for the moment the pass's OWN not-before opens — that is
+  // when checkCallPass starts answering 'ok', not the later, displayed
+  // meeting start (see meetingStart above) — plus a 60 s fallback interval
+  // for a skipped exact timer (clock drift, a backgrounded tab) or a wait
+  // longer than setTimeout's ~24.8-day cap.
+  const NOT_YET_FALLBACK_MS = 60_000;
+  const NOT_YET_MAX_TIMEOUT_MS = 24 * 3600 * 1000;
+  $effect(() => {
+    if (view !== 'not_yet' || !pointer || !code) return;
+    const p = pointer;
+    const c = code;
+    const notBefore = check?.notBefore;
+    function recheck() {
+      checkCallPass(p.relay, p.id, c).then((/** @type {any} */ r) => {
+        if (!destroyed) check = r;
+      });
+    }
+    /** @type {ReturnType<typeof setTimeout> | undefined} */
+    let timeoutId;
+    if (typeof notBefore === 'number') {
+      const delayMs = (notBefore - Math.floor(Date.now() / 1000)) * 1000;
+      if (delayMs > 0 && delayMs <= NOT_YET_MAX_TIMEOUT_MS)
+        timeoutId = setTimeout(recheck, delayMs);
+    }
+    const intervalId = setInterval(recheck, NOT_YET_FALLBACK_MS);
+    return () => {
+      if (timeoutId) clearTimeout(timeoutId);
+      clearInterval(intervalId);
+    };
+  });
+
+  /** The .ics for the "not yet" screen — the channel's name as title, this
+   * link as the URL (no meeting coordinate is known here, only the pass). */
+  function downloadMeetingIcs() {
+    if (meetingStart === null || meetingEnd === null) return;
+    const ics = buildMeetingIcs({
+      title,
+      start: meetingStart,
+      end: meetingEnd,
+      url: `${location.origin}${location.pathname}${location.hash}`
+    });
+    const blobUrl = URL.createObjectURL(new Blob([ics], { type: 'text/calendar;charset=utf-8' }));
+    const a = document.createElement('a');
+    a.href = blobUrl;
+    a.download = icsFileName(title);
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(blobUrl);
+  }
+
   // Never after a removal: the relay keeps a removed guest out even while
   // the link itself stays valid ("blocked: you were removed").
   const canRejoin = $derived(
@@ -416,11 +486,11 @@
               <a class="btn mt-2 btn-sm" href="/">{m.call_landing_to_app()}</a>
             </div>
           {:else if view === 'not_yet'}
-            <div data-testid="call-landing-not-yet">
+            <div data-testid="call-landing-not-yet" class="flex flex-col gap-3">
               <h1 class="text-xl font-bold">{m.call_landing_invited({ title })}</h1>
               <p class="text-sm">
                 {m.call_landing_starts({
-                  when: formatTimestamp(check?.notBefore ?? 0, {
+                  when: formatTimestamp(meetingStart ?? check?.notBefore ?? 0, {
                     day: '2-digit',
                     month: '2-digit',
                     year: 'numeric',
@@ -429,6 +499,30 @@
                   })
                 })}
               </p>
+              {#if meetingStart !== null && meetingEnd !== null}
+                <button
+                  type="button"
+                  class="btn self-start btn-sm"
+                  onclick={downloadMeetingIcs}
+                  data-testid="call-landing-ics"
+                >
+                  {m.call_landing_ics_download()}
+                </button>
+              {/if}
+              {#if !me}
+                <div class="flex flex-col gap-2">
+                  <label class="text-sm font-medium" for="call-guest-name-early"
+                    >{m.call_landing_name_label()}</label
+                  >
+                  <input
+                    id="call-guest-name-early"
+                    class="input-bordered input"
+                    bind:value={name}
+                    maxlength="80"
+                    data-testid="call-landing-name-early"
+                  />
+                </div>
+              {/if}
             </div>
           {:else if view === 'ready'}
             <h1 class="text-xl font-bold">{m.call_landing_invited({ title })}</h1>
