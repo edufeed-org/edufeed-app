@@ -807,7 +807,8 @@ vi.mock('$lib/components/icons', () => ({
   LinkIcon: Stub,
   PollIcon: Stub,
   MeetIcon: Stub,
-  SettingsIcon: Stub
+  SettingsIcon: Stub,
+  ChevronLeftIcon: Stub
 }));
 // NIP-29 AV: the call store and the 39004 presence hook are stubbed at the
 // seams GroupChat imports — the token round-trip and the relay-key-pinned
@@ -956,7 +957,12 @@ vi.mock(
 vi.mock('$lib/paraglide/messages', () => ({
   groups_join: () => 'Join',
   groups_restricted_note: () => 'Only members can read and write in this channel.',
-  groups_leave: () => 'Leave',
+  groups_leave_channel: () => 'Leave channel',
+  groups_leave_confirm_title: () => 'Really leave this channel?',
+  groups_leave_confirm_body_open: () => 'You can join again later.',
+  groups_leave_confirm_body_closed: () => 'Rejoining needs approval.',
+  groups_breadcrumb_channels: () => 'Channels',
+  groups_breadcrumb_channels_aria: () => 'Back to the channel list',
   groups_more_menu: () => 'More',
   groups_list_remove: () => 'Remove from my list',
   groups_list_removed: () => 'Removed from your list',
@@ -2325,6 +2331,78 @@ describe('GroupChat', () => {
       expect(settings.textContent).not.toContain('⚙');
       expect(settings.getAttribute('aria-label')).toBeTruthy();
       expect(header.querySelectorAll('.btn-xs')).toHaveLength(0);
+    });
+  });
+
+  describe('channel navigation (design 1a)', () => {
+    it('renders no breadcrumb without an onBack (standalone /groups route)', async () => {
+      render(GroupChat, { props: { pointer } });
+      await screen.findByTestId('group-name');
+      expect(screen.queryByTestId('group-chat-breadcrumb')).toBeNull();
+    });
+
+    it('renders a "Channels" breadcrumb above the title that calls onBack', async () => {
+      const onBack = vi.fn();
+      render(GroupChat, { props: { pointer, onBack } });
+      const crumb = await screen.findByTestId('group-chat-breadcrumb');
+      expect(crumb.textContent).toContain('Channels');
+      expect(crumb.getAttribute('aria-label')).toBe('Back to the channel list');
+      expect(crumb.className).toContain('btn');
+      // Above the title, in document order.
+      const title = screen.getByTestId('group-name');
+      expect(crumb.compareDocumentPosition(title) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+      await fireEvent.click(crumb);
+      expect(onBack).toHaveBeenCalledTimes(1);
+    });
+
+    it('has no Leave button in the header for a member', async () => {
+      render(GroupChat, { props: { pointer } });
+      // beechat: ME is on the roster, so the menu entry shows once it answered.
+      await screen.findByTestId('group-leave');
+      const header = /** @type {HTMLElement} */ (
+        screen.getByTestId('group-name').closest('header')
+      );
+      const headerButtons = [...header.querySelectorAll('button')].filter(
+        (b) => !b.closest('.dropdown-content')
+      );
+      expect(headerButtons.some((b) => b.textContent?.trim() === 'Leave')).toBe(false);
+      expect(screen.getByTestId('group-leave').closest('.dropdown-content')).toBeTruthy();
+    });
+
+    it('"Leave channel" sits last in the ⋯ menu, in red, and asks first', async () => {
+      render(GroupChat, { props: { pointer } });
+      await fireEvent.click(await screen.findByTestId('group-more-menu'));
+      const item = await screen.findByTestId('group-leave');
+      expect(item.textContent?.trim()).toBe('Leave channel');
+      expect(item.className).toContain('text-error');
+      const menu = /** @type {HTMLElement} */ (item.closest('ul'));
+      const items = [...menu.querySelectorAll('li > button')];
+      expect(items.at(-1)).toBe(item);
+
+      await fireEvent.click(item);
+      const dialog = await screen.findByTestId('group-leave-confirm');
+      expect(dialog.textContent).toContain('Really leave this channel?');
+      expect(dialog.textContent).toContain('You can join again later.');
+      expect(publishMock).not.toHaveBeenCalled();
+
+      // Cancel closes without leaving.
+      await fireEvent.click(within(dialog).getByText('Cancel'));
+      await waitFor(() => expect(screen.queryByTestId('group-leave-confirm')).toBeNull());
+      expect(publishMock).not.toHaveBeenCalled();
+
+      // Confirm sends the 9022.
+      await fireEvent.click(screen.getByTestId('group-leave'));
+      await fireEvent.click(await screen.findByTestId('group-leave-confirm-action'));
+      await waitFor(() => expect(publishMock).toHaveBeenCalledTimes(1));
+      const sent = publishMock.mock.calls[0][0];
+      expect(sent.kind).toBe(9022);
+      await waitFor(() => expect(screen.queryByTestId('group-leave-confirm')).toBeNull());
+    });
+
+    it('offers no leave entry to a non-member', async () => {
+      render(GroupChat, { props: { pointer: { relay: GROUP_RELAY, id: 'openchat' } } });
+      await screen.findByTestId('group-join');
+      expect(screen.queryByTestId('group-leave')).toBeNull();
     });
   });
 

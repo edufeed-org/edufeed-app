@@ -88,6 +88,7 @@ export { default as HeartIcon } from './social/HeartIcon.svelte';
 export { default as SmilePlusIcon } from './social/SmilePlusIcon.svelte';
 export { default as PeopleIcon } from './social/People.svelte';
 export { default as ForumIcon } from './social/ForumIcon.svelte';
+export { default as ChannelsIcon } from './social/ChannelsIcon.svelte';
 export { default as BookmarkShareIcon } from './social/BookmarkShareIcon.svelte';
 export { default as MeetIcon } from './social/MeetIcon.svelte';
 export { default as MessageSquareIcon } from './social/MessageSquareIcon.svelte';

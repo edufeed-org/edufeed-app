@@ -17,6 +17,7 @@
   import { getCallPopoutState } from '$lib/groups/call-popout.svelte.js';
   import { useActiveUser } from '$lib/stores/accounts.svelte';
   import ProfileAvatar from '$lib/components/shared/ProfileAvatar.svelte';
+  import CallCountPill from './CallCountPill.svelte';
   import * as m from '$lib/paraglide/messages';
 
   /**
@@ -71,17 +72,11 @@
 
 {#if participants.length > 0}
   <div
-    class="flex items-center gap-2 pr-2 pb-1 pl-12"
+    class="flex flex-wrap items-center gap-x-2 gap-y-0.5 pr-2 pb-1 pl-12"
     data-testid="channel-call-roster"
     title={m.groups_call_people_in_call({ count: participants.length })}
   >
-    <span class="relative flex h-2 w-2 shrink-0" aria-hidden="true">
-      <span
-        class="absolute inline-flex h-full w-full animate-ping rounded-full bg-success opacity-60 motion-reduce:animate-none"
-      ></span>
-      <span class="relative inline-flex h-2 w-2 rounded-full bg-success"></span>
-    </span>
-    <span class="sr-only">{m.groups_call_live()}</span>
+    <CallCountPill count={participants.length} />
     <div class="flex min-w-0 flex-1 items-center -space-x-1.5">
       {#each shown as pubkey (pubkey)}
         <span class="rounded-full ring-2 ring-base-200">
@@ -94,7 +89,7 @@
     </div>
     {#if stageOnScreen}
       <span
-        class="shrink-0 text-xs font-medium text-primary"
+        class="ml-auto shrink-0 text-xs font-medium text-primary"
         data-testid="channel-call-roster-here"
       >
         {m.groups_call_in_this_call({ count: participants.length })}
@@ -105,7 +100,7 @@
         : m.groups_call_join_running({ count: participants.length })}
       <button
         type="button"
-        class="btn shrink-0 text-primary btn-ghost btn-sm"
+        class="btn ml-auto shrink-0 text-primary btn-ghost btn-sm"
         disabled={busy}
         aria-label={label}
         title={label}

@@ -110,7 +110,11 @@ vi.mock('$lib/stores/nostr-infrastructure.svelte', async (importOriginal) => {
 
 import PrivateChannelsView from '$lib/components/community/channels/PrivateChannelsView.svelte';
 import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
-import { clearGroupChannelSelection } from '$lib/groups/group-channel-selection.svelte.js';
+import {
+  clearGroupChannelSelection,
+  requestChannelList
+} from '$lib/groups/group-channel-selection.svelte.js';
+import { flushSync } from 'svelte';
 import { communityGroupsEndpoint, flatGroupsRelay } from '$lib/groups/community-endpoint.js';
 
 // Fixtures signed by a fake relay key — bypass signature verification.
@@ -295,5 +299,80 @@ describe('PrivateChannelsView — NIP-29 channels in the community rail', () => 
 
     const chat = await screen.findByTestId('group-chat-stub', {}, { timeout: 4000 });
     expect(chat.textContent).toContain('allgemein');
+  });
+  // Design 1a (laoc, 2026-10-02): the way back is GroupChat's own "‹ Kanäle"
+  // breadcrumb on every width, so the pane passes onBack and draws no
+  // mobile-only back button of its own.
+  describe('way back to the channel list', () => {
+    /** @param {{ container: HTMLElement }} view */
+    const rail = (view) => /** @type {HTMLElement} */ (view.container.querySelector('aside'));
+
+    async function openAllgemein() {
+      clearGroupChannelSelection(OWNER);
+      holders.events = { [ENDPOINT]: [root(), chan('allgemein', [['private']])] };
+      const view = render(PrivateChannelsView, { props: { communikeyEvent: moderated() } });
+      const rows = await screen.findAllByTestId('group-channel-row');
+      await fireEvent.click(
+        /** @type {HTMLElement} */ (rows.find((r) => r.textContent?.includes('allgemein')))
+      );
+      await screen.findByTestId('group-chat-stub');
+      return view;
+    }
+
+    it('hands GroupChat an onBack and renders no separate back button', async () => {
+      await openAllgemein();
+      expect(screen.queryByTestId('group-chat-back')).toBeNull();
+      expect(screen.getByTestId('group-chat-stub-back')).toBeTruthy();
+    });
+
+    it('the breadcrumb clears the selection: overview + rail again, ?channel= dropped', async () => {
+      const view = await openAllgemein();
+      expect(rail(view).className).toContain('hidden');
+      gotoMock.mockClear();
+
+      await fireEvent.click(screen.getByTestId('group-chat-stub-back'));
+
+      await vi.waitFor(() => expect(screen.queryByTestId('group-chat-stub')).toBeNull());
+      expect(rail(view).className.split(/\s+/)).not.toContain('hidden');
+      expect(gotoMock).toHaveBeenCalledWith(
+        expect.not.stringContaining('channel='),
+        expect.anything()
+      );
+    });
+
+    // The URL update is async (goto): the cleared selection re-runs the
+    // ?channel= deep-link effect while the old param is still in the address
+    // bar — it must not re-open the channel from it.
+    it('going back from a deep-linked channel stays back; the same link applies again later', async () => {
+      clearGroupChannelSelection(OWNER);
+      holders.pageUrl = 'https://app.example/c/relilab?view=channels&channel=allgemein';
+      holders.events = { [ENDPOINT]: [root(), chan('allgemein', [['private']])] };
+      render(PrivateChannelsView, { props: { communikeyEvent: moderated() } });
+      await screen.findByTestId('group-chat-stub', {}, { timeout: 4000 });
+
+      await fireEvent.click(screen.getByTestId('group-chat-stub-back'));
+      // Any re-run of the effect before goto lands (here: a page-store
+      // emission still carrying the old ?channel=) must not re-open it.
+      setPageUrl('https://app.example/c/relilab?view=channels&channel=allgemein');
+      await new Promise((r) => setTimeout(r, 50));
+      expect(screen.queryByTestId('group-chat-stub')).toBeNull();
+
+      setPageUrl('https://app.example/c/relilab?view=channels');
+      await new Promise((r) => setTimeout(r, 50));
+      expect(screen.queryByTestId('group-chat-stub')).toBeNull();
+
+      setPageUrl('https://app.example/c/relilab?view=channels&channel=allgemein');
+      await screen.findByTestId('group-chat-stub');
+    });
+
+    it('a re-tap of the Kanäle tab (requestChannelList) goes back to the list', async () => {
+      const view = await openAllgemein();
+
+      requestChannelList(OWNER);
+      flushSync();
+
+      await vi.waitFor(() => expect(screen.queryByTestId('group-chat-stub')).toBeNull());
+      expect(rail(view).className.split(/\s+/)).not.toContain('hidden');
+    });
   });
 });

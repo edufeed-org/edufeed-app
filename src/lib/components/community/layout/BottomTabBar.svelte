@@ -12,11 +12,13 @@
     BookmarkShareIcon,
     PollIcon,
     LockIcon,
-    LockOpenIcon
+    LockOpenIcon,
+    ChannelsIcon
   } from '$lib/components/icons';
   import { useConcordCommunity } from '$lib/concord/community.svelte.js';
   import { parseGroupPointers } from '$lib/groups/community-pointer.js';
   import { communityNavTabIds } from './community-nav.js';
+  import { requestChannelList } from '$lib/groups/group-channel-selection.svelte.js';
   import { areaUnreadState } from '$lib/concord/notifications.svelte.js';
   import ConcordUnreadDot from '$lib/components/shared/ConcordUnreadDot.svelte';
   import { onMount } from 'svelte';
@@ -50,7 +52,7 @@
     'social-bookmarks': BookmarkShareIcon,
     polls: PollIcon,
     settings: SettingsIcon,
-    channels: LockIcon
+    channels: ChannelsIcon
   };
 
   /** @type {Record<string, () => string>} */
@@ -97,6 +99,9 @@
    * @param {string} type
    */
   function handleDockClick(type) {
+    // Kanäle is also the way back: tapped while a channel is open, it returns
+    // to the channel list (design 1a) instead of re-selecting the same view.
+    if (type === 'channels') requestChannelList(communityEvent?.pubkey);
     if (onContentTypeSelect) {
       onContentTypeSelect(type);
     }

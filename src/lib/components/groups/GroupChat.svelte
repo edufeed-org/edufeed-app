@@ -85,7 +85,13 @@
     isAuthRequiredError
   } from '$lib/groups/relay-auth.js';
   import GroupBadges from '$lib/components/groups/GroupBadges.svelte';
-  import { PeopleIcon, MoreIcon, MeetIcon, SettingsIcon } from '$lib/components/icons';
+  import {
+    PeopleIcon,
+    MoreIcon,
+    MeetIcon,
+    SettingsIcon,
+    ChevronLeftIcon
+  } from '$lib/components/icons';
   import { lazyComponent } from '$lib/helpers/lazy-component.svelte.js';
   import { hasLivekitTag, identityToPubkey, probeRelayAvSupport } from '$lib/groups/livekit.js';
   import { probeCallPassSupport } from '$lib/groups/call-passes.js';
@@ -156,8 +162,17 @@
    * context and leaves it at the default ''.
    * anchorMessageId: a ?message= deep link — once that message is in the
    * loaded window it is scrolled into view and flashed (message-anchor.js).
-   * @type {{pointer: import('$lib/groups/groups.js').GroupPointer, fallbackName?: string, communityPubkey?: string, anchorMessageId?: string | null}} */
-  let { pointer, fallbackName = '', communityPubkey = '', anchorMessageId = null } = $props();
+   * onBack: the community pane's "back to the channel list" (design 1a). Only
+   * a host that HAS a channel list to go back to passes it — the standalone
+   * /groups route keeps its host sidebar and renders no breadcrumb.
+   * @type {{pointer: import('$lib/groups/groups.js').GroupPointer, fallbackName?: string, communityPubkey?: string, anchorMessageId?: string | null, onBack?: () => void}} */
+  let {
+    pointer,
+    fallbackName = '',
+    communityPubkey = '',
+    anchorMessageId = null,
+    onBack = undefined
+  } = $props();
 
   const getActiveUser = useActiveUser();
 
@@ -1408,6 +1423,28 @@
     }
   }
 
+  // Leaving sits behind a confirm (design 1a): it was a bare header button
+  // one stray click away, and on a closed channel the way back in is a new
+  // request an admin has to approve.
+  let leaveConfirmOpen = $state(false);
+  let leaving = $state(false);
+
+  function askLeave() {
+    closeMoreMenu();
+    leaveConfirmOpen = true;
+  }
+
+  async function confirmLeave() {
+    if (leaving) return;
+    leaving = true;
+    try {
+      await leave();
+    } finally {
+      leaving = false;
+      leaveConfirmOpen = false;
+    }
+  }
+
   async function leave() {
     try {
       await signAndPublish(buildLeaveRequestTemplate(pointer.id));
@@ -1459,7 +1496,25 @@
 </script>
 
 <div bind:this={chatRootEl} class="flex h-full min-h-0 flex-col">
-  <header class="flex items-center gap-3 border-b border-base-300 px-4 py-3">
+  {#if onBack}
+    <!-- "‹ Kanäle" (design 1a): the way back to the channel list, above the
+      title on every width. -->
+    <div class="px-2 pt-1">
+      <button
+        type="button"
+        class="btn gap-1 px-2 text-primary btn-ghost btn-sm"
+        data-testid="group-chat-breadcrumb"
+        aria-label={m.groups_breadcrumb_channels_aria()}
+        onclick={onBack}
+      >
+        <ChevronLeftIcon class_="w-4 h-4" title="" />
+        {m.groups_breadcrumb_channels()}
+      </button>
+    </div>
+  {/if}
+  <header
+    class="flex items-center gap-3 border-b border-base-300 px-4 {onBack ? 'pt-1 pb-3' : 'py-3'}"
+  >
     {#if metadata?.picture}
       <img src={metadata.picture} alt="" class="h-8 w-8 rounded-full object-cover" />
     {/if}
@@ -1570,19 +1625,20 @@
               </button>
             {/if}
           </li>
+          {#if rosterAnswered && isMember}
+            <!-- Destructive last, set apart, and confirmed (design 1a). -->
+            <li class="mt-1 border-t border-base-300 pt-1">
+              <button class="font-semibold text-error" data-testid="group-leave" onclick={askLeave}>
+                {m.groups_leave_channel()}
+              </button>
+            </li>
+          {/if}
         </ul>
       </div>
     {/if}
     {#if myPubkey && rosterAnswered}
       {#if isMember}
-        <button
-          type="button"
-          class="btn btn-ghost btn-sm"
-          data-testid="group-leave"
-          onclick={leave}
-        >
-          {m.groups_leave()}
-        </button>
+        <!-- Leave lives in the ⋯ menu behind a confirm (design 1a). -->
       {:else if canWrite}
         <!-- Admin (39001) without an explicit 39002 seat: NIP-29 counts admins
           as members, so they are already in — no join/leave affordance. This is
@@ -1653,6 +1709,30 @@
           <button class="btn btn-sm btn-primary" onclick={() => publishExport('article')}
             >{m.webxdc_export_as_article()}</button
           >
+        </div>
+      </div>
+    </div>
+  {/if}
+
+  {#if leaveConfirmOpen}
+    <div class="modal-open modal" role="dialog" data-testid="group-leave-confirm">
+      <div class="modal-box max-w-sm">
+        <h3 class="font-bold">{m.groups_leave_confirm_title()}</h3>
+        <p class="py-2 text-sm opacity-70">
+          {groupClosed ? m.groups_leave_confirm_body_closed() : m.groups_leave_confirm_body_open()}
+        </p>
+        <div class="modal-action">
+          <button class="btn btn-ghost" onclick={() => (leaveConfirmOpen = false)}
+            >{m.common_cancel()}</button
+          >
+          <button
+            class="btn btn-error"
+            data-testid="group-leave-confirm-action"
+            disabled={leaving}
+            onclick={confirmLeave}
+          >
+            {m.groups_leave_channel()}
+          </button>
         </div>
       </div>
     </div>

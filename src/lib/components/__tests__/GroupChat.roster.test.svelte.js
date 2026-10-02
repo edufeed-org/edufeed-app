@@ -137,7 +137,8 @@ vi.mock('$lib/components/icons', () => ({
   PeopleIcon: Stub,
   PollIcon: Stub,
   MoreIcon: Stub,
-  SettingsIcon: Stub
+  SettingsIcon: Stub,
+  ChevronLeftIcon: Stub
 }));
 vi.mock(
   '$lib/components/reactions/ReactionChips.svelte',
@@ -178,7 +179,12 @@ vi.mock('$lib/paraglide/messages', () => ({
   webxdc_export_title: () => 'webxdc_export_title',
   webxdc_export_too_large: () => 'webxdc_export_too_large',
   groups_join: () => 'Join',
-  groups_leave: () => 'Leave',
+  groups_leave_channel: () => 'groups_leave_channel',
+  groups_leave_confirm_title: () => 'groups_leave_confirm_title',
+  groups_leave_confirm_body_open: () => 'groups_leave_confirm_body_open',
+  groups_leave_confirm_body_closed: () => 'groups_leave_confirm_body_closed',
+  groups_breadcrumb_channels: () => 'groups_breadcrumb_channels',
+  groups_breadcrumb_channels_aria: () => 'groups_breadcrumb_channels_aria',
   chat_attach_file: () => 'Attach file',
   chat_attach_error_too_large: () => 'File is too large',
   chat_attach_error_upload_failed: () => 'Upload failed. Please try again.',

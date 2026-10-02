@@ -189,6 +189,9 @@ describe('ChannelOverview', () => {
       'sprechstunde'
     );
     expect(badges[0].textContent).toMatch(/2 (im Anruf|in the call)/);
+    // Design 1a: the same soft success pill as the channel lists.
+    expect(badges[0].className).toContain('badge-soft');
+    expect(badges[0].className).toContain('badge-success');
     presence.byId = {};
   });
 });

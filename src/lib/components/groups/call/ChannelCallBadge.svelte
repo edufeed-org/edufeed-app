@@ -9,7 +9,7 @@
 -->
 <script>
   import { useCallPresence } from '$lib/groups/call-presence.svelte.js';
-  import * as m from '$lib/paraglide/messages';
+  import CallCountPill from './CallCountPill.svelte';
 
   /** @type {{ pointer: {id: string, relay: string} }} */
   let { pointer } = $props();
@@ -19,8 +19,5 @@
 </script>
 
 {#if count > 0}
-  <span class="badge gap-1.5 badge-sm text-success" data-testid="channel-card-call">
-    <span class="h-2 w-2 shrink-0 rounded-full bg-success" aria-hidden="true"></span>
-    {m.groups_call_people_in_call({ count })}
-  </span>
+  <CallCountPill {count} testid="channel-card-call" />
 {/if}

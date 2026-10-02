@@ -40,7 +40,9 @@
   import { parseGroupPointers, sharedRelayOf, channelKey } from '$lib/groups/community-pointer.js';
   import {
     selectGroupChannel,
-    getSelectedGroupChannel
+    getSelectedGroupChannel,
+    clearGroupChannelSelection,
+    getChannelListRequests
   } from '$lib/groups/group-channel-selection.svelte.js';
   import GroupChat from '$lib/components/groups/GroupChat.svelte';
   import { parseMembershipPointer } from '$lib/groups/community-membership.js';
@@ -196,6 +198,9 @@
     const { rootChannel, channels: discovered, fetched } = getCommunityChannels();
     const legacy = groupPointers;
     const discovering = !!rootPointer;
+    // The param went away (back to the list): forget it, so following a link
+    // to the same channel later applies again.
+    if (!channelParam) appliedGroupParam = null;
     if (!communityPubkey || !channelParam || channelParam === appliedGroupParam) return;
     // While the subtree discovery is still running, matching would read a
     // half-arrived list and miss the target — wait for the full list.
@@ -233,6 +238,36 @@
     }
     mobileChat = true;
   }
+
+  /**
+   * Back to the channel list (design 1a): GroupChat's "‹ Kanäle" breadcrumb.
+   * Clears the pick — desktop shows the overview, below md the rail comes
+   * back — and drops ?channel= so a reload does not reopen the channel.
+   */
+  function backToChannelList() {
+    clearGroupChannelSelection(communikeyEvent?.pubkey);
+    mobileChat = false;
+    if (typeof window === 'undefined') return;
+    // appliedGroupParam keeps the old value until the URL drops it: the
+    // deep-link effect re-runs on the cleared selection while ?channel= is
+    // still in the address bar, and must not re-open the channel from it.
+    updateQueryParams(new URLSearchParams(window.location.search), {
+      channel: null,
+      message: null
+    });
+  }
+
+  // The Kanäle tab / sidebar heading tapped while a channel is open
+  // (requestChannelList): the selection is already cleared by the store, but
+  // `mobileChat` is per instance, so each instance flips back to the rail.
+  // The first run only records the count — a mount is not a request.
+  /** @type {number | undefined} */
+  let seenListRequests;
+  $effect(() => {
+    const count = getChannelListRequests(communikeyEvent?.pubkey);
+    if (seenListRequests !== undefined && count !== seenListRequests) mobileChat = false;
+    seenListRequests = count;
+  });
 
   /**
    * Mirror a channel pick into ?channel= so the open room is shareable from
@@ -866,22 +901,15 @@
             switching must remount the chat, or a draft typed in one would
             still be in the composer of the next (same rule as the /groups
             route). -->
-          <!-- Mobile-only back to the rail: GroupChat has no onBack of its
-            own (the /groups route never needed one), and without this the
-            rail would be unreachable once mobileChat flips. -->
-          <button
-            class="flex items-center gap-2 border-b border-base-300 px-4 py-2 text-sm text-base-content/70 md:hidden"
-            data-testid="group-chat-back"
-            onclick={() => (mobileChat = false)}
-          >
-            ← {m.concord_rail_channels()}
-          </button>
+          <!-- The way back is GroupChat's own "‹ Kanäle" breadcrumb, on every
+            width (design 1a) — no separate mobile-only back row here. -->
           {#key channelKey(selectedGroupPointer)}
             <GroupChat
               pointer={selectedGroupPointer}
               fallbackName={selectedFallbackName}
               communityPubkey={communikeyEvent?.pubkey ?? ''}
               {anchorMessageId}
+              onBack={backToChannelList}
             />
           {/key}
         {:else}

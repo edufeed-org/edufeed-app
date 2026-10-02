@@ -14,7 +14,8 @@
     LockIcon,
     LockOpenIcon,
     PeopleIcon,
-    StarIcon
+    StarIcon,
+    ChannelsIcon
   } from '$lib/components/icons';
   import { splitFavouriteRows } from '$lib/groups/channel-sections.js';
   import {
@@ -34,7 +35,7 @@
   import {
     selectGroupChannel,
     getSelectedGroupChannel,
-    clearGroupChannelSelection
+    requestChannelList
   } from '$lib/groups/group-channel-selection.svelte.js';
   import ConcordUnreadDot from '$lib/components/shared/ConcordUnreadDot.svelte';
   import ChannelRailRow from '../channels/ChannelRailRow.svelte';
@@ -92,7 +93,7 @@
     polls: PollIcon,
     settings: SettingsIcon,
     members: PeopleIcon,
-    channels: LockIcon
+    channels: ChannelsIcon
   };
 
   /** @type {Record<string, () => string>} */
@@ -198,7 +199,7 @@
    * alone — the click still lands on the channels view.
    */
   function openChannelOverview() {
-    clearGroupChannelSelection(communityEvent?.pubkey);
+    requestChannelList(communityEvent?.pubkey);
     handleContentTypeClick('channels');
   }
 

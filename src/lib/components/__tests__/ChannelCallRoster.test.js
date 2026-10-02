@@ -59,8 +59,7 @@ vi.mock('$lib/paraglide/messages', () => ({
   groups_join: () => 'Join',
   groups_call_join_running: (p) => `Join the running call (${p.count})`,
   groups_call_return: () => 'Show call',
-  groups_call_in_this_call: (p) => `You're in the call · ${p.count}`,
-  groups_call_live: () => 'Call live'
+  groups_call_in_this_call: (p) => `You're in the call · ${p.count}`
 }));
 
 const { default: ChannelCallRoster } = await import(
@@ -96,6 +95,19 @@ describe('ChannelCallRoster', () => {
     expect(screen.getAllByTestId('profile-avatar-stub')).toHaveLength(3);
     expect(screen.getByText('+2')).toBeTruthy();
     expect(screen.getByTitle('5 in the call')).toBeTruthy();
+  });
+
+  // Design 1a: the running call reads as a soft success pill, "● N im Anruf".
+  it('leads with the soft success pill carrying the head count', () => {
+    presence.participants = [P('b'), P('c')];
+    render(ChannelCallRoster, {
+      props: { pointer: POINTER, name: 'Sprechstunde', onOpen: fns.onOpen }
+    });
+    const pill = screen.getByTestId('call-count-pill');
+    expect(pill.className).toContain('badge');
+    expect(pill.className).toContain('badge-soft');
+    expect(pill.className).toContain('badge-success');
+    expect(pill.textContent).toContain('2 in the call');
   });
 
   it('Join opens the channel, then joins its call', async () => {
