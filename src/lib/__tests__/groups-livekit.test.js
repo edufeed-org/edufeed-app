@@ -183,7 +183,9 @@ describe('requestGroupCallToken', () => {
     [403, 'livekit not enabled for this group', 'not-enabled'],
     [403, 'not allowed to access livekit for this group', 'forbidden'],
     // a guest removed from the call (revoked link / kicked) asks again
-    [403, 'blocked: you were removed from this call', 'removed'],
+    // pyramid groups/livekit.go: the exact body for a removed pubkey
+    [403, 'call pass blocked: you were removed', 'removed'],
+    [403, 'call pass expired', 'pass'],
     [500, 'boom', 'server']
   ])('maps status %s (%s) to reason %s', async (status, body, reason) => {
     vi.stubGlobal(

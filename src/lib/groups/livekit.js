@@ -201,12 +201,14 @@ export async function requestGroupCallToken(relayUrl, groupId, user, opts = {}) 
     else if (response.status === 403)
       reason = /not enabled/i.test(body)
         ? 'not-enabled'
-        : /^call pass/i.test(body.trim())
-          ? 'pass'
-          : // pyramid: "blocked: you were removed" — removed from this call
-            // (revoked link / kicked), not a missing membership.
-            /removed/i.test(body)
-            ? 'removed'
+        : // pyramid (groups/livekit.go): "call pass blocked: you were
+          // removed" — removed from this call (revoked link / kicked), not a
+          // bad pass or a missing membership. Checked before the generic
+          // "call pass" prefix, which it also carries.
+          /you were removed/i.test(body)
+          ? 'removed'
+          : /^call pass/i.test(body.trim())
+            ? 'pass'
             : 'forbidden';
     throw new GroupCallTokenError(reason, message, response.status);
   }
