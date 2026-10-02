@@ -19,7 +19,9 @@ import {
   isMeetingForGroup,
   buildMeetingIcs,
   icsFileName,
-  findMeetingPass
+  findMeetingPass,
+  meetingTimes,
+  nextBarMeeting
 } from '../groups/meetings.js';
 
 /** @param {string[][]} tags @param {string} name @returns {string[][]} */
@@ -380,5 +382,86 @@ describe('findMeetingPass', () => {
     };
     expect(findMeetingPass([other], coordinate)).toBeNull();
     expect(findMeetingPass([], coordinate)).toBeNull();
+  });
+});
+
+describe('meetingTimes', () => {
+  it('reads start/end from the tags', () => {
+    const event = {
+      kind: 31923,
+      tags: [
+        ['start', '1000'],
+        ['end', '4600']
+      ]
+    };
+    expect(meetingTimes(event)).toEqual({ start: 1000, end: 4600 });
+  });
+
+  it('lasts an hour when the end is missing or not after the start', () => {
+    expect(meetingTimes({ kind: 31923, tags: [['start', '1000']] })).toEqual({
+      start: 1000,
+      end: 4600
+    });
+    expect(
+      meetingTimes({
+        kind: 31923,
+        tags: [
+          ['start', '1000'],
+          ['end', '900']
+        ]
+      })
+    ).toEqual({
+      start: 1000,
+      end: 4600
+    });
+  });
+
+  it('is null without a usable start', () => {
+    expect(meetingTimes({ kind: 31923, tags: [] })).toBeNull();
+    expect(meetingTimes({ kind: 31923, tags: [['start', 'soon']] })).toBeNull();
+  });
+});
+
+describe('nextBarMeeting', () => {
+  const now = 1_000_000;
+  /** @param {string} id @param {number} start @param {number} [end] */
+  const meeting = (id, start, end = start + 3600) => ({
+    id,
+    kind: 31923,
+    tags: [
+      ['d', id],
+      ['start', String(start)],
+      ['end', String(end)]
+    ]
+  });
+
+  it('is null when nothing runs, opens or starts within 24 h', () => {
+    expect(nextBarMeeting([], now)).toBeNull();
+    expect(nextBarMeeting([meeting('far', now + 86400 + 60)], now)).toBeNull();
+    expect(nextBarMeeting([meeting('past', now - 7200, now - 3600)], now)).toBeNull();
+  });
+
+  it('takes a meeting starting within 24 h as upcoming', () => {
+    const soon = meeting('soon', now + 3 * 3600);
+    expect(nextBarMeeting([soon], now)).toEqual({
+      event: soon,
+      start: now + 3 * 3600,
+      end: now + 4 * 3600,
+      phase: 'upcoming'
+    });
+  });
+
+  it('prefers the one that started first among running/joinable/upcoming', () => {
+    const running = meeting('running', now - 600, now + 600);
+    const joinable = meeting('joinable', now + 300);
+    const later = meeting('later', now + 7200);
+    const result = nextBarMeeting([later, joinable, running], now);
+    expect(result?.event).toBe(running);
+    expect(result?.phase).toBe('running');
+    expect(nextBarMeeting([later, joinable], now)?.phase).toBe('joinable');
+  });
+
+  it('ignores events without a start', () => {
+    expect(nextBarMeeting([{ id: 'x', kind: 31923, tags: [] }], now)).toBeNull();
   });
 });

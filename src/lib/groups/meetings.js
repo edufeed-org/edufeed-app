@@ -20,6 +20,10 @@ export const GUEST_EARLY_S = 900;
 export const GUEST_LATE_S = 1800;
 /** The relay's maximum call-pass lifetime (pyramid `callPassMaxLifetime`). */
 export const PASS_MAX_LIFETIME_S = 60 * 86400;
+/** A meeting without a (usable) end lasts an hour. */
+export const MEETING_DEFAULT_DURATION_S = 3600;
+/** The channel's meeting bar shows meetings starting within this window. */
+export const BAR_LOOKAHEAD_S = 24 * 3600;
 
 /**
  * Build NIP-52 tags for a channel meeting: reuses the normal calendar tag
@@ -258,6 +262,52 @@ export function findMeetingPass(passes, coordinate) {
     const aTag = pass?.tags?.find((tag) => tag[0] === 'a');
     if (!aTag || aTag[1] !== coordinate) continue;
     if (!best || (pass.created_at ?? 0) > (best.created_at ?? 0)) best = pass;
+  }
+  return best;
+}
+
+/**
+ * A meeting's start/end in unix seconds, read from its NIP-52 tags. A
+ * missing end (or one not after the start) means it lasts
+ * `MEETING_DEFAULT_DURATION_S` — the same fallback the scheduler uses for
+ * the guest window. Null when the start is missing or unreadable.
+ *
+ * @param {{tags?: string[][]}} event
+ * @returns {{start: number, end: number} | null}
+ */
+export function meetingTimes(event) {
+  const read = (/** @type {string} */ name) => {
+    const raw = event?.tags?.find((tag) => tag[0] === name)?.[1];
+    const n = raw === undefined || raw === '' ? NaN : Number(raw);
+    return Number.isFinite(n) ? n : null;
+  };
+  const start = read('start');
+  if (start === null) return null;
+  const end = read('end');
+  return { start, end: end !== null && end > start ? end : start + MEETING_DEFAULT_DURATION_S };
+}
+
+/**
+ * The meeting the channel's bar announces: running, joinable, or starting
+ * within `BAR_LOOKAHEAD_S` — the earliest start wins (a running meeting
+ * always started before one still ahead). Null when there is none.
+ *
+ * @template {{tags?: string[][]}} E
+ * @param {E[]} events - this channel's meetings (already group-filtered)
+ * @param {number} nowS
+ * @returns {{event: E, start: number, end: number,
+ *   phase: 'upcoming' | 'joinable' | 'running'} | null}
+ */
+export function nextBarMeeting(events, nowS) {
+  /** @type {{event: E, start: number, end: number, phase: 'upcoming' | 'joinable' | 'running'} | null} */
+  let best = null;
+  for (const event of events || []) {
+    const times = meetingTimes(event);
+    if (!times) continue;
+    const phase = meetingPhase(times, nowS);
+    if (phase === 'past') continue;
+    if (phase === 'upcoming' && times.start - nowS > BAR_LOOKAHEAD_S) continue;
+    if (!best || times.start < best.start) best = { event, ...times, phase };
   }
   return best;
 }
