@@ -24,10 +24,13 @@
    * @type {{
    *   pointer: {id: string, relay: string},
    *   name: string,
-   *   onOpen: () => void | Promise<void>
+   *   onOpen: () => void | Promise<void>,
+   *   inset?: string
    * }}
    */
-  let { pointer, name, onOpen } = $props();
+  // inset: the row's padding — the rails indent it under the row's text
+  // (default); the overview cards pad it like the card body.
+  let { pointer, name, onOpen, inset = 'pr-2 pb-1 pl-12' } = $props();
 
   const MAX_AVATARS = 3;
   const getPresence = useCallPresence(() => pointer);
@@ -72,7 +75,7 @@
 
 {#if participants.length > 0}
   <div
-    class="flex flex-wrap items-center gap-x-2 gap-y-0.5 pr-2 pb-1 pl-12"
+    class="flex flex-wrap items-center gap-x-2 gap-y-0.5 {inset}"
     data-testid="channel-call-roster"
     title={m.groups_call_people_in_call({ count: participants.length })}
   >

@@ -20,6 +20,7 @@
   import GroupBadges from '$lib/components/groups/GroupBadges.svelte';
   import ImageWithFallback from '$lib/components/shared/ImageWithFallback.svelte';
   import ChannelCallBadge from '$lib/components/groups/call/ChannelCallBadge.svelte';
+  import ChannelCallRoster from '$lib/components/groups/call/ChannelCallRoster.svelte';
   import { StarIcon, TrashIcon } from '$lib/components/icons';
   import * as m from '$lib/paraglide/messages';
 
@@ -127,14 +128,19 @@
       <div class="grid gap-3 sm:grid-cols-2">
         {#each channels as row (row.key)}
           {@const starred = !!isFavourite?.(row)}
-          <div class="relative min-w-0">
+          <!-- The wrap draws the card frame, so the call roster below the card
+               button reads as part of the card while staying its sibling. -->
+          <div
+            class="relative flex min-w-0 flex-col rounded-2xl border border-base-300 bg-base-100 transition-colors hover:border-primary/50"
+            data-testid="channel-card-wrap"
+          >
             <svelte:element
               this={onSelect ? 'button' : 'a'}
               role={onSelect ? 'button' : undefined}
               href={onSelect ? undefined : groupHref(row.pointer)}
               onclick={onSelect ? () => onSelect(row.pointer) : undefined}
               data-testid="channel-card"
-              class="flex h-full w-full flex-col gap-2 rounded-2xl border border-base-300 bg-base-100 p-4 text-left transition-colors hover:border-primary/50"
+              class="flex w-full flex-1 flex-col gap-2 rounded-2xl p-4 text-left"
             >
               <!-- Room on the right for the overlaid actions (2rem each). -->
               <span
@@ -180,13 +186,28 @@
                 <span class="badge badge-outline badge-xs" data-testid="channel-card-access"
                   >{accessLabel(row.level)}</span
                 >
-                <!-- Between md and lg these cards are the channel list (no
-                sidebar): a running call shows here too (laoc, 2026-10-02). -->
-                {#if row.av}
+                <!-- The relay directory's cards (links, no onSelect) show the
+                passive count; the community pane's carry the full roster
+                below instead. -->
+                {#if row.av && !onSelect}
                   <ChannelCallBadge pointer={row.pointer} />
                 {/if}
               </span>
             </svelte:element>
+            <!-- These cards are the community's channel list on every width
+              (C-new-7), so a running call gets the rail's full roster here:
+              who is in it and the one-click Join / "Anruf anzeigen" / "Du
+              bist im Anruf" states (Task 13). A sibling of the card button,
+              never inside it. AV rows only: each roster holds a standing
+              kind-39004 subscription. -->
+            {#if row.av && onSelect}
+              <ChannelCallRoster
+                pointer={row.pointer}
+                name={row.name}
+                onOpen={() => onSelect?.(row.pointer)}
+                inset="px-4 pb-3"
+              />
+            {/if}
             {#if actionCount(row) > 0}
               <div class="absolute top-2.5 right-2.5 flex items-center gap-0.5">
                 {#if deletable(row)}

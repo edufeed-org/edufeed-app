@@ -7,8 +7,8 @@
  * reader sees for a given relay state, and a hand-written row could describe a
  * state the builder never produces.
  */
-import { describe, it, expect, vi } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/svelte';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { render, screen, fireEvent, within } from '@testing-library/svelte';
 // Kind-39004 presence, stubbed per channel id: the cards only render it.
 const presence = vi.hoisted(() => ({ byId: /** @type {Record<string, string[]>} */ ({}) }));
 vi.mock('$lib/groups/call-presence.svelte.js', () => ({
@@ -17,6 +17,39 @@ vi.mock('$lib/groups/call-presence.svelte.js', () => ({
     answered: true
   })
 }));
+// The community pane's cards carry the full ChannelCallRoster (join / show
+// call / "you're in the call"): its call-state and account inputs, stubbed.
+const call = vi.hoisted(() => ({ active: false, stageViews: 0, stageHidden: false }));
+const callFns = vi.hoisted(() => ({
+  joinGroupCall: vi.fn(async (/** @type {any[]} */ ..._a) => {}),
+  showCallStage: vi.fn((/** @type {any[]} */ ..._a) => {})
+}));
+vi.mock('$lib/groups/group-call.svelte.js', () => ({
+  getGroupCallState: () => ({
+    isActiveFor: () => call.active,
+    get phase() {
+      return call.active ? 'ready' : 'idle';
+    },
+    get stageViews() {
+      return call.stageViews;
+    },
+    get stageHidden() {
+      return call.stageHidden;
+    }
+  }),
+  joinGroupCall: (/** @type {any[]} */ ...a) => callFns.joinGroupCall(...a),
+  showCallStage: (/** @type {any[]} */ ...a) => callFns.showCallStage(...a)
+}));
+vi.mock('$lib/groups/call-popout.svelte.js', () => ({
+  getCallPopoutState: () => ({ open: false })
+}));
+vi.mock('$lib/stores/accounts.svelte', () => ({
+  useActiveUser: () => () => ({ pubkey: 'a'.repeat(64), signer: {} })
+}));
+vi.mock(
+  '$lib/components/shared/ProfileAvatar.svelte',
+  () => import('./fixtures/ProfileAvatarStub.svelte')
+);
 import ChannelOverview from '$lib/components/community/channels/ChannelOverview.svelte';
 import { buildChannelRows } from '$lib/groups/community-channel-rows.js';
 import { channelAccessLevel } from '$lib/groups/channel-access.js';
@@ -237,6 +270,76 @@ describe('ChannelOverview', () => {
       expect(deletes[0].closest('[data-testid="channel-card"]')).toBeNull();
       await fireEvent.click(deletes[0]);
       expect(deleted).toEqual(['willkommen']);
+    });
+  });
+
+  // Fix round 1 (controller ruling): the phone rail's roster under AV rows —
+  // one-click join, "Anruf anzeigen", "Du bist im Anruf · N" — must not be
+  // lost now that the cards are the list. In the community pane (onSelect)
+  // each running AV card carries the full roster, as a sibling of the card
+  // button. The relay directory (no onSelect) keeps the passive pill.
+  describe('running-call roster on the community cards', () => {
+    const avRows = () =>
+      buildChannelRows({
+        subtreeChannels: [
+          sub(ptr('sprechstunde'), [['name', 'sprechstunde'], ['livekit']]),
+          sub(ptr('text'), [['name', 'text']])
+        ]
+      });
+
+    /** @param {() => void} [onSelect] */
+    function renderPane(onSelect = vi.fn()) {
+      presence.byId = { sprechstunde: ['b'.repeat(64), 'c'.repeat(64)] };
+      render(ChannelOverview, { props: { rows: avRows(), onSelect } });
+      const rosters = screen.getAllByTestId('channel-call-roster');
+      expect(rosters).toHaveLength(1);
+      expect(rosters[0].closest('[data-testid="channel-card"]')).toBeNull();
+      expect(rosters[0].closest('[data-testid="channel-card-wrap"]')?.textContent).toContain(
+        'sprechstunde'
+      );
+      return rosters[0];
+    }
+
+    beforeEach(() => {
+      call.active = false;
+      call.stageViews = 0;
+      call.stageHidden = false;
+      callFns.joinGroupCall.mockClear();
+      callFns.showCallStage.mockClear();
+    });
+
+    it('not in the call: Join opens the channel, then joins its call', async () => {
+      const onSelect = vi.fn();
+      const roster = renderPane(onSelect);
+      const join = within(roster).getByRole('button', { name: /Join|Laufendem Anruf|beitreten/i });
+      await fireEvent.click(join);
+      await vi.waitFor(() => expect(callFns.joinGroupCall).toHaveBeenCalled());
+      expect(onSelect).toHaveBeenCalledWith(expect.objectContaining({ id: 'sprechstunde' }));
+    });
+
+    it('in the call, stage not on screen: "Show call" brings it back', async () => {
+      call.active = true;
+      const onSelect = vi.fn();
+      const roster = renderPane(onSelect);
+      await fireEvent.click(within(roster).getByRole('button'));
+      expect(callFns.showCallStage).toHaveBeenCalledTimes(1);
+      expect(onSelect).toHaveBeenCalledTimes(1);
+      expect(callFns.joinGroupCall).not.toHaveBeenCalled();
+    });
+
+    it('in the call with its stage on screen: the status line, no button', () => {
+      call.active = true;
+      call.stageViews = 1;
+      const roster = renderPane();
+      expect(within(roster).queryByRole('button')).toBeNull();
+      expect(within(roster).getByTestId('channel-call-roster-here').textContent).toMatch(/2/);
+    });
+
+    it('the relay directory (no onSelect) keeps the passive pill, no roster', () => {
+      presence.byId = { sprechstunde: ['b'.repeat(64)] };
+      render(ChannelOverview, { props: { rows: avRows() } });
+      expect(screen.queryByTestId('channel-call-roster')).toBeNull();
+      expect(screen.getAllByTestId('channel-card-call')).toHaveLength(1);
     });
   });
 });

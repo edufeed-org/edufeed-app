@@ -204,6 +204,24 @@ describe('PrivateChannelsView — NIP-29 channels in the community pane', () => 
     expect(pane.className.split(/\s+/)).not.toContain('hidden');
   });
 
+  // Fix round 1: the rail's roster (join / show call / in-call states) lives
+  // on the AV cards now — and only AV channels open a presence subscription.
+  it('draws the call roster under AV cards only, and its action opens that channel', async () => {
+    holders.events = {
+      [ENDPOINT]: [root(), chan('sprechstunde', [['livekit']]), chan('zweiter', [['private']])]
+    };
+
+    render(PrivateChannelsView, { props: { communikeyEvent: moderated() } });
+
+    await screen.findAllByTestId('channel-card');
+    const rosters = await screen.findAllByTestId('channel-call-roster-stub');
+    expect(rosters.map((r) => r.textContent)).toEqual(['sprechstunde']);
+    expect(rosters[0].closest('[data-testid="channel-card"]')).toBeNull();
+    await fireEvent.click(rosters[0]);
+    const chat = await screen.findByTestId('group-chat-stub');
+    expect(chat.textContent).toContain('sprechstunde');
+  });
+
   it('shows the globe only for a channel the relay leaves open', async () => {
     holders.events = {
       [ENDPOINT]: [root(), chan('ankuendigungen', [['restricted']]), chan('leitung', [['private']])]
