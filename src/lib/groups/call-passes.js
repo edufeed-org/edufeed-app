@@ -14,6 +14,7 @@ import { groupPointerString } from './groups.js';
 import { publishToGroupRelay, buildDeleteEventTemplate } from './group-management.js';
 import { authenticateOnce } from './relay-auth.js';
 import { hasNip44 } from '$lib/helpers/nip44.js';
+import { guestWindow } from './meetings.js';
 
 export const CALL_PASS_KIND = 9025;
 /** The relay rejects a call-scoped pass expiring later than this. */
@@ -195,6 +196,41 @@ export async function createCallLink(relayConn, pointer, user, origin, { title }
     encryptedCode: await user.signer.nip44.encrypt(user.pubkey, code),
     expiration: Math.floor(Date.now() / 1000) + CALL_SCOPE_TTL_S,
     scopeCall: true,
+    title
+  });
+  const event = await publishToGroupRelay(relayConn, template, user);
+  return { code, url: callLinkUrl(origin, pointer, code), event };
+}
+
+/**
+ * Mint the guest link of a scheduled meeting: no call scope (the meeting may
+ * not have a running call yet), valid from 15 min before `start` until 30 min
+ * after `end` (`guestWindow`), and tied to the meeting by its coordinate. The
+ * caller checks `canHaveGuestLink` first — the relay rejects passes that live
+ * longer than 60 days.
+ * @param {any} relayConn pool.relay(pointer.relay)
+ * @param {{id: string, relay: string}} pointer
+ * @param {{pubkey: string, signer: any}} user
+ * @param {string} origin
+ * @param {{start: number, end: number, coordinate: string, title?: string}} meeting
+ */
+export async function createMeetingLink(
+  relayConn,
+  pointer,
+  user,
+  origin,
+  { start, end, coordinate, title }
+) {
+  if (!hasNip44(user.signer)) throw new Error('nip44-unsupported');
+  const code = generatePassCode();
+  const { notBefore, expiration } = guestWindow({ start, end });
+  const template = buildCallPassTemplate({
+    groupId: pointer.id,
+    codeHash: await hashPassCode(code),
+    encryptedCode: await user.signer.nip44.encrypt(user.pubkey, code),
+    notBefore,
+    expiration,
+    meeting: [coordinate, pointer.relay],
     title
   });
   const event = await publishToGroupRelay(relayConn, template, user);

@@ -18,8 +18,14 @@ vi.mock('$lib/groups/relay-auth.js', async (orig) => ({
   authenticateOnce: (...a) => authenticateOnce(...a)
 }));
 
-const { createCallLink, listCallPasses, passLinkFor, revokeCallPass, CALL_PASS_KIND } =
-  await import('$lib/groups/call-passes.js');
+const {
+  createCallLink,
+  createMeetingLink,
+  listCallPasses,
+  passLinkFor,
+  revokeCallPass,
+  CALL_PASS_KIND
+} = await import('$lib/groups/call-passes.js');
 
 const ME = 'a'.repeat(64);
 const OTHER = 'b'.repeat(64);
@@ -68,6 +74,50 @@ describe('createCallLink', () => {
         POINTER,
         { pubkey: ME, signer: { signEvent: vi.fn() } },
         'https://x'
+      )
+    ).rejects.toThrow('nip44-unsupported');
+    expect(publishToGroupRelay).not.toHaveBeenCalled();
+  });
+});
+
+describe('createMeetingLink', () => {
+  const MEETING = {
+    start: 2_000_000,
+    end: 2_003_600,
+    coordinate: `31923:${ME}:meeting-1`,
+    title: 'Elternabend'
+  };
+
+  it('publishes a self-encrypted pass windowed around the meeting, not call-scoped', async () => {
+    const { code, url } = await createMeetingLink(
+      relayConn,
+      POINTER,
+      USER,
+      'https://app.example',
+      MEETING
+    );
+    const template = publishToGroupRelay.mock.calls[0][1];
+    expect(publishToGroupRelay.mock.calls[0][0]).toBe(relayConn);
+    expect(template.kind).toBe(CALL_PASS_KIND);
+    expect(template.content).toBe(`enc:${code}`);
+    expect(template.tags.filter((t) => t[0] === 'h')).toEqual([['h', 'g1']]);
+    expect(template.tags).toContainEqual(['not-before', String(2_000_000 - 900)]);
+    expect(template.tags).toContainEqual(['expiration', String(2_003_600 + 1800)]);
+    expect(template.tags).toContainEqual(['a', MEETING.coordinate, POINTER.relay]);
+    expect(template.tags).toContainEqual(['title', 'Elternabend']);
+    expect(template.tags.find((t) => t[0] === 'scope')).toBeUndefined();
+    expect(url.startsWith('https://app.example/call/')).toBe(true);
+    expect(url.endsWith(`#${code}`)).toBe(true);
+  });
+
+  it('refuses a signer without NIP-44 before publishing anything', async () => {
+    await expect(
+      createMeetingLink(
+        relayConn,
+        POINTER,
+        { pubkey: ME, signer: { signEvent: vi.fn() } },
+        'https://x',
+        MEETING
       )
     ).rejects.toThrow('nip44-unsupported');
     expect(publishToGroupRelay).not.toHaveBeenCalled();
