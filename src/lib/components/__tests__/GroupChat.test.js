@@ -11,7 +11,7 @@
  * @vitest-environment jsdom
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, fireEvent, waitFor, within } from '@testing-library/svelte';
+import { render, screen, fireEvent, waitFor, within, cleanup } from '@testing-library/svelte';
 import { typeIntoEditor } from './fixtures/editor.js';
 import { finalizeEvent, generateSecretKey, getPublicKey } from 'nostr-tools';
 // Real module (not mocked): the walledchat auth-required retry exercises the
@@ -420,6 +420,37 @@ const meetChatMessage = signWith(
   { kind: 9, content: 'see you there', created_at: 1700000210, tags: [['h', 'meetchat']] },
   OTHER_SK
 );
+// `ownmeetchat`: ME has an upcoming meeting here (guest-link listing), and
+// one that already ended.
+const metadataEventOwnMeet = signWith(
+  { kind: 39000, tags: [['d', 'ownmeetchat'], ['name', 'Own Meet'], ['private'], ['livekit']] },
+  RELAY_SK
+);
+const membersEventOwnMeet = signWith(
+  {
+    kind: 39002,
+    tags: [
+      ['d', 'ownmeetchat'],
+      ['p', ME]
+    ]
+  },
+  RELAY_SK
+);
+const ownMeeting = signWith(
+  {
+    kind: 31923,
+    content: '',
+    created_at: 1700000300,
+    tags: [
+      ['d', 'own-1'],
+      ['title', 'Sprechstunde'],
+      ['start', '2000000000'],
+      ['end', '2000003600'],
+      ['h', 'ownmeetchat']
+    ]
+  },
+  MY_SK
+);
 // Enrichment fixture for the session-title effect (moved from GroupAppsBar
 // into GroupChat itself): the latest 9450 state event's `document` tag,
 // returned by the fake pool's request() below when it sees the effect's own
@@ -644,6 +675,7 @@ vi.mock('$lib/stores/nostr-infrastructure.svelte', async () => {
           if (d === 'pollchat') return rxOf(metadataEventPoll, membersEventPoll);
           if (d === 'callchat') return rxOf(metadataEventCall, membersEventCall);
           if (d === 'meetchat') return rxOf(metadataEventMeet, membersEventMeet);
+          if (d === 'ownmeetchat') return rxOf(metadataEventOwnMeet, membersEventOwnMeet);
           if (d === 'livetitlechat') return rxOf(metadataEventLiveTitle, membersEventLiveTitle);
           if (d === 'authchat') return rxOf(metadataEventAuthNoPrivate, membersEventAuthNoPrivate);
           if (d === 'emptychat') return rxOf(metadataEventEmptyRoster, membersEventEmptyRoster);
@@ -735,6 +767,7 @@ vi.mock('$lib/stores/nostr-infrastructure.svelte', async () => {
           // pollchat: isolated timeline holding the poll and one vote.
           if (h === 'pollchat') return rxMerge(rxOf(pollEvent, pollVoteOther), rxNever);
           // meetchat: a meeting, a malformed two-group meeting, a message.
+          if (h === 'ownmeetchat') return rxMerge(rxOf(ownMeeting), rxNever);
           if (h === 'meetchat')
             return rxMerge(rxOf(meetingEvent, meetingTwoGroups, meetChatMessage), rxNever);
           // livetitlechat: isolated timeline holding only its own webxdc
@@ -970,10 +1003,14 @@ vi.mock('$lib/groups/group-call.svelte.js', () => ({
 const probeCallPassSupport = vi.hoisted(() =>
   vi.fn(async (/** @type {string} */ _relay, /** @type {string} */ _id) => false)
 );
+const listCallPassesMock = vi.hoisted(() =>
+  vi.fn(async (/** @type {any[]} */ ..._args) => /** @type {any[]} */ ([]))
+);
 vi.mock('$lib/groups/call-passes.js', async (importOriginal) => ({
   .../** @type {any} */ (await importOriginal()),
   probeCallPassSupport: (/** @type {string} */ relay, /** @type {string} */ id) =>
-    probeCallPassSupport(relay, id)
+    probeCallPassSupport(relay, id),
+  listCallPasses: (/** @type {any[]} */ ...a) => listCallPassesMock(...a)
 }));
 // The relay's AV capability probe and the admin's "Start call" 9002 are
 // seams too (their own tests: groups-livekit.test.js, enable-group-calls.test.js).
@@ -1181,6 +1218,7 @@ vi.mock('$lib/paraglide/messages', () => ({
   group_invite_dm_failed_after_mint: () => 'Invite minted but DM failed',
   common_cancel: () => 'Cancel',
   groups_meeting_schedule: () => 'Schedule a meeting',
+  meeting_card_label: () => 'Meeting',
   groups_role_admin: () => 'Admin',
   groups_role_king: () => 'Owner',
   groups_role_moderator: () => 'Moderator',
@@ -2100,6 +2138,44 @@ describe('GroupChat', () => {
       );
       expect([...props.groupMeeting.memberPubkeys].sort()).toEqual([ME, OTHER].sort());
       openModal.mockRestore();
+    });
+
+    // One authenticated listing per channel visit feeds every card's guest
+    // link (not one per card), and only for a meeting of mine not yet over.
+    it('lists the channel passes once for my upcoming meeting', async () => {
+      listCallPassesMock.mockClear();
+      const nip44 = { encrypt: async () => '', decrypt: async () => '' };
+      activeUserHolder.current = { pubkey: ME, signer: { signEvent, nip44 } };
+      render(GroupChat, { props: { pointer: { relay: GROUP_RELAY, id: 'ownmeetchat' } } });
+      await screen.findAllByTestId('meeting-card-stub');
+      await waitFor(() => expect(listCallPassesMock).toHaveBeenCalledTimes(1));
+      expect(listCallPassesMock.mock.calls[0][1]).toBe('ownmeetchat');
+    });
+
+    it('does not list passes for someone else’s meeting or without NIP-44', async () => {
+      listCallPassesMock.mockClear();
+      const nip44 = { encrypt: async () => '', decrypt: async () => '' };
+      activeUserHolder.current = { pubkey: ME, signer: { signEvent, nip44 } };
+      render(GroupChat, { props: { pointer: { relay: GROUP_RELAY, id: 'meetchat' } } });
+      await screen.findAllByTestId('meeting-card-stub');
+      cleanup();
+      activeUserHolder.current = { pubkey: ME, signer: { signEvent } };
+      render(GroupChat, { props: { pointer: { relay: GROUP_RELAY, id: 'ownmeetchat' } } });
+      await screen.findAllByTestId('meeting-card-stub');
+      await new Promise((r) => setTimeout(r, 50));
+      expect(listCallPassesMock).not.toHaveBeenCalled();
+    });
+
+    it('quotes the meeting title when replying to a meeting row', async () => {
+      const { container } = render(GroupChat, { props: { pointer: meetPointer } });
+      await screen.findAllByTestId('meeting-card-stub');
+      const row = /** @type {HTMLElement} */ (
+        container.querySelector(`[data-message-id="${meetingEvent.id}"]`)
+      );
+      await fireEvent.click(
+        /** @type {HTMLElement} */ (row.querySelector('button[title="Reply"]'))
+      );
+      await waitFor(() => expect(container.textContent).toContain('↩ Elternabend'));
     });
 
     it('offers no "Termin planen" to a non-member', async () => {

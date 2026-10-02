@@ -63,7 +63,12 @@
   import PollMessage from '$lib/components/community/channels/PollMessage.svelte';
   import MeetingCard from '$lib/components/groups/MeetingCard.svelte';
   import MeetingBar from '$lib/components/groups/MeetingBar.svelte';
-  import { MEETING_KIND, isMeetingForGroup } from '$lib/groups/meetings.js';
+  import {
+    MEETING_KIND,
+    isMeetingForGroup,
+    meetingTimes,
+    meetingTitle
+  } from '$lib/groups/meetings.js';
   import GroupPollModal from '$lib/components/groups/GroupPollModal.svelte';
   import { updatePersonalGroupsList } from '$lib/groups/personal-groups-list.js';
   import { useMyGroups } from '$lib/groups/unlinked-groups.svelte.js';
@@ -97,7 +102,8 @@
   } from '$lib/components/icons';
   import { lazyComponent } from '$lib/helpers/lazy-component.svelte.js';
   import { hasLivekitTag, identityToPubkey, probeRelayAvSupport } from '$lib/groups/livekit.js';
-  import { probeCallPassSupport } from '$lib/groups/call-passes.js';
+  import { probeCallPassSupport, listCallPasses } from '$lib/groups/call-passes.js';
+  import { hasNip44 } from '$lib/helpers/nip44.js';
   import { trackOnScreen } from '$lib/groups/track-on-screen.js';
   import { joinOutcome } from '$lib/groups/join-outcome.js';
   import { modalStore } from '$lib/stores/modal.svelte.js';
@@ -529,6 +535,46 @@
       .toReversed()
   );
   const meetings = $derived(displayed.filter((event) => event.kind === MEETING_KIND));
+
+  // Guest links of my meetings: the channel's passes are listed ONCE per
+  // visit (and per account) into the store, where each MeetingCard finds its
+  // own by coordinate — not one authenticated REQ per card. Only while I
+  // have a meeting here that has not ended (a past one offers no link), and
+  // only with NIP-44 (the code is self-encrypted).
+  const hasOwnLiveMeeting = $derived.by(() => {
+    const now = Math.floor(Date.now() / 1000);
+    return meetings.some((event) => {
+      const times = event.pubkey === myPubkey ? meetingTimes(event) : null;
+      return !!times && times.end > now;
+    });
+  });
+  $effect(() => {
+    const wanted = hasOwnLiveMeeting; // read first (effect early-return rule)
+    const user = getActiveUser();
+    if (!wanted || !user || !hasNip44(user.signer)) return;
+    let alive = true;
+    untrack(() =>
+      listCallPasses(pool.relay(pointer.relay), pointer.id, user)
+        .then((passes) => {
+          if (alive) for (const pass of passes) eventStore.add(pass);
+        })
+        .catch((/** @type {unknown} */ err) => console.warn('meeting: listing passes failed', err))
+    );
+    return () => {
+      alive = false;
+    };
+  });
+
+  /**
+   * The text a reply quotes: a meeting's title (its content is the
+   * description, often empty), otherwise the message itself.
+   * @param {any} message
+   */
+  function quoteText(message) {
+    return message?.kind === MEETING_KIND
+      ? meetingTitle(message) || m.meeting_card_label()
+      : (message?.content ?? '');
+  }
   // Replies live in their thread, not in the timeline. An orphan — a reply
   // whose root fell outside the 100-event window — stays in the timeline
   // rather than disappearing.
@@ -1978,7 +2024,7 @@
               replyParent.pubkey,
               getProfiles().get(replyParent.pubkey)
             ),
-            content: replyParent.content
+            content: quoteText(replyParent)
           }
         : null}
       {onReply}
@@ -2052,7 +2098,11 @@
     >
       <GroupAppsBar {pointer} messages={displayed} sessionMeta={sessionTitles} onOpen={openStage} />
       {#if !callLiveHere}
-        <MeetingBar {meetings} onJoin={canJoinMeeting ? joinMeeting : undefined} />
+        <MeetingBar
+          {meetings}
+          onJoin={canJoinMeeting ? joinMeeting : undefined}
+          callRunning={callParticipantCount > 0}
+        />
       {/if}
       {#if poppedOutHere}
         <div
@@ -2296,7 +2346,7 @@
                 disabled={!myPubkey || !rosterAnswered}
                 {sending}
                 onSubmit={send}
-                {replyTo}
+                replyTo={replyTo && { content: quoteText(replyTo) }}
                 onCancelReply={() => (replyTo = null)}
                 testid="group-chat-input"
                 {customEmojiSets}
@@ -2333,7 +2383,7 @@
             disabled={!myPubkey}
             {sending}
             onSubmit={sendInThread}
-            replyTo={threadReplyTo}
+            replyTo={threadReplyTo && { content: quoteText(threadReplyTo) }}
             onCancelReply={() => (threadReplyTo = null)}
             testid="thread-chat-input"
             onAttachFile={canWrite ? (file) => attachFile(file, 'thread') : null}

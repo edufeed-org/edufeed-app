@@ -87,6 +87,15 @@ describe('MeetingBar', () => {
     );
   });
 
+  // One join rule for card and bar: a running channel call opens it early.
+  it('enables join for an upcoming meeting while the channel call runs', () => {
+    const now = Math.floor(Date.now() / 1000);
+    render(MeetingBar, {
+      props: { meetings: [meeting('Später', now + 5 * 3600)], onJoin: vi.fn(), callRunning: true }
+    });
+    expect(screen.getByTestId('meeting-bar-join').disabled).toBe(false);
+  });
+
   it('joins a meeting in its window through the channel join', async () => {
     const now = Math.floor(Date.now() / 1000);
     const onJoin = vi.fn();

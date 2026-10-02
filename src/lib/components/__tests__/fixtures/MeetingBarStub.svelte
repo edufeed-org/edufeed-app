@@ -1,11 +1,12 @@
 <!-- Captures the meetings GroupChat hands the real MeetingBar
      (MeetingBar.test.js covers the bar itself). -->
 <script>
-  let { meetings, onJoin = undefined } = $props();
+  let { meetings, onJoin = undefined, callRunning = false } = $props();
 </script>
 
 <div
   data-testid="meeting-bar-stub"
+  data-call-running={String(callRunning)}
   data-ids={meetings.map((/** @type {any} */ e) => e.id).join(',')}
 >
   {#if onJoin}

@@ -220,13 +220,12 @@ describe('MeetingCard', () => {
   });
 
   describe('guest link', () => {
-    it("rebuilds the organiser's guest link from the pass and copies it", async () => {
+    it("rebuilds the organiser's guest link from the pass in the store and copies it", async () => {
       const event = meetingIn(3600);
       const pass = passFor(event);
-      h.listCallPasses.mockImplementation(async () => [pass]);
+      eventStore.add(pass);
       render(MeetingCard, { props: { event, pointer: POINTER, user: me, isAdmin: false } });
       const button = await screen.findByTestId('meeting-card-guest-link');
-      expect(h.listCallPasses).toHaveBeenCalledWith({ url: RELAY }, 'g1', me);
       await fireEvent.click(button);
       await waitFor(() => expect(navigator.clipboard.writeText).toHaveBeenCalledWith(GUEST_URL));
       expect(h.passLinkFor.mock.calls[0][0].id).toBe(pass.id);
@@ -234,7 +233,7 @@ describe('MeetingCard', () => {
       expect(h.showToast).toHaveBeenCalledWith(m.meeting_card_guest_link_copied(), 'success');
     });
 
-    it('finds a pass that only reached the local store (just scheduled)', async () => {
+    it('picks up a pass that reaches the store later (just scheduled, or listed by the chat)', async () => {
       const event = meetingIn(3600);
       render(MeetingCard, { props: { event, pointer: POINTER, user: me, isAdmin: false } });
       await tick();
@@ -243,24 +242,24 @@ describe('MeetingCard', () => {
       expect(await screen.findByTestId('meeting-card-guest-link')).toBeTruthy();
     });
 
-    it('is hidden without a pass, and never looked up for someone else’s meeting', async () => {
+    // One listing per channel visit lives in GroupChat; a card never fetches.
+    it('never lists passes itself', async () => {
       render(MeetingCard, {
         props: { event: meetingIn(3600), pointer: POINTER, user: me, isAdmin: false }
       });
-      await waitFor(() => expect(h.listCallPasses).toHaveBeenCalled());
-      expect(screen.queryByTestId('meeting-card-guest-link')).toBeNull();
-
-      h.listCallPasses.mockClear();
-      render(MeetingCard, {
-        props: {
-          event: meetingIn(3600, { sk: OTHER_SK }),
-          pointer: POINTER,
-          user: me,
-          isAdmin: true
-        }
-      });
       await tick();
       expect(h.listCallPasses).not.toHaveBeenCalled();
+      expect(screen.queryByTestId('meeting-card-guest-link')).toBeNull();
+    });
+
+    it('offers no guest link for a past meeting or someone else’s', async () => {
+      const past = meetingIn(-3 * 3600);
+      eventStore.add(passFor(past));
+      render(MeetingCard, { props: { event: past, pointer: POINTER, user: me, isAdmin: false } });
+      const theirs = meetingIn(3600, { sk: OTHER_SK });
+      render(MeetingCard, { props: { event: theirs, pointer: POINTER, user: me, isAdmin: true } });
+      await tick();
+      expect(screen.queryByTestId('meeting-card-guest-link')).toBeNull();
     });
   });
 

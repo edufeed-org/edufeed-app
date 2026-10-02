@@ -9,15 +9,16 @@
   import * as m from '$lib/paraglide/messages';
   import { CalendarIcon } from '$lib/components/icons';
   import { formatTimestamp, formatTimeOfDay } from '$lib/helpers/dates.js';
-  import { nextBarMeeting } from '$lib/groups/meetings.js';
+  import { nextBarMeeting, canJoinMeetingNow, meetingTitle } from '$lib/groups/meetings.js';
 
   /**
    * @typedef {object} Props
    * @property {any[]} meetings - this channel's meetings (kind 31923, group-filtered)
    * @property {(() => void) | undefined} [onJoin] - the channel's call join; absent = cannot join
+   * @property {boolean} [callRunning] - the channel's call has participants right now
    */
   /** @type {Props} */
-  let { meetings, onJoin = undefined } = $props();
+  let { meetings, onJoin = undefined, callRunning = false } = $props();
 
   let nowS = $state(Math.floor(Date.now() / 1000));
   $effect(() => {
@@ -28,10 +29,7 @@
   });
 
   const next = $derived(nextBarMeeting(meetings, nowS));
-  const title = $derived(
-    next?.event.tags?.find((/** @type {string[]} */ t) => t[0] === 'title')?.[1] ||
-      m.meeting_card_label()
-  );
+  const title = $derived((next && meetingTitle(next.event)) || m.meeting_card_label());
 
   /** Local calendar day as a comparable key. @param {number} s */
   const dayKey = (s) => {
@@ -48,7 +46,8 @@
       return m.meeting_bar_tomorrow({ time });
     return `${formatTimestamp(next.start, { day: '2-digit', month: '2-digit' })} ${time}`;
   });
-  const joinEnabled = $derived(next?.phase === 'joinable' || next?.phase === 'running');
+  // Same rule as the card (canJoinMeetingNow).
+  const joinEnabled = $derived(!!next && canJoinMeetingNow(next.phase, callRunning));
 </script>
 
 {#if next}

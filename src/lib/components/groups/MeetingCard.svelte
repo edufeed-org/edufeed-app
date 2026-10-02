@@ -5,9 +5,10 @@
   The phase (upcoming / joinable / running / past) is re-evaluated every 30 s.
   "Beitreten" is the channel's own call join (`onJoin`, from GroupChat) —
   active from 15 minutes before the start, and after the end only while the
-  channel's call still runs. The organiser gets "Gast-Link kopieren": the link
-  is rebuilt from the meeting's pass (self-encrypted code), so it works on any
-  of the organiser's devices. Deleting revokes the meeting's passes first
+  channel's call still runs (canJoinMeetingNow, shared with the bar). The
+  organiser gets "Gast-Link kopieren": the link is rebuilt from the meeting's
+  pass (self-encrypted code, listed by GroupChat), so it works on any of the
+  organiser's devices. Deleting revokes the meeting's passes first
   (meeting-actions.js) and is open to the author and channel moderators.
 -->
 <script>
@@ -26,11 +27,13 @@
     meetingTimes,
     meetingPhase,
     meetingCoordinate,
+    meetingTitle,
+    canJoinMeetingNow,
     findMeetingPass,
     buildMeetingIcs,
     icsFileName
   } from '$lib/groups/meetings.js';
-  import { CALL_PASS_KIND, listCallPasses, passLinkFor } from '$lib/groups/call-passes.js';
+  import { CALL_PASS_KIND, passLinkFor } from '$lib/groups/call-passes.js';
   import { deleteMeeting } from '$lib/groups/meeting-actions.js';
 
   /**
@@ -58,7 +61,7 @@
   const tagValue = (name) =>
     event.tags?.find((/** @type {string[]} */ t) => t[0] === name)?.[1] ?? '';
 
-  const title = $derived(tagValue('title') || tagValue('name') || m.meeting_card_label());
+  const title = $derived(meetingTitle(event) || m.meeting_card_label());
   const summary = $derived((event.content || tagValue('summary') || '').trim());
   const times = $derived(meetingTimes(event));
   const phase = $derived(times ? meetingPhase(times, nowS) : 'past');
@@ -112,40 +115,33 @@
   // Join: from 15 minutes before the start; after the end only while the
   // channel's call still runs (the call is the channel's, not the meeting's).
   const showJoin = $derived(!!onJoin && (phase !== 'past' || callRunning));
-  const joinEnabled = $derived(phase === 'joinable' || phase === 'running' || callRunning);
+  const joinEnabled = $derived(canJoinMeetingNow(phase, callRunning));
 
   const isAuthor = $derived(!!user && user.pubkey === event.pubkey);
   const canDelete = $derived(!!user && (isAuthor || isAdmin));
 
-  // The organiser's guest link: the meeting's pass, from the relay (any of
-  // the organiser's devices) and from the local store (a pass minted a moment
-  // ago lands there before the relay listing would see it).
+  // The organiser's guest link: the meeting's pass, read from the store.
+  // GroupChat lists the channel's passes ONCE per visit (any of the
+  // organiser's devices) and a pass minted a moment ago is added there by
+  // the scheduler, so no card fetches on its own; a past meeting reads
+  // nothing.
   const coordinate = $derived(meetingCoordinate(event));
   const canHaveLink = $derived(isAuthor && hasNip44(user?.signer));
+  const linkActive = $derived(canHaveLink && phase !== 'past');
   /** @type {any[]} */
   let passes = $state.raw([]);
   $effect(() => {
     const coord = coordinate;
-    if (!canHaveLink || !user) return;
-    let alive = true;
+    if (!linkActive) return;
     const sub = eventStore
       .model(TimelineModel, { kinds: [CALL_PASS_KIND], '#a': [coord] })
       .subscribe((events) => {
         passes = events;
       });
-    listCallPasses(pool.relay(pointer.relay), pointer.id, user)
-      .then((listed) => {
-        if (!alive) return;
-        for (const pass of listed) eventStore.add(pass);
-      })
-      .catch((/** @type {unknown} */ err) => console.warn('meeting: listing passes failed', err));
-    return () => {
-      alive = false;
-      sub.unsubscribe();
-    };
+    return () => sub.unsubscribe();
   });
   const guestPass = $derived.by(() => {
-    if (!canHaveLink || phase === 'past') return null;
+    if (!linkActive) return null;
     const live = passes.filter((pass) => {
       const exp = Number(
         pass.tags?.find((/** @type {string[]} */ t) => t[0] === 'expiration')?.[1]
