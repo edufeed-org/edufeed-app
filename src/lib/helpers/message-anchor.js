@@ -24,7 +24,9 @@ export function buildMessageDeepLink(location, channelId, messageId) {
   const params = new URLSearchParams(location.search);
   params.set('channel', channelId);
   params.set('message', messageId);
-  return `${location.origin}${location.pathname}?${params.toString()}`;
+  // `'` is legal in a path but linkifiers stop at it (QA round 3 B1).
+  const path = location.pathname.replace(/'/g, '%27');
+  return `${location.origin}${path}?${params.toString()}`;
 }
 
 /**
@@ -41,7 +43,9 @@ export function buildChannelLink(location, channelId) {
   params.delete('message');
   params.delete('app');
   params.set('channel', channelId);
-  return `${location.origin}${location.pathname}?${params.toString()}`;
+  // `'` is legal in a path but linkifiers stop at it (QA round 3 B1).
+  const path = location.pathname.replace(/'/g, '%27');
+  return `${location.origin}${path}?${params.toString()}`;
 }
 
 /**

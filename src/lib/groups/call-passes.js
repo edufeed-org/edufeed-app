@@ -85,12 +85,16 @@ export function buildCallPassTemplate({
 }
 
 /**
+ * The pointer is fully percent-encoded: `encodeURIComponent` leaves `'`
+ * (the pointer's relay/id separator) alone, and linkifiers — the app's own
+ * included — stop at it, cutting a pasted link in half (QA round 3 B1).
  * @param {string} origin e.g. location.origin
  * @param {{id: string, relay: string}} pointer
  * @param {string} code
  */
 export function callLinkUrl(origin, pointer, code) {
-  return `${origin}/call/${encodeURIComponent(groupPointerString(pointer))}#${code}`;
+  const segment = encodeURIComponent(groupPointerString(pointer)).replace(/'/g, '%27');
+  return `${origin}/call/${segment}#${code}`;
 }
 
 /** @param {string} hash location.hash, with or without the leading '#' */

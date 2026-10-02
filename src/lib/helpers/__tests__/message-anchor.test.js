@@ -54,6 +54,16 @@ describe('buildChannelLink', () => {
     );
     expect(url).toBe('https://app.example/c/npub1xyz?channel=chan2');
   });
+
+  // QA round 3 B1: a `'` in the path (a /groups/<relay>'<id> page) cuts the
+  // link when a linkifier meets it in a DM.
+  it('percent-encodes an apostrophe in the path', () => {
+    const url = buildChannelLink(
+      { ...loc, pathname: "/groups/wss%3A%2F%2Fgroups.example'g1", search: '' },
+      'chan3'
+    );
+    expect(url).toBe('https://app.example/groups/wss%3A%2F%2Fgroups.example%27g1?channel=chan3');
+  });
 });
 
 describe('scrollToChatMessage', () => {

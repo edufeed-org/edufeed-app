@@ -97,6 +97,38 @@ describe('links', () => {
     expect(url.endsWith('#' + 'C'.repeat(22))).toBe(true);
     expect(url).not.toContain('?');
   });
+  // QA round 3 B1: encodeURIComponent leaves `'` alone, and linkifiers (the
+  // app's own included) stop at it — the DM's guest link was cut in half.
+  it("percent-encodes the pointer's apostrophe and round-trips through the route", async () => {
+    const pointer = { id: '4c9b50c8c413f15e', relay: 'wss://groups.example/c/eb5658ef84731c8e' };
+    const code = 'Ab-_cdEfGh12-_xyzABCDE';
+    const url = callLinkUrl('https://edufeed.org', pointer, code);
+    expect(url).not.toContain("'");
+    expect(url).toContain('%27');
+    const { load } = await import('../../routes/call/[pointer]/+page.js');
+    const segment = new URL(url).pathname.slice('/call/'.length);
+    const { rawPointer } = load({ params: { pointer: segment } });
+    expect(rawPointer).toBe("wss://groups.example/c/eb5658ef84731c8e'4c9b50c8c413f15e");
+  });
+  it('a DM carrying the link linkifies the whole URL, fragment included', async () => {
+    const { getParsedContent } = await import('applesauce-content/text');
+    const url = callLinkUrl(
+      'https://edufeed.org',
+      { id: '4c9b50c8c413f15e', relay: 'wss://groups.example/c/eb5658ef84731c8e' },
+      'Ab-_cdEfGh12-_xyzABCDE'
+    );
+    const parsed = getParsedContent({
+      kind: 14,
+      content: `Einladung …\nGast-Link (ohne Konto, ab 15 Minuten vor Beginn): ${url}`,
+      tags: [],
+      pubkey: '',
+      created_at: 0,
+      id: '',
+      sig: ''
+    });
+    const links = parsed.children.filter((n) => n.type === 'link').map((n) => n.href);
+    expect(links).toEqual([url]);
+  });
   it('reads a valid code back from location.hash', () => {
     expect(readPassCodeFromHash('#' + 'C'.repeat(22))).toBe('C'.repeat(22));
     expect(readPassCodeFromHash('')).toBeNull();
