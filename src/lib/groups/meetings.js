@@ -33,6 +33,9 @@ export const PASS_MAX_LIFETIME_S = 60 * 86400;
  * @returns {string[][]}
  */
 export function buildMeetingTags(formData, { groupId, dTag, channelUrl }) {
+  // The second arg is the community pubkey `convertFormDataToEvent` stamps
+  // onto `eventData.communityPubkey` — unused here since `buildCalendarEventTags`
+  // is called below with an explicit empty h-tag list, not `eventData.communityPubkey`.
   const eventData = convertFormDataToEvent(formData, '');
   const tags = buildCalendarEventTags(formData, eventData, dTag, []).filter(
     (tag) => tag[0] !== 'location'
@@ -134,17 +137,78 @@ function formatIcsDateTimeUtc(tsSeconds) {
 }
 
 /**
- * Build a minimal single-VEVENT .ics file for a meeting, matching the
- * escaping/CRLF conventions of the calendar export
- * (`src/routes/api/calendar/[id]/ics/+server.js`): times are always UTC
- * (meetings are always kind 31923 / timed), text fields are escaped per
- * RFC 5545, lines are CRLF-joined.
+ * A stable UID for the meeting coordinate (or caller-given value), made safe
+ * for the UID content line: trimmed, internal whitespace/newlines collapsed,
+ * non-printable-ASCII characters dropped (a coordinate is plain
+ * `kind:pubkey:d` so this never touches real content).
  *
- * @param {{title: string, start: number, end: number, description?: string, url: string}} meeting
+ * @param {string} value
  * @returns {string}
  */
-export function buildMeetingIcs({ title, start, end, description, url }) {
-  const uid = `meeting-${start}-${end}@edufeed`;
+function sanitizeIcsUid(value) {
+  return String(value ?? '')
+    .trim()
+    .replace(/\s+/g, '-')
+    .replace(/[^\x21-\x7e]/g, '');
+}
+
+/** RFC 5545 §3.1: content lines SHOULD NOT exceed this many octets. */
+const ICS_MAX_LINE_OCTETS = 75;
+
+/**
+ * RFC 5545 line folding: a content line longer than 75 octets (UTF-8 bytes,
+ * excluding the line break) is split with CRLF + a single leading space on
+ * each continuation line. Splits only on UTF-8 character boundaries — never
+ * mid multi-byte sequence — by backing off the chunk boundary past any
+ * continuation bytes (`10xxxxxx`).
+ *
+ * @param {string} line
+ * @returns {string}
+ */
+function foldIcsLine(line) {
+  const bytes = new TextEncoder().encode(line);
+  if (bytes.length <= ICS_MAX_LINE_OCTETS) return line;
+
+  const decoder = new TextDecoder('utf-8');
+  const chunks = [];
+  let start = 0;
+  // The first line may use the full 75 octets; continuation lines reserve
+  // one octet for their mandatory leading space.
+  let limit = ICS_MAX_LINE_OCTETS;
+  while (start < bytes.length) {
+    let end = Math.min(start + limit, bytes.length);
+    while (end > start && end < bytes.length && (bytes[end] & 0xc0) === 0x80) {
+      end--;
+    }
+    chunks.push(decoder.decode(bytes.slice(start, end)));
+    start = end;
+    limit = ICS_MAX_LINE_OCTETS - 1;
+  }
+  return chunks.join('\r\n ');
+}
+
+/**
+ * Build a minimal single-VEVENT .ics file for a meeting, matching the
+ * escaping/CRLF/line-folding conventions of RFC 5545 and the calendar
+ * export (`src/routes/api/calendar/[id]/ics/+server.js`): times are always
+ * UTC (meetings are always kind 31923 / timed), text fields are escaped,
+ * long content lines are folded without breaking a UTF-8 character.
+ *
+ * `uid`, when given, should be the meeting's coordinate
+ * (`meetingCoordinate(event)`) so the UID stays stable across reschedules —
+ * a recreated .ics for the same meeting (e.g. after editing start/end)
+ * updates the same calendar entry in the guest's client instead of adding a
+ * duplicate. Without one, a UID derived from start/end is used (only safe
+ * when the meeting itself never changes).
+ *
+ * @param {{title: string, start: number, end: number, description?: string,
+ *   url: string, uid?: string, nowS?: number}} meeting
+ * @returns {string}
+ */
+export function buildMeetingIcs({ title, start, end, description, url, uid, nowS }) {
+  const sanitizedUid = sanitizeIcsUid(uid);
+  const finalUid = sanitizedUid ? `${sanitizedUid}@edufeed` : `meeting-${start}-${end}@edufeed`;
+  const stamp = formatIcsDateTimeUtc(nowS ?? Math.floor(Date.now() / 1000));
   const lines = [
     'BEGIN:VCALENDAR',
     'VERSION:2.0',
@@ -152,7 +216,8 @@ export function buildMeetingIcs({ title, start, end, description, url }) {
     'CALSCALE:GREGORIAN',
     'METHOD:PUBLISH',
     'BEGIN:VEVENT',
-    `UID:${uid}`,
+    `UID:${finalUid}`,
+    `DTSTAMP:${stamp}`,
     `DTSTART:${formatIcsDateTimeUtc(start)}`,
     `DTEND:${formatIcsDateTimeUtc(end)}`,
     `SUMMARY:${escapeIcsText(title)}`,
@@ -161,7 +226,7 @@ export function buildMeetingIcs({ title, start, end, description, url }) {
     'END:VEVENT',
     'END:VCALENDAR'
   ];
-  return lines.join('\r\n');
+  return lines.map(foldIcsLine).join('\r\n');
 }
 
 /**

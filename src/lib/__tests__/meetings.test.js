@@ -246,6 +246,94 @@ describe('buildMeetingIcs', () => {
     });
     expect(ics).toContain('URL:https://edufeed.app/c/npub1xyz/channel-1');
   });
+
+  it('includes DTSTAMP at the given nowS, in UTC', () => {
+    const nowS = 1_760_000_500;
+    const expectedStamp =
+      new Date(nowS * 1000).toISOString().replace(/[-:]/g, '').split('.')[0] + 'Z';
+
+    const ics = buildMeetingIcs({
+      title: 'Standup',
+      start: 1_760_000_000,
+      end: 1_760_003_600,
+      url: 'https://edufeed.app/c/npub1xyz/channel-1',
+      nowS
+    });
+
+    expect(ics).toContain(`DTSTAMP:${expectedStamp}`);
+  });
+
+  it('uses a stable UID derived from the given coordinate, independent of start/end', () => {
+    const uid = '31923:abc123:meeting-1';
+    const a = buildMeetingIcs({
+      title: 'Standup',
+      start: 1_760_000_000,
+      end: 1_760_003_600,
+      url: 'https://edufeed.app/c/x',
+      uid,
+      nowS: 500
+    });
+    const b = buildMeetingIcs({
+      title: 'Standup (rescheduled)',
+      start: 1_800_000_000,
+      end: 1_800_003_600,
+      url: 'https://edufeed.app/c/x',
+      uid,
+      nowS: 999
+    });
+
+    const uidLineOf = (/** @type {string} */ ics) =>
+      ics.split('\r\n').find((l) => l.startsWith('UID:'));
+    expect(uidLineOf(a)).toBe('UID:31923:abc123:meeting-1@edufeed');
+    expect(uidLineOf(a)).toBe(uidLineOf(b));
+  });
+
+  it('falls back to a start/end derived UID when none is given', () => {
+    const ics = buildMeetingIcs({
+      title: 'Standup',
+      start: 1000,
+      end: 2000,
+      url: 'https://edufeed.app/c/x',
+      nowS: 500
+    });
+    expect(ics).toContain('UID:meeting-1000-2000@edufeed');
+  });
+
+  it('folds a long line with multi-byte characters without breaking any character', () => {
+    // German umlauts (ä/ö/ü) are 2-byte UTF-8 sequences — a long run of them
+    // forces a fold in the middle of the SUMMARY value.
+    const title = 'Projektbesprechung ' + 'ä'.repeat(60);
+    const ics = buildMeetingIcs({
+      title,
+      start: 1_760_000_000,
+      end: 1_760_003_600,
+      url: 'https://edufeed.app/c/x',
+      nowS: 500
+    });
+
+    expect(ics).not.toContain('�'); // no mangled/replacement characters
+
+    const physicalLines = ics.split('\r\n');
+    const summaryStart = physicalLines.findIndex((l) => l.startsWith('SUMMARY:'));
+    expect(summaryStart).toBeGreaterThan(-1);
+
+    let end = summaryStart + 1;
+    let unfolded = physicalLines[summaryStart];
+    while (end < physicalLines.length && physicalLines[end].startsWith(' ')) {
+      unfolded += physicalLines[end].slice(1);
+      end++;
+    }
+    // Folded into more than one physical line…
+    expect(end - summaryStart).toBeGreaterThan(1);
+    // …but reassembles to the exact, unescaped original (no special chars here).
+    expect(unfolded).toBe(`SUMMARY:${title}`);
+
+    // Every physical line respects the 75-octet limit.
+    const encoder = new TextEncoder();
+    for (let i = summaryStart; i < end; i++) {
+      expect(encoder.encode(physicalLines[i]).length).toBeLessThanOrEqual(75);
+    }
+  });
 });
 
 describe('icsFileName', () => {
