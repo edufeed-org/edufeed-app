@@ -122,7 +122,8 @@ const GROUP_MEETING = {
   pointer: { id: 'g1', relay: 'wss://groups.example/' },
   channelName: 'Arbeitszimmer',
   channelUrl: 'https://app.example/c/npub1x/g/g1',
-  memberPubkeys: [ME, MEMBER]
+  memberPubkeys: [ME, MEMBER],
+  passesSupported: true
 };
 
 const settle = () => new Promise((r) => setTimeout(r, 0));
@@ -242,6 +243,16 @@ describe('CalendarEventModal — group meeting mode', () => {
     await tick();
     expect(r.container.querySelector('#startDate').value).toBe(localIso(day));
     expect(r.container.querySelector('#endDate').value).toBe(localIso(day));
+  });
+
+  // Final review 3: no guest-link toggle on a relay without call passes.
+  it('hides the guest toggle when the channel relay has no call passes', () => {
+    h.modalStore.modalProps = {
+      mode: 'create',
+      groupMeeting: { ...GROUP_MEETING, passesSupported: false }
+    };
+    const r = render(CalendarEventModal);
+    expect(r.queryByLabelText(m.meeting_modal_guests_label())).toBeNull();
   });
 
   // QA round 3 C5/K1: the generic calendar wording ("Veranstaltungstitel",

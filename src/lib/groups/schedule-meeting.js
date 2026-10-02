@@ -27,7 +27,7 @@ const HEX_PUBKEY_RE = /^[0-9a-f]{64}$/;
 
 /**
  * @typedef {{pointer: {id: string, relay: string}, channelName: string,
- *   channelUrl: string, memberPubkeys?: string[]}} GroupMeeting
+ *   channelUrl: string, memberPubkeys?: string[], passesSupported?: boolean}} GroupMeeting
  */
 
 /** @param {string[][]} tags @param {string} name */

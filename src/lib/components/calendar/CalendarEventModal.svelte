@@ -134,6 +134,7 @@
   // The guest link's code is stored self-encrypted (NIP-44): a signer
   // without it cannot make one, so the toggle is disabled with a hint.
   let canGuests = $derived(hasNip44(activeUser?.signer));
+  let guestLinksPossible = $derived(groupMeeting?.passesSupported === true);
   $effect(() => {
     const subscription = manager.active$.subscribe((user) => {
       activeUser = user;
@@ -483,7 +484,7 @@
         groupMeeting: meeting,
         user,
         origin: window.location.origin,
-        allowGuests: allowGuests && canGuests
+        allowGuests: allowGuests && canGuests && guestLinksPossible
       });
     } catch (error) {
       console.error('Error scheduling meeting:', error);
@@ -698,28 +699,32 @@
         </div>
 
         {#if isGroupMeeting}
-          <!-- Guest link (the meeting's location is always the channel) -->
-          <div class="mb-4">
-            <label class="flex cursor-pointer items-center gap-3">
-              <input
-                type="checkbox"
-                class="toggle toggle-primary toggle-sm"
-                bind:checked={allowGuests}
-                disabled={isSubmitting || !canGuests}
-              />
-              <span class="text-sm font-medium text-base-content"
-                >{m.meeting_modal_guests_label()}</span
-              >
-            </label>
-            <p class="mt-1 text-xs text-base-content/60">
-              {canGuests ? m.meeting_modal_guests_help() : m.meeting_modal_guests_no_nip44()}
-            </p>
-            {#if guestsTooFar && canGuests}
-              <p class="mt-2 alert text-sm alert-info" role="status">
-                {m.meeting_modal_guests_too_far()}
+          <!-- Guest link (the meeting's location is always the channel) —
+               only where the channel's relay speaks call passes (GroupChat
+               probes it and hands the result in). -->
+          {#if guestLinksPossible}
+            <div class="mb-4">
+              <label class="flex cursor-pointer items-center gap-3">
+                <input
+                  type="checkbox"
+                  class="toggle toggle-primary toggle-sm"
+                  bind:checked={allowGuests}
+                  disabled={isSubmitting || !canGuests}
+                />
+                <span class="text-sm font-medium text-base-content"
+                  >{m.meeting_modal_guests_label()}</span
+                >
+              </label>
+              <p class="mt-1 text-xs text-base-content/60">
+                {canGuests ? m.meeting_modal_guests_help() : m.meeting_modal_guests_no_nip44()}
               </p>
-            {/if}
-          </div>
+              {#if guestsTooFar && canGuests}
+                <p class="mt-2 alert text-sm alert-info" role="status">
+                  {m.meeting_modal_guests_too_far()}
+                </p>
+              {/if}
+            </div>
+          {/if}
         {:else}
           <!-- Location with Autocomplete -->
           <div class="mb-4">
