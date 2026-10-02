@@ -142,10 +142,12 @@
 
   const title = $derived(check?.name || pointer?.id || '');
   // QA K-new-5: an empty document.title made the route announcer read
-  // "untitled page". The meeting's name once the pass check has it.
+  // "untitled page". The meeting's name once the pass check has it — never
+  // the raw group id (`title`'s fallback): plain "Einladung" until then and
+  // for a pass without a name.
   const documentTitle = $derived(
     pageTitle(
-      [title ? m.call_page_title({ name: title }) : m.call_page_title_plain()],
+      [check?.name ? m.call_page_title({ name: check.name }) : m.call_page_title_plain()],
       runtimeConfig.appName
     )
   );

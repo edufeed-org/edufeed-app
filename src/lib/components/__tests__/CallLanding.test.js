@@ -133,6 +133,22 @@ describe('CallLanding', () => {
       expect(document.title.startsWith(m.call_page_title({ name: 'Weekly' }))).toBe(true)
     );
   });
+  // Fix round 1: never the raw group id — "Einladung — <APP>" until the pass
+  // check names the call, and for a pass without a name.
+  it('keeps the plain "Einladung" title while checking and for a nameless pass', async () => {
+    document.title = '';
+    /** @type {(v: any) => void} */
+    let resolve = () => {};
+    checkCallPass.mockReturnValue(new Promise((r) => (resolve = r)));
+    render(CallLanding, { props: { pointer: POINTER } });
+    await screen.findByTestId('call-landing-checking');
+    await waitFor(() => expect(document.title.startsWith(m.call_page_title_plain())).toBe(true));
+    expect(document.title).not.toContain(POINTER.id);
+    resolve({ valid: true, reason: 'ok', liveCount: 1 });
+    await screen.findByTestId('call-landing-name');
+    expect(document.title.startsWith(m.call_page_title_plain())).toBe(true);
+    expect(document.title).not.toContain(POINTER.id);
+  });
   it('explains an ended call / revoked link', async () => {
     checkCallPass.mockResolvedValue({ valid: false, reason: 'call_ended', liveCount: 0 });
     render(CallLanding, { props: { pointer: POINTER } });
