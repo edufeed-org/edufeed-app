@@ -817,7 +817,7 @@ vi.mock('$lib/components/icons', () => ({
 // call" or seed a participant count; reset in the outer beforeEach.
 const groupCallHolder = vi.hoisted(() => ({
   state:
-    /** @type {{activeKey: string | null, phase: 'idle' | 'requesting' | 'ready' | 'error' | 'ended', error: Error | null, endReason?: 'removed' | 'dropped' | null, serverUrl: string | null, token: string | null, stageHidden?: boolean, chatBeside?: boolean}} */ ({
+    /** @type {{activeKey: string | null, phase: 'idle' | 'requesting' | 'ready' | 'error' | 'ended', error: Error | null, endReason?: 'removed' | 'dropped' | null, serverUrl: string | null, token: string | null, stageHidden?: boolean, chatBeside?: boolean, connected?: boolean}} */ ({
       activeKey: null,
       phase: 'idle',
       error: null,
@@ -879,6 +879,9 @@ vi.mock('$lib/groups/group-call.svelte.js', () => ({
     },
     get stageHidden() {
       return groupCallHolder.state.stageHidden ?? false;
+    },
+    get connected() {
+      return groupCallHolder.state.connected ?? false;
     },
     get chatBeside() {
       return groupCallHolder.state.chatBeside ?? false;
@@ -995,6 +998,8 @@ vi.mock('$lib/paraglide/messages', () => ({
   groups_call_rejoin: () => 'Rejoin',
   common_close: () => 'Close',
   groups_call_start: () => 'Start call',
+  groups_call_start_login: () => 'Log in to start a call',
+  groups_call_you_are_in: () => "You're in the call",
   groups_call_start_error: () => 'Calls could not be turned on',
   groups_call_return: () => 'Show call',
   groups_call_join_running: (/** @type {{ count: number }} */ { count }) =>
@@ -2547,7 +2552,8 @@ describe('GroupChat', () => {
         error: null,
         serverUrl: 'wss://livekit.example',
         token: 'jwt-1',
-        stageHidden: false
+        stageHidden: false,
+        connected: true
       };
     };
 
@@ -2596,13 +2602,42 @@ describe('GroupChat', () => {
         expect(await label()).toEqual(['Join the running call (1)', 'Join the running call (1)']);
       });
 
-      it('in it with the stage on screen: "Leave call"', async () => {
+      // QA 2026-10-02 C7: with the stage on screen the header icon said
+      // "Leave call" and duplicated the red button right below it —
+      // accidental hang-ups. It is a status now; only the red button leaves.
+      it('in it with the stage on screen: a status, not a leave button', async () => {
         inCallHere();
         groupCallHolder.participants = [ME];
         render(GroupChat, { props: { pointer: callPointer } });
-        // Let the lazily imported stage land inside this test.
         await screen.findByTestId('group-call-stage-stub');
-        expect(await label()).toEqual(['Leave call', 'Leave call']);
+        expect(screen.queryByTestId('group-call-join')).toBeNull();
+        const status = screen.getByTestId('group-call-status');
+        expect(status.tagName).not.toBe('BUTTON');
+        expect(status.getAttribute('aria-label')).toBe("You're in the call");
+        await fireEvent.click(status);
+        expect(leaveGroupCallMock).not.toHaveBeenCalled();
+      });
+
+      it.each(['requesting', 'error', 'ended'])(
+        'in it while the call view shows the %s state: still a status',
+        async (phase) => {
+          inCallHere();
+          groupCallHolder.state.phase = /** @type {any} */ (phase);
+          groupCallHolder.state.connected = false;
+          render(GroupChat, { props: { pointer: callPointer } });
+          expect(await screen.findByTestId('group-call-status')).toBeTruthy();
+          expect(screen.queryByTestId('group-call-join')).toBeNull();
+        }
+      );
+
+      it('in it while popped out: "Show call" brings the window back, never leaves', async () => {
+        inCallHere();
+        popoutHolder.open = true;
+        render(GroupChat, { props: { pointer: callPointer } });
+        expect(await label()).toEqual(['Show call', 'Show call']);
+        await fireEvent.click(screen.getByTestId('group-call-join'));
+        expect(popoutHolder.popInCall).toHaveBeenCalledTimes(1);
+        expect(leaveGroupCallMock).not.toHaveBeenCalled();
       });
 
       it('in it with the stage stepped aside: "Show call"', async () => {
@@ -2621,6 +2656,9 @@ describe('GroupChat', () => {
         await screen.findByTestId('group-call-join')
       );
       expect(button.disabled).toBe(true);
+      // QA C5: the greyed button says why.
+      expect(button.getAttribute('aria-label')).toBe('Log in to start a call');
+      expect(button.getAttribute('title')).toBe('Log in to start a call');
     });
 
     it('renders the call stage in place of the chat body while in a call here', async () => {
@@ -2848,13 +2886,46 @@ describe('GroupChat', () => {
       expect(screen.queryByTestId('group-call-stage-stub')).toBeNull();
     });
 
-    it('the header button leaves the call while in one here', async () => {
+    it('only the stage’s own leave button leaves the call while in one here', async () => {
       inCallHere();
       render(GroupChat, { props: { pointer: callPointer } });
       await screen.findByTestId('group-call-stage-stub');
-      await fireEvent.click(screen.getByTestId('group-call-join'));
-      expect(leaveGroupCallMock).toHaveBeenCalledTimes(1);
+      expect(screen.queryByTestId('group-call-join')).toBeNull();
+      expect(leaveGroupCallMock).not.toHaveBeenCalled();
       expect(joinGroupCallMock).not.toHaveBeenCalled();
+    });
+
+    // QA B4/C2: the dock showed ON the call page while it was connecting or
+    // had failed — only a mounted stage counted as "on screen".
+    it.each([
+      ['requesting', 'group-call-pending'],
+      ['error', 'group-call-error'],
+      ['ended', 'group-call-ended']
+    ])('the %s view counts as the call on screen (the dock steps aside)', async (phase, id) => {
+      inCallHere();
+      groupCallHolder.state.phase = /** @type {any} */ (phase);
+      groupCallHolder.state.connected = false;
+      if (phase === 'error') groupCallHolder.state.error = new Error('x');
+      if (phase === 'ended') groupCallHolder.state.endReason = 'dropped';
+      const { unmount } = render(GroupChat, { props: { pointer: callPointer } });
+      await screen.findByTestId(id);
+      expect(callViewMocks.registerCallStageView).toHaveBeenCalled();
+      unmount();
+      expect(callViewMocks.unregister).toHaveBeenCalled();
+    });
+
+    it('offers guest links only once the call is connected, not while connecting (QA B1)', async () => {
+      probeCallPassSupport.mockResolvedValue(true);
+      try {
+        inCallHere();
+        groupCallHolder.state.connected = false;
+        render(GroupChat, { props: { pointer: callPointer } });
+        await screen.findByTestId('group-call-stage-stub');
+        await new Promise((r) => setTimeout(r, 20));
+        expect(screen.queryByTestId('group-call-stage-stub-invite')).toBeNull();
+      } finally {
+        probeCallPassSupport.mockResolvedValue(false);
+      }
     });
 
     // The server ended the seat (pass revoked / kicked / room deleted, or
@@ -2933,7 +3004,7 @@ describe('GroupChat', () => {
       try {
         inCallHere();
         render(GroupChat, { props: { pointer: callPointer } });
-        await screen.findByTestId('group-call-join');
+        await screen.findByTestId('group-call-status');
         // Not reported visible yet (hidden twin): no stage, no connection.
         expect(screen.queryByTestId('group-call-stage-stub')).toBeNull();
 

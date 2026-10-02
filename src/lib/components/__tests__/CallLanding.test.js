@@ -78,6 +78,19 @@ describe('CallLanding', () => {
     expect(await screen.findByTestId('call-landing-invalid')).toBeTruthy();
     expect(checkCallPass).not.toHaveBeenCalled();
   });
+  // QA K6: an unknown code took ~2.5 s with only a blank card first.
+  it('says the link is being checked while the pass check runs', async () => {
+    /** @type {(v: any) => void} */
+    let resolve = () => {};
+    checkCallPass.mockReturnValue(new Promise((r) => (resolve = r)));
+    render(CallLanding, { props: { pointer: POINTER } });
+    const checking = await screen.findByTestId('call-landing-checking');
+    expect(checking.getAttribute('role')).toBe('status');
+    expect(checking.textContent).toContain(m.call_landing_checking());
+    resolve({ valid: false, reason: 'unknown', liveCount: 0 });
+    expect(await screen.findByTestId('call-landing-invalid')).toBeTruthy();
+    expect(screen.queryByTestId('call-landing-checking')).toBeNull();
+  });
   it('explains an ended call / revoked link', async () => {
     checkCallPass.mockResolvedValue({ valid: false, reason: 'call_ended', liveCount: 0 });
     render(CallLanding, { props: { pointer: POINTER } });

@@ -76,20 +76,31 @@
     return typeof value === 'string' ? value.trim() : '';
   }
 
+  /** @param {unknown} err @returns {string} */
+  function failureText(err) {
+    const reason = err instanceof Error ? err.message : String(err);
+    if (reason === 'nip44-unsupported') return m.groups_call_invite_nip44();
+    // The relay only mints passes for a call it sees running (39004 has a
+    // participant) — while the LiveKit handshake is still going it answers
+    // "blocked: no call is running" (QA 2026-10-02 B1).
+    if (/no call is running/i.test(reason)) return m.groups_call_invite_not_running();
+    return m.groups_call_invite_failed({ reason });
+  }
+
   /** @param {unknown} err */
   function failure(err) {
-    const reason = err instanceof Error ? err.message : String(err);
-    showToast(
-      reason === 'nip44-unsupported'
-        ? m.groups_call_invite_nip44()
-        : m.groups_call_invite_failed({ reason }),
-      'error'
-    );
+    showToast(failureText(err), 'error');
   }
+
+  // A refused "Link erstellen" is said IN the dialog: a toast under the
+  // modal went unnoticed and the click looked like it did nothing (QA B1).
+  /** @type {string | null} */
+  let createError = $state(null);
 
   async function create() {
     if (creating) return;
     creating = true;
+    createError = null;
     try {
       const { url, event } = await createCallLink(relay(), pointer, user, location.origin, {
         title: linkTitle
@@ -98,7 +109,8 @@
       linkTitle = '';
       rows = [{ pass: event, url }, ...rows];
     } catch (err) {
-      failure(err);
+      console.warn('call links: create failed', err);
+      createError = failureText(err);
     } finally {
       creating = false;
     }
@@ -205,6 +217,11 @@
         {#if creating}<span class="loading loading-sm loading-spinner"></span>{/if}
         {m.groups_call_invite_create()}
       </button>
+      {#if createError}
+        <p class="mt-2 text-sm text-error" role="alert" data-testid="call-invite-create-error">
+          {createError}
+        </p>
+      {/if}
     {/if}
 
     <h4 class="mt-6 text-sm font-semibold">{m.groups_call_invite_active()}</h4>

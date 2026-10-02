@@ -28,6 +28,7 @@ vi.mock('$lib/components/shared/ContactSearchInput.svelte', async () => ({
   default: (await import('./__mocks__/EmptyStub.svelte')).default
 }));
 
+const m = await import('$lib/paraglide/messages');
 const { default: CallInviteDialog } = await import(
   '$lib/components/groups/call/CallInviteDialog.svelte'
 );
@@ -133,6 +134,34 @@ describe('CallInviteDialog', () => {
     unmount();
     render(CallInviteDialog, { props: { ...props, isAdmin: true } });
     expect(await screen.findByTestId('call-invite-revoke')).toBeTruthy();
+  });
+
+  it('says in the dialog when the relay refuses because the call is not running yet (QA B1)', async () => {
+    createCallLink.mockRejectedValue(new Error('blocked: no call is running'));
+    render(CallInviteDialog, { props });
+    await fireEvent.click(screen.getByTestId('call-invite-create'));
+    const err = await screen.findByTestId('call-invite-create-error');
+    expect(err.getAttribute('role')).toBe('alert');
+    expect(err.textContent.trim()).toBe(m.groups_call_invite_not_running());
+    expect(screen.getByTestId('call-invite-create')).toBeTruthy();
+  });
+
+  it('shows any other refusal reason in the dialog and clears it on the next success', async () => {
+    createCallLink.mockRejectedValueOnce(new Error('blocked: rate limited'));
+    render(CallInviteDialog, { props });
+    await fireEvent.click(screen.getByTestId('call-invite-create'));
+    const err = await screen.findByTestId('call-invite-create-error');
+    expect(err.textContent.trim()).toBe(
+      m.groups_call_invite_failed({ reason: 'blocked: rate limited' })
+    );
+    createCallLink.mockResolvedValueOnce({
+      code: 'C',
+      url: 'https://x/call/p#C',
+      event: { id: 'p1', pubkey: ME, created_at: 1, tags: [['h', 'g1']] }
+    });
+    await fireEvent.click(screen.getByTestId('call-invite-create'));
+    await screen.findByTestId('call-invite-url');
+    expect(screen.queryByTestId('call-invite-create-error')).toBeNull();
   });
 
   it('shows an inline error when listing fails, but creating a link still works', async () => {

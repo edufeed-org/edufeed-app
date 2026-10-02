@@ -43,6 +43,8 @@
   // Not connected (the server ended the call): the messages stay readable,
   // nothing can be sent.
   const canSend = $derived(lk.isConnected && lk.canSignal);
+  // Says why the input is greyed (QA 2026-10-02 C4).
+  const offlineHintId = `call-chat-offline-${Math.random().toString(36).slice(2, 8)}`;
 
   async function send() {
     if (!canSend) return;
@@ -64,8 +66,17 @@
       </div>
     {/each}
   </div>
+  {#if !lk.isConnected}
+    <p
+      id={offlineHintId}
+      class="border-t border-base-300 px-3 pt-2 text-xs text-base-content/60"
+      data-testid="call-chat-offline"
+    >
+      {m.groups_call_chat_offline()}
+    </p>
+  {/if}
   <form
-    class="flex gap-2 border-t border-base-300 p-2"
+    class="flex gap-2 p-2 {lk.isConnected ? 'border-t border-base-300' : ''}"
     onsubmit={(e) => {
       e.preventDefault();
       send();
@@ -77,6 +88,7 @@
       placeholder={m.groups_call_chat_placeholder()}
       bind:value={draft}
       disabled={!canSend}
+      aria-describedby={lk.isConnected ? undefined : offlineHintId}
       data-testid="call-chat-input"
       onkeydown={(e) => {
         if (e.key === 'Enter' && !e.shiftKey) {

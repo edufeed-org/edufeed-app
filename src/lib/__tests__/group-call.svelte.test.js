@@ -259,12 +259,14 @@ describe('stage views', () => {
   // replacing it; the choice is a per-device preference.
   it('toggles the chat beside the stage and remembers it on this device', () => {
     const s = getGroupCallState();
+    // Open by default on wide screens (QA C3).
+    expect(s.chatBeside).toBe(true);
+    toggleChatBeside();
     expect(s.chatBeside).toBe(false);
+    expect(localStorage.getItem('edufeed:call:chatBeside')).toBe('0');
     toggleChatBeside();
     expect(s.chatBeside).toBe(true);
     expect(localStorage.getItem('edufeed:call:chatBeside')).toBe('1');
-    toggleChatBeside();
-    expect(s.chatBeside).toBe(false);
   });
 });
 

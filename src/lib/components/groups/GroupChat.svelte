@@ -69,7 +69,7 @@
   import { SvelteMap } from 'svelte/reactivity';
   import { isModerator, roleOptionsFromAdmins } from '$lib/groups/roles.js';
   import { unique } from '$lib/helpers/unique.js';
-  import { setContext, tick } from 'svelte';
+  import { setContext, tick, untrack } from 'svelte';
   import { updateQueryParams } from '$lib/helpers/urlParams.js';
   import { GROUP_MEDIA_AUTH } from '$lib/groups/authed-media.js';
   import {
@@ -95,6 +95,7 @@
   import { lazyComponent } from '$lib/helpers/lazy-component.svelte.js';
   import { hasLivekitTag, identityToPubkey, probeRelayAvSupport } from '$lib/groups/livekit.js';
   import { probeCallPassSupport } from '$lib/groups/call-passes.js';
+  import { trackOnScreen } from '$lib/groups/track-on-screen.js';
   import { enableGroupCalls } from '$lib/groups/enable-group-calls.js';
   import { useCallPresence } from '$lib/groups/call-presence.svelte.js';
   import {
@@ -899,7 +900,10 @@
       alive = false;
     };
   });
-  const canInvite = $derived(passesSupported && canWrite && inCallHere);
+  // Only once LiveKit is connected: the relay mints passes for a call it
+  // sees running, and answers "no call is running" while the handshake is
+  // still going (QA 2026-10-02 B1).
+  const canInvite = $derived(passesSupported && canWrite && inCallHere && call.connected);
 
   async function enableAndStartCall() {
     const user = getActiveUser();
@@ -920,22 +924,39 @@
   // What a click does: start a call nobody is in yet, join the running one
   // (with its head count), bring the stepped-aside stage back, or leave
   // (laoc, 2026-10-02: it said "Join call" while no call was running).
+  // While this channel's call view is on screen the header shows a status
+  // instead (QA 2026-10-02 C7: a "Leave call" icon right above the red
+  // leave button caused accidental hang-ups) — so the button never leaves.
   const callButtonLabel = $derived(
-    inCallHere
-      ? call.stageHidden
+    !myPubkey
+      ? m.groups_call_start_login()
+      : inCallHere
         ? m.groups_call_return()
-        : m.groups_call_leave()
-      : callParticipantCount > 0
-        ? m.groups_call_join_running({ count: callParticipantCount })
-        : m.groups_call_start()
+        : callParticipantCount > 0
+          ? m.groups_call_join_running({ count: callParticipantCount })
+          : m.groups_call_start()
   );
 
   async function toggleCall() {
-    if (inCallHere && call.stageHidden) {
+    if (inCallHere) {
+      if (poppedOutHere) popInCall();
       if (activeSession) await closeStage();
       showCallStage();
-    } else if (inCallHere) await leaveGroupCall();
-    else await startCall();
+    } else await startCall();
+  }
+
+  // The call's own connecting / failed / ended views count as "the call on
+  // screen" just like the stage, so the app-level dock steps aside on the
+  // call page in every phase (QA 2026-10-02 B4/C2). Untracked for the same
+  // reason as the stage's registration: the store bumps its own $state.
+  /** @param {HTMLElement} node */
+  function callViewOnScreen(node) {
+    const stop = untrack(() =>
+      trackOnScreen(node, () =>
+        registerCallStageView(`${window.location.pathname}${window.location.search}`)
+      )
+    );
+    return { destroy: stop };
   }
 
   async function closeStage() {
@@ -1570,19 +1591,34 @@
       <!-- NIP-29 AV space: join (or leave) the channel's call; the count is
         the relay's own kind-39004 participant list. Icon + count, same
         header chrome as the members button. -->
-      <button
-        type="button"
-        class="btn btn-ghost btn-sm {inCallHere ? 'text-primary' : ''}"
-        data-testid="group-call-join"
-        title={callButtonLabel}
-        aria-label={callButtonLabel}
-        aria-pressed={inCallHere}
-        disabled={!myPubkey}
-        onclick={toggleCall}
-      >
-        <MeetIcon class_="w-4 h-4" />
-        {#if callParticipantCount}{callParticipantCount}{/if}
-      </button>
+      {#if showCallHere}
+        <!-- The call is on screen right below: a status, not a second
+          (destructive) control — only the stage's red button leaves. -->
+        <span
+          role="status"
+          class="btn btn-active cursor-default text-primary btn-ghost btn-sm"
+          data-testid="group-call-status"
+          title={m.groups_call_you_are_in()}
+          aria-label={m.groups_call_you_are_in()}
+        >
+          <MeetIcon class_="w-4 h-4" title="" />
+          {#if callParticipantCount}{callParticipantCount}{/if}
+        </span>
+      {:else}
+        <button
+          type="button"
+          class="btn btn-ghost btn-sm {inCallHere ? 'text-primary' : ''}"
+          data-testid="group-call-join"
+          title={callButtonLabel}
+          aria-label={callButtonLabel}
+          aria-pressed={inCallHere}
+          disabled={!myPubkey}
+          onclick={toggleCall}
+        >
+          <MeetIcon class_="w-4 h-4" />
+          {#if callParticipantCount}{callParticipantCount}{/if}
+        </button>
+      {/if}
     {:else if canStartCall}
       <!-- Admin one-click: switch the channel's calls on (a 9002 restating
            the current metadata plus `livekit`) and join right away. -->
@@ -1909,7 +1945,11 @@
                   registerCallStageView(`${window.location.pathname}${window.location.search}`)}
               />
             {:else}
-              <div class="flex flex-1 items-center justify-center" data-testid="group-call-loading">
+              <div
+                class="flex flex-1 items-center justify-center"
+                data-testid="group-call-loading"
+                use:callViewOnScreen
+              >
                 <span class="loading loading-lg loading-spinner text-primary"></span>
               </div>
             {/if}
@@ -1918,6 +1958,7 @@
               class="flex flex-1 flex-col items-center justify-center gap-2 p-4 text-center"
               role="status"
               data-testid="group-call-ended"
+              use:callViewOnScreen
             >
               <p class="text-sm text-base-content/70">
                 {call.endReason === 'removed'
@@ -1945,8 +1986,9 @@
             </div>
           {:else if call.phase === 'error'}
             <div
-              class="flex flex-1 flex-col items-center justify-center gap-2"
+              class="flex flex-1 flex-col items-center justify-center gap-2 px-4 text-center"
               data-testid="group-call-error"
+              use:callViewOnScreen
             >
               <p class="text-sm text-error">{callErrorMessage(call.error)}</p>
               <div class="flex gap-2">
@@ -1960,8 +2002,9 @@
             </div>
           {:else}
             <div
-              class="flex flex-1 flex-col items-center justify-center gap-2"
+              class="flex flex-1 flex-col items-center justify-center gap-2 px-4 text-center"
               data-testid="group-call-pending"
+              use:callViewOnScreen
             >
               <span class="loading loading-lg loading-spinner text-primary"></span>
               <p class="text-sm text-base-content/60">{m.groups_call_requesting()}</p>

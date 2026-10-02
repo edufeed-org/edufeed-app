@@ -45,6 +45,7 @@
   } from '$lib/services/call-prefs.js';
   import { fitGrid, nextSpotlight } from '$lib/groups/call-layout.js';
   import { isGuestParticipant } from '$lib/groups/livekit.js';
+  import { trackOnScreen as trackNodeOnScreen } from '$lib/groups/track-on-screen.js';
   import { Track } from 'livekit-client';
   import { useProfileMap } from '$lib/stores/profile-map.svelte.js';
   import { showToast } from '$lib/helpers/toast';
@@ -115,35 +116,10 @@
     return untrack(() => trackOnScreen(node));
   });
 
-  /**
-   * Registered only while the stage has layout: below md the channel's
-   * "← Kanäle" hides the chat with display:none and the stage stays mounted,
-   * which must not keep the dock away (review 2026-10-02). The observer
-   * comes from the node's own document, so a stage in the pop-out window
-   * reports its own size. Without ResizeObserver it counts as on screen.
-   * @param {HTMLElement} node
-   */
+  /** @param {HTMLElement} node */
   function trackOnScreen(node) {
     if (!registerView) return;
-    let off = /** @type {(() => void) | null} */ (registerView());
-    const Observer = node.ownerDocument.defaultView?.ResizeObserver;
-    const observer = Observer
-      ? new Observer((entries) => {
-          const box = entries[entries.length - 1]?.contentRect;
-          const visible = !!box && box.width > 0 && box.height > 0;
-          if (visible && !off) off = registerView();
-          else if (!visible && off) {
-            off();
-            off = null;
-          }
-        })
-      : null;
-    observer?.observe(node);
-    return () => {
-      observer?.disconnect();
-      off?.();
-      off = null;
-    };
+    return trackNodeOnScreen(node, registerView);
   }
 
   /** @param {{identity?: string} | null | undefined} participant */
@@ -465,7 +441,7 @@
   <div class="flex items-center justify-between gap-2 border-b border-base-300 px-4 py-2">
     <div class="flex min-w-0 flex-1 items-center gap-2 overflow-hidden">
       <MeetIcon class_="w-5 h-5 shrink-0 text-primary" />
-      <h2 class="truncate font-semibold">{title}</h2>
+      <h2 class="min-w-0 flex-1 truncate font-semibold">{title}</h2>
       {#if !lk.canPublish}
         <span class="badge shrink-0 badge-ghost badge-sm" data-testid="group-call-listen-only">
           {m.groups_call_listen_only()}
@@ -478,12 +454,13 @@
         </span>
       {/if}
     </div>
-    <div class="flex shrink-0 items-center gap-2">
+    <div class="flex shrink-0 items-center gap-1 @lg:gap-2">
       {#if onInvite}
         <button
-          class="btn btn-ghost btn-sm"
+          class="btn px-2 btn-ghost btn-sm @lg:px-3"
           onclick={onInvite}
           title={m.groups_call_invite_title()}
+          aria-label={m.groups_call_invite_title()}
           data-testid="group-call-invite"
         >
           <LinkIcon class_="h-4 w-4" title="" />
@@ -508,9 +485,11 @@
       {/if}
       {#if onShowChat}
         <button
-          class="btn btn-ghost btn-sm {chatOpen ? 'btn-active' : ''}"
+          class="btn px-2 btn-ghost btn-sm @lg:px-3 {chatOpen ? 'btn-active' : ''}"
           onclick={onShowChat}
           aria-pressed={chatOpen}
+          aria-label={m.groups_call_show_chat()}
+          title={m.groups_call_show_chat()}
           data-testid="group-call-show-chat"
         >
           <ChatIcon class_="h-4 w-4" />

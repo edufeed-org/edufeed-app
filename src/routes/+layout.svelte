@@ -420,6 +420,14 @@
       <progress class="progress absolute top-0 left-0 h-1 w-full progress-primary"></progress>
     {/if}
   </div>
+  <!-- The running call while no call view is on screen: a strip in the
+    flow (not floating), so it never covers a page control (QA 2026-10-02). -->
+  {#if groupCall.phase !== 'idle' && groupCall.stageViews === 0}
+    {@const CallDock = lazyCallDock.Component}
+    {#if CallDock}
+      <CallDock />
+    {/if}
+  {/if}
   <ModalManager />
   <!-- Chrome row: sidebars + main as flex siblings. -->
   <div class="flex min-h-0 flex-1 overflow-hidden">
@@ -490,12 +498,6 @@
   </div>
 </div>
 <PublishStatusToast />
-{#if groupCall.phase !== 'idle' && groupCall.stageViews === 0}
-  {@const CallDock = lazyCallDock.Component}
-  {#if CallDock}
-    <CallDock />
-  {/if}
-{/if}
 {#if !hasOwnBottomUI && !pageHasOwnCreateAction && getActiveUser()}
   <GlobalFAB />
 {/if}

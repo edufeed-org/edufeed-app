@@ -473,6 +473,11 @@ describe('layout', () => {
     expect(title.classList.contains('truncate')).toBe(true);
     expect(title.parentElement.classList.contains('min-w-0')).toBe(true);
     expect(title.parentElement.classList.contains('flex-1')).toBe(true);
+    // QA K4: the title itself takes the free space before it truncates.
+    expect(title.classList.contains('min-w-0')).toBe(true);
+    expect(title.classList.contains('flex-1')).toBe(true);
+    // QA K1: icon-only at narrow stage widths, so it needs its own name.
+    expect(screen.getByTestId('group-call-show-chat').getAttribute('aria-label')).toBe('Chat');
   });
 
   it('a remote screen share takes the spotlight, seats move to the strip', () => {

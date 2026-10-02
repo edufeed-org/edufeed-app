@@ -157,11 +157,13 @@ export function setScreenShareQuality(quality) {
 }
 
 /** Wide screens: chat as a column beside the call stage (off = stage only). */
+// Open by default (QA 2026-10-02 C3: a closed chat had to be found first);
+// an explicit toggle either way is remembered on this device.
 export function getChatBeside() {
-  return read('chatBeside') === '1';
+  return read('chatBeside') !== '0';
 }
 
 /** @param {boolean} beside */
 export function setChatBeside(beside) {
-  write('chatBeside', beside ? '1' : null);
+  write('chatBeside', beside ? '1' : '0');
 }

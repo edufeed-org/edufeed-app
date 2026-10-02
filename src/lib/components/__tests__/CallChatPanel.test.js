@@ -17,6 +17,7 @@ vi.mock('$lib/stores/profile-map.svelte.js', () => ({
   useProfileMap: () => () => new Map([['b'.repeat(64), { name: 'Bea' }]])
 }));
 
+const m = await import('$lib/paraglide/messages');
 const { default: CallChatPanel } = await import('$lib/components/groups/call/CallChatPanel.svelte');
 const props = { identityToPubkey: (id) => id.slice(0, 64) };
 
@@ -54,5 +55,18 @@ describe('CallChatPanel', () => {
     expect(screen.getByTestId('call-chat-message')).toBeTruthy();
     await fireEvent.submit(input.closest('form'));
     expect(sendCallChat).not.toHaveBeenCalled();
+  });
+
+  // QA C4: the greyed input said nothing about why.
+  it('explains the disabled composer while not connected, and drops the line once connected', async () => {
+    state.isConnected = false;
+    const { unmount } = render(CallChatPanel, { props });
+    const hint = screen.getByTestId('call-chat-offline');
+    expect(hint.textContent.trim()).toBe(m.groups_call_chat_offline());
+    expect(screen.getByTestId('call-chat-input').getAttribute('aria-describedby')).toBe(hint.id);
+    unmount();
+    state.isConnected = true;
+    render(CallChatPanel, { props });
+    expect(screen.queryByTestId('call-chat-offline')).toBeNull();
   });
 });

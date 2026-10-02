@@ -5,8 +5,12 @@
   call it is and who is in it, and offers mute, "back to call" and leave.
 
   Mounted by the root layout through lazyComponent, only while a call is
-  active and no stage is registered (livekit-client stays out of every
-  route's static graph).
+  active and no call view is on screen (livekit-client stays out of every
+  route's static graph). It is a strip IN the layout's flow, right under
+  the navbar, not a floating pill: floating, it covered the "‹ Kanäle"
+  breadcrumb at 390 px and the channel title / page heading at 768 and
+  1440 px (QA 2026-10-02 B4/C2). In flow, the page below simply gets
+  shorter, so it can never sit on top of a control.
 -->
 <script>
   import { goto } from '$app/navigation';
@@ -53,7 +57,7 @@
      live dock: the channel itself says what happened. -->
 {#if call.phase !== 'ended'}
   <div
-    class="fixed top-[4.5rem] left-1/2 z-50 flex max-w-[calc(100vw-2rem)] -translate-x-1/2 items-center gap-2 rounded-full border border-base-300 bg-base-100 py-1 pr-1 pl-3 shadow-lg"
+    class="relative z-20 flex shrink-0 items-center gap-2 border-b border-base-300 bg-base-100 py-1 pr-2 pl-3 shadow-sm"
     role="region"
     aria-label={m.groups_call_in_call()}
     data-testid="call-dock"
@@ -71,7 +75,7 @@
       ></span>
     </span>
     <MeetIcon class_="h-4 w-4 shrink-0 text-primary" title="" />
-    <div class="flex min-w-0 flex-col leading-tight">
+    <div class="flex min-w-0 flex-1 flex-col leading-tight">
       <span class="truncate text-sm font-medium">{call.title || m.groups_call_in_call()}</span>
       <span class="truncate text-xs text-base-content/60">
         {#if call.phase === 'error'}

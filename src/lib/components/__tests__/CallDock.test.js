@@ -78,6 +78,15 @@ beforeEach(() => {
 });
 
 describe('CallDock', () => {
+  // QA 2026-10-02 B4/C2: floating (position:fixed) it covered the
+  // breadcrumb / channel title / page heading; it is a strip in the flow.
+  it('is a strip in the page flow, never floating over the page', () => {
+    render(CallDock);
+    const dock = screen.getByTestId('call-dock');
+    expect(dock.className.split(/\s+/)).not.toContain('fixed');
+    expect(dock.className.split(/\s+/)).toContain('shrink-0');
+  });
+
   it('names the call and counts everyone in it', () => {
     render(CallDock);
     expect(screen.getByText('Standup')).toBeTruthy();

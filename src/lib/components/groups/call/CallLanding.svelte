@@ -244,7 +244,16 @@
       <div class="card bg-base-100 shadow">
         <div class="card-body gap-4">
           {#if view === 'checking'}
-            <span class="loading mx-auto loading-md loading-dots"></span>
+            <!-- An unknown code takes the relay a moment (QA K6: ~2.5 s of
+              an empty card) — say what is happening. -->
+            <div
+              class="flex flex-col items-center gap-2 py-4 text-center"
+              role="status"
+              data-testid="call-landing-checking"
+            >
+              <span class="loading loading-md loading-spinner text-primary"></span>
+              <p class="text-sm text-base-content/70">{m.call_landing_checking()}</p>
+            </div>
           {:else if view === 'unreachable'}
             <div data-testid="call-landing-unreachable">
               <p class="text-sm text-base-content/70">{m.call_landing_unreachable()}</p>
