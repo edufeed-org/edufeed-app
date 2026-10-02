@@ -29,6 +29,19 @@ describe('hasStaticOwnBottomUI', () => {
     );
   });
 
+  // "Zum Kanal" from a call landing opens /groups/<pointer>: at 390 the FAB
+  // and Termi's bubble sat on the composer's "Beitreten" (QA K-new-6).
+  it('hides on a standalone channel chat (/groups/<pointer>)', () => {
+    expect(hasStaticOwnBottomUI({ pathname: '/groups/groups.example%27g1', viewParam: null })).toBe(
+      true
+    );
+  });
+
+  it('keeps the FAB on the /groups directory itself', () => {
+    expect(hasStaticOwnBottomUI({ pathname: '/groups', viewParam: null })).toBe(false);
+    expect(hasStaticOwnBottomUI({ pathname: '/groups/', viewParam: null })).toBe(false);
+  });
+
   it('stays visible on neutral routes/views', () => {
     expect(hasStaticOwnBottomUI({ pathname: '/settings', viewParam: null })).toBe(false);
     expect(hasStaticOwnBottomUI({ pathname: '/c/npub1abc', viewParam: 'calendar' })).toBe(false);

@@ -461,7 +461,7 @@
     <main
       bind:this={mainElement}
       class="flex min-h-0 flex-1 flex-col overflow-y-auto"
-      class:pb-16={showDashboardNav}
+      class:pb-16={showDashboardNav && !hasOwnBottomUI}
       class:pb-20={isInsideCommunity}
       class:lg:pb-0={showDashboardNav || isInsideCommunity}
     >

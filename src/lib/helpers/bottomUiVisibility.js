@@ -18,6 +18,10 @@ export function hasStaticOwnBottomUI({ pathname, viewParam }) {
   // Guest call landing page (`isCallLanding` in the root layout): the call
   // and its chat composer fill the page; no create FAB, no Termi bubble.
   if (pathname.startsWith('/call/')) return true;
+  // Standalone NIP-29 channel chat (`/groups/<pointer>`, e.g. "Zum Kanal"
+  // from a call landing): its composer / "Beitreten" bar sits at the bottom.
+  // The bare `/groups` directory keeps the FAB.
+  if (/^\/groups\/[^/]+/.test(pathname)) return true;
   // Community content tabs with an inline chat composer: public chat and
   // Concord private channels both render a bottom message input.
   if (viewParam === 'chat' || viewParam === 'channels') return true;
