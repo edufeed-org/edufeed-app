@@ -111,7 +111,7 @@
   import { useCallPresence } from '$lib/groups/call-presence.svelte.js';
   import {
     getGroupCallState,
-    joinGroupCall,
+    joinGroupCallWithConfirm,
     leaveGroupCall,
     callErrorMessage,
     showCallStage,
@@ -935,7 +935,7 @@
     // The call store owns the connection and outlives this view: leaving
     // the channel keeps the call running in the app-level dock, which
     // uses the title and this page to come back to.
-    await joinGroupCall(pointer, user, {
+    await joinGroupCallWithConfirm(pointer, user, {
       title: displayTitle,
       href: `${window.location.pathname}${window.location.search}`
     });

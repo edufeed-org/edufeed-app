@@ -11,7 +11,7 @@
   import { useCallPresence } from '$lib/groups/call-presence.svelte.js';
   import {
     getGroupCallState,
-    joinGroupCall,
+    joinGroupCallWithConfirm,
     showCallStage
   } from '$lib/groups/group-call.svelte.js';
   import { getCallPopoutState } from '$lib/groups/call-popout.svelte.js';
@@ -67,7 +67,7 @@
       const user = getActiveUser();
       if (!user?.signer) return;
       await onOpen();
-      await joinGroupCall(pointer, user, {
+      await joinGroupCallWithConfirm(pointer, user, {
         title: name,
         href: `${window.location.pathname}${window.location.search}`
       });

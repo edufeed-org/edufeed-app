@@ -23,6 +23,10 @@ vi.mock('../SignupModal.svelte', async () => {
   const mock = await import('./__mocks__/DialogModalStub.svelte');
   return { default: mock.default };
 });
+vi.mock('../groups/CallSwitchConfirmModal.svelte', async () => {
+  const mock = await import('./__mocks__/DialogModalStub.svelte');
+  return { default: mock.default };
+});
 
 const showModal = vi.fn(function () {
   this.setAttribute('open', '');
@@ -103,5 +107,19 @@ describe('ModalManager lazy loading', () => {
     render(ModalManager);
     modalStore.openModal('settings');
     expect(screen.queryByTestId('dialog-stub')).toBeNull();
+  });
+
+  // Task M6: the shared "switch calls?" confirm is a CSS-only modal (no
+  // native <dialog>, like other non-dialog entries) wired to the store's
+  // callbacks, not a modalId.
+  it('mounts the call-switch confirm with its title and callbacks', async () => {
+    render(ModalManager);
+    const onConfirm = vi.fn();
+    const onCancel = vi.fn();
+    modalStore.openModal('callSwitchConfirm', { title: 'Standup' }, { onConfirm, onCancel });
+    const dialog = await screen.findByTestId('dialog-stub');
+    expect(dialog.dataset.props.split(',')).toEqual(
+      expect.arrayContaining(['onCancel', 'onConfirm', 'title'])
+    );
   });
 });

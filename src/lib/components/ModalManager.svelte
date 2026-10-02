@@ -69,7 +69,8 @@
     resourceVariantPicker: lazyComponent(
       () => import('./educational/ResourceVariantPickerModal.svelte')
     ),
-    concordInvites: lazyComponent(() => import('./community/channels/InviteInboxModal.svelte'))
+    concordInvites: lazyComponent(() => import('./community/channels/InviteInboxModal.svelte')),
+    callSwitchConfirm: lazyComponent(() => import('./groups/CallSwitchConfirmModal.svelte'))
   };
 
   /** @type {any} */
@@ -139,6 +140,14 @@
         };
       case 'concordInvites':
         return { onClose: () => modal.closeModal() };
+      case 'callSwitchConfirm': {
+        const callbacks = /** @type {any} */ (modal.modalCallbacks);
+        return {
+          title: props?.title ?? '',
+          onConfirm: () => callbacks?.onConfirm?.(),
+          onCancel: () => callbacks?.onCancel?.()
+        };
+      }
       case 'nip05Activated':
         return { address: /** @type {string} */ (props?.address) || '' };
       default:

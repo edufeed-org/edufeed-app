@@ -15,6 +15,7 @@
 import { channelKey } from './community-pointer.js';
 import { requestGroupCallToken, GroupCallTokenError } from './livekit.js';
 import { getChatBeside, setChatBeside } from '$lib/services/call-prefs.js';
+import { confirmCallSwitch } from './call-switch-confirm.js';
 import * as m from '$lib/paraglide/messages';
 
 /** @typedef {'idle' | 'requesting' | 'ready' | 'error' | 'ended'} GroupCallPhase */
@@ -190,6 +191,30 @@ export async function joinGroupCall(pointer, user, view = {}) {
     phase = 'error';
     connected = false;
   }
+}
+
+/**
+ * Join a call, confirming first when the user is still live in a call
+ * (requesting/ready — i.e. not idle/ended/error) for a DIFFERENT channel.
+ * Every member join entry point (the chat header, the meeting card and bar,
+ * the channel roster's join pill) goes through this instead of calling
+ * `joinGroupCall` directly, so the dialog only needs implementing once.
+ * Same channel, or no live call elsewhere, joins straight away — and so
+ * does a cancelled confirm, which leaves the current call untouched.
+ * @param {{id: string, relay: string}} pointer
+ * @param {{pubkey: string, signer: any}} user
+ * @param {{title?: string, href?: string | null, code?: string}} [view]
+ * @returns {Promise<void>}
+ */
+export async function joinGroupCallWithConfirm(pointer, user, view = {}) {
+  const key = channelKey(pointer);
+  const switchingLiveCall =
+    !!activeKey && key !== activeKey && (phase === 'requesting' || phase === 'ready');
+  if (switchingLiveCall) {
+    const proceed = await confirmCallSwitch(title);
+    if (!proceed) return;
+  }
+  await joinGroupCall(pointer, user, view);
 }
 
 /**

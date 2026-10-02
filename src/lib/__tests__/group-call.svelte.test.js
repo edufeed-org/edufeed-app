@@ -44,10 +44,16 @@ vi.mock('$lib/paraglide/messages', () => ({
   groups_call_error_removed: () => 'removed-msg'
 }));
 
+const confirmCallSwitch = vi.fn();
+vi.mock('$lib/groups/call-switch-confirm.js', () => ({
+  confirmCallSwitch: (/** @type {any[]} */ ...args) => confirmCallSwitch(...args)
+}));
+
 const { GroupCallTokenError } = await import('$lib/groups/livekit.js');
 const {
   getGroupCallState,
   joinGroupCall,
+  joinGroupCallWithConfirm,
   leaveGroupCall,
   callErrorMessage,
   registerCallStageView,
@@ -67,6 +73,7 @@ beforeEach(async () => {
   disconnectFromRoom.mockClear();
   connectToRoom.mockReset();
   connectToRoom.mockResolvedValue(undefined);
+  confirmCallSwitch.mockReset();
 });
 
 describe('joinGroupCall', () => {
@@ -281,6 +288,87 @@ describe('leaveGroupCall', () => {
     expect(s.phase).toBe('idle');
     expect(s.activeKey).toBeNull();
     expect(s.error).toBeNull();
+  });
+});
+
+// Task M6: every member join entry point goes through this instead of
+// `joinGroupCall` directly, so the "switch calls?" dialog is implemented
+// once, here.
+describe('joinGroupCallWithConfirm', () => {
+  it('joins straight away while idle (no call anywhere)', async () => {
+    requestGroupCallToken.mockResolvedValue({ serverUrl: 'wss://x', participantToken: 't' });
+    await joinGroupCallWithConfirm(P1, USER);
+    expect(confirmCallSwitch).not.toHaveBeenCalled();
+    expect(getGroupCallState().isActiveFor(P1)).toBe(true);
+  });
+
+  it('joins straight away when re-joining the SAME channel already live', async () => {
+    requestGroupCallToken.mockResolvedValue({ serverUrl: 'wss://x', participantToken: 't' });
+    await joinGroupCallWithConfirm(P1, USER);
+    await joinGroupCallWithConfirm(P1, USER);
+    expect(confirmCallSwitch).not.toHaveBeenCalled();
+    expect(connectToRoom).toHaveBeenCalledTimes(1);
+  });
+
+  it('asks before switching away from a LIVE call in a different channel', async () => {
+    requestGroupCallToken.mockResolvedValue({ serverUrl: 'wss://x', participantToken: 't' });
+    await joinGroupCallWithConfirm(P1, USER);
+    confirmCallSwitch.mockResolvedValue(true);
+
+    await joinGroupCallWithConfirm(P2, USER, { title: 'Standup' });
+
+    expect(confirmCallSwitch).toHaveBeenCalledTimes(1);
+    // The dialog names the call the user is CURRENTLY in, not the target.
+    expect(confirmCallSwitch).toHaveBeenCalledWith('');
+    expect(disconnectFromRoom).toHaveBeenCalledTimes(1);
+    expect(getGroupCallState().isActiveFor(P2)).toBe(true);
+  });
+
+  it("passes the current call's title to the confirm dialog", async () => {
+    requestGroupCallToken.mockResolvedValue({ serverUrl: 'wss://x', participantToken: 't' });
+    await joinGroupCallWithConfirm(P1, USER, { title: 'Standup' });
+    confirmCallSwitch.mockResolvedValue(true);
+    await joinGroupCallWithConfirm(P2, USER);
+    expect(confirmCallSwitch).toHaveBeenCalledWith('Standup');
+  });
+
+  it('cancelling leaves the current call untouched and does not join', async () => {
+    requestGroupCallToken.mockResolvedValue({ serverUrl: 'wss://x', participantToken: 't' });
+    await joinGroupCallWithConfirm(P1, USER);
+    confirmCallSwitch.mockResolvedValue(false);
+
+    await joinGroupCallWithConfirm(P2, USER);
+
+    expect(disconnectFromRoom).not.toHaveBeenCalled();
+    const s = getGroupCallState();
+    expect(s.isActiveFor(P1)).toBe(true);
+    expect(s.isActiveFor(P2)).toBe(false);
+    expect(s.phase).toBe('ready');
+  });
+
+  it('does not ask once the previous call ended on its own', async () => {
+    requestGroupCallToken.mockResolvedValue({ serverUrl: 'wss://x', participantToken: 't' });
+    await joinGroupCallWithConfirm(P1, USER);
+    lkListener.cb?.('removed-reason');
+    expect(getGroupCallState().phase).toBe('ended');
+
+    await joinGroupCallWithConfirm(P2, USER);
+
+    expect(confirmCallSwitch).not.toHaveBeenCalled();
+    expect(getGroupCallState().isActiveFor(P2)).toBe(true);
+  });
+
+  it('does not ask once the previous call errored', async () => {
+    requestGroupCallToken.mockResolvedValueOnce({ serverUrl: 'wss://x', participantToken: 't' });
+    connectToRoom.mockRejectedValueOnce(new Error('boom'));
+    await joinGroupCallWithConfirm(P1, USER);
+    expect(getGroupCallState().phase).toBe('error');
+
+    requestGroupCallToken.mockResolvedValueOnce({ serverUrl: 'wss://x', participantToken: 't2' });
+    await joinGroupCallWithConfirm(P2, USER);
+
+    expect(confirmCallSwitch).not.toHaveBeenCalled();
+    expect(getGroupCallState().isActiveFor(P2)).toBe(true);
   });
 });
 

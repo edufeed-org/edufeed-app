@@ -40,6 +40,9 @@ vi.mock('$lib/groups/group-call.svelte.js', () => ({
     }
   }),
   joinGroupCall: (...a) => fns.joinGroupCall(...a),
+  // Task M6: the roster's join pill goes through the confirm wrapper, not
+  // the raw join — the gate itself is covered by group-call.svelte.test.js.
+  joinGroupCallWithConfirm: (...a) => fns.joinGroupCall(...a),
   showCallStage: (...a) => fns.showCallStage(...a)
 }));
 vi.mock('$lib/groups/call-popout.svelte.js', () => ({

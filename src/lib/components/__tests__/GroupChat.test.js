@@ -989,6 +989,15 @@ vi.mock('$lib/groups/group-call.svelte.js', () => ({
   }),
   joinGroupCall: (/** @type {any} */ pointer, /** @type {any} */ user, /** @type {any} */ view) =>
     joinGroupCallMock(pointer, user, view),
+  // Task M6: every join path goes through the confirm wrapper, not the raw
+  // join, so GroupChat's startCall() calls this one — same spy underneath,
+  // since this file's tests assert on `joinGroupCallMock` and the confirm
+  // gate itself is covered by group-call.svelte.test.js.
+  joinGroupCallWithConfirm: (
+    /** @type {any} */ pointer,
+    /** @type {any} */ user,
+    /** @type {any} */ view
+  ) => joinGroupCallMock(pointer, user, view),
   leaveGroupCall: () => leaveGroupCallMock(),
   showCallStage: () => callViewMocks.showCallStage(),
   hideCallStage: () => callViewMocks.hideCallStage(),
