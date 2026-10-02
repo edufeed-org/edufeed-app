@@ -94,4 +94,11 @@ describe('own messages are never unread', () => {
     expect(getUnreadDmCount()).toBe(1);
     expect(isDmConversationUnread(CONV_ID, 1100)).toBe(true);
   });
+
+  it('takes the author directly when the caller has the conversation', () => {
+    initializeDMs(ME, SIGNER);
+    // Nothing in the list: no lookup needed, the passed author decides.
+    expect(isDmConversationUnread(CONV_ID, 1000, ME)).toBe(false);
+    expect(isDmConversationUnread(CONV_ID, 1000, PEER)).toBe(true);
+  });
 });

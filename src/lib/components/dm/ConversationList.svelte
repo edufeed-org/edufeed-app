@@ -102,7 +102,11 @@
 
 {#snippet conversationRow(/** @type {any} */ conv, /** @type {boolean} */ isRequest)}
   {@const otherPubkey = getOtherPubkey(conv.participants)}
-  {@const unread = isDmConversationUnread(conv.id, conv.lastMessage.created_at)}
+  {@const unread = isDmConversationUnread(
+    conv.id,
+    conv.lastMessage.created_at,
+    conv.lastMessage.pubkey
+  )}
   <button
     class="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-base-200
       {selectedConversationId === conv.id ? 'bg-base-200' : ''}"

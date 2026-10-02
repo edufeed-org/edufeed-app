@@ -113,7 +113,8 @@ function onDms(known) {
     })
     .sort((a, b) => a.lastMessage.created_at - b.lastMessage.created_at);
   for (const conv of fresh) {
-    if (!isDmConversationUnread(conv.id, conv.lastMessage.created_at)) continue;
+    if (!isDmConversationUnread(conv.id, conv.lastMessage.created_at, conv.lastMessage.pubkey))
+      continue;
     const tag = `dm-${conv.id}`;
     if (!gate({ createdAt: conv.lastMessage.created_at, tag, surface: 'dm' })) continue;
     const others = conv.participants.filter((p) => p !== myPubkey);

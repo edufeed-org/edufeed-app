@@ -478,15 +478,19 @@ export function markConversationAsRead(conversationId, timestamp) {
  * Check if a specific conversation has unread messages.
  * @param {string} conversationId
  * @param {number} lastMessageTimestamp
+ * @param {string} [lastAuthor] pubkey of the newest message — pass it where
+ *   the conversation is at hand; omitted, it is looked up in the list
  * @returns {boolean}
  */
-export function isDmConversationUnread(conversationId, lastMessageTimestamp) {
-  // Callers pass (id, created_at) only — the author comes from the list.
-  const conv = dmConversations.find((c) => c.id === conversationId);
-  const lastAuthor =
-    conv?.lastMessage?.created_at === lastMessageTimestamp ? conv.lastMessage.pubkey : undefined;
+export function isDmConversationUnread(conversationId, lastMessageTimestamp, lastAuthor) {
+  let author = lastAuthor;
+  if (author === undefined) {
+    const conv = dmConversations.find((c) => c.id === conversationId);
+    author =
+      conv?.lastMessage?.created_at === lastMessageTimestamp ? conv.lastMessage.pubkey : undefined;
+  }
   return isConversationUnread(conversationId, lastMessageTimestamp, readTimestamps, {
-    lastAuthor,
+    lastAuthor: author,
     self: selfPubkey
   });
 }

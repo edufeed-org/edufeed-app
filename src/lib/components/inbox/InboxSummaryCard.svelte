@@ -6,7 +6,10 @@
     getTotalUnreadCount,
     isNotificationUnread
   } from '$lib/services/inbox-service.svelte.js';
-  import { getKnownDmConversations, isDmConversationUnread } from '$lib/services/dm-service.svelte.js';
+  import {
+    getKnownDmConversations,
+    isDmConversationUnread
+  } from '$lib/services/dm-service.svelte.js';
   import { useProfileMap } from '$lib/stores/profile-map.svelte.js';
   import { useActiveUser } from '$lib/stores/accounts.svelte';
   import { BellIcon } from '$lib/components/icons';
@@ -35,7 +38,7 @@
     }
 
     const unreadDms = getKnownDmConversations().filter((conv) =>
-      isDmConversationUnread(conv.id, conv.lastMessage.created_at)
+      isDmConversationUnread(conv.id, conv.lastMessage.created_at, conv.lastMessage.pubkey)
     );
     for (const conv of unreadDms) {
       items.push({
@@ -107,7 +110,8 @@
             profile={profiles.get(getDmOtherPubkey(item.conversation))}
             unread={isDmConversationUnread(
               item.conversation.id,
-              item.conversation.lastMessage.created_at
+              item.conversation.lastMessage.created_at,
+              item.conversation.lastMessage.pubkey
             )}
           />
         {:else}
