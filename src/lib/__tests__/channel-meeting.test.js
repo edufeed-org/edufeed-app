@@ -35,6 +35,18 @@ describe('isChannelMeeting', () => {
     expect(isChannelMeeting(ev(31922, []))).toBe(false);
   });
 
+  it('reads an upper-case hex community pubkey as a community, not a channel', () => {
+    expect(isChannelMeeting(ev(31923, [['h', 'C'.repeat(64)]]))).toBe(false);
+    expect(isChannelMeeting(ev(31923, [['h', 'aB'.repeat(32)]]))).toBe(false);
+  });
+
+  it('ignores empty or malformed h tags', () => {
+    expect(isChannelMeeting(ev(31923, [['h']]))).toBe(false);
+    expect(isChannelMeeting(ev(31923, [['h', '']]))).toBe(false);
+    expect(isChannelMeeting(ev(31923, [['h', '   ']]))).toBe(false);
+    expect(isChannelMeeting(ev(31923, [['h'], ['h', 'g1']]))).toBe(true);
+  });
+
   it('is false for other kinds (a chat message in a channel is not a meeting)', () => {
     expect(isChannelMeeting(ev(9, [['h', 'g1']]))).toBe(false);
     expect(isChannelMeeting(null)).toBe(false);

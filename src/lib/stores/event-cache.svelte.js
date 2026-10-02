@@ -9,7 +9,7 @@
 import { NostrIDB, getEventUID } from 'nostr-idb';
 import { isAddressPointer, isEventPointer, persistEventsToCache } from 'applesauce-core/helpers';
 import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
-import { isChannelMeeting } from '$lib/helpers/calendar-timing.js';
+import { isChannelMeeting, withoutChannelMeetings } from '$lib/helpers/calendar-timing.js';
 
 /**
  * Kinds we persist to IDB. See spec §"What gets persisted" for rationale.
@@ -168,7 +168,9 @@ export async function cacheRequest(filters) {
   if (!nostrIDB) return [];
   try {
     await dbReady;
-    return await nostrIDB.query(filters);
+    // Channel meetings cached before the write filter existed must not
+    // resurface in generic views.
+    return withoutChannelMeetings(await nostrIDB.query(filters));
   } catch (err) {
     console.warn('[event-cache] cacheRequest failed', err);
     return [];
@@ -275,7 +277,7 @@ export async function uncacheEvent(event) {
  */
 export async function recacheEvent(event) {
   if (!nostrIDB) return;
-  if (!CACHEABLE_KINDS.has(event.kind)) return;
+  if (!isCacheableEvent(event)) return;
   try {
     await dbReady;
     await nostrIDB.add(event);

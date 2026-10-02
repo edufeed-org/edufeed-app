@@ -3819,5 +3819,6 @@
   "meeting_bar_label": "Next meeting",
   "meeting_bar_today": "today {time}",
   "meeting_bar_tomorrow": "tomorrow {time}",
-  "meeting_detail_channel_only": "This meeting belongs to a channel. Join, guest link and delete are on its card in the channel."
+  "meeting_detail_channel_only": "This meeting belongs to a channel. Join, guest link and delete are on its card in the channel.",
+  "meeting_preview_channel": "Meeting in a channel"
 }

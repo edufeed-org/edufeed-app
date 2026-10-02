@@ -164,6 +164,45 @@ describe('event-cache read / count / clear', () => {
     expect(result[0].id).toBe('c'.repeat(64));
   });
 
+  // Rows written before the write filter existed must not resurface.
+  it('cacheRequest drops channel meetings read back from IDB', async () => {
+    const {
+      dbReady,
+      nostrIDB: _nostrIDB,
+      cacheRequest
+    } = await import('$lib/stores/event-cache.svelte.js');
+    const nostrIDB = /** @type {NonNullable<typeof _nostrIDB>} */ (_nostrIDB);
+    await dbReady;
+    const base = {
+      kind: 31923,
+      pubkey: 'p'.repeat(64),
+      created_at: 1000,
+      content: '',
+      sig: 's'.repeat(128)
+    };
+    await nostrIDB.add({
+      ...base,
+      id: 'd'.repeat(64),
+      tags: [
+        ['d', 'public'],
+        ['start', '2000000000'],
+        ['h', 'c'.repeat(64)]
+      ]
+    });
+    await nostrIDB.add({
+      ...base,
+      id: 'e'.repeat(64),
+      tags: [
+        ['d', 'meeting'],
+        ['start', '2000000000'],
+        ['h', 'g1']
+      ]
+    });
+
+    const result = await cacheRequest([{ kinds: [31923] }]);
+    expect(result.map((e) => e.id)).toEqual(['d'.repeat(64)]);
+  });
+
   it('cacheRequest returns [] when IDB throws (graceful degradation)', async () => {
     const { cacheRequest, nostrIDB: _nostrIDB } = await import('$lib/stores/event-cache.svelte.js');
     const nostrIDB = /** @type {NonNullable<typeof _nostrIDB>} */ (_nostrIDB);
@@ -822,6 +861,32 @@ describe('recacheEvent (#64, from-cache restore)', () => {
     Reflect.set(cached, FROM_CACHE, true);
 
     expect(isFromCache({ ...cached })).toBe(true);
+  });
+
+  it('never re-caches a channel meeting', async () => {
+    const {
+      dbReady,
+      nostrIDB: _nostrIDB,
+      recacheEvent
+    } = await import('$lib/stores/event-cache.svelte.js');
+    const nostrIDB = /** @type {NonNullable<typeof _nostrIDB>} */ (_nostrIDB);
+    await dbReady;
+    const addSpy = vi.spyOn(nostrIDB, 'add');
+    await recacheEvent(
+      /** @type {any} */ ({
+        id: '7'.repeat(64),
+        kind: 31923,
+        pubkey: PK,
+        created_at: 1000,
+        tags: [
+          ['d', 'meeting'],
+          ['h', 'g1']
+        ],
+        content: '',
+        sig: 'f'.repeat(128)
+      })
+    );
+    expect(addSpy).not.toHaveBeenCalled();
   });
 
   it('writes a from-cache event to IDB anyway', async () => {

@@ -15,6 +15,7 @@
   import { showToast } from '$lib/helpers/toast';
   import { PinIcon } from '$lib/components/icons';
   import { getCalendarEventMetadata } from '$lib/helpers/eventUtils.js';
+  import { withoutChannelMeetings } from '$lib/helpers/calendar-timing.js';
   import { formatAMBResource } from '$lib/helpers/educational/index.js';
   import { filterSocialBookmarks, groupByUrl, groupByEventRef } from '$lib/helpers/urlGrouping.js';
   import AMBResourceCard from '$lib/components/educational/AMBResourceCard.svelte';
@@ -81,7 +82,9 @@
     }
     const sub = eventStore.model(TimelineModel, { kinds, authors: [pubkey] }).subscribe({
       next: (loaded) => {
-        rawEvents = loaded || [];
+        // Channel meetings stay in their channel: never listed here, never
+        // offered for the public pin list (kind 10001 would name them).
+        rawEvents = withoutChannelMeetings(loaded || []);
       },
       error: (err) => console.error('ProfileContentTab: Model error:', err)
     });

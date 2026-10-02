@@ -195,22 +195,28 @@ export function formDateFromTimestamp(seconds, kind) {
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
 }
 
-const HEX_PUBKEY = /^[0-9a-f]{64}$/;
+const HEX_PUBKEY = /^[0-9a-fA-F]{64}$/;
 
 /**
- * A NIP-52 calendar event (31922/31923) h-tagged with a channel id — any `h`
- * value that is not a 64-hex community pubkey — is a channel meeting. It
- * lives on its channel's group relay only, so generic calendar surfaces
- * (personal calendar, feeds, discover, community calendar) skip it, its
- * edit/share/repost actions are hidden, and it is never written to the IDB
- * cache. Its home is the channel's MeetingCard.
+ * A NIP-52 calendar event (31922/31923) h-tagged with a channel id — any
+ * non-empty `h` value that is not a 64-hex community pubkey (either case) —
+ * is a channel meeting. It lives on its channel's group relay only, so
+ * generic calendar surfaces (personal calendar, feeds, discover, community
+ * calendar) skip it, its edit/share/repost actions are hidden, and it is
+ * never read from or written to the IDB cache. Its home is the channel's
+ * MeetingCard.
  *
  * @param {{kind?: number, tags?: string[][]} | null | undefined} event
  * @returns {boolean}
  */
 export function isChannelMeeting(event) {
   if (!event || (event.kind !== 31922 && event.kind !== 31923)) return false;
-  return (event.tags ?? []).some((tag) => tag[0] === 'h' && !HEX_PUBKEY.test(tag[1] ?? ''));
+  return (event.tags ?? []).some((tag) => {
+    if (tag[0] !== 'h' || typeof tag[1] !== 'string') return false;
+    const value = tag[1].trim();
+    // An empty/malformed h names nothing; a (any-case) 64-hex is a community.
+    return value !== '' && !HEX_PUBKEY.test(value);
+  });
 }
 
 /**
