@@ -80,7 +80,9 @@
 {#if participants.length > 0}
   {#snippet rosterContent()}
     <CallCountPill count={participants.length} />
-    <div class="flex min-w-0 flex-1 items-center -space-x-1.5">
+    <!-- A span, not a div: this can render inside a <button> (join/show-call
+       state below), whose content model is phrasing content only. -->
+    <span class="flex min-w-0 flex-1 items-center -space-x-1.5">
       {#each shown as pubkey (pubkey)}
         <span class="rounded-full ring-2 ring-base-200">
           <ProfileAvatar {pubkey} size="2xs" showHoverCard={false} linkToProfile={false} />
@@ -89,7 +91,7 @@
       {#if overflow > 0}
         <span class="pl-2.5 text-xs text-base-content/60">+{overflow}</span>
       {/if}
-    </div>
+    </span>
   {/snippet}
 
   {#if stageOnScreen}
@@ -100,6 +102,7 @@
     <div
       class="flex flex-wrap items-center gap-x-2 gap-y-0.5 {inset}"
       data-testid="channel-call-roster"
+      title={m.groups_call_people_in_call({ count: participants.length })}
     >
       {@render rosterContent()}
       <span class="sr-only" data-testid="channel-call-roster-here">

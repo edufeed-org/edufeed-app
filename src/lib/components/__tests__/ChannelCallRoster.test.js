@@ -159,6 +159,20 @@ describe('ChannelCallRoster', () => {
     const status = screen.getByTestId('channel-call-roster-here');
     expect(status.textContent).toContain("You're in the call · 2");
     expect(status.className).toContain('sr-only');
+    // Review fix round 1: a passive title (sighted hover) survives even
+    // though the status line itself went sr-only.
+    expect(screen.getByTestId('channel-call-roster').getAttribute('title')).toBe('2 in the call');
+  });
+
+  // Review fix round 1: a <button> only accepts phrasing content — the
+  // avatars wrapper must be a <span>, not a <div>.
+  it('the avatars wrapper is phrasing content (a span), not a div', () => {
+    presence.participants = [P('b')];
+    render(ChannelCallRoster, {
+      props: { pointer: POINTER, name: 'Sprechstunde', onOpen: fns.onOpen }
+    });
+    const button = screen.getByRole('button', { name: 'Join the running call (1)' });
+    expect(button.querySelector('div')).toBeNull();
   });
 
   it.each([

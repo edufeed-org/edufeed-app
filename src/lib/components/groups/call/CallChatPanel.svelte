@@ -8,6 +8,7 @@
   import { goto } from '$app/navigation';
   import { resolve } from '$app/paths';
   import { getLiveKitState, sendCallChat } from '$lib/services/livekit-connection.svelte.js';
+  import { getGroupCallState } from '$lib/groups/group-call.svelte.js';
   import { useProfileMap } from '$lib/stores/profile-map.svelte.js';
   import { avatarInitial } from '$lib/helpers/avatar-initial.js';
   import { profileLink } from '$lib/helpers/nostrUtils.js';
@@ -28,6 +29,7 @@
   let { identityToPubkey, title = '' } = $props();
 
   const lk = getLiveKitState();
+  const call = getGroupCallState();
   let draft = $state('');
   /** @type {HTMLDivElement | undefined} */
   let listEl = $state(undefined);
@@ -53,13 +55,22 @@
   }
 
   // Clicking a sender's avatar or name: pop the call out first (when the
-  // browser supports it) so leaving to the profile route doesn't drop the
-  // call, then navigate. Must run synchronously from the click — pop-out
-  // needs the user activation (QA 2026-10-02).
+  // browser supports it AND the call is actually live — a connecting/ended/
+  // failed call has nothing worth keeping on screen) so leaving to the
+  // profile route doesn't drop it, then navigate. Must run synchronously
+  // from the click — pop-out needs the user activation (QA 2026-10-02).
   /** @param {MouseEvent} e @param {string} pk */
   function openProfile(e, pk) {
     e.preventDefault();
-    if (canPopOutCall()) popOutCall({ title, identityToPubkey });
+    // The click also bubbles into HoverCard's own wrapper; nothing there
+    // needs it (interactiveTrigger mode doesn't toggle on click), but stop
+    // it so a click can only ever do the one thing: navigate.
+    e.stopPropagation();
+    if (call.phase === 'ready' && call.connected && canPopOutCall()) {
+      popOutCall({ title, identityToPubkey }).catch((err) => {
+        console.warn('call pop-out failed:', err);
+      });
+    }
     goto(resolve(profileLink(pk)));
   }
 
@@ -100,7 +111,13 @@
                ParticipantTile): hovering either shows the profile hover
                card, clicking either pops the call out (when supported) and
                opens the profile (QA 2026-10-02). -->
-          <HoverCard position="top" fixed={true} class="contents" triggerClass="contents">
+          <HoverCard
+            position="top"
+            fixed={true}
+            class="contents"
+            triggerClass="contents"
+            interactiveTrigger
+          >
             {#snippet trigger()}
               <a
                 href={resolve(profileLink(pk))}

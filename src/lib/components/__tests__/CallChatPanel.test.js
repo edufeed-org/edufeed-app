@@ -58,6 +58,13 @@ vi.mock('$lib/groups/call-popout.svelte.js', () => ({
   canPopOutCall: () => popout.supported,
   popOutCall: (/** @type {any} */ view) => popout.popOutCall(view)
 }));
+// Pop-out is only worth it for a call that is actually live — default to
+// live so existing pop-out tests exercise that path; a dedicated test below
+// covers the gate itself.
+const groupCall = vi.hoisted(() => ({ phase: 'ready', connected: true }));
+vi.mock('$lib/groups/group-call.svelte.js', () => ({
+  getGroupCallState: () => groupCall
+}));
 
 const m = await import('$lib/paraglide/messages');
 const { profileLink } = await import('$lib/helpers/nostrUtils.js');
@@ -72,6 +79,8 @@ beforeEach(() => {
   gotoMock.mockClear();
   popout.supported = false;
   popout.popOutCall.mockClear();
+  groupCall.phase = 'ready';
+  groupCall.connected = true;
 });
 
 describe('CallChatPanel', () => {
@@ -115,10 +124,20 @@ describe('CallChatPanel', () => {
   it('shows the profile hover card content for a resolved sender', async () => {
     render(CallChatPanel, { props });
     const link = screen.getByTestId('call-chat-sender-link');
-    // HoverCard toggles open immediately on click (no hover delay to fake).
-    await fireEvent.click(link);
+    // interactiveTrigger mode: opens on focus (keyboard-reachable), not on
+    // click (a click only navigates — review fix round 1).
+    await fireEvent.focusIn(link);
     const card = screen.getByTestId('profile-hover-card');
     expect(card.dataset.pubkey).toBe('b'.repeat(64));
+  });
+
+  // Review fix round 1: the link is the ONLY tab stop for a sender — the
+  // HoverCard wrapper around it must add no nested interactive element.
+  it('has one tab stop per sender (no nested interactive wrapper)', () => {
+    render(CallChatPanel, { props });
+    const wrapper = screen.getByTestId('hover-card-wrapper');
+    expect(wrapper.getAttribute('role')).toBeNull();
+    expect(wrapper.getAttribute('tabindex')).toBeNull();
   });
 
   it('pops the call out (when supported) and navigates when a sender is clicked', async () => {
@@ -137,6 +156,50 @@ describe('CallChatPanel', () => {
     render(CallChatPanel, { props });
     await fireEvent.click(screen.getByTestId('call-chat-sender-link'));
     expect(popout.popOutCall).not.toHaveBeenCalled();
+    expect(gotoMock).toHaveBeenCalledWith(profileLink('b'.repeat(64)));
+  });
+
+  // Review fix round 1: a connecting/ended/failed call has nothing worth
+  // keeping on screen — pop-out is only for a LIVE call.
+  it.each([
+    ['not connected yet', { phase: 'ready', connected: false }],
+    ['not ready (requesting)', { phase: 'requesting', connected: true }],
+    ['ended', { phase: 'ended', connected: false }]
+  ])('does not pop out when the call is %s, navigates anyway', async (_label, patch) => {
+    popout.supported = true;
+    Object.assign(groupCall, patch);
+    render(CallChatPanel, { props });
+    await fireEvent.click(screen.getByTestId('call-chat-sender-link'));
+    expect(popout.popOutCall).not.toHaveBeenCalled();
+    expect(gotoMock).toHaveBeenCalledWith(profileLink('b'.repeat(64)));
+  });
+
+  // Review fix round 1: popOutCall rejecting (e.g. NotAllowedError without a
+  // user gesture the browser recognises) must not throw — navigation still
+  // happens and nothing is left unhandled.
+  it('navigates even when popOutCall rejects', async () => {
+    popout.supported = true;
+    popout.popOutCall.mockRejectedValueOnce(new Error('NotAllowedError'));
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    render(CallChatPanel, { props });
+    await fireEvent.click(screen.getByTestId('call-chat-sender-link'));
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(gotoMock).toHaveBeenCalledWith(profileLink('b'.repeat(64)));
+    expect(warn).toHaveBeenCalled();
+    warn.mockRestore();
+  });
+
+  // Review fix round 1: the click must not also bubble into HoverCard's own
+  // click handling (or anything else above it) — it only navigates.
+  it('stops the click event from propagating past the sender link', async () => {
+    render(CallChatPanel, { props });
+    const link = screen.getByTestId('call-chat-sender-link');
+    const outerHandler = vi.fn();
+    document.body.addEventListener('click', outerHandler);
+    await fireEvent.click(link);
+    document.body.removeEventListener('click', outerHandler);
+    expect(outerHandler).not.toHaveBeenCalled();
     expect(gotoMock).toHaveBeenCalledWith(profileLink('b'.repeat(64)));
   });
 

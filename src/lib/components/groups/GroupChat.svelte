@@ -835,7 +835,9 @@
   const canPopOut = canPopOutCall();
   function popOutHere() {
     // straight from the click: the window request needs the user activation
-    popOutCall({ title: displayTitle, identityToPubkey });
+    popOutCall({ title: displayTitle, identityToPubkey }).catch((err) => {
+      console.warn('call pop-out failed:', err);
+    });
   }
 
   // The /c layout renders its page 2-3× (responsive variants, CSS hides the
