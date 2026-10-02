@@ -139,6 +139,33 @@ A relay that also exposes a group under a community relay URL (e.g.
 path too: `GET /c/<rootId>/.well-known/nip29/livekit/<group-id>/pass/<code-hash>`,
 for groups that belong to that community only.
 
+## Meeting passes (edufeed extension)
+
+A guest link for a scheduled meeting (a NIP-52 kind 31923 event with exactly
+one `["h", <group-id>]`, see `docs/guides/publishing-to-nip29-groups.md` §
+"Scheduled meetings") is an ordinary call pass with no `scope` tag — it is
+not tied to a running call — and a window built from the meeting's own
+start/end instead of an admin-chosen one:
+
+- `not-before` = meeting `start` − 15 minutes (900 s).
+- `expiration` = meeting `end` + 30 minutes (1800 s).
+- `["a", "31923:<pubkey>:<d>", <relay>]` links the pass to the meeting event
+  (the coordinate `kind:pubkey:d`); a pass carries at most one such tag, and
+  it is how a card rebuilds or revokes the right pass.
+- `title`, when set, is the meeting's title.
+
+A meeting more than ~60 days ahead (`expiration` would fall beyond the
+relay's maximum pass lifetime) cannot get a guest link; the author is told
+so and the meeting is created without a pass.
+
+The guest landing page (`/call/<group pointer>#<code>`) derives the
+meeting's displayed start/end from the pass check's own `not_before`/
+`expiration` — `start = not_before + 900`, `end = expiration − 1800` — never
+from a separate read of the 31923 event, since a guest cannot read the
+group's events at all. Deleting the meeting revokes its pass(es) first, so
+the guest page immediately reads `unknown` for anyone still holding the
+link.
+
 ## In-call chat (edufeed extension, optional)
 
 Guests do not read the group's events, so a call carries its own chat as

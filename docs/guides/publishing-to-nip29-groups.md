@@ -209,17 +209,66 @@ show a "Gast" badge instead. Calls also carry an ephemeral LiveKit-data chat
 (topic `edufeed.call.chat`) separate from the group's normal "Kanal" chat,
 which guests never see.
 
+## Scheduled meetings
+
+A channel meeting is a NIP-52 kind 31923 event with **exactly one**
+`["h", <group-id>]` tag (never a community-pubkey `h` on the same event),
+published through `publishToGroupRelay` to the channel's group relay only —
+never the outbox. `location` is always the channel's member link, never a
+pass code. `src/lib/groups/meetings.js` (`buildMeetingTags`,
+`meetingCoordinate`, `meetingPhase`, `isChannelMeeting`) and
+`src/lib/groups/schedule-meeting.js` (`scheduleGroupMeeting`,
+`sendMeetingInvites`) own the tag/window logic; `CalendarEventModal`'s
+"group meeting" mode is the only entry point for creating one.
+
+A guest link, when the organiser turns it on, is a meeting pass — see
+"Meeting passes" in `docs/nips/nip29-call-passes.md` — minted via
+`createMeetingLink` (`call-passes.js`). Invites are NIP-17 DMs
+(`sendWrappedDm`), one per invited pubkey, naming the meeting and the
+channel link; the guest link is included only for invitees who are not
+already on the channel roster (everyone gets it when the roster is
+unknown).
+
+`GroupChat.svelte` renders each 31923 as a `MeetingCard` (status, ".ics",
+the author's "Gast-Link kopieren", delete) and shows a `MeetingBar` above
+the timeline for the next joinable/upcoming meeting. Joining goes through
+`confirmCallSwitch` (`call-switch-confirm.svelte.js`) when the user is
+already live in another channel's call.
+
+The community calendar reads these events too: `channelCalendarsLoader`
+(`src/lib/loaders/calendar.js`) opens one `#h` REQ per channel (not one per
+relay), so a relay closing the REQ for a channel the user can't read never
+hides another channel's meetings; see "Channel calendars" in
+`docs/nips/communikey-groups.md`.
+
+Channel meetings are deliberately invisible everywhere a generic NIP-52
+event would otherwise show up: `isChannelMeeting` /
+`withoutChannelMeetings` (`src/lib/helpers/calendar-timing.js`) keep them
+out of the personal/discover/community-feed calendar models and loaders,
+the dashboard upcoming/activity lists, the profile events tab, link
+previews, the map view, the generic edit/delete/share/RSVP actions, and the
+IDB event cache (never written, and dropped on read as a migration guard).
+Deleting a meeting (`deleteMeeting`, `meeting-actions.js`) revokes every
+call pass whose `a` tag names it — via `listCallPasses` +
+`revokeCallPass` — **before** signing the kind 5/9005 deletion, so a
+deleted meeting never leaves a working guest link behind.
+
 ## Key files
 
-| File                                     | Role                                                                                             |
-| ---------------------------------------- | ------------------------------------------------------------------------------------------------ |
-| `src/lib/groups/groups.js`               | Pointer parsing, chat/join/leave templates, 10009 list template                                  |
-| `src/lib/groups/group-management.js`     | Moderation templates (9000–9009), `publishToGroupRelay`, `createGroupOnRelay`, error classifiers |
-| `src/lib/groups/relay-auth.js`           | NIP-42 `authenticateOnce`                                                                        |
-| `src/lib/groups/personal-groups-list.js` | Kind-10009 updates (outbox, not group relay)                                                     |
-| `src/lib/helpers/relay-helper.js`        | `getGroupsRelays()`                                                                              |
-| `src/lib/webxdc/session-events.js`       | Pad session kinds 9450/24450                                                                     |
-| `src/lib/groups/livekit.js`              | NIP-29 AV: relay probe, NIP-98 token request, `livekit` tag + identity helpers                   |
-| `src/lib/groups/call-presence*.js`       | Kind-39004 filter/parser and the relay-key-pinned live subscription                              |
-| `src/lib/groups/group-call.svelte.js`    | The single active call (token round-trip, which channel it belongs to)                           |
-| `src/lib/groups/call-passes.js`          | Guest call passes: code/hash/link helpers, pass check, create/list/revoke                        |
+| File                                     | Role                                                                                                |
+| ---------------------------------------- | --------------------------------------------------------------------------------------------------- |
+| `src/lib/groups/groups.js`               | Pointer parsing, chat/join/leave templates, 10009 list template                                     |
+| `src/lib/groups/group-management.js`     | Moderation templates (9000–9009), `publishToGroupRelay`, `createGroupOnRelay`, error classifiers    |
+| `src/lib/groups/relay-auth.js`           | NIP-42 `authenticateOnce`                                                                           |
+| `src/lib/groups/personal-groups-list.js` | Kind-10009 updates (outbox, not group relay)                                                        |
+| `src/lib/helpers/relay-helper.js`        | `getGroupsRelays()`                                                                                 |
+| `src/lib/webxdc/session-events.js`       | Pad session kinds 9450/24450                                                                        |
+| `src/lib/groups/livekit.js`              | NIP-29 AV: relay probe, NIP-98 token request, `livekit` tag + identity helpers                      |
+| `src/lib/groups/call-presence*.js`       | Kind-39004 filter/parser and the relay-key-pinned live subscription                                 |
+| `src/lib/groups/group-call.svelte.js`    | The single active call (token round-trip, which channel it belongs to)                              |
+| `src/lib/groups/call-passes.js`          | Guest call passes: code/hash/link helpers, pass check, create/list/revoke                           |
+| `src/lib/groups/meetings.js`             | Scheduled-meeting tags/window/phase helpers, `isChannelMeeting` guard, `.ics` builder               |
+| `src/lib/groups/schedule-meeting.js`     | `scheduleGroupMeeting`, `sendMeetingInvites` (NIP-17 invites + guest link)                          |
+| `src/lib/groups/meeting-actions.js`      | `deleteMeeting` — revokes the meeting's passes, then deletes it                                     |
+| `src/lib/helpers/calendar-timing.js`     | `isChannelMeeting` / `withoutChannelMeetings` (pure; used by the cache and generic calendar models) |
+| `src/lib/loaders/calendar.js`            | `channelCalendarsLoader` — one `#h` REQ per channel for the community calendar                      |
