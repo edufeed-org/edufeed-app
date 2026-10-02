@@ -11,15 +11,19 @@
 // Plain module (no runes): called from the modal and tested in node.
 import { publishToGroupRelay } from './group-management.js';
 import { createMeetingLink } from './call-passes.js';
-import { MEETING_KIND, buildMeetingTags, meetingCoordinate, canHaveGuestLink } from './meetings.js';
+import {
+  MEETING_KIND,
+  MEETING_DEFAULT_DURATION_S,
+  buildMeetingTags,
+  meetingCoordinate,
+  canHaveGuestLink
+} from './meetings.js';
 import { sendWrappedDm } from '$lib/services/wrapped-dm.js';
 import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
-import { formatTimestamp, formatTimeOfDay } from '$lib/helpers/dates.js';
+import { formatTimestamp, formatTimeOfDay, formatTimeZoneName } from '$lib/helpers/dates.js';
 import * as m from '$lib/paraglide/messages';
 
 const HEX_PUBKEY_RE = /^[0-9a-f]{64}$/;
-/** A meeting without an end lasts an hour (for the guest window). */
-const DEFAULT_DURATION_S = 3600;
 
 /**
  * @typedef {{pointer: {id: string, relay: string}, channelName: string,
@@ -68,7 +72,7 @@ export async function scheduleGroupMeeting({
   eventStore.add(event);
 
   const start = /** @type {number} */ (tagNumber(tags, 'start'));
-  const end = tagNumber(tags, 'end') ?? start + DEFAULT_DURATION_S;
+  const end = tagNumber(tags, 'end') ?? start + MEETING_DEFAULT_DURATION_S;
 
   /** @type {'off' | 'created' | 'too_far' | 'failed'} */
   let guestStatus = 'off';
@@ -84,6 +88,9 @@ export async function scheduleGroupMeeting({
           coordinate: meetingCoordinate(event),
           title: formData.title.trim()
         });
+        // Into the local store too: the meeting card finds its guest link
+        // there at once instead of racing the relay with its own listing.
+        eventStore.add(link.event);
         guestUrl = link.url;
         guestStatus = 'created';
       } catch (err) {
@@ -96,7 +103,7 @@ export async function scheduleGroupMeeting({
 }
 
 /**
- * The invitation DM: title, DD.MM.YYYY, HH:MM, the channel and its link —
+ * The invitation DM: title, DD.MM.YYYY, HH:MM with the time-zone name, the channel and its link —
  * plus the guest link when one is given (only for invitees off the roster).
  * @param {{title: string, start: number, channelName: string, channelUrl: string,
  *   guestUrl?: string | null}} p
@@ -106,6 +113,7 @@ export function meetingInviteText({ title, start, channelName, channelUrl, guest
     title,
     date: formatTimestamp(start, { day: '2-digit', month: '2-digit', year: 'numeric' }),
     time: formatTimeOfDay(start),
+    zone: formatTimeZoneName(start),
     channel: channelName,
     channelUrl
   });

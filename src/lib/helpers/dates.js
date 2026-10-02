@@ -67,6 +67,22 @@ export function formatTimeOfDay(seconds) {
 }
 
 /**
+ * The short name of the viewer's time zone at a Nostr timestamp (seconds),
+ * in the active European locale — `MESZ`/`MEZ` in German, `CEST`/`BST` in
+ * English, a `GMT+13`-style offset where the locale has no abbreviation.
+ * Daylight saving is resolved for that moment, not for now.
+ *
+ * @param {number} seconds
+ * @returns {string} '' when the runtime cannot name the zone
+ */
+export function formatTimeZoneName(seconds) {
+  const parts = new Intl.DateTimeFormat(activeDateLocale(), {
+    timeZoneName: 'short'
+  }).formatToParts(new Date(seconds * 1000));
+  return parts.find((part) => part.type === 'timeZoneName')?.value ?? '';
+}
+
+/**
  * Convert an ISO date (`YYYY-MM-DD`) to the German display form `DD.MM.YYYY`.
  * Returns '' for empty/unparseable input. The leading date portion of a full
  * datetime is accepted (`2018-05-03T...` → `03.05.2018`).

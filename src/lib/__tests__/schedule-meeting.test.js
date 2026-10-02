@@ -31,7 +31,9 @@ vi.mock('$lib/stores/nostr-infrastructure.svelte', () => ({
 const { scheduleGroupMeeting, sendMeetingInvites, meetingInviteText } = await import(
   '$lib/groups/schedule-meeting.js'
 );
-const { formatTimeOfDay, formatTimestamp } = await import('$lib/helpers/dates.js');
+const { formatTimeOfDay, formatTimestamp, formatTimeZoneName } = await import(
+  '$lib/helpers/dates.js'
+);
 
 const ME = 'a'.repeat(64);
 const MEMBER = 'b'.repeat(64);
@@ -127,6 +129,9 @@ describe('scheduleGroupMeeting', () => {
     );
     // The code never enters the public event.
     expect(JSON.stringify(event)).not.toContain('C'.repeat(22));
+    // The pass goes into the local store, so the meeting card finds it at
+    // once ("Gast-Link kopieren") without racing the relay.
+    expect(eventStoreAdd).toHaveBeenCalledWith({ id: 'pass-id' });
   });
 
   it('creates the meeting without a pass when it ends beyond the 60-day pass limit', async () => {
@@ -189,6 +194,9 @@ describe('meetingInviteText', () => {
       formatTimestamp(start, { day: '2-digit', month: '2-digit', year: 'numeric' })
     );
     expect(text).toContain(formatTimeOfDay(start));
+    // Invitees may live elsewhere: the time says which zone it is in.
+    expect(text).toContain(formatTimeZoneName(start));
+    expect(formatTimeZoneName(start)).not.toBe('');
     expect(text).toContain('Arbeitszimmer');
     expect(text).toContain(GROUP_MEETING.channelUrl);
     expect(text).not.toContain('/call/');

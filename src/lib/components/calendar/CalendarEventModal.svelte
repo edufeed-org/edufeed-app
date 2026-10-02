@@ -34,6 +34,8 @@
   import { canHaveGuestLink } from '$lib/groups/meetings.js';
   import { scheduleGroupMeeting, sendMeetingInvites } from '$lib/groups/schedule-meeting.js';
   import { showToast } from '$lib/helpers/toast';
+  import { hasNip44 } from '$lib/helpers/nip44.js';
+  import { formatDateParam } from '$lib/helpers/urlParams.js';
 
   /**
    * @typedef {import('../../types/calendar.js').EventFormData} EventFormData
@@ -128,6 +130,9 @@
 
   // Reactive user state
   let activeUser = $state(manager.active);
+  // The guest link's code is stored self-encrypted (NIP-44): a signer
+  // without it cannot make one, so the toggle is disabled with a hint.
+  let canGuests = $derived(hasNip44(activeUser?.signer));
   $effect(() => {
     const subscription = manager.active$.subscribe((user) => {
       activeUser = user;
@@ -271,9 +276,11 @@
       image: '',
       imageWasUploaded: false,
       imageLicenseEvent: null,
-      startDate: today.toISOString().split('T')[0],
+      // Local day: toISOString() names the UTC day, which east of UTC just
+      // after midnight is still yesterday.
+      startDate: formatDateParam(today),
       startTime: '09:00',
-      endDate: (meeting ? today : tomorrow).toISOString().split('T')[0],
+      endDate: formatDateParam(meeting ? today : tomorrow),
       endTime: '10:00',
       startTimezone: getCurrentTimezone(),
       endTimezone: getCurrentTimezone(),
@@ -318,9 +325,9 @@
       image: existingEvent.image || '',
       imageWasUploaded: false,
       imageLicenseEvent: null,
-      startDate: startDate.toISOString().split('T')[0],
+      startDate: formatDateParam(startDate),
       startTime: startDate.toTimeString().slice(0, 5),
-      endDate: endDate ? endDate.toISOString().split('T')[0] : '',
+      endDate: endDate ? formatDateParam(endDate) : '',
       endTime: endDate ? endDate.toTimeString().slice(0, 5) : '10:00',
       startTimezone: existingEvent.startTimezone || getCurrentTimezone(),
       endTimezone: existingEvent.endTimezone || getCurrentTimezone(),
@@ -469,7 +476,7 @@
         groupMeeting: meeting,
         user,
         origin: window.location.origin,
-        allowGuests
+        allowGuests: allowGuests && canGuests
       });
     } catch (error) {
       console.error('Error scheduling meeting:', error);
@@ -686,14 +693,16 @@
                 type="checkbox"
                 class="toggle toggle-primary toggle-sm"
                 bind:checked={allowGuests}
-                disabled={isSubmitting}
+                disabled={isSubmitting || !canGuests}
               />
               <span class="text-sm font-medium text-base-content"
                 >{m.meeting_modal_guests_label()}</span
               >
             </label>
-            <p class="mt-1 text-xs text-base-content/60">{m.meeting_modal_guests_help()}</p>
-            {#if guestsTooFar}
+            <p class="mt-1 text-xs text-base-content/60">
+              {canGuests ? m.meeting_modal_guests_help() : m.meeting_modal_guests_no_nip44()}
+            </p>
+            {#if guestsTooFar && canGuests}
               <p class="mt-2 alert text-sm alert-info" role="status">
                 {m.meeting_modal_guests_too_far()}
               </p>

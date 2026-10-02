@@ -17,7 +17,10 @@ const GUEST_URL = 'https://app.example/call/x#' + 'C'.repeat(22);
 const h = vi.hoisted(() => {
   const user = new (class Account {
     pubkey = 'a'.repeat(64);
-    signer = { signEvent: async (e) => e };
+    signer = {
+      signEvent: async (e) => e,
+      nip44: { encrypt: async (_pk, t) => t, decrypt: async (_pk, c) => c }
+    };
   })();
   return {
     user,
@@ -128,11 +131,15 @@ async function setInput(container, selector, value) {
   await fireEvent.input(input);
 }
 
-function isoDaysFromNow(days) {
-  const d = new Date(Date.now() + days * 86400_000);
+/** @param {Date} d */
+function localIso(d) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(
     d.getDate()
   ).padStart(2, '0')}`;
+}
+
+function isoDaysFromNow(days) {
+  return localIso(new Date(Date.now() + days * 86400_000));
 }
 
 beforeEach(() => {
@@ -178,6 +185,18 @@ describe('CalendarEventModal — normal calendar event (regression)', () => {
     expect(r.getByTestId('participants-label').textContent).toBe('');
   });
 
+  // The default day is the LOCAL date: east of UTC just after midnight,
+  // toISOString() still names yesterday (M2 review).
+  // (The worker's zone cannot be switched at runtime, so the instant is
+  // 22:30 UTC — already the next day anywhere east of UTC, e.g. CEST.)
+  it('defaults the start date to the local day, not the UTC day', async () => {
+    const day = new Date('2026-10-02T22:30:00Z');
+    h.modalStore.modalProps = { ...h.modalStore.modalProps, selectedDate: day };
+    const r = render(CalendarEventModal);
+    await tick();
+    expect(r.container.querySelector('#startDate').value).toBe(localIso(day));
+  });
+
   it('creates through calendar actions (outbox) and never through the group relay', async () => {
     const r = render(CalendarEventModal);
     await tick();
@@ -209,6 +228,35 @@ describe('CalendarEventModal — group meeting mode', () => {
     const toggle = r.getByLabelText(m.meeting_modal_guests_label());
     expect(toggle.checked).toBe(false);
     expect(r.getByText(m.meeting_modal_submit())).toBeTruthy();
+  });
+
+  it('defaults the meeting to the local day', async () => {
+    const day = new Date('2026-10-02T22:30:00Z');
+    h.modalStore.modalProps = { ...h.modalStore.modalProps, selectedDate: day };
+    const r = render(CalendarEventModal);
+    await tick();
+    expect(r.container.querySelector('#startDate').value).toBe(localIso(day));
+    expect(r.container.querySelector('#endDate').value).toBe(localIso(day));
+  });
+
+  // A guest link is the organiser's self-encrypted pass code: without NIP-44
+  // it cannot be made, so the toggle says why instead of failing on submit.
+  it('disables the guest toggle with a hint when the signer lacks NIP-44', async () => {
+    const nip44 = h.user.signer.nip44;
+    delete h.user.signer.nip44;
+    try {
+      const r = render(CalendarEventModal);
+      await tick();
+      const toggle = r.getByLabelText(m.meeting_modal_guests_label());
+      expect(toggle.disabled).toBe(true);
+      expect(r.getByText(m.meeting_modal_guests_no_nip44())).toBeTruthy();
+      await setInput(r.container, '#title', 'Elternabend');
+      await fireEvent.submit(r.container.querySelector('form:not(.modal-backdrop)'));
+      await settle();
+      expect(h.scheduleGroupMeeting.mock.calls[0][0].allowGuests).toBe(false);
+    } finally {
+      h.user.signer.nip44 = nip44;
+    }
   });
 
   it('schedules on the group relay, copies the guest link and sends invites', async () => {
