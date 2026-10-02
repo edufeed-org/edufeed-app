@@ -31,6 +31,8 @@ vi.mock('$lib/paraglide/messages', () => ({
   community_join_request: () => 'Request to join',
   community_join_pending: () => 'Request sent — waiting for approval.',
   community_join_member: () => 'Member',
+  community_member_follow_button: () => 'Add to my communities',
+  community_member_follow_hint: () => 'You are a member. Following lists it.',
   community_join_invite_toggle: () => 'Redeem invite code',
   community_join_invite_placeholder: () => 'Code',
   community_join_invite_lead: () => 'Enter the invite code.',
@@ -208,6 +210,59 @@ describe('CommunityProfileHero — moderated join lane', () => {
     expect(screen.getAllByText('Member').length).toBeGreaterThan(0);
     expect(screen.queryByText('Join')).toBeNull();
     expect(screen.queryByText('Redeem invite code')).toBeNull();
+  });
+
+  // QA C8 (2026-10-02): a member saw "Mitglied" AND the primary "Community
+  // folgen" — reading as if they were not in yet. Membership = the NIP-29
+  // root roster (channel access); following = the kind-30000 `communities`
+  // set (the community in the user's own list). They stay independent; the
+  // header just says each once.
+  it('member who also follows: only the Member badge, no follow button or Following badge', () => {
+    holders.isMember = true;
+    holders.joined = true;
+    renderModerated();
+
+    expect(screen.getAllByText('Member').length).toBe(1);
+    expect(screen.queryByText('Following')).toBeNull();
+    expect(screen.queryByText('Follow Community')).toBeNull();
+    expect(screen.queryByTestId('member-follow-button')).toBeNull();
+  });
+
+  it('member who does not follow: Member badge plus a secondary, clearly worded add action', async () => {
+    holders.isMember = true;
+    holders.joined = false;
+    const { joinCommunity } = await import('$lib/helpers/community');
+    /** @type {any} */ (joinCommunity).mockResolvedValue({ success: true });
+    renderModerated();
+
+    expect(screen.queryByText('Follow Community')).toBeNull();
+    const add = screen.getByTestId('member-follow-button');
+    expect(add.textContent?.trim()).toBe('Add to my communities');
+    expect(add.getAttribute('title')).toBe('You are a member. Following lists it.');
+    expect(add.className).not.toContain('btn-primary');
+    expect(add.className).toContain('btn-sm');
+    // Nothing is published on render — only the click follows.
+    expect(joinCommunity).not.toHaveBeenCalled();
+    await fireEvent.click(add);
+    expect(joinCommunity).toHaveBeenCalledTimes(1);
+  });
+
+  it('non-member who follows keeps the Following badge beside the join lane', () => {
+    holders.joined = true;
+    renderModerated();
+
+    expect(screen.getAllByText('Following').length).toBe(1);
+    expect(screen.queryByText('Member')).toBeNull();
+    expect(screen.getAllByText('Join').length).toBeGreaterThan(0);
+  });
+
+  it('non-member who does not follow: Join is the primary action, follow is secondary', () => {
+    renderModerated();
+
+    const join = screen.getByTestId('join-request-button');
+    expect(join.className).toContain('btn-primary');
+    const follow = screen.getByText('Follow Community').closest('button');
+    expect(follow?.className).not.toContain('btn-primary');
   });
 
   // The application-form join path is gone (YAGNI, 2026-08-18):
