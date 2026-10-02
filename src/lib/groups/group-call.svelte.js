@@ -15,7 +15,7 @@
 import { channelKey } from './community-pointer.js';
 import { requestGroupCallToken, GroupCallTokenError } from './livekit.js';
 import { getChatBeside, setChatBeside } from '$lib/services/call-prefs.js';
-import { confirmCallSwitch } from './call-switch-confirm.js';
+import { confirmCallSwitch } from './call-switch-confirm.svelte.js';
 import * as m from '$lib/paraglide/messages';
 
 /** @typedef {'idle' | 'requesting' | 'ready' | 'error' | 'ended'} GroupCallPhase */

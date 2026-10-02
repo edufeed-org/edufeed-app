@@ -2539,6 +2539,7 @@
   "groups_call_error_not_enabled": "Anrufe sind für diesen Kanal ausgeschaltet.",
   "groups_call_error_generic": "Der Anruf konnte nicht gestartet werden. Bitte versuche es erneut.",
   "groups_call_error_pass": "Dieser Einladungslink gilt nicht mehr.",
+  "groups_call_switch_confirm_title": "Anruf wechseln?",
   "groups_call_switch_confirm_body": "Du bist gerade im Anruf in {title}. Wechseln?",
   "groups_call_switch_confirm_action": "Wechseln",
   "call_page_title": "Einladung: {name}",

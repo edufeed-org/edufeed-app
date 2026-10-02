@@ -20,8 +20,17 @@
   let { title, onConfirm, onCancel } = $props();
 </script>
 
-<div class="modal-open modal" role="dialog" data-testid="call-switch-confirm">
+<div
+  class="modal-open modal"
+  role="alertdialog"
+  aria-modal="true"
+  aria-labelledby="call-switch-confirm-title"
+  data-testid="call-switch-confirm"
+>
   <div class="modal-box max-w-sm">
+    <h3 id="call-switch-confirm-title" class="font-bold">
+      {m.groups_call_switch_confirm_title()}
+    </h3>
     <p class="py-2 text-sm">{m.groups_call_switch_confirm_body({ title })}</p>
     <div class="modal-action">
       <button class="btn btn-ghost" data-testid="call-switch-confirm-cancel" onclick={onCancel}>

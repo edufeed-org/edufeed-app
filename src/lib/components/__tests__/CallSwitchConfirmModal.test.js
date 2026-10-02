@@ -11,6 +11,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, fireEvent, screen } from '@testing-library/svelte';
 
 vi.mock('$lib/paraglide/messages', () => ({
+  groups_call_switch_confirm_title: () => 'Switch call?',
   groups_call_switch_confirm_body: ({ title }) => `You're in a call in ${title}. Switch?`,
   groups_call_switch_confirm_action: () => 'Switch',
   common_cancel: () => 'Cancel'
@@ -27,11 +28,22 @@ beforeEach(() => {
 });
 
 describe('CallSwitchConfirmModal', () => {
-  it('names the call the user is currently in', () => {
+  it('names the call the user is currently in, under a short heading', () => {
     render(CallSwitchConfirmModal, { props: { title: 'Standup', onConfirm, onCancel } });
+    expect(screen.getByText('Switch call?')).toBeTruthy();
     expect(screen.getByTestId('call-switch-confirm').textContent).toContain(
       "You're in a call in Standup. Switch?"
     );
+  });
+
+  it('is announced as an alert dialog labelled by its heading', () => {
+    render(CallSwitchConfirmModal, { props: { title: 'Standup', onConfirm, onCancel } });
+    const dialog = screen.getByTestId('call-switch-confirm');
+    expect(dialog.getAttribute('role')).toBe('alertdialog');
+    expect(dialog.getAttribute('aria-modal')).toBe('true');
+    const labelId = dialog.getAttribute('aria-labelledby');
+    expect(labelId).toBeTruthy();
+    expect(document.getElementById(labelId).textContent).toBe('Switch call?');
   });
 
   it('"Switch" (primary) calls onConfirm', async () => {

@@ -1,16 +1,20 @@
 // @ts-nocheck
 /**
- * call-switch-confirm.js — the shared "you're in a call elsewhere. Switch?"
- * confirmation (Task M6). It is a thin Promise wrapper around the app's
- * modal store: opens the 'callSwitchConfirm' type (rendered by
- * ModalManager via CallSwitchConfirmModal), and resolves once the modal's
- * onConfirm/onCancel callback fires.
+ * call-switch-confirm.svelte.js — the shared "you're in a call elsewhere.
+ * Switch?" confirmation (Task M6). A thin Promise wrapper around the app's
+ * modal store: opens the 'callSwitchConfirm' type (rendered by ModalManager
+ * via CallSwitchConfirmModal), and resolves once the modal's
+ * onConfirm/onCancel callback fires — or false if the modal goes away any
+ * OTHER way (a second confirm superseding it, another modal opening on top,
+ * or anything calling closeModal() directly), so the Promise is never left
+ * dangling (review fix round 1).
  *
- * @vitest-environment node
+ * @vitest-environment jsdom
  */
 import { describe, it, expect, beforeEach } from 'vitest';
+import { flushSync } from 'svelte';
 import { modalStore } from '$lib/stores/modal.svelte.js';
-import { confirmCallSwitch } from '$lib/groups/call-switch-confirm.js';
+import { confirmCallSwitch } from '$lib/groups/call-switch-confirm.svelte.js';
 
 beforeEach(() => {
   modalStore.closeModal();
@@ -35,5 +39,36 @@ describe('confirmCallSwitch', () => {
     modalStore.modalCallbacks.onCancel();
     await expect(pending).resolves.toBe(false);
     expect(modalStore.activeModal).toBe('none');
+  });
+
+  // Review fix round 1: a second confirm while one is still pending used to
+  // silently overwrite the first one's modalProps/callbacks, orphaning its
+  // Promise forever — a caller awaiting it (e.g. ChannelCallRoster's `busy`
+  // flag) never recovered.
+  it('a second confirm while one is pending cancels the first instead of orphaning it', async () => {
+    const first = confirmCallSwitch('Standup');
+    const second = confirmCallSwitch('Catchup');
+
+    await expect(first).resolves.toBe(false);
+    // The second confirm is the one left live, with its own props/callbacks.
+    expect(modalStore.activeModal).toBe('callSwitchConfirm');
+    expect(modalStore.modalProps).toEqual({ title: 'Catchup' });
+
+    modalStore.modalCallbacks.onConfirm();
+    await expect(second).resolves.toBe(true);
+  });
+
+  it('resolves false if another modal opens on top instead of this one closing normally', async () => {
+    const pending = confirmCallSwitch('Standup');
+    modalStore.openModal('login');
+    flushSync();
+    await expect(pending).resolves.toBe(false);
+  });
+
+  it('resolves false if the modal is closed by any other path (e.g. closeModal() directly)', async () => {
+    const pending = confirmCallSwitch('Standup');
+    modalStore.closeModal();
+    flushSync();
+    await expect(pending).resolves.toBe(false);
   });
 });

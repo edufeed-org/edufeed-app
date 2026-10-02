@@ -45,7 +45,7 @@ vi.mock('$lib/paraglide/messages', () => ({
 }));
 
 const confirmCallSwitch = vi.fn();
-vi.mock('$lib/groups/call-switch-confirm.js', () => ({
+vi.mock('$lib/groups/call-switch-confirm.svelte.js', () => ({
   confirmCallSwitch: (/** @type {any[]} */ ...args) => confirmCallSwitch(...args)
 }));
 
