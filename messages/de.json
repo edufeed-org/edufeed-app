@@ -3779,5 +3779,22 @@
   "groups_call_invite_revoke_confirm_title": "Link zurückziehen?",
   "groups_call_invite_revoke_confirm_text": "Alle, die mit diesem Link im Anruf sind, werden entfernt.",
   "groups_call_tile_you": "Du",
-  "groups_call_error_removed": "Du wurdest aus diesem Anruf entfernt und kannst nicht erneut beitreten."
+  "groups_call_error_removed": "Du wurdest aus diesem Anruf entfernt und kannst nicht erneut beitreten.",
+  "meeting_modal_title": "Termin planen · {channel}",
+  "meeting_modal_guests_label": "Gäste mit Link erlauben",
+  "meeting_modal_guests_help": "Personen ohne Mitgliedschaft können mit dem Link von 15 Minuten vor Beginn bis 30 Minuten nach dem Ende teilnehmen.",
+  "meeting_modal_guests_too_far": "Gast-Links sind nur für Termine in den nächsten 60 Tagen möglich. Der Termin wird ohne Gast-Link angelegt.",
+  "meeting_modal_invite_label": "Einladen",
+  "meeting_modal_invite_help": "Eingeladene bekommen eine Direktnachricht mit Zeit und Link.",
+  "meeting_modal_submit": "Termin planen",
+  "meeting_modal_submitting": "Wird geplant…",
+  "meeting_modal_failed": "Der Termin konnte nicht geplant werden.",
+  "meeting_scheduled_toast": "Termin geplant",
+  "meeting_scheduled_link_copied_toast": "Termin geplant · Gast-Link kopiert",
+  "meeting_scheduled_link_not_copied_toast": "Termin geplant · Gast-Link über die Terminkarte kopieren",
+  "meeting_scheduled_link_failed_toast": "Termin geplant, aber der Gast-Link konnte nicht erstellt werden.",
+  "meeting_scheduled_too_far_toast": "Termin geplant · ohne Gast-Link (nur für die nächsten 60 Tage möglich)",
+  "meeting_invites_failed_toast": "Einladungen nicht gesendet: {count}",
+  "meeting_invite_dm": "Einladung: {title} am {date} um {time} Uhr im Kanal {channel}. {channelUrl}",
+  "meeting_invite_dm_guest": "Gast-Link (ohne Konto, ab 15 Minuten vor Beginn): {guestUrl}"
 }

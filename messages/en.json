@@ -3779,5 +3779,22 @@
   "groups_call_invite_revoke_confirm_title": "Revoke link?",
   "groups_call_invite_revoke_confirm_text": "Everyone in the call through this link will be removed.",
   "groups_call_tile_you": "You",
-  "groups_call_error_removed": "You were removed from this call and can't rejoin."
+  "groups_call_error_removed": "You were removed from this call and can't rejoin.",
+  "meeting_modal_title": "Schedule a meeting · {channel}",
+  "meeting_modal_guests_label": "Allow guests with a link",
+  "meeting_modal_guests_help": "People without a membership can join with the link from 15 minutes before the start until 30 minutes after the end.",
+  "meeting_modal_guests_too_far": "Guest links are only possible for meetings within the next 60 days. The meeting will be created without a guest link.",
+  "meeting_modal_invite_label": "Invite",
+  "meeting_modal_invite_help": "Invitees get a direct message with the time and the link.",
+  "meeting_modal_submit": "Schedule meeting",
+  "meeting_modal_submitting": "Scheduling…",
+  "meeting_modal_failed": "The meeting could not be scheduled.",
+  "meeting_scheduled_toast": "Meeting scheduled",
+  "meeting_scheduled_link_copied_toast": "Meeting scheduled · guest link copied",
+  "meeting_scheduled_link_not_copied_toast": "Meeting scheduled · copy the guest link from the meeting card",
+  "meeting_scheduled_link_failed_toast": "Meeting scheduled, but the guest link could not be created.",
+  "meeting_scheduled_too_far_toast": "Meeting scheduled · without a guest link (only possible within the next 60 days)",
+  "meeting_invites_failed_toast": "Invitations not sent: {count}",
+  "meeting_invite_dm": "Invitation: {title} on {date} at {time} in the channel {channel}. {channelUrl}",
+  "meeting_invite_dm_guest": "Guest link (no account needed, opens 15 minutes before the start): {guestUrl}"
 }
