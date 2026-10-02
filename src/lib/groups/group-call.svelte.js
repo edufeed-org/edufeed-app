@@ -266,6 +266,8 @@ export function callErrorMessage(err) {
       return m.groups_call_error_not_enabled();
     case 'pass':
       return m.groups_call_error_pass();
+    case 'removed':
+      return m.groups_call_error_removed();
     default:
       return m.groups_call_error_generic();
   }

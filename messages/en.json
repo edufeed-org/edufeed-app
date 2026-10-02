@@ -3776,5 +3776,6 @@
   "groups_call_invite_scope_hint": "Links only work for the running call and end with it.",
   "groups_call_invite_revoke_confirm_title": "Revoke link?",
   "groups_call_invite_revoke_confirm_text": "Everyone in the call through this link will be removed.",
-  "groups_call_tile_you": "You"
+  "groups_call_tile_you": "You",
+  "groups_call_error_removed": "You were removed from this call and can't rejoin."
 }

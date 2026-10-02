@@ -40,7 +40,8 @@ vi.mock('$lib/paraglide/messages', () => ({
   groups_call_error_forbidden: () => 'forbidden-msg',
   groups_call_error_not_enabled: () => 'not-enabled-msg',
   groups_call_error_generic: () => 'generic-msg',
-  groups_call_error_pass: () => 'pass-msg'
+  groups_call_error_pass: () => 'pass-msg',
+  groups_call_error_removed: () => 'removed-msg'
 }));
 
 const { GroupCallTokenError } = await import('$lib/groups/livekit.js');
@@ -288,6 +289,7 @@ describe('callErrorMessage', () => {
     ['unauthorized', 'unauthorized-msg'],
     ['forbidden', 'forbidden-msg'],
     ['not-enabled', 'not-enabled-msg'],
+    ['removed', 'removed-msg'],
     ['server', 'generic-msg'],
     ['network', 'generic-msg']
   ])('maps reason %s', (reason, expected) => {

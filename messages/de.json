@@ -3776,5 +3776,6 @@
   "groups_call_invite_scope_hint": "Links gelten nur für den laufenden Anruf und enden mit ihm.",
   "groups_call_invite_revoke_confirm_title": "Link zurückziehen?",
   "groups_call_invite_revoke_confirm_text": "Alle, die mit diesem Link im Anruf sind, werden entfernt.",
-  "groups_call_tile_you": "Du"
+  "groups_call_tile_you": "Du",
+  "groups_call_error_removed": "Du wurdest aus diesem Anruf entfernt und kannst nicht erneut beitreten."
 }

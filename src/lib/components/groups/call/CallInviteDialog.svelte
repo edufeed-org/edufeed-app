@@ -5,7 +5,7 @@
   A link stops working when the call ends.
 -->
 <script>
-  import { onMount } from 'svelte';
+  import { onMount, onDestroy } from 'svelte';
   import { SvelteSet } from 'svelte/reactivity';
   import {
     TITLE_MAX_CHARS,
@@ -52,6 +52,25 @@
   // after this client is connected: one quiet retry covers that window
   // (Task 15 review, B1).
   const NOT_RUNNING_RETRY_MS = 1500;
+  // Closing the dialog cancels a pending retry: no link may appear after
+  // the user walked away. Plain lets: bookkeeping, never rendered.
+  let destroyed = false;
+  /** @type {ReturnType<typeof setTimeout> | undefined} */
+  let retryTimer;
+  /** @type {(() => void) | null} */
+  let cancelRetry = null;
+  onDestroy(() => {
+    destroyed = true;
+    clearTimeout(retryTimer);
+    cancelRetry?.();
+  });
+  /** @returns {Promise<boolean>} false when the dialog closed meanwhile */
+  function waitForRetry() {
+    return new Promise((resolve) => {
+      cancelRetry = () => resolve(false);
+      retryTimer = setTimeout(() => resolve(!destroyed), NOT_RUNNING_RETRY_MS);
+    });
+  }
 
   onMount(async () => {
     try {
@@ -123,7 +142,7 @@
         created = await createOnce();
       } catch (err) {
         if (!isNotRunning(err) || !call.connected) throw err;
-        await new Promise((resolve) => setTimeout(resolve, NOT_RUNNING_RETRY_MS));
+        if (!(await waitForRetry())) return;
         created = await createOnce();
       }
       const { url, event } = created;

@@ -133,7 +133,7 @@ export function probeRelayAvSupport(relayUrl) {
   return promise;
 }
 
-/** @typedef {'unauthorized' | 'forbidden' | 'not-enabled' | 'pass' | 'server' | 'network'} GroupCallTokenReason */
+/** @typedef {'unauthorized' | 'forbidden' | 'not-enabled' | 'pass' | 'removed' | 'server' | 'network'} GroupCallTokenReason */
 
 export class GroupCallTokenError extends Error {
   /**
@@ -203,7 +203,11 @@ export async function requestGroupCallToken(relayUrl, groupId, user, opts = {}) 
         ? 'not-enabled'
         : /^call pass/i.test(body.trim())
           ? 'pass'
-          : 'forbidden';
+          : // pyramid: "blocked: you were removed" — removed from this call
+            // (revoked link / kicked), not a missing membership.
+            /removed/i.test(body)
+            ? 'removed'
+            : 'forbidden';
     throw new GroupCallTokenError(reason, message, response.status);
   }
 

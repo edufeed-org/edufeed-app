@@ -487,4 +487,34 @@ describe('CallLanding', () => {
     render(CallLanding, { props: { pointer: POINTER } });
     expect(await screen.findByTestId('call-landing-invalid')).toBeTruthy();
   });
+  // Task 16 review: the relay keeps a removed guest out even while the
+  // link stays valid ("blocked: you were removed").
+  it('no "Wieder beitreten" for a guest who was removed, even while the pass is ok', async () => {
+    const { rerender } = await renderInCall();
+    checkCallPass.mockResolvedValue({ valid: true, reason: 'ok', liveCount: 2 });
+    callState.phase = 'ended';
+    callState.connected = false;
+    callState.endReason = 'removed';
+    await rerender({ pointer: { ...POINTER } });
+    await screen.findByTestId('call-landing-removed');
+    await waitFor(() => expect(checkCallPass.mock.calls.length).toBeGreaterThan(1));
+    await new Promise((r) => setTimeout(r, 0));
+    expect(screen.queryByTestId('call-landing-rejoin')).toBeNull();
+  });
+  it('"Wieder beitreten" joins only once on a double click', async () => {
+    const { rerender } = await renderInCall();
+    checkCallPass.mockResolvedValue({ valid: true, reason: 'ok', liveCount: 2 });
+    callState.isActiveFor = () => false;
+    callState.phase = 'idle';
+    callState.connected = false;
+    await rerender({ pointer: { ...POINTER } });
+    let finish = () => {};
+    joinGroupCall.mockClear();
+    joinGroupCall.mockImplementationOnce(() => new Promise((r) => (finish = r)));
+    const button = await screen.findByTestId('call-landing-rejoin');
+    await fireEvent.click(button);
+    await fireEvent.click(button);
+    expect(joinGroupCall).toHaveBeenCalledTimes(1);
+    finish();
+  });
 });

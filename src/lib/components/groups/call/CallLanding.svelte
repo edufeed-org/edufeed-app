@@ -68,7 +68,11 @@
   // the stage, open by default — the same per-device pref as the member
   // page (call.chatBeside, QA round 2 C-new-3).
   let narrowChatOpen = $state(false);
-  let wideScreen = $state(false);
+  // Read right away in the browser: starting narrow would flash the
+  // phone layout (chat closed) at md+ before the effect corrects it.
+  let wideScreen = $state(
+    typeof window !== 'undefined' && !!window.matchMedia?.('(min-width: 768px)')?.matches
+  );
   $effect(() => {
     const query = window.matchMedia?.('(min-width: 768px)');
     if (!query) return;
@@ -176,11 +180,22 @@
       alive = false;
     };
   });
-  const canRejoin = $derived(view === 'ended' && check?.reason === 'ok' && !!me?.signer);
+  // Never after a removal: the relay keeps a removed guest out even while
+  // the link itself stays valid ("blocked: you were removed").
+  const canRejoin = $derived(
+    view === 'ended' && !removedHere && check?.reason === 'ok' && !!me?.signer
+  );
 
+  let rejoining = $state(false);
   async function rejoin() {
     const user = getActiveUser();
-    if (user?.signer) await joinAs(user);
+    if (!user?.signer || rejoining) return;
+    rejoining = true;
+    try {
+      await joinAs(user);
+    } finally {
+      if (!destroyed) rejoining = false;
+    }
   }
 
   // Every call view of this page (stage, chat in its place, connecting,
@@ -509,7 +524,12 @@
                 </p>
               {/if}
               {#if canRejoin}
-                <button class="btn btn-primary" onclick={rejoin} data-testid="call-landing-rejoin">
+                <button
+                  class="btn btn-primary"
+                  onclick={rejoin}
+                  disabled={rejoining}
+                  data-testid="call-landing-rejoin"
+                >
                   {m.call_landing_rejoin()}
                 </button>
               {/if}

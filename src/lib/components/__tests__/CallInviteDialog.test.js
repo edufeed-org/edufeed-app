@@ -350,4 +350,15 @@ describe('CallInviteDialog', () => {
     expect(err.textContent.trim()).toBe(m.groups_call_invite_not_running());
     expect(createCallLink).toHaveBeenCalledTimes(2);
   });
+  // Task 16 review: closing the dialog must not create a link 1.5 s later.
+  it('drops the pending retry when the dialog closes', async () => {
+    callState.connected = true;
+    createCallLink.mockRejectedValueOnce(new Error('blocked: no call is running'));
+    const { unmount } = render(CallInviteDialog, { props });
+    await fireEvent.click(screen.getByTestId('call-invite-create'));
+    await waitFor(() => expect(createCallLink).toHaveBeenCalledTimes(1));
+    unmount();
+    await new Promise((r) => setTimeout(r, 1800));
+    expect(createCallLink).toHaveBeenCalledTimes(1);
+  });
 });
