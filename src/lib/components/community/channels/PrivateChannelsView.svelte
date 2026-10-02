@@ -955,30 +955,28 @@
           {@const showCreate = isRootAdmin || isCommunikeyOwner}
           <!-- No channel picked: the channel overview (Armada parity:
             ServerPage's welcome pane) — the channel list on every width
-            (C-new-7), so the rail's actions sit above it: members for
+            (C-new-7), so the rail's actions ride in its header: members for
             members, "+ Neuer Kanal" for root admins and the owner. -->
-          {#if showMembers || showCreate}
-            <div class="flex flex-wrap gap-2 px-6 pt-4">
-              {#if showMembers}
-                <button
-                  class="btn btn-outline btn-sm"
-                  data-testid="area-members-open"
-                  onclick={() => (overlay = 'area-members')}
-                >
-                  {m.area_members_title()}
-                </button>
-              {/if}
-              {#if showCreate}
-                <button
-                  class="btn border-dashed btn-outline btn-sm"
-                  data-testid="concord-new-channel"
-                  onclick={() => (overlay = 'create')}
-                >
-                  + {m.concord_new_channel()}
-                </button>
-              {/if}
-            </div>
-          {/if}
+          {#snippet overviewActions()}
+            {#if showMembers}
+              <button
+                class="btn btn-outline btn-sm"
+                data-testid="area-members-open"
+                onclick={() => (overlay = 'area-members')}
+              >
+                {m.area_members_title()}
+              </button>
+            {/if}
+            {#if showCreate}
+              <button
+                class="btn border-dashed btn-outline btn-sm"
+                data-testid="concord-new-channel"
+                onclick={() => (overlay = 'create')}
+              >
+                + {m.concord_new_channel()}
+              </button>
+            {/if}
+          {/snippet}
           <ChannelOverview
             rows={overviewRows}
             hostBadges={channelHostBadges}
@@ -989,6 +987,7 @@
               : null}
             canDelete={canDeleteGroupRow}
             onDelete={(pointer) => (deletingGroup = pointer)}
+            actions={showMembers || showCreate ? overviewActions : null}
           />
         {/if}
       {:else if !concord.community && isCommunikeyOwner}

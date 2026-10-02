@@ -35,7 +35,8 @@
    *   isFavourite?: ((row: any) => boolean) | null,
    *   onToggleFavourite?: ((row: any) => void) | null,
    *   canDelete?: ((row: any) => boolean) | null,
-   *   onDelete?: ((pointer: {id: string, relay: string, name?: string}) => void) | null
+   *   onDelete?: ((pointer: {id: string, relay: string, name?: string}) => void) | null,
+   *   actions?: import('svelte').Snippet | null
    * }}
    */
   // The relay directory renders the same grid under a different heading — a
@@ -64,7 +65,8 @@
     isFavourite = null,
     onToggleFavourite = null,
     canDelete = null,
-    onDelete = null
+    onDelete = null,
+    actions = null
   } = $props();
 
   /** @param {any} row */
@@ -106,6 +108,13 @@
       </h2>
       <p class="mt-1 text-sm text-base-content/60">{lead}</p>
       <GroupBadges host={hostBadges} class="mt-2" />
+      <!-- The caller's list-level actions (members, "+ Neuer Kanal"), in the
+           same centred column as the cards. -->
+      {#if actions}
+        <div class="mt-3 flex flex-wrap gap-2" data-testid="channel-overview-actions">
+          {@render actions()}
+        </div>
+      {/if}
     </header>
 
     {#if channels.length === 0}
