@@ -34,6 +34,7 @@
   import { useActiveUser } from '$lib/stores/accounts.svelte';
   import { isCommunityOwner } from '$lib/helpers/community-signer.js';
   import { resolveZoneMembership } from '$lib/components/community/layout/community-nav.js';
+  import * as m from '$lib/paraglide/messages';
 
   /** @type {{ data: any, children: import('svelte').Snippet }} */
   let { data, children } = $props();
@@ -211,14 +212,19 @@
   });
   // Nav Kanäle-zone rows, DISCOVERED from the relay subtree (the SAME source
   // PrivateChannelsView uses; the two builders stay separate — known
-  // duplication). No General row here, matching the prior nav behavior.
+  // duplication). The root membership group is pinned first as "General",
+  // exactly as in the pane's cards — the sidebar used to leave it out, so the
+  // one channel every member is in appeared in one list but not the other
+  // (QA 2026-10-02 C-new-7).
   const getCommunityChannelsForNav = useCommunityChannels(() =>
     parseMembershipPointer(communikeyEvent)
   );
   const channelRows = $derived(
     buildChannelRows({
       concordChannels: getConcordForNav().channels,
-      subtreeChannels: getCommunityChannelsForNav().channels
+      subtreeChannels: getCommunityChannelsForNav().channels,
+      rootChannel: getCommunityChannelsForNav().rootChannel,
+      rootLabel: m.groups_general_channel()
     })
   );
 

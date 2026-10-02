@@ -4,7 +4,8 @@
  *
  * Drives the REAL useCommunityChannels end-to-end through a mocked pool: the
  * fake relay hands back kind:39000 events for the /c/<rootId> endpoint, they
- * flow through the eventStore, and buildChannelRows renders the rail. What can
+ * flow through the eventStore, and buildChannelRows renders the channel
+ * overview cards — the community's one channel list at every width. What can
  * only be proven here is the WIRING: that channels are DISCOVERED from the
  * subtree (parent==rootId), that the glyph a reader sees is the one the access
  * rules produced, and that the shared "+ New channel" opener shows for a
@@ -158,15 +159,18 @@ beforeEach(() => {
   holders.pageSubscribers.clear();
   gotoMock.mockClear();
   eventStore.removeByFilters?.({ kinds: [39000] });
+  // The pane shows EITHER the cards or an open channel; a selection left by
+  // an earlier test would hide the cards.
+  clearGroupChannelSelection(OWNER);
 });
 
-describe('PrivateChannelsView — NIP-29 channels in the community rail', () => {
-  it('renders the rail from the subtree for a community with NO concord area', async () => {
+describe('PrivateChannelsView — NIP-29 channels in the community pane', () => {
+  it('renders the channel cards from the subtree for a community with NO concord area', async () => {
     holders.events = { [ENDPOINT]: [root(), chan('allgemein', [['private']])] };
 
     render(PrivateChannelsView, { props: { communikeyEvent: moderated() } });
 
-    const rows = await screen.findAllByTestId('group-channel-row');
+    const rows = await screen.findAllByTestId('channel-card');
     expect(rows.some((r) => r.textContent?.includes('allgemein'))).toBe(true);
   });
 
@@ -175,7 +179,7 @@ describe('PrivateChannelsView — NIP-29 channels in the community rail', () => 
 
     render(PrivateChannelsView, { props: { communikeyEvent: moderated() } });
 
-    const rows = await screen.findAllByTestId('group-channel-row');
+    const rows = await screen.findAllByTestId('channel-card');
     const row = /** @type {HTMLElement} */ (rows.find((r) => r.textContent?.includes('allgemein')));
     expect(row.getAttribute('href')).toBeNull();
     await fireEvent.click(row);
@@ -184,22 +188,20 @@ describe('PrivateChannelsView — NIP-29 channels in the community rail', () => 
     expect(chat.textContent).toContain('allgemein');
   });
 
-  // Below lg this rail IS the channel list: a running call shows here the
-  // same way it does in the desktop sidebar (laoc, 2026-10-02) — and only AV
-  // channels open a presence subscription.
-  it('draws the call roster under AV channels only, and its Join opens that channel', async () => {
-    holders.events = {
-      [ENDPOINT]: [root(), chan('sprechstunde', [['livekit']]), chan('allgemein', [['private']])]
-    };
+  // QA 2026-10-02 C-new-7: phones got the sidebar-style rail, wider screens
+  // the cards — two designs for one list. The cards are THE list at every
+  // width now: no rail is mounted, the pane is never hidden, General first.
+  it('draws no rail: the overview cards are the list on every width, General first', async () => {
+    holders.events = { [ENDPOINT]: [root(), chan('zweiter', [['private']])] };
 
-    render(PrivateChannelsView, { props: { communikeyEvent: moderated() } });
+    const view = render(PrivateChannelsView, { props: { communikeyEvent: moderated() } });
 
-    await screen.findAllByTestId('group-channel-row');
-    const rosters = await screen.findAllByTestId('channel-call-roster-stub');
-    expect(rosters.map((r) => r.textContent)).toEqual(['sprechstunde']);
-    await fireEvent.click(rosters[0]);
-    const chat = await screen.findByTestId('group-chat-stub');
-    expect(chat.textContent).toContain('sprechstunde');
+    const cards = await screen.findAllByTestId('channel-card');
+    expect(cards[0].textContent).toMatch(/Allgemein|General/);
+    expect(view.container.querySelector('aside')).toBeNull();
+    expect(screen.queryAllByTestId('channel-call-roster-stub')).toHaveLength(0);
+    const pane = /** @type {HTMLElement} */ (view.container.querySelector('section'));
+    expect(pane.className.split(/\s+/)).not.toContain('hidden');
   });
 
   it('shows the globe only for a channel the relay leaves open', async () => {
@@ -209,7 +211,7 @@ describe('PrivateChannelsView — NIP-29 channels in the community rail', () => 
 
     render(PrivateChannelsView, { props: { communikeyEvent: moderated() } });
 
-    const rows = await screen.findAllByTestId('group-channel-row');
+    const rows = await screen.findAllByTestId('channel-card');
     const open = rows.find((r) => r.textContent?.includes('ankuendigungen'));
     const shut = rows.find((r) => r.textContent?.includes('leitung'));
     expect(open?.querySelector('[data-testid="world-readable-badge"]')).not.toBeNull();
@@ -224,7 +226,7 @@ describe('PrivateChannelsView — NIP-29 channels in the community rail', () => 
 
     render(PrivateChannelsView, { props: { communikeyEvent: moderated() } });
 
-    await screen.findAllByTestId('group-channel-row');
+    await screen.findAllByTestId('channel-card');
     expect(screen.queryByTestId('group-attach-open')).toBeNull();
   });
 
@@ -245,7 +247,7 @@ describe('PrivateChannelsView — NIP-29 channels in the community rail', () => 
       }
     });
 
-    expect(screen.queryAllByTestId('group-channel-row')).toHaveLength(0);
+    expect(screen.queryAllByTestId('channel-card')).toHaveLength(0);
   });
 
   it('clicking a group rail row mirrors the channel into ?channel=', async () => {
@@ -253,7 +255,7 @@ describe('PrivateChannelsView — NIP-29 channels in the community rail', () => 
 
     render(PrivateChannelsView, { props: { communikeyEvent: moderated() } });
 
-    const rows = await screen.findAllByTestId('group-channel-row');
+    const rows = await screen.findAllByTestId('channel-card');
     const row = /** @type {HTMLElement} */ (rows.find((r) => r.textContent?.includes('allgemein')));
     await fireEvent.click(row);
 
@@ -307,13 +309,13 @@ describe('PrivateChannelsView — NIP-29 channels in the community rail', () => 
   // mobile-only back button of its own.
   describe('way back to the channel list', () => {
     /** @param {{ container: HTMLElement }} view */
-    const rail = (view) => /** @type {HTMLElement} */ (view.container.querySelector('aside'));
+    const pane = (view) => /** @type {HTMLElement} */ (view.container.querySelector('section'));
 
     async function openAllgemein() {
       clearGroupChannelSelection(OWNER);
       holders.events = { [ENDPOINT]: [root(), chan('allgemein', [['private']])] };
       const view = render(PrivateChannelsView, { props: { communikeyEvent: moderated() } });
-      const rows = await screen.findAllByTestId('group-channel-row');
+      const rows = await screen.findAllByTestId('channel-card');
       await fireEvent.click(
         /** @type {HTMLElement} */ (rows.find((r) => r.textContent?.includes('allgemein')))
       );
@@ -327,15 +329,15 @@ describe('PrivateChannelsView — NIP-29 channels in the community rail', () => 
       expect(screen.getByTestId('group-chat-stub-back')).toBeTruthy();
     });
 
-    it('the breadcrumb clears the selection: overview + rail again, ?channel= dropped', async () => {
+    it('the breadcrumb clears the selection: the cards again, ?channel= dropped', async () => {
       const view = await openAllgemein();
-      expect(rail(view).className).toContain('hidden');
       gotoMock.mockClear();
 
       await fireEvent.click(screen.getByTestId('group-chat-stub-back'));
 
       await vi.waitFor(() => expect(screen.queryByTestId('group-chat-stub')).toBeNull());
-      expect(rail(view).className.split(/\s+/)).not.toContain('hidden');
+      expect((await screen.findAllByTestId('channel-card')).length).toBeGreaterThan(0);
+      expect(pane(view).className.split(/\s+/)).not.toContain('hidden');
       expect(gotoMock).toHaveBeenCalledWith(
         expect.not.stringContaining('channel='),
         expect.anything()
@@ -373,7 +375,7 @@ describe('PrivateChannelsView — NIP-29 channels in the community rail', () => 
       clearGroupChannelSelection(OWNER);
       holders.events = { [ENDPOINT]: [root(), chan('allgemein', [['private']])] };
       render(PrivateChannelsView, { props: { communikeyEvent: moderated() } });
-      const rows = await screen.findAllByTestId('group-channel-row');
+      const rows = await screen.findAllByTestId('channel-card');
       // Root is pinned first ("General").
       await fireEvent.click(rows[0]);
       let chat = await screen.findByTestId('group-chat-stub');
@@ -381,7 +383,7 @@ describe('PrivateChannelsView — NIP-29 channels in the community rail', () => 
       expect(chat.dataset.communityRoot).toBe('true');
 
       await fireEvent.click(screen.getByTestId('group-chat-stub-back'));
-      const again = await screen.findAllByTestId('group-channel-row');
+      const again = await screen.findAllByTestId('channel-card');
       await fireEvent.click(
         /** @type {HTMLElement} */ (again.find((r) => r.textContent?.includes('allgemein')))
       );
@@ -399,9 +401,7 @@ describe('PrivateChannelsView — NIP-29 channels in the community rail', () => 
       holders.events = { [ENDPOINT]: [root(), chan('allgemein', [['private']])] };
       const view = render(PrivateChannelsView, { props: { communikeyEvent: moderated() } });
       await screen.findByTestId('group-chat-stub', {}, { timeout: 4000 });
-      expect(rail(view).className.split(/\s+/)).toContain('hidden');
-      const pane = /** @type {HTMLElement} */ (view.container.querySelector('section'));
-      expect(pane.className.split(/\s+/)).not.toContain('hidden');
+      expect(pane(view).className.split(/\s+/)).not.toContain('hidden');
     });
 
     it('a channel already selected when the view mounts (reload) opens the pane', async () => {
@@ -412,7 +412,7 @@ describe('PrivateChannelsView — NIP-29 channels in the community rail', () => 
       );
       const view = render(PrivateChannelsView, { props: { communikeyEvent: moderated() } });
       await screen.findByTestId('group-chat-stub', {}, { timeout: 4000 });
-      expect(rail(view).className.split(/\s+/)).toContain('hidden');
+      expect(pane(view).className.split(/\s+/)).not.toContain('hidden');
     });
 
     it('a re-tap of the Kanäle tab (requestChannelList) goes back to the list', async () => {
@@ -422,7 +422,8 @@ describe('PrivateChannelsView — NIP-29 channels in the community rail', () => 
       flushSync();
 
       await vi.waitFor(() => expect(screen.queryByTestId('group-chat-stub')).toBeNull());
-      expect(rail(view).className.split(/\s+/)).not.toContain('hidden');
+      expect((await screen.findAllByTestId('channel-card')).length).toBeGreaterThan(0);
+      expect(pane(view).className.split(/\s+/)).not.toContain('hidden');
     });
   });
 });

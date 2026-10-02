@@ -163,11 +163,11 @@ describe('PrivateChannelsView — a community extended by NIP-29 groups', () => 
     expect(cascadeArg.pointer.id).toBe('allgemein');
   });
 
-  it('pins the root membership group as a "General" channel row with no delete', async () => {
+  it('pins the root membership group as a "General" channel card with no delete', async () => {
     holders.rootChannel = chan('root0', [['name', 'laoc42']]);
     holders.subtreeChannels = [chan('willkommen', [['name', 'Willkommen']])];
     render(PrivateChannelsView, { props: { communikeyEvent: moderated() } });
-    const rows = await screen.findAllByTestId('group-channel-row');
+    const rows = await screen.findAllByTestId('channel-card');
     expect(rows.length).toBe(2);
     expect(rows[0].textContent).toContain('General'); // root pinned first, labeled General
     expect(rows[1].textContent).toContain('Willkommen'); // the real channel follows
@@ -193,7 +193,7 @@ describe('PrivateChannelsView — a community extended by NIP-29 groups', () => 
     holders.rootAdmins = [{ pubkey: OWNER, roles: ['publisher'] }];
     holders.subtreeChannels = [chan('allgemein', [['name', 'Allgemein']])];
     render(PrivateChannelsView, { props: { communikeyEvent: moderated(STRANGER) } });
-    await screen.findByTestId('group-channel-row');
+    await screen.findAllByTestId('channel-card');
     expect(screen.queryByTestId('group-channel-delete')).toBeNull();
     expect(screen.queryByTestId('concord-new-channel')).toBeNull();
   });
@@ -202,7 +202,7 @@ describe('PrivateChannelsView — a community extended by NIP-29 groups', () => 
     holders.rootAdmins = []; // active account is neither owner nor a root admin
     holders.subtreeChannels = [chan('allgemein', [['name', 'Allgemein']])];
     render(PrivateChannelsView, { props: { communikeyEvent: moderated(STRANGER) } });
-    await screen.findByTestId('group-channel-row');
+    await screen.findAllByTestId('channel-card');
     expect(screen.queryByTestId('group-channel-delete')).toBeNull();
     expect(screen.queryByTestId('concord-new-channel')).toBeNull();
   });

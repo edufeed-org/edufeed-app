@@ -194,4 +194,49 @@ describe('ChannelOverview', () => {
     expect(badges[0].className).toContain('badge-success');
     presence.byId = {};
   });
+
+  // C-new-7 (QA 2026-10-02): the cards are now THE channel list at every
+  // width — so the rail's per-channel star and admin delete live on the card,
+  // as siblings of the card button (never nested inside it).
+  describe('per-card actions', () => {
+    const rows = () =>
+      buildChannelRows({
+        rootChannel: sub(ptr('root0'), [['name', 'laoc42']]),
+        rootLabel: 'Allgemein',
+        subtreeChannels: [sub(ptr('willkommen'), [['name', 'willkommen']])]
+      });
+
+    it('draws no actions unless the caller asks for them', () => {
+      render(ChannelOverview, { props: { rows: rows(), onSelect: () => {} } });
+      expect(screen.queryByTestId('channel-favourite-toggle')).toBeNull();
+      expect(screen.queryByTestId('group-channel-delete')).toBeNull();
+    });
+
+    it('stars a card and deletes only where canDelete allows, outside the card button', async () => {
+      const toggled = /** @type {string[]} */ ([]);
+      const deleted = /** @type {string[]} */ ([]);
+      render(ChannelOverview, {
+        props: {
+          rows: rows(),
+          onSelect: () => {},
+          isFavourite: (/** @type {any} */ row) => row.pointer.id === 'willkommen',
+          onToggleFavourite: (/** @type {any} */ row) => toggled.push(row.pointer.id),
+          canDelete: (/** @type {any} */ row) => row.pointer.id !== 'root0',
+          onDelete: (/** @type {any} */ pointer) => deleted.push(pointer.id)
+        }
+      });
+      const stars = screen.getAllByTestId('channel-favourite-toggle');
+      expect(stars).toHaveLength(2);
+      expect(stars.map((s) => s.getAttribute('aria-pressed'))).toEqual(['false', 'true']);
+      for (const star of stars) expect(star.closest('[data-testid="channel-card"]')).toBeNull();
+      await fireEvent.click(stars[0]);
+      expect(toggled).toEqual(['root0']);
+
+      const deletes = screen.getAllByTestId('group-channel-delete');
+      expect(deletes).toHaveLength(1);
+      expect(deletes[0].closest('[data-testid="channel-card"]')).toBeNull();
+      await fireEvent.click(deletes[0]);
+      expect(deleted).toEqual(['willkommen']);
+    });
+  });
 });
