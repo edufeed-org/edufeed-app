@@ -118,7 +118,7 @@ export function meetingInviteText({ title, start, channelName, channelUrl, guest
  * guest link goes only to invitees not on the channel roster; with no roster
  * known, to everyone. Per-invitee failures are collected, never thrown.
  *
- * @param {{participants: Array<{pubkey?: string, name?: string}>, self: string,
+ * @param {{participants?: Array<{pubkey?: string, name?: string}>, self: string,
  *   memberPubkeys?: string[] | null, guestUrl?: string | null, title: string,
  *   start: number, channelName: string, channelUrl: string}} p
  * @returns {Promise<{sent: number, failed: string[]}>}
@@ -134,13 +134,13 @@ export async function sendMeetingInvites({
   channelUrl
 }) {
   const roster = Array.isArray(memberPubkeys) ? new Set(memberPubkeys) : null;
-  const recipients = [
-    ...new Set(
-      (participants || [])
-        .map((p) => p?.pubkey)
-        .filter((pk) => typeof pk === 'string' && HEX_PUBKEY_RE.test(pk) && pk !== self)
-    )
-  ];
+  /** @type {string[]} */
+  const recipients = [];
+  for (const p of participants || []) {
+    const pk = p?.pubkey;
+    if (typeof pk === 'string' && HEX_PUBKEY_RE.test(pk) && pk !== self && !recipients.includes(pk))
+      recipients.push(pk);
+  }
   const results = await Promise.allSettled(
     recipients.map((pubkey) =>
       sendWrappedDm(

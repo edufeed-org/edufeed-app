@@ -17,8 +17,8 @@
 
   /** @typedef {import('$lib/types/calendar.js').CalendarEventParticipant} Participant */
 
-  /** @type {{participants?: Participant[], disabled?: boolean}} */
-  let { participants = $bindable([]), disabled = false } = $props();
+  /** @type {{participants?: Participant[], disabled?: boolean, label?: string}} */
+  let { participants = $bindable([]), disabled = false, label = '' } = $props();
 
   const ROLE_PRESETS = ['participant', 'speaker', 'organizer', 'moderator'];
   /** @type {Record<string, () => string>} */
@@ -100,7 +100,7 @@
 
 <div class="form-control">
   <label class="label" for="participants-editor-search">
-    <span class="label-text">{m.event_modal_participants_label()}</span>
+    <span class="label-text">{label || m.event_modal_participants_label()}</span>
   </label>
 
   {#if participants.length > 0}

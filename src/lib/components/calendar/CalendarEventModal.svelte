@@ -4,6 +4,7 @@
 -->
 
 <script>
+  import { tick } from 'svelte';
   import { SvelteDate } from 'svelte/reactivity';
   import * as m from '$lib/paraglide/messages';
   import { goto, invalidateAll } from '$app/navigation';
@@ -29,6 +30,10 @@
   import EditableList from '../shared/EditableList.svelte';
   import ParticipantsEditor from '$lib/components/calendar/ParticipantsEditor.svelte';
   import { CloseIcon } from '../icons';
+  import { pool } from '$lib/stores/nostr-infrastructure.svelte';
+  import { canHaveGuestLink } from '$lib/groups/meetings.js';
+  import { scheduleGroupMeeting, sendMeetingInvites } from '$lib/groups/schedule-meeting.js';
+  import { showToast } from '$lib/helpers/toast';
 
   /**
    * @typedef {import('../../types/calendar.js').EventFormData} EventFormData
@@ -54,6 +59,19 @@
   let existingRawEvent = $derived(
     /** @type {any} */ (/** @type {any} */ (modalStore.modalProps)?.existingRawEvent) || null
   );
+  // "Termin planen" in a NIP-29 channel (scheduled meetings): the opener
+  // passes { pointer: {id, relay}, channelName, channelUrl, memberPubkeys? }.
+  // The meeting goes to the group relay only (scheduleGroupMeeting), never
+  // through calendarActions' outbox path. Create only — editing a meeting is
+  // delete + recreate.
+  let groupMeeting = $derived(
+    /** @type {import('$lib/groups/schedule-meeting.js').GroupMeeting | null} */ (
+      /** @type {any} */ (modalStore.modalProps)?.groupMeeting
+    ) || null
+  );
+  let isGroupMeeting = $derived(!!groupMeeting && mode !== 'edit');
+  // Guest link for people off the channel roster — opt-in per meeting.
+  let allowGuests = $state(false);
 
   // Get calendar actions - updates when communityPubkey changes
   // Using $state + $effect instead of $derived because useCalendarActions
@@ -90,6 +108,23 @@
   let validationErrors = $state(/** @type {string[]} */ ([]));
   let isSubmitting = $state(false);
   let submitError = $state('');
+
+  // The relay refuses passes living past 60 days from now: say so before the
+  // organiser submits (the meeting is still created, just without a link).
+  let plannedEnd = $derived.by(() => {
+    // Same fallback as the submit: no end date means it ends the day it starts.
+    const date = formData.endDate || formData.startDate;
+    const time = formData.endTime || formData.startTime;
+    if (!date || !time) return null;
+    const ms = new Date(`${date}T${time}`).getTime();
+    return Number.isFinite(ms) ? Math.floor(ms / 1000) : null;
+  });
+  let guestsTooFar = $derived(
+    isGroupMeeting &&
+      allowGuests &&
+      plannedEnd !== null &&
+      !canHaveGuestLink({ end: plannedEnd }, Math.floor(Date.now() / 1000))
+  );
 
   // Reactive user state
   let activeUser = $state(manager.active);
@@ -217,6 +252,7 @@
     submitError = '';
     selectedCalendarIds = [];
     selectedCommunityIds = [];
+    allowGuests = false;
   }
 
   /**
@@ -226,6 +262,8 @@
     const today = selectedDate || new SvelteDate();
     const tomorrow = new SvelteDate(today);
     tomorrow.setDate(tomorrow.getDate() + 1);
+    // A channel meeting is always timed (kind 31923) and ends the day it starts.
+    const meeting = isGroupMeeting;
 
     formData = {
       title: '',
@@ -235,13 +273,13 @@
       imageLicenseEvent: null,
       startDate: today.toISOString().split('T')[0],
       startTime: '09:00',
-      endDate: tomorrow.toISOString().split('T')[0],
+      endDate: (meeting ? today : tomorrow).toISOString().split('T')[0],
       endTime: '10:00',
       startTimezone: getCurrentTimezone(),
       endTimezone: getCurrentTimezone(),
       location: '',
       isAllDay: false,
-      eventType: 'date',
+      eventType: meeting ? 'time' : 'date',
       references: [],
       participants: []
     };
@@ -249,6 +287,7 @@
     validationErrors = [];
     isSubmitting = false;
     submitError = '';
+    allowGuests = false;
   }
 
   /**
@@ -333,6 +372,11 @@
       return;
     }
 
+    if (isGroupMeeting && groupMeeting) {
+      await submitGroupMeeting(groupMeeting);
+      return;
+    }
+
     // Ensure calendarActions is available
     if (!calendarActions) {
       submitError = 'Calendar actions not ready. Please try again.';
@@ -401,6 +445,89 @@
   }
 
   /**
+   * Schedule the meeting on the channel's group relay, then copy the guest
+   * link (if any) and send the invitations. Invitations never block the
+   * meeting: they run after the dialog closed, failures end in one toast.
+   * @param {import('$lib/groups/schedule-meeting.js').GroupMeeting} meeting
+   */
+  async function submitGroupMeeting(meeting) {
+    const user = activeUser;
+    if (!user) {
+      submitError = m.meeting_modal_failed();
+      return;
+    }
+    isSubmitting = true;
+    submitError = '';
+    const form = $state.snapshot(formData);
+    if (!form.endDate) form.endDate = form.startDate;
+
+    let result;
+    try {
+      result = await scheduleGroupMeeting({
+        relayConn: pool.relay(meeting.pointer.relay),
+        formData: form,
+        groupMeeting: meeting,
+        user,
+        origin: window.location.origin,
+        allowGuests
+      });
+    } catch (error) {
+      console.error('Error scheduling meeting:', error);
+      submitError =
+        error instanceof Error && error.message ? error.message : m.meeting_modal_failed();
+      isSubmitting = false;
+      return;
+    }
+
+    // Copy first: the click's user activation may not survive much longer.
+    let copied = false;
+    if (result.guestUrl) {
+      try {
+        await navigator.clipboard.writeText(result.guestUrl);
+        copied = true;
+      } catch {
+        copied = false;
+      }
+    }
+
+    handleClose();
+    // A toast lands inside the topmost open <dialog>: wait for ours to go.
+    await tick();
+    if (result.guestStatus === 'created') {
+      showToast(
+        copied
+          ? m.meeting_scheduled_link_copied_toast()
+          : m.meeting_scheduled_link_not_copied_toast(),
+        'success'
+      );
+    } else if (result.guestStatus === 'too_far') {
+      showToast(m.meeting_scheduled_too_far_toast(), 'info');
+    } else if (result.guestStatus === 'failed') {
+      showToast(m.meeting_scheduled_link_failed_toast(), 'warning');
+    } else {
+      showToast(m.meeting_scheduled_toast(), 'success');
+    }
+
+    try {
+      const { failed } = await sendMeetingInvites({
+        participants: form.participants,
+        self: user.pubkey,
+        memberPubkeys: meeting.memberPubkeys,
+        guestUrl: result.guestUrl,
+        title: form.title.trim(),
+        start: result.start,
+        channelName: meeting.channelName,
+        channelUrl: meeting.channelUrl
+      });
+      if (failed.length > 0) {
+        showToast(m.meeting_invites_failed_toast({ count: failed.length }), 'warning');
+      }
+    } catch (error) {
+      console.warn('meeting: invitations failed', error);
+    }
+  }
+
+  /**
    * Handle modal close
    */
   function handleClose() {
@@ -416,7 +543,11 @@
       <!-- Modal Header -->
       <div class="mb-4 flex items-center justify-between">
         <h2 id="calendar-event-modal-title" class="text-xl font-semibold text-base-content">
-          {mode === 'edit' ? m.event_modal_title_edit() : m.event_modal_title_create()}
+          {#if isGroupMeeting && groupMeeting}
+            {m.meeting_modal_title({ channel: groupMeeting.channelName })}
+          {:else}
+            {mode === 'edit' ? m.event_modal_title_edit() : m.event_modal_title_create()}
+          {/if}
         </h2>
         <button
           class="btn btn-circle btn-ghost btn-sm"
@@ -430,12 +561,13 @@
 
       <!-- Modal Body -->
       <form onsubmit={handleSubmit}>
-        <!-- Event Type Selector -->
-        <div class="mb-4">
-          <span class="mb-1 block text-sm font-medium text-base-content"
-            >{m.event_modal_type_label()}</span
-          >
-          <!--
+        <!-- Event Type Selector (a channel meeting is always timed) -->
+        {#if !isGroupMeeting}
+          <div class="mb-4">
+            <span class="mb-1 block text-sm font-medium text-base-content"
+              >{m.event_modal_type_label()}</span
+            >
+            <!--
             The type is LOCKED when editing. All-day is NIP-52 kind 31922 and
             timed is 31923, and a replaceable event is addressed by
             (kind, pubkey, d-tag) — so switching would publish to a different
@@ -444,40 +576,41 @@
             `updateEvent` refuses the change too; this only stops the user
             reaching a control that cannot work. (#65)
           -->
-          <div
-            class="flex rounded-lg bg-base-200 p-1"
-            role="group"
-            aria-label={m.event_modal_type_label()}
-          >
-            <button
-              type="button"
-              disabled={mode === 'edit'}
-              title={mode === 'edit' ? m.event_modal_type_locked_hint() : undefined}
-              class="focus:ring-opacity-50 flex-1 rounded-md px-3 py-2 text-sm font-medium transition-colors duration-200 focus:ring-2 focus:ring-primary focus:outline-none disabled:cursor-not-allowed disabled:opacity-60 {formData.eventType ===
-              'date'
-                ? 'bg-base-100 text-primary shadow-sm'
-                : 'text-base-content/60 hover:bg-base-300 hover:text-base-content'}"
-              onclick={() => handleEventTypeChange('date')}
+            <div
+              class="flex rounded-lg bg-base-200 p-1"
+              role="group"
+              aria-label={m.event_modal_type_label()}
             >
-              {m.event_modal_type_all_day()}
-            </button>
-            <button
-              type="button"
-              disabled={mode === 'edit'}
-              title={mode === 'edit' ? m.event_modal_type_locked_hint() : undefined}
-              class="focus:ring-opacity-50 flex-1 rounded-md px-3 py-2 text-sm font-medium transition-colors duration-200 focus:ring-2 focus:ring-primary focus:outline-none disabled:cursor-not-allowed disabled:opacity-60 {formData.eventType ===
-              'time'
-                ? 'bg-base-100 text-primary shadow-sm'
-                : 'text-base-content/60 hover:bg-base-300 hover:text-base-content'}"
-              onclick={() => handleEventTypeChange('time')}
-            >
-              {m.event_modal_type_timed()}
-            </button>
+              <button
+                type="button"
+                disabled={mode === 'edit'}
+                title={mode === 'edit' ? m.event_modal_type_locked_hint() : undefined}
+                class="focus:ring-opacity-50 flex-1 rounded-md px-3 py-2 text-sm font-medium transition-colors duration-200 focus:ring-2 focus:ring-primary focus:outline-none disabled:cursor-not-allowed disabled:opacity-60 {formData.eventType ===
+                'date'
+                  ? 'bg-base-100 text-primary shadow-sm'
+                  : 'text-base-content/60 hover:bg-base-300 hover:text-base-content'}"
+                onclick={() => handleEventTypeChange('date')}
+              >
+                {m.event_modal_type_all_day()}
+              </button>
+              <button
+                type="button"
+                disabled={mode === 'edit'}
+                title={mode === 'edit' ? m.event_modal_type_locked_hint() : undefined}
+                class="focus:ring-opacity-50 flex-1 rounded-md px-3 py-2 text-sm font-medium transition-colors duration-200 focus:ring-2 focus:ring-primary focus:outline-none disabled:cursor-not-allowed disabled:opacity-60 {formData.eventType ===
+                'time'
+                  ? 'bg-base-100 text-primary shadow-sm'
+                  : 'text-base-content/60 hover:bg-base-300 hover:text-base-content'}"
+                onclick={() => handleEventTypeChange('time')}
+              >
+                {m.event_modal_type_timed()}
+              </button>
+            </div>
+            {#if mode === 'edit'}
+              <p class="mt-1 text-xs text-base-content/60">{m.event_modal_type_locked_hint()}</p>
+            {/if}
           </div>
-          {#if mode === 'edit'}
-            <p class="mt-1 text-xs text-base-content/60">{m.event_modal_type_locked_hint()}</p>
-          {/if}
-        </div>
+        {/if}
 
         <!-- Event Title -->
         <div class="mb-4">
@@ -545,27 +678,50 @@
           {/if}
         </div>
 
-        <!-- Location with Autocomplete -->
-        <div class="mb-4">
-          <LocationInput
-            bind:value={formData.location}
-            label={m.event_modal_location_label()}
-            placeholder={m.event_modal_location_placeholder()}
-          />
-        </div>
+        {#if isGroupMeeting}
+          <!-- Guest link (the meeting's location is always the channel) -->
+          <div class="mb-4">
+            <label class="flex cursor-pointer items-center gap-3">
+              <input
+                type="checkbox"
+                class="toggle toggle-primary toggle-sm"
+                bind:checked={allowGuests}
+                disabled={isSubmitting}
+              />
+              <span class="text-sm font-medium text-base-content"
+                >{m.meeting_modal_guests_label()}</span
+              >
+            </label>
+            <p class="mt-1 text-xs text-base-content/60">{m.meeting_modal_guests_help()}</p>
+            {#if guestsTooFar}
+              <p class="mt-2 alert text-sm alert-info" role="status">
+                {m.meeting_modal_guests_too_far()}
+              </p>
+            {/if}
+          </div>
+        {:else}
+          <!-- Location with Autocomplete -->
+          <div class="mb-4">
+            <LocationInput
+              bind:value={formData.location}
+              label={m.event_modal_location_label()}
+              placeholder={m.event_modal_location_placeholder()}
+            />
+          </div>
 
-        <!-- Event Image (upload or URL, with license attestation — #13) -->
-        <div class="mb-4">
-          <span class="mb-1 block text-sm font-medium text-base-content"
-            >{m.event_modal_image_label()}</span
-          >
-          <LicensedImageInput
-            bind:imageUrl={formData.image}
-            bind:imageWasUploaded={formData.imageWasUploaded}
-            bind:licenseEvent={formData.imageLicenseEvent}
-            activeUserDisplayName={ownProfile?.display_name ?? ownProfile?.name ?? ''}
-          />
-        </div>
+          <!-- Event Image (upload or URL, with license attestation — #13) -->
+          <div class="mb-4">
+            <span class="mb-1 block text-sm font-medium text-base-content"
+              >{m.event_modal_image_label()}</span
+            >
+            <LicensedImageInput
+              bind:imageUrl={formData.image}
+              bind:imageWasUploaded={formData.imageWasUploaded}
+              bind:licenseEvent={formData.imageLicenseEvent}
+              activeUserDisplayName={ownProfile?.display_name ?? ownProfile?.name ?? ''}
+            />
+          </div>
+        {/if}
 
         <!-- Reference Links (Optional) -->
         <div class="mb-4">
@@ -582,11 +738,20 @@
 
         <!-- Participants (Optional) -->
         <div class="mb-4">
-          <ParticipantsEditor bind:participants={formData.participants} disabled={isSubmitting} />
+          <ParticipantsEditor
+            bind:participants={formData.participants}
+            disabled={isSubmitting}
+            label={isGroupMeeting ? m.meeting_modal_invite_label() : ''}
+          />
+          {#if isGroupMeeting}
+            <p class="mt-1 text-xs text-base-content/60">{m.meeting_modal_invite_help()}</p>
+          {/if}
         </div>
 
         <!-- Calendar Selection (Optional) -->
-        {#if activeUser && calendarManagement && calendarManagement.calendars.length > 0}
+        <!-- A channel meeting stays on its group relay: no personal calendars
+             (kind 31924 goes out via the outbox) and no community shares. -->
+        {#if !isGroupMeeting && activeUser && calendarManagement && calendarManagement.calendars.length > 0}
           <div class="mb-4 border-t border-base-300 pt-4">
             <h3 class="mb-2 text-sm font-semibold text-base-content">
               {m.event_modal_calendars_section()}
@@ -601,7 +766,7 @@
         {/if}
 
         <!-- Community Selection (Optional) -->
-        {#if activeUser && joinedCommunities.length > 0}
+        {#if !isGroupMeeting && activeUser && joinedCommunities.length > 0}
           <div class="mb-4 border-t border-base-300 pt-4">
             <h3 class="mb-2 text-sm font-semibold text-base-content">
               {m.event_modal_communities_section()}
@@ -644,7 +809,9 @@
             {m.event_modal_cancel_button()}
           </button>
           <button type="submit" class="btn btn-primary" disabled={isSubmitting}>
-            {#if isSubmitting}
+            {#if isGroupMeeting}
+              {isSubmitting ? m.meeting_modal_submitting() : m.meeting_modal_submit()}
+            {:else if isSubmitting}
               {mode === 'edit' ? m.event_modal_updating() : m.event_modal_creating()}
             {:else}
               {mode === 'edit' ? m.event_modal_update_button() : m.event_modal_create_button()}
