@@ -28,7 +28,6 @@ services:
 
       # Calendar
       - CALENDAR_WEEK_START_DAY=${CALENDAR_WEEK_START_DAY:-1}
-      - CALENDAR_LOCALE=${CALENDAR_LOCALE:-de-DE}
       - CALENDAR_TIME_FORMAT=${CALENDAR_TIME_FORMAT:-24h}
 
       # Signup

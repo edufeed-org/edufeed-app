@@ -12,7 +12,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 const locale = vi.hoisted(() => ({ tag: 'de' }));
 vi.mock('$lib/paraglide/runtime.js', () => ({ getLocale: () => locale.tag }));
 vi.mock('$lib/stores/config.svelte.js', () => ({
-  runtimeConfig: { calendar: { locale: 'de-DE', timeFormat: '24h', weekStartDay: 1 } }
+  runtimeConfig: { calendar: { timeFormat: '24h', weekStartDay: 1 } }
 }));
 
 const { getWeekdayHeaders, formatCalendarDate } = await import('$lib/helpers/calendar.js');

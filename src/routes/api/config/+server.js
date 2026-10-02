@@ -325,7 +325,8 @@ export function GET() {
     // Calendar
     calendar: {
       weekStartDay: parseInt(env.CALENDAR_WEEK_START_DAY, 1),
-      locale: env.CALENDAR_LOCALE || 'de-DE',
+      // CALENDAR_LOCALE is deprecated and ignored: calendar names follow the
+      // app language (Paraglide locale, helpers/dates.js activeDateLocale).
       timeFormat: env.CALENDAR_TIME_FORMAT || '24h',
       featuredAuthors: parseArray(env.CALENDAR_FEATURED_AUTHORS)
     },
