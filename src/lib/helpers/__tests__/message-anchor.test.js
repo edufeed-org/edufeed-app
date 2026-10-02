@@ -4,7 +4,11 @@
  * URL for a message inside a channel, and scroll/flash the matching row.
  */
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { buildMessageDeepLink, scrollToChatMessage } from '$lib/helpers/message-anchor.js';
+import {
+  buildMessageDeepLink,
+  buildChannelLink,
+  scrollToChatMessage
+} from '$lib/helpers/message-anchor.js';
 
 describe('buildMessageDeepLink', () => {
   const loc = { origin: 'https://app.example', pathname: '/c/npub1xyz', search: '?view=channels' };
@@ -30,6 +34,25 @@ describe('buildMessageDeepLink', () => {
     expect(buildMessageDeepLink({ ...loc, search: '' }, 'chan1', 'msg1')).toBe(
       'https://app.example/c/npub1xyz?channel=chan1&message=msg1'
     );
+  });
+});
+
+describe('buildChannelLink', () => {
+  const loc = { origin: 'https://app.example', pathname: '/c/npub1xyz', search: '?view=channels' };
+
+  it('points at the channel, keeping the page params', () => {
+    expect(buildChannelLink(loc, 'chan1')).toBe(
+      'https://app.example/c/npub1xyz?view=channels&channel=chan1'
+    );
+  });
+
+  // A meeting's location is the channel, not whatever the organiser had open.
+  it('drops a message anchor and an open app session', () => {
+    const url = buildChannelLink(
+      { ...loc, search: '?channel=old&message=stale&app=session-1' },
+      'chan2'
+    );
+    expect(url).toBe('https://app.example/c/npub1xyz?channel=chan2');
   });
 });
 

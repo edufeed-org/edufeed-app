@@ -28,6 +28,23 @@ export function buildMessageDeepLink(location, channelId, messageId) {
 }
 
 /**
+ * The shareable URL of a channel itself (a meeting's `location`, the
+ * invitation's link): the current page with `?channel=`, minus a message
+ * anchor or an open app session.
+ *
+ * @param {{origin: string, pathname: string, search: string}} location
+ * @param {string} channelId
+ * @returns {string}
+ */
+export function buildChannelLink(location, channelId) {
+  const params = new URLSearchParams(location.search);
+  params.delete('message');
+  params.delete('app');
+  params.set('channel', channelId);
+  return `${location.origin}${location.pathname}?${params.toString()}`;
+}
+
+/**
  * Scroll the chat row carrying `data-message-id={messageId}` into view and
  * flash the highlight class on it.
  *

@@ -33,6 +33,7 @@
    * @property {((message: any) => void) | null} [onCopyLink] - shows a hover-reveal copy-link button in the header when provided (message deep links)
    * @property {string} [copyLinkTitle] - title attribute for the copy-link button (default "Copy link", override for i18n)
    * @property {boolean} [showLinkPreviews] - render LinkPreviewList below the message content (default false)
+   * @property {boolean} [showContent] - render the message content in the bubble (default true; false when an attachment card shows it itself, e.g. a meeting's description)
    * @property {number} [replyCount] - shows an "N replies" affordance in the footer when > 0 and `onOpenThread` is set
    * @property {string} [replyCountLabel] - pre-formatted label for that affordance (caller owns pluralisation/i18n)
    * @property {((message: any) => void) | null} [onOpenThread] - opens the thread for this message
@@ -56,6 +57,7 @@
     onCopyLink = null,
     copyLinkTitle = 'Copy link',
     showLinkPreviews = false,
+    showContent = true,
     replyCount = 0,
     replyCountLabel = '',
     onOpenThread = null,
@@ -141,7 +143,9 @@
     {/if}
     <!-- Chat is the only surface that opts into restricted markdown; the
          other seven NostrContentRenderer callers keep the plain walk. -->
-    <NostrContentRenderer event={message} markdown />
+    {#if showContent}
+      <NostrContentRenderer event={message} markdown />
+    {/if}
     {#if attachments}
       {@render attachments(message)}
     {/if}

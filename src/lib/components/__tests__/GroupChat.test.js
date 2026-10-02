@@ -367,6 +367,59 @@ const pollVoteOther = signWith(
   },
   OTHER_SK
 );
+// `meetchat`: an AV channel (livekit) with ME and OTHER on the roster whose
+// timeline carries a scheduled meeting (kind 31923, one group-id h-tag) by
+// OTHER, a malformed meeting with TWO h-tags (must not render), and a chat
+// message. Isolated so the meeting rows don't leak into other timelines.
+const metadataEventMeet = signWith(
+  { kind: 39000, tags: [['d', 'meetchat'], ['name', 'Meet Chat'], ['private'], ['livekit']] },
+  RELAY_SK
+);
+const membersEventMeet = signWith(
+  {
+    kind: 39002,
+    tags: [
+      ['d', 'meetchat'],
+      ['p', ME],
+      ['p', OTHER]
+    ]
+  },
+  RELAY_SK
+);
+const meetingEvent = signWith(
+  {
+    kind: 31923,
+    content: 'agenda in the card, not the bubble',
+    created_at: 1700000200,
+    tags: [
+      ['d', 'meeting-1'],
+      ['title', 'Elternabend'],
+      ['start', '2000000000'],
+      ['end', '2000003600'],
+      ['h', 'meetchat']
+    ]
+  },
+  OTHER_SK
+);
+const meetingTwoGroups = signWith(
+  {
+    kind: 31923,
+    content: 'two h tags',
+    created_at: 1700000201,
+    tags: [
+      ['d', 'meeting-2'],
+      ['title', 'Doppelt'],
+      ['start', '2000000000'],
+      ['h', 'meetchat'],
+      ['h', 'elsewhere']
+    ]
+  },
+  OTHER_SK
+);
+const meetChatMessage = signWith(
+  { kind: 9, content: 'see you there', created_at: 1700000210, tags: [['h', 'meetchat']] },
+  OTHER_SK
+);
 // Enrichment fixture for the session-title effect (moved from GroupAppsBar
 // into GroupChat itself): the latest 9450 state event's `document` tag,
 // returned by the fake pool's request() below when it sees the effect's own
@@ -590,6 +643,7 @@ vi.mock('$lib/stores/nostr-infrastructure.svelte', async () => {
           if (d === 'webxdcchat') return rxOf(metadataEventWebxdc, membersEventWebxdc);
           if (d === 'pollchat') return rxOf(metadataEventPoll, membersEventPoll);
           if (d === 'callchat') return rxOf(metadataEventCall, membersEventCall);
+          if (d === 'meetchat') return rxOf(metadataEventMeet, membersEventMeet);
           if (d === 'livetitlechat') return rxOf(metadataEventLiveTitle, membersEventLiveTitle);
           if (d === 'authchat') return rxOf(metadataEventAuthNoPrivate, membersEventAuthNoPrivate);
           if (d === 'emptychat') return rxOf(metadataEventEmptyRoster, membersEventEmptyRoster);
@@ -680,6 +734,9 @@ vi.mock('$lib/stores/nostr-infrastructure.svelte', async () => {
           if (h === 'webxdcchat') return rxMerge(rxOf(webxdcShareEvent), rxNever);
           // pollchat: isolated timeline holding the poll and one vote.
           if (h === 'pollchat') return rxMerge(rxOf(pollEvent, pollVoteOther), rxNever);
+          // meetchat: a meeting, a malformed two-group meeting, a message.
+          if (h === 'meetchat')
+            return rxMerge(rxOf(meetingEvent, meetingTwoGroups, meetChatMessage), rxNever);
           // livetitlechat: isolated timeline holding only its own webxdc
           // share (session-live-1), with zero 9450 history — see fixture.
           if (h === 'livetitlechat') return rxMerge(rxOf(liveTitleShareEvent), rxNever);
@@ -936,6 +993,14 @@ vi.mock('$lib/groups/call-presence.svelte.js', () => ({
   useCallPresence: () => () => ({ participants: groupCallHolder.participants, answered: true })
 }));
 vi.mock(
+  '$lib/components/groups/MeetingCard.svelte',
+  () => import('./fixtures/MeetingCardStub.svelte')
+);
+vi.mock(
+  '$lib/components/groups/MeetingBar.svelte',
+  () => import('./fixtures/MeetingBarStub.svelte')
+);
+vi.mock(
   '$lib/components/groups/call/GroupCallStage.svelte',
   () => import('./fixtures/GroupCallStageStub.svelte')
 );
@@ -1115,6 +1180,7 @@ vi.mock('$lib/paraglide/messages', () => ({
   group_invite_dm_failed: () => 'Invite failed',
   group_invite_dm_failed_after_mint: () => 'Invite minted but DM failed',
   common_cancel: () => 'Cancel',
+  groups_meeting_schedule: () => 'Schedule a meeting',
   groups_role_admin: () => 'Admin',
   groups_role_king: () => 'Owner',
   groups_role_moderator: () => 'Moderator',
@@ -1965,6 +2031,82 @@ describe('GroupChat', () => {
       expect(threadInput.textContent).toBe('');
       await typeIntoEditor(threadInput, 'thread draft');
       expect(screen.getByTestId('group-chat-input').textContent).toBe('timeline draft');
+    });
+  });
+
+  describe('scheduled meetings', () => {
+    const meetPointer = { relay: GROUP_RELAY, id: 'meetchat' };
+
+    it('subscribes to meetings and deletions alongside chat on the group relay', async () => {
+      render(GroupChat, { props: { pointer: meetPointer } });
+      await waitFor(() => {
+        const chatSub = subscriptionCalls.find((filters) =>
+          filters.some((f) => f?.kinds?.includes(9) && f?.['#h']?.[0] === 'meetchat')
+        );
+        expect(chatSub?.find((f) => f?.kinds?.includes(9))?.kinds).toContain(31923);
+        // Meetings get their own window, so a busy chat cannot push the
+        // upcoming ones out of the 100-message replay.
+        expect(chatSub?.some((f) => f?.kinds?.length === 1 && f.kinds[0] === 31923)).toBe(true);
+        // NIP-09 deletions of meetings (author deletes on another device).
+        expect(chatSub?.some((f) => f?.kinds?.includes(5) && f?.['#h']?.[0] === 'meetchat')).toBe(
+          true
+        );
+      });
+      expect(relayCalls.every((url) => url === GROUP_RELAY)).toBe(true);
+    });
+
+    it('renders a meeting card for this channel’s meeting only, and feeds the bar', async () => {
+      const { container } = render(GroupChat, { props: { pointer: meetPointer } });
+      const cards = await screen.findAllByTestId('meeting-card-stub');
+      expect(cards.map((c) => c.dataset.id)).toEqual([meetingEvent.id]);
+      expect(cards[0].dataset.group).toBe('meetchat');
+      expect(cards[0].dataset.user).toBe(ME);
+      // The description lives in the card, not twice in the bubble.
+      const contents = [...container.querySelectorAll('[data-testid="ncr-content"]')].map(
+        (el) => el.textContent
+      );
+      expect(contents).toContain('see you there');
+      expect(contents).not.toContain('agenda in the card, not the bubble');
+      expect(contents).not.toContain('two h tags');
+      expect(screen.getByTestId('meeting-bar-stub').dataset.ids).toBe(meetingEvent.id);
+    });
+
+    it('joins the channel call from the card and the bar', async () => {
+      render(GroupChat, { props: { pointer: meetPointer } });
+      await fireEvent.click(await screen.findByTestId('meeting-card-stub-join'));
+      await waitFor(() => expect(joinGroupCallMock).toHaveBeenCalledTimes(1));
+      expect(joinGroupCallMock.mock.calls[0][0]).toEqual(meetPointer);
+      await fireEvent.click(screen.getByTestId('meeting-bar-stub-join'));
+      await waitFor(() => expect(joinGroupCallMock).toHaveBeenCalledTimes(2));
+    });
+
+    it('"Termin planen" in the ⋯ menu opens the dialog in channel mode', async () => {
+      const { modalStore } = await import('$lib/stores/modal.svelte.js');
+      const openModal = vi.spyOn(modalStore, 'openModal').mockImplementation(() => {});
+      render(GroupChat, { props: { pointer: meetPointer } });
+      await fireEvent.click(await screen.findByTestId('group-more-menu'));
+      const item = await screen.findByTestId('group-meeting-schedule');
+      expect(item.textContent?.trim()).toBe('Schedule a meeting');
+      await fireEvent.click(item);
+      expect(openModal).toHaveBeenCalledTimes(1);
+      const type = openModal.mock.calls[0][0];
+      const props = /** @type {any} */ (openModal.mock.calls[0][1]);
+      expect(type).toBe('calendarEvent');
+      expect(props.mode).toBe('create');
+      expect(props.groupMeeting.pointer).toEqual(meetPointer);
+      expect(props.groupMeeting.channelName).toBe('Meet Chat');
+      expect(props.groupMeeting.channelUrl).toBe(
+        `${window.location.origin}${window.location.pathname}?channel=meetchat`
+      );
+      expect([...props.groupMeeting.memberPubkeys].sort()).toEqual([ME, OTHER].sort());
+      openModal.mockRestore();
+    });
+
+    it('offers no "Termin planen" to a non-member', async () => {
+      render(GroupChat, { props: { pointer: { relay: GROUP_RELAY, id: 'openchat' } } });
+      await fireEvent.click(await screen.findByTestId('group-more-menu'));
+      await screen.findByTestId('group-list-add');
+      expect(screen.queryByTestId('group-meeting-schedule')).toBeNull();
     });
   });
 

@@ -272,7 +272,7 @@ export function findMeetingPass(passes, coordinate) {
  * `MEETING_DEFAULT_DURATION_S` — the same fallback the scheduler uses for
  * the guest window. Null when the start is missing or unreadable.
  *
- * @param {{tags?: string[][]}} event
+ * @param {{kind?: number, tags?: string[][]}} event
  * @returns {{start: number, end: number} | null}
  */
 export function meetingTimes(event) {
@@ -292,14 +292,13 @@ export function meetingTimes(event) {
  * within `BAR_LOOKAHEAD_S` — the earliest start wins (a running meeting
  * always started before one still ahead). Null when there is none.
  *
- * @template {{tags?: string[][]}} E
- * @param {E[]} events - this channel's meetings (already group-filtered)
+ * @param {any[]} events - this channel's meetings (already group-filtered)
  * @param {number} nowS
- * @returns {{event: E, start: number, end: number,
+ * @returns {{event: any, start: number, end: number,
  *   phase: 'upcoming' | 'joinable' | 'running'} | null}
  */
 export function nextBarMeeting(events, nowS) {
-  /** @type {{event: E, start: number, end: number, phase: 'upcoming' | 'joinable' | 'running'} | null} */
+  /** @type {{event: any, start: number, end: number, phase: 'upcoming' | 'joinable' | 'running'} | null} */
   let best = null;
   for (const event of events || []) {
     const times = meetingTimes(event);

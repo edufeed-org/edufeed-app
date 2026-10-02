@@ -61,6 +61,9 @@
     isPollEnded
   } from '$lib/concord/polls.js';
   import PollMessage from '$lib/components/community/channels/PollMessage.svelte';
+  import MeetingCard from '$lib/components/groups/MeetingCard.svelte';
+  import MeetingBar from '$lib/components/groups/MeetingBar.svelte';
+  import { MEETING_KIND, isMeetingForGroup } from '$lib/groups/meetings.js';
   import GroupPollModal from '$lib/components/groups/GroupPollModal.svelte';
   import { updatePersonalGroupsList } from '$lib/groups/personal-groups-list.js';
   import { useMyGroups } from '$lib/groups/unlinked-groups.svelte.js';
@@ -152,7 +155,11 @@
   import { stashExport } from '$lib/webxdc/export-share.js';
   import { runtimeConfig } from '$lib/stores/config.svelte.js';
   import { showToast } from '$lib/helpers/toast';
-  import { buildMessageDeepLink, scrollToChatMessage } from '$lib/helpers/message-anchor.js';
+  import {
+    buildMessageDeepLink,
+    buildChannelLink,
+    scrollToChatMessage
+  } from '$lib/helpers/message-anchor.js';
   import * as m from '$lib/paraglide/messages';
   import { pageTitle } from '$lib/helpers/page-title.js';
 
@@ -436,14 +443,20 @@
     messagesRestricted = false;
     // Kind-1068 NIP-88 polls are timeline rows alongside kind-9 messages
     // (Armada renders both in the main chat; 1018 votes stay side events,
-    // h-scoped like reactions).
-    const filter = { kinds: [9, 1068], '#h': [pointer.id] };
+    // h-scoped like reactions). Kind-31923 scheduled meetings are timeline
+    // rows too (MeetingCard), with a window of their own so a busy chat
+    // cannot push an upcoming meeting out of the replay; kind-5 deletions
+    // reach the store so a meeting its author deleted elsewhere disappears
+    // (the store's delete handling drops it from every TimelineModel).
+    const filter = { kinds: [9, 1068, MEETING_KIND], '#h': [pointer.id] };
     const fallbackTimer = setTimeout(() => (isLoading = false), 4000);
 
     const subSub = pool
       .relay(pointer.relay)
       .subscription([
         { ...filter, limit: 100 },
+        { kinds: [MEETING_KIND], '#h': [pointer.id], limit: 50 },
+        { kinds: [5], '#h': [pointer.id], limit: 100 },
         { kinds: [7], '#h': [pointer.id], limit: 200 },
         { kinds: [DELETE_EVENT_KIND], '#h': [pointer.id], limit: 100 },
         { kinds: [1018], '#h': [pointer.id], limit: 500 }
@@ -504,9 +517,18 @@
   );
   const displayed = $derived(
     messages
-      .filter((event) => event && event.id && event.pubkey && !deletedMessageIds.has(event.id))
+      .filter(
+        (event) =>
+          event &&
+          event.id &&
+          event.pubkey &&
+          !deletedMessageIds.has(event.id) &&
+          // A meeting belongs here only with exactly this channel's h-tag.
+          (event.kind !== MEETING_KIND || isMeetingForGroup(event, pointer.id))
+      )
       .toReversed()
   );
+  const meetings = $derived(displayed.filter((event) => event.kind === MEETING_KIND));
   // Replies live in their thread, not in the timeline. An orphan — a reply
   // whose root fell outside the 100-event window — stays in the timeline
   // rather than disappearing.
@@ -960,6 +982,31 @@
       if (activeSession) await closeStage();
       showCallStage();
     } else await startCall();
+  }
+
+  // "Beitreten" on a meeting card or the meeting bar: a meeting's call is
+  // simply this channel's call — bring it back when already in, join/start
+  // it otherwise, and for an admin of a channel without calls yet switch
+  // them on first. Members only (the relay mints tokens for the roster).
+  const canJoinMeeting = $derived(!!myPubkey && canWrite && (avEnabled || canStartCall));
+  async function joinMeeting() {
+    if (callLiveHere || avEnabled) await toggleCall();
+    else if (canStartCall) await enableAndStartCall();
+  }
+
+  // "Termin planen": the calendar dialog in channel-meeting mode (M2). The
+  // meeting's location is the channel's own link; the roster decides who
+  // gets the guest link in their invitation.
+  function openScheduleMeeting() {
+    modalStore.openModal('calendarEvent', {
+      mode: 'create',
+      groupMeeting: {
+        pointer: { id: pointer.id, relay: pointer.relay },
+        channelName: displayTitle,
+        channelUrl: buildChannelLink(window.location, pointer.id),
+        memberPubkeys: [...members]
+      }
+    });
   }
 
   // The call's own connecting / failed / ended views count as "the call on
@@ -1761,6 +1808,13 @@
               </button>
             {/if}
           </li>
+          {#if canWrite}
+            <li>
+              <button data-testid="group-meeting-schedule" onclick={openScheduleMeeting}>
+                {m.groups_meeting_schedule()}
+              </button>
+            </li>
+          {/if}
           {#if rosterAnswered && isMember}
             <!-- Destructive last, set apart, and confirmed (design 1a). -->
             <li class="mt-2 border-t border-base-300 pt-2">
@@ -1929,7 +1983,8 @@
         : null}
       {onReply}
       replyTitle={m.groups_reply()}
-      onDelete={isAdmin ? (msg) => (deleteTarget = msg) : null}
+      showContent={message.kind !== MEETING_KIND}
+      onDelete={isAdmin && message.kind !== MEETING_KIND ? (msg) => (deleteTarget = msg) : null}
       deleteTitle={m.groups_message_delete()}
       onCopyLink={copyMessageLink}
       copyLinkTitle={m.chat_copy_message_link()}
@@ -1968,6 +2023,16 @@
             onVote={(optionIds) => votePoll(poll, optionIds)}
           />
         {/if}
+        {#if msg.kind === MEETING_KIND}
+          <MeetingCard
+            event={msg}
+            {pointer}
+            user={getActiveUser()}
+            {isAdmin}
+            onJoin={canJoinMeeting ? joinMeeting : undefined}
+            callRunning={callParticipantCount > 0}
+          />
+        {/if}
       {/snippet}
     </ChatMessageRow>
   {/snippet}
@@ -1986,6 +2051,9 @@
         : ''}"
     >
       <GroupAppsBar {pointer} messages={displayed} sessionMeta={sessionTitles} onOpen={openStage} />
+      {#if !callLiveHere}
+        <MeetingBar {meetings} onJoin={canJoinMeeting ? joinMeeting : undefined} />
+      {/if}
       {#if poppedOutHere}
         <div
           class="flex items-center justify-between gap-2 border-b border-base-300 bg-base-200 px-4 py-2 text-sm"

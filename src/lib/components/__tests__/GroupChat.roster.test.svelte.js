@@ -170,6 +170,7 @@ vi.mock('$lib/paraglide/messages', () => ({
   groups_message_delete_confirm_title: () => 'groups_message_delete_confirm_title',
   groups_message_delete_failed: () => 'groups_message_delete_failed',
   groups_more_menu: () => 'groups_more_menu',
+  groups_meeting_schedule: () => 'groups_meeting_schedule',
   groups_react_failed: () => 'groups_react_failed',
   groups_restricted_note: () => 'groups_restricted_note',
   webxdc_apps_share_failed: () => 'webxdc_apps_share_failed',
