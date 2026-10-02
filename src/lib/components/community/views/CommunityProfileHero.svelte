@@ -238,8 +238,11 @@
      banner variant keeps its own geometry (the row is pulled up over the
      banner) and makes no alignment claim. -->
 <div class="px-4 pb-4">
+  <!-- flex-wrap + the name's min width: on a phone the header actions
+       (follow, join lane) drop to their own line instead of squeezing the
+       community name to nothing (C8 visual check, 390 px). -->
   <div
-    class="flex gap-3 {bannerUrl
+    class="flex flex-wrap gap-3 {bannerUrl
       ? '-mt-6 items-start'
       : 'min-h-(--community-header-h) items-center'}"
   >
@@ -276,7 +279,7 @@
     </HoverCard>
 
     <!-- Name + Meta -->
-    <div class="min-w-0 flex-1" class:mt-7={bannerUrl}>
+    <div class="min-w-40 flex-1" class:mt-7={bannerUrl}>
       <div class="flex items-center gap-2">
         <!-- The name keeps its heading role; the link lives INSIDE the h2 so
              the community still has a proper page heading. min-w-0 on both
