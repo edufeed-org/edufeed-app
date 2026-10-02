@@ -308,11 +308,14 @@ describe('ChannelOverview', () => {
       callFns.showCallStage.mockClear();
     });
 
+    // Task 18 follow-up: the pill + avatars row IS the control now — no
+    // separate text link nested inside it.
     it('not in the call: Join opens the channel, then joins its call', async () => {
       const onSelect = vi.fn();
       const roster = renderPane(onSelect);
-      const join = within(roster).getByRole('button', { name: /Join|Laufendem Anruf|beitreten/i });
-      await fireEvent.click(join);
+      expect(roster.tagName).toBe('BUTTON');
+      expect(roster.getAttribute('aria-label')).toMatch(/Join|Laufendem Anruf|beitreten/i);
+      await fireEvent.click(roster);
       await vi.waitFor(() => expect(callFns.joinGroupCall).toHaveBeenCalled());
       expect(onSelect).toHaveBeenCalledWith(expect.objectContaining({ id: 'sprechstunde' }));
     });
@@ -321,7 +324,8 @@ describe('ChannelOverview', () => {
       call.active = true;
       const onSelect = vi.fn();
       const roster = renderPane(onSelect);
-      await fireEvent.click(within(roster).getByRole('button'));
+      expect(roster.tagName).toBe('BUTTON');
+      await fireEvent.click(roster);
       expect(callFns.showCallStage).toHaveBeenCalledTimes(1);
       expect(onSelect).toHaveBeenCalledTimes(1);
       expect(callFns.joinGroupCall).not.toHaveBeenCalled();

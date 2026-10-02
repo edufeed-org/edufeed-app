@@ -95,7 +95,7 @@ describe('ChannelCallRoster', () => {
     });
     expect(screen.getAllByTestId('profile-avatar-stub')).toHaveLength(3);
     expect(screen.getByText('+2')).toBeTruthy();
-    expect(screen.getByTitle('5 in the call')).toBeTruthy();
+    expect(screen.getByTestId('call-count-pill').textContent).toContain('5 in the call');
   });
 
   // Design 1a: the running call reads as a soft success pill, "● N im Anruf".
@@ -111,13 +111,19 @@ describe('ChannelCallRoster', () => {
     expect(pill.textContent).toContain('2 in the call');
   });
 
-  it('Join opens the channel, then joins its call', async () => {
+  // Task 18 follow-up (laoc): the pill + avatars ARE the control — no
+  // separate "Beitreten" text link beside them.
+  it('the whole pill + avatars row is the Join control', async () => {
     presence.participants = [P('b')];
     render(ChannelCallRoster, {
       props: { pointer: POINTER, name: 'Sprechstunde', onOpen: fns.onOpen }
     });
     const button = screen.getByRole('button', { name: 'Join the running call (1)' });
-    expect(button.textContent.trim()).toBe('Join');
+    // The pill and an avatar live INSIDE the button — one control, not a
+    // status pill plus a separate text link.
+    expect(button.querySelector('[data-testid="call-count-pill"]')).toBeTruthy();
+    expect(button.querySelector('[data-testid="profile-avatar-stub"]')).toBeTruthy();
+    expect(screen.queryByText('Join')).toBeNull();
     await fireEvent.click(button);
     await waitFor(() => expect(fns.joinGroupCall).toHaveBeenCalled());
     expect(fns.onOpen).toHaveBeenCalledTimes(1);
@@ -128,7 +134,21 @@ describe('ChannelCallRoster', () => {
     );
   });
 
-  it('in that call with its stage on screen: a status line, no button', () => {
+  // Clicking anywhere in the row (e.g. on the pill itself) must trigger the
+  // same control — it is one button, not a pill sitting beside a link.
+  it('clicking the pill inside the row also joins', async () => {
+    presence.participants = [P('b')];
+    render(ChannelCallRoster, {
+      props: { pointer: POINTER, name: 'Sprechstunde', onOpen: fns.onOpen }
+    });
+    await fireEvent.click(screen.getByTestId('call-count-pill'));
+    await waitFor(() => expect(fns.joinGroupCall).toHaveBeenCalled());
+  });
+
+  // Task 18: the pill + avatars already carry the count — no visible second
+  // status line (it duplicated the count and wrapped to its own row at
+  // sidebar width). Screen readers still get it via an sr-only span.
+  it('in that call with its stage on screen: no button, no visible status, sr-only context', () => {
     presence.participants = [P('a'), P('b')];
     call.active = true;
     call.stageViews = 1;
@@ -136,9 +156,9 @@ describe('ChannelCallRoster', () => {
       props: { pointer: POINTER, name: 'Sprechstunde', onOpen: fns.onOpen }
     });
     expect(screen.queryByRole('button')).toBeNull();
-    expect(screen.getByTestId('channel-call-roster-here').textContent).toContain(
-      "You're in the call · 2"
-    );
+    const status = screen.getByTestId('channel-call-roster-here');
+    expect(status.textContent).toContain("You're in the call · 2");
+    expect(status.className).toContain('sr-only');
   });
 
   it.each([
@@ -168,9 +188,7 @@ describe('ChannelCallRoster', () => {
       props: { pointer: POINTER, name: 'Sprechstunde', onOpen: fns.onOpen }
     });
     expect(screen.queryByRole('button', { name: 'Show call' })).toBeNull();
-    expect(screen.getByRole('button', { name: 'Join the running call (1)' }).textContent).toContain(
-      'Join'
-    );
+    expect(screen.getByRole('button', { name: 'Join the running call (1)' })).toBeTruthy();
   });
 
   it('no Join for an anonymous viewer', () => {

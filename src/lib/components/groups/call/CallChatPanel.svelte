@@ -5,12 +5,27 @@
 -->
 <script>
   import { tick } from 'svelte';
+  import { goto } from '$app/navigation';
+  import { resolve } from '$app/paths';
   import { getLiveKitState, sendCallChat } from '$lib/services/livekit-connection.svelte.js';
   import { useProfileMap } from '$lib/stores/profile-map.svelte.js';
+  import { avatarInitial } from '$lib/helpers/avatar-initial.js';
+  import { profileLink } from '$lib/helpers/nostrUtils.js';
+  import { canPopOutCall, popOutCall } from '$lib/groups/call-popout.svelte.js';
+  import ProfileAvatar from '$lib/components/shared/ProfileAvatar.svelte';
+  import HoverCard from '$lib/components/shared/HoverCard.svelte';
+  import ProfileHoverCardContent from '$lib/components/shared/ProfileHoverCardContent.svelte';
   import * as m from '$lib/paraglide/messages';
 
-  /** @type {{identityToPubkey: (identity: string) => string | null}} */
-  let { identityToPubkey } = $props();
+  /**
+   * @type {{
+   *   identityToPubkey: (identity: string) => string | null,
+   *   title?: string
+   * }}
+   */
+  // title: the call's own name — only needed to re-label the pop-out window
+  // when a sender's avatar/name is clicked from in here (QA 2026-10-02).
+  let { identityToPubkey, title = '' } = $props();
 
   const lk = getLiveKitState();
   let draft = $state('');
@@ -28,6 +43,24 @@
     const pk = identityToPubkey(identity);
     const p = pk ? getProfiles().get(pk) : undefined;
     return p?.display_name || p?.name || pk?.slice(0, 8) || '?';
+  }
+
+  // Consecutive messages from the same sender group under one avatar — the
+  // name repeats anyway (QA Task 18), only the avatar is worth collapsing.
+  /** @param {number} index */
+  function isGrouped(index) {
+    return index > 0 && lk.callChat[index - 1].identity === lk.callChat[index].identity;
+  }
+
+  // Clicking a sender's avatar or name: pop the call out first (when the
+  // browser supports it) so leaving to the profile route doesn't drop the
+  // call, then navigate. Must run synchronously from the click — pop-out
+  // needs the user activation (QA 2026-10-02).
+  /** @param {MouseEvent} e @param {string} pk */
+  function openProfile(e, pk) {
+    e.preventDefault();
+    if (canPopOutCall()) popOutCall({ title, identityToPubkey });
+    goto(resolve(profileLink(pk)));
   }
 
   $effect(() => {
@@ -59,10 +92,59 @@
     {#if lk.callChat.length === 0}
       <p class="m-auto text-center text-sm text-base-content/60">{m.groups_call_chat_empty()}</p>
     {/if}
-    {#each lk.callChat as msg (msg.id)}
-      <div class="text-sm" data-testid="call-chat-message">
-        <span class="font-semibold">{nameOf(msg.identity)}</span>
-        <span class="break-words whitespace-pre-wrap">{msg.text}</span>
+    {#each lk.callChat as msg, i (msg.id)}
+      {@const pk = identityToPubkey(msg.identity)}
+      <div class="flex items-start gap-2 text-sm" data-testid="call-chat-message">
+        {#if pk}
+          <!-- Avatar + name are one hover/click target (same pattern as
+               ParticipantTile): hovering either shows the profile hover
+               card, clicking either pops the call out (when supported) and
+               opens the profile (QA 2026-10-02). -->
+          <HoverCard position="top" fixed={true} class="contents" triggerClass="contents">
+            {#snippet trigger()}
+              <a
+                href={resolve(profileLink(pk))}
+                class="flex shrink-0 items-start gap-2 hover:underline"
+                data-testid="call-chat-sender-link"
+                onclick={(e) => openProfile(e, pk)}
+              >
+                <span class="w-6 shrink-0">
+                  {#if !isGrouped(i)}
+                    <ProfileAvatar
+                      pubkey={pk}
+                      size="xs"
+                      showHoverCard={false}
+                      linkToProfile={false}
+                    />
+                  {/if}
+                </span>
+                <span class="font-semibold">{nameOf(msg.identity)}</span>
+              </a>
+            {/snippet}
+            {#snippet content()}
+              <ProfileHoverCardContent pubkey={pk} profile={getProfiles().get(pk)} />
+            {/snippet}
+          </HoverCard>
+        {:else}
+          <!-- An identity LiveKit sent that does not resolve to a pubkey
+               (should not happen — guests get a real generated keypair too,
+               see guest-account.js) — same initials + colours as
+               ParticipantTile's own no-pubkey fallback. No profile to link
+               to or read a name from, so the initial comes from the
+               identity string itself. -->
+          <span class="w-6 shrink-0">
+            {#if !isGrouped(i)}
+              <div
+                class="flex h-6 w-6 items-center justify-center rounded-full bg-secondary text-xs font-semibold text-secondary-content"
+                data-testid="call-chat-avatar-fallback"
+              >
+                {avatarInitial(msg.identity, '?')}
+              </div>
+            {/if}
+          </span>
+          <span class="font-semibold">{nameOf(msg.identity)}</span>
+        {/if}
+        <span class="min-w-0 flex-1 break-words whitespace-pre-wrap">{msg.text}</span>
       </div>
     {/each}
   </div>

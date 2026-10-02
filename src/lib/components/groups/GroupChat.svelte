@@ -2133,7 +2133,7 @@
             </div>
           {/if}
           {#if inCallHere && chatTab === 'call' && CallChatPanel.Component}
-            <CallChatPanel.Component {identityToPubkey} />
+            <CallChatPanel.Component {identityToPubkey} title={displayTitle} />
           {/if}
           <div
             class={inCallHere && chatTab === 'call' ? 'hidden' : 'contents'}

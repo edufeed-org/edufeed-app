@@ -565,8 +565,11 @@
 
   <!-- Controls -->
   {#if lk.isConnected}
+    <!-- No top border (laoc, 2026-10-02: looked redundant against the tiles
+         above and the chat column's own borders); the padding alone still
+         reads as a control bar. -->
     <div
-      class="mt-auto flex shrink-0 flex-wrap items-center justify-center gap-3 border-t border-base-300 px-4 py-3"
+      class="mt-auto flex shrink-0 flex-wrap items-center justify-center gap-3 px-4 py-3"
       data-testid="group-call-controls"
     >
       {#if lk.canPublish}

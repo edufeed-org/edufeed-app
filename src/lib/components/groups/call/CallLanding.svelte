@@ -338,7 +338,7 @@
                   </button>
                 </div>
               {/if}
-              <CallChatPanel.Component {identityToPubkey} />
+              <CallChatPanel.Component {identityToPubkey} {title} />
             </div>
           {/if}
         </div>

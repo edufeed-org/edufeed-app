@@ -78,11 +78,7 @@
 </script>
 
 {#if participants.length > 0}
-  <div
-    class="flex flex-wrap items-center gap-x-2 gap-y-0.5 {inset}"
-    data-testid="channel-call-roster"
-    title={m.groups_call_people_in_call({ count: participants.length })}
-  >
+  {#snippet rosterContent()}
     <CallCountPill count={participants.length} />
     <div class="flex min-w-0 flex-1 items-center -space-x-1.5">
       {#each shown as pubkey (pubkey)}
@@ -94,27 +90,50 @@
         <span class="pl-2.5 text-xs text-base-content/60">+{overflow}</span>
       {/if}
     </div>
-    {#if stageOnScreen}
-      <span
-        class="ml-auto shrink-0 text-xs font-medium text-primary"
-        data-testid="channel-call-roster-here"
-      >
+  {/snippet}
+
+  {#if stageOnScreen}
+    <!-- Already looking at this call: the pill + avatars + the highlighted
+         channel say it — no button (it would point at the screen you are on),
+         no visible status line (laoc, 2026-10-02). Screen readers still get
+         the context. -->
+    <div
+      class="flex flex-wrap items-center gap-x-2 gap-y-0.5 {inset}"
+      data-testid="channel-call-roster"
+    >
+      {@render rosterContent()}
+      <span class="sr-only" data-testid="channel-call-roster-here">
         {m.groups_call_in_this_call({ count: participants.length })}
       </span>
-    {:else if getActiveUser()?.signer}
-      {@const label = inThisCall
-        ? m.groups_call_return()
-        : m.groups_call_join_running({ count: participants.length })}
-      <button
-        type="button"
-        class="btn ml-auto shrink-0 text-primary btn-ghost btn-sm"
-        disabled={busy}
-        aria-label={label}
-        title={label}
-        onclick={join}
-      >
-        {inThisCall ? m.groups_call_return() : m.groups_join()}
-      </button>
-    {/if}
-  </div>
+    </div>
+  {:else if getActiveUser()?.signer}
+    <!-- The pill + avatars ARE the control (laoc, 2026-10-02: a separate
+         "Beitreten"/"Anruf anzeigen" text link beside them was one thing too
+         many, and wrapped to its own row at sidebar width). Deliberately NOT
+         `btn` — same reasoning as ChannelRailRow: this reads as a list row,
+         not toolbar chrome. -->
+    {@const label = inThisCall
+      ? m.groups_call_return()
+      : m.groups_call_join_running({ count: participants.length })}
+    <button
+      type="button"
+      class="flex w-full flex-wrap items-center gap-x-2 gap-y-0.5 rounded-lg text-left transition-colors duration-150 hover:bg-base-300/60 {inset}"
+      data-testid="channel-call-roster"
+      disabled={busy}
+      aria-label={label}
+      title={label}
+      onclick={join}
+    >
+      {@render rosterContent()}
+    </button>
+  {:else}
+    <!-- Anonymous viewer: informative only, nothing to click. -->
+    <div
+      class="flex flex-wrap items-center gap-x-2 gap-y-0.5 {inset}"
+      data-testid="channel-call-roster"
+      title={m.groups_call_people_in_call({ count: participants.length })}
+    >
+      {@render rosterContent()}
+    </div>
+  {/if}
 {/if}
