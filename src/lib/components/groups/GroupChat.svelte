@@ -96,6 +96,8 @@
   import { hasLivekitTag, identityToPubkey, probeRelayAvSupport } from '$lib/groups/livekit.js';
   import { probeCallPassSupport } from '$lib/groups/call-passes.js';
   import { trackOnScreen } from '$lib/groups/track-on-screen.js';
+  import { joinOutcome } from '$lib/groups/join-outcome.js';
+  import { modalStore } from '$lib/stores/modal.svelte.js';
   import { enableGroupCalls } from '$lib/groups/enable-group-calls.js';
   import { useCallPresence } from '$lib/groups/call-presence.svelte.js';
   import {
@@ -927,10 +929,16 @@
   // While this channel's call view is on screen the header shows a status
   // instead (QA 2026-10-02 C7: a "Leave call" icon right above the red
   // leave button caused accidental hang-ups) — so the button never leaves.
+  // In a call here that is still on (requesting / ready) — a failed or
+  // ended call is not one "you are in" (Task 15 review): the header offers
+  // it again instead of a status.
+  const callLiveHere = $derived(
+    inCallHere && (call.phase === 'requesting' || call.phase === 'ready')
+  );
   const callButtonLabel = $derived(
     !myPubkey
       ? m.groups_call_start_login()
-      : inCallHere
+      : callLiveHere
         ? m.groups_call_return()
         : callParticipantCount > 0
           ? m.groups_call_join_running({ count: callParticipantCount })
@@ -938,7 +946,7 @@
   );
 
   async function toggleCall() {
-    if (inCallHere) {
+    if (callLiveHere) {
       if (poppedOutHere) popInCall();
       if (activeSession) await closeStage();
       showCallStage();
@@ -1424,6 +1432,19 @@
     await updatePersonalGroupsList(getActiveUser(), change);
   }
 
+  /**
+   * Resolves true as soon as I show up on the roster (the join's roster
+   * refreshes land in `members`), false once `ms` passed without.
+   * @param {number} ms
+   */
+  async function waitForMembership(ms) {
+    const until = Date.now() + ms;
+    while (!(myPubkey && members.has(myPubkey)) && Date.now() < until) {
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+    return !!myPubkey && members.has(myPubkey);
+  }
+
   async function join() {
     try {
       await signAndPublish(buildJoinRequestTemplate(pointer.id));
@@ -1432,9 +1453,16 @@
       // the button flips to Leave without a reload (laoc, 2026-08-11).
       onJoinAccepted();
       joinRequestedNow = true;
-      // An open NIP-29 group admits on the accepted 9021 (QA C1: "request
-      // sent" read like a pending approval); a closed one queues it.
-      showToast(groupClosed ? m.groups_join_sent() : m.groups_join_joined(), 'success');
+      // "Joined" or "request sent" by what the refreshed roster shows (QA
+      // C1: "request sent" read like a pending approval on an open group);
+      // the `closed` marker only decides when the roster cannot be read.
+      const onRoster = await waitForMembership(JOIN_ROSTER_HEAL_DELAY_MS + 500);
+      const outcome = joinOutcome({
+        onRoster,
+        rosterReadable: rosterAnswered && !rosterRestricted,
+        closed: groupClosed
+      });
+      showToast(outcome === 'joined' ? m.groups_join_joined() : m.groups_join_sent(), 'success');
     } catch (err) {
       if (isAlreadyMemberError(err)) {
         // Membership is exactly what the click wanted — the button only
@@ -1591,7 +1619,7 @@
       <!-- NIP-29 AV space: join (or leave) the channel's call; the count is
         the relay's own kind-39004 participant list. Icon + count, same
         header chrome as the members button. -->
-      {#if showCallHere}
+      {#if showCallHere && callLiveHere}
         <!-- The call is on screen right below: a status, not a second
           (destructive) control — only the stage's red button leaves. -->
         <span
@@ -1607,17 +1635,29 @@
       {:else}
         <button
           type="button"
-          class="btn btn-ghost btn-sm {inCallHere ? 'text-primary' : ''}"
+          class="btn btn-ghost btn-sm {callLiveHere ? 'text-primary' : ''}"
           data-testid="group-call-join"
           title={callButtonLabel}
           aria-label={callButtonLabel}
-          aria-pressed={inCallHere}
+          aria-pressed={callLiveHere}
           disabled={!myPubkey}
           onclick={toggleCall}
         >
           <MeetIcon class_="w-4 h-4" />
           {#if callParticipantCount}{callParticipantCount}{/if}
         </button>
+        {#if !myPubkey}
+          <!-- The greyed icon's "log in to start a call" is only a tooltip,
+            which a touch user never sees (QA round 2 C5). -->
+          <button
+            type="button"
+            class="btn text-primary btn-ghost btn-sm"
+            data-testid="group-call-login"
+            onclick={() => modalStore.openModal('login')}
+          >
+            {m.common_login()}
+          </button>
+        {/if}
       {/if}
     {:else if canStartCall}
       <!-- Admin one-click: switch the channel's calls on (a 9002 restating

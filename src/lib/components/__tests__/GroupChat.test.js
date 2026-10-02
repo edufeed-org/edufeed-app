@@ -978,6 +978,7 @@ vi.mock('$lib/paraglide/messages', () => ({
   groups_list_update_failed: () => 'Your list could not be updated',
   groups_join_sent: () => 'Join request sent',
   groups_join_joined: () => 'You joined the channel',
+  common_login: () => 'Log in',
   groups_join_already: () => 'You are already a member.',
   groups_composer_join_note: () => 'Join to write here.',
   community_join_request: () => 'Request to join',
@@ -1539,10 +1540,11 @@ describe('GroupChat', () => {
     /** @type {any} */ (showToast).mockClear();
     render(GroupChat, { props: { pointer: { relay: GROUP_RELAY, id: 'openchat' } } });
     await fireEvent.click(await screen.findByTestId('group-join'));
-    await waitFor(() =>
-      expect(showToast).toHaveBeenCalledWith('You joined the channel', 'success')
+    // Decided by the refreshed roster: openchat lists me ~1.2 s after the 9021.
+    await waitFor(
+      () => expect(showToast).toHaveBeenCalledWith('You joined the channel', 'success'),
+      { timeout: 5000 }
     );
-    expect(showToast).not.toHaveBeenCalledWith('Join request sent', 'success');
   });
 
   it('requesting to join a closed channel keeps the request wording', async () => {
@@ -1551,7 +1553,10 @@ describe('GroupChat', () => {
     render(GroupChat, { props: { pointer: { relay: GROUP_RELAY, id: 'walledchat' } } });
     const note = await screen.findByTestId('group-restricted-note');
     await fireEvent.click(within(note).getByRole('button', { name: 'Request to join' }));
-    await waitFor(() => expect(showToast).toHaveBeenCalledWith('Join request sent', 'success'));
+    // The roster stays unreadable (restricted): the `closed` marker decides.
+    await waitFor(() => expect(showToast).toHaveBeenCalledWith('Join request sent', 'success'), {
+      timeout: 5000
+    });
   });
 
   it('join publishes a 9021 to the group relay and mirrors the group into the 10009 list', async () => {
@@ -2618,15 +2623,29 @@ describe('GroupChat', () => {
         expect(leaveGroupCallMock).not.toHaveBeenCalled();
       });
 
-      it.each(['requesting', 'error', 'ended'])(
-        'in it while the call view shows the %s state: still a status',
+      it('in it while the call view shows the requesting state: still a status', async () => {
+        inCallHere();
+        groupCallHolder.state.phase = 'requesting';
+        groupCallHolder.state.connected = false;
+        render(GroupChat, { props: { pointer: callPointer } });
+        expect(await screen.findByTestId('group-call-status')).toBeTruthy();
+        expect(screen.queryByTestId('group-call-join')).toBeNull();
+      });
+
+      // Task 15 review: "Du bist im Anruf" is untrue once the call failed or
+      // ended — the header offers the call again instead.
+      it.each(['error', 'ended'])(
+        'in it while the call view shows the %s state: no "in the call" status',
         async (phase) => {
           inCallHere();
           groupCallHolder.state.phase = /** @type {any} */ (phase);
           groupCallHolder.state.connected = false;
+          groupCallHolder.participants = [];
           render(GroupChat, { props: { pointer: callPointer } });
-          expect(await screen.findByTestId('group-call-status')).toBeTruthy();
-          expect(screen.queryByTestId('group-call-join')).toBeNull();
+          const button = await screen.findByTestId('group-call-join');
+          expect(screen.queryByTestId('group-call-status')).toBeNull();
+          expect(button.getAttribute('aria-label')).toBe('Start call');
+          expect(button.getAttribute('aria-pressed')).toBe('false');
         }
       );
 
@@ -2659,6 +2678,26 @@ describe('GroupChat', () => {
       // QA C5: the greyed button says why.
       expect(button.getAttribute('aria-label')).toBe('Log in to start a call');
       expect(button.getAttribute('title')).toBe('Log in to start a call');
+    });
+
+    // QA round 2 C5: a touch user never sees the tooltip — a visible
+    // "Anmelden" sits next to the greyed icon and opens the login modal.
+    it('offers a visible login button next to the greyed call icon when logged out', async () => {
+      activeUserHolder.current = null;
+      const { modalStore } = await import('$lib/stores/modal.svelte.js');
+      const openModal = vi.spyOn(modalStore, 'openModal').mockImplementation(() => {});
+      render(GroupChat, { props: { pointer: callPointer } });
+      const login = await screen.findByTestId('group-call-login');
+      expect(login.textContent.trim()).toBe('Log in');
+      await fireEvent.click(login);
+      expect(openModal).toHaveBeenCalledWith('login');
+      openModal.mockRestore();
+    });
+
+    it('no login button for a logged-in viewer', async () => {
+      render(GroupChat, { props: { pointer: callPointer } });
+      await screen.findByTestId('group-call-join');
+      expect(screen.queryByTestId('group-call-login')).toBeNull();
     });
 
     it('renders the call stage in place of the chat body while in a call here', async () => {

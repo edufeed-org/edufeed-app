@@ -193,6 +193,7 @@ vi.mock('$lib/paraglide/messages', () => ({
   chat_attach_error_upload_failed: () => 'Upload failed. Please try again.',
   groups_join_sent: () => 'Join request sent',
   groups_join_joined: () => 'You joined the channel',
+  common_login: () => 'Log in',
   groups_list_remove_hint: () => 'groups_list_remove_hint',
   groups_call_start_login: () => 'Log in to start a call',
   groups_call_you_are_in: () => "You're in the call",
