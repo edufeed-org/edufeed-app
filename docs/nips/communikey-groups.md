@@ -30,11 +30,11 @@ It extends the Communikey community specification (kind `10222`).
 A Communikey community (kind `10222`, identified by its pubkey) can operate in one
 of three types:
 
-| Type | German UI label | Machinery |
-| --- | --- | --- |
-| open | Offen | plain 10222, no group |
-| moderated | Moderiert | 10222 + NIP-29 root group (public roster & roles) |
-| closed | Geschlossen | 10222 shell + E2E group engine (Concord/CORD today) |
+| Type      | German UI label | Machinery                                           |
+| --------- | --------------- | --------------------------------------------------- |
+| open      | Offen           | plain 10222, no group                               |
+| moderated | Moderiert       | 10222 + NIP-29 root group (public roster & roles)   |
+| closed    | Geschlossen     | 10222 shell + E2E group engine (Concord/CORD today) |
 
 The type is **derived, never declared**:
 
@@ -95,7 +95,7 @@ they surprise implementers:
    other place to record a role — 39002 carries bare pubkeys. Clients MUST
    NOT infer moderation authority from 39001 membership alone; they should
    read the role names and present a publisher as a publisher.
-2. **Relays MUST NOT grant moderation power on the strength of holding *a*
+2. **Relays MUST NOT grant moderation power on the strength of holding _a_
    role.** A relay that authorises `kind:9000`-`9020` for "any member with
    any role" hands every publisher the moderator's powers. Authorisation
    belongs to specific role names.
@@ -128,7 +128,7 @@ is a bare NIP-29 join request (kind `9021`) or an invite code.
 ```
 
 One tag per channel. Slot 5 `access`: `members` (roster mirrored from root) or
-`invited` (explicit subset); absent = world-open. Channel world-*readability* is
+`invited` (explicit subset); absent = world-open. Channel world-_readability_ is
 determined by ONE rule everywhere: the channel's `39000` lacking the `private`
 flag, capped by the relay's NIP-11 `auth_required`.
 
@@ -172,7 +172,7 @@ The tag grammar inside the section block is exactly the 10222's, so one
 parser serves both.
 
 **Validity.** An override counts only if its `d` tag equals the community
-pubkey AND its author is, *at read time*, either the community pubkey itself
+pubkey AND its author is, _at read time_, either the community pubkey itself
 or listed in the root group's current `kind:39001`. Judging against the
 current roster rather than the roster at signing time makes the rule
 retroactive in the same way `access` already is: demoting an admin revokes
@@ -185,7 +185,7 @@ broken by the lower event id so every client picks the same one. That winner
 replaces the 10222's section block **as a whole** — never merged
 section-by-section — but only while it is newer than the `kind:10222` itself.
 An owner editing their community therefore reasserts control by the ordinary
-act of saving. Clients SHOULD seed the owner's editing UI from the *effective*
+act of saving. Clients SHOULD seed the owner's editing UI from the _effective_
 sections so that save absorbs the admins' configuration rather than silently
 reverting it.
 
@@ -228,6 +228,19 @@ Following a community (client-side follow lists) is open to anyone for every
 type and is unrelated to membership. Membership exists only for moderated
 (NIP-29 roster) and closed (encrypted engine roster) communities.
 
+### Channel calendars
+
+A community calendar shows the NIP-52 calendar events h-tagged with the
+community pubkey **and** the ones h-tagged with the id of one of its channels:
+the root `membership` group, the channels discovered under it, and every
+`group` pointer. Clients read the latter from each channel's group relay
+(`{"kinds":[31923],"#h":[<channel ids on that relay>]}`), authenticating
+with NIP-42 first so private channels answer. A channel meeting carries
+exactly one `h` tag — never a community-pubkey `h` and a group-id `h` on
+one event. It lives only on the group relay, so clients show it read-only:
+named by its channel, linked to the channel, and kept out of every surface
+that would republish, share, repost, RSVP to or cache it.
+
 ### Type transitions
 
 - **open → moderated:** create root group (owner as admin), add `membership`
@@ -259,7 +272,7 @@ out mid-edit.
 ## Publisher window (Schaufenster) for concord communities
 
 A community with a `concord` pointer keeps its membership end-to-end
-encrypted — which makes publicly *verifiable* member-gating of its public
+encrypted — which makes publicly _verifiable_ member-gating of its public
 sections structurally impossible (a reader cannot check authorship against a
 roster nobody may see). The publisher window resolves this with a **consented
 public subset** of the private membership:
@@ -280,7 +293,7 @@ public subset** of the private membership:
   key-holding client is online — acceptance-to-listing latency is expected.
 - **Section gating.** The community's public sections reference the list with
   the standard profile-list form `["a", "30000:<community-pubkey>:publishers",
-  "<relay-url>"]`. Readers verify the public window exactly as for any
+"<relay-url>"]`. Readers verify the public window exactly as for any
   profile-list-gated section: only posts authored by listed publishers (or
   the community key itself) belong to the section.
 

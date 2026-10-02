@@ -45,6 +45,13 @@
 
   const isList = $derived(variant === 'list');
 
+  // A channel meeting on the community calendar (groups/channel-calendar.js):
+  // read-only. It names its channel and opens it — no /calendar/event page,
+  // no RSVP (a public `#a` REQ would name the private meeting), no reactions.
+  /** @type {{id: string, name: string, href: string} | null} */
+  const channelMeeting = $derived(event.channelMeeting ?? null);
+  const locations = $derived(channelMeeting ? [] : (event.locations ?? []));
+
   // Event descriptions sometimes contain markdown; show a clean plain-text
   // snippet in compact card/list previews rather than rendering it.
   const summaryText = $derived(stripMarkdown(event.summary));
@@ -80,9 +87,10 @@
 
   // Load RSVPs for this event (called at component init, not inside $derived)
   // svelte-ignore state_referenced_locally
-  const rsvpData = event.originalEvent
-    ? useCalendarEventRsvps(event.originalEvent)
-    : { rsvps: [], loading: false };
+  const rsvpData =
+    event.originalEvent && !event.channelMeeting
+      ? useCalendarEventRsvps(event.originalEvent)
+      : { rsvps: [], loading: false };
 
   // Get current user pubkey
   const userPubkey = $derived(manager.active?.pubkey || null);
@@ -103,7 +111,7 @@
   // Detail view handles relay fetching when the user navigates to the event.
   $effect(() => {
     const rawEvent = event.originalEvent;
-    if (!rawEvent?.id) return;
+    if (!rawEvent?.id || channelMeeting) return;
 
     const modelSub = eventStore.model(RepliesModel, rawEvent).subscribe((replies) => {
       commentCount = (replies || []).length;
@@ -127,6 +135,10 @@
    */
   function handleClick(e) {
     e.stopPropagation();
+    if (channelMeeting) {
+      goto(channelMeeting.href);
+      return;
+    }
     if (onEventClick) {
       onEventClick(event);
       return;
@@ -157,6 +169,7 @@
     onclick={handleClick}
     onkeydown={handleKeydown}
     data-testid="calendar-event-card"
+    data-channel-meeting={channelMeeting?.id}
   >
     <div
       class="list-thumbnail h-16 w-16 flex-shrink-0 overflow-hidden rounded bg-base-200 sm:h-20 sm:w-20"
@@ -199,9 +212,13 @@
           · {m.event_card_all_day()}
         {/if}
       </div>
-      {#if event.locations && event.locations.length > 0}
+      {#if channelMeeting}
+        <div class="truncate text-sm text-base-content/50" data-testid="channel-meeting-label">
+          {m.calendar_channel_meeting_in({ channel: channelMeeting.name })}
+        </div>
+      {:else if locations.length > 0}
         <div class="truncate text-sm text-base-content/50">
-          📍 {event.locations[0].name || event.locations[0].address || ''}
+          📍 {locations[0].name || locations[0].address || ''}
         </div>
       {:else if summaryText}
         <div class="truncate text-sm text-base-content/50">{summaryText}</div>
@@ -220,6 +237,7 @@
     onclick={handleClick}
     onkeydown={handleKeydown}
     data-testid="calendar-event-card"
+    data-channel-meeting={channelMeeting?.id}
   >
     <!-- Author Header (shown when authorProfile provided and not compact) -->
     {#if authorProfile && !compact}
@@ -372,16 +390,25 @@
           {/if}
         {/if}
 
+        {#if channelMeeting}
+          <div
+            class="{compact ? 'mb-1 truncate text-xs' : 'mb-2 text-sm'} text-base-content/70"
+            data-testid="channel-meeting-label"
+          >
+            {m.calendar_channel_meeting_in({ channel: channelMeeting.name })}
+          </div>
+        {/if}
+
         <!-- Event Location -->
-        {#if event.locations && event.locations.length > 0 && !compact}
+        {#if locations.length > 0 && !compact}
           <div class="mb-2 flex items-center gap-1 overflow-hidden text-sm text-base-content/70">
             <span class="flex-shrink-0 text-xs">📍</span>
             <div class="min-w-0 flex-1">
-              <LocationLink location={event.locations[0]} />
+              <LocationLink location={locations[0]} />
             </div>
-            {#if event.locations.length > 1}
+            {#if locations.length > 1}
               <span class="ml-1 flex-shrink-0 text-xs text-base-content/40"
-                >+{event.locations.length - 1}</span
+                >+{locations.length - 1}</span
               >
             {/if}
           </div>
@@ -430,7 +457,7 @@
         {/if}
 
         <!-- Reactions & Comments -->
-        {#if !compact}
+        {#if !compact && !channelMeeting}
           <div class="mt-2 flex items-center gap-2">
             {#if commentCount > 0}
               <span class="flex items-center gap-1 text-sm text-base-content/60">

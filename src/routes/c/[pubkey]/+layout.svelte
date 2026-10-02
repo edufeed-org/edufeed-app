@@ -296,6 +296,10 @@
   // too, and that is deliberate: an owner save then absorbs the admins'
   // section configuration into the 10222 instead of silently reverting it.
   setContext('communikeyEvent', () => effectiveCommunityEvent);
+  // The discovered channel list (root + subtree), shared so the community
+  // calendar can read the channels' meetings without a second 39000
+  // subscription (see CalendarView, "Channel calendars").
+  setContext('communityChannels', () => getCommunityChannelsForNav());
   setContext('sectionOverride', () => ({ source: sectionSource, author: sectionAuthor }));
   // The ONE availability-corrected content view (the $effect above). The
   // child page must render from THIS, not re-derive from $page.data — a

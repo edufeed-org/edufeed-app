@@ -2546,6 +2546,7 @@
   "call_landing_live_one": "Live now · 1 person",
   "call_landing_live_empty": "Live now",
   "call_landing_starts": "Starts {when}",
+  "call_landing_ics_download": "Download .ics",
   "call_landing_name_label": "What should the others call you?",
   "call_landing_name_required": "Please enter a name.",
   "call_landing_join": "Join",
@@ -3820,5 +3821,6 @@
   "meeting_bar_today": "today {time}",
   "meeting_bar_tomorrow": "tomorrow {time}",
   "meeting_detail_channel_only": "This meeting belongs to a channel. Join, guest link and delete are on its card in the channel.",
-  "meeting_preview_channel": "Meeting in a channel"
+  "meeting_preview_channel": "Meeting in a channel",
+  "calendar_channel_meeting_in": "in #{channel}"
 }

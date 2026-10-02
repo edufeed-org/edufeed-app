@@ -2,9 +2,12 @@
  * Calendar domain loaders for NIP-52 calendar events.
  * Includes timeline loaders and factory functions for custom filtering.
  */
-import { from, merge, EMPTY } from 'rxjs';
+import { from, merge, EMPTY, defer, of } from 'rxjs';
 import { mergeMap, filter, tap, switchMap } from 'rxjs/operators';
-import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
+import { createTimelineLoader } from 'applesauce-loaders/loaders';
+import { eventStore, pool } from '$lib/stores/nostr-infrastructure.svelte';
+import { authenticateOnce } from '$lib/groups/relay-auth.js';
+import { pointersByRelay } from '$lib/groups/channel-calendar.js';
 import { addressLoader, timedPool, createCachedTimelineLoader } from './base.js';
 import { backwardPaginateRelay } from './backward-paginate.js';
 import { getCalendarRelays } from '$lib/helpers/relay-helper.js';
@@ -280,6 +283,44 @@ export const communityCalendarTimelineLoader = (communityPubkey) => {
     limit: 250
   });
   return createCachedTimelineLoader(getCalendarRelays(), filter);
+};
+
+/**
+ * Factory: the community's CHANNEL calendars (communikey-groups.md, "Channel
+ * calendars"). Channel meetings are kind-31923 events h-tagged with a channel
+ * id and stored only on that channel's group relay, so they are read there —
+ * one timeline loader per relay with all of its channel ids as `#h`, plus the
+ * h-tagged kind-5s that delete them. Private channels answer only after
+ * NIP-42: with a signer each relay is authenticated first; a refused or
+ * missing auth still reads whatever the relay shows anonymously.
+ *
+ * Plain `createTimelineLoader` with the eventStore — no IDB cache request; the
+ * cache's write filter (isCacheableEvent) never persists channel meetings.
+ *
+ * @param {Array<{id: string, relay: string}>} groupPointers
+ * @param {{signer?: any}} [opts]
+ * @returns {() => import('rxjs').Observable<any>}
+ */
+export const channelCalendarsLoader = (groupPointers, { signer } = {}) => {
+  const groups = pointersByRelay(groupPointers);
+  return () =>
+    merge(
+      ...groups.map(({ relay, ids }) =>
+        defer(() => (signer ? from(authenticateOnce(pool.relay(relay), signer)) : of(null))).pipe(
+          switchMap(() =>
+            createTimelineLoader(
+              timedPool,
+              [relay],
+              [
+                { kinds: [31923], '#h': ids, limit: 250 },
+                { kinds: [5], '#h': ids, limit: 100 }
+              ],
+              { eventStore }
+            )()
+          )
+        )
+      )
+    );
 };
 
 /**

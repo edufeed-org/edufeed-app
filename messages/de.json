@@ -2546,6 +2546,7 @@
   "call_landing_live_one": "Läuft gerade · 1 Person",
   "call_landing_live_empty": "Läuft gerade",
   "call_landing_starts": "Beginnt {when}",
+  "call_landing_ics_download": ".ics herunterladen",
   "call_landing_name_label": "Wie sollen dich die anderen nennen?",
   "call_landing_name_required": "Bitte gib einen Namen ein.",
   "call_landing_join": "Beitreten",
@@ -3820,5 +3821,6 @@
   "meeting_bar_today": "heute {time}",
   "meeting_bar_tomorrow": "morgen {time}",
   "meeting_detail_channel_only": "Dieser Termin gehört zu einem Kanal. Du findest ihn – mit Beitreten, Gast-Link und Löschen – in der Terminkarte des Kanals.",
-  "meeting_preview_channel": "Termin in einem Kanal"
+  "meeting_preview_channel": "Termin in einem Kanal",
+  "calendar_channel_meeting_in": "in #{channel}"
 }
