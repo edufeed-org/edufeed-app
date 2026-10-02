@@ -992,7 +992,7 @@
     enrichmentErrorCode = '';
     try {
       // Konfi-Arbeit uses its own MCP variant so the LLM gets konfi-specific
-      // SKOS vocabs + field guidance (see /api/enrich + amb-mcp/src/lib/llm.ts).
+      // SKOS vocabs + field guidance (see /api/enrich + nope-mcp/src/lib/llm.ts).
       // It's only reachable when the user picked the EKW variant + bildungsbereich=konfi.
       const enrichVariant =
         isEkw && formData.bildungsbereich === 'konfi'

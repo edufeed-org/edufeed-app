@@ -1,6 +1,6 @@
 /** @vitest-environment node */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { callExtractMetadata } from '../ambMcpClient.js';
+import { callExtractMetadata } from '../nopeMcpClient.js';
 
 /**
  * Build a Response that mimics the streamable-HTTP MCP server: SSE body with a
@@ -220,7 +220,7 @@ describe('callExtractMetadata', () => {
   });
 
   it('throws with code="page_too_large" when tools/call returns isError flagging an oversized page', async () => {
-    // amb-mcp's fetchPage throws PageTooLargeError when the body exceeds the
+    // nope-mcp's fetchPage throws PageTooLargeError when the body exceeds the
     // configured byte cap. The MCP SDK wraps the throw into result.isError
     // with the error message in content[0].text. We surface this distinctly
     // so the wizard can prompt the user with a useful hint instead of the

@@ -1,25 +1,27 @@
 /**
  * URL → Form-prefill metadata enrichment endpoint.
  *
- * Thin proxy over the deployed AMB MCP server's `extract_metadata` tool.
- * The MCP server owns LLM grounding, PDF extraction, and SKOS vocab loading;
- * this route's job is request validation + per-request `skosSchemes` mapping
- * (since which subject vocab applies depends on the wizard's `bildungsbereich`
- * selection, which is dynamic per-call).
+ * Thin proxy over the deployed nope-mcp server's `extract_metadata` tool
+ * (nope-mcp was formerly named amb-mcp). The MCP server owns LLM grounding,
+ * PDF extraction, and SKOS vocab loading; this route's job is request
+ * validation + per-request `skosSchemes` mapping (since which subject vocab
+ * applies depends on the wizard's `bildungsbereich` selection, which is
+ * dynamic per-call).
  *
  * Validation: http(s) URL, variant ∈ {amb, ekw, konfi}.
  */
 
 import { json } from '@sveltejs/kit';
 import { env } from '$env/dynamic/private';
-import { callExtractMetadata } from '$lib/server/ambMcpClient.js';
-import { getAmbMcpToken } from '$lib/server/ambMcpToken.js';
+import { callExtractMetadata } from '$lib/server/nopeMcpClient.js';
+import { getNopeMcpToken } from '$lib/server/nopeMcpToken.js';
+import { nopeMcpEnv } from '$lib/server/nopeMcpEnv.js';
 import { parseHttpUrl } from '$lib/server/httpUrl.js';
 
 const VARIANTS = new Set(['amb', 'ekw', 'konfi']);
 const BILDUNGSBEREICHE = new Set(['schule', 'hochschule', 'extra', 'konfi']);
 
-/** Upper bound on sources per extraction — mirrors amb-mcp's MAX_SOURCE_URLS. */
+/** Upper bound on sources per extraction — mirrors nope-mcp's MAX_SOURCE_URLS. */
 const MAX_SOURCE_URLS = 10;
 
 /**
@@ -161,9 +163,9 @@ export async function POST({ request }) {
       ? body.bildungsbereich
       : undefined;
 
-  const mcpUrl = env.AMB_MCP_URL;
+  const mcpUrl = nopeMcpEnv(env, 'URL');
   if (!mcpUrl) {
-    console.error('[/api/enrich] AMB_MCP_URL is not configured');
+    console.error('[/api/enrich] NOPE_MCP_URL is not configured');
     return json({ error: 'Metadata extraction not configured' }, { status: 503 });
   }
 
@@ -194,7 +196,7 @@ export async function POST({ request }) {
       try {
         const result = await callExtractMetadata({
           mcpUrl,
-          bearerToken: await getAmbMcpToken(),
+          bearerToken: await getNopeMcpToken(),
           urls,
           variant,
           skosSchemes: buildSkosSchemes(variant, bildungsbereich)

@@ -1,6 +1,6 @@
 /**
  * Apply an enriched-metadata payload from the `extract_metadata` MCP tool /
- * `amb-mcp/lib`'s `extractMetadata()` onto the wizard's `formData`.
+ * `nope-mcp/lib`'s `extractMetadata()` onto the wizard's `formData`.
  *
  * Conservative semantics: only fill fields the user hasn't touched. Strings
  * are filled when blank; SKOS arrays when empty; license when still the form
