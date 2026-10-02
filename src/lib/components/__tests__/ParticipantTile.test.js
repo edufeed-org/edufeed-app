@@ -35,7 +35,8 @@ vi.mock('$lib/paraglide/messages', () => ({
   groups_call_volume_reset: () => 'Reset volume',
   groups_call_pin: () => 'Pin',
   groups_call_unpin: () => 'Unpin',
-  groups_call_guest_badge: () => 'Gast'
+  groups_call_guest_badge: () => 'Gast',
+  groups_call_tile_you: () => 'Du'
 }));
 
 const { default: ParticipantTile } = await import(
@@ -169,5 +170,14 @@ describe('ParticipantTile', () => {
       pinned: true
     });
     expect(screen.getByRole('button', { name: 'Unpin' })).toBeTruthy();
+  });
+
+  // QA round 2 K-new-1: the own tile said "You" in the German UI.
+  it('labels the own tile in the UI language', () => {
+    render(ParticipantTile, {
+      props: { participant: fakeParticipant(`${HEX}:x1`), pubkey: HEX, isLocal: true }
+    });
+    expect(screen.getByText('Du')).toBeTruthy();
+    expect(screen.queryByText('You')).toBeNull();
   });
 });

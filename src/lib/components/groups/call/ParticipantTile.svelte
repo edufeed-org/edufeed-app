@@ -113,7 +113,11 @@
 
   const fallbackName = $derived(pubkey ? pubkey.slice(0, 8) : 'Participant');
   const displayName = $derived(
-    isLocal ? 'You' : profile ? getDisplayName(profile, fallbackName) : fallbackName
+    isLocal
+      ? m.groups_call_tile_you()
+      : profile
+        ? getDisplayName(profile, fallbackName)
+        : fallbackName
   );
   // A hover card + profile link only make sense for a resolved Nostr identity.
   const linkable = $derived(!!pubkey && !isLocal && !compact);
