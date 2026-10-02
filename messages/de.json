@@ -3818,5 +3818,6 @@
   "meeting_status_past": "Vorbei",
   "meeting_bar_label": "Nächster Termin",
   "meeting_bar_today": "heute {time}",
-  "meeting_bar_tomorrow": "morgen {time}"
+  "meeting_bar_tomorrow": "morgen {time}",
+  "meeting_detail_channel_only": "Dieser Termin gehört zu einem Kanal. Du findest ihn – mit Beitreten, Gast-Link und Löschen – in der Terminkarte des Kanals."
 }

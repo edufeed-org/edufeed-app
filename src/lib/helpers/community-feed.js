@@ -6,7 +6,7 @@
  * ranking therefore uses the later of publish time and share time, and
  * upcoming-event selection works on the full item set, not the capped feed.
  */
-import { dedupeCalendarTwins } from '$lib/helpers/calendar-timing.js';
+import { dedupeCalendarTwins, withoutChannelMeetings } from '$lib/helpers/calendar-timing.js';
 
 /**
  * When an item was last "active": its own created_at or the newest share.
@@ -30,8 +30,9 @@ export function mergeFeedItems(lists, limit) {
   // Dedupe by id first, then collapse NIP-52 twins: an appointment whose
   // publisher flipped it between 31922 and 31923 under the same d-tag has two
   // live addresses and two ids, so id-dedupe alone lets it in twice.
+  // Channel meetings never reach a feed (their home is the channel card).
   const all = dedupeCalendarTwins(
-    lists.flat().filter((e) => {
+    withoutChannelMeetings(lists.flat()).filter((e) => {
       if (!e || seen.has(e.id)) return false;
       seen.add(e.id);
       return true;
@@ -50,7 +51,7 @@ export function mergeFeedItems(lists, limit) {
  * @returns {any[]}
  */
 export function selectUpcomingEvents(items, getStart, now, limit) {
-  return dedupeCalendarTwins(items)
+  return dedupeCalendarTwins(withoutChannelMeetings(items))
     .filter((e) => (e.kind === 31922 || e.kind === 31923) && getStart(e) > now)
     .sort((a, b) => getStart(a) - getStart(b))
     .slice(0, limit);

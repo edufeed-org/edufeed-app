@@ -12,6 +12,7 @@
   import { useActiveUser } from '$lib/stores/accounts.svelte';
   import { runtimeConfig } from '$lib/stores/config.svelte.js';
   import { formatCalendarDate } from '$lib/helpers/calendar.js';
+  import { isChannelMeeting } from '$lib/helpers/calendar-timing.js';
   import { encodeEventToNaddr } from '$lib/helpers/nostrUtils';
   import CommentList from '$lib/components/comments/CommentList.svelte';
   import ReactionBar from '$lib/components/reactions/ReactionBar.svelte';
@@ -69,6 +70,9 @@
 
   // Check if user owns this event
   let isUserEvent = $derived(event && activeUser && event.pubkey === activeUser.pubkey);
+  // A channel meeting is managed from its channel's card only: no outbox
+  // edit/delete, no "add to calendar" (a 31924 would list it publicly).
+  let channelMeeting = $derived(isChannelMeeting(rawEvent ?? event?.originalEvent));
 
   // Format event data for display
   let startDate = $derived(event ? new Date(event.start * 1000) : null);
@@ -88,8 +92,9 @@
   });
 
   // Load RSVPs for this event
+  // (Not for a channel meeting: the REQ would name its address on public relays.)
   const rsvpData = $derived(
-    rawEvent ? useCalendarEventRsvps(rawEvent) : { rsvps: [], loading: false }
+    rawEvent && !channelMeeting ? useCalendarEventRsvps(rawEvent) : { rsvps: [], loading: false }
   );
 
   // Get current user pubkey
@@ -100,7 +105,8 @@
 
   // Subscribe to featured calendars
   $effect(() => {
-    if (!eventAddress) return;
+    const address = eventAddress; // read first (effect early-return rule)
+    if (!address || channelMeeting) return;
 
     isLoadingCalendars = true;
 
@@ -108,7 +114,7 @@
     // v6: request() completes after EOSE (or timeout) and emits only events.
     const subscription = pool
       .group(getCalendarRelays())
-      .request({ kinds: [31924], '#a': [eventAddress] }, { timeout: 10_000 })
+      .request({ kinds: [31924], '#a': [address] }, { timeout: 10_000 })
       .subscribe({
         next: (event) => {
           if (event?.kind !== 31924) return;
@@ -180,7 +186,14 @@
   }
 </script>
 
-{#if event}
+{#if event && channelMeeting}
+  <!-- Reactions, comments, RSVPs, sharing and calendar edits would all
+       publish outside the channel's group relay. -->
+  <div class="alert alert-info" role="status" data-testid="channel-meeting-notice">
+    <span><span class="font-semibold">{event.title}</span> — {m.meeting_detail_channel_only()}</span
+    >
+  </div>
+{:else if event}
   <DetailHeader
     title={event.title || ''}
     event={rawEvent || {
@@ -193,13 +206,15 @@
       sig: ''
     }}
     authorPubkey={event.pubkey || ''}
-    onEdit={isUserEvent ? handleEdit : undefined}
-    onDelete={isUserEvent ? handleDelete : undefined}
+    onEdit={isUserEvent && !channelMeeting ? handleEdit : undefined}
+    onDelete={isUserEvent && !channelMeeting ? handleDelete : undefined}
     deleteTitle={m.event_management_delete_confirm_title()}
     deleteItemName={event.title || ''}
   >
     {#snippet actions()}
-      <AddToCalendarDropdown {event} disabled={!activeUser} />
+      {#if !channelMeeting}
+        <AddToCalendarDropdown {event} disabled={!activeUser} />
+      {/if}
     {/snippet}
     {#snippet metadata()}
       {#if event.hashtags?.length > 0}

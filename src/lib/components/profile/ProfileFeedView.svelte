@@ -27,6 +27,7 @@
     toggleHiddenCategory
   } from '$lib/helpers/profile-feed.js';
   import { mergeRepostsIntoFeed } from '$lib/helpers/repost-feed.js';
+  import { withoutChannelMeetings } from '$lib/helpers/calendar-timing.js';
   import { resolveRepostReferences } from '$lib/helpers/repost-resolution.js';
   import UrlCard from '$lib/components/bookmarks/UrlCard.svelte';
   import EventHighlightCard from '$lib/components/bookmarks/EventHighlightCard.svelte';
@@ -294,7 +295,8 @@
       .model(TimelineModel, { kinds: ALL_FEED_KINDS, authors: pubkeys })
       .subscribe({
         next: (loaded) => {
-          items = loaded || [];
+          // Channel meetings stay in their channel, never in a profile feed.
+          items = withoutChannelMeetings(loaded || []);
           isLoading = false;
         },
         error: (err) => {

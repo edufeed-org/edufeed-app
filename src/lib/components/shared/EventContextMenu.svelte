@@ -22,6 +22,7 @@
   import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
   import { modalStore } from '$lib/stores/modal.svelte.js';
   import CommunityShare from './CommunityShare.svelte';
+  import { isChannelMeeting } from '$lib/helpers/calendar-timing.js';
   import DeleteConfirmModal from './DeleteConfirmModal.svelte';
 
   /**
@@ -36,9 +37,15 @@
   /** @type {Props} */
   let { event, onEdit, onDelete, deleteTitle = '', deleteItemName = '' } = $props();
 
+  // A channel meeting (NIP-52 event h-tagged with a channel id) lives on its
+  // group relay only: no edit or delete through the public calendar path
+  // (both publish via the outbox), no sharing, no link, no pin — its home is
+  // the channel's meeting card.
+  let channelMeeting = $derived(isChannelMeeting(event));
+
   let showDeleteConfirmation = $state(false);
   let isDeleting = $state(false);
-  let hasAuthorActions = $derived(!!onEdit || !!onDelete);
+  let hasAuthorActions = $derived(!channelMeeting && (!!onEdit || !!onDelete));
 
   const getActiveUser = useActiveUser();
   let activeUser = $derived(getActiveUser());
@@ -60,7 +67,7 @@
     !!activeUser && activeUser.pubkey !== event.pubkey && event.kind === 30142
   );
 
-  let showPinOption = $derived(!!isCommunityAdmin);
+  let showPinOption = $derived(!!isCommunityAdmin && !channelMeeting);
   let eventIsPinned = $derived(
     showPinOption && activeUser ? isPinned(event, activeUser.pubkey) : false
   );
@@ -177,7 +184,7 @@
   <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
   <ul tabindex="0" class="dropdown-content menu z-10 w-56 rounded-box bg-base-100 p-2 shadow-lg">
     <!-- Author actions -->
-    {#if onEdit}
+    {#if onEdit && !channelMeeting}
       <li>
         <button onclick={handleEditClick}>
           <EditIcon class="h-4 w-4" />
@@ -185,7 +192,7 @@
         </button>
       </li>
     {/if}
-    {#if onDelete}
+    {#if onDelete && !channelMeeting}
       <li>
         <button class="text-error" onclick={handleDeleteClick}>
           <TrashIcon class="h-4 w-4" />
@@ -197,7 +204,7 @@
       <div class="divider my-0"></div>
     {/if}
     <!-- Sharing actions -->
-    {#if activeUser}
+    {#if activeUser && !channelMeeting}
       <li>
         <button onclick={openShareModal}>
           <RepostIcon class_="w-4 h-4" />
@@ -205,12 +212,14 @@
         </button>
       </li>
     {/if}
-    <li>
-      <button onclick={copyShareLink}>
-        <ExternalLinkIcon class_="w-4 h-4" />
-        {m.event_menu_copy_link()}
-      </button>
-    </li>
+    {#if !channelMeeting}
+      <li>
+        <button onclick={copyShareLink}>
+          <ExternalLinkIcon class_="w-4 h-4" />
+          {m.event_menu_copy_link()}
+        </button>
+      </li>
+    {/if}
     {#if showPinOption}
       <li>
         <button onclick={togglePin}>

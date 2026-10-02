@@ -36,6 +36,7 @@
   import { showToast } from '$lib/helpers/toast';
   import { hasNip44 } from '$lib/helpers/nip44.js';
   import { formatDateParam } from '$lib/helpers/urlParams.js';
+  import { formDateFromTimestamp } from '$lib/helpers/calendar-timing.js';
 
   /**
    * @typedef {import('../../types/calendar.js').EventFormData} EventFormData
@@ -325,9 +326,10 @@
       image: existingEvent.image || '',
       imageWasUploaded: false,
       imageLicenseEvent: null,
-      startDate: formatDateParam(startDate),
+      // All-day days are UTC days, timed ones local (formDateFromTimestamp).
+      startDate: formDateFromTimestamp(existingEvent.start, existingEvent.kind),
       startTime: startDate.toTimeString().slice(0, 5),
-      endDate: endDate ? formatDateParam(endDate) : '',
+      endDate: endDate ? formDateFromTimestamp(existingEvent.end, existingEvent.kind) : '',
       endTime: endDate ? endDate.toTimeString().slice(0, 5) : '10:00',
       startTimezone: existingEvent.startTimezone || getCurrentTimezone(),
       endTimezone: existingEvent.endTimezone || getCurrentTimezone(),

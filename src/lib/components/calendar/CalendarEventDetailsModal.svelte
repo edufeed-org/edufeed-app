@@ -12,6 +12,7 @@
   const resolve = /** @type {any} */ (_resolve);
   import { formatCalendarDate } from '../../helpers/calendar.js';
   import { modalStore } from '../../stores/modal.svelte.js';
+  import { isChannelMeeting } from '$lib/helpers/calendar-timing.js';
   import { manager } from '$lib/stores/accounts.svelte';
   import { showToast } from '$lib/helpers/toast.js';
   import {
@@ -114,6 +115,9 @@
 
   // Check if user owns this event
   let isUserEvent = $derived(event && manager.active && event.pubkey === manager.active.pubkey);
+  // A channel meeting is managed from its channel's card only: nothing here
+  // may publish about it outside the group relay (edit, share, reactions).
+  let channelMeeting = $derived(isChannelMeeting(event?.originalEvent));
 
   // Generate URL for event detail page
   let eventDetailUrl = $derived(
@@ -257,7 +261,7 @@
 
           <!-- Simplified Action Buttons -->
           <div class="flex items-center gap-1">
-            {#if isUserEvent}
+            {#if isUserEvent && !channelMeeting}
               <EventManagementActions
                 {event}
                 activeUser={manager.active}
@@ -485,30 +489,38 @@
         </div>
       {/if}
 
-      <!-- Reactions -->
-      <div class="mb-6">
-        <h3 class="mb-3 text-lg font-semibold text-base-content">{m.event_details_reactions()}</h3>
-        <ReactionBar event={event?.originalEvent || event} />
-      </div>
-
-      <!-- Personal Calendar Sharing Section -->
-      {#if manager.active}
-        <div class="mb-4 border-t border-base-300 pt-4">
+      {#if channelMeeting}
+        <p class="mb-4 alert text-sm alert-info" role="status" data-testid="channel-meeting-notice">
+          {m.meeting_detail_channel_only()}
+        </p>
+      {:else}
+        <!-- Reactions -->
+        <div class="mb-6">
           <h3 class="mb-3 text-lg font-semibold text-base-content">
-            {m.event_details_manage_calendar()}
+            {m.event_details_reactions()}
           </h3>
-          <PersonalCalendarShare {event} activeUser={manager.active} />
+          <ReactionBar event={event?.originalEvent || event} />
         </div>
-      {/if}
 
-      <!-- Community Sharing Section -->
-      {#if manager.active}
-        <div class="mb-4 border-t border-base-300 pt-4">
-          <h3 class="mb-3 text-lg font-semibold text-base-content">
-            {m.event_details_share_communities()}
-          </h3>
-          <CommunityShare event={event.originalEvent} activeUser={manager.active} />
-        </div>
+        <!-- Personal Calendar Sharing Section -->
+        {#if manager.active}
+          <div class="mb-4 border-t border-base-300 pt-4">
+            <h3 class="mb-3 text-lg font-semibold text-base-content">
+              {m.event_details_manage_calendar()}
+            </h3>
+            <PersonalCalendarShare {event} activeUser={manager.active} />
+          </div>
+        {/if}
+
+        <!-- Community Sharing Section -->
+        {#if manager.active}
+          <div class="mb-4 border-t border-base-300 pt-4">
+            <h3 class="mb-3 text-lg font-semibold text-base-content">
+              {m.event_details_share_communities()}
+            </h3>
+            <CommunityShare event={event.originalEvent} activeUser={manager.active} />
+          </div>
+        {/if}
       {/if}
 
       <!-- Debug Information Component -->

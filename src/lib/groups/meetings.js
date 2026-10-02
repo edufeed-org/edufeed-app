@@ -11,6 +11,11 @@
 // Plain module (no runes) — called from modal/card components and tested in
 // node.
 import { buildCalendarEventTags, convertFormDataToEvent } from '$lib/helpers/calendar.js';
+import { isChannelMeeting } from '$lib/helpers/calendar-timing.js';
+
+// The generic-surface guard lives with the pure calendar helpers (the IDB
+// cache and calendar models import it without pulling in this module).
+export { isChannelMeeting };
 
 /** NIP-52 time-based calendar event kind used for all scheduled meetings. */
 export const MEETING_KIND = 31923;
@@ -309,4 +314,28 @@ export function nextBarMeeting(events, nowS) {
     if (!best || times.start < best.start) best = { event, ...times, phase };
   }
   return best;
+}
+
+/**
+ * Whether "Beitreten" is enabled — one rule for the card and the bar: from
+ * 15 minutes before the start until the end, and in any phase while the
+ * channel's call is running (the meeting's call is the channel's call).
+ *
+ * @param {'upcoming' | 'joinable' | 'running' | 'past'} phase
+ * @param {boolean} callRunning
+ * @returns {boolean}
+ */
+export function canJoinMeetingNow(phase, callRunning) {
+  return phase === 'joinable' || phase === 'running' || callRunning;
+}
+
+/**
+ * A meeting's display title (NIP-52 `title`, legacy `name`), '' when none.
+ *
+ * @param {{tags?: string[][]}} event
+ * @returns {string}
+ */
+export function meetingTitle(event) {
+  const tags = event?.tags ?? [];
+  return tags.find((t) => t[0] === 'title')?.[1] || tags.find((t) => t[0] === 'name')?.[1] || '';
 }

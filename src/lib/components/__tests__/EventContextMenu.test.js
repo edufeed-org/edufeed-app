@@ -375,4 +375,66 @@ describe('EventContextMenu', () => {
       expect(mockOpenModal).toHaveBeenCalledWith('reportMetadata', { event: resourceEvent });
     });
   });
+
+  // A channel meeting (h = channel id) lives on its group relay only: the
+  // menu must offer nothing that publishes or links it outside the channel.
+  describe('channel meeting', () => {
+    const meeting = {
+      id: 'meeting1',
+      kind: 31923,
+      pubkey: ACTIVE_USER_PUBKEY,
+      tags: [
+        ['d', 'meeting-1'],
+        ['start', '2000000000'],
+        ['h', '4c9b50c8c413f15e']
+      ],
+      created_at: 1700000000,
+      content: ''
+    };
+    /** @param {HTMLElement} container */
+    const menuText = (container) =>
+      [...container.querySelectorAll('ul.dropdown-content button')]
+        .map((b) => b.textContent.trim())
+        .join(' | ');
+
+    it('hides edit, delete, share, copy link and pin', async () => {
+      replaceableSubject = new BehaviorSubject({ kind: 10222, pubkey: ACTIVE_USER_PUBKEY });
+      mockReplaceable.mockImplementation(() => replaceableSubject);
+      const { container } = render(EventContextMenu, {
+        props: { event: meeting, onEdit: vi.fn(), onDelete: vi.fn() }
+      });
+      await Promise.resolve();
+      const items = menuText(container);
+      for (const hidden of [
+        'Edit',
+        'Delete',
+        'Share to communities',
+        'Copy link',
+        'Feature on homepage'
+      ]) {
+        expect(items).not.toContain(hidden);
+      }
+      // Read-only dev actions stay.
+      expect(items).toContain('View raw event');
+    });
+
+    it('keeps the full menu for a community calendar event', () => {
+      const { container } = render(EventContextMenu, {
+        props: {
+          event: {
+            ...meeting,
+            tags: [
+              ['d', 'x'],
+              ['h', 'c'.repeat(64)]
+            ]
+          },
+          onEdit: vi.fn()
+        }
+      });
+      const items = menuText(container);
+      expect(items).toContain('Edit');
+      expect(items).toContain('Share to communities');
+      expect(items).toContain('Copy link');
+    });
+  });
 });

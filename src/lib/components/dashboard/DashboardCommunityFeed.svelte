@@ -15,6 +15,7 @@
   import { contactsStore } from '$lib/stores/contacts.svelte.js';
   import { useActiveUser } from '$lib/stores/accounts.svelte';
   import { ALL_FEED_KINDS } from '$lib/helpers/profile-feed.js';
+  import { withoutChannelMeetings } from '$lib/helpers/calendar-timing.js';
   import { startProfileFeedLoaders } from '$lib/loaders/profile-feed-loaders.js';
   import { addressLoader } from '$lib/loaders/base.js';
   import { getCommunikeyRelays } from '$lib/helpers/relay-helper.js';
@@ -263,7 +264,7 @@
     subs.push(
       eventStore.model(TimelineModel, { kinds: ALL_FEED_KINDS, authors: contacts }).subscribe({
         next: (loaded) => {
-          followItems = loaded || [];
+          followItems = withoutChannelMeetings(loaded || []);
         },
         error: (err) => console.error('DashboardCommunityFeed: follows model error:', err)
       })

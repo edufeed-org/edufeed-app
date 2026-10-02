@@ -9,6 +9,7 @@
 import { NostrIDB, getEventUID } from 'nostr-idb';
 import { isAddressPointer, isEventPointer, persistEventsToCache } from 'applesauce-core/helpers';
 import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
+import { isChannelMeeting } from '$lib/helpers/calendar-timing.js';
 
 /**
  * Kinds we persist to IDB. See spec §"What gets persisted" for rationale.
@@ -35,6 +36,19 @@ const CACHEABLE_KINDS = new Set([
  */
 export function isCacheableKind(kind) {
   return CACHEABLE_KINDS.has(kind);
+}
+
+/**
+ * The write filter: a cacheable kind, and never a channel meeting — a NIP-52
+ * event h-tagged with a channel id lives on its group relay only and must
+ * not outlive the channel session in IDB (it would resurface in generic
+ * calendar views).
+ *
+ * @param {{kind: number, tags?: string[][]}} event
+ * @returns {boolean}
+ */
+export function isCacheableEvent(event) {
+  return CACHEABLE_KINDS.has(event.kind) && !isChannelMeeting(event);
 }
 
 /**
@@ -88,9 +102,7 @@ export const dbReady = (async () => {
         // the write has always already happened. Deleting this guard left the
         // outcome identical in 5/5 trials. `uncacheEvent` is what handles that
         // path; this is the invariant for everything else. (#64)
-        const cacheable = events.filter(
-          (e) => CACHEABLE_KINDS.has(e.kind) && eventStore.hasEvent(e.id)
-        );
+        const cacheable = events.filter((e) => isCacheableEvent(e) && eventStore.hasEvent(e.id));
         if (cacheable.length === 0) return;
         await Promise.allSettled(cacheable.map((e) => nostrIDB.add(e)));
       },

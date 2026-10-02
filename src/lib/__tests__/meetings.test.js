@@ -21,7 +21,9 @@ import {
   icsFileName,
   findMeetingPass,
   meetingTimes,
-  nextBarMeeting
+  nextBarMeeting,
+  canJoinMeetingNow,
+  meetingTitle
 } from '../groups/meetings.js';
 
 /** @param {string[][]} tags @param {string} name @returns {string[][]} */
@@ -463,5 +465,30 @@ describe('nextBarMeeting', () => {
 
   it('ignores events without a start', () => {
     expect(nextBarMeeting([{ id: 'x', kind: 31923, tags: [] }], now)).toBeNull();
+  });
+});
+
+describe('canJoinMeetingNow (card and bar share it)', () => {
+  it('is open in the join window and while the meeting runs', () => {
+    expect(canJoinMeetingNow('joinable', false)).toBe(true);
+    expect(canJoinMeetingNow('running', false)).toBe(true);
+  });
+
+  it('is closed before the window and after the end', () => {
+    expect(canJoinMeetingNow('upcoming', false)).toBe(false);
+    expect(canJoinMeetingNow('past', false)).toBe(false);
+  });
+
+  it('is open in any phase while the channel call runs', () => {
+    expect(canJoinMeetingNow('upcoming', true)).toBe(true);
+    expect(canJoinMeetingNow('past', true)).toBe(true);
+  });
+});
+
+describe('meetingTitle', () => {
+  it('reads the title tag, then name, else empty', () => {
+    expect(meetingTitle({ tags: [['title', 'Elternabend']] })).toBe('Elternabend');
+    expect(meetingTitle({ tags: [['name', 'Alt']] })).toBe('Alt');
+    expect(meetingTitle({ tags: [] })).toBe('');
   });
 });
