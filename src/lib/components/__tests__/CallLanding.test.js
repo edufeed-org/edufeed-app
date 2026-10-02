@@ -298,6 +298,46 @@ describe('CallLanding', () => {
       await vi.advanceTimersByTimeAsync(60_000);
       expect(screen.getByTestId('call-landing-invalid')).toBeTruthy();
     });
+    // Review M8 fix 1: a ready-view recheck still in flight when the relay
+    // refuses the join must not flip the page back to "ready".
+    it('a recheck in flight when the join is refused cannot bring "ready" back', async () => {
+      vi.useFakeTimers();
+      checkCallPass.mockResolvedValue({ valid: true, reason: 'ok', liveCount: 0 });
+      activeUser = { pubkey: 'd'.repeat(64), signer: {} };
+      const view = render(CallLanding, { props: { pointer: POINTER } });
+      await vi.advanceTimersByTimeAsync(0);
+      expect(screen.getByTestId('call-landing-join-as')).toBeTruthy();
+      /** @type {(v: any) => void} */
+      let resolveLate = () => {};
+      checkCallPass.mockReturnValue(new Promise((r) => (resolveLate = r)));
+      await vi.advanceTimersByTimeAsync(60_000); // the 60 s recheck is now in flight
+      // A new pointer object (only to re-render the plain-object call state)
+      // re-runs the initial check too: keep that one silent.
+      checkCallPass.mockReturnValue(new Promise(() => {}));
+      leaveGroupCall.mockImplementation(async () => {
+        callState.phase = 'idle';
+        callState.error = null;
+        callState.isActiveFor = () => false;
+      });
+      callState.phase = 'error';
+      callState.error = { reason: 'pass' };
+      callState.isActiveFor = () => true;
+      try {
+        await view.rerender({ pointer: { ...POINTER } });
+        await vi.advanceTimersByTimeAsync(0);
+        expect(screen.getByTestId('call-landing-invalid')).toBeTruthy();
+        expect(leaveGroupCall).toHaveBeenCalled();
+        // The call state is gone now; the late "ok" lands afterwards.
+        await view.rerender({ pointer: { ...POINTER } });
+        resolveLate({ valid: true, reason: 'ok', liveCount: 0 });
+        await vi.advanceTimersByTimeAsync(0);
+        expect(screen.getByTestId('call-landing-invalid')).toBeTruthy();
+      } finally {
+        leaveGroupCall.mockImplementation(async () => {});
+        callState.error = null;
+      }
+    });
+
     it('a join the relay refuses for the pass shows the invalid view, not a retry', async () => {
       checkCallPass.mockResolvedValue({ valid: true, reason: 'ok', liveCount: 0 });
       activeUser = { pubkey: 'd'.repeat(64), signer: {} };

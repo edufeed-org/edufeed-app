@@ -214,6 +214,11 @@
       runtimeConfig.appName
     )
   );
+  // Guards the exact timer and the 60 s fallback against a race: if both
+  // fire close together, only the response to the LATEST request is ever
+  // applied, however the two in-flight requests resolve. A refused join
+  // bumps it too, so a recheck still in flight cannot bring "ready" back.
+  let notYetRecheckSeq = 0;
   // The relay refused the token for the pass (revoked / deleted meeting):
   // retrying can never work — show why instead (QA round 3 C4).
   const passRefused = $derived(
@@ -222,6 +227,7 @@
   $effect(() => {
     if (!passRefused) return;
     untrack(() => {
+      notYetRecheckSeq++;
       check = { valid: false, reason: 'unknown', liveCount: 0 };
       leaveGroupCall();
     });
@@ -266,10 +272,6 @@
   // longer than setTimeout's own cap (a signed 32-bit ms count).
   const NOT_YET_FALLBACK_MS = 60_000;
   const NOT_YET_MAX_TIMEOUT_MS = 2 ** 31 - 1;
-  // Guards the exact timer and the 60 s fallback against a race: if both
-  // fire close together, only the response to the LATEST request is ever
-  // applied, however the two in-flight requests resolve.
-  let notYetRecheckSeq = 0;
   // The ready view re-checks on the same 60 s interval: a meeting deleted or
   // a link revoked while the lobby is open turns it invalid (QA round 3 C4).
   $effect(() => {
