@@ -8,6 +8,7 @@
   import { CalendarIcon } from '$lib/components/icons';
   import EuropeanDateInput from '$lib/components/shared/EuropeanDateInput.svelte';
   import * as m from '$lib/paraglide/messages';
+  import { formatDate } from '$lib/helpers/dates.js';
 
   /**
    * @typedef {Object} DateRange
@@ -32,8 +33,8 @@
     const startDate = new Date(start * 1000);
     const endDate = new Date(end * 1000);
 
-    const startStr = startDate.toLocaleDateString(undefined, { month: 'short', year: 'numeric' });
-    const endStr = endDate.toLocaleDateString(undefined, { month: 'short', year: 'numeric' });
+    const startStr = formatDate(startDate, { month: 'short', year: 'numeric' });
+    const endStr = formatDate(endDate, { month: 'short', year: 'numeric' });
 
     return `${startStr} - ${endStr}`;
   });

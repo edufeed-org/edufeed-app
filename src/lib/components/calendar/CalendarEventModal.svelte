@@ -31,7 +31,7 @@
   import ParticipantsEditor from '$lib/components/calendar/ParticipantsEditor.svelte';
   import { CloseIcon } from '../icons';
   import { pool } from '$lib/stores/nostr-infrastructure.svelte';
-  import { canHaveGuestLink } from '$lib/groups/meetings.js';
+  import { canHaveGuestLink, defaultMeetingSlot } from '$lib/groups/meetings.js';
   import { scheduleGroupMeeting, sendMeetingInvites } from '$lib/groups/schedule-meeting.js';
   import { showToast } from '$lib/helpers/toast';
   import { hasNip44 } from '$lib/helpers/nip44.js';
@@ -270,6 +270,11 @@
     tomorrow.setDate(tomorrow.getDate() + 1);
     // A channel meeting is always timed (kind 31923) and ends the day it starts.
     const meeting = isGroupMeeting;
+    // …and opened for today it starts at the next half hour, not at an
+    // already-past 09:00 (QA round 3 C1).
+    const now = new Date();
+    const slot =
+      meeting && formatDateParam(today) === formatDateParam(now) ? defaultMeetingSlot(now) : null;
 
     formData = {
       title: '',
@@ -279,10 +284,10 @@
       imageLicenseEvent: null,
       // Local day: toISOString() names the UTC day, which east of UTC just
       // after midnight is still yesterday.
-      startDate: formatDateParam(today),
-      startTime: '09:00',
-      endDate: formatDateParam(meeting ? today : tomorrow),
-      endTime: '10:00',
+      startDate: slot?.startDate ?? formatDateParam(today),
+      startTime: slot?.startTime ?? '09:00',
+      endDate: slot?.endDate ?? formatDateParam(meeting ? today : tomorrow),
+      endTime: slot?.endTime ?? '10:00',
       startTimezone: getCurrentTimezone(),
       endTimezone: getCurrentTimezone(),
       location: '',
@@ -624,14 +629,17 @@
         <!-- Event Title -->
         <div class="mb-4">
           <label for="title" class="mb-1 block text-sm font-medium text-base-content">
-            {m.event_modal_event_title()} <span class="text-error">*</span>
+            {isGroupMeeting ? m.meeting_modal_title_label() : m.event_modal_event_title()}
+            <span class="text-error">*</span>
           </label>
           <input
             id="title"
             type="text"
             class="input-bordered input w-full"
             bind:value={formData.title}
-            placeholder={m.event_modal_enter_event_title()}
+            placeholder={isGroupMeeting
+              ? m.meeting_modal_title_placeholder()
+              : m.event_modal_enter_event_title()}
             required
           />
         </div>
@@ -645,7 +653,9 @@
             id="summary"
             class="textarea-bordered resize-vertical textarea w-full"
             bind:value={formData.summary}
-            placeholder={m.event_modal_enter_event_description()}
+            placeholder={isGroupMeeting
+              ? m.meeting_modal_description_placeholder()
+              : m.event_modal_enter_event_description()}
             rows="3"
           ></textarea>
         </div>
@@ -734,18 +744,20 @@
           </div>
         {/if}
 
-        <!-- Reference Links (Optional) -->
-        <div class="mb-4">
-          <EditableList
-            bind:items={formData.references}
-            label={m.event_modal_references_label()}
-            placeholder={m.event_modal_references_placeholder()}
-            buttonText={m.event_modal_references_button()}
-            itemType="link"
-            validator={validateUrl}
-            helpText={m.event_modal_references_help()}
-          />
-        </div>
+        <!-- Reference Links (Optional) — not for a channel meeting (C5) -->
+        {#if !isGroupMeeting}
+          <div class="mb-4">
+            <EditableList
+              bind:items={formData.references}
+              label={m.event_modal_references_label()}
+              placeholder={m.event_modal_references_placeholder()}
+              buttonText={m.event_modal_references_button()}
+              itemType="link"
+              validator={validateUrl}
+              helpText={m.event_modal_references_help()}
+            />
+          </div>
+        {/if}
 
         <!-- Participants (Optional) -->
         <div class="mb-4">
@@ -753,10 +765,8 @@
             bind:participants={formData.participants}
             disabled={isSubmitting}
             label={isGroupMeeting ? m.meeting_modal_invite_label() : ''}
+            help={isGroupMeeting ? m.meeting_modal_invite_help() : ''}
           />
-          {#if isGroupMeeting}
-            <p class="mt-1 text-xs text-base-content/60">{m.meeting_modal_invite_help()}</p>
-          {/if}
         </div>
 
         <!-- Calendar Selection (Optional) -->

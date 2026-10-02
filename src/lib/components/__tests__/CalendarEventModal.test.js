@@ -103,7 +103,10 @@ vi.mock(
   '$lib/components/shared/LicensedImageInput.svelte',
   () => import('./__mocks__/EmptyStub.svelte')
 );
-vi.mock('$lib/components/shared/EditableList.svelte', () => import('./__mocks__/EmptyStub.svelte'));
+vi.mock(
+  '$lib/components/shared/EditableList.svelte',
+  () => import('./fixtures/EditableListStub.svelte')
+);
 vi.mock(
   '$lib/components/calendar/CalendarSelector.svelte',
   () => import('./__mocks__/EmptyStub.svelte')
@@ -183,6 +186,8 @@ describe('CalendarEventModal — normal calendar event (regression)', () => {
     expect(r.getByTestId('location-input')).toBeTruthy();
     expect(r.queryByText(m.meeting_modal_guests_label())).toBeNull();
     expect(r.getByTestId('participants-label').textContent).toBe('');
+    expect(r.getByText(m.event_modal_event_title())).toBeTruthy();
+    expect(r.getByTestId('editable-list')).toBeTruthy();
   });
 
   // The default day is the LOCAL date: east of UTC just after midnight,
@@ -237,6 +242,37 @@ describe('CalendarEventModal — group meeting mode', () => {
     await tick();
     expect(r.container.querySelector('#startDate').value).toBe(localIso(day));
     expect(r.container.querySelector('#endDate').value).toBe(localIso(day));
+  });
+
+  // QA round 3 C5/K1: the generic calendar wording ("Veranstaltungstitel",
+  // reference links — whose nowrap label also scrolled the dialog sideways).
+  it('uses meeting wording and drops the reference links', () => {
+    const r = render(CalendarEventModal);
+    expect(r.getByText(m.meeting_modal_title_label())).toBeTruthy();
+    expect(r.queryByText(m.event_modal_event_title())).toBeNull();
+    expect(r.container.querySelector('#title').placeholder).toBe(
+      m.meeting_modal_title_placeholder()
+    );
+    expect(r.container.querySelector('#summary').placeholder).toBe(
+      m.meeting_modal_description_placeholder()
+    );
+    expect(r.queryByTestId('editable-list')).toBeNull();
+    expect(r.getByTestId('participants-help').textContent).toBe(m.meeting_modal_invite_help());
+  });
+
+  // QA round 3 C1: opened at 14:58 it pre-filled 09:00–10:00, already past.
+  it('pre-fills the next full half hour, one hour long', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date(2026, 9, 2, 14, 58));
+    try {
+      const r = render(CalendarEventModal);
+      await tick();
+      expect(r.container.querySelector('#startDate').value).toBe('2026-10-02');
+      expect(r.container.querySelector('#startTime').value).toBe('15:00');
+      expect(r.container.querySelector('#endTime').value).toBe('16:00');
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   // A guest link is the organiser's self-encrypted pass code: without NIP-44

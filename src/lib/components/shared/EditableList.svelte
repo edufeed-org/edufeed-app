@@ -91,10 +91,12 @@
 </script>
 
 <div class="form-control">
-  <label class="label" for="editable-list-input">
-    <span class="label-text">{label}</span>
+  <!-- DaisyUI's .label is nowrap: a long help text pushed the meeting
+       dialog sideways (QA round 3 K1). -->
+  <label class="label flex-wrap whitespace-normal" for="editable-list-input">
+    <span class="label-text min-w-0 break-words">{label}</span>
     {#if helpText}
-      <span class="label-text-alt">{helpText}</span>
+      <span class="label-text-alt min-w-0 break-words">{helpText}</span>
     {/if}
   </label>
 

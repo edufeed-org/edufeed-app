@@ -49,7 +49,9 @@ export function formatRelativeTime(unixSeconds) {
 export function formatCalendarDate(date, format, { utc = false } = {}) {
   if (!date || !(date instanceof Date)) return '';
 
-  const locale = runtimeConfig.calendar.locale;
+  // The app (Paraglide) locale, not the deployment's CALENDAR_LOCALE: the
+  // English UI showed "Oktober 2026" (QA round 3 K5).
+  const locale = activeDateLocale();
   const use24Hour = runtimeConfig.calendar.timeFormat === '24h';
   const tz = utc ? { timeZone: 'UTC' } : {};
 
@@ -563,7 +565,12 @@ export function createDateKey(date) {
  */
 export function getWeekdayHeaders() {
   const weekStartDay = runtimeConfig.calendar.weekStartDay;
-  const fullWeekdays = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  // Short names in the app locale (they were hard-coded English — QA round 3
+  // K5): 4 Jan 2026 is a Sunday. German's trailing dot ("Mo.") is dropped.
+  const format = new Intl.DateTimeFormat(activeDateLocale(), { weekday: 'short', timeZone: 'UTC' });
+  const fullWeekdays = Array.from({ length: 7 }, (_, i) =>
+    format.format(new Date(Date.UTC(2026, 0, 4 + i))).replace(/\.$/, '')
+  );
 
   // Rotate the array to start from the configured day
   const rotatedWeekdays = [
