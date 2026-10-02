@@ -339,3 +339,63 @@ export function meetingTitle(event) {
   const tags = event?.tags ?? [];
   return tags.find((t) => t[0] === 'title')?.[1] || tags.find((t) => t[0] === 'name')?.[1] || '';
 }
+
+/** @param {number} n */
+const pad2 = (n) => String(n).padStart(2, '0');
+/** @param {Date} d local YYYY-MM-DD */
+const localDay = (d) => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+
+/**
+ * The meeting dialog's pre-filled slot (QA round 3 C1): the next full half
+ * hour from `now` (local time), one hour long, the same day — unless that
+ * start is 23:00 or later (the meeting would cross midnight), then tomorrow
+ * 09:00–10:00.
+ * @param {Date} now
+ * @returns {{startDate: string, startTime: string, endDate: string, endTime: string}}
+ */
+export function defaultMeetingSlot(now) {
+  const start = new Date(now.getTime());
+  start.setSeconds(0, 0);
+  start.setMinutes(now.getMinutes() < 30 ? 30 : 60);
+  if (start.getHours() >= 23 || localDay(start) !== localDay(now)) {
+    const day = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 9, 0);
+    return {
+      startDate: localDay(day),
+      startTime: '09:00',
+      endDate: localDay(day),
+      endTime: '10:00'
+    };
+  }
+  const end = new Date(start.getTime() + MEETING_DEFAULT_DURATION_S * 1000);
+  const hm = (/** @type {Date} */ d) => `${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+  return {
+    startDate: localDay(start),
+    startTime: hm(start),
+    endDate: localDay(end),
+    endTime: hm(end)
+  };
+}
+
+/**
+ * The next moment (unix s, > `nowS`) at which any of these meetings changes
+ * what the card or bar shows: entering the bar's 24 h lookahead, the join
+ * window opening, the start, the end. Null when none is ahead. The card and
+ * the bar schedule a timer for it on top of their 30 s clock, so "Beitreten"
+ * turns on at the window, not up to a tick later (QA round 3 K3).
+ * @param {any[]} events
+ * @param {number} nowS
+ * @returns {number | null}
+ */
+export function nextMeetingBoundary(events, nowS) {
+  /** @type {number | null} */
+  let next = null;
+  for (const event of events || []) {
+    const times = meetingTimes(event);
+    if (!times) continue;
+    const { start, end } = times;
+    for (const t of [start - BAR_LOOKAHEAD_S, start - GUEST_EARLY_S, start, end]) {
+      if (t > nowS && (next === null || t < next)) next = t;
+    }
+  }
+  return next;
+}

@@ -7,7 +7,7 @@
 -->
 <script>
   import { untrack } from 'svelte';
-  import { checkCallPass, readPassCodeFromHash } from '$lib/groups/call-passes.js';
+  import { checkCallPass, readPassCodeFromHash, hashPassCode } from '$lib/groups/call-passes.js';
   import {
     buildMeetingIcs,
     icsFileName,
@@ -34,7 +34,7 @@
   import { useUserProfile } from '$lib/stores/user-profile.svelte.js';
   import { modalStore } from '$lib/stores/modal.svelte.js';
   import { lazyComponent } from '$lib/helpers/lazy-component.svelte.js';
-  import { formatTimestamp, formatTimeOfDay } from '$lib/helpers/dates.js';
+  import { formatTimestamp, formatTimeOfDay, formatTimeZoneName } from '$lib/helpers/dates.js';
   import { MeetIcon } from '$lib/components/icons';
   import * as m from '$lib/paraglide/messages';
   import { runtimeConfig } from '$lib/stores/config.svelte.js';
@@ -163,6 +163,47 @@
   // else the raw pass `notBefore` (a non-meeting pass, or before `check` has
   // settled at all).
   const notYetStartTs = $derived(meetingStart ?? check?.notBefore ?? 0);
+  // "Am 02.10.2026, 15:20–16:20 Uhr (MESZ)" — the pass check names only the
+  // channel (pyramid's callPassCheck returns no meeting title), so the time
+  // carries the meeting (QA round 3 C2).
+  const whenLabel = $derived(
+    meetingStart !== null && meetingEnd !== null
+      ? m.call_landing_when({
+          date: formatTimestamp(meetingStart, {
+            day: '2-digit',
+            month: '2-digit',
+            year: 'numeric'
+          }),
+          start: formatTimeOfDay(meetingStart),
+          end: formatTimeOfDay(meetingEnd),
+          zone: formatTimeZoneName(meetingStart)
+        })
+      : ''
+  );
+  // Join window open but the meeting not started yet: "Beginnt um …", not
+  // "Läuft gerade" (QA round 3 C3). A timer flips it at the start.
+  let nowS = $state(Math.floor(Date.now() / 1000));
+  $effect(() => {
+    if (meetingStart === null) return;
+    const delayMs = (meetingStart - Math.floor(Date.now() / 1000)) * 1000 + 50;
+    if (delayMs <= 0 || delayMs > 2 ** 31 - 1) return;
+    const timer = setTimeout(() => (nowS = Math.floor(Date.now() / 1000)), delayMs);
+    return () => clearTimeout(timer);
+  });
+  const beforeStart = $derived(meetingStart !== null && nowS < meetingStart);
+  // The .ics UID: the guest side never learns the meeting's coordinate, so
+  // it is derived from the pass (stable per link) — QA round 3 K2.
+  let passUid = $state('');
+  $effect(() => {
+    if (!code) return;
+    let alive = true;
+    hashPassCode(code).then((h) => {
+      if (alive) passUid = `pass-${h.slice(0, 32)}`;
+    });
+    return () => {
+      alive = false;
+    };
+  });
   // QA K-new-5: an empty document.title made the route announcer read
   // "untitled page". The meeting's name once the pass check has it — never
   // the raw group id (`title`'s fallback): plain "Einladung" until then and
@@ -173,9 +214,22 @@
       runtimeConfig.appName
     )
   );
+  // The relay refused the token for the pass (revoked / deleted meeting):
+  // retrying can never work — show why instead (QA round 3 C4).
+  const passRefused = $derived(
+    inCallHere && call.phase === 'error' && /** @type {any} */ (call.error)?.reason === 'pass'
+  );
+  $effect(() => {
+    if (!passRefused) return;
+    untrack(() => {
+      check = { valid: false, reason: 'unknown', liveCount: 0 };
+      leaveGroupCall();
+    });
+  });
   const view = $derived.by(() => {
     if (forgotten) return 'forgotten';
     if (!pointer || !code) return 'invalid';
+    if (passRefused) return 'invalid';
     if (inCallHere) return 'in-call';
     if (wasInCall) return 'ended';
     if (!check) return 'checking';
@@ -216,11 +270,13 @@
   // fire close together, only the response to the LATEST request is ever
   // applied, however the two in-flight requests resolve.
   let notYetRecheckSeq = 0;
+  // The ready view re-checks on the same 60 s interval: a meeting deleted or
+  // a link revoked while the lobby is open turns it invalid (QA round 3 C4).
   $effect(() => {
-    if (view !== 'not_yet' || !pointer || !code) return;
+    if ((view !== 'not_yet' && view !== 'ready') || !pointer || !code) return;
     const p = pointer;
     const c = code;
-    const notBefore = check?.notBefore;
+    const notBefore = view === 'not_yet' ? check?.notBefore : undefined;
     function recheck() {
       const seq = ++notYetRecheckSeq;
       checkCallPass(p.relay, p.id, c).then((/** @type {any} */ r) => {
@@ -249,7 +305,8 @@
       title,
       start: meetingStart,
       end: meetingEnd,
-      url: `${location.origin}${location.pathname}${location.hash}`
+      url: `${location.origin}${location.pathname}${location.hash}`,
+      uid: passUid || undefined
     });
     const blobUrl = URL.createObjectURL(new Blob([ics], { type: 'text/calendar;charset=utf-8' }));
     const a = document.createElement('a');
@@ -497,15 +554,16 @@
           {:else if view === 'not_yet'}
             <div data-testid="call-landing-not-yet" class="flex flex-col gap-3">
               <h1 class="text-xl font-bold">{m.call_landing_invited({ title })}</h1>
-              <p class="text-sm">
-                {m.call_landing_starts({
-                  date: formatTimestamp(notYetStartTs, {
-                    day: '2-digit',
-                    month: '2-digit',
-                    year: 'numeric'
-                  }),
-                  time: formatTimeOfDay(notYetStartTs)
-                })}
+              <p class="text-sm" data-testid="call-landing-when">
+                {whenLabel ||
+                  m.call_landing_starts({
+                    date: formatTimestamp(notYetStartTs, {
+                      day: '2-digit',
+                      month: '2-digit',
+                      year: 'numeric'
+                    }),
+                    time: formatTimeOfDay(notYetStartTs)
+                  })}
               </p>
               {#if meetingStart !== null && meetingEnd !== null}
                 <button
@@ -534,15 +592,25 @@
             </div>
           {:else if view === 'ready'}
             <h1 class="text-xl font-bold">{m.call_landing_invited({ title })}</h1>
-            <p class="text-sm text-base-content/70">
-              {#if (check?.liveCount ?? 0) === 0}
-                {m.call_landing_live_empty()}
-              {:else if check?.liveCount === 1}
-                {m.call_landing_live_one()}
-              {:else}
-                {m.call_landing_live({ count: check?.liveCount ?? 0 })}
-              {/if}
-            </p>
+            {#if whenLabel}
+              <p class="text-sm" data-testid="call-landing-when">{whenLabel}</p>
+            {/if}
+            {#if beforeStart && meetingStart !== null}
+              <p class="text-sm text-base-content/70" data-testid="call-landing-status">
+                {m.call_landing_early({ time: formatTimeOfDay(meetingStart) })}
+              </p>
+            {:else if (check?.liveCount ?? 0) > 0 || meetingStart === null}
+              <!-- A meeting says "Läuft gerade" only with people in it. -->
+              <p class="text-sm text-base-content/70" data-testid="call-landing-status">
+                {#if (check?.liveCount ?? 0) === 0}
+                  {m.call_landing_live_empty()}
+                {:else if check?.liveCount === 1}
+                  {m.call_landing_live_one()}
+                {:else}
+                  {m.call_landing_live({ count: check?.liveCount ?? 0 })}
+                {/if}
+              </p>
+            {/if}
             {#if me}
               {#if me.signer}
                 <button

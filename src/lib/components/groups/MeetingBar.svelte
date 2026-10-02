@@ -9,7 +9,12 @@
   import * as m from '$lib/paraglide/messages';
   import { CalendarIcon } from '$lib/components/icons';
   import { formatTimestamp, formatTimeOfDay } from '$lib/helpers/dates.js';
-  import { nextBarMeeting, canJoinMeetingNow, meetingTitle } from '$lib/groups/meetings.js';
+  import {
+    nextBarMeeting,
+    canJoinMeetingNow,
+    meetingTitle,
+    nextMeetingBoundary
+  } from '$lib/groups/meetings.js';
 
   /**
    * @typedef {object} Props
@@ -27,6 +32,17 @@
     }, 30_000);
     return () => clearInterval(timer);
   });
+  // The 30 s clock plus an exact timer at the next phase boundary (QA round 3
+  // K3): re-armed whenever `nowS` moves. Capped at setTimeout's 32-bit limit.
+  $effect(() => {
+    const boundary = nextMeetingBoundary(meetings, nowS);
+    if (boundary === null) return;
+    const delayMs = Math.min((boundary - nowS) * 1000 + 50, 2 ** 31 - 1);
+    const timer = setTimeout(() => {
+      nowS = Math.floor(Date.now() / 1000);
+    }, delayMs);
+    return () => clearTimeout(timer);
+  });
 
   const next = $derived(nextBarMeeting(meetings, nowS));
   const title = $derived((next && meetingTitle(next.event)) || m.meeting_card_label());
@@ -39,6 +55,15 @@
   const whenLabel = $derived.by(() => {
     if (!next) return '';
     const time = formatTimeOfDay(next.start);
+    // While it runs / in the join window the start day is no news (K4).
+    if (next.phase === 'running')
+      return m.meeting_bar_running_since({
+        time:
+          dayKey(next.start) === dayKey(nowS)
+            ? time
+            : `${formatTimestamp(next.start, { day: '2-digit', month: '2-digit' })} ${time}`
+      });
+    if (next.phase === 'joinable') return m.meeting_bar_starting_soon({ time });
     const today = new Date(nowS * 1000);
     const tomorrow = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1);
     if (dayKey(next.start) === dayKey(nowS)) return m.meeting_bar_today({ time });

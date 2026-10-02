@@ -3,7 +3,8 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/svelte';
 import * as m from '$lib/paraglide/messages';
-import { formatTimestamp, formatTimeOfDay } from '$lib/helpers/dates.js';
+import { formatTimestamp, formatTimeOfDay, formatTimeZoneName } from '$lib/helpers/dates.js';
+import { hashPassCode } from '$lib/groups/call-passes.js';
 
 const checkCallPass = vi.fn();
 vi.mock('$lib/groups/call-passes.js', async (orig) => ({
@@ -203,15 +204,115 @@ describe('CallLanding', () => {
     });
     render(CallLanding, { props: { pointer: POINTER } });
     await screen.findByTestId('call-landing-not-yet');
-    const expected = m.call_landing_starts({
-      date: formatTimestamp(2_000_000_000 + 900, {
-        day: '2-digit',
-        month: '2-digit',
-        year: 'numeric'
-      }),
-      time: formatTimeOfDay(2_000_000_000 + 900)
+    // QA round 3 C2: start AND end, and the zone.
+    const start = 2_000_000_000 + 900;
+    const end = 2_000_010_000 - 1800;
+    const expected = m.call_landing_when({
+      date: formatTimestamp(start, { day: '2-digit', month: '2-digit', year: 'numeric' }),
+      start: formatTimeOfDay(start),
+      end: formatTimeOfDay(end),
+      zone: formatTimeZoneName(start)
     });
     expect(screen.getByText(expected)).toBeTruthy();
+  });
+
+  // QA round 3 K2: no coordinate on the guest side — the UID is derived from
+  // the pass, so re-downloading the same link updates the same entry.
+  it('the guest .ics UID is stable per link (derived from the pass hash)', async () => {
+    checkCallPass.mockResolvedValue({
+      valid: false,
+      reason: 'not_yet',
+      notBefore: 2_000_000_000,
+      expiration: 2_000_010_000,
+      name: 'Elternabend',
+      liveCount: 0
+    });
+    const blobs = [];
+    URL.createObjectURL = vi.fn((b) => (blobs.push(b), 'blob:ics'));
+    URL.revokeObjectURL = vi.fn();
+    const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
+    render(CallLanding, { props: { pointer: POINTER } });
+    const button = await screen.findByTestId('call-landing-ics');
+    await new Promise((r) => setTimeout(r, 20)); // the hash is computed once, async
+    await fireEvent.click(button);
+    click.mockRestore();
+    const text = await blobs[0].text();
+    const hash = await hashPassCode(CODE);
+    expect(text).toContain(`UID:pass-${hash.slice(0, 32)}@edufeed`);
+  });
+
+  describe('meeting pass in its join window (QA round 3 C3/C2)', () => {
+    const now = () => Math.floor(Date.now() / 1000);
+    it('before the start: "Beginnt um … · du kannst schon beitreten", never "Läuft gerade"', async () => {
+      const start = now() + 600;
+      checkCallPass.mockResolvedValue({
+        valid: true,
+        reason: 'ok',
+        notBefore: start - 900,
+        expiration: start + 3600 + 1800,
+        name: 'Elternabend',
+        liveCount: 2
+      });
+      render(CallLanding, { props: { pointer: POINTER } });
+      await screen.findByTestId('call-landing-join');
+      expect(screen.getByText(m.call_landing_early({ time: formatTimeOfDay(start) }))).toBeTruthy();
+      expect(screen.queryByText(m.call_landing_live({ count: 2 }))).toBeNull();
+      expect(screen.getByTestId('call-landing-when')).toBeTruthy();
+    });
+    it('after the start: "Läuft gerade" only with people in the call', async () => {
+      const start = now() - 120;
+      checkCallPass.mockResolvedValue({
+        valid: true,
+        reason: 'ok',
+        notBefore: start - 900,
+        expiration: start + 3600 + 1800,
+        liveCount: 0
+      });
+      const view = render(CallLanding, { props: { pointer: POINTER } });
+      await screen.findByTestId('call-landing-join');
+      expect(screen.queryByText(m.call_landing_live_empty())).toBeNull();
+      view.unmount();
+      checkCallPass.mockResolvedValue({
+        valid: true,
+        reason: 'ok',
+        notBefore: start - 900,
+        expiration: start + 3600 + 1800,
+        liveCount: 1
+      });
+      render(CallLanding, { props: { pointer: POINTER } });
+      expect(await screen.findByText(m.call_landing_live_one())).toBeTruthy();
+    });
+  });
+
+  // QA round 3 C4: an open lobby kept saying "Live now" after the meeting
+  // was deleted, and Join then offered a retry that could never work.
+  describe('a link revoked while the lobby is open', () => {
+    afterEach(() => vi.useRealTimers());
+    it('the ready view re-checks every 60 s and turns invalid', async () => {
+      vi.useFakeTimers();
+      checkCallPass.mockResolvedValue({ valid: true, reason: 'ok', name: 'Weekly', liveCount: 1 });
+      render(CallLanding, { props: { pointer: POINTER } });
+      await vi.advanceTimersByTimeAsync(0);
+      expect(screen.getByTestId('call-landing-join')).toBeTruthy();
+      checkCallPass.mockResolvedValue({ valid: false, reason: 'unknown', liveCount: 0 });
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect(screen.getByTestId('call-landing-invalid')).toBeTruthy();
+    });
+    it('a join the relay refuses for the pass shows the invalid view, not a retry', async () => {
+      checkCallPass.mockResolvedValue({ valid: true, reason: 'ok', liveCount: 0 });
+      activeUser = { pubkey: 'd'.repeat(64), signer: {} };
+      callState.phase = 'error';
+      callState.error = { reason: 'pass' };
+      callState.isActiveFor = () => true;
+      try {
+        render(CallLanding, { props: { pointer: POINTER } });
+        expect(await screen.findByTestId('call-landing-invalid')).toBeTruthy();
+        expect(screen.queryByTestId('call-landing-retry')).toBeNull();
+        expect(leaveGroupCall).toHaveBeenCalled();
+      } finally {
+        callState.error = null;
+      }
+    });
   });
   it('offers an .ics download once the meeting end is known too', async () => {
     checkCallPass.mockResolvedValueOnce({

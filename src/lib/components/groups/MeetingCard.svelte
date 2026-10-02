@@ -29,6 +29,7 @@
     meetingCoordinate,
     meetingTitle,
     canJoinMeetingNow,
+    nextMeetingBoundary,
     findMeetingPass,
     buildMeetingIcs,
     icsFileName
@@ -55,6 +56,17 @@
       nowS = Math.floor(Date.now() / 1000);
     }, TICK_MS);
     return () => clearInterval(timer);
+  });
+  // The 30 s clock plus an exact timer at the next phase boundary (QA round 3
+  // K3): re-armed whenever `nowS` moves. Capped at setTimeout's 32-bit limit.
+  $effect(() => {
+    const boundary = nextMeetingBoundary([event], nowS);
+    if (boundary === null) return;
+    const delayMs = Math.min((boundary - nowS) * 1000 + 50, 2 ** 31 - 1);
+    const timer = setTimeout(() => {
+      nowS = Math.floor(Date.now() / 1000);
+    }, delayMs);
+    return () => clearTimeout(timer);
   });
 
   /** @param {string} name */

@@ -173,6 +173,22 @@ describe('MeetingCard', () => {
     expect(screen.getByTestId('meeting-card-join').disabled).toBe(false);
   });
 
+  // QA round 3 K3: the 30 s clock alone enabled "Beitreten" up to a minute
+  // late; a timer at the next phase boundary flips it on time.
+  it('flips to joinable exactly at the window, not at the next 30 s tick', async () => {
+    vi.useFakeTimers({
+      toFake: ['Date', 'setInterval', 'clearInterval', 'setTimeout', 'clearTimeout']
+    });
+    const onJoin = vi.fn();
+    render(MeetingCard, {
+      props: { event: meetingIn(15 * 60 + 5), pointer: POINTER, user: me, isAdmin: false, onJoin }
+    });
+    expect(screen.getByTestId('meeting-card-join').disabled).toBe(true);
+    vi.advanceTimersByTime(6_000);
+    await tick();
+    expect(screen.getByTestId('meeting-card-join').disabled).toBe(false);
+  });
+
   it('a past meeting offers join only while the channel call still runs', async () => {
     const event = meetingIn(-2 * 3600);
     const onJoin = vi.fn();

@@ -337,6 +337,22 @@ const membersEventCall = signWith(
   },
   RELAY_SK
 );
+// `listenchat`: an OPEN AV channel I am not on the roster of (QA round 3
+// C6: a non-member got "Anruf starten").
+const metadataEventListen = signWith(
+  { kind: 39000, tags: [['d', 'listenchat'], ['name', 'Listen Chat'], ['livekit']] },
+  RELAY_SK
+);
+const membersEventListen = signWith(
+  {
+    kind: 39002,
+    tags: [
+      ['d', 'listenchat'],
+      ['p', OTHER]
+    ]
+  },
+  RELAY_SK
+);
 const pollEvent = signWith(
   {
     kind: 1068,
@@ -674,6 +690,7 @@ vi.mock('$lib/stores/nostr-infrastructure.svelte', async () => {
           if (d === 'webxdcchat') return rxOf(metadataEventWebxdc, membersEventWebxdc);
           if (d === 'pollchat') return rxOf(metadataEventPoll, membersEventPoll);
           if (d === 'callchat') return rxOf(metadataEventCall, membersEventCall);
+          if (d === 'listenchat') return rxOf(metadataEventListen, membersEventListen);
           if (d === 'meetchat') return rxOf(metadataEventMeet, membersEventMeet);
           if (d === 'ownmeetchat') return rxOf(metadataEventOwnMeet, membersEventOwnMeet);
           if (d === 'livetitlechat') return rxOf(metadataEventLiveTitle, membersEventLiveTitle);
@@ -1123,6 +1140,7 @@ vi.mock('$lib/paraglide/messages', () => ({
   groups_call_you_are_in: () => "You're in the call",
   groups_call_start_error: () => 'Calls could not be turned on',
   groups_call_return: () => 'Show call',
+  groups_call_listen_in: (/** @type {{ count: number }} */ { count }) => `Listen in (${count})`,
   groups_call_join_running: (/** @type {{ count: number }} */ { count }) =>
     `Join the running call (${count})`,
   groups_call_chat_tab: () => 'Anruf-Chat',
@@ -2944,6 +2962,30 @@ describe('GroupChat', () => {
         groupCallHolder.participants = [ME];
         render(GroupChat, { props: { pointer: callPointer } });
         expect(await label()).toEqual(['Show call', 'Show call']);
+      });
+    });
+
+    // QA round 3 C6: only members start calls; a non-member of an open
+    // channel may listen in on a running one.
+    describe('non-member of an open AV channel', () => {
+      const listenPointer = { relay: GROUP_RELAY, id: 'listenchat' };
+
+      it('gets no call button while no call runs', async () => {
+        groupCallHolder.participants = [];
+        render(GroupChat, { props: { pointer: listenPointer } });
+        await screen.findByTestId('group-join');
+        expect(screen.queryByTestId('group-call-join')).toBeNull();
+        expect(screen.queryByTestId('group-call-start')).toBeNull();
+      });
+
+      it('may listen in on a running call', async () => {
+        groupCallHolder.participants = [OTHER];
+        render(GroupChat, { props: { pointer: listenPointer } });
+        await screen.findByTestId('group-join');
+        const button = await screen.findByTestId('group-call-join');
+        expect(button.getAttribute('aria-label')).toBe('Listen in (1)');
+        await fireEvent.click(button);
+        expect(joinGroupCallMock).toHaveBeenCalled();
       });
     });
 

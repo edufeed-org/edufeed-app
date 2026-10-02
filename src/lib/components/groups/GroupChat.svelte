@@ -1012,13 +1012,21 @@
   const callLiveHere = $derived(
     inCallHere && (call.phase === 'requesting' || call.phase === 'ready')
   );
+  // Only members start calls; a non-member of an open channel may listen in
+  // on a running one (QA round 3 C6). Logged out, the greyed button stays as
+  // the "log in" prompt.
+  const showCallButton = $derived(
+    !myPubkey || canWrite || callLiveHere || callParticipantCount > 0
+  );
   const callButtonLabel = $derived(
     !myPubkey
       ? m.groups_call_start_login()
       : callLiveHere
         ? m.groups_call_return()
         : callParticipantCount > 0
-          ? m.groups_call_join_running({ count: callParticipantCount })
+          ? canWrite
+            ? m.groups_call_join_running({ count: callParticipantCount })
+            : m.groups_call_listen_in({ count: callParticipantCount })
           : m.groups_call_start()
   );
 
@@ -1759,7 +1767,7 @@
           <MeetIcon class_="w-4 h-4" title="" />
           {#if callParticipantCount}{callParticipantCount}{/if}
         </span>
-      {:else}
+      {:else if showCallButton}
         <button
           type="button"
           class="btn btn-ghost btn-sm {callLiveHere ? 'text-primary' : ''}"

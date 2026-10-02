@@ -121,4 +121,32 @@ describe('MeetingBar', () => {
     await tick();
     expect(screen.getByTestId('meeting-bar')).toBeTruthy();
   });
+
+  // QA round 3 K4: the bar kept "heute 15:20" while the meeting ran.
+  it('says "läuft seit HH:MM" while running and "beginnt gleich" in the window', () => {
+    const now = Math.floor(Date.now() / 1000);
+    const { unmount } = render(MeetingBar, { props: { meetings: [meeting('Läuft', now - 600)] } });
+    expect(screen.getByTestId('meeting-bar').textContent).toContain(
+      m.meeting_bar_running_since({ time: formatTimeOfDay(now - 600) })
+    );
+    unmount();
+    render(MeetingBar, { props: { meetings: [meeting('Gleich', now + 600)] } });
+    expect(screen.getByTestId('meeting-bar').textContent).toContain(
+      m.meeting_bar_starting_soon({ time: formatTimeOfDay(now + 600) })
+    );
+  });
+
+  it('turns join on exactly when the window opens (phase-boundary timer)', async () => {
+    vi.useFakeTimers({
+      toFake: ['Date', 'setInterval', 'clearInterval', 'setTimeout', 'clearTimeout']
+    });
+    const now = Math.floor(Date.now() / 1000);
+    render(MeetingBar, {
+      props: { meetings: [meeting('Bald', now + 15 * 60 + 5)], onJoin: vi.fn() }
+    });
+    expect(screen.getByTestId('meeting-bar-join').disabled).toBe(true);
+    vi.advanceTimersByTime(6_000);
+    await tick();
+    expect(screen.getByTestId('meeting-bar-join').disabled).toBe(false);
+  });
 });

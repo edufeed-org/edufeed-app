@@ -23,7 +23,9 @@ import {
   meetingTimes,
   nextBarMeeting,
   canJoinMeetingNow,
-  meetingTitle
+  meetingTitle,
+  defaultMeetingSlot,
+  nextMeetingBoundary
 } from '../groups/meetings.js';
 
 /** @param {string[][]} tags @param {string} name @returns {string[][]} */
@@ -490,5 +492,70 @@ describe('meetingTitle', () => {
     expect(meetingTitle({ tags: [['title', 'Elternabend']] })).toBe('Elternabend');
     expect(meetingTitle({ tags: [['name', 'Alt']] })).toBe('Alt');
     expect(meetingTitle({ tags: [] })).toBe('');
+  });
+});
+
+// QA round 3 C1: "Termin planen" opened at 14:58 pre-filled 09:00–10:00 today.
+describe('defaultMeetingSlot', () => {
+  it('starts at the next full half hour, one hour long, the same day', () => {
+    expect(defaultMeetingSlot(new Date(2026, 9, 2, 14, 58))).toEqual({
+      startDate: '2026-10-02',
+      startTime: '15:00',
+      endDate: '2026-10-02',
+      endTime: '16:00'
+    });
+    expect(defaultMeetingSlot(new Date(2026, 9, 2, 15, 0, 0))).toMatchObject({
+      startTime: '15:30',
+      endTime: '16:30'
+    });
+    expect(defaultMeetingSlot(new Date(2026, 9, 2, 9, 1))).toMatchObject({
+      startTime: '09:30',
+      endTime: '10:30'
+    });
+  });
+  it('the last same-day slot is 22:30–23:30', () => {
+    expect(defaultMeetingSlot(new Date(2026, 9, 2, 22, 10))).toEqual({
+      startDate: '2026-10-02',
+      startTime: '22:30',
+      endDate: '2026-10-02',
+      endTime: '23:30'
+    });
+  });
+  it('past 23:00 it is tomorrow 09:00 (across a month end too)', () => {
+    expect(defaultMeetingSlot(new Date(2026, 9, 31, 22, 45))).toEqual({
+      startDate: '2026-11-01',
+      startTime: '09:00',
+      endDate: '2026-11-01',
+      endTime: '10:00'
+    });
+    expect(defaultMeetingSlot(new Date(2026, 9, 2, 23, 40))).toMatchObject({
+      startDate: '2026-10-03',
+      startTime: '09:00'
+    });
+  });
+});
+
+// QA round 3 K3: the card's "Beitreten" turned on up to a minute late.
+describe('nextMeetingBoundary', () => {
+  /** @param {number} start @param {number} end */
+  const ev = (start, end) => ({
+    kind: 31923,
+    tags: [
+      ['start', String(start)],
+      ['end', String(end)]
+    ]
+  });
+  it('is the next of bar-lookahead, join window, start and end after now', () => {
+    const e = ev(100_000, 103_600);
+    expect(nextMeetingBoundary([e], 0)).toBe(100_000 - 86_400);
+    expect(nextMeetingBoundary([e], 20_000)).toBe(100_000 - 900);
+    expect(nextMeetingBoundary([e], 99_100)).toBe(100_000);
+    expect(nextMeetingBoundary([e], 100_000)).toBe(103_600);
+    expect(nextMeetingBoundary([e], 103_600)).toBeNull();
+  });
+  it('takes the earliest across meetings and skips ones without times', () => {
+    expect(
+      nextMeetingBoundary([ev(200_000, 203_600), ev(150_000, 153_600), { tags: [] }], 140_000)
+    ).toBe(150_000 - 900);
   });
 });
