@@ -11,7 +11,7 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/svelte';
 
 const { presence, call, fns, user } = vi.hoisted(() => ({
   presence: { participants: [] },
-  call: { active: false, stageViews: 0, stageHidden: false, popout: false },
+  call: { active: false, phase: 'ready', stageViews: 0, stageHidden: false, popout: false },
   fns: {
     joinGroupCall: vi.fn(async () => {}),
     showCallStage: vi.fn(),
@@ -30,7 +30,7 @@ vi.mock('$lib/groups/group-call.svelte.js', () => ({
   getGroupCallState: () => ({
     isActiveFor: () => call.active,
     get phase() {
-      return call.active ? 'ready' : 'idle';
+      return call.active ? call.phase : 'idle';
     },
     get stageViews() {
       return call.stageViews;
@@ -73,6 +73,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   presence.participants = [];
   call.active = false;
+  call.phase = 'ready';
   call.stageViews = 0;
   call.stageHidden = false;
   call.popout = false;
@@ -155,6 +156,21 @@ describe('ChannelCallRoster', () => {
     expect(fns.showCallStage).toHaveBeenCalledTimes(1);
     expect(fns.onOpen).toHaveBeenCalledTimes(1);
     expect(fns.joinGroupCall).not.toHaveBeenCalled();
+  });
+
+  // Final review 2 minor: an ENDED (or failed) call of this channel is not
+  // one "you are in" — the card offers Join again, not "Show call".
+  it.each(['ended', 'error'])('a %s call of this channel offers Join again', async (phase) => {
+    presence.participants = [P('b')];
+    call.active = true;
+    call.phase = phase;
+    render(ChannelCallRoster, {
+      props: { pointer: POINTER, name: 'Sprechstunde', onOpen: fns.onOpen }
+    });
+    expect(screen.queryByRole('button', { name: 'Show call' })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Join the running call (1)' }).textContent).toContain(
+      'Join'
+    );
   });
 
   it('no Join for an anonymous viewer', () => {

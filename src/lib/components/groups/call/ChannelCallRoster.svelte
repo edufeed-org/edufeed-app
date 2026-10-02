@@ -39,7 +39,11 @@
   const overflow = $derived(Math.max(0, participants.length - MAX_AVATARS));
 
   const call = getGroupCallState();
-  const inThisCall = $derived(call.isActiveFor(pointer) && call.phase !== 'idle');
+  // Only a LIVE call is one "you are in" — an ended or failed one offers Join
+  // again (same rule as GroupChat's callLiveHere; final review 2).
+  const inThisCall = $derived(
+    call.isActiveFor(pointer) && (call.phase === 'requesting' || call.phase === 'ready')
+  );
   // The user is looking at this call right now: a stage view is mounted, not
   // stepped behind the chat, and the call is not in its own window. Then a
   // "back to the call" button would point at the screen they are on

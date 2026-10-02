@@ -54,8 +54,36 @@
 </script>
 
 <!-- An ended call (the server removed us / the connection died) gets no
-     live dock: the channel itself says what happened. -->
-{#if call.phase !== 'ended'}
+     live dock — but with no call view on screen the user would never learn
+     it ended (final review 2 I2), so a one-line strip says why, with a way
+     to the call's page (its ended view offers Rejoin) and Close, which
+     forgets the call. Same in-flow slot as the live dock. -->
+{#if call.phase === 'ended'}
+  <div
+    class="relative z-20 flex shrink-0 items-center gap-2 border-b border-base-300 bg-base-100 py-1 pr-2 pl-3 shadow-sm"
+    role="status"
+    data-testid="call-dock-ended"
+  >
+    <span class="relative inline-flex h-2.5 w-2.5 shrink-0 rounded-full bg-base-content/30"></span>
+    <div class="flex min-w-0 flex-1 flex-col leading-tight">
+      {#if call.title}
+        <span class="truncate text-sm font-medium">{call.title}</span>
+      {/if}
+      <span class="truncate text-xs text-base-content/70">
+        {call.endReason === 'removed'
+          ? m.groups_call_ended_removed()
+          : m.groups_call_ended_dropped()}
+      </span>
+    </div>
+    {#if call.href}
+      <button class="btn btn-sm btn-primary" onclick={backToCall}
+        >{m.groups_call_ended_show()}</button
+      >
+    {/if}
+    <button class="btn btn-ghost btn-sm" onclick={() => leaveGroupCall()}>{m.common_close()}</button
+    >
+  </div>
+{:else}
   <div
     class="relative z-20 flex shrink-0 items-center gap-2 border-b border-base-300 bg-base-100 py-1 pr-2 pl-3 shadow-sm"
     role="region"

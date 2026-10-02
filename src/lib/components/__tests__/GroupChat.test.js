@@ -760,6 +760,14 @@ vi.mock('$lib/helpers/joined-communikey-events.svelte.js', () => ({
   useJoinedCommunikeyEvents: () => () => joinedCommunikeyEventsHolder.events
 }));
 vi.mock('$lib/helpers/toast', () => ({ showToast: vi.fn() }));
+// Leaving the community ROOT also unfollows the community (kind 30000
+// follow set) through the real helper — mocked here, community.test.js
+// covers its guarded follow-set write.
+const leaveCommunityMock = vi.hoisted(() => vi.fn(async () => ({ success: true })));
+vi.mock('$lib/helpers/community.js', async (importOriginal) => ({
+  .../** @type {object} */ (await importOriginal()),
+  leaveCommunity: leaveCommunityMock
+}));
 vi.mock('$app/paths', () => ({ resolve: (/** @type {string} */ path) => path }));
 vi.mock('$app/navigation', () => ({ goto: vi.fn() }));
 const publishOptimisticMock = vi.hoisted(() => vi.fn());
@@ -966,7 +974,8 @@ vi.mock('$lib/paraglide/messages', () => ({
   groups_leave_confirm_body_closed: () => 'Rejoining needs approval.',
   groups_leave_community: () => 'Leave community',
   groups_leave_community_confirm_title: () => 'Really leave this community?',
-  groups_leave_community_confirm_body: () => 'You lose access to all channels of this community.',
+  groups_leave_community_confirm_body: () =>
+    "You won't be a member any more and the community disappears from your list.",
   groups_breadcrumb_channels: () => 'Channels',
   groups_breadcrumb_channels_aria: () => 'Back to the channel list',
   groups_more_menu: () => 'More',
@@ -2440,7 +2449,8 @@ describe('GroupChat', () => {
     });
 
     it('"Leave channel" sits last in the ⋯ menu, in red, and asks first', async () => {
-      render(GroupChat, { props: { pointer } });
+      leaveCommunityMock.mockClear();
+      render(GroupChat, { props: { pointer, communityPubkey: 'c'.repeat(64) } });
       await fireEvent.click(await screen.findByTestId('group-more-menu'));
       const item = await screen.findByTestId('group-leave');
       expect(item.textContent?.trim()).toBe('Leave channel');
@@ -2469,12 +2479,18 @@ describe('GroupChat', () => {
       const sent = publishMock.mock.calls[0][0];
       expect(sent.kind).toBe(9022);
       await waitFor(() => expect(screen.queryByTestId('group-leave-confirm')).toBeNull());
+      // A plain channel leaves only the channel — the community follow stays.
+      expect(leaveCommunityMock).not.toHaveBeenCalled();
     });
 
     // The community's ROOT group is its membership: leaving it leaves the
     // community, and the entry + confirm must say so (same 9022 underneath).
+    // Final review 2 I1: and it really leaves — the 9022 to the root AND the
+    // community unfollow (kind 30000), so it drops out of the rail.
     it('on the community root, the entry and confirm say "Leave community"', async () => {
-      render(GroupChat, { props: { pointer, isCommunityRoot: true } });
+      leaveCommunityMock.mockClear();
+      const communityPubkey = 'c'.repeat(64);
+      render(GroupChat, { props: { pointer, isCommunityRoot: true, communityPubkey } });
       await fireEvent.click(await screen.findByTestId('group-more-menu'));
       const item = await screen.findByTestId('group-leave');
       expect(item.textContent?.trim()).toBe('Leave community');
@@ -2482,7 +2498,9 @@ describe('GroupChat', () => {
       await fireEvent.click(item);
       const dialog = await screen.findByTestId('group-leave-confirm');
       expect(dialog.textContent).toContain('Really leave this community?');
-      expect(dialog.textContent).toContain('You lose access to all channels of this community.');
+      expect(dialog.textContent).toContain(
+        "You won't be a member any more and the community disappears from your list."
+      );
       expect(dialog.textContent).not.toContain('Really leave this channel?');
       const action = screen.getByTestId('group-leave-confirm-action');
       expect(action.textContent?.trim()).toBe('Leave community');
@@ -2491,6 +2509,7 @@ describe('GroupChat', () => {
       await fireEvent.click(action);
       await waitFor(() => expect(publishMock).toHaveBeenCalledTimes(1));
       expect(publishMock.mock.calls[0][0].kind).toBe(9022);
+      await waitFor(() => expect(leaveCommunityMock).toHaveBeenCalledWith(communityPubkey));
     });
 
     it('offers no leave entry to a non-member', async () => {
@@ -3010,28 +3029,31 @@ describe('GroupChat', () => {
         groupCallHolder.state.endReason = reason;
       };
 
-      it('says the user was removed and offers rejoin and close', async () => {
+      // Final review 2 minor: a removed user gets no "Rejoin" (the relay
+      // blocks their pass) — same rule as CallLanding's !removedHere.
+      it('says the user was removed and offers only close', async () => {
         endedHere('removed');
         render(GroupChat, { props: { pointer: callPointer } });
         const ended = await screen.findByTestId('group-call-ended');
         expect(ended.textContent).toContain('You were removed from the call.');
         expect(screen.queryByTestId('group-call-stage-stub')).toBeNull();
         expect(screen.queryByTestId('group-call-pending')).toBeNull();
+        expect(screen.queryByTestId('group-call-rejoin')).toBeNull();
+        await fireEvent.click(screen.getByTestId('group-call-ended-close'));
+        expect(leaveGroupCallMock).toHaveBeenCalledTimes(1);
+      });
+
+      it('says the connection was lost for a dropped call and offers rejoin', async () => {
+        endedHere('dropped');
+        render(GroupChat, { props: { pointer: callPointer } });
+        expect((await screen.findByTestId('group-call-ended')).textContent).toContain(
+          'The connection to the call was lost.'
+        );
         await fireEvent.click(screen.getByTestId('group-call-rejoin'));
         expect(joinGroupCallMock).toHaveBeenCalledWith(
           expect.objectContaining({ id: 'callchat', relay: GROUP_RELAY }),
           expect.anything(),
           expect.anything()
-        );
-        await fireEvent.click(screen.getByTestId('group-call-ended-close'));
-        expect(leaveGroupCallMock).toHaveBeenCalledTimes(1);
-      });
-
-      it('says the connection was lost for a dropped call', async () => {
-        endedHere('dropped');
-        render(GroupChat, { props: { pointer: callPointer } });
-        expect((await screen.findByTestId('group-call-ended')).textContent).toContain(
-          'The connection to the call was lost.'
         );
       });
     });

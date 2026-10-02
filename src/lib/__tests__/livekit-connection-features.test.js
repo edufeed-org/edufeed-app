@@ -441,6 +441,49 @@ describe('in-call chat (data messages)', () => {
     expect(svc.getLiveKitState().callChat.at(-1).at).toBe(10_000_000);
   });
 
+  // Final review 2 minor: `ts` is only for history REPLAYS, which arrive
+  // right after a join. A live message with a backdated `ts` must not slide
+  // up the chat (by up to 12 h) — late, it gets its receive time.
+  describe('send time is honoured only as a replay', () => {
+    const T = 50_000_000_000;
+    const bob = remote('b'.repeat(64) + ':x');
+    const emit = (obj) =>
+      room.emit(RoomEvent.DataReceived, encode(obj), bob, undefined, 'edufeed.call.chat');
+    const at = (n) => svc.getLiveKitState().callChat.find((c) => c.n === n)?.at;
+
+    it("within 5 s of the sender's arrival: the replayed send time stands", () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date(T));
+      room.emit(RoomEvent.ParticipantConnected, bob);
+      vi.setSystemTime(new Date(T + 2_000));
+      emit({ t: 'chat', text: 'history', n: 'h1', ts: T - 60_000 });
+      expect(at('h1')).toBe(T - 60_000);
+    });
+
+    it("later than 5 s after the sender's arrival: receive time, not the claimed ts", () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date(T));
+      room.emit(RoomEvent.ParticipantConnected, bob);
+      vi.setSystemTime(new Date(T + 10_000));
+      emit({ t: 'chat', text: 'backdated', n: 'l1', ts: T - 3600_000 });
+      expect(at('l1')).toBe(T + 10_000);
+    });
+
+    it('a sender already there when we joined: replay right after our join, not later', async () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date(T));
+      await svc.disconnectFromRoom();
+      await svc.connectToRoom('t', 'wss://lk');
+      room = rooms.at(-1);
+      vi.setSystemTime(new Date(T + 1_000));
+      emit({ t: 'chat', text: 'history', n: 'h2', ts: T - 60_000 });
+      expect(at('h2')).toBe(T - 60_000);
+      vi.setSystemTime(new Date(T + 6_000));
+      emit({ t: 'chat', text: 'backdated', n: 'l2', ts: T - 60_000 });
+      expect(at('l2')).toBe(T + 6_000);
+    });
+  });
+
   it('clears the call chat on disconnect', async () => {
     await svc.sendCallChat('bye');
     await svc.disconnectFromRoom();

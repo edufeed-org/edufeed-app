@@ -121,6 +121,7 @@
   import { useRelayInformation } from '$lib/groups/relay-information.svelte.js';
   import { unlinkDeletedChannel } from '$lib/groups/community-teardown.js';
   import { channelKey } from '$lib/groups/community-pointer.js';
+  import { leaveCommunity } from '$lib/helpers/community.js';
   import { channelAccessLevel } from '$lib/groups/channel-access.js';
   import { relayRequiresAuth } from '$lib/groups/relay-directory.js';
   import { aggregateChannelReactions } from '$lib/concord/chat-helpers.js';
@@ -1498,7 +1499,8 @@
   // request an admin has to approve.
   let leaveConfirmOpen = $state(false);
   // The root group IS the community's membership: leaving it leaves the
-  // community (controller ruling, Task 14 review) — same 9022, other words.
+  // community (controller ruling, Task 14 review; final review 2 I1) — the
+  // 9022 plus the community unfollow, see leave().
   const leaveLabel = $derived(
     isCommunityRoot ? m.groups_leave_community() : m.groups_leave_channel()
   );
@@ -1532,6 +1534,14 @@
       await signAndPublish(buildLeaveRequestTemplate(pointer.id));
       await updateGroupsList({ remove: pointer });
       onRosterChanged();
+      // Leaving the ROOT leaves the community: also unfollow it (kind 30000
+      // `communities` set) so it drops out of the rail (final review 2 I1).
+      // The helper's own guarded path; a failed unfollow is reported, but the
+      // 9022 already went out.
+      if (isCommunityRoot && communityPubkey) {
+        const result = await leaveCommunity(communityPubkey);
+        if (!result.success) throw new Error(result.error ?? 'community unfollow failed');
+      }
       showToast(m.groups_leave_sent(), 'success');
     } catch (err) {
       console.error('leave request failed', err);
@@ -2028,14 +2038,18 @@
                   : m.groups_call_ended_dropped()}
               </p>
               <div class="flex gap-2">
-                <button
-                  type="button"
-                  class="btn btn-sm btn-primary"
-                  onclick={startCall}
-                  data-testid="group-call-rejoin"
-                >
-                  {m.groups_call_rejoin()}
-                </button>
+                <!-- No way back for a removed user: the relay blocks their
+                  pass, so "Rejoin" would only fail (CallLanding's !removedHere). -->
+                {#if call.endReason !== 'removed'}
+                  <button
+                    type="button"
+                    class="btn btn-sm btn-primary"
+                    onclick={startCall}
+                    data-testid="group-call-rejoin"
+                  >
+                    {m.groups_call_rejoin()}
+                  </button>
+                {/if}
                 <button
                   type="button"
                   class="btn btn-ghost btn-sm"

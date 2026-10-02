@@ -114,6 +114,16 @@ const CHAT_REPLAY_MAX = 50;
 // No call outlives a call pass (12 h): a replayed send time older than that
 // is bogus and is clamped, like one from the future.
 const CHAT_MAX_AGE_MS = 12 * 3600 * 1000;
+// A sender's `ts` is honoured only as a history REPLAY, and replays arrive
+// right after a join: within this window of the sender's arrival (or of our
+// own join, for those already there). Later, `ts` is ignored and the
+// message gets its receive time — a live message cannot backdate itself.
+const CHAT_REPLAY_WINDOW_MS = 5000;
+/** When this client joined the current Room (ms). */
+let ownJoinAt = 0;
+/** identity -> when that participant arrived after us (ms). Internal. */
+// eslint-disable-next-line svelte/prefer-svelte-reactivity -- internal bookkeeping, never rendered
+let arrivedAt = new Map();
 /** @type {Array<{id: string, identity: string, n: string, text: string, at: number}>} */
 let callChat = $state.raw([]);
 
@@ -371,11 +381,13 @@ function handleSignal(payload, participant, _kind, topic) {
       chat.n.length > 0 &&
       chat.n.length <= 32
     ) {
+      const since = arrivedAt.get(participant.identity) ?? ownJoinAt;
+      const isReplay = Date.now() - since <= CHAT_REPLAY_WINDOW_MS;
       addChat(
         participant.identity,
         chat.text.trim(),
         chat.n,
-        typeof chat.ts === 'number' ? chat.ts : undefined
+        isReplay && typeof chat.ts === 'number' ? chat.ts : undefined
       );
     }
     return;
@@ -534,6 +546,8 @@ export async function connectToRoom(token, url, opts = {}) {
 
   isConnecting = true;
   disconnectReason = null;
+  // eslint-disable-next-line svelte/prefer-svelte-reactivity -- internal bookkeeping, never rendered
+  arrivedAt = new Map();
   try {
     const newRoom = new Room({
       adaptiveStream: true,
@@ -548,6 +562,7 @@ export async function connectToRoom(token, url, opts = {}) {
 
     newRoom.on(RoomEvent.ParticipantConnected, (/** @type {any} */ participant) => {
       const now = Date.now();
+      if (participant?.identity) arrivedAt.set(participant.identity, now);
       if (now - lastRemoteJoinCue > JOIN_CUE_DEBOUNCE_MS) {
         lastRemoteJoinCue = now;
         playJoinSound();
@@ -635,6 +650,7 @@ export async function connectToRoom(token, url, opts = {}) {
     );
 
     await newRoom.connect(url, token);
+    ownJoinAt = Date.now();
 
     // Track room state immediately after connection — before media setup
     // so a camera/mic failure doesn't leave a zombie connection
