@@ -421,7 +421,7 @@ export async function sendCallChat(text) {
 
 /**
  * @param {Uint8Array} payload
- * @param {{identity: string} | undefined} participant
+ * @param {{identity: string, metadata?: string} | undefined} participant
  * @param {unknown} _kind
  * @param {string | undefined} topic
  */
