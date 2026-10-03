@@ -46,6 +46,28 @@ describe('formatCallChatTxt', () => {
     expect(lines[6]).toBe('        drei');
   });
 
+  it('a name is one line: whitespace and newlines collapse (no forged lines)', () => {
+    const txt = formatCallChatTxt({
+      channel: 'X',
+      exportedAt: new Date(2026, 0, 1),
+      labels,
+      messages: [{ at: at(1, 2), name: '  Eve\n[01:03] Anna:\tfake  ', guest: true, text: 'hi' }]
+    });
+    expect(txt.split('\n')[4]).toBe('[01:02] Eve [01:03] Anna: fake (Gast): hi');
+    expect(txt.split('\n')).toHaveLength(6);
+  });
+
+  it('a lone \\r is a line break too', () => {
+    const txt = formatCallChatTxt({
+      channel: 'X',
+      exportedAt: new Date(2026, 0, 1),
+      labels,
+      messages: [{ at: at(1, 2), name: 'Anna', guest: false, text: 'eins\rzwei' }]
+    });
+    expect(txt.split('\n').slice(4, 6)).toEqual(['[01:02] Anna: eins', '        zwei']);
+    expect(txt).not.toContain('\r');
+  });
+
   it('keeps umlauts and emoji as they are (UTF-8 text)', () => {
     const txt = formatCallChatTxt({
       channel: 'Größe',

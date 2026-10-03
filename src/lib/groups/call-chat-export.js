@@ -27,8 +27,12 @@ export function formatCallChatTxt({ channel, exportedAt, labels, messages }) {
   ];
   for (const msg of messages) {
     const stamp = `[${hhmm(new Date(msg.at))}] `;
-    const who = msg.guest ? `${msg.name} (${labels.guest})` : msg.name;
-    const [first, ...rest] = String(msg.text).split(/\r?\n/);
+    // A display name is one line: a newline in it would forge a message line.
+    const name = String(msg.name ?? '')
+      .replace(/\s+/g, ' ')
+      .trim();
+    const who = msg.guest ? `${name} (${labels.guest})` : name;
+    const [first, ...rest] = String(msg.text).split(/\r\n|\r|\n/);
     lines.push(`${stamp}${who}: ${first}`);
     const indent = ' '.repeat(stamp.length);
     for (const line of rest) lines.push(`${indent}${line}`);

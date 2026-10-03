@@ -597,6 +597,26 @@ describe('in-call chat (data messages)', () => {
     });
   });
 
+  it('records at receipt whether the sender joined through a call link', () => {
+    const guest = { ...remote('b'.repeat(64) + ':g'), metadata: '{"guest":true}' };
+    const member = remote('c'.repeat(64) + ':m');
+    for (const [who, n] of [
+      [guest, 'g1'],
+      [member, 'm1']
+    ]) {
+      room.emit(
+        RoomEvent.DataReceived,
+        encode({ t: 'chat', text: 'hi', n }),
+        who,
+        undefined,
+        'edufeed.call.chat'
+      );
+    }
+    const chat = svc.getLiveKitState().callChat;
+    expect(chat.find((c) => c.n === 'g1').guest).toBe(true);
+    expect(chat.find((c) => c.n === 'm1').guest).toBeUndefined();
+  });
+
   it('clears the call chat on disconnect', async () => {
     await svc.sendCallChat('bye');
     await svc.disconnectFromRoom();

@@ -105,8 +105,12 @@ describe('CallChatPanel download', () => {
 
   it('saves the chat as anruf-chat-<channel>-<date>.txt with one line per message', async () => {
     const GUEST = 'c'.repeat(64) + ':1';
-    state.callChat = [...DEFAULT_CHAT, { id: 'g:1', identity: GUEST, text: 'Ich bin Gast', at: 2 }];
-    state.remoteParticipants = [{ identity: GUEST, metadata: '{"guest":true}' }];
+    // The store records the guest flag at receipt: still known after the
+    // guest left, and for a panel mounted later.
+    state.callChat = [
+      ...DEFAULT_CHAT,
+      { id: 'g:1', identity: GUEST, text: 'Ich bin Gast', at: 2, guest: true }
+    ];
     render(CallChatPanel, { props });
     await fireEvent.click(button());
     expect(download.fn).toHaveBeenCalledTimes(1);

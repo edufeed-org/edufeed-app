@@ -24,6 +24,7 @@ import {
 } from './call-sounds.js';
 import { withHand, handQueue } from '$lib/groups/call-tile-order.js';
 import { reactionPayload, parseReactionPayload } from '$lib/groups/call-reactions.js';
+import { isGuestParticipant } from '$lib/groups/livekit.js';
 
 // A burst of joins (a class arriving) gets one cue, not twenty.
 const JOIN_CUE_DEBOUNCE_MS = 750;
@@ -135,7 +136,9 @@ let ownJoinAt = 0;
 /** identity -> when that participant arrived after us (ms). Internal. */
 // eslint-disable-next-line svelte/prefer-svelte-reactivity -- internal bookkeeping, never rendered
 let arrivedAt = new Map();
-/** @type {Array<{id: string, identity: string, n: string, text: string, at: number}>} */
+// `guest`: the sender joined through a call link — recorded at receipt, so
+// it is still known after they left (the chat export marks them).
+/** @type {Array<{id: string, identity: string, n: string, text: string, at: number, guest?: boolean}>} */
 let callChat = $state.raw([]);
 
 /**
@@ -351,8 +354,9 @@ export async function sendReaction(emoji) {
  * `ts` is the sender's clock (a replay to a late joiner); without it the
  * message counts as sent now; a `ts` is clamped to [now - 12 h, now].
  * @param {string} identity @param {string} text @param {string} nonce @param {number} [ts]
+ * @param {boolean} [guest]
  */
-function addChat(identity, text, nonce, ts) {
+function addChat(identity, text, nonce, ts, guest = false) {
   const id = `${identity}:${nonce}`;
   if (callChat.some((c) => c.id === id)) return;
   const now = Date.now();
@@ -360,7 +364,10 @@ function addChat(identity, text, nonce, ts) {
     typeof ts === 'number' && Number.isFinite(ts)
       ? Math.min(Math.max(ts, now - CHAT_MAX_AGE_MS), now)
       : now;
-  callChat = [...callChat, { id, identity, n: nonce, text, at }]
+  callChat = [
+    ...callChat,
+    guest ? { id, identity, n: nonce, text, at, guest } : { id, identity, n: nonce, text, at }
+  ]
     .sort((a, b) => a.at - b.at)
     .slice(-CHAT_KEEP);
 }
@@ -395,7 +402,13 @@ export async function sendCallChat(text) {
     .slice(0, CHAT_MAX_CHARS);
   if (!room || !isConnected || !canSignal || !body) return;
   const nonce = Math.random().toString(36).slice(2, 12);
-  addChat(room.localParticipant.identity, body, nonce);
+  addChat(
+    room.localParticipant.identity,
+    body,
+    nonce,
+    undefined,
+    isGuestParticipant(room.localParticipant)
+  );
   try {
     await room.localParticipant.publishData(
       new TextEncoder().encode(JSON.stringify({ t: 'chat', text: body, n: nonce })),
@@ -435,7 +448,8 @@ function handleSignal(payload, participant, _kind, topic) {
         participant.identity,
         chat.text.trim(),
         chat.n,
-        replayedTime(participant.identity, chat.ts)
+        replayedTime(participant.identity, chat.ts),
+        isGuestParticipant(participant)
       );
     }
     return;
@@ -887,7 +901,7 @@ export async function toggleScreenShare() {
 
 /**
  * Get reactive connection state.
- * @returns {{ isConnected: boolean, isConnecting: boolean, isMuted: boolean, isCameraOff: boolean, isScreenSharing: boolean, canPublish: boolean, canSignal: boolean, connectionState: 'connected' | 'reconnecting' | 'disconnected', disconnectReason: import('livekit-client').DisconnectReason | null, mutedIdentities: Set<string>, raisedHands: Set<string>, reactions: Array<{id: string, identity: string, emoji: string, url?: string}>, callChat: Array<{id: string, identity: string, n: string, text: string, at: number}>, localParticipant: import('livekit-client').LocalParticipant | null, remoteParticipants: import('livekit-client').RemoteParticipant[], room: Room | null, speakingParticipantIds: Set<string>, audioInputDevices: MediaDeviceInfo[], activeAudioDeviceId: string, audioOutputDevices: MediaDeviceInfo[], activeAudioOutputDeviceId: string, videoInputDevices: MediaDeviceInfo[], activeVideoDeviceId: string }}
+ * @returns {{ isConnected: boolean, isConnecting: boolean, isMuted: boolean, isCameraOff: boolean, isScreenSharing: boolean, canPublish: boolean, canSignal: boolean, connectionState: 'connected' | 'reconnecting' | 'disconnected', disconnectReason: import('livekit-client').DisconnectReason | null, mutedIdentities: Set<string>, raisedHands: Set<string>, reactions: Array<{id: string, identity: string, emoji: string, url?: string}>, callChat: Array<{id: string, identity: string, n: string, text: string, at: number, guest?: boolean}>, localParticipant: import('livekit-client').LocalParticipant | null, remoteParticipants: import('livekit-client').RemoteParticipant[], room: Room | null, speakingParticipantIds: Set<string>, audioInputDevices: MediaDeviceInfo[], activeAudioDeviceId: string, audioOutputDevices: MediaDeviceInfo[], activeAudioOutputDeviceId: string, videoInputDevices: MediaDeviceInfo[], activeVideoDeviceId: string }}
  */
 export function getLiveKitState() {
   return {
