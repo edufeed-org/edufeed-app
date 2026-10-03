@@ -38,6 +38,7 @@ vi.mock('$lib/groups/group-call.svelte.js', () => ({
     }
   }),
   joinGroupCall: (/** @type {any[]} */ ...a) => callFns.joinGroupCall(...a),
+  joinGroupCallWithConfirm: (/** @type {any[]} */ ...a) => callFns.joinGroupCall(...a),
   showCallStage: (/** @type {any[]} */ ...a) => callFns.showCallStage(...a)
 }));
 vi.mock('$lib/groups/call-popout.svelte.js', () => ({
