@@ -82,7 +82,7 @@
     aria-label={m.meeting_bar_label()}
     data-testid="meeting-bar"
   >
-    <span class="flex min-w-0 items-center gap-2">
+    <span class="flex min-w-0 cursor-default items-center gap-2 select-none">
       <CalendarIcon class_="w-4 h-4 shrink-0 text-primary" />
       <span class="truncate"
         ><span class="font-semibold">{title}</span>

@@ -156,7 +156,9 @@
   </div>
   <div bind:this={listEl} class="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto p-3">
     {#if lk.callChat.length === 0}
-      <p class="m-auto text-center text-sm text-base-content/60">{m.groups_call_chat_empty()}</p>
+      <p class="m-auto cursor-default text-center text-sm text-base-content/60 select-none">
+        {m.groups_call_chat_empty()}
+      </p>
     {/if}
     {#each lk.callChat as msg, i (msg.id)}
       {@const pk = identityToPubkey(msg.identity)}
@@ -223,7 +225,7 @@
   {#if !lk.isConnected}
     <p
       id={offlineHintId}
-      class="border-t border-base-300 px-3 pt-2 text-xs text-base-content/60"
+      class="cursor-default border-t border-base-300 px-3 pt-2 text-xs text-base-content/60 select-none"
       data-testid="call-chat-offline"
     >
       {m.groups_call_chat_offline()}

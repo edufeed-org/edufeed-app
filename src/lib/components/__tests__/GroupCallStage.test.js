@@ -330,6 +330,20 @@ describe('GroupCallStage — a view, not the connection owner', () => {
     expect(screen.queryByTestId('group-call-reactions')).toBeNull();
   });
 
+  // Task 19 cursor audit: nothing in the stage is text to select; the cursor
+  // inherits, so the stage root covers every badge (the Gast pill showed an
+  // I-beam), while grid seats show they can be dragged.
+  it('decoration gets the default cursor and no selection; seats the grab cursor', () => {
+    lk.remoteParticipants = [remote(`${HEX}:x1`)];
+    render(GroupCallStage, { props: baseProps });
+    const stage = screen.getByTestId('group-call-stage');
+    expect(stage.classList.contains('cursor-default')).toBe(true);
+    expect(stage.classList.contains('select-none')).toBe(true);
+    expect(screen.getByTestId(`call-item-seat:${HEX}:x1`).classList.contains('cursor-grab')).toBe(
+      true
+    );
+  });
+
   it('renders inside the stage layout with the title', () => {
     render(GroupCallStage, { props: baseProps });
     expect(screen.getByTestId('group-call-stage')).toBeTruthy();

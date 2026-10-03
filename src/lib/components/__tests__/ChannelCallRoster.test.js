@@ -127,6 +127,10 @@ describe('ChannelCallRoster', () => {
     expect(button.querySelector('[data-testid="call-count-pill"]')).toBeTruthy();
     expect(button.querySelector('[data-testid="profile-avatar-stub"]')).toBeTruthy();
     expect(screen.queryByText('Join')).toBeNull();
+    expect(button.classList.contains('cursor-pointer')).toBe(true);
+    expect(
+      button.querySelector('[data-testid="call-count-pill"]').classList.contains('select-none')
+    ).toBe(true);
     await fireEvent.click(button);
     await waitFor(() => expect(fns.joinGroupCall).toHaveBeenCalled());
     expect(fns.onOpen).toHaveBeenCalledTimes(1);

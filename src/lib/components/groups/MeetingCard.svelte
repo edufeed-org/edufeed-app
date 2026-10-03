@@ -235,15 +235,16 @@
 >
   <div class="flex items-start justify-between gap-2">
     <div class="min-w-0">
-      <p class="flex items-center gap-1 text-xs text-base-content/60">
+      <p class="flex cursor-default items-center gap-1 text-xs text-base-content/60 select-none">
         <CalendarIcon class_="w-3.5 h-3.5" />
         {m.meeting_card_label()}
       </p>
       <p class="font-semibold break-words" data-testid="meeting-card-title">{title}</p>
       <p class="text-sm" data-testid="meeting-card-time">{timeLabel}</p>
     </div>
-    <span class="badge shrink-0 badge-sm {statusClass}" data-testid="meeting-card-status"
-      >{statusLabel}</span
+    <span
+      class="badge shrink-0 cursor-default badge-sm select-none {statusClass}"
+      data-testid="meeting-card-status">{statusLabel}</span
     >
   </div>
 
@@ -253,14 +254,14 @@
 
   {#if invitedPubkeys.length || invitedNames.length}
     <div class="mt-2 flex flex-wrap items-center gap-1 text-xs text-base-content/70">
-      <span class="mr-1">{m.meeting_card_participants()}</span>
+      <span class="mr-1 cursor-default select-none">{m.meeting_card_participants()}</span>
       {#each invitedPubkeys as pubkey (pubkey)}
         <span title={getUserDisplayName(pubkey, getProfiles().get(pubkey))}>
           <ProfileAvatar {pubkey} profile={getProfiles().get(pubkey)} size="xs" />
         </span>
       {/each}
       {#each invitedNames as name (name)}
-        <span class="badge badge-ghost badge-sm">{name}</span>
+        <span class="badge cursor-default badge-ghost badge-sm select-none">{name}</span>
       {/each}
     </div>
   {/if}

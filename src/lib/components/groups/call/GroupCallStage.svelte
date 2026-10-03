@@ -580,9 +580,14 @@
 <!-- A size container: beside the chat column the stage is narrow even in a
   wide window, so the header's labels answer to the STAGE's width (@lg:),
   not the viewport's (laoc, 2026-10-02: the button row widened the page). -->
+<!-- cursor-default + select-none for the whole stage: every badge, name and
+  label in here is decoration (laoc 2026-10-03: the I-beam over the Gast
+  pill). Buttons and links bring their own pointer; seats in the grid the
+  grab cursor (they can be dragged). The cursor inherits, so this one place
+  covers ParticipantTile and ScreenShareTile too. -->
 <div
   bind:this={rootEl}
-  class="@container flex min-h-0 min-w-0 flex-1 flex-col"
+  class="@container flex min-h-0 min-w-0 flex-1 cursor-default flex-col select-none"
   data-testid="group-call-stage"
 >
   <!-- Header -->

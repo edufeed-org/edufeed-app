@@ -100,7 +100,7 @@
          no visible status line (laoc, 2026-10-02). Screen readers still get
          the context. -->
     <div
-      class="flex flex-wrap items-center gap-x-2 gap-y-0.5 {inset}"
+      class="flex cursor-default flex-wrap items-center gap-x-2 gap-y-0.5 select-none {inset}"
       data-testid="channel-call-roster"
       title={m.groups_call_people_in_call({ count: participants.length })}
     >
@@ -120,7 +120,7 @@
       : m.groups_call_join_running({ count: participants.length })}
     <button
       type="button"
-      class="flex w-full flex-wrap items-center gap-x-2 gap-y-0.5 rounded-lg text-left transition-colors duration-150 hover:bg-base-300/60 {inset}"
+      class="flex w-full cursor-pointer flex-wrap items-center gap-x-2 gap-y-0.5 rounded-lg text-left transition-colors duration-150 select-none hover:bg-base-300/60 {inset}"
       data-testid="channel-call-roster"
       disabled={busy}
       aria-label={label}
@@ -132,7 +132,7 @@
   {:else}
     <!-- Anonymous viewer: informative only, nothing to click. -->
     <div
-      class="flex flex-wrap items-center gap-x-2 gap-y-0.5 {inset}"
+      class="flex cursor-default flex-wrap items-center gap-x-2 gap-y-0.5 select-none {inset}"
       data-testid="channel-call-roster"
       title={m.groups_call_people_in_call({ count: participants.length })}
     >

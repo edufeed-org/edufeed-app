@@ -97,6 +97,9 @@ describe('CallDock', () => {
     const dock = screen.getByTestId('call-dock');
     expect(dock.className.split(/\s+/)).not.toContain('fixed');
     expect(dock.className.split(/\s+/)).toContain('shrink-0');
+    // Task 19: a status strip, not text — no I-beam, no selection.
+    expect(dock.classList.contains('cursor-default')).toBe(true);
+    expect(dock.classList.contains('select-none')).toBe(true);
   });
 
   it('names the call and counts everyone in it', () => {

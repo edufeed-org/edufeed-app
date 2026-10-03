@@ -470,7 +470,10 @@
               {#if !wideScreen}
                 <!-- The way back to the stage while the chat stands in for it. -->
                 <div class="flex items-center gap-2 border-b border-base-300 px-3 py-2">
-                  <span class="min-w-0 flex-1 truncate text-sm font-semibold">{title}</span>
+                  <span
+                    class="min-w-0 flex-1 cursor-default truncate text-sm font-semibold select-none"
+                    >{title}</span
+                  >
                   <button
                     type="button"
                     class="btn btn-sm btn-primary"

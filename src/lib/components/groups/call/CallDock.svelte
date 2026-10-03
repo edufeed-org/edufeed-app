@@ -60,7 +60,7 @@
      forgets the call. Same in-flow slot as the live dock. -->
 {#if call.phase === 'ended'}
   <div
-    class="relative z-20 flex shrink-0 items-center gap-2 border-b border-base-300 bg-base-100 py-1 pr-2 pl-3 shadow-sm"
+    class="relative z-20 flex shrink-0 cursor-default items-center gap-2 border-b border-base-300 bg-base-100 py-1 pr-2 pl-3 shadow-sm select-none"
     role="status"
     data-testid="call-dock-ended"
   >
@@ -85,7 +85,7 @@
   </div>
 {:else}
   <div
-    class="relative z-20 flex shrink-0 items-center gap-2 border-b border-base-300 bg-base-100 py-1 pr-2 pl-3 shadow-sm"
+    class="relative z-20 flex shrink-0 cursor-default items-center gap-2 border-b border-base-300 bg-base-100 py-1 pr-2 pl-3 shadow-sm select-none"
     role="region"
     aria-label={m.groups_call_in_call()}
     data-testid="call-dock"

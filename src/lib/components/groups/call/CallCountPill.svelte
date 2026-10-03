@@ -11,7 +11,7 @@
 </script>
 
 <span
-  class="badge shrink-0 gap-1 badge-soft badge-sm font-semibold whitespace-nowrap badge-success"
+  class="badge shrink-0 gap-1 badge-soft badge-sm font-semibold whitespace-nowrap badge-success select-none"
   data-testid={testid}
 >
   <span aria-hidden="true">●</span>

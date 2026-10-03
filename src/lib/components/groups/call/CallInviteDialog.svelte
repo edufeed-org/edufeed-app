@@ -301,7 +301,7 @@
         {#each rows as row (row.pass.id)}
           {@const rowTitle = passTitle(row.pass)}
           <li class="flex items-center gap-2 text-sm" data-testid="call-invite-pass">
-            <span class="min-w-0 flex-1">
+            <span class="min-w-0 flex-1 cursor-default select-none">
               {#if rowTitle}
                 <span class="font-medium break-words" data-testid="call-invite-pass-title"
                   >{rowTitle}</span

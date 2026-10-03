@@ -127,6 +127,11 @@ describe('MeetingCard', () => {
     render(MeetingCard, { props: { event, pointer: POINTER, user: me, isAdmin: false } });
     const start = Number(event.tags.find((t) => t[0] === 'start')[1]);
     expect(screen.getByTestId('meeting-card-title').textContent).toBe('Elternabend');
+    // Task 19: the status chip is decoration, the title stays selectable text.
+    const status = screen.getByTestId('meeting-card-status');
+    expect(status.classList.contains('cursor-default')).toBe(true);
+    expect(status.classList.contains('select-none')).toBe(true);
+    expect(screen.getByTestId('meeting-card-title').classList.contains('select-none')).toBe(false);
     const date = formatTimestamp(start, { day: '2-digit', month: '2-digit', year: 'numeric' });
     expect(screen.getByTestId('meeting-card-time').textContent.trim()).toBe(
       `${date} ${formatTimeOfDay(start)}–${formatTimeOfDay(start + 3600)}`
