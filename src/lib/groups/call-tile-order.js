@@ -36,15 +36,54 @@ export function handQueue(times) {
 }
 
 /**
- * The seats in stage order: raised hands first (queue order), then everyone
- * else in the base order.
+ * The seats in stage order.
+ *
+ * Rule (Task 19): a tile the user placed by hand (drag and drop, Alt+arrow)
+ * keeps that slot — `placements` maps it to its index in the final order.
+ * Everyone else flows around those slots: raised hands first (queue order),
+ * then the base order, so a new participant lands at the end. A raised hand
+ * therefore promotes only tiles the user has not moved.
+ *
  * @param {string[]} baseKeys seats in their natural order
  * @param {string[]} handKeys raised hands, queue order (may name seats not on stage)
+ * @param {Map<string, number>} [placements] manually placed seat -> index
  * @returns {string[]}
  */
-export function orderSeats(baseKeys, handKeys) {
+export function orderSeats(baseKeys, handKeys, placements = new Map()) {
   const present = new Set(baseKeys);
-  const promoted = handKeys.filter((k) => present.has(k));
+  const placed = [...placements.entries()]
+    .filter(([k]) => present.has(k))
+    .sort((a, b) => a[1] - b[1]);
+  const fixed = new Set(placed.map(([k]) => k));
+  const promoted = handKeys.filter((k) => present.has(k) && !fixed.has(k));
   const up = new Set(promoted);
-  return [...promoted, ...baseKeys.filter((k) => !up.has(k))];
+  const order = [...promoted, ...baseKeys.filter((k) => !up.has(k) && !fixed.has(k))];
+  for (const [key, index] of placed) {
+    order.splice(Math.min(Math.max(0, index), order.length), 0, key);
+  }
+  return order;
+}
+
+/**
+ * Move one seat to `toIndex` of the current stage order and return the new
+ * placements: the moved seat and every seat placed before keep their exact
+ * slots in the resulting order (seats no longer on stage are dropped).
+ * @param {string[]} currentOrder the order on screen (orderSeats' result)
+ * @param {string} key
+ * @param {number} toIndex
+ * @param {Map<string, number>} placements
+ * @returns {Map<string, number>} new placements (the same map when `key` is unknown)
+ */
+export function moveSeat(currentOrder, key, toIndex, placements) {
+  const from = currentOrder.indexOf(key);
+  if (from < 0) return placements;
+  const order = currentOrder.filter((k) => k !== key);
+  order.splice(Math.min(Math.max(0, toIndex), order.length), 0, key);
+  /** @type {Map<string, number>} */
+  const next = new Map();
+  for (const k of [...placements.keys(), key]) {
+    const i = order.indexOf(k);
+    if (i >= 0) next.set(k, i);
+  }
+  return next;
 }

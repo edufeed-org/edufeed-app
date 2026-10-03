@@ -3796,6 +3796,8 @@
   "groups_call_invite_revoke_confirm_title": "Revoke link?",
   "groups_call_invite_revoke_confirm_text": "Everyone in the call through this link will be removed.",
   "groups_call_tile_you": "You",
+  "groups_call_tile_moved": "Tile moved, position {position} of {total}",
+  "groups_call_tile_move_hint": "Move with Alt+Left/Right arrow",
   "groups_call_error_removed": "You were removed from this call and can't rejoin.",
   "meeting_modal_title": "Schedule a meeting · {channel}",
   "meeting_modal_title_label": "Meeting title",

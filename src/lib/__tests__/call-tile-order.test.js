@@ -1,6 +1,6 @@
 /** @vitest-environment node */
 import { describe, it, expect } from 'vitest';
-import { withHand, handQueue, orderSeats } from '$lib/groups/call-tile-order.js';
+import { withHand, handQueue, orderSeats, moveSeat } from '$lib/groups/call-tile-order.js';
 
 describe('withHand / handQueue: raised hands in the order they went up', () => {
   it('queues hands by raise time, first raised first', () => {
@@ -62,5 +62,50 @@ describe('orderSeats: base order + raised hands', () => {
 
   it('ignores hands of seats that are not on the stage', () => {
     expect(orderSeats(base, ['gone', 'b'])).toEqual(['b', 'me', 'a', 'c']);
+  });
+});
+
+describe('orderSeats + moveSeat: manual placement (local, per call)', () => {
+  const base = ['me', 'a', 'b', 'c'];
+
+  it('moving a tile puts it exactly where it was dropped', () => {
+    const p = moveSeat(orderSeats(base, []), 'c', 0, new Map());
+    expect(orderSeats(base, [], p)).toEqual(['c', 'me', 'a', 'b']);
+    const p2 = moveSeat(orderSeats(base, [], p), 'me', 3, p);
+    expect(orderSeats(base, [], p2)).toEqual(['c', 'a', 'b', 'me']);
+  });
+
+  it('new participants append at the end; moved tiles keep their place', () => {
+    const p = moveSeat(orderSeats(base, []), 'a', 3, new Map());
+    expect(orderSeats(base, [], p)).toEqual(['me', 'b', 'c', 'a']);
+    expect(orderSeats([...base, 'd'], [], p)).toEqual(['me', 'b', 'c', 'a', 'd']);
+  });
+
+  it('a moved tile that left the call frees its slot', () => {
+    const p = moveSeat(orderSeats(base, []), 'a', 0, new Map());
+    expect(orderSeats(['me', 'b', 'c'], [], p)).toEqual(['me', 'b', 'c']);
+  });
+
+  it('raised hands promote only tiles the user has not moved', () => {
+    // 'c' was placed last by hand; 'b' was not moved.
+    const p = moveSeat(orderSeats(base, []), 'c', 3, new Map());
+    expect(orderSeats(base, ['c', 'b'], p)).toEqual(['b', 'me', 'a', 'c']);
+  });
+
+  it('a placement past the end clamps to the end', () => {
+    const p = new Map([['me', 9]]);
+    expect(orderSeats(base, [], p)).toEqual(['a', 'b', 'c', 'me']);
+  });
+
+  it('moveSeat clamps the target index and ignores unknown keys', () => {
+    const order = orderSeats(base, []);
+    expect(orderSeats(base, [], moveSeat(order, 'a', -5, new Map()))).toEqual([
+      'a',
+      'me',
+      'b',
+      'c'
+    ]);
+    const same = new Map();
+    expect(moveSeat(order, 'zzz', 0, same)).toBe(same);
   });
 });

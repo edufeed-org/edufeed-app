@@ -139,6 +139,8 @@ vi.mock('$lib/paraglide/messages', () => ({
   groups_call_tile_you: () => 'You',
   groups_call_react: () => 'React',
   groups_call_more_emojis: () => 'More emojis',
+  groups_call_tile_moved: (p) => `Tile moved, position ${p.position} of ${p.total}`,
+  groups_call_tile_move_hint: () => 'Alt+arrow keys move this tile',
   groups_call_show_chat: () => 'Chat',
   groups_call_pop_out: () => 'Pop out',
   groups_call_pop_in: () => 'Back to tab',
@@ -599,5 +601,106 @@ describe('layout', () => {
       .querySelector('[data-testid="participant-tile-stub"]');
     expect(guestTile.getAttribute('data-guest')).toBe('true');
     expect(memberTile.getAttribute('data-guest')).toBe('false');
+  });
+});
+
+// Task 19: tiles can be reordered (drag and drop, Alt+arrow). The order is
+// the viewer's own, kept for the call, reset with the next call.
+describe('reordering tiles', () => {
+  const B = `${'b'.repeat(64)}:1`;
+  const C = `${'c'.repeat(64)}:1`;
+  const D = `${'d'.repeat(64)}:1`;
+  const ME = `${'a'.repeat(64)}:me`;
+  const order = () =>
+    [...screen.getByTestId('group-call-grid').querySelectorAll('[data-seat-key]')].map((el) =>
+      el.dataset.seatKey.replace('seat:', '')
+    );
+  const tile = (id) => screen.getByTestId(`call-item-seat:${id}`);
+
+  beforeEach(() => {
+    lk.room = {}; // a fresh call
+    lk.remoteParticipants = [remote(B), remote(C), remote(D)];
+  });
+
+  it('Alt+→ / Alt+← move the focused tile and announce its new position', async () => {
+    render(GroupCallStage, { props: baseProps });
+    expect(order()).toEqual([ME, B, C, D]);
+    tile(B).focus();
+    await fireEvent.keyDown(tile(B), { key: 'ArrowRight', altKey: true });
+    expect(order()).toEqual([ME, C, B, D]);
+    expect(screen.getByTestId('group-call-tile-announce').textContent).toBe(
+      'Tile moved, position 3 of 4'
+    );
+    await fireEvent.keyDown(tile(B), { key: 'ArrowLeft', altKey: true });
+    await fireEvent.keyDown(tile(B), { key: 'ArrowLeft', altKey: true });
+    expect(order()).toEqual([B, ME, C, D]);
+    // without Alt the arrows do nothing here
+    await fireEvent.keyDown(tile(B), { key: 'ArrowRight' });
+    expect(order()).toEqual([B, ME, C, D]);
+  });
+
+  it('tiles are focusable groups that say how to move them', () => {
+    render(GroupCallStage, { props: baseProps });
+    const el = tile(C);
+    expect(el.getAttribute('tabindex')).toBe('0');
+    expect(el.getAttribute('aria-keyshortcuts')).toBe('Alt+ArrowLeft Alt+ArrowRight');
+    const hint = document.getElementById(el.getAttribute('aria-describedby'));
+    expect(hint.textContent).toBe('Alt+arrow keys move this tile');
+  });
+
+  it('dragging a tile onto another puts it in that place', async () => {
+    render(GroupCallStage, { props: baseProps });
+    const original = document.elementFromPoint;
+    document.elementFromPoint = () => tile(B);
+    try {
+      await fireEvent.pointerDown(tile(D), { button: 0, pointerId: 1, clientX: 10, clientY: 10 });
+      await fireEvent.pointerMove(window, { pointerId: 1, clientX: 60, clientY: 10 });
+      expect(tile(D).classList.contains('opacity-50')).toBe(true);
+      expect(tile(B).dataset.dropTarget).toBe('true');
+      await fireEvent.pointerUp(window, { pointerId: 1, clientX: 60, clientY: 10 });
+    } finally {
+      document.elementFromPoint = original;
+    }
+    expect(order()).toEqual([ME, D, B, C]);
+  });
+
+  it('a click without movement is no drag', async () => {
+    render(GroupCallStage, { props: baseProps });
+    await fireEvent.pointerDown(tile(D), { button: 0, pointerId: 1, clientX: 10, clientY: 10 });
+    await fireEvent.pointerMove(window, { pointerId: 1, clientX: 12, clientY: 11 });
+    await fireEvent.pointerUp(window, { pointerId: 1, clientX: 12, clientY: 11 });
+    expect(order()).toEqual([ME, B, C, D]);
+  });
+
+  it('the order survives the stage remounting in the same call, newcomers append', async () => {
+    const first = render(GroupCallStage, { props: baseProps });
+    tile(D).focus();
+    await fireEvent.keyDown(tile(D), { key: 'ArrowLeft', altKey: true });
+    expect(order()).toEqual([ME, B, D, C]);
+    first.unmount();
+    const E = `${'e'.repeat(64)}:1`;
+    lk.remoteParticipants = [remote(B), remote(C), remote(D), remote(E)];
+    render(GroupCallStage, { props: baseProps });
+    expect(order()).toEqual([ME, B, D, C, E]);
+  });
+
+  it('a new call starts from the natural order again', async () => {
+    const first = render(GroupCallStage, { props: baseProps });
+    await fireEvent.keyDown(tile(D), { key: 'ArrowLeft', altKey: true });
+    first.unmount();
+    lk.room = {};
+    render(GroupCallStage, { props: baseProps });
+    expect(order()).toEqual([ME, B, C, D]);
+  });
+
+  it('a moved tile keeps its place when its hand goes up; unmoved hands still come first', async () => {
+    const first = render(GroupCallStage, { props: baseProps });
+    await fireEvent.keyDown(tile(B), { key: 'ArrowRight', altKey: true });
+    await fireEvent.keyDown(tile(B), { key: 'ArrowRight', altKey: true });
+    expect(order()).toEqual([ME, C, D, B]);
+    first.unmount();
+    lk.raisedHands = new Set([B, D]);
+    render(GroupCallStage, { props: baseProps });
+    expect(order()).toEqual([D, ME, C, B]);
   });
 });

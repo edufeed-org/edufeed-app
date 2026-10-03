@@ -3796,6 +3796,8 @@
   "groups_call_invite_revoke_confirm_title": "Link zurückziehen?",
   "groups_call_invite_revoke_confirm_text": "Alle, die mit diesem Link im Anruf sind, werden entfernt.",
   "groups_call_tile_you": "Du",
+  "groups_call_tile_moved": "Kachel verschoben, Position {position} von {total}",
+  "groups_call_tile_move_hint": "Mit Alt+Pfeil links/rechts verschieben",
   "groups_call_error_removed": "Du wurdest aus diesem Anruf entfernt und kannst nicht erneut beitreten.",
   "meeting_modal_title": "Termin planen · {channel}",
   "meeting_modal_title_label": "Titel des Termins",

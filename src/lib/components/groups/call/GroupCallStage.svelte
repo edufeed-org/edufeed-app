@@ -18,7 +18,7 @@
 
 <script>
   import { SvelteMap } from 'svelte/reactivity';
-  import { untrack } from 'svelte';
+  import { untrack, tick } from 'svelte';
   import {
     CALL_REACTIONS,
     toggleMute,
@@ -44,7 +44,8 @@
     setScreenShareQuality
   } from '$lib/services/call-prefs.js';
   import { fitGrid, nextSpotlight } from '$lib/groups/call-layout.js';
-  import { orderSeats } from '$lib/groups/call-tile-order.js';
+  import { orderSeats, moveSeat } from '$lib/groups/call-tile-order.js';
+  import { getTilePlacements, setTilePlacements } from '$lib/groups/call-tile-placements.svelte.js';
   import { isGuestParticipant } from '$lib/groups/livekit.js';
   import { trackOnScreen as trackNodeOnScreen } from '$lib/groups/track-on-screen.js';
   import { Track } from 'livekit-client';
@@ -221,16 +222,106 @@
   });
 
   // Raised hands come first, first raised first (lk.raisedHands iterates in
-  // queue order); a lowered hand goes back to its natural place.
+  // queue order); a lowered hand goes back to its natural place. Tiles the
+  // viewer placed by hand (drag and drop, Alt+arrow) keep their slot and are
+  // not promoted — see orderSeats for the rule.
   const handKeys = $derived([...lk.raisedHands].map((id) => `seat:${id}`));
+  const placements = $derived(getTilePlacements(lk.room));
   /** @type {SeatItem[]} */
   const seats = $derived.by(() => {
     const byKey = new Map(baseSeats.map((s) => [s.key, s]));
     return orderSeats(
       baseSeats.map((s) => s.key),
-      handKeys
+      handKeys,
+      placements
     ).map((k) => /** @type {SeatItem} */ (byKey.get(k)));
   });
+
+  // --- Reordering: local to this viewer, kept for the call ---
+  let tileAnnouncement = $state('');
+  const moveHintId = `call-tile-move-hint-${Math.random().toString(36).slice(2, 8)}`;
+  /** @param {string} key @param {number} toIndex */
+  function moveTile(key, toIndex) {
+    const order = seats.map((s) => s.key);
+    const target = Math.min(Math.max(0, toIndex), order.length - 1);
+    if (order.indexOf(key) === target) return;
+    setTilePlacements(lk.room, moveSeat(order, key, target, placements));
+    tileAnnouncement = m.groups_call_tile_moved({ position: target + 1, total: order.length });
+  }
+  /** @param {KeyboardEvent} event @param {string} key */
+  async function onTileKeyDown(event, key) {
+    if (!event.altKey || (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight')) return;
+    event.preventDefault();
+    const from = seats.findIndex((s) => s.key === key);
+    moveTile(key, from + (event.key === 'ArrowLeft' ? -1 : 1));
+    // The keyed block moved the node: keep the focus on the moved tile.
+    await tick();
+    for (const el of rootEl?.querySelectorAll('[data-seat-key]') ?? []) {
+      if (/** @type {HTMLElement} */ (el).dataset.seatKey === key) {
+        /** @type {HTMLElement} */ (el).focus();
+      }
+    }
+  }
+
+  // Pointer drag (mouse, pen and touch alike): a press that moves a few
+  // pixels picks the tile up, releasing over another tile puts it there.
+  /** @type {string | null} */
+  let draggingKey = $state(null);
+  /** @type {string | null} */
+  let dropKey = $state(null);
+  const DRAG_THRESHOLD = 6;
+  /** @param {PointerEvent} event @param {string} key */
+  function onTilePointerDown(event, key) {
+    if (event.button !== 0 || seats.length < 2) return;
+    const target = /** @type {Element | null} */ (event.target);
+    if (target?.closest?.('button, input, select, textarea, [role="slider"]')) return;
+    const doc = rootEl?.ownerDocument;
+    const win = doc?.defaultView;
+    if (!doc || !win) return;
+    const startX = event.clientX;
+    const startY = event.clientY;
+    const pointerId = event.pointerId;
+    let active = false;
+    // The release would also "click" a profile link under the pointer.
+    /** @param {Event} c */
+    const swallow = (c) => {
+      c.preventDefault();
+      c.stopPropagation();
+    };
+    /** @param {PointerEvent} e */
+    const onMove = (e) => {
+      if (e.pointerId !== pointerId) return;
+      if (!active) {
+        if (Math.hypot(e.clientX - startX, e.clientY - startY) < DRAG_THRESHOLD) return;
+        active = true;
+        draggingKey = key;
+      }
+      const over = doc.elementFromPoint(e.clientX, e.clientY)?.closest('[data-seat-key]');
+      const overKey = over instanceof win.HTMLElement ? (over.dataset.seatKey ?? null) : null;
+      dropKey = overKey && overKey !== key ? overKey : null;
+    };
+    const finish = (/** @type {PointerEvent} */ e) => {
+      if (e.pointerId !== pointerId) return;
+      win.removeEventListener('pointermove', onMove);
+      win.removeEventListener('pointerup', finish);
+      win.removeEventListener('pointercancel', finish);
+      if (active && e.type === 'pointerup' && dropKey) {
+        moveTile(
+          key,
+          seats.findIndex((s) => s.key === dropKey)
+        );
+      }
+      if (active) {
+        win.addEventListener('click', swallow, true);
+        win.setTimeout(() => win.removeEventListener('click', swallow, true), 0);
+      }
+      draggingKey = null;
+      dropKey = null;
+    };
+    win.addEventListener('pointermove', onMove);
+    win.addEventListener('pointerup', finish);
+    win.addEventListener('pointercancel', finish);
+  }
 
   /** @type {Array<ShareItem | SeatItem>} */
   const items = $derived([...shares, ...seats]);
@@ -589,6 +680,11 @@
     </div>
   </div>
 
+  <span id={moveHintId} class="sr-only">{m.groups_call_tile_move_hint()}</span>
+  <p class="sr-only" aria-live="polite" data-testid="group-call-tile-announce">
+    {tileAnnouncement}
+  </p>
+
   {#if lk.connectionState === 'reconnecting'}
     <div
       class="flex items-center justify-center gap-2 bg-warning px-3 py-1 text-sm text-warning-content"
@@ -634,13 +730,42 @@
           data-testid="group-call-grid"
         >
           {#each items as it (it.key)}
-            <div
-              class="relative {measured ? '' : 'aspect-video'}"
-              style={tileStyle}
-              data-testid={`call-item-${it.key}`}
-            >
-              {@render item(it, false)}
-            </div>
+            {#if it.kind === 'seat'}
+              <!-- A seat can be reordered: dragged (pointer/touch, so no
+                touch scrolling on it) or moved with Alt+←/→ when focused.
+                A focusable group, not a button: it holds its own controls
+                (pin, volume, profile link). -->
+              <!-- svelte-ignore a11y_no_noninteractive_tabindex, a11y_no_noninteractive_element_interactions -->
+              <div
+                class="relative touch-none rounded-lg outline-offset-2 {measured
+                  ? ''
+                  : 'aspect-video'} {draggingKey === it.key
+                  ? 'cursor-grabbing opacity-50'
+                  : 'cursor-grab'} {dropKey === it.key ? 'ring-2 ring-primary ring-offset-2' : ''}"
+                style={tileStyle}
+                role="group"
+                tabindex="0"
+                aria-label={it.isLocal ? m.groups_call_tile_you() : nameOf(it.participant)}
+                aria-describedby={moveHintId}
+                aria-keyshortcuts="Alt+ArrowLeft Alt+ArrowRight"
+                data-seat-key={it.key}
+                data-drop-target={dropKey === it.key ? 'true' : undefined}
+                data-testid={`call-item-${it.key}`}
+                onkeydown={(e) => onTileKeyDown(e, it.key)}
+                onpointerdown={(e) => onTilePointerDown(e, it.key)}
+                ondragstart={(e) => e.preventDefault()}
+              >
+                {@render item(it, false)}
+              </div>
+            {:else}
+              <div
+                class="relative {measured ? '' : 'aspect-video'}"
+                style={tileStyle}
+                data-testid={`call-item-${it.key}`}
+              >
+                {@render item(it, false)}
+              </div>
+            {/if}
           {/each}
         </div>
       </div>
