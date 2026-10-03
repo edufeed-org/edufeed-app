@@ -13,6 +13,13 @@
   import { avatarInitial } from '$lib/helpers/avatar-initial.js';
   import { profileLink } from '$lib/helpers/nostrUtils.js';
   import { canPopOutCall, popOutCall } from '$lib/groups/call-popout.svelte.js';
+  import { isGuestParticipant } from '$lib/groups/livekit.js';
+  import {
+    formatCallChatTxt,
+    callChatFileName,
+    downloadTextFile
+  } from '$lib/groups/call-chat-export.js';
+  import { DownloadIcon } from '$lib/components/icons';
   import ProfileAvatar from '$lib/components/shared/ProfileAvatar.svelte';
   import HoverCard from '$lib/components/shared/HoverCard.svelte';
   import ProfileHoverCardContent from '$lib/components/shared/ProfileHoverCardContent.svelte';
@@ -90,6 +97,38 @@
   // Says why the input is greyed (QA 2026-10-02 C4).
   const offlineHintId = `call-chat-offline-${Math.random().toString(36).slice(2, 8)}`;
 
+  // Guests are marked "(Gast)" in the export. Remembered for the whole call:
+  // a guest who already left still wrote their messages as a guest.
+  /** @type {Set<string>} */
+  // eslint-disable-next-line svelte/prefer-svelte-reactivity -- bookkeeping, never rendered
+  const guestIdentities = new Set();
+  $effect(() => {
+    for (const p of [lk.localParticipant, ...(lk.remoteParticipants ?? [])]) {
+      if (p && isGuestParticipant(p)) guestIdentities.add(p.identity);
+    }
+  });
+
+  function downloadChat() {
+    if (lk.callChat.length === 0) return;
+    const now = new Date();
+    const channel = title || m.groups_call_chat_tab();
+    const text = formatCallChatTxt({
+      channel,
+      exportedAt: now,
+      labels: {
+        exportedAt: (time) => m.groups_call_chat_exported_at({ time }),
+        guest: m.groups_call_guest_badge()
+      },
+      messages: lk.callChat.map((c) => ({
+        at: c.at,
+        name: nameOf(c.identity),
+        guest: guestIdentities.has(c.identity),
+        text: c.text
+      }))
+    });
+    downloadTextFile(callChatFileName(channel, now), text);
+  }
+
   async function send() {
     if (!canSend) return;
     const text = draft;
@@ -99,6 +138,22 @@
 </script>
 
 <div class="flex min-h-0 flex-1 flex-col" data-testid="call-chat-panel">
+  <div
+    class="flex shrink-0 items-center justify-end border-b border-base-300 px-2 py-1"
+    data-testid="call-chat-header"
+  >
+    <button
+      type="button"
+      class="btn btn-square btn-ghost btn-sm"
+      aria-label={m.groups_call_chat_download()}
+      title={m.groups_call_chat_download()}
+      disabled={lk.callChat.length === 0}
+      onclick={downloadChat}
+      data-testid="call-chat-download"
+    >
+      <DownloadIcon class_="h-4 w-4" title="" />
+    </button>
+  </div>
   <div bind:this={listEl} class="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto p-3">
     {#if lk.callChat.length === 0}
       <p class="m-auto text-center text-sm text-base-content/60">{m.groups_call_chat_empty()}</p>

@@ -66,6 +66,12 @@ vi.mock('$lib/groups/group-call.svelte.js', () => ({
   getGroupCallState: () => groupCall
 }));
 
+const download = vi.hoisted(() => ({ fn: vi.fn() }));
+vi.mock('$lib/groups/call-chat-export.js', async (importOriginal) => ({
+  .../** @type {any} */ (await importOriginal()),
+  downloadTextFile: (/** @type {any[]} */ ...a) => download.fn(...a)
+}));
+
 const m = await import('$lib/paraglide/messages');
 const { profileLink } = await import('$lib/helpers/nostrUtils.js');
 const { default: CallChatPanel } = await import('$lib/components/groups/call/CallChatPanel.svelte');
@@ -81,6 +87,41 @@ beforeEach(() => {
   popout.popOutCall.mockClear();
   groupCall.phase = 'ready';
   groupCall.connected = true;
+  state.localParticipant = undefined;
+  state.remoteParticipants = undefined;
+  download.fn.mockClear();
+});
+
+// Task 19: the chat is gone when the call ends — a .txt keeps it.
+describe('CallChatPanel download', () => {
+  const button = () => screen.getByRole('button', { name: m.groups_call_chat_download() });
+
+  it('offers "Chat herunterladen" in the panel header, disabled while empty', () => {
+    state.callChat = [];
+    render(CallChatPanel, { props });
+    expect(button().disabled).toBe(true);
+    expect(button().closest('[data-testid="call-chat-header"]')).toBeTruthy();
+  });
+
+  it('saves the chat as anruf-chat-<channel>-<date>.txt with one line per message', async () => {
+    const GUEST = 'c'.repeat(64) + ':1';
+    state.callChat = [...DEFAULT_CHAT, { id: 'g:1', identity: GUEST, text: 'Ich bin Gast', at: 2 }];
+    state.remoteParticipants = [{ identity: GUEST, metadata: '{"guest":true}' }];
+    render(CallChatPanel, { props });
+    await fireEvent.click(button());
+    expect(download.fn).toHaveBeenCalledTimes(1);
+    const [filename, text] = download.fn.mock.calls[0];
+    expect(filename).toMatch(/^anruf-chat-arbeitszimmer-\d{4}-\d{2}-\d{2}\.txt$/);
+    const lines = text.split('\n');
+    expect(lines[0]).toBe('arbeitszimmer');
+    expect(lines[1]).toMatch(/^\d{2}\.\d{2}\.\d{4}$/);
+    expect(lines[4]).toMatch(/^\[\d{2}:\d{2}\] Bea: Hallo zusammen$/);
+    expect(lines[5]).toMatch(
+      new RegExp(
+        `^\\[\\d{2}:\\d{2}\\] ${'c'.repeat(8)} \\(${m.groups_call_guest_badge()}\\): Ich bin Gast$`
+      )
+    );
+  });
 });
 
 describe('CallChatPanel', () => {

@@ -23,6 +23,7 @@ export { default as AlertIcon } from './ui/AlertIcon.svelte';
 export { default as UserIcon } from './ui/UserIcon.svelte';
 export { default as GlobeIcon } from './ui/GlobeIcon.svelte';
 export { default as LinkIcon } from './ui/LinkIcon.svelte';
+export { default as DownloadIcon } from './ui/DownloadIcon.svelte';
 export { default as Link45Icon } from './ui/Link45Icon.svelte';
 export { default as TranslateIcon } from './ui/TranslateIcon.svelte';
 export { default as SettingsIcon } from './ui/SettingsIcon.svelte';

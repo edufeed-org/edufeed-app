@@ -2604,6 +2604,8 @@
   "groups_call_chat_empty": "Nachrichten hier sehen alle im Anruf, auch Gäste. Sie verschwinden, wenn der Anruf endet.",
   "groups_call_chat_placeholder": "Nachricht an alle im Anruf",
   "groups_call_chat_send": "Senden",
+  "groups_call_chat_download": "Chat herunterladen",
+  "groups_call_chat_exported_at": "Exportiert um {time}",
   "groups_call_chat_offline": "Der Anruf-Chat ist verfügbar, sobald du verbunden bist.",
   "groups_livekit_toggle": "Live-Audio/Video",
   "groups_livekit_hint": "Mitglieder können über die Kanalkopfzeile einem Anruf beitreten. Dieses Relay hostet den Anruf.",
