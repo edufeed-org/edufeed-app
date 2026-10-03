@@ -7,6 +7,60 @@ merge commits of the nostr PRs that landed since the previous tag.
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-10-03
+
+### Added
+
+- **Guest links for channel calls.** Anyone in a call can create a link
+  (`/call/…#code`) that lets a person without an account join that one
+  call under a name of their choice — never as a channel member. Links can
+  be named, expire on their own and can be revoked from the invite dialog.
+  Guests get the call chat, a "Gast" badge and
+  clear "link no longer valid", "removed" and "call ended" pages. Needs
+  pyramid edufeed-v1.9 or newer on the groups relay.
+- **Scheduled meetings in channels.** "Termin planen" in a channel's ⋯ menu
+  creates a meeting (NIP-52, kept on the group relay only), optionally with
+  a guest link valid from 15 minutes before the start, and invites people
+  by DM (only non-members get the guest link). The channel shows a meeting
+  card and an upcoming bar, both with .ics download; the guest page counts
+  down and becomes joinable on its own; the community calendar lists the
+  meetings of its channels. Private-channel meetings never reach the
+  personal calendar, feeds or the local cache.
+- **In-call polish.** An ephemeral call chat (late joiners see earlier
+  messages, downloadable as .txt), raised hands ordered by when they went
+  up with the order on the ✋ pill, custom emoji reactions via the full
+  emoji picker, tiles you can rearrange by drag or Alt+arrow, a running-call
+  pill on channel cards and in the sidebar that joins in one click,
+  confirmations before switching or leaving a call, and a call dock that
+  sits in the page instead of floating over content.
+- **Agents page** (behind `AGENTS_ENABLED`). Pair the Edufeed desktop
+  companion over NIP-46, edit an agent's persona and record (kinds
+  30175/30177), and see an "Agent" badge and presence in group chat.
+
+### Changed
+
+- **Channel navigation.** A breadcrumb leads back to the channel list, one
+  channel list looks the same at every width (with "Allgemein" first),
+  "Kanal verlassen" sits in the ⋯ menu behind a confirmation, and the
+  community header shows members and followers clearly.
+- **Calls:** non-members of an open channel can listen to a running call
+  but not start one.
+- **`/api/enrich` talks to nope-mcp** (formerly amb-mcp) and reads
+  `NOPE_MCP_*` variables; the old `AMB_MCP_*` names still work.
+
+### Fixed
+
+- Community pages (`/c/…`) mount once instead of once per breakpoint, so a
+  single click (e.g. Follow) no longer publishes twice.
+- The community list is never rebuilt from an empty answer: when relays stay
+  silent, joining or leaving says the list is unavailable instead of
+  overwriting it.
+- Join requests held by another of your accounts offer an account switch
+  instead of a read that cannot succeed.
+- A DM you send outside the composer (such as a meeting invitation) no
+  longer shows up as unread or as a message request.
+- Weekday and month names in the calendar follow the app language.
+
 ### Deprecated
 
 - **`CALENDAR_LOCALE` is ignored.** Calendar weekday and month names now
