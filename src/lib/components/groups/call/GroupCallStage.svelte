@@ -418,6 +418,8 @@
   // focus-open must not close it again.
   let handsOpen = $state(false);
   let handsOpenedAt = 0;
+  /** @type {HTMLButtonElement | undefined} */
+  let handsPillEl = $state(undefined);
   function showHands() {
     if (handsOpen) return;
     handsOpen = true;
@@ -605,6 +607,7 @@
       {/if}
       {#if handCount > 0}
         <button
+          bind:this={handsPillEl}
           type="button"
           class="badge shrink-0 cursor-pointer gap-1 badge-sm badge-warning select-none"
           aria-expanded={handsOpen}
@@ -626,7 +629,8 @@
       <!-- Outside the title row's overflow-hidden, so it is never clipped. -->
       <div
         id="group-call-hands-list"
-        class="absolute top-full left-3 z-30 mt-1 max-w-64 cursor-default rounded-box bg-base-100 p-2 text-sm shadow-lg select-none"
+        class="absolute top-full z-30 mt-1 max-w-64 cursor-default rounded-box bg-base-100 p-2 text-sm shadow-lg select-none"
+        style="left: {Math.max(12, handsPillEl?.offsetLeft ?? 12)}px"
         data-testid="group-call-hands-list"
       >
         <p class="mb-1 text-xs text-base-content/60">{m.groups_call_hands_order()}</p>
