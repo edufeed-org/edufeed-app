@@ -21,7 +21,7 @@ function getLookupRelays() {
  * Used for users without kind 10002 relay list
  * @returns {string[]}
  */
-function getDefaultRelays() {
+export function getDefaultRelays() {
   return runtimeConfig.fallbackRelays || [];
 }
 

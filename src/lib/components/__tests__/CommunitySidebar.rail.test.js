@@ -32,6 +32,8 @@ vi.mock('$lib/helpers/toast.js', () => ({ showToast: vi.fn() }));
 
 const holders = vi.hoisted(() => ({
   /** @type {string[]} */ communities: [],
+  status: 'ready',
+  retry: vi.fn(),
   /** @type {any[]} */ areas: [],
   /** @type {any[]} */ groups: [],
   locked: false
@@ -46,7 +48,11 @@ globalThis.ResizeObserver = class {
 };
 
 vi.mock('$lib/stores/joined-communities-list.svelte.js', () => ({
-  useJoinedCommunitiesList: () => () => holders.communities
+  useJoinedCommunitiesState: () => ({
+    list: () => holders.communities,
+    status: () => holders.status,
+    retry: () => holders.retry()
+  })
 }));
 vi.mock('$lib/concord/unlinked-areas.svelte.js', () => ({
   useUnlinkedConcordAreas: () => () => holders.areas,
@@ -78,6 +84,7 @@ const PROPS = {
 beforeEach(() => {
   localStorage.clear();
   holders.communities = [COMMUNITY_A, COMMUNITY_B];
+  holders.status = 'ready';
   holders.areas = [];
   holders.groups = [];
   holders.locked = false;
@@ -488,5 +495,32 @@ describe('dissolved-area archive cluster', () => {
     ];
     render(CommunitySidebar, { props: PROPS });
     expect(screen.queryAllByTestId('rail-dissolved-area')).toEqual([]);
+  });
+});
+
+// 2026-09-30: an unreachable list rendered as "no communities", the user
+// re-followed one, and that join replaced the real membership list.
+describe('CommunitySidebar — a list that could not be loaded', () => {
+  beforeEach(() => {
+    holders.communities = [];
+    holders.status = 'unavailable';
+    holders.retry.mockClear();
+  });
+
+  it('warns and offers a retry instead of claiming you follow nothing', async () => {
+    render(CommunitySidebar, { props: PROPS });
+    const alert = screen.getByTestId('rail-communities-unavailable');
+    expect(alert).toBeTruthy();
+    expect(screen.queryByTestId('rail-communities-empty')).toBeNull();
+
+    screen.getByTestId('rail-communities-retry').click();
+    expect(holders.retry).toHaveBeenCalledOnce();
+  });
+
+  it('shows neither the warning nor the empty state while loading', () => {
+    holders.status = 'loading';
+    render(CommunitySidebar, { props: PROPS });
+    expect(screen.queryByTestId('rail-communities-unavailable')).toBeNull();
+    expect(screen.queryByTestId('rail-communities-empty')).toBeNull();
   });
 });

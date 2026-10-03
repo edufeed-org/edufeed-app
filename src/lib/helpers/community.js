@@ -4,80 +4,31 @@ import { createAppEventFactory } from '$lib/helpers/event-factory.js';
 import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
 import { manager } from '$lib/stores/accounts.svelte';
 import { publishEvent } from '$lib/services/publish-service.js';
-import { addressLoader } from '$lib/loaders/base.js';
-import { getAllLookupRelays } from '$lib/helpers/relay-helper.js';
-import { getWriteRelays } from '$lib/services/relay-service.svelte.js';
+import { probeCommunitiesFollowSet } from '$lib/helpers/follow-set-probe.js';
+import * as m from '$lib/paraglide/messages';
 
 const COMMUNITIES_SET_ID = 'communities';
 
-// Worst-case latency added to a join when the user truly has no follow set
-// yet and at least one relay hangs. Existing users' sets resolve as soon as
-// any relay (or the IDB cache) answers.
-const FOLLOW_SET_LOOKUP_TIMEOUT = 5_000;
+/**
+ * Thrown when a join/leave needs the user's communities follow set but the
+ * network could neither deliver it nor confirm it doesn't exist. Creating one
+ * then would replace the real list on every relay, so the action fails and
+ * the user can retry once their relays answer.
+ */
+export class FollowSetUnavailableError extends Error {
+  constructor() {
+    super('Your communities list could not be loaded. Check your connection and try again.');
+    this.name = 'FollowSetUnavailableError';
+  }
+}
 
 /**
- * Confirm against cache + relays whether the user's communities follow set
- * exists anywhere, before we dare to bootstrap a fresh one.
- *
- * A kind 30000 event with a newer created_at REPLACES the old list on every
- * relay it reaches, so treating a local EventStore miss as "the user has no
- * follow set" destroys their memberships whenever the loaders simply haven't
- * finished (or failed) fetching it. Queries lookup relays plus the user's
- * NIP-65 write relays; resolves true the moment the event lands in
- * EventStore, false once the loader completes (or the timeout fires) empty.
- *
- * @param {string} pubkey
- * @returns {Promise<boolean>}
+ * @param {unknown} error
+ * @returns {string}
  */
-async function followSetExistsOnNetwork(pubkey) {
-  const writeRelays = await getWriteRelays(pubkey).catch(() => []);
-  const relays = [...new Set([...getAllLookupRelays(), ...writeRelays])];
-
-  return new Promise((resolve) => {
-    let settled = false;
-    /** @type {import('rxjs').Subscription | undefined} */
-    let storeSub;
-    /** @type {import('rxjs').Subscription | undefined} */
-    let loaderSub;
-
-    const found = () => Boolean(eventStore.getReplaceable(30000, pubkey, COMMUNITIES_SET_ID));
-    const settle = (/** @type {boolean} */ result) => {
-      if (settled) return;
-      settled = true;
-      clearTimeout(timer);
-      // Defer teardown: settle() can fire synchronously inside subscribe(),
-      // before the subscription variables are assigned.
-      queueMicrotask(() => {
-        storeSub?.unsubscribe();
-        loaderSub?.unsubscribe();
-      });
-      resolve(result);
-    };
-
-    const timer = setTimeout(() => settle(found()), FOLLOW_SET_LOOKUP_TIMEOUT);
-
-    // Resolves fastest: fires as soon as the event lands from ANY source
-    // (IDB cache, this loader, or a concurrent loader elsewhere in the app).
-    storeSub = eventStore.replaceable(30000, pubkey, COMMUNITIES_SET_ID).subscribe((event) => {
-      if (event) settle(true);
-    });
-
-    if (!settled) {
-      loaderSub = addressLoader({
-        kind: 30000,
-        pubkey,
-        identifier: COMMUNITIES_SET_ID,
-        relays
-      }).subscribe({
-        complete: () => settle(found()),
-        error: (/** @type {unknown} */ err) => {
-          // A loader error is NOT confirmed absence — leave the decision to a
-          // store emission or the timeout instead of bootstrapping instantly.
-          console.warn('[community] follow-set lookup errored; waiting for timeout', err);
-        }
-      });
-    }
-  });
+function describeError(error) {
+  if (error instanceof FollowSetUnavailableError) return m.communities_list_unavailable();
+  return error instanceof Error ? error.message : 'Unknown error occurred';
 }
 
 /** @type {Promise<void> | null} */
@@ -93,8 +44,9 @@ let ensureInflightPubkey = null;
  * Optimistic once the set is known: when it's already in EventStore the check
  * is synchronous, and the bootstrap publish is fire-and-forget. But a local
  * miss must first be confirmed against the network (see
- * followSetExistsOnNetwork) — that's the one path where blocking is cheaper
- * than data loss.
+ * probeCommunitiesFollowSet) — that's the one path where blocking is cheaper
+ * than data loss. When the network can't confirm either way, this throws
+ * FollowSetUnavailableError instead of guessing.
  *
  * Single-flight per pubkey: two concurrent first-joins (e.g. two tabs, or two
  * calls before the network check resolves) share one in-flight confirmation
@@ -121,9 +73,12 @@ async function ensureFollowSetExistsInner(pubkey) {
   // Synchronous lookup — no subscription, no microtask hop.
   if (eventStore.getReplaceable(30000, pubkey, COMMUNITIES_SET_ID)) return;
 
-  // Local miss ≠ absence. Confirm before creating a replaceable that would
-  // overwrite the user's real list on every relay.
-  if (await followSetExistsOnNetwork(pubkey)) return;
+  // Local miss ≠ absence, and neither is silence: only relays that ANSWERED
+  // "not here" license creating a replaceable that would overwrite the user's
+  // real list on every relay (2026-07-16 and 2026-09-30 wipes).
+  const probe = await probeCommunitiesFollowSet(pubkey);
+  if (probe === 'found') return;
+  if (probe === 'unknown') throw new FollowSetUnavailableError();
 
   // The network check awaited above can take seconds — if the active account
   // changed meanwhile, bootstrapping now would sign an empty follow set for
@@ -173,7 +128,7 @@ export async function joinCommunity(communityPubkey) {
     console.error('Failed to join community:', error);
     return {
       success: false,
-      error: error instanceof Error ? error.message : 'Unknown error occurred'
+      error: describeError(error)
     };
   }
 }
@@ -197,7 +152,7 @@ export async function joinCommunities(communityPubkeys) {
     console.error('Failed to join communities:', error);
     return {
       success: false,
-      error: error instanceof Error ? error.message : 'Unknown error occurred'
+      error: describeError(error)
     };
   }
 }
@@ -220,7 +175,7 @@ export async function leaveCommunity(communityPubkey) {
     console.error('Failed to leave community:', error);
     return {
       success: false,
-      error: error instanceof Error ? error.message : 'Unknown error occurred'
+      error: describeError(error)
     };
   }
 }
