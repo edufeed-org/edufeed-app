@@ -266,14 +266,14 @@
    * Initialize form with default values for creating new event
    */
   function initializeForm() {
-    const today = selectedDate || new SvelteDate();
+    const now = new Date();
+    const today = selectedDate || new SvelteDate(now.getTime());
     const tomorrow = new SvelteDate(today);
     tomorrow.setDate(tomorrow.getDate() + 1);
     // A channel meeting is always timed (kind 31923) and ends the day it starts.
     const meeting = isGroupMeeting;
     // …and opened for today it starts at the next half hour, not at an
     // already-past 09:00 (QA round 3 C1).
-    const now = new Date();
     const slot =
       meeting && formatDateParam(today) === formatDateParam(now) ? defaultMeetingSlot(now) : null;
 
