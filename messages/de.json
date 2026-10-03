@@ -3632,6 +3632,8 @@
   "community_join_invite_lead": "Gib den Einladungscode ein, den du von der Community erhalten hast.",
   "community_join_requests_title": "Beitrittsanfragen",
   "community_join_requests_lead": "Offene Beitrittsanfragen an diese Community und ihre Kanäle. Aufnehmen fügt zur Community hinzu (und zu den angefragten Kanälen).",
+  "community_join_requests_other_account": "Beitrittsanfragen sieht nur das Community-Konto selbst oder ein Admin der Gruppe. Du bist gerade mit einem anderen Konto angemeldet.",
+  "community_join_requests_switch_account": "Zum Community-Konto wechseln",
   "community_join_requests_approve": "Aufnehmen",
   "community_join_requests_ignore": "Ignorieren",
   "community_join_requests_channels": "Angefragte Kanäle: {channels}",
