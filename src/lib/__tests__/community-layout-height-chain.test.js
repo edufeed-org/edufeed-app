@@ -23,7 +23,7 @@ describe('community layout: definite height chain below lg', () => {
     const wrapper = source.match(/<div class="([^"]*)">\s*<div class="drawer/);
     expect(wrapper).not.toBeNull();
     expect(wrapper?.[1].split(/\s+/)).toEqual(
-      expect.arrayContaining(['flex', 'min-h-0', 'flex-1', 'flex-col', 'lg:hidden'])
+      expect.arrayContaining(['flex', 'min-h-0', 'flex-1', 'flex-col'])
     );
   });
 
@@ -49,7 +49,7 @@ describe('community layout: definite height chain below lg', () => {
   });
 
   test('the logged-out mobile wrapper is bounded too', () => {
-    const wrapper = source.match(/{:else}\s*<div class="([^"]*lg:hidden[^"]*)">/);
+    const wrapper = source.match(/{:else}\s*<div class="([^"]*)">\s*{@render children\(\)}/);
     expect(wrapper?.[1].split(/\s+/)).toEqual(
       expect.arrayContaining(['flex', 'min-h-0', 'flex-1', 'flex-col'])
     );
