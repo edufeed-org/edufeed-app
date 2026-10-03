@@ -23,6 +23,7 @@ import {
   playUnmuteSound
 } from './call-sounds.js';
 import { withHand, handQueue } from '$lib/groups/call-tile-order.js';
+import { reactionPayload, parseReactionPayload } from '$lib/groups/call-reactions.js';
 
 // A burst of joins (a class arriving) gets one cue, not twenty.
 const JOIN_CUE_DEBOUNCE_MS = 750;
@@ -84,7 +85,10 @@ let disconnectListener = null;
 let mutedIdentities = $state.raw(new Set());
 /** Seats with a raised hand (local included), first raised first. @type {Set<string>} */
 let raisedHands = $state.raw(new Set());
-/** Floating reactions, newest last. @type {Array<{id: string, identity: string, emoji: string}>} */
+/**
+ * Floating reactions, newest last; `url` = a NIP-30 custom emoji image.
+ * @type {Array<{id: string, identity: string, emoji: string, url?: string}>}
+ */
 let reactions = $state.raw([]);
 // Data messages need canPublishData; a listen-only token may lack it.
 let canSignal = $state(true);
@@ -106,6 +110,8 @@ const audioSinks = new Map();
 // NIP-29 has no client presence plane (kind 39004 is relay-authored), and
 // the SFU already connects exactly the people in the call.
 const SIGNAL_TOPIC = 'edufeed.call';
+// The quick picks. Any emoji (and NIP-30 custom ones) can be sent through the
+// full picker — see groups/call-reactions.js for the wire format.
 export const CALL_REACTIONS = ['👍', '❤️', '😂', '🎉', '😮', '👏', '🙏', '🤔'];
 const REACTION_TTL_MS = 4000;
 
@@ -271,11 +277,14 @@ async function publishSignal(payload, destinationIdentities) {
   }
 }
 
-/** @param {string} identity @param {string} emoji @param {string} nonce */
-function addReaction(identity, emoji, nonce) {
+/**
+ * @param {string} identity @param {string} emoji @param {string} nonce
+ * @param {string} [url] custom emoji image
+ */
+function addReaction(identity, emoji, nonce, url) {
   const id = `${identity}:${nonce}`;
   if (reactions.some((r) => r.id === id)) return;
-  reactions = [...reactions, { id, identity, emoji }];
+  reactions = [...reactions, url ? { id, identity, emoji, url } : { id, identity, emoji }];
   setTimeout(() => {
     reactions = reactions.filter((r) => r.id !== id);
   }, REACTION_TTL_MS);
@@ -324,12 +333,17 @@ export async function setHandRaised(raised) {
   await publishSignal(raised ? { t: 'hand', v: true, at: myHandAt } : { t: 'hand', v: false });
 }
 
-/** @param {string} emoji one of CALL_REACTIONS */
+/**
+ * @param {string | {shortcode: string, url: string}} emoji a unicode emoji,
+ *   or a NIP-30 custom one (https image only)
+ */
 export async function sendReaction(emoji) {
-  if (!room || !canSignal || !CALL_REACTIONS.includes(emoji)) return;
+  if (!room || !canSignal) return;
   const nonce = Math.random().toString(36).slice(2, 10);
-  addReaction(room.localParticipant.identity, emoji, nonce);
-  await publishSignal({ t: 'react', e: emoji, n: nonce });
+  const payload = reactionPayload(emoji, nonce);
+  if (!payload) return;
+  addReaction(room.localParticipant.identity, payload.e, nonce, payload.custom?.url);
+  await publishSignal(payload);
 }
 
 /**
@@ -441,14 +455,9 @@ function handleSignal(payload, participant, _kind, topic) {
       raised,
       raised ? (replayedTime(participant.identity, msg.at) ?? Date.now()) : 0
     );
-  } else if (
-    msg?.t === 'react' &&
-    CALL_REACTIONS.includes(msg.e) &&
-    typeof msg.n === 'string' &&
-    msg.n.length > 0 &&
-    msg.n.length <= 32
-  ) {
-    addReaction(participant.identity, msg.e, msg.n);
+  } else if (msg?.t === 'react') {
+    const reaction = parseReactionPayload(msg);
+    if (reaction) addReaction(participant.identity, reaction.emoji, reaction.nonce, reaction.url);
   }
 }
 
@@ -878,7 +887,7 @@ export async function toggleScreenShare() {
 
 /**
  * Get reactive connection state.
- * @returns {{ isConnected: boolean, isConnecting: boolean, isMuted: boolean, isCameraOff: boolean, isScreenSharing: boolean, canPublish: boolean, canSignal: boolean, connectionState: 'connected' | 'reconnecting' | 'disconnected', disconnectReason: import('livekit-client').DisconnectReason | null, mutedIdentities: Set<string>, raisedHands: Set<string>, reactions: Array<{id: string, identity: string, emoji: string}>, callChat: Array<{id: string, identity: string, n: string, text: string, at: number}>, localParticipant: import('livekit-client').LocalParticipant | null, remoteParticipants: import('livekit-client').RemoteParticipant[], room: Room | null, speakingParticipantIds: Set<string>, audioInputDevices: MediaDeviceInfo[], activeAudioDeviceId: string, audioOutputDevices: MediaDeviceInfo[], activeAudioOutputDeviceId: string, videoInputDevices: MediaDeviceInfo[], activeVideoDeviceId: string }}
+ * @returns {{ isConnected: boolean, isConnecting: boolean, isMuted: boolean, isCameraOff: boolean, isScreenSharing: boolean, canPublish: boolean, canSignal: boolean, connectionState: 'connected' | 'reconnecting' | 'disconnected', disconnectReason: import('livekit-client').DisconnectReason | null, mutedIdentities: Set<string>, raisedHands: Set<string>, reactions: Array<{id: string, identity: string, emoji: string, url?: string}>, callChat: Array<{id: string, identity: string, n: string, text: string, at: number}>, localParticipant: import('livekit-client').LocalParticipant | null, remoteParticipants: import('livekit-client').RemoteParticipant[], room: Room | null, speakingParticipantIds: Set<string>, audioInputDevices: MediaDeviceInfo[], activeAudioDeviceId: string, audioOutputDevices: MediaDeviceInfo[], activeAudioOutputDeviceId: string, videoInputDevices: MediaDeviceInfo[], activeVideoDeviceId: string }}
  */
 export function getLiveKitState() {
   return {

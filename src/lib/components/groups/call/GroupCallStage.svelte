@@ -49,6 +49,7 @@
   import { trackOnScreen as trackNodeOnScreen } from '$lib/groups/track-on-screen.js';
   import { Track } from 'livekit-client';
   import { useProfileMap } from '$lib/stores/profile-map.svelte.js';
+  import { lazyComponent } from '$lib/helpers/lazy-component.svelte.js';
   import { showToast } from '$lib/helpers/toast';
   import { callMediaErrorMessage } from '$lib/groups/call-media-errors.js';
   import {
@@ -62,7 +63,8 @@
     SmilePlusIcon,
     ChatIcon,
     ExternalLinkIcon,
-    LinkIcon
+    LinkIcon,
+    MoreIcon
   } from '$lib/components/icons';
   import ParticipantTile from './ParticipantTile.svelte';
   import ScreenShareTile from './ScreenShareTile.svelte';
@@ -423,7 +425,13 @@
     const preset = SCREEN_SHARE_QUALITIES[q];
     return `${preset.height}p · ${preset.frameRate} fps`;
   }
-  /** @param {string} emoji */
+  // The full picker ("Weitere Emojis"): loaded on first open only.
+  const EmojiPickerLazy = lazyComponent(() => import('./CallEmojiPicker.svelte'));
+  let pickerOpen = $state(false);
+  $effect(() => {
+    if (openMenu !== 'react') pickerOpen = false;
+  });
+  /** @param {string | {shortcode: string, url: string}} emoji */
   function react(emoji) {
     sendReaction(emoji);
     openMenu = null;
@@ -809,17 +817,36 @@
           </button>
           {#if openMenu === 'react'}
             <div
-              class="absolute right-0 bottom-full z-30 mb-2 flex gap-1 rounded-box bg-base-100 p-1.5 shadow-lg"
-              data-testid="group-call-reactions"
+              class="absolute right-0 bottom-full z-30 mb-2 flex flex-col gap-1 rounded-box bg-base-100 p-1.5 shadow-lg"
             >
-              {#each CALL_REACTIONS as emoji (emoji)}
+              {#if pickerOpen}
+                {#if EmojiPickerLazy.Component}
+                  <EmojiPickerLazy.Component onPick={react} />
+                {:else}
+                  <div class="flex h-80 w-72 items-center justify-center">
+                    <span class="loading loading-md loading-spinner"></span>
+                  </div>
+                {/if}
+              {/if}
+              <div class="flex gap-1" data-testid="group-call-reactions">
+                {#each CALL_REACTIONS as emoji (emoji)}
+                  <button
+                    class="btn btn-square text-xl btn-ghost btn-sm"
+                    onclick={() => react(emoji)}
+                  >
+                    {emoji}
+                  </button>
+                {/each}
                 <button
-                  class="btn btn-square text-xl btn-ghost btn-sm"
-                  onclick={() => react(emoji)}
+                  class="btn btn-square btn-ghost btn-sm"
+                  aria-label={m.groups_call_more_emojis()}
+                  title={m.groups_call_more_emojis()}
+                  aria-expanded={pickerOpen}
+                  onclick={() => (pickerOpen = !pickerOpen)}
                 >
-                  {emoji}
+                  <MoreIcon class_="h-5 w-5" title="" />
                 </button>
-              {/each}
+              </div>
             </div>
           {/if}
         </div>

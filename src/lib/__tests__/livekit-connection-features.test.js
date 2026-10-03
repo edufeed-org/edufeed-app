@@ -364,18 +364,62 @@ describe('raise hand + reactions (data messages)', () => {
     expect(svc.getLiveKitState().reactions).toEqual([]);
   });
 
-  it('refuses reactions outside the allowlist (sent or received)', async () => {
+  it('refuses anything that is not an emoji (sent or received)', async () => {
     await svc.sendReaction('💣 boom');
     expect(room.localParticipant.publishData).not.toHaveBeenCalled();
     const bob = remote('b'.repeat(64) + ':x1');
     room.emit(
       RoomEvent.DataReceived,
-      encode({ t: 'react', e: '💣', n: 'x' }),
+      encode({ t: 'react', e: 'boom', n: 'x' }),
       bob,
       undefined,
       'edufeed.call'
     );
     expect(svc.getLiveKitState().reactions).toEqual([]);
+  });
+
+  // Task 19: any emoji from the full picker, and NIP-30 custom ones.
+  it('sends and shows any unicode emoji, not only the quick ones', async () => {
+    await svc.sendReaction('🫶');
+    expect(decode(room.localParticipant.publishData.mock.calls[0][0])).toEqual(
+      expect.objectContaining({ t: 'react', e: '🫶' })
+    );
+    expect(svc.getLiveKitState().reactions.map((r) => r.emoji)).toEqual(['🫶']);
+  });
+
+  it('sends a custom emoji with its shortcode and https image', async () => {
+    await svc.sendReaction({ shortcode: 'parrot', url: 'https://x.org/p.gif' });
+    expect(decode(room.localParticipant.publishData.mock.calls[0][0])).toEqual({
+      t: 'react',
+      e: ':parrot:',
+      n: expect.any(String),
+      custom: { shortcode: 'parrot', url: 'https://x.org/p.gif' }
+    });
+    expect(svc.getLiveKitState().reactions).toEqual([
+      expect.objectContaining({ emoji: ':parrot:', url: 'https://x.org/p.gif' })
+    ]);
+  });
+
+  it('shows a received custom emoji; drops one with a non-https image', () => {
+    const bob = remote('b'.repeat(64) + ':x1');
+    const send = (custom, n) =>
+      room.emit(
+        RoomEvent.DataReceived,
+        encode({ t: 'react', e: `:${custom.shortcode}:`, n, custom }),
+        bob,
+        undefined,
+        'edufeed.call'
+      );
+    send({ shortcode: 'evil', url: 'http://x.org/e.gif' }, 'n1');
+    send({ shortcode: 'parrot', url: 'https://x.org/p.gif' }, 'n2');
+    expect(svc.getLiveKitState().reactions).toEqual([
+      {
+        id: `${bob.identity}:n2`,
+        identity: bob.identity,
+        emoji: ':parrot:',
+        url: 'https://x.org/p.gif'
+      }
+    ]);
   });
 
   it('cannot signal on a listen-only token without data rights', async () => {

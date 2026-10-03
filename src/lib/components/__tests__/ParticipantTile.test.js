@@ -130,6 +130,23 @@ describe('ParticipantTile', () => {
     expect(screen.getByText('🎉')).toBeTruthy();
   });
 
+  it('floats a custom emoji as an image sized like the unicode ones', () => {
+    render(ParticipantTile, {
+      props: {
+        participant: fakeParticipant(`${HEX}:x1`),
+        pubkey: HEX,
+        reactions: [
+          { id: 'r2', identity: `${HEX}:x1`, emoji: ':parrot:', url: 'https://x.org/p.gif' }
+        ]
+      }
+    });
+    const img = screen.getByAltText(':parrot:');
+    expect(img.tagName).toBe('IMG');
+    expect(img.getAttribute('src')).toBe('https://x.org/p.gif');
+    expect(img.classList.contains('h-[1em]')).toBe(true);
+    expect(screen.queryByText(':parrot:')).toBeNull();
+  });
+
   it('per-person volume: the slider shows percent and reports 0..2', async () => {
     const onVolumeChange = vi.fn();
     render(ParticipantTile, {

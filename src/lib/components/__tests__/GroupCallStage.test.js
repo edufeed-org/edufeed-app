@@ -89,6 +89,10 @@ vi.mock(
   () => import('./fixtures/ParticipantTileStub.svelte')
 );
 vi.mock('$lib/components/groups/call/ScreenShareTile.svelte', () => ({ default: Stub }));
+vi.mock(
+  '$lib/components/groups/call/CallEmojiPicker.svelte',
+  () => import('./fixtures/CallEmojiPickerStub.svelte')
+);
 vi.mock('$lib/components/icons', () => ({
   MeetIcon: Stub,
   ChevronDownIcon: Stub,
@@ -100,7 +104,8 @@ vi.mock('$lib/components/icons', () => ({
   SmilePlusIcon: Stub,
   ChatIcon: Stub,
   ExternalLinkIcon: Stub,
-  LinkIcon: Stub
+  LinkIcon: Stub,
+  MoreIcon: Stub
 }));
 vi.mock('$lib/paraglide/messages', () => ({
   groups_call_leave: () => 'Leave call',
@@ -133,6 +138,7 @@ vi.mock('$lib/paraglide/messages', () => ({
   groups_call_hands_order: () => 'Order of raised hands',
   groups_call_tile_you: () => 'You',
   groups_call_react: () => 'React',
+  groups_call_more_emojis: () => 'More emojis',
   groups_call_show_chat: () => 'Chat',
   groups_call_pop_out: () => 'Pop out',
   groups_call_pop_in: () => 'Back to tab',
@@ -471,6 +477,31 @@ describe('hands, reactions, connection state', () => {
     await fireEvent.click(screen.getByRole('button', { name: '🎉' }));
     expect(svc.sendReaction).toHaveBeenCalledWith('🎉');
     expect(screen.queryByTestId('group-call-reactions')).toBeNull();
+  });
+
+  // Task 19: the quick row keeps its defaults and ends in a "more" button
+  // that opens the app's full emoji picker (lazy), custom emojis included.
+  it('"More emojis" opens the full picker; any pick is sent and closes it', async () => {
+    render(GroupCallStage, { props: baseProps });
+    await fireEvent.click(screen.getByTitle('React'));
+    const row = screen.getByTestId('group-call-reactions');
+    const more = screen.getByRole('button', { name: 'More emojis' });
+    expect(row.lastElementChild.contains(more)).toBe(true);
+    expect(screen.getByRole('button', { name: '👍' })).toBeTruthy();
+    expect(screen.queryByTestId('call-emoji-picker-stub')).toBeNull();
+    await fireEvent.click(more);
+    await screen.findByTestId('call-emoji-picker-stub');
+    await fireEvent.click(screen.getByText('pick-custom'));
+    expect(svc.sendReaction).toHaveBeenCalledWith({
+      shortcode: 'parrot',
+      url: 'https://x.org/p.gif'
+    });
+    expect(screen.queryByTestId('group-call-reactions')).toBeNull();
+    await fireEvent.click(screen.getByTitle('React'));
+    expect(screen.queryByTestId('call-emoji-picker-stub')).toBeNull();
+    await fireEvent.click(screen.getByRole('button', { name: 'More emojis' }));
+    await fireEvent.click(await screen.findByText('pick-unicode'));
+    expect(svc.sendReaction).toHaveBeenLastCalledWith('🫶');
   });
 
   it('no hands or reactions when the token cannot send data', () => {

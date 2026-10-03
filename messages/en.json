@@ -3739,6 +3739,7 @@
   "groups_call_hands_raised": "{count} raised",
   "groups_call_hands_order": "Order of raised hands",
   "groups_call_react": "Send a reaction",
+  "groups_call_more_emojis": "More emojis",
   "groups_call_audio_processing": "Audio processing",
   "groups_call_noise_suppression": "Noise suppression",
   "groups_call_echo_cancellation": "Echo cancellation",

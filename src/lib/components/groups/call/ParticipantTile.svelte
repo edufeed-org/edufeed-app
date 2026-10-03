@@ -31,7 +31,7 @@
    *   isSpeaking?: boolean,
    *   handRaised?: boolean,
    *   isGuest?: boolean,
-   *   reactions?: Array<{id: string, emoji: string}>,
+   *   reactions?: Array<{id: string, emoji: string, url?: string}>,
    *   profile?: any,
    *   volume?: number,
    *   onVolumeChange?: (volume: number) => void,
@@ -297,7 +297,19 @@
   <!-- Floating reactions -->
   {#each reactions as reaction (reaction.id)}
     <span class="call-reaction pointer-events-none absolute bottom-6 left-1/2 z-30 text-3xl">
-      {reaction.emoji}
+      {#if reaction.url}
+        <!-- NIP-30 custom emoji (https only, validated on receipt), 1em = the
+             unicode reactions' size. -->
+        <img
+          src={reaction.url}
+          alt={reaction.emoji}
+          class="inline-block h-[1em] w-[1em] object-contain"
+          referrerpolicy="no-referrer"
+          loading="eager"
+        />
+      {:else}
+        {reaction.emoji}
+      {/if}
     </span>
   {/each}
 </div>
