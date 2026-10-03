@@ -1,23 +1,23 @@
 /** @vitest-environment node */
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { postJson, ev } from './apiRoute.fixtures.js';
 
 // Mock the MCP client BEFORE importing the route — the route imports it eagerly.
 const callExtractMetadataMock = vi.fn();
-vi.mock('$lib/server/ambMcpClient.js', () => ({
+vi.mock('$lib/server/nopeMcpClient.js', () => ({
   /** @param {unknown} input */
   callExtractMetadata: (input) => callExtractMetadataMock(input)
 }));
 
 // Mock the token provider so the route doesn't attempt a real Keycloak fetch.
-vi.mock('$lib/server/ambMcpToken.js', () => ({
-  getAmbMcpToken: () => Promise.resolve('test-token')
+vi.mock('$lib/server/nopeMcpToken.js', () => ({
+  getNopeMcpToken: () => Promise.resolve('test-token')
 }));
 
 // Mock $env/dynamic/private — SvelteKit's env-import path.
 vi.mock('$env/dynamic/private', () => ({
   env: {
-    AMB_MCP_URL: 'https://mcp.example/mcp',
+    NOPE_MCP_URL: 'https://mcp.example/mcp',
     SCHEME_NADDR_HCRT: 'naddr1hcrt',
     SCHEME_NADDR_EKW_LRT: 'naddr1ekwlrt',
     SCHEME_NADDR_KLASSENSTUFEN: 'naddr1klassen',
@@ -263,23 +263,67 @@ describe('POST /api/enrich', () => {
   });
 });
 
-describe('POST /api/enrich without AMB_MCP_URL configured', () => {
+describe('POST /api/enrich NOPE_MCP_URL / AMB_MCP_URL fallback', () => {
   beforeEach(() => {
     callExtractMetadataMock.mockReset();
     vi.resetModules();
   });
 
-  it('returns 503 when AMB_MCP_URL env is not set', async () => {
-    vi.doMock('$env/dynamic/private', () => ({ env: {} }));
-    vi.doMock('$lib/server/ambMcpClient.js', () => ({
+  afterEach(() => {
+    vi.doUnmock('$env/dynamic/private');
+  });
+
+  /** @param {Record<string, string>} env */
+  function mockEnrichDeps(env) {
+    vi.doMock('$env/dynamic/private', () => ({ env }));
+    vi.doMock('$lib/server/nopeMcpClient.js', () => ({
       callExtractMetadata: callExtractMetadataMock
     }));
-    vi.doMock('$lib/server/ambMcpToken.js', () => ({
-      getAmbMcpToken: () => Promise.resolve('test-token')
+    vi.doMock('$lib/server/nopeMcpToken.js', () => ({
+      getNopeMcpToken: () => Promise.resolve('test-token')
     }));
+  }
+
+  it('returns 503 when neither NOPE_MCP_URL nor AMB_MCP_URL is set', async () => {
+    mockEnrichDeps({});
     const { POST: PostNoEnv } = await import('../../routes/api/enrich/+server.js');
     const res = await PostNoEnv(ev(makeRequest({ url: 'https://example.org' })));
     expect(res.status).toBe(503);
     expect(callExtractMetadataMock).not.toHaveBeenCalled();
+  });
+
+  it('prefers NOPE_MCP_URL when both NOPE_MCP_URL and AMB_MCP_URL are set', async () => {
+    mockEnrichDeps({
+      NOPE_MCP_URL: 'https://nope.example/mcp',
+      AMB_MCP_URL: 'https://amb.example/mcp'
+    });
+    callExtractMetadataMock.mockResolvedValueOnce({
+      source: 'llm-enriched',
+      payload: {},
+      evidence: {},
+      baseline: {}
+    });
+    const { POST: PostBothEnv } = await import('../../routes/api/enrich/+server.js');
+    const res = await PostBothEnv(ev(makeRequest({ url: 'https://example.org' })));
+    expect(res.status).toBe(200);
+    expect(callExtractMetadataMock).toHaveBeenCalledWith(
+      expect.objectContaining({ mcpUrl: 'https://nope.example/mcp' })
+    );
+  });
+
+  it('falls back to the legacy AMB_MCP_URL when NOPE_MCP_URL is unset', async () => {
+    mockEnrichDeps({ AMB_MCP_URL: 'https://amb.example/mcp' });
+    callExtractMetadataMock.mockResolvedValueOnce({
+      source: 'llm-enriched',
+      payload: {},
+      evidence: {},
+      baseline: {}
+    });
+    const { POST: PostAmbOnlyEnv } = await import('../../routes/api/enrich/+server.js');
+    const res = await PostAmbOnlyEnv(ev(makeRequest({ url: 'https://example.org' })));
+    expect(res.status).toBe(200);
+    expect(callExtractMetadataMock).toHaveBeenCalledWith(
+      expect.objectContaining({ mcpUrl: 'https://amb.example/mcp' })
+    );
   });
 });
