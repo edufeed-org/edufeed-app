@@ -3731,6 +3731,7 @@
   "groups_call_lower_hand": "Lower hand",
   "groups_call_hand_raised": "Hand raised",
   "groups_call_hands_raised": "{count} raised",
+  "groups_call_hands_order": "Order of raised hands",
   "groups_call_react": "Send a reaction",
   "groups_call_audio_processing": "Audio processing",
   "groups_call_noise_suppression": "Noise suppression",

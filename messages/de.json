@@ -3731,6 +3731,7 @@
   "groups_call_lower_hand": "Hand senken",
   "groups_call_hand_raised": "Hand gehoben",
   "groups_call_hands_raised": "{count} gemeldet",
+  "groups_call_hands_order": "Reihenfolge der Meldungen",
   "groups_call_react": "Reaktion senden",
   "groups_call_audio_processing": "Audioverarbeitung",
   "groups_call_noise_suppression": "Rauschunterdrückung",

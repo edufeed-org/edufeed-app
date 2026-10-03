@@ -130,6 +130,8 @@ vi.mock('$lib/paraglide/messages', () => ({
   groups_call_raise_hand: () => 'Raise hand',
   groups_call_lower_hand: () => 'Lower hand',
   groups_call_hands_raised: (p) => `${p.count} raised`,
+  groups_call_hands_order: () => 'Order of raised hands',
+  groups_call_tile_you: () => 'You',
   groups_call_react: () => 'React',
   groups_call_show_chat: () => 'Chat',
   groups_call_pop_out: () => 'Pop out',
@@ -399,6 +401,67 @@ describe('hands, reactions, connection state', () => {
     expect(screen.getByTestId('group-call-hands').textContent).toContain('1 raised');
     await fireEvent.click(screen.getByTitle('Lower hand'));
     expect(svc.setHandRaised).toHaveBeenCalledWith(false);
+  });
+
+  const gridOrder = () =>
+    [...screen.getByTestId('group-call-grid').querySelectorAll('[data-testid^="call-item-"]')].map(
+      (el) => el.dataset.testid.replace('call-item-seat:', '')
+    );
+
+  it('raised hands move to the front in the order they went up; lowered ones go back', () => {
+    const B = `${'b'.repeat(64)}:1`;
+    const C = `${'c'.repeat(64)}:1`;
+    const D = `${'d'.repeat(64)}:1`;
+    lk.remoteParticipants = [remote(B), remote(C), remote(D)];
+    lk.raisedHands = new Set([D, B]); // D raised first
+    const { unmount } = render(GroupCallStage, { props: baseProps });
+    expect(gridOrder()).toEqual([D, B, lk.localParticipant.identity, C]);
+    unmount();
+    lk.raisedHands = new Set([B]);
+    render(GroupCallStage, { props: baseProps });
+    expect(gridOrder()).toEqual([B, lk.localParticipant.identity, C, D]);
+  });
+
+  describe('the hands pill lists who is waiting, in order', () => {
+    const B = `${'b'.repeat(64)}:1`;
+    const C = `${'c'.repeat(64)}:1`;
+    beforeEach(() => {
+      lk.remoteParticipants = [remote(B), remote(C)];
+      lk.raisedHands = new Set([C, B]);
+    });
+    const list = () => screen.queryByTestId('group-call-hands-list');
+
+    it('opens on hover and closes on leave', async () => {
+      render(GroupCallStage, { props: baseProps });
+      const pill = screen.getByTestId('group-call-hands');
+      expect(list()).toBeNull();
+      await fireEvent.pointerEnter(pill, { pointerType: 'mouse' });
+      const items = [...list().querySelectorAll('li')].map((li) => li.textContent.trim());
+      expect(items).toEqual([`1. ${'c'.repeat(8)}`, `2. ${'b'.repeat(8)}`]);
+      await fireEvent.pointerLeave(pill, { pointerType: 'mouse' });
+      expect(list()).toBeNull();
+    });
+
+    it('opens on keyboard focus, and a tap toggles it', async () => {
+      render(GroupCallStage, { props: baseProps });
+      const pill = screen.getByTestId('group-call-hands');
+      expect(pill.tagName).toBe('BUTTON');
+      await fireEvent.focus(pill);
+      expect(list()).toBeTruthy();
+      expect(pill.getAttribute('aria-expanded')).toBe('true');
+      await fireEvent.blur(pill);
+      expect(list()).toBeNull();
+      await fireEvent.click(pill);
+      expect(list()).toBeTruthy();
+      await fireEvent.click(pill);
+      expect(list()).toBeNull();
+    });
+
+    it('is display only: no buttons inside the list', async () => {
+      render(GroupCallStage, { props: baseProps });
+      await fireEvent.click(screen.getByTestId('group-call-hands'));
+      expect(list().querySelector('button')).toBeNull();
+    });
   });
 
   it('sends a reaction from the picker', async () => {

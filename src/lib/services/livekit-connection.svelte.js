@@ -22,6 +22,7 @@ import {
   playScreenShareSound,
   playUnmuteSound
 } from './call-sounds.js';
+import { withHand, handQueue } from '$lib/groups/call-tile-order.js';
 
 // A burst of joins (a class arriving) gets one cue, not twenty.
 const JOIN_CUE_DEBOUNCE_MS = 750;
@@ -81,13 +82,17 @@ let disconnecting = false;
 let disconnectListener = null;
 /** Remote seats whose microphone is off. @type {Set<string>} */
 let mutedIdentities = $state.raw(new Set());
-/** Seats with a raised hand (local included). @type {Set<string>} */
+/** Seats with a raised hand (local included), first raised first. @type {Set<string>} */
 let raisedHands = $state.raw(new Set());
 /** Floating reactions, newest last. @type {Array<{id: string, identity: string, emoji: string}>} */
 let reactions = $state.raw([]);
 // Data messages need canPublishData; a listen-only token may lack it.
 let canSignal = $state(true);
 let handRaised = false;
+/** When my hand went up (ms), re-sent to late joiners. */
+let myHandAt = 0;
+/** identity -> raise time (ms); `raisedHands` is this, in queue order. Internal. */
+let handTimes = new Map();
 
 // Remote audio is played HERE, one hidden element per subscribed track —
 // not by the tiles. A call can be drawn several times at once (the /c
@@ -276,16 +281,47 @@ function addReaction(identity, emoji, nonce) {
   }, REACTION_TTL_MS);
 }
 
+/**
+ * A hand went up or down. `raisedHands` keeps the queue order: first raised
+ * first (the stage moves those seats to the front in that order).
+ * @param {string} identity @param {boolean} raised @param {number} at
+ */
+function applyHand(identity, raised, at) {
+  handTimes = withHand(handTimes, identity, raised, at);
+  raisedHands = new Set(handQueue(handTimes));
+}
+
+function clearHands() {
+  handRaised = false;
+  myHandAt = 0;
+  handTimes = new Map();
+  raisedHands = new Set();
+}
+
+/**
+ * The sender's own time for a message, honoured only as a REPLAY to a late
+ * joiner — within CHAT_REPLAY_WINDOW_MS of the sender's arrival (or of our
+ * own join, for those already there) — and clamped to [now - 12 h, now].
+ * Otherwise undefined: a live message gets its receive time and can never
+ * backdate itself.
+ * @param {string} identity @param {unknown} ts
+ * @returns {number | undefined}
+ */
+function replayedTime(identity, ts) {
+  if (typeof ts !== 'number' || !Number.isFinite(ts)) return undefined;
+  const now = Date.now();
+  const since = arrivedAt.get(identity) ?? ownJoinAt;
+  if (now - since > CHAT_REPLAY_WINDOW_MS) return undefined;
+  return Math.min(Math.max(ts, now - CHAT_MAX_AGE_MS), now);
+}
+
 /** @param {boolean} raised */
 export async function setHandRaised(raised) {
   if (!room || !canSignal) return;
   handRaised = raised;
-  // eslint-disable-next-line svelte/prefer-svelte-reactivity -- built fresh, then assigned whole to a $state.raw
-  const next = new Set(raisedHands);
-  if (raised) next.add(room.localParticipant.identity);
-  else next.delete(room.localParticipant.identity);
-  raisedHands = next;
-  await publishSignal({ t: 'hand', v: raised });
+  myHandAt = raised ? Date.now() : 0;
+  applyHand(room.localParticipant.identity, raised, myHandAt);
+  await publishSignal(raised ? { t: 'hand', v: true, at: myHandAt } : { t: 'hand', v: false });
 }
 
 /** @param {string} emoji one of CALL_REACTIONS */
@@ -381,13 +417,11 @@ function handleSignal(payload, participant, _kind, topic) {
       chat.n.length > 0 &&
       chat.n.length <= 32
     ) {
-      const since = arrivedAt.get(participant.identity) ?? ownJoinAt;
-      const isReplay = Date.now() - since <= CHAT_REPLAY_WINDOW_MS;
       addChat(
         participant.identity,
         chat.text.trim(),
         chat.n,
-        isReplay && typeof chat.ts === 'number' ? chat.ts : undefined
+        replayedTime(participant.identity, chat.ts)
       );
     }
     return;
@@ -401,11 +435,12 @@ function handleSignal(payload, participant, _kind, topic) {
     return;
   }
   if (msg?.t === 'hand') {
-    // eslint-disable-next-line svelte/prefer-svelte-reactivity -- built fresh, then assigned whole to a $state.raw
-    const next = new Set(raisedHands);
-    if (msg.v === true) next.add(participant.identity);
-    else next.delete(participant.identity);
-    raisedHands = next;
+    const raised = msg.v === true;
+    applyHand(
+      participant.identity,
+      raised,
+      raised ? (replayedTime(participant.identity, msg.at) ?? Date.now()) : 0
+    );
   } else if (
     msg?.t === 'react' &&
     CALL_REACTIONS.includes(msg.e) &&
@@ -569,7 +604,7 @@ export async function connectToRoom(token, url, opts = {}) {
       }
       // A late joiner learns about a hand that is already up.
       if (handRaised && participant?.identity) {
-        publishSignal({ t: 'hand', v: true }, [participant.identity]);
+        publishSignal({ t: 'hand', v: true, at: myHandAt }, [participant.identity]);
       }
       // ... and the chat so far, as far as it is mine to tell.
       if (participant?.identity) replayOwnChat(participant.identity);
@@ -579,10 +614,7 @@ export async function connectToRoom(token, url, opts = {}) {
     newRoom.on(RoomEvent.ParticipantDisconnected, (/** @type {any} */ participant) => {
       playLeaveSound();
       if (participant?.identity && raisedHands.has(participant.identity)) {
-        // eslint-disable-next-line svelte/prefer-svelte-reactivity -- built fresh, then assigned whole to a $state.raw
-        const next = new Set(raisedHands);
-        next.delete(participant.identity);
-        raisedHands = next;
+        applyHand(participant.identity, false, 0);
       }
       updateParticipants();
       recomputeMuted();
@@ -724,9 +756,8 @@ function dropDeadRoom() {
   isScreenSharing = false;
   canPublish = false;
   canSignal = false;
-  handRaised = false;
+  clearHands();
   mutedIdentities = new Set();
-  raisedHands = new Set();
   reactions = [];
   speakingParticipantIds = new SvelteSet();
 }
@@ -758,11 +789,9 @@ export async function disconnectFromRoom() {
   isScreenSharing = false;
   canPublish = true;
   canSignal = true;
-  handRaised = false;
+  clearHands();
   // eslint-disable-next-line svelte/prefer-svelte-reactivity -- built fresh, then assigned whole to a $state.raw
   mutedIdentities = new Set();
-  // eslint-disable-next-line svelte/prefer-svelte-reactivity -- built fresh, then assigned whole to a $state.raw
-  raisedHands = new Set();
   reactions = [];
   callChat = [];
   speakingParticipantIds = new SvelteSet();

@@ -44,6 +44,7 @@
     setScreenShareQuality
   } from '$lib/services/call-prefs.js';
   import { fitGrid, nextSpotlight } from '$lib/groups/call-layout.js';
+  import { orderSeats } from '$lib/groups/call-tile-order.js';
   import { isGuestParticipant } from '$lib/groups/livekit.js';
   import { trackOnScreen as trackNodeOnScreen } from '$lib/groups/track-on-screen.js';
   import { Track } from 'livekit-client';
@@ -203,8 +204,9 @@
     return out;
   });
 
+  // Natural seat order: me first, then everyone in the order they came.
   /** @type {SeatItem[]} */
-  const seats = $derived.by(() => {
+  const baseSeats = $derived.by(() => {
     /** @type {SeatItem[]} */
     const out = [];
     const local = lk.localParticipant;
@@ -215,6 +217,18 @@
       out.push({ kind: 'seat', key: `seat:${p.identity}`, participant: p, isLocal: false });
     }
     return out;
+  });
+
+  // Raised hands come first, first raised first (lk.raisedHands iterates in
+  // queue order); a lowered hand goes back to its natural place.
+  const handKeys = $derived([...lk.raisedHands].map((id) => `seat:${id}`));
+  /** @type {SeatItem[]} */
+  const seats = $derived.by(() => {
+    const byKey = new Map(baseSeats.map((s) => [s.key, s]));
+    return orderSeats(
+      baseSeats.map((s) => s.key),
+      handKeys
+    ).map((k) => /** @type {SeatItem} */ (byKey.get(k)));
   });
 
   /** @type {Array<ShareItem | SeatItem>} */
@@ -299,6 +313,39 @@
   const myIdentity = $derived(lk.localParticipant?.identity ?? '');
   const myHandUp = $derived(!!myIdentity && lk.raisedHands.has(myIdentity));
   const handCount = $derived(lk.raisedHands.size);
+  // "1. Name, 2. Name …" — who is waiting, in the order they raised.
+  const handNames = $derived(
+    [...lk.raisedHands].map((identity) => {
+      const seat = baseSeats.find((s) => s.participant.identity === identity);
+      if (seat?.isLocal) return m.groups_call_tile_you();
+      return seat ? nameOf(seat.participant) : nameOf({ identity });
+    })
+  );
+  // The pill's list opens on mouse hover, keyboard focus, or a tap (which
+  // toggles). A tap also focuses the pill: the click right after that
+  // focus-open must not close it again.
+  let handsOpen = $state(false);
+  let handsOpenedAt = 0;
+  function showHands() {
+    if (handsOpen) return;
+    handsOpen = true;
+    handsOpenedAt = Date.now();
+  }
+  function hideHands() {
+    handsOpen = false;
+    handsOpenedAt = 0;
+  }
+  function tapHands() {
+    if (handsOpen && Date.now() - handsOpenedAt < 400) return;
+    if (handsOpen) hideHands();
+    else handsOpen = true;
+  }
+  /** @param {PointerEvent} event @param {boolean} enter */
+  function hoverHands(event, enter) {
+    if (event.pointerType && event.pointerType !== 'mouse') return;
+    if (enter) showHands();
+    else hideHands();
+  }
   /** @param {string} identity */
   function reactionsOf(identity) {
     return lk.reactions.filter((r) => r.identity === identity);
@@ -328,7 +375,10 @@
     };
     /** @param {KeyboardEvent} event */
     const onKeyDown = (event) => {
-      if (event.key === 'Escape') openMenu = null;
+      if (event.key === 'Escape') {
+        openMenu = null;
+        hideHands();
+      }
     };
     win.addEventListener('pointerdown', onPointerDown);
     win.addEventListener('keydown', onKeyDown);
@@ -440,7 +490,7 @@
   <!-- Header -->
   <!-- Tighter below the stage's @lg so the title keeps its letters (QA K4). -->
   <div
-    class="flex items-center justify-between gap-1.5 border-b border-base-300 px-3 py-2 @lg:gap-2 @lg:px-4"
+    class="relative flex items-center justify-between gap-1.5 border-b border-base-300 px-3 py-2 @lg:gap-2 @lg:px-4"
   >
     <div class="flex min-w-0 flex-1 items-center gap-1.5 overflow-hidden @lg:gap-2">
       <MeetIcon class_="w-5 h-5 shrink-0 text-primary" />
@@ -451,12 +501,39 @@
         </span>
       {/if}
       {#if handCount > 0}
-        <span class="badge shrink-0 gap-1 badge-sm badge-warning" data-testid="group-call-hands">
+        <button
+          type="button"
+          class="badge shrink-0 cursor-pointer gap-1 badge-sm badge-warning select-none"
+          aria-expanded={handsOpen}
+          aria-controls="group-call-hands-list"
+          aria-label={`${m.groups_call_hands_raised({ count: handCount })}: ${m.groups_call_hands_order()}`}
+          data-testid="group-call-hands"
+          onpointerenter={(e) => hoverHands(e, true)}
+          onpointerleave={(e) => hoverHands(e, false)}
+          onfocus={showHands}
+          onblur={hideHands}
+          onclick={tapHands}
+        >
           <HandIcon class_="h-3 w-3" title="" />
           {m.groups_call_hands_raised({ count: handCount })}
-        </span>
+        </button>
       {/if}
     </div>
+    {#if handsOpen && handCount > 0}
+      <!-- Outside the title row's overflow-hidden, so it is never clipped. -->
+      <div
+        id="group-call-hands-list"
+        class="absolute top-full left-3 z-30 mt-1 max-w-64 cursor-default rounded-box bg-base-100 p-2 text-sm shadow-lg select-none"
+        data-testid="group-call-hands-list"
+      >
+        <p class="mb-1 text-xs text-base-content/60">{m.groups_call_hands_order()}</p>
+        <ol>
+          {#each handNames as name, i (i)}
+            <li class="truncate">{i + 1}. {name}</li>
+          {/each}
+        </ol>
+      </div>
+    {/if}
     <div class="flex shrink-0 items-center gap-1 @lg:gap-2">
       {#if onInvite}
         <button

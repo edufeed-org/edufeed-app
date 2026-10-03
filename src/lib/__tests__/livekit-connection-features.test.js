@@ -246,7 +246,7 @@ describe('raise hand + reactions (data messages)', () => {
   it('raising a hand publishes it and marks the local seat', async () => {
     await svc.setHandRaised(true);
     const [bytes, opts] = room.localParticipant.publishData.mock.calls[0];
-    expect(decode(bytes)).toEqual({ t: 'hand', v: true });
+    expect(decode(bytes)).toEqual({ t: 'hand', v: true, at: expect.any(Number) });
     expect(opts).toEqual(expect.objectContaining({ reliable: true, topic: 'edufeed.call' }));
     expect(svc.getLiveKitState().raisedHands.has(room.localParticipant.identity)).toBe(true);
     await svc.setHandRaised(false);
@@ -280,8 +280,77 @@ describe('raise hand + reactions (data messages)', () => {
     const carol = remote('c'.repeat(64) + ':x1');
     room.emit(RoomEvent.ParticipantConnected, carol);
     const [bytes, opts] = room.localParticipant.publishData.mock.calls[0];
-    expect(decode(bytes)).toEqual({ t: 'hand', v: true });
+    expect(decode(bytes)).toEqual({ t: 'hand', v: true, at: expect.any(Number) });
     expect(opts.destinationIdentities).toEqual([carol.identity]);
+  });
+
+  describe('hand queue: first raised first', () => {
+    const T = 4_000_000_000_000; // after the real clock our beforeEach join used
+    const hand = (who, v, extra = {}) =>
+      room.emit(
+        RoomEvent.DataReceived,
+        encode({ t: 'hand', v, ...extra }),
+        who,
+        undefined,
+        'edufeed.call'
+      );
+
+    it('orders raised hands by when they arrived; a lowered hand leaves the queue', () => {
+      vi.useFakeTimers();
+      const bob = remote('b'.repeat(64) + ':x');
+      const carol = remote('c'.repeat(64) + ':x');
+      vi.setSystemTime(new Date(T + 10_000));
+      hand(carol, true);
+      vi.setSystemTime(new Date(T + 11_000));
+      hand(bob, true);
+      expect([...svc.getLiveKitState().raisedHands]).toEqual([carol.identity, bob.identity]);
+      hand(carol, false);
+      vi.setSystemTime(new Date(T + 12_000));
+      hand(carol, true);
+      expect([...svc.getLiveKitState().raisedHands]).toEqual([bob.identity, carol.identity]);
+    });
+
+    it('a live hand cannot jump the queue with a backdated raise time', () => {
+      vi.useFakeTimers();
+      const bob = remote('b'.repeat(64) + ':x');
+      const carol = remote('c'.repeat(64) + ':x');
+      vi.setSystemTime(new Date(T + 20_000));
+      hand(bob, true);
+      vi.setSystemTime(new Date(T + 21_000));
+      hand(carol, true, { at: T });
+      expect([...svc.getLiveKitState().raisedHands]).toEqual([bob.identity, carol.identity]);
+    });
+
+    it('right after our join, a re-sent hand keeps its original raise time', async () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date(T));
+      await svc.disconnectFromRoom();
+      await svc.connectToRoom('t', 'wss://lk');
+      room = rooms.at(-1);
+      const bob = remote('b'.repeat(64) + ':x');
+      const carol = remote('c'.repeat(64) + ':x');
+      vi.setSystemTime(new Date(T + 500));
+      hand(carol, true, { at: T - 30_000 });
+      hand(bob, true, { at: T - 60_000 });
+      expect([...svc.getLiveKitState().raisedHands]).toEqual([bob.identity, carol.identity]);
+    });
+
+    it('my own raise sends its time and joins the queue behind earlier hands', async () => {
+      vi.useFakeTimers();
+      const bob = remote('b'.repeat(64) + ':x');
+      vi.setSystemTime(new Date(T + 30_000));
+      hand(bob, true);
+      vi.setSystemTime(new Date(T + 31_000));
+      await svc.setHandRaised(true);
+      const sent = room.localParticipant.publishData.mock.calls
+        .map(([b]) => decode(b))
+        .find((p) => p.t === 'hand');
+      expect(sent).toEqual({ t: 'hand', v: true, at: T + 31_000 });
+      expect([...svc.getLiveKitState().raisedHands]).toEqual([
+        bob.identity,
+        room.localParticipant.identity
+      ]);
+    });
   });
 
   it('sends an allowed reaction, shows it locally and prunes it after a few seconds', async () => {
