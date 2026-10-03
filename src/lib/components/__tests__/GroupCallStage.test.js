@@ -480,6 +480,14 @@ describe('hands, reactions, connection state', () => {
       expect(list()).toBeNull();
     });
 
+    it('points aria-controls at the list only while it is rendered', async () => {
+      render(GroupCallStage, { props: baseProps });
+      const pill = screen.getByTestId('group-call-hands');
+      expect(pill.hasAttribute('aria-controls')).toBe(false);
+      await fireEvent.click(pill);
+      expect(document.getElementById(pill.getAttribute('aria-controls'))).toBe(list());
+    });
+
     it('is display only: no buttons inside the list', async () => {
       render(GroupCallStage, { props: baseProps });
       await fireEvent.click(screen.getByTestId('group-call-hands'));
@@ -642,8 +650,10 @@ describe('reordering tiles', () => {
     tile(B).focus();
     await fireEvent.keyDown(tile(B), { key: 'ArrowRight', altKey: true });
     expect(order()).toEqual([ME, C, B, D]);
-    expect(screen.getByTestId('group-call-tile-announce').textContent).toBe(
-      'Tile moved, position 3 of 4'
+    await vi.waitFor(() =>
+      expect(screen.getByTestId('group-call-tile-announce').textContent.trim()).toBe(
+        'Tile moved, position 3 of 4'
+      )
     );
     await fireEvent.keyDown(tile(B), { key: 'ArrowLeft', altKey: true });
     await fireEvent.keyDown(tile(B), { key: 'ArrowLeft', altKey: true });
@@ -651,6 +661,60 @@ describe('reordering tiles', () => {
     // without Alt the arrows do nothing here
     await fireEvent.keyDown(tile(B), { key: 'ArrowRight' });
     expect(order()).toEqual([B, ME, C, D]);
+  });
+
+  it('Alt+arrow inside a tile control (the volume slider) does not move the tile', async () => {
+    render(GroupCallStage, { props: baseProps });
+    const inner = tile(B).querySelector('[data-testid="participant-tile-stub"]');
+    await fireEvent.keyDown(inner, { key: 'ArrowRight', altKey: true });
+    expect(order()).toEqual([ME, B, C, D]);
+  });
+
+  it('the same announcement twice in a row is cleared in between, so it is read again', async () => {
+    render(GroupCallStage, { props: baseProps });
+    const live = screen.getByTestId('group-call-tile-announce');
+    const seen = [];
+    new MutationObserver(() => seen.push(live.textContent.trim())).observe(live, {
+      childList: true,
+      characterData: true,
+      subtree: true
+    });
+    await fireEvent.keyDown(tile(B), { key: 'ArrowRight', altKey: true }); // B -> 3rd
+    await vi.waitFor(() => expect(live.textContent).toBe('Tile moved, position 3 of 4'));
+    seen.length = 0;
+    await fireEvent.keyDown(tile(C), { key: 'ArrowRight', altKey: true }); // C -> 3rd
+    await vi.waitFor(() => expect(seen.at(-1)).toBe('Tile moved, position 3 of 4'));
+    expect(seen).toContain('');
+    expect(order()).toEqual([ME, B, C, D]);
+  });
+
+  it('a drop on a tile that left the call meanwhile moves nothing', async () => {
+    render(GroupCallStage, { props: baseProps });
+    const gone = document.createElement('div');
+    gone.dataset.seatKey = 'seat:gone:1';
+    const original = document.elementFromPoint;
+    document.elementFromPoint = () => gone;
+    try {
+      await fireEvent.pointerDown(tile(D), { button: 0, pointerId: 1, clientX: 10, clientY: 10 });
+      await fireEvent.pointerMove(window, { pointerId: 1, clientX: 60, clientY: 10 });
+      await fireEvent.pointerUp(window, { pointerId: 1, clientX: 60, clientY: 10 });
+    } finally {
+      document.elementFromPoint = original;
+    }
+    expect(order()).toEqual([ME, B, C, D]);
+  });
+
+  it('unmounting mid-drag takes the window listeners away', async () => {
+    const view = render(GroupCallStage, { props: baseProps });
+    const removed = vi.spyOn(window, 'removeEventListener');
+    try {
+      await fireEvent.pointerDown(tile(D), { button: 0, pointerId: 1, clientX: 10, clientY: 10 });
+      view.unmount();
+      const types = removed.mock.calls.map((c) => c[0]);
+      expect(types).toEqual(expect.arrayContaining(['pointermove', 'pointerup', 'pointercancel']));
+    } finally {
+      removed.mockRestore();
+    }
   });
 
   it('tiles are focusable groups that say how to move them', () => {

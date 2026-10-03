@@ -246,10 +246,21 @@
     const target = Math.min(Math.max(0, toIndex), order.length - 1);
     if (order.indexOf(key) === target) return;
     setTilePlacements(lk.room, moveSeat(order, key, target, placements));
-    tileAnnouncement = m.groups_call_tile_moved({ position: target + 1, total: order.length });
+    announce(m.groups_call_tile_moved({ position: target + 1, total: order.length }));
+  }
+  // Cleared first, set after a tick: the same text twice in a row ("Position
+  // 3 von 4" again) must be announced again.
+  /** @param {string} text */
+  async function announce(text) {
+    tileAnnouncement = '';
+    await tick();
+    tileAnnouncement = text;
   }
   /** @param {KeyboardEvent} event @param {string} key */
   async function onTileKeyDown(event, key) {
+    // Only the focused tile itself: Alt+arrow inside its controls (the
+    // volume slider) belongs to them.
+    if (event.target !== event.currentTarget) return;
     if (!event.altKey || (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight')) return;
     event.preventDefault();
     const from = seats.findIndex((s) => s.key === key);
@@ -270,6 +281,10 @@
   /** @type {string | null} */
   let dropKey = $state(null);
   const DRAG_THRESHOLD = 6;
+  // Ends a drag in progress (window listeners off); also on unmount mid-drag.
+  /** @type {(() => void) | null} */
+  let stopDrag = null;
+  $effect(() => () => stopDrag?.());
   /** @param {PointerEvent} event @param {string} key */
   function onTilePointerDown(event, key) {
     if (event.button !== 0 || seats.length < 2) return;
@@ -300,17 +315,19 @@
       const overKey = over instanceof win.HTMLElement ? (over.dataset.seatKey ?? null) : null;
       dropKey = overKey && overKey !== key ? overKey : null;
     };
-    const finish = (/** @type {PointerEvent} */ e) => {
-      if (e.pointerId !== pointerId) return;
+    const detach = () => {
       win.removeEventListener('pointermove', onMove);
       win.removeEventListener('pointerup', finish);
       win.removeEventListener('pointercancel', finish);
-      if (active && e.type === 'pointerup' && dropKey) {
-        moveTile(
-          key,
-          seats.findIndex((s) => s.key === dropKey)
-        );
-      }
+      if (stopDrag === detach) stopDrag = null;
+    };
+    const finish = (/** @type {PointerEvent} */ e) => {
+      if (e.pointerId !== pointerId) return;
+      detach();
+      // The tile it was dropped on may have left the call meanwhile: then
+      // nothing moves (no jump to the first slot).
+      const to = dropKey ? seats.findIndex((s) => s.key === dropKey) : -1;
+      if (active && e.type === 'pointerup' && to >= 0) moveTile(key, to);
       if (active) {
         win.addEventListener('click', swallow, true);
         win.setTimeout(() => win.removeEventListener('click', swallow, true), 0);
@@ -318,6 +335,8 @@
       draggingKey = null;
       dropKey = null;
     };
+    stopDrag?.();
+    stopDrag = detach;
     win.addEventListener('pointermove', onMove);
     win.addEventListener('pointerup', finish);
     win.addEventListener('pointercancel', finish);
@@ -611,7 +630,7 @@
           type="button"
           class="badge shrink-0 cursor-pointer gap-1 badge-sm badge-warning select-none"
           aria-expanded={handsOpen}
-          aria-controls="group-call-hands-list"
+          aria-controls={handsOpen ? 'group-call-hands-list' : undefined}
           aria-label={`${m.groups_call_hands_raised({ count: handCount })}: ${m.groups_call_hands_order()}`}
           data-testid="group-call-hands"
           onpointerenter={(e) => hoverHands(e, true)}
