@@ -302,16 +302,24 @@
           {@const rowTitle = passTitle(row.pass)}
           <li class="flex items-center gap-2 text-sm" data-testid="call-invite-pass">
             <span class="min-w-0 flex-1">
-              <!-- The title is the user's own text (selectable); the time and
-                "by someone else" after it are a label. -->
+              <!-- The title is the user's own text (selectable); "created
+                <time>" and "by someone else" after it are a label. A bare
+                clock time said nothing (laoc, 2026-10-03), so an untitled
+                link is called "Invite link". -->
               {#if rowTitle}
                 <span class="font-medium break-words" data-testid="call-invite-pass-title"
                   >{rowTitle}</span
                 >
+              {:else}
+                <span
+                  class="cursor-default font-medium select-none"
+                  data-testid="call-invite-pass-untitled">{m.groups_call_invite_untitled()}</span
+                >
               {/if}
               <span class="cursor-default select-none" data-testid="call-invite-pass-meta"
-                >{#if rowTitle}·
-                {/if}{formatTimeOfDay(row.pass.created_at)}
+                >· {m.groups_call_invite_created_at({
+                  time: formatTimeOfDay(row.pass.created_at)
+                })}
                 {#if row.pass.pubkey !== user.pubkey}· {m.groups_call_invite_by_other()}{/if}</span
               >
             </span>

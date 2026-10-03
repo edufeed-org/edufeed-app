@@ -3908,5 +3908,11 @@
   "meeting_bar_tomorrow": "morgen {time}",
   "meeting_detail_channel_only": "Dieser Termin gehört zu einem Kanal. Du findest ihn – mit Beitreten, Gast-Link und Löschen – in der Terminkarte des Kanals.",
   "meeting_preview_channel": "Termin in einem Kanal",
-  "calendar_channel_meeting_in": "in #{channel}"
+  "calendar_channel_meeting_in": "in #{channel}",
+  "signer_slow_hint": "Warte auf deine Signier-App… Öffne sie und bestätige die Anfrage.",
+  "signer_slow_hint_mobile": "Warte auf deine Signier-App… Öffne sie und bestätige die Anfrage. Im Energiesparmodus hält dein Handy solche Anfragen oft zurück – schalte ihn aus, falls nichts passiert.",
+  "signer_timeout_hint": "Deine Signier-App hat nicht geantwortet. Öffne sie und versuche es erneut.",
+  "signer_timeout_hint_mobile": "Deine Signier-App hat nicht geantwortet. Öffne sie und versuche es erneut – und schalte den Energiesparmodus aus, er blockiert auf Handys oft Signier-Anfragen.",
+  "groups_call_invite_untitled": "Einladungslink",
+  "groups_call_invite_created_at": "erstellt {time}"
 }

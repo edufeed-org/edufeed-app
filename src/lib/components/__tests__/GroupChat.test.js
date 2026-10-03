@@ -3306,6 +3306,17 @@ describe('GroupChat', () => {
       expect(callViewMocks.unregister).toHaveBeenCalled();
     });
 
+    // A bunker held back by energy saver mode left "Requesting access…"
+    // with no way out (laoc, 2026-10-03).
+    it('lets the user cancel a call that is still requesting access', async () => {
+      inCallHere();
+      groupCallHolder.state.phase = 'requesting';
+      groupCallHolder.state.connected = false;
+      render(GroupChat, { props: { pointer: callPointer } });
+      await fireEvent.click(await screen.findByTestId('group-call-pending-cancel'));
+      expect(leaveGroupCallMock).toHaveBeenCalled();
+    });
+
     it('offers guest links only once the call is connected, not while connecting (QA B1)', async () => {
       probeCallPassSupport.mockResolvedValue(true);
       try {

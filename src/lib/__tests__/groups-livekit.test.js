@@ -178,6 +178,18 @@ describe('requestGroupCallToken', () => {
     expect(signed.tags.some((t) => t[0] === 'payload')).toBe(false);
   });
 
+  it('gives up on a signer that never answers after 45s with a SignerTimeoutError', async () => {
+    vi.useFakeTimers();
+    const { SignerTimeoutError } = await import('$lib/helpers/signer-wait.js');
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    const stuck = { pubkey: HEX, signer: { signEvent: () => new Promise(() => {}) } };
+    const caught = requestGroupCallToken('wss://relay.example', 'g', stuck).catch((e) => e);
+    await vi.advanceTimersByTimeAsync(45_000);
+    expect(await caught).toBeInstanceOf(SignerTimeoutError);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
   it.each([
     [401, 'nope', 'unauthorized'],
     [403, 'livekit not enabled for this group', 'not-enabled'],

@@ -42,7 +42,11 @@ vi.mock('$lib/paraglide/messages', () => ({
   groups_call_error_not_enabled: () => 'not-enabled-msg',
   groups_call_error_generic: () => 'generic-msg',
   groups_call_error_pass: () => 'pass-msg',
-  groups_call_error_removed: () => 'removed-msg'
+  groups_call_error_removed: () => 'removed-msg',
+  signer_slow_hint: () => 'slow',
+  signer_slow_hint_mobile: () => 'slow-mobile',
+  signer_timeout_hint: () => 'timeout-msg',
+  signer_timeout_hint_mobile: () => 'timeout-mobile-msg'
 }));
 
 const confirmCallSwitch = vi.fn();
@@ -488,6 +492,10 @@ describe('callErrorMessage', () => {
     ['network', 'generic-msg']
   ])('maps reason %s', (reason, expected) => {
     expect(callErrorMessage(new GroupCallTokenError(reason, 'x'))).toBe(expected);
+  });
+  it('explains a signer timeout instead of the generic message', async () => {
+    const { SignerTimeoutError } = await import('$lib/helpers/signer-wait.js');
+    expect(callErrorMessage(new SignerTimeoutError('x'))).toMatch(/^timeout(-mobile)?-msg$/);
   });
   it('maps a plain Error to the generic message', () => {
     expect(callErrorMessage(new Error('boom'))).toBe('generic-msg');
