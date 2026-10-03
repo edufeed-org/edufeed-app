@@ -1,6 +1,6 @@
 /** @vitest-environment node */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { createTokenProvider } from '../ambMcpToken.js';
+import { createTokenProvider } from '../nopeMcpToken.js';
 
 /**
  * Build a Keycloak-shaped token response.
@@ -111,5 +111,62 @@ describe('createTokenProvider', () => {
     const getToken = createTokenProvider(CONFIG);
 
     await expect(getToken()).rejects.toThrow(/HTTP 401/);
+  });
+});
+
+describe('getNopeMcpToken (env fallback)', () => {
+  /** @type {ReturnType<typeof vi.fn>} */
+  let envFetchMock;
+
+  beforeEach(() => {
+    envFetchMock = vi.fn();
+    vi.stubGlobal('fetch', envFetchMock);
+    vi.resetModules();
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.doUnmock('$env/dynamic/private');
+  });
+
+  it('uses NOPE_MCP_* env names when set', async () => {
+    vi.doMock('$env/dynamic/private', () => ({
+      env: {
+        NOPE_MCP_TOKEN_URL: 'https://nope.example/token',
+        NOPE_MCP_CLIENT_ID: 'nope-client',
+        NOPE_MCP_CLIENT_SECRET: 'nope-secret'
+      }
+    }));
+    envFetchMock.mockResolvedValueOnce(tokenResponse('tok-nope'));
+    const { getNopeMcpToken } = await import('../nopeMcpToken.js');
+
+    expect(await getNopeMcpToken()).toBe('tok-nope');
+    expect(envFetchMock.mock.calls[0][0]).toBe('https://nope.example/token');
+    const params = new URLSearchParams(envFetchMock.mock.calls[0][1].body);
+    expect(params.get('client_id')).toBe('nope-client');
+    expect(params.get('client_secret')).toBe('nope-secret');
+  });
+
+  it('falls back to legacy AMB_MCP_* names when NOPE_MCP_* is unset', async () => {
+    vi.doMock('$env/dynamic/private', () => ({
+      env: {
+        AMB_MCP_TOKEN_URL: 'https://amb.example/token',
+        AMB_MCP_CLIENT_ID: 'amb-client',
+        AMB_MCP_CLIENT_SECRET: 'amb-secret'
+      }
+    }));
+    envFetchMock.mockResolvedValueOnce(tokenResponse('tok-amb'));
+    const { getNopeMcpToken } = await import('../nopeMcpToken.js');
+
+    expect(await getNopeMcpToken()).toBe('tok-amb');
+    expect(envFetchMock.mock.calls[0][0]).toBe('https://amb.example/token');
+  });
+
+  it('rejects with the client-credentials config error when neither name is set', async () => {
+    vi.doMock('$env/dynamic/private', () => ({ env: {} }));
+    const { getNopeMcpToken } = await import('../nopeMcpToken.js');
+
+    await expect(getNopeMcpToken()).rejects.toThrow(/config incomplete/);
+    expect(envFetchMock).not.toHaveBeenCalled();
   });
 });

@@ -151,6 +151,10 @@
   import GroupAppStage from '$lib/components/groups/GroupAppStage.svelte';
   import GroupAppsBar from '$lib/components/groups/GroupAppsBar.svelte';
   import WebxdcAppPicker from '$lib/components/groups/WebxdcAppPicker.svelte';
+  import AgentBadge from '$lib/components/agents/AgentBadge.svelte';
+  import { useAgentRecords } from '$lib/agents/agent-records.svelte.js';
+  import { useAgentPresence } from '$lib/agents/agent-presence.svelte.js';
+  import { presenceIsOnline } from '$lib/agents/agent-index.js';
   import {
     mintSessionId,
     buildAppShareTemplate,
@@ -647,7 +651,18 @@
     };
   });
 
-  const getProfiles = useProfileMap(() => displayed.map((event) => event.pubkey));
+  // Agent badges: who among the message authors is an agent (kind 30177),
+  // and is it online (kind 20001). Off entirely when the feature is off.
+  const getAgentRecords = useAgentRecords(() =>
+    runtimeConfig.agents?.enabled ? displayed.map((msg) => msg.pubkey) : []
+  );
+  const getAgentPresence = useAgentPresence(() => [...getAgentRecords().keys()]);
+  const nowSeconds = () => Math.floor(Date.now() / 1000);
+
+  const getProfiles = useProfileMap(() => [
+    ...displayed.map((event) => event.pubkey),
+    ...[...getAgentRecords().values()].map((r) => r.ownerPubkey)
+  ]);
 
   // Profiles for authors + roster, from the GROUP relay itself: members of a
   // closed host often have no kind-0 on our lookup relays, but the host has
@@ -2049,6 +2064,17 @@
       replyCountLabel={replyCountLabel(threads.replyCount(message.id))}
       onOpenThread={offerThread ? openThread : null}
     >
+      {#snippet nameBadge(/** @type {string} */ pubkey)}
+        <AgentBadge
+          {pubkey}
+          records={getAgentRecords()}
+          ownerName={(() => {
+            const owner = getAgentRecords().get(pubkey)?.ownerPubkey;
+            return owner ? getUserDisplayName(owner, getProfiles().get(owner)) : '';
+          })()}
+          online={presenceIsOnline(getAgentPresence().get(pubkey), nowSeconds())}
+        />
+      {/snippet}
       {#snippet reactions(/** @type {any} */ msg)}
         <ReactionChips
           aggregated={reactionsByTarget.get(msg.id) ?? new Map()}

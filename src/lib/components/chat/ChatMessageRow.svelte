@@ -39,6 +39,7 @@
    * @property {((message: any) => void) | null} [onOpenThread] - opens the thread for this message
    * @property {import('svelte').Snippet<[any]>} [reactions] - rendered inside chat-footer, receives `message`
    * @property {import('svelte').Snippet<[any]>} [attachments] - rendered inside the bubble below the content, receives `message` (e.g. concord imeta media)
+   * @property {import('svelte').Snippet<[string]>} [nameBadge] - rendered right after the author name (e.g. an agent badge), receives message.pubkey
    */
 
   /** @type {Props} */
@@ -62,7 +63,8 @@
     replyCountLabel = '',
     onOpenThread = null,
     reactions = undefined,
-    attachments = undefined
+    attachments = undefined,
+    nameBadge = undefined
   } = $props();
 
   // The footer exists for reactions today; the thread affordance shares it so a
@@ -92,6 +94,7 @@
       {:else}
         <span class="font-semibold">{displayName}</span>
       {/if}
+      {#if nameBadge}{@render nameBadge(message.pubkey)}{/if}
       <span>&middot;</span>
     {/if}
     <time datetime={new Date(message.created_at * 1000).toISOString()}>

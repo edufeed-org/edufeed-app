@@ -212,6 +212,12 @@ const defaultConfig = {
     enabled: false,
     relays: /** @type {string[]} */ ([])
   },
+  // AI agents (see docs/superpowers/specs/2026-09-30-agent-companion-design.md)
+  agents: {
+    enabled: false,
+    pairingRelays: /** @type {string[]} */ ([]),
+    downloadUrl: /** @type {string | null} */ (null)
+  },
   // Read-only npub login
   npubLogin: {
     enabled: false
@@ -418,6 +424,10 @@ export function initializeConfig(runtimeConfig) {
       ...defaultConfig.concord,
       ...runtimeConfig.concord
     },
+    agents: {
+      ...defaultConfig.agents,
+      ...runtimeConfig.agents
+    },
     npubLogin: {
       ...defaultConfig.npubLogin,
       ...runtimeConfig.npubLogin
@@ -552,6 +562,9 @@ export const runtimeConfig = {
   },
   get concord() {
     return config.concord;
+  },
+  get agents() {
+    return config.agents;
   },
   get groupsEnabled() {
     return config.groupsEnabled;

@@ -339,7 +339,7 @@ Top-level shape:
 
 Besides `/api/config`, the app has server-side proxy endpoints (all optional, 503/hidden when their env is unset):
 
-- `/api/enrich` — URL → form-prefill metadata via the deployed AMB MCP server (`AMB_MCP_URL`, Keycloak client-credentials auth via `AMB_MCP_TOKEN_URL`/`AMB_MCP_CLIENT_ID`/`AMB_MCP_CLIENT_SECRET`)
+- `/api/enrich` — URL → form-prefill metadata via the deployed nope-mcp server (formerly amb-mcp; `NOPE_MCP_URL`, Keycloak client-credentials auth via `NOPE_MCP_TOKEN_URL`/`NOPE_MCP_CLIENT_ID`/`NOPE_MCP_CLIENT_SECRET`; legacy `AMB_MCP_*` names still read as a fallback)
 - `/api/oer` — OER media-library image search proxy (`OER_PROXY_URL`)
 - `/api/metaclean` — metadata-cleaner proxy for the pre-upload review step in `LicensedFileInput`/`LicensedImageInput` (`METADATA_CLEANER_URL`)
 - `/api/curricula` — Lehrplan-ontology SPARQL cascade for the curriculum picker (`SPARQL_ENDPOINT_URL`)

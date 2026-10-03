@@ -98,7 +98,7 @@
 
   // License-badge centralization: lookup the kind-1063 license event for the
   // image's SHA-256 hash. Prefer the resource's `x` tag; events published
-  // outside the app's form (e.g. via the AMB MCP server) carry only the
+  // outside the app's form (e.g. via the nope-mcp server) carry only the
   // `image` tag, so fall back to the hash embedded in a Blossom-style URL —
   // the same recovery ArticleView does for kind 30023 covers.
   const imageHash = $derived.by(() => {

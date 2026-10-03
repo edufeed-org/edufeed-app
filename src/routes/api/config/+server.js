@@ -7,20 +7,7 @@
 import { json } from '@sveltejs/kit';
 import { parseDiscoverContentTypes } from '$lib/helpers/discover-content-types.js';
 import { env } from '$env/dynamic/private';
-
-/**
- * Parse comma-separated string into array
- * @param {string | undefined} value
- * @param {string[]} defaultValue
- * @returns {string[]}
- */
-function parseArray(value, defaultValue = []) {
-  if (!value) return defaultValue;
-  return value
-    .split(',')
-    .map((s) => s.trim())
-    .filter(Boolean);
-}
+import { parseArray, parseBool } from '$lib/server/env-parse.js';
 
 /**
  * Like parseArray, but the literal `none` yields [] — the way to switch a
@@ -93,17 +80,6 @@ function parseInt(value, defaultValue) {
   if (!value) return defaultValue;
   const parsed = Number.parseInt(value);
   return isNaN(parsed) ? defaultValue : parsed;
-}
-
-/**
- * Parse boolean with default
- * @param {string | undefined} value
- * @param {boolean} defaultValue
- * @returns {boolean}
- */
-function parseBool(value, defaultValue) {
-  if (value === undefined || value === null || value === '') return defaultValue;
-  return value === 'true' || value === '1';
 }
 
 /**
@@ -509,6 +485,15 @@ export function GET() {
     concord: {
       enabled: parseBool(env.CONCORD_ENABLED, false),
       relays: parseArray(env.CONCORD_RELAYS)
+    },
+
+    // AI agents (buzz-acp companions): the Agents pages, the agent badge and
+    // /api/agent-config. Pairing relays carry NIP-46 traffic (kind 24133) and
+    // default to the groups relays, which accept ephemeral events from anyone.
+    agents: {
+      enabled: parseBool(env.AGENTS_ENABLED, false),
+      pairingRelays: parseArray(env.AGENT_PAIRING_RELAYS, parseArray(env.GROUPS_RELAYS)),
+      downloadUrl: env.AGENT_DOWNLOAD_URL || null
     },
 
     // Read-only npub login ("browse as") — see docs/superpowers/specs/2026-07-16-google-and-npub-login-design.md

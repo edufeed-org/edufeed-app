@@ -103,7 +103,7 @@
   });
 
   // Heal incoming values whose `id` is a label rather than a canonical
-  // concept id. AI enrichment (amb-mcp) returns `{id: prefLabel}`, which
+  // concept id. AI enrichment (nope-mcp) returns `{id: prefLabel}`, which
   // chips can render but the option-checked state can't match. When concept
   // events are loaded, look each unmatched value up by label and emit
   // `onchange` once with the corrected rich entries — the form data then

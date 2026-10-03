@@ -602,7 +602,7 @@ describe('ResourceCover — license lookup hash', () => {
     expect(licenseHook.getHash?.()).toBe('ab'.repeat(32));
   });
 
-  // Events published outside the app's own form (e.g. via the AMB MCP server)
+  // Events published outside the app's own form (e.g. via the nope-mcp server)
   // carry only the `image` tag — the article view already recovers the hash
   // from a Blossom URL, the AMB cover must do the same.
   it('falls back to the SHA-256 embedded in a Blossom image URL when no x tag exists', () => {

@@ -1,5 +1,6 @@
 /**
- * Minimal streamable-HTTP MCP client for the deployed AMB MCP server.
+ * Minimal streamable-HTTP MCP client for the deployed nope-mcp server
+ * (formerly amb-mcp).
  *
  * Each `callExtractMetadata` performs:
  *   1. POST initialize          → captures `Mcp-Session-Id` from the response
@@ -73,7 +74,7 @@ export async function callExtractMetadata({
     throw new Error('callExtractMetadata requires `url` or a non-empty `urls` array.');
   }
   // Send the single-URL shape when there is exactly one source so the call
-  // still works against an amb-mcp server that predates the `urls` array.
+  // still works against a nope-mcp server that predates the `urls` array.
   // Multi-source extractions require the newer server (deploy it first).
   const toolArguments =
     sourceUrls.length === 1
@@ -150,7 +151,7 @@ export async function callExtractMetadata({
     const errText = callRpc.result.content?.[0]?.text;
     const errStr = typeof errText === 'string' ? errText : JSON.stringify(errText ?? '');
     const isOverloaded = /\boverloaded/i.test(errStr) || /^\s*529\b/.test(errStr);
-    // amb-mcp's PageTooLargeError stringifies as
+    // nope-mcp's PageTooLargeError stringifies as
     //   "PDF body (… bytes) exceeds size cap (… bytes)"
     //   "HTML body (… bytes) exceeds size cap (… bytes)"
     // We match on "exceeds size cap" so the wizard can show "page too big"
