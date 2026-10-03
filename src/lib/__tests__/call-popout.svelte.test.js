@@ -196,5 +196,16 @@ describe('closing the pop-out', () => {
       await settle();
       expect(getGroupCallState().phase).toBe('ready');
     });
+
+    it('the call ending while it asks takes the dialog away', async () => {
+      await popOutCall(VIEW);
+      q('group-call-stage-stub-leave').click();
+      await vi.waitFor(() => expect(q('call-leave-confirm-stub')).toBeTruthy());
+      lkListener.cb?.(4);
+      flushSync();
+      await settle();
+      expect(q('call-leave-confirm-stub')).toBeNull();
+      expect(getGroupCallState().phase).toBe('ended');
+    });
   });
 });

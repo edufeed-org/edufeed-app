@@ -92,10 +92,17 @@ export function confirmCallSwitch(title) {
 
 /**
  * Ask before leaving the running call ("Anruf verlassen?").
- * @param {{ guest: boolean }} options - guest: joined through a call link,
- *   which is also the way back (different copy)
+ * @param {{ guest: boolean, signal?: AbortSignal }} options - guest: joined
+ *   through a call link, which is also the way back (different copy);
+ *   signal: dismiss the dialog (resolves false) — the call ended meanwhile
  * @returns {Promise<boolean>} true on "Verlassen", false on cancel
  */
-export function confirmCallLeave({ guest }) {
-  return askModal('callLeaveConfirm', { guest });
+export function confirmCallLeave({ guest, signal }) {
+  const answer = askModal('callLeaveConfirm', { guest });
+  const dismiss = () => {
+    if (modalStore.activeModal === 'callLeaveConfirm') modalStore.closeModal();
+  };
+  if (signal?.aborted) dismiss();
+  else signal?.addEventListener('abort', dismiss, { once: true });
+  return answer;
 }

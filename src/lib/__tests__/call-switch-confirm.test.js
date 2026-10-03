@@ -98,6 +98,16 @@ describe('confirmCallLeave', () => {
     await expect(pending).resolves.toBe(false);
   });
 
+  it('an aborted signal dismisses the dialog and resolves false (the call ended)', async () => {
+    const moot = new AbortController();
+    const pending = confirmCallLeave({ guest: false, signal: moot.signal });
+    expect(modalStore.activeModal).toBe('callLeaveConfirm');
+    moot.abort();
+    flushSync();
+    await expect(pending).resolves.toBe(false);
+    expect(modalStore.activeModal).toBe('none');
+  });
+
   it('a switch confirm opening on top settles a pending leave confirm as cancelled', async () => {
     const leave = confirmCallLeave({ guest: false });
     confirmCallSwitch('Standup');

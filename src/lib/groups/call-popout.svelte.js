@@ -96,10 +96,10 @@ export function popInCall() {
  * "Anruf verlassen?" inside the pop-out window: the same dialog component as
  * the tab's (ModalManager's 'callLeaveConfirm'), mounted into the window's
  * own document. Closing the window while it asks counts as cancel.
- * @param {any} pip @param {{ guest: boolean }} options
+ * @param {any} pip @param {{ guest: boolean, signal?: AbortSignal }} options
  * @returns {Promise<boolean>}
  */
-async function confirmLeaveIn(pip, { guest }) {
+async function confirmLeaveIn(pip, { guest, signal }) {
   settleConfirm?.(false);
   const { default: CallLeaveConfirmModal } = await import(
     '$lib/components/groups/CallLeaveConfirmModal.svelte'
@@ -116,6 +116,8 @@ async function confirmLeaveIn(pip, { guest }) {
       resolve(value);
     };
     settleConfirm = settle;
+    if (signal?.aborted) return settle(false);
+    signal?.addEventListener('abort', () => settle(false), { once: true });
     dialog = mount(CallLeaveConfirmModal, {
       target: pip.document.body,
       props: { guest, onConfirm: () => settle(true), onCancel: () => settle(false) }

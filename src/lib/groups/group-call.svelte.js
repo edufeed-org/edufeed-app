@@ -282,20 +282,39 @@ export async function leaveGroupCall() {
  * button (stage, dock, guest page, pop-out) goes through this; a switch to
  * another call (already confirmed), the call ending on its own, a removal
  * and page unload use `leaveGroupCall` and never ask. An ended or failed
- * call just closes.
- * @param {(options: {guest: boolean}) => Promise<boolean>} [ask] where to ask —
- *   the pop-out window asks in its own document
+ * call just closes. If the call stops being live while the dialog is open
+ * (it ended, the user was removed), the dialog is dismissed and nothing is
+ * left: the store keeps showing why the call ended.
+ * @param {(options: {guest: boolean, signal: AbortSignal}) => Promise<boolean>} [ask]
+ *   where to ask — the pop-out window asks in its own document; `signal`
+ *   aborts when the question has become moot
  * @returns {Promise<boolean>} whether the call was left
  */
 export async function leaveGroupCallWithConfirm(ask = confirmCallLeave) {
-  if (phase === 'requesting' || phase === 'ready') {
-    // Joined with a call pass code: that link is also the way back.
-    const proceed = await ask({ guest: !!code });
-    if (!proceed) return false;
+  if (isLive()) {
+    const moot = new AbortController();
+    const myAttempt = attempt;
+    const stopWatch = $effect.root(() => {
+      $effect(() => {
+        if (!isLive() || attempt !== myAttempt) moot.abort();
+      });
+    });
+    let proceed = false;
+    try {
+      // Joined with a call pass code: that link is also the way back.
+      proceed = await ask({ guest: !!code, signal: moot.signal });
+    } finally {
+      stopWatch();
+    }
+    if (!proceed || moot.signal.aborted || !isLive() || attempt !== myAttempt) return false;
     playLeaveSound();
   }
   await leaveGroupCall();
   return true;
+}
+
+function isLive() {
+  return phase === 'requesting' || phase === 'ready';
 }
 
 /**

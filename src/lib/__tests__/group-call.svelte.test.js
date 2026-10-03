@@ -8,6 +8,7 @@
  * One call at a time app-wide (the connection service holds one Room).
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { flushSync } from 'svelte';
 
 const requestGroupCallToken = vi.fn();
 vi.mock('$lib/groups/livekit.js', async (importOriginal) => {
@@ -389,7 +390,7 @@ describe('leaveGroupCallWithConfirm', () => {
     await joinGroupCall(P1, USER);
     confirmCallLeave.mockResolvedValue(true);
     await expect(leaveGroupCallWithConfirm()).resolves.toBe(true);
-    expect(confirmCallLeave).toHaveBeenCalledWith({ guest: false });
+    expect(confirmCallLeave).toHaveBeenCalledWith(expect.objectContaining({ guest: false }));
     expect(playLeaveSound).toHaveBeenCalledTimes(1);
     expect(disconnectFromRoom).toHaveBeenCalledTimes(1);
     expect(getGroupCallState().phase).toBe('idle');
@@ -409,7 +410,7 @@ describe('leaveGroupCallWithConfirm', () => {
     await joinGroupCall(P1, USER, { code: 'secret' });
     confirmCallLeave.mockResolvedValue(false);
     await leaveGroupCallWithConfirm();
-    expect(confirmCallLeave).toHaveBeenCalledWith({ guest: true });
+    expect(confirmCallLeave).toHaveBeenCalledWith(expect.objectContaining({ guest: true }));
   });
 
   it('an ended call closes without asking again', async () => {
@@ -433,9 +434,39 @@ describe('leaveGroupCallWithConfirm', () => {
     await joinGroupCall(P1, USER);
     const ask = vi.fn(async () => false);
     await leaveGroupCallWithConfirm(ask);
-    expect(ask).toHaveBeenCalledWith({ guest: false });
+    expect(ask).toHaveBeenCalledWith(expect.objectContaining({ guest: false }));
     expect(confirmCallLeave).not.toHaveBeenCalled();
     expect(getGroupCallState().isActiveFor(P1)).toBe(true);
+  });
+
+  // Review fix: the call ending while "Anruf verlassen?" is open.
+  it('the call ending while the dialog is open dismisses it; nothing is left', async () => {
+    await joinGroupCall(P1, USER);
+    confirmCallLeave.mockImplementation(
+      ({ signal }) =>
+        new Promise((resolve) => signal.addEventListener('abort', () => resolve(false)))
+    );
+    const pending = leaveGroupCallWithConfirm();
+    lkListener.cb?.('removed-reason');
+    flushSync();
+    await expect(pending).resolves.toBe(false);
+    expect(playLeaveSound).not.toHaveBeenCalled();
+    expect(disconnectFromRoom).not.toHaveBeenCalled();
+    expect(getGroupCallState().phase).toBe('ended');
+    expect(getGroupCallState().endReason).toBe('removed');
+  });
+
+  it('a "Leave" that lands after the call ended does not leave (the ended view stays)', async () => {
+    await joinGroupCall(P1, USER);
+    /** @type {(v: boolean) => void} */
+    let answer = () => {};
+    confirmCallLeave.mockImplementation(() => new Promise((r) => (answer = r)));
+    const pending = leaveGroupCallWithConfirm();
+    lkListener.cb?.('signal-close');
+    answer(true);
+    await expect(pending).resolves.toBe(false);
+    expect(playLeaveSound).not.toHaveBeenCalled();
+    expect(getGroupCallState().phase).toBe('ended');
   });
 
   it('switching calls (already confirmed) never asks to leave', async () => {
