@@ -2,8 +2,12 @@
 import { describe, it, expect } from 'vitest';
 import { formatCallChatTxt, callChatFileName } from '$lib/groups/call-chat-export.js';
 
+/** @param {number} h @param {number} min */
 const at = (h, min) => new Date(2026, 9, 3, h, min).getTime();
-const labels = { exportedAt: (time) => `Exportiert um ${time}`, guest: 'Gast' };
+const labels = {
+  exportedAt: (/** @type {string} */ time) => `Exportiert um ${time}`,
+  guest: 'Gast'
+};
 
 describe('formatCallChatTxt', () => {
   it('header (channel, DD.MM.YYYY, export time), then one line per message', () => {
