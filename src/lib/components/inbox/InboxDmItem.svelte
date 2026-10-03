@@ -31,6 +31,14 @@
     );
   });
 
+  // A conversation listed by its newest message: when that is the user's own
+  // (an invitation sent from the schedule dialog), the peer did not "send
+  // you a message" (QA round 3 B2).
+  const sentByMe = $derived(
+    !!conversation.lastMessage?.pubkey &&
+      conversation.lastMessage.pubkey === getActiveUser()?.pubkey
+  );
+
   const displayName = $derived(
     profile?.display_name || profile?.name || otherPubkey.slice(0, 8) + '...'
   );
@@ -98,7 +106,7 @@
         }}>{displayName}</span
       >
       <OfficialBadge pubkey={otherPubkey} class_="ml-1 align-middle" />
-      &nbsp;{m.inbox_action_dm()}
+      &nbsp;{sentByMe ? m.inbox_action_dm_sent() : m.inbox_action_dm()}
     </div>
     <div class="mt-0.5 flex items-center gap-2">
       <span class="text-xs text-base-content/50"

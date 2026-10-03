@@ -148,11 +148,21 @@ const FOLLOWS_SETTLE_MS = 8000;
  */
 // eslint-disable-next-line svelte/prefer-svelte-reactivity -- a promise-resolver registry, never read from a reactive context
 const dmRelayCheckWaiters = new Set();
+/**
+ * Own newest message = nothing unread (QA round 3 B2).
+ * @param {{ id: string, lastMessage: any }} conv
+ */
+function isUnread(conv) {
+  return isConversationUnread(conv.id, conv.lastMessage.created_at, readTimestamps, {
+    lastAuthor: conv.lastMessage.pubkey,
+    self: selfPubkey
+  });
+}
 let unreadCount = $derived.by(() => {
   let count = 0;
   // Only known conversations count toward the badge — requests stay quiet.
   for (const conv of conversationBuckets.known) {
-    if (isConversationUnread(conv.id, conv.lastMessage.created_at, readTimestamps)) {
+    if (isUnread(conv)) {
       count++;
     }
   }
@@ -433,9 +443,7 @@ export function hasInitialDmsLoaded() {
 
 /** @returns {{ id: string, participants: string[], lastMessage: any }[]} */
 export function getUnreadDmConversations() {
-  return conversationBuckets.known.filter((conv) =>
-    isConversationUnread(conv.id, conv.lastMessage.created_at, readTimestamps)
-  );
+  return conversationBuckets.known.filter(isUnread);
 }
 
 /** Mark all DM conversations as read (latest message timestamp each). */
@@ -470,10 +478,21 @@ export function markConversationAsRead(conversationId, timestamp) {
  * Check if a specific conversation has unread messages.
  * @param {string} conversationId
  * @param {number} lastMessageTimestamp
+ * @param {string} [lastAuthor] pubkey of the newest message — pass it where
+ *   the conversation is at hand; omitted, it is looked up in the list
  * @returns {boolean}
  */
-export function isDmConversationUnread(conversationId, lastMessageTimestamp) {
-  return isConversationUnread(conversationId, lastMessageTimestamp, readTimestamps);
+export function isDmConversationUnread(conversationId, lastMessageTimestamp, lastAuthor) {
+  let author = lastAuthor;
+  if (author === undefined) {
+    const conv = dmConversations.find((c) => c.id === conversationId);
+    author =
+      conv?.lastMessage?.created_at === lastMessageTimestamp ? conv.lastMessage.pubkey : undefined;
+  }
+  return isConversationUnread(conversationId, lastMessageTimestamp, readTimestamps, {
+    lastAuthor: author,
+    self: selfPubkey
+  });
 }
 
 /**

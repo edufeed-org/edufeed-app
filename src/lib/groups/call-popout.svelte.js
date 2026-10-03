@@ -11,7 +11,11 @@
 // Closing the window — the user, "back to tab", or the call ending — unmounts
 // the stage and hands the call back to the page (stage or dock).
 import { mount, unmount } from 'svelte';
-import { getGroupCallState, leaveGroupCall, registerCallStageView } from './group-call.svelte.js';
+import {
+  getGroupCallState,
+  leaveGroupCallWithConfirm,
+  registerCallStageView
+} from './group-call.svelte.js';
 
 let open = $state(false);
 /** @type {any} */
@@ -20,6 +24,9 @@ let pipWindow = null;
 let stage = null;
 /** @type {(() => void) | null} */
 let stopWatching = null;
+// A pending "Anruf verlassen?" inside the window: settles false on close.
+/** @type {((value: boolean) => void) | null} */
+let settleConfirm = null;
 
 /** @returns {{ open: boolean }} */
 export function getCallPopoutState() {
@@ -58,7 +65,8 @@ export async function popOutCall(view) {
     props: {
       title: view.title,
       identityToPubkey: view.identityToPubkey,
-      onLeave: leaveGroupCall,
+      // The opener's modal layer is invisible from here: ask in the window.
+      onLeave: () => leaveGroupCallWithConfirm((options) => confirmLeaveIn(pip, options)),
       onPopIn: popInCall,
       // no href: the dock's "back to call" keeps pointing at the channel
       registerView: () => registerCallStageView()
@@ -66,11 +74,12 @@ export async function popOutCall(view) {
   });
   open = true;
 
-  // The call ended (left here, in the tab, or dropped): nothing to show.
+  // The call ended (left here, in the tab, or dropped / removed by the
+  // server — the channel then shows why): nothing to show.
   const call = getGroupCallState();
   stopWatching = $effect.root(() => {
     $effect(() => {
-      if (call.phase === 'idle') popInCall();
+      if (call.phase === 'idle' || call.phase === 'ended') popInCall();
     });
   });
 }
@@ -83,9 +92,43 @@ export function popInCall() {
   pip.close();
 }
 
+/**
+ * "Anruf verlassen?" inside the pop-out window: the same dialog component as
+ * the tab's (ModalManager's 'callLeaveConfirm'), mounted into the window's
+ * own document. Closing the window while it asks counts as cancel.
+ * @param {any} pip @param {{ guest: boolean, signal?: AbortSignal }} options
+ * @returns {Promise<boolean>}
+ */
+async function confirmLeaveIn(pip, { guest, signal }) {
+  settleConfirm?.(false);
+  const { default: CallLeaveConfirmModal } = await import(
+    '$lib/components/groups/CallLeaveConfirmModal.svelte'
+  );
+  if (pipWindow !== pip) return false;
+  return new Promise((resolve) => {
+    /** @type {Record<string, any> | null} */
+    let dialog = null;
+    /** @param {boolean} value */
+    const settle = (value) => {
+      if (settleConfirm === settle) settleConfirm = null;
+      if (dialog) unmount(dialog);
+      dialog = null;
+      resolve(value);
+    };
+    settleConfirm = settle;
+    if (signal?.aborted) return settle(false);
+    signal?.addEventListener('abort', () => settle(false), { once: true });
+    dialog = mount(CallLeaveConfirmModal, {
+      target: pip.document.body,
+      props: { guest, onConfirm: () => settle(true), onCancel: () => settle(false) }
+    });
+  });
+}
+
 /** @param {any} pip */
 function teardown(pip) {
   if (pipWindow !== pip) return;
+  settleConfirm?.(false);
   pipWindow = null;
   stopWatching?.();
   stopWatching = null;

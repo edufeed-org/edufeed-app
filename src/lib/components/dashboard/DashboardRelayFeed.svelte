@@ -16,6 +16,7 @@
   import { timedPool } from '$lib/loaders/base.js';
   import { useActiveUser } from '$lib/stores/accounts.svelte';
   import { ALL_FEED_KINDS } from '$lib/helpers/profile-feed.js';
+  import { withoutChannelMeetings } from '$lib/helpers/calendar-timing.js';
   import { filterEventsForRelay, relayHostLabel } from '$lib/helpers/relay-feed.js';
   import { createRelayPageLoader } from '$lib/helpers/relay-page-loader.js';
   import { useProfileMap } from '$lib/stores/profile-map.svelte.js';
@@ -73,7 +74,8 @@
     const modelSub = eventStore
       .model(TimelineModel, { kinds: ALL_FEED_KINDS })
       .subscribe((/** @type {any[]} */ events) => {
-        modelEvents = events || [];
+        // Channel meetings share the store but never appear in a feed.
+        modelEvents = withoutChannelMeetings(events || []);
       });
     // Untracked: the pager callback writes pagination $state which must not
     // become an effect dependency — the effect tracks only `relay`.

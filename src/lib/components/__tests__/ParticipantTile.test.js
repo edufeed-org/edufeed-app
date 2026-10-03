@@ -34,7 +34,9 @@ vi.mock('$lib/paraglide/messages', () => ({
   groups_call_volume: () => 'Volume',
   groups_call_volume_reset: () => 'Reset volume',
   groups_call_pin: () => 'Pin',
-  groups_call_unpin: () => 'Unpin'
+  groups_call_unpin: () => 'Unpin',
+  groups_call_guest_badge: () => 'Gast',
+  groups_call_tile_you: () => 'Du'
 }));
 
 const { default: ParticipantTile } = await import(
@@ -102,6 +104,21 @@ describe('ParticipantTile', () => {
     expect(screen.getByTitle('Hand raised')).toBeTruthy();
   });
 
+  it('shows a Gast badge for a participant who joined through a call link', () => {
+    render(ParticipantTile, {
+      props: { participant: fakeParticipant(`${HEX}:x1`), pubkey: HEX, isGuest: true }
+    });
+    const badge = screen.getByTestId('call-guest-badge');
+    expect(badge.textContent).toContain('Gast');
+  });
+
+  it('shows no Gast badge for a regular member', () => {
+    render(ParticipantTile, {
+      props: { participant: fakeParticipant(`${HEX}:x1`), pubkey: HEX }
+    });
+    expect(screen.queryByTestId('call-guest-badge')).toBeNull();
+  });
+
   it('floats reactions sent from this seat', () => {
     render(ParticipantTile, {
       props: {
@@ -111,6 +128,23 @@ describe('ParticipantTile', () => {
       }
     });
     expect(screen.getByText('🎉')).toBeTruthy();
+  });
+
+  it('floats a custom emoji as an image sized like the unicode ones', () => {
+    render(ParticipantTile, {
+      props: {
+        participant: fakeParticipant(`${HEX}:x1`),
+        pubkey: HEX,
+        reactions: [
+          { id: 'r2', identity: `${HEX}:x1`, emoji: ':parrot:', url: 'https://x.org/p.gif' }
+        ]
+      }
+    });
+    const img = screen.getByAltText(':parrot:');
+    expect(img.tagName).toBe('IMG');
+    expect(img.getAttribute('src')).toBe('https://x.org/p.gif');
+    expect(img.classList.contains('h-[1em]')).toBe(true);
+    expect(screen.queryByText(':parrot:')).toBeNull();
   });
 
   it('per-person volume: the slider shows percent and reports 0..2', async () => {
@@ -153,5 +187,14 @@ describe('ParticipantTile', () => {
       pinned: true
     });
     expect(screen.getByRole('button', { name: 'Unpin' })).toBeTruthy();
+  });
+
+  // QA round 2 K-new-1: the own tile said "You" in the German UI.
+  it('labels the own tile in the UI language', () => {
+    render(ParticipantTile, {
+      props: { participant: fakeParticipant(`${HEX}:x1`), pubkey: HEX, isLocal: true }
+    });
+    expect(screen.getByText('Du')).toBeTruthy();
+    expect(screen.queryByText('You')).toBeNull();
   });
 });

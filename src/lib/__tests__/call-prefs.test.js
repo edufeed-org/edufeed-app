@@ -123,11 +123,12 @@ describe('screen share quality', () => {
 });
 
 describe('chat beside the call', () => {
-  it('defaults to off and remembers the choice', () => {
-    expect(getChatBeside()).toBe(false);
-    setChatBeside(true);
+  it('defaults to open (QA C3) and remembers an explicit choice either way', () => {
     expect(getChatBeside()).toBe(true);
     setChatBeside(false);
     expect(getChatBeside()).toBe(false);
+    expect(localStorage.getItem('edufeed:call:chatBeside')).toBe('0');
+    setChatBeside(true);
+    expect(getChatBeside()).toBe(true);
   });
 });

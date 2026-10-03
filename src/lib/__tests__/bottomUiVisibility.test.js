@@ -21,6 +21,27 @@ describe('hasStaticOwnBottomUI', () => {
     expect(hasStaticOwnBottomUI({ pathname: '/c/npub1abc', viewParam: 'channels' })).toBe(true);
   });
 
+  // A guest on a call link saw Termi's bubble and the "+" FAB on top of the
+  // call chat (live test 2026-10-01): the landing page is the call only.
+  it('hides on the guest call landing page (/call/<pointer>)', () => {
+    expect(hasStaticOwnBottomUI({ pathname: '/call/groups.example%27g1', viewParam: null })).toBe(
+      true
+    );
+  });
+
+  // "Zum Kanal" from a call landing opens /groups/<pointer>: at 390 the FAB
+  // and Termi's bubble sat on the composer's "Beitreten" (QA K-new-6).
+  it('hides on a standalone channel chat (/groups/<pointer>)', () => {
+    expect(hasStaticOwnBottomUI({ pathname: '/groups/groups.example%27g1', viewParam: null })).toBe(
+      true
+    );
+  });
+
+  it('keeps the FAB on the /groups directory itself', () => {
+    expect(hasStaticOwnBottomUI({ pathname: '/groups', viewParam: null })).toBe(false);
+    expect(hasStaticOwnBottomUI({ pathname: '/groups/', viewParam: null })).toBe(false);
+  });
+
   it('stays visible on neutral routes/views', () => {
     expect(hasStaticOwnBottomUI({ pathname: '/settings', viewParam: null })).toBe(false);
     expect(hasStaticOwnBottomUI({ pathname: '/c/npub1abc', viewParam: 'calendar' })).toBe(false);

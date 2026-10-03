@@ -81,13 +81,25 @@ vi.mock('livekit-client', () => {
       for (const h of this.handlers[event] ?? []) h(...args);
     }
     async connect() {}
-    async disconnect() {}
+    // Like livekit-client: a local disconnect() emits Disconnected too.
+    async disconnect() {
+      this.emit('disconnected', 1);
+    }
     static getLocalDevices = vi.fn(async () => []);
   }
-  return { Room: MockRoom, RoomEvent, Track };
+  const DisconnectReason = {
+    UNKNOWN_REASON: 0,
+    CLIENT_INITIATED: 1,
+    DUPLICATE_IDENTITY: 2,
+    SERVER_SHUTDOWN: 3,
+    PARTICIPANT_REMOVED: 4,
+    ROOM_DELETED: 5,
+    SIGNAL_CLOSE: 9
+  };
+  return { Room: MockRoom, RoomEvent, Track, DisconnectReason };
 });
 
-const { RoomEvent } = await import('livekit-client');
+const { RoomEvent, DisconnectReason } = await import('livekit-client');
 const svc = await import('$lib/services/livekit-connection.svelte.js');
 const prefs = await import('$lib/services/call-prefs.js');
 
@@ -234,7 +246,7 @@ describe('raise hand + reactions (data messages)', () => {
   it('raising a hand publishes it and marks the local seat', async () => {
     await svc.setHandRaised(true);
     const [bytes, opts] = room.localParticipant.publishData.mock.calls[0];
-    expect(decode(bytes)).toEqual({ t: 'hand', v: true });
+    expect(decode(bytes)).toEqual({ t: 'hand', v: true, at: expect.any(Number) });
     expect(opts).toEqual(expect.objectContaining({ reliable: true, topic: 'edufeed.call' }));
     expect(svc.getLiveKitState().raisedHands.has(room.localParticipant.identity)).toBe(true);
     await svc.setHandRaised(false);
@@ -268,8 +280,77 @@ describe('raise hand + reactions (data messages)', () => {
     const carol = remote('c'.repeat(64) + ':x1');
     room.emit(RoomEvent.ParticipantConnected, carol);
     const [bytes, opts] = room.localParticipant.publishData.mock.calls[0];
-    expect(decode(bytes)).toEqual({ t: 'hand', v: true });
+    expect(decode(bytes)).toEqual({ t: 'hand', v: true, at: expect.any(Number) });
     expect(opts.destinationIdentities).toEqual([carol.identity]);
+  });
+
+  describe('hand queue: first raised first', () => {
+    const T = 4_000_000_000_000; // after the real clock our beforeEach join used
+    const hand = (who, v, extra = {}) =>
+      room.emit(
+        RoomEvent.DataReceived,
+        encode({ t: 'hand', v, ...extra }),
+        who,
+        undefined,
+        'edufeed.call'
+      );
+
+    it('orders raised hands by when they arrived; a lowered hand leaves the queue', () => {
+      vi.useFakeTimers();
+      const bob = remote('b'.repeat(64) + ':x');
+      const carol = remote('c'.repeat(64) + ':x');
+      vi.setSystemTime(new Date(T + 10_000));
+      hand(carol, true);
+      vi.setSystemTime(new Date(T + 11_000));
+      hand(bob, true);
+      expect([...svc.getLiveKitState().raisedHands]).toEqual([carol.identity, bob.identity]);
+      hand(carol, false);
+      vi.setSystemTime(new Date(T + 12_000));
+      hand(carol, true);
+      expect([...svc.getLiveKitState().raisedHands]).toEqual([bob.identity, carol.identity]);
+    });
+
+    it('a live hand cannot jump the queue with a backdated raise time', () => {
+      vi.useFakeTimers();
+      const bob = remote('b'.repeat(64) + ':x');
+      const carol = remote('c'.repeat(64) + ':x');
+      vi.setSystemTime(new Date(T + 20_000));
+      hand(bob, true);
+      vi.setSystemTime(new Date(T + 21_000));
+      hand(carol, true, { at: T });
+      expect([...svc.getLiveKitState().raisedHands]).toEqual([bob.identity, carol.identity]);
+    });
+
+    it('right after our join, a re-sent hand keeps its original raise time', async () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date(T));
+      await svc.disconnectFromRoom();
+      await svc.connectToRoom('t', 'wss://lk');
+      room = rooms.at(-1);
+      const bob = remote('b'.repeat(64) + ':x');
+      const carol = remote('c'.repeat(64) + ':x');
+      vi.setSystemTime(new Date(T + 500));
+      hand(carol, true, { at: T - 30_000 });
+      hand(bob, true, { at: T - 60_000 });
+      expect([...svc.getLiveKitState().raisedHands]).toEqual([bob.identity, carol.identity]);
+    });
+
+    it('my own raise sends its time and joins the queue behind earlier hands', async () => {
+      vi.useFakeTimers();
+      const bob = remote('b'.repeat(64) + ':x');
+      vi.setSystemTime(new Date(T + 30_000));
+      hand(bob, true);
+      vi.setSystemTime(new Date(T + 31_000));
+      await svc.setHandRaised(true);
+      const sent = room.localParticipant.publishData.mock.calls
+        .map(([b]) => decode(b))
+        .find((p) => p.t === 'hand');
+      expect(sent).toEqual({ t: 'hand', v: true, at: T + 31_000 });
+      expect([...svc.getLiveKitState().raisedHands]).toEqual([
+        bob.identity,
+        room.localParticipant.identity
+      ]);
+    });
   });
 
   it('sends an allowed reaction, shows it locally and prunes it after a few seconds', async () => {
@@ -283,18 +364,62 @@ describe('raise hand + reactions (data messages)', () => {
     expect(svc.getLiveKitState().reactions).toEqual([]);
   });
 
-  it('refuses reactions outside the allowlist (sent or received)', async () => {
+  it('refuses anything that is not an emoji (sent or received)', async () => {
     await svc.sendReaction('💣 boom');
     expect(room.localParticipant.publishData).not.toHaveBeenCalled();
     const bob = remote('b'.repeat(64) + ':x1');
     room.emit(
       RoomEvent.DataReceived,
-      encode({ t: 'react', e: '💣', n: 'x' }),
+      encode({ t: 'react', e: 'boom', n: 'x' }),
       bob,
       undefined,
       'edufeed.call'
     );
     expect(svc.getLiveKitState().reactions).toEqual([]);
+  });
+
+  // Task 19: any emoji from the full picker, and NIP-30 custom ones.
+  it('sends and shows any unicode emoji, not only the quick ones', async () => {
+    await svc.sendReaction('🫶');
+    expect(decode(room.localParticipant.publishData.mock.calls[0][0])).toEqual(
+      expect.objectContaining({ t: 'react', e: '🫶' })
+    );
+    expect(svc.getLiveKitState().reactions.map((r) => r.emoji)).toEqual(['🫶']);
+  });
+
+  it('sends a custom emoji with its shortcode and https image', async () => {
+    await svc.sendReaction({ shortcode: 'parrot', url: 'https://x.org/p.gif' });
+    expect(decode(room.localParticipant.publishData.mock.calls[0][0])).toEqual({
+      t: 'react',
+      e: ':parrot:',
+      n: expect.any(String),
+      custom: { shortcode: 'parrot', url: 'https://x.org/p.gif' }
+    });
+    expect(svc.getLiveKitState().reactions).toEqual([
+      expect.objectContaining({ emoji: ':parrot:', url: 'https://x.org/p.gif' })
+    ]);
+  });
+
+  it('shows a received custom emoji; drops one with a non-https image', () => {
+    const bob = remote('b'.repeat(64) + ':x1');
+    const send = (custom, n) =>
+      room.emit(
+        RoomEvent.DataReceived,
+        encode({ t: 'react', e: `:${custom.shortcode}:`, n, custom }),
+        bob,
+        undefined,
+        'edufeed.call'
+      );
+    send({ shortcode: 'evil', url: 'http://x.org/e.gif' }, 'n1');
+    send({ shortcode: 'parrot', url: 'https://x.org/p.gif' }, 'n2');
+    expect(svc.getLiveKitState().reactions).toEqual([
+      {
+        id: `${bob.identity}:n2`,
+        identity: bob.identity,
+        emoji: ':parrot:',
+        url: 'https://x.org/p.gif'
+      }
+    ]);
   });
 
   it('cannot signal on a listen-only token without data rights', async () => {
@@ -306,5 +431,251 @@ describe('raise hand + reactions (data messages)', () => {
     expect(svc.getLiveKitState().canSignal).toBe(false);
     await svc.setHandRaised(true);
     expect(rooms[0].localParticipant.publishData).not.toHaveBeenCalled();
+  });
+});
+
+describe('in-call chat (data messages)', () => {
+  it('sends a call chat message on the chat topic and keeps it locally', async () => {
+    await svc.sendCallChat('  hallo  ');
+    const [bytes, opts] = room.localParticipant.publishData.mock.calls.at(-1);
+    expect(opts).toMatchObject({ reliable: true, topic: 'edufeed.call.chat' });
+    expect(decode(bytes)).toMatchObject({ t: 'chat', text: 'hallo' });
+    expect(svc.getLiveKitState().callChat.at(-1)).toMatchObject({ text: 'hallo' });
+  });
+
+  it('receives chat, drops garbage and oversized text, dedupes by nonce', () => {
+    const bob = remote('b'.repeat(64) + ':x');
+    const emit = (payload) =>
+      room.emit(
+        RoomEvent.DataReceived,
+        new TextEncoder().encode(payload),
+        bob,
+        undefined,
+        'edufeed.call.chat'
+      );
+    emit(JSON.stringify({ t: 'chat', text: 'hi', n: 'n1' }));
+    emit(JSON.stringify({ t: 'chat', text: 'hi', n: 'n1' }));
+    emit('not json');
+    emit(JSON.stringify({ t: 'chat', text: 'x'.repeat(2001), n: 'n2' }));
+    emit(JSON.stringify({ t: 'chat', text: 42, n: 'n3' }));
+    expect(svc.getLiveKitState().callChat.map((c) => c.text)).toEqual(['hi']);
+  });
+
+  // Late joiners: the chat is ephemeral, so each present participant hands a
+  // newcomer its OWN recent messages (never anyone else's — the sender
+  // identity must stay LiveKit-verified), with their original send time.
+  it('sends a newcomer only my own recent messages, oldest first, with their send time', async () => {
+    const me = room.localParticipant.identity;
+    const bob = remote('b'.repeat(64) + ':x');
+    await svc.sendCallChat('erste');
+    room.emit(
+      RoomEvent.DataReceived,
+      encode({ t: 'chat', text: 'von bob', n: 'b1' }),
+      bob,
+      undefined,
+      'edufeed.call.chat'
+    );
+    await svc.sendCallChat('zweite');
+    const mine = svc.getLiveKitState().callChat.filter((c) => c.identity === me);
+    room.localParticipant.publishData.mockClear();
+
+    const carol = remote('c'.repeat(64) + ':y');
+    room.emit(RoomEvent.ParticipantConnected, carol);
+    await new Promise((r) => setTimeout(r, 0));
+
+    const replays = room.localParticipant.publishData.mock.calls.filter(
+      ([, opts]) => opts.topic === 'edufeed.call.chat'
+    );
+    expect(replays).toHaveLength(2);
+    for (const [, opts] of replays) {
+      expect(opts).toMatchObject({ reliable: true, destinationIdentities: [carol.identity] });
+    }
+    const payloads = replays.map(([bytes]) => decode(bytes));
+    expect(payloads.map((p) => p.text)).toEqual(['erste', 'zweite']);
+    expect(payloads.map((p) => p.ts)).toEqual(mine.map((c) => c.at));
+    expect(payloads.map((p) => `${me}:${p.n}`)).toEqual(mine.map((c) => c.id));
+  });
+
+  it('replays at most my last 50 messages', async () => {
+    for (let i = 0; i < 55; i++) await svc.sendCallChat(`m${i}`);
+    room.localParticipant.publishData.mockClear();
+    room.emit(RoomEvent.ParticipantConnected, remote('c'.repeat(64) + ':y'));
+    await new Promise((r) => setTimeout(r, 0));
+    const texts = room.localParticipant.publishData.mock.calls
+      .filter(([, opts]) => opts.topic === 'edufeed.call.chat')
+      .map(([bytes]) => decode(bytes).text);
+    expect(texts).toHaveLength(50);
+    expect(texts[0]).toBe('m5');
+    expect(texts.at(-1)).toBe('m54');
+  });
+
+  it('orders received messages by their send time and ignores a replayed duplicate', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(10_000_000));
+    const bob = remote('b'.repeat(64) + ':x');
+    const emit = (obj) =>
+      room.emit(RoomEvent.DataReceived, encode(obj), bob, undefined, 'edufeed.call.chat');
+    emit({ t: 'chat', text: 'live', n: 'n2' });
+    // bob's replay of history after we (re)joined: older, so it goes first
+    emit({ t: 'chat', text: 'earlier', n: 'n1', ts: 9_000_000 });
+    // the same message again (live copy + replay): shown once
+    emit({ t: 'chat', text: 'live', n: 'n2', ts: 10_000_000 });
+    const chat = svc.getLiveKitState().callChat;
+    expect(chat.map((c) => c.text)).toEqual(['earlier', 'live']);
+    expect(chat[0].at).toBe(9_000_000);
+  });
+
+  it('clamps a replayed send time older than a call pass can live (12 h) to that floor', () => {
+    vi.useFakeTimers();
+    const now = 100_000_000_000;
+    vi.setSystemTime(new Date(now));
+    const bob = remote('b'.repeat(64) + ':x');
+    room.emit(
+      RoomEvent.DataReceived,
+      encode({ t: 'chat', text: 'uralt', n: 'o1', ts: 1 }),
+      bob,
+      undefined,
+      'edufeed.call.chat'
+    );
+    expect(svc.getLiveKitState().callChat.at(-1).at).toBe(now - 12 * 3600 * 1000);
+  });
+
+  it('clamps a send time in the future to now', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(10_000_000));
+    const bob = remote('b'.repeat(64) + ':x');
+    room.emit(
+      RoomEvent.DataReceived,
+      encode({ t: 'chat', text: 'from the future', n: 'f1', ts: 99_000_000 }),
+      bob,
+      undefined,
+      'edufeed.call.chat'
+    );
+    expect(svc.getLiveKitState().callChat.at(-1).at).toBe(10_000_000);
+  });
+
+  // Final review 2 minor: `ts` is only for history REPLAYS, which arrive
+  // right after a join. A live message with a backdated `ts` must not slide
+  // up the chat (by up to 12 h) — late, it gets its receive time.
+  describe('send time is honoured only as a replay', () => {
+    const T = 50_000_000_000;
+    const bob = remote('b'.repeat(64) + ':x');
+    const emit = (obj) =>
+      room.emit(RoomEvent.DataReceived, encode(obj), bob, undefined, 'edufeed.call.chat');
+    const at = (n) => svc.getLiveKitState().callChat.find((c) => c.n === n)?.at;
+
+    it("within 5 s of the sender's arrival: the replayed send time stands", () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date(T));
+      room.emit(RoomEvent.ParticipantConnected, bob);
+      vi.setSystemTime(new Date(T + 2_000));
+      emit({ t: 'chat', text: 'history', n: 'h1', ts: T - 60_000 });
+      expect(at('h1')).toBe(T - 60_000);
+    });
+
+    it("later than 5 s after the sender's arrival: receive time, not the claimed ts", () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date(T));
+      room.emit(RoomEvent.ParticipantConnected, bob);
+      vi.setSystemTime(new Date(T + 10_000));
+      emit({ t: 'chat', text: 'backdated', n: 'l1', ts: T - 3600_000 });
+      expect(at('l1')).toBe(T + 10_000);
+    });
+
+    it('a sender already there when we joined: replay right after our join, not later', async () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date(T));
+      await svc.disconnectFromRoom();
+      await svc.connectToRoom('t', 'wss://lk');
+      room = rooms.at(-1);
+      vi.setSystemTime(new Date(T + 1_000));
+      emit({ t: 'chat', text: 'history', n: 'h2', ts: T - 60_000 });
+      expect(at('h2')).toBe(T - 60_000);
+      vi.setSystemTime(new Date(T + 6_000));
+      emit({ t: 'chat', text: 'backdated', n: 'l2', ts: T - 60_000 });
+      expect(at('l2')).toBe(T + 6_000);
+    });
+  });
+
+  it('records at receipt whether the sender joined through a call link', () => {
+    const guest = { ...remote('b'.repeat(64) + ':g'), metadata: '{"guest":true}' };
+    const member = remote('c'.repeat(64) + ':m');
+    for (const [who, n] of [
+      [guest, 'g1'],
+      [member, 'm1']
+    ]) {
+      room.emit(
+        RoomEvent.DataReceived,
+        encode({ t: 'chat', text: 'hi', n }),
+        who,
+        undefined,
+        'edufeed.call.chat'
+      );
+    }
+    const chat = svc.getLiveKitState().callChat;
+    expect(chat.find((c) => c.n === 'g1').guest).toBe(true);
+    expect(chat.find((c) => c.n === 'm1').guest).toBeUndefined();
+  });
+
+  it('clears the call chat on disconnect', async () => {
+    await svc.sendCallChat('bye');
+    await svc.disconnectFromRoom();
+    expect(svc.getLiveKitState().callChat).toEqual([]);
+  });
+});
+
+// The server can end a seat on its own: a revoked call pass makes the relay
+// remove the guest, a moderator kicks someone, the room is deleted, or the
+// connection just dies. The call store must hear about it (live 2026-10-01:
+// the stage said "Connecting…" forever) — but not about our own leave.
+describe('unexpected disconnects', () => {
+  it('records the reason and tells the listener when the server ends the seat', () => {
+    const seen = [];
+    const off = svc.onRoomDisconnected((reason) => seen.push(reason));
+    room.emit(RoomEvent.Disconnected, DisconnectReason.PARTICIPANT_REMOVED);
+    expect(seen).toEqual([DisconnectReason.PARTICIPANT_REMOVED]);
+    const state = svc.getLiveKitState();
+    expect(state.disconnectReason).toBe(DisconnectReason.PARTICIPANT_REMOVED);
+    expect(state.isConnected).toBe(false);
+    off();
+  });
+
+  it('tears the dead Room down but keeps the call chat readable; nothing more is sent', async () => {
+    await svc.sendCallChat('vorher');
+    const track = audioTrack('TR_dead');
+    room.emit(RoomEvent.TrackSubscribed, track, { source: 'microphone' }, remote(ALICE + ':x'));
+    room.localParticipant.publishData.mockClear();
+    room.emit(RoomEvent.Disconnected, DisconnectReason.PARTICIPANT_REMOVED);
+    const state = svc.getLiveKitState();
+    expect(state.room).toBeNull();
+    expect(state.isConnected).toBe(false);
+    expect(state.canSignal).toBe(false);
+    expect(track.detach).toHaveBeenCalled();
+    expect(state.callChat.map((c) => c.text)).toEqual(['vorher']);
+    await svc.sendCallChat('danach');
+    expect(room.localParticipant.publishData).not.toHaveBeenCalled();
+    expect(svc.getLiveKitState().callChat.map((c) => c.text)).toEqual(['vorher']);
+  });
+
+  it('does not call the listener for our own disconnectFromRoom', async () => {
+    const listener = vi.fn();
+    const off = svc.onRoomDisconnected(listener);
+    await svc.disconnectFromRoom();
+    expect(listener).not.toHaveBeenCalled();
+    off();
+  });
+
+  it('stops calling a listener once unsubscribed', () => {
+    const listener = vi.fn();
+    svc.onRoomDisconnected(listener)();
+    room.emit(RoomEvent.Disconnected, DisconnectReason.SIGNAL_CLOSE);
+    expect(listener).not.toHaveBeenCalled();
+  });
+
+  it('classifies removal vs. a dropped connection', () => {
+    expect(svc.isRemovalReason(DisconnectReason.PARTICIPANT_REMOVED)).toBe(true);
+    expect(svc.isRemovalReason(DisconnectReason.ROOM_DELETED)).toBe(true);
+    expect(svc.isRemovalReason(DisconnectReason.SIGNAL_CLOSE)).toBe(false);
+    expect(svc.isRemovalReason(undefined)).toBe(false);
   });
 });

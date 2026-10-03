@@ -1,15 +1,25 @@
 <script>
   import { SvelteDate } from 'svelte/reactivity';
-  import { onMount, getContext } from 'svelte';
-  import { afterNavigate, replaceState } from '$app/navigation';
+  import { onMount, getContext, untrack } from 'svelte';
+  import { afterNavigate, replaceState, goto } from '$app/navigation';
   import { formatDateParam, applyCalendarFilterState } from '$lib/helpers/urlParams.js';
   import { page } from '$app/stores';
   import {
     communityCalendarTimelineLoader,
     createDateRangeCalendarLoader,
     createRelayFilteredCalendarLoader,
-    calendarEventReferencesLoader
+    calendarEventReferencesLoader,
+    channelCalendarsLoader
   } from '$lib/loaders/calendar.js';
+  import {
+    channelCalendarPointers,
+    toChannelMeetings,
+    mergeChannelMeetings
+  } from '$lib/groups/channel-calendar.js';
+  import { parseGroupPointers } from '$lib/groups/community-pointer.js';
+  import { hexToNpub } from '$lib/helpers/nostrUtils.js';
+  import { TimelineModel } from 'applesauce-core/models';
+  import { combineLatest } from 'rxjs';
   import { createTimelineLoader } from 'applesauce-loaders/loaders';
   import { timedPool } from '$lib/loaders/base.js';
   import { calendarSearchLoader, MIN_QUERY_LENGTH } from '$lib/loaders/calendar-search.js';
@@ -596,6 +606,13 @@
    * @param {CalendarEvent} event
    */
   function handleEventClick(event) {
+    // A channel meeting is read-only here: it opens its channel, never the
+    // shareable event details.
+    const channelMeeting = /** @type {any} */ (event).channelMeeting;
+    if (channelMeeting) {
+      goto(channelMeeting.href);
+      return;
+    }
     modalStore.openModal('eventDetails', { event });
   }
 
@@ -678,9 +695,71 @@
   // Outside a community there is no context and nothing is filtered.
   /** @type {(() => string[] | null) | undefined} */
   const getAllowedAuthors = getContext('allowedAuthors');
+
+  // Channel calendars (communikey-groups.md): the community calendar also
+  // shows the meetings of the community's channels — read from each
+  // channel's group relay, after NIP-42 auth when logged in. They are added
+  // here and nowhere else (every generic calendar path drops channel
+  // meetings), read-only: each carries its channel's name and link. The
+  // section's author gate does not apply — the group relay already decides
+  // who may write into a channel, and who may read it.
+  /** @type {(() => any) | undefined} */
+  const getCommunikeyEvent = getContext('communikeyEvent');
+  /** @type {(() => {rootChannel: any, channels: any[]}) | undefined} */
+  const getCommunityChannels = getContext('communityChannels');
+  const channelPointers = $derived.by(() => {
+    if (!communityMode || !communityPubkey) return [];
+    const discovered = getCommunityChannels?.();
+    return channelCalendarPointers({
+      legacy: parseGroupPointers(getCommunikeyEvent?.()),
+      rootChannel: discovered?.rootChannel ?? null,
+      channels: discovered?.channels ?? [],
+      generalName: m.groups_general_channel()
+    });
+  });
+  // Value-stable: the channel list is rebuilt on unrelated re-renders.
+  const channelPointersKey = $derived(
+    channelPointers.map((p) => `${p.id}@${p.relay}@${p.name ?? ''}`).join('|')
+  );
+  /** @type {import('$lib/types/calendar.js').CalendarEvent[]} */
+  let channelMeetings = $state.raw([]);
+  $effect(() => {
+    const key = channelPointersKey;
+    const signer = _activeUser?.signer;
+    if (!key) {
+      channelMeetings = [];
+      return;
+    }
+    const pointers = untrack(() => channelPointers);
+    const communityNpub =
+      hexToNpub(untrack(() => communityPubkey)) ?? untrack(() => communityPubkey);
+    const loaderSub = channelCalendarsLoader(pointers, { signer })().subscribe({
+      error: (/** @type {any} */ err) => {
+        console.warn('📅 CalendarView: channel calendars loader error:', err);
+      }
+    });
+    const ids = [...new Set(pointers.map((p) => p.id))];
+    const modelSub = combineLatest([
+      eventStore.model(TimelineModel, { kinds: [31923], '#h': ids }),
+      eventStore.model(TimelineModel, { kinds: [9005], '#h': ids })
+    ]).subscribe(([raw, deletions]) => {
+      channelMeetings = toChannelMeetings(raw || [], pointers, {
+        communityNpub,
+        deletions: deletions || []
+      });
+    });
+    return () => {
+      loaderSub.unsubscribe();
+      modelSub.unsubscribe();
+    };
+  });
+
   let events = $derived(
     communityMode
-      ? filterByAllowedAuthors(relayFilteredEvents, getAllowedAuthors?.())
+      ? mergeChannelMeetings(
+          filterByAllowedAuthors(relayFilteredEvents, getAllowedAuthors?.()),
+          channelMeetings
+        )
       : relayFilteredEvents
   );
 

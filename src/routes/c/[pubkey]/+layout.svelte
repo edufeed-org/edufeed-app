@@ -34,6 +34,10 @@
   import { useActiveUser } from '$lib/stores/accounts.svelte';
   import { isCommunityOwner } from '$lib/helpers/community-signer.js';
   import { resolveZoneMembership } from '$lib/components/community/layout/community-nav.js';
+  import * as m from '$lib/paraglide/messages';
+  import { runtimeConfig } from '$lib/stores/config.svelte.js';
+  import { getSelectedGroupChannel } from '$lib/groups/group-channel-selection.svelte.js';
+  import { communityPageTitle } from '$lib/helpers/page-title.js';
 
   /** @type {{ data: any, children: import('svelte').Snippet }} */
   let { data, children } = $props();
@@ -211,14 +215,37 @@
   });
   // Nav Kanäle-zone rows, DISCOVERED from the relay subtree (the SAME source
   // PrivateChannelsView uses; the two builders stay separate — known
-  // duplication). No General row here, matching the prior nav behavior.
+  // duplication). The root membership group is pinned first as "General",
+  // exactly as in the pane's cards — the sidebar used to leave it out, so the
+  // one channel every member is in appeared in one list but not the other
+  // (QA 2026-10-02 C-new-7).
   const getCommunityChannelsForNav = useCommunityChannels(() =>
     parseMembershipPointer(communikeyEvent)
   );
   const channelRows = $derived(
     buildChannelRows({
       concordChannels: getConcordForNav().channels,
-      subtreeChannels: getCommunityChannelsForNav().channels
+      subtreeChannels: getCommunityChannelsForNav().channels,
+      rootChannel: getCommunityChannelsForNav().rootChannel,
+      rootLabel: m.groups_general_channel()
+    })
+  );
+
+  // Document title (QA 2026-10-02 K-new-5: channel pages had none, so the
+  // route announcer read "untitled page"). The open NIP-29 channel's name
+  // comes from the same rows the sidebar lists (General included).
+  const openChannelName = $derived.by(() => {
+    const key = getSelectedGroupChannel(communikeyEvent?.pubkey ?? data.pubkey);
+    if (!key) return '';
+    return channelRows.find((row) => row.key === `group:${key}`)?.name ?? '';
+  });
+  const documentTitle = $derived(
+    communityPageTitle({
+      communityName: displayName,
+      appName: runtimeConfig.appName,
+      view: selectedContentType,
+      channelName: openChannelName,
+      channelsLabel: m.concord_tab_label()
     })
   );
 
@@ -269,6 +296,10 @@
   // too, and that is deliberate: an owner save then absorbs the admins'
   // section configuration into the 10222 instead of silently reverting it.
   setContext('communikeyEvent', () => effectiveCommunityEvent);
+  // The discovered channel list (root + subtree), shared so the community
+  // calendar can read the channels' meetings without a second 39000
+  // subscription (see CalendarView, "Channel calendars").
+  setContext('communityChannels', () => getCommunityChannelsForNav());
   setContext('sectionOverride', () => ({ source: sectionSource, author: sectionAuthor }));
   // The ONE availability-corrected content view (the $effect above). The
   // child page must render from THIS, not re-derive from $page.data — a
@@ -338,6 +369,10 @@
     }
   }
 </script>
+
+<svelte:head>
+  <title>{documentTitle}</title>
+</svelte:head>
 
 <div class="px-4 pt-3 empty:hidden">
   <LegacyContentTypesBanner communityEvent={effectiveCommunityEvent} />

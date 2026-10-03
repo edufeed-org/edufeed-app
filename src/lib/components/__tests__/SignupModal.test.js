@@ -319,6 +319,17 @@ describe('SignupModal — Step 1 (Account)', () => {
     // step 1 — covered structurally by the addAccount call count above.
     expect(mockManager.addAccount).toHaveBeenCalledTimes(1);
   });
+
+  it('prefills the name input from the initialName prop (call-link guest flow)', async () => {
+    const { container } = render(SignupModal, {
+      props: { modalId: 'signup-test-initial-name', initialName: 'Ada' }
+    });
+
+    const nameInput = /** @type {HTMLInputElement} */ (
+      container.querySelector('#signup-name-input')
+    );
+    expect(nameInput.value).toBe('Ada');
+  });
 });
 
 describe('SignupModal — Step 2 (Profile)', () => {
@@ -526,6 +537,18 @@ describe('SignupModal — Step 4 (Communities)', () => {
 
     // Reset for other tests.
     /** @type {any} */ (config).runtimeConfig.signup.suggestedCommunities = [];
+  });
+
+  it('clears the call-guest flag for this pubkey after finishing (a full user stops seeing "Vergessen")', async () => {
+    const pubkey = 'a'.repeat(64); // matches the stubbed generateSignupKeypair's publicKey
+    localStorage.setItem(`call-guest:${pubkey}`, '1');
+    const utils = render(SignupModal, { props: { modalId: 'signup-modal' } });
+    await advanceToCommunities(utils);
+    await fireEvent.click(utils.getByText('auth_signup_modal_step3_skip'));
+
+    await new Promise((r) => setTimeout(r, 0));
+    expect(localStorage.getItem(`call-guest:${pubkey}`)).toBeNull();
+    localStorage.removeItem(`call-guest:${pubkey}`);
   });
 });
 

@@ -3,7 +3,7 @@
  * Manages the LiveKit room connection and exposes reactive participant state.
  */
 import { SvelteSet } from 'svelte/reactivity';
-import { Room, RoomEvent, Track } from 'livekit-client';
+import { DisconnectReason, Room, RoomEvent, Track } from 'livekit-client';
 import {
   SCREEN_SHARE_QUALITIES,
   cameraCaptureOptions,
@@ -22,6 +22,9 @@ import {
   playScreenShareSound,
   playUnmuteSound
 } from './call-sounds.js';
+import { withHand, handQueue } from '$lib/groups/call-tile-order.js';
+import { reactionPayload, parseReactionPayload } from '$lib/groups/call-reactions.js';
+import { isGuestParticipant } from '$lib/groups/livekit.js';
 
 // A burst of joins (a class arriving) gets one cue, not twenty.
 const JOIN_CUE_DEBOUNCE_MS = 750;
@@ -68,15 +71,33 @@ let activeVideoDeviceId = $state('');
 // --- Connection + participant state beyond the participant lists ---
 /** @type {'connected' | 'reconnecting' | 'disconnected'} */
 let connectionState = $state('disconnected');
+// Why the last Room ended (livekit-client's DisconnectReason), null while
+// connected or after our own disconnectFromRoom.
+/** @type {import('livekit-client').DisconnectReason | null} */
+let disconnectReason = $state(null);
+// Our own disconnectFromRoom is running: its Disconnected event is expected
+// and must not reach the listener below.
+let disconnecting = false;
+// One external listener (the call store) for disconnects the server or the
+// network caused: a revoked call pass, a kick, a deleted room, a dead link.
+/** @type {((reason: import('livekit-client').DisconnectReason | undefined) => void) | null} */
+let disconnectListener = null;
 /** Remote seats whose microphone is off. @type {Set<string>} */
 let mutedIdentities = $state.raw(new Set());
-/** Seats with a raised hand (local included). @type {Set<string>} */
+/** Seats with a raised hand (local included), first raised first. @type {Set<string>} */
 let raisedHands = $state.raw(new Set());
-/** Floating reactions, newest last. @type {Array<{id: string, identity: string, emoji: string}>} */
+/**
+ * Floating reactions, newest last; `url` = a NIP-30 custom emoji image.
+ * @type {Array<{id: string, identity: string, emoji: string, url?: string}>}
+ */
 let reactions = $state.raw([]);
 // Data messages need canPublishData; a listen-only token may lack it.
 let canSignal = $state(true);
 let handRaised = false;
+/** When my hand went up (ms), re-sent to late joiners. */
+let myHandAt = 0;
+/** identity -> raise time (ms); `raisedHands` is this, in queue order. Internal. */
+let handTimes = new Map();
 
 // Remote audio is played HERE, one hidden element per subscribed track —
 // not by the tiles. A call can be drawn several times at once (the /c
@@ -90,8 +111,60 @@ const audioSinks = new Map();
 // NIP-29 has no client presence plane (kind 39004 is relay-authored), and
 // the SFU already connects exactly the people in the call.
 const SIGNAL_TOPIC = 'edufeed.call';
+// The quick picks. Any emoji (and NIP-30 custom ones) can be sent through the
+// full picker — see groups/call-reactions.js for the wire format.
 export const CALL_REACTIONS = ['👍', '❤️', '😂', '🎉', '😮', '👏', '🙏', '🤔'];
 const REACTION_TTL_MS = 4000;
+
+// In-call chat: everyone in the call, guests included (who never see the
+// channel chat). Ephemeral by design — nothing is stored anywhere.
+const CHAT_TOPIC = 'edufeed.call.chat';
+const CHAT_MAX_CHARS = 2000;
+const CHAT_KEEP = 200;
+// Late joiners get each present participant's own recent messages (G).
+const CHAT_REPLAY_MAX = 50;
+// No call outlives a call pass (12 h): a replayed send time older than that
+// is bogus and is clamped, like one from the future.
+const CHAT_MAX_AGE_MS = 12 * 3600 * 1000;
+// A sender's `ts` is honoured only as a history REPLAY, and replays arrive
+// right after a join: within this window of the sender's arrival (or of our
+// own join, for those already there). Later, `ts` is ignored and the
+// message gets its receive time — a live message cannot backdate itself.
+const CHAT_REPLAY_WINDOW_MS = 5000;
+/** When this client joined the current Room (ms). */
+let ownJoinAt = 0;
+/** identity -> when that participant arrived after us (ms). Internal. */
+// eslint-disable-next-line svelte/prefer-svelte-reactivity -- internal bookkeeping, never rendered
+let arrivedAt = new Map();
+// `guest`: the sender joined through a call link — recorded at receipt, so
+// it is still known after they left (the chat export marks them).
+/** @type {Array<{id: string, identity: string, n: string, text: string, at: number, guest?: boolean}>} */
+let callChat = $state.raw([]);
+
+/**
+ * Listen for disconnects NOT initiated by disconnectFromRoom(). One listener
+ * at a time (the call store); returns the matching unsubscribe.
+ * @param {(reason: import('livekit-client').DisconnectReason | undefined) => void} cb
+ * @returns {() => void}
+ */
+export function onRoomDisconnected(cb) {
+  disconnectListener = cb;
+  return () => {
+    if (disconnectListener === cb) disconnectListener = null;
+  };
+}
+
+/**
+ * Whether a disconnect reason means "taken out of the call" (removed by the
+ * server, e.g. a revoked call pass, or the room deleted) rather than a lost
+ * connection.
+ * @param {unknown} reason
+ */
+export function isRemovalReason(reason) {
+  return (
+    reason === DisconnectReason.PARTICIPANT_REMOVED || reason === DisconnectReason.ROOM_DELETED
+  );
+}
 
 /**
  * Per-person key for volumes: NIP-29 identities are `<64-hex pubkey>:<suffix>`,
@@ -207,44 +280,181 @@ async function publishSignal(payload, destinationIdentities) {
   }
 }
 
-/** @param {string} identity @param {string} emoji @param {string} nonce */
-function addReaction(identity, emoji, nonce) {
+/**
+ * @param {string} identity @param {string} emoji @param {string} nonce
+ * @param {string} [url] custom emoji image
+ */
+function addReaction(identity, emoji, nonce, url) {
   const id = `${identity}:${nonce}`;
   if (reactions.some((r) => r.id === id)) return;
-  reactions = [...reactions, { id, identity, emoji }];
+  reactions = [...reactions, url ? { id, identity, emoji, url } : { id, identity, emoji }];
   setTimeout(() => {
     reactions = reactions.filter((r) => r.id !== id);
   }, REACTION_TTL_MS);
+}
+
+/**
+ * A hand went up or down. `raisedHands` keeps the queue order: first raised
+ * first (the stage moves those seats to the front in that order).
+ * @param {string} identity @param {boolean} raised @param {number} at
+ */
+function applyHand(identity, raised, at) {
+  handTimes = withHand(handTimes, identity, raised, at);
+  raisedHands = new Set(handQueue(handTimes));
+}
+
+function clearHands() {
+  handRaised = false;
+  myHandAt = 0;
+  handTimes = new Map();
+  raisedHands = new Set();
+}
+
+/**
+ * The sender's own time for a message, honoured only as a REPLAY to a late
+ * joiner — within CHAT_REPLAY_WINDOW_MS of the sender's arrival (or of our
+ * own join, for those already there) — and clamped to [now - 12 h, now].
+ * Otherwise undefined: a live message gets its receive time and can never
+ * backdate itself.
+ * @param {string} identity @param {unknown} ts
+ * @returns {number | undefined}
+ */
+function replayedTime(identity, ts) {
+  if (typeof ts !== 'number' || !Number.isFinite(ts)) return undefined;
+  const now = Date.now();
+  const since = arrivedAt.get(identity) ?? ownJoinAt;
+  if (now - since > CHAT_REPLAY_WINDOW_MS) return undefined;
+  return Math.min(Math.max(ts, now - CHAT_MAX_AGE_MS), now);
 }
 
 /** @param {boolean} raised */
 export async function setHandRaised(raised) {
   if (!room || !canSignal) return;
   handRaised = raised;
-  // eslint-disable-next-line svelte/prefer-svelte-reactivity -- built fresh, then assigned whole to a $state.raw
-  const next = new Set(raisedHands);
-  if (raised) next.add(room.localParticipant.identity);
-  else next.delete(room.localParticipant.identity);
-  raisedHands = next;
-  await publishSignal({ t: 'hand', v: raised });
+  myHandAt = raised ? Date.now() : 0;
+  applyHand(room.localParticipant.identity, raised, myHandAt);
+  await publishSignal(raised ? { t: 'hand', v: true, at: myHandAt } : { t: 'hand', v: false });
 }
 
-/** @param {string} emoji one of CALL_REACTIONS */
+/**
+ * @param {string | {shortcode: string, url: string}} emoji a unicode emoji,
+ *   or a NIP-30 custom one (https image only)
+ */
 export async function sendReaction(emoji) {
-  if (!room || !canSignal || !CALL_REACTIONS.includes(emoji)) return;
+  if (!room || !canSignal) return;
   const nonce = Math.random().toString(36).slice(2, 10);
-  addReaction(room.localParticipant.identity, emoji, nonce);
-  await publishSignal({ t: 'react', e: emoji, n: nonce });
+  const payload = reactionPayload(emoji, nonce);
+  if (!payload) return;
+  addReaction(room.localParticipant.identity, payload.e, nonce, payload.custom?.url);
+  await publishSignal(payload);
+}
+
+/**
+ * Keep a chat message, deduped by (identity, nonce) and ordered by send time.
+ * `ts` is the sender's clock (a replay to a late joiner); without it the
+ * message counts as sent now; a `ts` is clamped to [now - 12 h, now].
+ * @param {string} identity @param {string} text @param {string} nonce @param {number} [ts]
+ * @param {boolean} [guest]
+ */
+function addChat(identity, text, nonce, ts, guest = false) {
+  const id = `${identity}:${nonce}`;
+  if (callChat.some((c) => c.id === id)) return;
+  const now = Date.now();
+  const at =
+    typeof ts === 'number' && Number.isFinite(ts)
+      ? Math.min(Math.max(ts, now - CHAT_MAX_AGE_MS), now)
+      : now;
+  callChat = [
+    ...callChat,
+    guest ? { id, identity, n: nonce, text, at, guest } : { id, identity, n: nonce, text, at }
+  ]
+    .sort((a, b) => a.at - b.at)
+    .slice(-CHAT_KEEP);
+}
+
+/**
+ * Hand a newcomer MY recent messages (never anyone else's: a receiver takes
+ * the sender identity from LiveKit, so only the author can vouch for a
+ * message). Oldest first, with the original send time.
+ * @param {string} identity the newcomer
+ */
+async function replayOwnChat(identity) {
+  if (!room || !canSignal || !identity) return;
+  const local = room.localParticipant;
+  const mine = callChat.filter((c) => c.identity === local.identity).slice(-CHAT_REPLAY_MAX);
+  for (const c of mine) {
+    try {
+      await local.publishData(
+        new TextEncoder().encode(JSON.stringify({ t: 'chat', text: c.text, n: c.n, ts: c.at })),
+        { reliable: true, topic: CHAT_TOPIC, destinationIdentities: [identity] }
+      );
+    } catch (err) {
+      console.warn('call chat history not sent:', err);
+      return;
+    }
+  }
+}
+
+/** @param {string} text */
+export async function sendCallChat(text) {
+  const body = String(text ?? '')
+    .trim()
+    .slice(0, CHAT_MAX_CHARS);
+  if (!room || !isConnected || !canSignal || !body) return;
+  const nonce = Math.random().toString(36).slice(2, 12);
+  addChat(
+    room.localParticipant.identity,
+    body,
+    nonce,
+    undefined,
+    isGuestParticipant(room.localParticipant)
+  );
+  try {
+    await room.localParticipant.publishData(
+      new TextEncoder().encode(JSON.stringify({ t: 'chat', text: body, n: nonce })),
+      { reliable: true, topic: CHAT_TOPIC }
+    );
+  } catch (err) {
+    console.warn('call chat not sent:', err);
+  }
 }
 
 /**
  * @param {Uint8Array} payload
- * @param {{identity: string} | undefined} participant
+ * @param {{identity: string, metadata?: string} | undefined} participant
  * @param {unknown} _kind
  * @param {string | undefined} topic
  */
 function handleSignal(payload, participant, _kind, topic) {
-  if (topic !== SIGNAL_TOPIC || !participant) return;
+  if (!participant) return;
+  if (topic === CHAT_TOPIC) {
+    /** @type {any} */
+    let chat;
+    try {
+      chat = JSON.parse(new TextDecoder().decode(payload));
+    } catch {
+      return;
+    }
+    if (
+      chat?.t === 'chat' &&
+      typeof chat.text === 'string' &&
+      chat.text.trim() &&
+      chat.text.length <= CHAT_MAX_CHARS &&
+      typeof chat.n === 'string' &&
+      chat.n.length > 0 &&
+      chat.n.length <= 32
+    ) {
+      addChat(
+        participant.identity,
+        chat.text.trim(),
+        chat.n,
+        replayedTime(participant.identity, chat.ts),
+        isGuestParticipant(participant)
+      );
+    }
+    return;
+  }
+  if (topic !== SIGNAL_TOPIC) return;
   /** @type {any} */
   let msg;
   try {
@@ -253,19 +463,15 @@ function handleSignal(payload, participant, _kind, topic) {
     return;
   }
   if (msg?.t === 'hand') {
-    // eslint-disable-next-line svelte/prefer-svelte-reactivity -- built fresh, then assigned whole to a $state.raw
-    const next = new Set(raisedHands);
-    if (msg.v === true) next.add(participant.identity);
-    else next.delete(participant.identity);
-    raisedHands = next;
-  } else if (
-    msg?.t === 'react' &&
-    CALL_REACTIONS.includes(msg.e) &&
-    typeof msg.n === 'string' &&
-    msg.n.length > 0 &&
-    msg.n.length <= 32
-  ) {
-    addReaction(participant.identity, msg.e, msg.n);
+    const raised = msg.v === true;
+    applyHand(
+      participant.identity,
+      raised,
+      raised ? (replayedTime(participant.identity, msg.at) ?? Date.now()) : 0
+    );
+  } else if (msg?.t === 'react') {
+    const reaction = parseReactionPayload(msg);
+    if (reaction) addReaction(participant.identity, reaction.emoji, reaction.nonce, reaction.url);
   }
 }
 
@@ -397,6 +603,9 @@ export async function connectToRoom(token, url, opts = {}) {
   }
 
   isConnecting = true;
+  disconnectReason = null;
+  // eslint-disable-next-line svelte/prefer-svelte-reactivity -- internal bookkeeping, never rendered
+  arrivedAt = new Map();
   try {
     const newRoom = new Room({
       adaptiveStream: true,
@@ -411,24 +620,24 @@ export async function connectToRoom(token, url, opts = {}) {
 
     newRoom.on(RoomEvent.ParticipantConnected, (/** @type {any} */ participant) => {
       const now = Date.now();
+      if (participant?.identity) arrivedAt.set(participant.identity, now);
       if (now - lastRemoteJoinCue > JOIN_CUE_DEBOUNCE_MS) {
         lastRemoteJoinCue = now;
         playJoinSound();
       }
       // A late joiner learns about a hand that is already up.
       if (handRaised && participant?.identity) {
-        publishSignal({ t: 'hand', v: true }, [participant.identity]);
+        publishSignal({ t: 'hand', v: true, at: myHandAt }, [participant.identity]);
       }
+      // ... and the chat so far, as far as it is mine to tell.
+      if (participant?.identity) replayOwnChat(participant.identity);
       updateParticipants();
       recomputeMuted();
     });
     newRoom.on(RoomEvent.ParticipantDisconnected, (/** @type {any} */ participant) => {
       playLeaveSound();
       if (participant?.identity && raisedHands.has(participant.identity)) {
-        // eslint-disable-next-line svelte/prefer-svelte-reactivity -- built fresh, then assigned whole to a $state.raw
-        const next = new Set(raisedHands);
-        next.delete(participant.identity);
-        raisedHands = next;
+        applyHand(participant.identity, false, 0);
       }
       updateParticipants();
       recomputeMuted();
@@ -470,11 +679,19 @@ export async function connectToRoom(token, url, opts = {}) {
         speakingParticipantIds = new SvelteSet(speakers.map((s) => s.identity));
       }
     );
-    newRoom.on(RoomEvent.Disconnected, () => {
-      isConnected = false;
-      connectionState = 'disconnected';
-      updateParticipants();
-    });
+    newRoom.on(
+      RoomEvent.Disconnected,
+      (/** @type {import('livekit-client').DisconnectReason | undefined} */ reason) => {
+        // Only the live Room, and only when we did not ask for it.
+        const unexpected = !disconnecting && room === newRoom;
+        isConnected = false;
+        connectionState = 'disconnected';
+        disconnectReason = reason ?? null;
+        if (unexpected) dropDeadRoom();
+        updateParticipants();
+        if (unexpected) disconnectListener?.(reason);
+      }
+    );
     newRoom.on(
       RoomEvent.ParticipantPermissionsChanged,
       (
@@ -488,6 +705,7 @@ export async function connectToRoom(token, url, opts = {}) {
     );
 
     await newRoom.connect(url, token);
+    ownJoinAt = Date.now();
 
     // Track room state immediately after connection — before media setup
     // so a camera/mic failure doesn't leave a zombie connection
@@ -546,6 +764,28 @@ export async function connectToRoom(token, url, opts = {}) {
 }
 
 /**
+ * The server or the network ended the Room: tear it down like
+ * disconnectFromRoom does, so nothing is sent into it any more, but keep
+ * the call chat readable on the end screen (cleared on leave / next join).
+ */
+function dropDeadRoom() {
+  if (typeof navigator !== 'undefined' && navigator.mediaDevices) {
+    navigator.mediaDevices.removeEventListener('devicechange', handleDeviceChange);
+  }
+  detachAllRemoteAudio();
+  room = null;
+  isConnected = false;
+  connectionState = 'disconnected';
+  isScreenSharing = false;
+  canPublish = false;
+  canSignal = false;
+  clearHands();
+  mutedIdentities = new Set();
+  reactions = [];
+  speakingParticipantIds = new SvelteSet();
+}
+
+/**
  * Disconnect from the current room.
  */
 export async function disconnectFromRoom() {
@@ -555,10 +795,16 @@ export async function disconnectFromRoom() {
   }
 
   detachAllRemoteAudio();
-  if (room) {
-    await room.disconnect();
-    room = null;
+  disconnecting = true;
+  try {
+    if (room) {
+      await room.disconnect();
+      room = null;
+    }
+  } finally {
+    disconnecting = false;
   }
+  disconnectReason = null;
   isConnected = false;
   connectionState = 'disconnected';
   isMuted = false;
@@ -566,12 +812,11 @@ export async function disconnectFromRoom() {
   isScreenSharing = false;
   canPublish = true;
   canSignal = true;
-  handRaised = false;
+  clearHands();
   // eslint-disable-next-line svelte/prefer-svelte-reactivity -- built fresh, then assigned whole to a $state.raw
   mutedIdentities = new Set();
-  // eslint-disable-next-line svelte/prefer-svelte-reactivity -- built fresh, then assigned whole to a $state.raw
-  raisedHands = new Set();
   reactions = [];
+  callChat = [];
   speakingParticipantIds = new SvelteSet();
   audioInputDevices = [];
   activeAudioDeviceId = '';
@@ -656,7 +901,7 @@ export async function toggleScreenShare() {
 
 /**
  * Get reactive connection state.
- * @returns {{ isConnected: boolean, isConnecting: boolean, isMuted: boolean, isCameraOff: boolean, isScreenSharing: boolean, canPublish: boolean, canSignal: boolean, connectionState: 'connected' | 'reconnecting' | 'disconnected', mutedIdentities: Set<string>, raisedHands: Set<string>, reactions: Array<{id: string, identity: string, emoji: string}>, localParticipant: import('livekit-client').LocalParticipant | null, remoteParticipants: import('livekit-client').RemoteParticipant[], room: Room | null, speakingParticipantIds: Set<string>, audioInputDevices: MediaDeviceInfo[], activeAudioDeviceId: string, audioOutputDevices: MediaDeviceInfo[], activeAudioOutputDeviceId: string, videoInputDevices: MediaDeviceInfo[], activeVideoDeviceId: string }}
+ * @returns {{ isConnected: boolean, isConnecting: boolean, isMuted: boolean, isCameraOff: boolean, isScreenSharing: boolean, canPublish: boolean, canSignal: boolean, connectionState: 'connected' | 'reconnecting' | 'disconnected', disconnectReason: import('livekit-client').DisconnectReason | null, mutedIdentities: Set<string>, raisedHands: Set<string>, reactions: Array<{id: string, identity: string, emoji: string, url?: string}>, callChat: Array<{id: string, identity: string, n: string, text: string, at: number, guest?: boolean}>, localParticipant: import('livekit-client').LocalParticipant | null, remoteParticipants: import('livekit-client').RemoteParticipant[], room: Room | null, speakingParticipantIds: Set<string>, audioInputDevices: MediaDeviceInfo[], activeAudioDeviceId: string, audioOutputDevices: MediaDeviceInfo[], activeAudioOutputDeviceId: string, videoInputDevices: MediaDeviceInfo[], activeVideoDeviceId: string }}
  */
 export function getLiveKitState() {
   return {
@@ -684,6 +929,9 @@ export function getLiveKitState() {
     get connectionState() {
       return connectionState;
     },
+    get disconnectReason() {
+      return disconnectReason;
+    },
     get mutedIdentities() {
       return mutedIdentities;
     },
@@ -692,6 +940,9 @@ export function getLiveKitState() {
     },
     get reactions() {
       return reactions;
+    },
+    get callChat() {
+      return callChat;
     },
     get localParticipant() {
       return localParticipant;

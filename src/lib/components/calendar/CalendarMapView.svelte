@@ -46,8 +46,15 @@
   let map = $state();
   let mapLoaded = $state(false);
 
-  // Filter events based on current view mode and date using shared helper
-  let filteredEvents = $derived.by(() => filterEventsByViewMode(events, viewMode, currentDate));
+  // Filter events based on current view mode and date using shared helper.
+  // Channel meetings (community calendar, groups/channel-calendar.js) never
+  // reach the map: their `location` is an untrusted channel URL that must not
+  // go to a geocoder, and they have no /calendar/event page to link to.
+  let filteredEvents = $derived.by(() =>
+    filterEventsByViewMode(events, viewMode, currentDate).filter(
+      (/** @type {any} */ event) => !event.channelMeeting
+    )
+  );
 
   // Derive renderable pins from cache + current filter. Only events with
   // resolved coordinates are rendered; un-geocoded or null-cached events are

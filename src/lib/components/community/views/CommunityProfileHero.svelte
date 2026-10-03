@@ -98,13 +98,15 @@
     }
   }
 
-  async function handleJoin() {
+  /** @param {string} [successMessage] toast text — the member's "add to my
+   * communities" says that, not "Community folgen ✓" (same follow-set write) */
+  async function handleJoin(successMessage = m.communikey_header_join_button() + ' ✓') {
     if (isJoining) return;
     isJoining = true;
     try {
       const result = await joinCommunity(communityId);
       if (result.success) {
-        showToast(m.communikey_header_join_button() + ' ✓', 'success');
+        showToast(successMessage, 'success');
       } else {
         showToast(result.error || 'Failed to follow', 'error');
       }
@@ -182,6 +184,19 @@
   let rootPointer = $derived(getRootRoster().pointer);
   let isRosterLoading = $derived(getRootRoster().isLoading);
   let isRosterMember = $derived(!!activeUser && getRootRoster().isMember(activeUser.pubkey));
+  // QA C8: two independent relations, each said once in the header.
+  // - Member: on the moderated community's NIP-29 root roster — channel
+  //   access, joined via 9021 / invite code.
+  // - Following: the community is in the account's kind-30000 `communities`
+  //   set — the user's own community list (rail). Social, grants nothing.
+  // A member who follows shows "Mitglied" only; a member who does not gets a
+  // secondary "add to my communities" instead of the newcomer's primary
+  // "Community folgen". Semantics and writes are unchanged — the button is
+  // the same follow-set join, and only a click publishes it.
+  let isMemberHere = $derived(isModerated && !!activeUser && isRosterMember);
+  // A moderated non-member also sees the join lane; joining is the primary
+  // action there, following the secondary one.
+  let showsJoinLane = $derived(isModerated && !!activeUser && !isRosterMember);
   // The root group's own kind:39000 "closed" marker (group-management.js's
   // metadataTags) — distinct from the read-access `private` tag
   // channel-access.js reads. Closed means bare 9021s don't auto-join —
@@ -225,8 +240,11 @@
      banner variant keeps its own geometry (the row is pulled up over the
      banner) and makes no alignment claim. -->
 <div class="px-4 pb-4">
+  <!-- flex-wrap + the name's min width: on a phone the header actions
+       (follow, join lane) drop to their own line instead of squeezing the
+       community name to nothing (C8 visual check, 390 px). -->
   <div
-    class="flex gap-3 {bannerUrl
+    class="flex flex-wrap gap-3 {bannerUrl
       ? '-mt-6 items-start'
       : 'min-h-(--community-header-h) items-center'}"
   >
@@ -263,7 +281,7 @@
     </HoverCard>
 
     <!-- Name + Meta -->
-    <div class="min-w-0 flex-1" class:mt-7={bannerUrl}>
+    <div class="min-w-40 flex-1" class:mt-7={bannerUrl}>
       <div class="flex items-center gap-2">
         <!-- The name keeps its heading role; the link lives INSIDE the h2 so
              the community still has a proper page heading. min-w-0 on both
@@ -286,7 +304,7 @@
             {m.community_type_closed_title()}
           </div>
         {/if}
-        {#if getJoined()}
+        {#if getJoined() && !isMemberHere}
           <div class="badge gap-1 badge-sm badge-success">
             <svg class="h-3 w-3" fill="currentColor" viewBox="0 0 20 20">
               <path
@@ -298,8 +316,15 @@
             {m.communikey_header_joined_badge()}
           </div>
         {/if}
-        {#if isModerated && activeUser && isRosterMember}
-          <div class="badge gap-1 badge-sm badge-success">
+        {#if isMemberHere}
+          <div class="badge gap-1 badge-sm badge-success" data-testid="member-badge">
+            <svg class="h-3 w-3" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true">
+              <path
+                fill-rule="evenodd"
+                d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
+                clip-rule="evenodd"
+              />
+            </svg>
             {m.community_join_member()}
           </div>
         {/if}
@@ -311,15 +336,38 @@
       <div class:mt-7={bannerUrl}>
         <span class="text-sm text-base-content/60">{m.community_hero_closed_hint()}</span>
       </div>
+    {:else if !getJoined() && isMemberHere}
+      <!-- A member who does not follow (C8): add it to their own list —
+           secondary, and worded as what it does, not as joining. -->
+      <div class:mt-7={bannerUrl}>
+        <button
+          onclick={() => handleJoin(m.community_member_follow_done())}
+          disabled={isJoining}
+          class="btn btn-outline btn-sm"
+          title={m.community_member_follow_hint()}
+          data-testid="member-follow-button"
+        >
+          {#if isJoining}
+            <span class="loading loading-xs loading-spinner"></span>
+          {:else}
+            {m.community_member_follow_button()}
+          {/if}
+        </button>
+      </div>
     {:else if !getJoined()}
-      <!-- Join Button (non-members) -->
+      <!-- Follow button (non-followers). Secondary beside a moderated
+           community's join lane, which is the primary action there. -->
       <div class:mt-7={bannerUrl}>
         {#if getCommunityWideFormRef?.()}
           <button onclick={handleRequestJoin} class="btn btn-sm btn-primary">
             {m.community_request_join()}
           </button>
         {:else}
-          <button onclick={handleJoin} disabled={isJoining} class="btn btn-sm btn-primary">
+          <button
+            onclick={() => handleJoin()}
+            disabled={isJoining}
+            class="btn btn-sm {showsJoinLane ? 'btn-outline' : 'btn-primary'}"
+          >
             {#if isJoining}
               <span class="loading loading-xs loading-spinner"></span>
             {:else}

@@ -52,6 +52,37 @@ export function formatTimestamp(seconds, options) {
 }
 
 /**
+ * Time of day of a Nostr timestamp (seconds) as a 24-hour `HH:MM` in the
+ * active European locale — never the runtime's 12-hour "09:14 AM".
+ *
+ * @param {number} seconds
+ * @returns {string}
+ */
+export function formatTimeOfDay(seconds) {
+  return new Date(seconds * 1000).toLocaleTimeString(activeDateLocale(), {
+    hour: '2-digit',
+    minute: '2-digit',
+    hourCycle: 'h23'
+  });
+}
+
+/**
+ * The short name of the viewer's time zone at a Nostr timestamp (seconds),
+ * in the active European locale — `MESZ`/`MEZ` in German, `CEST`/`BST` in
+ * English, a `GMT+13`-style offset where the locale has no abbreviation.
+ * Daylight saving is resolved for that moment, not for now.
+ *
+ * @param {number} seconds
+ * @returns {string} '' when the runtime cannot name the zone
+ */
+export function formatTimeZoneName(seconds) {
+  const parts = new Intl.DateTimeFormat(activeDateLocale(), {
+    timeZoneName: 'short'
+  }).formatToParts(new Date(seconds * 1000));
+  return parts.find((part) => part.type === 'timeZoneName')?.value ?? '';
+}
+
+/**
  * Convert an ISO date (`YYYY-MM-DD`) to the German display form `DD.MM.YYYY`.
  * Returns '' for empty/unparseable input. The leading date portion of a full
  * datetime is accepted (`2018-05-03T...` → `03.05.2018`).

@@ -84,8 +84,15 @@ vi.mock('$lib/stores/profile-map.svelte.js', () => ({
   useProfileMap: () => () => new Map()
 }));
 function Stub() {}
-vi.mock('$lib/components/groups/call/ParticipantTile.svelte', () => ({ default: Stub }));
+vi.mock(
+  '$lib/components/groups/call/ParticipantTile.svelte',
+  () => import('./fixtures/ParticipantTileStub.svelte')
+);
 vi.mock('$lib/components/groups/call/ScreenShareTile.svelte', () => ({ default: Stub }));
+vi.mock(
+  '$lib/components/groups/call/CallEmojiPicker.svelte',
+  () => import('./fixtures/CallEmojiPickerStub.svelte')
+);
 vi.mock('$lib/components/icons', () => ({
   MeetIcon: Stub,
   ChevronDownIcon: Stub,
@@ -96,7 +103,9 @@ vi.mock('$lib/components/icons', () => ({
   HandIcon: Stub,
   SmilePlusIcon: Stub,
   ChatIcon: Stub,
-  ExternalLinkIcon: Stub
+  ExternalLinkIcon: Stub,
+  LinkIcon: Stub,
+  MoreIcon: Stub
 }));
 vi.mock('$lib/paraglide/messages', () => ({
   groups_call_leave: () => 'Leave call',
@@ -126,10 +135,17 @@ vi.mock('$lib/paraglide/messages', () => ({
   groups_call_raise_hand: () => 'Raise hand',
   groups_call_lower_hand: () => 'Lower hand',
   groups_call_hands_raised: (p) => `${p.count} raised`,
+  groups_call_hands_order: () => 'Order of raised hands',
+  groups_call_tile_you: () => 'You',
   groups_call_react: () => 'React',
+  groups_call_more_emojis: () => 'More emojis',
+  groups_call_tile_moved: (p) => `Tile moved, position ${p.position} of ${p.total}`,
+  groups_call_tile_move_hint: () => 'Alt+arrow keys move this tile',
   groups_call_show_chat: () => 'Chat',
   groups_call_pop_out: () => 'Pop out',
   groups_call_pop_in: () => 'Back to tab',
+  groups_call_invite_title: () => 'Invite guests',
+  groups_call_invite_button: () => 'Invite link',
   groups_call_error_mic_denied: () => 'Microphone access denied',
   groups_call_error_mic_missing: () => 'No microphone',
   groups_call_error_camera_denied: () => 'Camera access denied',
@@ -158,10 +174,11 @@ const baseProps = {
   onLeave: vi.fn()
 };
 
-function remote(identity, { screenShare = false } = {}) {
+function remote(identity, { screenShare = false, metadata } = {}) {
   return {
     identity,
     sid: `sid-${identity}`,
+    metadata,
     getTrackPublication: (source) =>
       screenShare && source === 'screen_share' ? { track: { sid: 'ss' } } : undefined
   };
@@ -201,6 +218,44 @@ describe('GroupCallStage — a view, not the connection owner', () => {
     expect(off).toHaveBeenCalledTimes(1);
   });
 
+  // Below md the channel's "← Kanäle" only hides the chat (display:none):
+  // the stage stays mounted. A stage without layout is not on screen — the
+  // dock and the channel list's "Anruf anzeigen" must come back (review
+  // 2026-10-02).
+  it('counts as on screen only while it has a size', () => {
+    /** @type {((entries: any[]) => void)[]} */
+    const callbacks = [];
+    const Original = globalThis.ResizeObserver;
+    globalThis.ResizeObserver = class {
+      constructor(cb) {
+        callbacks.push(cb);
+      }
+      observe() {}
+      unobserve() {}
+      disconnect() {}
+    };
+    try {
+      const off = vi.fn();
+      const registerView = vi.fn(() => off);
+      const { unmount } = render(GroupCallStage, { props: { ...baseProps, registerView } });
+      expect(registerView).toHaveBeenCalledTimes(1);
+      const report = (width, height) =>
+        callbacks.forEach((cb) => cb([{ contentRect: { width, height } }]));
+      report(0, 0);
+      expect(off).toHaveBeenCalledTimes(1);
+      report(0, 0);
+      expect(off).toHaveBeenCalledTimes(1);
+      report(400, 300);
+      expect(registerView).toHaveBeenCalledTimes(2);
+      report(400, 320);
+      expect(registerView).toHaveBeenCalledTimes(2);
+      unmount();
+      expect(off).toHaveBeenCalledTimes(2);
+    } finally {
+      globalThis.ResizeObserver = Original;
+    }
+  });
+
   // Regression (live 2026-09-28, effect_update_depth_exceeded on join): the
   // REAL register reads and writes the store's `$state` counter; called
   // tracked inside the mount effect it re-ran the effect forever.
@@ -217,10 +272,11 @@ describe('GroupCallStage — a view, not the connection owner', () => {
     expect(getGroupCallState().stageViews).toBe(0);
   });
 
-  it('leave plays the cue and hands the leave to the parent', async () => {
+  it('leave hands the leave to the parent (which asks first and plays the cue)', async () => {
     render(GroupCallStage, { props: baseProps });
     await fireEvent.click(screen.getByRole('button', { name: 'Leave call' }));
-    expect(media.playLeaveSound).toHaveBeenCalledTimes(1);
+    // No cue here: a cancelled "Anruf verlassen?" must stay silent (Task 19).
+    expect(media.playLeaveSound).not.toHaveBeenCalled();
     expect(baseProps.onLeave).toHaveBeenCalledTimes(1);
     expect(svc.disconnectFromRoom).not.toHaveBeenCalled();
   });
@@ -254,6 +310,16 @@ describe('GroupCallStage — a view, not the connection owner', () => {
     expect(onPopIn).toHaveBeenCalledTimes(1);
   });
 
+  it('offers Einladungslink only when the parent passes onInvite', async () => {
+    const { unmount } = render(GroupCallStage, { props: baseProps });
+    expect(screen.queryByTestId('group-call-invite')).toBeNull();
+    unmount();
+    const onInvite = vi.fn();
+    render(GroupCallStage, { props: { ...baseProps, onInvite } });
+    await fireEvent.click(screen.getByTestId('group-call-invite'));
+    expect(onInvite).toHaveBeenCalled();
+  });
+
   // The pop-out is another document: menus must close on clicks in the
   // document the stage is rendered in, not only the opener's.
   it('closes an open menu on a click outside it', async () => {
@@ -262,6 +328,20 @@ describe('GroupCallStage — a view, not the connection owner', () => {
     expect(screen.getByTestId('group-call-reactions')).toBeTruthy();
     await fireEvent.pointerDown(screen.getByTestId('group-call-stage'));
     expect(screen.queryByTestId('group-call-reactions')).toBeNull();
+  });
+
+  // Task 19 cursor audit: nothing in the stage is text to select; the cursor
+  // inherits, so the stage root covers every badge (the Gast pill showed an
+  // I-beam), while grid seats show they can be dragged.
+  it('decoration gets the default cursor and no selection; seats the grab cursor', () => {
+    lk.remoteParticipants = [remote(`${HEX}:x1`)];
+    render(GroupCallStage, { props: baseProps });
+    const stage = screen.getByTestId('group-call-stage');
+    expect(stage.classList.contains('cursor-default')).toBe(true);
+    expect(stage.classList.contains('select-none')).toBe(true);
+    expect(screen.getByTestId(`call-item-seat:${HEX}:x1`).classList.contains('cursor-grab')).toBe(
+      true
+    );
   });
 
   it('renders inside the stage layout with the title', () => {
@@ -346,12 +426,106 @@ describe('hands, reactions, connection state', () => {
     expect(svc.setHandRaised).toHaveBeenCalledWith(false);
   });
 
+  const gridOrder = () =>
+    [...screen.getByTestId('group-call-grid').querySelectorAll('[data-testid^="call-item-"]')].map(
+      (el) => el.dataset.testid.replace('call-item-seat:', '')
+    );
+
+  it('raised hands move to the front in the order they went up; lowered ones go back', () => {
+    const B = `${'b'.repeat(64)}:1`;
+    const C = `${'c'.repeat(64)}:1`;
+    const D = `${'d'.repeat(64)}:1`;
+    lk.remoteParticipants = [remote(B), remote(C), remote(D)];
+    lk.raisedHands = new Set([D, B]); // D raised first
+    const { unmount } = render(GroupCallStage, { props: baseProps });
+    expect(gridOrder()).toEqual([D, B, lk.localParticipant.identity, C]);
+    unmount();
+    lk.raisedHands = new Set([B]);
+    render(GroupCallStage, { props: baseProps });
+    expect(gridOrder()).toEqual([B, lk.localParticipant.identity, C, D]);
+  });
+
+  describe('the hands pill lists who is waiting, in order', () => {
+    const B = `${'b'.repeat(64)}:1`;
+    const C = `${'c'.repeat(64)}:1`;
+    beforeEach(() => {
+      lk.remoteParticipants = [remote(B), remote(C)];
+      lk.raisedHands = new Set([C, B]);
+    });
+    const list = () => screen.queryByTestId('group-call-hands-list');
+
+    it('opens on hover and closes on leave', async () => {
+      render(GroupCallStage, { props: baseProps });
+      const pill = screen.getByTestId('group-call-hands');
+      expect(list()).toBeNull();
+      await fireEvent.pointerEnter(pill, { pointerType: 'mouse' });
+      const items = [...list().querySelectorAll('li')].map((li) => li.textContent.trim());
+      expect(items).toEqual([`1. ${'c'.repeat(8)}`, `2. ${'b'.repeat(8)}`]);
+      await fireEvent.pointerLeave(pill, { pointerType: 'mouse' });
+      expect(list()).toBeNull();
+    });
+
+    it('opens on keyboard focus, and a tap toggles it', async () => {
+      render(GroupCallStage, { props: baseProps });
+      const pill = screen.getByTestId('group-call-hands');
+      expect(pill.tagName).toBe('BUTTON');
+      await fireEvent.focus(pill);
+      expect(list()).toBeTruthy();
+      expect(pill.getAttribute('aria-expanded')).toBe('true');
+      await fireEvent.blur(pill);
+      expect(list()).toBeNull();
+      await fireEvent.click(pill);
+      expect(list()).toBeTruthy();
+      await fireEvent.click(pill);
+      expect(list()).toBeNull();
+    });
+
+    it('points aria-controls at the list only while it is rendered', async () => {
+      render(GroupCallStage, { props: baseProps });
+      const pill = screen.getByTestId('group-call-hands');
+      expect(pill.hasAttribute('aria-controls')).toBe(false);
+      await fireEvent.click(pill);
+      expect(document.getElementById(pill.getAttribute('aria-controls'))).toBe(list());
+    });
+
+    it('is display only: no buttons inside the list', async () => {
+      render(GroupCallStage, { props: baseProps });
+      await fireEvent.click(screen.getByTestId('group-call-hands'));
+      expect(list().querySelector('button')).toBeNull();
+    });
+  });
+
   it('sends a reaction from the picker', async () => {
     render(GroupCallStage, { props: baseProps });
     await fireEvent.click(screen.getByTitle('React'));
     await fireEvent.click(screen.getByRole('button', { name: '🎉' }));
     expect(svc.sendReaction).toHaveBeenCalledWith('🎉');
     expect(screen.queryByTestId('group-call-reactions')).toBeNull();
+  });
+
+  // Task 19: the quick row keeps its defaults and ends in a "more" button
+  // that opens the app's full emoji picker (lazy), custom emojis included.
+  it('"More emojis" opens the full picker; any pick is sent and closes it', async () => {
+    render(GroupCallStage, { props: baseProps });
+    await fireEvent.click(screen.getByTitle('React'));
+    const row = screen.getByTestId('group-call-reactions');
+    const more = screen.getByRole('button', { name: 'More emojis' });
+    expect(row.lastElementChild.contains(more)).toBe(true);
+    expect(screen.getByRole('button', { name: '👍' })).toBeTruthy();
+    expect(screen.queryByTestId('call-emoji-picker-stub')).toBeNull();
+    await fireEvent.click(more);
+    await screen.findByTestId('call-emoji-picker-stub');
+    await fireEvent.click(screen.getByText('pick-custom'));
+    expect(svc.sendReaction).toHaveBeenCalledWith({
+      shortcode: 'parrot',
+      url: 'https://x.org/p.gif'
+    });
+    expect(screen.queryByTestId('group-call-reactions')).toBeNull();
+    await fireEvent.click(screen.getByTitle('React'));
+    expect(screen.queryByTestId('call-emoji-picker-stub')).toBeNull();
+    await fireEvent.click(screen.getByRole('button', { name: 'More emojis' }));
+    await fireEvent.click(await screen.findByText('pick-unicode'));
+    expect(svc.sendReaction).toHaveBeenLastCalledWith('🫶');
   });
 
   it('no hands or reactions when the token cannot send data', () => {
@@ -377,11 +551,234 @@ describe('layout', () => {
     expect(screen.queryByTestId('group-call-spotlight')).toBeNull();
   });
 
+  it('tiles start at the top of the video area, not centred in a tall box', () => {
+    // laoc 2026-10-01: in a tall channel the centred grid sat far below the
+    // header (and below the fold while the page itself grew).
+    lk.remoteParticipants = [remote(`${HEX}:x1`)];
+    render(GroupCallStage, { props: baseProps });
+    const grid = screen.getByTestId('group-call-grid');
+    expect(grid.classList.contains('content-start')).toBe(true);
+    expect(grid.classList.contains('content-center')).toBe(false);
+    const layer = grid.parentElement;
+    expect(layer.classList.contains('items-start')).toBe(true);
+    expect(layer.classList.contains('items-center')).toBe(false);
+  });
+
+  it('the control bar never shrinks away: the video area gives way instead', () => {
+    render(GroupCallStage, { props: baseProps });
+    const controls = screen.getByTestId('group-call-controls');
+    expect(controls.classList.contains('shrink-0')).toBe(true);
+    const videoArea = screen.getByTestId('group-call-grid').parentElement.parentElement;
+    expect(videoArea.classList.contains('min-h-0')).toBe(true);
+    expect(videoArea.classList.contains('flex-1')).toBe(true);
+  });
+
+  it('the header shrinks with the stage, not the viewport: labels collapse to icons', () => {
+    // laoc 2026-10-02: beside the chat column the stage is narrow even on a
+    // wide window; the header's fixed button row widened the page. The stage
+    // is a size container and the labels answer to ITS width.
+    render(GroupCallStage, {
+      props: { ...baseProps, onShowChat: vi.fn(), onInvite: vi.fn(), onPopOut: vi.fn() }
+    });
+    const stage = screen.getByTestId('group-call-stage');
+    expect(stage.classList.contains('@container')).toBe(true);
+    for (const id of ['group-call-invite', 'group-call-show-chat']) {
+      const label = screen.getByTestId(id).querySelector('span');
+      expect(label.classList.contains('hidden')).toBe(true);
+      expect(label.classList.contains('@lg:inline')).toBe(true);
+    }
+    // The title side gives way (truncates) before the buttons do.
+    const title = stage.querySelector('h2');
+    expect(title.classList.contains('truncate')).toBe(true);
+    expect(title.parentElement.classList.contains('min-w-0')).toBe(true);
+    expect(title.parentElement.classList.contains('flex-1')).toBe(true);
+    // QA K4: the title itself takes the free space before it truncates.
+    expect(title.classList.contains('min-w-0')).toBe(true);
+    expect(title.classList.contains('flex-1')).toBe(true);
+    // QA K1: icon-only at narrow stage widths, so it needs its own name.
+    expect(screen.getByTestId('group-call-show-chat').getAttribute('aria-label')).toBe('Chat');
+  });
+
   it('a remote screen share takes the spotlight, seats move to the strip', () => {
     lk.remoteParticipants = [remote(`${HEX}:x1`, { screenShare: true })];
     render(GroupCallStage, { props: baseProps });
     expect(screen.getByTestId('group-call-spotlight')).toBeTruthy();
     expect(screen.getByTestId(`call-item-screen:${HEX}:x1`)).toBeTruthy();
     expect(screen.getByTestId(`call-item-seat:${HEX}:x1`)).toBeTruthy();
+  });
+
+  it('marks guests who joined through a call link', () => {
+    const GUEST = 'b'.repeat(64);
+    const MEMBER = 'c'.repeat(64);
+    lk.remoteParticipants = [
+      remote(`${GUEST}:1`, { metadata: '{"guest":true,"pass":"p"}' }),
+      remote(`${MEMBER}:1`)
+    ];
+    render(GroupCallStage, { props: baseProps });
+    const guestTile = screen
+      .getByTestId(`call-item-seat:${GUEST}:1`)
+      .querySelector('[data-testid="participant-tile-stub"]');
+    const memberTile = screen
+      .getByTestId(`call-item-seat:${MEMBER}:1`)
+      .querySelector('[data-testid="participant-tile-stub"]');
+    expect(guestTile.getAttribute('data-guest')).toBe('true');
+    expect(memberTile.getAttribute('data-guest')).toBe('false');
+  });
+});
+
+// Task 19: tiles can be reordered (drag and drop, Alt+arrow). The order is
+// the viewer's own, kept for the call, reset with the next call.
+describe('reordering tiles', () => {
+  const B = `${'b'.repeat(64)}:1`;
+  const C = `${'c'.repeat(64)}:1`;
+  const D = `${'d'.repeat(64)}:1`;
+  const ME = `${'a'.repeat(64)}:me`;
+  const order = () =>
+    [...screen.getByTestId('group-call-grid').querySelectorAll('[data-seat-key]')].map((el) =>
+      el.dataset.seatKey.replace('seat:', '')
+    );
+  const tile = (id) => screen.getByTestId(`call-item-seat:${id}`);
+
+  beforeEach(() => {
+    lk.room = {}; // a fresh call
+    lk.remoteParticipants = [remote(B), remote(C), remote(D)];
+  });
+
+  it('Alt+→ / Alt+← move the focused tile and announce its new position', async () => {
+    render(GroupCallStage, { props: baseProps });
+    expect(order()).toEqual([ME, B, C, D]);
+    tile(B).focus();
+    await fireEvent.keyDown(tile(B), { key: 'ArrowRight', altKey: true });
+    expect(order()).toEqual([ME, C, B, D]);
+    await vi.waitFor(() =>
+      expect(screen.getByTestId('group-call-tile-announce').textContent.trim()).toBe(
+        'Tile moved, position 3 of 4'
+      )
+    );
+    await fireEvent.keyDown(tile(B), { key: 'ArrowLeft', altKey: true });
+    await fireEvent.keyDown(tile(B), { key: 'ArrowLeft', altKey: true });
+    expect(order()).toEqual([B, ME, C, D]);
+    // without Alt the arrows do nothing here
+    await fireEvent.keyDown(tile(B), { key: 'ArrowRight' });
+    expect(order()).toEqual([B, ME, C, D]);
+  });
+
+  it('Alt+arrow inside a tile control (the volume slider) does not move the tile', async () => {
+    render(GroupCallStage, { props: baseProps });
+    const inner = tile(B).querySelector('[data-testid="participant-tile-stub"]');
+    await fireEvent.keyDown(inner, { key: 'ArrowRight', altKey: true });
+    expect(order()).toEqual([ME, B, C, D]);
+  });
+
+  it('the same announcement twice in a row is cleared in between, so it is read again', async () => {
+    render(GroupCallStage, { props: baseProps });
+    const live = screen.getByTestId('group-call-tile-announce');
+    const seen = [];
+    new MutationObserver(() => seen.push(live.textContent.trim())).observe(live, {
+      childList: true,
+      characterData: true,
+      subtree: true
+    });
+    await fireEvent.keyDown(tile(B), { key: 'ArrowRight', altKey: true }); // B -> 3rd
+    await vi.waitFor(() => expect(live.textContent).toBe('Tile moved, position 3 of 4'));
+    seen.length = 0;
+    await fireEvent.keyDown(tile(C), { key: 'ArrowRight', altKey: true }); // C -> 3rd
+    await vi.waitFor(() => expect(seen.at(-1)).toBe('Tile moved, position 3 of 4'));
+    expect(seen).toContain('');
+    expect(order()).toEqual([ME, B, C, D]);
+  });
+
+  it('a drop on a tile that left the call meanwhile moves nothing', async () => {
+    render(GroupCallStage, { props: baseProps });
+    const gone = document.createElement('div');
+    gone.dataset.seatKey = 'seat:gone:1';
+    const original = document.elementFromPoint;
+    document.elementFromPoint = () => gone;
+    try {
+      await fireEvent.pointerDown(tile(D), { button: 0, pointerId: 1, clientX: 10, clientY: 10 });
+      await fireEvent.pointerMove(window, { pointerId: 1, clientX: 60, clientY: 10 });
+      await fireEvent.pointerUp(window, { pointerId: 1, clientX: 60, clientY: 10 });
+    } finally {
+      document.elementFromPoint = original;
+    }
+    expect(order()).toEqual([ME, B, C, D]);
+  });
+
+  it('unmounting mid-drag takes the window listeners away', async () => {
+    const view = render(GroupCallStage, { props: baseProps });
+    const removed = vi.spyOn(window, 'removeEventListener');
+    try {
+      await fireEvent.pointerDown(tile(D), { button: 0, pointerId: 1, clientX: 10, clientY: 10 });
+      view.unmount();
+      const types = removed.mock.calls.map((c) => c[0]);
+      expect(types).toEqual(expect.arrayContaining(['pointermove', 'pointerup', 'pointercancel']));
+    } finally {
+      removed.mockRestore();
+    }
+  });
+
+  it('tiles are focusable groups that say how to move them', () => {
+    render(GroupCallStage, { props: baseProps });
+    const el = tile(C);
+    expect(el.getAttribute('tabindex')).toBe('0');
+    expect(el.getAttribute('aria-keyshortcuts')).toBe('Alt+ArrowLeft Alt+ArrowRight');
+    const hint = document.getElementById(el.getAttribute('aria-describedby'));
+    expect(hint.textContent).toBe('Alt+arrow keys move this tile');
+  });
+
+  it('dragging a tile onto another puts it in that place', async () => {
+    render(GroupCallStage, { props: baseProps });
+    const original = document.elementFromPoint;
+    document.elementFromPoint = () => tile(B);
+    try {
+      await fireEvent.pointerDown(tile(D), { button: 0, pointerId: 1, clientX: 10, clientY: 10 });
+      await fireEvent.pointerMove(window, { pointerId: 1, clientX: 60, clientY: 10 });
+      expect(tile(D).classList.contains('opacity-50')).toBe(true);
+      expect(tile(B).dataset.dropTarget).toBe('true');
+      await fireEvent.pointerUp(window, { pointerId: 1, clientX: 60, clientY: 10 });
+    } finally {
+      document.elementFromPoint = original;
+    }
+    expect(order()).toEqual([ME, D, B, C]);
+  });
+
+  it('a click without movement is no drag', async () => {
+    render(GroupCallStage, { props: baseProps });
+    await fireEvent.pointerDown(tile(D), { button: 0, pointerId: 1, clientX: 10, clientY: 10 });
+    await fireEvent.pointerMove(window, { pointerId: 1, clientX: 12, clientY: 11 });
+    await fireEvent.pointerUp(window, { pointerId: 1, clientX: 12, clientY: 11 });
+    expect(order()).toEqual([ME, B, C, D]);
+  });
+
+  it('the order survives the stage remounting in the same call, newcomers append', async () => {
+    const first = render(GroupCallStage, { props: baseProps });
+    tile(D).focus();
+    await fireEvent.keyDown(tile(D), { key: 'ArrowLeft', altKey: true });
+    expect(order()).toEqual([ME, B, D, C]);
+    first.unmount();
+    const E = `${'e'.repeat(64)}:1`;
+    lk.remoteParticipants = [remote(B), remote(C), remote(D), remote(E)];
+    render(GroupCallStage, { props: baseProps });
+    expect(order()).toEqual([ME, B, D, C, E]);
+  });
+
+  it('a new call starts from the natural order again', async () => {
+    const first = render(GroupCallStage, { props: baseProps });
+    await fireEvent.keyDown(tile(D), { key: 'ArrowLeft', altKey: true });
+    first.unmount();
+    lk.room = {};
+    render(GroupCallStage, { props: baseProps });
+    expect(order()).toEqual([ME, B, C, D]);
+  });
+
+  it('a moved tile keeps its place when its hand goes up; unmoved hands still come first', async () => {
+    const first = render(GroupCallStage, { props: baseProps });
+    await fireEvent.keyDown(tile(B), { key: 'ArrowRight', altKey: true });
+    await fireEvent.keyDown(tile(B), { key: 'ArrowRight', altKey: true });
+    expect(order()).toEqual([ME, C, D, B]);
+    first.unmount();
+    lk.raisedHands = new Set([B, D]);
+    render(GroupCallStage, { props: baseProps });
+    expect(order()).toEqual([D, ME, C, B]);
   });
 });

@@ -5,6 +5,7 @@
 -->
 
 <script>
+  import { avatarInitial } from '$lib/helpers/avatar-initial.js';
   import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
   import { getProfilePicture, getDisplayName } from 'applesauce-core/helpers';
   import { resolve } from '$app/paths';
@@ -94,9 +95,7 @@
   let displayName = $derived(getDisplayName(loadedProfile));
 
   // First letter of the display name — the unfailable terminal fallback
-  let initialLetter = $derived(
-    displayName?.trim()?.charAt(0)?.toUpperCase() || m.profile_avatar_fallback()
-  );
+  let initialLetter = $derived(avatarInitial(displayName, m.profile_avatar_fallback()));
 </script>
 
 {#snippet initialFallback()}

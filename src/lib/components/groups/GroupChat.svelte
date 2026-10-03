@@ -61,6 +61,14 @@
     isPollEnded
   } from '$lib/concord/polls.js';
   import PollMessage from '$lib/components/community/channels/PollMessage.svelte';
+  import MeetingCard from '$lib/components/groups/MeetingCard.svelte';
+  import MeetingBar from '$lib/components/groups/MeetingBar.svelte';
+  import {
+    MEETING_KIND,
+    isMeetingForGroup,
+    meetingTimes,
+    meetingTitle
+  } from '$lib/groups/meetings.js';
   import GroupPollModal from '$lib/components/groups/GroupPollModal.svelte';
   import { updatePersonalGroupsList } from '$lib/groups/personal-groups-list.js';
   import { useMyGroups } from '$lib/groups/unlinked-groups.svelte.js';
@@ -69,7 +77,7 @@
   import { SvelteMap } from 'svelte/reactivity';
   import { isModerator, roleOptionsFromAdmins } from '$lib/groups/roles.js';
   import { unique } from '$lib/helpers/unique.js';
-  import { setContext, tick } from 'svelte';
+  import { setContext, tick, untrack } from 'svelte';
   import { updateQueryParams } from '$lib/helpers/urlParams.js';
   import { GROUP_MEDIA_AUTH } from '$lib/groups/authed-media.js';
   import {
@@ -85,15 +93,27 @@
     isAuthRequiredError
   } from '$lib/groups/relay-auth.js';
   import GroupBadges from '$lib/components/groups/GroupBadges.svelte';
-  import { PeopleIcon, MoreIcon, MeetIcon, SettingsIcon } from '$lib/components/icons';
+  import {
+    PeopleIcon,
+    MoreIcon,
+    MeetIcon,
+    SettingsIcon,
+    ChevronLeftIcon
+  } from '$lib/components/icons';
   import { lazyComponent } from '$lib/helpers/lazy-component.svelte.js';
   import { hasLivekitTag, identityToPubkey, probeRelayAvSupport } from '$lib/groups/livekit.js';
+  import { probeCallPassSupport, listCallPasses } from '$lib/groups/call-passes.js';
+  import { hasNip44 } from '$lib/helpers/nip44.js';
+  import { trackOnScreen } from '$lib/groups/track-on-screen.js';
+  import { joinOutcome } from '$lib/groups/join-outcome.js';
+  import { modalStore } from '$lib/stores/modal.svelte.js';
   import { enableGroupCalls } from '$lib/groups/enable-group-calls.js';
   import { useCallPresence } from '$lib/groups/call-presence.svelte.js';
   import {
     getGroupCallState,
-    joinGroupCall,
+    joinGroupCallWithConfirm,
     leaveGroupCall,
+    leaveGroupCallWithConfirm,
     callErrorMessage,
     showCallStage,
     toggleChatBeside,
@@ -111,6 +131,7 @@
   import { useRelayInformation } from '$lib/groups/relay-information.svelte.js';
   import { unlinkDeletedChannel } from '$lib/groups/community-teardown.js';
   import { channelKey } from '$lib/groups/community-pointer.js';
+  import { leaveCommunity } from '$lib/helpers/community.js';
   import { channelAccessLevel } from '$lib/groups/channel-access.js';
   import { relayRequiresAuth } from '$lib/groups/relay-directory.js';
   import { aggregateChannelReactions } from '$lib/concord/chat-helpers.js';
@@ -145,8 +166,13 @@
   import { stashExport } from '$lib/webxdc/export-share.js';
   import { runtimeConfig } from '$lib/stores/config.svelte.js';
   import { showToast } from '$lib/helpers/toast';
-  import { buildMessageDeepLink, scrollToChatMessage } from '$lib/helpers/message-anchor.js';
+  import {
+    buildMessageDeepLink,
+    buildChannelLink,
+    scrollToChatMessage
+  } from '$lib/helpers/message-anchor.js';
   import * as m from '$lib/paraglide/messages';
+  import { pageTitle } from '$lib/helpers/page-title.js';
 
   /** fallbackName: the display name the CALLER already knows (the community
    * pane reads it off the 10222's group pointer tag). Wins over the raw id
@@ -159,8 +185,24 @@
    * context and leaves it at the default ''.
    * anchorMessageId: a ?message= deep link — once that message is in the
    * loaded window it is scrolled into view and flashed (message-anchor.js).
-   * @type {{pointer: import('$lib/groups/groups.js').GroupPointer, fallbackName?: string, communityPubkey?: string, anchorMessageId?: string | null}} */
-  let { pointer, fallbackName = '', communityPubkey = '', anchorMessageId = null } = $props();
+   * onBack: the community pane's "back to the channel list" (design 1a). Only
+   * a host that HAS a channel list to go back to passes it — the standalone
+   * /groups route keeps its host sidebar and renders no breadcrumb.
+   * isCommunityRoot: this is the community's ROOT (membership) group — leaving
+   * it leaves the community, so the leave entry and its confirm say so.
+   * ownsDocumentTitle: the standalone /groups/<pointer> route has no other
+   * source for the channel's name, so the chat titles the page there. Inside
+   * a community the layout does it (and two writers would race).
+   * @type {{pointer: import('$lib/groups/groups.js').GroupPointer, fallbackName?: string, communityPubkey?: string, anchorMessageId?: string | null, onBack?: () => void, isCommunityRoot?: boolean, ownsDocumentTitle?: boolean}} */
+  let {
+    pointer,
+    fallbackName = '',
+    communityPubkey = '',
+    anchorMessageId = null,
+    onBack = undefined,
+    isCommunityRoot = false,
+    ownsDocumentTitle = false
+  } = $props();
 
   const getActiveUser = useActiveUser();
 
@@ -171,6 +213,7 @@
 
   /** @type {any} */ let metadata = $state(null);
   const displayTitle = $derived(metadata?.name ?? (fallbackName || pointer.id));
+  const documentTitle = $derived(pageTitle([displayTitle], runtimeConfig.appName));
   // The RAW kind:39000 as well as the parsed metadata: the access badges read
   // the tags directly, because applesauce's parser drops `restricted`/`hidden`
   // and reads openness from the inverse tags of an older NIP-29 draft.
@@ -411,14 +454,20 @@
     messagesRestricted = false;
     // Kind-1068 NIP-88 polls are timeline rows alongside kind-9 messages
     // (Armada renders both in the main chat; 1018 votes stay side events,
-    // h-scoped like reactions).
-    const filter = { kinds: [9, 1068], '#h': [pointer.id] };
+    // h-scoped like reactions). Kind-31923 scheduled meetings are timeline
+    // rows too (MeetingCard), with a window of their own so a busy chat
+    // cannot push an upcoming meeting out of the replay; kind-5 deletions
+    // reach the store so a meeting its author deleted elsewhere disappears
+    // (the store's delete handling drops it from every TimelineModel).
+    const filter = { kinds: [9, 1068, MEETING_KIND], '#h': [pointer.id] };
     const fallbackTimer = setTimeout(() => (isLoading = false), 4000);
 
     const subSub = pool
       .relay(pointer.relay)
       .subscription([
         { ...filter, limit: 100 },
+        { kinds: [MEETING_KIND], '#h': [pointer.id], limit: 50 },
+        { kinds: [5], '#h': [pointer.id], limit: 100 },
         { kinds: [7], '#h': [pointer.id], limit: 200 },
         { kinds: [DELETE_EVENT_KIND], '#h': [pointer.id], limit: 100 },
         { kinds: [1018], '#h': [pointer.id], limit: 500 }
@@ -479,9 +528,58 @@
   );
   const displayed = $derived(
     messages
-      .filter((event) => event && event.id && event.pubkey && !deletedMessageIds.has(event.id))
+      .filter(
+        (event) =>
+          event &&
+          event.id &&
+          event.pubkey &&
+          !deletedMessageIds.has(event.id) &&
+          // A meeting belongs here only with exactly this channel's h-tag.
+          (event.kind !== MEETING_KIND || isMeetingForGroup(event, pointer.id))
+      )
       .toReversed()
   );
+  const meetings = $derived(displayed.filter((event) => event.kind === MEETING_KIND));
+
+  // Guest links of my meetings: the channel's passes are listed ONCE per
+  // visit (and per account) into the store, where each MeetingCard finds its
+  // own by coordinate — not one authenticated REQ per card. Only while I
+  // have a meeting here that has not ended (a past one offers no link), and
+  // only with NIP-44 (the code is self-encrypted).
+  const hasOwnLiveMeeting = $derived.by(() => {
+    const now = Math.floor(Date.now() / 1000);
+    return meetings.some((event) => {
+      const times = event.pubkey === myPubkey ? meetingTimes(event) : null;
+      return !!times && times.end > now;
+    });
+  });
+  $effect(() => {
+    const wanted = hasOwnLiveMeeting; // read first (effect early-return rule)
+    const user = getActiveUser();
+    if (!wanted || !user || !hasNip44(user.signer)) return;
+    let alive = true;
+    untrack(() =>
+      listCallPasses(pool.relay(pointer.relay), pointer.id, user)
+        .then((passes) => {
+          if (alive) for (const pass of passes) eventStore.add(pass);
+        })
+        .catch((/** @type {unknown} */ err) => console.warn('meeting: listing passes failed', err))
+    );
+    return () => {
+      alive = false;
+    };
+  });
+
+  /**
+   * The text a reply quotes: a meeting's title (its content is the
+   * description, often empty), otherwise the message itself.
+   * @param {any} message
+   */
+  function quoteText(message) {
+    return message?.kind === MEETING_KIND
+      ? meetingTitle(message) || m.meeting_card_label()
+      : (message?.content ?? '');
+  }
   // Replies live in their thread, not in the timeline. An orphan — a reply
   // whose root fell outside the 100-event window — stays in the timeline
   // rather than disappearing.
@@ -761,6 +859,14 @@
   const CallStage = lazyComponent(
     () => import('$lib/components/groups/call/GroupCallStage.svelte')
   );
+  const CallInviteDialog = lazyComponent(
+    () => import('$lib/components/groups/call/CallInviteDialog.svelte')
+  );
+  const CallChatPanel = lazyComponent(
+    () => import('$lib/components/groups/call/CallChatPanel.svelte')
+  );
+  /** @type {'channel' | 'call'} */
+  let chatTab = $state('channel');
   const avEnabled = $derived(hasLivekitTag(metadataEvent));
   // Relay-published kind 39004 ("who is live"), only subscribed while the
   // group is an AV space at all.
@@ -770,13 +876,28 @@
   // "In a call HERE" — the store holds one call app-wide; a call in another
   // channel must not take over this channel's body.
   const inCallHere = $derived(call.isActiveFor(pointer) && call.phase !== 'idle');
+  // A call starting here opens on its chat (that is where the people in the
+  // call talk, guests included); once it ends, land back on the channel chat
+  // rather than a dead tab. Only on the edge — a user who picks "Kanal"
+  // during the call stays there. Plain `let`: bookkeeping, never rendered.
+  let wasInCallHere = false;
+  $effect(() => {
+    const now = inCallHere;
+    if (now !== wasInCallHere) chatTab = now ? 'call' : 'channel';
+    wasInCallHere = now;
+  });
   // The call moved to its own window (Document PiP): the channel shows its
   // chat, with a bar to bring the call back.
   const callPopout = getCallPopoutState();
   const poppedOutHere = $derived(inCallHere && callPopout.open);
   // In the call but stepped back to the chat (or into a shared app): the
   // call runs on and the app-level dock shows it.
-  const showCallHere = $derived(inCallHere && !call.stageHidden && !poppedOutHere);
+  // A call the server ended (removed / dropped) always shows its end state
+  // here, even if the user had stepped back to the chat: the dock hides for
+  // an ended call, so this is the only place that says what happened.
+  const showCallHere = $derived(
+    inCallHere && (call.phase === 'ended' || (!call.stageHidden && !poppedOutHere))
+  );
   // Wide screens: the chat as a column beside the stage (per-device pref),
   // so the call stays in view. Narrow screens keep switching between the two.
   let wideScreen = $state(false);
@@ -798,7 +919,9 @@
   const canPopOut = canPopOutCall();
   function popOutHere() {
     // straight from the click: the window request needs the user activation
-    popOutCall({ title: displayTitle, identityToPubkey });
+    popOutCall({ title: displayTitle, identityToPubkey }).catch((err) => {
+      console.warn('call pop-out failed:', err);
+    });
   }
 
   // The /c layout renders its page 2-3× (responsive variants, CSS hides the
@@ -828,7 +951,7 @@
     // The call store owns the connection and outlives this view: leaving
     // the channel keeps the call running in the app-level dock, which
     // uses the title and this page to come back to.
-    await joinGroupCall(pointer, user, {
+    await joinGroupCallWithConfirm(pointer, user, {
       title: displayTitle,
       href: `${window.location.pathname}${window.location.search}`
     });
@@ -851,6 +974,33 @@
   });
   const canStartCall = $derived(isAdmin && !avEnabled && avSupported);
 
+  // Guest links: members of an AV channel on a relay that speaks call
+  // passes (docs/nips/nip29-call-passes.md). Probed for every AV channel:
+  // the in-call invite and the meeting dialog's guest toggle both need it.
+  let passesSupported = $state(false);
+  let inviteOpen = $state(false);
+  $effect(() => {
+    const relay = pointer.relay;
+    const id = pointer.id;
+    // Reset first: a channel switch (pointer changes) must never show the
+    // invite button carried over from the previous channel's probe while
+    // this one's probe (or its skip, on a relay without call support) is
+    // still pending.
+    passesSupported = false;
+    if (!avEnabled) return;
+    let alive = true;
+    probeCallPassSupport(relay, id).then((ok) => {
+      if (alive) passesSupported = ok;
+    });
+    return () => {
+      alive = false;
+    };
+  });
+  // Only once LiveKit is connected: the relay mints passes for a call it
+  // sees running, and answers "no call is running" while the handshake is
+  // still going (QA 2026-10-02 B1).
+  const canInvite = $derived(passesSupported && canWrite && inCallHere && call.connected);
+
   async function enableAndStartCall() {
     const user = getActiveUser();
     if (!user?.signer || enablingCall) return;
@@ -867,20 +1017,82 @@
     await startCall();
   }
 
+  // What a click does: start a call nobody is in yet, join the running one
+  // (with its head count), bring the stepped-aside stage back, or leave
+  // (laoc, 2026-10-02: it said "Join call" while no call was running).
+  // While this channel's call view is on screen the header shows a status
+  // instead (QA 2026-10-02 C7: a "Leave call" icon right above the red
+  // leave button caused accidental hang-ups) — so the button never leaves.
+  // In a call here that is still on (requesting / ready) — a failed or
+  // ended call is not one "you are in" (Task 15 review): the header offers
+  // it again instead of a status.
+  const callLiveHere = $derived(
+    inCallHere && (call.phase === 'requesting' || call.phase === 'ready')
+  );
+  // Only members start calls; a non-member of an open channel may listen in
+  // on a running one (QA round 3 C6). Logged out, the greyed button stays as
+  // the "log in" prompt.
+  const showCallButton = $derived(
+    !myPubkey || canWrite || callLiveHere || callParticipantCount > 0
+  );
   const callButtonLabel = $derived(
-    inCallHere
-      ? call.stageHidden
+    !myPubkey
+      ? m.groups_call_start_login()
+      : callLiveHere
         ? m.groups_call_return()
-        : m.groups_call_leave()
-      : m.groups_call_join()
+        : callParticipantCount > 0
+          ? canWrite
+            ? m.groups_call_join_running({ count: callParticipantCount })
+            : m.groups_call_listen_in({ count: callParticipantCount })
+          : m.groups_call_start()
   );
 
   async function toggleCall() {
-    if (inCallHere && call.stageHidden) {
+    if (callLiveHere) {
+      if (poppedOutHere) popInCall();
       if (activeSession) await closeStage();
       showCallStage();
-    } else if (inCallHere) await leaveGroupCall();
-    else await startCall();
+    } else await startCall();
+  }
+
+  // "Beitreten" on a meeting card or the meeting bar: a meeting's call is
+  // simply this channel's call — bring it back when already in, join/start
+  // it otherwise, and for an admin of a channel without calls yet switch
+  // them on first. Members only (the relay mints tokens for the roster).
+  const canJoinMeeting = $derived(!!myPubkey && canWrite && (avEnabled || canStartCall));
+  async function joinMeeting() {
+    if (callLiveHere || avEnabled) await toggleCall();
+    else if (canStartCall) await enableAndStartCall();
+  }
+
+  // "Termin planen": the calendar dialog in channel-meeting mode (M2). The
+  // meeting's location is the channel's own link; the roster decides who
+  // gets the guest link in their invitation.
+  function openScheduleMeeting() {
+    modalStore.openModal('calendarEvent', {
+      mode: 'create',
+      groupMeeting: {
+        pointer: { id: pointer.id, relay: pointer.relay },
+        channelName: displayTitle,
+        channelUrl: buildChannelLink(window.location, pointer.id),
+        memberPubkeys: [...members],
+        passesSupported
+      }
+    });
+  }
+
+  // The call's own connecting / failed / ended views count as "the call on
+  // screen" just like the stage, so the app-level dock steps aside on the
+  // call page in every phase (QA 2026-10-02 B4/C2). Untracked for the same
+  // reason as the stage's registration: the store bumps its own $state.
+  /** @param {HTMLElement} node */
+  function callViewOnScreen(node) {
+    const stop = untrack(() =>
+      trackOnScreen(node, () =>
+        registerCallStageView(`${window.location.pathname}${window.location.search}`)
+      )
+    );
+    return { destroy: stop };
   }
 
   async function closeStage() {
@@ -1348,6 +1560,26 @@
     await updatePersonalGroupsList(getActiveUser(), change);
   }
 
+  // Set on unmount so the join's roster wait stops and stays silent.
+  // Plain `let`: bookkeeping, never rendered.
+  let destroyed = false;
+  $effect(() => () => {
+    destroyed = true;
+  });
+
+  /**
+   * Resolves true as soon as I show up on the roster (the join's roster
+   * refreshes land in `members`), false once `ms` passed without.
+   * @param {number} ms
+   */
+  async function waitForMembership(ms) {
+    const until = Date.now() + ms;
+    while (!destroyed && !(myPubkey && members.has(myPubkey)) && Date.now() < until) {
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+    return !!myPubkey && members.has(myPubkey);
+  }
+
   async function join() {
     try {
       await signAndPublish(buildJoinRequestTemplate(pointer.id));
@@ -1356,7 +1588,19 @@
       // the button flips to Leave without a reload (laoc, 2026-08-11).
       onJoinAccepted();
       joinRequestedNow = true;
-      showToast(m.groups_join_sent(), 'success');
+      // "Joined" or "request sent" by what the refreshed roster shows (QA
+      // C1: "request sent" read like a pending approval on an open group);
+      // the `closed` marker only decides when the roster cannot be read.
+      const onRoster = await waitForMembership(JOIN_ROSTER_HEAL_DELAY_MS + 500);
+      // Left meanwhile: the outcome belongs to this channel's page, never
+      // to whatever page came next (it would read stale there).
+      if (destroyed) return;
+      const outcome = joinOutcome({
+        onRoster,
+        rosterReadable: rosterAnswered && !rosterRestricted,
+        closed: groupClosed
+      });
+      showToast(outcome === 'joined' ? m.groups_join_joined() : m.groups_join_sent(), 'success');
     } catch (err) {
       if (isAlreadyMemberError(err)) {
         // Membership is exactly what the click wanted — the button only
@@ -1371,11 +1615,54 @@
     }
   }
 
+  // Leaving sits behind a confirm (design 1a): it was a bare header button
+  // one stray click away, and on a closed channel the way back in is a new
+  // request an admin has to approve.
+  let leaveConfirmOpen = $state(false);
+  // The root group IS the community's membership: leaving it leaves the
+  // community (controller ruling, Task 14 review; final review 2 I1) — the
+  // 9022 plus the community unfollow, see leave().
+  const leaveLabel = $derived(
+    isCommunityRoot ? m.groups_leave_community() : m.groups_leave_channel()
+  );
+  const leaveConfirmTitle = $derived(
+    isCommunityRoot ? m.groups_leave_community_confirm_title() : m.groups_leave_confirm_title()
+  );
+  const leaveConfirmBody = $derived.by(() => {
+    if (isCommunityRoot) return m.groups_leave_community_confirm_body();
+    return groupClosed ? m.groups_leave_confirm_body_closed() : m.groups_leave_confirm_body_open();
+  });
+  let leaving = $state(false);
+
+  function askLeave() {
+    closeMoreMenu();
+    leaveConfirmOpen = true;
+  }
+
+  async function confirmLeave() {
+    if (leaving) return;
+    leaving = true;
+    try {
+      await leave();
+    } finally {
+      leaving = false;
+      leaveConfirmOpen = false;
+    }
+  }
+
   async function leave() {
     try {
       await signAndPublish(buildLeaveRequestTemplate(pointer.id));
       await updateGroupsList({ remove: pointer });
       onRosterChanged();
+      // Leaving the ROOT leaves the community: also unfollow it (kind 30000
+      // `communities` set) so it drops out of the rail (final review 2 I1).
+      // The helper's own guarded path; a failed unfollow is reported, but the
+      // 9022 already went out.
+      if (isCommunityRoot && communityPubkey) {
+        const result = await leaveCommunity(communityPubkey);
+        if (!result.success) throw new Error(result.error ?? 'community unfollow failed');
+      }
       showToast(m.groups_leave_sent(), 'success');
     } catch (err) {
       console.error('leave request failed', err);
@@ -1421,8 +1708,32 @@
   }
 </script>
 
+<svelte:head>
+  {#if ownsDocumentTitle}
+    <title>{documentTitle}</title>
+  {/if}
+</svelte:head>
+
 <div bind:this={chatRootEl} class="flex h-full min-h-0 flex-col">
-  <header class="flex items-center gap-3 border-b border-base-300 px-4 py-3">
+  {#if onBack}
+    <!-- "‹ Kanäle" (design 1a): the way back to the channel list, above the
+      title on every width. -->
+    <div class="px-2 pt-1">
+      <button
+        type="button"
+        class="btn gap-1 px-2 text-primary btn-ghost btn-sm"
+        data-testid="group-chat-breadcrumb"
+        aria-label={m.groups_breadcrumb_channels_aria()}
+        onclick={onBack}
+      >
+        <ChevronLeftIcon class_="w-4 h-4" title="" />
+        {m.groups_breadcrumb_channels()}
+      </button>
+    </div>
+  {/if}
+  <header
+    class="flex items-center gap-3 border-b border-base-300 px-4 {onBack ? 'pt-1 pb-3' : 'py-3'}"
+  >
     {#if metadata?.picture}
       <img src={metadata.picture} alt="" class="h-8 w-8 rounded-full object-cover" />
     {/if}
@@ -1461,21 +1772,46 @@
       <!-- NIP-29 AV space: join (or leave) the channel's call; the count is
         the relay's own kind-39004 participant list. Icon + count, same
         header chrome as the members button. -->
-      <button
-        type="button"
-        class="btn btn-ghost btn-sm {inCallHere ? 'text-primary' : ''}"
-        data-testid="group-call-join"
-        title={callParticipantCount > 0
-          ? m.groups_call_in_progress({ count: callParticipantCount })
-          : callButtonLabel}
-        aria-label={callButtonLabel}
-        aria-pressed={inCallHere}
-        disabled={!myPubkey}
-        onclick={toggleCall}
-      >
-        <MeetIcon class_="w-4 h-4" />
-        {#if callParticipantCount}{callParticipantCount}{/if}
-      </button>
+      {#if showCallHere && callLiveHere}
+        <!-- The call is on screen right below: a status, not a second
+          (destructive) control — only the stage's red button leaves. -->
+        <span
+          role="status"
+          class="btn btn-active cursor-default text-primary btn-ghost btn-sm"
+          data-testid="group-call-status"
+          title={m.groups_call_you_are_in()}
+          aria-label={m.groups_call_you_are_in()}
+        >
+          <MeetIcon class_="w-4 h-4" title="" />
+          {#if callParticipantCount}{callParticipantCount}{/if}
+        </span>
+      {:else if showCallButton}
+        <button
+          type="button"
+          class="btn btn-ghost btn-sm {callLiveHere ? 'text-primary' : ''}"
+          data-testid="group-call-join"
+          title={callButtonLabel}
+          aria-label={callButtonLabel}
+          aria-pressed={callLiveHere}
+          disabled={!myPubkey}
+          onclick={toggleCall}
+        >
+          <MeetIcon class_="w-4 h-4" />
+          {#if callParticipantCount}{callParticipantCount}{/if}
+        </button>
+        {#if !myPubkey}
+          <!-- The greyed icon's "log in to start a call" is only a tooltip,
+            which a touch user never sees (QA round 2 C5). -->
+          <button
+            type="button"
+            class="btn text-primary btn-ghost btn-sm"
+            data-testid="group-call-login"
+            onclick={() => modalStore.openModal('login')}
+          >
+            {m.common_login()}
+          </button>
+        {/if}
+      {/if}
     {:else if canStartCall}
       <!-- Admin one-click: switch the channel's calls on (a 9002 restating
            the current metadata plus `livekit`) and join right away. -->
@@ -1526,8 +1862,17 @@
         >
           <li>
             {#if inMyList}
-              <button data-testid="group-list-remove" onclick={() => toggleMyList(false)}>
-                {m.groups_list_remove()}
+              <!-- QA C6: says which list and that nothing else changes. -->
+              <button
+                class="flex flex-col items-start gap-0.5"
+                data-testid="group-list-remove"
+                onclick={() => toggleMyList(false)}
+              >
+                <span>{m.groups_list_remove()}</span>
+                <span
+                  class="text-xs font-normal text-base-content/60"
+                  data-testid="group-list-remove-hint">{m.groups_list_remove_hint()}</span
+                >
               </button>
             {:else}
               <button data-testid="group-list-add" onclick={() => toggleMyList(true)}>
@@ -1535,24 +1880,31 @@
               </button>
             {/if}
           </li>
+          {#if canWrite}
+            <li>
+              <button data-testid="group-meeting-schedule" onclick={openScheduleMeeting}>
+                {m.groups_meeting_schedule()}
+              </button>
+            </li>
+          {/if}
+          {#if rosterAnswered && isMember}
+            <!-- Destructive last, set apart, and confirmed (design 1a). -->
+            <li class="mt-2 border-t border-base-300 pt-2">
+              <button class="font-semibold text-error" data-testid="group-leave" onclick={askLeave}>
+                {leaveLabel}
+              </button>
+            </li>
+          {/if}
         </ul>
       </div>
     {/if}
-    {#if myPubkey && rosterAnswered}
-      {#if isMember}
-        <button
-          type="button"
-          class="btn btn-ghost btn-sm"
-          data-testid="group-leave"
-          onclick={leave}
-        >
-          {m.groups_leave()}
-        </button>
-      {:else if canWrite}
-        <!-- Admin (39001) without an explicit 39002 seat: NIP-29 counts admins
-          as members, so they are already in — no join/leave affordance. This is
-          the community creator's own situation (self-approval loop otherwise). -->
-      {:else if joinPending}
+    <!-- Join affordance for non-members only. A member's Leave lives in the ⋯
+      menu behind a confirm (design 1a); an admin (39001) without an explicit
+      39002 seat is a member too — NIP-29 counts admins as members, so no
+      join/leave here (the community creator's own situation; a self-approval
+      loop otherwise). -->
+    {#if myPubkey && rosterAnswered && !isMember && !canWrite}
+      {#if joinPending}
         <span class="text-xs text-base-content/60" data-testid="group-join-pending"
           >{m.community_join_pending()}</span
         >
@@ -1623,6 +1975,28 @@
     </div>
   {/if}
 
+  {#if leaveConfirmOpen}
+    <div class="modal-open modal" role="dialog" data-testid="group-leave-confirm">
+      <div class="modal-box max-w-sm">
+        <h3 class="font-bold">{leaveConfirmTitle}</h3>
+        <p class="py-2 text-sm opacity-70">{leaveConfirmBody}</p>
+        <div class="modal-action">
+          <button class="btn btn-ghost" onclick={() => (leaveConfirmOpen = false)}
+            >{m.common_cancel()}</button
+          >
+          <button
+            class="btn btn-error"
+            data-testid="group-leave-confirm-action"
+            disabled={leaving}
+            onclick={confirmLeave}
+          >
+            {leaveLabel}
+          </button>
+        </div>
+      </div>
+    </div>
+  {/if}
+
   {#if deleteTarget}
     <div class="modal-open modal" role="dialog">
       <div class="modal-box max-w-sm">
@@ -1676,12 +2050,13 @@
               replyParent.pubkey,
               getProfiles().get(replyParent.pubkey)
             ),
-            content: replyParent.content
+            content: quoteText(replyParent)
           }
         : null}
       {onReply}
       replyTitle={m.groups_reply()}
-      onDelete={isAdmin ? (msg) => (deleteTarget = msg) : null}
+      showContent={message.kind !== MEETING_KIND}
+      onDelete={isAdmin && message.kind !== MEETING_KIND ? (msg) => (deleteTarget = msg) : null}
       deleteTitle={m.groups_message_delete()}
       onCopyLink={copyMessageLink}
       copyLinkTitle={m.chat_copy_message_link()}
@@ -1731,21 +2106,41 @@
             onVote={(optionIds) => votePoll(poll, optionIds)}
           />
         {/if}
+        {#if msg.kind === MEETING_KIND}
+          <MeetingCard
+            event={msg}
+            {pointer}
+            user={getActiveUser()}
+            {isAdmin}
+            onJoin={canJoinMeeting ? joinMeeting : undefined}
+            callRunning={callParticipantCount > 0}
+          />
+        {/if}
       {/snippet}
     </ChatMessageRow>
   {/snippet}
 
   <div class="flex min-h-0 flex-1">
     <!-- On a narrow viewport the panel takes the whole width; the timeline
-         steps aside rather than being squeezed into a column of its own. -->
+         steps aside rather than being squeezed into a column of its own.
+         min-w-0: a flex item is at least as wide as its content's
+         min-content by default — with the call stage and the chat column
+         side by side that widened the whole page (laoc, 2026-10-02). -->
     <div
-      class="relative flex min-h-0 flex-1 flex-col {openThreadRoot
+      class="relative flex min-h-0 min-w-0 flex-1 flex-col {openThreadRoot
         ? threadExpanded
           ? 'hidden'
           : 'hidden md:flex'
         : ''}"
     >
       <GroupAppsBar {pointer} messages={displayed} sessionMeta={sessionTitles} onOpen={openStage} />
+      {#if !callLiveHere}
+        <MeetingBar
+          {meetings}
+          onJoin={canJoinMeeting ? joinMeeting : undefined}
+          callRunning={callParticipantCount > 0}
+        />
+      {/if}
       {#if poppedOutHere}
         <div
           class="flex items-center justify-between gap-2 border-b border-base-300 bg-base-200 px-4 py-2 text-sm"
@@ -1770,22 +2165,63 @@
               <CallStage.Component
                 title={displayTitle}
                 {identityToPubkey}
-                onLeave={leaveGroupCall}
+                onLeave={() => leaveGroupCallWithConfirm()}
                 onShowChat={showChatFromStage}
                 chatOpen={call.chatBeside && wideScreen}
                 onPopOut={canPopOut ? popOutHere : undefined}
+                onInvite={canInvite ? () => (inviteOpen = true) : undefined}
                 registerView={() =>
                   registerCallStageView(`${window.location.pathname}${window.location.search}`)}
               />
             {:else}
-              <div class="flex flex-1 items-center justify-center" data-testid="group-call-loading">
+              <div
+                class="flex flex-1 items-center justify-center"
+                data-testid="group-call-loading"
+                use:callViewOnScreen
+              >
                 <span class="loading loading-lg loading-spinner text-primary"></span>
               </div>
             {/if}
+          {:else if call.phase === 'ended'}
+            <div
+              class="flex flex-1 flex-col items-center justify-center gap-2 p-4 text-center"
+              role="status"
+              data-testid="group-call-ended"
+              use:callViewOnScreen
+            >
+              <p class="text-sm text-base-content/70">
+                {call.endReason === 'removed'
+                  ? m.groups_call_ended_removed()
+                  : m.groups_call_ended_dropped()}
+              </p>
+              <div class="flex gap-2">
+                <!-- No way back for a removed user: the relay blocks their
+                  pass, so "Rejoin" would only fail (CallLanding's !removedHere). -->
+                {#if call.endReason !== 'removed'}
+                  <button
+                    type="button"
+                    class="btn btn-sm btn-primary"
+                    onclick={startCall}
+                    data-testid="group-call-rejoin"
+                  >
+                    {m.groups_call_rejoin()}
+                  </button>
+                {/if}
+                <button
+                  type="button"
+                  class="btn btn-ghost btn-sm"
+                  onclick={leaveGroupCall}
+                  data-testid="group-call-ended-close"
+                >
+                  {m.common_close()}
+                </button>
+              </div>
+            </div>
           {:else if call.phase === 'error'}
             <div
-              class="flex flex-1 flex-col items-center justify-center gap-2"
+              class="flex flex-1 flex-col items-center justify-center gap-2 px-4 text-center"
               data-testid="group-call-error"
+              use:callViewOnScreen
             >
               <p class="text-sm text-error">{callErrorMessage(call.error)}</p>
               <div class="flex gap-2">
@@ -1799,8 +2235,9 @@
             </div>
           {:else}
             <div
-              class="flex flex-1 flex-col items-center justify-center gap-2"
+              class="flex flex-1 flex-col items-center justify-center gap-2 px-4 text-center"
               data-testid="group-call-pending"
+              use:callViewOnScreen
             >
               <span class="loading loading-lg loading-spinner text-primary"></span>
               <p class="text-sm text-base-content/60">{m.groups_call_requesting()}</p>
@@ -1834,101 +2271,129 @@
                 : 'contents'}
           data-testid="group-chat-body"
         >
-          {#if !atBottom}
-            <button
-              type="button"
-              data-testid="chat-jump-to-bottom"
-              class="btn absolute right-6 bottom-20 z-10 btn-circle shadow-md btn-sm"
-              title={m.chat_jump_to_bottom()}
-              aria-label={m.chat_jump_to_bottom()}
-              onclick={jumpToBottom}>↓</button
-            >
+          {#if inCallHere}
+            <div role="tablist" class="tabs-border tabs border-b border-base-300 px-2 tabs-sm">
+              <button
+                role="tab"
+                class="tab {chatTab === 'call' ? 'tab-active' : ''}"
+                aria-selected={chatTab === 'call'}
+                data-testid="chat-tab-call"
+                onclick={() => (chatTab = 'call')}>{m.groups_call_chat_tab()}</button
+              >
+              <button
+                role="tab"
+                class="tab {chatTab === 'channel' ? 'tab-active' : ''}"
+                aria-selected={chatTab === 'channel'}
+                data-testid="chat-tab-channel"
+                onclick={() => (chatTab = 'channel')}>{m.groups_call_chat_channel_tab()}</button
+              >
+            </div>
+          {/if}
+          {#if inCallHere && chatTab === 'call' && CallChatPanel.Component}
+            <CallChatPanel.Component {identityToPubkey} title={displayTitle} />
           {/if}
           <div
-            bind:this={scrollContainer}
-            class="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-4"
-            onscroll={handleScroll}
-            onloadcapture={handleContentLoad}
+            class={inCallHere && chatTab === 'call' ? 'hidden' : 'contents'}
+            data-testid="channel-chat-body"
           >
-            {#if isLoading && displayed.length === 0}
-              <div class="mx-auto py-6"><span class="loading loading-md loading-dots"></span></div>
+            {#if !atBottom}
+              <button
+                type="button"
+                data-testid="chat-jump-to-bottom"
+                class="btn absolute right-6 bottom-20 z-10 btn-circle shadow-md btn-sm"
+                title={m.chat_jump_to_bottom()}
+                aria-label={m.chat_jump_to_bottom()}
+                onclick={jumpToBottom}>↓</button
+              >
             {/if}
-            <ChatMessageList items={grouped}>
-              {#snippet row(/** @type {any} */ message)}
-                {@render messageRow(message, (msg) => (replyTo = msg), true)}
-              {/snippet}
-            </ChatMessageList>
-          </div>
-
-          {#if disclosure !== 'unknown'}
-            <p data-testid="disclosure-line" class="px-4 pb-1 text-xs opacity-60">
-              {#if disclosure === 'world'}
-                {m.disclosure_world()}
-              {:else if disclosure === 'members'}
-                {m.disclosure_members({ count: members.size })}
-              {:else}
-                {m.disclosure_invited({ count: members.size })}
-              {/if}
-            </p>
-          {/if}
-          {#if restricted}
             <div
-              class="flex items-center justify-between gap-3 rounded-xl border border-dashed border-base-300 px-4 py-3 text-sm text-base-content/70"
-              data-testid="group-restricted-note"
+              bind:this={scrollContainer}
+              class="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-4"
+              onscroll={handleScroll}
+              onloadcapture={handleContentLoad}
             >
-              <span>{m.groups_restricted_note()}</span>
-              {#if joinPending}
-                <!-- The relay accepts a pending 9021 to a closed group even
+              {#if isLoading && displayed.length === 0}
+                <div class="mx-auto py-6">
+                  <span class="loading loading-md loading-dots"></span>
+                </div>
+              {/if}
+              <ChatMessageList items={grouped}>
+                {#snippet row(/** @type {any} */ message)}
+                  {@render messageRow(message, (msg) => (replyTo = msg), true)}
+                {/snippet}
+              </ChatMessageList>
+            </div>
+
+            {#if disclosure !== 'unknown'}
+              <p data-testid="disclosure-line" class="px-4 pb-1 text-xs opacity-60">
+                {#if disclosure === 'world'}
+                  {m.disclosure_world()}
+                {:else if disclosure === 'members'}
+                  {m.disclosure_members({ count: members.size })}
+                {:else}
+                  {m.disclosure_invited({ count: members.size })}
+                {/if}
+              </p>
+            {/if}
+            {#if restricted}
+              <div
+                class="flex items-center justify-between gap-3 rounded-xl border border-dashed border-base-300 px-4 py-3 text-sm text-base-content/70"
+                data-testid="group-restricted-note"
+              >
+                <span>{m.groups_restricted_note()}</span>
+                {#if joinPending}
+                  <!-- The relay accepts a pending 9021 to a closed group even
               while reads stay restricted (verified live) — the same pending
               wording as the header/join-bar, not a dead end. -->
-                <span class="text-xs text-base-content/60">{m.community_join_pending()}</span>
-              {:else if myPubkey && !canWrite}
-                <button class="btn btn-sm btn-primary" onclick={join}
-                  >{groupClosed ? m.community_join_request() : m.groups_join()}</button
-                >
-              {/if}
-            </div>
-          {:else if myPubkey && rosterAnswered && !canWrite}
-            <!-- Readable, but not a member: the relay would reject every send
+                  <span class="text-xs text-base-content/60">{m.community_join_pending()}</span>
+                {:else if myPubkey && !canWrite}
+                  <button class="btn btn-sm btn-primary" onclick={join}
+                    >{groupClosed ? m.community_join_request() : m.groups_join()}</button
+                  >
+                {/if}
+              </div>
+            {:else if myPubkey && rosterAnswered && !canWrite}
+              <!-- Readable, but not a member: the relay would reject every send
           ("blocked: unknown member") — offer the join instead of a composer
           whose messages silently vanish (laoc, 2026-08-19). -->
-            <div
-              class="flex items-center justify-between gap-3 rounded-xl border border-dashed border-base-300 px-4 py-3 text-sm text-base-content/70"
-              data-testid="group-join-bar"
-            >
-              {#if joinPending}
-                <span>{m.community_join_pending()}</span>
-              {:else}
-                <span>{m.groups_composer_join_note()}</span>
-                <button
-                  class="btn btn-sm btn-primary"
-                  data-testid="group-join-bar-button"
-                  onclick={join}
-                  >{groupClosed ? m.community_join_request() : m.groups_join()}</button
-                >
-              {/if}
-            </div>
-          {:else}
-            <!-- disabled while the roster hasn't answered yet, not just while
+              <div
+                class="flex items-center justify-between gap-3 rounded-xl border border-dashed border-base-300 px-4 py-3 text-sm text-base-content/70"
+                data-testid="group-join-bar"
+              >
+                {#if joinPending}
+                  <span>{m.community_join_pending()}</span>
+                {:else}
+                  <span>{m.groups_composer_join_note()}</span>
+                  <button
+                    class="btn btn-sm btn-primary"
+                    data-testid="group-join-bar-button"
+                    onclick={join}
+                    >{groupClosed ? m.community_join_request() : m.groups_join()}</button
+                  >
+                {/if}
+              </div>
+            {:else}
+              <!-- disabled while the roster hasn't answered yet, not just while
           logged out: canWrite is unknown until then, and an enabled input a
           non-member could type into is a dead end the moment the roster
           finally does answer restricted (laoc, 2026-08-19). -->
-            <ChatComposer
-              bind:value={text}
-              placeholder={m.groups_input_placeholder({ name: displayTitle })}
-              disabled={!myPubkey || !rosterAnswered}
-              {sending}
-              onSubmit={send}
-              {replyTo}
-              onCancelReply={() => (replyTo = null)}
-              testid="group-chat-input"
-              {customEmojiSets}
-              onOpenApps={canWrite ? () => (appPickerOpen = true) : null}
-              onAttachFile={canWrite ? (file) => attachFile(file, 'timeline') : null}
-              uploading={uploadingAttachment}
-              onOpenPoll={canWrite ? () => (pollModalOpen = true) : null}
-            />
-          {/if}
+              <ChatComposer
+                bind:value={text}
+                placeholder={m.groups_input_placeholder({ name: displayTitle })}
+                disabled={!myPubkey || !rosterAnswered}
+                {sending}
+                onSubmit={send}
+                replyTo={replyTo && { content: quoteText(replyTo) }}
+                onCancelReply={() => (replyTo = null)}
+                testid="group-chat-input"
+                {customEmojiSets}
+                onOpenApps={canWrite ? () => (appPickerOpen = true) : null}
+                onAttachFile={canWrite ? (file) => attachFile(file, 'timeline') : null}
+                uploading={uploadingAttachment}
+                onOpenPoll={canWrite ? () => (pollModalOpen = true) : null}
+              />
+            {/if}
+          </div>
         </div>
       </div>
     </div>
@@ -1955,7 +2420,7 @@
             disabled={!myPubkey}
             {sending}
             onSubmit={sendInThread}
-            replyTo={threadReplyTo}
+            replyTo={threadReplyTo && { content: quoteText(threadReplyTo) }}
             onCancelReply={() => (threadReplyTo = null)}
             testid="thread-chat-input"
             onAttachFile={canWrite ? (file) => attachFile(file, 'thread') : null}
@@ -1965,4 +2430,17 @@
       </ThreadPanel>
     {/if}
   </div>
+
+  {#if inviteOpen && CallInviteDialog.Component}
+    {@const user = getActiveUser()}
+    {#if user?.signer}
+      <CallInviteDialog.Component
+        {pointer}
+        {user}
+        {isAdmin}
+        title={displayTitle}
+        onClose={() => (inviteOpen = false)}
+      />
+    {/if}
+  {/if}
 </div>

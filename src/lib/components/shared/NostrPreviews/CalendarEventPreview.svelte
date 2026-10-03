@@ -18,6 +18,8 @@
   import InlineRsvp from '$lib/components/calendar/InlineRsvp.svelte';
   import { useActiveUser } from '$lib/stores/accounts.svelte';
   import ImageWithFallback from '$lib/components/shared/ImageWithFallback.svelte';
+  import { isChannelMeeting } from '$lib/helpers/calendar-timing.js';
+  import * as m from '$lib/paraglide/messages';
 
   let { identifier, decoded: _decoded, inline: _inline = false } = $props();
 
@@ -102,6 +104,19 @@
         <CopyIcon class_="w-3 h-3" />
       </button>
     </div>
+  </div>
+{:else if event && isChannelMeeting(event.originalEvent)}
+  <!-- A channel meeting lives on its group relay only: no RSVP (a 31925
+       would go out through the outbox naming it), no details, no link to the
+       public calendar page — just a neutral marker. -->
+  <div
+    class="nostr-preview-surface card my-2 border border-base-300 bg-base-100 p-3 text-sm shadow-sm"
+    data-testid="channel-meeting-preview"
+  >
+    <span class="flex items-center gap-2 text-base-content/70">
+      <CalendarIcon class_="w-4 h-4" />
+      {m.meeting_preview_channel()}
+    </span>
   </div>
 {:else if event}
   <!-- Single opaque surface for card + RSVP so both stay readable when

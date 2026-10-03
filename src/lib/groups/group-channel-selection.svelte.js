@@ -38,3 +38,24 @@ export function clearGroupChannelSelection(communityPubkey) {
   delete next[communityPubkey];
   selections = next;
 }
+
+// "Back to the channel list" requests per community (design 1a, laoc
+// 2026-10-02): the Kanäle tab / sidebar heading tapped while a channel is
+// open. Clearing the selection alone is not enough below md, where
+// PrivateChannelsView keeps its own `mobileChat` flag (rail vs pane) — every
+// mounted instance watches this counter and flips back to the rail.
+let listRequests = $state.raw(/** @type {Record<string, number>} */ ({}));
+
+/** Back to the channel list: clear the selection and tell the views.
+ * @param {string|undefined|null} communityPubkey */
+export function requestChannelList(communityPubkey) {
+  if (!communityPubkey) return;
+  clearGroupChannelSelection(communityPubkey);
+  listRequests = { ...listRequests, [communityPubkey]: (listRequests[communityPubkey] ?? 0) + 1 };
+}
+
+/** @param {string|undefined|null} communityPubkey @returns {number} */
+export function getChannelListRequests(communityPubkey) {
+  if (!communityPubkey) return 0;
+  return listRequests[communityPubkey] ?? 0;
+}

@@ -69,7 +69,9 @@
     resourceVariantPicker: lazyComponent(
       () => import('./educational/ResourceVariantPickerModal.svelte')
     ),
-    concordInvites: lazyComponent(() => import('./community/channels/InviteInboxModal.svelte'))
+    concordInvites: lazyComponent(() => import('./community/channels/InviteInboxModal.svelte')),
+    callSwitchConfirm: lazyComponent(() => import('./groups/CallSwitchConfirmModal.svelte')),
+    callLeaveConfirm: lazyComponent(() => import('./groups/CallLeaveConfirmModal.svelte'))
   };
 
   /** @type {any} */
@@ -123,7 +125,11 @@
           onBack: () => modal.transitionModal('bunker', 'login')
         };
       case 'signup':
-        return { modalId, externalSignup: !!props?.externalSignup };
+        return {
+          modalId,
+          externalSignup: !!props?.externalSignup,
+          initialName: props?.initialName ?? ''
+        };
       case 'createPoll':
       case 'createNote':
         return { communityPubkey };
@@ -135,6 +141,22 @@
         };
       case 'concordInvites':
         return { onClose: () => modal.closeModal() };
+      case 'callSwitchConfirm': {
+        const callbacks = /** @type {any} */ (modal.modalCallbacks);
+        return {
+          title: props?.title ?? '',
+          onConfirm: () => callbacks?.onConfirm?.(),
+          onCancel: () => callbacks?.onCancel?.()
+        };
+      }
+      case 'callLeaveConfirm': {
+        const callbacks = /** @type {any} */ (modal.modalCallbacks);
+        return {
+          guest: props?.guest === true,
+          onConfirm: () => callbacks?.onConfirm?.(),
+          onCancel: () => callbacks?.onCancel?.()
+        };
+      }
       case 'nip05Activated':
         return { address: /** @type {string} */ (props?.address) || '' };
       default:

@@ -40,7 +40,9 @@
   import { parseGroupPointers, sharedRelayOf, channelKey } from '$lib/groups/community-pointer.js';
   import {
     selectGroupChannel,
-    getSelectedGroupChannel
+    getSelectedGroupChannel,
+    clearGroupChannelSelection,
+    getChannelListRequests
   } from '$lib/groups/group-channel-selection.svelte.js';
   import GroupChat from '$lib/components/groups/GroupChat.svelte';
   import { parseMembershipPointer } from '$lib/groups/community-membership.js';
@@ -58,6 +60,7 @@
   import { page } from '$app/stores';
   import { updateQueryParams } from '$lib/helpers/urlParams.js';
   import ChannelRailRow from './ChannelRailRow.svelte';
+  import ChannelCallRoster from '$lib/components/groups/call/ChannelCallRoster.svelte';
   import ChannelStatePane from './ChannelStatePane.svelte';
   import ChannelOverview from './ChannelOverview.svelte';
   import ChannelChat from './ChannelChat.svelte';
@@ -195,6 +198,9 @@
     const { rootChannel, channels: discovered, fetched } = getCommunityChannels();
     const legacy = groupPointers;
     const discovering = !!rootPointer;
+    // The param went away (back to the list): forget it, so following a link
+    // to the same channel later applies again.
+    if (!channelParam) appliedGroupParam = null;
     if (!communityPubkey || !channelParam || channelParam === appliedGroupParam) return;
     // While the subtree discovery is still running, matching would read a
     // half-arrived list and miss the target — wait for the full list.
@@ -215,6 +221,52 @@
     if (key && getSelectedGroupChannel(communityPubkey) !== key) {
       selectGroupChannel(communityPubkey, key);
     }
+  });
+
+  /**
+   * Open a NIP-29 channel IN the community pane (selection store + ?channel=)
+   * — rail rows, overview cards and the rail's call roster all land here.
+   * @param {{id: string, relay: string}} pointer
+   */
+  function openGroupChannel(pointer) {
+    if (communikeyEvent?.pubkey) {
+      const key = channelKey(pointer);
+      if (key) {
+        selectGroupChannel(communikeyEvent.pubkey, key);
+        syncChannelParam(pointer.id);
+      }
+    }
+    mobileChat = true;
+  }
+
+  /**
+   * Back to the channel list (design 1a): GroupChat's "‹ Kanäle" breadcrumb.
+   * Clears the pick — desktop shows the overview, below md the rail comes
+   * back — and drops ?channel= so a reload does not reopen the channel.
+   */
+  function backToChannelList() {
+    clearGroupChannelSelection(communikeyEvent?.pubkey);
+    mobileChat = false;
+    if (typeof window === 'undefined') return;
+    // appliedGroupParam keeps the old value until the URL drops it: the
+    // deep-link effect re-runs on the cleared selection while ?channel= is
+    // still in the address bar, and must not re-open the channel from it.
+    updateQueryParams(new URLSearchParams(window.location.search), {
+      channel: null,
+      message: null
+    });
+  }
+
+  // The Kanäle tab / sidebar heading tapped while a channel is open
+  // (requestChannelList): the selection is already cleared by the store, but
+  // `mobileChat` is per instance, so each instance flips back to the rail.
+  // The first run only records the count — a mount is not a request.
+  /** @type {number | undefined} */
+  let seenListRequests;
+  $effect(() => {
+    const count = getChannelListRequests(communikeyEvent?.pubkey);
+    if (seenListRequests !== undefined && count !== seenListRequests) mobileChat = false;
+    seenListRequests = count;
   });
 
   /**
@@ -322,6 +374,32 @@
     ];
     return all.find((pointer) => channelKey(pointer) === key) ?? null;
   });
+  // Below md the pane replaces the rail. A selected NIP-29 channel opens on
+  // every width — whether it was picked by a tap, a ?channel= deep link, a
+  // reload, or before the window shrank (QA 2026-10-02 B2: those drew the
+  // rail with the channel merely highlighted). The breadcrumb and the
+  // Kanäle tab clear the selection, which is the way back.
+  const groupChannelOpen = $derived(
+    isNip29Community && !concord.community && !!selectedGroupPointer
+  );
+  // A community extended by NIP-29 groups, inside its community layout: the
+  // channel overview cards are THE channel list at every width (QA
+  // 2026-10-02 C-new-7 — phones got the rail, tablets/desktops the cards, two
+  // designs for one list). The rail stays for Concord areas and the
+  // standalone /private route.
+  const groupsListIsOverview = $derived(
+    !!communikeyEvent && isNip29Community && !concord.community
+  );
+  const paneOnMobile = $derived(mobileChat || groupChannelOpen || groupsListIsOverview);
+  // The root (membership) group is open: leaving it leaves the community.
+  const selectedIsRoot = $derived.by(() => {
+    const root = getCommunityChannels().rootChannel;
+    return (
+      !!selectedGroupPointer &&
+      !!root &&
+      channelKey(selectedGroupPointer) === channelKey({ id: root.id, relay: root.relay })
+    );
+  });
   // GroupChat's fallback title: a channel pointer's own name, or "General" for
   // the root (which has no name — its 39000 name is the community name).
   const selectedFallbackName = $derived(
@@ -406,6 +484,15 @@
   const railSections = $derived(
     splitFavouriteRows(channelRows, readFavouriteChannels(favouritePubkey))
   );
+  // The overview's order: starred channels first (the rail's Favoriten
+  // section), then General and the rest as buildChannelRows sorted them.
+  const overviewRows = $derived([...railSections.favourites, ...railSections.rest]);
+  const favouriteKeys = $derived(new Set(railSections.favourites.map((row) => row.key)));
+  /** Same gate as the rail's per-row delete: admins/owner, never the root. */
+  const canDeleteGroupRow = (/** @type {any} */ row) =>
+    row.source === 'group' &&
+    (isRootAdmin || isCommunikeyOwner) &&
+    row.pointer.id !== rootPointer?.id;
 
   // Mirror the on-screen channel into the shared active-channel store and
   // stamp it read. Reads deps BEFORE the early return (project gotcha:
@@ -530,222 +617,225 @@
       the rail stays the desktop channel list too (regression fix, same
       day: hiding it unconditionally left that page with no channel list
       at all). Hosted-ness = a communikeyEvent was passed. -->
-    <aside
-      class="w-full shrink-0 flex-col gap-1 overflow-y-auto bg-base-200 p-3 {communikeyEvent
-        ? 'md:hidden'
-        : 'md:flex md:w-72'} {mobileChat ? 'hidden' : 'flex'}"
-    >
-      <!-- Same header grammar as the linked sidebar's KANÄLE zone: px-4
+    {#if !groupsListIsOverview}
+      <aside
+        class="w-full shrink-0 flex-col gap-1 overflow-y-auto bg-base-200 p-3 {communikeyEvent
+          ? 'md:hidden'
+          : 'md:flex md:w-72'} {paneOnMobile ? 'hidden' : 'flex'}"
+      >
+        <!-- Same header grammar as the linked sidebar's KANÄLE zone: px-4
         inset matching the rows, plain bell glyph on the badge column, no
         BETA badge (the page header above already carries one) — laoc,
         2026-08-18. -->
-      <div
-        class="flex items-center gap-1.5 px-4 pt-2 pb-1 text-xs font-bold tracking-wider text-base-content/50 uppercase"
-      >
-        <span>{m.concord_rail_channels()}</span>
-        {#if concord.phase === 'syncing'}
-          <span
-            class="loading loading-xs loading-spinner text-base-content/40"
-            title={m.concord_sync_title()}
-          ></span>
-        {/if}
-      </div>
-      {#if channels.length > 0}
-        <!-- Legend glyphs sit in the same w-5 icon column as the rows below. -->
-        <div class="px-4 pb-1 text-[0.65rem] leading-tight text-base-content/50">
-          <span class="flex items-center gap-3">
-            <span class="flex w-5 shrink-0 justify-center">#</span>{m.concord_legend_public()}
-          </span>
-          <span class="flex items-center gap-3">
-            <span class="flex w-5 shrink-0 justify-center"
-              ><LockIcon class_="w-3 h-3" title="" /></span
-            >{m.concord_legend_private()}
-          </span>
+        <div
+          class="flex items-center gap-1.5 px-4 pt-2 pb-1 text-xs font-bold tracking-wider text-base-content/50 uppercase"
+        >
+          <span>{m.concord_rail_channels()}</span>
+          {#if concord.phase === 'syncing'}
+            <span
+              class="loading loading-xs loading-spinner text-base-content/40"
+              title={m.concord_sync_title()}
+            ></span>
+          {/if}
         </div>
-      {/if}
-      <!-- Tighter, list-style rows (Armada-parity cleanup). The row markup
+        {#if channels.length > 0}
+          <!-- Legend glyphs sit in the same w-5 icon column as the rows below. -->
+          <div class="px-4 pb-1 text-[0.65rem] leading-tight text-base-content/50">
+            <span class="flex items-center gap-3">
+              <span class="flex w-5 shrink-0 justify-center">#</span>{m.concord_legend_public()}
+            </span>
+            <span class="flex items-center gap-3">
+              <span class="flex w-5 shrink-0 justify-center"
+                ><LockIcon class_="w-3 h-3" title="" /></span
+              >{m.concord_legend_private()}
+            </span>
+          </div>
+        {/if}
+        <!-- Tighter, list-style rows (Armada-parity cleanup). The row markup
         itself lives in ChannelRailRow, shared with the host sidebar — the two
         rails must not drift apart channel by channel. -->
-      {#snippet railRow(/** @type {any} */ row, /** @type {boolean} */ starred)}
-        {@const canDelete =
-          row.source !== 'concord' &&
-          isNip29Community &&
-          (isRootAdmin || isCommunikeyOwner) &&
-          row.pointer.id !== rootPointer?.id}
-        <!-- Row affordances (star, owner delete) OVERLAY the row's right edge
+        {#snippet railRow(/** @type {any} */ row, /** @type {boolean} */ starred)}
+          {@const canDelete =
+            row.source !== 'concord' &&
+            isNip29Community &&
+            (isRootAdmin || isCommunikeyOwner) &&
+            row.pointer.id !== rootPointer?.id}
+          <!-- Row affordances (star, owner delete) OVERLAY the row's right edge
              (never nested inside it — nested interactive): the row keeps its
              full width until hover/focus, then pads right so the fading-in
              buttons don't cover the trailing badges (laoc, 2026-09-01). A
              starred row keeps the star (and its padding) permanently. -->
-        <div class="group/ch relative w-full min-w-0">
-          <div
-            class="w-full min-w-0 transition-[padding] duration-150 {starred
-              ? 'pr-7'
-              : ''} {canDelete
-              ? 'group-focus-within/ch:pr-14 group-hover/ch:pr-14'
-              : 'group-focus-within/ch:pr-7 group-hover/ch:pr-7'}"
-          >
-            {#if row.source === 'concord'}
-              {@const flags = channelUnreadState(concord.communityId, row.channel_id)}
-              <ChannelRailRow
-                symbol={row.symbol}
-                name={row.name}
-                locked={row.locked}
-                active={activeChannel?.channel_id === row.channel_id}
-                dimmed={!row.accessible}
-                bold={flags.unread}
-                onclick={() => {
-                  if (concord.communityId && row.channel_id) {
-                    selectConcordChannel(concord.communityId, row.channel_id);
-                    syncChannelParam(row.channel_id);
-                  }
-                  mobileChat = true;
-                }}
-              >
-                {#snippet trailing()}
-                  <ConcordUnreadDot unread={flags.unread} mentioned={flags.mentioned} />
-                {/snippet}
-              </ChannelRailRow>
-            {:else}
-              <!-- A NIP-29 channel opens IN the community pane (selection store),
+          <div class="group/ch relative w-full min-w-0">
+            <div
+              class="w-full min-w-0 transition-[padding] duration-150 {starred
+                ? 'pr-7'
+                : ''} {canDelete
+                ? 'group-focus-within/ch:pr-14 group-hover/ch:pr-14'
+                : 'group-focus-within/ch:pr-7 group-hover/ch:pr-7'}"
+            >
+              {#if row.source === 'concord'}
+                {@const flags = channelUnreadState(concord.communityId, row.channel_id)}
+                <ChannelRailRow
+                  symbol={row.symbol}
+                  name={row.name}
+                  locked={row.locked}
+                  active={activeChannel?.channel_id === row.channel_id}
+                  dimmed={!row.accessible}
+                  bold={flags.unread}
+                  onclick={() => {
+                    if (concord.communityId && row.channel_id) {
+                      selectConcordChannel(concord.communityId, row.channel_id);
+                      syncChannelParam(row.channel_id);
+                    }
+                    mobileChat = true;
+                  }}
+                >
+                  {#snippet trailing()}
+                    <ConcordUnreadDot unread={flags.unread} mentioned={flags.mentioned} />
+                  {/snippet}
+                </ChannelRailRow>
+              {:else}
+                <!-- A NIP-29 channel opens IN the community pane (selection store),
                 not on the standalone /groups route: that route's sidebar is the
                 host's ENTIRE directory, which on a big public relay is a wall of
                 foreign groups and a frozen tab (laoc, 2026-08-19). -->
-              <ChannelRailRow
-                testid="group-channel-row"
-                symbol={row.symbol}
-                name={row.name}
-                locked={row.locked}
-                active={!!selectedGroupPointer &&
-                  channelKey(selectedGroupPointer) === channelKey(row.pointer)}
-                dimmed={row.pending}
-                worldReadable={row.worldReadable}
-                hidden={row.hidden === true}
-                onclick={() => {
-                  if (communikeyEvent?.pubkey) {
-                    const key = channelKey(row.pointer);
-                    if (key) {
-                      selectGroupChannel(communikeyEvent.pubkey, key);
-                      syncChannelParam(row.pointer.id);
-                    }
-                  }
-                  mobileChat = true;
-                }}
-              />
-            {/if}
-          </div>
-          <!-- Delete before star, so the always-visible star of a starred row
+                <ChannelRailRow
+                  testid="group-channel-row"
+                  symbol={row.symbol}
+                  name={row.name}
+                  locked={row.locked}
+                  active={!!selectedGroupPointer &&
+                    channelKey(selectedGroupPointer) === channelKey(row.pointer)}
+                  dimmed={row.pending}
+                  worldReadable={row.worldReadable}
+                  hidden={row.hidden === true}
+                  onclick={() => openGroupChannel(row.pointer)}
+                />
+              {/if}
+            </div>
+            <!-- Delete before star, so the always-visible star of a starred row
                sits flush at the right edge and the delete fades in to its
                left. No delete on the General (root) row: it is the community's
                membership group — removing it is the whole-community teardown
                in Settings, not a per-channel delete. -->
-          <div class="absolute inset-y-0 right-0.5 flex items-center gap-0.5">
-            {#if canDelete}
-              <button
-                type="button"
-                class="btn pointer-events-none btn-square opacity-0 btn-ghost transition-opacity btn-xs group-hover/ch:pointer-events-auto group-hover/ch:opacity-100 focus:pointer-events-auto focus:opacity-100"
-                data-testid="group-channel-delete"
-                title={m.groups_channel_delete()}
-                aria-label={m.groups_channel_delete()}
-                onclick={() => (deletingGroup = row.pointer)}
-              >
-                <TrashIcon class="h-4 w-4" />
-              </button>
-            {/if}
-            {#if favouritePubkey}
-              <button
-                type="button"
-                class="btn btn-square btn-ghost transition-opacity btn-xs {starred
-                  ? 'text-accent'
-                  : 'pointer-events-none opacity-0 group-hover/ch:pointer-events-auto group-hover/ch:opacity-100 focus:pointer-events-auto focus:opacity-100'}"
-                data-testid="channel-favourite-toggle"
-                aria-pressed={starred}
-                title={starred
-                  ? m.groups_channel_favourite_remove()
-                  : m.groups_channel_favourite_add()}
-                aria-label={starred
-                  ? m.groups_channel_favourite_remove()
-                  : m.groups_channel_favourite_add()}
-                onclick={() => toggleFavouriteChannel(favouritePubkey, row.key)}
-              >
-                <StarIcon class_="w-4 h-4" filled={starred} title="" />
-              </button>
-            {/if}
+            <div class="absolute inset-y-0 right-0.5 flex items-center gap-0.5">
+              {#if canDelete}
+                <button
+                  type="button"
+                  class="btn pointer-events-none btn-square opacity-0 btn-ghost transition-opacity btn-xs group-hover/ch:pointer-events-auto group-hover/ch:opacity-100 focus:pointer-events-auto focus:opacity-100"
+                  data-testid="group-channel-delete"
+                  title={m.groups_channel_delete()}
+                  aria-label={m.groups_channel_delete()}
+                  onclick={() => (deletingGroup = row.pointer)}
+                >
+                  <TrashIcon class="h-4 w-4" />
+                </button>
+              {/if}
+              {#if favouritePubkey}
+                <button
+                  type="button"
+                  class="btn btn-square btn-ghost transition-opacity btn-xs {starred
+                    ? 'text-accent'
+                    : 'pointer-events-none opacity-0 group-hover/ch:pointer-events-auto group-hover/ch:opacity-100 focus:pointer-events-auto focus:opacity-100'}"
+                  data-testid="channel-favourite-toggle"
+                  aria-pressed={starred}
+                  title={starred
+                    ? m.groups_channel_favourite_remove()
+                    : m.groups_channel_favourite_add()}
+                  aria-label={starred
+                    ? m.groups_channel_favourite_remove()
+                    : m.groups_channel_favourite_add()}
+                  onclick={() => toggleFavouriteChannel(favouritePubkey, row.key)}
+                >
+                  <StarIcon class_="w-4 h-4" filled={starred} title="" />
+                </button>
+              {/if}
+            </div>
           </div>
-        </div>
-      {/snippet}
-      {#if railSections.favourites.length > 0}
-        <div
-          data-testid="rail-zone-favoriten"
-          class="px-4 pt-1 pb-0.5 text-[0.65rem] font-semibold tracking-wider text-base-content/40 uppercase"
-        >
-          {m.groups_rail_favourites()}
-        </div>
-        {#each railSections.favourites as row (row.key)}
-          {@render railRow(row, true)}
+          <!-- Below lg this rail is the channel list, so a running call shows
+          here as in the desktop sidebar (laoc, 2026-10-02). AV channels only:
+          each roster holds a standing kind-39004 subscription. -->
+          {#if row.source === 'group' && row.av}
+            <ChannelCallRoster
+              pointer={row.pointer}
+              name={row.name}
+              onOpen={() => openGroupChannel(row.pointer)}
+            />
+          {/if}
+        {/snippet}
+        {#if railSections.favourites.length > 0}
+          <div
+            data-testid="rail-zone-favoriten"
+            class="px-4 pt-1 pb-0.5 text-[0.65rem] font-semibold tracking-wider text-base-content/40 uppercase"
+          >
+            {m.groups_rail_favourites()}
+          </div>
+          {#each railSections.favourites as row (row.key)}
+            {@render railRow(row, true)}
+          {/each}
+          <div class="my-1 border-t border-base-content/10"></div>
+        {/if}
+        {#each railSections.rest as row (row.key)}
+          {@render railRow(row, false)}
         {/each}
-        <div class="my-1 border-t border-base-content/10"></div>
-      {/if}
-      {#each railSections.rest as row (row.key)}
-        {@render railRow(row, false)}
-      {/each}
-      {#if (!!rootPointer || groupPointers.length > 0) && isAreaMember}
-        <button
-          class="btn justify-start btn-outline btn-sm"
-          data-testid="area-members-open"
-          onclick={() => (overlay = 'area-members')}
-        >
-          {m.area_members_title()}
-        </button>
-      {/if}
-      {#if (concord.community && concord.canManageChannels && !concord.dissolved) || (isNip29Community && (isRootAdmin || isCommunikeyOwner))}
-        <button
-          class="btn justify-start border-dashed btn-outline btn-sm"
-          data-testid="concord-new-channel"
-          onclick={() => (overlay = 'create')}
-        >
-          + {m.concord_new_channel()}
-        </button>
-      {/if}
-      <!-- Invites moved into the Einstellungen pane (laoc, 2026-08-18) —
+        {#if (!!rootPointer || groupPointers.length > 0) && isAreaMember}
+          <button
+            class="btn justify-start btn-outline btn-sm"
+            data-testid="area-members-open"
+            onclick={() => (overlay = 'area-members')}
+          >
+            {m.area_members_title()}
+          </button>
+        {/if}
+        {#if (concord.community && concord.canManageChannels && !concord.dissolved) || (isNip29Community && (isRootAdmin || isCommunikeyOwner))}
+          <button
+            class="btn justify-start border-dashed btn-outline btn-sm"
+            data-testid="concord-new-channel"
+            onclick={() => (overlay = 'create')}
+          >
+            + {m.concord_new_channel()}
+          </button>
+        {/if}
+        <!-- Invites moved into the Einstellungen pane (laoc, 2026-08-18) —
         the rail row was the linked sidebar's already-removed redundancy,
         surviving here. The ?invites=1 deep link and the global inbox still
         reach the same overlay. -->
 
-      <!-- Standalone-area footer (laoc, 2026-08-18): mirror the community
+        <!-- Standalone-area footer (laoc, 2026-08-18): mirror the community
         sidebar's Mitglieder/Einstellungen entries — an unlinked area is a
         community too, and its rail is the only chrome it has. Linked mode
         skips this (the community sidebar footer already exists there). -->
-      {#if !communikeyEvent && concord.community && !concord.dissolved}
-        <!-- Same row markup as ContentNavSidebar's footer (icons, padding,
+        {#if !communikeyEvent && concord.community && !concord.dissolved}
+          <!-- Same row markup as ContentNavSidebar's footer (icons, padding,
           hover) — the two rails must not read as different apps. -->
-        <nav class="menu mt-auto w-full space-y-1 pt-2">
-          {#if activeChannel}
+          <nav class="menu mt-auto w-full space-y-1 pt-2">
+            {#if activeChannel}
+              <button
+                class="flex items-center gap-3 rounded-lg px-4 py-3 transition-all duration-200 hover:bg-base-300/60"
+                data-testid="area-footer-members"
+                onclick={() => (overlay = 'members')}
+              >
+                <PeopleIcon class_="w-5 h-5" title="" />
+                <span class="text-sm font-medium">{m.community_members_title()}</span>
+              </button>
+            {/if}
             <button
               class="flex items-center gap-3 rounded-lg px-4 py-3 transition-all duration-200 hover:bg-base-300/60"
-              data-testid="area-footer-members"
-              onclick={() => (overlay = 'members')}
+              data-testid="area-footer-settings"
+              onclick={() => (overlay = 'area-settings')}
             >
-              <PeopleIcon class_="w-5 h-5" title="" />
-              <span class="text-sm font-medium">{m.community_members_title()}</span>
+              <SettingsIcon class_="w-5 h-5" title="" />
+              <span class="text-sm font-medium">{m.area_settings_title()}</span>
             </button>
-          {/if}
-          <button
-            class="flex items-center gap-3 rounded-lg px-4 py-3 transition-all duration-200 hover:bg-base-300/60"
-            data-testid="area-footer-settings"
-            onclick={() => (overlay = 'area-settings')}
-          >
-            <SettingsIcon class_="w-5 h-5" title="" />
-            <span class="text-sm font-medium">{m.area_settings_title()}</span>
-          </button>
-        </nav>
-      {/if}
-    </aside>
+          </nav>
+        {/if}
+      </aside>
+    {/if}
 
     <!-- pane — the paper content surface (base-100), matching the public
       community chat; the beige rail beside it reads as chrome. -->
     <section
-      class="flex min-w-0 flex-1 flex-col bg-base-100 {mobileChat ? 'flex' : 'hidden md:flex'}"
+      class="flex min-w-0 flex-1 flex-col bg-base-100 {paneOnMobile ? 'flex' : 'hidden md:flex'}"
     >
       {#if overlay === 'area-settings'}
         <!-- Standalone-area settings as a PANE, not a modal — same visual
@@ -848,52 +938,56 @@
             switching must remount the chat, or a draft typed in one would
             still be in the composer of the next (same rule as the /groups
             route). -->
-          <!-- Mobile-only back to the rail: GroupChat has no onBack of its
-            own (the /groups route never needed one), and without this the
-            rail would be unreachable once mobileChat flips. -->
-          <button
-            class="flex items-center gap-2 border-b border-base-300 px-4 py-2 text-sm text-base-content/70 md:hidden"
-            data-testid="group-chat-back"
-            onclick={() => (mobileChat = false)}
-          >
-            ← {m.concord_rail_channels()}
-          </button>
+          <!-- The way back is GroupChat's own "‹ Kanäle" breadcrumb, on every
+            width (design 1a) — no separate mobile-only back row here. -->
           {#key channelKey(selectedGroupPointer)}
             <GroupChat
               pointer={selectedGroupPointer}
               fallbackName={selectedFallbackName}
               communityPubkey={communikeyEvent?.pubkey ?? ''}
               {anchorMessageId}
+              onBack={backToChannelList}
+              isCommunityRoot={selectedIsRoot}
             />
           {/key}
         {:else}
+          {@const showMembers = (!!rootPointer || groupPointers.length > 0) && isAreaMember}
+          {@const showCreate = isRootAdmin || isCommunikeyOwner}
           <!-- No channel picked: the channel overview (Armada parity:
-            ServerPage's welcome pane). The members action renders here on
-            desktop because the rail carrying it is mobile-only now. -->
-          {#if groupPointers.length > 0 && isAreaMember}
-            <div class="hidden flex-wrap gap-2 p-3 pb-0 md:flex">
+            ServerPage's welcome pane) — the channel list on every width
+            (C-new-7), so the rail's actions ride in its header: members for
+            members, "+ Neuer Kanal" for root admins and the owner. -->
+          {#snippet overviewActions()}
+            {#if showMembers}
               <button
                 class="btn btn-outline btn-sm"
-                data-testid="area-members-open-pane"
+                data-testid="area-members-open"
                 onclick={() => (overlay = 'area-members')}
               >
                 {m.area_members_title()}
               </button>
-            </div>
-          {/if}
+            {/if}
+            {#if showCreate}
+              <button
+                class="btn border-dashed btn-outline btn-sm"
+                data-testid="concord-new-channel"
+                onclick={() => (overlay = 'create')}
+              >
+                + {m.concord_new_channel()}
+              </button>
+            {/if}
+          {/snippet}
           <ChannelOverview
-            rows={channelRows}
+            rows={overviewRows}
             hostBadges={channelHostBadges}
-            onSelect={(/** @type {{id: string, relay: string}} */ pointer) => {
-              if (communikeyEvent?.pubkey) {
-                const key = channelKey(pointer);
-                if (key) {
-                  selectGroupChannel(communikeyEvent.pubkey, key);
-                  syncChannelParam(pointer.id);
-                }
-              }
-              mobileChat = true;
-            }}
+            onSelect={openGroupChannel}
+            isFavourite={favouritePubkey ? (row) => favouriteKeys.has(row.key) : null}
+            onToggleFavourite={favouritePubkey
+              ? (row) => toggleFavouriteChannel(favouritePubkey, row.key)
+              : null}
+            canDelete={canDeleteGroupRow}
+            onDelete={(pointer) => (deletingGroup = pointer)}
+            actions={showMembers || showCreate ? overviewActions : null}
           />
         {/if}
       {:else if !concord.community && isCommunikeyOwner}

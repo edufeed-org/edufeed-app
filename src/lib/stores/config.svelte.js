@@ -86,7 +86,6 @@ const defaultConfig = {
   defaultBlossomServers: [],
   calendar: {
     weekStartDay: 1,
-    locale: 'de-DE',
     timeFormat: '24h',
     featuredAuthors: /** @type {string[]} */ ([])
   },

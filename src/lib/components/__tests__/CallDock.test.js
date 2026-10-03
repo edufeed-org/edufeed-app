@@ -23,6 +23,7 @@ const { lk, call, fns } = vi.hoisted(() => ({
   fns: {
     toggleMute: vi.fn(async () => {}),
     leaveGroupCall: vi.fn(async () => {}),
+    leaveGroupCallWithConfirm: vi.fn(async () => true),
     showCallStage: vi.fn(),
     goto: vi.fn(async () => {}),
     playLeaveSound: vi.fn(),
@@ -37,6 +38,7 @@ vi.mock('$lib/services/livekit-connection.svelte.js', () => ({
 vi.mock('$lib/groups/group-call.svelte.js', () => ({
   getGroupCallState: () => call,
   leaveGroupCall: (...a) => fns.leaveGroupCall(...a),
+  leaveGroupCallWithConfirm: (...a) => fns.leaveGroupCallWithConfirm(...a),
   showCallStage: (...a) => fns.showCallStage(...a),
   callErrorMessage: () => 'call failed'
 }));
@@ -50,6 +52,10 @@ vi.mock('$lib/paraglide/messages', () => ({
   groups_call_people_in_call: (p) => `${p.count} in the call`,
   groups_call_return: () => 'Back to call',
   groups_call_leave: () => 'Leave call',
+  groups_call_ended_removed: () => 'You were removed from the call.',
+  groups_call_ended_dropped: () => 'The connection to the call was lost.',
+  groups_call_ended_show: () => 'Show',
+  common_close: () => 'Close',
   groups_call_mute: () => 'Mute',
   groups_call_unmute: () => 'Unmute',
   groups_call_reconnecting: () => 'Reconnecting…',
@@ -67,7 +73,13 @@ const { default: CallDock } = await import('$lib/components/groups/call/CallDock
 
 beforeEach(() => {
   vi.clearAllMocks();
-  Object.assign(call, { phase: 'ready', title: 'Standup', href: '/groups/abc?x=1', error: null });
+  Object.assign(call, {
+    phase: 'ready',
+    title: 'Standup',
+    href: '/groups/abc?x=1',
+    error: null,
+    endReason: null
+  });
   Object.assign(lk, {
     isConnected: true,
     isMuted: true,
@@ -78,6 +90,18 @@ beforeEach(() => {
 });
 
 describe('CallDock', () => {
+  // QA 2026-10-02 B4/C2: floating (position:fixed) it covered the
+  // breadcrumb / channel title / page heading; it is a strip in the flow.
+  it('is a strip in the page flow, never floating over the page', () => {
+    render(CallDock);
+    const dock = screen.getByTestId('call-dock');
+    expect(dock.className.split(/\s+/)).not.toContain('fixed');
+    expect(dock.className.split(/\s+/)).toContain('shrink-0');
+    // Task 19: a status strip, not text — no I-beam, no selection.
+    expect(dock.classList.contains('cursor-default')).toBe(true);
+    expect(dock.classList.contains('select-none')).toBe(true);
+  });
+
   it('names the call and counts everyone in it', () => {
     render(CallDock);
     expect(screen.getByText('Standup')).toBeTruthy();
@@ -107,11 +131,53 @@ describe('CallDock', () => {
     expect(screen.queryByRole('button', { name: 'Unmute' })).toBeNull();
   });
 
-  it('leave ends the call with the cue', async () => {
+  it('leave asks first (the store confirms, then leaves with the cue)', async () => {
     render(CallDock);
     await fireEvent.click(screen.getByRole('button', { name: 'Leave call' }));
-    expect(fns.playLeaveSound).toHaveBeenCalledTimes(1);
-    expect(fns.leaveGroupCall).toHaveBeenCalledTimes(1);
+    expect(fns.leaveGroupCallWithConfirm).toHaveBeenCalledTimes(1);
+    expect(fns.leaveGroupCall).not.toHaveBeenCalled();
+    expect(fns.playLeaveSound).not.toHaveBeenCalled();
+  });
+
+  // The server ended the seat (removed / dropped) while the user was on
+  // another page (final review 2 I2): no live dock for a call that is over,
+  // but a one-line strip says what happened, with Show and Close.
+  describe('ended call', () => {
+    it.each([
+      ['dropped', 'The connection to the call was lost.'],
+      ['removed', 'You were removed from the call.']
+    ])('%s: one ended strip saying why, no live controls', (reason, text) => {
+      call.phase = 'ended';
+      call.endReason = reason;
+      render(CallDock);
+      expect(screen.queryByTestId('call-dock')).toBeNull();
+      const strip = screen.getByTestId('call-dock-ended');
+      expect(strip.getAttribute('role')).toBe('status');
+      expect(strip.textContent).toContain(text);
+      expect(strip.textContent).toContain('Standup');
+      expect(screen.queryByRole('button', { name: 'Leave call' })).toBeNull();
+      expect(screen.queryByRole('button', { name: 'Unmute' })).toBeNull();
+    });
+
+    it('Show opens the call page, Close forgets the call', async () => {
+      call.phase = 'ended';
+      call.endReason = 'dropped';
+      render(CallDock);
+      await fireEvent.click(screen.getByRole('button', { name: 'Show' }));
+      expect(fns.goto).toHaveBeenCalledWith('/groups/abc?x=1');
+      await fireEvent.click(screen.getByRole('button', { name: 'Close' }));
+      expect(fns.leaveGroupCall).toHaveBeenCalledTimes(1);
+      expect(fns.playLeaveSound).not.toHaveBeenCalled();
+    });
+
+    it('no Show without a call page to go to', () => {
+      call.phase = 'ended';
+      call.endReason = 'dropped';
+      call.href = null;
+      render(CallDock);
+      expect(screen.queryByRole('button', { name: 'Show' })).toBeNull();
+      expect(screen.getByRole('button', { name: 'Close' })).toBeTruthy();
+    });
   });
 
   it('shows reconnecting and failed states', async () => {

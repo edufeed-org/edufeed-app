@@ -11,6 +11,17 @@ import { mapEventsToStore, mapEventsToTimeline } from 'applesauce-core/observabl
 import { map } from 'rxjs';
 import { getTagValue } from 'applesauce-core/helpers';
 import { getCalendarEventMetadata, parseAddressReference } from '$lib/helpers/eventUtils';
+import { isChannelMeeting, withoutChannelMeetings } from '$lib/helpers/calendar-timing.js';
+
+/**
+ * Raw calendar events → CalendarEvents for the generic calendar views.
+ * Channel meetings (h = channel id) share the eventStore with everything
+ * else but belong to their channel's card only, never to these views.
+ * @param {any[]} timeline
+ */
+function toCalendarEvents(timeline) {
+  return withoutChannelMeetings(timeline).map(getCalendarEventMetadata);
+}
 import { calendarTimelineLoader } from '$lib/loaders/calendar.js';
 import { communityTargetedPublicationsLoader } from '$lib/loaders/targeted-publications.js';
 import { userDeletionLoader, addressLoader } from '$lib/loaders/base.js';
@@ -180,7 +191,7 @@ export function useCalendarEventLoader(options) {
         const authorPubkeys = [...new Set(timeline.map((e) => e.pubkey))];
         startDeletionLoaders(authorPubkeys);
 
-        const mapped = timeline.map(getCalendarEventMetadata);
+        const mapped = toCalendarEvents(timeline);
         options.onEventsUpdate(mapped);
         options.onLoadingChange(false);
       });
@@ -229,6 +240,8 @@ export function useCalendarEventLoader(options) {
         pubkey: parsed.pubkey,
         identifier: parsed.dTag
       }).subscribe((/** @type {any} */ event) => {
+        // A personal calendar may reference a channel meeting; it stays out.
+        if (isChannelMeeting(event)) return;
         const calendarEvent = getCalendarEventMetadata(event);
 
         if (!eventMap.has(calendarEvent.id)) {
@@ -276,7 +289,7 @@ export function useCalendarEventLoader(options) {
         )
         .subscribe({
           next: (timeline) => {
-            const mapped = timeline.map(getCalendarEventMetadata);
+            const mapped = toCalendarEvents(timeline);
             options.onEventsUpdate(mapped);
             options.onLoadingChange(false);
           },
@@ -293,7 +306,7 @@ export function useCalendarEventLoader(options) {
       const filter = { kinds: [31922, 31923], authors: [pubkey], limit: 50 };
 
       subscription = eventStore.model(TimelineModel, filter).subscribe((timeline) => {
-        const mapped = timeline.map(getCalendarEventMetadata);
+        const mapped = toCalendarEvents(timeline);
         options.onEventsUpdate(mapped);
         options.onLoadingChange(false);
       });
@@ -424,7 +437,7 @@ export function useCalendarEventLoader(options) {
           const authorPubkeys = [...new Set(events.map((e) => e.originalEvent.pubkey))];
           startDeletionLoaders(authorPubkeys);
 
-          options.onEventsUpdate(events);
+          options.onEventsUpdate(withoutChannelMeetings(events));
           options.onLoadingChange(false);
         },
         error: (err) => {
@@ -477,7 +490,7 @@ export function useCalendarEventLoader(options) {
           const authorPubkeys = [...new Set(timeline.map((e) => e.pubkey))];
           startDeletionLoaders(authorPubkeys);
 
-          const mapped = timeline.map(getCalendarEventMetadata);
+          const mapped = toCalendarEvents(timeline);
           options.onEventsUpdate(mapped);
           options.onLoadingChange(false);
         },

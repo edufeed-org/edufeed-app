@@ -78,12 +78,25 @@ export function saveReadTimestamps(pubkey, timestamps) {
 
 /**
  * Check if a conversation has unread messages.
+ *
+ * A conversation whose newest message is the user's own has nothing unread,
+ * whether or not a read marker exists: messages sent outside the DM composer
+ * (meeting/calendar invites, approvals, another device) never set one, and
+ * they showed up as "… hat dir eine Nachricht gesendet" (QA round 3 B2).
  * @param {string} conversationId
  * @param {number} lastMessageTimestamp
  * @param {Record<string, number>} readTimestamps
+ * @param {{lastAuthor?: string, self?: string | null}} [who] author of the
+ *   newest message and the active user
  * @returns {boolean}
  */
-export function isConversationUnread(conversationId, lastMessageTimestamp, readTimestamps) {
+export function isConversationUnread(
+  conversationId,
+  lastMessageTimestamp,
+  readTimestamps,
+  { lastAuthor, self } = {}
+) {
+  if (self && lastAuthor === self) return false;
   const lastRead = readTimestamps[conversationId];
   if (lastRead === undefined) return true;
   return lastMessageTimestamp > lastRead;

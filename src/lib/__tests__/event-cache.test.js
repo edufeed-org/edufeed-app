@@ -2,7 +2,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import 'fake-indexeddb/auto';
 import { EventStore, DeleteManager } from 'applesauce-core';
-import { isCacheableKind } from '$lib/stores/event-cache.svelte.js';
+import { isCacheableKind, isCacheableEvent } from '$lib/stores/event-cache.svelte.js';
 
 describe('isCacheableKind', () => {
   it('returns true for identity kinds', () => {
@@ -27,6 +27,25 @@ describe('isCacheableKind', () => {
 
   it('returns false for unknown kinds', () => {
     expect(isCacheableKind(99999)).toBe(false);
+  });
+});
+
+describe('isCacheableEvent', () => {
+  it('caches community and personal calendar events', () => {
+    expect(isCacheableEvent({ kind: 31923, tags: [['h', 'c'.repeat(64)]] })).toBe(true);
+    expect(isCacheableEvent({ kind: 31922, tags: [] })).toBe(true);
+  });
+
+  // A channel meeting lives on its group relay only; a local copy in IDB
+  // would outlive the channel session and resurface in generic views.
+  it('never caches a channel meeting (h = channel id)', () => {
+    expect(isCacheableEvent({ kind: 31923, tags: [['h', '4c9b50c8c413f15e']] })).toBe(false);
+    expect(isCacheableEvent({ kind: 31922, tags: [['h', 'g1']] })).toBe(false);
+  });
+
+  it('still follows the kind list', () => {
+    expect(isCacheableEvent({ kind: 0, tags: [] })).toBe(true);
+    expect(isCacheableEvent({ kind: 7, tags: [] })).toBe(false);
   });
 });
 
@@ -82,9 +101,21 @@ describe('event-cache initialization', () => {
       sig: 's'.repeat(128)
     };
     const reaction = { ...profile, id: 'b'.repeat(64), kind: 7, content: '+' };
+    const meeting = {
+      ...profile,
+      id: 'c'.repeat(64),
+      kind: 31923,
+      content: '',
+      tags: [
+        ['d', 'meeting-1'],
+        ['start', '2000000000'],
+        ['h', 'g1']
+      ]
+    };
 
     mockEventStore.add(profile);
     mockEventStore.add(reaction);
+    mockEventStore.add(meeting);
 
     // persistEventsToCache batches; wait for the batch window to flush.
     await new Promise((r) => setTimeout(r, 2500));
@@ -94,6 +125,8 @@ describe('event-cache initialization', () => {
     );
     expect(calledKinds).toContain(0);
     expect(calledKinds).not.toContain(7);
+    // The channel meeting (kind 31923 is otherwise cacheable) stays out.
+    expect(calledKinds).not.toContain(31923);
   });
 });
 
@@ -129,6 +162,45 @@ describe('event-cache read / count / clear', () => {
     const result = await cacheRequest([{ kinds: [0], authors: ['p'.repeat(64)] }]);
     expect(result).toHaveLength(1);
     expect(result[0].id).toBe('c'.repeat(64));
+  });
+
+  // Rows written before the write filter existed must not resurface.
+  it('cacheRequest drops channel meetings read back from IDB', async () => {
+    const {
+      dbReady,
+      nostrIDB: _nostrIDB,
+      cacheRequest
+    } = await import('$lib/stores/event-cache.svelte.js');
+    const nostrIDB = /** @type {NonNullable<typeof _nostrIDB>} */ (_nostrIDB);
+    await dbReady;
+    const base = {
+      kind: 31923,
+      pubkey: 'p'.repeat(64),
+      created_at: 1000,
+      content: '',
+      sig: 's'.repeat(128)
+    };
+    await nostrIDB.add({
+      ...base,
+      id: 'd'.repeat(64),
+      tags: [
+        ['d', 'public'],
+        ['start', '2000000000'],
+        ['h', 'c'.repeat(64)]
+      ]
+    });
+    await nostrIDB.add({
+      ...base,
+      id: 'e'.repeat(64),
+      tags: [
+        ['d', 'meeting'],
+        ['start', '2000000000'],
+        ['h', 'g1']
+      ]
+    });
+
+    const result = await cacheRequest([{ kinds: [31923] }]);
+    expect(result.map((e) => e.id)).toEqual(['d'.repeat(64)]);
   });
 
   it('cacheRequest returns [] when IDB throws (graceful degradation)', async () => {
@@ -789,6 +861,32 @@ describe('recacheEvent (#64, from-cache restore)', () => {
     Reflect.set(cached, FROM_CACHE, true);
 
     expect(isFromCache({ ...cached })).toBe(true);
+  });
+
+  it('never re-caches a channel meeting', async () => {
+    const {
+      dbReady,
+      nostrIDB: _nostrIDB,
+      recacheEvent
+    } = await import('$lib/stores/event-cache.svelte.js');
+    const nostrIDB = /** @type {NonNullable<typeof _nostrIDB>} */ (_nostrIDB);
+    await dbReady;
+    const addSpy = vi.spyOn(nostrIDB, 'add');
+    await recacheEvent(
+      /** @type {any} */ ({
+        id: '7'.repeat(64),
+        kind: 31923,
+        pubkey: PK,
+        created_at: 1000,
+        tags: [
+          ['d', 'meeting'],
+          ['h', 'g1']
+        ],
+        content: '',
+        sig: 'f'.repeat(128)
+      })
+    );
+    expect(addSpy).not.toHaveBeenCalled();
   });
 
   it('writes a from-cache event to IDB anyway', async () => {

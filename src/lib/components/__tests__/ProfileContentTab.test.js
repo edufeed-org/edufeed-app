@@ -109,4 +109,35 @@ describe('<ProfileContentTab>', () => {
     // Two web bookmarks of the same URL group into a single card
     expect(container.querySelectorAll('[data-testid="stub-component"]')).toHaveLength(1);
   });
+
+  // A channel meeting (h = channel id) lives on its group relay only: it
+  // never shows on a profile, and so is never offered for the public pin
+  // list (kind 10001 would name its coordinate).
+  it('hides channel meetings on the events tab and offers no pin for them', async () => {
+    const { container } = render(ProfileContentTab, {
+      pubkey: PUBKEY,
+      tabId: 'events',
+      canPin: true
+    });
+    const start = String(Math.floor(Date.now() / 1000) + 3600);
+    await emit([
+      ev(31923, {
+        tags: [
+          ['d', 'public'],
+          ['title', 'Public'],
+          ['start', start]
+        ]
+      }),
+      ev(31923, {
+        tags: [
+          ['d', 'meeting'],
+          ['title', 'Meeting'],
+          ['start', start],
+          ['h', '4c9b50c8c413f15e']
+        ]
+      })
+    ]);
+    expect(container.querySelectorAll('[data-testid="stub-component"]')).toHaveLength(1);
+    expect(container.querySelectorAll('[data-testid="pin-toggle"]')).toHaveLength(1);
+  });
 });

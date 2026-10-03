@@ -178,4 +178,68 @@ describe('HoverCard', () => {
     await fireEvent.click(button);
     expect(onAction).toHaveBeenCalledTimes(1);
   });
+
+  // interactiveTrigger: the trigger is its own interactive element (an <a>
+  // here) — the wrapper must not add a second, nested one, and keyboard
+  // focus (not just hover/click) must open the card (laoc QA 2026-10-02).
+  describe('interactiveTrigger', () => {
+    it('adds no nested interactive wrapper — one tab stop', () => {
+      const { container, getByTestId } = render(HoverCardTestWrapper, {
+        props: { interactiveTrigger: true }
+      });
+      const wrapper = getByTestId('hover-card-wrapper');
+      expect(wrapper.getAttribute('role')).toBeNull();
+      expect(wrapper.getAttribute('tabindex')).toBeNull();
+      expect(wrapper.getAttribute('aria-haspopup')).toBeNull();
+      // Only the inner <a> is tabbable.
+      expect(container.querySelectorAll('[tabindex], a, button')).toHaveLength(1);
+      expect(getByTestId('trigger').tagName).toBe('A');
+    });
+
+    it('opens on focus, no delay', async () => {
+      const { getByTestId, queryByTestId } = render(HoverCardTestWrapper, {
+        props: { interactiveTrigger: true, enterDelay: 999 }
+      });
+      const link = getByTestId('trigger');
+      expect(queryByTestId('content')).toBeNull();
+
+      await fireEvent.focusIn(link);
+      await tick();
+      expect(queryByTestId('content')).not.toBeNull();
+    });
+
+    it('closes on focus leaving the trigger, stays open moving into the popup', async () => {
+      const { getByTestId, queryByTestId, container } = render(HoverCardTestWrapper, {
+        props: { interactiveTrigger: true, fixed: true }
+      });
+      const link = getByTestId('trigger');
+      await fireEvent.focusIn(link);
+      await tick();
+      expect(queryByTestId('content')).not.toBeNull();
+
+      // Focus moving to the popup's own button must not close it.
+      const popupButton = document.querySelector('[data-testid="content-button"]');
+      await fireEvent.focusOut(link, { relatedTarget: popupButton });
+      await tick();
+      expect(queryByTestId('content')).not.toBeNull();
+
+      // Focus leaving entirely closes it.
+      await fireEvent.focusOut(popupButton, { relatedTarget: document.body });
+      await tick();
+      expect(queryByTestId('content')).toBeNull();
+      void container;
+    });
+
+    it('a click on the trigger does not toggle the card itself (only the link navigates)', async () => {
+      const { getByTestId, queryByTestId } = render(HoverCardTestWrapper, {
+        props: { interactiveTrigger: true }
+      });
+      const link = getByTestId('trigger');
+      await fireEvent.click(link);
+      await tick();
+      // No click-to-toggle wiring in this mode: a bare click (no focus event
+      // fired by jsdom's fireEvent.click) leaves the card closed.
+      expect(queryByTestId('content')).toBeNull();
+    });
+  });
 });

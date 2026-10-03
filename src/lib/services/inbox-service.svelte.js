@@ -4,6 +4,7 @@
  */
 import { createTimelineLoader } from 'applesauce-loaders/loaders';
 import { TimelineModel } from 'applesauce-core/models';
+import { withoutChannelMeetings } from '$lib/helpers/calendar-timing.js';
 import { finalizeDraft } from '$lib/helpers/event-factory.js';
 import { eventStore, pool } from '$lib/stores/nostr-infrastructure.svelte';
 import { timedPool, addressLoader, eventLoader } from '$lib/loaders/base.js';
@@ -537,8 +538,10 @@ export function initializeInbox(pubkey) {
         kinds: [31922, 31923],
         authors: [pubkey]
       });
-      const coordSub = calModel.subscribe((events) => {
-        if (!events?.length) return;
+      const coordSub = calModel.subscribe((all) => {
+        // A channel meeting's coordinate must not go out in a public RSVP REQ.
+        const events = withoutChannelMeetings(all ?? []);
+        if (!events.length) return;
         const coords = events.map((e) => {
           const d = e.tags.find((t) => t[0] === 'd')?.[1] || '';
           return `${e.kind}:${e.pubkey}:${d}`;

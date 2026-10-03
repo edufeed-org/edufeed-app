@@ -298,6 +298,40 @@ describe('ContentNavSidebar — two-zone sidebar', () => {
     expect(onContentTypeSelect).toHaveBeenCalledWith('channels', 'chan-open');
   });
 
+  // QA 2026-10-02 C-new-7: the desktop sidebar omitted the root channel
+  // ("Allgemein") that every other channel list shows. The layout now hands
+  // it in pinned first; the zone keeps that order and the row opens the root.
+  it('lists the General (root) row first, and it opens the root channel', async () => {
+    const rows = buildChannelRows({
+      rootChannel: /** @type {any} */ ({
+        id: 'root0',
+        relay: RELAY,
+        name: 'laoc42',
+        level: 'members',
+        metadata: { kind: GROUP_METADATA_KIND, tags: [['d', 'root0']] }
+      }),
+      rootLabel: 'Allgemein',
+      subtreeChannels: [
+        /** @type {any} */ ({
+          id: 'aaa',
+          relay: RELAY,
+          name: 'aaa',
+          level: 'members',
+          metadata: { kind: GROUP_METADATA_KIND, tags: [['d', 'aaa']] }
+        })
+      ]
+    });
+    const onContentTypeSelect = vi.fn();
+    renderNav({ channelRows: rows, isMember: true, onContentTypeSelect });
+    const navRows = screen.getAllByTestId(/^nav-channel-row-/);
+    expect(navRows.map((el) => el.textContent?.trim())).toEqual([
+      expect.stringContaining('Allgemein'),
+      expect.stringContaining('aaa')
+    ]);
+    await fireEvent.click(navRows[0]);
+    expect(onContentTypeSelect).toHaveBeenCalledWith('channels', 'root0');
+  });
+
   // 8d03f873 widened create to root-39001 admins, but only on the mobile
   // rail — the desktop zone's entry stayed key-holder-only. Pins that the
   // isRootAdmin prop actually reaches buildSidebarZones (laoc, 2026-08-21).

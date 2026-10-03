@@ -294,7 +294,7 @@ WoT extends curated mode by using anchor pubkeys' follow graphs. Anchor pubkeys'
 **Calendar Settings**
 
 - `CALENDAR_WEEK_START_DAY`: Week start day (0=Sunday, 1=Monday)
-- `CALENDAR_LOCALE`: Date/time locale (e.g., de-DE, en-US)
+- `CALENDAR_LOCALE`: **deprecated, ignored** since the scheduled-meetings release — calendar names follow the app language
 - `CALENDAR_TIME_FORMAT`: Time format (12h or 24h)
 
 **Interactive Apps (webxdc)**

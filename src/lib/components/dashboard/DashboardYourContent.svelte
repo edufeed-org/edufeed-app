@@ -10,6 +10,7 @@
 <script>
   import { goto } from '$app/navigation';
   import { resolve } from '$app/paths';
+  import { withoutChannelMeetings } from '$lib/helpers/calendar-timing.js';
   import { createTimelineLoader } from 'applesauce-loaders/loaders';
   import { TimelineModel } from 'applesauce-core/models';
   import { timedPool } from '$lib/loaders/base.js';
@@ -166,7 +167,8 @@
       .model(TimelineModel, { kinds: ALL_CONTENT_KINDS, authors: [pubkey] })
       .subscribe({
         next: (loaded) => {
-          items = loaded || [];
+          // My channel meetings live in their channels, not in "Your content".
+          items = withoutChannelMeetings(loaded || []);
           isLoading = false;
         }
       });

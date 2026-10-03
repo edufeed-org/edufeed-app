@@ -2,9 +2,12 @@
  * Calendar domain loaders for NIP-52 calendar events.
  * Includes timeline loaders and factory functions for custom filtering.
  */
-import { from, merge, EMPTY } from 'rxjs';
-import { mergeMap, filter, tap, switchMap } from 'rxjs/operators';
-import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
+import { from, merge, EMPTY, defer, of } from 'rxjs';
+import { mergeMap, filter, tap, switchMap, catchError } from 'rxjs/operators';
+import { createTimelineLoader } from 'applesauce-loaders/loaders';
+import { eventStore, pool } from '$lib/stores/nostr-infrastructure.svelte';
+import { authenticateOnce } from '$lib/groups/relay-auth.js';
+import { pointersByRelay } from '$lib/groups/channel-calendar.js';
 import { addressLoader, timedPool, createCachedTimelineLoader } from './base.js';
 import { backwardPaginateRelay } from './backward-paginate.js';
 import { getCalendarRelays } from '$lib/helpers/relay-helper.js';
@@ -280,6 +283,51 @@ export const communityCalendarTimelineLoader = (communityPubkey) => {
     limit: 250
   });
   return createCachedTimelineLoader(getCalendarRelays(), filter);
+};
+
+/**
+ * Factory: the community's CHANNEL calendars (communikey-groups.md, "Channel
+ * calendars"). Channel meetings are kind-31923 events h-tagged with a channel
+ * id and stored only on that channel's group relay, so they are read there.
+ *
+ * ONE REQ PER CHANNEL, not one per relay: pyramid closes a whole REQ
+ * (auth-required / restricted) when ANY `#h` in it names a private group the
+ * reader is not a member of — a combined REQ would hide the public channels'
+ * meetings too. Each per-channel read also carries the h-tagged kind-5
+ * (author) and kind-9005 (moderator) deletions, and swallows its own CLOSED so
+ * one refused channel cannot tear down the merge.
+ *
+ * With a signer, each relay is NIP-42-authenticated once before its channels
+ * are read; a refused or missing auth still reads what the relay serves
+ * anonymously. Plain `createTimelineLoader` with the eventStore — no IDB
+ * cache request; the cache's write filter never persists channel meetings.
+ *
+ * @param {Array<{id: string, relay: string}>} groupPointers
+ * @param {{signer?: any}} [opts]
+ * @returns {() => import('rxjs').Observable<any>}
+ */
+export const channelCalendarsLoader = (groupPointers, { signer } = {}) => {
+  const groups = pointersByRelay(groupPointers);
+  return () =>
+    merge(
+      ...groups.map(({ relay, ids }) =>
+        defer(() => (signer ? from(authenticateOnce(pool.relay(relay), signer)) : of(null))).pipe(
+          catchError(() => of(null)),
+          switchMap(() =>
+            merge(
+              ...ids.map((id) =>
+                createTimelineLoader(
+                  timedPool,
+                  [relay],
+                  { kinds: [31923, 5, 9005], '#h': [id], limit: 250 },
+                  { eventStore }
+                )().pipe(catchError(() => EMPTY))
+              )
+            )
+          )
+        )
+      )
+    );
 };
 
 /**

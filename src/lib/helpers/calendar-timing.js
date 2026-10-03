@@ -176,3 +176,59 @@ export function dedupeCalendarTwins(events) {
     return true;
   });
 }
+
+/**
+ * The `YYYY-MM-DD` an event form shows for a stored start/end timestamp.
+ * Kind 31922 (all-day) values are midnight UTC and the writer reads the form
+ * date back as UTC, so their day is the UTC day in every zone — local
+ * getters would shift it back a day west of UTC on every edit. Kind 31923
+ * values are instants, shown on the viewer's local day.
+ *
+ * @param {number} seconds - unix seconds
+ * @param {number} kind - 31922 or 31923
+ * @returns {string}
+ */
+export function formDateFromTimestamp(seconds, kind) {
+  const date = new Date(seconds * 1000);
+  if (kind === 31922) return date.toISOString().slice(0, 10);
+  const pad = (/** @type {number} */ n) => String(n).padStart(2, '0');
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+}
+
+const HEX_PUBKEY = /^[0-9a-fA-F]{64}$/;
+
+/**
+ * A NIP-52 calendar event (31922/31923) h-tagged with a channel id — any
+ * non-empty `h` value that is not a 64-hex community pubkey (either case) —
+ * is a channel meeting. It lives on its channel's group relay only, so
+ * generic calendar surfaces (personal calendar, feeds, discover, community
+ * calendar) skip it, its edit/share/repost actions are hidden, and it is
+ * never read from or written to the IDB cache. Its home is the channel's
+ * MeetingCard.
+ *
+ * @param {{kind?: number, tags?: string[][]} | null | undefined} event
+ * @returns {boolean}
+ */
+export function isChannelMeeting(event) {
+  if (!event || (event.kind !== 31922 && event.kind !== 31923)) return false;
+  return (event.tags ?? []).some((tag) => {
+    if (tag[0] !== 'h' || typeof tag[1] !== 'string') return false;
+    const value = tag[1].trim();
+    // An empty/malformed h names nothing; a (any-case) 64-hex is a community.
+    return value !== '' && !HEX_PUBKEY.test(value);
+  });
+}
+
+/**
+ * Drop channel meetings from a list of raw events or transformed
+ * CalendarEvents (read through `originalEvent`).
+ *
+ * @template T
+ * @param {T[]} events
+ * @returns {T[]}
+ */
+export function withoutChannelMeetings(events) {
+  return events.filter(
+    (item) => !isChannelMeeting(/** @type {any} */ (item)?.originalEvent ?? item)
+  );
+}

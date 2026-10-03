@@ -12,6 +12,7 @@ import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
 import { startProfileFeedLoaders } from '$lib/loaders/profile-feed-loaders.js';
 import { ALL_FEED_KINDS } from '$lib/helpers/profile-feed.js';
 import { tabCountsFromEvents } from '$lib/helpers/profile-tabs.js';
+import { withoutChannelMeetings } from '$lib/helpers/calendar-timing.js';
 
 /**
  * @param {() => string} getPubkey - reactive getter for the profile pubkey
@@ -34,7 +35,7 @@ export function useProfileContent(getPubkey, getUserPubkey = () => null) {
       .model(TimelineModel, { kinds: ALL_FEED_KINDS, authors: [pubkey] })
       .subscribe({
         next: (events) => {
-          counts = tabCountsFromEvents(events);
+          counts = tabCountsFromEvents(withoutChannelMeetings(events));
         },
         error: (err) => console.error('useProfileContent: Model error:', err)
       });

@@ -12,15 +12,25 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { flushSync } from 'svelte';
 
 const requestGroupCallToken = vi.fn();
+const lkListener = vi.hoisted(() => ({ cb: /** @type {any} */ (null) }));
 vi.mock('$lib/groups/livekit.js', async (importOriginal) => ({
   .../** @type {any} */ (await importOriginal()),
   requestGroupCallToken: (/** @type {any[]} */ ...args) => requestGroupCallToken(...args)
 }));
 vi.mock('$lib/services/livekit-connection.svelte.js', () => ({
   disconnectFromRoom: async () => {},
-  connectToRoom: async () => {}
+  connectToRoom: async () => {},
+  onRoomDisconnected: (/** @type {any} */ cb) => {
+    lkListener.cb = cb;
+    return () => {};
+  },
+  isRemovalReason: () => true
 }));
 vi.mock('$lib/paraglide/messages', () => ({}));
+vi.mock(
+  '$lib/components/groups/CallLeaveConfirmModal.svelte',
+  () => import('../components/__tests__/fixtures/CallLeaveConfirmStub.svelte')
+);
 vi.mock(
   '$lib/components/groups/call/GroupCallStage.svelte',
   () => import('../components/__tests__/fixtures/GroupCallStageStub.svelte')
@@ -133,11 +143,69 @@ describe('closing the pop-out', () => {
     expect(getCallPopoutState().open).toBe(false);
   });
 
+  it('the server ending the call closes the window (the channel shows why)', async () => {
+    await popOutCall(VIEW);
+    lkListener.cb?.(4);
+    flushSync();
+    expect(getGroupCallState().phase).toBe('ended');
+    expect(pip.close).toHaveBeenCalled();
+    expect(getCallPopoutState().open).toBe(false);
+  });
+
   it('leaving the call closes the window', async () => {
     await popOutCall(VIEW);
     await leaveGroupCall();
     flushSync();
     expect(pip.close).toHaveBeenCalled();
     expect(getCallPopoutState().open).toBe(false);
+  });
+
+  // Task 19: the opener's modal layer is invisible from the pop-out, so the
+  // "Anruf verlassen?" confirm is mounted into the window itself.
+  describe('leaving from inside the pop-out asks in the window', () => {
+    const q = (id) => pip.document.querySelector(`[data-testid="${id}"]`);
+    const settle = () => new Promise((r) => setTimeout(r, 0));
+
+    it('Cancel keeps the call and the window', async () => {
+      await popOutCall(VIEW);
+      q('group-call-stage-stub-leave').click();
+      await vi.waitFor(() => expect(q('call-leave-confirm-stub')).toBeTruthy());
+      expect(document.querySelector('[data-testid="call-leave-confirm-stub"]')).toBeNull();
+      q('call-leave-confirm-stub-cancel').click();
+      await settle();
+      expect(q('call-leave-confirm-stub')).toBeNull();
+      expect(getGroupCallState().phase).toBe('ready');
+      expect(getCallPopoutState().open).toBe(true);
+    });
+
+    it('Leave leaves the call (and the window closes with it)', async () => {
+      await popOutCall(VIEW);
+      q('group-call-stage-stub-leave').click();
+      await vi.waitFor(() => expect(q('call-leave-confirm-stub')).toBeTruthy());
+      q('call-leave-confirm-stub-confirm').click();
+      await vi.waitFor(() => expect(getGroupCallState().phase).toBe('idle'));
+      flushSync();
+      expect(getCallPopoutState().open).toBe(false);
+    });
+
+    it('closing the window while it asks counts as cancel', async () => {
+      await popOutCall(VIEW);
+      q('group-call-stage-stub-leave').click();
+      await vi.waitFor(() => expect(q('call-leave-confirm-stub')).toBeTruthy());
+      pip.dispatchEvent(new Event('pagehide'));
+      await settle();
+      expect(getGroupCallState().phase).toBe('ready');
+    });
+
+    it('the call ending while it asks takes the dialog away', async () => {
+      await popOutCall(VIEW);
+      q('group-call-stage-stub-leave').click();
+      await vi.waitFor(() => expect(q('call-leave-confirm-stub')).toBeTruthy());
+      lkListener.cb?.(4);
+      flushSync();
+      await settle();
+      expect(q('call-leave-confirm-stub')).toBeNull();
+      expect(getGroupCallState().phase).toBe('ended');
+    });
   });
 });

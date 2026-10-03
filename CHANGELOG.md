@@ -5,6 +5,15 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions are
 the `vX.Y.Z` git tags on `main`. Each release section is assembled from the
 merge commits of the nostr PRs that landed since the previous tag.
 
+## [Unreleased]
+
+### Deprecated
+
+- **`CALENDAR_LOCALE` is ignored.** Calendar weekday and month names now
+  follow the app language (German UI: "Mo Di …", "Oktober"; English UI:
+  "Mon Tue …", "October") instead of a deployment-wide locale. Deployments
+  that still set the variable keep working; it can be removed.
+
 ## [0.2.0] - 2026-09-29
 
 ### Added

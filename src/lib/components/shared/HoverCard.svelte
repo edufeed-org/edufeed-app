@@ -25,6 +25,12 @@
    * @property {boolean} [stopPropagation] - Stop the toggling click / Enter /
    *   Space from bubbling, for triggers that sit inside a clickable card
    *   (otherwise the card's own click handler would navigate away)
+   * @property {boolean} [interactiveTrigger] - The trigger snippet already
+   *   contains its own interactive element (an `<a>` or `<button>`): the
+   *   wrapper renders WITHOUT `role="button"`/`tabindex` (no nested
+   *   interactive element, no second tab stop) and opens/closes on
+   *   `focusin`/`focusout` in addition to hover, instead of toggling on its
+   *   own click (QA 2026-10-02: CallChatPanel's sender link)
    */
 
   /** @type {Props} */
@@ -37,7 +43,8 @@
     fixed = false,
     class: klass = 'relative inline-block',
     triggerClass = 'inline-block',
-    stopPropagation = false
+    stopPropagation = false,
+    interactiveTrigger = false
   } = $props();
 
   let isOpen = $state(false);
@@ -107,12 +114,36 @@
       isOpen = false;
       return;
     }
+    // interactiveTrigger: the inner element (an <a>/<button>) owns Enter/Space
+    // already (navigate / activate) — the wrapper must not also toggle.
+    if (interactiveTrigger) return;
     // Keyboard users toggle from the focused wrapper itself; a focused link or
     // button inside the trigger keeps its own Enter/Space semantics.
     if ((e.key === 'Enter' || e.key === ' ') && e.target === e.currentTarget) {
       e.preventDefault();
       handleClick(e);
     }
+  }
+
+  // interactiveTrigger mode: the wrapper is not itself focusable, so open on
+  // focus entering its subtree and close when it leaves — unless it moved
+  // into the (possibly portaled) popup, same containment check as the
+  // click-outside handler below.
+  function handleFocusIn() {
+    clearTimers();
+    updateFixedPosition();
+    isOpen = true;
+  }
+
+  /** @param {FocusEvent} e */
+  function handleFocusOut(e) {
+    const related = /** @type {Node | null} */ (e.relatedTarget);
+    const staysInside =
+      !!related &&
+      ((wrapperEl?.contains(related) ?? false) || (popupEl?.contains(related) ?? false));
+    if (staysInside) return;
+    clearTimers();
+    isOpen = false;
   }
 
   /** @param {PointerEvent} e */
@@ -196,17 +227,23 @@
   }
 </script>
 
+<!-- role/tabindex are set together, omitted together (interactiveTrigger);
+     the linter can't see that from the conditional expressions below. -->
+<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
 <div
   class={klass}
+  data-testid="hover-card-wrapper"
   bind:this={wrapperEl}
   onmouseenter={handleMouseEnter}
   onmouseleave={handleMouseLeave}
-  onclick={handleClick}
+  onclick={interactiveTrigger ? undefined : handleClick}
   onkeydown={handleKeyDown}
-  aria-haspopup="true"
-  aria-expanded={isOpen}
-  role="button"
-  tabindex="0"
+  onfocusin={interactiveTrigger ? handleFocusIn : undefined}
+  onfocusout={interactiveTrigger ? handleFocusOut : undefined}
+  aria-haspopup={interactiveTrigger ? undefined : 'true'}
+  aria-expanded={interactiveTrigger ? undefined : isOpen}
+  role={interactiveTrigger ? undefined : 'button'}
+  tabindex={interactiveTrigger ? undefined : 0}
 >
   <div class={triggerClass}>
     {@render trigger()}
@@ -232,6 +269,7 @@
       use:portal={fixed}
       onmouseenter={fixed ? handleMouseEnter : undefined}
       onmouseleave={fixed ? handleMouseLeave : undefined}
+      onfocusout={interactiveTrigger ? handleFocusOut : undefined}
     >
       {@render content()}
     </div>

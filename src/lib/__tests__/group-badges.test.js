@@ -62,6 +62,14 @@ describe('relayBadges', () => {
     expect(badge?.text).toBe('strfry');
   });
 
+  // QA K5: groups.edufeed.org answers `"version": "-"` → "pyramid -".
+  it.each(['-', ' - ', '—', '?', ''])('treats a placeholder version %j as none', (version) => {
+    const badge = relayBadges({ software: 'https://github.com/fiatjaf/pyramid', version }).find(
+      (b) => b.id === 'software'
+    );
+    expect(badge?.text).toBe('pyramid');
+  });
+
   it('omits the software badge entirely when the relay names none', () => {
     expect(relayBadges({ version: '1.2' }).map((b) => b.id)).not.toContain('software');
   });

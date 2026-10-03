@@ -11,21 +11,26 @@
   import { useCallPresence } from '$lib/groups/call-presence.svelte.js';
   import {
     getGroupCallState,
-    joinGroupCall,
+    joinGroupCallWithConfirm,
     showCallStage
   } from '$lib/groups/group-call.svelte.js';
+  import { getCallPopoutState } from '$lib/groups/call-popout.svelte.js';
   import { useActiveUser } from '$lib/stores/accounts.svelte';
   import ProfileAvatar from '$lib/components/shared/ProfileAvatar.svelte';
+  import CallCountPill from './CallCountPill.svelte';
   import * as m from '$lib/paraglide/messages';
 
   /**
    * @type {{
    *   pointer: {id: string, relay: string},
    *   name: string,
-   *   onOpen: () => void | Promise<void>
+   *   onOpen: () => void | Promise<void>,
+   *   inset?: string
    * }}
    */
-  let { pointer, name, onOpen } = $props();
+  // inset: the row's padding — the rails indent it under the row's text
+  // (default); the overview cards pad it like the card body.
+  let { pointer, name, onOpen, inset = 'pr-2 pb-1 pl-12' } = $props();
 
   const MAX_AVATARS = 3;
   const getPresence = useCallPresence(() => pointer);
@@ -34,7 +39,19 @@
   const overflow = $derived(Math.max(0, participants.length - MAX_AVATARS));
 
   const call = getGroupCallState();
-  const inThisCall = $derived(call.isActiveFor(pointer) && call.phase !== 'idle');
+  // Only a LIVE call is one "you are in" — an ended or failed one offers Join
+  // again (same rule as GroupChat's callLiveHere; final review 2).
+  const inThisCall = $derived(
+    call.isActiveFor(pointer) && (call.phase === 'requesting' || call.phase === 'ready')
+  );
+  // The user is looking at this call right now: a stage view is mounted, not
+  // stepped behind the chat, and the call is not in its own window. Then a
+  // "back to the call" button would point at the screen they are on
+  // (laoc, 2026-10-02) — the row only says where they are.
+  const popout = getCallPopoutState();
+  const stageOnScreen = $derived(
+    inThisCall && call.stageViews > 0 && !call.stageHidden && !popout.open
+  );
   const getActiveUser = useActiveUser();
   let busy = $state(false);
 
@@ -50,7 +67,7 @@
       const user = getActiveUser();
       if (!user?.signer) return;
       await onOpen();
-      await joinGroupCall(pointer, user, {
+      await joinGroupCallWithConfirm(pointer, user, {
         title: name,
         href: `${window.location.pathname}${window.location.search}`
       });
@@ -61,19 +78,11 @@
 </script>
 
 {#if participants.length > 0}
-  <div
-    class="flex items-center gap-2 pr-2 pb-1 pl-12"
-    data-testid="channel-call-roster"
-    title={m.groups_call_people_in_call({ count: participants.length })}
-  >
-    <span class="relative flex h-2 w-2 shrink-0" aria-hidden="true">
-      <span
-        class="absolute inline-flex h-full w-full animate-ping rounded-full bg-success opacity-60 motion-reduce:animate-none"
-      ></span>
-      <span class="relative inline-flex h-2 w-2 rounded-full bg-success"></span>
-    </span>
-    <span class="sr-only">{m.groups_call_live()}</span>
-    <div class="flex min-w-0 flex-1 items-center -space-x-1.5">
+  {#snippet rosterContent()}
+    <CallCountPill count={participants.length} />
+    <!-- A span, not a div: this can render inside a <button> (join/show-call
+       state below), whose content model is phrasing content only. -->
+    <span class="flex min-w-0 flex-1 items-center -space-x-1.5">
       {#each shown as pubkey (pubkey)}
         <span class="rounded-full ring-2 ring-base-200">
           <ProfileAvatar {pubkey} size="2xs" showHoverCard={false} linkToProfile={false} />
@@ -82,16 +91,52 @@
       {#if overflow > 0}
         <span class="pl-2.5 text-xs text-base-content/60">+{overflow}</span>
       {/if}
+    </span>
+  {/snippet}
+
+  {#if stageOnScreen}
+    <!-- Already looking at this call: the pill + avatars + the highlighted
+         channel say it — no button (it would point at the screen you are on),
+         no visible status line (laoc, 2026-10-02). Screen readers still get
+         the context. -->
+    <div
+      class="flex cursor-default flex-wrap items-center gap-x-2 gap-y-0.5 select-none {inset}"
+      data-testid="channel-call-roster"
+      title={m.groups_call_people_in_call({ count: participants.length })}
+    >
+      {@render rosterContent()}
+      <span class="sr-only" data-testid="channel-call-roster-here">
+        {m.groups_call_in_this_call({ count: participants.length })}
+      </span>
     </div>
-    {#if getActiveUser()?.signer}
-      <button
-        type="button"
-        class="btn text-primary btn-ghost btn-sm"
-        disabled={busy}
-        onclick={join}
-      >
-        {inThisCall ? m.groups_call_return() : m.groups_call_join()}
-      </button>
-    {/if}
-  </div>
+  {:else if getActiveUser()?.signer}
+    <!-- The pill + avatars ARE the control (laoc, 2026-10-02: a separate
+         "Beitreten"/"Anruf anzeigen" text link beside them was one thing too
+         many, and wrapped to its own row at sidebar width). Deliberately NOT
+         `btn` — same reasoning as ChannelRailRow: this reads as a list row,
+         not toolbar chrome. -->
+    {@const label = inThisCall
+      ? m.groups_call_return()
+      : m.groups_call_join_running({ count: participants.length })}
+    <button
+      type="button"
+      class="flex w-full cursor-pointer flex-wrap items-center gap-x-2 gap-y-0.5 rounded-lg text-left transition-colors duration-150 select-none hover:bg-base-300/60 {inset}"
+      data-testid="channel-call-roster"
+      disabled={busy}
+      aria-label={label}
+      title={label}
+      onclick={join}
+    >
+      {@render rosterContent()}
+    </button>
+  {:else}
+    <!-- Anonymous viewer: informative only, nothing to click. -->
+    <div
+      class="flex cursor-default flex-wrap items-center gap-x-2 gap-y-0.5 select-none {inset}"
+      data-testid="channel-call-roster"
+      title={m.groups_call_people_in_call({ count: participants.length })}
+    >
+      {@render rosterContent()}
+    </div>
+  {/if}
 {/if}

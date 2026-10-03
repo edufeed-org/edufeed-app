@@ -7,8 +7,49 @@
  * reader sees for a given relay state, and a hand-written row could describe a
  * state the builder never produces.
  */
-import { describe, it, expect, vi } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/svelte';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { render, screen, fireEvent, within } from '@testing-library/svelte';
+// Kind-39004 presence, stubbed per channel id: the cards only render it.
+const presence = vi.hoisted(() => ({ byId: /** @type {Record<string, string[]>} */ ({}) }));
+vi.mock('$lib/groups/call-presence.svelte.js', () => ({
+  useCallPresence: (/** @type {() => any} */ getPointer) => () => ({
+    participants: presence.byId[getPointer()?.id] ?? [],
+    answered: true
+  })
+}));
+// The community pane's cards carry the full ChannelCallRoster (join / show
+// call / "you're in the call"): its call-state and account inputs, stubbed.
+const call = vi.hoisted(() => ({ active: false, stageViews: 0, stageHidden: false }));
+const callFns = vi.hoisted(() => ({
+  joinGroupCall: vi.fn(async (/** @type {any[]} */ ..._a) => {}),
+  showCallStage: vi.fn((/** @type {any[]} */ ..._a) => {})
+}));
+vi.mock('$lib/groups/group-call.svelte.js', () => ({
+  getGroupCallState: () => ({
+    isActiveFor: () => call.active,
+    get phase() {
+      return call.active ? 'ready' : 'idle';
+    },
+    get stageViews() {
+      return call.stageViews;
+    },
+    get stageHidden() {
+      return call.stageHidden;
+    }
+  }),
+  joinGroupCall: (/** @type {any[]} */ ...a) => callFns.joinGroupCall(...a),
+  showCallStage: (/** @type {any[]} */ ...a) => callFns.showCallStage(...a)
+}));
+vi.mock('$lib/groups/call-popout.svelte.js', () => ({
+  getCallPopoutState: () => ({ open: false })
+}));
+vi.mock('$lib/stores/accounts.svelte', () => ({
+  useActiveUser: () => () => ({ pubkey: 'a'.repeat(64), signer: {} })
+}));
+vi.mock(
+  '$lib/components/shared/ProfileAvatar.svelte',
+  () => import('./fixtures/ProfileAvatarStub.svelte')
+);
 import ChannelOverview from '$lib/components/community/channels/ChannelOverview.svelte';
 import { buildChannelRows } from '$lib/groups/community-channel-rows.js';
 import { channelAccessLevel } from '$lib/groups/channel-access.js';
@@ -161,5 +202,148 @@ describe('ChannelOverview', () => {
     });
     render(ChannelOverview, { props: { rows } });
     expect(screen.queryAllByTestId('channel-card')).toHaveLength(0);
+  });
+
+  // Between md and lg there is no sidebar: these cards are the channel list,
+  // so a running call shows on its card (laoc, 2026-10-02).
+  it('marks a running call on an AV channel card, with the head count', () => {
+    presence.byId = { sprechstunde: ['b'.repeat(64), 'c'.repeat(64)], stumm: [] };
+    const rows = buildChannelRows({
+      subtreeChannels: [
+        sub(ptr('sprechstunde'), [['name', 'sprechstunde'], ['livekit']]),
+        sub(ptr('stumm'), [['name', 'stumm'], ['livekit']]),
+        sub(ptr('text'), [['name', 'text']])
+      ]
+    });
+    render(ChannelOverview, { props: { rows } });
+    const badges = screen.getAllByTestId('channel-card-call');
+    expect(badges).toHaveLength(1);
+    expect(badges[0].closest('[data-testid="channel-card"]')?.textContent).toContain(
+      'sprechstunde'
+    );
+    expect(badges[0].textContent).toMatch(/2 (im Anruf|in the call)/);
+    // Design 1a: the same soft success pill as the channel lists.
+    expect(badges[0].className).toContain('badge-soft');
+    expect(badges[0].className).toContain('badge-success');
+    presence.byId = {};
+  });
+
+  // C-new-7 (QA 2026-10-02): the cards are now THE channel list at every
+  // width — so the rail's per-channel star and admin delete live on the card,
+  // as siblings of the card button (never nested inside it).
+  describe('per-card actions', () => {
+    const rows = () =>
+      buildChannelRows({
+        rootChannel: sub(ptr('root0'), [['name', 'laoc42']]),
+        rootLabel: 'Allgemein',
+        subtreeChannels: [sub(ptr('willkommen'), [['name', 'willkommen']])]
+      });
+
+    it('draws no actions unless the caller asks for them', () => {
+      render(ChannelOverview, { props: { rows: rows(), onSelect: () => {} } });
+      expect(screen.queryByTestId('channel-favourite-toggle')).toBeNull();
+      expect(screen.queryByTestId('group-channel-delete')).toBeNull();
+    });
+
+    it('stars a card and deletes only where canDelete allows, outside the card button', async () => {
+      const toggled = /** @type {string[]} */ ([]);
+      const deleted = /** @type {string[]} */ ([]);
+      render(ChannelOverview, {
+        props: {
+          rows: rows(),
+          onSelect: () => {},
+          isFavourite: (/** @type {any} */ row) => row.pointer.id === 'willkommen',
+          onToggleFavourite: (/** @type {any} */ row) => toggled.push(row.pointer.id),
+          canDelete: (/** @type {any} */ row) => row.pointer.id !== 'root0',
+          onDelete: (/** @type {any} */ pointer) => deleted.push(pointer.id)
+        }
+      });
+      const stars = screen.getAllByTestId('channel-favourite-toggle');
+      expect(stars).toHaveLength(2);
+      expect(stars.map((s) => s.getAttribute('aria-pressed'))).toEqual(['false', 'true']);
+      for (const star of stars) expect(star.closest('[data-testid="channel-card"]')).toBeNull();
+      await fireEvent.click(stars[0]);
+      expect(toggled).toEqual(['root0']);
+
+      const deletes = screen.getAllByTestId('group-channel-delete');
+      expect(deletes).toHaveLength(1);
+      expect(deletes[0].closest('[data-testid="channel-card"]')).toBeNull();
+      await fireEvent.click(deletes[0]);
+      expect(deleted).toEqual(['willkommen']);
+    });
+  });
+
+  // Fix round 1 (controller ruling): the phone rail's roster under AV rows —
+  // one-click join, "Anruf anzeigen", "Du bist im Anruf · N" — must not be
+  // lost now that the cards are the list. In the community pane (onSelect)
+  // each running AV card carries the full roster, as a sibling of the card
+  // button. The relay directory (no onSelect) keeps the passive pill.
+  describe('running-call roster on the community cards', () => {
+    const avRows = () =>
+      buildChannelRows({
+        subtreeChannels: [
+          sub(ptr('sprechstunde'), [['name', 'sprechstunde'], ['livekit']]),
+          sub(ptr('text'), [['name', 'text']])
+        ]
+      });
+
+    /** @param {() => void} [onSelect] */
+    function renderPane(onSelect = vi.fn()) {
+      presence.byId = { sprechstunde: ['b'.repeat(64), 'c'.repeat(64)] };
+      render(ChannelOverview, { props: { rows: avRows(), onSelect } });
+      const rosters = screen.getAllByTestId('channel-call-roster');
+      expect(rosters).toHaveLength(1);
+      expect(rosters[0].closest('[data-testid="channel-card"]')).toBeNull();
+      expect(rosters[0].closest('[data-testid="channel-card-wrap"]')?.textContent).toContain(
+        'sprechstunde'
+      );
+      return rosters[0];
+    }
+
+    beforeEach(() => {
+      call.active = false;
+      call.stageViews = 0;
+      call.stageHidden = false;
+      callFns.joinGroupCall.mockClear();
+      callFns.showCallStage.mockClear();
+    });
+
+    // Task 18 follow-up: the pill + avatars row IS the control now — no
+    // separate text link nested inside it.
+    it('not in the call: Join opens the channel, then joins its call', async () => {
+      const onSelect = vi.fn();
+      const roster = renderPane(onSelect);
+      expect(roster.tagName).toBe('BUTTON');
+      expect(roster.getAttribute('aria-label')).toMatch(/Join|Laufendem Anruf|beitreten/i);
+      await fireEvent.click(roster);
+      await vi.waitFor(() => expect(callFns.joinGroupCall).toHaveBeenCalled());
+      expect(onSelect).toHaveBeenCalledWith(expect.objectContaining({ id: 'sprechstunde' }));
+    });
+
+    it('in the call, stage not on screen: "Show call" brings it back', async () => {
+      call.active = true;
+      const onSelect = vi.fn();
+      const roster = renderPane(onSelect);
+      expect(roster.tagName).toBe('BUTTON');
+      await fireEvent.click(roster);
+      expect(callFns.showCallStage).toHaveBeenCalledTimes(1);
+      expect(onSelect).toHaveBeenCalledTimes(1);
+      expect(callFns.joinGroupCall).not.toHaveBeenCalled();
+    });
+
+    it('in the call with its stage on screen: the status line, no button', () => {
+      call.active = true;
+      call.stageViews = 1;
+      const roster = renderPane();
+      expect(within(roster).queryByRole('button')).toBeNull();
+      expect(within(roster).getByTestId('channel-call-roster-here').textContent).toMatch(/2/);
+    });
+
+    it('the relay directory (no onSelect) keeps the passive pill, no roster', () => {
+      presence.byId = { sprechstunde: ['b'.repeat(64)] };
+      render(ChannelOverview, { props: { rows: avRows() } });
+      expect(screen.queryByTestId('channel-call-roster')).toBeNull();
+      expect(screen.getAllByTestId('channel-card-call')).toHaveLength(1);
+    });
   });
 });

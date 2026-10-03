@@ -4,7 +4,8 @@
  *
  * Drives the REAL useCommunityChannels end-to-end through a mocked pool: the
  * fake relay hands back kind:39000 events for the /c/<rootId> endpoint, they
- * flow through the eventStore, and buildChannelRows renders the rail. What can
+ * flow through the eventStore, and buildChannelRows renders the channel
+ * overview cards — the community's one channel list at every width. What can
  * only be proven here is the WIRING: that channels are DISCOVERED from the
  * subtree (parent==rootId), that the glyph a reader sees is the one the access
  * rules produced, and that the shared "+ New channel" opener shows for a
@@ -29,6 +30,10 @@ vi.mock('$lib/stores/accounts.svelte', () => ({
 vi.mock('$lib/stores/config.svelte.js', () => ({ runtimeConfig: { concord: { enabled: true } } }));
 vi.mock('$lib/helpers/toast', () => ({ showToast: vi.fn() }));
 vi.mock('$lib/components/groups/GroupChat.svelte', () => import('./fixtures/GroupChatStub.svelte'));
+vi.mock(
+  '$lib/components/groups/call/ChannelCallRoster.svelte',
+  () => import('./fixtures/ChannelCallRosterStub.svelte')
+);
 // The /c endpoint reveals private children only to authed members — the hook
 // authenticates proactively. The fake pool has no auth surface, so stub it.
 vi.mock('$lib/groups/relay-auth.js', () => ({
@@ -106,7 +111,13 @@ vi.mock('$lib/stores/nostr-infrastructure.svelte', async (importOriginal) => {
 
 import PrivateChannelsView from '$lib/components/community/channels/PrivateChannelsView.svelte';
 import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
-import { clearGroupChannelSelection } from '$lib/groups/group-channel-selection.svelte.js';
+import {
+  clearGroupChannelSelection,
+  requestChannelList,
+  selectGroupChannel
+} from '$lib/groups/group-channel-selection.svelte.js';
+import { channelKey } from '$lib/groups/community-pointer.js';
+import { flushSync } from 'svelte';
 import { communityGroupsEndpoint, flatGroupsRelay } from '$lib/groups/community-endpoint.js';
 
 // Fixtures signed by a fake relay key — bypass signature verification.
@@ -148,15 +159,18 @@ beforeEach(() => {
   holders.pageSubscribers.clear();
   gotoMock.mockClear();
   eventStore.removeByFilters?.({ kinds: [39000] });
+  // The pane shows EITHER the cards or an open channel; a selection left by
+  // an earlier test would hide the cards.
+  clearGroupChannelSelection(OWNER);
 });
 
-describe('PrivateChannelsView — NIP-29 channels in the community rail', () => {
-  it('renders the rail from the subtree for a community with NO concord area', async () => {
+describe('PrivateChannelsView — NIP-29 channels in the community pane', () => {
+  it('renders the channel cards from the subtree for a community with NO concord area', async () => {
     holders.events = { [ENDPOINT]: [root(), chan('allgemein', [['private']])] };
 
     render(PrivateChannelsView, { props: { communikeyEvent: moderated() } });
 
-    const rows = await screen.findAllByTestId('group-channel-row');
+    const rows = await screen.findAllByTestId('channel-card');
     expect(rows.some((r) => r.textContent?.includes('allgemein'))).toBe(true);
   });
 
@@ -165,13 +179,47 @@ describe('PrivateChannelsView — NIP-29 channels in the community rail', () => 
 
     render(PrivateChannelsView, { props: { communikeyEvent: moderated() } });
 
-    const rows = await screen.findAllByTestId('group-channel-row');
+    const rows = await screen.findAllByTestId('channel-card');
     const row = /** @type {HTMLElement} */ (rows.find((r) => r.textContent?.includes('allgemein')));
     expect(row.getAttribute('href')).toBeNull();
     await fireEvent.click(row);
 
     const chat = await screen.findByTestId('group-chat-stub');
     expect(chat.textContent).toContain('allgemein');
+  });
+
+  // QA 2026-10-02 C-new-7: phones got the sidebar-style rail, wider screens
+  // the cards — two designs for one list. The cards are THE list at every
+  // width now: no rail is mounted, the pane is never hidden, General first.
+  it('draws no rail: the overview cards are the list on every width, General first', async () => {
+    holders.events = { [ENDPOINT]: [root(), chan('zweiter', [['private']])] };
+
+    const view = render(PrivateChannelsView, { props: { communikeyEvent: moderated() } });
+
+    const cards = await screen.findAllByTestId('channel-card');
+    expect(cards[0].textContent).toMatch(/Allgemein|General/);
+    expect(view.container.querySelector('aside')).toBeNull();
+    expect(screen.queryAllByTestId('channel-call-roster-stub')).toHaveLength(0);
+    const pane = /** @type {HTMLElement} */ (view.container.querySelector('section'));
+    expect(pane.className.split(/\s+/)).not.toContain('hidden');
+  });
+
+  // Fix round 1: the rail's roster (join / show call / in-call states) lives
+  // on the AV cards now — and only AV channels open a presence subscription.
+  it('draws the call roster under AV cards only, and its action opens that channel', async () => {
+    holders.events = {
+      [ENDPOINT]: [root(), chan('sprechstunde', [['livekit']]), chan('zweiter', [['private']])]
+    };
+
+    render(PrivateChannelsView, { props: { communikeyEvent: moderated() } });
+
+    await screen.findAllByTestId('channel-card');
+    const rosters = await screen.findAllByTestId('channel-call-roster-stub');
+    expect(rosters.map((r) => r.textContent)).toEqual(['sprechstunde']);
+    expect(rosters[0].closest('[data-testid="channel-card"]')).toBeNull();
+    await fireEvent.click(rosters[0]);
+    const chat = await screen.findByTestId('group-chat-stub');
+    expect(chat.textContent).toContain('sprechstunde');
   });
 
   it('shows the globe only for a channel the relay leaves open', async () => {
@@ -181,7 +229,7 @@ describe('PrivateChannelsView — NIP-29 channels in the community rail', () => 
 
     render(PrivateChannelsView, { props: { communikeyEvent: moderated() } });
 
-    const rows = await screen.findAllByTestId('group-channel-row');
+    const rows = await screen.findAllByTestId('channel-card');
     const open = rows.find((r) => r.textContent?.includes('ankuendigungen'));
     const shut = rows.find((r) => r.textContent?.includes('leitung'));
     expect(open?.querySelector('[data-testid="world-readable-badge"]')).not.toBeNull();
@@ -196,7 +244,7 @@ describe('PrivateChannelsView — NIP-29 channels in the community rail', () => 
 
     render(PrivateChannelsView, { props: { communikeyEvent: moderated() } });
 
-    await screen.findAllByTestId('group-channel-row');
+    await screen.findAllByTestId('channel-card');
     expect(screen.queryByTestId('group-attach-open')).toBeNull();
   });
 
@@ -217,7 +265,7 @@ describe('PrivateChannelsView — NIP-29 channels in the community rail', () => 
       }
     });
 
-    expect(screen.queryAllByTestId('group-channel-row')).toHaveLength(0);
+    expect(screen.queryAllByTestId('channel-card')).toHaveLength(0);
   });
 
   it('clicking a group rail row mirrors the channel into ?channel=', async () => {
@@ -225,7 +273,7 @@ describe('PrivateChannelsView — NIP-29 channels in the community rail', () => 
 
     render(PrivateChannelsView, { props: { communikeyEvent: moderated() } });
 
-    const rows = await screen.findAllByTestId('group-channel-row');
+    const rows = await screen.findAllByTestId('channel-card');
     const row = /** @type {HTMLElement} */ (rows.find((r) => r.textContent?.includes('allgemein')));
     await fireEvent.click(row);
 
@@ -273,5 +321,127 @@ describe('PrivateChannelsView — NIP-29 channels in the community rail', () => 
 
     const chat = await screen.findByTestId('group-chat-stub', {}, { timeout: 4000 });
     expect(chat.textContent).toContain('allgemein');
+  });
+  // Design 1a (laoc, 2026-10-02): the way back is GroupChat's own "‹ Kanäle"
+  // breadcrumb on every width, so the pane passes onBack and draws no
+  // mobile-only back button of its own.
+  describe('way back to the channel list', () => {
+    /** @param {{ container: HTMLElement }} view */
+    const pane = (view) => /** @type {HTMLElement} */ (view.container.querySelector('section'));
+
+    async function openAllgemein() {
+      clearGroupChannelSelection(OWNER);
+      holders.events = { [ENDPOINT]: [root(), chan('allgemein', [['private']])] };
+      const view = render(PrivateChannelsView, { props: { communikeyEvent: moderated() } });
+      const rows = await screen.findAllByTestId('channel-card');
+      await fireEvent.click(
+        /** @type {HTMLElement} */ (rows.find((r) => r.textContent?.includes('allgemein')))
+      );
+      await screen.findByTestId('group-chat-stub');
+      return view;
+    }
+
+    it('hands GroupChat an onBack and renders no separate back button', async () => {
+      await openAllgemein();
+      expect(screen.queryByTestId('group-chat-back')).toBeNull();
+      expect(screen.getByTestId('group-chat-stub-back')).toBeTruthy();
+    });
+
+    it('the breadcrumb clears the selection: the cards again, ?channel= dropped', async () => {
+      const view = await openAllgemein();
+      gotoMock.mockClear();
+
+      await fireEvent.click(screen.getByTestId('group-chat-stub-back'));
+
+      await vi.waitFor(() => expect(screen.queryByTestId('group-chat-stub')).toBeNull());
+      expect((await screen.findAllByTestId('channel-card')).length).toBeGreaterThan(0);
+      expect(pane(view).className.split(/\s+/)).not.toContain('hidden');
+      expect(gotoMock).toHaveBeenCalledWith(
+        expect.not.stringContaining('channel='),
+        expect.anything()
+      );
+    });
+
+    // The URL update is async (goto): the cleared selection re-runs the
+    // ?channel= deep-link effect while the old param is still in the address
+    // bar — it must not re-open the channel from it.
+    it('going back from a deep-linked channel stays back; the same link applies again later', async () => {
+      clearGroupChannelSelection(OWNER);
+      holders.pageUrl = 'https://app.example/c/relilab?view=channels&channel=allgemein';
+      holders.events = { [ENDPOINT]: [root(), chan('allgemein', [['private']])] };
+      render(PrivateChannelsView, { props: { communikeyEvent: moderated() } });
+      await screen.findByTestId('group-chat-stub', {}, { timeout: 4000 });
+
+      await fireEvent.click(screen.getByTestId('group-chat-stub-back'));
+      // Any re-run of the effect before goto lands (here: a page-store
+      // emission still carrying the old ?channel=) must not re-open it.
+      setPageUrl('https://app.example/c/relilab?view=channels&channel=allgemein');
+      await new Promise((r) => setTimeout(r, 50));
+      expect(screen.queryByTestId('group-chat-stub')).toBeNull();
+
+      setPageUrl('https://app.example/c/relilab?view=channels');
+      await new Promise((r) => setTimeout(r, 50));
+      expect(screen.queryByTestId('group-chat-stub')).toBeNull();
+
+      setPageUrl('https://app.example/c/relilab?view=channels&channel=allgemein');
+      await screen.findByTestId('group-chat-stub');
+    });
+
+    // Controller ruling (Task 14 review): leaving the ROOT group leaves the
+    // community — the pane tells GroupChat which one it is showing.
+    it('marks only the root channel as the community root', async () => {
+      clearGroupChannelSelection(OWNER);
+      holders.events = { [ENDPOINT]: [root(), chan('allgemein', [['private']])] };
+      render(PrivateChannelsView, { props: { communikeyEvent: moderated() } });
+      const rows = await screen.findAllByTestId('channel-card');
+      // Root is pinned first ("General").
+      await fireEvent.click(rows[0]);
+      let chat = await screen.findByTestId('group-chat-stub');
+      expect(chat.textContent).toContain("'root0");
+      expect(chat.dataset.communityRoot).toBe('true');
+
+      await fireEvent.click(screen.getByTestId('group-chat-stub-back'));
+      const again = await screen.findAllByTestId('channel-card');
+      await fireEvent.click(
+        /** @type {HTMLElement} */ (again.find((r) => r.textContent?.includes('allgemein')))
+      );
+      chat = await screen.findByTestId('group-chat-stub');
+      expect(chat.textContent).toContain("'allgemein");
+      expect(chat.dataset.communityRoot).toBe('false');
+    });
+
+    // QA 2026-10-02 B2: below md a deep link or a reload drew the rail with
+    // the channel highlighted instead of the channel — `mobileChat` only
+    // flipped on a row tap. A selected channel opens on every width.
+    it('a deep-linked channel opens the pane below md, not the rail', async () => {
+      clearGroupChannelSelection(OWNER);
+      holders.pageUrl = 'https://app.example/c/relilab?view=channels&channel=allgemein';
+      holders.events = { [ENDPOINT]: [root(), chan('allgemein', [['private']])] };
+      const view = render(PrivateChannelsView, { props: { communikeyEvent: moderated() } });
+      await screen.findByTestId('group-chat-stub', {}, { timeout: 4000 });
+      expect(pane(view).className.split(/\s+/)).not.toContain('hidden');
+    });
+
+    it('a channel already selected when the view mounts (reload) opens the pane', async () => {
+      holders.events = { [ENDPOINT]: [root(), chan('allgemein', [['private']])] };
+      selectGroupChannel(
+        OWNER,
+        /** @type {string} */ (channelKey({ id: 'allgemein', relay: ENDPOINT }))
+      );
+      const view = render(PrivateChannelsView, { props: { communikeyEvent: moderated() } });
+      await screen.findByTestId('group-chat-stub', {}, { timeout: 4000 });
+      expect(pane(view).className.split(/\s+/)).not.toContain('hidden');
+    });
+
+    it('a re-tap of the Kanäle tab (requestChannelList) goes back to the list', async () => {
+      const view = await openAllgemein();
+
+      requestChannelList(OWNER);
+      flushSync();
+
+      await vi.waitFor(() => expect(screen.queryByTestId('group-chat-stub')).toBeNull());
+      expect((await screen.findAllByTestId('channel-card')).length).toBeGreaterThan(0);
+      expect(pane(view).className.split(/\s+/)).not.toContain('hidden');
+    });
   });
 });

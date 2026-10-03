@@ -11,7 +11,7 @@
  * @vitest-environment jsdom
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, fireEvent, waitFor, within } from '@testing-library/svelte';
+import { render, screen, fireEvent, waitFor, within, cleanup } from '@testing-library/svelte';
 import { typeIntoEditor } from './fixtures/editor.js';
 import { finalizeEvent, generateSecretKey, getPublicKey } from 'nostr-tools';
 // Real module (not mocked): the walledchat auth-required retry exercises the
@@ -337,6 +337,22 @@ const membersEventCall = signWith(
   },
   RELAY_SK
 );
+// `listenchat`: an OPEN AV channel I am not on the roster of (QA round 3
+// C6: a non-member got "Anruf starten").
+const metadataEventListen = signWith(
+  { kind: 39000, tags: [['d', 'listenchat'], ['name', 'Listen Chat'], ['livekit']] },
+  RELAY_SK
+);
+const membersEventListen = signWith(
+  {
+    kind: 39002,
+    tags: [
+      ['d', 'listenchat'],
+      ['p', OTHER]
+    ]
+  },
+  RELAY_SK
+);
 const pollEvent = signWith(
   {
     kind: 1068,
@@ -366,6 +382,90 @@ const pollVoteOther = signWith(
     ]
   },
   OTHER_SK
+);
+// `meetchat`: an AV channel (livekit) with ME and OTHER on the roster whose
+// timeline carries a scheduled meeting (kind 31923, one group-id h-tag) by
+// OTHER, a malformed meeting with TWO h-tags (must not render), and a chat
+// message. Isolated so the meeting rows don't leak into other timelines.
+const metadataEventMeet = signWith(
+  { kind: 39000, tags: [['d', 'meetchat'], ['name', 'Meet Chat'], ['private'], ['livekit']] },
+  RELAY_SK
+);
+const membersEventMeet = signWith(
+  {
+    kind: 39002,
+    tags: [
+      ['d', 'meetchat'],
+      ['p', ME],
+      ['p', OTHER]
+    ]
+  },
+  RELAY_SK
+);
+const meetingEvent = signWith(
+  {
+    kind: 31923,
+    content: 'agenda in the card, not the bubble',
+    created_at: 1700000200,
+    tags: [
+      ['d', 'meeting-1'],
+      ['title', 'Elternabend'],
+      ['start', '2000000000'],
+      ['end', '2000003600'],
+      ['h', 'meetchat']
+    ]
+  },
+  OTHER_SK
+);
+const meetingTwoGroups = signWith(
+  {
+    kind: 31923,
+    content: 'two h tags',
+    created_at: 1700000201,
+    tags: [
+      ['d', 'meeting-2'],
+      ['title', 'Doppelt'],
+      ['start', '2000000000'],
+      ['h', 'meetchat'],
+      ['h', 'elsewhere']
+    ]
+  },
+  OTHER_SK
+);
+const meetChatMessage = signWith(
+  { kind: 9, content: 'see you there', created_at: 1700000210, tags: [['h', 'meetchat']] },
+  OTHER_SK
+);
+// `ownmeetchat`: ME has an upcoming meeting here (guest-link listing), and
+// one that already ended.
+const metadataEventOwnMeet = signWith(
+  { kind: 39000, tags: [['d', 'ownmeetchat'], ['name', 'Own Meet'], ['private'], ['livekit']] },
+  RELAY_SK
+);
+const membersEventOwnMeet = signWith(
+  {
+    kind: 39002,
+    tags: [
+      ['d', 'ownmeetchat'],
+      ['p', ME]
+    ]
+  },
+  RELAY_SK
+);
+const ownMeeting = signWith(
+  {
+    kind: 31923,
+    content: '',
+    created_at: 1700000300,
+    tags: [
+      ['d', 'own-1'],
+      ['title', 'Sprechstunde'],
+      ['start', '2000000000'],
+      ['end', '2000003600'],
+      ['h', 'ownmeetchat']
+    ]
+  },
+  MY_SK
 );
 // Enrichment fixture for the session-title effect (moved from GroupAppsBar
 // into GroupChat itself): the latest 9450 state event's `document` tag,
@@ -590,6 +690,9 @@ vi.mock('$lib/stores/nostr-infrastructure.svelte', async () => {
           if (d === 'webxdcchat') return rxOf(metadataEventWebxdc, membersEventWebxdc);
           if (d === 'pollchat') return rxOf(metadataEventPoll, membersEventPoll);
           if (d === 'callchat') return rxOf(metadataEventCall, membersEventCall);
+          if (d === 'listenchat') return rxOf(metadataEventListen, membersEventListen);
+          if (d === 'meetchat') return rxOf(metadataEventMeet, membersEventMeet);
+          if (d === 'ownmeetchat') return rxOf(metadataEventOwnMeet, membersEventOwnMeet);
           if (d === 'livetitlechat') return rxOf(metadataEventLiveTitle, membersEventLiveTitle);
           if (d === 'authchat') return rxOf(metadataEventAuthNoPrivate, membersEventAuthNoPrivate);
           if (d === 'emptychat') return rxOf(metadataEventEmptyRoster, membersEventEmptyRoster);
@@ -680,6 +783,10 @@ vi.mock('$lib/stores/nostr-infrastructure.svelte', async () => {
           if (h === 'webxdcchat') return rxMerge(rxOf(webxdcShareEvent), rxNever);
           // pollchat: isolated timeline holding the poll and one vote.
           if (h === 'pollchat') return rxMerge(rxOf(pollEvent, pollVoteOther), rxNever);
+          // meetchat: a meeting, a malformed two-group meeting, a message.
+          if (h === 'ownmeetchat') return rxMerge(rxOf(ownMeeting), rxNever);
+          if (h === 'meetchat')
+            return rxMerge(rxOf(meetingEvent, meetingTwoGroups, meetChatMessage), rxNever);
           // livetitlechat: isolated timeline holding only its own webxdc
           // share (session-live-1), with zero 9450 history — see fixture.
           if (h === 'livetitlechat') return rxMerge(rxOf(liveTitleShareEvent), rxNever);
@@ -766,6 +873,14 @@ vi.mock('$lib/helpers/joined-communikey-events.svelte.js', () => ({
   useJoinedCommunikeyEvents: () => () => joinedCommunikeyEventsHolder.events
 }));
 vi.mock('$lib/helpers/toast', () => ({ showToast: vi.fn() }));
+// Leaving the community ROOT also unfollows the community (kind 30000
+// follow set) through the real helper — mocked here, community.test.js
+// covers its guarded follow-set write.
+const leaveCommunityMock = vi.hoisted(() => vi.fn(async () => ({ success: true })));
+vi.mock('$lib/helpers/community.js', async (importOriginal) => ({
+  .../** @type {object} */ (await importOriginal()),
+  leaveCommunity: leaveCommunityMock
+}));
 vi.mock('$app/paths', () => ({ resolve: (/** @type {string} */ path) => path }));
 vi.mock('$app/navigation', () => ({ goto: vi.fn() }));
 const publishOptimisticMock = vi.hoisted(() => vi.fn());
@@ -813,7 +928,8 @@ vi.mock('$lib/components/icons', () => ({
   LinkIcon: Stub,
   PollIcon: Stub,
   MeetIcon: Stub,
-  SettingsIcon: Stub
+  SettingsIcon: Stub,
+  ChevronLeftIcon: Stub
 }));
 // NIP-29 AV: the call store and the 39004 presence hook are stubbed at the
 // seams GroupChat imports — the token round-trip and the relay-key-pinned
@@ -822,7 +938,7 @@ vi.mock('$lib/components/icons', () => ({
 // call" or seed a participant count; reset in the outer beforeEach.
 const groupCallHolder = vi.hoisted(() => ({
   state:
-    /** @type {{activeKey: string | null, phase: 'idle' | 'requesting' | 'ready' | 'error', error: Error | null, serverUrl: string | null, token: string | null, stageHidden?: boolean, chatBeside?: boolean}} */ ({
+    /** @type {{activeKey: string | null, phase: 'idle' | 'requesting' | 'ready' | 'error' | 'ended', error: Error | null, endReason?: 'removed' | 'dropped' | null, serverUrl: string | null, token: string | null, stageHidden?: boolean, chatBeside?: boolean, connected?: boolean}} */ ({
       activeKey: null,
       phase: 'idle',
       error: null,
@@ -873,6 +989,9 @@ vi.mock('$lib/groups/group-call.svelte.js', () => ({
     get error() {
       return groupCallHolder.state.error;
     },
+    get endReason() {
+      return groupCallHolder.state.endReason ?? null;
+    },
     get serverUrl() {
       return groupCallHolder.state.serverUrl;
     },
@@ -882,6 +1001,9 @@ vi.mock('$lib/groups/group-call.svelte.js', () => ({
     get stageHidden() {
       return groupCallHolder.state.stageHidden ?? false;
     },
+    get connected() {
+      return groupCallHolder.state.connected ?? false;
+    },
     get chatBeside() {
       return groupCallHolder.state.chatBeside ?? false;
     },
@@ -890,7 +1012,17 @@ vi.mock('$lib/groups/group-call.svelte.js', () => ({
   }),
   joinGroupCall: (/** @type {any} */ pointer, /** @type {any} */ user, /** @type {any} */ view) =>
     joinGroupCallMock(pointer, user, view),
+  // Task M6: every join path goes through the confirm wrapper, not the raw
+  // join, so GroupChat's startCall() calls this one — same spy underneath,
+  // since this file's tests assert on `joinGroupCallMock` and the confirm
+  // gate itself is covered by group-call.svelte.test.js.
+  joinGroupCallWithConfirm: (
+    /** @type {any} */ pointer,
+    /** @type {any} */ user,
+    /** @type {any} */ view
+  ) => joinGroupCallMock(pointer, user, view),
   leaveGroupCall: () => leaveGroupCallMock(),
+  leaveGroupCallWithConfirm: () => leaveGroupCallMock(),
   showCallStage: () => callViewMocks.showCallStage(),
   hideCallStage: () => callViewMocks.hideCallStage(),
   toggleChatBeside: () => callViewMocks.toggleChatBeside(),
@@ -899,6 +1031,19 @@ vi.mock('$lib/groups/group-call.svelte.js', () => ({
     return callViewMocks.unregister;
   },
   callErrorMessage: () => 'call failed'
+}));
+// Guest-link discovery probe (own tests: call-passes.test.js).
+const probeCallPassSupport = vi.hoisted(() =>
+  vi.fn(async (/** @type {string} */ _relay, /** @type {string} */ _id) => false)
+);
+const listCallPassesMock = vi.hoisted(() =>
+  vi.fn(async (/** @type {any[]} */ ..._args) => /** @type {any[]} */ ([]))
+);
+vi.mock('$lib/groups/call-passes.js', async (importOriginal) => ({
+  .../** @type {any} */ (await importOriginal()),
+  probeCallPassSupport: (/** @type {string} */ relay, /** @type {string} */ id) =>
+    probeCallPassSupport(relay, id),
+  listCallPasses: (/** @type {any[]} */ ...a) => listCallPassesMock(...a)
 }));
 // The relay's AV capability probe and the admin's "Start call" 9002 are
 // seams too (their own tests: groups-livekit.test.js, enable-group-calls.test.js).
@@ -918,8 +1063,23 @@ vi.mock('$lib/groups/call-presence.svelte.js', () => ({
   useCallPresence: () => () => ({ participants: groupCallHolder.participants, answered: true })
 }));
 vi.mock(
+  '$lib/components/groups/MeetingCard.svelte',
+  () => import('./fixtures/MeetingCardStub.svelte')
+);
+vi.mock(
+  '$lib/components/groups/MeetingBar.svelte',
+  () => import('./fixtures/MeetingBarStub.svelte')
+);
+vi.mock(
   '$lib/components/groups/call/GroupCallStage.svelte',
   () => import('./fixtures/GroupCallStageStub.svelte')
+);
+// Its own test (CallChatPanel.test.js) covers rendering/sending; the real
+// file imports livekit-connection.svelte.js (and transitively
+// livekit-client), which this test's module graph doesn't otherwise need.
+vi.mock(
+  '$lib/components/groups/call/CallChatPanel.svelte',
+  () => import('./fixtures/CallChatPanelStub.svelte')
 );
 // The members modal embeds the contact search; its autocomplete machinery is
 // out of scope here (GroupMembersModal.test.js covers it via the same stub).
@@ -943,14 +1103,26 @@ vi.mock(
 vi.mock('$lib/paraglide/messages', () => ({
   groups_join: () => 'Join',
   groups_restricted_note: () => 'Only members can read and write in this channel.',
-  groups_leave: () => 'Leave',
+  groups_leave_channel: () => 'Leave channel',
+  groups_leave_confirm_title: () => 'Really leave this channel?',
+  groups_leave_confirm_body_open: () => 'You can join again later.',
+  groups_leave_confirm_body_closed: () => 'Rejoining needs approval.',
+  groups_leave_community: () => 'Leave community',
+  groups_leave_community_confirm_title: () => 'Really leave this community?',
+  groups_leave_community_confirm_body: () =>
+    "You won't be a member any more and the community disappears from your list.",
+  groups_breadcrumb_channels: () => 'Channels',
+  groups_breadcrumb_channels_aria: () => 'Back to the channel list',
   groups_more_menu: () => 'More',
   groups_list_remove: () => 'Remove from my list',
+  groups_list_remove_hint: () => 'The channel stays, you stay a member.',
   groups_list_removed: () => 'Removed from your list',
   groups_list_add: () => 'Add to my list',
   groups_list_added: () => 'Added to your list',
   groups_list_update_failed: () => 'Your list could not be updated',
   groups_join_sent: () => 'Join request sent',
+  groups_join_joined: () => 'You joined the channel',
+  common_login: () => 'Log in',
   groups_join_already: () => 'You are already a member.',
   groups_composer_join_note: () => 'Join to write here.',
   community_join_request: () => 'Request to join',
@@ -960,17 +1132,26 @@ vi.mock('$lib/paraglide/messages', () => ({
   groups_send_failed: () => 'Message could not be sent',
   groups_react_failed: () => 'Reaction could not be sent',
   groups_join_required: () => 'Join this group first',
-  groups_call_join: () => 'Join call',
-  groups_call_in_progress: (/** @type {{ count: number }} */ { count }) => `${count} in call`,
   groups_call_leave: () => 'Leave call',
   groups_call_popped_out: () => 'The call is open in its own window.',
   groups_call_bring_back: () => 'Bring back',
   groups_settings_title: () => 'Group settings',
   groups_call_requesting: () => 'Requesting access…',
   groups_call_retry: () => 'Try again',
+  groups_call_ended_removed: () => 'You were removed from the call.',
+  groups_call_ended_dropped: () => 'The connection to the call was lost.',
+  groups_call_rejoin: () => 'Rejoin',
+  common_close: () => 'Close',
   groups_call_start: () => 'Start call',
+  groups_call_start_login: () => 'Log in to start a call',
+  groups_call_you_are_in: () => "You're in the call",
   groups_call_start_error: () => 'Calls could not be turned on',
-  groups_call_return: () => 'Back to call',
+  groups_call_return: () => 'Show call',
+  groups_call_listen_in: (/** @type {{ count: number }} */ { count }) => `Listen in (${count})`,
+  groups_call_join_running: (/** @type {{ count: number }} */ { count }) =>
+    `Join the running call (${count})`,
+  groups_call_chat_tab: () => 'Anruf-Chat',
+  groups_call_chat_channel_tab: () => 'Kanal',
   groups_auth_required: () => 'auth required',
   groups_reply: () => 'Reply',
   groups_message_delete: () => 'Delete message',
@@ -1070,6 +1251,8 @@ vi.mock('$lib/paraglide/messages', () => ({
   group_invite_dm_failed: () => 'Invite failed',
   group_invite_dm_failed_after_mint: () => 'Invite minted but DM failed',
   common_cancel: () => 'Cancel',
+  groups_meeting_schedule: () => 'Schedule a meeting',
+  meeting_card_label: () => 'Meeting',
   groups_role_admin: () => 'Admin',
   groups_role_king: () => 'Owner',
   groups_role_moderator: () => 'Moderator',
@@ -1077,6 +1260,10 @@ vi.mock('$lib/paraglide/messages', () => ({
 }));
 
 const { default: GroupChat } = await import('$lib/components/groups/GroupChat.svelte');
+// Warm the lazily imported call-chat panel (its stub) once up front: its
+// first transform under a parallel run took longer than any findBy timeout,
+// so the first call-chat test failed only when other files ran alongside.
+await import('$lib/components/groups/call/CallChatPanel.svelte');
 
 const pointer = { relay: GROUP_RELAY, id: 'beechat' };
 
@@ -1493,6 +1680,49 @@ describe('GroupChat', () => {
     );
   });
 
+  // QA C1: an open channel admits on the spot — "Join request sent" read
+  // like a pending approval.
+  it('joining an open channel says you joined, not that a request was sent', async () => {
+    const { showToast } = await import('$lib/helpers/toast');
+    /** @type {any} */ (showToast).mockClear();
+    render(GroupChat, { props: { pointer: { relay: GROUP_RELAY, id: 'openchat' } } });
+    await fireEvent.click(await screen.findByTestId('group-join'));
+    // Decided by the refreshed roster: openchat lists me ~1.2 s after the 9021.
+    await waitFor(
+      () => expect(showToast).toHaveBeenCalledWith('You joined the channel', 'success'),
+      { timeout: 5000 }
+    );
+    expect(showToast).not.toHaveBeenCalledWith('Join request sent', 'success');
+  });
+
+  // Task 16 review: leaving within the roster window used to toast the
+  // stale outcome ("request sent") on whatever page came next.
+  it('a join left before the roster answered toasts nothing after unmount', async () => {
+    const { showToast } = await import('$lib/helpers/toast');
+    const { unmount } = render(GroupChat, {
+      props: { pointer: { relay: GROUP_RELAY, id: 'openchat' } }
+    });
+    await fireEvent.click(await screen.findByTestId('group-join'));
+    await waitFor(() => expect(publishMock).toHaveBeenCalled());
+    /** @type {any} */ (showToast).mockClear();
+    unmount();
+    await new Promise((r) => setTimeout(r, 2500));
+    expect(showToast).not.toHaveBeenCalledWith('Join request sent', 'success');
+    expect(showToast).not.toHaveBeenCalledWith('You joined the channel', 'success');
+  });
+
+  it('requesting to join a closed channel keeps the request wording', async () => {
+    const { showToast } = await import('$lib/helpers/toast');
+    /** @type {any} */ (showToast).mockClear();
+    render(GroupChat, { props: { pointer: { relay: GROUP_RELAY, id: 'walledchat' } } });
+    const note = await screen.findByTestId('group-restricted-note');
+    await fireEvent.click(within(note).getByRole('button', { name: 'Request to join' }));
+    // The roster stays unreadable (restricted): the `closed` marker decides.
+    await waitFor(() => expect(showToast).toHaveBeenCalledWith('Join request sent', 'success'), {
+      timeout: 5000
+    });
+  });
+
   it('join publishes a 9021 to the group relay and mirrors the group into the 10009 list', async () => {
     render(GroupChat, { props: { pointer: { relay: GROUP_RELAY, id: 'openchat' } } });
     // I'm not in openchat's members list -> Join button shows
@@ -1873,6 +2103,145 @@ describe('GroupChat', () => {
       expect(threadInput.textContent).toBe('');
       await typeIntoEditor(threadInput, 'thread draft');
       expect(screen.getByTestId('group-chat-input').textContent).toBe('timeline draft');
+    });
+  });
+
+  describe('scheduled meetings', () => {
+    const meetPointer = { relay: GROUP_RELAY, id: 'meetchat' };
+
+    it('subscribes to meetings and deletions alongside chat on the group relay', async () => {
+      render(GroupChat, { props: { pointer: meetPointer } });
+      await waitFor(() => {
+        const chatSub = subscriptionCalls.find((filters) =>
+          filters.some((f) => f?.kinds?.includes(9) && f?.['#h']?.[0] === 'meetchat')
+        );
+        expect(chatSub?.find((f) => f?.kinds?.includes(9))?.kinds).toContain(31923);
+        // Meetings get their own window, so a busy chat cannot push the
+        // upcoming ones out of the 100-message replay.
+        expect(chatSub?.some((f) => f?.kinds?.length === 1 && f.kinds[0] === 31923)).toBe(true);
+        // NIP-09 deletions of meetings (author deletes on another device).
+        expect(chatSub?.some((f) => f?.kinds?.includes(5) && f?.['#h']?.[0] === 'meetchat')).toBe(
+          true
+        );
+      });
+      expect(relayCalls.every((url) => url === GROUP_RELAY)).toBe(true);
+    });
+
+    it('renders a meeting card for this channel’s meeting only, and feeds the bar', async () => {
+      const { container } = render(GroupChat, { props: { pointer: meetPointer } });
+      const cards = await screen.findAllByTestId('meeting-card-stub');
+      expect(cards.map((c) => c.dataset.id)).toEqual([meetingEvent.id]);
+      expect(cards[0].dataset.group).toBe('meetchat');
+      expect(cards[0].dataset.user).toBe(ME);
+      // The description lives in the card, not twice in the bubble.
+      const contents = [...container.querySelectorAll('[data-testid="ncr-content"]')].map(
+        (el) => el.textContent
+      );
+      expect(contents).toContain('see you there');
+      expect(contents).not.toContain('agenda in the card, not the bubble');
+      expect(contents).not.toContain('two h tags');
+      expect(screen.getByTestId('meeting-bar-stub').dataset.ids).toBe(meetingEvent.id);
+    });
+
+    it('joins the channel call from the card and the bar', async () => {
+      render(GroupChat, { props: { pointer: meetPointer } });
+      await fireEvent.click(await screen.findByTestId('meeting-card-stub-join'));
+      await waitFor(() => expect(joinGroupCallMock).toHaveBeenCalledTimes(1));
+      expect(joinGroupCallMock.mock.calls[0][0]).toEqual(meetPointer);
+      await fireEvent.click(screen.getByTestId('meeting-bar-stub-join'));
+      await waitFor(() => expect(joinGroupCallMock).toHaveBeenCalledTimes(2));
+    });
+
+    it('"Termin planen" in the ⋯ menu opens the dialog in channel mode', async () => {
+      const { modalStore } = await import('$lib/stores/modal.svelte.js');
+      const openModal = vi.spyOn(modalStore, 'openModal').mockImplementation(() => {});
+      render(GroupChat, { props: { pointer: meetPointer } });
+      await fireEvent.click(await screen.findByTestId('group-more-menu'));
+      const item = await screen.findByTestId('group-meeting-schedule');
+      expect(item.textContent?.trim()).toBe('Schedule a meeting');
+      await fireEvent.click(item);
+      expect(openModal).toHaveBeenCalledTimes(1);
+      const type = openModal.mock.calls[0][0];
+      const props = /** @type {any} */ (openModal.mock.calls[0][1]);
+      expect(type).toBe('calendarEvent');
+      expect(props.mode).toBe('create');
+      expect(props.groupMeeting.pointer).toEqual(meetPointer);
+      expect(props.groupMeeting.channelName).toBe('Meet Chat');
+      expect(props.groupMeeting.channelUrl).toBe(
+        `${window.location.origin}${window.location.pathname}?channel=meetchat`
+      );
+      expect([...props.groupMeeting.memberPubkeys].sort()).toEqual([ME, OTHER].sort());
+      openModal.mockRestore();
+    });
+
+    // One authenticated listing per channel visit feeds every card's guest
+    // link (not one per card), and only for a meeting of mine not yet over.
+    it('lists the channel passes once for my upcoming meeting', async () => {
+      listCallPassesMock.mockClear();
+      const nip44 = { encrypt: async () => '', decrypt: async () => '' };
+      activeUserHolder.current = { pubkey: ME, signer: { signEvent, nip44 } };
+      render(GroupChat, { props: { pointer: { relay: GROUP_RELAY, id: 'ownmeetchat' } } });
+      await screen.findAllByTestId('meeting-card-stub');
+      await waitFor(() => expect(listCallPassesMock).toHaveBeenCalledTimes(1));
+      expect(listCallPassesMock.mock.calls[0][1]).toBe('ownmeetchat');
+    });
+
+    it('does not list passes for someone else’s meeting or without NIP-44', async () => {
+      listCallPassesMock.mockClear();
+      const nip44 = { encrypt: async () => '', decrypt: async () => '' };
+      activeUserHolder.current = { pubkey: ME, signer: { signEvent, nip44 } };
+      render(GroupChat, { props: { pointer: { relay: GROUP_RELAY, id: 'meetchat' } } });
+      await screen.findAllByTestId('meeting-card-stub');
+      cleanup();
+      activeUserHolder.current = { pubkey: ME, signer: { signEvent } };
+      render(GroupChat, { props: { pointer: { relay: GROUP_RELAY, id: 'ownmeetchat' } } });
+      await screen.findAllByTestId('meeting-card-stub');
+      await new Promise((r) => setTimeout(r, 50));
+      expect(listCallPassesMock).not.toHaveBeenCalled();
+    });
+
+    it('quotes the meeting title when replying to a meeting row', async () => {
+      const { container } = render(GroupChat, { props: { pointer: meetPointer } });
+      await screen.findAllByTestId('meeting-card-stub');
+      const row = /** @type {HTMLElement} */ (
+        container.querySelector(`[data-message-id="${meetingEvent.id}"]`)
+      );
+      await fireEvent.click(
+        /** @type {HTMLElement} */ (row.querySelector('button[title="Reply"]'))
+      );
+      await waitFor(() => expect(container.textContent).toContain('↩ Elternabend'));
+    });
+
+    // Final review 3: the dialog offers guest links only where the relay
+    // speaks call passes — probed for the AV channel, handed in with the props.
+    it.each([true, false])(
+      'hands the call-pass probe result (%s) to the meeting dialog',
+      async (supported) => {
+        probeCallPassSupport.mockResolvedValue(supported);
+        const { modalStore } = await import('$lib/stores/modal.svelte.js');
+        const openModal = vi.spyOn(modalStore, 'openModal').mockImplementation(() => {});
+        try {
+          render(GroupChat, { props: { pointer: meetPointer } });
+          await waitFor(() =>
+            expect(probeCallPassSupport).toHaveBeenCalledWith(GROUP_RELAY, 'meetchat')
+          );
+          await new Promise((r) => setTimeout(r, 0));
+          await fireEvent.click(await screen.findByTestId('group-more-menu'));
+          await fireEvent.click(await screen.findByTestId('group-meeting-schedule'));
+          const props = /** @type {any} */ (openModal.mock.calls[0][1]);
+          expect(props.groupMeeting.passesSupported).toBe(supported);
+        } finally {
+          openModal.mockRestore();
+          probeCallPassSupport.mockResolvedValue(false);
+        }
+      }
+    );
+
+    it('offers no "Termin planen" to a non-member', async () => {
+      render(GroupChat, { props: { pointer: { relay: GROUP_RELAY, id: 'openchat' } } });
+      await fireEvent.click(await screen.findByTestId('group-more-menu'));
+      await screen.findByTestId('group-list-add');
+      expect(screen.queryByTestId('group-meeting-schedule')).toBeNull();
     });
   });
 
@@ -2305,6 +2674,128 @@ describe('GroupChat', () => {
     });
   });
 
+  describe('channel navigation (design 1a)', () => {
+    it('renders no breadcrumb without an onBack (standalone /groups route)', async () => {
+      render(GroupChat, { props: { pointer } });
+      await screen.findByTestId('group-name');
+      expect(screen.queryByTestId('group-chat-breadcrumb')).toBeNull();
+    });
+
+    it('renders a "Channels" breadcrumb above the title that calls onBack', async () => {
+      const onBack = vi.fn();
+      render(GroupChat, { props: { pointer, onBack } });
+      const crumb = await screen.findByTestId('group-chat-breadcrumb');
+      expect(crumb.textContent).toContain('Channels');
+      expect(crumb.getAttribute('aria-label')).toBe('Back to the channel list');
+      expect(crumb.className).toContain('btn');
+      // Above the title, in document order.
+      const title = screen.getByTestId('group-name');
+      expect(crumb.compareDocumentPosition(title) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+      await fireEvent.click(crumb);
+      expect(onBack).toHaveBeenCalledTimes(1);
+    });
+
+    // QA K-new-5: the standalone /groups/<pointer> route had no meaningful
+    // title. Only a host that asks (ownsDocumentTitle) gets one — inside a
+    // community the layout titles the page.
+    it('titles the document with the channel name only when asked', async () => {
+      document.title = 'unchanged';
+      const first = render(GroupChat, { props: { pointer } });
+      await screen.findByTestId('group-name');
+      expect(document.title).toBe('unchanged');
+      first.unmount();
+
+      render(GroupChat, { props: { pointer, ownsDocumentTitle: true } });
+      const name = (await screen.findByTestId('group-name')).textContent?.trim() ?? '';
+      expect(name).not.toBe('');
+      await vi.waitFor(() => expect(document.title.startsWith(name)).toBe(true));
+    });
+
+    it('has no Leave button in the header for a member', async () => {
+      render(GroupChat, { props: { pointer } });
+      // beechat: ME is on the roster, so the menu entry shows once it answered.
+      await screen.findByTestId('group-leave');
+      const header = /** @type {HTMLElement} */ (
+        screen.getByTestId('group-name').closest('header')
+      );
+      const headerButtons = [...header.querySelectorAll('button')].filter(
+        (b) => !b.closest('.dropdown-content')
+      );
+      expect(headerButtons.some((b) => b.textContent?.trim() === 'Leave')).toBe(false);
+      expect(screen.getByTestId('group-leave').closest('.dropdown-content')).toBeTruthy();
+    });
+
+    it('"Leave channel" sits last in the ⋯ menu, in red, and asks first', async () => {
+      leaveCommunityMock.mockClear();
+      render(GroupChat, { props: { pointer, communityPubkey: 'c'.repeat(64) } });
+      await fireEvent.click(await screen.findByTestId('group-more-menu'));
+      const item = await screen.findByTestId('group-leave');
+      expect(item.textContent?.trim()).toBe('Leave channel');
+      expect(item.className).toContain('text-error');
+      const menu = /** @type {HTMLElement} */ (item.closest('ul'));
+      const items = [...menu.querySelectorAll('li > button')];
+      expect(items.at(-1)).toBe(item);
+
+      await fireEvent.click(item);
+      const dialog = await screen.findByTestId('group-leave-confirm');
+      expect(dialog.textContent).toContain('Really leave this channel?');
+      expect(dialog.textContent).toContain('You can join again later.');
+      expect(publishMock).not.toHaveBeenCalled();
+
+      // Cancel closes without leaving.
+      await fireEvent.click(within(dialog).getByText('Cancel'));
+      await waitFor(() => expect(screen.queryByTestId('group-leave-confirm')).toBeNull());
+      expect(publishMock).not.toHaveBeenCalled();
+
+      // Confirm sends the 9022.
+      await fireEvent.click(screen.getByTestId('group-leave'));
+      const action = await screen.findByTestId('group-leave-confirm-action');
+      expect(action.textContent?.trim()).toBe('Leave channel');
+      await fireEvent.click(action);
+      await waitFor(() => expect(publishMock).toHaveBeenCalledTimes(1));
+      const sent = publishMock.mock.calls[0][0];
+      expect(sent.kind).toBe(9022);
+      await waitFor(() => expect(screen.queryByTestId('group-leave-confirm')).toBeNull());
+      // A plain channel leaves only the channel — the community follow stays.
+      expect(leaveCommunityMock).not.toHaveBeenCalled();
+    });
+
+    // The community's ROOT group is its membership: leaving it leaves the
+    // community, and the entry + confirm must say so (same 9022 underneath).
+    // Final review 2 I1: and it really leaves — the 9022 to the root AND the
+    // community unfollow (kind 30000), so it drops out of the rail.
+    it('on the community root, the entry and confirm say "Leave community"', async () => {
+      leaveCommunityMock.mockClear();
+      const communityPubkey = 'c'.repeat(64);
+      render(GroupChat, { props: { pointer, isCommunityRoot: true, communityPubkey } });
+      await fireEvent.click(await screen.findByTestId('group-more-menu'));
+      const item = await screen.findByTestId('group-leave');
+      expect(item.textContent?.trim()).toBe('Leave community');
+
+      await fireEvent.click(item);
+      const dialog = await screen.findByTestId('group-leave-confirm');
+      expect(dialog.textContent).toContain('Really leave this community?');
+      expect(dialog.textContent).toContain(
+        "You won't be a member any more and the community disappears from your list."
+      );
+      expect(dialog.textContent).not.toContain('Really leave this channel?');
+      const action = screen.getByTestId('group-leave-confirm-action');
+      expect(action.textContent?.trim()).toBe('Leave community');
+      expect(publishMock).not.toHaveBeenCalled();
+
+      await fireEvent.click(action);
+      await waitFor(() => expect(publishMock).toHaveBeenCalledTimes(1));
+      expect(publishMock.mock.calls[0][0].kind).toBe(9022);
+      await waitFor(() => expect(leaveCommunityMock).toHaveBeenCalledWith(communityPubkey));
+    });
+
+    it('offers no leave entry to a non-member', async () => {
+      render(GroupChat, { props: { pointer: { relay: GROUP_RELAY, id: 'openchat' } } });
+      await screen.findByTestId('group-join');
+      expect(screen.queryByTestId('group-leave')).toBeNull();
+    });
+  });
+
   describe('my-list menu', () => {
     // Replaceable: each seed must be NEWER than anything the store already
     // holds for ME — including the list the component itself signs at
@@ -2327,6 +2818,10 @@ describe('GroupChat', () => {
       await fireEvent.click(await screen.findByTestId('group-more-menu'));
       const remove = await screen.findByTestId('group-list-remove');
       expect(screen.queryByTestId('group-list-add')).toBeNull();
+      // QA C6: says what it does, inside the item (part of its name).
+      expect(within(remove).getByTestId('group-list-remove-hint').textContent).toBe(
+        'The channel stays, you stay a member.'
+      );
       await fireEvent.click(remove);
 
       await waitFor(() => expect(publishOptimisticMock).toHaveBeenCalledTimes(1));
@@ -2391,7 +2886,8 @@ describe('GroupChat', () => {
         error: null,
         serverUrl: 'wss://livekit.example',
         token: 'jwt-1',
-        stageHidden: false
+        stageHidden: false,
+        connected: true
       };
     };
 
@@ -2418,7 +2914,111 @@ describe('GroupChat', () => {
       render(GroupChat, { props: { pointer: callPointer } });
       const button = await screen.findByTestId('group-call-join');
       expect(button.textContent).toContain('2');
-      expect(button.getAttribute('title')).toBe('2 in call');
+    });
+
+    // The header button names what a click does (laoc, 2026-10-02: it said
+    // "Join call" while nobody was in one).
+    describe('call button wording', () => {
+      const label = async () => {
+        const button = await screen.findByTestId('group-call-join');
+        return [button.getAttribute('aria-label'), button.getAttribute('title')];
+      };
+
+      it('no call running: "Start call"', async () => {
+        groupCallHolder.participants = [];
+        render(GroupChat, { props: { pointer: callPointer } });
+        expect(await label()).toEqual(['Start call', 'Start call']);
+      });
+
+      it('a call running without me: join it, with the count', async () => {
+        groupCallHolder.participants = [OTHER];
+        render(GroupChat, { props: { pointer: callPointer } });
+        expect(await label()).toEqual(['Join the running call (1)', 'Join the running call (1)']);
+      });
+
+      // QA 2026-10-02 C7: with the stage on screen the header icon said
+      // "Leave call" and duplicated the red button right below it —
+      // accidental hang-ups. It is a status now; only the red button leaves.
+      it('in it with the stage on screen: a status, not a leave button', async () => {
+        inCallHere();
+        groupCallHolder.participants = [ME];
+        render(GroupChat, { props: { pointer: callPointer } });
+        await screen.findByTestId('group-call-stage-stub');
+        expect(screen.queryByTestId('group-call-join')).toBeNull();
+        const status = screen.getByTestId('group-call-status');
+        expect(status.tagName).not.toBe('BUTTON');
+        expect(status.getAttribute('aria-label')).toBe("You're in the call");
+        await fireEvent.click(status);
+        expect(leaveGroupCallMock).not.toHaveBeenCalled();
+      });
+
+      it('in it while the call view shows the requesting state: still a status', async () => {
+        inCallHere();
+        groupCallHolder.state.phase = 'requesting';
+        groupCallHolder.state.connected = false;
+        render(GroupChat, { props: { pointer: callPointer } });
+        expect(await screen.findByTestId('group-call-status')).toBeTruthy();
+        expect(screen.queryByTestId('group-call-join')).toBeNull();
+      });
+
+      // Task 15 review: "Du bist im Anruf" is untrue once the call failed or
+      // ended — the header offers the call again instead.
+      it.each(['error', 'ended'])(
+        'in it while the call view shows the %s state: no "in the call" status',
+        async (phase) => {
+          inCallHere();
+          groupCallHolder.state.phase = /** @type {any} */ (phase);
+          groupCallHolder.state.connected = false;
+          groupCallHolder.participants = [];
+          render(GroupChat, { props: { pointer: callPointer } });
+          const button = await screen.findByTestId('group-call-join');
+          expect(screen.queryByTestId('group-call-status')).toBeNull();
+          expect(button.getAttribute('aria-label')).toBe('Start call');
+          expect(button.getAttribute('aria-pressed')).toBe('false');
+        }
+      );
+
+      it('in it while popped out: "Show call" brings the window back, never leaves', async () => {
+        inCallHere();
+        popoutHolder.open = true;
+        render(GroupChat, { props: { pointer: callPointer } });
+        expect(await label()).toEqual(['Show call', 'Show call']);
+        await fireEvent.click(screen.getByTestId('group-call-join'));
+        expect(popoutHolder.popInCall).toHaveBeenCalledTimes(1);
+        expect(leaveGroupCallMock).not.toHaveBeenCalled();
+      });
+
+      it('in it with the stage stepped aside: "Show call"', async () => {
+        inCallHere();
+        groupCallHolder.state.stageHidden = true;
+        groupCallHolder.participants = [ME];
+        render(GroupChat, { props: { pointer: callPointer } });
+        expect(await label()).toEqual(['Show call', 'Show call']);
+      });
+    });
+
+    // QA round 3 C6: only members start calls; a non-member of an open
+    // channel may listen in on a running one.
+    describe('non-member of an open AV channel', () => {
+      const listenPointer = { relay: GROUP_RELAY, id: 'listenchat' };
+
+      it('gets no call button while no call runs', async () => {
+        groupCallHolder.participants = [];
+        render(GroupChat, { props: { pointer: listenPointer } });
+        await screen.findByTestId('group-join');
+        expect(screen.queryByTestId('group-call-join')).toBeNull();
+        expect(screen.queryByTestId('group-call-start')).toBeNull();
+      });
+
+      it('may listen in on a running call', async () => {
+        groupCallHolder.participants = [OTHER];
+        render(GroupChat, { props: { pointer: listenPointer } });
+        await screen.findByTestId('group-join');
+        const button = await screen.findByTestId('group-call-join');
+        expect(button.getAttribute('aria-label')).toBe('Listen in (1)');
+        await fireEvent.click(button);
+        expect(joinGroupCallMock).toHaveBeenCalled();
+      });
     });
 
     it('disables the call button for an anonymous viewer — a token needs a signer', async () => {
@@ -2428,6 +3028,29 @@ describe('GroupChat', () => {
         await screen.findByTestId('group-call-join')
       );
       expect(button.disabled).toBe(true);
+      // QA C5: the greyed button says why.
+      expect(button.getAttribute('aria-label')).toBe('Log in to start a call');
+      expect(button.getAttribute('title')).toBe('Log in to start a call');
+    });
+
+    // QA round 2 C5: a touch user never sees the tooltip — a visible
+    // "Anmelden" sits next to the greyed icon and opens the login modal.
+    it('offers a visible login button next to the greyed call icon when logged out', async () => {
+      activeUserHolder.current = null;
+      const { modalStore } = await import('$lib/stores/modal.svelte.js');
+      const openModal = vi.spyOn(modalStore, 'openModal').mockImplementation(() => {});
+      render(GroupChat, { props: { pointer: callPointer } });
+      const login = await screen.findByTestId('group-call-login');
+      expect(login.textContent.trim()).toBe('Log in');
+      await fireEvent.click(login);
+      expect(openModal).toHaveBeenCalledWith('login');
+      openModal.mockRestore();
+    });
+
+    it('no login button for a logged-in viewer', async () => {
+      render(GroupChat, { props: { pointer: callPointer } });
+      await screen.findByTestId('group-call-join');
+      expect(screen.queryByTestId('group-call-login')).toBeNull();
     });
 
     it('renders the call stage in place of the chat body while in a call here', async () => {
@@ -2467,6 +3090,93 @@ describe('GroupChat', () => {
       await fireEvent.click(screen.getByTestId('group-call-join'));
       expect(callViewMocks.showCallStage).toHaveBeenCalledTimes(1);
       expect(leaveGroupCallMock).not.toHaveBeenCalled();
+    });
+
+    describe('call pass invite probe', () => {
+      beforeEach(() => {
+        probeCallPassSupport.mockReset();
+        probeCallPassSupport.mockResolvedValue(false);
+      });
+
+      it('resets passesSupported before re-probing on every pointer change, so a stale true never survives', async () => {
+        probeCallPassSupport.mockResolvedValue(true);
+        inCallHere();
+        const { rerender } = render(GroupChat, { props: { pointer: callPointer } });
+        await screen.findByTestId('group-call-stage-stub');
+        await waitFor(() =>
+          expect(screen.getByTestId('group-call-stage-stub-invite')).toBeTruthy()
+        );
+
+        // A pointer change re-runs the probe — while THIS one is still
+        // pending, the previous channel's `true` must not leak through.
+        /** @type {(value: boolean) => void} */
+        let resolveProbe = () => {};
+        probeCallPassSupport.mockReturnValueOnce(new Promise((r) => (resolveProbe = r)));
+        await rerender({ pointer: { ...callPointer } });
+        expect(screen.queryByTestId('group-call-stage-stub-invite')).toBeNull();
+
+        resolveProbe(false);
+        await waitFor(() =>
+          expect(screen.queryByTestId('group-call-stage-stub-invite')).toBeNull()
+        );
+      });
+    });
+
+    describe('call chat tab', () => {
+      it('shows Anruf-Chat / Kanal tabs while in the call here and switches to the call chat', async () => {
+        inCallHere();
+        groupCallHolder.state.stageHidden = true;
+        render(GroupChat, { props: { pointer: callPointer } });
+        await fireEvent.click(await screen.findByTestId('chat-tab-call'));
+        expect(await screen.findByTestId('call-chat-panel', {}, { timeout: 3000 })).toBeTruthy();
+        await fireEvent.click(screen.getByTestId('chat-tab-channel'));
+        expect(screen.queryByTestId('call-chat-panel')).toBeNull();
+      });
+
+      it('opens on the call chat when the call here starts, and the channel tab then sticks', async () => {
+        inCallHere();
+        groupCallHolder.state.stageHidden = true;
+        render(GroupChat, { props: { pointer: callPointer } });
+        expect(await screen.findByTestId('call-chat-panel', {}, { timeout: 3000 })).toBeTruthy();
+        expect(screen.getByTestId('chat-tab-call').getAttribute('aria-selected')).toBe('true');
+        await fireEvent.click(screen.getByTestId('chat-tab-channel'));
+        await waitFor(() => expect(screen.queryByTestId('call-chat-panel')).toBeNull());
+        // Still in the call: nothing pulls the user back to the call chat.
+        await new Promise((r) => setTimeout(r, 20));
+        expect(screen.queryByTestId('call-chat-panel')).toBeNull();
+        expect(screen.getByTestId('channel-chat-body').className).toContain('contents');
+      });
+
+      it('shows no tabs outside a call', async () => {
+        render(GroupChat, { props: { pointer: callPointer } });
+        await screen.findByTestId('group-name');
+        expect(screen.queryByTestId('chat-tab-call')).toBeNull();
+      });
+
+      it('hides (not unmounts) the channel timeline/composer while the call chat tab is active', async () => {
+        inCallHere();
+        groupCallHolder.state.stageHidden = true;
+        render(GroupChat, { props: { pointer: callPointer } });
+        await fireEvent.click(await screen.findByTestId('chat-tab-channel'));
+        const channelBody = await screen.findByTestId('channel-chat-body');
+        expect(channelBody.className).toContain('contents');
+        await fireEvent.click(await screen.findByTestId('chat-tab-call'));
+        // Hidden via CSS, not removed — the wrapper stays in the DOM.
+        expect(screen.getByTestId('channel-chat-body').className).toContain('hidden');
+      });
+
+      it('resets to the channel tab when the call here ends', async () => {
+        inCallHere();
+        groupCallHolder.state.stageHidden = true;
+        const { rerender } = render(GroupChat, { props: { pointer: callPointer } });
+        await fireEvent.click(await screen.findByTestId('chat-tab-call'));
+        expect(await screen.findByTestId('call-chat-panel', {}, { timeout: 3000 })).toBeTruthy();
+        // The call ends here: isActiveFor(pointer) goes false reactively
+        // when the channel's own pointer no longer matches the active call.
+        await rerender({ pointer: { relay: GROUP_RELAY, id: 'elsewhere' } });
+        await waitFor(() => expect(screen.queryByTestId('chat-tab-call')).toBeNull());
+        expect(screen.queryByTestId('call-chat-panel')).toBeNull();
+      });
     });
 
     // Wide screens: the chat opens BESIDE the stage (the call stays in
@@ -2568,13 +3278,85 @@ describe('GroupChat', () => {
       expect(screen.queryByTestId('group-call-stage-stub')).toBeNull();
     });
 
-    it('the header button leaves the call while in one here', async () => {
+    it('only the stage’s own leave button leaves the call while in one here', async () => {
       inCallHere();
       render(GroupChat, { props: { pointer: callPointer } });
       await screen.findByTestId('group-call-stage-stub');
-      await fireEvent.click(screen.getByTestId('group-call-join'));
-      expect(leaveGroupCallMock).toHaveBeenCalledTimes(1);
+      expect(screen.queryByTestId('group-call-join')).toBeNull();
+      expect(leaveGroupCallMock).not.toHaveBeenCalled();
       expect(joinGroupCallMock).not.toHaveBeenCalled();
+    });
+
+    // QA B4/C2: the dock showed ON the call page while it was connecting or
+    // had failed — only a mounted stage counted as "on screen".
+    it.each([
+      ['requesting', 'group-call-pending'],
+      ['error', 'group-call-error'],
+      ['ended', 'group-call-ended']
+    ])('the %s view counts as the call on screen (the dock steps aside)', async (phase, id) => {
+      inCallHere();
+      groupCallHolder.state.phase = /** @type {any} */ (phase);
+      groupCallHolder.state.connected = false;
+      if (phase === 'error') groupCallHolder.state.error = new Error('x');
+      if (phase === 'ended') groupCallHolder.state.endReason = 'dropped';
+      const { unmount } = render(GroupChat, { props: { pointer: callPointer } });
+      await screen.findByTestId(id);
+      expect(callViewMocks.registerCallStageView).toHaveBeenCalled();
+      unmount();
+      expect(callViewMocks.unregister).toHaveBeenCalled();
+    });
+
+    it('offers guest links only once the call is connected, not while connecting (QA B1)', async () => {
+      probeCallPassSupport.mockResolvedValue(true);
+      try {
+        inCallHere();
+        groupCallHolder.state.connected = false;
+        render(GroupChat, { props: { pointer: callPointer } });
+        await screen.findByTestId('group-call-stage-stub');
+        await new Promise((r) => setTimeout(r, 20));
+        expect(screen.queryByTestId('group-call-stage-stub-invite')).toBeNull();
+      } finally {
+        probeCallPassSupport.mockResolvedValue(false);
+      }
+    });
+
+    // The server ended the seat (pass revoked / kicked / room deleted, or
+    // the connection died): a readable end state, not "Connecting…".
+    describe('call ended by the server', () => {
+      /** @param {'removed' | 'dropped'} reason */
+      const endedHere = (reason) => {
+        inCallHere();
+        groupCallHolder.state.phase = 'ended';
+        groupCallHolder.state.endReason = reason;
+      };
+
+      // Final review 2 minor: a removed user gets no "Rejoin" (the relay
+      // blocks their pass) — same rule as CallLanding's !removedHere.
+      it('says the user was removed and offers only close', async () => {
+        endedHere('removed');
+        render(GroupChat, { props: { pointer: callPointer } });
+        const ended = await screen.findByTestId('group-call-ended');
+        expect(ended.textContent).toContain('You were removed from the call.');
+        expect(screen.queryByTestId('group-call-stage-stub')).toBeNull();
+        expect(screen.queryByTestId('group-call-pending')).toBeNull();
+        expect(screen.queryByTestId('group-call-rejoin')).toBeNull();
+        await fireEvent.click(screen.getByTestId('group-call-ended-close'));
+        expect(leaveGroupCallMock).toHaveBeenCalledTimes(1);
+      });
+
+      it('says the connection was lost for a dropped call and offers rejoin', async () => {
+        endedHere('dropped');
+        render(GroupChat, { props: { pointer: callPointer } });
+        expect((await screen.findByTestId('group-call-ended')).textContent).toContain(
+          'The connection to the call was lost.'
+        );
+        await fireEvent.click(screen.getByTestId('group-call-rejoin'));
+        expect(joinGroupCallMock).toHaveBeenCalledWith(
+          expect.objectContaining({ id: 'callchat', relay: GROUP_RELAY }),
+          expect.anything(),
+          expect.anything()
+        );
+      });
     });
 
     it('shows the pending state while the token is requested', async () => {
@@ -2617,7 +3399,7 @@ describe('GroupChat', () => {
       try {
         inCallHere();
         render(GroupChat, { props: { pointer: callPointer } });
-        await screen.findByTestId('group-call-join');
+        await screen.findByTestId('group-call-status');
         // Not reported visible yet (hidden twin): no stage, no connection.
         expect(screen.queryByTestId('group-call-stage-stub')).toBeNull();
 

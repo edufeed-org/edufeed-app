@@ -6,8 +6,15 @@
  * @vitest-environment jsdom
  */
 import { describe, it, expect, vi } from 'vitest';
-import { render } from '@testing-library/svelte';
+import { render, fireEvent } from '@testing-library/svelte';
 import CalendarEventCard from '../calendar/CalendarEventCard.svelte';
+
+const spies = vi.hoisted(() => ({
+  goto: vi.fn(),
+  useRsvps: vi.fn(() => ({ rsvps: [], loading: false })),
+  reactionBar: vi.fn(() => ({}))
+}));
+vi.mock('$app/navigation', () => ({ goto: spies.goto }));
 
 // Mock dependencies
 // Mock app-settings before any imports that transitively depend on it
@@ -36,7 +43,8 @@ vi.mock('$lib/paraglide/messages', () => ({
   attendee_indicator_declined_label: () => '',
   attendee_indicator_show_all: () => '',
   attendee_indicator_modal_title: () => '',
-  attendee_indicator_modal_close: () => ''
+  attendee_indicator_modal_close: () => '',
+  calendar_channel_meeting_in: (/** @type {any} */ p) => `in #${p.channel}`
 }));
 vi.mock('$lib/helpers/calendar.js', () => ({
   formatCalendarDate: (/** @type {any} */ date, /** @type {any} */ format) => {
@@ -46,7 +54,7 @@ vi.mock('$lib/helpers/calendar.js', () => ({
   formatRelativeTime: () => '2h ago'
 }));
 vi.mock('$lib/stores/calendar-event-rsvps.svelte.js', () => ({
-  useCalendarEventRsvps: () => ({ rsvps: [], loading: false })
+  useCalendarEventRsvps: spies.useRsvps
 }));
 vi.mock('$lib/stores/accounts.svelte', () => ({
   manager: { active: null }
@@ -55,7 +63,7 @@ vi.mock('$lib/helpers/rsvpUtils.js', () => ({
   transformRsvps: () => ({ accepted: [], tentative: [], declined: [], totalCount: 0 })
 }));
 // Mock heavy sub-components to avoid deep dependency chains
-vi.mock('../reactions/ReactionBar.svelte', () => ({ default: () => ({}) }));
+vi.mock('../reactions/ReactionBar.svelte', () => ({ default: spies.reactionBar }));
 vi.mock('../calendar/EventTags.svelte', () => ({ default: () => ({}) }));
 vi.mock('../calendar/AttendeeIndicator.svelte', () => ({ default: () => ({}) }));
 vi.mock('../shared/LocationLink.svelte', () => ({ default: () => ({}) }));
@@ -256,6 +264,67 @@ describe('CalendarEventCard', () => {
       const listItem = container.querySelector('.calendar-event-card-list');
       expect(listItem?.getAttribute('role')).toBe('button');
       expect(listItem?.getAttribute('tabindex')).toBe('0');
+    });
+  });
+
+  describe('channel meeting (community calendar, M5)', () => {
+    const meetingEvent = {
+      ...mockTimeEvent,
+      title: 'Teamtreffen',
+      locations: [{ name: 'https://app.example/c/npub1x?channel=chan1' }],
+      originalEvent: {
+        ...mockTimeEvent.originalEvent,
+        tags: [
+          ['d', 'm1'],
+          ['h', 'chan1']
+        ]
+      },
+      channelMeeting: {
+        id: 'chan1',
+        name: 'arbeitszimmer',
+        href: '/c/npub1x?view=channels&channel=chan1'
+      }
+    };
+
+    for (const variant of /** @type {const} */ (['card', 'list'])) {
+      it(`${variant}: names the channel, links to it, no RSVP or reactions`, async () => {
+        spies.goto.mockClear();
+        spies.useRsvps.mockClear();
+        spies.reactionBar.mockClear();
+        const { container, getByText } = render(CalendarEventCard, {
+          props: { event: meetingEvent, variant }
+        });
+        expect(getByText('in #arbeitszimmer')).toBeTruthy();
+        expect(spies.useRsvps).not.toHaveBeenCalled();
+        expect(spies.reactionBar).not.toHaveBeenCalled();
+        const card = /** @type {HTMLElement} */ (
+          container.querySelector('[data-testid="calendar-event-card"]')
+        );
+        expect(card.dataset.channelMeeting).toBe('chan1');
+        await fireEvent.click(card);
+        expect(spies.goto).toHaveBeenCalledWith('/c/npub1x?view=channels&channel=chan1');
+      });
+    }
+
+    it('prefers the channel link over a custom onEventClick', async () => {
+      spies.goto.mockClear();
+      const onEventClick = vi.fn();
+      const { container } = render(CalendarEventCard, {
+        props: { event: meetingEvent, onEventClick, compact: true }
+      });
+      await fireEvent.click(
+        /** @type {HTMLElement} */ (container.querySelector('[data-testid="calendar-event-card"]'))
+      );
+      expect(onEventClick).not.toHaveBeenCalled();
+      expect(spies.goto).toHaveBeenCalledWith('/c/npub1x?view=channels&channel=chan1');
+    });
+
+    it('a normal event still loads RSVPs and renders reactions', () => {
+      spies.useRsvps.mockClear();
+      spies.reactionBar.mockClear();
+      render(CalendarEventCard, { props: { event: mockTimeEvent } });
+      expect(spies.useRsvps).toHaveBeenCalled();
+      expect(spies.reactionBar).toHaveBeenCalled();
     });
   });
 });

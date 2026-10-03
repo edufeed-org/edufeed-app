@@ -16,6 +16,8 @@
   import HostChannelSidebar from '$lib/components/groups/HostChannelSidebar.svelte';
   import { parseGroupInput } from '$lib/groups/groups.js';
   import * as m from '$lib/paraglide/messages';
+  import { runtimeConfig } from '$lib/stores/config.svelte.js';
+  import { pageTitle } from '$lib/helpers/page-title.js';
 
   let { data } = $props();
   const pointer = $derived(parseGroupInput(data.rawPointer));
@@ -24,8 +26,12 @@
   const anchorMessageId = $derived($page.url.searchParams.get('message'));
 </script>
 
+<!-- A valid pointer: GroupChat titles the page with the channel's name
+  (ownsDocumentTitle) — this route only knows the raw id. -->
 <svelte:head>
-  <title>{pointer ? pointer.id : 'Groups'} — edufeed</title>
+  {#if !pointer}
+    <title>{pageTitle([m.groups_title()], runtimeConfig.appName)}</title>
+  {/if}
 </svelte:head>
 
 {#if pointer}
@@ -35,7 +41,7 @@
       <!-- Keyed on the channel: switching channels must remount the chat, or
            a draft typed in one would still be in the composer of the next. -->
       {#key `${pointer.relay}'${pointer.id}`}
-        <GroupChat {pointer} {anchorMessageId} />
+        <GroupChat {pointer} {anchorMessageId} ownsDocumentTitle />
       {/key}
     </div>
   </div>

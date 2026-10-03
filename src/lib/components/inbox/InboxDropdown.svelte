@@ -44,7 +44,7 @@
     }
 
     const unreadDms = getKnownDmConversations().filter((conv) =>
-      isDmConversationUnread(conv.id, conv.lastMessage.created_at)
+      isDmConversationUnread(conv.id, conv.lastMessage.created_at, conv.lastMessage.pubkey)
     );
     for (const conv of unreadDms) {
       items.push({
@@ -168,7 +168,8 @@
             profile={profiles.get(getDmOtherPubkey(item.conversation))}
             unread={isDmConversationUnread(
               item.conversation.id,
-              item.conversation.lastMessage.created_at
+              item.conversation.lastMessage.created_at,
+              item.conversation.lastMessage.pubkey
             )}
           />
         {:else}

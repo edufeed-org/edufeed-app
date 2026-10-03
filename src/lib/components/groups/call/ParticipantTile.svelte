@@ -30,7 +30,8 @@
    *   isMicOff?: boolean,
    *   isSpeaking?: boolean,
    *   handRaised?: boolean,
-   *   reactions?: Array<{id: string, emoji: string}>,
+   *   isGuest?: boolean,
+   *   reactions?: Array<{id: string, emoji: string, url?: string}>,
    *   profile?: any,
    *   volume?: number,
    *   onVolumeChange?: (volume: number) => void,
@@ -46,6 +47,7 @@
     isMicOff = false,
     isSpeaking = false,
     handRaised = false,
+    isGuest = false,
     reactions = [],
     profile = undefined,
     volume = 1,
@@ -111,7 +113,11 @@
 
   const fallbackName = $derived(pubkey ? pubkey.slice(0, 8) : 'Participant');
   const displayName = $derived(
-    isLocal ? 'You' : profile ? getDisplayName(profile, fallbackName) : fallbackName
+    isLocal
+      ? m.groups_call_tile_you()
+      : profile
+        ? getDisplayName(profile, fallbackName)
+        : fallbackName
   );
   // A hover card + profile link only make sense for a resolved Nostr identity.
   const linkable = $derived(!!pubkey && !isLocal && !compact);
@@ -222,6 +228,11 @@
         <MicOffIcon class_="h-3.5 w-3.5" title="" />
       </span>
     {/if}
+    {#if isGuest}
+      <span class="badge badge-sm badge-info" data-testid="call-guest-badge">
+        {m.groups_call_guest_badge()}
+      </span>
+    {/if}
   </div>
 
   <!-- Hover controls (top left): pin + volume -->
@@ -286,7 +297,19 @@
   <!-- Floating reactions -->
   {#each reactions as reaction (reaction.id)}
     <span class="call-reaction pointer-events-none absolute bottom-6 left-1/2 z-30 text-3xl">
-      {reaction.emoji}
+      {#if reaction.url}
+        <!-- NIP-30 custom emoji (https only, validated on receipt), 1em = the
+             unicode reactions' size. -->
+        <img
+          src={reaction.url}
+          alt={reaction.emoji}
+          class="inline-block h-[1em] w-[1em] object-contain"
+          referrerpolicy="no-referrer"
+          loading="eager"
+        />
+      {:else}
+        {reaction.emoji}
+      {/if}
     </span>
   {/each}
 </div>

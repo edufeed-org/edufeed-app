@@ -38,7 +38,9 @@ export function relayBadges(info) {
   }
   const software = softwareName(info.software);
   if (software) {
-    const version = typeof info.version === 'string' ? info.version.trim() : '';
+    // A placeholder like "-" (pyramid, QA 2026-10-02 K5) is no version.
+    const raw = typeof info.version === 'string' ? info.version.trim() : '';
+    const version = /[\p{L}\p{N}]/u.test(raw) ? raw : '';
     badges.push({ id: 'software', text: version ? `${software} ${version}` : software });
   }
   return badges;

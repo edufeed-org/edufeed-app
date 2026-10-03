@@ -582,7 +582,7 @@
       ? minHeight
         ? 'overflow-y-auto'
         : 'max-h-40 overflow-y-auto'
-      : 'overflow-hidden whitespace-nowrap'} {className}"
+      : 'single-line overflow-hidden whitespace-nowrap'} {className}"
     style={minHeight ? `min-height: ${minHeight}` : undefined}
     contenteditable={!disabled}
     role="textbox"
@@ -608,5 +608,14 @@
     content: attr(data-placeholder);
     opacity: 0.5;
     pointer-events: none;
+  }
+  /* A one-line field keeps its placeholder on one line too ("Nachricht an
+     arbeitszimmer" wrapped at 390/768, QA 2026-10-02 K3). */
+  .emoji-input.single-line:empty::before {
+    display: block;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 </style>
