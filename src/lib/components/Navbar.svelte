@@ -15,6 +15,7 @@
   import ImageWithFallback from './shared/ImageWithFallback.svelte';
   import { lazyComponent } from '$lib/helpers/lazy-component.svelte.js';
   import LanguageSwitcher from './LanguageSwitcher.svelte';
+  import ConnectionStatus from './shared/ConnectionStatus.svelte';
   import { runtimeConfig } from '$lib/stores/config.svelte.js';
   import { prefetchCalendarData } from '$lib/loaders/calendar.js';
   import { getTotalUnreadCount } from '$lib/services/inbox-service.svelte.js';
@@ -114,6 +115,7 @@
 
   <!-- Right: Utility items (desktop only) -->
   <div class="hidden flex-1 items-center justify-end gap-2 lg:flex">
+    <ConnectionStatus />
     {#if activeAccount}
       <!-- DM icon -->
       <a
@@ -181,7 +183,8 @@
   </div>
 
   <!-- Mobile Hamburger Menu (visible below lg) -->
-  <div class="lg:hidden">
+  <div class="flex items-center gap-1 lg:hidden">
+    <ConnectionStatus />
     <div class="dropdown dropdown-end">
       <div
         tabindex="0"

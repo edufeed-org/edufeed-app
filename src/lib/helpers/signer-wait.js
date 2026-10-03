@@ -58,6 +58,37 @@ export function notifyWhenSlow(promise, ms, onSlow) {
   promise.then(clear, clear);
 }
 
+// How many signatures are past the hint threshold right now — the
+// connection status shows "waiting for your signing app" while any is.
+let slowSigns = 0;
+/** @type {Set<(count: number) => void>} */
+const slowSignListeners = new Set();
+const emitSlowSigns = () => slowSignListeners.forEach((fn) => fn(slowSigns));
+
+/**
+ * Count `promise` as a slow signature until it settles.
+ * @param {Promise<unknown>} promise
+ */
+export function trackSlowSign(promise) {
+  slowSigns++;
+  emitSlowSigns();
+  const done = () => {
+    slowSigns--;
+    emitSlowSigns();
+  };
+  promise.then(done, done);
+}
+
+/**
+ * @param {(count: number) => void} fn called now and on every change
+ * @returns {() => void} unsubscribe
+ */
+export function subscribeSlowSigns(fn) {
+  slowSignListeners.add(fn);
+  fn(slowSigns);
+  return () => slowSignListeners.delete(fn);
+}
+
 /**
  * Phone or tablet — where "open your signing app" means switching apps and
  * energy saver mode is the usual reason a bunker goes quiet.

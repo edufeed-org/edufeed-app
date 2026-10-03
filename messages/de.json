@@ -3914,5 +3914,17 @@
   "signer_timeout_hint": "Deine Signier-App hat nicht geantwortet. Öffne sie und versuche es erneut.",
   "signer_timeout_hint_mobile": "Deine Signier-App hat nicht geantwortet. Öffne sie und versuche es erneut – und schalte den Energiesparmodus aus, er blockiert auf Handys oft Signier-Anfragen.",
   "groups_call_invite_untitled": "Einladungslink",
-  "groups_call_invite_created_at": "erstellt {time}"
+  "groups_call_invite_created_at": "erstellt {time}",
+  "connection_status_label": "Verbindungsstatus",
+  "connection_ok": "Verbunden",
+  "connection_ok_detail": "Deine Internetverbindung und die Server funktionieren.",
+  "connection_offline": "Keine Internetverbindung",
+  "connection_offline_detail": "Was du veröffentlichst, bleibt auf diesem Gerät und wird gesendet, sobald du wieder online bist.",
+  "connection_unreachable": "Server nicht erreichbar",
+  "connection_unreachable_detail": "Dein Gerät ist online, aber die Server antworten nicht – deine Verbindung ist vielleicht sehr langsam oder die Server sind gestört. Neuer Versuch läuft…",
+  "connection_relays_down": "{down} von {total} Servern nicht erreichbar",
+  "connection_relays_down_detail": "Manche Inhalte fehlen vielleicht oder kommen später. Neuer Versuch läuft…",
+  "connection_signer": "Warte auf deine Signier-App",
+  "connection_signer_detail": "Öffne deine Signier-App und bestätige die Anfrage.",
+  "connection_signer_detail_mobile": "Öffne deine Signier-App und bestätige die Anfrage. Im Energiesparmodus hält dein Handy solche Anfragen oft zurück."
 }

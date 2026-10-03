@@ -20,7 +20,9 @@ const {
   notifyWhenSlow,
   isLikelyMobile,
   slowSignHintText,
-  signerTimeoutText
+  signerTimeoutText,
+  trackSlowSign,
+  subscribeSlowSigns
 } = await import('$lib/helpers/signer-wait.js');
 
 afterEach(() => {
@@ -86,5 +88,22 @@ describe('hint texts', () => {
     expect(slowSignHintText(false)).toBe('slow');
     expect(signerTimeoutText(true)).toBe('timeout-mobile');
     expect(signerTimeoutText(false)).toBe('timeout');
+  });
+});
+
+describe('slow sign tracking', () => {
+  it('counts a tracked signature until it settles', async () => {
+    /** @type {number[]} */
+    const seen = [];
+    const stop = subscribeSlowSigns((n) => seen.push(n));
+    /** @type {(v?: unknown) => void} */
+    let finish = () => {};
+    const p = new Promise((r) => (finish = r));
+    trackSlowSign(p);
+    finish();
+    await p;
+    await Promise.resolve();
+    stop();
+    expect(seen).toEqual([0, 1, 0]);
   });
 });

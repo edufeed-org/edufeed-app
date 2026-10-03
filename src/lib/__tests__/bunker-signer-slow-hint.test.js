@@ -1,7 +1,7 @@
 /** @vitest-environment node */
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { wrapBunkerSigner } from '$lib/stores/accounts.svelte.js';
-import { SignerTimeoutError } from '$lib/helpers/signer-wait.js';
+import { SignerTimeoutError, subscribeSlowSigns } from '$lib/helpers/signer-wait.js';
 
 afterEach(() => {
   vi.useRealTimers();
@@ -22,6 +22,30 @@ describe('wrapBunkerSigner slow-sign hint', () => {
     signer.signEvent({ kind: 1 }).catch(() => {});
     await vi.advanceTimersByTimeAsync(8000);
     expect(onSlow).toHaveBeenCalledTimes(1);
+  });
+
+  it('counts the request as a slow signature for the connection status', async () => {
+    vi.useFakeTimers();
+    /** @type {number} */
+    let count = 0;
+    const stop = subscribeSlowSigns((n) => (count = n));
+    // Module-level counter: earlier tests leave never-settling signatures.
+    const before = count;
+    /** @type {(v: any) => void} */
+    let answer = () => {};
+    const signer = wrapBunkerSigner(
+      makeSigner(() => new Promise((r) => (answer = r))),
+      90_000,
+      { slowMs: 8000, onSlow: () => {} }
+    );
+    const signed = signer.signEvent({ kind: 1 });
+    await vi.advanceTimersByTimeAsync(8000);
+    expect(count).toBe(before + 1);
+    answer({ id: 'x' });
+    await signed;
+    await vi.advanceTimersByTimeAsync(0);
+    expect(count).toBe(before);
+    stop();
   });
 
   it('stays quiet for a prompt answer', async () => {

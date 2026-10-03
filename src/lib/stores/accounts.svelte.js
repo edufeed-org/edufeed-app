@@ -8,7 +8,8 @@ import {
   SignerTimeoutError,
   notifyWhenSlow,
   rejectAfter,
-  showSlowSignHint
+  showSlowSignHint,
+  trackSlowSign
 } from '$lib/helpers/signer-wait.js';
 
 /**
@@ -118,7 +119,10 @@ export function wrapBunkerSigner(signer, ms, opts = {}) {
       if (prop === 'signEvent') {
         return (/** @type {any} */ template) => {
           const signing = Promise.resolve(/** @type {any} */ (target).signEvent(template));
-          notifyWhenSlow(signing, slowMs, onSlow);
+          notifyWhenSlow(signing, slowMs, () => {
+            trackSlowSign(signing);
+            onSlow();
+          });
           return rejectAfter(signing, ms, 'Signing the event').catch((/** @type {any} */ err) => {
             if (err instanceof SignerTimeoutError) throw err; // our own timeout
             const message = err instanceof Error ? err.message : String(err);

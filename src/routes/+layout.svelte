@@ -7,6 +7,7 @@
   import '@fontsource-variable/open-sans';
   import '@fontsource-variable/jetbrains-mono';
   import Navbar from '$lib/components/Navbar.svelte';
+  import ConnectionStatus from '$lib/components/shared/ConnectionStatus.svelte';
   import ModalManager from '$lib/components/ModalManager.svelte';
   import PublishStatusToast from '$lib/components/shared/PublishStatusToast.svelte';
   import GlobalFAB from '$lib/components/shared/GlobalFAB.svelte';
@@ -412,6 +413,14 @@
 
 <div class="flex h-dvh flex-col overflow-hidden">
   <Navbar hideMobileNavbar={!!getActiveUser() && isOnCommunityRoutes} />
+  <!-- Where the mobile navbar (and its status dot) is hidden, connection
+    trouble still needs a voice: a strip that only renders while something
+    is wrong. -->
+  {#if getActiveUser() && isOnCommunityRoutes}
+    <div class="lg:hidden">
+      <ConnectionStatus variant="strip" />
+    </div>
+  {/if}
   <!-- Overlay, not flow: a flow progress bar pushed the whole chrome down
     4px on every navigation — visible as a flicker/bump (laoc, 2026-08-17).
     The relative wrapper pins it to the navbar's bottom edge instead. -->
