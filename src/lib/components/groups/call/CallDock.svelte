@@ -18,10 +18,10 @@
   import {
     getGroupCallState,
     leaveGroupCall,
+    leaveGroupCallWithConfirm,
     showCallStage,
     callErrorMessage
   } from '$lib/groups/group-call.svelte.js';
-  import { playLeaveSound } from '$lib/services/call-sounds.js';
   import { showToast } from '$lib/helpers/toast';
   import { callMediaErrorMessage } from '$lib/groups/call-media-errors.js';
   import { MeetIcon, MicIcon, MicOffIcon } from '$lib/components/icons';
@@ -47,9 +47,9 @@
     if (call.href) await goto(call.href);
   }
 
+  // Asks "Anruf verlassen?" first; the cue plays once confirmed.
   function leave() {
-    playLeaveSound();
-    leaveGroupCall();
+    leaveGroupCallWithConfirm();
   }
 </script>
 

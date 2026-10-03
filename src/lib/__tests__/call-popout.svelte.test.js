@@ -28,6 +28,10 @@ vi.mock('$lib/services/livekit-connection.svelte.js', () => ({
 }));
 vi.mock('$lib/paraglide/messages', () => ({}));
 vi.mock(
+  '$lib/components/groups/CallLeaveConfirmModal.svelte',
+  () => import('../components/__tests__/fixtures/CallLeaveConfirmStub.svelte')
+);
+vi.mock(
   '$lib/components/groups/call/GroupCallStage.svelte',
   () => import('../components/__tests__/fixtures/GroupCallStageStub.svelte')
 );
@@ -154,5 +158,43 @@ describe('closing the pop-out', () => {
     flushSync();
     expect(pip.close).toHaveBeenCalled();
     expect(getCallPopoutState().open).toBe(false);
+  });
+
+  // Task 19: the opener's modal layer is invisible from the pop-out, so the
+  // "Anruf verlassen?" confirm is mounted into the window itself.
+  describe('leaving from inside the pop-out asks in the window', () => {
+    const q = (id) => pip.document.querySelector(`[data-testid="${id}"]`);
+    const settle = () => new Promise((r) => setTimeout(r, 0));
+
+    it('Cancel keeps the call and the window', async () => {
+      await popOutCall(VIEW);
+      q('group-call-stage-stub-leave').click();
+      await vi.waitFor(() => expect(q('call-leave-confirm-stub')).toBeTruthy());
+      expect(document.querySelector('[data-testid="call-leave-confirm-stub"]')).toBeNull();
+      q('call-leave-confirm-stub-cancel').click();
+      await settle();
+      expect(q('call-leave-confirm-stub')).toBeNull();
+      expect(getGroupCallState().phase).toBe('ready');
+      expect(getCallPopoutState().open).toBe(true);
+    });
+
+    it('Leave leaves the call (and the window closes with it)', async () => {
+      await popOutCall(VIEW);
+      q('group-call-stage-stub-leave').click();
+      await vi.waitFor(() => expect(q('call-leave-confirm-stub')).toBeTruthy());
+      q('call-leave-confirm-stub-confirm').click();
+      await vi.waitFor(() => expect(getGroupCallState().phase).toBe('idle'));
+      flushSync();
+      expect(getCallPopoutState().open).toBe(false);
+    });
+
+    it('closing the window while it asks counts as cancel', async () => {
+      await popOutCall(VIEW);
+      q('group-call-stage-stub-leave').click();
+      await vi.waitFor(() => expect(q('call-leave-confirm-stub')).toBeTruthy());
+      pip.dispatchEvent(new Event('pagehide'));
+      await settle();
+      expect(getGroupCallState().phase).toBe('ready');
+    });
   });
 });

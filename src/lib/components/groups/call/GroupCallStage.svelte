@@ -50,7 +50,6 @@
   import { Track } from 'livekit-client';
   import { useProfileMap } from '$lib/stores/profile-map.svelte.js';
   import { showToast } from '$lib/helpers/toast';
-  import { playLeaveSound } from '$lib/services/call-sounds.js';
   import { callMediaErrorMessage } from '$lib/groups/call-media-errors.js';
   import {
     MeetIcon,
@@ -161,9 +160,9 @@
   const onToggleCamera = () => runMedia('camera', toggleCamera);
   const onToggleScreenShare = () => runMedia('screen', toggleScreenShare);
 
+  // The parent asks "Anruf verlassen?" first (leaveGroupCallWithConfirm),
+  // which also plays the leave cue once confirmed.
   function handleLeave() {
-    // Played inside the click: the teardown would cut it off otherwise.
-    playLeaveSound();
     onLeave();
   }
 

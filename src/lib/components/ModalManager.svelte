@@ -70,7 +70,8 @@
       () => import('./educational/ResourceVariantPickerModal.svelte')
     ),
     concordInvites: lazyComponent(() => import('./community/channels/InviteInboxModal.svelte')),
-    callSwitchConfirm: lazyComponent(() => import('./groups/CallSwitchConfirmModal.svelte'))
+    callSwitchConfirm: lazyComponent(() => import('./groups/CallSwitchConfirmModal.svelte')),
+    callLeaveConfirm: lazyComponent(() => import('./groups/CallLeaveConfirmModal.svelte'))
   };
 
   /** @type {any} */
@@ -144,6 +145,14 @@
         const callbacks = /** @type {any} */ (modal.modalCallbacks);
         return {
           title: props?.title ?? '',
+          onConfirm: () => callbacks?.onConfirm?.(),
+          onCancel: () => callbacks?.onCancel?.()
+        };
+      }
+      case 'callLeaveConfirm': {
+        const callbacks = /** @type {any} */ (modal.modalCallbacks);
+        return {
+          guest: props?.guest === true,
           onConfirm: () => callbacks?.onConfirm?.(),
           onCancel: () => callbacks?.onCancel?.()
         };

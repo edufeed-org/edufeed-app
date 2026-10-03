@@ -23,6 +23,7 @@ const { lk, call, fns } = vi.hoisted(() => ({
   fns: {
     toggleMute: vi.fn(async () => {}),
     leaveGroupCall: vi.fn(async () => {}),
+    leaveGroupCallWithConfirm: vi.fn(async () => true),
     showCallStage: vi.fn(),
     goto: vi.fn(async () => {}),
     playLeaveSound: vi.fn(),
@@ -37,6 +38,7 @@ vi.mock('$lib/services/livekit-connection.svelte.js', () => ({
 vi.mock('$lib/groups/group-call.svelte.js', () => ({
   getGroupCallState: () => call,
   leaveGroupCall: (...a) => fns.leaveGroupCall(...a),
+  leaveGroupCallWithConfirm: (...a) => fns.leaveGroupCallWithConfirm(...a),
   showCallStage: (...a) => fns.showCallStage(...a),
   callErrorMessage: () => 'call failed'
 }));
@@ -126,11 +128,12 @@ describe('CallDock', () => {
     expect(screen.queryByRole('button', { name: 'Unmute' })).toBeNull();
   });
 
-  it('leave ends the call with the cue', async () => {
+  it('leave asks first (the store confirms, then leaves with the cue)', async () => {
     render(CallDock);
     await fireEvent.click(screen.getByRole('button', { name: 'Leave call' }));
-    expect(fns.playLeaveSound).toHaveBeenCalledTimes(1);
-    expect(fns.leaveGroupCall).toHaveBeenCalledTimes(1);
+    expect(fns.leaveGroupCallWithConfirm).toHaveBeenCalledTimes(1);
+    expect(fns.leaveGroupCall).not.toHaveBeenCalled();
+    expect(fns.playLeaveSound).not.toHaveBeenCalled();
   });
 
   // The server ended the seat (removed / dropped) while the user was on

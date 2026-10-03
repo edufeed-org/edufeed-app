@@ -113,6 +113,7 @@
     getGroupCallState,
     joinGroupCallWithConfirm,
     leaveGroupCall,
+    leaveGroupCallWithConfirm,
     callErrorMessage,
     showCallStage,
     toggleChatBeside,
@@ -2138,7 +2139,7 @@
               <CallStage.Component
                 title={displayTitle}
                 {identityToPubkey}
-                onLeave={leaveGroupCall}
+                onLeave={() => leaveGroupCallWithConfirm()}
                 onShowChat={showChatFromStage}
                 chatOpen={call.chatBeside && wideScreen}
                 onPopOut={canPopOut ? popOutHere : undefined}

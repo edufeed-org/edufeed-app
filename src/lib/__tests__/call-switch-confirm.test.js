@@ -14,7 +14,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { flushSync } from 'svelte';
 import { modalStore } from '$lib/stores/modal.svelte.js';
-import { confirmCallSwitch } from '$lib/groups/call-switch-confirm.svelte.js';
+import { confirmCallSwitch, confirmCallLeave } from '$lib/groups/call-switch-confirm.svelte.js';
 
 beforeEach(() => {
   modalStore.closeModal();
@@ -70,5 +70,38 @@ describe('confirmCallSwitch', () => {
     modalStore.closeModal();
     flushSync();
     await expect(pending).resolves.toBe(false);
+  });
+});
+
+// Task 19: the same modal-store wrapper asks before leaving a call.
+describe('confirmCallLeave', () => {
+  it('opens the leave confirm, saying whether the user came in through a link', () => {
+    confirmCallLeave({ guest: true });
+    expect(modalStore.activeModal).toBe('callLeaveConfirm');
+    expect(modalStore.modalProps).toEqual({ guest: true });
+  });
+
+  it('resolves true on confirm, false on cancel', async () => {
+    const yes = confirmCallLeave({ guest: false });
+    modalStore.modalCallbacks.onConfirm();
+    await expect(yes).resolves.toBe(true);
+    const no = confirmCallLeave({ guest: false });
+    modalStore.modalCallbacks.onCancel();
+    await expect(no).resolves.toBe(false);
+    expect(modalStore.activeModal).toBe('none');
+  });
+
+  it('resolves false when another modal replaces it', async () => {
+    const pending = confirmCallLeave({ guest: false });
+    modalStore.openModal('login');
+    flushSync();
+    await expect(pending).resolves.toBe(false);
+  });
+
+  it('a switch confirm opening on top settles a pending leave confirm as cancelled', async () => {
+    const leave = confirmCallLeave({ guest: false });
+    confirmCallSwitch('Standup');
+    await expect(leave).resolves.toBe(false);
+    expect(modalStore.activeModal).toBe('callSwitchConfirm');
   });
 });

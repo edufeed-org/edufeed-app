@@ -17,19 +17,26 @@
 // would fire. A reactive watch on `modalStore.activeModal` (plain .js files
 // cannot use runes, hence the .svelte.js extension) resolves false in
 // every one of those cases instead of leaving the Promise dangling.
+//
+// Task 19: the same wrapper also asks before LEAVING a call
+// (`confirmCallLeave`, modal type 'callLeaveConfirm', asked by
+// `leaveGroupCallWithConfirm`). Both share one pending slot: the modal store
+// shows one modal at a time, so a new confirm of either kind settles the
+// previous one as cancelled.
 import { modalStore } from '$lib/stores/modal.svelte.js';
 
 /** @type {{ resolve: (value: boolean) => void } | null} */
 let active = null;
 
 /**
- * Ask whether to leave the call the user is currently in (named `title`) to
- * join a different channel's call instead.
- * @param {string} title - the channel name of the call currently running
- * @returns {Promise<boolean>} true on "Wechseln", false on cancel
+ * Open a confirm modal and resolve with the answer: true on its onConfirm,
+ * false on onCancel or on the modal going away any other way.
+ * @param {'callSwitchConfirm' | 'callLeaveConfirm'} type
+ * @param {Record<string, unknown>} props
+ * @returns {Promise<boolean>}
  */
-export function confirmCallSwitch(title) {
-  // A confirm is already pending (two switch attempts raced): settle it as
+function askModal(type, props) {
+  // A confirm is already pending (two attempts raced): settle it as
   // cancelled before replacing its props/callbacks, instead of orphaning it.
   active?.resolve(false);
   active = null;
@@ -48,20 +55,16 @@ export function confirmCallSwitch(title) {
       resolve(value);
     };
 
-    modalStore.openModal(
-      'callSwitchConfirm',
-      { title },
-      {
-        onConfirm: () => {
-          modalStore.closeModal();
-          finish(true);
-        },
-        onCancel: () => {
-          modalStore.closeModal();
-          finish(false);
-        }
+    modalStore.openModal(type, props, {
+      onConfirm: () => {
+        modalStore.closeModal();
+        finish(true);
+      },
+      onCancel: () => {
+        modalStore.closeModal();
+        finish(false);
       }
-    );
+    });
 
     // The modal can also disappear WITHOUT either callback firing — another
     // modal opening on top (overwriting this one's type) or anything calling
@@ -69,10 +72,30 @@ export function confirmCallSwitch(title) {
     // pending forever.
     disposeWatch = $effect.root(() => {
       $effect(() => {
-        if (modalStore.activeModal !== 'callSwitchConfirm') finish(false);
+        if (modalStore.activeModal !== type) finish(false);
       });
     });
 
     active = { resolve: finish };
   });
+}
+
+/**
+ * Ask whether to leave the call the user is currently in (named `title`) to
+ * join a different channel's call instead.
+ * @param {string} title - the channel name of the call currently running
+ * @returns {Promise<boolean>} true on "Wechseln", false on cancel
+ */
+export function confirmCallSwitch(title) {
+  return askModal('callSwitchConfirm', { title });
+}
+
+/**
+ * Ask before leaving the running call ("Anruf verlassen?").
+ * @param {{ guest: boolean }} options - guest: joined through a call link,
+ *   which is also the way back (different copy)
+ * @returns {Promise<boolean>} true on "Verlassen", false on cancel
+ */
+export function confirmCallLeave({ guest }) {
+  return askModal('callLeaveConfirm', { guest });
 }

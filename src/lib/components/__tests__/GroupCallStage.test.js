@@ -264,10 +264,11 @@ describe('GroupCallStage — a view, not the connection owner', () => {
     expect(getGroupCallState().stageViews).toBe(0);
   });
 
-  it('leave plays the cue and hands the leave to the parent', async () => {
+  it('leave hands the leave to the parent (which asks first and plays the cue)', async () => {
     render(GroupCallStage, { props: baseProps });
     await fireEvent.click(screen.getByRole('button', { name: 'Leave call' }));
-    expect(media.playLeaveSound).toHaveBeenCalledTimes(1);
+    // No cue here: a cancelled "Anruf verlassen?" must stay silent (Task 19).
+    expect(media.playLeaveSound).not.toHaveBeenCalled();
     expect(baseProps.onLeave).toHaveBeenCalledTimes(1);
     expect(svc.disconnectFromRoom).not.toHaveBeenCalled();
   });

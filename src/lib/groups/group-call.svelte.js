@@ -15,7 +15,8 @@
 import { channelKey } from './community-pointer.js';
 import { requestGroupCallToken, GroupCallTokenError } from './livekit.js';
 import { getChatBeside, setChatBeside } from '$lib/services/call-prefs.js';
-import { confirmCallSwitch } from './call-switch-confirm.svelte.js';
+import { confirmCallSwitch, confirmCallLeave } from './call-switch-confirm.svelte.js';
+import { playLeaveSound } from '$lib/services/call-sounds.js';
 import * as m from '$lib/paraglide/messages';
 
 /** @typedef {'idle' | 'requesting' | 'ready' | 'error' | 'ended'} GroupCallPhase */
@@ -273,6 +274,28 @@ export async function leaveGroupCall() {
     const { disconnectFromRoom } = await import('$lib/services/livekit-connection.svelte.js');
     await disconnectFromRoom();
   }
+}
+
+/**
+ * The user's "Anruf verlassen": asks first while the call is live
+ * (requesting/ready), then leaves with the leave cue. Every user-facing leave
+ * button (stage, dock, guest page, pop-out) goes through this; a switch to
+ * another call (already confirmed), the call ending on its own, a removal
+ * and page unload use `leaveGroupCall` and never ask. An ended or failed
+ * call just closes.
+ * @param {(options: {guest: boolean}) => Promise<boolean>} [ask] where to ask —
+ *   the pop-out window asks in its own document
+ * @returns {Promise<boolean>} whether the call was left
+ */
+export async function leaveGroupCallWithConfirm(ask = confirmCallLeave) {
+  if (phase === 'requesting' || phase === 'ready') {
+    // Joined with a call pass code: that link is also the way back.
+    const proceed = await ask({ guest: !!code });
+    if (!proceed) return false;
+    playLeaveSound();
+  }
+  await leaveGroupCall();
+  return true;
 }
 
 /**

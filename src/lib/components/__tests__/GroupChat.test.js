@@ -1016,6 +1016,7 @@ vi.mock('$lib/groups/group-call.svelte.js', () => ({
     /** @type {any} */ view
   ) => joinGroupCallMock(pointer, user, view),
   leaveGroupCall: () => leaveGroupCallMock(),
+  leaveGroupCallWithConfirm: () => leaveGroupCallMock(),
   showCallStage: () => callViewMocks.showCallStage(),
   hideCallStage: () => callViewMocks.hideCallStage(),
   toggleChatBeside: () => callViewMocks.toggleChatBeside(),

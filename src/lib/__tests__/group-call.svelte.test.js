@@ -45,9 +45,13 @@ vi.mock('$lib/paraglide/messages', () => ({
 }));
 
 const confirmCallSwitch = vi.fn();
+const confirmCallLeave = vi.fn();
 vi.mock('$lib/groups/call-switch-confirm.svelte.js', () => ({
-  confirmCallSwitch: (/** @type {any[]} */ ...args) => confirmCallSwitch(...args)
+  confirmCallSwitch: (/** @type {any[]} */ ...args) => confirmCallSwitch(...args),
+  confirmCallLeave: (/** @type {any[]} */ ...args) => confirmCallLeave(...args)
 }));
+const playLeaveSound = vi.fn();
+vi.mock('$lib/services/call-sounds.js', () => ({ playLeaveSound: () => playLeaveSound() }));
 
 const { GroupCallTokenError } = await import('$lib/groups/livekit.js');
 const {
@@ -55,6 +59,7 @@ const {
   joinGroupCall,
   joinGroupCallWithConfirm,
   leaveGroupCall,
+  leaveGroupCallWithConfirm,
   callErrorMessage,
   registerCallStageView,
   showCallStage,
@@ -74,6 +79,8 @@ beforeEach(async () => {
   connectToRoom.mockReset();
   connectToRoom.mockResolvedValue(undefined);
   confirmCallSwitch.mockReset();
+  confirmCallLeave.mockReset();
+  playLeaveSound.mockClear();
 });
 
 describe('joinGroupCall', () => {
@@ -368,6 +375,74 @@ describe('joinGroupCallWithConfirm', () => {
     await joinGroupCallWithConfirm(P2, USER);
 
     expect(confirmCallSwitch).not.toHaveBeenCalled();
+    expect(getGroupCallState().isActiveFor(P2)).toBe(true);
+  });
+});
+
+// Task 19: "Anruf verlassen" asks first — but only while the call is live.
+describe('leaveGroupCallWithConfirm', () => {
+  beforeEach(() => {
+    requestGroupCallToken.mockResolvedValue({ serverUrl: 'wss://x', participantToken: 't' });
+  });
+
+  it('asks while live; Leave leaves and plays the cue', async () => {
+    await joinGroupCall(P1, USER);
+    confirmCallLeave.mockResolvedValue(true);
+    await expect(leaveGroupCallWithConfirm()).resolves.toBe(true);
+    expect(confirmCallLeave).toHaveBeenCalledWith({ guest: false });
+    expect(playLeaveSound).toHaveBeenCalledTimes(1);
+    expect(disconnectFromRoom).toHaveBeenCalledTimes(1);
+    expect(getGroupCallState().phase).toBe('idle');
+  });
+
+  it('Cancel keeps the call untouched and silent', async () => {
+    await joinGroupCall(P1, USER);
+    confirmCallLeave.mockResolvedValue(false);
+    await expect(leaveGroupCallWithConfirm()).resolves.toBe(false);
+    expect(playLeaveSound).not.toHaveBeenCalled();
+    expect(disconnectFromRoom).not.toHaveBeenCalled();
+    expect(getGroupCallState().isActiveFor(P1)).toBe(true);
+    expect(getGroupCallState().phase).toBe('ready');
+  });
+
+  it('someone who joined with a call link gets the link copy', async () => {
+    await joinGroupCall(P1, USER, { code: 'secret' });
+    confirmCallLeave.mockResolvedValue(false);
+    await leaveGroupCallWithConfirm();
+    expect(confirmCallLeave).toHaveBeenCalledWith({ guest: true });
+  });
+
+  it('an ended call closes without asking again', async () => {
+    await joinGroupCall(P1, USER);
+    lkListener.cb?.('signal-close');
+    await expect(leaveGroupCallWithConfirm()).resolves.toBe(true);
+    expect(confirmCallLeave).not.toHaveBeenCalled();
+    expect(getGroupCallState().phase).toBe('idle');
+  });
+
+  it('an errored call closes without asking', async () => {
+    connectToRoom.mockRejectedValueOnce(new Error('boom'));
+    await joinGroupCall(P1, USER);
+    expect(getGroupCallState().phase).toBe('error');
+    await leaveGroupCallWithConfirm();
+    expect(confirmCallLeave).not.toHaveBeenCalled();
+    expect(getGroupCallState().phase).toBe('idle');
+  });
+
+  it('a caller can ask somewhere else (the pop-out window asks in itself)', async () => {
+    await joinGroupCall(P1, USER);
+    const ask = vi.fn(async () => false);
+    await leaveGroupCallWithConfirm(ask);
+    expect(ask).toHaveBeenCalledWith({ guest: false });
+    expect(confirmCallLeave).not.toHaveBeenCalled();
+    expect(getGroupCallState().isActiveFor(P1)).toBe(true);
+  });
+
+  it('switching calls (already confirmed) never asks to leave', async () => {
+    await joinGroupCallWithConfirm(P1, USER);
+    confirmCallSwitch.mockResolvedValue(true);
+    await joinGroupCallWithConfirm(P2, USER);
+    expect(confirmCallLeave).not.toHaveBeenCalled();
     expect(getGroupCallState().isActiveFor(P2)).toBe(true);
   });
 });

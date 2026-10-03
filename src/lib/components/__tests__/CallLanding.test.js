@@ -33,6 +33,7 @@ vi.mock('$lib/groups/group-call.svelte.js', () => ({
   getGroupCallState: () => callState,
   joinGroupCall: (...a) => joinGroupCall(...a),
   leaveGroupCall: (...a) => leaveGroupCall(...a),
+  leaveGroupCallWithConfirm: (...a) => leaveGroupCall(...a),
   callErrorMessage: () => 'err-msg',
   registerCallStageView: (...a) => registerCallStageView(...a),
   toggleChatBeside: () => toggleChatBeside()

@@ -20,6 +20,7 @@
     getGroupCallState,
     joinGroupCall,
     leaveGroupCall,
+    leaveGroupCallWithConfirm,
     callErrorMessage,
     registerCallStageView,
     toggleChatBeside
@@ -456,7 +457,7 @@
             <CallStage.Component
               {title}
               {identityToPubkey}
-              onLeave={leaveGroupCall}
+              onLeave={() => leaveGroupCallWithConfirm()}
               onShowChat={toggleChat}
               chatOpen={wideScreen && chatOpen}
               registerView={() => registerCallStageView(`${location.pathname}${location.hash}`)}

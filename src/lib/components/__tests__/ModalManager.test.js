@@ -27,6 +27,10 @@ vi.mock('../groups/CallSwitchConfirmModal.svelte', async () => {
   const mock = await import('./__mocks__/DialogModalStub.svelte');
   return { default: mock.default };
 });
+vi.mock('../groups/CallLeaveConfirmModal.svelte', async () => {
+  const mock = await import('./__mocks__/DialogModalStub.svelte');
+  return { default: mock.default };
+});
 
 const showModal = vi.fn(function () {
   this.setAttribute('open', '');
@@ -120,6 +124,17 @@ describe('ModalManager lazy loading', () => {
     const dialog = await screen.findByTestId('dialog-stub');
     expect(dialog.dataset.props.split(',')).toEqual(
       expect.arrayContaining(['onCancel', 'onConfirm', 'title'])
+    );
+  });
+
+  it('renders the call-leave confirm with its guest flag and callbacks (Task 19)', async () => {
+    render(ModalManager);
+    const onConfirm = vi.fn();
+    const onCancel = vi.fn();
+    modalStore.openModal('callLeaveConfirm', { guest: true }, { onConfirm, onCancel });
+    const dialog = await screen.findByTestId('dialog-stub');
+    expect(dialog.dataset.props.split(',')).toEqual(
+      expect.arrayContaining(['guest', 'onCancel', 'onConfirm'])
     );
   });
 });
