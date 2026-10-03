@@ -115,6 +115,12 @@ describe('CallInviteDialog', () => {
       'Sprechstunde'
     );
     expect(untitled.querySelector('[data-testid="call-invite-pass-title"]')).toBeNull();
+    // Task 19 review: the user's own title stays selectable, the meta is a label.
+    const title = titled.querySelector('[data-testid="call-invite-pass-title"]');
+    expect(title.closest('.select-none')).toBeNull();
+    const meta = titled.querySelector('[data-testid="call-invite-pass-meta"]');
+    expect(meta.classList.contains('select-none')).toBe(true);
+    expect(meta.classList.contains('cursor-default')).toBe(true);
   });
 
   it('lists my existing link and revokes it', async () => {

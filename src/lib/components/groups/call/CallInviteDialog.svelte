@@ -301,14 +301,19 @@
         {#each rows as row (row.pass.id)}
           {@const rowTitle = passTitle(row.pass)}
           <li class="flex items-center gap-2 text-sm" data-testid="call-invite-pass">
-            <span class="min-w-0 flex-1 cursor-default select-none">
+            <span class="min-w-0 flex-1">
+              <!-- The title is the user's own text (selectable); the time and
+                "by someone else" after it are a label. -->
               {#if rowTitle}
                 <span class="font-medium break-words" data-testid="call-invite-pass-title"
                   >{rowTitle}</span
-                > ·
+                >
               {/if}
-              {formatTimeOfDay(row.pass.created_at)}
-              {#if row.pass.pubkey !== user.pubkey}· {m.groups_call_invite_by_other()}{/if}
+              <span class="cursor-default select-none" data-testid="call-invite-pass-meta"
+                >{#if rowTitle}·
+                {/if}{formatTimeOfDay(row.pass.created_at)}
+                {#if row.pass.pubkey !== user.pubkey}· {m.groups_call_invite_by_other()}{/if}</span
+              >
             </span>
             {#if row.url}
               <button
