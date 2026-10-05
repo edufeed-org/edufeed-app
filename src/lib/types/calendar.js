@@ -53,6 +53,7 @@
  * @property {string[]} references - Referenced event IDs
  * @property {string[]} eventReferences - Referenced calendar event IDs
  * @property {string} [geohash] - Optional geohash for location (NIP-52 'g' tag)
+ * @property {import('$lib/helpers/calendar-attributes.js').CalendarEventAttributes} [attributes] - Educational extension attributes (registration, price, attendance mode, educational levels)
  * @property {Object} [coordinates] - Parsed coordinates for map display {lat: number, lng: number}
  * @property {string} communityPubkey - Target community public key
  * @property {number} createdAt - Creation timestamp (Unix timestamp)
@@ -97,6 +98,7 @@
  * @property {EventType} eventType - Event type (date or time)
  * @property {string[]} [references] - Optional array of reference URLs (r tags)
  * @property {CalendarEventParticipant[]} [participants] - NIP-52 participants (p-tags) and named participants
+ * @property {import('$lib/helpers/calendar-attributes.js').CalendarEventAttributes} [attributes] - Educational extension attributes (issue #13)
  */
 
 /**

@@ -14,20 +14,17 @@
   import ProfileAvatar from '$lib/components/shared/ProfileAvatar.svelte';
   import { CloseIcon } from '$lib/components/icons';
   import * as m from '$lib/paraglide/messages';
+  import {
+    PARTICIPANT_ROLE_PRESETS,
+    participantRoleLabel
+  } from '$lib/helpers/participant-roles.js';
 
   /** @typedef {import('$lib/types/calendar.js').CalendarEventParticipant} Participant */
 
   /** @type {{participants?: Participant[], disabled?: boolean, label?: string, help?: string}} */
   let { participants = $bindable([]), disabled = false, label = '', help = '' } = $props();
 
-  const ROLE_PRESETS = ['participant', 'speaker', 'organizer', 'moderator'];
-  /** @type {Record<string, () => string>} */
-  const roleLabels = {
-    participant: m.participant_role_participant,
-    speaker: m.participant_role_speaker,
-    organizer: m.participant_role_organizer,
-    moderator: m.participant_role_moderator
-  };
+  const ROLE_PRESETS = PARTICIPANT_ROLE_PRESETS;
 
   let searchValue = $state('');
   let selectedRole = $state('participant');
@@ -38,10 +35,7 @@
   );
   let profiles = $derived(getProfiles());
 
-  /** @param {string} role */
-  function roleLabel(role) {
-    return roleLabels[role] ? roleLabels[role]() : role;
-  }
+  const roleLabel = participantRoleLabel;
 
   function currentRole() {
     const role = selectedRole === 'custom' ? customRole.trim() : selectedRole;

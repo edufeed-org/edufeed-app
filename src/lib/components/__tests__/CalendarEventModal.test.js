@@ -115,6 +115,18 @@ vi.mock(
   '$lib/components/calendar/CommunitySelector.svelte',
   () => import('./__mocks__/EmptyStub.svelte')
 );
+vi.mock(
+  '$lib/components/forms/FormConceptPicker.svelte',
+  () => import('./fixtures/FormConceptPickerStub.svelte')
+);
+vi.mock('$lib/helpers/educational/vocabResolver.js', () => ({
+  resolveVocabField: () => ({
+    type: 'concept-picker',
+    id: 'educationalLevel',
+    label: 'educationalLevel',
+    vocab: { address: '39737:pub:educational-level', relay: '' }
+  })
+}));
 
 import CalendarEventModal from '../calendar/CalendarEventModal.svelte';
 
@@ -215,6 +227,85 @@ describe('CalendarEventModal — normal calendar event (regression)', () => {
     expect(h.goto).toHaveBeenCalledWith('/calendar/event/naddr1test');
     expect(h.scheduleGroupMeeting).not.toHaveBeenCalled();
     expect(h.sendMeetingInvites).not.toHaveBeenCalled();
+  });
+});
+
+describe('CalendarEventModal — educational attributes (#13, #8)', () => {
+  const LEVEL_C = 'https://w3id.org/kim/educationalLevel/level_C';
+
+  /** @param {HTMLElement} container @param {string} id @param {string} value */
+  async function choose(container, id, value) {
+    const select = container.querySelector(`#${id}`);
+    select.value = value;
+    await fireEvent.change(select);
+    await tick();
+  }
+
+  it('creates with the chosen attributes; online relabels the location', async () => {
+    h.modalStore.modalProps = { communityPubkey: 'comm', mode: 'create' };
+    const r = render(CalendarEventModal);
+    await tick();
+    expect(r.getByTestId('location-label').textContent).toBe(m.event_modal_location_label());
+
+    await setInput(r.container, '#title', 'OER-Werkstatt');
+    await choose(r.container, 'event-attr-registration', 'true');
+    await choose(r.container, 'event-attr-price', 'free');
+    await choose(r.container, 'event-attr-mode', 'online');
+    await fireEvent.click(r.getByTestId('concept-picker-pick'));
+    await tick();
+    expect(r.getByTestId('location-label').textContent).toBe(m.event_modal_location_label_online());
+
+    await fireEvent.submit(r.container.querySelector('form:not(.modal-backdrop)'));
+    await settle();
+    expect(h.createEvent).toHaveBeenCalledTimes(1);
+    expect(h.createEvent.mock.calls[0][0].attributes).toEqual({
+      educationalLevels: [{ id: LEVEL_C, labels: { de: 'Fortbildung', en: 'Advanced training' } }],
+      registrationRequired: true,
+      price: { amount: '0', currency: 'EUR' },
+      attendanceMode: 'online'
+    });
+  });
+
+  it('pre-fills the attributes in edit mode and saves them unchanged', async () => {
+    const attributes = {
+      registrationRequired: false,
+      price: { amount: '25', currency: 'EUR' },
+      attendanceMode: 'mixed',
+      educationalLevels: [{ id: LEVEL_C, labels: { de: 'Fortbildung' } }]
+    };
+    const rawEvent = { id: 'ev1', kind: 31922, pubkey: ME, tags: [['d', 'x']] };
+    h.modalStore.modalProps = {
+      mode: 'edit',
+      existingEvent: {
+        id: 'ev1',
+        kind: 31922,
+        pubkey: ME,
+        title: 'Alt',
+        start: 2_000_000_000,
+        participants: [],
+        references: [],
+        attributes
+      },
+      existingRawEvent: rawEvent
+    };
+    h.updateEvent.mockImplementation(async () => ({ id: 'ev2' }));
+    const r = render(CalendarEventModal);
+    await tick();
+    expect(r.container.querySelector('#event-attr-registration').value).toBe('false');
+    expect(r.container.querySelector('#event-attr-price').value).toBe('paid');
+    expect(r.container.querySelector('#event-attr-amount').value).toBe('25');
+    expect(r.container.querySelector('#event-attr-mode').value).toBe('mixed');
+
+    await fireEvent.submit(r.container.querySelector('form:not(.modal-backdrop)'));
+    await settle();
+    expect(h.updateEvent).toHaveBeenCalledTimes(1);
+    expect(h.updateEvent.mock.calls[0][0].attributes).toEqual(attributes);
+  });
+
+  it('offers no attribute fields for a channel meeting', () => {
+    h.modalStore.modalProps = { mode: 'create', groupMeeting: GROUP_MEETING };
+    const r = render(CalendarEventModal);
+    expect(r.queryByTestId('event-attributes-fields')).toBeNull();
   });
 });
 

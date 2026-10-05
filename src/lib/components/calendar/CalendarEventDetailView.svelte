@@ -33,6 +33,8 @@
   import { modalStore } from '$lib/stores/modal.svelte.js';
   import LocationLink from '$lib/components/shared/LocationLink.svelte';
   import EventLocationMap from '$lib/components/calendar/EventLocationMap.svelte';
+  import EventAttributesSummary from '$lib/components/calendar/EventAttributesSummary.svelte';
+  import { participantRoleLabel } from '$lib/helpers/participant-roles.js';
   import ProfileCard from '$lib/components/shared/ProfileCard.svelte';
   import NamedParticipant from '$lib/components/calendar/NamedParticipant.svelte';
   import InlineRsvp from '$lib/components/calendar/InlineRsvp.svelte';
@@ -294,6 +296,11 @@
           {/if}
         </div>
       {/if}
+
+      <!-- Educational attributes (#13): registration, cost, format, level -->
+      <div class="mt-4">
+        <EventAttributesSummary attributes={event.attributes} />
+      </div>
     </div>
   </div>
 
@@ -326,10 +333,12 @@
             </div>
           </div>
 
-          <!-- Map Preview -->
-          <div class="mt-4">
-            <EventLocationMap location={event.location} geohash={event.geohash} compact={true} />
-          </div>
+          <!-- Map Preview — not for online events, whose location is a link or "online" (#8) -->
+          {#if event.attributes?.attendanceMode !== 'online'}
+            <div class="mt-4">
+              <EventLocationMap location={event.location} geohash={event.geohash} compact={true} />
+            </div>
+          {/if}
         </div>
       </div>
     </div>
@@ -424,7 +433,9 @@
               {/if}
               {#if participant.role}
                 <div class="mt-2 flex items-center gap-2">
-                  <span class="badge badge-sm badge-primary">{participant.role}</span>
+                  <span class="badge badge-sm badge-primary"
+                    >{participantRoleLabel(participant.role)}</span
+                  >
                 </div>
               {/if}
               {#if participant.relay}

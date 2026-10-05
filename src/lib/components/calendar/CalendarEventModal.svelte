@@ -29,6 +29,11 @@
   import { useUserProfile } from '../../stores/user-profile.svelte.js';
   import EditableList from '../shared/EditableList.svelte';
   import ParticipantsEditor from '$lib/components/calendar/ParticipantsEditor.svelte';
+  import EventAttributesFields from '$lib/components/calendar/EventAttributesFields.svelte';
+  import {
+    emptyEventAttributes,
+    parseCalendarEventAttributes
+  } from '$lib/helpers/calendar-attributes.js';
   import { CloseIcon } from '../icons';
   import { pool } from '$lib/stores/nostr-infrastructure.svelte';
   import { canHaveGuestLink, defaultMeetingSlot } from '$lib/groups/meetings.js';
@@ -252,7 +257,8 @@
       isAllDay: false,
       eventType: 'date',
       references: [],
-      participants: []
+      participants: [],
+      attributes: emptyEventAttributes()
     };
     validationErrors = [];
     isSubmitting = false;
@@ -295,7 +301,8 @@
       isAllDay: false,
       eventType: meeting ? 'time' : 'date',
       references: [],
-      participants: []
+      participants: [],
+      attributes: emptyEventAttributes()
     };
 
     validationErrors = [];
@@ -343,7 +350,11 @@
       isAllDay: isAllDay,
       eventType: eventType,
       references: existingEvent.references || [],
-      participants: existingEvent.participants || []
+      participants: existingEvent.participants || [],
+      // Educational attributes round-trip from the parsed event (#13).
+      attributes:
+        $state.snapshot(existingEvent.attributes) ??
+        parseCalendarEventAttributes(existingRawEvent?.tags)
     };
 
     validationErrors = [];
@@ -726,12 +737,22 @@
             </div>
           {/if}
         {:else}
+          <!-- Educational attributes (#13): registration, cost, format, level -->
+          <div class="mb-4">
+            <EventAttributesFields bind:attributes={formData.attributes} disabled={isSubmitting} />
+          </div>
+
           <!-- Location with Autocomplete -->
           <div class="mb-4">
+            <!-- Online events (#8): the location is a meeting link or just "online" -->
             <LocationInput
               bind:value={formData.location}
-              label={m.event_modal_location_label()}
-              placeholder={m.event_modal_location_placeholder()}
+              label={formData.attributes?.attendanceMode === 'online'
+                ? m.event_modal_location_label_online()
+                : m.event_modal_location_label()}
+              placeholder={formData.attributes?.attendanceMode === 'online'
+                ? m.event_modal_location_placeholder_online()
+                : m.event_modal_location_placeholder()}
             />
           </div>
 
