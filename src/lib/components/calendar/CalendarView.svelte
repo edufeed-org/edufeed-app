@@ -46,6 +46,7 @@
     useCalendarEventLoader
   } from '$lib/loaders/calendar-event-loader.svelte.js';
   import { prefetchCalendarData } from '$lib/loaders/calendar.js';
+  import { listDefaultsToAllFor } from '$lib/helpers/calendar-view-mode.js';
   import * as m from '$lib/paraglide/messages';
 
   // Import existing UI components
@@ -332,6 +333,13 @@
     };
   });
 
+  // Bounded contexts (author / specific calendar / community) open the list on
+  // 'all' instead of one month (#3); the global calendar stays on 'month'
+  // because its undated query would pull every relay's whole history.
+  const urlSyncOptions = {
+    listDefaultsToAll: () => listDefaultsToAllFor({ authorPubkey, calendar, communityMode })
+  };
+
   // Sync initial URL state on mount
   syncInitialUrlState(
     $page.url.searchParams,
@@ -343,7 +351,8 @@
     },
     (/** @type {Date} */ date) => {
       currentDate = date;
-    }
+    },
+    urlSyncOptions
   );
 
   // Set up navigation listener - runs after every navigation
@@ -357,7 +366,8 @@
       },
       (/** @type {Date} */ date) => {
         currentDate = date;
-      }
+      },
+      urlSyncOptions
     )
   );
 
