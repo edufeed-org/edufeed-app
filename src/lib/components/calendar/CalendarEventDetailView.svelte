@@ -14,6 +14,7 @@
   import { formatCalendarDate } from '$lib/helpers/calendar.js';
   import { isChannelMeeting } from '$lib/helpers/calendar-timing.js';
   import { encodeEventToNaddr } from '$lib/helpers/nostrUtils';
+  import { splitEventLinks } from '$lib/helpers/event-links.js';
   import CommentList from '$lib/components/comments/CommentList.svelte';
   import ReactionBar from '$lib/components/reactions/ReactionBar.svelte';
   import {
@@ -83,6 +84,9 @@
   let isMultiDay = $derived(
     event && endDate && startDate ? startDate.toDateString() !== endDate.toDateString() : false
   );
+
+  // First reference = event website (shown with date/time, #7); rest = further links
+  let links = $derived(splitEventLinks(event?.references));
 
   // Generate event address for featured calendars
   let eventAddress = $derived.by(() => {
@@ -301,6 +305,24 @@
       <div class="mt-4">
         <EventAttributesSummary attributes={event.attributes} />
       </div>
+      {#if links.primary}
+        <div class="mt-4 border-t border-base-300 pt-4">
+          <!-- eslint-disable svelte/no-navigation-without-resolve -- external: event website URL -->
+          <a
+            href={links.primary.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            class="btn max-w-full btn-sm btn-primary"
+            aria-label={m.calendar_event_website_aria({ host: links.primary.host })}
+            data-testid="event-website-link"
+          >
+            <ExternalLinkIcon class_="w-4 h-4 shrink-0" />
+            <span>{m.calendar_event_website()}</span>
+            <span class="truncate font-normal opacity-80">· {links.primary.host}</span>
+          </a>
+          <!-- eslint-enable svelte/no-navigation-without-resolve -->
+        </div>
+      {/if}
     </div>
   </div>
 
@@ -357,12 +379,12 @@
   {/if}
 
   <!-- Further Links -->
-  {#if event.references && event.references.length > 0}
-    <div class="card mb-8 bg-base-100 shadow-lg">
+  {#if links.others.length > 0}
+    <div class="card mb-8 bg-base-100 shadow-lg" data-testid="event-further-links">
       <div class="card-body">
         <h2 class="card-title text-2xl">{m.calendar_detail_links()}</h2>
         <div class="mt-4 space-y-2">
-          {#each event.references as reference (reference)}
+          {#each links.others as reference (reference)}
             <!-- eslint-disable svelte/no-navigation-without-resolve -- external: event reference URL -->
             <a
               href={reference}
