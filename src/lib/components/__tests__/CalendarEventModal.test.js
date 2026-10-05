@@ -203,6 +203,44 @@ describe('CalendarEventModal — normal calendar event (regression)', () => {
     expect(r.container.querySelector('#startDate').value).toBe(localIso(day));
   });
 
+  // GitHub #9: a new event ends the day it starts (all-day ends are stored
+  // inclusively, so this is a one-day event there too).
+  it('defaults the end date to the start date', async () => {
+    const day = new Date('2026-10-05T10:00:00Z');
+    h.modalStore.modalProps = { ...h.modalStore.modalProps, selectedDate: day };
+    const r = render(CalendarEventModal);
+    await tick();
+    expect(r.container.querySelector('#endDate').value).toBe(localIso(day));
+  });
+
+  it('moves an untouched end date along with the start date', async () => {
+    h.modalStore.modalProps = {
+      ...h.modalStore.modalProps,
+      selectedDate: new Date('2026-10-05T10:00:00Z')
+    };
+    const r = render(CalendarEventModal);
+    await tick();
+    await setInput(r.container, '#startDate', '2026-10-09');
+    await tick();
+    expect(r.container.querySelector('#endDate').value).toBe('2026-10-09');
+  });
+
+  it('keeps a user-chosen end date, but never lets it fall before the start', async () => {
+    h.modalStore.modalProps = {
+      ...h.modalStore.modalProps,
+      selectedDate: new Date('2026-10-05T10:00:00Z')
+    };
+    const r = render(CalendarEventModal);
+    await tick();
+    await setInput(r.container, '#endDate', '2026-10-12');
+    await setInput(r.container, '#startDate', '2026-10-07');
+    await tick();
+    expect(r.container.querySelector('#endDate').value).toBe('2026-10-12');
+    await setInput(r.container, '#startDate', '2026-10-15');
+    await tick();
+    expect(r.container.querySelector('#endDate').value).toBe('2026-10-15');
+  });
+
   it('creates through calendar actions (outbox) and never through the group relay', async () => {
     const r = render(CalendarEventModal);
     await tick();
