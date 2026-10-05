@@ -2174,6 +2174,8 @@
   "amb_creator_button_update": "Update Creator",
   "amb_creator_button_add": "Add Creator",
   "amb_creator_button_add_self": "Add myself",
+  "amb_creator_name_from_profile_hint": "The name comes from the linked Nostr profile. To cite a different name, remove the profile link.",
+  "amb_creator_button_unlink": "Name only, without profile link",
   "amb_creator_error_duplicate": "This creator is already in the list.",
   "amb_creator_edit_aria": "Edit creator",
   "amb_creator_remove_aria": "Remove creator",

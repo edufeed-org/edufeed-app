@@ -6,7 +6,7 @@
 <script>
   import * as m from '$lib/paraglide/messages';
   import { CloseIcon, PlusIcon } from '$lib/components/icons';
-  import { getProfilePicture } from 'applesauce-core/helpers';
+  import { getProfilePicture, getDisplayName } from 'applesauce-core/helpers';
   import { useUserProfile } from '$lib/stores/user-profile.svelte';
   import { fetchProfileData } from '$lib/helpers/profile.js';
   import { normalizeToHex } from '$lib/helpers/nostrUtils.js';
@@ -38,11 +38,33 @@
   let showAddForm = $state(false);
   let newCreator = $state(createEmptyCreator());
   let editingIndex = $state(/** @type {number | null} */ (null));
-  let isLoadingProfile = $state(false);
   let orcidInvalid = $state(false);
   let pubkeyInvalid = $state(false);
   let duplicateCreator = $state(false);
   let isAddingSelf = $state(false);
+
+  // NIP-AMB (AMB.md l.26/82): a creator with a Nostr identity is published as
+  // the `["p", pk, relay, "creator"]` tag ONLY — their name is resolved from
+  // kind:0, a typed name never reaches the event. So while a valid pubkey is
+  // set the name field mirrors the profile read-only; a different name means
+  // dropping the link (name-only creator, flattened creator:* tags).
+  const linkedPubkey = $derived(
+    newCreator.pubkey?.trim() ? normalizeToHex(newCreator.pubkey.trim()) || '' : ''
+  );
+  const getLinkedProfile = useUserProfile(() => linkedPubkey);
+  // Same resolution as the citation in AMBResourceView (display_name first).
+  const linkedProfileName = $derived(
+    linkedPubkey ? getDisplayName(getLinkedProfile())?.trim() || '' : ''
+  );
+  $effect(() => {
+    if (linkedPubkey && linkedProfileName) newCreator.name = linkedProfileName;
+  });
+
+  /** Drop the Nostr link; the current name stays as an editable start value. */
+  function unlinkProfile() {
+    newCreator.pubkey = '';
+    pubkeyInvalid = false;
+  }
 
   // "Add myself" is offered while the logged-in user isn't in the list yet —
   // one click instead of hand-entering a key (which is how an nsec once got
@@ -94,7 +116,7 @@
    * Add a new creator
    */
   function addCreator() {
-    if (!newCreator.name.trim()) return;
+    if (!newCreator.name.trim() && !linkedPubkey) return;
 
     // Normalize ORCID to its canonical https URI; block save on invalid input
     const orcidInput = newCreator.orcid?.trim();
@@ -113,6 +135,11 @@
 
     // Guard against the same person landing in the list twice: same pubkey,
     // or same trimmed name when neither entry carries a pubkey.
+    // A linked creator without a resolvable profile name still needs one for
+    // the list (AMB requires name); it is never published (p-tag only).
+    if (normalizedPubkey && !newCreator.name.trim()) {
+      newCreator.name = normalizedPubkey.slice(0, 8) + '…';
+    }
     const trimmedName = newCreator.name.trim();
     duplicateCreator = creators.some((c, i) => {
       if (i === editingIndex) return false;
@@ -203,35 +230,14 @@
   }
 
   /**
-   * Handle pubkey field blur - normalize and auto-fill name from profile
+   * Handle pubkey field blur - normalize npub input to hex. The name follows
+   * the linked profile reactively (see linkedProfileName).
    */
-  async function handlePubkeyBlur() {
+  function handlePubkeyBlur() {
     const input = newCreator.pubkey?.trim();
     if (!input) return;
-
-    // Validate and normalize to hex
     const hexPubkey = normalizeToHex(input);
-    if (!hexPubkey) return; // Invalid input
-
-    // Store normalized hex pubkey
-    newCreator.pubkey = hexPubkey;
-
-    // Only fetch profile if name is empty
-    if (newCreator.name.trim()) return;
-
-    isLoadingProfile = true;
-    try {
-      const profile = await fetchProfileData(hexPubkey);
-      // @ts-ignore - profile has name property from fetchProfileData
-      if (profile && typeof profile.name === 'string' && profile.name !== 'Anonymous') {
-        // @ts-ignore
-        newCreator.name = profile.name;
-      }
-    } catch (error) {
-      console.warn('Failed to fetch profile:', error);
-    } finally {
-      isLoadingProfile = false;
-    }
+    if (hexPubkey) newCreator.pubkey = hexPubkey;
   }
 </script>
 
@@ -362,6 +368,15 @@
             {m.amb_creator_error_pubkey_invalid()}
           </p>
         {/if}
+        {#if linkedPubkey}
+          <button
+            type="button"
+            class="creator-unlink btn mt-1 self-start btn-ghost btn-sm"
+            onclick={unlinkProfile}
+          >
+            {m.amb_creator_button_unlink()}
+          </button>
+        {/if}
       </div>
 
       <!-- Name -->
@@ -369,19 +384,24 @@
         <label class="label py-1" for="creator-name">
           <span class="label-text flex items-center gap-2 text-sm">
             {m.amb_creator_label_name()} <span class="text-error">*</span>
-            {#if isLoadingProfile}
-              <span class="loading loading-xs loading-spinner"></span>
-            {/if}
           </span>
         </label>
         <input
           id="creator-name"
           type="text"
           class="input-bordered input input-sm w-full"
+          class:bg-base-200={!!linkedPubkey}
           bind:value={newCreator.name}
           placeholder={m.amb_creator_placeholder_name()}
-          required
+          readonly={!!linkedPubkey}
+          required={!linkedPubkey}
+          aria-describedby={linkedPubkey ? 'creator-name-hint' : undefined}
         />
+        {#if linkedPubkey}
+          <p id="creator-name-hint" class="mt-1 text-xs text-base-content/60">
+            {m.amb_creator_name_from_profile_hint()}
+          </p>
+        {/if}
       </div>
 
       <!-- Type -->
@@ -458,7 +478,7 @@
       <button
         type="submit"
         class="btn w-full btn-sm btn-primary"
-        disabled={!newCreator.name.trim()}
+        disabled={!newCreator.name.trim() && !linkedPubkey}
       >
         {editingIndex !== null ? m.amb_creator_button_update() : m.amb_creator_button_add()}
       </button>
