@@ -71,7 +71,8 @@
     ),
     concordInvites: lazyComponent(() => import('./community/channels/InviteInboxModal.svelte')),
     callSwitchConfirm: lazyComponent(() => import('./groups/CallSwitchConfirmModal.svelte')),
-    callLeaveConfirm: lazyComponent(() => import('./groups/CallLeaveConfirmModal.svelte'))
+    callLeaveConfirm: lazyComponent(() => import('./groups/CallLeaveConfirmModal.svelte')),
+    connectionStatus: lazyComponent(() => import('./shared/ConnectionStatusModal.svelte'))
   };
 
   /** @type {any} */
@@ -157,6 +158,8 @@
           onCancel: () => callbacks?.onCancel?.()
         };
       }
+      case 'connectionStatus':
+        return { onClose: () => modal.closeModal() };
       case 'nip05Activated':
         return { address: /** @type {string} */ (props?.address) || '' };
       default:

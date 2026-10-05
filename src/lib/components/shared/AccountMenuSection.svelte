@@ -20,6 +20,7 @@
   import { useMembershipPendingCount } from '$lib/stores/membership-pending.svelte.js';
   import { profileLink } from '$lib/helpers/nostrUtils.js';
   import ProfileAvatar from './ProfileAvatar.svelte';
+  import ConnectionStatus from './ConnectionStatus.svelte';
   import { GearIcon, ArrowLeftRightIcon, InfoCircleIcon, CheckIcon } from '$lib/components/icons';
 
   /** @type {{ onClose?: () => void }} */
@@ -146,6 +147,7 @@
   <li class="menu-disabled"><hr class="my-1 border-base-300" /></li>
 
   <!-- Group 3: info -->
+  <ConnectionStatus variant="menu-item" {onClose} />
   <li>
     <a href={resolve('/imprint')} onclick={onClose}>
       <InfoCircleIcon class_="w-4 h-4" />

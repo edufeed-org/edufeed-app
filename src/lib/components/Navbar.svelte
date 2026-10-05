@@ -15,6 +15,7 @@
   import ImageWithFallback from './shared/ImageWithFallback.svelte';
   import { lazyComponent } from '$lib/helpers/lazy-component.svelte.js';
   import LanguageSwitcher from './LanguageSwitcher.svelte';
+  import ConnectionStatus from './shared/ConnectionStatus.svelte';
   import { runtimeConfig } from '$lib/stores/config.svelte.js';
   import { prefetchCalendarData } from '$lib/loaders/calendar.js';
   import { getTotalUnreadCount } from '$lib/services/inbox-service.svelte.js';
@@ -159,14 +160,16 @@
         <div
           tabindex="0"
           role="button"
-          class="btn btn-circle btn-ghost"
+          class="btn relative btn-circle btn-ghost"
           onpointerenter={lazyAccountMenu.load}
           onfocusin={lazyAccountMenu.load}
         >
           <ProfileAvatar pubkey={activeAccount.pubkey} size="md" fallbackType="robohash" />
+          <!-- Connection trouble badges the avatar; its menu explains it. -->
+          <ConnectionStatus variant="badge" />
         </div>
         <ul
-          class="dropdown-content menu z-[60] mt-3 w-56 menu-sm rounded-box bg-base-100 p-2 shadow"
+          class="dropdown-content menu z-[60] mt-3 w-64 menu-sm rounded-box bg-base-100 p-2 shadow"
         >
           {#if lazyAccountMenu.loaded}
             {@const AccountMenuSection = lazyAccountMenu.loaded}
@@ -175,6 +178,7 @@
         </ul>
       </div>
     {:else}
+      <ConnectionStatus variant="dot" />
       <button onclick={openLoginModal} class="btn btn-ghost">{m.common_login()}</button>
     {/if}
     <LanguageSwitcher />
@@ -186,14 +190,15 @@
       <div
         tabindex="0"
         role="button"
-        class="btn btn-circle btn-ghost"
+        class="btn relative btn-circle btn-ghost"
         aria-label={m.navbar_menu()}
         onpointerenter={lazyMobileNavMenu.load}
         onfocusin={lazyMobileNavMenu.load}
       >
         <MenuIcon class_="w-6 h-6" />
+        <ConnectionStatus variant="badge" />
       </div>
-      <ul class="dropdown-content menu z-[60] mt-3 w-56 rounded-box bg-base-100 p-2 shadow-lg">
+      <ul class="dropdown-content menu z-[60] mt-3 w-64 rounded-box bg-base-100 p-2 shadow-lg">
         {#if lazyMobileNavMenu.loaded}
           {@const MobileNavMenu = lazyMobileNavMenu.loaded}
           <MobileNavMenu onClose={closeDropdown} />
