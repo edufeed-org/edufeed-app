@@ -188,7 +188,57 @@ describe('CalendarEventModal — normal calendar event (regression)', () => {
     expect(r.queryByText(m.meeting_modal_guests_label())).toBeNull();
     expect(r.getByTestId('participants-label').textContent).toBe('');
     expect(r.getByText(m.event_modal_event_title())).toBeTruthy();
-    expect(r.getByTestId('editable-list')).toBeTruthy();
+    expect(r.getAllByTestId('editable-list').length).toBeGreaterThan(0);
+  });
+
+  // GitHub #6: users could not add hashtags (NIP-52 t tags) to events.
+  it('offers a hashtag list and submits the added hashtags', async () => {
+    const r = render(CalendarEventModal);
+    await tick();
+    expect(r.getByText(m.event_modal_hashtags_label())).toBeTruthy();
+    await setInput(r.container, '#title', 'Sommerfest');
+    await fireEvent.click(r.getByTestId('stub-add-hashtag'));
+    await fireEvent.submit(r.container.querySelector('form:not(.modal-backdrop)'));
+    await settle();
+    expect(h.createEvent).toHaveBeenCalledTimes(1);
+    expect(h.createEvent.mock.calls[0][0].hashtags).toEqual(['neu']);
+  });
+
+  it('pre-fills the hashtags of the edited event and keeps them on save', async () => {
+    const start = Math.floor(new Date('2026-11-02T00:00:00Z').getTime() / 1000);
+    const existingRawEvent = {
+      id: 'e'.repeat(64),
+      kind: 31922,
+      pubkey: ME,
+      tags: [
+        ['d', 'x'],
+        ['t', 'OER'],
+        ['t', 'nostr'],
+        ['t', 'oer']
+      ]
+    };
+    h.modalStore.modalProps = {
+      communityPubkey: 'comm',
+      mode: 'edit',
+      existingRawEvent,
+      existingEvent: {
+        kind: 31922,
+        title: 'Fortbildung',
+        start,
+        hashtags: ['OER', 'nostr', 'oer'],
+        references: [],
+        participants: []
+      }
+    };
+    h.updateEvent.mockImplementation(async () => ({ id: 'ev1', kind: 31922, tags: [] }));
+    const r = render(CalendarEventModal);
+    await tick();
+    const list = r.getAllByTestId('editable-list').find((el) => el.dataset.itemType === 'hashtag');
+    expect(JSON.parse(list.dataset.items)).toEqual(['oer', 'nostr']);
+    await fireEvent.submit(r.container.querySelector('form:not(.modal-backdrop)'));
+    await settle();
+    expect(h.updateEvent).toHaveBeenCalledTimes(1);
+    expect(h.updateEvent.mock.calls[0][0].hashtags).toEqual(['oer', 'nostr']);
   });
 
   // The default day is the LOCAL date: east of UTC just after midnight,

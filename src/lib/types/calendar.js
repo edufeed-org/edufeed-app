@@ -96,6 +96,7 @@
  * @property {boolean} isAllDay - Whether event is all day
  * @property {EventType} eventType - Event type (date or time)
  * @property {string[]} [references] - Optional array of reference URLs (r tags)
+ * @property {string[]} [hashtags] - Optional hashtags (t tags, NIP-24 lowercase)
  * @property {CalendarEventParticipant[]} [participants] - NIP-52 participants (p-tags) and named participants
  */
 

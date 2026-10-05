@@ -86,3 +86,16 @@ describe('EditableList normalize prop', () => {
     expect(getByText('some-blossom-server.example')).toBeTruthy();
   });
 });
+
+// Two lists in one form (calendar event modal: links + hashtags) must not
+// share an input id, or the second label focuses the first input.
+describe('EditableList ids', () => {
+  it('gives each instance its own input id, wired to its label', () => {
+    const a = render(EditableList, { props: { items: [], label: 'Links' } });
+    const b = render(EditableList, { props: { items: [], label: 'Hashtags' } });
+    const inputA = /** @type {HTMLInputElement} */ (a.getByLabelText('Links'));
+    const inputB = /** @type {HTMLInputElement} */ (b.getByLabelText('Hashtags'));
+    expect(inputA.id).toBeTruthy();
+    expect(inputA.id).not.toBe(inputB.id);
+  });
+});

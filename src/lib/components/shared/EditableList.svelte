@@ -18,6 +18,10 @@
     helpText = ''
   } = $props();
 
+  // Unique per instance: a form can hold several lists (links + hashtags).
+  const uid = $props.id();
+  const inputId = `editable-list-input-${uid}`;
+
   let inputValue = $state('');
   let error = $state('');
 
@@ -93,7 +97,7 @@
 <div class="form-control">
   <!-- DaisyUI's .label is nowrap: a long help text pushed the meeting
        dialog sideways (QA round 3 K1). -->
-  <label class="label flex-wrap whitespace-normal" for="editable-list-input">
+  <label class="label flex-wrap whitespace-normal" for={inputId}>
     <span class="label-text min-w-0 break-words">{label}</span>
     {#if helpText}
       <span class="label-text-alt min-w-0 break-words">{helpText}</span>
@@ -103,7 +107,7 @@
   <!-- Input row -->
   <div class="mb-3 flex gap-2">
     <input
-      id="editable-list-input"
+      id={inputId}
       type="text"
       bind:value={inputValue}
       {placeholder}
