@@ -8,6 +8,7 @@
   import { useKanbanCommunityLoader } from '$lib/loaders/kanban-community.js';
   import { CommunityBoardModel } from '$lib/models/community-content.js';
   import KanbanBoardCard from '$lib/components/kanban/KanbanBoardCard.svelte';
+  import CreateBoardLink from '$lib/components/kanban/CreateBoardLink.svelte';
   import SharedByLine from '$lib/components/shared/SharedByLine.svelte';
   import CommunityContentView from './CommunityContentView.svelte';
   import * as m from '$lib/paraglide/messages';
@@ -31,6 +32,10 @@
   searchPlaceholder={m.community_boards_search_placeholder()}
   emptyIconPath="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"
 >
+  {#snippet headerAction()}
+    <CreateBoardLink />
+  {/snippet}
+
   {#snippet content(items, authorProfiles)}
     <div class="space-y-4">
       {#each items as board (board.id)}
