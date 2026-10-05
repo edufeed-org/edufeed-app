@@ -7,6 +7,52 @@ merge commits of the nostr PRs that landed since the previous tag.
 
 ## [Unreleased]
 
+## [0.3.3] - 2026-10-05
+
+### Added
+
+- **Event attributes for educational events.** The event form gets
+  registration required (yes/no), cost (free, or an amount and currency),
+  format (Präsenz / Online / Hybrid) and Bildungsstufe (the KIM
+  educational-level vocabulary). They are shown as badges on the event,
+  using the tags the Edufeed working group agreed on (`registrationRequired`,
+  `price`, `eventAttendanceMode`, `educationalLevel:*`). Online events get
+  an "Online-Ort" location field and no map.
+- **Hashtags on events.** Events can be tagged in the create and edit form.
+- **Event website link.** The first link of an event is shown as a
+  "Zur Veranstaltungsseite" button next to date and time; further links stay
+  under "Weitere Links".
+- **Filters in community calendars.** Search, tag and people filters now
+  work in a community's calendar too.
+- **"Board erstellen".** The Boards tab and community boards link to the
+  Kanban editor to create a new board.
+- **Camera backgrounds in calls.** Blur, three built-in images or your own
+  image, processed in your browser; the choice is remembered per device.
+- Participants can have the role "Besucher:in" (attendee); roles are shown
+  translated on the event page.
+
+### Changed
+
+- The "Personen" tab on Discover comes right after "Alle", and its cards show
+  the NIP-05 address and a short bio.
+- Calendar lists of a person, a calendar or a community open on "Alle"
+  (upcoming and past) instead of one month.
+- A new event ends on the day it starts, and its end date follows the start
+  date until changed by hand.
+- The RSVP section is called "Teilnahme anzeigen" and says that it is not a
+  registration with the organizer.
+- Learning resources: a creator linked to a Nostr profile always shows the
+  profile's name; "Ohne Profil-Verknüpfung, nur Name" lets you enter a
+  different name instead.
+
+### Fixed
+
+- Editing an event no longer deletes its hashtags.
+- "Bearbeiten" in the event preview opens the edit form instead of seemingly
+  doing nothing.
+- The list and map buttons of a community calendar no longer jump to the
+  community's home page, and the calendar no longer always opens as a grid.
+
 ## [0.3.2] - 2026-10-05
 
 ### Fixed
