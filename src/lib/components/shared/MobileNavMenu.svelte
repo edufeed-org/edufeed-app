@@ -8,6 +8,7 @@
   import { getTotalUnreadCount } from '$lib/services/inbox-service.svelte.js';
   import { getUnreadDmCount } from '$lib/services/dm-service.svelte.js';
   import AccountMenuSection from './AccountMenuSection.svelte';
+  import ConnectionStatus from './ConnectionStatus.svelte';
   import {
     PeopleIcon,
     SearchIcon,
@@ -103,6 +104,7 @@
 
   <AccountMenuSection {onClose} />
 {:else}
+  <ConnectionStatus variant="menu-item" {onClose} />
   <li>
     <a href={resolve('/imprint')} onclick={onClose}>
       {m.navbar_imprint()}

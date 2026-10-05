@@ -1,6 +1,6 @@
 /** @vitest-environment jsdom */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen } from '@testing-library/svelte';
+import { render, screen, fireEvent } from '@testing-library/svelte';
 
 const statusHolder = vi.hoisted(() => ({
   /** @type {() => any} */
@@ -11,6 +11,8 @@ vi.mock('$lib/services/connection-status.svelte.js', () => ({
   getConnectionStatus: () => statusHolder.get(),
   startConnectionStatus: () => startConnectionStatus()
 }));
+const openModal = vi.hoisted(() => vi.fn());
+vi.mock('$lib/stores/modal.svelte.js', () => ({ modalStore: { openModal } }));
 
 const { default: ConnectionStatus } = await import(
   '$lib/components/shared/ConnectionStatus.svelte'
@@ -23,7 +25,7 @@ const ONE_DOWN = {
       kind: 'relays',
       down: 1,
       total: 6,
-      servers: [{ host: 'dev.relay.edufeed.org', categories: ['communikey', 'longform'] }]
+      servers: [{ host: 'dev.relay.edufeed.org', categories: ['communikey'] }]
     }
   ]
 };
@@ -31,11 +33,12 @@ const ONE_DOWN = {
 beforeEach(() => {
   statusHolder.get = () => ({ level: 'ok', reasons: [] });
   startConnectionStatus.mockClear();
+  openModal.mockClear();
 });
 
 describe('ConnectionStatus', () => {
   // laoc 2026-10-05: an always-on dot was too present.
-  it.each(/** @type {const} */ (['badge', 'details', 'dot', 'strip']))(
+  it.each(/** @type {const} */ (['badge', 'dot', 'strip']))(
     '%s: starts the service and renders nothing while all is well',
     (variant) => {
       const { container } = render(ConnectionStatus, { props: { variant } });
@@ -44,7 +47,7 @@ describe('ConnectionStatus', () => {
     }
   );
 
-  it('badge: an amber dot on a problem, red when unreachable or offline', () => {
+  it('badge: amber on a partial problem, red when offline', () => {
     statusHolder.get = () => ONE_DOWN;
     const { unmount } = render(ConnectionStatus, { props: { variant: 'badge' } });
     expect(screen.getByTestId('connection-status-badge').classList.contains('bg-warning')).toBe(
@@ -56,53 +59,32 @@ describe('ConnectionStatus', () => {
     expect(screen.getByTestId('connection-status-badge').classList.contains('bg-error')).toBe(true);
   });
 
-  it('details: names the unreachable server and what it serves', () => {
-    statusHolder.get = () => ONE_DOWN;
-    render(ConnectionStatus, { props: { variant: 'details' } });
-    const server = screen.getByTestId('connection-status-server');
-    expect(server.textContent).toContain('dev.relay.edufeed.org');
-    expect(server.textContent).toMatch(/communities|Communities/);
-    expect(server.textContent).toMatch(/articles|Artikel/);
-  });
-
-  it('details: lists every reason (offline + signer)', () => {
-    statusHolder.get = () => ({
-      level: 'offline',
-      reasons: [{ kind: 'offline' }, { kind: 'signer' }]
-    });
-    render(ConnectionStatus, { props: { variant: 'details' } });
-    expect(screen.getAllByTestId('connection-status-item')).toHaveLength(2);
-  });
-
-  it('dot: a popover with the same explanation (logged out)', () => {
-    statusHolder.get = () => ONE_DOWN;
-    render(ConnectionStatus, { props: { variant: 'dot' } });
-    expect(screen.getByTestId('connection-status').dataset.level).toBe('degraded');
-    expect(screen.getByTestId('connection-status-server').textContent).toContain(
-      'dev.relay.edufeed.org'
+  it('menu-item: always there, a dot only on a problem, opens the modal and closes the menu', async () => {
+    const onClose = vi.fn();
+    const { unmount } = render(ConnectionStatus, { props: { variant: 'menu-item', onClose } });
+    expect(screen.getByTestId('connection-status-menu-item').textContent).toMatch(
+      /Connection|Verbindung/
     );
+    expect(screen.queryByTestId('connection-status-menu-dot')).toBeNull();
+    await fireEvent.click(screen.getByTestId('connection-status-menu-item'));
+    expect(onClose).toHaveBeenCalled();
+    expect(openModal).toHaveBeenCalledWith('connectionStatus');
+    unmount();
+    statusHolder.get = () => ONE_DOWN;
+    render(ConnectionStatus, { props: { variant: 'menu-item' } });
+    expect(screen.getByTestId('connection-status-menu-dot').dataset.level).toBe('degraded');
   });
 
-  it('strip: says the first problem in words, with the server', () => {
-    statusHolder.get = () => ({
-      level: 'unreachable',
-      reasons: [
-        {
-          kind: 'relays',
-          down: 2,
-          total: 2,
-          servers: [
-            { host: 'a.example', categories: [] },
-            { host: 'b.example', categories: [] }
-          ]
-        }
-      ]
-    });
+  it('dot and strip open the modal', async () => {
+    statusHolder.get = () => ONE_DOWN;
+    const { unmount } = render(ConnectionStatus, { props: { variant: 'dot' } });
+    await fireEvent.click(screen.getByTestId('connection-status'));
+    unmount();
     render(ConnectionStatus, { props: { variant: 'strip' } });
     const strip = screen.getByTestId('connection-status-strip');
-    expect(strip.getAttribute('role')).toBe('status');
-    expect(strip.textContent).toMatch(/not reachable|nicht erreichbar/);
-    expect(strip.textContent).toContain('a.example, b.example');
+    expect(strip.textContent).toContain('dev.relay.edufeed.org');
+    await fireEvent.click(strip);
+    expect(openModal).toHaveBeenCalledTimes(2);
   });
 
   it('never throws: a failing status read renders nothing (navbar sits outside the error boundary)', () => {

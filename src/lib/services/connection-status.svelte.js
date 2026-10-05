@@ -10,14 +10,18 @@ import { pool } from '$lib/stores/nostr-infrastructure.svelte';
 import { getGroupsRelays } from '$lib/helpers/relay-helper.js';
 import { getAppRelaysForCategory } from '$lib/services/app-relay-service.svelte.js';
 import { subscribeSlowSigns } from '$lib/helpers/signer-wait.js';
-import { coreHostsOf, deriveConnectionStatus } from '$lib/helpers/connection-status.js';
+import {
+  coreHostsOf,
+  deriveConnectionStatus,
+  describeServers
+} from '$lib/helpers/connection-status.js';
 
 // A relay must keep failing this long before it counts: a socket that
 // drops and reconnects within a second or two is not worth a warning.
 const FAILING_GRACE_MS = 3_000;
 
 let online = $state(true);
-/** @type {Array<{url: string, failing: boolean}>} */
+/** @type {Array<{url: string, failing: boolean, connected: boolean}>} */
 let relays = $state.raw([]);
 let slowSigns = $state(0);
 let started = false;
@@ -29,13 +33,15 @@ let started = false;
  * @param {import('applesauce-relay').Relay} relay
  */
 function relayHealth$(relay) {
-  return combineLatest([relay.connected$, relay.error$]).pipe(
+  const failing$ = combineLatest([relay.connected$, relay.error$]).pipe(
     map(([connected, error]) => !connected && !!error),
     distinctUntilChanged(),
     switchMap((failing) => (failing ? timer(FAILING_GRACE_MS).pipe(map(() => true)) : of(false))),
     startWith(false),
-    distinctUntilChanged(),
-    map((failing) => ({ url: relay.url, failing }))
+    distinctUntilChanged()
+  );
+  return combineLatest([failing$, relay.connected$]).pipe(
+    map(([failing, connected]) => ({ url: relay.url, failing, connected }))
   );
 }
 
@@ -60,9 +66,8 @@ export function startConnectionStatus() {
   subscribeSlowSigns((count) => (slowSigns = count));
 }
 
-/** @returns {ReturnType<typeof deriveConnectionStatus>} */
-export function getConnectionStatus() {
-  const coreHosts = coreHostsOf({
+function coreHosts() {
+  return coreHostsOf({
     calendar: getAppRelaysForCategory('calendar'),
     communikey: getAppRelaysForCategory('communikey'),
     educational: getAppRelaysForCategory('educational'),
@@ -70,10 +75,23 @@ export function getConnectionStatus() {
     kanban: getAppRelaysForCategory('kanban'),
     groups: getGroupsRelays()
   });
+}
+
+/** @returns {ReturnType<typeof deriveConnectionStatus>} */
+export function getConnectionStatus() {
   return deriveConnectionStatus({
     online,
     relays,
-    coreHosts,
+    coreHosts: coreHosts(),
     waitingForSigner: slowSigns > 0
   });
+}
+
+/** For the connection modal: the raw inputs plus every app server's state. */
+export function getConnectionDetails() {
+  return {
+    online,
+    waitingForSigner: slowSigns > 0,
+    servers: describeServers({ relays, coreHosts: coreHosts() })
+  };
 }

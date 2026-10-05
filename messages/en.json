@@ -3932,5 +3932,14 @@
   "connection_category_educational": "learning materials",
   "connection_category_longform": "articles",
   "connection_category_kanban": "boards",
-  "connection_category_groups": "channels & calls"
+  "connection_category_groups": "channels & calls",
+  "connection_menu_entry": "Connection",
+  "connection_modal_internet": "Internet",
+  "connection_modal_internet_online": "Connected",
+  "connection_modal_signer": "Signing app",
+  "connection_modal_servers": "{appName} servers",
+  "connection_modal_servers_hint": "Only this app's own servers are checked. Other people's relays can be offline at any time — that is normal on Nostr.",
+  "connection_server_connected": "connected",
+  "connection_server_failing": "not reachable",
+  "connection_server_idle": "not in use right now"
 }

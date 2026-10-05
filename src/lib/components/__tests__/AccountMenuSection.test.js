@@ -64,6 +64,8 @@ vi.mock('$lib/helpers/nostrUtils.js', () => ({
 
 // Heavy avatar component — replace with stub.
 vi.mock('../shared/ProfileAvatar.svelte', () => ({ default: () => ({}) }));
+// Has its own test; here it would need the live connection service.
+vi.mock('../shared/ConnectionStatus.svelte', () => ({ default: () => ({}) }));
 
 vi.mock('$app/paths', () => ({
   resolve: (path) => path

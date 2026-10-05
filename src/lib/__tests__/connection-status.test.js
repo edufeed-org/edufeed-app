@@ -5,7 +5,12 @@
  * health of the app's OWN relays and a signer that keeps us waiting.
  */
 import { describe, it, expect } from 'vitest';
-import { coreHostsOf, deriveConnectionStatus, relayHost } from '$lib/helpers/connection-status.js';
+import {
+  coreHostsOf,
+  deriveConnectionStatus,
+  describeServers,
+  relayHost
+} from '$lib/helpers/connection-status.js';
 
 const CORE = coreHostsOf({
   groups: ['wss://groups.edufeed.org'],
@@ -141,5 +146,40 @@ describe('deriveConnectionStatus', () => {
       waitingForSigner: false
     });
     expect(s.level).toBe('ok');
+  });
+});
+
+describe('describeServers', () => {
+  it('lists every app server: failing first, then connected, then not used yet', () => {
+    const core = coreHostsOf({
+      groups: ['wss://groups.edufeed.org'],
+      educational: ['wss://amb-relay.edufeed.org'],
+      calendar: ['wss://cal.edufeed.org']
+    });
+    const servers = describeServers({
+      relays: [
+        { url: 'wss://groups.edufeed.org', failing: false, connected: true },
+        { url: 'wss://amb-relay.edufeed.org', failing: true, connected: false },
+        { url: 'wss://some.public.relay', failing: true, connected: false }
+      ],
+      coreHosts: core
+    });
+    expect(servers).toEqual([
+      { host: 'amb-relay.edufeed.org', categories: ['educational'], state: 'failing' },
+      { host: 'groups.edufeed.org', categories: ['groups'], state: 'connected' },
+      { host: 'cal.edufeed.org', categories: ['calendar'], state: 'idle' }
+    ]);
+  });
+
+  it('a host with one working endpoint is not failing', () => {
+    const core = coreHostsOf({ groups: ['wss://groups.edufeed.org'] });
+    const [server] = describeServers({
+      relays: [
+        { url: 'wss://groups.edufeed.org', failing: true, connected: false },
+        { url: 'wss://groups.edufeed.org/c/root', failing: false, connected: true }
+      ],
+      coreHosts: core
+    });
+    expect(server.state).toBe('connected');
   });
 });

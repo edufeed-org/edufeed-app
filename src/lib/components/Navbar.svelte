@@ -171,7 +171,6 @@
         <ul
           class="dropdown-content menu z-[60] mt-3 w-64 menu-sm rounded-box bg-base-100 p-2 shadow"
         >
-          <ConnectionStatus variant="details" />
           {#if lazyAccountMenu.loaded}
             {@const AccountMenuSection = lazyAccountMenu.loaded}
             <AccountMenuSection onClose={closeDropdown} />
@@ -200,7 +199,6 @@
         <ConnectionStatus variant="badge" />
       </div>
       <ul class="dropdown-content menu z-[60] mt-3 w-64 rounded-box bg-base-100 p-2 shadow-lg">
-        <ConnectionStatus variant="details" />
         {#if lazyMobileNavMenu.loaded}
           {@const MobileNavMenu = lazyMobileNavMenu.loaded}
           <MobileNavMenu onClose={closeDropdown} />

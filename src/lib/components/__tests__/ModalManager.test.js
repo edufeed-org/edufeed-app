@@ -27,6 +27,10 @@ vi.mock('../groups/CallSwitchConfirmModal.svelte', async () => {
   const mock = await import('./__mocks__/DialogModalStub.svelte');
   return { default: mock.default };
 });
+vi.mock('../shared/ConnectionStatusModal.svelte', async () => {
+  const mock = await import('./__mocks__/DialogModalStub.svelte');
+  return { default: mock.default };
+});
 vi.mock('../groups/CallLeaveConfirmModal.svelte', async () => {
   const mock = await import('./__mocks__/DialogModalStub.svelte');
   return { default: mock.default };
@@ -136,5 +140,12 @@ describe('ModalManager lazy loading', () => {
     expect(dialog.dataset.props.split(',')).toEqual(
       expect.arrayContaining(['guest', 'onCancel', 'onConfirm'])
     );
+  });
+
+  it('renders the connection status modal with a close callback', async () => {
+    render(ModalManager);
+    modalStore.openModal('connectionStatus');
+    const dialog = await screen.findByTestId('dialog-stub');
+    expect(dialog.dataset.props.split(',')).toEqual(expect.arrayContaining(['onClose']));
   });
 });

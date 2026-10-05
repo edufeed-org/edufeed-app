@@ -95,3 +95,40 @@ export function deriveConnectionStatus({ online, relays, coreHosts, waitingForSi
   }
   return { level, reasons };
 }
+
+/** @typedef {'connected' | 'failing' | 'idle'} ServerState */
+
+/**
+ * Every app server with its state, for the connection details: `failing`
+ * when every open endpoint of the host fails (as in deriveConnectionStatus),
+ * `connected` when one is open, `idle` when the app has not needed it yet
+ * (or applesauce closed it after use). Failing first, then by host.
+ * @param {{
+ *   relays: Array<{url: string, failing: boolean, connected?: boolean}>,
+ *   coreHosts: Map<string, string[]>
+ * }} input
+ * @returns {Array<{host: string, categories: string[], state: ServerState}>}
+ */
+export function describeServers({ relays, coreHosts }) {
+  /** @type {Map<string, {failing: boolean, connected: boolean}>} */
+  const seen = new Map();
+  for (const r of relays) {
+    const host = relayHost(r.url);
+    if (!coreHosts.has(host)) continue;
+    const prev = seen.get(host) ?? { failing: true, connected: false };
+    seen.set(host, {
+      failing: prev.failing && r.failing,
+      connected: prev.connected || !!r.connected
+    });
+  }
+  /** @type {Record<ServerState, number>} */
+  const order = { failing: 0, connected: 1, idle: 2 };
+  return [...coreHosts]
+    .map(([host, categories]) => {
+      const s = seen.get(host);
+      /** @type {ServerState} */
+      const state = !s ? 'idle' : s.failing ? 'failing' : s.connected ? 'connected' : 'idle';
+      return { host, categories, state };
+    })
+    .sort((a, b) => order[a.state] - order[b.state] || a.host.localeCompare(b.host));
+}

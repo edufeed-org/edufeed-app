@@ -3932,5 +3932,14 @@
   "connection_category_educational": "Lernmaterialien",
   "connection_category_longform": "Artikel",
   "connection_category_kanban": "Boards",
-  "connection_category_groups": "Kanäle & Anrufe"
+  "connection_category_groups": "Kanäle & Anrufe",
+  "connection_menu_entry": "Verbindung",
+  "connection_modal_internet": "Internet",
+  "connection_modal_internet_online": "Verbunden",
+  "connection_modal_signer": "Signier-App",
+  "connection_modal_servers": "Server von {appName}",
+  "connection_modal_servers_hint": "Geprüft werden nur die eigenen Server dieser App. Relays anderer Leute können jederzeit offline sein – das ist bei Nostr normal.",
+  "connection_server_connected": "verbunden",
+  "connection_server_failing": "nicht erreichbar",
+  "connection_server_idle": "gerade nicht in Gebrauch"
 }
