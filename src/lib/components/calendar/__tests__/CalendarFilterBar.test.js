@@ -12,7 +12,12 @@ vi.mock('$lib/stores/profile-map.svelte.js', () => ({
 vi.mock('../TagSelector.svelte', () => ({ default: () => null }));
 vi.mock('../SearchInput.svelte', () => ({ default: () => null }));
 vi.mock('../PeopleFilter.svelte', () => ({ default: () => null }));
-vi.mock('../AdvancedFiltersDropdown.svelte', () => ({ default: () => null }));
+const advancedMounts = vi.hoisted(() => ({ count: 0 }));
+vi.mock('../AdvancedFiltersDropdown.svelte', () => ({
+  default: () => {
+    advancedMounts.count++;
+  }
+}));
 vi.mock('../ActiveFilterChips.svelte', () => ({ default: () => null }));
 
 describe('CalendarFilterBar', () => {
@@ -28,6 +33,17 @@ describe('CalendarFilterBar', () => {
 
   beforeEach(() => {
     calendarFilters.reset();
+    advancedMounts.count = 0;
+  });
+
+  it('offers the relay picker by default', () => {
+    render(CalendarFilterBar, { props: baseProps });
+    expect(advancedMounts.count).toBe(1);
+  });
+
+  it('hides the relay picker when showRelays is false (community calendars)', () => {
+    render(CalendarFilterBar, { props: { ...baseProps, showRelays: false } });
+    expect(advancedMounts.count).toBe(0);
   });
 
   it('renders a Tags dropdown trigger in the bar', () => {

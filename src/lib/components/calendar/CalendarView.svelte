@@ -312,6 +312,10 @@
     const q = calendarFilters.searchQuery.trim();
     searchLoaderSub?.unsubscribe();
     if (searchDebounceTimer !== null) clearTimeout(searchDebounceTimer);
+    // A community calendar already holds all of the community's events; a
+    // relay-side search of the calendar relays could only add events from
+    // outside the community, which its h-tag scoping never displays.
+    if (communityMode) return;
     if (q.length < MIN_QUERY_LENGTH) return;
 
     // Debounce to avoid hammering relays while the user is still typing.
@@ -332,6 +336,15 @@
     };
   });
 
+  // Community calendars have no relay filter: their events come from the
+  // community's own relays, not from the calendar relays the picker offers.
+  // A `relays` param (hand-edited or carried over) must not hide events.
+  function dropRelaySelectionInCommunity() {
+    if (communityMode && calendarFilters.selectedRelays.length > 0) {
+      calendarFilters.clearSelectedRelays();
+    }
+  }
+
   // Sync initial URL state on mount
   syncInitialUrlState(
     $page.url.searchParams,
@@ -345,21 +358,24 @@
       currentDate = date;
     }
   );
+  dropRelaySelectionInCommunity();
 
   // Set up navigation listener - runs after every navigation
-  afterNavigate(
-    createUrlSyncHandler(
-      (/** @type {'calendar' | 'list' | 'map'} */ mode) => {
-        presentationViewMode = mode;
-      },
-      (/** @type {CalendarViewMode} */ mode) => {
-        viewMode = mode;
-      },
-      (/** @type {Date} */ date) => {
-        currentDate = date;
-      }
-    )
+  const urlSyncHandler = createUrlSyncHandler(
+    (/** @type {'calendar' | 'list' | 'map'} */ mode) => {
+      presentationViewMode = mode;
+    },
+    (/** @type {CalendarViewMode} */ mode) => {
+      viewMode = mode;
+    },
+    (/** @type {Date} */ date) => {
+      currentDate = date;
+    }
   );
+  afterNavigate((navigation) => {
+    urlSyncHandler(navigation);
+    dropRelaySelectionInCommunity();
+  });
 
   // State → URL: keep the viewed date shareable/reload-safe (#30). Uses
   // replaceState so calendar paging doesn't spam the history stack; the
@@ -399,9 +415,11 @@
       publishers: calendarFilters.selectedAuthorPubkeys
     };
     if (typeof window === 'undefined') return;
-    // Community calendars render no filter UI — the singleton store may still
-    // hold filters from /calendar, which must not leak into community URLs.
-    if (communityMode) return;
+    // Community calendars write their filters too (shareable links). The
+    // singleton store cannot leak between calendars: every mount and
+    // navigation re-reads it from the URL (syncInitialUrlState /
+    // afterNavigate), and community section/community switches build fresh
+    // URLs that carry no filter params.
     // eslint-disable-next-line svelte/prefer-svelte-reactivity -- local, non-reactive URL work
     const url = new URL(window.location.href);
     const next = applyCalendarFilterState(url.searchParams, filterState);
@@ -801,6 +819,17 @@
       });
     }
 
+    // Step 2b: Community mode — the "people" filter (follows / featured
+    // pool, NIP-51 lists, picked authors). Global and author views apply it
+    // in their loader/model queries; community events come from the
+    // community loader, so it is applied here, with the same union semantics.
+    if (communityMode) {
+      const people = calendarFilters.getEffectiveAuthorPubkeys();
+      if (people.length > 0) {
+        filtered = filtered.filter((event) => people.includes(event.pubkey));
+      }
+    }
+
     // Step 3: Apply featured-authors filtering (AND logic)
     if (selectedFeaturedAuthors.length > 0) {
       filtered = filtered.filter((event) => selectedFeaturedAuthors.includes(event.pubkey));
@@ -847,26 +876,6 @@
     >
       {#if !communityMode}
         <CalendarDropdown currentCalendar={calendar} />
-        <!-- Desktop inline filter bar (takes remaining space) -->
-        <div class="hidden grow lg:block">
-          <CalendarFilterBar
-            validEvents={events}
-            featuredAuthors={featuredAuthorsHex}
-            onRelayFilterChange={handleRelayFilterChange}
-            onSearchQueryChange={handleSearchQueryChange}
-            onTagFilterChange={handleTagFilterChange}
-            onPeopleChange={handlePeopleChange}
-            onClearAll={handleClearAllFilters}
-          />
-        </div>
-        <!-- Mobile filter drawer trigger -->
-        <button
-          type="button"
-          class="btn ms-auto gap-1 btn-ghost btn-sm lg:hidden"
-          onclick={() => (drawerOpen = true)}
-        >
-          Filter{activeFilterCount > 0 ? ` (${activeFilterCount})` : ''}
-        </button>
       {:else}
         <h2 class="text-lg font-semibold text-base-content">
           {m.calendar_view_community_calendar()}
@@ -878,6 +887,29 @@
           />
         {/if}
       {/if}
+      <!-- Desktop inline filter bar: takes the remaining space next to the
+        calendar picker; in a community it gets its own line below the
+        heading so the search field keeps a usable width. -->
+      <div class="hidden grow lg:block" class:basis-full={communityMode}>
+        <CalendarFilterBar
+          validEvents={events}
+          featuredAuthors={featuredAuthorsHex}
+          showRelays={!communityMode}
+          onRelayFilterChange={handleRelayFilterChange}
+          onSearchQueryChange={handleSearchQueryChange}
+          onTagFilterChange={handleTagFilterChange}
+          onPeopleChange={handlePeopleChange}
+          onClearAll={handleClearAllFilters}
+        />
+      </div>
+      <!-- Mobile filter drawer trigger -->
+      <button
+        type="button"
+        class="btn ms-auto gap-1 btn-ghost btn-sm lg:hidden"
+        onclick={() => (drawerOpen = true)}
+      >
+        Filter{activeFilterCount > 0 ? ` (${activeFilterCount})` : ''}
+      </button>
     </div>
 
     <!-- Featured authors rail (only when no filters are active) -->
@@ -1070,17 +1102,16 @@
   {/if}
 
   <!-- Mobile filter drawer -->
-  {#if !communityMode}
-    <CalendarFilterDrawer
-      isDrawerOpen={drawerOpen}
-      validEvents={events}
-      featuredAuthors={featuredAuthorsHex}
-      {activeFilterCount}
-      onRelayFilterChange={handleRelayFilterChange}
-      onSearchQueryChange={handleSearchQueryChange}
-      onTagFilterChange={handleTagFilterChange}
-      onPeopleChange={handlePeopleChange}
-      onClose={() => (drawerOpen = false)}
-    />
-  {/if}
+  <CalendarFilterDrawer
+    isDrawerOpen={drawerOpen}
+    validEvents={events}
+    featuredAuthors={featuredAuthorsHex}
+    showRelays={!communityMode}
+    {activeFilterCount}
+    onRelayFilterChange={handleRelayFilterChange}
+    onSearchQueryChange={handleSearchQueryChange}
+    onTagFilterChange={handleTagFilterChange}
+    onPeopleChange={handlePeopleChange}
+    onClose={() => (drawerOpen = false)}
+  />
 </div>

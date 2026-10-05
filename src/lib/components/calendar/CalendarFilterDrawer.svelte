@@ -12,6 +12,7 @@
    * @property {boolean} isDrawerOpen
    * @property {any[]} validEvents
    * @property {string[]} [featuredAuthors]
+   * @property {boolean} [showRelays] - Offer the relay picker (false in community calendars, whose relays are fixed)
    * @property {number} activeFilterCount
    * @property {(relays: string[]) => void} [onRelayFilterChange]
    * @property {(query: string) => void} [onSearchQueryChange]
@@ -25,6 +26,7 @@
     isDrawerOpen,
     validEvents,
     featuredAuthors = [],
+    showRelays = true,
     activeFilterCount,
     onRelayFilterChange = (/** @type {string[]} */ _r) => {},
     onSearchQueryChange = (/** @type {string} */ _q) => {},
@@ -100,17 +102,19 @@
       </section>
 
       <!-- Advanced (Relays) - collapsed by default -->
-      <details class="mb-4 rounded-lg border border-base-300">
-        <summary class="cursor-pointer px-3 py-2 text-sm font-semibold select-none">
-          {m.calendar_advanced_title()}
-        </summary>
-        <div class="px-3 pb-3">
-          <h4 class="mb-2 text-xs font-medium text-base-content/60 uppercase">
-            {m.calendar_advanced_relays_heading()}
-          </h4>
-          <RelaySelector onApplyFilters={onRelayFilterChange} />
-        </div>
-      </details>
+      {#if showRelays}
+        <details class="mb-4 rounded-lg border border-base-300">
+          <summary class="cursor-pointer px-3 py-2 text-sm font-semibold select-none">
+            {m.calendar_advanced_title()}
+          </summary>
+          <div class="px-3 pb-3">
+            <h4 class="mb-2 text-xs font-medium text-base-content/60 uppercase">
+              {m.calendar_advanced_relays_heading()}
+            </h4>
+            <RelaySelector onApplyFilters={onRelayFilterChange} />
+          </div>
+        </details>
+      {/if}
 
       <!-- Active filter chips -->
       <section class="mb-4">

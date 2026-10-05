@@ -10,6 +10,7 @@
    * @typedef {Object} Props
    * @property {any[]} validEvents
    * @property {string[]} [featuredAuthors]
+   * @property {boolean} [showRelays] - Offer the relay picker (false in community calendars, whose relays are fixed)
    * @property {(relays: string[]) => void} [onRelayFilterChange]
    * @property {(query: string) => void} [onSearchQueryChange]
    * @property {(tags: string[]) => void} [onTagFilterChange]
@@ -21,6 +22,7 @@
   let {
     validEvents,
     featuredAuthors = [],
+    showRelays = true,
     onRelayFilterChange = (/** @type {string[]} */ _r) => {},
     onSearchQueryChange = (/** @type {string} */ _q) => {},
     onTagFilterChange = (/** @type {string[]} */ _t) => {},
@@ -64,9 +66,11 @@
     <PeopleFilter {featuredAuthors} onChange={onPeopleChange} />
 
     <!-- Advanced (Relays) — pushed right -->
-    <div class="ms-auto">
-      <AdvancedFiltersDropdown {onRelayFilterChange} />
-    </div>
+    {#if showRelays}
+      <div class="ms-auto">
+        <AdvancedFiltersDropdown {onRelayFilterChange} />
+      </div>
+    {/if}
   </div>
 
   <!-- Active filter chip strip -->
