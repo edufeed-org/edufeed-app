@@ -67,6 +67,41 @@ export function updateQueryParams(currentParams, updates, options = {}) {
 }
 
 /**
+ * Query param that carries the calendar presentation (list/calendar/map)
+ * inside a community. There `?view=` already selects the community SECTION
+ * (`/c/<npub>?view=calendar`), so the calendar must not read or write it.
+ */
+export const COMMUNITY_CALENDAR_VIEW_PARAM = 'cview';
+
+/**
+ * Name of the query param holding the calendar presentation mode.
+ * @param {boolean} communityMode
+ * @returns {string}
+ */
+export function calendarViewParamName(communityMode) {
+  return communityMode ? COMMUNITY_CALENDAR_VIEW_PARAM : 'view';
+}
+
+/**
+ * Params as the calendar URL sync expects them (presentation under `view`).
+ * In community mode returns a copy whose `view` is the `cview` value (absent
+ * when unset, so the default applies) — the community section param never
+ * reaches the calendar parser. Outside communities returns the input as is.
+ * @param {URLSearchParams} searchParams
+ * @param {boolean} communityMode
+ * @returns {URLSearchParams}
+ */
+export function toCalendarViewParams(searchParams, communityMode) {
+  if (!communityMode) return searchParams;
+  const params = new URLSearchParams(searchParams);
+  const presentation = params.get(COMMUNITY_CALENDAR_VIEW_PARAM);
+  params.delete(COMMUNITY_CALENDAR_VIEW_PARAM);
+  if (presentation) params.set('view', presentation);
+  else params.delete('view');
+  return params;
+}
+
+/**
  * Parse calendar filter parameters from URL
  *
  * @param {URLSearchParams} searchParams - URL search params from $page.url.searchParams
