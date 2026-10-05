@@ -28,6 +28,7 @@
   import LicensedImageInput from '../shared/LicensedImageInput.svelte';
   import { useUserProfile } from '../../stores/user-profile.svelte.js';
   import EditableList from '../shared/EditableList.svelte';
+  import { normalizeHashtag, normalizeHashtags } from '$lib/helpers/hashtags.js';
   import ParticipantsEditor from '$lib/components/calendar/ParticipantsEditor.svelte';
   import { CloseIcon } from '../icons';
   import { pool } from '$lib/stores/nostr-infrastructure.svelte';
@@ -106,6 +107,7 @@
     isAllDay: false,
     eventType: 'date',
     references: [],
+    hashtags: [],
     participants: []
   });
 
@@ -278,6 +280,7 @@
       isAllDay: false,
       eventType: 'date',
       references: [],
+      hashtags: [],
       participants: []
     };
     endDateEdited = false;
@@ -324,6 +327,7 @@
       isAllDay: false,
       eventType: meeting ? 'time' : 'date',
       references: [],
+      hashtags: [],
       participants: []
     };
     endDateEdited = false;
@@ -377,6 +381,8 @@
       isAllDay: isAllDay,
       eventType: eventType,
       references: existingEvent.references || [],
+      // Normalized like on save, so a tag repeated in another casing shows once.
+      hashtags: normalizeHashtags(existingEvent.hashtags),
       participants: existingEvent.participants || []
     };
     // An existing event's stored end is a choice: it stays put and only
@@ -401,6 +407,15 @@
     } catch {
       return m.event_modal_error_invalid_url();
     }
+  }
+
+  /**
+   * Reject input that normalizes to nothing (e.g. a bare "#").
+   * @param {string} hashtag - already normalized by EditableList
+   * @returns {string | null}
+   */
+  function validateHashtag(hashtag) {
+    return hashtag ? null : m.event_modal_hashtags_error_empty();
   }
 
   /**
@@ -791,7 +806,7 @@
           </div>
         {/if}
 
-        <!-- Reference Links (Optional) — not for a channel meeting (C5) -->
+        <!-- Reference Links + Hashtags (Optional) — not for a channel meeting (C5) -->
         {#if !isGroupMeeting}
           <div class="mb-4">
             <EditableList
@@ -802,6 +817,19 @@
               itemType="link"
               validator={validateUrl}
               helpText={m.event_modal_references_help()}
+            />
+          </div>
+          <!-- Hashtags (NIP-52 t tags, GitHub #6) -->
+          <div class="mb-4">
+            <EditableList
+              bind:items={formData.hashtags}
+              label={m.event_modal_hashtags_label()}
+              placeholder={m.event_modal_hashtags_placeholder()}
+              buttonText={m.event_modal_hashtags_button()}
+              itemType="hashtag"
+              normalize={normalizeHashtag}
+              validator={validateHashtag}
+              helpText={m.event_modal_hashtags_help()}
             />
           </div>
         {/if}

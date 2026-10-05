@@ -6,6 +6,7 @@
 import { runtimeConfig } from '$lib/stores/config.svelte.js';
 import { getSeenRelays, normalizeURL } from 'applesauce-core/helpers';
 import { activeDateLocale, formatDate } from '$lib/helpers/dates.js';
+import { normalizeHashtags } from '$lib/helpers/hashtags.js';
 import {
   parseCalendarTimestamp,
   getIcsEventTiming,
@@ -448,7 +449,7 @@ export function convertFormDataToEvent(formData, communityPubkey) {
     image: formData.image?.trim() || '',
     communityPubkey,
     location: formData.location?.trim() || '',
-    hashtags: [],
+    hashtags: normalizeHashtags(formData.hashtags),
     references: formData.references || [],
     participants: []
   };

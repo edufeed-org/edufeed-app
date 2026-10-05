@@ -9,7 +9,7 @@
  * @vitest-environment node
  */
 import { describe, it, expect } from 'vitest';
-import { buildCalendarEventTags } from '../helpers/calendar.js';
+import { buildCalendarEventTags, convertFormDataToEvent } from '../helpers/calendar.js';
 
 /**
  * Helper to find all tags with a given name
@@ -794,5 +794,54 @@ describe('buildCalendarEventTags', () => {
         { name: 'Twice', role: undefined }
       ]);
     });
+  });
+});
+
+describe('convertFormDataToEvent hashtags (GitHub #6)', () => {
+  const baseForm = {
+    title: 'Fortbildung',
+    summary: '',
+    image: '',
+    startDate: '2024-06-15',
+    startTime: '09:00',
+    endDate: '',
+    endTime: '10:00',
+    startTimezone: 'Europe/Berlin',
+    endTimezone: 'Europe/Berlin',
+    location: '',
+    isAllDay: true,
+    eventType: 'date'
+  };
+
+  // Regression: editing an event used to rebuild it with `hashtags: []`,
+  // silently dropping every t tag the event carried.
+  it('keeps the form hashtags instead of dropping them', () => {
+    const event = convertFormDataToEvent(
+      /** @type {any} */ ({ ...baseForm, hashtags: ['oer', 'nostr'] }),
+      'comm'
+    );
+    expect(event.hashtags).toEqual(['oer', 'nostr']);
+  });
+
+  it('normalizes hashtags: trim, strip #, lowercase, drop empty, dedupe', () => {
+    const event = convertFormDataToEvent(
+      /** @type {any} */ ({ ...baseForm, hashtags: [' #OER', 'oer', '', 'Nostr '] }),
+      'comm'
+    );
+    expect(event.hashtags).toEqual(['oer', 'nostr']);
+  });
+
+  it('defaults to no hashtags when the form has none', () => {
+    const event = convertFormDataToEvent(/** @type {any} */ (baseForm), 'comm');
+    expect(event.hashtags).toEqual([]);
+  });
+
+  it('round-trips form hashtags into t tags', () => {
+    const formData = /** @type {any} */ ({ ...baseForm, hashtags: ['OER', 'Schule'] });
+    const tags = buildCalendarEventTags(formData, convertFormDataToEvent(formData, ''), 'd1');
+    expect(findTags(tags, 't')).toEqual([
+      ['t', 'oer'],
+      ['t', 'schule']
+    ]);
   });
 });
