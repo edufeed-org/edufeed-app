@@ -3908,5 +3908,11 @@
   "meeting_bar_tomorrow": "tomorrow {time}",
   "meeting_detail_channel_only": "This meeting belongs to a channel. Join, guest link and delete are on its card in the channel.",
   "meeting_preview_channel": "Meeting in a channel",
-  "calendar_channel_meeting_in": "in #{channel}"
+  "calendar_channel_meeting_in": "in #{channel}",
+  "signer_slow_hint": "Waiting for your signing app… Open it and confirm the request.",
+  "signer_slow_hint_mobile": "Waiting for your signing app… Open it and confirm the request. In energy saver mode your phone may hold these requests back — switch it off if nothing happens.",
+  "signer_timeout_hint": "Your signing app did not respond. Open it and try again.",
+  "signer_timeout_hint_mobile": "Your signing app did not respond. Open it and try again — and switch off energy saver mode, which often blocks signing requests on phones.",
+  "groups_call_invite_untitled": "Invite link",
+  "groups_call_invite_created_at": "created {time}"
 }

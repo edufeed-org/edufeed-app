@@ -18,6 +18,7 @@ import { getChatBeside, setChatBeside } from '$lib/services/call-prefs.js';
 import { confirmCallSwitch, confirmCallLeave } from './call-switch-confirm.svelte.js';
 import { playLeaveSound } from '$lib/services/call-sounds.js';
 import * as m from '$lib/paraglide/messages';
+import { SignerTimeoutError, isLikelyMobile, signerTimeoutText } from '$lib/helpers/signer-wait.js';
 
 /** @typedef {'idle' | 'requesting' | 'ready' | 'error' | 'ended'} GroupCallPhase */
 /** @typedef {'removed' | 'dropped'} GroupCallEndReason */
@@ -323,6 +324,7 @@ function isLive() {
  * @returns {string}
  */
 export function callErrorMessage(err) {
+  if (err instanceof SignerTimeoutError) return signerTimeoutText(isLikelyMobile());
   const reason = err instanceof GroupCallTokenError ? err.reason : null;
   switch (reason) {
     case 'unauthorized':

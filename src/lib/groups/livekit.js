@@ -16,9 +16,15 @@
 // runes) so it can be called from click handlers and tested in node.
 import { normalizeURL } from 'applesauce-core/helpers/url';
 import { createNIP98AuthHeader } from '$lib/helpers/nip98.js';
+import { rejectAfter } from '$lib/helpers/signer-wait.js';
 
 const PROBE_TIMEOUT_MS = 5000;
 const TOKEN_TIMEOUT_MS = 10000;
+// The NIP-98 event is stamped before it is signed and the relay refuses a
+// stale one, so waiting on a bunker past about a minute cannot succeed
+// anyway — give up sooner than the account's 90s bound and say why
+// (SignerTimeoutError → callErrorMessage).
+const CALL_SIGN_TIMEOUT_MS = 45_000;
 
 /**
  * The http(s) ORIGIN a group relay's `.well-known` endpoints hang off. A
@@ -172,7 +178,12 @@ export async function requestGroupCallToken(relayUrl, groupId, user, opts = {}) 
     url,
     'GET',
     null,
-    (draft) => user.signer.signEvent({ ...draft, pubkey: user.pubkey }),
+    (draft) =>
+      rejectAfter(
+        Promise.resolve(user.signer.signEvent({ ...draft, pubkey: user.pubkey })),
+        CALL_SIGN_TIMEOUT_MS,
+        'Signing the call request'
+      ),
     opts.code ? [['code', opts.code]] : []
   );
 

@@ -2241,6 +2241,17 @@
             >
               <span class="loading loading-lg loading-spinner text-primary"></span>
               <p class="text-sm text-base-content/60">{m.groups_call_requesting()}</p>
+              <!-- A bunker held back by energy saver mode can keep this
+                waiting for up to 45s; cancelling resets the call so the
+                next "Join" asks again. -->
+              <button
+                type="button"
+                class="btn btn-ghost btn-sm"
+                onclick={leaveGroupCall}
+                data-testid="group-call-pending-cancel"
+              >
+                {m.common_cancel()}
+              </button>
             </div>
           {/if}
         {:else if activeSession}

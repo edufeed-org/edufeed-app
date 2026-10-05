@@ -3,6 +3,13 @@ import { registerCommonAccountTypes } from 'applesauce-accounts/accounts';
 import { NostrConnectSigner } from 'applesauce-signers';
 import { showToast } from '$lib/helpers/toast.js';
 import * as m from '$lib/paraglide/messages';
+import {
+  SLOW_SIGN_HINT_MS,
+  SignerTimeoutError,
+  notifyWhenSlow,
+  rejectAfter,
+  showSlowSignHint
+} from '$lib/helpers/signer-wait.js';
 
 /**
  * @typedef {{ name?: string }} AccountMetadata
@@ -64,29 +71,6 @@ export const BUNKER_SIGNER_TIMEOUT_MS = 90_000;
 const TIMEOUT_WRAPPED = Symbol('timeout-wrapped-signer');
 
 /**
- * Reject `promise` if it has not settled within `ms`, clearing the timer either way.
- * @template T
- * @param {Promise<T>} promise
- * @param {number} ms
- * @param {string} label
- * @returns {Promise<T>}
- */
-function rejectAfter(promise, ms, label) {
-  /** @type {ReturnType<typeof setTimeout>} */
-  let timer;
-  const timeout = new Promise((_resolve, reject) => {
-    timer = setTimeout(
-      () =>
-        reject(new Error(`${label} timed out after ${ms / 1000}s — the signer did not respond`)),
-      ms
-    );
-  });
-  return Promise.race([promise, /** @type {Promise<T>} */ (timeout)]).finally(() =>
-    clearTimeout(timer)
-  );
-}
-
-/**
  * Wrap a signer so `signEvent` rejects after `ms` instead of hanging forever.
  * Everything else (getPublicKey, nip04/nip44, pubkey) passes through unchanged, so
  * encryption and key lookups behave exactly as before.
@@ -116,26 +100,31 @@ export function wrapSignerWithTimeout(signer, ms) {
  * context — NostrConnectSigner surfaces the bunker's raw error string (e.g.
  * "exceeded quota"), which is meaningless to users without attribution.
  *
+ * While a request waits longer than `slowMs`, `onSlow` tells the user to
+ * open their signing app (a phone in energy saver mode holds bunker
+ * requests back — see signer-wait.js).
+ *
  * @template {object} T
  * @param {T} signer
  * @param {number} ms
+ * @param {{ slowMs?: number, onSlow?: () => void }} [opts]
  * @returns {T}
  */
-export function wrapBunkerSigner(signer, ms) {
+export function wrapBunkerSigner(signer, ms, opts = {}) {
+  const { slowMs = SLOW_SIGN_HINT_MS, onSlow = showSlowSignHint } = opts;
   return new Proxy(signer, {
     get(target, prop) {
       if (prop === TIMEOUT_WRAPPED) return true;
       if (prop === 'signEvent') {
-        return (/** @type {any} */ template) =>
-          rejectAfter(
-            /** @type {any} */ (target).signEvent(template),
-            ms,
-            'Signing the event'
-          ).catch((/** @type {any} */ err) => {
+        return (/** @type {any} */ template) => {
+          const signing = Promise.resolve(/** @type {any} */ (target).signEvent(template));
+          notifyWhenSlow(signing, slowMs, onSlow);
+          return rejectAfter(signing, ms, 'Signing the event').catch((/** @type {any} */ err) => {
+            if (err instanceof SignerTimeoutError) throw err; // our own timeout
             const message = err instanceof Error ? err.message : String(err);
-            if (message.includes('did not respond')) throw err; // our own timeout
             throw new Error(`Your remote signing app reported an error: ${message}`);
           });
+        };
       }
       const value = Reflect.get(target, prop, target);
       return typeof value === 'function' ? value.bind(target) : value;

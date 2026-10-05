@@ -95,7 +95,7 @@ describe('CallInviteDialog', () => {
     expect(screen.getByTestId('call-invite-pass').textContent).toContain('Elternabend');
   });
 
-  it('shows a pass title in its row, and only the time for an untitled pass', async () => {
+  it('shows a pass title in its row, and "Invite link" for an untitled pass', async () => {
     listCallPasses.mockResolvedValue([
       {
         id: 'p1',
@@ -115,6 +115,14 @@ describe('CallInviteDialog', () => {
       'Sprechstunde'
     );
     expect(untitled.querySelector('[data-testid="call-invite-pass-title"]')).toBeNull();
+    // A bare clock time said nothing (laoc, 2026-10-03): an untitled link is
+    // labelled "Invite link", every row says when it was created.
+    expect(untitled.querySelector('[data-testid="call-invite-pass-untitled"]')).not.toBeNull();
+    for (const row of [titled, untitled]) {
+      expect(row.querySelector('[data-testid="call-invite-pass-meta"]').textContent).toMatch(
+        /created|erstellt/
+      );
+    }
     // Task 19 review: the user's own title stays selectable, the meta is a label.
     const title = titled.querySelector('[data-testid="call-invite-pass-title"]');
     expect(title.closest('.select-none')).toBeNull();
