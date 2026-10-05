@@ -2174,6 +2174,8 @@
   "amb_creator_button_update": "Urheber aktualisieren",
   "amb_creator_button_add": "Urheber hinzufügen",
   "amb_creator_button_add_self": "Mich selbst hinzufügen",
+  "amb_creator_name_from_profile_hint": "Der Name kommt aus dem verknüpften Nostr-Profil. Für einen abweichenden Namen die Profil-Verknüpfung lösen.",
+  "amb_creator_button_unlink": "Ohne Profil-Verknüpfung, nur Name",
   "amb_creator_error_duplicate": "Diese Person ist bereits in der Liste.",
   "amb_creator_edit_aria": "Urheber bearbeiten",
   "amb_creator_remove_aria": "Urheber entfernen",

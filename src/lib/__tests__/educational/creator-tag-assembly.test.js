@@ -14,6 +14,7 @@ import { describe, it, expect } from 'vitest';
 import { ambToNostr } from 'amb-nostr-converter';
 import { convertFormDataToAMB } from '$lib/helpers/educational/formDataToAmb.js';
 import { appendCreatorPTags } from '$lib/helpers/educational/eventTags.js';
+import { getAMBCreators } from '$lib/helpers/educational/ambHelpers.js';
 
 const AUTHOR_PK = 'f'.repeat(64);
 
@@ -77,5 +78,31 @@ describe('creator tag assembly (NIP-AMB single representation)', () => {
 
     expect(tags.filter((t) => t[0] === 'creator:name').map((t) => t[1])).toEqual(['Typo']);
     expect(tags.some((t) => t[0] === 'p' && t[3] === 'creator')).toBe(false);
+  });
+
+  // GitHub #20: a typed name differing from the profile can only be published
+  // in the name-only form (creator:*, no pubkey) — and must read back on edit.
+  it('round-trips a name-only creator next to a linked one', async () => {
+    const tags = await assembleTags({
+      ...base,
+      creators: [
+        { name: 'Erika Mustermann', type: 'Person', honorificPrefix: 'Dr.' },
+        { name: 'Colibri', type: 'Person', pubkey: AUTHOR_PK }
+      ]
+    });
+
+    expect(tags.filter((t) => t[0] === 'p' && t[3] === 'creator')).toEqual([
+      ['p', AUTHOR_PK, 'wss://hint.example', 'creator']
+    ]);
+    // the linked creator's form name is never published
+    expect(tags.some((t) => t[1] === 'Colibri')).toBe(false);
+
+    const parsed = getAMBCreators(/** @type {any} */ ({ kind: 30142, tags }));
+    expect(parsed).toHaveLength(1);
+    expect(parsed[0]).toMatchObject({
+      name: 'Erika Mustermann',
+      type: 'Person',
+      honorificPrefix: 'Dr.'
+    });
   });
 });

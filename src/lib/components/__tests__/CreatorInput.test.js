@@ -43,8 +43,13 @@ vi.mock('$lib/stores/contacts.svelte.js', () => ({
   }
 }));
 
+// kind:0 content per pubkey, read through the mocked useUserProfile hook
+const profiles = /** @type {Record<string, any>} */ ({});
 vi.mock('$lib/stores/user-profile.svelte', () => ({
-  useUserProfile: () => () => undefined
+  useUserProfile: (pubkeyOrGetter) => () => {
+    const pk = typeof pubkeyOrGetter === 'function' ? pubkeyOrGetter() : pubkeyOrGetter;
+    return pk ? profiles[pk] : undefined;
+  }
 }));
 
 vi.mock('$lib/helpers/profile.js', () => ({
@@ -72,6 +77,8 @@ vi.mock('$lib/paraglide/messages', () => ({
   amb_creator_button_update: () => 'Update',
   amb_creator_edit_aria: () => 'Edit creator',
   amb_creator_remove_aria: () => 'Remove creator',
+  amb_creator_name_from_profile_hint: () => 'Name comes from the Nostr profile',
+  amb_creator_button_unlink: () => 'Name only, no profile link',
   common_edit: () => 'Edit',
   common_cancel: () => 'Cancel',
   contact_search_hint: ({ count }) => `Search ${count} follows`,
@@ -81,6 +88,7 @@ vi.mock('$lib/paraglide/messages', () => ({
 
 beforeEach(() => {
   vi.clearAllMocks();
+  for (const k of Object.keys(profiles)) delete profiles[k];
 });
 
 describe('CreatorInput edit flow', () => {
@@ -131,5 +139,70 @@ describe('CreatorInput edit flow', () => {
     expect(updated.length).toBe(2);
     expect(updated[0].name).toBe('Alice Updated');
     expect(updated[1].name).toBe('Bob');
+  });
+});
+
+// NIP-AMB (AMB.md l.26/82/95): a creator with a pubkey is ONLY a p-tag; the
+// name comes from kind:0 and a typed name is never published. The form must
+// not pretend otherwise — and must offer the name-only (creator:*) form.
+describe('CreatorInput linked profile vs. name only (GitHub #20)', () => {
+  const PK = 'a'.repeat(64);
+
+  it('shows the kind:0 display name read-only for a creator with a pubkey', async () => {
+    profiles[PK] = { name: 'handle', display_name: 'Profile Name' };
+    const { getAllByText, getByLabelText, getByText } = render(CreatorInput, {
+      props: { creators: [{ name: 'Typed Name', type: 'Person', pubkey: PK }] }
+    });
+    await fireEvent.click(getAllByText('Edit')[0]);
+
+    const nameInput = getByLabelText(/^Name/);
+    expect(nameInput.readOnly).toBe(true);
+    expect(nameInput.value).toBe('Profile Name');
+    expect(getByText('Name comes from the Nostr profile')).toBeTruthy();
+  });
+
+  it('keeps the name editable without a pubkey (no hint, no unlink action)', async () => {
+    const { getAllByText, getByLabelText, queryByText } = render(CreatorInput, {
+      props: { creators: [{ name: 'Alice', type: 'Person' }] }
+    });
+    await fireEvent.click(getAllByText('Edit')[0]);
+
+    expect(getByLabelText(/^Name/).readOnly).toBe(false);
+    expect(queryByText('Name comes from the Nostr profile')).toBeNull();
+    expect(queryByText('Name only, no profile link')).toBeNull();
+  });
+
+  it('unlinking clears the pubkey, unlocks the name and saves a name-only creator', async () => {
+    profiles[PK] = { name: 'Profile Name' };
+    const onchange = vi.fn();
+    const { getAllByText, getByLabelText, getByText } = render(CreatorInput, {
+      props: { creators: [{ name: 'Profile Name', type: 'Person', pubkey: PK }], onchange }
+    });
+    await fireEvent.click(getAllByText('Edit')[0]);
+    await fireEvent.click(getByText('Name only, no profile link'));
+
+    const nameInput = getByLabelText(/^Name/);
+    expect(nameInput.readOnly).toBe(false);
+    // current name is kept as the starting value
+    expect(nameInput.value).toBe('Profile Name');
+
+    await fireEvent.input(nameInput, { target: { value: 'Erika Mustermann' } });
+    await fireEvent.click(getByText('Update'));
+
+    const saved = onchange.mock.calls.at(-1)[0];
+    expect(saved).toEqual([{ name: 'Erika Mustermann', type: 'Person' }]);
+  });
+
+  it('saves a linked creator with the profile name, not a stale typed one', async () => {
+    profiles[PK] = { name: 'Profile Name' };
+    const onchange = vi.fn();
+    const { getAllByText, getByText } = render(CreatorInput, {
+      props: { creators: [{ name: 'Old Typed', type: 'Person', pubkey: PK }], onchange }
+    });
+    await fireEvent.click(getAllByText('Edit')[0]);
+    await fireEvent.click(getByText('Update'));
+
+    const saved = onchange.mock.calls.at(-1)[0];
+    expect(saved).toEqual([{ name: 'Profile Name', type: 'Person', pubkey: PK }]);
   });
 });
