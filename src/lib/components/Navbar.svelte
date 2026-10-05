@@ -115,7 +115,6 @@
 
   <!-- Right: Utility items (desktop only) -->
   <div class="hidden flex-1 items-center justify-end gap-2 lg:flex">
-    <ConnectionStatus />
     {#if activeAccount}
       <!-- DM icon -->
       <a
@@ -161,15 +160,18 @@
         <div
           tabindex="0"
           role="button"
-          class="btn btn-circle btn-ghost"
+          class="btn relative btn-circle btn-ghost"
           onpointerenter={lazyAccountMenu.load}
           onfocusin={lazyAccountMenu.load}
         >
           <ProfileAvatar pubkey={activeAccount.pubkey} size="md" fallbackType="robohash" />
+          <!-- Connection trouble badges the avatar; its menu explains it. -->
+          <ConnectionStatus variant="badge" />
         </div>
         <ul
-          class="dropdown-content menu z-[60] mt-3 w-56 menu-sm rounded-box bg-base-100 p-2 shadow"
+          class="dropdown-content menu z-[60] mt-3 w-64 menu-sm rounded-box bg-base-100 p-2 shadow"
         >
+          <ConnectionStatus variant="details" />
           {#if lazyAccountMenu.loaded}
             {@const AccountMenuSection = lazyAccountMenu.loaded}
             <AccountMenuSection onClose={closeDropdown} />
@@ -177,26 +179,28 @@
         </ul>
       </div>
     {:else}
+      <ConnectionStatus variant="dot" />
       <button onclick={openLoginModal} class="btn btn-ghost">{m.common_login()}</button>
     {/if}
     <LanguageSwitcher />
   </div>
 
   <!-- Mobile Hamburger Menu (visible below lg) -->
-  <div class="flex items-center gap-1 lg:hidden">
-    <ConnectionStatus />
+  <div class="lg:hidden">
     <div class="dropdown dropdown-end">
       <div
         tabindex="0"
         role="button"
-        class="btn btn-circle btn-ghost"
+        class="btn relative btn-circle btn-ghost"
         aria-label={m.navbar_menu()}
         onpointerenter={lazyMobileNavMenu.load}
         onfocusin={lazyMobileNavMenu.load}
       >
         <MenuIcon class_="w-6 h-6" />
+        <ConnectionStatus variant="badge" />
       </div>
-      <ul class="dropdown-content menu z-[60] mt-3 w-56 rounded-box bg-base-100 p-2 shadow-lg">
+      <ul class="dropdown-content menu z-[60] mt-3 w-64 rounded-box bg-base-100 p-2 shadow-lg">
+        <ConnectionStatus variant="details" />
         {#if lazyMobileNavMenu.loaded}
           {@const MobileNavMenu = lazyMobileNavMenu.loaded}
           <MobileNavMenu onClose={closeDropdown} />

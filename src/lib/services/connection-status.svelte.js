@@ -7,7 +7,8 @@
 import { combineLatest, of, timer } from 'rxjs';
 import { distinctUntilChanged, map, startWith, switchMap } from 'rxjs/operators';
 import { pool } from '$lib/stores/nostr-infrastructure.svelte';
-import { getAppManagedRelays, getGroupsRelays } from '$lib/helpers/relay-helper.js';
+import { getGroupsRelays } from '$lib/helpers/relay-helper.js';
+import { getAppRelaysForCategory } from '$lib/services/app-relay-service.svelte.js';
 import { subscribeSlowSigns } from '$lib/helpers/signer-wait.js';
 import { coreHostsOf, deriveConnectionStatus } from '$lib/helpers/connection-status.js';
 
@@ -61,7 +62,14 @@ export function startConnectionStatus() {
 
 /** @returns {ReturnType<typeof deriveConnectionStatus>} */
 export function getConnectionStatus() {
-  const coreHosts = coreHostsOf([...getAppManagedRelays(), ...getGroupsRelays()]);
+  const coreHosts = coreHostsOf({
+    calendar: getAppRelaysForCategory('calendar'),
+    communikey: getAppRelaysForCategory('communikey'),
+    educational: getAppRelaysForCategory('educational'),
+    longform: getAppRelaysForCategory('longform'),
+    kanban: getAppRelaysForCategory('kanban'),
+    groups: getGroupsRelays()
+  });
   return deriveConnectionStatus({
     online,
     relays,

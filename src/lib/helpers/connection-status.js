@@ -12,7 +12,7 @@
 /** @typedef {'ok' | 'degraded' | 'unreachable' | 'offline'} ConnectionLevel */
 /**
  * @typedef {{kind: 'offline'}
- *   | {kind: 'relays', down: number, total: number, hosts: string[]}
+ *   | {kind: 'relays', down: number, total: number, servers: Array<{host: string, categories: string[]}>}
  *   | {kind: 'signer'}} ConnectionReason
  */
 
@@ -32,18 +32,29 @@ export function relayHost(url) {
 }
 
 /**
- * @param {string[]} urls the app's own relays
- * @returns {Set<string>}
+ * The app's own relays, per host, with what each serves.
+ * @param {Record<string, string[]>} byCategory category → relay URLs
+ * @returns {Map<string, string[]>} host → categories (sorted)
  */
-export function coreHostsOf(urls) {
-  return new Set(urls.map(relayHost).filter(Boolean));
+export function coreHostsOf(byCategory) {
+  /** @type {Map<string, Set<string>>} */
+  const hosts = new Map();
+  for (const [category, urls] of Object.entries(byCategory)) {
+    for (const url of urls ?? []) {
+      const host = relayHost(url);
+      if (!host) continue;
+      if (!hosts.has(host)) hosts.set(host, new Set());
+      hosts.get(host)?.add(category);
+    }
+  }
+  return new Map([...hosts].map(([host, cats]) => [host, [...cats].sort()]));
 }
 
 /**
  * @param {{
  *   online: boolean,
  *   relays: Array<{url: string, failing: boolean}>,
- *   coreHosts: Set<string>,
+ *   coreHosts: Map<string, string[]>,
  *   waitingForSigner: boolean
  * }} input `relays`: the pool's relays (only those in use are in the pool)
  * @returns {{level: ConnectionLevel, reasons: ConnectionReason[]}}
@@ -69,7 +80,12 @@ export function deriveConnectionStatus({ online, relays, coreHosts, waitingForSi
     const down = [...hosts].filter(([, failing]) => failing).map(([host]) => host);
     if (down.length > 0) {
       level = down.length === hosts.size ? 'unreachable' : 'degraded';
-      reasons.push({ kind: 'relays', down: down.length, total: hosts.size, hosts: down.sort() });
+      reasons.push({
+        kind: 'relays',
+        down: down.length,
+        total: hosts.size,
+        servers: down.sort().map((host) => ({ host, categories: coreHosts.get(host) ?? [] }))
+      });
     }
   }
 

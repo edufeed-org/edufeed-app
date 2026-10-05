@@ -7,7 +7,11 @@
 import { describe, it, expect } from 'vitest';
 import { coreHostsOf, deriveConnectionStatus, relayHost } from '$lib/helpers/connection-status.js';
 
-const CORE = coreHostsOf(['wss://groups.edufeed.org', 'wss://amb-relay.edufeed.org/']);
+const CORE = coreHostsOf({
+  groups: ['wss://groups.edufeed.org'],
+  educational: ['wss://amb-relay.edufeed.org/'],
+  longform: ['wss://amb-relay.edufeed.org']
+});
 /** @param {string} url @param {boolean} failing */
 const relay = (url, failing) => ({ url, failing });
 
@@ -15,6 +19,13 @@ describe('relayHost', () => {
   it('reduces a relay URL (with a community endpoint path) to its host', () => {
     expect(relayHost('wss://Groups.edufeed.org/c/abc/')).toBe('groups.edufeed.org');
     expect(relayHost('not a url')).toBe('');
+  });
+});
+
+describe('coreHostsOf', () => {
+  it('maps each host to the sorted categories it serves', () => {
+    expect(CORE.get('amb-relay.edufeed.org')).toEqual(['educational', 'longform']);
+    expect(CORE.get('groups.edufeed.org')).toEqual(['groups']);
   });
 });
 
@@ -62,7 +73,12 @@ describe('deriveConnectionStatus', () => {
     });
     expect(s.level).toBe('degraded');
     expect(s.reasons).toEqual([
-      { kind: 'relays', down: 1, total: 2, hosts: ['groups.edufeed.org'] }
+      {
+        kind: 'relays',
+        down: 1,
+        total: 2,
+        servers: [{ host: 'groups.edufeed.org', categories: ['groups'] }]
+      }
     ]);
   });
 
@@ -78,7 +94,12 @@ describe('deriveConnectionStatus', () => {
       waitingForSigner: false
     });
     expect(s.reasons).toEqual([
-      { kind: 'relays', down: 1, total: 2, hosts: ['groups.edufeed.org'] }
+      {
+        kind: 'relays',
+        down: 1,
+        total: 2,
+        servers: [{ host: 'groups.edufeed.org', categories: ['groups'] }]
+      }
     ]);
   });
 
@@ -90,6 +111,12 @@ describe('deriveConnectionStatus', () => {
       waitingForSigner: false
     });
     expect(s.level).toBe('unreachable');
+    expect(s.reasons[0]).toMatchObject({
+      servers: [
+        { host: 'amb-relay.edufeed.org', categories: ['educational', 'longform'] },
+        { host: 'groups.edufeed.org', categories: ['groups'] }
+      ]
+    });
   });
 
   it('is degraded while a signer keeps us waiting, and lists it after network reasons', () => {

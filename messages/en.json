@@ -3926,5 +3926,11 @@
   "connection_relays_down_detail": "Some content may be missing or late. Retrying…",
   "connection_signer": "Waiting for your signing app",
   "connection_signer_detail": "Open your signing app and confirm the request.",
-  "connection_signer_detail_mobile": "Open your signing app and confirm the request. In energy saver mode your phone may hold these requests back."
+  "connection_signer_detail_mobile": "Open your signing app and confirm the request. In energy saver mode your phone may hold these requests back.",
+  "connection_category_calendar": "calendar",
+  "connection_category_communikey": "communities",
+  "connection_category_educational": "learning materials",
+  "connection_category_longform": "articles",
+  "connection_category_kanban": "boards",
+  "connection_category_groups": "channels & calls"
 }

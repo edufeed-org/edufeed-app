@@ -3926,5 +3926,11 @@
   "connection_relays_down_detail": "Manche Inhalte fehlen vielleicht oder kommen später. Neuer Versuch läuft…",
   "connection_signer": "Warte auf deine Signier-App",
   "connection_signer_detail": "Öffne deine Signier-App und bestätige die Anfrage.",
-  "connection_signer_detail_mobile": "Öffne deine Signier-App und bestätige die Anfrage. Im Energiesparmodus hält dein Handy solche Anfragen oft zurück."
+  "connection_signer_detail_mobile": "Öffne deine Signier-App und bestätige die Anfrage. Im Energiesparmodus hält dein Handy solche Anfragen oft zurück.",
+  "connection_category_calendar": "Kalender",
+  "connection_category_communikey": "Communities",
+  "connection_category_educational": "Lernmaterialien",
+  "connection_category_longform": "Artikel",
+  "connection_category_kanban": "Boards",
+  "connection_category_groups": "Kanäle & Anrufe"
 }
