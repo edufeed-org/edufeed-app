@@ -16,10 +16,21 @@ describe('parseDiscoverContentTypes', () => {
   });
 
   it('keeps only known types, deduped, in canonical order', () => {
-    expect(parseDiscoverContentTypes(['people', 'events', 'events', 'bogus', 'learning'])).toEqual([
+    expect(parseDiscoverContentTypes(['events', 'people', 'events', 'bogus', 'learning'])).toEqual([
+      'people',
+      'events',
+      'learning'
+    ]);
+  });
+
+  it('orders the canonical tabs people first, then the feed types, then communities', () => {
+    expect(DISCOVER_CONTENT_TYPES).toEqual([
+      'people',
       'events',
       'learning',
-      'people'
+      'articles',
+      'boards',
+      'communities'
     ]);
   });
 
@@ -38,21 +49,33 @@ describe('parseDiscoverContentTypes', () => {
 
 describe('getDiscoverTabs', () => {
   it('prepends "all" when at least two feed types are enabled', () => {
-    expect(getDiscoverTabs(['events', 'learning', 'people'])).toEqual([
+    expect(getDiscoverTabs(['people', 'events', 'learning'])).toEqual([
       'all',
+      'people',
+      'events',
+      'learning'
+    ]);
+  });
+
+  it('renders Alle · Personen · Veranstaltungen · Lernmaterialien · Artikel · Boards · Communities by default', () => {
+    expect(getDiscoverTabs(parseDiscoverContentTypes(undefined))).toEqual([
+      'all',
+      'people',
       'events',
       'learning',
-      'people'
+      'articles',
+      'boards',
+      'communities'
     ]);
   });
 
   it('omits "all" when fewer than two feed types are enabled', () => {
-    expect(getDiscoverTabs(['events', 'communities', 'people'])).toEqual([
+    expect(getDiscoverTabs(['people', 'events', 'communities'])).toEqual([
+      'people',
       'events',
-      'communities',
-      'people'
+      'communities'
     ]);
-    expect(getDiscoverTabs(['communities', 'people'])).toEqual(['communities', 'people']);
+    expect(getDiscoverTabs(['people', 'communities'])).toEqual(['people', 'communities']);
     expect(getDiscoverTabs(['learning'])).toEqual(['learning']);
   });
 
@@ -73,7 +96,15 @@ describe('resolveDiscoverType', () => {
     expect(resolveDiscoverType('', tabs)).toBe('all');
     expect(resolveDiscoverType('nope', tabs)).toBe('all');
     expect(resolveDiscoverType('boards', tabs)).toBe('all');
-    expect(resolveDiscoverType('all', ['communities', 'people'])).toBe('communities');
+    expect(resolveDiscoverType('all', ['people', 'communities'])).toBe('communities');
+  });
+
+  it('never defaults to the people tab when another tab exists', () => {
+    // Personen is listed early but is a search UI, not a feed — landing on it
+    // would show an empty hint instead of content.
+    expect(resolveDiscoverType(null, ['people', 'events'])).toBe('events');
+    expect(resolveDiscoverType(null, ['people'])).toBe('people');
+    expect(resolveDiscoverType('people', ['people', 'events'])).toBe('people');
   });
 });
 

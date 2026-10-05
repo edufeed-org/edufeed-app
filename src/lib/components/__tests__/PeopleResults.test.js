@@ -106,6 +106,24 @@ describe('PeopleResults', () => {
     expect(container.textContent).not.toContain('People you follow');
   });
 
+  it('asks the profile cards for NIP-05 and bio in every list', () => {
+    contacts.pubkeys = [FOLLOW_A];
+    const first = render(PeopleResults, { props: { query: '' } });
+    const followCard = first.container.querySelector('[data-testid="profile-card-stub"]');
+    expect(followCard?.dataset.details).toBe('nip05,about');
+    first.unmount();
+    search.state = {
+      term: 'lae',
+      tooShort: false,
+      busy: false,
+      results: [contact(REAL, 'Laeserin')],
+      scores: new Map()
+    };
+    const { container } = render(PeopleResults, { props: { query: 'lae' } });
+    const card = container.querySelector('[data-testid="profile-card-stub"]');
+    expect(card?.dataset.details).toBe('nip05,about');
+  });
+
   it('shows the relay spinner while busy, even with partial results', () => {
     search.state = {
       term: 'lae',

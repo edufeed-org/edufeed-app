@@ -9,14 +9,19 @@
  * of "All".
  */
 
-/** Every configurable content type, in canonical tab order. */
+/**
+ * Every configurable content type, in canonical tab order. Tabs always render
+ * in this order regardless of the order in `DISCOVER_CONTENT_TYPES`; with
+ * "All" prepended the bar reads Alle · Personen · Veranstaltungen ·
+ * Lernmaterialien · Artikel · Boards · Communities.
+ */
 export const DISCOVER_CONTENT_TYPES = Object.freeze([
+  'people',
   'events',
   'learning',
   'articles',
   'boards',
-  'communities',
-  'people'
+  'communities'
 ]);
 
 /** Content types that are merged into the "All" feed. */
@@ -55,7 +60,9 @@ export function getDiscoverTabs(enabled) {
 
 /**
  * Resolve a requested tab (e.g. from `?type=`) against the rendered tabs.
- * Unknown, missing or disabled values fall back to the first tab.
+ * Unknown, missing or disabled values fall back to the first tab — skipping
+ * "people", which is listed early but is a search UI (an empty query shows
+ * only a hint or the user's follows), unless it is the only tab.
  *
  * @param {string | null | undefined} requested
  * @param {readonly string[]} tabs
@@ -63,7 +70,7 @@ export function getDiscoverTabs(enabled) {
  */
 export function resolveDiscoverType(requested, tabs) {
   if (requested && tabs.includes(requested)) return requested;
-  return tabs[0];
+  return tabs.find((t) => t !== 'people') ?? tabs[0];
 }
 
 /**

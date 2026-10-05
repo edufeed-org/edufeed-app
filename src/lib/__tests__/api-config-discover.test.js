@@ -17,17 +17,17 @@ describe('/api/config discover.contentTypes', () => {
   it('defaults to every content type', async () => {
     const config = await getConfig({});
     expect(config.discover.contentTypes).toEqual([
+      'people',
       'events',
       'learning',
       'articles',
       'boards',
-      'communities',
-      'people'
+      'communities'
     ]);
   });
 
   it('parses DISCOVER_CONTENT_TYPES, dropping unknown tokens', async () => {
     const config = await getConfig({ DISCOVER_CONTENT_TYPES: 'people, learning,bogus' });
-    expect(config.discover.contentTypes).toEqual(['learning', 'people']);
+    expect(config.discover.contentTypes).toEqual(['people', 'learning']);
   });
 });
