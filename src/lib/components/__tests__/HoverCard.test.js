@@ -179,6 +179,35 @@ describe('HoverCard', () => {
     expect(onAction).toHaveBeenCalledTimes(1);
   });
 
+  // A `display: contents` wrapper (CallChatPanel's sender link) has no box:
+  // its getBoundingClientRect() is all zeros, which pinned the fixed popup
+  // to the viewport's top-left corner (laoc QA 2026-10-05). The position
+  // must come from the trigger's rendered element instead.
+  it('fixed popup anchors to the trigger when the wrapper is display: contents', async () => {
+    const { container } = render(HoverCardTestWrapper, {
+      props: { fixed: true, position: 'top', class: 'contents', triggerClass: 'contents' }
+    });
+    const trigger = container.querySelector('[data-testid="trigger"]');
+    trigger.getBoundingClientRect = () => ({
+      left: 600,
+      top: 500,
+      right: 680,
+      bottom: 520,
+      width: 80,
+      height: 20,
+      x: 600,
+      y: 500
+    });
+
+    await fireEvent.mouseEnter(container.querySelector('[data-testid="hover-card-wrapper"]'));
+    vi.advanceTimersByTime(200);
+    await tick();
+
+    const card = document.querySelector('[role="tooltip"]');
+    expect(card.style.left).toBe('600px');
+    expect(card.style.bottom).toBe(`${window.innerHeight - 500 + 8}px`);
+  });
+
   // interactiveTrigger: the trigger is its own interactive element (an <a>
   // here) — the wrapper must not add a second, nested one, and keyboard
   // focus (not just hover/click) must open the card (laoc QA 2026-10-02).
