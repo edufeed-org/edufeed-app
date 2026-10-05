@@ -4,6 +4,7 @@ import { sveltekit } from '@sveltejs/kit/vite';
 import { svelteTesting } from '@testing-library/svelte/vite';
 import { defineConfig } from 'vitest/config';
 import { fileURLToPath } from 'node:url';
+import { mediapipeWasm } from './scripts/vite-plugin-mediapipe-wasm.mjs';
 
 export default defineConfig({
   server: {
@@ -16,6 +17,7 @@ export default defineConfig({
       strategy: ['cookie', 'preferredLanguage', 'baseLocale']
     }),
     tailwindcss(),
+    mediapipeWasm(),
     sveltekit(),
     svelteTesting()
   ],

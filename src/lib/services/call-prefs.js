@@ -1,10 +1,12 @@
 // Per-device call preferences, kept in localStorage: remembered mic /
 // speaker / camera, browser audio processing flags, per-person playback
-// volume, the screen share quality preset and whether the chat sits beside
-// the call. These are conveniences for this browser only — every read falls
-// back to a default and every write is best effort, because storage can be
-// blocked (private mode, cleared site data) and a call must still work
-// without it.
+// volume, the screen share quality preset, whether the chat sits beside
+// the call and the camera background effect. These are conveniences for
+// this browser only — every read falls back to a default and every write is
+// best effort, because storage can be blocked (private mode, cleared site
+// data) and a call must still work without it.
+
+import { parseBackgroundEffect } from '$lib/groups/call-background.js';
 
 const PREFIX = 'edufeed:call:';
 const DEVICE_KEYS = {
@@ -166,4 +168,34 @@ export function getChatBeside() {
 /** @param {boolean} beside */
 export function setChatBeside(beside) {
   write('chatBeside', beside ? '1' : '0');
+}
+
+/** Camera background effect ('none' | 'blur' | 'custom' | 'preset:<id>'). */
+export function getBackgroundEffect() {
+  return parseBackgroundEffect(read('background'));
+}
+
+/** @param {string} effect */
+export function setBackgroundEffect(effect) {
+  write('background', parseBackgroundEffect(effect));
+}
+
+/** The own background image (downscaled JPEG data URL), or null. */
+export function getCustomBackground() {
+  return read('backgroundImage') || null;
+}
+
+/**
+ * Keep the own background image on this device. Returns false when storage
+ * refused it (full, blocked) — the caller tells the user instead of silently
+ * losing the image on the next call.
+ * @param {string} dataUrl
+ */
+export function setCustomBackground(dataUrl) {
+  try {
+    localStorage.setItem(PREFIX + 'backgroundImage', dataUrl);
+    return true;
+  } catch {
+    return false;
+  }
 }

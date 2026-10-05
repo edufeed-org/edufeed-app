@@ -34,15 +34,23 @@
     setAudioProcessingLive,
     canSelectSpeaker,
     setHandRaised,
-    sendReaction
+    sendReaction,
+    setCameraBackground
   } from '$lib/services/livekit-connection.svelte.js';
   import {
     SCREEN_SHARE_QUALITIES,
     getAudioProcessing,
+    getCustomBackground,
     getParticipantVolume,
     getScreenShareQuality,
+    setCustomBackground,
     setScreenShareQuality
   } from '$lib/services/call-prefs.js';
+  import {
+    BACKGROUND_PRESETS,
+    backgroundEffectsSupported,
+    imageFileToDataUrl
+  } from '$lib/groups/call-background.js';
   import { fitGrid, nextSpotlight } from '$lib/groups/call-layout.js';
   import { orderSeats, moveSeat } from '$lib/groups/call-tile-order.js';
   import { getTilePlacements, setTilePlacements } from '$lib/groups/call-tile-placements.svelte.js';
@@ -521,6 +529,49 @@
     }
   }
 
+  // Camera background: blur or an image, applied in this browser before the
+  // video leaves it. Hidden where the browser cannot run the processor.
+  const backgroundSupported = backgroundEffectsSupported();
+  /** @type {Record<string, () => string>} */
+  const PRESET_LABELS = {
+    paper: m.groups_call_background_paper,
+    teal: m.groups_call_background_teal,
+    shelf: m.groups_call_background_shelf
+  };
+  let customBackground = $state(getCustomBackground());
+  /** @type {HTMLInputElement | undefined} */
+  let backgroundFileInput = $state();
+  /** @param {string} effect */
+  async function pickBackground(effect) {
+    try {
+      await setCameraBackground(effect);
+    } catch (err) {
+      console.warn('background effect failed:', err);
+      showToast(m.groups_call_background_failed(), 'error');
+    }
+  }
+  /** @param {Event} event */
+  async function onBackgroundFile(event) {
+    const input = /** @type {HTMLInputElement} */ (event.currentTarget);
+    const file = input.files?.[0];
+    input.value = '';
+    if (!file) return;
+    let dataUrl;
+    try {
+      dataUrl = await imageFileToDataUrl(file);
+    } catch (err) {
+      console.warn('background image unreadable:', err);
+      showToast(m.groups_call_background_failed(), 'error');
+      return;
+    }
+    if (!setCustomBackground(dataUrl)) {
+      showToast(m.groups_call_background_store_failed(), 'error');
+      return;
+    }
+    customBackground = dataUrl;
+    await pickBackground('custom');
+  }
+
   const speakerSelectable = canSelectSpeaker();
   const QUALITY_KEYS = /** @type {Array<keyof typeof SCREEN_SHARE_QUALITIES>} */ (
     Object.keys(SCREEN_SHARE_QUALITIES)
@@ -891,7 +942,8 @@
             {@render menuButton('camera', m.groups_call_camera_options())}
             {#if openMenu === 'camera'}
               <ul
-                class="menu absolute bottom-full left-0 z-30 mb-2 w-60 rounded-box bg-base-100 p-2 shadow-lg"
+                class="menu absolute bottom-full left-0 z-30 mb-2 max-h-[70vh] w-64 flex-nowrap overflow-y-auto rounded-box bg-base-100 p-2 shadow-lg"
+                data-testid="group-call-camera-menu"
               >
                 <li class="menu-title text-xs">{m.groups_call_select_camera()}</li>
                 {#each lk.videoInputDevices as device (device.deviceId)}
@@ -911,6 +963,75 @@
                     >
                   </li>
                 {/each}
+
+                {#if backgroundSupported}
+                  <li class="mt-1 menu-title text-xs">{m.groups_call_background()}</li>
+                  <li>
+                    <button
+                      class="text-sm"
+                      class:menu-active={lk.backgroundEffect === 'none'}
+                      onclick={() => pickBackground('none')}
+                    >
+                      {m.groups_call_background_none()}
+                    </button>
+                  </li>
+                  <li>
+                    <button
+                      class="text-sm"
+                      class:menu-active={lk.backgroundEffect === 'blur'}
+                      onclick={() => pickBackground('blur')}
+                    >
+                      {m.groups_call_background_blur()}
+                    </button>
+                  </li>
+                  {#each BACKGROUND_PRESETS as preset (preset.id)}
+                    <li>
+                      <button
+                        class="text-sm"
+                        class:menu-active={lk.backgroundEffect === `preset:${preset.id}`}
+                        onclick={() => pickBackground(`preset:${preset.id}`)}
+                      >
+                        <img src={preset.src} alt="" class="h-5 w-9 rounded-sm object-cover" />
+                        {PRESET_LABELS[preset.id]?.() ?? preset.id}
+                      </button>
+                    </li>
+                  {/each}
+                  {#if customBackground}
+                    <li>
+                      <button
+                        class="text-sm"
+                        class:menu-active={lk.backgroundEffect === 'custom'}
+                        onclick={() => pickBackground('custom')}
+                      >
+                        <img
+                          src={customBackground}
+                          alt=""
+                          class="h-5 w-9 rounded-sm object-cover"
+                        />
+                        {m.groups_call_background_custom()}
+                      </button>
+                    </li>
+                  {/if}
+                  <li>
+                    <button
+                      class="grid-flow-row justify-items-start gap-0 text-sm"
+                      onclick={() => backgroundFileInput?.click()}
+                    >
+                      {m.groups_call_background_upload()}
+                      <span class="text-xs text-base-content/60"
+                        >{m.groups_call_background_upload_hint()}</span
+                      >
+                    </button>
+                    <input
+                      bind:this={backgroundFileInput}
+                      type="file"
+                      accept="image/*"
+                      class="hidden"
+                      data-testid="group-call-background-file"
+                      onchange={onBackgroundFile}
+                    />
+                  </li>
+                {/if}
               </ul>
             {/if}
           </div>

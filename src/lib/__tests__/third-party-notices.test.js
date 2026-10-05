@@ -25,4 +25,11 @@ describe('static/third-party-notices.txt', () => {
     expect(notices).toMatch(/Modification: converted/);
     expect(notices).toContain('Copyright (c) 2022 TalkJS');
   });
+
+  it('carries the Apache 2.0 text for the self-hosted MediaPipe runtime and model', () => {
+    expect(notices).toContain('@mediapipe/tasks-vision 0.10.14');
+    expect(notices).toContain('selfie_segmenter.tflite');
+    expect(notices).toContain('Version 2.0, January 2004');
+    expect(notices).toContain('END OF TERMS AND CONDITIONS');
+  });
 });
