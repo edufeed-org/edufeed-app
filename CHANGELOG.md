@@ -7,6 +7,13 @@ merge commits of the nostr PRs that landed since the previous tag.
 
 ## [Unreleased]
 
+## [0.3.2] - 2026-10-05
+
+### Fixed
+
+- Hovering a sender in the call chat opens their profile card next to the
+  name again, instead of in the top-left corner of the window.
+
 ## [0.3.1] - 2026-10-05
 
 ### Added
