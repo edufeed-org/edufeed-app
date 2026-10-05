@@ -6,7 +6,6 @@
 <script>
   import { SvelteDate } from 'svelte/reactivity';
   import * as m from '$lib/paraglide/messages';
-  import { goto } from '$app/navigation';
   import { resolve as _resolve } from '$app/paths';
   /** @type {(path: string) => string} */
   const resolve = /** @type {any} */ (_resolve);
@@ -161,12 +160,18 @@
   }
 
   /**
-   * Handle edit action - navigate to event detail page
+   * Handle edit action - open the edit form in place of this preview.
+   * Mirrors CalendarEventDetailView's handleEdit. openModal() replaces the
+   * active modal, so the preview closes as the edit form opens.
    */
   function handleEdit() {
-    if (eventDetailUrl) {
-      goto(resolve(eventDetailUrl));
-    }
+    if (!event?.originalEvent) return;
+    modal.openModal('calendarEvent', {
+      mode: 'edit',
+      existingEvent: event,
+      existingRawEvent: event.originalEvent,
+      communityPubkey: event.pubkey
+    });
   }
 
   /**
