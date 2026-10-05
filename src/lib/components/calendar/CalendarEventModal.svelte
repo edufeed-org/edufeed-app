@@ -36,6 +36,7 @@
   import { showToast } from '$lib/helpers/toast';
   import { hasNip44 } from '$lib/helpers/nip44.js';
   import { formatDateParam } from '$lib/helpers/urlParams.js';
+  import { followStartDate } from '$lib/helpers/event-form-dates.js';
   import { formDateFromTimestamp } from '$lib/helpers/calendar-timing.js';
 
   /**
@@ -107,6 +108,31 @@
     references: [],
     participants: []
   });
+
+  // Whether the user picked the end date themselves; until then it follows
+  // the start date (GitHub #9). Plain lets: internal refs, never rendered.
+  let endDateEdited = false;
+  // Last complete start date, so the end keeps its offset across the empty
+  // values the date input binds while the user is mid-typing.
+  let lastValidStart = '';
+
+  /** @param {string} value */
+  function setStartDate(value) {
+    formData.endDate = followStartDate({
+      previousStart: lastValidStart,
+      nextStart: value,
+      endDate: formData.endDate,
+      endEdited: endDateEdited
+    });
+    formData.startDate = value;
+    if (value) lastValidStart = value;
+  }
+
+  /** @param {string} value */
+  function setEndDate(value) {
+    formData.endDate = value;
+    endDateEdited = true;
+  }
 
   let validationErrors = $state(/** @type {string[]} */ ([]));
   let isSubmitting = $state(false);
@@ -254,6 +280,8 @@
       references: [],
       participants: []
     };
+    endDateEdited = false;
+    lastValidStart = '';
     validationErrors = [];
     isSubmitting = false;
     submitError = '';
@@ -268,14 +296,15 @@
   function initializeForm() {
     const now = new Date();
     const today = selectedDate || new SvelteDate(now.getTime());
-    const tomorrow = new SvelteDate(today);
-    tomorrow.setDate(tomorrow.getDate() + 1);
-    // A channel meeting is always timed (kind 31923) and ends the day it starts.
+    // A channel meeting is always timed (kind 31923).
     const meeting = isGroupMeeting;
     // …and opened for today it starts at the next half hour, not at an
     // already-past 09:00 (QA round 3 C1).
     const slot =
       meeting && formatDateParam(today) === formatDateParam(now) ? defaultMeetingSlot(now) : null;
+    // Local day: toISOString() names the UTC day, which east of UTC just
+    // after midnight is still yesterday.
+    const startDay = slot?.startDate ?? formatDateParam(today);
 
     formData = {
       title: '',
@@ -283,11 +312,11 @@
       image: '',
       imageWasUploaded: false,
       imageLicenseEvent: null,
-      // Local day: toISOString() names the UTC day, which east of UTC just
-      // after midnight is still yesterday.
-      startDate: slot?.startDate ?? formatDateParam(today),
+      startDate: startDay,
       startTime: slot?.startTime ?? '09:00',
-      endDate: slot?.endDate ?? formatDateParam(meeting ? today : tomorrow),
+      // A new event ends the day it starts (GitHub #9). All-day ends are
+      // stored inclusively, so for kind 31922 this is a one-day event.
+      endDate: slot?.endDate ?? startDay,
       endTime: slot?.endTime ?? '10:00',
       startTimezone: getCurrentTimezone(),
       endTimezone: getCurrentTimezone(),
@@ -297,6 +326,9 @@
       references: [],
       participants: []
     };
+    endDateEdited = false;
+    // Never read formData here: this runs inside the open-modal $effect.
+    lastValidStart = startDay;
 
     validationErrors = [];
     isSubmitting = false;
@@ -313,6 +345,9 @@
     // Convert Unix timestamps to Date objects
     const startDate = new SvelteDate(existingEvent.start * 1000);
     const endDate = existingEvent.end ? new SvelteDate(existingEvent.end * 1000) : null;
+
+    // All-day days are UTC days, timed ones local (formDateFromTimestamp).
+    const startDay = formDateFromTimestamp(existingEvent.start, existingEvent.kind);
 
     // Determine event type
     const isAllDay = existingEvent.kind === 31922;
@@ -332,8 +367,7 @@
       image: existingEvent.image || '',
       imageWasUploaded: false,
       imageLicenseEvent: null,
-      // All-day days are UTC days, timed ones local (formDateFromTimestamp).
-      startDate: formDateFromTimestamp(existingEvent.start, existingEvent.kind),
+      startDate: startDay,
       startTime: startDate.toTimeString().slice(0, 5),
       endDate: endDate ? formDateFromTimestamp(existingEvent.end, existingEvent.kind) : '',
       endTime: endDate ? endDate.toTimeString().slice(0, 5) : '10:00',
@@ -345,6 +379,10 @@
       references: existingEvent.references || [],
       participants: existingEvent.participants || []
     };
+    // An existing event's stored end is a choice: it stays put and only
+    // follows when the start is moved past it.
+    endDateEdited = true;
+    lastValidStart = startDay;
 
     validationErrors = [];
     isSubmitting = false;
@@ -667,7 +705,11 @@
             <label for="startDate" class="mb-1 block text-sm font-medium text-base-content">
               {m.event_modal_start_date_label()} <span class="text-error">*</span>
             </label>
-            <EuropeanDateInput id="startDate" bind:value={formData.startDate} required />
+            <EuropeanDateInput
+              id="startDate"
+              bind:value={() => formData.startDate, setStartDate}
+              required
+            />
           </div>
 
           {#if formData.eventType === 'time'}
@@ -685,7 +727,7 @@
             <label for="endDate" class="mb-1 block text-sm font-medium text-base-content"
               >{m.event_modal_end_date_label()}</label
             >
-            <EuropeanDateInput id="endDate" bind:value={formData.endDate} />
+            <EuropeanDateInput id="endDate" bind:value={() => formData.endDate, setEndDate} />
           </div>
 
           {#if formData.eventType === 'time'}
