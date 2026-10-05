@@ -25,6 +25,7 @@
   } from '$lib/components/icons';
   import EventDebugInfo from './EventDebugInfo.svelte';
   import { encodeEventToNaddr } from '$lib/helpers/nostrUtils.js';
+  import { splitEventLinks } from '$lib/helpers/event-links.js';
   import LocationLink from '../shared/LocationLink.svelte';
   import MarkdownRenderer from '../shared/MarkdownRenderer.svelte';
   import PersonalCalendarShare from './PersonalCalendarShare.svelte';
@@ -112,6 +113,9 @@
   let isMultiDay = $derived(
     event && endDate && startDate ? startDate.toDateString() !== endDate.toDateString() : false
   );
+
+  // First reference = event website (shown with date/time, #7); rest = further links
+  let links = $derived(splitEventLinks(event?.references));
 
   // Check if user owns this event
   let isUserEvent = $derived(event && manager.active && event.pubkey === manager.active.pubkey);
@@ -392,6 +396,25 @@
               {/if}
             </div>
           {/if}
+
+          {#if links.primary}
+            <div class="mt-3">
+              <!-- eslint-disable svelte/no-navigation-without-resolve -- external: event website URL -->
+              <a
+                href={links.primary.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                class="btn max-w-full btn-sm btn-primary"
+                aria-label={m.calendar_event_website_aria({ host: links.primary.host })}
+                data-testid="event-website-link"
+              >
+                <ExternalLinkIcon class_="w-4 h-4 shrink-0" />
+                <span>{m.calendar_event_website()}</span>
+                <span class="truncate font-normal opacity-80">· {links.primary.host}</span>
+              </a>
+              <!-- eslint-enable svelte/no-navigation-without-resolve -->
+            </div>
+          {/if}
         </div>
       </div>
 
@@ -466,13 +489,13 @@
       {/if}
 
       <!-- Further Links -->
-      {#if event.references && event.references.length > 0}
+      {#if links.others.length > 0}
         <div class="mb-6">
           <h3 class="mb-3 text-lg font-semibold text-base-content">
             {m.event_details_further_links()}
           </h3>
           <div class="space-y-2">
-            {#each event.references as reference (reference)}
+            {#each links.others as reference (reference)}
               <!-- eslint-disable svelte/no-navigation-without-resolve -- external: event reference URL -->
               <a
                 href={reference}
