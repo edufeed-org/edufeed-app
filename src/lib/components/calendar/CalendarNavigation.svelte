@@ -78,10 +78,10 @@
    * @param {CalendarViewMode} mode
    */
   function handleViewModeClick(mode) {
-    // Update URL with new period - let useCalendarUrlSync handle state updates
-    updateQueryParams($page.url.searchParams, {
-      period: mode === 'month' ? null : mode // Don't include 'month' as it's the default
-    });
+    // Update URL with new period - let useCalendarUrlSync handle state updates.
+    // Always explicit: the default period depends on view + context (a bounded
+    // calendar's list opens on 'all', #3), so an omitted param is not 'month'.
+    updateQueryParams($page.url.searchParams, { period: mode });
 
     // NOTE: Don't call _onViewModeChange here - let URL sync effect handle it
     // This prevents race conditions between async URL updates and sync callbacks
