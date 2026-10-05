@@ -7,6 +7,34 @@ merge commits of the nostr PRs that landed since the previous tag.
 
 ## [Unreleased]
 
+## [0.3.1] - 2026-10-05
+
+### Added
+
+- **Connection status.** While something is wrong, a small amber or red dot
+  appears on the avatar (on phones: on the menu button). The account menu's
+  new "Verbindung" entry opens a window with the internet state, a signing
+  app that keeps the app waiting, and every one of the app's own servers
+  with its state and what it serves. Logged out, a dot next to "Login"
+  opens it; on mobile community pages a quiet one-line strip does. Public
+  relays from other people's relay lists are not checked.
+- **Help with slow remote signing.** A bunker signature still pending after
+  8 seconds shows a hint to open the signing app; on phones it mentions
+  energy saver mode, which holds these requests back. A signer that never
+  answers now ends in an explained error instead of a generic one.
+
+### Changed
+
+- Untitled call guest links are listed as "Einladungslink · erstellt
+  14:32" instead of a bare time.
+
+### Fixed
+
+- Starting a call with a bunker could sit on "Zugang wird angefragt…"
+  for 90 seconds with no way out. The request now has a Cancel button and
+  gives up after 45 seconds (a later signature would be refused by the
+  relay anyway).
+
 ## [0.3.0] - 2026-10-03
 
 ### Added
