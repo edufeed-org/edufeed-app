@@ -6,6 +6,7 @@
 
 <script>
   import { getDisplayName, getTagValue } from 'applesauce-core/helpers';
+  import { getKanbanEditorBoardUrl } from '$lib/helpers/kanban-editor.js';
   import { formatCalendarDate } from '$lib/helpers/calendar.js';
   import { useUserProfile } from '$lib/stores/user-profile.svelte.js';
   import { runtimeConfig } from '$lib/stores/config.svelte.js';
@@ -73,9 +74,7 @@
   const boardNaddr = $derived(encodeEventToNaddr(event) || null);
 
   // External editor URL
-  const editorUrl = $derived(
-    boardNaddr ? `https://kanban.edufeed.org/cardsboard/${boardNaddr}` : null
-  );
+  const editorUrl = $derived(getKanbanEditorBoardUrl(boardNaddr));
 
   // Delete state
   let showDeleteConfirmation = $state(false);

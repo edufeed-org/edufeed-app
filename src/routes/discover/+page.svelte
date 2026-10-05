@@ -42,6 +42,7 @@
   import AMBResourceCard from '$lib/components/educational/AMBResourceCard.svelte';
   import CalendarEventCard from '$lib/components/calendar/CalendarEventCard.svelte';
   import KanbanBoardCard from '$lib/components/kanban/KanbanBoardCard.svelte';
+  import CreateBoardLink from '$lib/components/kanban/CreateBoardLink.svelte';
   import CommunityFilterDropdown from '$lib/components/feed/CommunityFilterDropdown.svelte';
   import RelayFilterDropdown from '$lib/components/feed/RelayFilterDropdown.svelte';
   import { getAppRelaysForCategory } from '$lib/services/app-relay-service.svelte.js';
@@ -1921,6 +1922,13 @@
 
   <!-- Content Grid -->
   <div class="container mx-auto px-4 py-8">
+    {#if contentType === 'boards'}
+      <!-- Boards are authored in the external Kanban editor; shown above the
+           loading/empty/results states so it is reachable in all of them -->
+      <div class="mb-6 flex justify-center">
+        <CreateBoardLink />
+      </div>
+    {/if}
     {#if contentType === 'communities'}
       <!-- Communities Grid -->
       {#if communities.length === 0 && !communitiesLoaded}

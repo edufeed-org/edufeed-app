@@ -1098,6 +1098,8 @@
   "kanban_board_columns": "{count} Spalten",
   "kanban_board_open_editor": "Im Editor öffnen",
   "kanban_board_open_editor_desc": "Dieses Board im Kanban-Editor bearbeiten",
+  "kanban_create_board": "Board erstellen",
+  "kanban_create_board_title": "Öffnet den Kanban-Editor in einem neuen Tab",
   "kanban_board_cards_count": "{count} Karten",
   "kanban_board_no_cards": "Noch keine Karten",
   "kanban_board_loading_cards": "Karten werden geladen...",

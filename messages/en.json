@@ -406,6 +406,8 @@
   "kanban_board_columns": "{count} columns",
   "kanban_board_open_editor": "Open in Editor",
   "kanban_board_open_editor_desc": "Edit this board in the Kanban editor",
+  "kanban_create_board": "Create board",
+  "kanban_create_board_title": "Opens the Kanban editor in a new tab",
   "kanban_board_cards_count": "{count} cards",
   "kanban_board_no_cards": "No cards yet",
   "kanban_board_loading_cards": "Loading cards...",
