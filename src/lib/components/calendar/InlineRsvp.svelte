@@ -284,6 +284,23 @@
     {/if}
   </div>
 
+  <!-- An RSVP only tells others whether you're coming; users mistook it for a
+       registration with the organizer (GitHub #10). Compact cards get the short
+       form with the full explanation as tooltip. -->
+  {#if compact}
+    <p
+      class="text-xs text-base-content/60"
+      data-testid="rsvp-hint"
+      title={m.rsvp_not_registration_hint()}
+    >
+      {m.rsvp_not_registration_hint_short()}
+    </p>
+  {:else}
+    <p class="text-sm text-base-content/60" data-testid="rsvp-hint">
+      {m.rsvp_not_registration_hint()}
+    </p>
+  {/if}
+
   <!-- Error Display -->
   {#if error}
     <div class="alert py-2 text-sm alert-error shadow-lg">
