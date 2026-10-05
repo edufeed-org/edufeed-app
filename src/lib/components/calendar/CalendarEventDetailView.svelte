@@ -465,9 +465,6 @@
           showNote={false}
           compact={false}
         />
-        <p class="mt-3 text-sm text-base-content/60">
-          {m.calendar_detail_rsvp_help()}
-        </p>
       </div>
     </div>
   </div>
