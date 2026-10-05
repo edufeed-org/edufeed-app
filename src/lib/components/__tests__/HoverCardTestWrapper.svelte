@@ -8,7 +8,9 @@
    *   position?: 'top' | 'bottom',
    *   fixed?: boolean,
    *   onAction?: () => void,
-   *   interactiveTrigger?: boolean
+   *   interactiveTrigger?: boolean,
+   *   class?: string,
+   *   triggerClass?: string
    * }}
    */
   let {
@@ -17,11 +19,21 @@
     position = 'bottom',
     fixed = false,
     onAction = () => {},
-    interactiveTrigger = false
+    interactiveTrigger = false,
+    class: klass = 'relative inline-block',
+    triggerClass = 'inline-block'
   } = $props();
 </script>
 
-<HoverCard {enterDelay} {leaveDelay} {position} {fixed} {interactiveTrigger}>
+<HoverCard
+  {enterDelay}
+  {leaveDelay}
+  {position}
+  {fixed}
+  {interactiveTrigger}
+  class={klass}
+  {triggerClass}
+>
   {#snippet trigger()}
     {#if interactiveTrigger}
       <a href="#profile" data-testid="trigger">Hover me</a>

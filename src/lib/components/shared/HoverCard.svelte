@@ -61,6 +61,8 @@
   /** @type {HTMLDivElement | undefined} */
   let wrapperEl;
   /** @type {HTMLDivElement | undefined} */
+  let triggerEl;
+  /** @type {HTMLDivElement | undefined} */
   let popupEl = $state();
 
   function clearTimers() {
@@ -70,11 +72,29 @@
     leaveTimer = undefined;
   }
 
+  /**
+   * The trigger's viewport box. Normally the wrapper's own box (the popup is
+   * out of flow). A `display: contents` wrapper has no box — its rect is all
+   * zeros, which pinned the popup to the top-left corner — so fall back to
+   * the union of the trigger's rendered children.
+   */
+  function measureTrigger() {
+    const rect = /** @type {HTMLDivElement} */ (wrapperEl).getBoundingClientRect();
+    if (rect.width || rect.height || !triggerEl) return rect;
+    const boxes = [...triggerEl.children]
+      .map((el) => el.getBoundingClientRect())
+      .filter((r) => r.width || r.height);
+    if (boxes.length === 0) return rect;
+    return {
+      left: Math.min(...boxes.map((r) => r.left)),
+      top: Math.min(...boxes.map((r) => r.top)),
+      bottom: Math.max(...boxes.map((r) => r.bottom))
+    };
+  }
+
   function updateFixedPosition() {
     if (!fixed || !wrapperEl) return;
-    // The wrapper box equals the trigger box (the popup is out of flow), and
-    // stays measurable even when the trigger box is `display: contents`.
-    const rect = wrapperEl.getBoundingClientRect();
+    const rect = measureTrigger();
     const popupWidth = 288; // w-72 = 18rem
     const minTopRoom = 240;
     popupX = Math.min(rect.left, window.innerWidth - popupWidth - 16);
@@ -245,7 +265,7 @@
   role={interactiveTrigger ? undefined : 'button'}
   tabindex={interactiveTrigger ? undefined : 0}
 >
-  <div class={triggerClass}>
+  <div class={triggerClass} bind:this={triggerEl}>
     {@render trigger()}
   </div>
 
