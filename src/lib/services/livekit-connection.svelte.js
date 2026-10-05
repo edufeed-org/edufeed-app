@@ -7,12 +7,15 @@ import { DisconnectReason, Room, RoomEvent, Track } from 'livekit-client';
 import {
   SCREEN_SHARE_QUALITIES,
   cameraCaptureOptions,
+  getBackgroundEffect,
+  getCustomBackground,
   getParticipantVolume,
   getPreferredDevice,
   getScreenShareQuality,
   micCaptureOptions,
   rememberDevice,
   setAudioProcessing,
+  setBackgroundEffect,
   setParticipantVolume as storeParticipantVolume
 } from './call-prefs.js';
 import {
@@ -25,6 +28,11 @@ import {
 import { withHand, handQueue } from '$lib/groups/call-tile-order.js';
 import { reactionPayload, parseReactionPayload } from '$lib/groups/call-reactions.js';
 import { isGuestParticipant } from '$lib/groups/livekit.js';
+import {
+  MEDIAPIPE_ASSET_PATHS,
+  backgroundProcessorOptions,
+  parseBackgroundEffect
+} from '$lib/groups/call-background.js';
 
 // A burst of joins (a class arriving) gets one cue, not twenty.
 const JOIN_CUE_DEBOUNCE_MS = 750;
@@ -67,6 +75,17 @@ let activeAudioOutputDeviceId = $state('');
 /** @type {MediaDeviceInfo[]} */
 let videoInputDevices = $state.raw([]);
 let activeVideoDeviceId = $state('');
+// Camera background effect, remembered per device (groups/call-background).
+let backgroundEffect = $state(getBackgroundEffect());
+// The BackgroundProcessor this service built last. Compared against the
+// camera track's current processor: a new track (rejoin) has none, so a
+// stale reference is simply replaced.
+/** @type {any} */
+let bgProcessor = null;
+// Effect changes run one after another: building the MediaPipe pipeline
+// takes a moment, and two overlapping setProcessor calls would race.
+/** @type {Promise<unknown>} */
+let backgroundQueue = Promise.resolve();
 
 // --- Connection + participant state beyond the participant lists ---
 /** @type {'connected' | 'reconnecting' | 'disconnected'} */
@@ -581,6 +600,64 @@ export async function switchVideoDevice(deviceId) {
   }
 }
 
+/**
+ * Put the remembered background effect on the local camera track, if the
+ * camera is on. The processor package (and MediaPipe) is loaded on first
+ * use only. Throws when the processor fails.
+ */
+function applyBackground() {
+  const run = backgroundQueue.then(async () => {
+    const track = /** @type {any} */ (
+      room?.localParticipant.getTrackPublication(Track.Source.Camera)?.track
+    );
+    if (!track) return;
+    const options = backgroundProcessorOptions(backgroundEffect, getCustomBackground());
+    const current = track.getProcessor?.();
+    if (!options) {
+      if (current) await track.stopProcessor();
+      return;
+    }
+    if (bgProcessor && current === bgProcessor) {
+      await bgProcessor.switchTo(options);
+      return;
+    }
+    const { BackgroundProcessor } = await import('@livekit/track-processors');
+    const processor = BackgroundProcessor({ ...options, assetPaths: MEDIAPIPE_ASSET_PATHS });
+    await track.setProcessor(processor);
+    bgProcessor = processor;
+  });
+  backgroundQueue = run.catch(() => {});
+  return run;
+}
+
+/** Turning the camera on must not fail because of the effect. */
+async function applyBackgroundSafely() {
+  try {
+    await applyBackground();
+  } catch (err) {
+    console.warn('Background effect not available:', err);
+  }
+}
+
+/**
+ * Choose the camera background effect ('none' | 'blur' | 'custom' |
+ * 'preset:<id>'). Remembered on this device and applied right away when the
+ * camera is on. A failing processor throws and the previous effect stays.
+ * @param {string} effect
+ */
+export async function setCameraBackground(effect) {
+  const previous = backgroundEffect;
+  backgroundEffect = parseBackgroundEffect(effect);
+  try {
+    await applyBackground();
+  } catch (err) {
+    backgroundEffect = previous;
+    await applyBackgroundSafely();
+    throw err;
+  }
+  setBackgroundEffect(backgroundEffect);
+}
+
 /** Handle device change events */
 function handleDeviceChange() {
   refreshAudioDevices();
@@ -604,6 +681,8 @@ export async function connectToRoom(token, url, opts = {}) {
 
   isConnecting = true;
   disconnectReason = null;
+  // Re-read: another tab (or the pre-join screen) may have changed it.
+  backgroundEffect = getBackgroundEffect();
   // eslint-disable-next-line svelte/prefer-svelte-reactivity -- internal bookkeeping, never rendered
   arrivedAt = new Map();
   try {
@@ -745,6 +824,7 @@ export async function connectToRoom(token, url, opts = {}) {
       } catch (err) {
         console.warn('Camera not available:', err);
       }
+      if (!isCameraOff) await applyBackgroundSafely();
     }
 
     // Initialize devices after connection
@@ -855,6 +935,7 @@ export async function toggleCamera() {
   if (isCameraOff) {
     await room.localParticipant.setCameraEnabled(true, cameraCaptureOptions());
     isCameraOff = false;
+    await applyBackgroundSafely();
   } else {
     await room.localParticipant.setCameraEnabled(false);
     isCameraOff = true;
@@ -901,7 +982,7 @@ export async function toggleScreenShare() {
 
 /**
  * Get reactive connection state.
- * @returns {{ isConnected: boolean, isConnecting: boolean, isMuted: boolean, isCameraOff: boolean, isScreenSharing: boolean, canPublish: boolean, canSignal: boolean, connectionState: 'connected' | 'reconnecting' | 'disconnected', disconnectReason: import('livekit-client').DisconnectReason | null, mutedIdentities: Set<string>, raisedHands: Set<string>, reactions: Array<{id: string, identity: string, emoji: string, url?: string}>, callChat: Array<{id: string, identity: string, n: string, text: string, at: number, guest?: boolean}>, localParticipant: import('livekit-client').LocalParticipant | null, remoteParticipants: import('livekit-client').RemoteParticipant[], room: Room | null, speakingParticipantIds: Set<string>, audioInputDevices: MediaDeviceInfo[], activeAudioDeviceId: string, audioOutputDevices: MediaDeviceInfo[], activeAudioOutputDeviceId: string, videoInputDevices: MediaDeviceInfo[], activeVideoDeviceId: string }}
+ * @returns {{ isConnected: boolean, isConnecting: boolean, isMuted: boolean, isCameraOff: boolean, isScreenSharing: boolean, canPublish: boolean, canSignal: boolean, connectionState: 'connected' | 'reconnecting' | 'disconnected', disconnectReason: import('livekit-client').DisconnectReason | null, mutedIdentities: Set<string>, raisedHands: Set<string>, reactions: Array<{id: string, identity: string, emoji: string, url?: string}>, callChat: Array<{id: string, identity: string, n: string, text: string, at: number, guest?: boolean}>, localParticipant: import('livekit-client').LocalParticipant | null, remoteParticipants: import('livekit-client').RemoteParticipant[], room: Room | null, speakingParticipantIds: Set<string>, audioInputDevices: MediaDeviceInfo[], activeAudioDeviceId: string, audioOutputDevices: MediaDeviceInfo[], activeAudioOutputDeviceId: string, videoInputDevices: MediaDeviceInfo[], activeVideoDeviceId: string, backgroundEffect: string }}
  */
 export function getLiveKitState() {
   return {
@@ -973,6 +1054,9 @@ export function getLiveKitState() {
     },
     get activeVideoDeviceId() {
       return activeVideoDeviceId;
+    },
+    get backgroundEffect() {
+      return backgroundEffect;
     }
   };
 }

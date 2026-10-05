@@ -21,7 +21,11 @@ import {
   setScreenShareQuality,
   SCREEN_SHARE_QUALITIES,
   getChatBeside,
-  setChatBeside
+  setChatBeside,
+  getBackgroundEffect,
+  setBackgroundEffect,
+  getCustomBackground,
+  setCustomBackground
 } from '$lib/services/call-prefs.js';
 
 beforeEach(() => {
@@ -130,5 +134,33 @@ describe('chat beside the call', () => {
     expect(localStorage.getItem('edufeed:call:chatBeside')).toBe('0');
     setChatBeside(true);
     expect(getChatBeside()).toBe(true);
+  });
+});
+
+describe('camera background effect', () => {
+  it('defaults to none and remembers a valid effect', () => {
+    expect(getBackgroundEffect()).toBe('none');
+    setBackgroundEffect('blur');
+    expect(getBackgroundEffect()).toBe('blur');
+    expect(localStorage.getItem('edufeed:call:background')).toBe('blur');
+  });
+
+  it('ignores an unknown stored effect', () => {
+    localStorage.setItem('edufeed:call:background', 'sparkles');
+    expect(getBackgroundEffect()).toBe('none');
+  });
+
+  it('keeps the own image on this device and reports whether storing worked', () => {
+    expect(getCustomBackground()).toBeNull();
+    expect(setCustomBackground('data:image/jpeg;base64,AAAA')).toBe(true);
+    expect(getCustomBackground()).toBe('data:image/jpeg;base64,AAAA');
+  });
+
+  it('reports a full or blocked storage instead of throwing', () => {
+    vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+      throw new DOMException('full', 'QuotaExceededError');
+    });
+    expect(setCustomBackground('data:image/jpeg;base64,AAAA')).toBe(false);
+    expect(() => setBackgroundEffect('blur')).not.toThrow();
   });
 });

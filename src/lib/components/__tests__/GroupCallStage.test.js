@@ -12,7 +12,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/svelte';
 
-const { lk, svc, media } = vi.hoisted(() => ({
+const { lk, svc, media, bg } = vi.hoisted(() => ({
   lk: {
     isConnected: true,
     isConnecting: false,
@@ -34,7 +34,8 @@ const { lk, svc, media } = vi.hoisted(() => ({
     audioOutputDevices: [],
     activeAudioOutputDeviceId: '',
     videoInputDevices: [],
-    activeVideoDeviceId: ''
+    activeVideoDeviceId: '',
+    backgroundEffect: 'none'
   },
   svc: {
     connectToRoom: vi.fn(),
@@ -45,7 +46,8 @@ const { lk, svc, media } = vi.hoisted(() => ({
     setParticipantVolume: vi.fn((_pk, v) => v),
     canSelectSpeaker: vi.fn(() => false),
     refreshAudioDevices: vi.fn(),
-    refreshVideoDevices: vi.fn()
+    refreshVideoDevices: vi.fn(),
+    setCameraBackground: vi.fn(async () => {})
   },
   media: {
     toggleMute: vi.fn(async () => {}),
@@ -53,6 +55,10 @@ const { lk, svc, media } = vi.hoisted(() => ({
     toggleScreenShare: vi.fn(async () => {}),
     showToast: vi.fn(),
     playLeaveSound: vi.fn()
+  },
+  bg: {
+    supported: true,
+    imageFileToDataUrl: vi.fn(async () => 'data:image/jpeg;base64,OWN')
   }
 }));
 
@@ -73,7 +79,17 @@ vi.mock('$lib/services/livekit-connection.svelte.js', () => ({
   canSelectSpeaker: svc.canSelectSpeaker,
   setHandRaised: svc.setHandRaised,
   sendReaction: svc.sendReaction,
+  setCameraBackground: (...a) => svc.setCameraBackground(...a),
   getLiveKitState: () => lk
+}));
+vi.mock('$lib/groups/call-background.js', () => ({
+  BACKGROUND_PRESETS: [
+    { id: 'paper', src: '/call-backgrounds/paper.svg' },
+    { id: 'shelf', src: '/call-backgrounds/shelf.svg' }
+  ],
+  backgroundEffectsSupported: () => bg.supported,
+  imageFileToDataUrl: (...a) => bg.imageFileToDataUrl(...a),
+  parseBackgroundEffect: (v) => v || 'none'
 }));
 vi.mock('$lib/helpers/toast', () => ({ showToast: media.showToast }));
 vi.mock('$lib/services/call-sounds.js', () => ({ playLeaveSound: media.playLeaveSound }));
@@ -152,7 +168,18 @@ vi.mock('$lib/paraglide/messages', () => ({
   groups_call_error_camera_missing: () => 'No camera',
   groups_call_error_device_busy: () => 'Device busy',
   groups_call_error_screen_denied: () => 'Screen capture blocked',
-  groups_call_error_media_generic: () => 'Media failed'
+  groups_call_error_media_generic: () => 'Media failed',
+  groups_call_background: () => 'Background',
+  groups_call_background_none: () => 'None',
+  groups_call_background_blur: () => 'Blur',
+  groups_call_background_paper: () => 'Paper',
+  groups_call_background_teal: () => 'Teal',
+  groups_call_background_shelf: () => 'Bookshelf',
+  groups_call_background_custom: () => 'Own image',
+  groups_call_background_upload: () => 'Choose own image',
+  groups_call_background_upload_hint: () => 'Stays on this device',
+  groups_call_background_failed: () => 'Background failed',
+  groups_call_background_store_failed: () => 'Image not saved'
 }));
 
 // bind:clientWidth measures through ResizeObserver, which jsdom lacks; an
@@ -401,6 +428,68 @@ describe('publish controls', () => {
     await fireEvent.click(screen.getByRole('button', { name: 'Mic options' }));
     expect(screen.queryByText('Select speaker')).toBeNull();
     lk.audioOutputDevices = [];
+  });
+
+  describe('camera background', () => {
+    beforeEach(() => {
+      bg.supported = true;
+      lk.backgroundEffect = 'none';
+    });
+    const openCameraMenu = () =>
+      fireEvent.click(screen.getByRole('button', { name: 'Camera options' }));
+
+    it('offers none, blur and the presets, marking the active one', async () => {
+      lk.backgroundEffect = 'blur';
+      render(GroupCallStage, { props: baseProps });
+      await openCameraMenu();
+      const menu = screen.getByTestId('group-call-camera-menu');
+      expect(menu.textContent).toContain('Background');
+      expect(screen.getByRole('button', { name: 'Blur' }).className).toContain('menu-active');
+      expect(screen.getByRole('button', { name: 'None' }).className).not.toContain('menu-active');
+      expect(screen.getByRole('button', { name: 'Bookshelf' })).toBeTruthy();
+      // no own image stored yet: only the way to choose one
+      expect(screen.queryByRole('button', { name: 'Own image' })).toBeNull();
+    });
+
+    it('picks an effect through the service', async () => {
+      render(GroupCallStage, { props: baseProps });
+      await openCameraMenu();
+      await fireEvent.click(screen.getByRole('button', { name: 'Paper' }));
+      expect(svc.setCameraBackground).toHaveBeenCalledWith('preset:paper');
+    });
+
+    it('toasts when the effect cannot start', async () => {
+      svc.setCameraBackground.mockRejectedValueOnce(new Error('no webgl2'));
+      vi.spyOn(console, 'warn').mockImplementation(() => {});
+      render(GroupCallStage, { props: baseProps });
+      await openCameraMenu();
+      await fireEvent.click(screen.getByRole('button', { name: 'Blur' }));
+      await vi.waitFor(() =>
+        expect(media.showToast).toHaveBeenCalledWith('Background failed', 'error')
+      );
+    });
+
+    it('keeps an own image on this device and switches to it', async () => {
+      render(GroupCallStage, { props: baseProps });
+      await openCameraMenu();
+      const input = screen.getByTestId('group-call-background-file');
+      const file = new File(['x'], 'me.png', { type: 'image/png' });
+      Object.defineProperty(input, 'files', { value: [file], configurable: true });
+      await fireEvent.change(input);
+      await vi.waitFor(() => expect(svc.setCameraBackground).toHaveBeenCalledWith('custom'));
+      expect(bg.imageFileToDataUrl).toHaveBeenCalledWith(file);
+      expect(localStorage.getItem('edufeed:call:backgroundImage')).toBe(
+        'data:image/jpeg;base64,OWN'
+      );
+      expect(screen.getByRole('button', { name: 'Own image' })).toBeTruthy();
+    });
+
+    it('hides the section where the browser cannot run the effect', async () => {
+      bg.supported = false;
+      render(GroupCallStage, { props: baseProps });
+      await openCameraMenu();
+      expect(screen.queryByRole('button', { name: 'Blur' })).toBeNull();
+    });
   });
 
   it('picks and remembers a screen share quality', async () => {
