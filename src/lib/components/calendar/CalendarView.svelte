@@ -2,7 +2,11 @@
   import { SvelteDate } from 'svelte/reactivity';
   import { onMount, getContext, untrack } from 'svelte';
   import { afterNavigate, replaceState, goto } from '$app/navigation';
-  import { formatDateParam, applyCalendarFilterState } from '$lib/helpers/urlParams.js';
+  import {
+    formatDateParam,
+    applyCalendarFilterState,
+    toCalendarViewParams
+  } from '$lib/helpers/urlParams.js';
   import { page } from '$app/stores';
   import {
     communityCalendarTimelineLoader,
@@ -333,8 +337,10 @@
   });
 
   // Sync initial URL state on mount
+  // In community mode `?view=` is the community section; the presentation
+  // mode lives in `?cview=` (toCalendarViewParams remaps it for the parser).
   syncInitialUrlState(
-    $page.url.searchParams,
+    toCalendarViewParams($page.url.searchParams, communityMode),
     (/** @type {'calendar' | 'list' | 'map'} */ mode) => {
       presentationViewMode = mode;
     },
@@ -347,19 +353,22 @@
   );
 
   // Set up navigation listener - runs after every navigation
-  afterNavigate(
-    createUrlSyncHandler(
-      (/** @type {'calendar' | 'list' | 'map'} */ mode) => {
-        presentationViewMode = mode;
-      },
-      (/** @type {CalendarViewMode} */ mode) => {
-        viewMode = mode;
-      },
-      (/** @type {Date} */ date) => {
-        currentDate = date;
-      }
-    )
+  const syncFromUrl = createUrlSyncHandler(
+    (/** @type {'calendar' | 'list' | 'map'} */ mode) => {
+      presentationViewMode = mode;
+    },
+    (/** @type {CalendarViewMode} */ mode) => {
+      viewMode = mode;
+    },
+    (/** @type {Date} */ date) => {
+      currentDate = date;
+    }
   );
+  afterNavigate((navigation) => {
+    if (!navigation.to) return;
+    const searchParams = toCalendarViewParams(navigation.to.url.searchParams, communityMode);
+    syncFromUrl({ to: { url: { searchParams } } });
+  });
 
   // State → URL: keep the viewed date shareable/reload-safe (#30). Uses
   // replaceState so calendar paging doesn't spam the history stack; the

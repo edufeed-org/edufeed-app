@@ -8,7 +8,7 @@
   import * as m from '$lib/paraglide/messages';
   import { page } from '$app/stores';
   import { formatCalendarDate } from '../../helpers/calendar.js';
-  import { updateQueryParams } from '../../helpers/urlParams.js';
+  import { updateQueryParams, calendarViewParamName } from '../../helpers/urlParams.js';
   import AddToCalendarButton from './AddToCalendarButton.svelte';
 
   import {
@@ -118,7 +118,8 @@
     // otherwise 'calendar' (grid) clicks would be swallowed as the default.
     // NOTE: Don't call _onPresentationViewModeChange here — let the URL sync
     // effect handle it to avoid races between async URL updates and sync callbacks.
-    updateQueryParams($page.url.searchParams, { view: mode });
+    // In a community `view` selects the section, so the mode goes to `cview`.
+    updateQueryParams($page.url.searchParams, { [calendarViewParamName(communityMode)]: mode });
   }
 </script>
 
