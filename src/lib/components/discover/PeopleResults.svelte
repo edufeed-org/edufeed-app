@@ -3,6 +3,7 @@
   Query comes from the page's search box (URL-synced ?search=); results from
   usePeopleSearch(): follows first, then everyone else by NIP-85 trust rank,
   scored rows badged "im Vertrauensnetz". Unscored accounts are never hidden.
+  Cards show display name, NIP-05 (verified badge) and a clamped bio.
   With an empty query the tab lists the user's follows, or a hint.
 -->
 
@@ -36,7 +37,7 @@
       <div class="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {#each follows as pubkey (pubkey)}
           <div class="rounded-lg bg-base-100 p-2" data-testid="people-result" data-pubkey={pubkey}>
-            <ProfileCard {pubkey} size="sm" showIcon={false} />
+            <ProfileCard {pubkey} size="sm" showIcon={false} showNip05 showAbout />
           </div>
         {/each}
       </div>
@@ -67,7 +68,7 @@
             data-pubkey={contact.pubkey}
           >
             <div class="min-w-0 flex-1">
-              <ProfileCard pubkey={contact.pubkey} size="sm" showIcon={false} />
+              <ProfileCard pubkey={contact.pubkey} size="sm" showIcon={false} showNip05 showAbout />
             </div>
             {#if score}
               <span

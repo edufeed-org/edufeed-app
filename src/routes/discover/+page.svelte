@@ -97,7 +97,7 @@
   const enabledContentTypes = runtimeConfig.discover?.contentTypes || [...DISCOVER_CONTENT_TYPES];
   // Tabs to render. "all" leads only when it merges ≥2 feed types.
   const discoverTabs = getDiscoverTabs(enabledContentTypes);
-  const defaultContentType = discoverTabs[0];
+  const defaultContentType = resolveDiscoverType(null, discoverTabs);
   const hasAnyFeedType = DISCOVER_FEED_TYPES.some((t) =>
     isDiscoverTypeEnabled(t, enabledContentTypes)
   );
