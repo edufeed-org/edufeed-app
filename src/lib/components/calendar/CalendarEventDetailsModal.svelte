@@ -31,6 +31,8 @@
   import ReactionBar from '../reactions/ReactionBar.svelte';
   import ProfileCard from '../shared/ProfileCard.svelte';
   import NamedParticipant from './NamedParticipant.svelte';
+  import EventAttributesSummary from './EventAttributesSummary.svelte';
+  import { participantRoleLabel } from '$lib/helpers/participant-roles.js';
   import EventManagementActions from './EventManagementActions.svelte';
   import EventContextMenu from '../shared/EventContextMenu.svelte';
   import HeroImage from '$lib/components/shared/HeroImage.svelte';
@@ -398,6 +400,10 @@
             </div>
           {/if}
         </div>
+        <!-- Educational attributes (#13) -->
+        <div class="mt-3">
+          <EventAttributesSummary attributes={event.attributes} />
+        </div>
       </div>
 
       <!-- Event Locations -->
@@ -437,7 +443,9 @@
                 {/if}
                 {#if participant.role}
                   <div class="mt-2 flex items-center gap-2">
-                    <span class="badge badge-sm badge-primary">{participant.role}</span>
+                    <span class="badge badge-sm badge-primary"
+                      >{participantRoleLabel(participant.role)}</span
+                    >
                   </div>
                 {/if}
                 {#if participant.relay}

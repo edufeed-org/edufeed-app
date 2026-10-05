@@ -46,7 +46,9 @@ export function buildMeetingTags(formData, { groupId, dTag, channelUrl }) {
   // onto `eventData.communityPubkey` — unused here since `buildCalendarEventTags`
   // is called below with an explicit empty h-tag list, not `eventData.communityPubkey`.
   const eventData = convertFormDataToEvent(formData, '');
-  const tags = buildCalendarEventTags(formData, eventData, dTag, []).filter(
+  // Educational attributes (price, registration, …) are not offered for meetings.
+  const meetingForm = { ...formData, attributes: undefined };
+  const tags = buildCalendarEventTags(meetingForm, eventData, dTag, []).filter(
     (tag) => tag[0] !== 'location'
   );
   tags.push(['location', channelUrl]);

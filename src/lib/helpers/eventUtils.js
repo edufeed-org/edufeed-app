@@ -3,6 +3,7 @@ import { parseCalendarTimestamp, dedupeCalendarTwins } from '$lib/helpers/calend
 import { withoutChannelMeetings } from '$lib/helpers/calendar-timing.js';
 import { validateCalendarEvent } from '$lib/helpers/eventValidation.js';
 import { uniqueBy } from '$lib/helpers/unique.js';
+import { parseCalendarEventAttributes } from '$lib/helpers/calendar-attributes.js';
 
 /**
  * @typedef {import('$lib/types/calendar.js').CalendarEvent} CalendarEvent
@@ -91,6 +92,7 @@ export function getCalendarEventMetadata(event) {
     references: getTagValues('r'),
     eventReferences: getTagValues('a'),
     geohash: getTagValue('g'),
+    attributes: parseCalendarEventAttributes(event.tags),
     communityPubkey: '',
     createdAt: event.created_at,
     dTag: getTagValue('d'),

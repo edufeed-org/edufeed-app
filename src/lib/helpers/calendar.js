@@ -13,6 +13,7 @@ import {
   dedupeReplaceableEvents,
   dedupeCalendarTwins
 } from '$lib/helpers/calendar-timing.js';
+import { buildCalendarEventAttributeTags } from '$lib/helpers/calendar-attributes.js';
 
 // Pure timing helpers live in calendar-timing.js (no store/config imports, so
 // server routes can use them too); re-exported here for client callers.
@@ -1017,6 +1018,9 @@ export function buildCalendarEventTags(formData, eventData, dTag, hTag) {
       }
     }
   }
+
+  // Educational extension attributes (NIP-52-Edufeed, issue #13)
+  tags.push(...buildCalendarEventAttributeTags(formData.attributes));
 
   return tags;
 }

@@ -30,6 +30,11 @@
   import EditableList from '../shared/EditableList.svelte';
   import { normalizeHashtag, normalizeHashtags } from '$lib/helpers/hashtags.js';
   import ParticipantsEditor from '$lib/components/calendar/ParticipantsEditor.svelte';
+  import EventAttributesFields from '$lib/components/calendar/EventAttributesFields.svelte';
+  import {
+    emptyEventAttributes,
+    parseCalendarEventAttributes
+  } from '$lib/helpers/calendar-attributes.js';
   import { CloseIcon } from '../icons';
   import { pool } from '$lib/stores/nostr-infrastructure.svelte';
   import { canHaveGuestLink, defaultMeetingSlot } from '$lib/groups/meetings.js';
@@ -281,7 +286,8 @@
       eventType: 'date',
       references: [],
       hashtags: [],
-      participants: []
+      participants: [],
+      attributes: emptyEventAttributes()
     };
     endDateEdited = false;
     lastValidStart = '';
@@ -328,7 +334,8 @@
       eventType: meeting ? 'time' : 'date',
       references: [],
       hashtags: [],
-      participants: []
+      participants: [],
+      attributes: emptyEventAttributes()
     };
     endDateEdited = false;
     // Never read formData here: this runs inside the open-modal $effect.
@@ -383,7 +390,11 @@
       references: existingEvent.references || [],
       // Normalized like on save, so a tag repeated in another casing shows once.
       hashtags: normalizeHashtags(existingEvent.hashtags),
-      participants: existingEvent.participants || []
+      participants: existingEvent.participants || [],
+      // Educational attributes round-trip from the parsed event (#13).
+      attributes:
+        $state.snapshot(existingEvent.attributes) ??
+        parseCalendarEventAttributes(existingRawEvent?.tags)
     };
     // An existing event's stored end is a choice: it stays put and only
     // follows when the start is moved past it.
@@ -783,12 +794,22 @@
             </div>
           {/if}
         {:else}
+          <!-- Educational attributes (#13): registration, cost, format, level -->
+          <div class="mb-4">
+            <EventAttributesFields bind:attributes={formData.attributes} disabled={isSubmitting} />
+          </div>
+
           <!-- Location with Autocomplete -->
           <div class="mb-4">
+            <!-- Online events (#8): the location is a meeting link or just "online" -->
             <LocationInput
               bind:value={formData.location}
-              label={m.event_modal_location_label()}
-              placeholder={m.event_modal_location_placeholder()}
+              label={formData.attributes?.attendanceMode === 'online'
+                ? m.event_modal_location_label_online()
+                : m.event_modal_location_label()}
+              placeholder={formData.attributes?.attendanceMode === 'online'
+                ? m.event_modal_location_placeholder_online()
+                : m.event_modal_location_placeholder()}
             />
           </div>
 
