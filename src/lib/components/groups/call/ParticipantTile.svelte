@@ -19,7 +19,15 @@
   import ProfileAvatar from '$lib/components/shared/ProfileAvatar.svelte';
   import HoverCard from '$lib/components/shared/HoverCard.svelte';
   import ProfileHoverCardContent from '$lib/components/shared/ProfileHoverCardContent.svelte';
-  import { MicOffIcon, HandIcon, VolumeUpIcon, PinIcon } from '$lib/components/icons';
+  import {
+    MicOffIcon,
+    HandIcon,
+    VolumeUpIcon,
+    PinIcon,
+    ExpandIcon,
+    CollapseIcon
+  } from '$lib/components/icons';
+  import { toggleFullscreen, isFullscreenOf } from '$lib/groups/fullscreen.js';
   import * as m from '$lib/paraglide/messages';
 
   /**
@@ -63,6 +71,13 @@
 
   /** @type {HTMLVideoElement | undefined} */
   let videoEl = $state(undefined);
+  /** @type {HTMLDivElement | undefined} */
+  let rootEl = $state(undefined);
+  // Full screen for this seat: the same path as the screen share tile.
+  let isFullscreen = $state(false);
+  function onFullscreenChange() {
+    isFullscreen = isFullscreenOf(rootEl);
+  }
 
   function updateTracks() {
     const cameraPub = participant.getTrackPublication(Track.Source.Camera);
@@ -124,14 +139,20 @@
   const hasVideo = $derived(!!videoTrack && !videoMuted);
 </script>
 
+<svelte:document onfullscreenchange={onFullscreenChange} />
+
 <div
+  bind:this={rootEl}
   class="group/tile relative h-full min-h-0 transition-shadow duration-200"
+  class:bg-black={isFullscreen}
   class:ring-2={isSpeaking}
   class:ring-primary={isSpeaking}
   class:rounded-lg={isSpeaking}
 >
   <div
-    class="absolute inset-0 flex items-center justify-center overflow-hidden rounded-lg bg-base-300"
+    class="absolute inset-0 flex items-center justify-center overflow-hidden rounded-lg {isFullscreen
+      ? 'bg-black'
+      : 'bg-base-300'}"
   >
     {#if hasVideo}
       <video
@@ -139,7 +160,7 @@
         autoplay
         playsinline
         muted
-        class="h-full w-full object-cover"
+        class="h-full w-full {isFullscreen ? 'object-contain' : 'object-cover'}"
         class:scale-x-[-1]={isLocal}
       ></video>
     {:else if !linkable}
@@ -235,8 +256,8 @@
     {/if}
   </div>
 
-  <!-- Hover controls (top left): pin + volume -->
-  {#if onTogglePin || showVolume}
+  <!-- Hover controls (top left): pin + volume + full screen -->
+  {#if onTogglePin || showVolume || !compact}
     <div
       class="absolute top-1.5 left-1.5 z-20 flex items-center gap-1 opacity-0 transition-opacity group-focus-within/tile:opacity-100 group-hover/tile:opacity-100"
       class:opacity-100={volumeOpen || pinned}
@@ -262,6 +283,20 @@
           onclick={() => (volumeOpen = !volumeOpen)}
         >
           <VolumeUpIcon class_="h-3.5 w-3.5" title="" />
+        </button>
+      {/if}
+      {#if !compact}
+        <button
+          class="btn btn-circle bg-base-100/80 btn-ghost btn-xs"
+          aria-label={isFullscreen ? m.groups_call_exit_fullscreen() : m.groups_call_fullscreen()}
+          title={isFullscreen ? m.groups_call_exit_fullscreen() : m.groups_call_fullscreen()}
+          onclick={() => toggleFullscreen(rootEl)}
+        >
+          {#if isFullscreen}
+            <CollapseIcon class_="h-3.5 w-3.5" title="" />
+          {:else}
+            <ExpandIcon class_="h-3.5 w-3.5" title="" />
+          {/if}
         </button>
       {/if}
     </div>

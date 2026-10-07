@@ -4,6 +4,7 @@
 -->
 <script>
   import { PinIcon, ExpandIcon, CollapseIcon } from '$lib/components/icons';
+  import { toggleFullscreen, isFullscreenOf } from '$lib/groups/fullscreen.js';
   import * as m from '$lib/paraglide/messages';
 
   /**
@@ -42,16 +43,7 @@
   });
 
   function onFullscreenChange() {
-    isFullscreen = !!rootEl && document.fullscreenElement === rootEl;
-  }
-
-  async function toggleFullscreen() {
-    try {
-      if (isFullscreen) await document.exitFullscreen();
-      else await rootEl?.requestFullscreen();
-    } catch (err) {
-      console.warn('fullscreen refused:', err);
-    }
+    isFullscreen = isFullscreenOf(rootEl);
   }
 </script>
 
@@ -68,7 +60,9 @@
     class="absolute right-0 bottom-0 left-0 flex items-center justify-between gap-2 bg-gradient-to-t from-black/60 to-transparent px-2 py-1"
   >
     <span class="truncate text-xs text-white">{label}</span>
-    {#if !compact}
+    <!-- In the strip (compact) only the pin stays: a share parked there can
+      be brought back big; full screen and stop belong to the big tile. -->
+    {#if onTogglePin || !compact}
       <div class="flex shrink-0 items-center gap-1">
         {#if onTogglePin}
           <button
@@ -81,22 +75,24 @@
             <PinIcon class_="h-3.5 w-3.5" title="" />
           </button>
         {/if}
-        <button
-          class="btn btn-circle text-white btn-ghost btn-xs"
-          aria-label={isFullscreen ? m.groups_call_exit_fullscreen() : m.groups_call_fullscreen()}
-          title={isFullscreen ? m.groups_call_exit_fullscreen() : m.groups_call_fullscreen()}
-          onclick={toggleFullscreen}
-        >
-          {#if isFullscreen}
-            <CollapseIcon class_="h-3.5 w-3.5" title="" />
-          {:else}
-            <ExpandIcon class_="h-3.5 w-3.5" title="" />
-          {/if}
-        </button>
-        {#if isLocal && onStop}
-          <button class="btn btn-sm btn-error" onclick={onStop}>
-            {m.groups_call_screen_share_stop()}
+        {#if !compact}
+          <button
+            class="btn btn-circle text-white btn-ghost btn-xs"
+            aria-label={isFullscreen ? m.groups_call_exit_fullscreen() : m.groups_call_fullscreen()}
+            title={isFullscreen ? m.groups_call_exit_fullscreen() : m.groups_call_fullscreen()}
+            onclick={() => toggleFullscreen(rootEl)}
+          >
+            {#if isFullscreen}
+              <CollapseIcon class_="h-3.5 w-3.5" title="" />
+            {:else}
+              <ExpandIcon class_="h-3.5 w-3.5" title="" />
+            {/if}
           </button>
+          {#if isLocal && onStop}
+            <button class="btn btn-sm btn-error" onclick={onStop}>
+              {m.groups_call_screen_share_stop()}
+            </button>
+          {/if}
         {/if}
       </div>
     {/if}

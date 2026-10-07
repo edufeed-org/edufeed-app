@@ -158,6 +158,38 @@ export function setScreenShareQuality(quality) {
   if (quality in SCREEN_SHARE_QUALITIES) write('screenShareQuality', quality);
 }
 
+/**
+ * The stage layout ('grid' | 'focus' | 'side' | 'speaker', see
+ * groups/call-layout.js) and how many tiles a grid page holds, both as
+ * last chosen on this device.
+ */
+export const TILE_CAPS = /** @type {const} */ ([9, 16, 25]);
+const LAYOUTS = ['grid', 'focus', 'side', 'speaker'];
+
+/** @returns {'grid' | 'focus' | 'side' | 'speaker'} */
+export function getCallLayout() {
+  const stored = read('layout');
+  return stored && LAYOUTS.includes(stored)
+    ? /** @type {'grid' | 'focus' | 'side' | 'speaker'} */ (stored)
+    : 'grid';
+}
+
+/** @param {string} layout */
+export function setCallLayout(layout) {
+  if (LAYOUTS.includes(layout)) write('layout', layout);
+}
+
+/** @returns {9 | 16 | 25} */
+export function getTileCap() {
+  const stored = Number(read('tileCap'));
+  return /** @type {9 | 16 | 25} */ (TILE_CAPS.includes(/** @type {any} */ (stored)) ? stored : 16);
+}
+
+/** @param {number} cap */
+export function setTileCap(cap) {
+  if (TILE_CAPS.includes(/** @type {any} */ (cap))) write('tileCap', String(cap));
+}
+
 /** Wide screens: chat as a column beside the call stage (off = stage only). */
 // Open by default (QA 2026-10-02 C3: a closed chat had to be found first);
 // an explicit toggle either way is remembered on this device.

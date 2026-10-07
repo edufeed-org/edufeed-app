@@ -44,14 +44,27 @@
     getParticipantVolume,
     getScreenShareQuality,
     setCustomBackground,
-    setScreenShareQuality
+    setScreenShareQuality,
+    TILE_CAPS,
+    getCallLayout,
+    setCallLayout,
+    getTileCap,
+    setTileCap
   } from '$lib/services/call-prefs.js';
   import {
     BACKGROUND_PRESETS,
     backgroundEffectsSupported,
     imageFileToDataUrl
   } from '$lib/groups/call-background.js';
-  import { fitGrid, nextSpotlight } from '$lib/groups/call-layout.js';
+  import {
+    CALL_LAYOUTS,
+    fitGrid,
+    maxPins,
+    nextPins,
+    paginate,
+    pickStage,
+    togglePinKey
+  } from '$lib/groups/call-layout.js';
   import { orderSeats, moveSeat } from '$lib/groups/call-tile-order.js';
   import { getTilePlacements, setTilePlacements } from '$lib/groups/call-tile-placements.svelte.js';
   import { isGuestParticipant } from '$lib/groups/livekit.js';
@@ -73,7 +86,10 @@
     ChatIcon,
     ExternalLinkIcon,
     LinkIcon,
-    MoreIcon
+    MoreIcon,
+    GridIcon,
+    ChevronLeftIcon,
+    ChevronRightIcon
   } from '$lib/components/icons';
   import ParticipantTile from './ParticipantTile.svelte';
   import ScreenShareTile from './ScreenShareTile.svelte';
@@ -359,30 +375,102 @@
   /** @type {Array<ShareItem | SeatItem>} */
   const items = $derived([...shares, ...seats]);
 
-  // --- Spotlight: a pinned item fills the stage, the rest go to a strip ---
-  /** @type {string | null} */
-  let pinnedKey = $state(null);
+  // --- Layout: Raster / Fokus / Nebeneinander / Sprecher, remembered on
+  // this device (call-prefs). The pure rules live in groups/call-layout.js.
+  /** @typedef {import('$lib/groups/call-layout.js').CallLayout} CallLayout */
+  /** @type {CallLayout} */
+  let layout = $state(getCallLayout());
+  /** @type {Record<CallLayout, () => string>} */
+  const LAYOUT_LABELS = {
+    grid: m.groups_call_layout_grid,
+    focus: m.groups_call_layout_focus,
+    side: m.groups_call_layout_side,
+    speaker: m.groups_call_layout_speaker
+  };
+  /** @param {CallLayout} next */
+  function pickLayout(next) {
+    setCallLayout(next);
+    layout = next;
+    openMenu = null;
+  }
+
+  // --- Pins: a pinned item takes a spotlight slot (two side by side) ---
+  /** @type {string[]} */
+  let pins = $state.raw([]);
   // Shares already seen on this stage (plain: bookkeeping, not UI state).
   /** @type {Set<string>} */
   const seenShares = new Set();
 
-  // A NEW remote share takes the spotlight; your own share never does
-  // (showing your screen to yourself big is a hall of mirrors). A pin whose
-  // item left the call is dropped.
+  // A NEW remote share is pinned; your own share never is (showing your
+  // screen to yourself big is a hall of mirrors). A pin whose item left the
+  // call is dropped, and a layout with fewer slots keeps the newest pins.
   $effect(() => {
     const remoteShareKeys = shares.filter((s) => !s.isLocal).map((s) => s.key);
-    const otherKeys = items.map((i) => i.key);
-    const current = untrack(() => pinnedKey);
-    const next = nextSpotlight(current, otherKeys, remoteShareKeys, seenShares);
-    if (next !== current) pinnedKey = next;
+    const itemKeys = items.map((i) => i.key);
+    const max = maxPins(layout);
+    const current = untrack(() => pins);
+    const next = nextPins(current, itemKeys, remoteShareKeys, seenShares, max);
+    if (next !== current) pins = next;
   });
-
-  const spotlight = $derived(items.find((i) => i.key === pinnedKey) ?? null);
-  const strip = $derived(spotlight ? items.filter((i) => i.key !== spotlight.key) : []);
 
   /** @param {string} key */
   function togglePin(key) {
-    pinnedKey = pinnedKey === key ? null : key;
+    pins = togglePinKey(pins, key, maxPins(layout));
+  }
+
+  // --- Active speaker: the remote seat heard last with its mic on. Sticks
+  // through silence until someone else speaks (Sprecher layout; also the
+  // fallback for a free slot). LiveKit's speaker detection counts
+  // microphone tracks only, so a shared tab's sound never "speaks".
+  /** @type {string | null} */
+  let speakerKey = $state(null);
+  $effect(() => {
+    const me = lk.localParticipant?.identity;
+    const heard = [...lk.speakingParticipantIds].find(
+      (id) => id !== me && !lk.mutedIdentities.has(id)
+    );
+    if (heard) speakerKey = `seat:${heard}`;
+  });
+
+  const stagePick = $derived(
+    pickStage({
+      layout,
+      pins,
+      itemKeys: items.map((i) => i.key),
+      remoteShareKeys: shares.filter((s) => !s.isLocal).map((s) => s.key),
+      speakerKey,
+      localKeys: items.filter((i) => i.isLocal).map((i) => i.key)
+    })
+  );
+  const itemsByKey = $derived(new Map(items.map((i) => [i.key, i])));
+  /** @type {Array<ShareItem | SeatItem>} */
+  const slotItems = $derived(
+    stagePick.slots.map((k) => /** @type {ShareItem | SeatItem} */ (itemsByKey.get(k)))
+  );
+  /** @type {Array<ShareItem | SeatItem>} */
+  const strip = $derived(
+    stagePick.strip.map((k) => /** @type {ShareItem | SeatItem} */ (itemsByKey.get(k)))
+  );
+  const spotlight = $derived(slotItems.length > 0);
+
+  // --- Grid pages: at most `tileCap` tiles at once; the rest wait on the
+  // next pages. Tiles off the page are not rendered at all, so no video
+  // element asks for their stream (adaptive stream drops it); their audio
+  // keeps playing (attached centrally by the call service).
+  /** @type {9 | 16 | 25} */
+  let tileCap = $state(getTileCap());
+  /** @param {9 | 16 | 25} cap */
+  function pickCap(cap) {
+    setTileCap(cap);
+    tileCap = cap;
+    openMenu = null;
+  }
+  let page = $state(0);
+  const paging = $derived(paginate(items.length, page, tileCap));
+  const pageItems = $derived(items.slice(paging.start, paging.end));
+  /** @param {number} delta */
+  function goPage(delta) {
+    page = paginate(items.length, paging.page + delta, tileCap).page;
   }
 
   // --- Auto-fit grid ---
@@ -407,7 +495,12 @@
   // the pixel-sized tiles never feed back into the width being measured
   // (they did: the stage grew past its column, 2026-09-28).
   const grid = $derived(
-    fitGrid(items.length, Math.max(0, gridWidth - 2 * PAD), Math.max(0, gridHeight - 2 * PAD), GAP)
+    fitGrid(
+      pageItems.length,
+      Math.max(0, gridWidth - 2 * PAD),
+      Math.max(0, gridHeight - 2 * PAD),
+      GAP
+    )
   );
   const measured = $derived(grid.tileWidth > 0);
   const gridStyle = $derived(
@@ -479,9 +572,9 @@
   }
 
   // --- Menus (one open at a time; outside click / Escape closes) ---
-  /** @type {'mic' | 'camera' | 'screen' | 'react' | null} */
+  /** @type {'mic' | 'camera' | 'screen' | 'react' | 'layout' | null} */
   let openMenu = $state(null);
-  /** @param {'mic' | 'camera' | 'screen' | 'react'} name */
+  /** @param {'mic' | 'camera' | 'screen' | 'react' | 'layout'} name */
   function toggleMenu(name) {
     if (openMenu === name) {
       openMenu = null;
@@ -615,7 +708,7 @@
         ? m.groups_call_screen_share_you()
         : m.groups_call_screen_share_active({ name: nameOf(it.participant) })}
       isLocal={it.isLocal}
-      pinned={pinnedKey === it.key}
+      pinned={pins.includes(it.key)}
       onTogglePin={() => togglePin(it.key)}
       onStop={onToggleScreenShare}
       {compact}
@@ -634,7 +727,7 @@
       profile={getProfiles().get(pk ?? '')}
       volume={volumeFor(pk)}
       onVolumeChange={it.isLocal ? undefined : (/** @type {number} */ v) => changeVolume(pk, v)}
-      pinned={pinnedKey === it.key}
+      pinned={pins.includes(it.key)}
       onTogglePin={() => togglePin(it.key)}
       {compact}
     />
@@ -746,6 +839,56 @@
           {m.groups_call_pop_in()}
         </button>
       {/if}
+      <div class="relative" data-call-menu>
+        <button
+          class="btn px-2 btn-ghost btn-sm @lg:px-3"
+          aria-haspopup="menu"
+          aria-expanded={openMenu === 'layout'}
+          aria-label={`${m.groups_call_layout()}: ${LAYOUT_LABELS[layout]()}`}
+          title={`${m.groups_call_layout()}: ${LAYOUT_LABELS[layout]()}`}
+          data-testid="group-call-layout"
+          onclick={() => toggleMenu('layout')}
+        >
+          <GridIcon class_="h-4 w-4" title="" />
+          <span class="hidden @lg:inline">{LAYOUT_LABELS[layout]()}</span>
+        </button>
+        {#if openMenu === 'layout'}
+          <ul
+            class="menu absolute top-full right-0 z-30 mt-1 w-56 rounded-box bg-base-100 p-2 shadow-lg"
+            role="menu"
+            data-testid="group-call-layout-menu"
+          >
+            <li class="menu-title text-xs">{m.groups_call_layout()}</li>
+            {#each CALL_LAYOUTS as l (l)}
+              <li>
+                <button
+                  class="text-sm"
+                  role="menuitemradio"
+                  aria-checked={layout === l}
+                  class:menu-active={layout === l}
+                  onclick={() => pickLayout(l)}
+                >
+                  {LAYOUT_LABELS[l]()}
+                </button>
+              </li>
+            {/each}
+            <li class="mt-1 menu-title text-xs">{m.groups_call_tiles_per_page()}</li>
+            {#each TILE_CAPS as cap (cap)}
+              <li>
+                <button
+                  class="text-sm"
+                  role="menuitemradio"
+                  aria-checked={tileCap === cap}
+                  class:menu-active={tileCap === cap}
+                  onclick={() => pickCap(cap)}
+                >
+                  {cap}
+                </button>
+              </li>
+            {/each}
+          </ul>
+        {/if}
+      </div>
       {#if onShowChat}
         <button
           class="btn relative btn-square btn-ghost btn-sm @lg:w-auto @lg:px-3 {chatOpen
@@ -798,11 +941,17 @@
     </div>
   {:else if spotlight}
     <div class="flex min-h-0 min-w-0 flex-1 flex-col gap-2 p-2" data-testid="group-call-spotlight">
-      <div class="relative min-h-0 flex-1" data-testid={`call-item-${spotlight.key}`}>
-        {@render item(spotlight, false)}
+      <!-- One slot (Fokus, Sprecher, a pin) or two side by side (Nebeneinander;
+        stacked below the stage's @md so a phone still shows both). -->
+      <div class="flex min-h-0 flex-1 flex-col gap-2 @md:flex-row" data-testid="group-call-slots">
+        {#each slotItems as it (it.key)}
+          <div class="relative min-h-0 min-w-0 flex-1" data-testid={`call-item-${it.key}`}>
+            {@render item(it, false)}
+          </div>
+        {/each}
       </div>
       {#if strip.length > 0}
-        <div class="flex h-24 shrink-0 gap-2 overflow-x-auto">
+        <div class="flex h-24 shrink-0 gap-2 overflow-x-auto" data-testid="group-call-strip">
           {#each strip as it (it.key)}
             <div class="relative aspect-video h-full shrink-0" data-testid={`call-item-${it.key}`}>
               {@render item(it, true)}
@@ -821,7 +970,7 @@
           style={gridStyle}
           data-testid="group-call-grid"
         >
-          {#each items as it (it.key)}
+          {#each pageItems as it (it.key)}
             {#if it.kind === 'seat'}
               <!-- A seat can be reordered: dragged (pointer/touch, so no
                 touch scrolling on it) or moved with Alt+←/→ when focused.
@@ -862,6 +1011,34 @@
         </div>
       </div>
     </div>
+    {#if paging.pageCount > 1}
+      <div
+        class="flex shrink-0 items-center justify-center gap-2 px-2 pb-1 text-xs text-base-content/70"
+        data-testid="group-call-pager"
+      >
+        <button
+          class="btn btn-circle btn-ghost btn-xs"
+          aria-label={m.groups_call_page_prev()}
+          title={m.groups_call_page_prev()}
+          disabled={paging.page === 0}
+          onclick={() => goPage(-1)}
+        >
+          <ChevronLeftIcon class_="h-4 w-4" title="" />
+        </button>
+        <span class="tabular-nums">
+          {m.groups_call_page({ page: paging.page + 1, total: paging.pageCount })}
+        </span>
+        <button
+          class="btn btn-circle btn-ghost btn-xs"
+          aria-label={m.groups_call_page_next()}
+          title={m.groups_call_page_next()}
+          disabled={paging.page >= paging.pageCount - 1}
+          onclick={() => goPage(1)}
+        >
+          <ChevronRightIcon class_="h-4 w-4" title="" />
+        </button>
+      </div>
+    {/if}
   {/if}
 
   <!-- Controls -->
