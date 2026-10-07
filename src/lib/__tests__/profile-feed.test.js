@@ -323,3 +323,52 @@ describe('category select/hide selection (issues #35, multi-select)', () => {
     });
   });
 });
+
+describe('community feed category filtering', () => {
+  /** @param {number} kind @param {object} [extra] */
+  const ev = (kind, extra = {}) => ({ id: `id-${kind}`, kind, tags: [], ...extra });
+
+  it('offers community content categories, notes only with follows merged in', async () => {
+    const { communityFeedCategoryIds } = await import('../helpers/profile-feed.js');
+    const communityOnly = communityFeedCategoryIds(false);
+    expect(communityOnly).not.toContain('notes');
+    for (const id of ['calendar', 'resources', 'articles', 'forum', 'wikis', 'boards', 'polls']) {
+      expect(communityOnly).toContain(id);
+    }
+    expect(communityOnly).toContain('shared');
+    expect(communityFeedCategoryIds(true)[0]).toBe('notes');
+  });
+
+  it('maps community-only kinds (forum, wiki, boards) to their own categories', async () => {
+    const { communityFeedCategory } = await import('../helpers/profile-feed.js');
+    expect(communityFeedCategory(11)).toBe('forum');
+    expect(communityFeedCategory(30818)).toBe('wikis');
+    expect(communityFeedCategory(30301)).toBe('boards');
+    expect(communityFeedCategory(30142)).toBe('resources');
+    expect(communityFeedCategory(9802)).toBe('highlights');
+  });
+
+  it('filters community items with the select/hide selection; reposts count as shared', async () => {
+    const { communityItemVisible } = await import('../helpers/profile-feed.js');
+    const resource = ev(30142);
+    const sharedResource = ev(30142, { _sharedBy: 'pk' });
+    const forum = ev(11);
+    const none = { selected: [], hidden: [] };
+    expect(communityItemVisible(resource, none)).toBe(true);
+    expect(communityItemVisible(forum, { selected: ['resources'], hidden: [] })).toBe(false);
+    expect(communityItemVisible(resource, { selected: ['resources'], hidden: [] })).toBe(true);
+    expect(communityItemVisible(sharedResource, { selected: ['shared'], hidden: [] })).toBe(true);
+    expect(communityItemVisible(resource, { selected: ['shared'], hidden: [] })).toBe(false);
+    expect(communityItemVisible(sharedResource, { selected: [], hidden: ['shared'] })).toBe(false);
+    expect(communityItemVisible(forum, { selected: [], hidden: ['forum'] })).toBe(false);
+  });
+
+  it('normalizes a cached selection to the offered category ids', async () => {
+    const { normalizeCategorySelection } = await import('../helpers/profile-feed.js');
+    expect(normalizeCategorySelection(null, ['a', 'b'])).toEqual({ selected: [], hidden: [] });
+    expect(
+      normalizeCategorySelection({ selected: ['notes', 'a'], hidden: ['b', 'x'] }, ['a', 'b'])
+    ).toEqual({ selected: ['a'], hidden: ['b'] });
+    expect(normalizeCategorySelection({ solo: 'a' }, ['a'])).toEqual({ selected: [], hidden: [] });
+  });
+});

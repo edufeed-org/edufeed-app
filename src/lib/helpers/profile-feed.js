@@ -130,6 +130,87 @@ export function effectiveActiveCategories(selection, allIds) {
 }
 
 /**
+ * Community-only content kinds that the profile feed never shows. Kept out
+ * of FEED_CATEGORIES so ALL_FEED_KINDS (the follows loaders' filter) stays
+ * unchanged.
+ * @type {FeedCategory[]}
+ */
+const COMMUNITY_EXTRA_CATEGORIES = [
+  { id: 'forum', kinds: [11] },
+  { id: 'wikis', kinds: [30818] },
+  { id: 'boards', kinds: [30301] }
+];
+
+/** @type {Map<number, string>} */
+const COMMUNITY_KIND_TO_CATEGORY = new Map(KIND_TO_CATEGORY);
+for (const cat of COMMUNITY_EXTRA_CATEGORIES) {
+  for (const kind of cat.kinds) COMMUNITY_KIND_TO_CATEGORY.set(kind, cat.id);
+}
+
+/**
+ * Feed category of an event in the community dashboard feed.
+ * @param {number} kind
+ * @returns {string | null}
+ */
+export function communityFeedCategory(kind) {
+  return COMMUNITY_KIND_TO_CATEGORY.get(kind) ?? null;
+}
+
+/**
+ * Filter chip ids the community dashboard feed offers. Community activity
+ * never contains kind 1, so 'notes' only appears when the user's follows
+ * are merged in (combined feed source).
+ * @param {boolean} includeFollows
+ * @returns {string[]}
+ */
+export function communityFeedCategoryIds(includeFollows) {
+  return [
+    ...(includeFollows ? ['notes'] : []),
+    'calendar',
+    'resources',
+    'articles',
+    'forum',
+    'wikis',
+    'boards',
+    'polls',
+    'bookmarks',
+    'highlights',
+    'shared'
+  ];
+}
+
+/**
+ * Select/hide visibility for a raw community feed event. Shares the
+ * entryVisible semantics of the profile feed: reposted/shared items
+ * (carrying `_sharedBy` from the community content model) also belong to
+ * the 'shared' category.
+ * @param {{ kind: number, _sharedBy?: string }} event
+ * @param {CategorySelection} selection
+ * @returns {boolean}
+ */
+export function communityItemVisible(event, selection) {
+  const entry = {
+    type: communityFeedCategory(event.kind) ?? '',
+    repost: event._sharedBy ? { pubkey: event._sharedBy } : undefined
+  };
+  return entryVisible(entry, selection);
+}
+
+/**
+ * Normalize a cached selection (possibly of an older shape) to the
+ * currently offered category ids, so a stale id can never leave the feed
+ * filtered by a chip that is not rendered.
+ * @param {any} cached
+ * @param {string[]} allowedIds
+ * @returns {CategorySelection}
+ */
+export function normalizeCategorySelection(cached, allowedIds) {
+  /** @param {any} list */
+  const keep = (list) => (Array.isArray(list) ? list.filter((id) => allowedIds.includes(id)) : []);
+  return { selected: keep(cached?.selected), hidden: keep(cached?.hidden) };
+}
+
+/**
  * @typedef {{ type: 'e' | 'a', value: string }} PinPointer
  */
 
