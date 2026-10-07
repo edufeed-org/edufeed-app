@@ -31,10 +31,15 @@ const state = {
   isConnected: true
 };
 const sendCallChat = vi.fn(async () => {});
+const sendCallFile = vi.fn(async () => ({ ok: true }));
 vi.mock('$lib/services/livekit-connection.svelte.js', () => ({
+  CALL_FILE_MAX_BYTES: 25 * 1024 * 1024,
   getLiveKitState: () => state,
-  sendCallChat: (...a) => sendCallChat(...a)
+  sendCallChat: (...a) => sendCallChat(...a),
+  sendCallFile: (...a) => sendCallFile(...a)
 }));
+const toast = vi.hoisted(() => ({ fn: vi.fn() }));
+vi.mock('$lib/helpers/toast.js', () => ({ showToast: (...a) => toast.fn(...a) }));
 vi.mock('$lib/stores/profile-map.svelte.js', () => ({
   useProfileMap: () => () =>
     new Map([
@@ -107,6 +112,9 @@ beforeEach(() => {
   state.canSignal = true;
   state.isConnected = true;
   sendCallChat.mockClear();
+  sendCallFile.mockClear();
+  sendCallFile.mockResolvedValue({ ok: true });
+  toast.fn.mockClear();
   gotoMock.mockClear();
   popout.supported = false;
   popout.popOutCall.mockClear();
@@ -748,5 +756,154 @@ describe('CallChatPanel private messages', () => {
     await fireEvent.click(screen.getByRole('button', { name: m.groups_call_chat_download() }));
     const [, text] = download.fn.mock.calls[0];
     expect(text).toContain(`(${m.groups_call_chat_private_to({ name: 'Bea' })}): nur du`);
+  });
+});
+
+// Issue "Video-Call chat: share files without storing them publicly".
+describe('CallChatPanel files', () => {
+  const ME = 'e'.repeat(64) + ':me';
+  const BEA = 'b'.repeat(64) + ':1';
+  const attachInput = () =>
+    /** @type {HTMLInputElement} */ (screen.getByTestId('call-chat-attach-input'));
+  const pick = async (file) => {
+    const input = attachInput();
+    Object.defineProperty(input, 'files', { value: [file], configurable: true });
+    await fireEvent.change(input);
+  };
+  beforeEach(() => {
+    state.localParticipant = { identity: ME };
+    state.remoteParticipants = [{ identity: BEA }];
+  });
+
+  it('offers an attach button that hands the picked file to the service, privately when a recipient is chosen', async () => {
+    render(CallChatPanel, { props });
+    expect(screen.getByRole('button', { name: m.chat_attach_file() })).toBeTruthy();
+    const file = new File(['abc'], 'notizen.txt', { type: 'text/plain' });
+    await pick(file);
+    expect(sendCallFile).toHaveBeenCalledWith(file, { to: undefined });
+    await fireEvent.change(screen.getByTestId('call-chat-recipient'), { target: { value: BEA } });
+    await pick(file);
+    expect(sendCallFile).toHaveBeenLastCalledWith(file, { to: BEA });
+  });
+
+  it('toasts when the service refuses a too-large file', async () => {
+    sendCallFile.mockResolvedValue({ ok: false, error: 'too-large' });
+    render(CallChatPanel, { props });
+    await pick(new File(['x'], 'big.bin'));
+    await waitFor(() => expect(toast.fn).toHaveBeenCalledTimes(1));
+    expect(toast.fn.mock.calls[0][0]).toBe(m.groups_call_chat_file_too_large({ max: '25.0 MB' }));
+  });
+
+  it('renders a transfer in progress with name, size and a progress bar', () => {
+    state.callChat = [
+      {
+        id: 'f:1',
+        identity: ME,
+        text: '',
+        at: 1,
+        file: {
+          name: 'folien.pdf',
+          size: 2 * 1024 * 1024,
+          mime: 'application/pdf',
+          status: 'sending',
+          progress: 0.4
+        }
+      }
+    ];
+    render(CallChatPanel, { props });
+    const bubble = screen.getByTestId('call-chat-file');
+    expect(bubble.textContent).toContain('folien.pdf');
+    expect(bubble.textContent).toContain('2.0 MB');
+    expect(bubble.textContent).toContain(m.groups_call_chat_file_sending());
+    const bar = /** @type {HTMLProgressElement} */ (bubble.querySelector('progress'));
+    expect(bar.value).toBe(40);
+    expect(bubble.querySelector('a[download]')).toBeNull();
+  });
+
+  it('renders a received file with a download link, and an inline preview for an image', () => {
+    state.callChat = [
+      {
+        id: 'f:2',
+        identity: BEA,
+        text: '',
+        at: 1,
+        file: {
+          name: 'bild.png',
+          size: 1234,
+          mime: 'image/png',
+          status: 'done',
+          progress: 1,
+          url: 'blob:img'
+        }
+      },
+      {
+        id: 'f:3',
+        identity: BEA,
+        text: '',
+        at: 2,
+        file: {
+          name: 'daten.csv',
+          size: 99,
+          mime: 'text/csv',
+          status: 'done',
+          progress: 1,
+          url: 'blob:csv'
+        }
+      }
+    ];
+    render(CallChatPanel, { props });
+    const [img, csv] = screen.getAllByTestId('call-chat-file');
+    expect(img.querySelector('img').getAttribute('src')).toBe('blob:img');
+    const link = /** @type {HTMLAnchorElement} */ (img.querySelector('a[download]'));
+    expect(link.getAttribute('href')).toBe('blob:img');
+    expect(link.getAttribute('download')).toBe('bild.png');
+    expect(csv.querySelector('img')).toBeNull();
+    expect(csv.querySelector('a[download]').getAttribute('href')).toBe('blob:csv');
+    expect(csv.textContent).toContain('99 B');
+  });
+
+  it('says so when a transfer failed', () => {
+    state.callChat = [
+      {
+        id: 'f:4',
+        identity: BEA,
+        text: '',
+        at: 1,
+        file: { name: 'x.zip', size: 5, mime: 'application/zip', status: 'failed', progress: 0.2 }
+      }
+    ];
+    render(CallChatPanel, { props });
+    expect(screen.getByTestId('call-chat-file').textContent).toContain(
+      m.groups_call_chat_file_failed()
+    );
+  });
+
+  it('exports a file message as its name only', async () => {
+    state.callChat = [
+      {
+        id: 'f:5',
+        identity: BEA,
+        text: '',
+        at: 1,
+        file: {
+          name: 'folien.pdf',
+          size: 5,
+          mime: 'application/pdf',
+          status: 'done',
+          progress: 1,
+          url: 'blob:p'
+        }
+      }
+    ];
+    render(CallChatPanel, { props: { ...props, title: 'x' } });
+    await fireEvent.click(screen.getByRole('button', { name: m.groups_call_chat_download() }));
+    const [, text] = download.fn.mock.calls[0];
+    expect(text).toContain(`Bea: [${m.groups_call_chat_file_label()}] folien.pdf`);
+  });
+
+  it('hides the attach button while nothing can be sent', () => {
+    state.isConnected = false;
+    render(CallChatPanel, { props });
+    expect(screen.queryByRole('button', { name: m.chat_attach_file() })).toBeNull();
   });
 });
