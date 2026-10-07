@@ -16,7 +16,30 @@
  * @typedef {ExtractMetadataResult | EnrichError | null} EnrichResult
  */
 
+import { normalizeBibleReference } from './bibleReference.js';
+
 const DEFAULT_TIMEOUT_MS = 60_000;
+
+/**
+ * Bring LLM-extracted bible references into the Loccum form ("Mt 5,1-12")
+ * before they prefill the form; unrecognized text passes through unchanged.
+ *
+ * @param {EnrichResult} result
+ * @returns {EnrichResult}
+ */
+function normalizeBibleReferences(result) {
+  const payload = result && 'payload' in result ? result.payload : null;
+  if (!payload || !Array.isArray(payload.bibleReferences)) return result;
+  return {
+    .../** @type {ExtractMetadataResult} */ (result),
+    payload: {
+      ...payload,
+      bibleReferences: payload.bibleReferences.map((v) =>
+        typeof v === 'string' ? normalizeBibleReference(v) : v
+      )
+    }
+  };
+}
 
 /** @returns {EnrichError} */
 function networkError() {
@@ -64,7 +87,7 @@ export async function enrichFromUrls(urls, variant, options = {}) {
     });
     if (!res.ok) return networkError();
     try {
-      return /** @type {EnrichResult} */ (await res.json());
+      return normalizeBibleReferences(/** @type {EnrichResult} */ (await res.json()));
     } catch {
       return networkError();
     }

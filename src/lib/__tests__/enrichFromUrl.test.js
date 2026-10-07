@@ -173,3 +173,51 @@ describe('enrichFromUrls', () => {
     });
   });
 });
+
+describe('enrichFromUrls — bible references', () => {
+  it('normalizes payload.bibleReferences to the Loccum form', async () => {
+    const fetchFn = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          source: 'llm-enriched',
+          payload: {
+            name: 'X',
+            bibleReferences: [
+              'Mt. 5,1-12',
+              'Apostelgeschichte 2,1-12',
+              '1. Mose 2,4-7',
+              'Bergpredigt'
+            ]
+          },
+          evidence: {},
+          baseline: {}
+        }),
+        { status: 200 }
+      )
+    );
+    const result = /** @type {any} */ (
+      await enrichFromUrls(['https://example.org/x'], 'ekw', { fetchFn })
+    );
+    expect(result.payload.bibleReferences).toEqual([
+      'Mt 5,1-12',
+      'Apg 2,1-12',
+      'Gen 2,4-7',
+      'Bergpredigt'
+    ]);
+    expect(result.payload.name).toBe('X');
+  });
+
+  it('leaves payloads without bibleReferences and error envelopes alone', async () => {
+    const ok = { source: 'opengraph-only', payload: {}, evidence: {}, baseline: {} };
+    const fetchOk = vi.fn().mockResolvedValue(new Response(JSON.stringify(ok), { status: 200 }));
+    expect(await enrichFromUrls(['https://example.org/x'], 'ekw', { fetchFn: fetchOk })).toEqual(
+      ok
+    );
+
+    const err = { error: 'ai_unavailable', code: 'overloaded' };
+    const fetchErr = vi.fn().mockResolvedValue(new Response(JSON.stringify(err), { status: 200 }));
+    expect(await enrichFromUrls(['https://example.org/x'], 'ekw', { fetchFn: fetchErr })).toEqual(
+      err
+    );
+  });
+});

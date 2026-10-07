@@ -4,6 +4,8 @@ import {
   BIBLE_BOOKS,
   findBookMatches,
   findExactBook,
+  LOCCUM_BIBLE_BOOKS,
+  normalizeBibleReference,
   parseAndCanonicalize,
   toDieBibelUrl
 } from '$lib/helpers/educational/bibleReference.js';
@@ -25,12 +27,24 @@ describe('parseAndCanonicalize — German bible references', () => {
       ['Offb 1,8', 'Offb 1,8'],
       // OT
       ['Ps 23', 'Ps 23'],
-      ['1 Mo 1,1', '1 Mo 1,1'],
-      ['Hes 1,1-3,15', 'Hes 1,1-3,15'],
+      ['1 Mo 1,1', 'Gen 1,1'],
+      ['Hi 1,21', 'Ijob 1,21'],
+      ['Pred 3,1', 'Koh 3,1'],
+      ['Ijob 1,21', 'Ijob 1,21'],
+      ['Koh 3,1-8', 'Koh 3,1-8'],
+      ['Joël 3,1', 'Joël 3,1'],
+      ['Esra 1,1', 'Esra 1,1'],
+      ['Zef 3,14', 'Zef 3,14'],
+      ['Hes 1,1-3,15', 'Ez 1,1-3,15'],
       // Long forms get normalized to short
       ['Matthäus 5,3-12', 'Mt 5,3-12'],
       ['Johannes 3,16', 'Joh 3,16'],
-      ['1. Mose 1,1', '1 Mo 1,1'],
+      ['1. Mose 1,1', 'Gen 1,1'],
+      ['Psalm 104', 'Ps 104'],
+      ['Mk. 1,16-20', 'Mk 1,16-20'],
+      ['Apg. 1-2', 'Apg 1-2'],
+      ['Gen. 2,4-7', 'Gen 2,4-7'],
+      ['1. Kor. 12', '1 Kor 12'],
       ['1. Korinther 13,1-3', '1 Kor 13,1-3'],
       // Lists
       ['Mt 5; Mk 2', 'Mt 5; Mk 2'],
@@ -69,11 +83,11 @@ describe('parseAndCanonicalize — German bible references', () => {
   });
 
   describe('verse-list within a chapter', () => {
-    it('"Mt 5,3.5-7" splits into separate entries', async () => {
+    it('"Mt 5,3.5-7" keeps the Loccum verse list', async () => {
       const result = await parseAndCanonicalize('Mt 5,3.5-7');
       expect(result.ok).toBe(true);
-      // Parser emits two OSIS entities (verse 3, then verses 5-7).
-      expect(result.canonical).toBe('Mt 5,3; Mt 5,5-7');
+      // Parser emits two OSIS entities; same chapter → joined by ".".
+      expect(result.canonical).toBe('Mt 5,3.5-7');
     });
   });
 });
@@ -81,7 +95,7 @@ describe('parseAndCanonicalize — German bible references', () => {
 describe('BIBLE_BOOKS — typeahead data', () => {
   it('contains all 73 books in canonical order', () => {
     expect(BIBLE_BOOKS).toHaveLength(73);
-    expect(BIBLE_BOOKS[0]).toEqual({ short: '1 Mo', long: '1. Mose' });
+    expect(BIBLE_BOOKS[0]).toMatchObject({ short: 'Gen', long: 'Genesis' });
     expect(BIBLE_BOOKS.find((b) => b.short === 'Mt')?.long).toBe('Matthäus');
     expect(BIBLE_BOOKS.find((b) => b.short === 'Offb')?.long).toBe('Offenbarung');
   });
@@ -292,4 +306,315 @@ describe('toDieBibelUrl', () => {
     expect(toDieBibelUrl('Mt')).toBeNull();
     expect(toDieBibelUrl('Matthäus')).toBeNull();
   });
+});
+
+// Every `ext:ekw:bibleReference` spelling found on the AMB relays (survey
+// 2026-10-07) must link — RPI EKKW cites with dotted abbreviations
+// ("Mk. 1,16-20"), others without dot or with full book names.
+describe('toDieBibelUrl — house-style tolerance', () => {
+  it('links every value of the RPI EKKW "Simon Petrus" reference event', () => {
+    /** @type {Array<[string, string]>} */
+    const cases = [
+      ['Mk. 1,16-20', 'MRK.1.16-20'],
+      ['Mt. 14,22-32', 'MAT.14.22-32'],
+      ['Mt. 16,13-19', 'MAT.16.13-19'],
+      ['Mk. 14', 'MRK.14'],
+      ['Joh. 21,15-17', 'JHN.21.15-17'],
+      ['Apg. 1-2', 'ACT.1']
+    ];
+    for (const [input, path] of cases) {
+      expect(toDieBibelUrl(input), input).toBe(`${DIE_BIBEL}/${path}`);
+    }
+  });
+
+  it('links the same references in the legacy undotted form', () => {
+    /** @type {Array<[string, string]>} */
+    const cases = [
+      ['Mk 1,16-20', 'MRK.1.16-20'],
+      ['Mt 14,22-32', 'MAT.14.22-32'],
+      ['Mk 14', 'MRK.14'],
+      ['Joh 21,15-17', 'JHN.21.15-17'],
+      ['Apg 1-2', 'ACT.1']
+    ];
+    for (const [input, path] of cases) {
+      expect(toDieBibelUrl(input), input).toBe(`${DIE_BIBEL}/${path}`);
+    }
+  });
+
+  it('accepts numbered books with or without ordinal dot and space', () => {
+    /** @type {Array<[string, string]>} */
+    const cases = [
+      ['1. Kor 12', '1CO.12'],
+      ['1 Kor 12', '1CO.12'],
+      ['1Kor 12', '1CO.12'],
+      ['1. Kor. 12,4', '1CO.12.4'],
+      ['1 Tim 2,1-4', '1TI.2.1-4'],
+      ['1. Mose 2,4-7', 'GEN.2.4-7'],
+      ['1 Mo 2,4-7', 'GEN.2.4-7'],
+      ['1. Mo. 2,4', 'GEN.2.4'],
+      ['1. Joh. 4,16', '1JN.4.16']
+    ];
+    for (const [input, path] of cases) {
+      expect(toDieBibelUrl(input), input).toBe(`${DIE_BIBEL}/${path}`);
+    }
+  });
+
+  it('accepts ecumenical Pentateuch abbreviations and Psalm spellings', () => {
+    /** @type {Array<[string, string]>} */
+    const cases = [
+      ['Gen. 2,4-7', 'GEN.2.4-7'],
+      ['Gen 1', 'GEN.1'],
+      ['Ex 20,1-17', 'EXO.20.1-17'],
+      ['Dtn 6,4', 'DEU.6.4'],
+      ['Ps. 23', 'PSA.23'],
+      ['Psalm 104', 'PSA.104'],
+      ['Psalm 34,15', 'PSA.34.15'],
+      ['Psalmen 23', 'PSA.23']
+    ];
+    for (const [input, path] of cases) {
+      expect(toDieBibelUrl(input), input).toBe(`${DIE_BIBEL}/${path}`);
+    }
+  });
+
+  it('tolerates dash variants, spacing, verse suffixes and verse lists', () => {
+    /** @type {Array<[string, string]>} */
+    const cases = [
+      ['Lukas 15,3–7', 'LUK.15.3-7'], // en dash
+      ['Mk. 1,16 - 20', 'MRK.1.16-20'],
+      ['Joh.21,15', 'JHN.21.15'],
+      ['Mt 13,31f.', 'MAT.13.31-32'],
+      ['Mt 5,3ff.', 'MAT.5.3'],
+      ['Joh 14,27-31a', 'JHN.14.27-31'],
+      ['Jer 29,7.11-14a', 'JER.29.7'],
+      ['LK 10,25-37', 'LUK.10.25-37'],
+      ['Mt. 5,3-12; Lk. 6,20-26', 'MAT.5.3-12']
+    ];
+    for (const [input, path] of cases) {
+      expect(toDieBibelUrl(input), input).toBe(`${DIE_BIBEL}/${path}`);
+    }
+  });
+
+  it('still refuses free text and unknown books', () => {
+    expect(toDieBibelUrl('Mt.')).toBeNull();
+    expect(toDieBibelUrl('Foo. 5,3')).toBeNull();
+    expect(toDieBibelUrl('Mk 1,16-20 und mehr')).toBeNull();
+    expect(toDieBibelUrl('Lukasevangelium (LK 10,25-37)')).toBeNull();
+  });
+});
+
+describe('parseAndCanonicalize — Loccum citation rules (Passau KTF handout §8.2)', () => {
+  // Handout examples verbatim: they must round-trip unchanged.
+  for (const ref of [
+    'Gen 1,1',
+    'Gen 1-3',
+    'Gen 1,1-17',
+    'Gen 1,1.3.5.7',
+    'Gen 1,1.3; 3,17-21; Ex 15,3',
+    'Gen 3,17-21',
+    'Gen 3,17-4,12'
+  ]) {
+    it(`"${ref}" round-trips`, async () => {
+      const result = await parseAndCanonicalize(ref);
+      expect(result.ok).toBe(true);
+      expect(result.canonical).toBe(ref);
+    });
+  }
+
+  /** @type {Array<[string, string]>} */
+  const cases = [
+    // Simon Petrus (RPI EKKW) values
+    ['Mk. 1,16-20', 'Mk 1,16-20'],
+    ['Mt. 14,22-32', 'Mt 14,22-32'],
+    ['Mt. 16,13-19', 'Mt 16,13-19'],
+    ['Mk. 14', 'Mk 14'],
+    ['Joh. 21,15-17', 'Joh 21,15-17'],
+    ['Apg. 1-2', 'Apg 1-2'],
+    // Luther spellings and spacing
+    ['1. Mose 1, 1', 'Gen 1,1'],
+    ['Hesekiel 37,1-14', 'Ez 37,1-14']
+  ];
+  for (const [input, expected] of cases) {
+    it(`"${input}" → "${expected}"`, async () => {
+      const result = await parseAndCanonicalize(input);
+      expect(result.ok).toBe(true);
+      expect(result.canonical).toBe(expected);
+    });
+  }
+});
+
+describe('LOCCUM_BIBLE_BOOKS', () => {
+  /** @param {string} osis */
+  const abbr = (osis) => LOCCUM_BIBLE_BOOKS.find((b) => b.osis === osis)?.abbr;
+
+  it('uses the Loccum abbreviations (no dots, numbered "1 Kor")', () => {
+    /** @type {Array<[string, string]>} */
+    const cases = [
+      ['Gen', 'Gen'],
+      ['Exod', 'Ex'],
+      ['Lev', 'Lev'],
+      ['Num', 'Num'],
+      ['Deut', 'Dtn'],
+      ['Job', 'Ijob'],
+      ['Eccl', 'Koh'],
+      ['Ezek', 'Ez'],
+      ['Ezra', 'Esra'],
+      ['Esth', 'Est'],
+      ['Song', 'Hld'],
+      ['Prov', 'Spr'],
+      ['Zech', 'Sach'],
+      ['Obad', 'Obd'],
+      ['Zeph', 'Zef'],
+      ['Joel', 'Joël'],
+      ['Ps', 'Ps'],
+      ['Matt', 'Mt'],
+      ['Acts', 'Apg'],
+      ['Rom', 'Röm'],
+      ['1Cor', '1 Kor'],
+      ['2Tim', '2 Tim'],
+      ['1John', '1 Joh'],
+      ['1Sam', '1 Sam'],
+      ['1Macc', '1 Makk'],
+      ['Rev', 'Offb']
+    ];
+    for (const [osis, expected] of cases) expect(abbr(osis), osis).toBe(expected);
+    for (const b of LOCCUM_BIBLE_BOOKS) expect(b.abbr, b.osis).not.toMatch(/\./);
+  });
+
+  it('maps every accepted spelling to exactly one book', () => {
+    /** @type {Map<string, string>} */
+    const seen = new Map();
+    for (const b of LOCCUM_BIBLE_BOOKS) {
+      for (const name of [b.abbr, b.name, b.osis, ...b.aliases]) {
+        const key = name
+          .normalize('NFD')
+          .replace(/[\u0300-\u036f]/g, '')
+          .toLowerCase()
+          .replace(/[.\s]/g, '');
+        expect(seen.get(key) ?? b.osis, name).toBe(b.osis);
+        seen.set(key, b.osis);
+      }
+    }
+  });
+});
+
+describe('normalizeBibleReference — display / prefill', () => {
+  it('rewrites the Simon Petrus values to Loccum', () => {
+    /** @type {Array<[string, string]>} */
+    const cases = [
+      ['Mk. 1,16-20', 'Mk 1,16-20'],
+      ['Mt. 14,22-32', 'Mt 14,22-32'],
+      ['Mt. 16,13-19', 'Mt 16,13-19'],
+      ['Mk. 14', 'Mk 14'],
+      ['Joh. 21,15-17', 'Joh 21,15-17'],
+      ['Apg. 1-2', 'Apg 1-2']
+    ];
+    for (const [input, expected] of cases) expect(normalizeBibleReference(input)).toBe(expected);
+  });
+
+  it('keeps the handout examples verbatim', () => {
+    for (const ref of [
+      'Gen 1,1',
+      'Gen 1-3',
+      'Gen 1,1-17',
+      'Gen 1,1.3.5.7',
+      'Gen 1,1.3; 3,17-21; Ex 15,3',
+      'Gen 3,17-21',
+      'Gen 3,17-4,12'
+    ]) {
+      expect(normalizeBibleReference(ref)).toBe(ref);
+    }
+  });
+
+  it('rewrites Luther, full-name, dotted and English spellings', () => {
+    /** @type {Array<[string, string]>} */
+    const cases = [
+      ['Mt 2', 'Mt 2'],
+      ['LK 10,25-37', 'Lk 10,25-37'],
+      ['Psalm 104', 'Ps 104'],
+      ['Psalm 34,15', 'Ps 34,15'],
+      ['Ps. 23', 'Ps 23'],
+      ['Apostelgeschichte 2,1-12', 'Apg 2,1-12'],
+      ['Matthäus 5,43-48', 'Mt 5,43-48'],
+      ['Jesaja 9,1-5', 'Jes 9,1-5'],
+      ['Johannes 6,63', 'Joh 6,63'],
+      ['1. Mose 2,4-7', 'Gen 2,4-7'],
+      ['1 Mo 2,4-7', 'Gen 2,4-7'],
+      ['5. Mose 6,4', 'Dtn 6,4'],
+      ['Hiob 1,21', 'Ijob 1,21'],
+      ['Hi 1,21', 'Ijob 1,21'],
+      ['Pred 3,1-8', 'Koh 3,1-8'],
+      ['Prediger 3,1', 'Koh 3,1'],
+      ['Hes 37,1-14', 'Ez 37,1-14'],
+      ['Esr 1,1', 'Esra 1,1'],
+      ['Zeph 3,14', 'Zef 3,14'],
+      ['Joel 3,1', 'Joël 3,1'],
+      ['1. Kor 12', '1 Kor 12'],
+      ['1. Kor. 13,1-13', '1 Kor 13,1-13'],
+      ['1Kor 12', '1 Kor 12'],
+      ['1 Tim 2,1-4', '1 Tim 2,1-4'],
+      ['Matthew 5,1-12', 'Mt 5,1-12'],
+      ['1 Corinthians 13', '1 Kor 13'],
+      ['Rev 21,4', 'Offb 21,4'],
+      ['Lukas 15,3–7', 'Lk 15,3-7'],
+      ['Mk. 1,16 - 20', 'Mk 1,16-20'],
+      ['Gen 1, 1', 'Gen 1,1'],
+      ['Joh 14,27-31a', 'Joh 14,27-31a'],
+      ['Jer 29,7.11-14a', 'Jer 29,7.11-14a'],
+      ['Mt 13,31f.', 'Mt 13,31f.'],
+      ['Mt 5,3-12; Lk 6,20-26', 'Mt 5,3-12; Lk 6,20-26'],
+      ['Mt 5,3; Mt 6,1', 'Mt 5,3; 6,1']
+    ];
+    for (const [input, expected] of cases) {
+      expect(normalizeBibleReference(input), input).toBe(expected);
+    }
+  });
+
+  it('returns free text verbatim', () => {
+    for (const v of [
+      'Lukasevangelium (LK 10,25-37)',
+      'Mk 1,16-20 und mehr',
+      'Bergpredigt',
+      'Foo 5,3',
+      'Mt 5; Bergpredigt',
+      '3,17-21',
+      ''
+    ]) {
+      expect(normalizeBibleReference(v)).toBe(v);
+    }
+  });
+});
+
+describe('toDieBibelUrl — Loccum spellings', () => {
+  it('links Loccum-only abbreviations and continuation lists', () => {
+    /** @type {Array<[string, string]>} */
+    const cases = [
+      ['Ijob 1,21', 'JOB.1.21'],
+      ['Koh 3,1-8', 'ECC.3.1-8'],
+      ['Ez 37,1-14', 'EZK.37.1-14'],
+      ['Esra 1,1', 'EZR.1.1'],
+      ['Joël 3,1', 'JOL.3.1'],
+      ['Joe\u0308l 3,1', 'JOL.3.1'], // NFD input
+      ['Zef 3,14', 'ZEP.3.14'],
+      ['Gen 1,1.3; 3,17-21; Ex 15,3', 'GEN.1.1'],
+      ['Gen 3,17-4,12', 'GEN.3.17'],
+      ['Matthew 5,1-12', 'MAT.5.1-12']
+    ];
+    for (const [input, path] of cases) {
+      expect(toDieBibelUrl(input), input).toBe(`${DIE_BIBEL}/${path}`);
+    }
+  });
+});
+
+describe('parseAndCanonicalize — deutero-canonical books', () => {
+  for (const [input, expected] of [
+    ['Sir 1,1', 'Sir 1,1'],
+    ['Tob 1,1', 'Tob 1,1'],
+    ['Weish 7,1', 'Weish 7,1'],
+    ['1 Makk 1,1', '1 Makk 1,1']
+  ]) {
+    it(`"${input}" → "${expected}"`, async () => {
+      const result = await parseAndCanonicalize(input);
+      expect(result.canonical).toBe(expected);
+    });
+  }
 });

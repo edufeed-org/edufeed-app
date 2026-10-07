@@ -11,7 +11,7 @@
 import { parseExtensionTags } from './parseExtensionTags.js';
 import { getFormReferenceFromResource } from './formReference.js';
 import { parseFormTemplate } from '../forms.js';
-import { toDieBibelUrl } from './bibleReference.js';
+import { normalizeBibleReference, toDieBibelUrl } from './bibleReference.js';
 import { ALL_VARIANTS, EXTENSION_NAMESPACE_LABELS } from '$lib/config/resource-form-variants.js';
 import { resolveMessage } from '$lib/helpers/message-lookup.js';
 
@@ -157,7 +157,10 @@ export function buildExtensionCards(sections, locale) {
             : [];
         const scalars = [...conceptLabels, ...facet.scalars]
           .filter(Boolean)
-          .map((/** @type {string} */ v) => {
+          .map((/** @type {string} */ raw) => {
+            // Bible references display in the Loccum form; stored events keep
+            // whatever spelling they were published with.
+            const v = facet.facetName === 'bibleReference' ? normalizeBibleReference(raw) : raw;
             const href = toDieBibelUrl(v) ?? undefined;
             return { text: v, href, long: !href && (v.includes('\n') || v.length > 40) };
           });

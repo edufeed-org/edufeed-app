@@ -3,6 +3,8 @@
  * (AMBResourceView). Kept framework-free so they can be unit-tested in node.
  */
 
+import { normalizeBibleReference } from './bibleReference.js';
+
 /**
  * Split a title into `{ main, script, tail }` for the hero's script-accent
  * treatment. Only ever splits on word boundaries so words are never broken.
@@ -118,7 +120,11 @@ export function summarizeExtensionFacets(parsed, opts = {}) {
       if (out.length >= limit) return out;
 
       if (facet.kind === 'scalar') {
-        const items = facet.scalars.filter(Boolean);
+        // Bible references display in the Loccum form; stored events keep
+        // whatever spelling they were published with.
+        const items = facet.scalars
+          .filter(Boolean)
+          .map((v) => (facetName === 'bibleReference' ? normalizeBibleReference(v) : v));
         if (items.length === 0) continue;
         if (items.length === 1 && items[0] === 'false') continue;
         if (items.length === 1 && items[0] === 'true') {
