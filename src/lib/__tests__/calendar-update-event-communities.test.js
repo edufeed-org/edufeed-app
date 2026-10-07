@@ -110,3 +110,44 @@ describe('updateEvent community h-tags', () => {
     expect(signedHTags()).toEqual([]);
   });
 });
+
+describe('updateEvent keeps tags the form does not manage', () => {
+  beforeEach(() => {
+    signEvent.mockClear();
+  });
+
+  it('preserves summary, a, g, labels and custom tags; replaces form-owned ones', async () => {
+    const existing = {
+      ...makeExistingEvent([COMMUNITY_A]),
+      tags: [
+        ['d', 'event-1'],
+        ['h', COMMUNITY_A],
+        ['title', 'Old Title'],
+        ['start', '2026-01-01'],
+        ['t', 'stale'],
+        ['summary', 'Short teaser'],
+        ['a', '31924:' + PK + ':cal', 'wss://relay.example'],
+        ['g', 'u1hcy'],
+        ['L', 'org.rpi'],
+        ['l', 'workshop', 'org.rpi'],
+        ['rpi:source', 'https://rpi.example/1']
+      ]
+    };
+    const actions = createCalendarActions('');
+    await actions.updateEvent(FORM_DATA, existing, null, [COMMUNITY_B]);
+
+    const tags = signEvent.mock.calls.at(-1)[0].tags;
+    expect(tags.filter((t) => t[0] === 'title')).toEqual([['title', 'Test Event']]);
+    expect(tags.filter((t) => t[0] === 'start')).toEqual([['start', '2026-07-08']]);
+    expect(tags.filter((t) => t[0] === 't')).toEqual([]);
+    expect(signedHTags()).toEqual([COMMUNITY_B]);
+    expect(tags.slice(-6)).toEqual([
+      ['summary', 'Short teaser'],
+      ['a', '31924:' + PK + ':cal', 'wss://relay.example'],
+      ['g', 'u1hcy'],
+      ['L', 'org.rpi'],
+      ['l', 'workshop', 'org.rpi'],
+      ['rpi:source', 'https://rpi.example/1']
+    ]);
+  });
+});

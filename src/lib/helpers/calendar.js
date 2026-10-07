@@ -1026,6 +1026,74 @@ export function buildCalendarEventTags(formData, eventData, dTag, hTag) {
 }
 
 /**
+ * Tag names the calendar event form manages — everything `buildCalendarEventTags`
+ * (plus the attribute builder) can emit and the form round-trips. On edit these
+ * are replaced wholesale by the form's output; any other tag on the existing
+ * event is kept. A trailing `*` marks a name prefix.
+ *
+ * Not listed on purpose: `summary` (NIP-52 short description — the form edits
+ * `content`, not this tag), `a`, `L`/`l` and `g` (`convertFormDataToEvent` never
+ * sets a geohash, so the builder never writes one on edit). `client` is listed
+ * because the event factory owns it: it re-adds it when the user opted in and
+ * an edit by this app must not keep another client's attribution.
+ * @type {readonly string[]}
+ */
+export const CALENDAR_FORM_OWNED_TAGS = Object.freeze([
+  'd',
+  'h',
+  'title',
+  'start',
+  'end',
+  'start_tzid',
+  'end_tzid',
+  'D',
+  'image',
+  'location',
+  't',
+  'r',
+  'p',
+  'participant',
+  'registrationRequired',
+  'price',
+  'eventAttendanceMode',
+  'educationalLevel:*',
+  'client'
+]);
+
+/**
+ * Merge a form's freshly built tags into an existing event's tags: tags whose
+ * name the form owns are dropped from the existing event and replaced by the
+ * form's tags; every other existing tag is kept, in its original order, after
+ * the form's tags. Any name the form actually emitted counts as owned too, so
+ * the result never carries a stale duplicate.
+ *
+ * Pure function.
+ *
+ * @param {string[][]} existingTags - Tags of the event being edited (untrusted)
+ * @param {string[][]} formTags - Tags built from the form
+ * @param {Iterable<string>} ownedNames - Owned tag names; `prefix*` matches by prefix
+ * @returns {string[][]}
+ */
+export function mergeFormOwnedTags(existingTags, formTags, ownedNames) {
+  const exact = new Set(formTags.map((t) => t[0]));
+  /** @type {string[]} */
+  const prefixes = [];
+  for (const name of ownedNames) {
+    if (name.endsWith('*')) prefixes.push(name.slice(0, -1));
+    else exact.add(name);
+  }
+
+  /** @param {string} name */
+  const isOwned = (name) => exact.has(name) || prefixes.some((p) => name.startsWith(p));
+
+  const kept = (Array.isArray(existingTags) ? existingTags : [])
+    .filter((t) => Array.isArray(t) && typeof t[0] === 'string' && !isOwned(t[0]))
+    .map((t) => [...t]);
+
+  return [...formTags, ...kept];
+}
+
+/**
  * Padding in days to add before/after the view range to catch multi-day events
  * that span view boundaries
  * @type {number}
