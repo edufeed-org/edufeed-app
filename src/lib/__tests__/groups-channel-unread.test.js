@@ -16,6 +16,8 @@ import {
   hostRollup,
   markRead,
   markHostRead,
+  channelSeenUpTo,
+  hasNewFromOthers,
   UNREAD_LOOKBACK,
   UNREAD_MAX_LOOKBACK
 } from '$lib/groups/channel-unread.js';
@@ -224,5 +226,28 @@ describe('markHostRead', () => {
   it('returns the same object when there was nothing to mark', () => {
     const markers = { [KEY('a')]: 100, [KEY('b')]: 200 };
     expect(markHostRead(markers, summaries, [KEY('a'), KEY('b')])).toBe(markers);
+  });
+});
+
+// While in a call, the "Kanal" tab says when the channel moved on behind
+// the call chat. The active channel's markers are stamped read as messages
+// arrive (host-unread), so this is a session-local "seen up to" instead.
+describe('channel tab while in a call', () => {
+  const ME = 'a'.repeat(64);
+  const OTHER = 'b'.repeat(64);
+  it('seen-up-to is now, or the newest message if that is later (clock skew)', () => {
+    expect(channelSeenUpTo([{ created_at: 50 }, { created_at: 80 }], 100)).toBe(100);
+    expect(channelSeenUpTo([{ created_at: 150 }], 100)).toBe(150);
+    expect(channelSeenUpTo([], 100)).toBe(100);
+  });
+
+  it('new = a message from someone else after the marker; mine never count', () => {
+    const events = [
+      { pubkey: OTHER, created_at: 90 },
+      { pubkey: ME, created_at: 120 }
+    ];
+    expect(hasNewFromOthers(events, ME, 100)).toBe(false);
+    expect(hasNewFromOthers([...events, { pubkey: OTHER, created_at: 101 }], ME, 100)).toBe(true);
+    expect(hasNewFromOthers(undefined, ME, 100)).toBe(false);
   });
 });

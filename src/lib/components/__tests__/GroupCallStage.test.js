@@ -10,6 +10,7 @@
  * @vitest-environment jsdom
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { flushSync } from 'svelte';
 import { render, screen, fireEvent } from '@testing-library/svelte';
 
 const { lk, svc, media, bg } = vi.hoisted(() => ({
@@ -124,6 +125,7 @@ vi.mock('$lib/components/icons', () => ({
   MoreIcon: Stub
 }));
 vi.mock('$lib/paraglide/messages', () => ({
+  groups_call_chat_unread: () => 'New messages in the call chat',
   groups_call_leave: () => 'Leave call',
   groups_call_connecting: () => 'Connecting…',
   groups_call_listen_only: () => 'You are listening only',
@@ -190,6 +192,7 @@ globalThis.ResizeObserver ??= class {
   disconnect() {}
 };
 
+const unreadMod = await import('$lib/groups/call-chat-unread.svelte.js');
 const { default: GroupCallStage } = await import(
   '$lib/components/groups/call/GroupCallStage.svelte'
 );
@@ -313,6 +316,29 @@ describe('GroupCallStage — a view, not the connection owner', () => {
     render(GroupCallStage, { props: { ...baseProps, onShowChat } });
     await fireEvent.click(screen.getByTestId('group-call-show-chat'));
     expect(onShowChat).toHaveBeenCalledTimes(1);
+  });
+
+  // Issue "notification dot for new messages": the call chat is hidden
+  // behind this button, so it says when something new is in there.
+  it('shows an unread dot on the chat button while the chat is closed', () => {
+    unreadMod.resetCallChatUnread();
+    render(GroupCallStage, { props: { ...baseProps, onShowChat: vi.fn() } });
+    const button = screen.getByTestId('group-call-show-chat');
+    expect(button.querySelector('[data-testid="call-chat-unread-dot"]')).toBeNull();
+    expect(button.getAttribute('aria-label')).toBe('Chat');
+    unreadMod.noteCallChatReceived();
+    flushSync();
+    expect(button.querySelector('[data-testid="call-chat-unread-dot"]')).not.toBeNull();
+    expect(button.getAttribute('aria-label')).toBe('Chat – New messages in the call chat');
+    unreadMod.resetCallChatUnread();
+  });
+
+  it('shows no unread dot while the chat is open beside the stage', () => {
+    unreadMod.resetCallChatUnread();
+    unreadMod.noteCallChatReceived();
+    render(GroupCallStage, { props: { ...baseProps, onShowChat: vi.fn(), chatOpen: true } });
+    expect(screen.queryByTestId('call-chat-unread-dot')).toBeNull();
+    unreadMod.resetCallChatUnread();
   });
 
   it('marks the chat button pressed while the chat is open beside the stage', () => {

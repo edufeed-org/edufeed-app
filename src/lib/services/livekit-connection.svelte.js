@@ -28,6 +28,7 @@ import {
 import { withHand, handQueue } from '$lib/groups/call-tile-order.js';
 import { reactionPayload, parseReactionPayload } from '$lib/groups/call-reactions.js';
 import { isGuestParticipant } from '$lib/groups/livekit.js';
+import { noteCallChatReceived, resetCallChatUnread } from '$lib/groups/call-chat-unread.svelte.js';
 import {
   MEDIAPIPE_ASSET_PATHS,
   backgroundProcessorOptions,
@@ -374,10 +375,11 @@ export async function sendReaction(emoji) {
  * message counts as sent now; a `ts` is clamped to [now - 12 h, now].
  * @param {string} identity @param {string} text @param {string} nonce @param {number} [ts]
  * @param {boolean} [guest]
+ * @returns {boolean} whether it was new
  */
 function addChat(identity, text, nonce, ts, guest = false) {
   const id = `${identity}:${nonce}`;
-  if (callChat.some((c) => c.id === id)) return;
+  if (callChat.some((c) => c.id === id)) return false;
   const now = Date.now();
   const at =
     typeof ts === 'number' && Number.isFinite(ts)
@@ -389,6 +391,7 @@ function addChat(identity, text, nonce, ts, guest = false) {
   ]
     .sort((a, b) => a.at - b.at)
     .slice(-CHAT_KEEP);
+  return true;
 }
 
 /**
@@ -463,13 +466,16 @@ function handleSignal(payload, participant, _kind, topic) {
       chat.n.length > 0 &&
       chat.n.length <= 32
     ) {
-      addChat(
+      const added = addChat(
         participant.identity,
         chat.text.trim(),
         chat.n,
         replayedTime(participant.identity, chat.ts),
         isGuestParticipant(participant)
       );
+      // Data from a remote participant: never my own message, so it can be
+      // unread (the dots on the call chat tab, chat button and dock).
+      if (added) noteCallChatReceived();
     }
     return;
   }
@@ -897,6 +903,7 @@ export async function disconnectFromRoom() {
   mutedIdentities = new Set();
   reactions = [];
   callChat = [];
+  resetCallChatUnread();
   speakingParticipantIds = new SvelteSet();
   audioInputDevices = [];
   activeAudioDeviceId = '';

@@ -25,11 +25,15 @@
   import { showToast } from '$lib/helpers/toast';
   import { callMediaErrorMessage } from '$lib/groups/call-media-errors.js';
   import { MeetIcon, MicIcon, MicOffIcon } from '$lib/components/icons';
+  import { getCallChatUnread } from '$lib/groups/call-chat-unread.svelte.js';
+  import CallUnreadDot from './CallUnreadDot.svelte';
   import * as m from '$lib/paraglide/messages';
 
   const lk = getLiveKitState();
   const call = getGroupCallState();
 
+  // New call chat messages nobody has seen (no chat on screen).
+  const chatUnread = getCallChatUnread();
   const count = $derived((lk.localParticipant ? 1 : 0) + lk.remoteParticipants.length);
   const someoneSpeaking = $derived(lk.speakingParticipantIds.size > 0);
 
@@ -134,7 +138,12 @@
         {/if}
       </button>
     {/if}
-    <button class="btn btn-sm btn-primary" onclick={backToCall}>{m.groups_call_return()}</button>
+    <button class="btn btn-sm btn-primary" onclick={backToCall}>
+      {m.groups_call_return()}
+      {#if chatUnread.count > 0}
+        <CallUnreadDot tone="bg-primary-content" label={m.groups_call_chat_unread()} />
+      {/if}
+    </button>
     <button class="btn btn-sm btn-error" onclick={leave}>{m.groups_call_leave()}</button>
   </div>
 {/if}

@@ -51,6 +51,7 @@ vi.mock('$lib/paraglide/messages', () => ({
   groups_call_in_call: () => 'In call',
   groups_call_people_in_call: (p) => `${p.count} in the call`,
   groups_call_return: () => 'Back to call',
+  groups_call_chat_unread: () => 'New messages in the call chat',
   groups_call_leave: () => 'Leave call',
   groups_call_ended_removed: () => 'You were removed from the call.',
   groups_call_ended_dropped: () => 'The connection to the call was lost.',
@@ -189,5 +190,21 @@ describe('CallDock', () => {
     call.error = new Error('x');
     render(CallDock);
     expect(screen.getByText('call failed')).toBeTruthy();
+  });
+});
+
+describe('CallDock call chat unread dot', () => {
+  it('marks "back to call" while the call chat has unseen messages', async () => {
+    const unreadMod = await import('$lib/groups/call-chat-unread.svelte.js');
+    const { flushSync } = await import('svelte');
+    unreadMod.resetCallChatUnread();
+    render(CallDock);
+    const back = () => screen.getByRole('button', { name: /Back to call/ });
+    expect(screen.queryByTestId('call-chat-unread-dot')).toBeNull();
+    unreadMod.noteCallChatReceived();
+    flushSync();
+    expect(back().querySelector('[data-testid="call-chat-unread-dot"]')).not.toBeNull();
+    expect(back().textContent).toContain('New messages in the call chat');
+    unreadMod.resetCallChatUnread();
   });
 });
