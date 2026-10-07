@@ -10,9 +10,10 @@
  * @param {string} message - The message to display (can be a translation key or plain text)
  * @param {string} type - Toast type: 'success', 'error', 'info', 'warning'
  * @param {number} duration - Duration in ms (default: 3000). 0 = persistent (call dismiss()).
+ * @param {{ link?: { href: string, label: string } }} [opts] - Optional trailing link (opens in a new tab)
  * @returns {() => void} dismiss — removes the toast immediately
  */
-export function showToast(message, type = 'info', duration = 3000) {
+export function showToast(message, type = 'info', duration = 3000, opts = {}) {
   // Targeting (journey-test regression 2026-08-14 — "silent" error toasts):
   // - An OPEN native <dialog> renders in the browser's top layer, which sits
   //   above ALL z-indexed body content — a body-appended toast is invisible
@@ -47,6 +48,16 @@ export function showToast(message, type = 'info', duration = 3000) {
   content.className = 'text-sm';
   content.textContent = message;
   toast.appendChild(content);
+
+  if (opts.link?.href) {
+    const link = document.createElement('a');
+    link.className = 'link text-sm font-semibold whitespace-nowrap';
+    link.href = opts.link.href;
+    link.target = '_blank';
+    link.rel = 'noopener noreferrer';
+    link.textContent = opts.link.label;
+    toast.appendChild(link);
+  }
 
   // Add to container
   toastContainer.appendChild(toast);

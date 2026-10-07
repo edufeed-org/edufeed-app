@@ -4,9 +4,19 @@ import { sveltekit } from '@sveltejs/kit/vite';
 import { svelteTesting } from '@testing-library/svelte/vite';
 import { defineConfig } from 'vitest/config';
 import { fileURLToPath } from 'node:url';
+import { readFileSync } from 'node:fs';
 import { mediapipeWasm } from './scripts/vite-plugin-mediapipe-wasm.mjs';
 
+const { version: appVersion } = JSON.parse(
+  readFileSync(new URL('./package.json', import.meta.url), 'utf8')
+);
+
 export default defineConfig({
+  // package.json version, read by $lib/helpers/app-version.js (shown in
+  // in-app issue reports so maintainers know which build misbehaved).
+  define: {
+    __APP_VERSION__: JSON.stringify(appVersion)
+  },
   server: {
     allowedHosts: process.env.TUNNEL ? true : undefined
   },

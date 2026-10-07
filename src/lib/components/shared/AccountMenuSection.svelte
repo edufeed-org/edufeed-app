@@ -21,7 +21,13 @@
   import { profileLink } from '$lib/helpers/nostrUtils.js';
   import ProfileAvatar from './ProfileAvatar.svelte';
   import ConnectionStatus from './ConnectionStatus.svelte';
-  import { GearIcon, ArrowLeftRightIcon, InfoCircleIcon, CheckIcon } from '$lib/components/icons';
+  import {
+    GearIcon,
+    ArrowLeftRightIcon,
+    InfoCircleIcon,
+    CheckIcon,
+    ChatTextIcon
+  } from '$lib/components/icons';
 
   /** @type {{ onClose?: () => void }} */
   let { onClose = () => {} } = $props();
@@ -55,6 +61,11 @@
   );
 
   const pendingMembershipCount = useMembershipPendingCount();
+
+  function openReportIssue() {
+    onClose?.();
+    modalStore.openModal('reportIssue');
+  }
 
   function openLoginModal() {
     modalStore.openModal('login');
@@ -148,6 +159,12 @@
 
   <!-- Group 3: info -->
   <ConnectionStatus variant="menu-item" {onClose} />
+  <li>
+    <button type="button" onclick={openReportIssue} data-testid="report-issue-menu-item">
+      <ChatTextIcon class_="w-4 h-4" />
+      {m.report_issue_menu_item()}
+    </button>
+  </li>
   <li>
     <a href={resolve('/imprint')} onclick={onClose}>
       <InfoCircleIcon class_="w-4 h-4" />

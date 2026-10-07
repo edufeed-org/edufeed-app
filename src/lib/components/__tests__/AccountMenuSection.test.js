@@ -76,6 +76,7 @@ vi.mock('$lib/paraglide/messages', () => ({
   common_settings: () => 'Einstellungen',
   navbar_switch_account: () => 'Konto wechseln',
   navbar_imprint: () => 'Impressum',
+  report_issue_menu_item: () => 'Feedback & Fehler melden',
   navbar_logout_current: () => 'Abmelden',
   navbar_logout_all: () => 'Alle Konten abmelden',
   navbar_logout_all_confirm: () => 'Sure?',
@@ -100,6 +101,16 @@ beforeEach(() => {
 });
 
 describe('AccountMenuSection', () => {
+  it('opens the issue report modal from the info group and closes the menu', async () => {
+    const onClose = vi.fn();
+    const { findByTestId } = render(AccountMenuSection, { onClose });
+    const row = await findByTestId('report-issue-menu-item');
+    expect(row.textContent).toContain('Feedback & Fehler melden');
+    await fireEvent.click(row);
+    expect(mockModalStore.openModal).toHaveBeenCalledWith('reportIssue');
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
   it('renders the active account display name in the identity header', async () => {
     const { findByText } = render(AccountMenuSection, { onClose: vi.fn() });
     expect(await findByText('Alice')).toBeTruthy();
