@@ -11,7 +11,8 @@
   /** @type {(path: string) => string} */
   const resolve = /** @type {any} */ (_resolve);
   import { fetchEventById } from '$lib/helpers/nostrUtils.js';
-  import { getTagValue, getNestedTagValues } from '$lib/helpers/educational/ambTransform.js';
+  import { getTagValue, getLabelsWithFallback } from '$lib/helpers/educational/ambTransform.js';
+  import { getLocale } from '$lib/paraglide/runtime.js';
   import { CopyIcon } from '$lib/components/icons';
   import ResourceCover from '$lib/components/educational/ResourceCover.svelte';
 
@@ -28,8 +29,8 @@
   let summary = $state('');
   /** @type {string | null} */
   let image = $state(null);
-  /** @type {string} */
-  let resourceType = $state('');
+  /** @type {string[]} */
+  let resourceTypes = $state.raw([]);
   /** @type {string} */
   let identifierDTag = $state('');
 
@@ -46,9 +47,11 @@
           summary = getTagValue(tags, 'description') || '';
           image = getTagValue(tags, 'image');
           identifierDTag = getTagValue(tags, 'd') || '';
-          // Pick the first learningResourceType prefLabel if present
-          const types = getNestedTagValues(tags, 'learningResourceType:0:prefLabel');
-          resourceType = types[0] || '';
+          // Every learningResourceType label (AMB flattens them as
+          // `learningResourceType:prefLabel:<lang>`, one tag per type).
+          resourceTypes = getLabelsWithFallback(tags, 'learningResourceType', getLocale())
+            .map((t) => t.label)
+            .filter(Boolean);
         } else {
           error = 'Resource not found';
         }
@@ -111,9 +114,9 @@
           <p class="line-clamp-2 text-sm text-base-content/60">{summary}</p>
         {/if}
         <div class="mt-2 flex flex-wrap gap-1">
-          {#if resourceType}
+          {#each resourceTypes as resourceType, i (i)}
             <div class="badge badge-outline badge-sm">{resourceType}</div>
-          {/if}
+          {/each}
           <div class="badge badge-sm badge-accent">Resource</div>
         </div>
       </div>

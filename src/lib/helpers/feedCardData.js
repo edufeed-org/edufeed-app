@@ -27,13 +27,30 @@ export function getFeedCardData(event) {
       };
     }
     case 30142: {
-      const lrt = getTag('learningResourceType');
-      const lrtLabel = lrt ? lrt.split('/').pop() : undefined;
+      // AMB flattens learningResourceType into `learningResourceType:id` +
+      // `learningResourceType:prefLabel:<lang>` tags, one per type. List every
+      // type (a resource is often exercise AND lesson plan AND assessment);
+      // prefer German labels, then English, then any language, then id slugs.
+      const lrtLabels =
+        getTags('learningResourceType:prefLabel:de').length > 0
+          ? getTags('learningResourceType:prefLabel:de')
+          : getTags('learningResourceType:prefLabel:en').length > 0
+            ? getTags('learningResourceType:prefLabel:en')
+            : (event.tags
+                ?.filter(
+                  /** @param {string[]} t */ (t) =>
+                    t[0].startsWith('learningResourceType:prefLabel:')
+                )
+                .map(/** @param {string[]} t */ (t) => t[1]) ?? []);
+      const lrtSlugs = getTags('learningResourceType:id').map(
+        /** @param {string} id */ (id) => id.split('/').pop() ?? id
+      );
+      const types = [...new Set(lrtLabels.length > 0 ? lrtLabels : lrtSlugs)].filter(Boolean);
       return {
         title: getTag('name') || 'Untitled Resource',
         typeKey: 'learning',
         tags,
-        description: lrtLabel
+        description: types.length > 0 ? types.join(', ') : undefined
       };
     }
     case 30301: {

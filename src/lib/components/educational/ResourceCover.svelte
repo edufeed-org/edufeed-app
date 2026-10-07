@@ -134,9 +134,11 @@
     getLabelsWithFallback(resource?.tags ?? [], 'audience', getLocale())
   );
 
-  const contentTypeLabel = $derived(
-    localizedTypes[0]?.label ? localizedTypes[0].label.toUpperCase() : null
-  );
+  // Every type on the pill, not just the first ("ÜBUNG · LERNKONTROLLE").
+  const contentTypeLabel = $derived.by(() => {
+    const labels = localizedTypes.map((t) => t.label).filter(Boolean);
+    return labels.length > 0 ? labels.join(' · ').toUpperCase() : null;
+  });
   const metaLabel = $derived(
     localizedLevels[0]?.label
       ? localizedLevels[0].label.toUpperCase()
