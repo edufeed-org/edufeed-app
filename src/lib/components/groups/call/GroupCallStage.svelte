@@ -78,6 +78,7 @@
   import ParticipantTile from './ParticipantTile.svelte';
   import ScreenShareTile from './ScreenShareTile.svelte';
   import { getCallChatUnread } from '$lib/groups/call-chat-unread.svelte.js';
+  import { requestPrivateRecipient } from '$lib/groups/call-chat-compose.svelte.js';
   import CallUnreadDot from './CallUnreadDot.svelte';
   import * as m from '$lib/paraglide/messages';
 
@@ -117,6 +118,15 @@
   let rootEl = $state(undefined);
 
   const lk = getLiveKitState();
+  // A tile's "Privat schreiben": park the recipient for the chat panel and
+  // bring the chat on screen (the panel takes the request when it mounts
+  // or is already there).
+  /** @param {string} identity */
+  function writePrivately(identity) {
+    requestPrivateRecipient(identity);
+    if (!chatOpen) onShowChat?.();
+  }
+
   // Unseen call chat behind the "Chat" button (not while the chat is open
   // beside the stage — it is on screen then).
   const chatUnread = getCallChatUnread();
@@ -639,6 +649,7 @@
       pinned={pinnedKey === it.key}
       onTogglePin={() => togglePin(it.key)}
       {compact}
+      onPrivateMessage={onShowChat && !it.isLocal ? writePrivately : undefined}
     />
   {/if}
 {/snippet}

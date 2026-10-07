@@ -101,3 +101,23 @@ describe('callChatFileName', () => {
     expect(callChatFileName('x'.repeat(200), new Date(2026, 0, 5)).length).toBeLessThan(80);
   });
 });
+
+// Issue "private 1:1 messages": my own private messages (sent or received —
+// each client only has what it was given) export with a note after the name.
+describe('formatCallChatTxt notes', () => {
+  it('puts a per-message note after the name, alongside the guest marker', () => {
+    const txt = formatCallChatTxt({
+      channel: 'X',
+      exportedAt: new Date(2026, 0, 1, 0, 0),
+      labels,
+      messages: [
+        { at: at(9, 5), name: 'Anna', guest: false, text: 'nur du', note: 'privat an Bo' },
+        { at: at(9, 6), name: 'Bo', guest: true, text: 'ok', note: 'privat an Anna' }
+      ]
+    });
+    expect(txt.split('\n').slice(4, 6)).toEqual([
+      '[09:05] Anna (privat an Bo): nur du',
+      '[09:06] Bo (Gast, privat an Anna): ok'
+    ]);
+  });
+});

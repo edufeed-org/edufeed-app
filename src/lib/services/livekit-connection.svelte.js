@@ -439,7 +439,11 @@ function addChat(identity, parsed, ts, guest = false) {
 async function replayOwnChat(identity) {
   if (!room || !canSignal || !identity) return;
   const local = room.localParticipant;
-  const mine = callChat.filter((c) => c.identity === local.identity).slice(-CHAT_REPLAY_MAX);
+  // Never a private message: it was for one person, who may not be the
+  // newcomer — and a newcomer is never its addressee anyway.
+  const mine = callChat
+    .filter((c) => c.identity === local.identity && !c.to)
+    .slice(-CHAT_REPLAY_MAX);
   for (const c of mine) {
     try {
       await local.publishData(
@@ -457,11 +461,13 @@ async function replayOwnChat(identity) {
  * Send a chat message to everyone in the call and keep the local copy.
  * @param {string} text
  * @param {{ emoji?: Array<[string, string]>, replyTo?: string,
- *   replyPreview?: { n: string, text: string }, mentions?: string[] }} [opts]
+ *   replyPreview?: { n: string, text: string }, mentions?: string[], to?: string }} [opts]
  *   the optional payload fields (see groups/call-chat-payload.js): `emoji`
  *   = the NIP-30 custom emojis the text references as [shortcode, url]
  *   pairs; `replyTo`/`replyPreview` = the message replied to; `mentions` =
- *   identities named in the text (`"*"` = everyone)
+ *   identities named in the text (`"*"` = everyone); `to` = the one
+ *   identity a private message goes to (delivered to that participant
+ *   only, never replayed)
  */
 export async function sendCallChat(text, opts = {}) {
   const body = String(text ?? '')
@@ -481,7 +487,11 @@ export async function sendCallChat(text, opts = {}) {
   try {
     await room.localParticipant.publishData(
       new TextEncoder().encode(JSON.stringify(toCallChatPayload(msg))),
-      { reliable: true, topic: CHAT_TOPIC }
+      {
+        reliable: true,
+        topic: CHAT_TOPIC,
+        ...(msg.to ? { destinationIdentities: [msg.to] } : {})
+      }
     );
   } catch (err) {
     console.warn('call chat not sent:', err);
@@ -506,6 +516,9 @@ function handleSignal(payload, participant, _kind, topic) {
     }
     const chat = parseCallChatPayload(raw);
     if (!chat) return;
+    // A private message is for its addressee only — whatever the sender's
+    // destinationIdentities said, a `to` that is not me is not mine.
+    if (chat.to && chat.to !== room?.localParticipant.identity) return;
     const added = addChat(
       participant.identity,
       chat,
