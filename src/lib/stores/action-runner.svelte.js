@@ -91,8 +91,33 @@ const publishOptimistic = async (event, relays) => {
   });
 };
 
-export const actionRunner = new ActionRunner(eventStore, clientTagSigner, publish);
-export const actionRunnerOptimistic = new ActionRunner(
+/**
+ * ActionRunner that follows the active account.
+ *
+ * applesauce's ActionRunner resolves `self` (the pubkey) and `user`
+ * (castUser(self)) once, on the first run, and caches them for the lifetime
+ * of the runner — there is no invalidation when the signer starts answering
+ * for a different key. Our runners are session singletons over
+ * `manager.signer` (a proxy for whichever account is active), so after an
+ * account switch every action READ the previous account's lists while
+ * SIGNING as the new one: joining a single community as account B
+ * republished account A's whole communities follow set under B's key
+ * (2026-10-07). The AccountManager docs promise the switch "automatically
+ * uses the new account"; this makes that true by dropping the cached context
+ * whenever the signer's pubkey no longer matches it.
+ */
+class AccountAwareActionRunner extends ActionRunner {
+  async getContext() {
+    const self = await this.signer.getPublicKey();
+    // `_context` is TS-private upstream; there is no public invalidation API.
+    const runner = /** @type {{ _context?: { self: string } }} */ (/** @type {unknown} */ (this));
+    if (runner._context && runner._context.self !== self) runner._context = undefined;
+    return super.getContext();
+  }
+}
+
+export const actionRunner = new AccountAwareActionRunner(eventStore, clientTagSigner, publish);
+export const actionRunnerOptimistic = new AccountAwareActionRunner(
   eventStore,
   clientTagSigner,
   publishOptimistic
