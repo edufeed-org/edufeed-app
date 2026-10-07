@@ -28,7 +28,14 @@ import {
 import { withHand, handQueue } from '$lib/groups/call-tile-order.js';
 import { reactionPayload, parseReactionPayload } from '$lib/groups/call-reactions.js';
 import { isGuestParticipant } from '$lib/groups/livekit.js';
-import { noteCallChatReceived, resetCallChatUnread } from '$lib/groups/call-chat-unread.svelte.js';
+import {
+  noteCallChatMention,
+  noteCallChatReceived,
+  resetCallChatUnread
+} from '$lib/groups/call-chat-unread.svelte.js';
+import { isMentioned } from '$lib/groups/call-chat-mentions.js';
+import { showToast } from '$lib/helpers/toast.js';
+import * as m from '$lib/paraglide/messages';
 import {
   CALL_CHAT_MAX_CHARS as CHAT_MAX_CHARS,
   newCallChatId,
@@ -449,8 +456,12 @@ async function replayOwnChat(identity) {
 /**
  * Send a chat message to everyone in the call and keep the local copy.
  * @param {string} text
- * @param {{ emoji?: Array<[string, string]> }} [opts] `emoji`: the NIP-30
- *   custom emojis the text references, as [shortcode, url] pairs
+ * @param {{ emoji?: Array<[string, string]>, replyTo?: string,
+ *   replyPreview?: { n: string, text: string }, mentions?: string[] }} [opts]
+ *   the optional payload fields (see groups/call-chat-payload.js): `emoji`
+ *   = the NIP-30 custom emojis the text references as [shortcode, url]
+ *   pairs; `replyTo`/`replyPreview` = the message replied to; `mentions` =
+ *   identities named in the text (`"*"` = everyone)
  */
 export async function sendCallChat(text, opts = {}) {
   const body = String(text ?? '')
@@ -503,7 +514,18 @@ function handleSignal(payload, participant, _kind, topic) {
     );
     // Data from a remote participant: never my own message, so it can be
     // unread (the dots on the call chat tab, chat button and dock).
-    if (added) noteCallChatReceived();
+    if (added) {
+      noteCallChatReceived();
+      // Named me (or everyone): a stronger signal while no chat is on
+      // screen — counted on the chat button / dock and a toast naming the
+      // sender (LiveKit's participant name, else the identity's pubkey
+      // prefix: the service has no profile lookup).
+      if (isMentioned(added, room?.localParticipant.identity) && noteCallChatMention()) {
+        const name =
+          /** @type {{ name?: string }} */ (participant).name || participant.identity.slice(0, 8);
+        showToast(m.groups_call_chat_mentioned_toast({ name }), 'info');
+      }
+    }
     return;
   }
   if (topic !== SIGNAL_TOPIC) return;

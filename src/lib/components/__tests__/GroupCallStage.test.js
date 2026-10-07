@@ -126,6 +126,7 @@ vi.mock('$lib/components/icons', () => ({
 }));
 vi.mock('$lib/paraglide/messages', () => ({
   groups_call_chat_unread: () => 'New messages in the call chat',
+  groups_call_chat_mentions_unread: () => 'You were mentioned in the call chat',
   groups_call_leave: () => 'Leave call',
   groups_call_connecting: () => 'Connecting…',
   groups_call_listen_only: () => 'You are listening only',
@@ -320,6 +321,22 @@ describe('GroupCallStage — a view, not the connection owner', () => {
 
   // Issue "notification dot for new messages": the call chat is hidden
   // behind this button, so it says when something new is in there.
+  // Issue "@mentions of call participants": a mention is a stronger signal
+  // than the dot — the button shows how many, and says so.
+  it('shows a mention count on the chat button instead of the dot', async () => {
+    unreadMod.resetCallChatUnread();
+    render(GroupCallStage, { props: { ...baseProps, onShowChat: vi.fn() } });
+    const button = screen.getByTestId('group-call-show-chat');
+    unreadMod.noteCallChatReceived();
+    unreadMod.noteCallChatMention();
+    unreadMod.noteCallChatMention();
+    flushSync();
+    const badge = button.querySelector('[data-testid="call-chat-mention-badge"]');
+    expect(badge.textContent.trim()).toBe('2');
+    expect(button.querySelector('[data-testid="call-chat-unread-dot"]')).toBeNull();
+    expect(button.getAttribute('aria-label')).toBe('Chat – You were mentioned in the call chat');
+  });
+
   it('shows an unread dot on the chat button while the chat is closed', () => {
     unreadMod.resetCallChatUnread();
     render(GroupCallStage, { props: { ...baseProps, onShowChat: vi.fn() } });

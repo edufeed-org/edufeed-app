@@ -26,6 +26,13 @@
   import { registerCallChatView } from '$lib/groups/call-chat-unread.svelte.js';
   import { trackOnScreen } from '$lib/groups/track-on-screen.js';
   import { customEmojisIn } from '$lib/helpers/emoji-autocomplete.js';
+  import {
+    EVERYONE,
+    isMentioned,
+    mentionCandidates,
+    mentionsIn,
+    withMentions
+  } from '$lib/groups/call-chat-mentions.js';
   import { useUserEmojiSets } from '$lib/stores/user-emoji-sets.svelte.js';
   import { lazyComponent } from '$lib/helpers/lazy-component.svelte.js';
   import { DownloadIcon, ReplyIcon, SmilePlusIcon } from '$lib/components/icons';
@@ -148,9 +155,15 @@
     flashTimer = setTimeout(() => (flashId = null), 1500);
   }
 
+  // Senders AND the people in the room: the latter for the @-mention
+  // candidates and the chips, before they have said anything.
   const getProfiles = useProfileMap(() =>
-    lk.callChat
-      .map((c) => identityToPubkey(c.identity))
+    [
+      ...lk.callChat.map((c) => c.identity),
+      ...(lk.remoteParticipants ?? []).map((p) => p.identity),
+      ...(lk.localParticipant ? [lk.localParticipant.identity] : [])
+    ]
+      .map((identity) => identityToPubkey(identity))
       .filter((/** @type {string | null} */ pk) => typeof pk === 'string')
   );
 
@@ -204,12 +217,48 @@
     openInApp(e, path);
   }
 
+  // @mentions: the composer offers the OTHER participants (and "alle");
+  // a pick inserts plain `@Name` and is remembered name → identity, so the
+  // send can list the identities whose @Name is still in the text.
+  const myIdentity = $derived(lk.localParticipant?.identity ?? null);
+  const others = $derived(
+    (lk.remoteParticipants ?? []).map((p) => ({
+      identity: p.identity,
+      name: nameOf(p.identity),
+      pubkey: identityToPubkey(p.identity)
+    }))
+  );
+  /** @type {Record<string, string>} name → identity (or EVERYONE) */
+  let pickedMentions = $state.raw({});
+  /** @param {string} query */
+  function provideMentions(query) {
+    return mentionCandidates(query, others, { everyone: m.groups_call_chat_mention_everyone() });
+  }
+  /** @param {{ key: string, name: string }} c */
+  function rememberMention(c) {
+    pickedMentions = { ...pickedMentions, [c.name]: c.key };
+  }
+  /** identity → display name, for the chips of a received message */
+  /** @param {string[] | undefined} mentions */
+  function mentionNames(mentions) {
+    /** @type {Record<string, string>} */
+    const names = {};
+    for (const id of mentions ?? []) {
+      names[id] = id === EVERYONE ? m.groups_call_chat_mention_everyone() : nameOf(id);
+    }
+    return names;
+  }
+
   const origin = typeof window !== 'undefined' ? window.location.origin : '';
   // One parse per message, not per render: messages never change once kept.
   const parsed = $derived(
     new Map(
       lk.callChat.map((c) => {
-        const segments = withCustomEmojis(linkifyCallChat(c.text, origin), c.emoji);
+        const segments = withMentions(
+          withCustomEmojis(linkifyCallChat(c.text, origin), c.emoji),
+          c.mentions,
+          mentionNames(c.mentions)
+        );
         return [c.id, { segments, previews: callChatPreviewUrls(segments) }];
       })
     )
@@ -283,8 +332,11 @@
     );
     const reply = replyTarget;
     replyTarget = null;
+    const mentions = mentionsIn(text, pickedMentions);
+    pickedMentions = {};
     await sendCallChat(text, {
       emoji,
+      mentions,
       ...(reply
         ? {
             replyTo: reply.id,
@@ -329,10 +381,13 @@
         class="group relative -mx-1 flex items-start gap-2 rounded px-1 text-sm transition-colors {flashId ===
         msg.id
           ? 'bg-primary/10'
-          : ''}"
+          : isMentioned(msg, myIdentity)
+            ? 'bg-accent/15'
+            : ''}"
         role="listitem"
         data-testid="call-chat-message"
         data-call-chat-id={msg.id}
+        data-mentioned={isMentioned(msg, myIdentity) ? 'true' : undefined}
         data-flash={flashId === msg.id ? 'true' : undefined}
         onpointerdown={(e) => pressStart(e, msg)}
         onpointerup={pressEnd}
@@ -422,7 +477,13 @@
           <!-- Escaped text and plain anchors only: the text is whatever a
                participant (guests included) sent, never HTML. -->
           <span class="break-words whitespace-pre-wrap"
-            >{#each body?.segments ?? [{ text: msg.text }] as seg, s (s)}{#if 'emoji' in seg}<ImageWithFallback
+            >{#each body?.segments ?? [{ text: msg.text }] as seg, s (s)}{#if 'mention' in seg}<span
+                  class="mx-px badge align-baseline badge-sm {seg.mention === myIdentity ||
+                  seg.mention === EVERYONE
+                    ? 'badge-primary'
+                    : 'badge-ghost'}"
+                  data-testid="call-chat-mention">{seg.label}</span
+                >{:else if 'emoji' in seg}<ImageWithFallback
                   src={seg.url}
                   alt=":{seg.emoji}:"
                   title=":{seg.emoji}:"
@@ -538,6 +599,8 @@
       onfocus={() => (pickerOpen = false)}
       onSubmit={send}
       onEscape={cancelReply}
+      mentionProvider={provideMentions}
+      onMentionPick={rememberMention}
       class="input-bordered input input-sm flex items-center"
       ariaDescribedby={lk.isConnected ? undefined : offlineHintId}
       testid="call-chat-input"

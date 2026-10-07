@@ -56,3 +56,33 @@ describe('call chat unread marker', () => {
     expect(unread.count).toBe(0);
   });
 });
+
+// Issue "@mentions of call participants": a mention of me is a stronger
+// signal than an ordinary unread — counted separately while no chat view
+// is on screen, cleared like the rest.
+describe('call chat mention marker', () => {
+  it('counts mentions that arrive while no chat is on screen and says so', async () => {
+    const { noteCallChatMention } = await import('$lib/groups/call-chat-unread.svelte.js');
+    expect(unread.mentions).toBe(0);
+    expect(noteCallChatMention()).toBe(true);
+    expect(unread.mentions).toBe(1);
+  });
+
+  it('does not count (and reports false) while a chat view is on screen', async () => {
+    const { noteCallChatMention } = await import('$lib/groups/call-chat-unread.svelte.js');
+    const off = registerCallChatView();
+    expect(noteCallChatMention()).toBe(false);
+    expect(unread.mentions).toBe(0);
+    off();
+  });
+
+  it('clears on view and on reset', async () => {
+    const { noteCallChatMention } = await import('$lib/groups/call-chat-unread.svelte.js');
+    noteCallChatMention();
+    registerCallChatView()();
+    expect(unread.mentions).toBe(0);
+    noteCallChatMention();
+    resetCallChatUnread();
+    expect(unread.mentions).toBe(0);
+  });
+});
