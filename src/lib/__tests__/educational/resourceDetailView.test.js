@@ -142,7 +142,7 @@ describe('summarizeExtensionFacets', () => {
     ]);
   });
 
-  it('keeps every value of a multi-value scalar facet in items and joins them in value', () => {
+  it('keeps every value of a multi-value scalar facet in items (bible refs in Loccum form)', () => {
     const facts = facetsFrom([
       ['ekw:bibleReference', 'Psalm 34,15'],
       ['ekw:bibleReference', 'Jesaja 9,1-5'],
@@ -153,8 +153,8 @@ describe('summarizeExtensionFacets', () => {
         ns: 'ekw',
         facetName: 'bibleReference',
         kind: 'scalar',
-        value: 'Psalm 34,15, Jesaja 9,1-5, Matthäus 5,43-48',
-        items: ['Psalm 34,15', 'Jesaja 9,1-5', 'Matthäus 5,43-48'],
+        value: 'Ps 34,15, Jes 9,1-5, Mt 5,43-48',
+        items: ['Ps 34,15', 'Jes 9,1-5', 'Mt 5,43-48'],
         count: 3
       }
     ]);

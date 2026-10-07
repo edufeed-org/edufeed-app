@@ -136,9 +136,9 @@ describe('buildExtensionSections', () => {
 });
 
 describe('buildExtensionCards', () => {
-  it('linkifies bibleReference scalars to die-bibel.de and keeps free text plain', () => {
+  it('shows bibleReference scalars in Loccum form, linked, free text verbatim', () => {
     const cards = cardsFrom([
-      ['ext:ekw:bibleReference', 'Mt 5,3-12'],
+      ['ext:ekw:bibleReference', 'Mt. 5,3-12'],
       ['ext:ekw:bibleReference', 'Freitext-Notiz']
     ]);
     const bible = cards.find((c) => c.key.endsWith(':bibleReference'));
@@ -148,7 +148,12 @@ describe('buildExtensionCards', () => {
       href: 'https://www.die-bibel.de/bibel/LU17/MAT.5.3-12',
       long: false
     });
-    expect(bible?.scalars?.[1].href).toBeUndefined();
+    expect(bible?.scalars?.[1]).toMatchObject({ text: 'Freitext-Notiz', href: undefined });
+  });
+
+  it('leaves non-bible scalar facets untouched even when they look like a reference', () => {
+    const cards = cardsFrom([['ext:ekw:methodOther', 'Mt. 5']]);
+    expect(cards[0].scalars?.[0].text).toBe('Mt. 5');
   });
 
   it('carries a provenance chip derived from the section label', () => {

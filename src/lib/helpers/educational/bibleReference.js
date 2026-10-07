@@ -1,122 +1,460 @@
 /**
- * Bible reference parsing + canonicalization to German short form.
+ * Bible reference parsing, normalization and linking.
  *
- * Uses `bible-passage-reference-parser` (MIT) to parse free-text input,
- * then maps OSIS book codes to canonical German abbreviations and emits
- * the German Schreibweise (e.g. "Mt 5,3-12").
+ * House style (laoc, 2026-10-07): the Loccum guidelines — Deutsche
+ * Bibelgesellschaft / Katholisches Bibelwerk (Hg.), "Ökumenisches Verzeichnis
+ * der biblischen Eigennamen nach den Loccumer Richtlinien", Stuttgart ²1981
+ * (abbreviation list in the appendix; the abbreviations of the
+ * Einheitsübersetzung). Citation rules as taught e.g. in the Uni Passau KTF
+ * handout "Einführung in das wissenschaftliche Arbeiten", §4.1 + §8.2:
  *
- * The parser is loaded via dynamic import so the ~150 KB bundle only
- * lands on routes that actually need it (the EKW resource form).
+ *  - book abbreviation without a dot; numbered books "1 Kor", "2 Tim";
+ *  - "Gen 1,1" — no space after the comma;
+ *  - chapter range "Gen 1-3", verse range "Gen 1,1-17", across chapters
+ *    "Gen 3,17-4,12" — hyphen, no spaces;
+ *  - single verses of one chapter joined by "." — "Gen 1,1.3.5.7";
+ *  - several passages joined by "; ", the book named once —
+ *    "Gen 1,1.3; 3,17-21; Ex 15,3".
+ *
+ * Every other spelling (Luther abbreviations "1 Mo"/"Hi"/"Pred"/"Hes",
+ * dotted "Mk.", full German names, OSIS / English names) is accepted as input
+ * and normalized to that form.
+ *
+ * `parseAndCanonicalize` uses `bible-passage-reference-parser` (MIT), loaded
+ * via dynamic import so the ~150 KB bundle only lands on routes that need it
+ * (the EKW resource form). `normalizeBibleReference` and `toDieBibelUrl` are
+ * synchronous and parser-free, for display.
  */
 
 /**
- * Canonical German Bible book table — single source of truth for OSIS↔DE
- * mappings, short Schreibweisen, long German names, and USFM book codes
- * (used to build die-bibel.de deep links).
+ * Canonical book table — single source of truth for OSIS ↔ Loccum
+ * abbreviation (`abbr`), German name (`name`, typeahead), USFM code
+ * (die-bibel.de deep links) and accepted input spellings: German ones
+ * (`aliases`, also offered by the typeahead) and OSIS / English ones (`intl`,
+ * accepted on input only — so typing "Mark" still suggests "Markus").
+ * `abbr` follows the Loccum list; where sources disagree: "Zef" (the
+ * Einheitsübersetzung's spelling; the old "Zeph" is an alias) and "Joël"
+ * ("Joel" accepted).
  *
- * Source: standard German Bible (Loccumer Richtlinien) abbreviations,
- * USFM 3-letter codes per UBS ICAP Standard Format Markers.
- * Covers all 66 protestant books + a few deutero-canonicals the parser knows.
- *
- * @type {ReadonlyArray<{ osis: string, short: string, long: string, usfm: string }>}
+ * @typedef {{ osis: string, abbr: string, name: string, usfm: string, aliases: string[], intl: string[] }} BibleBook
+ * @type {ReadonlyArray<Readonly<BibleBook>>}
  */
-const BOOKS_TABLE = Object.freeze([
-  // Pentateuch
-  { osis: 'Gen', short: '1 Mo', long: '1. Mose', usfm: 'GEN' },
-  { osis: 'Exod', short: '2 Mo', long: '2. Mose', usfm: 'EXO' },
-  { osis: 'Lev', short: '3 Mo', long: '3. Mose', usfm: 'LEV' },
-  { osis: 'Num', short: '4 Mo', long: '4. Mose', usfm: 'NUM' },
-  { osis: 'Deut', short: '5 Mo', long: '5. Mose', usfm: 'DEU' },
-  // Historical books
-  { osis: 'Josh', short: 'Jos', long: 'Josua', usfm: 'JOS' },
-  { osis: 'Judg', short: 'Ri', long: 'Richter', usfm: 'JDG' },
-  { osis: 'Ruth', short: 'Rut', long: 'Rut', usfm: 'RUT' },
-  { osis: '1Sam', short: '1 Sam', long: '1. Samuel', usfm: '1SA' },
-  { osis: '2Sam', short: '2 Sam', long: '2. Samuel', usfm: '2SA' },
-  { osis: '1Kgs', short: '1 Kön', long: '1. Könige', usfm: '1KI' },
-  { osis: '2Kgs', short: '2 Kön', long: '2. Könige', usfm: '2KI' },
-  { osis: '1Chr', short: '1 Chr', long: '1. Chronik', usfm: '1CH' },
-  { osis: '2Chr', short: '2 Chr', long: '2. Chronik', usfm: '2CH' },
-  { osis: 'Ezra', short: 'Esr', long: 'Esra', usfm: 'EZR' },
-  { osis: 'Neh', short: 'Neh', long: 'Nehemia', usfm: 'NEH' },
-  { osis: 'Esth', short: 'Est', long: 'Ester', usfm: 'EST' },
-  // Wisdom & poetry
-  { osis: 'Job', short: 'Hi', long: 'Hiob', usfm: 'JOB' },
-  { osis: 'Ps', short: 'Ps', long: 'Psalm', usfm: 'PSA' },
-  { osis: 'Prov', short: 'Spr', long: 'Sprüche', usfm: 'PRO' },
-  { osis: 'Eccl', short: 'Pred', long: 'Prediger', usfm: 'ECC' },
-  { osis: 'Song', short: 'Hld', long: 'Hohelied', usfm: 'SNG' },
-  // Major prophets
-  { osis: 'Isa', short: 'Jes', long: 'Jesaja', usfm: 'ISA' },
-  { osis: 'Jer', short: 'Jer', long: 'Jeremia', usfm: 'JER' },
-  { osis: 'Lam', short: 'Klgl', long: 'Klagelieder', usfm: 'LAM' },
-  { osis: 'Ezek', short: 'Hes', long: 'Hesekiel', usfm: 'EZK' },
-  { osis: 'Dan', short: 'Dan', long: 'Daniel', usfm: 'DAN' },
-  // Minor prophets
-  { osis: 'Hos', short: 'Hos', long: 'Hosea', usfm: 'HOS' },
-  { osis: 'Joel', short: 'Joel', long: 'Joel', usfm: 'JOL' },
-  { osis: 'Amos', short: 'Am', long: 'Amos', usfm: 'AMO' },
-  { osis: 'Obad', short: 'Obd', long: 'Obadja', usfm: 'OBA' },
-  { osis: 'Jonah', short: 'Jona', long: 'Jona', usfm: 'JON' },
-  { osis: 'Mic', short: 'Mi', long: 'Micha', usfm: 'MIC' },
-  { osis: 'Nah', short: 'Nah', long: 'Nahum', usfm: 'NAM' },
-  { osis: 'Hab', short: 'Hab', long: 'Habakuk', usfm: 'HAB' },
-  { osis: 'Zeph', short: 'Zef', long: 'Zefanja', usfm: 'ZEP' },
-  { osis: 'Hag', short: 'Hag', long: 'Haggai', usfm: 'HAG' },
-  { osis: 'Zech', short: 'Sach', long: 'Sacharja', usfm: 'ZEC' },
-  { osis: 'Mal', short: 'Mal', long: 'Maleachi', usfm: 'MAL' },
-  // Gospels & Acts
-  { osis: 'Matt', short: 'Mt', long: 'Matthäus', usfm: 'MAT' },
-  { osis: 'Mark', short: 'Mk', long: 'Markus', usfm: 'MRK' },
-  { osis: 'Luke', short: 'Lk', long: 'Lukas', usfm: 'LUK' },
-  { osis: 'John', short: 'Joh', long: 'Johannes', usfm: 'JHN' },
-  { osis: 'Acts', short: 'Apg', long: 'Apostelgeschichte', usfm: 'ACT' },
-  // Pauline epistles
-  { osis: 'Rom', short: 'Röm', long: 'Römer', usfm: 'ROM' },
-  { osis: '1Cor', short: '1 Kor', long: '1. Korinther', usfm: '1CO' },
-  { osis: '2Cor', short: '2 Kor', long: '2. Korinther', usfm: '2CO' },
-  { osis: 'Gal', short: 'Gal', long: 'Galater', usfm: 'GAL' },
-  { osis: 'Eph', short: 'Eph', long: 'Epheser', usfm: 'EPH' },
-  { osis: 'Phil', short: 'Phil', long: 'Philipper', usfm: 'PHP' },
-  { osis: 'Col', short: 'Kol', long: 'Kolosser', usfm: 'COL' },
-  { osis: '1Thess', short: '1 Thess', long: '1. Thessalonicher', usfm: '1TH' },
-  { osis: '2Thess', short: '2 Thess', long: '2. Thessalonicher', usfm: '2TH' },
-  { osis: '1Tim', short: '1 Tim', long: '1. Timotheus', usfm: '1TI' },
-  { osis: '2Tim', short: '2 Tim', long: '2. Timotheus', usfm: '2TI' },
-  { osis: 'Titus', short: 'Tit', long: 'Titus', usfm: 'TIT' },
-  { osis: 'Phlm', short: 'Phlm', long: 'Philemon', usfm: 'PHM' },
-  // General epistles
-  { osis: 'Heb', short: 'Hebr', long: 'Hebräer', usfm: 'HEB' },
-  { osis: 'Jas', short: 'Jak', long: 'Jakobus', usfm: 'JAS' },
-  { osis: '1Pet', short: '1 Petr', long: '1. Petrus', usfm: '1PE' },
-  { osis: '2Pet', short: '2 Petr', long: '2. Petrus', usfm: '2PE' },
-  { osis: '1John', short: '1 Joh', long: '1. Johannes', usfm: '1JN' },
-  { osis: '2John', short: '2 Joh', long: '2. Johannes', usfm: '2JN' },
-  { osis: '3John', short: '3 Joh', long: '3. Johannes', usfm: '3JN' },
-  { osis: 'Jude', short: 'Jud', long: 'Judas', usfm: 'JUD' },
-  // Apocalypse
-  { osis: 'Rev', short: 'Offb', long: 'Offenbarung', usfm: 'REV' },
-  // Common deutero-canonicals (used in some German bibles)
-  { osis: 'Tob', short: 'Tob', long: 'Tobit', usfm: 'TOB' },
-  { osis: 'Jdt', short: 'Jdt', long: 'Judit', usfm: 'JDT' },
-  { osis: 'Wis', short: 'Weish', long: 'Weisheit', usfm: 'WIS' },
-  { osis: 'Sir', short: 'Sir', long: 'Sirach', usfm: 'SIR' },
-  { osis: 'Bar', short: 'Bar', long: 'Baruch', usfm: 'BAR' },
-  { osis: '1Macc', short: '1 Makk', long: '1. Makkabäer', usfm: '1MA' },
-  { osis: '2Macc', short: '2 Makk', long: '2. Makkabäer', usfm: '2MA' }
-]);
+export const LOCCUM_BIBLE_BOOKS = Object.freeze(
+  /** @type {BibleBook[]} */ ([
+    // Pentateuch
+    {
+      osis: 'Gen',
+      abbr: 'Gen',
+      name: 'Genesis',
+      usfm: 'GEN',
+      aliases: ['1 Mo', '1. Mose'],
+      intl: []
+    },
+    {
+      osis: 'Exod',
+      abbr: 'Ex',
+      name: 'Exodus',
+      usfm: 'EXO',
+      aliases: ['2 Mo', '2. Mose'],
+      intl: ['Exod']
+    },
+    {
+      osis: 'Lev',
+      abbr: 'Lev',
+      name: 'Levitikus',
+      usfm: 'LEV',
+      aliases: ['3 Mo', '3. Mose'],
+      intl: ['Leviticus']
+    },
+    {
+      osis: 'Num',
+      abbr: 'Num',
+      name: 'Numeri',
+      usfm: 'NUM',
+      aliases: ['4 Mo', '4. Mose'],
+      intl: ['Numbers']
+    },
+    {
+      osis: 'Deut',
+      abbr: 'Dtn',
+      name: 'Deuteronomium',
+      usfm: 'DEU',
+      aliases: ['5 Mo', '5. Mose'],
+      intl: ['Deut', 'Deuteronomy']
+    },
+    // Historical books
+    {
+      osis: 'Josh',
+      abbr: 'Jos',
+      name: 'Josua',
+      usfm: 'JOS',
+      aliases: [],
+      intl: ['Josh', 'Joshua']
+    },
+    {
+      osis: 'Judg',
+      abbr: 'Ri',
+      name: 'Richter',
+      usfm: 'JDG',
+      aliases: [],
+      intl: ['Judg', 'Judges']
+    },
+    { osis: 'Ruth', abbr: 'Rut', name: 'Rut', usfm: 'RUT', aliases: [], intl: ['Ruth'] },
+    { osis: '1Sam', abbr: '1 Sam', name: '1. Samuel', usfm: '1SA', aliases: [], intl: ['1Sam'] },
+    { osis: '2Sam', abbr: '2 Sam', name: '2. Samuel', usfm: '2SA', aliases: [], intl: ['2Sam'] },
+    {
+      osis: '1Kgs',
+      abbr: '1 Kön',
+      name: '1. Könige',
+      usfm: '1KI',
+      aliases: [],
+      intl: ['1Kgs', '1 Kings']
+    },
+    {
+      osis: '2Kgs',
+      abbr: '2 Kön',
+      name: '2. Könige',
+      usfm: '2KI',
+      aliases: [],
+      intl: ['2Kgs', '2 Kings']
+    },
+    {
+      osis: '1Chr',
+      abbr: '1 Chr',
+      name: '1. Chronik',
+      usfm: '1CH',
+      aliases: [],
+      intl: ['1 Chronicles']
+    },
+    {
+      osis: '2Chr',
+      abbr: '2 Chr',
+      name: '2. Chronik',
+      usfm: '2CH',
+      aliases: [],
+      intl: ['2 Chronicles']
+    },
+    { osis: 'Ezra', abbr: 'Esra', name: 'Esra', usfm: 'EZR', aliases: ['Esr'], intl: ['Ezra'] },
+    { osis: 'Neh', abbr: 'Neh', name: 'Nehemia', usfm: 'NEH', aliases: [], intl: ['Nehemiah'] },
+    {
+      osis: 'Esth',
+      abbr: 'Est',
+      name: 'Ester',
+      usfm: 'EST',
+      aliases: [],
+      intl: ['Esth', 'Esther']
+    },
+    // Wisdom & poetry
+    {
+      osis: 'Job',
+      abbr: 'Ijob',
+      name: 'Ijob',
+      usfm: 'JOB',
+      aliases: ['Hi', 'Hiob'],
+      intl: ['Job']
+    },
+    { osis: 'Ps', abbr: 'Ps', name: 'Psalmen', usfm: 'PSA', aliases: ['Psalm'], intl: ['Psalms'] },
+    {
+      osis: 'Prov',
+      abbr: 'Spr',
+      name: 'Sprüche',
+      usfm: 'PRO',
+      aliases: ['Sprichwörter'],
+      intl: ['Prov', 'Proverbs']
+    },
+    {
+      osis: 'Eccl',
+      abbr: 'Koh',
+      name: 'Kohelet',
+      usfm: 'ECC',
+      aliases: ['Pred', 'Prediger'],
+      intl: ['Eccl', 'Ecclesiastes']
+    },
+    {
+      osis: 'Song',
+      abbr: 'Hld',
+      name: 'Hoheslied',
+      usfm: 'SNG',
+      aliases: ['Hohelied'],
+      intl: ['Song']
+    },
+    // Major prophets
+    { osis: 'Isa', abbr: 'Jes', name: 'Jesaja', usfm: 'ISA', aliases: [], intl: ['Isa', 'Isaiah'] },
+    { osis: 'Jer', abbr: 'Jer', name: 'Jeremia', usfm: 'JER', aliases: [], intl: ['Jeremiah'] },
+    {
+      osis: 'Lam',
+      abbr: 'Klgl',
+      name: 'Klagelieder',
+      usfm: 'LAM',
+      aliases: [],
+      intl: ['Lam', 'Lamentations']
+    },
+    {
+      osis: 'Ezek',
+      abbr: 'Ez',
+      name: 'Ezechiel',
+      usfm: 'EZK',
+      aliases: ['Hes', 'Hesekiel'],
+      intl: ['Ezek', 'Ezekiel']
+    },
+    { osis: 'Dan', abbr: 'Dan', name: 'Daniel', usfm: 'DAN', aliases: [], intl: [] },
+    // Minor prophets
+    { osis: 'Hos', abbr: 'Hos', name: 'Hosea', usfm: 'HOS', aliases: [], intl: [] },
+    { osis: 'Joel', abbr: 'Joël', name: 'Joël', usfm: 'JOL', aliases: ['Joel'], intl: [] },
+    { osis: 'Amos', abbr: 'Am', name: 'Amos', usfm: 'AMO', aliases: [], intl: [] },
+    {
+      osis: 'Obad',
+      abbr: 'Obd',
+      name: 'Obadja',
+      usfm: 'OBA',
+      aliases: [],
+      intl: ['Obad', 'Obadiah']
+    },
+    { osis: 'Jonah', abbr: 'Jona', name: 'Jona', usfm: 'JON', aliases: [], intl: ['Jonah'] },
+    { osis: 'Mic', abbr: 'Mi', name: 'Micha', usfm: 'MIC', aliases: [], intl: ['Mic', 'Micah'] },
+    { osis: 'Nah', abbr: 'Nah', name: 'Nahum', usfm: 'NAM', aliases: [], intl: [] },
+    { osis: 'Hab', abbr: 'Hab', name: 'Habakuk', usfm: 'HAB', aliases: [], intl: ['Habakkuk'] },
+    {
+      osis: 'Zeph',
+      abbr: 'Zef',
+      name: 'Zefanja',
+      usfm: 'ZEP',
+      aliases: ['Zeph', 'Zephanja'],
+      intl: ['Zephaniah']
+    },
+    { osis: 'Hag', abbr: 'Hag', name: 'Haggai', usfm: 'HAG', aliases: [], intl: [] },
+    {
+      osis: 'Zech',
+      abbr: 'Sach',
+      name: 'Sacharja',
+      usfm: 'ZEC',
+      aliases: [],
+      intl: ['Zech', 'Zechariah']
+    },
+    { osis: 'Mal', abbr: 'Mal', name: 'Maleachi', usfm: 'MAL', aliases: [], intl: ['Malachi'] },
+    // Gospels & Acts
+    {
+      osis: 'Matt',
+      abbr: 'Mt',
+      name: 'Matthäus',
+      usfm: 'MAT',
+      aliases: ['Matthäusevangelium'],
+      intl: ['Matt', 'Matthew']
+    },
+    {
+      osis: 'Mark',
+      abbr: 'Mk',
+      name: 'Markus',
+      usfm: 'MRK',
+      aliases: ['Markusevangelium'],
+      intl: ['Mark']
+    },
+    {
+      osis: 'Luke',
+      abbr: 'Lk',
+      name: 'Lukas',
+      usfm: 'LUK',
+      aliases: ['Lukasevangelium'],
+      intl: ['Luke']
+    },
+    {
+      osis: 'John',
+      abbr: 'Joh',
+      name: 'Johannes',
+      usfm: 'JHN',
+      aliases: ['Johannesevangelium'],
+      intl: ['John']
+    },
+    {
+      osis: 'Acts',
+      abbr: 'Apg',
+      name: 'Apostelgeschichte',
+      usfm: 'ACT',
+      aliases: [],
+      intl: ['Acts']
+    },
+    // Pauline epistles
+    {
+      osis: 'Rom',
+      abbr: 'Röm',
+      name: 'Römer',
+      usfm: 'ROM',
+      aliases: ['Römerbrief'],
+      intl: ['Rom', 'Romans']
+    },
+    {
+      osis: '1Cor',
+      abbr: '1 Kor',
+      name: '1. Korinther',
+      usfm: '1CO',
+      aliases: [],
+      intl: ['1Cor', '1 Corinthians']
+    },
+    {
+      osis: '2Cor',
+      abbr: '2 Kor',
+      name: '2. Korinther',
+      usfm: '2CO',
+      aliases: [],
+      intl: ['2Cor', '2 Corinthians']
+    },
+    { osis: 'Gal', abbr: 'Gal', name: 'Galater', usfm: 'GAL', aliases: [], intl: ['Galatians'] },
+    { osis: 'Eph', abbr: 'Eph', name: 'Epheser', usfm: 'EPH', aliases: [], intl: ['Ephesians'] },
+    {
+      osis: 'Phil',
+      abbr: 'Phil',
+      name: 'Philipper',
+      usfm: 'PHP',
+      aliases: [],
+      intl: ['Philippians']
+    },
+    {
+      osis: 'Col',
+      abbr: 'Kol',
+      name: 'Kolosser',
+      usfm: 'COL',
+      aliases: [],
+      intl: ['Col', 'Colossians']
+    },
+    {
+      osis: '1Thess',
+      abbr: '1 Thess',
+      name: '1. Thessalonicher',
+      usfm: '1TH',
+      aliases: [],
+      intl: ['1 Thessalonians']
+    },
+    {
+      osis: '2Thess',
+      abbr: '2 Thess',
+      name: '2. Thessalonicher',
+      usfm: '2TH',
+      aliases: [],
+      intl: ['2 Thessalonians']
+    },
+    {
+      osis: '1Tim',
+      abbr: '1 Tim',
+      name: '1. Timotheus',
+      usfm: '1TI',
+      aliases: [],
+      intl: ['1 Timothy']
+    },
+    {
+      osis: '2Tim',
+      abbr: '2 Tim',
+      name: '2. Timotheus',
+      usfm: '2TI',
+      aliases: [],
+      intl: ['2 Timothy']
+    },
+    { osis: 'Titus', abbr: 'Tit', name: 'Titus', usfm: 'TIT', aliases: [], intl: [] },
+    { osis: 'Phlm', abbr: 'Phlm', name: 'Philemon', usfm: 'PHM', aliases: [], intl: [] },
+    // General epistles
+    {
+      osis: 'Heb',
+      abbr: 'Hebr',
+      name: 'Hebräer',
+      usfm: 'HEB',
+      aliases: [],
+      intl: ['Heb', 'Hebrews']
+    },
+    { osis: 'Jas', abbr: 'Jak', name: 'Jakobus', usfm: 'JAS', aliases: [], intl: ['Jas', 'James'] },
+    {
+      osis: '1Pet',
+      abbr: '1 Petr',
+      name: '1. Petrus',
+      usfm: '1PE',
+      aliases: [],
+      intl: ['1Pet', '1 Peter']
+    },
+    {
+      osis: '2Pet',
+      abbr: '2 Petr',
+      name: '2. Petrus',
+      usfm: '2PE',
+      aliases: [],
+      intl: ['2Pet', '2 Peter']
+    },
+    {
+      osis: '1John',
+      abbr: '1 Joh',
+      name: '1. Johannes',
+      usfm: '1JN',
+      aliases: [],
+      intl: ['1John']
+    },
+    {
+      osis: '2John',
+      abbr: '2 Joh',
+      name: '2. Johannes',
+      usfm: '2JN',
+      aliases: [],
+      intl: ['2John']
+    },
+    {
+      osis: '3John',
+      abbr: '3 Joh',
+      name: '3. Johannes',
+      usfm: '3JN',
+      aliases: [],
+      intl: ['3John']
+    },
+    { osis: 'Jude', abbr: 'Jud', name: 'Judas', usfm: 'JUD', aliases: [], intl: ['Jude'] },
+    // Apocalypse
+    {
+      osis: 'Rev',
+      abbr: 'Offb',
+      name: 'Offenbarung',
+      usfm: 'REV',
+      aliases: ['Apokalypse'],
+      intl: ['Rev', 'Revelation']
+    },
+    // Deutero-canonicals
+    { osis: 'Tob', abbr: 'Tob', name: 'Tobit', usfm: 'TOB', aliases: [], intl: [] },
+    { osis: 'Jdt', abbr: 'Jdt', name: 'Judit', usfm: 'JDT', aliases: [], intl: ['Judith'] },
+    {
+      osis: 'Wis',
+      abbr: 'Weish',
+      name: 'Weisheit',
+      usfm: 'WIS',
+      aliases: [],
+      intl: ['Wis', 'Wisdom']
+    },
+    { osis: 'Sir', abbr: 'Sir', name: 'Sirach', usfm: 'SIR', aliases: [], intl: [] },
+    { osis: 'Bar', abbr: 'Bar', name: 'Baruch', usfm: 'BAR', aliases: [], intl: [] },
+    {
+      osis: '1Macc',
+      abbr: '1 Makk',
+      name: '1. Makkabäer',
+      usfm: '1MA',
+      aliases: [],
+      intl: ['1Macc', '1 Maccabees']
+    },
+    {
+      osis: '2Macc',
+      abbr: '2 Makk',
+      name: '2. Makkabäer',
+      usfm: '2MA',
+      aliases: [],
+      intl: ['2Macc', '2 Maccabees']
+    }
+  ]).map((b) => Object.freeze(b))
+);
 
 /** @type {Record<string, string>} */
-const OSIS_TO_DE = Object.fromEntries(BOOKS_TABLE.map((b) => [b.osis, b.short]));
+const OSIS_TO_ABBR = Object.fromEntries(LOCCUM_BIBLE_BOOKS.map((b) => [b.osis, b.abbr]));
 
 /**
- * German book entries (short + long form) in canonical (biblical) order —
- * the data source for the Bibelstelle typeahead.
+ * Typeahead entries in canonical (biblical) order: Loccum abbreviation
+ * (`short`), German name (`long`) and the other accepted spellings.
  *
- * @type {ReadonlyArray<{ short: string, long: string }>}
+ * @type {ReadonlyArray<{ short: string, long: string, aliases: string[] }>}
  */
 export const BIBLE_BOOKS = Object.freeze(
-  BOOKS_TABLE.map(({ short, long }) => Object.freeze({ short, long }))
+  LOCCUM_BIBLE_BOOKS.map(({ abbr, name, aliases }) =>
+    Object.freeze({ short: abbr, long: name, aliases })
+  )
 );
 
 /**
@@ -133,97 +471,139 @@ function fold(s) {
 }
 
 /**
- * Find books whose short or long German name contains `query`
- * (accent-insensitive). Prefix matches are ranked first.
+ * Lookup key for a book name: accent-folded, lowercased, with every dot and
+ * whitespace removed — so "1. Kor.", "1 Kor" and "1Kor" all become "1kor",
+ * "Mk." equals "Mk" and "Joel" equals "Joël".
+ *
+ * @param {string} name
+ * @returns {string}
+ */
+function bookKey(name) {
+  return fold(name).replace(/[.\s]/g, '');
+}
+
+/** @type {Map<string, Readonly<BibleBook>>} book key → book */
+const BOOK_BY_KEY = new Map(
+  LOCCUM_BIBLE_BOOKS.flatMap((b) =>
+    [b.abbr, b.name, ...b.aliases, b.osis, ...b.intl].map(
+      (n) => /** @type {const} */ ([bookKey(n), b])
+    )
+  )
+);
+
+/**
+ * Find books whose abbreviation, name or alias contains `query`
+ * (accent-insensitive) — so "Mose" finds Gen…Dtn and "Hiob" finds Ijob.
+ * Prefix matches are ranked first.
  *
  * @param {string} query
  * @param {number} [limit]
- * @returns {Array<{ short: string, long: string }>}
+ * @returns {Array<(typeof BIBLE_BOOKS)[number]>}
  */
 export function findBookMatches(query, limit = 8) {
   const q = fold(query.trim());
   if (!q) return [];
-  /** @type {Array<{ short: string, long: string }>} */
+  /** @type {Array<(typeof BIBLE_BOOKS)[number]>} */
   const prefix = [];
-  /** @type {Array<{ short: string, long: string }>} */
+  /** @type {Array<(typeof BIBLE_BOOKS)[number]>} */
   const contains = [];
   for (const b of BIBLE_BOOKS) {
-    const s = fold(b.short);
-    const l = fold(b.long);
-    if (s.startsWith(q) || l.startsWith(q)) prefix.push(b);
-    else if (s.includes(q) || l.includes(q)) contains.push(b);
+    const names = [b.short, b.long, ...b.aliases].map(fold);
+    if (names.some((n) => n.startsWith(q))) prefix.push(b);
+    else if (names.some((n) => n.includes(q))) contains.push(b);
   }
   return [...prefix, ...contains].slice(0, limit);
 }
 
 /**
- * If the input exactly matches a known German book name (short or long form,
- * accent-insensitive), return that entry — used to give a "Kapitel ergänzen"
- * hint instead of an "unparseable" warning when the user has just typed a
- * book name without a chapter yet.
+ * If the input is exactly a known book name in any accepted spelling
+ * (ignoring case, accents, dots and spaces), return that entry — used to give
+ * a "Kapitel ergänzen" hint instead of an "unparseable" warning when the user
+ * has just typed a book name without a chapter yet.
  *
  * @param {string} query
- * @returns {{ short: string, long: string } | null}
+ * @returns {(typeof BIBLE_BOOKS)[number] | null}
  */
 export function findExactBook(query) {
-  const q = fold(query.trim());
-  if (!q) return null;
-  for (const b of BIBLE_BOOKS) {
-    if (fold(b.short) === q || fold(b.long) === q) return b;
-  }
-  return null;
+  const key = bookKey(query.trim());
+  if (!key) return null;
+  return (
+    BIBLE_BOOKS.find((b) => [b.short, b.long, ...b.aliases].some((n) => bookKey(n) === key)) ?? null
+  );
 }
 
 /**
- * Format a single OSIS entity string ("Matt.5.3-Matt.5.12") to German short.
- * Falls back to the OSIS book code if no German mapping is registered.
+ * @typedef {Object} LoccumPart
+ * @property {string} book  Loccum abbreviation (or OSIS code if unmapped)
+ * @property {string} chapter
+ * @property {string} passage  "1,1-17", "1-3", "3,17-4,12", "14"
+ * @property {string | null} verses  "1" / "1-17" when the part stays inside one chapter
+ * @property {string | null} crossBook  full text for a range spanning books
+ */
+
+/**
+ * Split a single OSIS entity ("Matt.5.3-Matt.5.12") into Loccum pieces.
  *
  * @param {string} osisEntity
- * @returns {string}
+ * @returns {LoccumPart}
  */
 function formatOne(osisEntity) {
   const [start, end] = osisEntity.split('-');
   const [sb, sc, sv] = start.split('.');
-  const sBook = OSIS_TO_DE[sb] ?? sb;
+  const book = OSIS_TO_ABBR[sb] ?? sb;
+  /** @param {string} passage @param {string | null} verses @returns {LoccumPart} */
+  const part = (passage, verses) => ({ book, chapter: sc, passage, verses, crossBook: null });
 
-  if (!end) {
-    if (sv) return `${sBook} ${sc},${sv}`;
-    return `${sBook} ${sc}`;
-  }
+  if (!end) return sv ? part(`${sc},${sv}`, sv) : part(sc, null);
 
   const [eb, ec, ev] = end.split('.');
-  if (sb === eb && sc === ec && sv && ev) {
-    // verse range within chapter: "Mt 5,3-12"
-    return `${sBook} ${sc},${sv}-${ev}`;
-  }
-  if (sb === eb && sc !== ec && !sv && !ev) {
-    // whole-chapter range: "Apg 1-2"
-    return `${sBook} ${sc}-${ec}`;
-  }
-  if (sb === eb && sc !== ec) {
-    // cross-chapter range: "Hes 1,1-3,15"
-    return `${sBook} ${sc},${sv ?? '1'}-${ec},${ev ?? '1'}`;
-  }
+  if (sb === eb && sc === ec && sv && ev) return part(`${sc},${sv}-${ev}`, `${sv}-${ev}`); // "Gen 1,1-17"
+  if (sb === eb && sc !== ec && !sv && !ev) return part(`${sc}-${ec}`, null); // "Gen 1-3"
+  if (sb === eb) return part(`${sc},${sv ?? '1'}-${ec},${ev ?? '1'}`, null); // "Gen 3,17-4,12"
   // cross-book (rare in everyday use)
-  const eBook = OSIS_TO_DE[eb] ?? eb;
-  return `${sBook} ${sc}${sv ? ',' + sv : ''}-${eBook} ${ec}${ev ? ',' + ev : ''}`;
+  const eBook = OSIS_TO_ABBR[eb] ?? eb;
+  return {
+    ...part('', null),
+    crossBook: `${book} ${sc}${sv ? ',' + sv : ''}-${eBook} ${ec}${ev ? ',' + ev : ''}`
+  };
 }
 
 /**
- * Convert a full OSIS string (comma-separated entities) to German short form.
- * Uses "; " as the entity separator so the comma can serve as the verse
- * separator in each part.
+ * Convert a full OSIS string (comma-separated entities) to the Loccum form:
+ * passages joined by "; " with the book named once, single verses of the
+ * same chapter joined by "." — "Gen 1,1.3; 3,17-21; Ex 15,3".
  *
  * @param {string} osis
  * @returns {string}
  */
-function osisToDeShort(osis) {
-  return osis
+function osisToLoccum(osis) {
+  let out = '';
+  /** @type {LoccumPart | null} */
+  let prev = null;
+  for (const entity of osis
     .split(',')
-    .map((s) => s.trim())
-    .filter(Boolean)
-    .map(formatOne)
-    .join('; ');
+    .map((x) => x.trim())
+    .filter(Boolean)) {
+    const p = formatOne(entity);
+    if (p.crossBook) {
+      out += (out ? '; ' : '') + p.crossBook;
+      prev = null;
+    } else if (
+      prev &&
+      prev.book === p.book &&
+      prev.chapter === p.chapter &&
+      prev.verses &&
+      p.verses
+    ) {
+      out += `.${p.verses}`;
+    } else if (prev && prev.book === p.book) {
+      out += `; ${p.passage}`;
+    } else {
+      out += `${out ? '; ' : ''}${p.book} ${p.passage}`;
+    }
+    if (!p.crossBook) prev = p;
+  }
+  return out;
 }
 
 /** @type {Promise<{ parser: any }> | null} */
@@ -243,7 +623,8 @@ function loadParser() {
         import('bible-passage-reference-parser/esm/lang/de.js')
       ]);
       const parser = new bcv_parser(lang);
-      parser.set_options({ punctuation_strategy: 'eu' });
+      // 'ona': include the deutero-canonical books (Tob, Sir, 1 Makk, …).
+      parser.set_options({ punctuation_strategy: 'eu', testaments: 'ona' });
       return { parser };
     })();
   }
@@ -253,51 +634,12 @@ function loadParser() {
 /**
  * @typedef {Object} BibleReferenceResult
  * @property {boolean} ok - whether the input parsed to a real reference
- * @property {string | null} canonical - German short form (e.g. "Mt 5,3-12") when ok
+ * @property {string | null} canonical - Loccum form (e.g. "Mt 5,3-12") when ok
  * @property {string | null} osis - canonical OSIS string when ok
  */
 
 /** Base URL for die-bibel.de Lutherbibel 2017 deep links. */
 const DIE_BIBEL_BASE = 'https://www.die-bibel.de/bibel/LU17';
-
-/**
- * Lookup key for a book name: accent-folded, lowercased, with every dot and
- * whitespace removed — so "1. Kor.", "1 Kor" and "1Kor" all become "1kor",
- * and "Mk." equals "Mk".
- *
- * @param {string} name
- * @returns {string}
- */
-function bookKey(name) {
-  return fold(name).replace(/[.\s]/g, '');
-}
-
-/**
- * Spellings found in published `ext:ekw:bibleReference` tags that are neither
- * the table's short nor long form: ecumenical (Loccum) Pentateuch names and
- * the Psalter plural.
- *
- * @type {Record<string, string>}
- */
-const BOOK_ALIASES = {
-  Gen: 'GEN',
-  Ex: 'EXO',
-  Lev: 'LEV',
-  Num: 'NUM',
-  Dtn: 'DEU',
-  Psalmen: 'PSA'
-};
-
-/** @type {Map<string, string>} book key → USFM code */
-const USFM_BY_BOOK_KEY = new Map([
-  ...BOOKS_TABLE.flatMap((b) => [
-    /** @type {[string, string]} */ ([bookKey(b.short), b.usfm]),
-    /** @type {[string, string]} */ ([bookKey(b.long), b.usfm])
-  ]),
-  ...Object.entries(BOOK_ALIASES).map(
-    ([name, usfm]) => /** @type {[string, string]} */ ([bookKey(name), usfm])
-  )
-]);
 
 /**
  * Book token, then the chapter/verse part. The book is an optional ordinal
@@ -322,7 +664,7 @@ const REFERENCE_RE = /^((?:[1-5]\.?\s*)?\p{L}+)\.?\s*(\d.*)$/u;
  * Free text that doesn't start with a known book plus a digit stays unlinked.
  *
  * Limitations (die-bibel.de can't express these in the URL):
- *  - Chapter ranges (`Apg 1-2`) and cross-chapter ranges (`Hes 1,1-3,15`)
+ *  - Chapter ranges (`Apg 1-2`) and cross-chapter ranges (`Ez 1,1-3,15`)
  *    link to their start chapter / start verse.
  *  - Verse lists (`Jer 29,7.11-14`) and "ff." link to the first verse.
  *  - `;`-separated multi-refs in a single entry only link the first ref;
@@ -333,11 +675,11 @@ const REFERENCE_RE = /^((?:[1-5]\.?\s*)?\p{L}+)\.?\s*(\d.*)$/u;
  */
 export function toDieBibelUrl(text) {
   // Multi-ref entry like "Mt 5,3-12; Lk 6,20-26" → only link the first ref.
-  const first = (text || '').split(';')[0].trim();
+  const first = (text || '').normalize('NFC').split(';')[0].trim();
   const m = REFERENCE_RE.exec(first);
   if (!m) return null;
 
-  const usfm = USFM_BY_BOOK_KEY.get(bookKey(m[1]));
+  const usfm = BOOK_BY_KEY.get(bookKey(m[1]))?.usfm;
   if (!usfm) return null;
 
   const rest = m[2]
@@ -358,7 +700,7 @@ export function toDieBibelUrl(text) {
   }
 
   // Verse, verse range, cross-chapter range or verse list —
-  // "Joh 3,16", "Mt 5,3-12", "Hes 1,1-3,15", "Jer 29,7.11-14"
+  // "Joh 3,16", "Mt 5,3-12", "Ez 1,1-3,15", "Jer 29,7.11-14"
   const mVerse = /^(\d+),(\d+)(?:-(\d+)(,\d+)?|(?:\.\d+(?:-\d+)?)+)?$/.exec(rest);
   if (mVerse) {
     const [, c, v, end, crossChapter] = mVerse;
@@ -369,8 +711,52 @@ export function toDieBibelUrl(text) {
   return null;
 }
 
+/** Chapter/verse part after cleanup: "14", "1-2", "1,16-20", "29,7.11-14a", "13,31f." */
+const PASSAGE_RE = /^\d+(?:[,.-]\d+[a-c]?)*(?:ff?\.?)?$/;
+
 /**
- * Parse a free-text bible reference and return its canonical German short form.
+ * Rewrite a stored or imported reference into the Loccum form,
+ * synchronously and without the parser bundle: "Mk. 1,16-20" → "Mk 1,16-20",
+ * "Psalm 104" → "Ps 104", "1. Mose 2,4-7" → "Gen 2,4-7", "Hiob 1,21" →
+ * "Ijob 1,21". Only the book name is rewritten and repeated book names in a
+ * "; " list are dropped ("Mt 5,3; Mt 6,1" → "Mt 5,3; 6,1"); the chapter/verse
+ * part keeps its content with dashes and spacing tidied ("1,16 – 20" →
+ * "1,16-20"). Anything not recognized as a reference — including a list with
+ * one unrecognized entry — is returned verbatim.
+ *
+ * Used for display and for enrichment prefill; stored events are never
+ * rewritten.
+ *
+ * @param {string} text
+ * @returns {string}
+ */
+export function normalizeBibleReference(text) {
+  if (typeof text !== 'string') return text;
+  /** @type {string[]} */
+  const out = [];
+  /** @type {string | null} */
+  let prevBook = null;
+  for (const part of text
+    .normalize('NFC')
+    .split(';')
+    .map((p) => p.trim())) {
+    const m = REFERENCE_RE.exec(part);
+    const book = m && BOOK_BY_KEY.get(bookKey(m[1]));
+    // A bare "3,17-21" continues the previous entry's book (Loccum list form).
+    const passage = (book ? m[2] : prevBook ? part : '')
+      .replace(/[\u2010-\u2015]/g, '-')
+      .replace(/\s+/g, '');
+    if (!PASSAGE_RE.test(passage)) return text;
+    /** @type {string | null} */
+    const abbr = book ? book.abbr : prevBook;
+    out.push(abbr === prevBook ? passage : `${abbr} ${passage}`);
+    prevBook = abbr;
+  }
+  return out.join('; ');
+}
+
+/**
+ * Parse a free-text bible reference and return its canonical Loccum form.
  * Returns `{ ok: false, canonical: null, osis: null }` for unparseable input.
  *
  * @param {string} input
@@ -382,10 +768,16 @@ export async function parseAndCanonicalize(input) {
     return { ok: false, canonical: null, osis: null };
   }
   const { parser } = await loadParser();
-  parser.parse(trimmed);
+  // The parser's German data spells "Joel" without the diaeresis of "Joël".
+  parser.parse(
+    trimmed
+      .normalize('NFD')
+      .replace(/e\u0308/g, 'e')
+      .normalize('NFC')
+  );
   const osis = parser.osis();
   if (!osis) {
     return { ok: false, canonical: null, osis: null };
   }
-  return { ok: true, canonical: osisToDeShort(osis), osis };
+  return { ok: true, canonical: osisToLoccum(osis), osis };
 }
