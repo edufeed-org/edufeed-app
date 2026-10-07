@@ -518,7 +518,7 @@ describe('in-call chat (data messages)', () => {
     const payloads = replays.map(([bytes]) => decode(bytes));
     expect(payloads.map((p) => p.text)).toEqual(['erste', 'zweite']);
     expect(payloads.map((p) => p.ts)).toEqual(mine.map((c) => c.at));
-    expect(payloads.map((p) => `${me}:${p.n}`)).toEqual(mine.map((c) => c.id));
+    expect(payloads.map((p) => p.id)).toEqual(mine.map((c) => c.id));
   });
 
   it('replays at most my last 50 messages', async () => {
@@ -702,5 +702,88 @@ describe('unexpected disconnects', () => {
     expect(svc.isRemovalReason(DisconnectReason.ROOM_DELETED)).toBe(true);
     expect(svc.isRemovalReason(DisconnectReason.SIGNAL_CLOSE)).toBe(false);
     expect(svc.isRemovalReason(undefined)).toBe(false);
+  });
+});
+
+// Issue "emoji picker and :shortcode: autocomplete" (foundation): every
+// message carries a client-generated id (what replies will point at) and
+// may carry NIP-30 custom emojis as [shortcode, url] pairs.
+describe('call chat payload: ids and custom emojis', () => {
+  const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+  const bob = remote('b'.repeat(64) + ':x');
+  const emit = (obj, from = bob) =>
+    room.emit(RoomEvent.DataReceived, encode(obj), from, undefined, 'edufeed.call.chat');
+
+  it('sends a uuid id with a nonce derived from it, and keys the local copy by that id', async () => {
+    await svc.sendCallChat('hallo');
+    const [bytes] = room.localParticipant.publishData.mock.calls.at(-1);
+    const payload = decode(bytes);
+    expect(payload.id).toMatch(UUID_RE);
+    expect(payload.n).toBe(payload.id.replace(/-/g, ''));
+    expect(svc.getLiveKitState().callChat.at(-1).id).toBe(payload.id);
+  });
+
+  it('sends custom emojis as pairs and keeps them on the local copy', async () => {
+    const emoji = [['party', 'https://cdn.example/party.png']];
+    await svc.sendCallChat('los :party:', { emoji });
+    const [bytes] = room.localParticipant.publishData.mock.calls.at(-1);
+    expect(decode(bytes).emoji).toEqual(emoji);
+    expect(svc.getLiveKitState().callChat.at(-1).emoji).toEqual(emoji);
+  });
+
+  it('keys a received message by its id, or by identity:nonce for a peer without ids', () => {
+    emit({ t: 'chat', text: 'neu', n: 'n1', id: '11111111-2222-4333-8444-555555555555' });
+    emit({ t: 'chat', text: 'alt', n: 'n2' });
+    const chat = svc.getLiveKitState().callChat;
+    expect(chat.find((c) => c.text === 'neu').id).toBe('11111111-2222-4333-8444-555555555555');
+    expect(chat.find((c) => c.text === 'alt').id).toBe(`${bob.identity}:n2`);
+  });
+
+  it('dedupes on (identity, nonce) and on id alike', () => {
+    const id = '11111111-2222-4333-8444-555555555555';
+    emit({ t: 'chat', text: 'eins', n: 'n1', id });
+    emit({ t: 'chat', text: 'eins', n: 'n1' }); // same nonce, id-less copy
+    emit({ t: 'chat', text: 'eins', n: 'other', id }); // same id, other nonce
+    expect(svc.getLiveKitState().callChat.filter((c) => c.text === 'eins')).toHaveLength(1);
+  });
+
+  it("re-keys a message whose id collides with another sender's (never two rows with one key)", () => {
+    const id = '11111111-2222-4333-8444-555555555555';
+    const carol = remote('c'.repeat(64) + ':y');
+    emit({ t: 'chat', text: 'von bob', n: 'n1', id });
+    emit({ t: 'chat', text: 'von carol', n: 'n9', id }, carol);
+    const chat = svc.getLiveKitState().callChat;
+    expect(chat.map((c) => c.text)).toEqual(['von bob', 'von carol']);
+    expect(chat[1].id).toBe(`${carol.identity}:n9`);
+    expect(new Set(chat.map((c) => c.id)).size).toBe(2);
+  });
+
+  it('keeps received custom emojis (validated) on the message', () => {
+    emit({
+      t: 'chat',
+      text: ':party: :bad:',
+      n: 'e1',
+      emoji: [
+        ['party', 'https://cdn.example/party.png'],
+        ['bad', 'javascript:alert(1)']
+      ]
+    });
+    expect(svc.getLiveKitState().callChat.at(-1).emoji).toEqual([
+      ['party', 'https://cdn.example/party.png']
+    ]);
+  });
+
+  it('replays my messages with their id and emoji intact', async () => {
+    const emoji = [['party', 'https://cdn.example/party.png']];
+    await svc.sendCallChat('los :party:', { emoji });
+    const sent = decode(room.localParticipant.publishData.mock.calls.at(-1)[0]);
+    room.localParticipant.publishData.mockClear();
+    room.emit(RoomEvent.ParticipantConnected, remote('c'.repeat(64) + ':y'));
+    await new Promise((r) => setTimeout(r, 0));
+    const [replay] = room.localParticipant.publishData.mock.calls
+      .filter(([, opts]) => opts.topic === 'edufeed.call.chat')
+      .map(([bytes]) => decode(bytes));
+    expect(replay).toMatchObject({ id: sent.id, n: sent.n, emoji, text: 'los :party:' });
+    expect(typeof replay.ts).toBe('number');
   });
 });

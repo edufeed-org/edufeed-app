@@ -18,10 +18,19 @@
     callChatFileName,
     downloadTextFile
   } from '$lib/groups/call-chat-export.js';
-  import { linkifyCallChat, callChatPreviewUrls } from '$lib/groups/call-chat-links.js';
+  import {
+    linkifyCallChat,
+    callChatPreviewUrls,
+    withCustomEmojis
+  } from '$lib/groups/call-chat-links.js';
   import { registerCallChatView } from '$lib/groups/call-chat-unread.svelte.js';
   import { trackOnScreen } from '$lib/groups/track-on-screen.js';
-  import { DownloadIcon } from '$lib/components/icons';
+  import { customEmojisIn } from '$lib/helpers/emoji-autocomplete.js';
+  import { useUserEmojiSets } from '$lib/stores/user-emoji-sets.svelte.js';
+  import { lazyComponent } from '$lib/helpers/lazy-component.svelte.js';
+  import { DownloadIcon, SmilePlusIcon } from '$lib/components/icons';
+  import ComposerInput from '$lib/components/shared/ComposerInput.svelte';
+  import ImageWithFallback from '$lib/components/shared/ImageWithFallback.svelte';
   import LinkPreview from '$lib/components/shared/LinkPreview.svelte';
   import ProfileAvatar from '$lib/components/shared/ProfileAvatar.svelte';
   import HoverCard from '$lib/components/shared/HoverCard.svelte';
@@ -43,6 +52,31 @@
   let draft = $state('');
   /** @type {HTMLDivElement | undefined} */
   let listEl = $state(undefined);
+
+  // The composer is the app's ComposerInput: `:xx` autocomplete over the
+  // user's NIP-30 packs + unicode, inline images for picked custom emojis.
+  // A guest has no kind 10030, so useUserEmojiSets() hands them no packs —
+  // unicode only, nothing to special-case.
+  /** @type {ReturnType<typeof ComposerInput> | undefined} */
+  let composer = $state(undefined);
+  const getUserEmojiSets = useUserEmojiSets();
+  const customEmojiSets = $derived(getUserEmojiSets());
+  // A pick from the full picker may come from a pack the user does not
+  // list (the picker's "recent" row): remember its url so it still
+  // travels with the message.
+  /** @type {Record<string, string>} */
+  let pickedUrls = $state.raw({});
+  // The full picker (unicode + custom), lazy like on the stage: neither it
+  // nor the emoji dataset enter this panel's static graph.
+  const EmojiPickerLazy = lazyComponent(() => import('./CallEmojiPicker.svelte'));
+  let pickerOpen = $state(false);
+
+  /** @param {string | { shortcode: string, url: string }} emoji */
+  function pickEmoji(emoji) {
+    if (typeof emoji !== 'string') pickedUrls = { ...pickedUrls, [emoji.shortcode]: emoji.url };
+    composer?.insert(emoji);
+    pickerOpen = false;
+  }
 
   const getProfiles = useProfileMap(() =>
     lk.callChat
@@ -105,7 +139,7 @@
   const parsed = $derived(
     new Map(
       lk.callChat.map((c) => {
-        const segments = linkifyCallChat(c.text, origin);
+        const segments = withCustomEmojis(linkifyCallChat(c.text, origin), c.emoji);
         return [c.id, { segments, previews: callChatPreviewUrls(segments) }];
       })
     )
@@ -161,10 +195,23 @@
   }
 
   async function send() {
-    if (!canSend) return;
-    const text = draft;
+    if (!canSend || !draft.trim()) return;
+    const text = draft.trim();
     draft = '';
-    await sendCallChat(text);
+    pickerOpen = false;
+    // The custom emojis the text still references, as [shortcode, url]
+    // pairs: a data message has no `emoji` tags, so the urls travel inline.
+    const sets = [
+      ...customEmojiSets,
+      {
+        packName: '',
+        emojis: Object.entries(pickedUrls).map(([shortcode, url]) => ({ shortcode, url }))
+      }
+    ];
+    const emoji = customEmojisIn(text, sets).map(
+      (e) => /** @type {[string, string]} */ ([e.shortcode, e.url])
+    );
+    await sendCallChat(text, { emoji });
   }
 </script>
 
@@ -254,7 +301,14 @@
           <!-- Escaped text and plain anchors only: the text is whatever a
                participant (guests included) sent, never HTML. -->
           <span class="break-words whitespace-pre-wrap"
-            >{#each body?.segments ?? [{ text: msg.text }] as seg, s (s)}{#if 'href' in seg}{#if seg.internal}<a
+            >{#each body?.segments ?? [{ text: msg.text }] as seg, s (s)}{#if 'emoji' in seg}<ImageWithFallback
+                  src={seg.url}
+                  alt=":{seg.emoji}:"
+                  title=":{seg.emoji}:"
+                  size="emoji"
+                  fallbackType="generic"
+                  class="inline h-5 w-5 align-text-bottom"
+                />{:else if 'href' in seg}{#if seg.internal}<a
                     href={seg.href}
                     class="link break-all link-primary"
                     data-testid="call-chat-link"
@@ -284,26 +338,49 @@
     </p>
   {/if}
   <form
-    class="flex gap-2 p-2 {lk.isConnected ? 'border-t border-base-300' : ''}"
+    class="relative flex items-center gap-1 p-2 {lk.isConnected ? 'border-t border-base-300' : ''}"
     onsubmit={(e) => {
       e.preventDefault();
       send();
     }}
   >
-    <input
-      class="input-bordered input input-sm flex-1"
-      maxlength="2000"
-      placeholder={m.groups_call_chat_placeholder()}
-      bind:value={draft}
+    {#if pickerOpen}
+      <div
+        class="absolute bottom-full left-2 z-30 mb-1 rounded-box shadow-lg"
+        data-testid="call-chat-emoji-picker"
+      >
+        {#if EmojiPickerLazy.Component}
+          <EmojiPickerLazy.Component onPick={pickEmoji} />
+        {:else}
+          <div class="flex h-80 w-72 items-center justify-center rounded-box bg-base-100">
+            <span class="loading loading-md loading-spinner"></span>
+          </div>
+        {/if}
+      </div>
+    {/if}
+    <button
+      type="button"
+      class="btn btn-square btn-ghost btn-sm"
+      aria-label={m.groups_call_chat_emoji_button()}
+      title={m.groups_call_chat_emoji_button()}
+      aria-expanded={pickerOpen}
       disabled={!canSend}
-      aria-describedby={lk.isConnected ? undefined : offlineHintId}
-      data-testid="call-chat-input"
-      onkeydown={(e) => {
-        if (e.key === 'Enter' && !e.shiftKey) {
-          e.preventDefault();
-          send();
-        }
-      }}
+      onclick={() => (pickerOpen = !pickerOpen)}
+      data-testid="call-chat-emoji-toggle"
+    >
+      <SmilePlusIcon class="h-5 w-5" />
+    </button>
+    <ComposerInput
+      bind:this={composer}
+      bind:value={draft}
+      {customEmojiSets}
+      placeholder={m.groups_call_chat_placeholder()}
+      disabled={!canSend}
+      onfocus={() => (pickerOpen = false)}
+      onSubmit={send}
+      class="input-bordered input input-sm flex items-center"
+      ariaDescribedby={lk.isConnected ? undefined : offlineHintId}
+      testid="call-chat-input"
     />
     <button
       type="submit"
@@ -314,4 +391,14 @@
       {m.groups_call_chat_send()}
     </button>
   </form>
+  {#if pickerOpen}
+    <!-- svelte-ignore a11y_no_static_element_interactions -->
+    <div
+      class="fixed inset-0 z-20"
+      onclick={() => (pickerOpen = false)}
+      onkeydown={(e) => {
+        if (e.key === 'Escape') pickerOpen = false;
+      }}
+    ></div>
+  {/if}
 </div>
