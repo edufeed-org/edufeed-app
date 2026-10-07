@@ -599,3 +599,105 @@ describe('CalendarEventModal — group meeting mode', () => {
     expect(h.sendMeetingInvites).not.toHaveBeenCalled();
   });
 });
+
+// Moving the start time drags the end time along (14:30–15:30 moved to 16:00
+// must not leave an end at 15:30), rolling the end date past midnight.
+describe('CalendarEventModal — end time follows the start time', () => {
+  beforeEach(() => {
+    h.modalStore.modalProps = { mode: 'create', groupMeeting: GROUP_MEETING };
+    vi.useFakeTimers({ toFake: ['Date'] });
+    // Pre-fills 15:00–16:00 on 2026-10-02.
+    vi.setSystemTime(new Date(2026, 9, 2, 14, 58));
+  });
+
+  const value = (r, sel) => r.container.querySelector(sel).value;
+
+  it('keeps the duration while the end time is untouched', async () => {
+    try {
+      const r = render(CalendarEventModal);
+      await tick();
+      await setInput(r.container, '#startTime', '16:30');
+      await tick();
+      expect(value(r, '#endTime')).toBe('17:30');
+      expect(value(r, '#endDate')).toBe('2026-10-02');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('rolls the end date past midnight', async () => {
+    try {
+      const r = render(CalendarEventModal);
+      await tick();
+      await setInput(r.container, '#startTime', '23:30');
+      await tick();
+      expect(value(r, '#endTime')).toBe('00:30');
+      expect(value(r, '#endDate')).toBe('2026-10-03');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('keeps a user-chosen end time until the start reaches it', async () => {
+    try {
+      const r = render(CalendarEventModal);
+      await tick();
+      await setInput(r.container, '#endTime', '18:00');
+      await setInput(r.container, '#startTime', '17:00');
+      await tick();
+      expect(value(r, '#endTime')).toBe('18:00');
+      // Pushed by the duration the user gave it (15:00–18:00).
+      await setInput(r.container, '#startTime', '18:30');
+      await tick();
+      expect(value(r, '#endTime')).toBe('21:30');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("treats an edited event's stored end as chosen", async () => {
+    vi.useRealTimers();
+    const start = Math.floor(new Date(2026, 9, 7, 14, 30).getTime() / 1000);
+    h.modalStore.modalProps = {
+      mode: 'edit',
+      existingEvent: {
+        id: 'ev1',
+        kind: 31923,
+        pubkey: ME,
+        title: 'Treffen',
+        start,
+        end: start + 3600,
+        participants: [],
+        references: []
+      },
+      existingRawEvent: { id: 'ev1', kind: 31923, pubkey: ME, tags: [['d', 'x']] }
+    };
+    const r = render(CalendarEventModal);
+    await tick();
+    expect(value(r, '#endTime')).toBe('15:30');
+    await setInput(r.container, '#startTime', '15:00');
+    await tick();
+    expect(value(r, '#endTime')).toBe('15:30');
+    // Pushed by the duration the user gave it (14:30–15:30).
+    await setInput(r.container, '#startTime', '16:00');
+    await tick();
+    expect(value(r, '#endTime')).toBe('17:00');
+  });
+
+  it('measures the push from a settled start, not from values passed while typing', async () => {
+    try {
+      const r = render(CalendarEventModal);
+      await tick();
+      await setInput(r.container, '#endTime', '18:00'); // 15:00–18:00
+      // Typing "19:00" binds 01:00 after the first keystroke.
+      for (const typed of ['01:00', '19:00']) {
+        await setInput(r.container, '#startTime', typed);
+      }
+      await tick();
+      expect(value(r, '#endTime')).toBe('22:00');
+      expect(value(r, '#endDate')).toBe('2026-10-02');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});

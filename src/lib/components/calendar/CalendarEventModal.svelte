@@ -42,7 +42,7 @@
   import { showToast } from '$lib/helpers/toast';
   import { hasNip44 } from '$lib/helpers/nip44.js';
   import { formatDateParam } from '$lib/helpers/urlParams.js';
-  import { followStartDate } from '$lib/helpers/event-form-dates.js';
+  import { followStartDate, followStartTime } from '$lib/helpers/event-form-dates.js';
   import { formDateFromTimestamp } from '$lib/helpers/calendar-timing.js';
 
   /**
@@ -139,6 +139,39 @@
   function setEndDate(value) {
     formData.endDate = value;
     endDateEdited = true;
+  }
+
+  // Same for the end time of a timed event: until the user sets it, it keeps
+  // the duration when the start time moves; once set, it is only pushed when
+  // the start reaches it. Plain lets, like the date pair above.
+  let endTimeEdited = false;
+  // The start time the event's duration is measured from: the start as of
+  // the last time the end moved. Typing "16:00" binds 01:00 and 16:00 on the
+  // way; measuring from such a passing value would blow the duration up.
+  let durationFromTime = '';
+
+  /** @param {string} value */
+  function setStartTime(value) {
+    const next = followStartTime({
+      startDate: formData.startDate,
+      previousStartTime: durationFromTime,
+      nextStartTime: value,
+      endDate: formData.endDate,
+      endTime: formData.endTime,
+      endEdited: endTimeEdited
+    });
+    const endMoved = next.endTime !== formData.endTime || next.endDate !== formData.endDate;
+    formData.endDate = next.endDate;
+    formData.endTime = next.endTime;
+    formData.startTime = value;
+    if (value && (endMoved || !endTimeEdited)) durationFromTime = value;
+  }
+
+  /** @param {string} value */
+  function setEndTime(value) {
+    formData.endTime = value;
+    endTimeEdited = true;
+    if (formData.startTime) durationFromTime = formData.startTime;
   }
 
   let validationErrors = $state(/** @type {string[]} */ ([]));
@@ -291,6 +324,8 @@
     };
     endDateEdited = false;
     lastValidStart = '';
+    endTimeEdited = false;
+    durationFromTime = '09:00';
     validationErrors = [];
     isSubmitting = false;
     submitError = '';
@@ -338,8 +373,10 @@
       attributes: emptyEventAttributes()
     };
     endDateEdited = false;
+    endTimeEdited = false;
     // Never read formData here: this runs inside the open-modal $effect.
     lastValidStart = startDay;
+    durationFromTime = slot?.startTime ?? '09:00';
 
     validationErrors = [];
     isSubmitting = false;
@@ -400,6 +437,9 @@
     // follows when the start is moved past it.
     endDateEdited = true;
     lastValidStart = startDay;
+    // Only a stored end is a choice; without one the end time is a default.
+    endTimeEdited = Boolean(endDate);
+    durationFromTime = startDate.toTimeString().slice(0, 5);
 
     validationErrors = [];
     isSubmitting = false;
@@ -743,7 +783,11 @@
               <label for="startTime" class="mb-1 block text-sm font-medium text-base-content">
                 {m.event_modal_start_time_label()} <span class="text-error">*</span>
               </label>
-              <EuropeanTimeInput id="startTime" bind:value={formData.startTime} required />
+              <EuropeanTimeInput
+                id="startTime"
+                bind:value={() => formData.startTime, setStartTime}
+                required
+              />
             </div>
           {/if}
         </div>
@@ -761,7 +805,7 @@
               <label for="endTime" class="mb-1 block text-sm font-medium text-base-content"
                 >{m.event_modal_end_time_label()}</label
               >
-              <EuropeanTimeInput id="endTime" bind:value={formData.endTime} />
+              <EuropeanTimeInput id="endTime" bind:value={() => formData.endTime, setEndTime} />
             </div>
           {/if}
         </div>
