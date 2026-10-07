@@ -111,7 +111,10 @@ vi.mock('$lib/stores/config.svelte.js', () => ({
     }
   }
 }));
-vi.mock('nostr-tools', () => ({
+// Partial: the hover card's follow button reaches the accounts store, whose
+// DM service reads `kinds` from nostr-tools on the way in.
+vi.mock('nostr-tools', async (importOriginal) => ({
+  .../** @type {any} */ (await importOriginal()),
   nip19: {
     naddrEncode: () => 'naddr1test'
   }
