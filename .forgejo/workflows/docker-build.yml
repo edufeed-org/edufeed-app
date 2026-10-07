@@ -19,11 +19,36 @@ jobs:
       - name: Log in to Forgejo Registry
         run: echo "${{ secrets.REGISTRY_TOKEN }}" | docker login ${{ env.REGISTRY }} -u ${{ github.actor }} --password-stdin
 
+      # A release is two pushes of the SAME commit (main, then the v* tag), and
+      # the image is a pure function of the commit. Every main push publishes
+      # :sha-<sha> only after the smoke test passed, so when that tag already
+      # exists the tag run can reuse it instead of spending another full
+      # --no-cache build on an identical tree. Pulling (not `manifest inspect`)
+      # keeps the step a plain docker command; a missing tag just fails the pull.
+      - name: Reuse the image already published for this commit
+        id: reuse
+        run: |
+          REG=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          if docker pull "$REG:sha-${{ github.sha }}"; then
+            docker tag "$REG:sha-${{ github.sha }}" edufeed-app:ci-${{ github.sha }}
+            echo "Reusing $REG:sha-${{ github.sha }} (already built and smoke-tested)."
+            hit=true
+          else
+            echo "No published image for this commit yet - building."
+            hit=false
+          fi
+          # Forgejo documents $FORGEJO_OUTPUT; the runner also exports the
+          # GitHub-compatible name. Write whichever exists.
+          for out in "$FORGEJO_OUTPUT" "$GITHUB_OUTPUT"; do
+            [ -n "$out" ] && echo "hit=$hit" >> "$out"
+          done
+
       # Build to a local image WITHOUT cache. A stale buildkit layer cache on the
       # self-hosted runner previously produced images where Paraglide message
       # functions were bundled as `undefined`, crashing SSR. Building clean and
       # smoke-testing before publishing guarantees we only roll a working image.
       - name: Build image (no cache)
+        if: ${{ steps.reuse.outputs.hit != 'true' }}
         run: |
           docker buildx build \
             --no-cache \
@@ -32,6 +57,7 @@ jobs:
             .
 
       - name: Smoke test (must render / with HTTP 200 before publishing)
+        if: ${{ steps.reuse.outputs.hit != 'true' }}
         run: |
           docker rm -f edufeed-smoke 2>/dev/null || true
           docker run -d --name edufeed-smoke edufeed-app:ci-${{ github.sha }}
