@@ -240,6 +240,72 @@ describe('MeetingCard', () => {
     click.mockRestore();
   });
 
+  it('stamps the .ics with SEQUENCE/LAST-MODIFIED from created_at, so a re-import replaces the entry', async () => {
+    const created = [];
+    URL.createObjectURL = vi.fn((blob) => {
+      created.push(blob);
+      return 'blob:ics';
+    });
+    URL.revokeObjectURL = vi.fn();
+    const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
+    const event = meetingIn(3600);
+    render(MeetingCard, { props: { event, pointer: POINTER, user: me, isAdmin: false } });
+    await fireEvent.click(screen.getByTestId('meeting-card-ics'));
+    // Unfold first: the UID line (coordinate = 64-hex pubkey) exceeds the
+    // 75-octet limit and is folded with CRLF + space.
+    const text = (await created[0].text()).replace(/\r\n /g, '');
+    expect(text).toContain(`UID:31923:${ME}:${event.tags.find((t) => t[0] === 'd')[1]}@edufeed`);
+    expect(text).toContain(`SEQUENCE:${event.created_at}`);
+    expect(text).toMatch(/LAST-MODIFIED:\d{8}T\d{6}Z/);
+    click.mockRestore();
+  });
+
+  describe('edit', () => {
+    it('offers "Bearbeiten" to the author only, handing the meeting and its pass to the opener', async () => {
+      const onEdit = vi.fn();
+      const event = meetingIn(3600);
+      const pass = passFor(event);
+      eventStore.add(pass);
+      render(MeetingCard, {
+        props: { event, pointer: POINTER, user: me, isAdmin: false, onEdit }
+      });
+      await screen.findByTestId('meeting-card-guest-link');
+      const button = screen.getByTestId('meeting-card-edit');
+      expect(button.textContent?.trim()).toBe(m.meeting_card_edit());
+      expect(button.className).toContain('btn-sm');
+      await fireEvent.click(button);
+      expect(onEdit).toHaveBeenCalledTimes(1);
+      expect(onEdit.mock.calls[0][0].id).toBe(event.id);
+      expect(onEdit.mock.calls[0][1].id).toBe(pass.id);
+    });
+
+    it('hands a null pass when the meeting has none', async () => {
+      const onEdit = vi.fn();
+      const event = meetingIn(3600);
+      render(MeetingCard, {
+        props: { event, pointer: POINTER, user: me, isAdmin: false, onEdit }
+      });
+      await fireEvent.click(screen.getByTestId('meeting-card-edit'));
+      expect(onEdit).toHaveBeenCalledWith(expect.objectContaining({ id: event.id }), null);
+    });
+
+    it('is not offered to an admin who is not the author, nor without an opener', () => {
+      render(MeetingCard, {
+        props: {
+          event: meetingIn(3600, { sk: OTHER_SK }),
+          pointer: POINTER,
+          user: me,
+          isAdmin: true,
+          onEdit: vi.fn()
+        }
+      });
+      render(MeetingCard, {
+        props: { event: meetingIn(3600), pointer: POINTER, user: me, isAdmin: false }
+      });
+      expect(screen.queryByTestId('meeting-card-edit')).toBeNull();
+    });
+  });
+
   describe('guest link', () => {
     it("rebuilds the organiser's guest link from the pass in the store and copies it", async () => {
       const event = meetingIn(3600);

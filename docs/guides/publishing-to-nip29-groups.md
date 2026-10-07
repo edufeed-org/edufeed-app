@@ -221,6 +221,35 @@ pass code. `src/lib/groups/meetings.js` (`buildMeetingTags`,
 `sendMeetingInvites`) own the tag/window logic; `CalendarEventModal`'s
 "group meeting" mode is the only entry point for creating one.
 
+**Editing** ("Bearbeiten" on the `MeetingCard`, author only — a moderator
+cannot re-sign someone else's addressable event) reopens that same dialog
+in group-meeting edit mode (`GroupChat.openEditMeeting` passes
+`mode: 'edit'`, the raw 31923 as `existingRawEvent` and the meeting's pass
+as `groupMeeting.guestPass`). `updateGroupMeeting`
+(`src/lib/groups/edit-meeting.js`) re-publishes the **same d-tag** with a
+newer `created_at` through `publishToGroupRelay` — the group relay only,
+never `calendarActions.updateEvent` (which would fan a private channel's
+meeting out to the outbox/calendar relays; the dialog refuses a channel
+meeting on that path as defense in depth). On a reschedule it also:
+
+- keeps an already-shared guest link working: the relay freezes the pass
+  window at mint time, so `renewMeetingLink` (`call-passes.js`) publishes a
+  new 9025 with the **same code** (read from the old pass's self-encrypted
+  content) and the new window, then revokes the old one — the URL in
+  everyone's hands stays valid (see "Meeting passes" in
+  `docs/nips/nip29-call-passes.md`);
+- posts a "Termin verschoben" notice into the channel as an ordinary kind-9
+  message (`buildGroupMessageTemplate`), old → new time;
+- DMs every invited pubkey the same notice (`notifyMeetingChange`; newly
+  added invitees get the invitation instead).
+
+Switching the guest toggle on/off in the edit dialog mints/revokes the pass;
+a meeting moved beyond the relay's 60-day pass limit has its pass revoked
+(`guestStatus: 'too_far'`). The card's `.ics` keeps its UID (the meeting
+coordinate) and stamps `SEQUENCE`/`LAST-MODIFIED` from the event's
+`created_at`, so a calendar that already imported the meeting replaces its
+entry on re-import instead of adding a second one.
+
 A guest link, when the organiser turns it on, is a meeting pass — see
 "Meeting passes" in `docs/nips/nip29-call-passes.md` — minted via
 `createMeetingLink` (`call-passes.js`). Invites are NIP-17 DMs
@@ -230,7 +259,7 @@ already on the channel roster (everyone gets it when the roster is
 unknown).
 
 `GroupChat.svelte` renders each 31923 as a `MeetingCard` (status, ".ics",
-the author's "Gast-Link kopieren", delete) and shows a `MeetingBar` above
+the author's "Gast-Link kopieren" and "Bearbeiten", delete) and shows a `MeetingBar` above
 the timeline for the next joinable/upcoming meeting. Joining goes through
 `confirmCallSwitch` (`call-switch-confirm.svelte.js`) when the user is
 already live in another channel's call.
@@ -266,9 +295,10 @@ deleted meeting never leaves a working guest link behind.
 | `src/lib/groups/livekit.js`              | NIP-29 AV: relay probe, NIP-98 token request, `livekit` tag + identity helpers                      |
 | `src/lib/groups/call-presence*.js`       | Kind-39004 filter/parser and the relay-key-pinned live subscription                                 |
 | `src/lib/groups/group-call.svelte.js`    | The single active call (token round-trip, which channel it belongs to)                              |
-| `src/lib/groups/call-passes.js`          | Guest call passes: code/hash/link helpers, pass check, create/list/revoke                           |
+| `src/lib/groups/call-passes.js`          | Guest call passes: code/hash/link helpers, pass check, create/renew/list/revoke                     |
 | `src/lib/groups/meetings.js`             | Scheduled-meeting tags/window/phase helpers, `isChannelMeeting` guard, `.ics` builder               |
 | `src/lib/groups/schedule-meeting.js`     | `scheduleGroupMeeting`, `sendMeetingInvites` (NIP-17 invites + guest link)                          |
+| `src/lib/groups/edit-meeting.js`         | `updateGroupMeeting` (same d-tag, group relay only), reschedule notice + invitee DMs                |
 | `src/lib/groups/meeting-actions.js`      | `deleteMeeting` — revokes the meeting's passes, then deletes it                                     |
 | `src/lib/helpers/calendar-timing.js`     | `isChannelMeeting` / `withoutChannelMeetings` (pure; used by the cache and generic calendar models) |
 | `src/lib/loaders/calendar.js`            | `channelCalendarsLoader` — one `#h` REQ per channel for the community calendar                      |

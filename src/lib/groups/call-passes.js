@@ -241,6 +241,66 @@ export async function createMeetingLink(
   return { code, url: callLinkUrl(origin, pointer, code), event };
 }
 
+/**
+ * Re-mint the guest link of a meeting that was rescheduled, keeping its URL.
+ * The relay freezes `not-before`/`expiration` into the pass when it is
+ * minted (pyramid `call_pass.go`: `status()` reads the pass's own tags, never
+ * the meeting), so moving the meeting leaves the old pass windowed around
+ * the old time. A link that was already shared must keep working, so the
+ * same code is published again with the new window (the URL carries only
+ * the code), and only then is the old pass revoked — the link never reads
+ * `unknown` in between, and the relay serves the newest pass for a hash.
+ * The code is read from the old pass's self-encrypted content; if that is
+ * unreadable a fresh code is used and `sameCode` says so (the caller then
+ * hands out the new URL). A failed revocation is logged, not thrown: the
+ * old pass expires on its own and the new one already works.
+ * @param {any} relayConn pool.relay(pointer.relay)
+ * @param {{id: string, relay: string}} pointer
+ * @param {{pubkey: string, signer: any}} user
+ * @param {string} origin
+ * @param {any} pass the meeting's current pass (mine)
+ * @param {{start: number, end: number, coordinate: string, title?: string}} meeting
+ * @returns {Promise<{code: string, url: string, event: any, revoked: any | null, sameCode: boolean}>}
+ */
+export async function renewMeetingLink(
+  relayConn,
+  pointer,
+  user,
+  origin,
+  pass,
+  { start, end, coordinate, title }
+) {
+  if (pass?.pubkey !== user.pubkey) throw new Error('only the author can renew this link');
+  if (!hasNip44(user.signer)) throw new Error('nip44-unsupported');
+  let code = null;
+  try {
+    const previous = await user.signer.nip44.decrypt(user.pubkey, pass.content);
+    if (isPassCode(previous)) code = previous;
+  } catch {
+    code = null;
+  }
+  const sameCode = code !== null;
+  if (code === null) code = generatePassCode();
+  const { notBefore, expiration } = guestWindow({ start, end });
+  const template = buildCallPassTemplate({
+    groupId: pointer.id,
+    codeHash: await hashPassCode(code),
+    encryptedCode: await user.signer.nip44.encrypt(user.pubkey, code),
+    notBefore,
+    expiration,
+    meeting: [coordinate, pointer.relay],
+    title
+  });
+  const event = await publishToGroupRelay(relayConn, template, user);
+  let revoked = null;
+  try {
+    revoked = await revokeCallPass(relayConn, pass, user);
+  } catch (err) {
+    console.warn('meeting: revoking the superseded pass failed', err);
+  }
+  return { code, url: callLinkUrl(origin, pointer, code), event, revoked, sameCode };
+}
+
 /** @param {any} event */
 function expirationOf(event) {
   const raw = event?.tags?.find((/** @type {string[]} */ t) => t[0] === 'expiration')?.[1];
@@ -296,14 +356,17 @@ export async function passLinkFor(pass, user, pointer, origin) {
  * it. The author signs a NIP-09 kind 5; a moderator revoking someone else's
  * pass signs a NIP-29 kind 9005. publishToGroupRelay answers the relay's
  * auth-required rejection (the relay demands NIP-42 auth for this).
+ * Resolves with the signed deletion (add it to the eventStore so the pass
+ * drops out of every TimelineModel at once).
  * @param {any} relayConn @param {any} pass @param {{pubkey: string, signer: any}} user
  * @param {{asAdmin?: boolean}} [opts]
+ * @returns {Promise<any>}
  */
 export async function revokeCallPass(relayConn, pass, user, { asAdmin = false } = {}) {
   const groupId = pass?.tags?.find((/** @type {string[]} */ t) => t[0] === 'h')?.[1];
   if (!groupId) throw new Error('pass without h tag');
   if (pass.pubkey === user.pubkey) {
-    await publishToGroupRelay(
+    return publishToGroupRelay(
       relayConn,
       {
         kind: 5,
@@ -317,8 +380,7 @@ export async function revokeCallPass(relayConn, pass, user, { asAdmin = false } 
       },
       user
     );
-    return;
   }
   if (!asAdmin) throw new Error('only the author or a moderator can revoke this link');
-  await publishToGroupRelay(relayConn, buildDeleteEventTemplate(groupId, pass.id), user);
+  return publishToGroupRelay(relayConn, buildDeleteEventTemplate(groupId, pass.id), user);
 }
