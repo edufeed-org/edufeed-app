@@ -110,12 +110,16 @@ vi.mock(
   '$lib/components/groups/call/CallEmojiPicker.svelte',
   () => import('./fixtures/CallEmojiPickerStub.svelte')
 );
-vi.mock('$lib/components/icons', () => ({
+vi.mock('$lib/components/icons', async () => ({
   MeetIcon: Stub,
   ChevronDownIcon: Stub,
   MicIcon: Stub,
   MicOffIcon: Stub,
-  VideoIcon: Stub,
+  // The camera pair renders distinguishable markers: the control must swap
+  // icons with the camera state, not only recolour (issue "camera button
+  // needs a struck-through icon").
+  VideoIcon: (await import('./fixtures/VideoIconStub.svelte')).default,
+  VideoOffIcon: (await import('./fixtures/VideoOffIconStub.svelte')).default,
   ScreenShareIcon: Stub,
   HandIcon: Stub,
   SmilePlusIcon: Stub,
@@ -411,6 +415,27 @@ describe('publish controls', () => {
     expect(screen.getByTitle('Camera on')).toBeTruthy();
     expect(screen.getByTitle('Share screen')).toBeTruthy();
     expect(screen.queryByText('You are listening only')).toBeNull();
+  });
+
+  it('shows the struck-through camera icon while the camera is off, the plain one while on', () => {
+    lk.isCameraOff = true;
+    const off = render(GroupCallStage, { props: baseProps });
+    const button = screen.getByTitle('Camera on');
+    expect(button.className).toContain('btn-error');
+    expect(button.querySelector('[data-testid="video-off-icon"]')).toBeTruthy();
+    expect(button.querySelector('[data-testid="video-icon"]')).toBeNull();
+    off.unmount();
+
+    lk.isCameraOff = false;
+    try {
+      render(GroupCallStage, { props: baseProps });
+      const on = screen.getByTitle('Camera off');
+      expect(on.className).not.toContain('btn-error');
+      expect(on.querySelector('[data-testid="video-icon"]')).toBeTruthy();
+      expect(on.querySelector('[data-testid="video-off-icon"]')).toBeNull();
+    } finally {
+      lk.isCameraOff = true;
+    }
   });
 
   it('hides the camera button for an audio-only call', () => {

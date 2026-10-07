@@ -104,4 +104,5 @@ export { default as MicIcon } from './ui/MicIcon.svelte';
 export { default as MicOffIcon } from './ui/MicOffIcon.svelte';
 export { default as HandIcon } from './ui/HandIcon.svelte';
 export { default as VideoIcon } from './ui/VideoIcon.svelte';
+export { default as VideoOffIcon } from './ui/VideoOffIcon.svelte';
 export { default as ScreenShareIcon } from './ui/ScreenShareIcon.svelte';
