@@ -1152,6 +1152,8 @@ vi.mock('$lib/paraglide/messages', () => ({
     `Join the running call (${count})`,
   groups_call_chat_tab: () => 'Anruf-Chat',
   groups_call_chat_channel_tab: () => 'Kanal',
+  groups_call_chat_unread: () => 'New messages in the call chat',
+  groups_call_channel_unread: () => 'New messages in the channel',
   groups_auth_required: () => 'auth required',
   groups_reply: () => 'Reply',
   groups_message_delete: () => 'Delete message',
@@ -3163,6 +3165,63 @@ describe('GroupChat', () => {
         await fireEvent.click(await screen.findByTestId('chat-tab-call'));
         // Hidden via CSS, not removed — the wrapper stays in the DOM.
         expect(screen.getByTestId('channel-chat-body').className).toContain('hidden');
+      });
+
+      // Issue "notification dot for new messages": each tab says when the
+      // other side moved on.
+      it('dots the call chat tab while the call chat has unseen messages', async () => {
+        const unreadMod = await import('$lib/groups/call-chat-unread.svelte.js');
+        unreadMod.resetCallChatUnread();
+        inCallHere();
+        groupCallHolder.state.stageHidden = true;
+        render(GroupChat, { props: { pointer: callPointer } });
+        await fireEvent.click(await screen.findByTestId('chat-tab-channel'));
+        const callTab = screen.getByTestId('chat-tab-call');
+        expect(callTab.querySelector('[data-testid="call-chat-unread-dot"]')).toBeNull();
+        unreadMod.noteCallChatReceived();
+        await waitFor(() =>
+          expect(callTab.querySelector('[data-testid="call-chat-unread-dot"]')).not.toBeNull()
+        );
+        expect(callTab.textContent).toContain('New messages in the call chat');
+        unreadMod.resetCallChatUnread();
+      });
+
+      it('dots the channel tab for a new channel message from someone else while on the call chat', async () => {
+        inCallHere();
+        groupCallHolder.state.stageHidden = true;
+        render(GroupChat, { props: { pointer: callPointer } });
+        const channelTab = await screen.findByTestId('chat-tab-channel');
+        await waitFor(() =>
+          expect(screen.getByTestId('chat-tab-call').getAttribute('aria-selected')).toBe('true')
+        );
+        const later = Math.floor(Date.now() / 1000) + 60;
+        // My own message is not news.
+        eventStore.add(
+          signWith(
+            { kind: 9, content: 'von mir', created_at: later, tags: [['h', 'callchat']] },
+            MY_SK
+          )
+        );
+        await new Promise((r) => setTimeout(r, 20));
+        expect(channelTab.querySelector('[data-testid="channel-unread-dot"]')).toBeNull();
+        eventStore.add(
+          signWith(
+            { kind: 9, content: 'neu im Kanal', created_at: later + 1, tags: [['h', 'callchat']] },
+            OTHER_SK
+          )
+        );
+        await waitFor(() =>
+          expect(channelTab.querySelector('[data-testid="channel-unread-dot"]')).not.toBeNull()
+        );
+        expect(channelTab.textContent).toContain('New messages in the channel');
+        await fireEvent.click(channelTab);
+        await waitFor(() =>
+          expect(channelTab.querySelector('[data-testid="channel-unread-dot"]')).toBeNull()
+        );
+        // Back on the call chat: what was seen stays seen.
+        await fireEvent.click(screen.getByTestId('chat-tab-call'));
+        await new Promise((r) => setTimeout(r, 20));
+        expect(channelTab.querySelector('[data-testid="channel-unread-dot"]')).toBeNull();
       });
 
       it('resets to the channel tab when the call here ends', async () => {

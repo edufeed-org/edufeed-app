@@ -164,3 +164,36 @@ export function markHostRead(markers, summaries, keys) {
   }
   return next;
 }
+
+/**
+ * The channel as seen right now: up to `now`, or up to its newest message if
+ * a sender's clock runs ahead of ours (so that message does not stay "new").
+ * Session-local bookkeeping for the "Kanal" tab while in a call — the active
+ * channel's real read marker is stamped as messages arrive (host-unread), so
+ * it cannot say what was missed behind the call chat tab.
+ *
+ * @param {Array<{created_at?: number}> | null | undefined} events
+ * @param {number} now unix seconds
+ * @returns {number}
+ */
+export function channelSeenUpTo(events, now) {
+  let seen = now;
+  for (const event of events ?? []) {
+    if ((event?.created_at ?? 0) > seen) seen = /** @type {number} */ (event.created_at);
+  }
+  return seen;
+}
+
+/**
+ * Did someone else post after `since`? Your own messages never count.
+ *
+ * @param {Array<{pubkey?: string, created_at?: number}> | null | undefined} events
+ * @param {string | null | undefined} myPubkey
+ * @param {number} since unix seconds
+ * @returns {boolean}
+ */
+export function hasNewFromOthers(events, myPubkey, since) {
+  return (events ?? []).some(
+    (event) => !!event && event.pubkey !== myPubkey && (event.created_at ?? 0) > since
+  );
+}

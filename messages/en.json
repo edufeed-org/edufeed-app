@@ -2716,6 +2716,8 @@
   "groups_call_chat_download": "Download chat",
   "groups_call_chat_exported_at": "Exported at {time}",
   "groups_call_chat_offline": "The call chat is available once you're connected.",
+  "groups_call_chat_unread": "New messages in the call chat",
+  "groups_call_channel_unread": "New messages in the channel",
   "groups_livekit_toggle": "Live audio/video",
   "groups_livekit_hint": "Members can join a call from the channel header. This relay hosts the call.",
   "dm_title": "Messages",

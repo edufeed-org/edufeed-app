@@ -461,6 +461,31 @@ describe('in-call chat (data messages)', () => {
     expect(svc.getLiveKitState().callChat.map((c) => c.text)).toEqual(['hi']);
   });
 
+  // The unread dots: others' messages count (once, deduped), mine never do,
+  // and leaving the call clears the marker.
+  it('reports only new messages from others to the unread marker', async () => {
+    const { getCallChatUnread } = await import('$lib/groups/call-chat-unread.svelte.js');
+    const unread = getCallChatUnread();
+    const before = unread.count;
+    await svc.sendCallChat('meins');
+    expect(unread.count).toBe(before);
+    const bob = remote('b'.repeat(64) + ':x');
+    const emit = (/** @type {any} */ obj) =>
+      room.emit(
+        RoomEvent.DataReceived,
+        new TextEncoder().encode(JSON.stringify(obj)),
+        bob,
+        undefined,
+        'edufeed.call.chat'
+      );
+    emit({ t: 'chat', text: 'hi', n: 'u1' });
+    emit({ t: 'chat', text: 'hi', n: 'u1' });
+    emit({ t: 'chat', text: 42, n: 'u2' });
+    expect(unread.count).toBe(before + 1);
+    await svc.disconnectFromRoom();
+    expect(unread.count).toBe(0);
+  });
+
   // Late joiners: the chat is ephemeral, so each present participant hands a
   // newcomer its OWN recent messages (never anyone else's — the sender
   // identity must stay LiveKit-verified), with their original send time.

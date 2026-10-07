@@ -4,7 +4,7 @@
   when the call ends. The channel chat stays members-only.
 -->
 <script>
-  import { tick } from 'svelte';
+  import { tick, untrack } from 'svelte';
   import { goto } from '$app/navigation';
   import { resolve } from '$app/paths';
   import { getLiveKitState, sendCallChat } from '$lib/services/livekit-connection.svelte.js';
@@ -18,7 +18,11 @@
     callChatFileName,
     downloadTextFile
   } from '$lib/groups/call-chat-export.js';
+  import { linkifyCallChat, callChatPreviewUrls } from '$lib/groups/call-chat-links.js';
+  import { registerCallChatView } from '$lib/groups/call-chat-unread.svelte.js';
+  import { trackOnScreen } from '$lib/groups/track-on-screen.js';
   import { DownloadIcon } from '$lib/components/icons';
+  import LinkPreview from '$lib/components/shared/LinkPreview.svelte';
   import ProfileAvatar from '$lib/components/shared/ProfileAvatar.svelte';
   import HoverCard from '$lib/components/shared/HoverCard.svelte';
   import ProfileHoverCardContent from '$lib/components/shared/ProfileHoverCardContent.svelte';
@@ -60,13 +64,16 @@
     return index > 0 && lk.callChat[index - 1].identity === lk.callChat[index].identity;
   }
 
-  // Clicking a sender's avatar or name: pop the call out first (when the
-  // browser supports it AND the call is actually live — a connecting/ended/
-  // failed call has nothing worth keeping on screen) so leaving to the
-  // profile route doesn't drop it, then navigate. Must run synchronously
-  // from the click — pop-out needs the user activation (QA 2026-10-02).
-  /** @param {MouseEvent} e @param {string} pk */
-  function openProfile(e, pk) {
+  // Leaving for another app route must not cost the call its screen: pop
+  // the call out first (when the browser supports it AND the call is
+  // actually live — a connecting/ended/failed call has nothing worth keeping
+  // on screen), then navigate client-side; the call store keeps the Room
+  // either way, the dock shows it when nothing else does. Must run
+  // synchronously from the click — pop-out needs the user activation
+  // (QA 2026-10-02). Used by the sender's avatar/name and by app links in
+  // messages.
+  /** @param {MouseEvent} e @param {string} path */
+  function openInApp(e, path) {
     e.preventDefault();
     // The click also bubbles into HoverCard's own wrapper; nothing there
     // needs it (interactiveTrigger mode doesn't toggle on click), but stop
@@ -77,8 +84,44 @@
         console.warn('call pop-out failed:', err);
       });
     }
-    goto(resolve(profileLink(pk)));
+    goto(resolve(/** @type {any} */ (path)));
   }
+
+  /** @param {MouseEvent} e @param {string} pk */
+  function openProfile(e, pk) {
+    openInApp(e, profileLink(pk));
+  }
+
+  // An app link in a message. A modified or middle click (new tab / window)
+  // is the browser's to handle and leaves the call where it is.
+  /** @param {MouseEvent} e @param {string} path */
+  function openAppLink(e, path) {
+    if (e.button !== 0 || e.ctrlKey || e.metaKey || e.shiftKey || e.altKey) return;
+    openInApp(e, path);
+  }
+
+  const origin = typeof window !== 'undefined' ? window.location.origin : '';
+  // One parse per message, not per render: messages never change once kept.
+  const parsed = $derived(
+    new Map(
+      lk.callChat.map((c) => {
+        const segments = linkifyCallChat(c.text, origin);
+        return [c.id, { segments, previews: callChatPreviewUrls(segments) }];
+      })
+    )
+  );
+
+  // While this panel is actually on screen (laid out — the /c layout keeps
+  // hidden copies mounted, and below md the chat column is display:none),
+  // the call chat counts as seen: that is what clears the unread dots.
+  // Untracked: registering writes the marker's own state.
+  /** @type {HTMLDivElement | undefined} */
+  let rootEl = $state(undefined);
+  $effect(() => {
+    const node = rootEl;
+    if (!node) return;
+    return untrack(() => trackOnScreen(node, registerCallChatView));
+  });
 
   $effect(() => {
     const count = lk.callChat.length;
@@ -125,7 +168,7 @@
   }
 </script>
 
-<div class="flex min-h-0 flex-1 flex-col" data-testid="call-chat-panel">
+<div bind:this={rootEl} class="flex min-h-0 flex-1 flex-col" data-testid="call-chat-panel">
   <div
     class="flex shrink-0 items-center justify-end border-b border-base-300 px-2 py-1"
     data-testid="call-chat-header"
@@ -150,6 +193,7 @@
     {/if}
     {#each lk.callChat as msg, i (msg.id)}
       {@const pk = identityToPubkey(msg.identity)}
+      {@const body = parsed.get(msg.id)}
       <div class="flex items-start gap-2 text-sm" data-testid="call-chat-message">
         {#if pk}
           <!-- Avatar + name are one hover/click target (same pattern as
@@ -206,7 +250,27 @@
           </span>
           <span class="font-semibold">{nameOf(msg.identity)}</span>
         {/if}
-        <span class="min-w-0 flex-1 break-words whitespace-pre-wrap">{msg.text}</span>
+        <div class="flex min-w-0 flex-1 flex-col gap-1">
+          <!-- Escaped text and plain anchors only: the text is whatever a
+               participant (guests included) sent, never HTML. -->
+          <span class="break-words whitespace-pre-wrap"
+            >{#each body?.segments ?? [{ text: msg.text }] as seg, s (s)}{#if 'href' in seg}{#if seg.internal}<a
+                    href={seg.href}
+                    class="link break-all link-primary"
+                    data-testid="call-chat-link"
+                    onclick={(e) => openAppLink(e, seg.href)}>{seg.label}</a
+                  >{:else}<a
+                    href={seg.href}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    class="link break-all link-primary"
+                    data-testid="call-chat-link">{seg.label}</a
+                  >{/if}{:else}{seg.text}{/if}{/each}</span
+          >
+          {#each body?.previews ?? [] as url (url)}
+            <LinkPreview {url} />
+          {/each}
+        </div>
       </div>
     {/each}
   </div>

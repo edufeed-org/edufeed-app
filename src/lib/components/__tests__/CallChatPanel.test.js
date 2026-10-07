@@ -66,6 +66,11 @@ vi.mock('$lib/groups/group-call.svelte.js', () => ({
   getGroupCallState: () => groupCall
 }));
 
+vi.mock(
+  '$lib/components/shared/LinkPreview.svelte',
+  () => import('./fixtures/LinkPreviewStub.svelte')
+);
+
 const download = vi.hoisted(() => ({ fn: vi.fn() }));
 vi.mock('$lib/groups/call-chat-export.js', async (importOriginal) => ({
   .../** @type {any} */ (await importOriginal()),
@@ -73,6 +78,7 @@ vi.mock('$lib/groups/call-chat-export.js', async (importOriginal) => ({
 }));
 
 const m = await import('$lib/paraglide/messages');
+const unreadMod = await import('$lib/groups/call-chat-unread.svelte.js');
 const { profileLink } = await import('$lib/helpers/nostrUtils.js');
 const { default: CallChatPanel } = await import('$lib/components/groups/call/CallChatPanel.svelte');
 const props = { identityToPubkey: (id) => id.slice(0, 64), title: 'arbeitszimmer' };
@@ -291,5 +297,100 @@ describe('CallChatPanel', () => {
     state.isConnected = true;
     render(CallChatPanel, { props });
     expect(screen.queryByTestId('call-chat-offline')).toBeNull();
+  });
+});
+
+// Issue "render links in call chats and preview links".
+describe('CallChatPanel links', () => {
+  const NADDR = 'naddr1' + 'q'.repeat(70);
+  /** @param {string} text */
+  const say = (text) => {
+    state.callChat = [{ id: 'l:1', identity: 'b'.repeat(64) + ':1', text, at: 1 }];
+  };
+  const links = () =>
+    /** @type {HTMLAnchorElement[]} */ (
+      Array.from(
+        screen.getByTestId('call-chat-message').querySelectorAll('a[data-testid="call-chat-link"]')
+      )
+    );
+
+  it('makes an external URL a new-tab link and previews it under the message', () => {
+    say('Schaut mal https://example.com/artikel.');
+    render(CallChatPanel, { props });
+    const [a] = links();
+    expect(a.getAttribute('href')).toBe('https://example.com/artikel');
+    expect(a.getAttribute('target')).toBe('_blank');
+    expect(a.getAttribute('rel')).toBe('noopener noreferrer');
+    expect(a.textContent).toBe('https://example.com/artikel');
+    expect(screen.getByTestId('call-chat-message').textContent).toContain('Schaut mal');
+    const previews = screen.getAllByTestId('link-preview-stub');
+    expect(previews.map((p) => p.dataset.url)).toEqual(['https://example.com/artikel']);
+  });
+
+  it('keeps raw HTML as text', () => {
+    say('<img src=x onerror="alert(1)"> <b>fett</b>');
+    render(CallChatPanel, { props });
+    const msg = screen.getByTestId('call-chat-message');
+    expect(msg.querySelector('img')).toBeNull();
+    expect(msg.querySelector('b')).toBeNull();
+    expect(msg.textContent).toContain('<b>fett</b>');
+  });
+
+  it('an app link pops the call out and navigates in-app instead of leaving the page', async () => {
+    popout.supported = true;
+    say(`nostr:${NADDR}`);
+    render(CallChatPanel, { props });
+    const [a] = links();
+    expect(a.getAttribute('href')).toBe(`/${NADDR}`);
+    expect(a.getAttribute('target')).toBeNull();
+    const event = new MouseEvent('click', { bubbles: true, cancelable: true });
+    a.dispatchEvent(event);
+    expect(event.defaultPrevented).toBe(true);
+    expect(popout.popOutCall).toHaveBeenCalledTimes(1);
+    expect(gotoMock).toHaveBeenCalledWith(`/${NADDR}`);
+    // The app is not an external page: no preview card for it.
+    expect(screen.queryByTestId('link-preview-stub')).toBeNull();
+  });
+
+  it('a same-origin URL counts as an app link too', async () => {
+    say(`${window.location.origin}/${NADDR}`);
+    render(CallChatPanel, { props });
+    const [a] = links();
+    expect(a.getAttribute('href')).toBe(`/${NADDR}`);
+    await fireEvent.click(a);
+    expect(gotoMock).toHaveBeenCalledWith(`/${NADDR}`);
+  });
+
+  it('leaves a modified click (new tab) to the browser', async () => {
+    say(`nostr:${NADDR}`);
+    render(CallChatPanel, { props });
+    const event = new MouseEvent('click', { bubbles: true, cancelable: true, ctrlKey: true });
+    links()[0].dispatchEvent(event);
+    expect(event.defaultPrevented).toBe(false);
+    expect(gotoMock).not.toHaveBeenCalled();
+    expect(popout.popOutCall).not.toHaveBeenCalled();
+  });
+
+  it('an external link never navigates the app', async () => {
+    say('https://example.com/');
+    render(CallChatPanel, { props });
+    await fireEvent.click(links()[0]);
+    expect(gotoMock).not.toHaveBeenCalled();
+  });
+});
+
+describe('CallChatPanel unread marker', () => {
+  it('marks the call chat seen while the panel is on screen', () => {
+    unreadMod.resetCallChatUnread();
+    unreadMod.noteCallChatReceived();
+    const unread = unreadMod.getCallChatUnread();
+    expect(unread.count).toBe(1);
+    const { unmount } = render(CallChatPanel, { props });
+    expect(unread.count).toBe(0);
+    unreadMod.noteCallChatReceived();
+    expect(unread.count).toBe(0);
+    unmount();
+    unreadMod.noteCallChatReceived();
+    expect(unread.count).toBe(1);
   });
 });

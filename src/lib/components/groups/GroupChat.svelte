@@ -171,6 +171,9 @@
     buildChannelLink,
     scrollToChatMessage
   } from '$lib/helpers/message-anchor.js';
+  import { getCallChatUnread } from '$lib/groups/call-chat-unread.svelte.js';
+  import { channelSeenUpTo, hasNewFromOthers } from '$lib/groups/channel-unread.js';
+  import CallUnreadDot from '$lib/components/groups/call/CallUnreadDot.svelte';
   import * as m from '$lib/paraglide/messages';
   import { pageTitle } from '$lib/helpers/page-title.js';
 
@@ -886,6 +889,20 @@
     if (now !== wasInCallHere) chatTab = now ? 'call' : 'channel';
     wasInCallHere = now;
   });
+  // Unread dots on the two tabs. The call chat's marker lives in its own
+  // module (call-chat-unread — no livekit-client in this component's graph).
+  // The channel's real read marker is stamped while it is the active channel
+  // (host-unread), call chat tab or not, so the Kanal tab keeps a session-
+  // local "seen up to": it advances while the channel chat is what is shown.
+  const callChatUnread = getCallChatUnread();
+  let channelSeenAt = $state(Math.floor(Date.now() / 1000));
+  $effect(() => {
+    if (inCallHere && chatTab === 'call') return;
+    channelSeenAt = channelSeenUpTo(displayed, Math.floor(Date.now() / 1000));
+  });
+  const channelUnreadInCall = $derived.by(
+    () => inCallHere && chatTab === 'call' && hasNewFromOthers(displayed, myPubkey, channelSeenAt)
+  );
   // The call moved to its own window (Document PiP): the channel shows its
   // chat, with a bar to bring the call back.
   const callPopout = getCallPopoutState();
@@ -2289,15 +2306,29 @@
                 class="tab {chatTab === 'call' ? 'tab-active' : ''}"
                 aria-selected={chatTab === 'call'}
                 data-testid="chat-tab-call"
-                onclick={() => (chatTab = 'call')}>{m.groups_call_chat_tab()}</button
+                onclick={() => (chatTab = 'call')}
               >
+                {m.groups_call_chat_tab()}
+                {#if callChatUnread.count > 0}
+                  <CallUnreadDot class="ml-1.5" label={m.groups_call_chat_unread()} />
+                {/if}
+              </button>
               <button
                 role="tab"
                 class="tab {chatTab === 'channel' ? 'tab-active' : ''}"
                 aria-selected={chatTab === 'channel'}
                 data-testid="chat-tab-channel"
-                onclick={() => (chatTab = 'channel')}>{m.groups_call_chat_channel_tab()}</button
+                onclick={() => (chatTab = 'channel')}
               >
+                {m.groups_call_chat_channel_tab()}
+                {#if channelUnreadInCall}
+                  <CallUnreadDot
+                    class="ml-1.5"
+                    testid="channel-unread-dot"
+                    label={m.groups_call_channel_unread()}
+                  />
+                {/if}
+              </button>
             </div>
           {/if}
           {#if inCallHere && chatTab === 'call' && CallChatPanel.Component}

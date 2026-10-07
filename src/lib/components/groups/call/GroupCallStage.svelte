@@ -77,6 +77,8 @@
   } from '$lib/components/icons';
   import ParticipantTile from './ParticipantTile.svelte';
   import ScreenShareTile from './ScreenShareTile.svelte';
+  import { getCallChatUnread } from '$lib/groups/call-chat-unread.svelte.js';
+  import CallUnreadDot from './CallUnreadDot.svelte';
   import * as m from '$lib/paraglide/messages';
 
   /**
@@ -115,6 +117,10 @@
   let rootEl = $state(undefined);
 
   const lk = getLiveKitState();
+  // Unseen call chat behind the "Chat" button (not while the chat is open
+  // beside the stage — it is on screen then).
+  const chatUnread = getCallChatUnread();
+  const chatUnreadHere = $derived(!chatOpen && chatUnread.count > 0);
 
   // Tell the call store a stage is on screen (the dock steps aside, the
   // channel lists say "you're in the call" instead of "show call"). The
@@ -742,15 +748,22 @@
       {/if}
       {#if onShowChat}
         <button
-          class="btn btn-square btn-ghost btn-sm @lg:w-auto @lg:px-3 {chatOpen ? 'btn-active' : ''}"
+          class="btn relative btn-square btn-ghost btn-sm @lg:w-auto @lg:px-3 {chatOpen
+            ? 'btn-active'
+            : ''}"
           onclick={onShowChat}
           aria-pressed={chatOpen}
-          aria-label={m.groups_call_show_chat()}
+          aria-label={chatUnreadHere
+            ? `${m.groups_call_show_chat()} – ${m.groups_call_chat_unread()}`
+            : m.groups_call_show_chat()}
           title={m.groups_call_show_chat()}
           data-testid="group-call-show-chat"
         >
           <ChatIcon class_="h-4 w-4" />
           <span class="hidden @lg:inline">{m.groups_call_show_chat()}</span>
+          {#if chatUnreadHere}
+            <CallUnreadDot class="absolute top-1 right-1" />
+          {/if}
         </button>
       {/if}
       <button class="btn btn-sm btn-error" onclick={handleLeave} data-testid="group-call-leave">
