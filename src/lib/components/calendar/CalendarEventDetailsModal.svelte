@@ -26,6 +26,7 @@
   import { encodeEventToNaddr } from '$lib/helpers/nostrUtils.js';
   import { splitEventLinks } from '$lib/helpers/event-links.js';
   import LocationLink from '../shared/LocationLink.svelte';
+  import EventLocationMap from './EventLocationMap.svelte';
   import MarkdownRenderer from '../shared/MarkdownRenderer.svelte';
   import PersonalCalendarShare from './PersonalCalendarShare.svelte';
   import CommunityShare from '../shared/CommunityShare.svelte';
@@ -429,22 +430,24 @@
         </div>
       </div>
 
-      <!-- Event Locations -->
-      {#if event.locations && event.locations.length > 0}
+      <!-- Event Location — the parsed metadata carries a single `location` string -->
+      {#if event.location}
         <div class="mb-6">
           <h3 class="mb-3 text-lg font-semibold text-base-content">
-            {event.locations.length > 1 ? m.event_details_locations() : m.event_details_location()}
+            {m.event_details_location()}
           </h3>
-          <div class="space-y-2">
-            {#each event.locations as location, index (index)}
-              <div class="flex items-start gap-3 rounded-lg bg-base-200 p-3">
-                <LocationIcon class_="w-5 h-5 text-base-content/60 mt-0.5" />
-                <div class="text-base-content/80">
-                  <LocationLink {location} />
-                </div>
-              </div>
-            {/each}
+          <div class="flex items-start gap-3 rounded-lg bg-base-200 p-3">
+            <LocationIcon class_="w-5 h-5 text-base-content/60 mt-0.5" />
+            <div class="text-base-content/80">
+              <LocationLink location={event.location} />
+            </div>
           </div>
+          <!-- Map Preview — as in the detail view, not for online events, whose location is a link or "online" (#8) -->
+          {#if event.attributes?.attendanceMode !== 'online'}
+            <div class="mt-3">
+              <EventLocationMap location={event.location} geohash={event.geohash} compact={true} />
+            </div>
+          {/if}
         </div>
       {/if}
 
