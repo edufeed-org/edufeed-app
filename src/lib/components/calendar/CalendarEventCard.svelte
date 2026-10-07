@@ -26,7 +26,7 @@
   import ProfileAvatar from '../shared/ProfileAvatar.svelte';
   import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
   import { RepliesModel } from 'applesauce-common/models';
-  import { ChatIcon } from '$lib/components/icons';
+  import { CalendarIcon, ChatIcon, ClockIcon } from '$lib/components/icons';
   import { encodeEventToNaddr, profileLink } from '$lib/helpers/nostrUtils';
 
   /**
@@ -311,62 +311,30 @@
 
         <!-- Event Date and Time -->
         {#if !compact}
-          <!-- Mobile: Stacked layout -->
-          <div class="mb-2 flex flex-col gap-1 text-sm text-base-content/70 lg:hidden">
-            <!-- Date -->
-            <div class="flex items-center gap-1">
-              <span class="text-xs">📅</span>
-              <span>
-                {formatCalendarDate(startDate, 'short')}
-                {#if isMultiDay && endDate}
-                  - {formatCalendarDate(endDate, 'short')}
+          <!-- One wrapping line: date, then the time — or "Ganztägig" for
+               all-day events. -->
+          <div
+            class="mb-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-base-content/70"
+            data-testid="event-card-when"
+          >
+            <span class="flex items-center gap-1.5">
+              <CalendarIcon class_="h-4 w-4 flex-shrink-0 text-base-content/50" title="" />
+              {formatCalendarDate(startDate, 'short')}
+              {#if isMultiDay && endDate}
+                - {formatCalendarDate(endDate, 'short')}
+              {/if}
+            </span>
+            {#if isAllDay}
+              <span>{m.event_card_all_day()}</span>
+            {:else}
+              <span class="flex items-center gap-1.5">
+                <ClockIcon class_="h-4 w-4 flex-shrink-0 text-base-content/50" title="" />
+                {formatCalendarDate(startDate, 'time')}
+                {#if endDate}
+                  - {formatCalendarDate(endDate, 'time')}
                 {/if}
               </span>
-            </div>
-
-            <!-- Time -->
-            <div class="flex items-center gap-1">
-              <span class="text-xs">🕐</span>
-              <span>
-                {#if isAllDay}
-                  {m.event_card_all_day()}
-                {:else}
-                  {formatCalendarDate(startDate, 'time')}
-                  {#if endDate}
-                    - {formatCalendarDate(endDate, 'time')}
-                  {/if}
-                {/if}
-              </span>
-            </div>
-          </div>
-
-          <!-- Desktop: Horizontal layout -->
-          <div class="mb-2 hidden items-center gap-4 text-sm text-base-content/70 lg:flex">
-            <!-- Date -->
-            <div class="flex items-center gap-1">
-              <span class="text-xs">📅</span>
-              <span>
-                {formatCalendarDate(startDate, 'short')}
-                {#if isMultiDay && endDate}
-                  - {formatCalendarDate(endDate, 'short')}
-                {/if}
-              </span>
-            </div>
-
-            <!-- Time -->
-            <div class="flex items-center gap-1">
-              <span class="text-xs">🕐</span>
-              <span>
-                {#if isAllDay}
-                  {m.event_card_all_day()}
-                {:else}
-                  {formatCalendarDate(startDate, 'time')}
-                  {#if endDate}
-                    - {formatCalendarDate(endDate, 'time')}
-                  {/if}
-                {/if}
-              </span>
-            </div>
+            {/if}
           </div>
         {:else}
           <!-- Compact time display -->
@@ -419,23 +387,6 @@
           <p class="mb-3 line-clamp-2 text-sm break-words text-base-content/80">{summaryText}</p>
         {/if}
 
-        <!-- Event Type Badge and Creation Date (full mode only) -->
-        {#if !compact}
-          <div class="mb-2 flex flex-wrap items-center gap-2 text-xs text-base-content/60">
-            <span class="badge badge-outline badge-xs">
-              {event.kind === 31922 ? m.event_card_date_event() : m.event_card_time_event()}
-            </span>
-            {#if event.createdAt}
-              <div class="text-xs text-base-content/50">
-                <span
-                  >{m.event_card_created()}
-                  {formatCalendarDate(new Date(event.createdAt * 1000), 'short')}</span
-                >
-              </div>
-            {/if}
-          </div>
-        {/if}
-
         <!-- Event Tags (clickable) - Only show in full mode -->
         {#if event.hashtags && event.hashtags.length > 0 && !compact}
           <div class="mb-2 overflow-hidden">
@@ -443,7 +394,7 @@
           </div>
         {/if}
 
-        <!-- Attendee Indicator (replaces old RSVP count) -->
+        <!-- Attendees: who is going (declines are not attendees) -->
         {#if !compact && transformedRsvps.totalCount > 0}
           <div class="mb-3">
             <AttendeeIndicator

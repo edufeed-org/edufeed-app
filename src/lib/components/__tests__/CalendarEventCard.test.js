@@ -29,9 +29,6 @@ vi.mock('$lib/stores/image-license.svelte.js', () => ({
 }));
 vi.mock('$lib/paraglide/messages', () => ({
   event_card_all_day: () => 'All Day',
-  event_card_date_event: () => 'Date Event',
-  event_card_time_event: () => 'Time Event',
-  event_card_created: () => 'Created',
   event_tags_view_all_tooltip: () => '',
   event_tags_more_count: () => '',
   debug_panel_raw_nostr_event: () => '',
@@ -145,6 +142,36 @@ describe('CalendarEventCard', () => {
       expect(container.textContent).toContain('Modul 1: Handout zum Nachlesen');
       expect(container.textContent).not.toContain('**');
       expect(container.textContent).not.toContain('](');
+    });
+  });
+
+  describe('date line (no type badge, no creation date)', () => {
+    it('drops the event-type badge and the creation date from a timed card', () => {
+      const { container } = render(CalendarEventCard, {
+        props: { event: mockTimeEvent }
+      });
+
+      expect(container.textContent).not.toContain('Time Event');
+      expect(container.textContent).not.toContain('Date Event');
+      expect(container.textContent).not.toContain('Created');
+      expect(container.textContent).not.toContain('All Day');
+      const when = container.querySelector('[data-testid="event-card-when"]');
+      expect(when?.textContent).toContain('Jan 15');
+      expect(when?.textContent).toContain('14:00');
+    });
+
+    it('marks all-day events next to the date, without a time', () => {
+      const { container } = render(CalendarEventCard, {
+        props: { event: mockDateEvent }
+      });
+
+      const when = container.querySelector('[data-testid="event-card-when"]');
+      expect(when?.textContent).toContain('Jan 15');
+      expect(when?.textContent).toContain('All Day');
+      expect(when?.textContent).not.toContain('14:00');
+      expect(container.textContent).not.toContain('Date Event');
+      // The date line is rendered once, not duplicated per breakpoint.
+      expect(container.querySelectorAll('[data-testid="event-card-when"]').length).toBe(1);
     });
   });
 

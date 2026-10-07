@@ -4,9 +4,8 @@
    * Displays RSVP attendee counts and avatars
    * Supports compact mode (for cards) and expanded mode (for detail pages)
    */
-  import ProfileAvatar from '../shared/ProfileAvatar.svelte';
+  import CreatorAvatarStack from '../shared/CreatorAvatarStack.svelte';
   import ProfileCard from '../shared/ProfileCard.svelte';
-  import { getDisplayName } from 'applesauce-core/helpers';
   import * as m from '$lib/paraglide/messages';
 
   /**
@@ -25,78 +24,47 @@
   // State for view all modal
   let isViewAllOpen = $state(false);
 
-  // Determine how many avatars to show (max 5 in avatar group)
+  // Compact mode: at most 5 circles (the last one becomes "+N").
   const maxAvatars = 5;
-  const showAcceptedAvatars = $derived(accepted.slice(0, maxAvatars));
-  const remainingAccepted = $derived(Math.max(0, accepted.length - maxAvatars));
-
-  /**
-   * Get display name for an attendee
-   * @param {any} attendee
-   * @returns {string}
-   */
-  function getAttendeeName(attendee) {
-    return getDisplayName(attendee.profile) || `${attendee.pubkey.slice(0, 8)}...`;
-  }
+  const attending = $derived(accepted.length + tentative.length);
+  const acceptedCreators = $derived(accepted.map((/** @type {any} */ a) => ({ pubkey: a.pubkey })));
+  // "9 Zusagen · 1 vielleicht" — declines deliberately left out.
+  const attendingSummary = $derived(
+    [
+      accepted.length === 1
+        ? m.event_card_rsvp_going_one()
+        : accepted.length > 1
+          ? m.event_card_rsvp_going_other({ count: accepted.length })
+          : null,
+      tentative.length > 0 ? m.event_card_rsvp_maybe({ count: tentative.length }) : null
+    ]
+      .filter(Boolean)
+      .join(' · ')
+  );
 </script>
 
 {#if totalCount > 0}
   {#if compact}
-    <!-- Compact Mode: For event cards -->
-    <div class="flex items-center gap-3 text-sm">
-      <div class="flex items-center gap-1 text-base-content/70">
-        <span class="text-lg">👥</span>
-        <span class="font-medium"
-          >{m.attendee_indicator_attendees_label({ count: totalCount })}</span
-        >
-      </div>
-
-      <div class="flex items-center gap-2">
-        <!-- Accepted count with avatar group -->
+    <!-- Compact Mode: one calm line on event cards. Declines are not
+         attendees: never pictured, only named when they are all there is. -->
+    {#if attending > 0}
+      <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
+      <div
+        class="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-base-content/70"
+        onclick={(e) => e.stopPropagation()}
+      >
         {#if accepted.length > 0}
-          <div class="flex items-center gap-1">
-            <div class="avatar-group -space-x-3">
-              {#each showAcceptedAvatars as attendee (attendee.pubkey)}
-                <div class="tooltip" data-tip={getAttendeeName(attendee)}>
-                  <div class="h-7 w-7 transition-transform hover:scale-110">
-                    <div
-                      class="w-full rounded-full ring ring-success ring-offset-2 ring-offset-base-100"
-                    >
-                      <ProfileAvatar
-                        pubkey={attendee.pubkey}
-                        profile={attendee.profile}
-                        size="xs"
-                        linkToProfile
-                      />
-                    </div>
-                  </div>
-                </div>
-              {/each}
-              {#if remainingAccepted > 0}
-                <div class="placeholder avatar h-7 w-7">
-                  <div
-                    class="w-full rounded-full bg-success text-success-content ring ring-success ring-offset-2 ring-offset-base-100"
-                  >
-                    <span class="text-xs">+{remainingAccepted}</span>
-                  </div>
-                </div>
-              {/if}
-            </div>
-            <span class="badge badge-sm badge-success">{accepted.length}</span>
-          </div>
+          <CreatorAvatarStack creators={acceptedCreators} max={maxAvatars} size="xs" />
         {/if}
-
-        <!-- Maybe count -->
-        {#if tentative.length > 0}
-          <span class="badge badge-sm badge-warning">{tentative.length}</span>
-        {/if}
-
-        <!-- Declined count -->
-        {#if declined.length > 0}
-          <span class="badge badge-sm badge-error">{declined.length}</span>
-        {/if}
+        <span data-testid="attendee-summary">{attendingSummary}</span>
       </div>
-    </div>
+    {:else}
+      <div class="text-sm text-base-content/50" data-testid="attendee-summary">
+        {declined.length === 1
+          ? m.event_card_rsvp_declined_one()
+          : m.event_card_rsvp_declined_other({ count: declined.length })}
+      </div>
+    {/if}
   {:else}
     <!-- Expanded Mode: For detail pages -->
     <div class="space-y-4">
