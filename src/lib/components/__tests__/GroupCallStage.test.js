@@ -107,6 +107,10 @@ vi.mock(
 );
 vi.mock('$lib/components/groups/call/ScreenShareTile.svelte', () => ({ default: Stub }));
 vi.mock(
+  '$lib/components/groups/call/CallParticipantsPanel.svelte',
+  () => import('./fixtures/CallParticipantsPanelStub.svelte')
+);
+vi.mock(
   '$lib/components/groups/call/CallEmojiPicker.svelte',
   () => import('./fixtures/CallEmojiPickerStub.svelte')
 );
@@ -122,7 +126,8 @@ vi.mock('$lib/components/icons', () => ({
   ChatIcon: Stub,
   ExternalLinkIcon: Stub,
   LinkIcon: Stub,
-  MoreIcon: Stub
+  MoreIcon: Stub,
+  PeopleIcon: Stub
 }));
 vi.mock('$lib/paraglide/messages', () => ({
   groups_call_chat_unread: () => 'New messages in the call chat',
@@ -160,6 +165,8 @@ vi.mock('$lib/paraglide/messages', () => ({
   groups_call_tile_moved: (p) => `Tile moved, position ${p.position} of ${p.total}`,
   groups_call_tile_move_hint: () => 'Alt+arrow keys move this tile',
   groups_call_show_chat: () => 'Chat',
+  groups_call_participants: () => 'Participants',
+  groups_call_participants_count: (p) => `Participants (${p.count})`,
   groups_call_pop_out: () => 'Pop out',
   groups_call_pop_in: () => 'Back to tab',
   groups_call_invite_title: () => 'Invite guests',
@@ -193,6 +200,9 @@ globalThis.ResizeObserver ??= class {
 };
 
 const unreadMod = await import('$lib/groups/call-chat-unread.svelte.js');
+// The participant panel loads lazily: warm its (stubbed) module so the first
+// open in a test is not at the mercy of vite's transform time.
+await import('$lib/components/groups/call/CallParticipantsPanel.svelte');
 const { default: GroupCallStage } = await import(
   '$lib/components/groups/call/GroupCallStage.svelte'
 );
@@ -895,5 +905,112 @@ describe('reordering tiles', () => {
     lk.raisedHands = new Set([B, D]);
     render(GroupCallStage, { props: baseProps });
     expect(order()).toEqual([D, ME, C, B]);
+  });
+});
+
+// Issue "participant list panel inside the call": a "Teilnehmende (N)"
+// button in the header opens a list of everyone in the call with their
+// state and the per-person actions, so nothing hides behind a tile hover.
+describe('participant list panel', () => {
+  const B = `${'b'.repeat(64)}:1`;
+  const C = `${'c'.repeat(64)}:1`;
+  const ME = `${'a'.repeat(64)}:me`;
+  const openPanel = async () => {
+    // A finished drag in an earlier test swallows the very next click on the
+    // window until its 0 ms timer runs: let that macrotask pass first.
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await fireEvent.click(screen.getByTestId('group-call-show-participants'));
+    return screen.findByTestId('call-participants-panel-stub', {}, { timeout: 4000 });
+  };
+
+  it('the header counts everyone in the call, me included, and names the button', () => {
+    lk.remoteParticipants = [remote(B), remote(C)];
+    render(GroupCallStage, { props: baseProps });
+    const button = screen.getByTestId('group-call-show-participants');
+    expect(button.getAttribute('aria-label')).toBe('Participants (3)');
+    expect(button.getAttribute('aria-pressed')).toBe('false');
+    expect(button.textContent).toContain('3');
+    // Icon-only below the stage's @lg, like the chat button.
+    const label = button.querySelector('span');
+    expect(label.classList.contains('hidden')).toBe(true);
+    expect(label.classList.contains('@lg:inline')).toBe(true);
+    expect(screen.queryByTestId('call-participants-panel-stub')).toBeNull();
+  });
+
+  it('opens the panel lazily with one row per seat in stage order, and closes it again', async () => {
+    lk.remoteParticipants = [remote(B), remote(C)];
+    lk.raisedHands = new Set([C]);
+    render(GroupCallStage, { props: baseProps });
+    const panel = await openPanel();
+    expect(screen.getByTestId('group-call-show-participants').getAttribute('aria-pressed')).toBe(
+      'true'
+    );
+    const rows = [...panel.querySelectorAll('[data-testid="participants-row-stub"]')];
+    // Raised hands first, as on the stage.
+    expect(rows.map((r) => r.dataset.identity)).toEqual([C, ME, B]);
+    expect(rows[0].dataset.hand).toBe('true');
+    expect(rows[1].dataset.local).toBe('true');
+    await fireEvent.click(screen.getByTestId('stub-close'));
+    expect(screen.queryByTestId('call-participants-panel-stub')).toBeNull();
+    await fireEvent.click(screen.getByTestId('group-call-show-participants'));
+    expect(
+      await screen.findByTestId('call-participants-panel-stub', {}, { timeout: 4000 })
+    ).toBeTruthy();
+    await fireEvent.click(screen.getByTestId('group-call-show-participants'));
+    expect(screen.queryByTestId('call-participants-panel-stub')).toBeNull();
+  });
+
+  it('hands each row its state: mic, speaking, guest, listen-only, pin, volume', async () => {
+    const GUEST = `${'d'.repeat(64)}:g`;
+    lk.remoteParticipants = [
+      { ...remote(B), permissions: { canPublish: false } },
+      remote(GUEST, { metadata: '{"guest":true,"pass":"p"}' })
+    ];
+    lk.mutedIdentities = new Set([B]);
+    lk.speakingParticipantIds = new Set([GUEST]);
+    localStorage.setItem('edufeed:call:volumes', JSON.stringify({ ['d'.repeat(64)]: 1.5 }));
+    render(GroupCallStage, { props: baseProps });
+    const panel = await openPanel();
+    const row = (id) => panel.querySelector(`[data-identity="${id}"]`);
+    expect(row(B).dataset.micOff).toBe('true');
+    expect(row(B).dataset.listenOnly).toBe('true');
+    expect(row(B).dataset.guest).toBe('false');
+    expect(row(GUEST).dataset.speaking).toBe('true');
+    expect(row(GUEST).dataset.guest).toBe('true');
+    expect(row(GUEST).dataset.listenOnly).toBe('false');
+    expect(row(GUEST).dataset.volume).toBe('1.5');
+    expect(row(GUEST).dataset.pubkey).toBe('d'.repeat(64));
+    expect(row(ME).dataset.local).toBe('true');
+    lk.mutedIdentities = new Set();
+    lk.speakingParticipantIds = new Set();
+  });
+
+  it('pin and volume from the panel are the same actions as on the tiles', async () => {
+    lk.remoteParticipants = [remote(B)];
+    render(GroupCallStage, { props: baseProps });
+    const panel = await openPanel();
+    expect(screen.queryByTestId('group-call-spotlight')).toBeNull();
+    await fireEvent.click(screen.getByTestId(`stub-pin-seat:${B}`));
+    expect(screen.getByTestId('group-call-spotlight')).toBeTruthy();
+    expect(panel.querySelector(`[data-identity="${B}"]`).dataset.pinned).toBe('true');
+    await fireEvent.click(screen.getByTestId(`stub-pin-seat:${B}`));
+    expect(screen.queryByTestId('group-call-spotlight')).toBeNull();
+    await fireEvent.click(screen.getByTestId(`stub-volume-seat:${B}`));
+    expect(svc.setParticipantVolume).toHaveBeenCalledWith('b'.repeat(64), 0.5);
+    expect(panel.querySelector(`[data-identity="${B}"]`).dataset.volume).toBe('0.5');
+  });
+
+  it('sits beside the tiles on a wide stage and replaces them on a narrow one', async () => {
+    lk.remoteParticipants = [remote(B)];
+    render(GroupCallStage, { props: baseProps });
+    await openPanel();
+    const column = screen.getByTestId('group-call-participants-column');
+    expect(column.classList.contains('w-full')).toBe(true);
+    expect(column.classList.contains('@2xl:w-72')).toBe(true);
+    const tiles = screen.getByTestId('group-call-tiles');
+    expect(tiles.classList.contains('hidden')).toBe(true);
+    expect(tiles.classList.contains('@2xl:flex')).toBe(true);
+    await fireEvent.click(screen.getByTestId('stub-close'));
+    expect(screen.getByTestId('group-call-tiles').classList.contains('hidden')).toBe(false);
   });
 });

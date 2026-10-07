@@ -73,7 +73,8 @@
     ChatIcon,
     ExternalLinkIcon,
     LinkIcon,
-    MoreIcon
+    MoreIcon,
+    PeopleIcon
   } from '$lib/components/icons';
   import ParticipantTile from './ParticipantTile.svelte';
   import ScreenShareTile from './ScreenShareTile.svelte';
@@ -384,6 +385,35 @@
   function togglePin(key) {
     pinnedKey = pinnedKey === key ? null : key;
   }
+
+  // --- Participant list: a panel beside the tiles (a wide stage) or in
+  // their place (a phone), loaded on first open. Rows follow the seat
+  // order, so the list and the grid agree on who comes first.
+  const ParticipantsPanelLazy = lazyComponent(() => import('./CallParticipantsPanel.svelte'));
+  let participantsOpen = $state(false);
+  const participantCount = $derived(baseSeats.length);
+  const participantRows = $derived(
+    seats.map((seat) => {
+      const identity = seat.participant.identity;
+      const pk = pubkeyOf(seat.participant);
+      return {
+        key: seat.key,
+        participant: seat.participant,
+        pubkey: pk,
+        profile: getProfiles().get(pk ?? ''),
+        isLocal: seat.isLocal,
+        micOff: seat.isLocal ? lk.isMuted : lk.mutedIdentities.has(identity),
+        speaking: lk.speakingParticipantIds.has(identity),
+        handRaised: lk.raisedHands.has(identity),
+        guest: isGuestParticipant(seat.participant),
+        listenOnly: seat.isLocal
+          ? !lk.canPublish
+          : seat.participant.permissions?.canPublish === false,
+        pinned: pinnedKey === seat.key,
+        volume: volumeFor(pk)
+      };
+    })
+  );
 
   // --- Auto-fit grid ---
   const GAP = 8;
@@ -746,6 +776,18 @@
           {m.groups_call_pop_in()}
         </button>
       {/if}
+      <button
+        class="btn gap-1 px-2 btn-ghost btn-sm @lg:px-3 {participantsOpen ? 'btn-active' : ''}"
+        onclick={() => (participantsOpen = !participantsOpen)}
+        aria-pressed={participantsOpen}
+        aria-label={m.groups_call_participants_count({ count: participantCount })}
+        title={m.groups_call_participants_count({ count: participantCount })}
+        data-testid="group-call-show-participants"
+      >
+        <PeopleIcon class_="h-4 w-4" title="" />
+        <span class="hidden @lg:inline">{m.groups_call_participants()}</span>
+        <span class="tabular-nums">{participantCount}</span>
+      </button>
       {#if onShowChat}
         <button
           class="btn relative btn-square btn-ghost btn-sm @lg:w-auto @lg:px-3 {chatOpen
@@ -796,71 +838,109 @@
         <p class="mt-2 text-base-content/60">{m.groups_call_connecting()}</p>
       </div>
     </div>
-  {:else if spotlight}
-    <div class="flex min-h-0 min-w-0 flex-1 flex-col gap-2 p-2" data-testid="group-call-spotlight">
-      <div class="relative min-h-0 flex-1" data-testid={`call-item-${spotlight.key}`}>
-        {@render item(spotlight, false)}
-      </div>
-      {#if strip.length > 0}
-        <div class="flex h-24 shrink-0 gap-2 overflow-x-auto">
-          {#each strip as it (it.key)}
-            <div class="relative aspect-video h-full shrink-0" data-testid={`call-item-${it.key}`}>
-              {@render item(it, true)}
-            </div>
-          {/each}
-        </div>
-      {/if}
-    </div>
   {:else}
-    <div class="relative min-h-0 min-w-0 flex-1" {@attach measureGrid}>
-      <!-- Top-aligned: in a tall stage the tiles belong under the header,
-        not centred in empty space (laoc, 2026-10-01). -->
-      <div class="absolute inset-0 flex items-start justify-center overflow-hidden p-3">
-        <div
-          class="grid content-start justify-center"
-          style={gridStyle}
-          data-testid="group-call-grid"
-        >
-          {#each items as it (it.key)}
-            {#if it.kind === 'seat'}
-              <!-- A seat can be reordered: dragged (pointer/touch, so no
-                touch scrolling on it) or moved with Alt+←/→ when focused.
-                A focusable group, not a button: it holds its own controls
-                (pin, volume, profile link). -->
-              <!-- svelte-ignore a11y_no_noninteractive_tabindex, a11y_no_noninteractive_element_interactions -->
-              <div
-                class="relative touch-none rounded-lg outline-offset-2 {measured
-                  ? ''
-                  : 'aspect-video'} {draggingKey === it.key
-                  ? 'cursor-grabbing opacity-50'
-                  : 'cursor-grab'} {dropKey === it.key ? 'ring-2 ring-primary ring-offset-2' : ''}"
-                style={tileStyle}
-                role="group"
-                tabindex="0"
-                aria-label={it.isLocal ? m.groups_call_tile_you() : nameOf(it.participant)}
-                aria-describedby={moveHintId}
-                aria-keyshortcuts="Alt+ArrowLeft Alt+ArrowRight"
-                data-seat-key={it.key}
-                data-drop-target={dropKey === it.key ? 'true' : undefined}
-                data-testid={`call-item-${it.key}`}
-                onkeydown={(e) => onTileKeyDown(e, it.key)}
-                onpointerdown={(e) => onTilePointerDown(e, it.key)}
-                ondragstart={(e) => e.preventDefault()}
-              >
-                {@render item(it, false)}
-              </div>
-            {:else}
-              <div
-                class="relative {measured ? '' : 'aspect-video'}"
-                style={tileStyle}
-                data-testid={`call-item-${it.key}`}
-              >
-                {@render item(it, false)}
+    <!-- Tiles, and the participant list beside them on a wide stage (@2xl)
+      or in their place on a narrow one (a phone), like the chat column. -->
+    <div class="flex min-h-0 min-w-0 flex-1 flex-row">
+      <div
+        class="min-h-0 min-w-0 flex-1 flex-col {participantsOpen ? 'hidden @2xl:flex' : 'flex'}"
+        data-testid="group-call-tiles"
+      >
+        {#if spotlight}
+          <div
+            class="flex min-h-0 min-w-0 flex-1 flex-col gap-2 p-2"
+            data-testid="group-call-spotlight"
+          >
+            <div class="relative min-h-0 flex-1" data-testid={`call-item-${spotlight.key}`}>
+              {@render item(spotlight, false)}
+            </div>
+            {#if strip.length > 0}
+              <div class="flex h-24 shrink-0 gap-2 overflow-x-auto">
+                {#each strip as it (it.key)}
+                  <div
+                    class="relative aspect-video h-full shrink-0"
+                    data-testid={`call-item-${it.key}`}
+                  >
+                    {@render item(it, true)}
+                  </div>
+                {/each}
               </div>
             {/if}
-          {/each}
-        </div>
+          </div>
+        {:else}
+          <div class="relative min-h-0 min-w-0 flex-1" {@attach measureGrid}>
+            <!-- Top-aligned: in a tall stage the tiles belong under the header,
+            not centred in empty space (laoc, 2026-10-01). -->
+            <div class="absolute inset-0 flex items-start justify-center overflow-hidden p-3">
+              <div
+                class="grid content-start justify-center"
+                style={gridStyle}
+                data-testid="group-call-grid"
+              >
+                {#each items as it (it.key)}
+                  {#if it.kind === 'seat'}
+                    <!-- A seat can be reordered: dragged (pointer/touch, so no
+                    touch scrolling on it) or moved with Alt+←/→ when focused.
+                    A focusable group, not a button: it holds its own controls
+                    (pin, volume, profile link). -->
+                    <!-- svelte-ignore a11y_no_noninteractive_tabindex, a11y_no_noninteractive_element_interactions -->
+                    <div
+                      class="relative touch-none rounded-lg outline-offset-2 {measured
+                        ? ''
+                        : 'aspect-video'} {draggingKey === it.key
+                        ? 'cursor-grabbing opacity-50'
+                        : 'cursor-grab'} {dropKey === it.key
+                        ? 'ring-2 ring-primary ring-offset-2'
+                        : ''}"
+                      style={tileStyle}
+                      role="group"
+                      tabindex="0"
+                      aria-label={it.isLocal ? m.groups_call_tile_you() : nameOf(it.participant)}
+                      aria-describedby={moveHintId}
+                      aria-keyshortcuts="Alt+ArrowLeft Alt+ArrowRight"
+                      data-seat-key={it.key}
+                      data-drop-target={dropKey === it.key ? 'true' : undefined}
+                      data-testid={`call-item-${it.key}`}
+                      onkeydown={(e) => onTileKeyDown(e, it.key)}
+                      onpointerdown={(e) => onTilePointerDown(e, it.key)}
+                      ondragstart={(e) => e.preventDefault()}
+                    >
+                      {@render item(it, false)}
+                    </div>
+                  {:else}
+                    <div
+                      class="relative {measured ? '' : 'aspect-video'}"
+                      style={tileStyle}
+                      data-testid={`call-item-${it.key}`}
+                    >
+                      {@render item(it, false)}
+                    </div>
+                  {/if}
+                {/each}
+              </div>
+            </div>
+          </div>
+        {/if}
       </div>
+      {#if participantsOpen}
+        <div
+          class="flex min-h-0 w-full flex-col @2xl:w-72 @2xl:shrink-0 @2xl:border-l @2xl:border-base-300"
+          data-testid="group-call-participants-column"
+        >
+          {#if ParticipantsPanelLazy.Component}
+            <ParticipantsPanelLazy.Component
+              rows={participantRows}
+              onTogglePin={togglePin}
+              onVolumeChange={changeVolume}
+              onClose={() => (participantsOpen = false)}
+            />
+          {:else}
+            <div class="flex flex-1 items-center justify-center">
+              <span class="loading loading-md loading-spinner"></span>
+            </div>
+          {/if}
+        </div>
+      {/if}
     </div>
   {/if}
 
