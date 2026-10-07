@@ -102,6 +102,17 @@
     replyTarget = msg;
     composer?.focus();
   }
+  // Escape in the composer: an active reply quote is cancelled first; an
+  // empty composer has nothing to lose, so the next Escape closes the panel.
+  // A draft stays put - Escape only steps out of the input then.
+  function onComposerEscape() {
+    if (replyTarget) {
+      cancelReply();
+      return;
+    }
+    if (onClose && draft.trim() === '') onClose();
+  }
+
   function cancelReply() {
     replyTarget = null;
   }
@@ -553,7 +564,7 @@
       disabled={!canSend}
       onfocus={() => (pickerOpen = false)}
       onSubmit={send}
-      onEscape={cancelReply}
+      onEscape={onComposerEscape}
       class="input-bordered input input-sm flex items-center"
       ariaDescribedby={lk.isConnected ? undefined : offlineHintId}
       testid="call-chat-input"

@@ -169,10 +169,28 @@ describe('CallChatPanel close control', () => {
     const onClose = vi.fn();
     render(CallChatPanel, { props: { ...props, onClose } });
     const input = screen.getByTestId('call-chat-input');
-    await fireEvent.input(input, { target: { value: 'half-typed' } });
+    await typeIntoEditor(input, 'half-typed');
     await fireEvent.keyDown(input, { key: 'Escape' });
     expect(onClose).not.toHaveBeenCalled();
-    await fireEvent.input(input, { target: { value: '' } });
+    await typeIntoEditor(input, '');
+    await fireEvent.keyDown(input, { key: 'Escape' });
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it('Escape cancels an active reply quote before it closes the panel', async () => {
+    const onClose = vi.fn();
+    state.callChat = [
+      { id: 'o:1', identity: 'b'.repeat(64) + ':1', text: 'Hallo zusammen', at: 1 }
+    ];
+    render(CallChatPanel, { props: { ...props, onClose } });
+    const msg = screen.getByTestId('call-chat-message');
+    await fireEvent.click(
+      /** @type {HTMLElement} */ (msg.querySelector('[data-testid="call-chat-reply"]'))
+    );
+    const input = screen.getByTestId('call-chat-input');
+    await fireEvent.keyDown(input, { key: 'Escape' });
+    expect(screen.queryByTestId('call-chat-reply-strip')).toBeNull();
+    expect(onClose).not.toHaveBeenCalled();
     await fireEvent.keyDown(input, { key: 'Escape' });
     expect(onClose).toHaveBeenCalledTimes(1);
   });
