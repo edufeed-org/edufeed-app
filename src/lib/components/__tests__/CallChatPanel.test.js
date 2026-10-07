@@ -134,6 +134,41 @@ describe('CallChatPanel download', () => {
   });
 });
 
+describe('CallChatPanel close control', () => {
+  // Issue "collapse/close control inside the chat panel": the panel used to
+  // close only through the stage header's Chat toggle.
+  it('offers a close button in the header only when the parent can close it', async () => {
+    const { unmount } = render(CallChatPanel, { props });
+    expect(screen.queryByTestId('call-chat-close')).toBeNull();
+    unmount();
+    const onClose = vi.fn();
+    render(CallChatPanel, { props: { ...props, onClose } });
+    const button = screen.getByTestId('call-chat-close');
+    expect(button.getAttribute('aria-label')).toBe(m.groups_call_chat_close());
+    expect(button.className).toContain('btn-ghost');
+    await fireEvent.click(button);
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it('Escape in an empty composer closes the panel; a draft keeps it open', async () => {
+    const onClose = vi.fn();
+    render(CallChatPanel, { props: { ...props, onClose } });
+    const input = screen.getByTestId('call-chat-input');
+    await fireEvent.input(input, { target: { value: 'half-typed' } });
+    await fireEvent.keyDown(input, { key: 'Escape' });
+    expect(onClose).not.toHaveBeenCalled();
+    await fireEvent.input(input, { target: { value: '' } });
+    await fireEvent.keyDown(input, { key: 'Escape' });
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it('without onClose, Escape does nothing and sends nothing', async () => {
+    render(CallChatPanel, { props });
+    await fireEvent.keyDown(screen.getByTestId('call-chat-input'), { key: 'Escape' });
+    expect(sendCallChat).not.toHaveBeenCalled();
+  });
+});
+
 describe('CallChatPanel', () => {
   it('shows messages with the sender name', () => {
     render(CallChatPanel, { props });

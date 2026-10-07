@@ -2721,6 +2721,7 @@
   "groups_call_chat_placeholder": "Message everyone in the call",
   "groups_call_chat_send": "Send",
   "groups_call_chat_download": "Download chat",
+  "groups_call_chat_close": "Close chat",
   "groups_call_chat_exported_at": "Exported at {time}",
   "groups_call_chat_offline": "The call chat is available once you're connected.",
   "groups_call_chat_unread": "New messages in the call chat",

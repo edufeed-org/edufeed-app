@@ -932,6 +932,13 @@
     if (wideScreen) toggleChatBeside();
     else hideCallStage();
   }
+  // The close control inside the call chat panel: collapse the column beside
+  // the stage, or — where the chat stands in for the stage — step back to it.
+  function closeCallChat() {
+    if (chatBesideCall) toggleChatBeside();
+    else if (call.stageHidden) showCallStage();
+    else chatTab = 'channel';
+  }
 
   const canPopOut = canPopOutCall();
   function popOutHere() {
@@ -2332,7 +2339,11 @@
             </div>
           {/if}
           {#if inCallHere && chatTab === 'call' && CallChatPanel.Component}
-            <CallChatPanel.Component {identityToPubkey} title={displayTitle} />
+            <CallChatPanel.Component
+              {identityToPubkey}
+              title={displayTitle}
+              onClose={closeCallChat}
+            />
           {/if}
           <div
             class={inCallHere && chatTab === 'call' ? 'hidden' : 'contents'}

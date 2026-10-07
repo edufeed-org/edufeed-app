@@ -3283,6 +3283,30 @@ describe('GroupChat', () => {
         expect(body.className).toContain('md:w-96');
       });
 
+      it('the close control inside the chat panel collapses the column beside the stage', async () => {
+        stubViewport(true);
+        inCallHere();
+        groupCallHolder.state.chatBeside = true;
+        render(GroupChat, { props: { pointer: callPointer } });
+        await fireEvent.click(
+          await screen.findByTestId('call-chat-panel-stub-close', {}, { timeout: 3000 })
+        );
+        expect(callViewMocks.toggleChatBeside).toHaveBeenCalledTimes(1);
+        expect(callViewMocks.showCallStage).not.toHaveBeenCalled();
+      });
+
+      it('on a narrow screen the same control steps back to the stage', async () => {
+        stubViewport(false);
+        inCallHere();
+        groupCallHolder.state.stageHidden = true;
+        render(GroupChat, { props: { pointer: callPointer } });
+        await fireEvent.click(
+          await screen.findByTestId('call-chat-panel-stub-close', {}, { timeout: 3000 })
+        );
+        expect(callViewMocks.showCallStage).toHaveBeenCalledTimes(1);
+        expect(callViewMocks.toggleChatBeside).not.toHaveBeenCalled();
+      });
+
       it('without it, the stage alone fills the channel', async () => {
         stubViewport(true);
         inCallHere();
