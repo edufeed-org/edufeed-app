@@ -7,6 +7,18 @@ merge commits of the nostr PRs that landed since the previous tag.
 
 ## [Unreleased]
 
+## [0.3.4] - 2026-10-07
+
+### Fixed
+
+- **Actions after switching accounts used the previous account's lists.**
+  Joining a single community right after switching to another account
+  republished the previous account's whole communities list under the new
+  account's key, and the new account's own list was lost. Following people,
+  bookmarks and mutes were affected the same way. Actions now always read the
+  lists of the account that signs them. (Until this fix is deployed, reload
+  the page after switching accounts.)
+
 ## [0.3.3] - 2026-10-05
 
 ### Added
