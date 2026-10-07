@@ -293,3 +293,117 @@ describe('toDieBibelUrl', () => {
     expect(toDieBibelUrl('Matthäus')).toBeNull();
   });
 });
+
+// Every `ext:ekw:bibleReference` spelling found on the AMB relays (survey
+// 2026-10-07) must link — RPI EKKW cites with dotted abbreviations
+// ("Mk. 1,16-20"), others without dot or with full book names.
+describe('toDieBibelUrl — house-style tolerance', () => {
+  it('links every value of the RPI EKKW "Simon Petrus" reference event', () => {
+    /** @type {Array<[string, string]>} */
+    const cases = [
+      ['Mk. 1,16-20', 'MRK.1.16-20'],
+      ['Mt. 14,22-32', 'MAT.14.22-32'],
+      ['Mt. 16,13-19', 'MAT.16.13-19'],
+      ['Mk. 14', 'MRK.14'],
+      ['Joh. 21,15-17', 'JHN.21.15-17'],
+      ['Apg. 1-2', 'ACT.1']
+    ];
+    for (const [input, path] of cases) {
+      expect(toDieBibelUrl(input), input).toBe(`${DIE_BIBEL}/${path}`);
+    }
+  });
+
+  it('links the same references in the legacy undotted form', () => {
+    /** @type {Array<[string, string]>} */
+    const cases = [
+      ['Mk 1,16-20', 'MRK.1.16-20'],
+      ['Mt 14,22-32', 'MAT.14.22-32'],
+      ['Mk 14', 'MRK.14'],
+      ['Joh 21,15-17', 'JHN.21.15-17'],
+      ['Apg 1-2', 'ACT.1']
+    ];
+    for (const [input, path] of cases) {
+      expect(toDieBibelUrl(input), input).toBe(`${DIE_BIBEL}/${path}`);
+    }
+  });
+
+  it('accepts numbered books with or without ordinal dot and space', () => {
+    /** @type {Array<[string, string]>} */
+    const cases = [
+      ['1. Kor 12', '1CO.12'],
+      ['1 Kor 12', '1CO.12'],
+      ['1Kor 12', '1CO.12'],
+      ['1. Kor. 12,4', '1CO.12.4'],
+      ['1 Tim 2,1-4', '1TI.2.1-4'],
+      ['1. Mose 2,4-7', 'GEN.2.4-7'],
+      ['1 Mo 2,4-7', 'GEN.2.4-7'],
+      ['1. Mo. 2,4', 'GEN.2.4'],
+      ['1. Joh. 4,16', '1JN.4.16']
+    ];
+    for (const [input, path] of cases) {
+      expect(toDieBibelUrl(input), input).toBe(`${DIE_BIBEL}/${path}`);
+    }
+  });
+
+  it('accepts ecumenical Pentateuch abbreviations and Psalm spellings', () => {
+    /** @type {Array<[string, string]>} */
+    const cases = [
+      ['Gen. 2,4-7', 'GEN.2.4-7'],
+      ['Gen 1', 'GEN.1'],
+      ['Ex 20,1-17', 'EXO.20.1-17'],
+      ['Dtn 6,4', 'DEU.6.4'],
+      ['Ps. 23', 'PSA.23'],
+      ['Psalm 104', 'PSA.104'],
+      ['Psalm 34,15', 'PSA.34.15'],
+      ['Psalmen 23', 'PSA.23']
+    ];
+    for (const [input, path] of cases) {
+      expect(toDieBibelUrl(input), input).toBe(`${DIE_BIBEL}/${path}`);
+    }
+  });
+
+  it('tolerates dash variants, spacing, verse suffixes and verse lists', () => {
+    /** @type {Array<[string, string]>} */
+    const cases = [
+      ['Lukas 15,3–7', 'LUK.15.3-7'], // en dash
+      ['Mk. 1,16 - 20', 'MRK.1.16-20'],
+      ['Joh.21,15', 'JHN.21.15'],
+      ['Mt 13,31f.', 'MAT.13.31-32'],
+      ['Mt 5,3ff.', 'MAT.5.3'],
+      ['Joh 14,27-31a', 'JHN.14.27-31'],
+      ['Jer 29,7.11-14a', 'JER.29.7'],
+      ['LK 10,25-37', 'LUK.10.25-37'],
+      ['Mt. 5,3-12; Lk. 6,20-26', 'MAT.5.3-12']
+    ];
+    for (const [input, path] of cases) {
+      expect(toDieBibelUrl(input), input).toBe(`${DIE_BIBEL}/${path}`);
+    }
+  });
+
+  it('still refuses free text and unknown books', () => {
+    expect(toDieBibelUrl('Mt.')).toBeNull();
+    expect(toDieBibelUrl('Foo. 5,3')).toBeNull();
+    expect(toDieBibelUrl('Mk 1,16-20 und mehr')).toBeNull();
+    expect(toDieBibelUrl('Lukasevangelium (LK 10,25-37)')).toBeNull();
+  });
+});
+
+describe('parseAndCanonicalize — dotted house-style input', () => {
+  /** @type {Array<[string, string]>} */
+  const cases = [
+    ['Mk. 1,16-20', 'Mk 1,16-20'],
+    ['Mt. 14,22-32', 'Mt 14,22-32'],
+    ['Mk. 14', 'Mk 14'],
+    ['Joh. 21,15-17', 'Joh 21,15-17'],
+    ['Apg. 1-2', 'Apg 1-2'],
+    ['1. Kor. 12', '1 Kor 12'],
+    ['Gen. 2,4-7', '1 Mo 2,4-7']
+  ];
+  for (const [input, expected] of cases) {
+    it(`"${input}" parses`, async () => {
+      const result = await parseAndCanonicalize(input);
+      expect(result.ok).toBe(true);
+      expect(result.canonical).toBe(expected);
+    });
+  }
+});

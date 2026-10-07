@@ -196,6 +196,10 @@ function formatOne(osisEntity) {
     // verse range within chapter: "Mt 5,3-12"
     return `${sBook} ${sc},${sv}-${ev}`;
   }
+  if (sb === eb && sc !== ec && !sv && !ev) {
+    // whole-chapter range: "Apg 1-2"
+    return `${sBook} ${sc}-${ec}`;
+  }
   if (sb === eb && sc !== ec) {
     // cross-chapter range: "Hes 1,1-3,15"
     return `${sBook} ${sc},${sv ?? '1'}-${ec},${ev ?? '1'}`;
@@ -257,74 +261,110 @@ function loadParser() {
 const DIE_BIBEL_BASE = 'https://www.die-bibel.de/bibel/LU17';
 
 /**
- * Build a die-bibel.de deep link for a canonical German short reference
- * (e.g. `"Mt 5,3-12"`). Targets the Lutherbibel 2017 (`LU17`).
+ * Lookup key for a book name: accent-folded, lowercased, with every dot and
+ * whitespace removed — so "1. Kor.", "1 Kor" and "1Kor" all become "1kor",
+ * and "Mk." equals "Mk".
+ *
+ * @param {string} name
+ * @returns {string}
+ */
+function bookKey(name) {
+  return fold(name).replace(/[.\s]/g, '');
+}
+
+/**
+ * Spellings found in published `ext:ekw:bibleReference` tags that are neither
+ * the table's short nor long form: ecumenical (Loccum) Pentateuch names and
+ * the Psalter plural.
+ *
+ * @type {Record<string, string>}
+ */
+const BOOK_ALIASES = {
+  Gen: 'GEN',
+  Ex: 'EXO',
+  Lev: 'LEV',
+  Num: 'NUM',
+  Dtn: 'DEU',
+  Psalmen: 'PSA'
+};
+
+/** @type {Map<string, string>} book key → USFM code */
+const USFM_BY_BOOK_KEY = new Map([
+  ...BOOKS_TABLE.flatMap((b) => [
+    /** @type {[string, string]} */ ([bookKey(b.short), b.usfm]),
+    /** @type {[string, string]} */ ([bookKey(b.long), b.usfm])
+  ]),
+  ...Object.entries(BOOK_ALIASES).map(
+    ([name, usfm]) => /** @type {[string, string]} */ ([bookKey(name), usfm])
+  )
+]);
+
+/**
+ * Book token, then the chapter/verse part. The book is an optional ordinal
+ * ("1", "1.") plus one word with an optional abbreviation dot; the rest must
+ * start with a digit.
+ */
+const REFERENCE_RE = /^((?:[1-5]\.?\s*)?\p{L}+)\.?\s*(\d.*)$/u;
+
+/**
+ * Build a die-bibel.de deep link for a German bible reference (e.g.
+ * `"Mt 5,3-12"`). Targets the Lutherbibel 2017 (`LU17`).
  *
  * die-bibel.de uses USFM 3-letter book codes in the URL path
  * (`/LU17/MAT.5.3-12`). Unknown book codes silently fall back to Genesis 1
  * rather than 404, so this builder explicitly maps each known German book
  * name to its USFM code — never passes the German string through.
  *
- * Heuristic guard: the input must start with a known German book name (short
- * or long form, accent-insensitive) followed by whitespace and a digit, so
- * stray free-form text in a Bible-reference slot doesn't become a link.
+ * Tolerates the spellings found in published events: short or long book
+ * names with or without abbreviation dot ("Mk. 1,16-20", "Markus 1,16"),
+ * ordinals with or without dot ("1. Kor 12", "1 Kor 12"), en dashes,
+ * spaces around the dash, "f."/"ff." and a/b verse-part suffixes.
+ * Free text that doesn't start with a known book plus a digit stays unlinked.
  *
- * Limitations:
- *  - Cross-chapter ranges (`Hes 1,1-3,15`) aren't supported by die-bibel.de;
- *    we collapse them to the start verse to avoid the silent fallback.
+ * Limitations (die-bibel.de can't express these in the URL):
+ *  - Chapter ranges (`Apg 1-2`) and cross-chapter ranges (`Hes 1,1-3,15`)
+ *    link to their start chapter / start verse.
+ *  - Verse lists (`Jer 29,7.11-14`) and "ff." link to the first verse.
  *  - `;`-separated multi-refs in a single entry only link the first ref;
- *    the canonical text shows the rest as plain text.
+ *    the text shows the rest as plain text.
  *
  * @param {string} text
  * @returns {string | null}
  */
 export function toDieBibelUrl(text) {
-  const trimmed = (text || '').trim();
-  if (!trimmed) return null;
-
   // Multi-ref entry like "Mt 5,3-12; Lk 6,20-26" → only link the first ref.
-  const first = trimmed.split(';')[0].trim();
-  if (!first || !/\d/.test(first)) return null;
+  const first = (text || '').split(';')[0].trim();
+  const m = REFERENCE_RE.exec(first);
+  if (!m) return null;
 
-  const folded = fold(first);
-
-  // Find the longest book-name prefix (short or long, accent-insensitive)
-  // followed by whitespace. Longest wins so e.g. "1 Joh 4,16" matches
-  // "1 Joh" rather than nothing (the bare "Joh" doesn't prefix-match here,
-  // but longest-match keeps us safe if the table ever grows).
-  let usfm = null;
-  let nameLen = 0;
-  for (const b of BOOKS_TABLE) {
-    for (const name of [b.short, b.long]) {
-      const fName = fold(name);
-      if (folded.startsWith(fName + ' ') && fName.length > nameLen) {
-        usfm = b.usfm;
-        nameLen = fName.length;
-      }
-    }
-  }
+  const usfm = USFM_BY_BOOK_KEY.get(bookKey(m[1]));
   if (!usfm) return null;
 
-  // fold() preserves visible string length (NFD-decompose then strip combining
-  // marks), so slicing the original by the folded name length is safe.
-  const rest = first.slice(nameLen).trim();
+  const rest = m[2]
+    .replace(/[\u2010-\u2015]/g, '-') // en/em dashes → hyphen
+    .replace(/\s+/g, '')
+    .replace(/(\d)[a-c](?=$|[-.])/g, '$1'); // "31a" → "31"
+  const url = (/** @type {string} */ path) => `${DIE_BIBEL_BASE}/${usfm}.${path}`;
 
-  // Chapter only — e.g. "Ps 23"
-  const mChapter = /^(\d+)$/.exec(rest);
-  if (mChapter) return `${DIE_BIBEL_BASE}/${usfm}.${mChapter[1]}`;
+  // Chapter or chapter range — "Ps 23", "Apg 1-2" (range → start chapter)
+  const mChapter = /^(\d+)(?:-\d+)?$/.exec(rest);
+  if (mChapter) return url(mChapter[1]);
 
-  // Single verse — e.g. "Joh 3,16"
-  const mVerse = /^(\d+),(\d+)$/.exec(rest);
-  if (mVerse) return `${DIE_BIBEL_BASE}/${usfm}.${mVerse[1]}.${mVerse[2]}`;
+  // "Mt 13,31f." = verses 31-32; "Mt 5,3ff." → start verse
+  const mFollowing = /^(\d+),(\d+)(f|ff)\.?$/.exec(rest);
+  if (mFollowing) {
+    const [, c, v, f] = mFollowing;
+    return url(f === 'f' ? `${c}.${v}-${Number(v) + 1}` : `${c}.${v}`);
+  }
 
-  // In-chapter verse range — e.g. "Mt 5,3-12"
-  const mRange = /^(\d+),(\d+)-(\d+)$/.exec(rest);
-  if (mRange) return `${DIE_BIBEL_BASE}/${usfm}.${mRange[1]}.${mRange[2]}-${mRange[3]}`;
-
-  // Cross-chapter range — e.g. "Hes 1,1-3,15". die-bibel.de can't render
-  // these in the URL, so collapse to the start verse.
-  const mCross = /^(\d+),(\d+)-(\d+),(\d+)$/.exec(rest);
-  if (mCross) return `${DIE_BIBEL_BASE}/${usfm}.${mCross[1]}.${mCross[2]}`;
+  // Verse, verse range, cross-chapter range or verse list —
+  // "Joh 3,16", "Mt 5,3-12", "Hes 1,1-3,15", "Jer 29,7.11-14"
+  const mVerse = /^(\d+),(\d+)(?:-(\d+)(,\d+)?|(?:\.\d+(?:-\d+)?)+)?$/.exec(rest);
+  if (mVerse) {
+    const [, c, v, end, crossChapter] = mVerse;
+    if (end && !crossChapter) return url(`${c}.${v}-${end}`);
+    return url(`${c}.${v}`);
+  }
 
   return null;
 }
