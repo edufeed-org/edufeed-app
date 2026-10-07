@@ -22,6 +22,8 @@ import {
   SCREEN_SHARE_QUALITIES,
   getChatBeside,
   setChatBeside,
+  getScreenShareAudio,
+  setScreenShareAudio,
   getBackgroundEffect,
   setBackgroundEffect,
   getCustomBackground,
@@ -123,6 +125,18 @@ describe('screen share quality', () => {
     setScreenShareQuality('8k240');
     expect(getScreenShareQuality()).toBe('720p15');
     expect(Object.keys(SCREEN_SHARE_QUALITIES)).toContain('1440p30');
+  });
+});
+
+describe('screen share sound ("Ton teilen")', () => {
+  it('is off by default and remembers an explicit choice either way', () => {
+    expect(getScreenShareAudio()).toBe(false);
+    setScreenShareAudio(true);
+    expect(getScreenShareAudio()).toBe(true);
+    setScreenShareAudio(false);
+    expect(getScreenShareAudio()).toBe(false);
+    localStorage.setItem('edufeed:call:screenShareAudio', 'yes');
+    expect(getScreenShareAudio()).toBe(false);
   });
 });
 

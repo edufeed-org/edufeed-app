@@ -158,6 +158,19 @@ export function setScreenShareQuality(quality) {
   if (quality in SCREEN_SHARE_QUALITIES) write('screenShareQuality', quality);
 }
 
+/**
+ * "Ton teilen": whether a screen share also carries the tab's / system's
+ * sound. Off by default — the browser then never offers audio in the picker.
+ */
+export function getScreenShareAudio() {
+  return read('screenShareAudio') === '1';
+}
+
+/** @param {boolean} enabled */
+export function setScreenShareAudio(enabled) {
+  write('screenShareAudio', enabled ? '1' : '0');
+}
+
 /** Wide screens: chat as a column beside the call stage (off = stage only). */
 // Open by default (QA 2026-10-02 C3: a closed chat had to be found first);
 // an explicit toggle either way is remembered on this device.

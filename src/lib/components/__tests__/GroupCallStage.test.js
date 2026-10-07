@@ -20,6 +20,7 @@ const { lk, svc, media, bg } = vi.hoisted(() => ({
     isMuted: false,
     isCameraOff: true,
     isScreenSharing: false,
+    screenShareAudioMissing: false,
     canPublish: true,
     canSignal: true,
     connectionState: 'connected',
@@ -142,6 +143,9 @@ vi.mock('$lib/paraglide/messages', () => ({
   groups_call_screen_share_you: () => 'You are sharing',
   groups_call_screen_share_active: (p) => `${p.name} is sharing`,
   groups_call_screen_share_quality: () => 'Sharing quality',
+  groups_call_screen_share_audio: () => 'Share sound',
+  groups_call_screen_share_audio_hint: () => 'Tab or system sound (Chrome, Edge).',
+  groups_call_screen_share_audio_missing: () => 'The browser delivered no sound.',
   groups_call_screen_share_options: () => 'Screen options',
   groups_call_camera_options: () => 'Camera options',
   groups_call_mic_options: () => 'Mic options',
@@ -516,6 +520,45 @@ describe('publish controls', () => {
       await openCameraMenu();
       expect(screen.queryByRole('button', { name: 'Blur' })).toBeNull();
     });
+  });
+
+  // Issue "share tab/system audio with the screen share": opt-in, per device.
+  it('"Ton teilen" is off by default, toggles in the screen menu and is remembered', async () => {
+    render(GroupCallStage, { props: baseProps });
+    await fireEvent.click(screen.getByRole('button', { name: 'Screen options' }));
+    const toggle = screen.getByTestId('group-call-screen-share-audio');
+    expect(toggle.checked).toBe(false);
+    expect(screen.getByText('Tab or system sound (Chrome, Edge).')).toBeTruthy();
+    await fireEvent.click(toggle);
+    expect(localStorage.getItem('edufeed:call:screenShareAudio')).toBe('1');
+    await fireEvent.click(toggle);
+    expect(localStorage.getItem('edufeed:call:screenShareAudio')).toBe('0');
+  });
+
+  it('hints once, as info, when a share asked for sound but got none', async () => {
+    media.toggleScreenShare.mockImplementationOnce(async () => {
+      lk.isScreenSharing = true;
+      lk.screenShareAudioMissing = true;
+    });
+    render(GroupCallStage, { props: baseProps });
+    await fireEvent.click(screen.getByTitle('Share screen'));
+    await vi.waitFor(() =>
+      expect(media.showToast).toHaveBeenCalledWith('The browser delivered no sound.', 'info')
+    );
+    lk.isScreenSharing = false;
+    lk.screenShareAudioMissing = false;
+  });
+
+  it('no hint when the share has its sound, or never asked for it', async () => {
+    media.toggleScreenShare.mockImplementationOnce(async () => {
+      lk.isScreenSharing = true;
+      lk.screenShareAudioMissing = false;
+    });
+    render(GroupCallStage, { props: baseProps });
+    await fireEvent.click(screen.getByTitle('Share screen'));
+    await vi.waitFor(() => expect(media.toggleScreenShare).toHaveBeenCalled());
+    expect(media.showToast).not.toHaveBeenCalled();
+    lk.isScreenSharing = false;
   });
 
   it('picks and remembers a screen share quality', async () => {
