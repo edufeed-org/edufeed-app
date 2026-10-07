@@ -3930,6 +3930,8 @@
   "meeting_invite_dm": "Einladung: {title} am {date} um {time} Uhr ({zone}) im Kanal {channel}. {channelUrl}",
   "meeting_invite_dm_guest": "Gast-Link (ohne Konto, ab 15 Minuten vor Beginn): {guestUrl}",
   "meeting_modal_guests_no_nip44": "Gast-Links brauchen eine Anmeldung, die verschlüsseln kann (NIP-44). Mit deiner aktuellen Anmeldung geht das nicht.",
+  "meeting_modal_guests_help_enables_calls": "Schaltet Videoanrufe in diesem Kanal ein. Personen ohne Mitgliedschaft können dann mit dem Link von 15 Minuten vor Beginn bis 30 Minuten nach dem Ende teilnehmen.",
+  "meeting_modal_guests_calls_off": "Gast-Links brauchen Videoanrufe im Kanal. Ein Admin kann sie in den Kanaleinstellungen einschalten.",
   "groups_meeting_schedule": "Termin planen",
   "meeting_card_label": "Termin",
   "meeting_card_join": "Beitreten",

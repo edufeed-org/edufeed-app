@@ -167,7 +167,19 @@
   // The guest link's code is stored self-encrypted (NIP-44): a signer
   // without it cannot make one, so the toggle is disabled with a hint.
   let canGuests = $derived(hasNip44(activeUser?.signer));
-  let guestLinksPossible = $derived(groupMeeting?.passesSupported === true);
+  // Guest links need the channel's relay to speak call passes. A channel
+  // without calls yet (a community's General channel starts that way) still
+  // offers them to an admin who may switch calls on — scheduling with guests
+  // then switches them on (issue d0ab04d0); a plain member is told why not.
+  let guestLinksPossible = $derived(
+    groupMeeting?.passesSupported === true || groupMeeting?.canEnableCalls === true
+  );
+  let guestsEnableCalls = $derived(
+    groupMeeting?.passesSupported !== true && groupMeeting?.canEnableCalls === true
+  );
+  let guestsNeedCalls = $derived(
+    !guestLinksPossible && isGroupMeeting && groupMeeting?.callsEnabled === false
+  );
   $effect(() => {
     const subscription = manager.active$.subscribe((user) => {
       activeUser = user;
@@ -784,7 +796,11 @@
                 >
               </label>
               <p class="mt-1 text-xs text-base-content/60">
-                {canGuests ? m.meeting_modal_guests_help() : m.meeting_modal_guests_no_nip44()}
+                {!canGuests
+                  ? m.meeting_modal_guests_no_nip44()
+                  : guestsEnableCalls
+                    ? m.meeting_modal_guests_help_enables_calls()
+                    : m.meeting_modal_guests_help()}
               </p>
               {#if guestsTooFar && canGuests}
                 <p class="mt-2 alert text-sm alert-info" role="status">
@@ -792,6 +808,10 @@
                 </p>
               {/if}
             </div>
+          {:else if guestsNeedCalls}
+            <p class="mb-4 text-xs text-base-content/60" data-testid="meeting-guests-need-calls">
+              {m.meeting_modal_guests_calls_off()}
+            </p>
           {/if}
         {:else}
           <!-- Educational attributes (#13): registration, cost, format, level -->

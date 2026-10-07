@@ -1067,7 +1067,10 @@
 
   // "Termin planen": the calendar dialog in channel-meeting mode (M2). The
   // meeting's location is the channel's own link; the roster decides who
-  // gets the guest link in their invitation.
+  // gets the guest link in their invitation. A channel without calls (the
+  // community's General channel starts that way) tells the dialog whether
+  // this user may switch them on, so an admin still gets a guest option
+  // (issue d0ab04d0).
   function openScheduleMeeting() {
     modalStore.openModal('calendarEvent', {
       mode: 'create',
@@ -1076,7 +1079,9 @@
         channelName: displayTitle,
         channelUrl: buildChannelLink(window.location, pointer.id),
         memberPubkeys: [...members],
-        passesSupported
+        passesSupported,
+        callsEnabled: avEnabled,
+        canEnableCalls: canStartCall
       }
     });
   }

@@ -19,6 +19,10 @@ const createMeetingLink = vi.fn(async () => ({
 vi.mock('$lib/groups/call-passes.js', () => ({
   createMeetingLink: (...a) => createMeetingLink(...a)
 }));
+const enableGroupCalls = vi.fn(async () => {});
+vi.mock('$lib/groups/enable-group-calls.js', () => ({
+  enableGroupCalls: (...a) => enableGroupCalls(...a)
+}));
 const sendWrappedDm = vi.fn(async () => {});
 vi.mock('$lib/services/wrapped-dm.js', () => ({
   sendWrappedDm: (...a) => sendWrappedDm(...a)
@@ -75,6 +79,8 @@ function formIn(days) {
 beforeEach(() => {
   publishToGroupRelay.mockClear();
   createMeetingLink.mockClear();
+  enableGroupCalls.mockReset();
+  enableGroupCalls.mockImplementation(async () => {});
   sendWrappedDm.mockReset();
   sendWrappedDm.mockImplementation(async () => {});
   eventStoreAdd.mockClear();
@@ -162,6 +168,86 @@ describe('scheduleGroupMeeting', () => {
     expect(event.id).toBe('meeting-id');
     expect(guestStatus).toBe('failed');
     expect(guestUrl).toBeNull();
+  });
+
+  // Issue d0ab04d0: a community's General channel starts without calls, so its
+  // organiser never saw a guest option. An admin who may switch calls on gets
+  // the option, and the switch happens here, right before the link is minted.
+  it('switches calls on before minting the link when the channel has none and the organiser may', async () => {
+    const order = [];
+    enableGroupCalls.mockImplementation(async () => {
+      order.push('enable');
+    });
+    createMeetingLink.mockImplementationOnce(async () => {
+      order.push('mint');
+      return { code: 'C'.repeat(22), url: GUEST_URL, event: { id: 'pass-id' } };
+    });
+    const { guestStatus, guestUrl } = await scheduleGroupMeeting({
+      relayConn: RELAY,
+      formData: formIn(3),
+      groupMeeting: { ...GROUP_MEETING, callsEnabled: false, canEnableCalls: true },
+      user: USER,
+      origin: 'https://app.example',
+      allowGuests: true
+    });
+    expect(enableGroupCalls).toHaveBeenCalledWith(GROUP_MEETING.pointer, USER);
+    expect(order).toEqual(['enable', 'mint']);
+    expect(guestStatus).toBe('created');
+    expect(guestUrl).toBe(GUEST_URL);
+  });
+
+  it('leaves the channel alone when calls are on, the organiser may not switch them on, or no guests are wanted', async () => {
+    const base = {
+      relayConn: RELAY,
+      formData: formIn(3),
+      user: USER,
+      origin: 'https://app.example'
+    };
+    await scheduleGroupMeeting({
+      ...base,
+      groupMeeting: { ...GROUP_MEETING, callsEnabled: true, canEnableCalls: false },
+      allowGuests: true
+    });
+    await scheduleGroupMeeting({
+      ...base,
+      groupMeeting: { ...GROUP_MEETING, callsEnabled: false, canEnableCalls: false },
+      allowGuests: true
+    });
+    await scheduleGroupMeeting({
+      ...base,
+      groupMeeting: { ...GROUP_MEETING, callsEnabled: false, canEnableCalls: true },
+      allowGuests: false
+    });
+    expect(enableGroupCalls).not.toHaveBeenCalled();
+  });
+
+  it('keeps the meeting without a link when switching calls on fails', async () => {
+    enableGroupCalls.mockRejectedValueOnce(new Error('restricted: not an admin'));
+    const { event, guestStatus, guestUrl } = await scheduleGroupMeeting({
+      relayConn: RELAY,
+      formData: formIn(3),
+      groupMeeting: { ...GROUP_MEETING, callsEnabled: false, canEnableCalls: true },
+      user: USER,
+      origin: 'https://app.example',
+      allowGuests: true
+    });
+    expect(event.id).toBe('meeting-id');
+    expect(createMeetingLink).not.toHaveBeenCalled();
+    expect(guestStatus).toBe('failed');
+    expect(guestUrl).toBeNull();
+  });
+
+  it('does not switch calls on for a meeting beyond the pass limit', async () => {
+    const { guestStatus } = await scheduleGroupMeeting({
+      relayConn: RELAY,
+      formData: formIn(70),
+      groupMeeting: { ...GROUP_MEETING, callsEnabled: false, canEnableCalls: true },
+      user: USER,
+      origin: 'https://app.example',
+      allowGuests: true
+    });
+    expect(guestStatus).toBe('too_far');
+    expect(enableGroupCalls).not.toHaveBeenCalled();
   });
 
   it('propagates a relay rejection of the meeting itself', async () => {
