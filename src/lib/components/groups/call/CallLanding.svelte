@@ -60,6 +60,9 @@
 
   const CallStage = lazyComponent(() => import('./GroupCallStage.svelte'));
   const CallChatPanel = lazyComponent(() => import('./CallChatPanel.svelte'));
+  // The lobby (self-preview, mic meter, devices, "join with camera / mic"):
+  // lazy like the stage — it brings livekit-client.
+  const CallPreJoin = lazyComponent(() => import('./CallPreJoin.svelte'));
   const getActiveUser = useActiveUser();
   const getMyProfile = useUserProfile();
   const call = getGroupCallState();
@@ -85,6 +88,10 @@
   let check = $state.raw(null);
   let name = $state('');
   let joining = $state(false);
+  // What the lobby chose; a retry / "Wieder beitreten" reuses it instead of
+  // sending the visitor through the lobby again. Plain `let`: never rendered.
+  /** @type {import('$lib/services/call-prefs.js').JoinMedia | undefined} */
+  let lastMedia;
   let wasInCall = $state(false);
   // Phones: the call chat REPLACES the stage (QA round 2 N1: side by side
   // at 390 px the stage collapsed into a 30 px strip). md+: it sits beside
@@ -390,24 +397,31 @@
     }
   }
 
-  /** @param {{pubkey: string, signer: any}} user */
-  async function joinAs(user) {
+  /**
+   * @param {{pubkey: string, signer: any}} user
+   * @param {import('$lib/services/call-prefs.js').JoinMedia} [media] the
+   *   lobby's choice; the token is requested only now, on join
+   */
+  async function joinAs(user, media = lastMedia) {
     if (!pointer || !code) return;
+    lastMedia = media;
     await joinGroupCall(pointer, user, {
       title,
       href: `${location.pathname}${location.hash}`,
       // A member joins as a member: no pass code in the token request.
-      ...(memberHere ? {} : { code })
+      ...(memberHere ? {} : { code }),
+      ...(media ? { media } : {})
     });
   }
 
-  async function joinAsGuest() {
+  /** @param {import('$lib/services/call-prefs.js').JoinMedia} [media] */
+  async function joinAsGuest(media) {
     if (joining) return;
     guestError = null;
     joining = true;
     try {
       const user = await createGuestAccount(name);
-      await joinAs(user);
+      await joinAs(user, media);
     } catch (err) {
       if (err instanceof Error && err.message === 'name-required') {
         guestError = m.call_landing_name_required();
@@ -420,9 +434,10 @@
     }
   }
 
-  async function joinWithAccount() {
+  /** @param {import('$lib/services/call-prefs.js').JoinMedia} [media] */
+  async function joinWithAccount(media) {
     const user = getActiveUser();
-    if (user?.signer) await joinAs(user);
+    if (user?.signer) await joinAs(user, media);
   }
 
   async function retry() {
@@ -431,7 +446,8 @@
       await joinGroupCall(pointer, user, {
         title,
         href: `${location.pathname}${location.hash}`,
-        ...(memberHere ? {} : { code: call.code ?? code ?? undefined })
+        ...(memberHere ? {} : { code: call.code ?? code ?? undefined }),
+        ...(lastMedia ? { media: lastMedia } : {})
       });
     }
   }
@@ -639,96 +655,83 @@
                 {/if}
               </p>
             {/if}
-            {#if me}
-              {#if memberHere}
-                <p class="text-sm text-base-content/70" data-testid="call-landing-member">
-                  {m.call_landing_member()}
-                </p>
-                <button
-                  class="btn btn-primary"
-                  onclick={joinWithAccount}
-                  data-testid="call-landing-join-member"
-                >
-                  {m.call_landing_join_member()}
-                </button>
+            {#if me && !me.signer}
+              <p class="text-sm text-error" data-testid="call-landing-no-signer">
+                {m.call_landing_no_signer()}
+              </p>
+              <button
+                class="btn btn-sm"
+                onclick={() => modalStore.openModal('login')}
+                data-testid="call-landing-switch-login"
+              >
+                {m.call_landing_login()}
+              </button>
+            {:else if CallPreJoin.Component}
+              <!-- The lobby: camera / mic check first, the token only on join.
+                   A newcomer's name field sits inside it (Enter joins). -->
+              <CallPreJoin.Component
+                joinLabel={memberHere
+                  ? m.call_landing_join_member()
+                  : me
+                    ? m.call_landing_join_as()
+                    : m.call_landing_join()}
+                busy={joining}
+                error={guestError}
+                testid={memberHere
+                  ? 'call-landing-join-member'
+                  : me
+                    ? 'call-landing-join-as'
+                    : 'call-landing-join'}
+                onJoin={(media) => (me ? joinWithAccount(media) : joinAsGuest(media))}
+              >
+                {#if memberHere}
+                  <p class="text-sm text-base-content/70" data-testid="call-landing-member">
+                    {m.call_landing_member()}
+                  </p>
+                {:else if !me}
+                  <div class="flex flex-col gap-2">
+                    <label class="text-sm font-medium" for="call-guest-name"
+                      >{m.call_landing_name_label()}</label
+                    >
+                    <input
+                      id="call-guest-name"
+                      class="input-bordered input w-full"
+                      bind:value={name}
+                      maxlength="80"
+                      data-testid="call-landing-name"
+                    />
+                  </div>
+                {/if}
+              </CallPreJoin.Component>
+              {#if me}
                 <a
                   class="link text-sm"
                   href={pointer ? groupHref(pointer) : '/'}
                   data-testid="call-landing-channel"
                 >
-                  {m.call_landing_channel_link()}
-                </a>
-              {:else if me.signer}
-                <button
-                  class="btn btn-primary"
-                  onclick={joinWithAccount}
-                  data-testid="call-landing-join-as"
-                >
-                  {m.call_landing_join_as()}
-                </button>
-                <a
-                  class="link text-sm"
-                  href={pointer ? groupHref(pointer) : '/'}
-                  data-testid="call-landing-channel"
-                >
-                  {m.call_landing_open_channel()}
+                  {memberHere ? m.call_landing_channel_link() : m.call_landing_open_channel()}
                 </a>
               {:else}
-                <p class="text-sm text-error" data-testid="call-landing-no-signer">
-                  {m.call_landing_no_signer()}
-                </p>
-                <button
-                  class="btn btn-sm"
-                  onclick={() => modalStore.openModal('login')}
-                  data-testid="call-landing-switch-login"
-                >
-                  {m.call_landing_login()}
-                </button>
+                <div class="flex flex-wrap gap-2">
+                  <button
+                    class="btn btn-ghost btn-sm"
+                    onclick={() => modalStore.openModal('login')}
+                    data-testid="call-landing-login"
+                  >
+                    {m.call_landing_login()}
+                  </button>
+                  <button
+                    class="btn btn-ghost btn-sm"
+                    onclick={() => modalStore.openModal('signup')}
+                    data-testid="call-landing-signup"
+                  >
+                    {m.call_landing_full_profile()}
+                  </button>
+                </div>
               {/if}
             {:else}
-              <form
-                class="flex flex-col gap-2"
-                onsubmit={(e) => {
-                  e.preventDefault();
-                  joinAsGuest();
-                }}
-              >
-                <label class="text-sm font-medium" for="call-guest-name"
-                  >{m.call_landing_name_label()}</label
-                >
-                <input
-                  id="call-guest-name"
-                  class="input-bordered input"
-                  bind:value={name}
-                  maxlength="80"
-                  data-testid="call-landing-name"
-                />
-                {#if guestError}<p class="text-sm text-error">{guestError}</p>{/if}
-                <button
-                  type="submit"
-                  class="btn btn-primary"
-                  disabled={joining}
-                  data-testid="call-landing-join"
-                >
-                  {#if joining}<span class="loading loading-sm loading-spinner"></span>{/if}
-                  {m.call_landing_join()}
-                </button>
-              </form>
-              <div class="flex flex-wrap gap-2">
-                <button
-                  class="btn btn-ghost btn-sm"
-                  onclick={() => modalStore.openModal('login')}
-                  data-testid="call-landing-login"
-                >
-                  {m.call_landing_login()}
-                </button>
-                <button
-                  class="btn btn-ghost btn-sm"
-                  onclick={() => modalStore.openModal('signup')}
-                  data-testid="call-landing-signup"
-                >
-                  {m.call_landing_full_profile()}
-                </button>
+              <div class="flex justify-center py-6" data-testid="call-landing-lobby-loading">
+                <span class="loading loading-md loading-spinner text-primary"></span>
               </div>
             {/if}
           {:else if view === 'ended'}

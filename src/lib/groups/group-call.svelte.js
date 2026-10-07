@@ -15,7 +15,11 @@
 import { channelKey } from './community-pointer.js';
 import { requestGroupCallToken, GroupCallTokenError, isGuestParticipant } from './livekit.js';
 import { getChatBeside, setChatBeside } from '$lib/services/call-prefs.js';
-import { confirmCallSwitch, confirmCallLeave } from './call-switch-confirm.svelte.js';
+import {
+  confirmCallSwitch,
+  confirmCallLeave,
+  confirmCallJoin
+} from './call-switch-confirm.svelte.js';
 import { playLeaveSound } from '$lib/services/call-sounds.js';
 import * as m from '$lib/paraglide/messages';
 import { SignerTimeoutError, isLikelyMobile, signerTimeoutText } from '$lib/helpers/signer-wait.js';
@@ -52,6 +56,10 @@ let href = $state(null);
 // a retry after a failed token request can reuse it.
 /** @type {string | null} */
 let code = $state(null);
+// What the lobby chose to join with (camera / mic on). Kept for a retry of
+// the same channel after a failed join, so the lobby is not asked twice.
+/** @type {import('$lib/services/call-prefs.js').JoinMedia | null} */
+let media = null;
 // Mounted stage views (the dock shows while none is on screen) and whether
 // the user stepped from the stage back to the chat while staying in the call.
 let stageViews = $state(0);
@@ -143,7 +151,9 @@ export function getGroupCallState() {
  * back); re-joining after an error retries. Joins muted, camera off.
  * @param {{id: string, relay: string}} pointer
  * @param {{pubkey: string, signer: any}} user
- * @param {{title?: string, href?: string | null, code?: string}} [view] for the dock
+ * @param {{title?: string, href?: string | null, code?: string, media?: import('$lib/services/call-prefs.js').JoinMedia}} [view]
+ *   for the dock; `media`: publish camera / mic right away (the lobby's
+ *   choice) — without it the call opens muted with the camera off
  */
 export async function joinGroupCall(pointer, user, view = {}) {
   const key = channelKey(pointer);
@@ -163,6 +173,7 @@ export async function joinGroupCall(pointer, user, view = {}) {
   title = view.title ?? '';
   href = view.href ?? null;
   code = view.code ?? null;
+  media = view.media ?? null;
   try {
     const result = await requestGroupCallToken(pointer.relay, pointer.id, user, {
       code: view.code
@@ -183,7 +194,7 @@ export async function joinGroupCall(pointer, user, view = {}) {
       phase = 'ended';
       endReason = lk.isRemovalReason(reason) ? 'removed' : 'dropped';
     });
-    await lk.connectToRoom(result.participantToken, result.serverUrl, {});
+    await lk.connectToRoom(result.participantToken, result.serverUrl, view.media ?? {});
     // Left (or moved on) while the handshake ran: leaveGroupCall's
     // disconnect raced the connect, so tear the fresh Room down again.
     if (myAttempt !== attempt) {
@@ -208,6 +219,13 @@ export async function joinGroupCall(pointer, user, view = {}) {
  * `joinGroupCall` directly, so the dialog only needs implementing once.
  * Same channel, or no live call elsewhere, joins straight away — and so
  * does a cancelled confirm, which leaves the current call untouched.
+ *
+ * Then the pre-join lobby (`confirmCallJoin`): camera and microphone are
+ * checked and the "join with camera / mic on" choice made BEFORE any token
+ * is requested — a member sitting in the lobby is not in the call yet.
+ * Not asked when the channel is already live here (that only brings the
+ * stage back) nor for a retry after a failed join of the same channel
+ * (the earlier choice is reused); a cancelled lobby joins nothing.
  * @param {{id: string, relay: string}} pointer
  * @param {{pubkey: string, signer: any}} user
  * @param {{title?: string, href?: string | null, code?: string}} [view]
@@ -221,7 +239,18 @@ export async function joinGroupCallWithConfirm(pointer, user, view = {}) {
     const proceed = await confirmCallSwitch(title);
     if (!proceed) return;
   }
-  await joinGroupCall(pointer, user, view);
+  const alreadyLiveHere = activeKey === key && (phase === 'ready' || phase === 'requesting');
+  if (alreadyLiveHere) {
+    await joinGroupCall(pointer, user, view);
+    return;
+  }
+  /** @type {import('$lib/services/call-prefs.js').JoinMedia | null} */
+  let chosen = activeKey === key && phase === 'error' ? media : null;
+  if (!chosen) {
+    chosen = await confirmCallJoin(view.title ?? '');
+    if (!chosen) return;
+  }
+  await joinGroupCall(pointer, user, { ...view, media: chosen });
 }
 
 /**
@@ -275,6 +304,7 @@ export async function leaveGroupCall() {
   title = '';
   href = null;
   code = null;
+  media = null;
   stageHidden = false;
   if (wasActive) {
     const { disconnectFromRoom } = await import('$lib/services/livekit-connection.svelte.js');

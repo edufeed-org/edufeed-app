@@ -14,7 +14,11 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { flushSync } from 'svelte';
 import { modalStore } from '$lib/stores/modal.svelte.js';
-import { confirmCallSwitch, confirmCallLeave } from '$lib/groups/call-switch-confirm.svelte.js';
+import {
+  confirmCallSwitch,
+  confirmCallLeave,
+  confirmCallJoin
+} from '$lib/groups/call-switch-confirm.svelte.js';
 
 beforeEach(() => {
   modalStore.closeModal();
@@ -113,5 +117,32 @@ describe('confirmCallLeave', () => {
     confirmCallSwitch('Standup');
     await expect(leave).resolves.toBe(false);
     expect(modalStore.activeModal).toBe('callSwitchConfirm');
+  });
+});
+
+// The pre-join lobby (issue "pre-join preview"): same modal slot, but the
+// answer carries the chosen media instead of a bare yes.
+describe('confirmCallJoin', () => {
+  it('opens the pre-join modal with the channel title', () => {
+    confirmCallJoin('Standup');
+    expect(modalStore.activeModal).toBe('callPreJoin');
+    expect(modalStore.modalProps).toEqual({ title: 'Standup' });
+  });
+
+  it('resolves with the media the lobby confirmed and closes the modal', async () => {
+    const pending = confirmCallJoin('Standup');
+    modalStore.modalCallbacks.onConfirm({ audio: true, video: false });
+    await expect(pending).resolves.toEqual({ audio: true, video: false });
+    expect(modalStore.activeModal).toBe('none');
+  });
+
+  it('resolves null on cancel and when another modal replaces it', async () => {
+    const first = confirmCallJoin('Standup');
+    modalStore.modalCallbacks.onCancel();
+    await expect(first).resolves.toBeNull();
+    const second = confirmCallJoin('Standup');
+    modalStore.openModal('login');
+    flushSync();
+    await expect(second).resolves.toBeNull();
   });
 });

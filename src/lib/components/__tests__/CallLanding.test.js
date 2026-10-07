@@ -71,6 +71,12 @@ vi.mock(
   '$lib/components/groups/call/CallChatPanel.svelte',
   () => import('./fixtures/CallChatPanelStub.svelte')
 );
+// The lobby (self-preview, meter, devices) has its own test; here a stub
+// answers "join" with a fixed media choice and renders the extra fields.
+vi.mock(
+  '$lib/components/groups/call/CallPreJoin.svelte',
+  () => import('./fixtures/CallPreJoinStub.svelte')
+);
 
 const { channelKey } = await import('$lib/groups/community-pointer.js');
 const { default: CallLanding } = await import('$lib/components/groups/call/CallLanding.svelte');
@@ -183,6 +189,58 @@ describe('CallLanding', () => {
       expect.objectContaining({ code: CODE })
     );
   });
+  // Issue "pre-join preview": the lobby comes first, the token only on join.
+  describe('pre-join lobby', () => {
+    it('hosts the lobby in the ready view and requests nothing until join is pressed', async () => {
+      checkCallPass.mockResolvedValue({ valid: true, reason: 'ok', name: 'Weekly', liveCount: 1 });
+      render(CallLanding, { props: { pointer: POINTER } });
+      const lobby = await screen.findByTestId('call-prejoin-stub');
+      expect(lobby.querySelector('[data-testid="call-landing-name"]')).toBeTruthy();
+      await new Promise((r) => setTimeout(r, 20));
+      expect(joinGroupCall).not.toHaveBeenCalled();
+      await fireEvent.input(screen.getByTestId('call-landing-name'), { target: { value: 'Ada' } });
+      await fireEvent.click(screen.getByTestId('call-landing-join'));
+      await waitFor(() => expect(joinGroupCall).toHaveBeenCalledTimes(1));
+      expect(joinGroupCall.mock.calls[0][2]).toEqual(
+        expect.objectContaining({ code: CODE, media: { audio: true, video: false } })
+      );
+    });
+
+    it("a logged-in account joins with the lobby's media too", async () => {
+      activeUser = { pubkey: 'b'.repeat(64), signer: {} };
+      checkCallPass.mockResolvedValue({ valid: true, reason: 'ok', liveCount: 1 });
+      render(CallLanding, { props: { pointer: POINTER } });
+      await fireEvent.click(await screen.findByTestId('call-landing-join-as'));
+      expect(joinGroupCall.mock.calls[0][2].media).toEqual({ audio: true, video: false });
+    });
+
+    it('shows the lobby busy and its error line while a guest join is refused', async () => {
+      checkCallPass.mockResolvedValue({ valid: true, reason: 'ok', liveCount: 1 });
+      createGuestAccount.mockRejectedValueOnce(new Error('name-required'));
+      render(CallLanding, { props: { pointer: POINTER } });
+      await fireEvent.click(await screen.findByTestId('call-landing-join'));
+      expect(await screen.findByTestId('call-prejoin-error')).toBeTruthy();
+      expect(screen.getByTestId('call-prejoin-error').textContent).toContain(
+        m.call_landing_name_required()
+      );
+    });
+
+    it('a retry after a failed join reuses the media chosen in the lobby', async () => {
+      activeUser = { pubkey: 'b'.repeat(64), signer: {} };
+      checkCallPass.mockResolvedValue({ valid: true, reason: 'ok', liveCount: 1 });
+      const view = render(CallLanding, { props: { pointer: POINTER } });
+      await fireEvent.click(await screen.findByTestId('call-landing-join-as'));
+      callState.phase = 'error';
+      callState.error = new Error('boom');
+      callState.isActiveFor = () => true;
+      await view.rerender({ pointer: { ...POINTER } });
+      await fireEvent.click(await screen.findByTestId('call-landing-retry'));
+      expect(joinGroupCall).toHaveBeenCalledTimes(2);
+      expect(joinGroupCall.mock.calls[1][2].media).toEqual({ audio: true, video: false });
+      callState.error = null;
+    });
+  });
+
   it('lets a logged-in person join with their own account and offers the channel', async () => {
     activeUser = { pubkey: 'b'.repeat(64), signer: {} };
     checkCallPass.mockResolvedValue({ valid: true, reason: 'ok', liveCount: 1 });

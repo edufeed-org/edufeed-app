@@ -170,6 +170,27 @@ export function setChatBeside(beside) {
   write('chatBeside', beside ? '1' : '0');
 }
 
+/** @typedef {{audio: boolean, video: boolean}} JoinMedia */
+
+/**
+ * The pre-join lobby's "join with microphone / camera on" toggles, as last
+ * chosen on this device. First visit: mic on, camera off — the lobby shows
+ * both, so nothing goes on air unseen.
+ * @returns {JoinMedia}
+ */
+export function getJoinMedia() {
+  const stored = readJson('joinMedia', {});
+  return {
+    audio: typeof stored.audio === 'boolean' ? stored.audio : true,
+    video: typeof stored.video === 'boolean' ? stored.video : false
+  };
+}
+
+/** @param {JoinMedia} media */
+export function setJoinMedia(media) {
+  write('joinMedia', JSON.stringify({ audio: !!media.audio, video: !!media.video }));
+}
+
 /** Camera background effect ('none' | 'blur' | 'custom' | 'preset:<id>'). */
 export function getBackgroundEffect() {
   return parseBackgroundEffect(read('background'));
