@@ -1093,6 +1093,7 @@
       {communityProfile}
       community={concord.dissolved ? undefined : concord.community}
       adminPubkeys={moderationPubkeys(getRootRoster().admins)}
+      rootMembers={getRootRoster().members}
       onClose={() => {
         overlay = null;
         clearChannelCreateRequest();
