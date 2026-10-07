@@ -15,6 +15,7 @@
   import { deleteEvent } from '$lib/helpers/eventDeletion.js';
   import { showToast } from '$lib/helpers/toast.js';
   import { renderMarkdown } from '$lib/helpers/markdown.js';
+  import { imetaByUrl } from '$lib/helpers/imeta.js';
   import { loadEventHighlights } from '$lib/loaders/event-highlights.js';
   import { useProfileMap } from '$lib/stores/profile-map.svelte.js';
   import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
@@ -87,7 +88,10 @@
   const isAuthor = $derived(activeUser?.pubkey === event.pubkey);
 
   // Render markdown to HTML
-  const htmlContent = $derived(renderMarkdown(event.content, { headingAnchors: true }));
+  // NIP-92: body images get width/height + fallback alt from the imeta tags.
+  const htmlContent = $derived(
+    renderMarkdown(event.content, { headingAnchors: true, imeta: imetaByUrl(event.tags) })
+  );
 
   // Address pointer for this article
   const addressPointer = $derived.by(() => ({

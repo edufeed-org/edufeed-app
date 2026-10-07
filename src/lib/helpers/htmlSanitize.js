@@ -49,6 +49,8 @@ export const ALLOWED_ATTR = [
   'src',
   'alt',
   'title',
+  'width',
+  'height',
   'class',
   'id',
   'aria-label',

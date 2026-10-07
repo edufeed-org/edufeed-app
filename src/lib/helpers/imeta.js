@@ -144,3 +144,74 @@ export function stripAttachmentUrls(content, attachments) {
     .replace(/\n{3,}/g, '\n\n')
     .trim();
 }
+
+/**
+ * Serialize one media attachment as a NIP-92 `imeta` tag (NIP-94 field
+ * names). Only fields that are present are written; returns null when there
+ * is no url or no second field (NIP-92: "MUST have a url, and at least one
+ * other field").
+ * @param {Partial<MediaAttachment> & { url?: string }} att
+ * @returns {string[] | null}
+ */
+export function buildImetaTag(att) {
+  if (!att?.url) return null;
+  /** @type {string[]} */
+  const fields = [`url ${att.url}`];
+  if (att.type) fields.push(`m ${att.type}`);
+  if (att.sha256) fields.push(`x ${att.sha256}`);
+  if (att.size) fields.push(`size ${att.size}`);
+  if (att.dimensions) fields.push(`dim ${att.dimensions}`);
+  if (att.blurhash) fields.push(`blurhash ${att.blurhash}`);
+  if (att.alt) fields.push(`alt ${att.alt}`);
+  if (fields.length < 2) return null;
+  return ['imeta', ...fields];
+}
+
+/**
+ * The `imeta` tags for a long-form body: one per media URL that is still
+ * present in `content`. Tags of a previous version (`existingTags`) are
+ * carried over as long as their URL is still referenced — an edit session
+ * only knows about the images uploaded in that session — and a fresh
+ * attachment for the same URL replaces the carried-over tag. Attachments
+ * whose URL the author removed from the text get no tag (NIP-92: each
+ * imeta SHOULD match a URL in the content).
+ * @param {string} content
+ * @param {Array<Partial<MediaAttachment> & { url?: string }>} attachments
+ * @param {string[][]} [existingTags]
+ * @returns {string[][]}
+ */
+export function collectImetaTags(content, attachments, existingTags = []) {
+  const text = content || '';
+  /** @type {Map<string, string[]>} */
+  const byUrl = new Map();
+  for (const tag of existingTags) {
+    if (tag[0] !== 'imeta') continue;
+    const url = parseImetaTag(tag)?.url;
+    if (url && text.includes(url)) byUrl.set(url, tag);
+  }
+  for (const att of attachments || []) {
+    if (!att?.url || !text.includes(att.url)) continue;
+    const tag = buildImetaTag(att);
+    if (tag) byUrl.set(att.url, tag);
+  }
+  return [...byUrl.values()];
+}
+
+/**
+ * Pure URL -> attachment lookup over an event's imeta tags (no caching on
+ * the event, so it is safe inside Svelte `$derived`). Keyed by the raw url
+ * as written in the tag.
+ * @param {string[][] | undefined | null} tags
+ * @returns {Map<string, MediaAttachment>}
+ */
+export function imetaByUrl(tags) {
+  /** @type {Map<string, MediaAttachment>} */
+  const map = new Map();
+  if (!Array.isArray(tags)) return map;
+  for (const tag of tags) {
+    if (tag[0] !== 'imeta') continue;
+    const att = parseImetaTag(tag);
+    if (att && !map.has(att.url)) map.set(att.url, att);
+  }
+  return map;
+}

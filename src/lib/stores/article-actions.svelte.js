@@ -12,6 +12,7 @@ import { publishEventOptimistic } from '$lib/services/publish-service.js';
 import { nextCreatedAt } from '$lib/helpers/replaceableUpdates.js';
 import { getAppRelaysForCategory } from '$lib/services/app-relay-service.svelte.js';
 import { getSha256FromURL } from 'applesauce-common/helpers';
+import { collectImetaTags } from '$lib/helpers/imeta.js';
 
 /** Kind number for NIP-23 long-form articles */
 const ARTICLE_KIND = 30023;
@@ -25,6 +26,7 @@ const ARTICLE_KIND = 30023;
  * @property {string} [imageHash] - SHA-256 of the cover image (for NIP-94 license attestation lookup)
  * @property {import('nostr-tools').NostrEvent | null} [imageLicenseEvent] - The cover's kind-1063 license attestation; rebroadcast with the article so its relays can resolve the badge
  * @property {string[]} [hashtags] - Optional hashtags
+ * @property {Array<Partial<import('$lib/helpers/imeta.js').MediaAttachment> & { url?: string }>} [media] - Images inserted into the body this session (NIP-94 fields from the upload); become NIP-92 imeta tags for the URLs still present in `content`
  */
 
 /**
@@ -49,9 +51,10 @@ function generateRandomId() {
  * @param {ArticleFormData} formData
  * @param {string} [dTag] - Optional d-tag (for updates)
  * @param {string} [communityPubkey] - Optional community targeting
+ * @param {string[][]} [existingTags] - Tags of the version being replaced (updates): their imeta tags are carried over while the URL is still in the body
  * @returns {string[][]}
  */
-export function buildArticleTags(formData, dTag, communityPubkey) {
+export function buildArticleTags(formData, dTag, communityPubkey, existingTags = []) {
   const tags = [
     ['d', dTag || generateRandomId()],
     ['title', formData.title]
@@ -86,6 +89,9 @@ export function buildArticleTags(formData, dTag, communityPubkey) {
   if (communityPubkey) {
     tags.push(['h', communityPubkey]);
   }
+
+  // NIP-92: one imeta per body image whose URL is still in the markdown.
+  tags.push(...collectImetaTags(formData.content, formData.media ?? [], existingTags));
 
   return tags;
 }
@@ -168,7 +174,7 @@ export async function updateArticle(formData, existingEvent, communityEvent = nu
   // Preserve h-tag if present
   const hTag = existingEvent.tags.find((/** @type {string[]} */ t) => t[0] === 'h')?.[1];
 
-  const tags = buildArticleTags(formData, dTag, hTag || undefined);
+  const tags = buildArticleTags(formData, dTag, hTag || undefined, existingEvent.tags);
 
   const eventFactory = createAppEventFactory();
   // Strictly newer than the version being replaced — a same-second edit is
