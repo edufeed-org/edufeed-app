@@ -39,6 +39,8 @@ vi.mock('$lib/paraglide/messages', () => ({
   community_join_invite_lead: () => 'Enter the invite code.',
   common_cancel: () => 'Cancel',
   community_join_invite_submit: () => 'Redeem',
+  community_join_invite_login_hint: () => 'Sign in to redeem the invite.',
+  community_join_invite_login_button: () => 'Sign in or create an account',
   community_join_refused: () => 'The relay declined this join request.',
   community_join_failed: (/** @type {{reason: string}} */ { reason }) => `Join failed: ${reason}`
 }));
@@ -58,6 +60,8 @@ vi.mock('$app/stores', () => ({
   }
 }));
 vi.mock('$lib/helpers/toast', () => ({ showToast: vi.fn() }));
+const modalStoreMock = vi.hoisted(() => ({ openModal: vi.fn() }));
+vi.mock('$lib/stores/modal.svelte.js', () => ({ modalStore: modalStoreMock }));
 
 const holders = vi.hoisted(() => ({
   joined: false,
@@ -446,6 +450,24 @@ describe('CommunityProfileHero — moderated join lane', () => {
     await waitFor(() =>
       expect(service).toHaveBeenCalledWith({ pointer: ROOT_POINTER, code: 'CODE123', user: USER })
     );
+  });
+
+  // Invite link / QR scanned without an account: the visitor is pointed at
+  // sign-in instead of a dead input, and the ?join= param is NOT stripped,
+  // so the modal comes back prefilled once they are signed in.
+  it('logged out, a ?join= param opens a sign-in prompt and keeps the param in the URL', async () => {
+    pageUrlHolder.url = new URL('http://localhost/c/test?join=CODE123');
+    holders.activeUser = null;
+    const { goto } = await import('$app/navigation');
+    renderModerated();
+
+    expect(screen.getByTestId('invite-code-login-hint')).toBeTruthy();
+    expect(screen.queryByTestId('invite-code-input')).toBeNull();
+    expect(goto).not.toHaveBeenCalled();
+
+    await fireEvent.click(screen.getByTestId('invite-code-login'));
+    expect(modalStoreMock.openModal).toHaveBeenCalledWith('login');
+    expect(screen.queryByTestId('invite-code-login-hint')).toBeNull();
   });
 });
 

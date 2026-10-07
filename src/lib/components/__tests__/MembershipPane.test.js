@@ -72,6 +72,9 @@ const { putUserOn, fanOut, channelRostersState } = vi.hoisted(() => ({
   }
 }));
 vi.mock('$lib/groups/roster-fanout.js', () => ({ putUserOn, fanOut }));
+vi.mock('qrcode', () => ({
+  default: { toDataURL: () => Promise.resolve('data:image/png;base64,QR') }
+}));
 vi.mock('$lib/groups/channel-rosters.svelte.js', () => ({
   useChannelRosters: () => () => channelRostersState
 }));
@@ -162,6 +165,13 @@ vi.mock('$lib/paraglide/messages', () => ({
   community_invite_failed: (/** @type {{reason: string}} */ p) =>
     `Code konnte nicht erstellt werden: ${p.reason}`,
   community_invite_clipboard_unavailable: () => 'Zwischenablage nicht verfügbar',
+  community_invite_link_title: () => 'Einladungslink',
+  community_invite_link_hint: () => 'Teile diesen Link oder den QR-Code.',
+  community_invite_link_copy: () => 'Link kopieren',
+  community_invite_link_copied: () => 'Link kopiert.',
+  community_invite_link_copy_failed: (/** @type {{reason: string}} */ p) =>
+    `Link konnte nicht kopiert werden: ${p.reason}`,
+  community_invite_qr_alt: () => 'QR-Code für den Einladungslink',
   community_join_requests_title: () => 'Beitrittsanfragen',
   community_join_requests_empty: () => 'Keine offenen Anfragen.',
   community_join_requests_lead: () => 'lead',
@@ -691,6 +701,23 @@ describe('MembershipPane — invite-code minting', () => {
     // Verify the code is displayed
     const codeElement = await screen.findByTestId('membership-invite-code');
     expect(codeElement).toBeTruthy();
+  });
+
+  it('shows the join link (page + ?join=<code>) with a QR code and a copy-link button after minting', async () => {
+    const { nip19 } = await import('nostr-tools');
+    render(MembershipPane, {
+      props: { communikeyEvent: eventWithoutApplication, communityId: OWNER, profileEvent }
+    });
+    expect(screen.queryByTestId('membership-invite-link-block')).toBeNull();
+
+    await fireEvent.click(screen.getByTestId('membership-invite-create'));
+    const codeElement = await screen.findByTestId('membership-invite-code');
+    const code = (codeElement.textContent ?? '').trim();
+
+    const link = screen.getByTestId('membership-invite-link-url').textContent ?? '';
+    expect(link.trim()).toBe(`${location.origin}/c/${nip19.npubEncode(OWNER)}?join=${code}`);
+    expect(await screen.findByTestId('membership-invite-link-qr')).toBeTruthy();
+    expect(screen.getByTestId('membership-invite-link-copy')).toBeTruthy();
   });
 
   it('displays a copy button for the generated code', async () => {

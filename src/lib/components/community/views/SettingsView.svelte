@@ -21,6 +21,8 @@
   import AccessTierEditor from '$lib/components/community/settings/AccessTierEditor.svelte';
   import SectionOverridePane from '$lib/components/community/settings/SectionOverridePane.svelte';
   import MembershipPane from '$lib/components/community/settings/MembershipPane.svelte';
+  import InviteLinkQr from '$lib/components/community/InviteLinkQr.svelte';
+  import { buildCommunityUrl } from '$lib/groups/invite-link.js';
   import CommunityBasicsForm from '$lib/components/community/settings/CommunityBasicsForm.svelte';
   import PublisherWindowPane from '$lib/components/community/settings/PublisherWindowPane.svelte';
   import { windowSectionKeys } from '$lib/concord/publisher-window.js';
@@ -591,6 +593,26 @@
             {profileEvent}
             onRolesChanged={(roles) => (roleSuggestions = roles)}
           />
+        {/if}
+
+        <!-- Open community: there is no invite code (anyone follows), so the
+             owner's invite is the community page itself — as link + QR for
+             flyers and chats. Moderated communities get the code-carrying
+             join link inside MembershipPane instead. -->
+        {#if isOwner && communityType === 'open'}
+          <div class="card mb-6 bg-base-100 shadow-xl" data-testid="settings-share-link-card">
+            <div class="card-body">
+              <h2 class="card-title">{m.community_share_link_title()}</h2>
+              <p class="text-sm text-base-content/70">{m.community_share_link_hint()}</p>
+              <InviteLinkQr
+                url={buildCommunityUrl(
+                  typeof location !== 'undefined' ? location.origin : '',
+                  communityId
+                )}
+                testid="settings-share-link"
+              />
+            </div>
+          </div>
         {/if}
 
         <!-- Inhalte & Rechte (Task 7) — moderated-only. Two routes to the

@@ -94,6 +94,9 @@ const rosterFixture = vi.hoisted(
 vi.mock('$lib/groups/root-roster.svelte.js', () => ({
   useRootRoster: () => () => rosterFixture.value
 }));
+vi.mock('qrcode', () => ({
+  default: { toDataURL: () => Promise.resolve('data:image/png;base64,QR') }
+}));
 
 const { default: SettingsView } = await import(
   '$lib/components/community/views/SettingsView.svelte'
@@ -488,5 +491,26 @@ describe('SettingsView — MembershipPane mount gate (Task 3: approvals reachabi
     expect(screen.getByTestId('membership-invite-create')).toBeTruthy();
     // The Beitrittsformular card is gone with the application-form layer.
     expect(screen.queryByTestId('membership-application-select')).toBeNull();
+  });
+});
+
+describe('SettingsView — share link for open communities', () => {
+  it('shows the community page link + QR for the owner of an open community', async () => {
+    const { nip19 } = await import('nostr-tools');
+    render(SettingsView, {
+      props: { communityId: OWNER, communikeyEvent: openEvent, profileEvent }
+    });
+    expect(screen.getByTestId('settings-share-link-card')).toBeTruthy();
+    expect(screen.getByTestId('settings-share-link-url').textContent?.trim()).toBe(
+      `${location.origin}/c/${nip19.npubEncode(OWNER)}`
+    );
+    expect(await screen.findByTestId('settings-share-link-qr')).toBeTruthy();
+  });
+
+  it('is not rendered for a moderated community (MembershipPane carries the join link)', () => {
+    render(SettingsView, {
+      props: { communityId: OWNER, communikeyEvent: moderatedEvent, profileEvent }
+    });
+    expect(screen.queryByTestId('settings-share-link-card')).toBeNull();
   });
 });

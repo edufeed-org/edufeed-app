@@ -14,6 +14,7 @@
   import { joinCommunityGroup } from '$lib/groups/join-community-group.js';
   import { isMembershipRefusal } from '$lib/groups/groups.js';
   import { useActiveUser } from '$lib/stores/accounts.svelte';
+  import { modalStore } from '$lib/stores/modal.svelte.js';
   import { showToast } from '$lib/helpers/toast';
   import { goto } from '$app/navigation';
   import { page } from '$app/stores';
@@ -69,11 +70,17 @@
   // effect keeps a dependency even on the early-return path — see CLAUDE.md
   // "Svelte effect early-return goes dead"), then strip the param via
   // replaceState so a reload doesn't re-open the modal.
+  // Logged-out arrival (invite link / QR scanned without an account): the
+  // modal opens with a sign-in prompt instead of the input, and the param
+  // stays in the URL so the effect re-runs — with the code still prefilled —
+  // once the visitor has signed in or created an account.
   $effect(() => {
     const code = $page.url.searchParams.get('join');
+    const user = activeUser;
     if (!code) return;
     inviteCode = code;
     showInviteInput = true;
+    if (!user) return;
     const url = new URL($page.url);
     url.searchParams.delete('join');
     goto(url, { replaceState: true, noScroll: true, keepFocus: true });
@@ -472,37 +479,63 @@
   <div class="modal-open modal" role="dialog">
     <div class="modal-box max-w-sm">
       <h3 class="text-lg font-extrabold">{m.community_join_invite_toggle()}</h3>
-      <p class="my-3 text-sm text-base-content/70">{m.community_join_invite_lead()}</p>
-      <input
-        type="text"
-        bind:value={inviteCode}
-        placeholder={m.community_join_invite_placeholder()}
-        aria-label={m.community_join_invite_placeholder()}
-        class="input-bordered input w-full"
-        data-testid="invite-code-input"
-      />
-      <div class="modal-action">
-        <button
-          class="btn btn-ghost"
-          onclick={() => {
-            showInviteInput = false;
-            inviteCode = '';
-          }}
-        >
-          {m.common_cancel()}
-        </button>
-        <button
-          onclick={handleJoinWithCode}
-          disabled={isSendingInvite || !inviteCode.trim()}
-          class="btn btn-primary"
-          data-testid="invite-code-submit"
-        >
-          {#if isSendingInvite}
-            <span class="loading loading-xs loading-spinner"></span>
-          {/if}
-          {m.community_join_invite_submit()}
-        </button>
-      </div>
+      {#if !activeUser}
+        <p class="my-3 text-sm text-base-content/70" data-testid="invite-code-login-hint">
+          {m.community_join_invite_login_hint()}
+        </p>
+        <div class="modal-action">
+          <button
+            class="btn btn-ghost"
+            onclick={() => {
+              showInviteInput = false;
+            }}
+          >
+            {m.common_cancel()}
+          </button>
+          <button
+            class="btn btn-primary"
+            data-testid="invite-code-login"
+            onclick={() => {
+              showInviteInput = false;
+              modalStore.openModal('login');
+            }}
+          >
+            {m.community_join_invite_login_button()}
+          </button>
+        </div>
+      {:else}
+        <p class="my-3 text-sm text-base-content/70">{m.community_join_invite_lead()}</p>
+        <input
+          type="text"
+          bind:value={inviteCode}
+          placeholder={m.community_join_invite_placeholder()}
+          aria-label={m.community_join_invite_placeholder()}
+          class="input-bordered input w-full"
+          data-testid="invite-code-input"
+        />
+        <div class="modal-action">
+          <button
+            class="btn btn-ghost"
+            onclick={() => {
+              showInviteInput = false;
+              inviteCode = '';
+            }}
+          >
+            {m.common_cancel()}
+          </button>
+          <button
+            onclick={handleJoinWithCode}
+            disabled={isSendingInvite || !inviteCode.trim()}
+            class="btn btn-primary"
+            data-testid="invite-code-submit"
+          >
+            {#if isSendingInvite}
+              <span class="loading loading-xs loading-spinner"></span>
+            {/if}
+            {m.community_join_invite_submit()}
+          </button>
+        </div>
+      {/if}
     </div>
   </div>
 {/if}

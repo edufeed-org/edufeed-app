@@ -35,6 +35,8 @@
     generateInviteCode,
     publishToGroupRelay
   } from '$lib/groups/group-management.js';
+  import { buildJoinUrl } from '$lib/groups/invite-link.js';
+  import InviteLinkQr from '$lib/components/community/InviteLinkQr.svelte';
   import JoinRequestsPanel from '$lib/components/community/settings/JoinRequestsPanel.svelte';
   import GroupMembersModal from '$lib/components/groups/GroupMembersModal.svelte';
   import * as m from '$lib/paraglide/messages';
@@ -86,6 +88,13 @@
 
   let generatedCode = $state('');
   let creatingCode = $state(false);
+  // Same link shape as the DM invite (AddMemberControl): the community page
+  // with `?join=<code>`, which CommunityProfileHero prefills on arrival.
+  const joinUrl = $derived(
+    generatedCode && typeof location !== 'undefined'
+      ? buildJoinUrl(location.origin, communityId, generatedCode)
+      : ''
+  );
 
   async function handleCreateInviteCode() {
     if (!activeUser || !roster.pointer || creatingCode) return;
@@ -196,6 +205,14 @@
           </div>
         {/if}
       </div>
+
+      {#if joinUrl}
+        <div class="mt-4" data-testid="membership-invite-link-block">
+          <h3 class="text-sm font-bold">{m.community_invite_link_title()}</h3>
+          <p class="mb-3 text-sm text-base-content/70">{m.community_invite_link_hint()}</p>
+          <InviteLinkQr url={joinUrl} testid="membership-invite-link" />
+        </div>
+      {/if}
 
       <div class="divider"></div>
       <JoinRequestsPanel {communityId} {roster} showEmpty={true} />
