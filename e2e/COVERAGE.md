@@ -1753,6 +1753,15 @@ needs both 'open' and 'moderated' creates).
    the type card updates to "Moderated", then flips back
    (`settings-flip-to-open` → confirm) and asserts it's "Open" again.
 
+**Status 2026-10-07 (issue wc4x0lnp):** both specs had been red since
+9598b982 — the wizard crashed in `CreateCommunityModal`'s root-group seeding
+(`getProfileContent(undefined)` for a creator without a cached kind 0, i.e.
+every fresh e2e key) with "Reflect.has called on non-object". Fixed in app
+code (`rootGroupSeed`, null-safe); the specs' own staleness was repaired
+alongside: the type card's title line now carries an engine badge and the
+card lists the other types in bold too (match the FIRST `p.font-semibold`
+by containment), and the member count is pluralised ("1 member").
+
 **Bug found and fixed while writing this spec:** `HomeView.svelte` gated its
 entire body (including `CommunityProfileHero`, which owns the invite-redeem
 UI) behind `{#if profileEvent && communikeyEvent}`. A community founded via
