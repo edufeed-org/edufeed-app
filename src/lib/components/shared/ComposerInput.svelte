@@ -62,7 +62,8 @@
    *   submitOnEnter?: boolean,
    *   placement?: 'above' | 'caret',
    *   ariaLabelledby?: string,
-   *   ariaDescribedby?: string
+   *   ariaDescribedby?: string,
+   *   onEscape?: () => void
    * }}
    */
   let {
@@ -88,7 +89,9 @@
     /** id of the visible label element (a contenteditable cannot use <label for>) */
     ariaLabelledby = undefined,
     /** id of a hint that says why the field is disabled, for instance */
-    ariaDescribedby = undefined
+    ariaDescribedby = undefined,
+    /** Escape with no autocomplete open (a host cancels its reply quote, say) */
+    onEscape = undefined
   } = $props();
 
   /** @type {HTMLDivElement | undefined} */
@@ -523,6 +526,10 @@
         query = null;
         return;
       }
+    }
+    if (event.key === 'Escape' && !event.isComposing) {
+      onEscape?.();
+      return;
     }
     if (event.key === 'Enter' && !event.isComposing) {
       if (!submitOnEnter) return; // newline (long-form bodies)

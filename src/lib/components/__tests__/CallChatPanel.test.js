@@ -478,3 +478,108 @@ describe('CallChatPanel emojis', () => {
     );
   });
 });
+
+// Issue "Video-Call chat: reply-to".
+describe('CallChatPanel replies', () => {
+  const BEA = 'b'.repeat(64) + ':1';
+  const ORIGINAL = {
+    id: '11111111-2222-4333-8444-555555555555',
+    identity: BEA,
+    text: 'erste Zeile\nzweite Zeile',
+    at: 1
+  };
+  const replyButton = (row) => row.querySelector('[data-testid="call-chat-reply"]');
+
+  it('offers "Antworten" on a message; choosing it shows the quote strip, cancel clears it', async () => {
+    state.callChat = [ORIGINAL];
+    render(CallChatPanel, { props });
+    const row = screen.getByTestId('call-chat-message');
+    const button = replyButton(row);
+    expect(button.getAttribute('aria-label')).toBe(m.groups_call_chat_reply());
+    await fireEvent.click(button);
+    const strip = screen.getByTestId('call-chat-reply-strip');
+    expect(strip.textContent).toContain(m.groups_call_chat_replying_to({ name: 'Bea' }));
+    expect(strip.textContent).toContain('erste Zeile');
+    expect(strip.textContent).not.toContain('zweite Zeile');
+    await fireEvent.click(screen.getByRole('button', { name: m.groups_call_chat_reply_cancel() }));
+    expect(screen.queryByTestId('call-chat-reply-strip')).toBeNull();
+  });
+
+  it('sends replyTo + replyPreview (author, first line) and drops the quote afterwards', async () => {
+    state.callChat = [ORIGINAL];
+    render(CallChatPanel, { props });
+    await fireEvent.click(replyButton(screen.getByTestId('call-chat-message')));
+    const input = screen.getByTestId('call-chat-input');
+    await typeIntoEditor(input, 'dazu: ja');
+    await fireEvent.keyDown(input, { key: 'Enter' });
+    expect(sendCallChat).toHaveBeenCalledWith(
+      'dazu: ja',
+      expect.objectContaining({
+        replyTo: ORIGINAL.id,
+        replyPreview: { n: 'Bea', text: 'erste Zeile' }
+      })
+    );
+    expect(screen.queryByTestId('call-chat-reply-strip')).toBeNull();
+  });
+
+  it('escape in the composer cancels the reply', async () => {
+    state.callChat = [ORIGINAL];
+    render(CallChatPanel, { props });
+    await fireEvent.click(replyButton(screen.getByTestId('call-chat-message')));
+    await fireEvent.keyDown(screen.getByTestId('call-chat-input'), { key: 'Escape' });
+    expect(screen.queryByTestId('call-chat-reply-strip')).toBeNull();
+  });
+
+  it('shows the quoted author + line above a reply, from the original when it is present, and jumps to it', async () => {
+    const scrollIntoView = vi.fn();
+    Element.prototype.scrollIntoView = scrollIntoView;
+    state.callChat = [
+      ORIGINAL,
+      {
+        id: 'r:1',
+        identity: 'c'.repeat(64) + ':1',
+        text: 'dazu: ja',
+        at: 2,
+        replyTo: ORIGINAL.id,
+        // the sender's preview may be stale: the live original wins
+        replyPreview: { n: 'B.', text: 'veraltet' }
+      }
+    ];
+    render(CallChatPanel, { props });
+    const [, reply] = screen.getAllByTestId('call-chat-message');
+    const quote = reply.querySelector('[data-testid="call-chat-quote"]');
+    expect(quote.tagName).toBe('BUTTON');
+    expect(quote.textContent).toContain('Bea');
+    expect(quote.textContent).toContain('erste Zeile');
+    expect(quote.textContent).not.toContain('veraltet');
+    await fireEvent.click(quote);
+    expect(scrollIntoView).toHaveBeenCalledTimes(1);
+    const [original] = screen.getAllByTestId('call-chat-message');
+    expect(original.dataset.flash).toBe('true');
+  });
+
+  it('falls back to the embedded preview (not clickable) when the original is missing', () => {
+    state.callChat = [
+      {
+        id: 'r:1',
+        identity: 'c'.repeat(64) + ':1',
+        text: 'dazu: ja',
+        at: 2,
+        replyTo: '99999999-2222-4333-8444-555555555555',
+        replyPreview: { n: 'Bea', text: 'erste Zeile' }
+      }
+    ];
+    render(CallChatPanel, { props });
+    const quote = screen.getByTestId('call-chat-quote');
+    expect(quote.tagName).not.toBe('BUTTON');
+    expect(quote.textContent).toContain('Bea');
+    expect(quote.textContent).toContain('erste Zeile');
+  });
+
+  it('hides the reply action while nothing can be sent', () => {
+    state.isConnected = false;
+    state.callChat = [ORIGINAL];
+    render(CallChatPanel, { props });
+    expect(replyButton(screen.getByTestId('call-chat-message'))).toBeNull();
+  });
+});

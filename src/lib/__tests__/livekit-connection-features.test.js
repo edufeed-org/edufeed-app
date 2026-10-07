@@ -787,3 +787,56 @@ describe('call chat payload: ids and custom emojis', () => {
     expect(typeof replay.ts).toBe('number');
   });
 });
+
+// Issue "Video-Call chat: reply-to": a reply points at the original's id and
+// embeds a preview (author + first line) so the quote shows even where the
+// original never arrived; both survive the late-joiner replay.
+describe('call chat payload: replies', () => {
+  const bob = remote('b'.repeat(64) + ':x');
+  const chatSends = () =>
+    room.localParticipant.publishData.mock.calls
+      .filter(([, opts]) => opts.topic === 'edufeed.call.chat')
+      .map(([bytes]) => decode(bytes));
+
+  it('sends replyTo + replyPreview, keeps them locally and replays them', async () => {
+    const replyTo = '11111111-2222-4333-8444-555555555555';
+    const replyPreview = { n: 'Bob', text: 'erste Zeile' };
+    await svc.sendCallChat('dazu: ja', { replyTo, replyPreview });
+    expect(chatSends().at(-1)).toMatchObject({ replyTo, replyPreview });
+    expect(svc.getLiveKitState().callChat.at(-1)).toMatchObject({ replyTo, replyPreview });
+    room.localParticipant.publishData.mockClear();
+    room.emit(RoomEvent.ParticipantConnected, remote('c'.repeat(64) + ':y'));
+    await new Promise((r) => setTimeout(r, 0));
+    expect(chatSends().at(-1)).toMatchObject({ replyTo, replyPreview, text: 'dazu: ja' });
+  });
+
+  it('drops a replyTo that is a legacy local key (no wire id) but keeps the preview', async () => {
+    await svc.sendCallChat('dazu', {
+      replyTo: `${bob.identity}:n1`,
+      replyPreview: { n: 'Bob', text: 'alt' }
+    });
+    const sent = chatSends().at(-1);
+    expect(sent.replyTo).toBeUndefined();
+    expect(sent.replyPreview).toEqual({ n: 'Bob', text: 'alt' });
+  });
+
+  it('keeps a received reply reference (validated) on the message', () => {
+    room.emit(
+      RoomEvent.DataReceived,
+      encode({
+        t: 'chat',
+        text: 'antwort',
+        n: 'r1',
+        replyTo: '11111111-2222-4333-8444-555555555555',
+        replyPreview: { n: 'Al', text: 'zeile 1\nzeile 2' }
+      }),
+      bob,
+      undefined,
+      'edufeed.call.chat'
+    );
+    expect(svc.getLiveKitState().callChat.at(-1)).toMatchObject({
+      replyTo: '11111111-2222-4333-8444-555555555555',
+      replyPreview: { n: 'Al', text: 'zeile 1' }
+    });
+  });
+});

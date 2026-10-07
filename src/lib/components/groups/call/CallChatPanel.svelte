@@ -28,7 +28,7 @@
   import { customEmojisIn } from '$lib/helpers/emoji-autocomplete.js';
   import { useUserEmojiSets } from '$lib/stores/user-emoji-sets.svelte.js';
   import { lazyComponent } from '$lib/helpers/lazy-component.svelte.js';
-  import { DownloadIcon, SmilePlusIcon } from '$lib/components/icons';
+  import { DownloadIcon, ReplyIcon, SmilePlusIcon } from '$lib/components/icons';
   import ComposerInput from '$lib/components/shared/ComposerInput.svelte';
   import ImageWithFallback from '$lib/components/shared/ImageWithFallback.svelte';
   import LinkPreview from '$lib/components/shared/LinkPreview.svelte';
@@ -76,6 +76,76 @@
     if (typeof emoji !== 'string') pickedUrls = { ...pickedUrls, [emoji.shortcode]: emoji.url };
     composer?.insert(emoji);
     pickerOpen = false;
+  }
+
+  // Reply-to: the next message points at `replyTarget.id` and embeds the
+  // quote (author + first line) so it shows even where the original never
+  // arrived (joined later, sender already gone).
+  /** @type {import('$lib/services/livekit-connection.svelte.js').CallChatMessage | null} */
+  let replyTarget = $state(null);
+  /** The row a quote click just jumped to — highlighted for a moment. */
+  /** @type {string | null} */
+  let flashId = $state(null);
+  /** @type {ReturnType<typeof setTimeout> | undefined} */
+  let flashTimer;
+
+  /** @param {string} text */
+  const firstLine = (text) => text.split(/\r\n|\r|\n/)[0].trim();
+
+  /** @param {import('$lib/services/livekit-connection.svelte.js').CallChatMessage} msg */
+  function startReply(msg) {
+    if (!canSend) return;
+    replyTarget = msg;
+    composer?.focus();
+  }
+  function cancelReply() {
+    replyTarget = null;
+  }
+
+  // Long-press on a touch screen is the "Antworten" of a row without hover.
+  /** @type {ReturnType<typeof setTimeout> | undefined} */
+  let pressTimer;
+  /** @param {PointerEvent} e @param {import('$lib/services/livekit-connection.svelte.js').CallChatMessage} msg */
+  function pressStart(e, msg) {
+    if (e.pointerType !== 'touch') return;
+    clearTimeout(pressTimer);
+    pressTimer = setTimeout(() => startReply(msg), 500);
+  }
+  function pressEnd() {
+    clearTimeout(pressTimer);
+  }
+
+  /**
+   * What a reply quotes: the live original when it is still here (its
+   * current author name and text win over the sender's embedded preview,
+   * which may be stale), else the embedded preview.
+   * @param {import('$lib/services/livekit-connection.svelte.js').CallChatMessage} msg
+   * @returns {{ name: string, text: string, targetId: string | null } | null}
+   */
+  function quoteOf(msg) {
+    const original = msg.replyTo ? lk.callChat.find((c) => c.id === msg.replyTo) : undefined;
+    if (original) {
+      return {
+        name: nameOf(original.identity),
+        text: firstLine(original.text),
+        targetId: original.id
+      };
+    }
+    if (msg.replyPreview)
+      return { name: msg.replyPreview.n, text: msg.replyPreview.text, targetId: null };
+    return null;
+  }
+
+  /** Scroll the quoted original into view and flash it. @param {string} id */
+  function jumpTo(id) {
+    const row = Array.from(listEl?.querySelectorAll('[data-call-chat-id]') ?? []).find(
+      (el) => /** @type {HTMLElement} */ (el).dataset.callChatId === id
+    );
+    if (!row) return;
+    row.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    flashId = id;
+    clearTimeout(flashTimer);
+    flashTimer = setTimeout(() => (flashId = null), 1500);
   }
 
   const getProfiles = useProfileMap(() =>
@@ -211,7 +281,17 @@
     const emoji = customEmojisIn(text, sets).map(
       (e) => /** @type {[string, string]} */ ([e.shortcode, e.url])
     );
-    await sendCallChat(text, { emoji });
+    const reply = replyTarget;
+    replyTarget = null;
+    await sendCallChat(text, {
+      emoji,
+      ...(reply
+        ? {
+            replyTo: reply.id,
+            replyPreview: { n: nameOf(reply.identity), text: firstLine(reply.text) }
+          }
+        : {})
+    });
   }
 </script>
 
@@ -232,7 +312,11 @@
       <DownloadIcon class_="h-4 w-4" title="" />
     </button>
   </div>
-  <div bind:this={listEl} class="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto p-3">
+  <div
+    bind:this={listEl}
+    class="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto p-3"
+    role="list"
+  >
     {#if lk.callChat.length === 0}
       <p class="m-auto cursor-default text-center text-sm text-base-content/60 select-none">
         {m.groups_call_chat_empty()}
@@ -241,7 +325,20 @@
     {#each lk.callChat as msg, i (msg.id)}
       {@const pk = identityToPubkey(msg.identity)}
       {@const body = parsed.get(msg.id)}
-      <div class="flex items-start gap-2 text-sm" data-testid="call-chat-message">
+      <div
+        class="group relative -mx-1 flex items-start gap-2 rounded px-1 text-sm transition-colors {flashId ===
+        msg.id
+          ? 'bg-primary/10'
+          : ''}"
+        role="listitem"
+        data-testid="call-chat-message"
+        data-call-chat-id={msg.id}
+        data-flash={flashId === msg.id ? 'true' : undefined}
+        onpointerdown={(e) => pressStart(e, msg)}
+        onpointerup={pressEnd}
+        onpointercancel={pressEnd}
+        onpointerleave={pressEnd}
+      >
         {#if pk}
           <!-- Avatar + name are one hover/click target (same pattern as
                ParticipantTile): hovering either shows the profile hover
@@ -298,6 +395,30 @@
           <span class="font-semibold">{nameOf(msg.identity)}</span>
         {/if}
         <div class="flex min-w-0 flex-1 flex-col gap-1">
+          {#if msg.replyTo || msg.replyPreview}
+            {@const quote = quoteOf(msg)}
+            {#if quote?.targetId}
+              <button
+                type="button"
+                class="flex max-w-full min-w-0 cursor-pointer gap-1 border-l-2 border-primary/60 pl-2 text-left text-xs text-base-content/70 hover:text-base-content"
+                aria-label={m.groups_call_chat_jump_to_original()}
+                title={m.groups_call_chat_jump_to_original()}
+                onclick={() => jumpTo(/** @type {string} */ (quote.targetId))}
+                data-testid="call-chat-quote"
+              >
+                <span class="shrink-0 font-semibold">{quote.name}</span>
+                <span class="truncate">{quote.text}</span>
+              </button>
+            {:else if quote}
+              <div
+                class="flex max-w-full min-w-0 gap-1 border-l-2 border-base-300 pl-2 text-xs text-base-content/70"
+                data-testid="call-chat-quote"
+              >
+                <span class="shrink-0 font-semibold">{quote.name}</span>
+                <span class="truncate">{quote.text}</span>
+              </div>
+            {/if}
+          {/if}
           <!-- Escaped text and plain anchors only: the text is whatever a
                participant (guests included) sent, never HTML. -->
           <span class="break-words whitespace-pre-wrap"
@@ -325,6 +446,20 @@
             <LinkPreview {url} />
           {/each}
         </div>
+        {#if canSend}
+          <!-- Hover/focus reveals it; on a touch screen (no hover) it stays
+               visible and a long-press on the row does the same. -->
+          <button
+            type="button"
+            class="btn btn-square shrink-0 opacity-0 btn-ghost btn-xs group-hover:opacity-100 focus-visible:opacity-100 [@media(hover:none)]:opacity-60"
+            aria-label={m.groups_call_chat_reply()}
+            title={m.groups_call_chat_reply()}
+            onclick={() => startReply(msg)}
+            data-testid="call-chat-reply"
+          >
+            <ReplyIcon class="h-3.5 w-3.5" />
+          </button>
+        {/if}
       </div>
     {/each}
   </div>
@@ -337,8 +472,32 @@
       {m.groups_call_chat_offline()}
     </p>
   {/if}
+  {#if replyTarget}
+    <div
+      class="flex items-center gap-2 border-t border-base-300 bg-base-200 px-3 py-1 text-xs"
+      data-testid="call-chat-reply-strip"
+    >
+      <ReplyIcon class="h-3.5 w-3.5 shrink-0 text-base-content/60" />
+      <span class="shrink-0 font-medium text-base-content/70"
+        >{m.groups_call_chat_replying_to({ name: nameOf(replyTarget.identity) })}</span
+      >
+      <span class="min-w-0 flex-1 truncate text-base-content/80">{firstLine(replyTarget.text)}</span
+      >
+      <button
+        type="button"
+        class="btn btn-square btn-ghost btn-xs"
+        aria-label={m.groups_call_chat_reply_cancel()}
+        title={m.groups_call_chat_reply_cancel()}
+        onclick={cancelReply}
+      >
+        ✕
+      </button>
+    </div>
+  {/if}
   <form
-    class="relative flex items-center gap-1 p-2 {lk.isConnected ? 'border-t border-base-300' : ''}"
+    class="relative flex items-center gap-1 p-2 {lk.isConnected && !replyTarget
+      ? 'border-t border-base-300'
+      : ''}"
     onsubmit={(e) => {
       e.preventDefault();
       send();
@@ -378,6 +537,7 @@
       disabled={!canSend}
       onfocus={() => (pickerOpen = false)}
       onSubmit={send}
+      onEscape={cancelReply}
       class="input-bordered input input-sm flex items-center"
       ariaDescribedby={lk.isConnected ? undefined : offlineHintId}
       testid="call-chat-input"
