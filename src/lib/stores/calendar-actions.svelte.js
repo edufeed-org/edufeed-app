@@ -9,7 +9,9 @@ import { nextCreatedAt, cachePublishedEvent } from '$lib/helpers/replaceableUpda
 import {
   validateEventForm,
   convertFormDataToEvent,
-  buildCalendarEventTags
+  buildCalendarEventTags,
+  mergeFormOwnedTags,
+  CALENDAR_FORM_OWNED_TAGS
 } from '../helpers/calendar.js';
 import { calendarStore } from './calendar-events.svelte.js';
 import { getCalendarEventMetadata } from '../helpers/eventUtils.js';
@@ -197,8 +199,15 @@ export function createCalendarActions(_communityPubkey) {
         // Create the calendar event using EventFactory with the SAME d-tag
         const eventFactory = createAppEventFactory();
 
-        // Build NIP-52 compliant tags (reuses original d-tag for replacement)
-        const tags = buildCalendarEventTags(formData, eventData, dTag, hTags);
+        // Build NIP-52 compliant tags (reuses original d-tag for replacement),
+        // then lay them over the existing event's tags: the form only replaces
+        // the tags it manages, so `summary`, `a` references, `g`, NIP-32
+        // labels and other clients' custom tags survive the edit.
+        const tags = mergeFormOwnedTags(
+          existingEvent.tags,
+          buildCalendarEventTags(formData, eventData, dTag, hTags),
+          CALENDAR_FORM_OWNED_TAGS
+        );
 
         // Build and sign the updated calendar event.
         //
