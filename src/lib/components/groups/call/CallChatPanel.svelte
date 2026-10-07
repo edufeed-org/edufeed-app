@@ -46,6 +46,7 @@
   } from '$lib/groups/call-chat-mentions.js';
   import { useUserEmojiSets } from '$lib/stores/user-emoji-sets.svelte.js';
   import { lazyComponent } from '$lib/helpers/lazy-component.svelte.js';
+  import { isPreviewableCallFile } from '$lib/groups/call-files.js';
   import { CloseIcon, DownloadIcon, ReplyIcon, SmilePlusIcon } from '$lib/components/icons';
   import ComposerInput from '$lib/components/shared/ComposerInput.svelte';
   import ImageWithFallback from '$lib/components/shared/ImageWithFallback.svelte';
@@ -580,15 +581,14 @@
               class="flex w-fit max-w-full flex-col gap-1 rounded-box border border-base-300 bg-base-200 px-3 py-2"
               data-testid="call-chat-file"
             >
-              {#if f.status === 'done' && f.url && f.mime.startsWith('image/')}
-                <a href={f.url} target="_blank" rel="noopener noreferrer">
-                  <img
-                    src={f.url}
-                    alt={f.name}
-                    class="max-h-48 max-w-full rounded object-contain"
-                    loading="lazy"
-                  />
-                </a>
+              {#if f.status === 'done' && f.url && isPreviewableCallFile(f.mime)}
+                <!-- Inline only, never a link that opens the blob as a document. -->
+                <img
+                  src={f.url}
+                  alt={f.name}
+                  class="max-h-48 max-w-full rounded object-contain"
+                  loading="lazy"
+                />
               {/if}
               <div class="flex min-w-0 items-center gap-2">
                 <span class="min-w-0 truncate font-medium" title={f.name}>{f.name}</span>

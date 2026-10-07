@@ -219,6 +219,38 @@ describe('receiving a file', () => {
     expect(unreadMod.getCallChatUnread().count).toBe(1);
   });
 
+  it("never trusts the sender's type: only raster images keep it, the rest become opaque downloads", async () => {
+    const html = reader(
+      {
+        id: 'S9',
+        name: 'harmlos.html',
+        size: 3,
+        mimeType: 'text/html',
+        attributes: { id: 'h'.repeat(12) }
+      },
+      [bytes(3)]
+    );
+    await handler()(html, { identity: BOB });
+    const svg = reader(
+      {
+        id: 'S10',
+        name: 'logo.svg',
+        size: 3,
+        mimeType: 'image/svg+xml',
+        attributes: { id: 's'.repeat(12) }
+      },
+      [bytes(3)]
+    );
+    await handler()(svg, { identity: BOB });
+    const byName = Object.fromEntries(files().map((f) => [f.file.name, f.file]));
+    expect(byName['harmlos.html'].mime).toBe('application/octet-stream');
+    expect(byName['logo.svg'].mime).toBe('application/octet-stream');
+    expect(createdUrls.map((u) => u.blob.type)).toEqual([
+      'application/octet-stream',
+      'application/octet-stream'
+    ]);
+  });
+
   it('falls back to <identity>:<stream id> when the sender declares no id', async () => {
     await handler()(reader({ id: 'S2', name: 'a.txt', size: 1 }, [bytes(1)]), { identity: BOB });
     expect(files()[0].id).toBe(`${BOB}:S2`);

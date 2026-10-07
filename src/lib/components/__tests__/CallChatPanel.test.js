@@ -913,6 +913,33 @@ describe('CallChatPanel files', () => {
     expect(csv.querySelector('img')).toBeNull();
     expect(csv.querySelector('a[download]').getAttribute('href')).toBe('blob:csv');
     expect(csv.textContent).toContain('99 B');
+    // The blob is same-origin: the preview is never a link that opens it as
+    // a document, and only the download link points at it.
+    expect(img.querySelector('a:not([download])')).toBeNull();
+    expect(img.querySelector('a[target]')).toBeNull();
+  });
+
+  it('never previews a file outside the raster allowlist, however it is typed', () => {
+    state.callChat = [
+      {
+        id: 'f:5',
+        identity: BEA,
+        text: '',
+        at: 1,
+        file: {
+          name: 'logo.svg',
+          size: 12,
+          mime: 'image/svg+xml',
+          status: 'done',
+          progress: 1,
+          url: 'blob:svg'
+        }
+      }
+    ];
+    render(CallChatPanel, { props });
+    const bubble = screen.getByTestId('call-chat-file');
+    expect(bubble.querySelector('img')).toBeNull();
+    expect(bubble.querySelector('a[download]').getAttribute('href')).toBe('blob:svg');
   });
 
   it('says so when a transfer failed', () => {
