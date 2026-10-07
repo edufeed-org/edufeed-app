@@ -67,6 +67,7 @@
     MicIcon,
     MicOffIcon,
     VideoIcon,
+    VideoOffIcon,
     ScreenShareIcon,
     HandIcon,
     SmilePlusIcon,
@@ -950,7 +951,11 @@
               onclick={onToggleCamera}
               title={lk.isCameraOff ? m.groups_call_camera_on() : m.groups_call_camera_off()}
             >
-              <VideoIcon class_="w-5 h-5" title="" />
+              {#if lk.isCameraOff}
+                <VideoOffIcon class_="w-5 h-5" title="" />
+              {:else}
+                <VideoIcon class_="w-5 h-5" title="" />
+              {/if}
             </button>
             {@render menuButton('camera', m.groups_call_camera_options())}
             {#if openMenu === 'camera'}
