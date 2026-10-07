@@ -570,10 +570,17 @@
         </div>
       {/if}
 
-      <!-- Keywords (Tags) -->
+      <!-- Keywords (Tags). The wizard preview shows all of them (a keyword the
+           user just added must be visible); feed cards cap at 5 and let
+           EventTags render the "+N" overflow instead of silently dropping the rest. -->
       {#if resource.keywords.length > 0 && !compact}
         <div class="flex flex-wrap gap-1">
-          <EventTags tags={resource.keywords.slice(0, 5)} size="sm" targetRoute="/discover" />
+          <EventTags
+            tags={resource.keywords}
+            maxDisplay={preview ? undefined : 5}
+            size="sm"
+            targetRoute="/discover"
+          />
         </div>
       {/if}
 
