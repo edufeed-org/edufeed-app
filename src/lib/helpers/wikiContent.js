@@ -98,9 +98,13 @@ function renderDjot(content) {
         const children = renderer.renderChildren(node);
         return `<a href="${href}">${children}</a>`;
       },
+      // Autolinks (`<https://…>`) are leaf nodes: `text` only, no `children`.
+      // renderChildren() on them throws and the whole article falls back to
+      // raw text, so the label is the escaped URL itself.
       url: (node, renderer) => {
-        const href = rewriteNostrHref(node.text || '');
-        return `<a href="${href}">${renderer.renderChildren(/** @type {any} */ (node))}</a>`;
+        const text = node.text || '';
+        const href = rewriteNostrHref(text);
+        return `<a href="${renderer.escapeAttribute(href)}">${renderer.escape(text)}</a>`;
       }
     }
   });

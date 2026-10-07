@@ -80,6 +80,27 @@ describe('renderWikiContent', () => {
     expect(html).toContain('click here');
   });
 
+  it('renders Djot autolinks (<https://…>) as links with the URL as label', async () => {
+    // Djot `url` nodes are leaves (text only, no children) — the override must not
+    // call renderChildren on them, or the whole article falls back to raw text.
+    const html = await renderWikiContent('See <https://example.com/a?b=1&c=2> now.');
+    expect(html).toContain('href="https://example.com/a?b=1&amp;c=2"');
+    expect(html).toContain('>https://example.com/a?b=1&amp;c=2</a>');
+    expect(html).not.toContain('&lt;https');
+  });
+
+  it('rewrites nostr: autolinks to app paths', async () => {
+    const html = await renderWikiContent('<nostr:npub1abc123>');
+    expect(html).toContain('href="/npub1abc123"');
+  });
+
+  it('keeps rendering an article whose only autolink sits in a list item', async () => {
+    const html = await renderWikiContent('## Refs\n\n- Source: <https://example.org/x>.\n');
+    expect(html).toContain('<h2');
+    expect(html).toContain('<li>');
+    expect(html).toContain('href="https://example.org/x"');
+  });
+
   it('rewrites nostr: links to app paths', async () => {
     const html = await renderWikiContent('[profile](nostr:npub1abc123)');
     expect(html).toContain('href="/npub1abc123"');
