@@ -7,6 +7,7 @@
 <script>
   import { onMount } from 'svelte';
   import { fade } from 'svelte/transition';
+  import { provideHoverCardHold } from './hover-card-hold.js';
 
   /**
    * @typedef {Object} Props
@@ -65,6 +66,28 @@
   /** @type {HTMLDivElement | undefined} */
   let popupEl = $state();
 
+  // Pending async actions started from inside the card (follow, wave). While
+  // any is outstanding the leave timer does not close the card; a leave that
+  // fired meanwhile is remembered and replayed once the last hold settles,
+  // so the card still goes away if the pointer is gone by then.
+  let holds = 0;
+  let closeAfterHold = false;
+
+  provideHoverCardHold({
+    hold(promise) {
+      holds++;
+      const release = () => {
+        holds--;
+        if (holds === 0 && closeAfterHold) {
+          closeAfterHold = false;
+          handleMouseLeave();
+        }
+      };
+      promise.then(release, release);
+      return promise;
+    }
+  });
+
   function clearTimers() {
     if (enterTimer) clearTimeout(enterTimer);
     if (leaveTimer) clearTimeout(leaveTimer);
@@ -108,6 +131,7 @@
 
   function handleMouseEnter() {
     clearTimers();
+    closeAfterHold = false;
     enterTimer = setTimeout(() => {
       updateFixedPosition();
       isOpen = true;
@@ -117,6 +141,10 @@
   function handleMouseLeave() {
     clearTimers();
     leaveTimer = setTimeout(() => {
+      if (holds > 0) {
+        closeAfterHold = true;
+        return;
+      }
       isOpen = false;
     }, leaveDelay);
   }

@@ -9,8 +9,7 @@
   import { getProfileLookupRelays, getAllLookupRelays } from '$lib/helpers/relay-helper.js';
   import { getWriteRelays } from '$lib/services/relay-service.svelte.js';
   import { contactsStore } from '$lib/stores/contacts.svelte.js';
-  import { actionRunner } from '$lib/stores/action-runner.svelte.js';
-  import { FollowUser, UnfollowUser } from 'applesauce-actions/actions';
+  import { toggleFollow } from '$lib/helpers/follow.js';
   import { useActiveUser } from '$lib/stores/accounts.svelte.js';
   import { modalStore } from '$lib/stores/modal.svelte.js';
   import { showToast } from '$lib/helpers/toast';
@@ -277,16 +276,7 @@
     if (!activeUser || followLoading) return;
     followLoading = true;
     try {
-      if (isFollowing) {
-        await actionRunner.run(UnfollowUser, data.pubkey);
-        showToast(m.profile_unfollow_success(), 'success');
-      } else {
-        await actionRunner.run(FollowUser, data.pubkey);
-        showToast(m.profile_follow_success(), 'success');
-      }
-    } catch (err) {
-      console.error('Follow action failed:', err);
-      showToast(m.profile_follow_error(), 'error');
+      await toggleFollow(data.pubkey, isFollowing);
     } finally {
       followLoading = false;
     }

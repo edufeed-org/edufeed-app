@@ -1,7 +1,7 @@
 <!--
   ProfileHoverCardContent Component
   Displays a compact profile preview for hover cards:
-  banner + avatar overlap + name + nip05/npub + bio + badges + wave
+  banner + avatar overlap + name + nip05/npub + bio + badges + wave + follow
 -->
 
 <script>
@@ -16,6 +16,11 @@
   import ImageWithFallback from './ImageWithFallback.svelte';
   import BadgeThumb from '../badges/BadgeThumb.svelte';
   import WaveButton from '../waves/WaveButton.svelte';
+  import { contactsStore } from '$lib/stores/contacts.svelte.js';
+  import { toggleFollow } from '$lib/helpers/follow.js';
+  import { useHoverCardHold } from './hover-card-hold.js';
+  import { CheckIcon, PlusIcon } from '$lib/components/icons';
+  import * as m from '$lib/paraglide/messages';
 
   /**
    * @typedef {Object} Props
@@ -53,6 +58,42 @@
     });
     return () => sub.unsubscribe();
   });
+
+  // Follow / unfollow (same action + toasts as the profile page, via
+  // toggleFollow). Offered only once the active user's own kind 3 is in the
+  // EventStore: FollowUser creates a fresh contact list when none is loaded,
+  // and a hover card must never risk wiping a list that just hasn't arrived
+  // yet. (The profile page remains the place that bootstraps a first list.)
+  let contactListLoaded = $state(false);
+  $effect(() => {
+    const me = activeUser?.pubkey;
+    if (!me) {
+      contactListLoaded = false;
+      return;
+    }
+    const sub = eventStore.replaceable(3, me).subscribe((event) => {
+      contactListLoaded = !!event;
+    });
+    return () => sub.unsubscribe();
+  });
+  let isFollowing = $derived(contactsStore.contacts.includes(pubkey));
+  let showFollow = $derived(!!showWave && contactsStore.isLoaded && contactListLoaded);
+  let followLoading = $state(false);
+  const hold = useHoverCardHold();
+
+  /** @param {MouseEvent} e */
+  async function handleFollow(e) {
+    // The whole card is a link to the profile — keep the click local.
+    e.preventDefault();
+    e.stopPropagation();
+    if (followLoading) return;
+    followLoading = true;
+    try {
+      await hold(toggleFollow(pubkey, isFollowing));
+    } finally {
+      followLoading = false;
+    }
+  }
 </script>
 
 <a href={resolve(profileLink(pubkey))} class="block w-72 overflow-hidden rounded-lg">
@@ -89,7 +130,7 @@
     {/if}
 
     {#if badges.length > 0 || showWave}
-      <div class="mt-2 flex items-center justify-between">
+      <div class="mt-2 flex items-center justify-between gap-2">
         {#if badges.length > 0}
           <div class="flex -space-x-1">
             {#each badges.slice(0, 5) as badge (badge.id)}
@@ -104,8 +145,31 @@
         {:else}
           <div></div>
         {/if}
-        {#if showWave && profileEvent}
-          <WaveButton {profileEvent} pubkey={activeUser.pubkey} />
+        {#if showWave}
+          <div class="flex items-center gap-1">
+            {#if profileEvent}
+              <WaveButton {profileEvent} pubkey={activeUser.pubkey} />
+            {/if}
+            {#if showFollow}
+              <button
+                type="button"
+                class="btn btn-sm {isFollowing ? 'btn-ghost' : 'btn-primary'}"
+                data-testid="hover-card-follow"
+                disabled={followLoading}
+                onclick={handleFollow}
+              >
+                {#if followLoading}
+                  <span class="loading loading-xs loading-spinner"></span>
+                {:else if isFollowing}
+                  <CheckIcon class_="w-4 h-4" />
+                  {m.profile_unfollow_button()}
+                {:else}
+                  <PlusIcon class_="w-4 h-4" />
+                  {m.profile_follow_button()}
+                {/if}
+              </button>
+            {/if}
+          </div>
         {/if}
       </div>
     {/if}
