@@ -47,10 +47,17 @@ const forgetGuestAccount = vi.fn();
 const createGuestAccount = vi.fn(
   async (_name) => (activeUser = { pubkey: 'a'.repeat(64), signer: {} })
 );
+const isCallGuest = vi.fn(() => true);
 vi.mock('$lib/groups/guest-account.js', () => ({
   createGuestAccount: (...a) => createGuestAccount(...a),
-  isCallGuest: () => true,
+  isCallGuest: (...a) => isCallGuest(...a),
   forgetGuestAccount: (...a) => forgetGuestAccount(...a)
+}));
+// The channel's NIP-29 roster (kind 39002/39001 through the eventStore):
+// a logged-in member should not travel the guest path at all.
+const rosters = { membersByKey: {}, adminsByKey: {}, fetchedKeys: new Set(), refresh: vi.fn() };
+vi.mock('$lib/groups/channel-rosters.svelte.js', () => ({
+  useChannelRosters: () => () => rosters
 }));
 const mockModalStore = { openModal: vi.fn() };
 vi.mock('$lib/stores/modal.svelte.js', () => ({ modalStore: mockModalStore }));
@@ -65,6 +72,7 @@ vi.mock(
   () => import('./fixtures/CallChatPanelStub.svelte')
 );
 
+const { channelKey } = await import('$lib/groups/community-pointer.js');
 const { default: CallLanding } = await import('$lib/components/groups/call/CallLanding.svelte');
 const POINTER = { id: 'g1', relay: 'wss://groups.example/' };
 const CODE = 'C'.repeat(22);
@@ -79,6 +87,10 @@ beforeEach(() => {
   callState.chatBeside = true;
   registerCallStageView.mockImplementation(() => () => {});
   getProfile.mockReturnValue(null);
+  isCallGuest.mockReturnValue(true);
+  rosters.membersByKey = {};
+  rosters.adminsByKey = {};
+  rosters.fetchedKeys = new Set();
   window.location.hash = '#' + CODE;
   sessionStorage.clear();
   setWide(false);
@@ -183,6 +195,50 @@ describe('CallLanding', () => {
       expect.objectContaining({ code: CODE })
     );
     expect(screen.getByTestId('call-landing-channel').getAttribute('href')).toContain('/groups/');
+  });
+  // Issue "member of the General channel got the Gast badge after joining
+  // via guest link": a logged-in member is told so and joins the normal way,
+  // so the code never travels for them.
+  it('a logged-in member of the channel is told so and joins without the code', async () => {
+    const pubkey = 'b'.repeat(64);
+    activeUser = { pubkey, signer: {} };
+    isCallGuest.mockReturnValue(false);
+    rosters.membersByKey = { [channelKey(POINTER)]: new Set([pubkey]) };
+    checkCallPass.mockResolvedValue({ valid: true, reason: 'ok', liveCount: 1 });
+    render(CallLanding, { props: { pointer: POINTER } });
+    expect(await screen.findByTestId('call-landing-member')).toBeTruthy();
+    expect(screen.queryByTestId('call-landing-join-as')).toBeNull();
+    await fireEvent.click(screen.getByTestId('call-landing-join-member'));
+    expect(joinGroupCall).toHaveBeenCalledTimes(1);
+    const [pointerArg, userArg, view] = joinGroupCall.mock.calls[0];
+    expect(pointerArg).toEqual(POINTER);
+    expect(userArg).toBe(activeUser);
+    expect(view.code).toBeUndefined();
+    expect(view.title).toBeDefined();
+  });
+  it('a logged-in non-member (roster fetched, not on it) keeps the guest flow', async () => {
+    activeUser = { pubkey: 'b'.repeat(64), signer: {} };
+    isCallGuest.mockReturnValue(false);
+    rosters.membersByKey = { [channelKey(POINTER)]: new Set(['c'.repeat(64)]) };
+    rosters.fetchedKeys = new Set([channelKey(POINTER)]);
+    checkCallPass.mockResolvedValue({ valid: true, reason: 'ok', liveCount: 1 });
+    render(CallLanding, { props: { pointer: POINTER } });
+    await fireEvent.click(await screen.findByTestId('call-landing-join-as'));
+    expect(screen.queryByTestId('call-landing-member')).toBeNull();
+    expect(joinGroupCall).toHaveBeenCalledWith(
+      POINTER,
+      activeUser,
+      expect.objectContaining({ code: CODE })
+    );
+  });
+  it('a member on the roster only through an admin entry (39001) counts as a member', async () => {
+    const pubkey = 'b'.repeat(64);
+    activeUser = { pubkey, signer: {} };
+    isCallGuest.mockReturnValue(false);
+    rosters.adminsByKey = { [channelKey(POINTER)]: [{ pubkey, roles: ['admin'] }] };
+    checkCallPass.mockResolvedValue({ valid: true, reason: 'ok', liveCount: 1 });
+    render(CallLanding, { props: { pointer: POINTER } });
+    expect(await screen.findByTestId('call-landing-member')).toBeTruthy();
   });
   it('shows the start time for a link that is not open yet', async () => {
     checkCallPass.mockResolvedValue({

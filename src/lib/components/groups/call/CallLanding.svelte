@@ -15,6 +15,8 @@
     GUEST_LATE_S
   } from '$lib/groups/meetings.js';
   import { groupHref } from '$lib/groups/groups.js';
+  import { useChannelRosters } from '$lib/groups/channel-rosters.svelte.js';
+  import { rosterView } from '$lib/groups/root-roster.js';
   import { identityToPubkey } from '$lib/groups/livekit.js';
   import {
     getGroupCallState,
@@ -63,6 +65,20 @@
   const call = getGroupCallState();
   const me = $derived(getActiveUser());
   const guestHere = $derived(!!me && isCallGuest(me.pubkey));
+  // A logged-in account that is already on the channel's NIP-29 roster
+  // (kind 39002, admins 39001) joins the normal way: the relay would seat it
+  // as a member anyway (the code is ignored for members), so the code should
+  // not travel and the page should not read like a guest flow. Only an
+  // affirmative roster hit switches; "not known" stays the guest path. The
+  // roster is asked only for a real account — a call guest is never on it.
+  const getRosters = useChannelRosters(() =>
+    pointer && me?.signer && !guestHere ? [pointer] : []
+  );
+  const memberHere = $derived.by(() => {
+    if (!pointer || !me?.signer || guestHere) return false;
+    const { membersByKey, adminsByKey, fetchedKeys } = getRosters();
+    return rosterView(pointer, membersByKey, adminsByKey, fetchedKeys).isMember(me.pubkey);
+  });
 
   const code = typeof window !== 'undefined' ? readPassCodeFromHash(window.location.hash) : null;
   /** @type {any} */
@@ -380,7 +396,8 @@
     await joinGroupCall(pointer, user, {
       title,
       href: `${location.pathname}${location.hash}`,
-      code
+      // A member joins as a member: no pass code in the token request.
+      ...(memberHere ? {} : { code })
     });
   }
 
@@ -414,7 +431,7 @@
       await joinGroupCall(pointer, user, {
         title,
         href: `${location.pathname}${location.hash}`,
-        code: call.code ?? code ?? undefined
+        ...(memberHere ? {} : { code: call.code ?? code ?? undefined })
       });
     }
   }
@@ -623,7 +640,25 @@
               </p>
             {/if}
             {#if me}
-              {#if me.signer}
+              {#if memberHere}
+                <p class="text-sm text-base-content/70" data-testid="call-landing-member">
+                  {m.call_landing_member()}
+                </p>
+                <button
+                  class="btn btn-primary"
+                  onclick={joinWithAccount}
+                  data-testid="call-landing-join-member"
+                >
+                  {m.call_landing_join_member()}
+                </button>
+                <a
+                  class="link text-sm"
+                  href={pointer ? groupHref(pointer) : '/'}
+                  data-testid="call-landing-channel"
+                >
+                  {m.call_landing_channel_link()}
+                </a>
+              {:else if me.signer}
                 <button
                   class="btn btn-primary"
                   onclick={joinWithAccount}
