@@ -7,6 +7,7 @@ import { runtimeConfig } from '$lib/stores/config.svelte.js';
 import { getSeenRelays, normalizeURL } from 'applesauce-core/helpers';
 import { activeDateLocale, formatDate } from '$lib/helpers/dates.js';
 import { normalizeHashtags } from '$lib/helpers/hashtags.js';
+import * as m from '$lib/paraglide/messages';
 import {
   parseCalendarTimestamp,
   getIcsEventTiming,
@@ -406,22 +407,22 @@ export function validateEventForm(formData) {
   const errors = [];
 
   if (!formData.title?.trim()) {
-    errors.push('Event title is required');
+    errors.push(m.event_modal_error_title_required());
   }
 
   if (!formData.startDate) {
-    errors.push('Start date is required');
+    errors.push(m.event_modal_error_start_date_required());
   }
 
   if (formData.eventType === 'time' && !formData.startTime) {
-    errors.push('Start time is required for time-based events');
+    errors.push(m.event_modal_error_start_time_required());
   }
 
   if (formData.endDate && formData.startDate) {
     const startDate = new Date(formData.startDate);
     const endDate = new Date(formData.endDate);
     if (endDate < startDate) {
-      errors.push('End date cannot be before start date');
+      errors.push(m.event_modal_error_end_date_before_start());
     }
   }
 
@@ -429,7 +430,7 @@ export function validateEventForm(formData) {
     const startTime = new Date(`2000-01-01T${formData.startTime}`);
     const endTime = new Date(`2000-01-01T${formData.endTime}`);
     if (endTime <= startTime && formData.startDate === formData.endDate) {
-      errors.push('End time must be after start time for same-day events');
+      errors.push(m.event_modal_error_end_time_before_start());
     }
   }
 
