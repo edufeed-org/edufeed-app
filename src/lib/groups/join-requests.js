@@ -176,3 +176,38 @@ export function readAllDismissedJoinRequests() {
   }
   return all;
 }
+
+/**
+ * Where a declined row's 9005s go: one target per request id, paired with the
+ * pointer of the group that request knocked on (`ids[i]` ↔ `groupIds[i]`, both
+ * newest-first from pendingJoinRequests). A group nobody can resolve a pointer
+ * for yields no target — a 9005 on the wrong group is rejected by the relay
+ * ("none of the targets exist in this relay"), so guessing is pointless.
+ *
+ * Why delete at all: Ignorieren used to be a per-device localStorage note, so
+ * the stored 9021 came back on every other device, browser profile and admin
+ * (issue wcv7uqqa). NIP-29 has no "reject" moderation kind; the admin
+ * delete-event (9005) is how a request leaves the relay for everyone. A newer
+ * re-request is a new event and resurfaces — by design.
+ *
+ * @param {JoinRequestRow} row
+ * @param {{
+ *   rootPointer: {id: string, relay: string} | null | undefined,
+ *   channelPointers: Array<{id: string, relay: string}>
+ * }} groups
+ * @returns {Array<{pointer: {id: string, relay: string}, groupId: string, eventId: string}>}
+ */
+export function rejectionTargets(row, { rootPointer, channelPointers }) {
+  /** @type {Array<{pointer: {id: string, relay: string}, groupId: string, eventId: string}>} */
+  const targets = [];
+  (row?.ids ?? []).forEach((eventId, index) => {
+    const groupId = row.groupIds?.[index] ?? '';
+    const pointer =
+      rootPointer && (groupId === rootPointer.id || groupId === '')
+        ? rootPointer
+        : (channelPointers ?? []).find((candidate) => candidate.id === groupId);
+    if (!pointer?.id || !pointer.relay || typeof eventId !== 'string' || !eventId) return;
+    targets.push({ pointer, groupId: pointer.id, eventId });
+  });
+  return targets;
+}

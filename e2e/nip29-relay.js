@@ -21,6 +21,7 @@ const REMOVE_USER_KIND = 9001;
 const CREATE_INVITE_KIND = 9009;
 const JOIN_REQUEST_KIND = 9021;
 const LEAVE_REQUEST_KIND = 9022;
+const DELETE_EVENT_KIND = 9005;
 const GROUP_METADATA_KIND = 39000;
 const GROUP_ADMINS_KIND = 39001;
 const GROUP_MEMBERS_KIND = 39002;
@@ -32,7 +33,8 @@ const MODERATION_KINDS = new Set([
   REMOVE_USER_KIND,
   CREATE_INVITE_KIND,
   JOIN_REQUEST_KIND,
-  LEAVE_REQUEST_KIND
+  LEAVE_REQUEST_KIND,
+  DELETE_EVENT_KIND
 ]);
 
 const NIP11 = JSON.stringify({
@@ -110,7 +112,7 @@ function applyMetadataTags(metadata, tags) {
  * Apply one NIP-29 moderation event to the relay's group-state map.
  * @param {Map<string, GroupState>} groups
  * @param {import('nostr-tools').NostrEvent} event
- * @returns {{group: GroupState, changed: boolean} | null} null when the
+ * @returns {{group: GroupState, changed: boolean, stored?: boolean, deletes?: string[]} | null} null when the
  *   event carries no resolvable group id (or targets an unknown group,
  *   for any kind other than create).
  */
@@ -164,10 +166,23 @@ function applyModerationEvent(groups, event) {
         group.members.add(event.pubkey);
         return { group, changed: true };
       }
-      if (!group.metadata.isOpen) return { group, changed: false }; // closed: ignored
+      // Closed group, no code: real relays (pyramid, khatru) STORE the bare
+      // request so admins can read it back as the "Beitrittsanfragen" queue
+      // (JoinRequestsPanel). `stored: true` asks the caller to persist + fan
+      // out the raw 9021 — the one moderation command that is queryable.
+      if (!group.metadata.isOpen) return { group, changed: false, stored: true };
       group.members.add(event.pubkey);
       return { group, changed: true };
     }
+
+    case DELETE_EVENT_KIND:
+      // Admin delete-event: the caller drops every `e`-tagged event of this
+      // group from the store (the declined 9021s, deleted chat messages).
+      return {
+        group,
+        changed: false,
+        deletes: event.tags.filter((t) => t[0] === 'e').map((t) => t[1])
+      };
 
     case LEAVE_REQUEST_KIND:
       group.members.delete(event.pubkey); // 39002 only, symmetric with remove-user
@@ -342,8 +357,20 @@ export function startRelay(port) {
                 fanOut(subscriptions, rosterEvent);
               }
             }
+            if (result?.deletes?.length) {
+              const gone = new Set(result.deletes);
+              for (let i = storedEvents.length - 1; i >= 0; i--) {
+                if (gone.has(storedEvents[i].id)) storedEvents.splice(i, 1);
+              }
+            }
             // Raw moderation commands aren't persisted/queryable — only the
-            // roster state they produce (39000/39001/39002) is.
+            // roster state they produce (39000/39001/39002) is. The one
+            // exception is a bare join request on a closed group, which real
+            // relays keep for the admin queue.
+            if (result?.stored) {
+              storeEvent(storedEvents, event);
+              fanOut(subscriptions, event);
+            }
             return;
           }
 

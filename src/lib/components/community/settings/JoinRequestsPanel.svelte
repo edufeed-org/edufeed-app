@@ -18,8 +18,10 @@
   + — for every channel the applicant specifically asked for — a put-user on
   that channel too (A4, 2026-08-19: the members-tier blanket fan-out is
   retired; members join those channels themselves via their own 9021).
-  Ignorieren = local dismissal of ALL of the row's REQUEST ids (a newer
-  re-request resurfaces).
+  Ablehnen = local dismissal of ALL of the row's REQUEST ids PLUS a kind-9005
+  delete-event per ask on its group relay (issue wcv7uqqa: a localStorage-only
+  dismissal came back on every other device and admin); a newer re-request is
+  a new event and resurfaces.
 
   Group-aware queue (final-review fix, 2026-08-19): membership is checked
   PER GROUP, not just against the root roster — an existing community member
@@ -45,6 +47,7 @@
   import { useChannelRosters } from '$lib/groups/channel-rosters.svelte.js';
   import { useCommunityChannels } from '$lib/groups/community-channels.svelte.js';
   import { putUserOn } from '$lib/groups/roster-fanout.js';
+  import { rejectJoinRequest } from '$lib/groups/reject-join-request.js';
   import { resolveGroupActor } from '$lib/groups/group-actor.js';
   import { isAlreadyMemberError } from '$lib/groups/groups.js';
   import { useActiveUser, manager } from '$lib/stores/accounts.svelte';
@@ -282,14 +285,43 @@
     }
   }
 
-  /** @param {import('$lib/groups/join-requests.js').JoinRequestRow} row */
-  function ignoreRequest(row) {
+  /**
+   * Decline: hide locally at once, then delete every ask of the row on the
+   * relay of the group it knocked on (kind 9005). The local dismissal alone
+   * was the bug behind issue wcv7uqqa — it lives in ONE browser's
+   * localStorage, so the stored 9021 came back on every other device and for
+   * every other admin "after some time". The relay delete is what makes the
+   * decline stick; the local hide stays as the optimistic/offline layer, and
+   * a refused delete is reported rather than silently degraded to it.
+   * @param {import('$lib/groups/join-requests.js').JoinRequestRow} row
+   */
+  async function ignoreRequest(row) {
     // eslint-disable-next-line svelte/prefer-svelte-reactivity -- $state.raw Set, replaced wholesale (CLAUDE.md pattern)
     const next = new Set(dismissedIds);
     // Every ask merged into this row — dismissing the person, not one event.
     for (const id of row.ids) next.add(id);
     dismissedIds = next;
     writeDismissedJoinRequests(communityId, next);
+
+    // Same signing identity as approval: a 39001 moderator signs as
+    // themselves, the key-holding owner as the community (group-actor.js).
+    const user = resolveGroupActor(activeUser, roster.admins, communityId);
+    if (!user) return;
+    const { failed } = await rejectJoinRequest({
+      row,
+      rootPointer: roster.pointer,
+      channelPointers,
+      user: /** @type {any} */ (user)
+    });
+    if (failed.length > 0) {
+      const error = failed[0].error;
+      showToast(
+        m.community_join_request_reject_failed({
+          reason: error instanceof Error ? error.message : String(error)
+        }),
+        'warning'
+      );
+    }
   }
 
   /**

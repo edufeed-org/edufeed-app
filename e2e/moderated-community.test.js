@@ -207,6 +207,68 @@ test.describe('moderated community lifecycle', () => {
     await ownerContext.close();
     await guestContext.close();
   });
+
+  // Issue wcv7uqqa: "Ignorieren" was a per-browser localStorage note, so a
+  // declined request came back on every other device and for every other
+  // admin as soon as the stored 9021 was fetched again. Declining now also
+  // deletes the request on the relay (kind 9005). The second owner context
+  // below IS the other device: a fresh profile with no localStorage.
+  test('declined join request stays gone on another device', async ({ browser }) => {
+    test.setTimeout(180_000);
+    const ownerContext = await browser.newContext();
+    const guestContext = await browser.newContext();
+    const owner = await ownerContext.newPage();
+    const guest = await guestContext.newPage();
+
+    const ownerNsec = nip19.nsecEncode(generateSecretKey());
+    const guestSk = generateSecretKey();
+    const guestPubkeyHex = getPublicKey(guestSk);
+
+    await bootstrapLogin(owner, ownerNsec);
+    const communityNpub = await createCommunityViaWizard(owner, 'moderated');
+
+    // --- guest: bare "Request to join" on the closed root group (stored 9021)
+    await bootstrapLogin(guest, nip19.nsecEncode(guestSk));
+    const requestButton = vis(guest.getByTestId('join-request-button'));
+    await expect(async () => {
+      await guest.goto(`/c/${communityNpub}`);
+      await expect(requestButton).toBeVisible({ timeout: 10_000 });
+    }).toPass({ timeout: 30_000 });
+    await requestButton.click();
+    await expect(vis(guest.getByText('Request sent', { exact: false }))).toBeVisible({
+      timeout: 15_000
+    });
+
+    // --- owner (device A): the request shows up in the queue; decline it
+    const requestRow = vis(
+      owner.locator(`[data-testid="join-request-row"][data-pubkey="${guestPubkeyHex}"]`)
+    );
+    await expect(async () => {
+      await owner.goto(`/c/${communityNpub}?view=settings`);
+      await expect(requestRow).toBeVisible({ timeout: 10_000 });
+    }).toPass({ timeout: 45_000 });
+    await requestRow.getByTestId('join-request-ignore').click();
+    await expect(requestRow).not.toBeVisible({ timeout: 10_000 });
+
+    // --- owner (device B): fresh context, same key, no localStorage dismissal
+    const otherDevice = await browser.newContext();
+    const ownerB = await otherDevice.newPage();
+    await bootstrapLogin(ownerB, ownerNsec);
+    await ownerB.goto(`/c/${communityNpub}?view=settings`);
+    await expect(vis(ownerB.getByTestId('membership-pane'))).toBeVisible({ timeout: 20_000 });
+    // Positive signal first (the queue has answered and is empty), then the
+    // negative one: the declined request did not come back.
+    await expect(vis(ownerB.getByTestId('join-requests-empty'))).toBeVisible({
+      timeout: 30_000
+    });
+    await expect(
+      ownerB.locator(`[data-testid="join-request-row"][data-pubkey="${guestPubkeyHex}"]`)
+    ).toHaveCount(0);
+
+    await otherDevice.close();
+    await ownerContext.close();
+    await guestContext.close();
+  });
 });
 
 test.describe('community type flip lifecycle', () => {

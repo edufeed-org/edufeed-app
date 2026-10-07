@@ -213,3 +213,45 @@ describe('pendingJoinRequests', () => {
     expect(rows).toEqual([]);
   });
 });
+
+// Issue wcv7uqqa ("Denied Membership requests pop up again and again"):
+// Ignorieren used to be a per-device localStorage dismissal only. The 9021
+// stayed stored on the relay, so every other device, browser profile and
+// admin fetched it again — the queue "popped up again after some time".
+// Declining now ALSO deletes the request on the relay (NIP-29 kind 9005,
+// admin delete-event, which the pyramid honours for any h-tagged event of
+// the group). rejectionTargets pairs each of a row's request ids with the
+// group it knocked on, so the 9005 lands on the right group and relay.
+describe('rejectionTargets', () => {
+  const ROOT_PTR = { id: ROOT, relay: 'wss://groups.example/' };
+  const CHAN_PTR = { id: CHAN, relay: 'wss://groups.example/c/root1' };
+
+  it('maps every request id of a merged row to the pointer of the group it knocked on', async () => {
+    const { rejectionTargets } = await import('$lib/groups/join-requests.js');
+    const [row] = pendingJoinRequests({
+      events: [req(A, 100, { id: 'r-root' }), req(A, 200, { id: 'r-chan', groupId: CHAN })],
+      membersByGroup: new Map(),
+      rootId: ROOT,
+      dismissed: new Set()
+    });
+    const targets = rejectionTargets(row, { rootPointer: ROOT_PTR, channelPointers: [CHAN_PTR] });
+    expect(targets).toEqual([
+      { pointer: CHAN_PTR, groupId: CHAN, eventId: 'r-chan' },
+      { pointer: ROOT_PTR, groupId: ROOT, eventId: 'r-root' }
+    ]);
+  });
+
+  it('skips asks for groups nobody can resolve a pointer for, instead of guessing a relay', async () => {
+    const { rejectionTargets } = await import('$lib/groups/join-requests.js');
+    const [row] = pendingJoinRequests({
+      events: [req(A, 100, { id: 'r-root' }), req(A, 200, { id: 'r-x', groupId: 'unknown' })],
+      membersByGroup: new Map(),
+      rootId: ROOT,
+      dismissed: new Set()
+    });
+    expect(rejectionTargets(row, { rootPointer: ROOT_PTR, channelPointers: [] })).toEqual([
+      { pointer: ROOT_PTR, groupId: ROOT, eventId: 'r-root' }
+    ]);
+    expect(rejectionTargets(row, { rootPointer: null, channelPointers: [] })).toEqual([]);
+  });
+});

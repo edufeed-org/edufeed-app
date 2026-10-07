@@ -166,7 +166,9 @@ vi.mock('$lib/paraglide/messages', () => ({
   community_join_requests_empty: () => 'Keine offenen Anfragen.',
   community_join_requests_lead: () => 'lead',
   community_join_requests_approve: () => 'Aufnehmen',
-  community_join_requests_ignore: () => 'Ignorieren',
+  community_join_requests_ignore: () => 'Ablehnen',
+  community_join_request_reject_failed: (/** @type {{reason: string}} */ p) =>
+    `Ablehnen auf dem Relay fehlgeschlagen: ${p.reason}`,
   community_join_request_approved: () => 'Aufgenommen.',
   community_join_request_approve_failed: (/** @type {{reason: string}} */ p) =>
     `Aufnahme fehlgeschlagen: ${p.reason}`,
@@ -633,6 +635,57 @@ describe('MembershipPane — Beitrittsanfragen (NIP-29 join requests)', () => {
     await new Promise((r) => setTimeout(r, 20));
     // Neither the root ask nor the channel ask resurfaces.
     expect(screen.queryByTestId('join-request-row')).toBeNull();
+  });
+
+  // Issue wcv7uqqa: a dismissal that lives only in this browser's localStorage
+  // comes back on every other device/admin — the 9021 is still on the relay.
+  // Declining must delete each ask on the relay of the group it knocked on
+  // (NIP-29 kind 9005), on top of the local hide.
+  it('decline deletes every ask of the row on its group relay via kind 9005', async () => {
+    relayRequestEvents.value = [
+      req(APPLICANT, 100, 'r-root', 'root1'),
+      req(APPLICANT, 200, 'r-chan1', 'chan1')
+    ];
+    communityChannelsState.channels = [chanFix('chan1', 'Willkommen')];
+    render(MembershipPane, {
+      props: {
+        communikeyEvent: communikeyEvent([['membership', 'root1', GROUPS_RELAY]]),
+        communityId: OWNER,
+        profileEvent
+      }
+    });
+    await fireEvent.click(await screen.findByTestId('join-request-ignore'));
+    expect(screen.queryByTestId('join-request-row')).toBeNull();
+
+    await waitFor(() => expect(publishToGroupRelay).toHaveBeenCalledTimes(2));
+    /** @type {any[][]} */
+    const calls = publishToGroupRelay.mock.calls;
+    const deletes = calls.map((call) => call[1]);
+    expect(deletes.every((t) => t.kind === 9005)).toBe(true);
+    /** @param {any} t @param {string} name */
+    const tag = (t, name) => t.tags.find((/** @type {string[]} */ x) => x[0] === name)?.[1];
+    const byEvent = Object.fromEntries(deletes.map((t) => [tag(t, 'e'), tag(t, 'h')]));
+    expect(byEvent).toEqual({ 'r-root': 'root1', 'r-chan1': 'chan1' });
+    // Signed by the moderation actor (owner is a 39001 admin here).
+    for (const call of calls) expect(call[2].pubkey).toBe(OWNER);
+    expect(showToast).not.toHaveBeenCalledWith(expect.anything(), 'warning');
+  });
+
+  it('a relay refusing the delete keeps the local hide and warns', async () => {
+    relayRequestEvents.value = [req(APPLICANT, 100, 'r-root', 'root1')];
+    publishToGroupRelay.mockRejectedValueOnce(new Error('restricted: not an admin'));
+    render(MembershipPane, {
+      props: {
+        communikeyEvent: communikeyEvent([['membership', 'root1', GROUPS_RELAY]]),
+        communityId: OWNER,
+        profileEvent
+      }
+    });
+    await fireEvent.click(await screen.findByTestId('join-request-ignore'));
+    expect(screen.queryByTestId('join-request-row')).toBeNull();
+    await waitFor(() =>
+      expect(showToast).toHaveBeenCalledWith(expect.stringContaining('restricted'), 'warning')
+    );
   });
 
   it('ignore hides the request and persists across a remount', async () => {
