@@ -177,3 +177,44 @@ describe('ParticipantsEditor', () => {
     expect(readParticipants(getByTestId('participants-json'))).toEqual([]);
   });
 });
+
+// Issue "Video-Call: host role": a channel meeting's participant picker gets
+// a per-person "Co-Host" switch that writes the NIP-52 p-tag role the group
+// relay reads as a call co-host.
+describe('ParticipantsEditor — co-host toggle (channel meetings)', () => {
+  it('is absent unless asked for', () => {
+    const { queryByTestId } = render(Host, {
+      props: { initial: [{ pubkey: PK_A, role: 'participant' }] }
+    });
+    expect(queryByTestId('participant-cohost-toggle')).toBeNull();
+  });
+
+  it('writes role co-host when switched on and drops the role when switched off', async () => {
+    const { getByTestId, getAllByTestId } = render(Host, {
+      props: {
+        cohostToggle: true,
+        initial: [
+          { pubkey: PK_A, relay: 'wss://relay.test/', role: 'participant' },
+          { pubkey: PK_B, role: 'moderator' },
+          { name: 'Ada' }
+        ]
+      }
+    });
+    const toggles = /** @type {HTMLInputElement[]} */ (getAllByTestId('participant-cohost-toggle'));
+    expect(toggles).toHaveLength(2); // a named participant has no seat in the call
+    expect(toggles[0].checked).toBe(false);
+    expect(toggles[1].checked).toBe(true); // moderator already counts as co-host
+
+    toggles[0].click();
+    await tick();
+    expect(readParticipants(getByTestId('participants-json'))).toEqual([
+      { pubkey: PK_A, relay: 'wss://relay.test/', role: 'co-host' },
+      { pubkey: PK_B, role: 'moderator' },
+      { name: 'Ada' }
+    ]);
+
+    getAllByTestId('participant-cohost-toggle')[1].click();
+    await tick();
+    expect(readParticipants(getByTestId('participants-json'))[1]).toEqual({ pubkey: PK_B });
+  });
+});

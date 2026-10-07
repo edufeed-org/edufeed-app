@@ -18,11 +18,23 @@
     PARTICIPANT_ROLE_PRESETS,
     participantRoleLabel
   } from '$lib/helpers/participant-roles.js';
+  import { isCohostRole, withCohostRole } from '$lib/groups/meeting-roles.js';
 
   /** @typedef {import('$lib/types/calendar.js').CalendarEventParticipant} Participant */
 
-  /** @type {{participants?: Participant[], disabled?: boolean, label?: string, help?: string}} */
-  let { participants = $bindable([]), disabled = false, label = '', help = '' } = $props();
+  /**
+   * `cohostToggle` (channel meetings): each Nostr participant gets a
+   * "Co-Host" switch that writes the `p`-tag role the group relay reads as
+   * a call co-host (meeting-roles.js) — instead of the role badge.
+   * @type {{participants?: Participant[], disabled?: boolean, label?: string, help?: string, cohostToggle?: boolean}}
+   */
+  let {
+    participants = $bindable([]),
+    disabled = false,
+    label = '',
+    help = '',
+    cohostToggle = false
+  } = $props();
 
   const ROLE_PRESETS = PARTICIPANT_ROLE_PRESETS;
 
@@ -90,6 +102,12 @@
     const key = participantKey(participant);
     participants = participants.filter((p) => participantKey(p) !== key);
   }
+
+  /** @param {Participant} participant @param {boolean} on */
+  function setCohost(participant, on) {
+    const key = participantKey(participant);
+    participants = participants.map((p) => (participantKey(p) === key ? withCohostRole(p, on) : p));
+  }
 </script>
 
 <div class="form-control">
@@ -116,7 +134,19 @@
             </span>
             <span class="min-w-0 flex-1 truncate text-sm">{participant.name}</span>
           {/if}
-          {#if participant.role}
+          {#if cohostToggle && participant.pubkey}
+            <label class="label cursor-pointer gap-1 py-0">
+              <input
+                type="checkbox"
+                class="checkbox checkbox-xs"
+                data-testid="participant-cohost-toggle"
+                checked={isCohostRole(participant.role)}
+                {disabled}
+                onchange={(e) => setCohost(participant, e.currentTarget.checked)}
+              />
+              <span class="label-text text-xs">{m.participant_role_cohost()}</span>
+            </label>
+          {:else if participant.role}
             <span class="badge badge-outline badge-sm">{roleLabel(participant.role)}</span>
           {/if}
           <button

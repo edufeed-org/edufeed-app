@@ -209,6 +209,24 @@ show a "Gast" badge instead. Calls also carry an ephemeral LiveKit-data chat
 (topic `edufeed.call.chat`) separate from the group's normal "Kanal" chat,
 which guests never see.
 
+**Host and co-host.** The relay decides who hosts a call (the meeting's
+author, else whoever opened the room; co-hosts from the meeting's `p`-tag
+roles or promoted in the call — "Host and co-host" in
+`docs/nips/nip29-call-passes.md`) and writes it into participant metadata.
+`participantCallRole()` (`livekit.js`) reads it the way `isGuestParticipant`
+does; the stage shows "Host"/"Co-Host" badges on tiles and rows and the
+viewer's own role in the header. Host actions (mute, stop camera, stop
+screen share, remove, make/revoke co-host) sit in the participant list's
+row menu (`CallHostActions.svelte` via the panel's `menuExtras`) and go
+through `moderateActiveCall()` (`group-call.svelte.js`) →
+`moderateCall()`, a NIP-98 POST to `…/livekit/<group-id>/moderate`; the
+relay does the work with its admin token. A server-side mute reaches the
+muted client as `TrackMuted` on its own publication; the connection service
+keeps `isMuted`/`isCameraOff` truthful and turns a muted screen share into a
+stopped one. The meeting dialog's participant picker offers a per-person
+"Co-Host" switch (`ParticipantsEditor` `cohostToggle`, `meeting-roles.js`)
+that writes the `p`-tag role.
+
 ## Scheduled meetings
 
 A channel meeting is a NIP-52 kind 31923 event with **exactly one**

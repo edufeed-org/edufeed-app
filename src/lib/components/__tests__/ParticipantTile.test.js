@@ -36,6 +36,8 @@ vi.mock('$lib/paraglide/messages', () => ({
   groups_call_pin: () => 'Pin',
   groups_call_unpin: () => 'Unpin',
   groups_call_guest_badge: () => 'Gast',
+  groups_call_host_badge: () => 'Host',
+  groups_call_cohost_badge: () => 'Co-Host',
   groups_call_tile_you: () => 'Du'
 }));
 
@@ -196,5 +198,28 @@ describe('ParticipantTile', () => {
     });
     expect(screen.getByText('Du')).toBeTruthy();
     expect(screen.queryByText('You')).toBeNull();
+  });
+
+  // Issue "Video-Call: host role": the relay writes the seat's role into its
+  // metadata; the tile shows it like the guest badge.
+  it('shows a Host / Co-Host badge for the role, none for a plain seat', () => {
+    const { unmount } = render(ParticipantTile, {
+      props: { participant: fakeParticipant(`${HEX}:x1`), pubkey: HEX, role: 'host' }
+    });
+    const badge = screen.getByTestId('call-role-badge');
+    expect(badge.textContent.trim()).toBe('Host');
+    expect(badge.dataset.role).toBe('host');
+    expect(screen.queryByTestId('call-guest-badge')).toBeNull();
+    unmount();
+
+    render(ParticipantTile, {
+      props: { participant: fakeParticipant(`${HEX}:x1`), pubkey: HEX, role: 'cohost' }
+    });
+    expect(screen.getByTestId('call-role-badge').textContent.trim()).toBe('Co-Host');
+  });
+
+  it('has no role badge by default', () => {
+    render(ParticipantTile, { props: { participant: fakeParticipant(`${HEX}:x1`), pubkey: HEX } });
+    expect(screen.queryByTestId('call-role-badge')).toBeNull();
   });
 });

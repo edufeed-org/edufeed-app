@@ -16,6 +16,7 @@ export const PARTICIPANT_ROLE_PRESETS = [
 
 /** @type {Record<string, () => string>} */
 const ROLE_LABELS = {
+  'co-host': m.participant_role_cohost,
   participant: m.participant_role_participant,
   attendee: m.participant_role_attendee,
   speaker: m.participant_role_speaker,

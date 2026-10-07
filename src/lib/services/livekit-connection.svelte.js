@@ -59,6 +59,11 @@ let remoteParticipants = $state.raw([]);
 
 /** @type {import('livekit-client').LocalParticipant | null} */
 let localParticipant = $state(null);
+// Bumped whenever a participant's metadata changes (the relay pushes call
+// roles through it, see groups/livekit.js participantCallRole): the
+// participant objects themselves are not reactive, so a view that derives
+// a role from `localParticipant.metadata` reads this to be re-run.
+let participantMetadataVersion = $state(0);
 
 /** @type {Set<string>} */
 let speakingParticipantIds = $state.raw(new Set());
@@ -500,6 +505,35 @@ function handleSignal(payload, participant, _kind, topic) {
   }
 }
 
+/**
+ * The host muted us through the relay (RoomService.MutePublishedTrack, see
+ * groups/livekit.js moderateCall): LiveKit mutes the published track and
+ * the client learns of it as TrackMuted on its own publication. Keep the
+ * toggles truthful — a muted mic shows muted, a muted camera shows off —
+ * and turn a muted screen share into a stopped one, since a paused share
+ * is just a black tile for everyone else. Our own toggles end up here too
+ * (setMicrophoneEnabled(false) also mutes), which is a no-op.
+ * @param {Room} target
+ * @param {{source?: string} | undefined} publication
+ */
+function followServerMute(target, publication) {
+  if (target !== room) return;
+  switch (publication?.source) {
+    case Track.Source.Microphone:
+      isMuted = true;
+      break;
+    case Track.Source.Camera:
+      isCameraOff = true;
+      break;
+    case Track.Source.ScreenShare:
+      if (isScreenSharing) {
+        isScreenSharing = false;
+        target.localParticipant.setScreenShareEnabled(false).catch(() => {});
+      }
+      break;
+  }
+}
+
 function updateParticipants() {
   if (!room) {
     remoteParticipants = [];
@@ -745,8 +779,15 @@ export async function connectToRoom(token, url, opts = {}) {
       updateParticipants();
       recomputeMuted();
     });
-    newRoom.on(RoomEvent.TrackMuted, recomputeMuted);
+    newRoom.on(RoomEvent.TrackMuted, (publication, participant) => {
+      recomputeMuted();
+      if (participant === newRoom.localParticipant) followServerMute(newRoom, publication);
+    });
     newRoom.on(RoomEvent.TrackUnmuted, recomputeMuted);
+    newRoom.on(RoomEvent.ParticipantMetadataChanged, () => {
+      participantMetadataVersion++;
+      updateParticipants();
+    });
     newRoom.on(RoomEvent.Reconnecting, () => (connectionState = 'reconnecting'));
     newRoom.on(RoomEvent.SignalReconnecting, () => (connectionState = 'reconnecting'));
     newRoom.on(RoomEvent.Reconnected, () => (connectionState = 'connected'));
@@ -989,7 +1030,7 @@ export async function toggleScreenShare() {
 
 /**
  * Get reactive connection state.
- * @returns {{ isConnected: boolean, isConnecting: boolean, isMuted: boolean, isCameraOff: boolean, isScreenSharing: boolean, canPublish: boolean, canSignal: boolean, connectionState: 'connected' | 'reconnecting' | 'disconnected', disconnectReason: import('livekit-client').DisconnectReason | null, mutedIdentities: Set<string>, raisedHands: Set<string>, reactions: Array<{id: string, identity: string, emoji: string, url?: string}>, callChat: Array<{id: string, identity: string, n: string, text: string, at: number, guest?: boolean}>, localParticipant: import('livekit-client').LocalParticipant | null, remoteParticipants: import('livekit-client').RemoteParticipant[], room: Room | null, speakingParticipantIds: Set<string>, audioInputDevices: MediaDeviceInfo[], activeAudioDeviceId: string, audioOutputDevices: MediaDeviceInfo[], activeAudioOutputDeviceId: string, videoInputDevices: MediaDeviceInfo[], activeVideoDeviceId: string, backgroundEffect: string }}
+ * @returns {{ isConnected: boolean, isConnecting: boolean, isMuted: boolean, isCameraOff: boolean, isScreenSharing: boolean, canPublish: boolean, canSignal: boolean, connectionState: 'connected' | 'reconnecting' | 'disconnected', disconnectReason: import('livekit-client').DisconnectReason | null, mutedIdentities: Set<string>, raisedHands: Set<string>, reactions: Array<{id: string, identity: string, emoji: string, url?: string}>, callChat: Array<{id: string, identity: string, n: string, text: string, at: number, guest?: boolean}>, localParticipant: import('livekit-client').LocalParticipant | null, remoteParticipants: import('livekit-client').RemoteParticipant[], participantMetadataVersion: number, room: Room | null, speakingParticipantIds: Set<string>, audioInputDevices: MediaDeviceInfo[], activeAudioDeviceId: string, audioOutputDevices: MediaDeviceInfo[], activeAudioOutputDeviceId: string, videoInputDevices: MediaDeviceInfo[], activeVideoDeviceId: string, backgroundEffect: string }}
  */
 export function getLiveKitState() {
   return {
@@ -1037,6 +1078,9 @@ export function getLiveKitState() {
     },
     get remoteParticipants() {
       return remoteParticipants;
+    },
+    get participantMetadataVersion() {
+      return participantMetadataVersion;
     },
     get room() {
       return room;

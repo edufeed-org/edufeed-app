@@ -11,11 +11,13 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { flushSync } from 'svelte';
 
 const requestGroupCallToken = vi.fn();
+const moderateCall = vi.fn();
 vi.mock('$lib/groups/livekit.js', async (importOriginal) => {
   const actual = /** @type {any} */ (await importOriginal());
   return {
     ...actual,
-    requestGroupCallToken: (/** @type {any[]} */ ...args) => requestGroupCallToken(...args)
+    requestGroupCallToken: (/** @type {any[]} */ ...args) => requestGroupCallToken(...args),
+    moderateCall: (/** @type {any[]} */ ...args) => moderateCall(...args)
   };
 });
 
@@ -69,7 +71,8 @@ const {
   registerCallStageView,
   showCallStage,
   hideCallStage,
-  toggleChatBeside
+  toggleChatBeside,
+  moderateActiveCall
 } = await import('$lib/groups/group-call.svelte.js');
 
 const RELAY = 'wss://groups.example/';
@@ -80,6 +83,7 @@ const USER = { pubkey: 'a'.repeat(64), signer: { signEvent: vi.fn() } };
 beforeEach(async () => {
   await leaveGroupCall();
   requestGroupCallToken.mockReset();
+  moderateCall.mockReset();
   disconnectFromRoom.mockClear();
   connectToRoom.mockReset();
   connectToRoom.mockResolvedValue(undefined);
@@ -575,5 +579,42 @@ describe('server-side end of the call', () => {
     await joinGroupCall(P2, USER);
     stale?.('removed-reason');
     expect(getGroupCallState().phase).toBe('ready');
+  });
+});
+
+// Host actions ride on the active call: the channel it belongs to and the
+// account that joined it, so the stage needs neither as props.
+describe('moderateActiveCall', () => {
+  it('moderates the active channel as the joined user', async () => {
+    requestGroupCallToken.mockResolvedValue({ serverUrl: 'wss://x', participantToken: 't' });
+    moderateCall.mockResolvedValue(undefined);
+    await joinGroupCall(P1, USER);
+    await moderateActiveCall({ action: 'mute', identity: 'b'.repeat(64) + ':1' });
+    expect(moderateCall).toHaveBeenCalledWith({ id: 'room-1', relay: RELAY }, USER, {
+      action: 'mute',
+      identity: 'b'.repeat(64) + ':1'
+    });
+  });
+
+  it('rejects without a live call and after leaving', async () => {
+    await expect(moderateActiveCall({ action: 'mute', identity: 'x' })).rejects.toThrow(
+      /no active call/
+    );
+    requestGroupCallToken.mockResolvedValue({ serverUrl: 'wss://x', participantToken: 't' });
+    await joinGroupCall(P1, USER);
+    await leaveGroupCall();
+    await expect(moderateActiveCall({ action: 'mute', identity: 'x' })).rejects.toThrow(
+      /no active call/
+    );
+    expect(moderateCall).not.toHaveBeenCalled();
+  });
+
+  it("passes the relay's refusal through", async () => {
+    requestGroupCallToken.mockResolvedValue({ serverUrl: 'wss://x', participantToken: 't' });
+    moderateCall.mockRejectedValue(new Error('only the host may change roles'));
+    await joinGroupCall(P1, USER);
+    await expect(moderateActiveCall({ action: 'make-cohost', identity: 'x' })).rejects.toThrow(
+      'only the host may change roles'
+    );
   });
 });

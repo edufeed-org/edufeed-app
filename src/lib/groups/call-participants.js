@@ -13,6 +13,7 @@
  *   speaking: boolean,
  *   handRaised: boolean,
  *   guest: boolean,
+ *   role: import('./livekit.js').CallRole | null,
  *   listenOnly: boolean,
  *   pinned: boolean,
  *   volume: number

@@ -31,6 +31,7 @@
    *   isSpeaking?: boolean,
    *   handRaised?: boolean,
    *   isGuest?: boolean,
+   *   role?: import('$lib/groups/livekit.js').CallRole | null,
    *   reactions?: Array<{id: string, emoji: string, url?: string}>,
    *   profile?: any,
    *   volume?: number,
@@ -48,6 +49,7 @@
     isSpeaking = false,
     handRaised = false,
     isGuest = false,
+    role = null,
     reactions = [],
     profile = undefined,
     volume = 1,
@@ -231,6 +233,11 @@
     {#if isGuest}
       <span class="badge badge-sm badge-info" data-testid="call-guest-badge">
         {m.groups_call_guest_badge()}
+      </span>
+    {/if}
+    {#if role}
+      <span class="badge badge-sm badge-primary" data-testid="call-role-badge" data-role={role}>
+        {role === 'host' ? m.groups_call_host_badge() : m.groups_call_cohost_badge()}
       </span>
     {/if}
   </div>
