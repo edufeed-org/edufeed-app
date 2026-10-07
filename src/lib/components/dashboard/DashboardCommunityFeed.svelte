@@ -14,7 +14,14 @@
   import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
   import { contactsStore } from '$lib/stores/contacts.svelte.js';
   import { useActiveUser } from '$lib/stores/accounts.svelte';
-  import { ALL_FEED_KINDS } from '$lib/helpers/profile-feed.js';
+  import {
+    ALL_FEED_KINDS,
+    communityFeedCategoryIds,
+    communityItemVisible,
+    normalizeCategorySelection,
+    toggleSelectedCategory,
+    toggleHiddenCategory
+  } from '$lib/helpers/profile-feed.js';
   import { withoutChannelMeetings } from '$lib/helpers/calendar-timing.js';
   import { startProfileFeedLoaders } from '$lib/loaders/profile-feed-loaders.js';
   import { addressLoader } from '$lib/loaders/base.js';
@@ -41,6 +48,7 @@
   import { feedStateCache } from '$lib/stores/feed-state-cache.js';
   import DashboardFeedSelector from '$lib/components/dashboard/DashboardFeedSelector.svelte';
   import FeedComposer from '$lib/components/dashboard/FeedComposer.svelte';
+  import FeedCategoryChips from '$lib/components/shared/FeedCategoryChips.svelte';
   import * as m from '$lib/paraglide/messages';
 
   /**
@@ -106,8 +114,35 @@
     return filterUpcomingEvents(feedItems, nowTs);
   });
 
-  let visibleItems = $derived(feedItems.slice(0, previewCount > 0 ? previewCount : displayCount));
-  let hasMore = $derived(previewCount === 0 && displayCount < feedItems.length);
+  // Content-type chips (same select/hide convention as the follows feed).
+  // The preview has no chips, so it never applies a selection. Each feed
+  // source keeps its own selection: the combined feed offers a notes chip
+  // the community-only feed does not.
+  const showFilters = $derived(previewCount === 0);
+  const filterCategories = $derived(communityFeedCategoryIds(includeFollows));
+  const filterCacheKey = $derived(
+    'dashboard-community-feed-filter-' + (includeFollows ? 'combined' : 'communities')
+  );
+  // Writable derived: re-reads the source's saved selection on mount and
+  // whenever the feed source prop flips (the page keeps this instance across
+  // that switch); chip clicks overwrite it locally.
+  /** @type {import('$lib/helpers/profile-feed.js').CategorySelection} */
+  let categorySelection = $derived(
+    normalizeCategorySelection(feedStateCache.get(filterCacheKey), filterCategories)
+  );
+
+  // Filter BEFORE slicing: pagination counts only matching items, so a
+  // filter that hides most of the feed still fills the page.
+  let filteredItems = $derived(
+    showFilters && (categorySelection.selected.length > 0 || categorySelection.hidden.length > 0)
+      ? feedItems.filter((event) => communityItemVisible(event, categorySelection))
+      : feedItems
+  );
+
+  let visibleItems = $derived(
+    filteredItems.slice(0, previewCount > 0 ? previewCount : displayCount)
+  );
+  let hasMore = $derived(previewCount === 0 && displayCount < filteredItems.length);
 
   // Per-community cleanup functions
   /** @type {Map<string, () => void>} */
@@ -311,6 +346,27 @@
     displayCount += 15;
     feedStateCache.set('dashboard-community-feed', { displayCount });
   }
+
+  /** @param {import('$lib/helpers/profile-feed.js').CategorySelection} next */
+  function applySelection(next) {
+    categorySelection = next;
+    feedStateCache.set(filterCacheKey, {
+      selected: [...next.selected],
+      hidden: [...next.hidden]
+    });
+    displayCount = 15;
+    feedStateCache.set('dashboard-community-feed', { displayCount });
+  }
+
+  /** @param {string} id */
+  function selectFilter(id) {
+    applySelection(toggleSelectedCategory(categorySelection, id));
+  }
+
+  /** @param {string} id */
+  function hideFilter(id) {
+    applySelection(toggleHiddenCategory(categorySelection, id));
+  }
 </script>
 
 {#if previewCount === 0}
@@ -321,6 +377,12 @@
     </div>
   </div>
   <FeedComposer />
+  <FeedCategoryChips
+    categories={filterCategories}
+    selection={categorySelection}
+    onselect={selectFilter}
+    onhide={hideFilter}
+  />
 {/if}
 
 {#if isLoading}
