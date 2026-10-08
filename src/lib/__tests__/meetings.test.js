@@ -559,3 +559,52 @@ describe('nextMeetingBoundary', () => {
     ).toBe(150_000 - 900);
   });
 });
+
+// Editing a meeting re-publishes the same coordinate with a newer
+// created_at. A calendar client that already imported the earlier .ics
+// replaces its entry only when the UID matches AND the SEQUENCE grew (RFC
+// 5545 §3.8.7.4), so the builder derives SEQUENCE/LAST-MODIFIED from the
+// event's created_at.
+describe('buildMeetingIcs — re-import after an edit', () => {
+  const base = {
+    title: 'Standup',
+    start: 1_760_000_000,
+    end: 1_760_003_600,
+    url: 'https://edufeed.app/c/x',
+    uid: '31923:abc123:meeting-1',
+    nowS: 1_760_000_500
+  };
+  const line = (/** @type {string} */ ics, /** @type {string} */ name) =>
+    ics.split('\r\n').find((l) => l.startsWith(`${name}:`));
+  const utc = (/** @type {number} */ s) =>
+    new Date(s * 1000).toISOString().replace(/[-:]/g, '').split('.')[0] + 'Z';
+
+  it('writes SEQUENCE and LAST-MODIFIED from the meeting event’s created_at', () => {
+    const ics = buildMeetingIcs({ ...base, modifiedS: 1_759_990_000 });
+    expect(line(ics, 'SEQUENCE')).toBe('SEQUENCE:1759990000');
+    expect(line(ics, 'LAST-MODIFIED')).toBe(`LAST-MODIFIED:${utc(1_759_990_000)}`);
+  });
+
+  it('keeps the UID and raises SEQUENCE across an edit, so the entry is replaced', () => {
+    const before = buildMeetingIcs({ ...base, modifiedS: 1_759_990_000 });
+    const after = buildMeetingIcs({
+      ...base,
+      start: 1_760_086_400,
+      end: 1_760_090_000,
+      modifiedS: 1_759_995_000,
+      nowS: 1_759_995_100
+    });
+    expect(line(before, 'UID')).toBe(line(after, 'UID'));
+    const seq = (/** @type {string} */ ics) => Number(line(ics, 'SEQUENCE')?.slice(9));
+    expect(seq(after)).toBeGreaterThan(seq(before));
+    expect(line(after, 'DTSTART')).not.toBe(line(before, 'DTSTART'));
+    expect(line(after, 'LAST-MODIFIED')).not.toBe(line(before, 'LAST-MODIFIED'));
+    expect(line(after, 'DTSTAMP')).toBe(`DTSTAMP:${utc(1_759_995_100)}`);
+  });
+
+  it('omits SEQUENCE and LAST-MODIFIED when no modification time is known', () => {
+    const ics = buildMeetingIcs(base);
+    expect(line(ics, 'SEQUENCE')).toBeUndefined();
+    expect(line(ics, 'LAST-MODIFIED')).toBeUndefined();
+  });
+});

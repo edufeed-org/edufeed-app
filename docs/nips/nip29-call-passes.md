@@ -158,6 +158,17 @@ A meeting more than ~60 days ahead (`expiration` would fall beyond the
 relay's maximum pass lifetime) cannot get a guest link; the author is told
 so and the meeting is created without a pass.
 
+A rescheduled meeting keeps its guest link: the relay derives a pass's
+state from the `not-before`/`expiration` frozen into the pass event (never
+from the meeting the `a` tag names), so moving the meeting leaves the old
+pass windowed around the old time. The organiser's client therefore
+publishes a new pass with the **same code** (hence the same `code-hash`
+and the same URL) and the window of the new time, then revokes the old
+pass with a NIP-09 deletion — in that order, so the link never reads
+`unknown` in between. A relay serves the newest pass for a hash. Only when
+the old code cannot be read (its self-encrypted content is unreadable) is
+a fresh code minted, and the organiser is told the link changed.
+
 The guest landing page (`/call/<group pointer>#<code>`) derives the
 meeting's displayed start/end from the pass check's own `not_before`/
 `expiration` — `start = not_before + 900`, `end = expiration − 1800` — never

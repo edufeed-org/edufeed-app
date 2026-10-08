@@ -2176,6 +2176,29 @@ describe('GroupChat', () => {
       openModal.mockRestore();
     });
 
+    it('"Bearbeiten" on a card opens the dialog in channel EDIT mode with the meeting and its pass', async () => {
+      const { modalStore } = await import('$lib/stores/modal.svelte.js');
+      const openModal = vi.spyOn(modalStore, 'openModal').mockImplementation(() => {});
+      render(GroupChat, { props: { pointer: meetPointer } });
+      await fireEvent.click(await screen.findByTestId('meeting-card-stub-edit'));
+      expect(openModal).toHaveBeenCalledTimes(1);
+      const [type, props] = /** @type {any[]} */ (openModal.mock.calls[0]);
+      expect(type).toBe('calendarEvent');
+      expect(props.mode).toBe('edit');
+      expect(props.existingRawEvent.id).toBe(meetingEvent.id);
+      expect(props.existingEvent.dTag).toBe('meeting-1');
+      expect(props.existingEvent.start).toBe(
+        Number(meetingEvent.tags.find((t) => t[0] === 'start')?.[1])
+      );
+      expect(props.groupMeeting.pointer).toEqual(meetPointer);
+      expect(props.groupMeeting.channelName).toBe('Meet Chat');
+      expect(props.groupMeeting.channelUrl).toBe(
+        `${window.location.origin}${window.location.pathname}?channel=meetchat`
+      );
+      expect(props.groupMeeting.guestPass).toEqual({ id: 'pass-stub' });
+      openModal.mockRestore();
+    });
+
     // One authenticated listing per channel visit feeds every card's guest
     // link (not one per card), and only for a meeting of mine not yet over.
     it('lists the channel passes once for my upcoming meeting', async () => {

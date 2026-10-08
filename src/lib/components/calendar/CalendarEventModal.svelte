@@ -39,11 +39,12 @@
   import { pool } from '$lib/stores/nostr-infrastructure.svelte';
   import { canHaveGuestLink, defaultMeetingSlot } from '$lib/groups/meetings.js';
   import { scheduleGroupMeeting, sendMeetingInvites } from '$lib/groups/schedule-meeting.js';
+  import { updateGroupMeeting, notifyMeetingChange } from '$lib/groups/edit-meeting.js';
   import { showToast } from '$lib/helpers/toast';
   import { hasNip44 } from '$lib/helpers/nip44.js';
   import { formatDateParam } from '$lib/helpers/urlParams.js';
   import { followStartDate, followStartTime } from '$lib/helpers/event-form-dates.js';
-  import { formDateFromTimestamp } from '$lib/helpers/calendar-timing.js';
+  import { formDateFromTimestamp, isChannelMeeting } from '$lib/helpers/calendar-timing.js';
 
   /**
    * @typedef {import('../../types/calendar.js').EventFormData} EventFormData
@@ -69,17 +70,19 @@
   let existingRawEvent = $derived(
     /** @type {any} */ (/** @type {any} */ (modalStore.modalProps)?.existingRawEvent) || null
   );
-  // "Termin planen" in a NIP-29 channel (scheduled meetings): the opener
-  // passes { pointer: {id, relay}, channelName, channelUrl, memberPubkeys? }.
-  // The meeting goes to the group relay only (scheduleGroupMeeting), never
-  // through calendarActions' outbox path. Create only — editing a meeting is
-  // delete + recreate.
+  // "Termin planen" / "Bearbeiten" in a NIP-29 channel (scheduled meetings):
+  // the opener passes { pointer: {id, relay}, channelName, channelUrl,
+  // memberPubkeys?, passesSupported?, guestPass? }. The meeting goes to the
+  // group relay only (scheduleGroupMeeting / updateGroupMeeting), never
+  // through calendarActions' outbox path — in edit mode the same d-tag is
+  // re-published there (existingRawEvent is the meeting, guestPass its link).
   let groupMeeting = $derived(
-    /** @type {import('$lib/groups/schedule-meeting.js').GroupMeeting | null} */ (
+    /** @type {import('$lib/groups/edit-meeting.js').EditableGroupMeeting | null} */ (
       /** @type {any} */ (modalStore.modalProps)?.groupMeeting
     ) || null
   );
-  let isGroupMeeting = $derived(!!groupMeeting && mode !== 'edit');
+  let isGroupMeeting = $derived(!!groupMeeting);
+  let isGroupMeetingEdit = $derived(isGroupMeeting && mode === 'edit' && !!existingRawEvent);
   // Guest link for people off the channel roster — opt-in per meeting.
   let allowGuests = $state(false);
 
@@ -298,10 +301,15 @@
         // Pre-select the communities the event is already shared with (its
         // h-tags) so editing doesn't look like — or silently cause — an
         // un-share. Non-joined communities stay in the list untouched; the
-        // selector simply doesn't render them.
-        selectedCommunityIds = (existingRawEvent?.tags || [])
-          .filter((/** @type {string[]} */ t) => t[0] === 'h' && t[1])
-          .map((/** @type {string[]} */ t) => t[1]);
+        // selector simply doesn't render them. A channel meeting's h-tag is
+        // the group id, not a community: nothing to pre-select there — its
+        // guest toggle instead mirrors whether the meeting has a pass.
+        selectedCommunityIds = isGroupMeeting
+          ? []
+          : (existingRawEvent?.tags || [])
+              .filter((/** @type {string[]} */ t) => t[0] === 'h' && t[1])
+              .map((/** @type {string[]} */ t) => t[1]);
+        allowGuests = isGroupMeeting && !!groupMeeting?.guestPass;
       } else {
         initializeForm();
         selectedCommunityIds = [];
@@ -504,7 +512,18 @@
     }
 
     if (isGroupMeeting && groupMeeting) {
-      await submitGroupMeeting(groupMeeting);
+      if (isGroupMeetingEdit) await submitGroupMeetingEdit(groupMeeting);
+      else await submitGroupMeeting(groupMeeting);
+      return;
+    }
+
+    // Defense in depth: a channel meeting must never go through the generic
+    // edit path — calendarActions.updateEvent fans out to the outbox and the
+    // calendar relays, which would leak a private channel's meeting. The
+    // channel opens the dialog with a groupMeeting context; without one,
+    // refuse rather than publish.
+    if (mode === 'edit' && existingRawEvent && isChannelMeeting(existingRawEvent)) {
+      submitError = m.meeting_modal_update_failed();
       return;
     }
 
@@ -659,6 +678,106 @@
   }
 
   /**
+   * Save an edited meeting on the channel's group relay (same d-tag), then
+   * report what happened to its guest link and the channel notice, and DM
+   * the invitees. Like scheduling, the DMs never block the save.
+   * @param {import('$lib/groups/edit-meeting.js').EditableGroupMeeting} meeting
+   */
+  async function submitGroupMeetingEdit(meeting) {
+    const user = activeUser;
+    const existing = existingRawEvent;
+    if (!user || !existing) {
+      submitError = m.meeting_modal_update_failed();
+      return;
+    }
+    isSubmitting = true;
+    submitError = '';
+    const form = $state.snapshot(formData);
+    if (!form.endDate) form.endDate = form.startDate;
+    const guestPass = meeting.guestPass ?? null;
+    // A signer without NIP-44 (or a relay without passes) cannot change the
+    // link either way: the toggle is disabled, so leave the pass as it is.
+    const guestsWanted = canGuests && guestLinksPossible ? allowGuests : !!guestPass;
+
+    let result;
+    try {
+      result = await updateGroupMeeting({
+        relayConn: pool.relay(meeting.pointer.relay),
+        formData: form,
+        groupMeeting: meeting,
+        existing,
+        guestPass,
+        user,
+        origin: window.location.origin,
+        allowGuests: guestsWanted
+      });
+    } catch (error) {
+      console.error('Error saving meeting:', error);
+      submitError =
+        error instanceof Error && error.message ? error.message : m.meeting_modal_update_failed();
+      isSubmitting = false;
+      return;
+    }
+
+    // A NEW link (switched on, or the old code was unreadable) is copied
+    // first, while the click's user activation lasts; a renewed one keeps
+    // the URL everyone already has.
+    let copied = false;
+    if (result.guestStatus === 'created' && result.guestUrl) {
+      try {
+        await navigator.clipboard.writeText(result.guestUrl);
+        copied = true;
+      } catch {
+        copied = false;
+      }
+    }
+
+    handleClose();
+    await tick();
+    const toasts = {
+      renewed: [m.meeting_updated_link_kept_toast(), 'success'],
+      created: [
+        copied ? m.meeting_updated_link_copied_toast() : m.meeting_updated_link_not_copied_toast(),
+        'success'
+      ],
+      revoked: [m.meeting_updated_link_revoked_toast(), 'success'],
+      too_far: [m.meeting_updated_too_far_toast(), 'info'],
+      failed: [m.meeting_updated_link_failed_toast(), 'warning']
+    };
+    const [text, type] = /** @type {[string, any]} */ (
+      toasts[/** @type {keyof typeof toasts} */ (result.guestStatus)] ?? [
+        m.meeting_updated_toast(),
+        'success'
+      ]
+    );
+    showToast(text, type);
+    if (result.noticeStatus === 'failed') showToast(m.meeting_notice_failed_toast(), 'warning');
+
+    try {
+      const { failed } = await notifyMeetingChange({
+        participants: form.participants,
+        previousParticipants: (existing.tags || [])
+          .filter((/** @type {string[]} */ t) => t[0] === 'p' && t[1])
+          .map((/** @type {string[]} */ t) => t[1]),
+        self: user.pubkey,
+        memberPubkeys: meeting.memberPubkeys,
+        guestUrl: result.guestUrl,
+        title: form.title.trim(),
+        start: result.start,
+        previousStart: result.previous.start,
+        rescheduled: result.rescheduled,
+        channelName: meeting.channelName,
+        channelUrl: meeting.channelUrl
+      });
+      if (failed.length > 0) {
+        showToast(m.meeting_invites_failed_toast({ count: failed.length }), 'warning');
+      }
+    } catch (error) {
+      console.warn('meeting: change notifications failed', error);
+    }
+  }
+
+  /**
    * Handle modal close
    */
   function handleClose() {
@@ -675,7 +794,9 @@
       <div class="mb-4 flex items-center justify-between">
         <h2 id="calendar-event-modal-title" class="text-xl font-semibold text-base-content">
           {#if isGroupMeeting && groupMeeting}
-            {m.meeting_modal_title({ channel: groupMeeting.channelName })}
+            {isGroupMeetingEdit
+              ? m.meeting_modal_title_edit({ channel: groupMeeting.channelName })
+              : m.meeting_modal_title({ channel: groupMeeting.channelName })}
           {:else}
             {mode === 'edit' ? m.event_modal_title_edit() : m.event_modal_title_create()}
           {/if}
@@ -990,7 +1111,9 @@
             {m.event_modal_cancel_button()}
           </button>
           <button type="submit" class="btn btn-primary" disabled={isSubmitting}>
-            {#if isGroupMeeting}
+            {#if isGroupMeetingEdit}
+              {isSubmitting ? m.meeting_modal_updating() : m.meeting_modal_update()}
+            {:else if isGroupMeeting}
               {isSubmitting ? m.meeting_modal_submitting() : m.meeting_modal_submit()}
             {:else if isSubmitting}
               {mode === 'edit' ? m.event_modal_updating() : m.event_modal_creating()}

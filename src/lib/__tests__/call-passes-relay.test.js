@@ -21,9 +21,12 @@ vi.mock('$lib/groups/relay-auth.js', async (orig) => ({
 const {
   createCallLink,
   createMeetingLink,
+  renewMeetingLink,
   listCallPasses,
   passLinkFor,
   revokeCallPass,
+  hashPassCode,
+  callLinkUrl,
   CALL_PASS_KIND
 } = await import('$lib/groups/call-passes.js');
 
@@ -202,6 +205,132 @@ describe('revokeCallPass', () => {
     await expect(
       revokeCallPass(relayConn, { id: 'p3', pubkey: OTHER, tags: [['h', 'g1']] }, USER)
     ).rejects.toThrow();
+    expect(publishToGroupRelay).not.toHaveBeenCalled();
+  });
+});
+
+// A reschedule must not break a guest link that was already shared: the
+// relay freezes not-before/expiration into the pass at mint time (pyramid
+// call_pass.go `status()` never reads the meeting), so the pass is minted
+// again with the SAME code (the URL stays) and the new window, and the old
+// pass is revoked.
+describe('renewMeetingLink', () => {
+  const CODE = 'C'.repeat(22);
+  const MEETING = {
+    start: 3_000_000,
+    end: 3_003_600,
+    coordinate: `31923:${ME}:meeting-1`,
+    title: 'Elternabend (neu)'
+  };
+  const oldPass = {
+    id: 'old-pass',
+    kind: CALL_PASS_KIND,
+    pubkey: ME,
+    content: `enc:${CODE}`,
+    tags: [
+      ['h', 'g1'],
+      ['code-hash', 'f'.repeat(64)],
+      ['expiration', '2005400'],
+      ['not-before', '1999100'],
+      ['a', MEETING.coordinate, POINTER.relay]
+    ]
+  };
+
+  it('re-mints the pass with the same code and the new window, then revokes the old one', async () => {
+    const signed = async (_relay, template, user) => ({
+      ...template,
+      pubkey: user.pubkey,
+      id: template.kind === CALL_PASS_KIND ? 'new-pass' : 'deletion'
+    });
+    publishToGroupRelay.mockImplementationOnce(signed).mockImplementationOnce(signed);
+    const { code, url, event, revoked, sameCode } = await renewMeetingLink(
+      relayConn,
+      POINTER,
+      USER,
+      'https://app.example',
+      oldPass,
+      MEETING
+    );
+    expect(sameCode).toBe(true);
+    expect(code).toBe(CODE);
+    expect(url).toBe(callLinkUrl('https://app.example', POINTER, CODE));
+
+    expect(publishToGroupRelay).toHaveBeenCalledTimes(2);
+    const [, template] = publishToGroupRelay.mock.calls[0];
+    expect(template.kind).toBe(CALL_PASS_KIND);
+    expect(template.content).toBe(`enc:${CODE}`);
+    expect(template.tags).toContainEqual(['code-hash', await hashPassCode(CODE)]);
+    expect(template.tags).toContainEqual(['not-before', String(3_000_000 - 900)]);
+    expect(template.tags).toContainEqual(['expiration', String(3_003_600 + 1800)]);
+    expect(template.tags).toContainEqual(['a', MEETING.coordinate, POINTER.relay]);
+    expect(template.tags).toContainEqual(['title', 'Elternabend (neu)']);
+    expect(template.tags.filter((t) => t[0] === 'h')).toEqual([['h', 'g1']]);
+    expect(event.id).toBe('new-pass');
+
+    // The old pass goes second: the link never stops working in between.
+    const [, deletion] = publishToGroupRelay.mock.calls[1];
+    expect(deletion.kind).toBe(5);
+    expect(deletion.tags).toContainEqual(['e', 'old-pass']);
+    expect(revoked?.id).toBe('deletion');
+  });
+
+  it('falls back to a fresh code when the old one cannot be read, and says so', async () => {
+    const { code, sameCode } = await renewMeetingLink(
+      relayConn,
+      POINTER,
+      USER,
+      'https://app.example',
+      { ...oldPass, content: 'enc:garbage' },
+      MEETING
+    );
+    expect(sameCode).toBe(false);
+    expect(code).toMatch(/^[A-Za-z0-9_-]{22}$/);
+    expect(publishToGroupRelay).toHaveBeenCalledTimes(2);
+  });
+
+  it('keeps the new pass when revoking the old one fails (the link works either way)', async () => {
+    publishToGroupRelay
+      .mockImplementationOnce(async (_r, template, user) => ({
+        ...template,
+        pubkey: user.pubkey,
+        id: 'new-pass'
+      }))
+      .mockRejectedValueOnce(new Error('auth-required'));
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const { event, revoked } = await renewMeetingLink(
+      relayConn,
+      POINTER,
+      USER,
+      'https://app.example',
+      oldPass,
+      MEETING
+    );
+    expect(event.id).toBe('new-pass');
+    expect(revoked).toBeNull();
+    warn.mockRestore();
+  });
+
+  it("refuses someone else's pass and a signer without NIP-44", async () => {
+    await expect(
+      renewMeetingLink(
+        relayConn,
+        POINTER,
+        USER,
+        'https://x',
+        { ...oldPass, pubkey: OTHER },
+        MEETING
+      )
+    ).rejects.toThrow();
+    await expect(
+      renewMeetingLink(
+        relayConn,
+        POINTER,
+        { pubkey: ME, signer: { signEvent: vi.fn() } },
+        'https://x',
+        oldPass,
+        MEETING
+      )
+    ).rejects.toThrow('nip44-unsupported');
     expect(publishToGroupRelay).not.toHaveBeenCalled();
   });
 });

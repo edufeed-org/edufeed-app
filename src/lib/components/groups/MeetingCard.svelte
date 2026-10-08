@@ -8,8 +8,11 @@
   channel's call still runs (canJoinMeetingNow, shared with the bar). The
   organiser gets "Gast-Link kopieren": the link is rebuilt from the meeting's
   pass (self-encrypted code, listed by GroupChat), so it works on any of the
-  organiser's devices. Deleting revokes the meeting's passes first
-  (meeting-actions.js) and is open to the author and channel moderators.
+  organiser's devices. "Bearbeiten" (author only) hands the meeting and its
+  pass to the opener (`onEdit`, GroupChat), which reopens the schedule dialog
+  in edit mode — the card itself never publishes. Deleting revokes the
+  meeting's passes first (meeting-actions.js) and is open to the author and
+  channel moderators.
 -->
 <script>
   import { TimelineModel } from 'applesauce-core/models';
@@ -44,10 +47,20 @@
    * @property {{pubkey: string, signer: any} | null | undefined} user - active account
    * @property {boolean} isAdmin - channel moderator (may delete any meeting)
    * @property {(() => void) | undefined} [onJoin] - the channel's call join; absent = cannot join
+   * @property {((event: any, guestPass: any | null) => void) | undefined} [onEdit] - opens the
+   *   edit dialog for the author's own meeting; absent = no editing here
    * @property {boolean} [callRunning] - the channel's call has participants right now
    */
   /** @type {Props} */
-  let { event, pointer, user, isAdmin, onJoin = undefined, callRunning = false } = $props();
+  let {
+    event,
+    pointer,
+    user,
+    isAdmin,
+    onJoin = undefined,
+    onEdit = undefined,
+    callRunning = false
+  } = $props();
 
   // Unique per card: several cards can sit in one timeline.
   const uid = $props.id();
@@ -133,6 +146,8 @@
 
   const isAuthor = $derived(!!user && user.pubkey === event.pubkey);
   const canDelete = $derived(!!user && (isAuthor || isAdmin));
+  // Only the author can re-sign the addressable event (a moderator cannot).
+  const canEdit = $derived(isAuthor && !!onEdit);
 
   // The organiser's guest link: the meeting's pass, read from the store.
   // GroupChat lists the channel's passes ONCE per visit (any of the
@@ -188,7 +203,11 @@
       end: times.end,
       description: summary,
       url: tagValue('location'),
-      uid: coordinate
+      uid: coordinate,
+      // SEQUENCE/LAST-MODIFIED: an edit re-publishes the coordinate with a
+      // newer created_at, so a calendar that already imported the meeting
+      // replaces its entry instead of adding a second one.
+      modifiedS: event.created_at
     });
     const url = URL.createObjectURL(new Blob([ics], { type: 'text/calendar;charset=utf-8' }));
     const a = document.createElement('a');
@@ -295,6 +314,16 @@
         onclick={copyGuestLink}
       >
         {m.meeting_card_copy_guest_link()}
+      </button>
+    {/if}
+    {#if canEdit}
+      <button
+        type="button"
+        class="btn btn-ghost btn-sm"
+        data-testid="meeting-card-edit"
+        onclick={() => onEdit?.(event, guestPass)}
+      >
+        {m.meeting_card_edit()}
       </button>
     {/if}
     {#if canDelete}

@@ -103,6 +103,7 @@
   import { lazyComponent } from '$lib/helpers/lazy-component.svelte.js';
   import { hasLivekitTag, identityToPubkey, probeRelayAvSupport } from '$lib/groups/livekit.js';
   import { probeCallPassSupport, listCallPasses } from '$lib/groups/call-passes.js';
+  import { getCalendarEventMetadata } from '$lib/helpers/eventUtils.js';
   import { hasNip44 } from '$lib/helpers/nip44.js';
   import { trackOnScreen } from '$lib/groups/track-on-screen.js';
   import { joinOutcome } from '$lib/groups/join-outcome.js';
@@ -1082,24 +1083,42 @@
     else if (canStartCall) await enableAndStartCall();
   }
 
-  // "Termin planen": the calendar dialog in channel-meeting mode (M2). The
-  // meeting's location is the channel's own link; the roster decides who
+  // The channel context the meeting dialog needs (create and edit alike):
+  // the meeting's location is the channel's own link; the roster decides who
   // gets the guest link in their invitation. A channel without calls (the
   // community's General channel starts that way) tells the dialog whether
   // this user may switch them on, so an admin still gets a guest option
   // (issue d0ab04d0).
+  function meetingDialogContext() {
+    return {
+      pointer: { id: pointer.id, relay: pointer.relay },
+      channelName: displayTitle,
+      channelUrl: buildChannelLink(window.location, pointer.id),
+      memberPubkeys: [...members],
+      passesSupported,
+      callsEnabled: avEnabled,
+      canEnableCalls: canStartCall
+    };
+  }
+
+  // "Termin planen": the calendar dialog in channel-meeting mode (M2).
   function openScheduleMeeting() {
     modalStore.openModal('calendarEvent', {
       mode: 'create',
-      groupMeeting: {
-        pointer: { id: pointer.id, relay: pointer.relay },
-        channelName: displayTitle,
-        channelUrl: buildChannelLink(window.location, pointer.id),
-        memberPubkeys: [...members],
-        passesSupported,
-        callsEnabled: avEnabled,
-        canEnableCalls: canStartCall
-      }
+      groupMeeting: meetingDialogContext()
+    });
+  }
+
+  // "Bearbeiten" on a meeting card: the same dialog in channel-meeting EDIT
+  // mode. The card hands over the raw 31923 and its guest pass (if any); the
+  // dialog re-publishes the same coordinate to this relay only.
+  /** @param {any} event @param {any | null} guestPass */
+  function openEditMeeting(event, guestPass) {
+    modalStore.openModal('calendarEvent', {
+      mode: 'edit',
+      existingEvent: getCalendarEventMetadata(event),
+      existingRawEvent: event,
+      groupMeeting: { ...meetingDialogContext(), guestPass }
     });
   }
 
@@ -2135,6 +2154,7 @@
             user={getActiveUser()}
             {isAdmin}
             onJoin={canJoinMeeting ? joinMeeting : undefined}
+            onEdit={openEditMeeting}
             callRunning={callParticipantCount > 0}
           />
         {/if}

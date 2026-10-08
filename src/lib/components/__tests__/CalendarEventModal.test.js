@@ -34,6 +34,8 @@ const h = vi.hoisted(() => {
     updateEvent: null,
     scheduleGroupMeeting: null,
     sendMeetingInvites: null,
+    updateGroupMeeting: null,
+    notifyMeetingChange: null,
     showToast: null,
     goto: null,
     poolRelay: null
@@ -43,6 +45,8 @@ h.createEvent = vi.fn();
 h.updateEvent = vi.fn();
 h.scheduleGroupMeeting = vi.fn();
 h.sendMeetingInvites = vi.fn();
+h.updateGroupMeeting = vi.fn();
+h.notifyMeetingChange = vi.fn();
 h.showToast = vi.fn();
 h.goto = vi.fn(async () => {});
 h.poolRelay = vi.fn((url) => ({ url }));
@@ -74,6 +78,10 @@ vi.mock('$lib/stores/nostr-infrastructure.svelte', () => ({
 vi.mock('$lib/groups/schedule-meeting.js', () => ({
   scheduleGroupMeeting: (...a) => h.scheduleGroupMeeting(...a),
   sendMeetingInvites: (...a) => h.sendMeetingInvites(...a)
+}));
+vi.mock('$lib/groups/edit-meeting.js', () => ({
+  updateGroupMeeting: (...a) => h.updateGroupMeeting(...a),
+  notifyMeetingChange: (...a) => h.notifyMeetingChange(...a)
 }));
 vi.mock('$lib/helpers/toast', () => ({ showToast: (...a) => h.showToast(...a) }));
 vi.mock('$lib/helpers/relay-helper.js', () => ({ getCalendarRelays: () => [] }));
@@ -635,6 +643,187 @@ describe('CalendarEventModal — group meeting mode', () => {
 
 // Moving the start time drags the end time along (14:30–15:30 moved to 16:00
 // must not leave an end at 15:30), rolling the end date past midnight.
+describe('CalendarEventModal — group meeting EDIT mode', () => {
+  const START = 1_800_000_000;
+  const rawMeeting = {
+    id: 'meeting-old',
+    kind: 31923,
+    pubkey: ME,
+    created_at: 1_700_000_000,
+    content: 'Agenda folgt',
+    tags: [
+      ['d', 'meeting-abc'],
+      ['h', 'g1'],
+      ['title', 'Elternabend'],
+      ['start', String(START)],
+      ['end', String(START + 3600)],
+      ['start_tzid', 'Europe/Berlin'],
+      ['end_tzid', 'Europe/Berlin'],
+      ['location', GROUP_MEETING.channelUrl],
+      ['p', MEMBER],
+      ['participant', 'Erna', '', '']
+    ]
+  };
+  const existingEvent = {
+    id: 'meeting-old',
+    pubkey: ME,
+    kind: 31923,
+    title: 'Elternabend',
+    summary: 'Agenda folgt',
+    start: START,
+    end: START + 3600,
+    startTimezone: 'Europe/Berlin',
+    endTimezone: 'Europe/Berlin',
+    location: GROUP_MEETING.channelUrl,
+    participants: [{ pubkey: MEMBER }, { name: 'Erna' }],
+    hashtags: [],
+    references: [],
+    dTag: 'meeting-abc'
+  };
+  const guestPass = { id: 'old-pass', kind: 9025, pubkey: ME, tags: [['h', 'g1']] };
+  const result = (overrides = {}) => ({
+    event: { id: 'meeting-new', kind: 31923, tags: rawMeeting.tags },
+    start: START + 86400,
+    end: START + 86400 + 3600,
+    previous: { start: START, end: START + 3600 },
+    rescheduled: true,
+    guestUrl: null,
+    guestStatus: 'off',
+    noticeStatus: 'sent',
+    ...overrides
+  });
+
+  beforeEach(() => {
+    h.modalStore.modalProps = {
+      mode: 'edit',
+      existingEvent,
+      existingRawEvent: rawMeeting,
+      groupMeeting: { ...GROUP_MEETING, guestPass }
+    };
+    h.updateGroupMeeting.mockImplementation(async () => result());
+    h.notifyMeetingChange.mockImplementation(async () => ({ sent: 1, failed: [] }));
+  });
+
+  it('titles the dialog as an edit, pre-fills the meeting and pre-checks guests when a pass exists', async () => {
+    const r = render(CalendarEventModal);
+    await tick();
+    expect(r.getByText(m.meeting_modal_title_edit({ channel: 'Arbeitszimmer' }))).toBeTruthy();
+    expect(r.container.querySelector('#title').value).toBe('Elternabend');
+    expect(r.container.querySelector('#summary').value).toBe('Agenda folgt');
+    expect(r.queryByText(m.event_modal_type_all_day())).toBeNull();
+    expect(r.queryByTestId('location-input')).toBeNull();
+    expect(r.getByLabelText(m.meeting_modal_guests_label()).checked).toBe(true);
+    expect(r.getByText(m.meeting_modal_update())).toBeTruthy();
+  });
+
+  it('leaves the guest toggle off when the meeting has no pass', async () => {
+    h.modalStore.modalProps = { ...h.modalStore.modalProps, groupMeeting: GROUP_MEETING };
+    const r = render(CalendarEventModal);
+    await tick();
+    expect(r.getByLabelText(m.meeting_modal_guests_label()).checked).toBe(false);
+  });
+
+  it('saves through updateGroupMeeting on the group relay — never the calendar edit path', async () => {
+    const r = render(CalendarEventModal);
+    await tick();
+    await setInput(r.container, '#title', 'Elternabend (neu)');
+    await fireEvent.submit(r.container.querySelector('form:not(.modal-backdrop)'));
+    await settle();
+
+    expect(h.updateEvent).not.toHaveBeenCalled();
+    expect(h.createEvent).not.toHaveBeenCalled();
+    expect(h.scheduleGroupMeeting).not.toHaveBeenCalled();
+    expect(h.updateGroupMeeting).toHaveBeenCalledTimes(1);
+    const args = h.updateGroupMeeting.mock.calls[0][0];
+    expect(args.relayConn).toEqual({ url: 'wss://groups.example/' });
+    expect(args.existing).toBe(rawMeeting);
+    expect(args.guestPass).toBe(guestPass);
+    expect(args.user).toBe(h.user);
+    expect(args.allowGuests).toBe(true);
+    expect(args.formData.title).toBe('Elternabend (neu)');
+    expect(args.formData.eventType).toBe('time');
+    expect(h.modalStore.closeModal).toHaveBeenCalled();
+    expect(h.goto).not.toHaveBeenCalled();
+    expect(h.showToast).toHaveBeenCalledWith(m.meeting_updated_toast(), 'success');
+
+    expect(h.notifyMeetingChange).toHaveBeenCalledWith({
+      participants: [{ pubkey: MEMBER }, { name: 'Erna' }],
+      previousParticipants: [MEMBER],
+      self: ME,
+      memberPubkeys: [ME, MEMBER],
+      guestUrl: null,
+      title: 'Elternabend (neu)',
+      start: START + 86400,
+      previousStart: START,
+      rescheduled: true,
+      channelName: 'Arbeitszimmer',
+      channelUrl: GROUP_MEETING.channelUrl
+    });
+  });
+
+  it('passes guests=false when the organiser switches the link off', async () => {
+    h.updateGroupMeeting.mockImplementation(async () => result({ guestStatus: 'revoked' }));
+    const r = render(CalendarEventModal);
+    await tick();
+    await fireEvent.click(r.getByLabelText(m.meeting_modal_guests_label()));
+    await fireEvent.submit(r.container.querySelector('form:not(.modal-backdrop)'));
+    await settle();
+    expect(h.updateGroupMeeting.mock.calls[0][0].allowGuests).toBe(false);
+    expect(h.showToast).toHaveBeenCalledWith(m.meeting_updated_link_revoked_toast(), 'success');
+  });
+
+  it('tells the organiser the shared link keeps working after a reschedule', async () => {
+    h.updateGroupMeeting.mockImplementation(async () =>
+      result({ guestStatus: 'renewed', guestUrl: GUEST_URL })
+    );
+    const r = render(CalendarEventModal);
+    await tick();
+    await fireEvent.submit(r.container.querySelector('form:not(.modal-backdrop)'));
+    await settle();
+    expect(navigator.clipboard.writeText).not.toHaveBeenCalled();
+    expect(h.showToast).toHaveBeenCalledWith(m.meeting_updated_link_kept_toast(), 'success');
+  });
+
+  it('copies a NEW link and warns about a failed channel notice', async () => {
+    h.updateGroupMeeting.mockImplementation(async () =>
+      result({ guestStatus: 'created', guestUrl: GUEST_URL, noticeStatus: 'failed' })
+    );
+    const r = render(CalendarEventModal);
+    await tick();
+    await fireEvent.submit(r.container.querySelector('form:not(.modal-backdrop)'));
+    await settle();
+    expect(navigator.clipboard.writeText).toHaveBeenCalledWith(GUEST_URL);
+    expect(h.showToast).toHaveBeenCalledWith(m.meeting_updated_link_copied_toast(), 'success');
+    expect(h.showToast).toHaveBeenCalledWith(m.meeting_notice_failed_toast(), 'warning');
+  });
+
+  it('keeps the dialog open with an error when the relay rejects the edit', async () => {
+    h.updateGroupMeeting.mockRejectedValueOnce(new Error('blocked: not a member'));
+    const r = render(CalendarEventModal);
+    await tick();
+    await fireEvent.submit(r.container.querySelector('form:not(.modal-backdrop)'));
+    await settle();
+    expect(h.modalStore.closeModal).not.toHaveBeenCalled();
+    expect(r.getByText('blocked: not a member')).toBeTruthy();
+    expect(h.notifyMeetingChange).not.toHaveBeenCalled();
+  });
+
+  // Defense in depth: a channel meeting opened in plain edit mode (no
+  // groupMeeting context) must never reach calendarActions.updateEvent —
+  // that would fan the private meeting out to the outbox/calendar relays.
+  it('refuses to save a channel meeting through the generic calendar edit path', async () => {
+    h.modalStore.modalProps = { mode: 'edit', existingEvent, existingRawEvent: rawMeeting };
+    const r = render(CalendarEventModal);
+    await tick();
+    await fireEvent.submit(r.container.querySelector('form:not(.modal-backdrop)'));
+    await settle();
+    expect(h.updateEvent).not.toHaveBeenCalled();
+    expect(h.updateGroupMeeting).not.toHaveBeenCalled();
+    expect(h.modalStore.closeModal).not.toHaveBeenCalled();
+    expect(r.getByText(m.meeting_modal_update_failed())).toBeTruthy();
+  });
+});
+
 describe('CalendarEventModal — end time follows the start time', () => {
   beforeEach(() => {
     h.modalStore.modalProps = { mode: 'create', groupMeeting: GROUP_MEETING };

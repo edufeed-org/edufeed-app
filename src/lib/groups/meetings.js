@@ -212,14 +212,24 @@ function foldIcsLine(line) {
  * duplicate. Without one, a UID derived from start/end is used (only safe
  * when the meeting itself never changes).
  *
+ * `modifiedS`, when given, should be the meeting event's `created_at`: it
+ * becomes `LAST-MODIFIED` and, as a plain integer, `SEQUENCE` — a calendar
+ * client replaces an entry it already holds only when the UID matches and
+ * the SEQUENCE grew (RFC 5545 §3.8.7.4), and every edit re-publishes the
+ * coordinate with a newer `created_at`, so the pair is monotonic for free.
+ *
  * @param {{title: string, start: number, end: number, description?: string,
- *   url: string, uid?: string, nowS?: number}} meeting
+ *   url: string, uid?: string, nowS?: number, modifiedS?: number}} meeting
  * @returns {string}
  */
-export function buildMeetingIcs({ title, start, end, description, url, uid, nowS }) {
+export function buildMeetingIcs({ title, start, end, description, url, uid, nowS, modifiedS }) {
   const sanitizedUid = sanitizeIcsUid(uid);
   const finalUid = sanitizedUid ? `${sanitizedUid}@edufeed` : `meeting-${start}-${end}@edufeed`;
   const stamp = formatIcsDateTimeUtc(nowS ?? Math.floor(Date.now() / 1000));
+  const modified =
+    Number.isFinite(modifiedS) && /** @type {number} */ (modifiedS) >= 0
+      ? Math.floor(/** @type {number} */ (modifiedS))
+      : null;
   const lines = [
     'BEGIN:VCALENDAR',
     'VERSION:2.0',
@@ -229,6 +239,9 @@ export function buildMeetingIcs({ title, start, end, description, url, uid, nowS
     'BEGIN:VEVENT',
     `UID:${finalUid}`,
     `DTSTAMP:${stamp}`,
+    ...(modified !== null
+      ? [`SEQUENCE:${modified}`, `LAST-MODIFIED:${formatIcsDateTimeUtc(modified)}`]
+      : []),
     `DTSTART:${formatIcsDateTimeUtc(start)}`,
     `DTEND:${formatIcsDateTimeUtc(end)}`,
     `SUMMARY:${escapeIcsText(title)}`,
