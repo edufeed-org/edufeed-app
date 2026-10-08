@@ -32,6 +32,7 @@ import {
 import { withHand, handQueue } from '$lib/groups/call-tile-order.js';
 import { reactionPayload, parseReactionPayload } from '$lib/groups/call-reactions.js';
 import { isGuestParticipant } from '$lib/groups/livekit.js';
+import { safeCallFileType } from '$lib/groups/call-files.js';
 import {
   noteCallChatMention,
   noteCallChatReceived,
@@ -620,8 +621,10 @@ async function handleFileStream(reader, { identity }) {
     typeof declared === 'string' && /^[A-Za-z0-9_-]{8,36}$/.test(declared)
       ? declared
       : `${identity}:${info.id}`;
-  const mime =
-    typeof info.mimeType === 'string' && info.mimeType ? info.mimeType : 'application/octet-stream';
+  // Untrusted: a blob typed text/html or image/svg+xml would run script in
+  // the app's origin when opened. Raster images keep their type (inline
+  // <img> preview), everything else is an opaque download (groups/call-files).
+  const mime = safeCallFileType(info.mimeType);
   const sender = room?.remoteParticipants.get(identity);
   const added = addFile(
     identity,
