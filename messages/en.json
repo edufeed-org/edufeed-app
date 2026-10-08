@@ -4044,6 +4044,7 @@
   "meeting_card_delete_confirm_body": "The meeting disappears from the channel for everyone. Its guest link stops working.",
   "meeting_card_deleted": "Meeting deleted",
   "meeting_card_delete_failed": "The meeting could not be deleted",
+  "meeting_card_delete_failed_reason": "The meeting could not be deleted: {reason}",
   "meeting_modal_title_edit": "Edit meeting · {channel}",
   "meeting_modal_update": "Save changes",
   "meeting_modal_updating": "Saving…",

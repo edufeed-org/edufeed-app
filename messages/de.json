@@ -4044,6 +4044,7 @@
   "meeting_card_delete_confirm_body": "Der Termin verschwindet für alle aus dem Kanal. Ein Gast-Link funktioniert danach nicht mehr.",
   "meeting_card_deleted": "Termin gelöscht",
   "meeting_card_delete_failed": "Der Termin konnte nicht gelöscht werden",
+  "meeting_card_delete_failed_reason": "Der Termin konnte nicht gelöscht werden: {reason}",
   "meeting_modal_title_edit": "Termin bearbeiten · {channel}",
   "meeting_modal_update": "Änderungen speichern",
   "meeting_modal_updating": "Wird gespeichert…",
