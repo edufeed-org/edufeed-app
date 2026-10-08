@@ -19,12 +19,14 @@
   import { useUserProfile } from '$lib/stores/user-profile.svelte.js';
   import { useMembershipPendingCount } from '$lib/stores/membership-pending.svelte.js';
   import { profileLink } from '$lib/helpers/nostrUtils.js';
+  import { helpLinkAttrs } from '$lib/helpers/help-link.js';
   import ProfileAvatar from './ProfileAvatar.svelte';
   import ConnectionStatus from './ConnectionStatus.svelte';
   import {
     GearIcon,
     ArrowLeftRightIcon,
     InfoCircleIcon,
+    QuestionCircleIcon,
     CheckIcon,
     ChatTextIcon
   } from '$lib/components/icons';
@@ -61,6 +63,9 @@
   );
 
   const pendingMembershipCount = useMembershipPendingCount();
+
+  // User guide (HELP_URL); null hides the row.
+  const helpLink = $derived(helpLinkAttrs(runtimeConfig.help?.url));
 
   function openReportIssue() {
     onClose?.();
@@ -165,6 +170,14 @@
       {m.report_issue_menu_item()}
     </button>
   </li>
+  {#if helpLink}
+    <li>
+      <a {...helpLink} onclick={onClose} data-testid="help-menu-item">
+        <QuestionCircleIcon class_="w-4 h-4" />
+        {m.navbar_help()}
+      </a>
+    </li>
+  {/if}
   <li>
     <a href={resolve('/imprint')} onclick={onClose}>
       <InfoCircleIcon class_="w-4 h-4" />

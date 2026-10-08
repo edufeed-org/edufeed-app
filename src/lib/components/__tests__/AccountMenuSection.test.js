@@ -48,7 +48,8 @@ vi.mock('$lib/stores/membership-pending.svelte.js', () => ({
 }));
 
 const mockRuntimeConfig = vi.hoisted(() => ({
-  membership: { adminPubkeys: /** @type {string[]} */ ([]) }
+  membership: { adminPubkeys: /** @type {string[]} */ ([]) },
+  help: /** @type {{url: string | null}} */ ({ url: '/wiki/edufeed-erste-schritte' })
 }));
 vi.mock('$lib/stores/config.svelte.js', () => ({
   runtimeConfig: mockRuntimeConfig
@@ -76,6 +77,7 @@ vi.mock('$lib/paraglide/messages', () => ({
   common_settings: () => 'Einstellungen',
   navbar_switch_account: () => 'Konto wechseln',
   navbar_imprint: () => 'Impressum',
+  navbar_help: () => 'Hilfe',
   report_issue_menu_item: () => 'Feedback & Fehler melden',
   navbar_logout_current: () => 'Abmelden',
   navbar_logout_all: () => 'Alle Konten abmelden',
@@ -98,6 +100,7 @@ beforeEach(() => {
   mockModalStore.openModal.mockReset();
   mockPendingCount.value = 0;
   mockRuntimeConfig.membership = { adminPubkeys: [] };
+  mockRuntimeConfig.help = { url: '/wiki/edufeed-erste-schritte' };
 });
 
 describe('AccountMenuSection', () => {
@@ -109,6 +112,23 @@ describe('AccountMenuSection', () => {
     await fireEvent.click(row);
     expect(mockModalStore.openModal).toHaveBeenCalledWith('reportIssue');
     expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it('links to the user guide from the info group', async () => {
+    const onClose = vi.fn();
+    const { findByTestId } = render(AccountMenuSection, { onClose });
+    const link = await findByTestId('help-menu-item');
+    expect(link.textContent).toContain('Hilfe');
+    expect(link.getAttribute('href')).toBe('/wiki/edufeed-erste-schritte');
+    await fireEvent.click(link);
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it('omits the help row when no guide is configured', async () => {
+    mockRuntimeConfig.help = { url: null };
+    const { findByText, queryByTestId } = render(AccountMenuSection, { onClose: vi.fn() });
+    await findByText('Impressum');
+    expect(queryByTestId('help-menu-item')).toBeNull();
   });
 
   it('renders the active account display name in the identity header', async () => {

@@ -5,6 +5,7 @@
   import { getFirstPendingInvite } from '$lib/concord/pending-invites.svelte.js';
   import * as m from '$lib/paraglide/messages';
   import { runtimeConfig } from '$lib/stores/config.svelte.js';
+  import { helpLinkAttrs } from '$lib/helpers/help-link.js';
   import { useActiveUser } from '$lib/stores/accounts.svelte';
   import { useUserProfile } from '$lib/stores/user-profile.svelte.js';
   import { matchSuggestion } from '$lib/helpers/assistant-hints.js';
@@ -157,13 +158,29 @@
     ];
   }
 
+  // The user guide (HELP_URL). Only offer the getting-started chip when a
+  // deployment has one.
+  const helpLink = $derived(helpLinkAttrs(runtimeConfig.help?.url));
+
+  /** @typedef {{ q: string, a: string, link?: { label: string, attrs: NonNullable<ReturnType<typeof helpLinkAttrs>> } }} Suggestion */
+
+  /** @type {Suggestion[]} */
   const suggestions = $derived([
+    ...(helpLink
+      ? [
+          {
+            q: m.termi_sugg_4_q(),
+            a: m.termi_sugg_4_a(),
+            link: { label: m.termi_sugg_4_link(), attrs: helpLink }
+          }
+        ]
+      : []),
     { q: m.termi_sugg_1_q(), a: m.termi_sugg_1_a() },
     { q: m.termi_sugg_2_q(), a: m.termi_sugg_2_a() },
     { q: m.termi_sugg_3_q(), a: m.termi_sugg_3_a() }
   ]);
 
-  /** @type {Array<{role: 'user' | 'bot', text: string}>} */
+  /** @type {Array<{role: 'user' | 'bot', text: string, link?: Suggestion['link']}>} */
   let msgs = $state.raw([]);
   let input = $state('');
   let botTyping = $state(false);
@@ -181,7 +198,12 @@
     botTyping = true;
     replyTimer = setTimeout(() => {
       botTyping = false;
-      msgs = [...msgs, { role: 'bot', text: match ? match.a : m.termi_fallback() }];
+      msgs = [
+        ...msgs,
+        match
+          ? { role: 'bot', text: match.a, link: match.link }
+          : { role: 'bot', text: m.termi_fallback() }
+      ];
     }, 900);
   }
 
@@ -352,6 +374,15 @@
             : 'rounded-bl-md border border-base-300 bg-base-200'}"
         >
           {msg.text}
+          {#if msg.link}
+            <a
+              {...msg.link.attrs}
+              data-testid="termi-help-link"
+              class="btn mt-2 btn-sm btn-primary"
+            >
+              {msg.link.label}
+            </a>
+          {/if}
         </div>
       </div>
     {/each}

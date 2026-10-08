@@ -7,6 +7,8 @@
   import { prefetchCalendarData } from '$lib/loaders/calendar.js';
   import { getTotalUnreadCount } from '$lib/services/inbox-service.svelte.js';
   import { getUnreadDmCount } from '$lib/services/dm-service.svelte.js';
+  import { runtimeConfig } from '$lib/stores/config.svelte.js';
+  import { helpLinkAttrs } from '$lib/helpers/help-link.js';
   import AccountMenuSection from './AccountMenuSection.svelte';
   import ConnectionStatus from './ConnectionStatus.svelte';
   import {
@@ -29,6 +31,9 @@
   let currentLocale = $derived(getLocale());
 
   let activeAccount = $state(/** @type {any} */ (null));
+
+  // Logged-in visitors get the help row via AccountMenuSection.
+  const helpLink = $derived(helpLinkAttrs(runtimeConfig.help?.url));
 
   $effect(() => {
     const subscription = manager.active$.subscribe((account) => {
@@ -105,6 +110,13 @@
   <AccountMenuSection {onClose} />
 {:else}
   <ConnectionStatus variant="menu-item" {onClose} />
+  {#if helpLink}
+    <li>
+      <a {...helpLink} onclick={onClose} data-testid="help-menu-item">
+        {m.navbar_help()}
+      </a>
+    </li>
+  {/if}
   <li>
     <a href={resolve('/imprint')} onclick={onClose}>
       {m.navbar_imprint()}

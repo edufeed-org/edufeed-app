@@ -8,6 +8,7 @@
   import LandingHero from '$lib/components/landing/LandingHero.svelte';
   import FeatureHighlights from '$lib/components/landing/FeatureHighlights.svelte';
   import CommunityCarousel from '$lib/components/landing/CommunityCarousel.svelte';
+  import LandingFooter from '$lib/components/landing/LandingFooter.svelte';
 
   const activeUser = useActiveUser();
 
@@ -26,3 +27,4 @@
 <LandingHero />
 <FeatureHighlights />
 <CommunityCarousel />
+<LandingFooter />
