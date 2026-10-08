@@ -18,9 +18,12 @@
     setPreviewMic,
     switchPreviewDevice,
     refreshPreviewDevices,
-    stopPreview
+    stopPreview,
+    setPreviewBackground,
+    syncPreviewBackground
   } from '$lib/services/call-preview.svelte.js';
-  import { getJoinMedia, setJoinMedia } from '$lib/services/call-prefs.js';
+  import { getJoinMedia, setJoinMedia, getCustomBackground } from '$lib/services/call-prefs.js';
+  import { BACKGROUND_PRESETS, backgroundEffectsSupported } from '$lib/groups/call-background.js';
   import { callMediaErrorMessage } from '$lib/groups/call-media-errors.js';
   import { MicIcon, MicOffIcon, VideoIcon, VideoOffIcon } from '$lib/components/icons';
   import * as m from '$lib/paraglide/messages';
@@ -67,12 +70,42 @@
     untrack(() => setPreviewMic(on));
   });
   $effect(() => {
-    untrack(() => refreshPreviewDevices());
+    untrack(() => {
+      syncPreviewBackground();
+      refreshPreviewDevices();
+    });
     return () => {
       destroyed = true;
       stopPreview();
     };
   });
+
+  // Camera background: the same effects as the in-call camera menu, shown
+  // on the preview so the user sees the blur before going on air. Hidden
+  // where the browser cannot run the processor; disabled while the camera
+  // is off (nothing to show it on). The own image is read once: the lobby
+  // has no upload — that stays in the call's camera menu.
+  const backgroundSupported = backgroundEffectsSupported();
+  /** @type {Record<string, () => string>} */
+  const PRESET_LABELS = {
+    paper: m.groups_call_background_paper,
+    teal: m.groups_call_background_teal,
+    shelf: m.groups_call_background_shelf
+  };
+  const customBackground = getCustomBackground();
+  /** @type {Array<{effect: string, label: () => string, src?: string}>} */
+  const backgroundOptions = [
+    { effect: 'none', label: m.groups_call_background_none },
+    { effect: 'blur', label: m.groups_call_background_blur },
+    ...BACKGROUND_PRESETS.map((preset) => ({
+      effect: `preset:${preset.id}`,
+      label: PRESET_LABELS[preset.id] ?? (() => preset.id),
+      src: preset.src
+    })),
+    ...(customBackground
+      ? [{ effect: 'custom', label: m.groups_call_background_custom, src: customBackground }]
+      : [])
+  ];
   $effect(() => {
     const track = pv.videoTrack;
     const el = videoEl;
@@ -216,6 +249,47 @@
     {#if cameraHint}<p class="text-xs text-error" data-testid="call-prejoin-camera-error">
         {cameraHint}
       </p>{/if}
+
+    {#if backgroundSupported}
+      <div class="flex flex-col gap-1.5 pt-1" data-testid="call-prejoin-background">
+        <span class="text-xs text-base-content/70" id="call-prejoin-background-label"
+          >{m.groups_call_background()}</span
+        >
+        <div
+          class="flex flex-wrap gap-1.5"
+          role="group"
+          aria-labelledby="call-prejoin-background-label"
+        >
+          {#each backgroundOptions as option (option.effect)}
+            {@const active = pv.backgroundEffect === option.effect}
+            <button
+              type="button"
+              class="btn btn-sm"
+              class:btn-primary={active}
+              aria-pressed={active}
+              disabled={!media.video}
+              onclick={() => setPreviewBackground(option.effect)}
+              data-testid="call-prejoin-background-option"
+              data-effect={option.effect}
+            >
+              {#if option.src}
+                <img src={option.src} alt="" class="h-5 w-8 rounded-sm object-cover" />
+              {/if}
+              {option.label()}
+            </button>
+          {/each}
+        </div>
+        {#if !media.video}
+          <p class="text-xs text-base-content/60" data-testid="call-prejoin-background-hint">
+            {m.groups_call_prejoin_background_camera_off()}
+          </p>
+        {:else if pv.backgroundError}
+          <p class="text-xs text-error" data-testid="call-prejoin-background-error">
+            {m.groups_call_background_failed()}
+          </p>
+        {/if}
+      </div>
+    {/if}
   </div>
 
   <div class="grid gap-2 sm:grid-cols-2">

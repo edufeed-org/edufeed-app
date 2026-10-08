@@ -8,7 +8,6 @@ import {
   SCREEN_SHARE_QUALITIES,
   cameraCaptureOptions,
   getBackgroundEffect,
-  getCustomBackground,
   getParticipantVolume,
   getPreferredDevice,
   getScreenShareQuality,
@@ -48,11 +47,8 @@ import {
   parseCallChatPayload,
   toCallChatPayload
 } from '$lib/groups/call-chat-payload.js';
-import {
-  MEDIAPIPE_ASSET_PATHS,
-  backgroundProcessorOptions,
-  parseBackgroundEffect
-} from '$lib/groups/call-background.js';
+import { parseBackgroundEffect } from '$lib/groups/call-background.js';
+import { applyBackgroundToTrack } from '$lib/groups/call-background-processor.js';
 
 // A burst of joins (a class arriving) gets one cue, not twenty.
 const JOIN_CUE_DEBOUNCE_MS = 750;
@@ -873,20 +869,7 @@ function applyBackground() {
       room?.localParticipant.getTrackPublication(Track.Source.Camera)?.track
     );
     if (!track) return;
-    const options = backgroundProcessorOptions(backgroundEffect, getCustomBackground());
-    const current = track.getProcessor?.();
-    if (!options) {
-      if (current) await track.stopProcessor();
-      return;
-    }
-    if (bgProcessor && current === bgProcessor) {
-      await bgProcessor.switchTo(options);
-      return;
-    }
-    const { BackgroundProcessor } = await import('@livekit/track-processors');
-    const processor = BackgroundProcessor({ ...options, assetPaths: MEDIAPIPE_ASSET_PATHS });
-    await track.setProcessor(processor);
-    bgProcessor = processor;
+    bgProcessor = await applyBackgroundToTrack(track, backgroundEffect, bgProcessor);
   });
   backgroundQueue = run.catch(() => {});
   return run;

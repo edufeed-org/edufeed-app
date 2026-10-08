@@ -2708,6 +2708,7 @@
   "groups_call_prejoin_mic_toggle": "Join with microphone on",
   "groups_call_prejoin_mic_level": "Microphone level",
   "groups_call_prejoin_join": "Join",
+  "groups_call_prejoin_background_camera_off": "Turn the camera on to choose a background.",
   "groups_call_background": "Background",
   "groups_call_background_none": "None",
   "groups_call_background_blur": "Blur",

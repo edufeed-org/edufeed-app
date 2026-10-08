@@ -12,7 +12,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/svelte';
 import { flushSync } from 'svelte';
 
-const { pv, svc } = vi.hoisted(() => ({
+const { pv, svc, background } = vi.hoisted(() => ({
   pv: {
     videoTrack: null,
     audioTrack: null,
@@ -26,15 +26,21 @@ const { pv, svc } = vi.hoisted(() => ({
     videoInputDevices: [],
     activeAudioDeviceId: '',
     activeAudioOutputDeviceId: '',
-    activeVideoDeviceId: ''
+    activeVideoDeviceId: '',
+    backgroundEffect: 'none',
+    backgroundError: null
   },
   svc: {
     setPreviewCamera: vi.fn(async () => {}),
     setPreviewMic: vi.fn(async () => {}),
     switchPreviewDevice: vi.fn(async () => {}),
     refreshPreviewDevices: vi.fn(async () => {}),
-    stopPreview: vi.fn()
-  }
+    stopPreview: vi.fn(),
+    setPreviewBackground: vi.fn(async () => {}),
+    syncPreviewBackground: vi.fn()
+  },
+  // Whether this "browser" can run the background processor (jsdom cannot).
+  background: { supported: true }
 }));
 vi.mock('$lib/services/call-preview.svelte.js', () => ({
   getCallPreviewState: () => pv,
@@ -42,11 +48,20 @@ vi.mock('$lib/services/call-preview.svelte.js', () => ({
   setPreviewMic: (...a) => svc.setPreviewMic(...a),
   switchPreviewDevice: (...a) => svc.switchPreviewDevice(...a),
   refreshPreviewDevices: (...a) => svc.refreshPreviewDevices(...a),
-  stopPreview: (...a) => svc.stopPreview(...a)
+  stopPreview: (...a) => svc.stopPreview(...a),
+  setPreviewBackground: (...a) => svc.setPreviewBackground(...a),
+  syncPreviewBackground: (...a) => svc.syncPreviewBackground(...a)
+}));
+vi.mock('$lib/groups/call-background.js', async (importOriginal) => ({
+  ...(await importOriginal()),
+  backgroundEffectsSupported: () => background.supported
 }));
 
 const m = await import('$lib/paraglide/messages');
-const { getJoinMedia, setJoinMedia } = await import('$lib/services/call-prefs.js');
+const { getJoinMedia, setJoinMedia, setCustomBackground } = await import(
+  '$lib/services/call-prefs.js'
+);
+const { BACKGROUND_PRESETS } = await import('$lib/groups/call-background.js');
 const { default: CallPreJoin } = await import('$lib/components/groups/call/CallPreJoin.svelte');
 
 const baseProps = { joinLabel: 'Beitreten', onJoin: vi.fn(async () => {}) };
@@ -58,6 +73,7 @@ function fakeTrack() {
 beforeEach(() => {
   vi.clearAllMocks();
   localStorage.clear();
+  background.supported = true;
   Object.assign(pv, {
     videoTrack: null,
     audioTrack: null,
@@ -71,7 +87,77 @@ beforeEach(() => {
     videoInputDevices: [],
     activeAudioDeviceId: '',
     activeAudioOutputDeviceId: '',
-    activeVideoDeviceId: ''
+    activeVideoDeviceId: '',
+    backgroundEffect: 'none',
+    backgroundError: null
+  });
+});
+
+describe('CallPreJoin — camera background', () => {
+  const options = () => screen.queryAllByTestId('call-prejoin-background-option');
+  const option = (effect) => options().find((b) => b.dataset.effect === effect);
+
+  it('offers none / blur / the presets while the camera is on, and a pick goes to the preview', async () => {
+    setJoinMedia({ audio: true, video: true });
+    pv.videoTrack = fakeTrack();
+    render(CallPreJoin, { props: baseProps });
+    expect(svc.syncPreviewBackground).toHaveBeenCalled();
+    expect(screen.getByTestId('call-prejoin-background')).toBeTruthy();
+    expect(options().map((b) => b.dataset.effect)).toEqual([
+      'none',
+      'blur',
+      ...BACKGROUND_PRESETS.map((p) => `preset:${p.id}`)
+    ]);
+    for (const b of options()) expect(b.disabled).toBe(false);
+    expect(option('none').getAttribute('aria-pressed')).toBe('true');
+    expect(option('blur').textContent).toContain(m.groups_call_background_blur());
+    // Presets carry their thumbnail, as in the in-call camera menu.
+    expect(
+      option(`preset:${BACKGROUND_PRESETS[0].id}`).querySelector('img').getAttribute('src')
+    ).toBe(BACKGROUND_PRESETS[0].src);
+    await fireEvent.click(option('blur'));
+    expect(svc.setPreviewBackground).toHaveBeenCalledWith('blur');
+    expect(screen.queryByTestId('call-prejoin-background-hint')).toBeNull();
+  });
+
+  it('is absent where the browser cannot run the processor', () => {
+    background.supported = false;
+    setJoinMedia({ audio: true, video: true });
+    pv.videoTrack = fakeTrack();
+    render(CallPreJoin, { props: baseProps });
+    expect(screen.queryByTestId('call-prejoin-background')).toBeNull();
+  });
+
+  it('is disabled with a hint while the camera is off', () => {
+    render(CallPreJoin, { props: baseProps });
+    expect(screen.getByTestId('call-prejoin-background')).toBeTruthy();
+    for (const b of options()) expect(b.disabled).toBe(true);
+    expect(screen.getByTestId('call-prejoin-background-hint').textContent).toContain(
+      m.groups_call_prejoin_background_camera_off()
+    );
+  });
+
+  it('marks the remembered effect and offers the own image when one is kept', () => {
+    setCustomBackground('data:image/jpeg;base64,AAAA');
+    setJoinMedia({ audio: true, video: true });
+    pv.videoTrack = fakeTrack();
+    pv.backgroundEffect = 'custom';
+    render(CallPreJoin, { props: baseProps });
+    const custom = option('custom');
+    expect(custom).toBeTruthy();
+    expect(custom.getAttribute('aria-pressed')).toBe('true');
+    expect(custom.querySelector('img').getAttribute('src')).toBe('data:image/jpeg;base64,AAAA');
+    expect(option('none').getAttribute('aria-pressed')).toBe('false');
+  });
+
+  it('says so when the effect could not be started', () => {
+    setJoinMedia({ audio: true, video: true });
+    pv.videoTrack = fakeTrack();
+    pv.backgroundError = new Error('webgl2 unavailable');
+    render(CallPreJoin, { props: baseProps });
+    expect(screen.getByTestId('call-prejoin-background-error').textContent).toContain(
+      m.groups_call_background_failed()
+    );
   });
 });
 

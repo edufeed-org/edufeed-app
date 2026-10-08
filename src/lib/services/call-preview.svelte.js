@@ -17,10 +17,14 @@ import {
 } from 'livekit-client';
 import {
   cameraCaptureOptions,
+  getBackgroundEffect,
   getPreferredDevice,
   micCaptureOptions,
-  rememberDevice
+  rememberDevice,
+  setBackgroundEffect
 } from './call-prefs.js';
+import { parseBackgroundEffect } from '$lib/groups/call-background.js';
+import { applyBackgroundToTrack } from '$lib/groups/call-background-processor.js';
 
 /** @type {import('livekit-client').LocalVideoTrack | null} */
 let videoTrack = $state(null);
@@ -48,6 +52,23 @@ let activeAudioDeviceId = $state('');
 let activeAudioOutputDeviceId = $state('');
 let activeVideoDeviceId = $state('');
 
+// Camera background effect: the same per-device key the live call reads on
+// connect (call-prefs 'background'), shown on the preview track through the
+// same processor (groups/call-background-processor).
+let backgroundEffect = $state(getBackgroundEffect());
+// Why the last effect could not start (raw error; the UI says "not
+// available in this browser"). Cleared on the next pick and on stop.
+/** @type {unknown} */
+let backgroundError = $state(null);
+// The processor this module built last; livekit's track.stop() destroys
+// it, so a released camera leaves no processor behind — only this reference,
+// reset in releaseVideo so the next camera builds a fresh one.
+/** @type {any} */
+let bgProcessor = null;
+// Effect changes run one after another (building MediaPipe takes a moment).
+/** @type {Promise<unknown>} */
+let backgroundQueue = Promise.resolve();
+
 /** @type {ReturnType<typeof createAudioAnalyser> | null} */
 let analyser = null;
 let meterFrame = 0;
@@ -70,11 +91,19 @@ let micSeq = 0;
  *   videoInputDevices: MediaDeviceInfo[],
  *   activeAudioDeviceId: string,
  *   activeAudioOutputDeviceId: string,
- *   activeVideoDeviceId: string
+ *   activeVideoDeviceId: string,
+ *   backgroundEffect: string,
+ *   backgroundError: unknown
  * }}
  */
 export function getCallPreviewState() {
   return {
+    get backgroundEffect() {
+      return backgroundEffect;
+    },
+    get backgroundError() {
+      return backgroundError;
+    },
     get videoTrack() {
       return videoTrack;
     },
@@ -139,11 +168,66 @@ export async function setPreviewCamera(on) {
     }
     videoTrack = track;
     activeVideoDeviceId = (await track.getDeviceId()) || activeVideoDeviceId;
+    // The remembered effect goes on the preview as soon as there is a
+    // track; a failing effect never keeps the camera from showing.
+    await applyPreviewBackgroundSafely();
     await refreshPreviewDevices();
   } catch (err) {
     if (seq === cameraSeq) cameraError = err;
   } finally {
     if (seq === cameraSeq) cameraStarting = false;
+  }
+}
+
+/**
+ * Read the effect remembered on this device (the in-call menu or another
+ * tab may have changed it since this module loaded). The lobby calls it on
+ * mount so its control starts on the truth.
+ */
+export function syncPreviewBackground() {
+  backgroundEffect = getBackgroundEffect();
+  backgroundError = null;
+}
+
+/**
+ * Choose the camera background effect ('none' | 'blur' | 'custom' |
+ * 'preset:<id>') for the preview AND the call that follows: remembered on
+ * this device (the call reads the same key on connect) and shown on the
+ * preview track right away when the camera is on. A failing processor
+ * keeps the previous effect and lands in `backgroundError`.
+ * @param {string} effect
+ */
+export async function setPreviewBackground(effect) {
+  const previous = backgroundEffect;
+  backgroundEffect = parseBackgroundEffect(effect);
+  backgroundError = null;
+  try {
+    await applyPreviewBackground();
+  } catch (err) {
+    backgroundEffect = previous;
+    backgroundError = err;
+    await applyPreviewBackgroundSafely();
+    return;
+  }
+  setBackgroundEffect(backgroundEffect);
+}
+
+/** Put `backgroundEffect` on the preview track, if any. Throws on failure. */
+function applyPreviewBackground() {
+  const run = backgroundQueue.then(async () => {
+    const track = videoTrack;
+    if (!track) return;
+    bgProcessor = await applyBackgroundToTrack(track, backgroundEffect, bgProcessor);
+  });
+  backgroundQueue = run.catch(() => {});
+  return run;
+}
+
+async function applyPreviewBackgroundSafely() {
+  try {
+    await applyPreviewBackground();
+  } catch (err) {
+    console.warn('Background effect not available:', err);
   }
 }
 
@@ -247,6 +331,7 @@ export function stopPreview() {
   releaseAudio();
   cameraError = null;
   micError = null;
+  backgroundError = null;
   cameraStarting = false;
   micStarting = false;
 }
@@ -263,6 +348,8 @@ function pick(devices, preferred) {
 function releaseVideo() {
   const track = videoTrack;
   videoTrack = null;
+  // stop() destroys the track's processor; only our reference remains.
+  bgProcessor = null;
   track?.stop();
 }
 

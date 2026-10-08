@@ -2708,6 +2708,7 @@
   "groups_call_prejoin_mic_toggle": "Mit Mikrofon beitreten",
   "groups_call_prejoin_mic_level": "Mikrofonpegel",
   "groups_call_prejoin_join": "Beitreten",
+  "groups_call_prejoin_background_camera_off": "Schalte die Kamera ein, um einen Hintergrund zu wählen.",
   "groups_call_background": "Hintergrund",
   "groups_call_background_none": "Keiner",
   "groups_call_background_blur": "Weichzeichnen",
