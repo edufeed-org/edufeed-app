@@ -760,6 +760,22 @@ describe('CallLanding', () => {
     expect(await screen.findByTestId('group-call-stage-stub')).toBeTruthy();
     expect(screen.queryByTestId('call-chat-panel')).toBeNull();
   });
+  it('on a phone the close control inside the chat panel brings the stage back', async () => {
+    await renderInCall();
+    await fireEvent.click(screen.getByTestId('group-call-stage-stub-chat'));
+    await screen.findByTestId('call-chat-panel');
+    await fireEvent.click(screen.getByTestId('call-chat-panel-stub-close'));
+    expect(await screen.findByTestId('group-call-stage-stub')).toBeTruthy();
+    expect(screen.queryByTestId('call-chat-panel')).toBeNull();
+    expect(toggleChatBeside).not.toHaveBeenCalled();
+  });
+  it('on md+ the close control inside the chat panel collapses the chat beside the stage', async () => {
+    setWide(true);
+    await renderInCall();
+    await screen.findByTestId('call-chat-panel');
+    await fireEvent.click(screen.getByTestId('call-chat-panel-stub-close'));
+    expect(toggleChatBeside).toHaveBeenCalledTimes(1);
+  });
   it("the landing's call view stays registered as on screen while the chat replaces the stage (no dock)", async () => {
     let live = 0;
     registerCallStageView.mockImplementation(() => {

@@ -485,7 +485,7 @@
                   </button>
                 </div>
               {/if}
-              <CallChatPanel.Component {identityToPubkey} {title} />
+              <CallChatPanel.Component {identityToPubkey} {title} onClose={toggleChat} />
             </div>
           {/if}
         </div>

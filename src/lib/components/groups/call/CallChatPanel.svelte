@@ -21,7 +21,7 @@
   import { linkifyCallChat, callChatPreviewUrls } from '$lib/groups/call-chat-links.js';
   import { registerCallChatView } from '$lib/groups/call-chat-unread.svelte.js';
   import { trackOnScreen } from '$lib/groups/track-on-screen.js';
-  import { DownloadIcon } from '$lib/components/icons';
+  import { CloseIcon, DownloadIcon } from '$lib/components/icons';
   import LinkPreview from '$lib/components/shared/LinkPreview.svelte';
   import ProfileAvatar from '$lib/components/shared/ProfileAvatar.svelte';
   import HoverCard from '$lib/components/shared/HoverCard.svelte';
@@ -31,12 +31,16 @@
   /**
    * @type {{
    *   identityToPubkey: (identity: string) => string | null,
-   *   title?: string
+   *   title?: string,
+   *   onClose?: () => void
    * }}
    */
   // title: the call's own name — only needed to re-label the pop-out window
   // when a sender's avatar/name is clicked from in here (QA 2026-10-02).
-  let { identityToPubkey, title = '' } = $props();
+  // onClose: the parent's way of collapsing this panel (the stage header's
+  // Chat toggle, the phone's back-to-call, the member page's column) — the
+  // panel offers a close control and Escape in an empty composer for it.
+  let { identityToPubkey, title = '', onClose = undefined } = $props();
 
   const lk = getLiveKitState();
   const call = getGroupCallState();
@@ -184,6 +188,18 @@
     >
       <DownloadIcon class_="h-4 w-4" title="" />
     </button>
+    {#if onClose}
+      <button
+        type="button"
+        class="btn btn-square btn-ghost btn-sm"
+        aria-label={m.groups_call_chat_close()}
+        title={m.groups_call_chat_close()}
+        onclick={onClose}
+        data-testid="call-chat-close"
+      >
+        <CloseIcon class_="h-4 w-4" title="" />
+      </button>
+    {/if}
   </div>
   <div bind:this={listEl} class="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto p-3">
     {#if lk.callChat.length === 0}
@@ -302,6 +318,11 @@
         if (e.key === 'Enter' && !e.shiftKey) {
           e.preventDefault();
           send();
+        } else if (e.key === 'Escape' && onClose && draft.trim() === '') {
+          // An empty composer has nothing to lose: Escape closes the panel.
+          // A draft stays put — Escape only steps out of the input then.
+          e.preventDefault();
+          onClose();
         }
       }}
     />
