@@ -8,6 +8,7 @@
   import { manager } from '$lib/stores/accounts.svelte';
   import { uploadAndFindLicense } from '$lib/helpers/upload-and-find-license.js';
   import { buildTulluCaption } from '$lib/helpers/tullu-caption.js';
+  import { readImageDimensions } from '$lib/helpers/image-dimensions.js';
   import LicenseModal from './LicenseModal.svelte';
   import MarkdownRenderer from './MarkdownRenderer.svelte';
   import ImageSourceChooserModal from './ImageSourceChooserModal.svelte';
@@ -16,14 +17,24 @@
   import * as m from '$lib/paraglide/messages';
 
   /**
+   * @typedef {import('$lib/helpers/imeta.js').MediaAttachment} MediaAttachment
+   *
    * @typedef {Object} Props
    * @property {string} content - Markdown content (two-way binding)
    * @property {string} [placeholder] - Placeholder text
    * @property {string} [minHeight] - Minimum editor height
+   * @property {(attachment: MediaAttachment) => void} [onmediainsert] - Called
+   *   with the NIP-94 fields of every image inserted into the body (upload or
+   *   library pick), so the publishing side can write NIP-92 imeta tags.
    */
 
-  /** @type {{ content: string, placeholder?: string, minHeight?: string }} */
-  let { content = $bindable(''), placeholder = '', minHeight = '400px' } = $props();
+  /** @type {Props} */
+  let {
+    content = $bindable(''),
+    placeholder = '',
+    minHeight = '400px',
+    onmediainsert = undefined
+  } = $props();
 
   let activeTab = $state(/** @type {'write' | 'preview'} */ ('write'));
   let imageUploading = $state(false);
@@ -36,7 +47,7 @@
 
   // pending-upload pattern (4th instance; extract a composable if a 5th appears).
   /**
-   * @typedef {{ url: string, hash: string, mime: string, size: number, alt: string }} PendingUpload
+   * @typedef {{ url: string, hash: string, mime: string, size: number, alt: string, dim?: string }} PendingUpload
    */
   let pendingUpload = $state(/** @type {PendingUpload | null} */ (null));
   /** @type {any} */
@@ -98,11 +109,23 @@
    * @param {{ url: string, hash: string, licenseEvent: any }} picked
    */
   function handleLibraryPick(picked) {
-    const alt =
-      picked.licenseEvent?.tags?.find((/** @type {string[]} */ t) => t[0] === 'title')?.[1] ?? '';
+    /** @param {string} name */
+    const tag = (name) =>
+      picked.licenseEvent?.tags?.find((/** @type {string[]} */ t) => t[0] === name)?.[1];
+    const alt = tag('title') ?? '';
     const caption = buildTulluCaption(picked.licenseEvent, { alt });
     const tail = caption ? `)\n\n${caption}\n\n` : ')';
     insertMarkdown(`![${alt}](`, tail, picked.url);
+    // The kind-1063 attestation already carries the NIP-94 fields.
+    const size = Number(tag('size'));
+    onmediainsert?.({
+      url: picked.url,
+      sha256: picked.hash || tag('x'),
+      type: tag('m'),
+      size: Number.isFinite(size) && size > 0 ? size : undefined,
+      dimensions: tag('dim'),
+      alt: alt || undefined
+    });
   }
 
   /**
@@ -125,7 +148,10 @@
 
     imageUploading = true;
     try {
-      const result = await uploadAndFindLicense(file, { signer: activeUser });
+      const [result, dim] = await Promise.all([
+        uploadAndFindLicense(file, { signer: activeUser }),
+        readImageDimensions(file)
+      ]);
 
       // Always open the modal. If an existing license was found, the modal
       // shows it in Accept / Create-my-own mode; otherwise the standard form.
@@ -135,7 +161,8 @@
         hash: result.sha256,
         mime: result.type,
         size: result.size,
-        alt: file.name
+        alt: file.name,
+        dim
       };
       pendingExistingLicense = result.existingLicense;
       modalOpen = true;
@@ -253,6 +280,14 @@
       const caption = buildTulluCaption(license, { alt: pendingUpload.alt });
       const tail = caption ? `)\n\n${caption}\n\n` : ')';
       insertMarkdown(`![${pendingUpload.alt}](`, tail, pendingUpload.url);
+      onmediainsert?.({
+        url: pendingUpload.url,
+        sha256: pendingUpload.hash,
+        type: pendingUpload.mime,
+        size: pendingUpload.size || undefined,
+        dimensions: pendingUpload.dim,
+        alt: pendingUpload.alt || undefined
+      });
     }
     pendingUpload = null;
     pendingExistingLicense = null;

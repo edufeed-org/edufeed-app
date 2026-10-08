@@ -8,12 +8,64 @@ import { sanitizeHtml } from '$lib/helpers/htmlSanitize.js';
 import { createSlugger, headingAnchorLink } from '$lib/helpers/headingAnchor.js';
 
 /**
- * @param {{ headingAnchors: boolean }} options
+ * @typedef {{ alt?: string, dimensions?: string }} ImetaFields
+ */
+
+/** @param {string} value */
+function escapeAttr(value) {
+  return String(value)
+    .replace(/&/g, '&amp;')
+    .replace(/"/g, '&quot;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+}
+
+/**
+ * The NIP-92 imeta entry for an image URL: by the raw string first, then by
+ * the normalized URL (authors and tags may differ in trailing slashes or
+ * casing of the host).
+ * @param {Map<string, ImetaFields> | undefined} imeta
+ * @param {string} href
+ */
+function lookupImeta(imeta, href) {
+  if (!imeta || imeta.size === 0) return undefined;
+  const direct = imeta.get(href);
+  if (direct) return direct;
+  try {
+    const normalized = new URL(href).toString();
+    for (const [url, fields] of imeta) {
+      try {
+        if (new URL(url).toString() === normalized) return fields;
+      } catch {
+        // skip unparseable tag urls
+      }
+    }
+  } catch {
+    // relative / invalid href: no match
+  }
+  return undefined;
+}
+
+/**
+ * @param {{ headingAnchors: boolean, imeta?: Map<string, ImetaFields> }} options
  * @returns {import('marked').RendererObject}
  */
-function buildRenderer({ headingAnchors }) {
+function buildRenderer({ headingAnchors, imeta }) {
   const slugger = headingAnchors ? createSlugger() : null;
   return {
+    // Images: NIP-92 imeta supplies width/height (no layout shift while the
+    // image loads) and an alt text when the markdown left it empty.
+    image({ href, title, text }) {
+      const fields = lookupImeta(imeta, href);
+      const dim = fields?.dimensions?.match(/^(\d+)x(\d+)$/);
+      const alt = text || fields?.alt || '';
+      let attrs = ` src="${escapeAttr(href)}" alt="${escapeAttr(alt)}"`;
+      if (title) attrs += ` title="${escapeAttr(title)}"`;
+      if (dim && Number(dim[1]) > 0 && Number(dim[2]) > 0) {
+        attrs += ` width="${dim[1]}" height="${dim[2]}"`;
+      }
+      return `<img${attrs}>`;
+    },
     link({ href, title, tokens }) {
       if (href?.startsWith('nostr:')) {
         href = '/' + href.slice(6);
@@ -67,7 +119,10 @@ export function stripMarkdown(content) {
 /**
  * Render markdown content to sanitized HTML string.
  * @param {string | null | undefined} content - Raw markdown content
- * @param {{ headingAnchors?: boolean }} [options]
+ * @param {{ headingAnchors?: boolean, imeta?: Map<string, ImetaFields> }} [options]
+ *   `imeta`: url -> NIP-92 fields of the event (see `imetaByUrl` in
+ *   helpers/imeta.js); images in the body get width/height and a fallback alt
+ *   from it.
  * @returns {string} Sanitized HTML
  */
 export function renderMarkdown(content, options = {}) {
@@ -75,7 +130,9 @@ export function renderMarkdown(content, options = {}) {
 
   try {
     const m = new Marked({ breaks: true, gfm: true });
-    m.use({ renderer: buildRenderer({ headingAnchors: !!options.headingAnchors }) });
+    m.use({
+      renderer: buildRenderer({ headingAnchors: !!options.headingAnchors, imeta: options.imeta })
+    });
     const rawHtml = /** @type {string} */ (
       m.parse(preprocessNostrMentions(content), { async: false })
     );

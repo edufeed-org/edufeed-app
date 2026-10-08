@@ -35,6 +35,14 @@
   let imageWasUploaded = $state(false);
   /** @type {any} */
   let imageLicenseEvent = $state(null);
+  /**
+   * Body images inserted this session (upload or library pick) with their
+   * NIP-94 fields — buildArticleTags turns the ones still in the markdown
+   * into NIP-92 imeta tags. Previous versions' imeta tags are carried over
+   * by updateArticle from the existing event.
+   * @type {import('$lib/helpers/imeta.js').MediaAttachment[]}
+   */
+  let bodyMedia = $state.raw([]);
   let hashtags = $state(/** @type {string[]} */ ([]));
 
   // Prefill from a channel app export (webxdc sendToChat → sessionStorage handoff).
@@ -150,7 +158,8 @@
         image: imageUrl || undefined,
         imageHash,
         imageLicenseEvent: imageLicenseEvent ?? null,
-        hashtags: hashtags.length > 0 ? hashtags : undefined
+        hashtags: hashtags.length > 0 ? hashtags : undefined,
+        media: bodyMedia
       };
 
       let naddr;
@@ -244,6 +253,7 @@
       <MarkdownEditor
         bind:content={editorContent}
         placeholder={m.article_editor_content_placeholder()}
+        onmediainsert={(att) => (bodyMedia = [...bodyMedia, att])}
       />
 
       <!-- Hashtags -->
