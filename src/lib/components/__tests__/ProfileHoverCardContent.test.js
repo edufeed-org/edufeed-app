@@ -4,8 +4,21 @@
  * @vitest-environment jsdom
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render } from '@testing-library/svelte';
+import { render, fireEvent, waitFor } from '@testing-library/svelte';
 import ProfileHoverCardContent from '../shared/ProfileHoverCardContent.svelte';
+
+// Follow-button fixtures, hoisted so the mock factories below can read them.
+const { activeUserRef, contactsRef, contactListRef, toggleFollow } = vi.hoisted(() => ({
+  activeUserRef: /** @type {{ value: any }} */ ({ value: null }),
+  contactsRef: /** @type {{ contacts: string[], isLoaded: boolean }} */ ({
+    contacts: [],
+    isLoaded: false
+  }),
+  // The active user's own kind 3 as the eventStore would hand it out
+  // (undefined = not loaded / absent).
+  contactListRef: /** @type {{ value: any }} */ ({ value: undefined }),
+  toggleFollow: vi.fn(async () => true)
+}));
 
 vi.mock('applesauce-core/helpers', () => ({
   getDisplayName: (/** @type {any} */ profile) => profile?.display_name || profile?.name || null
@@ -40,12 +53,28 @@ vi.mock('../waves/WaveButton.svelte', async () => {
 });
 
 vi.mock('$lib/components/icons', () => ({
-  CheckIcon: (/** @type {any} */ _anchor, /** @type {any} */ _props) => ({})
+  CheckIcon: (/** @type {any} */ _anchor, /** @type {any} */ _props) => ({}),
+  PlusIcon: (/** @type {any} */ _anchor, /** @type {any} */ _props) => ({})
 }));
 
 vi.mock('$lib/paraglide/messages', () => ({
   profile_avatar_alt: () => 'Avatar',
-  profile_avatar_fallback: () => '?'
+  profile_avatar_fallback: () => '?',
+  profile_follow_button: () => 'Folgen',
+  profile_unfollow_button: () => 'Entfolgen'
+}));
+
+vi.mock('$lib/helpers/follow.js', () => ({ toggleFollow }));
+
+vi.mock('$lib/stores/contacts.svelte.js', () => ({
+  contactsStore: {
+    get contacts() {
+      return contactsRef.contacts;
+    },
+    get isLoaded() {
+      return contactsRef.isLoaded;
+    }
+  }
 }));
 
 vi.mock('$lib/loaders/profile.js', () => ({
@@ -55,7 +84,12 @@ vi.mock('$lib/loaders/profile.js', () => ({
 vi.mock('$lib/stores/nostr-infrastructure.svelte', () => ({
   eventStore: {
     model: () => ({ subscribe: () => ({ unsubscribe: vi.fn() }) }),
-    replaceable: () => ({ subscribe: () => ({ unsubscribe: vi.fn() }) })
+    replaceable: (/** @type {number} */ kind) => ({
+      subscribe: (/** @type {(e: any) => void} */ next) => {
+        if (kind === 3) next(contactListRef.value);
+        return { unsubscribe: vi.fn() };
+      }
+    })
   }
 }));
 
@@ -76,14 +110,99 @@ vi.mock('$lib/stores/badge-awards.svelte.js', () => ({
 }));
 
 vi.mock('$lib/stores/accounts.svelte.js', () => ({
-  useActiveUser: () => () => null
+  useActiveUser: () => () => activeUserRef.value
 }));
 
 beforeEach(() => {
   vi.clearAllMocks();
+  activeUserRef.value = null;
+  contactsRef.contacts = [];
+  contactsRef.isLoaded = false;
+  contactListRef.value = undefined;
 });
 
 const TEST_PUBKEY = 'a'.repeat(64);
+const ME = 'b'.repeat(64);
+
+/** Logged in as ME with a loaded kind 3 that follows `contacts`. */
+function loginWithContacts(/** @type {string[]} */ contacts) {
+  activeUserRef.value = { pubkey: ME };
+  contactsRef.contacts = contacts;
+  contactsRef.isLoaded = true;
+  contactListRef.value = { kind: 3, pubkey: ME, tags: contacts.map((p) => ['p', p]) };
+}
+
+describe('ProfileHoverCardContent follow button', () => {
+  it('is hidden when logged out', () => {
+    const { queryByTestId } = render(ProfileHoverCardContent, {
+      props: { pubkey: TEST_PUBKEY, profile: { name: 'Alice' } }
+    });
+    expect(queryByTestId('hover-card-follow')).toBeNull();
+  });
+
+  it('is hidden on the own profile', () => {
+    loginWithContacts([]);
+    const { queryByTestId } = render(ProfileHoverCardContent, {
+      props: { pubkey: ME, profile: { name: 'Me' } }
+    });
+    expect(queryByTestId('hover-card-follow')).toBeNull();
+  });
+
+  it('is hidden while the own contact list has not arrived (never offers Follow over an unloaded kind 3)', () => {
+    activeUserRef.value = { pubkey: ME };
+    contactsRef.isLoaded = true; // ContactsModel emitted [] for a missing event
+    contactListRef.value = undefined;
+    const { queryByTestId } = render(ProfileHoverCardContent, {
+      props: { pubkey: TEST_PUBKEY, profile: { name: 'Alice' } }
+    });
+    expect(queryByTestId('hover-card-follow')).toBeNull();
+  });
+
+  it('offers Folgen for a user not yet followed', () => {
+    loginWithContacts(['c'.repeat(64)]);
+    const { getByTestId } = render(ProfileHoverCardContent, {
+      props: { pubkey: TEST_PUBKEY, profile: { name: 'Alice' } }
+    });
+    const btn = getByTestId('hover-card-follow');
+    expect(btn.textContent).toContain('Folgen');
+    expect(btn.className).toContain('btn-sm');
+  });
+
+  it('offers Entfolgen for a followed user', () => {
+    loginWithContacts([TEST_PUBKEY]);
+    const { getByTestId } = render(ProfileHoverCardContent, {
+      props: { pubkey: TEST_PUBKEY, profile: { name: 'Alice' } }
+    });
+    expect(getByTestId('hover-card-follow').textContent).toContain('Entfolgen');
+  });
+
+  it('runs the shared toggleFollow without navigating the card link', async () => {
+    loginWithContacts([]);
+    const { getByTestId } = render(ProfileHoverCardContent, {
+      props: { pubkey: TEST_PUBKEY, profile: { name: 'Alice' } }
+    });
+    const btn = getByTestId('hover-card-follow');
+    const event = new MouseEvent('click', { bubbles: true, cancelable: true });
+    btn.dispatchEvent(event);
+    expect(event.defaultPrevented).toBe(true);
+    await waitFor(() => expect(toggleFollow).toHaveBeenCalledWith(TEST_PUBKEY, false));
+  });
+
+  it('disables the button while the action is pending', async () => {
+    loginWithContacts([TEST_PUBKEY]);
+    /** @type {() => void} */
+    let resolve = () => {};
+    toggleFollow.mockImplementationOnce(() => new Promise((r) => (resolve = () => r(true))));
+    const { getByTestId } = render(ProfileHoverCardContent, {
+      props: { pubkey: TEST_PUBKEY, profile: { name: 'Alice' } }
+    });
+    const btn = /** @type {HTMLButtonElement} */ (getByTestId('hover-card-follow'));
+    await fireEvent.click(btn);
+    expect(btn.disabled).toBe(true);
+    resolve();
+    await waitFor(() => expect(btn.disabled).toBe(false));
+  });
+});
 
 describe('ProfileHoverCardContent', () => {
   it('renders display name from profile', () => {
