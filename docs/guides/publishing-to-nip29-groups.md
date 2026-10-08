@@ -223,7 +223,13 @@ pass code. `src/lib/groups/meetings.js` (`buildMeetingTags`,
 
 A guest link, when the organiser turns it on, is a meeting pass — see
 "Meeting passes" in `docs/nips/nip29-call-passes.md` — minted via
-`createMeetingLink` (`call-passes.js`). Invites are NIP-17 DMs
+`createMeetingLink` (`call-passes.js`). The relay only mints passes for AV
+groups, and a community's General channel (its root group) starts without
+the `livekit` tag: the dialog still offers the toggle to an admin who may
+switch calls on (`canEnableCalls`, the same gate as the one-click "Start
+call"), and `scheduleGroupMeeting` runs `enableGroupCalls` right before
+minting; a plain member is told that an admin has to switch calls on in
+the channel settings first. Invites are NIP-17 DMs
 (`sendWrappedDm`), one per invited pubkey, naming the meeting and the
 channel link; the guest link is included only for invitees who are not
 already on the channel roster (everyone gets it when the roster is

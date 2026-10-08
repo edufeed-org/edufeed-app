@@ -434,6 +434,39 @@ describe('CalendarEventModal — group meeting mode', () => {
     expect(r.queryByLabelText(m.meeting_modal_guests_label())).toBeNull();
   });
 
+  // Issue d0ab04d0 (General channel): calls are off, but the organiser is an
+  // admin who may switch them on — the toggle stays, its help says what it does.
+  it('offers the guest toggle to an admin who can switch calls on, and says so', () => {
+    h.modalStore.modalProps = {
+      mode: 'create',
+      groupMeeting: {
+        ...GROUP_MEETING,
+        passesSupported: false,
+        callsEnabled: false,
+        canEnableCalls: true
+      }
+    };
+    const r = render(CalendarEventModal);
+    expect(r.getByLabelText(m.meeting_modal_guests_label())).toBeTruthy();
+    expect(r.getByText(m.meeting_modal_guests_help_enables_calls())).toBeTruthy();
+    expect(r.queryByText(m.meeting_modal_guests_help())).toBeNull();
+  });
+
+  it('tells a member why guest links are unavailable while the channel has no calls', () => {
+    h.modalStore.modalProps = {
+      mode: 'create',
+      groupMeeting: {
+        ...GROUP_MEETING,
+        passesSupported: false,
+        callsEnabled: false,
+        canEnableCalls: false
+      }
+    };
+    const r = render(CalendarEventModal);
+    expect(r.queryByLabelText(m.meeting_modal_guests_label())).toBeNull();
+    expect(r.getByText(m.meeting_modal_guests_calls_off())).toBeTruthy();
+  });
+
   // QA round 3 C5/K1: the generic calendar wording ("Veranstaltungstitel",
   // reference links — whose nowrap label also scrolled the dialog sideways).
   it('uses meeting wording and drops the reference links', () => {

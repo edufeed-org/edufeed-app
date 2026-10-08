@@ -3973,6 +3973,8 @@
   "meeting_invite_dm": "Invitation: {title} on {date} at {time} ({zone}) in the channel {channel}. {channelUrl}",
   "meeting_invite_dm_guest": "Guest link (no account needed, opens 15 minutes before the start): {guestUrl}",
   "meeting_modal_guests_no_nip44": "Guest links need a login that can encrypt (NIP-44). Your current login can't.",
+  "meeting_modal_guests_help_enables_calls": "Turns on video calls in this channel. People without a membership can then join with the link from 15 minutes before the start until 30 minutes after the end.",
+  "meeting_modal_guests_calls_off": "Guest links need video calls in the channel. An admin can turn them on in the channel settings.",
   "groups_meeting_schedule": "Schedule a meeting",
   "meeting_card_label": "Meeting",
   "meeting_card_join": "Join",

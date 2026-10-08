@@ -2239,6 +2239,28 @@ describe('GroupChat', () => {
       }
     );
 
+    // Issue d0ab04d0: the dialog also learns whether calls are on and whether
+    // this user may switch them on (admin, relay hosts calls) — General
+    // starts without calls, so that is how its organiser gets a guest option.
+    it('hands the call state and the admin switch to the meeting dialog', async () => {
+      avProbe.supported = true;
+      const { modalStore } = await import('$lib/stores/modal.svelte.js');
+      const openModal = vi.spyOn(modalStore, 'openModal').mockImplementation(() => {});
+      try {
+        render(GroupChat, { props: { pointer: { relay: GROUP_RELAY, id: 'adminchat' } } });
+        await screen.findByTestId('group-call-start');
+        await fireEvent.click(await screen.findByTestId('group-more-menu'));
+        await fireEvent.click(await screen.findByTestId('group-meeting-schedule'));
+        const props = /** @type {any} */ (openModal.mock.calls[0][1]);
+        expect(props.groupMeeting.callsEnabled).toBe(false);
+        expect(props.groupMeeting.canEnableCalls).toBe(true);
+        expect(props.groupMeeting.passesSupported).toBe(false);
+      } finally {
+        openModal.mockRestore();
+        avProbe.supported = false;
+      }
+    });
+
     it('offers no "Termin planen" to a non-member', async () => {
       render(GroupChat, { props: { pointer: { relay: GROUP_RELAY, id: 'openchat' } } });
       await fireEvent.click(await screen.findByTestId('group-more-menu'));

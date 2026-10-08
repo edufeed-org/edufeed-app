@@ -11,6 +11,7 @@
 // Plain module (no runes): called from the modal and tested in node.
 import { publishToGroupRelay } from './group-management.js';
 import { createMeetingLink } from './call-passes.js';
+import { enableGroupCalls } from './enable-group-calls.js';
 import {
   MEETING_KIND,
   MEETING_DEFAULT_DURATION_S,
@@ -26,8 +27,12 @@ import * as m from '$lib/paraglide/messages';
 const HEX_PUBKEY_RE = /^[0-9a-f]{64}$/;
 
 /**
+ * `callsEnabled`: the channel's 39000 carries `livekit`. `canEnableCalls`: the
+ * organiser is an admin and the relay can host calls, so guests are possible
+ * once calls are switched on — which scheduling with guests then does.
  * @typedef {{pointer: {id: string, relay: string}, channelName: string,
- *   channelUrl: string, memberPubkeys?: string[], passesSupported?: boolean}} GroupMeeting
+ *   channelUrl: string, memberPubkeys?: string[], passesSupported?: boolean,
+ *   callsEnabled?: boolean, canEnableCalls?: boolean}} GroupMeeting
  */
 
 /** @param {string[][]} tags @param {string} name */
@@ -39,7 +44,10 @@ function tagNumber(tags, name) {
 /**
  * Sign and publish the meeting to the group relay, then (when guests are
  * allowed and the relay's 60-day pass limit permits) mint its guest link.
- * A failed guest link never undoes the meeting; a rejected meeting throws.
+ * A channel without calls gets them switched on first when the organiser
+ * may (issue d0ab04d0: a community's General channel starts without calls,
+ * and the relay only mints passes for AV groups). A failed guest link — or
+ * a failed switch — never undoes the meeting; a rejected meeting throws.
  *
  * @param {{relayConn: any, formData: import('../types/calendar.js').EventFormData,
  *   groupMeeting: GroupMeeting, user: {pubkey: string, signer: any}, origin: string,
@@ -82,6 +90,9 @@ export async function scheduleGroupMeeting({
       guestStatus = 'too_far';
     } else {
       try {
+        if (groupMeeting.callsEnabled === false && groupMeeting.canEnableCalls) {
+          await enableGroupCalls(pointer, user);
+        }
         const link = await createMeetingLink(relayConn, pointer, user, origin, {
           start,
           end,
