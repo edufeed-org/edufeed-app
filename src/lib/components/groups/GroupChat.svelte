@@ -1908,7 +1908,17 @@
           tabindex="0"
           class="dropdown-content menu z-50 w-60 rounded-box border border-base-300 bg-base-100 p-2 shadow-lg"
         >
-          <li>
+          {#if canWrite}
+            <li>
+              <button data-testid="group-meeting-schedule" onclick={openScheduleMeeting}>
+                {m.groups_meeting_schedule()}
+              </button>
+            </li>
+          {/if}
+          <!-- Hiding belongs with leaving, not with the content actions
+            (smoke test 2026-10-08): its own section right above Leave. The
+            divider only makes sense when something sits above it. -->
+          <li class={canWrite ? 'mt-2 border-t border-base-300 pt-2' : ''}>
             {#if inMyList}
               <!-- QA C6: says which list and that nothing else changes. -->
               <button
@@ -1928,13 +1938,6 @@
               </button>
             {/if}
           </li>
-          {#if canWrite}
-            <li>
-              <button data-testid="group-meeting-schedule" onclick={openScheduleMeeting}>
-                {m.groups_meeting_schedule()}
-              </button>
-            </li>
-          {/if}
           {#if rosterAnswered && isMember}
             <!-- Destructive last, set apart, and confirmed (design 1a). -->
             <li class="mt-2 border-t border-base-300 pt-2">

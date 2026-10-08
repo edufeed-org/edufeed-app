@@ -2888,6 +2888,27 @@ describe('GroupChat', () => {
       await waitFor(() => expect(screen.getByTestId('group-list-add')).toBeTruthy());
     });
 
+    // Smoke test 2026-10-08: hiding belongs with leaving, not above
+    // "Schedule a meeting" — its own section right before the red entry.
+    it('sits in its own section after "Schedule a meeting" and right above "Leave channel"', async () => {
+      seedMyList([['group', 'beechat', GROUP_RELAY]]);
+      render(GroupChat, { props: { pointer } });
+      await fireEvent.click(await screen.findByTestId('group-more-menu'));
+      const remove = await screen.findByTestId('group-list-remove');
+      const schedule = await screen.findByTestId('group-meeting-schedule');
+      const leave = await screen.findByTestId('group-leave');
+      const menu = /** @type {HTMLElement} */ (remove.closest('ul'));
+      const items = [...menu.querySelectorAll('li > button')];
+      expect(items.indexOf(schedule)).toBeLessThan(items.indexOf(remove));
+      expect(items.indexOf(remove)).toBe(items.length - 2);
+      expect(items.at(-1)).toBe(leave);
+      // Dividers: one above the hide entry, one above leave, none above the
+      // content actions.
+      expect(schedule.closest('li')?.className ?? '').not.toContain('border-t');
+      expect(remove.closest('li')?.className).toContain('border-t');
+      expect(leave.closest('li')?.className).toContain('border-t');
+    });
+
     it('offers "Add to my list" for a group that is not listed', async () => {
       seedMyList([['group', 'other', GROUP_RELAY]]);
       render(GroupChat, { props: { pointer } });
