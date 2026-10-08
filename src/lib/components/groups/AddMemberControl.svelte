@@ -19,6 +19,7 @@
   } from '$lib/groups/group-management.js';
   import { sendWrappedDm } from '$lib/services/wrapped-dm.js';
   import { buildGroupInviteMessage } from '$lib/groups/invite-message.js';
+  import { buildJoinUrl } from '$lib/groups/invite-link.js';
   import { fetchRelaySelf } from '$lib/groups/relay-self.js';
   import { resolveGroupActor } from '$lib/groups/group-actor.js';
   import { pool } from '$lib/stores/nostr-infrastructure.svelte';
@@ -121,8 +122,7 @@
         // ?view=channels was dropped (controller ruling, 2026-08-19):
         // CommunityProfileHero — the only place reading ?join= — mounts
         // inside HomeView, not the channels view that param would route to.
-        const npub = nip19.npubEncode(communityId);
-        const joinUrl = `${location.origin}/c/${npub}?join=${code}`;
+        const joinUrl = buildJoinUrl(location.origin, communityId, code);
 
         // Cross-client naddr line is best-effort: a relay that won't answer
         // NIP-11 (or has no `self`) just means the DM ships without it —

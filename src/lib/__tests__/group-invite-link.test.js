@@ -59,3 +59,26 @@ describe('parseGroupInvite', () => {
     ).toBeNull();
   });
 });
+
+describe('buildCommunityUrl / buildJoinUrl', () => {
+  it('builds the canonical /c/<npub> page link from a hex pubkey', async () => {
+    const { buildCommunityUrl } = await import('$lib/groups/invite-link.js');
+    expect(buildCommunityUrl('https://dev.edufeed.org', COMMUNITY)).toBe(
+      `https://dev.edufeed.org/c/${NPUB}`
+    );
+    expect(buildCommunityUrl('https://dev.edufeed.org', NPUB)).toBe(
+      `https://dev.edufeed.org/c/${NPUB}`
+    );
+  });
+
+  it('builds a join link that parseGroupInvite recognises again', async () => {
+    const { buildJoinUrl } = await import('$lib/groups/invite-link.js');
+    const url = buildJoinUrl('https://dev.edufeed.org', COMMUNITY, 'hMX6PYy4m37J');
+    expect(url).toBe(JOIN_URL);
+    expect(parseGroupInvite(`Hi\n${url}`)).toMatchObject({
+      communityPubkey: COMMUNITY,
+      code: 'hMX6PYy4m37J',
+      joinUrl: url
+    });
+  });
+});

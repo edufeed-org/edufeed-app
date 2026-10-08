@@ -49,3 +49,30 @@ export function parseGroupInvite(content) {
     naddr: content.match(NADDR_LINE_RE)?.[1] ?? null
   };
 }
+
+/**
+ * Canonical in-app URL of a community: `/c/<npub>` (the `/c/[pubkey]` layout
+ * redirects hex to npub, so this is also the shortest form the app has — a
+ * true short link would need a server-side redirect registry).
+ * @param {string} origin - e.g. location.origin
+ * @param {string} communityPubkey - hex or npub
+ */
+export function buildCommunityUrl(origin, communityPubkey) {
+  const npub = communityPubkey.startsWith('npub1')
+    ? communityPubkey
+    : nip19.npubEncode(communityPubkey);
+  return `${origin}/c/${npub}`;
+}
+
+/**
+ * Invite link for a moderated community: the community page with the
+ * invite code that CommunityProfileHero's `?join=` effect prefills. The
+ * single shape every writer (DM invite, settings pane) and the parser above
+ * agree on.
+ * @param {string} origin
+ * @param {string} communityPubkey - hex or npub
+ * @param {string} code - minted kind-9009 invite code
+ */
+export function buildJoinUrl(origin, communityPubkey, code) {
+  return `${buildCommunityUrl(origin, communityPubkey)}?join=${encodeURIComponent(code)}`;
+}
