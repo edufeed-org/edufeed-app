@@ -16,6 +16,7 @@
 import { buildChannelRows } from './community-channel-rows.js';
 import { dTagOf, nameOf } from './subtree-channels.js';
 import { channelAccessLevel, channelDeleted } from './channel-access.js';
+import { isBreakoutGroup } from './breakout.js';
 import { useMyGroups } from './unlinked-groups.svelte.js';
 import { sameRelayUrl } from './relay-url.js';
 import { useRelayDirectory } from './relay-directory.svelte.js';
@@ -86,7 +87,7 @@ function rowsFrom(metadata, relay, hostRequiresAuth = false) {
     const id = dTagOf(event);
     if (!id) continue;
     // The open listing still returns a deleted group's "[deleted]" tombstone.
-    if (channelDeleted(event)) continue;
+    if (channelDeleted(event) || isBreakoutGroup(event)) continue;
     subtreeChannels.push({
       id,
       relay,

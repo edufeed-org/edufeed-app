@@ -74,6 +74,7 @@
     callSwitchConfirm: lazyComponent(() => import('./groups/CallSwitchConfirmModal.svelte')),
     callLeaveConfirm: lazyComponent(() => import('./groups/CallLeaveConfirmModal.svelte')),
     callPreJoin: lazyComponent(() => import('./groups/CallPreJoinModal.svelte')),
+    breakoutAssignment: lazyComponent(() => import('./groups/BreakoutAssignmentModal.svelte')),
     connectionStatus: lazyComponent(() => import('./shared/ConnectionStatusModal.svelte')),
     reportIssue: lazyComponent(() => import('./shared/ReportIssueModal.svelte'))
   };
@@ -167,6 +168,15 @@
           title: props?.title ?? '',
           // The lobby's answer carries the chosen media (camera / mic on).
           onConfirm: (/** @type {unknown} */ media) => callbacks?.onConfirm?.(media),
+          onCancel: () => callbacks?.onCancel?.()
+        };
+      }
+      case 'breakoutAssignment': {
+        const callbacks = /** @type {any} */ (modal.modalCallbacks);
+        return {
+          roomName: props?.roomName ?? '',
+          autoMs: typeof props?.autoMs === 'number' ? props.autoMs : 5000,
+          onConfirm: () => callbacks?.onConfirm?.(),
           onCancel: () => callbacks?.onCancel?.()
         };
       }

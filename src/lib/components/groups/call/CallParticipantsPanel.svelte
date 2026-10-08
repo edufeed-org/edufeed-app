@@ -22,10 +22,19 @@
    *   onTogglePin: (key: string) => void,
    *   onVolumeChange: (pubkey: string, volume: number) => void,
    *   onClose: () => void,
-   *   menuExtras?: import('svelte').Snippet<[ParticipantRow]>
+   *   menuExtras?: import('svelte').Snippet<[ParticipantRow]>,
+   *   headerExtras?: import('svelte').Snippet
    * }}
+   * `headerExtras`: the stage's buttons in the panel header (breakout rooms).
    */
-  let { rows, onTogglePin, onVolumeChange, onClose, menuExtras = undefined } = $props();
+  let {
+    rows,
+    onTogglePin,
+    onVolumeChange,
+    onClose,
+    menuExtras = undefined,
+    headerExtras = undefined
+  } = $props();
 
   /** @type {HTMLDivElement | undefined} */
   let rootEl = $state(undefined);
@@ -63,6 +72,7 @@
     <h3 class="min-w-0 flex-1 truncate text-sm font-semibold">
       {m.groups_call_participants_count({ count: rows.length })}
     </h3>
+    {@render headerExtras?.()}
     <button
       type="button"
       class="btn btn-square btn-ghost btn-sm"

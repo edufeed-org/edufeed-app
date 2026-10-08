@@ -71,6 +71,16 @@
   import { getTilePlacements, setTilePlacements } from '$lib/groups/call-tile-placements.svelte.js';
   import { isGuestParticipant, participantCallRole } from '$lib/groups/livekit.js';
   import { moderateActiveCall } from '$lib/groups/group-call.svelte.js';
+  import {
+    getBreakoutState,
+    ensureBreakoutListener,
+    startBreakout,
+    endBreakout,
+    moveParticipant,
+    joinBreakoutRoom,
+    returnToMain
+  } from '$lib/groups/breakout.svelte.js';
+  import { formatCountdown } from '$lib/groups/breakout.js';
   import { trackOnScreen as trackNodeOnScreen } from '$lib/groups/track-on-screen.js';
   import { Track } from 'livekit-client';
   import { useProfileMap } from '$lib/stores/profile-map.svelte.js';
@@ -94,7 +104,9 @@
     PeopleIcon,
     GridIcon,
     ChevronLeftIcon,
-    ChevronRightIcon
+    ChevronRightIcon,
+    ChannelsIcon,
+    ClockIcon
   } from '$lib/components/icons';
   import ParticipantTile from './ParticipantTile.svelte';
   import CallHostActions from './CallHostActions.svelte';
@@ -310,6 +322,36 @@
   const myRole = $derived(
     lk.localParticipant ? (rolesByIdentity.get(lk.localParticipant.identity) ?? null) : null
   );
+
+  // --- Breakout rooms (groups/breakout.svelte.js): a host or co-host of the
+  // MAIN room opens them from the participant list; in a room everyone gets
+  // the room chip, the deadline and the way back. The listener for the
+  // host's assignment lives in the connection service — made sure of here
+  // as well as by the store, so a stage mounted into an already-live call
+  // (pop-out, second mount) never misses it.
+  const breakout = getBreakoutState();
+  $effect(() => {
+    void ensureBreakoutListener();
+  });
+  const BreakoutDialogLazy = lazyComponent(() => import('./BreakoutDialog.svelte'));
+  const BreakoutPanelLazy = lazyComponent(() => import('./BreakoutPanel.svelte'));
+  let breakoutDialogOpen = $state(false);
+  let breakoutPanelOpen = $state(false);
+  // Host rights hold in the main room only: never offer the controls inside
+  // a breakout room (the relay seats whoever opens that room as its host).
+  const inBreakoutRoom = $derived(breakout.currentRoom !== null);
+  const hostsBreakout = $derived(!inBreakoutRoom && breakout.session?.hosting === true);
+  const canOpenBreakout = $derived(!!myRole && !inBreakoutRoom && !breakout.session);
+  /** @param {{roomCount: number, seats: Array<{identity: string, pubkey: string, roomIndex: number}>, durationMinutes: number | null}} args */
+  async function startBreakoutRooms(args) {
+    await startBreakout({ channelName: title, ...args });
+    breakoutDialogOpen = false;
+    breakoutPanelOpen = true;
+    participantsOpen = true;
+  }
+  $effect(() => {
+    if (!hostsBreakout) breakoutPanelOpen = false;
+  });
 
   // --- Host actions (CallHostActions in the participant list's row menu):
   // the relay does the work with its admin token (moderateActiveCall); a
@@ -902,7 +944,7 @@
           {m.groups_call_listen_only()}
         </span>
       {/if}
-      {#if myRole}
+      {#if myRole && !inBreakoutRoom}
         <span
           class="badge shrink-0 badge-sm badge-primary"
           data-testid="group-call-my-role"
@@ -910,6 +952,30 @@
         >
           {myRole === 'host' ? m.groups_call_you_are_host() : m.groups_call_you_are_cohost()}
         </span>
+      {/if}
+      {#if breakout.currentRoom}
+        <span
+          class="badge shrink-0 gap-1 badge-sm tabular-nums badge-accent"
+          data-testid="group-call-breakout-room"
+        >
+          {m.groups_call_breakout_in_room({ n: breakout.currentRoom.index })}
+          {#if breakout.remaining !== null}
+            · {formatCountdown(breakout.remaining)}
+          {/if}
+        </span>
+      {:else if hostsBreakout && breakout.remaining !== null}
+        <button
+          type="button"
+          class="badge shrink-0 cursor-pointer gap-1 badge-sm tabular-nums badge-accent"
+          onclick={() => {
+            participantsOpen = true;
+            breakoutPanelOpen = true;
+          }}
+          data-testid="group-call-breakout-deadline"
+        >
+          <ClockIcon class_="h-3 w-3" title="" />
+          {m.groups_call_breakout_time_left({ time: formatCountdown(breakout.remaining) })}
+        </button>
       {/if}
       {#if handCount > 0}
         <button
@@ -948,6 +1014,18 @@
       </div>
     {/if}
     <div class="flex shrink-0 items-center gap-1 @lg:gap-2">
+      {#if inBreakoutRoom}
+        <button
+          class="btn gap-1 px-2 btn-sm btn-primary @lg:px-3"
+          onclick={() => void returnToMain()}
+          title={m.groups_call_breakout_back_to_main()}
+          aria-label={m.groups_call_breakout_back_to_main()}
+          data-testid="group-call-breakout-back"
+        >
+          <ChevronLeftIcon class_="h-4 w-4" title="" />
+          <span class="hidden @lg:inline">{m.groups_call_breakout_back_to_main()}</span>
+        </button>
+      {/if}
       {#if onInvite}
         <button
           class="btn btn-square btn-ghost btn-sm @lg:w-auto @lg:px-3"
@@ -1222,13 +1300,46 @@
           class="flex min-h-0 w-full flex-col @2xl:w-72 @2xl:shrink-0 @2xl:border-l @2xl:border-base-300"
           data-testid="group-call-participants-column"
         >
-          {#if ParticipantsPanelLazy.Component}
+          {#if breakoutPanelOpen && hostsBreakout}
+            {#if BreakoutPanelLazy.Component}
+              <BreakoutPanelLazy.Component
+                rows={participantRows}
+                {breakout}
+                myPubkey={pubkeyOf(lk.localParticipant)}
+                onMove={(args) => void moveParticipant(args)}
+                onJoin={(room) => void joinBreakoutRoom(room)}
+                onEnd={() => void endBreakout()}
+                onClose={() => (breakoutPanelOpen = false)}
+              />
+            {:else}
+              <div class="flex flex-1 items-center justify-center">
+                <span class="loading loading-md loading-spinner"></span>
+              </div>
+            {/if}
+          {:else if ParticipantsPanelLazy.Component}
             <ParticipantsPanelLazy.Component
               rows={participantRows}
               onTogglePin={togglePin}
               onVolumeChange={changeVolume}
               onClose={() => (participantsOpen = false)}
             >
+              {#snippet headerExtras()}
+                {#if canOpenBreakout || hostsBreakout}
+                  <button
+                    type="button"
+                    class="btn gap-1 btn-ghost btn-sm"
+                    onclick={() => {
+                      if (hostsBreakout) breakoutPanelOpen = true;
+                      else breakoutDialogOpen = true;
+                    }}
+                    title={m.groups_call_breakout_title()}
+                    data-testid="group-call-breakout-open"
+                  >
+                    <ChannelsIcon class_="h-4 w-4" title="" />
+                    <span class="hidden @lg:inline">{m.groups_call_breakout_title()}</span>
+                  </button>
+                {/if}
+              {/snippet}
               {#snippet menuExtras(
                 /** @type {import('$lib/groups/call-participants.js').ParticipantRow} */ row
               )}
@@ -1577,4 +1688,13 @@
       onclick={() => (removeTarget = null)}
     ></button>
   </div>
+{/if}
+
+{#if breakoutDialogOpen && BreakoutDialogLazy.Component}
+  <BreakoutDialogLazy.Component
+    rows={participantRows}
+    nameOf={(row) => nameOf(row.participant)}
+    onStart={startBreakoutRooms}
+    onClose={() => (breakoutDialogOpen = false)}
+  />
 {/if}

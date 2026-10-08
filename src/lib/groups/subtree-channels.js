@@ -11,6 +11,7 @@
 // pointer marker; "all community members, privately" is Concord's job now.
 import { GROUP_METADATA_KIND } from 'applesauce-common/helpers/groups';
 import { channelAccessLevel, channelDeleted, channelHidden } from './channel-access.js';
+import { isBreakoutGroup } from './breakout.js';
 
 /** @param {any} event @returns {string | undefined} the `d` tag (group id) */
 export function dTagOf(event) {
@@ -87,7 +88,8 @@ export function buildSubtreeChannels(events, rootId, relay, hostRequiresAuth = f
   // creation has a live 39000 followed by the tombstone), so it is applied
   // after the newest-wins pass, not while iterating the bag.
   const channels = [...newestById.values()]
-    .filter((ev) => !channelDeleted(ev))
+    // Breakout rooms are ephemeral call sub-groups, never channels to list.
+    .filter((ev) => !channelDeleted(ev) && !isBreakoutGroup(ev))
     .map(toRow)
     .sort((a, b) => (a.name ?? a.id).localeCompare(b.name ?? b.id));
 

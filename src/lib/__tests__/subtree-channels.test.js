@@ -1,6 +1,7 @@
 /** @vitest-environment node */
 import { describe, it, expect } from 'vitest';
 import { buildSubtreeChannels, parentOf, dTagOf, nameOf } from '$lib/groups/subtree-channels.js';
+import { breakoutRoomMetadata } from '$lib/groups/breakout.js';
 
 const ROOT = 'root123';
 const R = 'wss://groups.example/c/root123';
@@ -49,6 +50,37 @@ describe('buildSubtreeChannels', () => {
   // The relay keeps a tombstone 39000 (name "[deleted]") for a deleted group,
   // and the /c endpoint serves it with the rest of the subtree. A row named
   // "[deleted]" is noise in the channel overview: drop it.
+  it('drops breakout rooms (ephemeral call sub-groups) whether or not they carry a parent', () => {
+    const room = (/** @type {number} */ n, /** @type {boolean} */ withParent) => {
+      const m = breakoutRoomMetadata({
+        parentId: 'allgemein',
+        channelName: 'Allgemein',
+        index: n,
+        withParent
+      });
+      return meta(`room-${n}`, [
+        ['name', m.name],
+        ['about', m.about],
+        ['hidden'],
+        ['livekit'],
+        // the relay keeps whatever parent the 9002 set: the channel, or the
+        // ROOT when a deployment lists rooms right under the community
+        ['parent', withParent ? 'allgemein' : ROOT]
+      ]);
+    };
+    const events = [
+      meta(ROOT, [['name', 'Community']]),
+      meta('allgemein', [
+        ['parent', ROOT],
+        ['name', 'Allgemein']
+      ]),
+      room(1, true),
+      room(2, false)
+    ];
+    const { channels } = buildSubtreeChannels(events, ROOT, R);
+    expect(channels.map((c) => c.id)).toEqual(['allgemein']);
+  });
+
   it('drops a deleted channel (relay tombstone) from the list', () => {
     const events = [
       meta(ROOT, [['name', 'Community']]),
