@@ -428,9 +428,24 @@ describe('MeetingCard', () => {
       await fireEvent.click(screen.getByTestId('meeting-card-delete'));
       await fireEvent.click(screen.getByTestId('meeting-card-delete-confirm'));
       await waitFor(() =>
-        expect(h.showToast).toHaveBeenCalledWith(m.meeting_card_delete_failed(), 'error')
+        expect(h.showToast).toHaveBeenCalledWith(
+          m.meeting_card_delete_failed_reason({ reason: 'relay said no' }),
+          'error'
+        )
       );
       expect(screen.getByTestId('meeting-card-delete-confirm')).toBeTruthy();
+    });
+
+    it('falls back to the plain message when the failure carries no reason', async () => {
+      h.deleteMeeting.mockRejectedValue(new Error(''));
+      render(MeetingCard, {
+        props: { event: meetingIn(3600), pointer: POINTER, user: me, isAdmin: false }
+      });
+      await fireEvent.click(screen.getByTestId('meeting-card-delete'));
+      await fireEvent.click(screen.getByTestId('meeting-card-delete-confirm'));
+      await waitFor(() =>
+        expect(h.showToast).toHaveBeenCalledWith(m.meeting_card_delete_failed(), 'error')
+      );
     });
   });
 });

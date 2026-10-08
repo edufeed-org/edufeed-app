@@ -240,7 +240,13 @@
       showToast(m.meeting_card_deleted(), 'success');
     } catch (err) {
       console.error('meeting: delete failed', err);
-      showToast(m.meeting_card_delete_failed(), 'error');
+      // The relay's own words ("can't delete very old group message", a
+      // moderation refusal) tell the organiser what to do next.
+      const reason = (err instanceof Error ? err.message : String(err ?? '')).trim();
+      showToast(
+        reason ? m.meeting_card_delete_failed_reason({ reason }) : m.meeting_card_delete_failed(),
+        'error'
+      );
     }
     deleting = false;
   }
