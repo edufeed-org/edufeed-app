@@ -24,7 +24,9 @@ vi.mock('$lib/services/livekit-connection.svelte.js', () => ({
     lkListener.cb = cb;
     return () => {};
   },
-  isRemovalReason: () => true
+  isRemovalReason: () => true,
+  // The leave dialog reads the seat (guest or member) off the local participant.
+  getLiveKitState: () => ({ localParticipant: null })
 }));
 vi.mock('$lib/paraglide/messages', () => ({}));
 vi.mock(

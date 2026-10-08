@@ -13,7 +13,7 @@
 // pulls livekit-client (~300KB) into whatever imports it, and this store is
 // imported by GroupChat and the root layout. It is loaded on join.
 import { channelKey } from './community-pointer.js';
-import { requestGroupCallToken, GroupCallTokenError } from './livekit.js';
+import { requestGroupCallToken, GroupCallTokenError, isGuestParticipant } from './livekit.js';
 import { getChatBeside, setChatBeside } from '$lib/services/call-prefs.js';
 import { confirmCallSwitch, confirmCallLeave } from './call-switch-confirm.svelte.js';
 import { playLeaveSound } from '$lib/services/call-sounds.js';
@@ -65,6 +65,10 @@ let attempt = 0;
 // current attempt. Plain `let`: bookkeeping, never rendered.
 /** @type {(() => void) | null} */
 let stopDisconnectListener = null;
+// The connection service once a join has loaded it (see the header: never a
+// static import). Lets the leave dialog read the seat synchronously.
+/** @type {typeof import('$lib/services/livekit-connection.svelte.js') | null} */
+let lkModule = null;
 
 /**
  * @returns {{
@@ -168,6 +172,7 @@ export async function joinGroupCall(pointer, user, view = {}) {
     token = result.participantToken;
     phase = 'ready';
     const lk = await import('$lib/services/livekit-connection.svelte.js');
+    lkModule = lk;
     if (myAttempt !== attempt) return;
     // The server (or the network) ending the seat: show a readable end
     // state instead of a stage stuck on "Connecting…".
@@ -302,8 +307,8 @@ export async function leaveGroupCallWithConfirm(ask = confirmCallLeave) {
     });
     let proceed = false;
     try {
-      // Joined with a call pass code: that link is also the way back.
-      proceed = await ask({ guest: !!code, signal: moot.signal });
+      // A guest seat: that link is also the way back (the dialog says so).
+      proceed = await ask({ guest: seatedAsGuest(), signal: moot.signal });
     } finally {
       stopWatch();
     }
@@ -316,6 +321,21 @@ export async function leaveGroupCallWithConfirm(ask = confirmCallLeave) {
 
 function isLive() {
   return phase === 'requesting' || phase === 'ready';
+}
+
+/**
+ * Whether the seat we hold is a guest seat. The relay decides, not the link:
+ * a member who opens a guest link gets a member token (the code is ignored
+ * for members, docs/nips/nip29-call-passes.md), and only a guest token
+ * carries `{"guest":true}` in the participant metadata. While the Room is
+ * not up yet (token in flight) the code is the best available guess.
+ * Synchronous on purpose: the dialog must open in the same tick as the
+ * click, before anything else can end the call under it.
+ */
+function seatedAsGuest() {
+  const local = connected ? lkModule?.getLiveKitState().localParticipant : null;
+  if (local) return isGuestParticipant(local);
+  return !!code;
 }
 
 /**

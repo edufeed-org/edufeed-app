@@ -24,9 +24,13 @@ const connectToRoom = vi.fn(async () => {});
 // The store's one disconnect listener (onRoomDisconnected), so a test can
 // play "the server dropped / removed us".
 const lkListener = { cb: /** @type {((reason: any) => void) | null} */ (null) };
+// The seat LiveKit gave us: its metadata says whether the relay minted a
+// guest token ({"guest":true,...}) — the only truth about guest-ness.
+const lkState = { localParticipant: /** @type {{metadata?: string} | null} */ (null) };
 vi.mock('$lib/services/livekit-connection.svelte.js', () => ({
   disconnectFromRoom: () => disconnectFromRoom(),
   connectToRoom: (/** @type {any[]} */ ...args) => connectToRoom(...args),
+  getLiveKitState: () => lkState,
   onRoomDisconnected: (/** @type {(reason: any) => void} */ cb) => {
     lkListener.cb = cb;
     return () => {
@@ -78,6 +82,7 @@ const P2 = { id: 'room-2', relay: RELAY };
 const USER = { pubkey: 'a'.repeat(64), signer: { signEvent: vi.fn() } };
 
 beforeEach(async () => {
+  lkState.localParticipant = null;
   await leaveGroupCall();
   requestGroupCallToken.mockReset();
   disconnectFromRoom.mockClear();
@@ -411,10 +416,34 @@ describe('leaveGroupCallWithConfirm', () => {
   });
 
   it('someone who joined with a call link gets the link copy', async () => {
+    lkState.localParticipant = { metadata: '{"guest":true,"pass":"p1"}' };
     await joinGroupCall(P1, USER, { code: 'secret' });
     confirmCallLeave.mockResolvedValue(false);
     await leaveGroupCallWithConfirm();
     expect(confirmCallLeave).toHaveBeenCalledWith(expect.objectContaining({ guest: true }));
+  });
+
+  // Issue "member of the General channel got the Gast badge": the relay
+  // ignores the code for a member and seats them as a member (no guest
+  // metadata) — the dialog must follow the seat, not the link.
+  it('a member who came through a guest link gets the member copy', async () => {
+    lkState.localParticipant = { metadata: '' };
+    await joinGroupCall(P1, USER, { code: 'secret' });
+    confirmCallLeave.mockResolvedValue(false);
+    await leaveGroupCallWithConfirm();
+    expect(confirmCallLeave).toHaveBeenCalledWith(expect.objectContaining({ guest: false }));
+  });
+
+  it('falls back to the link while the seat is not known yet (token still in flight)', async () => {
+    lkState.localParticipant = null;
+    let resolveToken = (/** @type {any} */ _v) => {};
+    requestGroupCallToken.mockReturnValueOnce(new Promise((r) => (resolveToken = r)));
+    const joining = joinGroupCall(P1, USER, { code: 'secret' });
+    confirmCallLeave.mockResolvedValue(false);
+    await leaveGroupCallWithConfirm();
+    expect(confirmCallLeave).toHaveBeenCalledWith(expect.objectContaining({ guest: true }));
+    resolveToken({ serverUrl: 'wss://x', participantToken: 't' });
+    await joining;
   });
 
   it('an ended call closes without asking again', async () => {
