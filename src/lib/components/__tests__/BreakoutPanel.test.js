@@ -7,10 +7,10 @@
  * @vitest-environment jsdom
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, fireEvent, screen } from '@testing-library/svelte';
+import { render, fireEvent, screen, waitFor } from '@testing-library/svelte';
 
 function Stub() {}
-vi.mock('$lib/components/icons', () => ({ CloseIcon: Stub, MeetIcon: Stub }));
+vi.mock('$lib/components/icons', () => ({ CloseIcon: Stub, MeetIcon: Stub, SendIcon: Stub }));
 vi.mock(
   '$lib/components/shared/ProfileAvatar.svelte',
   () => import('./fixtures/ProfileAvatarStub.svelte')
@@ -35,6 +35,13 @@ vi.mock('$lib/paraglide/messages', () => ({
   groups_call_breakout_duration: () => 'Duration',
   groups_call_breakout_extend: ({ minutes }) => `+${minutes} min`,
   groups_call_breakout_auto_assign: () => 'Assign late joiners automatically',
+  groups_call_breakout_broadcast_title: () => 'Message to all rooms',
+  groups_call_breakout_broadcast_placeholder: () => 'A short announcement …',
+  groups_call_breakout_broadcast_send: () => 'Send',
+  groups_call_breakout_end_confirm_title: () => 'Bring everyone back?',
+  groups_call_breakout_end_confirm_body: () => 'The rooms are closed.',
+  groups_call_breakout_end_notify: () => 'Announce it first',
+  common_cancel: () => 'Cancel',
   common_close: () => 'Close'
 }));
 
@@ -85,6 +92,7 @@ const cb = {
   onEnd: vi.fn(),
   onExtend: vi.fn(),
   onAutoAssign: vi.fn(),
+  onBroadcast: vi.fn(async () => true),
   onClose: vi.fn()
 };
 beforeEach(() => Object.values(cb).forEach((fn) => fn.mockClear()));
@@ -139,14 +147,49 @@ describe('BreakoutPanel', () => {
     });
   });
 
-  it('joins a room and brings everyone back', async () => {
+  it('joins a room, and brings everyone back after a confirm with the return heads-up on by default', async () => {
     render(BreakoutPanel, { props: { rows: [], breakout: state(), myPubkey: HOST, ...cb } });
     await fireEvent.click(screen.getAllByTestId('breakout-panel-join')[1]);
     expect(cb.onJoin).toHaveBeenCalledWith(rooms[1]);
     await fireEvent.click(screen.getByTestId('breakout-panel-end'));
-    expect(cb.onEnd).toHaveBeenCalledTimes(1);
+    expect(cb.onEnd).not.toHaveBeenCalled();
+    const confirm = screen.getByTestId('breakout-end-confirm');
+    expect(confirm.textContent).toContain('Bring everyone back?');
+    expect(screen.getByTestId('breakout-end-notify').checked).toBe(true);
+    await fireEvent.click(screen.getByTestId('breakout-end-confirm-action'));
+    expect(cb.onEnd).toHaveBeenCalledWith({ notify: true });
+    expect(screen.queryByTestId('breakout-end-confirm')).toBeNull();
     await fireEvent.click(screen.getByTestId('breakout-panel-close'));
     expect(cb.onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it('the confirm can be cancelled, and the heads-up switched off', async () => {
+    render(BreakoutPanel, { props: { rows: [], breakout: state(), myPubkey: HOST, ...cb } });
+    await fireEvent.click(screen.getByTestId('breakout-panel-end'));
+    await fireEvent.click(screen.getByTestId('breakout-end-cancel'));
+    expect(cb.onEnd).not.toHaveBeenCalled();
+    expect(screen.queryByTestId('breakout-end-confirm')).toBeNull();
+    await fireEvent.click(screen.getByTestId('breakout-panel-end'));
+    await fireEvent.click(screen.getByTestId('breakout-end-notify'));
+    await fireEvent.click(screen.getByTestId('breakout-end-confirm-action'));
+    expect(cb.onEnd).toHaveBeenCalledWith({ notify: false });
+  });
+
+  it('"Nachricht an alle Raeume": sends the draft, clears it on success and keeps it on a refusal', async () => {
+    render(BreakoutPanel, { props: { rows: [], breakout: state(), myPubkey: HOST, ...cb } });
+    const input = screen.getByTestId('breakout-panel-broadcast-input');
+    const send = screen.getByTestId('breakout-panel-broadcast-send');
+    expect(send.disabled).toBe(true);
+    await fireEvent.input(input, { target: { value: '  two minutes left ' } });
+    expect(send.disabled).toBe(false);
+    await fireEvent.submit(screen.getByTestId('breakout-panel-broadcast'));
+    await waitFor(() => expect(cb.onBroadcast).toHaveBeenCalledWith('two minutes left'));
+    await waitFor(() => expect(input.value).toBe(''));
+    cb.onBroadcast.mockResolvedValueOnce(false);
+    await fireEvent.input(input, { target: { value: 'again' } });
+    await fireEvent.submit(screen.getByTestId('breakout-panel-broadcast'));
+    await waitFor(() => expect(cb.onBroadcast).toHaveBeenCalledTimes(2));
+    expect(input.value).toBe('again');
   });
 
   it('disables the controls while the store is busy', () => {

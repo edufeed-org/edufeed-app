@@ -325,11 +325,31 @@ members:[identity…]}], until?}` (`parseBreakoutPayload`), believed only
    `livekit` and the relay refuses a dropped `ephemeral`), the late-joiner
    switch, and "Alle zurückholen" = 9008 for every room.
 
+9. **Call broadcasts (kind 20002, `call-broadcasts.js`).** The host seat
+   talks to every room through the relay: an ephemeral event (never
+   stored) with the PARENT's `h` tag and a `type` — `message` (free text
+   from the panel's "Nachricht an alle Räume"), `countdown` (sent on its
+   own at 300 / 120 / 60 s before `until` — `countdownDue`; a moved
+   deadline fires them again), `return` (the heads-up before "Alle
+   zurückholen", a checkbox in its confirm, on by default). It goes out
+   through `publishToGroupRelay` (`sendCallBroadcast`); the relay accepts
+   it from the parent's current call host / co-hosts or an admin only and
+   a refusal is toasted with its reason. Every client with a session — in
+   the main room or a breakout room — keeps
+   `{"kinds":[20002], "#h":[<channel id>]}` open for the session's
+   duration and renders a `message` / `return` as a toast naming the
+   sender plus a LOCAL system line in the room's call chat
+   (`addSystemCallChat` in the connection service: never sent, never
+   replayed, `CallChatPanel` draws it apart from the messages); a
+   `countdown` only moves the deadline display. The sender's own copy is
+   rendered at once and the relay's echo deduped by id.
+
 Degrades on a relay without the extension: rooms carry the `about` marker
 only, nobody but the creator may delete or move, the `#ephemeral` read
-answers nothing (the host seat's replay still reaches late joiners), and a
+answers nothing (the host seat's replay still reaches late joiners), a
 room whose host vanished stays until the creator returns or the deadline
-sends everyone home. A "message to all rooms" is the next PR (kind 20002).
+sends everyone home, and kind 20002 is refused on publish (the toast says
+so; countdowns and the return heads-up fail silently).
 
 ## Scheduled meetings
 

@@ -79,6 +79,7 @@
     extendBreakout,
     setSessionAutoAssign,
     requestBreakoutRoom,
+    sendCallBroadcast,
     moveParticipant,
     joinBreakoutRoom,
     returnToMain
@@ -1326,9 +1327,10 @@
                 myPubkey={pubkeyOf(lk.localParticipant)}
                 onMove={(args) => void moveParticipant(args)}
                 onJoin={(room) => void joinBreakoutRoom(room)}
-                onEnd={() => void endBreakout()}
+                onEnd={(opts) => void endBreakout(opts)}
                 onExtend={(minutes) => void extendBreakout(minutes)}
                 onAutoAssign={(enabled) => setSessionAutoAssign(enabled)}
+                onBroadcast={(text) => sendCallBroadcast('message', text)}
                 onClose={() => (breakoutPanelOpen = false)}
               />
             {:else}

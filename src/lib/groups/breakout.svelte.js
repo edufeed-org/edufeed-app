@@ -38,20 +38,36 @@
 // when the relay hands the host seat to one of them (the host left), that
 // client takes over: panel, newcomers, deadline, moving and ending — the
 // relay enforces the rights per the extension.
+//
+// Call broadcasts (kind 20002, call-broadcasts.js): the host seat tells
+// every room something through the relay — a free-text `message`, the
+// automatic `countdown` at 300 / 120 / 60 s before the deadline, a `return`
+// heads-up before "Alle zurueckholen". Every client with a session (main
+// room or breakout room) subscribes for its duration and renders a toast
+// naming the sender plus a local system line in the room's call chat; a
+// countdown only moves the deadline display.
 import { normalizeURL } from 'applesauce-core/helpers/url';
+import { getProfileContent } from 'applesauce-core/helpers';
 import {
   GROUP_METADATA_KIND,
   GROUP_MEMBERS_KIND,
   DELETE_GROUP_KIND,
   getGroupMembers
 } from 'applesauce-common/helpers/groups';
-import { pool } from '$lib/stores/nostr-infrastructure.svelte';
+import { pool, eventStore } from '$lib/stores/nostr-infrastructure.svelte';
 import { modalStore } from '$lib/stores/modal.svelte.js';
 import { showToast } from '$lib/helpers/toast';
 import { unique } from '$lib/helpers/unique.js';
+import { getUserDisplayName } from '$lib/helpers/message-utils.js';
 import * as m from '$lib/paraglide/messages';
 import { getBreakoutAutoAssign, setBreakoutAutoAssign } from '$lib/services/call-prefs.js';
-import { generateGroupId } from './group-management.js';
+import { generateGroupId, publishToGroupRelay } from './group-management.js';
+import {
+  buildCallBroadcastTemplate,
+  callBroadcastFilter,
+  countdownDue,
+  parseCallBroadcast
+} from './call-broadcasts.js';
 import {
   getGroupCallState,
   getActiveCallPointer,
@@ -157,6 +173,12 @@ let newestSeen = {};
 // so a re-render never asks twice for the same call.
 /** @type {string | null} */
 let discoveredFor = null;
+/** Broadcast ids already rendered (our own copy + the relay's echo = one). @type {Set<string>} */
+// eslint-disable-next-line svelte/prefer-svelte-reactivity -- bookkeeping, never rendered
+let seenBroadcasts = new Set();
+/** Countdown marks this host seat has sent for the current deadline. @type {Set<number>} */
+
+let countdownSent = new Set();
 
 /**
  * @returns {{
@@ -253,6 +275,10 @@ function clearSession() {
   deadlineHandled = false;
   newestSeen = {};
   joinRequest = null;
+
+  seenBroadcasts = new Set();
+
+  countdownSent = new Set();
   if (pending) {
     pending = null;
     if (modalStore.activeModal === 'breakoutAssignment') modalStore.closeModal();
@@ -732,6 +758,88 @@ export async function extendBreakout(minutes = BREAKOUT_EXTEND_MINUTES) {
   }
 }
 
+/** A pubkey's display name from the profiles already loaded, else its prefix. @param {string} pubkey */
+function nameOfPubkey(pubkey) {
+  let profile;
+  try {
+    const event = eventStore.getReplaceable(0, pubkey);
+    profile = event ? getProfileContent(event) : undefined;
+  } catch {
+    profile = undefined;
+  }
+  return getUserDisplayName(pubkey, profile);
+}
+
+/**
+ * Show a broadcast once: `message` and `return` as a toast naming the
+ * sender plus a system line in the call chat (so people who missed the
+ * toast still see it); `countdown` only moves the deadline (no toast — one
+ * comes every few minutes).
+ * @param {import('./call-broadcasts.js').CallBroadcast} broadcast
+ */
+function renderBroadcast(broadcast) {
+  const s = session;
+  if (!s || broadcast.parentId !== s.main.id) return;
+  const key = broadcast.id ?? `${broadcast.pubkey}:${broadcast.createdAt}:${broadcast.type}`;
+  if (seenBroadcasts.has(key)) return;
+  seenBroadcasts.add(key);
+  if (broadcast.type === 'countdown') {
+    const seconds = broadcast.seconds ?? 0;
+    const until = Math.floor(Date.now() / 1000) + seconds;
+    // Our own clock already agrees within a tick or two: leave it alone.
+    if (s.until !== null && Math.abs(s.until - until) <= 2) return;
+    if ((s.until ?? 0) < until) deadlineHandled = false;
+    session = { ...s, until };
+    return;
+  }
+  const text =
+    broadcast.type === 'return'
+      ? broadcast.content.trim() || m.groups_call_broadcast_return_default()
+      : broadcast.content.trim();
+  if (!text) return;
+  const name = nameOfPubkey(broadcast.pubkey);
+  showToast(m.groups_call_broadcast_toast({ name, text }), 'info');
+  lkModule?.addSystemCallChat?.({ identity: `${broadcast.pubkey}:relay`, text, id: key });
+}
+
+/**
+ * Publish a call broadcast to the parent group (the relay accepts it from
+ * the parent's current call host / co-hosts or an admin and never stores
+ * it). The sender's own client renders it right away; the relay's echo is
+ * deduped by id. A refusal (an old relay, no rights) is toasted with the
+ * relay's reason unless `quiet`.
+ * @param {import('./call-broadcasts.js').CallBroadcastType} type
+ * @param {string} [content]
+ * @param {{quiet?: boolean}} [opts]
+ * @returns {Promise<boolean>} whether the relay took it
+ */
+export async function sendCallBroadcast(type, content = '', opts = {}) {
+  const s = session;
+  const user = getActiveCallUser();
+  if (!s?.hosting || !user) return false;
+  try {
+    const signed = await publishToGroupRelay(
+      pool.relay(s.main.relay),
+      buildCallBroadcastTemplate(s.main.id, type, content),
+      user
+    );
+    const parsed = parseCallBroadcast(signed);
+    if (parsed) renderBroadcast(parsed);
+    return true;
+  } catch (err) {
+    console.warn('call broadcast not sent:', err);
+    if (!opts.quiet) {
+      showToast(
+        m.groups_call_breakout_broadcast_failed({
+          reason: err instanceof Error ? err.message : String(err)
+        }),
+        'error'
+      );
+    }
+    return false;
+  }
+}
+
 /**
  * The host panel's "Nachzügler automatisch verteilen" switch mid-session;
  * remembered on this device like the dialog's.
@@ -746,12 +854,18 @@ export function setSessionAutoAssign(enabled) {
 /**
  * "Alle zurückholen" / the host ends the session: delete every room (the
  * clients in them see the 9008 and return), tell the main room, forget.
+ * `notify`: send the `return` broadcast first ("Bitte zurück in den
+ * Hauptraum"), so the rooms hear why they are being pulled.
+ * @param {{notify?: boolean}} [opts]
  */
-export async function endBreakout() {
+export async function endBreakout(opts = {}) {
   const s = session;
   const user = getActiveCallUser();
   if (!s?.hosting || !user) return;
   busy = true;
+  if (opts.notify) {
+    await sendCallBroadcast('return', m.groups_call_broadcast_return_default(), { quiet: true });
+  }
   const relayConn = pool.relay(s.main.relay);
   /** @type {string[]} */
   const failed = [];
@@ -966,6 +1080,30 @@ if (typeof window !== 'undefined') {
       return () => sub.unsubscribe();
     });
 
+    // Call broadcasts (kind 20002) for the session's parent, while a
+    // session is known — in the main room or in a room. Ephemeral: the
+    // relay sends only what arrives from now on.
+    const broadcastKey = $derived(
+      session ? `${normalizeURL(session.main.relay)} ${session.main.id}` : ''
+    );
+    $effect(() => {
+      const key = broadcastKey;
+      if (!key) return;
+      const [relay, mainId] = key.split(' ');
+      const sub = pool
+        .relay(relay)
+        .subscription([callBroadcastFilter(mainId)])
+        .subscribe({
+          next: (/** @type {any} */ event) => {
+            if (!event || typeof event !== 'object') return;
+            const broadcast = parseCallBroadcast(event);
+            if (broadcast) renderBroadcast(broadcast);
+          },
+          error: () => {}
+        });
+      return () => sub.unsubscribe();
+    });
+
     // React, in a room: the room is gone → main; I am not in its roster →
     // another room that names me, else (after the move grace) main.
     $effect(() => {
@@ -1014,7 +1152,18 @@ if (typeof window !== 'undefined') {
       }
       const tick = () => {
         remaining = remainingSeconds(until, Date.now());
-        if (remaining === 0) void onDeadline();
+        if (remaining === 0) {
+          void onDeadline();
+          return;
+        }
+        // The host seat warns the rooms at 300 / 120 / 60 s (a moved
+        // deadline fires them again — countdownDue forgets marks above it).
+        if (remaining !== null && session?.hosting && !currentRoom && holdsHostSeat()) {
+          const { mark, sent } = countdownDue(remaining, countdownSent);
+          countdownSent = sent;
+          if (mark !== null)
+            void sendCallBroadcast('countdown', String(remaining), { quiet: true });
+        }
       };
       tick();
       const timer = setInterval(tick, 1000);

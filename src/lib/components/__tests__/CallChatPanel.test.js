@@ -244,6 +244,33 @@ describe('CallChatPanel', () => {
     expect(fallback.textContent.trim()).toBe('W');
   });
 
+  // A call broadcast (kind 20002 from the host, via the relay) is noted as
+  // a LOCAL system line: no avatar, no reply, named after its sender.
+  it('renders a system line (a call broadcast) apart from the messages', () => {
+    state.callChat = [
+      ...DEFAULT_CHAT,
+      {
+        id: 'bc-1',
+        identity: 'c'.repeat(64) + ':relay',
+        n: 'bc-1',
+        text: 'two minutes left',
+        at: 2,
+        system: 'broadcast'
+      },
+      { id: 'a:2', identity: 'b'.repeat(64) + ':1', text: 'ok', at: 3 }
+    ];
+    render(CallChatPanel, { props });
+    const line = screen.getByTestId('call-chat-system');
+    expect(line.textContent).toContain(m.groups_call_broadcast_line({ name: 'Carl Otto' }));
+    expect(line.textContent).toContain('two minutes left');
+    expect(line.querySelector('[data-testid="call-chat-reply"]')).toBeNull();
+    expect(line.querySelector('[data-testid="profile-avatar-stub"]')).toBeNull();
+    // the message after the line is not grouped with the one before it
+    const messages = screen.getAllByTestId('call-chat-message');
+    expect(messages).toHaveLength(2);
+    expect(messages[1].querySelector('[data-testid="profile-avatar-stub"]')).not.toBeNull();
+  });
+
   // QA 2026-10-02: hovering/clicking a sender takes you to their profile
   // without losing the call.
   it('links the sender to their profile route', () => {

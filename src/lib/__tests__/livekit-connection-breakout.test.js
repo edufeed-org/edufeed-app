@@ -190,6 +190,29 @@ describe('breakout data messages', () => {
     expect(seen).toHaveLength(1);
   });
 
+  it('keeps a local system line (a call broadcast) in the chat without ever sending or replaying it', async () => {
+    const host = 'a'.repeat(64) + ':h';
+    const line = svc.addSystemCallChat({ identity: host, text: 'two minutes left', id: 'bc-1' });
+    expect(line).toMatchObject({
+      id: 'bc-1',
+      identity: host,
+      text: 'two minutes left',
+      system: 'broadcast'
+    });
+    expect(svc.getLiveKitState().callChat).toEqual([line]);
+    // the same broadcast twice (the relay echo after the local copy) is kept once
+    expect(
+      svc.addSystemCallChat({ identity: host, text: 'two minutes left', id: 'bc-1' })
+    ).toBeNull();
+    expect(svc.getLiveKitState().callChat).toHaveLength(1);
+    expect(room.localParticipant.publishData).not.toHaveBeenCalled();
+    // my own line (the host's client keeps its copy too) is not chat history for a newcomer
+    svc.addSystemCallChat({ identity: room.localParticipant.identity, text: 'mine', id: 'bc-2' });
+    room.emit(RoomEvent.ParticipantConnected, remote('b'.repeat(64) + ':x1'));
+    await Promise.resolve();
+    expect(room.localParticipant.publishData).not.toHaveBeenCalled();
+  });
+
   it('reports the current media state for a room switch that keeps mic and camera', async () => {
     expect(svc.currentJoinMedia()).toEqual({ audio: false, video: false });
     await svc.toggleMute();

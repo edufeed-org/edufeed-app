@@ -4166,5 +4166,16 @@
   "groups_call_breakout_took_over": "Du leitest jetzt die Breakout-Session.",
   "groups_call_breakout_room_closed": "Der Raum wurde geschlossen – zurück im Hauptraum.",
   "groups_call_breakout_extend": "+{minutes} Min",
-  "groups_call_breakout_extend_failed": "Zeit konnte nicht verlängert werden: {reason}"
+  "groups_call_breakout_extend_failed": "Zeit konnte nicht verlängert werden: {reason}",
+  "groups_call_broadcast_label": "Durchsage",
+  "groups_call_broadcast_line": "Durchsage von {name}:",
+  "groups_call_broadcast_toast": "Durchsage von {name}: {text}",
+  "groups_call_broadcast_return_default": "Bitte zurück in den Hauptraum",
+  "groups_call_breakout_broadcast_title": "Nachricht an alle Räume",
+  "groups_call_breakout_broadcast_placeholder": "Kurze Durchsage an alle Räume …",
+  "groups_call_breakout_broadcast_send": "Senden",
+  "groups_call_breakout_broadcast_failed": "Durchsage nicht gesendet: {reason}",
+  "groups_call_breakout_end_confirm_title": "Alle zurückholen?",
+  "groups_call_breakout_end_confirm_body": "Die Räume werden geschlossen, alle kommen zurück in den Hauptraum.",
+  "groups_call_breakout_end_notify": "Vorher ankündigen: „Bitte zurück in den Hauptraum“"
 }
