@@ -86,7 +86,10 @@ function classifyArray(field, userArr, aiArr) {
 
   const aiSubset = [...aiIds].every((id) => userIds.has(id));
   const userSubset = [...userIds].every((id) => aiIds.has(id));
-  if (aiSubset && userSubset) return 'none'; // sets equal
+  // Sets equal, or the user already has every AI item plus their own
+  // additions: there is nothing left to merge, and "replace" would only
+  // delete the user's additions — so the badge has nothing to offer.
+  if (aiSubset) return 'none';
   if (userSubset) return 'additive'; // AI strict superset
   return 'conflict'; // any other partial/disjoint
 }
@@ -121,7 +124,7 @@ function classifyPairedByLabel(formData, field, aiArr) {
 
   const aiSubset = [...aiLabels].every((l) => userLabels.has(l));
   const userSubset = [...userLabels].every((l) => aiLabels.has(l));
-  if (aiSubset && userSubset) return 'none';
+  if (aiSubset) return 'none'; // equal, or user ⊇ AI: nothing to merge
   if (userSubset) return 'additive';
   return 'conflict';
 }

@@ -2511,7 +2511,10 @@
               {#if formData.keywords.length > 0}
                 <div class="mt-2 flex flex-wrap gap-2">
                   {#each formData.keywords as keyword (keyword)}
-                    <span class="badge gap-1 badge-outline" data-testid="keyword-chip">
+                    <span
+                      class="badge gap-1 badge-outline badge-primary"
+                      data-testid="keyword-chip"
+                    >
                       {keyword}
                       <button
                         type="button"

@@ -271,3 +271,35 @@ describe('buildPreviewResource — invalid image URLs (mid-typing)', () => {
     expect(resource.tags.some((t) => t[0] === 'x')).toBe(false);
   });
 });
+
+describe('buildPreviewResource — stable identifier (cover palette seed)', () => {
+  // The typo cover derives its hue from the d-tag. convertFormDataToAMB
+  // generates a RANDOM id when the slug is empty, so every preview re-render
+  // (each keystroke, each "Zusammenführen" click) reshuffled the cover colour.
+  it('keeps the d-tag stable across re-renders when no slug is set', () => {
+    const formData = { ...emptyFormData(), name: 'Kirchenraum in VR' };
+    const a = buildPreviewResource(formData, PUBKEY);
+    const b = buildPreviewResource({ ...formData }, PUBKEY);
+    expect(a.identifier).toBeTruthy();
+    expect(a.identifier).toBe(b.identifier);
+  });
+
+  it('seeds the d-tag from the resource URL (formData.identifier), like the publish path', () => {
+    const formData = {
+      ...emptyFormData(),
+      name: 'Kirchenraum in VR',
+      identifier: 'https://example.org/vr'
+    };
+    expect(buildPreviewResource(formData, PUBKEY).identifier).toBe('https://example.org/vr');
+  });
+
+  it('prefers an explicit slug over the URL', () => {
+    const formData = {
+      ...emptyFormData(),
+      name: 'X',
+      slug: 'my-slug',
+      identifier: 'https://example.org/vr'
+    };
+    expect(buildPreviewResource(formData, PUBKEY).identifier).toBe('my-slug');
+  });
+});

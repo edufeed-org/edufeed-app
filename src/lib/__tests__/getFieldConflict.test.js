@@ -89,6 +89,23 @@ describe('getFieldConflict — concept arrays (id/prefLabel)', () => {
     expect(getFieldConflict('learningResourceType', fd, {}, a)).toBe('conflict');
   });
 
+  it("returns 'none' when the user already has every AI concept plus their own (nothing left to merge)", () => {
+    const fd = {
+      learningResourceType: [
+        { id: 'urn:a', label: 'A' },
+        { id: 'urn:b', label: 'B' },
+        { id: 'urn:mine', label: 'Mine' }
+      ]
+    };
+    const a = ai({
+      learningResourceType: [
+        { id: 'urn:a', prefLabel: 'A' },
+        { id: 'urn:b', prefLabel: 'B' }
+      ]
+    });
+    expect(getFieldConflict('learningResourceType', fd, {}, a)).toBe('none');
+  });
+
   it("returns 'conflict' when user has items AI doesn't (partial overlap)", () => {
     const fd = {
       learningResourceType: [
@@ -120,6 +137,16 @@ describe('getFieldConflict — string arrays (keywords)', () => {
   it("returns 'none' when sets match", () => {
     const a = ai({ keywords: ['math', 'algebra'] });
     expect(getFieldConflict('keywords', { keywords: ['math', 'algebra'] }, {}, a)).toBe('none');
+  });
+
+  // Issue "Schlagwörter zusammenführen klappt nicht": after Smart fill the user
+  // keeps the AI keywords and adds "VR". The AI list is then a strict subset of
+  // the user's — nothing left to merge — yet the badge offered a no-op
+  // "Zusammenführen" (and a destructive "Ersetzen") instead of disappearing.
+  it("returns 'none' when the user kept every AI keyword and added their own", () => {
+    const a = ai({ keywords: ['Augmented Reality', 'AR', 'religiöse Bildung'] });
+    const fd = { keywords: ['Augmented Reality', 'AR', 'religiöse Bildung', 'VR'] };
+    expect(getFieldConflict('keywords', fd, {}, a)).toBe('none');
   });
 });
 
@@ -255,6 +282,19 @@ describe('getFieldConflict — paired-key fields after applyEnrichedPayload', ()
       ]
     });
     expect(getFieldConflict('methods', formData, {}, result)).toBe('additive');
+  });
+
+  it("returns 'none' for paired-key field when user labels are a strict superset of AI labels", () => {
+    const formData = {
+      ...createInitialFormData(),
+      methods: ['nostr:39738:pubkey:1', 'nostr:39738:pubkey:2'],
+      methodLabels: [
+        { id: 'nostr:39738:pubkey:1', label: 'Stationenlernen' },
+        { id: 'nostr:39738:pubkey:2', label: 'Gruppenpuzzle' }
+      ]
+    };
+    const result = ai({ methods: [{ id: '39738:abc:1', prefLabel: 'Stationenlernen' }] });
+    expect(getFieldConflict('methods', formData, {}, result)).toBe('none');
   });
 
   it("returns 'conflict' for paired-key field when labels are genuinely disjoint", () => {

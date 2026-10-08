@@ -11,8 +11,9 @@ import { goto } from '$app/navigation';
 import AMBResourceCard from '../educational/AMBResourceCard.svelte';
 
 // Hoisted so vi.mock factory can reference it
-const { BookmarkButtonStub } = vi.hoisted(() => ({
-  BookmarkButtonStub: vi.fn(() => ({}))
+const { BookmarkButtonStub, EventTagsStub } = vi.hoisted(() => ({
+  BookmarkButtonStub: vi.fn(() => ({})),
+  EventTagsStub: vi.fn(() => ({}))
 }));
 
 // Mock dependencies
@@ -118,7 +119,7 @@ vi.mock('nostr-tools', () => ({
 // Mock heavy sub-components to avoid deep dependency chains
 vi.mock('../reactions/ReactionBar.svelte', () => ({ default: () => ({}) }));
 vi.mock('../shared/EventDebugPanel.svelte', () => ({ default: () => ({}) }));
-vi.mock('../calendar/EventTags.svelte', () => ({ default: () => ({}) }));
+vi.mock('../calendar/EventTags.svelte', () => ({ default: EventTagsStub }));
 vi.mock('../shared/ImageWithFallback.svelte', () => ({ default: () => ({}) }));
 vi.mock('../shared/MarkdownRenderer.svelte', () => ({ default: () => ({}) }));
 vi.mock('../bookmarks/BookmarkButton.svelte', () => ({ default: BookmarkButtonStub }));
@@ -741,6 +742,42 @@ describe('AMBResourceCard', () => {
       expect(pill?.textContent?.replace(/\s+/g, ' ').trim()).toBe(
         'PRESENTATION · VIDEO · WORKSHEET'
       );
+    });
+  });
+
+  describe('keywords (issue: Schlagwörter zusammenführen klappt nicht)', () => {
+    const sevenKeywords = [
+      'Augmented Reality',
+      'AR',
+      'religiöse Bildung',
+      'Kirchenraumpädagogik',
+      'interreligiöses Lernen',
+      'digitale Bildung',
+      'VR'
+    ];
+    /** @type {any} */
+    const resourceWith7 = { ...mockResource, keywords: sevenKeywords };
+
+    /** Props of the last EventTags mount (Svelte 5 calls `Component(anchor, props)`). */
+    const lastEventTagsProps = () =>
+      /** @type {any} */ (/** @type {any} */ (EventTagsStub).mock.calls.at(-1)?.[1]);
+
+    beforeEach(() => {
+      EventTagsStub.mockClear();
+    });
+
+    it('the wizard preview shows every keyword, so a freshly added one is visible', () => {
+      render(AMBResourceCard, { props: { resource: resourceWith7, preview: true } });
+      const props = lastEventTagsProps();
+      expect(props.tags).toEqual(sevenKeywords);
+      expect(props.maxDisplay).toBeUndefined();
+    });
+
+    it('feed cards hand all keywords to EventTags with a display cap instead of silently slicing', () => {
+      render(AMBResourceCard, { props: { resource: resourceWith7 } });
+      const props = lastEventTagsProps();
+      expect(props.tags).toEqual(sevenKeywords);
+      expect(props.maxDisplay).toBe(5);
     });
   });
 });

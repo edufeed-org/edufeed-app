@@ -76,6 +76,13 @@ export function buildPreviewResource(formData, pubkey, locale = 'en') {
     /** @type {any} */
     const normalised = { ...formData };
 
+    // Stable d-tag. convertFormDataToAMB generates a RANDOM id for an empty
+    // slug, and the typo cover seeds its hue from the d-tag — so without this
+    // every preview re-render (each keystroke, each suggestion click)
+    // reshuffled the cover colour. Mirror the publish path (buildResourceData
+    // uses the resource URL as slug) and fall back to a constant.
+    normalised.slug = formData?.slug?.trim() || formData?.identifier?.trim() || 'preview';
+
     // learningResourceType: CompactConcept[] → string[] + label sidecar
     if (Array.isArray(lrt)) {
       normalised.learningResourceTypes = lrt.map((/** @type {any} */ c) => c.id);
