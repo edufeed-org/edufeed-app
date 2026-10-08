@@ -10,12 +10,15 @@
 // a room is created with, the `edufeed.call.breakout` wire format and the
 // deadline math.
 //
-// Why a marker in `about` and not a custom tag: pyramid regenerates a group's
-// 39000 from its own Group struct (nip29.Group.ToMetadataEvent), so only
-// name / about / picture / the status flags / parent survive — a `t` or
-// `breakout` tag on the 9002 would simply vanish. `about` is free text the
-// relay keeps verbatim, and a room is hidden from every list anyway, so its
-// "description" is never shown to anyone.
+// The marker (docs/nips/nip29-ephemeral-groups.md): a room's 39000 carries
+// `["ephemeral", <parent id>]` and, with a deadline, `["until", <unix>]` —
+// the relay stores both, restates them on the regenerated 39000, deletes the
+// group itself when its call is over and lets the parent's call host / co-
+// hosts moderate it. The first implementation put the same facts into the
+// free-text `about` (`edufeed:breakout parent=<id> n=<N> [until=<unix>]`)
+// because pyramid dropped every tag it did not know; that marker is still
+// written AND read as the transition fallback for relays without the
+// extension. The tags win when both are present.
 import { GROUP_METADATA_KIND } from 'applesauce-common/helpers/groups';
 import { isValidRelayWebsocketUrl } from './groups.js';
 
@@ -25,6 +28,8 @@ export const BREAKOUT_MIN_ROOMS = 2;
 export const BREAKOUT_MAX_ROOMS = 8;
 /** How long the "you were assigned to room N" prompt waits before switching. */
 export const BREAKOUT_AUTO_SWITCH_MS = 5000;
+/** "+5 Min" in the host panel. */
+export const BREAKOUT_EXTEND_MINUTES = 5;
 const MARKER = 'edufeed:breakout';
 
 /**
@@ -73,13 +78,14 @@ export function breakoutAbout({ parent, index, until }) {
   return about;
 }
 
-/**
- * @param {{kind?: number, tags?: string[][]} | null | undefined} metadataEvent a kind 39000
- * @returns {{parent: string, index: number, until: number | null} | null}
- */
-export function parseBreakoutMarker(metadataEvent) {
-  if (!metadataEvent || !Array.isArray(metadataEvent.tags)) return null;
-  const about = metadataEvent.tags.find((t) => Array.isArray(t) && t[0] === 'about')?.[1];
+/** @param {{tags?: string[][]} | null | undefined} event @param {string} name */
+function tagValue(event, name) {
+  const tag = event?.tags?.find((t) => Array.isArray(t) && t[0] === name);
+  return typeof tag?.[1] === 'string' ? tag[1] : undefined;
+}
+
+/** The `about` marker's fields, or null when the text is not one. @param {string | undefined} about */
+function parseAboutMarker(about) {
   if (typeof about !== 'string' || !about.startsWith(`${MARKER} `)) return null;
   /** @type {Record<string, string>} */
   const fields = {};
@@ -87,19 +93,42 @@ export function parseBreakoutMarker(metadataEvent) {
     const eq = part.indexOf('=');
     if (eq > 0) fields[part.slice(0, eq)] = part.slice(eq + 1);
   }
-  const index = Number(fields.n);
-  if (!fields.parent || !Number.isInteger(index) || index < 1) return null;
-  const until = fields.until !== undefined ? Number(fields.until) : null;
-  return {
-    parent: fields.parent,
-    index,
-    until: until !== null && Number.isFinite(until) ? until : null
-  };
+  return fields;
+}
+
+/** @param {unknown} raw */
+function parseUntil(raw) {
+  if (raw === undefined || raw === null || raw === '') return null;
+  const n = Number(raw);
+  return Number.isFinite(n) ? n : null;
 }
 
 /**
- * Whether a kind-39000 describes a breakout room. Every channel list, the
- * sidebar, `/groups`, discovery and the community calendar drop these.
+ * Which room a group is: the `ephemeral` / `until` tags of the extension,
+ * else the legacy `about` marker. The room's number comes from the marker's
+ * `n=` when present, else from the name this client gives rooms
+ * (`Breakout N · …`), else 1.
+ * @param {{kind?: number, tags?: string[][]} | null | undefined} metadataEvent a kind 39000
+ * @returns {{parent: string, index: number, until: number | null} | null}
+ */
+export function parseBreakoutMarker(metadataEvent) {
+  if (!metadataEvent || !Array.isArray(metadataEvent.tags)) return null;
+  const fields = parseAboutMarker(tagValue(metadataEvent, 'about'));
+  const ephemeral = tagValue(metadataEvent, 'ephemeral');
+  const parent = ephemeral || fields?.parent;
+  if (!parent) return null;
+  const fromMarker = Number(fields?.n);
+  const fromName = Number(/^Breakout (\d+)\b/.exec(tagValue(metadataEvent, 'name') ?? '')?.[1]);
+  const index = Number.isInteger(fromMarker) && fromMarker >= 1 ? fromMarker : fromName || 1;
+  const untilTag = tagValue(metadataEvent, 'until');
+  const until = untilTag !== undefined ? parseUntil(untilTag) : parseUntil(fields?.until);
+  return { parent, index, until };
+}
+
+/**
+ * Whether a kind-39000 describes a breakout room — by the `ephemeral` tag
+ * or the legacy `about` marker. Every channel list, the sidebar, `/groups`,
+ * discovery and the community calendar drop these.
  * @param {{kind?: number, tags?: string[][]} | null | undefined} metadataEvent
  */
 export function isBreakoutGroup(metadataEvent) {
@@ -111,6 +140,29 @@ export function isBreakoutGroup(metadataEvent) {
 }
 
 /**
+ * The rooms a relay reports for a parent (the `#ephemeral` read of the
+ * extension): one entry per live 39000 that is a breakout room of `parentId`,
+ * tombstones and strangers dropped, ordered by room number.
+ * @param {Array<{kind?: number, tags?: string[][]}>} events kind-39000s
+ * @param {string} parentId
+ * @param {string} relay
+ * @returns {Array<{id: string, relay: string, name: string, index: number, until: number | null}>}
+ */
+export function roomsFromMetadataEvents(events, parentId, relay) {
+  /** @type {Array<{id: string, relay: string, name: string, index: number, until: number | null}>} */
+  const rooms = [];
+  for (const event of events) {
+    const id = tagValue(event, 'd');
+    const name = tagValue(event, 'name') ?? '';
+    const marker = isBreakoutGroup(event) ? parseBreakoutMarker(event) : null;
+    if (!id || !marker || marker.parent !== parentId || name === '[deleted]') continue;
+    if (rooms.some((room) => room.id === id)) continue;
+    rooms.push({ id, relay, name, index: marker.index, until: marker.until });
+  }
+  return rooms.sort((a, b) => a.index - b.index);
+}
+
+/**
  * The metadata a room is created with (`createGroupOnRelay`): hidden from
  * listings, closed (nobody self-joins — the host seats people), PUBLIC so
  * every participant can read every room's roster (pyramid hides a private
@@ -119,7 +171,8 @@ export function isBreakoutGroup(metadataEvent) {
  * the channel — a child of it. `withParent: false` is the fallback for a
  * host who is only a member of the channel: pyramid rejects a `parent` from
  * anyone without a role in the parent (reject-event.go), and the marker
- * names the parent anyway.
+ * names the parent anyway. `ephemeral` + `until` are the extension's tags,
+ * the `about` marker the fallback for a relay without it.
  * @param {{parentId: string, channelName: string, index: number, until?: number | null, withParent: boolean}} args
  */
 export function breakoutRoomMetadata({ parentId, channelName, index, until, withParent }) {
@@ -130,6 +183,8 @@ export function breakoutRoomMetadata({ parentId, channelName, index, until, with
     isOpen: false,
     isHidden: true,
     livekit: true,
+    ephemeral: parentId,
+    until: typeof until === 'number' && Number.isFinite(until) ? Math.floor(until) : null,
     ...(withParent ? { parent: parentId } : {})
   };
 }
@@ -147,8 +202,14 @@ export function isParentRoleRejection(error) {
  * @typedef {{id: string, relay: string, name: string, members: string[]}} BreakoutRoomAssignment
  *   `members` are LiveKit identities (`<pubkey>:<random>`), so each SEAT is
  *   addressed — a user sitting in the call twice may be sent to two rooms.
+ * @typedef {{id: string, relay: string, name: string}} BreakoutRoomRef
  * @typedef {{t: 'assign', rooms: BreakoutRoomAssignment[], until: number | null}} BreakoutAssignPayload
+ * @typedef {{t: 'state', rooms: BreakoutRoomRef[], until: number | null}} BreakoutStatePayload
+ *   the running session, replayed to whoever joins the main room late
+ * @typedef {{t: 'join', room: string}} BreakoutJoinPayload
+ *   a seat in the main room asks the host seat to be put into a room
  * @typedef {{t: 'end'}} BreakoutEndPayload
+ * @typedef {BreakoutAssignPayload | BreakoutStatePayload | BreakoutJoinPayload | BreakoutEndPayload} BreakoutPayload
  */
 
 /**
@@ -168,37 +229,78 @@ export function buildBreakoutAssignPayload({ rooms, until }) {
   };
 }
 
+/**
+ * The session as a late joiner needs it: the rooms (no seats — nobody is
+ * being sent anywhere) and the deadline.
+ * @param {{rooms: BreakoutRoomRef[], until?: number | null}} args
+ * @returns {{t: 'state', rooms: BreakoutRoomRef[], until?: number}}
+ */
+export function buildBreakoutStatePayload({ rooms, until }) {
+  return {
+    t: 'state',
+    rooms: rooms.map((room) => ({ id: room.id, relay: room.relay, name: room.name })),
+    ...(typeof until === 'number' && Number.isFinite(until) ? { until: Math.floor(until) } : {})
+  };
+}
+
+/** @param {string} roomId @returns {BreakoutJoinPayload} */
+export function buildBreakoutJoinPayload(roomId) {
+  return { t: 'join', room: roomId };
+}
+
 /** @returns {BreakoutEndPayload} */
 export function buildBreakoutEndPayload() {
   return { t: 'end' };
 }
 
 /**
- * Validate a decoded data message on the breakout topic. Anything that is
- * not exactly one of the two shapes is dropped (`null`).
  * @param {unknown} raw
- * @returns {BreakoutAssignPayload | BreakoutEndPayload | null}
+ * @param {boolean} withMembers
+ * @returns {BreakoutRoomAssignment[] | null}
  */
-export function parseBreakoutPayload(raw) {
-  if (!raw || typeof raw !== 'object') return null;
-  const msg = /** @type {Record<string, unknown>} */ (raw);
-  if (msg.t === 'end') return { t: 'end' };
-  if (msg.t !== 'assign' || !Array.isArray(msg.rooms)) return null;
+function parseRooms(raw, withMembers) {
+  if (!Array.isArray(raw)) return null;
   /** @type {BreakoutRoomAssignment[]} */
   const rooms = [];
-  for (const room of msg.rooms) {
+  for (const room of raw) {
     if (!room || typeof room !== 'object') return null;
     const { id, relay, name, members } = /** @type {Record<string, unknown>} */ (room);
     if (typeof id !== 'string' || !id) return null;
     if (typeof relay !== 'string' || !isValidRelayWebsocketUrl(relay)) return null;
     if (typeof name !== 'string') return null;
-    if (!Array.isArray(members) || !members.every((m) => typeof m === 'string')) return null;
-    rooms.push({ id, relay, name, members: [...members] });
+    if (withMembers) {
+      if (!Array.isArray(members) || !members.every((m) => typeof m === 'string')) return null;
+      rooms.push({ id, relay, name, members: [...members] });
+    } else {
+      rooms.push({ id, relay, name, members: [] });
+    }
   }
+  return rooms;
+}
+
+/**
+ * Validate a decoded data message on the breakout topic. Anything that is
+ * not exactly one of the known shapes is dropped (`null`).
+ * @param {unknown} raw
+ * @returns {BreakoutPayload | null}
+ */
+export function parseBreakoutPayload(raw) {
+  if (!raw || typeof raw !== 'object') return null;
+  const msg = /** @type {Record<string, unknown>} */ (raw);
+  if (msg.t === 'end') return { t: 'end' };
+  if (msg.t === 'join') {
+    return typeof msg.room === 'string' && msg.room ? { t: 'join', room: msg.room } : null;
+  }
+  if (msg.t !== 'assign' && msg.t !== 'state') return null;
+  const rooms = parseRooms(msg.rooms, msg.t === 'assign');
+  if (!rooms) return null;
   let until = null;
   if (msg.until !== undefined && msg.until !== null) {
     if (typeof msg.until !== 'number' || !Number.isFinite(msg.until)) return null;
     until = msg.until;
+  }
+  if (msg.t === 'state') {
+    return { t: 'state', rooms: rooms.map(({ id, relay, name }) => ({ id, relay, name })), until };
   }
   return { t: 'assign', rooms, until };
 }
@@ -224,6 +326,31 @@ export function assignedRoom(payload, identity) {
  */
 export function roomOfPubkey(rooms, membersByRoomId, pubkey) {
   return rooms.find((room) => membersByRoomId[room.id]?.has(pubkey) === true) ?? null;
+}
+
+/**
+ * Where a late joiner goes when the host lets the client distribute them:
+ * the room with the fewest seated people (the host's own seat in every room
+ * not counted), the lowest room number on a tie. Null without rooms.
+ * @template {{id: string, index: number}} R
+ * @param {R[]} rooms
+ * @param {Record<string, Set<string> | undefined>} membersByRoomId
+ * @param {string[]} [ignorePubkeys] seats that do not count (the host)
+ * @returns {R | null}
+ */
+export function pickSmallestRoom(rooms, membersByRoomId, ignorePubkeys = []) {
+  /** @type {R | null} */
+  let best = null;
+  let bestSize = Infinity;
+  for (const room of [...rooms].sort((a, b) => a.index - b.index)) {
+    const members = membersByRoomId[room.id];
+    const size = members ? [...members].filter((p) => !ignorePubkeys.includes(p)).length : 0;
+    if (size < bestSize) {
+      best = room;
+      bestSize = size;
+    }
+  }
+  return best;
 }
 
 /**

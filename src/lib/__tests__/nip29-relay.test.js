@@ -100,7 +100,7 @@ function waitForNextEvent(ws, subId) {
 }
 
 describe('nip29-relay', () => {
-  /** @type {{server: import('http').Server, wss: import('ws').WebSocketServer}} */
+  /** @type {{server: import('http').Server, wss: import('ws').WebSocketServer, relayPubkey: string}} */
   let relay;
   /** @type {WebSocket} */
   let ws;
@@ -304,5 +304,98 @@ describe('nip29-relay', () => {
     const fanned = await nextEvent;
     expect(fanned.tags).toContainEqual(['name', 'Fanned Out']);
     sub.close();
+  });
+
+  describe('ephemeral groups extension (docs/nips/nip29-ephemeral-groups.md)', () => {
+    it('stores ephemeral + until, restates them on the 39000 and answers the #ephemeral read', async () => {
+      const ws = await connect();
+      const sk = generateSecretKey();
+      const meta = [
+        ['name', 'Breakout 1 · Seminar'],
+        ['public'],
+        ['closed'],
+        ['hidden'],
+        ['livekit'],
+        ['ephemeral', 'parent-1'],
+        ['until', '1700000000']
+      ];
+      await publish(ws, build(CREATE_GROUP_KIND, [['h', 'eph-1'], ...meta], sk));
+      await publish(ws, build(EDIT_METADATA_KIND, [['h', 'eph-1'], ...meta], sk));
+      const [metadata] = await reqOnce(ws, 'eph', {
+        kinds: [GROUP_METADATA_KIND],
+        '#ephemeral': ['parent-1']
+      });
+      expect(metadata.tags).toContainEqual(['ephemeral', 'parent-1']);
+      expect(metadata.tags).toContainEqual(['until', '1700000000']);
+      expect(metadata.tags).toContainEqual(['hidden']);
+      // until may move, ephemeral may not
+      const moved = await publish(
+        ws,
+        build(
+          EDIT_METADATA_KIND,
+          [['h', 'eph-1'], ...meta.slice(0, -1), ['until', '1700000900']],
+          sk
+        )
+      );
+      expect(moved[2]).toBe(true);
+      const [again] = await reqOnce(ws, 'eph2', { kinds: [GROUP_METADATA_KIND], '#d': ['eph-1'] });
+      expect(again.tags).toContainEqual(['until', '1700000900']);
+      const refused = await publish(
+        ws,
+        build(
+          EDIT_METADATA_KIND,
+          [['h', 'eph-1'], ...meta.slice(0, -2), ['ephemeral', 'other']],
+          sk
+        )
+      );
+      expect(refused[2]).toBe(false);
+      expect(refused[3]).toMatch(/ephemeral/);
+      ws.close();
+    });
+
+    it('deletes an ephemeral group on the relay-side hook: relay-signed 9008, then the tombstone', async () => {
+      const ws = await connect();
+      const sk = generateSecretKey();
+      const meta = [['name', 'Breakout 2 · Seminar'], ['livekit'], ['ephemeral', 'parent-2']];
+      await publish(ws, build(CREATE_GROUP_KIND, [['h', 'eph-2'], ...meta], sk));
+      await publish(ws, build(EDIT_METADATA_KIND, [['h', 'eph-2'], ...meta], sk));
+      await reqOnce(ws, 'live', { kinds: [9008], '#h': ['eph-2'] });
+      const next = waitForNextEvent(ws, 'live');
+      const res = await fetch(`http://localhost:${PORT}/__mock/delete-group/eph-2`, {
+        method: 'POST'
+      });
+      expect(res.status).toBe(204);
+      const deletion = await next;
+      expect(deletion.kind).toBe(9008);
+      expect(deletion.pubkey).toBe(relay.relayPubkey);
+      const [tomb] = await reqOnce(ws, 'tomb', { kinds: [GROUP_METADATA_KIND], '#d': ['eph-2'] });
+      expect(tomb.tags).toContainEqual(['name', '[deleted]']);
+      expect(
+        (await fetch(`http://localhost:${PORT}/__mock/delete-group/nope`, { method: 'POST' }))
+          .status
+      ).toBe(404);
+      ws.close();
+    });
+
+    it('relays an ephemeral kind (20002) to live subscribers without storing it', async () => {
+      const ws = await connect();
+      const sk = generateSecretKey();
+      await reqOnce(ws, 'bc', { kinds: [20002], '#h': ['parent-1'] });
+      const next = waitForNextEvent(ws, 'bc');
+      const event = build(
+        20002,
+        [
+          ['h', 'parent-1'],
+          ['type', 'message']
+        ],
+        sk,
+        'two minutes left'
+      );
+      const ok = await publish(ws, event);
+      expect(ok[2]).toBe(true);
+      expect((await next).id).toBe(event.id);
+      expect(await reqOnce(ws, 'bc2', { kinds: [20002], '#h': ['parent-1'] })).toEqual([]);
+      ws.close();
+    });
   });
 });

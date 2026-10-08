@@ -16,12 +16,16 @@ import {
   parseBreakoutMarker,
   isBreakoutGroup,
   breakoutRoomMetadata,
+  roomsFromMetadataEvents,
   isParentRoleRejection,
   buildBreakoutAssignPayload,
+  buildBreakoutStatePayload,
+  buildBreakoutJoinPayload,
   buildBreakoutEndPayload,
   parseBreakoutPayload,
   assignedRoom,
   roomOfPubkey,
+  pickSmallestRoom,
   remainingSeconds,
   formatCountdown
 } from '$lib/groups/breakout.js';
@@ -101,6 +105,55 @@ describe('room marker on kind 39000', () => {
     });
   });
 
+  it('reads the extension tags: ephemeral names the parent, until the deadline', () => {
+    expect(
+      parseBreakoutMarker(
+        metadata([
+          ['name', 'Breakout 3 · Seminar'],
+          ['ephemeral', 'main-id'],
+          ['until', '1700000000'],
+          ['hidden']
+        ])
+      )
+    ).toEqual({ parent: 'main-id', index: 3, until: 1700000000 });
+    expect(
+      isBreakoutGroup(
+        metadata([
+          ['ephemeral', 'main-id'],
+          ['name', 'Breakout 1 · Seminar']
+        ])
+      )
+    ).toBe(true);
+    // no until tag, no marker: no deadline; a room named by another client: number 1
+    expect(
+      parseBreakoutMarker(
+        metadata([
+          ['ephemeral', 'main-id'],
+          ['name', 'Gruppe A']
+        ])
+      )
+    ).toEqual({ parent: 'main-id', index: 1, until: null });
+  });
+
+  it('prefers the tags over the about marker when both are present (a transition relay)', () => {
+    const event = metadata([
+      ['name', 'Breakout 2 · Seminar'],
+      ['about', 'edufeed:breakout parent=main-id n=2 until=1700000000'],
+      ['ephemeral', 'main-id'],
+      ['until', '1700000900']
+    ]);
+    expect(parseBreakoutMarker(event)).toEqual({ parent: 'main-id', index: 2, until: 1700000900 });
+    // a relay that knows the tags but was given no until: the marker's one does not leak back
+    expect(
+      parseBreakoutMarker(
+        metadata([
+          ['about', 'edufeed:breakout parent=main-id n=2 until=1700000000'],
+          ['ephemeral', 'main-id']
+        ])
+      )
+    ).toEqual({ parent: 'main-id', index: 2, until: 1700000000 });
+  });
+
   it('recognises a room only by the marker, never by its name', () => {
     expect(isBreakoutGroup(metadata([['about', 'edufeed:breakout parent=x n=1']]))).toBe(true);
     expect(isBreakoutGroup(metadata([['name', 'Breakout 1 · Seminar']]))).toBe(false);
@@ -125,6 +178,8 @@ describe('breakoutRoomMetadata', () => {
       isOpen: false,
       isHidden: true,
       livekit: true,
+      ephemeral: 'main-id',
+      until: 1700000000,
       parent: 'main-id'
     });
     const tags = buildCreateGroupTemplate('room-id', meta).tags;
@@ -134,7 +189,25 @@ describe('breakoutRoomMetadata', () => {
     expect(tags).toContainEqual(['public']);
     expect(tags).toContainEqual(['closed']);
     expect(tags).toContainEqual(['parent', 'main-id']);
+    // the ephemeral-groups extension: the relay owns the room's end of life
+    expect(tags).toContainEqual(['ephemeral', 'main-id']);
+    expect(tags).toContainEqual(['until', '1700000000']);
     expect(tags).not.toContainEqual(['private']);
+    // the same tags on the 9002 (the relay reads metadata from there)
+    expect(buildEditGroupMetadataTemplate('room-id', meta).tags).toContainEqual([
+      'ephemeral',
+      'main-id'
+    ]);
+  });
+
+  it('sends no until tag without a deadline, and never a fractional one', () => {
+    const none = breakoutRoomMetadata({ ...base, until: null, withParent: true });
+    expect(none.until).toBeNull();
+    expect(buildEditGroupMetadataTemplate('r', none).tags.some((t) => t[0] === 'until')).toBe(
+      false
+    );
+    const frac = breakoutRoomMetadata({ ...base, until: 1700000000.7, withParent: true });
+    expect(buildEditGroupMetadataTemplate('r', frac).tags).toContainEqual(['until', '1700000000']);
   });
 
   it('drops the parent tag when the host has no role in the channel (relay rule)', () => {
@@ -152,6 +225,62 @@ describe('breakoutRoomMetadata', () => {
     ).toBe(true);
     expect(isParentRoleRejection(new Error('restricted: insufficient permissions'))).toBe(false);
     expect(isParentRoleRejection(null)).toBe(false);
+  });
+});
+
+describe('roomsFromMetadataEvents (the #ephemeral read)', () => {
+  const relay = 'wss://relay.example/';
+  it('lists the live rooms of the parent by number, dropping tombstones and strangers', () => {
+    const events = [
+      metadata([
+        ['d', 'r2'],
+        ['name', 'Breakout 2 · S'],
+        ['ephemeral', 'main'],
+        ['until', '5']
+      ]),
+      metadata([
+        ['d', 'r1'],
+        ['name', 'Breakout 1 · S'],
+        ['ephemeral', 'main']
+      ]),
+      metadata([
+        ['d', 'gone'],
+        ['name', '[deleted]'],
+        ['ephemeral', 'main']
+      ]),
+      metadata([
+        ['d', 'other'],
+        ['name', 'Breakout 1 · X'],
+        ['ephemeral', 'other-parent']
+      ]),
+      metadata([
+        ['d', 'plain'],
+        ['name', 'Plain channel']
+      ]),
+      {
+        kind: 39002,
+        tags: [
+          ['d', 'r9'],
+          ['ephemeral', 'main']
+        ]
+      }
+    ];
+    expect(roomsFromMetadataEvents(events, 'main', relay)).toEqual([
+      { id: 'r1', relay, name: 'Breakout 1 · S', index: 1, until: null },
+      { id: 'r2', relay, name: 'Breakout 2 · S', index: 2, until: 5 }
+    ]);
+  });
+
+  it('also understands rooms a v1 client created (about marker only)', () => {
+    const events = [
+      metadata([
+        ['d', 'r1'],
+        ['name', 'Breakout 1 · S'],
+        ['about', 'edufeed:breakout parent=main n=1']
+      ])
+    ];
+    expect(roomsFromMetadataEvents(events, 'main', relay)).toHaveLength(1);
+    expect(roomsFromMetadataEvents([], 'main', relay)).toEqual([]);
   });
 });
 
@@ -191,6 +320,35 @@ describe('edufeed.call.breakout payloads', () => {
   it('builds and parses the end signal', () => {
     expect(buildBreakoutEndPayload()).toEqual({ t: 'end' });
     expect(parseBreakoutPayload({ t: 'end' })).toEqual({ t: 'end' });
+  });
+
+  it('builds and parses the session state a late joiner is handed (rooms without seats)', () => {
+    const payload = buildBreakoutStatePayload({ rooms, until: 1700000000 });
+    expect(payload).toEqual({
+      t: 'state',
+      rooms: [
+        { id: 'r1', relay: 'wss://relay.example/', name: 'Breakout 1 · S' },
+        { id: 'r2', relay: 'wss://relay.example/', name: 'Breakout 2 · S' }
+      ],
+      until: 1700000000
+    });
+    expect(parseBreakoutPayload(JSON.parse(JSON.stringify(payload)))).toEqual(payload);
+    expect(parseBreakoutPayload(buildBreakoutStatePayload({ rooms }))).toEqual({
+      t: 'state',
+      rooms: payload.rooms,
+      until: null
+    });
+    // a state needs no members, but still a valid relay per room
+    expect(
+      parseBreakoutPayload({ t: 'state', rooms: [{ id: 'r', relay: 'nope', name: '' }] })
+    ).toBe(null);
+  });
+
+  it('builds and parses a join request (a late joiner asks for a room)', () => {
+    expect(buildBreakoutJoinPayload('r2')).toEqual({ t: 'join', room: 'r2' });
+    expect(parseBreakoutPayload({ t: 'join', room: 'r2' })).toEqual({ t: 'join', room: 'r2' });
+    expect(parseBreakoutPayload({ t: 'join' })).toBeNull();
+    expect(parseBreakoutPayload({ t: 'join', room: 3 })).toBeNull();
   });
 
   it('rejects malformed input instead of throwing', () => {
@@ -237,6 +395,31 @@ describe('following rosters', () => {
 
   it('treats an unknown roster as "not there" rather than as a match', () => {
     expect(roomOfPubkey(rooms, {}, 'aa')).toBeNull();
+  });
+});
+
+describe('pickSmallestRoom (late joiners)', () => {
+  const rooms = [
+    { id: 'r1', index: 1 },
+    { id: 'r2', index: 2 },
+    { id: 'r3', index: 3 }
+  ];
+
+  it('picks the room with the fewest seated people, the host not counted', () => {
+    const members = {
+      r1: new Set(['host', 'aa', 'bb']),
+      r2: new Set(['host', 'cc']),
+      r3: new Set(['host', 'dd', 'ee'])
+    };
+    expect(pickSmallestRoom(rooms, members, ['host'])?.id).toBe('r2');
+  });
+
+  it('breaks a tie by room number and treats an unknown roster as empty', () => {
+    expect(pickSmallestRoom([rooms[2], rooms[0], rooms[1]], {}, [])?.id).toBe('r1');
+    expect(pickSmallestRoom(rooms, { r1: new Set(['aa']), r2: new Set(['bb']) }, [])?.id).toBe(
+      'r3'
+    );
+    expect(pickSmallestRoom([], {}, [])).toBeNull();
   });
 });
 
