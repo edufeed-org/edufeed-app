@@ -177,6 +177,82 @@ group's events at all. Deleting the meeting revokes its pass(es) first, so
 the guest page immediately reads `unknown` for anyone still holding the
 link.
 
+## Host and co-host (edufeed extension)
+
+Participant tokens stay `RoomJoin` only; nobody in the call holds
+`roomAdmin`. The relay keeps the room's **host** and **co-hosts** itself,
+tells every client who they are through LiveKit participant metadata, and
+offers a moderation endpoint that drives LiveKit with the relay's own admin
+token.
+
+### Who hosts
+
+- **The scheduler.** While a channel meeting's window is open (a kind
+  31923 with exactly one `["h", <group-id>]`, from `start` − 15 minutes
+  until its `end`, an hour after `start` when there is none), the
+  meeting's author is the host whenever they take a seat — also taking
+  over from whoever opened the room before them, who keeps a co-host seat.
+  The meeting's `p` tags whose role slot reads `co-host` (also `cohost`,
+  `moderator` or `organizer`) make those participants co-hosts.
+- **The opener.** Without a current meeting (or before its author shows
+  up), the first member to obtain a token while nobody hosts is the host.
+- **Promotion in the call.** The host may make any member seat a co-host
+  (and revoke it) through the endpoint below; those roles last until the
+  seat leaves. The `p`-tag roles are re-applied on every token.
+- **Hand-over.** When the host leaves (and a freshly minted token's holder
+  has had 60 s to show up in the participant list), the oldest co-host
+  still present becomes host, else the member seat present longest, else
+  nobody. Co-hosts who left lose the seat; the room emptying clears
+  everything.
+- **Never guests or listeners.** A call-pass seat keeps its
+  `{"guest":true,"pass":…}` metadata and can be neither host nor co-host;
+  a listen-only seat (non-member of a public group) cannot either.
+- Roles live in the relay's memory for the running room only.
+
+### Metadata
+
+Member tokens carry `{"host":true}` or `{"cohost":true}`; a plain seat has
+no metadata. When roles change while people are connected, the relay sets
+the affected seats' metadata through `RoomService.UpdateParticipant`
+(`{}` for a revoked role — LiveKit ignores an empty string), which clients
+see as `ParticipantMetadataChanged`. Clients SHOULD render host and co-host
+badges from this metadata exactly as they render the guest badge.
+
+### Moderation endpoint
+
+`POST /.well-known/nip29/livekit/<group-id>/moderate` (and, for groups of a
+community, `POST /c/<rootId>/.well-known/nip29/livekit/<group-id>/moderate`),
+CORS open. Authentication is NIP-98 like the token endpoint, but the
+kind 27235 event MUST also carry `["method", "POST"]` and
+`["payload", <sha256 hex of the body>]`, and its `created_at` must be within
+60 s. Body:
+
+```json
+{ "action": "mute", "identity": "<LiveKit participant identity>" }
+```
+
+| action          | effect                                                                   | who                        |
+| --------------- | ------------------------------------------------------------------------ | -------------------------- |
+| `mute`          | `MutePublishedTrack` on the seat's unmuted microphone track(s)           | host, co-host, (moderator) |
+| `stop-video`    | `MutePublishedTrack` on the camera track(s)                              | host, co-host, (moderator) |
+| `stop-screen`   | `MutePublishedTrack` on the screen share (+ screen share audio) track(s) | host, co-host, (moderator) |
+| `remove`        | `RemoveParticipant`; a guest's pass stays valid                          | host, co-host, (moderator) |
+| `make-cohost`   | the seat's pubkey becomes a co-host; metadata is pushed                  | host, (moderator)          |
+| `revoke-cohost` | the co-host role is taken away; metadata is pushed                       | host, (moderator)          |
+
+A co-host cannot act on the host; nobody can act on their own seat; a
+guest or listener cannot be made co-host. A NIP-29 group moderator or
+admin is accepted as a fallback for every action, host or not. Muting does
+not restrict publish sources: a muted participant may unmute themselves,
+and a client whose screen share was muted SHOULD stop the share.
+
+Answers: `200 {"ok":true}`; `400` for a bad body or unknown action; `401`
+with the NIP-98 failure; `403` with a short reason (`only the host or a
+co-host may do this`, `only the host may change roles`, `a co-host cannot
+moderate the host`, `a guest cannot be co-host`, `cannot moderate
+yourself`, …); `404` when the identity is not in the room; `502` when
+LiveKit does not answer.
+
 ## In-call chat (edufeed extension, optional)
 
 Guests do not read the group's events, so a call carries its own chat as

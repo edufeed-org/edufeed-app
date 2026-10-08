@@ -67,7 +67,8 @@
   } from '$lib/groups/call-layout.js';
   import { orderSeats, moveSeat } from '$lib/groups/call-tile-order.js';
   import { getTilePlacements, setTilePlacements } from '$lib/groups/call-tile-placements.svelte.js';
-  import { isGuestParticipant } from '$lib/groups/livekit.js';
+  import { isGuestParticipant, participantCallRole } from '$lib/groups/livekit.js';
+  import { moderateActiveCall } from '$lib/groups/group-call.svelte.js';
   import { trackOnScreen as trackNodeOnScreen } from '$lib/groups/track-on-screen.js';
   import { Track } from 'livekit-client';
   import { useProfileMap } from '$lib/stores/profile-map.svelte.js';
@@ -94,6 +95,7 @@
     ChevronRightIcon
   } from '$lib/components/icons';
   import ParticipantTile from './ParticipantTile.svelte';
+  import CallHostActions from './CallHostActions.svelte';
   import ScreenShareTile from './ScreenShareTile.svelte';
   import { getCallChatUnread } from '$lib/groups/call-chat-unread.svelte.js';
   import { requestPrivateRecipient } from '$lib/groups/call-chat-compose.svelte.js';
@@ -280,6 +282,70 @@
       placements
     ).map((k) => /** @type {SeatItem} */ (byKey.get(k)));
   });
+
+  // --- Call roles (host / co-host): the relay writes them into participant
+  // metadata (groups/livekit.js participantCallRole) and pushes changes
+  // mid-call; the participant objects are not reactive, so the map is
+  // rebuilt on the connection service's metadata version.
+  /** @type {Map<string, import('$lib/groups/livekit.js').CallRole | null>} */
+  const rolesByIdentity = $derived.by(() => {
+    void lk.participantMetadataVersion;
+    // eslint-disable-next-line svelte/prefer-svelte-reactivity -- built fresh on every derivation, never mutated afterwards
+    const out = new Map();
+    for (const seat of baseSeats) {
+      out.set(seat.participant.identity, participantCallRole(seat.participant));
+    }
+    return out;
+  });
+  const myRole = $derived(
+    lk.localParticipant ? (rolesByIdentity.get(lk.localParticipant.identity) ?? null) : null
+  );
+
+  // --- Host actions (CallHostActions in the participant list's row menu):
+  // the relay does the work with its admin token (moderateActiveCall); a
+  // removal is confirmed first; every outcome is toasted.
+  /** @type {import('$lib/groups/call-participants.js').ParticipantRow | null} */
+  let removeTarget = $state(null);
+  /** @type {Record<import('$lib/groups/livekit.js').CallModerationAction, (p: {name: string}) => string>} */
+  const doneMessages = {
+    mute: m.groups_call_mod_done_mute,
+    'stop-video': m.groups_call_mod_done_stop_video,
+    'stop-screen': m.groups_call_mod_done_stop_screen,
+    remove: m.groups_call_mod_done_remove,
+    'make-cohost': m.groups_call_mod_done_make_cohost,
+    'revoke-cohost': m.groups_call_mod_done_revoke_cohost
+  };
+  /**
+   * @param {import('$lib/groups/livekit.js').CallModerationAction} action
+   * @param {import('$lib/groups/call-participants.js').ParticipantRow} row
+   */
+  function hostAction(action, row) {
+    if (action === 'remove') {
+      removeTarget = row;
+      return;
+    }
+    void runModeration(action, row);
+  }
+  /**
+   * @param {import('$lib/groups/livekit.js').CallModerationAction} action
+   * @param {import('$lib/groups/call-participants.js').ParticipantRow} row
+   */
+  async function runModeration(action, row) {
+    const name = nameOf(row.participant);
+    try {
+      await moderateActiveCall({ action, identity: row.participant.identity });
+      showToast(doneMessages[action]({ name }), 'success');
+    } catch (err) {
+      console.warn(`call ${action} failed:`, err);
+      const reason = err instanceof Error ? err.message : String(err);
+      showToast(m.groups_call_mod_failed({ reason }), 'error');
+    }
+  }
+  function confirmRemove() {
+    const row = removeTarget;
+    removeTarget = null;
+    if (row) void runModeration('remove', row);
+  }
 
   // --- Reordering: local to this viewer, kept for the call ---
   let tileAnnouncement = $state('');
@@ -507,6 +573,7 @@
         speaking: lk.speakingParticipantIds.has(identity),
         handRaised: lk.raisedHands.has(identity),
         guest: isGuestParticipant(seat.participant),
+        role: rolesByIdentity.get(identity) ?? null,
         listenOnly: seat.isLocal
           ? !lk.canPublish
           : seat.participant.permissions?.canPublish === false,
@@ -766,6 +833,7 @@
       isSpeaking={lk.speakingParticipantIds.has(it.participant.identity)}
       handRaised={lk.raisedHands.has(it.participant.identity)}
       isGuest={isGuestParticipant(it.participant)}
+      role={rolesByIdentity.get(it.participant.identity) ?? null}
       reactions={reactionsOf(it.participant.identity)}
       profile={getProfiles().get(pk ?? '')}
       volume={volumeFor(pk)}
@@ -816,6 +884,15 @@
       {#if !lk.canPublish}
         <span class="badge shrink-0 badge-ghost badge-sm" data-testid="group-call-listen-only">
           {m.groups_call_listen_only()}
+        </span>
+      {/if}
+      {#if myRole}
+        <span
+          class="badge shrink-0 badge-sm badge-primary"
+          data-testid="group-call-my-role"
+          data-role={myRole}
+        >
+          {myRole === 'host' ? m.groups_call_you_are_host() : m.groups_call_you_are_cohost()}
         </span>
       {/if}
       {#if handCount > 0}
@@ -1135,7 +1212,13 @@
               onTogglePin={togglePin}
               onVolumeChange={changeVolume}
               onClose={() => (participantsOpen = false)}
-            />
+            >
+              {#snippet menuExtras(
+                /** @type {import('$lib/groups/call-participants.js').ParticipantRow} */ row
+              )}
+                <CallHostActions {row} {myRole} onAction={(action) => hostAction(action, row)} />
+              {/snippet}
+            </ParticipantsPanelLazy.Component>
           {:else}
             <div class="flex flex-1 items-center justify-center">
               <span class="loading loading-md loading-spinner"></span>
@@ -1427,3 +1510,40 @@
     </div>
   {/if}
 </div>
+
+{#if removeTarget}
+  <!-- Removal confirm: the shared small-dialog grammar (CallLeaveConfirmModal). -->
+  <div
+    class="modal-open modal"
+    role="alertdialog"
+    aria-modal="true"
+    aria-labelledby="call-mod-remove-title"
+    data-testid="call-mod-remove-confirm"
+  >
+    <div class="modal-box max-w-sm">
+      <h3 id="call-mod-remove-title" class="font-bold">{m.groups_call_mod_remove_title()}</h3>
+      <p class="py-2 text-sm">
+        {m.groups_call_mod_remove_body({ name: nameOf(removeTarget.participant) })}
+      </p>
+      <div class="modal-action">
+        <button
+          class="btn btn-ghost"
+          data-testid="call-mod-remove-cancel"
+          onclick={() => (removeTarget = null)}
+        >
+          {m.common_cancel()}
+        </button>
+        <button class="btn btn-error" data-testid="call-mod-remove-action" onclick={confirmRemove}>
+          {m.groups_call_mod_remove_action()}
+        </button>
+      </div>
+    </div>
+    <button
+      type="button"
+      class="modal-backdrop"
+      aria-label={m.common_cancel()}
+      tabindex="-1"
+      onclick={() => (removeTarget = null)}
+    ></button>
+  </div>
+{/if}

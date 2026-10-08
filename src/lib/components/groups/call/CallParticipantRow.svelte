@@ -111,11 +111,20 @@
     <span class="truncate text-sm" title={row.speaking ? m.groups_call_speaking() : undefined}>
       {name}
     </span>
-    {#if row.guest || row.listenOnly}
+    {#if row.guest || row.role || row.listenOnly}
       <span class="flex flex-wrap gap-1">
         {#if row.guest}
           <span class="badge badge-xs badge-info" data-testid="call-guest-badge">
             {m.groups_call_guest_badge()}
+          </span>
+        {/if}
+        {#if row.role}
+          <span
+            class="badge badge-xs badge-primary"
+            data-testid="call-role-badge"
+            data-role={row.role}
+          >
+            {row.role === 'host' ? m.groups_call_host_badge() : m.groups_call_cohost_badge()}
           </span>
         {/if}
         {#if row.listenOnly}

@@ -13,7 +13,12 @@
 // pulls livekit-client (~300KB) into whatever imports it, and this store is
 // imported by GroupChat and the root layout. It is loaded on join.
 import { channelKey } from './community-pointer.js';
-import { requestGroupCallToken, GroupCallTokenError, isGuestParticipant } from './livekit.js';
+import {
+  requestGroupCallToken,
+  moderateCall,
+  GroupCallTokenError,
+  isGuestParticipant
+} from './livekit.js';
 import { getChatBeside, setChatBeside } from '$lib/services/call-prefs.js';
 import {
   confirmCallSwitch,
@@ -77,6 +82,13 @@ let stopDisconnectListener = null;
 // static import). Lets the leave dialog read the seat synchronously.
 /** @type {typeof import('$lib/services/livekit-connection.svelte.js') | null} */
 let lkModule = null;
+
+// The channel and the signer of the active call, for host actions
+// (moderateActiveCall). Plain `let`: never rendered.
+/** @type {{id: string, relay: string} | null} */
+let activePointer = null;
+/** @type {{pubkey: string, signer: any} | null} */
+let activeUser = null;
 
 /**
  * @returns {{
@@ -164,6 +176,8 @@ export async function joinGroupCall(pointer, user, view = {}) {
 
   const myAttempt = ++attempt;
   activeKey = key;
+  activePointer = { id: pointer.id, relay: pointer.relay };
+  activeUser = user;
   phase = 'requesting';
   error = null;
   endReason = null;
@@ -298,6 +312,8 @@ export async function leaveGroupCall() {
   endReason = null;
   stopDisconnectListener?.();
   stopDisconnectListener = null;
+  activePointer = null;
+  activeUser = null;
   token = null;
   serverUrl = null;
   connected = false;
@@ -366,6 +382,20 @@ function seatedAsGuest() {
   const local = connected ? lkModule?.getLiveKitState().localParticipant : null;
   if (local) return isGuestParticipant(local);
   return !!code;
+}
+
+/**
+ * A host action on a seat of the active call (livekit.js `moderateCall`
+ * against the channel the call belongs to, signed by the account that
+ * joined it). Rejects with GroupCallModerationError — the relay's reason —
+ * or when no call is live.
+ * @param {{action: import('./livekit.js').CallModerationAction, identity: string}} request
+ */
+export async function moderateActiveCall(request) {
+  if (!activePointer || !activeUser || !isLive()) {
+    throw new Error('no active call');
+  }
+  await moderateCall(activePointer, activeUser, request);
 }
 
 /**

@@ -60,6 +60,16 @@ export function livekitTokenUrl(relayUrl, groupId) {
 }
 
 /**
+ * The host moderation endpoint (edufeed extension, see
+ * docs/nips/nip29-call-passes.md § "Host and co-host").
+ * @param {string} relayUrl @param {string} groupId
+ */
+export function livekitModerateUrl(relayUrl, groupId) {
+  const base = livekitTokenUrl(relayUrl, groupId);
+  return base ? `${base}/moderate` : null;
+}
+
+/**
  * Bare `livekit` tag on the RAW kind-39000 — same rule the settings sheet
  * uses for `hidden`/`private`/`closed` (applesauce's parsed metadata does
  * not surface it).
@@ -88,12 +98,51 @@ export function identityToPubkey(identity) {
  * @param {{metadata?: string} | null | undefined} participant
  */
 export function isGuestParticipant(participant) {
+  return participantMetadata(participant)?.guest === true;
+}
+
+/**
+ * The relay writes a member seat's call role into its participant metadata
+ * (`{"host":true}` / `{"cohost":true}`, `{}` once revoked) — at mint time
+ * and, when roles change mid-call, through RoomService.UpdateParticipant
+ * (ParticipantMetadataChanged on the client). A guest seat never carries
+ * one.
+ * @param {{metadata?: string} | null | undefined} participant
+ */
+export function isHostParticipant(participant) {
+  return participantMetadata(participant)?.host === true;
+}
+
+/** @param {{metadata?: string} | null | undefined} participant */
+export function isCohostParticipant(participant) {
+  const md = participantMetadata(participant);
+  return md?.cohost === true && md?.host !== true;
+}
+
+/** @typedef {'host' | 'cohost'} CallRole */
+
+/**
+ * @param {{metadata?: string} | null | undefined} participant
+ * @returns {CallRole | null}
+ */
+export function participantCallRole(participant) {
+  if (isHostParticipant(participant)) return 'host';
+  if (isCohostParticipant(participant)) return 'cohost';
+  return null;
+}
+
+/**
+ * @param {{metadata?: string} | null | undefined} participant
+ * @returns {any}
+ */
+function participantMetadata(participant) {
   const raw = participant?.metadata;
-  if (typeof raw !== 'string' || !raw) return false;
+  if (typeof raw !== 'string' || !raw) return null;
   try {
-    return JSON.parse(raw)?.guest === true;
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === 'object' ? parsed : null;
   } catch {
-    return false;
+    return null;
   }
 }
 
@@ -246,4 +295,79 @@ export async function requestGroupCallToken(relayUrl, groupId, user, opts = {}) 
     );
   }
   return { serverUrl, participantToken };
+}
+
+/** @typedef {'mute' | 'stop-video' | 'stop-screen' | 'remove' | 'make-cohost' | 'revoke-cohost'} CallModerationAction */
+
+/** The actions the moderation endpoint knows, in the order the menu shows them. */
+export const CALL_MODERATION_ACTIONS = /** @type {const} */ ([
+  'mute',
+  'stop-video',
+  'stop-screen',
+  'remove',
+  'make-cohost',
+  'revoke-cohost'
+]);
+
+export class GroupCallModerationError extends Error {
+  /**
+   * @param {string} message the relay's reason (403/404 body) or a transport message
+   * @param {number} [status]
+   */
+  constructor(message, status) {
+    super(message);
+    this.name = 'GroupCallModerationError';
+    this.status = status;
+  }
+}
+
+/**
+ * Ask the group relay to moderate a seat of the channel's call: POST
+ * `<origin>/.well-known/nip29/livekit/<group-id>/moderate` with a NIP-98
+ * header bound to that URL, the method and the SHA-256 of the JSON body
+ * `{action, identity}`. The relay checks the caller's call role (host,
+ * co-host, or group moderator as a fallback) and drives LiveKit with its own
+ * admin token — participant tokens never carry roomAdmin.
+ * @param {{id: string, relay: string}} pointer
+ * @param {{pubkey: string, signer: {signEvent: (draft: any) => Promise<any>}}} user
+ * @param {{action: CallModerationAction, identity: string}} request
+ * @returns {Promise<void>}
+ */
+export async function moderateCall(pointer, user, { action, identity }) {
+  const url = livekitModerateUrl(pointer.relay, pointer.id);
+  if (!url) throw new GroupCallModerationError(`not a relay url: ${pointer.relay}`);
+  const body = JSON.stringify({ action, identity });
+
+  const authorization = await createNIP98AuthHeader(url, 'POST', body, (draft) =>
+    rejectAfter(
+      Promise.resolve(user.signer.signEvent({ ...draft, pubkey: user.pubkey })),
+      CALL_SIGN_TIMEOUT_MS,
+      'Signing the moderation request'
+    )
+  );
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), TOKEN_TIMEOUT_MS);
+  /** @type {Response} */
+  let response;
+  try {
+    response = await fetch(url, {
+      method: 'POST',
+      headers: { Authorization: authorization, 'Content-Type': 'application/json' },
+      body,
+      signal: controller.signal
+    });
+  } catch (err) {
+    clearTimeout(timer);
+    throw new GroupCallModerationError(err instanceof Error ? err.message : String(err));
+  }
+  clearTimeout(timer);
+
+  if (!response.ok) {
+    const text = await response.text().catch(() => '');
+    throw new GroupCallModerationError(
+      text.trim() || `relay answered ${response.status}`,
+      response.status
+    );
+  }
 }

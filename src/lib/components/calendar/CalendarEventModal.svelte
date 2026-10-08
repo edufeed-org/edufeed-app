@@ -1047,6 +1047,7 @@
             disabled={isSubmitting}
             label={isGroupMeeting ? m.meeting_modal_invite_label() : ''}
             help={isGroupMeeting ? m.meeting_modal_invite_help() : ''}
+            cohostToggle={isGroupMeeting}
           />
         </div>
 

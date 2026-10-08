@@ -49,6 +49,8 @@ vi.mock('$lib/paraglide/messages', () => ({
   groups_call_hand_raised: () => 'Hand raised',
   groups_call_speaking: () => 'Speaking',
   groups_call_guest_badge: () => 'Gast',
+  groups_call_host_badge: () => 'Host',
+  groups_call_cohost_badge: () => 'Co-Host',
   groups_call_listen_only: () => 'Listening only',
   groups_call_tile_you: () => 'You',
   groups_call_pin: () => 'Pin',
@@ -240,5 +242,25 @@ describe('CallParticipantsPanel — row menu', () => {
     await fireEvent.click(screen.getByRole('button', { name: `Options for ${B.slice(0, 8)}` }));
     await fireEvent.click(screen.getByTestId('menu-extra'));
     expect(onExtra).toHaveBeenCalledWith(`${B}:1`);
+  });
+});
+
+// Issue "Video-Call: host role": the stage derives `role` from the seat's
+// metadata; the row shows it next to the guest badge, in the same style.
+describe('CallParticipantsPanel — role badges', () => {
+  it('shows Host / Co-Host for the role and nothing for a plain seat', () => {
+    const rows = [
+      row(`${A}:me`, A, { isLocal: true, role: 'host' }),
+      row(`${B}:1`, B, { role: 'cohost' }),
+      row(`${C}:1`, C, { role: null })
+    ];
+    render(CallParticipantsPanel, { props: { rows, ...callbacks() } });
+    const badge = (id) =>
+      document.querySelector(`[data-identity="${id}"] [data-testid="call-role-badge"]`);
+    expect(badge(`${A}:me`).textContent.trim()).toBe('Host');
+    expect(badge(`${A}:me`).dataset.role).toBe('host');
+    expect(badge(`${B}:1`).textContent.trim()).toBe('Co-Host');
+    expect(badge(`${B}:1`).classList.contains('badge-xs')).toBe(true);
+    expect(badge(`${C}:1`)).toBeNull();
   });
 });

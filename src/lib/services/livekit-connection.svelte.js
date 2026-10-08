@@ -28,7 +28,6 @@ import {
 import { withHand, handQueue } from '$lib/groups/call-tile-order.js';
 import { reactionPayload, parseReactionPayload } from '$lib/groups/call-reactions.js';
 import { isGuestParticipant } from '$lib/groups/livekit.js';
-import { safeCallFileType } from '$lib/groups/call-files.js';
 import {
   noteCallChatMention,
   noteCallChatReceived,
@@ -74,6 +73,11 @@ let remoteParticipants = $state.raw([]);
 
 /** @type {import('livekit-client').LocalParticipant | null} */
 let localParticipant = $state(null);
+// Bumped whenever a participant's metadata changes (the relay pushes call
+// roles through it, see groups/livekit.js participantCallRole): the
+// participant objects themselves are not reactive, so a view that derives
+// a role from `localParticipant.metadata` reads this to be re-run.
+let participantMetadataVersion = $state(0);
 
 /** @type {Set<string>} */
 let speakingParticipantIds = $state.raw(new Set());
@@ -606,10 +610,8 @@ async function handleFileStream(reader, { identity }) {
     typeof declared === 'string' && /^[A-Za-z0-9_-]{8,36}$/.test(declared)
       ? declared
       : `${identity}:${info.id}`;
-  // Untrusted: a blob typed text/html or image/svg+xml would run script in
-  // the app's origin when opened. Raster images keep their type (inline
-  // <img> preview), everything else is an opaque download (groups/call-files).
-  const mime = safeCallFileType(info.mimeType);
+  const mime =
+    typeof info.mimeType === 'string' && info.mimeType ? info.mimeType : 'application/octet-stream';
   const sender = room?.remoteParticipants.get(identity);
   const added = addFile(
     identity,
@@ -708,6 +710,35 @@ function handleSignal(payload, participant, _kind, topic) {
   } else if (msg?.t === 'react') {
     const reaction = parseReactionPayload(msg);
     if (reaction) addReaction(participant.identity, reaction.emoji, reaction.nonce, reaction.url);
+  }
+}
+
+/**
+ * The host muted us through the relay (RoomService.MutePublishedTrack, see
+ * groups/livekit.js moderateCall): LiveKit mutes the published track and
+ * the client learns of it as TrackMuted on its own publication. Keep the
+ * toggles truthful — a muted mic shows muted, a muted camera shows off —
+ * and turn a muted screen share into a stopped one, since a paused share
+ * is just a black tile for everyone else. Our own toggles end up here too
+ * (setMicrophoneEnabled(false) also mutes), which is a no-op.
+ * @param {Room} target
+ * @param {{source?: string} | undefined} publication
+ */
+function followServerMute(target, publication) {
+  if (target !== room) return;
+  switch (publication?.source) {
+    case Track.Source.Microphone:
+      isMuted = true;
+      break;
+    case Track.Source.Camera:
+      isCameraOff = true;
+      break;
+    case Track.Source.ScreenShare:
+      if (isScreenSharing) {
+        isScreenSharing = false;
+        target.localParticipant.setScreenShareEnabled(false).catch(() => {});
+      }
+      break;
   }
 }
 
@@ -956,8 +987,15 @@ export async function connectToRoom(token, url, opts = {}) {
       updateParticipants();
       recomputeMuted();
     });
-    newRoom.on(RoomEvent.TrackMuted, recomputeMuted);
+    newRoom.on(RoomEvent.TrackMuted, (publication, participant) => {
+      recomputeMuted();
+      if (participant === newRoom.localParticipant) followServerMute(newRoom, publication);
+    });
     newRoom.on(RoomEvent.TrackUnmuted, recomputeMuted);
+    newRoom.on(RoomEvent.ParticipantMetadataChanged, () => {
+      participantMetadataVersion++;
+      updateParticipants();
+    });
     newRoom.on(RoomEvent.Reconnecting, () => (connectionState = 'reconnecting'));
     newRoom.on(RoomEvent.SignalReconnecting, () => (connectionState = 'reconnecting'));
     newRoom.on(RoomEvent.Reconnected, () => (connectionState = 'connected'));
@@ -1204,7 +1242,7 @@ export async function toggleScreenShare() {
 
 /**
  * Get reactive connection state.
- * @returns {{ isConnected: boolean, isConnecting: boolean, isMuted: boolean, isCameraOff: boolean, isScreenSharing: boolean, canPublish: boolean, canSignal: boolean, connectionState: 'connected' | 'reconnecting' | 'disconnected', disconnectReason: import('livekit-client').DisconnectReason | null, mutedIdentities: Set<string>, raisedHands: Set<string>, reactions: Array<{id: string, identity: string, emoji: string, url?: string}>, callChat: CallChatMessage[], localParticipant: import('livekit-client').LocalParticipant | null, remoteParticipants: import('livekit-client').RemoteParticipant[], room: Room | null, speakingParticipantIds: Set<string>, audioInputDevices: MediaDeviceInfo[], activeAudioDeviceId: string, audioOutputDevices: MediaDeviceInfo[], activeAudioOutputDeviceId: string, videoInputDevices: MediaDeviceInfo[], activeVideoDeviceId: string, backgroundEffect: string }}
+ * @returns {{ isConnected: boolean, isConnecting: boolean, isMuted: boolean, isCameraOff: boolean, isScreenSharing: boolean, canPublish: boolean, canSignal: boolean, connectionState: 'connected' | 'reconnecting' | 'disconnected', disconnectReason: import('livekit-client').DisconnectReason | null, mutedIdentities: Set<string>, raisedHands: Set<string>, reactions: Array<{id: string, identity: string, emoji: string, url?: string}>, callChat: CallChatMessage[], localParticipant: import('livekit-client').LocalParticipant | null, remoteParticipants: import('livekit-client').RemoteParticipant[], participantMetadataVersion: number, room: Room | null, speakingParticipantIds: Set<string>, audioInputDevices: MediaDeviceInfo[], activeAudioDeviceId: string, audioOutputDevices: MediaDeviceInfo[], activeAudioOutputDeviceId: string, videoInputDevices: MediaDeviceInfo[], activeVideoDeviceId: string, backgroundEffect: string }}
  */
 export function getLiveKitState() {
   return {
@@ -1252,6 +1290,9 @@ export function getLiveKitState() {
     },
     get remoteParticipants() {
       return remoteParticipants;
+    },
+    get participantMetadataVersion() {
+      return participantMetadataVersion;
     },
     get room() {
       return room;

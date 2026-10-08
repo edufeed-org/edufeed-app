@@ -94,6 +94,11 @@ vi.mock('$lib/groups/call-background.js', () => ({
   parseBackgroundEffect: (v) => v || 'none'
 }));
 vi.mock('$lib/helpers/toast', () => ({ showToast: media.showToast }));
+const moderateActiveCall = vi.fn(async () => {});
+vi.mock('$lib/groups/group-call.svelte.js', async (importOriginal) => ({
+  ...(await importOriginal()),
+  moderateActiveCall: (...a) => moderateActiveCall(...a)
+}));
 vi.mock('$lib/services/call-sounds.js', () => ({ playLeaveSound: media.playLeaveSound }));
 vi.mock('livekit-client', () => ({
   Track: { Source: { Camera: 'camera', Microphone: 'microphone', ScreenShare: 'screen_share' } }
@@ -135,7 +140,9 @@ vi.mock('$lib/components/icons', async () => ({
   PeopleIcon: Stub,
   GridIcon: Stub,
   ChevronLeftIcon: Stub,
-  ChevronRightIcon: Stub
+  ChevronRightIcon: Stub,
+  CloseIcon: Stub,
+  StarIcon: Stub
 }));
 vi.mock('$lib/paraglide/messages', () => ({
   groups_call_chat_unread: () => 'New messages in the call chat',
@@ -185,6 +192,26 @@ vi.mock('$lib/paraglide/messages', () => ({
   groups_call_page: (p) => `Page ${p.page} of ${p.total}`,
   groups_call_page_prev: () => 'Previous page',
   groups_call_page_next: () => 'Next page',
+  groups_call_you_are_host: () => 'You are the host',
+  groups_call_you_are_cohost: () => 'You are a co-host',
+  groups_call_host_actions_title: () => 'Host actions',
+  groups_call_mod_mute: () => 'Mute',
+  groups_call_mod_stop_video: () => 'Stop camera',
+  groups_call_mod_stop_screen: () => 'Stop screen share',
+  groups_call_mod_remove: () => 'Remove from call',
+  groups_call_mod_make_cohost: () => 'Make co-host',
+  groups_call_mod_revoke_cohost: () => 'Remove co-host',
+  groups_call_mod_remove_title: () => 'Remove from the call?',
+  groups_call_mod_remove_body: (p) => `${p.name} will be disconnected.`,
+  groups_call_mod_remove_action: () => 'Remove',
+  groups_call_mod_done_mute: (p) => `${p.name} muted`,
+  groups_call_mod_done_stop_video: (p) => `${p.name} camera stopped`,
+  groups_call_mod_done_stop_screen: (p) => `${p.name} screen stopped`,
+  groups_call_mod_done_remove: (p) => `${p.name} removed`,
+  groups_call_mod_done_make_cohost: (p) => `${p.name} is co-host`,
+  groups_call_mod_done_revoke_cohost: (p) => `${p.name} is no co-host`,
+  groups_call_mod_failed: (p) => `failed: ${p.reason}`,
+  common_cancel: () => 'Cancel',
   groups_call_pop_out: () => 'Pop out',
   groups_call_pop_in: () => 'Back to tab',
   groups_call_invite_title: () => 'Invite guests',
@@ -1264,5 +1291,182 @@ describe('layouts', () => {
       ).toBe(20);
       expect(screen.queryByTestId('group-call-pager')).toBeNull();
     });
+  });
+});
+
+// Issues "Video-Call: host role" + "mute other participants": the relay
+// marks the host / co-hosts in participant metadata and offers a NIP-98
+// moderation endpoint; the stage shows the badges and, for a host or
+// co-host, the actions in the participant list's row menu.
+describe('host role', () => {
+  const HOST_ME = `${'a'.repeat(64)}:me`;
+  const B = `${'b'.repeat(64)}:1`;
+  const C = `${'c'.repeat(64)}:1`;
+  const GUEST = `${'d'.repeat(64)}:g`;
+  const openPanel = async () => {
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await fireEvent.click(screen.getByTestId('group-call-show-participants'));
+    return screen.findByTestId('call-participants-panel-stub', {}, { timeout: 4000 });
+  };
+  const asHost = () => {
+    lk.localParticipant = {
+      identity: HOST_ME,
+      metadata: '{"host":true}',
+      getTrackPublication: () => undefined
+    };
+  };
+  beforeEach(() => {
+    moderateActiveCall.mockReset();
+    moderateActiveCall.mockResolvedValue(undefined);
+    lk.participantMetadataVersion = 0;
+  });
+
+  it('tells me in the header when I am the host or a co-host, and nothing otherwise', () => {
+    const { unmount } = render(GroupCallStage, { props: baseProps });
+    expect(screen.queryByTestId('group-call-my-role')).toBeNull();
+    unmount();
+
+    asHost();
+    const second = render(GroupCallStage, { props: baseProps });
+    const badge = screen.getByTestId('group-call-my-role');
+    expect(badge.textContent.trim()).toBe('You are the host');
+    expect(badge.dataset.role).toBe('host');
+    second.unmount();
+
+    lk.localParticipant.metadata = '{"cohost":true}';
+    render(GroupCallStage, { props: baseProps });
+    expect(screen.getByTestId('group-call-my-role').textContent.trim()).toBe('You are a co-host');
+  });
+
+  it("hands tiles and rows the role read from each seat's metadata", async () => {
+    lk.remoteParticipants = [
+      remote(B, { metadata: '{"host":true}' }),
+      remote(C, { metadata: '{"cohost":true}' }),
+      remote(GUEST, { metadata: '{"guest":true,"pass":"p"}' })
+    ];
+    render(GroupCallStage, { props: baseProps });
+    const tile = (id) =>
+      document.querySelector(`[data-testid="participant-tile-stub"][data-identity="${id}"]`);
+    expect(tile(B).dataset.role).toBe('host');
+    expect(tile(C).dataset.role).toBe('cohost');
+    expect(tile(GUEST).dataset.role).toBe('');
+    const panel = await openPanel();
+    const row = (id) => panel.querySelector(`[data-identity="${id}"]`);
+    expect(row(B).dataset.role).toBe('host');
+    expect(row(C).dataset.role).toBe('cohost');
+    expect(row(HOST_ME).dataset.role).toBe('');
+  });
+
+  it('a plain member sees no host actions in any row menu', async () => {
+    lk.remoteParticipants = [remote(B)];
+    render(GroupCallStage, { props: baseProps });
+    await openPanel();
+    expect(screen.queryByTestId('call-host-actions')).toBeNull();
+  });
+
+  it('the host mutes a participant through the relay and hears the outcome', async () => {
+    asHost();
+    lk.remoteParticipants = [remote(B)];
+    render(GroupCallStage, { props: baseProps });
+    const panel = await openPanel();
+    const menu = panel.querySelector(`[data-testid="stub-menu-seat:${B}"]`);
+    expect(menu.querySelector('[data-testid="call-host-actions"]')).toBeTruthy();
+    expect(
+      panel.querySelector(
+        `[data-testid="stub-menu-seat:${HOST_ME}"] [data-testid="call-host-actions"]`
+      )
+    ).toBeNull();
+
+    await fireEvent.click(menu.querySelector('[data-testid="call-mod-mute"]'));
+    expect(moderateActiveCall).toHaveBeenCalledWith({ action: 'mute', identity: B });
+    await vi.waitFor(() =>
+      expect(media.showToast).toHaveBeenCalledWith('bbbbbbbb muted', 'success')
+    );
+
+    moderateActiveCall.mockRejectedValueOnce(new Error('a co-host cannot moderate the host'));
+    await fireEvent.click(menu.querySelector('[data-testid="call-mod-stop-video"]'));
+    await vi.waitFor(() =>
+      expect(media.showToast).toHaveBeenCalledWith(
+        'failed: a co-host cannot moderate the host',
+        'error'
+      )
+    );
+  });
+
+  it('removing asks first (shared small dialog), then calls the relay; cancel does nothing', async () => {
+    asHost();
+    lk.remoteParticipants = [remote(B)];
+    render(GroupCallStage, { props: baseProps });
+    const panel = await openPanel();
+    const menu = panel.querySelector(`[data-testid="stub-menu-seat:${B}"]`);
+
+    await fireEvent.click(menu.querySelector('[data-testid="call-mod-remove"]'));
+    const dialog = screen.getByTestId('call-mod-remove-confirm');
+    expect(dialog.querySelector('.modal-box').classList.contains('max-w-sm')).toBe(true);
+    expect(dialog.textContent).toContain('bbbbbbbb will be disconnected.');
+    expect(moderateActiveCall).not.toHaveBeenCalled();
+    await fireEvent.click(screen.getByTestId('call-mod-remove-cancel'));
+    expect(screen.queryByTestId('call-mod-remove-confirm')).toBeNull();
+    expect(moderateActiveCall).not.toHaveBeenCalled();
+
+    await fireEvent.click(menu.querySelector('[data-testid="call-mod-remove"]'));
+    await fireEvent.click(screen.getByTestId('call-mod-remove-action'));
+    expect(screen.queryByTestId('call-mod-remove-confirm')).toBeNull();
+    expect(moderateActiveCall).toHaveBeenCalledWith({ action: 'remove', identity: B });
+    await vi.waitFor(() =>
+      expect(media.showToast).toHaveBeenCalledWith('bbbbbbbb removed', 'success')
+    );
+  });
+
+  it("co-host toggling is the host's alone and never offered for a guest", async () => {
+    asHost();
+    lk.remoteParticipants = [
+      remote(B),
+      remote(C, { metadata: '{"cohost":true}' }),
+      remote(GUEST, { metadata: '{"guest":true,"pass":"p"}' })
+    ];
+    render(GroupCallStage, { props: baseProps });
+    const panel = await openPanel();
+    const menu = (id) => panel.querySelector(`[data-testid="stub-menu-seat:${id}"]`);
+    await fireEvent.click(menu(B).querySelector('[data-testid="call-mod-make-cohost"]'));
+    expect(moderateActiveCall).toHaveBeenCalledWith({ action: 'make-cohost', identity: B });
+    await fireEvent.click(menu(C).querySelector('[data-testid="call-mod-revoke-cohost"]'));
+    expect(moderateActiveCall).toHaveBeenCalledWith({ action: 'revoke-cohost', identity: C });
+    expect(menu(GUEST).querySelector('[data-testid="call-mod-make-cohost"]')).toBeNull();
+    expect(menu(GUEST).querySelector('[data-testid="call-mod-mute"]')).toBeTruthy();
+    expect(menu(GUEST).querySelector('[data-testid="call-mod-remove"]')).toBeTruthy();
+  });
+
+  it('a co-host may mute and remove but not change roles, and never touches the host', async () => {
+    lk.localParticipant = {
+      identity: HOST_ME,
+      metadata: '{"cohost":true}',
+      getTrackPublication: () => undefined
+    };
+    lk.remoteParticipants = [remote(B, { metadata: '{"host":true}' }), remote(C)];
+    render(GroupCallStage, { props: baseProps });
+    const panel = await openPanel();
+    const menu = (id) => panel.querySelector(`[data-testid="stub-menu-seat:${id}"]`);
+    expect(menu(B).querySelector('[data-testid="call-host-actions"]')).toBeNull();
+    expect(menu(C).querySelector('[data-testid="call-mod-mute"]')).toBeTruthy();
+    expect(menu(C).querySelector('[data-testid="call-mod-remove"]')).toBeTruthy();
+    expect(menu(C).querySelector('[data-testid="call-mod-make-cohost"]')).toBeNull();
+  });
+
+  it('reads the role afresh from the metadata the relay pushed (participantMetadataVersion)', async () => {
+    // The stage's roles map depends on the connection service's metadata
+    // version (the participant objects are not reactive); the fixture `lk`
+    // is a plain object, so the re-derivation is exercised by a fresh render.
+    const b = remote(B);
+    lk.remoteParticipants = [b];
+    const first = render(GroupCallStage, { props: baseProps });
+    const tile = () =>
+      document.querySelector(`[data-testid="participant-tile-stub"][data-identity="${B}"]`);
+    expect(tile().dataset.role).toBe('');
+    first.unmount();
+    b.metadata = '{"cohost":true}';
+    lk.participantMetadataVersion = 1;
+    render(GroupCallStage, { props: baseProps });
+    expect(tile().dataset.role).toBe('cohost');
   });
 });
