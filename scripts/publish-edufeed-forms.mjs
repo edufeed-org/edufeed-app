@@ -3,8 +3,10 @@
  * Publish edufeed default form templates (kind 30168).
  *
  * Reads form definitions from `scripts/data/edufeed-forms.json`. Each field
- * may carry a `vocabRef` (the d-tag of a scheme published via publish:vocabs).
- * Scheme naddrs are resolved from env vars of the form
+ * may carry a `vocabRef` (the d-tag of a scheme). Vocabularies are published
+ * from the `edufeed/vocabs` repo (`pnpm plan` / `pnpm apply`); edufeed-app
+ * only consumes them via `SCHEME_NADDR_*`. Scheme naddrs are resolved from
+ * env vars of the form
  *   SCHEME_NADDR_<UPPER_SNAKE>
  * where dashes in the d-tag become underscores (e.g. `new-lrt` →
  * `SCHEME_NADDR_NEW_LRT`).
@@ -12,7 +14,7 @@
  * Env:
  *   EDUFEED_PUBLISHER_NSEC        hex secret key
  *   EDUFEED_PUBLISH_RELAYS        comma-separated relay URLs
- *   SCHEME_NADDR_<UPPER_SNAKE>    per-vocab naddr (paste from publish:vocabs)
+ *   SCHEME_NADDR_<UPPER_SNAKE>    per-vocab naddr (paste from edufeed/vocabs' `pnpm apply`)
  *
  * Usage:
  *   pnpm run publish:forms

@@ -75,7 +75,7 @@ Kind 1069 responses still exist for ordinary forms, such as the membership appli
 - **Building.** Any logged-in user can build a template at `/forms/new`. The builder supports steps, show-only-if rules, option routing, a field-to-AMB mapping on every field, vocabulary bindings, help texts per field, and a preview of the form as a respondent sees it.
 - **Filling in a template directly.** Every published metadata template can be filled in from its own page (`/forms/<naddr>/create-resource`).
 - **Plugging a template into the resource picker.** The "Share learning resource" picker lists the variants a deployment enables. A deployment points a variant at a template with one environment variable, `RESOURCE_FORM_TEMPLATE_NADDR_<VARIANT>`. With the variable set, that variant renders the template. Without it, the variant keeps using the hand-written wizard. This lets a deployment move one profile at a time.
-- **Default templates.** The edufeed default templates live as data in the repository (`scripts/data/edufeed-forms.json`) and are published with `pnpm run publish:forms`. Vocabulary references resolve to the schemes published with `pnpm run publish:vocabs`.
+- **Default templates.** The edufeed default templates live as data in the repository (`scripts/data/edufeed-forms.json`) and are published with `pnpm run publish:forms`. Vocabularies are published from the `edufeed/vocabs` repo (`pnpm plan` / `pnpm apply`); edufeed-app only consumes them via `SCHEME_NADDR_*`.
 
 | Template             | What it is                                                                                               | Steps |
 | -------------------- | -------------------------------------------------------------------------------------------------------- | ----- |
