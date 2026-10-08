@@ -97,7 +97,9 @@
   /** @type {Record<string, string>} */
   let pickedUrls = $state.raw({});
   // The full picker (unicode + custom), lazy like on the stage: neither it
-  // nor the emoji dataset enter this panel's static graph.
+  // nor the emoji dataset enter this panel's static graph. It gets THIS
+  // panel's packs, so the picker and the `:xx` autocomplete always agree
+  // (smoke test 2026-10-08: the picker showed no custom emojis).
   const EmojiPickerLazy = lazyComponent(() => import('./CallEmojiPicker.svelte'));
   let pickerOpen = $state(false);
 
@@ -730,7 +732,7 @@
         data-testid="call-chat-emoji-picker"
       >
         {#if EmojiPickerLazy.Component}
-          <EmojiPickerLazy.Component onPick={pickEmoji} />
+          <EmojiPickerLazy.Component onPick={pickEmoji} {customEmojiSets} />
         {:else}
           <div class="flex h-80 w-72 items-center justify-center rounded-box bg-base-100">
             <span class="loading loading-md loading-spinner"></span>

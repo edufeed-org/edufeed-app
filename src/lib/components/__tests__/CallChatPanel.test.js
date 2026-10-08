@@ -537,6 +537,15 @@ describe('CallChatPanel emojis', () => {
     expect(msg.textContent).not.toContain(':party:');
   });
 
+  // Smoke test 2026-10-08: the picker showed no custom emojis. The panel
+  // hands its own packs over, so picker and `:xx` autocomplete always agree.
+  it('hands its own custom emoji packs to the picker', async () => {
+    render(CallChatPanel, { props });
+    await fireEvent.click(screen.getByRole('button', { name: m.groups_call_chat_emoji_button() }));
+    const picker = await waitFor(() => screen.getByTestId('call-emoji-picker-stub'));
+    expect(JSON.parse(picker.dataset.sets)).toEqual(SETS);
+  });
+
   it('keeps the picker button disabled while not connected', () => {
     state.isConnected = false;
     render(CallChatPanel, { props });
