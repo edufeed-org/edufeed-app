@@ -137,7 +137,7 @@
     {placeholder}
     {disabled}
     onSubmit={() => !disabled && !sending && value.trim() && onSubmit()}
-    class="input flex items-center input-ghost focus:outline-none"
+    class="input flex w-full items-center input-ghost focus:outline-none"
     {testid}
   />
   <button
