@@ -24,6 +24,10 @@
     withCustomEmojis
   } from '$lib/groups/call-chat-links.js';
   import { registerCallChatView } from '$lib/groups/call-chat-unread.svelte.js';
+  import {
+    getCallChatCompose,
+    takePrivateRecipient
+  } from '$lib/groups/call-chat-compose.svelte.js';
   import { trackOnScreen } from '$lib/groups/track-on-screen.js';
   import { customEmojisIn } from '$lib/helpers/emoji-autocomplete.js';
   import {
@@ -264,6 +268,37 @@
     return names;
   }
 
+  // Private messages: "An: Alle" or one participant. The choice stays until
+  // changed (a private exchange is usually several lines) and falls back to
+  // everyone when that person leaves. A tile's "Privat schreiben" arrives
+  // through the compose store.
+  /** '' = everyone, else the recipient identity */
+  let recipient = $state('');
+  const compose = getCallChatCompose();
+  $effect(() => {
+    if (compose.recipient) {
+      const requested = takePrivateRecipient();
+      if (requested) {
+        recipient = requested;
+        composer?.focus();
+      }
+    }
+  });
+  $effect(() => {
+    if (recipient && !others.some((p) => p.identity === recipient)) recipient = '';
+  });
+  const recipientName = $derived(recipient ? nameOf(recipient) : '');
+  /**
+   * "privat an X" on my own copy, "privat von X" on a received one.
+   * @param {import('$lib/services/livekit-connection.svelte.js').CallChatMessage} msg
+   */
+  function privateLabel(msg) {
+    if (!msg.to) return '';
+    return msg.identity === myIdentity
+      ? m.groups_call_chat_private_to({ name: nameOf(msg.to) })
+      : m.groups_call_chat_private_from({ name: nameOf(msg.identity) });
+  }
+
   const origin = typeof window !== 'undefined' ? window.location.origin : '';
   // One parse per message, not per render: messages never change once kept.
   const parsed = $derived(
@@ -322,7 +357,8 @@
         at: c.at,
         name: nameOf(c.identity),
         guest: c.guest === true,
-        text: c.text
+        text: c.text,
+        ...(c.to ? { note: privateLabel(c) } : {})
       }))
     });
     downloadTextFile(callChatFileName(channel, now), text);
@@ -352,6 +388,7 @@
     await sendCallChat(text, {
       emoji,
       mentions,
+      ...(recipient ? { to: recipient } : {}),
       ...(reply
         ? {
             replyTo: reply.id,
@@ -410,10 +447,13 @@
           ? 'bg-primary/10'
           : isMentioned(msg, myIdentity)
             ? 'bg-accent/15'
-            : ''}"
+            : msg.to
+              ? 'bg-secondary/10'
+              : ''}"
         role="listitem"
         data-testid="call-chat-message"
         data-call-chat-id={msg.id}
+        data-private={msg.to ? 'true' : undefined}
         data-mentioned={isMentioned(msg, myIdentity) ? 'true' : undefined}
         data-flash={flashId === msg.id ? 'true' : undefined}
         onpointerdown={(e) => pressStart(e, msg)}
@@ -477,6 +517,11 @@
           <span class="font-semibold">{nameOf(msg.identity)}</span>
         {/if}
         <div class="flex min-w-0 flex-1 flex-col gap-1">
+          {#if msg.to}
+            <span class="badge w-fit badge-xs badge-secondary" data-testid="call-chat-private-badge"
+              >{privateLabel(msg)}</span
+            >
+          {/if}
           {#if msg.replyTo || msg.replyPreview}
             {@const quote = quoteOf(msg)}
             {#if quote?.targetId}
@@ -617,11 +662,25 @@
     >
       <SmilePlusIcon class="h-5 w-5" />
     </button>
+    <select
+      class="select max-w-32 select-ghost select-sm"
+      aria-label={m.groups_call_chat_recipient()}
+      bind:value={recipient}
+      disabled={!canSend}
+      data-testid="call-chat-recipient"
+    >
+      <option value="">{m.groups_call_chat_to_everyone()}</option>
+      {#each others as p (p.identity)}
+        <option value={p.identity}>{p.name}</option>
+      {/each}
+    </select>
     <ComposerInput
       bind:this={composer}
       bind:value={draft}
       {customEmojiSets}
-      placeholder={m.groups_call_chat_placeholder()}
+      placeholder={recipient
+        ? m.groups_call_chat_placeholder_private({ name: recipientName })
+        : m.groups_call_chat_placeholder()}
       disabled={!canSend}
       onfocus={() => (pickerOpen = false)}
       onSubmit={send}

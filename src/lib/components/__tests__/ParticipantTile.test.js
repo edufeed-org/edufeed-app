@@ -36,7 +36,8 @@ vi.mock('$lib/paraglide/messages', () => ({
   groups_call_pin: () => 'Pin',
   groups_call_unpin: () => 'Unpin',
   groups_call_guest_badge: () => 'Gast',
-  groups_call_tile_you: () => 'Du'
+  groups_call_tile_you: () => 'Du',
+  groups_call_private_message: () => 'Message privately'
 }));
 
 const { default: ParticipantTile } = await import(
@@ -196,5 +197,31 @@ describe('ParticipantTile', () => {
     });
     expect(screen.getByText('Du')).toBeTruthy();
     expect(screen.queryByText('You')).toBeNull();
+  });
+});
+
+// Issue "private 1:1 messages in the call chat": a remote tile offers
+// "Privat schreiben" when the stage wires it (the chat panel then
+// preselects that person as recipient).
+describe('ParticipantTile private message', () => {
+  it('offers the action for a remote participant and reports the identity', async () => {
+    const onPrivateMessage = vi.fn();
+    render(ParticipantTile, {
+      props: { participant: fakeParticipant(HEX + ':1'), pubkey: HEX, onPrivateMessage }
+    });
+    await fireEvent.click(screen.getByRole('button', { name: 'Message privately' }));
+    expect(onPrivateMessage).toHaveBeenCalledWith(HEX + ':1');
+  });
+
+  it('never offers it on my own tile or without the wiring', () => {
+    render(ParticipantTile, {
+      props: {
+        participant: fakeParticipant(HEX + ':1'),
+        pubkey: HEX,
+        isLocal: true,
+        onPrivateMessage: vi.fn()
+      }
+    });
+    expect(screen.queryByRole('button', { name: 'Message privately' })).toBeNull();
   });
 });

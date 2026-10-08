@@ -895,3 +895,46 @@ describe('call chat payload: mentions', () => {
     off();
   });
 });
+
+// Issue "Video-Call: private 1:1 messages in the call chat": in-call only,
+// ephemeral, delivered to one identity; never relayed to anyone else.
+describe('call chat payload: private messages', () => {
+  const bob = remote('b'.repeat(64) + ':x');
+  const chatSends = () =>
+    room.localParticipant.publishData.mock.calls.filter(
+      ([, opts]) => opts.topic === 'edufeed.call.chat'
+    );
+  const emit = (obj) =>
+    room.emit(RoomEvent.DataReceived, encode(obj), bob, undefined, 'edufeed.call.chat');
+
+  it('sends a private message to one identity only and keeps the own copy marked', async () => {
+    await svc.sendCallChat('nur fuer dich', { to: bob.identity });
+    const [bytes, opts] = chatSends().at(-1);
+    expect(opts.destinationIdentities).toEqual([bob.identity]);
+    expect(decode(bytes).to).toBe(bob.identity);
+    expect(svc.getLiveKitState().callChat.at(-1)).toMatchObject({
+      text: 'nur fuer dich',
+      to: bob.identity
+    });
+  });
+
+  it('keeps a private message addressed to me and drops one addressed to someone else', () => {
+    const me = room.localParticipant.identity;
+    emit({ t: 'chat', text: 'psst', n: 'p1', to: me });
+    emit({ t: 'chat', text: 'fuer carol', n: 'p2', to: 'c'.repeat(64) + ':y' });
+    const texts = svc.getLiveKitState().callChat.map((c) => c.text);
+    expect(texts).toContain('psst');
+    expect(texts).not.toContain('fuer carol');
+    expect(svc.getLiveKitState().callChat.find((c) => c.text === 'psst').to).toBe(me);
+  });
+
+  it('never replays private messages to a late joiner', async () => {
+    await svc.sendCallChat('oeffentlich');
+    await svc.sendCallChat('privat', { to: bob.identity });
+    room.localParticipant.publishData.mockClear();
+    room.emit(RoomEvent.ParticipantConnected, remote('c'.repeat(64) + ':y'));
+    await new Promise((r) => setTimeout(r, 0));
+    const texts = chatSends().map(([bytes]) => decode(bytes).text);
+    expect(texts).toEqual(['oeffentlich']);
+  });
+});

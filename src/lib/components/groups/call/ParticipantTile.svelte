@@ -19,7 +19,7 @@
   import ProfileAvatar from '$lib/components/shared/ProfileAvatar.svelte';
   import HoverCard from '$lib/components/shared/HoverCard.svelte';
   import ProfileHoverCardContent from '$lib/components/shared/ProfileHoverCardContent.svelte';
-  import { MicOffIcon, HandIcon, VolumeUpIcon, PinIcon } from '$lib/components/icons';
+  import { MicOffIcon, HandIcon, VolumeUpIcon, PinIcon, ChatIcon } from '$lib/components/icons';
   import * as m from '$lib/paraglide/messages';
 
   /**
@@ -37,7 +37,8 @@
    *   onVolumeChange?: (volume: number) => void,
    *   pinned?: boolean,
    *   onTogglePin?: () => void,
-   *   compact?: boolean
+   *   compact?: boolean,
+   *   onPrivateMessage?: (identity: string) => void
    * }}
    */
   let {
@@ -54,8 +55,11 @@
     onVolumeChange = undefined,
     pinned = false,
     onTogglePin = undefined,
-    compact = false
+    compact = false,
+    /** "Privat schreiben": preselect this person in the call chat (remote tiles only) */
+    onPrivateMessage = undefined
   } = $props();
+  const showPrivate = $derived(!isLocal && typeof onPrivateMessage === 'function');
 
   /** @type {import('livekit-client').Track | null} */
   let videoTrack = $state(null);
@@ -235,8 +239,8 @@
     {/if}
   </div>
 
-  <!-- Hover controls (top left): pin + volume -->
-  {#if onTogglePin || showVolume}
+  <!-- Hover controls (top left): pin + volume + private message -->
+  {#if onTogglePin || showVolume || showPrivate}
     <div
       class="absolute top-1.5 left-1.5 z-20 flex items-center gap-1 opacity-0 transition-opacity group-focus-within/tile:opacity-100 group-hover/tile:opacity-100"
       class:opacity-100={volumeOpen || pinned}
@@ -262,6 +266,17 @@
           onclick={() => (volumeOpen = !volumeOpen)}
         >
           <VolumeUpIcon class_="h-3.5 w-3.5" title="" />
+        </button>
+      {/if}
+      {#if showPrivate}
+        <button
+          class="btn btn-circle bg-base-100/80 btn-ghost btn-xs"
+          aria-label={m.groups_call_private_message()}
+          title={m.groups_call_private_message()}
+          onclick={() => onPrivateMessage?.(participant.identity)}
+          data-testid="participant-private-message"
+        >
+          <ChatIcon class_="h-3.5 w-3.5" title="" />
         </button>
       {/if}
     </div>

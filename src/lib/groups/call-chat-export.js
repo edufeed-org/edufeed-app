@@ -12,8 +12,10 @@ const hhmm = (d) => `${pad(d.getHours())}:${pad(d.getMinutes())}`;
  *   channel: string,
  *   exportedAt: Date,
  *   labels: { exportedAt: (time: string) => string, guest: string },
- *   messages: Array<{ at: number, name: string, guest: boolean, text: string }>
- * }} input `labels.exportedAt` words the export time; `labels.guest` marks guests
+ *   messages: Array<{ at: number, name: string, guest: boolean, text: string, note?: string }>
+ * }} input `labels.exportedAt` words the export time; `labels.guest` marks
+ *   guests; a message's `note` ("privat an X") joins the guest marker in the
+ *   parentheses after the name
  * @returns {string} channel, DD.MM.YYYY, export time, a blank line, then one
  *   `[HH:MM] Name: text` line per message (continuation lines indented)
  */
@@ -31,7 +33,8 @@ export function formatCallChatTxt({ channel, exportedAt, labels, messages }) {
     const name = String(msg.name ?? '')
       .replace(/\s+/g, ' ')
       .trim();
-    const who = msg.guest ? `${name} (${labels.guest})` : name;
+    const marks = [...(msg.guest ? [labels.guest] : []), ...(msg.note ? [msg.note] : [])];
+    const who = marks.length ? `${name} (${marks.join(', ')})` : name;
     const [first, ...rest] = String(msg.text).split(/\r\n|\r|\n/);
     lines.push(`${stamp}${who}: ${first}`);
     const indent = ' '.repeat(stamp.length);

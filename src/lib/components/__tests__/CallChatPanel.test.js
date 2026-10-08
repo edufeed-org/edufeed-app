@@ -720,3 +720,86 @@ describe('CallChatPanel mentions', () => {
     expect(plain.querySelector('[data-testid="call-chat-mention"]')).toBeNull();
   });
 });
+
+// Issue "Video-Call: private 1:1 messages in the call chat".
+describe('CallChatPanel private messages', () => {
+  const ME = 'e'.repeat(64) + ':me';
+  const BEA = 'b'.repeat(64) + ':1';
+  const CARL = 'c'.repeat(64) + ':1';
+  const select = () =>
+    /** @type {HTMLSelectElement} */ (
+      screen.getByRole('combobox', { name: m.groups_call_chat_recipient() })
+    );
+  beforeEach(() => {
+    state.localParticipant = { identity: ME };
+    state.remoteParticipants = [{ identity: BEA }, { identity: CARL }];
+  });
+
+  it('offers "An: Alle" plus the other participants and sends to the chosen one only', async () => {
+    render(CallChatPanel, { props });
+    const options = Array.from(select().options).map((o) => o.textContent.trim());
+    expect(options).toEqual([m.groups_call_chat_to_everyone(), 'Bea', 'Carl Otto']);
+    await fireEvent.change(select(), { target: { value: BEA } });
+    const input = screen.getByTestId('call-chat-input');
+    expect(input.getAttribute('aria-placeholder')).toBe(
+      m.groups_call_chat_placeholder_private({ name: 'Bea' })
+    );
+    await typeIntoEditor(input, 'nur du');
+    await fireEvent.keyDown(input, { key: 'Enter' });
+    expect(sendCallChat).toHaveBeenCalledWith('nur du', expect.objectContaining({ to: BEA }));
+    // the choice stays until changed (a private exchange is usually several lines)
+    expect(select().value).toBe(BEA);
+  });
+
+  it('sends to everyone by default', async () => {
+    render(CallChatPanel, { props });
+    const input = screen.getByTestId('call-chat-input');
+    await typeIntoEditor(input, 'an alle');
+    await fireEvent.keyDown(input, { key: 'Enter' });
+    expect(sendCallChat.mock.calls[0][1].to).toBeUndefined();
+  });
+
+  it('marks my own private copy "privat an X" and a received one "privat von X"', () => {
+    state.callChat = [
+      { id: 'p:1', identity: ME, text: 'nur du', at: 1, to: BEA },
+      { id: 'p:2', identity: BEA, text: 'ok', at: 2, to: ME },
+      { id: 'p:3', identity: CARL, text: 'alle', at: 3 }
+    ];
+    render(CallChatPanel, { props: { identityToPubkey: (id) => id.slice(0, 64) } });
+    const [mine, theirs, open] = screen.getAllByTestId('call-chat-message');
+    expect(mine.dataset.private).toBe('true');
+    expect(mine.querySelector('[data-testid="call-chat-private-badge"]').textContent).toBe(
+      m.groups_call_chat_private_to({ name: 'Bea' })
+    );
+    expect(theirs.querySelector('[data-testid="call-chat-private-badge"]').textContent).toBe(
+      m.groups_call_chat_private_from({ name: 'Bea' })
+    );
+    expect(open.dataset.private).toBeUndefined();
+    expect(open.querySelector('[data-testid="call-chat-private-badge"]')).toBeNull();
+  });
+
+  it('takes a recipient requested from a participant tile', async () => {
+    const compose = await import('$lib/groups/call-chat-compose.svelte.js');
+    compose.requestPrivateRecipient(CARL);
+    render(CallChatPanel, { props });
+    await waitFor(() => expect(select().value).toBe(CARL));
+    expect(compose.getCallChatCompose().recipient).toBeNull();
+  });
+
+  it('falls back to everyone when the chosen recipient leaves the call', async () => {
+    const { rerender } = render(CallChatPanel, { props });
+    await fireEvent.change(select(), { target: { value: CARL } });
+    expect(select().value).toBe(CARL);
+    state.remoteParticipants = [{ identity: BEA }];
+    await rerender(props);
+    await waitFor(() => expect(select().value).toBe(''));
+  });
+
+  it('exports private messages with a note, never as plain lines', async () => {
+    state.callChat = [{ id: 'p:1', identity: ME, text: 'nur du', at: 1, to: BEA }];
+    render(CallChatPanel, { props: { identityToPubkey: (id) => id.slice(0, 64), title: 'x' } });
+    await fireEvent.click(screen.getByRole('button', { name: m.groups_call_chat_download() }));
+    const [, text] = download.fn.mock.calls[0];
+    expect(text).toContain(`(${m.groups_call_chat_private_to({ name: 'Bea' })}): nur du`);
+  });
+});
