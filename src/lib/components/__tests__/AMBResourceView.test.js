@@ -641,6 +641,27 @@ describe('AMBResourceView', () => {
       expect(card?.querySelector('.mcg-val')?.textContent).toContain('Worksheet');
     });
 
+    it('names every learning resource type in the header kicker, not just the first', () => {
+      const { container } = render(AMBResourceView, {
+        props: {
+          event: eventWithTypes([
+            ['learningResourceType:id', 'https://w3id.org/kim/hcrt/slide'],
+            ['learningResourceType:prefLabel:en', 'Presentation'],
+            ['learningResourceType:id', 'https://w3id.org/kim/hcrt/video'],
+            ['learningResourceType:prefLabel:en', 'Video'],
+            ['learningResourceType:id', 'https://w3id.org/kim/hcrt/worksheet'],
+            ['learningResourceType:prefLabel:en', 'Worksheet']
+          ]),
+          resource: mockResource
+        }
+      });
+
+      const kickers = [...container.querySelectorAll('.ed-kicker-badge')].map((k) =>
+        k.textContent?.trim()
+      );
+      expect(kickers).toEqual(['Presentation', 'Video', 'Worksheet']);
+    });
+
     it('omits the card entirely when the resource has no type', () => {
       const { container } = render(AMBResourceView, {
         props: { event: eventWithTypes([]), resource: mockResource }

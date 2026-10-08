@@ -323,18 +323,21 @@
       class="h-16 w-16 flex-shrink-0 sm:h-20 sm:w-20"
     />
     <div class="min-w-0 flex-1">
-      <div class="flex items-center gap-2">
-        <span class="truncate font-semibold text-base-content">{resource.name}</span>
-        {#if localizedLearningResourceTypes.length > 0}
+      <!-- flex-wrap: several type badges drop below the title instead of
+           truncating it to nothing -->
+      <div class="flex flex-wrap items-center gap-x-2 gap-y-1">
+        <span class="max-w-full min-w-0 truncate font-semibold text-base-content"
+          >{resource.name}</span
+        >
+        <!-- One badge per resource type: a material can be exercise AND lesson plan
+             AND assessment at once, and only naming the first hid the rest. Keyed by
+             id — getLabelsWithFallback dedupes ids, so the key is safe. -->
+        {#each localizedLearningResourceTypes as type (type.id)}
           <span class="badge flex-shrink-0 badge-xs badge-primary"
-            >{localizedLearningResourceTypes[0]
-              .label}{#if localizedLearningResourceTypes[0].fallbackLang}
-              ({getLanguageDisplayName(
-                localizedLearningResourceTypes[0].fallbackLang,
-                getLocale()
-              )}){/if}</span
+            >{type.label}{#if type.fallbackLang}
+              ({getLanguageDisplayName(type.fallbackLang, getLocale())}){/if}</span
           >
-        {/if}
+        {/each}
       </div>
       <div class="truncate text-sm text-base-content/60" title={fullCreatorNames}>
         {displayedAuthorName} · {formatCalendarDate(publishedAt, 'short')}
@@ -403,7 +406,9 @@
     <!-- Author Header — for indexed resources the metadata creator takes the
          author slot (dashed avatar = no Nostr profile); the indexer only
          appears on the detail page ("Indexed by"). -->
-    <div class="mb-3 flex items-center gap-3">
+    <!-- flex-wrap + basis on the author block: a long set of type badges wraps
+         onto its own full-width line instead of squeezing the author out. -->
+    <div class="mb-3 flex flex-wrap items-center gap-3">
       <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
       <div class="flex-shrink-0" onclick={(e) => e.stopPropagation()}>
         {#if indexedCreators.length}
@@ -419,7 +424,7 @@
           />
         {/if}
       </div>
-      <div class="min-w-0 flex-1">
+      <div class="min-w-0 flex-1 basis-48">
         {#if indexedCreators.length && !singleCreatorPubkey}
           <span class="block truncate font-medium text-base-content" title={fullCreatorNames}>
             {displayedAuthorName}
@@ -447,15 +452,15 @@
           </div>
         {/if}
       </div>
-      <!-- Resource Type Badge -->
+      <!-- Resource Type Badges — one per type (see list variant above) -->
       {#if localizedLearningResourceTypes.length > 0}
-        <div class="badge badge-sm badge-primary">
-          {localizedLearningResourceTypes[0]
-            .label}{#if localizedLearningResourceTypes[0].fallbackLang}
-            ({getLanguageDisplayName(
-              localizedLearningResourceTypes[0].fallbackLang,
-              getLocale()
-            )}){/if}
+        <div class="ml-auto flex flex-wrap justify-end gap-1">
+          {#each localizedLearningResourceTypes as type (type.id)}
+            <div class="badge badge-sm badge-primary">
+              {type.label}{#if type.fallbackLang}
+                ({getLanguageDisplayName(type.fallbackLang, getLocale())}){/if}
+            </div>
+          {/each}
         </div>
       {/if}
     </div>

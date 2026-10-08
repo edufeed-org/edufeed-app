@@ -321,8 +321,12 @@
     return '';
   });
 
-  // Primary content-type badge shown in the slim toolbar (design's "Stundenentwurf").
-  const primaryTypeLabel = $derived(localizedLearningResourceTypes[0]?.label ?? '');
+  // Content-type kicker badges shown in the slim toolbar (design's
+  // "Stundenentwurf"). One per type: a resource can be exercise, assessment
+  // and lesson plan at once, and showing only the first hid the rest.
+  const typeKickerLabels = $derived(
+    localizedLearningResourceTypes.map((t) => t.label).filter(Boolean)
+  );
 
   // Concise extension facts (duration, method, …) to surface in the hero strip,
   // on top of the core educational fields. Full extension metadata still renders
@@ -667,9 +671,9 @@
     deleteItemName={resource.name}
   >
     {#snippet metadata()}
-      {#if primaryTypeLabel}
-        <span class="ed-kicker-badge">{primaryTypeLabel}</span>
-      {/if}
+      {#each typeKickerLabels as label, i (i)}
+        <span class="ed-kicker-badge">{label}</span>
+      {/each}
     {/snippet}
 
     {#snippet actions()}

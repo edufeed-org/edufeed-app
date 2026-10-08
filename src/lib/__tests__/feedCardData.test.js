@@ -247,4 +247,43 @@ describe('getFeedCardData', () => {
       expect(getFeedCardData(event).typeKey).toBe('calendar');
     });
   });
+
+  describe('kind 30142 (learning resource)', () => {
+    const typeTags = [
+      ['d', 'multi'],
+      ['name', 'Was ist gerecht?'],
+      ['learningResourceType:id', 'https://w3id.org/kim/hcrt/exercise'],
+      ['learningResourceType:prefLabel:de', 'Übung'],
+      ['learningResourceType:prefLabel:en', 'Exercise'],
+      ['learningResourceType:id', 'https://w3id.org/kim/hcrt/assessment'],
+      ['learningResourceType:prefLabel:de', 'Lernkontrolle'],
+      ['learningResourceType:prefLabel:en', 'Assessment'],
+      ['learningResourceType:id', 'https://w3id.org/kim/hcrt/lesson_plan'],
+      ['learningResourceType:prefLabel:de', 'Unterrichtsplanung'],
+      ['learningResourceType:prefLabel:en', 'Lesson Plan']
+    ];
+
+    it('lists every learning resource type label in the description', () => {
+      const result = getFeedCardData({ kind: 30142, content: '', tags: typeTags });
+      expect(result.typeKey).toBe('learning');
+      expect(result.title).toBe('Was ist gerecht?');
+      expect(result.description).toBe('Übung, Lernkontrolle, Unterrichtsplanung');
+    });
+
+    it('falls back to English labels, then to the id slug', () => {
+      const en = typeTags.filter((t) => t[0] !== 'learningResourceType:prefLabel:de');
+      expect(getFeedCardData({ kind: 30142, content: '', tags: en }).description).toBe(
+        'Exercise, Assessment, Lesson Plan'
+      );
+      const idsOnly = typeTags.filter((t) => !t[0].startsWith('learningResourceType:prefLabel'));
+      expect(getFeedCardData({ kind: 30142, content: '', tags: idsOnly }).description).toBe(
+        'exercise, assessment, lesson_plan'
+      );
+    });
+
+    it('leaves the description undefined without any type', () => {
+      const result = getFeedCardData({ kind: 30142, content: '', tags: [['name', 'X']] });
+      expect(result.description).toBeUndefined();
+    });
+  });
 });

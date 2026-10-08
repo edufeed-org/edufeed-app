@@ -77,6 +77,16 @@ vi.mock('$lib/helpers/educational/ambTransform.js', async (importOriginal) => {
   return {
     ...actual,
     getLabelsWithFallback: (/** @type {any} */ tags, /** @type {any} */ field) => {
+      // Fixtures that carry real flattened `learningResourceType:id` tags
+      // drive the actual (pure) implementation so multi-type rendering can
+      // be exercised; the legacy fixture keeps the canned single type.
+      if (
+        field === 'learningResourceType' &&
+        Array.isArray(tags) &&
+        tags.some((/** @type {string[]} */ t) => t[0] === 'learningResourceType:id')
+      ) {
+        return actual.getLabelsWithFallback(tags, field, 'en');
+      }
       if (field === 'learningResourceType') return [{ id: 'hcrt/text', label: 'Text' }];
       if (field === 'about') return [{ id: 'math', label: 'Mathematik', fallbackLang: 'de' }];
       if (field === 'educationalLevel') return [{ id: 'higher', label: 'Higher Education' }];
@@ -678,6 +688,59 @@ describe('AMBResourceCard', () => {
       expect(badge?.className).toContain('left-2');
       expect(badge?.className).not.toContain('opacity-0');
       expect(badge?.className).not.toContain('group-hover');
+    });
+  });
+
+  describe('multiple learning resource types (issue: Angabe Materialressource unvollständig)', () => {
+    const typeTags = [
+      ['d', 'multi-type'],
+      ['learningResourceType:id', 'https://w3id.org/kim/hcrt/slide'],
+      ['learningResourceType:prefLabel:en', 'Presentation'],
+      ['learningResourceType:id', 'https://w3id.org/kim/hcrt/video'],
+      ['learningResourceType:prefLabel:en', 'Video'],
+      ['learningResourceType:id', 'https://w3id.org/kim/hcrt/worksheet'],
+      ['learningResourceType:prefLabel:en', 'Worksheet']
+    ];
+    /** @type {any} */
+    const multiTypeResource = {
+      ...mockResource,
+      image: '', // no cover image → TypoCover with its content-type pill
+      tags: typeTags,
+      rawEvent: { ...mockResource.rawEvent, tags: typeTags }
+    };
+
+    /** @param {HTMLElement} container */
+    const typeBadgeTexts = (container) =>
+      [...container.querySelectorAll('.badge-primary')].map((b) => b.textContent?.trim());
+
+    it('card variant shows a badge for every type, not just the first', () => {
+      const { container } = render(AMBResourceCard, {
+        props: { resource: multiTypeResource, authorProfile: mockAuthorProfile }
+      });
+      const texts = typeBadgeTexts(container);
+      expect(texts).toContain('Presentation');
+      expect(texts).toContain('Video');
+      expect(texts).toContain('Worksheet');
+    });
+
+    it('list variant shows a badge for every type, not just the first', () => {
+      const { container } = render(AMBResourceCard, {
+        props: { resource: multiTypeResource, authorProfile: mockAuthorProfile, variant: 'list' }
+      });
+      const texts = typeBadgeTexts(container);
+      expect(texts).toContain('Presentation');
+      expect(texts).toContain('Video');
+      expect(texts).toContain('Worksheet');
+    });
+
+    it('typo cover pill names every type', () => {
+      const { container } = render(AMBResourceCard, {
+        props: { resource: multiTypeResource, authorProfile: mockAuthorProfile }
+      });
+      const pill = container.querySelector('[data-testid="typo-cover-pill"]');
+      expect(pill?.textContent?.replace(/\s+/g, ' ').trim()).toBe(
+        'PRESENTATION · VIDEO · WORKSHEET'
+      );
     });
   });
 });
