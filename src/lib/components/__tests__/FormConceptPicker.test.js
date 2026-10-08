@@ -228,6 +228,32 @@ describe('FormConceptPicker', () => {
     });
   });
 
+  it('still heals a label-shaped id that contains a colon followed by a space ("Kunst: Malen")', async () => {
+    // A label with ": " is not a URI — it must not be mistaken for a
+    // canonical id and skipped by the healing effect.
+    let calls = 0;
+    /** @type {any[]} */
+    let healed = [];
+    render(FormConceptPicker, {
+      props: {
+        field: fieldFixture,
+        multiple: true,
+        value: [{ id: 'Kunst: Malen', nostrCoord: '', relay: '', labels: { de: 'Mathematik' } }],
+        onchange: (/** @type {any[]} */ v) => {
+          calls++;
+          healed = v;
+        }
+      }
+    });
+
+    await waitFor(() => {
+      if (calls === 0) throw new Error('onchange not called yet');
+    });
+
+    expect(healed.length).toBe(1);
+    expect(healed[0].id).toBe('https://w3id.org/kim/schulfaecher/s1017');
+  });
+
   it('does not re-emit onchange when incoming ids already match concept events', async () => {
     let calls = 0;
     render(FormConceptPicker, {
@@ -253,7 +279,7 @@ describe('FormConceptPicker', () => {
     expect(calls).toBe(0);
   });
 
-  it('does not rewrite a canonical id from a foreign scheme even when its label coincides with a current-scheme concept (Task 14)', async () => {
+  it('does not rewrite a canonical id from a foreign scheme even when its label coincides with a current-scheme concept', async () => {
     // Simulates a resource that stores a concept id from a DIFFERENT scheme
     // (e.g. `konfi-methode`) after the vocabulary publisher renamed/split
     // concepts out of the scheme this picker now resolves (`methode`). The
@@ -262,8 +288,6 @@ describe('FormConceptPicker', () => {
     // effect must NOT treat a same-named concept in the current scheme as a
     // match and silently swap the stored id out from under the user.
     let calls = 0;
-    /** @type {any[]} */
-    let seen = [];
     const foreignCanonicalId =
       'nostr:39738:d2689e2f41dabfba953da26655a94ce2aa4e029c383ee921c6a4deafab99a612:rollenspiel';
     render(FormConceptPicker, {
@@ -280,9 +304,8 @@ describe('FormConceptPicker', () => {
             labels: { de: 'Biologie' }
           }
         ],
-        onchange: (/** @type {any[]} */ v) => {
+        onchange: () => {
           calls++;
-          seen = v;
         }
       }
     });
@@ -291,7 +314,6 @@ describe('FormConceptPicker', () => {
     await new Promise((r) => setTimeout(r, 50));
 
     expect(calls).toBe(0);
-    void seen;
   });
 
   it('shows incoming value as selected badges via the dropdown trigger', async () => {

@@ -103,14 +103,12 @@
   });
 
   // A canonical concept id is always a URI (an external URI, or the
-  // `nostr:<coord>` shape `toRichSelected` builds) — i.e. it has a URI
-  // scheme prefix. A bare AI-enrichment label like "Mathematik" never does.
-  // Used below to tell "id is actually a label" (heal it) apart from "id is
-  // a real identifier the picker's own scheme just doesn't happen to carry"
-  // (leave it alone — see the Task 14 guard a few lines down).
+  // `nostr:<coord>` shape `toRichSelected` builds): a scheme prefix followed
+  // directly by a non-space. Labels like "Mathematik" or "Kunst: Malen" never
+  // match, so they are still healed below.
   /** @param {string} id */
   function looksLikeCanonicalId(id) {
-    return /^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(id);
+    return /^[a-zA-Z][a-zA-Z0-9+.-]*:\S/.test(id);
   }
 
   // Heal incoming values whose `id` is a label rather than a canonical
@@ -119,16 +117,9 @@
   // events are loaded, look each unmatched value up by label and emit
   // `onchange` once with the corrected rich entries — the form data then
   // carries canonical IDs all the way through to publish.
-  //
-  // Task 14 guard: only attempt this for values whose `id` isn't already
-  // canonical. A stored concept can legitimately belong to a DIFFERENT
-  // scheme than the one this picker resolves (e.g. after the vocabulary
-  // publisher renames/splits concepts out of the picker's scheme) — its id
-  // just won't be in `eventById`. Matching such a value by label text alone
-  // is unsound: a same-named concept in the CURRENT scheme is a coincidence,
-  // not evidence it's the same concept, and swapping to it would silently
-  // rewrite a user's stored value out from under them. Only bare labels
-  // (non-canonical ids) are safe to heal this way.
+  // Values with a canonical id are never healed: after a vocabulary rename a
+  // stored concept may live in another scheme, and a same-named concept here
+  // is a coincidence — swapping to it would silently rewrite the user's value.
   $effect(() => {
     if (!conceptEvents.length || !value.length) return;
     /** @type {Record<string, import('nostr-tools').NostrEvent>} */

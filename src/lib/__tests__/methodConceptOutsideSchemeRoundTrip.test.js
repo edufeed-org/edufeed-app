@@ -1,5 +1,5 @@
 /**
- * Task 14: a resource whose `ext:ekw:method:id` points at a concept that is
+ * A resource whose `ext:ekw:method:id` points at a concept that is
  * no longer in the `methode` scheme (the vocabulary publisher renamed some
  * concepts, splitting the old shared scheme into `methode` and
  * `konfi-methode`) must survive an edit/save round trip unchanged — editing
@@ -46,7 +46,7 @@ function publishTags(resourceData) {
   return /** @type {string[][]} */ (result.data.tags);
 }
 
-describe('method concept outside the picker scheme survives edit/save (Task 14)', () => {
+describe('method concept outside the picker scheme survives edit/save', () => {
   it('round-trips the exact stored tag value unchanged through load → form state → event build', () => {
     // 1. Load: an existing stored event carries the out-of-scheme concept.
     const storedEvent = {
