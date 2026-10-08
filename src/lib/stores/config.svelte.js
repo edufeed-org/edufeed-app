@@ -151,6 +151,10 @@ const defaultConfig = {
   footer: {
     fundingText: 'gefördert vom BMBFSFJ (FKZ01PZ24007)'
   },
+  help: {
+    /** @type {string | null} */
+    url: '/wiki/edufeed-erste-schritte'
+  },
   educational: {
     searchDebounceMs: 300,
     vocabularies: {
@@ -385,6 +389,10 @@ export function initializeConfig(runtimeConfig) {
       ...defaultConfig.footer,
       ...runtimeConfig.footer
     },
+    help: {
+      ...defaultConfig.help,
+      ...runtimeConfig.help
+    },
     educational: {
       ...defaultConfig.educational,
       ...runtimeConfig.educational,
@@ -532,6 +540,9 @@ export const runtimeConfig = {
   },
   get footer() {
     return config.footer;
+  },
+  get help() {
+    return config.help;
   },
   get educational() {
     return config.educational;

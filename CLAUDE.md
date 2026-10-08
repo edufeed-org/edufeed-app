@@ -331,6 +331,7 @@ Top-level shape:
 - `wotMode.{enabled,includeUserFollows,calendar,communikey,educational,longform,kanban}` — WoT config
 - `blossom.serverUrl` — file upload server
 - `ui.{defaultLightTheme,defaultDarkTheme}` — theme defaults (dark is inert)
+- `help.url` — user-guide target of the "Hilfe" links (account menu, Termi "Wie fange ich an?" chip, landing footer; `HELP_URL` env, default `/wiki/edufeed-erste-schritte`, `none` hides them). Render via `helpLinkAttrs()` from `$lib/helpers/help-link.js`; the article itself lives in the edufeed/wikis repo.
 - `educational` — search debounce, vocabulary choices, `schemeNaddrs` (kind 39737 ConceptScheme naddrs from `SCHEME_NADDR_*` env vars)
 - `npubLogin.enabled` / `googleLogin.{enabled,centralUrl,operatorUrls}` — login methods (`NPUB_LOGIN_ENABLED`, `GOOGLE_LOGIN_ENABLED`, `POMEGRANATE_CENTRAL_URL`, `POMEGRANATE_OPERATOR_URLS`); Google = Pomegranate/promenade FROST bunker, accounts tagged via `account.metadata.pomegranateCentral`
 - Whitelabel: `APP_LOGO`, hero images (`LANDING_HERO_IMAGE`, `DISCOVER_HERO_IMAGE`), favicons, imprint vars

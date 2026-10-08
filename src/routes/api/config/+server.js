@@ -117,6 +117,19 @@ function parseFunding(env) {
 }
 
 /**
+ * HELP_URL: unset/blank → the "Erste Schritte" wiki article rendered in-app;
+ * `none` → null (links hidden); anything else is used verbatim (trimmed).
+ * @param {string | undefined} value
+ * @returns {string | null}
+ */
+function parseHelpUrl(value) {
+  const trimmed = (value || '').trim();
+  if (!trimmed) return '/wiki/edufeed-erste-schritte';
+  if (trimmed.toLowerCase() === 'none') return null;
+  return trimmed;
+}
+
+/**
  * Parse theme value
  * @param {string | undefined} value
  * @param {'light' | 'dark' | 'stil' | 'stil-dark' | 'rpi' | 'rpi-dark'} defaultValue
@@ -379,6 +392,12 @@ export function GET() {
     // Footer
     footer: {
       fundingText: env.FOOTER_FUNDING_TEXT || 'gefördert vom BMBFSFJ (FKZ01PZ24007)'
+    },
+
+    // Help / user guide — target of the "Hilfe" links (account menu, Termi
+    // chip, landing footer). In-app path or absolute URL; `none` hides them.
+    help: {
+      url: parseHelpUrl(env.HELP_URL)
     },
 
     // Educational content
