@@ -11,6 +11,7 @@
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { flushSync } from 'svelte';
+import { SvelteSet } from 'svelte/reactivity';
 import { render, screen, fireEvent } from '@testing-library/svelte';
 
 const { lk, svc, media, bg } = vi.hoisted(() => ({
@@ -131,7 +132,10 @@ vi.mock('$lib/components/icons', async () => ({
   ExternalLinkIcon: Stub,
   LinkIcon: Stub,
   MoreIcon: Stub,
-  PeopleIcon: Stub
+  PeopleIcon: Stub,
+  GridIcon: Stub,
+  ChevronLeftIcon: Stub,
+  ChevronRightIcon: Stub
 }));
 vi.mock('$lib/paraglide/messages', () => ({
   groups_call_chat_unread: () => 'New messages in the call chat',
@@ -172,6 +176,15 @@ vi.mock('$lib/paraglide/messages', () => ({
   groups_call_show_chat: () => 'Chat',
   groups_call_participants: () => 'Participants',
   groups_call_participants_count: (p) => `Participants (${p.count})`,
+  groups_call_layout: () => 'View',
+  groups_call_layout_grid: () => 'Grid',
+  groups_call_layout_focus: () => 'Focus',
+  groups_call_layout_side: () => 'Side by side',
+  groups_call_layout_speaker: () => 'Speaker',
+  groups_call_tiles_per_page: () => 'Tiles per page',
+  groups_call_page: (p) => `Page ${p.page} of ${p.total}`,
+  groups_call_page_prev: () => 'Previous page',
+  groups_call_page_next: () => 'Next page',
   groups_call_pop_out: () => 'Pop out',
   groups_call_pop_in: () => 'Back to tab',
   groups_call_invite_title: () => 'Invite guests',
@@ -1054,5 +1067,202 @@ describe('participant list panel', () => {
     expect(tiles.classList.contains('@2xl:flex')).toBe(true);
     await fireEvent.click(screen.getByTestId('stub-close'));
     expect(screen.getByTestId('group-call-tiles').classList.contains('hidden')).toBe(false);
+  });
+});
+
+// Issue "layouts (side by side, fullscreen camera tiles, tile cap +
+// pagination)": a layout picker in the header — Raster (grid), Fokus
+// (spotlight + strip), Nebeneinander (two spotlights), Sprecher (active
+// speaker) — a tile cap with pages for the grid, both remembered per device.
+describe('layouts', () => {
+  // A finished drag in the reordering tests swallows the very next click on
+  // the window until its 0 ms timer runs: let that macrotask pass first.
+  beforeEach(() => {
+    lk.room = null; // no tile placements left over from the reordering tests
+    lk.speakingParticipantIds = new Set();
+    lk.mutedIdentities = new Set();
+    return new Promise((resolve) => setTimeout(resolve, 0));
+  });
+  const B = `${'b'.repeat(64)}:1`;
+  const C = `${'c'.repeat(64)}:1`;
+  const D = `${'d'.repeat(64)}:1`;
+  const ME = `${'a'.repeat(64)}:me`;
+  const slots = () =>
+    [
+      ...screen
+        .getByTestId('group-call-slots')
+        .querySelectorAll(':scope > [data-testid^="call-item-"]')
+    ].map((el) => el.dataset.testid.replace('call-item-', ''));
+  const gridKeys = () =>
+    [...screen.getByTestId('group-call-grid').querySelectorAll('[data-testid^="call-item-"]')].map(
+      (el) => el.dataset.testid.replace('call-item-', '')
+    );
+  const pinTile = (id) =>
+    fireEvent.click(
+      screen.getByTestId(`call-item-seat:${id}`).querySelector('[data-testid="tile-pin-stub"]')
+    );
+  const pickLayout = async (name) => {
+    await fireEvent.click(screen.getByTestId('group-call-layout'));
+    await fireEvent.click(screen.getByRole('menuitemradio', { name }));
+  };
+
+  it('the picker names the current layout and lists the four', async () => {
+    lk.remoteParticipants = [remote(B)];
+    render(GroupCallStage, { props: baseProps });
+    const button = screen.getByTestId('group-call-layout');
+    expect(button.getAttribute('aria-label')).toBe('View: Grid');
+    expect(button.querySelector('span').classList.contains('@lg:inline')).toBe(true);
+    await fireEvent.click(button);
+    const items = screen.getAllByRole('menuitemradio');
+    expect(items.map((i) => i.textContent.trim())).toEqual([
+      'Grid',
+      'Focus',
+      'Side by side',
+      'Speaker',
+      '9',
+      '16',
+      '25'
+    ]);
+    expect(items[0].getAttribute('aria-checked')).toBe('true');
+    expect(items[5].getAttribute('aria-checked')).toBe('true');
+  });
+
+  it('focus: one spotlight even without a pin, remembered on this device', async () => {
+    lk.remoteParticipants = [remote(B), remote(C)];
+    const view = render(GroupCallStage, { props: baseProps });
+    expect(screen.getByTestId('group-call-grid')).toBeTruthy();
+    await pickLayout('Focus');
+    expect(slots()).toEqual([`seat:${B}`]);
+    expect(
+      screen.getByTestId('group-call-strip').querySelectorAll('[data-testid^="call-item-"]').length
+    ).toBe(2);
+    expect(localStorage.getItem('edufeed:call:layout')).toBe('focus');
+    view.unmount();
+    render(GroupCallStage, { props: baseProps });
+    expect(screen.getByTestId('group-call-layout').getAttribute('aria-label')).toBe('View: Focus');
+    expect(slots()).toEqual([`seat:${B}`]);
+  });
+
+  it('side by side: two remote shares fill both slots, a third replaces the oldest', async () => {
+    localStorage.setItem('edufeed:call:layout', 'side');
+    lk.remoteParticipants = [remote(B, { screenShare: true }), remote(C, { screenShare: true })];
+    const view = render(GroupCallStage, { props: baseProps });
+    expect(slots()).toEqual([`screen:${B}`, `screen:${C}`]);
+    const box = screen.getByTestId('group-call-slots');
+    expect(box.classList.contains('@md:flex-row')).toBe(true);
+    // The mocked participant list is not reactive: a third share arrives
+    // with a fresh stage, which sees all three as new and keeps the newest two.
+    view.unmount();
+    lk.remoteParticipants = [
+      remote(B, { screenShare: true }),
+      remote(C, { screenShare: true }),
+      remote(D, { screenShare: true })
+    ];
+    render(GroupCallStage, { props: baseProps });
+    expect(slots()).toEqual([`screen:${C}`, `screen:${D}`]);
+  });
+
+  it('side by side: a share and the active speaker, two pins allowed', async () => {
+    localStorage.setItem('edufeed:call:layout', 'side');
+    lk.remoteParticipants = [remote(B, { screenShare: true }), remote(C), remote(D)];
+    lk.speakingParticipantIds = new Set([D]);
+    render(GroupCallStage, { props: baseProps });
+    expect(slots()).toEqual([`screen:${B}`, `seat:${D}`]);
+    // Pins: the share stays (auto-pinned), pinning C and then ME keeps the two newest.
+    await pinTile(C);
+    expect(slots()).toEqual([`screen:${B}`, `seat:${C}`]);
+    await pinTile(ME);
+    expect(slots()).toEqual([`seat:${C}`, `seat:${ME}`]);
+    lk.speakingParticipantIds = new Set();
+  });
+
+  it('speaker: follows the active remote speaker, ignores a muted one and myself, sticks when silence falls', async () => {
+    localStorage.setItem('edufeed:call:layout', 'speaker');
+    lk.remoteParticipants = [remote(B), remote(C)];
+    // Reactive sets, mutated in place like the service's SvelteSet.
+    const speaking = new SvelteSet([ME, C]);
+    const muted = new SvelteSet();
+    lk.speakingParticipantIds = speaking;
+    lk.mutedIdentities = muted;
+    render(GroupCallStage, { props: baseProps });
+    expect(slots()).toEqual([`seat:${C}`]);
+    // B's mic is off: whatever LiveKit reports, B is not the speaker.
+    muted.add(B);
+    speaking.delete(C);
+    speaking.add(B);
+    flushSync();
+    expect(slots()).toEqual([`seat:${C}`]);
+    muted.delete(B);
+    flushSync();
+    expect(slots()).toEqual([`seat:${B}`]);
+    // Silence: the last speaker stays.
+    speaking.delete(B);
+    flushSync();
+    expect(slots()).toEqual([`seat:${B}`]);
+  });
+
+  it('a pin beats the speaker, and unpinning hands the slot back', async () => {
+    localStorage.setItem('edufeed:call:layout', 'speaker');
+    lk.remoteParticipants = [remote(B), remote(C)];
+    lk.speakingParticipantIds = new Set([C]);
+    render(GroupCallStage, { props: baseProps });
+    await pinTile(B);
+    expect(slots()).toEqual([`seat:${B}`]);
+    await pinTile(B);
+    expect(slots()).toEqual([`seat:${C}`]);
+    lk.speakingParticipantIds = new Set();
+  });
+
+  describe('grid pages', () => {
+    const many = (n) =>
+      Array.from({ length: n }, (_, i) => remote(`${(i + 2).toString(16).padStart(64, '0')}:1`));
+
+    it('caps the grid at the tile cap and pages through the rest; tiles off the page are not rendered', async () => {
+      localStorage.setItem('edufeed:call:tileCap', '9');
+      lk.remoteParticipants = many(20); // 21 with me
+      render(GroupCallStage, { props: baseProps });
+      expect(gridKeys().length).toBe(9);
+      expect(gridKeys()[0]).toBe(`seat:${ME}`);
+      const pager = screen.getByTestId('group-call-pager');
+      expect(pager.textContent).toContain('Page 1 of 3');
+      const prev = screen.getByRole('button', { name: 'Previous page' });
+      const next = screen.getByRole('button', { name: 'Next page' });
+      expect(prev.disabled).toBe(true);
+      await fireEvent.click(next);
+      expect(pager.textContent).toContain('Page 2 of 3');
+      expect(gridKeys().length).toBe(9);
+      expect(gridKeys()[0]).toBe(`seat:${(10).toString(16).padStart(64, '0')}:1`);
+      await fireEvent.click(next);
+      expect(gridKeys().length).toBe(3);
+      expect(next.disabled).toBe(true);
+      expect(screen.getAllByTestId('participant-tile-stub').length).toBe(3);
+    });
+
+    it('no pager when everyone fits; the cap is picked in the layout menu and remembered', async () => {
+      lk.remoteParticipants = many(12);
+      render(GroupCallStage, { props: baseProps });
+      expect(screen.queryByTestId('group-call-pager')).toBeNull();
+      expect(gridKeys().length).toBe(13);
+      await fireEvent.click(screen.getByTestId('group-call-layout'));
+      await fireEvent.click(screen.getByRole('menuitemradio', { name: '9' }));
+      expect(gridKeys().length).toBe(9);
+      expect(screen.getByTestId('group-call-pager').textContent).toContain('Page 1 of 2');
+      expect(localStorage.getItem('edufeed:call:tileCap')).toBe('9');
+    });
+
+    // A page that emptied (people left) falls back to the last one: paginate's
+    // own test covers the clamp; the mocked participant list is not reactive.
+
+    it('the strip of a spotlight layout is not paged (it scrolls)', async () => {
+      localStorage.setItem('edufeed:call:tileCap', '9');
+      localStorage.setItem('edufeed:call:layout', 'focus');
+      lk.remoteParticipants = many(20);
+      render(GroupCallStage, { props: baseProps });
+      expect(
+        screen.getByTestId('group-call-strip').querySelectorAll('[data-testid^="call-item-"]')
+          .length
+      ).toBe(20);
+      expect(screen.queryByTestId('group-call-pager')).toBeNull();
+    });
   });
 });

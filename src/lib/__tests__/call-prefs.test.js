@@ -22,6 +22,11 @@ import {
   SCREEN_SHARE_QUALITIES,
   getChatBeside,
   setChatBeside,
+  getCallLayout,
+  setCallLayout,
+  getTileCap,
+  setTileCap,
+  TILE_CAPS,
   getBackgroundEffect,
   setBackgroundEffect,
   getCustomBackground,
@@ -125,6 +130,29 @@ describe('screen share quality', () => {
     setScreenShareQuality('8k240');
     expect(getScreenShareQuality()).toBe('720p15');
     expect(Object.keys(SCREEN_SHARE_QUALITIES)).toContain('1440p30');
+  });
+});
+
+describe('stage layout and tile cap', () => {
+  it('defaults to the grid and remembers a known layout only', () => {
+    expect(getCallLayout()).toBe('grid');
+    setCallLayout('side');
+    expect(getCallLayout()).toBe('side');
+    setCallLayout('cinema');
+    expect(getCallLayout()).toBe('side');
+    localStorage.setItem('edufeed:call:layout', 'bogus');
+    expect(getCallLayout()).toBe('grid');
+  });
+
+  it('defaults to 16 tiles per page and accepts 9, 16 and 25 only', () => {
+    expect(TILE_CAPS).toEqual([9, 16, 25]);
+    expect(getTileCap()).toBe(16);
+    setTileCap(9);
+    expect(getTileCap()).toBe(9);
+    setTileCap(12);
+    expect(getTileCap()).toBe(9);
+    localStorage.setItem('edufeed:call:tileCap', '100');
+    expect(getTileCap()).toBe(16);
   });
 });
 

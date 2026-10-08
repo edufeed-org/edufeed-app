@@ -28,6 +28,11 @@ vi.mock(
 );
 function Stub() {}
 vi.mock('$lib/components/shared/ProfileHoverCardContent.svelte', () => ({ default: Stub }));
+const fs = vi.hoisted(() => ({ toggleFullscreen: vi.fn(async () => {}) }));
+vi.mock('$lib/groups/fullscreen.js', () => ({
+  toggleFullscreen: fs.toggleFullscreen,
+  isFullscreenOf: () => false
+}));
 vi.mock('$lib/paraglide/messages', () => ({
   groups_call_mic_off: () => 'Microphone off',
   groups_call_hand_raised: () => 'Hand raised',
@@ -37,7 +42,9 @@ vi.mock('$lib/paraglide/messages', () => ({
   groups_call_unpin: () => 'Unpin',
   groups_call_guest_badge: () => 'Gast',
   groups_call_tile_you: () => 'Du',
-  groups_call_private_message: () => 'Message privately'
+  groups_call_private_message: () => 'Message privately',
+  groups_call_fullscreen: () => 'Full screen',
+  groups_call_exit_fullscreen: () => 'Exit full screen'
 }));
 
 const { default: ParticipantTile } = await import(
@@ -223,5 +230,25 @@ describe('ParticipantTile private message', () => {
       }
     });
     expect(screen.queryByRole('button', { name: 'Message privately' })).toBeNull();
+  });
+});
+
+// Issue "layouts": full screen for camera tiles, the same path as the
+// screen share tile (groups/fullscreen.js), on the tile itself.
+describe('full screen', () => {
+  it('offers full screen on a normal tile and asks for the tile element', async () => {
+    const { container } = render(ParticipantTile, {
+      props: { participant: fakeParticipant(`${HEX}:x1`), pubkey: HEX }
+    });
+    const button = screen.getByRole('button', { name: 'Full screen' });
+    await fireEvent.click(button);
+    expect(fs.toggleFullscreen).toHaveBeenCalledWith(container.querySelector('.group\\/tile'));
+  });
+
+  it('not in the compact strip', () => {
+    render(ParticipantTile, {
+      props: { participant: fakeParticipant(`${HEX}:x1`), pubkey: HEX, compact: true }
+    });
+    expect(screen.queryByRole('button', { name: 'Full screen' })).toBeNull();
   });
 });
