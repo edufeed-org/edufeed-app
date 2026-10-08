@@ -3,11 +3,29 @@
   import { resolve } from '$app/paths';
   import CommunikeyCard from '$lib/components/CommunikeyCard.svelte';
   import { ChevronLeftIcon, ChevronRightIcon } from '$lib/components/icons';
-  import { useAllCommunities } from '$lib/stores/all-communities.svelte.js';
+  import {
+    useAllCommunities,
+    useAllCommunitiesLoaded
+  } from '$lib/stores/all-communities.svelte.js';
+  import { useProfileMap } from '$lib/stores/profile-map.svelte.js';
+  import { hasDisplayableCommunityProfile } from '$lib/helpers/communityContent.js';
   import * as m from '$lib/paraglide/messages';
 
   const getAllCommunities = useAllCommunities();
-  const communities = $derived(getAllCommunities());
+  const getCommunitiesLoaded = useAllCommunitiesLoaded();
+  const allCommunities = $derived(getAllCommunities());
+  const getProfiles = useProfileMap(() => allCommunities.map((c) => c.pubkey));
+
+  // Same rule as the discover communities tab: a community without a named
+  // kind 0 profile would render as a meaningless "Unknown User" card.
+  const communities = $derived(
+    allCommunities.filter((community) =>
+      hasDisplayableCommunityProfile(getProfiles().get(community.pubkey))
+    )
+  );
+  // Spin only while the initial load is still running — once it has finished,
+  // "nothing displayable" must not look like "still loading".
+  const isLoading = $derived(communities.length === 0 && !getCommunitiesLoaded());
 
   let showAll = $state(false);
   /** @type {ReturnType<typeof setInterval> | null} */
@@ -131,7 +149,7 @@
       </p>
     </div>
 
-    {#if communities.length === 0}
+    {#if isLoading}
       <!-- Loading state -->
       <div class="flex justify-center py-12">
         <div class="loading loading-lg loading-spinner text-primary"></div>
