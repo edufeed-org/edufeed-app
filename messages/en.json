@@ -4166,5 +4166,16 @@
   "groups_call_breakout_took_over": "You are now running the breakout session.",
   "groups_call_breakout_room_closed": "The room was closed – back in the main room.",
   "groups_call_breakout_extend": "+{minutes} min",
-  "groups_call_breakout_extend_failed": "The time could not be extended: {reason}"
+  "groups_call_breakout_extend_failed": "The time could not be extended: {reason}",
+  "groups_call_broadcast_label": "Announcement",
+  "groups_call_broadcast_line": "Announcement from {name}:",
+  "groups_call_broadcast_toast": "Announcement from {name}: {text}",
+  "groups_call_broadcast_return_default": "Please come back to the main room",
+  "groups_call_breakout_broadcast_title": "Message to all rooms",
+  "groups_call_breakout_broadcast_placeholder": "A short announcement to every room …",
+  "groups_call_breakout_broadcast_send": "Send",
+  "groups_call_breakout_broadcast_failed": "Announcement not sent: {reason}",
+  "groups_call_breakout_end_confirm_title": "Bring everyone back?",
+  "groups_call_breakout_end_confirm_body": "The rooms are closed and everyone returns to the main room.",
+  "groups_call_breakout_end_notify": "Announce it first: “Please come back to the main room”"
 }

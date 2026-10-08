@@ -12,7 +12,7 @@
   a room are no longer LiveKit participants of the main room.
 -->
 <script>
-  import { CloseIcon, MeetIcon } from '$lib/components/icons';
+  import { CloseIcon, MeetIcon, SendIcon } from '$lib/components/icons';
   import ProfileAvatar from '$lib/components/shared/ProfileAvatar.svelte';
   import { useProfileMap } from '$lib/stores/profile-map.svelte.js';
   import { getUserDisplayName } from '$lib/helpers/message-utils.js';
@@ -28,14 +28,48 @@
    *   myPubkey: string | null,
    *   onMove: (args: {pubkey: string, identities: string[], toRoomId: string | null}) => void,
    *   onJoin: (room: BreakoutRoom) => void,
-   *   onEnd: () => void,
+   *   onEnd: (opts: {notify: boolean}) => void,
    *   onExtend: (minutes: number) => void,
    *   onAutoAssign: (enabled: boolean) => void,
+   *   onBroadcast: (text: string) => Promise<boolean>,
    *   onClose: () => void
    * }}
    */
-  let { rows, breakout, myPubkey, onMove, onJoin, onEnd, onExtend, onAutoAssign, onClose } =
-    $props();
+  let {
+    rows,
+    breakout,
+    myPubkey,
+    onMove,
+    onJoin,
+    onEnd,
+    onExtend,
+    onAutoAssign,
+    onBroadcast,
+    onClose
+  } = $props();
+
+  // "Nachricht an alle Räume": a kind-20002 call broadcast through the
+  // relay (groups/call-broadcasts.js). The draft stays when the relay
+  // refuses it (the store toasts the reason).
+  let broadcastDraft = $state('');
+  let broadcastBusy = $state(false);
+  async function sendBroadcast() {
+    const text = broadcastDraft.trim();
+    if (!text || broadcastBusy) return;
+    broadcastBusy = true;
+    try {
+      if (await onBroadcast(text)) broadcastDraft = '';
+    } finally {
+      broadcastBusy = false;
+    }
+  }
+  // "Alle zurückholen" asks first, with the optional `return` heads-up.
+  let endConfirmOpen = $state(false);
+  let endNotify = $state(true);
+  function confirmEnd() {
+    endConfirmOpen = false;
+    onEnd({ notify: endNotify });
+  }
 
   const rooms = $derived(breakout.rooms);
   /** Seated people per room, the host (a member of every room) left out. */
@@ -210,10 +244,43 @@
   </div>
 
   <div class="shrink-0 border-t border-base-300 p-2">
+    <form
+      class="mb-2 flex items-center gap-1"
+      onsubmit={(e) => {
+        e.preventDefault();
+        void sendBroadcast();
+      }}
+      data-testid="breakout-panel-broadcast"
+    >
+      <input
+        type="text"
+        class="input-bordered input input-sm min-w-0 flex-1"
+        bind:value={broadcastDraft}
+        placeholder={m.groups_call_breakout_broadcast_placeholder()}
+        aria-label={m.groups_call_breakout_broadcast_title()}
+        maxlength="280"
+        disabled={broadcastBusy}
+        data-testid="breakout-panel-broadcast-input"
+      />
+      <button
+        type="submit"
+        class="btn btn-square btn-sm btn-primary"
+        disabled={broadcastBusy || !broadcastDraft.trim()}
+        aria-label={m.groups_call_breakout_broadcast_send()}
+        title={m.groups_call_breakout_broadcast_title()}
+        data-testid="breakout-panel-broadcast-send"
+      >
+        {#if broadcastBusy}
+          <span class="loading loading-xs loading-spinner"></span>
+        {:else}
+          <SendIcon class_="h-4 w-4" title="" />
+        {/if}
+      </button>
+    </form>
     <button
       type="button"
       class="btn w-full btn-sm btn-primary"
-      onclick={onEnd}
+      onclick={() => (endConfirmOpen = true)}
       disabled={breakout.busy}
       data-testid="breakout-panel-end"
     >
@@ -226,3 +293,47 @@
     </button>
   </div>
 </div>
+
+{#if endConfirmOpen}
+  <div
+    class="modal-open modal"
+    role="dialog"
+    aria-modal="true"
+    aria-labelledby="breakout-end-title"
+    data-testid="breakout-end-confirm"
+  >
+    <div class="modal-box max-w-sm">
+      <h3 id="breakout-end-title" class="font-bold">
+        {m.groups_call_breakout_end_confirm_title()}
+      </h3>
+      <p class="py-2 text-sm">{m.groups_call_breakout_end_confirm_body()}</p>
+      <label class="flex cursor-pointer items-center gap-2 text-sm">
+        <input
+          type="checkbox"
+          class="checkbox checkbox-sm"
+          bind:checked={endNotify}
+          data-testid="breakout-end-notify"
+        />
+        <span>{m.groups_call_breakout_end_notify()}</span>
+      </label>
+      <div class="modal-action">
+        <button
+          type="button"
+          class="btn btn-ghost"
+          onclick={() => (endConfirmOpen = false)}
+          data-testid="breakout-end-cancel"
+        >
+          {m.common_cancel()}
+        </button>
+        <button
+          type="button"
+          class="btn btn-primary"
+          onclick={confirmEnd}
+          data-testid="breakout-end-confirm-action"
+        >
+          {m.groups_call_breakout_end_all()}
+        </button>
+      </div>
+    </div>
+  </div>
+{/if}

@@ -28,6 +28,7 @@ const FUTURE = Math.floor(Date.now() / 1000) + 3600;
 /** @type {{ subs: Array<{filters: any[], stream: Subject<any>, closed: boolean}> }} */
 const relay = vi.hoisted(() => ({ subs: [] }));
 vi.mock('$lib/stores/nostr-infrastructure.svelte', () => ({
+  eventStore: { getReplaceable: () => undefined },
   pool: {
     relay: () => ({
       subscription: (/** @type {any[]} */ filters) => {
@@ -61,6 +62,19 @@ vi.mock(
   '$lib/services/livekit-connection.svelte.js',
   () => import('./__mocks__/livekit-connection-fake.svelte.js')
 );
+const relayPublish = vi.hoisted(() => ({
+  fn: vi.fn(
+    async (/** @type {any} */ _conn, /** @type {any} */ template, /** @type {any} */ user) => ({
+      ...template,
+      id: 'bc-' + Math.random().toString(36).slice(2, 8),
+      pubkey: user.pubkey
+    })
+  )
+}));
+vi.mock('$lib/groups/group-management.js', async (importOriginal) => ({
+  .../** @type {any} */ (await importOriginal()),
+  publishToGroupRelay: (/** @type {any[]} */ ...a) => relayPublish.fn(...a)
+}));
 const prefs = vi.hoisted(() => ({ autoAssign: /** @type {boolean | null} */ (null) }));
 vi.mock('$lib/services/call-prefs.js', () => ({
   getBreakoutAutoAssign: () => prefs.autoAssign,
@@ -99,7 +113,10 @@ vi.mock('$lib/paraglide/messages', () => ({
   groups_call_breakout_took_over: () => 'you run the session now',
   groups_call_breakout_join_no_host: () => 'nobody can seat you',
   groups_call_breakout_room_closed: () => 'room closed, back in main',
-  groups_call_breakout_extend_failed: (/** @type {any} */ p) => `not extended: ${p.reason}`
+  groups_call_breakout_extend_failed: (/** @type {any} */ p) => `not extended: ${p.reason}`,
+  groups_call_broadcast_toast: (/** @type {any} */ p) => `${p.name}: ${p.text}`,
+  groups_call_broadcast_return_default: () => 'please come back',
+  groups_call_breakout_broadcast_failed: (/** @type {any} */ p) => `not sent: ${p.reason}`
 }));
 
 const rel = vi.hoisted(() => ({
@@ -174,9 +191,9 @@ async function settle() {
   flushSync();
 }
 
-/** The live roster subscription (the newest one still open). */
+/** The live roster subscription (the newest one still open; the broadcast one is kept apart). */
 function liveSub() {
-  const open = relay.subs.filter((s) => !s.closed);
+  const open = relay.subs.filter((s) => !s.closed && s.filters[0]?.['#d']);
   return open[open.length - 1];
 }
 
@@ -189,6 +206,8 @@ beforeEach(async () => {
   flushSync();
   relay.subs.length = 0;
   rel.fetchEphemeralChildren.mockResolvedValue([]);
+  relayPublish.fn.mockClear();
+  lkFake.addSystemCallChat.mockClear();
   modal.activeModal = 'none';
   modal.props = null;
   modal.callbacks = null;
@@ -985,5 +1004,196 @@ describe('moving the deadline', () => {
     expect(store.getBreakoutState().session?.until).toBeNull();
     await store.extendBreakout(5);
     expect(store.getBreakoutState().session?.until).toBe(1_700_000_000 + 300);
+  });
+});
+
+describe('call broadcasts (kind 20002)', () => {
+  /** The subscription for the parent's broadcasts (the newest one open). */
+  const broadcastSub = () =>
+    relay.subs.filter((x) => !x.closed && x.filters[0]?.kinds?.[0] === 20002).at(-1);
+  const broadcast = (type, content, extra = {}) => ({
+    id: 'ev-' + Math.random().toString(36).slice(2, 8),
+    kind: 20002,
+    pubkey: HOST,
+    created_at: Math.floor(Date.now() / 1000),
+    content,
+    tags: [
+      ['h', 'main-id'],
+      ['type', type]
+    ],
+    ...extra
+  });
+
+  it("subscribes to the parent's broadcasts while a session is known, in a room too, and stops with it", async () => {
+    await liveInMain(bobUser);
+    expect(broadcastSub()).toBeUndefined();
+    lk.listener?.({ t: 'assign', rooms: ROOMS, until: FUTURE }, hostSender);
+    await settle();
+    const sub = broadcastSub();
+    expect(sub.filters).toEqual([{ kinds: [20002], '#h': ['main-id'] }]);
+    modal.callbacks.onConfirm();
+    await settle();
+    expect(broadcastSub()).toBe(sub); // the switch into the room keeps it
+    lk.listener?.({ t: 'end' }, hostSender);
+    await settle();
+    expect(sub.closed).toBe(true);
+  });
+
+  it('renders a message as a toast naming the sender and a system line in the call chat, once', async () => {
+    await liveInMain(bobUser);
+    lk.listener?.({ t: 'assign', rooms: ROOMS, until: FUTURE }, hostSender);
+    modal.callbacks.onCancel();
+    await settle();
+    const event = broadcast('message', 'two minutes left');
+    broadcastSub().stream.next(event);
+    broadcastSub().stream.next(event); // the relay sends it twice (two subscriptions, a reconnect)
+    expect(toast.fn).toHaveBeenCalledTimes(1);
+    expect(toast.fn).toHaveBeenCalledWith(`${HOST.slice(0, 8)}...: two minutes left`, 'info');
+    expect(lkFake.addSystemCallChat).toHaveBeenCalledTimes(1);
+    expect(lkFake.addSystemCallChat).toHaveBeenCalledWith({
+      identity: HOST + ':relay',
+      text: 'two minutes left',
+      id: event.id
+    });
+    // another parent's broadcast, a malformed one, an empty one: nothing
+    broadcastSub().stream.next(
+      broadcast('message', 'x', {
+        tags: [
+          ['h', 'other'],
+          ['type', 'message']
+        ]
+      })
+    );
+    broadcastSub().stream.next(broadcast('message', '   '));
+    broadcastSub().stream.next({ kind: 20002, tags: [] });
+    expect(toast.fn).toHaveBeenCalledTimes(1);
+  });
+
+  it('a countdown moves the deadline display and nothing else; a return toasts its text or the default', async () => {
+    vi.useFakeTimers({ now: 1_700_000_000_000 });
+    await liveInMain(bobUser);
+    lk.listener?.({ t: 'assign', rooms: ROOMS, until: 1_700_000_000 + 600 }, hostSender);
+    modal.callbacks.onCancel();
+    await settle();
+    expect(store.getBreakoutState().remaining).toBe(600);
+    broadcastSub().stream.next(broadcast('countdown', '120'));
+    await settle();
+    expect(store.getBreakoutState().session?.until).toBe(1_700_000_000 + 120);
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(store.getBreakoutState().remaining).toBe(119);
+    expect(toast.fn).not.toHaveBeenCalled();
+    expect(lkFake.addSystemCallChat).not.toHaveBeenCalled();
+    // within two seconds of our own clock: left alone
+    broadcastSub().stream.next(broadcast('countdown', '118'));
+    expect(store.getBreakoutState().session?.until).toBe(1_700_000_000 + 120);
+
+    broadcastSub().stream.next(broadcast('return', ''));
+    expect(toast.fn).toHaveBeenLastCalledWith(`${HOST.slice(0, 8)}...: please come back`, 'info');
+    broadcastSub().stream.next(broadcast('return', 'wrap-up in the main room'));
+    expect(toast.fn).toHaveBeenLastCalledWith(
+      `${HOST.slice(0, 8)}...: wrap-up in the main room`,
+      'info'
+    );
+    expect(lkFake.addSystemCallChat).toHaveBeenCalledTimes(2);
+  });
+
+  it("the host sends a message to the group relay with the parent's h tag and sees its own copy once", async () => {
+    await liveInMain(hostUser);
+    await store.startBreakout({ channelName: 'Seminar', roomCount: 2, seats: [] });
+    await settle();
+    expect(await store.sendCallBroadcast('message', 'hello rooms')).toBe(true);
+    const [, template, user] = relayPublish.fn.mock.calls[0];
+    expect(user).toBe(hostUser);
+    expect(template).toMatchObject({
+      kind: 20002,
+      content: 'hello rooms',
+      tags: [
+        ['h', 'main-id'],
+        ['type', 'message']
+      ]
+    });
+    expect(toast.fn).toHaveBeenCalledWith(`${HOST.slice(0, 8)}...: hello rooms`, 'info');
+    expect(lkFake.addSystemCallChat).toHaveBeenCalledTimes(1);
+    // the relay's echo of the same event changes nothing
+    const [signed] = relayPublish.fn.mock.results.map((r) => r.value);
+    broadcastSub().stream.next(await signed);
+    expect(toast.fn).toHaveBeenCalledTimes(1);
+    // not hosting: nothing goes out
+    store.__resetBreakout();
+    expect(await store.sendCallBroadcast('message', 'x')).toBe(false);
+  });
+
+  it('a relay that refuses the kind (an old pyramid) is reported with its reason', async () => {
+    await liveInMain(hostUser);
+    await store.startBreakout({ channelName: 'Seminar', roomCount: 2, seats: [] });
+    relayPublish.fn.mockRejectedValueOnce(new Error('blocked: kind 20002 not allowed'));
+    expect(await store.sendCallBroadcast('message', 'hello')).toBe(false);
+    expect(toast.fn).toHaveBeenCalledWith('not sent: blocked: kind 20002 not allowed', 'error');
+    expect(lkFake.addSystemCallChat).not.toHaveBeenCalled();
+  });
+
+  it('the host seat sends countdowns at 300, 120 and 60 s, once each, and again after +5 Min', async () => {
+    vi.useFakeTimers({ now: 1_700_000_000_000 });
+    lkFake.setIdentity(HOST + ':h');
+    lkFake.setMyMetadata(HOST_META);
+    await liveInMain(hostUser);
+    await store.startBreakout({ channelName: 'S', roomCount: 2, seats: [], durationMinutes: 5.5 });
+    await settle();
+    const sent = () =>
+      relayPublish.fn.mock.calls
+        .filter((c) => c[1].kind === 20002)
+        .map((c) => [c[1].tags[1][1], c[1].content]);
+    await vi.advanceTimersByTimeAsync(29_000);
+    expect(sent()).toEqual([]);
+    await vi.advanceTimersByTimeAsync(1_500);
+    expect(sent()).toEqual([['countdown', '300']]);
+    await vi.advanceTimersByTimeAsync(180_000);
+    expect(sent()).toEqual([
+      ['countdown', '300'],
+      ['countdown', '120']
+    ]);
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(sent()).toHaveLength(3);
+    expect(sent()[2]).toEqual(['countdown', '60']);
+    await vi.advanceTimersByTimeAsync(20_000);
+    expect(sent()).toHaveLength(3);
+    // "+5 Min": the marks fire again on the way down
+    await store.extendBreakout(5);
+    await vi.advanceTimersByTimeAsync(41_000);
+    expect(sent()).toHaveLength(4);
+    expect(sent()[3][0]).toBe('countdown');
+    expect(Number(sent()[3][1])).toBeLessThanOrEqual(300);
+  });
+
+  it('no countdowns from a client that does not hold the host seat, or sits in a room', async () => {
+    vi.useFakeTimers({ now: 1_700_000_000_000 });
+    await liveInMain(hostUser);
+    await store.startBreakout({ channelName: 'S', roomCount: 2, seats: [], durationMinutes: 2 });
+    await settle();
+    await vi.advanceTimersByTimeAsync(119_000);
+    expect(relayPublish.fn.mock.calls.filter((c) => c[1].kind === 20002)).toEqual([]);
+  });
+
+  it('"Alle zurueckholen" with the heads-up sends the return broadcast before deleting the rooms', async () => {
+    await liveInMain(hostUser);
+    await store.startBreakout({ channelName: 'S', roomCount: 2, seats: [] });
+    await settle();
+    await store.endBreakout({ notify: true });
+    const [, template] = relayPublish.fn.mock.calls.find((c) => c[1].kind === 20002);
+    expect(template.tags).toEqual([
+      ['h', 'main-id'],
+      ['type', 'return']
+    ]);
+    expect(template.content).toBe('please come back');
+    expect(relayPublish.fn.mock.invocationCallOrder[0]).toBeLessThan(
+      rel.deleteBreakoutRoom.mock.invocationCallOrder[0]
+    );
+    expect(store.getBreakoutState().session).toBeNull();
+    // without the heads-up: no broadcast
+    relayPublish.fn.mockClear();
+    callFake.setCall({ pointer: MAIN, user: hostUser, phase: 'ready' });
+    await store.startBreakout({ channelName: 'S', roomCount: 2, seats: [] });
+    await store.endBreakout({ notify: false });
+    expect(relayPublish.fn).not.toHaveBeenCalled();
   });
 });

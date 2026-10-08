@@ -17,6 +17,8 @@ let participantMetadataVersion = $state(0);
 let disconnectReason = $state(null);
 
 export const sendBreakoutMessage = vi.fn(async () => {});
+/** The local system line a call broadcast adds to the chat. */
+export const addSystemCallChat = vi.fn(() => null);
 
 /** @param {(raw: unknown, sender: any) => void} cb */
 export function onBreakoutMessage(cb) {
@@ -76,4 +78,5 @@ export function resetLiveKitFake() {
   metadata = '';
   disconnectReason = null;
   sendBreakoutMessage.mockClear();
+  addSystemCallChat.mockClear();
 }

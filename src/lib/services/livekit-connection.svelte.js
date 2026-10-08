@@ -205,12 +205,16 @@ let arrivedAt = new Map();
  * unique local key either way. `guest`: the sender joined through a call
  * link — recorded at receipt, so it is still known after they left (the
  * chat export marks them). The optional fields mirror the payload's.
+ * `system`: a LOCAL line this client added itself (a call broadcast from
+ * the host, groups/call-broadcasts.js) — never sent, never replayed; its
+ * `identity` names who caused it.
  * @typedef {{
  *   id: string, identity: string, n: string, text: string, at: number, guest?: boolean,
  *   emoji?: Array<[string, string]>,
  *   replyTo?: string, replyPreview?: { n: string, text: string },
  *   mentions?: string[], to?: string,
- *   file?: CallChatFile
+ *   file?: CallChatFile,
+ *   system?: 'broadcast'
  * }} CallChatMessage
  *
  * A file message (`text` is empty): the transfer's state on this side.
@@ -546,7 +550,7 @@ async function replayOwnChat(identity) {
   // newcomer) and never a file (a byte stream is sent once, to those
   // present — a newcomer simply missed it, like today's screen share).
   const mine = callChat
-    .filter((c) => c.identity === local.identity && !c.to && !c.file)
+    .filter((c) => c.identity === local.identity && !c.to && !c.file && !c.system)
     .slice(-CHAT_REPLAY_MAX);
   for (const c of mine) {
     try {
@@ -559,6 +563,27 @@ async function replayOwnChat(identity) {
       return;
     }
   }
+}
+
+/**
+ * Add a LOCAL system line to the call chat — a call broadcast from the host
+ * (kind 20002 via the relay, groups/call-broadcasts.js), so people who
+ * missed the toast still see it. Nothing is sent; the line never leaves
+ * this client and is not replayed to late joiners. Counts as received, so
+ * the unread dot shows while the chat is closed.
+ * @param {{identity: string, text: string, id?: string, kind?: 'broadcast'}} line
+ *   `identity` = the sender's LiveKit-style identity (`<pubkey>:…`), which
+ *   the panel resolves to a name and avatar like any message
+ * @returns {CallChatMessage | null} the line, or null when the id was seen
+ */
+export function addSystemCallChat({ identity, text, id, kind = 'broadcast' }) {
+  const key = id ?? `system:${Math.random().toString(36).slice(2, 10)}`;
+  if (callChat.some((c) => c.id === key)) return null;
+  /** @type {CallChatMessage} */
+  const msg = { id: key, identity, n: key, text: String(text ?? ''), at: Date.now(), system: kind };
+  callChat = [...callChat, msg].sort((a, b) => a.at - b.at).slice(-CHAT_KEEP);
+  noteCallChatReceived();
+  return msg;
 }
 
 /**
