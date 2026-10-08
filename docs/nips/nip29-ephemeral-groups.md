@@ -101,6 +101,30 @@ the parent's current ephemeral children to members of the parent. (This is
 the one place where `hidden` is relaxed; the rooms are still absent from
 unfiltered listings.)
 
+### Implementation notes (pyramid edufeed-v1.12)
+
+- The `#ephemeral` request MUST name `"kinds":[39000]`: pyramid's store
+  indexes single-letter tags only and post-filters a multi-letter tag while
+  walking the kind index, so a `#ephemeral` filter without `kinds` returns
+  nothing.
+- "Started" means a LiveKit room exists for the group: a token minted by the
+  relay or a participant webhook marks it; after a restart the sweeper asks
+  LiveKit once per unknown room. When LiveKit is unreachable the
+  never-started rule is skipped for that group; the other triggers still
+  apply.
+- "Admin of the parent" means a moderation role there (admin or moderator),
+  not the publisher role.
+- A 9007 MAY carry `ephemeral` and `until` itself (atomic creation); the
+  9007-then-9002 shape works too, the first applied 9002 may set them.
+- `until` on a non-ephemeral group is refused; `["until",""]` clears a
+  deadline. Restating the same `ephemeral` value is accepted, any change or
+  removal is refused.
+- The relay-signed 9008 carries the reason in `content` (`call finished`,
+  `call never started`, `deadline passed`, `parent group deleted`).
+- The optional "parent room finished and child empty" rule is NOT
+  implemented: when everyone moves into breakout rooms the parent room
+  empties, which would delete rooms people are about to enter.
+
 ## Call broadcasts (kind 20002)
 
 A host wants to tell every room something ("two minutes left", "come back
