@@ -13,9 +13,18 @@
   /**
    * `anchored`: the host positions a wrapper at the caret; the list then
    * fills that wrapper instead of hanging above the field.
-   * @type {{candidates: Array<{pubkey: string, name: string, profile: any}>, highlightIndex: number, onSelect: (pubkey: string) => void, anchored?: boolean}}
+   * `avatarPubkey` (optional): the pubkey to draw the avatar from when `pubkey`
+   * is only a list key (a host-supplied candidate such as "everyone" has
+   * none and gets an @ glyph instead).
+   * @type {{candidates: Array<{pubkey: string, name: string, profile: any, avatarPubkey?: string | null}>, highlightIndex: number, onSelect: (pubkey: string) => void, anchored?: boolean}}
    */
   let { candidates = [], highlightIndex = 0, onSelect, anchored = false } = $props();
+
+  /** @param {{pubkey: string, avatarPubkey?: string | null}} c */
+  function avatarOf(c) {
+    const pk = c.avatarPubkey === undefined ? c.pubkey : c.avatarPubkey;
+    return pk && /^[0-9a-f]{64}$/i.test(pk) ? pk : null;
+  }
 </script>
 
 {#if candidates.length > 0}
@@ -28,6 +37,7 @@
     data-testid="mention-suggestions"
   >
     {#each candidates as candidate, i (candidate.pubkey)}
+      {@const avatarPubkey = avatarOf(candidate)}
       <li
         role="option"
         aria-selected={i === highlightIndex}
@@ -40,7 +50,14 @@
           onSelect(candidate.pubkey);
         }}
       >
-        <ProfileAvatar pubkey={candidate.pubkey} profile={candidate.profile} size="xs" />
+        {#if avatarPubkey}
+          <ProfileAvatar pubkey={avatarPubkey} profile={candidate.profile} size="xs" />
+        {:else}
+          <span
+            class="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-base-300 text-xs font-semibold"
+            aria-hidden="true">@</span
+          >
+        {/if}
         <span class="min-w-0 flex-1 truncate">{candidate.name}</span>
       </li>
     {/each}

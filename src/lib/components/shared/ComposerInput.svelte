@@ -63,7 +63,9 @@
    *   placement?: 'above' | 'caret',
    *   ariaLabelledby?: string,
    *   ariaDescribedby?: string,
-   *   onEscape?: () => void
+   *   onEscape?: () => void,
+   *   mentionProvider?: (query: string) => Array<{ key: string, name: string, pubkey: string | null, profile?: any }>,
+   *   onMentionPick?: (candidate: { key: string, name: string, pubkey: string | null }) => void
    * }}
    */
   let {
@@ -91,7 +93,15 @@
     /** id of a hint that says why the field is disabled, for instance */
     ariaDescribedby = undefined,
     /** Escape with no autocomplete open (a host cancels its reply quote, say) */
-    onEscape = undefined
+    onEscape = undefined,
+    /**
+     * Host-supplied `@` candidates instead of the app-wide people search
+     * (the call chat offers the room's participants). A pick then inserts
+     * plain `@Name ` — no nostr: reference — and reports the candidate, so
+     * the host can carry the mention in its own format.
+     */
+    mentionProvider = undefined,
+    onMentionPick = undefined
   } = $props();
 
   /** @type {HTMLDivElement | undefined} */
@@ -105,7 +115,7 @@
   );
   let highlight = $state(0);
   const getMentionCandidates = useMentionCandidates(() =>
-    query?.kind === 'mention' ? query.query : null
+    query?.kind === 'mention' && !mentionProvider ? query.query : null
   );
   const emojiCandidates = $derived(
     query?.kind === 'emoji'
@@ -117,7 +127,18 @@
   );
   // warm the locale's unicode dataset so the first `:xx` already has candidates
   $effect(() => ensureEmojiData());
-  const mentionCandidates = $derived(query?.kind === 'mention' ? getMentionCandidates() : []);
+  const mentionCandidates = $derived(
+    query?.kind !== 'mention'
+      ? []
+      : mentionProvider
+        ? mentionProvider(query.query).map((c) => ({
+            pubkey: c.key,
+            name: c.name,
+            profile: c.profile ?? null,
+            avatarPubkey: c.pubkey
+          }))
+        : getMentionCandidates()
+  );
   const candidateCount = $derived(
     query?.kind === 'emoji' ? emojiCandidates.length : mentionCandidates.length
   );
@@ -471,10 +492,22 @@
     const result = applyEmoji(value, query.start, caretOffset(), inserted);
     void commit(result.text, result.caret);
   }
-  /** @param {string} pubkey */
+  /** @param {string} pubkey the candidate's key (a pubkey, or the provider's key) */
   function pickMention(pubkey) {
     if (!query) return;
     const candidate = mentionCandidates.find((c) => c.pubkey === pubkey);
+    if (mentionProvider) {
+      if (!candidate) return;
+      const inserted = `@${candidate.name} `;
+      const nextText = value.slice(0, query.start) + inserted + value.slice(caretOffset());
+      onMentionPick?.({
+        key: candidate.pubkey,
+        name: candidate.name,
+        pubkey: /** @type {any} */ (candidate).avatarPubkey ?? null
+      });
+      void commit(nextText, query.start + inserted.length);
+      return;
+    }
     if (candidate?.profile) seededProfiles = { ...seededProfiles, [pubkey]: candidate.profile };
     const result = applyMention(value, query.start, caretOffset(), nip19.npubEncode(pubkey));
     void commit(result.text, result.caret);

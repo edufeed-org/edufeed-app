@@ -14,6 +14,10 @@
 
 let received = $state(0);
 let seen = $state(0);
+// Mentions of me (or of everyone) that arrived while no chat was on screen:
+// a stronger signal than an ordinary unread (count badge instead of a dot,
+// a toast), cleared the same way.
+let mentions = $state(0);
 /** Chat views on screen right now. Bookkeeping, never rendered. */
 let views = 0;
 
@@ -24,6 +28,16 @@ export function noteCallChatReceived() {
 }
 
 /**
+ * A message from someone else mentioned me. Counts only while no chat view
+ * is on screen; returns whether it counted (then the caller may toast).
+ */
+export function noteCallChatMention() {
+  if (views > 0) return false;
+  mentions++;
+  return true;
+}
+
+/**
  * A call chat view is on screen. Returns the matching unregister (safe to
  * call twice); leaving also counts as having seen what was there.
  * @returns {() => void}
@@ -31,12 +45,14 @@ export function noteCallChatReceived() {
 export function registerCallChatView() {
   views++;
   seen = received;
+  mentions = 0;
   let done = false;
   return () => {
     if (done) return;
     done = true;
     views--;
     seen = received;
+    mentions = 0;
   };
 }
 
@@ -44,13 +60,17 @@ export function registerCallChatView() {
 export function resetCallChatUnread() {
   received = 0;
   seen = 0;
+  mentions = 0;
 }
 
-/** @returns {{ readonly count: number }} */
+/** @returns {{ readonly count: number, readonly mentions: number }} */
 export function getCallChatUnread() {
   return {
     get count() {
       return Math.max(0, received - seen);
+    },
+    get mentions() {
+      return mentions;
     }
   };
 }

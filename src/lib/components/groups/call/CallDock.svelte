@@ -140,7 +140,12 @@
     {/if}
     <button class="btn btn-sm btn-primary" onclick={backToCall}>
       {m.groups_call_return()}
-      {#if chatUnread.count > 0}
+      {#if chatUnread.mentions > 0}
+        <span
+          class="badge h-4 min-w-4 px-1 text-[10px] badge-neutral"
+          data-testid="call-chat-mention-badge">{chatUnread.mentions}</span
+        ><span class="sr-only">{m.groups_call_chat_mentions_unread()}</span>
+      {:else if chatUnread.count > 0}
         <CallUnreadDot tone="bg-primary-content" label={m.groups_call_chat_unread()} />
       {/if}
     </button>

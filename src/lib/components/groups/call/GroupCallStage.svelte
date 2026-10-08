@@ -122,6 +122,8 @@
   // beside the stage — it is on screen then).
   const chatUnread = getCallChatUnread();
   const chatUnreadHere = $derived(!chatOpen && chatUnread.count > 0);
+  // A mention of me beats the dot: a count, and the label says so.
+  const chatMentionsHere = $derived(!chatOpen && chatUnread.mentions > 0);
 
   // Tell the call store a stage is on screen (the dock steps aside, the
   // channel lists say "you're in the call" instead of "show call"). The
@@ -754,15 +756,23 @@
             : ''}"
           onclick={onShowChat}
           aria-pressed={chatOpen}
-          aria-label={chatUnreadHere
-            ? `${m.groups_call_show_chat()} – ${m.groups_call_chat_unread()}`
-            : m.groups_call_show_chat()}
+          aria-label={chatMentionsHere
+            ? `${m.groups_call_show_chat()} – ${m.groups_call_chat_mentions_unread()}`
+            : chatUnreadHere
+              ? `${m.groups_call_show_chat()} – ${m.groups_call_chat_unread()}`
+              : m.groups_call_show_chat()}
           title={m.groups_call_show_chat()}
           data-testid="group-call-show-chat"
         >
           <ChatIcon class_="h-4 w-4" />
           <span class="hidden @lg:inline">{m.groups_call_show_chat()}</span>
-          {#if chatUnreadHere}
+          {#if chatMentionsHere}
+            <span
+              class="absolute -top-1 -right-1 badge h-4 min-w-4 px-1 text-[10px] badge-primary"
+              aria-hidden="true"
+              data-testid="call-chat-mention-badge">{chatUnread.mentions}</span
+            >
+          {:else if chatUnreadHere}
             <CallUnreadDot class="absolute top-1 right-1" />
           {/if}
         </button>

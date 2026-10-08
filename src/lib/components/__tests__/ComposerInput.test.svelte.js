@@ -384,3 +384,30 @@ describe('ComposerInput selection API', () => {
     expect(editor.className).not.toContain('max-h-40');
   });
 });
+
+// Call chat: the host supplies the people (room participants) and a pick
+// inserts plain `@Name` — no nostr: reference, no network lookup.
+describe('ComposerInput with a mentionProvider', () => {
+  it('lists the provider candidates and inserts @Name on pick, reporting the pick', async () => {
+    const onMentionPick = vi.fn();
+    const mentionProvider = (q) =>
+      [
+        { key: '*', name: 'alle', pubkey: null },
+        { key: 'id-bea', name: 'Bea', pubkey: 'b'.repeat(64) }
+      ].filter((c) => c.name.toLowerCase().startsWith(q.toLowerCase()));
+    const { editor, value, findByRole, getAllByRole } = setup({ mentionProvider, onMentionPick });
+    await typeText(editor, 'hi @');
+    await findByRole('listbox');
+    expect(getAllByRole('option').map((o) => o.lastElementChild.textContent.trim())).toEqual([
+      'alle',
+      'Bea'
+    ]);
+    await fireEvent.keyDown(editor, { key: 'ArrowDown' });
+    await fireEvent.keyDown(editor, { key: 'Enter' });
+    expect(value()).toBe('hi @Bea ');
+    expect(onMentionPick).toHaveBeenCalledWith(
+      expect.objectContaining({ key: 'id-bea', name: 'Bea' })
+    );
+    expect(editor.querySelector('[data-mention]')).toBeNull();
+  });
+});

@@ -36,7 +36,11 @@ vi.mock('$lib/services/livekit-connection.svelte.js', () => ({
   sendCallChat: (...a) => sendCallChat(...a)
 }));
 vi.mock('$lib/stores/profile-map.svelte.js', () => ({
-  useProfileMap: () => () => new Map([['b'.repeat(64), { name: 'Bea' }]])
+  useProfileMap: () => () =>
+    new Map([
+      ['b'.repeat(64), { name: 'Bea' }],
+      ['c'.repeat(64), { name: 'Carl Otto' }]
+    ])
 }));
 vi.mock(
   '$lib/components/shared/ProfileAvatar.svelte',
@@ -125,7 +129,7 @@ describe('CallChatPanel download', () => {
   });
 
   it('saves the chat as anruf-chat-<channel>-<date>.txt with one line per message', async () => {
-    const GUEST = 'c'.repeat(64) + ':1';
+    const GUEST = 'd'.repeat(64) + ':1';
     // The store records the guest flag at receipt: still known after the
     // guest left, and for a panel mounted later.
     state.callChat = [
@@ -143,7 +147,7 @@ describe('CallChatPanel download', () => {
     expect(lines[4]).toMatch(/^\[\d{2}:\d{2}\] Bea: Hallo zusammen$/);
     expect(lines[5]).toMatch(
       new RegExp(
-        `^\\[\\d{2}:\\d{2}\\] ${'c'.repeat(8)} \\(${m.groups_call_guest_badge()}\\): Ich bin Gast$`
+        `^\\[\\d{2}:\\d{2}\\] ${'d'.repeat(8)} \\(${m.groups_call_guest_badge()}\\): Ich bin Gast$`
       )
     );
   });
@@ -474,9 +478,10 @@ describe('CallChatPanel emojis', () => {
     await fireEvent.keyDown(input, { key: 'Enter' }); // pick
     expect(input.querySelector('img[data-shortcode="doge"]')).toBeTruthy();
     await fireEvent.keyDown(input, { key: 'Enter' }); // send
-    expect(sendCallChat).toHaveBeenCalledWith('los :doge:', {
-      emoji: [['doge', 'https://x/doge.png']]
-    });
+    expect(sendCallChat).toHaveBeenCalledWith(
+      'los :doge:',
+      expect.objectContaining({ emoji: [['doge', 'https://x/doge.png']] })
+    );
   });
 
   it('opens the emoji picker from a button and inserts the pick into the draft', async () => {
@@ -500,9 +505,10 @@ describe('CallChatPanel emojis', () => {
     const input = screen.getByTestId('call-chat-input');
     await waitFor(() => expect(input.querySelector('img[data-shortcode="parrot"]')).toBeTruthy());
     await fireEvent.keyDown(input, { key: 'Enter' });
-    expect(sendCallChat).toHaveBeenCalledWith(':parrot:', {
-      emoji: [['parrot', 'https://x.org/p.gif']]
-    });
+    expect(sendCallChat).toHaveBeenCalledWith(
+      ':parrot:',
+      expect.objectContaining({ emoji: [['parrot', 'https://x.org/p.gif']] })
+    );
   });
 
   it('renders a received custom emoji inline as its image, undeclared codes as text', () => {
@@ -634,5 +640,83 @@ describe('CallChatPanel replies', () => {
     state.callChat = [ORIGINAL];
     render(CallChatPanel, { props });
     expect(replyButton(screen.getByTestId('call-chat-message'))).toBeNull();
+  });
+});
+
+// Issue "Video-Call chat: @mentions of call participants".
+describe('CallChatPanel mentions', () => {
+  const ME = 'e'.repeat(64) + ':me';
+  const BEA = 'b'.repeat(64) + ':1';
+  const CARL = 'c'.repeat(64) + ':1';
+  beforeEach(() => {
+    state.localParticipant = { identity: ME };
+    state.remoteParticipants = [{ identity: BEA }, { identity: CARL }];
+  });
+
+  it('suggests "alle" and the other participants on "@" and sends the picked identities', async () => {
+    render(CallChatPanel, { props });
+    const input = screen.getByTestId('call-chat-input');
+    await typeIntoEditor(input, 'hey @');
+    const list = await screen.findByRole('listbox');
+    const options = Array.from(list.querySelectorAll('[role="option"]')).map((o) =>
+      o.lastElementChild.textContent.trim()
+    );
+    expect(options).toEqual([m.groups_call_chat_mention_everyone(), 'Bea', 'Carl Otto']);
+    await fireEvent.keyDown(input, { key: 'ArrowDown' }); // Bea
+    await fireEvent.keyDown(input, { key: 'Enter' }); // pick
+    expect(input.textContent).toBe('hey @Bea ');
+    await typeIntoEditor(input, 'hey @Bea und @Car');
+    await screen.findByRole('listbox');
+    await fireEvent.keyDown(input, { key: 'Enter' }); // Carl Otto
+    expect(input.textContent).toBe('hey @Bea und @Carl Otto ');
+    await fireEvent.keyDown(input, { key: 'Enter' }); // send
+    expect(sendCallChat).toHaveBeenCalledWith(
+      'hey @Bea und @Carl Otto',
+      expect.objectContaining({ mentions: [BEA, CARL] })
+    );
+  });
+
+  it('"@alle" is sent as "*"', async () => {
+    render(CallChatPanel, { props });
+    const input = screen.getByTestId('call-chat-input');
+    await typeIntoEditor(input, '@al');
+    await screen.findByRole('listbox');
+    await fireEvent.keyDown(input, { key: 'Enter' });
+    await fireEvent.keyDown(input, { key: 'Enter' });
+    expect(sendCallChat).toHaveBeenCalledWith(
+      `@${m.groups_call_chat_mention_everyone()}`,
+      expect.objectContaining({ mentions: ['*'] })
+    );
+  });
+
+  it('drops a mention whose @Name was deleted from the draft again', async () => {
+    render(CallChatPanel, { props });
+    const input = screen.getByTestId('call-chat-input');
+    await typeIntoEditor(input, '@Be');
+    await screen.findByRole('listbox');
+    await fireEvent.keyDown(input, { key: 'Enter' });
+    await typeIntoEditor(input, 'doch nicht');
+    await fireEvent.keyDown(input, { key: 'Enter' });
+    expect(sendCallChat).toHaveBeenCalledWith(
+      'doch nicht',
+      expect.objectContaining({ mentions: [] })
+    );
+  });
+
+  it('renders mentioned names as chips and highlights a message that mentions me', () => {
+    state.callChat = [
+      { id: 'm:1', identity: BEA, text: 'hey @Carl Otto schau', at: 1, mentions: [CARL] },
+      { id: 'm:2', identity: BEA, text: '@alle her', at: 2, mentions: ['*'] },
+      { id: 'm:3', identity: CARL, text: 'nur text @Bea', at: 3 }
+    ];
+    render(CallChatPanel, { props });
+    const [toCarl, toAll, plain] = screen.getAllByTestId('call-chat-message');
+    const chip = toCarl.querySelector('[data-testid="call-chat-mention"]');
+    expect(chip.textContent).toBe('@Carl Otto');
+    expect(toCarl.dataset.mentioned).toBeUndefined();
+    // the chip keeps what the sender typed (a German "@alle" on an English UI too)
+    expect(toAll.querySelector('[data-testid="call-chat-mention"]').textContent).toBe('@alle');
+    expect(toAll.dataset.mentioned).toBe('true');
+    expect(plain.querySelector('[data-testid="call-chat-mention"]')).toBeNull();
   });
 });

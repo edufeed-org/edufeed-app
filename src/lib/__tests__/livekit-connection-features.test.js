@@ -12,6 +12,8 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 const { rooms } = vi.hoisted(() => ({ rooms: [] }));
 
+const toast = vi.hoisted(() => ({ fn: vi.fn() }));
+vi.mock('$lib/helpers/toast.js', () => ({ showToast: (...a) => toast.fn(...a) }));
 vi.mock('$lib/services/call-sounds.js', () => ({
   playJoinSound: vi.fn(),
   playLeaveSound: vi.fn(),
@@ -838,5 +840,58 @@ describe('call chat payload: replies', () => {
       replyTo: '11111111-2222-4333-8444-555555555555',
       replyPreview: { n: 'Al', text: 'zeile 1' }
     });
+  });
+});
+
+// Issue "@mentions of call participants": `mentions` travels with the
+// message; a message that names me (or everyone) is a stronger signal —
+// counted separately and toasted while no chat view is on screen.
+describe('call chat payload: mentions', () => {
+  const bob = remote('b'.repeat(64) + ':x');
+  bob.name = 'Bob';
+  const emit = (obj) =>
+    room.emit(RoomEvent.DataReceived, encode(obj), bob, undefined, 'edufeed.call.chat');
+
+  it('sends mentions, keeps them locally and replays them', async () => {
+    const mentions = ['c'.repeat(64) + ':y', '*'];
+    await svc.sendCallChat('@Carol @alle los', { mentions });
+    expect(decode(room.localParticipant.publishData.mock.calls.at(-1)[0]).mentions).toEqual(
+      mentions
+    );
+    expect(svc.getLiveKitState().callChat.at(-1).mentions).toEqual(mentions);
+    room.localParticipant.publishData.mockClear();
+    room.emit(RoomEvent.ParticipantConnected, remote('d'.repeat(64) + ':z'));
+    await new Promise((r) => setTimeout(r, 0));
+    expect(decode(room.localParticipant.publishData.mock.calls.at(-1)[0]).mentions).toEqual(
+      mentions
+    );
+  });
+
+  it('notes a mention of me (or everyone) with a toast naming the sender, not one of someone else', async () => {
+    const { getCallChatUnread, resetCallChatUnread } = await import(
+      '$lib/groups/call-chat-unread.svelte.js'
+    );
+    resetCallChatUnread();
+    toast.fn.mockClear();
+    const me = room.localParticipant.identity;
+    emit({ t: 'chat', text: 'an dich', n: 'm1', mentions: [me] });
+    emit({ t: 'chat', text: 'an alle', n: 'm2', mentions: ['*'] });
+    emit({ t: 'chat', text: 'an carol', n: 'm3', mentions: ['c'.repeat(64) + ':y'] });
+    expect(getCallChatUnread().mentions).toBe(2);
+    expect(toast.fn).toHaveBeenCalledTimes(2);
+    expect(toast.fn.mock.calls[0][0]).toContain('Bob');
+  });
+
+  it('does not toast a mention that arrives while a chat view is on screen', async () => {
+    const { registerCallChatView, getCallChatUnread, resetCallChatUnread } = await import(
+      '$lib/groups/call-chat-unread.svelte.js'
+    );
+    resetCallChatUnread();
+    toast.fn.mockClear();
+    const off = registerCallChatView();
+    emit({ t: 'chat', text: 'an alle', n: 'm4', mentions: ['*'] });
+    expect(getCallChatUnread().mentions).toBe(0);
+    expect(toast.fn).not.toHaveBeenCalled();
+    off();
   });
 });

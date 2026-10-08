@@ -12,7 +12,9 @@
    *   minHeight?: string,
    *   submitOnEnter?: boolean,
    *   placement?: 'above' | 'caret',
-   *   onSubmit?: () => void
+   *   onSubmit?: () => void,
+   *   mentionProvider?: any,
+   *   onMentionPick?: any
    * }}
    */
   let {
@@ -22,7 +24,9 @@
     minHeight = undefined,
     submitOnEnter = true,
     placement = 'above',
-    onSubmit = () => {}
+    onSubmit = () => {},
+    mentionProvider = undefined,
+    onMentionPick = undefined
   } = $props();
   let value = $state(initial);
   let selection = $state('');
@@ -45,6 +49,8 @@
   {submitOnEnter}
   {placement}
   {onSubmit}
+  {mentionProvider}
+  {onMentionPick}
   placeholder="Nachricht"
   testid="emoji-input"
 />

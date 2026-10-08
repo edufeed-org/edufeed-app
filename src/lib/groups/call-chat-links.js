@@ -17,7 +17,8 @@ import { extractPreviewableUrls } from '$lib/helpers/linkPreview.js';
 /** @typedef {{ text: string }} TextSegment */
 /** @typedef {{ href: string, label: string, internal: boolean }} LinkSegment */
 /** @typedef {{ emoji: string, url: string }} EmojiSegment NIP-30 custom emoji: `:emoji:` → image */
-/** @typedef {TextSegment | LinkSegment | EmojiSegment} CallChatSegment */
+/** @typedef {{ mention: string, label: string }} MentionSegment `@Name` of a mentioned identity → chip */
+/** @typedef {TextSegment | LinkSegment | EmojiSegment | MentionSegment} CallChatSegment */
 
 // An http(s) URL, or a NIP-19 id (optionally `nostr:`-prefixed) standing on
 // its own. Only these two shapes are ever linked, so `javascript:` and
