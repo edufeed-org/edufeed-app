@@ -149,7 +149,10 @@ test.describe('moderated community lifecycle', () => {
     await owner.goto(`/c/${communityNpub}?view=settings`);
     const typeCard = vis(owner.getByTestId('settings-type-card'));
     await expect(typeCard).toBeVisible({ timeout: 20_000 });
-    await expect(typeCard.locator('p.font-semibold')).toHaveText('Moderated');
+    // The title line is the card's FIRST bold paragraph; it carries an engine
+    // badge ("NIP-29") and the card below it lists the other types in bold
+    // too, so match the title only, and by containment.
+    await expect(typeCard.locator('p.font-semibold').first()).toContainText('Moderated');
 
     // --- owner: mint an invite code from the MembershipPane
     const membershipPane = vis(owner.getByTestId('membership-pane'));
@@ -193,7 +196,8 @@ test.describe('moderated community lifecycle', () => {
     // open across the wait above).
     await expect(async () => {
       await owner.reload();
-      await expect(membershipPane).toContainText('1 members', { timeout: 5000 });
+      // Pluralised copy: "1 member" (en), "1 Mitglied" would be de.
+      await expect(membershipPane).toContainText(/\b1 members?\b/, { timeout: 5000 });
     }).toPass({ timeout: 30_000 });
 
     const manageMembersButton = vis(owner.getByTestId('membership-manage-members'));
@@ -282,19 +286,20 @@ test.describe('community type flip lifecycle', () => {
 
     await owner.goto(`/c/${communityNpub}?view=settings`);
     const typeCard = vis(owner.getByTestId('settings-type-card'));
-    const typeTitle = typeCard.locator('p.font-semibold');
+    // First bold paragraph = the title line (see the lifecycle spec above).
+    const typeTitle = typeCard.locator('p.font-semibold').first();
     await expect(typeCard).toBeVisible({ timeout: 20_000 });
-    await expect(typeTitle).toHaveText('Open');
+    await expect(typeTitle).toContainText('Open');
 
     // --- flip to moderated (provisions a root NIP-29 group)
     await vis(owner.getByTestId('settings-flip-to-moderated')).click();
     await vis(owner.getByTestId('settings-flip-confirm')).click();
-    await expect(typeTitle).toHaveText('Moderated', { timeout: 30_000 });
+    await expect(typeTitle).toContainText('Moderated', { timeout: 30_000 });
 
     // --- flip back to open (confirm dialog lists channels, none here)
     await vis(owner.getByTestId('settings-flip-to-open')).click();
     await vis(owner.getByTestId('settings-flip-confirm')).click();
-    await expect(typeTitle).toHaveText('Open', { timeout: 30_000 });
+    await expect(typeTitle).toContainText('Open', { timeout: 30_000 });
 
     await context.close();
   });

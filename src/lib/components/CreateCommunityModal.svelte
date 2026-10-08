@@ -3,7 +3,7 @@
   import { goto } from '$app/navigation';
   import { resolve } from '$app/paths';
   import { manager } from '$lib/stores/accounts.svelte';
-  import { getDisplayName, getProfileContent } from 'applesauce-core/helpers';
+  import { rootGroupSeed } from '$lib/groups/root-group-seed.js';
   import { SimpleSigner } from 'applesauce-signers';
   import { SimpleAccount } from 'applesauce-accounts/accounts';
   import { generateSecretKey, getPublicKey, nip19 } from 'nostr-tools';
@@ -498,26 +498,21 @@
         }
         humanUser = { pubkey: activeAccount.pubkey, signer: activeAccount.signer };
         try {
-          // Name fallback chain: userData.name (set only in the new-keypair
-          // flow — empty for "use current keypair") → the active account's
-          // cached kind 0 display name, itself falling back to a short npub
-          // (both handled by applesauce's getDisplayName; a synchronous
-          // EventStore read, no new subscription) → the literal 'Community'.
+          // Name/about/picture for the root group's 39000: userData (set only
+          // in the new-keypair flow) → the active account's cached kind 0 (a
+          // synchronous EventStore read, no new subscription) → 'Community'.
+          // rootGroupSeed is null-safe: a creator WITHOUT a cached kind 0
+          // (fresh account, profile not loaded yet) used to crash this branch
+          // inside applesauce's getProfileContent (issue wc4x0lnp).
           const cachedProfile = /** @type {any} */ (
             eventStore.getReplaceable(0, activeAccount.pubkey)
           );
-          const groupName = userData.name?.trim() || getDisplayName(cachedProfile) || 'Community';
-          // Seed the root group's 39000 with the community's picture + about so
-          // the /c space shows an icon + description in Armada. Same fallback
-          // shape as the name: the new-keypair flow collects these into
-          // userData; the "use current keypair" flow leaves them empty and
-          // sources them from the active account's cached kind 0.
-          const cachedContent = getProfileContent(cachedProfile);
+          const seed = rootGroupSeed(userData, cachedProfile);
           rootGroupPointer = await provisionRootGroup({
             relay: groupsRelay,
-            name: groupName,
-            about: userData.about?.trim() || cachedContent?.about,
-            picture: userData.picture?.trim() || cachedContent?.picture,
+            name: seed.name,
+            about: seed.about,
+            picture: seed.picture,
             user: { pubkey: activeAccount.pubkey, signer: activeAccount.signer },
             existingId: readRootGroupMarker(communityPk),
             // Seats the community key itself on the 39001 — required so the
