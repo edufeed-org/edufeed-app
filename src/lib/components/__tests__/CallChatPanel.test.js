@@ -948,6 +948,47 @@ describe('CallChatPanel files', () => {
     expect(sendCallFile).toHaveBeenLastCalledWith(file, { to: BEA });
   });
 
+  it('sends files pasted into the composer, privately when a recipient is chosen', async () => {
+    render(CallChatPanel, { props });
+    const file = new File(['abc'], 'shot.png', { type: 'image/png' });
+    const paste = new Event('paste', { bubbles: true, cancelable: true });
+    Object.defineProperty(paste, 'clipboardData', { value: { files: [file], getData: () => '' } });
+    screen.getByTestId('call-chat-input').dispatchEvent(paste);
+    await waitFor(() => expect(sendCallFile).toHaveBeenCalledWith(file, { to: undefined }));
+    await fireEvent.change(screen.getByTestId('call-chat-recipient'), { target: { value: BEA } });
+    screen.getByTestId('call-chat-input').dispatchEvent(paste);
+    await waitFor(() => expect(sendCallFile).toHaveBeenLastCalledWith(file, { to: BEA }));
+  });
+
+  it('sends files dropped on the composer row, one after another', async () => {
+    render(CallChatPanel, { props });
+    const a = new File(['a'], 'a.png', { type: 'image/png' });
+    const b = new File(['b'], 'b.pdf', { type: 'application/pdf' });
+    const row = screen.getByTestId('call-chat-input-row');
+    const enter = new Event('dragenter', { bubbles: true, cancelable: true });
+    Object.defineProperty(enter, 'dataTransfer', { value: { files: [], types: ['Files'] } });
+    row.dispatchEvent(enter);
+    expect(row.dataset.dragging).toBe('true');
+    const drop = new Event('drop', { bubbles: true, cancelable: true });
+    Object.defineProperty(drop, 'dataTransfer', { value: { files: [a, b], types: ['Files'] } });
+    row.dispatchEvent(drop);
+    await waitFor(() => expect(sendCallFile).toHaveBeenCalledTimes(2));
+    expect(sendCallFile.mock.calls.map((c) => c[0])).toEqual([a, b]);
+    expect(row.dataset.dragging).toBeUndefined();
+  });
+
+  it('ignores pasted files while nothing can be sent', async () => {
+    state.canSignal = false;
+    render(CallChatPanel, { props });
+    const paste = new Event('paste', { bubbles: true, cancelable: true });
+    Object.defineProperty(paste, 'clipboardData', {
+      value: { files: [new File(['x'], 'x.png', { type: 'image/png' })], getData: () => '' }
+    });
+    screen.getByTestId('call-chat-input').dispatchEvent(paste);
+    await Promise.resolve();
+    expect(sendCallFile).not.toHaveBeenCalled();
+  });
+
   it('toasts when the service refuses a too-large file', async () => {
     sendCallFile.mockResolvedValue({ ok: false, error: 'too-large' });
     render(CallChatPanel, { props });

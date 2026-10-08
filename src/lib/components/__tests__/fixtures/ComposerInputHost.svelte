@@ -14,7 +14,8 @@
    *   placement?: 'above' | 'caret',
    *   onSubmit?: () => void,
    *   mentionProvider?: any,
-   *   onMentionPick?: any
+   *   onMentionPick?: any,
+   *   onFiles?: (files: File[]) => void
    * }}
    */
   let {
@@ -26,7 +27,8 @@
     placement = 'above',
     onSubmit = () => {},
     mentionProvider = undefined,
-    onMentionPick = undefined
+    onMentionPick = undefined,
+    onFiles = undefined
   } = $props();
   let value = $state(initial);
   let selection = $state('');
@@ -51,6 +53,7 @@
   {onSubmit}
   {mentionProvider}
   {onMentionPick}
+  {onFiles}
   placeholder="Nachricht"
   testid="emoji-input"
 />

@@ -9,6 +9,7 @@
   import * as m from '$lib/paraglide/messages';
   import { PollIcon } from '$lib/components/icons';
   import ComposerInput from '$lib/components/shared/ComposerInput.svelte';
+  import { fileDropZone } from '$lib/helpers/file-drop.js';
 
   /**
    * @typedef {Object} Props
@@ -24,9 +25,10 @@
    *   button before the input. Only the timeline composer passes this; the
    *   ThreadPanel composer leaves it null (webxdc sessions are channel-scoped,
    *   not thread-scoped).
-   * @property {((file: File) => void) | null} [onAttachFile] - opt-in: renders
-   *   the attach-file button. The caller owns the upload; `uploading` mirrors
-   *   its in-flight state back onto the button.
+   * @property {((files: File[]) => void) | null} [onAttachFiles] - opt-in: renders
+   *   the attach-file button and makes the pill accept pasted and dropped
+   *   files, all landing here. The caller owns the upload; `uploading`
+   *   mirrors its in-flight state back onto the button.
    * @property {boolean} [uploading]
    * @property {import('$lib/helpers/emoji-autocomplete.js').EmojiPack[]} [customEmojiSets]
    *   the user's NIP-30 packs, for the ':' autocomplete and inline rendering
@@ -46,7 +48,7 @@
     onCancelReply = null,
     testid = undefined,
     onOpenApps = null,
-    onAttachFile = null,
+    onAttachFiles = null,
     uploading = false,
     onOpenPoll = null,
     customEmojiSets = []
@@ -57,10 +59,15 @@
   /** @param {Event} e */
   function handleFileChange(e) {
     const input = /** @type {HTMLInputElement} */ (e.currentTarget);
-    const file = input.files?.[0];
+    const files = Array.from(input.files ?? []);
     // Reset so picking the same file again re-fires change.
     input.value = '';
-    if (file) onAttachFile?.(file);
+    if (files.length) onAttachFiles?.(files);
+  }
+
+  /** @param {File[]} files */
+  function takeFiles(files) {
+    if (!disabled && !uploading) onAttachFiles?.(files);
   }
 </script>
 
@@ -79,8 +86,13 @@
 {/if}
 
 <form
-  class="m-4 mt-2 flex shrink-0 items-center gap-2 rounded-full border border-base-300 bg-base-200 p-1.5"
-  onsubmit={(e) => {
+  class="m-4 mt-2 flex shrink-0 items-center gap-2 rounded-full border border-base-300 bg-base-200 p-1.5 data-[dragging=true]:border-primary data-[dragging=true]:bg-primary/10 data-[dragging=true]:ring-2 data-[dragging=true]:ring-primary"
+  data-testid="chat-composer-form"
+  use:fileDropZone={{
+    onFiles: takeFiles,
+    enabled: Boolean(onAttachFiles) && !disabled && !uploading
+  }}
+  onsubmit={(/** @type {SubmitEvent} */ e) => {
     e.preventDefault();
     onSubmit();
   }}
@@ -96,10 +108,11 @@
       {disabled}>+</button
     >
   {/if}
-  {#if onAttachFile}
+  {#if onAttachFiles}
     <input
       bind:this={fileInput}
       type="file"
+      multiple
       class="hidden"
       data-testid="chat-attach-input"
       onchange={handleFileChange}
@@ -136,6 +149,7 @@
     {customEmojiSets}
     {placeholder}
     {disabled}
+    onFiles={onAttachFiles ? takeFiles : undefined}
     onSubmit={() => !disabled && !sending && value.trim() && onSubmit()}
     class="input flex w-full items-center input-ghost focus:outline-none"
     {testid}

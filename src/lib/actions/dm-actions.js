@@ -31,7 +31,8 @@
  *   `(params) => async ({ signer, run }) => Promise<void>`
  */
 import { GiftWrapMessageToParticipants } from 'applesauce-actions/actions';
-import { WrappedMessageFactory } from 'applesauce-common/factories';
+import { GiftWrapFactory, WrappedMessageFactory } from 'applesauce-common/factories';
+import { castUser } from 'applesauce-common/casts';
 import { addNameValueTag } from 'applesauce-core/operations/tag/common';
 
 /**
@@ -136,5 +137,98 @@ export function ReplyToWrappedMessage(parent, message, options) {
     );
     const rumor = await stampRumor(factory, signer);
     await run(GiftWrapMessageToParticipants, rumor, wrapOpts);
+  };
+}
+
+/**
+ * @typedef {{
+ *   url: string,
+ *   fileType: string,
+ *   algorithm: string,
+ *   key: string,
+ *   nonce: string,
+ *   hash?: string,
+ *   size?: number
+ * }} DmFileInfo — an uploaded ciphertext and the material to decrypt it
+ *   (what `uploadEncryptedDmFile` returns).
+ */
+
+/**
+ * Gift-wrap any rumor to explicit receivers and publish each wrap to that
+ * receiver's inbox relays. Same procedure as applesauce's
+ * `GiftWrapMessageToParticipants`, which however reads the receivers off the
+ * rumor and only accepts kinds 4 and 14 — a kind-15 file message is refused
+ * with "Can only get participants from direct message event". The sender is
+ * always included, so our own copy lands in our inbox too.
+ * @param {import('applesauce-common/helpers/gift-wrap').Rumor} rumor
+ * @param {string[]} receivers
+ * @param {Record<string, any>} [opts] - gift-wrap options (e.g. `expiration`)
+ * @returns {import('applesauce-actions').Action}
+ */
+export function GiftWrapRumorToParticipants(rumor, receivers, opts) {
+  return async ({ signer, user, publish, events }) => {
+    if (!signer) throw new Error('Missing signer');
+    const pubkeys = new Set(receivers.filter(Boolean));
+    pubkeys.add(user.pubkey);
+    /** @type {Map<string, string[]>} */
+    const inboxRelays = new Map();
+    await Promise.allSettled(
+      Array.from(pubkeys).map(async (pubkey) => {
+        const receiver = castUser(pubkey, events);
+        // The DM relays (kind 10050) win, the NIP-65 inboxes are the fallback.
+        const relays = (
+          await Promise.all([
+            receiver.directMessageRelays$.$first(1_000, undefined),
+            receiver.inboxes$.$first(1_000, undefined)
+          ])
+        ).find((arr) => arr && arr.length > 0);
+        if (relays) inboxRelays.set(pubkey, relays);
+      })
+    );
+    const wraps = [];
+    for (const pubkey of pubkeys) {
+      const event = await GiftWrapFactory.create(signer, pubkey, rumor, opts);
+      wraps.push({ event, relays: inboxRelays.get(pubkey) });
+    }
+    await Promise.allSettled(wraps.map(({ event, relays }) => publish(event, relays)));
+  };
+}
+
+/**
+ * Sends a NIP-17 file message (kind 15): the rumor's content is the blob
+ * URL, its tags carry the mime type and the AES-GCM material, and the
+ * participants are the receivers. Built by hand rather than through
+ * `WrappedMessageFactory` (hard-wired to kind 14) and wrapped by
+ * `GiftWrapRumorToParticipants` (see there for why not applesauce's).
+ * Mirror of `parseFileRumor` on the read side.
+ * @param {string[]} participants - conversation participant pubkeys (sender included)
+ * @param {DmFileInfo} file
+ * @param {Record<string, any>} [wrapOpts] - gift-wrap options (e.g. `expiration`)
+ * @returns {import('applesauce-actions').Action}
+ */
+export function SendWrappedFile(participants, file, wrapOpts) {
+  return async ({ signer, run }) => {
+    if (!signer) throw new Error('Missing signer');
+    const pubkey = await signer.getPublicKey();
+    /** @type {string[][]} */
+    const tags = [
+      ...setParticipants(participants)([]),
+      ['file-type', file.fileType],
+      ['encryption-algorithm', file.algorithm],
+      ['decryption-key', file.key],
+      ['decryption-nonce', file.nonce]
+    ];
+    if (file.hash) tags.push(['x', file.hash]);
+    if (file.size) tags.push(['size', String(file.size)]);
+    const rumor = /** @type {import('applesauce-common/helpers/gift-wrap').Rumor} */ (
+      /** @type {unknown} */ ({
+        kind: 15,
+        pubkey,
+        created_at: Math.floor(Date.now() / 1000),
+        content: file.url,
+        tags
+      })
+    );
+    await run(GiftWrapRumorToParticipants, rumor, participants, wrapOpts);
   };
 }

@@ -2790,6 +2790,7 @@
   "dm_relay_remove": "Remove",
   "dm_relay_placeholder": "relay.example.com",
   "dm_send_failed": "Failed to send message. Please try again.",
+  "dm_attach_legacy_unsupported": "Files can only be sent in encrypted (NIP-17) conversations.",
   "dm_unlock_failed_one": "1 message could not be decrypted.",
   "dm_unlock_failed_many": "{count} messages could not be decrypted.",
   "dm_unlock_retry": "Try again",

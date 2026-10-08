@@ -1,6 +1,7 @@
-// AES-256-GCM decryption for NIP-17 kind-15 file messages. Same parameters as
-// Amethyst (quartz nip17Dm/files) and dark-wisp (EncryptedMedia.kt): 12-byte
-// nonce, 128-bit auth tag. WebCrypto only — no new dependency.
+// AES-256-GCM for NIP-17 kind-15 file messages, both directions. Same
+// parameters as Amethyst (quartz nip17Dm/files) and dark-wisp
+// (EncryptedMedia.kt): 12-byte nonce, 128-bit auth tag. WebCrypto only — no
+// new dependency.
 
 /** Algorithms we can decrypt. Anything else must surface, never silently fail. */
 export const SUPPORTED_FILE_ALGORITHMS = ['aes-gcm'];
@@ -20,6 +21,36 @@ function hexToBytes(hex, label) {
   const out = new Uint8Array(hex.length / 2);
   for (let i = 0; i < out.length; i++) out[i] = parseInt(hex.slice(i * 2, i * 2 + 2), 16);
   return out;
+}
+
+/** @param {Uint8Array} bytes */
+function bytesToHex(bytes) {
+  return Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
+}
+
+/**
+ * Encrypt a file's bytes for a kind-15 message with a fresh random key and
+ * nonce. The hex material goes into the rumor's `decryption-key` /
+ * `decryption-nonce` tags; the ciphertext is what gets uploaded.
+ * @param {BufferSource} bytes
+ * @returns {Promise<{ encrypted: Uint8Array, algorithm: 'aes-gcm', key: string, nonce: string }>}
+ */
+export async function encryptFileBytes(bytes) {
+  const subtle = globalThis.crypto.subtle;
+  const keyBytes = globalThis.crypto.getRandomValues(new Uint8Array(32));
+  const iv = globalThis.crypto.getRandomValues(new Uint8Array(12));
+  const cryptoKey = await subtle.importKey('raw', keyBytes, 'AES-GCM', false, ['encrypt']);
+  const encrypted = await subtle.encrypt(
+    { name: 'AES-GCM', iv, tagLength: TAG_BITS },
+    cryptoKey,
+    bytes
+  );
+  return {
+    encrypted: new Uint8Array(encrypted),
+    algorithm: 'aes-gcm',
+    key: bytesToHex(keyBytes),
+    nonce: bytesToHex(iv)
+  };
 }
 
 /**

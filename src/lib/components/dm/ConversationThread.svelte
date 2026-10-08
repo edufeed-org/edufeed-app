@@ -16,7 +16,11 @@
   import { SendLegacyMessage, ReplyToLegacyMessage } from 'applesauce-actions/actions';
   // Local NIP-17 actions: same rumor as applesauce's, plus NIP-30 `emoji`
   // tags for picked custom emojis (the stock actions have no hook for them).
-  import { SendWrappedMessage, ReplyToWrappedMessage } from '$lib/actions/dm-actions.js';
+  import {
+    SendWrappedMessage,
+    ReplyToWrappedMessage,
+    SendWrappedFile
+  } from '$lib/actions/dm-actions.js';
   import { actionRunnerOptimistic } from '$lib/stores/action-runner.svelte.js';
   import {
     markConversationAsRead,
@@ -30,6 +34,8 @@
   } from '$lib/helpers/dm.js';
   import { ensureRecipientDmRelays } from '$lib/services/dm-recipient-relays.js';
   import { sendWrappedDm } from '$lib/services/wrapped-dm.js';
+  import { fileDropZone } from '$lib/helpers/file-drop.js';
+  import { runtimeConfig } from '$lib/stores/config.svelte.js';
   import {
     formatMessageTimestamp,
     getUserDisplayName as getDisplayName,
@@ -96,6 +102,67 @@
   let replyingTo = $state(null);
   /** @type {ReturnType<typeof ComposerInput> | undefined} */
   let messageInput = $state(undefined);
+
+  // Files from the 📎 picker, a paste or a drop: each one is encrypted,
+  // uploaded and sent at once as its own NIP-17 kind-15 message (a file
+  // message carries no text, so the draft stays as it is). Legacy NIP-04
+  // threads have no such message kind.
+  /** @type {HTMLInputElement | null} */
+  let fileInput = $state(null);
+  let sendingFiles = $state(false);
+  /** @param {File[]} files */
+  async function sendFiles(files) {
+    const user = getActiveUser();
+    if (!user?.signer || files.length === 0) return;
+    if (isLegacy) {
+      showToast(m.dm_attach_legacy_unsupported(), 'warning');
+      return;
+    }
+    sendingFiles = true;
+    try {
+      // Lazy: the Blossom SDK and the publish pipeline behind it are only
+      // needed once someone actually sends a file from a DM thread.
+      const { uploadEncryptedDmFile } = await import('$lib/helpers/dm-file-upload.js');
+      const recipients = participants.filter((p) => p !== user.pubkey);
+      for (const file of files) {
+        const max = runtimeConfig.blossom?.maxFileSize;
+        if (max && file.size > max) {
+          showToast(
+            m.chat_attach_error_too_large({ size: Math.round(max / (1024 * 1024)) }),
+            'error'
+          );
+          continue;
+        }
+        let info;
+        try {
+          info = await uploadEncryptedDmFile(file, { signer: user.signer });
+        } catch (err) {
+          console.error('DM file upload failed:', err);
+          showToast(m.chat_attach_error_upload_failed(), 'error');
+          continue;
+        }
+        try {
+          await sendWrappedDm(recipients, '', {
+            action: SendWrappedFile,
+            args: [participants, info]
+          });
+        } catch (err) {
+          console.error('Failed to send DM file:', err);
+          showToast(m.dm_send_failed(), 'error');
+        }
+      }
+    } finally {
+      sendingFiles = false;
+    }
+  }
+  /** @param {Event} e */
+  function handleFileChange(e) {
+    const input = /** @type {HTMLInputElement} */ (e.currentTarget);
+    const files = Array.from(input.files ?? []);
+    // Reset so picking the same file again re-fires change.
+    input.value = '';
+    if (files.length) void sendFiles(files);
+  }
 
   // Custom emoji state
   const getUserEmojiSets = useUserEmojiSets();
@@ -542,7 +609,9 @@
       onsubmit={sendMessage}
       class="flex items-end gap-2 {replyingTo
         ? 'rounded-t-none rounded-b-3xl'
-        : 'rounded-3xl'} bg-base-200 px-2 py-1 shadow-md"
+        : 'rounded-3xl'} bg-base-200 px-2 py-1 shadow-md data-[dragging=true]:bg-primary/10 data-[dragging=true]:ring-2 data-[dragging=true]:ring-primary"
+      data-testid="dm-composer-form"
+      use:fileDropZone={{ onFiles: sendFiles, enabled: !isLegacy && !sendingFiles }}
     >
       <button
         type="button"
@@ -553,6 +622,32 @@
         <SmilePlusIcon class="h-5 w-5" />
       </button>
 
+      {#if !isLegacy}
+        <input
+          bind:this={fileInput}
+          type="file"
+          multiple
+          class="hidden"
+          data-testid="dm-attach-input"
+          onchange={handleFileChange}
+        />
+        <button
+          type="button"
+          class="btn btn-circle shrink-0 btn-ghost btn-sm"
+          data-testid="dm-attach-button"
+          title={m.chat_attach_file()}
+          aria-label={m.chat_attach_file()}
+          onclick={() => fileInput?.click()}
+          disabled={sendingFiles}
+        >
+          {#if sendingFiles}
+            <span class="loading loading-xs loading-spinner"></span>
+          {:else}
+            📎
+          {/if}
+        </button>
+      {/if}
+
       <ComposerInput
         bind:this={messageInput}
         bind:value={newMessage}
@@ -562,6 +657,7 @@
         disabled={isSending}
         onfocus={() => (showEmojiPicker = false)}
         onSubmit={() => sendMessage()}
+        onFiles={sendFiles}
         class="min-h-[2rem] py-1.5 leading-snug"
         testid="dm-input"
       />

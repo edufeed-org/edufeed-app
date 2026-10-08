@@ -16,7 +16,9 @@
     raw reference — publish pipelines turn it into a `p` tag;
   - Enter submits (`onSubmit`), Shift+Enter inserts a newline in multiline
     mode (`submitOnEnter={false}` makes Enter a plain newline for long-form
-    bodies); paste is plain text; the picker button feeds `insert()`;
+    bodies); paste is plain text, unless the clipboard carries files and the
+    host passes `onFiles` (then the files go there and nothing is inserted;
+    drops are the host's job, see `fileDropZone`); the picker button feeds `insert()`;
     toolbar hosts use `getSelection()` / `replaceRange()` in value coordinates.
 
   Sync rules: user edits flow DOM → value (serialize on input, no re-render,
@@ -65,7 +67,8 @@
    *   ariaDescribedby?: string,
    *   onEscape?: () => void,
    *   mentionProvider?: (query: string) => Array<{ key: string, name: string, pubkey: string | null, profile?: any }>,
-   *   onMentionPick?: (candidate: { key: string, name: string, pubkey: string | null }) => void
+   *   onMentionPick?: (candidate: { key: string, name: string, pubkey: string | null }) => void,
+   *   onFiles?: (files: File[]) => void
    * }}
    */
   let {
@@ -101,7 +104,13 @@
      * the host can carry the mention in its own format.
      */
     mentionProvider = undefined,
-    onMentionPick = undefined
+    onMentionPick = undefined,
+    /**
+     * Files pasted into the field (a screenshot from the clipboard, say).
+     * Without it the field is text-only and files are ignored; with it, a
+     * paste that carries files inserts no text.
+     */
+    onFiles = undefined
   } = $props();
 
   /** @type {HTMLDivElement | undefined} */
@@ -574,11 +583,25 @@
   /** @param {ClipboardEvent} event */
   function onPaste(event) {
     event.preventDefault();
+    if (takeFiles(event.clipboardData)) return;
     const text = event.clipboardData?.getData('text/plain') ?? '';
     if (!text) return;
     const caret = caretOffset();
     const nextText = value.slice(0, caret) + text + value.slice(caret);
     void commit(nextText, caret + text.length);
+  }
+
+  /**
+   * Hand the files of a paste to the host. Returns whether there were any
+   * (and a host to take them), so the caller skips its text path.
+   * @param {DataTransfer | null | undefined} data
+   */
+  function takeFiles(data) {
+    if (!onFiles || disabled) return false;
+    const files = Array.from(data?.files ?? []);
+    if (files.length === 0) return false;
+    onFiles(files);
+    return true;
   }
 </script>
 

@@ -125,6 +125,7 @@ vi.mock('$lib/paraglide/messages', () => ({
   community_views_chat_empty: () => 'No messages',
   community_views_chat_input_placeholder: () => 'Type a message',
   community_views_chat_login_prompt: () => 'Log in to chat',
+  chat_attach_file: () => 'Attach file',
   profile_avatar_fallback: () => '?'
 }));
 

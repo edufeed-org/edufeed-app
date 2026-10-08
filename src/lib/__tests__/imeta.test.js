@@ -38,6 +38,13 @@ describe('shared imeta parser', () => {
 });
 
 describe('buildImetaTag', () => {
+  it('carries the original filename as `name`, so a pasted screenshot keeps it', async () => {
+    const { buildImetaTag } = await import('$lib/helpers/imeta.js');
+    expect(
+      buildImetaTag({ url: 'https://blossom.example/abc.png', type: 'image/png', name: 'shot.png' })
+    ).toEqual(['imeta', 'url https://blossom.example/abc.png', 'm image/png', 'name shot.png']);
+  });
+
   it('writes the NIP-94 fields that are present, url first', async () => {
     const { buildImetaTag } = await import('$lib/helpers/imeta.js');
     expect(
