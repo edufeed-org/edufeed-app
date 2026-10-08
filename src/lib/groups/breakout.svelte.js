@@ -59,6 +59,7 @@
 // "removed from the call" end state), where the host's client re-assigns
 // it to the next room if that was a move. An old relay refuses the child
 // token: the guest stays in the main room and is told.
+import { untrack } from 'svelte';
 import { normalizeURL } from 'applesauce-core/helpers/url';
 import { getProfileContent } from 'applesauce-core/helpers';
 import {
@@ -199,7 +200,11 @@ let returnTimer;
 let joinTimer;
 // A switch leaves one call before joining the next: the store must not read
 // that idle moment as "the user left the call".
-let switching = false;
+// A room switch in flight (into a room or back): the call passes through
+// idle and the pointer changes, and the views must not read that as the
+// call ending. Reactive for the guest landing; the store's own effects
+// read it untracked (the switch, not its flag, drives them).
+let switching = $state(false);
 let deadlineHandled = false;
 /** @type {Record<string, number>} newest created_at seen per room id and kind */
 let newestSeen = {};
@@ -236,11 +241,16 @@ let sentHome = new Map();
  *   busy: boolean,
  *   pending: {room: BreakoutRoom} | null,
  *   joinRequest: {roomId: string} | null,
- *   guestSeats: Record<string, {roomId: string, identity: string}>
+ *   guestSeats: Record<string, {roomId: string, identity: string}>,
+ *   switching: boolean
  * }}
  */
 export function getBreakoutState() {
   return {
+    /** a switch into a room or back is in flight */
+    get switching() {
+      return switching;
+    },
     get guestSeats() {
       return guestSeats;
     },
@@ -403,7 +413,10 @@ function learnRooms(rooms, until) {
       title: getGroupCallState().title
     },
     rooms: merged,
-    until: until ?? session?.until ?? null,
+    // Every assign / state payload carries the host's whole deadline (a
+    // missing one IS "no deadline" — a cleared limit must reach the main
+    // room too), only the relay's listing may leave it to what is known.
+    until: until === undefined ? (session?.until ?? null) : until,
     hosting: false,
     creator: false,
     autoAssign: false,
@@ -970,10 +983,38 @@ async function moveGuest({ pubkey, identities, toRoomId, session: s, user }) {
  */
 export async function extendBreakout(minutes = BREAKOUT_EXTEND_MINUTES) {
   const s = session;
-  const user = getActiveCallUser();
-  if (!s?.hosting || !user || minutes <= 0) return;
+  if (!s || minutes <= 0) return;
   const now = Math.floor(Date.now() / 1000);
-  const until = Math.max(s.until ?? now, now) + Math.round(minutes * 60);
+  await applyDeadline(Math.max(s.until ?? now, now) + Math.round(minutes * 60), 'extend');
+}
+
+/**
+ * Set the deadline from now ("In 10 Min beenden" on a session without one),
+ * or take it away (`null`: `["until",""]` clears it on the relay; the
+ * countdown stops everywhere). The same per-room 9002 and state replay as
+ * `extendBreakout`.
+ * @param {number | null} minutesFromNow
+ */
+export async function setBreakoutDeadline(minutesFromNow) {
+  if (minutesFromNow !== null && !(minutesFromNow > 0)) return;
+  const until =
+    minutesFromNow === null
+      ? null
+      : Math.floor(Date.now() / 1000) + Math.round(minutesFromNow * 60);
+  await applyDeadline(until, 'set');
+}
+
+/**
+ * The deadline edit itself: every standing room gets the 9002, the session
+ * follows (a NEW deadline arms the auto-return again), the main room hears
+ * the state. A refusal keeps the old deadline and toasts the relay's reason.
+ * @param {number | null} until unix seconds, null = no deadline
+ * @param {'extend' | 'set'} what which failure text to use
+ */
+async function applyDeadline(until, what) {
+  const s = session;
+  const user = getActiveCallUser();
+  if (!s?.hosting || !user) return;
   const relayConn = pool.relay(s.main.relay);
   busy = true;
   try {
@@ -995,10 +1036,11 @@ export async function extendBreakout(minutes = BREAKOUT_EXTEND_MINUTES) {
       ?.sendBreakoutMessage(buildBreakoutStatePayload({ rooms, until }))
       .catch(() => {});
   } catch (err) {
+    const reason = err instanceof Error ? err.message : String(err);
     showToast(
-      m.groups_call_breakout_extend_failed({
-        reason: err instanceof Error ? err.message : String(err)
-      }),
+      what === 'extend'
+        ? m.groups_call_breakout_extend_failed({ reason })
+        : m.groups_call_breakout_deadline_failed({ reason }),
       'error'
     );
   } finally {
@@ -1181,7 +1223,7 @@ if (typeof window !== 'undefined') {
       const phase = getGroupCallState().phase;
       if (phase !== 'idle') return;
       discoveredFor = null;
-      if (switching) return;
+      if (untrack(() => switching)) return;
       if (session || currentRoom || pending) clearSession();
     });
 
@@ -1190,7 +1232,7 @@ if (typeof window !== 'undefined') {
     $effect(() => {
       const phase = getGroupCallState().phase;
       const s = session;
-      if (phase !== 'ready' || s || currentRoom || switching) return;
+      if (phase !== 'ready' || s || currentRoom || untrack(() => switching)) return;
       const pointer = getActiveCallPointer();
       if (!pointer) return;
       const key = `${normalizeURL(pointer.relay)}'${pointer.id}`;
@@ -1320,9 +1362,11 @@ if (typeof window !== 'undefined') {
                 return;
               }
               // The deadline lives on the room (`until`): a host moved it.
+              // A newer 39000 without `until` means the host took the
+              // deadline away (`["until",""]`): the countdown stops here too.
               const marker = parseBreakoutMarker(event);
-              if (marker && marker.until !== null && session && marker.until !== session.until) {
-                if ((session.until ?? 0) < marker.until) deadlineHandled = false;
+              if (marker && session && marker.until !== session.until) {
+                if ((session.until ?? 0) < (marker.until ?? 0)) deadlineHandled = false;
                 session = { ...session, until: marker.until };
               }
             }

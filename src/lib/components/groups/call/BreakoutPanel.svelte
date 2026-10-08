@@ -5,8 +5,10 @@
   39004) and the GUESTS in it (live in the room's call without a roster
   seat — a call pass opens the room; "Gast" badge), a "Verschieben nach …"
   picker per person, "Beitreten" per room, the people still in the main
-  room with the same picker, the deadline with "+5 Min", the late-joiner
-  switch ("Nachzügler automatisch verteilen") and "Alle zurückholen"
+  room with the same picker, the deadline menu ("Noch m:ss" → +5/10/15 Min
+  or "Zeitlimit entfernen"; "Kein Zeitlimit" → "In N Min beenden" or an
+  own number of minutes), the late-joiner switch ("Nachzügler automatisch
+  verteilen") and "Alle zurückholen"
   (= delete every room, everyone returns). A guest's picker reports
   `guest: true`: the store moves it by message and the moderation
   endpoint, never with put-user.
@@ -16,11 +18,11 @@
   a room are no longer LiveKit participants of the main room.
 -->
 <script>
-  import { CloseIcon, MeetIcon, SendIcon } from '$lib/components/icons';
+  import { ChevronDownIcon, CloseIcon, MeetIcon, SendIcon } from '$lib/components/icons';
   import ProfileAvatar from '$lib/components/shared/ProfileAvatar.svelte';
   import { useProfileMap } from '$lib/stores/profile-map.svelte.js';
   import { getUserDisplayName } from '$lib/helpers/message-utils.js';
-  import { BREAKOUT_EXTEND_MINUTES, formatCountdown, roomOfPubkey } from '$lib/groups/breakout.js';
+  import { formatCountdown, roomOfPubkey } from '$lib/groups/breakout.js';
   import * as m from '$lib/paraglide/messages';
 
   /** @typedef {import('$lib/groups/call-participants.js').ParticipantRow} ParticipantRow */
@@ -34,6 +36,7 @@
    *   onJoin: (room: BreakoutRoom) => void,
    *   onEnd: (opts: {notify: boolean}) => void,
    *   onExtend: (minutes: number) => void,
+   *   onSetDeadline: (minutesFromNow: number | null) => void,
    *   onAutoAssign: (enabled: boolean) => void,
    *   onBroadcast: (text: string) => Promise<boolean>,
    *   onClose: () => void
@@ -47,6 +50,7 @@
     onJoin,
     onEnd,
     onExtend,
+    onSetDeadline,
     onAutoAssign,
     onBroadcast,
     onClose
@@ -67,6 +71,61 @@
       broadcastBusy = false;
     }
   }
+  // The deadline menu: "+N Min" / "Zeitlimit entfernen" while one runs,
+  // "In N Min beenden" / "Eigene Dauer …" (a minutes input) without one. A
+  // click outside (in the panel's own document — the pop-out has its own)
+  // or Escape closes it; the input stays until set or closed.
+  const DEADLINE_STEPS = [5, 10, 15];
+  const CUSTOM_MIN = 1;
+  const CUSTOM_MAX = 180;
+  /** @type {HTMLDivElement | undefined} */
+  let deadlineMenuEl = $state(undefined);
+  let deadlineMenuOpen = $state(false);
+  let customOpen = $state(false);
+  let customMinutes = $state('');
+  const customValue = $derived(Number(customMinutes));
+  const customValid = $derived(
+    Number.isInteger(customValue) && customValue >= CUSTOM_MIN && customValue <= CUSTOM_MAX
+  );
+  function closeDeadlineMenu() {
+    deadlineMenuOpen = false;
+    customOpen = false;
+    customMinutes = '';
+  }
+  /** @param {number} minutes */
+  function extend(minutes) {
+    closeDeadlineMenu();
+    onExtend(minutes);
+  }
+  /** @param {number | null} minutes */
+  function setDeadline(minutes) {
+    closeDeadlineMenu();
+    onSetDeadline(minutes);
+  }
+  function setCustom() {
+    if (!customValid) return;
+    setDeadline(customValue);
+  }
+  $effect(() => {
+    if (!deadlineMenuOpen) return;
+    const win = deadlineMenuEl?.ownerDocument.defaultView;
+    if (!win) return;
+    /** @param {PointerEvent} event */
+    const onPointerDown = (event) => {
+      const target = /** @type {Node | null} */ (event.target);
+      if (target && !deadlineMenuEl?.contains(target)) closeDeadlineMenu();
+    };
+    /** @param {KeyboardEvent} event */
+    const onKeyDown = (event) => {
+      if (event.key === 'Escape') closeDeadlineMenu();
+    };
+    win.addEventListener('pointerdown', onPointerDown);
+    win.addEventListener('keydown', onKeyDown);
+    return () => {
+      win.removeEventListener('pointerdown', onPointerDown);
+      win.removeEventListener('keydown', onKeyDown);
+    };
+  });
   // "Alle zurückholen" asks first, with the optional `return` heads-up.
   let endConfirmOpen = $state(false);
   let endNotify = $state(true);
@@ -145,21 +204,132 @@
 <div class="flex min-h-0 flex-1 flex-col" data-testid="breakout-panel">
   <div class="flex shrink-0 items-center gap-2 border-b border-base-300 px-3 py-2">
     <h3 class="min-w-0 flex-1 truncate text-sm font-semibold">{m.groups_call_breakout_title()}</h3>
-    {#if breakout.remaining !== null}
-      <span class="badge badge-sm tabular-nums badge-warning" data-testid="breakout-panel-deadline">
-        {m.groups_call_breakout_time_left({ time: formatCountdown(breakout.remaining) })}
-      </span>
-    {/if}
-    <button
-      type="button"
-      class="btn btn-ghost btn-sm"
-      onclick={() => onExtend(BREAKOUT_EXTEND_MINUTES)}
-      disabled={breakout.busy}
-      title={m.groups_call_breakout_duration()}
-      data-testid="breakout-panel-extend"
+    <div
+      class="relative shrink-0"
+      bind:this={deadlineMenuEl}
+      data-testid="breakout-panel-deadline-menu"
     >
-      {m.groups_call_breakout_extend({ minutes: BREAKOUT_EXTEND_MINUTES })}
-    </button>
+      <button
+        type="button"
+        class="btn gap-1 px-2 btn-ghost btn-sm {breakout.remaining !== null
+          ? 'text-warning-content tabular-nums'
+          : ''}"
+        onclick={() => (deadlineMenuOpen ? closeDeadlineMenu() : (deadlineMenuOpen = true))}
+        disabled={breakout.busy}
+        aria-haspopup="menu"
+        aria-expanded={deadlineMenuOpen}
+        title={m.groups_call_breakout_deadline_menu()}
+        data-testid="breakout-panel-deadline"
+        data-deadline={breakout.remaining !== null ? 'set' : 'none'}
+      >
+        {#if breakout.remaining !== null}
+          <span class="badge badge-sm tabular-nums badge-warning">
+            {m.groups_call_breakout_time_left({ time: formatCountdown(breakout.remaining) })}
+          </span>
+        {:else}
+          {m.groups_call_breakout_no_deadline()}
+        {/if}
+        <ChevronDownIcon class_="h-3 w-3" title="" />
+      </button>
+      {#if deadlineMenuOpen}
+        <ul
+          class="menu absolute top-full right-0 z-30 mt-1 w-56 rounded-box bg-base-100 p-2 shadow-lg"
+          role="menu"
+          data-testid="breakout-panel-deadline-options"
+        >
+          {#if breakout.remaining !== null}
+            {#each DEADLINE_STEPS as minutes (minutes)}
+              <li>
+                <button
+                  type="button"
+                  class="text-sm"
+                  role="menuitem"
+                  onclick={() => extend(minutes)}
+                  data-testid="breakout-panel-extend"
+                  data-minutes={minutes}
+                >
+                  {m.groups_call_breakout_extend({ minutes })}
+                </button>
+              </li>
+            {/each}
+            <li>
+              <button
+                type="button"
+                class="text-sm"
+                role="menuitem"
+                onclick={() => setDeadline(null)}
+                data-testid="breakout-panel-clear-deadline"
+              >
+                {m.groups_call_breakout_clear_deadline()}
+              </button>
+            </li>
+          {:else}
+            {#each DEADLINE_STEPS as minutes (minutes)}
+              <li>
+                <button
+                  type="button"
+                  class="text-sm"
+                  role="menuitem"
+                  onclick={() => setDeadline(minutes)}
+                  data-testid="breakout-panel-end-in"
+                  data-minutes={minutes}
+                >
+                  {m.groups_call_breakout_end_in({ minutes })}
+                </button>
+              </li>
+            {/each}
+            {#if customOpen}
+              <li class="menu-title text-xs">{m.groups_call_breakout_custom_duration()}</li>
+              <li class="pointer-events-auto">
+                <form
+                  class="flex items-center gap-1 p-1 hover:bg-transparent"
+                  onsubmit={(e) => {
+                    e.preventDefault();
+                    setCustom();
+                  }}
+                  data-testid="breakout-panel-custom-form"
+                >
+                  <!-- svelte-ignore a11y_autofocus -->
+                  <input
+                    type="number"
+                    class="input-bordered input input-sm w-20 tabular-nums"
+                    min={CUSTOM_MIN}
+                    max={CUSTOM_MAX}
+                    step="1"
+                    inputmode="numeric"
+                    bind:value={customMinutes}
+                    aria-label={m.groups_call_breakout_custom_minutes()}
+                    placeholder={m.groups_call_breakout_custom_minutes()}
+                    autofocus
+                    data-testid="breakout-panel-custom-minutes"
+                  />
+                  <button
+                    type="submit"
+                    class="btn btn-sm btn-primary"
+                    disabled={!customValid}
+                    data-testid="breakout-panel-custom-set"
+                  >
+                    {m.groups_call_breakout_set_deadline()}
+                  </button>
+                </form>
+              </li>
+            {:else}
+              <li>
+                <button
+                  type="button"
+                  class="text-sm"
+                  role="menuitem"
+                  onclick={() => (customOpen = true)}
+                  data-testid="breakout-panel-custom-duration"
+                >
+                  {m.groups_call_breakout_custom_duration()}
+                </button>
+              </li>
+            {/if}
+          {/if}
+        </ul>
+      {/if}
+    </div>
     <button
       type="button"
       class="btn btn-square btn-ghost btn-sm"

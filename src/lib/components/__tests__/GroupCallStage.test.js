@@ -119,6 +119,7 @@ const breakout = vi.hoisted(() => ({
   startBreakout: vi.fn(async () => {}),
   endBreakout: vi.fn(async () => {}),
   extendBreakout: vi.fn(async () => {}),
+  setBreakoutDeadline: vi.fn(async () => {}),
   sendCallBroadcast: vi.fn(async () => true),
   setSessionAutoAssign: vi.fn(),
   requestBreakoutRoom: vi.fn(async () => {}),
@@ -132,6 +133,7 @@ vi.mock('$lib/groups/breakout.svelte.js', () => ({
   startBreakout: (...a) => breakout.startBreakout(...a),
   endBreakout: (...a) => breakout.endBreakout(...a),
   extendBreakout: (...a) => breakout.extendBreakout(...a),
+  setBreakoutDeadline: (...a) => breakout.setBreakoutDeadline(...a),
   sendCallBroadcast: (...a) => breakout.sendCallBroadcast(...a),
   setSessionAutoAssign: (...a) => breakout.setSessionAutoAssign(...a),
   requestBreakoutRoom: (...a) => breakout.requestBreakoutRoom(...a),
@@ -140,7 +142,10 @@ vi.mock('$lib/groups/breakout.svelte.js', () => ({
   ensureBreakoutListener: (...a) => breakout.ensureBreakoutListener(...a)
 }));
 vi.mock('$lib/components/groups/call/BreakoutDialog.svelte', () => ({ default: Stub }));
-vi.mock('$lib/components/groups/call/BreakoutPanel.svelte', () => ({ default: Stub }));
+vi.mock(
+  '$lib/components/groups/call/BreakoutPanel.svelte',
+  () => import('./fixtures/BreakoutPanelStub.svelte')
+);
 vi.mock(
   '$lib/components/groups/call/BreakoutBanner.svelte',
   () => import('./fixtures/BreakoutBannerStub.svelte')
@@ -285,6 +290,8 @@ vi.mock('$lib/paraglide/messages', () => ({
   groups_call_background_failed: () => 'Background failed',
   groups_call_background_store_failed: () => 'Image not saved',
   groups_call_breakout_title: () => 'Breakout rooms',
+  groups_call_column_tab_participants: ({ count }) => `Participants ${count}`,
+  groups_call_breakout_running_badge: () => 'Session running',
   groups_call_breakout_in_room: (p) => `Breakout room ${p.n}`,
   groups_call_breakout_time_left: (p) => `${p.time} left`,
   groups_call_breakout_back_to_main: () => 'Back to the main room'
@@ -885,7 +892,7 @@ describe('layout', () => {
     for (const id of ['group-call-invite', 'group-call-show-chat']) {
       const label = screen.getByTestId(id).querySelector('span');
       expect(label.classList.contains('hidden')).toBe(true);
-      expect(label.classList.contains('@lg:inline')).toBe(true);
+      expect(label.classList.contains('@2xl:inline')).toBe(true);
     }
     // The title side gives way (truncates) before the buttons do.
     const title = stage.querySelector('h2');
@@ -1108,7 +1115,7 @@ describe('participant list panel', () => {
     // Icon-only below the stage's @lg, like the chat button.
     const label = button.querySelector('span');
     expect(label.classList.contains('hidden')).toBe(true);
-    expect(label.classList.contains('@lg:inline')).toBe(true);
+    expect(label.classList.contains('@2xl:inline')).toBe(true);
     expect(screen.queryByTestId('call-participants-panel-stub')).toBeNull();
   });
 
@@ -1231,7 +1238,7 @@ describe('layouts', () => {
     render(GroupCallStage, { props: baseProps });
     const button = screen.getByTestId('group-call-layout');
     expect(button.getAttribute('aria-label')).toBe('View: Grid');
-    expect(button.querySelector('span').classList.contains('@lg:inline')).toBe(true);
+    expect(button.querySelector('span').classList.contains('@2xl:inline')).toBe(true);
     await fireEvent.click(button);
     const items = screen.getAllByRole('menuitemradio');
     expect(items.map((i) => i.textContent.trim())).toEqual([
@@ -1588,20 +1595,79 @@ describe('breakout rooms', () => {
     return screen.findByTestId('call-participants-panel-stub', {}, { timeout: 4000 });
   };
 
-  it('offers "Breakout rooms" in the participant list header to a host, not to a plain seat', async () => {
+  it('offers the "Breakout rooms" tab in the side column to a host, not to a plain seat', async () => {
     render(GroupCallStage, { props: baseProps });
     await openPanel();
+    expect(screen.queryByTestId('group-call-column-tabs')).toBeNull();
     expect(screen.queryByTestId('group-call-breakout-open')).toBeNull();
   });
 
-  it('shows the host the button and makes sure the assignment listener is registered', async () => {
+  it('shows the host the tabs: the rooms tab opens the dialog until a session runs', async () => {
     asHost();
     render(GroupCallStage, { props: baseProps });
     await openPanel();
+    expect(breakout.ensureBreakoutListener).toHaveBeenCalled();
+    const tabs = screen.getByTestId('group-call-column-tabs');
+    expect(tabs.getAttribute('role')).toBe('tablist');
+    const people = screen.getByTestId('group-call-column-tab-participants');
+    expect(people.textContent).toContain('Participants 1');
+    expect(people.getAttribute('aria-selected')).toBe('true');
     const open = screen.getByTestId('group-call-breakout-open');
     expect(open.textContent).toContain('Breakout rooms');
+    expect(open.getAttribute('aria-selected')).toBe('false');
+    expect(screen.queryByTestId('group-call-breakout-tab-dot')).toBeNull();
     await fireEvent.click(open);
-    expect(breakout.ensureBreakoutListener).toHaveBeenCalled();
+    // no session: the dialog, the list stays
+    expect(screen.getByTestId('call-participants-panel-stub')).toBeTruthy();
+    expect(screen.queryByTestId('breakout-panel-stub')).toBeNull();
+    expect(open.getAttribute('aria-selected')).toBe('false');
+  });
+
+  it('while hosting a session the tabs switch between the list and the panel; the list keeps its row menus', async () => {
+    asHost();
+    breakout.state.session = {
+      main: { id: 'main', relay: 'wss://r.example/', title: 'Standup' },
+      rooms: [{ id: 'r1', relay: 'wss://r.example/', name: 'Breakout 1', index: 1 }],
+      until: null,
+      hosting: true
+    };
+    breakout.state.rooms = breakout.state.session.rooms;
+    render(GroupCallStage, { props: baseProps });
+    await openPanel();
+    // the list first, the rooms tab wearing the "running" dot
+    expect(screen.getByTestId('group-call-breakout-tab-dot')).toBeTruthy();
+    await fireEvent.click(screen.getByTestId('group-call-breakout-open'));
+    const panel = await screen.findByTestId('breakout-panel-stub', {}, { timeout: 4000 });
+    expect(screen.getByTestId('group-call-breakout-open').getAttribute('aria-selected')).toBe(
+      'true'
+    );
+    expect(screen.queryByTestId('call-participants-panel-stub')).toBeNull();
+    expect(screen.getByTestId('group-call-column-tabs')).toBeTruthy();
+    // the panel's deadline controls reach the store
+    await fireEvent.click(panel.querySelector('[data-testid="stub-breakout-set"]'));
+    expect(breakout.setBreakoutDeadline).toHaveBeenCalledWith(10);
+    await fireEvent.click(panel.querySelector('[data-testid="stub-breakout-clear"]'));
+    expect(breakout.setBreakoutDeadline).toHaveBeenCalledWith(null);
+    await fireEvent.click(panel.querySelector('[data-testid="stub-breakout-extend"]'));
+    expect(breakout.extendBreakout).toHaveBeenCalledWith(5);
+    // back to the people (a row menu lives there), the tab is remembered
+    await fireEvent.click(screen.getByTestId('group-call-column-tab-participants'));
+    expect(screen.getByTestId('call-participants-panel-stub')).toBeTruthy();
+    expect(screen.queryByTestId('breakout-panel-stub')).toBeNull();
+    await fireEvent.click(screen.getByTestId('group-call-breakout-open'));
+    await screen.findByTestId('breakout-panel-stub');
+    // the stage's "Participants" button: from the rooms tab it switches, from the list it closes
+    await fireEvent.click(screen.getByTestId('group-call-show-participants'));
+    expect(screen.getByTestId('call-participants-panel-stub')).toBeTruthy();
+    expect(screen.getByTestId('group-call-participants-column')).toBeTruthy();
+    await fireEvent.click(screen.getByTestId('group-call-show-participants'));
+    expect(screen.queryByTestId('group-call-participants-column')).toBeNull();
+    // ... and the panel's close button closes the whole column
+    await fireEvent.click(screen.getByTestId('group-call-show-participants'));
+    await fireEvent.click(screen.getByTestId('group-call-breakout-open'));
+    const again = await screen.findByTestId('breakout-panel-stub');
+    await fireEvent.click(again.querySelector('[data-testid="stub-breakout-close"]'));
+    expect(screen.queryByTestId('group-call-participants-column')).toBeNull();
   });
 
   it('in a breakout room: no host badge, a room chip with the countdown, and the way back', async () => {
@@ -1670,7 +1736,7 @@ describe('breakout rooms', () => {
     breakout.state.pending = null;
   });
 
-  it('hosting from the main room: the deadline chip shows and the button stays', async () => {
+  it('hosting from the main room: the deadline chip opens the column on the rooms tab', async () => {
     asHost();
     breakout.state.session = {
       main: { id: 'main', relay: 'wss://r.example/', title: 'Standup' },
@@ -1683,7 +1749,13 @@ describe('breakout rooms', () => {
     render(GroupCallStage, { props: baseProps });
     expect(screen.getByTestId('group-call-breakout-deadline').textContent).toContain('0:59 left');
     expect(screen.queryByTestId('group-call-breakout-back')).toBeNull();
-    await openPanel();
-    expect(screen.getByTestId('group-call-breakout-open')).toBeTruthy();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await fireEvent.click(screen.getByTestId('group-call-breakout-deadline'));
+    const panel = await screen.findByTestId('breakout-panel-stub', {}, { timeout: 4000 });
+    expect(panel.dataset.remaining).toBe('59');
+    expect(screen.getByTestId('group-call-breakout-open').getAttribute('aria-selected')).toBe(
+      'true'
+    );
+    expect(screen.getByTestId('group-call-breakout-tab-dot')).toBeTruthy();
   });
 });

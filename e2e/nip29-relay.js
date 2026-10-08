@@ -135,7 +135,8 @@ function applyMetadataTags(metadata, tags) {
         metadata.ephemeral = tag[1] || undefined;
         break;
       case 'until': {
-        const until = Number(tag[1]);
+        // `["until",""]` clears a deadline (the spec's way), as does absence.
+        const until = tag[1] === '' ? NaN : Number(tag[1]);
         metadata.until = Number.isFinite(until) ? until : undefined;
         break;
       }

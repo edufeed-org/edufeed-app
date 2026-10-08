@@ -316,14 +316,20 @@ members:[identity…]}], until?}` (`parseBreakoutPayload`), believed only
    back at zero. "Zurück zum Hauptraum" is always available to anyone in a
    room. `GroupChat` treats a call in a breakout room of its channel as "in
    call here", so the stage stays on the channel's page.
-8. **Host panel** (participant list → "Breakout-Räume"): rooms with their
-   seated people (39002) and who is live (39004), "Verschieben nach …",
-   "Beitreten" (the host becomes a plain participant there — the relay seats
-   whoever opens a room's call as that room's host, so host rights hold in
-   the main room only), "+5 Min" (`extendBreakout`: a 9002 per room with the
-   new `until`, restating the whole metadata because pyramid overwrites
-   `livekit` and the relay refuses a dropped `ephemeral`), the late-joiner
-   switch, and "Alle zurückholen" = 9008 for every room.
+8. **Host panel** (the side column's "Breakout-Räume" tab — the column
+   keeps a "Teilnehmende N" tab beside it, so the host still reaches a
+   participant's row menu while rooms are open): rooms with their seated
+   people (39002) and who is live (39004), "Verschieben nach …", "Beitreten"
+   (the host becomes a plain participant there — the relay seats whoever
+   opens a room's call as that room's host, so host rights hold in the main
+   room only), the deadline menu — "Noch m:ss" → +5/+10/+15 Min
+   (`extendBreakout`) or "Zeitlimit entfernen", "Kein Zeitlimit" → "In N
+   Min beenden" or an own number of minutes (`setBreakoutDeadline`); every
+   change is a 9002 per room restating the whole metadata (pyramid
+   overwrites `livekit`, the relay refuses a dropped `ephemeral`) with the
+   new `until`, `["until",""]` to clear it, plus a state replay to the main
+   room — the late-joiner switch, and "Alle zurückholen" = 9008 for every
+   room.
 
 9. **Call broadcasts (kind 20002, `call-broadcasts.js`).** The host seat
    talks to every room through the relay: an ephemeral event (never

@@ -215,6 +215,27 @@ describe('editBreakoutUntil', () => {
     expect(last).toContainEqual(['about', 'edufeed:breakout parent=main n=1 until=1700000600']);
   });
 
+  it('takes a deadline away with ["until",""] and an about without until=', async () => {
+    const relay = relayOf();
+    await editBreakoutUntil(relay, room, null, user);
+    const tags = relay.published[0].tags;
+    expect(tags).toContainEqual(['until', '']);
+    expect(tags).toContainEqual(['ephemeral', 'main']);
+    expect(tags).toContainEqual(['about', 'edufeed:breakout parent=main n=1']);
+    // the no-ephemeral fallback carries no until tag at all (a stock relay
+    // would refuse it) — the marker alone says "no deadline"
+    const refusing = relayOf((event) =>
+      event.tags.some((/** @type {string[]} */ t) => t[0] === 'ephemeral')
+        ? 'restricted: ephemeral cannot be changed after creation'
+        : null
+    );
+    await editBreakoutUntil(refusing, { ...room, withParent: false }, null, user);
+    /** @type {string[][]} */
+    const last = refusing.published[refusing.published.length - 1].tags;
+    expect(last.some((t) => t[0] === 'until')).toBe(false);
+    expect(last).toContainEqual(['about', 'edufeed:breakout parent=main n=1']);
+  });
+
   it("rethrows any other refusal with the relay's reason", async () => {
     const relay = relayOf(() => 'restricted: insufficient permissions');
     await expect(

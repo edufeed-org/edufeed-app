@@ -77,6 +77,7 @@
     startBreakout,
     endBreakout,
     extendBreakout,
+    setBreakoutDeadline,
     setSessionAutoAssign,
     requestBreakoutRoom,
     sendCallBroadcast,
@@ -109,7 +110,6 @@
     GridIcon,
     ChevronLeftIcon,
     ChevronRightIcon,
-    ChannelsIcon,
     ClockIcon
   } from '$lib/components/icons';
   import ParticipantTile from './ParticipantTile.svelte';
@@ -341,7 +341,11 @@
   const BreakoutPanelLazy = lazyComponent(() => import('./BreakoutPanel.svelte'));
   const BreakoutBannerLazy = lazyComponent(() => import('./BreakoutBanner.svelte'));
   let breakoutDialogOpen = $state(false);
-  let breakoutPanelOpen = $state(false);
+  // The side column's tab: the participant list or, while hosting a
+  // session, the breakout panel. Both stay reachable (the host needs a
+  // participant's row menu while rooms are open); the tab is remembered for
+  // as long as the stage lives.
+  let columnTab = $state(/** @type {'participants' | 'breakout'} */ ('participants'));
   // Host rights hold in the main room only: never offer the controls inside
   // a breakout room (the relay seats whoever opens that room as its host).
   const inBreakoutRoom = $derived(breakout.currentRoom !== null);
@@ -357,12 +361,20 @@
   async function startBreakoutRooms(args) {
     await startBreakout({ channelName: title, ...args });
     breakoutDialogOpen = false;
-    breakoutPanelOpen = true;
+    columnTab = 'breakout';
     participantsOpen = true;
   }
   $effect(() => {
-    if (!hostsBreakout) breakoutPanelOpen = false;
+    if (!hostsBreakout) columnTab = 'participants';
   });
+  // The column's tabs show whenever this seat may run breakouts from the
+  // main room; the rooms tab opens the dialog until a session runs.
+  const columnTabs = $derived(canOpenBreakout || hostsBreakout);
+  const breakoutPanelShown = $derived(hostsBreakout && columnTab === 'breakout');
+  function openBreakoutTab() {
+    if (hostsBreakout) columnTab = 'breakout';
+    else breakoutDialogOpen = true;
+  }
 
   // --- Host actions (CallHostActions in the participant list's row menu):
   // the relay does the work with its admin token (moderateActiveCall); a
@@ -943,7 +955,11 @@
   data-testid="group-call-stage"
 >
   <!-- Header -->
-  <!-- Tighter below the stage's @lg so the title keeps its letters (QA K4). -->
+  <!-- Tighter below the stage's @lg so the title keeps its letters (QA K4).
+    The buttons' labels wait for @2xl: the labelled row is ~600 px wide and
+    the right group cannot shrink, so from @lg (512) to there it ran past the
+    stage's edge — under the chat column's tabs on the member page at ~1270
+    px (laoc, 2026-10-08). -->
   <div
     class="relative flex items-center justify-between gap-1.5 border-b border-base-300 px-3 py-2 @lg:gap-2 @lg:px-4"
   >
@@ -980,7 +996,7 @@
           class="badge shrink-0 cursor-pointer gap-1 badge-sm tabular-nums badge-accent"
           onclick={() => {
             participantsOpen = true;
-            breakoutPanelOpen = true;
+            columnTab = 'breakout';
           }}
           data-testid="group-call-breakout-deadline"
         >
@@ -1027,26 +1043,26 @@
     <div class="flex shrink-0 items-center gap-1 @lg:gap-2">
       {#if inBreakoutRoom}
         <button
-          class="btn gap-1 px-2 btn-sm btn-primary @lg:px-3"
+          class="btn gap-1 px-2 btn-sm btn-primary @2xl:px-3"
           onclick={() => void returnToMain()}
           title={m.groups_call_breakout_back_to_main()}
           aria-label={m.groups_call_breakout_back_to_main()}
           data-testid="group-call-breakout-back"
         >
           <ChevronLeftIcon class_="h-4 w-4" title="" />
-          <span class="hidden @lg:inline">{m.groups_call_breakout_back_to_main()}</span>
+          <span class="hidden @2xl:inline">{m.groups_call_breakout_back_to_main()}</span>
         </button>
       {/if}
       {#if onInvite}
         <button
-          class="btn btn-square btn-ghost btn-sm @lg:w-auto @lg:px-3"
+          class="btn btn-square btn-ghost btn-sm @2xl:w-auto @2xl:px-3"
           onclick={onInvite}
           title={m.groups_call_invite_title()}
           aria-label={m.groups_call_invite_title()}
           data-testid="group-call-invite"
         >
           <LinkIcon class_="h-4 w-4" title="" />
-          <span class="hidden @lg:inline">{m.groups_call_invite_button()}</span>
+          <span class="hidden @2xl:inline">{m.groups_call_invite_button()}</span>
         </button>
       {/if}
       {#if onPopOut}
@@ -1066,20 +1082,27 @@
         </button>
       {/if}
       <button
-        class="btn gap-1 px-2 btn-ghost btn-sm @lg:px-3 {participantsOpen ? 'btn-active' : ''}"
-        onclick={() => (participantsOpen = !participantsOpen)}
+        class="btn gap-1 px-2 btn-ghost btn-sm @2xl:px-3 {participantsOpen ? 'btn-active' : ''}"
+        onclick={() => {
+          // Opens the column on the participant list; closes it from there.
+          if (participantsOpen && columnTab === 'participants') participantsOpen = false;
+          else {
+            participantsOpen = true;
+            columnTab = 'participants';
+          }
+        }}
         aria-pressed={participantsOpen}
         aria-label={m.groups_call_participants_count({ count: participantCount })}
         title={m.groups_call_participants_count({ count: participantCount })}
         data-testid="group-call-show-participants"
       >
         <PeopleIcon class_="h-4 w-4" title="" />
-        <span class="hidden @lg:inline">{m.groups_call_participants()}</span>
+        <span class="hidden @2xl:inline">{m.groups_call_participants()}</span>
         <span class="tabular-nums">{participantCount}</span>
       </button>
       <div class="relative" data-call-menu>
         <button
-          class="btn px-2 btn-ghost btn-sm @lg:px-3"
+          class="btn px-2 btn-ghost btn-sm @2xl:px-3"
           aria-haspopup="menu"
           aria-expanded={openMenu === 'layout'}
           aria-label={`${m.groups_call_layout()}: ${LAYOUT_LABELS[layout]()}`}
@@ -1088,7 +1111,7 @@
           onclick={() => toggleMenu('layout')}
         >
           <GridIcon class_="h-4 w-4" title="" />
-          <span class="hidden @lg:inline">{LAYOUT_LABELS[layout]()}</span>
+          <span class="hidden @2xl:inline">{LAYOUT_LABELS[layout]()}</span>
         </button>
         {#if openMenu === 'layout'}
           <ul
@@ -1129,7 +1152,7 @@
       </div>
       {#if onShowChat}
         <button
-          class="btn relative btn-square btn-ghost btn-sm @lg:w-auto @lg:px-3 {chatOpen
+          class="btn relative btn-square btn-ghost btn-sm @2xl:w-auto @2xl:px-3 {chatOpen
             ? 'btn-active'
             : ''}"
           onclick={onShowChat}
@@ -1143,7 +1166,7 @@
           data-testid="group-call-show-chat"
         >
           <ChatIcon class_="h-4 w-4" />
-          <span class="hidden @lg:inline">{m.groups_call_show_chat()}</span>
+          <span class="hidden @2xl:inline">{m.groups_call_show_chat()}</span>
           {#if chatMentionsHere}
             <span
               class="absolute -top-1 -right-1 badge h-4 min-w-4 px-1 text-[10px] badge-primary"
@@ -1315,7 +1338,44 @@
           class="flex min-h-0 w-full flex-col @2xl:w-72 @2xl:shrink-0 @2xl:border-l @2xl:border-base-300"
           data-testid="group-call-participants-column"
         >
-          {#if breakoutPanelOpen && hostsBreakout}
+          {#if columnTabs}
+            <div
+              role="tablist"
+              class="tabs-border tabs shrink-0 border-b border-base-300 px-2 tabs-sm"
+              data-testid="group-call-column-tabs"
+            >
+              <button
+                type="button"
+                role="tab"
+                class="tab {breakoutPanelShown ? '' : 'tab-active'}"
+                aria-selected={!breakoutPanelShown}
+                onclick={() => (columnTab = 'participants')}
+                data-testid="group-call-column-tab-participants"
+              >
+                {m.groups_call_column_tab_participants({ count: participantCount })}
+              </button>
+              <button
+                type="button"
+                role="tab"
+                class="tab {breakoutPanelShown ? 'tab-active' : ''}"
+                aria-selected={breakoutPanelShown}
+                onclick={openBreakoutTab}
+                title={m.groups_call_breakout_title()}
+                data-testid="group-call-breakout-open"
+              >
+                {m.groups_call_breakout_title()}
+                {#if hostsBreakout}
+                  <CallUnreadDot
+                    class="ml-1.5"
+                    tone="bg-accent"
+                    testid="group-call-breakout-tab-dot"
+                    label={m.groups_call_breakout_running_badge()}
+                  />
+                {/if}
+              </button>
+            </div>
+          {/if}
+          {#if breakoutPanelShown}
             {#if BreakoutPanelLazy.Component}
               <BreakoutPanelLazy.Component
                 rows={participantRows}
@@ -1325,9 +1385,10 @@
                 onJoin={(room) => void joinBreakoutRoom(room)}
                 onEnd={(opts) => void endBreakout(opts)}
                 onExtend={(minutes) => void extendBreakout(minutes)}
+                onSetDeadline={(minutes) => void setBreakoutDeadline(minutes)}
                 onAutoAssign={(enabled) => setSessionAutoAssign(enabled)}
                 onBroadcast={(text) => sendCallBroadcast('message', text)}
-                onClose={() => (breakoutPanelOpen = false)}
+                onClose={() => (participantsOpen = false)}
               />
             {:else}
               <div class="flex flex-1 items-center justify-center">
@@ -1341,23 +1402,6 @@
               onVolumeChange={changeVolume}
               onClose={() => (participantsOpen = false)}
             >
-              {#snippet headerExtras()}
-                {#if canOpenBreakout || hostsBreakout}
-                  <button
-                    type="button"
-                    class="btn gap-1 btn-ghost btn-sm"
-                    onclick={() => {
-                      if (hostsBreakout) breakoutPanelOpen = true;
-                      else breakoutDialogOpen = true;
-                    }}
-                    title={m.groups_call_breakout_title()}
-                    data-testid="group-call-breakout-open"
-                  >
-                    <ChannelsIcon class_="h-4 w-4" title="" />
-                    <span class="hidden @lg:inline">{m.groups_call_breakout_title()}</span>
-                  </button>
-                {/if}
-              {/snippet}
               {#snippet menuExtras(
                 /** @type {import('$lib/groups/call-participants.js').ParticipantRow} */ row
               )}

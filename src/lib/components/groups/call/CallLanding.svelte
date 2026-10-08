@@ -16,6 +16,9 @@
   } from '$lib/groups/meetings.js';
   import { groupHref } from '$lib/groups/groups.js';
   import { useChannelRosters } from '$lib/groups/channel-rosters.svelte.js';
+  import { useChannelMetadata } from '$lib/groups/channel-metadata.svelte.js';
+  import { metadataName } from '$lib/groups/unlinked-groups.js';
+  import { channelKey } from '$lib/groups/community-pointer.js';
   import { rosterView } from '$lib/groups/root-roster.js';
   import { identityToPubkey } from '$lib/groups/livekit.js';
   import {
@@ -159,18 +162,26 @@
   // assigned to a room moves its call to the room's group, and the store
   // brings it back (a removal or a deleted room in a child never ends the
   // call for good), so the shell stays up whatever the phase in a child.
+  //
+  // The switch itself (into a room, or back: `returnToMain` clears the
+  // room before the call moves, and either way the call passes through
+  // idle with the pointer changing) is "here" too — read as "ended", the
+  // landing flashed its end screen, threw the pass check away and re-ran
+  // it, which is how a guest came back to the raw group id as the title.
   const breakout = getBreakoutState();
-  const inBreakoutOfHere = $derived(
+  const breakoutSessionHere = $derived(
     !!pointer &&
-      breakout.currentRoom !== null &&
       !!breakout.session &&
       breakout.session.main.id === pointer.id &&
       sameRelayUrl(breakout.session.main.relay, pointer.relay)
   );
+  const inBreakoutOfHere = $derived(breakoutSessionHere && breakout.currentRoom !== null);
+  const switchingHere = $derived(breakoutSessionHere && breakout.switching);
   const inCallHere = $derived(
     !!pointer &&
       ((call.isActiveFor(pointer) && call.phase !== 'idle' && call.phase !== 'ended') ||
-        (inBreakoutOfHere && call.phase !== 'idle'))
+        (inBreakoutOfHere && call.phase !== 'idle') ||
+        switchingHere)
   );
   const removedHere = $derived(
     !!pointer && call.isActiveFor(pointer) && call.phase === 'ended' && call.endReason === 'removed'
@@ -187,7 +198,23 @@
     if (readyInCallHere) untrack(() => (wasInCall = true));
   });
 
-  const title = $derived(check?.name || pointer?.id || '');
+  // The call's name: the pass check names the channel only when it finds
+  // the pass (pyramid: found + known), so a pending, reset or "unknown"
+  // check has none — then the channel's own kind 39000 (readable without
+  // auth), a name seen earlier (the end screen clears `check` for its
+  // re-check), and as the last resort a neutral word. Never the group id.
+  const getMetadata = useChannelMetadata(() => (pointer ? [pointer] : []));
+  const channelName = $derived.by(() => {
+    const key = pointer ? channelKey(pointer) : null;
+    return (key && metadataName(getMetadata().byKey[key])) || '';
+  });
+  let knownName = $state('');
+  $effect(() => {
+    const name = check?.name;
+    if (typeof name === 'string' && name.trim()) knownName = name.trim();
+  });
+  const callName = $derived(check?.name?.trim() || knownName || channelName);
+  const title = $derived(callName || m.call_title_fallback());
   // A meeting pass's `notBefore`/`expiration` ARE the guest-join window
   // (GUEST_EARLY_S before the meeting's real `start`, GUEST_LATE_S after its
   // `end` — guestWindow() in meetings.js), not the meeting's own start/end.
@@ -247,12 +274,12 @@
     };
   });
   // QA K-new-5: an empty document.title made the route announcer read
-  // "untitled page". The meeting's name once the pass check has it — never
-  // the raw group id (`title`'s fallback): plain "Einladung" until then and
-  // for a pass without a name.
+  // "untitled page". The call's name once known (the pass check, the
+  // channel's 39000) — never the raw group id: plain "Einladung" until then
+  // and for a pass without a name.
   const documentTitle = $derived(
     pageTitle(
-      [check?.name ? m.call_page_title({ name: check.name }) : m.call_page_title_plain()],
+      [callName ? m.call_page_title({ name: callName }) : m.call_page_title_plain()],
       runtimeConfig.appName
     )
   );
