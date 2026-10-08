@@ -1631,7 +1631,7 @@ describe('breakout rooms', () => {
     expect(screen.queryByTestId('group-call-breakout-open')).toBeNull();
   });
 
-  it('a seat in the main room during a session it is not part of sees the banner (guest flag passed through), never a host', async () => {
+  it('a seat in the main room during a session it is not part of sees the banner with the rooms to join, never a host', async () => {
     const session = {
       main: { id: 'main', relay: 'wss://r.example/', title: 'Standup' },
       rooms: [{ id: 'r1', relay: 'wss://r.example/', name: 'Breakout 1', index: 1 }],
@@ -1642,12 +1642,11 @@ describe('breakout rooms', () => {
     breakout.state.rooms = session.rooms;
     render(GroupCallStage, { props: baseProps });
     const banner = await screen.findByTestId('breakout-banner-stub', {}, { timeout: 4000 });
-    expect(banner.dataset.guest).toBe('false');
     await fireEvent.click(banner);
     expect(breakout.requestBreakoutRoom).toHaveBeenCalledWith(session.rooms[0]);
   });
 
-  it('the banner names a guest seat as such and hides while the assignment prompt is up', async () => {
+  it('a guest seat gets the same banner (its pass opens the rooms) and it hides while the assignment prompt is up', async () => {
     lk.localParticipant = {
       identity: `${'a'.repeat(64)}:me`,
       metadata: '{"guest":true,"pass":"p"}',
@@ -1661,7 +1660,7 @@ describe('breakout rooms', () => {
     };
     render(GroupCallStage, { props: baseProps });
     const banner = await screen.findByTestId('breakout-banner-stub', {}, { timeout: 4000 });
-    expect(banner.dataset.guest).toBe('true');
+    expect(banner.dataset.rooms).toBe('0');
     // hosting: no banner (the panel is the host's view)
     breakout.state.session = { ...breakout.state.session, hosting: true };
     breakout.state.pending = { room: { id: 'r1' } };

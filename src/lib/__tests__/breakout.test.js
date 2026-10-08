@@ -21,6 +21,7 @@ import {
   buildBreakoutAssignPayload,
   buildBreakoutStatePayload,
   buildBreakoutJoinPayload,
+  buildBreakoutSeatPayload,
   buildBreakoutEndPayload,
   parseBreakoutPayload,
   assignedRoom,
@@ -349,6 +350,23 @@ describe('edufeed.call.breakout payloads', () => {
     expect(parseBreakoutPayload({ t: 'join', room: 'r2' })).toEqual({ t: 'join', room: 'r2' });
     expect(parseBreakoutPayload({ t: 'join' })).toBeNull();
     expect(parseBreakoutPayload({ t: 'join', room: 3 })).toBeNull();
+  });
+
+  it('builds and parses a seat announcement (a guest names the identity it will hold in a room)', () => {
+    expect(buildBreakoutSeatPayload('r2', 'cc:9')).toEqual({
+      t: 'seat',
+      room: 'r2',
+      identity: 'cc:9'
+    });
+    expect(parseBreakoutPayload({ t: 'seat', room: 'r2', identity: 'cc:9' })).toEqual({
+      t: 'seat',
+      room: 'r2',
+      identity: 'cc:9'
+    });
+    expect(parseBreakoutPayload({ t: 'seat', room: 'r2' })).toBeNull();
+    expect(parseBreakoutPayload({ t: 'seat', identity: 'cc:9' })).toBeNull();
+    expect(parseBreakoutPayload({ t: 'seat', room: '', identity: 'cc:9' })).toBeNull();
+    expect(parseBreakoutPayload({ t: 'seat', room: 'r2', identity: 7 })).toBeNull();
   });
 
   it('rejects malformed input instead of throwing', () => {

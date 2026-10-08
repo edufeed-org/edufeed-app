@@ -20,6 +20,7 @@ const {
   probeRelayAvSupport,
   requestGroupCallToken,
   isGuestParticipant,
+  tokenIdentity,
   GroupCallTokenError,
   __resetAvProbeCache
 } = await import('$lib/groups/livekit.js');
@@ -286,5 +287,28 @@ describe('isGuestParticipant', () => {
     expect(isGuestParticipant({ metadata: 'not json' })).toBe(false);
     expect(isGuestParticipant({})).toBe(false);
     expect(isGuestParticipant(null)).toBe(false);
+  });
+});
+
+describe('tokenIdentity', () => {
+  const b64url = (/** @type {string} */ text) =>
+    Buffer.from(text).toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  const jwt = (/** @type {object} */ payload) =>
+    `${b64url(JSON.stringify({ alg: 'HS256', typ: 'JWT' }))}.${b64url(JSON.stringify(payload))}.sig`;
+
+  it('reads the participant identity (the sub claim) out of a LiveKit token', () => {
+    expect(tokenIdentity(jwt({ sub: `${HEX}:a1`, video: { room: 'r' } }))).toBe(`${HEX}:a1`);
+    // base64url without padding, as LiveKit emits it
+    expect(tokenIdentity(jwt({ sub: 'x:?>' }))).toBe('x:?>');
+  });
+
+  it('is null for anything that is not a JWT with a string sub', () => {
+    expect(tokenIdentity(jwt({ iss: 'devkey' }))).toBeNull();
+    expect(tokenIdentity(jwt({ sub: 7 }))).toBeNull();
+    expect(tokenIdentity('not.a.jwt.at.all')).toBeNull();
+    expect(tokenIdentity('a.b')).toBeNull();
+    expect(tokenIdentity(`x.${b64url('not json')}.y`)).toBeNull();
+    expect(tokenIdentity(null)).toBeNull();
+    expect(tokenIdentity(undefined)).toBeNull();
   });
 });

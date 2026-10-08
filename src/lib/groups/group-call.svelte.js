@@ -163,9 +163,12 @@ export function getGroupCallState() {
  * back); re-joining after an error retries. Joins muted, camera off.
  * @param {{id: string, relay: string}} pointer
  * @param {{pubkey: string, signer: any}} user
- * @param {{title?: string, href?: string | null, code?: string, media?: import('$lib/services/call-prefs.js').JoinMedia}} [view]
+ * @param {{title?: string, href?: string | null, code?: string, media?: import('$lib/services/call-prefs.js').JoinMedia, token?: {serverUrl: string, participantToken: string}}} [view]
  *   for the dock; `media`: publish camera / mic right away (the lobby's
- *   choice) — without it the call opens muted with the camera off
+ *   choice) — without it the call opens muted with the camera off;
+ *   `token`: a token the caller already holds (a guest's breakout switch
+ *   requests the child's token BEFORE leaving the main room, so it can
+ *   announce its new identity there) — no request is made then
  */
 export async function joinGroupCall(pointer, user, view = {}) {
   const key = channelKey(pointer);
@@ -189,9 +192,11 @@ export async function joinGroupCall(pointer, user, view = {}) {
   code = view.code ?? null;
   media = view.media ?? null;
   try {
-    const result = await requestGroupCallToken(pointer.relay, pointer.id, user, {
-      code: view.code
-    });
+    const result =
+      view.token ??
+      (await requestGroupCallToken(pointer.relay, pointer.id, user, {
+        code: view.code
+      }));
     if (myAttempt !== attempt) return;
     serverUrl = result.serverUrl;
     token = result.participantToken;
@@ -272,9 +277,13 @@ export async function joinGroupCallWithConfirm(pointer, user, view = {}) {
  * switch (groups/breakout.svelte.js): the seat keeps its mic / camera state
  * (the background effect is re-read from prefs on connect anyway) and the
  * dock's way back stays the page the main call was shown on. No-op without
- * a live call; the signer is the one that joined.
+ * a live call; the signer is the one that joined. A guest seat keeps its
+ * call pass code: the token request for the room carries the same `code`
+ * tag (the relay honours a parent's pass in its ephemeral children), and
+ * so does the way back — `view.code` overrides, else the active call's
+ * code travels on. `view.token`: a token already minted for `pointer`.
  * @param {{id: string, relay: string}} pointer
- * @param {{title?: string}} [view]
+ * @param {{title?: string, code?: string, token?: {serverUrl: string, participantToken: string}}} [view]
  */
 export async function switchGroupCall(pointer, view = {}) {
   // An ENDED call may still be moved: a breakout room the relay deleted
@@ -283,8 +292,15 @@ export async function switchGroupCall(pointer, view = {}) {
   if (!activeUser || !(isLive() || phase === 'ended')) return;
   const user = activeUser;
   const keepHref = href;
+  const keepCode = view.code ?? code ?? undefined;
   const media = lkModule?.currentJoinMedia?.() ?? { audio: false, video: false };
-  await joinGroupCall(pointer, user, { title: view.title ?? '', href: keepHref, media });
+  await joinGroupCall(pointer, user, {
+    title: view.title ?? '',
+    href: keepHref,
+    media,
+    ...(keepCode ? { code: keepCode } : {}),
+    ...(view.token ? { token: view.token } : {})
+  });
 }
 
 /** The channel of the active call (null while idle). */

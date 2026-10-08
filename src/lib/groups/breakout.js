@@ -208,8 +208,13 @@ export function isParentRoleRejection(error) {
  *   the running session, replayed to whoever joins the main room late
  * @typedef {{t: 'join', room: string}} BreakoutJoinPayload
  *   a seat in the main room asks the host seat to be put into a room
+ * @typedef {{t: 'seat', room: string, identity: string}} BreakoutSeatPayload
+ *   a GUEST about to move into a room announces the identity it will hold
+ *   there (the child token's `sub`), so a host can later `remove` it on
+ *   the child — the moderation endpoint matches identities exactly and the
+ *   child's 39004 lists pubkeys only (guests are on no roster)
  * @typedef {{t: 'end'}} BreakoutEndPayload
- * @typedef {BreakoutAssignPayload | BreakoutStatePayload | BreakoutJoinPayload | BreakoutEndPayload} BreakoutPayload
+ * @typedef {BreakoutAssignPayload | BreakoutStatePayload | BreakoutJoinPayload | BreakoutSeatPayload | BreakoutEndPayload} BreakoutPayload
  */
 
 /**
@@ -246,6 +251,11 @@ export function buildBreakoutStatePayload({ rooms, until }) {
 /** @param {string} roomId @returns {BreakoutJoinPayload} */
 export function buildBreakoutJoinPayload(roomId) {
   return { t: 'join', room: roomId };
+}
+
+/** @param {string} roomId @param {string} identity @returns {BreakoutSeatPayload} */
+export function buildBreakoutSeatPayload(roomId, identity) {
+  return { t: 'seat', room: roomId, identity };
 }
 
 /** @returns {BreakoutEndPayload} */
@@ -290,6 +300,14 @@ export function parseBreakoutPayload(raw) {
   if (msg.t === 'end') return { t: 'end' };
   if (msg.t === 'join') {
     return typeof msg.room === 'string' && msg.room ? { t: 'join', room: msg.room } : null;
+  }
+  if (msg.t === 'seat') {
+    return typeof msg.room === 'string' &&
+      msg.room &&
+      typeof msg.identity === 'string' &&
+      msg.identity
+      ? { t: 'seat', room: msg.room, identity: msg.identity }
+      : null;
   }
   if (msg.t !== 'assign' && msg.t !== 'state') return null;
   const rooms = parseRooms(msg.rooms, msg.t === 'assign');

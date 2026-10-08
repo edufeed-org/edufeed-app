@@ -9,7 +9,10 @@
  * extension: late joiners get the session replayed (and a seat when the
  * host asked for that) or find it on the relay; a co-host handed the host
  * seat takes the session over; a room the relay deleted sends its seat
- * home; the deadline can be moved.
+ * home; the deadline can be moved. Guests (call-pass seats): assigned by
+ * message only, switch with their code after announcing their room seat,
+ * follow no roster, come back on a removal, are moved by the host through
+ * the moderation endpoint plus a re-assignment in the main room.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { flushSync } from 'svelte';
@@ -75,6 +78,15 @@ vi.mock('$lib/groups/group-management.js', async (importOriginal) => ({
   .../** @type {any} */ (await importOriginal()),
   publishToGroupRelay: (/** @type {any[]} */ ...a) => relayPublish.fn(...a)
 }));
+const lkApi = vi.hoisted(() => ({
+  requestGroupCallToken: vi.fn(),
+  moderateCall: vi.fn(async () => {})
+}));
+vi.mock('$lib/groups/livekit.js', async (importOriginal) => ({
+  .../** @type {any} */ (await importOriginal()),
+  requestGroupCallToken: (/** @type {any[]} */ ...a) => lkApi.requestGroupCallToken(...a),
+  moderateCall: (/** @type {any[]} */ ...a) => lkApi.moderateCall(...a)
+}));
 const prefs = vi.hoisted(() => ({ autoAssign: /** @type {boolean | null} */ (null) }));
 vi.mock('$lib/services/call-prefs.js', () => ({
   getBreakoutAutoAssign: () => prefs.autoAssign,
@@ -108,7 +120,11 @@ vi.mock('$lib/stores/modal.svelte.js', () => ({
 const toast = vi.hoisted(() => ({ fn: vi.fn() }));
 vi.mock('$lib/helpers/toast', () => ({ showToast: (/** @type {any[]} */ ...a) => toast.fn(...a) }));
 vi.mock('$lib/paraglide/messages', () => ({
-  groups_call_breakout_switch_failed: () => 'switch failed',
+  groups_call_breakout_switch_failed: (/** @type {any} */ p) => `switch failed: ${p.reason}`,
+  groups_call_breakout_moved_out: () => 'taken out, back in main',
+  groups_call_breakout_guest_move_failed: (/** @type {any} */ p) => `guest not moved: ${p.reason}`,
+  groups_call_breakout_guest_move_timeout: () => 'guest did not come back',
+  groups_call_error_generic: () => 'generic',
   groups_call_breakout_end_partial: (/** @type {any} */ p) => `not deleted: ${p.rooms}`,
   groups_call_breakout_took_over: () => 'you run the session now',
   groups_call_breakout_join_no_host: () => 'nobody can seat you',
@@ -215,6 +231,9 @@ beforeEach(async () => {
   callFake.switchGroupCall.mockClear();
   for (const fn of Object.values(rel)) fn.mockClear();
   rel.deleteBreakoutRoom.mockResolvedValue(undefined);
+  lkApi.requestGroupCallToken.mockReset();
+  lkApi.moderateCall.mockReset();
+  lkApi.moderateCall.mockResolvedValue(undefined);
 });
 afterEach(() => vi.useRealTimers());
 
@@ -626,8 +645,8 @@ describe('late joiners: the host seat replays the session and seats them', () =>
     ]);
   });
 
-  it('with auto-assign off only replays the state; guests and my own second seat get no seat either way', async () => {
-    await hostingWithSeat({ autoAssign: false });
+  it('with auto-assign off only replays the state; a guest is assigned by message only and my own second seat not at all', async () => {
+    const { roomIds } = await hostingWithSeat({ autoAssign: false });
     lk.joined?.({ identity: DAVE + ':s', metadata: '' });
     await settle();
     expect(rel.seatInRoom).not.toHaveBeenCalled();
@@ -638,11 +657,25 @@ describe('late joiners: the host seat replays the session and seats them', () =>
     expect(prefs.autoAssign).toBe(true);
     lk.send.mockClear();
     lk.joined?.({ identity: 'e'.repeat(64) + ':g', metadata: '{"guest":true,"pass":"x"}' });
+    await settle();
+    await settle();
     lk.joined?.({ identity: HOST + ':second', metadata: '' });
     await settle();
     await settle();
+    // never a put-user for a guest — its pass opens the room; the smallest
+    // room (room 2) is named in a targeted assignment instead
     expect(rel.seatInRoom).not.toHaveBeenCalled();
-    expect(lk.send.mock.calls.map((c) => c[0].t)).toEqual(['state', 'state']);
+    expect(lk.send.mock.calls.map((c) => c[0].t)).toEqual(['state', 'assign', 'state']);
+    const [assign, to] = lk.send.mock.calls[1];
+    expect(to).toEqual(['e'.repeat(64) + ':g']);
+    expect(assign.rooms).toEqual([
+      {
+        id: roomIds[1],
+        relay: RELAY,
+        name: 'Breakout 2 · Seminar',
+        members: ['e'.repeat(64) + ':g']
+      }
+    ]);
   });
 
   it('sends a seat that is already in a roster (a rejoin) back to its room without seating it again', async () => {
@@ -764,6 +797,33 @@ describe('late joiners: "Beitreten" from the banner', () => {
     lk.listener?.({ t: 'join', room: 'nope' }, { identity: DAVE + ':s', metadata: '' });
     await settle();
     expect(rel.seatInRoom).not.toHaveBeenCalled();
+  });
+});
+
+describe('room numbers from one-room messages', () => {
+  it('a targeted assignment after the state keeps the room number it already knows', async () => {
+    await liveInMain(bobUser);
+    lk.listener?.(
+      { t: 'state', rooms: ROOMS.map(({ id, relay, name }) => ({ id, relay, name })) },
+      hostSender
+    );
+    expect(store.getBreakoutState().rooms.map((r) => [r.id, r.index])).toEqual([
+      ['r1', 1],
+      ['r2', 2]
+    ]);
+    // the host sends Bob to room 2 only: still room 2, not "room 1"
+    lk.listener?.({ t: 'assign', rooms: [{ ...ROOMS[1], members: [BOB + ':seat1'] }] }, hostSender);
+    expect(store.getBreakoutState().pending?.room.index).toBe(2);
+    expect(store.getBreakoutState().rooms.map((r) => [r.id, r.index])).toEqual([
+      ['r1', 1],
+      ['r2', 2]
+    ]);
+  });
+
+  it('a one-room assignment to a client that knows nothing yet takes the number from the name', async () => {
+    await liveInMain(bobUser);
+    lk.listener?.({ t: 'assign', rooms: [{ ...ROOMS[1], members: [BOB + ':seat1'] }] }, hostSender);
+    expect(store.getBreakoutState().pending?.room.index).toBe(2);
   });
 });
 
@@ -1195,5 +1255,295 @@ describe('call broadcasts (kind 20002)', () => {
     await store.startBreakout({ channelName: 'S', roomCount: 2, seats: [] });
     await store.endBreakout({ notify: false });
     expect(relayPublish.fn).not.toHaveBeenCalled();
+  });
+});
+
+describe('guests (call-pass seats)', () => {
+  const EVE = 'e'.repeat(64);
+  const CODE = 'C'.repeat(22);
+  const GUEST_META = JSON.stringify({ guest: true, pass: 'p1' });
+  const eveUser = { pubkey: EVE, signer: { signEvent: vi.fn() } };
+  const b64url = (/** @type {string} */ text) =>
+    Buffer.from(text).toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  /** A LiveKit token minted for `identity`. @param {string} identity */
+  const tokenFor = (identity) => ({
+    serverUrl: 'wss://lk.example',
+    participantToken: `${b64url('{"alg":"HS256"}')}.${b64url(JSON.stringify({ sub: identity }))}.s`
+  });
+
+  /** Eve joined the main room through a guest link: a guest seat with the code kept. */
+  async function guestInMain() {
+    lkFake.setIdentity(EVE + ':g1');
+    lkFake.setMyMetadata(GUEST_META);
+    callFake.setCall({
+      pointer: MAIN,
+      user: eveUser,
+      title: 'Seminar',
+      phase: 'ready',
+      code: CODE
+    });
+    await store.ensureBreakoutListener();
+    await settle();
+    lkApi.requestGroupCallToken.mockResolvedValue(tokenFor(EVE + ':r1'));
+  }
+
+  /** The host runs a two-room session and holds the host seat. */
+  async function hostingWithSeat() {
+    lkFake.setIdentity(HOST + ':h');
+    lkFake.setMyMetadata(HOST_META);
+    await liveInMain(hostUser);
+    await store.startBreakout({ channelName: 'Seminar', roomCount: 2, seats: [] });
+    await settle();
+    const roomIds = rel.createBreakoutRoom.mock.calls.map((c) => c[1].id);
+    const sub = liveSub();
+    sub.stream.next(roster(roomIds[0], [HOST]));
+    sub.stream.next(roster(roomIds[1], [HOST]));
+    sub.stream.next('EOSE');
+    await settle();
+    rel.seatInRoom.mockClear();
+    lk.send.mockClear();
+    return { roomIds, sub };
+  }
+
+  it('the host never seats a guest: the assignment names its identity, no put-user', async () => {
+    await liveInMain(hostUser);
+    await store.startBreakout({
+      channelName: 'Seminar',
+      roomCount: 2,
+      seats: [
+        { identity: BOB + ':seat1', pubkey: BOB, roomIndex: 1 },
+        { identity: EVE + ':g1', pubkey: EVE, roomIndex: 1, guest: true }
+      ]
+    });
+    const roomIds = rel.createBreakoutRoom.mock.calls.map((c) => c[1].id);
+    expect(rel.seatInRoom.mock.calls.map((c) => [c[1], c[2]])).toEqual([[roomIds[0], BOB]]);
+    const [payload] = lk.send.mock.calls[0];
+    expect(payload.rooms[0].members).toEqual([BOB + ':seat1', EVE + ':g1']);
+  });
+
+  it('an assigned guest requests the room token with its code, announces its seat and switches with code and token', async () => {
+    await guestInMain();
+    lk.listener?.({ t: 'assign', rooms: [{ ...ROOMS[0], members: [EVE + ':g1'] }] }, hostSender);
+    modal.callbacks.onConfirm();
+    await settle();
+    expect(lkApi.requestGroupCallToken).toHaveBeenCalledWith(
+      'wss://groups.example/',
+      'r1',
+      eveUser,
+      {
+        code: CODE
+      }
+    );
+    // the seat announcement went out to the main room BEFORE the switch
+    expect(lk.send).toHaveBeenCalledWith({ t: 'seat', room: 'r1', identity: EVE + ':r1' });
+    expect(lk.send.mock.invocationCallOrder[0]).toBeLessThan(
+      callFake.switchGroupCall.mock.invocationCallOrder[0]
+    );
+    expect(callFake.switchGroupCall).toHaveBeenCalledWith(
+      { id: 'r1', relay: RELAY },
+      { title: 'Breakout 1 · Seminar', code: CODE, token: tokenFor(EVE + ':r1') }
+    );
+    expect(store.getBreakoutState().currentRoom?.id).toBe('r1');
+    expect(rel.seatInRoom).not.toHaveBeenCalled();
+  });
+
+  it('a refused room token (an old relay) keeps the guest in the main room and says why', async () => {
+    await guestInMain();
+    const { GroupCallTokenError } = await import('$lib/groups/livekit.js');
+    lkApi.requestGroupCallToken.mockRejectedValue(
+      new GroupCallTokenError('pass', 'call pass unknown', 403)
+    );
+    lk.listener?.({ t: 'assign', rooms: [{ ...ROOMS[0], members: [EVE + ':g1'] }] }, hostSender);
+    modal.callbacks.onConfirm();
+    await settle();
+    expect(callFake.switchGroupCall).not.toHaveBeenCalled();
+    expect(lk.send).not.toHaveBeenCalled();
+    expect(store.getBreakoutState().currentRoom).toBeNull();
+    expect(store.getBreakoutState().session).not.toBeNull();
+    expect(toast.fn).toHaveBeenCalledWith('switch failed: call pass unknown', 'error');
+  });
+
+  it('in a room a guest follows no roster: it stays although no 39002 names it', async () => {
+    vi.useFakeTimers();
+    await guestInMain();
+    lk.listener?.({ t: 'assign', rooms: [{ ...ROOMS[0], members: [EVE + ':g1'] }] }, hostSender);
+    modal.callbacks.onConfirm();
+    await settle();
+    callFake.switchGroupCall.mockClear();
+    const sub = liveSub();
+    expect(sub.filters[0]).toEqual({ kinds: [39000, 39002, 39004], '#d': ['r1'] });
+    sub.stream.next(roster('r1', [HOST, BOB]));
+    sub.stream.next('EOSE');
+    await settle();
+    await vi.advanceTimersByTimeAsync(BREAKOUT_MOVE_GRACE_MS + 100);
+    await settle();
+    expect(callFake.switchGroupCall).not.toHaveBeenCalled();
+    expect(store.getBreakoutState().currentRoom?.id).toBe('r1');
+    // but the room's 39000 (a moved deadline) and its deletion do count
+    sub.stream.next(roomMeta('r1', 1, FUTURE + 60, 11));
+    await settle();
+    expect(store.getBreakoutState().session?.until).toBe(FUTURE + 60);
+    sub.stream.next({ kind: 9008, pubkey: KEY, created_at: 12, tags: [['h', 'r1']] });
+    await settle();
+    expect(callFake.switchGroupCall).toHaveBeenCalledWith(MAIN, { title: 'Seminar', code: CODE });
+  });
+
+  it('removed from a room by the host, a guest goes back to the main room with its code — never the end screen', async () => {
+    await guestInMain();
+    lk.listener?.({ t: 'assign', rooms: [{ ...ROOMS[0], members: [EVE + ':g1'] }] }, hostSender);
+    modal.callbacks.onConfirm();
+    await settle();
+    callFake.switchGroupCall.mockClear();
+    lkFake.setDisconnectReason(lkFake.PARTICIPANT_REMOVED);
+    callFake.setCall({ pointer: { id: 'r1', relay: RELAY }, phase: 'ended' });
+    await settle();
+    expect(callFake.switchGroupCall).toHaveBeenCalledWith(MAIN, { title: 'Seminar', code: CODE });
+    expect(store.getBreakoutState().currentRoom).toBeNull();
+    expect(store.getBreakoutState().session).not.toBeNull();
+    expect(toast.fn).toHaveBeenCalledWith('taken out, back in main', 'info');
+  });
+
+  it('"Beitreten" from the banner switches a guest right away: no seat, no request to the host', async () => {
+    await guestInMain();
+    lk.listener?.(
+      { t: 'state', rooms: ROOMS.map(({ id, relay, name }) => ({ id, relay, name })) },
+      hostSender
+    );
+    await settle();
+    lk.send.mockClear();
+    await store.requestBreakoutRoom(store.getBreakoutState().rooms[1]);
+    await settle();
+    expect(rel.seatInRoom).not.toHaveBeenCalled();
+    expect(lk.send.mock.calls.map((c) => c[0].t)).toEqual(['seat']);
+    expect(store.getBreakoutState().joinRequest).toBeNull();
+    expect(callFake.switchGroupCall).toHaveBeenCalledWith(
+      { id: 'r2', relay: RELAY },
+      expect.objectContaining({ title: 'Breakout 2 · Seminar', code: CODE })
+    );
+  });
+
+  it('the host records a seat announcement only from a guest whose pubkey matches', async () => {
+    const { roomIds } = await hostingWithSeat();
+    const guestSender = { identity: EVE + ':g1', metadata: GUEST_META };
+    lk.listener?.({ t: 'seat', room: roomIds[0], identity: BOB + ':x' }, guestSender); // not Eve's
+    lk.listener?.(
+      { t: 'seat', room: roomIds[0], identity: BOB + ':x' },
+      { identity: BOB + ':m', metadata: '' }
+    ); // a member
+    lk.listener?.({ t: 'seat', room: 'nope', identity: EVE + ':zz' }, guestSender); // unknown room
+    expect(store.getBreakoutState().guestSeats).toEqual({});
+    lk.listener?.({ t: 'seat', room: roomIds[0], identity: EVE + ':zz' }, guestSender);
+    expect(store.getBreakoutState().guestSeats).toEqual({
+      [EVE]: { roomId: roomIds[0], identity: EVE + ':zz' }
+    });
+  });
+
+  it('moving a guest between rooms: remove on the child with the announced identity, then the next assignment when it reappears', async () => {
+    vi.useFakeTimers();
+    const { roomIds } = await hostingWithSeat();
+    lk.listener?.(
+      { t: 'seat', room: roomIds[0], identity: EVE + ':zz' },
+      { identity: EVE + ':g1', metadata: GUEST_META }
+    );
+    await store.moveParticipant({ pubkey: EVE, identities: [], toRoomId: roomIds[1], guest: true });
+    expect(lkApi.moderateCall).toHaveBeenCalledWith({ id: roomIds[0], relay: RELAY }, hostUser, {
+      action: 'remove',
+      identity: EVE + ':zz'
+    });
+    expect(rel.seatInRoom).not.toHaveBeenCalled();
+    expect(rel.unseatFromRoom).not.toHaveBeenCalled();
+    expect(lk.send).not.toHaveBeenCalled();
+    expect(store.getBreakoutState().guestSeats).toEqual({});
+    expect(store.__pendingGuestMoves().get(EVE)).toBe(roomIds[1]);
+    // Eve's client came back to the main room: the host seat answers with room 2 only
+    lk.joined?.({ identity: EVE + ':g2', metadata: GUEST_META });
+    await settle();
+    await settle();
+    expect(store.__pendingGuestMoves().has(EVE)).toBe(false);
+    expect(lk.send).toHaveBeenCalledTimes(1);
+    const [assign, to] = lk.send.mock.calls[0];
+    expect(to).toEqual([EVE + ':g2']);
+    expect(assign).toEqual({
+      t: 'assign',
+      rooms: [
+        { id: roomIds[1], relay: RELAY, name: 'Breakout 2 · Seminar', members: [EVE + ':g2'] }
+      ]
+    });
+    expect(rel.seatInRoom).not.toHaveBeenCalled();
+  });
+
+  it('a guest that does not come back within 20 s is given up on, with a toast', async () => {
+    vi.useFakeTimers();
+    const { roomIds } = await hostingWithSeat();
+    lk.listener?.(
+      { t: 'seat', room: roomIds[0], identity: EVE + ':zz' },
+      { identity: EVE + ':g1', metadata: GUEST_META }
+    );
+    await store.moveParticipant({ pubkey: EVE, identities: [], toRoomId: roomIds[1], guest: true });
+    await vi.advanceTimersByTimeAsync(store.BREAKOUT_GUEST_MOVE_TIMEOUT_MS + 10);
+    expect(store.__pendingGuestMoves().has(EVE)).toBe(false);
+    expect(toast.fn).toHaveBeenCalledWith('guest did not come back', 'error');
+  });
+
+  it('"back to the main room" for a guest is the remove alone, and the returning guest is not auto-assigned again', async () => {
+    const { roomIds } = await hostingWithSeat();
+    lk.listener?.(
+      { t: 'seat', room: roomIds[0], identity: EVE + ':zz' },
+      { identity: EVE + ':g1', metadata: GUEST_META }
+    );
+    await store.moveParticipant({ pubkey: EVE, identities: [], toRoomId: null, guest: true });
+    expect(lkApi.moderateCall).toHaveBeenCalledWith({ id: roomIds[0], relay: RELAY }, hostUser, {
+      action: 'remove',
+      identity: EVE + ':zz'
+    });
+    expect(store.__pendingGuestMoves().size).toBe(0);
+    lk.joined?.({ identity: EVE + ':g2', metadata: GUEST_META });
+    await settle();
+    await settle();
+    // auto-assign is on, but someone just sent home stays home: only the state replay
+    expect(lk.send.mock.calls.map((c) => c[0].t)).toEqual(['state']);
+  });
+
+  it('a guest still in the main room is moved by a targeted assignment only; the relay refusal of a remove is toasted', async () => {
+    const { roomIds } = await hostingWithSeat();
+    await store.moveParticipant({
+      pubkey: EVE,
+      identities: [EVE + ':g1'],
+      toRoomId: roomIds[0],
+      guest: true
+    });
+    expect(lkApi.moderateCall).not.toHaveBeenCalled();
+    expect(rel.seatInRoom).not.toHaveBeenCalled();
+    const [assign, to] = lk.send.mock.calls[0];
+    expect(to).toEqual([EVE + ':g1']);
+    expect(assign.rooms[0]).toMatchObject({ id: roomIds[0], members: [EVE + ':g1'] });
+
+    lk.listener?.(
+      { t: 'seat', room: roomIds[0], identity: EVE + ':zz' },
+      { identity: EVE + ':g1', metadata: GUEST_META }
+    );
+    lkApi.moderateCall.mockRejectedValueOnce(new Error('only the host or a co-host may do this'));
+    await store.moveParticipant({ pubkey: EVE, identities: [], toRoomId: roomIds[1], guest: true });
+    expect(toast.fn).toHaveBeenCalledWith(
+      'guest not moved: only the host or a co-host may do this',
+      'error'
+    );
+    expect(store.__pendingGuestMoves().size).toBe(0);
+    expect(store.getBreakoutState().busy).toBe(false);
+  });
+
+  it('a member the host sent back to the main room is not auto-assigned again either', async () => {
+    const { roomIds, sub } = await hostingWithSeat();
+    sub.stream.next(roster(roomIds[0], [HOST, BOB], 11));
+    await settle();
+    await store.moveParticipant({ pubkey: BOB, toRoomId: null });
+    expect(rel.unseatFromRoom).toHaveBeenCalledWith(expect.anything(), roomIds[0], BOB, hostUser);
+    sub.stream.next(roster(roomIds[0], [HOST], 12));
+    await settle();
+    lk.joined?.({ identity: BOB + ':seat2', metadata: '' });
+    await settle();
+    await settle();
+    expect(rel.seatInRoom).not.toHaveBeenCalled();
+    expect(lk.send.mock.calls.map((c) => c[0].t)).toEqual(['state']);
   });
 });
