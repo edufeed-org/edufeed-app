@@ -2747,6 +2747,7 @@
   "groups_call_chat_mentions_unread": "You were mentioned in the call chat",
   "groups_call_chat_recipient": "Recipient",
   "groups_call_chat_to_everyone": "To: Everyone",
+  "groups_call_chat_to_name": "To: {name}",
   "groups_call_chat_placeholder_private": "Private message to {name}",
   "groups_call_chat_private_to": "private to {name}",
   "groups_call_chat_private_from": "private from {name}",

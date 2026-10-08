@@ -47,7 +47,14 @@
   import { useUserEmojiSets } from '$lib/stores/user-emoji-sets.svelte.js';
   import { lazyComponent } from '$lib/helpers/lazy-component.svelte.js';
   import { isPreviewableCallFile } from '$lib/groups/call-files.js';
-  import { CloseIcon, DownloadIcon, ReplyIcon, SmilePlusIcon } from '$lib/components/icons';
+  import {
+    CloseIcon,
+    DownloadIcon,
+    LockIcon,
+    ReplyIcon,
+    SendIcon,
+    SmilePlusIcon
+  } from '$lib/components/icons';
   import ComposerInput from '$lib/components/shared/ComposerInput.svelte';
   import ImageWithFallback from '$lib/components/shared/ImageWithFallback.svelte';
   import LinkPreview from '$lib/components/shared/LinkPreview.svelte';
@@ -704,8 +711,12 @@
       </button>
     </div>
   {/if}
+  <!-- Two rows (smoke test 2026-10-08): the text field owns the whole width
+       and grows to a few lines, Senden sits at its end; attach, emoji and the
+       recipient live in a toolbar below it. One row squeezed the input to
+       ~90px beside the call stage and on a phone. -->
   <form
-    class="relative flex items-center gap-1 p-2 {lk.isConnected && !replyTarget
+    class="relative flex flex-col gap-1 p-2 {lk.isConnected && !replyTarget
       ? 'border-t border-base-300'
       : ''}"
     onsubmit={(e) => {
@@ -727,74 +738,111 @@
         {/if}
       </div>
     {/if}
-    {#if canSend}
-      <input
-        bind:this={fileInput}
-        type="file"
-        class="hidden"
-        onchange={attach}
-        data-testid="call-chat-attach-input"
+    <!-- A private recipient tints the field like a private message row, so
+         the state is obvious while typing. -->
+    <div
+      class="flex items-end gap-1 rounded-box border py-1 pr-1 pl-3 transition-colors {recipient
+        ? 'border-secondary bg-secondary/5 focus-within:border-secondary'
+        : 'border-base-300 bg-base-100 focus-within:border-base-content/40'} {canSend
+        ? ''
+        : 'opacity-60'}"
+      data-testid="call-chat-input-row"
+      data-private={recipient ? 'true' : undefined}
+    >
+      <ComposerInput
+        bind:this={composer}
+        bind:value={draft}
+        {customEmojiSets}
+        multiline
+        placeholder={recipient
+          ? m.groups_call_chat_placeholder_private({ name: recipientName })
+          : m.groups_call_chat_placeholder()}
+        disabled={!canSend}
+        onfocus={() => (pickerOpen = false)}
+        onSubmit={send}
+        onEscape={onComposerEscape}
+        mentionProvider={provideMentions}
+        onMentionPick={rememberMention}
+        class="min-h-[1.75rem] py-1 text-sm leading-snug"
+        ariaDescribedby={lk.isConnected ? undefined : offlineHintId}
+        testid="call-chat-input"
       />
+      <button
+        type="submit"
+        class="btn btn-square shrink-0 btn-sm btn-primary"
+        aria-label={m.groups_call_chat_send()}
+        title={m.groups_call_chat_send()}
+        disabled={!canSend}
+        data-testid="call-chat-send"
+      >
+        <SendIcon class="h-4 w-4" />
+      </button>
+    </div>
+    <div class="flex min-w-0 items-center gap-1" data-testid="call-chat-toolbar">
+      {#if canSend}
+        <input
+          bind:this={fileInput}
+          type="file"
+          class="hidden"
+          onchange={attach}
+          data-testid="call-chat-attach-input"
+        />
+        <button
+          type="button"
+          class="btn btn-square btn-ghost btn-sm"
+          aria-label={m.chat_attach_file()}
+          title="{m.chat_attach_file()} – {m.groups_call_chat_file_hint()}"
+          onclick={() => fileInput?.click()}
+          data-testid="call-chat-attach"
+        >
+          📎
+        </button>
+      {/if}
       <button
         type="button"
         class="btn btn-square btn-ghost btn-sm"
-        aria-label={m.chat_attach_file()}
-        title="{m.chat_attach_file()} – {m.groups_call_chat_file_hint()}"
-        onclick={() => fileInput?.click()}
-        data-testid="call-chat-attach"
+        aria-label={m.groups_call_chat_emoji_button()}
+        title={m.groups_call_chat_emoji_button()}
+        aria-expanded={pickerOpen}
+        disabled={!canSend}
+        onclick={() => (pickerOpen = !pickerOpen)}
+        data-testid="call-chat-emoji-toggle"
       >
-        📎
+        <SmilePlusIcon class="h-5 w-5" />
       </button>
-    {/if}
-    <button
-      type="button"
-      class="btn btn-square btn-ghost btn-sm"
-      aria-label={m.groups_call_chat_emoji_button()}
-      title={m.groups_call_chat_emoji_button()}
-      aria-expanded={pickerOpen}
-      disabled={!canSend}
-      onclick={() => (pickerOpen = !pickerOpen)}
-      data-testid="call-chat-emoji-toggle"
-    >
-      <SmilePlusIcon class="h-5 w-5" />
-    </button>
-    <select
-      class="select max-w-32 select-ghost select-sm"
-      aria-label={m.groups_call_chat_recipient()}
-      bind:value={recipient}
-      disabled={!canSend}
-      data-testid="call-chat-recipient"
-    >
-      <option value="">{m.groups_call_chat_to_everyone()}</option>
-      {#each others as p (p.identity)}
-        <option value={p.identity}>{p.name}</option>
-      {/each}
-    </select>
-    <ComposerInput
-      bind:this={composer}
-      bind:value={draft}
-      {customEmojiSets}
-      placeholder={recipient
-        ? m.groups_call_chat_placeholder_private({ name: recipientName })
-        : m.groups_call_chat_placeholder()}
-      disabled={!canSend}
-      onfocus={() => (pickerOpen = false)}
-      onSubmit={send}
-      onEscape={onComposerEscape}
-      mentionProvider={provideMentions}
-      onMentionPick={rememberMention}
-      class="input-bordered input input-sm flex items-center"
-      ariaDescribedby={lk.isConnected ? undefined : offlineHintId}
-      testid="call-chat-input"
-    />
-    <button
-      type="submit"
-      class="btn btn-sm btn-primary"
-      disabled={!canSend}
-      data-testid="call-chat-send"
-    >
-      {m.groups_call_chat_send()}
-    </button>
+      <!-- Recipient: a ghost button as wide as its text ("An: Alle" / lock +
+           "An: Bea"); the real <select> sits invisibly on top of it so the
+           native menu, keyboard and screen reader all keep working. -->
+      <span
+        class="btn relative min-w-0 gap-1 px-2 font-normal btn-ghost btn-sm focus-within:ring-2 focus-within:ring-primary/40 {recipient
+          ? 'text-secondary'
+          : ''} {canSend ? '' : 'btn-disabled'}"
+        data-testid="call-chat-recipient-control"
+        data-private={recipient ? 'true' : undefined}
+      >
+        {#if recipient}
+          <LockIcon class_="h-3.5 w-3.5 shrink-0" title="" />
+        {/if}
+        <span class="min-w-0 truncate" aria-hidden="true"
+          >{recipient
+            ? m.groups_call_chat_to_name({ name: recipientName })
+            : m.groups_call_chat_to_everyone()}</span
+        >
+        <span class="shrink-0 text-xs opacity-60" aria-hidden="true">▾</span>
+        <select
+          class="absolute inset-0 h-full w-full cursor-pointer opacity-0"
+          aria-label={m.groups_call_chat_recipient()}
+          bind:value={recipient}
+          disabled={!canSend}
+          data-testid="call-chat-recipient"
+        >
+          <option value="">{m.groups_call_chat_to_everyone()}</option>
+          {#each others as p (p.identity)}
+            <option value={p.identity}>{p.name}</option>
+          {/each}
+        </select>
+      </span>
+    </div>
   </form>
   {#if pickerOpen}
     <!-- svelte-ignore a11y_no_static_element_interactions -->

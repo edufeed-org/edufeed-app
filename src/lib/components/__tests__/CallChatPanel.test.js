@@ -546,6 +546,79 @@ describe('CallChatPanel emojis', () => {
   });
 });
 
+// Smoke test 2026-10-08: "the input field is much too small" — one row with
+// attach, emoji, recipient, input and Senden squeezed the input to ~90px.
+describe('CallChatPanel composer layout', () => {
+  const ME = 'e'.repeat(64) + ':me';
+  const BEA = 'b'.repeat(64) + ':1';
+  beforeEach(() => {
+    state.localParticipant = { identity: ME };
+    state.remoteParticipants = [{ identity: BEA }];
+  });
+
+  it('gives the input its own row (with Senden only) and puts the controls in a toolbar below', () => {
+    render(CallChatPanel, { props });
+    const input = screen.getByTestId('call-chat-input');
+    const row = input.closest('[data-testid="call-chat-input-row"]');
+    expect(row).toBeTruthy();
+    for (const id of ['call-chat-attach', 'call-chat-emoji-toggle', 'call-chat-recipient']) {
+      expect(row.querySelector(`[data-testid="${id}"]`)).toBeNull();
+    }
+    expect(row.querySelector('[data-testid="call-chat-send"]')).toBeTruthy();
+    const toolbar = screen.getByTestId('call-chat-toolbar');
+    for (const id of ['call-chat-attach', 'call-chat-emoji-toggle', 'call-chat-recipient']) {
+      expect(toolbar.querySelector(`[data-testid="${id}"]`)).toBeTruthy();
+    }
+    // the toolbar follows the input row
+    expect(row.compareDocumentPosition(toolbar) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(row.contains(toolbar)).toBe(false);
+  });
+
+  it('is a multiline field; Senden is an icon button that keeps its label', () => {
+    render(CallChatPanel, { props });
+    expect(screen.getByTestId('call-chat-input').getAttribute('aria-multiline')).toBe('true');
+    const send = screen.getByTestId('call-chat-send');
+    expect(send.getAttribute('aria-label')).toBe(m.groups_call_chat_send());
+    expect(send.className).toContain('btn-square');
+    expect(send.textContent.trim()).toBe('');
+  });
+
+  it('the recipient control reads "An: Alle", and "An: <Name>" with a lock once someone is chosen', async () => {
+    render(CallChatPanel, { props });
+    const control = screen.getByTestId('call-chat-recipient-control');
+    expect(control.textContent).toContain(m.groups_call_chat_to_everyone());
+    expect(control.dataset.private).toBeUndefined();
+    expect(control.querySelector('svg')).toBeNull();
+    const row = screen.getByTestId('call-chat-input-row');
+    expect(row.dataset.private).toBeUndefined();
+    expect(row.className).not.toContain('border-secondary');
+    await fireEvent.change(screen.getByTestId('call-chat-recipient'), { target: { value: BEA } });
+    expect(control.textContent).toContain(m.groups_call_chat_to_name({ name: 'Bea' }));
+    expect(control.dataset.private).toBe('true');
+    expect(control.querySelector('svg')).toBeTruthy();
+    // the field itself is tinted like a private message
+    expect(row.dataset.private).toBe('true');
+    expect(row.className).toContain('border-secondary');
+  });
+
+  it('keeps the offline hint and the reply strip above the input', async () => {
+    state.isConnected = false;
+    const { unmount } = render(CallChatPanel, { props });
+    const hint = screen.getByTestId('call-chat-offline');
+    const row = screen.getByTestId('call-chat-input-row');
+    expect(hint.compareDocumentPosition(row) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    unmount();
+    state.isConnected = true;
+    render(CallChatPanel, { props });
+    await fireEvent.click(
+      screen.getByTestId('call-chat-message').querySelector('[data-testid="call-chat-reply"]')
+    );
+    const strip = screen.getByTestId('call-chat-reply-strip');
+    const row2 = screen.getByTestId('call-chat-input-row');
+    expect(strip.compareDocumentPosition(row2) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+});
+
 // Issue "Video-Call chat: reply-to".
 describe('CallChatPanel replies', () => {
   const BEA = 'b'.repeat(64) + ':1';
