@@ -55,7 +55,7 @@ this total by a file or two between updates — `rail-layout-sync.test.js`
 | `cordn-groups.test.js`               | 1                     | Yes  | Cordn groups (/c/groups, per-user opt-in seeded via localStorage): two-account MLS create → invite → welcome accept → bidirectional messages. Real-network (homelab coordinator via relay.contextvm.org); skips unless `CORDN_GROUPS_ENABLED=true`                                                                                     |
 | `concord-channels.test.js`           | 1                     | Yes  | Concord private channels: create wizard, invite link, join-by-link, two-context chat, ban + key-rotation severance                                                                                                                                                                                                                     |
 | `concord-notifications.test.js`      | 1                     | Yes  | Concord unread/mention badges: tab rollup dot + channel-row dot (2 channels), clears on row open, survives reload (IDB markers), reply lights mention pill                                                                                                                                                                             |
-| `moderated-community.test.js`        | 2                     | Yes  | Moderated community (NIP-29) lifecycle: wizard-driven create → mint invite code → second-context guest redeems via the hero → owner's MembershipPane shows the new member; open↔moderated type-flip round trip via Settings                                                                                                           |
+| `moderated-community.test.js`        | 3                     | Yes  | Moderated community (NIP-29) lifecycle: wizard-driven create → mint invite code → second-context guest redeems via the hero → owner's MembershipPane shows the new member; open↔moderated type-flip round trip via Settings; declined join request (kind 9005 delete on the relay) stays gone in a fresh owner context                |
 
 ## Detailed Coverage
 
@@ -1715,7 +1715,7 @@ notifications service (`src/lib/concord/notifications.svelte.js`).
 
 ---
 
-### moderated-community.test.js (2 tests)
+### moderated-community.test.js (3 tests)
 
 **Routes:** `/discover`, `/c/[pubkey]`, `/c/[pubkey]?view=settings`
 **Auth required:** Yes (fresh nsec accounts per run; owner/guest spec uses
@@ -1752,6 +1752,18 @@ needs both 'open' and 'moderated' creates).
    provisions a NIP-29 root group, same as the create-time path), asserts
    the type card updates to "Moderated", then flips back
    (`settings-flip-to-open` → confirm) and asserts it's "Open" again.
+3. **Declined request stays gone on another device** (issue wcv7uqqa) —
+   owner creates a moderated community; a fresh-key guest clicks the hero's
+   bare "Request to join" (`join-request-button`, a stored kind-9021 on the
+   closed root group — the mock relay keeps bare closed-group 9021s like
+   pyramid/khatru do); the owner's Settings `MembershipPane` lists the
+   `[data-testid="join-request-row"]` and the owner clicks
+   `join-request-ignore` ("Decline"), which hides it locally AND publishes a
+   NIP-29 kind-9005 delete-event for the 9021 (the mock relay drops the
+   `e`-tagged events from its store). A THIRD browser context — same owner
+   key, no localStorage — opens Settings and must see
+   `join-requests-empty`, never the row again. Before the fix the dismissal
+   was localStorage-only, so this context showed the request again.
 
 **Bug found and fixed while writing this spec:** `HomeView.svelte` gated its
 entire body (including `CommunityProfileHero`, which owns the invite-redeem
