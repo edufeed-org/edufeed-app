@@ -55,9 +55,12 @@ vi.mock('$lib/paraglide/messages', () => ({
 
 const confirmCallSwitch = vi.fn();
 const confirmCallLeave = vi.fn();
+// The pre-join lobby: resolves the chosen media, or null when cancelled.
+const confirmCallJoin = vi.fn(async () => ({ audio: false, video: false }));
 vi.mock('$lib/groups/call-switch-confirm.svelte.js', () => ({
   confirmCallSwitch: (/** @type {any[]} */ ...args) => confirmCallSwitch(...args),
-  confirmCallLeave: (/** @type {any[]} */ ...args) => confirmCallLeave(...args)
+  confirmCallLeave: (/** @type {any[]} */ ...args) => confirmCallLeave(...args),
+  confirmCallJoin: (/** @type {any[]} */ ...args) => confirmCallJoin(...args)
 }));
 const playLeaveSound = vi.fn();
 vi.mock('$lib/services/call-sounds.js', () => ({ playLeaveSound: () => playLeaveSound() }));
@@ -83,6 +86,8 @@ const USER = { pubkey: 'a'.repeat(64), signer: { signEvent: vi.fn() } };
 
 beforeEach(async () => {
   lkState.localParticipant = null;
+  confirmCallJoin.mockReset();
+  confirmCallJoin.mockResolvedValue({ audio: false, video: false });
   await leaveGroupCall();
   requestGroupCallToken.mockReset();
   disconnectFromRoom.mockClear();
@@ -311,6 +316,68 @@ describe('leaveGroupCall', () => {
 // Task M6: every member join entry point goes through this instead of
 // `joinGroupCall` directly, so the "switch calls?" dialog is implemented
 // once, here.
+// Issue "pre-join preview": every member join passes the lobby first; the
+// token is requested only after "join", with the media the lobby chose.
+describe('joinGroupCallWithConfirm — the pre-join lobby', () => {
+  beforeEach(() => {
+    requestGroupCallToken.mockResolvedValue({ serverUrl: 'wss://x', participantToken: 't' });
+  });
+
+  it('asks the lobby before requesting a token, naming the channel', async () => {
+    confirmCallJoin.mockResolvedValue({ audio: true, video: true });
+    await joinGroupCallWithConfirm(P1, USER, { title: 'Standup' });
+    expect(confirmCallJoin).toHaveBeenCalledWith('Standup');
+    expect(confirmCallJoin.mock.invocationCallOrder[0]).toBeLessThan(
+      requestGroupCallToken.mock.invocationCallOrder[0]
+    );
+    expect(connectToRoom).toHaveBeenCalledWith('t', 'wss://x', { audio: true, video: true });
+  });
+
+  it('a cancelled lobby requests no token and leaves the store idle', async () => {
+    confirmCallJoin.mockResolvedValue(null);
+    await joinGroupCallWithConfirm(P1, USER, { title: 'Standup' });
+    expect(requestGroupCallToken).not.toHaveBeenCalled();
+    expect(getGroupCallState().phase).toBe('idle');
+  });
+
+  it('re-joining the channel already live shows no lobby (it only brings the stage back)', async () => {
+    await joinGroupCallWithConfirm(P1, USER);
+    confirmCallJoin.mockClear();
+    await joinGroupCallWithConfirm(P1, USER);
+    expect(confirmCallJoin).not.toHaveBeenCalled();
+  });
+
+  it('a retry after a failed join reuses the media chosen before, without a second lobby', async () => {
+    confirmCallJoin.mockResolvedValue({ audio: true, video: false });
+    requestGroupCallToken.mockRejectedValueOnce(new Error('relay down'));
+    await joinGroupCallWithConfirm(P1, USER);
+    expect(getGroupCallState().phase).toBe('error');
+    confirmCallJoin.mockClear();
+    await joinGroupCallWithConfirm(P1, USER);
+    expect(confirmCallJoin).not.toHaveBeenCalled();
+    expect(connectToRoom).toHaveBeenCalledWith('t', 'wss://x', { audio: true, video: false });
+  });
+
+  it('asks the lobby after the switch confirm, not before it', async () => {
+    await joinGroupCallWithConfirm(P1, USER);
+    confirmCallSwitch.mockResolvedValue(false);
+    confirmCallJoin.mockClear();
+    await joinGroupCallWithConfirm(P2, USER);
+    expect(confirmCallJoin).not.toHaveBeenCalled();
+  });
+});
+
+describe('joinGroupCall media', () => {
+  it('connects with the media the caller passes, muted and camera off by default', async () => {
+    requestGroupCallToken.mockResolvedValue({ serverUrl: 'wss://x', participantToken: 't' });
+    await joinGroupCall(P1, USER, { media: { audio: true, video: false } });
+    expect(connectToRoom).toHaveBeenCalledWith('t', 'wss://x', { audio: true, video: false });
+    await leaveGroupCall();
+    await joinGroupCall(P1, USER);
+    expect(connectToRoom).toHaveBeenLastCalledWith('t', 'wss://x', {});
+  });
+});
+
 describe('joinGroupCallWithConfirm', () => {
   it('joins straight away while idle (no call anywhere)', async () => {
     requestGroupCallToken.mockResolvedValue({ serverUrl: 'wss://x', participantToken: 't' });

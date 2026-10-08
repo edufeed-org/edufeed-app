@@ -25,20 +25,23 @@
 // previous one as cancelled.
 import { modalStore } from '$lib/stores/modal.svelte.js';
 
-/** @type {{ resolve: (value: boolean) => void } | null} */
+/** @type {{ resolve: (value: any) => void } | null} */
 let active = null;
 
 /**
- * Open a confirm modal and resolve with the answer: true on its onConfirm,
- * false on onCancel or on the modal going away any other way.
- * @param {'callSwitchConfirm' | 'callLeaveConfirm'} type
+ * Open a confirm modal and resolve with the answer: the value its onConfirm
+ * was called with (true when called bare), `cancelled` on onCancel or on the
+ * modal going away any other way.
+ * @template T
+ * @param {'callSwitchConfirm' | 'callLeaveConfirm' | 'callPreJoin'} type
  * @param {Record<string, unknown>} props
- * @returns {Promise<boolean>}
+ * @param {T} cancelled
+ * @returns {Promise<boolean | T>}
  */
-function askModal(type, props) {
+function askModal(type, props, cancelled = /** @type {T} */ (false)) {
   // A confirm is already pending (two attempts raced): settle it as
   // cancelled before replacing its props/callbacks, instead of orphaning it.
-  active?.resolve(false);
+  active?.resolve(cancelled);
   active = null;
 
   return new Promise((resolve) => {
@@ -46,7 +49,7 @@ function askModal(type, props) {
     /** @type {() => void} */
     let disposeWatch = () => {};
 
-    /** @param {boolean} value */
+    /** @param {boolean | T} value */
     const finish = (value) => {
       if (settled) return;
       settled = true;
@@ -56,13 +59,13 @@ function askModal(type, props) {
     };
 
     modalStore.openModal(type, props, {
-      onConfirm: () => {
+      onConfirm: (/** @type {T | undefined} */ value) => {
         modalStore.closeModal();
-        finish(true);
+        finish(value === undefined ? true : value);
       },
       onCancel: () => {
         modalStore.closeModal();
-        finish(false);
+        finish(cancelled);
       }
     });
 
@@ -72,7 +75,7 @@ function askModal(type, props) {
     // pending forever.
     disposeWatch = $effect.root(() => {
       $effect(() => {
-        if (modalStore.activeModal !== type) finish(false);
+        if (modalStore.activeModal !== type) finish(cancelled);
       });
     });
 
@@ -87,7 +90,21 @@ function askModal(type, props) {
  * @returns {Promise<boolean>} true on "Wechseln", false on cancel
  */
 export function confirmCallSwitch(title) {
-  return askModal('callSwitchConfirm', { title });
+  return /** @type {Promise<boolean>} */ (askModal('callSwitchConfirm', { title }));
+}
+
+/**
+ * The pre-join lobby ("Bereit für den Anruf?", CallPreJoinModal): the user
+ * checks camera and microphone and picks what to join with. Asked by
+ * `joinGroupCallWithConfirm` before any token is requested.
+ * @param {string} title - the channel the call belongs to
+ * @returns {Promise<import('$lib/services/call-prefs.js').JoinMedia | null>}
+ *   the chosen media, or null when the lobby was cancelled / dismissed
+ */
+export function confirmCallJoin(title) {
+  return /** @type {Promise<import('$lib/services/call-prefs.js').JoinMedia | null>} */ (
+    askModal('callPreJoin', { title }, /** @type {null} */ (null))
+  );
 }
 
 /**
@@ -98,7 +115,7 @@ export function confirmCallSwitch(title) {
  * @returns {Promise<boolean>} true on "Verlassen", false on cancel
  */
 export function confirmCallLeave({ guest, signal }) {
-  const answer = askModal('callLeaveConfirm', { guest });
+  const answer = /** @type {Promise<boolean>} */ (askModal('callLeaveConfirm', { guest }));
   const dismiss = () => {
     if (modalStore.activeModal === 'callLeaveConfirm') modalStore.closeModal();
   };

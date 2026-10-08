@@ -39,6 +39,10 @@ vi.mock('../groups/CallLeaveConfirmModal.svelte', async () => {
   const mock = await import('./__mocks__/DialogModalStub.svelte');
   return { default: mock.default };
 });
+vi.mock('../groups/CallPreJoinModal.svelte', async () => {
+  const mock = await import('./__mocks__/DialogModalStub.svelte');
+  return { default: mock.default };
+});
 
 const showModal = vi.fn(function () {
   this.setAttribute('open', '');
@@ -152,6 +156,17 @@ describe('ModalManager lazy loading', () => {
     const dialog = await screen.findByTestId('dialog-stub');
     expect(dialog.id).toBe('report-issue-modal');
     await waitFor(() => expect(dialog.hasAttribute('open')).toBe(true));
+  });
+
+  it('renders the pre-join lobby with the title and hands the chosen media to onConfirm', async () => {
+    render(ModalManager);
+    const onConfirm = vi.fn();
+    const onCancel = vi.fn();
+    modalStore.openModal('callPreJoin', { title: 'Standup' }, { onConfirm, onCancel });
+    const dialog = await screen.findByTestId('dialog-stub');
+    expect(dialog.dataset.props.split(',')).toEqual(
+      expect.arrayContaining(['onCancel', 'onConfirm', 'title'])
+    );
   });
 
   it('renders the connection status modal with a close callback', async () => {

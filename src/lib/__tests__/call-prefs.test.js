@@ -25,7 +25,9 @@ import {
   getBackgroundEffect,
   setBackgroundEffect,
   getCustomBackground,
-  setCustomBackground
+  setCustomBackground,
+  getJoinMedia,
+  setJoinMedia
 } from '$lib/services/call-prefs.js';
 
 beforeEach(() => {
@@ -162,5 +164,32 @@ describe('camera background effect', () => {
     });
     expect(setCustomBackground('data:image/jpeg;base64,AAAA')).toBe(false);
     expect(() => setBackgroundEffect('blur')).not.toThrow();
+  });
+});
+
+// Pre-join lobby: "join with camera / mic on", remembered on this device.
+describe('join media', () => {
+  it('defaults to mic on, camera off, and remembers an explicit choice', () => {
+    expect(getJoinMedia()).toEqual({ audio: true, video: false });
+    setJoinMedia({ audio: false, video: true });
+    expect(getJoinMedia()).toEqual({ audio: false, video: true });
+  });
+
+  it('ignores a malformed stored value', () => {
+    localStorage.setItem('edufeed:call:joinMedia', '{"audio":"yes"}');
+    expect(getJoinMedia()).toEqual({ audio: true, video: false });
+    localStorage.setItem('edufeed:call:joinMedia', 'nope');
+    expect(getJoinMedia()).toEqual({ audio: true, video: false });
+  });
+
+  it('survives a throwing storage', () => {
+    vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
+      throw new Error('blocked');
+    });
+    vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+      throw new Error('blocked');
+    });
+    expect(() => setJoinMedia({ audio: true, video: true })).not.toThrow();
+    expect(getJoinMedia()).toEqual({ audio: true, video: false });
   });
 });

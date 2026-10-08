@@ -73,6 +73,7 @@
     concordInvites: lazyComponent(() => import('./community/channels/InviteInboxModal.svelte')),
     callSwitchConfirm: lazyComponent(() => import('./groups/CallSwitchConfirmModal.svelte')),
     callLeaveConfirm: lazyComponent(() => import('./groups/CallLeaveConfirmModal.svelte')),
+    callPreJoin: lazyComponent(() => import('./groups/CallPreJoinModal.svelte')),
     connectionStatus: lazyComponent(() => import('./shared/ConnectionStatusModal.svelte')),
     reportIssue: lazyComponent(() => import('./shared/ReportIssueModal.svelte'))
   };
@@ -157,6 +158,15 @@
         return {
           guest: props?.guest === true,
           onConfirm: () => callbacks?.onConfirm?.(),
+          onCancel: () => callbacks?.onCancel?.()
+        };
+      }
+      case 'callPreJoin': {
+        const callbacks = /** @type {any} */ (modal.modalCallbacks);
+        return {
+          title: props?.title ?? '',
+          // The lobby's answer carries the chosen media (camera / mic on).
+          onConfirm: (/** @type {unknown} */ media) => callbacks?.onConfirm?.(media),
           onCancel: () => callbacks?.onCancel?.()
         };
       }

@@ -48,6 +48,12 @@ function guardedJoin(holder, pointer) {
   });
 }
 
+/** The pre-join lobby (real confirmCallJoin) is the last gate before the token. */
+async function answerLobby(media = { audio: false, video: false }) {
+  await vi.waitFor(() => expect(modalStore.activeModal).toBe('callPreJoin'));
+  modalStore.modalCallbacks.onConfirm(media);
+}
+
 beforeEach(async () => {
   await leaveGroupCall();
   modalStore.closeModal();
@@ -57,7 +63,9 @@ beforeEach(async () => {
 
 describe('joinGroupCallWithConfirm reentrancy (real confirmCallSwitch)', () => {
   it('a superseded confirm resolves false and releases its caller’s busy flag', async () => {
-    await joinGroupCallWithConfirm(P1, USER, { title: 'Standup' });
+    const first = joinGroupCallWithConfirm(P1, USER, { title: 'Standup' });
+    await answerLobby();
+    await first;
     expect(getGroupCallState().isActiveFor(P1)).toBe(true);
 
     const callerA = { busy: false };
@@ -71,10 +79,41 @@ describe('joinGroupCallWithConfirm reentrancy (real confirmCallSwitch)', () => {
     expect(callerA.busy).toBe(false);
     expect(getGroupCallState().isActiveFor(P1)).toBe(true);
 
-    // Caller B's confirm is the one left live; answering it still works.
+    // Caller B's confirm is the one left live; answering it still works —
+    // the lobby follows the switch confirm, then the token is requested.
     modalStore.modalCallbacks.onConfirm();
+    await answerLobby({ audio: true, video: false });
     await pendingB;
     expect(callerB.busy).toBe(false);
     expect(getGroupCallState().isActiveFor(P3)).toBe(true);
+  });
+
+  // The lobby shares the one modal slot: a second join attempt while a lobby
+  // is open settles the first as cancelled instead of orphaning its caller.
+  it('a superseded lobby settles as cancelled and releases its caller’s busy flag', async () => {
+    const callerA = { busy: false };
+    const callerB = { busy: false };
+    const pendingA = guardedJoin(callerA, P1);
+    await vi.waitFor(() => expect(modalStore.activeModal).toBe('callPreJoin'));
+    const pendingB = guardedJoin(callerB, P2);
+    await pendingA;
+    expect(callerA.busy).toBe(false);
+    expect(requestGroupCallToken).not.toHaveBeenCalled();
+    await answerLobby();
+    await pendingB;
+    expect(callerB.busy).toBe(false);
+    expect(getGroupCallState().isActiveFor(P2)).toBe(true);
+    expect(requestGroupCallToken).toHaveBeenCalledTimes(1);
+  });
+
+  it('a cancelled lobby joins nothing and releases the busy flag', async () => {
+    const caller = { busy: false };
+    const pending = guardedJoin(caller, P1);
+    await vi.waitFor(() => expect(modalStore.activeModal).toBe('callPreJoin'));
+    modalStore.modalCallbacks.onCancel();
+    await pending;
+    expect(caller.busy).toBe(false);
+    expect(getGroupCallState().phase).toBe('idle');
+    expect(requestGroupCallToken).not.toHaveBeenCalled();
   });
 });

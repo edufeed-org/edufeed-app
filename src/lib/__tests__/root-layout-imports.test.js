@@ -15,6 +15,8 @@ import layoutSource from '../../routes/+layout.svelte?raw';
 import navbarSource from '../components/Navbar.svelte?raw';
 import groupChatSource from '../components/groups/GroupChat.svelte?raw';
 import renderErrorCardSource from '../components/shared/RenderErrorCard.svelte?raw';
+import callLandingSource from '../components/groups/call/CallLanding.svelte?raw';
+import modalManagerSource from '../components/ModalManager.svelte?raw';
 
 /**
  * @param {string} source
@@ -73,6 +75,24 @@ describe('root layout static imports', () => {
     'GroupChat does not statically import %s',
     (needle) => {
       expect(staticImportsOf(groupChatSource).filter((s) => s.endsWith(needle))).toEqual([]);
+    }
+  );
+
+  // The pre-join lobby (CallPreJoin + services/call-preview) imports
+  // livekit-client: the /call route's CallLanding and the root layout's
+  // ModalManager may only reach it through lazyComponent / import().
+  it.each([
+    'groups/call/CallPreJoin.svelte',
+    'services/call-preview.svelte.js',
+    'services/livekit-connection.svelte.js',
+    'groups/call/GroupCallStage.svelte'
+  ])('CallLanding does not statically import %s', (needle) => {
+    expect(staticImportsOf(callLandingSource).filter((s) => s.endsWith(needle))).toEqual([]);
+  });
+  it.each(['groups/CallPreJoinModal.svelte', 'groups/call/CallPreJoin.svelte'])(
+    'ModalManager does not statically import %s',
+    (needle) => {
+      expect(staticImportsOf(modalManagerSource).filter((s) => s.endsWith(needle))).toEqual([]);
     }
   );
 
