@@ -102,12 +102,33 @@
     return map;
   });
 
+  // A canonical concept id is always a URI (an external URI, or the
+  // `nostr:<coord>` shape `toRichSelected` builds) — i.e. it has a URI
+  // scheme prefix. A bare AI-enrichment label like "Mathematik" never does.
+  // Used below to tell "id is actually a label" (heal it) apart from "id is
+  // a real identifier the picker's own scheme just doesn't happen to carry"
+  // (leave it alone — see the Task 14 guard a few lines down).
+  /** @param {string} id */
+  function looksLikeCanonicalId(id) {
+    return /^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(id);
+  }
+
   // Heal incoming values whose `id` is a label rather than a canonical
   // concept id. AI enrichment (nope-mcp) returns `{id: prefLabel}`, which
   // chips can render but the option-checked state can't match. When concept
   // events are loaded, look each unmatched value up by label and emit
   // `onchange` once with the corrected rich entries — the form data then
   // carries canonical IDs all the way through to publish.
+  //
+  // Task 14 guard: only attempt this for values whose `id` isn't already
+  // canonical. A stored concept can legitimately belong to a DIFFERENT
+  // scheme than the one this picker resolves (e.g. after the vocabulary
+  // publisher renames/splits concepts out of the picker's scheme) — its id
+  // just won't be in `eventById`. Matching such a value by label text alone
+  // is unsound: a same-named concept in the CURRENT scheme is a coincidence,
+  // not evidence it's the same concept, and swapping to it would silently
+  // rewrite a user's stored value out from under them. Only bare labels
+  // (non-canonical ids) are safe to heal this way.
   $effect(() => {
     if (!conceptEvents.length || !value.length) return;
     /** @type {Record<string, import('nostr-tools').NostrEvent>} */
@@ -121,6 +142,7 @@
     let changed = false;
     const healed = value.map((v) => {
       if (eventById[v.id]) return v;
+      if (looksLikeCanonicalId(v.id)) return v;
       const label = pickLabel(v.labels, locale);
       const evt = label ? byLabel[label] : undefined;
       if (!evt) return v;

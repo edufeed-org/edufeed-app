@@ -253,6 +253,47 @@ describe('FormConceptPicker', () => {
     expect(calls).toBe(0);
   });
 
+  it('does not rewrite a canonical id from a foreign scheme even when its label coincides with a current-scheme concept (Task 14)', async () => {
+    // Simulates a resource that stores a concept id from a DIFFERENT scheme
+    // (e.g. `konfi-methode`) after the vocabulary publisher renamed/split
+    // concepts out of the scheme this picker now resolves (`methode`). The
+    // stored id is already canonical (a real nostr: coordinate) — it is not
+    // an "id is a label" AI-enrichment artifact — so the by-label healing
+    // effect must NOT treat a same-named concept in the current scheme as a
+    // match and silently swap the stored id out from under the user.
+    let calls = 0;
+    /** @type {any[]} */
+    let seen = [];
+    const foreignCanonicalId =
+      'nostr:39738:d2689e2f41dabfba953da26655a94ce2aa4e029c383ee921c6a4deafab99a612:rollenspiel';
+    render(FormConceptPicker, {
+      props: {
+        field: fieldFixture,
+        multiple: true,
+        value: [
+          {
+            id: foreignCanonicalId,
+            nostrCoord: '',
+            relay: '',
+            // Coincidentally shares its label text with concept c2
+            // ('Biologie') in the mocked scheme above.
+            labels: { de: 'Biologie' }
+          }
+        ],
+        onchange: (/** @type {any[]} */ v) => {
+          calls++;
+          seen = v;
+        }
+      }
+    });
+
+    // Wait long enough for any spurious healing effect to fire.
+    await new Promise((r) => setTimeout(r, 50));
+
+    expect(calls).toBe(0);
+    void seen;
+  });
+
   it('shows incoming value as selected badges via the dropdown trigger', async () => {
     const { container } = render(FormConceptPicker, {
       props: {
