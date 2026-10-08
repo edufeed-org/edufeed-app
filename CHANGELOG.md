@@ -7,6 +7,57 @@ merge commits of the nostr PRs that landed since the previous tag.
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-10-08
+
+### Added
+
+- **Breakout rooms for channel calls.** A host or co-host opens 2 to 8
+  rooms from the participant panel, assigns people at random or by hand,
+  sets an optional deadline and sends everyone there; "Alle zurückholen"
+  brings them back. People are moved between rooms from the host panel,
+  late joiners are distributed automatically or see a banner with the
+  rooms, guests take part with their guest link, and a co-host who inherits
+  the host seat takes the session over. Rooms are ephemeral NIP-29 groups
+  that the relay cleans up on its own (see `docs/nips/nip29-ephemeral-groups.md`);
+  the groups relay must run pyramid `edufeed-v1.16` or newer.
+- **Broadcasts to all rooms.** "Nachricht an alle Räume" from the host
+  panel, automatic countdowns at 5, 2 and 1 minutes before the deadline,
+  and a heads-up before the rooms are closed; shown as a toast and a line
+  in each room's call chat.
+- **Paste and drop files into every chat composer.** Images and files from
+  the clipboard or dropped onto the composer are uploaded and attached.
+- **User guide links** from the account menu, Termi and the landing footer.
+
+### Changed
+
+- The side column of a call has two tabs, Teilnehmende and Breakout-Räume,
+  so role changes and mutes stay reachable while rooms are open.
+- The breakout deadline is a dropdown: with a limit it offers +5, +10, +15
+  minutes and "Zeitlimit entfernen", without one "In 5/10/15 Min beenden"
+  and a custom duration.
+- The chat composer field stretches to the full width of the input bar.
+
+### Fixed
+
+- Communities without a displayable profile no longer show as "Unknown" in
+  the landing page carousel.
+- A failed meeting deletion says why (the relay's reason); together with
+  pyramid `edufeed-v1.16`, meetings older than two hours can be deleted
+  again.
+- The guest call page shows the channel name instead of a raw group id,
+  also while switching into a breakout room and back.
+- The call stage's header buttons no longer overflow into the chat column
+  at medium widths.
+
+### Relay (pyramid fork, deployed to groups.edufeed.org)
+
+- `edufeed-v1.12` ephemeral groups with relay-side deletion and kind 20002
+  call broadcasts; `edufeed-v1.13` a channel's call pass is valid in its
+  breakout rooms; `edufeed-v1.14` breakout rooms belong to their
+  community endpoint; `edufeed-v1.15` rooms survive being briefly empty,
+  tombstones for relay-side deletions, a working groups logger;
+  `edufeed-v1.16` addressable events escape the two-hour deletion rule.
+
 ## [0.4.0] - 2026-10-08
 
 ### Added
