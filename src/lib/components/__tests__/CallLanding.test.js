@@ -50,9 +50,15 @@ const breakoutState = {
   remaining: null,
   busy: false,
   pending: null,
-  joinRequest: null
+  joinRequest: null,
+  switching: false
 };
 vi.mock('$lib/groups/breakout.svelte.js', () => ({ getBreakoutState: () => breakoutState }));
+// The channel's own kind 39000 (its name when the pass check has none).
+const metadata = { byKey: /** @type {Record<string, any>} */ ({}), failedRelays: [] };
+vi.mock('$lib/groups/channel-metadata.svelte.js', () => ({
+  useChannelMetadata: () => () => metadata
+}));
 let activeUser = null;
 vi.mock('$lib/stores/accounts.svelte', () => ({
   useActiveUser: () => () => activeUser,
@@ -108,6 +114,8 @@ beforeEach(() => {
   callState.chatBeside = true;
   breakoutState.session = null;
   breakoutState.currentRoom = null;
+  breakoutState.switching = false;
+  metadata.byKey = {};
   registerCallStageView.mockImplementation(() => () => {});
   getProfile.mockReturnValue(null);
   isCallGuest.mockReturnValue(true);
@@ -892,6 +900,123 @@ describe('CallLanding', () => {
     callState.isActiveFor = (p) => p?.id === POINTER.id;
     await rerender({ pointer: { ...POINTER } });
     expect(await screen.findByTestId('group-call-stage-stub')).toBeTruthy();
+  });
+
+  // laoc's test 2026-10-08: a guest saw the raw group id as the stage title.
+  describe("the call's name, never the group id", () => {
+    const KEY = channelKey(POINTER);
+    const meta39000 = {
+      kind: 39000,
+      tags: [
+        ['d', POINTER.id],
+        ['name', 'arbeitszimmer']
+      ]
+    };
+
+    it('a guest in the call sees the channel name from the pass check', async () => {
+      checkCallPass.mockResolvedValue({ valid: true, reason: 'ok', name: 'Weekly', liveCount: 1 });
+      activeUser = { pubkey: 'h'.repeat(64), signer: {} };
+      const view = render(CallLanding, { props: { pointer: POINTER } });
+      callState.phase = 'ready';
+      callState.connected = true;
+      callState.isActiveFor = () => true;
+      await view.rerender({ pointer: { ...POINTER } });
+      const stage = await screen.findByTestId('group-call-stage-stub');
+      expect(stage.textContent).toContain('Weekly');
+      expect(stage.textContent).not.toContain(POINTER.id);
+    });
+
+    it('the name stays through a breakout switch and the way back; the check is not thrown away', async () => {
+      checkCallPass.mockResolvedValue({ valid: true, reason: 'ok', name: 'Weekly', liveCount: 1 });
+      activeUser = { pubkey: 'h'.repeat(64), signer: {} };
+      const { rerender } = render(CallLanding, { props: { pointer: POINTER } });
+      callState.phase = 'ready';
+      callState.connected = true;
+      callState.isActiveFor = () => true;
+      await rerender({ pointer: { ...POINTER } });
+      await screen.findByTestId('group-call-stage-stub');
+      // (the rerenders above hand in a fresh pointer object, which re-runs
+      // the first check; from here on only an end screen would ask again)
+      const checksSoFar = checkCallPass.mock.calls.length;
+      const ROOM = { id: 'room-1', relay: POINTER.relay };
+      breakoutState.session = {
+        main: { id: POINTER.id, relay: POINTER.relay, title: 'Weekly' },
+        rooms: []
+      };
+      // into the room: the store flags the switch, the call passes through idle
+      breakoutState.switching = true;
+      breakoutState.currentRoom = { ...ROOM, name: 'Breakout 1', index: 1 };
+      callState.isActiveFor = () => false;
+      callState.phase = 'idle';
+      callState.connected = false;
+      await rerender({ pointer: { ...POINTER } });
+      expect(screen.getByTestId('call-landing-in-call')).toBeTruthy();
+      expect(screen.queryByTestId('call-landing-ended')).toBeNull();
+      callState.phase = 'ready';
+      callState.connected = true;
+      callState.isActiveFor = (p) => p?.id === ROOM.id;
+      breakoutState.switching = false;
+      await rerender({ pointer: { ...POINTER } });
+      expect((await screen.findByTestId('group-call-stage-stub')).textContent).toContain('Weekly');
+      // back: the room is cleared BEFORE the call moves (returnToMain)
+      breakoutState.switching = true;
+      breakoutState.currentRoom = null;
+      callState.phase = 'idle';
+      callState.connected = false;
+      await rerender({ pointer: { ...POINTER } });
+      expect(screen.getByTestId('call-landing-in-call')).toBeTruthy();
+      expect(screen.queryByTestId('call-landing-ended')).toBeNull();
+      callState.phase = 'ready';
+      callState.connected = true;
+      callState.isActiveFor = (p) => p?.id === POINTER.id;
+      breakoutState.switching = false;
+      await rerender({ pointer: { ...POINTER } });
+      const stage = await screen.findByTestId('group-call-stage-stub');
+      expect(stage.textContent).toContain('Weekly');
+      expect(stage.textContent).not.toContain(POINTER.id);
+      expect(checkCallPass).toHaveBeenCalledTimes(checksSoFar);
+      expect(screen.queryByTestId('call-landing-ended')).toBeNull();
+    });
+
+    it("a pending or unknown check never shows the id: the channel's kind 39000 names it", async () => {
+      document.title = '';
+      metadata.byKey = { [KEY]: meta39000 };
+      /** @type {(v: any) => void} */
+      let resolve = () => {};
+      checkCallPass.mockReturnValue(new Promise((r) => (resolve = r)));
+      render(CallLanding, { props: { pointer: POINTER } });
+      await screen.findByTestId('call-landing-checking');
+      await waitFor(() =>
+        expect(document.title.startsWith(m.call_page_title({ name: 'arbeitszimmer' }))).toBe(true)
+      );
+      expect(document.title).not.toContain(POINTER.id);
+      resolve({ valid: false, reason: 'unknown', liveCount: 0 });
+      await screen.findByTestId('call-landing-invalid');
+      expect(document.title.startsWith(m.call_page_title({ name: 'arbeitszimmer' }))).toBe(true);
+      expect(document.body.textContent).not.toContain(POINTER.id);
+    });
+
+    it('in the call with a nameless check the 39000 name is the stage title, else a neutral word', async () => {
+      metadata.byKey = { [KEY]: meta39000 };
+      const { unmount } = await renderInCall();
+      expect(screen.getByTestId('group-call-stage-stub').textContent).toContain('arbeitszimmer');
+      unmount();
+      metadata.byKey = {};
+      await renderInCall();
+      const stage = screen.getByTestId('group-call-stage-stub');
+      expect(stage.textContent).toContain(m.call_title_fallback());
+      expect(stage.textContent).not.toContain(POINTER.id);
+    });
+
+    it('the ready screen names the call neutrally without any name, never the id', async () => {
+      checkCallPass.mockResolvedValue({ valid: true, reason: 'ok', liveCount: 1 });
+      render(CallLanding, { props: { pointer: POINTER } });
+      await screen.findByTestId('call-landing-name');
+      expect(document.body.textContent).toContain(
+        m.call_landing_invited({ title: m.call_title_fallback() })
+      );
+      expect(document.body.textContent).not.toContain(POINTER.id);
+    });
   });
 
   it('a room of ANOTHER call is not "here": the landing shows its end screen like before', async () => {

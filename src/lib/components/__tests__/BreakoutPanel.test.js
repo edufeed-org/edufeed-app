@@ -12,7 +12,12 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, fireEvent, screen, waitFor } from '@testing-library/svelte';
 
 function Stub() {}
-vi.mock('$lib/components/icons', () => ({ CloseIcon: Stub, MeetIcon: Stub, SendIcon: Stub }));
+vi.mock('$lib/components/icons', () => ({
+  ChevronDownIcon: Stub,
+  CloseIcon: Stub,
+  MeetIcon: Stub,
+  SendIcon: Stub
+}));
 vi.mock(
   '$lib/components/shared/ProfileAvatar.svelte',
   () => import('./fixtures/ProfileAvatarStub.svelte')
@@ -37,6 +42,13 @@ vi.mock('$lib/paraglide/messages', () => ({
   groups_call_breakout_ending: () => 'Closing rooms …',
   groups_call_breakout_duration: () => 'Duration',
   groups_call_breakout_extend: ({ minutes }) => `+${minutes} min`,
+  groups_call_breakout_no_deadline: () => 'No time limit',
+  groups_call_breakout_deadline_menu: () => 'Time limit',
+  groups_call_breakout_end_in: ({ minutes }) => `End in ${minutes} min`,
+  groups_call_breakout_clear_deadline: () => 'Remove time limit',
+  groups_call_breakout_custom_duration: () => 'Custom duration …',
+  groups_call_breakout_custom_minutes: () => 'Minutes',
+  groups_call_breakout_set_deadline: () => 'Set',
   groups_call_breakout_auto_assign: () => 'Assign late joiners automatically',
   groups_call_breakout_broadcast_title: () => 'Message to all rooms',
   groups_call_breakout_broadcast_placeholder: () => 'A short announcement …',
@@ -95,6 +107,7 @@ const cb = {
   onJoin: vi.fn(),
   onEnd: vi.fn(),
   onExtend: vi.fn(),
+  onSetDeadline: vi.fn(),
   onAutoAssign: vi.fn(),
   onBroadcast: vi.fn(async () => true),
   onClose: vi.fn()
@@ -285,12 +298,89 @@ describe('BreakoutPanel', () => {
     expect(screen.getByTestId('breakout-panel-end').disabled).toBe(true);
     expect(screen.getByTestId('breakout-panel-end').textContent).toContain('Closing rooms');
     expect(screen.getAllByTestId('breakout-panel-move')[0].disabled).toBe(true);
+    expect(screen.getByTestId('breakout-panel-deadline').disabled).toBe(true);
   });
 
-  it('"+5 min" moves the deadline and the late-joiner switch reflects and sets the session', async () => {
+  it('with a deadline: the "Noch m:ss" menu offers +5/+10/+15 min and "remove", and closes after a pick', async () => {
     render(BreakoutPanel, { props: { rows: [], breakout: state(), myPubkey: HOST, ...cb } });
-    await fireEvent.click(screen.getByTestId('breakout-panel-extend'));
-    expect(cb.onExtend).toHaveBeenCalledWith(5);
+    const trigger = screen.getByTestId('breakout-panel-deadline');
+    expect(trigger.textContent).toContain('1:30 left');
+    expect(trigger.dataset.deadline).toBe('set');
+    expect(trigger.getAttribute('aria-haspopup')).toBe('menu');
+    expect(trigger.getAttribute('aria-expanded')).toBe('false');
+    expect(screen.queryByTestId('breakout-panel-deadline-options')).toBeNull();
+    await fireEvent.click(trigger);
+    expect(trigger.getAttribute('aria-expanded')).toBe('true');
+    const items = screen.getAllByTestId('breakout-panel-extend');
+    expect(items.map((el) => el.dataset.minutes)).toEqual(['5', '10', '15']);
+    expect(items.map((el) => el.textContent.trim())).toEqual(['+5 min', '+10 min', '+15 min']);
+    expect(screen.queryByTestId('breakout-panel-end-in')).toBeNull();
+    expect(screen.queryByTestId('breakout-panel-custom-duration')).toBeNull();
+    await fireEvent.click(items[1]);
+    expect(cb.onExtend).toHaveBeenCalledWith(10);
+    expect(cb.onSetDeadline).not.toHaveBeenCalled();
+    expect(screen.queryByTestId('breakout-panel-deadline-options')).toBeNull();
+    await fireEvent.click(trigger);
+    await fireEvent.click(screen.getByTestId('breakout-panel-clear-deadline'));
+    expect(cb.onSetDeadline).toHaveBeenCalledWith(null);
+    expect(screen.queryByTestId('breakout-panel-deadline-options')).toBeNull();
+  });
+
+  it('without a deadline: "No time limit" offers "end in 5/10/15 min" and a custom number of minutes', async () => {
+    render(BreakoutPanel, {
+      props: {
+        rows: [],
+        breakout: state({ remaining: null, session: { ...state().session, until: null } }),
+        myPubkey: HOST,
+        ...cb
+      }
+    });
+    const trigger = screen.getByTestId('breakout-panel-deadline');
+    expect(trigger.textContent).toContain('No time limit');
+    expect(trigger.dataset.deadline).toBe('none');
+    await fireEvent.click(trigger);
+    expect(screen.queryByTestId('breakout-panel-extend')).toBeNull();
+    expect(screen.queryByTestId('breakout-panel-clear-deadline')).toBeNull();
+    const items = screen.getAllByTestId('breakout-panel-end-in');
+    expect(items.map((el) => el.textContent.trim())).toEqual([
+      'End in 5 min',
+      'End in 10 min',
+      'End in 15 min'
+    ]);
+    await fireEvent.click(items[2]);
+    expect(cb.onSetDeadline).toHaveBeenCalledWith(15);
+    expect(cb.onExtend).not.toHaveBeenCalled();
+    expect(screen.queryByTestId('breakout-panel-deadline-options')).toBeNull();
+    // the custom path: an input (1–180) with "Set"; nonsense keeps the button off
+    await fireEvent.click(trigger);
+    await fireEvent.click(screen.getByTestId('breakout-panel-custom-duration'));
+    const input = screen.getByTestId('breakout-panel-custom-minutes');
+    const set = screen.getByTestId('breakout-panel-custom-set');
+    expect(input.getAttribute('min')).toBe('1');
+    expect(input.getAttribute('max')).toBe('180');
+    expect(set.disabled).toBe(true);
+    await fireEvent.input(input, { target: { value: '0' } });
+    expect(set.disabled).toBe(true);
+    await fireEvent.input(input, { target: { value: '181' } });
+    expect(set.disabled).toBe(true);
+    await fireEvent.input(input, { target: { value: '2.5' } });
+    expect(set.disabled).toBe(true);
+    await fireEvent.input(input, { target: { value: '45' } });
+    expect(set.disabled).toBe(false);
+    await fireEvent.submit(screen.getByTestId('breakout-panel-custom-form'));
+    expect(cb.onSetDeadline).toHaveBeenLastCalledWith(45);
+    expect(screen.queryByTestId('breakout-panel-deadline-options')).toBeNull();
+    // Escape closes the menu (and forgets the custom field)
+    await fireEvent.click(trigger);
+    await fireEvent.click(screen.getByTestId('breakout-panel-custom-duration'));
+    await fireEvent.keyDown(window, { key: 'Escape' });
+    expect(screen.queryByTestId('breakout-panel-deadline-options')).toBeNull();
+    await fireEvent.click(trigger);
+    expect(screen.queryByTestId('breakout-panel-custom-minutes')).toBeNull();
+  });
+
+  it('the late-joiner switch reflects and sets the session', async () => {
+    render(BreakoutPanel, { props: { rows: [], breakout: state(), myPubkey: HOST, ...cb } });
     const box = screen.getByTestId('breakout-panel-auto-assign');
     expect(box.checked).toBe(true);
     await fireEvent.click(box);

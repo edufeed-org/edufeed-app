@@ -140,6 +140,8 @@ export function fetchEphemeralChildren(relayConn, parentId, opts = {}) {
  * tried first and dropped on the parent-role rejection, like on creation;
  * a relay that refuses the `ephemeral` tag (a room a v1 client created)
  * gets the edit without it, so the `about` marker still carries the time.
+ * `until: null` takes the deadline away: `["until",""]` (the extension's
+ * clear), and an `about` without `until=`.
  * @param {any} relayConn
  * @param {{id: string, parentId: string, channelName: string, index: number, withParent?: boolean}} room
  * @param {number | null} until unix seconds, null = no deadline
@@ -160,7 +162,9 @@ export async function editBreakoutUntil(relayConn, room, until, user) {
       until,
       withParent
     });
-    return withEphemeral ? { ...rest, ephemeral, until: untilTag } : rest;
+    return withEphemeral
+      ? { ...rest, ephemeral, until: untilTag, ...(until === null ? { clearUntil: true } : {}) }
+      : rest;
   };
   let withParent = room.withParent !== false;
   try {

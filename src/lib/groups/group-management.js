@@ -25,7 +25,7 @@ const template = (kind, tags) => ({ kind, content: '', created_at: now(), tags }
  * @typedef {{
  *   name?: string, about?: string, picture?: string,
  *   isPublic: boolean, isOpen: boolean, isHidden?: boolean, livekit?: boolean,
- *   parent?: string, ephemeral?: string, until?: number | null
+ *   parent?: string, ephemeral?: string, until?: number | null, clearUntil?: boolean
  * }} GroupMetadataInput
  */
 
@@ -74,6 +74,11 @@ function metadataTags(meta) {
   if (meta.ephemeral) tags.push(['ephemeral', meta.ephemeral]);
   if (typeof meta.until === 'number' && Number.isFinite(meta.until)) {
     tags.push(['until', String(Math.floor(meta.until))]);
+  } else if (meta.clearUntil) {
+    // The extension's way to take a deadline away again: pyramid restates
+    // a stored `until` on every 39000, so an edit that merely omits the
+    // tag keeps it — only the empty value clears it.
+    tags.push(['until', '']);
   }
   return tags;
 }

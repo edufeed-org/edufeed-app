@@ -130,6 +130,7 @@ vi.mock('$lib/paraglide/messages', () => ({
   groups_call_breakout_join_no_host: () => 'nobody can seat you',
   groups_call_breakout_room_closed: () => 'room closed, back in main',
   groups_call_breakout_extend_failed: (/** @type {any} */ p) => `not extended: ${p.reason}`,
+  groups_call_breakout_deadline_failed: (/** @type {any} */ p) => `deadline not set: ${p.reason}`,
   groups_call_broadcast_toast: (/** @type {any} */ p) => `${p.name}: ${p.text}`,
   groups_call_broadcast_return_default: () => 'please come back',
   groups_call_breakout_broadcast_failed: (/** @type {any} */ p) => `not sent: ${p.reason}`
@@ -1064,6 +1065,107 @@ describe('moving the deadline', () => {
     expect(store.getBreakoutState().session?.until).toBeNull();
     await store.extendBreakout(5);
     expect(store.getBreakoutState().session?.until).toBe(1_700_000_000 + 300);
+  });
+
+  it('setBreakoutDeadline(minutes) starts one from now on a session without a deadline', async () => {
+    vi.useFakeTimers({ now: 1_700_000_000_000 });
+    await liveInMain(hostUser);
+    await store.startBreakout({ channelName: 'Seminar', roomCount: 2, seats: [] });
+    await settle();
+    expect(store.getBreakoutState().remaining).toBeNull();
+    const roomIds = rel.createBreakoutRoom.mock.calls.map((c) => c[1].id);
+    lk.send.mockClear();
+    await store.setBreakoutDeadline(10);
+    expect(rel.editBreakoutUntil).toHaveBeenCalledTimes(2);
+    expect(rel.editBreakoutUntil.mock.calls[1].slice(1, 3)).toEqual([
+      { id: roomIds[1], parentId: 'main-id', channelName: 'Seminar', index: 2 },
+      1_700_000_000 + 600
+    ]);
+    expect(store.getBreakoutState().session?.until).toBe(1_700_000_000 + 600);
+    expect(store.getBreakoutState().remaining).toBe(600);
+    expect(lk.send).toHaveBeenCalledWith({
+      t: 'state',
+      rooms: roomIds.map((id, i) => ({ id, relay: RELAY, name: `Breakout ${i + 1} · Seminar` })),
+      until: 1_700_000_000 + 600
+    });
+    // and the extend case moves it on from there
+    await store.extendBreakout(5);
+    expect(store.getBreakoutState().session?.until).toBe(1_700_000_000 + 900);
+    // nonsense minutes are ignored, nothing goes to the relay
+    rel.editBreakoutUntil.mockClear();
+    await store.setBreakoutDeadline(0);
+    await store.setBreakoutDeadline(-3);
+    expect(rel.editBreakoutUntil).not.toHaveBeenCalled();
+  });
+
+  it('setBreakoutDeadline(null) takes the deadline away: a null until per room, no countdown, the main room told', async () => {
+    vi.useFakeTimers({ now: 1_700_000_000_000 });
+    await liveInMain(hostUser);
+    await store.startBreakout({
+      channelName: 'Seminar',
+      roomCount: 2,
+      seats: [],
+      durationMinutes: 3
+    });
+    await settle();
+    expect(store.getBreakoutState().remaining).toBe(180);
+    const roomIds = rel.createBreakoutRoom.mock.calls.map((c) => c[1].id);
+    lk.send.mockClear();
+    await store.setBreakoutDeadline(null);
+    expect(rel.editBreakoutUntil).toHaveBeenCalledTimes(2);
+    expect(rel.editBreakoutUntil.mock.calls[0][2]).toBeNull();
+    expect(store.getBreakoutState().session?.until).toBeNull();
+    expect(store.getBreakoutState().remaining).toBeNull();
+    expect(lk.send).toHaveBeenCalledWith({
+      t: 'state',
+      rooms: roomIds.map((id, i) => ({ id, relay: RELAY, name: `Breakout ${i + 1} · Seminar` }))
+    });
+    // a refusal keeps what there was and names the reason
+    await store.setBreakoutDeadline(5);
+    rel.editBreakoutUntil.mockRejectedValueOnce(new Error('restricted'));
+    await store.setBreakoutDeadline(null);
+    expect(toast.fn).toHaveBeenCalledWith('deadline not set: restricted', 'error');
+    expect(store.getBreakoutState().session?.until).toBe(1_700_000_000 + 300);
+  });
+
+  it('a cleared deadline reaches the main room (state without until) and the rooms (a 39000 without until)', async () => {
+    // main room: bob holds a deadline, the host's state replay drops it
+    await liveInMain(bobUser);
+    lk.listener?.(
+      {
+        t: 'state',
+        rooms: ROOMS.map(({ id, relay, name }) => ({ id, relay, name })),
+        until: FUTURE
+      },
+      hostSender
+    );
+    await settle();
+    expect(store.getBreakoutState().session?.until).toBe(FUTURE);
+    lk.listener?.(
+      { t: 'state', rooms: ROOMS.map(({ id, relay, name }) => ({ id, relay, name })) },
+      hostSender
+    );
+    await settle();
+    expect(store.getBreakoutState().session?.until).toBeNull();
+    expect(store.getBreakoutState().remaining).toBeNull();
+    // in a room: the newer 39000 of the room carries no until any more
+    store.__resetBreakout();
+    await liveInMain(bobUser);
+    lk.listener?.({ t: 'assign', rooms: ROOMS, until: FUTURE }, hostSender);
+    modal.callbacks.onConfirm();
+    await settle();
+    expect(store.getBreakoutState().currentRoom?.id).toBe('r1');
+    const sub = liveSub();
+    sub.stream.next(roomMeta('r1', 1, FUTURE, 11));
+    await settle();
+    expect(store.getBreakoutState().session?.until).toBe(FUTURE);
+    sub.stream.next(roomMeta('r1', 1, null, 12));
+    await settle();
+    expect(store.getBreakoutState().session?.until).toBeNull();
+    // an OLDER 39000 (a replay) never resurrects or drops anything
+    sub.stream.next(roomMeta('r1', 1, FUTURE, 5));
+    await settle();
+    expect(store.getBreakoutState().session?.until).toBeNull();
   });
 });
 
