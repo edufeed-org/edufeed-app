@@ -3,7 +3,8 @@
   stage's side column: every room with the people seated in it (kind 39002
   rosters; a badge for those the relay sees live in the room's call, kind
   39004), a "Verschieben nach …" picker per person, "Beitreten" per room,
-  the people still in the main room with the same picker, the deadline, and
+  the people still in the main room with the same picker, the deadline with
+  "+5 Min", the late-joiner switch ("Nachzügler automatisch verteilen") and
   "Alle zurückholen" (= delete every room, everyone returns).
 
   Pure view: the breakout store (groups/breakout.svelte.js) owns the session;
@@ -15,7 +16,7 @@
   import ProfileAvatar from '$lib/components/shared/ProfileAvatar.svelte';
   import { useProfileMap } from '$lib/stores/profile-map.svelte.js';
   import { getUserDisplayName } from '$lib/helpers/message-utils.js';
-  import { formatCountdown, roomOfPubkey } from '$lib/groups/breakout.js';
+  import { BREAKOUT_EXTEND_MINUTES, formatCountdown, roomOfPubkey } from '$lib/groups/breakout.js';
   import * as m from '$lib/paraglide/messages';
 
   /** @typedef {import('$lib/groups/call-participants.js').ParticipantRow} ParticipantRow */
@@ -28,10 +29,13 @@
    *   onMove: (args: {pubkey: string, identities: string[], toRoomId: string | null}) => void,
    *   onJoin: (room: BreakoutRoom) => void,
    *   onEnd: () => void,
+   *   onExtend: (minutes: number) => void,
+   *   onAutoAssign: (enabled: boolean) => void,
    *   onClose: () => void
    * }}
    */
-  let { rows, breakout, myPubkey, onMove, onJoin, onEnd, onClose } = $props();
+  let { rows, breakout, myPubkey, onMove, onJoin, onEnd, onExtend, onAutoAssign, onClose } =
+    $props();
 
   const rooms = $derived(breakout.rooms);
   /** Seated people per room, the host (a member of every room) left out. */
@@ -83,6 +87,16 @@
         {m.groups_call_breakout_time_left({ time: formatCountdown(breakout.remaining) })}
       </span>
     {/if}
+    <button
+      type="button"
+      class="btn btn-ghost btn-sm"
+      onclick={() => onExtend(BREAKOUT_EXTEND_MINUTES)}
+      disabled={breakout.busy}
+      title={m.groups_call_breakout_duration()}
+      data-testid="breakout-panel-extend"
+    >
+      {m.groups_call_breakout_extend({ minutes: BREAKOUT_EXTEND_MINUTES })}
+    </button>
     <button
       type="button"
       class="btn btn-square btn-ghost btn-sm"
@@ -181,6 +195,16 @@
       {/if}
     </section>
 
+    <label class="mb-2 flex cursor-pointer items-center gap-2 text-sm">
+      <input
+        type="checkbox"
+        class="checkbox checkbox-sm"
+        checked={breakout.session?.autoAssign === true}
+        onchange={(e) => onAutoAssign(/** @type {HTMLInputElement} */ (e.currentTarget).checked)}
+        data-testid="breakout-panel-auto-assign"
+      />
+      <span>{m.groups_call_breakout_auto_assign()}</span>
+    </label>
     <p class="text-xs text-base-content/60">{m.groups_call_breakout_panel_hint()}</p>
     <p class="mt-1 text-xs text-base-content/60">{m.groups_call_breakout_host_note()}</p>
   </div>

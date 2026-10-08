@@ -32,6 +32,9 @@ vi.mock('$lib/paraglide/messages', () => ({
   groups_call_breakout_host_note: () => 'Host rights apply in the main room only.',
   groups_call_breakout_end_all: () => 'Bring everyone back',
   groups_call_breakout_ending: () => 'Closing rooms …',
+  groups_call_breakout_duration: () => 'Duration',
+  groups_call_breakout_extend: ({ minutes }) => `+${minutes} min`,
+  groups_call_breakout_auto_assign: () => 'Assign late joiners automatically',
   common_close: () => 'Close'
 }));
 
@@ -60,7 +63,10 @@ function state(over = {}) {
       main: { id: 'main', relay: RELAY, title: 'Seminar' },
       rooms,
       until: 1,
-      hosting: true
+      hosting: true,
+      creator: true,
+      autoAssign: true,
+      channelName: 'Seminar'
     },
     currentRoom: null,
     rooms,
@@ -69,10 +75,18 @@ function state(over = {}) {
     remaining: 90,
     busy: false,
     pending: null,
+    joinRequest: null,
     ...over
   };
 }
-const cb = { onMove: vi.fn(), onJoin: vi.fn(), onEnd: vi.fn(), onClose: vi.fn() };
+const cb = {
+  onMove: vi.fn(),
+  onJoin: vi.fn(),
+  onEnd: vi.fn(),
+  onExtend: vi.fn(),
+  onAutoAssign: vi.fn(),
+  onClose: vi.fn()
+};
 beforeEach(() => Object.values(cb).forEach((fn) => fn.mockClear()));
 
 describe('BreakoutPanel', () => {
@@ -142,5 +156,27 @@ describe('BreakoutPanel', () => {
     expect(screen.getByTestId('breakout-panel-end').disabled).toBe(true);
     expect(screen.getByTestId('breakout-panel-end').textContent).toContain('Closing rooms');
     expect(screen.getAllByTestId('breakout-panel-move')[0].disabled).toBe(true);
+  });
+
+  it('"+5 min" moves the deadline and the late-joiner switch reflects and sets the session', async () => {
+    render(BreakoutPanel, { props: { rows: [], breakout: state(), myPubkey: HOST, ...cb } });
+    await fireEvent.click(screen.getByTestId('breakout-panel-extend'));
+    expect(cb.onExtend).toHaveBeenCalledWith(5);
+    const box = screen.getByTestId('breakout-panel-auto-assign');
+    expect(box.checked).toBe(true);
+    await fireEvent.click(box);
+    expect(cb.onAutoAssign).toHaveBeenCalledWith(false);
+  });
+
+  it('shows only the rooms still standing (one the relay deleted is gone)', () => {
+    render(BreakoutPanel, {
+      props: { rows: [], breakout: state({ rooms: [rooms[1]] }), myPubkey: HOST, ...cb }
+    });
+    const sections = screen.getAllByTestId('breakout-panel-room');
+    expect(sections).toHaveLength(1);
+    expect(sections[0].textContent).toContain('Room 2');
+    // and the move picker offers no deleted room as a target either
+    const main = screen.getByTestId('breakout-panel-main');
+    expect(main.querySelectorAll('option[value="r1"]')).toHaveLength(0);
   });
 });

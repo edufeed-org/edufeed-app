@@ -4155,5 +4155,16 @@
   "groups_call_breakout_members_in_main": "In the main room",
   "groups_call_breakout_switch_failed": "Switching to the breakout room failed.",
   "groups_call_breakout_end_partial": "Not deleted: {rooms}",
-  "groups_call_breakout_panel_hint": "Move participants between rooms or bring everyone back; the rooms are deleted then."
+  "groups_call_breakout_panel_hint": "Move participants between rooms or bring everyone back; the rooms are deleted then.",
+  "groups_call_breakout_auto_assign": "Assign late joiners automatically",
+  "groups_call_breakout_auto_assign_hint": "Whoever enters the main room during the session is seated in the smallest room.",
+  "groups_call_breakout_banner_title": "Breakout session running",
+  "groups_call_breakout_banner_body": "Join a room or stay in the main room.",
+  "groups_call_breakout_banner_guest": "As a guest you stay in the main room – guest links do not extend to breakout rooms.",
+  "groups_call_breakout_join_requested": "Request sent …",
+  "groups_call_breakout_join_no_host": "Nobody in the main room can seat you right now.",
+  "groups_call_breakout_took_over": "You are now running the breakout session.",
+  "groups_call_breakout_room_closed": "The room was closed – back in the main room.",
+  "groups_call_breakout_extend": "+{minutes} min",
+  "groups_call_breakout_extend_failed": "The time could not be extended: {reason}"
 }

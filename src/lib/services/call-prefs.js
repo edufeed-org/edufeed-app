@@ -203,6 +203,22 @@ export function setScreenShareAudio(enabled) {
   write('screenShareAudio', enabled ? '1' : '0');
 }
 
+/**
+ * Breakout rooms: whether the host's client seats people who join the main
+ * room while a session runs ("Nachzügler automatisch verteilen"). Null until
+ * chosen once — the dialog then defaults it from the assignment mode.
+ * @returns {boolean | null}
+ */
+export function getBreakoutAutoAssign() {
+  const raw = read('breakoutAutoAssign');
+  return raw === '1' ? true : raw === '0' ? false : null;
+}
+
+/** @param {boolean} enabled */
+export function setBreakoutAutoAssign(enabled) {
+  write('breakoutAutoAssign', enabled ? '1' : '0');
+}
+
 /** Wide screens: chat as a column beside the call stage (off = stage only). */
 // Open by default (QA 2026-10-02 C3: a closed chat had to be found first);
 // an explicit toggle either way is remembered on this device.
