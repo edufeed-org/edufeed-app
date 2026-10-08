@@ -7,6 +7,98 @@ merge commits of the nostr PRs that landed since the previous tag.
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-10-08
+
+### Added
+
+- **Pre-join lobby for calls.** Before joining a channel call, members and
+  guests see a mirrored self-preview with a microphone level meter, pick
+  camera, microphone and speaker, choose whether to start with camera or mic
+  on, and set the background effect (none, blur, presets or a stored custom
+  image). The choices are remembered per device; the call token is only
+  requested on "Beitreten".
+- **Participant list in the call.** A "Teilnehmende (N)" button opens a list
+  of everyone in the call with mic, camera, hand, guest and listen-only state
+  and the per-person actions (pin, volume); beside the tiles on a wide stage,
+  in their place on a phone.
+- **Call layouts.** An "Ansicht" picker with Raster, Fokus (one spotlight and
+  a strip), Nebeneinander (two spotlights, e.g. two screen shares) and
+  Sprecher (follows the active speaker); full screen on camera tiles; a tile
+  cap of 9, 16 or 25 per page with a pager, tiles off the current page render
+  no video. Remembered per device.
+- **Host and co-host roles.** The person who scheduled or started the call is
+  the host; co-hosts come from the meeting's participant role or are
+  promoted in the participant list. Hosts and co-hosts can mute, stop the
+  camera or screen share of, and remove a participant through a relay
+  endpoint; badges show the roles. Needs the groups relay at edufeed-v1.11.
+- **Share tab or system sound with a screen share** ("Ton teilen" in the
+  screen-share menu, off by default); browsers that deliver no audio get a
+  hint instead of an error.
+- **Call chat:** emoji picker with `:shortcode:` autocomplete and the user's
+  custom emoji packs, reply-to with a quote, @mentions of call participants
+  (with a count badge and a toast while the chat is hidden), private 1:1
+  messages ("An: <Name>"), and file sharing through LiveKit byte streams —
+  files go peer to peer, are never stored on a server and vanish with the
+  call. A close button in the panel, Escape closes an empty composer. The
+  composer now has its own full-width row with the tools below it.
+- **Edit scheduled channel meetings** (author only). The guest link keeps
+  working after a reschedule, the channel gets a "Termin verschoben" notice
+  and invitees a DM, and the .ics carries SEQUENCE and LAST-MODIFIED so a
+  re-import replaces the old entry.
+- **Guest links in channels whose calls are off.** Scheduling a meeting there
+  switches calls on first; members are told an admin has to enable calls.
+- **In-app issue reporting.** "Feedback & Fehler melden" in the account menu
+  and a "Fehler melden" button on the render error card file a public NIP-34
+  issue against the edufeed-app repository with route, version, user agent
+  and the error prefilled (logged-in users).
+- **Invite QR code and link** for communities: the membership pane shows the
+  join link with a QR after minting a code, open communities get a "Community
+  teilen" card in settings, and a logged-out visitor with a join link is asked
+  to sign in and lands in the prefilled join dialog.
+- **Follow and unfollow from the profile hover card.**
+- **NIP-92 `imeta` tags for images in articles** (URL, type, hash, dimensions,
+  alt); the reader uses dimensions and alt text.
+- **Content type chips in the community feed** and **clickable links with
+  previews and an unread dot in the call chat**.
+- **Calendar form:** the end time follows the start time.
+- Draft spec for opt-in online presence in NIP-29 groups (`docs/nips`).
+
+### Changed
+
+- The camera button shows a struck-through icon while the camera is off.
+- "Aus meiner Liste ausblenden" sits in its own section directly above
+  "Kanal verlassen" in the channel menu.
+- Declining a join request now publishes a deletion on the group relay, so
+  the request no longer reappears on other devices or for other admins
+  ("Ablehnen").
+- The channel wizard's people picker searches profiles and admits an outsider
+  to the community first, so people outside the community can be invited into
+  a channel.
+- Calmer event card meta and attendee line in the calendar.
+
+### Fixed
+
+- A logged-in channel member who opens a guest link joins as a member and
+  gets the member leave dialog.
+- Creating a moderated community no longer fails for a creator without a
+  cached profile (the e2e specs for it run again).
+- Learning resources with several resource types show all of them on cards,
+  detail pages, link previews and embeds.
+- In the resource wizard, the AI keyword badge no longer offers a no-op merge
+  once the user holds every suggested keyword; the preview shows every
+  keyword and keeps a stable cover colour.
+- Bible references are linked in every publication, not just the first.
+- Calendar edits keep tags the form does not manage.
+- Wiki articles with Djot autolinks render instead of falling back to raw
+  text.
+- Received call files never trust the sender's MIME type: only raster images
+  are previewed, everything else is an opaque download.
+
+### Infrastructure
+
+- CI reuses the published `:sha-<sha>` image for a release tag instead of
+  rebuilding the identical commit.
+
 ## [0.3.4] - 2026-10-07
 
 ### Fixed
