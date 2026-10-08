@@ -7,7 +7,11 @@
  */
 import { describe, it, expect } from 'vitest';
 import { webcrypto } from 'node:crypto';
-import { decryptFileBytes, SUPPORTED_FILE_ALGORITHMS } from '$lib/helpers/dm-file-crypto.js';
+import {
+  decryptFileBytes,
+  encryptFileBytes,
+  SUPPORTED_FILE_ALGORITHMS
+} from '$lib/helpers/dm-file-crypto.js';
 
 const toHex = (bytes) => [...bytes].map((b) => b.toString(16).padStart(2, '0')).join('');
 
@@ -57,5 +61,27 @@ describe('decryptFileBytes', () => {
     await expect(
       decryptFileBytes(encrypted, { algorithm: 'aes-gcm', key: 'zz', nonce })
     ).rejects.toThrow(/hex|key/i);
+  });
+});
+
+describe('encryptFileBytes', () => {
+  it('produces aes-gcm material that decryptFileBytes round-trips', async () => {
+    const plain = new TextEncoder().encode('a pasted screenshot');
+    const { encrypted, algorithm, key, nonce } = await encryptFileBytes(plain);
+    expect(algorithm).toBe('aes-gcm');
+    expect(key).toMatch(/^[0-9a-f]{64}$/);
+    expect(nonce).toMatch(/^[0-9a-f]{24}$/);
+    // ciphertext + 16-byte GCM tag, and not the plaintext
+    expect(encrypted.byteLength).toBe(plain.byteLength + 16);
+    expect(new TextDecoder().decode(encrypted)).not.toContain('pasted');
+    const out = await decryptFileBytes(encrypted, { algorithm, key, nonce });
+    expect(new TextDecoder().decode(out)).toBe('a pasted screenshot');
+  });
+
+  it('draws a fresh key and nonce for every file', async () => {
+    const a = await encryptFileBytes(new Uint8Array([1]));
+    const b = await encryptFileBytes(new Uint8Array([1]));
+    expect(a.key).not.toBe(b.key);
+    expect(a.nonce).not.toBe(b.nonce);
   });
 });

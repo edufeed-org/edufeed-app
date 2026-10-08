@@ -15,7 +15,7 @@
  * @typedef {{url: string, type?: string, sha256?: string, originalSha256?: string,
  *            size?: number, dimensions?: string, blurhash?: string, alt?: string,
  *            thumbnail?: string, image?: string, summary?: string, magnet?: string,
- *            infohash?: string, fallback?: string[],
+ *            infohash?: string, fallback?: string[], name?: string,
  *            encryption?: AttachmentEncryption, webxdc?: string}} MediaAttachment
  */
 
@@ -81,6 +81,7 @@ function parseImetaTag(tag) {
   if (entry.image) att.image = entry.image;
   if (entry.summary) att.summary = entry.summary;
   if (entry.alt) att.alt = entry.alt;
+  if (entry.name) att.name = entry.name;
   if (entry.blurhash) att.blurhash = entry.blurhash;
   if (entry.webxdc) att.webxdc = entry.webxdc;
   att.encryption = parseEncryption(entry);
@@ -163,6 +164,7 @@ export function buildImetaTag(att) {
   if (att.dimensions) fields.push(`dim ${att.dimensions}`);
   if (att.blurhash) fields.push(`blurhash ${att.blurhash}`);
   if (att.alt) fields.push(`alt ${att.alt}`);
+  if (att.name) fields.push(`name ${att.name}`);
   if (fields.length < 2) return null;
   return ['imeta', ...fields];
 }

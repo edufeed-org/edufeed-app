@@ -11,9 +11,18 @@
  * @vitest-environment node
  */
 import { describe, it, expect } from 'vitest';
-import { SendWrappedMessage, ReplyToWrappedMessage } from '$lib/actions/dm-actions.js';
+import {
+  SendWrappedMessage,
+  ReplyToWrappedMessage,
+  SendWrappedFile,
+  GiftWrapRumorToParticipants
+} from '$lib/actions/dm-actions.js';
 import { parseEventContent } from '$lib/helpers/nostrContent.js';
 import { nip19 } from 'nostr-tools';
+import { SimpleSigner } from 'applesauce-signers';
+import { EventStore } from 'applesauce-core';
+import { unlockGiftWrap } from 'applesauce-common/helpers/gift-wrap';
+import { vi } from 'vitest';
 
 const ME = 'a'.repeat(64);
 const PEER = 'b'.repeat(64);
@@ -25,7 +34,7 @@ const signer = { getPublicKey: async () => ME };
 /**
  * Run an action with a stub context and capture the rumor handed to `run`.
  * @param {import('applesauce-actions').Action} action
- * @returns {Promise<{ rumor: import('nostr-tools').Event, opts: any, builder: any }>}
+ * @returns {Promise<{ rumor: import('nostr-tools').Event, opts: any, builder: any, args: any[] }>}
  */
 async function runAction(action) {
   /** @type {{ builder: any, args: any[] }[]} */
@@ -36,7 +45,12 @@ async function runAction(action) {
   };
   await action(/** @type {any} */ ({ signer, run }));
   expect(calls).toHaveLength(1);
-  return { rumor: calls[0].args[0], opts: calls[0].args[1], builder: calls[0].builder };
+  return {
+    rumor: calls[0].args[0],
+    opts: calls[0].args[1],
+    builder: calls[0].builder,
+    args: calls[0].args
+  };
 }
 
 /** @param {{ tags: string[][] }} rumor */
@@ -186,5 +200,129 @@ describe('mention-derived p-tags (issue: relay identity became a DM participant)
 
     expect(pTags(rumor)).toEqual([ME]);
     expect(rumor.tags.some((t) => t[0] === 'e' && t[1] === parent.id)).toBe(true);
+  });
+});
+
+// NIP-17 kind 15: an encrypted file message. The rumor's content is the blob
+// URL and its tags carry what the receiver needs to fetch and decrypt it —
+// the shape `parseFileRumor` / DmFileMessage already read.
+describe('SendWrappedFile', () => {
+  const FILE = {
+    url: 'https://blossom.example/' + 'c'.repeat(64),
+    fileType: 'image/png',
+    algorithm: 'aes-gcm',
+    key: 'ab'.repeat(32),
+    nonce: 'cd'.repeat(12),
+    hash: 'c'.repeat(64),
+    size: 1234
+  };
+
+  it('builds a kind-15 rumor addressed to every participant with the decryption tags', async () => {
+    const { rumor, builder, args } = await runAction(
+      SendWrappedFile([ME, PEER], FILE, { expiration: 99 })
+    );
+    expect(rumor.kind).toBe(15);
+    expect(rumor.pubkey).toBe(ME);
+    expect(rumor.content).toBe(FILE.url);
+    expect(typeof rumor.created_at).toBe('number');
+    expect(rumor.tags).toEqual([
+      ['p', ME],
+      ['p', PEER],
+      ['file-type', 'image/png'],
+      ['encryption-algorithm', 'aes-gcm'],
+      ['decryption-key', FILE.key],
+      ['decryption-nonce', FILE.nonce],
+      ['x', FILE.hash],
+      ['size', '1234']
+    ]);
+    // applesauce's GiftWrapMessageToParticipants only reads participants off
+    // kinds 4 and 14 (verified live 2026-10-08: "Can only get participants
+    // from direct message event"), so a file rumor is wrapped by our own
+    // action with the receivers spelled out.
+    expect(builder).toBe(GiftWrapRumorToParticipants);
+    expect(args).toEqual([rumor, [ME, PEER], { expiration: 99 }]);
+  });
+
+  it('parses back as a file rumor the DM thread can render', async () => {
+    const { parseFileRumor } = await import('$lib/helpers/dm-rumors.js');
+    const { rumor } = await runAction(SendWrappedFile([ME, PEER], FILE));
+    expect(parseFileRumor(rumor)).toMatchObject({
+      url: FILE.url,
+      mimeType: 'image/png',
+      algorithm: 'aes-gcm',
+      key: FILE.key,
+      nonce: FILE.nonce,
+      hash: FILE.hash,
+      size: 1234
+    });
+  });
+
+  it('dedupes participants and refuses to run without a signer', async () => {
+    const { rumor } = await runAction(SendWrappedFile([PEER, PEER, ME], FILE));
+    expect(rumor.tags.filter((t) => t[0] === 'p').map((t) => t[1])).toEqual([PEER, ME]);
+    await expect(
+      SendWrappedFile([ME, PEER], FILE)(/** @type {any} */ ({ signer: null, run: async () => {} }))
+    ).rejects.toThrow(/signer/i);
+  });
+});
+
+describe('GiftWrapRumorToParticipants', () => {
+  it('seals one gift wrap per receiver (sender included) that the receiver can unwrap', async () => {
+    const sender = new SimpleSigner();
+    const peer = new SimpleSigner();
+    const me = await sender.getPublicKey();
+    const them = await peer.getPublicKey();
+    const rumor = /** @type {any} */ ({
+      kind: 15,
+      pubkey: me,
+      created_at: 1_700_000_000,
+      content: 'https://blossom.example/' + 'c'.repeat(64),
+      tags: [
+        ['p', me],
+        ['p', them],
+        ['file-type', 'image/png']
+      ]
+    });
+    /** @type {import('nostr-tools').NostrEvent[]} */
+    const wraps = [];
+    const publish = vi.fn(async (/** @type {import('nostr-tools').NostrEvent} */ event) => {
+      wraps.push(event);
+    });
+    await GiftWrapRumorToParticipants(rumor, [them], { expiration: 123 })(
+      /** @type {any} */ ({
+        signer: sender,
+        user: { pubkey: me },
+        publish,
+        events: new EventStore()
+      })
+    );
+    expect(publish).toHaveBeenCalledTimes(2);
+    expect(wraps.map((w) => w.kind)).toEqual([1059, 1059]);
+    expect(wraps.map((w) => w.tags.find((t) => t[0] === 'p')?.[1]).sort()).toEqual(
+      [me, them].sort()
+    );
+    const forPeer = wraps.find((w) => w.tags.some((t) => t[0] === 'p' && t[1] === them));
+    if (!forPeer) throw new Error('no wrap for the peer');
+    const unwrapped = await unlockGiftWrap(forPeer, peer);
+    expect(unwrapped.kind).toBe(15);
+    expect(unwrapped.pubkey).toBe(me);
+    expect(unwrapped.content).toBe(rumor.content);
+    expect(unwrapped.tags).toContainEqual(['file-type', 'image/png']);
+  });
+
+  it('refuses to run without a signer', async () => {
+    await expect(
+      GiftWrapRumorToParticipants(
+        /** @type {any} */ ({ kind: 15, pubkey: ME, created_at: 1, content: '', tags: [] }),
+        ['a'.repeat(64)]
+      )(
+        /** @type {any} */ ({
+          signer: null,
+          user: { pubkey: ME },
+          publish: async () => {},
+          events: new EventStore()
+        })
+      )
+    ).rejects.toThrow(/signer/i);
   });
 });

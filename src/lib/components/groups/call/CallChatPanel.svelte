@@ -56,6 +56,7 @@
     SmilePlusIcon
   } from '$lib/components/icons';
   import ComposerInput from '$lib/components/shared/ComposerInput.svelte';
+  import { fileDropZone } from '$lib/helpers/file-drop.js';
   import ImageWithFallback from '$lib/components/shared/ImageWithFallback.svelte';
   import LinkPreview from '$lib/components/shared/LinkPreview.svelte';
   import ProfileAvatar from '$lib/components/shared/ProfileAvatar.svelte';
@@ -317,23 +318,31 @@
   }
 
   // Files: a LiveKit byte stream to the people in the call right now (or
-  // to the chosen recipient), never uploaded anywhere.
+  // to the chosen recipient), never uploaded anywhere. They arrive from the
+  // 📎 picker, a paste with files in the clipboard, or a drop onto the
+  // composer row, and go out one after another.
   /** @type {HTMLInputElement | undefined} */
   let fileInput = $state(undefined);
   /** @param {Event} e */
-  async function attach(e) {
+  function attach(e) {
     const input = /** @type {HTMLInputElement} */ (e.currentTarget);
-    const file = input.files?.[0];
+    const files = Array.from(input.files ?? []);
     input.value = '';
-    if (!file || !canSend) return;
-    const result = await sendCallFile(file, { to: recipient || undefined });
-    if (!result.ok && result.error === 'too-large') {
-      showToast(
-        m.groups_call_chat_file_too_large({ max: formatFileSize(CALL_FILE_MAX_BYTES) ?? '' }),
-        'warning'
-      );
-    } else if (!result.ok && result.error === 'failed') {
-      showToast(m.groups_call_chat_file_failed(), 'error');
+    void sendFiles(files);
+  }
+  /** @param {File[]} files */
+  async function sendFiles(files) {
+    if (!canSend) return;
+    for (const file of files) {
+      const result = await sendCallFile(file, { to: recipient || undefined });
+      if (!result.ok && result.error === 'too-large') {
+        showToast(
+          m.groups_call_chat_file_too_large({ max: formatFileSize(CALL_FILE_MAX_BYTES) ?? '' }),
+          'warning'
+        );
+      } else if (!result.ok && result.error === 'failed') {
+        showToast(m.groups_call_chat_file_failed(), 'error');
+      }
     }
   }
 
@@ -747,9 +756,10 @@
         ? 'border-secondary bg-secondary/5 focus-within:border-secondary'
         : 'border-base-300 bg-base-100 focus-within:border-base-content/40'} {canSend
         ? ''
-        : 'opacity-60'}"
+        : 'opacity-60'} data-[dragging=true]:border-primary data-[dragging=true]:bg-primary/10 data-[dragging=true]:ring-2 data-[dragging=true]:ring-primary"
       data-testid="call-chat-input-row"
       data-private={recipient ? 'true' : undefined}
+      use:fileDropZone={{ onFiles: sendFiles, enabled: canSend }}
     >
       <ComposerInput
         bind:this={composer}
@@ -762,6 +772,7 @@
         disabled={!canSend}
         onfocus={() => (pickerOpen = false)}
         onSubmit={send}
+        onFiles={canSend ? sendFiles : undefined}
         onEscape={onComposerEscape}
         mentionProvider={provideMentions}
         onMentionPick={rememberMention}
@@ -785,6 +796,7 @@
         <input
           bind:this={fileInput}
           type="file"
+          multiple
           class="hidden"
           onchange={attach}
           data-testid="call-chat-attach-input"

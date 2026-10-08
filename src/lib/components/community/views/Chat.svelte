@@ -25,6 +25,9 @@
   import { showToast } from '$lib/helpers/toast';
   import { getAppRelaysForCategory } from '$lib/services/app-relay-service.svelte.js';
   import { mentionPubkeysIn, pTagPubkeys } from '$lib/helpers/mention-autocomplete.js';
+  import { useChatAttachments, appendUrlToDraft } from '$lib/stores/chat-attachments.svelte.js';
+  import { collectImetaTags } from '$lib/helpers/imeta.js';
+  import { fileDropZone } from '$lib/helpers/file-drop.js';
 
   const getAllowedAuthors = getContext('allowedAuthors');
 
@@ -62,6 +65,28 @@
 
   /** @type {ReturnType<typeof ComposerInput> | undefined} */
   let messageInput = $state(undefined);
+
+  // Files picked, pasted or dropped into the composer: uploaded to the
+  // user's Blossom server, URL into the draft, imeta tag along at send time
+  // (same contract as the NIP-29 channel chat).
+  const attachments = useChatAttachments(getActiveUser);
+  /** @type {HTMLInputElement | null} */
+  let fileInput = $state(null);
+  /** @param {File[]} files */
+  function attachFiles(files) {
+    if (isSending) return;
+    return attachments.attach(files, (url) => {
+      newMessage = appendUrlToDraft(newMessage, url);
+    });
+  }
+  /** @param {Event} e */
+  function handleFileChange(e) {
+    const input = /** @type {HTMLInputElement} */ (e.currentTarget);
+    const files = Array.from(input.files ?? []);
+    // Reset so picking the same file again re-fires change.
+    input.value = '';
+    if (files.length) attachFiles(files);
+  }
 
   let displayedMessages = $derived.by(() => {
     const allowed = getAllowedAuthors?.();
@@ -197,9 +222,12 @@
       for (const emoji of customEmojisIn(messageContent, customEmojiSets)) {
         chatEvent.tags.push(['emoji', emoji.shortcode, emoji.url]);
       }
+      // NIP-92: one imeta tag per uploaded file whose URL is still in the text
+      chatEvent.tags.push(...collectImetaTags(messageContent, attachments.pending()));
 
       const signedEvent = await activeUser.signer.signEvent(chatEvent);
       isSending = false;
+      attachments.markSent(messageContent);
 
       eventStore.add(signedEvent);
 
@@ -371,7 +399,9 @@
         onsubmit={sendMessage}
         class="flex items-center gap-2 {replyingTo
           ? 'rounded-t-none rounded-b-full'
-          : 'rounded-full'} border border-base-300 bg-base-100 px-2 py-1 shadow-md"
+          : 'rounded-full'} border border-base-300 bg-base-100 px-2 py-1 shadow-md data-[dragging=true]:border-primary data-[dragging=true]:bg-primary/10 data-[dragging=true]:ring-2 data-[dragging=true]:ring-primary"
+        data-testid="chat-composer-form"
+        use:fileDropZone={{ onFiles: attachFiles, enabled: !isSending && !attachments.uploading }}
       >
         <button
           type="button"
@@ -382,6 +412,30 @@
           <SmilePlusIcon class="h-5 w-5" />
         </button>
 
+        <input
+          bind:this={fileInput}
+          type="file"
+          multiple
+          class="hidden"
+          data-testid="chat-attach-input"
+          onchange={handleFileChange}
+        />
+        <button
+          type="button"
+          class="btn btn-circle btn-ghost btn-sm"
+          data-testid="chat-attach-button"
+          title={m.chat_attach_file()}
+          aria-label={m.chat_attach_file()}
+          onclick={() => fileInput?.click()}
+          disabled={isSending || attachments.uploading}
+        >
+          {#if attachments.uploading}
+            <span class="loading loading-xs loading-spinner"></span>
+          {:else}
+            📎
+          {/if}
+        </button>
+
         <ComposerInput
           bind:this={messageInput}
           bind:value={newMessage}
@@ -390,6 +444,7 @@
           disabled={isSending}
           onfocus={() => (showEmojiPicker = false)}
           onSubmit={() => sendMessage()}
+          onFiles={attachFiles}
           class="py-1"
           testid="chat-input"
         />
