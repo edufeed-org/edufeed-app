@@ -23,7 +23,8 @@ vi.mock('livekit-client', () => {
     Source: {
       Camera: 'camera',
       Microphone: 'microphone',
-      ScreenShare: 'screen_share'
+      ScreenShare: 'screen_share',
+      ScreenShareAudio: 'screen_share_audio'
     }
   };
 
@@ -35,7 +36,8 @@ vi.mock('livekit-client', () => {
       setCameraEnabled: vi.fn(),
       setScreenShareEnabled: vi.fn(),
       activeDeviceMap: new Map(),
-      identity: 'local-user'
+      identity: 'local-user',
+      trackPublications: new Map()
     };
     remoteParticipants = new Map();
 
@@ -60,6 +62,16 @@ vi.mock('livekit-client', () => {
 
 const { RoomEvent, Track } = await import('livekit-client');
 
+// call-prefs reads localStorage (none in node): a tiny stand-in for the
+// "Ton teilen" preference.
+const store = new Map();
+globalThis.localStorage = {
+  getItem: (k) => store.get(k) ?? null,
+  setItem: (k, v) => store.set(k, String(v)),
+  removeItem: (k) => store.delete(k),
+  clear: () => store.clear()
+};
+
 // Dynamic import so mocks are in place
 const { connectToRoom, disconnectFromRoom, toggleScreenShare, getLiveKitState } = await import(
   '$lib/services/livekit-connection.svelte.js'
@@ -69,6 +81,7 @@ describe('screen sharing', () => {
   beforeEach(async () => {
     // Ensure clean state
     await disconnectFromRoom();
+    store.clear();
   });
 
   async function connectTestRoom() {
@@ -87,6 +100,65 @@ describe('screen sharing', () => {
       true,
       expect.objectContaining({ audio: false })
     );
+  });
+
+  // Issue "share tab/system audio with the screen share": sound only on
+  // request, with our own tab kept out of the picker.
+  describe('"Ton teilen"', () => {
+    it('asks for system/tab audio and excludes the own tab when the preference is on', async () => {
+      store.set('edufeed:call:screenShareAudio', '1');
+      await connectTestRoom();
+      const lk = getLiveKitState();
+      await toggleScreenShare();
+      expect(lk.room.localParticipant.setScreenShareEnabled).toHaveBeenCalledWith(
+        true,
+        expect.objectContaining({
+          audio: true,
+          selfBrowserSurface: 'exclude',
+          systemAudio: 'include',
+          contentHint: 'detail'
+        })
+      );
+    });
+
+    it('flags a share that came back without sound, and clears the flag on stop', async () => {
+      store.set('edufeed:call:screenShareAudio', '1');
+      await connectTestRoom();
+      const lk = getLiveKitState();
+      lk.room.localParticipant.trackPublications.set('v', { source: Track.Source.ScreenShare });
+      await toggleScreenShare();
+      expect(lk.isScreenSharing).toBe(true);
+      expect(lk.screenShareAudioMissing).toBe(true);
+      await toggleScreenShare();
+      expect(lk.screenShareAudioMissing).toBe(false);
+    });
+
+    it('no flag when the browser delivered the audio track, or when no sound was asked for', async () => {
+      store.set('edufeed:call:screenShareAudio', '1');
+      await connectTestRoom();
+      const lk = getLiveKitState();
+      lk.room.localParticipant.trackPublications.set('v', { source: Track.Source.ScreenShare });
+      lk.room.localParticipant.trackPublications.set('a', {
+        source: Track.Source.ScreenShareAudio
+      });
+      await toggleScreenShare();
+      expect(lk.screenShareAudioMissing).toBe(false);
+      await toggleScreenShare();
+      store.set('edufeed:call:screenShareAudio', '0');
+      lk.room.localParticipant.trackPublications.clear();
+      await toggleScreenShare();
+      expect(lk.screenShareAudioMissing).toBe(false);
+    });
+
+    it('the browser stopping the share clears the flag too', async () => {
+      store.set('edufeed:call:screenShareAudio', '1');
+      await connectTestRoom();
+      const lk = getLiveKitState();
+      await toggleScreenShare();
+      expect(lk.screenShareAudioMissing).toBe(true);
+      lk.room.emit(RoomEvent.LocalTrackUnpublished, { source: Track.Source.ScreenShare });
+      expect(lk.screenShareAudioMissing).toBe(false);
+    });
   });
 
   it('toggleScreenShare again disables screen sharing', async () => {

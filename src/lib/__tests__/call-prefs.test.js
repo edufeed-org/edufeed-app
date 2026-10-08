@@ -27,6 +27,8 @@ import {
   getTileCap,
   setTileCap,
   TILE_CAPS,
+  getScreenShareAudio,
+  setScreenShareAudio,
   getBackgroundEffect,
   setBackgroundEffect,
   getCustomBackground,
@@ -153,6 +155,18 @@ describe('stage layout and tile cap', () => {
     expect(getTileCap()).toBe(9);
     localStorage.setItem('edufeed:call:tileCap', '100');
     expect(getTileCap()).toBe(16);
+  });
+});
+
+describe('screen share sound ("Ton teilen")', () => {
+  it('is off by default and remembers an explicit choice either way', () => {
+    expect(getScreenShareAudio()).toBe(false);
+    setScreenShareAudio(true);
+    expect(getScreenShareAudio()).toBe(true);
+    setScreenShareAudio(false);
+    expect(getScreenShareAudio()).toBe(false);
+    localStorage.setItem('edufeed:call:screenShareAudio', 'yes');
+    expect(getScreenShareAudio()).toBe(false);
   });
 });
 

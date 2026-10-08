@@ -12,12 +12,17 @@ import {
   getParticipantVolume,
   getPreferredDevice,
   getScreenShareQuality,
+  getScreenShareAudio,
   micCaptureOptions,
   rememberDevice,
   setAudioProcessing,
   setBackgroundEffect,
   setParticipantVolume as storeParticipantVolume
 } from './call-prefs.js';
+import {
+  screenShareCaptureOptions,
+  screenShareAudioMissing as screenShareAudioMissingIn
+} from '$lib/groups/screen-share-options.js';
 import {
   playJoinSound,
   playLeaveSound,
@@ -61,6 +66,10 @@ let isConnecting = $state(false);
 let isMuted = $state(false);
 let isCameraOff = $state(true);
 let isScreenSharing = $state(false);
+// The running share asked for sound ("Ton teilen") but the browser gave
+// none: Firefox/Safari never do, Chrome only when the picker's "share
+// audio" box was ticked. A hint for the UI, not an error.
+let screenShareAudioMissing = $state(false);
 // Whether the server lets the local participant publish tracks at all. A
 // NIP-29 relay hands a non-member of a public group a listen-only token
 // (canPublish=false); publishing would be refused, so the media setup and
@@ -263,11 +272,13 @@ function attachRemoteAudio(track, participant, source) {
   el.autoplay = true;
   document.body.appendChild(el);
   audioSinks.set(track.sid, { track, el });
-  if (source === Track.Source.Microphone && participant?.setVolume) {
-    participant.setVolume(
-      getParticipantVolume(volumeKey(participant.identity)),
-      Track.Source.Microphone
-    );
+  // The person's volume applies to their voice and to the sound of their
+  // shared screen alike.
+  if (
+    (source === Track.Source.Microphone || source === Track.Source.ScreenShareAudio) &&
+    participant?.setVolume
+  ) {
+    participant.setVolume(getParticipantVolume(volumeKey(participant.identity)), source);
   }
 }
 
@@ -306,7 +317,10 @@ export function setParticipantVolume(pubkey, volume) {
   const value = storeParticipantVolume(pubkey, volume);
   if (room) {
     for (const p of room.remoteParticipants.values()) {
-      if (volumeKey(p.identity) === pubkey) p.setVolume(value, Track.Source.Microphone);
+      if (volumeKey(p.identity) === pubkey) {
+        p.setVolume(value, Track.Source.Microphone);
+        p.setVolume(value, Track.Source.ScreenShareAudio);
+      }
     }
   }
   return value;
@@ -1007,6 +1021,7 @@ export async function connectToRoom(token, url, opts = {}) {
     newRoom.on(RoomEvent.LocalTrackUnpublished, (publication) => {
       if (publication.source === Track.Source.ScreenShare) {
         isScreenSharing = false;
+        screenShareAudioMissing = false;
       }
       updateParticipants();
     });
@@ -1115,6 +1130,7 @@ function dropDeadRoom() {
   isConnected = false;
   connectionState = 'disconnected';
   isScreenSharing = false;
+  screenShareAudioMissing = false;
   canPublish = false;
   canSignal = false;
   clearHands();
@@ -1148,6 +1164,7 @@ export async function disconnectFromRoom() {
   isMuted = false;
   isCameraOff = true;
   isScreenSharing = false;
+  screenShareAudioMissing = false;
   canPublish = true;
   canSignal = true;
   clearHands();
@@ -1222,15 +1239,25 @@ export async function toggleScreenShare() {
   const newState = !isScreenSharing;
   try {
     if (newState) {
-      // No system audio: capturing it without the browser's own-audio
-      // restriction echoes the call back into itself.
-      await room.localParticipant.setScreenShareEnabled(true, {
-        audio: false,
-        resolution: SCREEN_SHARE_QUALITIES[getScreenShareQuality()],
-        contentHint: 'detail'
-      });
+      // Sound only on request ("Ton teilen"), and then with our own tab kept
+      // out of the picker — capturing the tab that plays the call would
+      // echo the call back into itself (groups/screen-share-options.js).
+      const audio = getScreenShareAudio();
+      await room.localParticipant.setScreenShareEnabled(
+        true,
+        screenShareCaptureOptions({
+          resolution: SCREEN_SHARE_QUALITIES[getScreenShareQuality()],
+          audio
+        })
+      );
+      screenShareAudioMissing = screenShareAudioMissingIn(
+        audio,
+        room.localParticipant.trackPublications?.values?.() ?? [],
+        Track.Source.ScreenShareAudio
+      );
     } else {
       await room.localParticipant.setScreenShareEnabled(false);
+      screenShareAudioMissing = false;
     }
     isScreenSharing = newState;
     if (newState) playScreenShareSound();
@@ -1242,7 +1269,7 @@ export async function toggleScreenShare() {
 
 /**
  * Get reactive connection state.
- * @returns {{ isConnected: boolean, isConnecting: boolean, isMuted: boolean, isCameraOff: boolean, isScreenSharing: boolean, canPublish: boolean, canSignal: boolean, connectionState: 'connected' | 'reconnecting' | 'disconnected', disconnectReason: import('livekit-client').DisconnectReason | null, mutedIdentities: Set<string>, raisedHands: Set<string>, reactions: Array<{id: string, identity: string, emoji: string, url?: string}>, callChat: CallChatMessage[], localParticipant: import('livekit-client').LocalParticipant | null, remoteParticipants: import('livekit-client').RemoteParticipant[], participantMetadataVersion: number, room: Room | null, speakingParticipantIds: Set<string>, audioInputDevices: MediaDeviceInfo[], activeAudioDeviceId: string, audioOutputDevices: MediaDeviceInfo[], activeAudioOutputDeviceId: string, videoInputDevices: MediaDeviceInfo[], activeVideoDeviceId: string, backgroundEffect: string }}
+ * @returns {{ isConnected: boolean, isConnecting: boolean, isMuted: boolean, isCameraOff: boolean, isScreenSharing: boolean, screenShareAudioMissing: boolean, canPublish: boolean, canSignal: boolean, connectionState: 'connected' | 'reconnecting' | 'disconnected', disconnectReason: import('livekit-client').DisconnectReason | null, mutedIdentities: Set<string>, raisedHands: Set<string>, reactions: Array<{id: string, identity: string, emoji: string, url?: string}>, callChat: CallChatMessage[], localParticipant: import('livekit-client').LocalParticipant | null, remoteParticipants: import('livekit-client').RemoteParticipant[], participantMetadataVersion: number, room: Room | null, speakingParticipantIds: Set<string>, audioInputDevices: MediaDeviceInfo[], activeAudioDeviceId: string, audioOutputDevices: MediaDeviceInfo[], activeAudioOutputDeviceId: string, videoInputDevices: MediaDeviceInfo[], activeVideoDeviceId: string, backgroundEffect: string }}
  */
 export function getLiveKitState() {
   return {
@@ -1260,6 +1287,9 @@ export function getLiveKitState() {
     },
     get isScreenSharing() {
       return isScreenSharing;
+    },
+    get screenShareAudioMissing() {
+      return screenShareAudioMissing;
     },
     get canPublish() {
       return canPublish;

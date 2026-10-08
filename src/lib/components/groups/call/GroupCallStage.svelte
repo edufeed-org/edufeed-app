@@ -43,13 +43,15 @@
     getCustomBackground,
     getParticipantVolume,
     getScreenShareQuality,
+    getScreenShareAudio,
     setCustomBackground,
     setScreenShareQuality,
     TILE_CAPS,
     getCallLayout,
     setCallLayout,
     getTileCap,
-    setTileCap
+    setTileCap,
+    setScreenShareAudio
   } from '$lib/services/call-prefs.js';
   import {
     BACKGROUND_PRESETS,
@@ -207,7 +209,15 @@
   }
   const onToggleMute = () => runMedia('mic', toggleMute);
   const onToggleCamera = () => runMedia('camera', toggleCamera);
-  const onToggleScreenShare = () => runMedia('screen', toggleScreenShare);
+  // After a share that asked for sound came back silent (Firefox/Safari
+  // never deliver it, Chrome only with the picker's box ticked): one hint.
+  const onToggleScreenShare = () =>
+    runMedia('screen', async () => {
+      await toggleScreenShare();
+      if (lk.isScreenSharing && lk.screenShareAudioMissing) {
+        showToast(m.groups_call_screen_share_audio_missing(), 'info');
+      }
+    });
 
   // The parent asks "Anruf verlassen?" first (leaveGroupCallWithConfirm),
   // which also plays the leave cue once confirmed.
@@ -786,6 +796,12 @@
     Object.keys(SCREEN_SHARE_QUALITIES)
   );
   let shareQuality = $state(getScreenShareQuality());
+  // "Ton teilen": remembered on this device; applies to the next share.
+  let shareAudio = $state(getScreenShareAudio());
+  function toggleShareAudio() {
+    shareAudio = !shareAudio;
+    setScreenShareAudio(shareAudio);
+  }
   /** @param {keyof typeof SCREEN_SHARE_QUALITIES} q */
   function pickQuality(q) {
     setScreenShareQuality(q);
@@ -1435,7 +1451,22 @@
               class="menu absolute right-0 bottom-full z-30 mb-2 w-52 rounded-box bg-base-100 p-2 shadow-lg"
               data-testid="group-call-screen-menu"
             >
-              <li class="menu-title text-xs">{m.groups_call_screen_share_quality()}</li>
+              <li>
+                <label class="flex cursor-pointer items-center justify-between gap-2 text-sm">
+                  {m.groups_call_screen_share_audio()}
+                  <input
+                    type="checkbox"
+                    class="toggle toggle-primary toggle-sm"
+                    checked={shareAudio}
+                    onchange={toggleShareAudio}
+                    data-testid="group-call-screen-share-audio"
+                  />
+                </label>
+              </li>
+              <li class="menu-title text-xs whitespace-normal">
+                {m.groups_call_screen_share_audio_hint()}
+              </li>
+              <li class="mt-1 menu-title text-xs">{m.groups_call_screen_share_quality()}</li>
               {#each QUALITY_KEYS as q (q)}
                 <li>
                   <button

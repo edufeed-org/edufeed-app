@@ -204,8 +204,11 @@ describe('remote audio playback + per-person volume', () => {
 
     svc.setParticipantVolume(ALICE, 0.4);
     expect(prefs.getParticipantVolume(ALICE)).toBe(0.4);
-    expect(seat1.setVolume).toHaveBeenLastCalledWith(0.4, 'microphone');
-    expect(seat2.setVolume).toHaveBeenLastCalledWith(0.4, 'microphone');
+    expect(seat1.setVolume).toHaveBeenCalledWith(0.4, 'microphone');
+    expect(seat2.setVolume).toHaveBeenCalledWith(0.4, 'microphone');
+    // ... and their shared screen's sound follows the same slider.
+    expect(seat1.setVolume).toHaveBeenCalledWith(0.4, 'screen_share_audio');
+    expect(seat2.setVolume).toHaveBeenCalledWith(0.4, 'screen_share_audio');
   });
 });
 
