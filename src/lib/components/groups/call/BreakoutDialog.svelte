@@ -14,6 +14,7 @@
   import { CloseIcon } from '$lib/components/icons';
   import { BREAKOUT_MIN_ROOMS, BREAKOUT_MAX_ROOMS, splitRandom } from '$lib/groups/breakout.js';
   import { isRelayMembershipRequired } from '$lib/groups/group-management.js';
+  import { getBreakoutAutoAssign, setBreakoutAutoAssign } from '$lib/services/call-prefs.js';
   import * as m from '$lib/paraglide/messages';
 
   /** @typedef {import('$lib/groups/call-participants.js').ParticipantRow} ParticipantRow */
@@ -24,7 +25,8 @@
    *   onStart: (args: {
    *     roomCount: number,
    *     seats: Array<{identity: string, pubkey: string, roomIndex: number}>,
-   *     durationMinutes: number | null
+   *     durationMinutes: number | null,
+   *     autoAssign: boolean
    *   }) => Promise<void>,
    *   onClose: () => void
    * }}
@@ -38,6 +40,18 @@
   let durationMinutes = $state(null);
   /** @type {Record<string, number>} seat key -> 1-based room (manual mode) */
   let manual = $state({});
+  // "Nachzügler automatisch verteilen": whoever joins the main room while
+  // the session runs is seated in the smallest room by the host's client.
+  // Remembered on this device once chosen; until then it follows the mode
+  // (on for a random split, off when the host places people by hand).
+  /** @type {boolean | null} */
+  let autoAssignChoice = $state(getBreakoutAutoAssign());
+  const autoAssign = $derived(autoAssignChoice ?? mode === 'random');
+  /** @param {boolean} enabled */
+  function chooseAutoAssign(enabled) {
+    autoAssignChoice = enabled;
+    setBreakoutAutoAssign(enabled);
+  }
   let busy = $state(false);
   /** @type {string | null} */
   let error = $state(null);
@@ -80,7 +94,8 @@
       await onStart({
         roomCount,
         seats,
-        durationMinutes: durationMinutes && durationMinutes > 0 ? durationMinutes : null
+        durationMinutes: durationMinutes && durationMinutes > 0 ? durationMinutes : null,
+        autoAssign
       });
     } catch (err) {
       console.warn('breakout start failed:', err);
@@ -167,6 +182,22 @@
         {m.groups_call_breakout_assign_manual()}
       </label>
     </div>
+
+    <label class="mt-3 flex cursor-pointer items-start gap-2 text-sm">
+      <input
+        type="checkbox"
+        class="checkbox checkbox-sm"
+        checked={autoAssign}
+        onchange={(e) =>
+          chooseAutoAssign(/** @type {HTMLInputElement} */ (e.currentTarget).checked)}
+        data-testid="breakout-auto-assign"
+      />
+      <span class="flex flex-col">
+        <span>{m.groups_call_breakout_auto_assign()}</span>
+        <span class="text-xs text-base-content/60">{m.groups_call_breakout_auto_assign_hint()}</span
+        >
+      </span>
+    </label>
 
     <ul class="mt-3 min-h-0 flex-1 divide-y divide-base-200 overflow-y-auto text-sm">
       {#if assignable.length === 0}

@@ -6,11 +6,15 @@
  * seating / unseating people (9000 / 9001) and deleting rooms (9008).
  */
 import { describe, it, expect, vi } from 'vitest';
+import { of, throwError } from 'rxjs';
 import {
   createBreakoutRoom,
   seatInRoom,
   unseatFromRoom,
-  deleteBreakoutRoom
+  deleteBreakoutRoom,
+  fetchEphemeralChildren,
+  editBreakoutUntil,
+  isEphemeralTagRejection
 } from '$lib/groups/breakout-relay.js';
 
 const PK = 'a'.repeat(64);
@@ -138,5 +142,85 @@ describe('deleteBreakoutRoom', () => {
   it('accepts a room that is already gone', async () => {
     const relay = relayOf(() => "group 'room-1' doesn't exist");
     await expect(deleteBreakoutRoom(relay, 'room-1', user)).resolves.toBeUndefined();
+  });
+});
+
+describe('fetchEphemeralChildren (the #ephemeral read)', () => {
+  const child = {
+    kind: 39000,
+    tags: [
+      ['d', 'r1'],
+      ['ephemeral', 'main']
+    ]
+  };
+
+  it("asks the relay for the parent's ephemeral 39000s and collects what it answers", async () => {
+    const request = vi.fn(() =>
+      of(child, {
+        ...child,
+        tags: [
+          ['d', 'r2'],
+          ['ephemeral', 'main']
+        ]
+      })
+    );
+    const rooms = await fetchEphemeralChildren({ request }, 'main', { timeoutMs: 100 });
+    expect(request).toHaveBeenCalledWith(
+      { kinds: [39000], '#ephemeral': ['main'] },
+      { timeout: 100 }
+    );
+    expect(rooms).toHaveLength(2);
+  });
+
+  it('answers an empty list on a relay without the extension (nothing matches) or a failing request', async () => {
+    expect(await fetchEphemeralChildren({ request: () => of() }, 'main')).toEqual([]);
+    expect(
+      await fetchEphemeralChildren({ request: () => throwError(() => new Error('closed')) }, 'main')
+    ).toEqual([]);
+  });
+});
+
+describe('editBreakoutUntil', () => {
+  const room = { id: 'room-1', parentId: 'main', channelName: 'Seminar', index: 1 };
+
+  it('restates the whole room metadata with the new until on a 9002', async () => {
+    const relay = relayOf();
+    await editBreakoutUntil(relay, room, 1700000600, user);
+    expect(relay.published.map((e) => e.kind)).toEqual([9002]);
+    const tags = relay.published[0].tags;
+    expect(tags).toContainEqual(['until', '1700000600']);
+    expect(tags).toContainEqual(['ephemeral', 'main']);
+    expect(tags).toContainEqual(['livekit']);
+    expect(tags).toContainEqual(['hidden']);
+    expect(tags).toContainEqual(['parent', 'main']);
+    expect(tags).toContainEqual(['about', 'edufeed:breakout parent=main n=1 until=1700000600']);
+  });
+
+  it('drops the parent on the parent-role rejection, and ephemeral when the relay refuses that tag', async () => {
+    const relay = relayOf((event) => {
+      if (event.tags.some((/** @type {string[]} */ t) => t[0] === 'parent'))
+        return 'restricted: must be an admin of the parent group';
+      if (event.tags.some((/** @type {string[]} */ t) => t[0] === 'ephemeral'))
+        return 'restricted: ephemeral cannot be changed after creation';
+      return null;
+    });
+    await editBreakoutUntil(relay, room, 1700000600, user);
+    expect(relay.published).toHaveLength(3);
+    /** @type {string[][]} */
+    const last = relay.published[2].tags;
+    expect(last.some((t) => t[0] === 'parent')).toBe(false);
+    expect(last.some((t) => t[0] === 'ephemeral')).toBe(false);
+    expect(last.some((t) => t[0] === 'until')).toBe(false);
+    // the legacy marker still carries the new time for v1 readers
+    expect(last).toContainEqual(['about', 'edufeed:breakout parent=main n=1 until=1700000600']);
+  });
+
+  it("rethrows any other refusal with the relay's reason", async () => {
+    const relay = relayOf(() => 'restricted: insufficient permissions');
+    await expect(
+      editBreakoutUntil(relay, { ...room, withParent: false }, null, user)
+    ).rejects.toThrow(/insufficient permissions/);
+    expect(isEphemeralTagRejection(new Error('restricted: ephemeral is fixed'))).toBe(true);
+    expect(isEphemeralTagRejection(new Error('too old'))).toBe(false);
   });
 });

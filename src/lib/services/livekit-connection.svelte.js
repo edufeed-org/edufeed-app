@@ -177,6 +177,10 @@ const FILE_TOPIC = 'edufeed.call.file';
 const BREAKOUT_TOPIC = 'edufeed.call.breakout';
 /** @type {((payload: unknown, sender: {identity: string, metadata?: string}) => void) | null} */
 let breakoutListener = null;
+// Someone joined the Room after us: the breakout store replays a running
+// session to the newcomer (and seats them) the way the chat replays history.
+/** @type {((participant: {identity: string, metadata?: string}) => void) | null} */
+let participantJoinedListener = null;
 export const CALL_FILE_MAX_BYTES = 25 * 1024 * 1024;
 const FILE_CHUNK_BYTES = 64 * 1024;
 const CHAT_KEEP = 200;
@@ -246,6 +250,19 @@ export function onBreakoutMessage(cb) {
 }
 
 /**
+ * Listen for remote participants connecting to the live Room (after us).
+ * One listener at a time; returns the matching unsubscribe.
+ * @param {(participant: {identity: string, metadata?: string}) => void} cb
+ * @returns {() => void}
+ */
+export function onParticipantJoined(cb) {
+  participantJoinedListener = cb;
+  return () => {
+    if (participantJoinedListener === cb) participantJoinedListener = null;
+  };
+}
+
+/**
  * Send a breakout message (reliable) to everyone in the room, or to the
  * named seats only. Resolves without sending when there is no room or the
  * seat cannot publish data.
@@ -281,6 +298,15 @@ export function isRemovalReason(reason) {
   return (
     reason === DisconnectReason.PARTICIPANT_REMOVED || reason === DisconnectReason.ROOM_DELETED
   );
+}
+
+/**
+ * The room itself was deleted (RoomService DeleteRoom — what the relay does
+ * to an ephemeral breakout room it tears down).
+ * @param {unknown} reason
+ */
+export function isRoomDeletedReason(reason) {
+  return reason === DisconnectReason.ROOM_DELETED;
 }
 
 /**
@@ -1017,6 +1043,7 @@ export async function connectToRoom(token, url, opts = {}) {
       if (participant?.identity) replayOwnChat(participant.identity);
       updateParticipants();
       recomputeMuted();
+      if (participant?.identity && room === newRoom) participantJoinedListener?.(participant);
     });
     newRoom.on(RoomEvent.ParticipantDisconnected, (/** @type {any} */ participant) => {
       playLeaveSound();

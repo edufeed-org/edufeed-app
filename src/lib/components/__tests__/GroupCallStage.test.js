@@ -112,11 +112,15 @@ const breakout = vi.hoisted(() => ({
     presenceByRoomId: {},
     remaining: null,
     busy: false,
-    pending: null
+    pending: null,
+    joinRequest: null
   },
   returnToMain: vi.fn(async () => {}),
   startBreakout: vi.fn(async () => {}),
   endBreakout: vi.fn(async () => {}),
+  extendBreakout: vi.fn(async () => {}),
+  setSessionAutoAssign: vi.fn(),
+  requestBreakoutRoom: vi.fn(async () => {}),
   moveParticipant: vi.fn(async () => {}),
   joinBreakoutRoom: vi.fn(async () => {}),
   ensureBreakoutListener: vi.fn(async () => {})
@@ -126,12 +130,19 @@ vi.mock('$lib/groups/breakout.svelte.js', () => ({
   returnToMain: (...a) => breakout.returnToMain(...a),
   startBreakout: (...a) => breakout.startBreakout(...a),
   endBreakout: (...a) => breakout.endBreakout(...a),
+  extendBreakout: (...a) => breakout.extendBreakout(...a),
+  setSessionAutoAssign: (...a) => breakout.setSessionAutoAssign(...a),
+  requestBreakoutRoom: (...a) => breakout.requestBreakoutRoom(...a),
   moveParticipant: (...a) => breakout.moveParticipant(...a),
   joinBreakoutRoom: (...a) => breakout.joinBreakoutRoom(...a),
   ensureBreakoutListener: (...a) => breakout.ensureBreakoutListener(...a)
 }));
 vi.mock('$lib/components/groups/call/BreakoutDialog.svelte', () => ({ default: Stub }));
 vi.mock('$lib/components/groups/call/BreakoutPanel.svelte', () => ({ default: Stub }));
+vi.mock(
+  '$lib/components/groups/call/BreakoutBanner.svelte',
+  () => import('./fixtures/BreakoutBannerStub.svelte')
+);
 vi.mock('livekit-client', () => ({
   Track: { Source: { Camera: 'camera', Microphone: 'microphone', ScreenShare: 'screen_share' } }
 }));
@@ -1616,6 +1627,46 @@ describe('breakout rooms', () => {
     // host controls are never offered inside a room
     await openPanel();
     expect(screen.queryByTestId('group-call-breakout-open')).toBeNull();
+  });
+
+  it('a seat in the main room during a session it is not part of sees the banner (guest flag passed through), never a host', async () => {
+    const session = {
+      main: { id: 'main', relay: 'wss://r.example/', title: 'Standup' },
+      rooms: [{ id: 'r1', relay: 'wss://r.example/', name: 'Breakout 1', index: 1 }],
+      until: null,
+      hosting: false
+    };
+    breakout.state.session = session;
+    breakout.state.rooms = session.rooms;
+    render(GroupCallStage, { props: baseProps });
+    const banner = await screen.findByTestId('breakout-banner-stub', {}, { timeout: 4000 });
+    expect(banner.dataset.guest).toBe('false');
+    await fireEvent.click(banner);
+    expect(breakout.requestBreakoutRoom).toHaveBeenCalledWith(session.rooms[0]);
+  });
+
+  it('the banner names a guest seat as such and hides while the assignment prompt is up', async () => {
+    lk.localParticipant = {
+      identity: `${'a'.repeat(64)}:me`,
+      metadata: '{"guest":true,"pass":"p"}',
+      getTrackPublication: () => undefined
+    };
+    breakout.state.session = {
+      main: { id: 'main', relay: 'wss://r.example/', title: 'Standup' },
+      rooms: [],
+      until: null,
+      hosting: false
+    };
+    render(GroupCallStage, { props: baseProps });
+    const banner = await screen.findByTestId('breakout-banner-stub', {}, { timeout: 4000 });
+    expect(banner.dataset.guest).toBe('true');
+    // hosting: no banner (the panel is the host's view)
+    breakout.state.session = { ...breakout.state.session, hosting: true };
+    breakout.state.pending = { room: { id: 'r1' } };
+    render(GroupCallStage, { props: baseProps });
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(screen.getAllByTestId('breakout-banner-stub')).toHaveLength(1);
+    breakout.state.pending = null;
   });
 
   it('hosting from the main room: the deadline chip shows and the button stays', async () => {

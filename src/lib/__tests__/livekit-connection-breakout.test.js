@@ -179,6 +179,17 @@ describe('breakout data messages', () => {
     expect(seen).toEqual([{ t: 'hand', v: true }]);
   });
 
+  it('tells the registered listener about every participant that joins after us', () => {
+    const seen = [];
+    const stop = svc.onParticipantJoined((p) => seen.push(p.identity));
+    const bob = remote('b'.repeat(64) + ':x1');
+    room.emit(RoomEvent.ParticipantConnected, bob);
+    expect(seen).toEqual([bob.identity]);
+    stop();
+    room.emit(RoomEvent.ParticipantConnected, remote('c'.repeat(64) + ':x2'));
+    expect(seen).toHaveLength(1);
+  });
+
   it('reports the current media state for a room switch that keeps mic and camera', async () => {
     expect(svc.currentJoinMedia()).toEqual({ audio: false, video: false });
     await svc.toggleMute();

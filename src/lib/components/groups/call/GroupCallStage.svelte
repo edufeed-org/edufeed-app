@@ -76,6 +76,9 @@
     ensureBreakoutListener,
     startBreakout,
     endBreakout,
+    extendBreakout,
+    setSessionAutoAssign,
+    requestBreakoutRoom,
     moveParticipant,
     joinBreakoutRoom,
     returnToMain
@@ -335,6 +338,7 @@
   });
   const BreakoutDialogLazy = lazyComponent(() => import('./BreakoutDialog.svelte'));
   const BreakoutPanelLazy = lazyComponent(() => import('./BreakoutPanel.svelte'));
+  const BreakoutBannerLazy = lazyComponent(() => import('./BreakoutBanner.svelte'));
   let breakoutDialogOpen = $state(false);
   let breakoutPanelOpen = $state(false);
   // Host rights hold in the main room only: never offer the controls inside
@@ -342,7 +346,13 @@
   const inBreakoutRoom = $derived(breakout.currentRoom !== null);
   const hostsBreakout = $derived(!inBreakoutRoom && breakout.session?.hosting === true);
   const canOpenBreakout = $derived(!!myRole && !inBreakoutRoom && !breakout.session);
-  /** @param {{roomCount: number, seats: Array<{identity: string, pubkey: string, roomIndex: number}>, durationMinutes: number | null}} args */
+  // A session runs that this seat is not part of (joined late, declined,
+  // came back): the banner with the rooms to join — or, for a guest, the
+  // note that a pass does not reach a breakout room.
+  const showBreakoutBanner = $derived(
+    !!breakout.session && !hostsBreakout && !inBreakoutRoom && breakout.pending === null
+  );
+  /** @param {{roomCount: number, seats: Array<{identity: string, pubkey: string, roomIndex: number}>, durationMinutes: number | null, autoAssign: boolean}} args */
   async function startBreakoutRooms(args) {
     await startBreakout({ channelName: title, ...args });
     breakoutDialogOpen = false;
@@ -1166,6 +1176,14 @@
     </div>
   {/if}
 
+  {#if showBreakoutBanner && BreakoutBannerLazy.Component}
+    <BreakoutBannerLazy.Component
+      {breakout}
+      guest={isGuestParticipant(lk.localParticipant)}
+      onJoin={(room) => void requestBreakoutRoom(room)}
+    />
+  {/if}
+
   <!-- Content -->
   {#if lk.isConnecting || !lk.isConnected}
     <div class="flex flex-1 items-center justify-center">
@@ -1309,6 +1327,8 @@
                 onMove={(args) => void moveParticipant(args)}
                 onJoin={(room) => void joinBreakoutRoom(room)}
                 onEnd={() => void endBreakout()}
+                onExtend={(minutes) => void extendBreakout(minutes)}
+                onAutoAssign={(enabled) => setSessionAutoAssign(enabled)}
                 onClose={() => (breakoutPanelOpen = false)}
               />
             {:else}

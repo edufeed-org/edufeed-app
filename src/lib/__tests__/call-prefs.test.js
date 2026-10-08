@@ -28,6 +28,8 @@ import {
   setTileCap,
   TILE_CAPS,
   getScreenShareAudio,
+  getBreakoutAutoAssign,
+  setBreakoutAutoAssign,
   setScreenShareAudio,
   getBackgroundEffect,
   setBackgroundEffect,
@@ -167,6 +169,18 @@ describe('screen share sound ("Ton teilen")', () => {
     expect(getScreenShareAudio()).toBe(false);
     localStorage.setItem('edufeed:call:screenShareAudio', 'yes');
     expect(getScreenShareAudio()).toBe(false);
+  });
+});
+
+describe('breakout auto-assign for late joiners', () => {
+  it('is undecided until chosen once, then remembered either way', () => {
+    expect(getBreakoutAutoAssign()).toBeNull();
+    setBreakoutAutoAssign(false);
+    expect(getBreakoutAutoAssign()).toBe(false);
+    setBreakoutAutoAssign(true);
+    expect(getBreakoutAutoAssign()).toBe(true);
+    localStorage.setItem('edufeed:call:breakoutAutoAssign', 'maybe');
+    expect(getBreakoutAutoAssign()).toBeNull();
   });
 });
 

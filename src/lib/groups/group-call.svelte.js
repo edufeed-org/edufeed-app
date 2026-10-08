@@ -277,7 +277,10 @@ export async function joinGroupCallWithConfirm(pointer, user, view = {}) {
  * @param {{title?: string}} [view]
  */
 export async function switchGroupCall(pointer, view = {}) {
-  if (!activeUser || !isLive()) return;
+  // An ENDED call may still be moved: a breakout room the relay deleted
+  // (DisconnectReason ROOM_DELETED) sends its seat back to the main room
+  // instead of leaving it on the "call ended" screen.
+  if (!activeUser || !(isLive() || phase === 'ended')) return;
   const user = activeUser;
   const keepHref = href;
   const media = lkModule?.currentJoinMedia?.() ?? { audio: false, video: false };

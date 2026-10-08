@@ -231,33 +231,47 @@ that writes the `p`-tag role.
 
 A host or co-host of a channel call can split the people in the call into
 2–8 **breakout rooms** (`src/lib/groups/breakout*.js`,
-`components/groups/call/BreakoutDialog.svelte` / `BreakoutPanel.svelte`,
-`components/groups/BreakoutAssignmentModal.svelte`). Client-only and
-ephemeral — nothing of it survives the call:
+`components/groups/call/BreakoutDialog.svelte` / `BreakoutPanel.svelte` /
+`BreakoutBanner.svelte`, `components/groups/BreakoutAssignmentModal.svelte`).
+Nothing of it survives the call:
 
-1. **Rooms are hidden AV sub-groups on the channel's relay.** For every room
-   the host publishes a 9007 + 9002 (`createBreakoutRoom`,
-   `breakout-relay.js`) with `breakoutRoomMetadata()`: name
-   `Breakout N · <channel>`, `public` (so every participant can read every
-   room's 39002 — pyramid hides a private group's rosters from non-members),
-   `closed`, `restricted`, `hidden`, `livekit`, and `["parent", <channel id>]`.
-   pyramid accepts a `parent` only from an account with a role in the parent
-   ("restricted: must be an admin of the parent group"), so for a host who is
-   a plain channel member the 9002 is retried without it. The marker that
-   makes a room recognisable is the `about` text
-   `edufeed:breakout parent=<channel id> n=<N> [until=<unix>]`
-   (`parseBreakoutMarker` / `isBreakoutGroup`) — pyramid regenerates the
-   39000 from its own struct, so a custom tag would not survive, while
-   `about` does. `isBreakoutGroup` keeps rooms out of `buildSubtreeChannels`
-   (community channel lists, sidebar, the channel calendar), `useHostChannels`
-   (relay directory) and `unlinkedGroups` (`/groups`). Creating a group needs
-   the relay's create whitelist (or its open-creation setting) — a refused
-   9007 surfaces as `community_groups_relay_membership_required`.
-2. **Seating.** Each assigned pubkey gets a plain put-user (9000) on its room,
-   so the relay mints a full token. The creator is the room's admin — only
-   the account that opened the rooms can seat, move or delete; a co-host who
-   did not start the session cannot manage it.
-3. **Assignment** travels as a LiveKit data message in the main room — topic
+1. **Rooms are ephemeral, hidden AV sub-groups on the channel's relay**
+   (`docs/nips/nip29-ephemeral-groups.md`, relay side pyramid
+   `edufeed-v1.12`). For every room the host publishes a 9007 + 9002
+   (`createBreakoutRoom`, `breakout-relay.js`) with `breakoutRoomMetadata()`:
+   name `Breakout N · <channel>`, `public` (so every participant can read
+   every room's 39002 — pyramid hides a private group's rosters from
+   non-members), `closed`, `restricted`, `hidden`, `livekit`,
+   `["ephemeral", <channel id>]`, `["until", <unix>]` when a duration was
+   given, and `["parent", <channel id>]`. pyramid accepts a `parent` only
+   from an account with a role in the parent ("restricted: must be an admin
+   of the parent group"), so for a host who is a plain channel member the
+   9002 is retried without it. The relay stores `ephemeral` / `until` and
+   restates them on the 39000; a relay WITHOUT the extension drops both, so
+   the same facts also go into the legacy `about` marker
+   `edufeed:breakout parent=<channel id> n=<N> [until=<unix>]`.
+   `parseBreakoutMarker` / `isBreakoutGroup` read the tags first and fall
+   back to the marker; `isBreakoutGroup` keeps rooms out of
+   `buildSubtreeChannels` (community channel lists, sidebar, the channel
+   calendar), `useHostChannels` (relay directory) and `unlinkedGroups`
+   (`/groups`). Creating a group needs the relay's create whitelist (or its
+   open-creation setting) — a refused 9007 surfaces as
+   `community_groups_relay_membership_required`. Before creating, the host
+   deletes leftover ephemeral children of the channel the relay still lists
+   (`fetchEphemeralChildren`, best effort).
+2. **The relay owns the end of life.** With the extension, the relay deletes
+   a room itself (relay-signed 9008 + LiveKit `DeleteRoom`) when its LiveKit
+   room finishes, never starts within 15 min, passes `until` + 5 min, or
+   loses its parent, and a sweeper re-checks every minute. The client still
+   deletes rooms on "Alle zurückholen" and at the deadline, so nobody waits
+   for the sweeper. Moderation of a room (9000 / 9001 / 9002 `until` / 9008)
+   is accepted from its creator, the parent's admins and the parent's
+   **current call host / co-hosts** — the client no longer restricts this to
+   the creator; on an old relay a non-creator's action fails with the
+   relay's reason (toasted).
+3. **Seating.** Each assigned pubkey gets a plain put-user (9000) on its
+   room, so the relay mints a full token.
+4. **Assignment** travels as a LiveKit data message in the main room — topic
    `edufeed.call.breakout`, `{t:'assign', rooms:[{id, relay, name,
 members:[identity…]}], until?}` (`parseBreakoutPayload`), believed only
    from a seat whose participant metadata says host/co-host. A seat named in
@@ -265,28 +279,57 @@ members:[identity…]}], until?}` (`parseBreakoutPayload`), believed only
    auto-switch after 5 s) and moves its call with `switchGroupCall`
    (group-call.svelte.js): no lobby, mic/camera state kept, the dock's way
    back unchanged. `{t:'end'}` tells the main room the session is over.
-4. **In a room the client follows the relay**, not the host (the main room's
+   Two more shapes: `{t:'state', rooms:[{id, relay, name}], until?}` is the
+   session as the host seat replays it to a late joiner (and sends after a
+   deadline change), `{t:'join', room}` is a seat in the main room asking the
+   host seat for a room.
+5. **Late joiners.** Someone who joins the main room while a session runs
+   learns about it twice over: the client holding the **host seat** (relay
+   participant metadata `{"host":true}`) replays `state` to every newcomer
+   (`onParticipantJoined` in the connection service), and the newcomer's own
+   client asks the relay `{"kinds":[39000], "#ephemeral":[<channel id>]}`
+   (the one place the extension relaxes `hidden`; empty on an old relay).
+   With "Nachzügler automatisch verteilen" (dialog + panel switch,
+   `call-prefs.js` `getBreakoutAutoAssign`, default on for a random split)
+   the host seat also seats the newcomer in the room with the fewest people
+   (`pickSmallestRoom`) and sends the targeted assignment; otherwise the
+   newcomer sees the **banner** "Breakout-Session läuft" with the rooms and
+   "Beitreten" (`requestBreakoutRoom`: seat yourself if the relay lets you,
+   else `join` to the host seat, which seats and assigns you; unanswered
+   after 10 s → toast). Guests stay in the main room (a pass does not reach
+   a sub-channel); the banner tells them.
+6. **Hand-over.** Every host / co-host client keeps the session state it
+   received. When the relay hands this seat the host role (the host left),
+   the store flips to `hosting` and takes over: panel, newcomers, deadline,
+   moving and ending — the relay rights above make that work.
+7. **In a room the client follows the relay**, not the host (the main room's
    SFU no longer reaches it): one subscription for the rooms' 39000/39002/
-   39004 and 9008. Removed from its roster → back to the main room after a
-   2.5 s grace; named in another room's roster → switch there (that is how a
-   move works: put-user on the new room FIRST, then remove-user); 9008 or a
-   `[deleted]` 39000 → back; the `until` deadline → countdown in the header,
+   39004 and 9008 (also held by the host and by main-room seats with a
+   session, so the panel and banner drop rooms the relay deleted). Removed
+   from its roster → back to the main room after a 2.5 s grace; named in
+   another room's roster → switch there (that is how a move works: put-user
+   on the new room FIRST, then remove-user); 9008, a `[deleted]` 39000, or
+   the LiveKit disconnect with `ROOM_DELETED` (the relay's `DeleteRoom`) →
+   back to the main room (never the "call ended" screen —
+   `switchGroupCall` moves an ended call too); a 39000 with a new `until` →
+   the countdown follows; the `until` deadline → countdown in the header,
    back at zero. "Zurück zum Hauptraum" is always available to anyone in a
    room. `GroupChat` treats a call in a breakout room of its channel as "in
    call here", so the stage stays on the channel's page.
-5. **Host panel** (participant list → "Breakout-Räume"): rooms with their
+8. **Host panel** (participant list → "Breakout-Räume"): rooms with their
    seated people (39002) and who is live (39004), "Verschieben nach …",
    "Beitreten" (the host becomes a plain participant there — the relay seats
    whoever opens a room's call as that room's host, so host rights hold in
-   the main room only) and "Alle zurückholen" = 9008 for every room.
-6. **Guests** (call passes) stay in the main room: a pass does not extend to
-   a sub-channel.
+   the main room only), "+5 Min" (`extendBreakout`: a 9002 per room with the
+   new `until`, restating the whole metadata because pyramid overwrites
+   `livekit` and the relay refuses a dropped `ephemeral`), the late-joiner
+   switch, and "Alle zurückholen" = 9008 for every room.
 
-Limitations: if the host disconnects with rooms open, a deadline still
-returns everyone, but the rooms stay on the relay (hidden) until the creator
-comes back and ends the session — nobody else may delete them; a "message to
-all rooms" does not exist; pyramid does not tear a room's LiveKit room down
-on 9008 (participants leave when their client returns).
+Degrades on a relay without the extension: rooms carry the `about` marker
+only, nobody but the creator may delete or move, the `#ephemeral` read
+answers nothing (the host seat's replay still reaches late joiners), and a
+room whose host vanished stays until the creator returns or the deadline
+sends everyone home. A "message to all rooms" is the next PR (kind 20002).
 
 ## Scheduled meetings
 

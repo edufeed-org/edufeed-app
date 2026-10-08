@@ -22,10 +22,18 @@ const now = () => Math.floor(Date.now() / 1000);
 const template = (kind, tags) => ({ kind, content: '', created_at: now(), tags });
 
 /**
+ * @typedef {{
+ *   name?: string, about?: string, picture?: string,
+ *   isPublic: boolean, isOpen: boolean, isHidden?: boolean, livekit?: boolean,
+ *   parent?: string, ephemeral?: string, until?: number | null
+ * }} GroupMetadataInput
+ */
+
+/**
  * The metadata tag block shared by create (9007) and edit (9002): fields only
  * when non-empty after trim, then BOTH marker sides so a flip always
  * overwrites.
- * @param {{name?: string, about?: string, picture?: string, isPublic: boolean, isOpen: boolean, isHidden?: boolean, livekit?: boolean, parent?: string}} meta
+ * @param {GroupMetadataInput} meta
  * @returns {string[][]}
  */
 function metadataTags(meta) {
@@ -56,6 +64,17 @@ function metadataTags(meta) {
   // meaningful when both groups live on the same relay (the tag is
   // relay-scoped) — callers are responsible for that check.
   if (meta.parent) tags.push(['parent', meta.parent]);
+  // NIP-29 extension "ephemeral groups" (docs/nips/nip29-ephemeral-groups.md):
+  // a short-lived child of `ephemeral` (the parent group id) whose end of
+  // life the RELAY owns — deleted when its LiveKit room finishes, never
+  // starts, passes `until` (+ 5 min grace) or loses its parent. The relay
+  // refuses any later edit that adds, removes or changes `ephemeral`, so
+  // every 9002 restates it verbatim; `until` may be edited by whoever may
+  // moderate the group. A relay without the extension simply drops both.
+  if (meta.ephemeral) tags.push(['ephemeral', meta.ephemeral]);
+  if (typeof meta.until === 'number' && Number.isFinite(meta.until)) {
+    tags.push(['until', String(Math.floor(meta.until))]);
+  }
   return tags;
 }
 
@@ -65,7 +84,7 @@ function metadataTags(meta) {
  * relays that read metadata only from 9002 ignore the extra tags (khatru,
  * measured on groups.0xchat.com).
  * @param {string} groupId
- * @param {{name?: string, about?: string, picture?: string, isPublic: boolean, isOpen: boolean, isHidden?: boolean, livekit?: boolean, parent?: string}} [meta]
+ * @param {GroupMetadataInput} [meta]
  */
 export function buildCreateGroupTemplate(groupId, meta) {
   return template(CREATE_GROUP_KIND, [['h', groupId], ...(meta ? metadataTags(meta) : [])]);
@@ -73,7 +92,7 @@ export function buildCreateGroupTemplate(groupId, meta) {
 
 /**
  * @param {string} groupId
- * @param {{name?: string, about?: string, picture?: string, isPublic: boolean, isOpen: boolean, isHidden?: boolean, livekit?: boolean, parent?: string}} meta
+ * @param {GroupMetadataInput} meta
  */
 export function buildEditGroupMetadataTemplate(groupId, meta) {
   return template(EDIT_METADATA_KIND, [['h', groupId], ...metadataTags(meta)]);

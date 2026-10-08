@@ -760,6 +760,19 @@ describe('switchGroupCall (breakout rooms)', () => {
     expect(getGroupCallState().phase).toBe('idle');
   });
 
+  it('still moves a call the server ended (a deleted breakout room goes back to the main room)', async () => {
+    requestGroupCallToken.mockResolvedValue({ serverUrl: 'wss://x', participantToken: 't' });
+    await joinGroupCall(P2, USER, { title: 'Breakout 1' });
+    lkListener.cb?.('removed-reason'); // ROOM_DELETED / PARTICIPANT_REMOVED
+    expect(getGroupCallState().phase).toBe('ended');
+    expect(getGroupCallState().endReason).toBe('removed');
+    await switchGroupCall(P1, { title: 'Main' });
+    const s = getGroupCallState();
+    expect(s.phase).toBe('ready');
+    expect(s.isActiveFor(P1)).toBe(true);
+    expect(s.endReason).toBeNull();
+  });
+
   it('exposes the channel and signer of the active call to the breakout store', async () => {
     expect(getActiveCallPointer()).toBeNull();
     expect(getActiveCallUser()).toBeNull();

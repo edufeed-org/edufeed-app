@@ -11,7 +11,16 @@ import { render, fireEvent, screen, waitFor } from '@testing-library/svelte';
 
 function Stub() {}
 vi.mock('$lib/components/icons', () => ({ CloseIcon: Stub }));
+const prefs = vi.hoisted(() => ({ autoAssign: /** @type {boolean | null} */ (null) }));
+vi.mock('$lib/services/call-prefs.js', () => ({
+  getBreakoutAutoAssign: () => prefs.autoAssign,
+  setBreakoutAutoAssign: (v) => {
+    prefs.autoAssign = v;
+  }
+}));
 vi.mock('$lib/paraglide/messages', () => ({
+  groups_call_breakout_auto_assign: () => 'Assign late joiners automatically',
+  groups_call_breakout_auto_assign_hint: () => 'Newcomers go to the smallest room.',
   groups_call_breakout_title: () => 'Breakout rooms',
   groups_call_breakout_room_count: () => 'Number of rooms',
   groups_call_breakout_assign_random: () => 'Assign randomly',
@@ -57,6 +66,7 @@ beforeEach(() => {
   onStart.mockReset();
   onStart.mockResolvedValue(undefined);
   onClose.mockClear();
+  prefs.autoAssign = null;
 });
 
 describe('BreakoutDialog', () => {
@@ -97,6 +107,33 @@ describe('BreakoutDialog', () => {
     // one per room — balanced, nobody doubled, the guest and I left out
     expect(args.seats.map((s) => s.roomIndex).sort()).toEqual([1, 2, 3]);
     expect(args.seats.every((s) => typeof s.identity === 'string')).toBe(true);
+    // late joiners are distributed by default when the split is random
+    expect(args.autoAssign).toBe(true);
+  });
+
+  it('"Nachzügler automatisch verteilen" follows the mode until chosen, then is remembered on this device', async () => {
+    render(BreakoutDialog, { props: { rows: [ME, BOB], nameOf, onStart, onClose } });
+    const box = screen.getByTestId('breakout-auto-assign');
+    expect(box.checked).toBe(true);
+    await fireEvent.click(screen.getByTestId('breakout-mode-manual'));
+    expect(box.checked).toBe(false);
+    await fireEvent.click(screen.getByTestId('breakout-start'));
+    await waitFor(() => expect(onStart).toHaveBeenCalledTimes(1));
+    expect(onStart.mock.calls[0][0].autoAssign).toBe(false);
+    expect(prefs.autoAssign).toBeNull();
+    // an explicit choice sticks across the mode and is stored
+    await fireEvent.click(box);
+    expect(box.checked).toBe(true);
+    expect(prefs.autoAssign).toBe(true);
+    await fireEvent.click(screen.getByTestId('breakout-mode-random'));
+    await fireEvent.click(screen.getByTestId('breakout-mode-manual'));
+    expect(screen.getByTestId('breakout-auto-assign').checked).toBe(true);
+  });
+
+  it('a remembered "off" wins over the random default', () => {
+    prefs.autoAssign = false;
+    render(BreakoutDialog, { props: { rows: [ME, BOB], nameOf, onStart, onClose } });
+    expect(screen.getByTestId('breakout-auto-assign').checked).toBe(false);
   });
 
   it('manual: sends only the seats given a room, where the host put them', async () => {

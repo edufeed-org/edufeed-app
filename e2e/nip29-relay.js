@@ -57,7 +57,7 @@ function tagValue(tags, name) {
 /**
  * @typedef {object} GroupState
  * @property {string} id
- * @property {{name?: string, about?: string, picture?: string, isPublic: boolean, isOpen: boolean, restricted: boolean, hidden: boolean, livekit: boolean, parent?: string}} metadata
+ * @property {{name?: string, about?: string, picture?: string, isPublic: boolean, isOpen: boolean, restricted: boolean, hidden: boolean, livekit: boolean, parent?: string, ephemeral?: string, until?: number}} metadata
  * @property {Map<string, string[]>} admins pubkey -> roles (only entries with roles.length > 0 are kept)
  * @property {Set<string>} members
  * @property {Set<string>} inviteCodes registered via kind 9009
@@ -121,26 +121,50 @@ function applyMetadataTags(metadata, tags) {
       case 'parent':
         metadata.parent = tag[1] || undefined;
         break;
+      // NIP-29 extension "ephemeral groups" (docs/nips/nip29-ephemeral-groups.md):
+      // stored and restated verbatim on the 39000, so the `#ephemeral` read
+      // and `isBreakoutGroup` work against this mock as against pyramid
+      // edufeed-v1.12. `until` may change on a later 9002; `ephemeral` is
+      // fixed after creation (an edit that changes it is refused below).
+      case 'ephemeral':
+        metadata.ephemeral = tag[1] || undefined;
+        break;
+      case 'until': {
+        const until = Number(tag[1]);
+        metadata.until = Number.isFinite(until) ? until : undefined;
+        break;
+      }
     }
   }
 }
 
-/** @param {GroupState['metadata']} metadata @param {string[][]} tags */
+/**
+ * @param {GroupState['metadata']} metadata @param {string[][]} tags
+ * @returns {string | null} a refusal reason, or null when applied
+ */
 function applyEditMetadataTags(metadata, tags) {
+  const ephemeral = tagValue(tags, 'ephemeral');
+  if ((metadata.ephemeral ?? undefined) !== (ephemeral || undefined)) {
+    return 'restricted: ephemeral cannot be changed after creation';
+  }
   metadata.livekit = false;
+  // `until` is overwritten from every edit (absence removes the deadline).
+  metadata.until = undefined;
   applyMetadataTags(metadata, tags);
+  return null;
 }
 
 /**
  * Apply one NIP-29 moderation event to the relay's group-state map.
  * @param {Map<string, GroupState>} groups
  * @param {import('nostr-tools').NostrEvent} event
- * @param {{creatorIsAdmin?: boolean}} [options]
- * @returns {{group: GroupState, changed: boolean, stored?: boolean, deletes?: string[], deletedGroup?: boolean} | null} null when the
+ * @param {{creatorIsAdmin?: boolean, enforceModeration?: boolean}} [options]
+ * @param {Map<string, string>} [callHosts] group id -> pubkey hosting its call (enforceModeration)
+ * @returns {{group: GroupState, changed: boolean, stored?: boolean, deletes?: string[], deletedGroup?: boolean, refused?: string} | null} null when the
  *   event carries no resolvable group id (or targets an unknown group,
  *   for any kind other than create).
  */
-function applyModerationEvent(groups, event, options = {}) {
+function applyModerationEvent(groups, event, options = {}, callHosts = new Map()) {
   const groupId = tagValue(event.tags, 'h');
   if (!groupId) return null;
 
@@ -158,10 +182,28 @@ function applyModerationEvent(groups, event, options = {}) {
   const group = groups.get(groupId);
   if (!group) return null;
 
+  // Rights, when asked to enforce them (off by default — the e2e suite's
+  // open relay): put-user / remove-user / edit-metadata / delete-group from
+  // the group's admins; for an EPHEMERAL group also from the parent's admins
+  // and the parent's current call host (the extension's rule), the
+  // co-hosts being unknown to this mock.
+  if (
+    options.enforceModeration &&
+    [PUT_USER_KIND, REMOVE_USER_KIND, EDIT_METADATA_KIND, DELETE_GROUP_KIND].includes(event.kind)
+  ) {
+    const parent = group.metadata.ephemeral ? groups.get(group.metadata.ephemeral) : undefined;
+    const allowed =
+      group.admins.has(event.pubkey) ||
+      (parent !== undefined &&
+        (parent.admins.has(event.pubkey) || callHosts.get(parent.id) === event.pubkey));
+    if (!allowed) return { group, changed: false, refused: 'restricted: insufficient permissions' };
+  }
+
   switch (event.kind) {
-    case EDIT_METADATA_KIND:
-      applyEditMetadataTags(group.metadata, event.tags);
-      return { group, changed: true };
+    case EDIT_METADATA_KIND: {
+      const refused = applyEditMetadataTags(group.metadata, event.tags);
+      return refused ? { group, changed: false, refused } : { group, changed: true };
+    }
 
     case DELETE_GROUP_KIND:
       // pyramid archives every event of the group and drops it from memory;
@@ -247,6 +289,9 @@ function buildRosterEvents(group, relaySecretKey) {
   if (group.metadata.hidden) metadataTags.push(['hidden']);
   if (group.metadata.livekit) metadataTags.push(['livekit']);
   if (group.metadata.parent) metadataTags.push(['parent', group.metadata.parent]);
+  if (group.metadata.ephemeral) metadataTags.push(['ephemeral', group.metadata.ephemeral]);
+  if (group.metadata.until !== undefined)
+    metadataTags.push(['until', String(group.metadata.until)]);
 
   const adminTags = [['d', group.id]];
   for (const [pubkey, roles] of group.admins) {
@@ -368,8 +413,18 @@ function nip98Pubkey(header) {
  *   → dev JWT for a livekit-enabled group; the first seat of a room is its
  *   host, exactly pyramid's "opener" rule) so a local livekit-server --dev
  *   can carry real calls against this relay.
+ * Always on: the ephemeral-groups extension (`ephemeral` / `until` stored
+ * and restated on the 39000, `#ephemeral` answered through the generic tag
+ * filter, a 9002 that changes `ephemeral` refused), ephemeral kinds
+ * (20000-29999) relayed without being stored, and `POST
+ * /__mock/delete-group/<id>` as the relay-side deletion of an ephemeral
+ * group (relay-signed 9008 + tombstone, like a user's 9008).
+ * - `enforceModeration`: refuse 9000/9001/9002/9008 from anyone but the
+ *   group's admins — and, for an ephemeral group, the parent's admins and
+ *   the parent's current call host (`POST /__mock/call-host/<group>/<pubkey>`
+ *   moves that seat, as pyramid does on a hand-over).
  * @param {number} port
- * @param {{creatorIsAdmin?: boolean, livekit?: {serverUrl: string, apiKey: string, apiSecret: string}}} [options]
+ * @param {{creatorIsAdmin?: boolean, enforceModeration?: boolean, livekit?: {serverUrl: string, apiKey: string, apiSecret: string}}} [options]
  * @returns {Promise<{server: http.Server, wss: WebSocketServer, relayPubkey: string}>}
  */
 export function startRelay(port, options = {}) {
@@ -384,6 +439,45 @@ export function startRelay(port, options = {}) {
   /** @type {Array<{ws: import('ws').WebSocket, subId: string, filters: import('nostr-tools').Filter[]}>} */
   const subscriptions = [];
 
+  /**
+   * Tear a group down the way pyramid does on a 9008 — a user's or, for an
+   * ephemeral group, the relay's own (room finished, deadline, sweep): the
+   * 9008 fans out live, the group's events are dropped and its 39000 becomes
+   * the `[deleted]` tombstone.
+   * @param {string} gid
+   * @param {import('nostr-tools').NostrEvent} [deleteEvent] the 9008 (relay-signed when omitted)
+   */
+  function deleteGroup(gid, deleteEvent) {
+    groups.delete(gid);
+    const now = Math.floor(Date.now() / 1000);
+    fanOut(
+      subscriptions,
+      deleteEvent ??
+        finalizeEvent(
+          { kind: DELETE_GROUP_KIND, created_at: now, tags: [['h', gid]], content: '' },
+          relaySecretKey
+        )
+    );
+    for (let i = storedEvents.length - 1; i >= 0; i--) {
+      const stored = storedEvents[i];
+      if (tagValue(stored.tags, 'h') === gid || tagValue(stored.tags, 'd') === gid) {
+        storedEvents.splice(i, 1);
+      }
+    }
+    callHosts.delete(gid);
+    const tombstone = finalizeEvent(
+      {
+        kind: GROUP_METADATA_KIND,
+        created_at: now,
+        tags: [['d', gid], ['name', '[deleted]'], ['private'], ['closed']],
+        content: ''
+      },
+      relaySecretKey
+    );
+    storeEvent(storedEvents, tombstone);
+    fanOut(subscriptions, tombstone);
+  }
+
   return new Promise((resolve) => {
     const server = http.createServer((req, res) => {
       const cors = {
@@ -392,6 +486,30 @@ export function startRelay(port, options = {}) {
         'Access-Control-Allow-Methods': 'GET, POST, OPTIONS'
       };
       if (req.method === 'OPTIONS') {
+        res.writeHead(204, cors);
+        res.end();
+        return;
+      }
+      // Test hook: the relay deletes an ephemeral group itself (what
+      // pyramid does on room_finished / until / sweep) — POST
+      // /__mock/delete-group/<id>. Only for groups that carry `ephemeral`.
+      const callHost = req.url?.match(/^\/__mock\/call-host\/([^/?]+)\/([0-9a-f]{64})$/);
+      if (callHost && req.method === 'POST') {
+        callHosts.set(decodeURIComponent(callHost[1]), callHost[2]);
+        res.writeHead(204, cors);
+        res.end();
+        return;
+      }
+      const relayDelete = req.url?.match(/^\/__mock\/delete-group\/([^/?]+)$/);
+      if (relayDelete && req.method === 'POST') {
+        const gid = decodeURIComponent(relayDelete[1]);
+        const group = groups.get(gid);
+        if (!group?.metadata.ephemeral) {
+          res.writeHead(404, cors);
+          res.end('no such ephemeral group');
+          return;
+        }
+        deleteGroup(gid);
         res.writeHead(204, cors);
         res.end();
         return;
@@ -493,33 +611,17 @@ export function startRelay(port, options = {}) {
           const event = rest[0];
           if (!event?.id) return;
 
-          ws.send(JSON.stringify(['OK', event.id, true, '']));
-
           if (MODERATION_KINDS.has(event.kind)) {
-            const result = applyModerationEvent(groups, event, options);
+            const result = applyModerationEvent(groups, event, options, callHosts);
+            if (result?.refused) {
+              ws.send(JSON.stringify(['OK', event.id, false, result.refused]));
+              return;
+            }
+            ws.send(JSON.stringify(['OK', event.id, true, '']));
             if (result?.deletedGroup) {
               // live subscribers see the 9008 itself; afterwards the group's
               // events are gone and its 39000 is the `[deleted]` tombstone
-              fanOut(subscriptions, event);
-              const gid = result.group.id;
-              for (let i = storedEvents.length - 1; i >= 0; i--) {
-                const stored = storedEvents[i];
-                if (tagValue(stored.tags, 'h') === gid || tagValue(stored.tags, 'd') === gid) {
-                  storedEvents.splice(i, 1);
-                }
-              }
-              callHosts.delete(gid);
-              const tombstone = finalizeEvent(
-                {
-                  kind: GROUP_METADATA_KIND,
-                  created_at: Math.floor(Date.now() / 1000),
-                  tags: [['d', gid], ['name', '[deleted]'], ['private'], ['closed']],
-                  content: ''
-                },
-                relaySecretKey
-              );
-              storeEvent(storedEvents, tombstone);
-              fanOut(subscriptions, tombstone);
+              deleteGroup(result.group.id, event);
               return;
             }
             if (result?.changed) {
@@ -545,6 +647,13 @@ export function startRelay(port, options = {}) {
             return;
           }
 
+          ws.send(JSON.stringify(['OK', event.id, true, '']));
+          // Ephemeral kinds (20000-29999, NIP-01): relayed to whoever listens
+          // right now, never stored — what a kind-20002 call broadcast needs.
+          if (event.kind >= 20000 && event.kind < 30000) {
+            fanOut(subscriptions, event);
+            return;
+          }
           storeEvent(storedEvents, event);
           fanOut(subscriptions, event);
         }
