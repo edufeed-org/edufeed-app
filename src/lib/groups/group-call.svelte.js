@@ -268,6 +268,33 @@ export async function joinGroupCallWithConfirm(pointer, user, view = {}) {
 }
 
 /**
+ * Move the live call to another channel WITHOUT the lobby — a breakout
+ * switch (groups/breakout.svelte.js): the seat keeps its mic / camera state
+ * (the background effect is re-read from prefs on connect anyway) and the
+ * dock's way back stays the page the main call was shown on. No-op without
+ * a live call; the signer is the one that joined.
+ * @param {{id: string, relay: string}} pointer
+ * @param {{title?: string}} [view]
+ */
+export async function switchGroupCall(pointer, view = {}) {
+  if (!activeUser || !isLive()) return;
+  const user = activeUser;
+  const keepHref = href;
+  const media = lkModule?.currentJoinMedia?.() ?? { audio: false, video: false };
+  await joinGroupCall(pointer, user, { title: view.title ?? '', href: keepHref, media });
+}
+
+/** The channel of the active call (null while idle). */
+export function getActiveCallPointer() {
+  return activePointer ? { ...activePointer } : null;
+}
+
+/** The account that joined the active call (null while idle). */
+export function getActiveCallUser() {
+  return activeUser;
+}
+
+/**
  * A stage view is on screen; returns the matching unregister (idempotent).
  * `viewHref` is the page it sits on: the dock's "back to call" returns to
  * wherever the call was last shown (a channel opened from a list may reach

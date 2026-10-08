@@ -65,6 +65,9 @@ const { default: CallParticipantsPanel } = await import(
 const { default: MenuExtrasHost } = await import(
   './fixtures/CallParticipantsPanelExtrasHost.svelte'
 );
+const { default: HeaderExtrasHost } = await import(
+  './fixtures/CallParticipantsPanelHeaderHost.svelte'
+);
 
 const A = 'a'.repeat(64);
 const B = 'b'.repeat(64);
@@ -262,5 +265,17 @@ describe('CallParticipantsPanel — role badges', () => {
     expect(badge(`${B}:1`).textContent.trim()).toBe('Co-Host');
     expect(badge(`${B}:1`).classList.contains('badge-xs')).toBe(true);
     expect(badge(`${C}:1`)).toBeNull();
+  });
+});
+
+describe('headerExtras', () => {
+  it("renders the stage's header buttons between the count and the close button", () => {
+    render(HeaderExtrasHost, { props: { rows: [row(`${A}:1`, A)] } });
+    const header = screen.getByTestId('call-participants-panel').firstElementChild;
+    const children = [...header.children];
+    const extra = screen.getByTestId('header-extra');
+    const close = screen.getByTestId('call-participants-close');
+    expect(children.indexOf(extra)).toBeGreaterThan(0);
+    expect(children.indexOf(extra)).toBeLessThan(children.indexOf(close));
   });
 });

@@ -101,6 +101,37 @@ vi.mock('$lib/groups/group-call.svelte.js', async (importOriginal) => ({
   moderateActiveCall: (...a) => moderateActiveCall(...a)
 }));
 vi.mock('$lib/services/call-sounds.js', () => ({ playLeaveSound: media.playLeaveSound }));
+// The breakout store reaches the relay pool; the stage only reads its state
+// and calls its actions.
+const breakout = vi.hoisted(() => ({
+  state: {
+    session: null,
+    currentRoom: null,
+    rooms: [],
+    membersByRoomId: {},
+    presenceByRoomId: {},
+    remaining: null,
+    busy: false,
+    pending: null
+  },
+  returnToMain: vi.fn(async () => {}),
+  startBreakout: vi.fn(async () => {}),
+  endBreakout: vi.fn(async () => {}),
+  moveParticipant: vi.fn(async () => {}),
+  joinBreakoutRoom: vi.fn(async () => {}),
+  ensureBreakoutListener: vi.fn(async () => {})
+}));
+vi.mock('$lib/groups/breakout.svelte.js', () => ({
+  getBreakoutState: () => breakout.state,
+  returnToMain: (...a) => breakout.returnToMain(...a),
+  startBreakout: (...a) => breakout.startBreakout(...a),
+  endBreakout: (...a) => breakout.endBreakout(...a),
+  moveParticipant: (...a) => breakout.moveParticipant(...a),
+  joinBreakoutRoom: (...a) => breakout.joinBreakoutRoom(...a),
+  ensureBreakoutListener: (...a) => breakout.ensureBreakoutListener(...a)
+}));
+vi.mock('$lib/components/groups/call/BreakoutDialog.svelte', () => ({ default: Stub }));
+vi.mock('$lib/components/groups/call/BreakoutPanel.svelte', () => ({ default: Stub }));
 vi.mock('livekit-client', () => ({
   Track: { Source: { Camera: 'camera', Microphone: 'microphone', ScreenShare: 'screen_share' } }
 }));
@@ -143,7 +174,9 @@ vi.mock('$lib/components/icons', async () => ({
   ChevronLeftIcon: Stub,
   ChevronRightIcon: Stub,
   CloseIcon: Stub,
-  StarIcon: Stub
+  StarIcon: Stub,
+  ChannelsIcon: Stub,
+  ClockIcon: Stub
 }));
 vi.mock('$lib/paraglide/messages', () => ({
   groups_call_chat_unread: () => 'New messages in the call chat',
@@ -237,7 +270,11 @@ vi.mock('$lib/paraglide/messages', () => ({
   groups_call_background_upload: () => 'Choose own image',
   groups_call_background_upload_hint: () => 'Stays on this device',
   groups_call_background_failed: () => 'Background failed',
-  groups_call_background_store_failed: () => 'Image not saved'
+  groups_call_background_store_failed: () => 'Image not saved',
+  groups_call_breakout_title: () => 'Breakout rooms',
+  groups_call_breakout_in_room: (p) => `Breakout room ${p.n}`,
+  groups_call_breakout_time_left: (p) => `${p.time} left`,
+  groups_call_breakout_back_to_main: () => 'Back to the main room'
 }));
 
 // bind:clientWidth measures through ResizeObserver, which jsdom lacks; an
@@ -1511,5 +1548,90 @@ describe('host role', () => {
     lk.participantMetadataVersion = 1;
     render(GroupCallStage, { props: baseProps });
     expect(tile().dataset.role).toBe('cohost');
+  });
+});
+
+describe('breakout rooms', () => {
+  const asHost = () => {
+    lk.localParticipant = {
+      identity: `${'a'.repeat(64)}:me`,
+      metadata: '{"host":true}',
+      getTrackPublication: () => undefined
+    };
+  };
+  beforeEach(() => {
+    Object.assign(breakout.state, {
+      session: null,
+      currentRoom: null,
+      rooms: [],
+      remaining: null,
+      busy: false
+    });
+    breakout.returnToMain.mockClear();
+  });
+  const openPanel = async () => {
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await fireEvent.click(screen.getByTestId('group-call-show-participants'));
+    return screen.findByTestId('call-participants-panel-stub', {}, { timeout: 4000 });
+  };
+
+  it('offers "Breakout rooms" in the participant list header to a host, not to a plain seat', async () => {
+    render(GroupCallStage, { props: baseProps });
+    await openPanel();
+    expect(screen.queryByTestId('group-call-breakout-open')).toBeNull();
+  });
+
+  it('shows the host the button and makes sure the assignment listener is registered', async () => {
+    asHost();
+    render(GroupCallStage, { props: baseProps });
+    await openPanel();
+    const open = screen.getByTestId('group-call-breakout-open');
+    expect(open.textContent).toContain('Breakout rooms');
+    await fireEvent.click(open);
+    expect(breakout.ensureBreakoutListener).toHaveBeenCalled();
+  });
+
+  it('in a breakout room: no host badge, a room chip with the countdown, and the way back', async () => {
+    asHost();
+    breakout.state.session = {
+      main: { id: 'main', relay: 'wss://r.example/', title: 'Standup' },
+      rooms: [],
+      until: 1,
+      hosting: false
+    };
+    breakout.state.currentRoom = {
+      id: 'r2',
+      relay: 'wss://r.example/',
+      name: 'Breakout 2',
+      index: 2
+    };
+    breakout.state.remaining = 125;
+    render(GroupCallStage, { props: baseProps });
+    expect(screen.queryByTestId('group-call-my-role')).toBeNull();
+    expect(
+      screen.getByTestId('group-call-breakout-room').textContent.replace(/\s+/g, ' ').trim()
+    ).toBe('Breakout room 2 · 2:05');
+    await fireEvent.click(screen.getByTestId('group-call-breakout-back'));
+    expect(breakout.returnToMain).toHaveBeenCalledTimes(1);
+    // host controls are never offered inside a room
+    await openPanel();
+    expect(screen.queryByTestId('group-call-breakout-open')).toBeNull();
+  });
+
+  it('hosting from the main room: the deadline chip shows and the button stays', async () => {
+    asHost();
+    breakout.state.session = {
+      main: { id: 'main', relay: 'wss://r.example/', title: 'Standup' },
+      rooms: [{ id: 'r1', relay: 'wss://r.example/', name: 'Breakout 1', index: 1 }],
+      until: 1,
+      hosting: true
+    };
+    breakout.state.rooms = breakout.state.session.rooms;
+    breakout.state.remaining = 59;
+    render(GroupCallStage, { props: baseProps });
+    expect(screen.getByTestId('group-call-breakout-deadline').textContent).toContain('0:59 left');
+    expect(screen.queryByTestId('group-call-breakout-back')).toBeNull();
+    await openPanel();
+    expect(screen.getByTestId('group-call-breakout-open')).toBeTruthy();
   });
 });

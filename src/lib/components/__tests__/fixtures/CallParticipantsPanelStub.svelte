@@ -1,9 +1,17 @@
 <script>
   /** Records the rows the stage hands CallParticipantsPanel, exposes its callbacks and renders its menu extras. */
-  let { rows, onTogglePin, onVolumeChange, onClose, menuExtras = undefined } = $props();
+  let {
+    rows,
+    onTogglePin,
+    onVolumeChange,
+    onClose,
+    menuExtras = undefined,
+    headerExtras = undefined
+  } = $props();
 </script>
 
 <div data-testid="call-participants-panel-stub">
+  <div data-testid="stub-header-extras">{@render headerExtras?.()}</div>
   {#each rows as row (row.key)}
     <span
       data-testid="participants-row-stub"

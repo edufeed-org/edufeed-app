@@ -39,6 +39,10 @@ vi.mock('../groups/CallLeaveConfirmModal.svelte', async () => {
   const mock = await import('./__mocks__/DialogModalStub.svelte');
   return { default: mock.default };
 });
+vi.mock('../groups/BreakoutAssignmentModal.svelte', async () => {
+  const mock = await import('./__mocks__/DialogModalStub.svelte');
+  return { default: mock.default };
+});
 vi.mock('../groups/CallPreJoinModal.svelte', async () => {
   const mock = await import('./__mocks__/DialogModalStub.svelte');
   return { default: mock.default };
@@ -136,6 +140,21 @@ describe('ModalManager lazy loading', () => {
     const dialog = await screen.findByTestId('dialog-stub');
     expect(dialog.dataset.props.split(',')).toEqual(
       expect.arrayContaining(['onCancel', 'onConfirm', 'title'])
+    );
+  });
+
+  it('mounts the breakout assignment prompt with the room name, countdown and callbacks', async () => {
+    render(ModalManager);
+    const onConfirm = vi.fn();
+    const onCancel = vi.fn();
+    modalStore.openModal(
+      'breakoutAssignment',
+      { roomName: 'Breakout 2 · Seminar', autoMs: 5000 },
+      { onConfirm, onCancel }
+    );
+    const dialog = await screen.findByTestId('dialog-stub');
+    expect(dialog.dataset.props.split(',')).toEqual(
+      expect.arrayContaining(['autoMs', 'onCancel', 'onConfirm', 'roomName'])
     );
   });
 

@@ -171,6 +171,12 @@ const CHAT_TOPIC = 'edufeed.call.chat';
 // publicly"). Stream attributes carry the message `id` and, for a private
 // file, `to`. Late joiners never get earlier files.
 const FILE_TOPIC = 'edufeed.call.file';
+// Breakout-room assignments (groups/breakout.js): the host tells the seats
+// in the main room where to go. One listener (the breakout store) gets the
+// decoded payload with its sender; this service never interprets it.
+const BREAKOUT_TOPIC = 'edufeed.call.breakout';
+/** @type {((payload: unknown, sender: {identity: string, metadata?: string}) => void) | null} */
+let breakoutListener = null;
 export const CALL_FILE_MAX_BYTES = 25 * 1024 * 1024;
 const FILE_CHUNK_BYTES = 64 * 1024;
 const CHAT_KEEP = 200;
@@ -224,6 +230,45 @@ export function onRoomDisconnected(cb) {
   return () => {
     if (disconnectListener === cb) disconnectListener = null;
   };
+}
+
+/**
+ * Listen for data messages on the breakout topic (decoded JSON + sender).
+ * One listener at a time; returns the matching unsubscribe.
+ * @param {(payload: unknown, sender: {identity: string, metadata?: string}) => void} cb
+ * @returns {() => void}
+ */
+export function onBreakoutMessage(cb) {
+  breakoutListener = cb;
+  return () => {
+    if (breakoutListener === cb) breakoutListener = null;
+  };
+}
+
+/**
+ * Send a breakout message (reliable) to everyone in the room, or to the
+ * named seats only. Resolves without sending when there is no room or the
+ * seat cannot publish data.
+ * @param {Record<string, unknown>} payload
+ * @param {string[]} [destinationIdentities]
+ */
+export async function sendBreakoutMessage(payload, destinationIdentities) {
+  if (!room || !canSignal) return;
+  const data = new TextEncoder().encode(JSON.stringify(payload));
+  await room.localParticipant.publishData(data, {
+    reliable: true,
+    topic: BREAKOUT_TOPIC,
+    ...(destinationIdentities ? { destinationIdentities } : {})
+  });
+}
+
+/**
+ * What a re-join elsewhere should open with to keep the current mic and
+ * camera state (a breakout switch skips the lobby).
+ * @returns {{audio: boolean, video: boolean}}
+ */
+export function currentJoinMedia() {
+  return { audio: isConnected && !isMuted, video: isConnected && !isCameraOff };
 }
 
 /**
@@ -703,6 +748,18 @@ function handleSignal(payload, participant, _kind, topic) {
         showToast(m.groups_call_chat_mentioned_toast({ name }), 'info');
       }
     }
+    return;
+  }
+  if (topic === BREAKOUT_TOPIC) {
+    if (!breakoutListener) return;
+    /** @type {unknown} */
+    let raw;
+    try {
+      raw = JSON.parse(new TextDecoder().decode(payload));
+    } catch {
+      return;
+    }
+    breakoutListener(raw, participant);
     return;
   }
   if (topic !== SIGNAL_TOPIC) return;

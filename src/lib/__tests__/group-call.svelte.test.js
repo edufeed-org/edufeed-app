@@ -29,9 +29,11 @@ const lkListener = { cb: /** @type {((reason: any) => void) | null} */ (null) };
 // The seat LiveKit gave us: its metadata says whether the relay minted a
 // guest token ({"guest":true,...}) — the only truth about guest-ness.
 const lkState = { localParticipant: /** @type {{metadata?: string} | null} */ (null) };
+const lkMedia = { audio: false, video: false };
 vi.mock('$lib/services/livekit-connection.svelte.js', () => ({
   disconnectFromRoom: () => disconnectFromRoom(),
   connectToRoom: (/** @type {any[]} */ ...args) => connectToRoom(...args),
+  currentJoinMedia: () => ({ ...lkMedia }),
   getLiveKitState: () => lkState,
   onRoomDisconnected: (/** @type {(reason: any) => void} */ cb) => {
     lkListener.cb = cb;
@@ -79,7 +81,10 @@ const {
   showCallStage,
   hideCallStage,
   toggleChatBeside,
-  moderateActiveCall
+  moderateActiveCall,
+  switchGroupCall,
+  getActiveCallPointer,
+  getActiveCallUser
 } = await import('$lib/groups/group-call.svelte.js');
 
 const RELAY = 'wss://groups.example/';
@@ -712,5 +717,57 @@ describe('moderateActiveCall', () => {
     await expect(moderateActiveCall({ action: 'make-cohost', identity: 'x' })).rejects.toThrow(
       'only the host may change roles'
     );
+  });
+});
+
+describe('switchGroupCall (breakout rooms)', () => {
+  beforeEach(() => {
+    lkMedia.audio = false;
+    lkMedia.video = false;
+  });
+
+  it('moves the live call to another channel without the lobby, keeping mic and camera', async () => {
+    requestGroupCallToken.mockResolvedValue({ serverUrl: 'wss://x', participantToken: 't' });
+    await joinGroupCall(P1, USER, {
+      title: 'Main',
+      href: '/c/x',
+      media: { audio: true, video: false }
+    });
+    lkMedia.audio = true;
+    lkMedia.video = true;
+    confirmCallJoin.mockClear();
+    disconnectFromRoom.mockClear();
+    connectToRoom.mockClear();
+
+    await switchGroupCall(P2, { title: 'Breakout 1 · Main' });
+    const s = getGroupCallState();
+    expect(confirmCallJoin).not.toHaveBeenCalled();
+    expect(disconnectFromRoom).toHaveBeenCalledTimes(1);
+    expect(requestGroupCallToken).toHaveBeenLastCalledWith(RELAY, 'room-2', USER, {
+      code: undefined
+    });
+    expect(connectToRoom).toHaveBeenCalledWith('t', 'wss://x', { audio: true, video: true });
+    expect(s.isActiveFor(P2)).toBe(true);
+    expect(s.phase).toBe('ready');
+    expect(s.title).toBe('Breakout 1 · Main');
+    // the way back stays the page the main call was shown on
+    expect(s.href).toBe('/c/x');
+  });
+
+  it('does nothing without a live call to move', async () => {
+    await switchGroupCall(P2, { title: 'x' });
+    expect(requestGroupCallToken).not.toHaveBeenCalled();
+    expect(getGroupCallState().phase).toBe('idle');
+  });
+
+  it('exposes the channel and signer of the active call to the breakout store', async () => {
+    expect(getActiveCallPointer()).toBeNull();
+    expect(getActiveCallUser()).toBeNull();
+    requestGroupCallToken.mockResolvedValue({ serverUrl: 'wss://x', participantToken: 't' });
+    await joinGroupCall(P1, USER);
+    expect(getActiveCallPointer()).toEqual(P1);
+    expect(getActiveCallUser()).toBe(USER);
+    await leaveGroupCall();
+    expect(getActiveCallPointer()).toBeNull();
   });
 });

@@ -227,6 +227,67 @@ stopped one. The meeting dialog's participant picker offers a per-person
 "Co-Host" switch (`ParticipantsEditor` `cohostToggle`, `meeting-roles.js`)
 that writes the `p`-tag role.
 
+## Breakout rooms
+
+A host or co-host of a channel call can split the people in the call into
+2–8 **breakout rooms** (`src/lib/groups/breakout*.js`,
+`components/groups/call/BreakoutDialog.svelte` / `BreakoutPanel.svelte`,
+`components/groups/BreakoutAssignmentModal.svelte`). Client-only and
+ephemeral — nothing of it survives the call:
+
+1. **Rooms are hidden AV sub-groups on the channel's relay.** For every room
+   the host publishes a 9007 + 9002 (`createBreakoutRoom`,
+   `breakout-relay.js`) with `breakoutRoomMetadata()`: name
+   `Breakout N · <channel>`, `public` (so every participant can read every
+   room's 39002 — pyramid hides a private group's rosters from non-members),
+   `closed`, `restricted`, `hidden`, `livekit`, and `["parent", <channel id>]`.
+   pyramid accepts a `parent` only from an account with a role in the parent
+   ("restricted: must be an admin of the parent group"), so for a host who is
+   a plain channel member the 9002 is retried without it. The marker that
+   makes a room recognisable is the `about` text
+   `edufeed:breakout parent=<channel id> n=<N> [until=<unix>]`
+   (`parseBreakoutMarker` / `isBreakoutGroup`) — pyramid regenerates the
+   39000 from its own struct, so a custom tag would not survive, while
+   `about` does. `isBreakoutGroup` keeps rooms out of `buildSubtreeChannels`
+   (community channel lists, sidebar, the channel calendar), `useHostChannels`
+   (relay directory) and `unlinkedGroups` (`/groups`). Creating a group needs
+   the relay's create whitelist (or its open-creation setting) — a refused
+   9007 surfaces as `community_groups_relay_membership_required`.
+2. **Seating.** Each assigned pubkey gets a plain put-user (9000) on its room,
+   so the relay mints a full token. The creator is the room's admin — only
+   the account that opened the rooms can seat, move or delete; a co-host who
+   did not start the session cannot manage it.
+3. **Assignment** travels as a LiveKit data message in the main room — topic
+   `edufeed.call.breakout`, `{t:'assign', rooms:[{id, relay, name,
+members:[identity…]}], until?}` (`parseBreakoutPayload`), believed only
+   from a seat whose participant metadata says host/co-host. A seat named in
+   a room gets the `breakoutAssignment` modal ("Wechseln" / "Bleiben",
+   auto-switch after 5 s) and moves its call with `switchGroupCall`
+   (group-call.svelte.js): no lobby, mic/camera state kept, the dock's way
+   back unchanged. `{t:'end'}` tells the main room the session is over.
+4. **In a room the client follows the relay**, not the host (the main room's
+   SFU no longer reaches it): one subscription for the rooms' 39000/39002/
+   39004 and 9008. Removed from its roster → back to the main room after a
+   2.5 s grace; named in another room's roster → switch there (that is how a
+   move works: put-user on the new room FIRST, then remove-user); 9008 or a
+   `[deleted]` 39000 → back; the `until` deadline → countdown in the header,
+   back at zero. "Zurück zum Hauptraum" is always available to anyone in a
+   room. `GroupChat` treats a call in a breakout room of its channel as "in
+   call here", so the stage stays on the channel's page.
+5. **Host panel** (participant list → "Breakout-Räume"): rooms with their
+   seated people (39002) and who is live (39004), "Verschieben nach …",
+   "Beitreten" (the host becomes a plain participant there — the relay seats
+   whoever opens a room's call as that room's host, so host rights hold in
+   the main room only) and "Alle zurückholen" = 9008 for every room.
+6. **Guests** (call passes) stay in the main room: a pass does not extend to
+   a sub-channel.
+
+Limitations: if the host disconnects with rooms open, a deadline still
+returns everyone, but the rooms stay on the relay (hidden) until the creator
+comes back and ends the session — nobody else may delete them; a "message to
+all rooms" does not exist; pyramid does not tear a room's LiveKit room down
+on 9008 (participants leave when their client returns).
+
 ## Scheduled meetings
 
 A channel meeting is a NIP-52 kind 31923 event with **exactly one**
@@ -324,5 +385,8 @@ deleted meeting never leaves a working guest link behind.
 | `src/lib/groups/schedule-meeting.js`     | `scheduleGroupMeeting`, `sendMeetingInvites` (NIP-17 invites + guest link)                          |
 | `src/lib/groups/edit-meeting.js`         | `updateGroupMeeting` (same d-tag, group relay only), reschedule notice + invitee DMs                |
 | `src/lib/groups/meeting-actions.js`      | `deleteMeeting` — revokes the meeting's passes, then deletes it                                     |
+| `src/lib/groups/breakout.js`             | Breakout rooms: random split, 39000 marker (`isBreakoutGroup`), wire format, deadline math          |
+| `src/lib/groups/breakout-relay.js`       | Breakout rooms: create (9007/9002, parent fallback), seat/unseat (9000/9001), delete (9008)         |
+| `src/lib/groups/breakout.svelte.js`      | The one breakout session: host actions, assignment prompt, following rosters/9008/deadline          |
 | `src/lib/helpers/calendar-timing.js`     | `isChannelMeeting` / `withoutChannelMeetings` (pure; used by the cache and generic calendar models) |
 | `src/lib/loaders/calendar.js`            | `channelCalendarsLoader` — one `#h` REQ per channel for the community calendar                      |

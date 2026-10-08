@@ -41,23 +41,19 @@ export function matchesFilter(event, filter) {
  * @returns {import('nostr-tools').NostrEvent[]}
  */
 export function queryEvents(events, filters) {
+  // NIP-01: a REQ's filters are OR-ed and each `limit` caps ITS OWN filter's
+  // newest-first results — not the whole answer. (A single global minimum
+  // used to let a `limit: 1` side filter swallow the other filters' events,
+  // e.g. the channel's 39001/39002 next to a `{kinds:[9021], limit:1}`.)
   const matched = new Set();
-  let limit = Infinity;
-
   for (const filter of filters) {
-    if (filter.limit !== undefined && filter.limit < limit) {
-      limit = filter.limit;
-    }
-    for (const event of events) {
-      if (matchesFilter(event, filter)) {
-        matched.add(event);
-      }
-    }
+    const mine = events
+      .filter((event) => matchesFilter(event, filter))
+      .sort((a, b) => b.created_at - a.created_at);
+    const capped = filter.limit !== undefined ? mine.slice(0, filter.limit) : mine;
+    for (const event of capped) matched.add(event);
   }
-
-  return Array.from(matched)
-    .sort((a, b) => b.created_at - a.created_at)
-    .slice(0, limit === Infinity ? undefined : limit);
+  return Array.from(matched).sort((a, b) => b.created_at - a.created_at);
 }
 
 /**

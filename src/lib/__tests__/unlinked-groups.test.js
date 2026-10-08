@@ -65,6 +65,27 @@ describe('unlinkedGroups', () => {
     expect(rows.map((r) => r.pointer.id)).toEqual(['allgemein', 'projekt']);
   });
 
+  it('drops a breakout room even when the 10009 list still names it', () => {
+    const rows = unlinkedGroups({
+      groups: [
+        { id: 'allgemein', relay: R },
+        { id: 'room-1', relay: R }
+      ],
+      linkedKeys: new Set(),
+      metadataByKey: {
+        [`room-1@${R}/`]: {
+          kind: 39000,
+          tags: [
+            ['d', 'room-1'],
+            ['name', 'Breakout 1 · Allgemein'],
+            ['about', 'edufeed:breakout parent=allgemein n=1']
+          ]
+        }
+      }
+    });
+    expect(rows.map((r) => r.pointer.id)).toEqual(['allgemein']);
+  });
+
   it('keeps everything when no community claims anything', () => {
     expect(unlinkedGroups({ groups, linkedKeys: new Set() })).toHaveLength(3);
   });

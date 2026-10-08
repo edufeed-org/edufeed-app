@@ -1,5 +1,6 @@
 import { WebSocketServer } from 'ws';
 import http from 'http';
+import { createHmac } from 'crypto';
 import { generateSecretKey, getPublicKey, finalizeEvent } from 'nostr-tools/pure';
 import { matchesFilter, queryEvents } from './mock-relay.js';
 
@@ -10,7 +11,9 @@ import { matchesFilter, queryEvents } from './mock-relay.js';
 // metadata tags, it does not add the creator to `group.admins`. Recorded,
 // not fixed: a future application-flow E2E that asserts the creator shows
 // up as admin immediately after 9007 (before any 9000/9021) needs
-// creator-as-admin implemented here first.
+// creator-as-admin implemented here first — or pass `creatorIsAdmin: true`
+// to startRelay (the breakout-room harness does: a breakout room's creator
+// must be its admin to seat people and delete it).
 
 // NIP-29 event kinds (mirrors applesauce-common/helpers/groups constants —
 // duplicated here so this module has no app dependency beyond nostr-tools).
@@ -22,6 +25,7 @@ const CREATE_INVITE_KIND = 9009;
 const JOIN_REQUEST_KIND = 9021;
 const LEAVE_REQUEST_KIND = 9022;
 const DELETE_EVENT_KIND = 9005;
+const DELETE_GROUP_KIND = 9008;
 const GROUP_METADATA_KIND = 39000;
 const GROUP_ADMINS_KIND = 39001;
 const GROUP_MEMBERS_KIND = 39002;
@@ -34,7 +38,8 @@ const MODERATION_KINDS = new Set([
   CREATE_INVITE_KIND,
   JOIN_REQUEST_KIND,
   LEAVE_REQUEST_KIND,
-  DELETE_EVENT_KIND
+  DELETE_EVENT_KIND,
+  DELETE_GROUP_KIND
 ]);
 
 const NIP11 = JSON.stringify({
@@ -52,7 +57,7 @@ function tagValue(tags, name) {
 /**
  * @typedef {object} GroupState
  * @property {string} id
- * @property {{name?: string, about?: string, picture?: string, isPublic: boolean, isOpen: boolean, restricted: boolean}} metadata
+ * @property {{name?: string, about?: string, picture?: string, isPublic: boolean, isOpen: boolean, restricted: boolean, hidden: boolean, livekit: boolean, parent?: string}} metadata
  * @property {Map<string, string[]>} admins pubkey -> roles (only entries with roles.length > 0 are kept)
  * @property {Set<string>} members
  * @property {Set<string>} inviteCodes registered via kind 9009
@@ -62,7 +67,7 @@ function tagValue(tags, name) {
 function createGroupState(id) {
   return {
     id,
-    metadata: { isPublic: false, isOpen: false, restricted: false },
+    metadata: { isPublic: false, isOpen: false, restricted: false, hidden: false, livekit: false },
     admins: new Map(),
     members: new Set(),
     inviteCodes: new Set()
@@ -104,25 +109,48 @@ function applyMetadataTags(metadata, tags) {
       case 'restricted':
         metadata.restricted = true;
         break;
+      // pyramid semantics: `hidden` has no negation tag (absence keeps the
+      // value); `livekit` is overwritten from every 9002 (absence switches it
+      // off); `parent` names the channel this group hangs under.
+      case 'hidden':
+        metadata.hidden = true;
+        break;
+      case 'livekit':
+        metadata.livekit = true;
+        break;
+      case 'parent':
+        metadata.parent = tag[1] || undefined;
+        break;
     }
   }
+}
+
+/** @param {GroupState['metadata']} metadata @param {string[][]} tags */
+function applyEditMetadataTags(metadata, tags) {
+  metadata.livekit = false;
+  applyMetadataTags(metadata, tags);
 }
 
 /**
  * Apply one NIP-29 moderation event to the relay's group-state map.
  * @param {Map<string, GroupState>} groups
  * @param {import('nostr-tools').NostrEvent} event
- * @returns {{group: GroupState, changed: boolean, stored?: boolean, deletes?: string[]} | null} null when the
+ * @param {{creatorIsAdmin?: boolean}} [options]
+ * @returns {{group: GroupState, changed: boolean, stored?: boolean, deletes?: string[], deletedGroup?: boolean} | null} null when the
  *   event carries no resolvable group id (or targets an unknown group,
  *   for any kind other than create).
  */
-function applyModerationEvent(groups, event) {
+function applyModerationEvent(groups, event, options = {}) {
   const groupId = tagValue(event.tags, 'h');
   if (!groupId) return null;
 
   if (event.kind === CREATE_GROUP_KIND) {
     const group = groups.get(groupId) ?? createGroupState(groupId);
     applyMetadataTags(group.metadata, event.tags);
+    if (options.creatorIsAdmin) {
+      group.admins.set(event.pubkey, ['admin']);
+      group.members.add(event.pubkey);
+    }
     groups.set(groupId, group);
     return { group, changed: true };
   }
@@ -132,8 +160,15 @@ function applyModerationEvent(groups, event) {
 
   switch (event.kind) {
     case EDIT_METADATA_KIND:
-      applyMetadataTags(group.metadata, event.tags);
+      applyEditMetadataTags(group.metadata, event.tags);
       return { group, changed: true };
+
+    case DELETE_GROUP_KIND:
+      // pyramid archives every event of the group and drops it from memory;
+      // the caller fans the raw 9008 out live, drops the group's events and
+      // publishes a `[deleted]` tombstone 39000 (what other relays emit).
+      groups.delete(groupId);
+      return { group, changed: false, deletedGroup: true };
 
     case PUT_USER_KIND: {
       const pTag = event.tags.find((t) => t[0] === 'p');
@@ -209,6 +244,9 @@ function buildRosterEvents(group, relaySecretKey) {
   metadataTags.push([group.metadata.isPublic ? 'public' : 'private']);
   metadataTags.push([group.metadata.isOpen ? 'open' : 'closed']);
   if (group.metadata.restricted) metadataTags.push(['restricted']);
+  if (group.metadata.hidden) metadataTags.push(['hidden']);
+  if (group.metadata.livekit) metadataTags.push(['livekit']);
+  if (group.metadata.parent) metadataTags.push(['parent', group.metadata.parent]);
 
   const adminTags = [['d', group.id]];
   for (const [pubkey, roles] of group.admins) {
@@ -266,19 +304,79 @@ function fanOut(subscriptions, event) {
   }
 }
 
+/** @param {string | Buffer} input */
+const b64url = (input) => Buffer.from(input).toString('base64url');
+
+/**
+ * A LiveKit access token (HS256 JWT) the way livekit-server --dev accepts it
+ * (API key `devkey`, secret `secret`): room join with full publish rights
+ * and the participant metadata the relay would set (host / co-host / guest).
+ * @param {{apiKey: string, apiSecret: string}} keys
+ * @param {{room: string, identity: string, metadata?: string}} grant
+ */
+export function livekitDevToken({ apiKey, apiSecret }, { room, identity, metadata }) {
+  const now = Math.floor(Date.now() / 1000);
+  const header = b64url(JSON.stringify({ alg: 'HS256', typ: 'JWT' }));
+  const payload = b64url(
+    JSON.stringify({
+      iss: apiKey,
+      sub: identity,
+      nbf: now - 10,
+      exp: now + 6 * 3600,
+      ...(metadata ? { metadata } : {}),
+      video: {
+        room,
+        roomJoin: true,
+        canPublish: true,
+        canSubscribe: true,
+        canPublishData: true
+      }
+    })
+  );
+  const signature = createHmac('sha256', apiSecret).update(`${header}.${payload}`).digest();
+  return `${header}.${payload}.${b64url(signature)}`;
+}
+
+/**
+ * The pubkey of the NIP-98 event in an `Authorization: Nostr <base64>` header
+ * (the mock trusts it — no signature check).
+ * @param {string | undefined} header
+ */
+function nip98Pubkey(header) {
+  if (!header?.startsWith('Nostr ')) return null;
+  try {
+    const event = JSON.parse(Buffer.from(header.slice(6), 'base64').toString('utf8'));
+    return typeof event?.pubkey === 'string' ? event.pubkey : null;
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Start an in-process NIP-29-capable mock relay: in-memory NIP-01 base
  * (reusing mock-relay.js's matchesFilter/queryEvents), replaceable overwrite
  * for kinds 39000-39003, live subscription fan-out, and NIP-29 moderation
- * (9007/9002/9000/9001/9009/9021/9022) that regenerates + fans out the
+ * (9007/9002/9000/9001/9008/9009/9021/9022) that regenerates + fans out the
  * relay-signed 39000/39001/39002 after every accepted moderation event.
  * No NIP-42 — the relay is intentionally open.
+ *
+ * Options (all off by default, so the e2e suite's behaviour is unchanged):
+ * - `creatorIsAdmin`: seat the 9007 author as admin + member at creation,
+ *   like pyramid does.
+ * - `livekit: {serverUrl, apiKey, apiSecret}`: serve the NIP-29 AV endpoints
+ *   (`/.well-known/nip29/livekit` → 204, `/.well-known/nip29/livekit/<id>`
+ *   → dev JWT for a livekit-enabled group; the first seat of a room is its
+ *   host, exactly pyramid's "opener" rule) so a local livekit-server --dev
+ *   can carry real calls against this relay.
  * @param {number} port
+ * @param {{creatorIsAdmin?: boolean, livekit?: {serverUrl: string, apiKey: string, apiSecret: string}}} [options]
  * @returns {Promise<{server: http.Server, wss: WebSocketServer, relayPubkey: string}>}
  */
-export function startRelay(port) {
+export function startRelay(port, options = {}) {
   /** @type {Map<string, GroupState>} */
   const groups = new Map();
+  /** @type {Map<string, string>} group id -> pubkey hosting its call */
+  const callHosts = new Map();
   const relaySecretKey = generateSecretKey();
   const relayPubkey = getPublicKey(relaySecretKey);
   /** @type {import('nostr-tools').NostrEvent[]} */
@@ -288,6 +386,54 @@ export function startRelay(port) {
 
   return new Promise((resolve) => {
     const server = http.createServer((req, res) => {
+      const cors = {
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Headers': 'Authorization, Content-Type',
+        'Access-Control-Allow-Methods': 'GET, POST, OPTIONS'
+      };
+      if (req.method === 'OPTIONS') {
+        res.writeHead(204, cors);
+        res.end();
+        return;
+      }
+      const livekitPath = req.url?.match(
+        /^\/\.well-known\/nip29\/livekit(?:\/([^/?]+))?\/?(?:\?.*)?$/
+      );
+      if (!livekitPath && req.url?.startsWith('/.well-known/nip29/livekit/') && options.livekit) {
+        // pass checks, moderation: not part of this mock
+        res.writeHead(404, cors);
+        res.end('not supported by the mock relay');
+        return;
+      }
+      if (livekitPath && options.livekit) {
+        const groupId = livekitPath[1] ? decodeURIComponent(livekitPath[1]) : null;
+        if (!groupId) {
+          res.writeHead(204, cors);
+          res.end();
+          return;
+        }
+        const pubkey = nip98Pubkey(req.headers.authorization);
+        if (!pubkey) {
+          res.writeHead(401, cors);
+          res.end('missing nip-98 auth');
+          return;
+        }
+        const group = groups.get(groupId);
+        if (!group || !group.metadata.livekit) {
+          res.writeHead(403, cors);
+          res.end('livekit not enabled for this group');
+          return;
+        }
+        if (!callHosts.has(groupId)) callHosts.set(groupId, pubkey);
+        const identity = `${pubkey}:${Math.random().toString(36).slice(2, 8)}`;
+        const metadata = callHosts.get(groupId) === pubkey ? JSON.stringify({ host: true }) : '';
+        const token = livekitDevToken(options.livekit, { room: groupId, identity, metadata });
+        res.writeHead(200, { ...cors, 'Content-Type': 'application/json' });
+        res.end(
+          JSON.stringify({ server_url: options.livekit.serverUrl, participant_token: token })
+        );
+        return;
+      }
       if (req.headers.accept?.includes('application/nostr+json')) {
         res.writeHead(200, {
           'Content-Type': 'application/nostr+json',
@@ -350,7 +496,32 @@ export function startRelay(port) {
           ws.send(JSON.stringify(['OK', event.id, true, '']));
 
           if (MODERATION_KINDS.has(event.kind)) {
-            const result = applyModerationEvent(groups, event);
+            const result = applyModerationEvent(groups, event, options);
+            if (result?.deletedGroup) {
+              // live subscribers see the 9008 itself; afterwards the group's
+              // events are gone and its 39000 is the `[deleted]` tombstone
+              fanOut(subscriptions, event);
+              const gid = result.group.id;
+              for (let i = storedEvents.length - 1; i >= 0; i--) {
+                const stored = storedEvents[i];
+                if (tagValue(stored.tags, 'h') === gid || tagValue(stored.tags, 'd') === gid) {
+                  storedEvents.splice(i, 1);
+                }
+              }
+              callHosts.delete(gid);
+              const tombstone = finalizeEvent(
+                {
+                  kind: GROUP_METADATA_KIND,
+                  created_at: Math.floor(Date.now() / 1000),
+                  tags: [['d', gid], ['name', '[deleted]'], ['private'], ['closed']],
+                  content: ''
+                },
+                relaySecretKey
+              );
+              storeEvent(storedEvents, tombstone);
+              fanOut(subscriptions, tombstone);
+              return;
+            }
             if (result?.changed) {
               for (const rosterEvent of buildRosterEvents(result.group, relaySecretKey)) {
                 storeEvent(storedEvents, rosterEvent);

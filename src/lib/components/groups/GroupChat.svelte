@@ -121,6 +121,8 @@
     hideCallStage,
     registerCallStageView
   } from '$lib/groups/group-call.svelte.js';
+  import { getBreakoutState } from '$lib/groups/breakout.svelte.js';
+  import { sameRelayUrl } from '$lib/groups/relay-url.js';
   import {
     canPopOutCall,
     getCallPopoutState,
@@ -879,7 +881,18 @@
   const call = getGroupCallState();
   // "In a call HERE" — the store holds one call app-wide; a call in another
   // channel must not take over this channel's body.
-  const inCallHere = $derived(call.isActiveFor(pointer) && call.phase !== 'idle');
+  // A breakout room of THIS channel's call is still "here": the stage stays
+  // on the channel's page while the seat is in a room (groups/breakout).
+  const breakout = getBreakoutState();
+  const inBreakoutOfHere = $derived(
+    breakout.currentRoom !== null &&
+      !!breakout.session &&
+      breakout.session.main.id === pointer.id &&
+      sameRelayUrl(breakout.session.main.relay, pointer.relay)
+  );
+  const inCallHere = $derived(
+    (call.isActiveFor(pointer) || inBreakoutOfHere) && call.phase !== 'idle'
+  );
   // A call starting here opens on its chat (that is where the people in the
   // call talk, guests included); once it ends, land back on the channel chat
   // rather than a dead tab. Only on the edge — a user who picks "Kanal"
