@@ -1,6 +1,11 @@
+// @ts-nocheck
 /** @vitest-environment node */
 import { describe, it, expect } from 'vitest';
-import { linkifyCallChat, callChatPreviewUrls } from '$lib/groups/call-chat-links.js';
+import {
+  linkifyCallChat,
+  callChatPreviewUrls,
+  withCustomEmojis
+} from '$lib/groups/call-chat-links.js';
 
 const ORIGIN = 'https://edufeed.org';
 const NADDR = 'naddr1' + 'q'.repeat(70);
@@ -83,6 +88,43 @@ describe('callChatPreviewUrls', () => {
       'https://a.example/1',
       'https://b.example/2',
       'https://c.example/3'
+    ]);
+  });
+});
+
+// Issue "emoji picker and :shortcode: autocomplete": a NIP-30 custom emoji
+// the sender declared (payload `emoji` pairs) renders as its image; a
+// `:code:` nobody declared stays text.
+describe('withCustomEmojis', () => {
+  const PARTY = ['party', 'https://cdn.example/party.png'];
+
+  it('splits declared shortcodes out of text segments', () => {
+    expect(withCustomEmojis([{ text: 'los :party: jetzt' }], [PARTY])).toEqual([
+      { text: 'los ' },
+      { emoji: 'party', url: 'https://cdn.example/party.png' },
+      { text: ' jetzt' }
+    ]);
+  });
+
+  it('leaves undeclared shortcodes and link segments alone', () => {
+    const link = { href: 'https://example.com/:party:', label: 'x', internal: false };
+    expect(withCustomEmojis([{ text: ':nope: :party:' }, link], [PARTY])).toEqual([
+      { text: ':nope: ' },
+      { emoji: 'party', url: 'https://cdn.example/party.png' },
+      link
+    ]);
+  });
+
+  it('returns the segments untouched without declared emojis', () => {
+    const segs = [{ text: ':party:' }];
+    expect(withCustomEmojis(segs, undefined)).toBe(segs);
+    expect(withCustomEmojis(segs, [])).toBe(segs);
+  });
+
+  it('handles a shortcode repeated and at the very ends', () => {
+    expect(withCustomEmojis([{ text: ':party::party:' }], [PARTY])).toEqual([
+      { emoji: 'party', url: 'https://cdn.example/party.png' },
+      { emoji: 'party', url: 'https://cdn.example/party.png' }
     ]);
   });
 });

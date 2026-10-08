@@ -1,7 +1,7 @@
 // @ts-nocheck
 /** @vitest-environment jsdom */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/svelte';
+import { render, screen, fireEvent, waitFor } from '@testing-library/svelte';
 
 // Polyfill Element.animate for jsdom (HoverCard's popup uses a fade transition).
 // Same shim as HoverCard.test.js — completes instantly so it never blocks the DOM.
@@ -70,6 +70,21 @@ vi.mock(
   '$lib/components/shared/LinkPreview.svelte',
   () => import('./fixtures/LinkPreviewStub.svelte')
 );
+// The composer is the app's ComposerInput (`:xx` autocomplete + inline custom
+// emojis); the picker is the call's lazy CallEmojiPicker.
+vi.mock(
+  '$lib/stores/mention-candidates.svelte.js',
+  () => import('./fixtures/mention-candidates-mock.svelte.js')
+);
+const SETS = [{ packName: 'Doge', emojis: [{ shortcode: 'doge', url: 'https://x/doge.png' }] }];
+vi.mock('$lib/stores/user-emoji-sets.svelte.js', () => ({
+  useUserEmojiSets: () => () => SETS
+}));
+vi.mock(
+  '$lib/components/groups/call/CallEmojiPicker.svelte',
+  () => import('./fixtures/CallEmojiPickerStub.svelte')
+);
+const { typeIntoEditor } = await import('./fixtures/editor.js');
 
 const download = vi.hoisted(() => ({ fn: vi.fn() }));
 vi.mock('$lib/groups/call-chat-export.js', async (importOriginal) => ({
@@ -302,10 +317,10 @@ describe('CallChatPanel', () => {
   it('sends on Enter and clears the input', async () => {
     render(CallChatPanel, { props });
     const input = screen.getByTestId('call-chat-input');
-    await fireEvent.input(input, { target: { value: 'Moin' } });
+    await typeIntoEditor(input, 'Moin');
     await fireEvent.keyDown(input, { key: 'Enter' });
-    expect(sendCallChat).toHaveBeenCalledWith('Moin');
-    expect(input.value).toBe('');
+    expect(sendCallChat).toHaveBeenCalledWith('Moin', expect.objectContaining({ emoji: [] }));
+    expect(input.textContent).toBe('');
   });
 
   // The server ended the call (removed / dropped): the messages stay
@@ -314,7 +329,8 @@ describe('CallChatPanel', () => {
     state.isConnected = false;
     render(CallChatPanel, { props });
     const input = screen.getByTestId('call-chat-input');
-    expect(input.disabled).toBe(true);
+    expect(input.getAttribute('aria-disabled')).toBe('true');
+    expect(input.getAttribute('contenteditable')).toBe('false');
     expect(screen.getByTestId('call-chat-send').disabled).toBe(true);
     expect(screen.getByTestId('call-chat-message')).toBeTruthy();
     await fireEvent.submit(input.closest('form'));
@@ -427,5 +443,73 @@ describe('CallChatPanel unread marker', () => {
     unmount();
     unreadMod.noteCallChatReceived();
     expect(unread.count).toBe(1);
+  });
+});
+
+// Issue "Video-Call chat: emoji picker and :shortcode: autocomplete".
+describe('CallChatPanel emojis', () => {
+  it('suggests custom emojis on ":" and sends the pick as a [shortcode, url] pair', async () => {
+    render(CallChatPanel, { props });
+    const input = screen.getByTestId('call-chat-input');
+    await typeIntoEditor(input, 'los :dog');
+    await screen.findByRole('listbox');
+    await fireEvent.keyDown(input, { key: 'Enter' }); // pick
+    expect(input.querySelector('img[data-shortcode="doge"]')).toBeTruthy();
+    await fireEvent.keyDown(input, { key: 'Enter' }); // send
+    expect(sendCallChat).toHaveBeenCalledWith('los :doge:', {
+      emoji: [['doge', 'https://x/doge.png']]
+    });
+  });
+
+  it('opens the emoji picker from a button and inserts the pick into the draft', async () => {
+    render(CallChatPanel, { props });
+    const toggle = screen.getByRole('button', { name: m.groups_call_chat_emoji_button() });
+    expect(toggle.getAttribute('aria-expanded')).toBe('false');
+    await fireEvent.click(toggle);
+    const picker = await waitFor(() => screen.getByTestId('call-emoji-picker-stub'));
+    await fireEvent.click(picker.querySelector('button')); // 🫶
+    const input = screen.getByTestId('call-chat-input');
+    await waitFor(() => expect(input.textContent).toContain('🫶'));
+    // picking closes the picker
+    expect(screen.queryByTestId('call-emoji-picker-stub')).toBeNull();
+  });
+
+  it('a custom pick from the picker travels as a pair even when it is not in my packs', async () => {
+    render(CallChatPanel, { props });
+    await fireEvent.click(screen.getByRole('button', { name: m.groups_call_chat_emoji_button() }));
+    const picker = await waitFor(() => screen.getByTestId('call-emoji-picker-stub'));
+    await fireEvent.click(picker.querySelectorAll('button')[1]); // :parrot:
+    const input = screen.getByTestId('call-chat-input');
+    await waitFor(() => expect(input.querySelector('img[data-shortcode="parrot"]')).toBeTruthy());
+    await fireEvent.keyDown(input, { key: 'Enter' });
+    expect(sendCallChat).toHaveBeenCalledWith(':parrot:', {
+      emoji: [['parrot', 'https://x.org/p.gif']]
+    });
+  });
+
+  it('renders a received custom emoji inline as its image, undeclared codes as text', () => {
+    state.callChat = [
+      {
+        id: 'e:1',
+        identity: 'b'.repeat(64) + ':1',
+        text: ':party: los :nope:',
+        at: 1,
+        emoji: [['party', 'https://cdn.example/party.png']]
+      }
+    ];
+    render(CallChatPanel, { props });
+    const msg = screen.getByTestId('call-chat-message');
+    const img = msg.querySelector('img[alt=":party:"]');
+    expect(img).toBeTruthy();
+    expect(msg.textContent).toContain(':nope:');
+    expect(msg.textContent).not.toContain(':party:');
+  });
+
+  it('keeps the picker button disabled while not connected', () => {
+    state.isConnected = false;
+    render(CallChatPanel, { props });
+    expect(screen.getByRole('button', { name: m.groups_call_chat_emoji_button() }).disabled).toBe(
+      true
+    );
   });
 });

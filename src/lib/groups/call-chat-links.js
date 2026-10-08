@@ -16,7 +16,8 @@ import { extractPreviewableUrls } from '$lib/helpers/linkPreview.js';
 
 /** @typedef {{ text: string }} TextSegment */
 /** @typedef {{ href: string, label: string, internal: boolean }} LinkSegment */
-/** @typedef {TextSegment | LinkSegment} CallChatSegment */
+/** @typedef {{ emoji: string, url: string }} EmojiSegment NIP-30 custom emoji: `:emoji:` → image */
+/** @typedef {TextSegment | LinkSegment | EmojiSegment} CallChatSegment */
 
 // An http(s) URL, or a NIP-19 id (optionally `nostr:`-prefixed) standing on
 // its own. Only these two shapes are ever linked, so `javascript:` and
@@ -122,4 +123,37 @@ export function callChatPreviewUrls(segments) {
       .filter((s) => 'href' in s && !s.internal)
       .map((s) => ({ type: 'link', href: /** @type {LinkSegment} */ (s).href }))
   });
+}
+
+/**
+ * Split the custom emojis a sender declared (payload `emoji` pairs) out of
+ * the text segments: `:party:` becomes an {@link EmojiSegment} when `party`
+ * was declared, any other `:code:` stays text. Link segments are left as
+ * they are. Returns the same array when there is nothing to do.
+ * @param {CallChatSegment[]} segments
+ * @param {Array<[string, string]> | undefined} emoji declared [shortcode, url] pairs
+ * @returns {CallChatSegment[]}
+ */
+export function withCustomEmojis(segments, emoji) {
+  if (!emoji?.length) return segments;
+  const urls = new Map(emoji);
+  const codes = [...urls.keys()].map((c) => c.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+  const re = new RegExp(`:(${codes.join('|')}):`, 'g');
+  /** @type {CallChatSegment[]} */
+  const out = [];
+  for (const seg of segments) {
+    if (!('text' in seg)) {
+      out.push(seg);
+      continue;
+    }
+    let last = 0;
+    for (const match of seg.text.matchAll(re)) {
+      const at = /** @type {number} */ (match.index);
+      if (at > last) out.push({ text: seg.text.slice(last, at) });
+      out.push({ emoji: match[1], url: /** @type {string} */ (urls.get(match[1])) });
+      last = at + match[0].length;
+    }
+    if (last < seg.text.length) out.push({ text: seg.text.slice(last) });
+  }
+  return out;
 }

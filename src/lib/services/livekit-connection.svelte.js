@@ -30,6 +30,13 @@ import { reactionPayload, parseReactionPayload } from '$lib/groups/call-reaction
 import { isGuestParticipant } from '$lib/groups/livekit.js';
 import { noteCallChatReceived, resetCallChatUnread } from '$lib/groups/call-chat-unread.svelte.js';
 import {
+  CALL_CHAT_MAX_CHARS as CHAT_MAX_CHARS,
+  newCallChatId,
+  nonceFor,
+  parseCallChatPayload,
+  toCallChatPayload
+} from '$lib/groups/call-chat-payload.js';
+import {
   MEDIAPIPE_ASSET_PATHS,
   backgroundProcessorOptions,
   parseBackgroundEffect
@@ -138,8 +145,8 @@ const REACTION_TTL_MS = 4000;
 
 // In-call chat: everyone in the call, guests included (who never see the
 // channel chat). Ephemeral by design — nothing is stored anywhere.
+// The wire format lives in groups/call-chat-payload.js.
 const CHAT_TOPIC = 'edufeed.call.chat';
-const CHAT_MAX_CHARS = 2000;
 const CHAT_KEEP = 200;
 // Late joiners get each present participant's own recent messages (G).
 const CHAT_REPLAY_MAX = 50;
@@ -156,9 +163,20 @@ let ownJoinAt = 0;
 /** identity -> when that participant arrived after us (ms). Internal. */
 // eslint-disable-next-line svelte/prefer-svelte-reactivity -- internal bookkeeping, never rendered
 let arrivedAt = new Map();
-// `guest`: the sender joined through a call link — recorded at receipt, so
-// it is still known after they left (the chat export marks them).
-/** @type {Array<{id: string, identity: string, n: string, text: string, at: number, guest?: boolean}>} */
+/**
+ * A kept call chat message. `id` is the sender's message id (what a reply
+ * points at) or, for a peer that sends none, `<identity>:<n>`; it is the
+ * unique local key either way. `guest`: the sender joined through a call
+ * link — recorded at receipt, so it is still known after they left (the
+ * chat export marks them). The optional fields mirror the payload's.
+ * @typedef {{
+ *   id: string, identity: string, n: string, text: string, at: number, guest?: boolean,
+ *   emoji?: Array<[string, string]>,
+ *   replyTo?: string, replyPreview?: { n: string, text: string },
+ *   mentions?: string[], to?: string
+ * }} CallChatMessage
+ */
+/** @type {CallChatMessage[]} */
 let callChat = $state.raw([]);
 
 /**
@@ -370,28 +388,39 @@ export async function sendReaction(emoji) {
 }
 
 /**
- * Keep a chat message, deduped by (identity, nonce) and ordered by send time.
- * `ts` is the sender's clock (a replay to a late joiner); without it the
- * message counts as sent now; a `ts` is clamped to [now - 12 h, now].
- * @param {string} identity @param {string} text @param {string} nonce @param {number} [ts]
+ * Keep a chat message, deduped by id and by (identity, nonce), ordered by
+ * send time. `ts` is the sender's clock (a replay to a late joiner);
+ * without it the message counts as sent now; a `ts` is clamped to
+ * [now - 12 h, now]. An id another sender already used falls back to the
+ * legacy key so one key never names two rows.
+ * @param {string} identity
+ * @param {import('$lib/groups/call-chat-payload.js').CallChatParsed} parsed
+ * @param {number | undefined} ts
  * @param {boolean} [guest]
- * @returns {boolean} whether it was new
+ * @returns {CallChatMessage | null} the kept message, or null when it was a duplicate
  */
-function addChat(identity, text, nonce, ts, guest = false) {
-  const id = `${identity}:${nonce}`;
-  if (callChat.some((c) => c.id === id)) return false;
+function addChat(identity, parsed, ts, guest = false) {
+  const legacyId = `${identity}:${parsed.n}`;
+  const byId = parsed.id ? callChat.find((c) => c.id === parsed.id) : undefined;
+  if (byId?.identity === identity) return null;
+  if (callChat.some((c) => c.identity === identity && c.n === parsed.n)) return null;
+  const id = parsed.id && !byId ? parsed.id : legacyId;
+  if (callChat.some((c) => c.id === id)) return null;
   const now = Date.now();
   const at =
     typeof ts === 'number' && Number.isFinite(ts)
       ? Math.min(Math.max(ts, now - CHAT_MAX_AGE_MS), now)
       : now;
-  callChat = [
-    ...callChat,
-    guest ? { id, identity, n: nonce, text, at, guest } : { id, identity, n: nonce, text, at }
-  ]
-    .sort((a, b) => a.at - b.at)
-    .slice(-CHAT_KEEP);
-  return true;
+  /** @type {CallChatMessage} */
+  const msg = { id, identity, n: parsed.n, text: parsed.text, at };
+  if (guest) msg.guest = true;
+  if (parsed.emoji) msg.emoji = parsed.emoji;
+  if (parsed.replyTo) msg.replyTo = parsed.replyTo;
+  if (parsed.replyPreview) msg.replyPreview = parsed.replyPreview;
+  if (parsed.mentions) msg.mentions = parsed.mentions;
+  if (parsed.to) msg.to = parsed.to;
+  callChat = [...callChat, msg].sort((a, b) => a.at - b.at).slice(-CHAT_KEEP);
+  return msg;
 }
 
 /**
@@ -407,7 +436,7 @@ async function replayOwnChat(identity) {
   for (const c of mine) {
     try {
       await local.publishData(
-        new TextEncoder().encode(JSON.stringify({ t: 'chat', text: c.text, n: c.n, ts: c.at })),
+        new TextEncoder().encode(JSON.stringify(toCallChatPayload(c, { ts: true }))),
         { reliable: true, topic: CHAT_TOPIC, destinationIdentities: [identity] }
       );
     } catch (err) {
@@ -417,23 +446,30 @@ async function replayOwnChat(identity) {
   }
 }
 
-/** @param {string} text */
-export async function sendCallChat(text) {
+/**
+ * Send a chat message to everyone in the call and keep the local copy.
+ * @param {string} text
+ * @param {{ emoji?: Array<[string, string]> }} [opts] `emoji`: the NIP-30
+ *   custom emojis the text references, as [shortcode, url] pairs
+ */
+export async function sendCallChat(text, opts = {}) {
   const body = String(text ?? '')
     .trim()
     .slice(0, CHAT_MAX_CHARS);
   if (!room || !isConnected || !canSignal || !body) return;
-  const nonce = Math.random().toString(36).slice(2, 12);
-  addChat(
+  const id = newCallChatId();
+  const parsed = parseCallChatPayload({ t: 'chat', id, n: nonceFor(id), text: body, ...opts });
+  if (!parsed) return;
+  const msg = addChat(
     room.localParticipant.identity,
-    body,
-    nonce,
+    parsed,
     undefined,
     isGuestParticipant(room.localParticipant)
   );
+  if (!msg) return;
   try {
     await room.localParticipant.publishData(
-      new TextEncoder().encode(JSON.stringify({ t: 'chat', text: body, n: nonce })),
+      new TextEncoder().encode(JSON.stringify(toCallChatPayload(msg))),
       { reliable: true, topic: CHAT_TOPIC }
     );
   } catch (err) {
@@ -450,33 +486,24 @@ export async function sendCallChat(text) {
 function handleSignal(payload, participant, _kind, topic) {
   if (!participant) return;
   if (topic === CHAT_TOPIC) {
-    /** @type {any} */
-    let chat;
+    /** @type {unknown} */
+    let raw;
     try {
-      chat = JSON.parse(new TextDecoder().decode(payload));
+      raw = JSON.parse(new TextDecoder().decode(payload));
     } catch {
       return;
     }
-    if (
-      chat?.t === 'chat' &&
-      typeof chat.text === 'string' &&
-      chat.text.trim() &&
-      chat.text.length <= CHAT_MAX_CHARS &&
-      typeof chat.n === 'string' &&
-      chat.n.length > 0 &&
-      chat.n.length <= 32
-    ) {
-      const added = addChat(
-        participant.identity,
-        chat.text.trim(),
-        chat.n,
-        replayedTime(participant.identity, chat.ts),
-        isGuestParticipant(participant)
-      );
-      // Data from a remote participant: never my own message, so it can be
-      // unread (the dots on the call chat tab, chat button and dock).
-      if (added) noteCallChatReceived();
-    }
+    const chat = parseCallChatPayload(raw);
+    if (!chat) return;
+    const added = addChat(
+      participant.identity,
+      chat,
+      replayedTime(participant.identity, chat.ts),
+      isGuestParticipant(participant)
+    );
+    // Data from a remote participant: never my own message, so it can be
+    // unread (the dots on the call chat tab, chat button and dock).
+    if (added) noteCallChatReceived();
     return;
   }
   if (topic !== SIGNAL_TOPIC) return;
@@ -989,7 +1016,7 @@ export async function toggleScreenShare() {
 
 /**
  * Get reactive connection state.
- * @returns {{ isConnected: boolean, isConnecting: boolean, isMuted: boolean, isCameraOff: boolean, isScreenSharing: boolean, canPublish: boolean, canSignal: boolean, connectionState: 'connected' | 'reconnecting' | 'disconnected', disconnectReason: import('livekit-client').DisconnectReason | null, mutedIdentities: Set<string>, raisedHands: Set<string>, reactions: Array<{id: string, identity: string, emoji: string, url?: string}>, callChat: Array<{id: string, identity: string, n: string, text: string, at: number, guest?: boolean}>, localParticipant: import('livekit-client').LocalParticipant | null, remoteParticipants: import('livekit-client').RemoteParticipant[], room: Room | null, speakingParticipantIds: Set<string>, audioInputDevices: MediaDeviceInfo[], activeAudioDeviceId: string, audioOutputDevices: MediaDeviceInfo[], activeAudioOutputDeviceId: string, videoInputDevices: MediaDeviceInfo[], activeVideoDeviceId: string, backgroundEffect: string }}
+ * @returns {{ isConnected: boolean, isConnecting: boolean, isMuted: boolean, isCameraOff: boolean, isScreenSharing: boolean, canPublish: boolean, canSignal: boolean, connectionState: 'connected' | 'reconnecting' | 'disconnected', disconnectReason: import('livekit-client').DisconnectReason | null, mutedIdentities: Set<string>, raisedHands: Set<string>, reactions: Array<{id: string, identity: string, emoji: string, url?: string}>, callChat: CallChatMessage[], localParticipant: import('livekit-client').LocalParticipant | null, remoteParticipants: import('livekit-client').RemoteParticipant[], room: Room | null, speakingParticipantIds: Set<string>, audioInputDevices: MediaDeviceInfo[], activeAudioDeviceId: string, audioOutputDevices: MediaDeviceInfo[], activeAudioOutputDeviceId: string, videoInputDevices: MediaDeviceInfo[], activeVideoDeviceId: string, backgroundEffect: string }}
  */
 export function getLiveKitState() {
   return {

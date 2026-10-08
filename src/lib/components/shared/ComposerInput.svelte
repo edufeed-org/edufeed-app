@@ -61,7 +61,8 @@
    *   minHeight?: string,
    *   submitOnEnter?: boolean,
    *   placement?: 'above' | 'caret',
-   *   ariaLabelledby?: string
+   *   ariaLabelledby?: string,
+   *   ariaDescribedby?: string
    * }}
    */
   let {
@@ -85,7 +86,9 @@
      */
     placement = /** @type {'above' | 'caret'} */ ('above'),
     /** id of the visible label element (a contenteditable cannot use <label for>) */
-    ariaLabelledby = undefined
+    ariaLabelledby = undefined,
+    /** id of a hint that says why the field is disabled, for instance */
+    ariaDescribedby = undefined
   } = $props();
 
   /** @type {HTMLDivElement | undefined} */
@@ -590,6 +593,7 @@
     aria-multiline={multiline}
     aria-placeholder={placeholder}
     aria-labelledby={ariaLabelledby}
+    aria-describedby={ariaDescribedby}
     data-placeholder={placeholder}
     data-testid={testid}
     tabindex="0"
