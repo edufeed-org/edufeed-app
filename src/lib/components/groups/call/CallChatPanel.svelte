@@ -7,7 +7,14 @@
   import { tick, untrack } from 'svelte';
   import { goto } from '$app/navigation';
   import { resolve } from '$app/paths';
-  import { getLiveKitState, sendCallChat } from '$lib/services/livekit-connection.svelte.js';
+  import {
+    CALL_FILE_MAX_BYTES,
+    getLiveKitState,
+    sendCallChat,
+    sendCallFile
+  } from '$lib/services/livekit-connection.svelte.js';
+  import { formatFileSize } from '$lib/helpers/media-meta.js';
+  import { showToast } from '$lib/helpers/toast.js';
   import { getGroupCallState } from '$lib/groups/group-call.svelte.js';
   import { useProfileMap } from '$lib/stores/profile-map.svelte.js';
   import { avatarInitial } from '$lib/helpers/avatar-initial.js';
@@ -299,6 +306,27 @@
       : m.groups_call_chat_private_from({ name: nameOf(msg.identity) });
   }
 
+  // Files: a LiveKit byte stream to the people in the call right now (or
+  // to the chosen recipient), never uploaded anywhere.
+  /** @type {HTMLInputElement | undefined} */
+  let fileInput = $state(undefined);
+  /** @param {Event} e */
+  async function attach(e) {
+    const input = /** @type {HTMLInputElement} */ (e.currentTarget);
+    const file = input.files?.[0];
+    input.value = '';
+    if (!file || !canSend) return;
+    const result = await sendCallFile(file, { to: recipient || undefined });
+    if (!result.ok && result.error === 'too-large') {
+      showToast(
+        m.groups_call_chat_file_too_large({ max: formatFileSize(CALL_FILE_MAX_BYTES) ?? '' }),
+        'warning'
+      );
+    } else if (!result.ok && result.error === 'failed') {
+      showToast(m.groups_call_chat_file_failed(), 'error');
+    }
+  }
+
   const origin = typeof window !== 'undefined' ? window.location.origin : '';
   // One parse per message, not per render: messages never change once kept.
   const parsed = $derived(
@@ -357,7 +385,7 @@
         at: c.at,
         name: nameOf(c.identity),
         guest: c.guest === true,
-        text: c.text,
+        text: c.file ? `[${m.groups_call_chat_file_label()}] ${c.file.name}` : c.text,
         ...(c.to ? { note: privateLabel(c) } : {})
       }))
     });
@@ -546,38 +574,87 @@
               </div>
             {/if}
           {/if}
-          <!-- Escaped text and plain anchors only: the text is whatever a
+          {#if msg.file}
+            {@const f = msg.file}
+            <div
+              class="flex w-fit max-w-full flex-col gap-1 rounded-box border border-base-300 bg-base-200 px-3 py-2"
+              data-testid="call-chat-file"
+            >
+              {#if f.status === 'done' && f.url && f.mime.startsWith('image/')}
+                <a href={f.url} target="_blank" rel="noopener noreferrer">
+                  <img
+                    src={f.url}
+                    alt={f.name}
+                    class="max-h-48 max-w-full rounded object-contain"
+                    loading="lazy"
+                  />
+                </a>
+              {/if}
+              <div class="flex min-w-0 items-center gap-2">
+                <span class="min-w-0 truncate font-medium" title={f.name}>{f.name}</span>
+                <span class="shrink-0 text-xs text-base-content/60"
+                  >{formatFileSize(f.size) ?? ''}</span
+                >
+              </div>
+              {#if f.status === 'done' && f.url}
+                <a
+                  href={f.url}
+                  download={f.name}
+                  class="btn w-fit btn-outline btn-sm"
+                  data-testid="call-chat-file-download"
+                >
+                  <DownloadIcon class_="h-4 w-4" title="" />
+                  {m.groups_call_chat_file_download()}
+                </a>
+              {:else if f.status === 'failed'}
+                <span class="text-xs text-error">{m.groups_call_chat_file_failed()}</span>
+              {:else}
+                <progress
+                  class="progress w-40 progress-primary"
+                  value={Math.round(f.progress * 100)}
+                  max="100"
+                ></progress>
+                <span class="text-xs text-base-content/60"
+                  >{f.status === 'sending'
+                    ? m.groups_call_chat_file_sending()
+                    : m.groups_call_chat_file_receiving()}</span
+                >
+              {/if}
+            </div>
+          {:else}
+            <!-- Escaped text and plain anchors only: the text is whatever a
                participant (guests included) sent, never HTML. -->
-          <span class="break-words whitespace-pre-wrap"
-            >{#each body?.segments ?? [{ text: msg.text }] as seg, s (s)}{#if 'mention' in seg}<span
-                  class="mx-px badge align-baseline badge-sm {seg.mention === myIdentity ||
-                  seg.mention === EVERYONE
-                    ? 'badge-primary'
-                    : 'badge-ghost'}"
-                  data-testid="call-chat-mention">{seg.label}</span
-                >{:else if 'emoji' in seg}<ImageWithFallback
-                  src={seg.url}
-                  alt=":{seg.emoji}:"
-                  title=":{seg.emoji}:"
-                  size="emoji"
-                  fallbackType="generic"
-                  class="inline h-5 w-5 align-text-bottom"
-                />{:else if 'href' in seg}{#if seg.internal}<a
-                    href={seg.href}
-                    class="link break-all link-primary"
-                    data-testid="call-chat-link"
-                    onclick={(e) => openAppLink(e, seg.href)}>{seg.label}</a
-                  >{:else}<a
-                    href={seg.href}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    class="link break-all link-primary"
-                    data-testid="call-chat-link">{seg.label}</a
-                  >{/if}{:else}{seg.text}{/if}{/each}</span
-          >
-          {#each body?.previews ?? [] as url (url)}
-            <LinkPreview {url} />
-          {/each}
+            <span class="break-words whitespace-pre-wrap"
+              >{#each body?.segments ?? [{ text: msg.text }] as seg, s (s)}{#if 'mention' in seg}<span
+                    class="mx-px badge align-baseline badge-sm {seg.mention === myIdentity ||
+                    seg.mention === EVERYONE
+                      ? 'badge-primary'
+                      : 'badge-ghost'}"
+                    data-testid="call-chat-mention">{seg.label}</span
+                  >{:else if 'emoji' in seg}<ImageWithFallback
+                    src={seg.url}
+                    alt=":{seg.emoji}:"
+                    title=":{seg.emoji}:"
+                    size="emoji"
+                    fallbackType="generic"
+                    class="inline h-5 w-5 align-text-bottom"
+                  />{:else if 'href' in seg}{#if seg.internal}<a
+                      href={seg.href}
+                      class="link break-all link-primary"
+                      data-testid="call-chat-link"
+                      onclick={(e) => openAppLink(e, seg.href)}>{seg.label}</a
+                    >{:else}<a
+                      href={seg.href}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      class="link break-all link-primary"
+                      data-testid="call-chat-link">{seg.label}</a
+                    >{/if}{:else}{seg.text}{/if}{/each}</span
+            >
+            {#each body?.previews ?? [] as url (url)}
+              <LinkPreview {url} />
+            {/each}
+          {/if}
         </div>
         {#if canSend}
           <!-- Hover/focus reveals it; on a touch screen (no hover) it stays
@@ -649,6 +726,25 @@
           </div>
         {/if}
       </div>
+    {/if}
+    {#if canSend}
+      <input
+        bind:this={fileInput}
+        type="file"
+        class="hidden"
+        onchange={attach}
+        data-testid="call-chat-attach-input"
+      />
+      <button
+        type="button"
+        class="btn btn-square btn-ghost btn-sm"
+        aria-label={m.chat_attach_file()}
+        title="{m.chat_attach_file()} – {m.groups_call_chat_file_hint()}"
+        onclick={() => fileInput?.click()}
+        data-testid="call-chat-attach"
+      >
+        📎
+      </button>
     {/if}
     <button
       type="button"

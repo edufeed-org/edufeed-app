@@ -154,6 +154,14 @@ const REACTION_TTL_MS = 4000;
 // channel chat). Ephemeral by design — nothing is stored anywhere.
 // The wire format lives in groups/call-chat-payload.js.
 const CHAT_TOPIC = 'edufeed.call.chat';
+// Files in the call chat travel as LiveKit byte streams on this topic: through
+// the SFU to the participants present right now, stored on no server, held
+// here as object URLs only (issue "share files without storing them
+// publicly"). Stream attributes carry the message `id` and, for a private
+// file, `to`. Late joiners never get earlier files.
+const FILE_TOPIC = 'edufeed.call.file';
+export const CALL_FILE_MAX_BYTES = 25 * 1024 * 1024;
+const FILE_CHUNK_BYTES = 64 * 1024;
 const CHAT_KEEP = 200;
 // Late joiners get each present participant's own recent messages (G).
 const CHAT_REPLAY_MAX = 50;
@@ -180,8 +188,16 @@ let arrivedAt = new Map();
  *   id: string, identity: string, n: string, text: string, at: number, guest?: boolean,
  *   emoji?: Array<[string, string]>,
  *   replyTo?: string, replyPreview?: { n: string, text: string },
- *   mentions?: string[], to?: string
+ *   mentions?: string[], to?: string,
+ *   file?: CallChatFile
  * }} CallChatMessage
+ *
+ * A file message (`text` is empty): the transfer's state on this side.
+ * `url` is an object URL — memory only, revoked when the call ends.
+ * @typedef {{
+ *   name: string, size: number, mime: string,
+ *   status: 'sending' | 'receiving' | 'done' | 'failed', progress: number, url?: string
+ * }} CallChatFile
  */
 /** @type {CallChatMessage[]} */
 let callChat = $state.raw([]);
@@ -439,10 +455,11 @@ function addChat(identity, parsed, ts, guest = false) {
 async function replayOwnChat(identity) {
   if (!room || !canSignal || !identity) return;
   const local = room.localParticipant;
-  // Never a private message: it was for one person, who may not be the
-  // newcomer — and a newcomer is never its addressee anyway.
+  // Never a private message (it was for one person, who may not be the
+  // newcomer) and never a file (a byte stream is sent once, to those
+  // present — a newcomer simply missed it, like today's screen share).
   const mine = callChat
-    .filter((c) => c.identity === local.identity && !c.to)
+    .filter((c) => c.identity === local.identity && !c.to && !c.file)
     .slice(-CHAT_REPLAY_MAX);
   for (const c of mine) {
     try {
@@ -495,6 +512,135 @@ export async function sendCallChat(text, opts = {}) {
     );
   } catch (err) {
     console.warn('call chat not sent:', err);
+  }
+}
+
+/**
+ * Patch a file message's transfer state in place (new array for reactivity).
+ * @param {string} id @param {Partial<CallChatFile>} patch
+ */
+function patchFile(id, patch) {
+  callChat = callChat.map((c) =>
+    c.id === id && c.file ? { ...c, file: { ...c.file, ...patch } } : c
+  );
+}
+
+/**
+ * Keep a file message. @param {string} identity @param {string} id
+ * @param {CallChatFile} file @param {string} [to] @param {boolean} [guest]
+ */
+function addFile(identity, id, file, to, guest = false) {
+  if (callChat.some((c) => c.id === id)) return false;
+  /** @type {CallChatMessage} */
+  const msg = { id, identity, n: id.slice(0, 32), text: '', at: Date.now(), file };
+  if (to) msg.to = to;
+  if (guest) msg.guest = true;
+  callChat = [...callChat, msg].sort((a, b) => a.at - b.at).slice(-CHAT_KEEP);
+  return true;
+}
+
+/**
+ * Send a file to everyone in the call (or to one person) as a byte stream.
+ * Capped at CALL_FILE_MAX_BYTES on both ends.
+ * @param {File} file
+ * @param {{ to?: string }} [opts] `to`: deliver to this identity only
+ * @returns {Promise<{ ok: true } | { ok: false, error: 'too-large' | 'failed' | 'not-connected' }>}
+ */
+export async function sendCallFile(file, opts = {}) {
+  if (!room || !isConnected || !canSignal) return { ok: false, error: 'not-connected' };
+  if (!file || file.size > CALL_FILE_MAX_BYTES) return { ok: false, error: 'too-large' };
+  const local = room.localParticipant;
+  const id = newCallChatId();
+  const mime = file.type || 'application/octet-stream';
+  addFile(
+    local.identity,
+    id,
+    { name: file.name, size: file.size, mime, status: 'sending', progress: 0 },
+    opts.to,
+    isGuestParticipant(local)
+  );
+  try {
+    const writer = await /** @type {any} */ (local).streamBytes({
+      name: file.name,
+      mimeType: mime,
+      totalSize: file.size,
+      topic: FILE_TOPIC,
+      attributes: { id, ...(opts.to ? { to: opts.to } : {}) },
+      ...(opts.to ? { destinationIdentities: [opts.to] } : {})
+    });
+    let sent = 0;
+    for (let offset = 0; offset < file.size; offset += FILE_CHUNK_BYTES) {
+      const chunk = new Uint8Array(
+        await file.slice(offset, offset + FILE_CHUNK_BYTES).arrayBuffer()
+      );
+      await writer.write(chunk);
+      sent += chunk.byteLength;
+      patchFile(id, { progress: sent / file.size });
+    }
+    await writer.close();
+    patchFile(id, { status: 'done', progress: 1, url: URL.createObjectURL(file) });
+    return { ok: true };
+  } catch (err) {
+    console.warn('call file not sent:', err);
+    patchFile(id, { status: 'failed' });
+    return { ok: false, error: 'failed' };
+  }
+}
+
+/**
+ * A byte stream on the file topic: keep it as a message while it arrives,
+ * then as an object URL. Anything over the cap, or addressed to someone
+ * else, is dropped unread.
+ * @param {any} reader livekit-client ByteStreamReader
+ * @param {{ identity: string }} from
+ */
+async function handleFileStream(reader, { identity }) {
+  const info = reader?.info ?? {};
+  const to = info.attributes?.to;
+  if (to && to !== room?.localParticipant.identity) return;
+  const size = typeof info.size === 'number' ? info.size : 0;
+  if (size > CALL_FILE_MAX_BYTES) return;
+  const declared = info.attributes?.id;
+  const id =
+    typeof declared === 'string' && /^[A-Za-z0-9_-]{8,36}$/.test(declared)
+      ? declared
+      : `${identity}:${info.id}`;
+  const mime =
+    typeof info.mimeType === 'string' && info.mimeType ? info.mimeType : 'application/octet-stream';
+  const sender = room?.remoteParticipants.get(identity);
+  const added = addFile(
+    identity,
+    id,
+    { name: String(info.name ?? 'file'), size, mime, status: 'receiving', progress: 0 },
+    to,
+    isGuestParticipant(sender)
+  );
+  if (!added) return;
+  noteCallChatReceived();
+  reader.onProgress = (/** @type {number | undefined} */ p) => {
+    if (typeof p === 'number') patchFile(id, { progress: Math.min(Math.max(p, 0), 1) });
+  };
+  try {
+    const chunks = await reader.readAll();
+    const blob = new Blob(chunks, { type: mime });
+    if (blob.size > CALL_FILE_MAX_BYTES) throw new Error('file larger than declared');
+    patchFile(id, { status: 'done', progress: 1, size: blob.size, url: URL.createObjectURL(blob) });
+  } catch (err) {
+    console.warn('call file not received:', err);
+    patchFile(id, { status: 'failed' });
+  }
+}
+
+/** Object URLs are memory: drop them with the chat. */
+function revokeFileUrls() {
+  for (const c of callChat) {
+    if (c.file?.url) {
+      try {
+        URL.revokeObjectURL(c.file.url);
+      } catch {
+        /* already gone */
+      }
+    }
   }
 }
 
@@ -813,6 +959,9 @@ export async function connectToRoom(token, url, opts = {}) {
     newRoom.on(RoomEvent.SignalReconnecting, () => (connectionState = 'reconnecting'));
     newRoom.on(RoomEvent.Reconnected, () => (connectionState = 'connected'));
     newRoom.on(RoomEvent.DataReceived, handleSignal);
+    if (typeof newRoom.registerByteStreamHandler === 'function') {
+      newRoom.registerByteStreamHandler(FILE_TOPIC, handleFileStream);
+    }
     newRoom.on(RoomEvent.LocalTrackPublished, updateParticipants);
     newRoom.on(RoomEvent.LocalTrackUnpublished, (publication) => {
       if (publication.source === Track.Source.ScreenShare) {
@@ -964,6 +1113,7 @@ export async function disconnectFromRoom() {
   // eslint-disable-next-line svelte/prefer-svelte-reactivity -- built fresh, then assigned whole to a $state.raw
   mutedIdentities = new Set();
   reactions = [];
+  revokeFileUrls();
   callChat = [];
   resetCallChatUnread();
   speakingParticipantIds = new SvelteSet();
