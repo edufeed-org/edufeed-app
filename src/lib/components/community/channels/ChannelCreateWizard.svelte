@@ -30,6 +30,8 @@
   } from '$lib/groups/group-management.js';
   import { updatePersonalGroupsList } from '$lib/groups/personal-groups-list.js';
   import { putUserOn, fanOut } from '$lib/groups/roster-fanout.js';
+  import { channelInvitePlan } from '$lib/groups/channel-invite-plan.js';
+  import { isAlreadyMemberError } from '$lib/groups/groups.js';
   import { pool } from '$lib/stores/nostr-infrastructure.svelte';
   import { unique } from '$lib/helpers/unique.js';
   import { focusOnMount } from '$lib/helpers/focus.js';
@@ -48,6 +50,10 @@
     // put-user'd with the admin role, so a community admin is never locked
     // out of a channel someone else just created.
     adminPubkeys = [],
+    // The moderated community's root roster (39002 ∪ 39001), when the parent
+    // has it: quick-pick rows on the people step, and the "already a member"
+    // test that decides who gets admitted to the community on create.
+    rootMembers = /** @type {Set<string>} */ (new Set()),
     onClose,
     onCreated
   } = $props();
@@ -139,12 +145,15 @@
     return tier === 'invited' ? m.wizard_access_invited_hint() : m.wizard_access_world_hint();
   });
 
-  // Invitable people: community members (kind-30000 profile lists + owner),
-  // minus self. Reuses the SAME profileAccess instance MembersView/HomeView/
+  // Invitable people: community members (kind-30000 profile lists + owner,
+  // plus the NIP-29 root roster for a moderated community), minus self.
+  // Reuses the SAME profileAccess instance MembersView/HomeView/
   // MainContentArea read (set up once in c/[pubkey]/+layout.svelte with the
   // community's actual relays) rather than a fresh useProfileListAccess call
   // — avoids a second concurrent kind-30000 subscription for data we already
-  // have in context.
+  // have in context. These are only the quick picks: the search field below
+  // reaches follows and, via NIP-50, people outside the community too
+  // (issue wcm40ukc).
   /** @type {import('$lib/stores/profile-list-access.svelte.js').ProfileListAccess} */
   const profileAccess = getContext('profileAccess');
   const invitable = $derived.by(() => {
@@ -154,7 +163,7 @@
     // community itself as an invitable "member" (handoff #12).
     const community = communikeyEvent?.pubkey;
     const { allMembers } = getVerifiedMembers(profileAccess, communikeyEvent);
-    return allMembers.filter((p) => p !== self && p !== community);
+    return unique([...allMembers, ...rootMembers]).filter((p) => p !== self && p !== community);
   });
   // Rows shown on the invite step: community members PLUS anyone selected by
   // pasted npub who is not (yet) a member — a raw-pubkey selection previously
@@ -322,9 +331,34 @@
       // channels no longer seed the community's existing member union at
       // creation time — members self-join those channels themselves via
       // their own 9021 (A4, 2026-08-19). Self never needs a grant.
-      const targets = unique(selected).filter((pubkey) => pubkey !== user.pubkey);
+      //
+      // Invitees who are not on the community's root roster are admitted to
+      // the community FIRST (root put-user, the same event the join-request
+      // approval sends) — inviting someone into a channel of a moderated
+      // community is inviting them into the community (issue wcm40ukc). A
+      // relay answering "members already" (roster lagged) is not a failure.
+      const plan = channelInvitePlan({
+        selected,
+        self: user.pubkey,
+        rootPointer: membershipPointer,
+        rootMembers
+      });
       let failed = 0;
-      for (const pubkey of targets) {
+      for (const pubkey of plan.root) {
+        try {
+          await publishToGroupRelay(
+            pool.relay(flatGroupsRelay(/** @type {any} */ (membershipPointer).relay)),
+            buildPutUserTemplate(/** @type {any} */ (membershipPointer).id, pubkey),
+            user
+          );
+        } catch (error) {
+          if (!isAlreadyMemberError(error)) {
+            console.error('groups: root put-user failed for', pubkey, error);
+            failed++;
+          }
+        }
+      }
+      for (const pubkey of plan.channel) {
         try {
           await publishToGroupRelay(relayConn, buildPutUserTemplate(id, pubkey), user);
         } catch (error) {
@@ -332,7 +366,7 @@
           failed++;
         }
       }
-      toastCreateResult(failed, targets.length);
+      toastCreateResult(failed, plan.channel.length);
       onCreated(id);
     } catch (error) {
       console.error('groups: channel creation failed', error);
@@ -487,8 +521,14 @@
       <p class="mb-3 text-sm text-base-content/70">
         {isGroupMode ? m.wizard_invite_lead() : m.concord_wizard_invite_lead()}
       </p>
+      <!-- searchProfiles: follows come first, then people outside the
+           community via NIP-50 — an admin with few follows typed a name here
+           and got nothing (issue wcm40ukc). inlineList: inside the modal box
+           the overlay dropdown sat on top of the Create button. -->
       <ContactSearchInput
         acceptPubkeyInput
+        searchProfiles
+        inlineList
         placeholder={m.concord_invite_search_placeholder()}
         exclude={selected}
         onselect={(/** @type {{ pubkey: string }} */ c) => toggle(c.pubkey)}

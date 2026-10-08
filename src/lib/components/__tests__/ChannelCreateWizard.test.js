@@ -583,6 +583,85 @@ describe('ChannelCreateWizard — NIP-29 groups', () => {
     });
   });
 
+  // Issue wcm40ukc: "Can't invite members outside the group to a public
+  // channel" — the people step listed community members only and its search
+  // reached follows only, and an outsider added by npub got a channel seat
+  // without a community seat.
+  describe('inviting people outside the community (issue wcm40ukc)', () => {
+    const OUTSIDER = 'b'.repeat(64); // in the legacy profile list, NOT on the root roster
+    const ROOT_MEMBER = 'e'.repeat(64);
+    const ROSTER_ONLY = 'f'.repeat(64); // on the root roster, not in any profile list
+
+    /** @param {Set<string>} rootMembers */
+    async function toPeopleStep(rootMembers) {
+      render(ChannelCreateWizard, {
+        props: {
+          communikeyEvent: moderatedCommunity(),
+          rootMembers,
+          onClose: () => {},
+          onCreated: () => {}
+        }
+      });
+      await fireEvent.input(screen.getByPlaceholderText(/Staff room|Lehrer/), {
+        target: { value: 'Mathe' }
+      });
+      await fireEvent.click(screen.getByTestId('wizard-access-world'));
+      await fireEvent.click(screen.getByRole('button', { name: /Next|Weiter/ }));
+    }
+
+    it('the people search reaches beyond the follow list (NIP-50 profile search)', async () => {
+      await toPeopleStep(new Set());
+      expect(screen.getByTestId('stub-search-profiles').textContent).toBe('true');
+    });
+
+    it('root roster members are quick-pick rows next to the profile-list members', async () => {
+      await toPeopleStep(new Set([ROSTER_ONLY, PUBKEY]));
+      expect(
+        screen.getByRole('button', { name: new RegExp(ROSTER_ONLY.slice(0, 12)) })
+      ).toBeTruthy();
+      // self stays excluded even when the roster lists it
+      expect(screen.queryByRole('button', { name: new RegExp(PUBKEY.slice(0, 12)) })).toBeNull();
+    });
+
+    it('an outsider is admitted to the root group before the channel seat; a root member only gets the channel seat', async () => {
+      await toPeopleStep(new Set([ROOT_MEMBER]));
+      await fireEvent.click(
+        screen.getByRole('button', { name: new RegExp(OUTSIDER.slice(0, 12)) })
+      );
+      await fireEvent.click(
+        screen.getByRole('button', { name: new RegExp(ROOT_MEMBER.slice(0, 12)) })
+      );
+      await fireEvent.click(screen.getByTestId('concord-wizard-create'));
+      await waitFor(() => expect(createGroupOnRelay).toHaveBeenCalledTimes(1));
+
+      await waitFor(() =>
+        expect(buildPutUserTemplate).toHaveBeenCalledWith('new-group-id', ROOT_MEMBER)
+      );
+      const seats = buildPutUserTemplate.mock.calls.map((call) => `${call[0]}:${call[1]}`);
+      expect(seats).toContain(`root-1:${OUTSIDER}`);
+      expect(seats).toContain(`new-group-id:${OUTSIDER}`);
+      expect(seats).not.toContain(`root-1:${ROOT_MEMBER}`);
+      // Root admission goes before the channel seat.
+      expect(seats.indexOf(`root-1:${OUTSIDER}`)).toBeLessThan(
+        seats.indexOf(`new-group-id:${OUTSIDER}`)
+      );
+    });
+
+    it('a relay answering "members already" for the root seat is not a failure', async () => {
+      await toPeopleStep(new Set());
+      await fireEvent.click(
+        screen.getByRole('button', { name: new RegExp(OUTSIDER.slice(0, 12)) })
+      );
+      publishToGroupRelay.mockImplementationOnce(async () => {
+        throw new Error('all targets are members already');
+      });
+      await fireEvent.click(screen.getByTestId('concord-wizard-create'));
+      await waitFor(() =>
+        expect(toastSpy).toHaveBeenCalledWith(expect.stringMatching(/Mathe/), 'success')
+      );
+    });
+  });
+
   // Hidden rooms (pyramid fork edufeed-v1.3): even a private channel's NAME
   // is listed unless its metadata carries `hidden` — the wizard offers the
   // opt-out at creation time so the room is born unlisted, never briefly

@@ -3320,7 +3320,7 @@
   "wizard_hidden_hint": "Erscheint nicht in der Kanalliste; nur eingeladene Mitglieder sehen ihn.",
   "wizard_access_concord_hint": "Ein Kanal nur für Community-Mitglieder? Erstelle stattdessen einen verschlüsselten Kanal.",
   "wizard_no_shared_relay": "Die Kanäle dieser Community liegen auf verschiedenen Relays — Anlegen hier nicht möglich.",
-  "wizard_invite_lead": "Füge Personen hinzu, die von Anfang an im Kanal sein sollen — Mitglieder lassen sich jederzeit später verwalten.",
+  "wizard_invite_lead": "Füge Personen hinzu, die von Anfang an im Kanal sein sollen — aus deinen Kontakten, per Suche oder npub. Wer noch nicht Mitglied der Community ist, wird dabei aufgenommen. Mitglieder lassen sich jederzeit später verwalten.",
   "concord_locked_title": "Kein Schlüssel für diesen Kanal",
   "concord_locked_body": "Du hast für diesen Kanal noch keinen Zugang erhalten. Bitte eine:n Admin um eine Einladung.",
   "concord_chat_subtitle": "Ende-zu-Ende-verschlüsselt · nur Mitglieder können mitlesen",
