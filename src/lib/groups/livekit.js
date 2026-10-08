@@ -93,6 +93,30 @@ export function identityToPubkey(identity) {
 }
 
 /**
+ * The participant identity a LiveKit access token was minted for: its JWT
+ * `sub` claim (`<pubkey>:<suffix>` on a NIP-29 relay). Null for anything
+ * that is not a JWT with a string `sub`. Read client-side only — the token
+ * is not verified here, LiveKit does that; a guest about to move into a
+ * breakout room announces this identity to the host seat before it leaves
+ * the main room (groups/breakout.svelte.js).
+ * @param {unknown} jwt
+ * @returns {string | null}
+ */
+export function tokenIdentity(jwt) {
+  if (typeof jwt !== 'string') return null;
+  const parts = jwt.split('.');
+  if (parts.length !== 3) return null;
+  try {
+    const base64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+    const padded = base64 + '='.repeat((4 - (base64.length % 4)) % 4);
+    const json = JSON.parse(atob(padded));
+    return typeof json?.sub === 'string' && json.sub ? json.sub : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * A seat that joined through a call pass: the relay mints those tokens with
  * participant metadata `{"guest":true,"pass":"<id>"}`.
  * @param {{metadata?: string} | null | undefined} participant

@@ -2,10 +2,14 @@
   BreakoutPanel — the host's view of a running breakout session, in the
   stage's side column: every room with the people seated in it (kind 39002
   rosters; a badge for those the relay sees live in the room's call, kind
-  39004), a "Verschieben nach …" picker per person, "Beitreten" per room,
-  the people still in the main room with the same picker, the deadline with
-  "+5 Min", the late-joiner switch ("Nachzügler automatisch verteilen") and
-  "Alle zurückholen" (= delete every room, everyone returns).
+  39004) and the GUESTS in it (live in the room's call without a roster
+  seat — a call pass opens the room; "Gast" badge), a "Verschieben nach …"
+  picker per person, "Beitreten" per room, the people still in the main
+  room with the same picker, the deadline with "+5 Min", the late-joiner
+  switch ("Nachzügler automatisch verteilen") and "Alle zurückholen"
+  (= delete every room, everyone returns). A guest's picker reports
+  `guest: true`: the store moves it by message and the moderation
+  endpoint, never with put-user.
 
   Pure view: the breakout store (groups/breakout.svelte.js) owns the session;
   the callbacks are the stage's. Names come from the profile map — people in
@@ -26,7 +30,7 @@
    *   rows: ParticipantRow[],
    *   breakout: ReturnType<typeof import('$lib/groups/breakout.svelte.js').getBreakoutState>,
    *   myPubkey: string | null,
-   *   onMove: (args: {pubkey: string, identities: string[], toRoomId: string | null}) => void,
+   *   onMove: (args: {pubkey: string, identities: string[], toRoomId: string | null, guest?: boolean}) => void,
    *   onJoin: (room: BreakoutRoom) => void,
    *   onEnd: (opts: {notify: boolean}) => void,
    *   onExtend: (minutes: number) => void,
@@ -83,18 +87,38 @@
     }
     return out;
   });
-  /** Main-room seats that can be sent somewhere: remote members not in a room. */
+  /**
+   * Guests per room: live in the room's call (39004) without a roster seat
+   * there (guests are on no roster) and not us. A guest that announced its
+   * seat (`guestSeats`) counts too, so it is listed before the relay's
+   * first 39004 arrives.
+   */
+  const guestsByRoom = $derived.by(() => {
+    /** @type {Record<string, string[]>} */
+    const out = {};
+    for (const room of rooms) {
+      const seated = breakout.membersByRoomId[room.id] ?? new Set();
+      const announced = Object.entries(breakout.guestSeats ?? {})
+        .filter(([, seat]) => seat.roomId === room.id)
+        .map(([pubkey]) => pubkey);
+      out[room.id] = [
+        ...new Set([...(breakout.presenceByRoomId[room.id] ?? []), ...announced])
+      ].filter((pubkey) => pubkey !== myPubkey && !seated.has(pubkey));
+    }
+    return out;
+  });
+  /** Main-room seats that can be sent somewhere: remote members not in a room, and guests. */
   const inMain = $derived(
     rows.filter(
       (row) =>
         !row.isLocal &&
-        !row.guest &&
         !!row.pubkey &&
         !roomOfPubkey(rooms, breakout.membersByRoomId, /** @type {string} */ (row.pubkey))
     )
   );
   const getProfiles = useProfileMap(() => [
     ...Object.values(seatedByRoom).flat(),
+    ...Object.values(guestsByRoom).flat(),
     ...inMain.map((row) => /** @type {string} */ (row.pubkey))
   ]);
   /** @param {string} pubkey */
@@ -105,10 +129,15 @@
   const identitiesOf = (pubkey) =>
     rows.filter((row) => row.pubkey === pubkey).map((row) => row.participant.identity);
 
-  /** @param {string} pubkey @param {Event} event */
-  function move(pubkey, event) {
+  /** @param {string} pubkey @param {Event} event @param {boolean} [guest] */
+  function move(pubkey, event, guest = false) {
     const value = /** @type {HTMLSelectElement} */ (event.currentTarget).value;
-    onMove({ pubkey, identities: identitiesOf(pubkey), toRoomId: value === '' ? null : value });
+    onMove({
+      pubkey,
+      identities: identitiesOf(pubkey),
+      toRoomId: value === '' ? null : value,
+      ...(guest ? { guest: true } : {})
+    });
     /** @type {HTMLSelectElement} */ (event.currentTarget).value = '__pick';
   }
 </script>
@@ -160,10 +189,33 @@
             {m.groups_call_breakout_join()}
           </button>
         </div>
-        {#if seatedByRoom[room.id].length === 0}
+        {#if seatedByRoom[room.id].length === 0 && guestsByRoom[room.id].length === 0}
           <p class="px-1 text-xs text-base-content/60">{m.groups_call_breakout_empty_room()}</p>
         {:else}
           <ul>
+            {#each guestsByRoom[room.id] as pubkey (pubkey)}
+              <li class="flex items-center gap-2 py-1" data-testid="breakout-panel-guest">
+                <ProfileAvatar {pubkey} profile={getProfiles().get(pubkey)} size="xs" />
+                <span class="min-w-0 flex-1 truncate">{nameOf(pubkey)}</span>
+                <span class="badge badge-ghost badge-xs">{m.groups_call_guest_badge()}</span>
+                <select
+                  class="select-bordered select max-w-32 select-xs"
+                  value="__pick"
+                  disabled={breakout.busy}
+                  onchange={(e) => move(pubkey, e, true)}
+                  aria-label={m.groups_call_breakout_move_to()}
+                  data-testid="breakout-panel-move-guest"
+                >
+                  <option value="__pick" disabled>{m.groups_call_breakout_move_to()}</option>
+                  <option value="">{m.groups_call_breakout_main_room()}</option>
+                  {#each rooms.filter((r) => r.id !== room.id) as other (other.id)}
+                    <option value={other.id}>
+                      {m.groups_call_breakout_room_label({ n: other.index })}
+                    </option>
+                  {/each}
+                </select>
+              </li>
+            {/each}
             {#each seatedByRoom[room.id] as pubkey (pubkey)}
               <li class="flex items-center gap-2 py-1" data-testid="breakout-panel-member">
                 <ProfileAvatar {pubkey} profile={getProfiles().get(pubkey)} size="xs" />
@@ -208,11 +260,16 @@
               <span class="min-w-0 flex-1 truncate">
                 {nameOf(/** @type {string} */ (row.pubkey))}
               </span>
+              {#if row.guest}
+                <span class="badge badge-ghost badge-xs" data-testid="breakout-panel-main-guest">
+                  {m.groups_call_guest_badge()}
+                </span>
+              {/if}
               <select
                 class="select-bordered select max-w-32 select-xs"
                 value="__pick"
                 disabled={breakout.busy}
-                onchange={(e) => move(/** @type {string} */ (row.pubkey), e)}
+                onchange={(e) => move(/** @type {string} */ (row.pubkey), e, row.guest === true)}
                 aria-label={m.groups_call_breakout_move_to()}
                 data-testid="breakout-panel-move"
               >

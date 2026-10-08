@@ -296,8 +296,8 @@ members:[identity…]}], until?}` (`parseBreakoutPayload`), believed only
    newcomer sees the **banner** "Breakout-Session läuft" with the rooms and
    "Beitreten" (`requestBreakoutRoom`: seat yourself if the relay lets you,
    else `join` to the host seat, which seats and assigns you; unanswered
-   after 10 s → toast). Guests stay in the main room (a pass does not reach
-   a sub-channel); the banner tells them.
+   after 10 s → toast). A guest's "Beitreten" switches straight away with
+   its pass (see 10.).
 6. **Hand-over.** Every host / co-host client keeps the session state it
    received. When the relay hands this seat the host role (the host left),
    the store flips to `hosting` and takes over: panel, newcomers, deadline,
@@ -343,6 +343,44 @@ members:[identity…]}], until?}` (`parseBreakoutPayload`), believed only
    replayed, `CallChatPanel` draws it apart from the messages); a
    `countdown` only moves the deadline display. The sender's own copy is
    rendered at once and the relay's echo deduped by id.
+
+10. **Guests (call-pass seats)** — `docs/nips/nip29-ephemeral-groups.md`
+    "Guests in ephemeral children", relay side pyramid `edufeed-v1.13`: a
+    pass issued for the channel is honoured on a token request for any of
+    its ephemeral children (judged against the parent — window, scope,
+    revocation, "you were removed"), the guest seat in a room carries the
+    same `{"guest":true,"pass":…}` metadata, and guests are never roster
+    members. In the app: the dialog lists guests assignable like members
+    (with the "Gast" badge, `guest: true` on the seat) and the store
+    **never publishes a put-user for a guest** — the assignment names the
+    guest's identity like a member's. The guest's client switches with
+    `switchGroupCall(room, { code, token })`: it requests the room's token
+    with its **same `code`** WHILE still in the main room (a refusal — an
+    old relay, a revoked pass — leaves it there with the relay's reason,
+    `groups_call_breakout_switch_failed`), announces the identity it will
+    hold in the room to the main room (`{t:'seat', room, identity}`, the
+    token's `sub` — `tokenIdentity()` in `livekit.js`), then moves; back to
+    the main room goes with the code too (`switchGroupCall` keeps the active
+    call's code by default). In a room a guest follows no roster (it is on
+    none): the room's 39000 (`until`, tombstone), its 9008 and the LiveKit
+    disconnect after `DeleteRoom` send it home like a member; a **removal**
+    from a room (`PARTICIPANT_REMOVED`) also means "back to the main room"
+    (`groups_call_breakout_moved_out`), never the end screen — `CallLanding`
+    treats a breakout room of its call as "here" (`inBreakoutOfHere`, like
+    `GroupChat`). The host panel lists guests per room from the room's
+    39004 presence minus its roster (plus announced seats, `guestSeats`),
+    with the badge; "Verschieben nach …" for a guest in a room =
+    `moderateCall(child, {action:'remove', identity})` with the announced
+    identity, then — once the guest's new seat joins the main room
+    (`onParticipantJoined`) — a targeted `assign` to the target room
+    (`guestMoves`, 20 s timeout → `groups_call_breakout_guest_move_timeout`);
+    "Hauptraum" for a guest is the remove alone; a guest still in the main
+    room is moved by targeted `assign` only. Someone the host sent back to
+    the main room (member or guest) is not auto-assigned again for 60 s
+    (`sentHome`). Broadcasts reach guests only where the parent group is
+    readable to non-members; the subscription ignores a refusal silently.
+    A guest who reloads while in a room lands on the landing page with the
+    parent pointer and code and simply joins the main room again.
 
 Degrades on a relay without the extension: rooms carry the `about` marker
 only, nobody but the creator may delete or move, the `#ephemeral` read

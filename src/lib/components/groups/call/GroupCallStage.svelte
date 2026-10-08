@@ -348,12 +348,12 @@
   const hostsBreakout = $derived(!inBreakoutRoom && breakout.session?.hosting === true);
   const canOpenBreakout = $derived(!!myRole && !inBreakoutRoom && !breakout.session);
   // A session runs that this seat is not part of (joined late, declined,
-  // came back): the banner with the rooms to join — or, for a guest, the
-  // note that a pass does not reach a breakout room.
+  // came back): the banner with the rooms to join — guests too, their pass
+  // opens the rooms (the store switches them with their code).
   const showBreakoutBanner = $derived(
     !!breakout.session && !hostsBreakout && !inBreakoutRoom && breakout.pending === null
   );
-  /** @param {{roomCount: number, seats: Array<{identity: string, pubkey: string, roomIndex: number}>, durationMinutes: number | null, autoAssign: boolean}} args */
+  /** @param {{roomCount: number, seats: Array<{identity: string, pubkey: string, roomIndex: number, guest: boolean}>, durationMinutes: number | null, autoAssign: boolean}} args */
   async function startBreakoutRooms(args) {
     await startBreakout({ channelName: title, ...args });
     breakoutDialogOpen = false;
@@ -1178,11 +1178,7 @@
   {/if}
 
   {#if showBreakoutBanner && BreakoutBannerLazy.Component}
-    <BreakoutBannerLazy.Component
-      {breakout}
-      guest={isGuestParticipant(lk.localParticipant)}
-      onJoin={(room) => void requestBreakoutRoom(room)}
-    />
+    <BreakoutBannerLazy.Component {breakout} onJoin={(room) => void requestBreakoutRoom(room)} />
   {/if}
 
   <!-- Content -->

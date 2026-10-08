@@ -1,8 +1,9 @@
 // @ts-nocheck
 /**
  * BreakoutDialog — the host's "open breakout rooms" form: room count,
- * random or manual assignment, optional duration; guests listed greyed out
- * and never assigned; the relay's refusal shown in place.
+ * random or manual assignment, optional duration; guests assignable like
+ * members (a "Gast" badge, `guest: true` on their seat so the store never
+ * seats them); the relay's refusal shown in place.
  *
  * @vitest-environment jsdom
  */
@@ -29,7 +30,7 @@ vi.mock('$lib/paraglide/messages', () => ({
   groups_call_breakout_duration_none: () => 'No time limit',
   groups_call_breakout_room_label: ({ n }) => `Room ${n}`,
   groups_call_breakout_main_room: () => 'Main room',
-  groups_call_breakout_guest_stays: () => 'Guests stay in the main room.',
+  groups_call_breakout_guest_note: () => 'Guests follow with their link.',
   groups_call_breakout_host_note: () => 'Host rights apply in the main room only.',
   groups_call_breakout_nobody: () => 'Nobody else is in the call.',
   groups_call_breakout_start: () => 'Open rooms',
@@ -70,27 +71,32 @@ beforeEach(() => {
 });
 
 describe('BreakoutDialog', () => {
-  it('lists assignable seats, greys guests out and explains why', () => {
+  it('lists every remote seat as assignable — guests with a badge and the note', () => {
     render(BreakoutDialog, { props: { rows: [ME, BOB, GUEST], nameOf, onStart, onClose } });
-    expect(screen.getAllByTestId('breakout-seat')).toHaveLength(1);
-    const guest = screen.getByTestId('breakout-seat-guest');
-    expect(guest.getAttribute('aria-disabled')).toBe('true');
-    expect(guest.textContent).toContain('Gast');
-    expect(screen.getByTestId('breakout-dialog').textContent).toContain(
-      'Guests stay in the main room.'
+    const seats = screen.getAllByTestId('breakout-seat');
+    expect(seats).toHaveLength(2);
+    expect(seats[1].textContent).toContain('Gast');
+    expect(screen.getAllByTestId('breakout-seat-guest-badge')).toHaveLength(1);
+    expect(seats[1].getAttribute('aria-disabled')).toBeNull();
+    expect(screen.getByTestId('breakout-guest-note').textContent).toContain(
+      'Guests follow with their link.'
     );
-    expect(screen.getByTestId('breakout-dialog').textContent).toContain(
-      'Host rights apply in the main room only.'
-    );
+    expect(screen.getByTestId('breakout-start').disabled).toBe(false);
+  });
+
+  it('without guests there is no guest note', () => {
+    render(BreakoutDialog, { props: { rows: [ME, BOB], nameOf, onStart, onClose } });
+    expect(screen.queryByTestId('breakout-guest-note')).toBeNull();
+    expect(screen.queryAllByTestId('breakout-seat-guest-badge')).toHaveLength(0);
   });
 
   it('cannot start with nobody to assign', () => {
-    render(BreakoutDialog, { props: { rows: [ME, GUEST], nameOf, onStart, onClose } });
+    render(BreakoutDialog, { props: { rows: [ME], nameOf, onStart, onClose } });
     expect(screen.getByTestId('breakout-dialog').textContent).toContain('Nobody else');
     expect(screen.getByTestId('breakout-start').disabled).toBe(true);
   });
 
-  it('random: deals every member seat into the chosen number of rooms, with the duration', async () => {
+  it('random: deals every seat — guests included — into the chosen number of rooms, with the duration', async () => {
     render(BreakoutDialog, {
       props: { rows: [ME, BOB, CAROL, DAVE, GUEST], nameOf, onStart, onClose }
     });
@@ -102,11 +108,16 @@ describe('BreakoutDialog', () => {
     expect(args.roomCount).toBe(3);
     expect(args.durationMinutes).toBe(15);
     expect(args.seats.map((s) => s.pubkey).sort()).toEqual(
-      [BOB.pubkey, CAROL.pubkey, DAVE.pubkey].sort()
+      [BOB.pubkey, CAROL.pubkey, DAVE.pubkey, GUEST.pubkey].sort()
     );
-    // one per room — balanced, nobody doubled, the guest and I left out
-    expect(args.seats.map((s) => s.roomIndex).sort()).toEqual([1, 2, 3]);
+    // balanced over three rooms, nobody doubled, only I am left out
+    expect(args.seats.map((s) => s.roomIndex).sort()).toEqual([1, 1, 2, 3]);
     expect(args.seats.every((s) => typeof s.identity === 'string')).toBe(true);
+    // the store must know which seat is a guest's: no put-user for those
+    expect(args.seats.find((s) => s.pubkey === GUEST.pubkey).guest).toBe(true);
+    expect(
+      args.seats.filter((s) => s.pubkey !== GUEST.pubkey).every((s) => s.guest === false)
+    ).toBe(true);
     // late joiners are distributed by default when the split is random
     expect(args.autoAssign).toBe(true);
   });
@@ -147,7 +158,7 @@ describe('BreakoutDialog', () => {
     const [args] = onStart.mock.calls[0];
     expect(args.durationMinutes).toBeNull();
     expect(args.seats).toEqual([
-      { identity: CAROL.participant.identity, pubkey: CAROL.pubkey, roomIndex: 2 }
+      { identity: CAROL.participant.identity, pubkey: CAROL.pubkey, roomIndex: 2, guest: false }
     ]);
   });
 

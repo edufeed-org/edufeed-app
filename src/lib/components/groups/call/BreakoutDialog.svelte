@@ -1,10 +1,11 @@
 <!--
   BreakoutDialog — the host opens breakout rooms: how many (2–8), random or
   manual assignment (a room picker per participant), an optional duration.
-  Guests (call-pass seats) are listed greyed out: a pass does not extend to
-  a sub-channel, so they stay in the main room. The host's own seat is not
-  assigned either — the host stays to run the session (and may join a room
-  from the panel afterwards).
+  Guests (call-pass seats) are assignable like members — the relay honours
+  the parent's pass in its breakout rooms — and carry a "Gast" badge; a
+  guest seat is assigned by message only, never seated (the store knows
+  from `guest`). The host's own seat is not assigned — the host stays to
+  run the session (and may join a room from the panel afterwards).
 
   Pure form: `onStart` (the stage → breakout store) does the relay work and
   rejects with the relay's reason, which is shown here; on success the
@@ -24,7 +25,7 @@
    *   nameOf: (row: ParticipantRow) => string,
    *   onStart: (args: {
    *     roomCount: number,
-   *     seats: Array<{identity: string, pubkey: string, roomIndex: number}>,
+   *     seats: Array<{identity: string, pubkey: string, roomIndex: number, guest: boolean}>,
    *     durationMinutes: number | null,
    *     autoAssign: boolean
    *   }) => Promise<void>,
@@ -56,9 +57,10 @@
   /** @type {string | null} */
   let error = $state(null);
 
-  // Everyone who can be sent to a room: a remote member seat with a pubkey.
-  const assignable = $derived(rows.filter((row) => !row.isLocal && !row.guest && !!row.pubkey));
-  const guests = $derived(rows.filter((row) => !row.isLocal && row.guest));
+  // Everyone who can be sent to a room: a remote seat with a pubkey —
+  // members and guests alike.
+  const assignable = $derived(rows.filter((row) => !row.isLocal && !!row.pubkey));
+  const hasGuests = $derived(assignable.some((row) => row.guest));
   const roomNumbers = $derived(Array.from({ length: roomCount }, (_, i) => i + 1));
 
   /** @param {ParticipantRow} row @param {number} n */
@@ -66,28 +68,26 @@
     manual = { ...manual, [row.key]: n };
   }
 
+  /** @param {ParticipantRow} row @param {number} roomIndex */
+  const seatOf = (row, roomIndex) => ({
+    identity: row.participant.identity,
+    pubkey: /** @type {string} */ (row.pubkey),
+    roomIndex,
+    guest: row.guest === true
+  });
+
   async function start() {
     if (busy) return;
     error = null;
-    /** @type {Array<{identity: string, pubkey: string, roomIndex: number}>} */
+    /** @type {Array<{identity: string, pubkey: string, roomIndex: number, guest: boolean}>} */
     let seats;
     if (mode === 'random') {
       const buckets = splitRandom(assignable, roomCount);
-      seats = buckets.flatMap((bucket, i) =>
-        bucket.map((row) => ({
-          identity: row.participant.identity,
-          pubkey: /** @type {string} */ (row.pubkey),
-          roomIndex: i + 1
-        }))
-      );
+      seats = buckets.flatMap((bucket, i) => bucket.map((row) => seatOf(row, i + 1)));
     } else {
       seats = assignable
         .filter((row) => (manual[row.key] ?? 0) >= 1)
-        .map((row) => ({
-          identity: row.participant.identity,
-          pubkey: /** @type {string} */ (row.pubkey),
-          roomIndex: manual[row.key]
-        }));
+        .map((row) => seatOf(row, manual[row.key]));
     }
     busy = true;
     try {
@@ -206,6 +206,11 @@
       {#each assignable as row (row.key)}
         <li class="flex items-center gap-2 py-1.5" data-testid="breakout-seat">
           <span class="min-w-0 flex-1 truncate">{nameOf(row)}</span>
+          {#if row.guest}
+            <span class="badge badge-ghost badge-sm" data-testid="breakout-seat-guest-badge">
+              {m.groups_call_guest_badge()}
+            </span>
+          {/if}
           {#if mode === 'manual'}
             <select
               class="select-bordered select select-xs"
@@ -223,19 +228,11 @@
           {/if}
         </li>
       {/each}
-      {#each guests as row (row.key)}
-        <li
-          class="flex items-center gap-2 py-1.5 text-base-content/40"
-          aria-disabled="true"
-          data-testid="breakout-seat-guest"
-        >
-          <span class="min-w-0 flex-1 truncate">{nameOf(row)}</span>
-          <span class="badge badge-ghost badge-sm">{m.groups_call_guest_badge()}</span>
-        </li>
-      {/each}
     </ul>
-    {#if guests.length > 0}
-      <p class="mt-2 text-xs text-base-content/60">{m.groups_call_breakout_guest_stays()}</p>
+    {#if hasGuests}
+      <p class="mt-2 text-xs text-base-content/60" data-testid="breakout-guest-note">
+        {m.groups_call_breakout_guest_note()}
+      </p>
     {/if}
     <p class="mt-2 text-xs text-base-content/60">{m.groups_call_breakout_host_note()}</p>
 

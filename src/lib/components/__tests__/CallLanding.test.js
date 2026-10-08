@@ -38,6 +38,21 @@ vi.mock('$lib/groups/group-call.svelte.js', () => ({
   registerCallStageView: (...a) => registerCallStageView(...a),
   toggleChatBeside: () => toggleChatBeside()
 }));
+// The breakout store: a guest assigned to a breakout room moves its call to
+// the room's group; the landing must keep its in-call shell up then.
+const breakoutState = {
+  session: /** @type {any} */ (null),
+  currentRoom: /** @type {any} */ (null),
+  rooms: [],
+  membersByRoomId: {},
+  presenceByRoomId: {},
+  guestSeats: {},
+  remaining: null,
+  busy: false,
+  pending: null,
+  joinRequest: null
+};
+vi.mock('$lib/groups/breakout.svelte.js', () => ({ getBreakoutState: () => breakoutState }));
 let activeUser = null;
 vi.mock('$lib/stores/accounts.svelte', () => ({
   useActiveUser: () => () => activeUser,
@@ -91,6 +106,8 @@ beforeEach(() => {
   callState.endReason = null;
   callState.isActiveFor = () => false;
   callState.chatBeside = true;
+  breakoutState.session = null;
+  breakoutState.currentRoom = null;
   registerCallStageView.mockImplementation(() => () => {});
   getProfile.mockReturnValue(null);
   isCallGuest.mockReturnValue(true);
@@ -843,6 +860,56 @@ describe('CallLanding', () => {
     // still offered the guest's keep/forget choices
     expect(screen.getByTestId('call-landing-backup')).toBeTruthy();
     expect(screen.getByTestId('call-landing-forget')).toBeTruthy();
+  });
+
+  it('a guest moved into a breakout room of this call stays in the in-call shell — through a removal from the room too', async () => {
+    const { rerender } = await renderInCall();
+    const ROOM = { id: 'room-1', relay: POINTER.relay };
+    // The store switched the call to the room's group: the pointer is no
+    // longer the active one, but the room belongs to this call.
+    breakoutState.session = {
+      main: { id: POINTER.id, relay: POINTER.relay, title: 'Seminar' },
+      rooms: []
+    };
+    breakoutState.currentRoom = { ...ROOM, name: 'Breakout 1', index: 1 };
+    callState.isActiveFor = (p) => p?.id === ROOM.id;
+    await rerender({ pointer: { ...POINTER } });
+    expect(screen.getByTestId('group-call-stage-stub')).toBeTruthy();
+    expect(screen.queryByTestId('call-landing-ended')).toBeNull();
+    // The host took the guest out of the room (a move): the store brings it
+    // back to the main room — no end screen in between.
+    callState.phase = 'ended';
+    callState.connected = false;
+    callState.endReason = 'removed';
+    await rerender({ pointer: { ...POINTER } });
+    expect(screen.queryByTestId('call-landing-ended')).toBeNull();
+    expect(screen.getByTestId('call-landing-in-call')).toBeTruthy();
+    // ... and once back in the main room the stage is up again.
+    callState.phase = 'ready';
+    callState.connected = true;
+    callState.endReason = null;
+    breakoutState.currentRoom = null;
+    callState.isActiveFor = (p) => p?.id === POINTER.id;
+    await rerender({ pointer: { ...POINTER } });
+    expect(await screen.findByTestId('group-call-stage-stub')).toBeTruthy();
+  });
+
+  it('a room of ANOTHER call is not "here": the landing shows its end screen like before', async () => {
+    const { rerender } = await renderInCall();
+    breakoutState.session = {
+      main: { id: 'other', relay: POINTER.relay, title: 'Elsewhere' },
+      rooms: []
+    };
+    breakoutState.currentRoom = {
+      id: 'room-x',
+      relay: POINTER.relay,
+      name: 'Breakout 1',
+      index: 1
+    };
+    callState.isActiveFor = () => false;
+    callState.phase = 'ready';
+    await rerender({ pointer: { ...POINTER } });
+    expect(await screen.findByTestId('call-landing-ended')).toBeTruthy();
   });
 
   it('a dropped connection shows the end screen without the removal note', async () => {

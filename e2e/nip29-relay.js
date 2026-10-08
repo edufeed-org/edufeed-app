@@ -1,6 +1,6 @@
 import { WebSocketServer } from 'ws';
 import http from 'http';
-import { createHmac } from 'crypto';
+import { createHash, createHmac } from 'crypto';
 import { generateSecretKey, getPublicKey, finalizeEvent } from 'nostr-tools/pure';
 import { matchesFilter, queryEvents } from './mock-relay.js';
 
@@ -29,6 +29,9 @@ const DELETE_GROUP_KIND = 9008;
 const GROUP_METADATA_KIND = 39000;
 const GROUP_ADMINS_KIND = 39001;
 const GROUP_MEMBERS_KIND = 39002;
+// NIP-29 AV extensions (docs/nips/nip29-call-passes.md, nip29-presence.md)
+const CALL_PASS_KIND = 9025;
+const CALL_PRESENCE_KIND = 39004;
 
 const MODERATION_KINDS = new Set([
   CREATE_GROUP_KIND,
@@ -61,6 +64,7 @@ function tagValue(tags, name) {
  * @property {Map<string, string[]>} admins pubkey -> roles (only entries with roles.length > 0 are kept)
  * @property {Set<string>} members
  * @property {Set<string>} inviteCodes registered via kind 9009
+ * @property {Map<string, {id: string}>} passes call passes (kind 9025) by code-hash
  */
 
 /** @param {string} id @returns {GroupState} */
@@ -70,7 +74,8 @@ function createGroupState(id) {
     metadata: { isPublic: false, isOpen: false, restricted: false, hidden: false, livekit: false },
     admins: new Map(),
     members: new Set(),
-    inviteCodes: new Set()
+    inviteCodes: new Set(),
+    passes: new Map()
   };
 }
 
@@ -324,7 +329,7 @@ function buildRosterEvents(group, relaySecretKey) {
  * @param {import('nostr-tools').NostrEvent} event
  */
 function storeEvent(storedEvents, event) {
-  if (event.kind >= 39000 && event.kind <= 39003) {
+  if (event.kind >= 39000 && event.kind <= 39004) {
     const d = tagValue(event.tags, 'd') ?? '';
     for (let i = storedEvents.length - 1; i >= 0; i--) {
       const existing = storedEvents[i];
@@ -383,18 +388,58 @@ export function livekitDevToken({ apiKey, apiSecret }, { room, identity, metadat
 }
 
 /**
- * The pubkey of the NIP-98 event in an `Authorization: Nostr <base64>` header
- * (the mock trusts it — no signature check).
+ * The NIP-98 event in an `Authorization: Nostr <base64>` header (the mock
+ * trusts it — no signature check).
  * @param {string | undefined} header
+ * @returns {{pubkey: string, tags: string[][]} | null}
  */
-function nip98Pubkey(header) {
+function nip98Event(header) {
   if (!header?.startsWith('Nostr ')) return null;
   try {
     const event = JSON.parse(Buffer.from(header.slice(6), 'base64').toString('utf8'));
-    return typeof event?.pubkey === 'string' ? event.pubkey : null;
+    if (typeof event?.pubkey !== 'string') return null;
+    return { pubkey: event.pubkey, tags: Array.isArray(event.tags) ? event.tags : [] };
   } catch {
     return null;
   }
+}
+
+/** @param {string | undefined} header */
+function nip98Pubkey(header) {
+  return nip98Event(header)?.pubkey ?? null;
+}
+
+/**
+ * A LiveKit RoomService (twirp) call with the relay's own admin token — what
+ * pyramid does for the participant list, moderation and DeleteRoom.
+ * @param {{serverUrl: string, apiKey: string, apiSecret: string}} lk
+ * @param {string} method
+ * @param {{room: string, [key: string]: unknown}} body
+ * @returns {Promise<any>}
+ */
+async function livekitRoomService(lk, method, body) {
+  const now = Math.floor(Date.now() / 1000);
+  const header = b64url(JSON.stringify({ alg: 'HS256', typ: 'JWT' }));
+  const payload = b64url(
+    JSON.stringify({
+      iss: lk.apiKey,
+      sub: 'mock-relay',
+      nbf: now - 10,
+      exp: now + 600,
+      video: { roomAdmin: true, roomList: true, room: body.room }
+    })
+  );
+  const signature = createHmac('sha256', lk.apiSecret).update(`${header}.${payload}`).digest();
+  const token = `${header}.${payload}.${b64url(signature)}`;
+  const origin = lk.serverUrl.replace(/^ws/, 'http');
+  const response = await fetch(`${origin}/twirp/livekit.RoomService/${method}`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify(body)
+  });
+  const text = await response.text();
+  if (!response.ok) throw new Error(`${method} ${response.status}: ${text}`);
+  return text ? JSON.parse(text) : {};
 }
 
 /**
@@ -412,7 +457,17 @@ function nip98Pubkey(header) {
  *   (`/.well-known/nip29/livekit` → 204, `/.well-known/nip29/livekit/<id>`
  *   → dev JWT for a livekit-enabled group; the first seat of a room is its
  *   host, exactly pyramid's "opener" rule) so a local livekit-server --dev
- *   can carry real calls against this relay.
+ *   can carry real calls against this relay. With it: call passes (a kind
+ *   9025 from a member registers its `code-hash`; a non-member's token
+ *   request with a matching `code` tag gets a guest token with
+ *   `{"guest":true,"pass":<id>}` — for an EPHEMERAL group the parent's
+ *   passes count too, as on pyramid edufeed-v1.13), the pass check
+ *   (`GET …/livekit/<id>/pass/<hash>`, answering for the parent's pass on
+ *   a child), the moderation endpoint (`POST …/livekit/<id>/moderate`,
+ *   `remove` only, from the group's call host / admins or, for an
+ *   ephemeral group, the parent's), kind 39004 presence republished from
+ *   LiveKit's participant list every 2 s for every room a token was minted
+ *   for, and `DeleteRoom` on a group's deletion.
  * Always on: the ephemeral-groups extension (`ephemeral` / `until` stored
  * and restated on the 39000, `#ephemeral` answered through the generic tag
  * filter, a 9002 that changes `ephemeral` refused), ephemeral kinds
@@ -425,7 +480,7 @@ function nip98Pubkey(header) {
  *   moves that seat, as pyramid does on a hand-over).
  * @param {number} port
  * @param {{creatorIsAdmin?: boolean, enforceModeration?: boolean, livekit?: {serverUrl: string, apiKey: string, apiSecret: string}}} [options]
- * @returns {Promise<{server: http.Server, wss: WebSocketServer, relayPubkey: string}>}
+ * @returns {Promise<{server: http.Server, wss: WebSocketServer, relayPubkey: string, presenceTimer: ReturnType<typeof setInterval> | null}>}
  */
 export function startRelay(port, options = {}) {
   /** @type {Map<string, GroupState>} */
@@ -438,6 +493,64 @@ export function startRelay(port, options = {}) {
   const storedEvents = [];
   /** @type {Array<{ws: import('ws').WebSocket, subId: string, filters: import('nostr-tools').Filter[]}>} */
   const subscriptions = [];
+  /** Rooms a token was minted for (their 39004 is polled). @type {Set<string>} */
+  const startedRooms = new Set();
+  /** @type {Map<string, string>} group id -> last 39004 participant list published */
+  const lastPresence = new Map();
+
+  /**
+   * A pass by code-hash: the group's own, else — for an ephemeral group —
+   * its parent's (the extension's rule).
+   * @param {GroupState} group @param {string} hash
+   */
+  function resolvePass(group, hash) {
+    const own = group.passes.get(hash);
+    if (own) return own;
+    const parent = group.metadata.ephemeral ? groups.get(group.metadata.ephemeral) : undefined;
+    return parent?.passes.get(hash) ?? null;
+  }
+
+  /** Kind 39004 for every started room whose participant list changed. */
+  async function pollPresence() {
+    if (!options.livekit) return;
+    for (const gid of [...startedRooms]) {
+      if (!groups.has(gid)) {
+        startedRooms.delete(gid);
+        continue;
+      }
+      /** @type {Array<{identity: string}>} */
+      let participants;
+      try {
+        ({ participants = [] } = await livekitRoomService(options.livekit, 'ListParticipants', {
+          room: gid
+        }));
+      } catch {
+        continue;
+      }
+      const pubkeys = [
+        ...new Set(
+          participants
+            .map((p) => String(p.identity ?? '').slice(0, 64))
+            .filter((p) => /^[0-9a-f]{64}$/.test(p))
+        )
+      ].sort();
+      const key = pubkeys.join(',');
+      if (lastPresence.get(gid) === key) continue;
+      lastPresence.set(gid, key);
+      const presence = finalizeEvent(
+        {
+          kind: CALL_PRESENCE_KIND,
+          created_at: Math.floor(Date.now() / 1000),
+          tags: [['d', gid], ...pubkeys.map((p) => ['participant', p])],
+          content: ''
+        },
+        relaySecretKey
+      );
+      storeEvent(storedEvents, presence);
+      fanOut(subscriptions, presence);
+    }
+  }
+  const presenceTimer = options.livekit ? setInterval(() => void pollPresence(), 2000) : null;
 
   /**
    * Tear a group down the way pyramid does on a 9008 — a user's or, for an
@@ -465,6 +578,11 @@ export function startRelay(port, options = {}) {
       }
     }
     callHosts.delete(gid);
+    startedRooms.delete(gid);
+    lastPresence.delete(gid);
+    if (options.livekit) {
+      void livekitRoomService(options.livekit, 'DeleteRoom', { room: gid }).catch(() => {});
+    }
     const tombstone = finalizeEvent(
       {
         kind: GROUP_METADATA_KIND,
@@ -514,11 +632,104 @@ export function startRelay(port, options = {}) {
         res.end();
         return;
       }
+      const passCheck = req.url?.match(
+        /^\/\.well-known\/nip29\/livekit\/([^/?]+)\/pass\/([0-9a-f]{64})$/
+      );
+      if (passCheck && options.livekit) {
+        const group = groups.get(decodeURIComponent(passCheck[1]));
+        if (!group || !group.metadata.livekit) {
+          res.writeHead(404, cors);
+          res.end('no such group');
+          return;
+        }
+        const pass = resolvePass(group, passCheck[2]);
+        const parent = group.metadata.ephemeral ? groups.get(group.metadata.ephemeral) : undefined;
+        const liveCount = (lastPresence.get(group.id) ?? '').split(',').filter(Boolean).length;
+        res.writeHead(200, { ...cors, 'Content-Type': 'application/json' });
+        res.end(
+          JSON.stringify(
+            pass
+              ? {
+                  valid: true,
+                  reason: 'ok',
+                  live_count: liveCount,
+                  name: group.metadata.ephemeral ? parent?.metadata.name : group.metadata.name
+                }
+              : { valid: false, reason: 'unknown', live_count: 0 }
+          )
+        );
+        return;
+      }
+      const moderate = req.url?.match(/^\/\.well-known\/nip29\/livekit\/([^/?]+)\/moderate$/);
+      if (moderate && options.livekit && req.method === 'POST') {
+        const lk = options.livekit;
+        const group = groups.get(decodeURIComponent(moderate[1]));
+        /** @type {Buffer[]} */
+        const chunks = [];
+        req.on('data', (chunk) => chunks.push(chunk));
+        req.on('end', async () => {
+          const caller = nip98Pubkey(req.headers.authorization);
+          if (!caller) {
+            res.writeHead(401, cors);
+            res.end('missing nip-98 auth');
+            return;
+          }
+          if (!group || !group.metadata.livekit) {
+            res.writeHead(404, cors);
+            res.end('no such group');
+            return;
+          }
+          /** @type {{action?: string, identity?: string}} */
+          let body;
+          try {
+            body = JSON.parse(Buffer.concat(chunks).toString('utf8'));
+          } catch {
+            res.writeHead(400, cors);
+            res.end('invalid json body');
+            return;
+          }
+          if (body.action !== 'remove') {
+            res.writeHead(400, cors);
+            res.end('unknown action (the mock knows remove only)');
+            return;
+          }
+          if (!body.identity) {
+            res.writeHead(400, cors);
+            res.end('identity required');
+            return;
+          }
+          const parent = group.metadata.ephemeral
+            ? groups.get(group.metadata.ephemeral)
+            : undefined;
+          const allowed =
+            callHosts.get(group.id) === caller ||
+            group.admins.has(caller) ||
+            (parent !== undefined &&
+              (callHosts.get(parent.id) === caller || parent.admins.has(caller)));
+          if (!allowed) {
+            res.writeHead(403, cors);
+            res.end('only the host or a co-host may do this');
+            return;
+          }
+          try {
+            await livekitRoomService(lk, 'RemoveParticipant', {
+              room: group.id,
+              identity: body.identity
+            });
+          } catch (err) {
+            res.writeHead(404, cors);
+            res.end(`identity not in the room (${err instanceof Error ? err.message : err})`);
+            return;
+          }
+          res.writeHead(200, { ...cors, 'Content-Type': 'application/json' });
+          res.end('{"ok":true}');
+        });
+        return;
+      }
       const livekitPath = req.url?.match(
         /^\/\.well-known\/nip29\/livekit(?:\/([^/?]+))?\/?(?:\?.*)?$/
       );
       if (!livekitPath && req.url?.startsWith('/.well-known/nip29/livekit/') && options.livekit) {
-        // pass checks, moderation: not part of this mock
         res.writeHead(404, cors);
         res.end('not supported by the mock relay');
         return;
@@ -530,8 +741,9 @@ export function startRelay(port, options = {}) {
           res.end();
           return;
         }
-        const pubkey = nip98Pubkey(req.headers.authorization);
-        if (!pubkey) {
+        const authEvent = nip98Event(req.headers.authorization);
+        const pubkey = authEvent?.pubkey ?? null;
+        if (!authEvent || !pubkey) {
           res.writeHead(401, cors);
           res.end('missing nip-98 auth');
           return;
@@ -542,9 +754,30 @@ export function startRelay(port, options = {}) {
           res.end('livekit not enabled for this group');
           return;
         }
-        if (!callHosts.has(groupId)) callHosts.set(groupId, pubkey);
+        // A call pass (docs/nips/nip29-call-passes.md): a non-member with a
+        // `code` tag gets a guest seat when the code's hash names a pass of
+        // this group — or, for an ephemeral group, of its parent. A member
+        // is a member; the code is ignored.
+        const isMember = group.members.has(pubkey) || group.admins.has(pubkey);
+        const code = tagValue(authEvent.tags, 'code');
+        /** @type {{id: string} | null} */
+        let guestPass = null;
+        if (!isMember && code) {
+          guestPass = resolvePass(group, createHash('sha256').update(code).digest('hex'));
+          if (!guestPass) {
+            res.writeHead(403, cors);
+            res.end('call pass unknown');
+            return;
+          }
+        }
+        if (!guestPass && !callHosts.has(groupId)) callHosts.set(groupId, pubkey);
+        startedRooms.add(groupId);
         const identity = `${pubkey}:${Math.random().toString(36).slice(2, 8)}`;
-        const metadata = callHosts.get(groupId) === pubkey ? JSON.stringify({ host: true }) : '';
+        const metadata = guestPass
+          ? JSON.stringify({ guest: true, pass: guestPass.id })
+          : callHosts.get(groupId) === pubkey
+            ? JSON.stringify({ host: true })
+            : '';
         const token = livekitDevToken(options.livekit, { room: groupId, identity, metadata });
         res.writeHead(200, { ...cors, 'Content-Type': 'application/json' });
         res.end(
@@ -647,6 +880,42 @@ export function startRelay(port, options = {}) {
             return;
           }
 
+          if (event.kind === CALL_PASS_KIND) {
+            // A call pass: from a member of a livekit group, exactly one h
+            // tag, a code-hash. Stored by hash; the token endpoint and the
+            // pass check resolve against it (and against a parent's for an
+            // ephemeral child).
+            const gid = tagValue(event.tags, 'h');
+            const hash = tagValue(event.tags, 'code-hash');
+            const group = gid ? groups.get(gid) : undefined;
+            if (!group || !hash || event.tags.filter((t) => t[0] === 'h').length !== 1) {
+              ws.send(
+                JSON.stringify([
+                  'OK',
+                  event.id,
+                  false,
+                  'invalid: a call pass needs one h and a code-hash'
+                ])
+              );
+              return;
+            }
+            if (!group.members.has(event.pubkey) && !group.admins.has(event.pubkey)) {
+              ws.send(
+                JSON.stringify([
+                  'OK',
+                  event.id,
+                  false,
+                  'restricted: only members may issue call passes'
+                ])
+              );
+              return;
+            }
+            group.passes.set(hash, { id: event.id });
+            ws.send(JSON.stringify(['OK', event.id, true, '']));
+            storeEvent(storedEvents, event);
+            return;
+          }
+
           ws.send(JSON.stringify(['OK', event.id, true, '']));
           // Ephemeral kinds (20000-29999, NIP-01): relayed to whoever listens
           // right now, never stored — what a kind-20002 call broadcast needs.
@@ -662,17 +931,18 @@ export function startRelay(port, options = {}) {
     });
 
     server.listen(port, () => {
-      resolve({ server, wss, relayPubkey });
+      resolve({ server, wss, relayPubkey, presenceTimer });
     });
   });
 }
 
 /**
  * Stop the mock relay server.
- * @param {{server: http.Server, wss: WebSocketServer}} relay
+ * @param {{server: http.Server, wss: WebSocketServer, presenceTimer?: ReturnType<typeof setInterval> | null}} relay
  * @returns {Promise<void>}
  */
-export function stopRelay({ server, wss }) {
+export function stopRelay({ server, wss, presenceTimer }) {
+  if (presenceTimer) clearInterval(presenceTimer);
   return new Promise((resolve) => {
     for (const client of wss.clients ?? []) {
       client.terminate();

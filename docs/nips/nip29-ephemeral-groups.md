@@ -74,13 +74,13 @@ through the same path as a user's 9008 (events archived, id blocked) —
 and tears down its LiveKit room (RoomService `DeleteRoom`) when any of
 these happens:
 
-| trigger | when |
-|---|---|
-| room finished | the LiveKit `room_finished` webhook fires for the group (the last seat left or returned) |
-| never started | 15 minutes after creation without a LiveKit room having started |
-| deadline | `until` + 5 minutes grace has passed, whether or not the room is in use |
-| parent gone | the parent group is deleted; ephemeral children are deleted first |
-| sweep | on relay start and from a periodic sweeper (edufeed: every minute) that re-checks the rules above, as a safety net for missed webhooks |
+| trigger       | when                                                                                                                                   |
+| ------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| room finished | the LiveKit `room_finished` webhook fires for the group (the last seat left or returned)                                               |
+| never started | 15 minutes after creation without a LiveKit room having started                                                                        |
+| deadline      | `until` + 5 minutes grace has passed, whether or not the room is in use                                                                |
+| parent gone   | the parent group is deleted; ephemeral children are deleted first                                                                      |
+| sweep         | on relay start and from a periodic sweeper (edufeed: every minute) that re-checks the rules above, as a safety net for missed webhooks |
 
 A relay MAY delete an ephemeral group earlier when its parent's call ends
 (`room_finished` of the parent) and nobody is in the ephemeral room.
@@ -159,6 +159,81 @@ and MUST NOT store it. Clients in an ephemeral child subscribe to
 Clients SHOULD render a broadcast as a toast naming the sender and as a
 system line in the room's call chat, so people who missed the toast still
 see it.
+
+## Guests in ephemeral children
+
+A call guest (someone who joined through a call pass,
+`nip29-call-passes.md`) is not a member of the parent group and can never
+be seated in an ephemeral child with put-user: a pass grants a seat in the
+call, not membership, and a put-user would turn the guest into a member of
+the child. Instead the **pass itself** reaches the children (relay side
+pyramid `edufeed-v1.13`).
+
+### Relay rules
+
+- A pass issued for group P MUST be honoured on a token request for any
+  ephemeral child of P. The relay resolves the `code` against the child's
+  own passes first, then the parent's. A pass found on the parent is judged
+  against the **parent**: its `not-before` / `expiration` window, its
+  author's membership of the parent, revocation, and for `scope=call` the
+  parent's call running — never the child's.
+- A pubkey removed from the parent (its newest kind 9001 there is not a
+  self-removal) MUST be refused in every child too, with the same
+  `call pass blocked: you were removed` answer.
+- The guest's seat in the child carries the same participant metadata as in
+  the parent, `{"guest":true,"pass":"<pass event id>"}`. Guests are never
+  roster members of any group; the child's kind 39002 does not list them.
+- Revoking the parent's pass (the author's kind 5, a moderator's kind 9005)
+  and the parent's call ending (for call-scoped passes) MUST disconnect
+  that pass's guests from every child room as well as from the parent.
+  Deleting a child tears down its LiveKit room, which disconnects the
+  guests in it like everyone else.
+- The pass check `GET /.well-known/nip29/livekit/<child-id>/pass/<hash>`
+  MUST answer for the parent's pass exactly as the parent's own endpoint
+  would.
+
+A relay without this rule refuses the child token request with its usual
+`403 call pass unknown`; a client then leaves the guest in the parent's
+call and says so.
+
+### Client rules
+
+- A client MUST assign a guest **by message only** — the
+  `edufeed.call.breakout` data message (`{t:'assign', …}`) names the
+  guest's seat identity like a member's — and MUST NOT publish a kind 9000
+  for a guest identity.
+- The guest's client joins the child with the **same `code`** it joined the
+  parent with (the `["code", …]` tag on the NIP-98 token request) and
+  returns to the parent with that code again. Mic, camera and background
+  effect are kept across the switch like a member's.
+- Before leaving the parent's call for a child, the guest's client SHOULD
+  request the child token while it is still connected to the parent and
+  tell the host seat which identity it will hold there:
+  `{t:'seat', room: <child id>, identity: <the token's identity>}` on the
+  breakout topic. The token's `sub` is the identity; a host needs it for
+  the moderation endpoint, which matches identities exactly, while the
+  child's kind 39004 lists pubkeys only. Clients MUST believe a `seat` only
+  from a guest seat (`{"guest":true}` metadata) whose pubkey matches the
+  announced identity.
+- In a child the guest's client cannot follow a roster (it is on none). It
+  MUST follow the child's kind 39000 by `#d` for `until` and deletion, the
+  kind 9008, and the LiveKit disconnect that follows the relay's
+  `DeleteRoom`; all of these mean "return to the parent". Being **removed**
+  from an ephemeral child by moderation also means "return to the parent"
+  (that is how a host moves a guest), never the "removed from the call" end
+  state; a removal from the parent itself stays final.
+- The guest's client SHOULD subscribe to the parent's kind 20002 while in a
+  child like a member's, and MUST ignore a relay's refusal silently: a
+  broadcast reaches guests only where the parent group is readable to
+  non-members (a public parent). A private parent's broadcasts do not
+  reach its guests.
+- The host moves a guest out of a room with the moderation endpoint's
+  `remove` on the **child** (`POST …/livekit/<child-id>/moderate`, the
+  identity from the guest's `seat`); the guest's client returns to the
+  parent on its own, and the host's client then re-assigns it by message
+  once the guest's new seat appears in the parent's room. "Back to the main
+  room" for a guest is the `remove` alone. A guest still in the parent's
+  room is moved by a targeted `assign` only.
 
 ## Why relay-side
 

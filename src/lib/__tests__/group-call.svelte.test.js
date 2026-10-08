@@ -773,6 +773,44 @@ describe('switchGroupCall (breakout rooms)', () => {
     expect(s.endReason).toBeNull();
   });
 
+  it("a guest seat keeps its call pass code across the switch and on the way back (the relay honours the parent's pass in its children)", async () => {
+    requestGroupCallToken.mockResolvedValue({ serverUrl: 'wss://x', participantToken: 't' });
+    await joinGroupCall(P1, USER, { title: 'Main', code: 'C'.repeat(22) });
+    await switchGroupCall(P2, { title: 'Breakout 1' });
+    expect(requestGroupCallToken).toHaveBeenLastCalledWith(RELAY, 'room-2', USER, {
+      code: 'C'.repeat(22)
+    });
+    expect(getGroupCallState().code).toBe('C'.repeat(22));
+    await switchGroupCall(P1, { title: 'Main' });
+    expect(requestGroupCallToken).toHaveBeenLastCalledWith(RELAY, 'room-1', USER, {
+      code: 'C'.repeat(22)
+    });
+    // an explicit code wins
+    await switchGroupCall(P2, { title: 'Breakout 1', code: 'D'.repeat(22) });
+    expect(requestGroupCallToken).toHaveBeenLastCalledWith(RELAY, 'room-2', USER, {
+      code: 'D'.repeat(22)
+    });
+    expect(getGroupCallState().code).toBe('D'.repeat(22));
+  });
+
+  it('a token the caller already holds is used as is: no second request, connected with it', async () => {
+    requestGroupCallToken.mockResolvedValue({ serverUrl: 'wss://x', participantToken: 't' });
+    await joinGroupCall(P1, USER, { title: 'Main', code: 'C'.repeat(22) });
+    requestGroupCallToken.mockClear();
+    connectToRoom.mockClear();
+    await switchGroupCall(P2, {
+      title: 'Breakout 1',
+      token: { serverUrl: 'wss://y', participantToken: 'pre-minted' }
+    });
+    expect(requestGroupCallToken).not.toHaveBeenCalled();
+    expect(connectToRoom).toHaveBeenCalledWith('pre-minted', 'wss://y', expect.anything());
+    const s = getGroupCallState();
+    expect(s.phase).toBe('ready');
+    expect(s.token).toBe('pre-minted');
+    expect(s.serverUrl).toBe('wss://y');
+    expect(s.isActiveFor(P2)).toBe(true);
+  });
+
   it('exposes the channel and signer of the active call to the breakout store', async () => {
     expect(getActiveCallPointer()).toBeNull();
     expect(getActiveCallUser()).toBeNull();

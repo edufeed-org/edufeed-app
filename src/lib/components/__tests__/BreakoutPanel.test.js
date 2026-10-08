@@ -1,8 +1,10 @@
 // @ts-nocheck
 /**
  * BreakoutPanel — the host's view of a running session: rooms with their
- * seated people (rosters) and who is live (presence), "move to", "join",
- * the main-room seats, the deadline and "bring everyone back".
+ * seated people (rosters) and who is live (presence), the guests in a room
+ * (live without a roster seat, "Gast" badge, moved by message and the
+ * moderation endpoint — `guest: true`), "move to", "join", the main-room
+ * seats, the deadline and "bring everyone back".
  *
  * @vitest-environment jsdom
  */
@@ -25,6 +27,7 @@ vi.mock('$lib/paraglide/messages', () => ({
   groups_call_breakout_join: () => 'Join',
   groups_call_breakout_empty_room: () => 'Nobody yet',
   groups_call_breakout_in_call_badge: () => 'in the call',
+  groups_call_guest_badge: () => 'Gast',
   groups_call_breakout_move_to: () => 'Move to …',
   groups_call_breakout_main_room: () => 'Main room',
   groups_call_breakout_members_in_main: () => 'In the main room',
@@ -79,6 +82,7 @@ function state(over = {}) {
     rooms,
     membersByRoomId: { r1: new Set([HOST, BOB]), r2: new Set([HOST]) },
     presenceByRoomId: { r1: [BOB] },
+    guestSeats: {},
     remaining: 90,
     busy: false,
     pending: null,
@@ -144,6 +148,88 @@ describe('BreakoutPanel', () => {
       pubkey: DAVE,
       identities: [`${DAVE}:1`],
       toRoomId: 'r1'
+    });
+  });
+
+  it('lists a guest live in a room (no roster seat) with the badge and moves it as a guest', async () => {
+    const EVE = 'e'.repeat(64);
+    render(BreakoutPanel, {
+      props: {
+        rows: [],
+        breakout: state({ presenceByRoomId: { r1: [BOB], r2: [HOST, EVE] } }),
+        myPubkey: HOST,
+        ...cb
+      }
+    });
+    const sections = screen.getAllByTestId('breakout-panel-room');
+    // Bob is seated (a member), so he is no guest; Eve is live in room 2 without a seat
+    expect(sections[0].querySelectorAll('[data-testid="breakout-panel-guest"]')).toHaveLength(0);
+    const guests = sections[1].querySelectorAll('[data-testid="breakout-panel-guest"]');
+    expect(guests).toHaveLength(1);
+    expect(guests[0].textContent).toContain('Gast');
+    expect(sections[1].textContent).not.toContain('Nobody yet');
+    const picker = guests[0].querySelector('[data-testid="breakout-panel-move-guest"]');
+    await fireEvent.change(picker, { target: { value: 'r1' } });
+    expect(cb.onMove).toHaveBeenCalledWith({
+      pubkey: EVE,
+      identities: [],
+      toRoomId: 'r1',
+      guest: true
+    });
+    await fireEvent.change(picker, { target: { value: '' } });
+    expect(cb.onMove).toHaveBeenLastCalledWith({
+      pubkey: EVE,
+      identities: [],
+      toRoomId: null,
+      guest: true
+    });
+  });
+
+  it('a guest that announced its seat is listed in that room before the relay reports it live', () => {
+    const EVE = 'e'.repeat(64);
+    render(BreakoutPanel, {
+      props: {
+        rows: [],
+        breakout: state({ guestSeats: { [EVE]: { roomId: 'r2', identity: `${EVE}:zz` } } }),
+        myPubkey: HOST,
+        ...cb
+      }
+    });
+    const sections = screen.getAllByTestId('breakout-panel-room');
+    expect(sections[1].querySelectorAll('[data-testid="breakout-panel-guest"]')).toHaveLength(1);
+  });
+
+  it('a guest in the main room gets the badge and is sent into a room as a guest, with its identities', async () => {
+    const EVE = 'e'.repeat(64);
+    render(BreakoutPanel, {
+      props: {
+        rows: [row(DAVE), row(EVE, { guest: true })],
+        breakout: state(),
+        myPubkey: HOST,
+        ...cb
+      }
+    });
+    const main = screen.getByTestId('breakout-panel-main');
+    const members = main.querySelectorAll('[data-testid="breakout-panel-main-member"]');
+    expect(members).toHaveLength(2);
+    expect(members[0].querySelector('[data-testid="breakout-panel-main-guest"]')).toBeNull();
+    expect(
+      members[1].querySelector('[data-testid="breakout-panel-main-guest"]').textContent
+    ).toContain('Gast');
+    const pickers = main.querySelectorAll('[data-testid="breakout-panel-move"]');
+    await fireEvent.change(pickers[1], { target: { value: 'r2' } });
+    expect(cb.onMove).toHaveBeenCalledWith({
+      pubkey: EVE,
+      identities: [`${EVE}:1`],
+      toRoomId: 'r2',
+      guest: true
+    });
+    // a member's move carries no guest flag
+    await fireEvent.change(pickers[0], { target: { value: 'r2' } });
+    expect(cb.onMove).toHaveBeenLastCalledWith({
+      pubkey: DAVE,
+      identities: [`${DAVE}:1`],
+      toRoomId: 'r2'
     });
   });
 

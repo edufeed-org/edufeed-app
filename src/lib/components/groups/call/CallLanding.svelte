@@ -28,6 +28,8 @@
     toggleChatBeside
   } from '$lib/groups/group-call.svelte.js';
   import { trackOnScreen } from '$lib/groups/track-on-screen.js';
+  import { getBreakoutState } from '$lib/groups/breakout.svelte.js';
+  import { sameRelayUrl } from '$lib/groups/relay-url.js';
   import {
     createGuestAccount,
     isCallGuest,
@@ -152,8 +154,23 @@
   // An 'ended' call (the relay removed the guest — e.g. the link was
   // revoked — or the connection died) leaves the in-call shell for the end
   // screen; it was connected before, so `wasInCall` already latched.
+  //
+  // A breakout room of THIS call is still "here" (groups/breakout): a guest
+  // assigned to a room moves its call to the room's group, and the store
+  // brings it back (a removal or a deleted room in a child never ends the
+  // call for good), so the shell stays up whatever the phase in a child.
+  const breakout = getBreakoutState();
+  const inBreakoutOfHere = $derived(
+    !!pointer &&
+      breakout.currentRoom !== null &&
+      !!breakout.session &&
+      breakout.session.main.id === pointer.id &&
+      sameRelayUrl(breakout.session.main.relay, pointer.relay)
+  );
   const inCallHere = $derived(
-    !!pointer && call.isActiveFor(pointer) && call.phase !== 'idle' && call.phase !== 'ended'
+    !!pointer &&
+      ((call.isActiveFor(pointer) && call.phase !== 'idle' && call.phase !== 'ended') ||
+        (inBreakoutOfHere && call.phase !== 'idle'))
   );
   const removedHere = $derived(
     !!pointer && call.isActiveFor(pointer) && call.phase === 'ended' && call.endReason === 'removed'
