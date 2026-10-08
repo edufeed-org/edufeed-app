@@ -46,6 +46,19 @@ describe('showToast targeting', () => {
     expect(container?.parentElement).toBe(dialog);
   });
 
+  it('appends an optional link that opens in a new tab', () => {
+    showToast('filed', 'success', 0, {
+      link: { href: 'https://gitworkshop.dev/nevent1abc', label: 'Open issue' }
+    });
+    const link = /** @type {HTMLAnchorElement | null} */ (
+      document.querySelector('.toast-container a')
+    );
+    expect(link?.href).toBe('https://gitworkshop.dev/nevent1abc');
+    expect(link?.textContent).toBe('Open issue');
+    expect(link?.target).toBe('_blank');
+    expect(link?.rel).toContain('noopener');
+  });
+
   it('ignores a stale container hidden deeper in the tree and creates its own', () => {
     const hiddenHost = document.createElement('div');
     const stale = document.createElement('div');

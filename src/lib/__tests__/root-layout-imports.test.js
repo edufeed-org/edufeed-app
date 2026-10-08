@@ -14,6 +14,7 @@ import { describe, it, expect } from 'vitest';
 import layoutSource from '../../routes/+layout.svelte?raw';
 import navbarSource from '../components/Navbar.svelte?raw';
 import groupChatSource from '../components/groups/GroupChat.svelte?raw';
+import renderErrorCardSource from '../components/shared/RenderErrorCard.svelte?raw';
 
 /**
  * @param {string} source
@@ -39,7 +40,11 @@ describe('root layout static imports', () => {
     'community/layout/ContentNavSidebar.svelte',
     // The running-call dock: only loaded while a call is active.
     'groups/call/CallDock.svelte',
-    'services/livekit-connection.svelte.js'
+    'services/livekit-connection.svelte.js',
+    // The in-app issue report modal: opened from the account menu and from
+    // RenderErrorCard (a static import of the layout) — only via ModalManager.
+    'shared/ReportIssueModal.svelte',
+    'services/issue-report.js'
   ])('does not statically import %s', (needle) => {
     expect(staticImports.filter((s) => s.endsWith(needle))).toEqual([]);
   });
@@ -57,6 +62,13 @@ describe('root layout static imports', () => {
   // GroupChat sits in the /groups and /c route graphs; the in-call stage
   // (and with it livekit-client, ~300KB) must only load once a channel
   // actually starts a call — lazyComponent, never a static import.
+  it.each(['shared/ReportIssueModal.svelte', 'services/issue-report.js'])(
+    'RenderErrorCard does not statically import %s',
+    (needle) => {
+      expect(staticImportsOf(renderErrorCardSource).filter((s) => s.endsWith(needle))).toEqual([]);
+    }
+  );
+
   it.each(['groups/call/GroupCallStage.svelte', 'services/livekit-connection.svelte.js'])(
     'GroupChat does not statically import %s',
     (needle) => {

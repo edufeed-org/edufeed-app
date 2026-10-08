@@ -38,7 +38,8 @@
     shareByNaddr: 'share-by-naddr-modal',
     reportMetadata: 'report-metadata-modal',
     'recovery-download': 'recovery-download-modal',
-    deleteCommunity: 'delete-community-modal'
+    deleteCommunity: 'delete-community-modal',
+    reportIssue: 'report-issue-modal'
   };
 
   // Lazy loaders, keyed by modal type. Reading `.Component` triggers the import.
@@ -72,7 +73,8 @@
     concordInvites: lazyComponent(() => import('./community/channels/InviteInboxModal.svelte')),
     callSwitchConfirm: lazyComponent(() => import('./groups/CallSwitchConfirmModal.svelte')),
     callLeaveConfirm: lazyComponent(() => import('./groups/CallLeaveConfirmModal.svelte')),
-    connectionStatus: lazyComponent(() => import('./shared/ConnectionStatusModal.svelte'))
+    connectionStatus: lazyComponent(() => import('./shared/ConnectionStatusModal.svelte')),
+    reportIssue: lazyComponent(() => import('./shared/ReportIssueModal.svelte'))
   };
 
   /** @type {any} */
