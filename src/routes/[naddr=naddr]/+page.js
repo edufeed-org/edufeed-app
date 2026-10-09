@@ -9,9 +9,9 @@ export const ssr = false;
 export const prerender = false;
 
 /**
- * @param {{ params: { naddr: string }, parent: () => Promise<any> }} context
+ * @param {{ params: { naddr: string }, parent: () => Promise<any>, url?: URL }} context
  */
-export async function load({ params, parent }) {
+export async function load({ params, parent, url }) {
   // Ensure runtime config is initialized before fetching.
   // Config is normally initialized in +layout.svelte (after all load functions),
   // but we need it here for relay resolution. The guard prevents double-init.
@@ -83,7 +83,9 @@ export async function load({ params, parent }) {
     const canonical = getCanonicalEventRoute(event, { relayHints: decoded.data.relays ?? [] });
     const currentPath = `/${params.naddr}`;
     if (canonical && canonical !== currentPath) {
-      redirect(307, canonical);
+      // This route is client-only (ssr = false), so the hash is readable here:
+      // carry a section anchor (wiki heading deep links) over to the canonical page.
+      redirect(307, `${canonical}${url?.hash ?? ''}`);
     }
 
     return {

@@ -55,6 +55,7 @@ describe('profileToContact', () => {
       display_name: 'Colibri',
       picture: 'https://x/c.png',
       nip05: null,
+      nip05s: [],
       about: null
     });
   });

@@ -53,7 +53,9 @@
               identifier: getTagValue(event, 'd') || '',
               relays: relays.slice(0, 3)
             });
-            goto(`/${naddr}`, { replaceState: true });
+            // Keep a section anchor (e.g. the user guide's
+            // #was-bedeutet-verifiziert deep link) across the redirect.
+            goto(`/${naddr}${window.location.hash}`, { replaceState: true });
           } else if (found.length > 1) {
             results = found;
             status = 'multiple';

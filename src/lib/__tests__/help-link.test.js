@@ -1,6 +1,6 @@
 /** @vitest-environment node */
 import { describe, it, expect } from 'vitest';
-import { helpLinkAttrs } from '$lib/helpers/help-link.js';
+import { helpLinkAttrs, helpSectionLinkAttrs } from '$lib/helpers/help-link.js';
 
 describe('helpLinkAttrs', () => {
   it('returns null when no help url is configured', () => {
@@ -20,6 +20,33 @@ describe('helpLinkAttrs', () => {
       href: 'https://example.org/hilfe',
       target: '_blank',
       rel: 'noopener noreferrer'
+    });
+  });
+});
+
+describe('helpSectionLinkAttrs', () => {
+  it('returns null when no help url is configured', () => {
+    expect(helpSectionLinkAttrs(null, 'was-bedeutet-verifiziert')).toBeNull();
+    expect(helpSectionLinkAttrs('', 'was-bedeutet-verifiziert')).toBeNull();
+  });
+
+  it('appends the section anchor to an in-app guide path', () => {
+    expect(
+      helpSectionLinkAttrs('/wiki/edufeed-erste-schritte', 'was-bedeutet-verifiziert')
+    ).toEqual({ href: '/wiki/edufeed-erste-schritte#was-bedeutet-verifiziert' });
+  });
+
+  it('appends the anchor to an external guide and keeps the new-tab attributes', () => {
+    expect(helpSectionLinkAttrs('https://example.org/hilfe', 'verifiziert')).toEqual({
+      href: 'https://example.org/hilfe#verifiziert',
+      target: '_blank',
+      rel: 'noopener noreferrer'
+    });
+  });
+
+  it('replaces an anchor the configured url already carries', () => {
+    expect(helpSectionLinkAttrs('/wiki/guide#top', 'verifiziert')).toEqual({
+      href: '/wiki/guide#verifiziert'
     });
   });
 });

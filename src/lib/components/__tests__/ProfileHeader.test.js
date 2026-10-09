@@ -9,6 +9,28 @@ vi.mock('../waves/WaveButton.svelte', async () => {
   const { default: Stub } = await import('./fixtures/StubComponent.svelte');
   return { default: Stub };
 });
+// The explainer card reads config + the viewer's profile — stubbed here.
+vi.mock('../shared/Nip05InfoCard.svelte', async () => {
+  const mock = await import('./__mocks__/Nip05InfoCardMock.svelte');
+  return { default: mock.default };
+});
+
+// Opening the chip's popover runs a Svelte fade transition; jsdom has no
+// Web Animations API, so give it an instantly finished stand-in.
+if (!Element.prototype.animate) {
+  Element.prototype.animate = function () {
+    const finished = Promise.resolve();
+    const anim = {
+      onfinish: null,
+      cancel: vi.fn(),
+      finished,
+      currentTime: null,
+      playState: 'finished'
+    };
+    finished.then(() => anim.onfinish?.());
+    return anim;
+  };
+}
 
 const PUBKEY = 'a'.repeat(64);
 const NPUB = 'npub1' + 'x'.repeat(59);
@@ -40,6 +62,20 @@ describe('<ProfileHeader>', () => {
     const { container } = render(ProfileHeader, baseProps({ nip05Status: 'verified' }));
     expect(container.querySelector('[data-testid="profile-verified-chip"]')).toBeTruthy();
     expect(container.querySelector('[data-testid="profile-unverified-chip"]')).toBeFalsy();
+  });
+
+  // Issue "Erklärung/Anleitung Verifizierung": the chip used to be inert, so
+  // new users had no way to learn what "Verifiziert" and the @-address mean.
+  it('opens the explainer popover when the verified chip is clicked', async () => {
+    const { container, queryByTestId, findByTestId } = render(
+      ProfileHeader,
+      baseProps({ nip05Status: 'verified' })
+    );
+    expect(queryByTestId('nip05-info-card-mock')).toBeNull();
+    const chip = container.querySelector('[data-testid="profile-verified-chip"]');
+    chip.closest('[role="button"]').click();
+    const card = await findByTestId('nip05-info-card-mock');
+    expect(card.getAttribute('data-apply-cta')).toBe('true');
   });
 
   it('shows the unverified chip when the aggregate status is unverified', () => {

@@ -11,12 +11,18 @@
  *     fields. Relays that reject `search` simply return nothing; callers
  *     must degrade gracefully.
  */
-import { Observable, from, merge } from 'rxjs';
-import { mergeMap, tap } from 'rxjs/operators';
+import { EMPTY, Observable, from, merge, of } from 'rxjs';
+import { mergeMap, take, tap } from 'rxjs/operators';
 import { getProfileContent } from 'applesauce-core/helpers';
 import { pool, eventStore } from '$lib/stores/nostr-infrastructure.svelte';
-import { getProfileSearchRelays, getProfileSearchObserver } from '$lib/helpers/relay-helper.js';
+import {
+  getProfileLookupRelays,
+  getProfileSearchRelays,
+  getProfileSearchObserver
+} from '$lib/helpers/relay-helper.js';
 import { getSearchExtensions } from '$lib/helpers/relay-search-extensions.js';
+import { getProfileNip05s, isNip05Address, resolveNip05 } from '$lib/helpers/nip05-verify.js';
+import { profileLoader } from '$lib/loaders/profile.js';
 
 /**
  * @typedef {import('$lib/stores/contacts.svelte.js').EnrichedContact} EnrichedContact
@@ -42,14 +48,16 @@ export function profileToContact(event) {
     display_name: profile.display_name || null,
     picture: profile.picture || null,
     nip05: profile.nip05 || null,
+    nip05s: getProfileNip05s(event),
     about: profile.about || null
   };
 }
 
 /**
- * Case-insensitive substring match on name, display_name and nip05. Applied
- * to NIP-50 results too: search relays rank fuzzily and happily return
- * "Framasoft" for "Colibri" — a row the user cannot relate to their input.
+ * Case-insensitive substring match on name, display_name and every nip05
+ * address (content field and repeated tags). Applied to NIP-50 results too:
+ * search relays rank fuzzily and happily return "Framasoft" for "Colibri" —
+ * a row the user cannot relate to their input.
  * @param {EnrichedContact | null} contact
  * @param {string} term
  */
@@ -57,8 +65,29 @@ export function profileMatches(contact, term) {
   if (!contact) return false;
   const t = (term || '').trim().toLowerCase();
   if (!t) return false;
-  return [contact.name, contact.display_name, contact.nip05].some((v) =>
+  return [contact.name, contact.display_name, contact.nip05, ...(contact.nip05s ?? [])].some((v) =>
     (v || '').toLowerCase().includes(t)
+  );
+}
+
+/**
+ * The address leg: `name@domain` is not a search term but a pointer. Ask the
+ * domain for the pubkey (NIP-05 `/.well-known/nostr.json`) and emit that
+ * pubkey's kind 0 — from the EventStore when we have it, otherwise via the
+ * profile loader on the lookup relays. Empty when the domain does not know
+ * the name. This is what makes an address on a flyer work in edufeed's
+ * search the way it does in Amethyst, Damus or Primal.
+ * @param {string} address
+ * @returns {import('rxjs').Observable<import('nostr-tools').Event>}
+ */
+function nip05ProfileLeg(address) {
+  return from(resolveNip05(address)).pipe(
+    mergeMap((pubkey) => {
+      if (!pubkey) return EMPTY;
+      const cached = eventStore.getReplaceable(0, pubkey);
+      if (cached) return of(cached);
+      return profileLoader({ kind: 0, pubkey, relays: getProfileLookupRelays() }).pipe(take(1));
+    })
   );
 }
 
@@ -97,7 +126,8 @@ function searchLeg(relays, search, limit) {
 }
 
 /**
- * Search kind-0 profiles by name on the NIP-50 search relays.
+ * Search kind-0 profiles by name on the NIP-50 search relays — or, when the
+ * term is a full NIP-05 address, resolve it directly (see nip05ProfileLeg).
  *
  * Each relay gets at most one lens token, chosen from the NIP-50
  * extensions its NIP-11 advertises (see relay-search-extensions.js):
@@ -121,6 +151,7 @@ function searchLeg(relays, search, limit) {
  */
 export function profileNameSearchLoader(name, limit = 10, relays = getProfileSearchRelays()) {
   const trimmed = (name || '').trim();
+  if (isNip05Address(trimmed)) return nip05ProfileLeg(trimmed);
   if (!trimmed || relays.length === 0) {
     return new Observable((subscriber) => {
       subscriber.complete();

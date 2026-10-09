@@ -61,6 +61,29 @@ function fakeEvent({ kind, identifier, hTag }) {
 }
 
 describe('[naddr] route redirect', () => {
+  // Wiki heading deep links (e.g. the "Verifiziert" explainer's guide link)
+  // must survive the hop to the community wiki route.
+  it('keeps the URL hash when redirecting to the canonical route', async () => {
+    /** @type {any} */ (fetchEventById).mockResolvedValueOnce(
+      fakeEvent({ kind: 30818, identifier: 'edufeed-erste-schritte', hTag: COMMUNITY_HEX })
+    );
+    const naddr = naddrEncode({
+      kind: 30818,
+      pubkey: FAKE_PUBKEY,
+      identifier: 'edufeed-erste-schritte'
+    });
+    const url = new URL(`https://edufeed.test/${naddr}#was-bedeutet-verifiziert`);
+    try {
+      await load({ params: { naddr }, parent: fakeParent, url });
+      expect.unreachable('should have thrown redirect');
+    } catch (/** @type {any} */ err) {
+      expect(err.status).toBe(307);
+      expect(err.location).toMatch(
+        new RegExp(`^/c/${COMMUNITY_NPUB}/wiki/.*#was-bedeutet-verifiziert$`)
+      );
+    }
+  });
+
   it('redirects kind 31922 (date-based calendar event) to /calendar/event/', async () => {
     /** @type {any} */ (fetchEventById).mockResolvedValueOnce(
       fakeEvent({ kind: 31922, identifier: 'test-event' })

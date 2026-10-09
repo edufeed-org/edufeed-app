@@ -79,7 +79,14 @@ vi.mock('$lib/paraglide/messages', () =>
       'auth_signup_modal_context_subtitle',
       'auth_signup_modal_step_handle',
       'auth_signup_modal_handle_subtitle',
-      'auth_signup_modal_handle_optional_hint',
+      'auth_signup_modal_handle_placeholder_name',
+      'auth_signup_modal_handle_claim_authentic',
+      'auth_signup_modal_handle_claim_findable',
+      'auth_signup_modal_handle_claim_publish',
+      'auth_signup_modal_handle_note',
+      'nip05_info_point_authentic_title',
+      'nip05_info_point_findable_title',
+      'nip05_info_point_publish_title',
       'auth_signup_modal_membership_skip',
       'auth_signup_modal_step1_subtitle',
       'auth_signup_modal_step2_subtitle',
@@ -105,7 +112,7 @@ vi.mock('$lib/stores/config.svelte.js', () => ({
   runtimeConfig: {
     signup: { suggestedCommunities: [] },
     blossom: { maxFileSize: 5 * 1024 * 1024 },
-    membership: { enabled: false }
+    membership: { enabled: false, handleDomain: 'edufeed.org' }
   },
   configReady: { subscribe: () => () => {} }
 }));
@@ -586,13 +593,22 @@ describe('SignupModal — Step 5 (edufeed handle, membership-gated)', () => {
     expect(mockModalStore.closeModal).toHaveBeenCalled();
   });
 
-  it('shows the no-handle hint on the handle step', async () => {
+  // Issue "Erklärung/Anleitung Verifizierung" (design option 2c): the address
+  // step opens with the address itself as a preview and says what it is
+  // good for — and that it is not an e-mail address — before the form.
+  it('introduces the address with a preview, three benefits and the not-an-email note', async () => {
     const utils = render(SignupModal, { props: { modalId: 'signup-modal' } });
     await advanceToCommunities(utils);
     await fireEvent.click(utils.getByText('auth_signup_modal_step3_skip'));
     await new Promise((r) => setTimeout(r, 0));
 
-    expect(utils.getByText('auth_signup_modal_handle_optional_hint')).toBeTruthy();
+    const intro = await utils.findByTestId('signup-handle-intro');
+    const preview = intro.querySelector('[data-testid="signup-handle-preview"]');
+    expect(preview?.textContent).toContain('auth_signup_modal_handle_placeholder_name');
+    expect(preview?.textContent).toContain('@edufeed.org');
+    expect(intro.querySelectorAll('[data-testid="signup-handle-claim"]')).toHaveLength(3);
+    expect(utils.getByText('auth_signup_modal_handle_note')).toBeTruthy();
+    expect(utils.queryByText('auth_signup_modal_handle_optional_hint')).toBeNull();
   });
 
   it('after submitting the application the close button reads Done', async () => {

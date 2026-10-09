@@ -251,6 +251,10 @@
     recordNavigation(from);
     if (!to?.url) return;
     const key = to.url.pathname + to.url.search;
+    // A fresh navigation to a section anchor (wiki heading deep links such as
+    // the user guide's #was-bedeutet-verifiziert) is scrolled by the content
+    // itself once it has rendered — forcing the top here would undo that.
+    if (to.url.hash && !scrollPositions.has(key)) return;
     const saved = scrollPositions.get(key) ?? 0;
     // Yield to the user: if they scroll/touch/key during the retry window,
     // abort the restore loop so we don't fight their input.
