@@ -493,7 +493,9 @@ describe('GroupCallStage — a view, not the connection owner', () => {
   // there is something to put in it.
   it('offers the pop-out window only when the parent can open one', async () => {
     const { unmount } = render(GroupCallStage, { props: baseProps });
-    expect(screen.queryByTestId('group-call-more')).toBeNull();
+    // Without invite / pop-out / back the "More" button serves only the
+    // narrow stage (device menus, below): hidden from @2xl up.
+    expect(screen.getByTestId('group-call-more-wrap').classList.contains('@2xl:hidden')).toBe(true);
     expect(screen.queryByTestId('group-call-pop-out')).toBeNull();
     unmount();
     const onPopOut = vi.fn();
@@ -504,6 +506,35 @@ describe('GroupCallStage — a view, not the connection owner', () => {
     expect(onPopOut).toHaveBeenCalledTimes(1);
     // Picking closes the menu.
     expect(screen.queryByTestId('group-call-more-menu')).toBeNull();
+  });
+
+  // A narrow stage (below @2xl, e.g. beside the channel nav on a laptop)
+  // cannot hold 13 circles in one row: the three device chevrons step out of
+  // the dock and their menus open from "More" instead (laoc 2026-10-09: the
+  // dock wrapped into two rows and its menu reached into the channel nav).
+  it('on a narrow stage the device menus move from the chevrons into "More"', async () => {
+    const { unmount } = render(GroupCallStage, { props: { ...baseProps, onPopOut: vi.fn() } });
+    for (const label of ['Mic options', 'Camera options', 'Screen options']) {
+      const chevron = screen.getByRole('button', { name: label });
+      expect(chevron.classList.contains('hidden')).toBe(true);
+      expect(chevron.classList.contains('@2xl:inline-flex')).toBe(true);
+    }
+    // With something else in it, "More" stays at every width.
+    expect(screen.getByTestId('group-call-more-wrap').classList.contains('@2xl:hidden')).toBe(
+      false
+    );
+    await fireEvent.click(screen.getByTestId('group-call-more'));
+    const entries = screen.getAllByTestId('group-call-more-device');
+    expect(entries.map((li) => li.textContent?.trim())).toEqual([
+      'Mic options',
+      'Camera options',
+      'Screen options'
+    ]);
+    for (const li of entries) expect(li.classList.contains('@2xl:hidden')).toBe(true);
+    await fireEvent.click(screen.getByRole('menuitem', { name: 'Mic options' }));
+    expect(screen.queryByTestId('group-call-more-menu')).toBeNull();
+    expect(screen.getByTestId('group-call-mic-menu')).toBeTruthy();
+    unmount();
   });
 
   it('inside the pop-out: a way back to the tab', async () => {
