@@ -1286,6 +1286,16 @@ describe('floating chrome (design 1d "Bühne")', () => {
     expect(stage.classList.contains('bg-base-200')).toBe(true);
   });
 
+  // A tile's avatar / name bar / controls sit at z-10..z-30 in the stage's
+  // stacking context; the dock's backdrop-blur makes the dock a context at
+  // level auto. Both chrome layers must sit above the tiles, or a tile
+  // paints over every menu that opens from the dock.
+  it('the floating chrome paints above the tiles (menus from the dock are not covered by a tile)', () => {
+    render(GroupCallStage, { props: baseProps });
+    expect(screen.getByTestId('group-call-top-layer').classList.contains('z-40')).toBe(true);
+    expect(screen.getByTestId('group-call-dock-layer').classList.contains('z-40')).toBe(true);
+  });
+
   it('the hand button carries the count of hands up; the list of who waits sits in the title row', () => {
     lk.remoteParticipants = [remote(B)];
     lk.raisedHands = new Set([B]);

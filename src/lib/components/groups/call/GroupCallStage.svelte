@@ -1289,8 +1289,13 @@
     draggable. -->
   <!-- Beside an open drawer (@2xl) the layer ends where the drawer begins:
     18rem drawer + its 0.75rem margin + a 0.75rem gap. -->
+  <!-- z-40 on both chrome layers: a tile's own layers (avatar, name bar,
+    controls, reactions) sit at z-10..z-30 in the stage's stacking context,
+    and the dock's backdrop-blur makes it a stacking context at level auto —
+    so without this, a tile paints over every menu that opens from the dock
+    (laoc 2026-10-09: the "Mehr" menu looked transparent). -->
   <div
-    class="pointer-events-none absolute top-0 left-0 flex flex-col items-start gap-2 p-3 {participantsOpen
+    class="pointer-events-none absolute top-0 left-0 z-40 flex flex-col items-start gap-2 p-3 {participantsOpen
       ? 'right-0 @2xl:right-[19.5rem]'
       : 'right-0'}"
     data-testid="group-call-top-layer"
@@ -1451,9 +1456,10 @@
     floating along the bottom. It steps back with the title row when idle,
     never while the pointer rests on it or a focus is inside it. -->
   <div
-    class="pointer-events-none absolute inset-x-0 bottom-0 flex justify-center p-3 transition-opacity duration-300 motion-reduce:transition-none {chromeHidden
+    class="pointer-events-none absolute inset-x-0 bottom-0 z-40 flex justify-center p-3 transition-opacity duration-300 motion-reduce:transition-none {chromeHidden
       ? 'opacity-0'
       : ''}"
+    data-testid="group-call-dock-layer"
   >
     <div
       class="pointer-events-auto flex max-w-full flex-wrap items-center justify-center gap-1 rounded-[1.75rem] bg-base-100/95 p-1.5 shadow-xl backdrop-blur-sm"
