@@ -24,6 +24,7 @@
   } from '$lib/services/call-preview.svelte.js';
   import { getJoinMedia, setJoinMedia, getCustomBackground } from '$lib/services/call-prefs.js';
   import { BACKGROUND_PRESETS, backgroundEffectsSupported } from '$lib/groups/call-background.js';
+  import { backgroundPresetLabel } from '$lib/groups/call-background-labels.js';
   import { callMediaErrorMessage } from '$lib/groups/call-media-errors.js';
   import { MicIcon, MicOffIcon, VideoIcon, VideoOffIcon } from '$lib/components/icons';
   import * as m from '$lib/paraglide/messages';
@@ -86,12 +87,6 @@
   // is off (nothing to show it on). The own image is read once: the lobby
   // has no upload — that stays in the call's camera menu.
   const backgroundSupported = backgroundEffectsSupported();
-  /** @type {Record<string, () => string>} */
-  const PRESET_LABELS = {
-    paper: m.groups_call_background_paper,
-    teal: m.groups_call_background_teal,
-    shelf: m.groups_call_background_shelf
-  };
   const customBackground = getCustomBackground();
   /** @type {Array<{effect: string, label: () => string, src?: string}>} */
   const backgroundOptions = [
@@ -99,7 +94,7 @@
     { effect: 'blur', label: m.groups_call_background_blur },
     ...BACKGROUND_PRESETS.map((preset) => ({
       effect: `preset:${preset.id}`,
-      label: PRESET_LABELS[preset.id] ?? (() => preset.id),
+      label: backgroundPresetLabel(preset.id),
       src: preset.src
     })),
     ...(customBackground

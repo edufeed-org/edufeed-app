@@ -722,8 +722,9 @@ const PASSAGE_RE = /^\d+(?:[,.-]\d+[a-c]?)*(?:ff?\.?)?$/;
  * "Ijob 1,21". Only the book name is rewritten and repeated book names in a
  * "; " list are dropped ("Mt 5,3; Mt 6,1" → "Mt 5,3; 6,1"); the chapter/verse
  * part keeps its content with dashes and spacing tidied ("1,16 – 20" →
- * "1,16-20"). Anything not recognized as a reference — including a list with
- * one unrecognized entry — is returned verbatim.
+ * "1,16-20"); empty entries such as a trailing ";" are dropped. Anything not
+ * recognized as a reference — including a list with one unrecognized entry —
+ * is returned verbatim.
  *
  * Used for display and for enrichment prefill; stored events are never
  * rewritten.
@@ -737,10 +738,15 @@ export function normalizeBibleReference(text) {
   const out = [];
   /** @type {string | null} */
   let prevBook = null;
-  for (const part of text
+  // Empty entries — a trailing ";" or a doubled separator, common in
+  // extracted lists — are dropped rather than treated as unrecognized.
+  const parts = text
     .normalize('NFC')
     .split(';')
-    .map((p) => p.trim())) {
+    .map((p) => p.trim())
+    .filter(Boolean);
+  if (parts.length === 0) return text;
+  for (const part of parts) {
     const m = REFERENCE_RE.exec(part);
     const book = m && BOOK_BY_KEY.get(bookKey(m[1]));
     // A bare "3,17-21" continues the previous entry's book (Loccum list form).

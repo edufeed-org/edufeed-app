@@ -58,6 +58,7 @@
     backgroundEffectsSupported,
     imageFileToDataUrl
   } from '$lib/groups/call-background.js';
+  import { backgroundPresetLabel } from '$lib/groups/call-background-labels.js';
   import {
     CALL_LAYOUTS,
     fitGrid,
@@ -816,12 +817,6 @@
   // Camera background: blur or an image, applied in this browser before the
   // video leaves it. Hidden where the browser cannot run the processor.
   const backgroundSupported = backgroundEffectsSupported();
-  /** @type {Record<string, () => string>} */
-  const PRESET_LABELS = {
-    paper: m.groups_call_background_paper,
-    teal: m.groups_call_background_teal,
-    shelf: m.groups_call_background_shelf
-  };
   let customBackground = $state(getCustomBackground());
   /** @type {HTMLInputElement | undefined} */
   let backgroundFileInput = $state();
@@ -1563,7 +1558,7 @@
                         onclick={() => pickBackground(`preset:${preset.id}`)}
                       >
                         <img src={preset.src} alt="" class="h-5 w-9 rounded-sm object-cover" />
-                        {PRESET_LABELS[preset.id]?.() ?? preset.id}
+                        {backgroundPresetLabel(preset.id)()}
                       </button>
                     </li>
                   {/each}
