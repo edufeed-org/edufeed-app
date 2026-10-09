@@ -52,11 +52,59 @@ describe('getFeedCardData', () => {
     expect(result.title).toBe('Untitled Resource');
   });
 
-  it('extracts learningResourceType label as description for AMB resource', () => {
+  // AMB flattens learningResourceType into `learningResourceType:id` plus
+  // `learningResourceType:prefLabel:<lang>` tags, one per type.
+  it('lists every learningResourceType label as description for AMB resource', () => {
     const result = getFeedCardData(
       makeEvent(30142, [
         ['name', 'Res'],
-        ['learningResourceType', 'https://w3id.org/kim/hcrt/text']
+        ['learningResourceType:id', 'https://w3id.org/kim/hcrt/text'],
+        ['learningResourceType:prefLabel:de', 'Text'],
+        ['learningResourceType:prefLabel:en', 'Text'],
+        ['learningResourceType:id', 'https://w3id.org/kim/hcrt/worksheet'],
+        ['learningResourceType:prefLabel:de', 'Arbeitsblatt'],
+        ['learningResourceType:prefLabel:en', 'Worksheet']
+      ])
+    );
+    expect(result.description).toBe('Text, Arbeitsblatt');
+  });
+
+  it('falls back to English, then any language, for learningResourceType labels', () => {
+    expect(
+      getFeedCardData(
+        makeEvent(30142, [
+          ['learningResourceType:id', 'https://w3id.org/kim/hcrt/text'],
+          ['learningResourceType:prefLabel:en', 'Text'],
+          ['learningResourceType:prefLabel:fr', 'Texte']
+        ])
+      ).description
+    ).toBe('Text');
+    expect(
+      getFeedCardData(
+        makeEvent(30142, [
+          ['learningResourceType:id', 'https://w3id.org/kim/hcrt/text'],
+          ['learningResourceType:prefLabel:fr', 'Texte']
+        ])
+      ).description
+    ).toBe('Texte');
+  });
+
+  it('falls back to the id slug when a learningResourceType has no label', () => {
+    const result = getFeedCardData(
+      makeEvent(30142, [
+        ['name', 'Res'],
+        ['learningResourceType:id', 'https://w3id.org/kim/hcrt/text']
+      ])
+    );
+    expect(result.description).toBe('text');
+  });
+
+  it('ignores a malformed tag while reading learningResourceType labels', () => {
+    const result = getFeedCardData(
+      makeEvent(30142, [
+        ['name', 'Res'],
+        [],
+        ['learningResourceType:id', 'https://w3id.org/kim/hcrt/text']
       ])
     );
     expect(result.description).toBe('text');
