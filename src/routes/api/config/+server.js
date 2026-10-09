@@ -286,6 +286,21 @@ export function GET() {
       'wss://amb-relay.edufeed.org'
     ]),
 
+    // NIP-89 application handlers (kind 31990): where to look for apps that
+    // can open an event kind this app has no view for. The generic detail
+    // page lists them as "open in another app" links. Independent of gated
+    // mode on purpose — handler announcements live on the wider network, and
+    // a deployment that does not want to hand users off to third-party apps
+    // sets APP_HANDLERS_ENABLED=false (or APP_HANDLER_RELAYS=none).
+    appHandlers: {
+      enabled: parseBool(env.APP_HANDLERS_ENABLED, true),
+      relays: parseArrayOrNone(env.APP_HANDLER_RELAYS, [
+        'wss://relay.nostr.band',
+        'wss://nos.lol',
+        'wss://relay.damus.io'
+      ])
+    },
+
     // Optional point of view for WoT-ranked profile search (npub or hex).
     // Appended as `observer:<hex>` to the NIP-50 search string on relays
     // that advertise the extension in NIP-11 (Brainstorm). Needs a

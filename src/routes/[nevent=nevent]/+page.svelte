@@ -5,6 +5,8 @@
   import { getTagValue } from 'applesauce-core/helpers';
   import ThreadDetailView from '$lib/components/thread/ThreadDetailView.svelte';
   import PollCard from '$lib/components/polls/PollCard.svelte';
+  import GenericEventView from '$lib/components/shared/GenericEventView.svelte';
+  import { getGenericEventTitle } from '$lib/helpers/nip89.js';
   import { runtimeConfig } from '$lib/stores/config.svelte.js';
   import { resolveThreadContext } from '$lib/helpers/threadContext.js';
   import { fetchEventById } from '$lib/helpers/nostrUtils.js';
@@ -113,6 +115,8 @@
       const title = getTagValue(resolvedEvent, 'title') || getTagValue(resolvedEvent, 'subject');
       return `${title || 'Thread'} - ${runtimeConfig.appName}`;
     }
+    const genericTitle = getGenericEventTitle(resolvedEvent);
+    if (genericTitle) return `${genericTitle} - ${runtimeConfig.appName}`;
     return `Event - ${runtimeConfig.appName}`;
   });
 </script>
@@ -140,8 +144,6 @@
   {:else if resolvedEvent?.kind === 1068}
     <PollCard event={resolvedEvent} truncate={false} />
   {:else if resolvedEvent}
-    <div class="alert alert-warning">
-      <span>{m.route_unsupported_event_kind({ kind: resolvedEvent.kind })}</span>
-    </div>
+    <GenericEventView event={resolvedEvent} />
   {/if}
 </div>

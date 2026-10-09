@@ -8,11 +8,13 @@
   import BookmarkSetView from '$lib/components/bookmarks/BookmarkSetView.svelte';
   import NIP51ListDetailView from '$lib/components/shared/NIP51ListDetailView.svelte';
   import ReaderView from '$lib/components/bookmarks/ReaderView.svelte';
+  import GenericEventView from '$lib/components/shared/GenericEventView.svelte';
   import BookmarkItem from '$lib/components/bookmarks/BookmarkItem.svelte';
   import { ExternalLinkIcon } from '$lib/components/icons';
   import { formatAMBResource } from '$lib/helpers/educational';
   import { extractUrlFromEvent } from '$lib/helpers/urlGrouping.js';
   import { getTagValue } from 'applesauce-core/helpers';
+  import { getGenericEventTitle } from '$lib/helpers/nip89.js';
   import { runtimeConfig } from '$lib/stores/config.svelte.js';
   import { useProfileMap } from '$lib/stores/profile-map.svelte.js';
   import { useActiveUser } from '$lib/stores/accounts.svelte.js';
@@ -100,9 +102,11 @@
       };
     }
 
-    // Unsupported kind
+    // Any other kind: generic view (author, content, reactions, comments,
+    // NIP-89 "open in another app" links).
     return {
-      type: 'unsupported',
+      type: 'generic',
+      event: data.event,
       kind: data.kind
     };
   });
@@ -139,6 +143,9 @@
       return `${listTitle} - ${runtimeConfig.appName}`;
     } else if (displayData?.type === 'bookmark') {
       return `${displayData.title || 'Bookmark'} - ${runtimeConfig.appName}`;
+    } else if (displayData?.type === 'generic') {
+      const genericTitle = getGenericEventTitle(displayData.event) || `Kind ${displayData.kind}`;
+      return `${genericTitle} - ${runtimeConfig.appName}`;
     }
     return `Content - ${runtimeConfig.appName}`;
   });
@@ -203,29 +210,9 @@
         />
       </div>
     {/if}
-  {:else if displayData?.type === 'unsupported'}
-    <!-- Unsupported Content Type -->
-    <div class="alert alert-warning">
-      <svg
-        xmlns="http://www.w3.org/2000/svg"
-        class="h-6 w-6 shrink-0 stroke-current"
-        fill="none"
-        viewBox="0 0 24 24"
-      >
-        <path
-          stroke-linecap="round"
-          stroke-linejoin="round"
-          stroke-width="2"
-          d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
-        />
-      </svg>
-      <div>
-        <h3 class="font-bold">{m.route_unsupported_content()}</h3>
-        <p class="text-sm">
-          {m.route_unsupported_content_detail({ kind: displayData.kind })}
-        </p>
-      </div>
-    </div>
+  {:else if displayData?.type === 'generic'}
+    <!-- Any other kind -->
+    <GenericEventView event={displayData.event} />
   {:else}
     <!-- Loading or Error State -->
     <div class="alert alert-error">

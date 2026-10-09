@@ -4,6 +4,8 @@
   import { resolve } from '$app/paths';
   import { getAddressPointerForEvent, encodePointer, getTagValue } from 'applesauce-core/helpers';
   import ThreadDetailView from '$lib/components/thread/ThreadDetailView.svelte';
+  import GenericEventView from '$lib/components/shared/GenericEventView.svelte';
+  import { getGenericEventTitle } from '$lib/helpers/nip89.js';
   import { runtimeConfig } from '$lib/stores/config.svelte.js';
   import { resolveThreadContext } from '$lib/helpers/threadContext.js';
   import { fetchEventById, hexToNpub } from '$lib/helpers/nostrUtils.js';
@@ -98,6 +100,8 @@
       const title = getTagValue(resolvedEvent, 'title') || getTagValue(resolvedEvent, 'subject');
       return `${title || 'Thread'} - ${runtimeConfig.appName}`;
     }
+    const genericTitle = getGenericEventTitle(resolvedEvent);
+    if (genericTitle) return `${genericTitle} - ${runtimeConfig.appName}`;
     return `Event - ${runtimeConfig.appName}`;
   });
 </script>
@@ -123,10 +127,6 @@
       {scrollTo}
     />
   {:else if resolvedEvent}
-    <div class="flex flex-col items-center justify-center py-16 text-center">
-      <p class="text-base-content/60">
-        {m.route_unsupported_event_kind({ kind: resolvedEvent.kind })}
-      </p>
-    </div>
+    <GenericEventView event={resolvedEvent} />
   {/if}
 </div>
