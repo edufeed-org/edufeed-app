@@ -68,13 +68,17 @@ export function breakoutRoomName(index, channelName) {
 
 /**
  * The machine-readable `about` of a room: which channel it belongs to, its
- * number, and (optionally) the unix-seconds deadline after which clients
- * return on their own.
- * @param {{parent: string, index: number, until?: number | null}} marker
+ * number, (optionally) the unix-seconds deadline after which clients return
+ * on their own, and `join=host` when the host keeps the assignment to
+ * themselves (participants are told a session runs, not which rooms, and
+ * do not walk in by themselves). Absent = participants see the rooms and
+ * may join.
+ * @param {{parent: string, index: number, until?: number | null, selfJoin?: boolean}} marker
  */
-export function breakoutAbout({ parent, index, until }) {
+export function breakoutAbout({ parent, index, until, selfJoin = true }) {
   let about = `${MARKER} parent=${parent} n=${index}`;
   if (typeof until === 'number' && Number.isFinite(until)) about += ` until=${Math.floor(until)}`;
+  if (selfJoin === false) about += ' join=host';
   return about;
 }
 
@@ -108,8 +112,9 @@ function parseUntil(raw) {
  * else the legacy `about` marker. The room's number comes from the marker's
  * `n=` when present, else from the name this client gives rooms
  * (`Breakout N · …`), else 1.
+ * `selfJoin` is false only for a marker that says `join=host`.
  * @param {{kind?: number, tags?: string[][]} | null | undefined} metadataEvent a kind 39000
- * @returns {{parent: string, index: number, until: number | null} | null}
+ * @returns {{parent: string, index: number, until: number | null, selfJoin: boolean} | null}
  */
 export function parseBreakoutMarker(metadataEvent) {
   if (!metadataEvent || !Array.isArray(metadataEvent.tags)) return null;
@@ -122,7 +127,7 @@ export function parseBreakoutMarker(metadataEvent) {
   const index = Number.isInteger(fromMarker) && fromMarker >= 1 ? fromMarker : fromName || 1;
   const untilTag = tagValue(metadataEvent, 'until');
   const until = untilTag !== undefined ? parseUntil(untilTag) : parseUntil(fields?.until);
-  return { parent, index, until };
+  return { parent, index, until, selfJoin: fields?.join !== 'host' };
 }
 
 /**
@@ -146,10 +151,10 @@ export function isBreakoutGroup(metadataEvent) {
  * @param {Array<{kind?: number, tags?: string[][]}>} events kind-39000s
  * @param {string} parentId
  * @param {string} relay
- * @returns {Array<{id: string, relay: string, name: string, index: number, until: number | null}>}
+ * @returns {Array<{id: string, relay: string, name: string, index: number, until: number | null, selfJoin: boolean}>}
  */
 export function roomsFromMetadataEvents(events, parentId, relay) {
-  /** @type {Array<{id: string, relay: string, name: string, index: number, until: number | null}>} */
+  /** @type {Array<{id: string, relay: string, name: string, index: number, until: number | null, selfJoin: boolean}>} */
   const rooms = [];
   for (const event of events) {
     const id = tagValue(event, 'd');
@@ -157,7 +162,14 @@ export function roomsFromMetadataEvents(events, parentId, relay) {
     const marker = isBreakoutGroup(event) ? parseBreakoutMarker(event) : null;
     if (!id || !marker || marker.parent !== parentId || name === '[deleted]') continue;
     if (rooms.some((room) => room.id === id)) continue;
-    rooms.push({ id, relay, name, index: marker.index, until: marker.until });
+    rooms.push({
+      id,
+      relay,
+      name,
+      index: marker.index,
+      until: marker.until,
+      selfJoin: marker.selfJoin
+    });
   }
   return rooms.sort((a, b) => a.index - b.index);
 }
@@ -173,12 +185,20 @@ export function roomsFromMetadataEvents(events, parentId, relay) {
  * anyone without a role in the parent (reject-event.go), and the marker
  * names the parent anyway. `ephemeral` + `until` are the extension's tags,
  * the `about` marker the fallback for a relay without it.
- * @param {{parentId: string, channelName: string, index: number, until?: number | null, withParent: boolean}} args
+ * `selfJoin: false` puts `join=host` into the marker.
+ * @param {{parentId: string, channelName: string, index: number, until?: number | null, withParent: boolean, selfJoin?: boolean}} args
  */
-export function breakoutRoomMetadata({ parentId, channelName, index, until, withParent }) {
+export function breakoutRoomMetadata({
+  parentId,
+  channelName,
+  index,
+  until,
+  withParent,
+  selfJoin = true
+}) {
   return {
     name: breakoutRoomName(index, channelName),
-    about: breakoutAbout({ parent: parentId, index, until }),
+    about: breakoutAbout({ parent: parentId, index, until, selfJoin }),
     isPublic: true,
     isOpen: false,
     isHidden: true,
@@ -204,8 +224,9 @@ export function isParentRoleRejection(error) {
  *   addressed — a user sitting in the call twice may be sent to two rooms.
  * @typedef {{id: string, relay: string, name: string}} BreakoutRoomRef
  * @typedef {{t: 'assign', rooms: BreakoutRoomAssignment[], until: number | null}} BreakoutAssignPayload
- * @typedef {{t: 'state', rooms: BreakoutRoomRef[], until: number | null}} BreakoutStatePayload
- *   the running session, replayed to whoever joins the main room late
+ * @typedef {{t: 'state', rooms: BreakoutRoomRef[], until: number | null, selfJoin: boolean}} BreakoutStatePayload
+ *   the running session, replayed to whoever joins the main room late;
+ *   `selfJoin` false = the host keeps the assignment to themselves
  * @typedef {{t: 'join', room: string}} BreakoutJoinPayload
  *   a seat in the main room asks the host seat to be put into a room
  * @typedef {{t: 'seat', room: string, identity: string}} BreakoutSeatPayload
@@ -236,15 +257,17 @@ export function buildBreakoutAssignPayload({ rooms, until }) {
 
 /**
  * The session as a late joiner needs it: the rooms (no seats — nobody is
- * being sent anywhere) and the deadline.
- * @param {{rooms: BreakoutRoomRef[], until?: number | null}} args
- * @returns {{t: 'state', rooms: BreakoutRoomRef[], until?: number}}
+ * being sent anywhere), the deadline, and `selfJoin: false` when the host
+ * keeps the assignment to themselves (absent = may join).
+ * @param {{rooms: BreakoutRoomRef[], until?: number | null, selfJoin?: boolean}} args
+ * @returns {{t: 'state', rooms: BreakoutRoomRef[], until?: number, selfJoin?: false}}
  */
-export function buildBreakoutStatePayload({ rooms, until }) {
+export function buildBreakoutStatePayload({ rooms, until, selfJoin = true }) {
   return {
     t: 'state',
     rooms: rooms.map((room) => ({ id: room.id, relay: room.relay, name: room.name })),
-    ...(typeof until === 'number' && Number.isFinite(until) ? { until: Math.floor(until) } : {})
+    ...(typeof until === 'number' && Number.isFinite(until) ? { until: Math.floor(until) } : {}),
+    ...(selfJoin === false ? { selfJoin: false } : {})
   };
 }
 
@@ -318,7 +341,13 @@ export function parseBreakoutPayload(raw) {
     until = msg.until;
   }
   if (msg.t === 'state') {
-    return { t: 'state', rooms: rooms.map(({ id, relay, name }) => ({ id, relay, name })), until };
+    if (msg.selfJoin !== undefined && typeof msg.selfJoin !== 'boolean') return null;
+    return {
+      t: 'state',
+      rooms: rooms.map(({ id, relay, name }) => ({ id, relay, name })),
+      until,
+      selfJoin: msg.selfJoin !== false
+    };
   }
   return { t: 'assign', rooms, until };
 }

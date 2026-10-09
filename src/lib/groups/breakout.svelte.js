@@ -155,12 +155,16 @@ const SENT_HOME_GRACE_MS = 60_000;
  *   hosting: boolean,
  *   creator: boolean,
  *   autoAssign: boolean,
+ *   selfJoin: boolean,
  *   channelName: string
  * }} BreakoutSession
  *   `hosting`: this client manages the session (started it, or took the
  *   host seat over while it ran); `creator`: this client created the rooms;
  *   `autoAssign`: newcomers to the main room are seated by this client when
- *   it holds the host seat.
+ *   it holds the host seat; `selfJoin`: participants see the rooms and may
+ *   walk in by themselves (false = the host keeps the assignment to
+ *   themselves: the banner names no rooms, nobody knocks, the host seat
+ *   answers no join request).
  */
 
 /** @type {BreakoutSession | null} */
@@ -423,8 +427,9 @@ function channelNameOf(rooms) {
  * already known are kept.
  * @param {Array<{id: string, relay: string, name: string, index?: number}>} rooms
  * @param {number | null | undefined} until
+ * @param {boolean | undefined} [selfJoin] what the host said; undefined keeps what is known
  */
-function learnRooms(rooms, until) {
+function learnRooms(rooms, until, selfJoin) {
   const pointer = getActiveCallPointer();
   if (!pointer) return;
   const known = session?.rooms ?? [];
@@ -458,6 +463,7 @@ function learnRooms(rooms, until) {
     hosting: false,
     creator: false,
     autoAssign: false,
+    selfJoin: selfJoin ?? session?.selfJoin ?? true,
     channelName: session?.channelName || channelNameOf(merged)
   };
 }
@@ -488,7 +494,9 @@ function handleMessage(raw, sender) {
   }
   const pointer = getActiveCallPointer();
   if (!pointer || currentRoom) return;
-  if (!session?.hosting) learnRooms(payload.rooms, payload.until);
+  if (!session?.hosting) {
+    learnRooms(payload.rooms, payload.until, payload.t === 'state' ? payload.selfJoin : undefined);
+  }
   if (payload.t === 'state' || !session) return;
   const myIdentity = lkModule?.getLiveKitState().localParticipant?.identity;
   const mine = myIdentity ? assignedRoom(payload, myIdentity) : null;
@@ -646,6 +654,9 @@ export async function requestBreakoutRoom(room) {
   const s = session;
   const user = getActiveCallUser();
   if (!s || currentRoom || joinRequest || !user) return;
+  // The host keeps the assignment to themselves: a roster that names me
+  // (or an assignment) is the only way in.
+  if (s.selfJoin === false && !membersByRoomId[room.id]?.has(user.pubkey)) return;
   if (seatIsGuest() || membersByRoomId[room.id]?.has(user.pubkey)) {
     await enterRoom(room);
     return;
@@ -761,7 +772,7 @@ async function answerJoinRequest(sender, roomId) {
   const s = session;
   const user = getActiveCallUser();
   if (!s?.hosting || !user || currentRoom || !holdsHostSeat()) return;
-  if (isGuestParticipant(sender)) return;
+  if (s.selfJoin === false || isGuestParticipant(sender)) return;
   const room = s.rooms.find((r) => r.id === roomId && !goneRoomIds.has(r.id));
   const pubkey = identityToPubkey(sender.identity);
   if (!room || !pubkey) return;
@@ -823,9 +834,10 @@ async function onNewcomer(participant) {
   const rooms = s.rooms.filter((room) => !goneRoomIds.has(room.id));
   if (rooms.length === 0) return;
   try {
-    await lk.sendBreakoutMessage(buildBreakoutStatePayload({ rooms, until: s.until }), [
-      participant.identity
-    ]);
+    await lk.sendBreakoutMessage(
+      buildBreakoutStatePayload({ rooms, until: s.until, selfJoin: s.selfJoin }),
+      [participant.identity]
+    );
   } catch (err) {
     console.warn('breakout state not replayed:', err);
     return;
@@ -906,7 +918,11 @@ async function discoverSession(pointer) {
   const now = getActiveCallPointer();
   if (!now || now.id !== pointer.id || session || currentRoom || rooms.length === 0) return;
   const until = rooms.find((room) => room.until !== null)?.until ?? null;
-  learnRooms(rooms, until);
+  learnRooms(
+    rooms,
+    until,
+    rooms.every((room) => room.selfJoin !== false)
+  );
 }
 
 /**
@@ -918,16 +934,19 @@ async function discoverSession(pointer) {
  *   roomCount: number,
  *   seats: Array<{identity: string, pubkey: string, roomIndex: number, guest?: boolean}>,
  *   durationMinutes?: number | null,
- *   autoAssign?: boolean
+ *   autoAssign?: boolean,
+ *   selfJoin?: boolean
  * }} args `roomIndex` is 1-based; seats without a room are left in the main
- *   room; a `guest` seat is assigned by message only (never seated)
+ *   room; a `guest` seat is assigned by message only (never seated);
+ *   `selfJoin: false` = the host keeps the assignment to themselves
  */
 export async function startBreakout({
   channelName,
   roomCount,
   seats,
   durationMinutes,
-  autoAssign = true
+  autoAssign = true,
+  selfJoin = true
 }) {
   const pointer = getActiveCallPointer();
   const user = getActiveCallUser();
@@ -951,7 +970,7 @@ export async function startBreakout({
       const id = generateGroupId();
       await createBreakoutRoom(
         relayConn,
-        { id, parentId: pointer.id, channelName, index, until },
+        { id, parentId: pointer.id, channelName, index, until, selfJoin },
         user
       );
       rooms.push({ id, relay: pointer.relay, name: breakoutRoomName(index, channelName), index });
@@ -972,6 +991,7 @@ export async function startBreakout({
       hosting: true,
       creator: true,
       autoAssign,
+      selfJoin,
       channelName
     };
     await lk.sendBreakoutMessage(buildBreakoutAssignPayload({ rooms: assignments, until }));
@@ -1158,7 +1178,7 @@ async function applyDeadline(until, what) {
     }
     const rooms = s.rooms.filter((room) => !goneRoomIds.has(room.id));
     await lkModule
-      ?.sendBreakoutMessage(buildBreakoutStatePayload({ rooms, until }))
+      ?.sendBreakoutMessage(buildBreakoutStatePayload({ rooms, until, selfJoin: s.selfJoin }))
       .catch(() => {});
   } catch (err) {
     const reason = err instanceof Error ? err.message : String(err);
@@ -1544,9 +1564,9 @@ if (typeof window !== 'undefined') {
     // roster.
     $effect(() => {
       const s = session;
+      if (!s || currentRoom || s.hosting || untrack(() => switching)) return;
       const me = getActiveCallUser()?.pubkey;
-      if (!s || currentRoom || s.hosting || !me || untrack(() => switching)) return;
-      if (seatIsGuest()) return;
+      if (!me || seatIsGuest()) return;
       const rooms = s.rooms.filter((room) => !goneRoomIds.has(room.id));
       const mine = roomOfPubkey(rooms, membersByRoomId, me);
       if (!mine) {
@@ -1575,8 +1595,9 @@ if (typeof window !== 'undefined') {
       const here = mainPresence;
       const members = mainMembers;
       const room = currentRoom;
+      if (!s?.hosting) return;
       const user = getActiveCallUser();
-      if (!s?.hosting || !user) return;
+      if (!user) return;
       const present = new Set(here);
       for (const pubkey of [...arrivedInMain])
         if (!present.has(pubkey)) arrivedInMain.delete(pubkey);

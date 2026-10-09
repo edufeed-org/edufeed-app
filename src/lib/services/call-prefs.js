@@ -219,6 +219,19 @@ export function setBreakoutAutoAssign(enabled) {
   write('breakoutAutoAssign', enabled ? '1' : '0');
 }
 
+/**
+ * "Teilnehmende sehen die Räume und können selbst beitreten": on unless
+ * this device chose otherwise (the host keeps the assignment to themselves).
+ */
+export function getBreakoutSelfJoin() {
+  return read('breakoutSelfJoin') !== '0';
+}
+
+/** @param {boolean} enabled */
+export function setBreakoutSelfJoin(enabled) {
+  write('breakoutSelfJoin', enabled ? '1' : '0');
+}
+
 /** Wide screens: chat as a column beside the call stage (off = stage only). */
 // Open by default (QA 2026-10-02 C3: a closed chat had to be found first);
 // an explicit toggle either way is remembered on this device.

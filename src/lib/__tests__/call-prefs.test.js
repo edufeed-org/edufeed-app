@@ -30,6 +30,8 @@ import {
   getScreenShareAudio,
   getBreakoutAutoAssign,
   setBreakoutAutoAssign,
+  getBreakoutSelfJoin,
+  setBreakoutSelfJoin,
   setScreenShareAudio,
   getBackgroundEffect,
   setBackgroundEffect,
@@ -181,6 +183,18 @@ describe('breakout auto-assign for late joiners', () => {
     expect(getBreakoutAutoAssign()).toBe(true);
     localStorage.setItem('edufeed:call:breakoutAutoAssign', 'maybe');
     expect(getBreakoutAutoAssign()).toBeNull();
+  });
+});
+
+describe('breakout rooms: participants may join by themselves', () => {
+  it('is on until chosen, then remembered either way', () => {
+    expect(getBreakoutSelfJoin()).toBe(true);
+    setBreakoutSelfJoin(false);
+    expect(getBreakoutSelfJoin()).toBe(false);
+    setBreakoutSelfJoin(true);
+    expect(getBreakoutSelfJoin()).toBe(true);
+    localStorage.setItem('edufeed:call:breakoutSelfJoin', 'maybe');
+    expect(getBreakoutSelfJoin()).toBe(true);
   });
 });
 

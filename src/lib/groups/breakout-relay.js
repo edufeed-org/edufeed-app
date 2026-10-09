@@ -36,19 +36,21 @@ export function isEphemeralTagRejection(error) {
  * same room without the parent tag — the `about` marker names the channel
  * either way, which is all the client needs.
  * @param {any} relayConn a pool.relay(url) connection
- * @param {{id: string, parentId: string, channelName: string, index: number, until?: number | null}} room
+ * @param {{id: string, parentId: string, channelName: string, index: number, until?: number | null, selfJoin?: boolean}} room
+ *   `selfJoin: false` = the host keeps the assignment to themselves (`join=host` in the marker)
  * @param {{pubkey: string, signer: any}} user
  * @param {{confirmDelayMs?: number}} [opts]
  * @returns {Promise<any>} the relay's kind 39000 for the room
  */
 export async function createBreakoutRoom(relayConn, room, user, opts = {}) {
-  const { id, parentId, channelName, index, until } = room;
+  const { id, parentId, channelName, index, until, selfJoin = true } = room;
   const withParent = breakoutRoomMetadata({
     parentId,
     channelName,
     index,
     until,
-    withParent: true
+    withParent: true,
+    selfJoin
   });
   await publishToGroupRelay(relayConn, buildCreateGroupTemplate(id, withParent), user);
   try {
@@ -60,7 +62,8 @@ export async function createBreakoutRoom(relayConn, room, user, opts = {}) {
       channelName,
       index,
       until,
-      withParent: false
+      withParent: false,
+      selfJoin
     });
     await publishToGroupRelay(relayConn, buildEditGroupMetadataTemplate(id, withoutParent), user);
   }

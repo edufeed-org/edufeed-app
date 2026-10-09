@@ -12,9 +12,16 @@ import { render, fireEvent, screen, waitFor } from '@testing-library/svelte';
 
 function Stub() {}
 vi.mock('$lib/components/icons', () => ({ CloseIcon: Stub }));
-const prefs = vi.hoisted(() => ({ autoAssign: /** @type {boolean | null} */ (null) }));
+const prefs = vi.hoisted(() => ({
+  autoAssign: /** @type {boolean | null} */ (null),
+  selfJoin: true
+}));
 vi.mock('$lib/services/call-prefs.js', () => ({
   getBreakoutAutoAssign: () => prefs.autoAssign,
+  getBreakoutSelfJoin: () => prefs.selfJoin,
+  setBreakoutSelfJoin: (/** @type {boolean} */ v) => {
+    prefs.selfJoin = v;
+  },
   setBreakoutAutoAssign: (v) => {
     prefs.autoAssign = v;
   }
@@ -22,6 +29,8 @@ vi.mock('$lib/services/call-prefs.js', () => ({
 vi.mock('$lib/paraglide/messages', () => ({
   groups_call_breakout_auto_assign: () => 'Assign late joiners automatically',
   groups_call_breakout_auto_assign_hint: () => 'Newcomers go to the smallest room.',
+  groups_call_breakout_self_join: () => 'Participants see the rooms and may join them',
+  groups_call_breakout_self_join_hint: () => 'Unchecked, you assign them.',
   groups_call_breakout_title: () => 'Breakout rooms',
   groups_call_breakout_room_count: () => 'Number of rooms',
   groups_call_breakout_assign_random: () => 'Assign randomly',
@@ -68,6 +77,7 @@ beforeEach(() => {
   onStart.mockResolvedValue(undefined);
   onClose.mockClear();
   prefs.autoAssign = null;
+  prefs.selfJoin = true;
 });
 
 describe('BreakoutDialog', () => {
@@ -139,6 +149,27 @@ describe('BreakoutDialog', () => {
     await fireEvent.click(screen.getByTestId('breakout-mode-random'));
     await fireEvent.click(screen.getByTestId('breakout-mode-manual'));
     expect(screen.getByTestId('breakout-auto-assign').checked).toBe(true);
+  });
+
+  it('"Teilnehmende sehen die Räume und können selbst beitreten" is on by default, remembered on this device', async () => {
+    render(BreakoutDialog, { props: { rows: [ME, BOB], nameOf, onStart, onClose } });
+    const box = screen.getByTestId('breakout-self-join');
+    expect(box.checked).toBe(true);
+    await fireEvent.click(box);
+    expect(box.checked).toBe(false);
+    expect(prefs.selfJoin).toBe(false);
+    await fireEvent.click(screen.getByTestId('breakout-start'));
+    await waitFor(() => expect(onStart).toHaveBeenCalledTimes(1));
+    expect(onStart.mock.calls[0][0].selfJoin).toBe(false);
+  });
+
+  it('a remembered "the host assigns" starts unchecked and is passed on', async () => {
+    prefs.selfJoin = false;
+    render(BreakoutDialog, { props: { rows: [ME, BOB], nameOf, onStart, onClose } });
+    expect(screen.getByTestId('breakout-self-join').checked).toBe(false);
+    await fireEvent.click(screen.getByTestId('breakout-start'));
+    await waitFor(() => expect(onStart).toHaveBeenCalledTimes(1));
+    expect(onStart.mock.calls[0][0].selfJoin).toBe(false);
   });
 
   it('a remembered "off" wins over the random default', () => {

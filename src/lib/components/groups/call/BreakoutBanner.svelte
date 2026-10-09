@@ -23,6 +23,8 @@
   let { breakout, onJoin } = $props();
 
   const rooms = $derived(breakout.rooms);
+  // The host keeps the assignment to themselves: only that a session runs.
+  const hostAssigns = $derived(breakout.session?.selfJoin === false);
   /** @param {string} roomId */
   const seated = (roomId) => breakout.membersByRoomId[roomId]?.size ?? 0;
 </script>
@@ -39,9 +41,15 @@
       {m.groups_call_breakout_time_left({ time: formatCountdown(breakout.remaining) })}
     </span>
   {/if}
-  <span class="text-base-content/70">{m.groups_call_breakout_banner_body()}</span>
+  {#if hostAssigns}
+    <span class="text-base-content/70" data-testid="breakout-banner-host-assigns"
+      >{m.groups_call_breakout_banner_host_assigns()}</span
+    >
+  {:else}
+    <span class="text-base-content/70">{m.groups_call_breakout_banner_body()}</span>
+  {/if}
   <ul class="flex flex-wrap gap-1">
-    {#each rooms as room (room.id)}
+    {#each hostAssigns ? [] : rooms as room (room.id)}
       <li>
         <button
           type="button"

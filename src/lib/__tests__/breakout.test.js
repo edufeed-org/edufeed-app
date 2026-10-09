@@ -92,7 +92,8 @@ describe('room marker on kind 39000', () => {
     expect(parseBreakoutMarker(metadata([['about', about]]))).toEqual({
       parent: 'main-id',
       index: 3,
-      until: 1700000000
+      until: 1700000000,
+      selfJoin: true
     });
   });
 
@@ -102,8 +103,32 @@ describe('room marker on kind 39000', () => {
     expect(parseBreakoutMarker(metadata([['about', about]]))).toEqual({
       parent: 'main-id',
       index: 1,
-      until: null
+      until: null,
+      selfJoin: true
     });
+  });
+
+  // The host decides whether participants see the rooms and may walk in
+  // by themselves; off, the marker says `join=host` and a late joiner who
+  // finds the rooms on the relay learns only that a session runs.
+  it('carries "the host assigns" (join=host) in the marker; absent means participants may join', () => {
+    const about = breakoutAbout({ parent: 'main-id', index: 2, selfJoin: false });
+    expect(about).toBe('edufeed:breakout parent=main-id n=2 join=host');
+    expect(parseBreakoutMarker(metadata([['about', about]]))?.selfJoin).toBe(false);
+    expect(
+      parseBreakoutMarker(
+        metadata([['about', breakoutAbout({ parent: 'main-id', index: 2, selfJoin: true })]])
+      )?.selfJoin
+    ).toBe(true);
+    expect(parseBreakoutMarker(metadata([['ephemeral', 'main-id']]))?.selfJoin).toBe(true);
+    const meta = breakoutRoomMetadata({
+      parentId: 'main-id',
+      channelName: 'S',
+      index: 1,
+      withParent: true,
+      selfJoin: false
+    });
+    expect(meta.about).toContain(' join=host');
   });
 
   it('reads the extension tags: ephemeral names the parent, until the deadline', () => {
@@ -116,7 +141,7 @@ describe('room marker on kind 39000', () => {
           ['hidden']
         ])
       )
-    ).toEqual({ parent: 'main-id', index: 3, until: 1700000000 });
+    ).toEqual({ parent: 'main-id', index: 3, until: 1700000000, selfJoin: true });
     expect(
       isBreakoutGroup(
         metadata([
@@ -133,7 +158,7 @@ describe('room marker on kind 39000', () => {
           ['name', 'Gruppe A']
         ])
       )
-    ).toEqual({ parent: 'main-id', index: 1, until: null });
+    ).toEqual({ parent: 'main-id', index: 1, until: null, selfJoin: true });
   });
 
   it('prefers the tags over the about marker when both are present (a transition relay)', () => {
@@ -143,7 +168,12 @@ describe('room marker on kind 39000', () => {
       ['ephemeral', 'main-id'],
       ['until', '1700000900']
     ]);
-    expect(parseBreakoutMarker(event)).toEqual({ parent: 'main-id', index: 2, until: 1700000900 });
+    expect(parseBreakoutMarker(event)).toEqual({
+      parent: 'main-id',
+      index: 2,
+      until: 1700000900,
+      selfJoin: true
+    });
     // a relay that knows the tags but was given no until: the marker's one does not leak back
     expect(
       parseBreakoutMarker(
@@ -152,7 +182,7 @@ describe('room marker on kind 39000', () => {
           ['ephemeral', 'main-id']
         ])
       )
-    ).toEqual({ parent: 'main-id', index: 2, until: 1700000000 });
+    ).toEqual({ parent: 'main-id', index: 2, until: 1700000000, selfJoin: true });
   });
 
   it('recognises a room only by the marker, never by its name', () => {
@@ -267,8 +297,8 @@ describe('roomsFromMetadataEvents (the #ephemeral read)', () => {
       }
     ];
     expect(roomsFromMetadataEvents(events, 'main', relay)).toEqual([
-      { id: 'r1', relay, name: 'Breakout 1 · S', index: 1, until: null },
-      { id: 'r2', relay, name: 'Breakout 2 · S', index: 2, until: 5 }
+      { id: 'r1', relay, name: 'Breakout 1 · S', index: 1, until: null, selfJoin: true },
+      { id: 'r2', relay, name: 'Breakout 2 · S', index: 2, until: 5, selfJoin: true }
     ]);
   });
 
@@ -323,6 +353,17 @@ describe('edufeed.call.breakout payloads', () => {
     expect(parseBreakoutPayload({ t: 'end' })).toEqual({ t: 'end' });
   });
 
+  it('the state carries "the host assigns" only when set, and parses it back (default: may join)', () => {
+    const closed = buildBreakoutStatePayload({ rooms, selfJoin: false });
+    expect(closed.selfJoin).toBe(false);
+    /** @param {unknown} raw */
+    const parsed = (raw) => /** @type {any} */ (parseBreakoutPayload(raw));
+    expect(parsed(JSON.parse(JSON.stringify(closed)))?.selfJoin).toBe(false);
+    expect(buildBreakoutStatePayload({ rooms }).selfJoin).toBeUndefined();
+    expect(parsed(buildBreakoutStatePayload({ rooms }))?.selfJoin).toBe(true);
+    expect(parseBreakoutPayload({ t: 'state', rooms: [], selfJoin: 'no' })).toBe(null);
+  });
+
   it('builds and parses the session state a late joiner is handed (rooms without seats)', () => {
     const payload = buildBreakoutStatePayload({ rooms, until: 1700000000 });
     expect(payload).toEqual({
@@ -333,11 +374,15 @@ describe('edufeed.call.breakout payloads', () => {
       ],
       until: 1700000000
     });
-    expect(parseBreakoutPayload(JSON.parse(JSON.stringify(payload)))).toEqual(payload);
+    expect(parseBreakoutPayload(JSON.parse(JSON.stringify(payload)))).toEqual({
+      ...payload,
+      selfJoin: true
+    });
     expect(parseBreakoutPayload(buildBreakoutStatePayload({ rooms }))).toEqual({
       t: 'state',
       rooms: payload.rooms,
-      until: null
+      until: null,
+      selfJoin: true
     });
     // a state needs no members, but still a valid relay per room
     expect(

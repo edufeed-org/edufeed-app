@@ -86,6 +86,13 @@ that child itself), so the host can seat people from any room through the
 relay alone. A host's client in a child SHOULD follow the parent's kind
 39004 to see who waits in the parent's room.
 
+A host may keep the assignment to themselves: the rooms' `about` marker
+then carries `join=host` (and the host's `{t:'state'}` message
+`selfJoin: false`). Clients SHOULD then tell a late joiner only that a
+session runs, list no rooms, and not knock; the host seat answers no join
+request. The relay still admits a member's 9021 — this is a client-side
+courtesy, not access control.
+
 ### How one ends
 
 The relay deletes an ephemeral group **itself** — a relay-signed kind 9008

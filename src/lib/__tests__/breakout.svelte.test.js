@@ -87,11 +87,18 @@ vi.mock('$lib/groups/livekit.js', async (importOriginal) => ({
   requestGroupCallToken: (/** @type {any[]} */ ...a) => lkApi.requestGroupCallToken(...a),
   moderateCall: (/** @type {any[]} */ ...a) => lkApi.moderateCall(...a)
 }));
-const prefs = vi.hoisted(() => ({ autoAssign: /** @type {boolean | null} */ (null) }));
+const prefs = vi.hoisted(() => ({
+  autoAssign: /** @type {boolean | null} */ (null),
+  selfJoin: true
+}));
 vi.mock('$lib/services/call-prefs.js', () => ({
   getBreakoutAutoAssign: () => prefs.autoAssign,
   setBreakoutAutoAssign: (/** @type {boolean} */ v) => {
     prefs.autoAssign = v;
+  },
+  getBreakoutSelfJoin: () => prefs.selfJoin,
+  setBreakoutSelfJoin: (/** @type {boolean} */ v) => {
+    prefs.selfJoin = v;
   }
 }));
 
@@ -230,6 +237,7 @@ beforeEach(async () => {
   callFake.setCall({ pointer: null, user: null, title: '', phase: 'idle', code: null });
   lkFake.resetLiveKitFake();
   prefs.autoAssign = null;
+  prefs.selfJoin = true;
   flushSync();
   relay.subs.length = 0;
   rel.fetchEphemeralChildren.mockResolvedValue([]);
@@ -274,7 +282,8 @@ describe('host: startBreakout', () => {
       parentId: 'main-id',
       channelName: 'Seminar',
       index: 1,
-      until: 1_700_000_000 + 600
+      until: 1_700_000_000 + 600,
+      selfJoin: true
     });
     // one put-user per pubkey per room — Carol's two seats share one roster entry
     expect(rel.seatInRoom).toHaveBeenCalledTimes(2);
@@ -984,6 +993,74 @@ describe('late joiners while the host sits in a room: relay-only paths', () => {
     await settle();
     await settle();
     expect(rel.seatInRoom).toHaveBeenCalledTimes(2);
+  });
+});
+
+// "Teilnehmende sehen die Räume und können selbst beitreten" off: the rooms'
+// marker says join=host and the host's state message carries selfJoin:false,
+// so a late joiner learns only that a session runs; the host seat ignores
+// join requests, and the client does not knock.
+describe('the host keeps the assignment to themselves (selfJoin off)', () => {
+  it('the host creates the rooms with join=host and tells newcomers so', async () => {
+    lkFake.setIdentity(HOST + ':h');
+    lkFake.setMyMetadata(HOST_META);
+    await liveInMain(hostUser);
+    await store.startBreakout({ channelName: 'Seminar', roomCount: 2, seats: [], selfJoin: false });
+    await settle();
+    expect(store.getBreakoutState().session?.selfJoin).toBe(false);
+    expect(rel.createBreakoutRoom.mock.calls[0][1].selfJoin).toBe(false);
+    lk.send.mockClear();
+    lk.joined?.({ identity: DAVE + ':s', metadata: '' });
+    await settle();
+    expect(lk.send.mock.calls[0][0]).toMatchObject({ t: 'state', selfJoin: false });
+    // a join request from the main room is not answered
+    rel.seatInRoom.mockClear();
+    const roomIds = rel.createBreakoutRoom.mock.calls.map((c) => c[1].id);
+    lk.listener?.({ t: 'join', room: roomIds[0] }, { identity: DAVE + ':s', metadata: '' });
+    await settle();
+    expect(rel.seatInRoom).not.toHaveBeenCalled();
+  });
+
+  it('a late joiner learns it from the state message and from the relay listing, and does not knock', async () => {
+    await liveInMain(bobUser);
+    lk.listener?.(
+      {
+        t: 'state',
+        rooms: ROOMS.map(({ id, relay, name }) => ({ id, relay, name })),
+        selfJoin: false
+      },
+      hostSender
+    );
+    await settle();
+    expect(store.getBreakoutState().session?.selfJoin).toBe(false);
+    lk.send.mockClear();
+    await store.requestBreakoutRoom(store.getBreakoutState().rooms[0]);
+    await settle();
+    expect(rel.knockOnRoom).not.toHaveBeenCalled();
+    expect(lk.send).not.toHaveBeenCalled();
+    expect(store.getBreakoutState().joinRequest).toBeNull();
+
+    store.__resetBreakout();
+    callFake.setCall({ pointer: null, user: null, title: '', phase: 'idle', code: null });
+    await settle();
+    rel.fetchEphemeralChildren.mockResolvedValue([
+      {
+        kind: 39000,
+        pubkey: KEY,
+        created_at: 10,
+        tags: [
+          ['d', 'r1'],
+          ['name', 'Breakout 1 · Seminar'],
+          ['about', 'edufeed:breakout parent=main-id n=1 join=host'],
+          ['ephemeral', 'main-id']
+        ]
+      }
+    ]);
+    await liveInMain(bobUser);
+    await settle();
+    await settle();
+    expect(store.getBreakoutState().session?.rooms.map((r) => r.id)).toEqual(['r1']);
+    expect(store.getBreakoutState().session?.selfJoin).toBe(false);
   });
 });
 
