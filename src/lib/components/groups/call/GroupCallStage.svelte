@@ -84,7 +84,8 @@
     sendCallBroadcast,
     moveParticipant,
     joinBreakoutRoom,
-    returnToMain
+    returnToMain,
+    bringMainRoomHere
   } from '$lib/groups/breakout.svelte.js';
   import { formatCountdown } from '$lib/groups/breakout.js';
   import { trackOnScreen as trackNodeOnScreen } from '$lib/groups/track-on-screen.js';
@@ -361,6 +362,18 @@
   // Host rights hold in the main room only: never offer the controls inside
   // a breakout room (the relay seats whoever opens that room as its host).
   const inBreakoutRoom = $derived(breakout.currentRoom !== null);
+  // Hosting from inside a room: who waits in the main room (its kind
+  // 39004, me left out), and which of them are members — those can be
+  // seated here through the relay; a guest moves by message, from the main
+  // room, so it is only counted.
+  const mainWaiting = $derived.by(() => {
+    if (!inBreakoutRoom || breakout.session?.hosting !== true) return [];
+    const me = pubkeyOf(lk.localParticipant);
+    return (breakout.mainPresence ?? []).filter((pubkey) => pubkey !== me);
+  });
+  const mainFetchable = $derived(
+    mainWaiting.filter((pubkey) => breakout.mainMembers?.has(pubkey) === true)
+  );
   const hostsBreakout = $derived(!inBreakoutRoom && breakout.session?.hosting === true);
   const canOpenBreakout = $derived(!!myRole && !inBreakoutRoom && !breakout.session);
   // The rare actions behind "More" (invite, pop out, back to the tab).
@@ -1419,6 +1432,24 @@
                 · {formatCountdown(breakout.remaining)}
               {/if}
             </span>
+            {#if mainWaiting.length > 0}
+              <span
+                class="badge gap-1 badge-sm tabular-nums badge-warning"
+                data-testid="group-call-breakout-main-count"
+              >
+                {m.groups_call_breakout_in_main_count({ n: mainWaiting.length })}
+              </span>
+              {#if mainFetchable.length > 0}
+                <button
+                  class="btn rounded-full px-3 btn-outline btn-sm"
+                  disabled={breakout.busy}
+                  onclick={() => void bringMainRoomHere()}
+                  data-testid="group-call-breakout-fetch-here"
+                >
+                  {m.groups_call_breakout_fetch_here()}
+                </button>
+              {/if}
+            {/if}
             <button
               class="btn gap-1 rounded-full px-3 btn-sm btn-primary"
               onclick={() => void returnToMain()}

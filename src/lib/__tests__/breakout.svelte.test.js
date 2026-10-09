@@ -133,7 +133,8 @@ vi.mock('$lib/paraglide/messages', () => ({
   groups_call_breakout_deadline_failed: (/** @type {any} */ p) => `deadline not set: ${p.reason}`,
   groups_call_broadcast_toast: (/** @type {any} */ p) => `${p.name}: ${p.text}`,
   groups_call_broadcast_return_default: () => 'please come back',
-  groups_call_breakout_broadcast_failed: (/** @type {any} */ p) => `not sent: ${p.reason}`
+  groups_call_breakout_broadcast_failed: (/** @type {any} */ p) => `not sent: ${p.reason}`,
+  groups_call_breakout_arrived_main: (/** @type {any} */ p) => `${p.name} arrived in the main room`
 }));
 
 const rel = vi.hoisted(() => ({
@@ -142,9 +143,11 @@ const rel = vi.hoisted(() => ({
   unseatFromRoom: vi.fn(async () => {}),
   deleteBreakoutRoom: vi.fn(async () => {}),
   fetchEphemeralChildren: vi.fn(async () => []),
-  editBreakoutUntil: vi.fn(async () => {})
+  editBreakoutUntil: vi.fn(async () => {}),
+  knockOnRoom: vi.fn(async () => {})
 }));
 vi.mock('$lib/groups/breakout-relay.js', () => ({
+  knockOnRoom: (/** @type {any[]} */ ...a) => rel.knockOnRoom(...a),
   createBreakoutRoom: (/** @type {any[]} */ ...a) => rel.createBreakoutRoom(...a),
   seatInRoom: (/** @type {any[]} */ ...a) => rel.seatInRoom(...a),
   unseatFromRoom: (/** @type {any[]} */ ...a) => rel.unseatFromRoom(...a),
@@ -193,6 +196,13 @@ const roster = (id, members, at = 10) => ({
   pubkey: KEY,
   created_at: at,
   tags: [['d', id], ...members.map((p) => ['p', p])]
+});
+/** A relay-signed kind 39004 of a room (or of the main room). @param {string} id @param {string[]} pubkeys @param {number} [at] */
+const presence = (id, pubkeys, at = 10) => ({
+  kind: 39004,
+  pubkey: KEY,
+  created_at: at,
+  tags: [['d', id], ...pubkeys.map((p) => ['participant', p])]
 });
 const ROOMS = [
   { id: 'r1', relay: RELAY, name: 'Breakout 1 · Seminar', members: [BOB + ':seat1'] },
@@ -831,6 +841,149 @@ describe('late joiners: "Beitreten" from the banner', () => {
     lk.listener?.({ t: 'join', room: 'nope' }, { identity: DAVE + ':s', metadata: '' });
     await settle();
     expect(rel.seatInRoom).not.toHaveBeenCalled();
+  });
+});
+
+// The host's client may sit in a breakout room, out of reach of the main
+// room's data channel. Everything a late joiner and the host need then goes
+// through the relay: a member knocks on a room (kind 9021, the relay seats
+// them), a roster that names a main-room seat is the assignment, and the
+// main room's 39004 tells the host who waits there.
+describe('late joiners while the host sits in a room: relay-only paths', () => {
+  async function bobSeesSession() {
+    await liveInMain(bobUser);
+    lk.listener?.(
+      { t: 'state', rooms: ROOMS.map(({ id, relay, name }) => ({ id, relay, name })) },
+      hostSender
+    );
+    await settle();
+    lk.send.mockClear();
+    callFake.switchGroupCall.mockClear();
+  }
+
+  it('"Beitreten" knocks on the room (kind 9021) and switches when the roster names the seat', async () => {
+    vi.useFakeTimers();
+    await bobSeesSession();
+    rel.seatInRoom.mockRejectedValueOnce(new Error('restricted: insufficient permissions'));
+    const request = store.requestBreakoutRoom(store.getBreakoutState().rooms[1]);
+    await vi.advanceTimersByTimeAsync(10);
+    await request;
+    expect(rel.knockOnRoom).toHaveBeenCalledWith(expect.anything(), 'r2', bobUser);
+    // the host seat is still asked too (an older relay, a host in the main room)
+    expect(lk.send).toHaveBeenCalledWith({ t: 'join', room: 'r2' });
+    expect(store.getBreakoutState().joinRequest).toEqual({ roomId: 'r2' });
+    const sub = liveSub();
+    sub.stream.next(roster('r2', [HOST, BOB], 20));
+    sub.stream.next('EOSE');
+    await settle();
+    expect(store.getBreakoutState().joinRequest).toBeNull();
+    expect(modal.activeModal).toBe('none');
+    expect(callFake.switchGroupCall).toHaveBeenCalledWith(
+      { id: 'r2', relay: RELAY },
+      { title: 'Breakout 2 · Seminar' }
+    );
+  });
+
+  it('a seat in the main room that a roster now names is asked to switch, once per room', async () => {
+    await bobSeesSession();
+    const sub = liveSub();
+    sub.stream.next(roster('r1', [HOST, BOB], 20));
+    sub.stream.next('EOSE');
+    await settle();
+    expect(modal.activeModal).toBe('breakoutAssignment');
+    expect(store.getBreakoutState().pending?.room.id).toBe('r1');
+    modal.callbacks.onCancel();
+    await settle();
+    expect(modal.activeModal).toBe('none');
+    // the same room again (someone else was seated): not asked twice
+    sub.stream.next(roster('r1', [HOST, BOB, CAROL], 21));
+    await settle();
+    expect(modal.activeModal).toBe('none');
+    // moved to another room: asked again
+    sub.stream.next(roster('r1', [HOST, CAROL], 22));
+    sub.stream.next(roster('r2', [HOST, BOB], 22));
+    await settle();
+    expect(modal.activeModal).toBe('breakoutAssignment');
+    expect(store.getBreakoutState().pending?.room.id).toBe('r2');
+    expect(callFake.switchGroupCall).not.toHaveBeenCalled();
+  });
+
+  /** The host runs a session, sits in room 1, and the main room's roster is known. */
+  async function hostInRoom({ autoAssign = true } = {}) {
+    lkFake.setIdentity(HOST + ':h');
+    lkFake.setMyMetadata(HOST_META);
+    await liveInMain(hostUser);
+    await store.startBreakout({
+      channelName: 'Seminar',
+      roomCount: 2,
+      seats: [{ identity: BOB + ':seat1', pubkey: BOB, roomIndex: 1 }],
+      autoAssign
+    });
+    await settle();
+    const roomIds = rel.createBreakoutRoom.mock.calls.map((c) => c[1].id);
+    const sub = liveSub();
+    sub.stream.next(roster(roomIds[0], [HOST, BOB]));
+    sub.stream.next(roster(roomIds[1], [HOST]));
+    sub.stream.next(roster('main-id', [HOST, BOB, CAROL, DAVE]));
+    sub.stream.next('EOSE');
+    await settle();
+    await store.joinBreakoutRoom(store.getBreakoutState().rooms[0]);
+    await settle();
+    expect(store.getBreakoutState().currentRoom?.id).toBe(roomIds[0]);
+    rel.seatInRoom.mockClear();
+    toast.fn.mockClear();
+    return { roomIds, sub: liveSub() };
+  }
+
+  it('a host inside a room sees who waits in the main room, and seats a member there in the smallest room', async () => {
+    const { roomIds, sub } = await hostInRoom();
+    sub.stream.next(presence('main-id', [DAVE], 30));
+    await settle();
+    await settle();
+    expect(store.getBreakoutState().mainPresence).toEqual([DAVE]);
+    expect(toast.fn).toHaveBeenCalledWith(
+      expect.stringContaining('arrived in the main room'),
+      'info'
+    );
+    expect(rel.seatInRoom).toHaveBeenCalledWith(expect.anything(), roomIds[1], DAVE, hostUser);
+    expect(rel.seatInRoom).toHaveBeenCalledTimes(1);
+    // the same presence again: dealt with already
+    sub.stream.next(presence('main-id', [DAVE], 31));
+    await settle();
+    expect(rel.seatInRoom).toHaveBeenCalledTimes(1);
+    // a guest (not on the channel's roster) is only shown, never seated
+    sub.stream.next(presence('main-id', [DAVE, 'e'.repeat(64)], 32));
+    await settle();
+    await settle();
+    expect(store.getBreakoutState().mainPresence).toEqual([DAVE, 'e'.repeat(64)]);
+    expect(rel.seatInRoom).toHaveBeenCalledTimes(1);
+  });
+
+  it('with auto-assign off the host is only told; "Hierher holen" seats the waiting members into the host\'s room', async () => {
+    const { roomIds, sub } = await hostInRoom({ autoAssign: false });
+    sub.stream.next(presence('main-id', [DAVE, 'e'.repeat(64)], 30));
+    await settle();
+    await settle();
+    expect(toast.fn).toHaveBeenCalledTimes(1);
+    expect(rel.seatInRoom).not.toHaveBeenCalled();
+    await store.bringMainRoomHere();
+    await settle();
+    expect(rel.seatInRoom).toHaveBeenCalledWith(expect.anything(), roomIds[0], DAVE, hostUser);
+    expect(rel.seatInRoom).toHaveBeenCalledTimes(1);
+  });
+
+  it('a seat in the main room is dealt with again after it left and came back', async () => {
+    const { roomIds, sub } = await hostInRoom();
+    sub.stream.next(presence('main-id', [DAVE], 30));
+    await settle();
+    await settle();
+    sub.stream.next(presence('main-id', [], 31));
+    await settle();
+    sub.stream.next(roster(roomIds[1], [HOST], 32));
+    sub.stream.next(presence('main-id', [DAVE], 33));
+    await settle();
+    await settle();
+    expect(rel.seatInRoom).toHaveBeenCalledTimes(2);
   });
 });
 

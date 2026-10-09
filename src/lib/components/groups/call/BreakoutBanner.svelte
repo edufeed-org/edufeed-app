@@ -2,10 +2,11 @@
   BreakoutBanner — "Breakout-Session läuft": what a seat in the MAIN room
   sees while a session runs that it is not part of (joined late with
   auto-assign off, declined its assignment, came back early). Lists the
-  rooms with "Beitreten" — for a member a request to the host seat, which
-  seats the person and sends them over; for a guest a direct switch with
-  its call pass (groups/breakout.svelte.js requestBreakoutRoom) — and the
-  deadline. Pure view; the store owns the session.
+  rooms with "Beitreten" — for a member a knock on the room (kind 9021, the
+  relay seats them) plus a request to the host seat, whichever answers
+  first; for a guest a direct switch with its call pass
+  (groups/breakout.svelte.js requestBreakoutRoom) — and the deadline. Pure
+  view; the store owns the session.
 -->
 <script>
   import { ChannelsIcon } from '$lib/components/icons';

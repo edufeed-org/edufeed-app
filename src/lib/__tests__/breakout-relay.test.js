@@ -14,7 +14,8 @@ import {
   deleteBreakoutRoom,
   fetchEphemeralChildren,
   editBreakoutUntil,
-  isEphemeralTagRejection
+  isEphemeralTagRejection,
+  knockOnRoom
 } from '$lib/groups/breakout-relay.js';
 
 const PK = 'a'.repeat(64);
@@ -128,6 +129,37 @@ describe('seating', () => {
     );
     await expect(seatInRoom(relay, 'room-1', 'b'.repeat(64), user)).resolves.toBeUndefined();
     await expect(unseatFromRoom(relay, 'room-1', 'b'.repeat(64), user)).resolves.toBeUndefined();
+  });
+});
+
+describe('knockOnRoom (a member asks for a seat with their own 9021)', () => {
+  it('publishes a codeless join request to the room', async () => {
+    const relay = relayOf();
+    await knockOnRoom(relay, 'room-1', user);
+    expect(relay.published).toHaveLength(1);
+    expect(relay.published[0]).toMatchObject({ kind: 9021, tags: [['h', 'room-1']] });
+  });
+
+  it('treats "already a member" and "already pending" as done', async () => {
+    for (const reason of [
+      'duplicate: already a member',
+      'duplicate: join request already pending'
+    ]) {
+      await expect(
+        knockOnRoom(
+          relayOf(() => reason),
+          'room-1',
+          user
+        )
+      ).resolves.toBeUndefined();
+    }
+    await expect(
+      knockOnRoom(
+        relayOf(() => 'blocked: unknown member'),
+        'room-1',
+        user
+      )
+    ).rejects.toThrow(/unknown member/);
   });
 });
 

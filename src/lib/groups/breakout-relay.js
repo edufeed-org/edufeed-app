@@ -13,6 +13,7 @@ import {
   publishToGroupRelay,
   confirmGroupMetadata
 } from './group-management.js';
+import { buildJoinRequestTemplate } from './groups.js';
 import { breakoutRoomMetadata, isParentRoleRejection } from './breakout.js';
 
 /**
@@ -93,6 +94,23 @@ export function seatInRoom(relayConn, roomId, pubkey, user) {
     buildPutUserTemplate(roomId, pubkey),
     user,
     /members already/i
+  );
+}
+
+/**
+ * Knock on a room: a member of the channel asks for a seat with their own
+ * kind 9021. A relay with the extension (pyramid edufeed-v1.18+) seats a
+ * member of the room's parent at once — the roster (kind 39002) then names
+ * them; an older relay parks the request as a pending application, which
+ * is harmless. "Already a member" and "already pending" count as done.
+ * @param {any} relayConn @param {string} roomId @param {{pubkey: string, signer: any}} user
+ */
+export function knockOnRoom(relayConn, roomId, user) {
+  return publishIdempotent(
+    relayConn,
+    buildJoinRequestTemplate(roomId),
+    user,
+    /already a member|already pending/i
   );
 }
 

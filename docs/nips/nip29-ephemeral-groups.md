@@ -67,6 +67,25 @@ Everyone else is refused as for a normal group. This is what lets a co-host
 who inherited the host seat move people and end a session that someone
 else started.
 
+### Walking into one
+
+A **member of the parent group** may take a seat in one of its ephemeral
+children by themselves: a codeless kind 9021 (join-request) to the child
+from a member of the parent MUST be auto-admitted like a valid-code join
+(the relay publishes the put-user; the child's kind 39002 then names
+them). The host's client may sit in another child, out of reach of the
+parent room's data channel, so a request parked in the child's pending
+queue would reach nobody. Inside an ephemeral child a kind 9001 is the
+host moving someone out, not a ban: it MUST NOT block that member's later
+9021 to the same child. Strangers still land in the pending queue, as for
+any closed group. (pyramid edufeed-v1.18.)
+
+Clients: a seat in the parent's room that a child's roster now names SHOULD
+treat that as its assignment (ask, or switch at once when it knocked on
+that child itself), so the host can seat people from any room through the
+relay alone. A host's client in a child SHOULD follow the parent's kind
+39004 to see who waits in the parent's room.
+
 ### How one ends
 
 The relay deletes an ephemeral group **itself** — a relay-signed kind 9008

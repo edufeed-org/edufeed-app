@@ -4216,5 +4216,8 @@
   "groups_call_breakout_moved_out": "You were taken out of the room – back in the main room.",
   "groups_call_breakout_guest_move_failed": "The guest could not be moved: {reason}",
   "groups_call_breakout_move_failed": "Participant could not be moved: {reason}",
+  "groups_call_breakout_in_main_count": "{n} in the main room",
+  "groups_call_breakout_fetch_here": "Bring here",
+  "groups_call_breakout_arrived_main": "{name} arrived in the main room.",
   "groups_call_breakout_guest_move_timeout": "The guest did not come back to the main room – please assign them again."
 }
