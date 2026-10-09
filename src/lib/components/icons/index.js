@@ -71,6 +71,7 @@ export { default as KeyIcon } from './ui/KeyIcon.svelte';
 export { default as CopyIcon } from './actions/CopyIcon.svelte';
 export { default as RefreshIcon } from './actions/RefreshIcon.svelte';
 export { default as ExternalLinkIcon } from './actions/ExternalLinkIcon.svelte';
+export { default as CallEndIcon } from './actions/CallEndIcon.svelte';
 export { default as EditIcon } from './actions/EditIcon.svelte';
 export { default as PinIcon } from './ui/PinIcon.svelte';
 export { default as StarIcon } from './ui/StarIcon.svelte';

@@ -6,11 +6,12 @@
     onVolumeChange,
     onClose,
     menuExtras = undefined,
-    headerExtras = undefined
+    headerExtras = undefined,
+    compact = false
   } = $props();
 </script>
 
-<div data-testid="call-participants-panel-stub">
+<div data-testid="call-participants-panel-stub" data-compact={compact}>
   <div data-testid="stub-header-extras">{@render headerExtras?.()}</div>
   {#each rows as row (row.key)}
     <span

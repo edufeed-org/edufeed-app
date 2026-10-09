@@ -95,6 +95,7 @@
   import {
     PeopleIcon,
     MoreIcon,
+    CloseIcon,
     MeetIcon,
     SettingsIcon,
     ChevronLeftIcon
@@ -917,6 +918,19 @@
     return () => query.removeEventListener('change', onChange);
   });
   const chatBesideCall = $derived(showCallHere && call.chatBeside);
+  // The stage itself on screen (not its pending / error / ended cards): the
+  // channel chrome — breadcrumb, header, apps and meeting bars — steps off
+  // the page and the stage's title pill carries the way back, the title and
+  // the role (design 1d "Bühne"). Everything the header offered comes back
+  // the moment the call ends or the stage steps aside.
+  const stageOnScreen = $derived(
+    showCallHere && call.phase === 'ready' && !!call.token && !!call.serverUrl
+  );
+  // The stage opens its own drawer: fold the chat column away (one drawer
+  // beside the tiles).
+  function hideChatBeside() {
+    if (chatBesideCall) toggleChatBeside();
+  }
 
   function showChatFromStage() {
     if (wideScreen) toggleChatBeside();
@@ -1747,8 +1761,41 @@
   {/if}
 </svelte:head>
 
+{#snippet chatTabs()}
+  <div role="tablist" class="tabs-border tabs tabs-sm">
+    <button
+      role="tab"
+      class="tab {chatTab === 'call' ? 'tab-active' : ''}"
+      aria-selected={chatTab === 'call'}
+      data-testid="chat-tab-call"
+      onclick={() => (chatTab = 'call')}
+    >
+      {m.groups_call_chat_tab()}
+      {#if callChatUnread.count > 0}
+        <CallUnreadDot class="ml-1.5" label={m.groups_call_chat_unread()} />
+      {/if}
+    </button>
+    <button
+      role="tab"
+      class="tab {chatTab === 'channel' ? 'tab-active' : ''}"
+      aria-selected={chatTab === 'channel'}
+      data-testid="chat-tab-channel"
+      onclick={() => (chatTab = 'channel')}
+    >
+      {m.groups_call_chat_channel_tab()}
+      {#if channelUnreadInCall}
+        <CallUnreadDot
+          class="ml-1.5"
+          testid="channel-unread-dot"
+          label={m.groups_call_channel_unread()}
+        />
+      {/if}
+    </button>
+  </div>
+{/snippet}
+
 <div bind:this={chatRootEl} class="flex h-full min-h-0 flex-col">
-  {#if onBack}
+  {#if onBack && !stageOnScreen}
     <!-- "‹ Kanäle" (design 1a): the way back to the channel list, above the
       title on every width. -->
     <div class="px-2 pt-1">
@@ -1764,200 +1811,206 @@
       </button>
     </div>
   {/if}
-  <header
-    class="flex items-center gap-3 border-b border-base-300 px-4 {onBack ? 'pt-1 pb-3' : 'py-3'}"
-  >
-    {#if metadata?.picture}
-      <img src={metadata.picture} alt="" class="h-8 w-8 rounded-full object-cover" />
-    {/if}
-    <div class="min-w-0 flex-1">
-      <h2 class="truncate text-sm font-bold" data-testid="group-name">
-        {displayTitle}
-      </h2>
-      <p class="truncate text-xs opacity-60">
-        <!-- The host, as the way back to its OTHER channels. A channel is a
+  {#if !stageOnScreen}
+    <header
+      class="flex items-center gap-3 border-b border-base-300 px-4 {onBack ? 'pt-1 pb-3' : 'py-3'}"
+    >
+      {#if metadata?.picture}
+        <img src={metadata.picture} alt="" class="h-8 w-8 rounded-full object-cover" />
+      {/if}
+      <div class="min-w-0 flex-1">
+        <h2 class="truncate text-sm font-bold" data-testid="group-name">
+          {displayTitle}
+        </h2>
+        <p class="truncate text-xs opacity-60">
+          <!-- The host, as the way back to its OTHER channels. A channel is a
              group with no parent object, so the relay is the container this
              chat sits in, and it was previously named here in plain text —
              a dead end. `relayLabel` keeps the port: a relay on another port
              is another relay. -->
-        <a href={relayHref(pointer.relay)} data-testid="group-host-link" class="link link-hover"
-          >{relayLabel(pointer.relay)}</a
-        >{#if metadata?.about}&nbsp;— {metadata.about}{/if}
-      </p>
-      <GroupBadges access={accessBadges} host={hostBadges} class="mt-1" />
-    </div>
-    {#if rosterAnswered}
-      <!-- Concord parity (ChannelChat's members button): the roster door,
+          <a href={relayHref(pointer.relay)} data-testid="group-host-link" class="link link-hover"
+            >{relayLabel(pointer.relay)}</a
+          >{#if metadata?.about}&nbsp;— {metadata.about}{/if}
+        </p>
+        <GroupBadges access={accessBadges} host={hostBadges} class="mt-1" />
+      </div>
+      {#if rosterAnswered}
+        <!-- Concord parity (ChannelChat's members button): the roster door,
         with the count once there is one. Was a near-invisible "· N" text
         link that rendered NOTHING while the roster was empty
         (laoc, 2026-08-19). View-only for non-admins. -->
-      <button
-        type="button"
-        class="btn btn-ghost btn-sm"
-        data-testid="group-members-open"
-        onclick={() => (membersOpen = true)}
-      >
-        <PeopleIcon class_="w-4 h-4" title="" />
-        {#if members.size}{members.size}{/if}
-      </button>
-    {/if}
-    {#if avEnabled}
-      <!-- NIP-29 AV space: join (or leave) the channel's call; the count is
-        the relay's own kind-39004 participant list. Icon + count, same
-        header chrome as the members button. -->
-      {#if showCallHere && callLiveHere}
-        <!-- The call is on screen right below: a status, not a second
-          (destructive) control — only the stage's red button leaves. -->
-        <span
-          role="status"
-          class="btn btn-active cursor-default text-primary btn-ghost btn-sm"
-          data-testid="group-call-status"
-          title={m.groups_call_you_are_in()}
-          aria-label={m.groups_call_you_are_in()}
-        >
-          <MeetIcon class_="w-4 h-4" title="" />
-          {#if callParticipantCount}{callParticipantCount}{/if}
-        </span>
-      {:else if showCallButton}
         <button
           type="button"
-          class="btn btn-ghost btn-sm {callLiveHere ? 'text-primary' : ''}"
-          data-testid="group-call-join"
-          title={callButtonLabel}
-          aria-label={callButtonLabel}
-          aria-pressed={callLiveHere}
-          disabled={!myPubkey}
-          onclick={toggleCall}
+          class="btn btn-ghost btn-sm"
+          data-testid="group-members-open"
+          onclick={() => (membersOpen = true)}
         >
-          <MeetIcon class_="w-4 h-4" />
-          {#if callParticipantCount}{callParticipantCount}{/if}
+          <PeopleIcon class_="w-4 h-4" title="" />
+          {#if members.size}{members.size}{/if}
         </button>
-        {#if !myPubkey}
-          <!-- The greyed icon's "log in to start a call" is only a tooltip,
-            which a touch user never sees (QA round 2 C5). -->
+      {/if}
+      {#if avEnabled}
+        <!-- NIP-29 AV space: join (or leave) the channel's call; the count is
+        the relay's own kind-39004 participant list. Icon + count, same
+        header chrome as the members button. -->
+        {#if showCallHere && callLiveHere}
+          <!-- The call is on screen right below: a status, not a second
+          (destructive) control — only the stage's red button leaves. -->
+          <span
+            role="status"
+            class="btn btn-active cursor-default text-primary btn-ghost btn-sm"
+            data-testid="group-call-status"
+            title={m.groups_call_you_are_in()}
+            aria-label={m.groups_call_you_are_in()}
+          >
+            <MeetIcon class_="w-4 h-4" title="" />
+            {#if callParticipantCount}{callParticipantCount}{/if}
+          </span>
+        {:else if showCallButton}
           <button
             type="button"
-            class="btn text-primary btn-ghost btn-sm"
-            data-testid="group-call-login"
-            onclick={() => modalStore.openModal('login')}
+            class="btn btn-ghost btn-sm {callLiveHere ? 'text-primary' : ''}"
+            data-testid="group-call-join"
+            title={callButtonLabel}
+            aria-label={callButtonLabel}
+            aria-pressed={callLiveHere}
+            disabled={!myPubkey}
+            onclick={toggleCall}
           >
-            {m.common_login()}
+            <MeetIcon class_="w-4 h-4" />
+            {#if callParticipantCount}{callParticipantCount}{/if}
           </button>
-        {/if}
-      {/if}
-    {:else if canStartCall}
-      <!-- Admin one-click: switch the channel's calls on (a 9002 restating
-           the current metadata plus `livekit`) and join right away. -->
-      <button
-        type="button"
-        class="btn btn-ghost btn-sm"
-        data-testid="group-call-start"
-        title={m.groups_call_start()}
-        aria-label={m.groups_call_start()}
-        disabled={enablingCall}
-        onclick={enableAndStartCall}
-      >
-        {#if enablingCall}
-          <span class="loading loading-xs loading-spinner"></span>
-        {:else}
-          <MeetIcon class_="w-4 h-4" />
-        {/if}
-      </button>
-    {/if}
-    {#if isAdmin}
-      <button
-        type="button"
-        class="btn btn-ghost btn-sm"
-        data-testid="group-settings-open"
-        title={m.groups_settings_title()}
-        aria-label={m.groups_settings_title()}
-        onclick={() => (settingsOpen = true)}
-      >
-        <SettingsIcon class_="w-4 h-4" title="" />
-      </button>
-    {/if}
-    {#if myPubkey}
-      <!-- Same focus-driven DaisyUI dropdown as MemberActionsMenu; one home
-        for actions that are neither roster nor admin operations. -->
-      <div class="dropdown dropdown-end shrink-0">
-        <button
-          tabindex="0"
-          class="btn btn-ghost btn-sm"
-          data-testid="group-more-menu"
-          aria-label={m.groups_more_menu()}
-        >
-          <MoreIcon class_="w-4 h-4" />
-        </button>
-        <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
-        <ul
-          tabindex="0"
-          class="dropdown-content menu z-50 w-60 rounded-box border border-base-300 bg-base-100 p-2 shadow-lg"
-        >
-          {#if canWrite}
-            <li>
-              <button data-testid="group-meeting-schedule" onclick={openScheduleMeeting}>
-                {m.groups_meeting_schedule()}
-              </button>
-            </li>
+          {#if !myPubkey}
+            <!-- The greyed icon's "log in to start a call" is only a tooltip,
+            which a touch user never sees (QA round 2 C5). -->
+            <button
+              type="button"
+              class="btn text-primary btn-ghost btn-sm"
+              data-testid="group-call-login"
+              onclick={() => modalStore.openModal('login')}
+            >
+              {m.common_login()}
+            </button>
           {/if}
-          <!-- Hiding belongs with leaving, not with the content actions
+        {/if}
+      {:else if canStartCall}
+        <!-- Admin one-click: switch the channel's calls on (a 9002 restating
+           the current metadata plus `livekit`) and join right away. -->
+        <button
+          type="button"
+          class="btn btn-ghost btn-sm"
+          data-testid="group-call-start"
+          title={m.groups_call_start()}
+          aria-label={m.groups_call_start()}
+          disabled={enablingCall}
+          onclick={enableAndStartCall}
+        >
+          {#if enablingCall}
+            <span class="loading loading-xs loading-spinner"></span>
+          {:else}
+            <MeetIcon class_="w-4 h-4" />
+          {/if}
+        </button>
+      {/if}
+      {#if isAdmin}
+        <button
+          type="button"
+          class="btn btn-ghost btn-sm"
+          data-testid="group-settings-open"
+          title={m.groups_settings_title()}
+          aria-label={m.groups_settings_title()}
+          onclick={() => (settingsOpen = true)}
+        >
+          <SettingsIcon class_="w-4 h-4" title="" />
+        </button>
+      {/if}
+      {#if myPubkey}
+        <!-- Same focus-driven DaisyUI dropdown as MemberActionsMenu; one home
+        for actions that are neither roster nor admin operations. -->
+        <div class="dropdown dropdown-end shrink-0">
+          <button
+            tabindex="0"
+            class="btn btn-ghost btn-sm"
+            data-testid="group-more-menu"
+            aria-label={m.groups_more_menu()}
+          >
+            <MoreIcon class_="w-4 h-4" />
+          </button>
+          <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
+          <ul
+            tabindex="0"
+            class="dropdown-content menu z-50 w-60 rounded-box border border-base-300 bg-base-100 p-2 shadow-lg"
+          >
+            {#if canWrite}
+              <li>
+                <button data-testid="group-meeting-schedule" onclick={openScheduleMeeting}>
+                  {m.groups_meeting_schedule()}
+                </button>
+              </li>
+            {/if}
+            <!-- Hiding belongs with leaving, not with the content actions
             (smoke test 2026-10-08): its own section right above Leave. The
             divider only makes sense when something sits above it. -->
-          <li class={canWrite ? 'mt-2 border-t border-base-300 pt-2' : ''}>
-            {#if inMyList}
-              <!-- QA C6: says which list and that nothing else changes. -->
-              <button
-                class="flex flex-col items-start gap-0.5"
-                data-testid="group-list-remove"
-                onclick={() => toggleMyList(false)}
-              >
-                <span>{m.groups_list_remove()}</span>
-                <span
-                  class="text-xs font-normal text-base-content/60"
-                  data-testid="group-list-remove-hint">{m.groups_list_remove_hint()}</span
+            <li class={canWrite ? 'mt-2 border-t border-base-300 pt-2' : ''}>
+              {#if inMyList}
+                <!-- QA C6: says which list and that nothing else changes. -->
+                <button
+                  class="flex flex-col items-start gap-0.5"
+                  data-testid="group-list-remove"
+                  onclick={() => toggleMyList(false)}
                 >
-              </button>
-            {:else}
-              <button data-testid="group-list-add" onclick={() => toggleMyList(true)}>
-                {m.groups_list_add()}
-              </button>
-            {/if}
-          </li>
-          {#if rosterAnswered && isMember}
-            <!-- Destructive last, set apart, and confirmed (design 1a). -->
-            <li class="mt-2 border-t border-base-300 pt-2">
-              <button class="font-semibold text-error" data-testid="group-leave" onclick={askLeave}>
-                {leaveLabel}
-              </button>
+                  <span>{m.groups_list_remove()}</span>
+                  <span
+                    class="text-xs font-normal text-base-content/60"
+                    data-testid="group-list-remove-hint">{m.groups_list_remove_hint()}</span
+                  >
+                </button>
+              {:else}
+                <button data-testid="group-list-add" onclick={() => toggleMyList(true)}>
+                  {m.groups_list_add()}
+                </button>
+              {/if}
             </li>
-          {/if}
-        </ul>
-      </div>
-    {/if}
-    <!-- Join affordance for non-members only. A member's Leave lives in the ⋯
+            {#if rosterAnswered && isMember}
+              <!-- Destructive last, set apart, and confirmed (design 1a). -->
+              <li class="mt-2 border-t border-base-300 pt-2">
+                <button
+                  class="font-semibold text-error"
+                  data-testid="group-leave"
+                  onclick={askLeave}
+                >
+                  {leaveLabel}
+                </button>
+              </li>
+            {/if}
+          </ul>
+        </div>
+      {/if}
+      <!-- Join affordance for non-members only. A member's Leave lives in the ⋯
       menu behind a confirm (design 1a); an admin (39001) without an explicit
       39002 seat is a member too — NIP-29 counts admins as members, so no
       join/leave here (the community creator's own situation; a self-approval
       loop otherwise). -->
-    {#if myPubkey && rosterAnswered && !isMember && !canWrite}
-      {#if joinPending}
-        <span class="text-xs text-base-content/60" data-testid="group-join-pending"
-          >{m.community_join_pending()}</span
-        >
-      {:else}
-        <!-- Closed group: the 9021 lands in the admins' queue — say
+      {#if myPubkey && rosterAnswered && !isMember && !canWrite}
+        {#if joinPending}
+          <span class="text-xs text-base-content/60" data-testid="group-join-pending"
+            >{m.community_join_pending()}</span
+          >
+        {:else}
+          <!-- Closed group: the 9021 lands in the admins' queue — say
           "anfragen", not "beitreten" (open groups auto-add on join). -->
-        <button
-          type="button"
-          class="btn btn-sm btn-primary"
-          data-testid="group-join"
-          onclick={join}
-        >
-          {groupClosed ? m.community_join_request() : m.groups_join()}
-        </button>
+          <button
+            type="button"
+            class="btn btn-sm btn-primary"
+            data-testid="group-join"
+            onclick={join}
+          >
+            {groupClosed ? m.community_join_request() : m.groups_join()}
+          </button>
+        {/if}
       {/if}
-    {/if}
-  </header>
+    </header>
+  {/if}
 
   {#if membersOpen}
     <GroupMembersModal
@@ -2170,7 +2223,14 @@
           : 'hidden md:flex'
         : ''}"
     >
-      <GroupAppsBar {pointer} messages={displayed} sessionMeta={sessionTitles} onOpen={openStage} />
+      {#if !stageOnScreen}
+        <GroupAppsBar
+          {pointer}
+          messages={displayed}
+          sessionMeta={sessionTitles}
+          onOpen={openStage}
+        />
+      {/if}
       {#if !callLiveHere}
         <MeetingBar
           {meetings}
@@ -2195,7 +2255,13 @@
       {/if}
       <!-- Stage and chat share this box: stacked (one of them hidden), or
            side by side while the chat sits beside the call. -->
-      <div class="flex min-h-0 flex-1 {chatBesideCall ? 'flex-row' : 'flex-col'}">
+      <!-- With the stage on screen the box is the room too, so the chat
+           column floats on it as a paper card. -->
+      <div
+        class="flex min-h-0 flex-1 {chatBesideCall ? 'flex-row' : 'flex-col'} {stageOnScreen
+          ? 'bg-base-200'
+          : ''}"
+      >
         {#if showCallHere}
           {#if call.phase === 'ready' && call.token && call.serverUrl}
             {#if chatVisible && CallStage.Component}
@@ -2207,6 +2273,8 @@
                 chatOpen={call.chatBeside && wideScreen}
                 onPopOut={canPopOut ? popOutHere : undefined}
                 onInvite={canInvite ? () => (inviteOpen = true) : undefined}
+                {onBack}
+                onHideChat={hideChatBeside}
                 registerView={() =>
                   registerCallStageView(`${window.location.pathname}${window.location.search}`)}
               />
@@ -2313,42 +2381,30 @@
           class={activeSession
             ? 'hidden'
             : chatBesideCall
-              ? 'relative hidden min-h-0 flex-col border-l border-base-300 md:flex md:w-96 md:shrink-0'
+              ? 'relative hidden min-h-0 flex-col bg-base-100 text-base-content md:my-3 md:mr-3 md:flex md:w-96 md:shrink-0 md:overflow-hidden md:rounded-2xl md:shadow-xl'
               : showCallHere
                 ? 'hidden'
                 : 'contents'}
           data-testid="group-chat-body"
         >
-          {#if inCallHere}
-            <div role="tablist" class="tabs-border tabs border-b border-base-300 px-2 tabs-sm">
-              <button
-                role="tab"
-                class="tab {chatTab === 'call' ? 'tab-active' : ''}"
-                aria-selected={chatTab === 'call'}
-                data-testid="chat-tab-call"
-                onclick={() => (chatTab = 'call')}
-              >
-                {m.groups_call_chat_tab()}
-                {#if callChatUnread.count > 0}
-                  <CallUnreadDot class="ml-1.5" label={m.groups_call_chat_unread()} />
-                {/if}
-              </button>
-              <button
-                role="tab"
-                class="tab {chatTab === 'channel' ? 'tab-active' : ''}"
-                aria-selected={chatTab === 'channel'}
-                data-testid="chat-tab-channel"
-                onclick={() => (chatTab = 'channel')}
-              >
-                {m.groups_call_chat_channel_tab()}
-                {#if channelUnreadInCall}
-                  <CallUnreadDot
-                    class="ml-1.5"
-                    testid="channel-unread-dot"
-                    label={m.groups_call_channel_unread()}
-                  />
-                {/if}
-              </button>
+          {#if inCallHere && chatTab === 'channel'}
+            <!-- The call tab renders these same tabs inside the panel's own
+              header row (download, close), so the column never stacks two
+              rows of chrome (design 1d). -->
+            <div class="flex shrink-0 items-center gap-1 border-b border-base-300 px-2 py-1">
+              <div class="min-w-0 flex-1">{@render chatTabs()}</div>
+              {#if chatBesideCall || call.stageHidden}
+                <button
+                  type="button"
+                  class="btn btn-square btn-ghost btn-sm"
+                  aria-label={m.groups_call_chat_tabs_close()}
+                  title={m.groups_call_chat_tabs_close()}
+                  onclick={closeCallChat}
+                  data-testid="chat-tabs-close"
+                >
+                  <CloseIcon class_="h-4 w-4" title="" />
+                </button>
+              {/if}
             </div>
           {/if}
           {#if inCallHere && chatTab === 'call' && CallChatPanel.Component}
@@ -2356,6 +2412,7 @@
               {identityToPubkey}
               title={displayTitle}
               onClose={closeCallChat}
+              header={chatTabs}
             />
           {/if}
           <div

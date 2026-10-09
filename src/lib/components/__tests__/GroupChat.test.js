@@ -922,6 +922,7 @@ vi.mock('$lib/stores/app-settings.svelte.js', async (importOriginal) => {
 });
 vi.mock('$lib/components/icons', () => ({
   ReplyIcon: Stub,
+  CloseIcon: Stub,
   PeopleIcon: Stub,
   MoreIcon: Stub,
   TrashIcon: Stub,
@@ -1151,6 +1152,7 @@ vi.mock('$lib/paraglide/messages', () => ({
   groups_call_join_running: (/** @type {{ count: number }} */ { count }) =>
     `Join the running call (${count})`,
   groups_call_chat_tab: () => 'Anruf-Chat',
+  groups_call_chat_tabs_close: () => 'Close the chat column',
   groups_call_chat_channel_tab: () => 'Kanal',
   groups_call_chat_unread: () => 'New messages in the call chat',
   groups_call_channel_unread: () => 'New messages in the channel',
@@ -3006,18 +3008,42 @@ describe('GroupChat', () => {
 
       // QA 2026-10-02 C7: with the stage on screen the header icon said
       // "Leave call" and duplicated the red button right below it —
-      // accidental hang-ups. It is a status now; only the red button leaves.
-      it('in it with the stage on screen: a status, not a leave button', async () => {
+      // accidental hang-ups. Design 1d ("Bühne") goes further: the channel
+      // header leaves the page with the stage on it; the stage's own title
+      // pill carries the way back, and only its red button leaves.
+      it('in it with the stage on screen: no channel header at all, the stage carries the way back', async () => {
         inCallHere();
         groupCallHolder.participants = [ME];
-        render(GroupChat, { props: { pointer: callPointer } });
-        await screen.findByTestId('group-call-stage-stub');
+        const onBack = vi.fn();
+        render(GroupChat, { props: { pointer: callPointer, onBack } });
+        const stage = await screen.findByTestId('group-call-stage-stub');
         expect(screen.queryByTestId('group-call-join')).toBeNull();
-        const status = screen.getByTestId('group-call-status');
-        expect(status.tagName).not.toBe('BUTTON');
-        expect(status.getAttribute('aria-label')).toBe("You're in the call");
-        await fireEvent.click(status);
+        expect(screen.queryByTestId('group-call-status')).toBeNull();
+        expect(screen.queryByTestId('group-name')).toBeNull();
+        expect(screen.queryByTestId('group-chat-breadcrumb')).toBeNull();
+        expect(screen.queryByTestId('group-more-menu')).toBeNull();
+        await fireEvent.click(screen.getByTestId('group-call-stage-stub-back'));
+        expect(onBack).toHaveBeenCalledTimes(1);
         expect(leaveGroupCallMock).not.toHaveBeenCalled();
+        // The room: the box the stage and the chat column share, in the
+        // page's own colors (no dark scope).
+        expect(stage.parentElement?.classList.contains('bg-base-200')).toBe(true);
+        expect(stage.parentElement?.classList.contains('call-stage')).toBe(false);
+      });
+
+      it('the header is back the moment the stage steps aside or the call is only requesting', async () => {
+        inCallHere();
+        groupCallHolder.state.stageHidden = true;
+        const { unmount } = render(GroupChat, { props: { pointer: callPointer } });
+        await screen.findByTestId('group-name');
+        expect(screen.queryByTestId('group-call-stage-stub')).toBeNull();
+        unmount();
+        groupCallHolder.state.stageHidden = false;
+        groupCallHolder.state.phase = 'requesting';
+        groupCallHolder.state.connected = false;
+        render(GroupChat, { props: { pointer: callPointer } });
+        await screen.findByTestId('group-call-pending');
+        expect(screen.getByTestId('group-name')).toBeTruthy();
       });
 
       it('in it while the call view shows the requesting state: still a status', async () => {
@@ -3281,13 +3307,21 @@ describe('GroupChat', () => {
         );
         expect(channelTab.textContent).toContain('New messages in the channel');
         await fireEvent.click(channelTab);
+        // The tabs move from the call panel's header row into the channel
+        // tab's own row (one row of chrome either way): re-query.
         await waitFor(() =>
-          expect(channelTab.querySelector('[data-testid="channel-unread-dot"]')).toBeNull()
+          expect(
+            screen
+              .getByTestId('chat-tab-channel')
+              .querySelector('[data-testid="channel-unread-dot"]')
+          ).toBeNull()
         );
         // Back on the call chat: what was seen stays seen.
         await fireEvent.click(screen.getByTestId('chat-tab-call'));
         await new Promise((r) => setTimeout(r, 20));
-        expect(channelTab.querySelector('[data-testid="channel-unread-dot"]')).toBeNull();
+        expect(
+          screen.getByTestId('chat-tab-channel').querySelector('[data-testid="channel-unread-dot"]')
+        ).toBeNull();
       });
 
       it('resets to the channel tab when the call here ends', async () => {
@@ -3559,7 +3593,7 @@ describe('GroupChat', () => {
       try {
         inCallHere();
         render(GroupChat, { props: { pointer: callPointer } });
-        await screen.findByTestId('group-call-status');
+        await screen.findByTestId('group-call-loading');
         // Not reported visible yet (hidden twin): no stage, no connection.
         expect(screen.queryByTestId('group-call-stage-stub')).toBeNull();
 

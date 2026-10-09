@@ -68,6 +68,7 @@
    * @type {{
    *   identityToPubkey: (identity: string) => string | null,
    *   title?: string,
+   *   header?: import('svelte').Snippet,
    *   onClose?: () => void
    * }}
    */
@@ -76,7 +77,7 @@
   // onClose: the parent's way of collapsing this panel (the stage header's
   // Chat toggle, the phone's back-to-call, the member page's column) — the
   // panel offers a close control and Escape in an empty composer for it.
-  let { identityToPubkey, title = '', onClose = undefined } = $props();
+  let { identityToPubkey, title = '', onClose = undefined, header = undefined } = $props();
 
   const lk = getLiveKitState();
   const call = getGroupCallState();
@@ -450,10 +451,15 @@
 </script>
 
 <div bind:this={rootEl} class="flex min-h-0 flex-1 flex-col" data-testid="call-chat-panel">
+  <!-- One header row: the parent's tabs (Anruf-Chat | Kanal) on the left,
+    download and close on the right — never two rows of chrome. -->
   <div
-    class="flex shrink-0 items-center justify-end border-b border-base-300 px-2 py-1"
+    class="flex shrink-0 items-center justify-end gap-1 border-b border-base-300 px-2 py-1"
     data-testid="call-chat-header"
   >
+    {#if header}
+      <div class="min-w-0 flex-1">{@render header()}</div>
+    {/if}
     <button
       type="button"
       class="btn btn-square btn-ghost btn-sm"

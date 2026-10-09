@@ -9,7 +9,7 @@
  *
  * @vitest-environment jsdom
  */
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { flushSync } from 'svelte';
 import { SvelteSet } from 'svelte/reactivity';
 import { render, screen, fireEvent } from '@testing-library/svelte';
@@ -25,6 +25,7 @@ const { lk, svc, media, bg } = vi.hoisted(() => ({
     canPublish: true,
     canSignal: true,
     connectionState: 'connected',
+    joinedAt: 0,
     localParticipant: null,
     remoteParticipants: [],
     mutedIdentities: new Set(),
@@ -194,9 +195,18 @@ vi.mock('$lib/components/icons', async () => ({
   CloseIcon: Stub,
   StarIcon: Stub,
   ChannelsIcon: Stub,
-  ClockIcon: Stub
+  ClockIcon: Stub,
+  CallEndIcon: Stub
 }));
 vi.mock('$lib/paraglide/messages', () => ({
+  groups_call_more: () => 'More',
+  groups_call_participants_close: () => 'Close participant list',
+  groups_call_duration: ({ time }) => `Call duration ${time}`,
+  groups_call_in_call: () => 'In the call',
+  groups_breadcrumb_channels: () => 'Channels',
+  groups_breadcrumb_channels_aria: () => 'Back to the channel list',
+  groups_call_host_badge: () => 'Host',
+  groups_call_cohost_badge: () => 'Co-host',
   groups_call_chat_unread: () => 'New messages in the call chat',
   groups_call_chat_mentions_unread: () => 'You were mentioned in the call chat',
   groups_call_leave: () => 'Leave call',
@@ -478,20 +488,29 @@ describe('GroupCallStage — a view, not the connection owner', () => {
     expect(screen.getByTestId('group-call-show-chat').getAttribute('aria-pressed')).toBe('true');
   });
 
+  // Design 1d ("Bühne"): the rare actions — invite, pop out, back to the
+  // tab — sit behind one "More" button in the dock, which only exists when
+  // there is something to put in it.
   it('offers the pop-out window only when the parent can open one', async () => {
     const { unmount } = render(GroupCallStage, { props: baseProps });
+    expect(screen.queryByTestId('group-call-more')).toBeNull();
     expect(screen.queryByTestId('group-call-pop-out')).toBeNull();
     unmount();
     const onPopOut = vi.fn();
     render(GroupCallStage, { props: { ...baseProps, onPopOut } });
-    await fireEvent.click(screen.getByRole('button', { name: 'Pop out' }));
+    expect(screen.queryByTestId('group-call-pop-out')).toBeNull();
+    await fireEvent.click(screen.getByTestId('group-call-more'));
+    await fireEvent.click(screen.getByRole('menuitem', { name: 'Pop out' }));
     expect(onPopOut).toHaveBeenCalledTimes(1);
+    // Picking closes the menu.
+    expect(screen.queryByTestId('group-call-more-menu')).toBeNull();
   });
 
   it('inside the pop-out: a way back to the tab', async () => {
     const onPopIn = vi.fn();
     render(GroupCallStage, { props: { ...baseProps, onPopIn } });
-    await fireEvent.click(screen.getByRole('button', { name: 'Back to tab' }));
+    await fireEvent.click(screen.getByTestId('group-call-more'));
+    await fireEvent.click(screen.getByRole('menuitem', { name: 'Back to tab' }));
     expect(onPopIn).toHaveBeenCalledTimes(1);
   });
 
@@ -501,8 +520,34 @@ describe('GroupCallStage — a view, not the connection owner', () => {
     unmount();
     const onInvite = vi.fn();
     render(GroupCallStage, { props: { ...baseProps, onInvite } });
+    await fireEvent.click(screen.getByTestId('group-call-more'));
     await fireEvent.click(screen.getByTestId('group-call-invite'));
     expect(onInvite).toHaveBeenCalled();
+  });
+
+  it('carries the way back to the channel list in the title pill when the parent has one', async () => {
+    const { unmount } = render(GroupCallStage, { props: baseProps });
+    expect(screen.queryByTestId('group-call-back')).toBeNull();
+    unmount();
+    const onBack = vi.fn();
+    render(GroupCallStage, { props: { ...baseProps, onBack } });
+    await fireEvent.click(screen.getByTestId('group-call-back'));
+    expect(onBack).toHaveBeenCalledTimes(1);
+  });
+
+  it("counts how long I have been in the call, from the connection's own join stamp", () => {
+    lk.joinedAt = Date.now() - 65_000;
+    render(GroupCallStage, { props: baseProps });
+    const duration = screen.getByTestId('group-call-duration');
+    expect(duration.textContent).toBe('1:05');
+    expect(duration.getAttribute('aria-label')).toBe('Call duration 1:05');
+    lk.joinedAt = 0;
+  });
+
+  it('no duration before the first join stamp', () => {
+    lk.joinedAt = 0;
+    render(GroupCallStage, { props: baseProps });
+    expect(screen.queryByTestId('group-call-duration')).toBeNull();
   });
 
   // The pop-out is another document: menus must close on clicks in the
@@ -871,39 +916,47 @@ describe('layout', () => {
     expect(layer.classList.contains('items-center')).toBe(false);
   });
 
-  it('the control bar never shrinks away: the video area gives way instead', () => {
+  // Design 1d: the dock floats over the stage instead of taking a row of
+  // its own; the tiles keep clear of it (and of the title row above).
+  it('the dock floats along the bottom and the tiles keep clear of the chrome', () => {
     render(GroupCallStage, { props: baseProps });
     const controls = screen.getByTestId('group-call-controls');
-    expect(controls.classList.contains('shrink-0')).toBe(true);
+    expect(controls.getAttribute('role')).toBe('toolbar');
+    const layer = controls.parentElement;
+    expect(layer.classList.contains('absolute')).toBe(true);
+    expect(layer.classList.contains('bottom-0')).toBe(true);
+    // The free space around the dock belongs to the tiles (drag targets).
+    expect(layer.classList.contains('pointer-events-none')).toBe(true);
+    expect(controls.classList.contains('pointer-events-auto')).toBe(true);
+    const tiles = screen.getByTestId('group-call-tiles');
+    expect(tiles.classList.contains('pt-16')).toBe(true);
+    expect(tiles.classList.contains('pb-28')).toBe(true);
+    expect(tiles.classList.contains('@xl:pb-20')).toBe(true);
     const videoArea = screen.getByTestId('group-call-grid').parentElement.parentElement;
     expect(videoArea.classList.contains('min-h-0')).toBe(true);
     expect(videoArea.classList.contains('flex-1')).toBe(true);
   });
 
-  it('the header shrinks with the stage, not the viewport: labels collapse to icons', () => {
+  it('the chrome answers to the stage width, not the viewport: icon dock, truncating title', () => {
     // laoc 2026-10-02: beside the chat column the stage is narrow even on a
-    // wide window; the header's fixed button row widened the page. The stage
-    // is a size container and the labels answer to ITS width.
+    // wide window. The stage is a size container; the dock is icons only
+    // (every button carries its name) and the title pill truncates.
     render(GroupCallStage, {
       props: { ...baseProps, onShowChat: vi.fn(), onInvite: vi.fn(), onPopOut: vi.fn() }
     });
     const stage = screen.getByTestId('group-call-stage');
     expect(stage.classList.contains('@container')).toBe(true);
-    for (const id of ['group-call-invite', 'group-call-show-chat']) {
-      const label = screen.getByTestId(id).querySelector('span');
-      expect(label.classList.contains('hidden')).toBe(true);
-      expect(label.classList.contains('@2xl:inline')).toBe(true);
-    }
-    // The title side gives way (truncates) before the buttons do.
+    const chat = screen.getByTestId('group-call-show-chat');
+    expect(chat.querySelector('span')).toBeNull();
+    // QA K1: icon-only, so it needs its own name.
+    expect(chat.getAttribute('aria-label')).toBe('Chat');
     const title = stage.querySelector('h2');
     expect(title.classList.contains('truncate')).toBe(true);
-    expect(title.parentElement.classList.contains('min-w-0')).toBe(true);
-    expect(title.parentElement.classList.contains('flex-1')).toBe(true);
-    // QA K4: the title itself takes the free space before it truncates.
     expect(title.classList.contains('min-w-0')).toBe(true);
-    expect(title.classList.contains('flex-1')).toBe(true);
-    // QA K1: icon-only at narrow stage widths, so it needs its own name.
-    expect(screen.getByTestId('group-call-show-chat').getAttribute('aria-label')).toBe('Chat');
+    const pill = screen.getByTestId('group-call-title-pill');
+    expect(pill.classList.contains('min-w-0')).toBe(true);
+    expect(pill.classList.contains('max-w-full')).toBe(true);
+    expect(pill.textContent).toContain('Standup');
   });
 
   it('a remote screen share takes the spotlight, seats move to the strip', () => {
@@ -1111,11 +1164,7 @@ describe('participant list panel', () => {
     const button = screen.getByTestId('group-call-show-participants');
     expect(button.getAttribute('aria-label')).toBe('Participants (3)');
     expect(button.getAttribute('aria-pressed')).toBe('false');
-    expect(button.textContent).toContain('3');
-    // Icon-only below the stage's @lg, like the chat button.
-    const label = button.querySelector('span');
-    expect(label.classList.contains('hidden')).toBe(true);
-    expect(label.classList.contains('@2xl:inline')).toBe(true);
+    expect(button.textContent.trim()).toBe('3');
     expect(screen.queryByTestId('call-participants-panel-stub')).toBeNull();
   });
 
@@ -1189,11 +1238,125 @@ describe('participant list panel', () => {
     const column = screen.getByTestId('group-call-participants-column');
     expect(column.classList.contains('w-full')).toBe(true);
     expect(column.classList.contains('@2xl:w-72')).toBe(true);
+    // A paper card on the stage (design 1d).
+    expect(column.classList.contains('bg-base-100')).toBe(true);
     const tiles = screen.getByTestId('group-call-tiles');
     expect(tiles.classList.contains('hidden')).toBe(true);
     expect(tiles.classList.contains('@2xl:flex')).toBe(true);
     await fireEvent.click(screen.getByTestId('stub-close'));
     expect(screen.getByTestId('group-call-tiles').classList.contains('hidden')).toBe(false);
+  });
+
+  // Design 1d: one drawer beside the tiles. The chat column (the parent's)
+  // and this list never stand side by side.
+  it('opening the list folds the chat column away, and the chat opening closes the list', async () => {
+    lk.remoteParticipants = [remote(B)];
+    const onHideChat = vi.fn();
+    const { rerender } = render(GroupCallStage, {
+      props: { ...baseProps, onShowChat: vi.fn(), onHideChat, chatOpen: true }
+    });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await fireEvent.click(screen.getByTestId('group-call-show-participants'));
+    expect(onHideChat).toHaveBeenCalledTimes(1);
+    await rerender({ ...baseProps, onShowChat: vi.fn(), onHideChat, chatOpen: false });
+    expect(
+      await screen.findByTestId('call-participants-panel-stub', {}, { timeout: 4000 })
+    ).toBeTruthy();
+    // The parent opens the chat beside the stage: the list steps back.
+    await rerender({ ...baseProps, onShowChat: vi.fn(), onHideChat, chatOpen: true });
+    expect(screen.queryByTestId('group-call-participants-column')).toBeNull();
+  });
+});
+
+describe('floating chrome (design 1d "Bühne")', () => {
+  const B = `${'b'.repeat(64)}:1`;
+  beforeEach(() => {
+    lk.remoteParticipants = [];
+    lk.raisedHands = new Set();
+    lk.connectionState = 'connected';
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('the stage keeps the page colors: no dark scope, drawers are paper cards', () => {
+    render(GroupCallStage, { props: baseProps });
+    const stage = screen.getByTestId('group-call-stage');
+    expect(stage.classList.contains('call-stage')).toBe(false);
+    expect(stage.classList.contains('bg-base-200')).toBe(true);
+  });
+
+  // A tile's avatar / name bar / controls sit at z-10..z-30 in the stage's
+  // stacking context; the dock's backdrop-blur makes the dock a context at
+  // level auto. Both chrome layers must sit above the tiles, or a tile
+  // paints over every menu that opens from the dock.
+  it('the floating chrome paints above the tiles (menus from the dock are not covered by a tile)', () => {
+    render(GroupCallStage, { props: baseProps });
+    expect(screen.getByTestId('group-call-top-layer').classList.contains('z-40')).toBe(true);
+    expect(screen.getByTestId('group-call-dock-layer').classList.contains('z-40')).toBe(true);
+  });
+
+  it('the hand button carries the count of hands up; the list of who waits sits in the title row', () => {
+    lk.remoteParticipants = [remote(B)];
+    lk.raisedHands = new Set([B]);
+    render(GroupCallStage, { props: baseProps });
+    expect(screen.getByTestId('group-call-hand-count').textContent.trim()).toBe('1');
+    const pill = screen.getByTestId('group-call-hands');
+    expect(screen.getByTestId('group-call-title-row').contains(pill)).toBe(true);
+    lk.raisedHands = new Set();
+  });
+
+  it('the title row and the dock step back after a few seconds without input, and come back on it', () => {
+    vi.useFakeTimers();
+    render(GroupCallStage, { props: baseProps });
+    const stage = screen.getByTestId('group-call-stage');
+    const dockLayer = screen.getByTestId('group-call-controls').parentElement;
+    const titleRow = screen.getByTestId('group-call-title-row');
+    expect(stage.hasAttribute('data-idle')).toBe(false);
+    vi.advanceTimersByTime(3000);
+    flushSync();
+    expect(stage.getAttribute('data-idle')).toBe('true');
+    expect(dockLayer.classList.contains('opacity-0')).toBe(true);
+    expect(titleRow.classList.contains('opacity-0')).toBe(true);
+    stage.dispatchEvent(new Event('pointermove', { bubbles: true }));
+    flushSync();
+    expect(stage.hasAttribute('data-idle')).toBe(false);
+    expect(dockLayer.classList.contains('opacity-0')).toBe(false);
+  });
+
+  it('never steps back while a menu is open or the pointer rests on the dock', async () => {
+    vi.useFakeTimers();
+    render(GroupCallStage, { props: baseProps });
+    const stage = screen.getByTestId('group-call-stage');
+    await fireEvent.click(screen.getByTitle('React'));
+    vi.advanceTimersByTime(10_000);
+    flushSync();
+    expect(stage.hasAttribute('data-idle')).toBe(false);
+    await fireEvent.pointerDown(stage); // closes the menu
+    const dock = screen.getByTestId('group-call-controls');
+    await fireEvent.pointerEnter(dock, { pointerType: 'mouse' });
+    vi.advanceTimersByTime(10_000);
+    flushSync();
+    expect(stage.hasAttribute('data-idle')).toBe(false);
+    await fireEvent.pointerLeave(dock, { pointerType: 'mouse' });
+    vi.advanceTimersByTime(3000);
+    flushSync();
+    expect(stage.getAttribute('data-idle')).toBe('true');
+  });
+
+  it('the status row never hides: reconnecting is a pill up top, outside the fading row', () => {
+    vi.useFakeTimers();
+    lk.connectionState = 'reconnecting';
+    render(GroupCallStage, { props: baseProps });
+    const pill = screen.getByTestId('group-call-reconnecting');
+    const statusRow = screen.getByTestId('group-call-status-row');
+    expect(statusRow.contains(pill)).toBe(true);
+    expect(screen.getByTestId('group-call-title-row').contains(pill)).toBe(false);
+    // A bad connection also holds the chrome up.
+    vi.advanceTimersByTime(10_000);
+    flushSync();
+    expect(screen.getByTestId('group-call-stage').hasAttribute('data-idle')).toBe(false);
+    lk.connectionState = 'connected';
   });
 });
 
@@ -1238,7 +1401,6 @@ describe('layouts', () => {
     render(GroupCallStage, { props: baseProps });
     const button = screen.getByTestId('group-call-layout');
     expect(button.getAttribute('aria-label')).toBe('View: Grid');
-    expect(button.querySelector('span').classList.contains('@2xl:inline')).toBe(true);
     await fireEvent.click(button);
     const items = screen.getAllByRole('menuitemradio');
     expect(items.map((i) => i.textContent.trim())).toEqual([
@@ -1421,7 +1583,7 @@ describe('host role', () => {
     lk.participantMetadataVersion = 0;
   });
 
-  it('tells me in the header when I am the host or a co-host, and nothing otherwise', () => {
+  it('tells me in the title pill when I am the host or a co-host, and nothing otherwise', () => {
     const { unmount } = render(GroupCallStage, { props: baseProps });
     expect(screen.queryByTestId('group-call-my-role')).toBeNull();
     unmount();
@@ -1429,13 +1591,18 @@ describe('host role', () => {
     asHost();
     const second = render(GroupCallStage, { props: baseProps });
     const badge = screen.getByTestId('group-call-my-role');
-    expect(badge.textContent.trim()).toBe('You are the host');
+    // A chip in the pill: short, the full sentence as its title.
+    expect(badge.textContent.trim()).toBe('Host');
+    expect(badge.getAttribute('title')).toBe('You are the host');
     expect(badge.dataset.role).toBe('host');
+    expect(screen.getByTestId('group-call-title-pill').contains(badge)).toBe(true);
     second.unmount();
 
     lk.localParticipant.metadata = '{"cohost":true}';
     render(GroupCallStage, { props: baseProps });
-    expect(screen.getByTestId('group-call-my-role').textContent.trim()).toBe('You are a co-host');
+    const cohost = screen.getByTestId('group-call-my-role');
+    expect(cohost.textContent.trim()).toBe('Co-host');
+    expect(cohost.getAttribute('title')).toBe('You are a co-host');
   });
 
   it("hands tiles and rows the role read from each seat's metadata", async () => {
@@ -1597,9 +1764,12 @@ describe('breakout rooms', () => {
 
   it('offers the "Breakout rooms" tab in the side column to a host, not to a plain seat', async () => {
     render(GroupCallStage, { props: baseProps });
-    await openPanel();
+    const panel = await openPanel();
     expect(screen.queryByTestId('group-call-column-tabs')).toBeNull();
     expect(screen.queryByTestId('group-call-breakout-open')).toBeNull();
+    // No tab row: the list keeps its own title and close.
+    expect(panel.dataset.compact).toBe('false');
+    expect(screen.queryByTestId('group-call-column-close')).toBeNull();
   });
 
   it('shows the host the tabs: the rooms tab opens the dialog until a session runs', async () => {
@@ -1616,6 +1786,12 @@ describe('breakout rooms', () => {
     expect(open.textContent).toContain('Breakout rooms');
     expect(open.getAttribute('aria-selected')).toBe('false');
     expect(screen.queryByTestId('group-call-breakout-tab-dot')).toBeNull();
+    // Design 1d: one header for the drawer — the tabs name the list, the
+    // close sits at their end, the panel renders no second title.
+    expect(screen.getByTestId('call-participants-panel-stub').dataset.compact).toBe('true');
+    await fireEvent.click(screen.getByTestId('group-call-column-close'));
+    expect(screen.queryByTestId('group-call-participants-column')).toBeNull();
+    await openPanel();
     await fireEvent.click(open);
     // no session: the dialog, the list stays
     expect(screen.getByTestId('call-participants-panel-stub')).toBeTruthy();

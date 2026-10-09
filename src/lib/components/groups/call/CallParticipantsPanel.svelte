@@ -23,9 +23,13 @@
    *   onVolumeChange: (pubkey: string, volume: number) => void,
    *   onClose: () => void,
    *   menuExtras?: import('svelte').Snippet<[ParticipantRow]>,
-   *   headerExtras?: import('svelte').Snippet
+   *   headerExtras?: import('svelte').Snippet,
+   *   compact?: boolean
    * }}
    * `headerExtras`: the stage's buttons in the panel header (breakout rooms).
+   * `compact`: no header row of its own — the stage's drawer already names
+   * the list in its tab row and carries the close there (design 1d: never
+   * two titles for one list).
    */
   let {
     rows,
@@ -33,7 +37,8 @@
     onVolumeChange,
     onClose,
     menuExtras = undefined,
-    headerExtras = undefined
+    headerExtras = undefined,
+    compact = false
   } = $props();
 
   /** @type {HTMLDivElement | undefined} */
@@ -68,22 +73,24 @@
 </script>
 
 <div bind:this={rootEl} class="flex min-h-0 flex-1 flex-col" data-testid="call-participants-panel">
-  <div class="flex shrink-0 items-center gap-2 border-b border-base-300 px-3 py-2">
-    <h3 class="min-w-0 flex-1 truncate text-sm font-semibold">
-      {m.groups_call_participants_count({ count: rows.length })}
-    </h3>
-    {@render headerExtras?.()}
-    <button
-      type="button"
-      class="btn btn-square btn-ghost btn-sm"
-      onclick={onClose}
-      aria-label={m.groups_call_participants_close()}
-      title={m.groups_call_participants_close()}
-      data-testid="call-participants-close"
-    >
-      <CloseIcon class_="h-4 w-4" title="" />
-    </button>
-  </div>
+  {#if !compact}
+    <div class="flex shrink-0 items-center gap-2 border-b border-base-300 px-3 py-2">
+      <h3 class="min-w-0 flex-1 truncate text-sm font-semibold">
+        {m.groups_call_participants_count({ count: rows.length })}
+      </h3>
+      {@render headerExtras?.()}
+      <button
+        type="button"
+        class="btn btn-square btn-ghost btn-sm"
+        onclick={onClose}
+        aria-label={m.groups_call_participants_close()}
+        title={m.groups_call_participants_close()}
+        data-testid="call-participants-close"
+      >
+        <CloseIcon class_="h-4 w-4" title="" />
+      </button>
+    </div>
+  {/if}
   <ul class="min-h-0 flex-1 overflow-y-auto p-1">
     {#each rows as row (row.key)}
       <CallParticipantRow
