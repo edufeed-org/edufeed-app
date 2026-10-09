@@ -85,8 +85,49 @@
     />
   {/if}
 
+  {#snippet headerActions()}
+    {#if onReply}
+      <button
+        type="button"
+        onclick={() => onReply(message)}
+        class="mx-0.5 opacity-0 transition-opacity group-hover:opacity-70 hover:!opacity-100"
+        title={replyTitle}
+      >
+        <ReplyIcon class="h-3.5 w-3.5" />
+      </button>
+    {/if}
+    {#if onDelete}
+      <button
+        type="button"
+        data-testid="chat-message-delete"
+        onclick={() => onDelete(message)}
+        class="mx-0.5 text-error opacity-0 transition-opacity group-hover:opacity-70 hover:!opacity-100"
+        title={deleteTitle}
+      >
+        <TrashIcon class="h-3.5 w-3.5" />
+      </button>
+    {/if}
+    {#if onCopyLink}
+      <button
+        type="button"
+        onclick={() => onCopyLink(message)}
+        class="mx-0.5 opacity-0 transition-opacity group-hover:opacity-70 hover:!opacity-100"
+        title={copyLinkTitle}
+        data-testid="message-copy-link"
+      >
+        <LinkIcon class_="h-3.5 w-3.5" />
+      </button>
+    {/if}
+  {/snippet}
+
+  <!-- The hover-reveal actions are hidden with opacity, so they always reserve
+       their width. They sit on the INNER side of the timestamp (left of it on
+       own, right-aligned messages) so the time hugs the bubble edge while idle
+       and nothing shifts on hover. -->
   <div class="chat-header mb-1 flex items-center gap-1 text-xs opacity-70">
-    {#if !isOwnMessage}
+    {#if isOwnMessage}
+      {@render headerActions()}
+    {:else}
       {#if linkProfile}
         <a href={resolve(profileLink(message.pubkey))} class="font-semibold hover:underline"
           >{displayName}</a
@@ -100,37 +141,8 @@
     <time datetime={new Date(message.created_at * 1000).toISOString()}>
       {timestamp}
     </time>
-    {#if onReply}
-      <button
-        type="button"
-        onclick={() => onReply(message)}
-        class="ml-1 opacity-0 transition-opacity group-hover:opacity-70 hover:!opacity-100"
-        title={replyTitle}
-      >
-        <ReplyIcon class="h-3.5 w-3.5" />
-      </button>
-    {/if}
-    {#if onDelete}
-      <button
-        type="button"
-        data-testid="chat-message-delete"
-        onclick={() => onDelete(message)}
-        class="ml-1 text-error opacity-0 transition-opacity group-hover:opacity-70 hover:!opacity-100"
-        title={deleteTitle}
-      >
-        <TrashIcon class="h-3.5 w-3.5" />
-      </button>
-    {/if}
-    {#if onCopyLink}
-      <button
-        type="button"
-        onclick={() => onCopyLink(message)}
-        class="ml-1 opacity-0 transition-opacity group-hover:opacity-70 hover:!opacity-100"
-        title={copyLinkTitle}
-        data-testid="message-copy-link"
-      >
-        <LinkIcon class_="h-3.5 w-3.5" />
-      </button>
+    {#if !isOwnMessage}
+      {@render headerActions()}
     {/if}
   </div>
 
