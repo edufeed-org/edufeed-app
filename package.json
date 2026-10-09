@@ -21,11 +21,9 @@
     "test:component": "vitest run --environment jsdom",
     "test:e2e": "playwright test",
     "machine-translate": "inlang machine translate --project project.inlang",
-    "publish:vocabs": "node scripts/publish-edufeed-vocabs.mjs",
     "generate:emoji": "node scripts/generate-emoji-data.mjs",
     "publish:forms": "node scripts/publish-edufeed-forms.mjs",
-    "publish:webxdc-app": "node scripts/publish-webxdc-app.mjs",
-    "cleanup:legacy-vocab": "node scripts/delete-legacy-concept-kinds.mjs"
+    "publish:webxdc-app": "node scripts/publish-webxdc-app.mjs"
   },
   "devDependencies": {
     "@djot/djot": "^0.3.2",
@@ -113,7 +111,6 @@
     "nostr-idb": "^5.0.0",
     "nostr-tools": "^2.24.1",
     "nostr-vocab-core": "https://git.edufeed.org/api/packages/edufeed/npm/nostr-vocab-core/-/0.2.3/nostr-vocab-core-0.2.3.tgz",
-    "nostr-vocab-skos-import": "https://git.edufeed.org/api/packages/edufeed/npm/nostr-vocab-skos-import/-/0.2.4/nostr-vocab-skos-import-0.2.4.tgz",
     "pdfjs-dist": "4.10.38",
     "sharp": "^0.34.5",
     "smol-toml": "^1.8.0",

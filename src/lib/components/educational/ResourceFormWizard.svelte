@@ -567,8 +567,10 @@
   // EKW keyword typeahead: pull the published kind-39738 concepts off the
   // relay and project them to a flat, German-locale-sorted, dedup'd label
   // list. Replaces the static `EKW_KEYWORD_SUGGESTIONS` data file — the
-  // suggestion list is now sourced from the same NIP-VOCAB scheme published
-  // by `pnpm run publish:vocabs`.
+  // suggestion list is now sourced from the same NIP-VOCAB scheme.
+  // Vocabularies are published from the `edufeed/vocabs` repo
+  // (`pnpm plan` / `pnpm apply`); edufeed-app only consumes them via
+  // `SCHEME_NADDR_*`.
   const getEkwKeywordsConcepts = useSchemeConcepts(
     () => ekwKeywordsField?.vocab?.address,
     () =>

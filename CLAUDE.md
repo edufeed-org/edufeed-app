@@ -265,7 +265,7 @@ async function handleClick() {
 | 31925 | NIP-52     | Calendar RSVP                                                                                         |
 | 33301 | CORD-05    | Concord invite bundle                                                                                 |
 | 39701 | NIP-B0     | Web bookmark (social bookmarks)                                                                       |
-| 39737 | NIP-VOCAB  | SKOS ConceptScheme (vocabularies for resource forms, published via `pnpm run publish:vocabs`)         |
+| 39737 | NIP-VOCAB  | SKOS ConceptScheme (vocabularies for resource forms; published from the `edufeed/vocabs` repo)        |
 
 ### Regular Kinds
 

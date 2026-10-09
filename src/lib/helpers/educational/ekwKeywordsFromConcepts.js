@@ -3,8 +3,9 @@
  * deduplicated label list for the EKW step-4 keyword typeahead.
  *
  * Replaces the static `EKW_KEYWORD_SUGGESTIONS` array — the same labels are now
- * sourced from the `ekw-keywords` ConceptScheme published by
- * `pnpm run publish:vocabs`. Per the design spec (decisions Q3a/Q4a in
+ * sourced from the `ekw-keywords` ConceptScheme. Vocabularies are published
+ * from the `edufeed/vocabs` repo (`pnpm plan` / `pnpm apply`); edufeed-app
+ * only consumes them via `SCHEME_NADDR_*`. Per the design spec (decisions Q3a/Q4a in
  * docs/superpowers/specs/2026-05-04-ekw-step4-lrt-keywords-design.md), the
  * suggestion list informs but does not constrain — free-text keywords still
  * round-trip verbatim, so a Concept event without a German prefLabel is
