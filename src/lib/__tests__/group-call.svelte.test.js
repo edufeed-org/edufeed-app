@@ -9,6 +9,7 @@
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { flushSync } from 'svelte';
+import { channelKey } from '$lib/groups/community-pointer.js';
 
 const requestGroupCallToken = vi.fn();
 const moderateCall = vi.fn();
@@ -31,7 +32,7 @@ const lkListener = { cb: /** @type {((reason: any) => void) | null} */ (null) };
 const lkState = { localParticipant: /** @type {{metadata?: string} | null} */ (null) };
 const lkMedia = { audio: false, video: false };
 vi.mock('$lib/services/livekit-connection.svelte.js', () => ({
-  disconnectFromRoom: () => disconnectFromRoom(),
+  disconnectFromRoom: (/** @type {any[]} */ ...args) => disconnectFromRoom(...args),
   connectToRoom: (/** @type {any[]} */ ...args) => connectToRoom(...args),
   currentJoinMedia: () => ({ ...lkMedia }),
   getLiveKitState: () => lkState,
@@ -90,6 +91,8 @@ const {
 const RELAY = 'wss://groups.example/';
 const P1 = { id: 'room-1', relay: RELAY };
 const P2 = { id: 'room-2', relay: RELAY };
+const CHAT1 = channelKey(P1);
+const CHAT2 = channelKey(P2);
 const USER = { pubkey: 'a'.repeat(64), signer: { signEvent: vi.fn() } };
 
 beforeEach(async () => {
@@ -179,7 +182,7 @@ describe('connection ownership', () => {
     requestGroupCallToken.mockResolvedValue({ serverUrl: 'wss://lk', participantToken: 'jwt' });
     await joinGroupCall(P1, USER);
     expect(connectToRoom).toHaveBeenCalledTimes(1);
-    expect(connectToRoom).toHaveBeenCalledWith('jwt', 'wss://lk', {});
+    expect(connectToRoom).toHaveBeenCalledWith('jwt', 'wss://lk', { chatKey: CHAT1 });
   });
 
   // `phase` flips to 'ready' as soon as the TOKEN is in, before LiveKit has
@@ -339,7 +342,11 @@ describe('joinGroupCallWithConfirm — the pre-join lobby', () => {
     expect(confirmCallJoin.mock.invocationCallOrder[0]).toBeLessThan(
       requestGroupCallToken.mock.invocationCallOrder[0]
     );
-    expect(connectToRoom).toHaveBeenCalledWith('t', 'wss://x', { audio: true, video: true });
+    expect(connectToRoom).toHaveBeenCalledWith('t', 'wss://x', {
+      audio: true,
+      video: true,
+      chatKey: CHAT1
+    });
   });
 
   it('a cancelled lobby requests no token and leaves the store idle', async () => {
@@ -364,7 +371,11 @@ describe('joinGroupCallWithConfirm — the pre-join lobby', () => {
     confirmCallJoin.mockClear();
     await joinGroupCallWithConfirm(P1, USER);
     expect(confirmCallJoin).not.toHaveBeenCalled();
-    expect(connectToRoom).toHaveBeenCalledWith('t', 'wss://x', { audio: true, video: false });
+    expect(connectToRoom).toHaveBeenCalledWith('t', 'wss://x', {
+      audio: true,
+      video: false,
+      chatKey: CHAT1
+    });
   });
 
   it('asks the lobby after the switch confirm, not before it', async () => {
@@ -380,10 +391,14 @@ describe('joinGroupCall media', () => {
   it('connects with the media the caller passes, muted and camera off by default', async () => {
     requestGroupCallToken.mockResolvedValue({ serverUrl: 'wss://x', participantToken: 't' });
     await joinGroupCall(P1, USER, { media: { audio: true, video: false } });
-    expect(connectToRoom).toHaveBeenCalledWith('t', 'wss://x', { audio: true, video: false });
+    expect(connectToRoom).toHaveBeenCalledWith('t', 'wss://x', {
+      audio: true,
+      video: false,
+      chatKey: CHAT1
+    });
     await leaveGroupCall();
     await joinGroupCall(P1, USER);
-    expect(connectToRoom).toHaveBeenLastCalledWith('t', 'wss://x', {});
+    expect(connectToRoom).toHaveBeenLastCalledWith('t', 'wss://x', { chatKey: CHAT1 });
   });
 });
 
@@ -746,12 +761,37 @@ describe('switchGroupCall (breakout rooms)', () => {
     expect(requestGroupCallToken).toHaveBeenLastCalledWith(RELAY, 'room-2', USER, {
       code: undefined
     });
-    expect(connectToRoom).toHaveBeenCalledWith('t', 'wss://x', { audio: true, video: true });
+    expect(connectToRoom).toHaveBeenCalledWith('t', 'wss://x', {
+      audio: true,
+      video: true,
+      chatKey: CHAT2
+    });
     expect(s.isActiveFor(P2)).toBe(true);
     expect(s.phase).toBe('ready');
     expect(s.title).toBe('Breakout 1 · Main');
     // the way back stays the page the main call was shown on
     expect(s.href).toBe('/c/x');
+  });
+
+  it('a switch sets the chat of the room left aside and names the room joined; a plain join or leave forgets it', async () => {
+    requestGroupCallToken.mockResolvedValue({ serverUrl: 'wss://x', participantToken: 't' });
+    await joinGroupCall(P1, USER, { title: 'Main' });
+    expect(connectToRoom).toHaveBeenLastCalledWith('t', 'wss://x', { chatKey: CHAT1 });
+    disconnectFromRoom.mockClear();
+    await switchGroupCall(P2, { title: 'Breakout 1' });
+    expect(disconnectFromRoom).toHaveBeenCalledTimes(1);
+    expect(disconnectFromRoom).toHaveBeenLastCalledWith({ keepChat: true });
+    expect(connectToRoom).toHaveBeenLastCalledWith('t', 'wss://x', {
+      audio: false,
+      video: false,
+      chatKey: CHAT2
+    });
+    // a plain join elsewhere leaves the call first, chat and all
+    disconnectFromRoom.mockClear();
+    await joinGroupCall(P1, USER, { title: 'Main' });
+    expect(disconnectFromRoom).toHaveBeenLastCalledWith({ keepChat: false });
+    await leaveGroupCall();
+    expect(disconnectFromRoom).toHaveBeenLastCalledWith({ keepChat: false });
   });
 
   it('does nothing without a live call to move', async () => {

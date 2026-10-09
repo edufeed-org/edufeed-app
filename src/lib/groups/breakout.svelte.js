@@ -322,16 +322,21 @@ function holdsHostSeat() {
 }
 
 /**
- * Whether OUR seat is a guest seat: the relay says so in the participant
- * metadata (`{"guest":true}`), and while no Room is up yet the call pass
- * code the call was joined with is the best guess (group-call.svelte.js
+ * Whether OUR seat is a guest seat. The relay decides, not the link: a
+ * member who opened a guest link gets a member token (the code is ignored
+ * for members, docs/nips/nip29-call-passes.md) and only a guest token
+ * carries `{"guest":true}` in the participant metadata — so while a seat
+ * is up, its metadata is the answer, whatever code the call was joined
+ * with. Only while no Room is up (the token in flight, a room the relay
+ * tore down) is the call pass code the best guess (group-call.svelte.js
  * keeps it). Reactive inside an effect.
  */
 function seatIsGuest() {
   if (lkReady && lkModule) {
     const lk = lkModule.getLiveKitState();
     void lk.participantMetadataVersion;
-    if (isGuestParticipant(lk.localParticipant)) return true;
+    const local = lk.localParticipant;
+    if (local) return isGuestParticipant(local);
   }
   return !!getGroupCallState().code;
 }

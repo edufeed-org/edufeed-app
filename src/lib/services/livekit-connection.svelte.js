@@ -226,6 +226,29 @@ let arrivedAt = new Map();
  */
 /** @type {CallChatMessage[]} */
 let callChat = $state.raw([]);
+/**
+ * Which room the chat belongs to (`connectToRoom`'s `chatKey`: the channel
+ * or breakout room), and the chats of the rooms left for a breakout switch
+ * (`disconnectFromRoom({keepChat: true})`), restored on the way back into
+ * the same room. Every room's chat is forgotten when the call is left for
+ * good. Plain bookkeeping, never rendered.
+ * @type {string | null}
+ */
+let chatKey = null;
+/** @type {Map<string, CallChatMessage[]>} */
+// eslint-disable-next-line svelte/prefer-svelte-reactivity -- bookkeeping, never rendered
+let stashedChats = new Map();
+/**
+ * What this seat last had on air while connected: a breakout switch keeps
+ * mic and camera as they were, and the way back out of a room the relay
+ * tore down (LiveKit ends the seat BEFORE the client moves) must still
+ * know. Plain bookkeeping; reset when the call is left.
+ */
+let liveMedia = { audio: false, video: false };
+
+function noteLiveMedia() {
+  liveMedia = { audio: isConnected && !isMuted, video: isConnected && !isCameraOff };
+}
 
 /**
  * Listen for disconnects NOT initiated by disconnectFromRoom(). One listener
@@ -285,11 +308,14 @@ export async function sendBreakoutMessage(payload, destinationIdentities) {
 
 /**
  * What a re-join elsewhere should open with to keep the current mic and
- * camera state (a breakout switch skips the lobby).
+ * camera state (a breakout switch skips the lobby). Once the seat is gone
+ * (the relay deleted the breakout room, the host took us out of it) it is
+ * the state the seat had last while it was live.
  * @returns {{audio: boolean, video: boolean}}
  */
 export function currentJoinMedia() {
-  return { audio: isConnected && !isMuted, video: isConnected && !isCameraOff };
+  if (isConnected) return { audio: !isMuted, video: !isCameraOff };
+  return { ...liveMedia };
 }
 
 /**
@@ -745,9 +771,9 @@ async function handleFileStream(reader, { identity }) {
   }
 }
 
-/** Object URLs are memory: drop them with the chat. */
-function revokeFileUrls() {
-  for (const c of callChat) {
+/** Object URLs are memory: drop them with the chat. @param {CallChatMessage[]} chat */
+function revokeFileUrls(chat) {
+  for (const c of chat) {
     if (c.file?.url) {
       try {
         URL.revokeObjectURL(c.file.url);
@@ -850,9 +876,11 @@ function followServerMute(target, publication) {
   switch (publication?.source) {
     case Track.Source.Microphone:
       isMuted = true;
+      noteLiveMedia();
       break;
     case Track.Source.Camera:
       isCameraOff = true;
+      noteLiveMedia();
       break;
     case Track.Source.ScreenShare:
       if (isScreenSharing) {
@@ -1026,14 +1054,22 @@ function handleDeviceChange() {
  * the opt-in.
  * @param {string} token - JWT token from the relay's token endpoint
  * @param {string} url - LiveKit server WebSocket URL
- * @param {{ video?: boolean, audio?: boolean }} [opts] publish camera / mic right away
+ * @param {{ video?: boolean, audio?: boolean, chatKey?: string }} [opts] publish camera / mic
+ *   right away; `chatKey` names the room for the chat (see `chatKey` above)
  */
 export async function connectToRoom(token, url, opts = {}) {
   // Force clean up any stale state from a previous session
   if (isConnecting || isConnected || room) {
     isConnecting = false;
-    await disconnectFromRoom();
+    await disconnectFromRoom({ keepChat: true });
   }
+
+  // The chat of this room, if it was set aside for a breakout switch —
+  // taken back before the connect, so a replay arriving with the join lands
+  // on top of it (and is deduped by id).
+  chatKey = typeof opts.chatKey === 'string' && opts.chatKey ? opts.chatKey : null;
+  callChat = (chatKey && stashedChats.get(chatKey)) || [];
+  if (chatKey) stashedChats.delete(chatKey);
 
   isConnecting = true;
   disconnectReason = null;
@@ -1194,6 +1230,7 @@ export async function connectToRoom(token, url, opts = {}) {
       }
       if (!isCameraOff) await applyBackgroundSafely();
     }
+    noteLiveMedia();
 
     // Initialize devices after connection
     await refreshAudioDevices();
@@ -1235,9 +1272,12 @@ function dropDeadRoom() {
 }
 
 /**
- * Disconnect from the current room.
+ * Disconnect from the current room. `keepChat`: a breakout switch — the
+ * room's chat is set aside for the way back into it (see `chatKey`);
+ * without it the call is over and every room's chat is forgotten.
+ * @param {{keepChat?: boolean}} [opts]
  */
-export async function disconnectFromRoom() {
+export async function disconnectFromRoom(opts = {}) {
   // Remove device change listener
   if (typeof navigator !== 'undefined' && navigator.mediaDevices) {
     navigator.mediaDevices.removeEventListener('devicechange', handleDeviceChange);
@@ -1266,7 +1306,16 @@ export async function disconnectFromRoom() {
   // eslint-disable-next-line svelte/prefer-svelte-reactivity -- built fresh, then assigned whole to a $state.raw
   mutedIdentities = new Set();
   reactions = [];
-  revokeFileUrls();
+  if (opts.keepChat === true) {
+    if (chatKey) stashedChats.set(chatKey, callChat);
+  } else {
+    revokeFileUrls(callChat);
+    for (const chat of stashedChats.values()) revokeFileUrls(chat);
+    // eslint-disable-next-line svelte/prefer-svelte-reactivity -- bookkeeping, never rendered
+    stashedChats = new Map();
+    liveMedia = { audio: false, video: false };
+  }
+  chatKey = null;
   callChat = [];
   resetCallChatUnread();
   speakingParticipantIds = new SvelteSet();
@@ -1297,6 +1346,7 @@ export async function toggleMute() {
     isMuted = true;
     playMuteSound();
   }
+  noteLiveMedia();
 }
 
 /**
@@ -1312,6 +1362,7 @@ export async function toggleCamera() {
     await room.localParticipant.setCameraEnabled(false);
     isCameraOff = true;
   }
+  noteLiveMedia();
 }
 
 /**

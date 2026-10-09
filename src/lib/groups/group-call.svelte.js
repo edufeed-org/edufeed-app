@@ -163,17 +163,19 @@ export function getGroupCallState() {
  * back); re-joining after an error retries. Joins muted, camera off.
  * @param {{id: string, relay: string}} pointer
  * @param {{pubkey: string, signer: any}} user
- * @param {{title?: string, href?: string | null, code?: string, media?: import('$lib/services/call-prefs.js').JoinMedia, token?: {serverUrl: string, participantToken: string}}} [view]
+ * @param {{title?: string, href?: string | null, code?: string, media?: import('$lib/services/call-prefs.js').JoinMedia, token?: {serverUrl: string, participantToken: string}, keepChat?: boolean}} [view]
  *   for the dock; `media`: publish camera / mic right away (the lobby's
  *   choice) — without it the call opens muted with the camera off;
  *   `token`: a token the caller already holds (a guest's breakout switch
  *   requests the child's token BEFORE leaving the main room, so it can
- *   announce its new identity there) — no request is made then
+ *   announce its new identity there) — no request is made then;
+ *   `keepChat`: a breakout switch — the call chat of the channel left is
+ *   kept for the way back (a plain join elsewhere forgets it with the call)
  */
 export async function joinGroupCall(pointer, user, view = {}) {
   const key = channelKey(pointer);
   if (!key || !user?.signer) return;
-  if (activeKey && activeKey !== key) await leaveGroupCall();
+  if (activeKey && activeKey !== key) await endCall({ keepChat: view.keepChat === true });
   stageHidden = false;
   if (activeKey === key && (phase === 'ready' || phase === 'requesting')) return;
 
@@ -213,7 +215,12 @@ export async function joinGroupCall(pointer, user, view = {}) {
       phase = 'ended';
       endReason = lk.isRemovalReason(reason) ? 'removed' : 'dropped';
     });
-    await lk.connectToRoom(result.participantToken, result.serverUrl, view.media ?? {});
+    // The chat is kept per room (chatKey): a breakout switch sets the
+    // channel's aside and takes it back on return.
+    await lk.connectToRoom(result.participantToken, result.serverUrl, {
+      ...(view.media ?? {}),
+      chatKey: key
+    });
     // Left (or moved on) while the handshake ran: leaveGroupCall's
     // disconnect raced the connect, so tear the fresh Room down again.
     if (myAttempt !== attempt) {
@@ -275,8 +282,9 @@ export async function joinGroupCallWithConfirm(pointer, user, view = {}) {
 /**
  * Move the live call to another channel WITHOUT the lobby — a breakout
  * switch (groups/breakout.svelte.js): the seat keeps its mic / camera state
- * (the background effect is re-read from prefs on connect anyway) and the
- * dock's way back stays the page the main call was shown on. No-op without
+ * (the background effect is re-read from prefs on connect anyway), the
+ * call chat of the room left is set aside for the way back into it, and
+ * the dock's way back stays the page the main call was shown on. No-op without
  * a live call; the signer is the one that joined. A guest seat keeps its
  * call pass code: the token request for the room carries the same `code`
  * tag (the relay honours a parent's pass in its ephemeral children), and
@@ -298,6 +306,7 @@ export async function switchGroupCall(pointer, view = {}) {
     title: view.title ?? '',
     href: keepHref,
     media,
+    keepChat: true,
     ...(keepCode ? { code: keepCode } : {}),
     ...(view.token ? { token: view.token } : {})
   });
@@ -348,8 +357,22 @@ export function showCallStage() {
   stageHidden = false;
 }
 
-/** Reset to idle and make sure no Room is left connected. */
+/**
+ * Reset to idle and make sure no Room is left connected. The call is over:
+ * its chat goes with it. (Zero-arg on purpose — it is wired to buttons as
+ * is.)
+ */
 export async function leaveGroupCall() {
+  await endCall({ keepChat: false });
+}
+
+/**
+ * Leave the current Room. `keepChat`: a breakout switch leaves this room
+ * for another of the same call — its chat is set aside, not forgotten
+ * (livekit-connection `disconnectFromRoom`).
+ * @param {{keepChat: boolean}} opts
+ */
+async function endCall({ keepChat }) {
   attempt++;
   const wasActive = activeKey !== null;
   activeKey = null;
@@ -370,7 +393,7 @@ export async function leaveGroupCall() {
   stageHidden = false;
   if (wasActive) {
     const { disconnectFromRoom } = await import('$lib/services/livekit-connection.svelte.js');
-    await disconnectFromRoom();
+    await disconnectFromRoom({ keepChat });
   }
 }
 
