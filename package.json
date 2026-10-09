@@ -1,4 +1,5 @@
 {
+  "license": "AGPL-3.0-only",
   "name": "edufeed-app",
   "private": true,
   "version": "0.5.1",
