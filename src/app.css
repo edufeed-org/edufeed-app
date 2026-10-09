@@ -291,6 +291,13 @@ body {
   --c-cta-ink: var(--color-accent-content);
   --c-rule: color-mix(in oklch, var(--color-base-content) 16%, transparent);
   --c-on-dark: var(--color-base-100);
+  /* The call stage ("Bühne", design 1d): a dark room the video sits in, no
+     matter which light theme the deployment runs. --c-stage is the floor,
+     --c-stage-2 the floating chrome (dock, pills), --c-on-stage the text on
+     both. Accents (primary/secondary/accent) stay the active theme's. */
+  --c-stage: oklch(17% 0.012 80);
+  --c-stage-2: oklch(26% 0.012 80);
+  --c-on-stage: oklch(96% 0.008 80);
   --font-display: 'Twemoji Country Flags', 'Outfit Variable', 'Outfit', ui-sans-serif, system-ui,
     sans-serif;
   --font-script: 'Twemoji Country Flags', 'Caveat Variable', 'Caveat', cursive;
@@ -331,6 +338,9 @@ body {
   --c-cta-ink: var(--color-accent-content);
   --c-rule: #ebebeb; /* tfk-light-grey */
   --c-on-dark: var(--color-base-100);
+  --c-stage: oklch(18% 0.01 250);
+  --c-stage-2: oklch(27% 0.01 250);
+  --c-on-stage: oklch(96% 0 0);
   --font-sans: 'Twemoji Country Flags', 'Open Sans Variable', 'Open Sans', ui-sans-serif, system-ui,
     sans-serif;
   --font-display: 'Twemoji Country Flags', 'Open Sans Variable', 'Open Sans', ui-sans-serif,
@@ -412,4 +422,28 @@ body {
   text-align: left;
   cursor: pointer;
   background-image: none;
+}
+
+/* ── Call stage scope ────────────────────────────────────────────────────
+   `.call-stage` re-points the DaisyUI base tokens for its subtree at the
+   stage aliases, so every `bg-base-*` / `text-base-content` / `btn-ghost` /
+   `menu` inside the in-call UI renders on the dark room without a theme
+   switch (color mode stays light app-wide; stil/rpi keep their accents).
+   `.call-stage-paper` restores the page's paper inside that scope: the
+   drawers (participants, chat) float as light cards on the dark stage. The
+   :root aliases were resolved at :root, so they still carry the light
+   values here. */
+.call-stage {
+  --color-base-100: var(--c-stage-2);
+  --color-base-200: var(--c-stage);
+  --color-base-300: color-mix(in oklch, var(--c-on-stage) 18%, var(--c-stage-2));
+  --color-base-content: var(--c-on-stage);
+  color-scheme: dark;
+}
+.call-stage-paper {
+  --color-base-100: var(--c-paper);
+  --color-base-200: var(--c-bg);
+  --color-base-300: color-mix(in oklch, var(--c-ink) 14%, var(--c-paper));
+  --color-base-content: var(--c-ink);
+  color-scheme: light;
 }

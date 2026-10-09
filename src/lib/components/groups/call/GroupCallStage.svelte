@@ -110,8 +110,11 @@
     GridIcon,
     ChevronLeftIcon,
     ChevronRightIcon,
-    ClockIcon
+    ClockIcon,
+    CallEndIcon,
+    CloseIcon
   } from '$lib/components/icons';
+  import { createCallIdle } from '$lib/groups/call-idle.svelte.js';
   import ParticipantTile from './ParticipantTile.svelte';
   import CallHostActions from './CallHostActions.svelte';
   import ScreenShareTile from './ScreenShareTile.svelte';
@@ -131,9 +134,15 @@
    *   onPopOut?: () => void,
    *   onPopIn?: () => void,
    *   onInvite?: () => void,
+   *   onBack?: () => void,
+   *   onHideChat?: () => void,
    *   registerView?: () => () => void
    * }}
    * `chatOpen`: the chat sits beside the stage (wide screens);
+   * `onHideChat`: folds that chat column away — the stage asks for it when
+   * its own drawer opens, so only one drawer stands beside the tiles;
+   * `onBack`: the channel pane's way back to the channel list, carried in
+   * the title pill while the channel header is off screen;
    * `onPopOut`: offered where the call can move to its own window;
    * `onPopIn`: this stage IS that window — the way back to the tab.
    * `onInvite`: offered when the parent has resolved guest links are
@@ -149,6 +158,8 @@
     onPopOut = undefined,
     onPopIn = undefined,
     onInvite = undefined,
+    onBack = undefined,
+    onHideChat = undefined,
     registerView = undefined
   } = $props();
 
@@ -633,6 +644,21 @@
   // order, so the list and the grid agree on who comes first.
   const ParticipantsPanelLazy = lazyComponent(() => import('./CallParticipantsPanel.svelte'));
   let participantsOpen = $state(false);
+  // One drawer beside the tiles: opening this one folds the chat column
+  // away, and the chat column opening closes this one.
+  $effect(() => {
+    if (chatOpen) participantsOpen = false;
+  });
+  function toggleParticipants() {
+    // Opens the drawer on the participant list; closes it from there.
+    if (participantsOpen && columnTab === 'participants') {
+      participantsOpen = false;
+      return;
+    }
+    participantsOpen = true;
+    columnTab = 'participants';
+    if (chatOpen) onHideChat?.();
+  }
   const participantCount = $derived(baseSeats.length);
   const participantRows = $derived(
     seats.map((seat) => {
@@ -729,8 +755,6 @@
   // focus-open must not close it again.
   let handsOpen = $state(false);
   let handsOpenedAt = 0;
-  /** @type {HTMLButtonElement | undefined} */
-  let handsPillEl = $state(undefined);
   function showHands() {
     if (handsOpen) return;
     handsOpen = true;
@@ -757,9 +781,9 @@
   }
 
   // --- Menus (one open at a time; outside click / Escape closes) ---
-  /** @type {'mic' | 'camera' | 'screen' | 'react' | 'layout' | null} */
+  /** @type {'mic' | 'camera' | 'screen' | 'react' | 'layout' | 'more' | null} */
   let openMenu = $state(null);
-  /** @param {'mic' | 'camera' | 'screen' | 'react' | 'layout'} name */
+  /** @param {'mic' | 'camera' | 'screen' | 'react' | 'layout' | 'more'} name */
   function toggleMenu(name) {
     if (openMenu === name) {
       openMenu = null;
@@ -889,6 +913,61 @@
     sendReaction(emoji);
     openMenu = null;
   }
+
+  // --- Title pill: how long this seat has been in the call. The connection
+  // service stamps its own join, so a remounted stage (channel switch,
+  // pop-out) keeps counting. Ticks on the stage's own window.
+  let now = $state(Date.now());
+  $effect(() => {
+    if (!lk.isConnected) return;
+    const win = rootEl?.ownerDocument.defaultView ?? globalThis;
+    const id = win.setInterval(() => (now = Date.now()), 1000);
+    return () => win.clearInterval(id);
+  });
+  const elapsed = $derived(
+    lk.isConnected && lk.joinedAt ? formatCountdown((now - lk.joinedAt) / 1000) : ''
+  );
+
+  // --- Chrome autohide (design 2b): the title row and the dock step back
+  // after a few seconds without input; anything the user is in the middle
+  // of (a menu, a drawer, the pointer on the dock, a focus in it) and any
+  // state they must see (connecting, reconnecting) holds them up. The
+  // status row is never hidden at all.
+  const idleCtl = createCallIdle();
+  $effect(() => {
+    const node = rootEl;
+    if (!node) return;
+    return idleCtl.attach(node);
+  });
+  let dockHover = $state(false);
+  let dockFocus = $state(false);
+  /** @param {PointerEvent} event @param {boolean} enter */
+  function hoverDock(event, enter) {
+    if (event.pointerType && event.pointerType !== 'mouse') return;
+    dockHover = enter;
+  }
+  const chromeBlocked = $derived(
+    openMenu !== null ||
+      participantsOpen ||
+      chatOpen ||
+      handsOpen ||
+      breakoutDialogOpen ||
+      removeTarget !== null ||
+      dockHover ||
+      dockFocus ||
+      !lk.isConnected ||
+      lk.connectionState === 'reconnecting'
+  );
+  $effect(() => {
+    idleCtl.setBlocked(chromeBlocked);
+  });
+  const chromeHidden = $derived(idleCtl.idle);
+  const statusRow = $derived(
+    lk.connectionState === 'reconnecting' ||
+      breakout.currentRoom !== null ||
+      (hostsBreakout && breakout.remaining !== null) ||
+      showBreakoutBanner
+  );
 </script>
 
 {#snippet item(/** @type {any} */ it, /** @type {boolean} */ compact)}
@@ -940,269 +1019,32 @@
 {/snippet}
 
 <!-- The stage IS the channel body while the call is open (same rule as
-     GroupAppStage): a flex column handing its full height to the grid. -->
+     GroupAppStage): a dark room — the "Bühne" of design 1d — that the tiles
+     fill, with the chrome floating over it: a title pill top left, status
+     pills under it, the dock along the bottom, and one drawer beside the
+     tiles. `call-stage` (app.css) re-points the base tokens for this
+     subtree, so every DaisyUI class in here renders dark without a theme
+     switch; `call-stage-paper` on a drawer brings the page's paper back. -->
 <!-- A size container: beside the chat column the stage is narrow even in a
-  wide window, so the header's labels answer to the STAGE's width (@lg:),
-  not the viewport's (laoc, 2026-10-02: the button row widened the page). -->
+  wide window, so the layout answers to the STAGE's width (@2xl: drawer
+  beside the tiles), not the viewport's. -->
 <!-- cursor-default + select-none for the whole stage: every badge, name and
   label in here is decoration (laoc 2026-10-03: the I-beam over the Gast
   pill). Buttons and links bring their own pointer; seats in the grid the
   grab cursor (they can be dragged). The cursor inherits, so this one place
   covers ParticipantTile and ScreenShareTile too. -->
+<!-- data-idle: the title pill and the dock have stepped back (call-idle);
+  the status row and the drawers never do. -->
 <div
   bind:this={rootEl}
-  class="@container flex min-h-0 min-w-0 flex-1 cursor-default flex-col select-none"
+  class="call-stage @container relative flex min-h-0 min-w-0 flex-1 cursor-default flex-col bg-base-200 text-base-content select-none"
   data-testid="group-call-stage"
+  data-idle={chromeHidden ? 'true' : undefined}
 >
-  <!-- Header -->
-  <!-- Tighter below the stage's @lg so the title keeps its letters (QA K4).
-    The buttons' labels wait for @2xl: the labelled row is ~600 px wide and
-    the right group cannot shrink, so from @lg (512) to there it ran past the
-    stage's edge — under the chat column's tabs on the member page at ~1270
-    px (laoc, 2026-10-08). -->
-  <div
-    class="relative flex items-center justify-between gap-1.5 border-b border-base-300 px-3 py-2 @lg:gap-2 @lg:px-4"
-  >
-    <div class="flex min-w-0 flex-1 items-center gap-1.5 overflow-hidden @lg:gap-2">
-      <MeetIcon class_="w-5 h-5 shrink-0 text-primary" />
-      <h2 class="min-w-0 flex-1 truncate font-semibold">{title}</h2>
-      {#if !lk.canPublish}
-        <span class="badge shrink-0 badge-ghost badge-sm" data-testid="group-call-listen-only">
-          {m.groups_call_listen_only()}
-        </span>
-      {/if}
-      {#if myRole && !inBreakoutRoom}
-        <span
-          class="badge shrink-0 badge-sm badge-primary"
-          data-testid="group-call-my-role"
-          data-role={myRole}
-        >
-          {myRole === 'host' ? m.groups_call_you_are_host() : m.groups_call_you_are_cohost()}
-        </span>
-      {/if}
-      {#if breakout.currentRoom}
-        <span
-          class="badge shrink-0 gap-1 badge-sm tabular-nums badge-accent"
-          data-testid="group-call-breakout-room"
-        >
-          {m.groups_call_breakout_in_room({ n: breakout.currentRoom.index })}
-          {#if breakout.remaining !== null}
-            · {formatCountdown(breakout.remaining)}
-          {/if}
-        </span>
-      {:else if hostsBreakout && breakout.remaining !== null}
-        <button
-          type="button"
-          class="badge shrink-0 cursor-pointer gap-1 badge-sm tabular-nums badge-accent"
-          onclick={() => {
-            participantsOpen = true;
-            columnTab = 'breakout';
-          }}
-          data-testid="group-call-breakout-deadline"
-        >
-          <ClockIcon class_="h-3 w-3" title="" />
-          {m.groups_call_breakout_time_left({ time: formatCountdown(breakout.remaining) })}
-        </button>
-      {/if}
-      {#if handCount > 0}
-        <button
-          bind:this={handsPillEl}
-          type="button"
-          class="badge shrink-0 cursor-pointer gap-1 badge-sm badge-warning select-none"
-          aria-expanded={handsOpen}
-          aria-controls={handsOpen ? 'group-call-hands-list' : undefined}
-          aria-label={`${m.groups_call_hands_raised({ count: handCount })}: ${m.groups_call_hands_order()}`}
-          data-testid="group-call-hands"
-          onpointerenter={(e) => hoverHands(e, true)}
-          onpointerleave={(e) => hoverHands(e, false)}
-          onfocus={showHands}
-          onblur={hideHands}
-          onclick={tapHands}
-        >
-          <HandIcon class_="h-3 w-3" title="" />
-          {m.groups_call_hands_raised({ count: handCount })}
-        </button>
-      {/if}
-    </div>
-    {#if handsOpen && handCount > 0}
-      <!-- Outside the title row's overflow-hidden, so it is never clipped. -->
-      <div
-        id="group-call-hands-list"
-        class="absolute top-full z-30 mt-1 max-w-64 cursor-default rounded-box bg-base-100 p-2 text-sm shadow-lg select-none"
-        style="left: {Math.max(12, handsPillEl?.offsetLeft ?? 12)}px"
-        data-testid="group-call-hands-list"
-      >
-        <p class="mb-1 text-xs text-base-content/60">{m.groups_call_hands_order()}</p>
-        <ol>
-          {#each handNames as name, i (i)}
-            <li class="truncate">{i + 1}. {name}</li>
-          {/each}
-        </ol>
-      </div>
-    {/if}
-    <div class="flex shrink-0 items-center gap-1 @lg:gap-2">
-      {#if inBreakoutRoom}
-        <button
-          class="btn gap-1 px-2 btn-sm btn-primary @2xl:px-3"
-          onclick={() => void returnToMain()}
-          title={m.groups_call_breakout_back_to_main()}
-          aria-label={m.groups_call_breakout_back_to_main()}
-          data-testid="group-call-breakout-back"
-        >
-          <ChevronLeftIcon class_="h-4 w-4" title="" />
-          <span class="hidden @2xl:inline">{m.groups_call_breakout_back_to_main()}</span>
-        </button>
-      {/if}
-      {#if onInvite}
-        <button
-          class="btn btn-square btn-ghost btn-sm @2xl:w-auto @2xl:px-3"
-          onclick={onInvite}
-          title={m.groups_call_invite_title()}
-          aria-label={m.groups_call_invite_title()}
-          data-testid="group-call-invite"
-        >
-          <LinkIcon class_="h-4 w-4" title="" />
-          <span class="hidden @2xl:inline">{m.groups_call_invite_button()}</span>
-        </button>
-      {/if}
-      {#if onPopOut}
-        <button
-          class="btn btn-square btn-ghost btn-sm"
-          onclick={onPopOut}
-          title={m.groups_call_pop_out()}
-          aria-label={m.groups_call_pop_out()}
-          data-testid="group-call-pop-out"
-        >
-          <ExternalLinkIcon class_="h-4 w-4" title="" />
-        </button>
-      {/if}
-      {#if onPopIn}
-        <button class="btn btn-ghost btn-sm" onclick={onPopIn} data-testid="group-call-pop-in">
-          {m.groups_call_pop_in()}
-        </button>
-      {/if}
-      <button
-        class="btn gap-1 px-2 btn-ghost btn-sm @2xl:px-3 {participantsOpen ? 'btn-active' : ''}"
-        onclick={() => {
-          // Opens the column on the participant list; closes it from there.
-          if (participantsOpen && columnTab === 'participants') participantsOpen = false;
-          else {
-            participantsOpen = true;
-            columnTab = 'participants';
-          }
-        }}
-        aria-pressed={participantsOpen}
-        aria-label={m.groups_call_participants_count({ count: participantCount })}
-        title={m.groups_call_participants_count({ count: participantCount })}
-        data-testid="group-call-show-participants"
-      >
-        <PeopleIcon class_="h-4 w-4" title="" />
-        <span class="hidden @2xl:inline">{m.groups_call_participants()}</span>
-        <span class="tabular-nums">{participantCount}</span>
-      </button>
-      <div class="relative" data-call-menu>
-        <button
-          class="btn px-2 btn-ghost btn-sm @2xl:px-3"
-          aria-haspopup="menu"
-          aria-expanded={openMenu === 'layout'}
-          aria-label={`${m.groups_call_layout()}: ${LAYOUT_LABELS[layout]()}`}
-          title={`${m.groups_call_layout()}: ${LAYOUT_LABELS[layout]()}`}
-          data-testid="group-call-layout"
-          onclick={() => toggleMenu('layout')}
-        >
-          <GridIcon class_="h-4 w-4" title="" />
-          <span class="hidden @2xl:inline">{LAYOUT_LABELS[layout]()}</span>
-        </button>
-        {#if openMenu === 'layout'}
-          <ul
-            class="menu absolute top-full right-0 z-30 mt-1 w-56 rounded-box bg-base-100 p-2 shadow-lg"
-            role="menu"
-            data-testid="group-call-layout-menu"
-          >
-            <li class="menu-title text-xs">{m.groups_call_layout()}</li>
-            {#each CALL_LAYOUTS as l (l)}
-              <li>
-                <button
-                  class="text-sm"
-                  role="menuitemradio"
-                  aria-checked={layout === l}
-                  class:menu-active={layout === l}
-                  onclick={() => pickLayout(l)}
-                >
-                  {LAYOUT_LABELS[l]()}
-                </button>
-              </li>
-            {/each}
-            <li class="mt-1 menu-title text-xs">{m.groups_call_tiles_per_page()}</li>
-            {#each TILE_CAPS as cap (cap)}
-              <li>
-                <button
-                  class="text-sm"
-                  role="menuitemradio"
-                  aria-checked={tileCap === cap}
-                  class:menu-active={tileCap === cap}
-                  onclick={() => pickCap(cap)}
-                >
-                  {cap}
-                </button>
-              </li>
-            {/each}
-          </ul>
-        {/if}
-      </div>
-      {#if onShowChat}
-        <button
-          class="btn relative btn-square btn-ghost btn-sm @2xl:w-auto @2xl:px-3 {chatOpen
-            ? 'btn-active'
-            : ''}"
-          onclick={onShowChat}
-          aria-pressed={chatOpen}
-          aria-label={chatMentionsHere
-            ? `${m.groups_call_show_chat()} – ${m.groups_call_chat_mentions_unread()}`
-            : chatUnreadHere
-              ? `${m.groups_call_show_chat()} – ${m.groups_call_chat_unread()}`
-              : m.groups_call_show_chat()}
-          title={m.groups_call_show_chat()}
-          data-testid="group-call-show-chat"
-        >
-          <ChatIcon class_="h-4 w-4" />
-          <span class="hidden @2xl:inline">{m.groups_call_show_chat()}</span>
-          {#if chatMentionsHere}
-            <span
-              class="absolute -top-1 -right-1 badge h-4 min-w-4 px-1 text-[10px] badge-primary"
-              aria-hidden="true"
-              data-testid="call-chat-mention-badge">{chatUnread.mentions}</span
-            >
-          {:else if chatUnreadHere}
-            <CallUnreadDot class="absolute top-1 right-1" />
-          {/if}
-        </button>
-      {/if}
-      <button class="btn btn-sm btn-error" onclick={handleLeave} data-testid="group-call-leave">
-        {m.groups_call_leave()}
-      </button>
-    </div>
-  </div>
-
   <span id={moveHintId} class="sr-only">{m.groups_call_tile_move_hint()}</span>
   <p class="sr-only" aria-live="polite" data-testid="group-call-tile-announce">
     {tileAnnouncement}
   </p>
-
-  {#if lk.connectionState === 'reconnecting'}
-    <div
-      class="flex items-center justify-center gap-2 bg-warning px-3 py-1 text-sm text-warning-content"
-      role="status"
-      data-testid="group-call-reconnecting"
-    >
-      <span class="loading loading-xs loading-spinner"></span>
-      {m.groups_call_reconnecting()}
-    </div>
-  {/if}
-
-  {#if showBreakoutBanner && BreakoutBannerLazy.Component}
-    <BreakoutBannerLazy.Component {breakout} onJoin={(room) => void requestBreakoutRoom(room)} />
-  {/if}
 
   <!-- Content -->
   {#if lk.isConnecting || !lk.isConnected}
@@ -1213,16 +1055,20 @@
       </div>
     </div>
   {:else}
-    <!-- Tiles, and the participant list beside them on a wide stage (@2xl)
-      or in their place on a narrow one (a phone), like the chat column. -->
+    <!-- Tiles, and the drawer beside them on a wide stage (@2xl) or in
+      their place on a narrow one (a phone). The tiles keep clear of the
+      floating chrome: the title row above, the dock below (two rows of it
+      on a narrow stage, where the dock wraps). -->
     <div class="flex min-h-0 min-w-0 flex-1 flex-row">
       <div
-        class="min-h-0 min-w-0 flex-1 flex-col {participantsOpen ? 'hidden @2xl:flex' : 'flex'}"
+        class="min-h-0 min-w-0 flex-1 flex-col px-3 pt-16 pb-28 @xl:pb-20 {participantsOpen
+          ? 'hidden @2xl:flex'
+          : 'flex'}"
         data-testid="group-call-tiles"
       >
         {#if spotlight}
           <div
-            class="flex min-h-0 min-w-0 flex-1 flex-col gap-2 p-2"
+            class="flex min-h-0 min-w-0 flex-1 flex-col gap-2"
             data-testid="group-call-spotlight"
           >
             <!-- One slot (Fokus, Sprecher, a pin) or two side by side (Nebeneinander;
@@ -1252,8 +1098,8 @@
           </div>
         {:else}
           <div class="relative min-h-0 min-w-0 flex-1" {@attach measureGrid}>
-            <!-- Top-aligned: in a tall stage the tiles belong under the header,
-            not centred in empty space (laoc, 2026-10-01). -->
+            <!-- Top-aligned: in a tall stage the tiles belong under the title
+            row, not centred in empty space (laoc, 2026-10-01). -->
             <div class="absolute inset-0 flex items-start justify-center overflow-hidden p-3">
               <div
                 class="grid content-start justify-center"
@@ -1334,44 +1180,62 @@
         {/if}
       </div>
       {#if participantsOpen}
+        <!-- The drawer: a paper card floating on the stage beside the tiles
+          (@2xl), or — on a narrow stage — in their place, between the title
+          row and the dock. -->
         <div
-          class="flex min-h-0 w-full flex-col @2xl:w-72 @2xl:shrink-0 @2xl:border-l @2xl:border-base-300"
+          class="call-stage-paper mx-3 mt-16 mb-24 flex min-h-0 w-full flex-col overflow-hidden rounded-2xl bg-base-100 text-base-content shadow-xl @2xl:my-3 @2xl:mr-3 @2xl:ml-0 @2xl:w-72 @2xl:shrink-0"
           data-testid="group-call-participants-column"
         >
           {#if columnTabs}
-            <div
-              role="tablist"
-              class="tabs-border tabs shrink-0 border-b border-base-300 px-2 tabs-sm"
-              data-testid="group-call-column-tabs"
-            >
+            <!-- One header for the drawer: the tabs name what is shown and
+              the close sits at their end; the panels below render no title
+              row of their own (compact). -->
+            <div class="flex shrink-0 items-center border-b border-base-300 pr-1">
+              <div
+                role="tablist"
+                class="tabs-border tabs min-w-0 flex-1 px-2 tabs-sm"
+                data-testid="group-call-column-tabs"
+              >
+                <button
+                  type="button"
+                  role="tab"
+                  class="tab {breakoutPanelShown ? '' : 'tab-active'}"
+                  aria-selected={!breakoutPanelShown}
+                  onclick={() => (columnTab = 'participants')}
+                  data-testid="group-call-column-tab-participants"
+                >
+                  {m.groups_call_column_tab_participants({ count: participantCount })}
+                </button>
+                <button
+                  type="button"
+                  role="tab"
+                  class="tab {breakoutPanelShown ? 'tab-active' : ''}"
+                  aria-selected={breakoutPanelShown}
+                  onclick={openBreakoutTab}
+                  title={m.groups_call_breakout_title()}
+                  data-testid="group-call-breakout-open"
+                >
+                  {m.groups_call_breakout_title()}
+                  {#if hostsBreakout}
+                    <CallUnreadDot
+                      class="ml-1.5"
+                      tone="bg-accent"
+                      testid="group-call-breakout-tab-dot"
+                      label={m.groups_call_breakout_running_badge()}
+                    />
+                  {/if}
+                </button>
+              </div>
               <button
                 type="button"
-                role="tab"
-                class="tab {breakoutPanelShown ? '' : 'tab-active'}"
-                aria-selected={!breakoutPanelShown}
-                onclick={() => (columnTab = 'participants')}
-                data-testid="group-call-column-tab-participants"
+                class="btn btn-square btn-ghost btn-sm"
+                onclick={() => (participantsOpen = false)}
+                aria-label={m.groups_call_participants_close()}
+                title={m.groups_call_participants_close()}
+                data-testid="group-call-column-close"
               >
-                {m.groups_call_column_tab_participants({ count: participantCount })}
-              </button>
-              <button
-                type="button"
-                role="tab"
-                class="tab {breakoutPanelShown ? 'tab-active' : ''}"
-                aria-selected={breakoutPanelShown}
-                onclick={openBreakoutTab}
-                title={m.groups_call_breakout_title()}
-                data-testid="group-call-breakout-open"
-              >
-                {m.groups_call_breakout_title()}
-                {#if hostsBreakout}
-                  <CallUnreadDot
-                    class="ml-1.5"
-                    tone="bg-accent"
-                    testid="group-call-breakout-tab-dot"
-                    label={m.groups_call_breakout_running_badge()}
-                  />
-                {/if}
+                <CloseIcon class_="h-4 w-4" title="" />
               </button>
             </div>
           {/if}
@@ -1389,6 +1253,7 @@
                 onAutoAssign={(enabled) => setSessionAutoAssign(enabled)}
                 onBroadcast={(text) => sendCallBroadcast('message', text)}
                 onClose={() => (participantsOpen = false)}
+                compact={columnTabs}
               />
             {:else}
               <div class="flex flex-1 items-center justify-center">
@@ -1401,6 +1266,7 @@
               onTogglePin={togglePin}
               onVolumeChange={changeVolume}
               onClose={() => (participantsOpen = false)}
+              compact={columnTabs}
             >
               {#snippet menuExtras(
                 /** @type {import('$lib/groups/call-participants.js').ParticipantRow} */ row
@@ -1418,16 +1284,190 @@
     </div>
   {/if}
 
-  <!-- Controls -->
-  {#if lk.isConnected}
-    <!-- No top border (laoc, 2026-10-02: looked redundant against the tiles
-         above and the chat column's own borders); the padding alone still
-         reads as a control bar. -->
+  <!-- Floating chrome, top: the title row steps back when idle; the status
+    row (reconnecting, breakout) never does. pointer-events-none on the
+    layer, back on every pill, so the tiles under the free space stay
+    draggable. -->
+  <!-- Beside an open drawer (@2xl) the layer ends where the drawer begins:
+    18rem drawer + its 0.75rem margin + a 0.75rem gap. -->
+  <div
+    class="pointer-events-none absolute top-0 left-0 flex flex-col items-start gap-2 p-3 {participantsOpen
+      ? 'right-0 @2xl:right-[19.5rem]'
+      : 'right-0'}"
+    data-testid="group-call-top-layer"
+  >
     <div
-      class="mt-auto flex shrink-0 flex-wrap items-center justify-center gap-3 px-4 py-3"
-      data-testid="group-call-controls"
+      class="flex w-full items-start gap-2 transition-opacity duration-300 motion-reduce:transition-none {chromeHidden
+        ? 'opacity-0'
+        : ''}"
+      data-testid="group-call-title-row"
     >
-      {#if lk.canPublish}
+      <div
+        class="pointer-events-auto flex max-w-full min-w-0 items-center gap-2 rounded-full bg-base-100/90 py-1 pr-3 pl-1 shadow-lg backdrop-blur-sm"
+        data-testid="group-call-title-pill"
+      >
+        {#if onBack}
+          <button
+            type="button"
+            class="btn btn-circle btn-ghost btn-sm"
+            onclick={onBack}
+            aria-label={m.groups_breadcrumb_channels_aria()}
+            title={m.groups_breadcrumb_channels()}
+            data-testid="group-call-back"
+          >
+            <ChevronLeftIcon class_="h-4 w-4" title="" />
+          </button>
+        {:else}
+          <MeetIcon class_="ml-2 h-4 w-4 shrink-0 text-primary" />
+        {/if}
+        <h2 class="min-w-0 truncate text-sm font-semibold">{title}</h2>
+        {#if elapsed}
+          <span
+            class="shrink-0 text-xs text-base-content/60 tabular-nums"
+            aria-label={m.groups_call_duration({ time: elapsed })}
+            title={m.groups_call_duration({ time: elapsed })}
+            data-testid="group-call-duration">{elapsed}</span
+          >
+        {/if}
+        {#if !lk.canPublish}
+          <span class="badge shrink-0 badge-ghost badge-sm" data-testid="group-call-listen-only">
+            {m.groups_call_listen_only()}
+          </span>
+        {/if}
+        {#if myRole && !inBreakoutRoom}
+          <span
+            class="badge shrink-0 badge-sm badge-primary"
+            data-testid="group-call-my-role"
+            data-role={myRole}
+            title={myRole === 'host'
+              ? m.groups_call_you_are_host()
+              : m.groups_call_you_are_cohost()}
+          >
+            {myRole === 'host' ? m.groups_call_host_badge() : m.groups_call_cohost_badge()}
+          </span>
+        {/if}
+      </div>
+      <span class="grow"></span>
+      {#if handCount > 0}
+        <!-- Who is waiting, in the order they raised: a pill at the top right
+          whose list opens on hover, focus or a tap. -->
+        <div class="pointer-events-auto relative shrink-0">
+          <button
+            type="button"
+            class="badge h-9 cursor-pointer gap-1 rounded-full px-3 shadow-lg badge-warning select-none"
+            aria-expanded={handsOpen}
+            aria-controls={handsOpen ? 'group-call-hands-list' : undefined}
+            aria-label={`${m.groups_call_hands_raised({ count: handCount })}: ${m.groups_call_hands_order()}`}
+            data-testid="group-call-hands"
+            onpointerenter={(e) => hoverHands(e, true)}
+            onpointerleave={(e) => hoverHands(e, false)}
+            onfocus={showHands}
+            onblur={hideHands}
+            onclick={tapHands}
+          >
+            <HandIcon class_="h-3 w-3" title="" />
+            {m.groups_call_hands_raised({ count: handCount })}
+          </button>
+          {#if handsOpen}
+            <div
+              id="group-call-hands-list"
+              class="absolute top-full right-0 z-30 mt-1 w-max max-w-64 cursor-default rounded-box bg-base-100 p-2 text-sm shadow-lg select-none"
+              data-testid="group-call-hands-list"
+            >
+              <p class="mb-1 text-xs text-base-content/60">{m.groups_call_hands_order()}</p>
+              <ol>
+                {#each handNames as name, i (i)}
+                  <li class="truncate">{i + 1}. {name}</li>
+                {/each}
+              </ol>
+            </div>
+          {/if}
+        </div>
+      {/if}
+    </div>
+
+    {#if statusRow}
+      <div class="flex w-full flex-wrap items-center gap-2" data-testid="group-call-status-row">
+        {#if lk.connectionState === 'reconnecting'}
+          <div
+            class="pointer-events-auto flex items-center gap-2 rounded-full bg-warning px-3 py-1.5 text-sm text-warning-content shadow-lg"
+            role="status"
+            data-testid="group-call-reconnecting"
+          >
+            <span class="loading loading-xs loading-spinner"></span>
+            {m.groups_call_reconnecting()}
+          </div>
+        {/if}
+        {#if breakout.currentRoom}
+          <div
+            class="pointer-events-auto flex items-center gap-2 rounded-full bg-base-100/90 py-1 pr-1 pl-3 text-sm shadow-lg backdrop-blur-sm"
+          >
+            <span
+              class="badge gap-1 badge-sm tabular-nums badge-accent"
+              data-testid="group-call-breakout-room"
+            >
+              {m.groups_call_breakout_in_room({ n: breakout.currentRoom.index })}
+              {#if breakout.remaining !== null}
+                · {formatCountdown(breakout.remaining)}
+              {/if}
+            </span>
+            <button
+              class="btn gap-1 rounded-full px-3 btn-sm btn-primary"
+              onclick={() => void returnToMain()}
+              title={m.groups_call_breakout_back_to_main()}
+              aria-label={m.groups_call_breakout_back_to_main()}
+              data-testid="group-call-breakout-back"
+            >
+              <ChevronLeftIcon class_="h-4 w-4" title="" />
+              <span class="hidden @lg:inline">{m.groups_call_breakout_back_to_main()}</span>
+            </button>
+          </div>
+        {:else if hostsBreakout && breakout.remaining !== null}
+          <button
+            type="button"
+            class="pointer-events-auto badge h-9 cursor-pointer gap-1 rounded-full px-3 tabular-nums shadow-lg badge-accent"
+            onclick={() => {
+              participantsOpen = true;
+              columnTab = 'breakout';
+            }}
+            data-testid="group-call-breakout-deadline"
+          >
+            <ClockIcon class_="h-3 w-3" title="" />
+            {m.groups_call_breakout_time_left({ time: formatCountdown(breakout.remaining) })}
+          </button>
+        {/if}
+        {#if showBreakoutBanner && BreakoutBannerLazy.Component}
+          <div class="pointer-events-auto max-w-full">
+            <BreakoutBannerLazy.Component
+              {breakout}
+              onJoin={(room) => void requestBreakoutRoom(room)}
+            />
+          </div>
+        {/if}
+      </div>
+    {/if}
+  </div>
+
+  <!-- The dock: media (me) · view (people, chat, layout) · more · leave,
+    floating along the bottom. It steps back with the title row when idle,
+    never while the pointer rests on it or a focus is inside it. -->
+  <div
+    class="pointer-events-none absolute inset-x-0 bottom-0 flex justify-center p-3 transition-opacity duration-300 motion-reduce:transition-none {chromeHidden
+      ? 'opacity-0'
+      : ''}"
+  >
+    <div
+      class="pointer-events-auto flex max-w-full flex-wrap items-center justify-center gap-1 rounded-[1.75rem] bg-base-100/95 p-1.5 shadow-xl backdrop-blur-sm"
+      role="toolbar"
+      aria-label={m.groups_call_in_call()}
+      data-testid="group-call-controls"
+      onpointerenter={(e) => hoverDock(e, true)}
+      onpointerleave={(e) => hoverDock(e, false)}
+      onfocusin={() => (dockFocus = true)}
+      onfocusout={(e) =>
+        (dockFocus = e.currentTarget.contains(/** @type {Node | null} */ (e.relatedTarget)))}
+    >
+      {#if lk.isConnected && lk.canPublish}
         <!-- Microphone + devices + processing -->
         <div class="relative flex items-center" data-call-menu>
           <button
@@ -1656,14 +1696,23 @@
         </div>
       {/if}
 
-      {#if lk.canSignal}
+      {#if lk.isConnected && lk.canSignal}
+        <!-- My hand; the count of every hand up rides on the button (the
+          list of who is waiting sits in the title row). -->
         <button
-          class="btn btn-circle {myHandUp ? 'btn-warning' : 'btn-ghost'}"
+          class="btn relative btn-circle {myHandUp ? 'btn-warning' : 'btn-ghost'}"
           aria-pressed={myHandUp}
           title={myHandUp ? m.groups_call_lower_hand() : m.groups_call_raise_hand()}
           onclick={() => setHandRaised(!myHandUp)}
         >
           <HandIcon class_="w-5 h-5" title="" />
+          {#if handCount > 0}
+            <span
+              class="absolute -top-1 -right-1 badge h-4 min-w-4 px-1 text-[10px] badge-warning"
+              aria-hidden="true"
+              data-testid="group-call-hand-count">{handCount}</span
+            >
+          {/if}
         </button>
 
         <div class="relative" data-call-menu>
@@ -1711,8 +1760,184 @@
           {/if}
         </div>
       {/if}
+
+      {#if lk.isConnected}
+        <span class="mx-1 h-6 w-px shrink-0 bg-base-content/15" aria-hidden="true"></span>
+        <button
+          class="btn gap-1 rounded-full px-3 btn-ghost {participantsOpen ? 'btn-active' : ''}"
+          onclick={toggleParticipants}
+          aria-pressed={participantsOpen}
+          aria-label={m.groups_call_participants_count({ count: participantCount })}
+          title={m.groups_call_participants_count({ count: participantCount })}
+          data-testid="group-call-show-participants"
+        >
+          <PeopleIcon class_="h-5 w-5" title="" />
+          <span class="text-sm tabular-nums">{participantCount}</span>
+        </button>
+        {#if onShowChat}
+          <button
+            class="btn relative btn-circle btn-ghost {chatOpen ? 'btn-active' : ''}"
+            onclick={onShowChat}
+            aria-pressed={chatOpen}
+            aria-label={chatMentionsHere
+              ? `${m.groups_call_show_chat()} – ${m.groups_call_chat_mentions_unread()}`
+              : chatUnreadHere
+                ? `${m.groups_call_show_chat()} – ${m.groups_call_chat_unread()}`
+                : m.groups_call_show_chat()}
+            title={m.groups_call_show_chat()}
+            data-testid="group-call-show-chat"
+          >
+            <ChatIcon class_="h-5 w-5" />
+            {#if chatMentionsHere}
+              <span
+                class="absolute -top-1 -right-1 badge h-4 min-w-4 px-1 text-[10px] badge-primary"
+                aria-hidden="true"
+                data-testid="call-chat-mention-badge">{chatUnread.mentions}</span
+              >
+            {:else if chatUnreadHere}
+              <CallUnreadDot class="absolute top-1 right-1" />
+            {/if}
+          </button>
+        {/if}
+        <div class="relative" data-call-menu>
+          <button
+            class="btn btn-circle btn-ghost"
+            aria-haspopup="menu"
+            aria-expanded={openMenu === 'layout'}
+            aria-label={`${m.groups_call_layout()}: ${LAYOUT_LABELS[layout]()}`}
+            title={`${m.groups_call_layout()}: ${LAYOUT_LABELS[layout]()}`}
+            data-testid="group-call-layout"
+            onclick={() => toggleMenu('layout')}
+          >
+            <GridIcon class_="h-5 w-5" title="" />
+          </button>
+          {#if openMenu === 'layout'}
+            <ul
+              class="menu absolute right-0 bottom-full z-30 mb-2 w-56 rounded-box bg-base-100 p-2 shadow-lg"
+              role="menu"
+              data-testid="group-call-layout-menu"
+            >
+              <li class="menu-title text-xs">{m.groups_call_layout()}</li>
+              {#each CALL_LAYOUTS as l (l)}
+                <li>
+                  <button
+                    class="text-sm"
+                    role="menuitemradio"
+                    aria-checked={layout === l}
+                    class:menu-active={layout === l}
+                    onclick={() => pickLayout(l)}
+                  >
+                    {LAYOUT_LABELS[l]()}
+                  </button>
+                </li>
+              {/each}
+              <li class="mt-1 menu-title text-xs">{m.groups_call_tiles_per_page()}</li>
+              {#each TILE_CAPS as cap (cap)}
+                <li>
+                  <button
+                    class="text-sm"
+                    role="menuitemradio"
+                    aria-checked={tileCap === cap}
+                    class:menu-active={tileCap === cap}
+                    onclick={() => pickCap(cap)}
+                  >
+                    {cap}
+                  </button>
+                </li>
+              {/each}
+            </ul>
+          {/if}
+        </div>
+      {/if}
+
+      {#if onInvite || onPopOut || onPopIn}
+        <!-- The rare actions: invite guests, move the call to its own window
+          (or back). One menu, so the dock stays a single row of circles. -->
+        <div class="relative" data-call-menu>
+          <button
+            class="btn btn-circle btn-ghost"
+            aria-haspopup="menu"
+            aria-expanded={openMenu === 'more'}
+            aria-label={m.groups_call_more()}
+            title={m.groups_call_more()}
+            data-testid="group-call-more"
+            onclick={() => toggleMenu('more')}
+          >
+            <MoreIcon class_="h-5 w-5" title="" />
+          </button>
+          {#if openMenu === 'more'}
+            <ul
+              class="menu absolute right-0 bottom-full z-30 mb-2 w-60 rounded-box bg-base-100 p-2 shadow-lg"
+              role="menu"
+              data-testid="group-call-more-menu"
+            >
+              {#if onInvite}
+                <li>
+                  <button
+                    role="menuitem"
+                    class="text-sm"
+                    title={m.groups_call_invite_title()}
+                    data-testid="group-call-invite"
+                    onclick={() => {
+                      openMenu = null;
+                      onInvite();
+                    }}
+                  >
+                    <LinkIcon class_="h-4 w-4" title="" />
+                    {m.groups_call_invite_button()}
+                  </button>
+                </li>
+              {/if}
+              {#if onPopOut}
+                <li>
+                  <button
+                    role="menuitem"
+                    class="text-sm"
+                    data-testid="group-call-pop-out"
+                    onclick={() => {
+                      openMenu = null;
+                      onPopOut();
+                    }}
+                  >
+                    <ExternalLinkIcon class_="h-4 w-4" title="" />
+                    {m.groups_call_pop_out()}
+                  </button>
+                </li>
+              {/if}
+              {#if onPopIn}
+                <li>
+                  <button
+                    role="menuitem"
+                    class="text-sm"
+                    data-testid="group-call-pop-in"
+                    onclick={() => {
+                      openMenu = null;
+                      onPopIn();
+                    }}
+                  >
+                    <ChevronLeftIcon class_="h-4 w-4" title="" />
+                    {m.groups_call_pop_in()}
+                  </button>
+                </li>
+              {/if}
+            </ul>
+          {/if}
+        </div>
+      {/if}
+
+      <span class="mx-1 h-6 w-px shrink-0 bg-base-content/15" aria-hidden="true"></span>
+      <!-- Leave: the one red circle, set apart from everything else. -->
+      <button
+        class="btn btn-circle btn-error"
+        onclick={handleLeave}
+        aria-label={m.groups_call_leave()}
+        title={m.groups_call_leave()}
+        data-testid="group-call-leave"
+      >
+        <CallEndIcon class_="w-5 h-5" title="" />
+      </button>
     </div>
-  {/if}
+  </div>
 </div>
 
 {#if removeTarget}

@@ -27,7 +27,7 @@
 </script>
 
 <div
-  class="flex shrink-0 flex-wrap items-center gap-x-3 gap-y-1 border-b border-base-300 bg-base-200 px-3 py-2 text-sm"
+  class="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-2xl bg-base-100/90 px-3 py-2 text-sm shadow-lg backdrop-blur-sm"
   role="status"
   data-testid="breakout-banner"
 >

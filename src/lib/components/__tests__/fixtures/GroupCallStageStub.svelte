@@ -11,6 +11,8 @@
    *   onPopOut?: () => void,
    *   onPopIn?: () => void,
    *   onInvite?: () => void,
+   *   onBack?: () => void,
+   *   onHideChat?: () => void,
    *   registerView?: () => () => void
    * }}
    */
@@ -22,6 +24,8 @@
     onPopOut = undefined,
     onPopIn = undefined,
     onInvite = undefined,
+    onBack = undefined,
+    onHideChat = undefined,
     registerView = undefined
   } = $props();
 
@@ -48,6 +52,14 @@
   {#if onInvite}
     <button type="button" data-testid="group-call-stage-stub-invite" onclick={onInvite}
       >invite</button
+    >
+  {/if}
+  {#if onBack}
+    <button type="button" data-testid="group-call-stage-stub-back" onclick={onBack}>back</button>
+  {/if}
+  {#if onHideChat}
+    <button type="button" data-testid="group-call-stage-stub-hide-chat" onclick={onHideChat}
+      >hide chat</button
     >
   {/if}
 </div>
