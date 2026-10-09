@@ -39,8 +39,12 @@ let cameraError = $state(null);
 /** @type {unknown} */
 let micError = $state(null);
 // Only while a capture is being opened: the toggles disable, nothing races.
-let cameraStarting = $state(false);
-let micStarting = $state(false);
+// The sequence number of the capture in flight (0 = none). A flag of the
+// capture itself, not of the toggle: it clears when that capture ends,
+// however it ends, so a release landing mid-capture never leaves the
+// lobby's toggle disabled.
+let cameraStarting = $state(0);
+let micStarting = $state(0);
 
 /** @type {MediaDeviceInfo[]} */
 let audioInputDevices = $state.raw([]);
@@ -120,10 +124,10 @@ export function getCallPreviewState() {
       return micError;
     },
     get cameraStarting() {
-      return cameraStarting;
+      return cameraStarting !== 0;
     },
     get micStarting() {
-      return micStarting;
+      return micStarting !== 0;
     },
     get audioInputDevices() {
       return audioInputDevices;
@@ -152,14 +156,16 @@ export function getCallPreviewState() {
  * @param {boolean} on
  */
 export async function setPreviewCamera(on) {
-  const seq = ++cameraSeq;
   if (!on) {
+    cameraSeq++;
     releaseVideo();
     return;
   }
+  // Already on, or a capture is pending: that capture will deliver.
   if (videoTrack || cameraStarting) return;
+  const seq = ++cameraSeq;
   cameraError = null;
-  cameraStarting = true;
+  cameraStarting = seq;
   try {
     const track = await createLocalVideoTrack(cameraCaptureOptions());
     if (seq !== cameraSeq) {
@@ -175,7 +181,7 @@ export async function setPreviewCamera(on) {
   } catch (err) {
     if (seq === cameraSeq) cameraError = err;
   } finally {
-    if (seq === cameraSeq) cameraStarting = false;
+    if (cameraStarting === seq) cameraStarting = 0;
   }
 }
 
@@ -237,14 +243,15 @@ async function applyPreviewBackgroundSafely() {
  * @param {boolean} on
  */
 export async function setPreviewMic(on) {
-  const seq = ++micSeq;
   if (!on) {
+    micSeq++;
     releaseAudio();
     return;
   }
   if (audioTrack || micStarting) return;
+  const seq = ++micSeq;
   micError = null;
-  micStarting = true;
+  micStarting = seq;
   try {
     const track = await createLocalAudioTrack(micCaptureOptions());
     if (seq !== micSeq) {
@@ -258,7 +265,7 @@ export async function setPreviewMic(on) {
   } catch (err) {
     if (seq === micSeq) micError = err;
   } finally {
-    if (seq === micSeq) micStarting = false;
+    if (micStarting === seq) micStarting = 0;
   }
 }
 
@@ -332,8 +339,8 @@ export function stopPreview() {
   cameraError = null;
   micError = null;
   backgroundError = null;
-  cameraStarting = false;
-  micStarting = false;
+  cameraStarting = 0;
+  micStarting = 0;
 }
 
 /**

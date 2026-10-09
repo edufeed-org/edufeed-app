@@ -30,6 +30,7 @@
     callChatPreviewUrls,
     withCustomEmojis
   } from '$lib/groups/call-chat-links.js';
+  import { reuseParsed } from '$lib/groups/call-chat-parse.js';
   import { registerCallChatView } from '$lib/groups/call-chat-unread.svelte.js';
   import {
     getCallChatCompose,
@@ -350,19 +351,26 @@
   }
 
   const origin = typeof window !== 'undefined' ? window.location.origin : '';
-  // One parse per message, not per render: messages never change once kept.
-  const parsed = $derived(
-    new Map(
-      lk.callChat.map((c) => {
+  // One parse per message, not per rebuild: messages never change once
+  // kept. The map itself is rebuilt whenever the chat or a profile changes
+  // (mentionNames reads the profile map), so each message's body is carried
+  // over until the names of its mentions change.
+  /** @type {Map<string, {segments: import('$lib/groups/call-chat-links.js').CallChatSegment[], previews: string[]}>} */
+  let parseCache = new Map();
+  const parsed = $derived.by(() => {
+    parseCache = reuseParsed(parseCache, lk.callChat, {
+      key: (c) => (c.mentions?.length ? JSON.stringify(mentionNames(c.mentions)) : ''),
+      parse: (c) => {
         const segments = withMentions(
           withCustomEmojis(linkifyCallChat(c.text, origin), c.emoji),
           c.mentions,
           mentionNames(c.mentions)
         );
-        return [c.id, { segments, previews: callChatPreviewUrls(segments) }];
-      })
-    )
-  );
+        return { segments, previews: callChatPreviewUrls(segments) };
+      }
+    });
+    return parseCache;
+  });
 
   // While this panel is actually on screen (laid out — the /c layout keeps
   // hidden copies mounted, and below md the chat column is display:none),

@@ -511,6 +511,18 @@ describe('normalizeBibleReference — display / prefill', () => {
     for (const [input, expected] of cases) expect(normalizeBibleReference(input)).toBe(expected);
   });
 
+  it('ignores empty entries such as a trailing separator', () => {
+    /** @type {Array<[string, string]>} */
+    const cases = [
+      ['Mt 5,3;', 'Mt 5,3'],
+      ['Mk. 1,16-20; ', 'Mk 1,16-20'],
+      ['Gen 1,1;; Ex 15,3', 'Gen 1,1; Ex 15,3'],
+      [';', ';']
+    ];
+    for (const [input, expected] of cases)
+      expect(normalizeBibleReference(input), input).toBe(expected);
+  });
+
   it('keeps the handout examples verbatim', () => {
     for (const ref of [
       'Gen 1,1',
