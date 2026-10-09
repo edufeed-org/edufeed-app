@@ -1176,9 +1176,11 @@
       {#if participantsOpen}
         <!-- The drawer: a paper card floating on the stage beside the tiles
           (@2xl), or — on a narrow stage — in their place, between the title
-          row and the dock. -->
+          row and the dock. As wide as the chat column beside the stage
+          (GroupChat, md:w-96): the two drawers swap without moving the
+          tiles. -->
         <div
-          class="mx-3 mt-16 mb-24 flex min-h-0 w-full flex-col overflow-hidden rounded-2xl bg-base-100 text-base-content shadow-xl @2xl:my-3 @2xl:mr-3 @2xl:ml-0 @2xl:w-72 @2xl:shrink-0"
+          class="mx-3 mt-16 mb-24 flex min-h-0 w-full flex-col overflow-hidden rounded-2xl bg-base-100 text-base-content shadow-xl @2xl:my-3 @2xl:mr-3 @2xl:ml-0 @2xl:w-96 @2xl:shrink-0"
           data-testid="group-call-participants-column"
         >
           {#if columnTabs}
@@ -1282,8 +1284,10 @@
     row (reconnecting, breakout) never does. pointer-events-none on the
     layer, back on every pill, so the tiles under the free space stay
     draggable. -->
-  <!-- Beside an open drawer (@2xl) the layer ends where the drawer begins:
-    18rem drawer + its 0.75rem margin + a 0.75rem gap. -->
+  <!-- Beside an open drawer (@2xl) both chrome layers end where the drawer
+    begins (24rem drawer + its 0.75rem margin + a 0.75rem gap), so the title
+    row and the dock are centred on the tiles and never lie over the
+    drawer's header or footer. -->
   <!-- z-40 on both chrome layers: a tile's own layers (avatar, name bar,
     controls, reactions) sit at z-10..z-30 in the stage's stacking context,
     and the dock's backdrop-blur makes it a stacking context at level auto —
@@ -1291,7 +1295,7 @@
     (laoc 2026-10-09: the "Mehr" menu looked transparent). -->
   <div
     class="pointer-events-none absolute top-0 left-0 z-40 flex flex-col items-start gap-2 p-3 {participantsOpen
-      ? 'right-0 @2xl:right-[19.5rem]'
+      ? 'right-0 @2xl:right-[25.5rem]'
       : 'right-0'}"
     data-testid="group-call-top-layer"
   >
@@ -1451,9 +1455,9 @@
     floating along the bottom. It steps back with the title row when idle,
     never while the pointer rests on it or a focus is inside it. -->
   <div
-    class="pointer-events-none absolute inset-x-0 bottom-0 z-40 flex justify-center p-3 transition-opacity duration-300 motion-reduce:transition-none {chromeHidden
-      ? 'opacity-0'
-      : ''}"
+    class="pointer-events-none absolute bottom-0 left-0 z-40 flex justify-center p-3 transition-opacity duration-300 motion-reduce:transition-none {participantsOpen
+      ? 'right-0 @2xl:right-[25.5rem]'
+      : 'right-0'} {chromeHidden ? 'opacity-0' : ''}"
     data-testid="group-call-dock-layer"
   >
     <div
