@@ -102,12 +102,24 @@
     return map;
   });
 
+  // A canonical concept id is always a URI (an external URI, or the
+  // `nostr:<coord>` shape `toRichSelected` builds): a scheme prefix followed
+  // directly by a non-space. Labels like "Mathematik" or "Kunst: Malen" never
+  // match, so they are still healed below.
+  /** @param {string} id */
+  function looksLikeCanonicalId(id) {
+    return /^[a-zA-Z][a-zA-Z0-9+.-]*:\S/.test(id);
+  }
+
   // Heal incoming values whose `id` is a label rather than a canonical
   // concept id. AI enrichment (nope-mcp) returns `{id: prefLabel}`, which
   // chips can render but the option-checked state can't match. When concept
   // events are loaded, look each unmatched value up by label and emit
   // `onchange` once with the corrected rich entries — the form data then
   // carries canonical IDs all the way through to publish.
+  // Values with a canonical id are never healed: after a vocabulary rename a
+  // stored concept may live in another scheme, and a same-named concept here
+  // is a coincidence — swapping to it would silently rewrite the user's value.
   $effect(() => {
     if (!conceptEvents.length || !value.length) return;
     /** @type {Record<string, import('nostr-tools').NostrEvent>} */
@@ -121,6 +133,7 @@
     let changed = false;
     const healed = value.map((v) => {
       if (eventById[v.id]) return v;
+      if (looksLikeCanonicalId(v.id)) return v;
       const label = pickLabel(v.labels, locale);
       const evt = label ? byLabel[label] : undefined;
       if (!evt) return v;
