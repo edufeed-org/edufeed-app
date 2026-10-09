@@ -3025,8 +3025,10 @@ describe('GroupChat', () => {
         await fireEvent.click(screen.getByTestId('group-call-stage-stub-back'));
         expect(onBack).toHaveBeenCalledTimes(1);
         expect(leaveGroupCallMock).not.toHaveBeenCalled();
-        // The dark room: the box the stage and the chat column share.
-        expect(stage.parentElement?.classList.contains('call-stage')).toBe(true);
+        // The room: the box the stage and the chat column share, in the
+        // page's own colors (no dark scope).
+        expect(stage.parentElement?.classList.contains('bg-base-200')).toBe(true);
+        expect(stage.parentElement?.classList.contains('call-stage')).toBe(false);
       });
 
       it('the header is back the moment the stage steps aside or the call is only requesting', async () => {

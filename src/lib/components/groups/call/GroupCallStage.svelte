@@ -1019,12 +1019,11 @@
 {/snippet}
 
 <!-- The stage IS the channel body while the call is open (same rule as
-     GroupAppStage): a dark room — the "Bühne" of design 1d — that the tiles
-     fill, with the chrome floating over it: a title pill top left, status
-     pills under it, the dock along the bottom, and one drawer beside the
-     tiles. `call-stage` (app.css) re-points the base tokens for this
-     subtree, so every DaisyUI class in here renders dark without a theme
-     switch; `call-stage-paper` on a drawer brings the page's paper back. -->
+     GroupAppStage): the "Bühne" of design 1d — a room in the page's own
+     colors that the tiles fill, with the chrome floating over it: a title
+     pill top left, status pills under it, the dock along the bottom, and one
+     drawer beside the tiles (laoc 2026-10-09: the normal color scheme, just
+     with this layout — no dark scope). -->
 <!-- A size container: beside the chat column the stage is narrow even in a
   wide window, so the layout answers to the STAGE's width (@2xl: drawer
   beside the tiles), not the viewport's. -->
@@ -1037,7 +1036,7 @@
   the status row and the drawers never do. -->
 <div
   bind:this={rootEl}
-  class="call-stage @container relative flex min-h-0 min-w-0 flex-1 cursor-default flex-col bg-base-200 text-base-content select-none"
+  class="@container relative flex min-h-0 min-w-0 flex-1 cursor-default flex-col bg-base-200 text-base-content select-none"
   data-testid="group-call-stage"
   data-idle={chromeHidden ? 'true' : undefined}
 >
@@ -1184,7 +1183,7 @@
           (@2xl), or — on a narrow stage — in their place, between the title
           row and the dock. -->
         <div
-          class="call-stage-paper mx-3 mt-16 mb-24 flex min-h-0 w-full flex-col overflow-hidden rounded-2xl bg-base-100 text-base-content shadow-xl @2xl:my-3 @2xl:mr-3 @2xl:ml-0 @2xl:w-72 @2xl:shrink-0"
+          class="mx-3 mt-16 mb-24 flex min-h-0 w-full flex-col overflow-hidden rounded-2xl bg-base-100 text-base-content shadow-xl @2xl:my-3 @2xl:mr-3 @2xl:ml-0 @2xl:w-72 @2xl:shrink-0"
           data-testid="group-call-participants-column"
         >
           {#if columnTabs}
@@ -1867,7 +1866,7 @@
           </button>
           {#if openMenu === 'more'}
             <ul
-              class="menu absolute right-0 bottom-full z-30 mb-2 w-60 rounded-box bg-base-100 p-2 shadow-lg"
+              class="menu absolute right-0 bottom-full z-30 mb-2 w-max min-w-48 rounded-box bg-base-100 p-2 shadow-lg"
               role="menu"
               data-testid="group-call-more-menu"
             >
@@ -1875,7 +1874,7 @@
                 <li>
                   <button
                     role="menuitem"
-                    class="text-sm"
+                    class="text-sm whitespace-nowrap"
                     title={m.groups_call_invite_title()}
                     data-testid="group-call-invite"
                     onclick={() => {
@@ -1892,7 +1891,7 @@
                 <li>
                   <button
                     role="menuitem"
-                    class="text-sm"
+                    class="text-sm whitespace-nowrap"
                     data-testid="group-call-pop-out"
                     onclick={() => {
                       openMenu = null;
@@ -1908,7 +1907,7 @@
                 <li>
                   <button
                     role="menuitem"
-                    class="text-sm"
+                    class="text-sm whitespace-nowrap"
                     data-testid="group-call-pop-in"
                     onclick={() => {
                       openMenu = null;

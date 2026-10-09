@@ -2255,11 +2255,11 @@
       {/if}
       <!-- Stage and chat share this box: stacked (one of them hidden), or
            side by side while the chat sits beside the call. -->
-      <!-- With the stage on screen the box is the dark room too, so the chat
-           column floats on it as a paper card (call-stage / -paper, app.css). -->
+      <!-- With the stage on screen the box is the room too, so the chat
+           column floats on it as a paper card. -->
       <div
         class="flex min-h-0 flex-1 {chatBesideCall ? 'flex-row' : 'flex-col'} {stageOnScreen
-          ? 'call-stage bg-base-200'
+          ? 'bg-base-200'
           : ''}"
       >
         {#if showCallHere}
@@ -2381,7 +2381,7 @@
           class={activeSession
             ? 'hidden'
             : chatBesideCall
-              ? 'call-stage-paper relative hidden min-h-0 flex-col bg-base-100 text-base-content md:my-3 md:mr-3 md:flex md:w-96 md:shrink-0 md:overflow-hidden md:rounded-2xl md:shadow-xl'
+              ? 'relative hidden min-h-0 flex-col bg-base-100 text-base-content md:my-3 md:mr-3 md:flex md:w-96 md:shrink-0 md:overflow-hidden md:rounded-2xl md:shadow-xl'
               : showCallHere
                 ? 'hidden'
                 : 'contents'}

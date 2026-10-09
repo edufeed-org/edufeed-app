@@ -1238,8 +1238,8 @@ describe('participant list panel', () => {
     const column = screen.getByTestId('group-call-participants-column');
     expect(column.classList.contains('w-full')).toBe(true);
     expect(column.classList.contains('@2xl:w-72')).toBe(true);
-    // A paper card on the dark stage (design 1d).
-    expect(column.classList.contains('call-stage-paper')).toBe(true);
+    // A paper card on the stage (design 1d).
+    expect(column.classList.contains('bg-base-100')).toBe(true);
     const tiles = screen.getByTestId('group-call-tiles');
     expect(tiles.classList.contains('hidden')).toBe(true);
     expect(tiles.classList.contains('@2xl:flex')).toBe(true);
@@ -1279,10 +1279,10 @@ describe('floating chrome (design 1d "Bühne")', () => {
     vi.useRealTimers();
   });
 
-  it('the stage is the dark room; drawers bring the paper back', () => {
+  it('the stage keeps the page colors: no dark scope, drawers are paper cards', () => {
     render(GroupCallStage, { props: baseProps });
     const stage = screen.getByTestId('group-call-stage');
-    expect(stage.classList.contains('call-stage')).toBe(true);
+    expect(stage.classList.contains('call-stage')).toBe(false);
     expect(stage.classList.contains('bg-base-200')).toBe(true);
   });
 
