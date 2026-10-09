@@ -218,4 +218,72 @@ describe('breakout data messages', () => {
     await svc.toggleMute();
     expect(svc.currentJoinMedia()).toEqual({ audio: true, video: false });
   });
+
+  it('keeps the media state of a seat the server ended, for the way back to the main room', async () => {
+    await svc.toggleMute();
+    expect(svc.currentJoinMedia()).toEqual({ audio: true, video: false });
+    // the relay deleted the breakout room: LiveKit ends the seat (ROOM_DELETED)
+    room.emit(RoomEvent.Disconnected, 5);
+    expect(svc.getLiveKitState().isConnected).toBe(false);
+    expect(svc.currentJoinMedia()).toEqual({ audio: true, video: false });
+    // leaving for real forgets it
+    await svc.disconnectFromRoom();
+    expect(svc.currentJoinMedia()).toEqual({ audio: false, video: false });
+  });
+});
+
+describe('call chat across room switches', () => {
+  const texts = () => svc.getLiveKitState().callChat.map((c) => c.text);
+  /** Connect to the room named `chatKey` (a channel or a breakout room). */
+  async function enter(chatKey) {
+    await svc.connectToRoom('t', 'wss://lk', { chatKey });
+    room = rooms[rooms.length - 1];
+  }
+
+  it("keeps each room's chat across a breakout switch and forgets all of it when the call is left", async () => {
+    await svc.disconnectFromRoom();
+    await enter('main');
+    await svc.sendCallChat('hello main');
+    expect(texts()).toEqual(['hello main']);
+
+    // into a breakout room: the main room's chat is set aside, the room starts empty
+    await svc.disconnectFromRoom({ keepChat: true });
+    await enter('r1');
+    expect(texts()).toEqual([]);
+    await svc.sendCallChat('hello room');
+
+    // back to the main room: its chat is there again
+    await svc.disconnectFromRoom({ keepChat: true });
+    await enter('main');
+    expect(texts()).toEqual(['hello main']);
+
+    // and back into the same room: its chat too
+    await svc.disconnectFromRoom({ keepChat: true });
+    await enter('r1');
+    expect(texts()).toEqual(['hello room']);
+
+    // leaving the call for good forgets every room
+    await svc.disconnectFromRoom();
+    await enter('r1');
+    expect(texts()).toEqual([]);
+    await svc.disconnectFromRoom({ keepChat: true });
+    await enter('main');
+    expect(texts()).toEqual([]);
+  });
+
+  it('a room the server ended keeps its chat until the switch sets it aside', async () => {
+    await svc.disconnectFromRoom();
+    await enter('r1');
+    await svc.sendCallChat('hello room');
+    // the relay deleted the room: the seat is ended, the chat still shown
+    room.emit(RoomEvent.Disconnected, 5);
+    expect(texts()).toEqual(['hello room']);
+    // the way back: the room's chat is set aside like after any switch
+    await svc.disconnectFromRoom({ keepChat: true });
+    await enter('main');
+    expect(texts()).toEqual([]);
+    await svc.disconnectFromRoom({ keepChat: true });
+    await enter('r1');
+    expect(texts()).toEqual(['hello room']);
+  });
 });

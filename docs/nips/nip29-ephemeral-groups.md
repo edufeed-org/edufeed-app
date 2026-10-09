@@ -85,6 +85,18 @@ these happens:
 A relay MAY delete an ephemeral group earlier when its parent's call ends
 (`room_finished` of the parent) and nobody is in the ephemeral room.
 
+**The parent's call runs on in its ephemeral children.** Whenever everyone
+— the host included — sits in breakout rooms, the parent's own LiveKit
+room is empty and finishes, but the call is not over. Relays MUST treat the
+parent's call as running while the parent's room or any of its ephemeral
+children holds a seat: a `room_finished` of the parent's own room while a
+child is in use MUST NOT delete the parent's call-scoped passes
+(`nip29-call-passes.md`), clear its call host / co-host roles, or start the
+"parent call ended" clock of its children, and a call-scoped pass of the
+parent stays valid for token requests on the parent and its children
+meanwhile. The call ends — passes deleted, roles cleared, the clock started
+— once the parent's room and every child's room have finished.
+
 Clients that are in an ephemeral group's call MUST treat the group's
 deletion (its kind 39000 answered as deleted, a 9008 seen live, or the
 LiveKit disconnect that follows `DeleteRoom`) as "return to the parent".

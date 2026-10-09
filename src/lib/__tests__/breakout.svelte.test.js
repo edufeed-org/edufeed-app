@@ -217,7 +217,7 @@ function liveSub() {
 beforeEach(async () => {
   vi.useRealTimers();
   store.__resetBreakout();
-  callFake.setCall({ pointer: null, user: null, title: '', phase: 'idle' });
+  callFake.setCall({ pointer: null, user: null, title: '', phase: 'idle', code: null });
   lkFake.resetLiveKitFake();
   prefs.autoAssign = null;
   flushSync();
@@ -430,6 +430,39 @@ describe('participant in a room: following the relay', () => {
     sub.stream.next(roster('r1', [HOST], 11));
     await settle();
     expect(callFake.switchGroupCall).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(BREAKOUT_MOVE_GRACE_MS + 10);
+    await settle();
+    expect(callFake.switchGroupCall).toHaveBeenCalledWith(MAIN, { title: 'Seminar' });
+    expect(store.getBreakoutState().currentRoom).toBeNull();
+  });
+
+  it('a member who came in through the invite link (code kept, member seat) still follows its roster', async () => {
+    vi.useFakeTimers();
+    // The relay ignores the code for a member: a member seat, no guest
+    // metadata — the code the link carried must not make this seat a guest.
+    lkFake.setMyMetadata('');
+    callFake.setCall({
+      pointer: MAIN,
+      user: bobUser,
+      title: 'Seminar',
+      phase: 'ready',
+      code: 'C'.repeat(22)
+    });
+    await store.ensureBreakoutListener();
+    await settle();
+    lk.listener?.({ t: 'assign', rooms: ROOMS, until: null }, hostSender);
+    modal.callbacks.onConfirm();
+    await settle();
+    expect(store.getBreakoutState().currentRoom?.id).toBe('r1');
+    // a member seat requests no room token of its own (that is the guest path)
+    expect(lkApi.requestGroupCallToken).not.toHaveBeenCalled();
+    const sub = liveSub();
+    callFake.switchGroupCall.mockClear();
+    sub.stream.next(roster('r1', [HOST, BOB]));
+    sub.stream.next('EOSE');
+    await settle();
+    sub.stream.next(roster('r1', [HOST], 11));
+    await settle();
     await vi.advanceTimersByTimeAsync(BREAKOUT_MOVE_GRACE_MS + 10);
     await settle();
     expect(callFake.switchGroupCall).toHaveBeenCalledWith(MAIN, { title: 'Seminar' });
