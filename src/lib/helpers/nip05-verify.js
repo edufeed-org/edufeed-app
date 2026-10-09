@@ -1,19 +1,24 @@
 /**
- * NIP-05 verification helper.
+ * NIP-05 lookup + verification helper.
  *
  * Resolves a `name@domain` (or bare-domain shorthand) against the domain's
- * `/.well-known/nostr.json` and reports whether it actually maps to the
- * expected pubkey. The result is cached in-memory per (nip05, pubkey) pair
- * for the lifetime of the page so we don't refetch on every render.
+ * `/.well-known/nostr.json`. Two public faces of one cached lookup:
  *
- * `error` results are *not* cached — transient CORS / network failures
- * should be allowed to recover on the next call.
+ *   - resolveNip05(address)         → the pubkey the domain maps the name to
+ *     (people search, /p/<address>, the root shortcut route);
+ *   - verifyNip05(address, pubkey)  → whether it maps to the pubkey a profile
+ *     claims (the "Verifiziert" chip).
+ *
+ * Successful lookups — including "the domain does not know this name" — are
+ * cached in memory per address for the lifetime of the page. Transient
+ * CORS / network / JSON failures are *not* cached so they can recover on
+ * the next call.
  *
  * @typedef {'verified' | 'mismatch' | 'error'} VerificationResult
  */
 
-/** @type {Map<string, VerificationResult>} */
-const cache = new Map();
+/** @type {Map<string, string | null>} address → mapped pubkey (null = unknown name) */
+const lookupCache = new Map();
 
 /**
  * Parse a NIP-05 address into `{ name, domain }`.
@@ -24,7 +29,7 @@ const cache = new Map();
  * @param {string} address
  * @returns {{ name: string, domain: string } | null}
  */
-function parseAddress(address) {
+export function parseNip05Address(address) {
   if (typeof address !== 'string') return null;
   const trimmed = address.trim().toLowerCase();
   if (!trimmed) return null;
@@ -40,9 +45,58 @@ function parseAddress(address) {
   return { name, domain };
 }
 
-/** @param {string} nip05 @param {string} pubkey */
-function cacheKey(nip05, pubkey) {
-  return `${nip05.toLowerCase()}#${pubkey}`;
+/**
+ * Does the term look like a full `name@domain` NIP-05 address (the form
+ * people type into a search field or print on a flyer)? Bare domains are
+ * excluded here — they are too easy to confuse with an ordinary search word.
+ * @param {string} term
+ */
+export function isNip05Address(term) {
+  const parsed = parseNip05Address(term);
+  if (!parsed || parsed.name === '_' || !term.includes('@')) return false;
+  return /^[a-z0-9._-]+$/.test(parsed.name) && /^[a-z0-9.-]+\.[a-z0-9-]{2,}$/.test(parsed.domain);
+}
+
+/**
+ * One cached fetch of `/.well-known/nostr.json?name=…`.
+ * @param {{ name: string, domain: string }} parsed
+ * @param {typeof fetch} fetchImpl
+ * @returns {Promise<{ ok: true, pubkey: string | null } | { ok: false }>}
+ */
+async function lookupNip05(parsed, fetchImpl) {
+  const key = `${parsed.name}@${parsed.domain}`;
+  if (lookupCache.has(key))
+    return { ok: true, pubkey: /** @type {string | null} */ (lookupCache.get(key)) };
+  try {
+    const url = `https://${parsed.domain}/.well-known/nostr.json?name=${encodeURIComponent(parsed.name)}`;
+    const res = await fetchImpl(url, { headers: { accept: 'application/json' } });
+    // Don't cache transient HTTP failures.
+    if (!res.ok) return { ok: false };
+    const body = await res.json();
+    const mapped = body?.names?.[parsed.name];
+    const pubkey =
+      typeof mapped === 'string' && /^[0-9a-f]{64}$/i.test(mapped) ? mapped.toLowerCase() : null;
+    lookupCache.set(key, pubkey);
+    return { ok: true, pubkey };
+  } catch {
+    // Network / CORS / JSON parse — don't cache.
+    return { ok: false };
+  }
+}
+
+/**
+ * Resolve a NIP-05 address to the pubkey its domain publishes for it.
+ * `null` when the domain does not know the name — or could not be reached.
+ *
+ * @param {string} nip05Address - `name@domain` or bare `domain`
+ * @param {typeof fetch} [fetchImpl] - injectable for tests
+ * @returns {Promise<string | null>} lowercase hex pubkey
+ */
+export async function resolveNip05(nip05Address, fetchImpl = fetch) {
+  const parsed = parseNip05Address(nip05Address);
+  if (!parsed) return null;
+  const result = await lookupNip05(parsed, fetchImpl);
+  return result.ok ? result.pubkey : null;
 }
 
 /**
@@ -54,32 +108,11 @@ function cacheKey(nip05, pubkey) {
  * @returns {Promise<VerificationResult>}
  */
 export async function verifyNip05(nip05Address, expectedPubkey, fetchImpl = fetch) {
-  const parsed = parseAddress(nip05Address);
+  const parsed = parseNip05Address(nip05Address);
   if (!parsed || !expectedPubkey) return 'error';
-
-  const key = cacheKey(nip05Address, expectedPubkey);
-  const cached = cache.get(key);
-  if (cached) return cached;
-
-  /** @type {VerificationResult} */
-  let result;
-  try {
-    const url = `https://${parsed.domain}/.well-known/nostr.json?name=${encodeURIComponent(parsed.name)}`;
-    const res = await fetchImpl(url, { headers: { accept: 'application/json' } });
-    if (!res.ok) {
-      // Don't cache transient HTTP failures.
-      return 'error';
-    }
-    const body = await res.json();
-    const mapped = body?.names?.[parsed.name];
-    result = mapped === expectedPubkey ? 'verified' : 'mismatch';
-  } catch {
-    // Network / CORS / JSON parse — don't cache.
-    return 'error';
-  }
-
-  cache.set(key, result);
-  return result;
+  const result = await lookupNip05(parsed, fetchImpl);
+  if (!result.ok) return 'error';
+  return result.pubkey === expectedPubkey.toLowerCase() ? 'verified' : 'mismatch';
 }
 
 /**
@@ -140,5 +173,5 @@ export function aggregateNip05Results(results) {
  * public API; only used by Vitest.
  */
 export function _clearNip05Cache() {
-  cache.clear();
+  lookupCache.clear();
 }

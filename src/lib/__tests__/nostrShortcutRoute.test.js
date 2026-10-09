@@ -56,3 +56,27 @@ describe('resolveNostrShortcutRoute', () => {
     expect(resolveNostrShortcutRoute(nsec)).toBeNull();
   });
 });
+
+describe('resolveNostrShortcutRoute — NIP-05 addresses', () => {
+  it('maps name@domain → /p/<address> (the profile route resolves it)', () => {
+    expect(resolveNostrShortcutRoute('alpika-grundschule@edufeed.org')).toBe(
+      '/p/alpika-grundschule@edufeed.org'
+    );
+  });
+
+  it('lowercases the address and leaves garbage alone', () => {
+    expect(resolveNostrShortcutRoute('Maria@Edufeed.org')).toBe('/p/maria@edufeed.org');
+    expect(resolveNostrShortcutRoute('maria@localhost')).toBeNull();
+  });
+});
+
+describe('nostrShortcut param matcher', () => {
+  it('matches NIP-05 addresses next to bech32 identifiers', async () => {
+    const { match } = await import('../../params/nostrShortcut.js');
+    expect(match('alpika-grundschule@edufeed.org')).toBe(true);
+    expect(match('maria@edufeed.org')).toBe(true);
+    expect(match('edufeed.org')).toBe(false);
+    expect(match('settings')).toBe(false);
+    expect(match('npub1' + 'q'.repeat(58))).toBe(true);
+  });
+});

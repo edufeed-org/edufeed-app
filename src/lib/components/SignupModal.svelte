@@ -527,9 +527,56 @@
       {:else if currentStep === 4}
         <SignupCommunityPicker bind:selected />
       {:else if currentStep === 5}
+        {@const handleDomain = runtimeConfig.membership?.handleDomain || 'edufeed.org'}
+        {@const appName = runtimeConfig.appName || 'Edufeed'}
         <div class="space-y-4">
-          <p class="text-base opacity-80">{m.auth_signup_modal_handle_subtitle()}</p>
-          <p class="text-sm opacity-70">{m.auth_signup_modal_handle_optional_hint()}</p>
+          <!-- Issue "Erklärung/Anleitung Verifizierung": first-time users did not
+               know what the address is for and took it for an e-mail address.
+               The address itself is the picture; the three benefits and the
+               not-an-email note sit right under it (design option 2c). -->
+          <div class="space-y-3 rounded-xl bg-base-200 p-4" data-testid="signup-handle-intro">
+            <p
+              class="flex flex-wrap items-baseline text-xl font-bold"
+              data-testid="signup-handle-preview"
+            >
+              <span class="border-b-2 border-dashed border-primary text-primary"
+                >{m.auth_signup_modal_handle_placeholder_name()}</span
+              ><span class="font-medium text-base-content/60">@{handleDomain}</span>
+            </p>
+            <p class="text-sm text-base-content/70">{m.auth_signup_modal_handle_subtitle()}</p>
+            <div class="grid grid-cols-1 gap-2 sm:grid-cols-3">
+              <div
+                class="rounded-lg border border-base-300 bg-base-100 p-2.5"
+                data-testid="signup-handle-claim"
+              >
+                <p class="text-sm font-semibold">{m.nip05_info_point_authentic_title()}</p>
+                <p class="text-xs text-base-content/70">
+                  {m.auth_signup_modal_handle_claim_authentic({ domain: handleDomain })}
+                </p>
+              </div>
+              <div
+                class="rounded-lg border border-base-300 bg-base-100 p-2.5"
+                data-testid="signup-handle-claim"
+              >
+                <p class="text-sm font-semibold">{m.nip05_info_point_findable_title()}</p>
+                <p class="text-xs text-base-content/70">
+                  {m.auth_signup_modal_handle_claim_findable()}
+                </p>
+              </div>
+              <div
+                class="rounded-lg border border-base-300 bg-base-100 p-2.5"
+                data-testid="signup-handle-claim"
+              >
+                <p class="text-sm font-semibold">{m.nip05_info_point_publish_title()}</p>
+                <p class="text-xs text-base-content/70">
+                  {m.auth_signup_modal_handle_claim_publish({ appName })}
+                </p>
+              </div>
+            </div>
+            <p class="text-xs text-base-content/70">
+              {m.auth_signup_modal_handle_note({ appName })}
+            </p>
+          </div>
           <MembershipApplicationForm onsubmitted={() => (handleApplied = true)} />
         </div>
       {/if}

@@ -25,7 +25,8 @@ import { getProfileLookupRelays } from '$lib/helpers/relay-helper.js';
  * @property {string|null} name - Profile name
  * @property {string|null} display_name - Display name
  * @property {string|null} picture - Profile picture URL
- * @property {string|null} nip05 - NIP-05 identifier
+ * @property {string|null} nip05 - NIP-05 identifier (profile content)
+ * @property {string[]} [nip05s] - every NIP-05 address: content field + repeated nip05 tags
  * @property {string|null} about - Profile about/bio
  */
 

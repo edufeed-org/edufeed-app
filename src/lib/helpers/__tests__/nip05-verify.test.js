@@ -194,3 +194,64 @@ describe('aggregateNip05Results', () => {
     expect(aggregateNip05Results([])).toBe('unverified');
   });
 });
+
+describe('isNip05Address', () => {
+  it('accepts name@domain and rejects bare domains, keys and words', async () => {
+    const { isNip05Address } = await import('../nip05-verify.js');
+    expect(isNip05Address('alpika-grundschule@edufeed.org')).toBe(true);
+    expect(isNip05Address('  Maria@Edufeed.org ')).toBe(true);
+    expect(isNip05Address('edufeed.org')).toBe(false);
+    expect(isNip05Address('maria@localhost')).toBe(false);
+    expect(isNip05Address('maria')).toBe(false);
+    expect(isNip05Address('npub1' + 'x'.repeat(59))).toBe(false);
+    expect(isNip05Address('')).toBe(false);
+  });
+});
+
+describe('resolveNip05', () => {
+  beforeEach(() => {
+    _clearNip05Cache();
+  });
+
+  it('returns the hex pubkey the domain maps the name to', async () => {
+    const { resolveNip05 } = await import('../nip05-verify.js');
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ names: { alice: ALICE } }));
+    await expect(resolveNip05('Alice@Edufeed.org', fetchMock)).resolves.toBe(ALICE);
+    expect(fetchMock).toHaveBeenCalledWith(
+      'https://edufeed.org/.well-known/nostr.json?name=alice',
+      expect.anything()
+    );
+  });
+
+  it('returns null for an unknown name and caches that answer', async () => {
+    const { resolveNip05 } = await import('../nip05-verify.js');
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ names: { bob: BOB } }));
+    await expect(resolveNip05('alice@edufeed.org', fetchMock)).resolves.toBeNull();
+    await expect(resolveNip05('alice@edufeed.org', fetchMock)).resolves.toBeNull();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('returns null on network errors without caching', async () => {
+    const { resolveNip05 } = await import('../nip05-verify.js');
+    const fetchMock = vi
+      .fn()
+      .mockRejectedValueOnce(new Error('offline'))
+      .mockResolvedValueOnce(jsonResponse({ names: { alice: ALICE } }));
+    await expect(resolveNip05('alice@edufeed.org', fetchMock)).resolves.toBeNull();
+    await expect(resolveNip05('alice@edufeed.org', fetchMock)).resolves.toBe(ALICE);
+  });
+
+  it('ignores malformed pubkeys in the response', async () => {
+    const { resolveNip05 } = await import('../nip05-verify.js');
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ names: { alice: 'not-hex' } }));
+    await expect(resolveNip05('alice@edufeed.org', fetchMock)).resolves.toBeNull();
+  });
+
+  it('reuses a verified lookup: resolving after verifyNip05 needs no second fetch', async () => {
+    const { resolveNip05 } = await import('../nip05-verify.js');
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ names: { alice: ALICE } }));
+    await verifyNip05('alice@edufeed.org', ALICE, fetchMock);
+    await expect(resolveNip05('alice@edufeed.org', fetchMock)).resolves.toBe(ALICE);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+});

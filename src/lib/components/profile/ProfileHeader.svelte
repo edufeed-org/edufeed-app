@@ -8,6 +8,8 @@
   import { resolve } from '$app/paths';
   import WaveButton from '$lib/components/waves/WaveButton.svelte';
   import Nip05VerifiedBadge from '$lib/components/shared/Nip05VerifiedBadge.svelte';
+  import HoverCard from '$lib/components/shared/HoverCard.svelte';
+  import Nip05InfoCard from '$lib/components/shared/Nip05InfoCard.svelte';
   import ImageWithFallback from '$lib/components/shared/ImageWithFallback.svelte';
   import {
     CheckIcon,
@@ -112,10 +114,26 @@
       <h1>
         {displayName}
         {#if nip05Status === 'verified'}
-          <span class="pf-chip verified" data-testid="profile-verified-chip">
-            <CheckIcon class_="w-3 h-3" />
-            {m.profile_verified_chip()}
-          </span>
+          <!-- The chip explains itself (issue "Erklärung/Anleitung Verifizierung"):
+               hover, tap or Enter opens the plain-language NIP-05 card. Fixed
+               positioning escapes the header's overflow clipping. -->
+          <HoverCard
+            fixed
+            position="bottom"
+            enterDelay={100}
+            class="relative inline-flex"
+            triggerClass="contents"
+          >
+            {#snippet trigger()}
+              <span class="pf-chip verified" data-testid="profile-verified-chip">
+                <CheckIcon class_="w-3 h-3" />
+                {m.profile_verified_chip()}
+              </span>
+            {/snippet}
+            {#snippet content()}
+              <Nip05InfoCard nip05={nip05s[0] ?? null} />
+            {/snippet}
+          </HoverCard>
         {:else if nip05Status === 'unverified'}
           <span class="pf-chip unverified" data-testid="profile-unverified-chip">
             <AlertIcon class_="w-3 h-3" />
@@ -330,6 +348,7 @@
   .pf-chip.verified {
     background: var(--color-primary);
     color: var(--color-primary-content);
+    cursor: help;
   }
   .pf-chip.unverified {
     background: var(--color-warning);
