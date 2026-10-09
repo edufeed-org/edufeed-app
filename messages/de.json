@@ -4197,5 +4197,6 @@
   "groups_call_breakout_guest_note": "Gäste wechseln mit ihrem Gast-Link in die Räume. Auf einem älteren Relay bleiben sie im Hauptraum.",
   "groups_call_breakout_moved_out": "Du wurdest aus dem Raum geholt – zurück im Hauptraum.",
   "groups_call_breakout_guest_move_failed": "Gast konnte nicht verschoben werden: {reason}",
+  "groups_call_breakout_move_failed": "Die Person konnte nicht verschoben werden: {reason}",
   "groups_call_breakout_guest_move_timeout": "Der Gast ist nicht in den Hauptraum zurückgekommen – bitte erneut zuteilen."
 }

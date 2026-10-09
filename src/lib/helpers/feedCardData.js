@@ -39,7 +39,7 @@ export function getFeedCardData(event) {
             : (event.tags
                 ?.filter(
                   /** @param {string[]} t */ (t) =>
-                    t[0].startsWith('learningResourceType:prefLabel:')
+                    typeof t[0] === 'string' && t[0].startsWith('learningResourceType:prefLabel:')
                 )
                 .map(/** @param {string[]} t */ (t) => t[1]) ?? []);
       const lrtSlugs = getTags('learningResourceType:id').map(

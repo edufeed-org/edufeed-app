@@ -4197,5 +4197,6 @@
   "groups_call_breakout_guest_note": "Guests move into the rooms with their guest link. On an older relay they stay in the main room.",
   "groups_call_breakout_moved_out": "You were taken out of the room – back in the main room.",
   "groups_call_breakout_guest_move_failed": "The guest could not be moved: {reason}",
+  "groups_call_breakout_move_failed": "Participant could not be moved: {reason}",
   "groups_call_breakout_guest_move_timeout": "The guest did not come back to the main room – please assign them again."
 }

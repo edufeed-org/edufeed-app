@@ -914,6 +914,17 @@ export async function moveParticipant({ pubkey, identities = [], toRoomId, guest
         identities
       );
     }
+  } catch (err) {
+    // The panel fires this and forgets (`void moveParticipant(...)`): a
+    // relay refusal must reach the host as a toast, not as an unhandled
+    // rejection — same as moveGuest.
+    console.warn('participant not moved:', err);
+    showToast(
+      m.groups_call_breakout_move_failed({
+        reason: err instanceof Error ? err.message : String(err)
+      }),
+      'error'
+    );
   } finally {
     busy = false;
   }
@@ -1452,18 +1463,21 @@ if (typeof window !== 'undefined') {
         return;
       }
       const tick = () => {
-        remaining = remainingSeconds(until, Date.now());
-        if (remaining === 0) {
+        // Work on a local: reading `remaining` back here would make it a
+        // dependency of this effect, which the interval then re-triggers
+        // every second (tearing the interval down and up each tick).
+        const left = remainingSeconds(until, Date.now());
+        remaining = left;
+        if (left === 0) {
           void onDeadline();
           return;
         }
         // The host seat warns the rooms at 300 / 120 / 60 s (a moved
         // deadline fires them again — countdownDue forgets marks above it).
-        if (remaining !== null && session?.hosting && !currentRoom && holdsHostSeat()) {
-          const { mark, sent } = countdownDue(remaining, countdownSent);
+        if (left !== null && session?.hosting && !currentRoom && holdsHostSeat()) {
+          const { mark, sent } = countdownDue(left, countdownSent);
           countdownSent = sent;
-          if (mark !== null)
-            void sendCallBroadcast('countdown', String(remaining), { quiet: true });
+          if (mark !== null) void sendCallBroadcast('countdown', String(left), { quiet: true });
         }
       };
       tick();

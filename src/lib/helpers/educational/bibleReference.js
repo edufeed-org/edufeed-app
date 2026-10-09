@@ -699,9 +699,10 @@ export function toDieBibelUrl(text) {
     return url(f === 'f' ? `${c}.${v}-${Number(v) + 1}` : `${c}.${v}`);
   }
 
-  // Verse, verse range, cross-chapter range or verse list —
-  // "Joh 3,16", "Mt 5,3-12", "Ez 1,1-3,15", "Jer 29,7.11-14"
-  const mVerse = /^(\d+),(\d+)(?:-(\d+)(,\d+)?|(?:\.\d+(?:-\d+)?)+)?$/.exec(rest);
+  // Verse, verse range, cross-chapter range or verse list — "Joh 3,16",
+  // "Mt 5,3-12", "Ez 1,1-3,15", "Jer 29,7.11-14", "Mt 5,3-12.14" (a list
+  // that opens with a range links to that range)
+  const mVerse = /^(\d+),(\d+)(?:-(\d+)(,\d+)?)?(?:\.\d+(?:-\d+)?)*$/.exec(rest);
   if (mVerse) {
     const [, c, v, end, crossChapter] = mVerse;
     if (end && !crossChapter) return url(`${c}.${v}-${end}`);
