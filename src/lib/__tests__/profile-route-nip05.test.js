@@ -46,7 +46,7 @@ vi.mock('@sveltejs/kit', () => ({
   }
 }));
 
-const { load } = await import('../../routes/p/[pubkey]/+page.js');
+const { load } = /** @type {any} */ (await import('../../routes/p/[pubkey]/+page.js'));
 
 describe('/p/[pubkey] with a NIP-05 address', () => {
   beforeEach(() => lookup.resolveNip05.mockReset());

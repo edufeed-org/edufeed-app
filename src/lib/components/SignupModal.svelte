@@ -551,7 +551,7 @@
               >
                 <p class="text-sm font-semibold">{m.nip05_info_point_authentic_title()}</p>
                 <p class="text-xs text-base-content/70">
-                  {m.auth_signup_modal_handle_claim_authentic({ domain: handleDomain })}
+                  {m.auth_signup_modal_handle_claim_authentic({ atDomain: '@' + handleDomain })}
                 </p>
               </div>
               <div

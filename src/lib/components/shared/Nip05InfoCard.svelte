@@ -70,7 +70,7 @@
   <dl class="mt-2.5 grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-2">
     <dt class="font-semibold text-base-content">{m.nip05_info_point_authentic_title()}</dt>
     <dd class="text-base-content/80" data-testid="nip05-info-point">
-      {m.nip05_info_point_authentic({ domain })}
+      {m.nip05_info_point_authentic({ domain, atDomain: '@' + domain })}
     </dd>
     <dt class="font-semibold text-base-content">{m.nip05_info_point_findable_title()}</dt>
     <dd class="text-base-content/80" data-testid="nip05-info-point">

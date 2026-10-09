@@ -17,7 +17,7 @@ const kind0 = { kind: 0, pubkey: ALPIKA, tags: [], content: '{"name":"ALPIKA"}' 
 const infra = vi.hoisted(() => ({
   request: vi.fn(),
   add: vi.fn(),
-  getReplaceable: vi.fn(() => undefined)
+  getReplaceable: vi.fn(/** @returns {any} */ () => undefined)
 }));
 const lookup = vi.hoisted(() => ({ resolveNip05: vi.fn(), profileLoader: vi.fn() }));
 
