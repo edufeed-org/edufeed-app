@@ -7,6 +7,24 @@ merge commits of the nostr PRs that landed since the previous tag.
 
 ## [Unreleased]
 
+## [0.5.1] - 2026-10-09
+
+Patch release with the fixes from a code review of everything that landed
+between v0.3.2 and v0.5.0.
+
+### Fixed
+
+- A breakout deadline no longer restarts its countdown timer every second:
+  the effect that drives it depended on the state it wrote, so each tick
+  tore the interval down and set it up again.
+- Moving a participant into or out of a breakout room now reports a relay
+  refusal as a toast with the reason, instead of failing silently with the
+  person left where they were.
+- Learning resources without a labelled resource type no longer break the
+  server-side link preview when the event carries a malformed tag.
+- A Bible reference whose verse list opens with a range ("Mt 5,3-12.14")
+  now links to die-bibel.de like the other Loccum forms.
+
 ## [0.5.0] - 2026-10-08
 
 ### Added
