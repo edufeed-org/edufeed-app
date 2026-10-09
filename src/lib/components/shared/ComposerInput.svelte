@@ -444,6 +444,11 @@
 
   function onInput() {
     rendered = serializeEditor();
+    // Deleting the last character leaves a bare <br> (or an empty text node)
+    // in the contenteditable, which keeps `:empty` — and with it the
+    // placeholder — from matching. Nothing is left to keep a caret in, so
+    // drop it.
+    if (!rendered && editor?.childNodes.length) renderValue('');
     value = rendered;
     refreshQuery();
   }

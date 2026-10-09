@@ -22,4 +22,21 @@ describe('ChatComposer input width', () => {
     expect(field.classList.contains('input')).toBe(true);
     expect(field.classList.contains('w-full')).toBe(true);
   });
+
+  it('lays the field out as a block, not a flex container, so the caret of the empty field sits on the text line', () => {
+    // An empty flex-container contenteditable draws its caret at the content
+    // edge with the full box height, left of the placeholder (issue 983f0c7b).
+    // A block with line-height = the field height centers text, placeholder
+    // and caret alike.
+    const { container } = render(ChatComposer, {
+      props: { value: '', placeholder: 'write…', onSubmit: () => {}, testid: 'chat-input' }
+    });
+    const field = /** @type {HTMLElement} */ (
+      container.querySelector('[data-testid="chat-input"]')
+    );
+    expect(field.classList.contains('flex')).toBe(false);
+    expect(field.classList.contains('items-center')).toBe(false);
+    expect(field.classList.contains('block')).toBe(true);
+    expect(field.classList.contains('leading-(--size)')).toBe(true);
+  });
 });

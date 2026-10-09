@@ -171,6 +171,20 @@ describe('ComposerInput', () => {
     expect(editor.querySelector('img[data-shortcode="cat_wow"]')).toBeTruthy();
   });
 
+  it('drops the <br> a browser leaves behind after the last character is deleted, so the :empty placeholder shows again', async () => {
+    const { editor, value } = setup();
+    await typeText(editor, 'a');
+    expect(editor.matches(':empty')).toBe(false);
+    // Backspace on the last character: Chrome/Firefox keep a bare <br> in
+    // the contenteditable instead of leaving it empty (issue 983f0c7b).
+    editor.replaceChildren(document.createElement('br'));
+    await fireEvent.input(editor);
+    await tick();
+    expect(value()).toBe('');
+    expect(editor.childNodes.length).toBe(0);
+    expect(editor.matches(':empty')).toBe(true);
+  });
+
   it('empties the editor when the parent clears the value (after send)', async () => {
     const { editor, getByTestId } = setup({ initial: 'tschüss :doge:' });
     await fireEvent.click(getByTestId('clear'));

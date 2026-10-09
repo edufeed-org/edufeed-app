@@ -151,7 +151,7 @@
     {disabled}
     onFiles={onAttachFiles ? takeFiles : undefined}
     onSubmit={() => !disabled && !sending && value.trim() && onSubmit()}
-    class="input flex w-full items-center input-ghost focus:outline-none"
+    class="input block w-full input-ghost leading-(--size) focus:outline-none"
     {testid}
   />
   <button
