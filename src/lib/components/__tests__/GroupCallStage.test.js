@@ -493,7 +493,9 @@ describe('GroupCallStage — a view, not the connection owner', () => {
   // there is something to put in it.
   it('offers the pop-out window only when the parent can open one', async () => {
     const { unmount } = render(GroupCallStage, { props: baseProps });
-    expect(screen.queryByTestId('group-call-more')).toBeNull();
+    // Without invite / pop-out / back the "More" button serves only the
+    // narrow stage (device menus, below): hidden from @2xl up.
+    expect(screen.getByTestId('group-call-more-wrap').classList.contains('@2xl:hidden')).toBe(true);
     expect(screen.queryByTestId('group-call-pop-out')).toBeNull();
     unmount();
     const onPopOut = vi.fn();
@@ -504,6 +506,35 @@ describe('GroupCallStage — a view, not the connection owner', () => {
     expect(onPopOut).toHaveBeenCalledTimes(1);
     // Picking closes the menu.
     expect(screen.queryByTestId('group-call-more-menu')).toBeNull();
+  });
+
+  // A narrow stage (below @2xl, e.g. beside the channel nav on a laptop)
+  // cannot hold 13 circles in one row: the three device chevrons step out of
+  // the dock and their menus open from "More" instead (laoc 2026-10-09: the
+  // dock wrapped into two rows and its menu reached into the channel nav).
+  it('on a narrow stage the device menus move from the chevrons into "More"', async () => {
+    const { unmount } = render(GroupCallStage, { props: { ...baseProps, onPopOut: vi.fn() } });
+    for (const label of ['Mic options', 'Camera options', 'Screen options']) {
+      const chevron = screen.getByRole('button', { name: label });
+      expect(chevron.classList.contains('hidden')).toBe(true);
+      expect(chevron.classList.contains('@2xl:inline-flex')).toBe(true);
+    }
+    // With something else in it, "More" stays at every width.
+    expect(screen.getByTestId('group-call-more-wrap').classList.contains('@2xl:hidden')).toBe(
+      false
+    );
+    await fireEvent.click(screen.getByTestId('group-call-more'));
+    const entries = screen.getAllByTestId('group-call-more-device');
+    expect(entries.map((li) => li.textContent?.trim())).toEqual([
+      'Mic options',
+      'Camera options',
+      'Screen options'
+    ]);
+    for (const li of entries) expect(li.classList.contains('@2xl:hidden')).toBe(true);
+    await fireEvent.click(screen.getByRole('menuitem', { name: 'Mic options' }));
+    expect(screen.queryByTestId('group-call-more-menu')).toBeNull();
+    expect(screen.getByTestId('group-call-mic-menu')).toBeTruthy();
+    unmount();
   });
 
   it('inside the pop-out: a way back to the tab', async () => {
@@ -1237,7 +1268,11 @@ describe('participant list panel', () => {
     await openPanel();
     const column = screen.getByTestId('group-call-participants-column');
     expect(column.classList.contains('w-full')).toBe(true);
-    expect(column.classList.contains('@2xl:w-72')).toBe(true);
+    // As wide as the chat column beside the stage (GroupChat: md:w-96), so
+    // switching between the two drawers does not move the tiles (laoc
+    // 2026-10-09: "changes the width of the sidebar").
+    expect(column.classList.contains('@2xl:w-96')).toBe(true);
+    expect(column.classList.contains('@2xl:w-72')).toBe(false);
     // A paper card on the stage (design 1d).
     expect(column.classList.contains('bg-base-100')).toBe(true);
     const tiles = screen.getByTestId('group-call-tiles');
@@ -1245,6 +1280,27 @@ describe('participant list panel', () => {
     expect(tiles.classList.contains('@2xl:flex')).toBe(true);
     await fireEvent.click(screen.getByTestId('stub-close'));
     expect(screen.getByTestId('group-call-tiles').classList.contains('hidden')).toBe(false);
+  });
+
+  // Both chrome layers end where the drawer begins (24rem drawer + its
+  // 0.75rem margin + a 0.75rem gap): the dock is centred on the tiles, not
+  // on the whole stage, so it never lies over the drawer's footer (laoc
+  // 2026-10-09: the dock covered "Räume schließen" in the breakout panel).
+  it('the title row and the dock keep clear of the open drawer', async () => {
+    lk.remoteParticipants = [remote(B)];
+    render(GroupCallStage, { props: baseProps });
+    const top = screen.getByTestId('group-call-top-layer');
+    const dock = screen.getByTestId('group-call-dock-layer');
+    expect(top.classList.contains('right-0')).toBe(true);
+    expect(dock.classList.contains('right-0')).toBe(true);
+    await openPanel();
+    for (const layer of [top, dock]) {
+      expect(layer.classList.contains('@2xl:right-[25.5rem]')).toBe(true);
+      expect(layer.classList.contains('right-0')).toBe(true);
+    }
+    await fireEvent.click(screen.getByTestId('stub-close'));
+    expect(top.classList.contains('@2xl:right-[25.5rem]')).toBe(false);
+    expect(dock.classList.contains('@2xl:right-[25.5rem]')).toBe(false);
   });
 
   // Design 1d: one drawer beside the tiles. The chat column (the parent's)

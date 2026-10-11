@@ -363,6 +363,8 @@
   const inBreakoutRoom = $derived(breakout.currentRoom !== null);
   const hostsBreakout = $derived(!inBreakoutRoom && breakout.session?.hosting === true);
   const canOpenBreakout = $derived(!!myRole && !inBreakoutRoom && !breakout.session);
+  // The rare actions behind "More" (invite, pop out, back to the tab).
+  const moreActions = $derived(!!(onInvite || onPopOut || onPopIn));
   // A session runs that this seat is not part of (joined late, declined,
   // came back): the banner with the rooms to join — guests too, their pass
   // opens the rooms (the store switches them with their code).
@@ -1001,9 +1003,12 @@
   {/if}
 {/snippet}
 
+<!-- The device chevrons: in the dock from @2xl up; on a narrower stage the
+  same menus open from "More" (the wrapper stays, so the menu it anchors
+  still has its place next to the control). -->
 {#snippet menuButton(/** @type {'mic' | 'camera' | 'screen'} */ name, /** @type {string} */ label)}
   <button
-    class="btn btn-circle btn-ghost btn-xs"
+    class="btn hidden btn-circle btn-ghost btn-xs @2xl:inline-flex"
     aria-label={label}
     title={label}
     aria-expanded={openMenu === name}
@@ -1176,9 +1181,11 @@
       {#if participantsOpen}
         <!-- The drawer: a paper card floating on the stage beside the tiles
           (@2xl), or — on a narrow stage — in their place, between the title
-          row and the dock. -->
+          row and the dock. As wide as the chat column beside the stage
+          (GroupChat, md:w-96): the two drawers swap without moving the
+          tiles. -->
         <div
-          class="mx-3 mt-16 mb-24 flex min-h-0 w-full flex-col overflow-hidden rounded-2xl bg-base-100 text-base-content shadow-xl @2xl:my-3 @2xl:mr-3 @2xl:ml-0 @2xl:w-72 @2xl:shrink-0"
+          class="mx-3 mt-16 mb-24 flex min-h-0 w-full flex-col overflow-hidden rounded-2xl bg-base-100 text-base-content shadow-xl @2xl:my-3 @2xl:mr-3 @2xl:ml-0 @2xl:w-96 @2xl:shrink-0"
           data-testid="group-call-participants-column"
         >
           {#if columnTabs}
@@ -1282,8 +1289,10 @@
     row (reconnecting, breakout) never does. pointer-events-none on the
     layer, back on every pill, so the tiles under the free space stay
     draggable. -->
-  <!-- Beside an open drawer (@2xl) the layer ends where the drawer begins:
-    18rem drawer + its 0.75rem margin + a 0.75rem gap. -->
+  <!-- Beside an open drawer (@2xl) both chrome layers end where the drawer
+    begins (24rem drawer + its 0.75rem margin + a 0.75rem gap), so the title
+    row and the dock are centred on the tiles and never lie over the
+    drawer's header or footer. -->
   <!-- z-40 on both chrome layers: a tile's own layers (avatar, name bar,
     controls, reactions) sit at z-10..z-30 in the stage's stacking context,
     and the dock's backdrop-blur makes it a stacking context at level auto —
@@ -1291,7 +1300,7 @@
     (laoc 2026-10-09: the "Mehr" menu looked transparent). -->
   <div
     class="pointer-events-none absolute top-0 left-0 z-40 flex flex-col items-start gap-2 p-3 {participantsOpen
-      ? 'right-0 @2xl:right-[19.5rem]'
+      ? 'right-0 @2xl:right-[25.5rem]'
       : 'right-0'}"
     data-testid="group-call-top-layer"
   >
@@ -1451,9 +1460,9 @@
     floating along the bottom. It steps back with the title row when idle,
     never while the pointer rests on it or a focus is inside it. -->
   <div
-    class="pointer-events-none absolute inset-x-0 bottom-0 z-40 flex justify-center p-3 transition-opacity duration-300 motion-reduce:transition-none {chromeHidden
-      ? 'opacity-0'
-      : ''}"
+    class="pointer-events-none absolute bottom-0 left-0 z-40 flex justify-center p-3 transition-opacity duration-300 motion-reduce:transition-none {participantsOpen
+      ? 'right-0 @2xl:right-[25.5rem]'
+      : 'right-0'} {chromeHidden ? 'opacity-0' : ''}"
     data-testid="group-call-dock-layer"
   >
     <div
@@ -1850,80 +1859,105 @@
         </div>
       {/if}
 
-      {#if onInvite || onPopOut || onPopIn}
-        <!-- The rare actions: invite guests, move the call to its own window
-          (or back). One menu, so the dock stays a single row of circles. -->
-        <div class="relative" data-call-menu>
-          <button
-            class="btn btn-circle btn-ghost"
-            aria-haspopup="menu"
-            aria-expanded={openMenu === 'more'}
-            aria-label={m.groups_call_more()}
-            title={m.groups_call_more()}
-            data-testid="group-call-more"
-            onclick={() => toggleMenu('more')}
+      <!-- The rare actions: invite guests, move the call to its own window
+        (or back). One menu, so the dock stays a single row of circles. On a
+        narrow stage (below @2xl) it also carries the device menus whose
+        chevrons left the dock — so it exists there even without a rare
+        action. The menu never grows past the stage (100cqw). -->
+      <div
+        class="relative {moreActions ? '' : '@2xl:hidden'}"
+        data-call-menu
+        data-testid="group-call-more-wrap"
+      >
+        <button
+          class="btn btn-circle btn-ghost"
+          aria-haspopup="menu"
+          aria-expanded={openMenu === 'more'}
+          aria-label={m.groups_call_more()}
+          title={m.groups_call_more()}
+          data-testid="group-call-more"
+          onclick={() => toggleMenu('more')}
+        >
+          <MoreIcon class_="h-5 w-5" title="" />
+        </button>
+        {#if openMenu === 'more'}
+          <ul
+            class="menu absolute right-0 bottom-full z-30 mb-2 w-max max-w-[calc(100cqw-1.5rem)] min-w-48 rounded-box bg-base-100 p-2 shadow-lg"
+            role="menu"
+            data-testid="group-call-more-menu"
           >
-            <MoreIcon class_="h-5 w-5" title="" />
-          </button>
-          {#if openMenu === 'more'}
-            <ul
-              class="menu absolute right-0 bottom-full z-30 mb-2 w-max min-w-48 rounded-box bg-base-100 p-2 shadow-lg"
-              role="menu"
-              data-testid="group-call-more-menu"
-            >
-              {#if onInvite}
-                <li>
-                  <button
-                    role="menuitem"
-                    class="text-sm whitespace-nowrap"
-                    title={m.groups_call_invite_title()}
-                    data-testid="group-call-invite"
-                    onclick={() => {
-                      openMenu = null;
-                      onInvite();
-                    }}
-                  >
-                    <LinkIcon class_="h-4 w-4" title="" />
-                    {m.groups_call_invite_button()}
-                  </button>
-                </li>
-              {/if}
-              {#if onPopOut}
-                <li>
-                  <button
-                    role="menuitem"
-                    class="text-sm whitespace-nowrap"
-                    data-testid="group-call-pop-out"
-                    onclick={() => {
-                      openMenu = null;
-                      onPopOut();
-                    }}
-                  >
-                    <ExternalLinkIcon class_="h-4 w-4" title="" />
-                    {m.groups_call_pop_out()}
-                  </button>
-                </li>
-              {/if}
-              {#if onPopIn}
-                <li>
-                  <button
-                    role="menuitem"
-                    class="text-sm whitespace-nowrap"
-                    data-testid="group-call-pop-in"
-                    onclick={() => {
-                      openMenu = null;
-                      onPopIn();
-                    }}
-                  >
-                    <ChevronLeftIcon class_="h-4 w-4" title="" />
-                    {m.groups_call_pop_in()}
-                  </button>
-                </li>
-              {/if}
-            </ul>
-          {/if}
-        </div>
-      {/if}
+            {#if lk.isConnected && lk.canPublish}
+              <li class="@2xl:hidden" data-testid="group-call-more-device">
+                <button role="menuitem" class="text-sm" onclick={() => toggleMenu('mic')}>
+                  <MicIcon class_="h-4 w-4" title="" />
+                  {m.groups_call_mic_options()}
+                </button>
+              </li>
+              <li class="@2xl:hidden" data-testid="group-call-more-device">
+                <button role="menuitem" class="text-sm" onclick={() => toggleMenu('camera')}>
+                  <VideoIcon class_="h-4 w-4" title="" />
+                  {m.groups_call_camera_options()}
+                </button>
+              </li>
+            {/if}
+            <li class="@2xl:hidden" data-testid="group-call-more-device">
+              <button role="menuitem" class="text-sm" onclick={() => toggleMenu('screen')}>
+                <ScreenShareIcon class_="h-4 w-4" title="" />
+                {m.groups_call_screen_share_options()}
+              </button>
+            </li>
+            {#if onInvite}
+              <li>
+                <button
+                  role="menuitem"
+                  class="text-sm @2xl:whitespace-nowrap"
+                  title={m.groups_call_invite_title()}
+                  data-testid="group-call-invite"
+                  onclick={() => {
+                    openMenu = null;
+                    onInvite();
+                  }}
+                >
+                  <LinkIcon class_="h-4 w-4" title="" />
+                  {m.groups_call_invite_button()}
+                </button>
+              </li>
+            {/if}
+            {#if onPopOut}
+              <li>
+                <button
+                  role="menuitem"
+                  class="text-sm @2xl:whitespace-nowrap"
+                  data-testid="group-call-pop-out"
+                  onclick={() => {
+                    openMenu = null;
+                    onPopOut();
+                  }}
+                >
+                  <ExternalLinkIcon class_="h-4 w-4" title="" />
+                  {m.groups_call_pop_out()}
+                </button>
+              </li>
+            {/if}
+            {#if onPopIn}
+              <li>
+                <button
+                  role="menuitem"
+                  class="text-sm @2xl:whitespace-nowrap"
+                  data-testid="group-call-pop-in"
+                  onclick={() => {
+                    openMenu = null;
+                    onPopIn();
+                  }}
+                >
+                  <ChevronLeftIcon class_="h-4 w-4" title="" />
+                  {m.groups_call_pop_in()}
+                </button>
+              </li>
+            {/if}
+          </ul>
+        {/if}
+      </div>
 
       <span class="mx-1 h-6 w-px shrink-0 bg-base-content/15" aria-hidden="true"></span>
       <!-- Leave: the one red circle, set apart from everything else. -->
