@@ -151,10 +151,12 @@ const rel = vi.hoisted(() => ({
   deleteBreakoutRoom: vi.fn(async () => {}),
   fetchEphemeralChildren: vi.fn(async () => []),
   editBreakoutUntil: vi.fn(async () => {}),
-  knockOnRoom: vi.fn(async () => {})
+  knockOnRoom: vi.fn(async () => {}),
+  leaveRoom: vi.fn(async () => {})
 }));
 vi.mock('$lib/groups/breakout-relay.js', () => ({
   knockOnRoom: (/** @type {any[]} */ ...a) => rel.knockOnRoom(...a),
+  leaveRoom: (/** @type {any[]} */ ...a) => rel.leaveRoom(...a),
   createBreakoutRoom: (/** @type {any[]} */ ...a) => rel.createBreakoutRoom(...a),
   seatInRoom: (/** @type {any[]} */ ...a) => rel.seatInRoom(...a),
   unseatFromRoom: (/** @type {any[]} */ ...a) => rel.unseatFromRoom(...a),
@@ -891,6 +893,33 @@ describe('late joiners while the host sits in a room: relay-only paths', () => {
       { id: 'r2', relay: RELAY },
       { title: 'Breakout 2 · Seminar' }
     );
+  });
+
+  // "Zurück zum Hauptraum" pressed by a member gives the room seat up (9022):
+  // the roster drops them, so the host's next seat — "Hierher holen", a move
+  // — is a change again and asks them. The host keeps every seat (the panel
+  // relies on it); a guest is on no roster.
+  it('a member\'s own "Zurück zum Hauptraum" gives the seat up, so a later seat asks again', async () => {
+    await bobSeesSession();
+    const sub = liveSub();
+    sub.stream.next(roster('r1', [HOST, BOB], 20));
+    sub.stream.next('EOSE');
+    await settle();
+    modal.callbacks.onConfirm();
+    await settle();
+    expect(store.getBreakoutState().currentRoom?.id).toBe('r1');
+    await store.leaveBreakoutRoom();
+    await settle();
+    expect(rel.leaveRoom).toHaveBeenCalledWith(expect.anything(), 'r1', bobUser);
+    expect(store.getBreakoutState().currentRoom).toBeNull();
+    // the relay's roster without me, then the host seats me there again
+    sub.stream.next(roster('r1', [HOST], 21));
+    await settle();
+    expect(modal.activeModal).toBe('none');
+    sub.stream.next(roster('r1', [HOST, BOB], 22));
+    await settle();
+    expect(modal.activeModal).toBe('breakoutAssignment');
+    expect(store.getBreakoutState().pending?.room.id).toBe('r1');
   });
 
   it('a seat in the main room that a roster now names is asked to switch, once per room', async () => {

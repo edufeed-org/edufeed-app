@@ -119,6 +119,7 @@ const breakout = vi.hoisted(() => ({
     joinRequest: null
   },
   returnToMain: vi.fn(async () => {}),
+  leaveBreakoutRoom: vi.fn(async () => {}),
   bringMainRoomHere: vi.fn(async () => {}),
   startBreakout: vi.fn(async () => {}),
   endBreakout: vi.fn(async () => {}),
@@ -134,6 +135,7 @@ const breakout = vi.hoisted(() => ({
 vi.mock('$lib/groups/breakout.svelte.js', () => ({
   getBreakoutState: () => breakout.state,
   returnToMain: (...a) => breakout.returnToMain(...a),
+  leaveBreakoutRoom: (...a) => breakout.leaveBreakoutRoom(...a),
   bringMainRoomHere: (...a) => breakout.bringMainRoomHere(...a),
   startBreakout: (...a) => breakout.startBreakout(...a),
   endBreakout: (...a) => breakout.endBreakout(...a),
@@ -1817,6 +1819,7 @@ describe('breakout rooms', () => {
       busy: false
     });
     breakout.returnToMain.mockClear();
+    breakout.leaveBreakoutRoom.mockClear();
   });
   const openPanel = async () => {
     await new Promise((resolve) => setTimeout(resolve, 0));
@@ -1929,7 +1932,8 @@ describe('breakout rooms', () => {
       screen.getByTestId('group-call-breakout-room').textContent.replace(/\s+/g, ' ').trim()
     ).toBe('Breakout room 2 · 2:05');
     await fireEvent.click(screen.getByTestId('group-call-breakout-back'));
-    expect(breakout.returnToMain).toHaveBeenCalledTimes(1);
+    // the button gives the seat up too (a member's own way back)
+    expect(breakout.leaveBreakoutRoom).toHaveBeenCalledTimes(1);
     // host controls are never offered inside a room
     await openPanel();
     expect(screen.queryByTestId('group-call-breakout-open')).toBeNull();

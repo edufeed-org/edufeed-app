@@ -13,7 +13,7 @@ import {
   publishToGroupRelay,
   confirmGroupMetadata
 } from './group-management.js';
-import { buildJoinRequestTemplate } from './groups.js';
+import { buildJoinRequestTemplate, buildLeaveRequestTemplate } from './groups.js';
 import { breakoutRoomMetadata, isParentRoleRejection } from './breakout.js';
 
 /**
@@ -114,6 +114,22 @@ export function knockOnRoom(relayConn, roomId, user) {
     buildJoinRequestTemplate(roomId),
     user,
     /already a member|already pending/i
+  );
+}
+
+/**
+ * Give one's own seat in a room up (kind 9022): a member who walked back to
+ * the main room leaves the room's roster, so the host's next seat for them
+ * is a change the roster shows. "Not a member" and a room that is already
+ * gone count as done.
+ * @param {any} relayConn @param {string} roomId @param {{pubkey: string, signer: any}} user
+ */
+export function leaveRoom(relayConn, roomId, user) {
+  return publishIdempotent(
+    relayConn,
+    buildLeaveRequestTemplate(roomId),
+    user,
+    /not a member|already left|doesn't exist|unknown member/i
   );
 }
 

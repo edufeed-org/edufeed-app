@@ -105,7 +105,8 @@ import {
   deleteBreakoutRoom,
   fetchEphemeralChildren,
   editBreakoutUntil,
-  knockOnRoom
+  knockOnRoom,
+  leaveRoom
 } from './breakout-relay.js';
 import { raceRelayKey } from './relay-key-race.js';
 import { isTrustedSigner } from './relay-directory.js';
@@ -630,6 +631,28 @@ export async function returnToMain() {
     );
   } finally {
     switching = false;
+  }
+}
+
+/**
+ * "Zurück zum Hauptraum" pressed in a room: back to the main room, and a
+ * member gives the room seat up (kind 9022) so the roster shows them gone —
+ * the host's next seat for them ("Hierher holen", a move) is a change
+ * again and asks them. The host keeps every seat (the panel relies on
+ * it); a guest is on no roster. The relay's own returns (a removal, a
+ * deleted room, the deadline) go through returnToMain alone.
+ */
+export async function leaveBreakoutRoom() {
+  const s = session;
+  const room = currentRoom;
+  const user = getActiveCallUser();
+  const giveUp = !!s && !!room && !!user && !s.hosting && !seatIsGuest();
+  await returnToMain();
+  if (!giveUp || !s || !room || !user) return;
+  try {
+    await leaveRoom(pool.relay(s.main.relay), room.id, user);
+  } catch (err) {
+    console.warn('room seat not given up:', err);
   }
 }
 
@@ -1575,7 +1598,9 @@ if (typeof window !== 'undefined') {
     // roster.
     $effect(() => {
       const s = session;
-      if (!s || currentRoom || s.hosting || untrack(() => switching)) return;
+      // `switching` is tracked on purpose: a switch sets currentRoom first
+      // and clears the flag last, and this must look again once it does.
+      if (!s || currentRoom || s.hosting || switching) return;
       const me = getActiveCallUser()?.pubkey;
       if (!me || seatIsGuest()) return;
       const rooms = s.rooms.filter((room) => !goneRoomIds.has(room.id));

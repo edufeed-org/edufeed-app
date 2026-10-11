@@ -84,7 +84,7 @@
     sendCallBroadcast,
     moveParticipant,
     joinBreakoutRoom,
-    returnToMain,
+    leaveBreakoutRoom,
     bringMainRoomHere
   } from '$lib/groups/breakout.svelte.js';
   import { formatCountdown } from '$lib/groups/breakout.js';
@@ -1452,7 +1452,7 @@
             {/if}
             <button
               class="btn gap-1 rounded-full px-3 btn-sm btn-primary"
-              onclick={() => void returnToMain()}
+              onclick={() => void leaveBreakoutRoom()}
               title={m.groups_call_breakout_back_to_main()}
               aria-label={m.groups_call_breakout_back_to_main()}
               data-testid="group-call-breakout-back"
