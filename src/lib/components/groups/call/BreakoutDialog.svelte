@@ -15,7 +15,12 @@
   import { CloseIcon } from '$lib/components/icons';
   import { BREAKOUT_MIN_ROOMS, BREAKOUT_MAX_ROOMS, splitRandom } from '$lib/groups/breakout.js';
   import { isRelayMembershipRequired } from '$lib/groups/group-management.js';
-  import { getBreakoutAutoAssign, setBreakoutAutoAssign } from '$lib/services/call-prefs.js';
+  import {
+    getBreakoutAutoAssign,
+    setBreakoutAutoAssign,
+    getBreakoutSelfJoin,
+    setBreakoutSelfJoin
+  } from '$lib/services/call-prefs.js';
   import * as m from '$lib/paraglide/messages';
 
   /** @typedef {import('$lib/groups/call-participants.js').ParticipantRow} ParticipantRow */
@@ -27,7 +32,8 @@
    *     roomCount: number,
    *     seats: Array<{identity: string, pubkey: string, roomIndex: number, guest: boolean}>,
    *     durationMinutes: number | null,
-   *     autoAssign: boolean
+   *     autoAssign: boolean,
+   *     selfJoin: boolean
    *   }) => Promise<void>,
    *   onClose: () => void
    * }}
@@ -52,6 +58,15 @@
   function chooseAutoAssign(enabled) {
     autoAssignChoice = enabled;
     setBreakoutAutoAssign(enabled);
+  }
+  // "Teilnehmende sehen die Räume und können selbst beitreten": off, the
+  // host keeps the assignment to themselves (the banner names no rooms,
+  // nobody knocks). Remembered on this device.
+  let selfJoin = $state(getBreakoutSelfJoin());
+  /** @param {boolean} enabled */
+  function chooseSelfJoin(enabled) {
+    selfJoin = enabled;
+    setBreakoutSelfJoin(enabled);
   }
   let busy = $state(false);
   /** @type {string | null} */
@@ -95,7 +110,8 @@
         roomCount,
         seats,
         durationMinutes: durationMinutes && durationMinutes > 0 ? durationMinutes : null,
-        autoAssign
+        autoAssign,
+        selfJoin
       });
     } catch (err) {
       console.warn('breakout start failed:', err);
@@ -196,6 +212,20 @@
         <span>{m.groups_call_breakout_auto_assign()}</span>
         <span class="text-xs text-base-content/60">{m.groups_call_breakout_auto_assign_hint()}</span
         >
+      </span>
+    </label>
+
+    <label class="mt-2 flex cursor-pointer items-start gap-2 text-sm">
+      <input
+        type="checkbox"
+        class="checkbox checkbox-sm"
+        checked={selfJoin}
+        onchange={(e) => chooseSelfJoin(/** @type {HTMLInputElement} */ (e.currentTarget).checked)}
+        data-testid="breakout-self-join"
+      />
+      <span class="flex flex-col">
+        <span>{m.groups_call_breakout_self_join()}</span>
+        <span class="text-xs text-base-content/60">{m.groups_call_breakout_self_join_hint()}</span>
       </span>
     </label>
 

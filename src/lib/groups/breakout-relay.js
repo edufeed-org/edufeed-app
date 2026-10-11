@@ -13,6 +13,7 @@ import {
   publishToGroupRelay,
   confirmGroupMetadata
 } from './group-management.js';
+import { buildJoinRequestTemplate, buildLeaveRequestTemplate } from './groups.js';
 import { breakoutRoomMetadata, isParentRoleRejection } from './breakout.js';
 
 /**
@@ -35,19 +36,21 @@ export function isEphemeralTagRejection(error) {
  * same room without the parent tag — the `about` marker names the channel
  * either way, which is all the client needs.
  * @param {any} relayConn a pool.relay(url) connection
- * @param {{id: string, parentId: string, channelName: string, index: number, until?: number | null}} room
+ * @param {{id: string, parentId: string, channelName: string, index: number, until?: number | null, selfJoin?: boolean}} room
+ *   `selfJoin: false` = the host keeps the assignment to themselves (`join=host` in the marker)
  * @param {{pubkey: string, signer: any}} user
  * @param {{confirmDelayMs?: number}} [opts]
  * @returns {Promise<any>} the relay's kind 39000 for the room
  */
 export async function createBreakoutRoom(relayConn, room, user, opts = {}) {
-  const { id, parentId, channelName, index, until } = room;
+  const { id, parentId, channelName, index, until, selfJoin = true } = room;
   const withParent = breakoutRoomMetadata({
     parentId,
     channelName,
     index,
     until,
-    withParent: true
+    withParent: true,
+    selfJoin
   });
   await publishToGroupRelay(relayConn, buildCreateGroupTemplate(id, withParent), user);
   try {
@@ -59,7 +62,8 @@ export async function createBreakoutRoom(relayConn, room, user, opts = {}) {
       channelName,
       index,
       until,
-      withParent: false
+      withParent: false,
+      selfJoin
     });
     await publishToGroupRelay(relayConn, buildEditGroupMetadataTemplate(id, withoutParent), user);
   }
@@ -93,6 +97,39 @@ export function seatInRoom(relayConn, roomId, pubkey, user) {
     buildPutUserTemplate(roomId, pubkey),
     user,
     /members already/i
+  );
+}
+
+/**
+ * Knock on a room: a member of the channel asks for a seat with their own
+ * kind 9021. A relay with the extension (pyramid edufeed-v1.18+) seats a
+ * member of the room's parent at once — the roster (kind 39002) then names
+ * them; an older relay parks the request as a pending application, which
+ * is harmless. "Already a member" and "already pending" count as done.
+ * @param {any} relayConn @param {string} roomId @param {{pubkey: string, signer: any}} user
+ */
+export function knockOnRoom(relayConn, roomId, user) {
+  return publishIdempotent(
+    relayConn,
+    buildJoinRequestTemplate(roomId),
+    user,
+    /already a member|already pending/i
+  );
+}
+
+/**
+ * Give one's own seat in a room up (kind 9022): a member who walked back to
+ * the main room leaves the room's roster, so the host's next seat for them
+ * is a change the roster shows. "Not a member" and a room that is already
+ * gone count as done.
+ * @param {any} relayConn @param {string} roomId @param {{pubkey: string, signer: any}} user
+ */
+export function leaveRoom(relayConn, roomId, user) {
+  return publishIdempotent(
+    relayConn,
+    buildLeaveRequestTemplate(roomId),
+    user,
+    /not a member|already left|doesn't exist|unknown member/i
   );
 }
 

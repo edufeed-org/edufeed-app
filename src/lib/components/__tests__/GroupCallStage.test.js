@@ -111,12 +111,16 @@ const breakout = vi.hoisted(() => ({
     rooms: [],
     membersByRoomId: {},
     presenceByRoomId: {},
+    mainPresence: [],
+    mainMembers: new Set(),
     remaining: null,
     busy: false,
     pending: null,
     joinRequest: null
   },
   returnToMain: vi.fn(async () => {}),
+  leaveBreakoutRoom: vi.fn(async () => {}),
+  bringMainRoomHere: vi.fn(async () => {}),
   startBreakout: vi.fn(async () => {}),
   endBreakout: vi.fn(async () => {}),
   extendBreakout: vi.fn(async () => {}),
@@ -131,6 +135,8 @@ const breakout = vi.hoisted(() => ({
 vi.mock('$lib/groups/breakout.svelte.js', () => ({
   getBreakoutState: () => breakout.state,
   returnToMain: (...a) => breakout.returnToMain(...a),
+  leaveBreakoutRoom: (...a) => breakout.leaveBreakoutRoom(...a),
+  bringMainRoomHere: (...a) => breakout.bringMainRoomHere(...a),
   startBreakout: (...a) => breakout.startBreakout(...a),
   endBreakout: (...a) => breakout.endBreakout(...a),
   extendBreakout: (...a) => breakout.extendBreakout(...a),
@@ -304,7 +310,9 @@ vi.mock('$lib/paraglide/messages', () => ({
   groups_call_breakout_running_badge: () => 'Session running',
   groups_call_breakout_in_room: (p) => `Breakout room ${p.n}`,
   groups_call_breakout_time_left: (p) => `${p.time} left`,
-  groups_call_breakout_back_to_main: () => 'Back to the main room'
+  groups_call_breakout_back_to_main: () => 'Back to the main room',
+  groups_call_breakout_in_main_count: (p) => `${p.n} in the main room`,
+  groups_call_breakout_fetch_here: () => 'Bring here'
 }));
 
 // bind:clientWidth measures through ResizeObserver, which jsdom lacks; an
@@ -1811,6 +1819,7 @@ describe('breakout rooms', () => {
       busy: false
     });
     breakout.returnToMain.mockClear();
+    breakout.leaveBreakoutRoom.mockClear();
   });
   const openPanel = async () => {
     await new Promise((resolve) => setTimeout(resolve, 0));
@@ -1923,10 +1932,56 @@ describe('breakout rooms', () => {
       screen.getByTestId('group-call-breakout-room').textContent.replace(/\s+/g, ' ').trim()
     ).toBe('Breakout room 2 · 2:05');
     await fireEvent.click(screen.getByTestId('group-call-breakout-back'));
-    expect(breakout.returnToMain).toHaveBeenCalledTimes(1);
+    // the button gives the seat up too (a member's own way back)
+    expect(breakout.leaveBreakoutRoom).toHaveBeenCalledTimes(1);
     // host controls are never offered inside a room
     await openPanel();
     expect(screen.queryByTestId('group-call-breakout-open')).toBeNull();
+  });
+
+  // The host sits in a room: the main room's 39004 shows who waits there
+  // (members and guests), and "Bring here" seats the members into this
+  // room through the relay. A plain seat in a room sees nothing of it.
+  it('a host inside a room sees who waits in the main room and can bring them here', async () => {
+    asHost();
+    const session = {
+      main: { id: 'main', relay: 'wss://r.example/', title: 'Standup' },
+      rooms: [],
+      until: null,
+      hosting: true
+    };
+    const BOB = 'b'.repeat(64);
+    breakout.state.session = session;
+    breakout.state.currentRoom = {
+      id: 'r1',
+      relay: 'wss://r.example/',
+      name: 'Breakout 1',
+      index: 1
+    };
+    breakout.state.mainPresence = ['a'.repeat(64), BOB, 'e'.repeat(64)];
+    breakout.state.mainMembers = new Set([BOB]);
+    const { unmount } = render(GroupCallStage, { props: baseProps });
+    // me left out: a member and a guest wait
+    expect(screen.getByTestId('group-call-breakout-main-count').textContent.trim()).toBe(
+      '2 in the main room'
+    );
+    await fireEvent.click(screen.getByTestId('group-call-breakout-fetch-here'));
+    expect(breakout.bringMainRoomHere).toHaveBeenCalledTimes(1);
+    unmount();
+    // only a guest waiting: told, but nothing to bring (guests move by message)
+    breakout.state.mainPresence = ['e'.repeat(64)];
+    const second = render(GroupCallStage, { props: baseProps });
+    expect(screen.getByTestId('group-call-breakout-main-count').textContent.trim()).toBe(
+      '1 in the main room'
+    );
+    expect(screen.queryByTestId('group-call-breakout-fetch-here')).toBeNull();
+    second.unmount();
+    // a plain seat in a room: nothing of it
+    breakout.state.session = { ...session, hosting: false };
+    breakout.state.mainPresence = [BOB];
+    render(GroupCallStage, { props: baseProps });
+    expect(screen.queryByTestId('group-call-breakout-main-count')).toBeNull();
+    expect(screen.queryByTestId('group-call-breakout-fetch-here')).toBeNull();
   });
 
   it('a seat in the main room during a session it is not part of sees the banner with the rooms to join, never a host', async () => {

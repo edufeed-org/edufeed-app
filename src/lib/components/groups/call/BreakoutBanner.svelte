@@ -2,10 +2,11 @@
   BreakoutBanner — "Breakout-Session läuft": what a seat in the MAIN room
   sees while a session runs that it is not part of (joined late with
   auto-assign off, declined its assignment, came back early). Lists the
-  rooms with "Beitreten" — for a member a request to the host seat, which
-  seats the person and sends them over; for a guest a direct switch with
-  its call pass (groups/breakout.svelte.js requestBreakoutRoom) — and the
-  deadline. Pure view; the store owns the session.
+  rooms with "Beitreten" — for a member a knock on the room (kind 9021, the
+  relay seats them) plus a request to the host seat, whichever answers
+  first; for a guest a direct switch with its call pass
+  (groups/breakout.svelte.js requestBreakoutRoom) — and the deadline. Pure
+  view; the store owns the session.
 -->
 <script>
   import { ChannelsIcon } from '$lib/components/icons';
@@ -22,6 +23,8 @@
   let { breakout, onJoin } = $props();
 
   const rooms = $derived(breakout.rooms);
+  // The host keeps the assignment to themselves: only that a session runs.
+  const hostAssigns = $derived(breakout.session?.selfJoin === false);
   /** @param {string} roomId */
   const seated = (roomId) => breakout.membersByRoomId[roomId]?.size ?? 0;
 </script>
@@ -38,9 +41,15 @@
       {m.groups_call_breakout_time_left({ time: formatCountdown(breakout.remaining) })}
     </span>
   {/if}
-  <span class="text-base-content/70">{m.groups_call_breakout_banner_body()}</span>
+  {#if hostAssigns}
+    <span class="text-base-content/70" data-testid="breakout-banner-host-assigns"
+      >{m.groups_call_breakout_banner_host_assigns()}</span
+    >
+  {:else}
+    <span class="text-base-content/70">{m.groups_call_breakout_banner_body()}</span>
+  {/if}
   <ul class="flex flex-wrap gap-1">
-    {#each rooms as room (room.id)}
+    {#each hostAssigns ? [] : rooms as room (room.id)}
       <li>
         <button
           type="button"
