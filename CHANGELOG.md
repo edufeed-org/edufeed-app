@@ -7,6 +7,58 @@ merge commits of the nostr PRs that landed since the previous tag.
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-10-12
+
+The call stage as a "Bühne", the verified address explained, and breakout
+rooms that work for late joiners. The breakout changes need the groups
+relay at pyramid `edufeed-v1.19` or later (deployed on groups.edufeed.org).
+
+### Added
+
+- The in-call UI is one room in the page's colors with the chrome floating
+  over it: a title pill with the way back, duration and role; status pills;
+  a dock along the bottom with one red leave button; one drawer beside the
+  tiles for participants or chat. Title row and dock step back after a few
+  seconds without input. On a narrow stage the device menus move from the
+  dock's chevrons into "Mehr". The participants drawer is as wide as the
+  chat column, so switching between them does not move the tiles, and the
+  dock keeps clear of the drawer.
+- The verified address is explained: an info card on the "Verifiziert"
+  chip, an "Adresse" step in the signup, and a NIP-05 address
+  (`name@edufeed.org`) works in the people search and as `/p/<address>`.
+  Wiki hash deep links land on their heading.
+- Breakout rooms: a late joiner of the main room sees the running rooms
+  and walks into one by themselves (the relay seats members of the channel
+  on their own join request), and a host sitting in a room sees who
+  arrived in the main room — a toast with the name, a "N im Hauptraum"
+  pill with "Hierher holen", and the smallest room when "Nachzügler
+  automatisch verteilen" is on. A roster that names a seat is its
+  assignment, so the host seats people from any room through the relay.
+- A new breakout setting, "Teilnehmende sehen die Räume und können selbst
+  beitreten": unchecked, participants only learn that a session runs and
+  the host assigns them.
+
+### Changed
+
+- Vocabulary publishing moved to the edufeed/vocabs repository.
+- In the chat, the actions on one's own messages sit left of the
+  timestamp, which stays flush with the bubble.
+
+### Fixed
+
+- Breakout: a member who came in through the invite link follows the
+  rosters again, microphone, camera and the call chat survive the way back
+  to the main room, and (with relay `edufeed-v1.17`) the host joining a
+  room no longer ends the guests' session. "Zurück zum Hauptraum" gives the
+  room seat up, so the host can bring the person somewhere else afterwards.
+- Resource forms keep a stored concept value that is outside the picker's
+  scheme when editing, and no longer mistake "Kunst: Malen"-style labels
+  for canonical ids.
+- The chat composer puts the caret on the text line and shows the
+  placeholder again after deleting everything.
+- The remaining findings of the v0.3.2..v0.5.0 code review (a labels
+  module, a stray semicolon, starting-flag tokens, memoised chat parsing).
+
 ## [0.5.1] - 2026-10-09
 
 Patch release with the fixes from a code review of everything that landed
