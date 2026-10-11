@@ -333,18 +333,25 @@ describe('edufeed.call.breakout payloads', () => {
     expect(parseBreakoutPayload(JSON.parse(JSON.stringify(payload)))).toEqual({
       t: 'assign',
       rooms,
-      until: 1700000000
+      until: 1700000000,
+      selfJoin: true
     });
   });
 
   it('omits an absent deadline and parses it back as null', () => {
     const payload = buildBreakoutAssignPayload({ rooms });
     expect('until' in payload).toBe(false);
-    expect(parseBreakoutPayload(payload)).toEqual({ t: 'assign', rooms, until: null });
+    expect(parseBreakoutPayload(payload)).toEqual({
+      t: 'assign',
+      rooms,
+      until: null,
+      selfJoin: true
+    });
     expect(parseBreakoutPayload({ ...payload, until: null })).toEqual({
       t: 'assign',
       rooms,
-      until: null
+      until: null,
+      selfJoin: true
     });
   });
 
@@ -356,6 +363,19 @@ describe('edufeed.call.breakout payloads', () => {
   it('the state carries "the host assigns" only when set, and parses it back (default: may join)', () => {
     const closed = buildBreakoutStatePayload({ rooms, selfJoin: false });
     expect(closed.selfJoin).toBe(false);
+    // the assignment at session start reaches every seat in the main room,
+    // the unassigned ones included: it carries the flag the same way
+    const assigned = buildBreakoutAssignPayload({
+      rooms: [{ ...rooms[0], members: ['a:1'] }],
+      selfJoin: false
+    });
+    expect(assigned.selfJoin).toBe(false);
+    expect(
+      /** @type {any} */ (parseBreakoutPayload(JSON.parse(JSON.stringify(assigned)))).selfJoin
+    ).toBe(false);
+    expect(
+      buildBreakoutAssignPayload({ rooms: [{ ...rooms[0], members: [] }] }).selfJoin
+    ).toBeUndefined();
     /** @param {unknown} raw */
     const parsed = (raw) => /** @type {any} */ (parseBreakoutPayload(raw));
     expect(parsed(JSON.parse(JSON.stringify(closed)))?.selfJoin).toBe(false);

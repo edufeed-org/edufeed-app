@@ -494,9 +494,7 @@ function handleMessage(raw, sender) {
   }
   const pointer = getActiveCallPointer();
   if (!pointer || currentRoom) return;
-  if (!session?.hosting) {
-    learnRooms(payload.rooms, payload.until, payload.t === 'state' ? payload.selfJoin : undefined);
-  }
+  if (!session?.hosting) learnRooms(payload.rooms, payload.until, payload.selfJoin);
   if (payload.t === 'state' || !session) return;
   const myIdentity = lkModule?.getLiveKitState().localParticipant?.identity;
   const mine = myIdentity ? assignedRoom(payload, myIdentity) : null;
@@ -781,7 +779,8 @@ async function answerJoinRequest(sender, roomId) {
     await lkModule?.sendBreakoutMessage(
       buildBreakoutAssignPayload({
         rooms: [{ ...room, members: [sender.identity] }],
-        until: s.until
+        until: s.until,
+        selfJoin: s.selfJoin
       }),
       [sender.identity]
     );
@@ -821,7 +820,8 @@ async function onNewcomer(participant) {
           .sendBreakoutMessage(
             buildBreakoutAssignPayload({
               rooms: [{ ...to, members: [participant.identity] }],
-              until: s.until
+              until: s.until,
+              selfJoin: s.selfJoin
             }),
             [participant.identity]
           )
@@ -856,7 +856,8 @@ async function onNewcomer(participant) {
     await lk.sendBreakoutMessage(
       buildBreakoutAssignPayload({
         rooms: [{ ...room, members: [participant.identity] }],
-        until: s.until
+        until: s.until,
+        selfJoin: s.selfJoin
       }),
       [participant.identity]
     );
@@ -994,7 +995,9 @@ export async function startBreakout({
       selfJoin,
       channelName
     };
-    await lk.sendBreakoutMessage(buildBreakoutAssignPayload({ rooms: assignments, until }));
+    await lk.sendBreakoutMessage(
+      buildBreakoutAssignPayload({ rooms: assignments, until, selfJoin })
+    );
   } catch (err) {
     // Leave nothing half-built behind.
     for (const room of rooms) await deleteBreakoutRoom(relayConn, room.id, user).catch(() => {});
@@ -1044,7 +1047,11 @@ export async function moveParticipant({ pubkey, identities = [], toRoomId, guest
     if (!to) sentHome.set(pubkey, Date.now());
     if (to && !from && identities.length > 0 && lkModule) {
       await lkModule.sendBreakoutMessage(
-        buildBreakoutAssignPayload({ rooms: [{ ...to, members: identities }], until: s.until }),
+        buildBreakoutAssignPayload({
+          rooms: [{ ...to, members: identities }],
+          until: s.until,
+          selfJoin: s.selfJoin
+        }),
         identities
       );
     }
@@ -1103,7 +1110,11 @@ async function moveGuest({ pubkey, identities, toRoomId, session: s, user }) {
       }
     } else if (to && identities.length > 0 && lkModule) {
       await lkModule.sendBreakoutMessage(
-        buildBreakoutAssignPayload({ rooms: [{ ...to, members: identities }], until: s.until }),
+        buildBreakoutAssignPayload({
+          rooms: [{ ...to, members: identities }],
+          until: s.until,
+          selfJoin: s.selfJoin
+        }),
         identities
       );
     }

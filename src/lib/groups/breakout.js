@@ -223,7 +223,7 @@ export function isParentRoleRejection(error) {
  *   `members` are LiveKit identities (`<pubkey>:<random>`), so each SEAT is
  *   addressed — a user sitting in the call twice may be sent to two rooms.
  * @typedef {{id: string, relay: string, name: string}} BreakoutRoomRef
- * @typedef {{t: 'assign', rooms: BreakoutRoomAssignment[], until: number | null}} BreakoutAssignPayload
+ * @typedef {{t: 'assign', rooms: BreakoutRoomAssignment[], until: number | null, selfJoin: boolean}} BreakoutAssignPayload
  * @typedef {{t: 'state', rooms: BreakoutRoomRef[], until: number | null, selfJoin: boolean}} BreakoutStatePayload
  *   the running session, replayed to whoever joins the main room late;
  *   `selfJoin` false = the host keeps the assignment to themselves
@@ -239,10 +239,12 @@ export function isParentRoleRejection(error) {
  */
 
 /**
- * @param {{rooms: BreakoutRoomAssignment[], until?: number | null}} args
- * @returns {{t: 'assign', rooms: BreakoutRoomAssignment[], until?: number}}
+ * `selfJoin: false` rides along like on the state: the assignment at session
+ * start reaches every seat in the main room, the unassigned ones included.
+ * @param {{rooms: BreakoutRoomAssignment[], until?: number | null, selfJoin?: boolean}} args
+ * @returns {{t: 'assign', rooms: BreakoutRoomAssignment[], until?: number, selfJoin?: false}}
  */
-export function buildBreakoutAssignPayload({ rooms, until }) {
+export function buildBreakoutAssignPayload({ rooms, until, selfJoin = true }) {
   return {
     t: 'assign',
     rooms: rooms.map((room) => ({
@@ -251,7 +253,8 @@ export function buildBreakoutAssignPayload({ rooms, until }) {
       name: room.name,
       members: [...room.members]
     })),
-    ...(typeof until === 'number' && Number.isFinite(until) ? { until: Math.floor(until) } : {})
+    ...(typeof until === 'number' && Number.isFinite(until) ? { until: Math.floor(until) } : {}),
+    ...(selfJoin === false ? { selfJoin: false } : {})
   };
 }
 
@@ -340,16 +343,17 @@ export function parseBreakoutPayload(raw) {
     if (typeof msg.until !== 'number' || !Number.isFinite(msg.until)) return null;
     until = msg.until;
   }
+  if (msg.selfJoin !== undefined && typeof msg.selfJoin !== 'boolean') return null;
+  const selfJoin = msg.selfJoin !== false;
   if (msg.t === 'state') {
-    if (msg.selfJoin !== undefined && typeof msg.selfJoin !== 'boolean') return null;
     return {
       t: 'state',
       rooms: rooms.map(({ id, relay, name }) => ({ id, relay, name })),
       until,
-      selfJoin: msg.selfJoin !== false
+      selfJoin
     };
   }
-  return { t: 'assign', rooms, until };
+  return { t: 'assign', rooms, until, selfJoin };
 }
 
 /**

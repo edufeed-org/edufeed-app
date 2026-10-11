@@ -1021,6 +1021,17 @@ describe('the host keeps the assignment to themselves (selfJoin off)', () => {
     expect(rel.seatInRoom).not.toHaveBeenCalled();
   });
 
+  it('a seat in the main room at session start learns it from the assignment broadcast', async () => {
+    await liveInMain(bobUser);
+    lk.listener?.(
+      { t: 'assign', rooms: [{ ...ROOMS[0], members: [CAROL + ':seat1'] }], selfJoin: false },
+      hostSender
+    );
+    await settle();
+    expect(store.getBreakoutState().session?.selfJoin).toBe(false);
+    expect(modal.activeModal).toBe('none');
+  });
+
   it('a late joiner learns it from the state message and from the relay listing, and does not knock', async () => {
     await liveInMain(bobUser);
     lk.listener?.(
