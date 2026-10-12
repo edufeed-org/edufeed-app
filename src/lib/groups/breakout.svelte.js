@@ -204,11 +204,13 @@ let joinRequest = $state.raw(null);
 // room this seat has not seen yet, or a new session.
 let bannerDismissed = $state(false);
 /**
- * Guests in rooms, as they announced themselves (`seat`): pubkey -> the
- * room and the LiveKit identity held there. Guests are on no roster, so
- * this is the host's only handle on them (the moderation endpoint matches
- * identities exactly). Forgotten when the guest shows up in the main room.
- * @type {Record<string, {roomId: string, identity: string}>}
+ * Guests in rooms, as they announced themselves (`seat`): the LiveKit
+ * identity held there -> the room and the guest's pubkey. Guests are on no
+ * roster, so this is the host's only handle on them (the moderation
+ * endpoint matches identities exactly). Keyed by identity, not pubkey: one
+ * guest may sit in two rooms from two tabs. A seat is forgotten once the
+ * room's kind 39004 no longer lists the pubkey.
+ * @type {Record<string, {roomId: string, identity: string, pubkey: string}>}
  */
 let guestSeats = $state.raw({});
 // The connection service has been loaded: effects that read its state wait
@@ -273,7 +275,7 @@ let sentHome = new Map();
  *   busy: boolean,
  *   pending: {room: BreakoutRoom} | null,
  *   joinRequest: {roomId: string} | null,
- *   guestSeats: Record<string, {roomId: string, identity: string}>,
+ *   guestSeats: Record<string, {roomId: string, identity: string, pubkey: string}>,
  *   switching: boolean,
  *   bannerDismissed: boolean
  * }}
@@ -550,14 +552,34 @@ function recordGuestSeat(sender, payload) {
   const pubkey = identityToPubkey(sender.identity);
   if (!pubkey || identityToPubkey(payload.identity) !== pubkey) return;
   if (!session.rooms.some((room) => room.id === payload.room)) return;
-  guestSeats = { ...guestSeats, [pubkey]: { roomId: payload.room, identity: payload.identity } };
+  guestSeats = {
+    ...guestSeats,
+    [payload.identity]: { roomId: payload.room, identity: payload.identity, pubkey }
+  };
 }
 
-/** @param {string} pubkey */
-function forgetGuestSeat(pubkey) {
-  if (!(pubkey in guestSeats)) return;
+/** The seats a guest announced, by pubkey. @param {string} pubkey */
+function guestSeatsOf(pubkey) {
+  return Object.values(guestSeats).filter((seat) => seat.pubkey === pubkey);
+}
+
+/**
+ * Forget announced guest seats: the named identities, or — for a pubkey —
+ * the seats in rooms whose kind 39004 (once heard) no longer lists it. A
+ * room that still lists the pubkey may hold the guest's other tab.
+ * @param {{identities?: string[], pubkey?: string}} which
+ */
+function forgetGuestSeats({ identities = [], pubkey }) {
+  const drop = new Set(identities);
+  if (pubkey) {
+    for (const seat of guestSeatsOf(pubkey)) {
+      const present = presenceByRoomId[seat.roomId];
+      if (Array.isArray(present) && !present.includes(pubkey)) drop.add(seat.identity);
+    }
+  }
+  if (![...drop].some((identity) => identity in guestSeats)) return;
   const rest = { ...guestSeats };
-  delete rest[pubkey];
+  for (const identity of drop) delete rest[identity];
   guestSeats = rest;
 }
 
@@ -640,6 +662,18 @@ async function enterRoom(room) {
 }
 
 /** Back to the main room (any participant may, at any time). */
+/**
+ * The connection died while this seat was in a room (the "call ended"
+ * screen, reason dropped): back into that room — the same switch as the
+ * assignment, from the ended call. A guest requests the room's token
+ * again with its code.
+ */
+export async function rejoinRoom() {
+  const room = currentRoom;
+  if (!room || !session || switching) return;
+  await enterRoom(room);
+}
+
 export async function returnToMain() {
   const s = session;
   clearTimeout(returnTimer);
@@ -893,8 +927,9 @@ async function onNewcomer(participant) {
   const guest = isGuestParticipant(participant);
   const pubkey = identityToPubkey(participant.identity);
   if (guest && pubkey) {
-    // Back in the main room: whatever seat it held in a room is history.
-    forgetGuestSeat(pubkey);
+    // Back in the main room: the seat it held in a room is history once
+    // that room no longer lists it (another tab may still sit there).
+    forgetGuestSeats({ pubkey });
     const move = guestMoves.get(pubkey);
     if (move) {
       clearTimeout(move.timer);
@@ -1169,17 +1204,20 @@ async function moveGuest({ pubkey, identities, toRoomId, session: s, user }) {
   const live = s.rooms.filter((room) => !goneRoomIds.has(room.id));
   const to = toRoomId ? live.find((room) => room.id === toRoomId) : null;
   if (toRoomId && !to) return;
-  const seat = guestSeats[pubkey];
-  const from = seat ? live.find((room) => room.id === seat.roomId) : null;
-  if (from?.id === toRoomId) return;
+  // Every seat the guest holds in a room (two tabs: both come along).
+  const seats = guestSeatsOf(pubkey).filter((seat) => live.some((room) => room.id === seat.roomId));
+  const from = seats.length > 0 ? live.find((room) => room.id === seats[0].roomId) : null;
+  if (seats.length > 0 && seats.every((seat) => seat.roomId === toRoomId)) return;
   busy = true;
   try {
-    if (from && seat) {
-      await moderateCall({ id: from.id, relay: s.main.relay }, user, {
-        action: 'remove',
-        identity: seat.identity
-      });
-      forgetGuestSeat(pubkey);
+    if (from) {
+      for (const seat of seats) {
+        await moderateCall({ id: seat.roomId, relay: s.main.relay }, user, {
+          action: 'remove',
+          identity: seat.identity
+        });
+      }
+      forgetGuestSeats({ identities: seats.map((seat) => seat.identity) });
       const pending = guestMoves.get(pubkey);
       if (pending) clearTimeout(pending.timer);
       guestMoves.delete(pubkey);
@@ -1484,7 +1522,9 @@ if (typeof window !== 'undefined') {
 
     // The relay hands this seat the host role while a session runs that
     // this client does not manage yet (the host left; this co-host was
-    // next): take over — panel, newcomers, the deadline.
+    // next): take over — panel, newcomers, the deadline. With no session
+    // known (the host dropped before this seat heard of one, or this
+    // client was last in a room) the relay is asked again.
     let heldSeat = false;
     $effect(() => {
       const s = session;
@@ -1492,6 +1532,13 @@ if (typeof window !== 'undefined') {
       const seat = holdsHostSeat();
       const gained = seat && !heldSeat;
       heldSeat = seat;
+      if (gained && !s && !inRoom && !untrack(() => switching)) {
+        const pointer = getActiveCallPointer();
+        if (pointer) {
+          discoveredFor = `${normalizeURL(pointer.relay)}'${pointer.id}`;
+          void discoverSession(pointer);
+        }
+      }
       if (!s || inRoom || !seat || s.hosting) return;
       session = {
         ...s,
@@ -1501,6 +1548,35 @@ if (typeof window !== 'undefined') {
         channelName: s.channelName || channelNameOf(s.rooms)
       };
       if (gained) showToast(m.groups_call_breakout_took_over(), 'info');
+    });
+
+    // The other way round: the relay took this seat's role away (handed on
+    // after a drop that lasted; a demotion) while this client runs the
+    // session. It steps back to the participant view — the state is kept,
+    // the panel and the newcomer / deadline actions are not its any more.
+    // Only a seat that showed a role in the main room during this session
+    // is watched: a session started while the metadata says nothing (an
+    // old relay) is left alone.
+    let roleSeen = false;
+    $effect(() => {
+      const s = session;
+      if (!s) {
+        roleSeen = false;
+        return;
+      }
+      if (!s.hosting || currentRoom || switching || !lkReady || !lkModule) return;
+      if (getGroupCallState().phase !== 'ready') return;
+      const lk = lkModule.getLiveKitState();
+      void lk.participantMetadataVersion;
+      const role = lk.localParticipant ? participantCallRole(lk.localParticipant) : null;
+      if (role) {
+        roleSeen = true;
+        return;
+      }
+      if (!roleSeen) return;
+      roleSeen = false;
+      session = { ...s, hosting: false, creator: false };
+      showToast(m.groups_call_breakout_handed_over(), 'info');
     });
 
     // The server ended our seat in a BREAKOUT room — the relay deleted the
@@ -1737,6 +1813,21 @@ if (typeof window !== 'undefined') {
       }
       clearTimeout(returnTimer);
       returnTimer = setTimeout(() => void returnToMain(), BREAKOUT_MOVE_GRACE_MS);
+    });
+
+    // An announced guest seat is forgotten once its room's kind 39004 no
+    // longer lists the guest (the guest left or was moved; another tab in
+    // another room keeps its own seat).
+    $effect(() => {
+      const seats = guestSeats;
+      const presence = presenceByRoomId;
+      const stale = Object.values(seats)
+        .filter((seat) => {
+          const present = presence[seat.roomId];
+          return Array.isArray(present) && !present.includes(seat.pubkey);
+        })
+        .map((seat) => seat.identity);
+      if (stale.length > 0) forgetGuestSeats({ identities: stale });
     });
 
     // In the main room: every room gone (the host ended it elsewhere, the

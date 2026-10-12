@@ -4194,6 +4194,7 @@
   "groups_call_breakout_join_requested": "Request sent …",
   "groups_call_breakout_join_no_host": "Nobody in the main room can seat you right now.",
   "groups_call_breakout_took_over": "You are now running the breakout session.",
+  "groups_call_breakout_handed_over": "Someone else is running the breakout session now.",
   "groups_call_breakout_room_closed": "The room was closed – back in the main room.",
   "groups_call_breakout_extend": "+{minutes} min",
   "groups_call_breakout_extend_failed": "The time could not be extended: {reason}",

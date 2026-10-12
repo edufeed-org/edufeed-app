@@ -4194,6 +4194,7 @@
   "groups_call_breakout_join_requested": "Anfrage gesendet …",
   "groups_call_breakout_join_no_host": "Niemand im Hauptraum kann dich gerade zuteilen.",
   "groups_call_breakout_took_over": "Du leitest jetzt die Breakout-Session.",
+  "groups_call_breakout_handed_over": "Die Breakout-Session leitet jetzt jemand anderes.",
   "groups_call_breakout_room_closed": "Der Raum wurde geschlossen – zurück im Hauptraum.",
   "groups_call_breakout_extend": "+{minutes} Min",
   "groups_call_breakout_extend_failed": "Zeit konnte nicht verlängert werden: {reason}",

@@ -159,9 +159,9 @@
     const out = {};
     for (const room of rooms) {
       const seated = breakout.membersByRoomId[room.id] ?? new Set();
-      const announced = Object.entries(breakout.guestSeats ?? {})
-        .filter(([, seat]) => seat.roomId === room.id)
-        .map(([pubkey]) => pubkey);
+      const announced = Object.values(breakout.guestSeats ?? {})
+        .filter((seat) => seat.roomId === room.id)
+        .map((seat) => seat.pubkey);
       out[room.id] = [
         ...new Set([...(breakout.presenceByRoomId[room.id] ?? []), ...announced])
       ].filter((pubkey) => pubkey !== myPubkey && !seated.has(pubkey));

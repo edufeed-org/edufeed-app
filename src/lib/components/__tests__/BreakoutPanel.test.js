@@ -203,7 +203,9 @@ describe('BreakoutPanel', () => {
     render(BreakoutPanel, {
       props: {
         rows: [],
-        breakout: state({ guestSeats: { [EVE]: { roomId: 'r2', identity: `${EVE}:zz` } } }),
+        breakout: state({
+          guestSeats: { [`${EVE}:zz`]: { roomId: 'r2', identity: `${EVE}:zz`, pubkey: EVE } }
+        }),
         myPubkey: HOST,
         ...cb
       }
