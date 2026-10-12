@@ -2362,3 +2362,57 @@ describe('the main room follows the rooms on the relay itself', () => {
     expect(ephemeralSub()).toBeUndefined();
   });
 });
+
+describe("a breakout room's own host seat is not the session's host seat", () => {
+  it('a seat that opened a room does not take the session over on the way back', async () => {
+    await liveInMain(bobUser);
+    lk.listener?.({ t: 'assign', rooms: ROOMS }, hostSender);
+    modal.callbacks.onConfirm();
+    await settle();
+    expect(store.getBreakoutState().currentRoom?.id).toBe('r1');
+    // the relay seats the opener of a room as that room's host
+    lkFake.setMyMetadata(HOST_META);
+    await settle();
+    expect(store.getBreakoutState().session?.hosting).toBe(false);
+    // the main room's seat the switch connects carries no role (the real
+    // connection service replaces the local participant on connect)
+    const original = callFake.switchGroupCall.getMockImplementation();
+    callFake.switchGroupCall.mockImplementationOnce(async (...args) => {
+      const result = await original?.(...args);
+      lkFake.setMyMetadata('');
+      return result;
+    });
+    await store.returnToMain();
+    await settle();
+    expect(store.getBreakoutState().currentRoom).toBeNull();
+    expect(store.getBreakoutState().session?.hosting).toBe(false);
+    expect(toast.fn).not.toHaveBeenCalledWith('you run the session now', 'info');
+  });
+
+  it('the host does not re-assign a seat that just came back from a room on its own', async () => {
+    lkFake.setIdentity(HOST + ':h');
+    lkFake.setMyMetadata(HOST_META);
+    await liveInMain(hostUser);
+    await store.startBreakout({
+      channelName: 'Seminar',
+      roomCount: 2,
+      seats: [{ identity: BOB + ':seat1', pubkey: BOB, roomIndex: 1 }],
+      autoAssign: true
+    });
+    await settle();
+    const roomIds = rel.createBreakoutRoom.mock.calls.map((c) => c[1].id);
+    const sub = liveSub();
+    sub.stream.next(roster(roomIds[0], [HOST, BOB], 11));
+    await settle();
+    // Bob leaves the room himself (kind 9022): the roster drops him
+    sub.stream.next(roster(roomIds[0], [HOST], 12));
+    await settle();
+    rel.seatInRoom.mockClear();
+    lk.send.mockClear();
+    lk.joined?.({ identity: BOB + ':seat2', metadata: '' });
+    await settle();
+    await settle();
+    expect(rel.seatInRoom).not.toHaveBeenCalled();
+    expect(lk.send.mock.calls.some((c) => c[0]?.t === 'assign')).toBe(false);
+  });
+});

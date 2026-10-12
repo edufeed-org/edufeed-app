@@ -264,6 +264,14 @@ let guestMoves = new Map();
 /** Pubkeys this client sent back to the main room, with when (no auto re-assign). @type {Map<string, number>} */
 // eslint-disable-next-line svelte/prefer-svelte-reactivity -- bookkeeping, never rendered
 let sentHome = new Map();
+/**
+ * Pubkeys a room's roster dropped, with when: a seat that came back to the
+ * main room on its own ("Zurück zum Hauptraum") is not a late joiner — the
+ * host's auto-assignment leaves it alone for the same grace as sentHome.
+ * @type {Map<string, number>}
+ */
+// eslint-disable-next-line svelte/prefer-svelte-reactivity -- bookkeeping, never rendered
+let leftRoom = new Map();
 
 /**
  * @returns {{
@@ -415,6 +423,7 @@ function clearSession() {
   clearTimeout(joinTimer);
   clearGuestMoves();
   sentHome = new Map();
+  leftRoom = new Map();
   guestSeats = {};
   session = null;
   currentRoom = null;
@@ -1003,6 +1012,9 @@ async function onNewcomer(participant) {
   if (!pubkey || pubkey === user.pubkey) return;
   const home = sentHome.get(pubkey);
   if (home !== undefined && Date.now() - home < SENT_HOME_GRACE_MS) return;
+  // Back from a room on its own: not a late joiner.
+  const left = leftRoom.get(pubkey);
+  if (left !== undefined && Date.now() - left < SENT_HOME_GRACE_MS) return;
   let room = guest ? null : roomOfPubkey(rooms, membersByRoomId, pubkey);
   try {
     if (!room) {
@@ -1618,10 +1630,19 @@ if (typeof window !== 'undefined') {
     $effect(() => {
       const s = session;
       const inRoom = currentRoom;
+      // Only the MAIN room's seat counts, and never mid-switch: a seat that
+      // opened a breakout room is that room's own host (the relay seats the
+      // opener as host there), and on the way back currentRoom is already
+      // null while the room's seat is still the local participant — read
+      // then, that seat took the whole session over (seen live: every seat
+      // that had opened a room came back "hosting").
+      if (switching) return;
+      const pointer = getActiveCallPointer();
+      if (s && (!pointer || pointer.id !== s.main.id)) return;
       const seat = holdsHostSeat();
       const gained = seat && !heldSeat;
       heldSeat = seat;
-      if (gained && !s && !inRoom && !untrack(() => switching)) {
+      if (gained && !s && !inRoom) {
         const pointer = getActiveCallPointer();
         if (pointer) {
           discoveredFor = `${normalizeURL(pointer.relay)}'${pointer.id}`;
@@ -1801,10 +1822,10 @@ if (typeof window !== 'undefined') {
               return;
             }
             if (event.kind === GROUP_MEMBERS_KIND) {
-              membersByRoomId = {
-                ...membersByRoomId,
-                [d]: new Set(getGroupMembers(event) ?? [])
-              };
+              const now = new Set(getGroupMembers(event) ?? []);
+              for (const pubkey of membersByRoomId[d] ?? [])
+                if (!now.has(pubkey)) leftRoom.set(pubkey, Date.now());
+              membersByRoomId = { ...membersByRoomId, [d]: now };
             } else if (event.kind === CALL_PRESENCE_KIND) {
               presenceByRoomId = { ...presenceByRoomId, [d]: parseCallParticipants(event) };
             } else if (event.kind === GROUP_METADATA_KIND) {
