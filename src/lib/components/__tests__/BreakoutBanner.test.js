@@ -19,7 +19,8 @@ vi.mock('$lib/paraglide/messages', () => ({
   groups_call_breakout_room_label: ({ n }) => `Room ${n}`,
   groups_call_breakout_join: () => 'Join',
   groups_call_breakout_join_requested: () => 'Request sent …',
-  groups_call_breakout_banner_host_assigns: () => 'The host will assign you to a room.'
+  groups_call_breakout_banner_host_assigns: () => 'The host will assign you to a room.',
+  groups_call_breakout_banner_stay: () => 'Stay in the main room'
 }));
 
 import BreakoutBanner from '../groups/call/BreakoutBanner.svelte';
@@ -81,6 +82,15 @@ describe('BreakoutBanner', () => {
     const joins = screen.getAllByTestId('breakout-banner-join');
     expect(joins[1].textContent).toContain('Request sent');
     expect(joins.every((b) => b.disabled)).toBe(true);
+  });
+
+  it('offers to stay in the main room, which puts the banner away', async () => {
+    const onStay = vi.fn();
+    render(BreakoutBanner, { props: { breakout: state(), onJoin: vi.fn(), onStay } });
+    const stay = screen.getByTestId('breakout-banner-stay');
+    expect(stay.textContent).toContain('Stay in the main room');
+    await fireEvent.click(stay);
+    expect(onStay).toHaveBeenCalledTimes(1);
   });
 
   it('leaves the deadline out without one and lists only the rooms still standing', () => {

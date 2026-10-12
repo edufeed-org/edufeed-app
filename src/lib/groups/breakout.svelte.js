@@ -104,6 +104,7 @@ import {
   unseatFromRoom,
   deleteBreakoutRoom,
   fetchEphemeralChildren,
+  fetchRoomMetadata,
   editBreakoutUntil,
   knockOnRoom,
   leaveRoom
@@ -118,7 +119,8 @@ import {
   participantCallRole,
   requestGroupCallToken,
   tokenIdentity,
-  moderateCall
+  moderateCall,
+  GroupCallTokenError
 } from './livekit.js';
 import {
   BREAKOUT_AUTO_SWITCH_MS,
@@ -197,6 +199,9 @@ let busy = $state(false);
 let pending = $state.raw(null);
 /** @type {{roomId: string} | null} the room this seat asked the host seat for */
 let joinRequest = $state.raw(null);
+// "Im Hauptraum bleiben": the banner is put away until there is news — a
+// room this seat has not seen yet, or a new session.
+let bannerDismissed = $state(false);
 /**
  * Guests in rooms, as they announced themselves (`seat`): pubkey -> the
  * room and the LiveKit identity held there. Guests are on no roster, so
@@ -268,7 +273,8 @@ let sentHome = new Map();
  *   pending: {room: BreakoutRoom} | null,
  *   joinRequest: {roomId: string} | null,
  *   guestSeats: Record<string, {roomId: string, identity: string}>,
- *   switching: boolean
+ *   switching: boolean,
+ *   bannerDismissed: boolean
  * }}
  */
 export function getBreakoutState() {
@@ -315,8 +321,21 @@ export function getBreakoutState() {
     },
     get joinRequest() {
       return joinRequest;
+    },
+    /** the "session running" banner was put away ("Im Hauptraum bleiben") */
+    get bannerDismissed() {
+      return bannerDismissed;
     }
   };
+}
+
+/** "Im Hauptraum bleiben": put the banner away; the chip brings it back. */
+export function dismissBanner() {
+  bannerDismissed = true;
+}
+
+export function showBanner() {
+  bannerDismissed = false;
 }
 
 /**
@@ -405,6 +424,7 @@ function clearSession() {
   deadlineHandled = false;
   newestSeen = {};
   joinRequest = null;
+  bannerDismissed = false;
 
   seenBroadcasts = new Set();
 
@@ -450,6 +470,8 @@ function learnRooms(rooms, until, selfJoin) {
   const merged = [...known.filter((r) => !incoming.some((n) => n.id === r.id)), ...incoming].sort(
     (a, b) => a.index - b.index
   );
+  // A room this seat has not seen yet is news: a banner put away comes back.
+  if (incoming.some((room) => !known.some((r) => r.id === room.id))) bannerDismissed = false;
   session = {
     main: session?.main ?? {
       id: pointer.id,
@@ -582,6 +604,7 @@ async function enterRoom(room) {
       token = await requestGroupCallToken(room.relay, room.id, user, { code });
     } catch (err) {
       console.warn('breakout room token refused for a guest:', err);
+      if (isGone(err)) markGone(room.id);
       showToast(m.groups_call_breakout_switch_failed({ reason: callErrorMessage(err) }), 'error');
       return;
     }
@@ -604,6 +627,7 @@ async function enterRoom(room) {
   }
   if (getGroupCallState().phase === 'error') {
     const err = getGroupCallState().error;
+    if (isGone(err)) markGone(room.id);
     showToast(
       m.groups_call_breakout_switch_failed({
         reason: err ? callErrorMessage(err) : m.groups_call_error_generic()
@@ -662,6 +686,37 @@ export async function joinBreakoutRoom(room) {
   await enterRoom(room);
 }
 
+/** The relay no longer has the group (404 on its token). @param {unknown} err */
+function isGone(err) {
+  return err instanceof GroupCallTokenError && err.reason === 'gone';
+}
+
+/**
+ * Ask the relay about the rooms still listed before acting on one: a
+ * deletion this client missed (its follow subscription died, the relay
+ * swept the room) shows as a `[deleted]` tombstone, and such rooms are
+ * dropped. Nothing back means nothing is known — the room is tried.
+ * @param {BreakoutSession} s
+ */
+async function revalidateRooms(s) {
+  const ids = s.rooms.filter((room) => !goneRoomIds.has(room.id)).map((room) => room.id);
+  if (ids.length === 0) return;
+  const relay = normalizeURL(s.main.relay);
+  let events;
+  try {
+    const authors = await relayAuthors(relay);
+    events = (await fetchRoomMetadata(pool.relay(relay), ids)).filter((event) =>
+      isTrustedSigner(event, authors)
+    );
+  } catch {
+    return;
+  }
+  for (const event of events) {
+    const d = event.tags?.find((/** @type {string[]} */ t) => t[0] === 'd')?.[1];
+    if (d && ids.includes(d) && channelDeleted(event)) markGone(d);
+  }
+}
+
 /**
  * "Beitreten" on the late-joiner banner: a seat in the main room wants into
  * a room of the running session. Seats itself when it may (a parent admin
@@ -669,12 +724,18 @@ export async function joinBreakoutRoom(room) {
  * otherwise asks the host seat with a join request and switches when the
  * targeted assignment arrives. Without an answer the request lapses. A
  * guest needs no seat: its pass opens the room, so it switches right away.
+ * The relay is asked about the rooms first (revalidateRooms).
  * @param {BreakoutRoom} room
  */
 export async function requestBreakoutRoom(room) {
   const s = session;
   const user = getActiveCallUser();
   if (!s || currentRoom || joinRequest || !user) return;
+  await revalidateRooms(s);
+  if (goneRoomIds.has(room.id) || session !== s) {
+    showToast(m.groups_call_breakout_room_gone(), 'error');
+    return;
+  }
   // The host keeps the assignment to themselves: a roster that names me
   // (or an assignment) is the only way in.
   if (s.selfJoin === false && !membersByRoomId[room.id]?.has(user.pubkey)) return;
