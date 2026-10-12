@@ -9,7 +9,10 @@
 
   Pure form: `onStart` (the stage → breakout store) does the relay work and
   rejects with the relay's reason, which is shown here; on success the
-  caller closes the dialog.
+  caller closes the dialog. Escape closes it like "Abbrechen" (not while
+  the rooms are being created); the listener sits on the dialog itself,
+  which takes the focus on open, so it also works in the pop-out's own
+  document (CallLeaveConfirmModal's rule).
 -->
 <script>
   import { CloseIcon } from '$lib/components/icons';
@@ -72,6 +75,19 @@
   /** @type {string | null} */
   let error = $state(null);
 
+  /** @type {HTMLDivElement | undefined} */
+  let dialogEl = $state(undefined);
+  $effect(() => {
+    dialogEl?.focus();
+  });
+  /** @param {KeyboardEvent} event */
+  function onKeyDown(event) {
+    if (event.key !== 'Escape' || busy) return;
+    event.preventDefault();
+    event.stopPropagation();
+    onClose();
+  }
+
   // Everyone who can be sent to a room: a remote seat with a pubkey —
   // members and guests alike.
   const assignable = $derived(rows.filter((row) => !row.isLocal && !!row.pubkey));
@@ -127,11 +143,14 @@
 </script>
 
 <div
+  bind:this={dialogEl}
   class="modal-open modal"
   role="dialog"
   aria-modal="true"
   aria-labelledby="breakout-dialog-title"
+  tabindex="-1"
   data-testid="breakout-dialog"
+  onkeydown={onKeyDown}
 >
   <div class="modal-box flex max-h-[90vh] max-w-lg flex-col">
     <div class="flex items-center gap-2">
