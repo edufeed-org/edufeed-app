@@ -2,7 +2,9 @@
   BreakoutPanel — the host's view of a running breakout session, in the
   stage's side column: every room with the people seated in it (kind 39002
   rosters; a badge for those the relay sees live in the room's call, kind
-  39004) and the GUESTS in it (live in the room's call without a roster
+  39004, and "nicht im Raum" for a seat the room's presence does not list —
+  the session's creator, whom the relay seats as admin of every room, and
+  this seat itself are listed only where live) and the GUESTS in it (live in the room's call without a roster
   seat — a call pass opens the room; "Gast" badge), a "Verschieben nach …"
   picker per person, "Beitreten" per room, the people still in the main
   room with the same picker, the deadline menu ("Noch m:ss" → +5/10/15 Min
@@ -22,7 +24,7 @@
   import ProfileAvatar from '$lib/components/shared/ProfileAvatar.svelte';
   import { useProfileMap } from '$lib/stores/profile-map.svelte.js';
   import { getUserDisplayName } from '$lib/helpers/message-utils.js';
-  import { formatCountdown, roomOfPubkey } from '$lib/groups/breakout.js';
+  import { formatCountdown, onEveryRoster, roomOfPubkey } from '$lib/groups/breakout.js';
   import * as m from '$lib/paraglide/messages';
 
   /** @typedef {import('$lib/groups/call-participants.js').ParticipantRow} ParticipantRow */
@@ -137,13 +139,26 @@
   }
 
   const rooms = $derived(breakout.rooms);
-  /** Seated people per room, the host (a member of every room) left out. */
+  /** @param {string} roomId @param {string} pubkey */
+  const live = (roomId, pubkey) => breakout.presenceByRoomId[roomId]?.includes(pubkey) === true;
+  /** The room's presence is known and does not list the pubkey. @param {string} roomId @param {string} pubkey */
+  const away = (roomId, pubkey) => {
+    const presence = breakout.presenceByRoomId[roomId];
+    return presence !== undefined && !presence.includes(pubkey);
+  };
+  // Seats that say nothing about where the person is: the session's
+  // creator (on every roster — the relay seats them as admin of every
+  // room) and this seat itself. Listed only where the room has them live.
+  const creator = $derived(onEveryRoster(rooms, breakout.membersByRoomId));
+  /** @param {string} pubkey */
+  const liveOnly = (pubkey) => pubkey === myPubkey || creator.has(pubkey);
+  /** Seated people per room: the roster, the live-only seats where live. */
   const seatedByRoom = $derived.by(() => {
     /** @type {Record<string, string[]>} */
     const out = {};
     for (const room of rooms) {
       out[room.id] = [...(breakout.membersByRoomId[room.id] ?? [])].filter(
-        (pubkey) => pubkey !== myPubkey
+        (pubkey) => !liveOnly(pubkey) || live(room.id, pubkey)
       );
     }
     return out;
@@ -168,14 +183,18 @@
     }
     return out;
   });
-  /** Main-room seats that can be sent somewhere: remote members not in a room, and guests. */
+  /**
+   * Main-room seats that can be sent somewhere: remote members not in a
+   * room (a live-only seat: not live in any room), and guests.
+   */
   const inMain = $derived(
-    rows.filter(
-      (row) =>
-        !row.isLocal &&
-        !!row.pubkey &&
-        !roomOfPubkey(rooms, breakout.membersByRoomId, /** @type {string} */ (row.pubkey))
-    )
+    rows.filter((row) => {
+      if (row.isLocal || !row.pubkey) return false;
+      const pubkey = row.pubkey;
+      return liveOnly(pubkey)
+        ? !rooms.some((room) => live(room.id, pubkey))
+        : !roomOfPubkey(rooms, breakout.membersByRoomId, pubkey);
+    })
   );
   const getProfiles = useProfileMap(() => [
     ...Object.values(seatedByRoom).flat(),
@@ -184,8 +203,6 @@
   ]);
   /** @param {string} pubkey */
   const nameOf = (pubkey) => getUserDisplayName(pubkey, getProfiles().get(pubkey));
-  /** @param {string} roomId @param {string} pubkey */
-  const live = (roomId, pubkey) => breakout.presenceByRoomId[roomId]?.includes(pubkey) === true;
   /** Every seat of this pubkey in the main room (a user may sit there twice). @param {string} pubkey */
   const identitiesOf = (pubkey) =>
     rows.filter((row) => row.pubkey === pubkey).map((row) => row.participant.identity);
@@ -400,12 +417,24 @@
               </li>
             {/each}
             {#each seatedByRoom[room.id] as pubkey (pubkey)}
-              <li class="flex items-center gap-2 py-1" data-testid="breakout-panel-member">
+              {@const absent = away(room.id, pubkey)}
+              <li
+                class="flex items-center gap-2 py-1"
+                data-testid="breakout-panel-member"
+                data-pubkey={pubkey}
+                data-away={absent ? 'true' : undefined}
+              >
                 <ProfileAvatar {pubkey} profile={getProfiles().get(pubkey)} size="xs" />
-                <span class="min-w-0 flex-1 truncate">{nameOf(pubkey)}</span>
+                <span class="min-w-0 flex-1 truncate {absent ? 'text-base-content/50' : ''}">
+                  {nameOf(pubkey)}
+                </span>
                 {#if live(room.id, pubkey)}
                   <span class="badge badge-ghost badge-xs" data-testid="breakout-panel-live">
                     {m.groups_call_breakout_in_call_badge()}
+                  </span>
+                {:else if absent}
+                  <span class="text-xs text-base-content/50" data-testid="breakout-panel-away">
+                    {m.groups_call_breakout_away()}
                   </span>
                 {/if}
                 <select

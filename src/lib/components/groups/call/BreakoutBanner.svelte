@@ -2,7 +2,7 @@
   BreakoutBanner — "Breakout-Session läuft": what a seat in the MAIN room
   sees while a session runs that it is not part of (joined late with
   auto-assign off, declined its assignment, came back early). Lists the
-  rooms with "Beitreten" — for a member a knock on the room (kind 9021, the
+  rooms with "Beitreten" and how many are live in each — for a member a knock on the room (kind 9021, the
   relay seats them) plus a request to the host seat, whichever answers
   first; for a guest a direct switch with its call pass
   (groups/breakout.svelte.js requestBreakoutRoom) — the deadline, and "Im
@@ -11,7 +11,7 @@
 -->
 <script>
   import { ChannelsIcon } from '$lib/components/icons';
-  import { formatCountdown } from '$lib/groups/breakout.js';
+  import { formatCountdown, onEveryRoster } from '$lib/groups/breakout.js';
   import * as m from '$lib/paraglide/messages';
 
   /** @typedef {import('$lib/groups/breakout.svelte.js').BreakoutRoom} BreakoutRoom */
@@ -27,8 +27,18 @@
   const rooms = $derived(breakout.rooms);
   // The host keeps the assignment to themselves: only that a session runs.
   const hostAssigns = $derived(breakout.session?.selfJoin === false);
+  // "(N)": who is live in the room (its kind 39004); until the relay has
+  // said, the roster — less the pubkey on every roster, the session's
+  // creator, whom the relay seats as admin of every room.
+  const creator = $derived(onEveryRoster(rooms, breakout.membersByRoomId));
   /** @param {string} roomId */
-  const seated = (roomId) => breakout.membersByRoomId[roomId]?.size ?? 0;
+  const headcount = (roomId) => {
+    const live = breakout.presenceByRoomId[roomId];
+    if (live) return live.length;
+    let n = 0;
+    for (const pubkey of breakout.membersByRoomId[roomId] ?? []) if (!creator.has(pubkey)) n++;
+    return n;
+  };
 </script>
 
 <div
@@ -65,7 +75,7 @@
             {m.groups_call_breakout_join_requested()}
           {:else}
             {m.groups_call_breakout_room_label({ n: room.index })}
-            <span class="text-base-content/60">({seated(room.id)})</span>
+            <span class="text-base-content/60">({headcount(room.id)})</span>
             · {m.groups_call_breakout_join()}
           {/if}
         </button>

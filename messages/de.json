@@ -4181,6 +4181,7 @@
   "groups_call_breakout_ending": "Räume werden geschlossen …",
   "groups_call_breakout_empty_room": "Noch niemand",
   "groups_call_breakout_in_call_badge": "im Gespräch",
+  "groups_call_breakout_away": "nicht im Raum",
   "groups_call_breakout_members_in_main": "Im Hauptraum",
   "groups_call_breakout_switch_failed": "Wechsel in den Breakout-Raum fehlgeschlagen: {reason}",
   "groups_call_breakout_end_partial": "Nicht gelöscht: {rooms}",

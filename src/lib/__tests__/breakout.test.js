@@ -26,6 +26,7 @@ import {
   parseBreakoutPayload,
   assignedRoom,
   roomOfPubkey,
+  onEveryRoster,
   pickSmallestRoom,
   remainingSeconds,
   formatCountdown
@@ -478,6 +479,16 @@ describe('following rosters', () => {
 
   it('treats an unknown roster as "not there" rather than as a match', () => {
     expect(roomOfPubkey(rooms, {}, 'aa')).toBeNull();
+  });
+
+  // The relay seats the session's creator as admin of EVERY room, so a
+  // pubkey on every roster is the creator, not someone in each room.
+  it("names the pubkeys every room's roster carries — none with one room or a roster still unknown", () => {
+    const members = { r1: new Set(['host', 'aa']), r2: new Set(['host', 'bb']) };
+    expect([...onEveryRoster(rooms, members)]).toEqual(['host']);
+    expect(onEveryRoster([rooms[0]], members).size).toBe(0);
+    expect(onEveryRoster(rooms, { r1: new Set(['host']) }).size).toBe(0);
+    expect(onEveryRoster([], members).size).toBe(0);
   });
 });
 

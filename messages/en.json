@@ -4181,6 +4181,7 @@
   "groups_call_breakout_ending": "Closing rooms …",
   "groups_call_breakout_empty_room": "Nobody yet",
   "groups_call_breakout_in_call_badge": "in the call",
+  "groups_call_breakout_away": "not in the room",
   "groups_call_breakout_members_in_main": "In the main room",
   "groups_call_breakout_switch_failed": "Could not switch to the breakout room: {reason}",
   "groups_call_breakout_end_partial": "Not deleted: {rooms}",

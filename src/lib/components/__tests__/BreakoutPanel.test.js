@@ -32,6 +32,7 @@ vi.mock('$lib/paraglide/messages', () => ({
   groups_call_breakout_join: () => 'Join',
   groups_call_breakout_empty_room: () => 'Nobody yet',
   groups_call_breakout_in_call_badge: () => 'in the call',
+  groups_call_breakout_away: () => 'not in the room',
   groups_call_guest_badge: () => 'Gast',
   groups_call_breakout_move_to: () => 'Move to …',
   groups_call_breakout_main_room: () => 'Main room',
@@ -138,6 +139,110 @@ describe('BreakoutPanel', () => {
     expect(screen.getByTestId('breakout-panel').textContent).toContain(
       'Host rights apply in the main room only.'
     );
+  });
+
+  // User test 2026-10-13: the rooms listed everyone on a roster as if
+  // present. Presence (kind 39004) is the truth about who is in a room.
+  const membersOf = (section) =>
+    [...section.querySelectorAll('[data-testid="breakout-panel-member"]')].map(
+      (li) => li.dataset.pubkey
+    );
+
+  it('a seated person the room does not have live is shown as away, still movable; an unknown presence shows the roster as is', () => {
+    render(BreakoutPanel, {
+      props: {
+        rows: [],
+        breakout: state({
+          membersByRoomId: { r1: new Set([HOST, BOB, CAROL]), r2: new Set([HOST, DAVE]) },
+          presenceByRoomId: { r1: [BOB] }
+        }),
+        myPubkey: HOST,
+        ...cb
+      }
+    });
+    const [room1, room2] = screen.getAllByTestId('breakout-panel-room');
+    expect(membersOf(room1)).toEqual([BOB, CAROL]);
+    const [bob, carol] = room1.querySelectorAll('[data-testid="breakout-panel-member"]');
+    expect(bob.dataset.away).toBeUndefined();
+    expect(bob.querySelector('[data-testid="breakout-panel-live"]')).toBeTruthy();
+    expect(bob.querySelector('[data-testid="breakout-panel-away"]')).toBeNull();
+    expect(carol.dataset.away).toBe('true');
+    expect(carol.querySelector('[data-testid="breakout-panel-live"]')).toBeNull();
+    expect(carol.querySelector('[data-testid="breakout-panel-away"]').textContent).toContain(
+      'not in the room'
+    );
+    expect(carol.querySelector('[data-testid="breakout-panel-move"]').disabled).toBe(false);
+    // room 2: the relay has not said who is there — nobody is marked
+    expect(membersOf(room2)).toEqual([DAVE]);
+    const [dave] = room2.querySelectorAll('[data-testid="breakout-panel-member"]');
+    expect(dave.dataset.away).toBeUndefined();
+    expect(dave.querySelector('[data-testid="breakout-panel-away"]')).toBeNull();
+    expect(dave.querySelector('[data-testid="breakout-panel-live"]')).toBeNull();
+  });
+
+  it("the session's creator — on every room's roster — is listed only where the relay has them live", () => {
+    const CREATOR = 'f'.repeat(64);
+    const members = () => ({ r1: new Set([CREATOR, BOB]), r2: new Set([CREATOR, DAVE]) });
+    const first = render(BreakoutPanel, {
+      props: {
+        rows: [row(CREATOR)],
+        breakout: state({
+          membersByRoomId: members(),
+          presenceByRoomId: { r1: [BOB], r2: [CREATOR, DAVE] }
+        }),
+        myPubkey: HOST,
+        ...cb
+      }
+    });
+    let [room1, room2] = screen.getAllByTestId('breakout-panel-room');
+    expect(membersOf(room1)).toEqual([BOB]);
+    expect(membersOf(room2)).toEqual([CREATOR, DAVE]);
+    const creatorRow = room2.querySelector(`[data-pubkey="${CREATOR}"]`);
+    expect(creatorRow.querySelector('[data-testid="breakout-panel-live"]')).toBeTruthy();
+    // live in a room, so not among the main-room seats either
+    expect(
+      screen
+        .getByTestId('breakout-panel-main')
+        .querySelectorAll('[data-testid="breakout-panel-main-member"]')
+    ).toHaveLength(0);
+    first.unmount();
+    // presence still unknown everywhere: nowhere in the rooms — in the main
+    // room, where the creator's seat says they are
+    render(BreakoutPanel, {
+      props: {
+        rows: [row(CREATOR)],
+        breakout: state({ membersByRoomId: members(), presenceByRoomId: {} }),
+        myPubkey: HOST,
+        ...cb
+      }
+    });
+    [room1, room2] = screen.getAllByTestId('breakout-panel-room');
+    expect(membersOf(room1)).toEqual([BOB]);
+    expect(membersOf(room2)).toEqual([DAVE]);
+    expect(
+      screen
+        .getByTestId('breakout-panel-main')
+        .querySelectorAll('[data-testid="breakout-panel-main-member"]')
+    ).toHaveLength(1);
+  });
+
+  it("the host's own pubkey shows in a room only where live", () => {
+    render(BreakoutPanel, {
+      props: {
+        rows: [],
+        breakout: state({
+          membersByRoomId: { r1: new Set([HOST, BOB]), r2: new Set([HOST]) },
+          presenceByRoomId: { r1: [BOB], r2: [HOST] }
+        }),
+        myPubkey: HOST,
+        ...cb
+      }
+    });
+    const [room1, room2] = screen.getAllByTestId('breakout-panel-room');
+    expect(membersOf(room1)).toEqual([BOB]);
+    expect(membersOf(room2)).toEqual([HOST]);
+    expect(room2.querySelector('[data-testid="breakout-panel-live"]')).toBeTruthy();
+    expect(room2.querySelector('[data-testid="breakout-panel-guest"]')).toBeNull();
   });
 
   it('moves a seated person to another room or back to the main room', async () => {
