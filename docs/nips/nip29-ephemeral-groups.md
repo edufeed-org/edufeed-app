@@ -86,6 +86,15 @@ that child itself), so the host can seat people from any room through the
 relay alone. A host's client in a child SHOULD follow the parent's kind
 39004 to see who waits in the parent's room.
 
+Two seats are never roster-assigned: the one holding the parent's **host
+seat** (it takes the session over instead), and the session's **creator**,
+whom the relay seats on every child's roster as its admin. Clients SHOULD
+act on rosters only once the relay has answered their replay (EOSE), and
+SHOULD treat a seat that left a child on its own (kind 9022) as returned,
+not as a late joiner to assign again. A seat in the parent's room SHOULD
+also follow the parent's `#ephemeral` kind 39000s live: the host's data
+message can be lost, the relay's event reaches everyone.
+
 A host may keep the assignment to themselves: the rooms' `about` marker
 then carries `join=host` (and the host's `{t:'state'}` message
 `selfJoin: false`). Clients SHOULD then tell a late joiner only that a
