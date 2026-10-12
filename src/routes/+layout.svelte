@@ -42,6 +42,10 @@
   import { buildCommunityPath } from '$lib/helpers/communityNavigation.js';
   import { getRandomQuote } from '$lib/data/loading-quotes.js';
   import { getLocale } from '$lib/paraglide/runtime.js';
+  import * as m from '$lib/paraglide/messages';
+  import { showToast } from '$lib/helpers/toast.js';
+  import { getAppUpdateState } from '$lib/stores/app-update.svelte.js';
+  import { shouldPromptUpdate } from '$lib/helpers/app-update.js';
 
   // Flag emojis on Windows (letters instead of flags) — lazy, browser-only;
   // see $lib/helpers/flag-emoji-polyfill.js
@@ -67,6 +71,32 @@
   // loaded once a call starts — it pulls livekit-client.
   const lazyCallDock = lazyComponent(() => import('$lib/components/groups/call/CallDock.svelte'));
   const groupCall = getGroupCallState();
+
+  // "A new version was deployed" — SvelteKit polls /_app/version.json
+  // (kit.version in svelte.config.js); one persistent toast offers a reload.
+  // Deferred while a call is live (a reload would drop the user out of the
+  // room) and shown once per page lifetime: `updatePrompted` is a plain let
+  // on purpose, so flipping it does not re-run the effect.
+  const appUpdate = getAppUpdateState();
+  let updatePrompted = false;
+  $effect(() => {
+    const inCall = groupCall.phase !== 'idle';
+    if (
+      !browser ||
+      !shouldPromptUpdate({
+        updateAvailable: appUpdate.updateAvailable,
+        inCall,
+        prompted: updatePrompted
+      })
+    ) {
+      return;
+    }
+    updatePrompted = true;
+    showToast(m.app_update_available({ appName: runtimeConfig.appName }), 'info', 0, {
+      action: { label: m.app_update_reload(), onClick: () => location.reload() },
+      dismissLabel: m.app_update_dismiss()
+    });
+  });
 
   let { children, data } = $props();
 

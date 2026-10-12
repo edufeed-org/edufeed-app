@@ -16,6 +16,13 @@ RUN pnpm install --frozen-lockfile
 # Copy source code
 COPY . .
 
+# The commit being built (CI passes --build-arg GIT_SHA=<sha>; .git is not in
+# the build context). scripts/app-version.mjs appends its short form to the
+# version name so SvelteKit's update detection and the issue-report version
+# can tell :dev images between releases apart.
+ARG GIT_SHA
+ENV GIT_SHA=$GIT_SHA
+
 # Build the application. Raise Node's heap: the adapter-node server-bundling
 # phase deterministically OOMs at 4096 MB since the NIP-29 groups merge
 # (2026-08-27, CI runs 186-193; reproduced locally) and completes at 6144.

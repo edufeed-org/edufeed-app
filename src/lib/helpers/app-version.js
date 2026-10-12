@@ -1,8 +1,9 @@
 /**
- * Build-time app version (package.json `version`), injected by the
- * `__APP_VERSION__` define in vite.config.js. Guarded so plain node tests and
- * tools that bypass Vite still work.
- * @returns {string} e.g. "0.3.4", or "unknown"
+ * Build-time app version (package.json `version` plus the short git sha of
+ * the build, see scripts/app-version.mjs), injected by the `__APP_VERSION__`
+ * define in vite.config.js. Guarded so plain node tests and tools that bypass
+ * Vite still work.
+ * @returns {string} e.g. "0.6.0+b17b4ce", or "unknown"
  */
 export function getAppVersion() {
   try {
