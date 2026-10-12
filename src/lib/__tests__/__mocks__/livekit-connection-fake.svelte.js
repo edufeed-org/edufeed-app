@@ -13,6 +13,8 @@ export let joinedListener = null;
 let identity = $state('b'.repeat(64) + ':seat1');
 let metadata = $state('');
 let participantMetadataVersion = $state(0);
+/** @type {Array<{identity: string, metadata?: string}>} */
+let remoteParticipants = $state.raw([]);
 /** @type {number | null} */
 let disconnectReason = $state(null);
 
@@ -44,6 +46,9 @@ export function getLiveKitState() {
     get participantMetadataVersion() {
       return participantMetadataVersion;
     },
+    get remoteParticipants() {
+      return remoteParticipants;
+    },
     get disconnectReason() {
       return disconnectReason;
     }
@@ -73,7 +78,13 @@ export function setDisconnectReason(reason) {
   disconnectReason = reason;
 }
 
+/** The other seats in our room. @param {Array<{identity: string, metadata?: string}>} next */
+export function setRemoteParticipants(next) {
+  remoteParticipants = next;
+}
+
 export function resetLiveKitFake() {
+  remoteParticipants = [];
   identity = 'b'.repeat(64) + ':seat1';
   metadata = '';
   disconnectReason = null;
