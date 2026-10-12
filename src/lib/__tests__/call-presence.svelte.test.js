@@ -174,3 +174,30 @@ describe('useCallPresence', () => {
     cleanup();
   });
 });
+
+describe('useCallPresence after the pool gave up', () => {
+  it('reopens the subscription after 5 s and takes the replayed list', () => {
+    let read = () => ({ participants: /** @type {string[]} */ ([]), answered: false });
+    const cleanup = $effect.root(() => {
+      read = useCallPresence(() => pointer);
+    });
+    flushSync();
+    holders.info[RELAY].next({ self: KEY });
+    flushSync();
+    holders.subs[0].stream.next(presence(KEY, [A], 100));
+    flushSync();
+    expect(read().participants).toEqual([A]);
+    holders.subs[0].stream.error(new Error('closed'));
+    flushSync();
+    expect(read().answered).toBe(true);
+    expect(holders.subs).toHaveLength(1);
+    vi.advanceTimersByTime(5_000);
+    expect(holders.subs).toHaveLength(2);
+    expect(holders.subs[1].filters).toEqual(holders.subs[0].filters);
+    holders.subs[1].stream.next(presence(KEY, [A, B], 200));
+    flushSync();
+    expect(read().participants).toEqual([A, B]);
+    cleanup();
+    expect(holders.subs[1].unsubscribed).toBe(true);
+  });
+});

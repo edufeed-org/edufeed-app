@@ -18,6 +18,7 @@ import { pool } from '$lib/stores/nostr-infrastructure.svelte';
 import { raceRelayKey } from './relay-key-race.js';
 import { isTrustedSigner } from './relay-directory.js';
 import { callPresenceFilter, parseCallParticipants } from './call-presence.js';
+import { resubscribing } from './relay-subscription.js';
 
 /**
  * @param {() => {id: string, relay: string} | null | undefined} getPointer
@@ -67,10 +68,11 @@ export function useCallPresence(getPointer) {
     // Newest-wins: the relay replaces the whole list on every change, and a
     // late-arriving older copy must not resurrect someone who already left.
     let newest = -1;
-    const sub = pool
-      .relay(relay)
-      .subscription([callPresenceFilter(pointer.id, pinned)])
-      .subscribe({
+    // Reopened after an outage (resubscribing): the relay replays the
+    // current list, newest-wins keeps a stale copy out.
+    return resubscribing(
+      () => pool.relay(relay).subscription([callPresenceFilter(pointer.id, pinned)]),
+      {
         next: (/** @type {any} */ event) => {
           if (event === 'EOSE') {
             answered = true;
@@ -87,8 +89,8 @@ export function useCallPresence(getPointer) {
         error: () => {
           answered = true;
         }
-      });
-    return () => sub.unsubscribe();
+      }
+    );
   });
 
   return () => ({ participants, answered });

@@ -2098,3 +2098,45 @@ describe('the banner can be put away', () => {
     expect(store.getBreakoutState().bannerDismissed).toBe(false);
   });
 });
+
+describe('the relay subscriptions come back', () => {
+  it('reopens the roster watch after the pool gave up, with the same filters, and believes what it replays', async () => {
+    vi.useFakeTimers();
+    await liveInMain(bobUser);
+    lk.listener?.(
+      { t: 'state', rooms: ROOMS.map(({ id, relay, name }) => ({ id, relay, name })) },
+      hostSender
+    );
+    await settle();
+    const follow = liveSub();
+    expect(follow).toBeTruthy();
+    const before = relay.subs.length;
+    follow.stream.error(new Error('closed'));
+    await settle();
+    expect(relay.subs.length).toBe(before);
+    await vi.advanceTimersByTimeAsync(5_000);
+    expect(relay.subs.length).toBe(before + 1);
+    const reopened = relay.subs[relay.subs.length - 1];
+    expect(reopened.filters).toEqual(follow.filters);
+    reopened.stream.next(tombstone('r1'));
+    await settle();
+    expect(store.getBreakoutState().rooms.map((r) => r.id)).toEqual(['r2']);
+  });
+
+  it('leaving the call stops the watch for good', async () => {
+    vi.useFakeTimers();
+    await liveInMain(bobUser);
+    lk.listener?.(
+      { t: 'state', rooms: ROOMS.map(({ id, relay, name }) => ({ id, relay, name })) },
+      hostSender
+    );
+    await settle();
+    const follow = liveSub();
+    follow.stream.error(new Error('closed'));
+    callFake.setCall({ pointer: null, phase: 'idle' });
+    await settle();
+    const before = relay.subs.length;
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(relay.subs.length).toBe(before);
+  });
+});

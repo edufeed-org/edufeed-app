@@ -110,6 +110,7 @@ import {
   leaveRoom
 } from './breakout-relay.js';
 import { raceRelayKey } from './relay-key-race.js';
+import { resubscribing } from './relay-subscription.js';
 import { isTrustedSigner } from './relay-directory.js';
 import { CALL_PRESENCE_KIND, parseCallParticipants } from './call-presence.js';
 import { channelDeleted } from './channel-access.js';
@@ -1560,16 +1561,18 @@ if (typeof window !== 'undefined') {
       const pinned = authors;
       if (!key || !isReady) return;
       const [relay, mainId, ...ids] = key.split(' ');
-      const sub = pool
-        .relay(relay)
-        .subscription([
-          { kinds: [GROUP_METADATA_KIND, GROUP_MEMBERS_KIND, CALL_PRESENCE_KIND], '#d': ids },
-          { kinds: [DELETE_GROUP_KIND], '#h': ids },
-          // The main room too: who is in it (a host in a room must know), and
-          // its roster (a main-room seat not on it is a guest).
-          { kinds: [GROUP_MEMBERS_KIND, CALL_PRESENCE_KIND], '#d': [mainId] }
-        ])
-        .subscribe({
+      // Reopened after an outage (resubscribing): the relay replays the
+      // current rosters and tombstones, newestSeen keeps old copies out.
+      return resubscribing(
+        () =>
+          pool.relay(relay).subscription([
+            { kinds: [GROUP_METADATA_KIND, GROUP_MEMBERS_KIND, CALL_PRESENCE_KIND], '#d': ids },
+            { kinds: [DELETE_GROUP_KIND], '#h': ids },
+            // The main room too: who is in it (a host in a room must know), and
+            // its roster (a main-room seat not on it is a guest).
+            { kinds: [GROUP_MEMBERS_KIND, CALL_PRESENCE_KIND], '#d': [mainId] }
+          ]),
+        {
           next: (/** @type {any} */ event) => {
             if (event === 'EOSE') {
               rostersAnswered = true;
@@ -1623,8 +1626,8 @@ if (typeof window !== 'undefined') {
           error: () => {
             rostersAnswered = true;
           }
-        });
-      return () => sub.unsubscribe();
+        }
+      );
     });
 
     // Call broadcasts (kind 20002) for the session's parent, while a
@@ -1637,18 +1640,13 @@ if (typeof window !== 'undefined') {
       const key = broadcastKey;
       if (!key) return;
       const [relay, mainId] = key.split(' ');
-      const sub = pool
-        .relay(relay)
-        .subscription([callBroadcastFilter(mainId)])
-        .subscribe({
-          next: (/** @type {any} */ event) => {
-            if (!event || typeof event !== 'object') return;
-            const broadcast = parseCallBroadcast(event);
-            if (broadcast) renderBroadcast(broadcast);
-          },
-          error: () => {}
-        });
-      return () => sub.unsubscribe();
+      return resubscribing(() => pool.relay(relay).subscription([callBroadcastFilter(mainId)]), {
+        next: (/** @type {any} */ event) => {
+          if (!event || typeof event !== 'object') return;
+          const broadcast = parseCallBroadcast(event);
+          if (broadcast) renderBroadcast(broadcast);
+        }
+      });
     });
 
     // In the main room, not hosting: a room roster that names me IS my
