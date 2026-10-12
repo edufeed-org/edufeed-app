@@ -215,9 +215,10 @@ export async function joinGroupCall(pointer, user, view = {}) {
       connected = false;
       phase = 'ended';
       endReason = lk.isRemovalReason(reason) ? 'removed' : 'dropped';
-      // Removed: the relay would refuse the way back (nothing to resume);
-      // dropped: the note stays, a reload still finds the call.
-      if (endReason === 'removed') forgetCall();
+      // Removed from the call: the relay would refuse the way back (nothing
+      // to resume). A deleted ROOM (a breakout room closing) is not that —
+      // the call goes on in the main room — and a drop keeps the note too.
+      if (endReason === 'removed' && !lk.isRoomDeletedReason?.(reason)) forgetCall();
     });
     // The chat is kept per room (chatKey): a breakout switch sets the
     // channel's aside and takes it back on return.
@@ -322,6 +323,16 @@ export async function switchGroupCall(pointer, view = {}) {
     ...(keepCode ? { code: keepCode } : {}),
     ...(view.token ? { token: view.token } : {})
   });
+}
+
+/**
+ * Note the active call for after a reload (call-resume.js) — the breakout
+ * store calls this once a seat is back in the MAIN room, so a note a room's
+ * removal or deletion took away is written again.
+ */
+export function noteActiveCallForResume() {
+  if (!activePointer || !isLive()) return;
+  rememberCall({ pointer: activePointer, title, href, code });
 }
 
 /** The channel of the active call (null while idle). */

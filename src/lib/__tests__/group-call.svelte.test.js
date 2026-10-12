@@ -42,7 +42,9 @@ vi.mock('$lib/services/livekit-connection.svelte.js', () => ({
       if (lkListener.cb === cb) lkListener.cb = null;
     };
   },
-  isRemovalReason: (/** @type {any} */ reason) => reason === 'removed-reason'
+  isRemovalReason: (/** @type {any} */ reason) =>
+    reason === 'removed-reason' || reason === 'room-deleted-reason',
+  isRoomDeletedReason: (/** @type {any} */ reason) => reason === 'room-deleted-reason'
 }));
 
 vi.mock('$lib/paraglide/messages', () => ({
@@ -930,6 +932,26 @@ describe('the way back after a reload (call-resume.js)', () => {
     expect(readResumableCall()?.pointer).toEqual(P);
     await joinGroupCall(P, user, { title: 'Seminar' });
     lkListener.cb?.('removed-reason');
+    expect(readResumableCall()).toBeNull();
+  });
+
+  it("a breakout room's deletion keeps the note, and the way back notes the main room again", async () => {
+    const { switchGroupCall, noteActiveCallForResume } = await import(
+      '$lib/groups/group-call.svelte.js'
+    );
+    await joinGroupCall(P, user, { title: 'Seminar', href: '/c/x' });
+    await switchGroupCall({ id: 'room-1', relay: P.relay }, { title: 'Breakout 1' });
+    lkListener.cb?.('room-deleted-reason');
+    expect(getGroupCallState().endReason).toBe('removed');
+    expect(readResumableCall()?.pointer).toEqual(P);
+    sessionStorage.clear();
+    await switchGroupCall(P, { title: 'Seminar' });
+    noteActiveCallForResume();
+    const note = readResumableCall();
+    expect(note?.pointer).toEqual(P);
+    expect(note?.href).toBe('/c/x');
+    await leaveGroupCall();
+    noteActiveCallForResume();
     expect(readResumableCall()).toBeNull();
   });
 });

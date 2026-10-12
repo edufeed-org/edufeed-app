@@ -1288,6 +1288,8 @@ describe('ephemeral groups: creation, leftovers, relay-side deletion', () => {
     expect(store.getBreakoutState().currentRoom).toBeNull();
     expect(store.getBreakoutState().rooms.map((r) => r.id)).toEqual(['r2']);
     expect(toast.fn).toHaveBeenCalledWith('room closed, back in main', 'info');
+    // the main room is the call to come back to after a reload
+    expect(callFake.noteActiveCallForResume).toHaveBeenCalled();
   });
 
   it('a lost connection in a room is not a deletion: the ended view stays', async () => {

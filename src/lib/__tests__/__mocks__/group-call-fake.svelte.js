@@ -80,3 +80,5 @@ export function setCall(next) {
   if ('code' in next) code = next.code ?? null;
   if ('error' in next) error = next.error ?? null;
 }
+
+export const noteActiveCallForResume = vi.fn();

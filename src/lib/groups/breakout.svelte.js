@@ -96,7 +96,8 @@ import {
   getActiveCallPointer,
   getActiveCallUser,
   switchGroupCall,
-  callErrorMessage
+  callErrorMessage,
+  noteActiveCallForResume
 } from './group-call.svelte.js';
 import {
   createBreakoutRoom,
@@ -702,8 +703,11 @@ export async function returnToMain() {
   } finally {
     switching = false;
   }
-  // Rooms may have closed while this seat was away (a session ended with
-  // this seat in a room sees only its own room's deletion): ask the relay.
+  // Back in the main room: that is the call to come back to after a reload
+  // (a room's end may have taken the note), and rooms may have closed while
+  // this seat was away (a session ended with this seat in a room sees only
+  // its own room's deletion): ask the relay.
+  noteActiveCallForResume();
   const after = session;
   if (after && !currentRoom) void revalidateRooms(after);
 }
