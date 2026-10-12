@@ -2343,8 +2343,9 @@ describe('the main room follows the rooms on the relay itself', () => {
     await settle();
     expect(store.getBreakoutState().rooms.map((r) => r.id)).toEqual(['r1', 'r2']);
     expect(store.getBreakoutState().session?.hosting).toBe(false);
-    // the roster then names me: that is my assignment
+    // the roster then names me: that is my assignment (once the replay is in)
     liveSub().stream.next(roster('r2', [BOB]));
+    liveSub().stream.next('EOSE');
     await settle();
     expect(modal.activeModal).toBe('breakoutAssignment');
     expect(store.getBreakoutState().pending?.room.id).toBe('r2');
@@ -2440,8 +2441,12 @@ describe('the roster rule leaves the host seat and the creator alone', () => {
     await liveInMain(bobUser);
     lk.listener?.(stateOf(), hostSender);
     await settle();
+    // the first roster of the replay alone must not count: wait for EOSE
     liveSub().stream.next(roster('r1', [BOB, CAROL]));
+    await settle();
+    expect(modal.activeModal).toBe('none');
     liveSub().stream.next(roster('r2', [BOB]));
+    liveSub().stream.next('EOSE');
     await settle();
     expect(modal.activeModal).toBe('none');
     expect(store.getBreakoutState().pending).toBeNull();
@@ -2449,5 +2454,26 @@ describe('the roster rule leaves the host seat and the creator alone', () => {
     liveSub().stream.next(roster('r2', [], 11));
     await settle();
     expect(store.getBreakoutState().pending?.room.id).toBe('r1');
+  });
+});
+
+describe('an assignment offer that beat the host seat is void', () => {
+  it('gaining the host seat closes a pending offer and ends a join request', async () => {
+    await liveInMain(bobUser);
+    lk.listener?.(
+      { t: 'state', rooms: ROOMS.map(({ id, relay, name }) => ({ id, relay, name })) },
+      hostSender
+    );
+    await settle();
+    liveSub().stream.next(roster('r1', [BOB]));
+    liveSub().stream.next('EOSE');
+    await settle();
+    expect(modal.activeModal).toBe('breakoutAssignment');
+    lkFake.setMyMetadata(HOST_META);
+    await settle();
+    expect(store.getBreakoutState().session?.hosting).toBe(true);
+    expect(store.getBreakoutState().pending).toBeNull();
+    expect(modal.activeModal).toBe('none');
+    expect(callFake.switchGroupCall).not.toHaveBeenCalled();
   });
 });

@@ -1657,6 +1657,13 @@ if (typeof window !== 'undefined') {
         autoAssign: getBreakoutAutoAssign() ?? true,
         channelName: s.channelName || channelNameOf(s.rooms)
       };
+      // A host is not assigned: an offer that beat the seat's role is void.
+      clearTimeout(joinTimer);
+      joinRequest = null;
+      if (pending) {
+        pending = null;
+        if (modalStore.activeModal === 'breakoutAssignment') modalStore.closeModal();
+      }
       if (gained) showToast(m.groups_call_breakout_took_over(), 'info');
     });
 
@@ -1893,6 +1900,9 @@ if (typeof window !== 'undefined') {
       // seats on EVERY room's roster — seen live: a host back from a reload
       // was pulled into a room before the takeover ran.
       if (holdsHostSeat()) return;
+      // Only once the relay has replayed every roster: on the first of
+      // several rosters the creator rule below cannot see the whole picture.
+      if (!rostersAnswered) return;
       const rooms = s.rooms.filter((room) => !goneRoomIds.has(room.id));
       if (rooms.length > 1 && rooms.every((room) => membersByRoomId[room.id]?.has(me))) return;
       const mine = roomOfPubkey(rooms, membersByRoomId, me);
