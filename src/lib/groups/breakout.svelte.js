@@ -108,7 +108,8 @@ import {
   fetchRoomMetadata,
   editBreakoutUntil,
   knockOnRoom,
-  leaveRoom
+  leaveRoom,
+  isGroupGoneRejection
 } from './breakout-relay.js';
 import { raceRelayKey } from './relay-key-race.js';
 import { resubscribing } from './relay-subscription.js';
@@ -802,7 +803,13 @@ export async function requestBreakoutRoom(room) {
     await seatInRoom(relayConn, room.id, user.pubkey, user);
     await enterRoom(room);
     return;
-  } catch {
+  } catch (err) {
+    // The relay no longer has the room (a deletion this seat missed): drop it.
+    if (isGroupGoneRejection(err)) {
+      markGone(room.id);
+      showToast(m.groups_call_breakout_room_gone(), 'error');
+      return;
+    }
     // not ours to seat — ask the host seat
   }
   const lk = await loadConnection();
@@ -818,11 +825,15 @@ export async function requestBreakoutRoom(room) {
   // watch below switches), and ask the host seat over the main room's data
   // channel (an older relay; a host sitting in the main room).
   let knocked = false;
+  let gone = false;
   const knock = knockOnRoom(relayConn, room.id, user)
     .then(() => {
       knocked = true;
     })
-    .catch((err) => console.warn('breakout room knock refused:', err));
+    .catch((err) => {
+      if (isGroupGoneRejection(err)) gone = true;
+      else console.warn('breakout room knock refused:', err);
+    });
   let asked = false;
   try {
     await lk.sendBreakoutMessage(buildBreakoutJoinPayload(room.id));
@@ -831,6 +842,13 @@ export async function requestBreakoutRoom(room) {
     console.warn('breakout join request not sent:', err);
   }
   await knock;
+  if (gone) {
+    clearTimeout(joinTimer);
+    joinRequest = null;
+    markGone(room.id);
+    showToast(m.groups_call_breakout_room_gone(), 'error');
+    return;
+  }
   if (!asked && !knocked && joinRequest?.roomId === room.id) {
     clearTimeout(joinTimer);
     joinRequest = null;

@@ -171,6 +171,17 @@ export function fetchEphemeralChildren(relayConn, parentId, opts = {}) {
 }
 
 /**
+ * The relay's refusal for a group it no longer has: pyramid answers a
+ * put-user / join request / edit for a deleted room with
+ * `group '<id>' doesn't exist` (groups/reject-event.go, virtual.go).
+ * @param {unknown} err
+ */
+export function isGroupGoneRejection(err) {
+  const message = String(/** @type {any} */ (err)?.message ?? err ?? '');
+  return /doesn't exist|does not exist/i.test(message);
+}
+
+/**
  * The current kind 39000 of each of the rooms named — alive metadata or the
  * relay's `[deleted]` tombstone. A one-shot resync for a client whose follow
  * subscription may have missed a deletion (the relay sweeps rooms on its

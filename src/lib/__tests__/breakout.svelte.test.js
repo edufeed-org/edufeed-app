@@ -157,7 +157,8 @@ const rel = vi.hoisted(() => ({
   knockOnRoom: vi.fn(async () => {}),
   leaveRoom: vi.fn(async () => {})
 }));
-vi.mock('$lib/groups/breakout-relay.js', () => ({
+vi.mock('$lib/groups/breakout-relay.js', async (importOriginal) => ({
+  isGroupGoneRejection: /** @type {any} */ (await importOriginal()).isGroupGoneRejection,
   knockOnRoom: (/** @type {any[]} */ ...a) => rel.knockOnRoom(...a),
   leaveRoom: (/** @type {any[]} */ ...a) => rel.leaveRoom(...a),
   createBreakoutRoom: (/** @type {any[]} */ ...a) => rel.createBreakoutRoom(...a),
@@ -841,6 +842,33 @@ describe('late joiners: "Beitreten" from the banner', () => {
     await settle();
     expect(callFake.switchGroupCall).not.toHaveBeenCalled();
     expect(store.getBreakoutState().session).toBeNull();
+  });
+
+  it('the relay refusing the seat with "doesn\'t exist" drops the room too', async () => {
+    await bobSeesSession();
+    rel.seatInRoom.mockRejectedValueOnce(new Error("group 'r2' doesn't exist"));
+    await store.requestBreakoutRoom(store.getBreakoutState().rooms[1]);
+    await settle();
+    expect(rel.knockOnRoom).not.toHaveBeenCalled();
+    expect(callFake.switchGroupCall).not.toHaveBeenCalled();
+    expect(store.getBreakoutState().rooms.map((r) => r.id)).toEqual(['r1']);
+    expect(store.getBreakoutState().joinRequest).toBeNull();
+    expect(toast.fn).toHaveBeenCalledWith('room gone', 'error');
+  });
+
+  it('the knock being refused with "doesn\'t exist" drops the room instead of waiting for a host', async () => {
+    vi.useFakeTimers();
+    await bobSeesSession();
+    rel.seatInRoom.mockRejectedValueOnce(new Error('restricted: insufficient permissions'));
+    rel.knockOnRoom.mockRejectedValueOnce(new Error("group 'r2' doesn't exist"));
+    const request = store.requestBreakoutRoom(store.getBreakoutState().rooms[1]);
+    await vi.advanceTimersByTimeAsync(10);
+    await request;
+    expect(store.getBreakoutState().rooms.map((r) => r.id)).toEqual(['r1']);
+    expect(store.getBreakoutState().joinRequest).toBeNull();
+    expect(toast.fn).toHaveBeenCalledWith('room gone', 'error');
+    await vi.advanceTimersByTimeAsync(BREAKOUT_JOIN_REQUEST_TIMEOUT_MS + 10);
+    expect(toast.fn).not.toHaveBeenCalledWith('nobody can seat you', 'error');
   });
 
   it('a room the relay answers nothing about (a timeout, an old relay) is tried anyway', async () => {
