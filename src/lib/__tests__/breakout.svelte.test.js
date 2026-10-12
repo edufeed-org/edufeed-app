@@ -2416,3 +2416,38 @@ describe("a breakout room's own host seat is not the session's host seat", () =>
     expect(lk.send.mock.calls.some((c) => c[0]?.t === 'assign')).toBe(false);
   });
 });
+
+describe('the roster rule leaves the host seat and the creator alone', () => {
+  const stateOf = () => ({
+    t: 'state',
+    rooms: ROOMS.map(({ id, relay, name }) => ({ id, relay, name }))
+  });
+
+  it('a seat holding the host role is not roster-assigned (it takes the session over instead)', async () => {
+    await liveInMain(bobUser);
+    lk.listener?.(stateOf(), hostSender);
+    await settle();
+    lkFake.setMyMetadata(HOST_META);
+    await settle();
+    liveSub().stream.next(roster('r1', [BOB]));
+    await settle();
+    expect(modal.activeModal).toBe('none');
+    expect(store.getBreakoutState().pending).toBeNull();
+    expect(store.getBreakoutState().session?.hosting).toBe(true);
+  });
+
+  it("a pubkey on every room's roster (the relay seats the creator everywhere) is not assigned", async () => {
+    await liveInMain(bobUser);
+    lk.listener?.(stateOf(), hostSender);
+    await settle();
+    liveSub().stream.next(roster('r1', [BOB, CAROL]));
+    liveSub().stream.next(roster('r2', [BOB]));
+    await settle();
+    expect(modal.activeModal).toBe('none');
+    expect(store.getBreakoutState().pending).toBeNull();
+    // named by one roster only: that is an assignment
+    liveSub().stream.next(roster('r2', [], 11));
+    await settle();
+    expect(store.getBreakoutState().pending?.room.id).toBe('r1');
+  });
+});

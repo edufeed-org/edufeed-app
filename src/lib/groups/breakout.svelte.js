@@ -1888,7 +1888,13 @@ if (typeof window !== 'undefined') {
       if (!s || currentRoom || s.hosting || switching) return;
       const me = getActiveCallUser()?.pubkey;
       if (!me || seatIsGuest()) return;
+      // The host seat is never roster-assigned (it is about to take the
+      // session over), and neither is the session's creator, whom the relay
+      // seats on EVERY room's roster — seen live: a host back from a reload
+      // was pulled into a room before the takeover ran.
+      if (holdsHostSeat()) return;
       const rooms = s.rooms.filter((room) => !goneRoomIds.has(room.id));
+      if (rooms.length > 1 && rooms.every((room) => membersByRoomId[room.id]?.has(me))) return;
       const mine = roomOfPubkey(rooms, membersByRoomId, me);
       if (!mine) {
         rosterOfferedRoomId = null;
