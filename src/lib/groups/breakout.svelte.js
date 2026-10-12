@@ -522,7 +522,16 @@ function handleMessage(raw, sender) {
   const pointer = getActiveCallPointer();
   if (!pointer || currentRoom) return;
   if (!session?.hosting) learnRooms(payload.rooms, payload.until, payload.selfJoin);
-  if (payload.t === 'state' || !session) return;
+  if (payload.t === 'state') {
+    // The host seat's full picture: a room it does not name is gone (a
+    // deletion this seat missed while it sat in another room).
+    if (!session?.hosting && session) {
+      const named = new Set(payload.rooms.map((room) => room.id));
+      for (const room of session.rooms) if (!named.has(room.id)) markGone(room.id);
+    }
+    return;
+  }
+  if (!session) return;
   const myIdentity = lkModule?.getLiveKitState().localParticipant?.identity;
   const mine = myIdentity ? assignedRoom(payload, myIdentity) : null;
   if (!mine) return;
@@ -693,6 +702,10 @@ export async function returnToMain() {
   } finally {
     switching = false;
   }
+  // Rooms may have closed while this seat was away (a session ended with
+  // this seat in a room sees only its own room's deletion): ask the relay.
+  const after = session;
+  if (after && !currentRoom) void revalidateRooms(after);
 }
 
 /**

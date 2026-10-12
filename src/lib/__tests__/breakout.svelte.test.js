@@ -2253,3 +2253,48 @@ describe('the host seat moves on, and a connection lost in a room', () => {
     expect(store.getBreakoutState().session).not.toBeNull();
   });
 });
+
+describe('rooms that closed while this seat sat in another room', () => {
+  it('back in the main room after its room was deleted, the seat asks the relay about the rest', async () => {
+    await liveInMain(bobUser);
+    lk.listener?.({ t: 'assign', rooms: ROOMS }, hostSender);
+    modal.callbacks.onConfirm();
+    await settle();
+    expect(store.getBreakoutState().currentRoom?.id).toBe('r1');
+    rel.fetchRoomMetadata.mockResolvedValueOnce([tombstone('r2')]);
+    lkFake.setDisconnectReason(lkFake.ROOM_DELETED);
+    callFake.setCall({ pointer: { id: 'r1', relay: RELAY }, phase: 'ended' });
+    await settle();
+    await settle();
+    expect(store.getBreakoutState().currentRoom).toBeNull();
+    expect(rel.fetchRoomMetadata).toHaveBeenCalledWith(expect.anything(), ['r2']);
+    expect(store.getBreakoutState().session).toBeNull();
+  });
+
+  it("the host seat's full state replay is authoritative: a room it does not name is gone", async () => {
+    await liveInMain(bobUser);
+    lk.listener?.(
+      { t: 'state', rooms: ROOMS.map(({ id, relay, name }) => ({ id, relay, name })) },
+      hostSender
+    );
+    await settle();
+    expect(store.getBreakoutState().rooms.map((r) => r.id)).toEqual(['r1', 'r2']);
+    lk.listener?.(
+      { t: 'state', rooms: [{ id: 'r3', relay: RELAY, name: 'Breakout 3 · Seminar' }] },
+      hostSender
+    );
+    await settle();
+    expect(store.getBreakoutState().rooms.map((r) => r.id)).toEqual(['r3']);
+    // a targeted assignment names one room and drops nothing; a room once
+    // gone stays gone
+    lk.listener?.(
+      {
+        t: 'assign',
+        rooms: [{ id: 'r4', relay: RELAY, name: 'Breakout 4 · Seminar', members: [] }]
+      },
+      hostSender
+    );
+    await settle();
+    expect(store.getBreakoutState().rooms.map((r) => r.id)).toEqual(['r3', 'r4']);
+  });
+});
