@@ -354,6 +354,29 @@ describe('participant: the assignment', () => {
     expect(s.session).not.toBeNull();
   });
 
+  it('a switch that fails (the relay already deleted the room, a lost network) lands the seat back in the main room', async () => {
+    await liveInMain(bobUser);
+    const { GroupCallTokenError } = await import('$lib/groups/livekit.js');
+    callFake.failNextSwitch(new GroupCallTokenError('server', 'room not found', 404));
+    lk.listener?.({ t: 'assign', rooms: ROOMS }, hostSender);
+    modal.callbacks.onConfirm();
+    await settle();
+    expect(toast.fn).toHaveBeenCalledWith('switch failed: room not found', 'error');
+    // the way back is a second switch — into the main room, live again there
+    expect(callFake.switchGroupCall).toHaveBeenCalledTimes(2);
+    expect(callFake.switchGroupCall).toHaveBeenLastCalledWith(MAIN, { title: 'Seminar' });
+    const call = callFake.getGroupCallState();
+    expect(call.phase).toBe('ready');
+    expect(call.error).toBeNull();
+    expect(callFake.getActiveCallPointer()).toEqual(MAIN);
+    const s = store.getBreakoutState();
+    expect(s.currentRoom).toBeNull();
+    expect(s.switching).toBe(false);
+    // the session is still known: the banner shows the rooms again
+    expect(s.session).not.toBeNull();
+    expect(s.rooms.map((r) => r.id)).toEqual(['r1', 'r2']);
+  });
+
   it('lets a seat stay, and ignores seats that were not assigned', async () => {
     await liveInMain(bobUser);
     lk.listener?.({ t: 'assign', rooms: ROOMS }, hostSender);
@@ -1766,6 +1789,26 @@ describe('guests (call-pass seats)', () => {
     expect(store.getBreakoutState().currentRoom).toBeNull();
     expect(store.getBreakoutState().session).not.toBeNull();
     expect(toast.fn).toHaveBeenCalledWith('switch failed: call pass unknown', 'error');
+  });
+
+  it('a guest whose room token came but whose switch then fails lands back in the main room, code kept', async () => {
+    await guestInMain();
+    callFake.failNextSwitch(new Error('connection lost'));
+    lk.listener?.({ t: 'assign', rooms: [{ ...ROOMS[0], members: [EVE + ':g1'] }] }, hostSender);
+    modal.callbacks.onConfirm();
+    await settle();
+    expect(toast.fn).toHaveBeenCalledWith('switch failed: connection lost', 'error');
+    expect(callFake.switchGroupCall).toHaveBeenCalledTimes(2);
+    expect(callFake.switchGroupCall).toHaveBeenLastCalledWith(MAIN, {
+      title: 'Seminar',
+      code: CODE
+    });
+    const call = callFake.getGroupCallState();
+    expect(call.phase).toBe('ready');
+    expect(call.code).toBe(CODE);
+    expect(callFake.getActiveCallPointer()).toEqual(MAIN);
+    expect(store.getBreakoutState().currentRoom).toBeNull();
+    expect(store.getBreakoutState().session).not.toBeNull();
   });
 
   it('in a room a guest follows no roster: it stays although no 39002 names it', async () => {

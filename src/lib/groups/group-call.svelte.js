@@ -296,8 +296,13 @@ export async function joinGroupCallWithConfirm(pointer, user, view = {}) {
 export async function switchGroupCall(pointer, view = {}) {
   // An ENDED call may still be moved: a breakout room the relay deleted
   // (DisconnectReason ROOM_DELETED) sends its seat back to the main room
-  // instead of leaving it on the "call ended" screen.
-  if (!activeUser || !(isLive() || phase === 'ended')) return;
+  // instead of leaving it on the "call ended" screen. So may an ERRORED
+  // one: a switch INTO a room that fails (its token refused — the relay
+  // already deleted it — or the connect lost) has left the main room
+  // already, and the way back (breakout.svelte.js returnToMain) is this
+  // same switch; refusing it would strand the seat on the error screen
+  // outside every room.
+  if (!activeUser || !(isLive() || phase === 'ended' || phase === 'error')) return;
   const user = activeUser;
   const keepHref = href;
   const keepCode = view.code ?? code ?? undefined;
