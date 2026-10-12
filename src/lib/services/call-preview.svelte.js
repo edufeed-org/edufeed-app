@@ -15,6 +15,7 @@ import {
   createLocalVideoTrack,
   createAudioAnalyser
 } from 'livekit-client';
+import { dedupeDevices } from '$lib/helpers/media-devices.js';
 import {
   cameraCaptureOptions,
   getBackgroundEffect,
@@ -313,11 +314,15 @@ export async function switchPreviewDevice(kind, deviceId) {
  */
 export async function refreshPreviewDevices() {
   try {
-    const [mics, speakers, cams] = await Promise.all([
-      Room.getLocalDevices('audioinput', false),
-      Room.getLocalDevices('audiooutput', false),
-      Room.getLocalDevices('videoinput', false)
-    ]);
+    // Firefox lists every device with deviceId "" before permission — dedupe
+    // or the keyed pickers throw each_key_duplicate (see media-devices.js).
+    const [mics, speakers, cams] = (
+      await Promise.all([
+        Room.getLocalDevices('audioinput', false),
+        Room.getLocalDevices('audiooutput', false),
+        Room.getLocalDevices('videoinput', false)
+      ])
+    ).map(dedupeDevices);
     audioInputDevices = mics;
     audioOutputDevices = speakers;
     videoInputDevices = cams;

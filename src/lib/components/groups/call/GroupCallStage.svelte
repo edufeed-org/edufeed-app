@@ -1528,7 +1528,7 @@
               data-testid="group-call-mic-menu"
             >
               <li class="menu-title text-xs">{m.groups_call_select_microphone()}</li>
-              {#each lk.audioInputDevices as device (device.deviceId)}
+              {#each lk.audioInputDevices as device, i (device.deviceId || i)}
                 <li>
                   <button
                     class="text-sm"
@@ -1546,7 +1546,7 @@
 
               {#if speakerSelectable && lk.audioOutputDevices.length > 0}
                 <li class="mt-1 menu-title text-xs">{m.groups_call_select_speaker()}</li>
-                {#each lk.audioOutputDevices as device (device.deviceId)}
+                {#each lk.audioOutputDevices as device, i (device.deviceId || i)}
                   <li>
                     <button
                       class="text-sm"
@@ -1597,7 +1597,7 @@
                 data-testid="group-call-camera-menu"
               >
                 <li class="menu-title text-xs">{m.groups_call_select_camera()}</li>
-                {#each lk.videoInputDevices as device (device.deviceId)}
+                {#each lk.videoInputDevices as device, i (device.deviceId || i)}
                   <li>
                     <button
                       class="text-sm"
