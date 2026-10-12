@@ -13,6 +13,7 @@
 // pulls livekit-client (~300KB) into whatever imports it, and this store is
 // imported by GroupChat and the root layout. It is loaded on join.
 import { channelKey } from './community-pointer.js';
+import { rememberCall, forgetCall } from './call-resume.js';
 import {
   requestGroupCallToken,
   moderateCall,
@@ -214,6 +215,9 @@ export async function joinGroupCall(pointer, user, view = {}) {
       connected = false;
       phase = 'ended';
       endReason = lk.isRemovalReason(reason) ? 'removed' : 'dropped';
+      // Removed: the relay would refuse the way back (nothing to resume);
+      // dropped: the note stays, a reload still finds the call.
+      if (endReason === 'removed') forgetCall();
     });
     // The chat is kept per room (chatKey): a breakout switch sets the
     // channel's aside and takes it back on return.
@@ -227,6 +231,9 @@ export async function joinGroupCall(pointer, user, view = {}) {
       await lk.disconnectFromRoom();
     } else {
       connected = true;
+      // For after a reload (call-resume.js): the call joined, not a
+      // breakout switch (keepChat) — the main room is what to come back to.
+      if (!view.keepChat) rememberCall({ pointer, title, href, code });
     }
   } catch (err) {
     if (myAttempt !== attempt) return;
@@ -380,6 +387,8 @@ export async function leaveGroupCall() {
 async function endCall({ keepChat }) {
   attempt++;
   const wasActive = activeKey !== null;
+  // A real leave (not a breakout switch): nothing to come back to.
+  if (!keepChat) forgetCall();
   activeKey = null;
   phase = 'idle';
   error = null;

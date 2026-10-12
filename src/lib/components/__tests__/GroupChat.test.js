@@ -1060,6 +1060,26 @@ vi.mock('$lib/groups/enable-group-calls.js', () => ({
   enableGroupCalls: (/** @type {any} */ pointer, /** @type {any} */ user) =>
     enableGroupCallsMock(pointer, user)
 }));
+// The breakout store (own tests: breakout.svelte.test.js): the chat reads
+// whether the seat sits in a room of this channel's call, and the ended view
+// offers the way back into the room or home.
+const breakoutHolder = vi.hoisted(() => ({
+  state: /** @type {{session: any, currentRoom: any}} */ ({ session: null, currentRoom: null }),
+  rejoinRoom: vi.fn(async () => {}),
+  returnToMain: vi.fn(async () => {})
+}));
+vi.mock('$lib/groups/breakout.svelte.js', () => ({
+  getBreakoutState: () => ({
+    get session() {
+      return breakoutHolder.state.session;
+    },
+    get currentRoom() {
+      return breakoutHolder.state.currentRoom;
+    }
+  }),
+  rejoinRoom: () => breakoutHolder.rejoinRoom(),
+  returnToMain: () => breakoutHolder.returnToMain()
+}));
 vi.mock('$lib/groups/call-presence.svelte.js', () => ({
   useCallPresence: () => () => ({ participants: groupCallHolder.participants, answered: true })
 }));
@@ -1142,6 +1162,10 @@ vi.mock('$lib/paraglide/messages', () => ({
   groups_call_ended_removed: () => 'You were removed from the call.',
   groups_call_ended_dropped: () => 'The connection to the call was lost.',
   groups_call_rejoin: () => 'Rejoin',
+  groups_call_ended_back_to_room: () => 'Back into the room',
+  groups_call_ended_to_main: () => 'To the main room',
+  groups_call_resume_title: () => 'You were in this call.',
+  groups_call_resume: () => 'Back into the call',
   common_close: () => 'Close',
   groups_call_start: () => 'Start call',
   groups_call_start_login: () => 'Log in to start a call',
@@ -3538,6 +3562,25 @@ describe('GroupChat', () => {
         expect(leaveGroupCallMock).toHaveBeenCalledTimes(1);
       });
 
+      it('a connection lost inside a breakout room of this call offers the room and the main room', async () => {
+        endedHere('dropped');
+        breakoutHolder.state.session = { main: { id: 'callchat', relay: GROUP_RELAY } };
+        breakoutHolder.state.currentRoom = { id: 'r1', relay: GROUP_RELAY, name: 'Breakout 1' };
+        try {
+          render(GroupChat, { props: { pointer: callPointer } });
+          await screen.findByTestId('group-call-ended');
+          expect(screen.queryByTestId('group-call-rejoin')).toBeNull();
+          await fireEvent.click(screen.getByTestId('group-call-rejoin-room'));
+          expect(breakoutHolder.rejoinRoom).toHaveBeenCalledTimes(1);
+          await fireEvent.click(screen.getByTestId('group-call-to-main'));
+          expect(breakoutHolder.returnToMain).toHaveBeenCalledTimes(1);
+          expect(joinGroupCallMock).not.toHaveBeenCalled();
+        } finally {
+          breakoutHolder.state.session = null;
+          breakoutHolder.state.currentRoom = null;
+        }
+      });
+
       it('says the connection was lost for a dropped call and offers rejoin', async () => {
         endedHere('dropped');
         render(GroupChat, { props: { pointer: callPointer } });
@@ -3550,6 +3593,67 @@ describe('GroupChat', () => {
           expect.anything(),
           expect.anything()
         );
+      });
+    });
+
+    // After a reload the call is gone from memory; the note in sessionStorage
+    // (groups/call-resume.js) brings a one-click way back while the relay
+    // still lists someone in the call.
+    describe('after a reload', () => {
+      const note = (over = {}) =>
+        JSON.stringify({
+          pointer: { id: 'callchat', relay: GROUP_RELAY },
+          title: 'Standup',
+          href: null,
+          code: null,
+          at: Date.now(),
+          ...over
+        });
+
+      it('offers "Back into the call" for this channel while someone is still in it, and joins on click', async () => {
+        sessionStorage.setItem('edufeed:call-resume', note());
+        groupCallHolder.participants = ['f'.repeat(64)];
+        try {
+          render(GroupChat, { props: { pointer: callPointer } });
+          const card = await screen.findByTestId('group-call-resume');
+          expect(card.textContent).toContain('You were in this call.');
+          await fireEvent.click(screen.getByTestId('group-call-resume-join'));
+          expect(joinGroupCallMock).toHaveBeenCalledWith(
+            expect.objectContaining({ id: 'callchat', relay: GROUP_RELAY }),
+            expect.anything(),
+            expect.anything()
+          );
+        } finally {
+          sessionStorage.removeItem('edufeed:call-resume');
+          groupCallHolder.participants = [];
+        }
+      });
+
+      it('offers nothing for another channel, an empty call, or a stale note', async () => {
+        groupCallHolder.participants = ['f'.repeat(64)];
+        try {
+          sessionStorage.setItem(
+            'edufeed:call-resume',
+            note({ pointer: { id: 'other', relay: GROUP_RELAY } })
+          );
+          const first = render(GroupChat, { props: { pointer: callPointer } });
+          await screen.findByTestId('group-name');
+          expect(screen.queryByTestId('group-call-resume')).toBeNull();
+          first.unmount();
+          sessionStorage.setItem('edufeed:call-resume', note({ at: Date.now() - 11 * 60_000 }));
+          const second = render(GroupChat, { props: { pointer: callPointer } });
+          await screen.findByTestId('group-name');
+          expect(screen.queryByTestId('group-call-resume')).toBeNull();
+          second.unmount();
+          sessionStorage.setItem('edufeed:call-resume', note());
+          groupCallHolder.participants = [];
+          render(GroupChat, { props: { pointer: callPointer } });
+          await screen.findByTestId('group-name');
+          expect(screen.queryByTestId('group-call-resume')).toBeNull();
+        } finally {
+          sessionStorage.removeItem('edufeed:call-resume');
+          groupCallHolder.participants = [];
+        }
       });
     });
 
