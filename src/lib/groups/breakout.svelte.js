@@ -1539,6 +1539,58 @@ if (typeof window !== 'undefined') {
       void discoverSession(pointer);
     });
 
+    // A seat in the main room follows the channel's ephemeral rooms on the
+    // relay itself (`#ephemeral`, docs/nips/nip29-ephemeral-groups.md
+    // "Reading"): the host's data message can be lost — measured live: a
+    // LiveKit signal resume at the moment the session started swallowed the
+    // assignment, and the seat never heard of the rooms — while the relay's
+    // 39000 reaches everyone; the roster then makes a seat's assignment.
+    // The host's own client runs the session and needs no such watch.
+    const ephemeralKey = $derived.by(() => {
+      const phase = getGroupCallState().phase;
+      const pointer = getActiveCallPointer();
+      if (phase !== 'ready' || !pointer || currentRoom || session?.hosting) return '';
+      return `${normalizeURL(pointer.relay)} ${pointer.id}`;
+    });
+    $effect(() => {
+      const key = ephemeralKey;
+      void authVersion;
+      if (!key || untrack(() => switching)) return;
+      const [relay, channelId] = key.split(' ');
+      const user = getActiveCallUser();
+      return resubscribing(
+        () =>
+          pool
+            .relay(relay)
+            .subscription([{ kinds: [GROUP_METADATA_KIND], '#ephemeral': [channelId] }]),
+        {
+          next: (/** @type {any} */ event) => {
+            if (!event || typeof event !== 'object') return;
+            if (
+              !isTrustedSigner(
+                event,
+                untrack(() => authors)
+              )
+            )
+              return;
+            const d = event.tags?.find((/** @type {string[]} */ t) => t[0] === 'd')?.[1];
+            if (!d) return;
+            if (channelDeleted(event)) {
+              if (session?.rooms.some((room) => room.id === d)) markGone(d);
+              return;
+            }
+            const rooms = roomsFromMetadataEvents([event], channelId, relay);
+            if (rooms.length === 0 || session?.hosting || currentRoom) return;
+            learnRooms(rooms, rooms[0].until, rooms[0].selfJoin);
+          }
+        },
+        {
+          beforeReopen: () =>
+            user?.signer ? authenticateOnce(pool.relay(relay), user.signer) : Promise.resolve()
+        }
+      );
+    });
+
     // The relay hands this seat the host role while a session runs that
     // this client does not manage yet (the host left; this co-host was
     // next): take over — panel, newcomers, the deadline. With no session
@@ -1625,7 +1677,15 @@ if (typeof window !== 'undefined') {
     let ready = $state(false);
     // Keyed on the relay URL alone: a reassigned session (a moved deadline)
     // must not re-race the key and flap the subscription below.
-    const mainRelay = $derived(session?.main.relay ?? null);
+    const mainRelay = $derived.by(() => {
+      if (session) return session.main.relay;
+      // No session yet: the main room's watch for rooms (below) needs the
+      // key of the call's relay all the same.
+      const pointer = getActiveCallPointer();
+      return getGroupCallState().phase === 'ready' && pointer && !currentRoom
+        ? pointer.relay
+        : null;
+    });
     // Bumped when the relay connection becomes authenticated (NIP-42): the
     // rooms' rosters, tombstones and 9008s are withheld from an
     // unauthenticated REQ (a clean, empty EOSE), so a watch opened before the

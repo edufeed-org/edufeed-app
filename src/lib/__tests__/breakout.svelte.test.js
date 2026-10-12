@@ -2300,3 +2300,37 @@ describe('rooms that closed while this seat sat in another room', () => {
     expect(store.getBreakoutState().rooms.map((r) => r.id)).toEqual(['r3', 'r4']);
   });
 });
+
+describe('the main room follows the rooms on the relay itself', () => {
+  const ephemeralSub = () => relay.subs.find((s) => !s.closed && s.filters[0]?.['#ephemeral']);
+
+  it('a seat without a session learns the rooms from the live 39000s, even when the assignment message was lost', async () => {
+    await liveInMain(bobUser);
+    await settle();
+    const sub = ephemeralSub();
+    expect(sub).toBeTruthy();
+    expect(sub.filters).toEqual([{ kinds: [39000], '#ephemeral': ['main-id'] }]);
+    sub.stream.next(roomMeta('r1', 1));
+    sub.stream.next(roomMeta('r2', 2));
+    await settle();
+    expect(store.getBreakoutState().rooms.map((r) => r.id)).toEqual(['r1', 'r2']);
+    expect(store.getBreakoutState().session?.hosting).toBe(false);
+    // the roster then names me: that is my assignment
+    liveSub().stream.next(roster('r2', [BOB]));
+    await settle();
+    expect(modal.activeModal).toBe('breakoutAssignment');
+    expect(store.getBreakoutState().pending?.room.id).toBe('r2');
+    // a tombstone drops a room
+    sub.stream.next(tombstone('r1'));
+    await settle();
+    expect(store.getBreakoutState().rooms.map((r) => r.id)).toEqual(['r2']);
+  });
+
+  it('is not opened by the host of a session, nor inside a room', async () => {
+    await liveInMain(hostUser);
+    lkFake.setMyMetadata(HOST_META);
+    await store.startBreakout({ channelName: 'Seminar', roomCount: 1, seats: [] });
+    await settle();
+    expect(ephemeralSub()).toBeUndefined();
+  });
+});
