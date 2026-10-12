@@ -111,6 +111,7 @@ import {
 } from './breakout-relay.js';
 import { raceRelayKey } from './relay-key-race.js';
 import { resubscribing } from './relay-subscription.js';
+import { authenticateOnce } from './relay-auth.js';
 import { isTrustedSigner } from './relay-directory.js';
 import { CALL_PRESENCE_KIND, parseCallParticipants } from './call-presence.js';
 import { channelDeleted } from './channel-access.js';
@@ -570,6 +571,7 @@ function guestSeatsOf(pubkey) {
  * @param {{identities?: string[], pubkey?: string}} which
  */
 function forgetGuestSeats({ identities = [], pubkey }) {
+  // eslint-disable-next-line svelte/prefer-svelte-reactivity -- bookkeeping, never rendered
   const drop = new Set(identities);
   if (pubkey) {
     for (const seat of guestSeatsOf(pubkey)) {
@@ -1607,6 +1609,31 @@ if (typeof window !== 'undefined') {
     // Keyed on the relay URL alone: a reassigned session (a moved deadline)
     // must not re-race the key and flap the subscription below.
     const mainRelay = $derived(session?.main.relay ?? null);
+    // Bumped when the relay connection becomes authenticated (NIP-42): the
+    // rooms' rosters, tombstones and 9008s are withheld from an
+    // unauthenticated REQ (a clean, empty EOSE), so a watch opened before the
+    // handshake — after a reload, a reconnect — is reopened once it is done.
+    let authVersion = $state(0);
+    $effect(() => {
+      const relay = mainRelay;
+      if (!relay) return;
+      const conn = /** @type {any} */ (pool.relay(normalizeURL(relay)));
+      const authenticated$ = conn?.authenticated$;
+      if (!authenticated$?.subscribe) return;
+      let was = conn.authenticated === true;
+      const sub = authenticated$.subscribe((/** @type {boolean} */ value) => {
+        if (value && !was) authVersion++;
+        was = value === true;
+      });
+      return () => sub.unsubscribe();
+    });
+    /** The NIP-42 handshake for a fresh connection to the session's relay. */
+    const authenticateMainRelay = () => {
+      const relay = session?.main.relay;
+      const signer = getActiveCallUser()?.signer;
+      if (!relay || !signer) return Promise.resolve();
+      return authenticateOnce(pool.relay(normalizeURL(relay)), signer);
+    };
     $effect(() => {
       const relay = mainRelay;
       authors = [];
@@ -1635,6 +1662,7 @@ if (typeof window !== 'undefined') {
       const key = followKey;
       const isReady = ready;
       const pinned = authors;
+      void authVersion;
       if (!key || !isReady) return;
       const [relay, mainId, ...ids] = key.split(' ');
       // Reopened after an outage (resubscribing): the relay replays the
@@ -1702,7 +1730,8 @@ if (typeof window !== 'undefined') {
           error: () => {
             rostersAnswered = true;
           }
-        }
+        },
+        { beforeReopen: authenticateMainRelay }
       );
     });
 
@@ -1714,15 +1743,20 @@ if (typeof window !== 'undefined') {
     );
     $effect(() => {
       const key = broadcastKey;
+      void authVersion;
       if (!key) return;
       const [relay, mainId] = key.split(' ');
-      return resubscribing(() => pool.relay(relay).subscription([callBroadcastFilter(mainId)]), {
-        next: (/** @type {any} */ event) => {
-          if (!event || typeof event !== 'object') return;
-          const broadcast = parseCallBroadcast(event);
-          if (broadcast) renderBroadcast(broadcast);
-        }
-      });
+      return resubscribing(
+        () => pool.relay(relay).subscription([callBroadcastFilter(mainId)]),
+        {
+          next: (/** @type {any} */ event) => {
+            if (!event || typeof event !== 'object') return;
+            const broadcast = parseCallBroadcast(event);
+            if (broadcast) renderBroadcast(broadcast);
+          }
+        },
+        { beforeReopen: authenticateMainRelay }
+      );
     });
 
     // In the main room, not hosting: a room roster that names me IS my

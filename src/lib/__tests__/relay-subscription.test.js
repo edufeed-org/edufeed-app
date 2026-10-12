@@ -87,6 +87,21 @@ describe('resubscribing', () => {
     expect(streams[1].observed).toBe(false);
   });
 
+  it('runs beforeReopen before every reopen, never before the first open, and reopens even if it fails', async () => {
+    const before = vi.fn(async () => {});
+    resubscribing(open, { next: () => {} }, { beforeReopen: before });
+    expect(before).not.toHaveBeenCalled();
+    streams[0].error(new Error('closed'));
+    await vi.advanceTimersByTimeAsync(5_000);
+    expect(before).toHaveBeenCalledTimes(1);
+    expect(open).toHaveBeenCalledTimes(2);
+    before.mockRejectedValueOnce(new Error('no challenge'));
+    streams[1].error(new Error('closed'));
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(before).toHaveBeenCalledTimes(2);
+    expect(open).toHaveBeenCalledTimes(3);
+  });
+
   it('EOSE markers pass through without resetting the delay', () => {
     const next = vi.fn();
     resubscribing(open, { next });

@@ -13,13 +13,22 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { flushSync } from 'svelte';
 import { Subject } from 'rxjs';
 
-/** @type {{ info: Record<string, Subject<any>>, subs: Array<{url: string, filters: any[], stream: Subject<any>, unsubscribed: boolean}> }} */
-const holders = { info: {}, subs: [] };
+/** @type {{ info: Record<string, Subject<any>>, auth: Record<string, Subject<any>>, subs: Array<{url: string, filters: any[], stream: Subject<any>, unsubscribed: boolean}> }} */
+const holders = { info: {}, auth: {}, subs: [] };
+const authenticateOnce = vi.fn(async () => ({ ok: true }));
+vi.mock('$lib/groups/relay-auth.js', () => ({
+  authenticateOnce: (/** @type {any[]} */ ...a) => authenticateOnce(...a)
+}));
+vi.mock('$lib/stores/accounts.svelte', () => ({
+  useActiveUser: () => () => ({ pubkey: 'a'.repeat(64), signer: { signEvent: async () => ({}) } })
+}));
 
 vi.mock('$lib/stores/nostr-infrastructure.svelte', () => ({
   pool: {
     relay: (/** @type {string} */ url) => ({
       information$: (holders.info[url] ??= new Subject()),
+      authenticated$: (holders.auth[url] ??= new Subject()),
+      authenticated: false,
       subscription: (/** @type {any[]} */ filters) => {
         const stream = new Subject();
         const entry = { url, filters, stream, unsubscribed: false };
@@ -60,7 +69,9 @@ function presence(signer, participants, createdAt) {
 
 beforeEach(() => {
   holders.info = {};
+  holders.auth = {};
   holders.subs = [];
+  authenticateOnce.mockClear();
   vi.useFakeTimers();
 });
 
@@ -176,7 +187,7 @@ describe('useCallPresence', () => {
 });
 
 describe('useCallPresence after the pool gave up', () => {
-  it('reopens the subscription after 5 s and takes the replayed list', () => {
+  it('reopens the subscription after 5 s and takes the replayed list', async () => {
     let read = () => ({ participants: /** @type {string[]} */ ([]), answered: false });
     const cleanup = $effect.root(() => {
       read = useCallPresence(() => pointer);
@@ -191,7 +202,7 @@ describe('useCallPresence after the pool gave up', () => {
     flushSync();
     expect(read().answered).toBe(true);
     expect(holders.subs).toHaveLength(1);
-    vi.advanceTimersByTime(5_000);
+    await vi.advanceTimersByTimeAsync(5_000);
     expect(holders.subs).toHaveLength(2);
     expect(holders.subs[1].filters).toEqual(holders.subs[0].filters);
     holders.subs[1].stream.next(presence(KEY, [A, B], 200));
@@ -199,5 +210,47 @@ describe('useCallPresence after the pool gave up', () => {
     expect(read().participants).toEqual([A, B]);
     cleanup();
     expect(holders.subs[1].unsubscribed).toBe(true);
+  });
+});
+
+describe('useCallPresence and NIP-42', () => {
+  it('reopens the subscription once the relay connection is authenticated (the private list was withheld before)', () => {
+    let read = () => ({ participants: /** @type {string[]} */ ([]), answered: false });
+    const cleanup = $effect.root(() => {
+      read = useCallPresence(() => pointer);
+    });
+    flushSync();
+    holders.info[RELAY].next({ self: KEY });
+    flushSync();
+    expect(holders.subs).toHaveLength(1);
+    holders.subs[0].stream.next('EOSE');
+    flushSync();
+    expect(read().participants).toEqual([]);
+    holders.auth[RELAY].next(true);
+    flushSync();
+    expect(holders.subs).toHaveLength(2);
+    expect(holders.subs[0].unsubscribed).toBe(true);
+    holders.subs[1].stream.next(presence(KEY, [A], 100));
+    flushSync();
+    expect(read().participants).toEqual([A]);
+    // still authenticated: no flapping
+    holders.auth[RELAY].next(true);
+    flushSync();
+    expect(holders.subs).toHaveLength(2);
+    cleanup();
+  });
+
+  it('authenticates the fresh connection before a reopen after the pool gave up', async () => {
+    const cleanup = $effect.root(() => {
+      useCallPresence(() => pointer);
+    });
+    flushSync();
+    holders.info[RELAY].next({ self: KEY });
+    flushSync();
+    holders.subs[0].stream.error(new Error('closed'));
+    await vi.advanceTimersByTimeAsync(5_000);
+    expect(authenticateOnce).toHaveBeenCalledTimes(1);
+    expect(holders.subs).toHaveLength(2);
+    cleanup();
   });
 });

@@ -20,7 +20,12 @@ export const RESUBSCRIBE_MAX_DELAY_MS = 60_000;
  *   opens a fresh subscription (an observable); called again on every reopen
  * @param {{next: (value: T) => void, error?: (err: unknown) => void}} observer
  *   `error` is told about every failure (before the reopen is scheduled)
- * @param {{delayMs?: number, maxDelayMs?: number}} [opts]
+ * @param {{delayMs?: number, maxDelayMs?: number, beforeReopen?: () => Promise<unknown>}} [opts]
+ *   `beforeReopen`: awaited before every reopen (never before the first
+ *   open) — the place to authenticate the fresh connection (NIP-42): a relay
+ *   that gates a private group's events answers an unauthenticated REQ with
+ *   a clean, empty EOSE, so a blind reopen would watch nothing. Its failure
+ *   is ignored; the reopen happens either way.
  * @returns {() => void} stop
  */
 export function resubscribing(open, observer, opts = {}) {
@@ -37,7 +42,18 @@ export function resubscribing(open, observer, opts = {}) {
     if (stopped) return;
     const wait = delay;
     delay = Math.min(delay * 2, max);
-    timer = setTimeout(start, wait);
+    timer = setTimeout(() => {
+      if (stopped) return;
+      const before = opts.beforeReopen;
+      if (!before) {
+        start();
+        return;
+      }
+      Promise.resolve()
+        .then(before)
+        .catch(() => {})
+        .then(() => start());
+    }, wait);
   };
 
   const start = () => {
