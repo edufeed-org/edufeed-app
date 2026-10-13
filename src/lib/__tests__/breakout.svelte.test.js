@@ -132,6 +132,7 @@ vi.mock('$lib/paraglide/messages', () => ({
   groups_call_breakout_guest_move_failed: (/** @type {any} */ p) => `guest not moved: ${p.reason}`,
   groups_call_breakout_guest_move_timeout: () => 'guest did not come back',
   groups_call_error_generic: () => 'generic',
+  groups_call_breakout_room_gone: () => 'room gone',
   groups_call_breakout_end_partial: (/** @type {any} */ p) => `not deleted: ${p.rooms}`,
   groups_call_breakout_took_over: () => 'you run the session now',
   groups_call_breakout_join_no_host: () => 'nobody can seat you',
@@ -150,6 +151,7 @@ const rel = vi.hoisted(() => ({
   unseatFromRoom: vi.fn(async () => {}),
   deleteBreakoutRoom: vi.fn(async () => {}),
   fetchEphemeralChildren: vi.fn(async () => []),
+  fetchRoomMetadata: vi.fn(async () => []),
   editBreakoutUntil: vi.fn(async () => {}),
   knockOnRoom: vi.fn(async () => {}),
   leaveRoom: vi.fn(async () => {})
@@ -162,6 +164,7 @@ vi.mock('$lib/groups/breakout-relay.js', () => ({
   unseatFromRoom: (/** @type {any[]} */ ...a) => rel.unseatFromRoom(...a),
   deleteBreakoutRoom: (/** @type {any[]} */ ...a) => rel.deleteBreakoutRoom(...a),
   fetchEphemeralChildren: (/** @type {any[]} */ ...a) => rel.fetchEphemeralChildren(...a),
+  fetchRoomMetadata: (/** @type {any[]} */ ...a) => rel.fetchRoomMetadata(...a),
   editBreakoutUntil: (/** @type {any[]} */ ...a) => rel.editBreakoutUntil(...a)
 }));
 
@@ -196,6 +199,17 @@ const roomMeta = (id, index, until = null, at = 10) => ({
     ...(until !== null ? [['until', String(until)]] : []),
     ['hidden'],
     ['livekit']
+  ]
+});
+
+/** The relay's kind 39000 tombstone of a deleted room. @param {string} id */
+const tombstone = (id) => ({
+  kind: 39000,
+  pubkey: KEY,
+  created_at: 20,
+  tags: [
+    ['d', id],
+    ['name', '[deleted]']
   ]
 });
 
@@ -243,6 +257,7 @@ beforeEach(async () => {
   flushSync();
   relay.subs.length = 0;
   rel.fetchEphemeralChildren.mockResolvedValue([]);
+  rel.fetchRoomMetadata.mockResolvedValue([]);
   relayPublish.fn.mockClear();
   lkFake.addSystemCallChat.mockClear();
   modal.activeModal = 'none';
@@ -805,6 +820,36 @@ describe('late joiners: "Beitreten" from the banner', () => {
     lk.send.mockClear();
     callFake.switchGroupCall.mockClear();
   }
+
+  it('asks the relay about the rooms first: a room it already deleted is dropped, with a word', async () => {
+    await bobSeesSession();
+    rel.fetchRoomMetadata.mockResolvedValueOnce([tombstone('r2')]);
+    await store.requestBreakoutRoom(store.getBreakoutState().rooms[1]);
+    await settle();
+    expect(rel.fetchRoomMetadata).toHaveBeenCalledWith(expect.anything(), ['r1', 'r2']);
+    expect(rel.seatInRoom).not.toHaveBeenCalled();
+    expect(callFake.switchGroupCall).not.toHaveBeenCalled();
+    expect(store.getBreakoutState().rooms.map((r) => r.id)).toEqual(['r1']);
+    expect(toast.fn).toHaveBeenCalledWith('room gone', 'error');
+  });
+
+  it('when the relay has deleted every room the session is over', async () => {
+    await bobSeesSession();
+    rel.fetchRoomMetadata.mockResolvedValueOnce([tombstone('r1'), tombstone('r2')]);
+    await store.requestBreakoutRoom(store.getBreakoutState().rooms[0]);
+    await settle();
+    expect(callFake.switchGroupCall).not.toHaveBeenCalled();
+    expect(store.getBreakoutState().session).toBeNull();
+  });
+
+  it('a room the relay answers nothing about (a timeout, an old relay) is tried anyway', async () => {
+    await bobSeesSession();
+    rel.fetchRoomMetadata.mockResolvedValueOnce([]);
+    await store.requestBreakoutRoom(store.getBreakoutState().rooms[1]);
+    await settle();
+    expect(rel.seatInRoom).toHaveBeenCalledWith(expect.anything(), 'r2', BOB, bobUser);
+    expect(callFake.switchGroupCall).toHaveBeenCalled();
+  });
 
   it('seats itself when the relay allows it, and switches', async () => {
     await bobSeesSession();
@@ -1811,6 +1856,21 @@ describe('guests (call-pass seats)', () => {
     expect(store.getBreakoutState().session).not.toBeNull();
   });
 
+  it('a room deleted meanwhile (404 on its token) is dropped and the guest stays in the main room', async () => {
+    await guestInMain();
+    const { GroupCallTokenError } = await import('$lib/groups/livekit.js');
+    lkApi.requestGroupCallToken.mockRejectedValue(
+      new GroupCallTokenError('gone', 'group not found', 404)
+    );
+    lk.listener?.({ t: 'assign', rooms: [{ ...ROOMS[0], members: [EVE + ':g1'] }] }, hostSender);
+    modal.callbacks.onConfirm();
+    await settle();
+    expect(callFake.switchGroupCall).not.toHaveBeenCalled();
+    expect(store.getBreakoutState().currentRoom).toBeNull();
+    expect(store.getBreakoutState().rooms.map((r) => r.id)).not.toContain('r1');
+    expect(toast.fn).toHaveBeenCalledWith('switch failed: group not found', 'error');
+  });
+
   it('in a room a guest follows no roster: it stays although no 39002 names it', async () => {
     vi.useFakeTimers();
     await guestInMain();
@@ -1993,5 +2053,48 @@ describe('guests (call-pass seats)', () => {
     await settle();
     expect(rel.seatInRoom).not.toHaveBeenCalled();
     expect(lk.send.mock.calls.map((c) => c[0].t)).toEqual(['state']);
+  });
+});
+
+describe('the banner can be put away', () => {
+  const stateOf = (rooms) => ({
+    t: 'state',
+    rooms: rooms.map(({ id, relay, name }) => ({ id, relay, name }))
+  });
+
+  it('hides on request, comes back on request, and on rooms it has not seen', async () => {
+    await liveInMain(bobUser);
+    lk.listener?.(stateOf(ROOMS), hostSender);
+    await settle();
+    expect(store.getBreakoutState().bannerDismissed).toBe(false);
+    store.dismissBanner();
+    expect(store.getBreakoutState().bannerDismissed).toBe(true);
+    // the same rooms again (a replay): stays away
+    lk.listener?.(stateOf(ROOMS), hostSender);
+    await settle();
+    expect(store.getBreakoutState().bannerDismissed).toBe(true);
+    store.showBanner();
+    expect(store.getBreakoutState().bannerDismissed).toBe(false);
+    store.dismissBanner();
+    // a room this seat has not seen: the banner is news again
+    lk.listener?.(
+      stateOf([...ROOMS, { id: 'r3', relay: RELAY, name: 'Breakout 3 · Seminar' }]),
+      hostSender
+    );
+    await settle();
+    expect(store.getBreakoutState().bannerDismissed).toBe(false);
+  });
+
+  it('a new session starts with the banner up', async () => {
+    await liveInMain(bobUser);
+    lk.listener?.(stateOf(ROOMS), hostSender);
+    await settle();
+    store.dismissBanner();
+    lk.listener?.({ t: 'end' }, hostSender);
+    await settle();
+    expect(store.getBreakoutState().session).toBeNull();
+    lk.listener?.(stateOf(ROOMS), hostSender);
+    await settle();
+    expect(store.getBreakoutState().bannerDismissed).toBe(false);
   });
 });

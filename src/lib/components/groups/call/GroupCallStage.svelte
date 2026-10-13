@@ -85,7 +85,9 @@
     moveParticipant,
     joinBreakoutRoom,
     leaveBreakoutRoom,
-    bringMainRoomHere
+    bringMainRoomHere,
+    dismissBanner,
+    showBanner
   } from '$lib/groups/breakout.svelte.js';
   import { formatCountdown } from '$lib/groups/breakout.js';
   import { trackOnScreen as trackNodeOnScreen } from '$lib/groups/track-on-screen.js';
@@ -114,7 +116,8 @@
     ChevronRightIcon,
     ClockIcon,
     CallEndIcon,
-    CloseIcon
+    CloseIcon,
+    ChannelsIcon
   } from '$lib/components/icons';
   import { createCallIdle } from '$lib/groups/call-idle.svelte.js';
   import ParticipantTile from './ParticipantTile.svelte';
@@ -381,9 +384,13 @@
   // A session runs that this seat is not part of (joined late, declined,
   // came back): the banner with the rooms to join — guests too, their pass
   // opens the rooms (the store switches them with their code).
-  const showBreakoutBanner = $derived(
+  const sessionAside = $derived(
     !!breakout.session && !hostsBreakout && !inBreakoutRoom && breakout.pending === null
   );
+  const showBreakoutBanner = $derived(sessionAside && !breakout.bannerDismissed);
+  // The banner put away ("Im Hauptraum bleiben"): a chip with the room count
+  // keeps the way in.
+  const showBreakoutChip = $derived(sessionAside && breakout.bannerDismissed);
   /** @param {{roomCount: number, seats: Array<{identity: string, pubkey: string, roomIndex: number, guest: boolean}>, durationMinutes: number | null, autoAssign: boolean}} args */
   async function startBreakoutRooms(args) {
     await startBreakout({ channelName: title, ...args });
@@ -976,7 +983,8 @@
     lk.connectionState === 'reconnecting' ||
       breakout.currentRoom !== null ||
       (hostsBreakout && breakout.remaining !== null) ||
-      showBreakoutBanner
+      showBreakoutBanner ||
+      showBreakoutChip
   );
 </script>
 
@@ -1480,8 +1488,19 @@
             <BreakoutBannerLazy.Component
               {breakout}
               onJoin={(room) => void requestBreakoutRoom(room)}
+              onStay={() => dismissBanner()}
             />
           </div>
+        {:else if showBreakoutChip}
+          <button
+            type="button"
+            class="pointer-events-auto badge h-9 cursor-pointer gap-1 rounded-full px-3 shadow-lg badge-neutral"
+            onclick={() => showBanner()}
+            data-testid="group-call-breakout-reopen"
+          >
+            <ChannelsIcon class_="h-3 w-3" title="" />
+            {m.groups_call_breakout_banner_reopen({ n: breakout.rooms.length })}
+          </button>
         {/if}
       </div>
     {/if}

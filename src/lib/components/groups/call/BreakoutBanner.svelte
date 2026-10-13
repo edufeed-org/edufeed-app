@@ -5,8 +5,9 @@
   rooms with "Beitreten" — for a member a knock on the room (kind 9021, the
   relay seats them) plus a request to the host seat, whichever answers
   first; for a guest a direct switch with its call pass
-  (groups/breakout.svelte.js requestBreakoutRoom) — and the deadline. Pure
-  view; the store owns the session.
+  (groups/breakout.svelte.js requestBreakoutRoom) — the deadline, and "Im
+  Hauptraum bleiben", which puts the banner away (the stage keeps a chip to
+  bring it back). Pure view; the store owns the session.
 -->
 <script>
   import { ChannelsIcon } from '$lib/components/icons';
@@ -17,10 +18,11 @@
   /**
    * @type {{
    *   breakout: ReturnType<typeof import('$lib/groups/breakout.svelte.js').getBreakoutState>,
-   *   onJoin: (room: BreakoutRoom) => void
+   *   onJoin: (room: BreakoutRoom) => void,
+   *   onStay?: () => void
    * }}
    */
-  let { breakout, onJoin } = $props();
+  let { breakout, onJoin, onStay } = $props();
 
   const rooms = $derived(breakout.rooms);
   // The host keeps the assignment to themselves: only that a session runs.
@@ -70,4 +72,14 @@
       </li>
     {/each}
   </ul>
+  {#if onStay}
+    <button
+      type="button"
+      class="btn btn-ghost btn-sm"
+      onclick={() => onStay()}
+      data-testid="breakout-banner-stay"
+    >
+      {m.groups_call_breakout_banner_stay()}
+    </button>
+  {/if}
 </div>

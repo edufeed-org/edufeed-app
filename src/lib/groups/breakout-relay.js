@@ -171,6 +171,27 @@ export function fetchEphemeralChildren(relayConn, parentId, opts = {}) {
 }
 
 /**
+ * The current kind 39000 of each of the rooms named — alive metadata or the
+ * relay's `[deleted]` tombstone. A one-shot resync for a client whose follow
+ * subscription may have missed a deletion (the relay sweeps rooms on its
+ * own, docs/nips/nip29-ephemeral-groups.md "How one ends"): nothing back
+ * means nothing is known (a timeout, a relay that keeps no tombstones), not
+ * that the rooms are gone.
+ * @param {any} relayConn a pool.relay(url) connection
+ * @param {string[]} roomIds
+ * @param {{timeoutMs?: number}} [opts]
+ * @returns {Promise<any[]>} kind-39000 events (unfiltered — the caller trusts the relay's key)
+ */
+export function fetchRoomMetadata(relayConn, roomIds, opts = {}) {
+  if (roomIds.length === 0) return Promise.resolve([]);
+  return firstValueFrom(
+    relayConn
+      .request({ kinds: [GROUP_METADATA_KIND], '#d': roomIds }, { timeout: opts.timeoutMs ?? 5000 })
+      .pipe(toArray(), defaultIfEmpty([]))
+  ).catch(() => []);
+}
+
+/**
  * Change a room's deadline: a 9002 that restates the room's whole metadata
  * (pyramid overwrites `livekit` from every edit, and the relay refuses an
  * edit that drops `ephemeral`) with the new `until`. The parent tag is

@@ -491,6 +491,8 @@ export function callErrorMessage(err) {
       return m.groups_call_error_pass();
     case 'removed':
       return m.groups_call_error_removed();
+    case 'gone':
+      return m.groups_call_breakout_room_gone();
     default:
       return m.groups_call_error_generic();
   }

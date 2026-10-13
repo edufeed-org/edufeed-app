@@ -116,8 +116,11 @@ const breakout = vi.hoisted(() => ({
     remaining: null,
     busy: false,
     pending: null,
-    joinRequest: null
+    joinRequest: null,
+    bannerDismissed: false
   },
+  dismissBanner: vi.fn(),
+  showBanner: vi.fn(),
   returnToMain: vi.fn(async () => {}),
   leaveBreakoutRoom: vi.fn(async () => {}),
   bringMainRoomHere: vi.fn(async () => {}),
@@ -146,7 +149,9 @@ vi.mock('$lib/groups/breakout.svelte.js', () => ({
   requestBreakoutRoom: (...a) => breakout.requestBreakoutRoom(...a),
   moveParticipant: (...a) => breakout.moveParticipant(...a),
   joinBreakoutRoom: (...a) => breakout.joinBreakoutRoom(...a),
-  ensureBreakoutListener: (...a) => breakout.ensureBreakoutListener(...a)
+  ensureBreakoutListener: (...a) => breakout.ensureBreakoutListener(...a),
+  dismissBanner: (...a) => breakout.dismissBanner(...a),
+  showBanner: (...a) => breakout.showBanner(...a)
 }));
 vi.mock('$lib/components/groups/call/BreakoutDialog.svelte', () => ({ default: Stub }));
 vi.mock(
@@ -312,7 +317,8 @@ vi.mock('$lib/paraglide/messages', () => ({
   groups_call_breakout_time_left: (p) => `${p.time} left`,
   groups_call_breakout_back_to_main: () => 'Back to the main room',
   groups_call_breakout_in_main_count: (p) => `${p.n} in the main room`,
-  groups_call_breakout_fetch_here: () => 'Bring here'
+  groups_call_breakout_fetch_here: () => 'Bring here',
+  groups_call_breakout_banner_reopen: (p) => `Breakout rooms (${p.n})`
 }));
 
 // bind:clientWidth measures through ResizeObserver, which jsdom lacks; an
@@ -1997,6 +2003,29 @@ describe('breakout rooms', () => {
     const banner = await screen.findByTestId('breakout-banner-stub', {}, { timeout: 4000 });
     await fireEvent.click(banner);
     expect(breakout.requestBreakoutRoom).toHaveBeenCalledWith(session.rooms[0]);
+  });
+
+  it('a banner put away leaves a chip with the room count that brings it back', async () => {
+    const session = {
+      main: { id: 'main', relay: 'wss://r.example/', title: 'Standup' },
+      rooms: [
+        { id: 'r1', relay: 'wss://r.example/', name: 'Breakout 1', index: 1 },
+        { id: 'r2', relay: 'wss://r.example/', name: 'Breakout 2', index: 2 }
+      ],
+      until: null,
+      hosting: false
+    };
+    breakout.state.session = session;
+    breakout.state.rooms = session.rooms;
+    breakout.state.bannerDismissed = true;
+    render(GroupCallStage, { props: baseProps });
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(screen.queryByTestId('breakout-banner-stub')).toBeNull();
+    const chip = screen.getByTestId('group-call-breakout-reopen');
+    expect(chip.textContent).toContain('Breakout rooms (2)');
+    await fireEvent.click(chip);
+    expect(breakout.showBanner).toHaveBeenCalledTimes(1);
+    breakout.state.bannerDismissed = false;
   });
 
   it('a guest seat gets the same banner (its pass opens the rooms) and it hides while the assignment prompt is up', async () => {

@@ -13,6 +13,7 @@ import {
   unseatFromRoom,
   deleteBreakoutRoom,
   fetchEphemeralChildren,
+  fetchRoomMetadata,
   editBreakoutUntil,
   isEphemeralTagRejection,
   knockOnRoom,
@@ -233,6 +234,32 @@ describe('fetchEphemeralChildren (the #ephemeral read)', () => {
     expect(await fetchEphemeralChildren({ request: () => of() }, 'main')).toEqual([]);
     expect(
       await fetchEphemeralChildren({ request: () => throwError(() => new Error('closed')) }, 'main')
+    ).toEqual([]);
+  });
+});
+
+describe("fetchRoomMetadata (the rooms' 39000s by id)", () => {
+  it('asks for the named rooms by #d and collects what it answers (tombstones included)', async () => {
+    const tombstone = {
+      kind: 39000,
+      tags: [
+        ['d', 'r2'],
+        ['name', '[deleted]']
+      ]
+    };
+    const request = vi.fn(() => of({ kind: 39000, tags: [['d', 'r1']] }, tombstone));
+    const events = await fetchRoomMetadata({ request }, ['r1', 'r2'], { timeoutMs: 100 });
+    expect(request).toHaveBeenCalledWith({ kinds: [39000], '#d': ['r1', 'r2'] }, { timeout: 100 });
+    expect(events).toHaveLength(2);
+    expect(events[1]).toBe(tombstone);
+  });
+
+  it('asks nothing for no rooms, and answers an empty list on a failing request', async () => {
+    const request = vi.fn();
+    expect(await fetchRoomMetadata({ request }, [])).toEqual([]);
+    expect(request).not.toHaveBeenCalled();
+    expect(
+      await fetchRoomMetadata({ request: () => throwError(() => new Error('closed')) }, ['r1'])
     ).toEqual([]);
   });
 });

@@ -199,6 +199,8 @@ describe('requestGroupCallToken', () => {
     // pyramid groups/livekit.go: the exact body for a removed pubkey
     [403, 'call pass blocked: you were removed', 'removed'],
     [403, 'call pass expired', 'pass'],
+    // a group the relay deleted (a breakout room gone meanwhile)
+    [404, 'group not found', 'gone'],
     [500, 'boom', 'server']
   ])('maps status %s (%s) to reason %s', async (status, body, reason) => {
     vi.stubGlobal(

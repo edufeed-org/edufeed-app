@@ -212,7 +212,7 @@ export function probeRelayAvSupport(relayUrl) {
   return promise;
 }
 
-/** @typedef {'unauthorized' | 'forbidden' | 'not-enabled' | 'pass' | 'removed' | 'server' | 'network'} GroupCallTokenReason */
+/** @typedef {'unauthorized' | 'forbidden' | 'not-enabled' | 'pass' | 'removed' | 'gone' | 'server' | 'network'} GroupCallTokenReason */
 
 export class GroupCallTokenError extends Error {
   /**
@@ -282,6 +282,9 @@ export async function requestGroupCallToken(relayUrl, groupId, user, opts = {}) 
     /** @type {GroupCallTokenReason} */
     let reason = 'server';
     if (response.status === 401) reason = 'unauthorized';
+    // pyramid answers 404 for a group it does not have — a breakout room it
+    // deleted meanwhile, a channel that is gone.
+    else if (response.status === 404) reason = 'gone';
     else if (response.status === 403)
       reason = /not enabled/i.test(body)
         ? 'not-enabled'
