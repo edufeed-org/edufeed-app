@@ -31,6 +31,7 @@ import {
   computeBaseGiftWrapRelays,
   loadReadTimestamps,
   saveReadTimestamps,
+  advanceReadTimestamps,
   isConversationUnread,
   normalizeLegacyConversation,
   groupLegacyConversations,
@@ -450,28 +451,40 @@ export function getUnreadDmConversations() {
 export function markAllDmConversationsAsRead() {
   if (dmConversations.length === 0) return;
   /** @type {Record<string, number>} */
-  const updated = { ...readTimestamps };
+  const updates = {};
   for (const conv of dmConversations) {
-    updated[conv.id] = conv.lastMessage.created_at;
+    updates[conv.id] = conv.lastMessage.created_at;
   }
-  readTimestamps = updated;
-  if (activePubkey) {
-    saveReadTimestamps(activePubkey, updated);
-  }
+  advanceReadMarkers(updates);
 }
 
 /**
  * Mark a conversation as read up to the given timestamp.
+ *
+ * Markers only move forward: callers pass the newest message they currently
+ * show, which right after a reload is a partial view (see
+ * advanceReadTimestamps). Passing an older timestamp is a no-op.
  * @param {string} conversationId
  * @param {number} timestamp
  */
 export function markConversationAsRead(conversationId, timestamp) {
-  readTimestamps = { ...readTimestamps, [conversationId]: timestamp };
-  if (activePubkey) {
-    saveReadTimestamps(activePubkey, readTimestamps);
-  }
+  advanceReadMarkers({ [conversationId]: timestamp });
   // Recompute unread count will happen via $effect in components or
   // next time getUnreadDmCount is called after conversations update
+}
+
+/**
+ * Apply forward-only marker updates and persist them when anything changed.
+ * @param {Record<string, number | undefined>} updates
+ */
+function advanceReadMarkers(updates) {
+  const next = advanceReadTimestamps(readTimestamps, updates);
+  const changed = Object.keys(next).some((id) => next[id] !== readTimestamps[id]);
+  if (!changed) return;
+  readTimestamps = next;
+  if (activePubkey) {
+    saveReadTimestamps(activePubkey, next);
+  }
 }
 
 /**

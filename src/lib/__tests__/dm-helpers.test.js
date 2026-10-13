@@ -23,6 +23,7 @@ import {
   DM_READ_TIMESTAMPS_KEY,
   loadReadTimestamps,
   saveReadTimestamps,
+  advanceReadTimestamps,
   isConversationUnread
 } from '$lib/helpers/dm.js';
 
@@ -161,6 +162,62 @@ describe('isConversationUnread', () => {
     expect(isConversationUnread('conv1', 1000, {}, { lastAuthor: undefined, self: null })).toBe(
       true
     );
+  });
+});
+
+// Issue 7872bcbd: conversations read long ago showed as unread again on a
+// later visit. The thread marks "read up to the newest message it currently
+// shows", and right after a reload that is a partial set (wraps still
+// restoring / the relay not yet delivering) — so the stored marker was
+// overwritten with an OLDER timestamp, and the real newest message, once it
+// arrived, counted as unread. A read marker must only ever move forward.
+describe('advanceReadTimestamps', () => {
+  it('raises a marker to a newer timestamp', () => {
+    expect(advanceReadTimestamps({ conv1: 1000 }, { conv1: 2000 })).toEqual({ conv1: 2000 });
+  });
+
+  it('never lowers an existing marker', () => {
+    expect(advanceReadTimestamps({ conv1: 2000 }, { conv1: 1500 })).toEqual({ conv1: 2000 });
+  });
+
+  it('adds markers for conversations without one', () => {
+    expect(advanceReadTimestamps({ conv1: 2000 }, { conv2: 500 })).toEqual({
+      conv1: 2000,
+      conv2: 500
+    });
+  });
+
+  it('keeps markers the update does not mention', () => {
+    const next = advanceReadTimestamps({ conv1: 2000, conv2: 300 }, { conv2: 400 });
+    expect(next).toEqual({ conv1: 2000, conv2: 400 });
+  });
+
+  it('returns a new object and leaves the input untouched', () => {
+    const before = { conv1: 1000 };
+    const next = advanceReadTimestamps(before, { conv1: 2000 });
+    expect(next).not.toBe(before);
+    expect(before).toEqual({ conv1: 1000 });
+  });
+
+  it('ignores non-finite timestamps', () => {
+    expect(advanceReadTimestamps({ conv1: 1000 }, { conv1: NaN, conv2: undefined })).toEqual({
+      conv1: 1000
+    });
+  });
+});
+
+describe('saveReadTimestamps', () => {
+  it('survives a storage write failure (quota, private mode)', () => {
+    vi.stubGlobal('localStorage', {
+      getItem: vi.fn(),
+      setItem: vi.fn(() => {
+        throw new Error('QuotaExceededError');
+      })
+    });
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    expect(() => saveReadTimestamps('pubkey123', { conv1: 1 })).not.toThrow();
+    expect(warn).toHaveBeenCalled();
+    warn.mockRestore();
   });
 });
 
