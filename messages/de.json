@@ -4234,5 +4234,22 @@
   "groups_call_breakout_guest_move_timeout": "Der Gast ist nicht in den Hauptraum zurückgekommen – bitte erneut zuteilen.",
   "app_update_available": "Eine neue Version von {appName} ist verfügbar.",
   "app_update_reload": "Neu laden",
-  "app_update_dismiss": "Schließen"
+  "app_update_dismiss": "Schließen",
+  "blossom_fallback_toast": "Stattdessen auf {host} hochgeladen – dein bevorzugter Dateiserver hat dieses Konto abgelehnt. Prüfe deine Dateiserver-Einstellungen.",
+  "blossom_fallback_toast_link": "Einstellungen",
+  "termi_hint_blossom_upgrade_title": "Deine Dateien bei edufeed speichern",
+  "termi_hint_blossom_upgrade_body": "Dein Konto darf Dateien auf {host} speichern. Im Moment landen deine Uploads woanders – wechsle, damit deine Dateien bei edufeed bleiben.",
+  "termi_hint_blossom_upgrade_cta": "edufeed-Speicher nutzen",
+  "termi_hint_blossom_customize_cta": "Server selbst wählen",
+  "termi_hint_blossom_doing": "Speichere deine Dateiserver-Liste …",
+  "termi_hint_blossom_public_title": "Deine Uploads brauchen einen anderen Server",
+  "termi_hint_blossom_public_body": "Der edufeed-Speicher ist Mitgliedern vorbehalten, deine Einstellungen zeigen aber noch dorthin – jeder Upload wird umgeleitet. Ich kann dich auf einen öffentlichen Server umstellen.",
+  "termi_hint_blossom_public_body_member": "Der edufeed-Speicher ist Mitgliedern mit einer {domain}-Adresse vorbehalten, deine Einstellungen zeigen aber noch dorthin – jeder Upload wird umgeleitet. Ich kann dich auf einen öffentlichen Server umstellen, oder du beantragst die Mitgliedschaft.",
+  "termi_hint_blossom_public_cta": "Auf öffentlichen Server wechseln",
+  "termi_hint_blossom_public_apply_link": "Mitgliedschaft beantragen",
+  "settings_blossom_eligible": "Dein Konto kann den edufeed-Speicher ({host}) nutzen.",
+  "settings_blossom_ineligible": "Der edufeed-Speicher ist Mitgliedern mit einer {domain}-Adresse vorbehalten. Deine Dateien landen auf einem öffentlichen Server.",
+  "settings_blossom_badge_default": "edufeed-Speicher",
+  "settings_blossom_badge_public": "öffentlich",
+  "settings_blossom_current_target": "Deine Uploads gehen derzeit an {host}."
 }

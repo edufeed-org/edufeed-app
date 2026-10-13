@@ -4,6 +4,7 @@
   // is matched against canned suggestions (no LLM backend yet).
   import { getFirstPendingInvite } from '$lib/concord/pending-invites.svelte.js';
   import * as m from '$lib/paraglide/messages';
+  import { modalStore } from '$lib/stores/modal.svelte.js';
   import { runtimeConfig } from '$lib/stores/config.svelte.js';
   import { helpLinkAttrs } from '$lib/helpers/help-link.js';
   import { useActiveUser } from '$lib/stores/accounts.svelte';
@@ -53,21 +54,24 @@
       body: m.auth_backup_banner_body(),
       action: m.auth_backup_banner_download_cta(),
       secondary: null,
-      doing: null
+      doing: null,
+      link: null
     },
     relays: {
       title: m.relay_list_banner_title(),
       body: isNsec ? m.relay_list_banner_body_nsec() : m.relay_list_banner_body(),
       action: m.relay_list_banner_use_cta(),
       secondary: m.relay_list_banner_customize_cta(),
-      doing: m.termi_hint_relays_doing()
+      doing: m.termi_hint_relays_doing(),
+      link: null
     },
     dm: {
       title: m.dm_relay_banner_title(),
       body: m.dm_relay_banner_body(),
       action: m.dm_relay_banner_use_cta(),
       secondary: m.dm_relay_banner_customize_cta(),
-      doing: m.termi_hint_dm_doing()
+      doing: m.termi_hint_dm_doing(),
+      link: null
     },
     nip05: {
       title: m.termi_hint_nip05_title(),
@@ -76,14 +80,16 @@
       }),
       action: m.termi_hint_nip05_cta(),
       secondary: null,
-      doing: null
+      doing: null,
+      link: null
     },
     profile: {
       title: m.termi_hint_profile_title(),
       body: m.termi_hint_profile_body(),
       action: m.termi_hint_profile_cta(),
       secondary: null,
-      doing: null
+      doing: null,
+      link: null
     },
     invites: {
       // Enriched once the invite is decrypted (auto-decrypt makes that the
@@ -96,7 +102,17 @@
       body: m.concord_invite_hint_body(),
       action: m.concord_invite_hint_action(),
       secondary: null,
-      doing: null
+      doing: null,
+      link: null
+    }
+  });
+
+  // Host of the deployment's own Blossom server, for the storage hints' copy.
+  const deploymentBlossomHost = $derived.by(() => {
+    try {
+      return new URL(runtimeConfig.defaultBlossomServers?.[0] || '').host;
+    } catch {
+      return '';
     }
   });
 
@@ -117,7 +133,8 @@
             : m.termi_hint_group_added_body({ count }),
         action: m.termi_hint_group_added_cta(),
         secondary: null,
-        doing: null
+        doing: null,
+        link: null
       };
     }
     if (hint.id === 'joinRequests') {
@@ -132,7 +149,8 @@
             : m.termi_hint_join_requests_body({ count }),
         action: m.termi_hint_join_requests_cta(),
         secondary: null,
-        doing: null
+        doing: null,
+        link: null
       };
     }
     if (hint.id === 'nip05' && hint.variant === 'ready') {
@@ -141,7 +159,8 @@
         body: m.termi_hint_nip05_ready_body({ address: hint.address || '' }),
         action: m.termi_hint_nip05_ready_cta(),
         secondary: null,
-        doing: m.termi_hint_nip05_ready_doing()
+        doing: m.termi_hint_nip05_ready_doing(),
+        link: null
       };
     }
     if (hint.id === 'nip05' && hint.variant === 'pending') {
@@ -150,7 +169,39 @@
         body: m.termi_hint_nip05_pending_body(),
         action: null,
         secondary: null,
-        doing: null
+        doing: null,
+        link: null
+      };
+    }
+    if (hint.id === 'blossomUpgrade') {
+      return {
+        title: m.termi_hint_blossom_upgrade_title(),
+        body: m.termi_hint_blossom_upgrade_body({ host: deploymentBlossomHost }),
+        action: m.termi_hint_blossom_upgrade_cta(),
+        secondary: m.termi_hint_blossom_customize_cta(),
+        doing: m.termi_hint_blossom_doing(),
+        link: null
+      };
+    }
+    if (hint.id === 'blossomPublic') {
+      const member = hint.variant === 'member';
+      return {
+        title: m.termi_hint_blossom_public_title(),
+        body: member
+          ? m.termi_hint_blossom_public_body_member({
+              domain: `@${runtimeConfig.membership?.handleDomain || ''}`
+            })
+          : m.termi_hint_blossom_public_body(),
+        action: m.termi_hint_blossom_public_cta(),
+        secondary: m.termi_hint_blossom_customize_cta(),
+        doing: m.termi_hint_blossom_doing(),
+        // Secondary path for non-members: apply for a handle right here.
+        link: member
+          ? {
+              label: m.termi_hint_blossom_public_apply_link(),
+              onClick: () => modalStore.openModal('membershipApply')
+            }
+          : null
       };
     }
     return hintCopy[
@@ -355,6 +406,16 @@
                   onclick={() => customizeHint(hint.id)}
                 >
                   {copy.secondary}
+                </button>
+              {/if}
+              {#if copy.link}
+                <button
+                  type="button"
+                  data-testid="termi-hint-{hint.id}-link"
+                  class="btn px-0 btn-link btn-sm"
+                  onclick={copy.link.onClick}
+                >
+                  {copy.link.label}
                 </button>
               {/if}
             </div>

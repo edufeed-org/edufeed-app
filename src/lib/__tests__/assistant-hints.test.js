@@ -7,7 +7,10 @@ import {
   trackEverOpen,
   matchSuggestion,
   isProfileHintApplicable,
-  deriveNip05Hint
+  deriveNip05Hint,
+  deriveBlossomHints,
+  buildUpgradedServerList,
+  buildPublicServerList
 } from '$lib/helpers/assistant-hints.js';
 
 describe('deriveHintStatus', () => {
@@ -211,5 +214,102 @@ describe('deriveNip05Hint', () => {
     expect(
       deriveNip05Hint({ ...base, grantState: 'granted', profileSettled: false }).applicable
     ).toBe(false);
+  });
+});
+
+describe('deriveBlossomHints', () => {
+  const EDUFEED = 'https://blossom.edufeed.org/';
+  const PRIMAL = 'https://blossom.primal.net';
+  const base = {
+    gated: true,
+    eligibility: /** @type {'unknown' | 'eligible' | 'ineligible'} */ ('eligible'),
+    user: { type: 'nsec' },
+    listSettled: true,
+    userServers: /** @type {string[]} */ ([]),
+    defaultServers: [EDUFEED],
+    upgradeDismissed: false,
+    publicDismissed: false
+  };
+
+  it('gate off → nothing', () => {
+    const r = deriveBlossomHints({ ...base, gated: false });
+    expect(r.upgrade).toEqual({ applicable: false, confirmed: false });
+    expect(r.public).toEqual({ applicable: false, confirmed: false });
+  });
+
+  it('eligible without a list → upgrade open', () => {
+    expect(deriveBlossomHints(base).upgrade).toEqual({ applicable: true, confirmed: false });
+  });
+
+  it('eligible with another server first → upgrade open; deployment first → confirmed', () => {
+    expect(deriveBlossomHints({ ...base, userServers: [PRIMAL, EDUFEED] }).upgrade).toEqual({
+      applicable: true,
+      confirmed: false
+    });
+    // trailing slash / case differences never matter
+    expect(
+      deriveBlossomHints({ ...base, userServers: ['https://BLOSSOM.edufeed.org', PRIMAL] }).upgrade
+    ).toEqual({ applicable: false, confirmed: true });
+  });
+
+  it('ineligible pointing at the deployment server → public open; no list → nothing', () => {
+    const r = deriveBlossomHints({ ...base, eligibility: 'ineligible', userServers: [EDUFEED] });
+    expect(r.public).toEqual({ applicable: true, confirmed: false });
+    expect(r.upgrade).toEqual({ applicable: false, confirmed: false });
+    const none = deriveBlossomHints({ ...base, eligibility: 'ineligible' });
+    expect(none.public).toEqual({ applicable: false, confirmed: false });
+  });
+
+  it('ineligible with a public-first list that no longer carries the gated server → confirmed', () => {
+    expect(
+      deriveBlossomHints({ ...base, eligibility: 'ineligible', userServers: [PRIMAL] }).public
+    ).toEqual({ applicable: false, confirmed: true });
+    // still carrying the gated server (second) → not confirmed, not open either
+    expect(
+      deriveBlossomHints({ ...base, eligibility: 'ineligible', userServers: [PRIMAL, EDUFEED] })
+        .public
+    ).toEqual({ applicable: false, confirmed: false });
+  });
+
+  it('unknown eligibility, readonly account, unsettled list or dismissal → not open', () => {
+    expect(deriveBlossomHints({ ...base, eligibility: 'unknown' }).upgrade.applicable).toBe(false);
+    expect(deriveBlossomHints({ ...base, user: { type: 'readonly' } }).upgrade.applicable).toBe(
+      false
+    );
+    expect(deriveBlossomHints({ ...base, listSettled: false }).upgrade.applicable).toBe(false);
+    expect(deriveBlossomHints({ ...base, upgradeDismissed: true }).upgrade.applicable).toBe(false);
+    expect(
+      deriveBlossomHints({
+        ...base,
+        eligibility: 'ineligible',
+        userServers: [EDUFEED],
+        publicDismissed: true
+      }).public.applicable
+    ).toBe(false);
+  });
+
+  it('no deployment servers configured → never an upgrade', () => {
+    expect(deriveBlossomHints({ ...base, defaultServers: [] }).upgrade.applicable).toBe(false);
+  });
+});
+
+describe('blossom server list builders', () => {
+  const EDUFEED = 'https://blossom.edufeed.org/';
+  const PRIMAL = 'https://blossom.primal.net';
+  const MINE = 'https://mine.example';
+
+  it('upgraded: defaults first, then the user list, deduped by host', () => {
+    expect(buildUpgradedServerList([MINE, 'https://blossom.edufeed.org'], [EDUFEED])).toEqual([
+      EDUFEED,
+      MINE
+    ]);
+    expect(buildUpgradedServerList([], [EDUFEED])).toEqual([EDUFEED]);
+  });
+
+  it('public: first public first, own others kept, gated dropped, remaining publics after', () => {
+    expect(
+      buildPublicServerList([EDUFEED, MINE], [EDUFEED], [PRIMAL, 'https://cdn.satellite.earth'])
+    ).toEqual([PRIMAL, MINE, 'https://cdn.satellite.earth']);
+    expect(buildPublicServerList([EDUFEED, PRIMAL + '/'], [EDUFEED], [PRIMAL])).toEqual([PRIMAL]);
   });
 });

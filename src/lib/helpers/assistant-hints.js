@@ -3,6 +3,7 @@
 // $lib/stores/assistant-hints.svelte.js — this module holds the testable core.
 
 import { canSign } from '$lib/helpers/signing-guard.js';
+import { blossomServerKey, uniqueBlossomServers } from '$lib/helpers/blossom-server-key.js';
 
 /**
  * @typedef {'open' | 'doing' | 'done'} HintStatus
@@ -124,4 +125,96 @@ export function deriveNip05Hint({
  */
 export function isProfileHintApplicable({ user, settled, hasProfile, dismissed, signupOpen }) {
   return canSign(user) && settled && !hasProfile && !dismissed && !signupOpen;
+}
+
+/**
+ * @param {string | undefined} url
+ * @param {string[]} servers
+ */
+function isOneOf(url, servers) {
+  if (!url) return false;
+  const key = blossomServerKey(url);
+  return servers.some((s) => blossomServerKey(s) === key);
+}
+
+/**
+ * The two Blossom hints of a closed deployment server. Pure; the store feeds
+ * live values.
+ *
+ * - `blossomUpgrade` — the account may use the deployment's storage but its
+ *   uploads go elsewhere (no kind 10063, or another server first). One click
+ *   publishes a list with the deployment servers first.
+ * - `blossomPublic` — the account is NOT eligible yet its list still points
+ *   at the deployment server first, so every upload gets rerouted. One click
+ *   moves a public server first and drops the gated ones.
+ *
+ * No hint for an ineligible account without a list: the defaults already
+ * send it to a public server. `eligibility` must be a definite answer —
+ * 'unknown' shows nothing, so we never nudge over an unanswered probe.
+ *
+ * @param {{
+ *   gated: boolean,
+ *   eligibility: 'unknown' | 'eligible' | 'ineligible',
+ *   user: { type?: string } | null | undefined,
+ *   listSettled: boolean,
+ *   userServers: string[],
+ *   defaultServers: string[],
+ *   upgradeDismissed: boolean,
+ *   publicDismissed: boolean
+ * }} input
+ * @returns {{
+ *   upgrade: { applicable: boolean, confirmed: boolean },
+ *   public: { applicable: boolean, confirmed: boolean }
+ * }}
+ */
+export function deriveBlossomHints({
+  gated,
+  eligibility,
+  user,
+  listSettled,
+  userServers,
+  defaultServers,
+  upgradeDismissed,
+  publicDismissed
+}) {
+  const firstIsDefault = isOneOf(userServers[0], defaultServers);
+  const hasDefault = userServers.some((s) => isOneOf(s, defaultServers));
+  const eligible = gated && eligibility === 'eligible';
+  const ineligible = gated && eligibility === 'ineligible';
+  const ready = canSign(user) && listSettled;
+  return {
+    upgrade: {
+      applicable:
+        eligible && ready && defaultServers.length > 0 && !firstIsDefault && !upgradeDismissed,
+      confirmed: eligible && firstIsDefault
+    },
+    public: {
+      applicable: ineligible && ready && firstIsDefault && !publicDismissed,
+      confirmed: ineligible && userServers.length > 0 && !hasDefault
+    }
+  };
+}
+
+/**
+ * Kind 10063 list for an eligible account: deployment servers first, then
+ * whatever the user had, deduped.
+ * @param {string[]} userServers
+ * @param {string[]} defaultServers
+ * @returns {string[]}
+ */
+export function buildUpgradedServerList(userServers, defaultServers) {
+  return uniqueBlossomServers([...defaultServers, ...userServers]);
+}
+
+/**
+ * Kind 10063 list for an ineligible account: a public server first, the
+ * user's other servers minus the gated deployment ones, remaining publics.
+ * @param {string[]} userServers
+ * @param {string[]} defaultServers
+ * @param {string[]} publicServers
+ * @returns {string[]}
+ */
+export function buildPublicServerList(userServers, defaultServers, publicServers) {
+  const ownOthers = userServers.filter((s) => !isOneOf(s, defaultServers));
+  return uniqueBlossomServers([publicServers[0], ...ownOthers, ...publicServers.slice(1)]);
 }

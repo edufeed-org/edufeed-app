@@ -4234,5 +4234,22 @@
   "groups_call_breakout_guest_move_timeout": "The guest did not come back to the main room – please assign them again.",
   "app_update_available": "A new version of {appName} is available.",
   "app_update_reload": "Reload",
-  "app_update_dismiss": "Close"
+  "app_update_dismiss": "Close",
+  "blossom_fallback_toast": "Uploaded to {host} instead – your preferred file server declined this account. Check your file server settings.",
+  "blossom_fallback_toast_link": "Settings",
+  "termi_hint_blossom_upgrade_title": "Store your files with edufeed",
+  "termi_hint_blossom_upgrade_body": "Your account may store files on {host}. Right now your uploads go elsewhere – switch so your files stay with edufeed.",
+  "termi_hint_blossom_upgrade_cta": "Use edufeed storage",
+  "termi_hint_blossom_customize_cta": "Choose servers myself",
+  "termi_hint_blossom_doing": "Saving your file server list …",
+  "termi_hint_blossom_public_title": "Your uploads need a different server",
+  "termi_hint_blossom_public_body": "edufeed storage is reserved for members, but your settings still point there – every upload gets rerouted. I can switch you to a public server.",
+  "termi_hint_blossom_public_body_member": "edufeed storage is reserved for members with an {domain} address, but your settings still point there – every upload gets rerouted. I can switch you to a public server, or you apply for membership.",
+  "termi_hint_blossom_public_cta": "Switch to a public server",
+  "termi_hint_blossom_public_apply_link": "Apply for membership",
+  "settings_blossom_eligible": "Your account can use edufeed storage ({host}).",
+  "settings_blossom_ineligible": "edufeed storage is reserved for members with an {domain} address. Your files are stored on a public server.",
+  "settings_blossom_badge_default": "edufeed storage",
+  "settings_blossom_badge_public": "public",
+  "settings_blossom_current_target": "Your uploads currently go to {host}."
 }
