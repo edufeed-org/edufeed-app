@@ -32,7 +32,16 @@ vi.mock('blossom-client-sdk', () => ({
 }));
 
 vi.mock('$lib/services/blossom-settings-service.js', () => ({
-  getActiveBlossomServer: mocks.getActiveBlossomServer
+  getActiveBlossomServer: mocks.getActiveBlossomServer,
+  getBlossomUploadServers: (/** @type {any} */ pubkey, /** @type {any} */ store) => [
+    /** @type {any} */ (mocks.getActiveBlossomServer)(pubkey, store)
+  ],
+  getPublicBlossomServers: () => ['https://blossom.primal.net'],
+  isDefaultBlossomServer: () => false
+}));
+vi.mock('$lib/stores/blossom-eligibility.svelte.js', () => ({
+  isBlossomEligible: () => true,
+  markBlossomIneligible: () => {}
 }));
 
 vi.mock('$lib/stores/nostr-infrastructure.svelte', () => ({

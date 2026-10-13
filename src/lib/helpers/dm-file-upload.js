@@ -8,9 +8,7 @@
  * bytes are ciphertext, and an extension would only invite the host to serve
  * them under the plaintext's type.
  */
-import { BlossomClient } from 'blossom-client-sdk';
-import { getActiveBlossomServer } from '$lib/services/blossom-settings-service.js';
-import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
+import { uploadWithFallback } from '$lib/helpers/blossom-upload.js';
 import { reconcileBlobUrlScheme } from '$lib/helpers/blossom-trust.js';
 import { encryptFileBytes } from '$lib/helpers/dm-file-crypto.js';
 
@@ -24,12 +22,9 @@ export async function uploadEncryptedDmFile(file, { signer }) {
   // getPublicKey(), not `.pubkey` — applesauce signers have no sync pubkey,
   // and reading it directly would skip the user's kind 10063 blossom server.
   const userPubkey = await signer.getPublicKey();
-  const serverUrl = getActiveBlossomServer(userPubkey, eventStore);
-  const client = new BlossomClient(serverUrl, async (/** @type {any} */ event) =>
-    signer.signEvent(event)
-  );
-  const blob = await client.uploadBlob(
-    new Blob([/** @type {BlobPart} */ (encrypted)], { type: 'application/octet-stream' })
+  const { blob, serverUrl } = await uploadWithFallback(
+    new Blob([/** @type {BlobPart} */ (encrypted)], { type: 'application/octet-stream' }),
+    { signer, userPubkey }
   );
   return {
     url: reconcileBlobUrlScheme(blob.url, serverUrl),

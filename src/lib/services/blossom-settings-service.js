@@ -5,6 +5,8 @@
 import { publishEvent } from './publish-service.js';
 import { manager } from '$lib/stores/accounts.svelte.js';
 import { runtimeConfig } from '$lib/stores/config.svelte.js';
+import { normalizeServerUrl } from '$lib/helpers/blossom-trust.js';
+import { isBlossomEligible } from '$lib/stores/blossom-eligibility.svelte.js';
 
 /**
  * Get default Blossom servers from runtime config
@@ -17,6 +19,43 @@ export function getDefaultBlossomServers() {
       'https://cdn.satellite.earth'
     ]
   );
+}
+
+/**
+ * Public Blossom servers — where accounts the closed deployment server
+ * refuses (see blossom-eligibility) upload instead.
+ * @returns {string[]}
+ */
+export function getPublicBlossomServers() {
+  const configured = runtimeConfig.blossom?.publicServers;
+  return configured?.length ? configured : ['https://blossom.primal.net'];
+}
+
+/**
+ * @param {string | null | undefined} url
+ * @param {string[]} list
+ */
+function inList(url, list) {
+  if (!url) return false;
+  const key = normalizeServerUrl(url);
+  return list.some((s) => normalizeServerUrl(s) === key);
+}
+
+/**
+ * Is `url` one of the deployment's own servers (DEFAULT_BLOSSOM_SERVERS)?
+ * Compared host/path-wise, so a trailing slash never matters.
+ * @param {string | null | undefined} url
+ */
+export function isDefaultBlossomServer(url) {
+  return inList(url, getDefaultBlossomServers());
+}
+
+/**
+ * Is `url` one of the configured public servers?
+ * @param {string | null | undefined} url
+ */
+export function isPublicBlossomServer(url) {
+  return inList(url, getPublicBlossomServers());
 }
 
 /**
@@ -107,25 +146,49 @@ export function parseBlossomServerEvent(event) {
 }
 
 /**
- * Get the active blossom server URL for uploading
- * Checks user's kind 10063 event first, falls back to default servers
+ * Ordered upload targets for an account, deduped by host:
+ *   1. the user's own kind 10063 list (their explicit choice, always first),
+ *   2. the deployment's servers — only when the account is eligible for them
+ *      (under a gate an unanswered check counts as "not eligible"),
+ *   3. the public servers, so a refused upload always has somewhere to go.
+ * Without a gate every account is eligible and the order is today's: user
+ * list, then the deployment defaults.
+ * @param {string} userPubkey
+ * @param {import('applesauce-core').EventStore} eventStore
+ * @param {{ eligible?: boolean }} [opts] override the eligibility prediction (tests)
+ * @returns {string[]}
+ */
+export function getBlossomUploadServers(userPubkey, eventStore, opts = {}) {
+  const eligible = opts.eligible ?? isBlossomEligible(userPubkey);
+  /** @type {string[]} */
+  const userServers =
+    userPubkey && eventStore
+      ? parseBlossomServerEvent(eventStore.getReplaceable(10063, userPubkey)).map((s) => s.url)
+      : [];
+  const ordered = [
+    ...userServers,
+    ...(eligible ? getDefaultBlossomServers() : []),
+    ...getPublicBlossomServers()
+  ];
+  const seen = new Set();
+  return ordered.filter((url) => {
+    if (!url) return false;
+    const key = normalizeServerUrl(url);
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+/**
+ * Get the active blossom server URL for uploading — the first entry of
+ * getBlossomUploadServers (user's kind 10063 first, else the deployment's
+ * server when eligible, else a public one).
  * @param {string} userPubkey - User's public key
  * @param {import('applesauce-core').EventStore} eventStore - The event store to check
+ * @param {{ eligible?: boolean }} [opts]
  * @returns {string} The blossom server URL to use for uploads
  */
-export function getActiveBlossomServer(userPubkey, eventStore) {
-  // Try to get user's kind 10063 event from the store
-  if (userPubkey && eventStore) {
-    const blossomEvent = eventStore.getReplaceable(10063, userPubkey);
-    if (blossomEvent) {
-      const servers = parseBlossomServerEvent(blossomEvent);
-      if (servers.length > 0) {
-        return servers[0].url;
-      }
-    }
-  }
-
-  // Fall back to default servers
-  const defaults = getDefaultBlossomServers();
-  return defaults[0] || 'https://blossom.primal.net';
+export function getActiveBlossomServer(userPubkey, eventStore, opts = {}) {
+  return getBlossomUploadServers(userPubkey, eventStore, opts)[0] || 'https://blossom.primal.net';
 }

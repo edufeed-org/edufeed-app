@@ -1,9 +1,8 @@
 <script>
-  import { BlossomClient } from 'blossom-client-sdk';
   import { getSha256FromURL } from 'applesauce-common/helpers';
   import * as m from '$lib/paraglide/messages';
   import { runtimeConfig } from '$lib/stores/config.svelte.js';
-  import { getActiveBlossomServer } from '$lib/services/blossom-settings-service.js';
+  import { uploadWithFallback } from '$lib/helpers/blossom-upload.js';
   import { useLicenseForHash } from '$lib/stores/image-license.svelte.js';
   import { findExistingLicense } from '$lib/helpers/image-license.js';
   import { reconcileBlobUrlScheme } from '$lib/helpers/blossom-trust.js';
@@ -182,10 +181,10 @@
       }
     }
 
-    const signerFn = async (/** @type {any} */ template) => signer.signEvent(template);
-    const serverUrl = getActiveBlossomServer(signer.pubkey || '', eventStore);
-    const client = new BlossomClient(serverUrl, signerFn);
-    const blob = await client.uploadBlob(uploadFile);
+    const { blob, serverUrl } = await uploadWithFallback(uploadFile, {
+      signer,
+      userPubkey: signer.pubkey || ''
+    });
 
     const finalUrl = reconcileBlobUrlScheme(blob.url, serverUrl);
     imageUrl = finalUrl;

@@ -11,8 +11,8 @@
   import { eventStore, pool } from '$lib/stores/nostr-infrastructure.svelte';
   import { TimelineModel } from 'applesauce-core/models';
   import { CloseIcon, PlusIcon } from '$lib/components/icons';
-  import { BlossomClient } from 'blossom-client-sdk';
-  import { getActiveBlossomServer } from '$lib/services/blossom-settings-service.js';
+  import { getBlossomUploadServers } from '$lib/services/blossom-settings-service.js';
+  import { uploadWithFallback } from '$lib/helpers/blossom-upload.js';
   import { createBlossomServerLoader } from '$lib/loaders/blossom-server-loader.js';
   import { getRelayListLookupRelays } from '$lib/services/relay-service.svelte.js';
   import { findExistingLicense, getLicenseUrl } from '$lib/helpers/image-license.js';
@@ -70,7 +70,7 @@
     return () => sub.unsubscribe();
   });
 
-  // Hydrate user's kind 10063 list so getActiveBlossomServer can find it.
+  // Hydrate user's kind 10063 list so getBlossomUploadServers can find it.
   $effect(() => {
     if (!activeUser?.pubkey) return;
     const lookupRelays = getRelayListLookupRelays();
@@ -474,12 +474,16 @@
         }
       }
 
-      const signerFn = async (/** @type {any} */ ev) => {
-        if (!activeUser) throw new Error('User not available');
-        return await activeUser.signEvent(ev);
+      const signer = {
+        signEvent: async (/** @type {any} */ ev) => {
+          if (!activeUser) throw new Error('User not available');
+          return await activeUser.signEvent(ev);
+        }
       };
-      const serverUrl = getActiveBlossomServer(activeUser.pubkey, eventStore);
-      const client = new BlossomClient(serverUrl, signerFn);
+      const userPubkey = activeUser.pubkey;
+      // Candidate servers for this slot; after an icon upload the package
+      // follows it onto the same host so both blobs resolve together.
+      let servers = getBlossomUploadServers(userPubkey, eventStore);
 
       // Interactive package: ship the extracted app icon alongside so the
       // kind-1063 discovery event can reference it.
@@ -489,11 +493,21 @@
           prep.iconMime === 'image/jpeg' ? 'icon.jpg' : 'icon.png',
           { type: prep.iconMime ?? 'image/png' }
         );
-        const iconBlob = await client.uploadBlob(iconFile);
-        interactiveIconUrls.set(index, reconcileBlobUrlScheme(iconBlob.url, serverUrl));
+        const icon = await uploadWithFallback(iconFile, {
+          signer,
+          userPubkey,
+          servers,
+          silent: true
+        });
+        interactiveIconUrls.set(index, reconcileBlobUrlScheme(icon.blob.url, icon.serverUrl));
+        servers = [icon.serverUrl, ...servers.filter((s) => s !== icon.serverUrl)];
       }
 
-      const blob = await client.uploadBlob(uploadFile);
+      const { blob, serverUrl } = await uploadWithFallback(uploadFile, {
+        signer,
+        userPubkey,
+        servers
+      });
       const finalUrl = reconcileBlobUrlScheme(blob.url, serverUrl);
 
       files = files.map((f, i) =>

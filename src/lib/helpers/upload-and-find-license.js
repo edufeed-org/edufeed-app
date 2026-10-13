@@ -3,9 +3,7 @@
  * for its SHA-256 hash. Does NOT publish a license event — the LicenseModal
  * component owns that responsibility (requires user consent).
  */
-import { BlossomClient } from 'blossom-client-sdk';
-import { getActiveBlossomServer } from '$lib/services/blossom-settings-service.js';
-import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
+import { uploadWithFallback } from '$lib/helpers/blossom-upload.js';
 import { findExistingLicense } from '$lib/helpers/image-license.js';
 import { reconcileBlobUrlScheme } from '$lib/helpers/blossom-trust.js';
 
@@ -31,14 +29,11 @@ import { reconcileBlobUrlScheme } from '$lib/helpers/blossom-trust.js';
 export async function uploadAndFindLicense(file, opts) {
   const { signer } = opts;
 
-  const signerFn = async (/** @type {any} */ event) => signer.signEvent(event);
   // Resolve the pubkey via getPublicKey() — applesauce signers (PrivateKeySigner,
   // PasswordSigner) don't expose a synchronous `.pubkey`, so reading it directly
   // would skip the user's kind 10063 blossom server and fall back to the default.
   const userPubkey = await signer.getPublicKey();
-  const serverUrl = getActiveBlossomServer(userPubkey, eventStore);
-  const client = new BlossomClient(serverUrl, signerFn);
-  const blob = await client.uploadBlob(file);
+  const { blob, serverUrl } = await uploadWithFallback(file, { signer, userPubkey });
 
   const existing = await findExistingLicense(blob.sha256);
 
