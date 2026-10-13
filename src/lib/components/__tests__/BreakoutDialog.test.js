@@ -193,6 +193,29 @@ describe('BreakoutDialog', () => {
     ]);
   });
 
+  // User test 2026-10-13: Escape did nothing, only "Abbrechen" closed it.
+  it('Escape closes the dialog like Cancel — not while the rooms are being created', async () => {
+    /** @type {() => void} */
+    let finishStart = () => {};
+    onStart.mockImplementationOnce(() => new Promise((resolve) => (finishStart = resolve)));
+    render(BreakoutDialog, { props: { rows: [ME, BOB], nameOf, onStart, onClose } });
+    const dialog = screen.getByTestId('breakout-dialog');
+    // the dialog takes the focus, so the key reaches it wherever the click came from
+    expect(dialog.contains(document.activeElement)).toBe(true);
+    await fireEvent.keyDown(screen.getByTestId('breakout-room-count'), { key: 'Escape' });
+    expect(onClose).toHaveBeenCalledTimes(1);
+    await fireEvent.keyDown(dialog, { key: 'Enter' });
+    expect(onClose).toHaveBeenCalledTimes(1);
+    await fireEvent.click(screen.getByTestId('breakout-start'));
+    await waitFor(() => expect(onStart).toHaveBeenCalledTimes(1));
+    await fireEvent.keyDown(dialog, { key: 'Escape' });
+    expect(onClose).toHaveBeenCalledTimes(1);
+    finishStart();
+    await waitFor(() => expect(screen.getByTestId('breakout-start').disabled).toBe(false));
+    await fireEvent.keyDown(dialog, { key: 'Escape' });
+    expect(onClose).toHaveBeenCalledTimes(2);
+  });
+
   it('shows the relay whitelist refusal in friendly words, other errors verbatim', async () => {
     onStart.mockRejectedValueOnce(
       new Error('restricted: only members of this relay can create a group')

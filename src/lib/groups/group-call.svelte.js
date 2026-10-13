@@ -13,6 +13,7 @@
 // pulls livekit-client (~300KB) into whatever imports it, and this store is
 // imported by GroupChat and the root layout. It is loaded on join.
 import { channelKey } from './community-pointer.js';
+import { rememberCall, forgetCall } from './call-resume.js';
 import {
   requestGroupCallToken,
   moderateCall,
@@ -214,6 +215,10 @@ export async function joinGroupCall(pointer, user, view = {}) {
       connected = false;
       phase = 'ended';
       endReason = lk.isRemovalReason(reason) ? 'removed' : 'dropped';
+      // Removed from the call: the relay would refuse the way back (nothing
+      // to resume). A deleted ROOM (a breakout room closing) is not that —
+      // the call goes on in the main room — and a drop keeps the note too.
+      if (endReason === 'removed' && !lk.isRoomDeletedReason?.(reason)) forgetCall();
     });
     // The chat is kept per room (chatKey): a breakout switch sets the
     // channel's aside and takes it back on return.
@@ -227,6 +232,9 @@ export async function joinGroupCall(pointer, user, view = {}) {
       await lk.disconnectFromRoom();
     } else {
       connected = true;
+      // For after a reload (call-resume.js): the call joined, not a
+      // breakout switch (keepChat) — the main room is what to come back to.
+      if (!view.keepChat) rememberCall({ pointer, title, href, code });
     }
   } catch (err) {
     if (myAttempt !== attempt) return;
@@ -317,6 +325,16 @@ export async function switchGroupCall(pointer, view = {}) {
   });
 }
 
+/**
+ * Note the active call for after a reload (call-resume.js) — the breakout
+ * store calls this once a seat is back in the MAIN room, so a note a room's
+ * removal or deletion took away is written again.
+ */
+export function noteActiveCallForResume() {
+  if (!activePointer || !isLive()) return;
+  rememberCall({ pointer: activePointer, title, href, code });
+}
+
 /** The channel of the active call (null while idle). */
 export function getActiveCallPointer() {
   return activePointer ? { ...activePointer } : null;
@@ -380,6 +398,8 @@ export async function leaveGroupCall() {
 async function endCall({ keepChat }) {
   attempt++;
   const wasActive = activeKey !== null;
+  // A real leave (not a breakout switch): nothing to come back to.
+  if (!keepChat) forgetCall();
   activeKey = null;
   phase = 'idle';
   error = null;

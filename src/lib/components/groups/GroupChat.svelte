@@ -121,7 +121,8 @@
     hideCallStage,
     registerCallStageView
   } from '$lib/groups/group-call.svelte.js';
-  import { getBreakoutState } from '$lib/groups/breakout.svelte.js';
+  import { getBreakoutState, rejoinRoom, returnToMain } from '$lib/groups/breakout.svelte.js';
+  import { readResumableCall } from '$lib/groups/call-resume.js';
   import { sameRelayUrl } from '$lib/groups/relay-url.js';
   import {
     canPopOutCall,
@@ -869,6 +870,22 @@
   );
   const inCallHere = $derived(
     (call.isActiveFor(pointer) || inBreakoutOfHere) && call.phase !== 'idle'
+  );
+  // After a reload: the call this tab was in (call-resume.js), offered as
+  // long as the relay still lists someone in it and no call is up here.
+  let resumable = $state.raw(
+    /** @type {import('$lib/groups/call-resume.js').CallResumeNote | null} */ (null)
+  );
+  $effect(() => {
+    resumable = readResumableCall();
+  });
+  const resumeOffer = $derived(
+    !!resumable &&
+      !!myPubkey &&
+      call.phase === 'idle' &&
+      resumable.pointer.id === pointer.id &&
+      sameRelayUrl(resumable.pointer.relay, pointer.relay) &&
+      callParticipantCount > 0
   );
   // A call starting here opens on its chat (that is where the people in the
   // call talk, guests included); once it ends, land back on the channel chat
@@ -2238,6 +2255,26 @@
           callRunning={callParticipantCount > 0}
         />
       {/if}
+      {#if resumeOffer}
+        <div
+          class="flex items-center justify-between gap-2 border-b border-base-300 bg-base-200 px-4 py-2 text-sm"
+          role="status"
+          data-testid="group-call-resume"
+        >
+          <span class="flex min-w-0 items-center gap-2">
+            <MeetIcon class_="w-4 h-4 shrink-0 text-primary" title="" />
+            <span class="truncate">{m.groups_call_resume_title()}</span>
+          </span>
+          <button
+            type="button"
+            class="btn btn-sm btn-primary"
+            onclick={startCall}
+            data-testid="group-call-resume-join"
+          >
+            {m.groups_call_resume()}
+          </button>
+        </div>
+      {/if}
       {#if poppedOutHere}
         <div
           class="flex items-center justify-between gap-2 border-b border-base-300 bg-base-200 px-4 py-2 text-sm"
@@ -2303,14 +2340,35 @@
                 <!-- No way back for a removed user: the relay blocks their
                   pass, so "Rejoin" would only fail (CallLanding's !removedHere). -->
                 {#if call.endReason !== 'removed'}
-                  <button
-                    type="button"
-                    class="btn btn-sm btn-primary"
-                    onclick={startCall}
-                    data-testid="group-call-rejoin"
-                  >
-                    {m.groups_call_rejoin()}
-                  </button>
+                  {#if inBreakoutOfHere}
+                    <!-- The connection died inside a breakout room: back into
+                      the room (the session may still run), or home. -->
+                    <button
+                      type="button"
+                      class="btn btn-sm btn-primary"
+                      onclick={() => void rejoinRoom()}
+                      data-testid="group-call-rejoin-room"
+                    >
+                      {m.groups_call_ended_back_to_room()}
+                    </button>
+                    <button
+                      type="button"
+                      class="btn btn-sm"
+                      onclick={() => void returnToMain()}
+                      data-testid="group-call-to-main"
+                    >
+                      {m.groups_call_ended_to_main()}
+                    </button>
+                  {:else}
+                    <button
+                      type="button"
+                      class="btn btn-sm btn-primary"
+                      onclick={startCall}
+                      data-testid="group-call-rejoin"
+                    >
+                      {m.groups_call_rejoin()}
+                    </button>
+                  {/if}
                 {/if}
                 <button
                   type="button"

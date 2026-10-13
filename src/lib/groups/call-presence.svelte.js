@@ -18,6 +18,9 @@ import { pool } from '$lib/stores/nostr-infrastructure.svelte';
 import { raceRelayKey } from './relay-key-race.js';
 import { isTrustedSigner } from './relay-directory.js';
 import { callPresenceFilter, parseCallParticipants } from './call-presence.js';
+import { resubscribing } from './relay-subscription.js';
+import { authenticateOnce } from './relay-auth.js';
+import { useActiveUser } from '$lib/stores/accounts.svelte';
 
 /**
  * @param {() => {id: string, relay: string} | null | undefined} getPointer
@@ -35,6 +38,27 @@ export function useCallPresence(getPointer) {
   /** @type {string[]} */
   let authors = $state.raw([]);
   let ready = $state(false);
+  // Bumped when the relay connection becomes authenticated (NIP-42): a
+  // private channel's kind 39004 is withheld — silently, with a clean EOSE —
+  // from an unauthenticated REQ (pyramid), so a subscription opened before
+  // the chat's handshake shows nobody in the call until it is reopened.
+  let authVersion = $state(0);
+  const getUser = useActiveUser();
+
+  $effect(() => {
+    const pointer = getPointer();
+    const relay = pointer?.relay ? normalizeURL(pointer.relay) : null;
+    if (!relay) return;
+    const conn = /** @type {any} */ (pool.relay(relay));
+    const authenticated$ = conn?.authenticated$;
+    if (!authenticated$?.subscribe) return;
+    let was = conn.authenticated === true;
+    const sub = authenticated$.subscribe((/** @type {boolean} */ value) => {
+      if (value && !was) authVersion++;
+      was = value === true;
+    });
+    return () => sub.unsubscribe();
+  });
 
   // Effect 1 — race the relay key for the current pointer's relay.
   $effect(() => {
@@ -59,6 +83,7 @@ export function useCallPresence(getPointer) {
     const pointer = getPointer();
     const isReady = ready;
     const pinned = authors;
+    void authVersion;
     participants = [];
     answered = false;
     if (!pointer?.id || !pointer.relay || !isReady) return;
@@ -67,10 +92,11 @@ export function useCallPresence(getPointer) {
     // Newest-wins: the relay replaces the whole list on every change, and a
     // late-arriving older copy must not resurrect someone who already left.
     let newest = -1;
-    const sub = pool
-      .relay(relay)
-      .subscription([callPresenceFilter(pointer.id, pinned)])
-      .subscribe({
+    // Reopened after an outage (resubscribing): the relay replays the
+    // current list, newest-wins keeps a stale copy out.
+    return resubscribing(
+      () => pool.relay(relay).subscription([callPresenceFilter(pointer.id, pinned)]),
+      {
         next: (/** @type {any} */ event) => {
           if (event === 'EOSE') {
             answered = true;
@@ -87,8 +113,13 @@ export function useCallPresence(getPointer) {
         error: () => {
           answered = true;
         }
-      });
-    return () => sub.unsubscribe();
+      },
+      {
+        // A reopened connection is unauthenticated: the handshake first,
+        // else the private channel's list stays empty.
+        beforeReopen: () => authenticateOnce(pool.relay(relay), getUser()?.signer)
+      }
+    );
   });
 
   return () => ({ participants, answered });

@@ -135,6 +135,7 @@ vi.mock('$lib/paraglide/messages', () => ({
   groups_call_breakout_room_gone: () => 'room gone',
   groups_call_breakout_end_partial: (/** @type {any} */ p) => `not deleted: ${p.rooms}`,
   groups_call_breakout_took_over: () => 'you run the session now',
+  groups_call_breakout_handed_over: () => 'someone else runs the session',
   groups_call_breakout_join_no_host: () => 'nobody can seat you',
   groups_call_breakout_room_closed: () => 'room closed, back in main',
   groups_call_breakout_extend_failed: (/** @type {any} */ p) => `not extended: ${p.reason}`,
@@ -152,11 +153,13 @@ const rel = vi.hoisted(() => ({
   deleteBreakoutRoom: vi.fn(async () => {}),
   fetchEphemeralChildren: vi.fn(async () => []),
   fetchRoomMetadata: vi.fn(async () => []),
+  fetchPresence: vi.fn(async () => []),
   editBreakoutUntil: vi.fn(async () => {}),
   knockOnRoom: vi.fn(async () => {}),
   leaveRoom: vi.fn(async () => {})
 }));
-vi.mock('$lib/groups/breakout-relay.js', () => ({
+vi.mock('$lib/groups/breakout-relay.js', async (importOriginal) => ({
+  isGroupGoneRejection: /** @type {any} */ (await importOriginal()).isGroupGoneRejection,
   knockOnRoom: (/** @type {any[]} */ ...a) => rel.knockOnRoom(...a),
   leaveRoom: (/** @type {any[]} */ ...a) => rel.leaveRoom(...a),
   createBreakoutRoom: (/** @type {any[]} */ ...a) => rel.createBreakoutRoom(...a),
@@ -165,6 +168,7 @@ vi.mock('$lib/groups/breakout-relay.js', () => ({
   deleteBreakoutRoom: (/** @type {any[]} */ ...a) => rel.deleteBreakoutRoom(...a),
   fetchEphemeralChildren: (/** @type {any[]} */ ...a) => rel.fetchEphemeralChildren(...a),
   fetchRoomMetadata: (/** @type {any[]} */ ...a) => rel.fetchRoomMetadata(...a),
+  fetchPresence: (/** @type {any[]} */ ...a) => rel.fetchPresence(...a),
   editBreakoutUntil: (/** @type {any[]} */ ...a) => rel.editBreakoutUntil(...a)
 }));
 
@@ -258,6 +262,7 @@ beforeEach(async () => {
   relay.subs.length = 0;
   rel.fetchEphemeralChildren.mockResolvedValue([]);
   rel.fetchRoomMetadata.mockResolvedValue([]);
+  rel.fetchPresence.mockResolvedValue([]);
   relayPublish.fn.mockClear();
   lkFake.addSystemCallChat.mockClear();
   modal.activeModal = 'none';
@@ -513,8 +518,9 @@ describe('participant in a room: following the relay', () => {
     modal.callbacks.onConfirm();
     await settle();
     expect(store.getBreakoutState().currentRoom?.id).toBe('r1');
-    // a member seat requests no room token of its own (that is the guest path)
-    expect(lkApi.requestGroupCallToken).not.toHaveBeenCalled();
+    // a member seat requests the room's token too, but without a code (the
+    // code is the guest path)
+    expect(lkApi.requestGroupCallToken).toHaveBeenCalledWith(RELAY, 'r1', expect.anything(), {});
     const sub = liveSub();
     callFake.switchGroupCall.mockClear();
     sub.stream.next(roster('r1', [HOST, BOB]));
@@ -840,6 +846,33 @@ describe('late joiners: "Beitreten" from the banner', () => {
     await settle();
     expect(callFake.switchGroupCall).not.toHaveBeenCalled();
     expect(store.getBreakoutState().session).toBeNull();
+  });
+
+  it('the relay refusing the seat with "doesn\'t exist" drops the room too', async () => {
+    await bobSeesSession();
+    rel.seatInRoom.mockRejectedValueOnce(new Error("group 'r2' doesn't exist"));
+    await store.requestBreakoutRoom(store.getBreakoutState().rooms[1]);
+    await settle();
+    expect(rel.knockOnRoom).not.toHaveBeenCalled();
+    expect(callFake.switchGroupCall).not.toHaveBeenCalled();
+    expect(store.getBreakoutState().rooms.map((r) => r.id)).toEqual(['r1']);
+    expect(store.getBreakoutState().joinRequest).toBeNull();
+    expect(toast.fn).toHaveBeenCalledWith('room gone', 'error');
+  });
+
+  it('the knock being refused with "doesn\'t exist" drops the room instead of waiting for a host', async () => {
+    vi.useFakeTimers();
+    await bobSeesSession();
+    rel.seatInRoom.mockRejectedValueOnce(new Error('restricted: insufficient permissions'));
+    rel.knockOnRoom.mockRejectedValueOnce(new Error("group 'r2' doesn't exist"));
+    const request = store.requestBreakoutRoom(store.getBreakoutState().rooms[1]);
+    await vi.advanceTimersByTimeAsync(10);
+    await request;
+    expect(store.getBreakoutState().rooms.map((r) => r.id)).toEqual(['r1']);
+    expect(store.getBreakoutState().joinRequest).toBeNull();
+    expect(toast.fn).toHaveBeenCalledWith('room gone', 'error');
+    await vi.advanceTimersByTimeAsync(BREAKOUT_JOIN_REQUEST_TIMEOUT_MS + 10);
+    expect(toast.fn).not.toHaveBeenCalledWith('nobody can seat you', 'error');
   });
 
   it('a room the relay answers nothing about (a timeout, an old relay) is tried anyway', async () => {
@@ -1287,6 +1320,8 @@ describe('ephemeral groups: creation, leftovers, relay-side deletion', () => {
     expect(store.getBreakoutState().currentRoom).toBeNull();
     expect(store.getBreakoutState().rooms.map((r) => r.id)).toEqual(['r2']);
     expect(toast.fn).toHaveBeenCalledWith('room closed, back in main', 'info');
+    // the main room is the call to come back to after a reload
+    expect(callFake.noteActiveCallForResume).toHaveBeenCalled();
   });
 
   it('a lost connection in a room is not a deletion: the ended view stays', async () => {
@@ -1871,6 +1906,41 @@ describe('guests (call-pass seats)', () => {
     expect(toast.fn).toHaveBeenCalledWith('switch failed: group not found', 'error');
   });
 
+  it('two tabs of one guest keep their own seats: forgotten per room once its 39004 drops the guest, moved together', async () => {
+    const { roomIds } = await hostingWithSeat();
+    lk.listener?.(
+      { t: 'seat', room: roomIds[0], identity: EVE + ':zz' },
+      { identity: EVE + ':g1', metadata: GUEST_META }
+    );
+    lk.listener?.(
+      { t: 'seat', room: roomIds[1], identity: EVE + ':yy' },
+      { identity: EVE + ':g2', metadata: GUEST_META }
+    );
+    expect(Object.keys(store.getBreakoutState().guestSeats).sort()).toEqual([
+      EVE + ':yy',
+      EVE + ':zz'
+    ]);
+    // both rooms still list Eve: a third tab arriving in the main room forgets nothing
+    liveSub().stream.next(presence(roomIds[0], [EVE], 11));
+    liveSub().stream.next(presence(roomIds[1], [EVE], 11));
+    lk.joined?.({ identity: EVE + ':g3', metadata: GUEST_META });
+    await settle();
+    expect(Object.keys(store.getBreakoutState().guestSeats)).toHaveLength(2);
+    // room 2 no longer lists Eve: that seat goes, the other stays
+    liveSub().stream.next(presence(roomIds[1], [], 12));
+    await settle();
+    expect(Object.keys(store.getBreakoutState().guestSeats)).toEqual([EVE + ':zz']);
+    // a move takes every seat the guest still holds
+    lk.listener?.(
+      { t: 'seat', room: roomIds[1], identity: EVE + ':ww' },
+      { identity: EVE + ':g2', metadata: GUEST_META }
+    );
+    await store.moveParticipant({ pubkey: EVE, identities: [], toRoomId: null, guest: true });
+    const removed = lkApi.moderateCall.mock.calls.map((c) => `${c[0].id} ${c[2].identity}`);
+    expect(removed.sort()).toEqual([`${roomIds[0]} ${EVE}:zz`, `${roomIds[1]} ${EVE}:ww`].sort());
+    expect(store.getBreakoutState().guestSeats).toEqual({});
+  });
+
   it('in a room a guest follows no roster: it stays although no 39002 names it', async () => {
     vi.useFakeTimers();
     await guestInMain();
@@ -1942,7 +2012,7 @@ describe('guests (call-pass seats)', () => {
     expect(store.getBreakoutState().guestSeats).toEqual({});
     lk.listener?.({ t: 'seat', room: roomIds[0], identity: EVE + ':zz' }, guestSender);
     expect(store.getBreakoutState().guestSeats).toEqual({
-      [EVE]: { roomId: roomIds[0], identity: EVE + ':zz' }
+      [EVE + ':zz']: { roomId: roomIds[0], identity: EVE + ':zz', pubkey: EVE }
     });
   });
 
@@ -2096,5 +2166,476 @@ describe('the banner can be put away', () => {
     lk.listener?.(stateOf(ROOMS), hostSender);
     await settle();
     expect(store.getBreakoutState().bannerDismissed).toBe(false);
+  });
+});
+
+describe('the relay subscriptions come back', () => {
+  it('reopens the roster watch after the pool gave up, with the same filters, and believes what it replays', async () => {
+    vi.useFakeTimers();
+    await liveInMain(bobUser);
+    lk.listener?.(
+      { t: 'state', rooms: ROOMS.map(({ id, relay, name }) => ({ id, relay, name })) },
+      hostSender
+    );
+    await settle();
+    const follow = liveSub();
+    expect(follow).toBeTruthy();
+    const before = relay.subs.length;
+    follow.stream.error(new Error('closed'));
+    await settle();
+    expect(relay.subs.length).toBe(before);
+    await vi.advanceTimersByTimeAsync(5_000);
+    expect(relay.subs.length).toBe(before + 1);
+    const reopened = relay.subs[relay.subs.length - 1];
+    expect(reopened.filters).toEqual(follow.filters);
+    reopened.stream.next(tombstone('r1'));
+    await settle();
+    expect(store.getBreakoutState().rooms.map((r) => r.id)).toEqual(['r2']);
+  });
+
+  it('leaving the call stops the watch for good', async () => {
+    vi.useFakeTimers();
+    await liveInMain(bobUser);
+    lk.listener?.(
+      { t: 'state', rooms: ROOMS.map(({ id, relay, name }) => ({ id, relay, name })) },
+      hostSender
+    );
+    await settle();
+    const follow = liveSub();
+    follow.stream.error(new Error('closed'));
+    callFake.setCall({ pointer: null, phase: 'idle' });
+    await settle();
+    const before = relay.subs.length;
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(relay.subs.length).toBe(before);
+  });
+});
+
+describe('the host seat moves on, and a connection lost in a room', () => {
+  async function hostingSession() {
+    await liveInMain(hostUser);
+    lkFake.setMyMetadata(HOST_META);
+    await store.startBreakout({ channelName: 'Seminar', roomCount: 2, seats: [] });
+    await settle();
+    toast.fn.mockClear();
+  }
+
+  it('the relay takes the role away: this client steps back, and takes over again when the host seat returns', async () => {
+    await hostingSession();
+    expect(store.getBreakoutState().session?.hosting).toBe(true);
+    lkFake.setMyMetadata('{}');
+    await settle();
+    expect(store.getBreakoutState().session?.hosting).toBe(false);
+    expect(store.getBreakoutState().session?.rooms).toHaveLength(2);
+    expect(toast.fn).toHaveBeenCalledWith('someone else runs the session', 'info');
+    lkFake.setMyMetadata(HOST_META);
+    await settle();
+    expect(store.getBreakoutState().session?.hosting).toBe(true);
+    expect(toast.fn).toHaveBeenCalledWith('you run the session now', 'info');
+  });
+
+  it('a session started while the seat showed no role is left alone', async () => {
+    await liveInMain(hostUser);
+    await store.startBreakout({ channelName: 'Seminar', roomCount: 2, seats: [] });
+    await settle();
+    lkFake.setMyMetadata('{}');
+    await settle();
+    expect(store.getBreakoutState().session?.hosting).toBe(true);
+  });
+
+  it('gaining the host seat with no session known asks the relay again and runs what it finds', async () => {
+    await liveInMain(bobUser);
+    await settle();
+    expect(rel.fetchEphemeralChildren).toHaveBeenCalledTimes(1);
+    expect(store.getBreakoutState().session).toBeNull();
+    rel.fetchEphemeralChildren.mockResolvedValue([roomMeta('r1', 1), roomMeta('r2', 2)]);
+    // somebody sits in a room: a running session, adopted
+    rel.fetchPresence.mockResolvedValue([presence('r1', [CAROL])]);
+    lkFake.setMyMetadata(HOST_META);
+    await settle();
+    await settle();
+    expect(rel.fetchEphemeralChildren).toHaveBeenCalledTimes(2);
+    const s = store.getBreakoutState();
+    expect(s.session?.hosting).toBe(true);
+    expect(s.rooms.map((r) => r.id)).toEqual(['r1', 'r2']);
+  });
+
+  it('the connection died in a room: the room is kept, "back into the room" re-enters it, "main room" goes home', async () => {
+    await liveInMain(bobUser);
+    lk.listener?.({ t: 'assign', rooms: [ROOMS[0]] }, hostSender);
+    modal.callbacks.onConfirm();
+    await settle();
+    expect(store.getBreakoutState().currentRoom?.id).toBe('r1');
+    callFake.setCall({ pointer: { id: 'r1', relay: RELAY }, phase: 'ended' });
+    lkFake.setDisconnectReason(1);
+    await settle();
+    expect(store.getBreakoutState().currentRoom?.id).toBe('r1');
+    expect(store.getBreakoutState().session).not.toBeNull();
+    callFake.switchGroupCall.mockClear();
+    await store.rejoinRoom();
+    await settle();
+    expect(callFake.switchGroupCall).toHaveBeenCalledWith(
+      { id: 'r1', relay: RELAY },
+      { title: 'Breakout 1 · Seminar' }
+    );
+    expect(callFake.getGroupCallState().phase).toBe('ready');
+    expect(store.getBreakoutState().currentRoom?.id).toBe('r1');
+    callFake.setCall({ pointer: { id: 'r1', relay: RELAY }, phase: 'ended' });
+    await settle();
+    await store.returnToMain();
+    await settle();
+    expect(callFake.switchGroupCall).toHaveBeenLastCalledWith(MAIN, { title: 'Seminar' });
+    expect(store.getBreakoutState().currentRoom).toBeNull();
+    expect(store.getBreakoutState().session).not.toBeNull();
+  });
+});
+
+describe('rooms that closed while this seat sat in another room', () => {
+  it('back in the main room after its room was deleted, the seat asks the relay about the rest', async () => {
+    await liveInMain(bobUser);
+    lk.listener?.({ t: 'assign', rooms: ROOMS }, hostSender);
+    modal.callbacks.onConfirm();
+    await settle();
+    expect(store.getBreakoutState().currentRoom?.id).toBe('r1');
+    rel.fetchRoomMetadata.mockResolvedValueOnce([tombstone('r2')]);
+    lkFake.setDisconnectReason(lkFake.ROOM_DELETED);
+    callFake.setCall({ pointer: { id: 'r1', relay: RELAY }, phase: 'ended' });
+    await settle();
+    await settle();
+    expect(store.getBreakoutState().currentRoom).toBeNull();
+    expect(rel.fetchRoomMetadata).toHaveBeenCalledWith(expect.anything(), ['r2']);
+    expect(store.getBreakoutState().session).toBeNull();
+  });
+
+  it("the host seat's full state replay is authoritative: a room it does not name is gone", async () => {
+    await liveInMain(bobUser);
+    lk.listener?.(
+      { t: 'state', rooms: ROOMS.map(({ id, relay, name }) => ({ id, relay, name })) },
+      hostSender
+    );
+    await settle();
+    expect(store.getBreakoutState().rooms.map((r) => r.id)).toEqual(['r1', 'r2']);
+    lk.listener?.(
+      { t: 'state', rooms: [{ id: 'r3', relay: RELAY, name: 'Breakout 3 · Seminar' }] },
+      hostSender
+    );
+    await settle();
+    expect(store.getBreakoutState().rooms.map((r) => r.id)).toEqual(['r3']);
+    // a targeted assignment names one room and drops nothing; a room once
+    // gone stays gone
+    lk.listener?.(
+      {
+        t: 'assign',
+        rooms: [{ id: 'r4', relay: RELAY, name: 'Breakout 4 · Seminar', members: [] }]
+      },
+      hostSender
+    );
+    await settle();
+    expect(store.getBreakoutState().rooms.map((r) => r.id)).toEqual(['r3', 'r4']);
+  });
+});
+
+describe('the main room follows the rooms on the relay itself', () => {
+  const ephemeralSub = () => relay.subs.find((s) => !s.closed && s.filters[0]?.['#ephemeral']);
+
+  it('a seat without a session learns the rooms from the live 39000s, even when the assignment message was lost', async () => {
+    await liveInMain(bobUser);
+    await settle();
+    const sub = ephemeralSub();
+    expect(sub).toBeTruthy();
+    expect(sub.filters).toEqual([{ kinds: [39000], '#ephemeral': ['main-id'] }]);
+    sub.stream.next(roomMeta('r1', 1));
+    sub.stream.next(roomMeta('r2', 2));
+    await settle();
+    expect(store.getBreakoutState().rooms.map((r) => r.id)).toEqual(['r1', 'r2']);
+    expect(store.getBreakoutState().session?.hosting).toBe(false);
+    // the roster then names me: that is my assignment (once the replay is in)
+    liveSub().stream.next(roster('r2', [BOB]));
+    liveSub().stream.next('EOSE');
+    await settle();
+    expect(modal.activeModal).toBe('breakoutAssignment');
+    expect(store.getBreakoutState().pending?.room.id).toBe('r2');
+    // a tombstone drops a room
+    sub.stream.next(tombstone('r1'));
+    await settle();
+    expect(store.getBreakoutState().rooms.map((r) => r.id)).toEqual(['r2']);
+  });
+
+  it('is not opened by the host of a session, nor inside a room', async () => {
+    await liveInMain(hostUser);
+    lkFake.setMyMetadata(HOST_META);
+    await store.startBreakout({ channelName: 'Seminar', roomCount: 1, seats: [] });
+    await settle();
+    expect(ephemeralSub()).toBeUndefined();
+  });
+});
+
+describe("a breakout room's own host seat is not the session's host seat", () => {
+  it('a seat that opened a room does not take the session over on the way back', async () => {
+    await liveInMain(bobUser);
+    lk.listener?.({ t: 'assign', rooms: ROOMS }, hostSender);
+    modal.callbacks.onConfirm();
+    await settle();
+    expect(store.getBreakoutState().currentRoom?.id).toBe('r1');
+    // the relay seats the opener of a room as that room's host
+    lkFake.setMyMetadata(HOST_META);
+    await settle();
+    expect(store.getBreakoutState().session?.hosting).toBe(false);
+    // the main room's seat the switch connects carries no role (the real
+    // connection service replaces the local participant on connect)
+    const original = callFake.switchGroupCall.getMockImplementation();
+    callFake.switchGroupCall.mockImplementationOnce(async (...args) => {
+      const result = await original?.(...args);
+      lkFake.setMyMetadata('');
+      return result;
+    });
+    await store.returnToMain();
+    await settle();
+    expect(store.getBreakoutState().currentRoom).toBeNull();
+    expect(store.getBreakoutState().session?.hosting).toBe(false);
+    expect(toast.fn).not.toHaveBeenCalledWith('you run the session now', 'info');
+  });
+
+  it('the host does not re-assign a seat that just came back from a room on its own', async () => {
+    lkFake.setIdentity(HOST + ':h');
+    lkFake.setMyMetadata(HOST_META);
+    await liveInMain(hostUser);
+    await store.startBreakout({
+      channelName: 'Seminar',
+      roomCount: 2,
+      seats: [{ identity: BOB + ':seat1', pubkey: BOB, roomIndex: 1 }],
+      autoAssign: true
+    });
+    await settle();
+    const roomIds = rel.createBreakoutRoom.mock.calls.map((c) => c[1].id);
+    const sub = liveSub();
+    sub.stream.next(roster(roomIds[0], [HOST, BOB], 11));
+    await settle();
+    // Bob leaves the room himself (kind 9022): the roster drops him
+    sub.stream.next(roster(roomIds[0], [HOST], 12));
+    await settle();
+    rel.seatInRoom.mockClear();
+    lk.send.mockClear();
+    lk.joined?.({ identity: BOB + ':seat2', metadata: '' });
+    await settle();
+    await settle();
+    expect(rel.seatInRoom).not.toHaveBeenCalled();
+    expect(lk.send.mock.calls.some((c) => c[0]?.t === 'assign')).toBe(false);
+  });
+});
+
+describe('the roster rule leaves the host seat and the creator alone', () => {
+  const stateOf = () => ({
+    t: 'state',
+    rooms: ROOMS.map(({ id, relay, name }) => ({ id, relay, name }))
+  });
+
+  it('a seat holding the host role is not roster-assigned (it takes the session over instead)', async () => {
+    await liveInMain(bobUser);
+    lk.listener?.(stateOf(), hostSender);
+    await settle();
+    lkFake.setMyMetadata(HOST_META);
+    await settle();
+    liveSub().stream.next(roster('r1', [BOB]));
+    await settle();
+    expect(modal.activeModal).toBe('none');
+    expect(store.getBreakoutState().pending).toBeNull();
+    expect(store.getBreakoutState().session?.hosting).toBe(true);
+  });
+
+  it("a pubkey on every room's roster (the relay seats the creator everywhere) is not assigned", async () => {
+    await liveInMain(bobUser);
+    lk.listener?.(stateOf(), hostSender);
+    await settle();
+    // the first roster of the replay alone must not count: wait for EOSE
+    liveSub().stream.next(roster('r1', [BOB, CAROL]));
+    await settle();
+    expect(modal.activeModal).toBe('none');
+    liveSub().stream.next(roster('r2', [BOB]));
+    liveSub().stream.next('EOSE');
+    await settle();
+    expect(modal.activeModal).toBe('none');
+    expect(store.getBreakoutState().pending).toBeNull();
+    // named by one roster only: that is an assignment
+    liveSub().stream.next(roster('r2', [], 11));
+    await settle();
+    expect(store.getBreakoutState().pending?.room.id).toBe('r1');
+  });
+});
+
+describe('an assignment offer that beat the host seat is void', () => {
+  it('gaining the host seat closes a pending offer and ends a join request', async () => {
+    await liveInMain(bobUser);
+    lk.listener?.(
+      { t: 'state', rooms: ROOMS.map(({ id, relay, name }) => ({ id, relay, name })) },
+      hostSender
+    );
+    await settle();
+    liveSub().stream.next(roster('r1', [BOB]));
+    liveSub().stream.next('EOSE');
+    await settle();
+    expect(modal.activeModal).toBe('breakoutAssignment');
+    lkFake.setMyMetadata(HOST_META);
+    await settle();
+    expect(store.getBreakoutState().session?.hosting).toBe(true);
+    expect(store.getBreakoutState().pending).toBeNull();
+    expect(modal.activeModal).toBe('none');
+    expect(callFake.switchGroupCall).not.toHaveBeenCalled();
+  });
+});
+
+describe('leftovers of a call that is over are deleted, not adopted', () => {
+  it('the host seat alone in an empty call deletes the rooms it finds', async () => {
+    rel.fetchEphemeralChildren.mockResolvedValue([roomMeta('old-1', 1), roomMeta('old-2', 2)]);
+    rel.fetchPresence.mockResolvedValue([presence('main-id', [HOST])]);
+    lkFake.setMyMetadata(HOST_META);
+    await liveInMain(hostUser);
+    await settle();
+    await settle();
+    expect(rel.deleteBreakoutRoom.mock.calls.map((c) => c[1]).sort()).toEqual(['old-1', 'old-2']);
+    expect(store.getBreakoutState().session).toBeNull();
+  });
+
+  it('with someone else in the call the rooms are adopted', async () => {
+    rel.fetchEphemeralChildren.mockResolvedValue([roomMeta('old-1', 1)]);
+    rel.fetchPresence.mockResolvedValue([presence('main-id', [HOST, BOB])]);
+    lkFake.setMyMetadata(HOST_META);
+    await liveInMain(hostUser);
+    await settle();
+    await settle();
+    expect(rel.deleteBreakoutRoom).not.toHaveBeenCalled();
+    expect(store.getBreakoutState().session?.hosting).toBe(true);
+  });
+
+  it('a plain seat never deletes', async () => {
+    rel.fetchEphemeralChildren.mockResolvedValue([roomMeta('old-1', 1)]);
+    rel.fetchPresence.mockResolvedValue([presence('main-id', [BOB])]);
+    await liveInMain(bobUser);
+    await settle();
+    await settle();
+    expect(rel.deleteBreakoutRoom).not.toHaveBeenCalled();
+    expect(store.getBreakoutState().rooms.map((r) => r.id)).toEqual(['old-1']);
+  });
+});
+
+describe('arrivals in the main room while the host sits in a room', () => {
+  async function hostInRoom() {
+    lkFake.setIdentity(HOST + ':h');
+    lkFake.setMyMetadata(HOST_META);
+    await liveInMain(hostUser);
+    await store.startBreakout({
+      channelName: 'Seminar',
+      roomCount: 2,
+      seats: [{ identity: BOB + ':seat1', pubkey: BOB, roomIndex: 1 }],
+      autoAssign: true
+    });
+    await settle();
+    const roomIds = rel.createBreakoutRoom.mock.calls.map((c) => c[1].id);
+    // Carol and Dave sit in the main room all along
+    liveSub().stream.next(presence('main-id', [HOST, CAROL, DAVE]));
+    liveSub().stream.next(roster('main-id', [HOST, BOB, CAROL, DAVE]));
+    await settle();
+    rel.seatInRoom.mockClear();
+    await store.joinBreakoutRoom(store.getBreakoutState().rooms[0]);
+    await settle();
+    return roomIds;
+  }
+
+  it('seats already in the main room when the host enters a room are not "arrivals"', async () => {
+    await hostInRoom();
+    liveSub().stream.next(presence('main-id', [CAROL, DAVE], 12));
+    await settle();
+    expect(rel.seatInRoom).not.toHaveBeenCalled();
+  });
+
+  it('a seat that comes back from a room on its own is not re-seated from the room either', async () => {
+    const roomIds = await hostInRoom();
+    liveSub().stream.next(roster(roomIds[0], [HOST, BOB], 11));
+    await settle();
+    liveSub().stream.next(roster(roomIds[0], [HOST], 12));
+    liveSub().stream.next(presence('main-id', [CAROL, DAVE, BOB], 13));
+    await settle();
+    expect(rel.seatInRoom).not.toHaveBeenCalled();
+  });
+
+  it('a true late joiner is seated from the room', async () => {
+    await hostInRoom();
+    liveSub().stream.next(roster('main-id', [HOST, BOB, CAROL, DAVE, 'e'.repeat(64)], 12));
+    liveSub().stream.next(presence('main-id', [CAROL, DAVE, 'e'.repeat(64)], 13));
+    await settle();
+    await settle();
+    expect(rel.seatInRoom).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.any(String),
+      'e'.repeat(64),
+      hostUser
+    );
+  });
+});
+
+describe('a seat with a role is not distributed as a late joiner', () => {
+  it('the newcomer path skips a co-host (a host back from a hang-up)', async () => {
+    lkFake.setIdentity(HOST + ':h');
+    lkFake.setMyMetadata(HOST_META);
+    await liveInMain(hostUser);
+    await store.startBreakout({
+      channelName: 'Seminar',
+      roomCount: 2,
+      seats: [],
+      autoAssign: true
+    });
+    await settle();
+    rel.seatInRoom.mockClear();
+    lk.joined?.({ identity: CAROL + ':c', metadata: JSON.stringify({ cohost: true }) });
+    await settle();
+    await settle();
+    expect(rel.seatInRoom).not.toHaveBeenCalled();
+    lk.joined?.({ identity: DAVE + ':d', metadata: '' });
+    await settle();
+    await settle();
+    expect(rel.seatInRoom).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.any(String),
+      DAVE,
+      hostUser
+    );
+  });
+});
+
+describe('guest insurance', () => {
+  it('the host seat re-sends the session state to guest seats every 15 s', async () => {
+    vi.useFakeTimers();
+    lkFake.setIdentity(HOST + ':h');
+    lkFake.setMyMetadata(HOST_META);
+    await liveInMain(hostUser);
+    await store.startBreakout({ channelName: 'Seminar', roomCount: 1, seats: [], selfJoin: false });
+    await settle();
+    lkFake.setRemoteParticipants([
+      { identity: 'e'.repeat(64) + ':g1', metadata: JSON.stringify({ guest: true, pass: 'p' }) },
+      { identity: BOB + ':m', metadata: '' }
+    ]);
+    lk.send.mockClear();
+    await vi.advanceTimersByTimeAsync(store.BREAKOUT_GUEST_STATE_REPLAY_MS + 10);
+    const replay = lk.send.mock.calls.find((c) => c[0]?.t === 'state');
+    expect(replay).toBeTruthy();
+    expect(replay[1]).toEqual(['e'.repeat(64) + ':g1']);
+    expect(replay[0].selfJoin).toBe(false);
+  });
+
+  it("a guest asks the relay for the rooms' tombstones every 20 s and drops what is gone", async () => {
+    vi.useFakeTimers();
+    await liveInMain(bobUser);
+    lkFake.setMyMetadata(JSON.stringify({ guest: true, pass: 'p' }));
+    lk.listener?.(
+      { t: 'state', rooms: ROOMS.map(({ id, relay, name }) => ({ id, relay, name })) },
+      hostSender
+    );
+    await settle();
+    expect(store.getBreakoutState().rooms.map((r) => r.id)).toEqual(['r1', 'r2']);
+    rel.fetchRoomMetadata.mockResolvedValue([tombstone('r1')]);
+    await vi.advanceTimersByTimeAsync(store.BREAKOUT_GUEST_REVALIDATE_MS + 10);
+    await settle();
+    expect(rel.fetchRoomMetadata).toHaveBeenCalled();
+    expect(store.getBreakoutState().rooms.map((r) => r.id)).toEqual(['r2']);
   });
 });

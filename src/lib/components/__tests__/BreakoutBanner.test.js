@@ -58,9 +58,25 @@ describe('BreakoutBanner', () => {
     expect(screen.getByTestId('breakout-banner-deadline').textContent).toContain('2:05 left');
     const joins = screen.getAllByTestId('breakout-banner-join');
     expect(joins).toHaveLength(2);
-    expect(joins[0].textContent.replace(/\s+/g, ' ')).toContain('Room 1 (2) · Join');
+    // presence unknown: the roster, less the pubkey on every roster (the
+    // session's creator, whom the relay seats as admin of every room)
+    expect(joins[0].textContent.replace(/\s+/g, ' ')).toContain('Room 1 (1) · Join');
+    expect(joins[1].textContent.replace(/\s+/g, ' ')).toContain('Room 2 (0) · Join');
     await fireEvent.click(joins[1]);
     expect(onJoin).toHaveBeenCalledWith(rooms[1]);
+  });
+
+  // User test 2026-10-13: the "(N)" showed roster sizes, creator included.
+  it('counts the people live in a room once the relay has said who is there', () => {
+    render(BreakoutBanner, {
+      props: {
+        breakout: state({ presenceByRoomId: { r1: ['b', 'c', 'd'], r2: [] } }),
+        onJoin: vi.fn()
+      }
+    });
+    const joins = screen.getAllByTestId('breakout-banner-join');
+    expect(joins[0].textContent.replace(/\s+/g, ' ')).toContain('Room 1 (3) · Join');
+    expect(joins[1].textContent.replace(/\s+/g, ' ')).toContain('Room 2 (0) · Join');
   });
 
   it('when the host keeps the assignment to themselves it names the session and the deadline, no rooms', () => {

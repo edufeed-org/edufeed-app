@@ -42,7 +42,9 @@ vi.mock('$lib/services/livekit-connection.svelte.js', () => ({
       if (lkListener.cb === cb) lkListener.cb = null;
     };
   },
-  isRemovalReason: (/** @type {any} */ reason) => reason === 'removed-reason'
+  isRemovalReason: (/** @type {any} */ reason) =>
+    reason === 'removed-reason' || reason === 'room-deleted-reason',
+  isRoomDeletedReason: (/** @type {any} */ reason) => reason === 'room-deleted-reason'
 }));
 
 vi.mock('$lib/paraglide/messages', () => ({
@@ -895,5 +897,61 @@ describe('switchGroupCall (breakout rooms)', () => {
     expect(getActiveCallUser()).toBe(USER);
     await leaveGroupCall();
     expect(getActiveCallPointer()).toBeNull();
+  });
+});
+
+const { readResumableCall } = await import('$lib/groups/call-resume.js');
+
+describe('the way back after a reload (call-resume.js)', () => {
+  const P = { id: 'resume-1', relay: 'wss://groups.example/' };
+  const user = { pubkey: 'a'.repeat(64), signer: { signEvent: vi.fn() } };
+
+  beforeEach(() => {
+    sessionStorage.clear();
+    requestGroupCallToken.mockResolvedValue({ serverUrl: 'wss://lk', participantToken: 't' });
+  });
+
+  it('notes the call once connected, with title, page and code, and forgets it on leave', async () => {
+    await joinGroupCall(P, user, { title: 'Seminar', href: '/c/x', code: 'C'.repeat(22) });
+    const note = readResumableCall();
+    expect(note?.pointer).toEqual(P);
+    expect(note?.title).toBe('Seminar');
+    expect(note?.href).toBe('/c/x');
+    expect(note?.code).toBe('C'.repeat(22));
+    await leaveGroupCall();
+    expect(readResumableCall()).toBeNull();
+  });
+
+  it('a breakout switch leaves the note on the main room; a drop keeps it; a removal forgets it', async () => {
+    await joinGroupCall(P, user, { title: 'Seminar' });
+    const { switchGroupCall } = await import('$lib/groups/group-call.svelte.js');
+    await switchGroupCall({ id: 'room-1', relay: P.relay }, { title: 'Breakout 1' });
+    expect(readResumableCall()?.pointer).toEqual(P);
+    lkListener.cb?.('network');
+    expect(getGroupCallState().phase).toBe('ended');
+    expect(readResumableCall()?.pointer).toEqual(P);
+    await joinGroupCall(P, user, { title: 'Seminar' });
+    lkListener.cb?.('removed-reason');
+    expect(readResumableCall()).toBeNull();
+  });
+
+  it("a breakout room's deletion keeps the note, and the way back notes the main room again", async () => {
+    const { switchGroupCall, noteActiveCallForResume } = await import(
+      '$lib/groups/group-call.svelte.js'
+    );
+    await joinGroupCall(P, user, { title: 'Seminar', href: '/c/x' });
+    await switchGroupCall({ id: 'room-1', relay: P.relay }, { title: 'Breakout 1' });
+    lkListener.cb?.('room-deleted-reason');
+    expect(getGroupCallState().endReason).toBe('removed');
+    expect(readResumableCall()?.pointer).toEqual(P);
+    sessionStorage.clear();
+    await switchGroupCall(P, { title: 'Seminar' });
+    noteActiveCallForResume();
+    const note = readResumableCall();
+    expect(note?.pointer).toEqual(P);
+    expect(note?.href).toBe('/c/x');
+    await leaveGroupCall();
+    noteActiveCallForResume();
+    expect(readResumableCall()).toBeNull();
   });
 });

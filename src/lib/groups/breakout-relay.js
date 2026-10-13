@@ -171,6 +171,35 @@ export function fetchEphemeralChildren(relayConn, parentId, opts = {}) {
 }
 
 /**
+ * The relay's refusal for a group it no longer has: pyramid answers a
+ * put-user / join request / edit for a deleted room with
+ * `group '<id>' doesn't exist` (groups/reject-event.go, virtual.go).
+ * @param {unknown} err
+ */
+export function isGroupGoneRejection(err) {
+  const message = String(/** @type {any} */ (err)?.message ?? err ?? '');
+  return /doesn't exist|does not exist/i.test(message);
+}
+
+/**
+ * The newest kind 39004 of each group named — who is live in it (the relay
+ * replaces the whole list on every change). One-shot; nothing back means
+ * nothing is known.
+ * @param {any} relayConn a pool.relay(url) connection
+ * @param {string[]} ids group ids (the main room and its rooms)
+ * @param {{timeoutMs?: number}} [opts]
+ * @returns {Promise<any[]>} kind-39004 events (unfiltered — the caller trusts the relay's key)
+ */
+export function fetchPresence(relayConn, ids, opts = {}) {
+  if (ids.length === 0) return Promise.resolve([]);
+  return firstValueFrom(
+    relayConn
+      .request({ kinds: [39004], '#d': ids }, { timeout: opts.timeoutMs ?? 5000 })
+      .pipe(toArray(), defaultIfEmpty([]))
+  ).catch(() => []);
+}
+
+/**
  * The current kind 39000 of each of the rooms named — alive metadata or the
  * relay's `[deleted]` tombstone. A one-shot resync for a client whose follow
  * subscription may have missed a deletion (the relay sweeps rooms on its

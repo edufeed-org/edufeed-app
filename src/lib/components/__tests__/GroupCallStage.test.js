@@ -1990,6 +1990,58 @@ describe('breakout rooms', () => {
     expect(screen.queryByTestId('group-call-breakout-fetch-here')).toBeNull();
   });
 
+  // User test 2026-10-13: "whoever opened the rooms has no call controls
+  // inside a room". The host seat in a room is a seat like any other: the
+  // title pill and the whole dock, beside the room's status row.
+  it('the host seat inside a room keeps the title pill and the dock, like any seat', () => {
+    vi.useFakeTimers();
+    asHost();
+    breakout.state.session = {
+      main: { id: 'main', relay: 'wss://r.example/', title: 'Standup' },
+      rooms: [{ id: 'r1', relay: 'wss://r.example/', name: 'Breakout 1', index: 1 }],
+      until: 1,
+      hosting: true
+    };
+    breakout.state.rooms = breakout.state.session.rooms;
+    breakout.state.currentRoom = breakout.state.session.rooms[0];
+    breakout.state.remaining = 83;
+    breakout.state.mainPresence = ['b'.repeat(64)];
+    breakout.state.mainMembers = new Set(['b'.repeat(64)]);
+    render(GroupCallStage, { props: baseProps });
+    const stage = screen.getByTestId('group-call-stage');
+    expect(screen.getByTestId('group-call-title-pill').textContent).toContain('Standup');
+    expect(screen.getByTestId('group-call-breakout-room').textContent).toContain('Breakout room 1');
+    expect(screen.getByTestId('group-call-breakout-main-count')).toBeTruthy();
+    const controls = screen.getByTestId('group-call-controls');
+    try {
+      for (const id of [
+        'group-call-show-participants',
+        'group-call-layout',
+        'group-call-more',
+        'group-call-leave'
+      ]) {
+        expect(controls.querySelector(`[data-testid="${id}"]`), id).toBeTruthy();
+      }
+      for (const title of ['Mute', 'Camera on', 'Share screen', 'Raise hand', 'React']) {
+        expect(controls.contains(screen.getByTitle(title)), title).toBe(true);
+      }
+      // visible right away, and the autohide answers to input as usual
+      expect(stage.hasAttribute('data-idle')).toBe(false);
+      expect(controls.parentElement.classList.contains('opacity-0')).toBe(false);
+      vi.advanceTimersByTime(3000);
+      flushSync();
+      expect(stage.getAttribute('data-idle')).toBe('true');
+      stage.dispatchEvent(new Event('pointermove', { bubbles: true }));
+      flushSync();
+      expect(stage.hasAttribute('data-idle')).toBe(false);
+      expect(controls.parentElement.classList.contains('opacity-0')).toBe(false);
+    } finally {
+      vi.useRealTimers();
+      breakout.state.mainPresence = [];
+      breakout.state.mainMembers = new Set();
+    }
+  });
+
   it('a seat in the main room during a session it is not part of sees the banner with the rooms to join, never a host', async () => {
     const session = {
       main: { id: 'main', relay: 'wss://r.example/', title: 'Standup' },

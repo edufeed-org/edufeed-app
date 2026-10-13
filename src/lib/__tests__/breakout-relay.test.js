@@ -14,6 +14,7 @@ import {
   deleteBreakoutRoom,
   fetchEphemeralChildren,
   fetchRoomMetadata,
+  isGroupGoneRejection,
   editBreakoutUntil,
   isEphemeralTagRejection,
   knockOnRoom,
@@ -327,5 +328,15 @@ describe('editBreakoutUntil', () => {
     ).rejects.toThrow(/insufficient permissions/);
     expect(isEphemeralTagRejection(new Error('restricted: ephemeral is fixed'))).toBe(true);
     expect(isEphemeralTagRejection(new Error('too old'))).toBe(false);
+  });
+});
+
+describe('isGroupGoneRejection', () => {
+  it("matches pyramid's \"group '<id>' doesn't exist\" and nothing else", () => {
+    expect(isGroupGoneRejection(new Error("group 'abc' doesn't exist"))).toBe(true);
+    expect(isGroupGoneRejection("error: parent group doesn't exist")).toBe(true);
+    expect(isGroupGoneRejection(new Error('group does not exist'))).toBe(true);
+    expect(isGroupGoneRejection(new Error('restricted: insufficient permissions'))).toBe(false);
+    expect(isGroupGoneRejection(null)).toBe(false);
   });
 });

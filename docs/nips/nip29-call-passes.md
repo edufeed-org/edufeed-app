@@ -199,11 +199,19 @@ token.
 - **Promotion in the call.** The host may make any member seat a co-host
   (and revoke it) through the endpoint below; those roles last until the
   seat leaves. The `p`-tag roles are re-applied on every token.
-- **Hand-over.** When the host leaves (and a freshly minted token's holder
-  has had 60 s to show up in the participant list), the oldest co-host
-  still present becomes host, else the member seat present longest, else
-  nobody. Co-hosts who left lose the seat; the room emptying clears
-  everything.
+- **Hand-over.** A host who is no longer in the call keeps the seat for a
+  grace of 120 s, counted from the moment they went missing (a reload, a
+  dropped connection, a laptop lid): coming back within it changes nothing.
+  A host whose token was minted but who never showed up is handed over
+  after 60 s. Then the oldest co-host still present becomes host, else the
+  member seat present longest, else nobody. "Present" counts the group's
+  own room **and its running ephemeral children** (`nip29-ephemeral-groups.md`):
+  a host visiting a breakout room is not absent. A former host who comes
+  back after a hand-over gets a co-host seat, not the host seat (the
+  scheduler rule above still takes it back). Co-hosts who left lose the
+  seat; the whole call emptying clears everything. The relay re-checks on
+  every participant webhook and from its minute sweeper, so a grace expires
+  without waiting for someone to join or leave. (pyramid edufeed-v1.20.)
 - **Never guests or listeners.** A call-pass seat keeps its
   `{"guest":true,"pass":…}` metadata and can be neither host nor co-host;
   a listen-only seat (non-member of a public group) cannot either.

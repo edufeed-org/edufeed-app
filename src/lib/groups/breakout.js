@@ -380,6 +380,24 @@ export function roomOfPubkey(rooms, membersByRoomId, pubkey) {
 }
 
 /**
+ * The pubkeys every room's roster names: the relay seats the session's
+ * creator as admin of EVERY room, so such a seat says nothing about where
+ * the person is — only the room's presence (kind 39004) does. Empty with
+ * fewer than two rooms (one roster names everyone in it) or while any
+ * roster is still unknown (nothing can be said yet).
+ * @param {Array<{id: string}>} rooms
+ * @param {Record<string, Set<string> | undefined>} membersByRoomId
+ * @returns {Set<string>}
+ */
+export function onEveryRoster(rooms, membersByRoomId) {
+  if (rooms.length < 2) return new Set();
+  const rosters = rooms.map((room) => membersByRoomId[room.id]);
+  if (rosters.some((roster) => roster === undefined)) return new Set();
+  const [first, ...rest] = /** @type {Set<string>[]} */ (rosters);
+  return new Set([...first].filter((pubkey) => rest.every((roster) => roster.has(pubkey))));
+}
+
+/**
  * Where a late joiner goes when the host lets the client distribute them:
  * the room with the fewest seated people (the host's own seat in every room
  * not counted), the lowest room number on a tie. Null without rooms.
