@@ -1063,7 +1063,7 @@
   <!-- REACTIONS (Nostr-first: Primary interaction) -->
   <div class="ed-reactions">
     <ReactionBar {event} />
-    <BookmarkButton {event} />
+    <BookmarkButton {event} align="start" />
   </div>
 
   <!-- COMMENTS SECTION (Nostr-first: Primary interaction) -->

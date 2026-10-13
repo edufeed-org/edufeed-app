@@ -23,8 +23,16 @@
   import { showToast } from '$lib/helpers/toast.js';
   import * as m from '$lib/paraglide/messages';
 
-  /** @type {{ event: import('nostr-tools').NostrEvent }} */
-  let { event } = $props();
+  /**
+   * `align` picks the side the menu grows towards. Cards put the button at the
+   * right edge of a row, so the default menu is end-aligned (grows leftwards).
+   * On a detail page the button sits at the LEFT edge of the main column, and
+   * an end-aligned menu grows out of that scroll container, where it gets
+   * clipped behind the nav sidebar — pass `align="start"` there.
+   *
+   * @type {{ event: import('nostr-tools').NostrEvent, align?: 'start' | 'end' }}
+   */
+  let { event, align = 'end' } = $props();
 
   let dropdownOpen = $state(false);
   let showNewSetInput = $state(false);
@@ -122,7 +130,10 @@
   }
 </script>
 
-<details class="dropdown dropdown-end" bind:open={dropdownOpen}>
+<details
+  class="dropdown {align === 'start' ? 'dropdown-start' : 'dropdown-end'}"
+  bind:open={dropdownOpen}
+>
   <summary
     class="btn btn-ghost btn-sm {active ? 'text-primary' : ''} {loading || !loggedIn
       ? 'btn-disabled'
