@@ -13,20 +13,39 @@ let error = $state(null);
 let pointer = $state.raw(null);
 /** @type {{pubkey: string, signer: any} | null} */
 let user = null;
+/** @type {Error | null} the error the next switch ends in (failNextSwitch) */
+let nextSwitchError = null;
 
 export const switchGroupCall = vi.fn(
   async (
     /** @type {{id: string, relay: string}} */ next,
     /** @type {{title?: string, code?: string, token?: any}} */ view
   ) => {
+    // The same guard as the real store: a live, ended or errored call
+    // moves (an errored one: the way back after a failed room switch).
+    if (!user || !['requesting', 'ready', 'ended', 'error'].includes(phase)) return;
     phase = 'idle';
     await Promise.resolve();
     pointer = { ...next };
     title = view?.title ?? '';
     code = view?.code ?? code;
+    if (nextSwitchError) {
+      // Like the real store: the channel switched to is the active one,
+      // and the join into it failed.
+      error = nextSwitchError;
+      nextSwitchError = null;
+      phase = 'error';
+      return;
+    }
+    error = null;
     phase = 'ready';
   }
 );
+
+/** Make the next switch fail the way a refused token / lost network does. @param {Error | null} err */
+export function failNextSwitch(err) {
+  nextSwitchError = err;
+}
 
 export const callErrorMessage = vi.fn((/** @type {unknown} */ err) =>
   err instanceof Error ? err.message : String(err)
@@ -53,6 +72,7 @@ export const getActiveCallUser = () => user;
 
 /** @param {{pointer: {id: string, relay: string} | null, user?: any, title?: string, phase?: string, code?: string | null, error?: Error | null}} next */
 export function setCall(next) {
+  nextSwitchError = null;
   pointer = next.pointer;
   user = next.user ?? user;
   title = next.title ?? title;

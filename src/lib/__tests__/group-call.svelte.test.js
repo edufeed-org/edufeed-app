@@ -813,6 +813,41 @@ describe('switchGroupCall (breakout rooms)', () => {
     expect(s.endReason).toBeNull();
   });
 
+  it('still moves a call whose join failed (a refused room token sends the seat back to the main room, mic and camera as before)', async () => {
+    requestGroupCallToken.mockResolvedValue({ serverUrl: 'wss://x', participantToken: 't' });
+    await joinGroupCall(P1, USER, {
+      title: 'Main',
+      href: '/c/x',
+      media: { audio: true, video: false }
+    });
+    // on air in the main room with the mic on — what the seat had last
+    lkMedia.audio = true;
+    requestGroupCallToken.mockRejectedValueOnce(
+      new GroupCallTokenError('server', 'room not found', 404)
+    );
+    await switchGroupCall(P2, { title: 'Breakout 1' });
+    expect(getGroupCallState().phase).toBe('error');
+    expect(getGroupCallState().isActiveFor(P2)).toBe(true);
+    disconnectFromRoom.mockClear();
+    connectToRoom.mockClear();
+    confirmCallJoin.mockClear();
+
+    await switchGroupCall(P1, { title: 'Main' });
+    const s = getGroupCallState();
+    expect(confirmCallJoin).not.toHaveBeenCalled();
+    expect(s.phase).toBe('ready');
+    expect(s.isActiveFor(P1)).toBe(true);
+    expect(s.error).toBeNull();
+    expect(s.title).toBe('Main');
+    expect(s.href).toBe('/c/x');
+    expect(disconnectFromRoom).toHaveBeenCalledWith({ keepChat: true });
+    expect(connectToRoom).toHaveBeenCalledWith('t', 'wss://x', {
+      audio: true,
+      video: false,
+      chatKey: CHAT1
+    });
+  });
+
   it("a guest seat keeps its call pass code across the switch and on the way back (the relay honours the parent's pass in its children)", async () => {
     requestGroupCallToken.mockResolvedValue({ serverUrl: 'wss://x', participantToken: 't' });
     await joinGroupCall(P1, USER, { title: 'Main', code: 'C'.repeat(22) });
