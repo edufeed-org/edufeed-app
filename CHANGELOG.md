@@ -7,6 +7,69 @@ merge commits of the nostr PRs that landed since the previous tag.
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-10-13
+
+Calls and breakout rooms hold up through what happens in every conference:
+the host hangs up, drops or reloads, seats drop or reload, rooms close,
+tabs run stale code. Designed against twelve conference scenarios and
+verified live on a local relay + LiveKit stack with scripted browsers, plus
+a user-level test drive. The host rules need the groups relay at pyramid
+`edufeed-v1.20` or later (deployed on groups.edufeed.org).
+
+### Added
+
+- A toast "Eine neue Version von Edufeed ist verfügbar" with "Neu laden"
+  once a deploy lands (SvelteKit version polling every five minutes),
+  held back while a call is live; the version reported in error reports
+  carries the commit.
+- After a reload the channel page offers "Zurück in den Anruf" for ten
+  minutes while someone is still in the call; a connection lost inside a
+  breakout room offers "Zurück in den Raum" and "Zum Hauptraum".
+- The breakout banner has "Im Hauptraum bleiben"; a chip "Breakout-Räume
+  (N)" brings it back. Escape closes the rooms dialog.
+- Whoever inherits the host seat runs the breakout session (panel, moves,
+  end); a seat in the main room follows the channel's rooms on the relay
+  itself, so a lost data message no longer hides a session.
+
+### Changed
+
+- Host role (relay): a host who drops keeps the seat for 120 seconds, a
+  deliberate hang-up hands over after 15 seconds, a host visiting a
+  breakout room stays host, a returning former host becomes co-host.
+  Breakout rooms end with the call instead of surviving into the next one.
+- The breakout panel and banner count who is live in a room, not the
+  roster (the relay seats the session's creator on every roster); a seat
+  that left is shown as "nicht im Raum".
+- "Zurück zum Hauptraum" sticks: a seat back on its own is not treated as
+  a late joiner and re-assigned; neither is a seat with a role.
+- Guests: the host re-sends the session state to guest seats every
+  15 seconds and guests check the rooms' tombstones every 20 seconds, so
+  a guest no longer keeps last session's "Raum 1" beside the new one.
+
+### Fixed
+
+- Joining a call in Firefox as a guest crashed the page
+  (`each_key_duplicate`): the device pickers keyed by `deviceId`, and
+  Firefox lists several devices with an empty id before a permission is
+  granted.
+- A failed switch into a breakout room left the seat on the error screen
+  outside every room.
+- Rooms the relay had deleted stayed listed and "Beitreten" ended in a
+  generic error: the relay now broadcasts a deleted room's tombstone and
+  9008 on both endpoints and answers reads for it, the client re-checks
+  the rooms before joining and after every return, a 404 says "Diesen
+  Raum gibt es nicht mehr.", and the relay's "doesn't exist" refusal
+  drops the room.
+- A private channel's presence and rooms were withheld from a freshly
+  reloaded tab until it had authenticated; the watches now reopen once
+  the connection is authenticated, and after a relay outage with backoff.
+- A seat that had opened a breakout room (that room's own host seat) took
+  the whole session over on its way back to the main room.
+- A host back from a reload was pulled into a room by the roster rule
+  before taking the session over; a host entering a room auto-assigned
+  everyone already in the main room.
+- A breakout room closing wiped the reload note, so the way back was gone.
+
 ## [0.6.0] - 2026-10-12
 
 The call stage as a "Bühne", the verified address explained, and breakout
