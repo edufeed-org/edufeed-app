@@ -53,6 +53,7 @@ jobs:
           docker buildx build \
             --no-cache \
             --load \
+            --build-arg GIT_SHA=${{ github.sha }} \
             --tag edufeed-app:ci-${{ github.sha }} \
             .
 

@@ -6,16 +6,19 @@ import { defineConfig } from 'vitest/config';
 import { fileURLToPath } from 'node:url';
 import { readFileSync } from 'node:fs';
 import { mediapipeWasm } from './scripts/vite-plugin-mediapipe-wasm.mjs';
+import { resolveAppVersion } from './scripts/app-version.mjs';
 
-const { version: appVersion } = JSON.parse(
+const { version: pkgVersion } = JSON.parse(
   readFileSync(new URL('./package.json', import.meta.url), 'utf8')
 );
 
 export default defineConfig({
-  // package.json version, read by $lib/helpers/app-version.js (shown in
-  // in-app issue reports so maintainers know which build misbehaved).
+  // `<package.json version>+<short git sha>` — the same string as
+  // kit.version.name in svelte.config.js. Read by $lib/helpers/app-version.js
+  // and shown in in-app issue reports so maintainers know which build
+  // misbehaved (the sha tells :dev builds between releases apart).
   define: {
-    __APP_VERSION__: JSON.stringify(appVersion)
+    __APP_VERSION__: JSON.stringify(resolveAppVersion({ pkgVersion }))
   },
   server: {
     allowedHosts: process.env.TUNNEL ? true : undefined

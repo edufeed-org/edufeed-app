@@ -4222,5 +4222,8 @@
   "groups_call_breakout_in_main_count": "{n} in the main room",
   "groups_call_breakout_fetch_here": "Bring here",
   "groups_call_breakout_arrived_main": "{name} arrived in the main room.",
-  "groups_call_breakout_guest_move_timeout": "The guest did not come back to the main room – please assign them again."
+  "groups_call_breakout_guest_move_timeout": "The guest did not come back to the main room – please assign them again.",
+  "app_update_available": "A new version of {appName} is available.",
+  "app_update_reload": "Reload",
+  "app_update_dismiss": "Close"
 }

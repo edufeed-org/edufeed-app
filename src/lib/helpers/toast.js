@@ -10,7 +10,14 @@
  * @param {string} message - The message to display (can be a translation key or plain text)
  * @param {string} type - Toast type: 'success', 'error', 'info', 'warning'
  * @param {number} duration - Duration in ms (default: 3000). 0 = persistent (call dismiss()).
- * @param {{ link?: { href: string, label: string } }} [opts] - Optional trailing link (opens in a new tab)
+ * @param {{
+ *   link?: { href: string, label: string },
+ *   action?: { label: string, onClick: () => void },
+ *   dismissLabel?: string
+ * }} [opts] - Optional trailing link (opens in a new tab), action button
+ *   (runs `onClick`, then dismisses) and/or a close button (`dismissLabel`
+ *   is its accessible name) — the latter two are what a persistent
+ *   (`duration: 0`) toast needs to stay usable.
  * @returns {() => void} dismiss — removes the toast immediately
  */
 export function showToast(message, type = 'info', duration = 3000, opts = {}) {
@@ -57,6 +64,28 @@ export function showToast(message, type = 'info', duration = 3000, opts = {}) {
     link.rel = 'noopener noreferrer';
     link.textContent = opts.link.label;
     toast.appendChild(link);
+  }
+
+  if (opts.action) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'btn btn-sm btn-primary whitespace-nowrap';
+    button.textContent = opts.action.label;
+    button.addEventListener('click', () => {
+      opts.action?.onClick();
+      dismiss();
+    });
+    toast.appendChild(button);
+  }
+
+  if (opts.dismissLabel) {
+    const close = document.createElement('button');
+    close.type = 'button';
+    close.className = 'btn btn-sm btn-ghost btn-square';
+    close.setAttribute('aria-label', opts.dismissLabel);
+    close.textContent = '✕';
+    close.addEventListener('click', dismiss);
+    toast.appendChild(close);
   }
 
   // Add to container

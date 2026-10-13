@@ -4222,5 +4222,8 @@
   "groups_call_breakout_in_main_count": "{n} im Hauptraum",
   "groups_call_breakout_fetch_here": "Hierher holen",
   "groups_call_breakout_arrived_main": "{name} ist im Hauptraum angekommen.",
-  "groups_call_breakout_guest_move_timeout": "Der Gast ist nicht in den Hauptraum zurückgekommen – bitte erneut zuteilen."
+  "groups_call_breakout_guest_move_timeout": "Der Gast ist nicht in den Hauptraum zurückgekommen – bitte erneut zuteilen.",
+  "app_update_available": "Eine neue Version von {appName} ist verfügbar.",
+  "app_update_reload": "Neu laden",
+  "app_update_dismiss": "Schließen"
 }
