@@ -59,6 +59,7 @@
   import TopPublishersFilter from './TopPublishersFilter.svelte';
   import { filterEventsByPublisherSelection } from '$lib/helpers/topPublishers.js';
   import { filterByAllowedAuthors } from '$lib/helpers/communityContent.js';
+  import { filterRemoved } from '$lib/groups/content-removal.js';
   import CalendarDropdown from './CalendarDropdown.svelte';
   import CalendarFilterBar from './CalendarFilterBar.svelte';
   import CalendarFilterDrawer from './CalendarFilterDrawer.svelte';
@@ -649,7 +650,10 @@
       goto(channelMeeting.href);
       return;
     }
-    modalStore.openModal('eventDetails', { event });
+    modalStore.openModal('eventDetails', {
+      event,
+      communityModeration: communityMode ? getCommunityModeration?.() : undefined
+    });
   }
 
   // Relay, tag, search, and follow-list filter changes are all driven by
@@ -731,6 +735,10 @@
   // Outside a community there is no context and nothing is filtered.
   /** @type {(() => string[] | null) | undefined} */
   const getAllowedAuthors = getContext('allowedAuthors');
+  // Removed-from-community set + the moderation handle the details modal
+  // needs (it renders under the root ModalManager, outside this context).
+  /** @type {(() => any) | undefined} */
+  const getCommunityModeration = getContext('communityModeration');
 
   // Channel calendars (communikey-groups.md): the community calendar also
   // shows the meetings of the community's channels — read from each
@@ -793,7 +801,10 @@
   let events = $derived(
     communityMode
       ? mergeChannelMeetings(
-          filterByAllowedAuthors(relayFilteredEvents, getAllowedAuthors?.()),
+          filterRemoved(
+            filterByAllowedAuthors(relayFilteredEvents, getAllowedAuthors?.()),
+            getCommunityModeration?.()?.removed
+          ),
           channelMeetings
         )
       : relayFilteredEvents
@@ -1065,7 +1076,16 @@
         onDateClick={handleDateClick}
       />
     {:else if presentationViewMode === 'list'}
-      <SimpleCalendarEventsList events={visibleEvents} {viewMode} {currentDate} {loading} {error} />
+      <SimpleCalendarEventsList
+        events={visibleEvents}
+        {viewMode}
+        {currentDate}
+        {loading}
+        {error}
+        communityNpub={communityMode && communityPubkey
+          ? (hexToNpub(communityPubkey) ?? undefined)
+          : undefined}
+      />
     {:else if presentationViewMode === 'map'}
       <CalendarMapView events={visibleEvents} {viewMode} {currentDate} />
     {/if}

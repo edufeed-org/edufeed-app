@@ -33,6 +33,9 @@
   import { useCommunityFollowReconcile } from '$lib/groups/community-follow-reconcile.svelte.js';
   import { useActiveUser } from '$lib/stores/accounts.svelte';
   import { isCommunityOwner } from '$lib/helpers/community-signer.js';
+  import { useContentRemovals } from '$lib/groups/content-removal.svelte.js';
+  import { canModerateCommunity, isRemovedItem } from '$lib/groups/content-removal.js';
+  import { removeFromCommunity, restoreToCommunity } from '$lib/helpers/publishContentRemoval.js';
   import { resolveZoneMembership } from '$lib/components/community/layout/community-nav.js';
   import * as m from '$lib/paraglide/messages';
   import { runtimeConfig } from '$lib/stores/config.svelte.js';
@@ -289,6 +292,36 @@
     isModerator(getRootRosterForNav().admins, getActiveUserForNav()?.pubkey)
   );
 
+  // Content removed from this community (src/lib/groups/content-removal.js):
+  // ONE subscription per community page, shared through context so every
+  // section view filters against the same set and every detail menu offers
+  // the same "remove" action. Plain functions on the handle keep the signer
+  // choice (own key vs community key) out of the views.
+  const getContentRemovals = useContentRemovals(() => communikeyEvent);
+  const communityModeration = $derived.by(() => {
+    const activeUser = getActiveUserForNav();
+    const admins = getRootRosterForNav().admins;
+    const { labels, removed } = getContentRemovals();
+    return {
+      communityPubkey: data.pubkey,
+      canModerate: canModerateCommunity({
+        communityEvent: communikeyEvent,
+        admins,
+        pubkey: activeUser?.pubkey,
+        isOwner: isCommunityOwner(data.pubkey)
+      }),
+      removals: labels,
+      removed,
+      /** @param {any} event */
+      isRemoved: (event) => isRemovedItem(event, removed),
+      /** @param {any} event */
+      remove: (event) =>
+        removeFromCommunity(event?.originalEvent ?? event, communikeyEvent, { admins, activeUser }),
+      /** @param {any} label */
+      restore: (label) => restoreToCommunity(label, communikeyEvent)
+    };
+  });
+
   // The EFFECTIVE community event (10222 with any admin section override
   // applied), because every consumer of this context reads it for display.
   // Community-level metadata is preserved verbatim, so metadata readers
@@ -314,6 +347,7 @@
   setContext('communikeyLoaded', () => communikeyLoaded);
   setContext('profileAccess', profileAccess);
   setContext('allowedAuthors', () => allowedAuthors);
+  setContext('communityModeration', () => communityModeration);
 
   // Expose ContentNavSidebar's data so the root layout can mount the sidebar
   // in the chrome row. Register the getter once; it closes over reactive

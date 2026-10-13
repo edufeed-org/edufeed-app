@@ -1,9 +1,11 @@
 <!--
   EventContextMenu Component
-  Three-dots dropdown with author actions, share, copy, pin, and dev actions
+  Three-dots dropdown with author actions, share, copy, pin, community
+  moderation, and dev actions
 -->
 
 <script>
+  import { getContext } from 'svelte';
   import * as m from '$lib/paraglide/messages.js';
   import { encodeEventBech32 } from '$lib/helpers/nostrUtils.js';
   import { showToast } from '$lib/helpers/toast.js';
@@ -15,7 +17,8 @@
     BookmarkIcon,
     RepostIcon,
     EditIcon,
-    TrashIcon
+    TrashIcon,
+    EyeOffIcon
   } from '$lib/components/icons';
   import { pinEvent, unpinEvent, isPinned } from '$lib/services/pin-list-service.js';
   import { useActiveUser } from '$lib/stores/accounts.svelte';
@@ -32,10 +35,37 @@
    * @property {(() => void | Promise<void>) | undefined} [onDelete] - Callback when delete is confirmed
    * @property {string} [deleteTitle] - Title for the delete confirmation modal
    * @property {string} [deleteItemName] - Item name shown in the delete confirmation modal
+   * @property {CommunityModeration | null} [communityModeration] - Community moderation
+   *   handle; falls back to the `communityModeration` context under /c/<pubkey>.
+   *   Pass it explicitly from surfaces rendered OUTSIDE that layout (the
+   *   calendar details modal lives under the root ModalManager).
+   */
+  /**
+   * @typedef {Object} CommunityModeration
+   * @property {string} communityPubkey
+   * @property {boolean} canModerate - viewer holds the community key or a moderation role
+   * @property {(event: any) => boolean} isRemoved
+   * @property {(event: any) => Promise<any>} remove - publish a removal label
    */
 
   /** @type {Props} */
-  let { event, onEdit, onDelete, deleteTitle = '', deleteItemName = '' } = $props();
+  let {
+    event,
+    onEdit,
+    onDelete,
+    deleteTitle = '',
+    deleteItemName = '',
+    communityModeration = undefined
+  } = $props();
+
+  // "Remove from community" (src/lib/groups/content-removal.js): shown to the
+  // community's owner/moderators for any item of the community they are
+  // looking at — including their own, since removing is not deleting.
+  /** @type {(() => CommunityModeration | null | undefined) | undefined} */
+  const getModerationFromContext = getContext('communityModeration');
+  let moderation = $derived(communityModeration ?? getModerationFromContext?.() ?? null);
+  let showRemoveConfirmation = $state(false);
+  let isRemoving = $state(false);
 
   // A channel meeting (NIP-52 event h-tagged with a channel id) lives on its
   // group relay only: no edit or delete through the public calendar path
@@ -68,6 +98,9 @@
   );
 
   let showPinOption = $derived(!!isCommunityAdmin && !channelMeeting);
+  let showRemoveOption = $derived(
+    !!moderation?.canModerate && !channelMeeting && !moderation.isRemoved(event)
+  );
   let eventIsPinned = $derived(
     showPinOption && activeUser ? isPinned(event, activeUser.pubkey) : false
   );
@@ -104,6 +137,30 @@
 
   function handleDeleteCancel() {
     showDeleteConfirmation = false;
+  }
+
+  function handleRemoveClick() {
+    closeDropdown();
+    showRemoveConfirmation = true;
+  }
+
+  async function handleRemoveConfirm() {
+    if (!moderation) return;
+    isRemoving = true;
+    try {
+      await moderation.remove(event);
+      showRemoveConfirmation = false;
+      showToast(m.community_remove_content_success(), 'success');
+    } catch (err) {
+      showToast(
+        m.community_remove_content_error({
+          error: err instanceof Error ? err.message : String(err)
+        }),
+        'error'
+      );
+    } finally {
+      isRemoving = false;
+    }
   }
 
   function closeDropdown() {
@@ -228,6 +285,14 @@
         </button>
       </li>
     {/if}
+    {#if showRemoveOption}
+      <li>
+        <button class="text-error" onclick={handleRemoveClick}>
+          <EyeOffIcon class_="w-4 h-4" />
+          {m.event_menu_remove_from_community()}
+        </button>
+      </li>
+    {/if}
     {#if canReportMetadata}
       <li>
         <button onclick={handleReportMetadata}>
@@ -274,6 +339,33 @@
     <button>close</button>
   </form>
 </dialog>
+
+<!-- Remove-from-community confirmation (shared small-dialog grammar) -->
+{#if showRemoveConfirmation}
+  <div class="modal-open modal" role="dialog" aria-labelledby="remove-from-community-title">
+    <div class="modal-box max-w-sm">
+      <h3 id="remove-from-community-title" class="text-lg font-bold">
+        {m.community_remove_content_title()}
+      </h3>
+      <p class="py-4 text-sm">{m.community_remove_content_text()}</p>
+      <div class="modal-action">
+        <button
+          class="btn btn-ghost"
+          onclick={() => (showRemoveConfirmation = false)}
+          disabled={isRemoving}
+        >
+          {m.common_cancel()}
+        </button>
+        <button class="btn btn-error" onclick={handleRemoveConfirm} disabled={isRemoving}>
+          {#if isRemoving}
+            <span class="loading loading-sm loading-spinner"></span>
+          {/if}
+          {m.community_remove_content_confirm()}
+        </button>
+      </div>
+    </div>
+  </div>
+{/if}
 
 <!-- Delete confirmation modal -->
 <DeleteConfirmModal

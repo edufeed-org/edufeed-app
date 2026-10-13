@@ -11,11 +11,16 @@
   import { useAuthorDeletions } from '$lib/stores/author-deletions.svelte.js';
   import { matchesEventSearch } from '$lib/helpers/contentSearch.js';
   import { filterByAllowedAuthors } from '$lib/helpers/communityContent.js';
+  import { filterRemoved } from '$lib/groups/content-removal.js';
   import { SearchIcon } from '$lib/components/icons';
   import EmptyState from '$lib/components/shared/EmptyState.svelte';
   import * as m from '$lib/paraglide/messages';
 
   const getAllowedAuthors = getContext('allowedAuthors');
+  // Items a moderator removed from this community (layout context; absent
+  // outside the community route).
+  /** @type {(() => {removed: import('$lib/groups/content-removal.js').RemovedTargets}) | undefined} */
+  const getCommunityModeration = getContext('communityModeration');
 
   /**
    * @typedef {Object} Props
@@ -78,7 +83,12 @@
   useAuthorDeletions(contentPubkeys);
   let authorProfiles = $derived(getAuthorProfiles());
 
-  let accessFilteredItems = $derived(filterByAllowedAuthors(items, getAllowedAuthors?.()));
+  let accessFilteredItems = $derived(
+    filterRemoved(
+      filterByAllowedAuthors(items, getAllowedAuthors?.()),
+      getCommunityModeration?.()?.removed
+    )
+  );
 
   let displayedItems = $derived.by(() => {
     if (!searchable || !searchQuery.trim()) return accessFilteredItems;

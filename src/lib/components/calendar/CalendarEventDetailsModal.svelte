@@ -126,6 +126,13 @@
   let channelMeeting = $derived(isChannelMeeting(event?.originalEvent));
 
   // Generate URL for event detail page
+  // Moderation handle handed over by CalendarView (community mode only):
+  // this modal renders under the root ModalManager, outside the community
+  // layout's context, so EventContextMenu cannot pick it up itself.
+  let communityModeration = $derived(
+    /** @type {any} */ (modal.modalProps)?.communityModeration ?? undefined
+  );
+
   let eventDetailUrl = $derived(
     event?.originalEvent ? `/calendar/event/${encodeEventToNaddr(event.originalEvent)}` : ''
   );
@@ -282,7 +289,7 @@
               />
             {/if}
             {#if event?.originalEvent}
-              <EventContextMenu event={event.originalEvent} />
+              <EventContextMenu event={event.originalEvent} {communityModeration} />
             {/if}
             <a
               href={resolve(eventDetailUrl)}

@@ -42,7 +42,13 @@ vi.mock('$lib/paraglide/messages.js', () => ({
   delete_confirm_text: () => 'Are you sure you want to delete',
   delete_confirm_cannot_undo: () => 'This cannot be undone.',
   delete_confirm_deleting: () => 'Deleting...',
-  common_cancel: () => 'Cancel'
+  common_cancel: () => 'Cancel',
+  event_menu_remove_from_community: () => 'Remove from community',
+  community_remove_content_title: () => 'Remove from community?',
+  community_remove_content_text: () => 'The item stays on the relays.',
+  community_remove_content_confirm: () => 'Remove',
+  community_remove_content_success: () => 'Removed from community',
+  community_remove_content_error: ({ error }) => `Removing failed: ${error}`
 }));
 
 const mockOpenModal = vi.fn();
@@ -435,6 +441,82 @@ describe('EventContextMenu', () => {
       expect(items).toContain('Edit');
       expect(items).toContain('Share to communities');
       expect(items).toContain('Copy link');
+    });
+  });
+
+  describe('remove from community (moderation)', () => {
+    const menuButtons = () =>
+      Array.from(document.querySelector('.dropdown-content')?.querySelectorAll('button') || []);
+    const removeBtn = () =>
+      menuButtons().find((btn) => btn.textContent?.includes('Remove from community'));
+    /** @param {Partial<any>} over */
+    const moderation = (over = {}) => ({
+      communityPubkey: 'cc'.repeat(32),
+      canModerate: true,
+      isRemoved: vi.fn(() => false),
+      remove: vi.fn().mockResolvedValue({}),
+      ...over
+    });
+
+    it('is absent without a moderation handle (outside a community, or plain visitor)', () => {
+      render(EventContextMenu, { props: { event: mockEvent } });
+      expect(removeBtn()).toBeUndefined();
+    });
+
+    it('is absent when the viewer cannot moderate, or the item is already removed', () => {
+      render(EventContextMenu, {
+        props: { event: mockEvent, communityModeration: moderation({ canModerate: false }) }
+      });
+      expect(removeBtn()).toBeUndefined();
+      document.body.innerHTML = '';
+      render(EventContextMenu, {
+        props: { event: mockEvent, communityModeration: moderation({ isRemoved: () => true }) }
+      });
+      expect(removeBtn()).toBeUndefined();
+    });
+
+    it('confirms, then publishes the removal and toasts', async () => {
+      const mod = moderation();
+      render(EventContextMenu, { props: { event: mockEvent, communityModeration: mod } });
+      await fireEvent.click(removeBtn());
+      // Nothing published before the confirm
+      expect(mod.remove).not.toHaveBeenCalled();
+      expect(screen.getByText('Remove from community?')).toBeTruthy();
+      await fireEvent.click(screen.getByRole('button', { name: 'Remove' }));
+      expect(mod.remove).toHaveBeenCalledWith(mockEvent);
+      await vi.waitFor(() =>
+        expect(mockShowToast).toHaveBeenCalledWith('Removed from community', 'success')
+      );
+      expect(screen.queryByText('Remove from community?')).toBeNull();
+    });
+
+    it('cancel closes the dialog without publishing', async () => {
+      const mod = moderation();
+      render(EventContextMenu, { props: { event: mockEvent, communityModeration: mod } });
+      await fireEvent.click(removeBtn());
+      await fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+      expect(mod.remove).not.toHaveBeenCalled();
+      expect(screen.queryByText('Remove from community?')).toBeNull();
+    });
+
+    it('surfaces a failed removal as an error toast and keeps the dialog open', async () => {
+      const mod = moderation({ remove: vi.fn().mockRejectedValue(new Error('relay said no')) });
+      render(EventContextMenu, { props: { event: mockEvent, communityModeration: mod } });
+      await fireEvent.click(removeBtn());
+      await fireEvent.click(screen.getByRole('button', { name: 'Remove' }));
+      await vi.waitFor(() =>
+        expect(mockShowToast).toHaveBeenCalledWith('Removing failed: relay said no', 'error')
+      );
+      expect(screen.getByText('Remove from community?')).toBeTruthy();
+    });
+
+    it('falls back to the communityModeration context under the community layout', () => {
+      const mod = moderation();
+      render(EventContextMenu, {
+        props: { event: mockEvent },
+        context: new Map([['communityModeration', () => mod]])
+      });
+      expect(removeBtn()).toBeTruthy();
     });
   });
 });
