@@ -1,4 +1,9 @@
-# User-Journey Katalog — Groups/Communities (agent-driven exploratory testing)
+# User-Journey Katalog (agent-driven exploratory testing)
+
+Two series: **Groups/Communities** (J1–J6, desktop) and **Mobile** (M1–M5,
+phone viewport, played by the personas in `PERSONAS.md`).
+
+# Series 1 — Groups/Communities
 
 Goal-level user stories for **fresh-eyes exploratory testing** against a live
 dev server + real relays — complementary to the scripted Playwright specs
@@ -85,3 +90,80 @@ of each type. What do I see, what is locked, is it explained why?
 Checks: open = everything readable; moderated = readable but write-gated with
 comprehensible locks; closed = shell only. Lock hints where content is hidden.
 No crashes/blank pages anywhere.
+
+# Series 2 — Mobile (personas, phone viewport)
+
+Goal-level journeys for the mobile UX round (first run 2026-10-13). Each
+journey is played by ONE persona from `PERSONAS.md`, in that persona's
+knowledge and patience. Goals only — no clicks. The question is never "does
+it work" but "would this person get there, and what did they think on the
+way".
+
+## Run protocol
+
+- Viewport: iPhone 14 preset (390×664 CSS px, touch, `de-DE`), fresh browser
+  context per persona (no site data, so first-run dialogs appear). One desktop
+  control run (1280×800) of M1 separates mobile-only from general findings.
+- Screenshot-first: the tester looks at the screen and taps coordinates, like
+  a thumb. Reading the accessibility tree or page text is a fallback only
+  after two failed attempts, and the log says so when it happened.
+- No code access. Testers do not read the repo, the i18n files or the tests.
+- Log every confusion moment, not only failures: expectation, what happened,
+  severity (`bug` / `ux` / `polish`, see Series 1), screenshot. End every goal
+  with reached / given up, number of actions, and the single biggest hurdle.
+- Every publish is captured in the cleanup ledger (see PERSONAS.md).
+
+## M1 — Anna: Material finden, Fachgruppe beitreten
+
+Als Anna öffne ich Edufeed zum ersten Mal auf dem Handy. Ich will verstehen,
+was das ist, ein Material für Mathe Klasse 8 finden (erst mal ohne Konto),
+eine Fortbildung im Kalender entdecken, dann eine Fachgruppe zu Mathe finden
+und ihr beitreten — wobei ich erst beim Beitreten merke, dass ich ein Konto
+brauche. Danach will ich die Gruppe wiederfinden und sehen, was drin ist.
+
+Checks: Landing erklärt den Zweck? Suche/Entdecken auffindbar und
+Ergebnisse brauchbar? Registrierung mitten im Flow: zumutbar, Schlüssel-
+Thema verständlich? Beitreten-Affordance klar? Rückweg zur Gruppe klar?
+
+## M2 — Ben: Konto, Profil, erster Beitrag, Nachricht
+
+Als Ben lege ich ein Konto an, fülle mein Profil (Name, Bild, Über mich),
+verschaffe mir einen Überblick über die Startseite nach dem Login, poste
+einen ersten Beitrag, finde eine Person und schreibe ihr eine Nachricht, und
+finde heraus, wo Antworten und Benachrichtigungen auftauchen. Zum Schluss
+melde ich mich ab und wieder an.
+
+Checks: Signup-Schritte und ihre Reihenfolge nachvollziehbar? Backup-Hinweis
+verstanden oder weggeklickt? Dashboard-Struktur (Tabs, Feed, "Mein Zeug")
+klar? Erstellen-Einstieg auffindbar? Personensuche + DM-Einstieg? Posteingang
+vs. Nachrichten unterscheidbar? Re-Login mit dem eigenen Schlüssel möglich?
+
+## M3 — Claudia: Community gründen und leiten
+
+Als Claudia lege ich ein Konto an und gründe eine Community für mein
+Fortbildungsnetzwerk (Name, Beschreibung, wer darf rein). Ich lege darin
+einen Termin an, suche einen Weg, Kolleginnen einzuladen oder einen Link zu
+teilen, finde die Einstellungen meiner Community und will wissen, wie sie
+für Außenstehende aussieht.
+
+Checks: "Community erstellen" auffindbar? Typ-Wahl (offen/moderiert/
+geschlossen) verständlich in ihren Worten? Community-Navigation auf dem
+Handy (Seitenleiste, Bereiche) begreifbar? Termin anlegen aus der Community
+heraus? Einladen/Teilen vorhanden und klar? Außenansicht erreichbar?
+
+## M4 — Dirk: mit vorhandenem Schlüssel
+
+Als Dirk melde ich mich mit meinem vorhandenen nsec an, prüfe, ob das mein
+Profil ist, finde und folge einer Community, finde unter Entdecken eine
+Lernressource und teile oder merke sie mir, suche die Einstellungen (Relays)
+und melde mich ab.
+
+Checks: Login-Weg mit nsec auffindbar ohne Google-Umweg? Profil wird
+erkannt (Name, Bild)? Folgen vs. Beitreten verständlich? Teilen/Merken an
+einer Ressource vorhanden? Einstellungen und Relays auffindbar? Abmelden
+auffindbar und eindeutig?
+
+## M5 — Desktop control (Anna, M1 at 1280×800)
+
+Same goals as M1 on a desktop viewport, same persona. Findings that appear
+here too are general UX, not mobile layout.
