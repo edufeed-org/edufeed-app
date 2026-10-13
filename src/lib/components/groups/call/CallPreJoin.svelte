@@ -297,7 +297,7 @@
         disabled={pv.audioInputDevices.length === 0}
         data-testid="call-prejoin-mic-device"
       >
-        {#each pv.audioInputDevices as device (device.deviceId)}
+        {#each pv.audioInputDevices as device, i (device.deviceId || i)}
           <option value={device.deviceId}>{device.label || m.groups_call_unknown_device()}</option>
         {:else}
           <option value="">{m.groups_call_unknown_device()}</option>
@@ -313,7 +313,7 @@
         disabled={pv.videoInputDevices.length === 0}
         data-testid="call-prejoin-camera-device"
       >
-        {#each pv.videoInputDevices as device (device.deviceId)}
+        {#each pv.videoInputDevices as device, i (device.deviceId || i)}
           <option value={device.deviceId}>{device.label || m.groups_call_unknown_device()}</option>
         {:else}
           <option value="">{m.groups_call_unknown_device()}</option>
@@ -329,7 +329,7 @@
           onchange={(e) => switchPreviewDevice('audiooutput', e.currentTarget.value)}
           data-testid="call-prejoin-speaker-device"
         >
-          {#each pv.audioOutputDevices as device (device.deviceId)}
+          {#each pv.audioOutputDevices as device, i (device.deviceId || i)}
             <option value={device.deviceId}>{device.label || m.groups_call_unknown_device()}</option
             >
           {/each}

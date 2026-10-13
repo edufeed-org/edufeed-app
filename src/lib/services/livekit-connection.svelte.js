@@ -18,6 +18,7 @@ import {
   setBackgroundEffect,
   setParticipantVolume as storeParticipantVolume
 } from './call-prefs.js';
+import { dedupeDevices } from '$lib/helpers/media-devices.js';
 import {
   screenShareCaptureOptions,
   screenShareAudioMissing as screenShareAudioMissingIn
@@ -907,7 +908,8 @@ function updateParticipants() {
 export async function refreshAudioDevices() {
   if (!room) return;
   try {
-    const inputDevices = await Room.getLocalDevices('audioinput');
+    // Dedupe: Firefox repeats deviceId "" before permission (media-devices.js).
+    const inputDevices = dedupeDevices(await Room.getLocalDevices('audioinput'));
     audioInputDevices = inputDevices;
 
     // Detect active input — only on initial load (guard preserves user selections)
@@ -917,7 +919,7 @@ export async function refreshAudioDevices() {
         mapId && inputDevices.some((d) => d.deviceId === mapId) ? mapId : inputDevices[0].deviceId;
     }
 
-    const outputDevices = await Room.getLocalDevices('audiooutput');
+    const outputDevices = dedupeDevices(await Room.getLocalDevices('audiooutput'));
     audioOutputDevices = outputDevices;
 
     // Detect active output — only on initial load
@@ -969,7 +971,7 @@ export async function switchAudioOutputDevice(deviceId) {
 export async function refreshVideoDevices() {
   if (!room) return;
   try {
-    const devices = await Room.getLocalDevices('videoinput');
+    const devices = dedupeDevices(await Room.getLocalDevices('videoinput'));
     videoInputDevices = devices;
 
     if (!activeVideoDeviceId && devices.length > 0) {
