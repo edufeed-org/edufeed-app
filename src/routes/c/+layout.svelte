@@ -12,6 +12,7 @@
   import ProfileAvatar from '$lib/components/shared/ProfileAvatar.svelte';
   import { MenuIcon, CloseIcon, ChevronRightIcon } from '$lib/components/icons';
   import ImageWithFallback from '$lib/components/shared/ImageWithFallback.svelte';
+  import TermiLauncherButton from '$lib/components/shared/TermiLauncherButton.svelte';
   import { runtimeConfig } from '$lib/stores/config.svelte.js';
   import * as m from '$lib/paraglide/messages';
 
@@ -151,17 +152,20 @@
             {isDashboardActive ? runtimeConfig.appName : mobileHeaderTitle}
           </h1>
 
-          <!-- Right: User avatar → global nav dropdown -->
+          <!-- Right: Termi launcher + user avatar → global nav dropdown -->
           {#if activeUser()}
-            <div class="dropdown dropdown-end">
-              <div tabindex="0" role="button" class="btn btn-circle btn-ghost">
-                <ProfileAvatar pubkey={activeUser().pubkey} size="sm" fallbackType="robohash" />
+            <div class="flex items-center gap-1">
+              <TermiLauncherButton />
+              <div class="dropdown dropdown-end">
+                <div tabindex="0" role="button" class="btn btn-circle btn-ghost">
+                  <ProfileAvatar pubkey={activeUser().pubkey} size="sm" fallbackType="robohash" />
+                </div>
+                <ul
+                  class="dropdown-content menu z-[60] mt-3 w-56 rounded-box bg-base-100 p-2 shadow-lg"
+                >
+                  <MobileNavMenu onClose={closeDropdown} />
+                </ul>
               </div>
-              <ul
-                class="dropdown-content menu z-[60] mt-3 w-56 rounded-box bg-base-100 p-2 shadow-lg"
-              >
-                <MobileNavMenu onClose={closeDropdown} />
-              </ul>
             </div>
           {:else}
             <div class="w-10"></div>
