@@ -39,6 +39,7 @@ vi.mock('$lib/paraglide/messages', () => ({
   groups_call_breakout_members_in_main: () => 'In the main room',
   groups_call_breakout_panel_hint: () => 'Move people or bring everyone back.',
   groups_call_breakout_host_note: () => 'Host rights apply in the main room only.',
+  groups_call_breakout_cohost_note: () => 'Only the host can move people or end the session.',
   groups_call_breakout_end_all: () => 'Bring everyone back',
   groups_call_breakout_ending: () => 'Closing rooms …',
   groups_call_breakout_duration: () => 'Duration',
@@ -492,6 +493,45 @@ describe('BreakoutPanel', () => {
     expect(box.checked).toBe(true);
     await fireEvent.click(box);
     expect(cb.onAutoAssign).toHaveBeenCalledWith(false);
+  });
+
+  // User test 2026-10-13: a former host who came back as co-host had no
+  // panel at all. Read-only: who is where, the deadline, "join", the
+  // broadcast form — none of the host seat's moves.
+  it('read-only (a co-host): lists rooms, people and the deadline, keeps join and broadcast, hides every host control', async () => {
+    const breakout = state({
+      session: { ...state().session, hosting: false, creator: false, autoAssign: false },
+      guestSeats: { [`${DAVE}:g`]: { pubkey: DAVE, roomId: 'r2' } }
+    });
+    render(BreakoutPanel, {
+      props: { rows: [row(CAROL)], breakout, myPubkey: BOB, readOnly: true, ...cb }
+    });
+    const roomEls = screen.getAllByTestId('breakout-panel-room');
+    expect(roomEls).toHaveLength(2);
+    // room 1: the host (seated, not live) and Bob (that is me: only where live)
+    expect(roomEls[0].textContent).toContain('Bob');
+    // room 2: the announced guest
+    expect(screen.getByTestId('breakout-panel-guest').textContent).toContain('Gast');
+    // the main room: Carol
+    expect(screen.getAllByTestId('breakout-panel-main-member')).toHaveLength(1);
+    // the deadline as plain text, no menu
+    expect(screen.queryByTestId('breakout-panel-deadline')).toBeNull();
+    expect(screen.getByTestId('breakout-panel-deadline-text').textContent).toContain('1:30 left');
+    // no host moves
+    expect(screen.queryAllByTestId('breakout-panel-move')).toHaveLength(0);
+    expect(screen.queryAllByTestId('breakout-panel-move-guest')).toHaveLength(0);
+    expect(screen.queryByTestId('breakout-panel-end')).toBeNull();
+    expect(screen.queryByTestId('breakout-panel-auto-assign')).toBeNull();
+    expect(screen.getByTestId('breakout-panel').textContent).toContain(
+      'Only the host can move people or end the session.'
+    );
+    // join and broadcast stay
+    await fireEvent.click(screen.getAllByTestId('breakout-panel-join')[1]);
+    expect(cb.onJoin).toHaveBeenCalledWith(rooms[1]);
+    const input = screen.getByTestId('breakout-panel-broadcast-input');
+    await fireEvent.input(input, { target: { value: 'back in five' } });
+    await fireEvent.submit(screen.getByTestId('breakout-panel-broadcast'));
+    await waitFor(() => expect(cb.onBroadcast).toHaveBeenCalledWith('back in five'));
   });
 
   it('shows only the rooms still standing (one the relay deleted is gone)', () => {

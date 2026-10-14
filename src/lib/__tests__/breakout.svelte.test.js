@@ -1691,6 +1691,41 @@ describe('call broadcasts (kind 20002)', () => {
     expect(await store.sendCallBroadcast('message', 'x')).toBe(false);
   });
 
+  it('a co-host in the main room may broadcast too (the relay accepts co-hosts); a plain seat and a seat inside a room may not', async () => {
+    await liveInMain(bobUser);
+    lk.listener?.({ t: 'assign', rooms: ROOMS, until: FUTURE }, hostSender);
+    modal.callbacks.onCancel();
+    await settle();
+    // a plain participant: nothing goes out
+    expect(await store.sendCallBroadcast('message', 'x')).toBe(false);
+    expect(relayPublish.fn).not.toHaveBeenCalled();
+    // the relay marks my seat co-host
+    lkFake.setMyMetadata('{"cohost":true}');
+    await settle();
+    expect(store.getBreakoutState().session?.hosting).toBe(false);
+    expect(await store.sendCallBroadcast('message', 'back in five')).toBe(true);
+    const [, template, user] = relayPublish.fn.mock.calls[0];
+    expect(user).toBe(bobUser);
+    expect(template).toMatchObject({
+      kind: 20002,
+      content: 'back in five',
+      tags: [
+        ['h', 'main-id'],
+        ['type', 'message']
+      ]
+    });
+    expect(toast.fn).toHaveBeenCalledWith(`${BOB.slice(0, 8)}...: back in five`, 'info');
+    // inside a room the relay seats the opener as that room's host: not the
+    // session's host seat, no broadcast from there
+    lk.listener?.({ t: 'assign', rooms: ROOMS, until: FUTURE }, hostSender);
+    modal.callbacks.onConfirm();
+    await settle();
+    expect(store.getBreakoutState().currentRoom).not.toBeNull();
+    lkFake.setMyMetadata('{"host":true}');
+    expect(await store.sendCallBroadcast('message', 'y')).toBe(false);
+    expect(relayPublish.fn).toHaveBeenCalledTimes(1);
+  });
+
   it('a relay that refuses the kind (an old pyramid) is reported with its reason', async () => {
     await liveInMain(hostUser);
     await store.startBreakout({ channelName: 'Seminar', roomCount: 2, seats: [] });

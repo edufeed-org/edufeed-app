@@ -378,6 +378,14 @@
     mainWaiting.filter((pubkey) => breakout.mainMembers?.has(pubkey) === true)
   );
   const hostsBreakout = $derived(!inBreakoutRoom && breakout.session?.hosting === true);
+  // A co-host in the main room during a session this client does not run (a
+  // former host back after a drop — the relay seats them as co-host): the
+  // panel read-only — who is where, the deadline, "join", the broadcast
+  // form (the relay accepts kind 20002 from co-hosts) — none of the host
+  // seat's moves. User test 2026-10-13: without it such a seat saw nothing.
+  const viewsBreakout = $derived(
+    myRole === 'cohost' && !inBreakoutRoom && !!breakout.session && !breakout.session.hosting
+  );
   const canOpenBreakout = $derived(!!myRole && !inBreakoutRoom && !breakout.session);
   // The rare actions behind "More" (invite, pop out, back to the tab).
   const moreActions = $derived(!!(onInvite || onPopOut || onPopIn));
@@ -399,14 +407,15 @@
     participantsOpen = true;
   }
   $effect(() => {
-    if (!hostsBreakout) columnTab = 'participants';
+    if (!hostsBreakout && !viewsBreakout) columnTab = 'participants';
   });
   // The column's tabs show whenever this seat may run breakouts from the
-  // main room; the rooms tab opens the dialog until a session runs.
-  const columnTabs = $derived(canOpenBreakout || hostsBreakout);
-  const breakoutPanelShown = $derived(hostsBreakout && columnTab === 'breakout');
+  // main room, or watch them as a co-host; the rooms tab opens the dialog
+  // until a session runs.
+  const columnTabs = $derived(canOpenBreakout || hostsBreakout || viewsBreakout);
+  const breakoutPanelShown = $derived((hostsBreakout || viewsBreakout) && columnTab === 'breakout');
   function openBreakoutTab() {
-    if (hostsBreakout) columnTab = 'breakout';
+    if (hostsBreakout || viewsBreakout) columnTab = 'breakout';
     else breakoutDialogOpen = true;
   }
 
@@ -1276,6 +1285,7 @@
                 onBroadcast={(text) => sendCallBroadcast('message', text)}
                 onClose={() => (participantsOpen = false)}
                 compact={columnTabs}
+                readOnly={!hostsBreakout}
               />
             {:else}
               <div class="flex flex-1 items-center justify-center">

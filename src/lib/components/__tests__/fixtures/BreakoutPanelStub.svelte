@@ -1,12 +1,13 @@
 <script>
   /** Stand-in for the lazily loaded BreakoutPanel: exposes the stage's callbacks. */
-  let { breakout, onExtend, onSetDeadline, onClose, compact = false } = $props();
+  let { breakout, onExtend, onSetDeadline, onClose, compact = false, readOnly = false } = $props();
 </script>
 
 <div
   data-testid="breakout-panel-stub"
   data-remaining={breakout.remaining ?? ''}
   data-compact={compact}
+  data-read-only={readOnly}
 >
   <button data-testid="stub-breakout-extend" onclick={() => onExtend(5)}>extend</button>
   <button data-testid="stub-breakout-set" onclick={() => onSetDeadline(10)}>set</button>

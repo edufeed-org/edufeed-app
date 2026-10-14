@@ -1165,6 +1165,8 @@ vi.mock('$lib/paraglide/messages', () => ({
   groups_call_ended_back_to_room: () => 'Back into the room',
   groups_call_ended_to_main: () => 'To the main room',
   groups_call_resume_title: () => 'You were in this call.',
+  groups_call_in_other_tab: () => 'You are in this call in another tab',
+  groups_call_join_here_anyway: () => 'Join here anyway',
   groups_call_resume: () => 'Back into the call',
   common_close: () => 'Close',
   groups_call_start: () => 'Start call',
@@ -3001,6 +3003,65 @@ describe('GroupChat', () => {
         // For the app-level dock: what to show, and where "back" goes.
         expect.objectContaining({ title: 'Call Chat', href: expect.any(String) })
       );
+    });
+
+    // User test 2026-10-13: a second tab of the channel showed only the
+    // camera button with "1" — nothing said the "1" was me. The relay's
+    // 39004 lists my pubkey: the button says so, and still joins on click
+    // (a deliberate second seat stays possible).
+    describe('a second tab of a call I am already in', () => {
+      it('says so on the join button when the relay lists me and this tab is not in the call; a click still joins', async () => {
+        groupCallHolder.participants = [OTHER, ME];
+        render(GroupChat, { props: { pointer: callPointer } });
+        const button = await screen.findByTestId('group-call-join');
+        const hint = screen.getByTestId('group-call-in-other-tab');
+        expect(button.contains(hint)).toBe(true);
+        expect(hint.textContent).toContain('You are in this call in another tab');
+        expect(button.getAttribute('title')).toBe('Join here anyway');
+        expect(button.getAttribute('aria-label')).toBe('Join here anyway');
+        await fireEvent.click(button);
+        expect(joinGroupCallMock).toHaveBeenCalledWith(
+          expect.objectContaining({ id: 'callchat', relay: GROUP_RELAY }),
+          expect.objectContaining({ pubkey: ME }),
+          expect.anything()
+        );
+      });
+
+      it('says nothing when the relay lists only others, or while this tab is in the call itself', async () => {
+        groupCallHolder.participants = [OTHER];
+        const first = render(GroupChat, { props: { pointer: callPointer } });
+        await screen.findByTestId('group-call-join');
+        expect(screen.queryByTestId('group-call-in-other-tab')).toBeNull();
+        first.unmount();
+        groupCallHolder.participants = [OTHER, ME];
+        inCallHere();
+        groupCallHolder.state.phase = 'requesting';
+        groupCallHolder.state.connected = false;
+        render(GroupChat, { props: { pointer: callPointer } });
+        expect(await screen.findByTestId('group-call-status')).toBeTruthy();
+        expect(screen.queryByTestId('group-call-in-other-tab')).toBeNull();
+      });
+
+      it('yields to the resume offer after a reload (the note names this tab, not another)', async () => {
+        sessionStorage.setItem(
+          'edufeed:call-resume',
+          JSON.stringify({
+            pointer: { id: 'callchat', relay: GROUP_RELAY },
+            title: 'Standup',
+            href: null,
+            code: null,
+            at: Date.now()
+          })
+        );
+        groupCallHolder.participants = [ME];
+        try {
+          render(GroupChat, { props: { pointer: callPointer } });
+          await screen.findByTestId('group-call-resume');
+          expect(screen.queryByTestId('group-call-in-other-tab')).toBeNull();
+        } finally {
+          sessionStorage.removeItem('edufeed:call-resume');
+        }
+      });
     });
 
     it('shows the live participant count from the relay-published kind 39004', async () => {

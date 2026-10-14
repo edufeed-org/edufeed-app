@@ -15,6 +15,11 @@
   `guest: true`: the store moves it by message and the moderation
   endpoint, never with put-user.
 
+  `readOnly` (a co-host who does not run the session — a former host back
+  after a drop): who is where, the deadline as text, "Beitreten" and the
+  broadcast form stay; the pickers, the deadline menu, the late-joiner
+  switch and "Alle zurückholen" are the host seat's and hidden.
+
   Pure view: the breakout store (groups/breakout.svelte.js) owns the session;
   the callbacks are the stage's. Names come from the profile map — people in
   a room are no longer LiveKit participants of the main room.
@@ -42,7 +47,8 @@
    *   onAutoAssign: (enabled: boolean) => void,
    *   onBroadcast: (text: string) => Promise<boolean>,
    *   onClose: () => void,
-   *   compact?: boolean
+   *   compact?: boolean,
+   *   readOnly?: boolean
    * }}
    */
   let {
@@ -57,7 +63,8 @@
     onAutoAssign,
     onBroadcast,
     onClose,
-    compact = false
+    compact = false,
+    readOnly = false
   } = $props();
 
   // "Nachricht an alle Räume": a kind-20002 call broadcast through the
@@ -232,24 +239,8 @@
     {:else}
       <span class="flex-1"></span>
     {/if}
-    <div
-      class="relative shrink-0"
-      bind:this={deadlineMenuEl}
-      data-testid="breakout-panel-deadline-menu"
-    >
-      <button
-        type="button"
-        class="btn gap-1 px-2 btn-ghost btn-sm {breakout.remaining !== null
-          ? 'text-warning-content tabular-nums'
-          : ''}"
-        onclick={() => (deadlineMenuOpen ? closeDeadlineMenu() : (deadlineMenuOpen = true))}
-        disabled={breakout.busy}
-        aria-haspopup="menu"
-        aria-expanded={deadlineMenuOpen}
-        title={m.groups_call_breakout_deadline_menu()}
-        data-testid="breakout-panel-deadline"
-        data-deadline={breakout.remaining !== null ? 'set' : 'none'}
-      >
+    {#if readOnly}
+      <span class="shrink-0 px-2 text-sm" data-testid="breakout-panel-deadline-text">
         {#if breakout.remaining !== null}
           <span class="badge badge-sm tabular-nums badge-warning">
             {m.groups_call_breakout_time_left({ time: formatCountdown(breakout.remaining) })}
@@ -257,107 +248,135 @@
         {:else}
           {m.groups_call_breakout_no_deadline()}
         {/if}
-        <ChevronDownIcon class_="h-3 w-3" title="" />
-      </button>
-      {#if deadlineMenuOpen}
-        <ul
-          class="menu absolute top-full right-0 z-30 mt-1 w-56 rounded-box bg-base-100 p-2 shadow-lg"
-          role="menu"
-          data-testid="breakout-panel-deadline-options"
+      </span>
+    {:else}
+      <div
+        class="relative shrink-0"
+        bind:this={deadlineMenuEl}
+        data-testid="breakout-panel-deadline-menu"
+      >
+        <button
+          type="button"
+          class="btn gap-1 px-2 btn-ghost btn-sm {breakout.remaining !== null
+            ? 'text-warning-content tabular-nums'
+            : ''}"
+          onclick={() => (deadlineMenuOpen ? closeDeadlineMenu() : (deadlineMenuOpen = true))}
+          disabled={breakout.busy}
+          aria-haspopup="menu"
+          aria-expanded={deadlineMenuOpen}
+          title={m.groups_call_breakout_deadline_menu()}
+          data-testid="breakout-panel-deadline"
+          data-deadline={breakout.remaining !== null ? 'set' : 'none'}
         >
           {#if breakout.remaining !== null}
-            {#each DEADLINE_STEPS as minutes (minutes)}
-              <li>
-                <button
-                  type="button"
-                  class="text-sm"
-                  role="menuitem"
-                  onclick={() => extend(minutes)}
-                  data-testid="breakout-panel-extend"
-                  data-minutes={minutes}
-                >
-                  {m.groups_call_breakout_extend({ minutes })}
-                </button>
-              </li>
-            {/each}
-            <li>
-              <button
-                type="button"
-                class="text-sm"
-                role="menuitem"
-                onclick={() => setDeadline(null)}
-                data-testid="breakout-panel-clear-deadline"
-              >
-                {m.groups_call_breakout_clear_deadline()}
-              </button>
-            </li>
+            <span class="badge badge-sm tabular-nums badge-warning">
+              {m.groups_call_breakout_time_left({ time: formatCountdown(breakout.remaining) })}
+            </span>
           {:else}
-            {#each DEADLINE_STEPS as minutes (minutes)}
+            {m.groups_call_breakout_no_deadline()}
+          {/if}
+          <ChevronDownIcon class_="h-3 w-3" title="" />
+        </button>
+        {#if deadlineMenuOpen}
+          <ul
+            class="menu absolute top-full right-0 z-30 mt-1 w-56 rounded-box bg-base-100 p-2 shadow-lg"
+            role="menu"
+            data-testid="breakout-panel-deadline-options"
+          >
+            {#if breakout.remaining !== null}
+              {#each DEADLINE_STEPS as minutes (minutes)}
+                <li>
+                  <button
+                    type="button"
+                    class="text-sm"
+                    role="menuitem"
+                    onclick={() => extend(minutes)}
+                    data-testid="breakout-panel-extend"
+                    data-minutes={minutes}
+                  >
+                    {m.groups_call_breakout_extend({ minutes })}
+                  </button>
+                </li>
+              {/each}
               <li>
                 <button
                   type="button"
                   class="text-sm"
                   role="menuitem"
-                  onclick={() => setDeadline(minutes)}
-                  data-testid="breakout-panel-end-in"
-                  data-minutes={minutes}
+                  onclick={() => setDeadline(null)}
+                  data-testid="breakout-panel-clear-deadline"
                 >
-                  {m.groups_call_breakout_end_in({ minutes })}
+                  {m.groups_call_breakout_clear_deadline()}
                 </button>
-              </li>
-            {/each}
-            {#if customOpen}
-              <li class="menu-title text-xs">{m.groups_call_breakout_custom_duration()}</li>
-              <li class="pointer-events-auto">
-                <form
-                  class="flex items-center gap-1 p-1 hover:bg-transparent"
-                  onsubmit={(e) => {
-                    e.preventDefault();
-                    setCustom();
-                  }}
-                  data-testid="breakout-panel-custom-form"
-                >
-                  <!-- svelte-ignore a11y_autofocus -->
-                  <input
-                    type="number"
-                    class="input-bordered input input-sm w-20 tabular-nums"
-                    min={CUSTOM_MIN}
-                    max={CUSTOM_MAX}
-                    step="1"
-                    inputmode="numeric"
-                    bind:value={customMinutes}
-                    aria-label={m.groups_call_breakout_custom_minutes()}
-                    placeholder={m.groups_call_breakout_custom_minutes()}
-                    autofocus
-                    data-testid="breakout-panel-custom-minutes"
-                  />
-                  <button
-                    type="submit"
-                    class="btn btn-sm btn-primary"
-                    disabled={!customValid}
-                    data-testid="breakout-panel-custom-set"
-                  >
-                    {m.groups_call_breakout_set_deadline()}
-                  </button>
-                </form>
               </li>
             {:else}
-              <li>
-                <button
-                  type="button"
-                  class="text-sm"
-                  role="menuitem"
-                  onclick={() => (customOpen = true)}
-                  data-testid="breakout-panel-custom-duration"
-                >
-                  {m.groups_call_breakout_custom_duration()}
-                </button>
-              </li>
+              {#each DEADLINE_STEPS as minutes (minutes)}
+                <li>
+                  <button
+                    type="button"
+                    class="text-sm"
+                    role="menuitem"
+                    onclick={() => setDeadline(minutes)}
+                    data-testid="breakout-panel-end-in"
+                    data-minutes={minutes}
+                  >
+                    {m.groups_call_breakout_end_in({ minutes })}
+                  </button>
+                </li>
+              {/each}
+              {#if customOpen}
+                <li class="menu-title text-xs">{m.groups_call_breakout_custom_duration()}</li>
+                <li class="pointer-events-auto">
+                  <form
+                    class="flex items-center gap-1 p-1 hover:bg-transparent"
+                    onsubmit={(e) => {
+                      e.preventDefault();
+                      setCustom();
+                    }}
+                    data-testid="breakout-panel-custom-form"
+                  >
+                    <!-- svelte-ignore a11y_autofocus -->
+                    <input
+                      type="number"
+                      class="input-bordered input input-sm w-20 tabular-nums"
+                      min={CUSTOM_MIN}
+                      max={CUSTOM_MAX}
+                      step="1"
+                      inputmode="numeric"
+                      bind:value={customMinutes}
+                      aria-label={m.groups_call_breakout_custom_minutes()}
+                      placeholder={m.groups_call_breakout_custom_minutes()}
+                      autofocus
+                      data-testid="breakout-panel-custom-minutes"
+                    />
+                    <button
+                      type="submit"
+                      class="btn btn-sm btn-primary"
+                      disabled={!customValid}
+                      data-testid="breakout-panel-custom-set"
+                    >
+                      {m.groups_call_breakout_set_deadline()}
+                    </button>
+                  </form>
+                </li>
+              {:else}
+                <li>
+                  <button
+                    type="button"
+                    class="text-sm"
+                    role="menuitem"
+                    onclick={() => (customOpen = true)}
+                    data-testid="breakout-panel-custom-duration"
+                  >
+                    {m.groups_call_breakout_custom_duration()}
+                  </button>
+                </li>
+              {/if}
             {/if}
-          {/if}
-        </ul>
-      {/if}
-    </div>
+          </ul>
+        {/if}
+      </div>
+    {/if}
     {#if !compact}
       <button
         type="button"
@@ -398,22 +417,24 @@
                 <ProfileAvatar {pubkey} profile={getProfiles().get(pubkey)} size="xs" />
                 <span class="min-w-0 flex-1 truncate">{nameOf(pubkey)}</span>
                 <span class="badge badge-ghost badge-xs">{m.groups_call_guest_badge()}</span>
-                <select
-                  class="select-bordered select max-w-32 select-xs"
-                  value="__pick"
-                  disabled={breakout.busy}
-                  onchange={(e) => move(pubkey, e, true)}
-                  aria-label={m.groups_call_breakout_move_to()}
-                  data-testid="breakout-panel-move-guest"
-                >
-                  <option value="__pick" disabled>{m.groups_call_breakout_move_to()}</option>
-                  <option value="">{m.groups_call_breakout_main_room()}</option>
-                  {#each rooms.filter((r) => r.id !== room.id) as other (other.id)}
-                    <option value={other.id}>
-                      {m.groups_call_breakout_room_label({ n: other.index })}
-                    </option>
-                  {/each}
-                </select>
+                {#if !readOnly}
+                  <select
+                    class="select-bordered select max-w-32 select-xs"
+                    value="__pick"
+                    disabled={breakout.busy}
+                    onchange={(e) => move(pubkey, e, true)}
+                    aria-label={m.groups_call_breakout_move_to()}
+                    data-testid="breakout-panel-move-guest"
+                  >
+                    <option value="__pick" disabled>{m.groups_call_breakout_move_to()}</option>
+                    <option value="">{m.groups_call_breakout_main_room()}</option>
+                    {#each rooms.filter((r) => r.id !== room.id) as other (other.id)}
+                      <option value={other.id}>
+                        {m.groups_call_breakout_room_label({ n: other.index })}
+                      </option>
+                    {/each}
+                  </select>
+                {/if}
               </li>
             {/each}
             {#each seatedByRoom[room.id] as pubkey (pubkey)}
@@ -437,22 +458,24 @@
                     {m.groups_call_breakout_away()}
                   </span>
                 {/if}
-                <select
-                  class="select-bordered select max-w-32 select-xs"
-                  value="__pick"
-                  disabled={breakout.busy}
-                  onchange={(e) => move(pubkey, e)}
-                  aria-label={m.groups_call_breakout_move_to()}
-                  data-testid="breakout-panel-move"
-                >
-                  <option value="__pick" disabled>{m.groups_call_breakout_move_to()}</option>
-                  <option value="">{m.groups_call_breakout_main_room()}</option>
-                  {#each rooms.filter((r) => r.id !== room.id) as other (other.id)}
-                    <option value={other.id}>
-                      {m.groups_call_breakout_room_label({ n: other.index })}
-                    </option>
-                  {/each}
-                </select>
+                {#if !readOnly}
+                  <select
+                    class="select-bordered select max-w-32 select-xs"
+                    value="__pick"
+                    disabled={breakout.busy}
+                    onchange={(e) => move(pubkey, e)}
+                    aria-label={m.groups_call_breakout_move_to()}
+                    data-testid="breakout-panel-move"
+                  >
+                    <option value="__pick" disabled>{m.groups_call_breakout_move_to()}</option>
+                    <option value="">{m.groups_call_breakout_main_room()}</option>
+                    {#each rooms.filter((r) => r.id !== room.id) as other (other.id)}
+                      <option value={other.id}>
+                        {m.groups_call_breakout_room_label({ n: other.index })}
+                      </option>
+                    {/each}
+                  </select>
+                {/if}
               </li>
             {/each}
           </ul>
@@ -477,39 +500,47 @@
                   {m.groups_call_guest_badge()}
                 </span>
               {/if}
-              <select
-                class="select-bordered select max-w-32 select-xs"
-                value="__pick"
-                disabled={breakout.busy}
-                onchange={(e) => move(/** @type {string} */ (row.pubkey), e, row.guest === true)}
-                aria-label={m.groups_call_breakout_move_to()}
-                data-testid="breakout-panel-move"
-              >
-                <option value="__pick" disabled>{m.groups_call_breakout_move_to()}</option>
-                {#each rooms as other (other.id)}
-                  <option value={other.id}>
-                    {m.groups_call_breakout_room_label({ n: other.index })}
-                  </option>
-                {/each}
-              </select>
+              {#if !readOnly}
+                <select
+                  class="select-bordered select max-w-32 select-xs"
+                  value="__pick"
+                  disabled={breakout.busy}
+                  onchange={(e) => move(/** @type {string} */ (row.pubkey), e, row.guest === true)}
+                  aria-label={m.groups_call_breakout_move_to()}
+                  data-testid="breakout-panel-move"
+                >
+                  <option value="__pick" disabled>{m.groups_call_breakout_move_to()}</option>
+                  {#each rooms as other (other.id)}
+                    <option value={other.id}>
+                      {m.groups_call_breakout_room_label({ n: other.index })}
+                    </option>
+                  {/each}
+                </select>
+              {/if}
             </li>
           {/each}
         </ul>
       {/if}
     </section>
 
-    <label class="mb-2 flex cursor-pointer items-center gap-2 text-sm">
-      <input
-        type="checkbox"
-        class="checkbox checkbox-sm"
-        checked={breakout.session?.autoAssign === true}
-        onchange={(e) => onAutoAssign(/** @type {HTMLInputElement} */ (e.currentTarget).checked)}
-        data-testid="breakout-panel-auto-assign"
-      />
-      <span>{m.groups_call_breakout_auto_assign()}</span>
-    </label>
-    <p class="text-xs text-base-content/60">{m.groups_call_breakout_panel_hint()}</p>
-    <p class="mt-1 text-xs text-base-content/60">{m.groups_call_breakout_host_note()}</p>
+    {#if readOnly}
+      <p class="text-xs text-base-content/60" data-testid="breakout-panel-cohost-note">
+        {m.groups_call_breakout_cohost_note()}
+      </p>
+    {:else}
+      <label class="mb-2 flex cursor-pointer items-center gap-2 text-sm">
+        <input
+          type="checkbox"
+          class="checkbox checkbox-sm"
+          checked={breakout.session?.autoAssign === true}
+          onchange={(e) => onAutoAssign(/** @type {HTMLInputElement} */ (e.currentTarget).checked)}
+          data-testid="breakout-panel-auto-assign"
+        />
+        <span>{m.groups_call_breakout_auto_assign()}</span>
+      </label>
+      <p class="text-xs text-base-content/60">{m.groups_call_breakout_panel_hint()}</p>
+      <p class="mt-1 text-xs text-base-content/60">{m.groups_call_breakout_host_note()}</p>
+    {/if}
   </div>
 
   <div class="shrink-0 border-t border-base-300 p-2">
@@ -546,20 +577,22 @@
         {/if}
       </button>
     </form>
-    <button
-      type="button"
-      class="btn w-full btn-sm btn-primary"
-      onclick={() => (endConfirmOpen = true)}
-      disabled={breakout.busy}
-      data-testid="breakout-panel-end"
-    >
-      {#if breakout.busy}
-        <span class="loading loading-xs loading-spinner"></span>
-        {m.groups_call_breakout_ending()}
-      {:else}
-        {m.groups_call_breakout_end_all()}
-      {/if}
-    </button>
+    {#if !readOnly}
+      <button
+        type="button"
+        class="btn w-full btn-sm btn-primary"
+        onclick={() => (endConfirmOpen = true)}
+        disabled={breakout.busy}
+        data-testid="breakout-panel-end"
+      >
+        {#if breakout.busy}
+          <span class="loading loading-xs loading-spinner"></span>
+          {m.groups_call_breakout_ending()}
+        {:else}
+          {m.groups_call_breakout_end_all()}
+        {/if}
+      </button>
+    {/if}
   </div>
 </div>
 

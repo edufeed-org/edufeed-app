@@ -1488,11 +1488,26 @@ function renderBroadcast(broadcast) {
 }
 
 /**
+ * Whether OUR seat in the MAIN room carries a call role (host or co-host).
+ * Never inside a breakout room: the relay seats whoever opens a room as
+ * that room's host, which says nothing about the session.
+ */
+function holdsRoleSeatInMain() {
+  if (currentRoom || !lkReady || !lkModule) return false;
+  const lk = lkModule.getLiveKitState();
+  void lk.participantMetadataVersion;
+  return participantCallRole(lk.localParticipant) !== null;
+}
+
+/**
  * Publish a call broadcast to the parent group (the relay accepts it from
  * the parent's current call host / co-hosts or an admin and never stores
- * it). The sender's own client renders it right away; the relay's echo is
- * deduped by id. A refusal (an old relay, no rights) is toasted with the
- * relay's reason unless `quiet`.
+ * it). Allowed from the client running the session and from any seat the
+ * relay marks host or co-host in the main room — a co-host who does not
+ * run the session (a former host back after a drop) may still address the
+ * rooms from the read-only panel. The sender's own client renders it right
+ * away; the relay's echo is deduped by id. A refusal (an old relay, no
+ * rights) is toasted with the relay's reason unless `quiet`.
  * @param {import('./call-broadcasts.js').CallBroadcastType} type
  * @param {string} [content]
  * @param {{quiet?: boolean}} [opts]
@@ -1501,7 +1516,8 @@ function renderBroadcast(broadcast) {
 export async function sendCallBroadcast(type, content = '', opts = {}) {
   const s = session;
   const user = getActiveCallUser();
-  if (!s?.hosting || !user) return false;
+  if (!s || !user) return false;
+  if (!s.hosting && !holdsRoleSeatInMain()) return false;
   try {
     const signed = await publishToGroupRelay(
       pool.relay(s.main.relay),
