@@ -51,6 +51,7 @@ vi.mock('$lib/paraglide/messages.js', () => ({
   inbox_title: () => 'Posteingang',
   inbox_mark_all_read: () => 'Alle gelesen',
   inbox_empty: () => 'Nichts Neues',
+  dm_no_conversations: () => 'Noch keine Unterhaltungen',
   inbox_tab_notifications: () => 'Benachrichtigungen',
   inbox_tab_messages: () => 'Nachrichten',
   inbox_filter_all: () => 'Alle',
@@ -101,10 +102,10 @@ describe('Inbox page tabs', () => {
     expect(getAllByTestId('dm-row')).toHaveLength(2);
   });
 
-  it('messages tab with no conversations shows the empty state', () => {
+  it('messages tab with no conversations shows the conversations empty state', () => {
     stores.__setUrl(new URL('http://localhost/c/inbox?tab=messages'));
     const { getByTestId } = render(InboxPage);
-    expect(getByTestId('empty-state')).toBeTruthy();
+    expect(getByTestId('empty-state').textContent).toContain('Noch keine Unterhaltungen');
   });
 
   it('unknown tab falls back to notifications', () => {

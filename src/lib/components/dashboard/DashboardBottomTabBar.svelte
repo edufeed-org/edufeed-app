@@ -48,7 +48,6 @@
           type="button"
           data-testid="dock-create"
           class="dock-item"
-          aria-label={m.fab_open_menu()}
           onclick={openCreateHub}
         >
           <span

@@ -195,7 +195,7 @@
 
   <!-- Notification list -->
   {#if mergedItems.length === 0}
-    <EmptyState title={m.inbox_empty()} />
+    <EmptyState title={activeTab === 'messages' ? m.dm_no_conversations() : m.inbox_empty()} />
   {:else}
     <div class="divide-y divide-base-300 overflow-hidden rounded-lg border border-base-300">
       {#each mergedItems as item (item.type === 'dm' ? `dm-${item.conversation.id}` : item.event.id)}

@@ -25,8 +25,7 @@ vi.mock('$lib/paraglide/messages', () => ({
   dashboard_nav_create: () => 'Erstellen',
   dashboard_nav_inbox: () => 'Posteingang',
   dashboard_nav_communities: () => 'Communities',
-  dashboard_nav_aria: () => 'Hauptnavigation',
-  fab_open_menu: () => 'Aktionsmenü öffnen'
+  dashboard_nav_aria: () => 'Hauptnavigation'
 }));
 
 const { default: Dock } = await import('../dashboard/DashboardBottomTabBar.svelte');
@@ -60,6 +59,9 @@ describe('DashboardBottomTabBar', () => {
     const { getByTestId } = render(Dock);
     const create = getByTestId('dock-create');
     expect(create.tagName).toBe('BUTTON');
+    // The visible label names it; no aria-label, so the e2e FAB selector
+    // (button[aria-label="Open actions menu"]) stays unique.
+    expect(create.getAttribute('aria-label')).toBeNull();
     await fireEvent.click(create);
     expect(state.openCreateHub).toHaveBeenCalledTimes(1);
   });

@@ -14,7 +14,7 @@ test.describe('Mobile navigation', () => {
       await expect(hamburger).toBeVisible({ timeout: 5000 });
 
       // Desktop nav links should be hidden
-      const desktopNav = page.locator('.hidden.lg\\:flex');
+      const desktopNav = page.locator('.hidden.lg\\:flex').first();
       await expect(desktopNav).not.toBeVisible();
     });
 
@@ -119,7 +119,7 @@ test.describe('Mobile navigation', () => {
       await page.waitForTimeout(2000);
 
       // Desktop nav links should be visible
-      const desktopNav = page.locator('.hidden.lg\\:flex');
+      const desktopNav = page.locator('.hidden.lg\\:flex').first();
       await expect(desktopNav).toBeVisible({ timeout: 5000 });
 
       // Hamburger menu container should be hidden
