@@ -61,9 +61,9 @@ test.describe('Signup - Normie path', () => {
     const nameInput = page.locator('#signup-name-input');
     await expect(nameInput).toBeVisible();
 
-    // Step indicator: account / profile / context / communities (+ handle)
+    // Step indicator: account / profile / context / communities (+ handle) / backup
     await expect(page.locator('#global-signup-modal .steps .step')).toHaveCount(
-      membershipEnabled ? 5 : 4
+      membershipEnabled ? 6 : 5
     );
 
     // Fill name and submit by pressing Enter — exercises the <form> wrap so
@@ -89,11 +89,21 @@ test.describe('Signup - Normie path', () => {
     await skipCommunities.click();
 
     if (membershipEnabled) {
-      // Step 5: optional handle application; "Später beantragen" closes.
+      // Step 5: optional handle application; "Später beantragen" moves on.
       const skipHandle = page.locator('[data-testid="signup-skip-handle"]');
       await expect(skipHandle).toBeVisible({ timeout: 10_000 });
       await skipHandle.click();
     }
+
+    // Last step: "Sichern" (issue ddce9cc0). Leaving without a download is a
+    // deliberate choice: "Später sichern" asks first, "Trotzdem schließen" closes.
+    await expect(page.locator('[data-testid="signup-backup-step"]')).toBeVisible({
+      timeout: 10_000
+    });
+    await expect(page.locator('[data-testid="recovery-download-btn"]')).toBeVisible();
+    await page.locator('[data-testid="signup-backup-later"]').click();
+    await expect(page.locator('[data-testid="signup-unsaved-guard"]')).toBeVisible();
+    await page.locator('[data-testid="signup-unsaved-close"]').click();
 
     // Modal closes
     await expect(page.locator('#global-signup-modal')).not.toBeVisible({ timeout: 10_000 });

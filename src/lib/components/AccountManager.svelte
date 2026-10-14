@@ -3,6 +3,9 @@
   import { SimpleAccount } from 'applesauce-accounts/accounts';
   import { merge, Subject, Subscription } from 'rxjs';
   import { manager } from '$lib/stores/accounts.svelte';
+  import { modalStore } from '$lib/stores/modal.svelte.js';
+  import { isBackupDownloaded } from '$lib/stores/backup-flags.svelte.js';
+  import { accountNeedsBackup } from '$lib/helpers/account-backup.js';
   import ImageWithFallback from '$lib/components/shared/ImageWithFallback.svelte';
   import * as m from '$lib/paraglide/messages';
 
@@ -86,6 +89,24 @@
   function removeAccount(accountId) {
     const acct = manager.getAccount(accountId);
     if (!acct) return;
+    // A never-backed-up local key is gone for good once removed (issue
+    // ddce9cc0): ask first; the download is offered when it is the active
+    // account (RecoveryDownloadModal backs up the active one).
+    if (accountNeedsBackup(acct, isBackupDownloaded)) {
+      modalStore.openModal(
+        'logoutConfirm',
+        { mode: 'current', count: 1, canDownload: manager.active?.pubkey === acct.pubkey },
+        {
+          onConfirm: () => {
+            manager.removeAccount(acct);
+            modalStore.closeModal();
+          },
+          onCancel: () => modalStore.closeModal(),
+          onBackup: () => modalStore.openModal('recovery-download')
+        }
+      );
+      return;
+    }
     manager.removeAccount(acct);
   }
 

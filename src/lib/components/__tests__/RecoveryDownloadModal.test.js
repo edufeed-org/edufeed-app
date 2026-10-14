@@ -37,6 +37,13 @@ vi.mock('$lib/helpers/recoveryFile.js', () => ({
   buildRecoveryFile: vi.fn()
 }));
 
+vi.mock('$lib/stores/user-profile.svelte.js', () => ({
+  useUserProfile: () => () => ({ name: 'Testkonto A' })
+}));
+vi.mock('$lib/stores/config.svelte.js', () => ({
+  runtimeConfig: { appName: 'Edufeed' }
+}));
+
 vi.mock('$lib/paraglide/messages', () =>
   Object.fromEntries(
     [

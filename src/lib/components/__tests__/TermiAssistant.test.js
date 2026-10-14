@@ -102,7 +102,12 @@ const mockManager = vi.hoisted(() => ({
 }));
 vi.mock('$lib/stores/accounts.svelte', async () => {
   const { createReactiveBox } = await import('./__mocks__/reactive-box.svelte.js');
+  const { BehaviorSubject } = await import('rxjs');
   const activeUserBox = createReactiveBox(null);
+  // nip05-ready-alert follows account switches through `manager.active$`
+  // (a real BehaviorSubject in applesauce); the mock has to offer one too,
+  // or useAssistantHints throws at mount.
+  /** @type {any} */ (mockManager).active$ = new BehaviorSubject(mockManager.active);
   return {
     useActiveUser: () => () => activeUserBox.value,
     manager: mockManager,
@@ -201,6 +206,7 @@ vi.mock('$lib/stores/config.svelte.js', () => ({
 
 import TermiAssistant from '../assistant/TermiAssistant.svelte';
 import { markBackupDownloaded } from '$lib/stores/backup-flags.svelte.js';
+import { stopNip05ReadyAlert } from '$lib/stores/nip05-ready-alert.svelte.js';
 // Reactive box (see the vi.mock('$lib/stores/accounts.svelte', ...) factory
 // above) — tests still just assign mockActiveUser.value like a plain object.
 import { __activeUserBox as mockActiveUser } from '$lib/stores/accounts.svelte';
@@ -239,9 +245,34 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  // Grant detection is a module singleton (idempotent init) — tear it down
+  // so the next test's account/fixtures start a fresh host.
+  stopNip05ReadyAlert();
   vi.useRealTimers();
   globalThis.fetch = originalFetch;
 });
+
+/**
+ * Wait for the nip05 "ready" hint's action to appear. Grant detection runs
+ * behind dynamic imports plus the decrypt → .well-known chain, so a fixed
+ * microtask budget is not enough; vi.waitFor also advances the fake timers
+ * (the profile-settle timeout) on every check.
+ * @param {HTMLElement} container
+ */
+async function waitForNip05Action(container) {
+  await vi.waitFor(
+    () => {
+      // Push the profile-settle timeout (a fake timer) along with every poll.
+      vi.advanceTimersByTime(6000);
+      flushSync();
+      // The 'apply' variant renders the same action button first; wait for
+      // the 'ready' card (its CTA is the one-click activation).
+      const action = container.querySelector('[data-testid="termi-hint-nip05-action"]');
+      expect(action?.textContent).toContain('termi_hint_nip05_ready_cta');
+    },
+    { timeout: 10_000, interval: 50 }
+  );
+}
 
 describe('TermiAssistant launcher + hints', () => {
   it('shows the backup hint for an in-app-signup nsec account', async () => {
@@ -255,22 +286,35 @@ describe('TermiAssistant launcher + hints', () => {
     expect(container.querySelector('[data-testid="termi-hint-dm"]')).toBeNull();
   });
 
-  it('shows no backup hint for extension accounts or downloaded/dismissed flags', async () => {
+  it('shows no backup hint for extension accounts or once the file was downloaded', async () => {
     mockActiveUser.value = { type: 'extension', pubkey: EXT_PUBKEY };
     const { container, unmount } = render(TermiAssistant);
     await openTermi(container);
     expect(container.querySelector('[data-testid="termi-hint-backup"]')).toBeNull();
     unmount();
 
-    for (const flag of ['backup-downloaded', 'backup-banner-dismissed']) {
-      mockActiveUser.value = signedUpNsecUser();
-      localStorage.setItem(`${flag}:${NSEC_PUBKEY}`, '1');
-      const r = render(TermiAssistant);
-      await openTermi(r.container);
-      expect(r.container.querySelector('[data-testid="termi-hint-backup"]')).toBeNull();
-      r.unmount();
-      localStorage.clear();
-    }
+    mockActiveUser.value = signedUpNsecUser();
+    localStorage.setItem(`backup-downloaded:${NSEC_PUBKEY}`, '1');
+    const r = render(TermiAssistant);
+    await openTermi(r.container);
+    expect(r.container.querySelector('[data-testid="termi-hint-backup"]')).toBeNull();
+    r.unmount();
+  });
+
+  // Issue ddce9cc0 (C): the old permanent "Später" flag let a never-backed-up
+  // key go silent forever. The hint now returns every visit until downloaded.
+  it('a stale backup-banner-dismissed flag no longer hides the hint, and dismissing it writes no flag', async () => {
+    mockActiveUser.value = signedUpNsecUser();
+    localStorage.setItem(`backup-banner-dismissed:${NSEC_PUBKEY}`, '1');
+    const { container } = render(TermiAssistant);
+    await openTermi(container);
+    expect(container.querySelector('[data-testid="termi-hint-backup"]')).not.toBeNull();
+
+    await fireEvent.click(container.querySelector('[data-testid="termi-hint-backup-dismiss"]'));
+    expect(container.querySelector('[data-testid="termi-hint-backup"]')).toBeNull();
+    expect(Object.keys(localStorage).filter((k) => k.startsWith('backup-'))).toEqual([
+      `backup-banner-dismissed:${NSEC_PUBKEY}`
+    ]);
   });
 
   it('backup action opens the recovery modal; hint flips to done when the flag lands', async () => {
@@ -347,89 +391,95 @@ describe('TermiAssistant launcher + hints', () => {
     expect(mockGoto).not.toHaveBeenCalled();
   });
 
-  it('one-click activates a granted handle by publishing the profile update', async () => {
-    mockActiveUser.value = { type: 'extension', pubkey: EXT_PUBKEY };
-    mockMembership.value = {
-      enabled: true,
-      handleDomain: 'edufeed.org',
-      formAddress: `30168:${'a'.repeat(64)}:edufeed-membership`,
-      adminPubkeys: ['a'.repeat(64)]
-    };
-    mockProfileEvent.value = { kind: 0, content: JSON.stringify({ name: 'test' }), tags: [] };
-    mockApplicationEvents.value = [
-      {
-        id: 'app-1',
-        kind: 1069,
-        pubkey: EXT_PUBKEY,
-        created_at: 1,
-        content: '<ciphertext>',
-        tags: [
-          ['a', `30168:${'a'.repeat(64)}:edufeed-membership`],
-          ['p', 'a'.repeat(64)],
-          ['encrypted']
-        ]
-      }
-    ];
-    globalThis.fetch = vi.fn(async () => ({
-      ok: true,
-      json: async () => ({ names: { maria: EXT_PUBKEY } })
-    }));
+  it(
+    'one-click activates a granted handle by publishing the profile update',
+    { timeout: 15_000 },
+    async () => {
+      mockActiveUser.value = { type: 'extension', pubkey: EXT_PUBKEY };
+      mockMembership.value = {
+        enabled: true,
+        handleDomain: 'edufeed.org',
+        formAddress: `30168:${'a'.repeat(64)}:edufeed-membership`,
+        adminPubkeys: ['a'.repeat(64)]
+      };
+      mockProfileEvent.value = { kind: 0, content: JSON.stringify({ name: 'test' }), tags: [] };
+      mockApplicationEvents.value = [
+        {
+          id: 'app-1',
+          kind: 1069,
+          pubkey: EXT_PUBKEY,
+          created_at: 1,
+          content: '<ciphertext>',
+          tags: [
+            ['a', `30168:${'a'.repeat(64)}:edufeed-membership`],
+            ['p', 'a'.repeat(64)],
+            ['encrypted']
+          ]
+        }
+      ];
+      globalThis.fetch = vi.fn(async () => ({
+        ok: true,
+        json: async () => ({ names: { maria: EXT_PUBKEY } })
+      }));
 
-    const { container } = render(TermiAssistant);
-    // Let the decrypt → .well-known chain resolve (microtasks, not timers).
-    for (let i = 0; i < 6; i++) await Promise.resolve();
-    flushSync();
-    await tick();
-    await openTermi(container);
+      const { container } = render(TermiAssistant);
+      await openTermi(container);
+      await waitForNip05Action(container);
 
-    await fireEvent.click(container.querySelector('[data-testid="termi-hint-nip05-action"]'));
-    expect(mockActionRun).toHaveBeenCalledWith(expect.anything(), {
-      nip05: 'maria@edufeed.org'
-    });
-    expect(mockGoto).not.toHaveBeenCalled();
-  });
+      await fireEvent.click(container.querySelector('[data-testid="termi-hint-nip05-action"]'));
+      await vi.waitFor(() =>
+        expect(mockActionRun).toHaveBeenCalledWith(expect.anything(), {
+          nip05: 'maria@edufeed.org'
+        })
+      );
+      expect(mockGoto).not.toHaveBeenCalled();
+    }
+  );
 
-  it('routes Activate to settings when the user has no kind 0 profile yet', async () => {
-    // UpdateProfile throws without an existing profile — the one-click must
-    // not fire-and-swallow that; it hands over to the settings flow instead.
-    mockActiveUser.value = { type: 'extension', pubkey: EXT_PUBKEY };
-    mockMembership.value = {
-      enabled: true,
-      handleDomain: 'edufeed.org',
-      formAddress: `30168:${'a'.repeat(64)}:edufeed-membership`,
-      adminPubkeys: ['a'.repeat(64)]
-    };
-    mockProfileEvent.value = null; // no kind 0
-    mockApplicationEvents.value = [
-      {
-        id: 'app-1',
-        kind: 1069,
-        pubkey: EXT_PUBKEY,
-        created_at: 1,
-        content: '<ciphertext>',
-        tags: [
-          ['a', `30168:${'a'.repeat(64)}:edufeed-membership`],
-          ['p', 'a'.repeat(64)],
-          ['encrypted']
-        ]
-      }
-    ];
-    globalThis.fetch = vi.fn(async () => ({
-      ok: true,
-      json: async () => ({ names: { maria: EXT_PUBKEY } })
-    }));
+  it(
+    'routes Activate to settings when the user has no kind 0 profile yet',
+    { timeout: 15_000 },
+    async () => {
+      // UpdateProfile throws without an existing profile — the one-click must
+      // not fire-and-swallow that; it hands over to the settings flow instead.
+      mockActiveUser.value = { type: 'extension', pubkey: EXT_PUBKEY };
+      mockMembership.value = {
+        enabled: true,
+        handleDomain: 'edufeed.org',
+        formAddress: `30168:${'a'.repeat(64)}:edufeed-membership`,
+        adminPubkeys: ['a'.repeat(64)]
+      };
+      mockProfileEvent.value = null; // no kind 0
+      mockApplicationEvents.value = [
+        {
+          id: 'app-1',
+          kind: 1069,
+          pubkey: EXT_PUBKEY,
+          created_at: 1,
+          content: '<ciphertext>',
+          tags: [
+            ['a', `30168:${'a'.repeat(64)}:edufeed-membership`],
+            ['p', 'a'.repeat(64)],
+            ['encrypted']
+          ]
+        }
+      ];
+      globalThis.fetch = vi.fn(async () => ({
+        ok: true,
+        json: async () => ({ names: { maria: EXT_PUBKEY } })
+      }));
 
-    const { container } = render(TermiAssistant);
-    vi.advanceTimersByTime(5000); // profile check settles via timeout
-    for (let i = 0; i < 6; i++) await Promise.resolve();
-    flushSync();
-    await tick();
-    await openTermi(container);
+      const { container } = render(TermiAssistant);
+      await openTermi(container);
+      // The profile check settles via its timeout — vi.waitFor advances the
+      // fake clock while polling.
+      await waitForNip05Action(container);
 
-    await fireEvent.click(container.querySelector('[data-testid="termi-hint-nip05-action"]'));
-    expect(mockGoto).toHaveBeenCalledWith('/settings');
-    expect(mockActionRun).not.toHaveBeenCalled();
-  });
+      await fireEvent.click(container.querySelector('[data-testid="termi-hint-nip05-action"]'));
+      await vi.waitFor(() => expect(mockGoto).toHaveBeenCalledWith('/settings'));
+      expect(mockActionRun).not.toHaveBeenCalled();
+    }
+  );
 
   it('shows no nip05 hint when the profile has one or membership is disabled', async () => {
     mockActiveUser.value = { type: 'extension', pubkey: EXT_PUBKEY };

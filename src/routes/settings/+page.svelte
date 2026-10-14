@@ -601,6 +601,36 @@
       <p class="text-base-content/70">{m.settings_subtitle()}</p>
     </div>
 
+    <!-- Konto & Sicherheit — first thing on the page (issue ddce9cc0, C):
+           the backup file is the only way back into a local-key account, so
+           it must not hide below cache, relays and notification settings.
+           Only for nsec accounts — extension/bunker accounts don't have a
+           recoverable secret in this app. -->
+    {#if activeAccount?.type === 'nsec'}
+      <div
+        class="card mb-6 bg-base-100 shadow-xl"
+        data-testid="settings-recovery-card"
+        transition:fade={{ duration: 200 }}
+      >
+        <div class="card-body">
+          <h2 class="mb-2 card-title text-2xl">
+            <span class="text-2xl">{m.settings_account_security_title()}</span>
+          </h2>
+          <h3 class="font-semibold">{m.settings_recovery_title()}</h3>
+          <p class="mb-4 text-base-content/70">{m.settings_recovery_description()}</p>
+          <div>
+            <button
+              class="btn btn-primary"
+              data-testid="settings-recovery-download"
+              onclick={() => modalStore.openModal('recovery-download')}
+            >
+              {m.settings_recovery_download_cta()}
+            </button>
+          </div>
+        </div>
+      </div>
+    {/if}
+
     <!-- Local Cache Panel (visible to all users) -->
     <div class="mb-6">
       <LocalCachePanel />
@@ -1366,30 +1396,6 @@
           <DmRelaySettings />
         </div>
       </div>
-
-      <!-- Recovery File Card (only for nsec accounts — extension/bunker
-           accounts don't have a recoverable secret in this app) -->
-      {#if activeAccount?.type === 'nsec'}
-        <div
-          class="card mt-6 bg-base-100 shadow-xl"
-          data-testid="settings-recovery-card"
-          transition:fade={{ duration: 200 }}
-        >
-          <div class="card-body">
-            <h2 class="mb-2 card-title text-2xl">
-              <span class="text-2xl">{m.settings_recovery_title()}</span>
-            </h2>
-            <p class="mb-6 text-base-content/70">{m.settings_recovery_description()}</p>
-            <button
-              class="btn btn-primary"
-              data-testid="settings-recovery-download"
-              onclick={() => modalStore.openModal('recovery-download')}
-            >
-              {m.settings_recovery_download_cta()}
-            </button>
-          </div>
-        </div>
-      {/if}
 
       <PomegranateExportCard />
 

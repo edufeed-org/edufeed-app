@@ -1,6 +1,7 @@
 <script>
   import { generateSecretKey, getPublicKey, nip19 } from 'nostr-tools';
-  import * as nip49 from 'nostr-tools/nip49';
+  import { downloadRecoveryFile } from '$lib/helpers/recoveryFile.js';
+  import { runtimeConfig } from '$lib/stores/config.svelte.js';
   import CopyIcon from '../icons/actions/CopyIcon.svelte';
   import CheckIcon from '../icons/ui/CheckIcon.svelte';
   import * as m from '$lib/paraglide/messages';
@@ -35,26 +36,27 @@
     }
   }
 
-  /**
-   * @param {string} content
-   * @param {string} filename
-   * @param {string} [mimeType]
-   */
-  function downloadFile(content, filename, mimeType = 'text/plain') {
-    const blob = new Blob([content], { type: mimeType });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = filename;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+  // Which backup(s) were taken — one flag per button, so downloading the
+  // plain file no longer shows the encrypted one as "Heruntergeladen" too.
+  let nsecDownloaded = $state(false);
+  let ncryptsecDownloaded = $state(false);
+
+  /** Identity that goes into the file name and header (shared helper, so
+   * a community key is never saved under the same name as a personal one). */
+  function identity() {
+    return {
+      label: userData.name || '',
+      npub: userData.npub,
+      appName: runtimeConfig.appName || 'Edufeed',
+      kind: /** @type {const} */ ('community')
+    };
   }
 
   function downloadNsec() {
-    downloadFile(userData.nsec, 'nostr-private-key.txt');
+    downloadRecoveryFile({ privateKey: userData.privateKey, nsec: userData.nsec, ...identity() });
+    nsecDownloaded = true;
     userData.downloadConfirmed = true;
+    errors.download = '';
   }
 
   function downloadNcryptsec() {
@@ -69,11 +71,16 @@
     }
 
     try {
-      // Use proper NIP-49 encryption
-      const ncryptsec = nip49.encrypt(userData.privateKey, userData.ncryptsecPassword);
-      downloadFile(ncryptsec, 'nostr-encrypted-key.txt');
+      downloadRecoveryFile({
+        privateKey: userData.privateKey,
+        nsec: userData.nsec,
+        password: userData.ncryptsecPassword,
+        ...identity()
+      });
+      ncryptsecDownloaded = true;
       userData.downloadConfirmed = true;
       errors.password = '';
+      errors.download = '';
     } catch (error) {
       console.error('Error generating keypair:', error);
       errors.keyGeneration = m.keypair_generator_error_generation_failed();
@@ -135,12 +142,8 @@
         <div class="space-y-4">
           <!-- Plain nsec download -->
           <div>
-            <button
-              class="btn btn-primary"
-              onclick={downloadNsec}
-              disabled={userData.downloadConfirmed}
-            >
-              {#if userData.downloadConfirmed}
+            <button class="btn btn-primary" onclick={downloadNsec} disabled={nsecDownloaded}>
+              {#if nsecDownloaded}
                 <CheckIcon />
                 {m.keypair_generator_downloaded()}
               {:else}
@@ -150,7 +153,7 @@
           </div>
 
           <!-- Encrypted option -->
-          <div class="divider">OR</div>
+          <div class="divider">{m.auth_login_modal_or()}</div>
 
           <div class="space-y-2">
             <label class="label" for="keypair-password">
@@ -168,9 +171,9 @@
               <button
                 class="btn btn-secondary"
                 onclick={downloadNcryptsec}
-                disabled={!userData.ncryptsecPassword || userData.downloadConfirmed}
+                disabled={!userData.ncryptsecPassword || ncryptsecDownloaded}
               >
-                {#if userData.downloadConfirmed}
+                {#if ncryptsecDownloaded}
                   <CheckIcon />
                   {m.keypair_generator_downloaded()}
                 {:else}
@@ -192,6 +195,10 @@
       <div class="alert alert-error">
         <span>{errors.download}</span>
       </div>
+    {:else if !userData.downloadConfirmed}
+      <p class="text-sm text-base-content/70" data-testid="keypair-download-hint">
+        {m.create_community_modal_error_download_required()}
+      </p>
     {/if}
   {/if}
 </div>

@@ -20,6 +20,8 @@
   import { useMembershipPendingCount } from '$lib/stores/membership-pending.svelte.js';
   import { profileLink } from '$lib/helpers/nostrUtils.js';
   import { helpLinkAttrs } from '$lib/helpers/help-link.js';
+  import { isBackupDownloaded } from '$lib/stores/backup-flags.svelte.js';
+  import { accountNeedsBackup, unsavedAccounts } from '$lib/helpers/account-backup.js';
   import ProfileAvatar from './ProfileAvatar.svelte';
   import ConnectionStatus from './ConnectionStatus.svelte';
   import {
@@ -28,7 +30,8 @@
     InfoCircleIcon,
     QuestionCircleIcon,
     CheckIcon,
-    ChatTextIcon
+    ChatTextIcon,
+    KeyIcon
   } from '$lib/components/icons';
 
   /** @type {{ onClose?: () => void }} */
@@ -77,21 +80,60 @@
     onClose();
   }
 
+  // Only local-key accounts hold a secret this app can lose — and only
+  // those get the backup entry and the logout warning (issue ddce9cc0).
+  const holdsLocalKey = $derived(activeAccount?.type === 'nsec');
+
+  function openBackup() {
+    modalStore.openModal('recovery-download');
+    onClose();
+  }
+
+  /**
+   * Ask before a logout that would lose a never-backed-up key. The dialog
+   * is a global modal so it survives this dropdown closing.
+   * @param {{mode: 'current' | 'all', count: number, canDownload: boolean}} props
+   * @param {() => void} remove
+   */
+  function confirmLogout(props, remove) {
+    modalStore.openModal('logoutConfirm', props, {
+      onConfirm: () => {
+        remove();
+        modalStore.closeModal();
+      },
+      onCancel: () => modalStore.closeModal(),
+      onBackup: () => modalStore.openModal('recovery-download')
+    });
+    onClose();
+  }
+
   function handleLogoutCurrent() {
-    if (activeAccount) {
-      manager.removeAccount(activeAccount.id);
+    const account = activeAccount;
+    if (!account) {
+      onClose();
+      return;
     }
+    if (accountNeedsBackup(account, isBackupDownloaded)) {
+      confirmLogout({ mode: 'current', count: 1, canDownload: true }, () =>
+        manager.removeAccount(account.id)
+      );
+      return;
+    }
+    manager.removeAccount(account.id);
     onClose();
   }
 
   function handleLogoutAll() {
-    if (confirm(m.navbar_logout_all_confirm())) {
-      const accounts = [...manager.accounts];
-      accounts.forEach((account) => {
-        manager.removeAccount(account.id);
-      });
-    }
-    onClose();
+    const accounts = [...manager.accounts];
+    const unsaved = unsavedAccounts(accounts, isBackupDownloaded);
+    confirmLogout(
+      {
+        mode: 'all',
+        count: unsaved.length,
+        canDownload: unsaved.some((a) => a.pubkey === activeAccount?.pubkey)
+      },
+      () => accounts.forEach((account) => manager.removeAccount(account.id))
+    );
   }
 </script>
 
@@ -148,6 +190,14 @@
   <li class="menu-disabled"><hr class="my-1 border-base-300" /></li>
 
   <!-- Group 2: account management -->
+  {#if holdsLocalKey}
+    <li>
+      <button onclick={openBackup} data-testid="backup-key-menu-item">
+        <KeyIcon class_="w-4 h-4" />
+        {m.navbar_backup_key()}
+      </button>
+    </li>
+  {/if}
   <li>
     <button onclick={openLoginModal}>
       <ArrowLeftRightIcon class_="w-4 h-4" />

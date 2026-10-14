@@ -103,10 +103,28 @@ vi.mock('$lib/paraglide/messages', () =>
       'auth_signup_modal_skip',
       'auth_signup_modal_creating_account',
       'common_back',
-      'common_cancel'
+      'common_cancel',
+      'common_close',
+      'auth_signup_modal_step_backup',
+      'auth_signup_modal_backup_title',
+      'auth_signup_modal_backup_intro',
+      'auth_signup_modal_backup_done',
+      'auth_signup_modal_backup_later',
+      'auth_signup_unsaved_title',
+      'auth_signup_unsaved_body',
+      'auth_signup_unsaved_backup_now',
+      'auth_signup_unsaved_close_anyway',
+      'auth_recovery_modal_encrypted_label',
+      'auth_recovery_modal_plain_label',
+      'auth_recovery_modal_password_label',
+      'auth_recovery_modal_download',
+      'auth_recovery_modal_password_too_short'
     ].map((key) => [key, () => key])
   )
 );
+
+const mockDownload = vi.hoisted(() => vi.fn());
+vi.mock('$lib/helpers/recoveryFile.js', () => ({ downloadRecoveryFile: mockDownload }));
 
 vi.mock('$lib/stores/config.svelte.js', () => ({
   runtimeConfig: {
@@ -228,6 +246,7 @@ import SignupModal from '../SignupModal.svelte';
 
 beforeEach(() => {
   vi.clearAllMocks();
+  localStorage.clear();
   mockManager.addAccount.mockClear();
   mockManager.setActive.mockClear();
   mockManager.getAccountForPubkey.mockReturnValue(undefined);
@@ -369,9 +388,9 @@ async function advanceToCommunities(utils) {
 }
 
 describe('SignupModal — Step 3 (Educator context)', () => {
-  it('shows the step indicator with 4 steps when membership is disabled', async () => {
+  it('shows the step indicator with 5 steps (incl. Sichern) when membership is disabled', async () => {
     const { container } = render(SignupModal, { props: { modalId: 'signup-modal' } });
-    expect(container.querySelectorAll('.steps .step')).toHaveLength(4);
+    expect(container.querySelectorAll('.steps .step')).toHaveLength(5);
   });
 
   it('Step 2 → Step 3 shows EducatorContextFields without publishing', async () => {
@@ -458,7 +477,7 @@ describe('SignupModal — Step 3 (Educator context)', () => {
 });
 
 describe('SignupModal — Step 4 (Communities)', () => {
-  it('Skip publishes kind 0 + kind 10002 + kind 10050 and closes the modal', async () => {
+  it('Skip publishes kind 0 + kind 10002 + kind 10050 and moves on to the backup step', async () => {
     const utils = render(SignupModal, { props: { modalId: 'signup-modal' } });
     await advanceToCommunities(utils);
     await fireEvent.click(utils.getByText('auth_signup_modal_step3_skip'));
@@ -470,8 +489,9 @@ describe('SignupModal — Step 4 (Communities)', () => {
     expect(kinds).toEqual([0, 10002, 10050]);
     const dmCall = mockPublishEvent.mock.calls.find((c) => c[0].kind === 10050);
     expect(dmCall?.[0].tags).toEqual([['relay', 'wss://dm.edufeed.org/']]);
-    // Membership disabled → modal closes right after finish.
-    expect(mockModalStore.closeModal).toHaveBeenCalled();
+    // Membership disabled → the wizard ends on the "Sichern" step, not closed.
+    expect(mockModalStore.closeModal).not.toHaveBeenCalled();
+    expect(await utils.findByTestId('signup-backup-step')).toBeTruthy();
   });
 
   it('Done with empty selection publishes kind 0 + kind 10002 + kind 10050', async () => {
@@ -572,9 +592,9 @@ describe('SignupModal — Step 5 (edufeed handle, membership-gated)', () => {
     config.runtimeConfig.membership.enabled = false;
   });
 
-  it('shows 5 steps in the indicator when membership is enabled', async () => {
+  it('shows 6 steps in the indicator when membership is enabled', async () => {
     const { container } = render(SignupModal, { props: { modalId: 'signup-modal' } });
-    expect(container.querySelectorAll('.steps .step')).toHaveLength(5);
+    expect(container.querySelectorAll('.steps .step')).toHaveLength(6);
   });
 
   it('finishing communities advances to the handle step instead of closing', async () => {
@@ -588,9 +608,10 @@ describe('SignupModal — Step 5 (edufeed handle, membership-gated)', () => {
     expect(mockModalStore.closeModal).not.toHaveBeenCalled();
     expect(await utils.findByTestId('membership-application-form-mock')).toBeTruthy();
 
-    // "Später beantragen" closes the modal.
+    // "Später beantragen" leads to the backup step, not out.
     await fireEvent.click(utils.getByText('auth_signup_modal_membership_skip'));
-    expect(mockModalStore.closeModal).toHaveBeenCalled();
+    expect(mockModalStore.closeModal).not.toHaveBeenCalled();
+    expect(await utils.findByTestId('signup-backup-step')).toBeTruthy();
   });
 
   // Issue "Erklärung/Anleitung Verifizierung" (design option 2c): the address
@@ -621,6 +642,99 @@ describe('SignupModal — Step 5 (edufeed handle, membership-gated)', () => {
 
     expect(utils.queryByText('auth_signup_modal_membership_skip')).toBeNull();
     await fireEvent.click(utils.getByText('auth_signup_modal_done'));
+    expect(await utils.findByTestId('signup-backup-step')).toBeTruthy();
+  });
+});
+
+// Issue ddce9cc0 (A/B): the wizard created the account at step 1 and never
+// asked for a backup; Escape at any later step silently left an unsaved key.
+describe('SignupModal — backup step and unsaved-key guard', () => {
+  /** @param {any} utils */
+  async function advanceToBackup(utils) {
+    await advanceToCommunities(utils);
+    await fireEvent.click(utils.getByText('auth_signup_modal_step3_skip'));
+    await new Promise((r) => setTimeout(r, 0));
+    await utils.findByTestId('signup-backup-step');
+  }
+
+  it('downloads a named backup for the new account, sets the flag, and only then offers Fertig', async () => {
+    const utils = render(SignupModal, { props: { modalId: 'signup-modal' } });
+    await advanceToBackup(utils);
+    expect(utils.queryByTestId('signup-backup-done-btn')).toBeNull();
+
+    await fireEvent.click(utils.getByTestId('recovery-mode-plain'));
+    await fireEvent.click(utils.getByTestId('recovery-download-btn'));
+
+    expect(mockDownload).toHaveBeenCalledTimes(1);
+    const args = mockDownload.mock.calls[0][0];
+    expect(args.nsec).toBe('nsec1stub');
+    expect(args.npub).toBe('npub1stub');
+    expect(args.label).toBe('Alice');
+    expect(localStorage.getItem(`backup-downloaded:${'a'.repeat(64)}`)).toBe('1');
+
+    expect(await utils.findByTestId('signup-backup-done')).toBeTruthy();
+    await fireEvent.click(utils.getByTestId('signup-backup-done-btn'));
+    expect(mockModalStore.closeModal).toHaveBeenCalled();
+  });
+
+  it('"Später sichern" asks before leaving without a backup; "Trotzdem schließen" then closes', async () => {
+    const utils = render(SignupModal, { props: { modalId: 'signup-modal' } });
+    await advanceToBackup(utils);
+    await fireEvent.click(utils.getByTestId('signup-backup-later'));
+    expect(mockModalStore.closeModal).not.toHaveBeenCalled();
+    expect(utils.getByTestId('signup-unsaved-guard')).toBeTruthy();
+    await fireEvent.click(utils.getByTestId('signup-unsaved-close'));
+    expect(mockModalStore.closeModal).toHaveBeenCalled();
+  });
+
+  it('Escape (dialog close) on step 2 reopens the wizard with the guard; "Jetzt sichern" jumps to the backup step', async () => {
+    const utils = render(SignupModal, { props: { modalId: 'signup-modal' } });
+    await submitStep1(utils.container, utils.getByText, 'Alice');
+    expect(mockManager.addAccount).toHaveBeenCalledTimes(1);
+
+    const dialog = /** @type {HTMLDialogElement} */ (utils.container.querySelector('dialog'));
+    dialog.close();
+    await new Promise((r) => setTimeout(r, 0));
+
+    expect(mockModalStore.closeModal).not.toHaveBeenCalled();
+    expect(dialog.open).toBe(true);
+    expect(utils.getByTestId('signup-unsaved-guard')).toBeTruthy();
+
+    await fireEvent.click(utils.getByTestId('signup-unsaved-backup'));
+    expect(utils.queryByTestId('signup-unsaved-guard')).toBeNull();
+    expect(utils.getByTestId('signup-backup-step')).toBeTruthy();
+  });
+
+  it('"Jetzt sichern" from a middle step publishes the profile on the way to the backup step', async () => {
+    const utils = render(SignupModal, { props: { modalId: 'signup-modal' } });
+    await submitStep1(utils.container, utils.getByText, 'Alice');
+    await fireEvent.click(utils.getByTestId('signup-close'));
+    await fireEvent.click(utils.getByTestId('signup-unsaved-backup'));
+    await new Promise((r) => setTimeout(r, 0));
+
+    expect(await utils.findByTestId('signup-backup-step')).toBeTruthy();
+    const kind0 = mockPublishEvent.mock.calls.find((c) => c[0].kind === 0);
+    expect(kind0).toBeTruthy();
+    expect(JSON.parse(kind0?.[0].content ?? '{}').name).toBe('Alice');
+  });
+
+  it('"Schließen" on step 2 goes through the same guard', async () => {
+    const utils = render(SignupModal, { props: { modalId: 'signup-modal' } });
+    await submitStep1(utils.container, utils.getByText, 'Alice');
+    await fireEvent.click(utils.getByTestId('signup-close'));
+    expect(utils.getByTestId('signup-unsaved-guard')).toBeTruthy();
+    expect(mockModalStore.closeModal).not.toHaveBeenCalled();
+  });
+
+  it('closes without a guard once the backup was downloaded', async () => {
+    const utils = render(SignupModal, { props: { modalId: 'signup-modal' } });
+    await advanceToBackup(utils);
+    await fireEvent.click(utils.getByTestId('recovery-mode-plain'));
+    await fireEvent.click(utils.getByTestId('recovery-download-btn'));
+    const dialog = /** @type {HTMLDialogElement} */ (utils.container.querySelector('dialog'));
+    dialog.close();
+    await new Promise((r) => setTimeout(r, 0));
+    expect(utils.queryByTestId('signup-unsaved-guard')).toBeNull();
     expect(mockModalStore.closeModal).toHaveBeenCalled();
   });
 });
