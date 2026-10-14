@@ -1,4 +1,6 @@
 <script>
+  import { page } from '$app/stores';
+  import { resolve } from '$app/paths';
   import {
     getNotifications,
     getUnreadCount,
@@ -27,7 +29,6 @@
 
   const filters = [
     { key: 'all', label: () => m.inbox_filter_all() },
-    { key: 'messages', label: () => m.inbox_filter_messages() },
     { key: 'formRequest', label: () => m.inbox_filter_forms() },
     { key: 'reaction', label: () => m.inbox_filter_reactions() },
     { key: 'wave', label: () => m.inbox_filter_waves() },
@@ -36,6 +37,16 @@
     { key: 'mention', label: () => m.inbox_filter_mentions() },
     { key: 'rsvp', label: () => m.inbox_filter_rsvps() }
   ];
+
+  // Two segments: notifications (default) and the DM conversation list.
+  // Anything but `messages` falls back to notifications (old links, typos).
+  let activeTab = $derived(
+    $page.url.searchParams.get('tab') === 'messages' ? 'messages' : 'notifications'
+  );
+  const tabHref = {
+    notifications: resolve('/c/inbox'),
+    messages: resolve('/c/inbox') + '?tab=messages'
+  };
 
   let allNotifications = $derived(getNotifications());
   let countsByType = $derived(getUnreadByType());
@@ -47,7 +58,7 @@
    * @typedef {NotificationItem | DmItem} InboxItem_
    */
   let mergedItems = $derived.by(() => {
-    if (activeFilter === 'messages') {
+    if (activeTab === 'messages') {
       // Show all DM conversations (both read and unread), sorted by recency
       return getKnownDmConversations().map((conv) => ({
         type: /** @type {const} */ ('dm'),
@@ -125,33 +136,61 @@
     {/if}
   </div>
 
-  <!-- Filter pills -->
-  <div class="mb-6 flex flex-wrap gap-2">
-    {#each filters as filter (filter.key)}
-      {@const count =
-        filter.key === 'all'
-          ? getUnreadCount() + getUnreadDmCount()
-          : filter.key === 'messages'
-            ? getUnreadDmCount()
+  <!-- Segments: Benachrichtigungen | Nachrichten -->
+  <div role="tablist" class="tabs mb-4 tabs-box">
+    <a
+      role="tab"
+      data-testid="inbox-tab-notifications"
+      href={tabHref.notifications}
+      class="tab gap-2"
+      class:tab-active={activeTab === 'notifications'}
+    >
+      {m.inbox_tab_notifications()}
+      {#if getUnreadCount() > 0}
+        <span class="badge badge-sm badge-primary">{getUnreadCount()}</span>
+      {/if}
+    </a>
+    <a
+      role="tab"
+      data-testid="inbox-tab-messages"
+      href={tabHref.messages}
+      class="tab gap-2"
+      class:tab-active={activeTab === 'messages'}
+    >
+      {m.inbox_tab_messages()}
+      {#if getUnreadDmCount() > 0}
+        <span class="badge badge-sm badge-primary">{getUnreadDmCount()}</span>
+      {/if}
+    </a>
+  </div>
+
+  {#if activeTab === 'notifications'}
+    <!-- Filter pills -->
+    <div class="mb-6 flex flex-wrap gap-2">
+      {#each filters as filter (filter.key)}
+        {@const count =
+          filter.key === 'all'
+            ? getUnreadCount() + getUnreadDmCount()
             : filter.key === 'formRequest'
               ? (countsByType['formRequest'] || 0) + (countsByType['formResponse'] || 0)
               : countsByType[filter.key] || 0}
-      <button
-        class="btn btn-sm {activeFilter === filter.key ? 'btn-primary' : 'btn-ghost'}"
-        onclick={() => (activeFilter = filter.key)}
-      >
-        {filter.label()}
-        {#if count > 0}
-          <span class="ml-1 badge badge-sm badge-primary">{count}</span>
-        {/if}
-      </button>
-    {/each}
-  </div>
+        <button
+          class="btn btn-sm {activeFilter === filter.key ? 'btn-primary' : 'btn-ghost'}"
+          onclick={() => (activeFilter = filter.key)}
+        >
+          {filter.label()}
+          {#if count > 0}
+            <span class="ml-1 badge badge-sm badge-primary">{count}</span>
+          {/if}
+        </button>
+      {/each}
+    </div>
 
-  {#if activeFilter === 'all'}
-    <!-- Not an inbox item (the handle grant is polled, not received as an
-      event) — pinned above the list, like the invites row in the dropdown. -->
-    <Nip05ReadyRow class_="mb-4 rounded-lg border border-base-300" />
+    {#if activeFilter === 'all'}
+      <!-- Not an inbox item (the handle grant is polled, not received as an
+        event) — pinned above the list, like the invites row in the dropdown. -->
+      <Nip05ReadyRow class_="mb-4 rounded-lg border border-base-300" />
+    {/if}
   {/if}
 
   <!-- Notification list -->

@@ -1897,6 +1897,8 @@
   "dashboard_requests_responded": "Beantwortet",
   "dashboard_requests_from": "Von",
   "dashboard_requests_unknown_form": "Unbekanntes Formular",
+  "inbox_tab_notifications": "Benachrichtigungen",
+  "inbox_tab_messages": "Nachrichten",
   "inbox_title": "Posteingang",
   "inbox_empty": "Noch keine Benachrichtigungen.",
   "inbox_mark_all_read": "Alle als gelesen markieren",
