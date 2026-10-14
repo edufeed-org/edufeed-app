@@ -560,3 +560,25 @@ describe('GlobalFAB — suggested row', () => {
     expect(sectionHeadings(container)).not.toContain('Suggested');
   });
 });
+
+describe('GlobalFAB — floating button visibility', () => {
+  it('renders the floating button by default', () => {
+    const { getByTestId } = render(GlobalFAB);
+    expect(getByTestId('global-fab-button')).toBeTruthy();
+  });
+
+  it('hides the floating button when hideButton is set, but still opens the sheet on request', async () => {
+    const { createHub } = await import('$lib/stores/create-hub.svelte.js');
+    const { queryByTestId, findByRole } = render(GlobalFAB, { hideButton: true });
+    expect(queryByTestId('global-fab-button')).toBeNull();
+    createHub.requested = true;
+    await findByRole('menu');
+  });
+
+  it('keeps the floating button out of the phone layout', () => {
+    const { getByTestId } = render(GlobalFAB);
+    const wrapper = getByTestId('global-fab-button').parentElement;
+    expect(wrapper?.className).toContain('lg:block');
+    expect(wrapper?.className).toContain('hidden');
+  });
+});

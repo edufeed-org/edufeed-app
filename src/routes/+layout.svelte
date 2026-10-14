@@ -148,7 +148,8 @@
 
   // Separately, pages can declare they already provide a primary "create"
   // affordance (e.g. /c/messages has a "Neu" button to start a new DM).
-  // When set, the global FAB is suppressed but the bottom nav stays visible.
+  // When set, the desktop floating button is hidden; the sheet stays
+  // mountable so the phone dock's Erstellen item keeps working.
   /** @type {ReturnType<typeof createOwnedSlot<() => boolean>>} */
   const pageHasOwnCreateActionSlot = createOwnedSlot();
   setContext('setPageHasOwnCreateAction', pageHasOwnCreateActionSlot.claim);
@@ -541,8 +542,8 @@
   </div>
 </div>
 <PublishStatusToast />
-{#if !hasOwnBottomUI && !pageHasOwnCreateAction && getActiveUser()}
-  <GlobalFAB />
+{#if !hasOwnBottomUI && getActiveUser()}
+  <GlobalFAB hideButton={pageHasOwnCreateAction} />
 {/if}
 {#if !hasOwnBottomUI && getActiveUser() && curatedReady}
   {@const TermiAssistant = lazyTermiAssistant.Component}

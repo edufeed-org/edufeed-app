@@ -21,6 +21,9 @@
   } from '$lib/config/create-actions.js';
   import { startResourceCreation } from '$lib/helpers/contentCreation.js';
 
+  /** @type {{ hideButton?: boolean }} */
+  let { hideButton = false } = $props();
+
   let open = $state(false);
   /** @type {HTMLDivElement | undefined} */
   let fabRoot = $state(undefined);
@@ -187,25 +190,28 @@
       ></button>
     {/if}
 
-    <div
-      class="fixed right-4 bottom-[calc(4rem+env(safe-area-inset-bottom)+0.75rem)] z-[60] lg:right-6 lg:bottom-6"
-    >
-      <!-- Main FAB Button -->
-      <button
-        type="button"
-        class="btn btn-circle shadow-lg btn-lg btn-accent hover:shadow-xl"
-        aria-label={m.fab_open_menu()}
-        aria-expanded={open}
-        aria-haspopup="menu"
-        onclick={() => (open = !open)}
+    {#if !hideButton}
+      <!-- Desktop create button. On phones the dock's Erstellen item opens the sheet. -->
+      <div
+        class="fixed right-4 bottom-[calc(4rem+env(safe-area-inset-bottom)+0.75rem)] z-[60] hidden lg:right-6 lg:bottom-6 lg:block"
       >
-        {#if open}
-          <CloseIcon class_="h-6 w-6" />
-        {:else}
-          <PlusIcon class_="h-6 w-6" />
-        {/if}
-      </button>
-    </div>
+        <button
+          type="button"
+          data-testid="global-fab-button"
+          class="btn btn-circle shadow-lg btn-lg btn-accent hover:shadow-xl"
+          aria-label={m.fab_open_menu()}
+          aria-expanded={open}
+          aria-haspopup="menu"
+          onclick={() => (open = !open)}
+        >
+          {#if open}
+            <CloseIcon class_="h-6 w-6" />
+          {:else}
+            <PlusIcon class_="h-6 w-6" />
+          {/if}
+        </button>
+      </div>
+    {/if}
 
     <!-- Create hub sheet: bottom sheet (< lg), anchored panel above the FAB (>= lg) -->
     {#if open}
