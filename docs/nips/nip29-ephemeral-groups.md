@@ -201,11 +201,25 @@ addressed to the parent group:
 
 Relays MUST accept kind 20002 only from the parent group's current call
 host or co-hosts, or an admin of the parent, carrying exactly one `h` tag,
-and MUST NOT store it. Clients in an ephemeral child subscribe to
-`{"kinds":[20002], "#h":["<parent id>"]}` for the duration of their stay.
-Clients SHOULD render a broadcast as a toast naming the sender and as a
-system line in the room's call chat, so people who missed the toast still
-see it.
+and MUST NOT store it.
+
+Relays MUST serve a kind 20002 to every **seat of the call**: an
+authenticated (NIP-42) reader who currently holds a seat in the parent's
+LiveKit room or in the room of one of its ephemeral children — judged by
+the participant lists the relay already keeps, never by membership — reads
+it even on a private parent. That is how a call-pass guest, a member of
+nothing, hears the host. Every other reader is judged like the parent's
+content (on a private parent: members only); an unauthenticated connection
+is nobody. (pyramid `edufeed-v1.21`.)
+
+Clients in the parent's call and in an ephemeral child subscribe to
+`{"kinds":[20002], "#h":["<parent id>"]}` for the duration of their stay,
+on an authenticated connection: a seat whose connection had no handshake
+of its own (a guest — the member path authenticates for the channel's
+chat) MUST authenticate before it opens the subscription, else the relay
+cannot know it is seated. Clients SHOULD render a broadcast as a toast
+naming the sender and as a system line in the room's call chat, so people
+who missed the toast still see it.
 
 ## Guests in ephemeral children
 
@@ -238,6 +252,10 @@ pyramid `edufeed-v1.13`).
 - The pass check `GET /.well-known/nip29/livekit/<child-id>/pass/<hash>`
   MUST answer for the parent's pass exactly as the parent's own endpoint
   would.
+- The parent's kind 20002 broadcasts MUST reach a guest's authenticated
+  connection while its seat is listed in the parent's room or in any
+  child's room ("Call broadcasts"): a private parent does not shut its
+  guests out of the host's word.
 
 A relay without this rule refuses the child token request with its usual
 `403 call pass unknown`; a client then leaves the guest in the parent's
@@ -269,11 +287,12 @@ call and says so.
   from an ephemeral child by moderation also means "return to the parent"
   (that is how a host moves a guest), never the "removed from the call" end
   state; a removal from the parent itself stays final.
-- The guest's client SHOULD subscribe to the parent's kind 20002 while in a
-  child like a member's, and MUST ignore a relay's refusal silently: a
-  broadcast reaches guests only where the parent group is readable to
-  non-members (a public parent). A private parent's broadcasts do not
-  reach its guests.
+- The guest's client SHOULD subscribe to the parent's kind 20002 in the
+  parent's call and in a child like a member's, on a connection it has
+  authenticated with the guest's own key (NIP-42 — nothing else
+  authenticates a guest), and MUST ignore a relay's refusal silently: on a
+  relay without the seat rule above a broadcast reaches guests only where
+  the parent group is readable to non-members (a public parent).
 - The host moves a guest out of a room with the moderation endpoint's
   `remove` on the **child** (`POST …/livekit/<child-id>/moderate`, the
   identity from the guest's `seat`); the guest's client returns to the

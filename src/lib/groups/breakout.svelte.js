@@ -1966,7 +1966,13 @@ if (typeof window !== 'undefined') {
 
     // Call broadcasts (kind 20002) for the session's parent, while a
     // session is known — in the main room or in a room. Ephemeral: the
-    // relay sends only what arrives from now on.
+    // relay sends only what arrives from now on. The relay serves a private
+    // parent's broadcasts to the SEATS of its call, authenticated (the
+    // extension's rule): a connection that had no NIP-42 handshake yet asks
+    // for one first — a guest's has nobody else to do it (the member path
+    // authenticates for the channel's chat), so without this a guest on a
+    // private channel never heard a word. The authenticated$ bump above
+    // (authVersion) then reopens the watch on the authenticated connection.
     const broadcastKey = $derived(
       session ? `${normalizeURL(session.main.relay)} ${session.main.id}` : ''
     );
@@ -1975,6 +1981,7 @@ if (typeof window !== 'undefined') {
       void authVersion;
       if (!key) return;
       const [relay, mainId] = key.split(' ');
+      if (!(/** @type {any} */ (pool.relay(relay)).authenticated)) void authenticateMainRelay();
       return resubscribing(
         () => pool.relay(relay).subscription([callBroadcastFilter(mainId)]),
         {

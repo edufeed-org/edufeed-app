@@ -17,6 +17,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { flushSync } from 'svelte';
 import { Subject } from 'rxjs';
+import { __resetAuthAttempts } from '$lib/groups/relay-auth.js';
 
 const RELAY = 'wss://groups.example/';
 const KEY = 'ab'.repeat(32);
@@ -28,31 +29,48 @@ const MAIN = { id: 'main-id', relay: RELAY };
 /** A deadline that is not yet due under real timers. */
 const FUTURE = Math.floor(Date.now() / 1000) + 3600;
 
-/** @type {{ subs: Array<{filters: any[], stream: Subject<any>, closed: boolean}> }} */
-const relay = vi.hoisted(() => ({ subs: [] }));
+/**
+ * The fake relay connection: its subscriptions, and the NIP-42 state the
+ * store reads (`authenticated`, `challenge`, `authenticate`, `authenticated$`
+ * — the shape of an applesauce Relay; see relay-auth.js). Unauthenticated
+ * and without a challenge by default: authenticateOnce then gives up at once.
+ * @type {{ subs: Array<{filters: any[], stream: Subject<any>, closed: boolean}>, conn: any }}
+ */
+const relay = vi.hoisted(() => ({ subs: [], conn: /** @type {any} */ (null) }));
 vi.mock('$lib/stores/nostr-infrastructure.svelte', () => ({
   eventStore: { getReplaceable: () => undefined },
   pool: {
-    relay: () => ({
-      subscription: (/** @type {any[]} */ filters) => {
-        const stream = new Subject();
-        const entry = { filters, stream, closed: false };
-        relay.subs.push(entry);
-        return {
-          subscribe: (/** @type {any} */ handlers) => {
-            const sub = stream.subscribe(handlers);
-            return {
-              unsubscribe: () => {
-                entry.closed = true;
-                sub.unsubscribe();
-              }
-            };
-          }
-        };
-      }
-    })
+    relay: () => relay.conn
   }
 }));
+/** A fresh fake connection (per test). */
+function freshConn() {
+  const conn = {
+    url: RELAY,
+    authenticated: false,
+    challenge: /** @type {string | null} */ (null),
+    authenticated$: new Subject(),
+    authenticate: vi.fn(async () => ({ ok: true })),
+    subscription: (/** @type {any[]} */ filters) => {
+      const stream = new Subject();
+      const entry = { filters, stream, closed: false };
+      relay.subs.push(entry);
+      return {
+        subscribe: (/** @type {any} */ handlers) => {
+          const sub = stream.subscribe(handlers);
+          return {
+            unsubscribe: () => {
+              entry.closed = true;
+              sub.unsubscribe();
+            }
+          };
+        }
+      };
+    }
+  };
+  return conn;
+}
+relay.conn = freshConn();
 vi.mock('$lib/groups/relay-key-race.js', () => ({
   raceRelayKey: (/** @type {string} */ _relay, /** @type {any} */ { onAuthors, onReady }) => {
     onAuthors([KEY]);
@@ -260,6 +278,8 @@ beforeEach(async () => {
   prefs.selfJoin = true;
   flushSync();
   relay.subs.length = 0;
+  relay.conn = freshConn();
+  __resetAuthAttempts();
   rel.fetchEphemeralChildren.mockResolvedValue([]);
   rel.fetchRoomMetadata.mockResolvedValue([]);
   rel.fetchPresence.mockResolvedValue([]);
@@ -1605,6 +1625,42 @@ describe('call broadcasts (kind 20002)', () => {
     lk.listener?.({ t: 'end' }, hostSender);
     await settle();
     expect(sub.closed).toBe(true);
+  });
+
+  it('authenticates a connection without a NIP-42 handshake before watching, and reopens the watch once authenticated (a guest has nobody else to authenticate it)', async () => {
+    const conn = relay.conn;
+    conn.challenge = 'challenge-1';
+    conn.authenticate.mockImplementation(async () => {
+      conn.authenticated = true;
+      conn.authenticated$.next(true);
+      return { ok: true };
+    });
+    await liveInMain(bobUser);
+    lk.listener?.({ t: 'state', rooms: ROOMS, until: FUTURE }, hostSender);
+    await settle();
+    expect(conn.authenticate).toHaveBeenCalledTimes(1);
+    expect(conn.authenticate).toHaveBeenCalledWith(bobUser.signer);
+    // the watch opened before the handshake is replaced by one after it
+    const all = relay.subs.filter((x) => x.filters[0]?.kinds?.[0] === 20002);
+    expect(all.length).toBeGreaterThanOrEqual(2);
+    expect(all.filter((x) => !x.closed)).toHaveLength(1);
+    expect(all.at(-1)?.closed).toBe(false);
+    // and the authenticated connection is not asked again
+    lk.listener?.({ t: 'end' }, hostSender);
+    await settle();
+    lk.listener?.({ t: 'state', rooms: ROOMS, until: FUTURE }, hostSender);
+    await settle();
+    expect(conn.authenticate).toHaveBeenCalledTimes(1);
+  });
+
+  it("an already authenticated connection (a member's chat did the handshake) is left alone", async () => {
+    relay.conn.authenticated = true;
+    relay.conn.challenge = 'challenge-1';
+    await liveInMain(bobUser);
+    lk.listener?.({ t: 'state', rooms: ROOMS, until: FUTURE }, hostSender);
+    await settle();
+    expect(broadcastSub()).toBeDefined();
+    expect(relay.conn.authenticate).not.toHaveBeenCalled();
   });
 
   it('renders a message as a toast naming the sender and a system line in the call chat, once', async () => {
