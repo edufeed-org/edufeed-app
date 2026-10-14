@@ -125,6 +125,22 @@ beforeEach(() => {
   download.fn.mockClear();
 });
 
+// A guest's chat drawer (CallLanding) has no channel tab to show in the
+// header: the panel then names itself, so the header is never empty.
+describe('CallChatPanel header title', () => {
+  it('names the chat after the call when the parent gives no tabs', () => {
+    render(CallChatPanel, { props });
+    const title = screen.getByTestId('call-chat-title');
+    expect(title.textContent).toBe('arbeitszimmer');
+    expect(title.closest('[data-testid="call-chat-header"]')).toBeTruthy();
+  });
+
+  it('falls back to the chat tab label without a title', () => {
+    render(CallChatPanel, { props: { ...props, title: '' } });
+    expect(screen.getByTestId('call-chat-title').textContent).toBe(m.groups_call_chat_tab());
+  });
+});
+
 // Task 19: the chat is gone when the call ends — a .txt keeps it.
 describe('CallChatPanel download', () => {
   const button = () => screen.getByRole('button', { name: m.groups_call_chat_download() });

@@ -615,9 +615,15 @@ function forgetGuestSeats({ identities = [], pubkey }) {
 /** @param {BreakoutRoom} room */
 function offerAssignment(room) {
   pending = { room };
+  // The UI names a room by its number alone ("Raum 2"), everywhere; the
+  // relay group name ("Breakout 2 · Seminar") is wire format other clients
+  // see and parsing relies on.
   modalStore.openModal(
     'breakoutAssignment',
-    { roomName: room.name, autoMs: BREAKOUT_AUTO_SWITCH_MS },
+    {
+      roomName: m.groups_call_breakout_room_label({ n: room.index }),
+      autoMs: BREAKOUT_AUTO_SWITCH_MS
+    },
     { onConfirm: () => void acceptAssignment(), onCancel: () => declineAssignment() }
   );
 }
@@ -674,10 +680,14 @@ async function enterRoom(room) {
   }
   switching = true;
   currentRoom = room;
+  // The stage keeps the CHANNEL's name as the call title in a room; the
+  // room itself is the "Raum N" badge beside it (not the relay group name,
+  // which would read as a third name for the same room).
+  const title = session?.main.title ?? getGroupCallState().title;
   try {
     await switchGroupCall(
       { id: room.id, relay: room.relay },
-      { title: room.name, ...(code ? { code } : {}), ...(token ? { token } : {}) }
+      { title, ...(code ? { code } : {}), ...(token ? { token } : {}) }
     );
   } finally {
     switching = false;
@@ -1456,10 +1466,10 @@ function nameOfPubkey(pubkey) {
 }
 
 /**
- * Show a broadcast once: `message` and `return` as a toast naming the
- * sender plus a system line in the call chat (so people who missed the
- * toast still see it); `countdown` only moves the deadline (no toast — one
- * comes every few minutes).
+ * Show a broadcast once: `message` (everywhere) and `return` (in a room
+ * only) as a toast naming the sender plus a system line in the call chat
+ * (so people who missed the toast still see it); `countdown` only moves the
+ * deadline (no toast — one comes every few minutes).
  * @param {import('./call-broadcasts.js').CallBroadcast} broadcast
  */
 function renderBroadcast(broadcast) {
@@ -1477,6 +1487,10 @@ function renderBroadcast(broadcast) {
     session = { ...s, until };
     return;
   }
+  // A `return` is addressed to the rooms ("come back"): a seat in the main
+  // room — the host's own echo included — has nothing to come back from,
+  // and would read it after the rooms are already gone.
+  if (broadcast.type === 'return' && !currentRoom) return;
   const text =
     broadcast.type === 'return'
       ? broadcast.content.trim() || m.groups_call_broadcast_return_default()
