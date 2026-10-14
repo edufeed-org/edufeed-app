@@ -61,10 +61,6 @@ describe('getDashboardActiveSection', () => {
     expect(getDashboardActiveSection('/c', params('view=communities'))).toBe('communities');
   });
 
-  it('returns null on /discover', () => {
-    expect(getDashboardActiveSection('/discover', params())).toBeNull();
-  });
-
   it('returns null on /calendar', () => {
     expect(getDashboardActiveSection('/calendar', params())).toBeNull();
   });
@@ -75,5 +71,17 @@ describe('getDashboardActiveSection', () => {
 
   it('returns null on /p/somepubkey', () => {
     expect(getDashboardActiveSection('/p/somepubkey', params())).toBeNull();
+  });
+
+  it('returns "discover" on /discover', () => {
+    expect(getDashboardActiveSection('/discover', params())).toBe('discover');
+  });
+
+  it('returns "discover" on /discover/ with a type filter', () => {
+    expect(getDashboardActiveSection('/discover/', params('type=learning'))).toBe('discover');
+  });
+
+  it('still returns null for unrelated routes', () => {
+    expect(getDashboardActiveSection('/calendar', params())).toBeNull();
   });
 });

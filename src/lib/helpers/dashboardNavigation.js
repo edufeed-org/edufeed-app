@@ -17,16 +17,20 @@ const resolvedBase = stripTrailingSlash(resolve('/c/'));
 const resolvedInbox = stripTrailingSlash(resolve('/c/inbox'));
 const resolvedMessages = stripTrailingSlash(resolve('/c/messages'));
 const resolvedGroups = stripTrailingSlash(resolve('/c/groups'));
+const resolvedDiscover = stripTrailingSlash(resolve('/discover'));
 
 /**
  * Derive the active section for DashboardNavSidebar / DashboardBottomTabBar.
  *
  * @param {string} pathname - Current URL pathname
  * @param {URLSearchParams} searchParams - Current URL search params
- * @returns {'home' | 'feed' | 'inbox' | 'messages' | 'groups' | 'my-stuff' | 'communities' | null}
+ * @returns {'home' | 'feed' | 'inbox' | 'messages' | 'groups' | 'my-stuff' | 'communities' | 'discover' | null}
  */
 export function getDashboardActiveSection(pathname, searchParams) {
   const normalized = stripTrailingSlash(pathname);
+  // /discover is a phone-dock destination outside /c.
+  if (normalized === resolvedDiscover || normalized.startsWith(resolvedDiscover + '/'))
+    return 'discover';
   if (normalized !== resolvedBase && !normalized.startsWith(resolvedBase + '/')) return null;
   if (normalized === resolvedMessages || normalized.startsWith(resolvedMessages + '/'))
     return 'messages';
