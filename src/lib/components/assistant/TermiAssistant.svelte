@@ -1,29 +1,35 @@
 <script>
-  // Termi — the edufeed assistant. Floating launcher stacked above the create
-  // FAB; opens a popover chat (expandable to a side panel) that carries the
-  // account-setup hints formerly shown as info banners, plus a canned Q&A.
+  // Termi — the edufeed assistant. Desktop: floating launcher stacked above
+  // the create FAB. Phone: the launcher sits in the headers
+  // (TermiLauncherButton) and opens the window through the termi-launcher
+  // store; the bubble below is hidden there.
   import * as m from '$lib/paraglide/messages';
   import { useAssistantHints } from '$lib/stores/assistant-hints.svelte.js';
+  import { termiLauncher, closeTermi } from '$lib/stores/termi-launcher.svelte.js';
   import TermiChatWindow from './TermiChatWindow.svelte';
 
   const { getHints, getOpenCount, runHint, customizeHint, dismissHint } = useAssistantHints();
 
-  let open = $state(false);
-  let expanded = $state(false);
+  $effect(() => {
+    termiLauncher.openCount = getOpenCount();
+  });
 
-  function close() {
-    open = false;
-    expanded = false;
-  }
+  $effect(() => {
+    termiLauncher.available = true;
+    return () => {
+      termiLauncher.available = false;
+      closeTermi();
+    };
+  });
 </script>
 
-{#if !open}
+{#if !termiLauncher.open}
   <button
     type="button"
     data-testid="termi-launcher"
     aria-label={m.termi_launcher_aria()}
-    class="termi-slot fixed right-[0.875rem] z-[60] grid h-[52px] w-[52px] place-items-center rounded-full border border-base-300 bg-base-100 shadow-lg transition-transform hover:scale-105 lg:right-[1.375rem]"
-    onclick={() => (open = true)}
+    class="termi-slot fixed right-[0.875rem] z-[60] hidden h-[52px] w-[52px] place-items-center rounded-full border border-base-300 bg-base-100 shadow-lg transition-transform hover:scale-105 lg:right-[1.375rem] lg:grid"
+    onclick={() => (termiLauncher.open = true)}
   >
     <img src="/termi.png" alt="" class="h-9 w-9 object-contain" />
     {#if getOpenCount() > 0}
@@ -37,19 +43,19 @@
   </button>
 {/if}
 
-{#if open}
-  {#if expanded}
+{#if termiLauncher.open}
+  {#if termiLauncher.expanded}
     <button
       type="button"
       class="fixed inset-0 z-[65] cursor-default bg-(--c-scrim)"
       aria-label={m.aria_close_modal()}
-      onclick={close}
+      onclick={closeTermi}
     ></button>
   {/if}
   <TermiChatWindow
-    {expanded}
-    onToggleExpand={() => (expanded = !expanded)}
-    onClose={close}
+    expanded={termiLauncher.expanded}
+    onToggleExpand={() => (termiLauncher.expanded = !termiLauncher.expanded)}
+    onClose={closeTermi}
     hints={getHints()}
     openCount={getOpenCount()}
     {runHint}
