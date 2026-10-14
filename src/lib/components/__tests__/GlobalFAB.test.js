@@ -582,3 +582,19 @@ describe('GlobalFAB — floating button visibility', () => {
     expect(wrapper?.className).toContain('hidden');
   });
 });
+
+describe('GlobalFAB — detail pages', () => {
+  it('hides the floating button on a detail page but still opens the sheet from the dock', async () => {
+    const stores = /** @type {any} */ (await import('$app/stores'));
+    stores.__setPage({
+      params: { naddr: 'naddr1abc' },
+      route: { id: '/[naddr=naddr]' },
+      url: new URL('http://localhost/naddr1abc')
+    });
+    const { createHub } = await import('$lib/stores/create-hub.svelte.js');
+    const { queryByTestId, findByRole } = render(GlobalFAB);
+    expect(queryByTestId('global-fab-button')).toBeNull();
+    createHub.requested = true;
+    await findByRole('menu');
+  });
+});

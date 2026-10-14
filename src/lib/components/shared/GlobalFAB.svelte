@@ -176,92 +176,92 @@
   }
 </script>
 
-{#if !isDetailPage}
-  <!-- fabRoot wraps button + sheet so the click-outside listener doesn't dismiss
-       when clicking inside the sheet (which sits outside the button's stack). -->
-  <div bind:this={fabRoot}>
-    {#if open}
-      <!-- Backdrop scrim — tap to dismiss -->
+<!-- fabRoot wraps button + sheet so the click-outside listener doesn't dismiss
+     when clicking inside the sheet (which sits outside the button's stack).
+     Detail pages (/[naddr], /forms/[naddr]) hide the floating button but keep
+     the sheet: the phone dock's Erstellen item opens it there too. -->
+<div bind:this={fabRoot}>
+  {#if open}
+    <!-- Backdrop scrim — tap to dismiss -->
+    <button
+      type="button"
+      class="fixed inset-0 z-[55] cursor-default bg-(--c-scrim)"
+      aria-label={m.aria_close_modal()}
+      onclick={close}
+    ></button>
+  {/if}
+
+  {#if !hideButton && !isDetailPage}
+    <!-- Desktop create button. On phones the dock's Erstellen item opens the sheet. -->
+    <div
+      class="fixed right-4 bottom-[calc(4rem+env(safe-area-inset-bottom)+0.75rem)] z-[60] hidden lg:right-6 lg:bottom-6 lg:block"
+    >
       <button
         type="button"
-        class="fixed inset-0 z-[55] cursor-default bg-(--c-scrim)"
-        aria-label={m.aria_close_modal()}
-        onclick={close}
-      ></button>
-    {/if}
-
-    {#if !hideButton}
-      <!-- Desktop create button. On phones the dock's Erstellen item opens the sheet. -->
-      <div
-        class="fixed right-4 bottom-[calc(4rem+env(safe-area-inset-bottom)+0.75rem)] z-[60] hidden lg:right-6 lg:bottom-6 lg:block"
+        data-testid="global-fab-button"
+        class="btn btn-circle shadow-lg btn-lg btn-accent hover:shadow-xl"
+        aria-label={m.fab_open_menu()}
+        aria-expanded={open}
+        aria-haspopup="menu"
+        onclick={() => (open = !open)}
       >
+        {#if open}
+          <CloseIcon class_="h-6 w-6" />
+        {:else}
+          <PlusIcon class_="h-6 w-6" />
+        {/if}
+      </button>
+    </div>
+  {/if}
+
+  <!-- Create hub sheet: bottom sheet (< lg), anchored panel above the FAB (>= lg) -->
+  {#if open}
+    <div
+      class="pb-safe fixed inset-x-0 bottom-0 z-[60] max-h-[80vh] overflow-y-auto rounded-t-2xl bg-base-100 shadow-2xl lg:inset-x-auto lg:right-6 lg:bottom-24 lg:w-96 lg:rounded-2xl"
+      role="menu"
+      aria-label={m.fab_open_menu()}
+    >
+      <!-- Grab handle (mobile) + close button row -->
+      <div class="relative flex items-center justify-center pt-2 pb-1">
+        <div class="h-1 w-12 rounded-full bg-base-content/20 lg:hidden"></div>
         <button
           type="button"
-          data-testid="global-fab-button"
-          class="btn btn-circle shadow-lg btn-lg btn-accent hover:shadow-xl"
-          aria-label={m.fab_open_menu()}
-          aria-expanded={open}
-          aria-haspopup="menu"
-          onclick={() => (open = !open)}
+          class="btn absolute top-1 right-2 btn-circle btn-ghost btn-sm"
+          aria-label={m.aria_close_modal()}
+          onclick={close}
         >
-          {#if open}
-            <CloseIcon class_="h-6 w-6" />
-          {:else}
-            <PlusIcon class_="h-6 w-6" />
-          {/if}
+          <CloseIcon class_="h-5 w-5" />
         </button>
       </div>
-    {/if}
 
-    <!-- Create hub sheet: bottom sheet (< lg), anchored panel above the FAB (>= lg) -->
-    {#if open}
-      <div
-        class="pb-safe fixed inset-x-0 bottom-0 z-[60] max-h-[80vh] overflow-y-auto rounded-t-2xl bg-base-100 shadow-2xl lg:inset-x-auto lg:right-6 lg:bottom-24 lg:w-96 lg:rounded-2xl"
-        role="menu"
-        aria-label={m.fab_open_menu()}
-      >
-        <!-- Grab handle (mobile) + close button row -->
-        <div class="relative flex items-center justify-center pt-2 pb-1">
-          <div class="h-1 w-12 rounded-full bg-base-content/20 lg:hidden"></div>
-          <button
-            type="button"
-            class="btn absolute top-1 right-2 btn-circle btn-ghost btn-sm"
-            aria-label={m.aria_close_modal()}
-            onclick={close}
-          >
-            <CloseIcon class_="h-5 w-5" />
-          </button>
-        </div>
-
-        <div class="space-y-5 px-4 pt-2 pb-6">
-          {#each sections as section (section.key)}
-            <section>
-              <h3 class="mb-2 text-xs font-semibold tracking-wide text-base-content/60 uppercase">
-                {section.title}
-              </h3>
-              <div class="fab-grid grid grid-cols-3 gap-2">
-                {#each section.actions as action (action.id)}
-                  <button
-                    type="button"
-                    onclick={() => runAction(action)}
-                    aria-label={action.ariaLabel()}
-                    data-tip={action.description?.()}
-                    class="flex flex-col items-center gap-1.5 rounded-xl bg-base-200 p-3 text-center transition-colors hover:bg-base-300 {action.description
-                      ? 'tooltip'
-                      : ''}"
-                  >
-                    <span class="text-primary"><action.icon class_="h-5 w-5" /></span>
-                    <span class="text-xs leading-tight">{action.label()}</span>
-                  </button>
-                {/each}
-              </div>
-            </section>
-          {/each}
-        </div>
+      <div class="space-y-5 px-4 pt-2 pb-6">
+        {#each sections as section (section.key)}
+          <section>
+            <h3 class="mb-2 text-xs font-semibold tracking-wide text-base-content/60 uppercase">
+              {section.title}
+            </h3>
+            <div class="fab-grid grid grid-cols-3 gap-2">
+              {#each section.actions as action (action.id)}
+                <button
+                  type="button"
+                  onclick={() => runAction(action)}
+                  aria-label={action.ariaLabel()}
+                  data-tip={action.description?.()}
+                  class="flex flex-col items-center gap-1.5 rounded-xl bg-base-200 p-3 text-center transition-colors hover:bg-base-300 {action.description
+                    ? 'tooltip'
+                    : ''}"
+                >
+                  <span class="text-primary"><action.icon class_="h-5 w-5" /></span>
+                  <span class="text-xs leading-tight">{action.label()}</span>
+                </button>
+              {/each}
+            </div>
+          </section>
+        {/each}
       </div>
-    {/if}
-  </div>
-{/if}
+    </div>
+  {/if}
+</div>
 
 <style>
   /* DaisyUI centers tooltips on the tile (inset ... 50% + translateX(-50%)), which
