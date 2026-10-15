@@ -85,6 +85,13 @@
       secondary: null,
       doing: null
     },
+    signer: {
+      title: m.termi_hint_signer_title(),
+      body: m.termi_hint_signer_body(),
+      action: m.termi_hint_signer_cta(),
+      secondary: null,
+      doing: null
+    },
     invites: {
       // Enriched once the invite is decrypted (auto-decrypt makes that the
       // common case): name the area instead of a generic "private area".
@@ -154,7 +161,9 @@
       };
     }
     return hintCopy[
-      /** @type {'backup' | 'relays' | 'dm' | 'nip05' | 'profile' | 'invites'} */ (hint.id)
+      /** @type {'backup' | 'relays' | 'dm' | 'nip05' | 'profile' | 'signer' | 'invites'} */ (
+        hint.id
+      )
     ];
   }
 

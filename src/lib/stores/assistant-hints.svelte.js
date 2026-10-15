@@ -59,15 +59,21 @@ import {
   markProfileHintDismissed
 } from '$lib/stores/profile-hint-flags.svelte.js';
 import {
+  isSignerHintDismissed,
+  markSignerHintDismissed
+} from '$lib/stores/signer-hint-flags.svelte.js';
+import { hasNip44 } from '$lib/helpers/nip44.js';
+import {
   deriveHintStatus,
   trackEverOpen,
   isProfileHintApplicable,
+  isSignerHintApplicable,
   deriveNip05Hint
 } from '$lib/helpers/assistant-hints.js';
 import { getProfileNip05s } from '$lib/helpers/nip05-verify.js';
 import { runtimeConfig } from '$lib/stores/config.svelte.js';
 
-/** @typedef {'backup' | 'relays' | 'dm' | 'nip05' | 'profile' | 'invites' | 'joinRequests' | 'groupAdded'} HintId */
+/** @typedef {'backup' | 'relays' | 'dm' | 'nip05' | 'profile' | 'signer' | 'invites' | 'joinRequests' | 'groupAdded'} HintId */
 /** @typedef {import('$lib/helpers/assistant-hints.js').HintStatus} HintStatus */
 
 export const HINT_IDS = /** @type {HintId[]} */ ([
@@ -75,6 +81,7 @@ export const HINT_IDS = /** @type {HintId[]} */ ([
   'relays',
   'dm',
   'profile',
+  'signer',
   'nip05',
   'invites',
   'joinRequests',
@@ -206,6 +213,7 @@ export function useAssistantHints() {
         dm: null,
         nip05: null,
         profile: null,
+        signer: null,
         invites: null,
         joinRequests: null,
         groupAdded: null
@@ -253,6 +261,17 @@ export function useAssistantHints() {
       signupOpen: modalStore.activeModal === 'signup'
     });
 
+    // An extension without window.nostr.nip44 (keys.band): DMs, private
+    // channels and guest links will all refuse — say so once, up front
+    // (issue acb0250d). `confirmed` flips when the user adds a method that
+    // encrypts, so the card reads done after the switch.
+    const canEncrypt = hasNip44(user.signer);
+    const signerApplicable = isSignerHintApplicable({
+      user,
+      canEncrypt,
+      dismissed: isSignerHintDismissed(user.pubkey)
+    });
+
     return {
       backup: deriveHintStatus({
         applicable: backupApplicable,
@@ -284,6 +303,12 @@ export function useAssistantHints() {
         confirmed: hasProfile,
         running: false, // the action opens a modal; the kind 0 confirms reactively
         everOpen: everOpen.has('profile')
+      }),
+      signer: deriveHintStatus({
+        applicable: signerApplicable,
+        confirmed: canEncrypt,
+        running: false, // the action opens the login modal; the next account confirms
+        everOpen: everOpen.has('signer')
       }),
       invites: deriveHintStatus({
         applicable: getPendingInviteCount() > 0,
@@ -363,6 +388,12 @@ export function useAssistantHints() {
       modalStore.openModal('profile', { profile: {}, pubkey: user.pubkey });
       return;
     }
+    if (id === 'signer') {
+      // The login modal adds another method for the same person (nsec, or an
+      // extension that encrypts) and makes it the active account.
+      modalStore.openModal('login');
+      return;
+    }
     if (id === 'invites') {
       modalStore.openModal('concordInvites');
       return;
@@ -418,6 +449,7 @@ export function useAssistantHints() {
         if (nip05Meta.variant === 'ready') markNip05ReadyHintDismissed(user.pubkey);
         else markNip05HintDismissed(user.pubkey);
       } else if (id === 'profile') markProfileHintDismissed(user.pubkey);
+      else if (id === 'signer') markSignerHintDismissed(user.pubkey);
     }
     const next = new Set(dismissed); // eslint-disable-line svelte/prefer-svelte-reactivity -- replaced wholesale below
     next.add(id);

@@ -7,6 +7,7 @@ import {
   trackEverOpen,
   matchSuggestion,
   isProfileHintApplicable,
+  isSignerHintApplicable,
   deriveNip05Hint
 } from '$lib/helpers/assistant-hints.js';
 
@@ -211,5 +212,32 @@ describe('deriveNip05Hint', () => {
     expect(
       deriveNip05Hint({ ...base, grantState: 'granted', profileSettled: false }).applicable
     ).toBe(false);
+  });
+});
+
+describe('isSignerHintApplicable', () => {
+  const base = {
+    user: { type: 'extension', pubkey: 'b'.repeat(64) },
+    canEncrypt: false,
+    dismissed: false
+  };
+
+  it('shows for an extension account whose signer lacks NIP-44 (keys.band, issue acb0250d)', () => {
+    expect(isSignerHintApplicable(base)).toBe(true);
+  });
+
+  it('hides when the extension does encrypt (Alby, nos2x)', () => {
+    expect(isSignerHintApplicable({ ...base, canEncrypt: true })).toBe(false);
+  });
+
+  it('hides for non-extension accounts even without NIP-44 (bunker/readonly own their story)', () => {
+    expect(isSignerHintApplicable({ ...base, user: { type: 'nostr-connect' } })).toBe(false);
+    expect(isSignerHintApplicable({ ...base, user: { type: 'readonly' } })).toBe(false);
+    expect(isSignerHintApplicable({ ...base, user: { type: 'nsec' } })).toBe(false);
+  });
+
+  it('hides when dismissed or logged out', () => {
+    expect(isSignerHintApplicable({ ...base, dismissed: true })).toBe(false);
+    expect(isSignerHintApplicable({ ...base, user: null })).toBe(false);
   });
 });
