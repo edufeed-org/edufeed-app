@@ -97,7 +97,18 @@ vi.mock('$lib/paraglide/messages', () => ({
   auth_login_modal_extension_short: () => 'Extension',
   auth_login_modal_bunker_short: () => 'Signer app',
   auth_login_modal_nsec_short: () => 'Private key',
-  auth_login_modal_npub_short: () => 'Browse only: with public key (npub)'
+  auth_login_modal_npub_short: () => 'Browse only: with public key (npub)',
+  auth_login_modal_title: () => 'Log in',
+  auth_login_modal_create_account_sub: () => 'Takes a minute, just a name.',
+  auth_login_modal_row_key: () => 'With your access key',
+  auth_login_modal_row_key_sub: () => 'The key from your backup',
+  auth_login_modal_row_bunker: () => 'With a signer app',
+  auth_login_modal_row_bunker_sub: () => 'Amber and others',
+  auth_login_modal_row_extension: () => 'With a browser extension',
+  auth_login_modal_row_extension_sub: () => 'Alby and others',
+  auth_login_modal_row_google_sub: () => 'For accounts of your institution',
+  auth_login_modal_google: () => 'Continue with Google',
+  auth_login_modal_footer: () => 'No password: your account is an access key.'
 }));
 
 beforeEach(() => {
@@ -218,19 +229,37 @@ describe('LoginModal — cleaned-up layout (issue #49)', () => {
     expect(cta, 'Primary signup CTA should be present').not.toBeNull();
   });
 
-  it('renders the three method cards in a 3-column grid inside the methods section', async () => {
+  it('renders the existing-account methods as full-width rows in order', async () => {
     const { container } = render(LoginModal, { props: { modalId: 'login-modal-4' } });
-
     const section = container.querySelector('section[data-testid="other-signin-methods"]');
     expect(section, 'methods section should render').not.toBeNull();
-
-    const grid = section?.querySelector('.grid');
-    expect(grid, 'method cards should sit in a grid').not.toBeNull();
-    expect(grid?.classList.contains('grid-cols-3')).toBe(true);
-    expect(grid?.querySelectorAll('button').length).toBe(3);
-
+    const ids = [...section.querySelectorAll('[data-testid^="login-method-"]')].map(
+      (b) => /** @type {HTMLElement} */ (b).dataset.testid
+    );
+    expect(ids).toEqual(['login-method-nsec', 'login-method-bunker', 'login-method-extension']);
+    expect(section.querySelector('.grid-cols-2, .grid-cols-3')).toBeNull();
     // The old stacked join-group is gone.
     expect(container.querySelector('.join')).toBeNull();
+  });
+
+  it('is titled Anmelden, leads with the create-account row and ends with the no-password line', async () => {
+    const { container, getByTestId } = render(LoginModal, { props: { modalId: 'login-modal-9' } });
+    expect(container.querySelector('h1')?.textContent?.trim()).toBe('Log in');
+    expect(getByTestId('signup-primary-cta').textContent).toContain('Takes a minute');
+    expect(getByTestId('login-footer').textContent?.trim()).toBe(
+      'No password: your account is an access key.'
+    );
+  });
+
+  it('renders as a bottom sheet on phones', async () => {
+    const { container } = render(LoginModal, { props: { modalId: 'login-modal-10' } });
+    expect(container.querySelector('dialog')?.className).toMatch(/modal-bottom.*sm:modal-middle/);
+  });
+
+  it('gated rows', async () => {
+    const { container } = render(LoginModal, { props: { modalId: 'login-modal-11' } });
+    expect(container.querySelector('[data-testid="login-method-google"]')).toBeNull();
+    expect(container.querySelector('[data-testid="login-method-npub"]')).toBeNull();
   });
 
   it('replaces the footer Schließen button with a header close button', async () => {
@@ -325,9 +354,10 @@ describe('LoginModal — mobile extension capability check', () => {
     const { container } = render(LoginModal, { props: { modalId: 'login-modal-m1' } });
 
     expect(container.querySelector('[data-testid="login-method-extension"]')).toBeNull();
-    const grid = container.querySelector('section[data-testid="other-signin-methods"] .grid');
-    expect(grid?.classList.contains('grid-cols-2')).toBe(true);
-    expect(grid?.querySelectorAll('button').length).toBe(2);
+    const rows = container.querySelectorAll(
+      'section[data-testid="other-signin-methods"] [data-testid^="login-method-"]'
+    );
+    expect(rows.length).toBe(2);
   });
 
   it('shows the extension card on a mobile UA when window.nostr is injected', () => {

@@ -17,7 +17,8 @@
     GoogleIcon,
     KeyIcon,
     PuzzleIcon,
-    SmartphoneIcon
+    SmartphoneIcon,
+    UserIcon
   } from '$lib/components/icons';
 
   const getAccounts = useAccounts();
@@ -142,7 +143,7 @@
   }
 </script>
 
-<dialog id={modalId} class="modal">
+<dialog id={modalId} class="modal modal-bottom sm:modal-middle">
   <div class="modal-box">
     <form method="dialog">
       <button
@@ -154,7 +155,7 @@
       </button>
     </form>
 
-    <h1 class="text-lg font-bold">{m.auth_login_modal_add_account()}</h1>
+    <h1 class="text-lg font-bold">{m.auth_login_modal_title()}</h1>
 
     <div class="mt-4 space-y-4">
       {#if getAccounts().length > 0}
@@ -173,22 +174,21 @@
 
       <button
         data-testid="signup-primary-cta"
-        class="btn w-full btn-lg btn-primary"
+        class="flex min-h-14 w-full items-center gap-3 rounded-2xl bg-primary/10 p-3 text-left transition-colors hover:bg-primary/15"
         onclick={() => modalStore.openModal('signup')}
       >
-        {m.auth_login_modal_create_account_cta()}
-      </button>
-
-      {#if runtimeConfig.googleLogin?.enabled}
-        <button
-          data-testid="login-method-google"
-          class="btn w-full"
-          onclick={() => onGoogleTransition?.()}
+        <span
+          class="grid size-10 shrink-0 place-items-center rounded-xl bg-primary text-primary-content"
         >
-          <GoogleIcon />
-          {m.auth_login_modal_google()}
-        </button>
-      {/if}
+          <UserIcon class_="h-5 w-5" title="" />
+        </span>
+        <span class="min-w-0">
+          <span class="block font-semibold">{m.auth_login_modal_create_account_cta()}</span>
+          <span class="block text-sm text-base-content/70"
+            >{m.auth_login_modal_create_account_sub()}</span
+          >
+        </span>
+      </button>
 
       <div class="divider text-xs opacity-70">{m.auth_login_modal_existing_account()}</div>
 
@@ -198,37 +198,59 @@
             <span class="text-sm">{extensionError}</span>
           </div>
         {/if}
-        <div class="grid gap-2 {showExtensionCard ? 'grid-cols-3' : 'grid-cols-2'}">
-          {#if showExtensionCard}
-            <button
-              data-testid="login-method-extension"
-              title={m.auth_login_modal_extension()}
-              onclick={() => createSigner('Extension')}
-              class="btn h-auto flex-col gap-2 py-4 font-normal"
-            >
-              <PuzzleIcon class_="h-6 w-6" title="" />
-              <span class="text-xs leading-tight">{m.auth_login_modal_extension_short()}</span>
-            </button>
-          {/if}
+        {#snippet methodRow(
+          /** @type {string} */ testid,
+          /** @type {any} */ Icon,
+          /** @type {string} */ title,
+          /** @type {string} */ sub,
+          /** @type {() => void} */ onclick
+        )}
           <button
-            data-testid="login-method-bunker"
-            title={m.auth_login_modal_bunker()}
-            onclick={() => createSigner('Bunker')}
-            class="btn h-auto flex-col gap-2 py-4 font-normal"
+            data-testid={testid}
+            {onclick}
+            class="flex min-h-14 w-full items-center gap-3 rounded-2xl border border-base-300 p-3 text-left transition-colors hover:bg-base-200"
           >
-            <SmartphoneIcon class_="h-6 w-6" title="" />
-            <span class="text-xs leading-tight">{m.auth_login_modal_bunker_short()}</span>
+            <span class="grid size-9 shrink-0 place-items-center rounded-lg bg-base-200">
+              <Icon class_="h-5 w-5" title="" />
+            </span>
+            <span class="min-w-0">
+              <span class="block font-semibold">{title}</span>
+              <span class="block text-sm text-base-content/70">{sub}</span>
+            </span>
           </button>
-          <button
-            data-testid="login-method-nsec"
-            title={m.auth_login_modal_nsec()}
-            onclick={() => createSigner('NSEC')}
-            class="btn h-auto flex-col gap-2 py-4 font-normal"
-          >
-            <KeyIcon class_="h-6 w-6" title="" />
-            <span class="text-xs leading-tight">{m.auth_login_modal_nsec_short()}</span>
-          </button>
-        </div>
+        {/snippet}
+        {@render methodRow(
+          'login-method-nsec',
+          KeyIcon,
+          m.auth_login_modal_row_key(),
+          m.auth_login_modal_row_key_sub(),
+          () => createSigner('NSEC')
+        )}
+        {@render methodRow(
+          'login-method-bunker',
+          SmartphoneIcon,
+          m.auth_login_modal_row_bunker(),
+          m.auth_login_modal_row_bunker_sub(),
+          () => createSigner('Bunker')
+        )}
+        {#if showExtensionCard}
+          {@render methodRow(
+            'login-method-extension',
+            PuzzleIcon,
+            m.auth_login_modal_row_extension(),
+            m.auth_login_modal_row_extension_sub(),
+            () => createSigner('Extension')
+          )}
+        {/if}
+        {#if runtimeConfig.googleLogin?.enabled}
+          {@render methodRow(
+            'login-method-google',
+            GoogleIcon,
+            m.auth_login_modal_google(),
+            m.auth_login_modal_row_google_sub(),
+            () => onGoogleTransition?.()
+          )}
+        {/if}
         {#if runtimeConfig.npubLogin?.enabled}
           <button
             data-testid="login-method-npub"
@@ -240,6 +262,10 @@
           </button>
         {/if}
       </section>
+
+      <p data-testid="login-footer" class="text-sm text-base-content/60">
+        {m.auth_login_modal_footer()}
+      </p>
     </div>
   </div>
 </dialog>
