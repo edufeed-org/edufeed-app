@@ -98,7 +98,7 @@
           <span
             class="grid size-11 shrink-0 place-items-center rounded-xl bg-primary/10 text-primary"
           >
-            <Icon class_="h-6 w-6" />
+            <Icon class_="h-6 w-6" title="" />
           </span>
           <span class="min-w-0">
             <span class="block font-semibold">{task.title}</span>
@@ -108,13 +108,20 @@
       {/each}
     </div>
 
-    <p data-testid="landing-network-line" class="mt-4 text-center text-sm text-white/90">
-      {m.landing_network_line()}
-      {#if helpLink}
-        <a data-testid="landing-network-link" {...helpLink} class="link">
-          {m.landing_network_link()}
-        </a>
-      {/if}
-    </p>
+    <!-- Own scrim: the line sits outside the frosted card, on the raw hero
+         photo or gradient, where white text alone can be unreadable. -->
+    <div class="mt-4 text-center">
+      <p
+        data-testid="landing-network-line"
+        class="inline-block rounded-full bg-black/40 px-3 py-1 text-sm text-white backdrop-blur-sm"
+      >
+        {m.landing_network_line({ appName: runtimeConfig.appName })}
+        {#if helpLink}
+          <a data-testid="landing-network-link" {...helpLink} class="link">
+            {m.landing_network_link()}
+          </a>
+        {/if}
+      </p>
+    </div>
   </div>
 </section>

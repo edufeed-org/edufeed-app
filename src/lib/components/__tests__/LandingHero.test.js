@@ -36,7 +36,10 @@ vi.mock('$lib/paraglide/messages', () =>
       'landing_task_community_sub',
       'landing_network_line',
       'landing_network_link'
-    ].map((k) => [k, () => k])
+    ].map((k) => [
+      k,
+      (/** @type {any} */ params) => (params ? `${k}:${JSON.stringify(params)}` : k)
+    ])
   )
 );
 
@@ -45,6 +48,7 @@ const { default: LandingHero } = await import('../landing/LandingHero.svelte');
 describe('LandingHero', () => {
   beforeEach(() => {
     state.config = {
+      appName: 'Finder',
       discover: {
         contentTypes: ['events', 'learning', 'articles', 'boards', 'communities', 'people']
       },
@@ -104,5 +108,20 @@ describe('LandingHero', () => {
     state.config.ui = { landingHeroImage: '/hero.jpg' };
     const { container } = render(LandingHero);
     expect(container.querySelector('section')?.className).not.toContain('bg-gradient-to-br');
+  });
+
+  it('network line names the deployment and sits on its own scrim', () => {
+    const { getByTestId } = render(LandingHero);
+    const line = getByTestId('landing-network-line');
+    expect(line.textContent).toContain('landing_network_line:{"appName":"Finder"}');
+    // White text must not sit directly on a bright hero photo or a light gradient.
+    expect(line.className).toMatch(/bg-black\/\d+/);
+  });
+
+  it('tile icons are decorative (no English icon names in the German UI)', () => {
+    const { getByTestId } = render(LandingHero);
+    for (const id of ['material', 'training', 'community']) {
+      expect(getByTestId(`landing-task-${id}`).querySelector('[role="img"]:not([aria-hidden="true"])')).toBeNull();
+    }
   });
 });

@@ -69,7 +69,7 @@
   "landing_task_training_sub": "Events online and on site",
   "landing_task_community_title": "Join a community",
   "landing_task_community_sub": "Exchange with colleagues",
-  "landing_network_line": "Edufeed runs on an open network.",
+  "landing_network_line": "{appName} runs on an open network.",
   "landing_network_link": "How it works",
   "landing_hero_title": "Materials, trainings and communities for teaching and learning",
   "landing_hero_subtitle": "Open, free, and maintained by people from schools, universities, adult education and community work. Browsing needs no account.",
