@@ -105,9 +105,11 @@
   }
 </script>
 
+<!-- top-18 = the /c mobile header's 4.5rem (p-4 + btn), which pins above
+     this row at z-30 in the same scroll surface. -->
 <div
   data-testid="section-row"
-  class="sticky top-0 z-20 flex items-center gap-2 bg-base-200 px-4 py-2"
+  class="sticky top-18 z-20 flex items-center gap-2 bg-base-200 px-4 py-2"
 >
   <button
     type="button"

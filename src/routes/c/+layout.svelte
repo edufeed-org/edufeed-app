@@ -166,7 +166,7 @@
               data-testid="header-switch"
               onclick={toggleDrawer}
               class="btn min-w-0 flex-1 gap-2 btn-ghost"
-              aria-label={m.community_header_switch_aria()}
+              aria-label="{mobileHeaderTitle} – {m.community_header_switch_aria()}"
             >
               {#if mobileHeaderAvatarUrl}
                 <div class="avatar">

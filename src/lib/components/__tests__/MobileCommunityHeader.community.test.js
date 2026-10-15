@@ -83,6 +83,8 @@ describe('/c mobile header in community mode', () => {
     const { getByTestId, container } = render(Harness, { title: 'Fortbildungsnetz' });
     const sw = getByTestId('header-switch');
     expect(sw.textContent).toContain('Fortbildungsnetz');
+    // Screen readers must still hear which community this is.
+    expect(sw.getAttribute('aria-label')).toContain('Fortbildungsnetz');
     const toggle = container.querySelector('#community-drawer');
     expect(toggle.checked).toBe(false);
     await fireEvent.click(sw);

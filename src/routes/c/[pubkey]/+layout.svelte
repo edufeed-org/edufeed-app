@@ -381,8 +381,9 @@
 </svelte:head>
 
 <!-- Phone: section row + Bereiche sheet, above the content (chat views keep
-     the row while their composer owns the bottom edge) -->
-<div class="lg:hidden">
+     the row while their composer owns the bottom edge). `contents` so the
+     sticky row's containing block is the page column, not this wrapper. -->
+<div class="contents lg:hidden">
   <CommunitySectionNav
     {selectedContentType}
     onContentTypeSelect={handleContentTypeSelect}

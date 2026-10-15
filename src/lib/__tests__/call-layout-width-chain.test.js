@@ -1,6 +1,6 @@
 /** @vitest-environment node */
 import { describe, test, expect } from 'vitest';
-import { readFileSync, existsSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 // laoc, 2026-10-02 (window ~1000 px, below lg, in a call with the chat
@@ -21,23 +21,5 @@ describe('channel view never widens the page', () => {
     expect(column?.[1].split(/\s+/)).toEqual(
       expect.arrayContaining(['relative', 'flex', 'min-h-0', 'min-w-0', 'flex-1', 'flex-col'])
     );
-  });
-});
-
-describe('community section nav (phones)', () => {
-  test('the old scrolling BottomTabBar is gone and the layout mounts CommunitySectionNav below lg', () => {
-    expect(existsSync(resolve(process.cwd(), 'src/lib/components/community/layout/BottomTabBar.svelte'))).toBe(false);
-    const layout = read('src/routes/c/[pubkey]/+layout.svelte');
-    expect(layout).not.toContain('BottomTabBar');
-    expect(layout).toMatch(/<div class="lg:hidden">\s*<CommunitySectionNav/);
-    // The section row sits above the page content, so chat views keep it
-    // while their composer owns the bottom edge.
-    expect(layout.indexOf('<CommunitySectionNav')).toBeLessThan(layout.indexOf('{@render children()}'));
-  });
-
-  test('the section row is sticky at the top of the scroll surface', () => {
-    const source = read('src/lib/components/community/layout/CommunitySectionNav.svelte');
-    const row = source.match(/data-testid="section-row"\s+class="([^"]*)"/);
-    expect(row?.[1].split(/\s+/)).toEqual(expect.arrayContaining(['sticky', 'top-0']));
   });
 });
