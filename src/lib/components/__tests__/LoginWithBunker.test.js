@@ -73,7 +73,8 @@ vi.mock('$lib/paraglide/messages', () => ({
   auth_login_modal_or: () => 'or',
   auth_login_bunker_already_logged_in: () => 'Bunker already logged in',
   bunker_qr_aria: () => 'qr aria',
-  common_close: () => 'Close'
+  common_close: () => 'Close',
+  auth_signup_button: () => 'Create an account'
 }));
 
 beforeEach(() => {

@@ -70,7 +70,8 @@ vi.mock('$lib/paraglide/messages', () => ({
   auth_login_private_key_error_login_failed: () => 'Failed to log in',
   auth_login_private_key_already_logged_in: () => 'Already logged in — switching',
   auth_login_modal_or: () => 'or',
-  common_close: () => 'Close'
+  common_close: () => 'Close',
+  auth_signup_button: () => 'Create an account'
 }));
 
 // jsdom's HTMLDialogElement does not implement showModal/close. Polyfill them
@@ -161,5 +162,15 @@ describe('LoginWithPrivateKey', () => {
 
     // …and once the delay elapses the flow finishes, closing the whole stack.
     await waitFor(() => expect(onAccountCreated).toHaveBeenCalledTimes(1), { timeout: 3000 });
+  });
+
+  it('hex key gets the format hint', async () => {
+    const { container, findByText, queryByText } = render(LoginWithPrivateKey, {
+      props: { modalId: 'pk-hex' }
+    });
+    await submitNsec(container, 'a'.repeat(64));
+    expect(await findByText('Invalid format')).toBeTruthy();
+    expect(queryByText('Failed to log in')).toBeNull();
+    expect(mockManager.addAccount).not.toHaveBeenCalled();
   });
 });
