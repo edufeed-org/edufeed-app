@@ -138,7 +138,7 @@ const TYPE_FALLBACKS = /** @type {Record<string, string[]>} */ ({
  * Resolve the URL a handler opens for one entity: a template typed for the
  * entity wins, then a compatible type (`note` for `nevent`), then an untyped
  * template ("generic handler for any NIP-19 entity"). Null when the handler
- * has no template for that entity.
+ * has no template for that entity, or when the result is not an https URL.
  *
  * @param {AppHandler | null | undefined} handler
  * @param {{ type: 'nevent' | 'naddr', bech32: string }} entity
@@ -149,9 +149,25 @@ export function resolveHandlerUrl(handler, entity) {
   const wanted = [entity.type, ...(TYPE_FALLBACKS[entity.type] ?? []), null];
   for (const type of wanted) {
     const match = handler.web.find((w) => w.type === type);
-    if (match) return match.template.split(PLACEHOLDER).join(entity.bech32);
+    if (match) return httpsOnly(match.template.split(PLACEHOLDER).join(entity.bech32));
   }
   return null;
+}
+
+/**
+ * The resolved URL lands in an `href`, and handler events are untrusted
+ * network input. The parser already drops non-https templates; this guards
+ * the output too, so no other path (a hand-built or cached handler) can
+ * produce a `javascript:` or `data:` link.
+ * @param {string} url
+ * @returns {string | null}
+ */
+function httpsOnly(url) {
+  try {
+    return new URL(url).protocol === 'https:' ? url : null;
+  } catch {
+    return null;
+  }
 }
 
 /**

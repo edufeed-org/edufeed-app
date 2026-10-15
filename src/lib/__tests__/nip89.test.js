@@ -254,6 +254,20 @@ describe('resolveHandlerUrl', () => {
     expect(resolveHandlerUrl(null, { type: 'nevent', bech32: 'nevent1abc' })).toBeNull();
   });
 
+  it('never returns a non-https URL, even for a handler that skipped the parser', () => {
+    const entity = { type: /** @type {'nevent'} */ ('nevent'), bech32: 'nevent1abc' };
+    /** @param {string} template */
+    const raw = (template) =>
+      /** @type {any} */ ({ web: [{ template, type: null }], kinds: [1], pubkey: APP });
+    expect(resolveHandlerUrl(raw('javascript:alert(1)//<bech32>'), entity)).toBeNull();
+    expect(resolveHandlerUrl(raw('data:text/html,<bech32>'), entity)).toBeNull();
+    expect(resolveHandlerUrl(raw('http://app.example/<bech32>'), entity)).toBeNull();
+    expect(resolveHandlerUrl(raw('not a url <bech32>'), entity)).toBeNull();
+    expect(resolveHandlerUrl(raw('https://app.example/<bech32>'), entity)).toBe(
+      'https://app.example/nevent1abc'
+    );
+  });
+
   it('treats a "note" template as a fallback for nevent entities', () => {
     const noteOnly = parseHandlerEvent(
       handler([
