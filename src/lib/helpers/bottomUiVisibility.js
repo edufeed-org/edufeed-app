@@ -27,3 +27,19 @@ export function hasStaticOwnBottomUI({ pathname, viewParam }) {
   if (viewParam === 'chat' || viewParam === 'channels') return true;
   return false;
 }
+
+/**
+ * Whether the phone bottom bar (DashboardBottomTabBar) shows on the current
+ * route. It is the one bar on phones since PR 2 of the mobile chrome
+ * redesign: it also shows inside communities. Hidden where a page owns its
+ * bottom edge (chat composer, DM thread, wizards, call landing).
+ *
+ * @param {{ hasUser: boolean, pathname: string, viewParam: string | null, pageOwnsBottomUI: boolean }} args
+ * @returns {boolean}
+ */
+export function mobileDockVisible({ hasUser, pathname, viewParam, pageOwnsBottomUI }) {
+  if (!hasUser) return false;
+  if (pathname.startsWith('/call/')) return false;
+  if (hasStaticOwnBottomUI({ pathname, viewParam })) return false;
+  return !pageOwnsBottomUI;
+}

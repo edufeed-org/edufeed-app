@@ -48,3 +48,28 @@ describe('hasStaticOwnBottomUI', () => {
     expect(hasStaticOwnBottomUI({ pathname: '/c/messages', viewParam: null })).toBe(false);
   });
 });
+
+import { mobileDockVisible } from '../helpers/bottomUiVisibility.js';
+
+describe('mobileDockVisible', () => {
+  const on = { hasUser: true, pageOwnsBottomUI: false };
+
+  it('shows the dock inside a community', () => {
+    expect(mobileDockVisible({ ...on, pathname: '/c/npub1abc', viewParam: null })).toBe(true);
+  });
+
+  it('chat view hides the dock', () => {
+    expect(mobileDockVisible({ ...on, pathname: '/c/npub1abc', viewParam: 'chat' })).toBe(false);
+  });
+
+  it('hides without a user and on the call landing', () => {
+    expect(mobileDockVisible({ ...on, hasUser: false, pathname: '/c/', viewParam: null })).toBe(false);
+    expect(mobileDockVisible({ ...on, pathname: '/call/x', viewParam: null })).toBe(false);
+  });
+
+  it('respects a page that owns its bottom UI (open DM thread)', () => {
+    expect(
+      mobileDockVisible({ ...on, pageOwnsBottomUI: true, pathname: '/c/messages', viewParam: null })
+    ).toBe(false);
+  });
+});

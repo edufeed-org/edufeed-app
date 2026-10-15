@@ -35,7 +35,7 @@
   import { afterNavigate, beforeNavigate, goto } from '$app/navigation';
   import { resolve } from '$app/paths';
   import { recordNavigation } from '$lib/helpers/navigationHistory.js';
-  import { hasStaticOwnBottomUI } from '$lib/helpers/bottomUiVisibility.js';
+  import { hasStaticOwnBottomUI, mobileDockVisible } from '$lib/helpers/bottomUiVisibility.js';
   import { page, navigating } from '$app/stores';
   import { onMount, setContext } from 'svelte';
   import { hexToNpub } from '$lib/helpers/nostrUtils.js';
@@ -169,6 +169,17 @@
       }
       return false;
     })()
+  );
+
+  // Phone dock: one bar everywhere (also inside communities since PR 2 of the
+  // mobile chrome redesign); desktop keeps showDashboardNav for the sidebar.
+  let showMobileDock = $derived(
+    mobileDockVisible({
+      hasUser: !!getActiveUser(),
+      pathname: $page.url.pathname,
+      viewParam: $page.url.searchParams.get('view'),
+      pageOwnsBottomUI: hasOwnBottomUI
+    })
   );
 
   /**
@@ -505,9 +516,8 @@
     <main
       bind:this={mainElement}
       class="flex min-h-0 flex-1 flex-col overflow-y-auto"
-      class:pb-16={showDashboardNav && !hasOwnBottomUI}
-      class:pb-20={isInsideCommunity}
-      class:lg:pb-0={showDashboardNav || isInsideCommunity}
+      class:pb-20={showMobileDock}
+      class:lg:pb-0={showMobileDock}
     >
       {#if curatedReady}
         <!-- Route-level error boundary: a page that throws during render
@@ -551,7 +561,7 @@
     <TermiAssistant />
   {/if}
 {/if}
-{#if showDashboardNav && !hasOwnBottomUI}
+{#if showMobileDock}
   <DashboardBottomTabBar />
 {/if}
 
