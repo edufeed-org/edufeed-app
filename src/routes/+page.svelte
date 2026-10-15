@@ -6,7 +6,6 @@
   import { runtimeConfig } from '$lib/stores/config.svelte.js';
   import { useActiveUser } from '$lib/stores/accounts.svelte';
   import LandingHero from '$lib/components/landing/LandingHero.svelte';
-  import FeatureHighlights from '$lib/components/landing/FeatureHighlights.svelte';
   import CommunityCarousel from '$lib/components/landing/CommunityCarousel.svelte';
   import LandingFooter from '$lib/components/landing/LandingFooter.svelte';
 
@@ -25,6 +24,5 @@
 </svelte:head>
 
 <LandingHero />
-<FeatureHighlights />
 <CommunityCarousel />
 <LandingFooter />
