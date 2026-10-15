@@ -87,7 +87,7 @@ base.describe('NSEC Login Flow', () => {
     // Click login and navigate to NSEC input
     await page.locator('button:has-text("Login")').first().click();
     await expect(page.locator('#global-login-modal')).toBeVisible({ timeout: 5000 });
-    await page.locator('#global-login-modal button:has-text("NSEC")').click();
+    await page.locator('#global-login-modal [data-testid="login-method-nsec"]').click();
     await expect(page.locator('#global-private-key-modal')).toBeVisible({ timeout: 5000 });
 
     // Enter invalid nsec (malformed)
@@ -117,7 +117,7 @@ base.describe('NSEC Login Flow', () => {
     // Navigate to NSEC input modal
     await page.locator('button:has-text("Login")').first().click();
     await expect(page.locator('#global-login-modal')).toBeVisible({ timeout: 5000 });
-    await page.locator('#global-login-modal button:has-text("NSEC")').click();
+    await page.locator('#global-login-modal [data-testid="login-method-nsec"]').click();
     await expect(page.locator('#global-private-key-modal')).toBeVisible({ timeout: 5000 });
 
     // Get the login button
@@ -228,7 +228,7 @@ base.describe('Account Persistence', () => {
     await expect(page.locator('#global-login-modal')).toBeVisible({ timeout: 5000 });
 
     // Login with second account
-    await page.locator('#global-login-modal button:has-text("NSEC")').click();
+    await page.locator('#global-login-modal [data-testid="login-method-nsec"]').click();
     await expect(page.locator('#global-private-key-modal')).toBeVisible({ timeout: 5000 });
     await page.locator('#global-private-key-modal input').first().fill(TEST_AUTHOR_2.nsec);
     await page.locator('#global-private-key-modal button.btn-primary').click();
@@ -290,7 +290,7 @@ base.describe('Account Switching', () => {
     await expect(page.locator('#global-login-modal')).toBeVisible({ timeout: 5000 });
 
     // Add second account
-    await page.locator('#global-login-modal button:has-text("NSEC")').click();
+    await page.locator('#global-login-modal [data-testid="login-method-nsec"]').click();
     await expect(page.locator('#global-private-key-modal')).toBeVisible({ timeout: 5000 });
     await page.locator('#global-private-key-modal input').first().fill(TEST_AUTHOR_2.nsec);
     await page.locator('#global-private-key-modal button.btn-primary').click();
@@ -335,7 +335,7 @@ base.describe('Account Switching', () => {
     await switchButton.click();
     await expect(page.locator('#global-login-modal')).toBeVisible({ timeout: 5000 });
 
-    await page.locator('#global-login-modal button:has-text("NSEC")').click();
+    await page.locator('#global-login-modal [data-testid="login-method-nsec"]').click();
     await expect(page.locator('#global-private-key-modal')).toBeVisible({ timeout: 5000 });
     await page.locator('#global-private-key-modal input').first().fill(TEST_AUTHOR_2.nsec);
     await page.locator('#global-private-key-modal button.btn-primary').click();
