@@ -33,9 +33,11 @@ base.describe('Login Modal UI', () => {
     await expect(page.locator('#global-login-modal')).toBeVisible({ timeout: 5000 });
 
     // Check for login method buttons
-    const nsecButton = page.locator('#global-login-modal button:has-text("NSEC")');
-    const extensionButton = page.locator('#global-login-modal button:has-text("Extension")');
-    const signupButton = page.locator('#global-login-modal button:has-text("Sign Up")');
+    const nsecButton = page.locator('#global-login-modal [data-testid="login-method-nsec"]');
+    const extensionButton = page.locator(
+      '#global-login-modal [data-testid="login-method-extension"]'
+    );
+    const signupButton = page.locator('#global-login-modal [data-testid="signup-primary-cta"]');
 
     await expect(nsecButton).toBeVisible();
     await expect(extensionButton).toBeVisible();
