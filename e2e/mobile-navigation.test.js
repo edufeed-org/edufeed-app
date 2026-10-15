@@ -73,6 +73,15 @@ test.describe('Mobile navigation', () => {
       await expect(dropdown.locator('button').filter({ hasText: /Login|Anmelden/ })).toBeVisible();
     });
 
+    test('landing shows Anmelden in the row and the account CTA opens signup', async ({ page }) => {
+      await page.goto('/');
+      await expect(page.getByTestId('navbar-mobile-login')).toBeVisible({ timeout: 10_000 });
+      const cta = page.getByTestId('landing-cta-signup');
+      await expect(cta).toBeVisible();
+      await cta.click();
+      await expect(page.locator('#global-signup-modal')).toBeVisible({ timeout: 5000 });
+    });
+
     test('no horizontal overflow on discover page', async ({ page }) => {
       // Use /discover (not homepage which has pre-existing hero section overflow)
       await page.goto('/discover');
