@@ -202,6 +202,12 @@ vi.mock('$lib/services/dm-service.svelte.js', () => ({
 vi.mock('$lib/stores/user-profile.svelte.js', () => ({ useUserProfile: () => () => null }));
 
 const mockMembership = vi.hoisted(() => ({ value: { enabled: false, handleDomain: '' } }));
+// The hints hook also starts the Blossom eligibility store, which waits on
+// `configReady` — not part of this suite's config stub.
+vi.mock('$lib/stores/blossom-eligibility.svelte.js', () => ({
+  initBlossomEligibility: () => {},
+  getBlossomEligibility: () => 'unknown'
+}));
 vi.mock('$lib/stores/config.svelte.js', () => ({
   runtimeConfig: {
     get membership() {
@@ -223,6 +229,16 @@ const EXT_PUBKEY = 'b'.repeat(64);
 function signedUpNsecUser() {
   localStorage.setItem(`signed-up-here:${NSEC_PUBKEY}`, '1');
   return { type: 'nsec', pubkey: NSEC_PUBKEY };
+}
+
+// An extension that encrypts (Alby, nos2x) — one without NIP-44 opens the
+// signer hint, which these scenarios are not about.
+function extensionUser(pubkey) {
+  return {
+    type: 'extension',
+    pubkey,
+    signer: { nip44: { encrypt: async () => '', decrypt: async () => '' } }
+  };
 }
 
 async function openTermi(container) {
@@ -293,7 +309,7 @@ describe('TermiAssistant launcher + hints', () => {
   });
 
   it('shows no backup hint for extension accounts or once the file was downloaded', async () => {
-    mockActiveUser.value = { type: 'extension', pubkey: EXT_PUBKEY };
+    mockActiveUser.value = extensionUser(EXT_PUBKEY);
     const { container, unmount } = render(TermiAssistant);
     await openTermi(container);
     expect(container.querySelector('[data-testid="termi-hint-backup"]')).toBeNull();
@@ -340,7 +356,7 @@ describe('TermiAssistant launcher + hints', () => {
   });
 
   it('shows the relays hint only after the check settles, with working actions', async () => {
-    mockActiveUser.value = { type: 'extension', pubkey: EXT_PUBKEY };
+    mockActiveUser.value = extensionUser(EXT_PUBKEY);
     mockRelayListEvent.value = null; // no kind 10002
     const { container } = render(TermiAssistant);
     await openTermi(container);
@@ -360,7 +376,7 @@ describe('TermiAssistant launcher + hints', () => {
   });
 
   it('relays secondary action routes to relay settings', async () => {
-    mockActiveUser.value = { type: 'extension', pubkey: EXT_PUBKEY };
+    mockActiveUser.value = extensionUser(EXT_PUBKEY);
     mockRelayListEvent.value = null;
     const { container } = render(TermiAssistant);
     vi.advanceTimersByTime(5000);
@@ -372,7 +388,7 @@ describe('TermiAssistant launcher + hints', () => {
   });
 
   it('shows the dm hint when the self-check reports absent and backfills on action', async () => {
-    mockActiveUser.value = { type: 'extension', pubkey: EXT_PUBKEY };
+    mockActiveUser.value = extensionUser(EXT_PUBKEY);
     mockDmStatus.value = 'absent';
     const { container } = render(TermiAssistant);
     expect(container.querySelector('[data-testid="termi-badge"]')?.textContent.trim()).toBe('1');
@@ -383,7 +399,7 @@ describe('TermiAssistant launcher + hints', () => {
   });
 
   it('shows the nip05 hint when membership is enabled and the profile has none, action opens the application modal', async () => {
-    mockActiveUser.value = { type: 'extension', pubkey: EXT_PUBKEY };
+    mockActiveUser.value = extensionUser(EXT_PUBKEY);
     mockMembership.value = { enabled: true, handleDomain: 'edufeed.org' };
     mockProfileEvent.value = { kind: 0, content: JSON.stringify({ name: 'test' }), tags: [] };
     const { container } = render(TermiAssistant);
@@ -401,7 +417,7 @@ describe('TermiAssistant launcher + hints', () => {
     'one-click activates a granted handle by publishing the profile update',
     { timeout: 15_000 },
     async () => {
-      mockActiveUser.value = { type: 'extension', pubkey: EXT_PUBKEY };
+      mockActiveUser.value = extensionUser(EXT_PUBKEY);
       mockMembership.value = {
         enabled: true,
         handleDomain: 'edufeed.org',
@@ -448,7 +464,7 @@ describe('TermiAssistant launcher + hints', () => {
     async () => {
       // UpdateProfile throws without an existing profile — the one-click must
       // not fire-and-swallow that; it hands over to the settings flow instead.
-      mockActiveUser.value = { type: 'extension', pubkey: EXT_PUBKEY };
+      mockActiveUser.value = extensionUser(EXT_PUBKEY);
       mockMembership.value = {
         enabled: true,
         handleDomain: 'edufeed.org',
@@ -488,7 +504,7 @@ describe('TermiAssistant launcher + hints', () => {
   );
 
   it('shows no nip05 hint when the profile has one or membership is disabled', async () => {
-    mockActiveUser.value = { type: 'extension', pubkey: EXT_PUBKEY };
+    mockActiveUser.value = extensionUser(EXT_PUBKEY);
     mockMembership.value = { enabled: true, handleDomain: 'edufeed.org' };
     let r = render(TermiAssistant);
     await openTermi(r.container);
@@ -503,7 +519,7 @@ describe('TermiAssistant launcher + hints', () => {
   });
 
   it('shows no nip05 hint when its dismiss flag is set', async () => {
-    mockActiveUser.value = { type: 'extension', pubkey: EXT_PUBKEY };
+    mockActiveUser.value = extensionUser(EXT_PUBKEY);
     mockMembership.value = { enabled: true, handleDomain: 'edufeed.org' };
     mockProfileEvent.value = { kind: 0, content: JSON.stringify({ name: 'test' }), tags: [] };
     localStorage.setItem(`nip05-hint-dismissed:${EXT_PUBKEY}`, '1');
@@ -513,7 +529,7 @@ describe('TermiAssistant launcher + hints', () => {
   });
 
   it('shows the profile hint when no kind 0 exists after settle, action opens the profile modal', async () => {
-    mockActiveUser.value = { type: 'extension', pubkey: EXT_PUBKEY };
+    mockActiveUser.value = extensionUser(EXT_PUBKEY);
     mockProfileEvent.value = null; // no kind 0 anywhere
     const { container } = render(TermiAssistant);
     await openTermi(container);
@@ -534,7 +550,7 @@ describe('TermiAssistant launcher + hints', () => {
 
   it('shows no profile hint when a kind 0 exists or the dismiss flag is set', async () => {
     // Kind 0 present (beforeEach default fixture) → no hint even after settle.
-    mockActiveUser.value = { type: 'extension', pubkey: EXT_PUBKEY };
+    mockActiveUser.value = extensionUser(EXT_PUBKEY);
     let r = render(TermiAssistant);
     vi.advanceTimersByTime(5000);
     flushSync();
@@ -553,7 +569,7 @@ describe('TermiAssistant launcher + hints', () => {
   });
 
   it('renders no launcher badge when everything is set up', async () => {
-    mockActiveUser.value = { type: 'extension', pubkey: EXT_PUBKEY };
+    mockActiveUser.value = extensionUser(EXT_PUBKEY);
     const { container } = render(TermiAssistant);
     expect(container.querySelector('[data-testid="termi-badge"]')).toBeNull();
 
@@ -562,7 +578,7 @@ describe('TermiAssistant launcher + hints', () => {
   });
 
   it('dismissing an open hint removes it and persists the per-account flag', async () => {
-    mockActiveUser.value = { type: 'extension', pubkey: EXT_PUBKEY };
+    mockActiveUser.value = extensionUser(EXT_PUBKEY);
     mockDmStatus.value = 'absent';
     const { container } = render(TermiAssistant);
     await openTermi(container);
@@ -574,7 +590,7 @@ describe('TermiAssistant launcher + hints', () => {
   });
 
   it('resets session-dismissed hints on account switch', async () => {
-    mockActiveUser.value = { type: 'extension', pubkey: EXT_PUBKEY };
+    mockActiveUser.value = extensionUser(EXT_PUBKEY);
     mockDmStatus.value = 'absent';
     const { container } = render(TermiAssistant);
     await openTermi(container);
@@ -586,7 +602,7 @@ describe('TermiAssistant launcher + hints', () => {
     // Switch to a different account with no dismiss flag of its own: the
     // session-local dismissed Set from account B must not leak and hide C's
     // legitimately open hint.
-    mockActiveUser.value = { type: 'extension', pubkey: 'c'.repeat(64) };
+    mockActiveUser.value = extensionUser('c'.repeat(64));
     flushSync();
     await tick();
     expect(container.querySelector('[data-testid="termi-hint-dm"]')).not.toBeNull();

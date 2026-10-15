@@ -109,6 +109,12 @@ vi.mock('$lib/stores/nip05-hint-flags.svelte.js', () => ({
   isNip05ReadyHintDismissed: () => false,
   markNip05ReadyHintDismissed: () => {}
 }));
+// The hints hook also starts the Blossom eligibility store, which follows
+// `manager.active$` — not part of this suite's accounts stub.
+vi.mock('$lib/stores/blossom-eligibility.svelte.js', () => ({
+  initBlossomEligibility: () => {},
+  getBlossomEligibility: () => 'unknown'
+}));
 vi.mock('$lib/stores/profile-hint-flags.svelte.js', () => ({
   isProfileHintDismissed: () => true,
   markProfileHintDismissed: () => {}

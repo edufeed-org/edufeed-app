@@ -96,7 +96,8 @@
       body: m.termi_hint_signer_body(),
       action: m.termi_hint_signer_cta(),
       secondary: null,
-      doing: null
+      doing: null,
+      link: null
     },
     invites: {
       // Enriched once the invite is decrypted (auto-decrypt makes that the
