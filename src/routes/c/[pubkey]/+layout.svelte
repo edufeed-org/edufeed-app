@@ -3,7 +3,7 @@
   import { resolve } from '$app/paths';
   import { page } from '$app/stores';
   import { getContext, setContext } from 'svelte';
-  import BottomTabBar from '$lib/components/community/layout/BottomTabBar.svelte';
+  import CommunitySectionNav from '$lib/components/community/layout/CommunitySectionNav.svelte';
   import LegacyContentTypesBanner from '$lib/components/community/LegacyContentTypesBanner.svelte';
   import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
   import { ProfileModel } from 'applesauce-core/models';
@@ -374,19 +374,20 @@
   <title>{documentTitle}</title>
 </svelte:head>
 
-<div class="px-4 pt-3 empty:hidden">
-  <LegacyContentTypesBanner communityEvent={effectiveCommunityEvent} />
-</div>
-
-{@render children()}
-
-<!-- Mobile: Bottom Tab Bar (fixed positioned) -->
+<!-- Phone: section row + Bereiche sheet, above the content (chat views keep
+     the row while their composer owns the bottom edge) -->
 <div class="lg:hidden">
-  <BottomTabBar
-    bind:selectedContentType
+  <CommunitySectionNav
+    {selectedContentType}
     onContentTypeSelect={handleContentTypeSelect}
     communityEvent={effectiveCommunityEvent}
     {restrictedTabs}
     {accessibleTabs}
   />
 </div>
+
+<div class="px-4 pt-3 empty:hidden">
+  <LegacyContentTypesBanner communityEvent={effectiveCommunityEvent} />
+</div>
+
+{@render children()}

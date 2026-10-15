@@ -113,11 +113,11 @@
     channels: () => m.concord_tab_label()
   };
 
-  // Tab ids (same rule BottomTabBar uses — see communityNavTabIds' doc
+  // Tab ids (same rule CommunitySectionNav uses — see communityNavTabIds' doc
   // comment) feed buildSidebarZones, which splits them into the sidebar's
   // two zones + footer and filters/dedupes channelRows for the current
   // viewer. The 'channels' tab id itself is dropped by buildSidebarZones —
-  // on desktop the Kanäle zone replaces it; BottomTabBar keeps it via its
+  // on desktop the Kanäle zone replaces it; CommunitySectionNav keeps it via its
   // own call to communityNavTabIds.
   let zones = $derived.by(() => {
     const concord = getConcord();

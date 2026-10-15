@@ -48,7 +48,7 @@
 
   // Deliberately NOT `btn` (its min-height/border/shadow chrome reads as a
   // toolbar, not a channel list). The active treatment is the app's existing
-  // subtle active-nav one (BottomTabBar.svelte: bg-primary/10 text-primary).
+  // subtle active-nav one (CommunitySectionNav.svelte: bg-primary/10 text-primary).
   // Same metrics as ContentNavSidebar's tab rows (px-4 py-3 gap-3, w-5 icon
   // column) — the KANÄLE rows sat visibly tighter and less indented than the
   // INHALTE rows right above them (laoc, 2026-08-18).

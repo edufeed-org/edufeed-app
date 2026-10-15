@@ -1,6 +1,6 @@
 /**
  * Pure community-navigation logic shared by ContentNavSidebar (desktop) and
- * BottomTabBar (mobile). Both components used to carry a byte-identical copy
+ * CommunitySectionNav (mobile). Both components used to carry a byte-identical copy
  * of "compute the tab list, then splice in a 'channels' tab" — extracted here
  * so there is exactly one place that decides the tab order. Label/icon maps
  * stay in the components; this module only ever deals in tab id strings.
@@ -41,7 +41,7 @@ export function communityNavTabIds({
     isMember,
     hasGroupChannels,
     // Derived here from the event itself (not a caller input) so
-    // ContentNavSidebar/BottomTabBar didn't need a new prop for it.
+    // ContentNavSidebar/CommunitySectionNav didn't need a new prop for it.
     hasMembershipPointer: !!parseMembershipPointer(communityEvent)
   });
   if (!showChannels) return base;

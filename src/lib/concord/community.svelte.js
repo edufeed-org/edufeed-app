@@ -181,7 +181,7 @@ export function useConcordArea(getCommunityId) {
  * Reactive Concord context for one Communikey community. Thin wrapper over
  * {@link useConcordArea}, keyed on the community id parsed from the kind
  * 10222 event's `concord` pointer tag; adds `pointer` to the returned shape
- * (needed by `shouldShowChannelsTab` callers — ContentNavSidebar/BottomTabBar
+ * (needed by `shouldShowChannelsTab` callers — ContentNavSidebar/CommunitySectionNav
  * — which gate visibility on the pointer's mere existence, independent of
  * membership).
  * @param {() => any} getCommunikeyEvent kind 10222 event getter
