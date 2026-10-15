@@ -341,12 +341,18 @@
 
   // Update parent layout's mobile header with community info
   const setMobileHeader =
-    /** @type {((info: { title: string, avatarUrl?: string | null }) => void) | undefined} */ (
+    /** @type {((info: { title: string, avatarUrl?: string | null, showSettings?: boolean, settingsHref?: string }) => void) | undefined} */ (
       getContext('setMobileHeader')
     );
   $effect(() => {
     if (setMobileHeader) {
-      setMobileHeader({ title: displayName, avatarUrl });
+      setMobileHeader({
+        title: displayName,
+        avatarUrl,
+        // Owners and root admins get the gear in the phone header.
+        showSettings: isCommunityOwner(data.pubkey) || zoneRootAdmin,
+        settingsHref: resolve(`/c/${data.npub}`) + '?view=settings'
+      });
     }
   });
 

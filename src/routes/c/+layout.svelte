@@ -10,7 +10,13 @@
   import CommunitySidebar from '$lib/components/community/layout/CommunitySidebar.svelte';
   import MobileNavMenu from '$lib/components/shared/MobileNavMenu.svelte';
   import ProfileAvatar from '$lib/components/shared/ProfileAvatar.svelte';
-  import { MenuIcon, CloseIcon, ChevronRightIcon } from '$lib/components/icons';
+  import {
+    CloseIcon,
+    ChevronRightIcon,
+    ChevronLeftIcon,
+    ChevronDownIcon,
+    SettingsIcon
+  } from '$lib/components/icons';
   import ImageWithFallback from '$lib/components/shared/ImageWithFallback.svelte';
   import TermiLauncherButton from '$lib/components/shared/TermiLauncherButton.svelte';
   import { runtimeConfig } from '$lib/stores/config.svelte.js';
@@ -34,6 +40,9 @@
   // Mobile header info — child layouts can update this via context
   let mobileHeaderTitle = $state(runtimeConfig.appName);
   let mobileHeaderAvatarUrl = $state(/** @type {string | null} */ (null));
+  // Community mode: owners/admins get a gear that links to ?view=settings.
+  let mobileHeaderShowSettings = $state(false);
+  let mobileHeaderSettingsHref = $state('');
 
   // Detect mode from route params
   let currentCommunityPubkey = $derived($page.params.pubkey ? $page.data?.pubkey : null);
@@ -63,9 +72,13 @@
   // Provide context for child layouts to update mobile header
   setContext(
     'setMobileHeader',
-    (/** @type {{ title: string, avatarUrl?: string | null }} */ info) => {
+    (
+      /** @type {{ title: string, avatarUrl?: string | null, showSettings?: boolean, settingsHref?: string }} */ info
+    ) => {
       mobileHeaderTitle = info.title;
       mobileHeaderAvatarUrl = info.avatarUrl ?? null;
+      mobileHeaderShowSettings = info.showSettings ?? false;
+      mobileHeaderSettingsHref = info.settingsHref ?? '';
     }
   );
 
@@ -116,9 +129,14 @@
           data-testid="mobile-community-header"
           class="sticky top-0 z-30 flex items-center justify-between bg-base-200 p-4"
         >
-          <!-- Left: Community avatar / App logo + chevron → opens drawer -->
-          <button onclick={toggleDrawer} class="btn gap-0 rounded-full px-1 btn-ghost">
-            {#if isDashboardActive}
+          {#if isDashboardActive}
+            <!-- Dashboard: app logo + chevron → opens the community drawer -->
+            <button
+              data-testid="header-drawer-toggle"
+              onclick={toggleDrawer}
+              class="btn gap-0 rounded-full px-1 btn-ghost"
+              aria-label={m.community_layout_title()}
+            >
               <div class="avatar">
                 <div class="w-8 rounded-full">
                   <ImageWithFallback
@@ -129,32 +147,58 @@
                   />
                 </div>
               </div>
-            {:else if mobileHeaderAvatarUrl}
-              <div class="avatar">
-                <div class="w-8 rounded-full ring-1 ring-base-300">
-                  <ImageWithFallback
-                    src={mobileHeaderAvatarUrl}
-                    alt={mobileHeaderTitle || ''}
-                    fallbackType="community"
-                    size="avatar_sm"
-                    class="h-full w-full rounded-full object-cover"
-                  />
+              <ChevronRightIcon class_="w-4 h-4 opacity-50" />
+            </button>
+            <h1 class="min-w-0 flex-1 truncate text-center text-base font-semibold">
+              {runtimeConfig.appName}
+            </h1>
+          {:else}
+            <!-- Community: back to the list, name opens the switcher drawer -->
+            <a
+              data-testid="header-back"
+              href={resolve('/c/') + '?view=communities'}
+              class="btn btn-circle btn-ghost"
+              aria-label={m.community_header_back_aria()}
+            >
+              <ChevronLeftIcon class_="w-6 h-6" />
+            </a>
+            <button
+              data-testid="header-switch"
+              onclick={toggleDrawer}
+              class="btn min-w-0 flex-1 gap-2 btn-ghost"
+              aria-label={m.community_header_switch_aria()}
+            >
+              {#if mobileHeaderAvatarUrl}
+                <div class="avatar">
+                  <div class="w-7 rounded-full ring-1 ring-base-300">
+                    <ImageWithFallback
+                      src={mobileHeaderAvatarUrl}
+                      alt=""
+                      fallbackType="community"
+                      size="avatar_sm"
+                      class="h-full w-full rounded-full object-cover"
+                    />
+                  </div>
                 </div>
-              </div>
-            {:else}
-              <MenuIcon class_="w-6 h-6" />
-            {/if}
-            <ChevronRightIcon class_="w-4 h-4 opacity-50" />
-          </button>
-
-          <!-- Center: Community name / App name -->
-          <h1 class="min-w-0 flex-1 truncate text-center text-base font-semibold">
-            {isDashboardActive ? runtimeConfig.appName : mobileHeaderTitle}
-          </h1>
+              {/if}
+              <span class="truncate text-base font-semibold">{mobileHeaderTitle}</span>
+              <ChevronDownIcon class_="w-4 h-4 opacity-50" />
+            </button>
+          {/if}
 
           <!-- Right: Termi launcher + user avatar → global nav dropdown -->
           {#if activeUser()}
             <div class="flex items-center gap-1">
+              {#if !isDashboardActive && mobileHeaderShowSettings}
+                <a
+                  data-testid="header-settings"
+                  href={mobileHeaderSettingsHref}
+                  class="btn btn-circle btn-ghost"
+                  aria-label={m.community_header_settings_aria()}
+                >
+                  <SettingsIcon class_="w-6 h-6" />
+                </a>
+              {/if}
               <TermiLauncherButton />
               <div class="dropdown dropdown-end">
                 <div tabindex="0" role="button" class="btn btn-circle btn-ghost">
