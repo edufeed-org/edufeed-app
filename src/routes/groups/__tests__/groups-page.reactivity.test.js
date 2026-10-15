@@ -42,14 +42,18 @@ const subject = vi.hoisted(() => ({ current: /** @type {any} */ (null) }));
 vi.mock('$lib/stores/nostr-infrastructure.svelte', async () => {
   const { EventStore } = await import('applesauce-core');
   await import('applesauce-common');
-  const { Subject, EMPTY } = await import('rxjs');
+  const { Subject, EMPTY, of } = await import('rxjs');
   const eventStore = new EventStore();
   eventStore.verifyEvent = () => true;
   const s = new Subject();
   subject.current = s;
   return {
     eventStore,
-    pool: { group: () => ({ request: () => s }), relay: () => ({ request: () => EMPTY }) }
+    pool: {
+      group: () => ({ request: () => s }),
+      // relay-key-race subscribes the relay's NIP-11 info; empty = no key.
+      relay: () => ({ request: () => EMPTY, information$: of({}) })
+    }
   };
 });
 // The page's kind-39000 name lookup (useChannelMetadata) asks each group's

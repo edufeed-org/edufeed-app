@@ -25,6 +25,8 @@ vi.mock('$lib/services/livekit-connection.svelte.js', () => ({
     return () => {};
   },
   isRemovalReason: () => true,
+  // group-call distinguishes a deleted breakout room from a kick; none here.
+  isRoomDeletedReason: () => false,
   // The leave dialog reads the seat (guest or member) off the local participant.
   getLiveKitState: () => ({ localParticipant: null })
 }));

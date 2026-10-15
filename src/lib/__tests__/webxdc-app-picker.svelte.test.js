@@ -25,6 +25,12 @@ vi.mock('$lib/stores/nostr-infrastructure.svelte', () => ({
   }
 }));
 
+// "Weitere Apps" (the discovered list) is behind the per-device
+// webxdcShowAllApps setting; this suite is about what that list contains.
+vi.mock('$lib/stores/app-settings.svelte.js', () => ({
+  appSettings: { webxdcShowAllApps: true }
+}));
+
 vi.mock('$lib/helpers/relay-helper.js', () => ({
   getEducationalRelays: () => ['wss://amb.example'],
   getAllLookupRelays: () => ['wss://lookup.example']

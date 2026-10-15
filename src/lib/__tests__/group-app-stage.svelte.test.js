@@ -112,15 +112,16 @@ describe('GroupAppStage', () => {
   });
 
   it('renders the app name and a close button', () => {
-    const { getByTestId, getByText } = renderStage();
+    const { getByTestId } = renderStage();
     expect(getByTestId('group-app-stage').textContent).toContain('Shared Quiz');
-    expect(getByText('Close app')).toBeTruthy();
+    // The close control is the player header's icon button (aria-label only).
+    expect(getByTestId('webxdc-close').getAttribute('aria-label')).toBe('Close');
   });
 
   it('calls onClose when the close button is clicked', async () => {
     const onClose = vi.fn();
-    const { getByText } = renderStage({ onClose });
-    await fireEvent.click(getByText('Close app'));
+    const { getByTestId } = renderStage({ onClose });
+    await fireEvent.click(getByTestId('webxdc-close'));
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 

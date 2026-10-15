@@ -51,7 +51,9 @@ vi.mock('$lib/stores/nostr-infrastructure.svelte', async () => {
       groupCalls.push(relays);
       return { request: () => rxOf(listEvent) };
     },
-    relay: () => ({ request: () => EMPTY })
+    // The channel-name lookup races the relay's NIP-11 key (relay-key-race):
+    // an empty info answers "no key" at once.
+    relay: () => ({ request: () => EMPTY, information$: rxOf({}) })
   };
   return { eventStore, pool };
 });
