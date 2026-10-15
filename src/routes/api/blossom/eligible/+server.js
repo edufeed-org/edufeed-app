@@ -1,7 +1,9 @@
 /**
  * Public eligibility probe for the closed Blossom server.
  *
- * `GET ?pubkey=<hex|npub>[&refresh=1]` → `{ eligible, gated }`. The client
+ * `GET ?pubkey=<hex|npub>[&refresh=1]` → `{ eligible, gated }` where `eligible`
+ * is `true`, `false` or `null` (undetermined: a domain directory could not be
+ * loaded yet — the client keeps its 'unknown' state and retries). The client
  * uses it to pick an upload target and to show the Termi hints; the answer is
  * not a secret (anyone can learn it by attempting an upload), so it is CORS
  * open. `refresh=1` asks the policy to bypass its cache (throttled server-side)

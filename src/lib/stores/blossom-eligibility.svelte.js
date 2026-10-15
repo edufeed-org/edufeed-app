@@ -28,6 +28,11 @@ let accountSub;
 let destroyRoot;
 /** Bumped per account emission so a late-resolving host for a previous account is dropped. */
 let hostGeneration = 0;
+/** Retry delays while a probe keeps failing or answering "undetermined". */
+const RETRY_DELAYS_MS = [15_000, 60_000, 300_000];
+/** Pending retry timer per pubkey (plain bookkeeping). */
+// eslint-disable-next-line svelte/prefer-svelte-reactivity -- internal bookkeeping, never read by the UI
+const retryTimers = new Map();
 /** Last seen nip05 list per pubkey (plain: only used to detect a change). */
 // eslint-disable-next-line svelte/prefer-svelte-reactivity -- internal bookkeeping, never read by the UI
 const lastProfileNip05s = new Map();
@@ -61,28 +66,65 @@ function isGated() {
   return !!runtimeConfig.blossom?.gated;
 }
 
+/** @param {string} pubkey */
+function clearRetry(pubkey) {
+  const timer = retryTimers.get(pubkey);
+  if (timer !== undefined) clearTimeout(timer);
+  retryTimers.delete(pubkey);
+}
+
+/**
+ * Schedule the next probe while the answer is still unknown (network error,
+ * non-OK response, or the server's "undetermined" while a directory is down).
+ * Backs off through RETRY_DELAYS_MS and then stops; a later trigger (handle
+ * grant, nip05 change, refused upload) starts over.
+ * @param {string} pubkey
+ * @param {number} attempt
+ */
+function scheduleRetry(pubkey, attempt) {
+  clearRetry(pubkey);
+  const delay = RETRY_DELAYS_MS[attempt];
+  if (delay === undefined) return;
+  retryTimers.set(
+    pubkey,
+    setTimeout(() => {
+      retryTimers.delete(pubkey);
+      if (pubkey !== activePubkey) return;
+      refreshBlossomEligibility(pubkey, { attempt: attempt + 1 });
+    }, delay)
+  );
+}
+
 /**
  * Ask the server again. Resolves when the state was updated (or left as is on
- * a network error — never throws).
+ * a network error — never throws). While the answer stays unknown the probe
+ * is retried with backoff.
  * @param {string | null | undefined} pubkey
- * @param {{ refresh?: boolean }} [opts] refresh: bypass the server cache (after a handle grant)
+ * @param {{ refresh?: boolean, attempt?: number }} [opts] refresh: bypass the server cache (after a handle grant)
  */
-export async function refreshBlossomEligibility(pubkey, { refresh = false } = {}) {
+export async function refreshBlossomEligibility(pubkey, { refresh = false, attempt = 0 } = {}) {
   if (!pubkey) return;
   if (!isGated()) {
     setState(pubkey, 'eligible');
     return;
   }
+  if (attempt === 0) clearRetry(pubkey);
+  let settled = false;
   try {
     const query = `pubkey=${encodeURIComponent(pubkey)}${refresh ? '&refresh=1' : ''}`;
     const res = await fetch(`/api/blossom/eligible?${query}`);
-    if (!res.ok) return;
-    const body = await res.json();
-    if (typeof body?.eligible !== 'boolean') return;
-    setState(pubkey, body.eligible ? 'eligible' : 'ineligible');
+    if (res.ok) {
+      const body = await res.json();
+      // `eligible: null` = undetermined (a directory is down server-side).
+      if (typeof body?.eligible === 'boolean') {
+        setState(pubkey, body.eligible ? 'eligible' : 'ineligible');
+        settled = true;
+      }
+    }
   } catch {
     /* stays 'unknown' — routing treats that as not eligible */
   }
+  if (!settled) scheduleRetry(pubkey, attempt);
 }
 
 /**
@@ -158,6 +200,7 @@ export function stopBlossomEligibility() {
   states = {};
   activePubkey = null;
   lastProfileNip05s.clear();
+  for (const pubkey of [...retryTimers.keys()]) clearRetry(pubkey);
 }
 
 /**
@@ -179,14 +222,4 @@ export function getBlossomEligibility(pubkey = activePubkey) {
  */
 export function isBlossomEligible(pubkey = activePubkey) {
   return getBlossomEligibility(pubkey) === 'eligible';
-}
-
-/**
- * The deployment server just refused this account (401/403 on upload): the
- * server is the authority, so flip the prediction without waiting.
- * @param {string | null | undefined} pubkey
- */
-export function markBlossomIneligible(pubkey) {
-  if (!pubkey || !isGated()) return;
-  setState(pubkey, 'ineligible');
 }

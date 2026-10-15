@@ -142,8 +142,10 @@ function isOneOf(url, servers) {
  * live values.
  *
  * - `blossomUpgrade` — the account may use the deployment's storage but its
- *   uploads go elsewhere (no kind 10063, or another server first). One click
- *   publishes a list with the deployment servers first.
+ *   kind 10063 list sends uploads elsewhere (another server first). One click
+ *   publishes a list with the deployment servers first. An eligible account
+ *   WITHOUT a list already uploads to the deployment server (routing default),
+ *   so it gets no card.
  * - `blossomPublic` — the account is NOT eligible yet its list still points
  *   at the deployment server first, so every upload gets rerouted. One click
  *   moves a public server first and drops the gated ones.
@@ -185,7 +187,12 @@ export function deriveBlossomHints({
   return {
     upgrade: {
       applicable:
-        eligible && ready && defaultServers.length > 0 && !firstIsDefault && !upgradeDismissed,
+        eligible &&
+        ready &&
+        defaultServers.length > 0 &&
+        userServers.length > 0 &&
+        !firstIsDefault &&
+        !upgradeDismissed,
       confirmed: eligible && firstIsDefault
     },
     public: {

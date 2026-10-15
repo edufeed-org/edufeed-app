@@ -8,7 +8,10 @@
  * server is the authority — when it refuses, the file goes to the next server
  * in the account's list and finally to a public server, and the user learns
  * where it went. Any other failure (413, 5xx, network) is rethrown untouched:
- * only an authorization refusal is a reason to try elsewhere.
+ * only an authorization refusal is a reason to try elsewhere. A refusal by
+ * the deployment server is NOT taken as an eligibility verdict (a 401 can be
+ * clock skew or an expired bunker-signed auth event just as well); it
+ * triggers a fresh probe of the policy instead.
  */
 import { BlossomClient } from 'blossom-client-sdk';
 import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
@@ -17,7 +20,9 @@ import {
   getPublicBlossomServers,
   isDefaultBlossomServer
 } from '$lib/services/blossom-settings-service.js';
-import { markBlossomIneligible } from '$lib/stores/blossom-eligibility.svelte.js';
+import { refreshBlossomEligibility } from '$lib/stores/blossom-eligibility.svelte.js';
+import { goto } from '$app/navigation';
+import { resolve } from '$app/paths';
 import { uniqueBlossomServers } from '$lib/helpers/blossom-server-key.js';
 import { showToast } from '$lib/helpers/toast.js';
 import * as m from '$lib/paraglide/messages';
@@ -80,7 +85,11 @@ export async function uploadWithFallback(file, { signer, userPubkey, servers, si
       const blob = await client.uploadBlob(file);
       if (fellBackFrom && !silent) {
         showToast(m.blossom_fallback_toast({ host: hostOf(serverUrl) }), 'warning', 8000, {
-          link: { href: '/settings#blossom-settings', label: m.blossom_fallback_toast_link() }
+          // An action, not a link: showToast's link opens a new tab (meant for external URLs).
+          action: {
+            label: m.blossom_fallback_toast_link(),
+            onClick: () => goto(resolve(/** @type {any} */ ('/settings#blossom-settings')))
+          }
         });
       }
       return { blob, serverUrl, fellBackFrom, reason };
@@ -89,9 +98,11 @@ export async function uploadWithFallback(file, { signer, userPubkey, servers, si
       lastError = err;
       fellBackFrom ??= serverUrl;
       reason = /** @type {any} */ (err)?.message || reason;
-      // The deployment server refused this account: it is the authority on
-      // eligibility, so stop predicting otherwise.
-      if (isDefaultBlossomServer(serverUrl)) markBlossomIneligible(userPubkey);
+      // The deployment server refused this account: ask the policy again
+      // (cache bypass) rather than guessing from the status code.
+      if (isDefaultBlossomServer(serverUrl)) {
+        refreshBlossomEligibility(userPubkey, { refresh: true }).catch(() => {});
+      }
     }
   }
   throw lastError;

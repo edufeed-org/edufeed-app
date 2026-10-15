@@ -482,7 +482,10 @@
       };
       const userPubkey = activeUser.pubkey;
       // Candidate servers for this slot; after an icon upload the package
-      // follows it onto the same host so both blobs resolve together.
+      // follows it onto the same host so both blobs resolve together. The
+      // icon upload is not silent: if it had to fall back, that one toast is
+      // the user's notice for both blobs (the package then lands there
+      // without a second fallback).
       let servers = getBlossomUploadServers(userPubkey, eventStore);
 
       // Interactive package: ship the extracted app icon alongside so the
@@ -493,12 +496,7 @@
           prep.iconMime === 'image/jpeg' ? 'icon.jpg' : 'icon.png',
           { type: prep.iconMime ?? 'image/png' }
         );
-        const icon = await uploadWithFallback(iconFile, {
-          signer,
-          userPubkey,
-          servers,
-          silent: true
-        });
+        const icon = await uploadWithFallback(iconFile, { signer, userPubkey, servers });
         interactiveIconUrls.set(index, reconcileBlobUrlScheme(icon.blob.url, icon.serverUrl));
         servers = [icon.serverUrl, ...servers.filter((s) => s !== icon.serverUrl)];
       }

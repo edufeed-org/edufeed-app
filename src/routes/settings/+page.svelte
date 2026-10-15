@@ -937,7 +937,7 @@
                       <span class="badge badge-sm badge-primary"
                         >{m.settings_blossom_badge_default()}</span
                       >
-                    {:else if isPublicBlossomServer(server.url)}
+                    {:else if blossomGated && isPublicBlossomServer(server.url)}
                       <span class="badge badge-ghost badge-sm"
                         >{m.settings_blossom_badge_public()}</span
                       >

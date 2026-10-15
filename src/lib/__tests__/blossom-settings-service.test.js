@@ -88,6 +88,8 @@ describe('blossom upload server choice', () => {
   it('isDefault/isPublic compare host-wise', () => {
     expect(isDefaultBlossomServer('https://blossom.edufeed.org')).toBe(true);
     expect(isDefaultBlossomServer('https://BLOSSOM.edufeed.org/')).toBe(true);
+    expect(isDefaultBlossomServer('http://blossom.edufeed.org')).toBe(true); // scheme-agnostic
+    expect(isDefaultBlossomServer('https://blossom.edufeed.org:443')).toBe(true);
     expect(isDefaultBlossomServer(PRIMAL)).toBe(false);
     expect(isPublicBlossomServer(PRIMAL + '/')).toBe(true);
     expect(isPublicBlossomServer(undefined)).toBe(false);

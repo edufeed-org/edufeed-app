@@ -47,9 +47,10 @@ vi.mock('$lib/services/blossom-settings-service.js', () => ({
   getPublicBlossomServers: () => ['https://blossom.primal.net'],
   isDefaultBlossomServer: () => false
 }));
+vi.mock('$app/navigation', () => ({ goto: () => {} }));
 vi.mock('$lib/stores/blossom-eligibility.svelte.js', () => ({
   isBlossomEligible: () => true,
-  markBlossomIneligible: () => {}
+  refreshBlossomEligibility: async () => {}
 }));
 
 const mockPublish = vi.fn();

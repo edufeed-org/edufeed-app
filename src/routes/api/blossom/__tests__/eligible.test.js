@@ -50,6 +50,14 @@ describe('GET /api/blossom/eligible', () => {
     await expect(no.json()).resolves.toEqual({ eligible: false, gated: true });
   });
 
+  it('answers eligible:null while the directory cannot be loaded', async () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    fetchSpy.mockRejectedValue(new Error('down'));
+    const { GET } = await loadRoute({ BLOSSOM_ELIGIBLE_NIP05_DOMAINS: 'edufeed.org' });
+    const res = await call(GET, `?pubkey=${CAROL}`);
+    await expect(res.json()).resolves.toEqual({ eligible: null, gated: true });
+  });
+
   it('gate off → eligible without touching the network', async () => {
     const { GET } = await loadRoute({});
     const res = await call(GET, `?pubkey=${CAROL}`);

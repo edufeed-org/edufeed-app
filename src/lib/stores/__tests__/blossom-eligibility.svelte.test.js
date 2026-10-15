@@ -148,12 +148,56 @@ describe('blossom-eligibility store', () => {
     await vi.waitFor(() => expect(fetchSpy).toHaveBeenCalledTimes(2));
   });
 
-  it('markBlossomIneligible flips the prediction; a failed fetch stays unknown', async () => {
-    fetchSpy.mockRejectedValue(new Error('offline'));
-    mod.initBlossomEligibility();
-    await settle();
-    expect(mod.getBlossomEligibility(ALICE)).toBe('unknown');
-    mod.markBlossomIneligible(ALICE);
-    expect(mod.getBlossomEligibility(ALICE)).toBe('ineligible');
+  it('a failed fetch stays unknown and is retried with backoff', async () => {
+    vi.useFakeTimers();
+    try {
+      fetchSpy.mockRejectedValueOnce(new Error('offline'));
+      mod.initBlossomEligibility();
+      await settle();
+      expect(mod.getBlossomEligibility(ALICE)).toBe('unknown');
+      expect(fetchSpy).toHaveBeenCalledTimes(1);
+      await vi.advanceTimersByTimeAsync(15_000);
+      await settle();
+      expect(fetchSpy).toHaveBeenCalledTimes(2);
+      expect(mod.getBlossomEligibility(ALICE)).toBe('eligible');
+      await vi.advanceTimersByTimeAsync(600_000);
+      expect(fetchSpy).toHaveBeenCalledTimes(2); // settled → no more retries
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("the server's undetermined answer (eligible: null) keeps unknown and retries", async () => {
+    vi.useFakeTimers();
+    try {
+      fetchSpy.mockResolvedValueOnce(
+        new Response(JSON.stringify({ eligible: null, gated: true }), { status: 200 })
+      );
+      mod.initBlossomEligibility();
+      await settle();
+      expect(mod.getBlossomEligibility(ALICE)).toBe('unknown');
+      await vi.advanceTimersByTimeAsync(15_000);
+      await settle();
+      expect(mod.getBlossomEligibility(ALICE)).toBe('eligible');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('gives up after the backoff ladder', async () => {
+    vi.useFakeTimers();
+    try {
+      fetchSpy.mockRejectedValue(new Error('offline'));
+      mod.initBlossomEligibility();
+      await settle();
+      for (const delay of [15_000, 60_000, 300_000, 300_000]) {
+        await vi.advanceTimersByTimeAsync(delay);
+        await settle();
+      }
+      expect(fetchSpy).toHaveBeenCalledTimes(4); // initial + 3 retries
+      expect(mod.getBlossomEligibility(ALICE)).toBe('unknown');
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

@@ -263,6 +263,7 @@ describe('assistant blossom hints', () => {
   });
 
   it('customize navigates to the settings anchor; dismiss persists per flag', () => {
+    listState.servers = ['https://mine.example'];
     withHints((hints) => {
       hints.customizeHint('blossomUpgrade');
       expect(gotoMock).toHaveBeenCalledWith('/settings#blossom-settings');

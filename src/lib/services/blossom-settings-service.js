@@ -5,7 +5,7 @@
 import { publishEvent } from './publish-service.js';
 import { manager } from '$lib/stores/accounts.svelte.js';
 import { runtimeConfig } from '$lib/stores/config.svelte.js';
-import { normalizeServerUrl } from '$lib/helpers/blossom-trust.js';
+import { blossomServerKey, uniqueBlossomServers } from '$lib/helpers/blossom-server-key.js';
 import { isBlossomEligible } from '$lib/stores/blossom-eligibility.svelte.js';
 
 /**
@@ -37,8 +37,8 @@ export function getPublicBlossomServers() {
  */
 function inList(url, list) {
   if (!url) return false;
-  const key = normalizeServerUrl(url);
-  return list.some((s) => normalizeServerUrl(s) === key);
+  const key = blossomServerKey(url);
+  return list.some((s) => blossomServerKey(s) === key);
 }
 
 /**
@@ -165,19 +165,11 @@ export function getBlossomUploadServers(userPubkey, eventStore, opts = {}) {
     userPubkey && eventStore
       ? parseBlossomServerEvent(eventStore.getReplaceable(10063, userPubkey)).map((s) => s.url)
       : [];
-  const ordered = [
+  return uniqueBlossomServers([
     ...userServers,
     ...(eligible ? getDefaultBlossomServers() : []),
     ...getPublicBlossomServers()
-  ];
-  const seen = new Set();
-  return ordered.filter((url) => {
-    if (!url) return false;
-    const key = normalizeServerUrl(url);
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  });
+  ]);
 }
 
 /**

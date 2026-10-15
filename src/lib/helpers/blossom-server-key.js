@@ -1,12 +1,27 @@
 /**
- * Comparison key for Blossom server URLs: case-insensitive, trailing slashes
- * ignored, so `https://blossom.edufeed.org/` (config) and
- * `https://blossom.edufeed.org` (a kind 10063 entry) count as one server.
+ * Comparison key for Blossom server URLs — the same host-based identity
+ * `normalizeServerUrl` (blossom-trust.js) uses for trust: scheme ignored,
+ * hostname lowercased, default port dropped, trailing slash stripped. So
+ * `https://blossom.edufeed.org/` (config), `https://blossom.edufeed.org` and
+ * `HTTPS://blossom.edufeed.org:443/` (kind 10063 entries) count as one server
+ * everywhere: routing, hints, settings badges and dedupe. Kept dependency-free
+ * (duplicates the few lines rather than importing blossom-trust, which many
+ * component tests mock partially). Unparsable input falls back to the
+ * trimmed, lowercased string without trailing slashes.
  * @param {string | null | undefined} url
  * @returns {string}
  */
 export function blossomServerKey(url) {
-  return (url ?? '').trim().toLowerCase().replace(/\/+$/, '');
+  const raw = (url ?? '').trim();
+  if (!raw) return '';
+  try {
+    const parsed = new URL(raw);
+    const port = parsed.port ? ':' + parsed.port : '';
+    const pathname = parsed.pathname === '/' ? '' : parsed.pathname.replace(/\/$/, '');
+    return `${parsed.hostname.toLowerCase()}${port}${pathname}`;
+  } catch {
+    return raw.toLowerCase().replace(/\/+$/, '');
+  }
 }
 
 /**

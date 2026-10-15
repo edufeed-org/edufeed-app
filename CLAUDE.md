@@ -344,7 +344,7 @@ Besides `/api/config`, the app has server-side proxy endpoints (all optional, 50
 - `/api/oer` — OER media-library image search proxy (`OER_PROXY_URL`)
 - `/api/metaclean` — metadata-cleaner proxy for the pre-upload review step in `LicensedFileInput`/`LicensedImageInput` (`METADATA_CLEANER_URL`)
 - `/api/curricula` — Lehrplan-ontology SPARQL cascade for the curriculum picker (`SPARQL_ENDPOINT_URL`)
-- `/api/blossom/eligible` — `?pubkey=<hex|npub>` → `{eligible, gated}`, CORS-open prediction of the closed Blossom server's upload policy (no env = gate off, everyone eligible)
+- `/api/blossom/eligible` — `?pubkey=<hex|npub>` → `{eligible: true|false|null, gated}` (`null` = a NIP-05 directory could not be loaded yet; the client keeps "unknown" and retries), CORS-open prediction of the closed Blossom server's upload policy (no env = gate off, everyone eligible)
 - `/api/nip05` — membership/handle admin proxy to the standalone nip-05-service (`NIP05_SERVICE_URL`, `NIP05_SERVICE_API_KEY`, allowlist `MEMBERSHIP_ADMIN_PUBKEYS`; feature flag `MEMBERSHIP_ENABLED`)
 
 ### Gated Mode

@@ -25,14 +25,21 @@ import { parseArray } from './env-parse.js';
 
 const HEX64 = /^[0-9a-f]{64}$/;
 const NOSTR_JSON_TIMEOUT_MS = 5000;
+/** After a failed fetch with no cached copy, don't hammer the domain for this long. */
+const FAILURE_RETRY_MS = 30_000;
 
 /**
  * @typedef {{ pubkeys: Set<string>, domains: string[], gated: boolean }} EligibilityConfig
  * @typedef {{
  *   gated: boolean,
  *   config: EligibilityConfig,
- *   isEligible: (pubkey: string, opts?: { refresh?: boolean }) => Promise<boolean>
+ *   isEligible: (pubkey: string, opts?: { refresh?: boolean }) => Promise<boolean | null>
  * }} EligibilityChecker
+ *
+ * `isEligible` answers `null` ("undetermined") when the pubkey was not found
+ * but at least one domain's directory has never been loaded — a definitive
+ * "no" there would make the client reroute a member and nudge them off the
+ * deployment server over a transient outage.
  */
 
 /**
@@ -123,30 +130,40 @@ export function createEligibilityChecker(config, opts = {}) {
 
   /** @type {Map<string, { pubkeys: Set<string>, fetchedAt: number }>} */
   const cache = new Map();
+  /** Last failed attempt per domain — throttles retries while nothing is cached. */
+  /** @type {Map<string, number>} */
+  const failedAt = new Map();
   /** @type {Map<string, Promise<Set<string> | null>>} */
   const inFlight = new Map();
 
   /**
    * Current pubkey set for a domain, refreshing when stale. Never throws:
-   * a failed refresh keeps the previous set (or yields an empty one).
+   * a failed refresh keeps the previous set; with no copy at all it yields
+   * `null` so the caller can report "undetermined" instead of "no".
    * @param {string} domain
    * @param {boolean} refresh
-   * @returns {Promise<Set<string>>}
+   * @returns {Promise<Set<string> | null>}
    */
   async function domainPubkeys(domain, refresh) {
     const entry = cache.get(domain);
     const age = entry ? now() - entry.fetchedAt : Infinity;
     const stale = age >= ttlMs || (refresh && age >= minRefreshMs);
     if (entry && !stale) return entry.pubkeys;
+    const lastFailure = failedAt.get(domain);
+    if (!entry && lastFailure !== undefined && now() - lastFailure < FAILURE_RETRY_MS) {
+      return null;
+    }
 
     let pending = inFlight.get(domain);
     if (!pending) {
       pending = fetchDomainPubkeys(domain, fetchImpl)
         .then((pubkeys) => {
           cache.set(domain, { pubkeys, fetchedAt: now() });
+          failedAt.delete(domain);
           return pubkeys;
         })
         .catch((err) => {
+          failedAt.set(domain, now());
           console.warn(
             `[blossom-eligibility] nostr.json for ${domain} failed (${err?.message || err}); ` +
               (entry ? 'keeping cached copy' : 'no copy yet')
@@ -157,7 +174,7 @@ export function createEligibilityChecker(config, opts = {}) {
       inFlight.set(domain, pending);
     }
     const fresh = await pending;
-    return fresh || entry?.pubkeys || new Set();
+    return fresh || entry?.pubkeys || null;
   }
 
   return {
@@ -168,10 +185,10 @@ export function createEligibilityChecker(config, opts = {}) {
       const hex = normalizePubkey(pubkey);
       if (!hex) return false;
       if (config.pubkeys.has(hex)) return true;
-      for (const domain of config.domains) {
-        if ((await domainPubkeys(domain, refresh)).has(hex)) return true;
-      }
-      return false;
+      // All domains in parallel: cold-cache latency is the slowest fetch, not the sum.
+      const sets = await Promise.all(config.domains.map((d) => domainPubkeys(d, refresh)));
+      if (sets.some((set) => set?.has(hex))) return true;
+      return sets.every((set) => set !== null) ? false : null;
     }
   };
 }
@@ -183,6 +200,11 @@ let _checker;
 export function getEligibilityChecker() {
   if (!_checker) _checker = createEligibilityChecker(parseEligibilityConfig(env));
   return _checker;
+}
+
+/** The parsed env (once per process — /api/config reads it on every request). */
+export function getEligibilityConfig() {
+  return getEligibilityChecker().config;
 }
 
 /** Test seam. */

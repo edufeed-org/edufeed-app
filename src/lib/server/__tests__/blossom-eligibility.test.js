@@ -134,12 +134,47 @@ describe('createEligibilityChecker', () => {
     warn.mockRestore();
   });
 
-  it('a domain that never loaded contributes nothing (fail closed)', async () => {
+  it('a domain that never loaded makes the answer undetermined, not "no"', async () => {
     vi.spyOn(console, 'warn').mockImplementation(() => {});
     fetchImpl.mockRejectedValue(new Error('down'));
     const cfg = parseEligibilityConfig({ BLOSSOM_ELIGIBLE_NIP05_DOMAINS: 'edufeed.org' });
     const checker = createEligibilityChecker(cfg, { fetchImpl, now: clock });
-    await expect(checker.isEligible(ALICE)).resolves.toBe(false);
+    await expect(checker.isEligible(ALICE)).resolves.toBeNull();
+    // the allowlist still answers definitively
+    const cfg2 = parseEligibilityConfig({
+      BLOSSOM_ELIGIBLE_PUBKEYS: BOB,
+      BLOSSOM_ELIGIBLE_NIP05_DOMAINS: 'edufeed.org'
+    });
+    const checker2 = createEligibilityChecker(cfg2, { fetchImpl, now: clock });
+    await expect(checker2.isEligible(BOB)).resolves.toBe(true);
+  });
+
+  it('does not re-fetch a dead domain within the failure window', async () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    fetchImpl.mockRejectedValue(new Error('down'));
+    const cfg = parseEligibilityConfig({ BLOSSOM_ELIGIBLE_NIP05_DOMAINS: 'edufeed.org' });
+    const checker = createEligibilityChecker(cfg, { fetchImpl, now: clock });
+    await checker.isEligible(ALICE);
+    now += 10_000;
+    await expect(checker.isEligible(ALICE)).resolves.toBeNull();
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    now += 31_000;
+    fetchImpl.mockResolvedValueOnce(okResponse({ alice: ALICE }));
+    await expect(checker.isEligible(ALICE)).resolves.toBe(true);
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+  });
+
+  it('answers "no" only when every domain was loaded', async () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    fetchImpl.mockImplementation(async (url) =>
+      String(url).startsWith('https://a.example')
+        ? okResponse({ alice: ALICE })
+        : Promise.reject(new Error('down'))
+    );
+    const cfg = parseEligibilityConfig({ BLOSSOM_ELIGIBLE_NIP05_DOMAINS: 'a.example,b.example' });
+    const checker = createEligibilityChecker(cfg, { fetchImpl, now: clock });
+    await expect(checker.isEligible(ALICE)).resolves.toBe(true);
+    await expect(checker.isEligible(CAROL)).resolves.toBeNull();
   });
 
   it('dedupes concurrent fetches of one domain', async () => {
@@ -171,7 +206,7 @@ describe('createEligibilityChecker', () => {
     expect(fetchImpl).toHaveBeenCalledTimes(2);
   });
 
-  it('checks every configured domain in order', async () => {
+  it('checks every configured domain', async () => {
     fetchImpl.mockImplementation(async (url) =>
       String(url).startsWith('https://a.example')
         ? okResponse({ alice: ALICE })
@@ -189,6 +224,6 @@ describe('createEligibilityChecker', () => {
     fetchImpl.mockResolvedValue(new Response('[]', { status: 200 }));
     const cfg = parseEligibilityConfig({ BLOSSOM_ELIGIBLE_NIP05_DOMAINS: 'edufeed.org' });
     const checker = createEligibilityChecker(cfg, { fetchImpl, now: clock });
-    await expect(checker.isEligible(ALICE)).resolves.toBe(false);
+    await expect(checker.isEligible(ALICE)).resolves.toBeNull();
   });
 });

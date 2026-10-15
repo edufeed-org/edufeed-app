@@ -237,8 +237,8 @@ describe('deriveBlossomHints', () => {
     expect(r.public).toEqual({ applicable: false, confirmed: false });
   });
 
-  it('eligible without a list → upgrade open', () => {
-    expect(deriveBlossomHints(base).upgrade).toEqual({ applicable: true, confirmed: false });
+  it('eligible without a list → nothing (routing already uses the deployment server)', () => {
+    expect(deriveBlossomHints(base).upgrade).toEqual({ applicable: false, confirmed: false });
   });
 
   it('eligible with another server first → upgrade open; deployment first → confirmed', () => {
@@ -272,12 +272,18 @@ describe('deriveBlossomHints', () => {
   });
 
   it('unknown eligibility, readonly account, unsettled list or dismissal → not open', () => {
-    expect(deriveBlossomHints({ ...base, eligibility: 'unknown' }).upgrade.applicable).toBe(false);
-    expect(deriveBlossomHints({ ...base, user: { type: 'readonly' } }).upgrade.applicable).toBe(
+    const withList = { ...base, userServers: [PRIMAL] };
+    expect(deriveBlossomHints(withList).upgrade.applicable).toBe(true);
+    expect(deriveBlossomHints({ ...withList, eligibility: 'unknown' }).upgrade.applicable).toBe(
       false
     );
-    expect(deriveBlossomHints({ ...base, listSettled: false }).upgrade.applicable).toBe(false);
-    expect(deriveBlossomHints({ ...base, upgradeDismissed: true }).upgrade.applicable).toBe(false);
+    expect(deriveBlossomHints({ ...withList, user: { type: 'readonly' } }).upgrade.applicable).toBe(
+      false
+    );
+    expect(deriveBlossomHints({ ...withList, listSettled: false }).upgrade.applicable).toBe(false);
+    expect(deriveBlossomHints({ ...withList, upgradeDismissed: true }).upgrade.applicable).toBe(
+      false
+    );
     expect(
       deriveBlossomHints({
         ...base,
@@ -289,7 +295,19 @@ describe('deriveBlossomHints', () => {
   });
 
   it('no deployment servers configured → never an upgrade', () => {
-    expect(deriveBlossomHints({ ...base, defaultServers: [] }).upgrade.applicable).toBe(false);
+    expect(
+      deriveBlossomHints({ ...base, userServers: [PRIMAL], defaultServers: [] }).upgrade.applicable
+    ).toBe(false);
+  });
+
+  it('a port-443 or scheme variant of the deployment server still counts as it', () => {
+    expect(
+      deriveBlossomHints({ ...base, userServers: ['HTTPS://blossom.edufeed.org:443/', PRIMAL] })
+        .upgrade
+    ).toEqual({ applicable: false, confirmed: true });
+    expect(buildUpgradedServerList(['https://blossom.edufeed.org:443'], [EDUFEED])).toEqual([
+      EDUFEED
+    ]);
   });
 });
 

@@ -8,7 +8,7 @@ import { json } from '@sveltejs/kit';
 import { parseDiscoverContentTypes } from '$lib/helpers/discover-content-types.js';
 import { env } from '$env/dynamic/private';
 import { parseArray, parseBool } from '$lib/server/env-parse.js';
-import { parseEligibilityConfig } from '$lib/server/blossom-eligibility.js';
+import { getEligibilityConfig } from '$lib/server/blossom-eligibility.js';
 
 /**
  * Like parseArray, but the literal `none` yields [] — the way to switch a
@@ -201,7 +201,7 @@ function resolveWotConfig(env, suffix) {
  * Returns public configuration that can be safely exposed to the browser
  */
 export function GET() {
-  const blossomEligibility = parseEligibilityConfig(env);
+  const blossomEligibility = getEligibilityConfig();
   const config = {
     // App branding
     appName: env.APP_NAME || 'Edufeed',

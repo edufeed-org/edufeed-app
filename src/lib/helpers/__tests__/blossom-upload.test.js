@@ -8,7 +8,8 @@ const mocks = vi.hoisted(() => ({
   uploadServers: ['https://blossom.edufeed.org/', 'https://second.example'],
   publicServers: ['https://blossom.primal.net'],
   showToast: vi.fn(),
-  markIneligible: vi.fn(),
+  refreshEligibility: vi.fn(async () => {}),
+  goto: vi.fn(),
   constructed: /** @type {string[]} */ ([])
 }));
 
@@ -37,8 +38,10 @@ vi.mock('$lib/services/blossom-settings-service.js', () => ({
   isDefaultBlossomServer: (url) => url === 'https://blossom.edufeed.org/'
 }));
 vi.mock('$lib/stores/blossom-eligibility.svelte.js', () => ({
-  markBlossomIneligible: (...a) => mocks.markIneligible(...a)
+  refreshBlossomEligibility: (...a) => mocks.refreshEligibility(...a)
 }));
+vi.mock('$app/navigation', () => ({ goto: (...a) => mocks.goto(...a) }));
+vi.mock('$app/paths', () => ({ resolve: (/** @type {string} */ p) => p }));
 vi.mock('$lib/helpers/toast.js', () => ({ showToast: (...a) => mocks.showToast(...a) }));
 
 const { uploadWithFallback, isBlossomAuthDenied } = await import('../blossom-upload.js');
@@ -68,7 +71,8 @@ describe('uploadWithFallback', () => {
     mocks.constructed = [];
     mocks.uploadServers = ['https://blossom.edufeed.org/', 'https://second.example'];
     mocks.showToast.mockReset();
-    mocks.markIneligible.mockReset();
+    mocks.refreshEligibility.mockReset();
+    mocks.goto.mockReset();
   });
 
   it('uploads to the first server without a toast', async () => {
@@ -77,10 +81,10 @@ describe('uploadWithFallback', () => {
     expect(res.serverUrl).toBe('https://blossom.edufeed.org/');
     expect(res.fellBackFrom).toBeNull();
     expect(mocks.showToast).not.toHaveBeenCalled();
-    expect(mocks.markIneligible).not.toHaveBeenCalled();
+    expect(mocks.refreshEligibility).not.toHaveBeenCalled();
   });
 
-  it('a refusal by the deployment server falls to the next server and marks ineligible', async () => {
+  it('a refusal by the deployment server falls to the next server and re-probes eligibility', async () => {
     mocks.servers['https://blossom.edufeed.org/'] = deny(
       401,
       'Pubkey not authorized by any storage rule'
@@ -90,10 +94,13 @@ describe('uploadWithFallback', () => {
     expect(res.serverUrl).toBe('https://second.example');
     expect(res.fellBackFrom).toBe('https://blossom.edufeed.org/');
     expect(res.reason).toBe('Pubkey not authorized by any storage rule');
-    expect(mocks.markIneligible).toHaveBeenCalledWith(PUB);
+    expect(mocks.refreshEligibility).toHaveBeenCalledWith(PUB, { refresh: true });
     expect(mocks.showToast).toHaveBeenCalledTimes(1);
     expect(mocks.showToast.mock.calls[0][0]).toContain('second.example');
-    expect(mocks.showToast.mock.calls[0][3].link.href).toBe('/settings#blossom-settings');
+    const opts = mocks.showToast.mock.calls[0][3];
+    expect(opts.link).toBeUndefined(); // a link would open a new tab
+    opts.action.onClick();
+    expect(mocks.goto).toHaveBeenCalledWith('/settings#blossom-settings');
   });
 
   it('two refusals end on the public server', async () => {
@@ -124,7 +131,7 @@ describe('uploadWithFallback', () => {
       'too large'
     );
     expect(mocks.constructed).toEqual(['https://blossom.edufeed.org/']);
-    expect(mocks.markIneligible).not.toHaveBeenCalled();
+    expect(mocks.refreshEligibility).not.toHaveBeenCalled();
   });
 
   it('a refusal by a non-deployment server does not touch eligibility', async () => {
@@ -132,7 +139,7 @@ describe('uploadWithFallback', () => {
     mocks.servers['https://mine.example'] = deny(403, 'nope');
     mocks.servers['https://blossom.primal.net'] = ok('https://blossom.primal.net/');
     await uploadWithFallback(file, { signer, userPubkey: PUB });
-    expect(mocks.markIneligible).not.toHaveBeenCalled();
+    expect(mocks.refreshEligibility).not.toHaveBeenCalled();
   });
 
   it('silent suppresses the toast; explicit servers are honoured and deduped', async () => {
