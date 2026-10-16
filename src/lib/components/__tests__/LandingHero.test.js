@@ -108,6 +108,13 @@ describe('LandingHero', () => {
     expect(getByTestId('landing-hero-grid').className).not.toContain('lg:grid-cols-2');
   });
 
+  it('while content is still loading, the card column holds placeholders (no reflow later)', () => {
+    const { getByTestId, queryByTestId } = render(LandingHero, { props: { pending: true } });
+    expect(getByTestId('landing-hero-grid').className).toContain('lg:grid-cols-2');
+    expect(getByTestId('landing-collage-pending').querySelectorAll('.skeleton').length).toBe(3);
+    expect(queryByTestId('landing-collage')).toBeNull();
+  });
+
   it('renders only the cards it gets', () => {
     const { getByTestId, queryByTestId } = render(LandingHero, { props: { nextEvent } });
     expect(getByTestId('landing-collage')).toBeTruthy();

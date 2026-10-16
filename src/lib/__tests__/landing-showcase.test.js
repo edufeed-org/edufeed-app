@@ -130,3 +130,16 @@ describe('landingCommunities', () => {
     ]);
   });
 });
+
+describe('heroPending', () => {
+  it('pending while any enabled source has not settled', async () => {
+    const { heroPending } = await import('$lib/helpers/landing-showcase.js');
+    const enabled = { learning: true, events: true, articles: false, communities: true };
+    const done = { learning: true, events: true, articles: false, communities: true };
+    expect(heroPending(enabled, done)).toBe(false);
+    expect(heroPending(enabled, { ...done, events: false })).toBe(true);
+    expect(heroPending(enabled, { ...done, communities: false })).toBe(true);
+    // a disabled source never holds the hero
+    expect(heroPending({ ...enabled, events: false }, { ...done, events: false })).toBe(false);
+  });
+});

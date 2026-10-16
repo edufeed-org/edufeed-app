@@ -103,3 +103,13 @@ export function landingCommunities(events, profiles, n = 11) {
     .filter((c) => c.name)
     .slice(0, n);
 }
+
+/**
+ * Whether the hero should still hold its card column: some enabled source
+ * has not answered yet. A disabled source never holds it.
+ * @param {Record<string, boolean>} enabled
+ * @param {Record<string, boolean>} settled
+ */
+export function heroPending(enabled, settled) {
+  return Object.keys(enabled).some((type) => enabled[type] && !settled[type]);
+}

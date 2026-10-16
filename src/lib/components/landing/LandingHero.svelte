@@ -16,8 +16,16 @@
   import { LocationIcon } from '$lib/components/icons';
 
   /** @typedef {{ pubkey: string, name: string, about?: string, picture?: string }} LandingCommunity */
-  /** @type {{ heroMaterial?: any, nextEvent?: any, article?: any, community?: LandingCommunity | null }} */
-  let { heroMaterial = null, nextEvent = null, article = null, community = null } = $props();
+  /** @type {{ heroMaterial?: any, nextEvent?: any, article?: any, community?: LandingCommunity | null, pending?: boolean }} */
+  let {
+    heroMaterial = null,
+    nextEvent = null,
+    article = null,
+    community = null,
+    // Content still loading: keep the card column (with placeholders) so the
+    // headline does not jump from full to half width when the first card lands.
+    pending = false
+  } = $props();
 
   const helpLink = $derived(helpLinkAttrs(runtimeConfig.help?.url));
   const hasCards = $derived(Boolean(heroMaterial || nextEvent || article || community));
@@ -42,7 +50,7 @@
 >
   <div
     data-testid="landing-hero-grid"
-    class="container mx-auto grid gap-10 px-4 py-12 lg:items-center lg:py-16 {hasCards
+    class="container mx-auto grid gap-10 px-4 py-12 lg:items-center lg:py-16 {hasCards || pending
       ? 'lg:grid-cols-2'
       : ''}"
   >
@@ -83,7 +91,19 @@
       </p>
     </div>
 
-    {#if hasCards}
+    {#if !hasCards && pending}
+      <div
+        data-testid="landing-collage-pending"
+        aria-hidden="true"
+        class="-mr-4 flex gap-3 overflow-hidden pr-4 lg:mr-0 lg:grid lg:h-[30rem] lg:grid-cols-2 lg:content-center lg:gap-4 lg:p-0"
+      >
+        {#each [0, 1, 2] as i (i)}
+          <div
+            class="h-28 shrink-0 basis-[84%] skeleton rounded-2xl opacity-30 lg:basis-auto"
+          ></div>
+        {/each}
+      </div>
+    {:else if hasCards}
       <div
         data-testid="landing-collage"
         class="-mr-4 flex gap-3 overflow-x-auto pr-4 pb-2 lg:relative lg:mr-0 lg:h-[30rem] lg:overflow-visible lg:p-0"

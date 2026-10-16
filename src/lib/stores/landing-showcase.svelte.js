@@ -3,6 +3,7 @@
 // Reuses the cheap loaders /discover runs (they apply curated/WoT authors);
 // the models read the EventStore without an author filter, like /discover.
 // Disabled discover types are neither loaded nor shown.
+import { untrack } from 'svelte';
 import { TimelineModel } from 'applesauce-core/models';
 import { ambTimelineLoader } from '$lib/loaders/amb.js';
 import { articleTimelineLoader } from '$lib/loaders/articles.js';
@@ -41,10 +42,14 @@ export function useLandingShowcase() {
   /** @param {ShowcaseType} type */
   const enabled = (type) => isDiscoverTypeEnabled(type, runtimeConfig.discover?.contentTypes || []);
 
+  // Runs inside the loader effect (disabled types settle synchronously), so it
+  // must not make the effect depend on settledByType — every write would
+  // restart all loaders.
   /** @param {ShowcaseType} type */
-  const markSettled = (type) => {
-    if (!settledByType[type]) settledByType = { ...settledByType, [type]: true };
-  };
+  const markSettled = (type) =>
+    untrack(() => {
+      if (!settledByType[type]) settledByType = { ...settledByType, [type]: true };
+    });
 
   $effect(() => {
     /** @type {{ unsubscribe(): void }[]} */

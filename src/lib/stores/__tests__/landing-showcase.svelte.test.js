@@ -101,6 +101,17 @@ describe('useLandingShowcase', () => {
     cleanup();
   });
 
+  it('starts each enabled loader once, even when another type is disabled', () => {
+    // articles disabled (cfg default) — settling it must not re-run the effect
+    loaders.calendar.mockReturnValue(() => NEVER);
+    const { cleanup } = mount();
+    vi.advanceTimersByTime(5_000);
+    flushSync();
+    expect(loaders.amb).toHaveBeenCalledTimes(1);
+    expect(loaders.calendar).toHaveBeenCalledTimes(1);
+    cleanup();
+  });
+
   it('settles a type when its loader completes', () => {
     const { api, cleanup } = mount();
     expect(api.settled('learning')).toBe(true);
