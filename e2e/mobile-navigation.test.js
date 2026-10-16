@@ -82,8 +82,23 @@ test.describe('Mobile navigation', () => {
       await expect(page.locator('#global-signup-modal')).toBeVisible({ timeout: 5000 });
     });
 
+    test('landing 5b: copy A, browse link, no horizontal overflow', async ({ page }) => {
+      await page.goto('/');
+      const hero = page.getByTestId('landing-hero');
+      await expect(hero).toBeVisible({ timeout: 10_000 });
+      await expect(page.getByTestId('landing-cta-signup')).toHaveText(
+        /Kostenlos mitmachen|Join for free/
+      );
+      await expect(page.getByTestId('landing-cta-hint')).toBeVisible();
+      await expect(page.getByTestId('landing-cta-browse')).toHaveAttribute('href', '/discover');
+      // Live cards and the avatar wall arrive late; give them time to lay out.
+      await page.waitForTimeout(3000);
+      const docWidth = await page.evaluate(() => document.documentElement.scrollWidth);
+      const viewportWidth = await page.evaluate(() => window.innerWidth);
+      expect(docWidth).toBeLessThanOrEqual(viewportWidth);
+    });
+
     test('no horizontal overflow on discover page', async ({ page }) => {
-      // Use /discover (not homepage which has pre-existing hero section overflow)
       await page.goto('/discover');
       await page.waitForTimeout(3000);
 
