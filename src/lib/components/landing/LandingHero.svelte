@@ -47,7 +47,11 @@
       : ''}"
   >
     <div class="flex max-w-2xl flex-col gap-5">
-      <span class="text-sm font-semibold tracking-wide text-accent uppercase">
+      <span
+        data-testid="landing-hero-eyebrow"
+        class="text-sm font-semibold tracking-wide uppercase"
+        style="color: var(--c-hero-accent)"
+      >
         {m.landing_hero_eyebrow()}
       </span>
       <h1 class="text-3xl leading-tight font-bold text-balance md:text-5xl">
@@ -60,7 +64,8 @@
         <button
           type="button"
           data-testid="landing-cta-signup"
-          class="btn border-none btn-lg btn-accent"
+          class="btn border-none btn-lg hover:brightness-95"
+          style="background: var(--c-hero-accent); color: var(--c-hero-accent-ink)"
           onclick={() => modalStore.openModal('signup')}
         >
           {m.landing_cta_create_account()}

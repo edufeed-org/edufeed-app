@@ -96,6 +96,12 @@ describe('LandingHero', () => {
     expect(container.querySelector('img')).toBeNull();
   });
 
+  it('eyebrow and primary action use the hero-band accent, so accent==primary themes stay readable', () => {
+    const { getByTestId } = render(LandingHero);
+    expect(getByTestId('landing-hero-eyebrow').getAttribute('style')).toContain('--c-hero-accent');
+    expect(getByTestId('landing-cta-signup').getAttribute('style')).toContain('--c-hero-accent');
+  });
+
   it('without content there is no collage and the text takes the full width', () => {
     const { queryByTestId, getByTestId } = render(LandingHero);
     expect(queryByTestId('landing-collage')).toBeNull();

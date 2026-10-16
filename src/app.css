@@ -289,6 +289,10 @@ body {
   --c-ink-soft: color-mix(in oklch, var(--color-base-content) 65%, transparent);
   --c-cta: var(--color-accent);
   --c-cta-ink: var(--color-accent-content);
+  /* Accent on the dark hero band (landing): where a theme's accent equals its
+     primary, accent on --c-hero-2 disappears, so such themes restate this. */
+  --c-hero-accent: var(--color-accent);
+  --c-hero-accent-ink: var(--color-accent-content);
   --c-rule: color-mix(in oklch, var(--color-base-content) 16%, transparent);
   --c-on-dark: var(--color-base-100);
   --font-display: 'Twemoji Country Flags', 'Outfit Variable', 'Outfit', ui-sans-serif, system-ui,
@@ -329,6 +333,9 @@ body {
   --c-ink-soft: #707070; /* tfk-grey-small-text */
   --c-cta: var(--color-accent);
   --c-cta-ink: var(--color-accent-content);
+  /* accent == primary here: white on the dark-orange band instead */
+  --c-hero-accent: #ffffff;
+  --c-hero-accent-ink: #cc4b05; /* tfk-primary-dark */
   --c-rule: #ebebeb; /* tfk-light-grey */
   --c-on-dark: var(--color-base-100);
   --font-sans: 'Twemoji Country Flags', 'Open Sans Variable', 'Open Sans', ui-sans-serif, system-ui,
