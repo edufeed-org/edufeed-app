@@ -1,127 +1,189 @@
 <script>
-  // Landing hero (mobile UX round 2026-10-13): say what Edufeed is for in
-  // education words, make "Konto erstellen" the primary action, and offer the
-  // three things first-time visitors came for as task tiles. The protocol
-  // shrinks to one line linking the guide.
+  // Landing hero, design 5b (Claude Design "Landing Round 3"): what Edufeed is
+  // for in copy A, on the theme's hero colour, with a collage of live cards on
+  // the right — real content instead of a stock photo. On phones the cards
+  // become a swipeable row. Every card is optional; with none, the text takes
+  // the full width.
   import { resolve } from '$app/paths';
   import * as m from '$lib/paraglide/messages';
   import { modalStore } from '$lib/stores/modal.svelte.js';
   import { runtimeConfig } from '$lib/stores/config.svelte.js';
   import ImageWithFallback from '$lib/components/shared/ImageWithFallback.svelte';
-  import { isDiscoverTypeEnabled } from '$lib/helpers/discover-content-types.js';
   import { helpLinkAttrs } from '$lib/helpers/help-link.js';
-  import { BookOpenIcon, CalendarIcon, PeopleIcon } from '$lib/components/icons';
+  import { encodeEventToNaddr, hexToNpub } from '$lib/helpers/nostrUtils.js';
+  import { getUpcomingDateParts } from '$lib/helpers/dates.js';
+  import { getTagValue } from 'applesauce-core/helpers';
+  import { LocationIcon } from '$lib/components/icons';
 
-  // Tiles deep-link into /discover tabs; hide the ones a deployment disabled
-  // via DISCOVER_CONTENT_TYPES so they never lead to a fallback tab.
-  const discoverTypes = $derived(runtimeConfig.discover?.contentTypes || []);
+  /**
+   * @typedef {{ pubkey: string, name: string, about?: string, picture?: string }} LandingCommunity
+   * @type {{ heroMaterial?: any, nextEvent?: any, article?: any, community?: LandingCommunity | null }}
+   */
+  let { heroMaterial = null, nextEvent = null, article = null, community = null } = $props();
+
   const helpLink = $derived(helpLinkAttrs(runtimeConfig.help?.url));
-  const tasks = $derived(
-    [
-      {
-        id: 'material',
-        href: resolve('/discover?type=learning'),
-        icon: BookOpenIcon,
-        title: m.landing_task_material_title(),
-        sub: m.landing_task_material_sub(),
-        show: isDiscoverTypeEnabled('learning', discoverTypes)
-      },
-      {
-        id: 'training',
-        href: resolve('/calendar'),
-        icon: CalendarIcon,
-        title: m.landing_task_training_title(),
-        sub: m.landing_task_training_sub(),
-        show: true
-      },
-      {
-        id: 'community',
-        href: resolve('/discover?type=communities'),
-        icon: PeopleIcon,
-        title: m.landing_task_community_title(),
-        sub: m.landing_task_community_sub(),
-        show: isDiscoverTypeEnabled('communities', discoverTypes)
-      }
-    ].filter((t) => t.show)
+  const hasCards = $derived(Boolean(heroMaterial || nextEvent || article || community));
+  const eventDate = $derived(
+    nextEvent ? getUpcomingDateParts(nextEvent.start, nextEvent.kind) : null
   );
+
+  /** @param {any} event */
+  const detailHref = (event) => resolve(`/${encodeEventToNaddr(event)}`);
+
+  // Desktop: loose, slightly rotated stack. Phones: a plain swipe row.
+  const card =
+    'block shrink-0 basis-[84%] snap-start overflow-hidden rounded-2xl bg-base-100 text-base-content shadow-xl transition-transform hover:-translate-y-0.5 lg:absolute lg:basis-auto';
 </script>
 
 <section
-  class="relative shrink-0 overflow-hidden py-12 text-primary-content md:py-20 {runtimeConfig.ui
-    ?.landingHeroImage
-    ? ''
-    : 'bg-gradient-to-br from-primary to-secondary'}"
+  data-testid="landing-hero"
+  class="shrink-0 text-primary-content"
+  style="background: var(--c-hero-2)"
 >
-  {#if runtimeConfig.ui?.landingHeroImage}
-    <ImageWithFallback
-      src={runtimeConfig.ui.landingHeroImage}
-      alt=""
-      size="hero"
-      loading="eager"
-      fallbackType="banner"
-      class="absolute inset-0 h-full w-full object-cover"
-    />
-  {/if}
-  <div class="relative z-10 container mx-auto px-4">
-    <!-- Frosted glass card -->
-    <div class="mx-auto max-w-4xl rounded-2xl bg-black/30 p-6 text-center backdrop-blur-md md:p-12">
-      <h1 class="mb-4 text-3xl leading-tight font-bold text-balance text-white md:text-5xl">
+  <div
+    data-testid="landing-hero-grid"
+    class="container mx-auto grid gap-10 px-4 py-12 lg:items-center lg:py-16 {hasCards
+      ? 'lg:grid-cols-2'
+      : ''}"
+  >
+    <div class="flex max-w-2xl flex-col gap-5">
+      <span class="text-sm font-semibold tracking-wide text-accent uppercase">
+        {m.landing_hero_eyebrow()}
+      </span>
+      <h1 class="text-3xl leading-tight font-bold text-balance md:text-5xl">
         {m.landing_hero_title()}
       </h1>
-      <p class="mb-6 text-base text-white/90 md:text-xl">
+      <p class="text-base text-pretty text-primary-content/85 md:text-lg">
         {m.landing_hero_subtitle()}
       </p>
-      <div class="flex flex-col items-center gap-3">
+      <div class="flex flex-col gap-3 sm:flex-row">
         <button
           type="button"
           data-testid="landing-cta-signup"
-          class="btn w-full max-w-sm border-none btn-lg btn-accent"
+          class="btn border-none btn-accent"
           onclick={() => modalStore.openModal('signup')}
         >
           {m.landing_cta_create_account()}
         </button>
-        <a data-testid="landing-cta-browse" href={resolve('/discover')} class="link text-white">
+        <a
+          data-testid="landing-cta-browse"
+          href={resolve('/discover')}
+          class="btn border-primary-content text-primary-content btn-outline hover:bg-primary-content hover:text-primary"
+        >
           {m.landing_cta_browse()}
         </a>
       </div>
-    </div>
-
-    <!-- Task tiles: what first-time visitors came for -->
-    <div class="mx-auto mt-6 grid max-w-4xl gap-3 sm:grid-cols-3">
-      {#each tasks as task (task.id)}
-        {@const Icon = task.icon}
-        <a
-          data-testid="landing-task-{task.id}"
-          href={task.href}
-          class="flex min-h-16 items-center gap-3 rounded-2xl bg-base-100 p-4 text-base-content shadow-sm transition-shadow hover:shadow-md"
-        >
-          <span
-            class="grid size-11 shrink-0 place-items-center rounded-xl bg-primary/10 text-primary"
-          >
-            <Icon class_="h-6 w-6" title="" />
-          </span>
-          <span class="min-w-0">
-            <span class="block font-semibold">{task.title}</span>
-            <span class="block text-sm text-base-content/70">{task.sub}</span>
-          </span>
-        </a>
-      {/each}
-    </div>
-
-    <!-- Own scrim: the line sits outside the frosted card, on the raw hero
-         photo or gradient, where white text alone can be unreadable. -->
-    <div class="mt-4 text-center">
-      <p
-        data-testid="landing-network-line"
-        class="inline-block rounded-full bg-black/40 px-3 py-1 text-sm text-white backdrop-blur-sm"
-      >
-        {m.landing_network_line({ appName: runtimeConfig.appName })}
-        {#if helpLink}
-          <a data-testid="landing-network-link" {...helpLink} class="link">
-            {m.landing_network_link()}
-          </a>
-        {/if}
+      <p data-testid="landing-cta-hint" class="text-sm text-primary-content/80">
+        {m.landing_cta_hint()}
       </p>
     </div>
+
+    {#if hasCards}
+      <div
+        data-testid="landing-collage"
+        class="-mr-4 flex snap-x gap-3 overflow-x-auto pr-4 pb-2 lg:relative lg:mr-0 lg:h-[30rem] lg:overflow-visible lg:p-0"
+      >
+        {#if heroMaterial}
+          <a
+            data-testid="landing-card-material"
+            href={detailHref(heroMaterial.rawEvent)}
+            class="{card} lg:top-2 lg:left-0 lg:w-[17rem] lg:-rotate-3"
+          >
+            {#if heroMaterial.image}
+              <ImageWithFallback
+                src={heroMaterial.image}
+                alt=""
+                fallbackType="generic"
+                class="h-32 w-full object-cover"
+              />
+            {/if}
+            <span class="flex flex-col gap-1.5 p-4">
+              <span class="flex flex-wrap gap-1.5">
+                <span class="badge badge-sm badge-primary">{m.landing_card_material()}</span>
+                {#if heroMaterial.license?.label}
+                  <span class="badge badge-ghost badge-sm">{heroMaterial.license.label}</span>
+                {/if}
+              </span>
+              <span class="leading-snug font-semibold">{heroMaterial.name}</span>
+            </span>
+          </a>
+        {/if}
+
+        {#if nextEvent && eventDate}
+          <a
+            data-testid="landing-card-event"
+            href={detailHref(nextEvent.originalEvent)}
+            class="{card} lg:top-8 lg:right-0 lg:w-[18rem] lg:rotate-2"
+          >
+            <span class="flex items-center gap-3 p-4">
+              <span
+                class="grid w-14 shrink-0 place-items-center rounded-xl bg-secondary/15 py-1.5 text-secondary"
+              >
+                <span class="text-xl leading-none font-bold">{eventDate.day}</span>
+                <span class="text-xs font-semibold uppercase">{eventDate.month}</span>
+              </span>
+              <span class="flex min-w-0 flex-col gap-1">
+                <span class="leading-snug font-semibold">{nextEvent.title}</span>
+                <span class="flex items-center gap-1 text-sm text-base-content/70">
+                  {#if eventDate.time}{eventDate.time}{/if}
+                  {#if nextEvent.location}
+                    <LocationIcon class_="h-4 w-4 shrink-0" />
+                    <span class="truncate">{nextEvent.location}</span>
+                  {/if}
+                </span>
+              </span>
+            </span>
+          </a>
+        {/if}
+
+        {#if community}
+          <a
+            data-testid="landing-card-community"
+            href={resolve(`/c/${hexToNpub(community.pubkey) || community.pubkey}`)}
+            class="{card} lg:top-[12.5rem] lg:right-2 lg:w-[19rem] lg:-rotate-1"
+          >
+            <span class="flex items-center gap-3 p-4">
+              <ImageWithFallback
+                src={community.picture || ''}
+                alt=""
+                fallbackType="community"
+                class="size-12 shrink-0 rounded-full object-cover"
+              />
+              <span class="flex min-w-0 flex-col">
+                <span class="font-semibold">{community.name}</span>
+                {#if community.about}
+                  <span class="line-clamp-2 text-sm text-base-content/70">{community.about}</span>
+                {/if}
+              </span>
+            </span>
+          </a>
+        {/if}
+
+        {#if article}
+          <a
+            data-testid="landing-card-article"
+            href={detailHref(article)}
+            class="{card} lg:top-[22rem] lg:left-8 lg:w-[16rem] lg:rotate-2"
+          >
+            <span class="flex items-center gap-2.5 p-4">
+              <span class="badge badge-sm badge-accent">{m.landing_card_article()}</span>
+              <span class="min-w-0 leading-snug font-semibold">{getTagValue(article, 'title')}</span
+              >
+            </span>
+          </a>
+        {/if}
+      </div>
+    {/if}
+  </div>
+
+  <div class="container mx-auto px-4 pb-6">
+    <p data-testid="landing-network-line" class="text-sm text-primary-content/80">
+      {m.landing_network_line({ appName: runtimeConfig.appName })}
+      {#if helpLink}
+        <a data-testid="landing-network-link" {...helpLink} class="link">
+          {m.landing_network_link()}
+        </a>
+      {/if}
+    </p>
   </div>
 </section>
