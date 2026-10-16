@@ -35,7 +35,9 @@
       </a>
     </div>
 
-    <div class="-mr-4 flex snap-x gap-4 overflow-x-auto pr-4 pb-2 md:mr-0 md:flex-wrap md:gap-5">
+    <div
+      class="-mr-4 flex snap-x gap-4 overflow-x-auto pr-4 pb-2 md:mr-0 md:flex-wrap md:gap-5 md:overflow-visible md:pr-0"
+    >
       {#if communities.length === 0}
         {#each [0, 1, 2, 3, 4, 5] as i (i)}
           <div class="size-16 shrink-0 skeleton rounded-full md:size-[4.5rem]"></div>
@@ -47,13 +49,17 @@
             href={resolve(`/c/${hexToNpub(community.pubkey) || community.pubkey}`)}
             class={tile}
           >
-            <ImageWithFallback
-              src={community.picture || ''}
-              alt=""
-              fallbackType="community"
-              class="size-16 rounded-full object-cover md:size-[4.5rem]"
-            />
-            <span class="line-clamp-2">{community.name}</span>
+            <span
+              class="size-16 shrink-0 overflow-hidden rounded-full bg-base-300 md:size-[4.5rem]"
+            >
+              <ImageWithFallback
+                src={community.picture || ''}
+                alt=""
+                fallbackType="community"
+                class="h-full w-full object-cover"
+              />
+            </span>
+            <span class="line-clamp-2 w-full break-words">{community.name}</span>
           </a>
         {/each}
         <button

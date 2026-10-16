@@ -67,14 +67,16 @@
 
 {#snippet materialRow(/** @type {any} */ item)}
   <a href={detailHref(item.rawEvent)} class={row}>
-    <ImageWithFallback
-      src={item.image || ''}
-      alt=""
-      fallbackType="generic"
-      class="size-14 shrink-0 rounded-xl object-cover"
-    />
+    <span class="size-14 shrink-0 overflow-hidden rounded-xl bg-base-200">
+      <ImageWithFallback
+        src={item.image || ''}
+        alt=""
+        fallbackType="generic"
+        class="h-full w-full object-cover"
+      />
+    </span>
     <span class="min-w-0">
-      <span class="line-clamp-2 block leading-snug font-semibold">{item.name}</span>
+      <span class="line-clamp-2 leading-snug font-semibold">{item.name}</span>
       {#if item.license?.label}
         <span class="block text-sm text-base-content/70">{item.license.label}</span>
       {/if}
@@ -92,7 +94,7 @@
       <span class="text-xs font-semibold uppercase">{date.month}</span>
     </span>
     <span class="min-w-0">
-      <span class="line-clamp-2 block leading-snug font-semibold">{item.title}</span>
+      <span class="line-clamp-2 leading-snug font-semibold">{item.title}</span>
       <span class="block truncate text-sm text-base-content/70">
         {[date.time, item.location].filter(Boolean).join(' · ')}
       </span>
@@ -103,11 +105,11 @@
 {#snippet articleRow(/** @type {any} */ item)}
   <a href={detailHref(item)} class={row}>
     <span class="min-w-0">
-      <span class="line-clamp-2 block leading-snug font-semibold">
+      <span class="line-clamp-2 leading-snug font-semibold">
         {getTagValue(item, 'title')}
       </span>
       {#if getTagValue(item, 'summary')}
-        <span class="line-clamp-1 block text-sm text-base-content/70">
+        <span class="line-clamp-2 text-sm text-base-content/70">
           {getTagValue(item, 'summary')}
         </span>
       {/if}
@@ -117,12 +119,12 @@
 
 {#if panels.length > 0}
   <section data-testid="landing-showcase" class="container mx-auto px-4 py-10">
-    <div class="grid gap-6 lg:grid-cols-3">
+    <div class="grid gap-6 lg:grid-cols-3 lg:items-start">
       {#each panels as panel (panel.type)}
         {@const Icon = panel.icon}
         <div
           data-testid="landing-panel-{panel.type}"
-          class="flex flex-col gap-3 rounded-3xl p-5 {panel.tint}"
+          class="flex min-w-0 flex-col gap-3 rounded-3xl p-5 {panel.tint}"
         >
           <h2 class="flex items-center gap-2.5 text-lg font-semibold">
             <span class="grid size-9 shrink-0 place-items-center rounded-full {panel.badge}">

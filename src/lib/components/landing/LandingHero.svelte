@@ -28,9 +28,11 @@
   /** @param {any} event */
   const detailHref = (event) => resolve(`/${encodeEventToNaddr(event)}`);
 
-  // Desktop: loose, slightly rotated stack. Phones: a plain swipe row.
+  // Desktop: loose, slightly rotated stack. Phones: a plain swipe row —
+  // deliberately without scroll-snap: cards arrive one by one, and snap keeps
+  // the first-loaded card in view, scrolling the row away from its start.
   const card =
-    'block shrink-0 basis-[84%] snap-start overflow-hidden rounded-2xl bg-base-100 text-base-content shadow-xl transition-transform hover:-translate-y-0.5 lg:absolute lg:basis-auto';
+    'block shrink-0 basis-[84%] overflow-hidden rounded-2xl bg-base-100 text-base-content shadow-xl transition-transform hover:-translate-y-0.5 lg:absolute lg:basis-auto';
 </script>
 
 <section
@@ -58,7 +60,7 @@
         <button
           type="button"
           data-testid="landing-cta-signup"
-          class="btn border-none btn-accent"
+          class="btn border-none btn-lg btn-accent"
           onclick={() => modalStore.openModal('signup')}
         >
           {m.landing_cta_create_account()}
@@ -66,7 +68,7 @@
         <a
           data-testid="landing-cta-browse"
           href={resolve('/discover')}
-          class="btn border-primary-content text-primary-content btn-outline hover:bg-primary-content hover:text-primary"
+          class="btn border-primary-content text-primary-content btn-outline btn-lg hover:bg-primary-content hover:text-primary"
         >
           {m.landing_cta_browse()}
         </a>
@@ -79,7 +81,7 @@
     {#if hasCards}
       <div
         data-testid="landing-collage"
-        class="-mr-4 flex snap-x gap-3 overflow-x-auto pr-4 pb-2 lg:relative lg:mr-0 lg:h-[30rem] lg:overflow-visible lg:p-0"
+        class="-mr-4 flex gap-3 overflow-x-auto pr-4 pb-2 lg:relative lg:mr-0 lg:h-[30rem] lg:overflow-visible lg:p-0"
       >
         {#if heroMaterial}
           <a
@@ -88,12 +90,15 @@
             class="{card} lg:top-2 lg:left-0 lg:w-[17rem] lg:-rotate-3"
           >
             {#if heroMaterial.image}
-              <ImageWithFallback
-                src={heroMaterial.image}
-                alt=""
-                fallbackType="generic"
-                class="h-32 w-full object-cover"
-              />
+              <span class="block h-32 bg-base-200">
+                <ImageWithFallback
+                  src={heroMaterial.image}
+                  alt=""
+                  loading="eager"
+                  fallbackType="generic"
+                  class="h-full w-full object-cover"
+                />
+              </span>
             {/if}
             <span class="flex flex-col gap-1.5 p-4">
               <span class="flex flex-wrap gap-1.5">
@@ -141,12 +146,14 @@
             class="{card} lg:top-[12.5rem] lg:right-2 lg:w-[19rem] lg:-rotate-1"
           >
             <span class="flex items-center gap-3 p-4">
-              <ImageWithFallback
-                src={community.picture || ''}
-                alt=""
-                fallbackType="community"
-                class="size-12 shrink-0 rounded-full object-cover"
-              />
+              <span class="size-12 shrink-0 overflow-hidden rounded-full bg-base-300">
+                <ImageWithFallback
+                  src={community.picture || ''}
+                  alt=""
+                  fallbackType="community"
+                  class="h-full w-full object-cover"
+                />
+              </span>
               <span class="flex min-w-0 flex-col">
                 <span class="font-semibold">{community.name}</span>
                 {#if community.about}

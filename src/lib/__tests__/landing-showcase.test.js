@@ -54,12 +54,20 @@ describe('pickUpcomingEvents', () => {
     end,
     originalEvent: { kind: 31923, tags }
   });
-  it('keeps running and future events, soonest first', () => {
+  it('only events starting from today on, soonest first', () => {
+    const day = 86_400;
+    const noon = 20_000 * day + day / 2; // 12:00 UTC
     const r = pickUpcomingEvents(
-      [ev('a', 2000), ev('b', 500, 1500), ev('c', 500, 900), ev('d', 1200)],
-      now
+      [
+        ev('later', noon + 3 * day),
+        ev('running-course', noon - 30 * day, noon + 60 * day),
+        ev('this-morning', noon - 3 * 3600),
+        ev('yesterday', noon - day),
+        ev('tonight', noon + 6 * 3600)
+      ],
+      noon
     );
-    expect(r.map((e) => e.id)).toEqual(['b', 'd', 'a']);
+    expect(r.map((e) => e.id)).toEqual(['this-morning', 'tonight', 'later']);
   });
   it('drops channel meetings', () => {
     const r = pickUpcomingEvents([ev('m', 2000, undefined, [['h', 'group']]), ev('x', 3000)], now);

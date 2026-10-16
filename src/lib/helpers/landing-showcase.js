@@ -42,12 +42,17 @@ export function pickHeroMaterial(resources) {
 
 /**
  * @param {any[]} events - transformed calendar events (CalendarEventRangeModel)
- * @param {number} nowSec
+ * @param {number} nowSec - now; the cut-off is the start of the viewer's day
  * @param {number} [n]
  */
 export function pickUpcomingEvents(events, nowSec, n = 3) {
+  // "Next" Fortbildungen: starting today or later, in the viewer's day. A
+  // course that started weeks ago and still runs would show a past date.
+  const today = new Date(nowSec * 1000);
+  today.setHours(0, 0, 0, 0);
+  const startOfToday = Math.floor(today.getTime() / 1000);
   return withoutChannelMeetings(events)
-    .filter((e) => (e.end ?? e.start) >= nowSec)
+    .filter((e) => e.start >= startOfToday)
     .sort((a, b) => a.start - b.start)
     .slice(0, n);
 }
