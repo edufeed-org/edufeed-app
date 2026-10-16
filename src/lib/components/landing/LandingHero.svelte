@@ -15,10 +15,8 @@
   import { getTagValue } from 'applesauce-core/helpers';
   import { LocationIcon } from '$lib/components/icons';
 
-  /**
-   * @typedef {{ pubkey: string, name: string, about?: string, picture?: string }} LandingCommunity
-   * @type {{ heroMaterial?: any, nextEvent?: any, article?: any, community?: LandingCommunity | null }}
-   */
+  /** @typedef {{ pubkey: string, name: string, about?: string, picture?: string }} LandingCommunity */
+  /** @type {{ heroMaterial?: any, nextEvent?: any, article?: any, community?: LandingCommunity | null }} */
   let { heroMaterial = null, nextEvent = null, article = null, community = null } = $props();
 
   const helpLink = $derived(helpLinkAttrs(runtimeConfig.help?.url));

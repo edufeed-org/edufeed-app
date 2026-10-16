@@ -12,9 +12,9 @@
   import { getTagValue } from 'applesauce-core/helpers';
   import { ArticleIcon, BookOpenIcon, CalendarIcon } from '$lib/components/icons';
 
+  /** @typedef {'learning' | 'events' | 'articles'} PanelType */
+  /** @typedef {'loading' | 'show' | 'hide'} PanelState */
   /**
-   * @typedef {'learning' | 'events' | 'articles'} PanelType
-   * @typedef {'loading' | 'show' | 'hide'} PanelState
    * @type {{
    *   materials: any[], events: any[], articles: any[],
    *   states: Record<PanelType, PanelState>,

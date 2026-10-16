@@ -77,3 +77,24 @@ export function panelState(items, settled, min = MIN_PANEL_ITEMS) {
   if (items.length >= min) return 'show';
   return settled ? 'hide' : 'loading';
 }
+
+/**
+ * Communities for the landing wall and hero card: only those with a named
+ * kind 0 profile (an unnamed one renders as "Unknown User"), newest
+ * definition first, one entry per community.
+ * @param {any[]} events - kind 10222 community definitions
+ * @param {Map<string, any>} profiles - pubkey → kind 0 profile content
+ * @param {number} [n]
+ * @returns {{ pubkey: string, name: string, about: string, picture: string }[]}
+ */
+export function landingCommunities(events, profiles, n = 11) {
+  const sorted = [...events].sort((a, b) => b.created_at - a.created_at);
+  return firstPerKey(sorted, (e) => e.pubkey)
+    .map((e) => {
+      const p = profiles.get(e.pubkey);
+      const name = (p?.display_name?.trim() || p?.name?.trim() || '').trim();
+      return { pubkey: e.pubkey, name, about: p?.about || '', picture: p?.picture || '' };
+    })
+    .filter((c) => c.name)
+    .slice(0, n);
+}

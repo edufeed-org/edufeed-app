@@ -97,3 +97,28 @@ describe('panelState', () => {
     expect(panelState([1, 2, 3], true)).toBe('show');
   });
 });
+
+describe('landingCommunities', () => {
+  const ev = (/** @type {string} */ pubkey, /** @type {number} */ created_at) => ({
+    pubkey,
+    created_at,
+    kind: 10222
+  });
+  it('named profiles only, newest first, deduped, capped', async () => {
+    const { landingCommunities } = await import('$lib/helpers/landing-showcase.js');
+    const profiles = new Map([
+      ['a', { name: 'A', about: 'x', picture: 'https://p/a' }],
+      ['b', { display_name: 'B' }],
+      ['c', { name: '  ' }]
+    ]);
+    const r = landingCommunities(
+      [ev('a', 1), ev('b', 5), ev('c', 9), ev('a', 3), ev('d', 7)],
+      profiles,
+      2
+    );
+    expect(r).toEqual([
+      { pubkey: 'b', name: 'B', about: '', picture: '' },
+      { pubkey: 'a', name: 'A', about: 'x', picture: 'https://p/a' }
+    ]);
+  });
+});

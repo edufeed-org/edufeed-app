@@ -76,17 +76,19 @@ export function useLandingShowcase() {
 
     start(
       'learning',
-      () => ambTimelineLoader(12),
+      () => /** @type {any} */ (ambTimelineLoader(12)),
       () => /** @type {any} */ (eventStore.model(AMBResourceModel, [])),
       (items) => (resources = items)
     );
     start(
       'events',
       () =>
-        createDateRangeCalendarLoader({
-          rangeStart: nowSec,
-          rangeEnd: nowSec + EVENT_WINDOW_SECONDS
-        }),
+        /** @type {any} */ (
+          createDateRangeCalendarLoader({
+            rangeStart: nowSec,
+            rangeEnd: nowSec + EVENT_WINDOW_SECONDS
+          })
+        ),
       () =>
         /** @type {any} */ (
           eventStore.model(CalendarEventRangeModel, nowSec, nowSec + EVENT_WINDOW_SECONDS)
@@ -95,7 +97,7 @@ export function useLandingShowcase() {
     );
     start(
       'articles',
-      () => articleTimelineLoader(8),
+      () => /** @type {any} */ (articleTimelineLoader(8)),
       () => /** @type {any} */ (eventStore.model(TimelineModel, { kinds: [30023] })),
       (items) => (articleEvents = items)
     );

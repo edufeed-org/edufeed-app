@@ -63,6 +63,7 @@ const art = (/** @type {string} */ id) => ({
 
 const ALL = { learning: true, events: true, articles: true };
 const SHOW = { learning: 'show', events: 'show', articles: 'show' };
+/** @returns {any} */
 const base = () => ({
   materials: [mat('1'), mat('2')],
   events: [ev('1'), ev('2')],
