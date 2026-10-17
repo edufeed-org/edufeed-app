@@ -12,7 +12,11 @@ vi.mock('$lib/helpers/relay-helper.js', () => ({ getAllLookupRelays: () => ['wss
 vi.mock('$lib/services/curated-authors-service.svelte.js', () => ({
   decodeNaddrs: () => [{ pubkey: 'p', identifier: 'd', relays: ['wss://a', 'wss://hangs'] }],
   extractPubkeysFromFollowSets: (/** @type {any[]} */ events) =>
-    events.flatMap((e) => e.tags.filter((t) => t[0] === 'p').map((t) => t[1]))
+    events.flatMap((e) =>
+      e.tags
+        .filter((/** @type {string[]} */ t) => t[0] === 'p')
+        .map((/** @type {string[]} */ t) => t[1])
+    )
 }));
 
 const { loadShowcaseSources } = await import('../landing-showcase-sources.js');
