@@ -29,7 +29,6 @@ vi.mock('$lib/paraglide/messages', () =>
       'landing_hero_subtitle',
       'landing_cta_create_account',
       'landing_cta_browse',
-      'landing_cta_hint',
       'landing_card_material',
       'landing_card_article',
       'landing_network_line',
@@ -76,7 +75,12 @@ describe('LandingHero', () => {
     for (const k of ['landing_hero_eyebrow', 'landing_hero_title', 'landing_hero_subtitle']) {
       expect(hero.textContent).toContain(k);
     }
-    expect(getByTestId('landing-cta-hint').textContent).toContain('landing_cta_hint');
+  });
+
+  it('drops the no-password hint (it confused more than it helped)', () => {
+    const { queryByTestId, container } = render(LandingHero);
+    expect(queryByTestId('landing-cta-hint')).toBeNull();
+    expect(container.textContent).not.toContain('landing_cta_hint');
   });
 
   it('primary action opens signup, secondary links to discover', async () => {

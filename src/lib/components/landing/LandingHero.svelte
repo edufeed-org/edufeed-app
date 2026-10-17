@@ -86,9 +86,6 @@
           {m.landing_cta_browse()}
         </a>
       </div>
-      <p data-testid="landing-cta-hint" class="text-sm text-primary-content/80">
-        {m.landing_cta_hint()}
-      </p>
     </div>
 
     {#if !hasCards && pending}

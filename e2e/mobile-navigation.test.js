@@ -89,7 +89,6 @@ test.describe('Mobile navigation', () => {
       await expect(page.getByTestId('landing-cta-signup')).toHaveText(
         /Kostenlos mitmachen|Join for free/
       );
-      await expect(page.getByTestId('landing-cta-hint')).toBeVisible();
       await expect(page.getByTestId('landing-cta-browse')).toHaveAttribute('href', '/discover');
       // Live cards and the avatar wall arrive late; give them time to lay out.
       await page.waitForTimeout(3000);

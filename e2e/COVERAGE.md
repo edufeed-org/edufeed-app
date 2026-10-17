@@ -1324,16 +1324,16 @@ detection, hint show/hide flags) is covered by Vitest component tests:
 
 #### Mobile Viewport - 375x667 (8 tests)
 
-| Test                                                   | What it verifies                                         |
-| ------------------------------------------------------ | -------------------------------------------------------- |
-| hamburger menu is visible and desktop nav links hidden | Hamburger visible, desktop nav hidden                    |
-| hamburger click opens dropdown with nav links          | Dropdown shows Communities, Discover, Calendar           |
-| nav link click navigates correctly                     | Discover link navigates to /discover                     |
-| login button is accessible in mobile dropdown          | Login button present in dropdown                         |
-| no horizontal overflow on mobile                       | Document width <= viewport width                         |
-| landing shows Anmelden in the row and the account CTA  | Navbar Anmelden visible, CTA opens signup                |
-| landing 5b: copy A, browse link, no overflow           | Hero copy + hint, browse → /discover, no overflow on `/` |
-| no critical JavaScript errors on mobile                | No JS errors during hamburger interaction                |
+| Test                                                   | What it verifies                                  |
+| ------------------------------------------------------ | ------------------------------------------------- |
+| hamburger menu is visible and desktop nav links hidden | Hamburger visible, desktop nav hidden             |
+| hamburger click opens dropdown with nav links          | Dropdown shows Communities, Discover, Calendar    |
+| nav link click navigates correctly                     | Discover link navigates to /discover              |
+| login button is accessible in mobile dropdown          | Login button present in dropdown                  |
+| no horizontal overflow on mobile                       | Document width <= viewport width                  |
+| landing shows Anmelden in the row and the account CTA  | Navbar Anmelden visible, CTA opens signup         |
+| landing 5b: copy A, browse link, no overflow           | Hero copy, browse → /discover, no overflow on `/` |
+| no critical JavaScript errors on mobile                | No JS errors during hamburger interaction         |
 
 #### Desktop Viewport - 1280x720 (2 tests)
 
