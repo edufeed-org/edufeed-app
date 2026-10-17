@@ -1,39 +1,55 @@
 // Live content for the logged-out landing (Claude Design "Landing Round 3",
-// 5b): the newest materials, the next Fortbildungen and the newest articles.
-// Reuses the cheap loaders /discover runs (they apply curated/WoT authors);
-// the models read the EventStore without an author filter, like /discover.
-// Disabled discover types are neither loaded nor shown.
+// 5b): the newest materials, the next Fortbildungen and the newest articles —
+// but only content BY the accounts on the deployment's showcase lists or
+// h-tagged INTO the listed communities (LANDING_SHOWCASE_LISTS). The landing
+// is the deployment's shop window: no lists, no live content. Disabled
+// discover types are neither loaded nor shown.
 import { untrack } from 'svelte';
 import { TimelineModel } from 'applesauce-core/models';
-import { ambTimelineLoader } from '$lib/loaders/amb.js';
-import { articleTimelineLoader } from '$lib/loaders/articles.js';
-import { createDateRangeCalendarLoader } from '$lib/loaders/calendar.js';
-import { AMBResourceModel, CalendarEventRangeModel } from '$lib/models';
+import { createTimelineLoader } from 'applesauce-loaders/loaders';
+import { timedPool } from '$lib/loaders/base.js';
+import { loadShowcaseSources } from '$lib/loaders/landing-showcase-sources.js';
 import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
 import { runtimeConfig } from '$lib/stores/config.svelte.js';
+import {
+  getEducationalRelays,
+  getCalendarRelays,
+  getArticleRelays
+} from '$lib/helpers/relay-helper.js';
 import { unique } from '$lib/helpers/unique.js';
 import { isDiscoverTypeEnabled } from '$lib/helpers/discover-content-types.js';
+import { formatAMBResource } from '$lib/helpers/educational/index.js';
+import { validateAndTransformCalendarEvents } from '$lib/helpers/eventUtils.js';
 import {
   pickMaterials,
   pickHeroMaterial,
   pickUpcomingEvents,
-  pickArticles
+  pickArticles,
+  showcaseFilters
 } from '$lib/helpers/landing-showcase.js';
 
 /** @typedef {'learning' | 'events' | 'articles'} ShowcaseType */
 
-const EVENT_WINDOW_SECONDS = 60 * 24 * 60 * 60;
 // timedPool gives relays 2 s; a loader that never completes must not keep
 // a panel in its loading state forever.
 const SETTLE_TIMEOUT_MS = 5_000;
 
+/** @type {Record<ShowcaseType, { kinds: number[], limit: number, relays: () => string[] }>} */
+const SOURCES = {
+  learning: { kinds: [30142], limit: 12, relays: getEducationalRelays },
+  events: { kinds: [31922, 31923], limit: 30, relays: getCalendarRelays },
+  articles: { kinds: [30023], limit: 8, relays: getArticleRelays }
+};
+
+/** @param {any[]} filters */
+const withoutLimit = (filters) => filters.map(({ limit: _limit, ...rest }) => rest);
+
 export function useLandingShowcase() {
-  /** @type {any[]} */
-  let resources = $state.raw([]);
-  /** @type {any[]} */
-  let calendar = $state.raw([]);
-  /** @type {any[]} */
-  let articleEvents = $state.raw([]);
+  /** null while the showcase lists are still resolving */
+  /** @type {string[] | null} */
+  let sources = $state.raw(null);
+  /** @type {Record<ShowcaseType, any[]>} */
+  let raw = $state.raw({ learning: [], events: [], articles: [] });
   /** @type {Record<ShowcaseType, boolean>} */
   let settledByType = $state.raw({ learning: false, events: false, articles: false });
 
@@ -51,61 +67,53 @@ export function useLandingShowcase() {
       if (!settledByType[type]) settledByType = { ...settledByType, [type]: true };
     });
 
+  // 1. Resolve the showcase lists into source pubkeys.
   $effect(() => {
+    const lists = runtimeConfig.landing?.showcaseLists || [];
+    if (lists.length === 0) {
+      sources = [];
+      return;
+    }
+    let cancelled = false;
+    loadShowcaseSources(lists)
+      .then((pubkeys) => !cancelled && (sources = pubkeys))
+      .catch(() => !cancelled && (sources = []));
+    return () => {
+      cancelled = true;
+    };
+  });
+
+  // 2. Load each enabled type, restricted to the sources.
+  $effect(() => {
+    const src = sources;
+    if (src === null) return;
+
     /** @type {{ unsubscribe(): void }[]} */
     const subs = [];
     /** @type {ShowcaseType[]} */
     const started = [];
 
-    /**
-     * @param {ShowcaseType} type
-     * @param {() => () => import('rxjs').Observable<any>} makeLoader
-     * @param {() => import('rxjs').Observable<any[]>} makeModel
-     * @param {(items: any[]) => void} assign
-     */
-    const start = (type, makeLoader, makeModel, assign) => {
-      if (!enabled(type)) {
-        assign([]);
+    for (const type of /** @type {ShowcaseType[]} */ (Object.keys(SOURCES))) {
+      const { kinds, limit, relays } = SOURCES[type];
+      const filters = showcaseFilters(kinds, src, limit);
+      if (!enabled(type) || filters.length === 0) {
+        raw = { ...untrack(() => raw), [type]: [] };
         markSettled(type);
-        return;
+        continue;
       }
       started.push(type);
+      const load = createTimelineLoader(timedPool, relays(), filters, { eventStore });
       subs.push(
-        makeLoader()().subscribe({
-          complete: () => markSettled(type),
-          error: () => markSettled(type)
-        })
+        load().subscribe({ complete: () => markSettled(type), error: () => markSettled(type) })
       );
-      subs.push(makeModel().subscribe((items) => assign(items || [])));
-    };
-
-    start(
-      'learning',
-      () => /** @type {any} */ (ambTimelineLoader(12)),
-      () => /** @type {any} */ (eventStore.model(AMBResourceModel, [])),
-      (items) => (resources = items)
-    );
-    start(
-      'events',
-      () =>
-        /** @type {any} */ (
-          createDateRangeCalendarLoader({
-            rangeStart: nowSec,
-            rangeEnd: nowSec + EVENT_WINDOW_SECONDS
-          })
-        ),
-      () =>
-        /** @type {any} */ (
-          eventStore.model(CalendarEventRangeModel, nowSec, nowSec + EVENT_WINDOW_SECONDS)
-        ),
-      (items) => (calendar = items)
-    );
-    start(
-      'articles',
-      () => /** @type {any} */ (articleTimelineLoader(8)),
-      () => /** @type {any} */ (eventStore.model(TimelineModel, { kinds: [30023] })),
-      (items) => (articleEvents = items)
-    );
+      subs.push(
+        /** @type {any} */ (eventStore.model(TimelineModel, withoutLimit(filters))).subscribe(
+          (/** @type {any[]} */ events) => {
+            raw = { ...untrack(() => raw), [type]: events || [] };
+          }
+        )
+      );
+    }
 
     const timer = setTimeout(() => started.forEach(markSettled), SETTLE_TIMEOUT_MS);
     return () => {
@@ -114,10 +122,13 @@ export function useLandingShowcase() {
     };
   });
 
+  const resources = $derived(raw.learning.map((event) => formatAMBResource(event)));
   const materials = $derived(pickMaterials(resources));
   const heroMaterial = $derived(pickHeroMaterial(resources));
-  const events = $derived(pickUpcomingEvents(calendar, nowSec));
-  const articles = $derived(pickArticles(articleEvents));
+  const events = $derived(
+    pickUpcomingEvents(validateAndTransformCalendarEvents(raw.events), nowSec)
+  );
+  const articles = $derived(pickArticles(raw.articles));
   const authors = $derived(
     unique(
       [...materials, heroMaterial, ...events, ...articles]
@@ -133,6 +144,9 @@ export function useLandingShowcase() {
     articles: () => articles,
     /** @param {ShowcaseType} type */
     settled: (type) => settledByType[type],
+    /** Pubkeys allowed on the landing; empty until resolved or when unset. */
+    sources: () => sources ?? [],
+    sourcesResolved: () => sources !== null,
     authors: () => authors
   };
 }

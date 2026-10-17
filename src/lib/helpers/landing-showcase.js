@@ -84,16 +84,19 @@ export function panelState(items, settled, min = MIN_PANEL_ITEMS) {
 }
 
 /**
- * Communities for the landing wall and hero card: only those with a named
- * kind 0 profile (an unnamed one renders as "Unknown User"), newest
- * definition first, one entry per community.
+ * Communities for the landing wall and hero card: only those on the
+ * showcase lists, only those with a named kind 0 profile (an unnamed one
+ * renders as "Unknown User"), newest definition first, one per community.
  * @param {any[]} events - kind 10222 community definitions
  * @param {Map<string, any>} profiles - pubkey → kind 0 profile content
+ * @param {string[]} sources - pubkeys from the showcase lists
  * @param {number} [n]
  * @returns {{ pubkey: string, name: string, about: string, picture: string }[]}
  */
-export function landingCommunities(events, profiles, n = 11) {
-  const sorted = [...events].sort((a, b) => b.created_at - a.created_at);
+export function landingCommunities(events, profiles, sources, n = 11) {
+  const allowed = new Set(sources);
+  const listed = events.filter((e) => allowed.has(e.pubkey));
+  const sorted = [...listed].sort((a, b) => b.created_at - a.created_at);
   return firstPerKey(sorted, (e) => e.pubkey)
     .map((e) => {
       const p = profiles.get(e.pubkey);
@@ -112,4 +115,20 @@ export function landingCommunities(events, profiles, n = 11) {
  */
 export function heroPending(enabled, settled) {
   return Object.keys(enabled).some((type) => enabled[type] && !settled[type]);
+}
+
+/**
+ * Relay filters for the landing showcase: content BY a listed account, or
+ * h-tagged INTO a listed community (Communikey targeting). No sources, no
+ * filters — the landing must never fall back to arbitrary network content.
+ * @param {number[]} kinds
+ * @param {string[]} sources - pubkeys from the showcase lists
+ * @param {number} limit
+ */
+export function showcaseFilters(kinds, sources, limit) {
+  if (sources.length === 0) return [];
+  return [
+    { kinds, authors: sources, limit },
+    { kinds, '#h': sources, limit }
+  ];
 }

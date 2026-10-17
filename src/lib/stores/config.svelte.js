@@ -59,6 +59,11 @@ const defaultConfig = {
   discover: {
     contentTypes: /** @type {string[]} */ ([...DISCOVER_CONTENT_TYPES])
   },
+  // Logged-out landing showcase lists (LANDING_SHOWCASE_LISTS, kind 30000
+  // naddrs). Empty = the landing shows no live content.
+  landing: {
+    showcaseLists: /** @type {string[]} */ ([])
+  },
   // Gated mode: when enabled, fetch only from app relays (exclude fallback relays)
   gatedMode: {
     default: false, // Default state for new users
@@ -329,6 +334,9 @@ export function initializeConfig(runtimeConfig) {
         runtimeConfig.discover?.contentTypes || defaultConfig.discover.contentTypes
       )
     },
+    landing: {
+      showcaseLists: runtimeConfig.landing?.showcaseLists || defaultConfig.landing.showcaseLists
+    },
     gatedMode: {
       default: runtimeConfig.gatedMode?.default ?? defaultConfig.gatedMode.default,
       force: runtimeConfig.gatedMode?.force ?? defaultConfig.gatedMode.force
@@ -519,6 +527,9 @@ export const runtimeConfig = {
   },
   get discover() {
     return config.discover;
+  },
+  get landing() {
+    return config.landing;
   },
   get defaultBlossomServers() {
     return config.defaultBlossomServers;

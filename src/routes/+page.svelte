@@ -37,9 +37,17 @@
   const showcase = useLandingShowcase();
 
   const getAllCommunities = useAllCommunities();
-  const getCommunityProfiles = useProfileMap(() => getAllCommunities().map((c) => c.pubkey));
+  // Profiles only for communities on the showcase lists (LANDING_SHOWCASE_LISTS).
+  const getCommunityProfiles = useProfileMap(() => {
+    const allowed = showcase.sources();
+    return getAllCommunities()
+      .map((c) => c.pubkey)
+      .filter((pk) => allowed.includes(pk));
+  });
   const communities = $derived(
-    communitiesEnabled ? landingCommunities(getAllCommunities(), getCommunityProfiles()) : []
+    communitiesEnabled
+      ? landingCommunities(getAllCommunities(), getCommunityProfiles(), showcase.sources())
+      : []
   );
   // useAllCommunitiesLoaded() turns true on the model's first (empty)
   // emission and profiles arrive later still, so the wall keeps its skeleton
@@ -49,7 +57,11 @@
     const timer = setTimeout(() => (communitiesTimedOut = true), 5_000);
     return () => clearTimeout(timer);
   });
-  const communitiesSettled = $derived(communities.length > 0 || communitiesTimedOut);
+  const communitiesSettled = $derived(
+    communities.length > 0 ||
+      communitiesTimedOut ||
+      (showcase.sourcesResolved() && showcase.sources().length === 0)
+  );
 
   // Other people's content: their kind 5s must reach the store, or a deleted
   // item (a material, an event, a whole community) keeps showing from a stale

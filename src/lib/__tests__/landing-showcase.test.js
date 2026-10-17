@@ -122,6 +122,7 @@ describe('landingCommunities', () => {
     const r = landingCommunities(
       [ev('a', 1), ev('b', 5), ev('c', 9), ev('a', 3), ev('d', 7)],
       profiles,
+      ['a', 'b', 'c', 'd'],
       2
     );
     expect(r).toEqual([
@@ -141,5 +142,35 @@ describe('heroPending', () => {
     expect(heroPending(enabled, { ...done, communities: false })).toBe(true);
     // a disabled source never holds the hero
     expect(heroPending({ ...enabled, events: false }, { ...done, events: false })).toBe(false);
+  });
+});
+
+describe('showcaseFilters', () => {
+  it('content by a listed account OR h-tagged into a listed community', async () => {
+    const { showcaseFilters } = await import('$lib/helpers/landing-showcase.js');
+    expect(showcaseFilters([30142], ['a', 'b'], 12)).toEqual([
+      { kinds: [30142], authors: ['a', 'b'], limit: 12 },
+      { kinds: [30142], '#h': ['a', 'b'], limit: 12 }
+    ]);
+  });
+  it('no sources, no filters — nothing may be loaded', async () => {
+    const { showcaseFilters } = await import('$lib/helpers/landing-showcase.js');
+    expect(showcaseFilters([30142], [], 12)).toEqual([]);
+  });
+});
+
+describe('landingCommunities and the showcase lists', () => {
+  it('only communities on the lists', async () => {
+    const { landingCommunities } = await import('$lib/helpers/landing-showcase.js');
+    const profiles = new Map([
+      ['edu', { name: 'Edu' }],
+      ['btc', { name: 'Bitcoin Talk' }]
+    ]);
+    const events = [
+      { pubkey: 'edu', created_at: 1, kind: 10222 },
+      { pubkey: 'btc', created_at: 2, kind: 10222 }
+    ];
+    expect(landingCommunities(events, profiles, ['edu']).map((c) => c.name)).toEqual(['Edu']);
+    expect(landingCommunities(events, profiles, [])).toEqual([]);
   });
 });
