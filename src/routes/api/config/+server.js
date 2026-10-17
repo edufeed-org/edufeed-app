@@ -464,6 +464,13 @@ export function GET() {
       contentTypes: parseDiscoverContentTypes(env.DISCOVER_CONTENT_TYPES)
     },
 
+    // Logged-out landing: kind 30000 lists (naddrs) whose members — accounts
+    // and communities — may appear in its live showcase. Unset = no live
+    // content (the landing is the deployment's shop window, not a feed).
+    landing: {
+      showcaseLists: parseArray(env.LANDING_SHOWCASE_LISTS)
+    },
+
     // UI settings
     ui: {
       defaultLightTheme: parseTheme(env.THEME_DEFAULT_LIGHT, 'light'),
