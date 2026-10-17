@@ -44,7 +44,7 @@ vi.mock('$lib/stores/config.svelte.js', () => ({
   }
 }));
 
-import { useLandingShowcase } from '../landing-showcase.svelte.js';
+import { useLandingShowcase, _resetShowcaseSourcesCache } from '../landing-showcase.svelte.js';
 
 function mount() {
   let api;
@@ -85,6 +85,8 @@ const cal = (id, pubkey, start) => ({
 beforeEach(() => {
   vi.useFakeTimers();
   vi.clearAllMocks();
+  _resetShowcaseSourcesCache();
+  localStorage.clear();
   store.modelFilters = [];
   cfg.types = ['learning', 'events'];
   cfg.lists = ['naddr1list'];
@@ -149,6 +151,58 @@ describe('useLandingShowcase', () => {
     expect(api.heroMaterial().id).toBe('new');
     expect(api.events().map((e) => e.id)).toEqual(['e1']);
     expect(api.sources()).toEqual(['src1', 'src2']);
+    cleanup();
+  });
+
+  it('coming back to the landing does not wait for the list again', async () => {
+    const first = mount();
+    await settle();
+    first.cleanup();
+    // the relay now hangs: the second visit must use the remembered sources
+    loader.sources.mockReturnValue(new Promise(() => {}));
+    loader.create.mockClear();
+    const { api, cleanup } = mount();
+    flushSync();
+    expect(api.sources()).toEqual(['src1', 'src2']);
+    expect(api.materials().map((r) => r.id)).toEqual(['new', 'old']);
+    expect(loader.create).toHaveBeenCalled();
+    cleanup();
+  });
+
+  it('a cold start uses the sources stored from the last visit', async () => {
+    localStorage.setItem(
+      'landing-showcase-sources',
+      JSON.stringify({ lists: ['naddr1list'], pubkeys: ['srcX'] })
+    );
+    loader.sources.mockReturnValue(new Promise(() => {}));
+    const { api, cleanup } = mount();
+    flushSync();
+    expect(api.sources()).toEqual(['srcX']);
+    cleanup();
+  });
+
+  it('an unreachable list (empty answer) keeps the remembered sources', async () => {
+    localStorage.setItem(
+      'landing-showcase-sources',
+      JSON.stringify({ lists: ['naddr1list'], pubkeys: ['srcX'] })
+    );
+    loader.sources.mockResolvedValue([]);
+    const { api, cleanup } = mount();
+    await settle();
+    expect(api.sources()).toEqual(['srcX']);
+    expect(JSON.parse(localStorage.getItem('landing-showcase-sources')).pubkeys).toEqual(['srcX']);
+    cleanup();
+  });
+
+  it('stored sources for other lists are ignored', async () => {
+    localStorage.setItem(
+      'landing-showcase-sources',
+      JSON.stringify({ lists: ['naddr1other'], pubkeys: ['srcX'] })
+    );
+    loader.sources.mockReturnValue(new Promise(() => {}));
+    const { api, cleanup } = mount();
+    flushSync();
+    expect(api.sourcesResolved()).toBe(false);
     cleanup();
   });
 

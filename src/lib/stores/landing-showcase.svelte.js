@@ -44,6 +44,45 @@ const SOURCES = {
 /** @param {any[]} filters */
 const withoutLimit = (filters) => filters.map(({ limit: _limit, ...rest }) => rest);
 
+// Resolved showcase sources, remembered for the session and across visits:
+// the list fetch waits on relays, and coming back to the landing (or a warm
+// cold start) must render from the EventStore at once. The list is refreshed
+// in the background on every visit.
+const STORAGE_KEY = 'landing-showcase-sources';
+/** @type {{ lists: string, pubkeys: string[] } | null} */
+let memorySources = null;
+
+/** @param {string[]} lists @returns {string[] | null} */
+function rememberedSources(lists) {
+  const key = lists.join(',');
+  if (memorySources?.lists === key) return memorySources.pubkeys;
+  try {
+    const stored = JSON.parse(localStorage.getItem(STORAGE_KEY) || 'null');
+    if (stored && stored.lists?.join(',') === key && Array.isArray(stored.pubkeys)) {
+      memorySources = { lists: key, pubkeys: stored.pubkeys };
+      return stored.pubkeys;
+    }
+  } catch {
+    // private mode / corrupt entry: just fetch
+  }
+  return null;
+}
+
+/** @param {string[]} lists @param {string[]} pubkeys */
+function rememberSources(lists, pubkeys) {
+  memorySources = { lists: lists.join(','), pubkeys };
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ lists, pubkeys }));
+  } catch {
+    // storage unavailable: memory cache still serves this session
+  }
+}
+
+/** Test hook: forget the remembered sources. */
+export function _resetShowcaseSourcesCache() {
+  memorySources = null;
+}
+
 export function useLandingShowcase() {
   /** null while the showcase lists are still resolving */
   /** @type {string[] | null} */
@@ -67,17 +106,29 @@ export function useLandingShowcase() {
       if (!settledByType[type]) settledByType = { ...settledByType, [type]: true };
     });
 
-  // 1. Resolve the showcase lists into source pubkeys.
+  // 1. Resolve the showcase lists into source pubkeys — remembered ones
+  //    first, then refreshed from the relays (only a changed list re-renders).
   $effect(() => {
     const lists = runtimeConfig.landing?.showcaseLists || [];
     if (lists.length === 0) {
       sources = [];
       return;
     }
+    const remembered = rememberedSources(lists);
+    if (remembered) sources = remembered;
     let cancelled = false;
     loadShowcaseSources(lists)
-      .then((pubkeys) => !cancelled && (sources = pubkeys))
-      .catch(() => !cancelled && (sources = []));
+      .then((pubkeys) => {
+        if (cancelled) return;
+        // No answer from any relay reads as an empty list — never let that
+        // wipe a list we already know.
+        if (pubkeys.length === 0 && remembered) return;
+        rememberSources(lists, pubkeys);
+        if (pubkeys.join(',') !== remembered?.join(',')) sources = pubkeys;
+      })
+      .catch(() => {
+        if (!cancelled && !remembered) sources = [];
+      });
     return () => {
       cancelled = true;
     };
