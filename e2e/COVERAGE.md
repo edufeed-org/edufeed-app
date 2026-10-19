@@ -910,11 +910,11 @@ for follow-up.
 
 #### Step 1 - Community Settings (3 tests)
 
-| Test                              | What it verifies                       |
-| --------------------------------- | -------------------------------------- |
-| step 1 shows settings form fields | Relays, content types sections visible |
-| can toggle content types          | Checkbox toggling works                |
-| default relay is pre-populated    | wss://relay.edufeed.org present        |
+| Test                              | What it verifies                                                |
+| --------------------------------- | --------------------------------------------------------------- |
+| step 1 shows settings form fields | Relays, content types sections visible                          |
+| can toggle content types          | Checkbox toggling works                                         |
+| default relay is pre-populated    | COMMUNIKEY_RELAYS (ws://localhost:17003) present, no prod relay |
 
 #### Creation Flow (3 tests)
 

@@ -68,6 +68,12 @@ vi.mock('$lib/stores/user-profile.svelte.js', () => ({
   useUserProfile: () => () => communityProfile.value
 }));
 
+// The deployment's community relays — what a definition without r-tags
+// falls back to (never a hardcoded production relay).
+vi.mock('$lib/helpers/community-defaults.js', () => ({
+  getDefaultCommunityRelays: () => ['ws://config-relay.test']
+}));
+
 const { default: CommunityBasicsForm } = await import(
   '$lib/components/community/settings/CommunityBasicsForm.svelte'
 );
@@ -395,5 +401,35 @@ describe('CommunityBasicsForm — form-gated section profile lists', () => {
       .map((c) => c[0])
       .filter((t) => t.kind === 30000);
     expect(lists).toHaveLength(0);
+  });
+});
+
+// A definition without r-tags must fall back to the deployment's communikey
+// relays. It used to fall back to a literal wss://relay.edufeed.org, so saving
+// a test or whitelabel community published it to edufeed production.
+describe('CommunityBasicsForm — relay fallback comes from config', () => {
+  beforeEach(() => {
+    extensionSigner.signEvent.mockClear();
+    publishEventOptimistic.mockClear();
+  });
+
+  it('writes the configured relays, not a hardcoded one, when the event has none', async () => {
+    const communikeyEvent = {
+      kind: 10222,
+      id: 'evt-no-relays',
+      pubkey: OWNER,
+      created_at: 1000,
+      content: '',
+      tags: [['name', 'No Relays']]
+    };
+
+    render(CommunityBasicsForm, { props: { communikeyEvent } });
+    await fireEvent.click(await screen.findByTestId('basics-save'));
+
+    await waitFor(() => expect(extensionSigner.signEvent).toHaveBeenCalled());
+    const relays = extensionSigner.signEvent.mock.calls[0][0].tags
+      .filter((/** @type {string[]} */ t) => t[0] === 'r')
+      .map((/** @type {string[]} */ t) => t[1]);
+    expect(relays).toEqual(['ws://config-relay.test']);
   });
 });

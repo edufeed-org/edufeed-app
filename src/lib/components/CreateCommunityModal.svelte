@@ -48,6 +48,10 @@
   import { getUserDisplayName } from '$lib/helpers/message-utils.js';
   import { addressLoader } from '$lib/loaders/base.js';
   import { getCommunikeyRelays } from '$lib/helpers/relay-helper.js';
+  import {
+    getDefaultCommunityRelays,
+    getDefaultCommunityBlossomServers
+  } from '$lib/helpers/community-defaults.js';
   import ProfileAvatar from './shared/ProfileAvatar.svelte';
   import { moderatedCreationAvailable } from '$lib/groups/feature.js';
   import {
@@ -217,12 +221,17 @@
   ];
 
   // Community data state
-  let communityData = $state({
-    relays: ['wss://relay.edufeed.org'],
-    blossomServers: ['blossom.edufeed.org'],
-    location: '',
-    contentTypes: createDefaultContentTypes(DEFAULT_ENABLED_CONTENT_TYPES)
-  });
+  // Relays + Blossom come from the deployment config — see community-defaults.js
+  function initialCommunityData() {
+    return {
+      relays: getDefaultCommunityRelays(),
+      blossomServers: getDefaultCommunityBlossomServers(),
+      location: '',
+      contentTypes: createDefaultContentTypes(DEFAULT_ENABLED_CONTENT_TYPES)
+    };
+  }
+
+  let communityData = $state(initialCommunityData());
 
   // Content types as they'll actually be published, given the chosen
   // community type — single source of truth for BOTH the confirm-step
@@ -291,12 +300,7 @@
           ncryptsecPassword: '',
           useEncryption: false
         };
-        communityData = {
-          relays: ['wss://relay.edufeed.org'],
-          blossomServers: ['blossom.edufeed.org'],
-          location: '',
-          contentTypes: createDefaultContentTypes(DEFAULT_ENABLED_CONTENT_TYPES)
-        };
+        communityData = initialCommunityData();
         communityType = 'open';
         defaultAccessTier = 'members';
         invitees = [];
@@ -700,12 +704,7 @@
       ncryptsecPassword: '',
       useEncryption: false
     };
-    communityData = {
-      relays: ['wss://relay.edufeed.org'],
-      blossomServers: ['blossom.edufeed.org'],
-      location: '',
-      contentTypes: createDefaultContentTypes(DEFAULT_ENABLED_CONTENT_TYPES)
-    };
+    communityData = initialCommunityData();
     communityType = 'open';
     defaultAccessTier = 'members';
     invitees = [];

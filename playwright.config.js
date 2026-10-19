@@ -96,6 +96,9 @@ export default defineConfig({
       KANBAN_RELAYS: RELAY_URLS.strfry,
       DM_RELAYS: RELAY_URLS.strfry,
       BLOSSOM_SERVER_URL: BLOSSOM_SERVER_URL,
+      // New communities take their blossom tag from here; unpinned, a local
+      // .env would put a production Blossom server into test communities.
+      DEFAULT_BLOSSOM_SERVERS: BLOSSOM_SERVER_URL,
       CONCORD_ENABLED: 'true',
       CONCORD_RELAYS: RELAY_URLS.strfry,
       GROUPS_ENABLED: 'true',
