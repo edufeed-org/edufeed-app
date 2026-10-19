@@ -25,7 +25,7 @@ import { pool } from '$lib/stores/nostr-infrastructure.svelte';
 import { runtimeConfig } from '$lib/stores/config.svelte.js';
 import { kindToAppRelayCategory } from '$lib/services/app-relay-service.svelte.js';
 import { getAllLookupRelays } from '$lib/helpers/relay-helper.js';
-import { lastValueFrom, toArray } from 'rxjs';
+import { firstValueFrom } from 'rxjs';
 
 /** @typedef {'calendar' | 'communikey' | 'educational' | 'longform' | 'kanban'} CuratedCategory */
 
@@ -33,7 +33,6 @@ import { lastValueFrom, toArray } from 'rxjs';
 
 const CURATED_CACHE_KEY = 'curated-authors-cache';
 const CACHE_VERSION = 1;
-export const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
 
 /**
  * @typedef {Object} CachedAuthorsData
@@ -43,7 +42,9 @@ export const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
 
 /**
  * Load cached curated/WoT author lists from localStorage.
- * Returns null if no cache, expired, or invalid.
+ * Returns null if no cache or invalid. An old cache is still returned: the
+ * root layout holds the app behind a splash until these lists exist, and every
+ * load refreshes them in the background anyway (stale-while-revalidate).
  * @returns {CachedAuthorsData | null}
  */
 export function loadCachedAuthors() {
@@ -52,7 +53,6 @@ export function loadCachedAuthors() {
     if (!raw) return null;
     const data = JSON.parse(raw);
     if (data.version !== CACHE_VERSION) return null;
-    if (Date.now() - data.timestamp > CACHE_TTL_MS) return null;
     return { curated: data.curated || {}, wot: data.wot || {} };
   } catch {
     return null;
@@ -386,6 +386,26 @@ export function extractPubkeysFromFollowSets(events) {
 }
 
 /**
+ * Fetch one replaceable event and resolve with the first relay's answer
+ * (empty when no relay has it before the request times out).
+ * @param {string[]} relays
+ * @param {import('nostr-tools').Filter} filter
+ * @param {string} label - for the warning on failure
+ * @returns {Promise<import('nostr-tools').Event[]>}
+ */
+async function firstAnswer(relays, filter, label) {
+  try {
+    return [
+      await firstValueFrom(pool.request(relays, filter, /** @type {any} */ ({ timeout: 5000 })))
+    ];
+  } catch (err) {
+    // EmptyError: no relay had the event — not worth a warning.
+    if (/** @type {any} */ (err)?.name !== 'EmptyError') console.warn(label, 'failed', err);
+    return [];
+  }
+}
+
+/**
  * Initialize curated authors for a specific category.
  * Parses direct pubkeys and fetches follow sets from network.
  * Safe to call multiple times — subsequent calls are no-ops.
@@ -414,32 +434,21 @@ export async function initializeCuratedAuthors(category) {
 
   try {
     const fallbackRelays = getAllLookupRelays();
-    /** @type {import('nostr-tools').Event[]} */
-    const allEvents = [];
+    // All sets at once, each resolved by its first answer: a relay that hangs
+    // without EOSE must not hold the app splash for the request timeout. Kind
+    // 30000 is replaceable; a stale copy is replaced by the next load's
+    // background refresh.
+    const allEvents = await Promise.all(
+      pointers.map((pointer) =>
+        firstAnswer(
+          pointer.relays.length > 0 ? pointer.relays : fallbackRelays,
+          { kinds: [30000], authors: [pointer.pubkey], '#d': [pointer.identifier] },
+          `Curated authors [${category}]: follow set ${pointer.identifier}`
+        )
+      )
+    );
 
-    for (const pointer of pointers) {
-      const relays = pointer.relays.length > 0 ? pointer.relays : fallbackRelays;
-      const filter = {
-        kinds: [30000],
-        authors: [pointer.pubkey],
-        '#d': [pointer.identifier]
-      };
-
-      try {
-        const events = await lastValueFrom(
-          pool.request(relays, filter, /** @type {any} */ ({ timeout: 5000 })).pipe(toArray())
-        );
-        allEvents.push(...events);
-      } catch (err) {
-        console.warn(
-          `Curated authors [${category}]: Failed to fetch follow set for`,
-          pointer.identifier,
-          err
-        );
-      }
-    }
-
-    const followSetPubkeys = extractPubkeysFromFollowSets(allEvents);
+    const followSetPubkeys = extractPubkeysFromFollowSets(allEvents.flat());
 
     // Union direct + follow set pubkeys (deduplicated)
     const allPubkeys = [...directPubkeys, ...followSetPubkeys].filter(
@@ -484,6 +493,9 @@ export async function initializeAllCuratedAuthors() {
   if (cached && Object.keys(cached.curated).length > 0) {
     // Populate in-memory caches from localStorage (instant)
     for (const [cat, pubkeys] of Object.entries(cached.curated)) {
+      // A category dropped from the config since the cache was written must
+      // not keep filtering.
+      if (!isCuratedModeConfigured(cat)) continue;
       if (!curatedAuthorsCache.has(cat) && pubkeys.length > 0) {
         curatedAuthorsCache.set(cat, pubkeys);
         directPubkeysInitialized.add(cat);
@@ -548,11 +560,19 @@ export async function initializeWotAuthors(category) {
 
   try {
     const relays = getAllLookupRelays();
-    const filter = { kinds: [3], authors: anchorPubkeys };
-
-    const events = await lastValueFrom(
-      pool.request(relays, filter, /** @type {any} */ ({ timeout: 5000 })).pipe(toArray())
-    );
+    // One request per anchor so each resolves on its own first answer (see
+    // initializeCuratedAuthors).
+    const events = (
+      await Promise.all(
+        anchorPubkeys.map((pubkey) =>
+          firstAnswer(
+            relays,
+            { kinds: [3], authors: [pubkey] },
+            `WoT authors [${category}]: contacts of ${pubkey}`
+          )
+        )
+      )
+    ).flat();
 
     // Extract p-tags from kind 3 events (reuse existing function)
     const followPubkeys = extractPubkeysFromFollowSets(events);
@@ -581,6 +601,7 @@ export async function initializeAllWotAuthors() {
   const cached = getSharedCachedData();
   if (cached && Object.keys(cached.wot).length > 0) {
     for (const [cat, pubkeys] of Object.entries(cached.wot)) {
+      if (getWotCategoryConfig(cat).anchors.length === 0) continue;
       if (!wotAuthorsCache.has(cat) && pubkeys.length > 0) {
         wotAuthorsCache.set(cat, pubkeys);
         wotInitialized.add(cat);

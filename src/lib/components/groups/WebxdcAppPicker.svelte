@@ -14,11 +14,11 @@
 -->
 <script>
   import { nip19 } from 'nostr-tools';
-  import { pool } from '$lib/stores/nostr-infrastructure.svelte';
+  import { pool, eventStore } from '$lib/stores/nostr-infrastructure.svelte';
   import { getEducationalRelays, getAllLookupRelays } from '$lib/helpers/relay-helper.js';
   import { WEBXDC_MIME, appFromFileEvent } from '$lib/webxdc/session-events.js';
-  import { timer } from 'rxjs';
-  import { takeUntil, toArray } from 'rxjs/operators';
+  import { of, timer, concat } from 'rxjs';
+  import { map, takeUntil, takeWhile, tap, toArray } from 'rxjs/operators';
   import * as m from '$lib/paraglide/messages';
   import { appSettings } from '$lib/stores/app-settings.svelte.js';
 
@@ -71,10 +71,29 @@
       curatedLoading = false;
       return;
     }
+    // Store first, network second: ids already in the EventStore need no REQ,
+    // and the REQ for the rest ends as soon as every id has answered instead
+    // of waiting for the slowest relay.
+    /** @type {import('nostr-tools').NostrEvent[]} */
+    const known = [];
+    const missing = new Set(); // eslint-disable-line svelte/prefer-svelte-reactivity -- local bookkeeping
+    for (const d of decoded) {
+      const ev = eventStore.getEvent(d.id);
+      if (ev) known.push(ev);
+      else missing.add(d.id);
+    }
     const relays = [...new Set([...getAllLookupRelays(), ...decoded.flatMap((d) => d.relays)])];
-    const sub = pool
-      .request(relays, [{ ids: decoded.map((d) => d.id) }])
-      .pipe(takeUntil(timer(5000)), toArray())
+    const fetched =
+      missing.size === 0
+        ? of()
+        : pool.request(relays, [{ ids: [...missing] }]).pipe(
+            map((ev) => eventStore.add(ev) ?? ev),
+            tap((ev) => missing.delete(ev.id)),
+            takeWhile(() => missing.size > 0, true),
+            takeUntil(timer(5000))
+          );
+    const sub = concat(of(...known), fetched)
+      .pipe(toArray())
       .subscribe((events) => {
         /** @type {Map<string, XdcApp>} */
         // eslint-disable-next-line svelte/prefer-svelte-reactivity
