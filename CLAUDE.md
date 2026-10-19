@@ -554,6 +554,14 @@ retired 2026-08-31 (merged into main) — never base new work on it.
   `CHANGELOG.md` (Keep a Changelog format) gets a section per release,
   assembled from the merge commits since the previous tag; the release
   commit bumps `package.json` and the changelog together.
+- **Release candidates first:** the release commit is tagged `vX.Y.Z-rc.1`
+  (any tag with a `-` publishes only its own image tag, never `:latest`),
+  dev.edufeed.org is deployed pinned to it (homelab
+  `--tags edufeed-app-dev -e edufeed_app_image_tag=vX.Y.Z-rc.N`) and
+  tested there. Fixes land on main as normal PRs → `-rc.N+1`; nothing
+  unrelated merges while an RC is open. When the RC is good, tag `vX.Y.Z`
+  on the SAME commit — CI reuses the RC's `:sha-<sha>` image, so prod runs
+  exactly what dev tested.
 - **Unfinished features hide behind env feature flags** (e.g.
   `CONCORD_ENABLED`, `MEMBERSHIP_ENABLED`), never behind branches. Merged
   work must always leave main releasable.
