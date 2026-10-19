@@ -972,6 +972,10 @@
       removeTarget !== null ||
       dockHover ||
       dockFocus ||
+      // The pop-out window keeps its chrome: it is small and always on top,
+      // and on Windows/Edge fading the chrome out there turned the whole
+      // window black except the videos (issue 082fc803).
+      !!onPopIn ||
       !lk.isConnected ||
       lk.connectionState === 'reconnecting'
   );
