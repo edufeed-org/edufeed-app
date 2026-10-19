@@ -10,7 +10,7 @@
   import { encodeEventToNaddr } from '$lib/helpers/nostrUtils.js';
   import { getUpcomingDateParts } from '$lib/helpers/dates.js';
   import { getTagValue } from 'applesauce-core/helpers';
-  import { ArticleIcon, BookOpenIcon, CalendarIcon } from '$lib/components/icons';
+  import { ArticleIcon, BookOpenIcon, CalendarIcon, ChevronRightIcon } from '$lib/components/icons';
 
   /** @typedef {'learning' | 'events' | 'articles'} PanelType */
   /** @typedef {'loading' | 'show' | 'hide'} PanelState */
@@ -179,9 +179,10 @@
             <a
               data-testid="landing-panel-{panel.type}-all"
               href={panel.href}
-              class="mt-1 inline-flex items-center gap-1 font-semibold {panel.link}"
+              class="btn -ms-3 mt-1 self-start text-sm btn-ghost btn-sm {panel.link}"
             >
-              {panel.all} →
+              {panel.all}
+              <ChevronRightIcon class_="h-4 w-4" />
             </a>
           {/if}
         </div>

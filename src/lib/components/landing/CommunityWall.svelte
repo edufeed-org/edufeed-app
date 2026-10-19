@@ -8,7 +8,7 @@
   import { modalStore } from '$lib/stores/modal.svelte.js';
   import ImageWithFallback from '$lib/components/shared/ImageWithFallback.svelte';
   import { hexToNpub } from '$lib/helpers/nostrUtils.js';
-  import { PlusIcon } from '$lib/components/icons';
+  import { ChevronRightIcon, PlusIcon } from '$lib/components/icons';
 
   /**
    * @type {{
@@ -29,9 +29,10 @@
       <a
         data-testid="landing-wall-all"
         href={resolve('/discover?type=communities')}
-        class="shrink-0 font-semibold text-primary"
+        class="btn -me-3 shrink-0 text-sm text-primary btn-ghost btn-sm"
       >
-        {m.landing_wall_all()} →
+        {m.landing_wall_all()}
+        <ChevronRightIcon class_="h-4 w-4" />
       </a>
     </div>
 

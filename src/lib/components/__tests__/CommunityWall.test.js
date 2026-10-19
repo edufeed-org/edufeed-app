@@ -43,6 +43,10 @@ describe('CommunityWall', () => {
     expect(items.map((i) => i.textContent?.trim())).toEqual(['rpi-virtuell', 'OER-Werkstatt']);
     expect(items[0].getAttribute('href')).toMatch(/^\/c\/npub1/);
     expect(getByTestId('landing-wall-all').getAttribute('href')).toBe('/discover?type=communities');
+    // App link grammar: a btn with the chevron icon, not a typed arrow glyph
+    expect(getByTestId('landing-wall-all').classList.contains('btn')).toBe(true);
+    expect(getByTestId('landing-wall-all').querySelector('svg')).not.toBeNull();
+    expect(getByTestId('landing-wall-all').textContent).not.toContain('→');
   });
 
   it('create tile opens signup', async () => {

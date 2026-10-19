@@ -84,6 +84,12 @@ describe('LandingShowcase', () => {
       '/discover?type=learning'
     );
     expect(getByTestId('landing-panel-events-all').getAttribute('href')).toBe('/calendar');
+    for (const id of ['learning', 'events', 'articles']) {
+      const link = getByTestId(`landing-panel-${id}-all`);
+      expect(link.classList.contains('btn')).toBe(true);
+      expect(link.querySelector('svg')).not.toBeNull();
+      expect(link.textContent).not.toContain('→');
+    }
     expect(getByTestId('landing-panel-articles-all').getAttribute('href')).toBe(
       '/discover?type=articles'
     );
