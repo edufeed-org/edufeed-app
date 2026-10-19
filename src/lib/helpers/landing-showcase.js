@@ -48,11 +48,21 @@ export function pickHeroMaterial(resources) {
 export function pickUpcomingEvents(events, nowSec, n = 3) {
   // "Next" Fortbildungen: starting today or later, in the viewer's day. A
   // course that started weeks ago and still runs would show a past date.
-  const today = new Date(nowSec * 1000);
+  const now = new Date(nowSec * 1000);
+  const today = new Date(now);
   today.setHours(0, 0, 0, 0);
   const startOfToday = Math.floor(today.getTime() / 1000);
+  // All-day events (31922) carry a calendar date stored as UTC midnight:
+  // compare dates, not instants, or west of UTC today's event looks past.
+  const pad = (/** @type {number} */ x) => String(x).padStart(2, '0');
+  const localDate = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+  /** @param {any} e */
+  const upcoming = (e) =>
+    e.kind === 31922
+      ? new Date(e.start * 1000).toISOString().slice(0, 10) >= localDate
+      : e.start >= startOfToday;
   return withoutChannelMeetings(events)
-    .filter((e) => e.start >= startOfToday)
+    .filter(upcoming)
     .sort((a, b) => a.start - b.start)
     .slice(0, n);
 }

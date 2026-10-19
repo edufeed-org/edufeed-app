@@ -174,3 +174,46 @@ describe('landingCommunities and the showcase lists', () => {
     expect(landingCommunities(events, profiles, [])).toEqual([]);
   });
 });
+
+describe('pickUpcomingEvents and all-day events across time zones', () => {
+  /** @param {string} tz @param {() => void} fn */
+  const inZone = (tz, fn) => {
+    const prev = process.env.TZ;
+    process.env.TZ = tz;
+    try {
+      fn();
+    } finally {
+      process.env.TZ = prev;
+    }
+  };
+  // 2026-10-19 as an all-day (31922) event: start = UTC midnight of that date
+  const day = Date.UTC(2026, 9, 19) / 1000;
+  const allDay = (/** @type {string} */ id, /** @type {number} */ start) => ({
+    id,
+    kind: 31922,
+    start,
+    originalEvent: { kind: 31922, tags: [] }
+  });
+
+  it('west of UTC, today’s all-day event stays (its UTC midnight is before local midnight)', () => {
+    inZone('America/New_York', () => {
+      const nowSec = Date.UTC(2026, 9, 19, 15) / 1000; // 11:00 in New York
+      const r = pickUpcomingEvents(
+        [allDay('today', day), allDay('yesterday', day - 86_400)],
+        nowSec
+      );
+      expect(r.map((e) => e.id)).toEqual(['today']);
+    });
+  });
+
+  it('east of UTC, yesterday’s all-day event does not sneak in', () => {
+    inZone('Europe/Berlin', () => {
+      const nowSec = Date.UTC(2026, 9, 18, 23) / 1000; // 01:00 on the 19th in Berlin
+      const r = pickUpcomingEvents(
+        [allDay('today', day), allDay('yesterday', day - 86_400)],
+        nowSec
+      );
+      expect(r.map((e) => e.id)).toEqual(['today']);
+    });
+  });
+});
