@@ -128,6 +128,23 @@ describe('LandingHero', () => {
     expect(queryByTestId('landing-card-community')).toBeNull();
   });
 
+  it('few cards close up: the first present card takes the first slot, the box shrinks', () => {
+    const article = {
+      id: 'a1',
+      kind: 30023,
+      pubkey: PK,
+      created_at: 1,
+      tags: [
+        ['d', 'art'],
+        ['title', 'Beitrag']
+      ]
+    };
+    const { getByTestId } = render(LandingHero, { props: { article } });
+    expect(getByTestId('landing-card-article').className).toContain('lg:top-2');
+    expect(getByTestId('landing-card-article').className).toContain('lg:left-0');
+    expect(getByTestId('landing-collage').className).toContain('lg:h-[16rem]');
+  });
+
   it('cards link to their detail pages', () => {
     const community = { pubkey: PK, name: 'rpi-virtuell', about: 'Religion', picture: '' };
     const { getByTestId } = render(LandingHero, { props: { heroMaterial: material, community } });

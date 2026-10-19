@@ -36,6 +36,26 @@
   /** @param {any} event */
   const detailHref = (event) => resolve(`/${encodeEventToNaddr(event)}`);
 
+  // Desktop stack: cards take the slots in order, so two cards never leave a
+  // hole where a missing one would have been, and the box fits the count.
+  const SLOTS = [
+    'lg:top-2 lg:left-0 lg:-rotate-3',
+    'lg:top-8 lg:right-0 lg:rotate-2',
+    'lg:top-[12.5rem] lg:right-2 lg:-rotate-1',
+    'lg:top-[22rem] lg:left-8 lg:rotate-2'
+  ];
+  const HEIGHTS = ['', 'lg:h-[16rem]', 'lg:h-[18rem]', 'lg:h-[24rem]', 'lg:h-[30rem]'];
+  const present = $derived(
+    [
+      heroMaterial && 'material',
+      nextEvent && 'event',
+      community && 'community',
+      article && 'article'
+    ].filter(Boolean)
+  );
+  /** @param {string} type */
+  const slot = (type) => SLOTS[present.indexOf(type)] ?? '';
+
   // Desktop: loose, slightly rotated stack. Phones: a plain swipe row —
   // deliberately without scroll-snap: cards arrive one by one, and snap keeps
   // the first-loaded card in view, scrolling the row away from its start.
@@ -103,13 +123,15 @@
     {:else if hasCards}
       <div
         data-testid="landing-collage"
-        class="-mr-4 flex gap-3 overflow-x-auto pr-4 pb-2 lg:relative lg:mr-0 lg:h-[30rem] lg:overflow-visible lg:p-0"
+        class="-mr-4 flex gap-3 overflow-x-auto pr-4 pb-2 lg:relative lg:mr-0 lg:overflow-visible lg:p-0 {HEIGHTS[
+          present.length
+        ]}"
       >
         {#if heroMaterial}
           <a
             data-testid="landing-card-material"
             href={detailHref(heroMaterial.rawEvent)}
-            class="{card} lg:top-2 lg:left-0 lg:w-[17rem] lg:-rotate-3"
+            class="{card} {slot('material')} lg:w-[17rem]"
           >
             {#if heroMaterial.image}
               <span class="block h-32 bg-base-200">
@@ -138,7 +160,7 @@
           <a
             data-testid="landing-card-event"
             href={detailHref(nextEvent.originalEvent)}
-            class="{card} lg:top-8 lg:right-0 lg:w-[18rem] lg:rotate-2"
+            class="{card} {slot('event')} lg:w-[18rem]"
           >
             <span class="flex items-center gap-3 p-4">
               <span
@@ -165,7 +187,7 @@
           <a
             data-testid="landing-card-community"
             href={resolve(`/c/${hexToNpub(community.pubkey) || community.pubkey}`)}
-            class="{card} lg:top-[12.5rem] lg:right-2 lg:w-[19rem] lg:-rotate-1"
+            class="{card} {slot('community')} lg:w-[19rem]"
           >
             <span class="flex items-center gap-3 p-4">
               <span class="size-12 shrink-0 overflow-hidden rounded-full bg-base-300">
@@ -190,7 +212,7 @@
           <a
             data-testid="landing-card-article"
             href={detailHref(article)}
-            class="{card} lg:top-[22rem] lg:left-8 lg:w-[16rem] lg:rotate-2"
+            class="{card} {slot('article')} lg:w-[16rem]"
           >
             <span class="flex items-center gap-2.5 p-4">
               <span class="badge badge-sm badge-accent">{m.landing_card_article()}</span>
