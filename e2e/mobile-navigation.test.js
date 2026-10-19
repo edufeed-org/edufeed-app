@@ -95,6 +95,14 @@ test.describe('Mobile navigation', () => {
       const docWidth = await page.evaluate(() => document.documentElement.scrollWidth);
       const viewportWidth = await page.evaluate(() => window.innerWidth);
       expect(docWidth).toBeLessThanOrEqual(viewportWidth);
+      // The page scrolls inside <main>, which also clips horizontally — an
+      // overflow there never widens the document, so measure it directly.
+      const main = await page.evaluate(() => {
+        const el = document.querySelector('main');
+        return el ? { scroll: el.scrollWidth, client: el.clientWidth } : null;
+      });
+      expect(main).not.toBeNull();
+      expect(main?.scroll).toBeLessThanOrEqual(/** @type {number} */ (main?.client));
     });
 
     test('no horizontal overflow on discover page', async ({ page }) => {
