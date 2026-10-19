@@ -89,6 +89,12 @@ describe('LandingShowcase', () => {
     );
   });
 
+  it('the articles panel colours through its own alias (stil: accent == primary)', () => {
+    const { getByTestId } = render(LandingShowcase, { props: base() });
+    const panel = getByTestId('landing-panel-articles');
+    expect(panel.getAttribute('style')).toContain('--c-panel-read');
+  });
+
   it('rows link to the detail page', () => {
     const { getByTestId } = render(LandingShowcase, { props: base() });
     const row = getByTestId('landing-panel-learning').querySelector('a[href^="/naddr1"]');

@@ -54,8 +54,11 @@
         all: m.landing_panel_articles_all(),
         href: resolve('/discover?type=articles'),
         icon: ArticleIcon,
-        tint: 'bg-accent/15',
-        badge: 'bg-accent text-accent-content',
+        // own alias: in stil the accent IS the primary (= the material panel)
+        tint: '',
+        tintStyle: 'background: color-mix(in oklch, var(--c-panel-read) 15%, transparent)',
+        badge: '',
+        badgeStyle: 'background: var(--c-panel-read); color: var(--c-panel-read-ink)',
         link: 'text-base-content'
       }
     ].filter((p) => enabled[p.type] && (states[p.type] !== 'hide' || p.type === 'events'))
@@ -133,9 +136,13 @@
         <div
           data-testid="landing-panel-{panel.type}"
           class="flex min-w-0 flex-col gap-3 rounded-3xl p-5 {panel.tint}"
+          style={panel.tintStyle}
         >
           <h2 class="flex items-center gap-2.5 text-lg font-semibold">
-            <span class="grid size-9 shrink-0 place-items-center rounded-full {panel.badge}">
+            <span
+              class="grid size-9 shrink-0 place-items-center rounded-full {panel.badge}"
+              style={panel.badgeStyle}
+            >
               <Icon class_="h-5 w-5" />
             </span>
             {panel.title}
