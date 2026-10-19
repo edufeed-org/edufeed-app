@@ -61,6 +61,11 @@
     ].filter((p) => enabled[p.type] && (states[p.type] !== 'hide' || p.type === 'events'))
   );
 
+  // As many columns as panels: a lone panel (often the events invitation on a
+  // quiet instance) should not sit in a third of an empty row.
+  /** @type {Record<number, string>} */
+  const COLUMNS = { 1: 'lg:grid-cols-1 lg:max-w-xl', 2: 'lg:grid-cols-2', 3: 'lg:grid-cols-3' };
+
   const row =
     'flex items-center gap-3 rounded-2xl bg-base-100 p-3 transition-shadow hover:shadow-md';
 </script>
@@ -119,7 +124,10 @@
 
 {#if panels.length > 0}
   <section data-testid="landing-showcase" class="container mx-auto px-4 py-10">
-    <div class="grid gap-6 lg:grid-cols-3 lg:items-start">
+    <div
+      data-testid="landing-showcase-grid"
+      class="grid gap-6 lg:items-start {COLUMNS[panels.length] ?? 'lg:grid-cols-3'}"
+    >
       {#each panels as panel (panel.type)}
         {@const Icon = panel.icon}
         <div

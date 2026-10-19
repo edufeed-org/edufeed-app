@@ -130,6 +130,15 @@ describe('LandingShowcase', () => {
     expect(queryByTestId('landing-events-empty')).toBeNull();
   });
 
+  it('the grid has as many columns as panels (a lone invitation is not stranded in a 3-column row)', () => {
+    const props = base();
+    props.states = { learning: 'hide', events: 'hide', articles: 'hide' };
+    const { getByTestId } = render(LandingShowcase, { props });
+    const grid = getByTestId('landing-showcase-grid');
+    expect(grid.className).toContain('lg:grid-cols-1');
+    expect(grid.className).not.toContain('lg:grid-cols-3');
+  });
+
   it('renders nothing when no panel is left', () => {
     const props = base();
     props.states = { learning: 'hide', events: 'hide', articles: 'hide' };
