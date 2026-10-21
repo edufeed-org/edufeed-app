@@ -8,6 +8,7 @@ import { json } from '@sveltejs/kit';
 import { parseDiscoverContentTypes } from '$lib/helpers/discover-content-types.js';
 import { env } from '$env/dynamic/private';
 import { parseArray, parseBool } from '$lib/server/env-parse.js';
+import { getEligibilityConfig } from '$lib/server/blossom-eligibility.js';
 
 /**
  * Like parseArray, but the literal `none` yields [] — the way to switch a
@@ -200,6 +201,7 @@ function resolveWotConfig(env, suffix) {
  * Returns public configuration that can be safely exposed to the browser
  */
 export function GET() {
+  const blossomEligibility = getEligibilityConfig();
   const config = {
     // App branding
     appName: env.APP_NAME || 'Edufeed',
@@ -342,9 +344,16 @@ export function GET() {
       suggestedCommunities: parseArray(env.SIGNUP_SUGGESTED_COMMUNITIES)
     },
 
-    // Blossom (media uploads)
+    // Blossom (media uploads). `defaultBlossomServers` above are the
+    // deployment's own servers (closed to eligible accounts when the gate is
+    // on); `publicServers` is where everyone else uploads. The eligibility
+    // inputs mirror the Blossom server's storage rules — the pubkey allowlist
+    // itself is never exposed, only whether a gate exists and which domains.
     blossom: {
-      maxFileSize: parseInt(env.BLOSSOM_MAX_FILE_SIZE, 5 * 1024 * 1024) // 5MB default
+      maxFileSize: parseInt(env.BLOSSOM_MAX_FILE_SIZE, 5 * 1024 * 1024), // 5MB default
+      publicServers: parseArray(env.PUBLIC_BLOSSOM_SERVERS, ['https://blossom.primal.net']),
+      gated: blossomEligibility.gated,
+      eligibleDomains: blossomEligibility.domains
     },
 
     // Geocoding (public settings only - API key stays on server)

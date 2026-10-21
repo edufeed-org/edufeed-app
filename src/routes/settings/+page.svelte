@@ -15,8 +15,16 @@
     saveBlossomServers,
     validateBlossomUrl,
     parseBlossomServerEvent,
-    getDefaultBlossomServers
+    getDefaultBlossomServers,
+    getPublicBlossomServers,
+    getActiveBlossomServer,
+    isDefaultBlossomServer,
+    isPublicBlossomServer
   } from '$lib/services/blossom-settings-service.js';
+  import {
+    getBlossomEligibility,
+    isBlossomEligible
+  } from '$lib/stores/blossom-eligibility.svelte.js';
   import {
     CATEGORIES,
     getRelaySetDTag,
@@ -375,9 +383,41 @@
     }
   }
 
-  // Create default Blossom server list
+  // Closed deployment server: what the gate means for this account.
+  const blossomGated = $derived(!!runtimeConfig.blossom?.gated);
+  const blossomEligibility = $derived(
+    blossomGated && activeAccount ? getBlossomEligibility(activeAccount.pubkey) : 'eligible'
+  );
+  const blossomDeploymentHost = $derived.by(() => {
+    try {
+      return new URL(getDefaultBlossomServers()[0] || '').host;
+    } catch {
+      return '';
+    }
+  });
+  const blossomEligibleDomain = $derived(
+    runtimeConfig.blossom?.eligibleDomains?.[0]
+      ? `@${runtimeConfig.blossom.eligibleDomains[0]}`
+      : `@${runtimeConfig.membership?.handleDomain || ''}`
+  );
+  const blossomCurrentTarget = $derived.by(() => {
+    if (!activeAccount) return '';
+    try {
+      return new URL(getActiveBlossomServer(activeAccount.pubkey, eventStore)).host;
+    } catch {
+      return '';
+    }
+  });
+
+  // Create default Blossom server list — the deployment's servers for an
+  // eligible account, the public ones otherwise (never seed a list that
+  // points a non-member at the server that refuses them).
   function createDefaultBlossomList() {
-    blossomServers = getDefaultBlossomServers().map((/** @type {string} */ url) => ({ url }));
+    const seed =
+      !blossomGated || isBlossomEligible(activeAccount?.pubkey)
+        ? getDefaultBlossomServers()
+        : getPublicBlossomServers();
+    blossomServers = seed.map((/** @type {string} */ url) => ({ url }));
     hasBlossomChanges = true;
   }
 
@@ -843,14 +883,43 @@
           </div>
         </div>
       {:else}
-        <div class="card mt-6 bg-base-100 shadow-xl" transition:fade={{ duration: 200 }}>
+        <div
+          id="blossom-settings"
+          class="card mt-6 bg-base-100 shadow-xl"
+          transition:fade={{ duration: 200 }}
+        >
           <div class="card-body">
             <h2 class="mb-2 card-title text-2xl">
               <span class="text-2xl">{m.settings_blossom_title()}</span>
             </h2>
-            <p class="mb-6 text-base-content/70">
+            <p class="mb-2 text-base-content/70">
               {m.settings_blossom_description()}
             </p>
+            {#if blossomGated && blossomEligibility === 'eligible'}
+              <p class="mb-4 text-sm text-success" data-testid="settings-blossom-eligible">
+                {m.settings_blossom_eligible({ host: blossomDeploymentHost })}
+              </p>
+            {:else if blossomGated && blossomEligibility === 'ineligible'}
+              <div
+                class="mb-4 flex flex-wrap items-center gap-3"
+                data-testid="settings-blossom-ineligible"
+              >
+                <p class="text-sm text-base-content/70">
+                  {m.settings_blossom_ineligible({ domain: blossomEligibleDomain })}
+                </p>
+                {#if runtimeConfig.membership?.enabled && runtimeConfig.membership?.handleDomain}
+                  <button
+                    type="button"
+                    class="btn btn-outline btn-sm"
+                    onclick={() => modalStore.openModal('membershipApply')}
+                  >
+                    {m.membership_apply_cta()}
+                  </button>
+                {/if}
+              </div>
+            {:else}
+              <div class="mb-4"></div>
+            {/if}
 
             {#if !hasBlossomList && blossomServers.length === 0}
               <!-- No server list state -->
@@ -873,6 +942,11 @@
                   <p class="text-sm">
                     {m.settings_blossom_no_list_description()}
                   </p>
+                  {#if blossomCurrentTarget}
+                    <p class="mt-1 text-sm" data-testid="settings-blossom-current-target">
+                      {m.settings_blossom_current_target({ host: blossomCurrentTarget })}
+                    </p>
+                  {/if}
                 </div>
               </div>
               <button class="btn btn-primary" onclick={createDefaultBlossomList}>
@@ -889,6 +963,15 @@
                     <div class="flex-1 truncate font-mono text-sm" title={server.url}>
                       {server.url}
                     </div>
+                    {#if blossomGated && isDefaultBlossomServer(server.url)}
+                      <span class="badge badge-sm badge-primary"
+                        >{m.settings_blossom_badge_default()}</span
+                      >
+                    {:else if blossomGated && isPublicBlossomServer(server.url)}
+                      <span class="badge badge-ghost badge-sm"
+                        >{m.settings_blossom_badge_public()}</span
+                      >
+                    {/if}
                     <button
                       class="btn btn-square text-error btn-ghost btn-sm"
                       onclick={() => removeBlossomServer(index)}

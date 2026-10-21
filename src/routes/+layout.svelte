@@ -391,6 +391,16 @@
     });
   });
 
+  // Blossom upload eligibility (closed deployment server): one probe per
+  // account, re-checked after a NIP-05 handle grant. Lazy for the same
+  // import-budget reason as the alert above.
+  $effect(() => {
+    if (!browser) return;
+    import('$lib/stores/blossom-eligibility.svelte.js').then(({ initBlossomEligibility }) => {
+      initBlossomEligibility();
+    });
+  });
+
   // Initialize inbox + wave toasts on login, cleanup on logout
   // Also warm the persistent event cache with identity data
   $effect(() => {

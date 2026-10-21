@@ -104,7 +104,13 @@ const defaultConfig = {
     suggestedCommunities: []
   },
   blossom: {
-    maxFileSize: 5 * 1024 * 1024 // 5MB
+    maxFileSize: 5 * 1024 * 1024, // 5MB
+    /** Upload servers for accounts the closed deployment server refuses. */
+    publicServers: /** @type {string[]} */ (['https://blossom.primal.net']),
+    /** True when the deployment's Blossom server only accepts eligible accounts. */
+    gated: false,
+    /** NIP-05 domains whose handles are eligible (copy for UI text). */
+    eligibleDomains: /** @type {string[]} */ ([])
   },
   geocoding: {
     cacheDurationDays: 30,

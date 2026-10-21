@@ -330,7 +330,7 @@ Top-level shape:
 - `gatedMode.{default,force}` — gated mode defaults / lockout
 - `curatedMode` — curated authors (`CURATED_PUBKEYS_SETS`, `CURATED_PUBKEYS`, per-category overrides)
 - `wotMode.{enabled,includeUserFollows,calendar,communikey,educational,longform,kanban}` — WoT config
-- `blossom.serverUrl` — file upload server
+- `blossom.{maxFileSize,publicServers,gated,eligibleDomains}` — uploads: `defaultBlossomServers` (`DEFAULT_BLOSSOM_SERVERS`) are the deployment's own servers, `publicServers` (`PUBLIC_BLOSSOM_SERVERS`) where non-eligible accounts upload; `gated`/`eligibleDomains` derive from the server-only `BLOSSOM_ELIGIBLE_PUBKEYS` / `BLOSSOM_ELIGIBLE_NIP05_DOMAINS` (mirror of blossom-server's `requirePubkeyInRule` rules). The server enforces; the app predicts via `/api/blossom/eligible` (`$lib/server/blossom-eligibility.js`), orders upload targets (`getBlossomUploadServers`), falls back on a 401/403 (`uploadWithFallback`) and nudges through Termi (`blossomUpgrade`/`blossomPublic`).
 - `ui.{defaultLightTheme,defaultDarkTheme}` — theme defaults (dark is inert)
 - `help.url` — user-guide target of the "Hilfe" links (account menu, Termi "Wie fange ich an?" chip, landing footer; `HELP_URL` env, default `/wiki/edufeed-erste-schritte`, `none` hides them). Render via `helpLinkAttrs()` from `$lib/helpers/help-link.js`; the article itself lives in the edufeed/wikis repo.
 - `educational` — search debounce, vocabulary choices, `schemeNaddrs` (kind 39737 ConceptScheme naddrs from `SCHEME_NADDR_*` env vars)
@@ -345,6 +345,7 @@ Besides `/api/config`, the app has server-side proxy endpoints (all optional, 50
 - `/api/oer` — OER media-library image search proxy (`OER_PROXY_URL`)
 - `/api/metaclean` — metadata-cleaner proxy for the pre-upload review step in `LicensedFileInput`/`LicensedImageInput` (`METADATA_CLEANER_URL`)
 - `/api/curricula` — Lehrplan-ontology SPARQL cascade for the curriculum picker (`SPARQL_ENDPOINT_URL`)
+- `/api/blossom/eligible` — `?pubkey=<hex|npub>` → `{eligible: true|false|null, gated}` (`null` = a NIP-05 directory could not be loaded yet; the client keeps "unknown" and retries), CORS-open prediction of the closed Blossom server's upload policy (no env = gate off, everyone eligible)
 - `/api/nip05` — membership/handle admin proxy to the standalone nip-05-service (`NIP05_SERVICE_URL`, `NIP05_SERVICE_API_KEY`, allowlist `MEMBERSHIP_ADMIN_PUBKEYS`; feature flag `MEMBERSHIP_ENABLED`)
 
 ### Gated Mode

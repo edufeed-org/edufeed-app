@@ -4,9 +4,7 @@
  * lookup: chat files aren't published OER (that gate belongs to the resource
  * form, see upload-and-find-license.js).
  */
-import { BlossomClient } from 'blossom-client-sdk';
-import { getActiveBlossomServer } from '$lib/services/blossom-settings-service.js';
-import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
+import { uploadWithFallback } from '$lib/helpers/blossom-upload.js';
 import { reconcileBlobUrlScheme } from '$lib/helpers/blossom-trust.js';
 
 /**
@@ -38,13 +36,10 @@ export function appendExtensionIfMissing(urlString, filename) {
  * @returns {Promise<{url: string, type: string, sha256: string, size: number, name: string}>}
  */
 export async function uploadChatAttachment(file, { signer }) {
-  const signerFn = async (/** @type {any} */ event) => signer.signEvent(event);
   // getPublicKey(), not `.pubkey` — applesauce signers have no sync pubkey,
   // and reading it directly would skip the user's kind 10063 blossom server.
   const userPubkey = await signer.getPublicKey();
-  const serverUrl = getActiveBlossomServer(userPubkey, eventStore);
-  const client = new BlossomClient(serverUrl, signerFn);
-  const blob = await client.uploadBlob(file);
+  const { blob, serverUrl } = await uploadWithFallback(file, { signer, userPubkey });
   return {
     url: appendExtensionIfMissing(reconcileBlobUrlScheme(blob.url, serverUrl), file.name),
     type: blob.type || file.type || 'application/octet-stream',

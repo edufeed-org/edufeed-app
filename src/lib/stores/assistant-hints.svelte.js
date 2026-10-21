@@ -64,12 +64,32 @@ import {
   trackEverOpen,
   isProfileHintApplicable,
   isSignerHintApplicable,
-  deriveNip05Hint
+  deriveNip05Hint,
+  deriveBlossomHints,
+  buildUpgradedServerList,
+  buildPublicServerList
 } from '$lib/helpers/assistant-hints.js';
+import { createBlossomServerLoader } from '$lib/loaders/blossom-server-loader.js';
+import {
+  parseBlossomServerEvent,
+  getDefaultBlossomServers,
+  getPublicBlossomServers,
+  saveBlossomServers
+} from '$lib/services/blossom-settings-service.js';
+import {
+  getBlossomEligibility,
+  initBlossomEligibility
+} from '$lib/stores/blossom-eligibility.svelte.js';
+import {
+  isBlossomUpgradeHintDismissed,
+  markBlossomUpgradeHintDismissed,
+  isBlossomPublicHintDismissed,
+  markBlossomPublicHintDismissed
+} from '$lib/stores/blossom-hint-flags.svelte.js';
 import { getProfileNip05s } from '$lib/helpers/nip05-verify.js';
 import { runtimeConfig } from '$lib/stores/config.svelte.js';
 
-/** @typedef {'backup' | 'relays' | 'dm' | 'nip05' | 'profile' | 'signer' | 'invites' | 'joinRequests' | 'groupAdded'} HintId */
+/** @typedef {'backup' | 'relays' | 'dm' | 'nip05' | 'profile' | 'signer' | 'invites' | 'joinRequests' | 'groupAdded' | 'blossomUpgrade' | 'blossomPublic'} HintId */
 /** @typedef {import('$lib/helpers/assistant-hints.js').HintStatus} HintStatus */
 
 export const HINT_IDS = /** @type {HintId[]} */ ([
@@ -79,6 +99,8 @@ export const HINT_IDS = /** @type {HintId[]} */ ([
   'profile',
   'signer',
   'nip05',
+  'blossomUpgrade',
+  'blossomPublic',
   'invites',
   'joinRequests',
   'groupAdded'
@@ -161,6 +183,45 @@ export function useAssistantHints() {
     };
   });
 
+  // Blossom server list (kind 10063) for the two upload-storage hints of a
+  // closed deployment server. Same settle discipline as the relay list: only
+  // conclude "no list" after the loader had time to answer. The eligibility
+  // prediction itself lives in blossom-eligibility.svelte.js (root layout
+  // starts it; this call is the idempotent safety net).
+  initBlossomEligibility();
+  /** @type {string[]} */
+  let blossomServers = $state.raw([]);
+  let blossomSettled = $state(false);
+
+  $effect(() => {
+    const user = getActiveUser();
+    blossomServers = [];
+    blossomSettled = false;
+    if (!user || !runtimeConfig.blossom?.gated) return;
+
+    const loader = createBlossomServerLoader(
+      pool,
+      getRelayListLookupRelays(),
+      eventStore,
+      user.pubkey
+    );
+    const loaderSub = loader()().subscribe();
+    const sub = eventStore.replaceable(10063, user.pubkey).subscribe((event) => {
+      if (!event) return;
+      blossomServers = parseBlossomServerEvent(event).map((s) => s.url);
+      blossomSettled = true;
+    });
+    const timeout = setTimeout(() => {
+      blossomSettled = true;
+    }, 5000);
+
+    return () => {
+      loaderSub?.unsubscribe();
+      sub?.unsubscribe();
+      clearTimeout(timeout);
+    };
+  });
+
   // Membership handle application state (none / pending / granted) — drives
   // the nip05 hint's variant and the one-click activation. Shared with the
   // bell count and the inbox rows through the app-wide alert store (the root
@@ -210,6 +271,8 @@ export function useAssistantHints() {
         nip05: null,
         profile: null,
         signer: null,
+        blossomUpgrade: null,
+        blossomPublic: null,
         invites: null,
         joinRequests: null,
         groupAdded: null
@@ -250,6 +313,17 @@ export function useAssistantHints() {
       dmStatus === 'absent' &&
       getDefaultDmRelays().length > 0 &&
       !isDmRelayBannerDismissed(user.pubkey);
+
+    const blossom = deriveBlossomHints({
+      gated: !!runtimeConfig.blossom?.gated,
+      eligibility: getBlossomEligibility(user.pubkey),
+      user,
+      listSettled: blossomSettled,
+      userServers: blossomServers,
+      defaultServers: getDefaultBlossomServers(),
+      upgradeDismissed: isBlossomUpgradeHintDismissed(user.pubkey),
+      publicDismissed: isBlossomPublicHintDismissed(user.pubkey)
+    });
 
     const profileApplicable = isProfileHintApplicable({
       user,
@@ -307,6 +381,18 @@ export function useAssistantHints() {
         confirmed: canEncrypt,
         running: false, // the action opens the login modal; the next account confirms
         everOpen: everOpen.has('signer')
+      }),
+      blossomUpgrade: deriveHintStatus({
+        applicable: blossom.upgrade.applicable,
+        confirmed: blossom.upgrade.confirmed,
+        running: running.has('blossomUpgrade'),
+        everOpen: everOpen.has('blossomUpgrade')
+      }),
+      blossomPublic: deriveHintStatus({
+        applicable: blossom.public.applicable,
+        confirmed: blossom.public.confirmed,
+        running: running.has('blossomPublic'),
+        everOpen: everOpen.has('blossomPublic')
       }),
       invites: deriveHintStatus({
         applicable: getPendingInviteCount() > 0,
@@ -409,6 +495,28 @@ export function useAssistantHints() {
       if (community) goto(`/c/${nip19.npubEncode(community.pubkey)}?view=members`);
       return;
     }
+    if (id === 'blossomUpgrade' || id === 'blossomPublic') {
+      const user = getActiveUser();
+      if (!user || running.has(id)) return;
+      setRunning(id, true);
+      // One click rewrites the kind 10063 list; publishEvent adds it to the
+      // store, so the 10063 subscription above confirms reactively ('done').
+      const list =
+        id === 'blossomUpgrade'
+          ? buildUpgradedServerList(blossomServers, getDefaultBlossomServers())
+          : buildPublicServerList(
+              blossomServers,
+              getDefaultBlossomServers(),
+              getPublicBlossomServers()
+            );
+      saveBlossomServers(
+        list.map((url) => ({ url })),
+        user.pubkey
+      )
+        .catch(() => {})
+        .then(() => setRunning(id, false));
+      return;
+    }
     if (running.has(id)) return;
     setRunning(id, true);
     // Fire-and-forget like the banners: on success the underlying store flips
@@ -428,6 +536,7 @@ export function useAssistantHints() {
   function customizeHint(id) {
     if (id === 'relays') goto('/settings#relay-settings');
     else if (id === 'dm') goto('/settings#dm-relay-settings');
+    else if (id === 'blossomUpgrade' || id === 'blossomPublic') goto('/settings#blossom-settings');
   }
 
   /**
@@ -448,6 +557,8 @@ export function useAssistantHints() {
         else markNip05HintDismissed(user.pubkey);
       } else if (id === 'profile') markProfileHintDismissed(user.pubkey);
       else if (id === 'signer') markSignerHintDismissed(user.pubkey);
+      else if (id === 'blossomUpgrade') markBlossomUpgradeHintDismissed(user.pubkey);
+      else if (id === 'blossomPublic') markBlossomPublicHintDismissed(user.pubkey);
     }
     const next = new Set(dismissed); // eslint-disable-line svelte/prefer-svelte-reactivity -- replaced wholesale below
     next.add(id);
@@ -464,6 +575,11 @@ export function useAssistantHints() {
         if (id === 'nip05') {
           entry.variant = nip05Meta.variant;
           entry.address = nip05Meta.address;
+        }
+        if (id === 'blossomPublic') {
+          // 'member' adds the application link; needs a deployment that grants handles.
+          const membership = runtimeConfig.membership;
+          entry.variant = membership?.enabled && membership?.handleDomain ? 'member' : 'plain';
         }
         if (id === 'joinRequests') {
           entry.count = getJoinRequestAlert().count;
