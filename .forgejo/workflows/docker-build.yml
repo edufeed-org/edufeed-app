@@ -92,12 +92,19 @@ jobs:
       # dev.edufeed.org tracks main HEAD). A v* tag publishes :vX.Y.Z and
       # moves :latest, which prod's manual Ansible deploy pulls — so prod
       # only ever advances when a release tag is cut.
+      # A release candidate (semver pre-release, vX.Y.Z-rc.N — any tag with a
+      # "-") publishes ONLY its own tag: dev.edufeed.org is pinned to it for
+      # testing, and :latest must not move until the final vX.Y.Z is tagged on
+      # the same commit (which then reuses the very image the RC tested).
       - name: Tag and push (only after smoke test passes)
         run: |
           REF_NAME="${{ github.ref_name }}"
           REG=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           if [ "${{ github.ref_type }}" = "tag" ]; then
-            TAGS="$REF_NAME latest"
+            case "$REF_NAME" in
+              *-*) TAGS="$REF_NAME" ;;
+              *) TAGS="$REF_NAME latest" ;;
+            esac
           else
             TAGS="dev"
           fi
