@@ -1408,6 +1408,21 @@ describe('floating chrome (design 1d "Bühne")', () => {
     expect(dockLayer.classList.contains('opacity-0')).toBe(false);
   });
 
+  // Issue 082fc803: on Windows/Edge the pop-out turned black except the
+  // videos whenever its chrome faded out. The pop-out is small and always
+  // on top, so its chrome simply stays.
+  it('in the pop-out window the chrome never steps back (no idle, no mouse-out)', async () => {
+    vi.useFakeTimers();
+    render(GroupCallStage, { props: { ...baseProps, onPopIn: vi.fn() } });
+    const stage = screen.getByTestId('group-call-stage');
+    vi.advanceTimersByTime(10_000);
+    flushSync();
+    expect(stage.hasAttribute('data-idle')).toBe(false);
+    await fireEvent.pointerLeave(stage, { pointerType: 'mouse' });
+    flushSync();
+    expect(stage.hasAttribute('data-idle')).toBe(false);
+  });
+
   it('never steps back while a menu is open or the pointer rests on the dock', async () => {
     vi.useFakeTimers();
     render(GroupCallStage, { props: baseProps });
