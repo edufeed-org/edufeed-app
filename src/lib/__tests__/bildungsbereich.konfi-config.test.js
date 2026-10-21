@@ -90,3 +90,19 @@ describe('Konfi field labelKey drift catcher', () => {
     expect(missing).toEqual([]);
   });
 });
+
+describe('Konfi keywords field placement', () => {
+  // The AMB keywords field (`formData.keywords` → `keywords` on the wire) is
+  // not a Konfi facet, so it is not part of any sub-step's `fields`. The
+  // wizard still has to render it somewhere inside the Konfi step 4, because
+  // the enrich prefill (`applyEnrichedPayload`) fills `keywords` for Konfi
+  // resources too and the serializer publishes them — without a field the
+  // user can neither see nor edit what goes out.
+  it('exactly one Konfi sub-step shows the AMB keywords field, and it is 4b (Inhalt & Methode)', async () => {
+    const { BILDUNGSBEREICHE: B } = await import('$lib/helpers/educational/bildungsbereich.js');
+    const withKeywords = (B.konfi.step4SubSteps ?? [])
+      .filter((s) => s.showKeywords === true)
+      .map((s) => s.key);
+    expect(withKeywords).toEqual(['4b']);
+  });
+});

@@ -2279,6 +2279,111 @@
 
       <!-- Step 4: Classification -->
       {#if currentStep === 4}
+        <!-- Keywords: plain AMB field, shared by the Konfi sub-step branch and the
+             AMB/EKW branch below (see SubStepConfig.showKeywords). -->
+        {#snippet keywordsField()}
+          <!-- Keywords -->
+          <div class="form-control">
+            <label class="label flex items-center gap-2" for="amb-keywords">
+              <span class="label-text font-medium">{m.amb_form_label_keywords()}</span>
+              <SmartFillBadge
+                provenance={provenance.keywords}
+                onclear={() => clearField('keywords')}
+              />
+            </label>
+            <div class="relative">
+              <input
+                id="amb-keywords"
+                type="text"
+                class="input-bordered input w-full"
+                placeholder={m.amb_form_placeholder_keywords()}
+                role={isEkw ? 'combobox' : undefined}
+                aria-expanded={isEkw ? keywordSuggestionsOpen : undefined}
+                aria-controls={isEkw ? 'ekw-keyword-suggestions' : undefined}
+                aria-autocomplete={isEkw ? 'list' : undefined}
+                aria-activedescendant={isEkw && keywordSuggestionActiveIndex >= 0
+                  ? `ekw-keyword-suggestion-${keywordSuggestionActiveIndex}`
+                  : undefined}
+                autocomplete="off"
+                bind:value={keywordInputValue}
+                oninput={() => {
+                  if (isEkw) {
+                    keywordSuggestionsOpen = true;
+                    keywordSuggestionActiveIndex = -1;
+                  }
+                }}
+                onfocus={() => {
+                  if (keywordBlurTimer) {
+                    clearTimeout(keywordBlurTimer);
+                    keywordBlurTimer = null;
+                  }
+                  if (isEkw) keywordSuggestionsOpen = true;
+                }}
+                onkeydown={isEkw ? handleKeywordKeydownEkw : handleAddKeyword}
+                onblur={(e) => {
+                  if (keywordBlurTimer) clearTimeout(keywordBlurTimer);
+                  keywordBlurTimer = setTimeout(() => {
+                    keywordSuggestionsOpen = false;
+                    keywordSuggestionActiveIndex = -1;
+                    keywordBlurTimer = null;
+                  }, 120);
+                  handleKeywordBlur(e);
+                }}
+                onpaste={handleKeywordPaste}
+              />
+              {#if isEkw && keywordSuggestionsOpen && keywordSuggestions.length > 0}
+                <ul
+                  id="ekw-keyword-suggestions"
+                  role="listbox"
+                  data-testid="ekw-keyword-suggestions"
+                  class="absolute z-10 mt-1 max-h-60 w-full overflow-auto rounded-md border border-base-300 bg-base-100 shadow"
+                  aria-label={m.ekw_keywords_suggestions_label()}
+                >
+                  {#each keywordSuggestions as suggestion, i (suggestion)}
+                    <!-- Keyboard interaction lives on the input via aria-activedescendant; the option click is reachable through Enter on the focused input. -->
+                    <!-- svelte-ignore a11y_click_events_have_key_events -->
+                    <li
+                      id="ekw-keyword-suggestion-{i}"
+                      role="option"
+                      aria-selected={i === keywordSuggestionActiveIndex}
+                      class="cursor-pointer px-3 py-2 hover:bg-base-200"
+                      class:bg-base-200={i === keywordSuggestionActiveIndex}
+                      onmousedown={(e) => e.preventDefault()}
+                      onclick={() => pickKeywordSuggestion(suggestion)}
+                    >
+                      {suggestion}
+                    </li>
+                  {/each}
+                </ul>
+              {/if}
+            </div>
+            <p class="mt-1 text-xs text-base-content/60">{m.amb_form_help_keywords()}</p>
+            {#if formData.keywords.length > 0}
+              <div class="mt-2 flex flex-wrap gap-2">
+                {#each formData.keywords as keyword (keyword)}
+                  <span class="badge gap-1 badge-outline badge-primary" data-testid="keyword-chip">
+                    {keyword}
+                    <button
+                      type="button"
+                      class="hover:text-error"
+                      onclick={handleRemoveKeyword(keyword)}
+                    >
+                      <CloseIcon class_="w-3 h-3" />
+                    </button>
+                  </span>
+                {/each}
+              </div>
+            {/if}
+            <FieldAiSuggestionBadge
+              field="keywords"
+              {formData}
+              {aboutByVocab}
+              {aiSuggestions}
+              dismissedFields={dismissedSuggestionFields}
+              onapply={handleSuggestionAction}
+            />
+          </div>
+        {/snippet}
         {#if currentSubStepConfig}
           {@const konfiFields = subStepToFormFields(currentSubStepConfig, schemeNaddrs)}
           {@const subStepHeading =
@@ -2296,6 +2401,9 @@
               onchange={handleKonfiFieldChange}
               oncustomchange={handleKonfiCustomChange}
             />
+            {#if currentSubStepConfig.showKeywords}
+              {@render keywordsField()}
+            {/if}
           </div>
         {:else}
           <div class="space-y-4">
@@ -2434,110 +2542,7 @@
               {/if}
             {/if}
 
-            <!-- Keywords -->
-            <div class="form-control">
-              <label class="label flex items-center gap-2" for="amb-keywords">
-                <span class="label-text font-medium">{m.amb_form_label_keywords()}</span>
-                <SmartFillBadge
-                  provenance={provenance.keywords}
-                  onclear={() => clearField('keywords')}
-                />
-              </label>
-              <div class="relative">
-                <input
-                  id="amb-keywords"
-                  type="text"
-                  class="input-bordered input w-full"
-                  placeholder={m.amb_form_placeholder_keywords()}
-                  role={isEkw ? 'combobox' : undefined}
-                  aria-expanded={isEkw ? keywordSuggestionsOpen : undefined}
-                  aria-controls={isEkw ? 'ekw-keyword-suggestions' : undefined}
-                  aria-autocomplete={isEkw ? 'list' : undefined}
-                  aria-activedescendant={isEkw && keywordSuggestionActiveIndex >= 0
-                    ? `ekw-keyword-suggestion-${keywordSuggestionActiveIndex}`
-                    : undefined}
-                  autocomplete="off"
-                  bind:value={keywordInputValue}
-                  oninput={() => {
-                    if (isEkw) {
-                      keywordSuggestionsOpen = true;
-                      keywordSuggestionActiveIndex = -1;
-                    }
-                  }}
-                  onfocus={() => {
-                    if (keywordBlurTimer) {
-                      clearTimeout(keywordBlurTimer);
-                      keywordBlurTimer = null;
-                    }
-                    if (isEkw) keywordSuggestionsOpen = true;
-                  }}
-                  onkeydown={isEkw ? handleKeywordKeydownEkw : handleAddKeyword}
-                  onblur={(e) => {
-                    if (keywordBlurTimer) clearTimeout(keywordBlurTimer);
-                    keywordBlurTimer = setTimeout(() => {
-                      keywordSuggestionsOpen = false;
-                      keywordSuggestionActiveIndex = -1;
-                      keywordBlurTimer = null;
-                    }, 120);
-                    handleKeywordBlur(e);
-                  }}
-                  onpaste={handleKeywordPaste}
-                />
-                {#if isEkw && keywordSuggestionsOpen && keywordSuggestions.length > 0}
-                  <ul
-                    id="ekw-keyword-suggestions"
-                    role="listbox"
-                    data-testid="ekw-keyword-suggestions"
-                    class="absolute z-10 mt-1 max-h-60 w-full overflow-auto rounded-md border border-base-300 bg-base-100 shadow"
-                    aria-label={m.ekw_keywords_suggestions_label()}
-                  >
-                    {#each keywordSuggestions as suggestion, i (suggestion)}
-                      <!-- Keyboard interaction lives on the input via aria-activedescendant; the option click is reachable through Enter on the focused input. -->
-                      <!-- svelte-ignore a11y_click_events_have_key_events -->
-                      <li
-                        id="ekw-keyword-suggestion-{i}"
-                        role="option"
-                        aria-selected={i === keywordSuggestionActiveIndex}
-                        class="cursor-pointer px-3 py-2 hover:bg-base-200"
-                        class:bg-base-200={i === keywordSuggestionActiveIndex}
-                        onmousedown={(e) => e.preventDefault()}
-                        onclick={() => pickKeywordSuggestion(suggestion)}
-                      >
-                        {suggestion}
-                      </li>
-                    {/each}
-                  </ul>
-                {/if}
-              </div>
-              <p class="mt-1 text-xs text-base-content/60">{m.amb_form_help_keywords()}</p>
-              {#if formData.keywords.length > 0}
-                <div class="mt-2 flex flex-wrap gap-2">
-                  {#each formData.keywords as keyword (keyword)}
-                    <span
-                      class="badge gap-1 badge-outline badge-primary"
-                      data-testid="keyword-chip"
-                    >
-                      {keyword}
-                      <button
-                        type="button"
-                        class="hover:text-error"
-                        onclick={handleRemoveKeyword(keyword)}
-                      >
-                        <CloseIcon class_="w-3 h-3" />
-                      </button>
-                    </span>
-                  {/each}
-                </div>
-              {/if}
-              <FieldAiSuggestionBadge
-                field="keywords"
-                {formData}
-                {aboutByVocab}
-                {aiSuggestions}
-                dismissedFields={dismissedSuggestionFields}
-                onapply={handleSuggestionAction}
-              />
-            </div>
+            {@render keywordsField()}
 
             <!-- EKW-only step 4 pickers: Fachrichtung, Klassenstufe, Schulart -->
             {#if isEkw}
