@@ -5,10 +5,7 @@
   import * as m from '$lib/paraglide/messages';
   import { runtimeConfig } from '$lib/stores/config.svelte.js';
   import { useActiveUser } from '$lib/stores/accounts.svelte';
-  import LandingHero from '$lib/components/landing/LandingHero.svelte';
-  import FeatureHighlights from '$lib/components/landing/FeatureHighlights.svelte';
-  import CommunityCarousel from '$lib/components/landing/CommunityCarousel.svelte';
-  import LandingFooter from '$lib/components/landing/LandingFooter.svelte';
+  import LandingContent from '$lib/components/landing/LandingContent.svelte';
 
   const activeUser = useActiveUser();
 
@@ -24,7 +21,6 @@
   <meta name="description" content={m.landing_meta_description()} />
 </svelte:head>
 
-<LandingHero />
-<FeatureHighlights />
-<CommunityCarousel />
-<LandingFooter />
+{#if !activeUser()}
+  <LandingContent />
+{/if}

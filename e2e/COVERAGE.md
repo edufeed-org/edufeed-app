@@ -44,8 +44,8 @@ this total by a file or two between updates — `rail-layout-sync.test.js`
 | `signup-normie-path.test.js`         | 1                     | No   | Signup wizard skip path: CTA → name → profile → educator context → communities skip (→ handle skip) → Termi backup hint                                                                                                                                                                                                                |
 | `settings.test.js`                   | 18                    | Both | Single-theme check, relays, relay editing, gated/debug                                                                                                                                                                                                                                                                                 |
 | `settings-blossom.test.js`           | 6                     | Yes  | Blossom server management                                                                                                                                                                                                                                                                                                              |
-| `mobile-navigation.test.js`          | 8                     | No   | Mobile hamburger menu, responsive layout                                                                                                                                                                                                                                                                                               |
-| `mobile-dock.test.js`                | 3                     | Yes  | Phone bottom bar: five labeled items, FAB and Termi bubble hidden below lg, Erstellen opens the create sheet; inside a community the dock stays, header back arrow, Bereiche sheet navigates, section row stays pinned under the header on scroll |
+| `mobile-navigation.test.js`          | 10                    | No   | Mobile hamburger menu, responsive layout, landing Anmelden button + account CTA, landing 5b copy + no overflow                                                                                                                                                                                                                         |
+| `mobile-dock.test.js`                | 3                     | Yes  | Phone bottom bar: five labeled items, FAB and Termi bubble hidden below lg, Erstellen opens the create sheet; inside a community the dock stays, header back arrow, Bereiche sheet navigates, section row stays pinned under the header on scroll                                                                                      |
 | `list-management.test.js`            | 9                     | Both | Dashboard Lists tab, New list modal, people-list CRUD affordances                                                                                                                                                                                                                                                                      |
 | `cache-warm-boot.test.js`            | 1                     | No   | Persistent event cache — warm reload renders calendar from IDB with WebSockets blocked                                                                                                                                                                                                                                                 |
 | `layout-consistency.test.js`         | 15                    | Yes  | Single overflow surface, no footer DOM, body non-scrolling, sticky mobile header, scroll restoration, flex-sibling sidebar guards, shared community header axis                                                                                                                                                                        |
@@ -1317,22 +1317,24 @@ detection, hint show/hide flags) is covered by Vitest component tests:
 
 ---
 
-### mobile-navigation.test.js (8 tests)
+### mobile-navigation.test.js (10 tests)
 
 **Route:** `/` (homepage), `/discover`
 **Auth required:** No
 **Note:** Tests responsive Navbar behavior across mobile (375x667) and desktop (1280x720) viewports.
 
-#### Mobile Viewport - 375x667 (6 tests)
+#### Mobile Viewport - 375x667 (8 tests)
 
-| Test                                                   | What it verifies                               |
-| ------------------------------------------------------ | ---------------------------------------------- |
-| hamburger menu is visible and desktop nav links hidden | Hamburger visible, desktop nav hidden          |
-| hamburger click opens dropdown with nav links          | Dropdown shows Communities, Discover, Calendar |
-| nav link click navigates correctly                     | Discover link navigates to /discover           |
-| login button is accessible in mobile dropdown          | Login button present in dropdown               |
-| no horizontal overflow on mobile                       | Document width <= viewport width               |
-| no critical JavaScript errors on mobile                | No JS errors during hamburger interaction      |
+| Test                                                   | What it verifies                                  |
+| ------------------------------------------------------ | ------------------------------------------------- |
+| hamburger menu is visible and desktop nav links hidden | Hamburger visible, desktop nav hidden             |
+| hamburger click opens dropdown with nav links          | Dropdown shows Communities, Discover, Calendar    |
+| nav link click navigates correctly                     | Discover link navigates to /discover              |
+| login button is accessible in mobile dropdown          | Login button present in dropdown                  |
+| no horizontal overflow on mobile                       | Document width <= viewport width                  |
+| landing shows Anmelden in the row and the account CTA  | Navbar Anmelden visible, CTA opens signup         |
+| landing 5b: copy A, browse link, no overflow           | Hero copy, browse → /discover, no overflow on `/` |
+| no critical JavaScript errors on mobile                | No JS errors during hamburger interaction         |
 
 #### Desktop Viewport - 1280x720 (2 tests)
 

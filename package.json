@@ -55,8 +55,6 @@
     "daisyui": "^5.5.19",
     "dompurify": "^3.4.1",
     "dotenv": "^17.4.2",
-    "embla-carousel": "^8.6.0",
-    "embla-carousel-svelte": "^8.6.0",
     "emojibase-data": "17.0.0",
     "eslint": "^9.18.0",
     "eslint-config-prettier": "^10.0.1",

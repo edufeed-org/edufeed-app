@@ -1,102 +1,238 @@
 <script>
+  // Landing hero, design 5b (Claude Design "Landing Round 3"): what Edufeed is
+  // for in copy A, on the theme's hero colour, with a collage of live cards on
+  // the right — real content instead of a stock photo. On phones the cards
+  // become a swipeable row. Every card is optional; with none, the text takes
+  // the full width.
   import { resolve } from '$app/paths';
   import * as m from '$lib/paraglide/messages';
   import { modalStore } from '$lib/stores/modal.svelte.js';
   import { runtimeConfig } from '$lib/stores/config.svelte.js';
   import ImageWithFallback from '$lib/components/shared/ImageWithFallback.svelte';
-  import { isDiscoverTypeEnabled } from '$lib/helpers/discover-content-types.js';
+  import { helpLinkAttrs } from '$lib/helpers/help-link.js';
+  import { encodeEventToNaddr, hexToNpub } from '$lib/helpers/nostrUtils.js';
+  import { getUpcomingDateParts } from '$lib/helpers/dates.js';
+  import { getTagValue } from 'applesauce-core/helpers';
+  import { LocationIcon } from '$lib/components/icons';
 
-  // Feature badges deep-link into /discover tabs; hide the ones a deployment
-  // disabled via DISCOVER_CONTENT_TYPES so they never lead to a fallback tab.
-  const discoverTypes = $derived(runtimeConfig.discover?.contentTypes || []);
-  const showCommunities = $derived(isDiscoverTypeEnabled('communities', discoverTypes));
-  const showBoards = $derived(isDiscoverTypeEnabled('boards', discoverTypes));
+  /** @typedef {{ pubkey: string, name: string, about?: string, picture?: string }} LandingCommunity */
+  /** @type {{ heroMaterial?: any, nextEvent?: any, article?: any, community?: LandingCommunity | null, pending?: boolean }} */
+  let {
+    heroMaterial = null,
+    nextEvent = null,
+    article = null,
+    community = null,
+    // Content still loading: keep the card column (with placeholders) so the
+    // headline does not jump from full to half width when the first card lands.
+    pending = false
+  } = $props();
 
-  // Note: These functions are kept for future CTA buttons
-  function _handleGetStarted() {
-    modalStore.openModal('signup');
-  }
+  const helpLink = $derived(helpLinkAttrs(runtimeConfig.help?.url));
+  const hasCards = $derived(Boolean(heroMaterial || nextEvent || article || community));
+  const eventDate = $derived(
+    nextEvent ? getUpcomingDateParts(nextEvent.start, nextEvent.kind) : null
+  );
 
-  function _scrollToCommunities() {
-    const carousel = document.querySelector('#community-showcase');
-    if (carousel) {
-      carousel.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    }
-  }
+  /** @param {any} event */
+  const detailHref = (event) => resolve(`/${encodeEventToNaddr(event)}`);
+
+  // Desktop stack: cards take the slots in order, so two cards never leave a
+  // hole where a missing one would have been, and the box fits the count.
+  const SLOTS = [
+    'lg:top-2 lg:left-0 lg:-rotate-3',
+    'lg:top-8 lg:right-0 lg:rotate-2',
+    'lg:top-[12.5rem] lg:right-2 lg:-rotate-1',
+    'lg:top-[22rem] lg:left-8 lg:rotate-2'
+  ];
+  const HEIGHTS = ['', 'lg:h-[16rem]', 'lg:h-[18rem]', 'lg:h-[24rem]', 'lg:h-[30rem]'];
+  const present = $derived(
+    [
+      heroMaterial && 'material',
+      nextEvent && 'event',
+      community && 'community',
+      article && 'article'
+    ].filter(Boolean)
+  );
+  /** @param {string} type */
+  const slot = (type) => SLOTS[present.indexOf(type)] ?? '';
+
+  // Desktop: loose, slightly rotated stack. Phones: a plain swipe row —
+  // deliberately without scroll-snap: cards arrive one by one, and snap keeps
+  // the first-loaded card in view, scrolling the row away from its start.
+  const card =
+    'block shrink-0 basis-[84%] overflow-hidden rounded-2xl bg-base-100 text-base-content shadow-xl transition-transform hover:-translate-y-0.5 lg:absolute lg:basis-auto';
 </script>
 
 <section
-  class="relative shrink-0 overflow-hidden py-20 text-primary-content {runtimeConfig.ui
-    ?.landingHeroImage
-    ? ''
-    : 'bg-gradient-to-br from-primary to-secondary'}"
+  data-testid="landing-hero"
+  class="shrink-0 text-primary-content"
+  style="background: var(--c-hero-2)"
 >
-  {#if runtimeConfig.ui?.landingHeroImage}
-    <ImageWithFallback
-      src={runtimeConfig.ui.landingHeroImage}
-      alt=""
-      size="hero"
-      loading="eager"
-      fallbackType="banner"
-      class="absolute inset-0 h-full w-full object-cover"
-    />
-  {/if}
-  <div class="relative z-10 container mx-auto px-4">
-    <!-- Frosted glass card -->
-    <div class="mx-auto max-w-4xl rounded-2xl bg-black/30 p-8 text-center backdrop-blur-md md:p-12">
-      <h1 class="mb-6 text-4xl leading-tight font-bold text-white md:text-5xl lg:text-6xl">
+  <div
+    data-testid="landing-hero-grid"
+    class="container mx-auto grid gap-10 px-4 py-12 lg:items-center lg:py-16 {hasCards || pending
+      ? 'lg:grid-cols-2'
+      : ''}"
+  >
+    <div class="flex max-w-2xl flex-col gap-5">
+      <span
+        data-testid="landing-hero-eyebrow"
+        class="text-sm font-semibold tracking-wide uppercase"
+        style="color: var(--c-hero-accent)"
+      >
+        {m.landing_hero_eyebrow()}
+      </span>
+      <h1 class="text-3xl leading-tight font-bold text-balance md:text-5xl">
         {m.landing_hero_title()}
       </h1>
-      <p class="mb-4 text-lg text-white/90 md:text-xl lg:text-2xl">
+      <p class="text-base text-pretty text-primary-content/85 md:text-lg">
         {m.landing_hero_subtitle()}
       </p>
-
-      <!-- Onboarding link disabled for now (may be reactivated later) -->
-
-      <!-- Feature badges -->
-      <div class="mb-10 flex flex-wrap justify-center gap-4">
-        {#if showCommunities}
-          <a
-            href={resolve('/discover?type=communities')}
-            class="flex items-center gap-2 rounded-full bg-white/20 px-4 py-2 text-white backdrop-blur-sm transition-opacity hover:opacity-80"
-          >
-            <span class="text-2xl">🏘️</span>
-            <span class="font-medium">{m.landing_features_communities()}</span>
-          </a>
-        {/if}
-        <a
-          href={resolve('/calendar')}
-          class="flex items-center gap-2 rounded-full bg-white/20 px-4 py-2 text-white backdrop-blur-sm transition-opacity hover:opacity-80"
+      <div class="flex flex-col gap-3 sm:flex-row">
+        <button
+          type="button"
+          data-testid="landing-cta-signup"
+          class="btn border-none btn-lg hover:brightness-95"
+          style="background: var(--c-hero-accent); color: var(--c-hero-accent-ink)"
+          onclick={() => modalStore.openModal('signup')}
         >
-          <span class="text-2xl">📅</span>
-          <span class="font-medium">{m.landing_features_calendar()}</span>
-        </a>
-        {#if showBoards}
-          <a
-            href={resolve('/discover?type=boards')}
-            class="flex items-center gap-2 rounded-full bg-white/20 px-4 py-2 text-white backdrop-blur-sm transition-opacity hover:opacity-80"
-          >
-            <span class="text-2xl">📋</span>
-            <span class="font-medium">{m.landing_features_kanban()}</span>
-          </a>
-        {/if}
-      </div>
-
-      <!-- Call to action buttons -->
-      <div class="flex flex-col items-center justify-center gap-4 sm:flex-row">
+          {m.landing_cta_create_account()}
+        </button>
         <a
-          href={resolve('/calendar')}
-          class="btn border-none bg-white text-primary shadow-lg btn-lg hover:bg-white/90"
-        >
-          📅 {m.landing_hero_browse_calendar()}
-        </a>
-        <a
+          data-testid="landing-cta-browse"
           href={resolve('/discover')}
-          class="btn border-2 border-white text-white btn-outline btn-lg hover:bg-white hover:text-primary"
+          class="btn border-primary-content text-primary-content btn-outline btn-lg hover:bg-primary-content hover:text-primary"
         >
-          🔭 {m.landing_hero_discover()}
+          {m.landing_cta_browse()}
         </a>
       </div>
     </div>
+
+    {#if !hasCards && pending}
+      <div
+        data-testid="landing-collage-pending"
+        aria-hidden="true"
+        class="-mr-4 flex gap-3 overflow-hidden pr-4 lg:mr-0 lg:grid lg:h-[30rem] lg:grid-cols-2 lg:content-center lg:gap-4 lg:p-0"
+      >
+        {#each [0, 1, 2] as i (i)}
+          <div
+            class="h-28 shrink-0 basis-[84%] skeleton rounded-2xl opacity-30 lg:basis-auto"
+          ></div>
+        {/each}
+      </div>
+    {:else if hasCards}
+      <div
+        data-testid="landing-collage"
+        class="-mr-4 flex gap-3 overflow-x-auto pr-4 pb-2 lg:relative lg:mr-0 lg:overflow-visible lg:p-0 {HEIGHTS[
+          present.length
+        ]}"
+      >
+        {#if heroMaterial}
+          <a
+            data-testid="landing-card-material"
+            href={detailHref(heroMaterial.rawEvent)}
+            class="{card} {slot('material')} lg:w-[17rem]"
+          >
+            {#if heroMaterial.image}
+              <span class="block h-32 bg-base-200">
+                <ImageWithFallback
+                  src={heroMaterial.image}
+                  alt=""
+                  loading="eager"
+                  fallbackType="generic"
+                  class="h-full w-full object-cover"
+                />
+              </span>
+            {/if}
+            <span class="flex flex-col gap-1.5 p-4">
+              <span class="flex flex-wrap gap-1.5">
+                <span class="badge badge-sm badge-primary">{m.landing_card_material()}</span>
+                {#if heroMaterial.license?.label}
+                  <span class="badge badge-ghost badge-sm">{heroMaterial.license.label}</span>
+                {/if}
+              </span>
+              <span class="leading-snug font-semibold">{heroMaterial.name}</span>
+            </span>
+          </a>
+        {/if}
+
+        {#if nextEvent && eventDate}
+          <a
+            data-testid="landing-card-event"
+            href={detailHref(nextEvent.originalEvent)}
+            class="{card} {slot('event')} lg:w-[18rem]"
+          >
+            <span class="flex items-center gap-3 p-4">
+              <span
+                class="grid w-14 shrink-0 place-items-center rounded-xl bg-secondary/15 py-1.5 text-secondary"
+              >
+                <span class="text-xl leading-none font-bold">{eventDate.day}</span>
+                <span class="text-xs font-semibold uppercase">{eventDate.month}</span>
+              </span>
+              <span class="flex min-w-0 flex-col gap-1">
+                <span class="leading-snug font-semibold">{nextEvent.title}</span>
+                <span class="flex items-center gap-1 text-sm text-base-content/70">
+                  {#if eventDate.time}{eventDate.time}{/if}
+                  {#if nextEvent.location}
+                    <LocationIcon class_="h-4 w-4 shrink-0" />
+                    <span class="truncate">{nextEvent.location}</span>
+                  {/if}
+                </span>
+              </span>
+            </span>
+          </a>
+        {/if}
+
+        {#if community}
+          <a
+            data-testid="landing-card-community"
+            href={resolve(`/c/${hexToNpub(community.pubkey) || community.pubkey}`)}
+            class="{card} {slot('community')} lg:w-[19rem]"
+          >
+            <span class="flex items-center gap-3 p-4">
+              <span class="size-12 shrink-0 overflow-hidden rounded-full bg-base-300">
+                <ImageWithFallback
+                  src={community.picture || ''}
+                  alt=""
+                  fallbackType="community"
+                  class="h-full w-full object-cover"
+                />
+              </span>
+              <span class="flex min-w-0 flex-col">
+                <span class="font-semibold">{community.name}</span>
+                {#if community.about}
+                  <span class="line-clamp-2 text-sm text-base-content/70">{community.about}</span>
+                {/if}
+              </span>
+            </span>
+          </a>
+        {/if}
+
+        {#if article}
+          <a
+            data-testid="landing-card-article"
+            href={detailHref(article)}
+            class="{card} {slot('article')} lg:w-[16rem]"
+          >
+            <span class="flex items-center gap-2.5 p-4">
+              <span class="badge badge-sm badge-accent">{m.landing_card_article()}</span>
+              <span class="min-w-0 leading-snug font-semibold">{getTagValue(article, 'title')}</span
+              >
+            </span>
+          </a>
+        {/if}
+      </div>
+    {/if}
+  </div>
+
+  <div class="container mx-auto px-4 pb-6">
+    <p data-testid="landing-network-line" class="text-sm text-primary-content/80">
+      {m.landing_network_line({ appName: runtimeConfig.appName })}
+      {#if helpLink}
+        <a data-testid="landing-network-link" {...helpLink} class="link">
+          {m.landing_network_link()}
+        </a>
+      {/if}
+    </p>
   </div>
 </section>

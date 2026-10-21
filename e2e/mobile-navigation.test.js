@@ -73,8 +73,39 @@ test.describe('Mobile navigation', () => {
       await expect(dropdown.locator('button').filter({ hasText: /Login|Anmelden/ })).toBeVisible();
     });
 
+    test('landing shows Anmelden in the row and the account CTA opens signup', async ({ page }) => {
+      await page.goto('/');
+      await expect(page.getByTestId('navbar-mobile-login')).toBeVisible({ timeout: 10_000 });
+      const cta = page.getByTestId('landing-cta-signup');
+      await expect(cta).toBeVisible();
+      await cta.click();
+      await expect(page.locator('#global-signup-modal')).toBeVisible({ timeout: 5000 });
+    });
+
+    test('landing 5b: copy A, browse link, no horizontal overflow', async ({ page }) => {
+      await page.goto('/');
+      const hero = page.getByTestId('landing-hero');
+      await expect(hero).toBeVisible({ timeout: 10_000 });
+      await expect(page.getByTestId('landing-cta-signup')).toHaveText(
+        /Kostenlos mitmachen|Join for free/
+      );
+      await expect(page.getByTestId('landing-cta-browse')).toHaveAttribute('href', '/discover');
+      // Live cards and the avatar wall arrive late; give them time to lay out.
+      await page.waitForTimeout(3000);
+      const docWidth = await page.evaluate(() => document.documentElement.scrollWidth);
+      const viewportWidth = await page.evaluate(() => window.innerWidth);
+      expect(docWidth).toBeLessThanOrEqual(viewportWidth);
+      // The page scrolls inside <main>, which also clips horizontally — an
+      // overflow there never widens the document, so measure it directly.
+      const main = await page.evaluate(() => {
+        const el = document.querySelector('main');
+        return el ? { scroll: el.scrollWidth, client: el.clientWidth } : null;
+      });
+      expect(main).not.toBeNull();
+      expect(main?.scroll).toBeLessThanOrEqual(/** @type {number} */ (main?.client));
+    });
+
     test('no horizontal overflow on discover page', async ({ page }) => {
-      // Use /discover (not homepage which has pre-existing hero section overflow)
       await page.goto('/discover');
       await page.waitForTimeout(3000);
 

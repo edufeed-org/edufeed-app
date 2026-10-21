@@ -185,10 +185,19 @@
     <LanguageSwitcher />
   </div>
 
-  <!-- Mobile: Termi launcher (logged in) + hamburger menu (visible below lg) -->
+  <!-- Mobile: Termi launcher (logged in) or visible Anmelden (logged out) + hamburger menu (below lg) -->
   <div class="flex items-center gap-1 lg:hidden">
     {#if activeAccount}
       <TermiLauncherButton />
+    {:else}
+      <button
+        type="button"
+        data-testid="navbar-mobile-login"
+        class="btn btn-outline btn-sm"
+        onclick={openLoginModal}
+      >
+        {m.common_login()}
+      </button>
     {/if}
     <div class="dropdown dropdown-end">
       <div
