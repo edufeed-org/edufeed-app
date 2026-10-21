@@ -454,7 +454,7 @@
   /* Launcher slot: one step above the create FAB (which sits at
      bottom calc(4rem + safe-area + 0.75rem) on mobile, 1.5rem on lg). */
   .termi-slot {
-    bottom: calc(4rem + env(safe-area-inset-bottom) + 0.75rem + 4.25rem);
+    bottom: calc(3.5rem + env(safe-area-inset-bottom) + 0.75rem);
   }
   @media (min-width: 1024px) {
     .termi-slot {

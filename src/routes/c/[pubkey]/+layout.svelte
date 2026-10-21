@@ -3,7 +3,7 @@
   import { resolve } from '$app/paths';
   import { page } from '$app/stores';
   import { getContext, setContext } from 'svelte';
-  import BottomTabBar from '$lib/components/community/layout/BottomTabBar.svelte';
+  import CommunitySectionNav from '$lib/components/community/layout/CommunitySectionNav.svelte';
   import LegacyContentTypesBanner from '$lib/components/community/LegacyContentTypesBanner.svelte';
   import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
   import { ProfileModel } from 'applesauce-core/models';
@@ -375,12 +375,18 @@
 
   // Update parent layout's mobile header with community info
   const setMobileHeader =
-    /** @type {((info: { title: string, avatarUrl?: string | null }) => void) | undefined} */ (
+    /** @type {((info: { title: string, avatarUrl?: string | null, showSettings?: boolean, settingsHref?: string }) => void) | undefined} */ (
       getContext('setMobileHeader')
     );
   $effect(() => {
     if (setMobileHeader) {
-      setMobileHeader({ title: displayName, avatarUrl });
+      setMobileHeader({
+        title: displayName,
+        avatarUrl,
+        // Owners and root admins get the gear in the phone header.
+        showSettings: isCommunityOwner(data.pubkey) || zoneRootAdmin,
+        settingsHref: resolve(`/c/${data.npub}`) + '?view=settings'
+      });
     }
   });
 
@@ -408,19 +414,21 @@
   <title>{documentTitle}</title>
 </svelte:head>
 
-<div class="px-4 pt-3 empty:hidden">
-  <LegacyContentTypesBanner communityEvent={effectiveCommunityEvent} />
-</div>
-
-{@render children()}
-
-<!-- Mobile: Bottom Tab Bar (fixed positioned) -->
-<div class="lg:hidden">
-  <BottomTabBar
-    bind:selectedContentType
+<!-- Phone: section row + Bereiche sheet, above the content (chat views keep
+     the row while their composer owns the bottom edge). `contents` so the
+     sticky row's containing block is the page column, not this wrapper. -->
+<div class="contents lg:hidden">
+  <CommunitySectionNav
+    {selectedContentType}
     onContentTypeSelect={handleContentTypeSelect}
     communityEvent={effectiveCommunityEvent}
     {restrictedTabs}
     {accessibleTabs}
   />
 </div>
+
+<div class="px-4 pt-3 empty:hidden">
+  <LegacyContentTypesBanner communityEvent={effectiveCommunityEvent} />
+</div>
+
+{@render children()}

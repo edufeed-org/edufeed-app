@@ -67,7 +67,7 @@
 <style>
   /* Keep in sync with .termi-slot in TermiChatWindow.svelte. */
   .termi-slot {
-    bottom: calc(4rem + env(safe-area-inset-bottom) + 0.75rem + 4.25rem);
+    bottom: calc(3.5rem + env(safe-area-inset-bottom) + 0.75rem);
   }
   @media (min-width: 1024px) {
     .termi-slot {
