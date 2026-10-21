@@ -73,7 +73,38 @@ export function loadReadTimestamps(pubkey) {
  * @param {Record<string, number>} timestamps
  */
 export function saveReadTimestamps(pubkey, timestamps) {
-  localStorage.setItem(`${DM_READ_TIMESTAMPS_KEY}:${pubkey}`, JSON.stringify(timestamps));
+  try {
+    localStorage.setItem(`${DM_READ_TIMESTAMPS_KEY}:${pubkey}`, JSON.stringify(timestamps));
+  } catch (err) {
+    // Quota exceeded or storage disabled: the in-memory state still holds for
+    // this session; don't let a storage failure throw out of a mark-read effect.
+    console.warn('[dm] could not persist read timestamps', err);
+  }
+}
+
+/**
+ * Merge read markers into a map so that each marker only ever moves forward.
+ *
+ * Every mark-read surface passes "the newest message it currently shows".
+ * Right after a reload that is a partial set — gift wraps still restoring from
+ * the plaintext cache, the relay not yet delivering — so a plain overwrite
+ * replaced a marker with an OLDER timestamp, and the true newest message,
+ * once it arrived, counted as unread again although it had been read on an
+ * earlier visit (issue 7872bcbd). Taking the maximum makes the marker
+ * idempotent against partial views.
+ * @param {Record<string, number>} readTimestamps current markers (not mutated)
+ * @param {Record<string, number | undefined>} updates conversation id → newest shown timestamp
+ * @returns {Record<string, number>} new map
+ */
+export function advanceReadTimestamps(readTimestamps, updates) {
+  /** @type {Record<string, number>} */
+  const next = { ...readTimestamps };
+  for (const [conversationId, timestamp] of Object.entries(updates)) {
+    if (typeof timestamp !== 'number' || !Number.isFinite(timestamp)) continue;
+    const current = next[conversationId];
+    if (current === undefined || timestamp > current) next[conversationId] = timestamp;
+  }
+  return next;
 }
 
 /**
