@@ -30,9 +30,12 @@ export async function deleteCalendarEvent(event, activeUser) {
  * Automatically determines relay category from event kind
  * @param {any} event - The Nostr event to delete
  * @param {any} activeUser - The active user with signer
+ * @param {{additionalRelays?: string[]}} [opts] - Extra relays the request must
+ *   reach (e.g. a community's relays for a kind with no app category and no
+ *   seen-relay provenance yet, such as a freshly published moderation label)
  * @returns {Promise<{success: boolean, error?: string}>}
  */
-export async function deleteEvent(event, activeUser) {
+export async function deleteEvent(event, activeUser, opts = {}) {
   if (!activeUser || !event) {
     return { success: false, error: 'Missing required parameters' };
   }
@@ -79,7 +82,11 @@ export async function deleteEvent(event, activeUser) {
     // community relay an event was h-tagged to — which the author's NIP-65 write
     // relays alone would miss.
     const seenRelays = getSeenRelays(eventToDelete);
-    const additionalRelays = [...categoryRelays, ...(seenRelays ? Array.from(seenRelays) : [])];
+    const additionalRelays = [
+      ...categoryRelays,
+      ...(seenRelays ? Array.from(seenRelays) : []),
+      ...(opts.additionalRelays ?? [])
+    ];
 
     // Publish in background
     publishEventOptimistic(signedDelete, [], {

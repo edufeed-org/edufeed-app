@@ -83,6 +83,26 @@ describe('CalendarEventsList', () => {
     }
   });
 
+  it('forwards communityNpub so community-calendar cards link to the community-scoped event page', () => {
+    // The community-scoped route is where the moderation context lives (the
+    // "remove from community" action); the global /calendar/event page has
+    // none. Without this prop the community calendar sent moderators there.
+    cardPropsSpy.mockClear();
+    const pastEvent = { ...futureEvent, id: 'd'.repeat(64), start: 1000, end: 2000 };
+    render(CalendarEventsList, {
+      props: {
+        events: [futureEvent, pastEvent],
+        viewMode: 'month',
+        currentDate: new Date(),
+        communityNpub: 'npub1community'
+      }
+    });
+    expect(cardPropsSpy).toHaveBeenCalledTimes(2);
+    for (const [props] of cardPropsSpy.mock.calls) {
+      expect(props.communityNpub).toBe('npub1community');
+    }
+  });
+
   it('keeps an ongoing open-ended event (no end tag) in Upcoming until its day ends', () => {
     // Started 2h ago, no end tag: NIP-52 open end = ends the same day, so it
     // is still running and must not be filed under "Past".

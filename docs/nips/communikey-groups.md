@@ -222,6 +222,77 @@ Enforcement is layered:
 An event h-tagged to multiple communities is evaluated per community; it may
 render in one and be filtered in another.
 
+### Removing content
+
+Content enters a community by carrying its pubkey in an `h` tag — directly on
+the event, or on a NIP-18 repost (kind `6`/`16`) of it. Nothing in Nostr lets
+anyone but the author delete such an event: NIP-09 is author-only (clients
+MUST check the deletion's pubkey against the target's), and NIP-29's
+`delete-event` (kind `9005`) covers only events the group relay itself holds
+under the group's `h`, which community content never is. What the people
+running a community can do is publish their own signed opinion that an item
+does not belong there, and have readers honour that opinion when it comes from
+someone with authority. That is NIP-32's "distributed moderation" use case, so
+a removal is a NIP-32 label (kind `1985`):
+
+```json
+{
+  "kind": 1985,
+  "tags": [
+    ["L", "communikey.moderation"],
+    ["l", "remove", "communikey.moderation"],
+    ["h", "<community-pubkey>"],
+    ["k", "<kind-of-the-removed-event>"],
+    ["e", "<event-id>", "<relay-hint>"],
+    ["a", "<kind>:<pubkey>:<d-tag>", "<relay-hint>"]
+  ],
+  "content": "<optional reason>"
+}
+```
+
+- `h` scopes the removal to ONE community: the same event may stay in every
+  other community that shows it.
+- `e` names the removed event. `a` is added for addressable kinds so that an
+  edit (new id, same `d`) does not resurrect the item. A removal MAY name
+  several targets; clients SHOULD write one label per item so that undoing it
+  is a single deletion.
+- `k` mirrors the removed event's kind, for filtering.
+- The removed event is NOT touched: it stays on the relays, on its author's
+  profile, in discovery and in other communities. A removal targets the
+  content, not the share that brought it in — the item leaves the community
+  however it arrived (direct `h` tag, any repost, legacy `30222`) and stays out
+  if someone shares it again.
+
+**Validity.** A label counts only if, _at read time_, its author is the
+community pubkey itself, or — on a moderated community — holds a moderation
+role (`admin`, `king` or `moderator`) on the root group's current
+`kind:39001`. This is the same rule as the `kind:30223` override, for the
+same reason: a publisher-only or custom-role entry must not be able to hide
+content, and judging against the current roster makes removals retroactive —
+demoting a moderator revokes everything they removed, with nothing to delete.
+Open communities therefore have one authority (the key holder); closed
+communities too, until a public roster rule for Concord areas exists.
+
+**Reading.** Clients query
+`{"kinds": [1985], "#h": ["<community-pubkey>"], "#L": ["communikey.moderation"]}`
+on the community's relays plus their general lookup relays (a label lives on
+its signer's outbox as well), keep the valid ones, and drop every item whose
+id or address a valid label names. Like the section override, a removal is an
+ordinary public event: it MUST NOT be published only to an auth-gated group
+relay, because the logged-out readers the community page serves must see it.
+
+**Undo.** Restoring an item is the label author's own NIP-09 deletion of the
+label — standard behaviour every relay and client already implements. It
+follows that only whoever removed an item can restore it (a moderator their
+own removals, the key holder the community-signed ones); another moderator
+cannot delete a colleague's label. Clients SHOULD list the current removals
+with their authors so moderators see what their colleagues removed.
+
+**Publishing.** A removal is published to the community's relays (where its
+readers look) and the signer's write relays. When the acting user both holds a
+moderation role and the community key, clients SHOULD sign with the user's own
+key: the label then records who acted, and demotion revokes it.
+
 ### Follower ≠ member
 
 Following a community (client-side follow lists) is open to anyone for every

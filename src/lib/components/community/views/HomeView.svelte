@@ -7,6 +7,7 @@
   import { getFeedCardData } from '$lib/helpers/feedCardData.js';
   import { filterEventsByAccess, getVerifiedMembers } from '$lib/helpers/contentTypes.js';
   import { getContext } from 'svelte';
+  import { filterRemoved } from '$lib/groups/content-removal.js';
   import AccessGateBanner from '$lib/components/forms/AccessGateBanner.svelte';
   import { parseCommunityContentTypes, sectionIsGated } from '$lib/helpers/communityRelays.js';
   import { getDisplayName, getProfilePicture } from 'applesauce-core/helpers';
@@ -180,13 +181,24 @@
     };
   });
 
-  let displayedItems = $derived(filterEventsByAccess(feedItems, communikeyEvent, profileAccess));
+  // Items a moderator removed from this community (layout context).
+  /** @type {(() => {removed: import('$lib/groups/content-removal.js').RemovedTargets}) | undefined} */
+  const getCommunityModeration = getContext('communityModeration');
+  let displayedItems = $derived(
+    filterRemoved(
+      filterEventsByAccess(feedItems, communikeyEvent, profileAccess),
+      getCommunityModeration?.()?.removed
+    )
+  );
 
   // Upcoming events come from the FULL access-filtered set — deriving them
   // from the top-15 feed silently dropped events that lost the recency race.
   let upcomingEvents = $derived.by(() => {
     const now = Math.floor(Date.now() / 1000);
-    const accessible = filterEventsByAccess(allFeedItems, communikeyEvent, profileAccess);
+    const accessible = filterRemoved(
+      filterEventsByAccess(allFeedItems, communikeyEvent, profileAccess),
+      getCommunityModeration?.()?.removed
+    );
     return selectUpcomingEvents(accessible, getEventStartTimestamp, now, 5);
   });
 </script>

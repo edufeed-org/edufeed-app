@@ -26,7 +26,11 @@
     viewMode = /** @type {CalendarViewMode} */ ('month'),
     currentDate = new Date(),
     loading = false,
-    error = /** @type {string | null} */ (null)
+    error = /** @type {string | null} */ (null),
+    // Set by the community calendar: cards then link to
+    // /c/<npub>/event/<naddr>, the page that carries the community context
+    // (moderation actions), instead of the global /calendar/event route.
+    communityNpub = /** @type {string | undefined} */ (undefined)
   } = $props();
 
   // Display limits for pagination
@@ -135,6 +139,7 @@
             {event}
             compact={false}
             authorProfile={authorProfiles.get(event.originalEvent?.pubkey)}
+            {communityNpub}
           />
         {/each}
       </div>
@@ -189,6 +194,7 @@
             {event}
             compact={false}
             authorProfile={authorProfiles.get(event.originalEvent?.pubkey)}
+            {communityNpub}
           />
         {/each}
       </div>

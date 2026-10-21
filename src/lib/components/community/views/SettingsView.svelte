@@ -25,6 +25,7 @@
   import { buildCommunityUrl } from '$lib/groups/invite-link.js';
   import CommunityBasicsForm from '$lib/components/community/settings/CommunityBasicsForm.svelte';
   import PublisherWindowPane from '$lib/components/community/settings/PublisherWindowPane.svelte';
+  import RemovedContentPane from '$lib/components/community/settings/RemovedContentPane.svelte';
   import { windowSectionKeys } from '$lib/concord/publisher-window.js';
   // Community-type flips (open <-> moderated; closed never transitions) — see
   // docs/nips/communikey-groups.md and src/lib/groups/community-flips.js.
@@ -333,6 +334,12 @@
   /** @type {() => {source: string, author: string | null}} */
   const sectionOverride =
     getContext('sectionOverride') ?? (() => ({ source: 'community', author: null }));
+  // Removed-content moderation handle (layout context): who may moderate,
+  // the removals that count, and the restore action. Null outside the
+  // community layout (tests), which hides the pane.
+  /** @type {(() => any) | undefined} */
+  const getCommunityModeration = getContext('communityModeration');
+  let communityModeration = $derived(getCommunityModeration?.() ?? null);
 
   // Single description source: the community's kind-0 `about` (see
   // CommunityProfileHero) — the 10222 content is never written by this app.
@@ -632,6 +639,20 @@
               overrideAuthor={sectionOverride().author}
             />
           {/if}
+        {/if}
+
+        <!-- Moderation: content removed from the community (spec:
+             docs/nips/communikey-groups.md "Removing content"). Owner and
+             moderation-role holders; each restores what they removed. -->
+        {#if communityModeration?.canModerate}
+          <h2 class="mt-8 mb-3 text-xs font-bold tracking-wider text-base-content/50 uppercase">
+            {m.community_settings_section_moderation()}
+          </h2>
+          <RemovedContentPane
+            removals={communityModeration.removals}
+            {communikeyEvent}
+            onRestore={communityModeration.restore}
+          />
         {/if}
 
         <!-- Publisher window (Schaufenster) — owner-only, only when a
