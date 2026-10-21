@@ -16,6 +16,7 @@
   import { lazyComponent } from '$lib/helpers/lazy-component.svelte.js';
   import LanguageSwitcher from './LanguageSwitcher.svelte';
   import ConnectionStatus from './shared/ConnectionStatus.svelte';
+  import TermiLauncherButton from './shared/TermiLauncherButton.svelte';
   import { runtimeConfig } from '$lib/stores/config.svelte.js';
   import { prefetchCalendarData } from '$lib/loaders/calendar.js';
   import { getTotalUnreadCount } from '$lib/services/inbox-service.svelte.js';
@@ -184,8 +185,11 @@
     <LanguageSwitcher />
   </div>
 
-  <!-- Mobile Hamburger Menu (visible below lg) -->
-  <div class="lg:hidden">
+  <!-- Mobile: Termi launcher (logged in) + hamburger menu (visible below lg) -->
+  <div class="flex items-center gap-1 lg:hidden">
+    {#if activeAccount}
+      <TermiLauncherButton />
+    {/if}
     <div class="dropdown dropdown-end">
       <div
         tabindex="0"

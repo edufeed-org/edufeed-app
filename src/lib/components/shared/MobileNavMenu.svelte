@@ -8,6 +8,8 @@
   import { getTotalUnreadCount } from '$lib/services/inbox-service.svelte.js';
   import { getUnreadDmCount } from '$lib/services/dm-service.svelte.js';
   import { runtimeConfig } from '$lib/stores/config.svelte.js';
+  import { appSettings } from '$lib/stores/app-settings.svelte.js';
+  import { parseCordnGroupsConfig } from '$lib/cordn';
   import { helpLinkAttrs } from '$lib/helpers/help-link.js';
   import AccountMenuSection from './AccountMenuSection.svelte';
   import ConnectionStatus from './ConnectionStatus.svelte';
@@ -17,7 +19,9 @@
     CalendarIcon,
     HomeIcon,
     BellIcon,
-    MessageSquareIcon
+    MessageSquareIcon,
+    FilesIcon,
+    LockIcon
   } from '$lib/components/icons';
 
   /** @type {{ onClose?: () => void }} */
@@ -29,6 +33,11 @@
   });
 
   let currentLocale = $derived(getLocale());
+
+  // «Gruppen» is deployment-gated (CORDN_GROUPS_ENABLED) AND per-user opt-in.
+  const groupsEnabled = $derived(
+    parseCordnGroupsConfig(runtimeConfig.cordnGroups).enabled && appSettings.cordnGroupsEnabled
+  );
 
   let activeAccount = $state(/** @type {any} */ (null));
 
@@ -87,7 +96,7 @@
     </a>
   </li>
   <li>
-    <a href={resolve('/inbox')} onclick={onClose}>
+    <a href={resolve('/c/inbox')} onclick={onClose} data-testid="menu-inbox">
       <BellIcon class_="w-5 h-5" />
       {m.inbox_bell_label()}
       {#if getTotalUnreadCount() > 0}
@@ -104,6 +113,20 @@
       {/if}
     </a>
   </li>
+  <li>
+    <a href={resolve('/c/') + '?view=my-stuff'} onclick={onClose} data-testid="menu-my-stuff">
+      <FilesIcon class_="w-5 h-5" />
+      {m.dashboard_nav_my_stuff()}
+    </a>
+  </li>
+  {#if groupsEnabled}
+    <li>
+      <a href={resolve('/c/groups')} onclick={onClose} data-testid="menu-groups">
+        <LockIcon class_="w-5 h-5" />
+        {m.dashboard_nav_groups()}
+      </a>
+    </li>
+  {/if}
 
   <li class="menu-disabled"><hr class="my-1 border-base-300" /></li>
 

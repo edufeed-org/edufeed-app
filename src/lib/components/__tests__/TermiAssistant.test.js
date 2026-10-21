@@ -95,6 +95,9 @@ vi.mock('$app/navigation', () => ({ goto: mockGoto }));
 const mockNip44Decrypt = vi.hoisted(() => vi.fn());
 // pubkey matches EXT_PUBKEY — the account most nip05 scenarios activate.
 const mockManager = vi.hoisted(() => ({
+  // nip05-ready-alert follows account switches through active$; the
+  // Termi tests drive the user through __activeUserBox instead.
+  active$: { subscribe: () => ({ unsubscribe() {} }) },
   active: {
     pubkey: 'b'.repeat(64),
     signer: {
@@ -589,5 +592,21 @@ describe('TermiAssistant launcher + hints', () => {
     await fireEvent.click(container.querySelector('[data-testid="termi-hint-backup-dismiss"]'));
     expect(container.querySelector('[data-testid="termi-hint-backup"]')).toBeNull();
     expect(localStorage.getItem(`backup-banner-dismissed:${NSEC_PUBKEY}`)).toBeNull();
+  });
+  it('marks the launcher available while mounted and opens from the store', async () => {
+    const { termiLauncher, openTermi: openFromStore } = await import(
+      '$lib/stores/termi-launcher.svelte.js'
+    );
+    mockActiveUser.value = signedUpNsecUser();
+    const { container, unmount } = render(TermiAssistant);
+    expect(termiLauncher.available).toBe(true);
+    expect(termiLauncher.openCount).toBe(1);
+    expect(container.querySelector('[data-testid="termi-window"]')).toBeNull();
+    openFromStore();
+    flushSync();
+    expect(container.querySelector('[data-testid="termi-window"]')).not.toBeNull();
+    unmount();
+    expect(termiLauncher.available).toBe(false);
+    expect(termiLauncher.open).toBe(false);
   });
 });
