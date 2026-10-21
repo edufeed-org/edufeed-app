@@ -7,11 +7,17 @@
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/svelte';
-import { of } from 'rxjs';
+import { of, concat, NEVER } from 'rxjs';
 
 const requestMock = vi.fn();
+/** @type {Map<string, any>} */
+const storeEvents = new Map();
 vi.mock('$lib/stores/nostr-infrastructure.svelte', () => ({
-  pool: { request: (/** @type {any[]} */ ...args) => requestMock(...args) }
+  pool: { request: (/** @type {any[]} */ ...args) => requestMock(...args) },
+  eventStore: {
+    getEvent: (/** @type {string} */ id) => storeEvents.get(id),
+    add: (/** @type {any} */ event) => event
+  }
 }));
 vi.mock('$lib/helpers/relay-helper.js', () => ({
   getEducationalRelays: () => ['wss://edu.example'],
@@ -54,6 +60,7 @@ const CURATED_ID = 'c'.repeat(64);
 const OTHER_ID = 'd'.repeat(64);
 
 beforeEach(() => {
+  storeEvents.clear();
   requestMock.mockReset();
   requestMock.mockImplementation((_relays, filters) => {
     const filter = filters[0];
@@ -83,6 +90,29 @@ describe('WebxdcAppPicker', () => {
     await waitFor(() => expect(screen.getByText('Some other app')).toBeTruthy());
     expect(screen.getByText('More apps')).toBeTruthy();
     expect(screen.getByTestId('webxdc-app-picker-featured')).toBeTruthy();
+  });
+
+  // Store first, network second (issue 38134eec): the picker must not wait
+  // for the slowest relay once every curated id has answered.
+  it('shows the curated app as soon as its event arrives, though a relay hangs', async () => {
+    settings.webxdcShowAllApps = false;
+    requestMock.mockImplementation(() => concat(of(fileEvent(CURATED_ID, 'Pad')), NEVER));
+    render(WebxdcAppPicker, {
+      props: { curatedApps: [CURATED_ID], onSelect: () => {}, onClose: () => {} }
+    });
+    await waitFor(() => expect(screen.getByTestId('webxdc-app-picker-featured')).toBeTruthy(), {
+      timeout: 1000
+    });
+  });
+
+  it('takes curated apps already in the EventStore without a request', async () => {
+    settings.webxdcShowAllApps = false;
+    storeEvents.set(CURATED_ID, fileEvent(CURATED_ID, 'Pad'));
+    render(WebxdcAppPicker, {
+      props: { curatedApps: [CURATED_ID], onSelect: () => {}, onClose: () => {} }
+    });
+    await waitFor(() => expect(screen.getByTestId('webxdc-app-picker-featured')).toBeTruthy());
+    expect(requestMock).not.toHaveBeenCalled();
   });
 
   it('says so when nothing is curated and discovery is off', async () => {

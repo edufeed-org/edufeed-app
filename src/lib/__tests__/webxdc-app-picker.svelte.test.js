@@ -22,7 +22,8 @@ vi.mock('$lib/stores/nostr-infrastructure.svelte', () => ({
       if (filters?.[0]?.ids) return of(...holders.curatedEvents);
       return of(...holders.events);
     }
-  }
+  },
+  eventStore: { getEvent: () => undefined, add: (/** @type {any} */ event) => event }
 }));
 
 // "Weitere Apps" (the discovered list) is behind the per-device

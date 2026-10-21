@@ -92,6 +92,17 @@ eventStore.timeline({ ids: [...] })
 eventStore.model(TimelineModel, { ids: [...] })
 ```
 
+### 4. Store First, Network Second
+
+Render what the EventStore (or a local cache) already holds immediately; network answers only update it. One hanging relay (sends events, never EOSE) otherwise holds a page for the whole request timeout — even on back-navigation with every event already loaded.
+
+- **Never gate rendering on a loader's `complete`** when data is already there: show spinners/skeletons only while there is nothing to show (`isLoading && items.length === 0`).
+- **Replaceables (kind 0, 3, 10002, 30000, …): first answer wins.** `firstValueFrom(pool.request(...))`, not `lastValueFrom(...pipe(toArray()))`; a stale copy is replaced by the next background refresh. Fetch several in parallel (`Promise.all`), never one after another.
+- **Lookups by id end when every id has answered** (`takeWhile(() => missing.size > 0, true)`), and skip ids `eventStore.getEvent()` already has.
+- **Config-like lists resolved before content (curated/WoT authors, showcase sources) are cached stale-while-revalidate:** an old cache is served at once and refreshed in the background, never expired into a blocking fetch. The root layout's splash waits on curated authors (`curated-authors-service.svelte.js`), so any wait there blocks the whole app.
+
+Waiting for all relays is only right when the answer needs every relay (NIP-50 search ranking, `/wiki/<topic>` disambiguation across authors) — and then through `timedPool`'s 2 s cap. Measure with Playwright: open page → navigate away → back; REQ frames (`framesent`) starting seconds after the back navigation reveal an upstream wait.
+
 ## Svelte 5 Critical Patterns
 
 ### $state() vs Plain let

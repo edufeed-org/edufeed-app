@@ -1264,21 +1264,19 @@ describe('curated-authors-service', () => {
       expect(loadCachedAuthors()).toBeNull();
     });
 
-    it('loadCachedAuthors returns null when cache is expired', async () => {
+    it('loadCachedAuthors still returns an old cache (it is refreshed, never awaited)', async () => {
       vi.resetModules();
-      const { loadCachedAuthors, CACHE_TTL_MS } = await import(
-        '../services/curated-authors-service.svelte.js'
-      );
+      const { loadCachedAuthors } = await import('../services/curated-authors-service.svelte.js');
 
-      const expiredCache = {
+      const oldCache = {
         version: 1,
-        timestamp: Date.now() - CACHE_TTL_MS - 1000,
+        timestamp: Date.now() - 7 * 24 * 60 * 60 * 1000,
         curated: { calendar: ['a'.repeat(64)] },
         wot: {}
       };
-      storage.set(CACHE_KEY, JSON.stringify(expiredCache));
+      storage.set(CACHE_KEY, JSON.stringify(oldCache));
 
-      expect(loadCachedAuthors()).toBeNull();
+      expect(loadCachedAuthors()?.curated.calendar).toEqual(['a'.repeat(64)]);
     });
 
     it('loadCachedAuthors returns data when cache is fresh', async () => {
@@ -1355,6 +1353,165 @@ describe('curated-authors-service', () => {
       storage.set(CACHE_KEY, JSON.stringify({ version: 1 }));
       clearCachedAuthors();
       expect(storage.has(CACHE_KEY)).toBe(false);
+    });
+  });
+
+  // Store first, network second: the root layout holds the whole app behind a
+  // splash until these lists resolve, so they must never wait for the slowest
+  // relay (issue 38134eec).
+  describe('store first, network second', () => {
+    const CACHE_KEY = 'curated-authors-cache';
+    const CACHED = 'a'.repeat(64);
+    /** @type {Map<string, string>} */
+    let storage;
+
+    /** @param {Record<string, string[]>} [sets] */
+    const curatedConfig = (sets = {}) => ({
+      calendar: { sets: sets.calendar ?? [], direct: [] },
+      communikey: { sets: [], direct: [] },
+      educational: { sets: [], direct: [] },
+      longform: { sets: sets.longform ?? [], direct: [] },
+      kanban: { sets: [], direct: [] }
+    });
+
+    /** @param {string} identifier @param {string[]} pubkeys */
+    const followSet = (identifier, pubkeys) => ({
+      kind: 30000,
+      pubkey: 'setowner',
+      created_at: 1,
+      tags: [['d', identifier], ...pubkeys.map((pk) => ['p', pk])]
+    });
+
+    /** @param {any} request @param {any} runtimeConfig */
+    const mockDeps = (request, runtimeConfig) => {
+      vi.doMock('$app/environment', () => ({ browser: true }));
+      vi.doMock('$lib/stores/nostr-infrastructure.svelte', () => ({
+        pool: { request },
+        eventStore: { add: vi.fn() }
+      }));
+      vi.doMock('nostr-tools', () => ({
+        nip19: {
+          decode: vi.fn((/** @type {string} */ naddr) => ({
+            type: 'naddr',
+            data: {
+              kind: 30000,
+              pubkey: 'setowner',
+              identifier: naddr.replace('naddr1', 'list-'),
+              relays: ['wss://relay.test']
+            }
+          }))
+        }
+      }));
+      vi.doMock('$lib/stores/config.svelte.js', () => ({ runtimeConfig }));
+    };
+
+    beforeEach(() => {
+      vi.resetModules();
+      storage = new Map();
+      vi.stubGlobal('localStorage', {
+        getItem: vi.fn((/** @type {string} */ key) => storage.get(key) ?? null),
+        setItem: vi.fn((/** @type {string} */ key, /** @type {string} */ val) =>
+          storage.set(key, val)
+        ),
+        removeItem: vi.fn((/** @type {string} */ key) => storage.delete(key))
+      });
+    });
+
+    it('serves an old cache at once and refreshes it in the background', async () => {
+      const { NEVER } = await import('rxjs');
+      const request = vi.fn(() => NEVER);
+      mockDeps(request, { curatedMode: curatedConfig({ calendar: ['naddr1a'] }) });
+      storage.set(
+        CACHE_KEY,
+        JSON.stringify({
+          version: 1,
+          timestamp: Date.now() - 24 * 60 * 60 * 1000,
+          curated: { calendar: [CACHED] },
+          wot: {}
+        })
+      );
+
+      const service = await import('../services/curated-authors-service.svelte.js');
+      // Resolves although no relay ever answers.
+      await service.initializeAllCuratedAuthors();
+
+      expect(service.getCuratedAuthors('calendar')).toEqual([CACHED]);
+      expect(request).toHaveBeenCalled();
+    });
+
+    it('ignores cached lists of categories that are no longer configured', async () => {
+      const { NEVER } = await import('rxjs');
+      mockDeps(
+        vi.fn(() => NEVER),
+        { curatedMode: curatedConfig({ calendar: ['naddr1a'] }) }
+      );
+      storage.set(
+        CACHE_KEY,
+        JSON.stringify({
+          version: 1,
+          timestamp: Date.now(),
+          curated: { calendar: [CACHED], longform: ['b'.repeat(64)] },
+          wot: { kanban: ['c'.repeat(64)] }
+        })
+      );
+
+      const service = await import('../services/curated-authors-service.svelte.js');
+      await service.initializeAllCuratedAuthors();
+      await service.initializeAllWotAuthors();
+
+      expect(service.getCuratedAuthors('longform')).toBeNull();
+      expect(service.getCuratedAuthors('kanban')).toBeNull();
+    });
+
+    it('resolves a follow set on the first relay answer, not the slowest relay', async () => {
+      const { concat, of, NEVER } = await import('rxjs');
+      // One relay answered, another hangs without EOSE.
+      mockDeps(
+        vi.fn(() => concat(of(followSet('list-a', ['follow1'])), NEVER)),
+        { curatedMode: curatedConfig({ calendar: ['naddr1a'] }) }
+      );
+
+      const service = await import('../services/curated-authors-service.svelte.js');
+      await service.initializeCuratedAuthors('calendar');
+
+      expect(service.getCuratedAuthors('calendar')).toEqual(['follow1']);
+    });
+
+    it('requests all follow sets at once instead of one after another', async () => {
+      const { of, Subject } = await import('rxjs');
+      const slow = new Subject();
+      const request = vi.fn((_relays, /** @type {any} */ filter) =>
+        filter['#d'][0] === 'list-a' ? slow : of(followSet('list-b', ['follow2']))
+      );
+      mockDeps(request, { curatedMode: curatedConfig({ calendar: ['naddr1a', 'naddr1b'] }) });
+
+      const service = await import('../services/curated-authors-service.svelte.js');
+      const pending = service.initializeCuratedAuthors('calendar');
+      await Promise.resolve();
+
+      expect(request).toHaveBeenCalledTimes(2);
+
+      slow.next(followSet('list-a', ['follow1']));
+      await pending;
+      expect(service.getCuratedAuthors('calendar')).toEqual(['follow1', 'follow2']);
+    });
+
+    it('resolves WoT anchors on their first answers', async () => {
+      const { concat, of, NEVER } = await import('rxjs');
+      const anchor = 'b'.repeat(64);
+      const follow = 'c'.repeat(64);
+      mockDeps(
+        vi.fn(() => concat(of({ kind: 3, pubkey: anchor, tags: [['p', follow]] }), NEVER)),
+        {
+          curatedMode: curatedConfig(),
+          wotMode: { enabled: true, includeUserFollows: false, calendar: { anchors: [anchor] } }
+        }
+      );
+
+      const service = await import('../services/curated-authors-service.svelte.js');
+      await service.initializeWotAuthors('calendar');
+
+      expect(service.getCuratedAuthors('calendar')).toEqual([anchor, follow]);
     });
   });
 });

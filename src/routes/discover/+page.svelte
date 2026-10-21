@@ -2029,9 +2029,12 @@
     {:else if contentType === 'people'}
       <!-- People: profile search, follows first, then by NIP-85 trust rank -->
       <PeopleResults query={activeSearchQuery} />
-    {:else if isLoading || (isSearching && displayedContent.length === 0)}
-      <!-- Loading / searching state — while a search is in flight, show the
-           spinner instead of flashing the empty state before results arrive -->
+    {:else if (isLoading || isSearching) && displayedContent.length === 0}
+      <!-- Loading / searching state — only while there is nothing to show:
+           content already in the EventStore (e.g. coming back to /discover)
+           renders at once instead of waiting for the loaders to complete.
+           While a search is in flight, the spinner also stands in for the
+           empty state until results arrive. -->
       <div class="flex justify-center py-12">
         <div class="text-center">
           <div class="loading loading-lg loading-spinner text-primary"></div>
