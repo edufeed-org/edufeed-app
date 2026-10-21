@@ -1884,6 +1884,44 @@ describe('breakout rooms', () => {
     expect(open.getAttribute('aria-selected')).toBe('false');
   });
 
+  // User test 2026-10-13: a former host back as co-host had no panel and
+  // could neither see who was where nor say anything to the rooms.
+  it('a co-host in the main room during a session it does not run gets the rooms tab and the panel read-only; a plain seat gets neither', async () => {
+    const session = {
+      main: { id: 'main', relay: 'wss://r.example/', title: 'Standup' },
+      rooms: [{ id: 'r1', relay: 'wss://r.example/', name: 'Breakout 1', index: 1 }],
+      until: null,
+      hosting: false
+    };
+    breakout.state.session = session;
+    breakout.state.rooms = session.rooms;
+    lk.localParticipant = {
+      identity: `${'a'.repeat(64)}:me`,
+      metadata: '{"cohost":true}',
+      getTrackPublication: () => undefined
+    };
+    const { unmount } = render(GroupCallStage, { props: baseProps });
+    await openPanel();
+    const open = screen.getByTestId('group-call-breakout-open');
+    // not running it: no "running" dot of the host's
+    expect(screen.queryByTestId('group-call-breakout-tab-dot')).toBeNull();
+    await fireEvent.click(open);
+    const panel = await screen.findByTestId('breakout-panel-stub', {}, { timeout: 4000 });
+    expect(panel.dataset.readOnly).toBe('true');
+    expect(open.getAttribute('aria-selected')).toBe('true');
+    unmount();
+    // a plain seat: the banner is its way in, no tab
+    lk.localParticipant = {
+      identity: `${'a'.repeat(64)}:me`,
+      metadata: '',
+      getTrackPublication: () => undefined
+    };
+    render(GroupCallStage, { props: baseProps });
+    await openPanel();
+    expect(screen.queryByTestId('group-call-breakout-open')).toBeNull();
+    expect(screen.queryByTestId('breakout-panel-stub')).toBeNull();
+  });
+
   it('while hosting a session the tabs switch between the list and the panel; the list keeps its row menus', async () => {
     asHost();
     breakout.state.session = {
@@ -1899,6 +1937,7 @@ describe('breakout rooms', () => {
     expect(screen.getByTestId('group-call-breakout-tab-dot')).toBeTruthy();
     await fireEvent.click(screen.getByTestId('group-call-breakout-open'));
     const panel = await screen.findByTestId('breakout-panel-stub', {}, { timeout: 4000 });
+    expect(panel.dataset.readOnly).toBe('false');
     expect(screen.getByTestId('group-call-breakout-open').getAttribute('aria-selected')).toBe(
       'true'
     );

@@ -1080,16 +1080,27 @@
   const showCallButton = $derived(
     !myPubkey || canWrite || callLiveHere || callParticipantCount > 0
   );
+  // The relay's 39004 lists ME while this tab is not in the call: another
+  // tab (or device) holds my seat. User test 2026-10-13: the second tab
+  // showed only the camera button with "1" and a click seated the same
+  // person twice. The button says so; a click still joins (a deliberate
+  // second seat stays possible). The resume offer after a reload speaks
+  // for this tab's own seat and comes first.
+  const inCallElsewhere = $derived(
+    !!myPubkey && !callLiveHere && !resumeOffer && getCallPresence().participants.includes(myPubkey)
+  );
   const callButtonLabel = $derived(
     !myPubkey
       ? m.groups_call_start_login()
       : callLiveHere
         ? m.groups_call_return()
-        : callParticipantCount > 0
-          ? canWrite
-            ? m.groups_call_join_running({ count: callParticipantCount })
-            : m.groups_call_listen_in({ count: callParticipantCount })
-          : m.groups_call_start()
+        : inCallElsewhere
+          ? m.groups_call_join_here_anyway()
+          : callParticipantCount > 0
+            ? canWrite
+              ? m.groups_call_join_running({ count: callParticipantCount })
+              : m.groups_call_listen_in({ count: callParticipantCount })
+            : m.groups_call_start()
   );
 
   async function toggleCall() {
@@ -1896,6 +1907,11 @@
           >
             <MeetIcon class_="w-4 h-4" />
             {#if callParticipantCount}{callParticipantCount}{/if}
+            {#if inCallElsewhere}
+              <span class="font-normal text-base-content/70" data-testid="group-call-in-other-tab">
+                {m.groups_call_in_other_tab()}
+              </span>
+            {/if}
           </button>
           {#if !myPubkey}
             <!-- The greyed icon's "log in to start a call" is only a tooltip,
