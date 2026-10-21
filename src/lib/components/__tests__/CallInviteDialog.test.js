@@ -26,6 +26,10 @@ vi.mock('$lib/groups/group-call.svelte.js', () => ({ getGroupCallState: () => ca
 vi.mock('$lib/stores/nostr-infrastructure.svelte', () => ({ pool: { relay: (url) => ({ url }) } }));
 vi.mock('$lib/services/wrapped-dm.js', () => ({ sendWrappedDm: vi.fn(async () => {}) }));
 vi.mock('$lib/helpers/toast', () => ({ showToast: vi.fn() }));
+const openModal = vi.fn();
+vi.mock('$lib/stores/modal.svelte.js', () => ({
+  modalStore: { openModal: (...a) => openModal(...a) }
+}));
 vi.mock('$lib/components/shared/ContactSearchInput.svelte', async () => ({
   default: (await import('./__mocks__/EmptyStub.svelte')).default
 }));
@@ -36,9 +40,12 @@ const { default: CallInviteDialog } = await import(
 );
 
 const ME = 'a'.repeat(64);
+// A signer that encrypts (nsec, Alby, nos2x): the pass code is self-encrypted
+// with NIP-44, so creating a link is gated on it.
+const NIP44 = { encrypt: async () => '', decrypt: async () => '' };
 const props = {
   pointer: { id: 'g1', relay: 'wss://groups.example/' },
-  user: { pubkey: ME, signer: {} },
+  user: { pubkey: ME, signer: { nip44: NIP44 } },
   isAdmin: false,
   title: 'Weekly',
   onClose: vi.fn()
@@ -374,5 +381,37 @@ describe('CallInviteDialog', () => {
     unmount();
     await new Promise((r) => setTimeout(r, 1800));
     expect(createCallLink).toHaveBeenCalledTimes(1);
+  });
+
+  // Issue acb0250d (keys.band): the extension has no nip44, so "Link
+  // erstellen" used to fail only after the click. Say it before, name the
+  // alternatives, and offer the way there.
+  describe('signer without NIP-44', () => {
+    const noNip44 = { ...props, user: { pubkey: ME, signer: { signEvent: async () => {} } } };
+
+    it('disables "Link erstellen" and explains before any click', async () => {
+      render(CallInviteDialog, { props: noNip44 });
+      expect(screen.getByTestId('call-invite-create').disabled).toBe(true);
+      expect(screen.getByTestId('call-invite-nip44-hint').textContent).toContain(
+        m.groups_call_invite_nip44()
+      );
+      expect(screen.queryByTestId('call-invite-create-error')).toBeNull();
+      // Enter in the name field must not try either.
+      await fireEvent.keyDown(screen.getByTestId('call-invite-title'), { key: 'Enter' });
+      expect(createCallLink).not.toHaveBeenCalled();
+    });
+
+    it('offers to log in another way, opening the login modal', async () => {
+      render(CallInviteDialog, { props: noNip44 });
+      await fireEvent.click(screen.getByTestId('call-invite-switch-login'));
+      expect(openModal).toHaveBeenCalledWith('login');
+    });
+
+    it('shows neither the hint nor the switch when the signer encrypts', async () => {
+      render(CallInviteDialog, { props });
+      expect(screen.getByTestId('call-invite-create').disabled).toBe(false);
+      expect(screen.queryByTestId('call-invite-nip44-hint')).toBeNull();
+      expect(screen.queryByTestId('call-invite-switch-login')).toBeNull();
+    });
   });
 });

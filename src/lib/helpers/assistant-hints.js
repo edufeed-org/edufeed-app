@@ -125,3 +125,21 @@ export function deriveNip05Hint({
 export function isProfileHintApplicable({ user, settled, hasProfile, dismissed, signupOpen }) {
   return canSign(user) && settled && !hasProfile && !dismissed && !signupOpen;
 }
+
+/**
+ * Whether the "your extension cannot encrypt" hint should show. NIP-07
+ * extensions are free to skip `window.nostr.nip44` (keys.band does — issue
+ * acb0250d), and then DMs, private channels and guest links all fail only
+ * when tried. Say it once, up front. Bunker and readonly accounts have their
+ * own stories, and nsec accounts always encrypt.
+ *
+ * @param {{
+ *   user: { type?: string } | null | undefined,
+ *   canEncrypt: boolean,
+ *   dismissed: boolean
+ * }} input
+ * @returns {boolean}
+ */
+export function isSignerHintApplicable({ user, canEncrypt, dismissed }) {
+  return user?.type === 'extension' && !canEncrypt && !dismissed;
+}

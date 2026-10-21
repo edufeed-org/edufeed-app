@@ -15,6 +15,8 @@
     revokeCallPass
   } from '$lib/groups/call-passes.js';
   import { getGroupCallState } from '$lib/groups/group-call.svelte.js';
+  import { hasNip44 } from '$lib/helpers/nip44.js';
+  import { modalStore } from '$lib/stores/modal.svelte.js';
   import { formatTimeOfDay } from '$lib/helpers/dates.js';
   import { pool } from '$lib/stores/nostr-infrastructure.svelte';
   import { sendWrappedDm } from '$lib/services/wrapped-dm.js';
@@ -48,6 +50,11 @@
 
   const relay = () => pool.relay(pointer.relay);
   const call = getGroupCallState();
+  // The pass code is self-encrypted with NIP-44 so the author can rebuild the
+  // link later; an extension without window.nostr.nip44 (keys.band) cannot
+  // mint one. Say so BEFORE the click, with the way out, instead of failing
+  // after it (issue acb0250d).
+  const canCreate = $derived(hasNip44(user?.signer));
   // The relay learns that the call runs from LiveKit's webhook, a moment
   // after this client is connected: one quiet retry covers that window
   // (Task 15 review, B1).
@@ -133,7 +140,7 @@
   }
 
   async function create() {
-    if (creating) return;
+    if (creating || !canCreate) return;
     creating = true;
     createError = null;
     try {
@@ -258,7 +265,7 @@
       placeholder={m.groups_call_invite_title_placeholder()}
       aria-label={m.groups_call_invite_title_placeholder()}
       bind:value={linkTitle}
-      disabled={creating}
+      disabled={creating || !canCreate}
       onkeydown={(e) => {
         if (e.key === 'Enter') {
           e.preventDefault();
@@ -270,12 +277,29 @@
     <button
       class="btn mt-2 {latestUrl ? '' : 'btn-primary'}"
       onclick={create}
-      disabled={creating}
+      disabled={creating || !canCreate}
       data-testid="call-invite-create"
     >
       {#if creating}<span class="loading loading-sm loading-spinner"></span>{/if}
       {m.groups_call_invite_create()}
     </button>
+    {#if !canCreate}
+      <div
+        class="mt-2 alert alert-vertical items-start text-sm alert-warning"
+        role="status"
+        data-testid="call-invite-nip44-hint"
+      >
+        <span>{m.groups_call_invite_nip44()}</span>
+        <button
+          type="button"
+          class="btn btn-sm"
+          onclick={() => modalStore.openModal('login')}
+          data-testid="call-invite-switch-login"
+        >
+          {m.groups_call_invite_switch_login()}
+        </button>
+      </div>
+    {/if}
     {#if createError}
       <p class="mt-2 text-sm text-error" role="alert" data-testid="call-invite-create-error">
         {createError}
