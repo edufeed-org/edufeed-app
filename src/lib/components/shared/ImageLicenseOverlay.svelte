@@ -82,7 +82,7 @@
     stopPropagation
     position="top"
     enterDelay={100}
-    class="badge inline-flex max-w-full cursor-default items-center gap-1 badge-ghost text-xs {position}"
+    class="badge inline-flex max-w-full min-w-0 cursor-default items-center gap-1 badge-ghost text-xs {position}"
     triggerClass="contents"
   >
     {#snippet trigger()}

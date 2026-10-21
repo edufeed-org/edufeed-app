@@ -1,6 +1,6 @@
 // @ts-nocheck
 /** @vitest-environment jsdom */
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render } from '@testing-library/svelte';
 import ProfileHeader from '../profile/ProfileHeader.svelte';
 
@@ -14,6 +14,19 @@ vi.mock('../shared/Nip05InfoCard.svelte', async () => {
   const mock = await import('./__mocks__/Nip05InfoCardMock.svelte');
   return { default: mock.default };
 });
+
+// The license row looks kind-1063 attestations up by Blossom hash; the test
+// decides per hash what the lookup yields (issue 1ff3b524).
+const licenseHolders = vi.hoisted(() => ({
+  /** @type {Record<string, {event: any, status: string}>} */ byHash: {}
+}));
+vi.mock('$lib/stores/image-license.svelte.js', () => ({
+  useLicenseStatus: (/** @type {() => string | null} */ getHash) => () => {
+    const hash = getHash();
+    if (!hash) return { event: null, status: 'missing' };
+    return licenseHolders.byHash[hash] ?? { event: null, status: 'missing' };
+  }
+}));
 
 // Opening the chip's popover runs a Svelte fade transition; jsdom has no
 // Web Animations API, so give it an instantly finished stand-in.
@@ -236,5 +249,54 @@ describe('<ProfileHeader>', () => {
     withCount.unmount();
     const withoutCount = render(ProfileHeader, baseProps({ postsCount: 0 }));
     expect(withoutCount.container.querySelector('[data-testid="stat-posts"]')).toBeFalsy();
+  });
+  // Issue 1ff3b524: a profile picture uploaded through the app carries a
+  // kind-1063 license like any other upload, but the page never showed it.
+  describe('image licenses', () => {
+    const HASH = 'c'.repeat(64);
+    const PICTURE = `https://blossom.edufeed.org/${HASH}.png`;
+
+    beforeEach(() => {
+      licenseHolders.byHash = {};
+    });
+
+    it('lists the picture license below the identity block', () => {
+      licenseHolders.byHash[HASH] = {
+        status: 'found',
+        event: {
+          id: 'd'.repeat(64),
+          kind: 1063,
+          pubkey: PUBKEY,
+          created_at: 1,
+          content: '',
+          tags: [
+            ['x', HASH],
+            ['license', 'https://creativecommons.org/licenses/by/4.0/'],
+            ['credit', 'Nadine Glage']
+          ]
+        }
+      };
+      const { container } = render(
+        ProfileHeader,
+        baseProps({ profile: { name: 'M', picture: PICTURE }, postsCount: 3 })
+      );
+      // Exactly one row, regardless of the posts stat being rendered next to it.
+      const rows = container.querySelectorAll(
+        '.pf-identity [data-testid="profile-image-licenses"]'
+      );
+      expect(rows.length).toBe(1);
+      const row = rows[0];
+      expect(row.textContent).toContain('CC BY 4.0');
+      expect(row.textContent).toContain('Nadine Glage');
+    });
+
+    it('shows no caution for an avatar without an attestation', () => {
+      const { container } = render(
+        ProfileHeader,
+        baseProps({ profile: { name: 'M', picture: PICTURE } })
+      );
+      expect(container.querySelector('[data-testid="profile-image-licenses"]')).toBeFalsy();
+      expect(container.querySelector('[data-testid="license-caution"]')).toBeFalsy();
+    });
   });
 });

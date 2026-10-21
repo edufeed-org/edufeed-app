@@ -26,6 +26,7 @@
   import { resolve } from '$app/paths';
   import { profileLink } from '$lib/helpers/nostrUtils.js';
   import ImageWithFallback from '../../shared/ImageWithFallback.svelte';
+  import ProfileImageLicenses from '../../shared/ProfileImageLicenses.svelte';
   import { ChevronRightIcon, LocationIcon } from '$lib/components/icons';
   import * as m from '$lib/paraglide/messages';
 
@@ -471,6 +472,14 @@
       <span>{location}</span>
     </p>
   {/if}
+
+  <!-- Picture/banner license attestations (issue 1ff3b524): read from the
+       normalised profile content, which is right in both shapes /c hands us. -->
+  <ProfileImageLicenses
+    picture={profileContent?.picture}
+    banner={profileContent?.banner}
+    class="mt-2"
+  />
 </div>
 
 {#if showInviteInput}

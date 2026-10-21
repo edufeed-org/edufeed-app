@@ -10,6 +10,7 @@
   import Nip05VerifiedBadge from '$lib/components/shared/Nip05VerifiedBadge.svelte';
   import HoverCard from '$lib/components/shared/HoverCard.svelte';
   import Nip05InfoCard from '$lib/components/shared/Nip05InfoCard.svelte';
+  import ProfileImageLicenses from '../shared/ProfileImageLicenses.svelte';
   import ImageWithFallback from '$lib/components/shared/ImageWithFallback.svelte';
   import {
     CheckIcon,
@@ -172,6 +173,10 @@
           <span data-testid="stat-posts"><b>{postsCount}</b> {m.profile_stat_posts()}</span>
         </div>
       {/if}
+
+      <!-- Picture/banner license attestations (issue 1ff3b524). Only shown when
+           one resolves — see ProfileImageLicenses. -->
+      <ProfileImageLicenses picture={profile?.picture} banner={profile?.banner} class="mt-2" />
     </div>
 
     <div class="pf-btns">
