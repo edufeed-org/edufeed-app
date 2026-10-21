@@ -40,7 +40,9 @@ const ambSearchSpy = vi.hoisted(() => vi.fn(() => ({ subscribe: () => ({ unsubsc
 vi.mock('$lib/loaders/amb-search.js', () => ({ ambSearchLoader: ambSearchSpy }));
 
 vi.mock('$lib/stores/accounts.svelte', () => ({
-  manager: { active: { pubkey: 'author-pub', signer: {} } }
+  manager: { active: { pubkey: 'author-pub', signer: {} } },
+  // CreatorInput's useUserProfile reads the active user through the hook.
+  useActiveUser: () => () => ({ pubkey: 'author-pub', signer: {} })
 }));
 
 vi.mock('$lib/components/forms/FormConceptPicker.svelte', () => ({ default: () => null }));

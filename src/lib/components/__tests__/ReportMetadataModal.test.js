@@ -66,7 +66,8 @@ vi.mock('$lib/stores/action-runner.svelte.js', () => ({
   actionRunnerOptimistic: { run: mockRun }
 }));
 
-vi.mock('applesauce-actions/actions', () => ({
+// sendWrappedDm runs the app's own SendWrappedMessage (dm-actions.js).
+vi.mock('$lib/actions/dm-actions.js', () => ({
   SendWrappedMessage: 'SendWrappedMessage'
 }));
 

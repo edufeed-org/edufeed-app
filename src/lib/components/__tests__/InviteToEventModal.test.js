@@ -56,7 +56,9 @@ vi.mock('$lib/stores/profile-map.svelte.js', () => ({
   useProfileMap: () => () => new Map()
 }));
 
-import { SendWrappedMessage } from 'applesauce-actions/actions';
+// sendWrappedDm runs the app's own SendWrappedMessage (p-tags pinned to the
+// recipients — see dm-actions.js), not applesauce's.
+import { SendWrappedMessage } from '$lib/actions/dm-actions.js';
 import InviteToEventModal from '../calendar/InviteToEventModal.svelte';
 
 /** @param {{ getByTestId: (id: string) => HTMLElement }} r @param {string} testId */

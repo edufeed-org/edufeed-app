@@ -344,7 +344,8 @@ describe('OG Meta Tags', () => {
       const meta = extractMetadata({ kind: 0, pubkey, content: 'not json', tags: [] });
       expect(meta.type).toBe('profile');
       const npub = nip19.npubEncode(pubkey);
-      expect(meta.title).toBe(`${npub.slice(0, 12)}…${npub.slice(-4)}`);
+      // shortNpub (helpers/pubkey.js): 12 leading + 6 trailing characters.
+      expect(meta.title).toBe(`${npub.slice(0, 12)}…${npub.slice(-6)}`);
       expect(meta.description).toBe('');
     });
   });
