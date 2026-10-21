@@ -7,6 +7,88 @@ merge commits of the nostr PRs that landed since the previous tag.
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-10-22
+
+The mobile chrome redesign (labeled dock, Bereiche sheet, plain-words login
+and landing), a curated landing showcase, key-backup safety in signup and
+logout, community moderators removing other people's content, a generic
+view for unknown event kinds, and a round of call and breakout fixes from
+the 2026-10-13 user test. First release cut as a release candidate
+(`v0.8.0-rc.1` on dev.edufeed.org) before this tag.
+
+### Deploy notes
+
+- `LANDING_SHOWCASE_LISTS` (kind 30000 list naddrs): set it, or the
+  logged-out landing shows no live content.
+- New communities take their default relays from the communikey relays
+  (`COMMUNIKEY_RELAYS`) and their blossom server from
+  `DEFAULT_BLOSSOM_SERVERS` — no more hardcoded edufeed production relay.
+  Unset means the creation form asks for a relay.
+- Optional: `APP_HANDLERS_ENABLED` / `APP_HANDLER_RELAYS` (NIP-89, default
+  on); `PUBLIC_BLOSSOM_SERVERS`, `BLOSSOM_ELIGIBLE_PUBKEYS`,
+  `BLOSSOM_ELIGIBLE_NIP05_DOMAINS` (Blossom upload gate, off when unset —
+  only turn on with a blossom-server that enforces the same rules).
+- Guest broadcasts in calls need the groups relay at pyramid
+  `edufeed-v1.21` or later (deployed on groups.edufeed.org).
+- CI: tags with a `-` (`vX.Y.Z-rc.N`) publish only their own image tag and
+  never move `:latest`.
+
+### Added
+
+- Phones: a labeled five-item dock (Start, Entdecken, Erstellen,
+  Posteingang, Communities), also inside communities; Termi opens from the
+  header; the Posteingang has a Nachrichten tab. Inside a community a
+  Bereiche chip opens every section as a bottom sheet, replacing the
+  scrolling section bar; the community header gets a back arrow, the
+  switcher and a settings gear for owners.
+- Landing: plain-words hero with "Konto erstellen" and a showcase of new
+  materials, upcoming events, new articles and a community wall — only
+  content by, or into, the accounts and communities on the
+  `LANDING_SHOWCASE_LISTS`; a visible Anmelden button on phones.
+- Signup ends on a "Sichern" step; logging out a key that was never
+  downloaded asks first ("Ohne Sicherung abmelden?"); backup files carry
+  the account name and a short npub, so two backups no longer overwrite
+  each other; "Schlüssel sichern" in the account menu.
+- Community owners and moderators can remove other people's content from
+  the community (NIP-32 label, kind 1985, `communikey.moderation`); the
+  original event is untouched, removals are listed and restorable in the
+  community settings.
+- Event kinds without a dedicated view open in a generic detail page
+  (author, title, content, reactions, comments) with NIP-89 "open in
+  another app" links.
+- Blossom upload gate: eligibility prediction, fallback to public servers
+  on a 401/403, Termi hints to fix the server list.
+- Calls: a second tab says "Du bist in einem anderen Tab im Anruf" before
+  seating you twice; co-hosts see the breakout panel read-only and may
+  broadcast to the rooms.
+- Termi tells extension users once when their extension cannot encrypt
+  (NIP-44), which DMs, private channels and guest links need.
+
+### Changed
+
+- The account dialog is titled Anmelden, opens as a bottom sheet on
+  phones and explains each login method in one line.
+- Breakout rooms: "Raum N" everywhere, the call timer survives room
+  switches, the banner closes with "Ausblenden".
+- Store first, network second: curated/WoT author lists are served from
+  cache and refreshed in the background (no splash wait after five
+  minutes away), `/discover` renders what is already in the store on
+  back-navigation, the webxdc app picker skips known apps.
+
+### Fixed
+
+- Call-pass guests on private channels now hear the host's broadcasts.
+- "Link erstellen" for guest links is disabled up front, with the reason,
+  when the login cannot encrypt.
+- Conversations read on an earlier visit no longer show as unread after a
+  reload (read markers only move forward).
+- The bookmark menu on a resource page opened behind the sidebar.
+- New communities no longer land on the edufeed production relay from
+  e2e runs, local checks or whitelabel deployments.
+- The call pop-out window no longer turns black on Windows/Edge when its
+  controls fade (needs confirmation on Windows).
+- Ten vitest suites that had drifted behind the code pass again.
+
 ## [0.7.0] - 2026-10-13
 
 Calls and breakout rooms hold up through what happens in every conference:
