@@ -276,6 +276,19 @@
       });
   });
 
+  /** True while the focused element is a text field inside <main>. */
+  function isTypingInMain() {
+    const el = document.activeElement;
+    return (
+      el instanceof HTMLElement &&
+      !!mainElement?.contains(el) &&
+      (el instanceof HTMLTextAreaElement ||
+        el.isContentEditable ||
+        (el instanceof HTMLInputElement &&
+          !['button', 'submit', 'reset', 'checkbox', 'radio', 'range', 'file'].includes(el.type)))
+    );
+  }
+
   // Save <main> scroll position before leaving a route so we can restore it on back/forward.
   beforeNavigate(({ from }) => {
     if (!from?.url || !mainElement) return;
@@ -289,7 +302,7 @@
   // clamped to 0. We retry across a few frames until the browser accepts the
   // requested position or we exhaust a small budget. `saved ?? 0` preserves
   // SvelteKit's default behavior of landing fresh navigations at the top.
-  afterNavigate(({ from, to }) => {
+  afterNavigate(({ from, to, type }) => {
     recordNavigation(from);
     if (!to?.url) return;
     const key = to.url.pathname + to.url.search;
@@ -297,6 +310,12 @@
     // the user guide's #was-bedeutet-verifiziert) is scrolled by the content
     // itself once it has rendered — forcing the top here would undo that.
     if (to.url.hash && !scrollPositions.has(key)) return;
+    // Someone typing into a field inside <main> is not "arriving" anywhere:
+    // search inputs sync their query to the URL (`?search=…` via goto with
+    // keepFocus + noScroll), and yanking <main> to the top mid-word scrolls
+    // the field out of view — on iOS the keyboard then loses the field too.
+    // Back/forward still restores: the user asked for a different page there.
+    if (type !== 'popstate' && isTypingInMain()) return;
     const saved = scrollPositions.get(key) ?? 0;
     // Yield to the user: if they scroll/touch/key during the retry window,
     // abort the restore loop so we don't fight their input.

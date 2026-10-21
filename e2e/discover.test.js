@@ -232,3 +232,57 @@ test.describe('Discover page - infinite scroll', () => {
     }).toPass({ timeout: 15_000 });
   });
 });
+
+test.describe('Discover page - search input stays put while typing', () => {
+  // Regression: typing into the search field syncs the query to the URL
+  // (`?search=…`, a replaceState goto). The root layout's scroll restore
+  // treated that as a fresh navigation and reset <main> to the top, which on
+  // a small viewport (iPhone with the keyboard open) scrolled the field out
+  // of view mid-word and lost the focus. Logged-out: the hero sits above the
+  // field, so the field is only reachable by scrolling.
+  test('typing a query keeps <main> scroll position and input focus', async ({ page }) => {
+    // Height like an iPhone viewport with the software keyboard open.
+    await page.setViewportSize({ width: 390, height: 420 });
+    await page.goto('/discover');
+
+    const input = page.getByRole('textbox', { name: /suche|search/i }).first();
+    await expect(input).toBeVisible();
+
+    // Bring the field to the top of the scroll surface, like Safari does when
+    // the keyboard opens on a focused field below the fold.
+    const scrollBefore = await page.evaluate(() => {
+      const main = document.querySelector('main');
+      const field = document.querySelector('main input[type="text"]');
+      if (!main || !field) throw new Error('no <main> or search input');
+      main.scrollTop = field.getBoundingClientRect().top + main.scrollTop - 16;
+      return main.scrollTop;
+    });
+    expect(scrollBefore).toBeGreaterThan(50);
+
+    await input.click();
+    await input.pressSequentially('Co', { delay: 50 });
+
+    // The debounced query sync must have reached the URL …
+    await expect(page).toHaveURL(/search=Co/);
+    // … and the layout's restore loop (≤ 30 frames) must have run its course.
+    await page.waitForTimeout(700);
+
+    const after = await page.evaluate(() => {
+      const main = document.querySelector('main');
+      const field = document.querySelector('main input[type="text"]');
+      const rect = field?.getBoundingClientRect();
+      return {
+        scrollTop: main?.scrollTop ?? -1,
+        focused: document.activeElement === field,
+        value: /** @type {HTMLInputElement | null} */ (field)?.value,
+        onScreen: !!rect && rect.top >= 0 && rect.bottom <= window.innerHeight
+      };
+    });
+    expect(after.value).toBe('Co');
+    expect(after.focused, 'search input must keep the focus').toBe(true);
+    expect(after.onScreen, 'search input must stay in view').toBe(true);
+    // The filtered result list is shorter, so <main> may clamp a bit lower
+    // than before; the bug reset it to the hero at the very top (0).
+    expect(after.scrollTop, '<main> must not jump to the top').toBeGreaterThan(100);
+  });
+});
