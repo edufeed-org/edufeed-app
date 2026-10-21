@@ -46,6 +46,8 @@ vi.mock('$lib/paraglide/messages', () => ({
   groups_members_row_menu: (/** @type {{name: string}} */ { name }) => `Actions for ${name}`,
   groups_members_role_placeholder: () => 'Role',
   groups_members_action_failed: () => 'The relay refused the change',
+  groups_members_owner_protected: () => 'The owner always keeps admin rights',
+  community_members_roles_hint: () => 'Roles explained',
   common_cancel: () => 'Cancel',
   community_members_area_note: () => 'Area members are private.',
   community_members_area_chip: () => 'Private area',
@@ -566,5 +568,57 @@ describe('MembersView — member search', () => {
     await fireEvent.input(screen.getByTestId('members-search'), { target: { value: 'zzz' } });
     expect(screen.getByText('No members match.')).toBeTruthy();
     expect(screen.queryAllByTestId('member-row')).toHaveLength(0);
+  });
+});
+
+// Issue 058f1c41: an admin the owner appointed could demote the community
+// key's own seat on the root roster and lock the owner out of the join queue.
+describe('MembersView — owner seat protection', () => {
+  const asAdminWithOwnerOnRoster = () => {
+    holders.admins = [
+      { pubkey: OWNER, roles: ['admin'] },
+      { pubkey: ADMIN, roles: ['admin'] }
+    ];
+    holders.members = new Set([OWNER, ADMIN, REGULAR]);
+    holders.pointer = { id: 'root123', relay: 'wss://groups.example' };
+    holders.activePubkey = ADMIN;
+  };
+  const rowOf = (/** @type {HTMLElement} */ container, /** @type {string} */ pubkey) =>
+    /** @type {HTMLElement} */ (
+      container.querySelector(`[data-testid="member-row"][data-pubkey="${pubkey}"]`)
+    );
+
+  it("the owner's row has no demote/remove, but keeps the publisher toggle", () => {
+    asAdminWithOwnerOnRoster();
+    const { container } = render(MembersView, {
+      props: { communikeyEvent: MODERATED_EVENT_OWNER_ONLY }
+    });
+    const ownerRow = rowOf(container, OWNER);
+    expect(within(ownerRow).getByTestId('member-actions-menu')).toBeTruthy();
+    expect(within(ownerRow).queryByTestId('member-demote')).toBeNull();
+    expect(within(ownerRow).queryByTestId('member-remove')).toBeNull();
+    expect(within(ownerRow).queryByTestId('member-assign-role')).toBeNull();
+    expect(within(ownerRow).getByTestId('member-owner-protected')).toBeTruthy();
+    expect(within(ownerRow).getByTestId('member-toggle-publisher')).toBeTruthy();
+  });
+
+  it('a moderated community explains the roles to whoever can manage them', () => {
+    asAdminWithOwnerOnRoster();
+    render(MembersView, { props: { communikeyEvent: MODERATED_EVENT_OWNER_ONLY } });
+    expect(screen.getByTestId('members-roles-hint')).toBeTruthy();
+  });
+
+  it('no roles hint for visitors or open communities', () => {
+    holders.admins = [{ pubkey: ADMIN, roles: ['admin'] }];
+    holders.members = new Set([OWNER, ADMIN]);
+    holders.pointer = { id: 'root123', relay: 'wss://groups.example' };
+    const { unmount } = render(MembersView, {
+      props: { communikeyEvent: MODERATED_EVENT_OWNER_ONLY }
+    });
+    expect(screen.queryByTestId('members-roles-hint')).toBeNull();
+    unmount();
+    holders.activePubkey = ADMIN;
+    render(MembersView, { props: { communikeyEvent: OPEN_EVENT } });
+    expect(screen.queryByTestId('members-roles-hint')).toBeNull();
   });
 });

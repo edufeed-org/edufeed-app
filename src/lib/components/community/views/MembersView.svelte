@@ -119,6 +119,8 @@
   const roleOptions = $derived(roleOptionsFromAdmins(getRootRoster().admins));
   const canManageRoster = $derived(canModerateJoins && !!rosterPointer);
 
+  let isOwner = (/** @type {string} */ pubkey) => communikeyEvent?.pubkey === pubkey;
+
   /** Root-roster roles of a pubkey ([] for plain members / non-roster rows). */
   function rosterRolesOf(/** @type {string} */ pubkey) {
     return getRootRoster().admins.find((a) => a.pubkey === pubkey)?.roles ?? [];
@@ -137,6 +139,10 @@
     if (!canManageRoster || pubkey === getActiveUserForQueue()?.pubkey) return null;
     const roster = getRootRoster();
     const admin = roster.admins.find((a) => a.pubkey === pubkey);
+    // The community key's own seat (issue 058f1c41) only ever gets the
+    // publisher toggle; MemberActionsMenu hides demote/remove/assign-role
+    // for it and keeps its admin role on every put-user.
+    if (isOwner(pubkey)) return { togglePublisher: true };
     if (admin && !isPublisherOnly(admin.roles)) return { togglePublisher: true, demote: true };
     if (admin || roster.members.has(pubkey))
       return { togglePublisher: true, promote: true, remove: true };
@@ -200,8 +206,6 @@
     return sections;
   }
 
-  let isOwner = (/** @type {string} */ pubkey) => communikeyEvent?.pubkey === pubkey;
-
   /**
    * A roster member of a fully members-gated community is in EVERY section —
    * one chip per section sprawled across the row (8 identical chips in the
@@ -227,6 +231,14 @@
       </button>
     {/if}
   </div>
+
+  {#if canManageRoster}
+    <!-- Roles explained for whoever manages them (issue 058f1c41 asked what
+      an owner can do that an admin can't). -->
+    <p class="mb-4 max-w-2xl text-sm text-base-content/60" data-testid="members-roles-hint">
+      {m.community_members_roles_hint()}
+    </p>
+  {/if}
 
   {#if canModerateJoins && communikeyEvent?.pubkey}
     <div class="mb-6 max-w-2xl">
