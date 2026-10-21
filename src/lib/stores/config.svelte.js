@@ -27,6 +27,11 @@ const defaultConfig = {
   // NIP-50 capable relays for free-text profile search (PROFILE_SEARCH_RELAYS)
   profileSearchRelays: [],
   profileSearchObserver: /** @type {string | null} */ (null),
+  // NIP-89 handler discovery (APP_HANDLERS_ENABLED / APP_HANDLER_RELAYS)
+  appHandlers: {
+    enabled: true,
+    relays: /** @type {string[]} */ ([])
+  },
   trustAssertions: {
     relays: /** @type {string[]} */ ([]),
     providers: /** @type {string[]} */ ([])
@@ -304,6 +309,10 @@ export function initializeConfig(runtimeConfig) {
     profileSearchRelays: runtimeConfig.profileSearchRelays || defaultConfig.profileSearchRelays,
     profileSearchObserver:
       runtimeConfig.profileSearchObserver || defaultConfig.profileSearchObserver,
+    appHandlers: {
+      enabled: runtimeConfig.appHandlers?.enabled ?? defaultConfig.appHandlers.enabled,
+      relays: runtimeConfig.appHandlers?.relays || defaultConfig.appHandlers.relays
+    },
     trustAssertions: {
       relays: runtimeConfig.trustAssertions?.relays || defaultConfig.trustAssertions.relays,
       providers: runtimeConfig.trustAssertions?.providers || defaultConfig.trustAssertions.providers
@@ -498,6 +507,9 @@ export const runtimeConfig = {
   },
   get profileSearchObserver() {
     return config.profileSearchObserver;
+  },
+  get appHandlers() {
+    return config.appHandlers;
   },
   get trustAssertions() {
     return config.trustAssertions;

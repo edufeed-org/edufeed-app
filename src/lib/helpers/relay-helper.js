@@ -265,6 +265,19 @@ export function getProfileSearchObserver() {
 }
 
 /**
+ * Relays asked for NIP-89 handler announcements (kind 31990/31989) when the
+ * app meets an event kind it cannot render. Deployment config, not gated
+ * mode: APP_HANDLERS_ENABLED=false switches the feature off, which this
+ * reports as "no relays".
+ * @returns {string[]}
+ */
+export function getAppHandlerRelays() {
+  const cfg = runtimeConfig.appHandlers;
+  if (!cfg?.enabled) return [];
+  return [...new Set(cfg.relays || [])];
+}
+
+/**
  * Relays serving NIP-85 trusted assertions (kind 30382). Empty = the
  * trust-score layer is off.
  * @returns {string[]}
