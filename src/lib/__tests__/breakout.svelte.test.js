@@ -142,6 +142,7 @@ vi.mock('$lib/paraglide/messages', () => ({
   groups_call_breakout_deadline_failed: (/** @type {any} */ p) => `deadline not set: ${p.reason}`,
   groups_call_broadcast_toast: (/** @type {any} */ p) => `${p.name}: ${p.text}`,
   groups_call_broadcast_return_default: () => 'please come back',
+  groups_call_breakout_room_label: (/** @type {any} */ p) => `Room ${p.n}`,
   groups_call_breakout_broadcast_failed: (/** @type {any} */ p) => `not sent: ${p.reason}`,
   groups_call_breakout_arrived_main: (/** @type {any} */ p) => `${p.name} arrived in the main room`
 }));
@@ -357,7 +358,8 @@ describe('participant: the assignment', () => {
     await liveInMain(bobUser);
     lk.listener?.({ t: 'assign', rooms: ROOMS, until: null }, hostSender);
     expect(modal.activeModal).toBe('breakoutAssignment');
-    expect(modal.props).toEqual({ roomName: 'Breakout 1 · Seminar', autoMs: 5000 });
+    // the UI names a room by its number alone (the relay group name is wire format)
+    expect(modal.props).toEqual({ roomName: 'Room 1', autoMs: 5000 });
     const s = store.getBreakoutState();
     expect(s.pending?.room.id).toBe('r1');
     expect(s.session?.hosting).toBe(false);
@@ -366,7 +368,7 @@ describe('participant: the assignment', () => {
     await settle();
     expect(callFake.switchGroupCall).toHaveBeenCalledWith(
       { id: 'r1', relay: RELAY },
-      { title: 'Breakout 1 · Seminar' }
+      { title: 'Seminar' }
     );
     expect(s.currentRoom?.id).toBe('r1');
     expect(modal.activeModal).toBe('none');
@@ -480,7 +482,7 @@ describe('participant in a room: following the relay', () => {
     await settle();
     expect(callFake.switchGroupCall).toHaveBeenCalledWith(
       { id: 'r2', relay: RELAY },
-      { title: 'Breakout 2 · Seminar' }
+      { title: 'Seminar' }
     );
     expect(store.getBreakoutState().currentRoom?.id).toBe('r2');
   });
@@ -891,7 +893,7 @@ describe('late joiners: "Beitreten" from the banner', () => {
     expect(rel.seatInRoom).toHaveBeenCalledWith(expect.anything(), 'r2', BOB, bobUser);
     expect(callFake.switchGroupCall).toHaveBeenCalledWith(
       { id: 'r2', relay: RELAY },
-      { title: 'Breakout 2 · Seminar' }
+      { title: 'Seminar' }
     );
     expect(lk.send).not.toHaveBeenCalled();
   });
@@ -913,7 +915,7 @@ describe('late joiners: "Beitreten" from the banner', () => {
     expect(store.getBreakoutState().joinRequest).toBeNull();
     expect(callFake.switchGroupCall).toHaveBeenCalledWith(
       { id: 'r2', relay: RELAY },
-      { title: 'Breakout 2 · Seminar' }
+      { title: 'Seminar' }
     );
   });
 
@@ -992,7 +994,7 @@ describe('late joiners while the host sits in a room: relay-only paths', () => {
     expect(modal.activeModal).toBe('none');
     expect(callFake.switchGroupCall).toHaveBeenCalledWith(
       { id: 'r2', relay: RELAY },
-      { title: 'Breakout 2 · Seminar' }
+      { title: 'Seminar' }
     );
   });
 
@@ -1655,6 +1657,16 @@ describe('call broadcasts (kind 20002)', () => {
     broadcastSub().stream.next(broadcast('countdown', '118'));
     expect(store.getBreakoutState().session?.until).toBe(1_700_000_000 + 120);
 
+    // a `return` is addressed to the rooms: a seat still in the main room
+    // (this one declined) hears nothing of it ...
+    broadcastSub().stream.next(broadcast('return', ''));
+    expect(toast.fn).not.toHaveBeenCalled();
+    expect(lkFake.addSystemCallChat).not.toHaveBeenCalled();
+    // ... a seat in a room toasts its text or the default
+    lk.listener?.({ t: 'assign', rooms: ROOMS, until: 1_700_000_000 + 120 }, hostSender);
+    modal.callbacks.onConfirm();
+    await settle();
+    expect(store.getBreakoutState().currentRoom?.id).toBe('r1');
     broadcastSub().stream.next(broadcast('return', ''));
     expect(toast.fn).toHaveBeenLastCalledWith(`${HOST.slice(0, 8)}...: please come back`, 'info');
     broadcastSub().stream.next(broadcast('return', 'wrap-up in the main room'));
@@ -1756,6 +1768,9 @@ describe('call broadcasts (kind 20002)', () => {
     expect(relayPublish.fn.mock.invocationCallOrder[0]).toBeLessThan(
       rel.deleteBreakoutRoom.mock.invocationCallOrder[0]
     );
+    // the host's own echo is not shown either: the host sits in the main room
+    expect(toast.fn).not.toHaveBeenCalledWith(expect.stringContaining('please come back'), 'info');
+    expect(lkFake.addSystemCallChat).not.toHaveBeenCalled();
     expect(store.getBreakoutState().session).toBeNull();
     // without the heads-up: no broadcast
     relayPublish.fn.mockClear();
@@ -1829,6 +1844,47 @@ describe('guests (call-pass seats)', () => {
     expect(payload.rooms[0].members).toEqual([BOB + ':seat1', EVE + ':g1']);
   });
 
+  it('a random split that deals a guest into a room reaches that guest: the host announces the identity, the guest is offered the room', async () => {
+    // the host side: what BreakoutDialog hands startBreakout for "Zufaellig zuteilen"
+    await liveInMain(hostUser);
+    await store.startBreakout({
+      channelName: 'Seminar',
+      roomCount: 2,
+      seats: [
+        { identity: BOB + ':seat1', pubkey: BOB, roomIndex: 2, guest: false },
+        { identity: EVE + ':g1', pubkey: EVE, roomIndex: 1, guest: true }
+      ],
+      durationMinutes: null,
+      autoAssign: true,
+      selfJoin: true
+    });
+    const [payload] = lk.send.mock.calls[0];
+    expect(payload.rooms.map((r) => r.members)).toEqual([[EVE + ':g1'], [BOB + ':seat1']]);
+    // the guest side: the same payload arrives over the data channel
+    store.__resetBreakout();
+    relay.subs.length = 0;
+    lk.send.mockClear();
+    await guestInMain();
+    lk.listener?.(payload, hostSender);
+    expect(modal.activeModal).toBe('breakoutAssignment');
+    expect(modal.props).toEqual({ roomName: 'Room 1', autoMs: 5000 });
+    expect(store.getBreakoutState().pending?.room.id).toBe(payload.rooms[0].id);
+    // the host's periodic state replay to guests does not void the offer
+    lk.listener?.(
+      { t: 'state', rooms: payload.rooms.map(({ id, relay, name }) => ({ id, relay, name })) },
+      hostSender
+    );
+    expect(modal.activeModal).toBe('breakoutAssignment');
+    lkApi.requestGroupCallToken.mockResolvedValue(tokenFor(EVE + ':x1'));
+    modal.callbacks.onConfirm();
+    await settle();
+    expect(store.getBreakoutState().currentRoom?.id).toBe(payload.rooms[0].id);
+    expect(callFake.switchGroupCall).toHaveBeenCalledWith(
+      { id: payload.rooms[0].id, relay: RELAY },
+      { title: 'Seminar', code: CODE, token: tokenFor(EVE + ':x1') }
+    );
+  });
+
   it('an assigned guest requests the room token with its code, announces its seat and switches with code and token', async () => {
     await guestInMain();
     lk.listener?.({ t: 'assign', rooms: [{ ...ROOMS[0], members: [EVE + ':g1'] }] }, hostSender);
@@ -1849,7 +1905,7 @@ describe('guests (call-pass seats)', () => {
     );
     expect(callFake.switchGroupCall).toHaveBeenCalledWith(
       { id: 'r1', relay: RELAY },
-      { title: 'Breakout 1 · Seminar', code: CODE, token: tokenFor(EVE + ':r1') }
+      { title: 'Seminar', code: CODE, token: tokenFor(EVE + ':r1') }
     );
     expect(store.getBreakoutState().currentRoom?.id).toBe('r1');
     expect(rel.seatInRoom).not.toHaveBeenCalled();
@@ -1996,7 +2052,7 @@ describe('guests (call-pass seats)', () => {
     expect(store.getBreakoutState().joinRequest).toBeNull();
     expect(callFake.switchGroupCall).toHaveBeenCalledWith(
       { id: 'r2', relay: RELAY },
-      expect.objectContaining({ title: 'Breakout 2 · Seminar', code: CODE })
+      expect.objectContaining({ title: 'Seminar', code: CODE })
     );
   });
 
@@ -2276,7 +2332,7 @@ describe('the host seat moves on, and a connection lost in a room', () => {
     await settle();
     expect(callFake.switchGroupCall).toHaveBeenCalledWith(
       { id: 'r1', relay: RELAY },
-      { title: 'Breakout 1 · Seminar' }
+      { title: 'Seminar' }
     );
     expect(callFake.getGroupCallState().phase).toBe('ready');
     expect(store.getBreakoutState().currentRoom?.id).toBe('r1');

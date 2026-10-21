@@ -313,7 +313,7 @@ vi.mock('$lib/paraglide/messages', () => ({
   groups_call_breakout_title: () => 'Breakout rooms',
   groups_call_column_tab_participants: ({ count }) => `Participants ${count}`,
   groups_call_breakout_running_badge: () => 'Session running',
-  groups_call_breakout_in_room: (p) => `Breakout room ${p.n}`,
+  groups_call_breakout_in_room: (p) => `Room ${p.n}`,
   groups_call_breakout_time_left: (p) => `${p.time} left`,
   groups_call_breakout_back_to_main: () => 'Back to the main room',
   groups_call_breakout_in_main_count: (p) => `${p.n} in the main room`,
@@ -974,7 +974,8 @@ describe('layout', () => {
     expect(layer.classList.contains('pointer-events-none')).toBe(true);
     expect(controls.classList.contains('pointer-events-auto')).toBe(true);
     const tiles = screen.getByTestId('group-call-tiles');
-    expect(tiles.classList.contains('pt-16')).toBe(true);
+    // the top is reserved by measurement (see 'the tiles start below …')
+    expect(tiles.style.paddingTop).toBe('64px');
     expect(tiles.classList.contains('pb-28')).toBe(true);
     expect(tiles.classList.contains('@xl:pb-20')).toBe(true);
     const videoArea = screen.getByTestId('group-call-grid').parentElement.parentElement;
@@ -1300,6 +1301,19 @@ describe('participant list panel', () => {
   // 0.75rem margin + a 0.75rem gap): the dock is centred on the tiles, not
   // on the whole stage, so it never lies over the drawer's footer (laoc
   // 2026-10-09: the dock covered "Räume schließen" in the breakout panel).
+  // The floating top layer (title row, status pills, the breakout banner) is
+  // absolute over the tiles; the tiles frame reserves its rendered height, so
+  // a wrapping banner never paints over the first tile's badges (user test
+  // 2026-10-13). jsdom measures nothing: the fallback is the title row's
+  // 4rem.
+  it('the tiles start below whatever the top layer occupies', () => {
+    lk.remoteParticipants = [remote(B)];
+    render(GroupCallStage, { props: baseProps });
+    const tiles = screen.getByTestId('group-call-tiles');
+    expect(tiles.classList.contains('pt-16')).toBe(false);
+    expect(tiles.style.paddingTop).toBe('64px');
+  });
+
   it('the title row and the dock keep clear of the open drawer', async () => {
     lk.remoteParticipants = [remote(B)];
     render(GroupCallStage, { props: baseProps });
@@ -1936,7 +1950,7 @@ describe('breakout rooms', () => {
     expect(screen.queryByTestId('group-call-my-role')).toBeNull();
     expect(
       screen.getByTestId('group-call-breakout-room').textContent.replace(/\s+/g, ' ').trim()
-    ).toBe('Breakout room 2 · 2:05');
+    ).toBe('Room 2 · 2:05');
     await fireEvent.click(screen.getByTestId('group-call-breakout-back'));
     // the button gives the seat up too (a member's own way back)
     expect(breakout.leaveBreakoutRoom).toHaveBeenCalledTimes(1);
@@ -2010,7 +2024,7 @@ describe('breakout rooms', () => {
     render(GroupCallStage, { props: baseProps });
     const stage = screen.getByTestId('group-call-stage');
     expect(screen.getByTestId('group-call-title-pill').textContent).toContain('Standup');
-    expect(screen.getByTestId('group-call-breakout-room').textContent).toContain('Breakout room 1');
+    expect(screen.getByTestId('group-call-breakout-room').textContent).toContain('Room 1');
     expect(screen.getByTestId('group-call-breakout-main-count')).toBeTruthy();
     const controls = screen.getByTestId('group-call-controls');
     try {

@@ -11,7 +11,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { render, fireEvent, screen } from '@testing-library/svelte';
 
 function Stub() {}
-vi.mock('$lib/components/icons', () => ({ ChannelsIcon: Stub }));
+vi.mock('$lib/components/icons', () => ({ ChannelsIcon: Stub, CloseIcon: Stub }));
 vi.mock('$lib/paraglide/messages', () => ({
   groups_call_breakout_banner_title: () => 'Breakout session running',
   groups_call_breakout_banner_body: () => 'Join a room or stay here.',
@@ -20,7 +20,7 @@ vi.mock('$lib/paraglide/messages', () => ({
   groups_call_breakout_join: () => 'Join',
   groups_call_breakout_join_requested: () => 'Request sent …',
   groups_call_breakout_banner_host_assigns: () => 'The host will assign you to a room.',
-  groups_call_breakout_banner_stay: () => 'Stay in the main room'
+  groups_call_breakout_banner_dismiss: () => 'Hide'
 }));
 
 import BreakoutBanner from '../groups/call/BreakoutBanner.svelte';
@@ -100,13 +100,23 @@ describe('BreakoutBanner', () => {
     expect(joins.every((b) => b.disabled)).toBe(true);
   });
 
-  it('offers to stay in the main room, which puts the banner away', async () => {
-    const onStay = vi.fn();
-    render(BreakoutBanner, { props: { breakout: state(), onJoin: vi.fn(), onStay } });
-    const stay = screen.getByTestId('breakout-banner-stay');
-    expect(stay.textContent).toContain('Stay in the main room');
-    await fireEvent.click(stay);
-    expect(onStay).toHaveBeenCalledTimes(1);
+  // Whoever sees the banner is not assigned anywhere, so there is no "stay"
+  // to choose: the control only puts the banner away (the stage keeps a
+  // chip that brings it back).
+  it('can be put away with a plain "Hide" — not a "stay in the main room" choice', async () => {
+    const onDismiss = vi.fn();
+    render(BreakoutBanner, { props: { breakout: state(), onJoin: vi.fn(), onDismiss } });
+    expect(screen.queryByTestId('breakout-banner-stay')).toBeNull();
+    const dismiss = screen.getByTestId('breakout-banner-dismiss');
+    expect(dismiss.getAttribute('aria-label')).toBe('Hide');
+    expect(dismiss.getAttribute('title')).toBe('Hide');
+    await fireEvent.click(dismiss);
+    expect(onDismiss).toHaveBeenCalledTimes(1);
+  });
+
+  it('without a dismiss callback there is no dismiss control', () => {
+    render(BreakoutBanner, { props: { breakout: state(), onJoin: vi.fn() } });
+    expect(screen.queryByTestId('breakout-banner-dismiss')).toBeNull();
   });
 
   it('leaves the deadline out without one and lists only the rooms still standing', () => {

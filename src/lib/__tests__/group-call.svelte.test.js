@@ -775,6 +775,27 @@ describe('switchGroupCall (breakout rooms)', () => {
     expect(s.href).toBe('/c/x');
   });
 
+  it('the call join stamp survives a room switch and back; a fresh join or a leave resets it', async () => {
+    const nowSpy = vi.spyOn(Date, 'now').mockReturnValue(1_000_000);
+    requestGroupCallToken.mockResolvedValue({ serverUrl: 'wss://x', participantToken: 't' });
+    const s = getGroupCallState();
+    expect(s.callJoinedAt).toBe(0);
+    await joinGroupCall(P1, USER, { title: 'Main' });
+    expect(s.callJoinedAt).toBe(1_000_000);
+    nowSpy.mockReturnValue(1_060_000);
+    await switchGroupCall(P2, { title: 'Breakout 1' });
+    expect(s.callJoinedAt).toBe(1_000_000);
+    nowSpy.mockReturnValue(1_120_000);
+    await switchGroupCall(P1, { title: 'Main' });
+    expect(s.callJoinedAt).toBe(1_000_000);
+    await leaveGroupCall();
+    expect(s.callJoinedAt).toBe(0);
+    nowSpy.mockReturnValue(2_000_000);
+    await joinGroupCall(P1, USER, { title: 'Main' });
+    expect(s.callJoinedAt).toBe(2_000_000);
+    nowSpy.mockRestore();
+  });
+
   it('a switch sets the chat of the room left aside and names the room joined; a plain join or leave forgets it', async () => {
     requestGroupCallToken.mockResolvedValue({ serverUrl: 'wss://x', participantToken: 't' });
     await joinGroupCall(P1, USER, { title: 'Main' });

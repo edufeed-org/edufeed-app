@@ -71,7 +71,7 @@
   import { orderSeats, moveSeat } from '$lib/groups/call-tile-order.js';
   import { getTilePlacements, setTilePlacements } from '$lib/groups/call-tile-placements.svelte.js';
   import { isGuestParticipant, participantCallRole } from '$lib/groups/livekit.js';
-  import { moderateActiveCall } from '$lib/groups/group-call.svelte.js';
+  import { getGroupCallState, moderateActiveCall } from '$lib/groups/group-call.svelte.js';
   import {
     getBreakoutState,
     ensureBreakoutListener,
@@ -388,8 +388,8 @@
     !!breakout.session && !hostsBreakout && !inBreakoutRoom && breakout.pending === null
   );
   const showBreakoutBanner = $derived(sessionAside && !breakout.bannerDismissed);
-  // The banner put away ("Im Hauptraum bleiben"): a chip with the room count
-  // keeps the way in.
+  // The banner put away ("Ausblenden"): a chip with the room count keeps
+  // the way in.
   const showBreakoutChip = $derived(sessionAside && breakout.bannerDismissed);
   /** @param {{roomCount: number, seats: Array<{identity: string, pubkey: string, roomIndex: number, guest: boolean}>, durationMinutes: number | null, autoAssign: boolean}} args */
   async function startBreakoutRooms(args) {
@@ -931,9 +931,13 @@
     openMenu = null;
   }
 
-  // --- Title pill: how long this seat has been in the call. The connection
-  // service stamps its own join, so a remounted stage (channel switch,
-  // pop-out) keeps counting. Ticks on the stage's own window.
+  // --- Title pill: how long this seat has been in the call. The call store
+  // stamps the join and keeps the stamp across breakout switches (a switch
+  // reconnects to another Room, whose own join stamp would restart the
+  // clock — user test 2026-10-13); a remounted stage (channel switch,
+  // pop-out) keeps counting too. Ticks on the stage's own window.
+  const call = getGroupCallState();
+  const joinStamp = $derived(call.callJoinedAt || lk.joinedAt);
   let now = $state(Date.now());
   $effect(() => {
     if (!lk.isConnected) return;
@@ -942,8 +946,17 @@
     return () => win.clearInterval(id);
   });
   const elapsed = $derived(
-    lk.isConnected && lk.joinedAt ? formatCountdown((now - lk.joinedAt) / 1000) : ''
+    lk.isConnected && joinStamp ? formatCountdown((now - joinStamp) / 1000) : ''
   );
+
+  // --- The floating top layer (title row, status pills, breakout banner)
+  // lies over the tiles; the tiles frame reserves its rendered height, so a
+  // wrapping banner never paints over the first tile's badges. The title
+  // row alone is 4rem (the fallback where nothing is measured yet); the
+  // space stays reserved while the chrome has only stepped back (opacity).
+  let topLayerHeight = $state(0);
+  const TOP_LAYER_MIN_PX = 64;
+  const tilesTopPadding = $derived(Math.max(TOP_LAYER_MIN_PX, topLayerHeight));
 
   // --- Chrome autohide (design 2b): the title row and the dock step back
   // after a few seconds without input; anything the user is in the middle
@@ -1081,9 +1094,10 @@
       on a narrow stage, where the dock wraps). -->
     <div class="flex min-h-0 min-w-0 flex-1 flex-row">
       <div
-        class="min-h-0 min-w-0 flex-1 flex-col px-3 pt-16 pb-28 @xl:pb-20 {participantsOpen
+        class="min-h-0 min-w-0 flex-1 flex-col px-3 pb-28 @xl:pb-20 {participantsOpen
           ? 'hidden @2xl:flex'
           : 'flex'}"
+        style:padding-top="{tilesTopPadding}px"
         data-testid="group-call-tiles"
       >
         {#if spotlight}
@@ -1320,6 +1334,7 @@
     so without this, a tile paints over every menu that opens from the dock
     (laoc 2026-10-09: the "Mehr" menu looked transparent). -->
   <div
+    bind:clientHeight={topLayerHeight}
     class="pointer-events-none absolute top-0 left-0 z-40 flex flex-col items-start gap-2 p-3 {participantsOpen
       ? 'right-0 @2xl:right-[25.5rem]'
       : 'right-0'}"
@@ -1488,7 +1503,7 @@
             <BreakoutBannerLazy.Component
               {breakout}
               onJoin={(room) => void requestBreakoutRoom(room)}
-              onStay={() => dismissBanner()}
+              onDismiss={() => dismissBanner()}
             />
           </div>
         {:else if showBreakoutChip}

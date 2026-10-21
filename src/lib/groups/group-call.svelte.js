@@ -56,6 +56,11 @@ let serverUrl = $state(null);
 let token = $state(null);
 // For the dock: what to call the call, and which page to return to.
 let title = $state('');
+// When this call was joined (ms epoch, 0 outside a call). A breakout switch
+// (keepChat) moves the seat to another Room without ending the call, so the
+// stamp survives it; a fresh join or a leave resets it. The connection
+// service's own `joinedAt` is per Room (it restarts on every connect).
+let callJoinedAt = $state(0);
 /** @type {string | null} */
 let href = $state(null);
 // The call pass code (if the active call was joined as a guest) — kept so
@@ -100,6 +105,7 @@ let activeUser = null;
  *   serverUrl: string | null,
  *   token: string | null,
  *   title: string,
+ *   callJoinedAt: number,
  *   href: string | null,
  *   code: string | null,
  *   stageViews: number,
@@ -134,6 +140,9 @@ export function getGroupCallState() {
     },
     get title() {
       return title;
+    },
+    get callJoinedAt() {
+      return callJoinedAt;
     },
     get href() {
       return href;
@@ -232,6 +241,7 @@ export async function joinGroupCall(pointer, user, view = {}) {
       await lk.disconnectFromRoom();
     } else {
       connected = true;
+      if (!view.keepChat || !callJoinedAt) callJoinedAt = Date.now();
       // For after a reload (call-resume.js): the call joined, not a
       // breakout switch (keepChat) — the main room is what to come back to.
       if (!view.keepChat) rememberCall({ pointer, title, href, code });
@@ -398,8 +408,12 @@ export async function leaveGroupCall() {
 async function endCall({ keepChat }) {
   attempt++;
   const wasActive = activeKey !== null;
-  // A real leave (not a breakout switch): nothing to come back to.
-  if (!keepChat) forgetCall();
+  // A real leave (not a breakout switch): nothing to come back to, and the
+  // call's clock stops.
+  if (!keepChat) {
+    forgetCall();
+    callJoinedAt = 0;
+  }
   activeKey = null;
   phase = 'idle';
   error = null;

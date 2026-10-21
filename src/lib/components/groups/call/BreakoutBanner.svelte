@@ -5,12 +5,13 @@
   rooms with "Beitreten" and how many are live in each — for a member a knock on the room (kind 9021, the
   relay seats them) plus a request to the host seat, whichever answers
   first; for a guest a direct switch with its call pass
-  (groups/breakout.svelte.js requestBreakoutRoom) — the deadline, and "Im
-  Hauptraum bleiben", which puts the banner away (the stage keeps a chip to
-  bring it back). Pure view; the store owns the session.
+  (groups/breakout.svelte.js requestBreakoutRoom) — the deadline, and
+  "Ausblenden", which only puts the banner away (the stage keeps a chip to
+  bring it back): whoever sees the banner is assigned nowhere, so there is no
+  "stay in the main room" to choose. Pure view; the store owns the session.
 -->
 <script>
-  import { ChannelsIcon } from '$lib/components/icons';
+  import { ChannelsIcon, CloseIcon } from '$lib/components/icons';
   import { formatCountdown, onEveryRoster } from '$lib/groups/breakout.js';
   import * as m from '$lib/paraglide/messages';
 
@@ -19,10 +20,10 @@
    * @type {{
    *   breakout: ReturnType<typeof import('$lib/groups/breakout.svelte.js').getBreakoutState>,
    *   onJoin: (room: BreakoutRoom) => void,
-   *   onStay?: () => void
+   *   onDismiss?: () => void
    * }}
    */
-  let { breakout, onJoin, onStay } = $props();
+  let { breakout, onJoin, onDismiss } = $props();
 
   const rooms = $derived(breakout.rooms);
   // The host keeps the assignment to themselves: only that a session runs.
@@ -82,14 +83,16 @@
       </li>
     {/each}
   </ul>
-  {#if onStay}
+  {#if onDismiss}
     <button
       type="button"
-      class="btn btn-ghost btn-sm"
-      onclick={() => onStay()}
-      data-testid="breakout-banner-stay"
+      class="btn btn-square btn-ghost btn-sm"
+      onclick={() => onDismiss()}
+      aria-label={m.groups_call_breakout_banner_dismiss()}
+      title={m.groups_call_breakout_banner_dismiss()}
+      data-testid="breakout-banner-dismiss"
     >
-      {m.groups_call_breakout_banner_stay()}
+      <CloseIcon class_="h-4 w-4" title="" />
     </button>
   {/if}
 </div>

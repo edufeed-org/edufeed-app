@@ -459,14 +459,20 @@
 </script>
 
 <div bind:this={rootEl} class="flex min-h-0 flex-1 flex-col" data-testid="call-chat-panel">
-  <!-- One header row: the parent's tabs (Anruf-Chat | Kanal) on the left,
-    download and close on the right — never two rows of chrome. -->
+  <!-- One header row: the parent's tabs (Anruf-Chat | Kanal) on the left —
+    or, without tabs (a guest's drawer on the call landing), the chat's own
+    name, so the row is never empty — download and close on the right;
+    never two rows of chrome. -->
   <div
     class="flex shrink-0 items-center justify-end gap-1 border-b border-base-300 px-2 py-1"
     data-testid="call-chat-header"
   >
     {#if header}
       <div class="min-w-0 flex-1">{@render header()}</div>
+    {:else}
+      <span class="min-w-0 flex-1 truncate px-2 text-sm font-semibold" data-testid="call-chat-title"
+        >{title || m.groups_call_chat_tab()}</span
+      >
     {/if}
     <button
       type="button"
