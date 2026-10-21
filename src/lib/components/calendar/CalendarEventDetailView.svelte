@@ -45,6 +45,9 @@
   import { transformRsvps } from '$lib/helpers/rsvpUtils.js';
   import * as m from '$lib/paraglide/messages';
   import HeroImage from '$lib/components/shared/HeroImage.svelte';
+  import ImageLicenseOverlay from '$lib/components/shared/ImageLicenseOverlay.svelte';
+  import { useLicenseStatus } from '$lib/stores/image-license.svelte.js';
+  import { getSha256FromURL } from 'applesauce-common/helpers';
 
   /**
    * @typedef {Object} Props
@@ -54,6 +57,19 @@
 
   /** @type {Props} */
   let { event, rawEvent = null } = $props();
+
+  // Same license lookup as the card and the details modal: the Blossom URL
+  // carries the file hash, the kind-1063 attestation is keyed by it.
+  const imageHash = $derived.by(() => {
+    if (!event?.image) return null;
+    try {
+      return getSha256FromURL(event.image) ?? null;
+    } catch {
+      return null;
+    }
+  });
+  const getImageStatus = useLicenseStatus(() => imageHash);
+  const imageStatus = $derived(getImageStatus());
 
   /**
    * Get calendar relays from app config
@@ -232,7 +248,14 @@
   <!-- Event Header with Image — full ratio, never cropped (#29) -->
   {#if event.image}
     <div class="mb-4">
-      <HeroImage src={event.image} alt={event.title} fallbackType="event" />
+      <HeroImage src={event.image} alt={event.title} fallbackType="event">
+        <ImageLicenseOverlay
+          licenseEvent={imageStatus.event}
+          status={imageStatus.status}
+          variant="pill"
+          position="absolute right-2 bottom-2 bg-base-100/80 backdrop-blur"
+        />
+      </HeroImage>
     </div>
   {/if}
 
