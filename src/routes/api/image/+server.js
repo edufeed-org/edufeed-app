@@ -1,11 +1,9 @@
 import sharp from 'sharp';
-import { isBlockedHost, fetchGuardedRedirects } from '$lib/server/httpUrl.js';
+import { fetchPublicImage } from '$lib/server/image-fetch.js';
 
-const MAX_UPSTREAM_SIZE = 25 * 1024 * 1024; // 25MB
 const MAX_WIDTH = 1920;
 const MAX_HEIGHT = 1080;
 const DEFAULT_QUALITY = 80;
-const FETCH_TIMEOUT = 10_000;
 
 /** @type {import('@sveltejs/kit').RequestHandler} */
 export async function GET({ url }) {
@@ -21,27 +19,6 @@ export async function GET({ url }) {
     return 'webp';
   })();
 
-  if (!imageUrl) {
-    return new Response('Missing url parameter', { status: 400 });
-  }
-
-  // Validate URL format
-  /** @type {URL} */
-  let parsedUrl;
-  try {
-    parsedUrl = new URL(imageUrl);
-  } catch {
-    return new Response('Invalid url parameter', { status: 400 });
-  }
-
-  if (parsedUrl.protocol !== 'http:' && parsedUrl.protocol !== 'https:') {
-    return new Response('URL must be http or https', { status: 400 });
-  }
-
-  if (await isBlockedHost(parsedUrl)) {
-    return new Response('Private/local URLs are not allowed', { status: 400 });
-  }
-
   // Clamp dimensions
   const width = Math.min(Math.max(w || 0, 0), MAX_WIDTH) || undefined;
   const height = Math.min(Math.max(h || 0, 0), MAX_HEIGHT) || undefined;
@@ -51,39 +28,15 @@ export async function GET({ url }) {
     return new Response('At least one of w or h is required', { status: 400 });
   }
 
+  // URL validation, SSRF guard, timeout, content-type and size checks are
+  // shared with /api/image-hash.
+  const upstream = await fetchPublicImage(imageUrl);
+  if (!upstream.ok) {
+    return new Response(upstream.message, { status: upstream.status });
+  }
+  const buffer = upstream.buffer;
+
   try {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), FETCH_TIMEOUT);
-
-    const upstream = await fetchGuardedRedirects(imageUrl, {
-      signal: controller.signal,
-      headers: { Accept: 'image/*' }
-    });
-
-    clearTimeout(timeout);
-
-    if (!upstream.ok) {
-      return new Response('Upstream image fetch failed', { status: 502 });
-    }
-
-    // Check content type
-    const contentType = upstream.headers.get('content-type') || '';
-    if (!contentType.startsWith('image/')) {
-      return new Response('Upstream resource is not an image', { status: 502 });
-    }
-
-    // Check content length if available
-    const contentLength = parseInt(upstream.headers.get('content-length') || '0', 10);
-    if (contentLength > MAX_UPSTREAM_SIZE) {
-      return new Response('Upstream image too large', { status: 502 });
-    }
-
-    const buffer = Buffer.from(await upstream.arrayBuffer());
-
-    if (buffer.length > MAX_UPSTREAM_SIZE) {
-      return new Response('Upstream image too large', { status: 502 });
-    }
-
     // Animated sources (GIF, animated WebP/APNG) keep their frames only for
     // webp output — jpeg/png can't animate, so those flatten to frame 1.
     const animated = fmtParam === 'webp';
@@ -118,10 +71,7 @@ export async function GET({ url }) {
         'Content-Length': String(outBuffer.length)
       }
     });
-  } catch (err) {
-    if (err instanceof Error && err.name === 'AbortError') {
-      return new Response('Upstream image fetch timed out', { status: 504 });
-    }
+  } catch {
     return new Response('Image processing failed', { status: 502 });
   }
 }

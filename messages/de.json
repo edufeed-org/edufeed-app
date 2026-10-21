@@ -3003,6 +3003,8 @@
   "licensed_image_input_error_too_large": "Bild ist zu groß (max. {size} MB)",
   "licensed_image_input_error_upload_failed": "Upload fehlgeschlagen. Bitte erneut versuchen.",
   "licensed_image_input_replace_license": "Lizenz ersetzen",
+  "licensed_image_input_attest_external": "Lizenz angeben",
+  "licensed_image_input_external_no_license": "Ohne Lizenzangabe",
   "license_modal_title": "Bild lizenzieren",
   "license_modal_title_file": "Datei lizenzieren",
   "license_modal_description": "Vor dem Veröffentlichen eines hochgeladenen Bildes benötigen wir eine Lizenz. Dies erzeugt eine öffentliche Attestierung auf Nostr.",

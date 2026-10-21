@@ -62,6 +62,14 @@
   let pendingFile = $state(null);
   let pickToken = 0;
 
+  // A pasted non-Blossom URL whose bytes the server hashed for us
+  // (/api/image-hash). The browser cannot hash a foreign image (CORS), but a
+  // kind-1063 attestation is keyed by SHA-256 — so this is what lets the user
+  // record a license for an external image, not only for an upload. Null while
+  // nothing external is pasted, the lookup is still running, or it failed.
+  let externalHashedUrl = $state(/** @type {string | null} */ (null));
+  let externalLookupToken = 0;
+
   // Reactive license event from EventStore.
   const getLicense = useLicenseForHash(() => currentHash);
   $effect(() => {
@@ -73,6 +81,35 @@
 
   function handleAddImage() {
     chooserOpen = true;
+  }
+
+  /**
+   * Hash a pasted external URL through the server. Any failure (private host,
+   * not an image, too large, endpoint down) leaves the field exactly as it
+   * was before: a plain URL with no hash, no badge and no license button.
+   * @param {string} url
+   */
+  async function hashExternalUrl(url) {
+    const myToken = ++externalLookupToken;
+    try {
+      const res = await fetch(`/api/image-hash?url=${encodeURIComponent(url)}`);
+      if (!res.ok) return;
+      const data = await res.json();
+      if (myToken !== externalLookupToken || imageUrl !== url) return; // superseded
+      if (typeof data?.sha256 !== 'string' || !/^[0-9a-f]{64}$/.test(data.sha256)) return;
+      currentHash = data.sha256;
+      modalMime = typeof data.mime === 'string' && data.mime ? data.mime : 'image/jpeg';
+      modalSize = typeof data.size === 'number' ? data.size : undefined;
+      externalHashedUrl = url;
+    } catch {
+      // degrade to today's behaviour: URL without license information
+    }
+  }
+
+  async function handleAttestExternal() {
+    if (!currentHash) return;
+    pendingExistingLicense = await findExistingLicense(currentHash);
+    modalOpen = true;
   }
 
   /**
@@ -204,6 +241,8 @@
     // file.
     metaCleanedFields = 0;
     metaCleanFailed = false;
+    externalHashedUrl = null;
+    externalLookupToken++;
     if (!imageUrl) {
       currentHash = null;
       imageWasUploaded = false;
@@ -212,7 +251,16 @@
     const hashFromUrl = getSha256FromURL(imageUrl);
     currentHash = hashFromUrl ?? null;
     imageWasUploaded = false;
+    if (!hashFromUrl && /^https?:\/\//i.test(imageUrl)) {
+      void hashExternalUrl(imageUrl);
+    }
   }
+
+  // Offer "add a license" only for an external image the server could hash
+  // and that nobody has attested yet. Uploads get the modal automatically.
+  const canAttestExternal = $derived(
+    !!externalHashedUrl && externalHashedUrl === imageUrl && !!currentHash && !licenseEvent
+  );
 </script>
 
 <div class="form-control">
@@ -268,7 +316,19 @@
     />
   </div>
 
-  {#if licenseEvent}
+  {#if canAttestExternal}
+    <div class="mt-2 flex items-center gap-2 text-xs">
+      <span class="text-base-content/70">{m.licensed_image_input_external_no_license()}</span>
+      <button
+        type="button"
+        class="btn btn-outline btn-sm"
+        data-testid="licensed-image-attest-external"
+        onclick={handleAttestExternal}
+      >
+        {m.licensed_image_input_attest_external()}
+      </button>
+    </div>
+  {:else if licenseEvent}
     <div class="mt-2 flex items-center gap-2 text-xs">
       <LicenseBadge {licenseEvent} />
       <button
@@ -337,6 +397,12 @@
     pendingFile = null;
   }}
   oncancel={() => {
+    // An external image was only being attested, not added: cancelling keeps
+    // the pasted URL and simply leaves it without a license, as before.
+    if (externalHashedUrl) {
+      pendingExistingLicense = null;
+      return;
+    }
     // Cancel discards the pending upload entirely. No bytes have been
     // sent to Blossom yet (performUpload runs only from beforeAttest),
     // so there is no orphan to clean up.
