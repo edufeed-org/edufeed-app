@@ -2,8 +2,8 @@
  * E2E spec for the normie-friendly signup happy path.
  *
  * Validates the integrated educator wizard (skip path):
- *   1. Login modal shows a prominent "Create your account" CTA, with the
- *      legacy methods (extension/nsec/bunker) visible directly below a
+ *   1. Login modal shows the "Neu hier? Konto erstellen" row first, with the
+ *      existing-account methods (key/signer app/extension) as rows below a
  *      divider — no disclosure to expand. Returning users need to see
  *      their option without an extra click.
  *   2. Clicking the CTA opens the signup wizard at step 1 (name only).
@@ -52,7 +52,11 @@ test.describe('Signup - Normie path', () => {
     // returning users don't have to hunt.
     const advanced = page.locator('[data-testid="other-signin-methods"]');
     await expect(advanced).toBeVisible();
-    await expect(advanced.locator('button.btn')).toHaveCount(3);
+    await expect(
+      advanced.locator(
+        '[data-testid="login-method-nsec"], [data-testid="login-method-bunker"], [data-testid="login-method-extension"]'
+      )
+    ).toHaveCount(3);
 
     // Click the primary CTA → opens signup modal at step 1
     await primaryCta.click();

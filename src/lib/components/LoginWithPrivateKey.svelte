@@ -151,8 +151,16 @@
           return;
         }
       } else {
-        // Try to decode as regular nsec
-        const decoded = nip19.decode(trimmedInput);
+        // Try to decode as regular nsec. Anything that is not bech32 (a hex
+        // key from another client, a typo) gets the format hint instead of
+        // the generic "login failed" (mobile UX round, Dirk).
+        let decoded;
+        try {
+          decoded = nip19.decode(trimmedInput);
+        } catch {
+          errorMessage = m.auth_login_private_key_error_invalid_format();
+          return;
+        }
         if (decoded.type !== 'nsec') {
           errorMessage = m.auth_login_private_key_error_invalid_format();
           return;
