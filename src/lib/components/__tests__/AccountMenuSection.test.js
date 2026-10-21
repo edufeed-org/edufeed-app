@@ -38,6 +38,12 @@ vi.mock('$lib/stores/modal.svelte.js', () => ({
   modalStore: mockModalStore
 }));
 
+// Backup flags: which pubkeys already downloaded their recovery file.
+const mockDownloaded = vi.hoisted(() => ({ pubkeys: /** @type {string[]} */ ([]) }));
+vi.mock('$lib/stores/backup-flags.svelte.js', () => ({
+  isBackupDownloaded: (pubkey) => mockDownloaded.pubkeys.includes(pubkey)
+}));
+
 vi.mock('$lib/stores/user-profile.svelte.js', () => ({
   useUserProfile: () => () => ({ name: 'Alice' })
 }));
@@ -82,6 +88,7 @@ vi.mock('$lib/paraglide/messages', () => ({
   navbar_logout_current: () => 'Abmelden',
   navbar_logout_all: () => 'Alle Konten abmelden',
   navbar_logout_all_confirm: () => 'Sure?',
+  navbar_backup_key: () => 'Schlüssel sichern',
   admin_membership_title: () => 'Mitgliedschaftsanträge'
 }));
 
@@ -99,6 +106,7 @@ beforeEach(() => {
   mockManager.removeAccount.mockReset();
   mockModalStore.openModal.mockReset();
   mockPendingCount.value = 0;
+  mockDownloaded.pubkeys = [];
   mockRuntimeConfig.membership = { adminPubkeys: [] };
   mockRuntimeConfig.help = { url: '/wiki/edufeed-erste-schritte' };
 });
@@ -215,6 +223,81 @@ describe('AccountMenuSection', () => {
       const badge = container.querySelector('[data-testid="membership-pending-badge"]');
       expect(badge).toBeTruthy();
       expect(badge?.textContent?.trim()).toBe('3');
+    });
+  });
+
+  describe('key safety (issue ddce9cc0)', () => {
+    const NSEC_A = { id: 'acct-a', pubkey: PUBKEY_A, type: 'nsec' };
+
+    it('offers "Schlüssel sichern" only for local-key accounts and opens the download', async () => {
+      active$.next(NSEC_A);
+      const onClose = vi.fn();
+      const { findByTestId } = render(AccountMenuSection, { onClose });
+      await fireEvent.click(await findByTestId('backup-key-menu-item'));
+      expect(mockModalStore.openModal).toHaveBeenCalledWith('recovery-download');
+      expect(onClose).toHaveBeenCalled();
+    });
+
+    it('has no backup row for extension or bunker accounts', async () => {
+      active$.next({ ...ACCOUNT_A, type: 'extension' });
+      const { findByText, queryByTestId } = render(AccountMenuSection, { onClose: vi.fn() });
+      await findByText('Abmelden');
+      expect(queryByTestId('backup-key-menu-item')).toBeNull();
+    });
+
+    it('does NOT remove a never-backed-up nsec account on "Abmelden" — it asks first', async () => {
+      active$.next(NSEC_A);
+      const onClose = vi.fn();
+      const { findByText } = render(AccountMenuSection, { onClose });
+      await fireEvent.click(await findByText('Abmelden'));
+      expect(mockManager.removeAccount).not.toHaveBeenCalled();
+      expect(mockModalStore.openModal).toHaveBeenCalledWith(
+        'logoutConfirm',
+        { mode: 'current', count: 1, canDownload: true },
+        expect.objectContaining({ onConfirm: expect.any(Function), onBackup: expect.any(Function) })
+      );
+      expect(onClose).toHaveBeenCalled();
+      // Confirming removes; the backup action opens the download.
+      const callbacks = mockModalStore.openModal.mock.calls[0][2];
+      callbacks.onBackup();
+      expect(mockModalStore.openModal).toHaveBeenLastCalledWith('recovery-download');
+      callbacks.onConfirm();
+      expect(mockManager.removeAccount).toHaveBeenCalledWith(NSEC_A.id);
+      expect(mockModalStore.closeModal).toHaveBeenCalled();
+    });
+
+    it('removes a backed-up nsec account straight away', async () => {
+      active$.next(NSEC_A);
+      mockDownloaded.pubkeys = [PUBKEY_A];
+      const { findByText } = render(AccountMenuSection, { onClose: vi.fn() });
+      await fireEvent.click(await findByText('Abmelden'));
+      expect(mockManager.removeAccount).toHaveBeenCalledWith(NSEC_A.id);
+      expect(mockModalStore.openModal).not.toHaveBeenCalledWith(
+        'logoutConfirm',
+        expect.anything(),
+        expect.anything()
+      );
+    });
+
+    it('"Alle Konten abmelden" confirms through the modal, counting the unsaved accounts', async () => {
+      const nsecB = { id: 'acct-b', pubkey: 'b'.repeat(64), type: 'nsec' };
+      active$.next(NSEC_A);
+      accounts$.next([NSEC_A, nsecB, { id: 'acct-c', pubkey: 'c'.repeat(64), type: 'extension' }]);
+      mockManager.accounts = [
+        NSEC_A,
+        nsecB,
+        { id: 'acct-c', pubkey: 'c'.repeat(64), type: 'extension' }
+      ];
+      const { findByText } = render(AccountMenuSection, { onClose: vi.fn() });
+      await fireEvent.click(await findByText('Alle Konten abmelden'));
+      expect(mockManager.removeAccount).not.toHaveBeenCalled();
+      expect(mockModalStore.openModal).toHaveBeenCalledWith(
+        'logoutConfirm',
+        { mode: 'all', count: 2, canDownload: true },
+        expect.anything()
+      );
+      mockModalStore.openModal.mock.calls[0][2].onConfirm();
+      expect(mockManager.removeAccount).toHaveBeenCalledTimes(3);
     });
   });
 

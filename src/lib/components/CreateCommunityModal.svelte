@@ -137,11 +137,10 @@
   // Dynamic step count based on choice (after keypair selection) - list-driven
   let totalSteps = $derived(currentStep === 0 ? 0 : wizardSteps.length);
 
-  // Current step display (adjusted for stepper)
-  let displayStep = $derived.by(() => {
-    if (currentStep === 0) return 0;
-    return useCurrentKeypair ? currentStep : currentStep - 1; // New keypair starts from step 1 after profile
-  });
+  // Current step display: the step list already contains 'profile' and
+  // 'keys' for the new-keypair flow, so the indicator is simply the step
+  // number — the old `- 1` lagged it one position behind (issue ddce9cc0, F).
+  let displayStep = $derived(currentStep);
 
   // Licensed community picture: informational flags the licensed input binds
   // (the license event is published by the input's own modal).
@@ -1246,7 +1245,13 @@
 
           {#if currentStep > 0}
             {#if currentStep < totalSteps}
-              <button class="btn btn-primary" onclick={nextStep}>
+              <!-- The keys step needs a downloaded backup first: disabled
+                   instead of a silent no-op (issue ddce9cc0, F). -->
+              <button
+                class="btn btn-primary"
+                onclick={nextStep}
+                disabled={currentStepId === 'keys' && !userData.downloadConfirmed}
+              >
                 {m.create_community_modal_button_next()}
                 <ChevronRightIcon />
               </button>

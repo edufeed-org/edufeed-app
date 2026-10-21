@@ -77,6 +77,14 @@ export async function logout(page) {
     .first()
     .click();
 
+  // A local-key account that was never backed up gets the "Ohne Sicherung
+  // abmelden?" dialog first (issue ddce9cc0) — confirm it.
+  await page.waitForTimeout(300);
+  const logoutConfirm = page.locator('[data-testid="logout-confirm-action"]');
+  if (await logoutConfirm.count()) {
+    await logoutConfirm.click();
+  }
+
   // Wait for logout to complete - login button should reappear (use .first() for responsive navbar)
   await expect(page.locator('button:has-text("Login")').first()).toBeVisible({ timeout: 5000 });
 }

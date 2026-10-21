@@ -6,7 +6,9 @@
   import { runtimeConfig } from '$lib/stores/config.svelte.js';
   import { modalStore } from '$lib/stores/modal.svelte.js';
   import { connectWithBunkerUrl, registerBunkerAccount } from '$lib/helpers/bunker-connection.js';
+  import { getPublicKey } from 'nostr-tools/pure';
   import { downloadRecoveryFile } from '$lib/helpers/recoveryFile.js';
+  import { markBackupDownloaded } from '$lib/stores/backup-flags.svelte.js';
   import { GoogleIcon } from '$lib/components/icons';
   import {
     startGoogleLogin,
@@ -138,7 +140,14 @@
 
   function downloadBackup() {
     if (!newSecretKey) return;
-    downloadRecoveryFile({ privateKey: newSecretKey, nsec: newNsec });
+    const pubkey = getPublicKey(newSecretKey);
+    downloadRecoveryFile({
+      privateKey: newSecretKey,
+      nsec: newNsec,
+      npub: nip19.npubEncode(pubkey),
+      appName: runtimeConfig.appName || 'Edufeed'
+    });
+    markBackupDownloaded(pubkey);
   }
 </script>
 

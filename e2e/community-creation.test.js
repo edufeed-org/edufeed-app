@@ -396,15 +396,11 @@ test.describe('Community Creation - New Keypair Flow', () => {
     await nextButton.click();
     await page.waitForTimeout(1000);
 
-    // Try to click Next without downloading
-    await nextButton.click();
-    await page.waitForTimeout(500);
-
-    // Should show error or still be on key generation step
-    const errorAlert = page.locator('.alert-error');
-    const stillOnKeyGen = await page.locator('#keypair-password').isVisible();
-
-    expect((await errorAlert.isVisible()) || stillOnKeyGen).toBe(true);
+    // Without a download, Next is disabled and the step says why
+    // (issue ddce9cc0, F) — the user cannot even try to skip the backup.
+    await expect(nextButton).toBeDisabled();
+    await expect(page.locator('[data-testid="keypair-download-hint"]')).toBeVisible();
+    await expect(page.locator('#keypair-password')).toBeVisible();
   });
 
   test('back button is NOT visible on profile step (step 1)', async ({

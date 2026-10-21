@@ -122,6 +122,7 @@ vi.mock('$lib/paraglide/messages', () =>
       'auth_signup_modal_handle_subtitle',
       'auth_signup_modal_handle_optional_hint',
       'auth_signup_modal_membership_skip',
+      'common_close',
       'common_back',
       'common_cancel'
     ].map((key) => [key, () => key])

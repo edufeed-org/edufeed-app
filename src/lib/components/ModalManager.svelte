@@ -73,6 +73,7 @@
     concordInvites: lazyComponent(() => import('./community/channels/InviteInboxModal.svelte')),
     callSwitchConfirm: lazyComponent(() => import('./groups/CallSwitchConfirmModal.svelte')),
     callLeaveConfirm: lazyComponent(() => import('./groups/CallLeaveConfirmModal.svelte')),
+    logoutConfirm: lazyComponent(() => import('./shared/LogoutConfirmModal.svelte')),
     callPreJoin: lazyComponent(() => import('./groups/CallPreJoinModal.svelte')),
     breakoutAssignment: lazyComponent(() => import('./groups/BreakoutAssignmentModal.svelte')),
     connectionStatus: lazyComponent(() => import('./shared/ConnectionStatusModal.svelte')),
@@ -160,6 +161,17 @@
           guest: props?.guest === true,
           onConfirm: () => callbacks?.onConfirm?.(),
           onCancel: () => callbacks?.onCancel?.()
+        };
+      }
+      case 'logoutConfirm': {
+        const callbacks = /** @type {any} */ (modal.modalCallbacks);
+        return {
+          mode: props?.mode ?? 'current',
+          count: props?.count ?? 1,
+          canDownload: props?.canDownload === true,
+          onConfirm: () => callbacks?.onConfirm?.(),
+          onCancel: () => callbacks?.onCancel?.(),
+          onBackup: () => callbacks?.onBackup?.()
         };
       }
       case 'callPreJoin': {

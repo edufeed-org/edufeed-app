@@ -292,22 +292,35 @@ describe('TermiAssistant launcher + hints', () => {
     expect(container.querySelector('[data-testid="termi-hint-dm"]')).toBeNull();
   });
 
-  it('shows no backup hint for extension accounts or downloaded/dismissed flags', async () => {
+  it('shows no backup hint for extension accounts or once the file was downloaded', async () => {
     mockActiveUser.value = { type: 'extension', pubkey: EXT_PUBKEY };
     const { container, unmount } = render(TermiAssistant);
     await openTermi(container);
     expect(container.querySelector('[data-testid="termi-hint-backup"]')).toBeNull();
     unmount();
 
-    for (const flag of ['backup-downloaded', 'backup-banner-dismissed']) {
-      mockActiveUser.value = signedUpNsecUser();
-      localStorage.setItem(`${flag}:${NSEC_PUBKEY}`, '1');
-      const r = render(TermiAssistant);
-      await openTermi(r.container);
-      expect(r.container.querySelector('[data-testid="termi-hint-backup"]')).toBeNull();
-      r.unmount();
-      localStorage.clear();
-    }
+    mockActiveUser.value = signedUpNsecUser();
+    localStorage.setItem(`backup-downloaded:${NSEC_PUBKEY}`, '1');
+    const r = render(TermiAssistant);
+    await openTermi(r.container);
+    expect(r.container.querySelector('[data-testid="termi-hint-backup"]')).toBeNull();
+    r.unmount();
+  });
+
+  // Issue ddce9cc0 (C): the old permanent "Später" flag let a never-backed-up
+  // key go silent forever. The hint now returns every visit until downloaded.
+  it('a stale backup-banner-dismissed flag no longer hides the hint, and dismissing it writes no flag', async () => {
+    mockActiveUser.value = signedUpNsecUser();
+    localStorage.setItem(`backup-banner-dismissed:${NSEC_PUBKEY}`, '1');
+    const { container } = render(TermiAssistant);
+    await openTermi(container);
+    expect(container.querySelector('[data-testid="termi-hint-backup"]')).not.toBeNull();
+
+    await fireEvent.click(container.querySelector('[data-testid="termi-hint-backup-dismiss"]'));
+    expect(container.querySelector('[data-testid="termi-hint-backup"]')).toBeNull();
+    expect(Object.keys(localStorage).filter((k) => k.startsWith('backup-'))).toEqual([
+      `backup-banner-dismissed:${NSEC_PUBKEY}`
+    ]);
   });
 
   it('backup action opens the recovery modal; hint flips to done when the flag lands', async () => {

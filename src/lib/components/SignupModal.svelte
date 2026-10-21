@@ -21,6 +21,8 @@
   import SignupCommunityPicker from './SignupCommunityPicker.svelte';
   import EducatorContextFields from './shared/EducatorContextFields.svelte';
   import MembershipApplicationForm from './membership/MembershipApplicationForm.svelte';
+  import RecoveryDownloadForm from './shared/RecoveryDownloadForm.svelte';
+  import { markBackupDownloaded } from '$lib/stores/backup-flags.svelte.js';
 
   let { modalId, externalSignup = false, initialName = '' } = $props();
 
@@ -30,11 +32,25 @@
   //   Step 3 = optional educator context (kind-0 `edufeed` object + kind 10015 interests)
   //   Step 4 = community picker → finishSignup publishes kind 0 (+ optional 10015/30000)
   //   Step 5 = optional edufeed-handle application; only when membership is
-  //            enabled — otherwise the modal closes right after finishSignup.
-  // Backup file + suggested follows are deferred to post-login banners.
+  //            enabled.
+  //   Last   = "Sichern": the backup-file download (local keys only; a
+  //            bunker account has nothing to back up here). The account
+  //            exists since step 1, so leaving the wizard before this step
+  //            — Escape, backdrop, "Schließen", "Später sichern" — asks
+  //            first (issue ddce9cc0: a never-backed-up key is lost with
+  //            the next logout).
+  // Suggested follows are deferred to post-login hints.
   let currentStep = $state(1);
 
   const membershipEnabled = $derived(!!runtimeConfig.membership?.enabled);
+  /** The "Sichern" step's number; comes after the optional handle step. */
+  const backupStep = $derived(membershipEnabled ? 6 : 5);
+  /** Set once the recovery file was downloaded on the backup step. */
+  let backupDone = $state(false);
+  /** The "Konto erstellt, aber nicht gesichert" dialog over the wizard. */
+  let showUnsavedGuard = $state(false);
+  /** True once finishSignup published the kind 0 (and friends). */
+  let profilePublished = $state(false);
 
   let userData = $state({
     // `initialName` only ever seeds the initial value (call-link guest flow
@@ -98,6 +114,13 @@
       // Don't allow closing mid-publish; reopen if attempted.
       if (isPublishing) {
         dialog.showModal();
+        return;
+      }
+      // Escape/backdrop after the account exists but before the backup:
+      // reopen and ask, instead of silently leaving an unsaved key behind.
+      if (needsUnsavedGuard()) {
+        dialog.showModal();
+        showUnsavedGuard = true;
         return;
       }
       if (modalStore.activeModal === 'signup') {
@@ -194,8 +217,54 @@
     hasSeededCommunities = false;
     edufeed = { interests: [], educationalLevels: [], subjects: [], locations: [] };
     handleApplied = false;
+    backupDone = false;
+    showUnsavedGuard = false;
+    profilePublished = false;
     prewarmSub?.unsubscribe();
     prewarmSub = undefined;
+  }
+
+  /**
+   * Local-key signup, account already created (step ≥ 2), no backup yet.
+   * resetState() puts currentStep back to 1, so the dialog's own close
+   * after closeModal() never re-triggers the guard.
+   */
+  function needsUnsavedGuard() {
+    return !externalSignup && currentStep >= 2 && !backupDone;
+  }
+
+  /** "Schließen" on the middle steps and "Später sichern" on the last. */
+  function requestClose() {
+    if (needsUnsavedGuard()) {
+      showUnsavedGuard = true;
+      return;
+    }
+    closeModal();
+  }
+
+  /**
+   * "Jetzt sichern" in the guard: back into the wizard, on the backup step.
+   * From a middle step the profile is not published yet — do that on the
+   * way (name only), or the account would stay a bare key with no kind 0.
+   */
+  async function goToBackup() {
+    showUnsavedGuard = false;
+    if (profilePublished) {
+      currentStep = backupStep;
+      return;
+    }
+    await finishSignup({ skipCommunities: true, next: 'backup' });
+  }
+
+  function handleBackupDownloaded() {
+    backupDone = true;
+    if (userData.publicKey) markBackupDownloaded(userData.publicKey);
+  }
+
+  /** Leaving the optional handle step: on to the backup (local key) or out. */
+  function leaveHandleStep() {
+    if (externalSignup) closeModal();
+    else currentStep = backupStep;
   }
 
   /**
@@ -280,9 +349,10 @@
    * time. Afterwards the modal either closes or — when membership is enabled —
    * advances to the optional handle-application step.
    *
-   * @param {{ skipCommunities?: boolean }} [opts]
+   * @param {{ skipCommunities?: boolean, next?: 'handle' | 'backup' }} [opts]
+   *   `next: 'backup'` skips the optional handle step (guard path).
    */
-  async function finishSignup({ skipCommunities = false } = {}) {
+  async function finishSignup({ skipCommunities = false, next = 'handle' } = {}) {
     if (!_signer || !userData.publicKey) {
       errors.publishing = 'Account not ready.';
       return;
@@ -352,12 +422,15 @@
       clearCallGuest(userData.publicKey);
 
       isPublishing = false;
-      if (membershipEnabled) {
+      profilePublished = true;
+      if (membershipEnabled && next === 'handle') {
         // Signup is complete; offer the optional handle application while the
-        // user is still in the flow. Closing at any point is fine.
+        // user is still in the flow, then the backup step.
         currentStep = 5;
-      } else {
+      } else if (externalSignup) {
         closeModal();
+      } else {
+        currentStep = backupStep;
       }
 
       // Background publish.
@@ -417,6 +490,11 @@
         {#if membershipEnabled}
           <li class="step {currentStep >= 5 ? 'step-primary' : ''}">
             {m.auth_signup_modal_step_handle()}
+          </li>
+        {/if}
+        {#if !externalSignup}
+          <li class="step {currentStep >= backupStep ? 'step-primary' : ''}">
+            {m.auth_signup_modal_step_backup()}
           </li>
         {/if}
       </ul>
@@ -526,6 +604,25 @@
         </div>
       {:else if currentStep === 4}
         <SignupCommunityPicker bind:selected />
+      {:else if currentStep === backupStep}
+        <div class="space-y-4" data-testid="signup-backup-step">
+          <h2 class="text-lg font-bold">{m.auth_signup_modal_backup_title()}</h2>
+          <p class="text-sm opacity-80">{m.auth_signup_modal_backup_intro()}</p>
+          {#if backupDone}
+            <div class="alert alert-success" data-testid="signup-backup-done">
+              <span>{m.auth_signup_modal_backup_done()}</span>
+            </div>
+          {:else}
+            <RecoveryDownloadForm
+              {privateKey}
+              nsec={userData.nsec}
+              label={userData.name}
+              npub={userData.npub}
+              appName={runtimeConfig.appName || 'Edufeed'}
+              onDownloaded={handleBackupDownloaded}
+            />
+          {/if}
+        </div>
       {:else if currentStep === 5}
         {@const handleDomain = runtimeConfig.membership?.handleDomain || 'edufeed.org'}
         {@const appName = runtimeConfig.appName || 'Edufeed'}
@@ -597,11 +694,17 @@
             <ChevronRightIcon />
           </button>
         {:else if currentStep === 2}
+          <button class="btn btn-ghost" data-testid="signup-close" onclick={requestClose}>
+            {m.common_close()}
+          </button>
           <button class="btn btn-primary" onclick={continueFromStep2}>
             {m.auth_signup_modal_continue()}
             <ChevronRightIcon />
           </button>
         {:else if currentStep === 3}
+          <button class="btn btn-ghost" data-testid="signup-close" onclick={requestClose}>
+            {m.common_close()}
+          </button>
           <button
             class="btn btn-primary"
             data-testid="signup-context-continue"
@@ -627,16 +730,40 @@
               {m.auth_signup_modal_step3_done()}
             {/if}
           </button>
-        {:else}
-          <!-- Step 5: account already exists and the kind 0 is published, so
-               the only action is leaving — either before applying ("Später
-               beantragen") or after ("Fertig"). -->
-          {#if handleApplied}
-            <button class="btn btn-primary" data-testid="signup-handle-done" onclick={closeModal}>
+        {:else if currentStep === backupStep}
+          <!-- Last step: "Fertig" once the file is saved; "Später sichern"
+               goes through the unsaved-key guard like every other exit. -->
+          {#if backupDone}
+            <button
+              class="btn btn-primary"
+              data-testid="signup-backup-done-btn"
+              onclick={closeModal}
+            >
               {m.auth_signup_modal_done()}
             </button>
           {:else}
-            <button class="btn btn-ghost" data-testid="signup-skip-handle" onclick={closeModal}>
+            <button class="btn btn-ghost" data-testid="signup-backup-later" onclick={requestClose}>
+              {m.auth_signup_modal_backup_later()}
+            </button>
+          {/if}
+        {:else}
+          <!-- Step 5: the kind 0 is published; leaving — before applying
+               ("Später beantragen") or after ("Fertig") — leads to the
+               backup step (or out, for a bunker account). -->
+          {#if handleApplied}
+            <button
+              class="btn btn-primary"
+              data-testid="signup-handle-done"
+              onclick={leaveHandleStep}
+            >
+              {m.auth_signup_modal_done()}
+            </button>
+          {:else}
+            <button
+              class="btn btn-ghost"
+              data-testid="signup-skip-handle"
+              onclick={leaveHandleStep}
+            >
               {m.auth_signup_modal_membership_skip()}
             </button>
           {/if}
@@ -650,4 +777,30 @@
       {/if}
     </div>
   </div>
+
+  <!-- Unsaved-key guard (issue ddce9cc0, B): the account exists since step
+       1, so closing before the backup must be a deliberate choice. Nested
+       inside the native dialog so it overlays the wizard's own box. -->
+  {#if showUnsavedGuard}
+    <div
+      class="modal-open modal"
+      role="alertdialog"
+      aria-modal="true"
+      aria-labelledby="signup-unsaved-title"
+      data-testid="signup-unsaved-guard"
+    >
+      <div class="modal-box max-w-sm">
+        <h3 id="signup-unsaved-title" class="font-bold">{m.auth_signup_unsaved_title()}</h3>
+        <p class="py-2 text-sm">{m.auth_signup_unsaved_body()}</p>
+        <div class="modal-action">
+          <button class="btn btn-ghost" data-testid="signup-unsaved-close" onclick={closeModal}>
+            {m.auth_signup_unsaved_close_anyway()}
+          </button>
+          <button class="btn btn-primary" data-testid="signup-unsaved-backup" onclick={goToBackup}>
+            {m.auth_signup_unsaved_backup_now()}
+          </button>
+        </div>
+      </div>
+    </div>
+  {/if}
 </dialog>

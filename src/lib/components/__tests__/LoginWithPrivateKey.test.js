@@ -173,4 +173,23 @@ describe('LoginWithPrivateKey', () => {
     expect(queryByText('Failed to log in')).toBeNull();
     expect(mockManager.addAccount).not.toHaveBeenCalled();
   });
+
+  it('accepts a whole backup file pasted in (header lines + key) — issue ddce9cc0', async () => {
+    mockManager.getAccountForPubkey.mockReturnValue(undefined);
+    const pasted = [
+      'Edufeed – Nostr-Schlüssel-Sicherung / Nostr key backup',
+      'Konto / Account: Testkonto A',
+      'npub: npub1xn34lppmdua2ft2qljhm59pm83xpfmsx4j9ctkx67suxh2us05js5zhftc',
+      'Erstellt / Created: 2026-10-14',
+      '',
+      'Privater Schlüssel (nsec) – geheim halten! / private key (nsec) – keep it secret:',
+      NSEC,
+      ''
+    ].join('\n');
+    const { container } = render(LoginWithPrivateKey, { props: { modalId: 'test-modal' } });
+    await submitNsec(container, pasted);
+    expect(mockManager.addAccount).toHaveBeenCalledTimes(1);
+    expect(mockManager.setActive).toHaveBeenCalledTimes(1);
+    expect(container.textContent).not.toContain('Invalid format');
+  });
 });

@@ -9,6 +9,7 @@
   import { loadUserProfile } from '$lib/loaders/profile.js';
   import SignupButton from './shared/SignupButton.svelte';
   import * as m from '$lib/paraglide/messages';
+  import { extractKeyToken } from '$lib/helpers/recoveryFile.js';
 
   let { modalId, onAccountCreated } = $props();
 
@@ -21,8 +22,11 @@
   /** @type {ReturnType<typeof setTimeout> | undefined} */
   let closeTimer;
 
+  // A pasted backup file (header lines + key) is as good as the bare key:
+  // the token inside it is what gets decoded.
+  let keyToken = $derived(extractKeyToken(inputNSEC));
   // Detect if input is ncryptsec format
-  let isNcryptsec = $derived(inputNSEC.trim().startsWith('ncryptsec1'));
+  let isNcryptsec = $derived(keyToken.startsWith('ncryptsec1'));
 
   /**
    * Sync modal close with store state
@@ -65,7 +69,7 @@
    *      decryption password). Plain-nsec users are the common path.
    */
   $effect(() => {
-    const trimmed = inputNSEC.trim();
+    const trimmed = keyToken;
     if (!trimmed.startsWith('nsec1')) {
       accountLabel = '';
       return;
@@ -133,7 +137,7 @@
     infoMessage = '';
 
     try {
-      const trimmedInput = inputNSEC.trim();
+      const trimmedInput = keyToken;
 
       // Check if it's an encrypted key (ncryptsec)
       if (trimmedInput.startsWith('ncryptsec1')) {

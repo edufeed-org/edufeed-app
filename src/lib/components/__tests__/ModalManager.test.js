@@ -39,6 +39,10 @@ vi.mock('../groups/CallLeaveConfirmModal.svelte', async () => {
   const mock = await import('./__mocks__/DialogModalStub.svelte');
   return { default: mock.default };
 });
+vi.mock('../shared/LogoutConfirmModal.svelte', async () => {
+  const mock = await import('./__mocks__/DialogModalStub.svelte');
+  return { default: mock.default };
+});
 vi.mock('../groups/BreakoutAssignmentModal.svelte', async () => {
   const mock = await import('./__mocks__/DialogModalStub.svelte');
   return { default: mock.default };
@@ -166,6 +170,22 @@ describe('ModalManager lazy loading', () => {
     const dialog = await screen.findByTestId('dialog-stub');
     expect(dialog.dataset.props.split(',')).toEqual(
       expect.arrayContaining(['guest', 'onCancel', 'onConfirm'])
+    );
+  });
+
+  it('renders the logout confirm with its props and the backup callback (issue ddce9cc0)', async () => {
+    render(ModalManager);
+    const onConfirm = vi.fn();
+    const onCancel = vi.fn();
+    const onBackup = vi.fn();
+    modalStore.openModal(
+      'logoutConfirm',
+      { mode: 'current', count: 1, canDownload: true },
+      { onConfirm, onCancel, onBackup }
+    );
+    const dialog = await screen.findByTestId('dialog-stub');
+    expect(dialog.dataset.props.split(',')).toEqual(
+      expect.arrayContaining(['mode', 'count', 'canDownload', 'onCancel', 'onConfirm', 'onBackup'])
     );
   });
 

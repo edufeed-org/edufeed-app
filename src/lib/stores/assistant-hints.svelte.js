@@ -30,11 +30,7 @@ import { getUnreadByType } from '$lib/services/inbox-service.svelte.js';
 import { useAdminJoinRequestAlert } from '$lib/groups/join-request-alerts.svelte.js';
 import { nip19 } from 'nostr-tools';
 import { modalStore } from '$lib/stores/modal.svelte.js';
-import {
-  isBackupDownloaded,
-  isBackupDismissed,
-  markBackupDismissed
-} from '$lib/stores/backup-flags.svelte.js';
+import { isBackupDownloaded } from '$lib/stores/backup-flags.svelte.js';
 import {
   isRelayListBannerDismissed,
   markRelayListBannerDismissed
@@ -221,13 +217,15 @@ export function useAssistantHints() {
 
     const backupConfirmed = isBackupDownloaded(user.pubkey);
     // Only nudge users who created their account via the in-app wizard —
-    // pre-existing nsec accounts own their backup story already.
+    // pre-existing nsec accounts own their backup story already. Deliberately
+    // NOT gated on a dismiss flag: a never-backed-up key is lost with the
+    // next logout, so the hint comes back every visit until the file is
+    // downloaded (issue ddce9cc0, C); the "x" only hides it for the session.
     const backupApplicable =
       user.type === 'nsec' &&
       typeof localStorage !== 'undefined' &&
       !!localStorage.getItem(`signed-up-here:${user.pubkey}`) &&
-      !backupConfirmed &&
-      !isBackupDismissed(user.pubkey);
+      !backupConfirmed;
 
     const relaysApplicable =
       settled &&
@@ -442,8 +440,8 @@ export function useAssistantHints() {
     const user = getActiveUser();
     const status = statuses[id];
     if (user && (status === 'open' || status === 'doing')) {
-      if (id === 'backup') markBackupDismissed(user.pubkey);
-      else if (id === 'relays') markRelayListBannerDismissed(user.pubkey);
+      // 'backup' is session-only on purpose (see backupApplicable above).
+      if (id === 'relays') markRelayListBannerDismissed(user.pubkey);
       else if (id === 'dm') markDmRelayBannerDismissed(user.pubkey);
       else if (id === 'nip05') {
         if (nip05Meta.variant === 'ready') markNip05ReadyHintDismissed(user.pubkey);

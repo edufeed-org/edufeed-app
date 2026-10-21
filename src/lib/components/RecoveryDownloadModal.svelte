@@ -1,25 +1,37 @@
 <script>
-  // Recovery file download dialog. Two modes:
-  //   encrypted  → NIP-49 ncryptsec (default; password ≥ 8 chars)
-  //   plain      → raw nsec (the file IS the secret — keep it private)
+  // Recovery file download dialog around the shared RecoveryDownloadForm.
   //
-  // Opened from the Termi assistant's backup hint and from the Settings page. After a
-  // successful download we set `backup-downloaded:<pubkey>` so the hint
-  // stops nagging on subsequent reloads.
+  // Opened from the Termi assistant's backup hint, the account menu and the
+  // Settings page. After a successful download we set
+  // `backup-downloaded:<pubkey>` so the hint stops nagging on subsequent
+  // reloads and the logout guard knows the key is safe.
   import { nip19 } from 'nostr-tools';
   import * as m from '$lib/paraglide/messages';
   import { useActiveUser } from '$lib/stores/accounts.svelte';
   import { modalStore } from '$lib/stores/modal.svelte.js';
-  import { downloadRecoveryFile } from '$lib/helpers/recoveryFile.js';
   import { markBackupDownloaded } from '$lib/stores/backup-flags.svelte.js';
+  import { useUserProfile } from '$lib/stores/user-profile.svelte.js';
+  import { runtimeConfig } from '$lib/stores/config.svelte.js';
+  import RecoveryDownloadForm from './shared/RecoveryDownloadForm.svelte';
 
   let { modalId } = $props();
 
   const getActiveUser = useActiveUser();
+  // The account's name goes into the file name and header so two backups
+  // never look alike (issue ddce9cc0).
+  const getProfile = useUserProfile(() => getActiveUser()?.pubkey);
 
-  let mode = $state(/** @type {'encrypted' | 'plain'} */ ('encrypted'));
-  let password = $state('');
-  let error = $state('');
+  // signer.key holds the raw private key bytes for nsec accounts.
+  const privateKey = $derived(getActiveUser()?.signer?.key ?? null);
+  const nsec = $derived(privateKey ? nip19.nsecEncode(privateKey) : '');
+  const npub = $derived.by(() => {
+    const pubkey = getActiveUser()?.pubkey;
+    return pubkey ? nip19.npubEncode(pubkey) : '';
+  });
+  const label = $derived.by(() => {
+    const profile = getProfile();
+    return profile?.display_name || profile?.name || '';
+  });
 
   /** Sync ESC/backdrop close with the modal store. */
   $effect(() => {
@@ -34,28 +46,9 @@
     return () => dialog.removeEventListener('close', onClose);
   });
 
-  function handleDownload() {
-    error = '';
+  function handleDownloaded() {
     const user = getActiveUser();
-    // signer.key holds the raw private key bytes for nsec accounts.
-    const privateKey = user?.signer?.key;
-    if (!user || !privateKey) {
-      error = 'No active key-holding account.';
-      return;
-    }
-    const nsec = nip19.nsecEncode(privateKey);
-
-    if (mode === 'encrypted') {
-      if (!password || password.length < 8) {
-        error = m.auth_recovery_modal_password_too_short();
-        return;
-      }
-      downloadRecoveryFile({ privateKey, nsec, password });
-    } else {
-      downloadRecoveryFile({ privateKey, nsec });
-    }
-
-    markBackupDownloaded(user.pubkey);
+    if (user) markBackupDownloaded(user.pubkey);
     modalStore.closeModal();
   }
 </script>
@@ -65,63 +58,23 @@
     <h3 class="mb-2 text-lg font-bold">{m.auth_recovery_modal_title()}</h3>
     <p class="mb-4 text-sm opacity-80">{m.auth_recovery_modal_intro()}</p>
 
-    <div class="space-y-2">
-      <label class="label flex cursor-pointer items-center gap-2">
-        <input
-          data-testid="recovery-mode-encrypted"
-          type="radio"
-          class="radio radio-sm"
-          name="recovery-mode"
-          value="encrypted"
-          checked={mode === 'encrypted'}
-          onchange={() => (mode = 'encrypted')}
-        />
-        <span class="label-text">{m.auth_recovery_modal_encrypted_label()}</span>
-      </label>
-
-      {#if mode === 'encrypted'}
-        <div class="form-control pl-8">
-          <label class="label" for="recovery-password-input">
-            <span class="label-text">{m.auth_recovery_modal_password_label()}</span>
-          </label>
-          <input
-            id="recovery-password-input"
-            data-testid="recovery-password"
-            type="password"
-            class="input-bordered input input-sm w-full"
-            bind:value={password}
-            minlength="8"
-          />
-        </div>
-      {/if}
-
-      <label class="label flex cursor-pointer items-center gap-2">
-        <input
-          data-testid="recovery-mode-plain"
-          type="radio"
-          class="radio radio-sm"
-          name="recovery-mode"
-          value="plain"
-          checked={mode === 'plain'}
-          onchange={() => (mode = 'plain')}
-        />
-        <span class="label-text">{m.auth_recovery_modal_plain_label()}</span>
-      </label>
-    </div>
-
-    {#if error}
-      <div class="mt-3 alert alert-error">
-        <span>{error}</span>
-      </div>
+    {#if privateKey}
+      <RecoveryDownloadForm
+        {privateKey}
+        {nsec}
+        {label}
+        {npub}
+        appName={runtimeConfig.appName || 'Edufeed'}
+        onDownloaded={handleDownloaded}
+      />
+    {:else}
+      <div class="alert alert-error"><span>No active key-holding account.</span></div>
     {/if}
 
     <div class="modal-action">
       <form method="dialog">
         <button class="btn btn-ghost">{m.common_cancel()}</button>
       </form>
-      <button data-testid="recovery-download-btn" class="btn btn-primary" onclick={handleDownload}>
-        {m.auth_recovery_modal_download()}
-      </button>
     </div>
   </div>
 </dialog>
