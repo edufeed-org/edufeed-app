@@ -47,6 +47,7 @@
   import { manager } from '$lib/stores/accounts.svelte.js';
   import { getCommunikeyRelays } from '$lib/helpers/relay-helper.js';
   import { normalizeRelayInput } from '$lib/helpers/relay-input.js';
+  import { getDefaultCommunityRelays } from '$lib/helpers/community-defaults.js';
   import { addressLoader } from '$lib/loaders/base.js';
 
   let { communikeyEvent } = $props();
@@ -158,7 +159,7 @@
     }
 
     communityData = {
-      relays: relays.length > 0 ? relays : ['wss://relay.edufeed.org'],
+      relays: relays.length > 0 ? relays : getDefaultCommunityRelays(),
       blossomServers,
       location,
       contentTypes: applyParsedAccessTiers(contentTypes, communikeyEvent)

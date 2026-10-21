@@ -513,10 +513,11 @@ test.describe('Community Creation - Community Settings', () => {
     await useCurrentButton.click();
     await page.waitForTimeout(500);
 
-    // Default relay (wss://relay.edufeed.org) is listed inside the collapsed
-    // "Advanced Settings" accordion — expand it first (see above).
+    // The default relay is the deployment's COMMUNIKEY_RELAYS (the e2e strfry,
+    // see playwright.config.js) — never a hardcoded production relay. Listed
+    // inside the collapsed "Advanced Settings" accordion — expand it first.
     await expandAdvancedSettings(page);
-    const defaultRelay = page.locator('text=wss://relay.edufeed.org');
+    const defaultRelay = page.locator('text=ws://localhost:17003');
     await expect(defaultRelay).toBeVisible({ timeout: 5000 });
   });
 });
