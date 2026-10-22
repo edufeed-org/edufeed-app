@@ -7,6 +7,67 @@ merge commits of the nostr PRs that landed since the previous tag.
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-10-22
+
+Ten fixes and features from the issues of the last twelve days: licences
+for external images, profile pictures and calendar event pages, a "Meine
+Uploads" tab that deletes a file from Blossom together with its
+attestation, keywords and subjects on licence attestations, resources a
+person is involved in on their profile, a contributor role, the community
+owner's seat protected from their own admins, and the iPhone search field
+on /discover that lost its focus. Cut as `v0.9.0-rc.1` on dev.edufeed.org
+before this tag.
+
+### Deploy notes
+
+- No new environment variables.
+- New server endpoint `GET /api/image-hash?url=` (hashes a public image for
+  the licence flow; same SSRF/redirect/size guards as `/api/image`).
+- The relay half of the owner-seat protection is the pyramid PR
+  `pr/creator-keeps-admin` (next `edufeed-v1.23`); until it is deployed the
+  guard is client-side only.
+- Wiki: edufeed/wikis PR #10 adds the "Indexing" section to
+  `license-events-nope` (keywords `t` and subjects `about:*` on kind 1063).
+
+### Added
+
+- Licence for pasted external image URLs: the resource form hashes the
+  image server-side and offers "Lizenz angeben"; an existing attestation
+  for that hash shows as before. The licence stays optional for external
+  URLs.
+- Profile and community pages show the licence of the picture and banner
+  ("Profilbild: CC BY 4.0 · …") when an attestation exists; no caution is
+  shown for unattested avatars.
+- "Meine Uploads" tab on your own profile: every file you attested, one row
+  per hash, "Entfernen" deletes the blob from its Blossom servers (BUD-01)
+  and withdraws the attestation (kind 5).
+- Licence attestations (kind 1063) can carry keywords (`t`) and subjects
+  (`about:*` from the KIM subject vocabularies) through a collapsed
+  "Erschließung (optional)" section of the licence dialog; the licence
+  info card shows them.
+- Materialien on a profile also list the resources that name the person
+  as creator or contributor (`p` tag with role) — flagged "Beteiligt".
+- Resource form people input: Urheber:in / Mitwirkende:r role;
+  contributors go out as `["p", …, "contributor"]` or `contributor:*` tags
+  and are shown as "Mitwirkende:r" on the resource page.
+
+### Fixed
+
+- The community owner's seat can no longer be demoted or removed by the
+  admins they appointed (client guard in all roster surfaces, plus a roles
+  hint); the relay-side rule follows with the next pyramid release.
+- /discover on iPhone: typing into the search field no longer scrolls
+  `<main>` to the top and drops the keyboard — the layout's scroll restore
+  skips navigations made while a text field has focus.
+- `/calendar/event/<naddr>` shows the image licence pill like the card and
+  the modal.
+- EKKW form: "Rollenspiel" was listed twice in the Methode picker — a stale
+  copy of a concept that had moved to `konfi-methode` on one relay; the
+  vocabulary loader now re-requests each concept by address once per
+  session so a moved concept leaves the list.
+- Konfi form: the keywords field was missing from step 4b, so AI-prefilled
+  keywords went out unedited.
+
 ## [0.8.0] - 2026-10-22
 
 The mobile chrome redesign (labeled dock, Bereiche sheet, plain-words login
