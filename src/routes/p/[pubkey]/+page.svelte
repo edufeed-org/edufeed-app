@@ -33,6 +33,7 @@
   import ProfileTabBar from '$lib/components/profile/ProfileTabBar.svelte';
   import ProfileContentTab from '$lib/components/profile/ProfileContentTab.svelte';
   import ProfileFeedView from '$lib/components/profile/ProfileFeedView.svelte';
+  import { lazyComponent } from '$lib/helpers/lazy-component.svelte.js';
   import CommunikeyCard from '$lib/components/CommunikeyCard.svelte';
   import BadgeCard from '$lib/components/badges/BadgeCard.svelte';
   import { PeopleIcon, BadgeIcon, UserIcon } from '$lib/components/icons';
@@ -312,6 +313,14 @@
     badges: tabCounts.badges
   });
 
+  // "Meine Uploads" (kind 1063 attestations + Blossom delete) is owner-only:
+  // not part of the kind-30078 tab config visitors see, and loaded on demand
+  // so blossom-client-sdk never enters the profile route's static graph.
+  const UPLOADS_TAB_ID = 'uploads';
+  const ProfileUploadsTab = lazyComponent(
+    () => import('$lib/components/profile/ProfileUploadsTab.svelte')
+  );
+
   /** @type {Record<string, () => string>} */
   const TAB_LABELS = {
     posts: m.profile_tab_posts,
@@ -331,15 +340,16 @@
   // Owner-defined order + hidden tabs (kind 30078), applied for all viewers.
   let tabsConfig = $derived(parseProfileTabsEvent(tabsConfigEvent));
 
-  let visibleTabs = $derived(
-    tabsConfig.order
+  let visibleTabs = $derived([
+    ...tabsConfig.order
       .filter((id) => !tabsConfig.hidden.includes(id))
       .map((id) => ({
         id,
         label: TAB_LABELS[id](),
         count: tabCounts[id] || 0
-      }))
-  );
+      })),
+    ...(isOwnProfile ? [{ id: UPLOADS_TAB_ID, label: m.profile_tab_uploads(), count: 0 }] : [])
+  ]);
 
   // If the active tab got hidden (config arrived or owner hid it), fall back
   // to the first visible tab.
@@ -504,6 +514,15 @@
             {/if}
           </div>
         {/each}
+
+        <!-- Meine Uploads (owner only, lazy) -->
+        {#if isOwnProfile}
+          <div class:hidden={activeTab !== UPLOADS_TAB_ID}>
+            {#if activatedTabs.has(UPLOADS_TAB_ID) && ProfileUploadsTab.Component}
+              <ProfileUploadsTab.Component pubkey={data.pubkey} {activeUser} />
+            {/if}
+          </div>
+        {/if}
 
         <!-- Communities -->
         <div class:hidden={activeTab !== 'communities'}>
