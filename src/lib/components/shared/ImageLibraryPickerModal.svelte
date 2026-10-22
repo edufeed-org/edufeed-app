@@ -1,7 +1,7 @@
 <script>
   import { topLayerModal } from '$lib/actions/topLayerModal.js';
   import { onDestroy } from 'svelte';
-  import { createTimelineLoader } from 'applesauce-loaders/loaders';
+  import { createTimelineLoader } from '$lib/loaders/timeline-loader.js';
   import {
     getFileMetadata,
     BLOSSOM_SERVER_LIST_KIND,

@@ -35,6 +35,12 @@ vi.mock('$lib/stores/nostr-infrastructure.svelte', () => {
 vi.mock('applesauce-loaders/loaders', () => ({
   createTimelineLoader: vi.fn(() => () => of())
 }));
+// applesauce v7 moved block paging out of the SDK: the app's timeline loader is
+// the local port in $lib/loaders/timeline-loader.js and takes the mock above.
+vi.mock('$lib/loaders/timeline-loader.js', async () => {
+  const loaders = /** @type {any} */ (await import('applesauce-loaders/loaders'));
+  return { createTimelineLoader: loaders.createTimelineLoader };
+});
 
 vi.mock('applesauce-core/models', () => ({
   TimelineModel: 'TimelineModel'

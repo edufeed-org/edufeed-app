@@ -156,7 +156,11 @@
     const sub = loader().subscribe();
 
     const modelSub = eventStore.model(TimelineModel, { kinds: [1069] }).subscribe((events) => {
-      responses = selectAdminApplications(events, formAddress, myPubkey);
+      responses = selectAdminApplications(
+        /** @type {import('nostr-tools').Event[]} */ (events),
+        formAddress,
+        myPubkey
+      );
     });
 
     return () => {

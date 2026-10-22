@@ -133,7 +133,9 @@ describe('createAppEventFactory (v6 compat wrapper)', () => {
         content: '',
         tags: [],
         created_at: 1,
-        sig: ''
+        // v7's isEvent() validates the signature format; a target without a
+        // real-looking sig is treated as a bare id, not an event.
+        sig: 'b'.repeat(128)
       };
       const draft = await factory.delete([target]);
 

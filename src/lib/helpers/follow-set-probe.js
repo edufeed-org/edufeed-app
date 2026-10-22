@@ -130,9 +130,9 @@ async function runProbe(pubkey) {
       subs.push(
         pool
           .relay(url)
-          // No reconnect retries: a dead relay should fail inside the
-          // deadline, not look silent.
-          .req(filter, { reconnect: false })
+          // Raw req(): one attempt, no reconnect retries — a dead relay
+          // should fail inside the deadline, not look silent.
+          .req(filter)
           .subscribe({
             next: (/** @type {import('applesauce-relay').RelayReqMessage} */ msg) => {
               if (msg.type === 'EVENT') {

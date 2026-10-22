@@ -39,6 +39,15 @@ vi.mock('applesauce-loaders/loaders', () => ({
   createOutboxTimelineLoader: () => () => ({ subscribe: () => ({ unsubscribe() {} }) }),
   createReactionsLoader: () => () => ({ subscribe: () => ({ unsubscribe() {} }) })
 }));
+// applesauce v7 moved block paging out of the SDK: the app's timeline loader is
+// the local port in $lib/loaders/timeline-loader.js and takes the mock above.
+vi.mock('$lib/loaders/timeline-loader.js', async () => {
+  const loaders = /** @type {any} */ (await import('applesauce-loaders/loaders'));
+  return {
+    createTimelineLoader: loaders.createTimelineLoader,
+    createOutboxTimelineLoader: loaders.createOutboxTimelineLoader
+  };
+});
 vi.mock('applesauce-common/helpers', () => ({
   getFileMetadata: () => null,
   BLOSSOM_SERVER_LIST_KIND: 10063,

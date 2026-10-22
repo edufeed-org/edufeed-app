@@ -4,7 +4,7 @@
 // reasoning in ./content-removal.js). One subscription per community page:
 // the layout calls this once and hands the result down through context, so
 // every section view and detail menu filters against the same set.
-import { createTimelineLoader } from 'applesauce-loaders/loaders';
+import { createTimelineLoader } from '$lib/loaders/timeline-loader.js';
 import { TimelineModel } from 'applesauce-core/models';
 import { timedPool } from '$lib/loaders/base.js';
 import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';

@@ -11,7 +11,7 @@
  *   const getList = useList(kinds.Mutelist);           // singleton
  *   const getSets = useAllLists(kinds.Followsets);     // addressable → reactive array
  */
-import { createTimelineLoader } from 'applesauce-loaders/loaders';
+import { createTimelineLoader } from '$lib/loaders/timeline-loader.js';
 import { TimelineModel } from 'applesauce-core/models';
 import { timedPool } from '$lib/loaders/base.js';
 import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
@@ -84,7 +84,7 @@ $effect.root(() => {
         eventStore
           .model(TimelineModel, { kinds: PARAMETERIZED_LIST_KINDS, authors: [pubkey] })
           .subscribe((events) => {
-            sets = events ?? [];
+            sets = /** @type {import('nostr-tools').Event[]} */ (events ?? []);
             _loading = false;
           })
       );

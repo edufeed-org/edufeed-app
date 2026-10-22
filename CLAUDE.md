@@ -18,13 +18,15 @@ pool.subscribeMany(relays, [filter], opts);
 // Sends: ["REQ", "sub:1", [{...}]] - MALFORMED!
 
 // ✅ CORRECT - Use applesauce infrastructure
-import { createTimelineLoader } from 'applesauce-loaders/loaders';
+import { createTimelineLoader } from '$lib/loaders/timeline-loader.js';
 import { timedPool } from '$lib/loaders';
 import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
 
 const loader = createTimelineLoader(timedPool, relays, filter, { eventStore, limit });
 return loader(); // Returns Observable
 ```
+
+**Timeline loaders page, not window**: `createTimelineLoader` / `createOutboxTimelineLoader` come from `$lib/loaders/timeline-loader.js` — a port of the applesauce v6 block-paging loader (`loader()` = next older block). applesauce v7's own timeline loader takes explicit `{ since, until }` windows and rejects `loader()`; never import it from `applesauce-loaders/loaders`. Tests that mock `applesauce-loaders/loaders` shim the local module too (see `timeline-loader-paging.test.js` for the semantics).
 
 **`timedPool` Wrapper**: The `timedPool` function wraps pool requests with a 2-second timeout. This prevents hanging relays (those that send events but never EOSE) from blocking pagination. Without this wrapper, v5's `pool.request()` waits for ALL relays to send EOSE before completing.
 

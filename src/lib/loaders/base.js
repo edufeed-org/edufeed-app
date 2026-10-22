@@ -10,9 +10,9 @@ import { catchError } from 'rxjs/operators';
 import {
   createAddressLoader,
   createEventLoader,
-  createUnifiedEventLoader,
-  createTimelineLoader
+  createUnifiedEventLoader
 } from 'applesauce-loaders/loaders';
+import { createTimelineLoader } from '$lib/loaders/timeline-loader.js';
 import { pool, eventStore } from '$lib/stores/nostr-infrastructure.svelte';
 import { getAllLookupRelays, getEventLoaderLookupRelays } from '$lib/helpers/relay-helper.js';
 import { cacheRequest } from '$lib/stores/event-cache.svelte.js';
@@ -21,10 +21,11 @@ import { createRevalidatingCacheRequest } from '$lib/helpers/cache-revalidate.js
 /**
  * Pool wrapper for use with createTimelineLoader.
  *
- * v6 removed the pool-level eoseTimeout (synthetic per-relay EOSE). The
- * default group.request() complete strategy (first relay EOSE + 5s grace, or
- * all EOSE) covers the healthy case; the explicit timeout caps the
- * all-relays-dead case, and catchError converts the resulting TimeoutError
+ * v6 removed the pool-level eoseTimeout (synthetic per-relay EOSE). v7's
+ * default group.request() complete strategy (`completeAfterIdle`: 3s grace
+ * after the first EOSE, then 1.5s idle, 15s cap) covers the healthy case; the
+ * explicit timeout caps the all-relays-dead case, and catchError converts the
+ * resulting TimeoutError — or v7's RelayGroupError when every relay failed —
  * into clean completion so pagination can proceed instead of erroring.
  *
  * @param {string[]} relays

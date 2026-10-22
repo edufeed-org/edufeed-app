@@ -19,6 +19,15 @@ export function validateBunkerUrl(url) {
 }
 
 /**
+ * applesauce-signers v7 rejects a NIP-46 request after 60s by default. A
+ * bunker approval is a human tapping "allow" on another device and routinely
+ * takes longer (publishToGroupRelay already re-stamps events after slow
+ * approvals), and the app's bunker UX is built on v6's wait-forever
+ * semantics — keep those (0 = no deadline).
+ */
+const BUNKER_REQUEST_TIMEOUT = 0;
+
+/**
  * Connect to a remote signer via bunker:// URI (signer-initiated flow)
  * @param {string} url - bunker:// URI
  * @param {{ pool: any, onAuth?: (url: string) => Promise<void> }} options
@@ -38,7 +47,8 @@ export async function connectWithBunkerUrl(url, { pool, onAuth }) {
   // connect()'s error path calls close(), destroying the subscription.
   const signer = await NostrConnectSigner.fromBunkerURI(url, {
     signer: clientSigner,
-    onAuth
+    onAuth,
+    timeout: BUNKER_REQUEST_TIMEOUT
   });
 
   const pubkey = await signer.getPublicKey();
@@ -95,7 +105,8 @@ export function createClientConnection(relays, { pool, onAuth, appMetadata }) {
     // v6.2: `secret` deprecated in favor of connectSecret (client-initiated
     // nostrconnect:// flow)
     connectSecret: generateSecret(),
-    onAuth
+    onAuth,
+    timeout: BUNKER_REQUEST_TIMEOUT
   });
 
   const uri = signer.getNostrConnectURI(appMetadata);

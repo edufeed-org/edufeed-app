@@ -2,7 +2,7 @@
  * Unified inbox service.
  * Manages notification loaders, read state (NIP-78 kind 30078), and reactive counts.
  */
-import { createTimelineLoader } from 'applesauce-loaders/loaders';
+import { createTimelineLoader } from '$lib/loaders/timeline-loader.js';
 import { TimelineModel } from 'applesauce-core/models';
 import { withoutChannelMeetings } from '$lib/helpers/calendar-timing.js';
 import { finalizeDraft } from '$lib/helpers/event-factory.js';
@@ -367,16 +367,16 @@ export function markItemAsRead(eventId) {
 /**
  * Open a standing REQ for live notifications and feed the event store; the
  * TimelineModel subscription in initializeInbox() sees them like loaded ones.
- * `group(relays, false)` rather than `pool.subscription`: the default drops
- * relays whose socket is not ready yet, which on a fresh login is all of
- * them (see subscribeToGiftWraps in dm-service for the full story).
+ * Explicit `group(relays)` with no health filtering: on a fresh login none of
+ * the relays' sockets are ready yet (see subscribeToGiftWraps in dm-service
+ * for the full story).
  * @param {string[]} relays
  * @param {import('nostr-tools').Filter[]} filters
  */
 function subscribeLive(relays, filters) {
   if (!relays.length) return;
   const sub = pool
-    .group(relays, false)
+    .group(relays)
     .subscription(filters)
     .subscribe({
       next: (event) => {
@@ -514,7 +514,10 @@ export function initializeInbox(pubkey) {
 
   const modelFilters = [...filters, groupAddedFilter].map(({ since: _since, ...rest }) => rest);
   const modelSub = eventStore.model(TimelineModel, modelFilters).subscribe((events) => {
-    const filtered = filterSelfNotifications(events || [], pubkey);
+    const filtered = filterSelfNotifications(
+      /** @type {import('nostr-tools').Event[]} */ (events || []),
+      pubkey
+    );
     rawMainNotifications = filtered;
     prefetchReferencedContent(filtered);
   });
@@ -607,7 +610,10 @@ export function loadRsvpNotifications(calendarEventCoords) {
   const modelSub = eventStore
     .model(TimelineModel, { kinds: [31925], '#a': calendarEventCoords })
     .subscribe((events) => {
-      const filtered = filterSelfNotifications(events || [], pubkey);
+      const filtered = filterSelfNotifications(
+        /** @type {import('nostr-tools').Event[]} */ (events || []),
+        pubkey
+      );
       rsvpNotifications = filtered;
       prefetchReferencedContent(filtered);
     });
@@ -637,7 +643,10 @@ export function loadPollResponseNotifications(pollIds) {
   const modelSub = eventStore
     .model(TimelineModel, { kinds: [1018], '#e': pollIds })
     .subscribe((events) => {
-      const filtered = filterSelfNotifications(events || [], pubkey);
+      const filtered = filterSelfNotifications(
+        /** @type {import('nostr-tools').Event[]} */ (events || []),
+        pubkey
+      );
       pollResponseNotifications = filtered;
       prefetchReferencedContent(filtered);
     });

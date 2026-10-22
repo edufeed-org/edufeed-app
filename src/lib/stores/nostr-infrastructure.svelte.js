@@ -15,6 +15,7 @@ import 'applesauce-common';
 const deleteManager = new DeleteManager();
 export const eventStore = Object.assign(new EventStore({ deleteManager }), { deleteManager });
 // v6: eoseTimeout was removed. Per-request completion is handled by
-// group.request()'s default complete strategy (first EOSE + 5s grace, or all
-// EOSE) plus the explicit timeout passed by timedPool (loaders/base.js).
+// group.request()'s default complete strategy (v7: completeAfterIdle) plus the
+// explicit timeout passed by timedPool (loaders/base.js). No liveness source
+// is configured: the app decides per surface which relays to skip.
 export const pool = new RelayPool();

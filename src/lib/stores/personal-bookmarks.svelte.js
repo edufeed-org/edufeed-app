@@ -20,7 +20,7 @@ import {
 } from '$lib/helpers/bookmark-tag.js';
 import { modifyPublicTags } from 'applesauce-core/operations';
 import { setSingletonTag } from 'applesauce-core/operations/tag/common';
-import { createTimelineLoader } from 'applesauce-loaders/loaders';
+import { createTimelineLoader } from '$lib/loaders/timeline-loader.js';
 import { TimelineModel } from 'applesauce-core/models';
 import { timedPool } from '$lib/loaders/base.js';
 import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
@@ -100,7 +100,7 @@ $effect.root(() => {
           authors: [pubkey]
         })
         .subscribe((events) => {
-          bookmarkSets = events ?? [];
+          bookmarkSets = /** @type {import('nostr-tools').Event[]} */ (events ?? []);
         });
 
       // Fetch from relays

@@ -11,7 +11,7 @@
   import { goto } from '$app/navigation';
   import { resolve } from '$app/paths';
   import { withoutChannelMeetings } from '$lib/helpers/calendar-timing.js';
-  import { createTimelineLoader } from 'applesauce-loaders/loaders';
+  import { createTimelineLoader } from '$lib/loaders/timeline-loader.js';
   import { TimelineModel } from 'applesauce-core/models';
   import { timedPool } from '$lib/loaders/base.js';
   import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';

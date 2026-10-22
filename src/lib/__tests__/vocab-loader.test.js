@@ -20,6 +20,12 @@ vi.mock('applesauce-loaders/loaders', () => ({
   createAddressLoader: vi.fn(() => () => ({ subscribe: () => ({ unsubscribe: () => {} }) })),
   createTimelineLoader: vi.fn(() => () => ({ subscribe: () => ({ unsubscribe: () => {} }) }))
 }));
+// applesauce v7 moved block paging out of the SDK: the app's timeline loader is
+// the local port in $lib/loaders/timeline-loader.js and takes the mock above.
+vi.mock('$lib/loaders/timeline-loader.js', async () => {
+  const loaders = /** @type {any} */ (await import('applesauce-loaders/loaders'));
+  return { createTimelineLoader: loaders.createTimelineLoader };
+});
 
 import { loadConceptScheme, loadSchemeConcepts } from '../loaders/vocab-loader.js';
 import { createAddressLoader, createTimelineLoader } from 'applesauce-loaders/loaders';

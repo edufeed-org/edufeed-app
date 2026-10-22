@@ -4,7 +4,7 @@
  */
 import { from, merge, EMPTY, defer, of } from 'rxjs';
 import { mergeMap, filter, tap, switchMap, catchError } from 'rxjs/operators';
-import { createTimelineLoader } from 'applesauce-loaders/loaders';
+import { createTimelineLoader } from '$lib/loaders/timeline-loader.js';
 import { eventStore, pool } from '$lib/stores/nostr-infrastructure.svelte';
 import { authenticateOnce } from '$lib/groups/relay-auth.js';
 import { pointersByRelay } from '$lib/groups/channel-calendar.js';

@@ -75,7 +75,7 @@
       const filtered = (events || []).filter((e) =>
         e.tags.some((t) => t[0] === 'a' && t[1] === formAddress)
       );
-      responses = filtered;
+      responses = /** @type {import('nostr-tools').Event[]} */ (filtered);
       isLoading = false;
     });
 

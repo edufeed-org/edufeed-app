@@ -14,7 +14,7 @@
 import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
 import { addressLoader } from '$lib/loaders/base.js';
 import { getAllLookupRelays, getCommunikeyRelays } from '$lib/helpers/relay-helper.js';
-import { createTimelineLoader } from 'applesauce-loaders/loaders';
+import { createTimelineLoader } from '$lib/loaders/timeline-loader.js';
 import { TimelineModel } from 'applesauce-core/models';
 import { timedPool } from '$lib/loaders/base.js';
 import {

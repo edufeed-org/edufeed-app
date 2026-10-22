@@ -2,7 +2,7 @@
  * Blossom Server Loader - fetches kind 10063 events (NIP-B7)
  * Following applesauce loader pattern
  */
-import { createTimelineLoader } from 'applesauce-loaders/loaders';
+import { createTimelineLoader } from '$lib/loaders/timeline-loader.js';
 
 /**
  * Creates a loader for a user's Blossom server list (kind 10063)

@@ -101,7 +101,7 @@ export function useMembershipPendingCount() {
     const loader = formResponseLoader(formAddress, activePubkey);
     const loaderSub = loader().subscribe();
     const modelSub = eventStore.model(TimelineModel, { kinds: [1069] }).subscribe((events) => {
-      cachedEvents = events || [];
+      cachedEvents = /** @type {import('nostr-tools').Event[]} */ (events || []);
       recompute();
     });
 

@@ -28,6 +28,12 @@ vi.mock('$lib/helpers/relay-helper.js', () => ({
 vi.mock('applesauce-loaders/loaders', () => ({
   createTimelineLoader: vi.fn(() => () => noopObservable)
 }));
+// applesauce v7 moved block paging out of the SDK: the app's timeline loader is
+// the local port in $lib/loaders/timeline-loader.js and takes the mock above.
+vi.mock('$lib/loaders/timeline-loader.js', async () => {
+  const loaders = /** @type {any} */ (await import('applesauce-loaders/loaders'));
+  return { createTimelineLoader: loaders.createTimelineLoader };
+});
 vi.mock('applesauce-core/models', () => ({ TimelineModel: 'TimelineModel' }));
 vi.mock('$lib/helpers/event-factory.js', () => ({
   finalizeDraft: vi.fn(async (draft) => await draft)
@@ -73,7 +79,7 @@ describe('inbox standing subscription', () => {
     mod.initializeInbox(PUBKEY);
     // The one-shot loaders fetch a 7-day window; the live leg must not
     // re-fetch that history — its `since` is the moment we subscribed.
-    expect(pool.group).toHaveBeenCalledWith(['wss://relay1', 'wss://relay2'], false);
+    expect(pool.group).toHaveBeenCalledWith(['wss://relay1', 'wss://relay2']);
     const filters = group.subscription.mock.calls[0][0];
     expect(filters).toEqual(mod.buildMainFilter(PUBKEY, filters[0].since));
     expect(filters[0].since).toBeGreaterThanOrEqual(before);
@@ -93,7 +99,7 @@ describe('inbox standing subscription', () => {
     mod.initializeInbox(PUBKEY);
     await new Promise((r) => setTimeout(r, 0));
     // getSupplementalNotificationRelays normalizes URLs (trailing slash).
-    expect(pool.group).toHaveBeenCalledWith(['wss://user-inbox.example/'], false);
+    expect(pool.group).toHaveBeenCalledWith(['wss://user-inbox.example/']);
     expect(group.subscription.mock.calls[1][0]).toEqual(group.subscription.mock.calls[0][0]);
   });
 

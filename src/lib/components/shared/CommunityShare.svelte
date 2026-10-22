@@ -22,7 +22,7 @@
   import * as m from '$lib/paraglide/messages';
   import { useUserProfile } from '../../stores/user-profile.svelte.js';
   import { eventStore, pool } from '$lib/stores/nostr-infrastructure.svelte';
-  import { createTimelineLoader } from 'applesauce-loaders/loaders';
+  import { createTimelineLoader } from '$lib/loaders/timeline-loader.js';
   import { SharesModel } from 'applesauce-common/models';
   import { deleteEvent } from '$lib/helpers/eventDeletion.js';
   import {

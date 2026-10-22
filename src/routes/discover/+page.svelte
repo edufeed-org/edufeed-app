@@ -24,7 +24,7 @@
   } from '$lib/helpers/educational/searchQueryBuilder.js';
   import { buildRankIndex } from '$lib/helpers/educational/searchRank.js';
   import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
-  import { createTimelineLoader } from 'applesauce-loaders/loaders';
+  import { createTimelineLoader } from '$lib/loaders/timeline-loader.js';
   import {
     getEducationalRelays,
     getArticleRelays,
