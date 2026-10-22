@@ -34,7 +34,7 @@ this total by a file or two between updates — `rail-layout-sync.test.js`
 | `community-access-filtering.test.js` | 3                     | No   | Profile-list gated forum filtering, open chat                                                                                                                                                                                                                                                                                          |
 | `community-membership.test.js`       | 12                    | Both | Join/leave flows, persistence, error handling                                                                                                                                                                                                                                                                                          |
 | `community-creation.test.js`         | 24                    | Yes  | Both keypair flows, all steps, settings, group-type step absent with flags off                                                                                                                                                                                                                                                         |
-| `discover.test.js`                   | 11                    | No   | Discovery tabs, infinite scroll, profiles                                                                                                                                                                                                                                                                                              |
+| `discover.test.js`                   | 12                    | No   | Discovery tabs, infinite scroll, profiles                                                                                                                                                                                                                                                                                              |
 | `discover-events-filter.test.js`     | 9                     | No   | Events tab date range filter, URL persistence                                                                                                                                                                                                                                                                                          |
 | `learning-search.test.js`            | 14                    | No   | Search input, SKOS filters, tab visibility, layout                                                                                                                                                                                                                                                                                     |
 | `relay-override-pagination.test.js`  | 6                     | Yes  | Kind 30002 relay overrides, multi-relay pagination                                                                                                                                                                                                                                                                                     |
@@ -935,7 +935,7 @@ for follow-up.
 
 ---
 
-### discover.test.js (11 tests)
+### discover.test.js (12 tests)
 
 **Route:** `/discover`
 **Auth required:** No
@@ -953,6 +953,7 @@ for follow-up.
 | Learning tab: spinner stops after all content loaded           | Tests timedPool timeout (hanging relay) |
 | page loads without critical JavaScript errors                  | No JS errors                            |
 | Learning tab: shows author profile names on resource cards     | Profiles load via useProfileMap hook    |
+| typing a query keeps `<main>` scroll position and input focus  | URL search sync must not reset `<main>` |
 
 **Components exercised:** DiscoverPage, ContentCard, InfiniteScroll sentinel, useProfileMap
 
