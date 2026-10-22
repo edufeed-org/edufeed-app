@@ -1,4 +1,5 @@
 import { normalizeAiLabel, normalizeAiTraining } from './ai-label.js';
+import { buildKeywordTags, buildSubjectTags } from './license-tags.js';
 
 /**
  * Builds a kind 1063 event template for an image license attestation.
@@ -18,6 +19,9 @@ import { normalizeAiLabel, normalizeAiTraining } from './ai-label.js';
  *   - ai-edited: (optional, only with `ai`) "true" when manually edited after generation
  *   - ai-training: (optional) "allowed" | "disallowed" — AI-training permission
  *   The three twillo-aligned tags mirror edu-sharing's ccm:commonlicense_ai_* props.
+ *   - t:       (optional, repeatable) free keyword, lowercase (NIP-24) — see license-tags.js
+ *   - about:*  (optional) subject concept triples (`about:id` / `about:prefLabel:<lang>` /
+ *              `about:type`), the NIP-AMB flattening kind 30142 and calendar events use
  *
  * @param {{
  *   hash: string,
@@ -36,7 +40,9 @@ import { normalizeAiLabel, normalizeAiTraining } from './ai-label.js';
  *   ai?: import('./ai-label.js').AiLabel | string | null,
  *   aiTool?: { label: string, id?: string | null } | null,
  *   aiEdited?: boolean,
- *   aiTraining?: import('./ai-label.js').AiTraining | string | null
+ *   aiTraining?: import('./ai-label.js').AiTraining | string | null,
+ *   keywords?: string[],
+ *   subjects?: Partial<import('./license-tags.js').LicenseSubject>[]
  * }} input
  * @returns {{ kind: 1063, content: string, tags: string[][] }}
  */
@@ -58,7 +64,9 @@ export function buildLicenseTemplate(input) {
     ai,
     aiTool,
     aiEdited,
-    aiTraining
+    aiTraining,
+    keywords,
+    subjects
   } = input;
   if (!hash) throw new Error('buildLicenseTemplate: hash is required');
   if (!url) throw new Error('buildLicenseTemplate: url is required');
@@ -93,6 +101,9 @@ export function buildLicenseTemplate(input) {
   }
   const training = normalizeAiTraining(aiTraining);
   if (training) tags.push(['ai-training', training]);
+  // Indexing (optional): keywords and subjects, so an image collection can be
+  // searched by `#t` and filtered by subject — absence means "not indexed".
+  tags.push(...buildKeywordTags(keywords), ...buildSubjectTags(subjects));
 
   return {
     kind: 1063,

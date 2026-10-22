@@ -166,4 +166,32 @@ describe('LicenseInfoCard', () => {
     expect(queryByTestId('license-info-ai-tool')).toBeNull();
     expect(queryByTestId('license-info-ai-training')).toBeNull();
   });
+
+  it('shows keywords as chips and subjects as one label line when the attestation is indexed', () => {
+    profiles = new Map();
+    const { getByTestId } = render(LicenseInfoCard, {
+      licenseEvent: licenseEvent([
+        ['t', 'barcamp'],
+        ['t', 'metadaten'],
+        ['t', 'barcamp'],
+        ['about:id', 'http://w3id.org/kim/schulfaecher/s1055'],
+        ['about:prefLabel:de', 'Religion'],
+        ['about:type', 'Concept'],
+        ['about:id', 'https://w3id.org/kim/hochschulfaechersystematik/n079'],
+        ['about:type', 'Concept']
+      ])
+    });
+    const chips = [...getByTestId('license-info-keywords').querySelectorAll('.badge')].map((b) =>
+      b.textContent?.trim()
+    );
+    expect(chips).toEqual(['barcamp', 'metadaten']);
+    expect(getByTestId('license-info-subjects').textContent?.trim()).toBe('Religion · n079');
+  });
+
+  it('omits the indexing rows when the attestation carries no t / about:* tags', () => {
+    profiles = new Map();
+    const { queryByTestId } = render(LicenseInfoCard, { licenseEvent: licenseEvent() });
+    expect(queryByTestId('license-info-keywords')).toBeNull();
+    expect(queryByTestId('license-info-subjects')).toBeNull();
+  });
 });

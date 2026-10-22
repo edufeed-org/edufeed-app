@@ -186,3 +186,29 @@ describe('buildLicenseTemplate — twillo-aligned AI provenance & usage tags', (
     }
   });
 });
+
+describe('buildLicenseTemplate — indexing tags (t + about:*)', () => {
+  it('emits t tags for keywords (normalized) and about:* triples for subjects', () => {
+    const tpl = buildLicenseTemplate({
+      ...required,
+      keywords: ['#BarCamp', 'metadaten', 'barcamp'],
+      subjects: [{ id: 'http://w3id.org/kim/schulfaecher/s1055', labels: { de: 'Religion' } }]
+    });
+    const idx = tpl.tags.findIndex((t) => t[0] === 't');
+    expect(tpl.tags.slice(idx)).toEqual([
+      ['t', 'barcamp'],
+      ['t', 'metadaten'],
+      ['about:id', 'http://w3id.org/kim/schulfaecher/s1055'],
+      ['about:prefLabel:de', 'Religion'],
+      ['about:type', 'Concept']
+    ]);
+  });
+
+  it('emits none of them when keywords/subjects are absent or empty', () => {
+    for (const extra of [{}, { keywords: [], subjects: [] }, { keywords: ['#'] }]) {
+      const keys = buildLicenseTemplate({ ...required, ...extra }).tags.map((t) => t[0]);
+      expect(keys).not.toContain('t');
+      expect(keys.some((k) => k.startsWith('about:'))).toBe(false);
+    }
+  });
+});
