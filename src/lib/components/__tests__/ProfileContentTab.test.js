@@ -82,6 +82,71 @@ describe('<ProfileContentTab>', () => {
     expect(_modelFilters[0]).toEqual({ kinds: [30142], authors: [PUBKEY] });
   });
 
+  // "Beteiligt an": resources by others that name this profile as creator or
+  // contributor via a NIP-AMB p-tag (AMB.md l.26) follow the own resources.
+  describe('participation (#p) on the content tab', () => {
+    const OTHER = 'b'.repeat(64);
+
+    it('also subscribes to 30142 events tagging the profile, content tab only', () => {
+      render(ProfileContentTab, { pubkey: PUBKEY, tabId: 'content' });
+      expect(_modelFilters).toContainEqual({ kinds: [30142], '#p': [PUBKEY] });
+
+      _modelFilters = [];
+      render(ProfileContentTab, { pubkey: PUBKEY, tabId: 'articles' });
+      expect(_modelFilters.some((f) => f['#p'])).toBe(false);
+    });
+
+    it('renders creator/contributor-tagged resources with a participation flag', async () => {
+      const { container } = render(ProfileContentTab, { pubkey: PUBKEY, tabId: 'content' });
+      const own = ev(30142);
+      const asCreator = ev(30142, {
+        pubkey: OTHER,
+        tags: [
+          ['d', 'c'],
+          ['p', PUBKEY, '', 'creator']
+        ]
+      });
+      const asContributor = ev(30142, {
+        pubkey: OTHER,
+        tags: [
+          ['d', 'k'],
+          ['p', PUBKEY, '', 'contributor']
+        ]
+      });
+      const mention = ev(30142, {
+        pubkey: OTHER,
+        tags: [
+          ['d', 'm'],
+          ['p', PUBKEY, '', 'mention']
+        ]
+      });
+      // model 0 = own, model 1 = #p (a relay answers #p with the own event too)
+      _modelSubscribers[0]([own]);
+      _modelSubscribers[1]([own, asCreator, asContributor, mention]);
+      await tick();
+
+      expect(container.querySelectorAll('[data-testid="stub-component"]')).toHaveLength(3);
+      expect(container.querySelectorAll('[data-testid="participation-flag"]')).toHaveLength(2);
+      expect(container.querySelector('[data-testid="tab-empty"]')).toBeFalsy();
+    });
+
+    it('shows participation alone when the profile authored nothing', async () => {
+      const { container } = render(ProfileContentTab, { pubkey: PUBKEY, tabId: 'content' });
+      _modelSubscribers[1]([
+        ev(30142, {
+          pubkey: OTHER,
+          tags: [
+            ['d', 'c'],
+            ['p', PUBKEY, '', 'creator']
+          ]
+        })
+      ]);
+      await tick();
+      expect(container.querySelectorAll('[data-testid="stub-component"]')).toHaveLength(1);
+      expect(container.querySelector('[data-testid="tab-empty"]')).toBeFalsy();
+    });
+  });
+
   it('shows the empty state when nothing is loaded', () => {
     const { container } = render(ProfileContentTab, { pubkey: PUBKEY, tabId: 'articles' });
     expect(container.querySelector('[data-testid="tab-empty"]')).toBeTruthy();

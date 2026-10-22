@@ -1,6 +1,6 @@
 /** @vitest-environment node */
 import { describe, it, expect } from 'vitest';
-import { getAMBCreators } from '$lib/helpers/educational/ambHelpers.js';
+import { getAMBCreators, getAMBContributors } from '$lib/helpers/educational/ambHelpers.js';
 
 /** @param {string[][]} tags */
 const ev = (tags) => ({ kind: 30142, tags, content: '', pubkey: 'pk' });
@@ -62,5 +62,28 @@ describe('getAMBCreators', () => {
       ['creator:somefuture:key', 'val']
     ]);
     expect(getAMBCreators(event)).toEqual([{ name: 'X' }]);
+  });
+});
+
+describe('getAMBContributors', () => {
+  it('parses contributor:* runs and ignores creator:* runs', () => {
+    const event = ev([
+      ['creator:type', 'Person'],
+      ['creator:name', 'Ada Lovelace'],
+      ['contributor:type', 'Person'],
+      ['contributor:name', 'Charles Babbage'],
+      ['contributor:affiliation:name', 'Analytical Engines Inc.'],
+      ['contributor:type', 'Organization'],
+      ['contributor:name', 'Royal Society']
+    ]);
+    expect(getAMBContributors(event)).toEqual([
+      { type: 'Person', name: 'Charles Babbage', affiliationName: 'Analytical Engines Inc.' },
+      { type: 'Organization', name: 'Royal Society' }
+    ]);
+    expect(getAMBCreators(event)).toEqual([{ type: 'Person', name: 'Ada Lovelace' }]);
+  });
+
+  it('returns [] when there are no contributor tags', () => {
+    expect(getAMBContributors(ev([['creator:name', 'Solo']]))).toEqual([]);
   });
 });

@@ -12,6 +12,7 @@ import { formDataToAmbExt } from './formDataToAmbExt.js';
 
 /**
  * @typedef {import('$lib/stores/educational-actions.svelte').EducationalFormData} EducationalFormData
+ * @typedef {import('$lib/stores/educational-actions.svelte').Creator} Creator
  */
 
 /**
@@ -95,30 +96,38 @@ export function convertFormDataToAMB(formData) {
     amb.keywords = formData.keywords;
   }
 
-  // NIP-AMB: creators with a Nostr identity are represented solely by a
-  // `["p", pk, relay, "creator"]` tag (appended by appendCreatorPTags) —
-  // never by a flattened creator:* run as well. Only creators whose pubkey
-  // is absent or invalid (no p-tag emitted) go into the AMB creator array.
-  const flattenedCreators = (formData.creators || []).filter((c) => !normalizePubkey(c.pubkey));
+  // NIP-AMB: people with a Nostr identity are represented solely by a
+  // `["p", pk, relay, <role>]` tag (appended by appendCreatorPTags) — never
+  // by a flattened creator:*/contributor:* run as well. Only entries whose
+  // pubkey is absent or invalid (no p-tag emitted) go into the AMB arrays,
+  // split by role (default creator; `role: 'contributor'` → amb.contributor).
+  const flattenedPeople = (formData.creators || []).filter((c) => !normalizePubkey(c.pubkey));
+  /** @param {Creator} person */
+  const toAmbPerson = (person) => {
+    /** @type {Record<string, any>} */
+    const obj = {
+      type: person.type,
+      name: person.name
+    };
+    if (person.honorificPrefix) {
+      obj.honorificPrefix = person.honorificPrefix;
+    }
+    if (person.affiliationName) {
+      obj.affiliation = { name: person.affiliationName };
+    }
+    // ORCID is the AMB-recommended URI identifier for persons → id
+    if (person.orcid) {
+      obj.id = person.orcid;
+    }
+    return obj;
+  };
+  const flattenedCreators = flattenedPeople.filter((c) => c.role !== 'contributor');
+  const flattenedContributors = flattenedPeople.filter((c) => c.role === 'contributor');
   if (flattenedCreators.length > 0) {
-    amb.creator = flattenedCreators.map((creator) => {
-      /** @type {Record<string, any>} */
-      const creatorObj = {
-        type: creator.type,
-        name: creator.name
-      };
-      if (creator.honorificPrefix) {
-        creatorObj.honorificPrefix = creator.honorificPrefix;
-      }
-      if (creator.affiliationName) {
-        creatorObj.affiliation = { name: creator.affiliationName };
-      }
-      // ORCID is the AMB-recommended URI identifier for persons → creator.id
-      if (creator.orcid) {
-        creatorObj.id = creator.orcid;
-      }
-      return creatorObj;
-    });
+    amb.creator = flattenedCreators.map(toAmbPerson);
+  }
+  if (flattenedContributors.length > 0) {
+    amb.contributor = flattenedContributors.map(toAmbPerson);
   }
 
   if (formData.files && formData.files.length > 0) {

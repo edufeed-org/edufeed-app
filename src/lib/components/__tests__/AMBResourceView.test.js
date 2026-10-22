@@ -65,6 +65,7 @@ vi.mock('$lib/paraglide/messages.js', () => ({
   amb_resource_topics_keywords: () => 'Topics',
   amb_resource_creators_heading: () => 'Creators',
   amb_resource_role_creator: () => 'Creator',
+  amb_resource_role_contributor: () => 'Contributor',
   amb_resource_indexed_by: () => 'Indexed by',
   amb_resource_related_resources: () => 'Related',
   amb_resource_uploaded_files: () => 'Uploaded Files',
@@ -474,6 +475,36 @@ describe('AMBResourceView', () => {
       // …while the structured (non-Nostr) creator's name is NOT profile-linked.
       const structuredEntry = [...entries].find((e) => e.textContent?.includes('Dr. Corinna Link'));
       expect(structuredEntry?.querySelector(`a[href="/p/${CREATOR_PK}"]`)).toBeFalsy();
+    });
+
+    it('lists contributors (contributor:* run and contributor p-tag) with the Contributor role', () => {
+      const CONTRIB_PK = 'e'.repeat(64);
+      const eventWithContributors = {
+        ...singleCreatorEvent,
+        tags: [
+          ...singleCreatorEvent.tags,
+          ['contributor:name', 'Erika Mustermann'],
+          ['contributor:type', 'Person'],
+          ['contributor:affiliation:name', 'PTI'],
+          ['p', CONTRIB_PK, 'wss://x', 'contributor']
+        ]
+      };
+      const { container } = render(AMBResourceView, {
+        props: { event: eventWithContributors, resource: mockResource }
+      });
+
+      const entries = Array.from(container.querySelectorAll('.ed-contrib')).filter(
+        (e) => !e.closest('[data-testid="indexed-by-section"]')
+      );
+      expect(entries.length).toBe(4);
+      const erika = entries.find((e) => e.textContent?.includes('Erika Mustermann'));
+      expect(erika?.querySelector('.role-badge')?.textContent).toBe('Contributor');
+      expect(erika?.textContent).toContain('PTI');
+      const linked = entries.find((e) => e.querySelector(`a[href="/p/${CONTRIB_PK}"]`));
+      expect(linked?.querySelector('.role-badge')?.textContent).toBe('Contributor');
+      // the creator keeps its role
+      const corinna = entries.find((e) => e.textContent?.includes('Dr. Corinna Link'));
+      expect(corinna?.querySelector('.role-badge')?.textContent).toBe('Creator');
     });
 
     it('renders nothing when the event has no creator data', () => {

@@ -107,4 +107,27 @@ describe('convertFormDataToAMB creators', () => {
       id: 'https://orcid.org/0000-0002-1694-233X'
     });
   });
+
+  it('splits people by role into amb.creator and amb.contributor', () => {
+    const amb = convertFormDataToAMB({
+      ...base,
+      creators: [
+        { name: 'Alice', type: 'Person' },
+        { name: 'Bob', type: 'Person', role: 'contributor', affiliationName: 'Uni' },
+        { name: 'Linked', type: 'Person', role: 'contributor', pubkey: 'c'.repeat(64) }
+      ]
+    });
+    expect(amb.creator).toEqual([{ type: 'Person', name: 'Alice' }]);
+    expect(amb.contributor).toEqual([
+      { type: 'Person', name: 'Bob', affiliation: { name: 'Uni' } }
+    ]);
+  });
+
+  it('omits amb.contributor when nobody has the contributor role', () => {
+    const amb = convertFormDataToAMB({
+      ...base,
+      creators: [{ name: 'Alice', type: 'Person' }]
+    });
+    expect(amb.contributor).toBeUndefined();
+  });
 });

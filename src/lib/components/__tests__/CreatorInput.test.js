@@ -66,6 +66,9 @@ vi.mock('$lib/paraglide/messages', () => ({
   amb_creator_label_name: () => 'Name',
   amb_creator_placeholder_name: () => 'Name…',
   amb_creator_label_type: () => 'Type',
+  amb_creator_label_role: () => 'Role',
+  amb_creator_role_creator: () => 'Creator',
+  amb_creator_role_contributor: () => 'Contributor',
   amb_creator_label_title: () => 'Title',
   amb_creator_placeholder_title: () => 'Title…',
   amb_creator_label_affiliation: () => 'Affiliation',
@@ -139,6 +142,41 @@ describe('CreatorInput edit flow', () => {
     expect(updated.length).toBe(2);
     expect(updated[0].name).toBe('Alice Updated');
     expect(updated[1].name).toBe('Bob');
+  });
+});
+
+// NIP-AMB (AMB.md l.93): contributors are the same people shape with the
+// "contributor" role — the form stores the marker only for that role.
+describe('CreatorInput role', () => {
+  it('saves a person with the contributor role and shows it in the list', async () => {
+    const onchange = vi.fn();
+    const { getAllByText, getByLabelText, getAllByTestId, container } = render(CreatorInput, {
+      props: { creators: [], label: 'Creators', onchange }
+    });
+    await fireEvent.click(getAllByText('Add').at(-1));
+    await fireEvent.input(getByLabelText(/^Name/), { target: { value: 'Erika' } });
+    await fireEvent.change(getByLabelText(/^Role/), { target: { value: 'contributor' } });
+    await fireEvent.click(container.querySelector('button[type="submit"]'));
+
+    expect(onchange.mock.calls.at(-1)[0]).toEqual([
+      { name: 'Erika', type: 'Person', role: 'contributor' }
+    ]);
+    expect(getAllByTestId('creator-role-contributor')).toHaveLength(1);
+  });
+
+  it('stores no role for a creator (default) and pre-selects it on edit', async () => {
+    const onchange = vi.fn();
+    const { getByLabelText, getAllByText, container, queryByTestId } = render(CreatorInput, {
+      props: { creators: [], label: 'Creators', onchange }
+    });
+    await fireEvent.click(getAllByText('Add').at(-1));
+    await fireEvent.input(getByLabelText(/^Name/), { target: { value: 'Alice' } });
+    await fireEvent.click(container.querySelector('button[type="submit"]'));
+    expect(onchange.mock.calls.at(-1)[0]).toEqual([{ name: 'Alice', type: 'Person' }]);
+    expect(queryByTestId('creator-role-contributor')).toBeNull();
+
+    await fireEvent.click(getAllByText('Edit')[0]);
+    expect(getByLabelText(/^Role/).value).toBe('creator');
   });
 });
 
