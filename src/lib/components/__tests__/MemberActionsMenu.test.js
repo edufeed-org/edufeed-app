@@ -64,6 +64,7 @@ vi.mock('$lib/paraglide/messages', () => ({
   groups_members_row_menu: (/** @type {{name: string}} */ { name }) => `Actions for ${name}`,
   groups_members_role_placeholder: () => 'Role',
   groups_members_action_failed: () => 'The relay refused the change',
+  groups_members_owner_protected: () => 'The owner always keeps admin rights',
   common_cancel: () => 'Cancel'
 }));
 
@@ -201,5 +202,51 @@ describe('MemberActionsMenu error handling', () => {
       expect(showToast).toHaveBeenCalledWith('The relay refused the change', 'error')
     );
     expect(onRosterChanged).not.toHaveBeenCalled();
+  });
+});
+
+// Issue 058f1c41: admins appointed by the owner could demote the community
+// key's own roster seat and lock the owner out of the join queue. The seat
+// gets no demote/remove/assign-role, and any put-user on it keeps admin.
+describe('MemberActionsMenu — owner seat (community key row)', () => {
+  it('hides demote, remove and assign-role, shows the protection note', () => {
+    renderMenu({
+      communityId: TARGET,
+      roles: ['admin'],
+      roleOptions: ['admin', 'publisher'],
+      actions: { togglePublisher: true, demote: true, remove: true }
+    });
+    expect(screen.getByTestId('member-actions-menu')).toBeTruthy();
+    expect(screen.queryByTestId('member-demote')).toBeNull();
+    expect(screen.queryByTestId('member-remove')).toBeNull();
+    expect(screen.queryByTestId('member-assign-role')).toBeNull();
+    expect(screen.getByTestId('member-owner-protected')).toBeTruthy();
+    expect(screen.getByTestId('member-toggle-publisher')).toBeTruthy();
+  });
+
+  it('granting publisher to a bare-admin owner seat keeps the admin role', async () => {
+    renderMenu({
+      communityId: TARGET,
+      // The acting admin is on the roster, so no community signer lookup.
+      admins: [{ pubkey: activeUser.pubkey, roles: ['admin'] }],
+      roles: [],
+      actions: { togglePublisher: true, demote: true }
+    });
+    await fireEvent.click(screen.getByTestId('member-toggle-publisher'));
+    await waitFor(() =>
+      expect(buildPutUserTemplate).toHaveBeenCalledWith('grp1', TARGET, ['publisher', 'admin'])
+    );
+  });
+
+  it('a different row with the same communityId is unaffected', () => {
+    renderMenu({
+      communityId: 'c'.repeat(64),
+      roles: ['admin'],
+      roleOptions: ['admin'],
+      actions: { togglePublisher: true, demote: true }
+    });
+    expect(screen.getByTestId('member-demote')).toBeTruthy();
+    expect(screen.getByTestId('member-assign-role')).toBeTruthy();
+    expect(screen.queryByTestId('member-owner-protected')).toBeNull();
   });
 });

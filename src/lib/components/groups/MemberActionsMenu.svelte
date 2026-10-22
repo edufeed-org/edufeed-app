@@ -22,7 +22,13 @@
   import { resolveGroupActor } from '$lib/groups/group-actor.js';
   import { pool } from '$lib/stores/nostr-infrastructure.svelte';
   import { useActiveUser } from '$lib/stores/accounts.svelte';
-  import { isPublisher, withPublisherRole, withoutPublisherRole } from '$lib/groups/roles.js';
+  import {
+    isPublisher,
+    isOwnerSeat,
+    ownerSafeRoles,
+    withPublisherRole,
+    withoutPublisherRole
+  } from '$lib/groups/roles.js';
   import { MoreIcon } from '$lib/components/icons';
   import { showToast } from '$lib/helpers/toast';
   import * as m from '$lib/paraglide/messages';
@@ -56,6 +62,12 @@
 
   const getActiveUser = useActiveUser();
 
+  // The community key's own seat (issue 058f1c41): no demote / remove /
+  // assign-role, and every put-user on it keeps a moderation role — see
+  // ownerSafeRoles. The relay only knows roles, so this is the client's
+  // guard; the relay-side rule is a pyramid follow-up.
+  const ownerSeat = $derived(isOwnerSeat(pubkey, communityId));
+
   let busy = $state(false);
   let roleDialogOpen = $state(false);
   let removeDialogOpen = $state(false);
@@ -74,7 +86,7 @@
     try {
       await publishToGroupRelay(
         pool.relay(pointer.relay),
-        buildPutUserTemplate(pointer.id, pubkey, newRoles),
+        buildPutUserTemplate(pointer.id, pubkey, ownerSafeRoles(pubkey, communityId, newRoles)),
         user
       );
       onRosterChanged?.();
@@ -103,6 +115,7 @@
   }
 
   async function removeMember() {
+    if (ownerSeat) return;
     const user = resolveGroupActor(getActiveUser(), admins, communityId);
     if (!user) return;
     removeDialogOpen = false;
@@ -168,7 +181,7 @@
         </button>
       </li>
     {/if}
-    {#if actions.demote}
+    {#if actions.demote && !ownerSeat}
       <li>
         <button
           data-testid="member-demote"
@@ -183,7 +196,7 @@
         </button>
       </li>
     {/if}
-    {#if roleOptions.length > 0}
+    {#if roleOptions.length > 0 && !ownerSeat}
       <li>
         <button
           data-testid="member-assign-role"
@@ -198,7 +211,12 @@
         </button>
       </li>
     {/if}
-    {#if actions.remove}
+    {#if ownerSeat}
+      <li class="menu-title text-xs font-normal" data-testid="member-owner-protected">
+        {m.groups_members_owner_protected()}
+      </li>
+    {/if}
+    {#if actions.remove && !ownerSeat}
       <div class="divider my-0"></div>
       <li>
         <button

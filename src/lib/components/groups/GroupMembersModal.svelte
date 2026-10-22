@@ -25,6 +25,8 @@
   import {
     isPublisher,
     isPublisherOnly,
+    isOwnerSeat,
+    ownerSafeRoles,
     withPublisherRole,
     withoutPublisherRole
   } from '$lib/groups/roles.js';
@@ -106,7 +108,7 @@
     try {
       await publishToGroupRelay(
         pool.relay(pointer.relay),
-        buildPutUserTemplate(pointer.id, pubkey, roles),
+        buildPutUserTemplate(pointer.id, pubkey, ownerSafeRoles(pubkey, communityId, roles)),
         user
       );
       onRosterChanged?.();
@@ -177,6 +179,7 @@
 
   /** @param {string} pubkey */
   async function removeMember(pubkey) {
+    if (isOwnerSeat(pubkey, communityId)) return;
     const user = resolveGroupActor(getActiveUser(), admins, communityId);
     if (!user) return;
     removeDialogPubkey = null;
@@ -212,7 +215,11 @@
   /** @type {{ togglePublisher?: boolean, promote?: boolean, demote?: boolean, remove?: boolean }} */ actions
 )}
   {@const self = pubkey === myPubkey}
-  {@const canAssignRole = isAdmin && roleOptions.length > 0 && !self}
+  <!-- The community key's own seat (issue 058f1c41): admins the owner
+    appointed must not be able to demote, re-role or remove it — same guard
+    as MemberActionsMenu, put-user roles go through ownerSafeRoles. -->
+  {@const ownerSeat = isOwnerSeat(pubkey, communityId)}
+  {@const canAssignRole = isAdmin && roleOptions.length > 0 && !self && !ownerSeat}
   {@const hasMenu =
     isAdmin &&
     !self &&
@@ -284,7 +291,7 @@
               </button>
             </li>
           {/if}
-          {#if actions.demote}
+          {#if actions.demote && !ownerSeat}
             <li>
               <button
                 data-testid="member-demote"
@@ -314,7 +321,16 @@
               </button>
             </li>
           {/if}
-          {#if actions.remove}
+          {#if ownerSeat}
+            <li
+              class="menu-title text-xs font-normal"
+              data-testid="member-owner-protected"
+              data-pubkey={pubkey}
+            >
+              {m.groups_members_owner_protected()}
+            </li>
+          {/if}
+          {#if actions.remove && !ownerSeat}
             <div class="divider my-0"></div>
             <li>
               <button

@@ -101,6 +101,7 @@ vi.mock('$lib/paraglide/messages', () => ({
   groups_members_add_direct_action: () => 'Add directly',
   groups_members_promote: () => 'Make admin',
   groups_members_demote: () => 'Remove admin',
+  groups_members_owner_protected: () => 'The owner always keeps admin rights',
   groups_members_remove: () => 'Remove',
   groups_members_action_failed: () => 'The relay refused the change',
   groups_members_assign_role: () => 'Assign role',
@@ -760,5 +761,50 @@ describe('GroupMembersModal publisher role', () => {
     // (pyramid groups/reject-event.go), so the control must not be offered.
     renderWithPublishers({ isAdmin: false });
     expect(screen.queryAllByTestId('member-toggle-publisher')).toHaveLength(0);
+  });
+});
+
+// Issue 058f1c41: the community key's own roster seat (owner) can't be
+// demoted, removed or re-roled by the admins the owner appointed.
+describe('GroupMembersModal — owner seat', () => {
+  it('the community-key admin row offers no demote/remove/assign-role, other admin rows do', () => {
+    const { container } = renderModal({
+      roleOptions: ['admin', 'publisher'],
+      admins: [
+        { pubkey: ADMIN_SELF, roles: [] },
+        { pubkey: ADMIN_OTHER, roles: ['admin'] },
+        { pubkey: COMMUNITY_ID, roles: ['admin'] }
+      ],
+      members: new Set([ADMIN_SELF, ADMIN_OTHER, COMMUNITY_ID, MEMBER_A])
+    });
+    const q = (/** @type {string} */ testid, /** @type {string} */ pk) =>
+      container.querySelector(`[data-testid="${testid}"][data-pubkey="${pk}"]`);
+    expect(q('member-demote', COMMUNITY_ID)).toBeNull();
+    expect(q('member-remove', COMMUNITY_ID)).toBeNull();
+    expect(q('member-assign-role', COMMUNITY_ID)).toBeNull();
+    expect(q('member-owner-protected', COMMUNITY_ID)).not.toBeNull();
+    expect(q('member-toggle-publisher', COMMUNITY_ID)).not.toBeNull();
+    expect(q('member-demote', ADMIN_OTHER)).not.toBeNull();
+    expect(q('member-assign-role', ADMIN_OTHER)).not.toBeNull();
+  });
+
+  it('granting publisher to the owner seat keeps the admin role', async () => {
+    const { container } = renderModal({
+      admins: [
+        { pubkey: ADMIN_SELF, roles: [] },
+        { pubkey: COMMUNITY_ID, roles: ['admin'] }
+      ],
+      members: new Set([ADMIN_SELF, COMMUNITY_ID])
+    });
+    const btn = container.querySelector(
+      `[data-testid="member-toggle-publisher"][data-pubkey="${COMMUNITY_ID}"]`
+    );
+    await fireEvent.click(/** @type {Element} */ (btn));
+    await waitFor(() =>
+      expect(buildPutUserTemplate).toHaveBeenCalledWith('grp1', COMMUNITY_ID, [
+        'admin',
+        'publisher'
+      ])
+    );
   });
 });

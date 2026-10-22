@@ -113,3 +113,42 @@ export function withPublisherRole(roles) {
 export function withoutPublisherRole(roles) {
   return (roles ?? []).filter((role) => role?.toLowerCase?.() !== PUBLISHER_ROLE);
 }
+
+/**
+ * Is this roster row the community key's own seat? The community keypair
+ * founds the root group and is listed on its 39001 as admin; the key holder
+ * is what the members UI calls the owner. Admins the owner appointed could
+ * demote that seat and lock the owner out of the join queue (issue
+ * 058f1c41) — the relay only knows roles, not ownership.
+ * @param {string | undefined | null} pubkey
+ * @param {string | undefined | null} communityPubkey
+ * @returns {boolean}
+ */
+export function isOwnerSeat(pubkey, communityPubkey) {
+  return !!communityPubkey && !!pubkey && pubkey === communityPubkey;
+}
+
+/**
+ * NEW role array that carries a moderation role: `admin` is appended when
+ * none of MODERATION_ROLES is present.
+ * @param {string[] | undefined | null} roles
+ * @returns {string[]}
+ */
+export function withModerationRole(roles) {
+  const current = [...(roles ?? [])];
+  return hasModerationRole(current) ? current : [...current, 'admin'];
+}
+
+/**
+ * The roles a put-user may send for a row: the owner seat always keeps a
+ * moderation role, every other row gets exactly what was asked. Run every
+ * put-user through this, whichever UI built it — demote, assign-role and the
+ * publisher toggle on a bare-admin seat would all drop `admin` otherwise.
+ * @param {string} pubkey
+ * @param {string | undefined | null} communityPubkey
+ * @param {string[]} roles
+ * @returns {string[]}
+ */
+export function ownerSafeRoles(pubkey, communityPubkey, roles) {
+  return isOwnerSeat(pubkey, communityPubkey) ? withModerationRole(roles) : roles;
+}

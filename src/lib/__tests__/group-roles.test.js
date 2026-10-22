@@ -9,7 +9,10 @@ import {
   moderationPubkeys,
   roleOptionsFromAdmins,
   withPublisherRole,
-  withoutPublisherRole
+  withoutPublisherRole,
+  isOwnerSeat,
+  withModerationRole,
+  ownerSafeRoles
 } from '$lib/groups/roles.js';
 
 describe('hasModerationRole', () => {
@@ -134,5 +137,45 @@ describe('isModerator', () => {
     expect(isModerator(admins, null)).toBe(false);
     expect(isModerator(undefined, 'a'.repeat(64))).toBe(false);
     expect(isModerator(null, 'a'.repeat(64))).toBe(false);
+  });
+});
+
+// The community key's own roster entry is the owner's seat (issue 058f1c41):
+// admins the owner appointed could demote it and lock the owner out of the
+// join queue. Every put-user that targets that seat keeps a moderation role.
+describe('owner seat', () => {
+  const COMMUNITY = 'a'.repeat(64);
+  const OTHER = 'b'.repeat(64);
+
+  it('isOwnerSeat matches only the community pubkey, never without one', () => {
+    expect(isOwnerSeat(COMMUNITY, COMMUNITY)).toBe(true);
+    expect(isOwnerSeat(OTHER, COMMUNITY)).toBe(false);
+    expect(isOwnerSeat(COMMUNITY, null)).toBe(false);
+    expect(isOwnerSeat(COMMUNITY, undefined)).toBe(false);
+  });
+
+  it('withModerationRole adds admin only when no moderation role is present', () => {
+    expect(withModerationRole([])).toEqual(['admin']);
+    expect(withModerationRole(['publisher'])).toEqual(['publisher', 'admin']);
+    expect(withModerationRole(['moderator'])).toEqual(['moderator']);
+    expect(withModerationRole(['Admin', 'publisher'])).toEqual(['Admin', 'publisher']);
+    expect(withModerationRole(undefined)).toEqual(['admin']);
+  });
+
+  it('ownerSafeRoles keeps the owner seat a moderator and leaves other rows alone', () => {
+    // demote → stays admin
+    expect(ownerSafeRoles(COMMUNITY, COMMUNITY, [])).toEqual(['admin']);
+    // publisher toggle on a bare-admin owner → admin survives
+    expect(ownerSafeRoles(COMMUNITY, COMMUNITY, ['publisher'])).toEqual(['publisher', 'admin']);
+    // free-text role → admin survives
+    expect(ownerSafeRoles(COMMUNITY, COMMUNITY, ['lehrkraft'])).toEqual(['lehrkraft', 'admin']);
+    // already a moderator → untouched
+    expect(ownerSafeRoles(COMMUNITY, COMMUNITY, ['admin', 'publisher'])).toEqual([
+      'admin',
+      'publisher'
+    ]);
+    // other rows are never touched
+    expect(ownerSafeRoles(OTHER, COMMUNITY, [])).toEqual([]);
+    expect(ownerSafeRoles(COMMUNITY, null, [])).toEqual([]);
   });
 });
