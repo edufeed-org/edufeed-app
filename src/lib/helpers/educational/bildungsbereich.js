@@ -44,6 +44,10 @@
  * @property {string} key
  * @property {string} titleKey
  * @property {Array<SubStepFieldVocab | SubStepFieldScalar>} fields
+ * @property {boolean} [showKeywords] - When true, the wizard renders the plain AMB
+ *   keywords field (`formData.keywords`, not a Konfi facet) below this sub-step's
+ *   fields. The enrich prefill fills keywords for Konfi resources too, so exactly
+ *   one sub-step must expose them for editing.
  */
 
 /**
@@ -135,6 +139,7 @@ export const BILDUNGSBEREICHE = {
       {
         key: '4b',
         titleKey: 'konfi_step4b_title',
+        showKeywords: true,
         fields: [
           {
             kind: 'vocab',
