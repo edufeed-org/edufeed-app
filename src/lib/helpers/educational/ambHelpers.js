@@ -234,30 +234,32 @@ export function getAMBCreatorNames(event) {
  */
 
 /**
- * Extracts structured creators from the flattened `creator:*` tags.
+ * Extracts structured persons/organizations from a flattened `<prefix>:*`
+ * run (`creator:*` or `contributor:*`, NIP-AMB AMB.md l.81-93).
  *
- * The AMB flattening repeats `creator:<field>` per creator with no instance
+ * The AMB flattening repeats `<prefix>:<field>` per person with no instance
  * separator, so grouping fields positionally by key misattributes optional
  * fields (a lone `creator:id` would land on creator 0 even if it belongs to
- * creator 1). Instead we walk the tags in order and start a new creator
+ * creator 1). Instead we walk the tags in order and start a new person
  * whenever a field would repeat on the current one — the flattener always
- * emits each creator's fields as one consecutive run.
+ * emits each person's fields as one consecutive run.
  *
  * @param {any} event - AMB event (kind 30142)
+ * @param {'creator' | 'contributor'} prefix
  * @returns {AMBCreator[]}
  */
-export function getAMBCreators(event) {
+function getAMBPersons(event, prefix) {
   /** @type {Record<string, keyof AMBCreator>} */
   const fieldMap = {
-    'creator:type': 'type',
-    'creator:name': 'name',
-    'creator:id': 'id',
-    'creator:honorificPrefix': 'honorificPrefix',
-    'creator:affiliation:name': 'affiliationName'
+    [`${prefix}:type`]: 'type',
+    [`${prefix}:name`]: 'name',
+    [`${prefix}:id`]: 'id',
+    [`${prefix}:honorificPrefix`]: 'honorificPrefix',
+    [`${prefix}:affiliation:name`]: 'affiliationName'
   };
 
   /** @type {AMBCreator[]} */
-  const creators = [];
+  const persons = [];
   /** @type {AMBCreator} */
   let current = {};
 
@@ -265,14 +267,33 @@ export function getAMBCreators(event) {
     const field = fieldMap[tag[0]];
     if (!field || !tag[1]) continue;
     if (current[field] !== undefined) {
-      creators.push(current);
+      persons.push(current);
       current = {};
     }
     current[field] = tag[1];
   }
-  if (Object.keys(current).length > 0) creators.push(current);
+  if (Object.keys(current).length > 0) persons.push(current);
 
-  return creators;
+  return persons;
+}
+
+/**
+ * Extracts structured creators from the flattened `creator:*` tags.
+ * @param {any} event - AMB event (kind 30142)
+ * @returns {AMBCreator[]}
+ */
+export function getAMBCreators(event) {
+  return getAMBPersons(event, 'creator');
+}
+
+/**
+ * Extracts structured contributors from the flattened `contributor:*` tags
+ * (same shape as creators, NIP-AMB AMB.md l.93).
+ * @param {any} event - AMB event (kind 30142)
+ * @returns {AMBCreator[]}
+ */
+export function getAMBContributors(event) {
+  return getAMBPersons(event, 'contributor');
 }
 
 /**

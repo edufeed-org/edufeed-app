@@ -111,7 +111,7 @@
   /**
    * @typedef {{ id: string, label: string }} CompactConcept
    * @typedef {{ url: string, name: string, type: string, size: number, sha256: string, licenseEvent?: import('nostr-tools').NostrEvent | null }} UploadedFile
-   * @typedef {{ name: string, type: 'Person' | 'Organization', pubkey?: string, affiliationName?: string, honorificPrefix?: string, orcid?: string }} Creator
+   * @typedef {{ name: string, type: 'Person' | 'Organization', pubkey?: string, affiliationName?: string, honorificPrefix?: string, orcid?: string, role?: 'creator' | 'contributor' }} Creator
    * @typedef {keyof typeof BILDUNGSBEREICHE} BildungsbereichKey
    * @typedef {{
    *   coordinate: string,
@@ -689,6 +689,7 @@
     isAMBFree,
     getAMBEncodings,
     getAMBCreators,
+    getAMBContributors,
     getAMBExternalUrls,
     getAMBHasPart,
     getAMBIsPartOf,
@@ -775,26 +776,42 @@
     // truth (name, type, honorificPrefix, affiliation, ORCID). Nostr pubkeys
     // live in separate `["p", pk, relay, "creator"]` tags and are re-attached
     // by name match below.
-    /** @type {Creator[]} */
-    const editCreators = getAMBCreators(editEvent).map((c) => {
+    /**
+     * @param {import('$lib/helpers/educational/ambHelpers.js').AMBCreator} c
+     * @param {'creator' | 'contributor'} role
+     * @returns {Creator}
+     */
+    const toFormPerson = (c, role) => {
       /** @type {Creator} */
-      const creator = {
+      const person = {
         name: c.name || '',
         type: c.type === 'Organization' ? 'Organization' : 'Person'
       };
-      if (c.honorificPrefix) creator.honorificPrefix = c.honorificPrefix;
-      if (c.affiliationName) creator.affiliationName = c.affiliationName;
+      if (c.honorificPrefix) person.honorificPrefix = c.honorificPrefix;
+      if (c.affiliationName) person.affiliationName = c.affiliationName;
       // creator:id carries the ORCID URI; other URI schemes are not editable
       // in the form, so only ORCID round-trips into the orcid field.
-      if (c.id && normalizeOrcid(c.id))
-        creator.orcid = /** @type {string} */ (normalizeOrcid(c.id));
-      return creator;
-    });
+      if (c.id && normalizeOrcid(c.id)) person.orcid = /** @type {string} */ (normalizeOrcid(c.id));
+      if (role === 'contributor') person.role = 'contributor';
+      return person;
+    };
+    /** @type {Creator[]} */
+    const editCreators = [
+      ...getAMBCreators(editEvent).map((c) => toFormPerson(c, 'creator')),
+      ...getAMBContributors(editEvent).map((c) => toFormPerson(c, 'contributor'))
+    ];
 
+    /** @type {Array<{ pubkey: string, role: 'creator' | 'contributor' }>} */
     const creatorPubkeys =
       editEvent.tags
-        ?.filter((/** @type {string[]} */ t) => t[0] === 'p' && t[3] === 'creator')
-        .map((/** @type {string[]} */ t) => t[1]) || [];
+        ?.filter(
+          (/** @type {string[]} */ t) =>
+            t[0] === 'p' && (t[3] === 'creator' || t[3] === 'contributor')
+        )
+        .map((/** @type {string[]} */ t) => ({
+          pubkey: t[1],
+          role: /** @type {'creator' | 'contributor'} */ (t[3])
+        })) || [];
 
     const lrtTypes = getAMBLearningResourceTypes(editEvent, getLocale());
     const subjects = getAMBSubjects(editEvent, getLocale());
@@ -898,12 +915,12 @@
     // field they want to change instead of walking Weiter through the wizard.
     maxVisitedStep = totalSteps;
 
-    // Re-attach Nostr pubkeys (`["p", pk, relay, "creator"]`) to creators by
-    // profile-name match. Deliberately AFTER the synchronous prefill above:
+    // Re-attach Nostr pubkeys (`["p", pk, relay, "creator"|"contributor"]`)
+    // to people by profile-name match within the same role. Deliberately AFTER the synchronous prefill above:
     // each fetch can block up to 2 s, and awaiting it first used to leave the
     // whole form (including step 1) empty while relays were slow.
     if (creatorPubkeys.length > 0) {
-      for (const pubkey of creatorPubkeys) {
+      for (const { pubkey, role } of creatorPubkeys) {
         /** @type {string} */
         let profileName = '';
         try {
@@ -912,11 +929,22 @@
         } catch (error) {
           console.warn('Failed to fetch profile for creator:', error);
         }
-        const match = editCreators.find((c) => !c.pubkey && c.name && c.name === profileName);
+        const match = editCreators.find(
+          (c) =>
+            !c.pubkey &&
+            c.name &&
+            c.name === profileName &&
+            (c.role === 'contributor') === (role === 'contributor')
+        );
         if (match) {
           match.pubkey = pubkey;
         } else {
-          editCreators.push({ name: profileName, type: 'Person', pubkey });
+          editCreators.push({
+            name: profileName,
+            type: 'Person',
+            pubkey,
+            ...(role === 'contributor' ? { role } : {})
+          });
         }
       }
       formData.creators = [...editCreators];

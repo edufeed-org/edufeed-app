@@ -22,6 +22,7 @@
    * @property {string} [affiliationName] - Optional affiliation name
    * @property {string} [honorificPrefix] - Optional title (Dr., Prof., etc.)
    * @property {string} [orcid] - Optional ORCID iD (canonical https URI)
+   * @property {'creator' | 'contributor'} [role] - AMB role; absent = creator
    */
 
   /** @type {{ creators?: Creator[], label?: string, required?: boolean, helpText?: string, activeUserPubkey?: string, onchange?: (creators: Creator[]) => void }} */
@@ -108,7 +109,8 @@
       pubkey: '',
       affiliationName: '',
       honorificPrefix: '',
-      orcid: ''
+      orcid: '',
+      role: 'creator'
     };
   }
 
@@ -159,6 +161,8 @@
     if (!creatorToAdd.affiliationName?.trim()) delete creatorToAdd.affiliationName;
     if (!creatorToAdd.honorificPrefix?.trim()) delete creatorToAdd.honorificPrefix;
     if (!creatorToAdd.orcid) delete creatorToAdd.orcid;
+    // Creator is the default role — only the contributor marker is stored.
+    if (creatorToAdd.role !== 'contributor') delete creatorToAdd.role;
 
     if (editingIndex !== null) {
       // Update existing
@@ -304,6 +308,11 @@
               {#if creator.affiliationName}
                 <span>• {creator.affiliationName}</span>
               {/if}
+              {#if creator.role === 'contributor'}
+                <span class="badge badge-outline badge-xs" data-testid="creator-role-contributor"
+                  >{m.amb_creator_role_contributor()}</span
+                >
+              {/if}
               {#if creator.pubkey}
                 <span class="badge badge-xs badge-primary">Nostr</span>
               {/if}
@@ -416,6 +425,22 @@
         >
           <option value="Person">👤 {m.amb_creator_type_person()}</option>
           <option value="Organization">🏢 {m.amb_creator_type_organization()}</option>
+        </select>
+      </div>
+
+      <!-- Role: creator (default) or contributor (NIP-AMB p-tag marker /
+           contributor:* run) -->
+      <div class="form-control">
+        <label class="label py-1" for="creator-role">
+          <span class="label-text text-sm">{m.amb_creator_label_role()}</span>
+        </label>
+        <select
+          id="creator-role"
+          class="select-bordered select w-full select-sm"
+          bind:value={newCreator.role}
+        >
+          <option value="creator">{m.amb_creator_role_creator()}</option>
+          <option value="contributor">{m.amb_creator_role_contributor()}</option>
         </select>
       </div>
 

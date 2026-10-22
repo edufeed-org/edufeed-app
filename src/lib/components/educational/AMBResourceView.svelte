@@ -42,7 +42,7 @@
     summarizeExtensionFacets
   } from '$lib/helpers/educational/resourceDetailView.js';
   import { toDieBibelUrl } from '$lib/helpers/educational/bibleReference.js';
-  import { getAMBCreators } from '$lib/helpers/educational/ambHelpers.js';
+  import { getAMBCreators, getAMBContributors } from '$lib/helpers/educational/ambHelpers.js';
   import { getResourceAttribution } from '$lib/helpers/educational/resourceAttribution.js';
   import { buildTulluCitation, getCitationOrigin } from '$lib/helpers/educational/citation.js';
   import { useProfileMap } from '$lib/stores/profile-map.svelte.js';
@@ -274,13 +274,16 @@
     }));
   });
 
-  // Creators & roles: structured creator:* runs followed by creator p-tag
-  // identities. NIP-AMB gives every person exactly ONE representation on the
-  // wire (p-tag when they have a Nostr identity, creator:* run otherwise),
-  // so the two lists are disjoint people — never merge them. Legacy
-  // dual-write events show such a person twice until re-saved.
+  // Creators & roles: structured creator:* runs, then contributor:* runs,
+  // then p-tag identities with their role marker. NIP-AMB gives every person
+  // exactly ONE representation on the wire (p-tag when they have a Nostr
+  // identity, a flattened run otherwise), so the lists are disjoint people —
+  // never merge them. Legacy dual-write events show such a person twice
+  // until re-saved.
   const contributorEntries = $derived.by(() => {
-    const structured = uniqueBy(getAMBCreators(event), (c) => `${c.name ?? ''}|${c.id ?? ''}`);
+    const personKey = (/** @type {any} */ c) => `${c.name ?? ''}|${c.id ?? ''}`;
+    const structured = uniqueBy(getAMBCreators(event), personKey);
+    const structuredContributors = uniqueBy(getAMBContributors(event), personKey);
     const roleByPubkey = new Map(
       (event.tags || [])
         .filter((/** @type {any} */ t) => t[0] === 'p' && /^[0-9a-f]{64}$/i.test(t[1] || ''))
@@ -289,6 +292,7 @@
     /** @type {any[]} */
     const entries = [];
     for (const c of structured) entries.push({ ...c, role: 'creator' });
+    for (const c of structuredContributors) entries.push({ ...c, role: 'contributor' });
     for (const c of creators)
       entries.push({ pubkey: c.pubkey, role: roleByPubkey.get(c.pubkey) || '' });
     return entries.map((e, i) => ({ ...e, key: `${i}:${e.pubkey || e.name || ''}` }));
@@ -299,7 +303,9 @@
    * @param {string} role
    */
   function roleLabel(role) {
-    return role === 'creator' ? m.amb_resource_role_creator() : role;
+    if (role === 'creator') return m.amb_resource_role_creator();
+    if (role === 'contributor') return m.amb_resource_role_contributor();
+    return role;
   }
 
   // Published date

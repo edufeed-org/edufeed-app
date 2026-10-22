@@ -14,10 +14,11 @@ import { normalizePubkey } from '$lib/helpers/pubkey.js';
  */
 
 /**
- * Append one `["p", pubkey, relayHint, "creator"]` tag per creator that has a
- * valid Nostr pubkey (hex or npub, normalized to hex). Creators without one
- * are skipped — anything that doesn't normalize (nsec, typos) must never end
- * up in a public tag.
+ * Append one `["p", pubkey, relayHint, <role>]` tag per person that has a
+ * valid Nostr pubkey (hex or npub, normalized to hex). The role is `creator`
+ * unless the entry carries `role: 'contributor'` (NIP-AMB AMB.md l.26/93).
+ * People without a pubkey are skipped — anything that doesn't normalize
+ * (nsec, typos) must never end up in a public tag.
  *
  * @param {string[][]} tags - Mutated
  * @param {Creator[] | undefined} creators
@@ -31,7 +32,12 @@ export async function appendCreatorPTags(tags, creators, resolveRelayHint) {
     const hexPubkey = normalizePubkey(creator.pubkey);
     if (!hexPubkey) continue;
     const relayHint = await resolveRelayHint(hexPubkey);
-    tags.push(['p', hexPubkey, relayHint, 'creator']);
+    tags.push([
+      'p',
+      hexPubkey,
+      relayHint,
+      creator.role === 'contributor' ? 'contributor' : 'creator'
+    ]);
   }
 }
 

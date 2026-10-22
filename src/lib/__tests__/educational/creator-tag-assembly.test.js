@@ -14,7 +14,7 @@ import { describe, it, expect } from 'vitest';
 import { ambToNostr } from 'amb-nostr-converter';
 import { convertFormDataToAMB } from '$lib/helpers/educational/formDataToAmb.js';
 import { appendCreatorPTags } from '$lib/helpers/educational/eventTags.js';
-import { getAMBCreators } from '$lib/helpers/educational/ambHelpers.js';
+import { getAMBCreators, getAMBContributors } from '$lib/helpers/educational/ambHelpers.js';
 
 const AUTHOR_PK = 'f'.repeat(64);
 
@@ -104,5 +104,35 @@ describe('creator tag assembly (NIP-AMB single representation)', () => {
       type: 'Person',
       honorificPrefix: 'Dr.'
     });
+  });
+
+  // NIP-AMB AMB.md l.93: contributors use the same two shapes with the
+  // "contributor" role — a p-tag with role contributor, or a contributor:* run.
+  it('emits contributors as p-tags with role contributor or contributor:* runs', async () => {
+    const CONTRIB_PK = 'e'.repeat(64);
+    const tags = await assembleTags({
+      ...base,
+      creators: [
+        { name: 'Colibri', type: 'Person', pubkey: AUTHOR_PK },
+        { name: 'Helper', type: 'Person', pubkey: CONTRIB_PK, role: 'contributor' },
+        { name: 'Erika Mustermann', type: 'Person', role: 'contributor', affiliationName: 'PTI' }
+      ]
+    });
+
+    expect(tags.filter((t) => t[0] === 'p')).toEqual([
+      ['p', AUTHOR_PK, 'wss://hint.example', 'creator'],
+      ['p', CONTRIB_PK, 'wss://hint.example', 'contributor']
+    ]);
+    expect(tags.some((t) => t[0].startsWith('creator:'))).toBe(false);
+    expect(tags.filter((t) => t[0] === 'contributor:name').map((t) => t[1])).toEqual([
+      'Erika Mustermann'
+    ]);
+    // the linked contributor's form name is never published
+    expect(tags.some((t) => t[1] === 'Helper')).toBe(false);
+
+    expect(getAMBCreators(/** @type {any} */ ({ kind: 30142, tags }))).toEqual([]);
+    expect(getAMBContributors(/** @type {any} */ ({ kind: 30142, tags }))).toEqual([
+      { name: 'Erika Mustermann', type: 'Person', affiliationName: 'PTI' }
+    ]);
   });
 });

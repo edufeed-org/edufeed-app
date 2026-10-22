@@ -32,6 +32,7 @@ import { bildungsbereichToNip32Tags } from '$lib/helpers/educational/bildungsber
  * @property {string} [affiliationName] - Affiliation/organization name
  * @property {string} [honorificPrefix] - Honorific prefix (Dr., Prof., etc.)
  * @property {string} [orcid] - ORCID iD as canonical https URI
+ * @property {'creator'|'contributor'} [role] - AMB role; absent = creator (NIP-AMB p-tag marker / creator:* vs contributor:* run)
  */
 
 /**

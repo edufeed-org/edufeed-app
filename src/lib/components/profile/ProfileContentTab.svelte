@@ -17,6 +17,10 @@
   import { getCalendarEventMetadata } from '$lib/helpers/eventUtils.js';
   import { withoutChannelMeetings } from '$lib/helpers/calendar-timing.js';
   import { formatAMBResource } from '$lib/helpers/educational/index.js';
+  import {
+    getParticipationRole,
+    participationFilter
+  } from '$lib/helpers/educational/participation.js';
   import { filterSocialBookmarks, groupByUrl, groupByEventRef } from '$lib/helpers/urlGrouping.js';
   import AMBResourceCard from '$lib/components/educational/AMBResourceCard.svelte';
   import ArticleCard from '$lib/components/article/ArticleCard.svelte';
@@ -38,6 +42,10 @@
   let { pubkey, tabId, pinnedPointers = [], canPin = false } = $props();
 
   let rawEvents = $state.raw(/** @type {any[]} */ ([]));
+  // "Beteiligt an" (content tab only): resources by others that carry a
+  // NIP-AMB creator/contributor p-tag for this profile. Shown after the own
+  // resources with a flag; never pinnable (the pin list is for own content).
+  let participationEvents = $state.raw(/** @type {any[]} */ ([]));
 
   // Pinned items first (the pin list is the user's global kind 10001 —
   // a-tags cover the addressable kinds shown here, e-tags the rest).
@@ -91,7 +99,27 @@
     return () => sub.unsubscribe();
   });
 
-  const getAuthorProfiles = useProfileMap(() => events.map((e) => e.pubkey));
+  $effect(() => {
+    if (!pubkey || tabId !== 'content') {
+      participationEvents = [];
+      return;
+    }
+    const sub = eventStore.model(TimelineModel, participationFilter(pubkey)).subscribe({
+      next: (loaded) => {
+        // A relay answers `#p` with the own events too (self as creator) —
+        // those already sit in the own list.
+        participationEvents = (loaded || []).filter(
+          (e) => e.pubkey !== pubkey && getParticipationRole(e, pubkey) !== null
+        );
+      },
+      error: (err) => console.error('ProfileContentTab: Participation model error:', err)
+    });
+    return () => sub.unsubscribe();
+  });
+
+  const getAuthorProfiles = useProfileMap(() =>
+    [...events, ...participationEvents].map((e) => e.pubkey)
+  );
   let authorProfiles = $derived(getAuthorProfiles());
 
   // Bookmarks group into URL / event-ref cards instead of raw events.
@@ -106,7 +134,7 @@
   let isEmpty = $derived(
     tabId === 'bookmarks'
       ? bookmarkGroups.urls.length === 0 && bookmarkGroups.refs.length === 0
-      : events.length === 0
+      : events.length === 0 && participationEvents.length === 0
   );
 </script>
 
@@ -167,6 +195,23 @@
             class:mt-3={isEntryPinned({ data: event }, pinnedPointers)}
           >
             {@render pinRow(event)}
+            <AMBResourceCard
+              {resource}
+              authorProfile={authorProfiles.get(event.pubkey) || null}
+              compact={false}
+            />
+          </div>
+        {/if}
+      {/each}
+      {#each participationEvents as event (event.id)}
+        {@const resource = formatAMBResource(event)}
+        {#if resource}
+          <div class="relative mt-3 mb-4 inline-block w-full break-inside-avoid">
+            <div class="absolute -top-2.5 right-4 z-10">
+              <span class="pf-pin-flag pf-participation-flag" data-testid="participation-flag">
+                {m.profile_participation_flag()}
+              </span>
+            </div>
             <AMBResourceCard
               {resource}
               authorProfile={authorProfiles.get(event.pubkey) || null}
@@ -284,6 +329,11 @@
     border: 1px solid color-mix(in oklch, var(--color-warning) 45%, transparent);
     border-radius: 999px;
     padding: 5px 10px;
+  }
+  .pf-participation-flag {
+    color: color-mix(in oklch, var(--color-primary) 80%, var(--color-base-content));
+    background: color-mix(in oklch, var(--color-primary) 14%, var(--color-base-100));
+    border-color: color-mix(in oklch, var(--color-primary) 40%, transparent);
   }
   .pf-pin-unpin {
     cursor: pointer;

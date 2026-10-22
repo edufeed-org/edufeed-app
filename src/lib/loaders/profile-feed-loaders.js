@@ -24,6 +24,7 @@ import {
   getCommunikeyRelays
 } from '$lib/helpers/relay-helper.js';
 import { ALL_FEED_KINDS } from '$lib/helpers/profile-feed.js';
+import { participationFilter } from '$lib/helpers/educational/participation.js';
 
 /** Feed source config: kinds → relay function. Used directly on the classic
  *  path; on the outbox path the same sources supplement the user's write
@@ -38,6 +39,29 @@ export const FEED_RELAY_SOURCES = [
 ];
 
 /**
+ * "Beteiligt an": resources by OTHER authors that name one of the profiles
+ * as creator/contributor through a NIP-AMB p-tag live on the educational
+ * relays, not on the profile's own write relays — one `#p` loader per
+ * profile, same on both paths.
+ * @param {string[]} pubkeys
+ * @returns {import('rxjs').Subscription[]}
+ */
+function startParticipationLoaders(pubkeys) {
+  const relays = getEducationalRelays();
+  if (relays.length === 0) return [];
+  return pubkeys.map((pubkey) =>
+    createTimelineLoader(
+      timedPool,
+      relays,
+      { ...participationFilter(pubkey), limit: 50 },
+      { eventStore }
+    )().subscribe({
+      error: (err) => console.error('profile-feed-loaders: Participation loader error:', err)
+    })
+  );
+}
+
+/**
  * Start all feed loaders for the given authors. Relay getters are resolved
  * at call time — callers inside $effect should invoke this via untrack (or a
  * timeout) to avoid registering relay-config dependencies.
@@ -49,6 +73,8 @@ export function startProfileFeedLoaders({ pubkeys, userPubkey = null }) {
   /** @type {import('rxjs').Subscription[]} */
   const subs = [];
   if (!pubkeys?.length) return subs;
+
+  subs.push(...startParticipationLoaders(pubkeys));
 
   if (userPubkey) {
     // --- Outbox path: uses OutboxModel to send targeted filters per relay ---
