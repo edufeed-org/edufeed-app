@@ -28,6 +28,14 @@
   import ReactionBar from '../reactions/ReactionBar.svelte';
   import CommentList from '../comments/CommentList.svelte';
   import EventTags from '../calendar/EventTags.svelte';
+  import ArticleProvenance from './ArticleProvenance.svelte';
+  import ProfileAvatar from '../shared/ProfileAvatar.svelte';
+  import { page } from '$app/stores';
+  import { getDisplayName } from 'applesauce-core/helpers';
+  import { profileLink } from '$lib/helpers/nostrUtils.js';
+  import { runtimeConfig } from '$lib/stores/config.svelte.js';
+  import { useUserProfile } from '$lib/stores/user-profile.svelte.js';
+  import { getArticleAttribution } from '$lib/helpers/article-attribution.js';
 
   /**
    * @typedef {Object} Props
@@ -86,6 +94,14 @@
   });
 
   const isAuthor = $derived(activeUser?.pubkey === event.pubkey);
+
+  // Re-published post: a credited foreign creator takes the byline and the
+  // publisher moves to a "published by" line. Edit/delete stay with the
+  // publisher (the event's signer).
+  const getPublisherProfile = useUserProfile(() => event.pubkey);
+  const publisherProfile = $derived(getPublisherProfile());
+  const attribution = $derived(getArticleAttribution(event, publisherProfile));
+  const publisherName = $derived(getDisplayName(publisherProfile, event.pubkey.slice(0, 8) + '…'));
 
   // Render markdown to HTML
   // NIP-92: body images get width/height + fallback alt from the imeta tags.
@@ -165,6 +181,7 @@
     subtitle={summary}
     {event}
     authorPubkey={event.pubkey}
+    displayAuthor={attribution.indexed ? attribution.creators[0] : undefined}
     date={formatCalendarDate(publishedAt, 'short')}
     onEdit={isAuthor ? handleEdit : undefined}
     onDelete={isAuthor ? handleDelete : undefined}
@@ -177,6 +194,19 @@
       {/if}
     {/snippet}
   </DetailHeader>
+
+  {#if attribution.indexed}
+    <p
+      class="mb-6 flex items-center gap-2 text-sm text-base-content/70"
+      data-testid="article-published-by"
+    >
+      {m.article_view_published_by()}
+      <ProfileAvatar pubkey={event.pubkey} profile={publisherProfile} size="xs" linkToProfile />
+      <a href={resolve(profileLink(event.pubkey))} class="font-medium hover:underline"
+        >{publisherName}</a
+      >
+    </p>
+  {/if}
 
   <!-- Featured Image — full ratio, never cropped (#29) -->
   {#if image}
@@ -205,6 +235,9 @@
       class="prose prose-lg max-w-none prose-a:text-primary prose-blockquote:border-primary/50 prose-pre:rounded-lg prose-img:rounded-lg"
     />
   </div>
+
+  <!-- Authorship, license, TULLU citation (only when the article carries any) -->
+  <ArticleProvenance {event} pageUrl={$page.url.href} appName={runtimeConfig.appName ?? ''} />
 
   <!-- Tags -->
   {#if hashtags.length > 0}

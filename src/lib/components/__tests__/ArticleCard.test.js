@@ -45,6 +45,9 @@ vi.mock('applesauce-common/helpers', () => ({
     event.tags?.find((/** @type {string[]} */ t) => t[0] === 'image')?.[1] || null,
   getSha256FromURL: () => null
 }));
+vi.mock('$lib/stores/profile-map.svelte.js', () => ({
+  useProfileMap: () => () => new Map([['d'.repeat(64), { name: 'Corinna Profil' }]])
+}));
 vi.mock('$lib/stores/image-license.svelte.js', () => ({
   useLicenseForHash: () => () => null,
   useLicenseStatus: () => () => ({ event: null, status: 'loading' })
@@ -225,6 +228,56 @@ describe('ArticleCard', () => {
       const listItem = container.querySelector('.article-card-list');
       expect(listItem?.getAttribute('role')).toBe('button');
       expect(listItem?.getAttribute('tabindex')).toBe('0');
+    });
+  });
+
+  describe('credited author byline', () => {
+    const CORINNA = 'd'.repeat(64);
+
+    it('shows the publisher when nobody else is credited', () => {
+      const { getByTestId } = render(ArticleCard, {
+        props: { article: mockArticle, authorProfile: mockAuthorProfile }
+      });
+      expect(getByTestId('article-byline').textContent).toContain('Test Author');
+    });
+
+    it('shows a linked creator instead of the publisher (card variant)', () => {
+      const credited = {
+        ...mockArticle,
+        tags: [...mockArticle.tags, ['p', CORINNA, '', 'creator']]
+      };
+      const { getByTestId } = render(ArticleCard, {
+        props: { article: credited, authorProfile: mockAuthorProfile }
+      });
+      const byline = getByTestId('article-byline');
+      expect(byline.textContent).toContain('Corinna Profil');
+      expect(byline.textContent).not.toContain('Test Author');
+      expect(byline.querySelector(`a[href="/p/${CORINNA}"]`)).toBeTruthy();
+    });
+
+    it('shows a name-only creator without a profile link (list variant)', () => {
+      const credited = {
+        ...mockArticle,
+        tags: [...mockArticle.tags, ['creator:name', 'Corinna Beispiel']]
+      };
+      const { getByTestId } = render(ArticleCard, {
+        props: { article: credited, authorProfile: mockAuthorProfile, variant: 'list' }
+      });
+      const byline = getByTestId('article-byline');
+      expect(byline.textContent).toContain('Corinna Beispiel');
+      expect(byline.textContent).not.toContain('Test Author');
+      expect(byline.querySelector('a[href^="/p/"]')).toBeNull();
+    });
+
+    it('keeps the publisher byline when they credit themselves', () => {
+      const credited = {
+        ...mockArticle,
+        tags: [...mockArticle.tags, ['p', mockArticle.pubkey, '', 'creator']]
+      };
+      const { getByTestId } = render(ArticleCard, {
+        props: { article: credited, authorProfile: mockAuthorProfile }
+      });
+      expect(getByTestId('article-byline').textContent).toContain('Test Author');
     });
   });
 });

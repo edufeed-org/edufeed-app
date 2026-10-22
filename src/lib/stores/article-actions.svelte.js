@@ -13,6 +13,17 @@ import { nextCreatedAt } from '$lib/helpers/replaceableUpdates.js';
 import { getAppRelaysForCategory } from '$lib/services/app-relay-service.svelte.js';
 import { getSha256FromURL } from 'applesauce-common/helpers';
 import { collectImetaTags } from '$lib/helpers/imeta.js';
+import {
+  appendCreatorPTags,
+  appendFlattenedPeopleTags
+} from '$lib/helpers/educational/eventTags.js';
+import { getPrimaryWriteRelay } from '$lib/services/relay-service.svelte.js';
+import { normalizePubkey } from '$lib/helpers/pubkey.js';
+import {
+  ARTICLE_LICENSE_TAG,
+  ARTICLE_SOURCE_TAG,
+  ARTICLE_CHANGES_TAG
+} from '$lib/helpers/article-attribution.js';
 
 /** Kind number for NIP-23 long-form articles */
 const ARTICLE_KIND = 30023;
@@ -27,6 +38,10 @@ const ARTICLE_KIND = 30023;
  * @property {import('nostr-tools').NostrEvent | null} [imageLicenseEvent] - The cover's kind-1063 license attestation; rebroadcast with the article so its relays can resolve the badge
  * @property {string[]} [hashtags] - Optional hashtags
  * @property {Array<Partial<import('$lib/helpers/imeta.js').MediaAttachment> & { url?: string }>} [media] - Images inserted into the body this session (NIP-94 fields from the upload); become NIP-92 imeta tags for the URLs still present in `content`
+ * @property {import('$lib/stores/educational-actions.svelte.js').Creator[]} [creators] - Credited people (authors / contributors); see `$lib/helpers/article-attribution.js` for the wire form
+ * @property {string} [license] - License URL (`license:id`)
+ * @property {string} [source] - Where the text originally appeared (TULLU Ursprungsort, `source`)
+ * @property {string} [changes] - Modification note (`changes`)
  */
 
 /**
@@ -90,10 +105,35 @@ export function buildArticleTags(formData, dTag, communityPubkey, existingTags =
     tags.push(['h', communityPubkey]);
   }
 
+  // Authorship / license / TULLU provenance (all optional).
+  if (formData.license?.trim()) tags.push([ARTICLE_LICENSE_TAG, formData.license.trim()]);
+  if (formData.source?.trim()) tags.push([ARTICLE_SOURCE_TAG, formData.source.trim()]);
+  if (formData.changes?.trim()) tags.push([ARTICLE_CHANGES_TAG, formData.changes.trim()]);
+  appendFlattenedPeopleTags(tags, formData.creators);
+
   // NIP-92: one imeta per body image whose URL is still in the markdown.
   tags.push(...collectImetaTags(formData.content, formData.media ?? [], existingTags));
 
   return tags;
+}
+
+/**
+ * Credit the linked people with `["p", pk, relay, "creator"|"contributor"]`
+ * AFTER the factory build: `tagPubkeyMentions()` merges a body mention into
+ * an existing p-tag for the same pubkey and drops its marker, so the marked
+ * tag has to be the last word. An earlier plain mention tag of that person
+ * is replaced, not duplicated.
+ * @param {import('nostr-tools').EventTemplate} template - Mutated
+ * @param {ArticleFormData} formData
+ */
+async function creditLinkedPeople(template, formData) {
+  const linked = (formData.creators || []).flatMap((c) => {
+    const pk = normalizePubkey(c.pubkey);
+    return pk ? [pk] : [];
+  });
+  if (linked.length === 0) return;
+  template.tags = template.tags.filter((t) => !(t[0] === 'p' && linked.includes(t[1])));
+  await appendCreatorPTags(template.tags, formData.creators, getPrimaryWriteRelay);
 }
 
 /**
@@ -129,6 +169,7 @@ export async function createArticle(formData, communityPubkey, communityEvent = 
     repairNostrLinks(),
     tagPubkeyMentions()
   );
+  await creditLinkedPeople(eventTemplate, formData);
 
   const articleEvent = await currentAccount.signEvent(eventTemplate);
   // Mentioned users get the article on their read relays too.
@@ -189,6 +230,7 @@ export async function updateArticle(formData, existingEvent, communityEvent = nu
     repairNostrLinks(),
     tagPubkeyMentions()
   );
+  await creditLinkedPeople(eventTemplate, formData);
 
   const updatedEvent = await currentAccount.signEvent(eventTemplate);
   publishEventOptimistic(updatedEvent, pTagPubkeys(updatedEvent), {

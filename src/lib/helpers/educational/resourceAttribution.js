@@ -79,15 +79,51 @@ export function getResourceAttribution(event, publisherProfile = null) {
       .map((/** @type {string[]} */ t) => t[1].toLowerCase())
   );
 
-  const publisherPubkey = (event.pubkey || '').toLowerCase();
-  if (pTagCreators.includes(publisherPubkey)) {
-    return { indexed: false, creators: [], sourceDomain };
+  return {
+    ...resolveAttribution({
+      structuredCreators: getAMBCreators(event),
+      pTagCreators,
+      publisherPubkey: event.pubkey,
+      publisherProfile
+    }),
+    sourceDomain
+  };
+}
+
+/**
+ * The indexed-vs-own decision, independent of the event kind. Shared by AMB
+ * resources and NIP-23 articles (`$lib/helpers/article-attribution.js`), which
+ * differ only in how they collect their creators from the tags.
+ *
+ * Own content (indexed=false) when:
+ * - there are no creators at all, or
+ * - a creator p-tag points at the publisher itself, or
+ * - a structured creator name matches the publisher's profile name.
+ *
+ * @param {{
+ *   structuredCreators: Array<{ name?: string, id?: string, type?: string }>,
+ *   pTagCreators: string[],
+ *   publisherPubkey: string | undefined,
+ *   publisherProfile?: any
+ * }} input - Structured (name) creators in tag order, creator pubkeys (hex)
+ * @returns {{ indexed: boolean, creators: DisplayCreator[] }}
+ */
+export function resolveAttribution({
+  structuredCreators,
+  pTagCreators,
+  publisherPubkey,
+  publisherProfile = null
+}) {
+  const publisher = (publisherPubkey || '').toLowerCase();
+  const creatorPubkeys = unique(pTagCreators.map((pk) => pk.toLowerCase()));
+  if (creatorPubkeys.includes(publisher)) {
+    return { indexed: false, creators: [] };
   }
 
   // Deduped: events in the wild repeat whole creator runs, and duplicates
   // would both mislead and crash keyed {#each} blocks downstream.
-  const structuredCreators = uniqueBy(
-    getAMBCreators(event).filter((c) => !!c.name),
+  const named = uniqueBy(
+    structuredCreators.filter((c) => !!c.name),
     (c) => `${normalizeName(c.name)}|${c.id ?? ''}`
   );
 
@@ -98,28 +134,24 @@ export function getResourceAttribution(event, publisherProfile = null) {
   ]
     .map(normalizeName)
     .filter(Boolean);
-  const publisherIsCreator = structuredCreators.some((c) =>
-    profileNames.includes(normalizeName(c.name))
-  );
+  const publisherIsCreator = named.some((c) => profileNames.includes(normalizeName(c.name)));
   if (publisherIsCreator) {
-    return { indexed: false, creators: [], sourceDomain };
+    return { indexed: false, creators: [] };
   }
 
   /** @type {DisplayCreator[]} */
   const creators = [
-    ...structuredCreators.map((c) => ({
+    ...named.map((c) => ({
       name: c.name,
       ...(c.type ? { type: c.type } : {})
     })),
-    ...pTagCreators
-      .filter((/** @type {string} */ pk) => pk !== publisherPubkey)
-      .map((/** @type {string} */ pk) => ({ pubkey: pk }))
+    ...creatorPubkeys.filter((pk) => pk !== publisher).map((pk) => ({ pubkey: pk }))
   ];
   if (creators.length === 0) {
-    return { indexed: false, creators: [], sourceDomain };
+    return { indexed: false, creators: [] };
   }
 
-  return { indexed: true, creators, sourceDomain };
+  return { indexed: true, creators };
 }
 
 /**

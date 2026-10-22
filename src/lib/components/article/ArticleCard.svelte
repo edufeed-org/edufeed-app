@@ -23,6 +23,12 @@
   import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
   import { RepliesModel } from 'applesauce-common/models';
   import { ChatIcon } from '$lib/components/icons';
+  import { getArticleAttribution } from '$lib/helpers/article-attribution.js';
+  import {
+    creatorInitials,
+    formatCreatorNames
+  } from '$lib/helpers/educational/resourceAttribution.js';
+  import { useProfileMap } from '$lib/stores/profile-map.svelte.js';
 
   /**
    * @typedef {Object} Props
@@ -107,6 +113,34 @@
 
   // Get author info
   const authorName = $derived(getDisplayName(authorProfile, article.pubkey.slice(0, 8) + '...'));
+
+  // Byline: a credited foreign creator (re-published post) replaces the
+  // publisher, as on AMB resources. The name links to a profile only for a
+  // single linked creator; mixed/multiple groups stay plain text.
+  const attribution = $derived(getArticleAttribution(article, authorProfile));
+  const credited = $derived(attribution.indexed ? attribution.creators : []);
+  const getCreditedProfiles = useProfileMap(() =>
+    credited.flatMap((c) => (c.pubkey ? [c.pubkey] : []))
+  );
+  /** @param {import('$lib/helpers/educational/resourceAttribution.js').DisplayCreator} c */
+  function creditedName(c) {
+    if (c.name) return c.name;
+    if (!c.pubkey) return '';
+    return getDisplayName(getCreditedProfiles().get(c.pubkey), c.pubkey.slice(0, 8) + '…');
+  }
+  const bylineName = $derived(
+    credited.length > 0 ? formatCreatorNames(credited.map(creditedName)) : authorName
+  );
+  const bylinePubkey = $derived(
+    credited.length === 0 ? article.pubkey : credited.length === 1 ? credited[0].pubkey : undefined
+  );
+  const bylineProfile = $derived(
+    credited.length === 0
+      ? authorProfile
+      : bylinePubkey
+        ? getCreditedProfiles().get(bylinePubkey)
+        : null
+  );
   // Generate naddr for the article (includes relay hints for discoverability)
   const articleNaddr = $derived.by(() => {
     const naddr = encodeEventToNaddr(article);
@@ -175,12 +209,16 @@
     </div>
     <div class="min-w-0 flex-1">
       <div class="truncate font-semibold text-base-content">{title}</div>
-      <div class="truncate text-sm text-base-content/60">
-        <a
-          href={resolve(profileLink(article.pubkey))}
-          class="hover:underline"
-          onclick={(e) => e.stopPropagation()}>{authorName}</a
-        >
+      <div class="truncate text-sm text-base-content/60" data-testid="article-byline">
+        {#if bylinePubkey}
+          <a
+            href={resolve(profileLink(bylinePubkey))}
+            class="hover:underline"
+            onclick={(e) => e.stopPropagation()}>{bylineName}</a
+          >
+        {:else}
+          <span>{bylineName}</span>
+        {/if}
         · {formatCalendarDate(publishedAt, 'short')}
       </div>
       {#if summary}
@@ -211,19 +249,37 @@
   >
     <!-- Author Header -->
     <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
-    <div class="mb-3 flex items-center gap-3" onclick={(e) => e.stopPropagation()}>
-      <ProfileAvatar
-        pubkey={article.pubkey}
-        profile={authorProfile}
-        size="md"
-        linkToProfile
-        showHoverCard
-      />
-      <div class="min-w-0 flex-1">
-        <a
-          href={resolve(profileLink(article.pubkey))}
-          class="truncate font-medium text-base-content hover:underline">{authorName}</a
+    <div
+      class="mb-3 flex items-center gap-3"
+      data-testid="article-byline"
+      onclick={(e) => e.stopPropagation()}
+    >
+      {#if bylinePubkey}
+        <ProfileAvatar
+          pubkey={bylinePubkey}
+          profile={bylineProfile}
+          size="md"
+          linkToProfile
+          showHoverCard
+        />
+      {:else}
+        <!-- metadata-only creator: dashed initials, no profile to link -->
+        <div
+          class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-dashed border-base-content/40 text-sm font-medium text-base-content/70"
+          aria-hidden="true"
         >
+          {creatorInitials(bylineName)}
+        </div>
+      {/if}
+      <div class="min-w-0 flex-1">
+        {#if bylinePubkey}
+          <a
+            href={resolve(profileLink(bylinePubkey))}
+            class="truncate font-medium text-base-content hover:underline">{bylineName}</a
+          >
+        {:else}
+          <span class="truncate font-medium text-base-content">{bylineName}</span>
+        {/if}
         <div class="text-sm text-base-content/60">
           {formatCalendarDate(publishedAt, 'short')}
         </div>
