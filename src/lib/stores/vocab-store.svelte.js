@@ -48,8 +48,6 @@ export function useConceptScheme(getAddr) {
 export function useSchemeConcepts(getSchemeCoord, getRelays) {
   /** @type {import('nostr-tools').NostrEvent[]} */
   let concepts = $state.raw([]);
-  // eslint-disable-next-line svelte/prefer-svelte-reactivity -- internal dedup tracker, not reactive
-  const loadedIds = new Map();
 
   $effect(() => {
     const coord = getSchemeCoord();
@@ -57,21 +55,16 @@ export function useSchemeConcepts(getSchemeCoord, getRelays) {
       concepts = [];
       return;
     }
-    loadedIds.clear();
 
     const relays = getRelays();
     const loaderSub = loadSchemeConcepts(coord, relays);
+    // Mirror the model, never accumulate: the TimelineModel already dedupes
+    // and drops a concept once a newer version of it (one that moved to
+    // another scheme, see loadSchemeConcepts) replaced it in the EventStore.
     const modelSub = eventStore
       .model(TimelineModel, { kinds: [CONCEPT_KIND], '#a': [coord] })
       .subscribe((events) => {
-        let changed = false;
-        for (const e of events || []) {
-          if (!loadedIds.has(e.id)) {
-            loadedIds.set(e.id, e);
-            changed = true;
-          }
-        }
-        if (changed) concepts = Array.from(loadedIds.values());
+        concepts = events || [];
       });
 
     return () => {
