@@ -320,6 +320,8 @@
   "profile_website": "Webseite",
   "profile_picture": "Profilbild",
   "profile_banner": "Banner",
+  "profile_image_license_picture": "Profilbild",
+  "profile_image_license_banner": "Banner",
   "profile_nip05": "NIP-05 Identifikator",
   "profile_save": "Profil speichern",
   "profile_cancel": "Abbrechen",

@@ -42,7 +42,9 @@ vi.mock('$lib/paraglide/messages', () => ({
   community_join_invite_login_hint: () => 'Sign in to redeem the invite.',
   community_join_invite_login_button: () => 'Sign in or create an account',
   community_join_refused: () => 'The relay declined this join request.',
-  community_join_failed: (/** @type {{reason: string}} */ { reason }) => `Join failed: ${reason}`
+  community_join_failed: (/** @type {{reason: string}} */ { reason }) => `Join failed: ${reason}`,
+  profile_image_license_picture: () => 'Profilbild',
+  profile_image_license_banner: () => 'Banner'
 }));
 
 vi.mock('$app/navigation', () => ({ goto: vi.fn() }));
@@ -106,6 +108,18 @@ vi.mock('svelte', async (importOriginal) => {
       key === 'communityWideFormRef' ? () => formRefHolder.value : undefined
   };
 });
+
+// Kind-1063 lookups for the license row under the hero (issue 1ff3b524).
+const licenseHolders = vi.hoisted(() => ({
+  /** @type {Record<string, {event: any, status: string}>} */ byHash: {}
+}));
+vi.mock('$lib/stores/image-license.svelte.js', () => ({
+  useLicenseStatus: (/** @type {() => string | null} */ getHash) => () => {
+    const hash = getHash();
+    if (!hash) return { event: null, status: 'missing' };
+    return licenseHolders.byHash[hash] ?? { event: null, status: 'missing' };
+  }
+}));
 
 vi.mock('$lib/components/shared/ProfileAvatar.svelte', () => ({ default: function Stub() {} }));
 vi.mock('../../shared/ImageWithFallback.svelte', () => ({ default: function Stub() {} }));
@@ -520,5 +534,60 @@ describe('CommunityProfileHero — description + location', () => {
       communikeyEvent: { kind: 10222, tags: [['location', 'Bremen, Deutschland']] }
     });
     expect(screen.getByText('Bremen, Deutschland')).toBeTruthy();
+  });
+});
+
+describe('CommunityProfileHero — image licenses (issue 1ff3b524)', () => {
+  const HASH = 'c'.repeat(64);
+  const PICTURE = `https://blossom.edufeed.org/${HASH}.png`;
+
+  beforeEach(() => {
+    licenseHolders.byHash = {};
+  });
+
+  it('lists the community picture license when its Blossom hash has a kind 1063', () => {
+    licenseHolders.byHash[HASH] = {
+      status: 'found',
+      event: {
+        id: 'd'.repeat(64),
+        kind: 1063,
+        pubkey: 'x'.repeat(64),
+        created_at: 1,
+        content: '',
+        tags: [
+          ['x', HASH],
+          ['license', 'https://creativecommons.org/licenses/by/4.0/'],
+          ['credit', 'Brot für die Welt']
+        ]
+      }
+    };
+    const { container } = render(CommunityProfileHero, {
+      props: {
+        communityId: 'x'.repeat(64),
+        communikeyEvent: OPEN_EVENT,
+        profileEvent: { name: 'Test Community', picture: PICTURE },
+        onNavigateToAbout: vi.fn(),
+        onMembersClick: vi.fn()
+      }
+    });
+    const row = container.querySelector('[data-testid="profile-image-licenses"]');
+    expect(row).toBeTruthy();
+    expect(row?.textContent).toContain('Profilbild');
+    expect(row?.textContent).toContain('CC BY 4.0');
+    expect(row?.textContent).toContain('Brot für die Welt');
+  });
+
+  it('shows nothing for a picture without an attestation', () => {
+    const { container } = render(CommunityProfileHero, {
+      props: {
+        communityId: 'x'.repeat(64),
+        communikeyEvent: OPEN_EVENT,
+        profileEvent: { name: 'Test Community', picture: PICTURE },
+        onNavigateToAbout: vi.fn(),
+        onMembersClick: vi.fn()
+      }
+    });
+    expect(container.querySelector('[data-testid="profile-image-licenses"]')).toBeFalsy();
+    expect(container.querySelector('[data-testid="license-caution"]')).toBeFalsy();
   });
 });
