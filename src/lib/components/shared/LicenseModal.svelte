@@ -13,6 +13,24 @@
     getAiEdited,
     getAiTraining
   } from '$lib/helpers/ai-label.js';
+  import {
+    normalizeKeyword,
+    getLicenseKeywords,
+    getLicenseSubjects,
+    getSubjectLabel
+  } from '$lib/helpers/license-tags.js';
+  import { splitKeywordInput, mergeKeywords } from '$lib/helpers/educational/keywordInput.js';
+  import { resolveVocabField } from '$lib/helpers/educational/vocabResolver.js';
+  import { getSubjectVocabLabel } from '$lib/helpers/educational/bildungsbereich.js';
+  import { getLocale } from '$lib/paraglide/runtime.js';
+  import { lazyComponent } from '$lib/helpers/lazy-component.svelte.js';
+  import { uniqueBy } from '$lib/helpers/unique.js';
+
+  // The subject pickers pull the vocabulary stack (SKOS tree, concept
+  // loaders); load them only once someone opens the indexing section.
+  const ConceptPicker = lazyComponent(
+    () => import('$lib/components/forms/FormConceptPicker.svelte')
+  );
 
   let {
     open = $bindable(false),
@@ -99,6 +117,100 @@
   let modalError = $state('');
   let modalDisclosureChecked = $state(false);
 
+  // Indexing (optional): free keywords → `t` tags, subjects → `about:*`
+  // triples (see license-tags.js). The section stays collapsed unless the
+  // existing attestation already carries something to edit.
+  let indexingOpen = $state(false);
+  /** @type {string[]} */
+  let modalKeywords = $state([]);
+  let modalKeywordInput = $state('');
+  /**
+   * Subjects picked through the per-vocabulary pickers, one bucket per vocab
+   * key, plus the ones carried over from an existing attestation (a 1063
+   * does not say which vocabulary a concept came from).
+   * @type {Record<string, import('$lib/helpers/educational/formReference.js').SelectedConcept[]>}
+   */
+  let modalSubjectBuckets = $state({});
+  /** @type {import('$lib/helpers/license-tags.js').LicenseSubject[]} */
+  let modalCarriedSubjects = $state([]);
+
+  // The same KIM subject vocabularies the resource form offers; a deployment
+  // without the naddr configured simply gets no picker for it.
+  const SUBJECT_VOCAB_KEYS = ['schulfaecher', 'hochschulfaecher'];
+  const subjectVocabFields = $derived(
+    SUBJECT_VOCAB_KEYS.map((key) => ({ key, field: resolveVocabField(key) })).filter(
+      /** @returns {e is { key: string, field: NonNullable<ReturnType<typeof resolveVocabField>> }} */
+      (e) => Boolean(e.field)
+    )
+  );
+  const locale = $derived(getLocale());
+
+  /** All subjects that will be written: carried-over first, then picked. */
+  const modalSubjects = $derived(
+    uniqueBy(
+      [
+        ...modalCarriedSubjects,
+        ...Object.values(modalSubjectBuckets)
+          .flat()
+          .map((c) => ({ id: c.id, labels: { ...(c.labels ?? {}) } }))
+      ],
+      (c) => c.id
+    )
+  );
+
+  /** Commit the typed fragment as keywords (Enter, Tab, comma, blur). */
+  function commitKeywordInput() {
+    const tokens = splitKeywordInput(modalKeywordInput).map(normalizeKeyword).filter(Boolean);
+    modalKeywordInput = '';
+    if (tokens.length) modalKeywords = mergeKeywords(modalKeywords, tokens);
+  }
+
+  /** @param {KeyboardEvent} e */
+  function handleKeywordKeydown(e) {
+    if (e.key === 'Enter' || e.key === 'Tab' || e.key === ',') {
+      if (e.key === 'Tab' && !modalKeywordInput.trim()) return;
+      e.preventDefault();
+      commitKeywordInput();
+    } else if (e.key === 'Backspace' && !modalKeywordInput && modalKeywords.length) {
+      modalKeywords = modalKeywords.slice(0, -1);
+    }
+  }
+
+  /** @param {string} keyword */
+  function removeKeyword(keyword) {
+    modalKeywords = modalKeywords.filter((k) => k !== keyword);
+  }
+
+  /** @param {string} id */
+  function removeSubject(id) {
+    modalCarriedSubjects = modalCarriedSubjects.filter((c) => c.id !== id);
+    const next = /** @type {typeof modalSubjectBuckets} */ ({});
+    for (const [key, list] of Object.entries(modalSubjectBuckets)) {
+      next[key] = list.filter((c) => c.id !== id);
+    }
+    modalSubjectBuckets = next;
+  }
+
+  /** @param {string} key */
+  function subjectPickerValue(key) {
+    return modalSubjectBuckets[key] ?? [];
+  }
+
+  /**
+   * @param {string} key
+   * @returns {(picked: import('$lib/helpers/educational/formReference.js').SelectedConcept[]) => void}
+   */
+  function makeSubjectHandler(key) {
+    return (picked) => {
+      modalSubjectBuckets = { ...modalSubjectBuckets, [key]: picked };
+      // A concept picked again replaces its carried-over copy.
+      const pickedIds = new Set(picked.map((c) => c.id));
+      modalCarriedSubjects = modalCarriedSubjects.filter((c) => !pickedIds.has(c.id));
+    };
+  }
+
+  const hasIndexing = $derived(modalKeywords.length > 0 || modalSubjects.length > 0);
+
   // Two-state modal:
   //   - 'existing': showing the existing license event with Accept / Create-my-own
   //   - 'form':     the standard create-a-license form
@@ -132,6 +244,8 @@
   const existingLicenseLabel = $derived(
     existingLicenseUrl ? formatLicenseUrl(existingLicenseUrl) : null
   );
+  const existingKeywords = $derived(getLicenseKeywords(existingLicense));
+  const existingSubjects = $derived(getLicenseSubjects(existingLicense));
 
   /** @param {import('$lib/helpers/ai-label.js').AiLabel} label */
   const aiLabelText = (label) =>
@@ -170,6 +284,17 @@
       modalAiTraining = true;
       modalError = '';
       modalDisclosureChecked = false;
+      // Re-attesting ("create my own" over an existing event) keeps the
+      // indexing the previous attester wrote, so it can be edited, not lost.
+      // Locals first: reading the state just written would make this effect
+      // depend on it and re-run (and reset the form) on every keystroke.
+      const carriedKeywords = getLicenseKeywords(existingLicense);
+      const carriedSubjects = getLicenseSubjects(existingLicense);
+      modalKeywords = carriedKeywords;
+      modalKeywordInput = '';
+      modalSubjectBuckets = {};
+      modalCarriedSubjects = carriedSubjects;
+      indexingOpen = carriedKeywords.length > 0 || carriedSubjects.length > 0;
       view = existingLicense ? 'existing' : 'form';
     }
   });
@@ -206,6 +331,8 @@
 
   async function handleSave() {
     modalError = '';
+    // A keyword typed but not yet confirmed with Enter still counts.
+    commitKeywordInput();
     if (!modalLicense || !modalCredit) {
       modalError = m.amb_form_validation_image_license_missing();
       return;
@@ -262,6 +389,8 @@
           aiTool: selectedAiTool(),
           aiEdited: modalAi === 'generated' && modalAiEdited,
           aiTraining: modalAiTraining ? 'allowed' : 'disallowed',
+          keywords: modalKeywords,
+          subjects: modalSubjects,
           ...(attestExtras ?? {})
         },
         effectiveSigner
@@ -376,6 +505,24 @@
                   {existingAiTraining === 'allowed'
                     ? m.license_modal_ai_training_allowed()
                     : m.license_modal_ai_training_disallowed()}
+                </dd>
+              </div>
+            {/if}
+            {#if existingKeywords.length > 0}
+              <div class="flex gap-2" data-testid="license-modal-existing-keywords">
+                <dt class="w-24 shrink-0 font-medium">{m.license_modal_keywords_label()}</dt>
+                <dd class="flex min-w-0 flex-wrap gap-1">
+                  {#each existingKeywords as keyword (keyword)}
+                    <span class="badge badge-sm">{keyword}</span>
+                  {/each}
+                </dd>
+              </div>
+            {/if}
+            {#if existingSubjects.length > 0}
+              <div class="flex gap-2" data-testid="license-modal-existing-subjects">
+                <dt class="w-24 shrink-0 font-medium">{m.license_modal_subjects_label()}</dt>
+                <dd class="min-w-0 break-words">
+                  {existingSubjects.map((c) => getSubjectLabel(c, locale)).join(' · ')}
                 </dd>
               </div>
             {/if}
@@ -580,6 +727,93 @@
             </label>
           {/if}
         </fieldset>
+
+        <!-- Indexing (optional): keywords → `t`, subjects → `about:*` triples,
+             so the attested image can be found by topic later on. -->
+        <details
+          class="mt-4 mb-3 rounded-lg border border-base-300 bg-base-200/50"
+          data-testid="license-modal-indexing-section"
+          bind:open={indexingOpen}
+        >
+          <summary class="cursor-pointer px-3 py-2 text-sm font-medium select-none">
+            {m.license_modal_indexing_section_title()}
+            {#if hasIndexing}
+              <span class="ml-1 badge badge-sm" data-testid="license-modal-indexing-count"
+                >{modalKeywords.length + modalSubjects.length}</span
+              >
+            {/if}
+          </summary>
+          <div class="px-3 pb-3">
+            <p class="mb-3 text-xs opacity-70">{m.license_modal_indexing_hint()}</p>
+
+            <div class="mb-3">
+              <label class="mb-1 block text-sm font-medium" for="license-modal-keywords">
+                {m.license_modal_keywords_label()}
+              </label>
+              <input
+                id="license-modal-keywords"
+                type="text"
+                class="input-bordered input w-full"
+                data-testid="license-modal-keywords"
+                placeholder={m.amb_form_placeholder_keywords()}
+                bind:value={modalKeywordInput}
+                onkeydown={handleKeywordKeydown}
+                onblur={commitKeywordInput}
+              />
+              {#if modalKeywords.length > 0}
+                <div class="mt-2 flex flex-wrap gap-1" data-testid="license-modal-keyword-chips">
+                  {#each modalKeywords as keyword (keyword)}
+                    <span class="badge gap-1 badge-outline">
+                      {keyword}
+                      <button
+                        type="button"
+                        class="opacity-60 hover:opacity-100"
+                        aria-label={m.license_modal_remove_keyword({ keyword })}
+                        onclick={() => removeKeyword(keyword)}>✕</button
+                      >
+                    </span>
+                  {/each}
+                </div>
+              {/if}
+            </div>
+
+            {#if subjectVocabFields.length > 0 || modalCarriedSubjects.length > 0}
+              <div class="mb-1 text-sm font-medium">{m.license_modal_subjects_label()}</div>
+              {#each subjectVocabFields as { key, field } (key)}
+                <div class="mb-2" data-testid="license-modal-subject-picker-{key}">
+                  {#if subjectVocabFields.length > 1}
+                    <div class="mb-1 text-xs opacity-70">{getSubjectVocabLabel(key, locale)}</div>
+                  {/if}
+                  {#if indexingOpen && ConceptPicker.Component}
+                    <ConceptPicker.Component
+                      {field}
+                      multiple={true}
+                      value={subjectPickerValue(key)}
+                      onchange={makeSubjectHandler(key)}
+                    />
+                  {/if}
+                </div>
+              {/each}
+              {#if modalSubjects.length > 0}
+                <div class="mt-2 flex flex-wrap gap-1" data-testid="license-modal-subject-chips">
+                  {#each modalSubjects as subject (subject.id)}
+                    <span class="badge gap-1 badge-outline">
+                      {getSubjectLabel(subject, locale)}
+                      <button
+                        type="button"
+                        class="opacity-60 hover:opacity-100"
+                        aria-label={m.license_modal_remove_subject({
+                          subject: getSubjectLabel(subject, locale)
+                        })}
+                        onclick={() => removeSubject(subject.id)}>✕</button
+                      >
+                    </span>
+                  {/each}
+                </div>
+              {/if}
+            {/if}
+          </div>
+        </details>
 
         {#if extraOptions}
           <div class="mt-4 mb-3 rounded-lg border border-base-300 bg-base-200/50 p-3">

@@ -22,6 +22,15 @@ vi.mock('$lib/paraglide/messages', () => ({
   license_modal_ai_generated: () => 'Fully AI-generated',
   license_modal_ai_modified: () => 'Partially AI-modified',
   license_modal_ai_section_title: () => 'AI provenance & usage',
+  license_modal_indexing_section_title: () => 'Indexing (optional)',
+  license_modal_indexing_hint: () => 'indexing hint',
+  license_modal_keywords_label: () => 'Keywords',
+  license_modal_subjects_label: () => 'Subject',
+  /** @param {{ keyword: string }} p */
+  license_modal_remove_keyword: (p) => `Remove keyword ${p.keyword}`,
+  /** @param {{ subject: string }} p */
+  license_modal_remove_subject: (p) => `Remove subject ${p.subject}`,
+  amb_form_placeholder_keywords: () => 'Enter, Tab or comma to add',
   license_modal_ai_training_label: () => 'Usable for AI training',
   license_modal_ai_training_hint: () => 'training hint',
   license_modal_ai_training_row_label: () => 'AI training',

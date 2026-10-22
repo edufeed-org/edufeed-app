@@ -6,7 +6,9 @@
   (event author) as profile names linking to their profiles. AI content
   additionally shows the twillo-aligned provenance details: manual edits,
   the generating tool (`ai-tool`) and the AI-training permission
-  (`ai-training`, also shown for human-made content when stated).
+  (`ai-training`, also shown for human-made content when stated). Indexing
+  tags — keywords (`t`) and subjects (`about:*`) — render as chips and a
+  label line only when the attestation carries them.
 
   Pubkeys never render as raw hex: while a profile is unknown the shortened
   npub stands in. Profiles are subscribed only while this card is mounted,
@@ -17,6 +19,12 @@
   import { getDisplayName } from 'applesauce-core/helpers';
   import { formatLicenseUrl } from '$lib/helpers/educational/licenseLabel.js';
   import { getAiLabel, getAiTool, getAiEdited, getAiTraining } from '$lib/helpers/ai-label.js';
+  import {
+    getLicenseKeywords,
+    getLicenseSubjects,
+    getSubjectLabel
+  } from '$lib/helpers/license-tags.js';
+  import { getLocale } from '$lib/paraglide/runtime.js';
   import { hexToNpub, normalizePubkey } from '$lib/helpers/pubkey.js';
   import { profileLink } from '$lib/helpers/nostrUtils.js';
   import { useProfileMap } from '$lib/stores/profile-map.svelte.js';
@@ -48,6 +56,9 @@
   const aiEdited = $derived(getAiEdited(licenseEvent));
   const aiTool = $derived(getAiTool(licenseEvent));
   const aiTraining = $derived(getAiTraining(licenseEvent));
+  const keywords = $derived(getLicenseKeywords(licenseEvent));
+  const subjects = $derived(getLicenseSubjects(licenseEvent));
+  const locale = $derived(getLocale());
 
   /** @param {string | null} url */
   const isHttpUrl = (url) => /^https?:\/\//i.test(url ?? '');
@@ -139,6 +150,20 @@
         {:else}
           <span class="break-all" data-testid="license-info-source">{source}</span>
         {/if}
+      </dd>
+    {/if}
+    {#if subjects.length > 0}
+      <dt class="text-base-content/60">{m.license_info_subjects()}</dt>
+      <dd class="min-w-0 break-words text-base-content" data-testid="license-info-subjects">
+        {subjects.map((c) => getSubjectLabel(c, locale)).join(' · ')}
+      </dd>
+    {/if}
+    {#if keywords.length > 0}
+      <dt class="text-base-content/60">{m.license_info_keywords()}</dt>
+      <dd class="flex min-w-0 flex-wrap gap-1" data-testid="license-info-keywords">
+        {#each keywords as keyword (keyword)}
+          <span class="badge badge-sm">{keyword}</span>
+        {/each}
       </dd>
     {/if}
     {#if creator}
