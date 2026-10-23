@@ -1,8 +1,8 @@
 /**
  * NIP-50 Search Loader for Calendar Events (kinds 31922, 31923)
  *
- * Uses pool.request() directly so the NIP-50 `search` filter field survives —
- * createTimelineLoader strips unknown filter fields during pagination.
+ * Uses pool.request() directly: a ranked search is one response per relay,
+ * not a feed window, and must not be served from the IDB cache.
  *
  * Falls silently empty for queries shorter than MIN_QUERY_LENGTH so callers
  * can wire it directly to a debounced input without guarding the call site.

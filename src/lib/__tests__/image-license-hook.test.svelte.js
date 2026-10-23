@@ -6,17 +6,9 @@ import { useLicenseForHash, useLicenseStatus } from '$lib/stores/image-license.s
 
 // Hoisted mocks (vi.mock is hoisted; reference must be inside the factory)
 vi.mock('$lib/loaders/base.js', () => ({
-  timedPool: () => ({ subscribe: () => ({ unsubscribe: () => {} }) })
+  timedPool: () => ({ subscribe: () => ({ unsubscribe: () => {} }) }),
+  fetchEvents: () => ({ subscribe: () => ({ unsubscribe: () => {} }) })
 }));
-vi.mock('applesauce-loaders/loaders', () => ({
-  createTimelineLoader: () => () => ({ subscribe: () => ({ unsubscribe: () => {} }) })
-}));
-// applesauce v7 moved block paging out of the SDK: the app's timeline loader is
-// the local port in $lib/loaders/timeline-loader.js and takes the mock above.
-vi.mock('$lib/loaders/timeline-loader.js', async () => {
-  const loaders = /** @type {any} */ (await import('applesauce-loaders/loaders'));
-  return { createTimelineLoader: loaders.createTimelineLoader };
-});
 vi.mock('$lib/helpers/relay-helper.js', () => ({
   getAllLookupRelays: () => ['wss://relay.example']
 }));

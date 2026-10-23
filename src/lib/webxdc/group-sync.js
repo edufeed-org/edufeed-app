@@ -27,7 +27,7 @@ const PAGE_LIMIT = 500;
  * PAGE_LIMIT would otherwise page forever. */
 const MAX_PAGES = 10;
 /** Relays that send events but never EOSE/complete are a known failure class
- * in this codebase (see timeline-loader-never-completes) — bound EACH page
+ * in this codebase (timedPool's 10 s cap exists for them) — bound EACH page
  * request so a hanging relay freezes the backfill with whatever it already
  * has instead of hanging the session open forever. */
 const PAGE_TIMEOUT_MS = 5000;

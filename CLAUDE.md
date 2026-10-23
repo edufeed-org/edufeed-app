@@ -17,27 +17,29 @@ const pool = new SimplePool();
 pool.subscribeMany(relays, [filter], opts);
 // Sends: ["REQ", "sub:1", [{...}]] - MALFORMED!
 
-// ✅ CORRECT - Use applesauce infrastructure
-import { createTimelineLoader } from '$lib/loaders/timeline-loader.js';
-import { timedPool } from '$lib/loaders';
-import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
+// ✅ CORRECT - one-shot "latest N" into the EventStore (lists, detail pages, stats, …)
+import { fetchEvents } from '$lib/loaders/base.js';
+fetchEvents(relays, { kinds: [30023], authors, limit: 50 }).subscribe(); // completes when the relays answer
+fetchEvents(relays, filter, { cache: true }); // seed from the IDB cache too
 
-const loader = createTimelineLoader(timedPool, relays, filter, { eventStore, limit });
-return loader(); // Returns Observable
+// ✅ CORRECT - a scrolling feed: the applesauce v7 window loader behind createTimelineFeed
+import { createTimelineFeed } from '$lib/loaders/timeline-feed.js';
+const feed = createTimelineFeed({
+  getRelays: getArticleRelays,
+  getFilter: () => ({ kinds: [30023] }),
+  pageSize: 20
+});
+feed.events$.subscribe(); // start; unsubscribing stops the REQs
+feed.status$; // { pending, settled, exhausted } — spinners and "no more" only
+feed.loadMore(); // one page further back
 ```
 
-**Timeline loaders page, not window**: `createTimelineLoader` / `createOutboxTimelineLoader` come from `$lib/loaders/timeline-loader.js` — a port of the applesauce v6 block-paging loader (`loader()` = next older block). applesauce v7's own timeline loader takes explicit `{ since, until }` windows and rejects `loader()`; never import it from `applesauce-loaders/loaders`. Tests that mock `applesauce-loaders/loaders` shim the local module too (see `timeline-loader-paging.test.js` for the semantics).
+**Two request primitives, nothing else** (`src/lib/loaders/base.js`, `src/lib/loaders/timeline-feed.js`):
 
-**`timedPool` Wrapper**: The `timedPool` function wraps pool requests with a 2-second timeout. This prevents hanging relays (those that send events but never EOSE) from blocking pagination. Without this wrapper, v5's `pool.request()` waits for ALL relays to send EOSE before completing.
+- `fetchEvents(relays, filters, { cache })` — one request through `timedPool`, optionally seeded from the IDB cache, events into the EventStore, observable completes. `limit` lives in the filter. `fetchOutbox(outboxMap$, filter)` is the same for an outbox map (relay → users; a relay is re-asked only for its added users). Domain loaders (`calendarLoader()`, `formResponseLoader(...)`, `reactionsLoaderForUrl(...)`, …) return this observable directly — there is no v6-style "loader function you call for the next page" any more.
+- `createTimelineFeed({ getRelays, getFilter, pageSize })` — the only surfaces that page (`/discover` articles/learning/boards, the dashboard relay feed). It starts a **zero-width** window at now; the SDK's prefetch keeps `pageSize` events buffered below it per relay, and `loadMore()` moves `since` to the page-th buffered event (never a time span: a dense relay would otherwise be paged sequentially before anything shows). Per-relay coverage, exhaustion, retry/backoff and reconciling relays/authors that arrive later live in the SDK; the page calls `feed.sync()` from an `$effect` tracking `$relayUpdateSignal` and `getCuratedCacheVersion()`. Requests bypass `timedPool` on purpose — v7 commits coverage only on completion and retries on error, and swallowing failures would read a dead relay as exhausted; a relay that sends events but never EOSE is cut `hangTimeout` (10 s) after its last event. Never import the timeline loader from `applesauce-loaders/loaders` anywhere else.
 
-```javascript
-// In $lib/loaders/base.js
-import { timer } from 'rxjs';
-import { takeUntil } from 'rxjs/operators';
-
-export const timedPool = (relays, filters) =>
-  pool.request(relays, filters).pipe(takeUntil(timer(2_000)));
-```
+**`timedPool` Wrapper**: `pool.request(relays, filters, { timeout: 10_000 }).pipe(catchError(() => EMPTY))` in `$lib/loaders/base.js`. v7's default completion (`completeAfterIdle`: 3 s grace after the first EOSE, 1.5 s idle, 15 s cap) covers healthy relays; the explicit timeout caps the all-relays-dead case and `catchError` turns a timeout or `RelayGroupError` into clean completion so one-shots can treat "done" uniformly.
 
 ### 2. Loader/Model Pattern (Essential)
 
@@ -55,7 +57,7 @@ Canonical implementation: `src/routes/discover/+page.svelte`.
 
 Use `useProfileMap(getPubkeys)` from `src/lib/stores/profile-map.svelte.js` instead of manual `profileLoader` + `ProfileModel` subscriptions for batch profile loading.
 
-Pair it with `useAuthorDeletions(getPubkeys)` from `src/lib/stores/author-deletions.svelte.js` on any surface listing OTHER people's content. Nothing else fetches other authors' kind-5s (`userDeletionLoader` is calendar-only and self-only; `hydrateDeletions()` merely replays what IDB already has), so without it a deleted event keeps rendering from a stale local copy — and stays shareable, producing a repost nobody else can resolve. It returns nothing: feeding the eventStore is enough, and the DeleteManager drops the events from every `TimelineModel`. Both hooks take the same pubkey list — authors **and** `_sharedBy`/`_allSharers`, since a repost points at someone else's event.
+Pair it with `useAuthorDeletions(getPubkeys)` from `src/lib/stores/author-deletions.svelte.js` on any surface listing OTHER people's content. Nothing else fetches other authors' kind-5s (`fetchUserDeletions` is calendar-only and self-only; `hydrateDeletions()` merely replays what IDB already has), so without it a deleted event keeps rendering from a stale local copy — and stays shareable, producing a repost nobody else can resolve. It returns nothing: feeding the eventStore is enough, and the DeleteManager drops the events from every `TimelineModel`. Both hooks take the same pubkey list — authors **and** `_sharedBy`/`_allSharers`, since a repost points at someone else's event.
 
 **Gotcha:** When the pubkey source is a `$state.raw()` array, the getter won't re-run on content changes (only on reassignment). Use a trigger counter:
 
@@ -160,7 +162,7 @@ let events = $state.raw([]);
 - Arrays of Nostr events that carry Symbol-based metadata (relay provenance)
 - Any array/object containing Sets, Maps, or other built-ins accessed via methods
 - Data that is always replaced entirely (never `.push()` or mutated in place)
-- Sets/Maps for per-relay pagination tracking (see [Per-Relay Pagination](#per-relay-pagination))
+- Sets/Maps of relay URLs or pubkeys that effects diff against (see [Relays and authors that arrive after mount](#relays-and-authors-that-arrive-after-mount))
 
 ### Keyed {#each} over Tag-Derived Data Must Be Deduped
 
@@ -430,22 +432,9 @@ Applesauce tracks per-event relay provenance via `Symbol.for("seen-relays")`. Us
 
 **CRITICAL:** Event arrays using relay provenance MUST use `$state.raw()` — see [Svelte 5 Critical Patterns](#stateraw-for-event-arrays-with-symbol-data).
 
-#### Supplemental Relay Loading
+#### Relays and authors that arrive after mount
 
-Loaders resolve relays at creation time, but user override relays (kind 30002) load asynchronously after login. Use a supplemental `$effect` that diffs `getXxxRelays()` against an initial set and spawns a fresh loader for newly-discovered relays — this preserves pagination state on the original loader. See `src/routes/discover/+page.svelte` for the canonical pattern.
-
-#### Per-Relay Pagination
-
-When paginating across multiple relays with different data sets (e.g., user-configured kind 30002 relays), track exhaustion and `until` timestamps **per relay**. A single global `until` + `hasMore` stops pagination as soon as the smallest relay empties.
-
-Implementation lives in `src/routes/discover/+page.svelte` — `exhaustedRelays: Set<string>` and `perRelayOldestTimestamp: Map<string, number>`, both `$state.raw()`. `hasMore` is true while _any_ relay is unexhausted.
-
-**Key points:**
-
-- Use `$state.raw()` for Set/Map — `$state()` proxies break `.has()`/`.get()`/`.set()`
-- Reassign the entire Set/Map (don't mutate in place) to trigger Svelte reactivity
-- Subtract 1 from `until` to exclude already-fetched boundary events
-- Only apply `until` for relays we've seen events from (lets new relays bootstrap)
+User override relays (kind 30002) and the curated/WoT author set resolve asynchronously after login. A feed re-reads both through `feed.sync()` from an `$effect` that tracks `$relayUpdateSignal` and `getCuratedCacheVersion()`; the SDK reconciles per relay (a new relay loads the current window, a grown author list requests only the added authors) and keeps per-relay coverage, so pagination never stops because the smallest relay emptied. One-shot surfaces that must react (the calendar's date-range loaders) keep the older pattern: diff `getXxxRelays()` against an initial `SvelteSet` and `fetchEvents` the new relays once.
 
 ### Event Deletion (NIP-09)
 

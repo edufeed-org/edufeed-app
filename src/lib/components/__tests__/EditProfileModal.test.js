@@ -121,8 +121,8 @@ vi.mock('$lib/loaders/base.js', () => ({
   timedPool: vi.fn(),
   addressLoader: vi.fn(() => ({ subscribe: () => ({ unsubscribe() {} }) })),
   eventLoader: vi.fn(() => ({ subscribe: () => ({ unsubscribe() {} }) })),
-  createCachedTimelineLoader: vi.fn(),
-  userDeletionLoader: vi.fn()
+  fetchEvents: vi.fn(),
+  fetchUserDeletions: vi.fn()
 }));
 
 vi.mock('$lib/helpers/relay-helper.js', () => ({

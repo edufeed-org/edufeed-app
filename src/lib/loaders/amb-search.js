@@ -3,7 +3,7 @@
  *
  * Uses the specialized AMB relay with Typesense backend for full-text search.
  * Uses per-relay `pool.relay(url).request()` directly:
- * - createTimelineLoader strips unknown filter fields (including `search`), and
+ * - a ranked search is one response per relay, not a feed window, and
  * - the pooled `pool.request()` merges and dedupes relays into one stream,
  *   which throws away each relay's relevance order. The AMB relay's scores
  *   are only meaningful within one response, so callers that want relevance
