@@ -1,34 +1,31 @@
 /**
- * /sitemap.xml: the deployment's own content pages, so search and AI crawlers
- * can find pages they would otherwise only reach through client-rendered
- * links. Mirrors what the app itself shows: articles and learning resources
- * respect the curated-author config of their category (plus WoT anchors —
- * WoT follows are not resolved, so a WoT deployment's sitemap is a subset).
+ * /sitemap.xml: the deployment's indexable content pages (articles, wiki
+ * entries, learning resources — see indexability.js: published through this
+ * deployment or by curated authors, minimal quality), so search and AI
+ * crawlers find pages they would otherwise only reach through client-rendered
+ * links. Pages outside the rule carry noindex; the sitemap never lists them.
  *
- * Built from relay queries, cached stale-while-revalidate: an old sitemap is
- * served at once and refreshed in the background, never expired into a
- * blocking fetch (see "Store First, Network Second" in CLAUDE.md).
+ * Built from the deployment's own relays, cached stale-while-revalidate: an
+ * old sitemap is served at once and refreshed in the background, never
+ * expired into a blocking fetch (see "Store First, Network Second" in
+ * CLAUDE.md).
  */
-import { nip19 } from 'nostr-tools';
 import { verifyEvent } from 'nostr-tools/pure';
-import {
-  parseArray,
-  parseBool,
-  resolveCuratedConfig,
-  resolveWotConfig
-} from '$lib/server/env-parse.js';
-import { normalizePubkey } from '$lib/helpers/pubkey.js';
-import { eventMatchesFilter, fetchFirstEvent, getRelaysForKind } from '$lib/server/og.js';
+import { parseArray } from '$lib/server/env-parse.js';
+import { eventMatchesFilter, getRelaysForKind } from '$lib/server/relay-fetch.js';
+import { curatedAuthors } from '$lib/server/og.js';
+import { isIndexableEvent } from './indexability.js';
 import { canonicalPathFor } from './page-content.js';
 
-const PAGE_SIZE = 500;
+// amb-relay caps at 250 and answers some requests at exactly that limit empty.
+const PAGE_SIZE = 200;
 const PAGE_TIMEOUT = 5000;
-const MAX_EVENTS_PER_RELAY = 10_000;
-const AUTHOR_CHUNK = 100;
+const EMPTY_PAGE_RETRY_MS = 2000;
+const MAX_EVENTS_PER_RELAY = 20_000;
+const CURATED_MAX_WAIT = 10_000;
 
 /**
- * @typedef {{ sets: string[], direct: string[] }} CuratedConfig
- * @typedef {{ kind: number, relays: string[], curated: CuratedConfig | null, wotAnchors: string[] }} SitemapSource
+ * @typedef {{ kind: number, relays: string[] }} SitemapSource
  */
 
 /**
@@ -36,68 +33,13 @@ const AUTHOR_CHUNK = 100;
  * @returns {SitemapSource[]}
  */
 export function sitemapSources(env) {
-  const wot = parseBool(env.WOT_ENABLED, false);
-  const anchors = (/** @type {string} */ suffix) =>
-    wot ? resolveWotConfig(env, suffix).anchors : [];
   return [
-    {
-      kind: 30023,
-      relays: parseArray(env.LONGFORM_CONTENT_RELAY),
-      curated: resolveCuratedConfig(env, 'LONGFORM'),
-      wotAnchors: anchors('LONGFORM')
-    },
-    // Wiki articles have no curation category in the app.
-    { kind: 30818, relays: parseArray(env.COMMUNIKEY_RELAYS), curated: null, wotAnchors: [] },
-    {
-      kind: 30142,
-      // Aggregated third-party metadata (e.g. an OERSI mirror) can be left out:
-      // thin copies of pages that live elsewhere don't belong in our sitemap.
-      relays: parseArray(env.SITEMAP_AMB_RELAYS || env.AMB_RELAYS),
-      curated: resolveCuratedConfig(env, 'EDUCATIONAL'),
-      wotAnchors: anchors('EDUCATIONAL')
-    }
+    { kind: 30023, relays: parseArray(env.LONGFORM_CONTENT_RELAY) },
+    { kind: 30818, relays: parseArray(env.COMMUNIKEY_RELAYS) },
+    // Leave mirrors of third-party metadata (e.g. OERSI) out of the scan:
+    // nothing there passes the indexability rule, it only costs relay time.
+    { kind: 30142, relays: parseArray(env.SITEMAP_AMB_RELAYS || env.AMB_RELAYS) }
   ];
-}
-
-/**
- * @param {CuratedConfig | null} curated
- * @param {string[]} wotAnchors
- * @param {typeof fetchFirstEvent} fetchFirst
- * @returns {Promise<string[] | null>} null = no author restriction; [] = restricted to nobody
- */
-export async function resolveAuthors(curated, wotAnchors, fetchFirst) {
-  const sets = curated?.sets ?? [];
-  const direct = curated?.direct ?? [];
-  if (sets.length === 0 && direct.length === 0 && wotAnchors.length === 0) return null;
-
-  /** @type {Set<string>} */
-  const authors = new Set();
-  for (const value of [...direct, ...wotAnchors]) {
-    const hex = normalizePubkey(value);
-    if (hex) authors.add(hex);
-  }
-  const lists = await Promise.all(
-    sets.map(async (naddr) => {
-      try {
-        const decoded = nip19.decode(naddr);
-        if (decoded.type !== 'naddr') return null;
-        const { kind, pubkey, identifier, relays = [] } = decoded.data;
-        return fetchFirst(
-          { kinds: [kind], authors: [pubkey], '#d': [identifier], limit: 1 },
-          getRelaysForKind(kind, relays)
-        );
-      } catch {
-        return null;
-      }
-    })
-  );
-  for (const list of lists) {
-    for (const tag of list?.tags ?? []) {
-      const hex = tag[0] === 'p' ? normalizePubkey(tag[1]) : null;
-      if (hex) authors.add(hex);
-    }
-  }
-  return [...authors];
 }
 
 /**
@@ -165,11 +107,13 @@ async function fetchAllEvents(filter, relays) {
       /** @type {number | undefined} */
       let until;
       while (all.length < MAX_EVENTS_PER_RELAY) {
-        const page = await fetchPage(relay, {
-          ...filter,
-          limit: PAGE_SIZE,
-          ...(until ? { until } : {})
-        });
+        const pageFilter = { ...filter, limit: PAGE_SIZE, ...(until ? { until } : {}) };
+        let page = await fetchPage(relay, pageFilter);
+        if (page.length === 0) {
+          // Relays occasionally answer empty; one retry before concluding "done".
+          await new Promise((r) => setTimeout(r, EMPTY_PAGE_RETRY_MS));
+          page = await fetchPage(relay, pageFilter);
+        }
         if (page.length === 0) break;
         all.push(...page);
         const oldest = Math.min(...page.map((e) => e.created_at));
@@ -183,16 +127,26 @@ async function fetchAllEvents(filter, relays) {
 }
 
 /**
+ * Latest version per address, filtered by the indexability rule.
  * @param {import('nostr-tools').NostrEvent[]} events
- * @param {{ origin: string, relayHintFor: (kind: number) => string | undefined }} opts
+ * @param {{ origin: string, relayHintFor: (kind: number) => string | undefined, isIndexable: (e: import('nostr-tools').NostrEvent) => boolean }} opts
  * @returns {{ loc: string, lastmod: string }[]}
  */
-export function buildSitemapEntries(events, { origin, relayHintFor }) {
-  /** @type {Map<string, number>} loc → newest created_at */
-  const byLoc = new Map();
+export function buildSitemapEntries(events, { origin, relayHintFor, isIndexable }) {
+  /** @type {Map<string, import('nostr-tools').NostrEvent>} */
+  const latest = new Map();
   for (const event of events) {
     const d = event.tags.find((t) => t[0] === 'd')?.[1];
     if (!d) continue;
+    const address = `${event.kind}:${event.pubkey}:${d}`;
+    const known = latest.get(address);
+    if (!known || known.created_at < event.created_at) latest.set(address, event);
+  }
+
+  /** @type {Map<string, number>} loc → newest created_at (wiki topics share a loc) */
+  const byLoc = new Map();
+  for (const event of latest.values()) {
+    if (!isIndexable(event)) continue;
     const path = canonicalPathFor(event, { relayHint: relayHintFor(event.kind) });
     if (!path) continue;
     const loc = `${origin}${path}`;
@@ -230,30 +184,33 @@ export function renderSitemapXml(entries) {
  * @returns {Promise<string>}
  */
 export async function buildSitemapXml(origin, env) {
+  const curated = await curatedAuthors.get(CURATED_MAX_WAIT);
+  const clientName = env.CLIENT_NAME || env.APP_NAME || 'Edufeed';
   /** @type {import('nostr-tools').NostrEvent[]} */
   const events = [];
   for (const source of sitemapSources(env)) {
     if (source.relays.length === 0) continue;
-    const authors = await resolveAuthors(source.curated, source.wotAnchors, fetchFirstEvent);
-    if (authors && authors.length === 0) continue; // curated, but nobody resolved
-    const filters = authors
-      ? Array.from({ length: Math.ceil(authors.length / AUTHOR_CHUNK) }, (_, i) => ({
-          kinds: [source.kind],
-          authors: authors.slice(i * AUTHOR_CHUNK, (i + 1) * AUTHOR_CHUNK)
-        }))
-      : [{ kinds: [source.kind] }];
-    for (const filter of filters) events.push(...(await fetchAllEvents(filter, source.relays)));
+    events.push(...(await fetchAllEvents({ kinds: [source.kind] }, source.relays)));
   }
   return renderSitemapXml(
-    buildSitemapEntries(events, { origin, relayHintFor: (kind) => getRelaysForKind(kind, [])[0] })
+    buildSitemapEntries(events, {
+      origin,
+      relayHintFor: (kind) => getRelaysForKind(kind, [])[0],
+      isIndexable: (event) => isIndexableEvent(event, { clientName, curatedAuthors: curated })
+    })
   );
 }
 
+/** @param {string} xml */
+const urlCount = (xml) => (xml.match(/<url>/g) ?? []).length;
+
 /**
- * Stale-while-revalidate cache keyed by origin.
- * @param {{ ttlMs: number, now?: () => number }} opts
+ * Stale-while-revalidate cache keyed by origin. A rebuild that lost more than
+ * half of the URLs is treated as a relay hiccup: the previous sitemap stays
+ * and the rebuild is retried after `retryMs`.
+ * @param {{ ttlMs: number, now?: () => number, retryMs?: number }} opts
  */
-export function createSitemapCache({ ttlMs, now = Date.now }) {
+export function createSitemapCache({ ttlMs, now = Date.now, retryMs = 10 * 60 * 1000 }) {
   /** @type {Map<string, { xml: string, builtAt: number }>} */
   const entries = new Map();
   /** @type {Map<string, Promise<string>>} */
@@ -268,6 +225,11 @@ export function createSitemapCache({ ttlMs, now = Date.now }) {
     if (running) return running;
     const promise = build()
       .then((xml) => {
+        const previous = entries.get(key);
+        if (previous && urlCount(xml) < urlCount(previous.xml) / 2) {
+          entries.set(key, { xml: previous.xml, builtAt: now() - ttlMs + retryMs });
+          return previous.xml;
+        }
         entries.set(key, { xml, builtAt: now() });
         return xml;
       })

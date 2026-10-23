@@ -24,9 +24,6 @@ import { buildAMBJsonLd } from '$lib/helpers/educational/ambJsonLd.js';
 import { shortNpub } from '$lib/helpers/pubkey.js';
 import { sanitizeServerHtml } from './sanitize.js';
 
-/** Kinds that get a body rendition and JSON-LD. Others get only a canonical link. */
-export const CRAWLABLE_KINDS = new Set([30023, 30818, 30142]);
-
 /** @param {unknown} s */
 const esc = (s) =>
   String(s ?? '')

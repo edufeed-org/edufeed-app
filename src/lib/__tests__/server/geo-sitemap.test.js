@@ -6,7 +6,6 @@ vi.mock('$env/dynamic/private', () => ({ env: {} }));
 
 import {
   sitemapSources,
-  resolveAuthors,
   buildSitemapEntries,
   renderSitemapXml,
   createSitemapCache
@@ -27,28 +26,21 @@ const ev = (kind, pubkey, d, created_at, extra = []) => ({
   tags: [['d', d], ...extra]
 });
 
+const hint = () => 'wss://hint.example';
+const all = () => true;
+
 describe('sitemapSources', () => {
-  it('maps content kinds to their relays and curation categories', () => {
-    const sources = sitemapSources({
-      LONGFORM_CONTENT_RELAY: 'wss://long.example',
-      COMMUNIKEY_RELAYS: 'wss://ck.example',
-      AMB_RELAYS: 'wss://amb.example,wss://oersi.example',
-      CURATED_PUBKEYS_SETS_LONGFORM: 'naddr1set'
-    });
-    expect(sources).toEqual([
-      {
-        kind: 30023,
-        relays: ['wss://long.example'],
-        curated: { sets: ['naddr1set'], direct: [] },
-        wotAnchors: []
-      },
-      { kind: 30818, relays: ['wss://ck.example'], curated: null, wotAnchors: [] },
-      {
-        kind: 30142,
-        relays: ['wss://amb.example', 'wss://oersi.example'],
-        curated: { sets: [], direct: [] },
-        wotAnchors: []
-      }
+  it('scans articles, wiki and learning resources on the deployment relays', () => {
+    expect(
+      sitemapSources({
+        LONGFORM_CONTENT_RELAY: 'wss://long.example',
+        COMMUNIKEY_RELAYS: 'wss://ck.example',
+        AMB_RELAYS: 'wss://amb.example,wss://oersi.example'
+      })
+    ).toEqual([
+      { kind: 30023, relays: ['wss://long.example'] },
+      { kind: 30818, relays: ['wss://ck.example'] },
+      { kind: 30142, relays: ['wss://amb.example', 'wss://oersi.example'] }
     ]);
   });
 
@@ -59,72 +51,17 @@ describe('sitemapSources', () => {
     }).find((s) => s.kind === 30142);
     expect(amb?.relays).toEqual(['wss://amb.example']);
   });
-
-  it('adds WoT anchors only when WoT is enabled', () => {
-    const on = sitemapSources({ WOT_ENABLED: 'true', WOT_ANCHOR_PUBKEYS: A });
-    expect(on.find((s) => s.kind === 30142)?.wotAnchors).toEqual([A]);
-    const off = sitemapSources({ WOT_ANCHOR_PUBKEYS: A });
-    expect(off.find((s) => s.kind === 30142)?.wotAnchors).toEqual([]);
-  });
-});
-
-describe('resolveAuthors', () => {
-  it('returns null (no restriction) when nothing is curated', async () => {
-    expect(await resolveAuthors({ sets: [], direct: [] }, [], vi.fn())).toBeNull();
-    expect(await resolveAuthors(null, [], vi.fn())).toBeNull();
-  });
-
-  it('unions set members, direct pubkeys (npub or hex) and WoT anchors', async () => {
-    const set = nip19.naddrEncode({
-      kind: 30000,
-      pubkey: A,
-      identifier: 'list',
-      relays: ['wss://r.example']
-    });
-    const fetchFirst = vi.fn(async () => ({
-      kind: 30000,
-      pubkey: A,
-      tags: [
-        ['d', 'list'],
-        ['p', B],
-        ['p', 'junk']
-      ]
-    }));
-    const authors = await resolveAuthors(
-      { sets: [set], direct: [nip19.npubEncode(A)] },
-      ['c'.repeat(64)],
-      /** @type {any} */ (fetchFirst)
-    );
-    expect(authors?.sort()).toEqual([A, B, 'c'.repeat(64)].sort());
-    expect(fetchFirst).toHaveBeenCalledWith(
-      { kinds: [30000], authors: [A], '#d': ['list'], limit: 1 },
-      expect.arrayContaining(['wss://r.example'])
-    );
-  });
-
-  it('returns an empty list — never "everyone" — when curated sets cannot be resolved', async () => {
-    const set = nip19.naddrEncode({ kind: 30000, pubkey: A, identifier: 'list', relays: [] });
-    expect(
-      await resolveAuthors(
-        { sets: [set], direct: [] },
-        [],
-        vi.fn(async () => null)
-      )
-    ).toEqual([]);
-  });
 });
 
 describe('buildSitemapEntries', () => {
-  const hint = () => 'wss://hint.example';
-
-  it('builds canonical URLs with lastmod, newest version per address', () => {
+  it('builds canonical URLs with lastmod from the latest version per address', () => {
     const entries = buildSitemapEntries(
       [
         ev(30023, A, 'x', 1700000000),
         ev(30023, A, 'x', 1710000000),
         ev(30142, B, 'https://oer.example/1', 1720000000)
       ],
-      { origin: ORIGIN, relayHintFor: hint }
+      { origin: ORIGIN, relayHintFor: hint, isIndexable: all }
     );
     expect(entries).toHaveLength(2);
     const naddr = nip19.naddrEncode({
@@ -136,20 +73,40 @@ describe('buildSitemapEntries', () => {
     expect(entries).toContainEqual({ loc: `${ORIGIN}/${naddr}`, lastmod: '2024-03-09' });
   });
 
+  it('judges indexability on the latest version only', () => {
+    const older = ev(30023, A, 'x', 1700000000, [['client', 'Edufeed']]);
+    const newer = ev(30023, A, 'x', 1710000000);
+    const isIndexable = (/** @type {any} */ e) =>
+      e.tags.some((/** @type {string[]} */ t) => t[0] === 'client');
+    expect(
+      buildSitemapEntries([older, newer], { origin: ORIGIN, relayHintFor: hint, isIndexable })
+    ).toEqual([]);
+  });
+
+  it('leaves out events the rule rejects', () => {
+    const entries = buildSitemapEntries(
+      [ev(30142, A, 'keep', 1700000000), ev(30142, A, 'drop', 1700000000)],
+      { origin: ORIGIN, relayHintFor: hint, isIndexable: (e) => e.tags[0][1] === 'keep' }
+    );
+    expect(entries).toHaveLength(1);
+  });
+
   it('lists one /wiki/<topic> URL per topic with the latest lastmod', () => {
     const entries = buildSitemapEntries(
       [ev(30818, A, 'nostr', 1700000000), ev(30818, B, 'nostr', 1720000000)],
-      { origin: ORIGIN, relayHintFor: hint }
+      { origin: ORIGIN, relayHintFor: hint, isIndexable: all }
     );
     expect(entries).toEqual([{ loc: `${ORIGIN}/wiki/nostr`, lastmod: '2024-07-03' }]);
   });
 
   it('skips events without a d-tag value', () => {
-    const entries = buildSitemapEntries([ev(30023, A, '', 1700000000)], {
-      origin: ORIGIN,
-      relayHintFor: hint
-    });
-    expect(entries).toEqual([]);
+    expect(
+      buildSitemapEntries([ev(30023, A, '', 1700000000)], {
+        origin: ORIGIN,
+        relayHintFor: hint,
+        isIndexable: all
+      })
+    ).toEqual([]);
   });
 });
 
@@ -167,6 +124,14 @@ describe('renderSitemapXml', () => {
 });
 
 describe('createSitemapCache', () => {
+  const xmlWith = (/** @type {number} */ n) =>
+    renderSitemapXml(
+      Array.from({ length: n }, (_, i) => ({
+        loc: `https://a.example/${i}`,
+        lastmod: '2024-01-01'
+      }))
+    );
+
   it('builds once, serves the cache, and refreshes stale entries in the background', async () => {
     let now = 0;
     let n = 0;
@@ -201,5 +166,24 @@ describe('createSitemapCache', () => {
     expect(await cache.get('o', failing)).toBe('good');
     await vi.waitFor(() => expect(failing).toHaveBeenCalled());
     expect(await cache.get('o', failing)).toBe('good');
+  });
+
+  it('rejects a rebuild that lost more than half of the URLs and retries after retryMs', async () => {
+    let now = 0;
+    const cache = createSitemapCache({ ttlMs: 1000, now: () => now, retryMs: 100 });
+    await cache.get('o', async () => xmlWith(10));
+
+    now = 2000;
+    const shrunk = vi.fn(async () => xmlWith(3));
+    await cache.get('o', shrunk);
+    await vi.waitFor(() => expect(shrunk).toHaveBeenCalledTimes(1));
+    expect(await cache.get('o', shrunk)).toBe(xmlWith(10));
+    expect(shrunk).toHaveBeenCalledTimes(1); // not retried before retryMs
+
+    now = 2150;
+    const recovered = vi.fn(async () => xmlWith(9));
+    await cache.get('o', recovered);
+    await vi.waitFor(() => expect(recovered).toHaveBeenCalledTimes(1));
+    expect(await cache.get('o', recovered)).toBe(xmlWith(9));
   });
 });

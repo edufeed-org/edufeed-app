@@ -5,6 +5,7 @@ const env = vi.hoisted(
   () =>
     /** @type {Record<string, string | undefined>} */ ({
       APP_NAME: 'TestApp',
+      CLIENT_NAME: 'Edufeed',
       AMB_RELAYS: 'wss://amb.example.com',
       LONGFORM_CONTENT_RELAY: 'wss://long.example.com',
       COMMUNIKEY_RELAYS: 'wss://ck.example.com',
@@ -13,26 +14,29 @@ const env = vi.hoisted(
 );
 vi.mock('$env/dynamic/private', () => ({ env }));
 
-import { buildPageEntry } from '$lib/server/og.js';
+import { buildPageEntry, ogMetaHandle, ogCache } from '$lib/server/og.js';
 import { geoGroup, geoContentKey, DEFAULT_GEO_SALT } from '$lib/server/geo/assignment.js';
 
 const PK = '1'.repeat(64);
+const CURATED = '9'.repeat(64);
 const url = new URL('https://edufeed.example/naddr1abc');
 const target = /** @type {const} */ ({ type: 'event', identifier: 'naddr1abc' });
 
-/** @param {string} d */
-const amb = (d) => ({
+/** Dependencies of a page whose author is curated and whose event is on our relays. */
+const ok = {
+  getCurated: async () => new Set([CURATED]),
+  onOwnRelays: async () => true
+};
+
+/** @param {string} d @param {string[][]} [extra] */
+const amb = (d, extra = [['client', 'Edufeed']]) => ({
   id: '2'.repeat(64),
   kind: 30142,
   pubkey: PK,
   created_at: 1760000000,
   content: '',
   sig: '',
-  tags: [
-    ['d', d],
-    ['name', `Ressource ${d}`],
-    ['description', 'Beschreibung']
-  ]
+  tags: [['d', d], ['name', `Ressource ${d}`], ['description', 'Beschreibung'], ...extra]
 });
 
 /** First d-tag whose key falls in the wanted group at share 0.5. */
@@ -44,14 +48,15 @@ function dIn(/** @type {'T' | 'V'} */ group) {
   throw new Error('no key found');
 }
 
-describe('buildPageEntry', () => {
+describe('buildPageEntry — indexable content', () => {
   beforeEach(() => {
     delete env.GEO_SERVER_CONTENT_SHARE;
     delete env.GEO_ASSIGNMENT_SALT;
   });
 
-  it('serves canonical, JSON-LD and body to every page by default', async () => {
-    const entry = await buildPageEntry(amb('https://oer.example/a'), target, url);
+  it('serves canonical, JSON-LD and body by default', async () => {
+    const entry = await buildPageEntry(amb('https://oer.example/a'), target, url, ok);
+    expect(entry.noindex).toBe(false);
     expect(entry.head).toContain('og:title');
     expect(entry.head).toContain('<link rel="canonical" href="https://edufeed.example/naddr1');
     expect(entry.head).toContain('application/ld+json');
@@ -60,21 +65,27 @@ describe('buildPageEntry', () => {
 
   it('gives control-group pages only OG tags and the canonical link', async () => {
     env.GEO_SERVER_CONTENT_SHARE = '0.5';
-    const entry = await buildPageEntry(amb(dIn('V')), target, url);
+    const entry = await buildPageEntry(amb(dIn('V')), target, url, ok);
     expect(entry.head).toContain('<link rel="canonical"');
     expect(entry.head).not.toContain('ld+json');
     expect(entry.body).toBe('');
+    expect(entry.noindex).toBe(false);
   });
 
   it('gives treatment-group pages the full content at share 0.5', async () => {
     env.GEO_SERVER_CONTENT_SHARE = '0.5';
-    const entry = await buildPageEntry(amb(dIn('T')), target, url);
+    const entry = await buildPageEntry(amb(dIn('T')), target, url, ok);
     expect(entry.head).toContain('ld+json');
     expect(entry.body).toContain('<article id="geo-content">');
   });
 
+  it('indexes curated authors without a client tag', async () => {
+    const entry = await buildPageEntry({ ...amb('x', []), pubkey: CURATED }, target, url, ok);
+    expect(entry.noindex).toBe(false);
+  });
+
   it('uses the deployment relay as the canonical naddr hint', async () => {
-    const entry = await buildPageEntry(amb('x'), target, url);
+    const entry = await buildPageEntry(amb('x'), target, url, ok);
     const naddr = entry.head.match(
       /canonical" href="https:\/\/edufeed\.example\/(naddr1[a-z0-9]+)"/
     )?.[1];
@@ -85,27 +96,94 @@ describe('buildPageEntry', () => {
   });
 
   it('canonicalizes /wiki/<topic> to itself', async () => {
-    env.GEO_SERVER_CONTENT_SHARE = '0';
     const wiki = {
       ...amb('x'),
       kind: 30818,
+      content: Array.from({ length: 200 }, () => 'wort').join(' '),
       tags: [
         ['d', 'Nostr Basics'],
-        ['h', '3'.repeat(64)]
+        ['client', 'Edufeed']
       ]
     };
-    const entry = await buildPageEntry(wiki, { type: 'wiki-topic', topic: 'Nostr Basics' }, url);
+    env.GEO_SERVER_CONTENT_SHARE = '0';
+    const entry = await buildPageEntry(
+      wiki,
+      { type: 'wiki-topic', topic: 'Nostr Basics' },
+      url,
+      ok
+    );
     expect(entry.head).toContain('href="https://edufeed.example/wiki/Nostr%20Basics"');
   });
+});
 
-  it('leaves profiles and non-content kinds untouched', async () => {
-    const profile = { ...amb('x'), kind: 0, tags: [], content: '{"name":"Ada"}' };
-    const entry = await buildPageEntry(profile, { type: 'profile', pubkey: PK }, url);
-    expect(entry.head).not.toContain('canonical');
+describe('buildPageEntry — not indexable', () => {
+  it('marks bulk-imported metadata (no client tag, not curated) noindex, without body or canonical', async () => {
+    const entry = await buildPageEntry(amb('https://oer.example/import', []), target, url, ok);
+    expect(entry.noindex).toBe(true);
     expect(entry.body).toBe('');
+    expect(entry.head).not.toContain('canonical');
+    expect(entry.head).toContain('og:title');
+  });
 
-    const note = { ...amb('x'), kind: 1, tags: [], content: 'hi' };
-    const noteEntry = await buildPageEntry(note, target, url);
-    expect(noteEntry.head).not.toContain('canonical');
+  it('marks content missing from our own relays noindex (forged client tag)', async () => {
+    const entry = await buildPageEntry(amb('x'), target, url, {
+      ...ok,
+      onOwnRelays: async () => false
+    });
+    expect(entry.noindex).toBe(true);
+  });
+
+  it('marks other kinds and profiles noindex, leaves community pages alone', async () => {
+    const note = { ...amb('x'), kind: 1, tags: [['client', 'Edufeed']], content: 'hi' };
+    expect((await buildPageEntry(note, target, url, ok)).noindex).toBe(true);
+    const profile = { ...amb('x'), kind: 0, tags: [], content: '{"name":"Ada"}' };
+    expect((await buildPageEntry(profile, { type: 'profile', pubkey: PK }, url, ok)).noindex).toBe(
+      true
+    );
+    expect(
+      (await buildPageEntry(profile, { type: 'community', pubkey: PK }, url, ok)).noindex
+    ).toBe(false);
+  });
+
+  it('is provisional while curation is still unknown', async () => {
+    const entry = await buildPageEntry(amb('x', []), target, url, {
+      ...ok,
+      getCurated: async () => null
+    });
+    expect(entry).toMatchObject({ noindex: true, provisional: true });
+  });
+});
+
+describe('ogMetaHandle robots meta', () => {
+  /** @param {string} path */
+  async function run(path) {
+    /** @type {any} */
+    const captured = {};
+    const event = { url: new URL(`https://app.example.com${path}`) };
+    const resolve = vi.fn((_e, opts) => {
+      captured.html = opts.transformPageChunk({ html: '<html><head></head><body></body></html>' });
+      return new Response(captured.html);
+    });
+    await ogMetaHandle(/** @type {any} */ ({ event, resolve }));
+    return captured.html;
+  }
+
+  it('adds noindex to app functions and discover variants, not to entry pages', async () => {
+    expect(await run('/settings')).toContain('<meta name="robots" content="noindex" />');
+    expect(await run('/discover?q=x')).toContain('noindex');
+    expect(await run('/discover')).not.toContain('noindex');
+    expect(await run('/')).not.toContain('noindex');
+  });
+
+  it('adds noindex for unresolvable content and noindex entries', async () => {
+    ogCache.clear();
+    ogCache.set('wiki:gone', { head: '', body: '', noindex: true }, 60000);
+    expect(await run('/wiki/gone')).toContain('noindex');
+    ogCache.set(
+      'wiki:ok',
+      { head: '<meta property="og:title" content="W" />', body: '', noindex: false },
+      60000
+    );
+    expect(await run('/wiki/ok')).not.toContain('noindex');
   });
 });

@@ -547,19 +547,25 @@ Link previews (OG tags) are injected server-side for ALL pages by `ogMetaHandle`
 and a default brand tag set (`static/og-default.png`, `APP_OG_DESCRIPTION`,
 `OG_DEFAULT_IMAGE`) for everything else. Extraction reuses `getFeedCardData`.
 
-**Crawler-facing content (GEO).** The same handle gives content pages of kinds
-30023/30818/30142 a `rel=canonical` (path from `eventRoutePath()`, naddr with the
-deployment's first app relay as the only hint — the sitemap uses the same
-function, so both always agree) and, for pages in the treatment group
-(`GEO_SERVER_CONTENT_SHARE`, default all), JSON-LD plus an
-`<article id="geo-content">` body before `</body>` (`src/lib/server/geo/`).
-Crawlers without JavaScript otherwise see an empty shell on every `ssr = false`
-route. Rules: same HTML for everyone — never switch on user agent (cloaking);
-`app.html` hides the block for JS clients and the root layout removes it on
-mount; server-rendered markdown/djot MUST go through `sanitizeServerHtml`
-(`htmlSanitize.js` is a no-op outside the browser). `/sitemap.xml` and
-`/robots.txt` are routes (stale-while-revalidate cache, curated authors
-respected; `SITEMAP_AMB_RELAYS` keeps aggregator mirrors out).
+**Crawler-facing content (GEO).** One indexability rule
+(`src/lib/server/geo/indexability.js`) decides what search/AI crawlers may
+index: articles, wiki entries and learning resources published through this
+deployment (NIP-89 `client` tag = `CLIENT_NAME`) or by curated authors
+(LONGFORM ∪ EDUCATIONAL, cached server-side in `curated-authors.js`), with a
+minimal quality gate, and found on the deployment's own relays (the client tag
+is forgeable). Those pages get `rel=canonical` (path from `eventRoutePath()`,
+naddr with the first app relay as the only hint — the sitemap uses the same
+function) and, in the treatment group (`GEO_SERVER_CONTENT_SHARE`, default
+all), JSON-LD plus an `<article id="geo-content">` body before `</body>`.
+Everything else — bulk-imported third-party metadata, other people's Nostr
+content, profiles, social items, app routes (`isNoindexPath`), unresolvable
+content — gets `<meta name="robots" content="noindex">`. Rules: same HTML for
+everyone, never switch on user agent (cloaking); `app.html` hides the block
+for JS clients and the root layout removes it on mount; server-rendered
+markdown/djot MUST go through `sanitizeServerHtml` (`htmlSanitize.js` is a
+no-op outside the browser). `/sitemap.xml` (same rule, stale-while-revalidate,
+shrink guard) and `/robots.txt` are routes; relay reads live in
+`src/lib/server/relay-fetch.js`.
 
 ## Development Environment
 
