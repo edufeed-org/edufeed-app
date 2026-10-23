@@ -11,9 +11,8 @@
  *   const getList = useList(kinds.Mutelist);           // singleton
  *   const getSets = useAllLists(kinds.Followsets);     // addressable → reactive array
  */
-import { createTimelineLoader } from '$lib/loaders/timeline-loader.js';
 import { TimelineModel } from 'applesauce-core/models';
-import { timedPool } from '$lib/loaders/base.js';
+import { fetchEvents } from '$lib/loaders/base.js';
 import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
 import { manager } from '$lib/stores/accounts.svelte';
 import { getWriteRelays } from '$lib/services/relay-service.svelte.js';
@@ -96,13 +95,11 @@ $effect.root(() => {
           return;
         }
         const allKinds = Object.keys(LIST_KINDS).map(Number);
-        const loader = createTimelineLoader(
-          timedPool,
-          relays,
-          { kinds: allKinds, authors: [pubkey], limit: 100 },
-          { eventStore }
+        subs.push(
+          fetchEvents(relays, { kinds: allKinds, authors: [pubkey], limit: 100 }).subscribe({
+            complete: () => (_loading = false)
+          })
         );
-        subs.push(loader().subscribe({ complete: () => (_loading = false) }));
       });
     });
 

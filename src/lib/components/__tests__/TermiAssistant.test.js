@@ -167,7 +167,8 @@ vi.mock('$lib/helpers/relay-helper.js', () => ({
 // Pulled in through the nip05 hint's membership-grant detection.
 const mockActionRun = vi.hoisted(() => vi.fn(async () => {}));
 vi.mock('$lib/loaders/base.js', () => ({
-  timedPool: () => ({})
+  timedPool: () => ({}),
+  fetchEvents: () => ({ subscribe: () => ({ unsubscribe: vi.fn() }) })
 }));
 // The joinRequests hint's hook drags in the NIP-29 roster/relay-auth
 // machinery (my-groups, channel-rosters, pool.relay …); it has its own
@@ -179,15 +180,6 @@ vi.mock('$lib/services/inbox-service.svelte.js', () => ({
 vi.mock('$lib/groups/join-request-alerts.svelte.js', () => ({
   useAdminJoinRequestAlert: () => () => ({ count: 0, communities: [] })
 }));
-vi.mock('applesauce-loaders/loaders', () => ({
-  createTimelineLoader: () => () => ({ subscribe: () => ({ unsubscribe: vi.fn() }) })
-}));
-// applesauce v7 moved block paging out of the SDK: the app's timeline loader is
-// the local port in $lib/loaders/timeline-loader.js and takes the mock above.
-vi.mock('$lib/loaders/timeline-loader.js', async () => {
-  const loaders = /** @type {any} */ (await import('applesauce-loaders/loaders'));
-  return { createTimelineLoader: loaders.createTimelineLoader };
-});
 vi.mock('$lib/stores/action-runner.svelte.js', () => ({
   actionRunner: { run: mockActionRun },
   actionRunnerOptimistic: { run: vi.fn() }

@@ -12,16 +12,7 @@ const loader = vi.hoisted(() => ({ create: vi.fn(), sources: vi.fn() }));
 const cfg = vi.hoisted(() => ({ types: ['learning', 'events'], lists: ['naddr1list'] }));
 const store = vi.hoisted(() => ({ byKind: {}, modelFilters: [] }));
 
-vi.mock('applesauce-loaders/loaders', () => ({
-  createTimelineLoader: (...a) => loader.create(...a)
-}));
-// applesauce v7 moved block paging out of the SDK: the app's timeline loader is
-// the local port in $lib/loaders/timeline-loader.js and takes the mock above.
-vi.mock('$lib/loaders/timeline-loader.js', async () => {
-  const loaders = /** @type {any} */ (await import('applesauce-loaders/loaders'));
-  return { createTimelineLoader: loaders.createTimelineLoader };
-});
-vi.mock('$lib/loaders/base.js', () => ({ timedPool: 'POOL' }));
+vi.mock('$lib/loaders/base.js', () => ({ fetchEvents: (...a) => loader.create(...a) }));
 vi.mock('$lib/loaders/landing-showcase-sources.js', () => ({
   loadShowcaseSources: (...a) => loader.sources(...a)
 }));
@@ -97,7 +88,7 @@ beforeEach(() => {
   cfg.types = ['learning', 'events'];
   cfg.lists = ['naddr1list'];
   loader.sources.mockResolvedValue(['src1', 'src2']);
-  loader.create.mockReturnValue(() => of());
+  loader.create.mockReturnValue(of());
   store.byKind = {
     30142: [amb('old', 'a1', 1), amb('new', 'a2', 9, 'https://i')],
     31922: [cal('e1', 'c1', NOW + 3600)],
@@ -135,8 +126,7 @@ describe('useLandingShowcase', () => {
     const { cleanup } = mount();
     await settle();
     expect(loader.sources).toHaveBeenCalledWith(['naddr1list']);
-    const [pool, relays, filters] = loader.create.mock.calls[0];
-    expect(pool).toBe('POOL');
+    const [relays, filters] = loader.create.mock.calls[0];
     expect(relays).toEqual(['wss://amb']);
     expect(filters).toEqual([
       { kinds: [30142], authors: ['src1', 'src2'], limit: 12 },
@@ -222,14 +212,14 @@ describe('useLandingShowcase', () => {
   it('never loads a disabled type and reports it settled and empty', async () => {
     const { api, cleanup } = mount();
     await settle();
-    expect(loader.create.mock.calls.every(([, , f]) => f[0].kinds[0] !== 30023)).toBe(true);
+    expect(loader.create.mock.calls.every(([, f]) => f[0].kinds[0] !== 30023)).toBe(true);
     expect(api.articles()).toEqual([]);
     expect(api.settled('articles')).toBe(true);
     cleanup();
   });
 
   it('starts each enabled loader once', async () => {
-    loader.create.mockReturnValue(() => NEVER);
+    loader.create.mockReturnValue(NEVER);
     const { cleanup } = mount();
     await settle();
     vi.advanceTimersByTime(5_000);
@@ -239,7 +229,7 @@ describe('useLandingShowcase', () => {
   });
 
   it('settles a hanging loader after 5 s', async () => {
-    loader.create.mockReturnValue(() => NEVER);
+    loader.create.mockReturnValue(NEVER);
     const { api, cleanup } = mount();
     await settle();
     expect(api.settled('events')).toBe(false);

@@ -7,9 +7,8 @@
 // its section block swapped for the effective one — so every existing
 // consumer keeps taking a single community event. Callers that SIGN or EDIT
 // the community must keep using the raw 10222.
-import { createTimelineLoader } from '$lib/loaders/timeline-loader.js';
 import { TimelineModel } from 'applesauce-core/models';
-import { timedPool } from '$lib/loaders/base.js';
+import { fetchEvents } from '$lib/loaders/base.js';
 import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
 import { getCommunikeyRelays } from '$lib/helpers/relay-helper.js';
 import { getCommunityGlobalRelays } from '$lib/helpers/communityRelays.js';
@@ -59,7 +58,7 @@ export function useEffectiveCommunity(getCommunityEvent) {
     const relays = unique([...getCommunikeyRelays(), ...getCommunityGlobalRelays(communityEvent)]);
     const filter = { kinds: [SECTION_OVERRIDE_KIND], '#d': [communityPubkey] };
 
-    loaderSub = createTimelineLoader(timedPool, relays, filter, { eventStore })().subscribe();
+    loaderSub = fetchEvents(relays, filter).subscribe();
     // eventStore.model(TimelineModel) rather than eventStore.timeline: a
     // withdrawn override is deleted (kind 5), and only the model filters
     // deleted events out.

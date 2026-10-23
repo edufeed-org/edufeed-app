@@ -6,8 +6,7 @@
 // discover types are neither loaded nor shown.
 import { untrack } from 'svelte';
 import { TimelineModel } from 'applesauce-core/models';
-import { createTimelineLoader } from '$lib/loaders/timeline-loader.js';
-import { timedPool } from '$lib/loaders/base.js';
+import { fetchEvents } from '$lib/loaders/base.js';
 import { loadShowcaseSources } from '$lib/loaders/landing-showcase-sources.js';
 import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
 import { runtimeConfig } from '$lib/stores/config.svelte.js';
@@ -153,9 +152,11 @@ export function useLandingShowcase() {
         continue;
       }
       started.push(type);
-      const load = createTimelineLoader(timedPool, relays(), filters, { eventStore });
       subs.push(
-        load().subscribe({ complete: () => markSettled(type), error: () => markSettled(type) })
+        fetchEvents(relays(), filters).subscribe({
+          complete: () => markSettled(type),
+          error: () => markSettled(type)
+        })
       );
       subs.push(
         /** @type {any} */ (eventStore.model(TimelineModel, withoutLimit(filters))).subscribe(

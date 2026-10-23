@@ -1,5 +1,4 @@
-import { createTimelineLoader } from '$lib/loaders/timeline-loader.js';
-import { timedPool } from '$lib/loaders/base.js';
+import { fetchEvents } from '$lib/loaders/base.js';
 import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
 import { getAllLookupRelays } from '$lib/helpers/relay-helper.js';
 
@@ -46,11 +45,10 @@ export function useLicenseStatus(getHash) {
     };
 
     const filter = { kinds: [1063], '#x': [hash], limit: 50 };
-    const loader = createTimelineLoader(timedPool, getAllLookupRelays(), filter, {
-      eventStore,
-      limit: 50
+    const loaderSub = fetchEvents(getAllLookupRelays(), filter).subscribe({
+      complete: settle,
+      error: settle
     });
-    const loaderSub = loader().subscribe({ complete: settle, error: settle });
 
     const storeSub = eventStore.timeline(filter).subscribe((events) => {
       if (events && events.length > 0) {

@@ -17,8 +17,7 @@ import { manager } from '$lib/stores/accounts.svelte';
 import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
 import { runtimeConfig } from '$lib/stores/config.svelte.js';
 import { buildUserResponseFilter, parseResponseTags } from '$lib/helpers/forms.js';
-import { createTimelineLoader } from '$lib/loaders/timeline-loader.js';
-import { timedPool } from '$lib/loaders/base.js';
+import { fetchEvents } from '$lib/loaders/base.js';
 import { getCommunikeyRelays } from '$lib/helpers/relay-helper.js';
 
 /**
@@ -52,10 +51,7 @@ export function useMembershipGrantState() {
     const filter = buildUserResponseFilter(formAddress, manager.active.pubkey);
     const relays = getCommunikeyRelays();
 
-    const loaderSub = createTimelineLoader(timedPool, relays, filter, {
-      eventStore,
-      limit: 1
-    })().subscribe();
+    const loaderSub = fetchEvents(relays, { ...filter, limit: 1 }).subscribe();
 
     const modelSub = eventStore.timeline(filter).subscribe((events) => {
       existingResponse = events?.[0] || null;

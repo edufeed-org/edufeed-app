@@ -16,6 +16,7 @@ vi.mock('$lib/stores/nostr-infrastructure.svelte', () => ({
 }));
 vi.mock('$lib/loaders/base.js', () => ({
   timedPool: vi.fn(),
+  fetchEvents: vi.fn(() => ({ subscribe: vi.fn(() => ({ unsubscribe: vi.fn() })) })),
   addressLoader: vi.fn(() => noopObservable),
   eventLoader: vi.fn(() => noopObservable)
 }));
@@ -28,15 +29,6 @@ vi.mock('$lib/helpers/relay-helper.js', () => ({
   getEventLoaderLookupRelays: () => [],
   getGroupsRelays: () => []
 }));
-vi.mock('applesauce-loaders/loaders', () => ({
-  createTimelineLoader: vi.fn(() => () => noopObservable)
-}));
-// applesauce v7 moved block paging out of the SDK: the app's timeline loader is
-// the local port in $lib/loaders/timeline-loader.js and takes the mock above.
-vi.mock('$lib/loaders/timeline-loader.js', async () => {
-  const loaders = /** @type {any} */ (await import('applesauce-loaders/loaders'));
-  return { createTimelineLoader: loaders.createTimelineLoader };
-});
 vi.mock('applesauce-core/models', () => ({
   TimelineModel: 'TimelineModel'
 }));
@@ -193,30 +185,34 @@ describe('per-item read tracking', () => {
 
   describe('supplemental read-relay loader (issue #43)', () => {
     it('spawns a loader on the user read relays with the main notification filters', async () => {
-      const { createTimelineLoader } = await import('applesauce-loaders/loaders');
-      createTimelineLoader.mockClear();
+      const { fetchEvents } = await import('$lib/loaders/base.js');
+      fetchEvents.mockClear();
 
       service.initializeInbox('user123');
       await vi.waitFor(() => {
-        const calls = createTimelineLoader.mock.calls;
-        const supplemental = calls.find((c) => c[1].includes('wss://user-inbox.example/'));
+        const calls = fetchEvents.mock.calls;
+        const supplemental = calls.find((c) => c[0].includes('wss://user-inbox.example/'));
         expect(supplemental).toBeDefined();
-        // Same filters as the main loader (reactions, comments, chat, forms)
-        expect(supplemental[2]).toEqual(service.buildMainFilter('user123', expect.any(Number)));
+        // Same filters as the main request (reactions, comments, chat, forms), same page size
+        expect(supplemental[1]).toEqual(
+          service
+            .buildMainFilter('user123', expect.any(Number))
+            .map((/** @type {any} */ f) => ({ ...f, limit: 50 }))
+        );
       });
     });
 
     it('does not spawn a supplemental loader after cleanup', async () => {
-      const { createTimelineLoader } = await import('applesauce-loaders/loaders');
+      const { fetchEvents } = await import('$lib/loaders/base.js');
 
       service.initializeInbox('user123');
       service.cleanup();
-      createTimelineLoader.mockClear();
+      fetchEvents.mockClear();
 
       // Give the pending getReadRelays promise a chance to resolve
       await new Promise((r) => setTimeout(r, 0));
-      const supplemental = createTimelineLoader.mock.calls.find((c) =>
-        c[1].includes('wss://user-inbox.example/')
+      const supplemental = fetchEvents.mock.calls.find((c) =>
+        c[0].includes('wss://user-inbox.example/')
       );
       expect(supplemental).toBeUndefined();
     });
