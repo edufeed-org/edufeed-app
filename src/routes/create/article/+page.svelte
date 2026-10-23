@@ -6,7 +6,11 @@
   import { fetchEventById } from '$lib/helpers/nostrUtils';
   import { runtimeConfig } from '$lib/stores/config.svelte.js';
   import { getArticleTitle, getArticleSummary, getArticleImage } from 'applesauce-common/helpers';
-  import { createArticle, updateArticle } from '$lib/stores/article-actions.svelte.js';
+  import {
+    createArticle,
+    updateArticle,
+    ARTICLE_DRAFT_KIND
+  } from '$lib/stores/article-actions.svelte.js';
   import MarkdownEditor from '$lib/components/shared/MarkdownEditor.svelte';
   import EditableList from '$lib/components/shared/EditableList.svelte';
   import CreatorInput from '$lib/components/educational/CreatorInput.svelte';
@@ -30,6 +34,10 @@
   let editError = $state('');
 
   const isEditMode = $derived(!!data.editNaddr);
+  // Editing a NIP-23 draft (kind 30024): it can be saved again or published.
+  // A published article never goes back to draft.
+  const isDraftEdit = $derived(isEditMode && editEvent?.kind === ARTICLE_DRAFT_KIND);
+  const canSaveDraft = $derived(!isEditMode || isDraftEdit);
 
   // Form state
   let title = $state('');
@@ -74,6 +82,7 @@
 
   // UI state
   let isPublishing = $state(false);
+  let isSavingDraft = $state(false);
   let validationError = $state('');
 
   // Active user display name for the license modal's "I created this" auto-credit.
@@ -171,7 +180,8 @@
     history.back();
   }
 
-  async function handlePublish() {
+  /** @param {boolean} [asDraft] - save as NIP-23 draft (kind 30024) instead of publishing */
+  async function handlePublish(asDraft = false) {
     validationError = '';
 
     if (!title.trim()) {
@@ -193,6 +203,7 @@
     }
 
     isPublishing = true;
+    isSavingDraft = asDraft;
     try {
       const imageHash =
         imageLicenseEvent?.tags?.find((/** @type {any} */ t) => t[0] === 'x')?.[1] || undefined;
@@ -213,12 +224,18 @@
         changes: changes.trim() || undefined
       };
 
+      const options = { draft: asDraft };
       let naddr;
       if (isEditMode && editEvent) {
-        const result = await updateArticle(formData, editEvent);
+        const result = await updateArticle(formData, editEvent, null, options);
         naddr = result.naddr;
       } else {
-        const result = await createArticle(formData, data.communityPubkey || undefined, undefined);
+        const result = await createArticle(
+          formData,
+          data.communityPubkey || undefined,
+          undefined,
+          options
+        );
         naddr = result.naddr;
       }
 
@@ -232,6 +249,7 @@
       validationError = err instanceof Error ? err.message : m.toast_publish_failed();
     } finally {
       isPublishing = false;
+      isSavingDraft = false;
     }
   }
 </script>
@@ -386,12 +404,38 @@
         </div>
       {/if}
 
+      <!-- Save as draft (NIP-23 kind 30024: unlisted, shareable preview link) -->
+      {#if canSaveDraft}
+        <button
+          class="btn w-full btn-outline"
+          onclick={() => handlePublish(true)}
+          disabled={isPublishing}
+          data-testid="article-save-draft"
+        >
+          {#if isPublishing && isSavingDraft}
+            <span class="loading loading-sm loading-spinner"></span>
+            {m.article_editor_saving_draft()}
+          {:else if isDraftEdit}
+            {m.article_editor_update_draft()}
+          {:else}
+            {m.article_editor_save_draft()}
+          {/if}
+        </button>
+        <p class="-mt-4 text-center text-xs text-base-content/60">
+          {m.article_editor_draft_hint()}
+        </p>
+      {/if}
+
       <!-- Publish Button -->
-      <button class="btn w-full btn-primary" onclick={handlePublish} disabled={isPublishing}>
-        {#if isPublishing}
+      <button
+        class="btn w-full btn-primary"
+        onclick={() => handlePublish(false)}
+        disabled={isPublishing}
+      >
+        {#if isPublishing && !isSavingDraft}
           <span class="loading loading-sm loading-spinner"></span>
           {m.article_editor_publishing()}
-        {:else if isEditMode}
+        {:else if isEditMode && !isDraftEdit}
           {m.article_editor_update()}
         {:else}
           {m.article_editor_publish()}

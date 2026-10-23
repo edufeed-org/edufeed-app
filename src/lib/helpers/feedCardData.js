@@ -2,7 +2,7 @@
  * Maps any Nostr event to normalized feed card display data.
  *
  * @param {any} event - Nostr event
- * @returns {{ title: string, subtitle?: string, typeKey: string, tags: string[], description?: string, location?: string }}
+ * @returns {{ title: string, subtitle?: string, typeKey: string, tags: string[], description?: string, location?: string, draft?: boolean }}
  */
 export function getFeedCardData(event) {
   /** @param {string} name */
@@ -17,13 +17,16 @@ export function getFeedCardData(event) {
   const tags = getTags('t').slice(0, 3);
 
   switch (event.kind) {
-    case 30023: {
+    case 30023:
+    case 30024: {
+      // 30024 = NIP-23 draft, same shape; only the owner's content views see it.
       const summary = getTag('summary') || truncate(event.content, 120);
       return {
         title: getTag('title') || 'Untitled Article',
         typeKey: 'article',
         tags,
-        description: summary
+        description: summary,
+        ...(event.kind === 30024 ? { draft: true } : {})
       };
     }
     case 30142: {

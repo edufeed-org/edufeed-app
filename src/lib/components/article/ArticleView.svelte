@@ -29,6 +29,8 @@
   import CommentList from '../comments/CommentList.svelte';
   import EventTags from '../calendar/EventTags.svelte';
   import ArticleProvenance from './ArticleProvenance.svelte';
+  import ArticleDraftBanner from './ArticleDraftBanner.svelte';
+  import { publishDraft, ARTICLE_DRAFT_KIND } from '$lib/stores/article-actions.svelte.js';
   import ProfileAvatar from '../shared/ProfileAvatar.svelte';
   import { page } from '$app/stores';
   import { getDisplayName } from 'applesauce-core/helpers';
@@ -94,6 +96,26 @@
   });
 
   const isAuthor = $derived(activeUser?.pubkey === event.pubkey);
+
+  // NIP-23 draft (kind 30024): unlisted preview. No reactions/comments — they
+  // would point at the draft address and be orphaned once it is published.
+  const isDraft = $derived(event.kind === ARTICLE_DRAFT_KIND);
+  let publishingDraft = $state(false);
+
+  async function handlePublishDraft() {
+    if (!isAuthor || publishingDraft) return;
+    publishingDraft = true;
+    try {
+      const { naddr } = await publishDraft(event);
+      showToast(m.article_draft_published(), 'success');
+      if (naddr) goto(resolve(`/${naddr}`));
+    } catch (err) {
+      console.error('Publishing draft failed:', err);
+      showToast(err instanceof Error ? err.message : m.article_draft_publish_failed(), 'error');
+    } finally {
+      publishingDraft = false;
+    }
+  }
 
   // Re-published post: a credited foreign creator takes the byline and the
   // publisher moves to a "published by" line. Edit/delete stay with the
@@ -195,6 +217,10 @@
     {/snippet}
   </DetailHeader>
 
+  {#if isDraft}
+    <ArticleDraftBanner {isAuthor} onPublish={handlePublishDraft} publishing={publishingDraft} />
+  {/if}
+
   {#if attribution.indexed}
     <p
       class="mb-6 flex items-center gap-2 text-sm text-base-content/70"
@@ -247,14 +273,16 @@
     </div>
   {/if}
 
-  <!-- Reactions -->
-  <div class="mb-8 border-y border-base-300 py-4">
-    <ReactionBar {event} />
-  </div>
+  {#if !isDraft}
+    <!-- Reactions -->
+    <div class="mb-8 border-y border-base-300 py-4">
+      <ReactionBar {event} />
+    </div>
 
-  <!-- Comments -->
-  <div class="mt-8">
-    <h2 class="mb-4 text-2xl font-bold text-base-content">{m.article_view_comments()}</h2>
-    <CommentList rootEvent={event} {activeUser} />
-  </div>
+    <!-- Comments -->
+    <div class="mt-8">
+      <h2 class="mb-4 text-2xl font-bold text-base-content">{m.article_view_comments()}</h2>
+      <CommentList rootEvent={event} {activeUser} />
+    </div>
+  {/if}
 </article>

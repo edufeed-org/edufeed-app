@@ -235,6 +235,15 @@ describe('getFeedCardData', () => {
       expect(getFeedCardData(event).title).toBe('My Article');
     });
 
+    it('returns article data flagged as draft for kind 30024', () => {
+      const event = { kind: 30024, content: 'Draft body', tags: [['title', 'My Draft']] };
+      const card = getFeedCardData(event);
+      expect(card.typeKey).toBe('article');
+      expect(card.title).toBe('My Draft');
+      expect(card.draft).toBe(true);
+      expect(getFeedCardData({ kind: 30023, content: '', tags: [] }).draft).toBeUndefined();
+    });
+
     it('returns calendar data for kind 31923', () => {
       const event = {
         kind: 31923,

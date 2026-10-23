@@ -26,7 +26,7 @@ export const CATEGORIES = {
     label: 'Educational Resources'
   },
   longform: {
-    kinds: [30023],
+    kinds: [30023, 30024],
     label: 'Articles & Long-form Content'
   },
   kanban: {
@@ -144,7 +144,7 @@ export function kindToAppRelayCategory(kind) {
   if ([31922, 31923, 31924, 31925].includes(kind)) return 'calendar';
   if ([11, 10222, 30222, 30223, 30168, 1069, 1070].includes(kind)) return 'communikey';
   if ([30142, 1063, 30040].includes(kind)) return 'educational';
-  if ([30023].includes(kind)) return 'longform';
+  if ([30023, 30024].includes(kind)) return 'longform';
   if ([30301, 30302, 8571].includes(kind)) return 'kanban';
   return null;
 }

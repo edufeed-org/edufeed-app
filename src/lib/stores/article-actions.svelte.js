@@ -24,9 +24,18 @@ import {
   ARTICLE_SOURCE_TAG,
   ARTICLE_CHANGES_TAG
 } from '$lib/helpers/article-attribution.js';
+import { deleteEvent } from '$lib/helpers/eventDeletion.js';
 
 /** Kind number for NIP-23 long-form articles */
-const ARTICLE_KIND = 30023;
+export const ARTICLE_KIND = 30023;
+/**
+ * NIP-23 draft: same structure as kind 30023, invisible to every feed (they
+ * query 30023 only) but readable by anyone who has the naddr — the preview
+ * link an author sends around for approval. Unlisted, not private.
+ */
+export const ARTICLE_DRAFT_KIND = 30024;
+
+/** @typedef {{ draft?: boolean }} ArticlePublishOptions - `draft: true` saves a kind 30024 */
 
 /**
  * @typedef {Object} ArticleFormData
@@ -141,9 +150,15 @@ async function creditLinkedPeople(template, formData) {
  * @param {ArticleFormData} formData
  * @param {string} [communityPubkey] - Optional community to target
  * @param {import('nostr-tools').NostrEvent | null} [communityEvent] - Optional community event for relay routing
+ * @param {ArticlePublishOptions} [options]
  * @returns {Promise<{event: import('nostr-tools').NostrEvent, naddr: string}>}
  */
-export async function createArticle(formData, communityPubkey, communityEvent = null) {
+export async function createArticle(
+  formData,
+  communityPubkey,
+  communityEvent = null,
+  options = {}
+) {
   const currentAccount = manager.active;
   if (!currentAccount) {
     throw new Error('No account selected. Please log in to create articles.');
@@ -162,7 +177,7 @@ export async function createArticle(formData, communityPubkey, communityEvent = 
   // NIP-27 references in the body become NIP-10 p tags (bare npubs repaired first).
   const eventTemplate = await eventFactory.build(
     {
-      kind: ARTICLE_KIND,
+      kind: options.draft ? ARTICLE_DRAFT_KIND : ARTICLE_KIND,
       content: formData.content,
       tags
     },
@@ -186,11 +201,13 @@ export async function createArticle(formData, communityPubkey, communityEvent = 
 /**
  * Update an existing article (kind 30023)
  * @param {ArticleFormData} formData
- * @param {import('nostr-tools').NostrEvent} existingEvent - Existing article to update
+ * @param {import('nostr-tools').NostrEvent} existingEvent - Existing article or draft to update
  * @param {import('nostr-tools').NostrEvent | null} [communityEvent] - Optional community event for relay routing
+ * @param {ArticlePublishOptions} [options] - `draft: true` keeps a draft a draft; a
+ *   draft saved without it is published as kind 30023 and the draft retired
  * @returns {Promise<{event: import('nostr-tools').NostrEvent, naddr: string}>}
  */
-export async function updateArticle(formData, existingEvent, communityEvent = null) {
+export async function updateArticle(formData, existingEvent, communityEvent = null, options = {}) {
   const currentAccount = manager.active;
   if (!currentAccount) {
     throw new Error('No account selected. Please log in to update articles.');
@@ -198,6 +215,12 @@ export async function updateArticle(formData, existingEvent, communityEvent = nu
 
   if (existingEvent.pubkey !== currentAccount.pubkey) {
     throw new Error('Cannot update article: you do not own this article.');
+  }
+
+  const wasDraft = existingEvent.kind === ARTICLE_DRAFT_KIND;
+  if (options.draft && !wasDraft) {
+    // A published article has readers; a draft shadowing it would only confuse.
+    throw new Error('Cannot save as draft: this article is already published.');
   }
 
   const dTag = existingEvent.tags.find((/** @type {string[]} */ t) => t[0] === 'd')?.[1];
@@ -222,7 +245,7 @@ export async function updateArticle(formData, existingEvent, communityEvent = nu
   // dropped by the relay tie-break and deterministically by the cache. (#62/#64)
   const eventTemplate = await eventFactory.build(
     {
-      kind: ARTICLE_KIND,
+      kind: options.draft ? ARTICLE_DRAFT_KIND : ARTICLE_KIND,
       content: formData.content,
       tags,
       created_at: nextCreatedAt(existingEvent)
@@ -237,8 +260,62 @@ export async function updateArticle(formData, existingEvent, communityEvent = nu
     communityEvent,
     companions: companionsOf(formData)
   });
+  if (wasDraft && !options.draft) await retireDraft(existingEvent, currentAccount);
 
   const naddr = encodeEventToNaddr(updatedEvent, getAppRelaysForCategory('longform'));
 
   return { event: updatedEvent, naddr };
+}
+
+/**
+ * NIP-09 the draft once its kind-30023 successor is out. Best effort: the
+ * article is already published, a lingering draft only costs a stale preview.
+ * @param {import('nostr-tools').NostrEvent} draft
+ * @param {any} account
+ */
+async function retireDraft(draft, account) {
+  try {
+    const result = await deleteEvent(draft, account);
+    if (!result.success) console.warn('Draft could not be retired:', result.error);
+  } catch (err) {
+    console.warn('Draft could not be retired:', err);
+  }
+}
+
+/**
+ * Publish a kind-30024 draft as it is: same content and tags (so credited
+ * people, license and provenance survive), fresh `published_at`, kind 30023
+ * under the same d-tag; then retire the draft.
+ * @param {import('nostr-tools').NostrEvent} draft
+ * @param {import('nostr-tools').NostrEvent | null} [communityEvent] - Optional community event for relay routing
+ * @returns {Promise<{event: import('nostr-tools').NostrEvent, naddr: string}>}
+ */
+export async function publishDraft(draft, communityEvent = null) {
+  const currentAccount = manager.active;
+  if (!currentAccount) {
+    throw new Error('No account selected. Please log in to publish.');
+  }
+  if (draft.kind !== ARTICLE_DRAFT_KIND) {
+    throw new Error('Not a draft: only kind 30024 drafts can be published this way.');
+  }
+  if (draft.pubkey !== currentAccount.pubkey) {
+    throw new Error('Cannot publish draft: you do not own this draft.');
+  }
+
+  const now = String(Math.floor(Date.now() / 1000));
+  const tags = draft.tags.filter((t) => t[0] !== 'published_at');
+  tags.push(['published_at', now]);
+
+  const eventFactory = createAppEventFactory();
+  const eventTemplate = await eventFactory.build({
+    kind: ARTICLE_KIND,
+    content: draft.content,
+    tags
+  });
+  const articleEvent = await currentAccount.signEvent(eventTemplate);
+  publishEventOptimistic(articleEvent, pTagPubkeys(articleEvent), { communityEvent });
+  await retireDraft(draft, currentAccount);
+
+  const naddr = encodeEventToNaddr(articleEvent, getAppRelaysForCategory('longform'));
+  return { event: articleEvent, naddr };
 }
