@@ -12,7 +12,8 @@ vi.mock('$lib/stores/nostr-infrastructure.svelte', () => ({
   pool: { request: (/** @type {any[]} */ ...args) => request(...args) },
   eventStore
 }));
-const cacheRequest = vi.fn(async () => [ev(250, 'cached')]);
+/** @type {import('vitest').Mock<(filters: any) => Promise<any[]>>} */
+const cacheRequest = vi.fn(async (_filters) => [ev(250, 'cached')]);
 vi.mock('$lib/stores/event-cache.svelte.js', () => ({
   cacheRequest: (/** @type {any} */ filters) => cacheRequest(filters)
 }));

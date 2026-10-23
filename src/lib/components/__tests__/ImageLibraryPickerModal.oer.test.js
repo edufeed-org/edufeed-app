@@ -30,24 +30,13 @@ vi.mock('$lib/helpers/oer/oerToLicenseInput.js', async () => {
 vi.mock('$lib/stores/accounts.svelte', () => ({
   manager: { active: { pubkey: 'signerpub', signEvent: vi.fn(async (e) => ({ ...e, id: 'sig' })) } }
 }));
-// Neutralise the local-1063 timeline machinery — this test exercises only OER.
+// Neutralise the local-1063 request machinery — this test exercises only OER.
 vi.mock('applesauce-loaders/loaders', () => ({
-  createTimelineLoader: () => () => ({ subscribe: () => ({ unsubscribe() {} }) }),
   createAddressLoader: () => () => ({ subscribe: () => ({ unsubscribe() {} }) }),
   createEventLoader: () => () => ({ subscribe: () => ({ unsubscribe() {} }) }),
   createUnifiedEventLoader: () => () => ({ subscribe: () => ({ unsubscribe() {} }) }),
-  createOutboxTimelineLoader: () => () => ({ subscribe: () => ({ unsubscribe() {} }) }),
   createReactionsLoader: () => () => ({ subscribe: () => ({ unsubscribe() {} }) })
 }));
-// applesauce v7 moved block paging out of the SDK: the app's timeline loader is
-// the local port in $lib/loaders/timeline-loader.js and takes the mock above.
-vi.mock('$lib/loaders/timeline-loader.js', async () => {
-  const loaders = /** @type {any} */ (await import('applesauce-loaders/loaders'));
-  return {
-    createTimelineLoader: loaders.createTimelineLoader,
-    createOutboxTimelineLoader: loaders.createOutboxTimelineLoader
-  };
-});
 vi.mock('applesauce-common/helpers', () => ({
   getFileMetadata: () => null,
   BLOSSOM_SERVER_LIST_KIND: 10063,
@@ -61,7 +50,10 @@ vi.mock('$lib/stores/nostr-infrastructure.svelte', () => ({
   },
   pool: {}
 }));
-vi.mock('$lib/loaders/base.js', () => ({ timedPool: {} }));
+vi.mock('$lib/loaders/base.js', () => ({
+  timedPool: {},
+  fetchEvents: () => ({ subscribe: () => ({ unsubscribe() {} }) })
+}));
 vi.mock('$lib/helpers/relay-helper.js', () => ({
   getAllLookupRelays: () => [],
   getEventLoaderLookupRelays: () => [],

@@ -26,8 +26,7 @@
   import { encodeEventToNaddr, profileLink } from '$lib/helpers/nostrUtils.js';
   import { deleteEvent } from '$lib/helpers/eventDeletion.js';
   import { showToast } from '$lib/helpers/toast.js';
-  import { createTimelineLoader } from '$lib/loaders/timeline-loader.js';
-  import { timedPool } from '$lib/loaders/base.js';
+  import { fetchEvents } from '$lib/loaders/base.js';
   import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
   import { getKanbanRelays } from '$lib/helpers/relay-helper.js';
   import { TimelineModel } from 'applesauce-core/models';
@@ -90,14 +89,11 @@
     const boardAddress = `30301:${event.pubkey}:${dTag}`;
     cardsLoading = true;
 
-    const cardLoader = createTimelineLoader(
-      timedPool,
-      getKanbanRelays(),
-      { kinds: [30302], '#a': [boardAddress] },
-      { eventStore, limit: 100 }
-    );
-
-    const loaderSub = cardLoader().subscribe({
+    const loaderSub = fetchEvents(getKanbanRelays(), {
+      kinds: [30302],
+      '#a': [boardAddress],
+      limit: 100
+    }).subscribe({
       complete: () => {
         cardsLoading = false;
       }

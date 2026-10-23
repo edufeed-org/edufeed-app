@@ -11,9 +11,8 @@
   import { goto } from '$app/navigation';
   import { resolve } from '$app/paths';
   import { withoutChannelMeetings } from '$lib/helpers/calendar-timing.js';
-  import { createTimelineLoader } from '$lib/loaders/timeline-loader.js';
   import { TimelineModel } from 'applesauce-core/models';
-  import { timedPool } from '$lib/loaders/base.js';
+  import { fetchEvents } from '$lib/loaders/base.js';
   import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
   import {
     getCalendarRelays,
@@ -136,9 +135,8 @@
     getWriteRelays(pubkey).then((writeRelays) => {
       if (cancelled || writeRelays.length === 0) return;
       const filter = { kinds: ALL_CONTENT_KINDS, authors: [pubkey], limit: 100 };
-      const loader = createTimelineLoader(timedPool, writeRelays, filter, { eventStore });
       subs.push(
-        loader().subscribe({
+        fetchEvents(writeRelays, filter).subscribe({
           error: (err) => console.error('DashboardYourContent: write-relay loader error:', err)
         })
       );
@@ -155,9 +153,8 @@
     for (const { relays, kinds } of relayGroups) {
       if (relays.length === 0) continue;
       const filter = { kinds, authors: [pubkey], limit: 50 };
-      const loader = createTimelineLoader(timedPool, relays, filter, { eventStore });
       subs.push(
-        loader().subscribe({
+        fetchEvents(relays, filter).subscribe({
           error: (err) => console.error('DashboardYourContent: Loader error:', err)
         })
       );

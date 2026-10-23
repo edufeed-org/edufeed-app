@@ -97,7 +97,10 @@ vi.mock('$lib/helpers/relay-helper.js', async (importOriginal) => ({
   .../** @type {object} */ (await importOriginal()),
   getAllLookupRelays: () => []
 }));
-vi.mock('$lib/loaders/base.js', () => ({ timedPool: vi.fn() }));
+vi.mock('$lib/loaders/base.js', () => ({
+  timedPool: vi.fn(),
+  fetchEvents: vi.fn(() => ({ subscribe: () => ({ unsubscribe: () => {} }) }))
+}));
 vi.mock('$lib/helpers/toast.js', () => ({ showToast: vi.fn() }));
 vi.mock('$app/navigation', () => ({ goto: vi.fn() }));
 vi.mock('$app/paths', () => ({ resolve: (/** @type {string} */ path) => path }));
