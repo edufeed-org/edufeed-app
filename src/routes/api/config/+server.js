@@ -7,7 +7,12 @@
 import { json } from '@sveltejs/kit';
 import { parseDiscoverContentTypes } from '$lib/helpers/discover-content-types.js';
 import { env } from '$env/dynamic/private';
-import { parseArray, parseBool } from '$lib/server/env-parse.js';
+import {
+  parseArray,
+  parseBool,
+  resolveCuratedConfig,
+  resolveWotConfig
+} from '$lib/server/env-parse.js';
 import { getEligibilityConfig } from '$lib/server/blossom-eligibility.js';
 
 /**
@@ -150,50 +155,6 @@ function parseTheme(value, defaultValue) {
     return normalized;
   }
   return defaultValue;
-}
-
-/**
- * Resolve curated mode config for a specific category.
- * If either category-specific env var is set, use ONLY category vars (complete replacement).
- * Otherwise fall back to global vars.
- * @param {Record<string, string|undefined>} env
- * @param {string} suffix - Category suffix, e.g. 'CALENDAR'
- * @returns {{ sets: string[], direct: string[] }}
- */
-function resolveCuratedConfig(env, suffix) {
-  const catSets = env[`CURATED_PUBKEYS_SETS_${suffix}`];
-  const catDirect = env[`CURATED_PUBKEYS_${suffix}`];
-
-  // If either category-specific var is defined and non-empty, use category vars exclusively
-  const hasCategorySets = catSets !== undefined && catSets.trim() !== '';
-  const hasCategoryDirect = catDirect !== undefined && catDirect.trim() !== '';
-  if (hasCategorySets || hasCategoryDirect) {
-    return {
-      sets: parseArray(catSets),
-      direct: parseArray(catDirect)
-    };
-  }
-
-  // Fall back to global vars
-  return {
-    sets: parseArray(env.CURATED_PUBKEYS_SETS),
-    direct: parseArray(env.CURATED_PUBKEYS)
-  };
-}
-
-/**
- * Resolve WoT anchor config for a specific category.
- * Category-specific var overrides global; falls back to global WOT_ANCHOR_PUBKEYS.
- * @param {Record<string, string|undefined>} env
- * @param {string} suffix - Category suffix, e.g. 'EDUCATIONAL'
- * @returns {{ anchors: string[] }}
- */
-function resolveWotConfig(env, suffix) {
-  const catAnchors = env[`WOT_ANCHOR_PUBKEYS_${suffix}`];
-  if (catAnchors !== undefined && catAnchors.trim() !== '') {
-    return { anchors: parseArray(catAnchors) };
-  }
-  return { anchors: parseArray(env.WOT_ANCHOR_PUBKEYS) };
 }
 
 /**

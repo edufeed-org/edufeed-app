@@ -20,6 +20,18 @@ import { getProfileContent } from 'applesauce-core/helpers';
 import { getFeedCardData } from '$lib/helpers/feedCardData.js';
 import { getTagValue } from '$lib/helpers/educational/ambTransform.js';
 import { normalizePubkey, shortNpub as abbreviateNpub } from '$lib/helpers/pubkey.js';
+import {
+  CRAWLABLE_KINDS,
+  buildCrawlableContent,
+  canonicalPathFor,
+  renderHeadExtras
+} from '$lib/server/geo/page-content.js';
+import {
+  DEFAULT_GEO_SALT,
+  geoContentKey,
+  geoGroup,
+  parseShare
+} from '$lib/server/geo/assignment.js';
 
 // ─── Relay fetch ──────────────────────────────────────────────────────────────
 
@@ -142,7 +154,7 @@ export function eventMatchesFilter(event, filter) {
  * @param {string[]} relays
  * @returns {Promise<import('nostr-tools').NostrEvent | null>}
  */
-export function fetchFirstEvent(filter, relays) {
+export function fetchFirstEvent(filter, relays, timeoutMs = FETCH_TIMEOUT) {
   return new Promise((resolve) => {
     let resolved = false;
     const timeout = setTimeout(() => {
@@ -151,7 +163,7 @@ export function fetchFirstEvent(filter, relays) {
         resolve(null);
       }
       cleanup();
-    }, FETCH_TIMEOUT);
+    }, timeoutMs);
 
     /** @type {import('ws').WebSocket[]} */
     const sockets = [];
@@ -478,8 +490,13 @@ export function renderOgTags(meta, url) {
 const MAX_CACHE_ENTRIES = 500;
 
 /**
+ * What the handle injects for one page target. `head` empty = negative entry.
+ * @typedef {{ head: string, body: string }} PageEntry
+ */
+
+/**
  * @typedef {Object} CacheEntry
- * @property {string} value
+ * @property {PageEntry} value
  * @property {number} expiresAt
  */
 
@@ -489,7 +506,7 @@ class OgCache {
 
   /**
    * @param {string} key
-   * @returns {string | null}
+   * @returns {PageEntry | null}
    */
   get(key) {
     const entry = this.#entries.get(key);
@@ -503,7 +520,7 @@ class OgCache {
 
   /**
    * @param {string} key
-   * @param {string} value
+   * @param {PageEntry} value
    * @param {number} ttlMs
    */
   set(key, value, ttlMs) {
@@ -644,8 +661,75 @@ async function fetchTargetEvent(target) {
   }
 }
 
+const AUTHOR_NAME_TIMEOUT = 1500;
+
 /**
- * SvelteKit handle hook for injecting OG meta tags.
+ * Display name of an author for the crawler byline. Short timeout: this runs
+ * before the HTML is sent, also for humans on an uncached page.
+ * @param {string} pubkey
+ * @returns {Promise<string | undefined>}
+ */
+async function fetchAuthorName(pubkey) {
+  const profileEvent = await fetchFirstEvent(
+    { kinds: [0], authors: [pubkey], limit: 1 },
+    getRelaysForKind(0, []),
+    AUTHOR_NAME_TIMEOUT
+  );
+  if (!profileEvent) return undefined;
+  const profile = getProfileContent(profileEvent);
+  return profile?.display_name || profile?.name || undefined;
+}
+
+/**
+ * Build what gets injected for a resolved target: OG tags for every target;
+ * for crawlable content kinds also a canonical link, and — for pages in the
+ * GEO treatment group — JSON-LD plus a server-rendered body (see
+ * $lib/server/geo/page-content.js, docs: GEO_SERVER_CONTENT_SHARE).
+ * @param {import('nostr-tools').NostrEvent} nostrEvent
+ * @param {PageTarget} target
+ * @param {URL} url
+ * @returns {Promise<PageEntry>}
+ */
+export async function buildPageEntry(nostrEvent, target, url) {
+  const og = renderOgTags(extractMetadata(nostrEvent), url.href);
+  const isContentTarget = target.type === 'event' || target.type === 'wiki-topic';
+  if (!isContentTarget || !CRAWLABLE_KINDS.has(nostrEvent.kind)) return { head: og, body: '' };
+
+  const relayHint = getRelaysForKind(nostrEvent.kind, [])[0];
+  const canonicalPath =
+    target.type === 'wiki-topic'
+      ? `/wiki/${encodeURIComponent(target.topic)}`
+      : (canonicalPathFor(nostrEvent, { relayHint }) ?? undefined);
+  const group = geoGroup(
+    geoContentKey(nostrEvent),
+    parseShare(env.GEO_SERVER_CONTENT_SHARE),
+    env.GEO_ASSIGNMENT_SALT || DEFAULT_GEO_SALT
+  );
+
+  if (group === 'V') {
+    const canonicalUrl = `${url.origin}${canonicalPath ?? url.pathname}`;
+    return { head: `${og}\n${renderHeadExtras({ canonicalUrl, jsonLd: null })}`, body: '' };
+  }
+
+  const content = await buildCrawlableContent(nostrEvent, {
+    origin: url.origin,
+    appName: env.APP_NAME || 'Edufeed',
+    relayHint,
+    canonicalPath,
+    authorName: nostrEvent.kind === 30142 ? undefined : await fetchAuthorName(nostrEvent.pubkey)
+  });
+  return {
+    head: `${og}\n${renderHeadExtras(content)}`,
+    body: content.bodyHtml ?? ''
+  };
+}
+
+/** @type {PageEntry} */
+const NEGATIVE_ENTRY = { head: '', body: '' };
+
+/**
+ * SvelteKit handle hook for injecting OG meta tags (and, for content pages,
+ * the GEO canonical/JSON-LD/body — see buildPageEntry).
  * Always injects exactly one tag set: content tags when a target resolves,
  * default site tags otherwise (no page ships a bare head).
  * @type {import('@sveltejs/kit').Handle}
@@ -658,43 +742,43 @@ export async function ogMetaHandle({ event, resolve }) {
 
   const target = resolvePageTarget(event.url.pathname);
 
-  /** @type {string | null} */
-  let ogHtml = null;
+  /** @type {PageEntry | null} */
+  let entry = null;
 
   if (target.type !== 'default') {
     const key = targetCacheKey(target);
-    ogHtml = ogCache.get(key);
+    entry = ogCache.get(key);
 
-    if (ogHtml === null) {
+    if (entry === null) {
       try {
         const nostrEvent = await fetchTargetEvent(target);
         if (nostrEvent) {
-          const meta = extractMetadata(nostrEvent);
-          ogHtml = renderOgTags(meta, event.url.href);
-          ogCache.set(key, ogHtml, POSITIVE_TTL);
+          entry = await buildPageEntry(nostrEvent, target, event.url);
+          ogCache.set(key, entry, POSITIVE_TTL);
         } else {
-          ogHtml = '';
-          ogCache.set(key, ogHtml, NEGATIVE_TTL);
+          entry = NEGATIVE_ENTRY;
+          ogCache.set(key, entry, NEGATIVE_TTL);
         }
       } catch {
-        ogHtml = '';
-        ogCache.set(key, ogHtml, NEGATIVE_TTL);
+        entry = NEGATIVE_ENTRY;
+        ogCache.set(key, entry, NEGATIVE_TTL);
       }
     }
   }
 
   // Default tags are cheap to render (string ops) and embed the per-request URL.
-  if (!ogHtml) {
-    ogHtml = renderOgTags(buildDefaultMeta(), event.url.href);
-  }
+  const head = entry?.head || renderOgTags(buildDefaultMeta(), event.url.href);
+  const body = entry?.head ? entry.body : '';
 
-  const finalOgHtml = ogHtml;
   return resolve(event, {
     // Use a replacer function, not a replacement string: String.replace
     // interprets `$&`/`` $` ``/`$'`/`$$` patterns in string replacements, and
     // attacker-controlled Nostr content (e.g. a profile title containing
     // `$'`) can corrupt the injected/surrounding HTML — output that then
     // gets cached for POSITIVE_TTL.
-    transformPageChunk: ({ html }) => html.replace('</head>', () => `${finalOgHtml}\n</head>`)
+    transformPageChunk: ({ html }) => {
+      const withHead = html.replace('</head>', () => `${head}\n</head>`);
+      return body ? withHead.replace('</body>', () => `${body}\n</body>`) : withHead;
+    }
   });
 }

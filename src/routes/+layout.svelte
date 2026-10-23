@@ -35,6 +35,11 @@
   import { initCalendarHiddenSources } from '$lib/services/calendar-sources.svelte.js';
   import { browser } from '$app/environment';
   import { afterNavigate, beforeNavigate, goto } from '$app/navigation';
+  import {
+    leftServerRenderedPage,
+    removeServerBody,
+    removeServerHeadExtras
+  } from '$lib/helpers/geo-server-content.js';
   import { resolve } from '$app/paths';
   import { recordNavigation } from '$lib/helpers/navigationHistory.js';
   import { hasStaticOwnBottomUI, mobileDockVisible } from '$lib/helpers/bottomUiVisibility.js';
@@ -238,7 +243,13 @@
   if (browser) {
     const loader = document.getElementById('app-loader');
     if (loader) loader.style.display = 'none';
+    removeServerBody(document);
   }
+
+  // Canonical link + JSON-LD from the server describe the first page only.
+  afterNavigate(({ from, to }) => {
+    if (leftServerRenderedPage(from, to)) removeServerHeadExtras(document);
+  });
 
   // Reveal the app once initialization is complete (see app.html CSS hide-until-ready)
   $effect(() => {

@@ -18,6 +18,9 @@
          Keep both in sync when adding/removing theme families.
          Color mode is fixed to light — dark themes are retired for now. -->
     <script>
+      // Lets CSS tell JavaScript clients apart from crawlers/no-JS readers:
+      // the server-rendered #geo-content block is only for the latter.
+      document.documentElement.classList.add('js');
       (function () {
         var theme = 'light';
         try {
@@ -41,6 +44,20 @@
       }
       body.app-ready #app-loader {
         display: none !important;
+      }
+      /* Crawler-facing content (src/lib/server/geo/page-content.js): hidden while
+         the app boots, removed once it mounts; readable without JavaScript. */
+      .js #geo-content {
+        display: none;
+      }
+      html:not(.js) #app-loader {
+        display: none;
+      }
+      #geo-content {
+        max-width: 48rem;
+        margin: 0 auto;
+        padding: 1.5rem 1rem;
+        line-height: 1.6;
       }
       #app-loader {
         position: fixed;

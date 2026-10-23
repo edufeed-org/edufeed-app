@@ -547,6 +547,20 @@ Link previews (OG tags) are injected server-side for ALL pages by `ogMetaHandle`
 and a default brand tag set (`static/og-default.png`, `APP_OG_DESCRIPTION`,
 `OG_DEFAULT_IMAGE`) for everything else. Extraction reuses `getFeedCardData`.
 
+**Crawler-facing content (GEO).** The same handle gives content pages of kinds
+30023/30818/30142 a `rel=canonical` (path from `eventRoutePath()`, naddr with the
+deployment's first app relay as the only hint — the sitemap uses the same
+function, so both always agree) and, for pages in the treatment group
+(`GEO_SERVER_CONTENT_SHARE`, default all), JSON-LD plus an
+`<article id="geo-content">` body before `</body>` (`src/lib/server/geo/`).
+Crawlers without JavaScript otherwise see an empty shell on every `ssr = false`
+route. Rules: same HTML for everyone — never switch on user agent (cloaking);
+`app.html` hides the block for JS clients and the root layout removes it on
+mount; server-rendered markdown/djot MUST go through `sanitizeServerHtml`
+(`htmlSanitize.js` is a no-op outside the browser). `/sitemap.xml` and
+`/robots.txt` are routes (stale-while-revalidate cache, curated authors
+respected; `SITEMAP_AMB_RELAYS` keeps aggregator mirrors out).
+
 ## Development Environment
 
 ### Branching & Releases
