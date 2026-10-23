@@ -261,6 +261,7 @@ async function handleClick() {
 | 30002 | NIP-51     | Relay set (user app relay overrides per category)                                                     |
 | 30009 | NIP-58     | Badge definition — **legacy access control**, read/delete only, no longer written                     |
 | 30023 | NIP-23     | Long-form article (`ArticlesView`, article editor)                                                    |
+| 30024 | NIP-23     | Article draft: same shape as 30023, unlisted preview page, `publishDraft` turns it into a 30023       |
 | 30040 | —          | Publication — create + view work; discover integration and relay support still pending                |
 | 30142 | AMB        | Educational resource (OER with SKOS metadata)                                                         |
 | 30168 | —          | Form template (metadata/membership forms; responses are kind 1069)                                    |
@@ -391,7 +392,7 @@ Disabled by default. Unioned with curated in the same `getCuratedAuthors()` call
 | calendar    | `CALENDAR_RELAYS`        | 31922, 31923, 31924, 31925 |
 | communikey  | `COMMUNIKEY_RELAYS`      | 10222, 30222               |
 | educational | `AMB_RELAYS`             | 30142                      |
-| longform    | `LONGFORM_CONTENT_RELAY` | 30023                      |
+| longform    | `LONGFORM_CONTENT_RELAY` | 30023, 30024               |
 | kanban      | `KANBAN_RELAYS`          | 30301, 30302, 8571         |
 
 `kindToAppRelayCategory(kind)` and `getAppRelaysForCategory(category)` live in `$lib/services/app-relay-service.svelte.js`. NIP-29 groups (kinds 9000-9009, 39000-39002) are a separate lane, not part of that helper's category set — see below.
