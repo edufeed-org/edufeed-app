@@ -58,6 +58,10 @@ const asList = (filters) => (Array.isArray(filters) ? filters : [filters]);
  * the shared EventStore; the observable emits the new ones and completes once
  * the relays have answered (or the 10 s cap hit). Put `limit` in the filter.
  *
+ * Never errors: relay failures and timeouts complete the stream (`timedPool`
+ * swallows them) and the cache leg catches its own failures, so subscribe
+ * without an error handler — one would be dead code.
+ *
  * @param {string[]} relays
  * @param {Filter | Filter[]} filters
  * @param {{ cache?: boolean }} [opts]

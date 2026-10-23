@@ -346,10 +346,7 @@ export function useCalendarEventLoader(options) {
         kinds: [6, 16],
         '#h': [communityPubkey],
         limit: 50
-      }).subscribe({
-        error: (/** @type {any} */ err) =>
-          console.warn('📅 EventLoader: Community repost loader error:', err)
-      });
+      }).subscribe();
       deletionSubscriptions.set('repostRelayLoader', repostRelayLoaderSubscription);
 
       /** Load the calendar events referenced by share/repost events on-demand.

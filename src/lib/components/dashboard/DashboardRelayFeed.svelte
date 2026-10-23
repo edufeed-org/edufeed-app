@@ -40,6 +40,8 @@
   let isLoading = $state(true);
   let exhausted = $state(false);
   let loadingPage = $state(false);
+  // The relay's last request failed and the SDK is backing off before a retry
+  let failing = $state(false);
   let displayCount = $state(DISPLAY_STEP);
 
   /** @type {import('$lib/loaders/timeline-feed.js').TimelineFeed | undefined} */
@@ -68,6 +70,7 @@
     const statusSub = current.status$.subscribe((status) => {
       loadingPage = status.pending;
       exhausted = status.exhausted;
+      failing = status.failing;
       if (status.settled) isLoading = false;
     });
     const modelSub = eventStore
@@ -88,7 +91,9 @@
   // timeline to events actually seen on this relay.
   let feedItems = $derived(filterEventsForRelay(modelEvents, relay));
   let visibleItems = $derived(feedItems.slice(0, displayCount));
-  let hasMore = $derived(!exhausted || displayCount < feedItems.length);
+  // While the relay is failing the SDK retries on its own: keep the button
+  // (busy) instead of declaring the relay empty.
+  let hasMore = $derived(!exhausted || failing || displayCount < feedItems.length);
 
   const getProfiles = useProfileMap(() => visibleItems.map((e) => e.pubkey));
   let profiles = $derived(getProfiles());
@@ -162,8 +167,8 @@
 
   {#if hasMore}
     <div class="mt-4 flex justify-center">
-      <button class="btn btn-ghost btn-sm" onclick={loadMore} disabled={loadingPage}>
-        {#if loadingPage}
+      <button class="btn btn-ghost btn-sm" onclick={loadMore} disabled={loadingPage || failing}>
+        {#if loadingPage || failing}
           <span class="loading loading-xs loading-spinner"></span>
         {/if}
         {m.discover_load_more()}

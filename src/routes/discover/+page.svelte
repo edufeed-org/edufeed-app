@@ -571,8 +571,13 @@
         // Untracked: status$ replays synchronously inside this effect, and the
         // merge reads the state it writes.
         untrack(() => {
+          const wasPending = feedStatus[type]?.pending ?? false;
           feedStatus = { ...feedStatus, [type]: status };
           if (FEEDS.every((f) => feedStatus[f.type]?.settled)) isLoading = false;
+          // A page this feed had to wait for has arrived: reveal it. Keyed on
+          // the feed's own transition, so switching tabs while another feed
+          // is pending reveals nothing here.
+          if (wasPending && !status.pending && showsType(type)) revealMore();
         });
       })
     ]);
@@ -1010,6 +1015,9 @@
   const isLoadingMore = $derived(
     calendarLoadingMore || activeFeeds.some((f) => feedStatus[f.type]?.pending ?? false)
   );
+  // A relay of the current tab failed and the SDK is backing off before it
+  // retries: keep the bottom spinner instead of declaring "no more content".
+  const anyFeedFailing = $derived(activeFeeds.some((f) => feedStatus[f.type]?.failing ?? false));
 
   /** Reveal the next display batch and re-arm the scroll sentinel. */
   function revealMore() {
@@ -1023,14 +1031,6 @@
       if (rect.top < window.innerHeight + 200) loadMoreContent();
     });
   }
-
-  // A network batch finishing reveals what it brought.
-  let wasLoadingMore = false;
-  $effect(() => {
-    const loading = isLoadingMore;
-    if (wasLoadingMore && !loading) untrack(revealMore);
-    wasLoadingMore = loading;
-  });
 
   /**
    * Load more content - reveals buffered items first, then fetches from network
@@ -1075,7 +1075,7 @@
 
     // Served from the prefetch buffer a loadMore() is synchronous and
     // `pending` never rises; otherwise the spinner shows until the relays
-    // settle and the effect above reveals what arrived.
+    // settle and the feed's status subscription reveals what arrived.
     for (const { type, feed } of activeFeeds) {
       if (type === 'learning' && isLearningSearchActive) continue;
       feed.loadMore();
@@ -1087,6 +1087,7 @@
       const calendarCountBefore = calendarEvents.length;
       const done = () => {
         calendarLoadingMore = false;
+        revealMore();
       };
 
       // Get the highest start timestamp from current events to paginate forward
@@ -1842,7 +1843,7 @@
 
       <!-- Infinite Scroll Sentinel -->
       <div id="load-more-sentinel" class="mt-8 py-8">
-        {#if isLoadingMore}
+        {#if isLoadingMore || anyFeedFailing}
           <div class="flex justify-center">
             <div class="text-center">
               <div class="loading loading-lg loading-spinner text-primary"></div>

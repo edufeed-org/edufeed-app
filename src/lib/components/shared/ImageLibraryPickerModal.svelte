@@ -161,9 +161,6 @@
     loaderSub = fetchEvents(getAllLookupRelays(), { ...filter, limit: 100 }).subscribe({
       complete: () => {
         loading = false;
-      },
-      error: () => {
-        loading = false;
       }
     });
     timelineSub = eventStore.timeline(filter).subscribe((next) => {

@@ -45,10 +45,7 @@ export function useLicenseStatus(getHash) {
     };
 
     const filter = { kinds: [1063], '#x': [hash], limit: 50 };
-    const loaderSub = fetchEvents(getAllLookupRelays(), filter).subscribe({
-      complete: settle,
-      error: settle
-    });
+    const loaderSub = fetchEvents(getAllLookupRelays(), filter).subscribe({ complete: settle });
 
     const storeSub = eventStore.timeline(filter).subscribe((events) => {
       if (events && events.length > 0) {

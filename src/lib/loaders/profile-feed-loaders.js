@@ -49,9 +49,7 @@ function startParticipationLoaders(pubkeys) {
   const relays = getEducationalRelays();
   if (relays.length === 0) return [];
   return pubkeys.map((pubkey) =>
-    fetchEvents(relays, { ...participationFilter(pubkey), limit: 50 }).subscribe({
-      error: (err) => console.error('profile-feed-loaders: Participation loader error:', err)
-    })
+    fetchEvents(relays, { ...participationFilter(pubkey), limit: 50 }).subscribe()
   );
 }
 
@@ -84,18 +82,10 @@ export function startProfileFeedLoaders({ pubkeys, userPubkey = null }) {
         map((pointers) => groupPubkeysByRelay(pointers))
       );
 
-    subs.push(
-      fetchOutbox(outboxMap$, { kinds: ALL_FEED_KINDS, limit: 50 }).subscribe({
-        error: (err) => console.error('profile-feed-loaders: Outbox loader error:', err)
-      })
-    );
+    subs.push(fetchOutbox(outboxMap$, { kinds: ALL_FEED_KINDS, limit: 50 }).subscribe());
 
     // Reposts via outbox (reposts live on user write relays)
-    subs.push(
-      fetchOutbox(outboxMap$, { kinds: [6, 16], limit: 50 }).subscribe({
-        error: (err) => console.error('profile-feed-loaders: Repost outbox loader error:', err)
-      })
-    );
+    subs.push(fetchOutbox(outboxMap$, { kinds: [6, 16], limit: 50 }).subscribe());
 
     // Supplemental: app-specific relays for content that also lives on dedicated relays
     for (const source of FEED_RELAY_SOURCES) {
@@ -103,9 +93,7 @@ export function startProfileFeedLoaders({ pubkeys, userPubkey = null }) {
       if (relays.length === 0) continue;
 
       subs.push(
-        fetchEvents(relays, { kinds: source.kinds, authors: pubkeys, limit: 50 }).subscribe({
-          error: (err) => console.error('profile-feed-loaders: App relay loader error:', err)
-        })
+        fetchEvents(relays, { kinds: source.kinds, authors: pubkeys, limit: 50 }).subscribe()
       );
     }
   } else {
@@ -115,9 +103,7 @@ export function startProfileFeedLoaders({ pubkeys, userPubkey = null }) {
       if (relays.length === 0) continue;
 
       subs.push(
-        fetchEvents(relays, { kinds: source.kinds, authors: pubkeys, limit: 50 }).subscribe({
-          error: (err) => console.error('profile-feed-loaders: Loader error:', err)
-        })
+        fetchEvents(relays, { kinds: source.kinds, authors: pubkeys, limit: 50 }).subscribe()
       );
     }
 
@@ -125,9 +111,7 @@ export function startProfileFeedLoaders({ pubkeys, userPubkey = null }) {
     const repostRelays = getProfileLookupRelays();
     if (repostRelays.length > 0) {
       subs.push(
-        fetchEvents(repostRelays, { kinds: [6, 16], authors: pubkeys, limit: 50 }).subscribe({
-          error: (err) => console.error('profile-feed-loaders: Repost loader error:', err)
-        })
+        fetchEvents(repostRelays, { kinds: [6, 16], authors: pubkeys, limit: 50 }).subscribe()
       );
     }
   }

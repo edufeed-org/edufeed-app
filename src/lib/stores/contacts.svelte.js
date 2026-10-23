@@ -67,11 +67,7 @@ export const contactsStore = {
       const relays = await getWriteRelays(userPubkey);
 
       // Step 1: Start background loader to fetch kind 3 event
-      const loaderSubscription = createContactListLoader(relays, userPubkey).subscribe({
-        error: (/** @type {any} */ error) => {
-          console.error('Error loading contact list:', error);
-        }
-      });
+      const loaderSubscription = createContactListLoader(relays, userPubkey).subscribe();
       activeSubscriptions.push(loaderSubscription);
 
       // Step 2: Use applesauce ContactsModel — emits ProfilePointer[] immediately

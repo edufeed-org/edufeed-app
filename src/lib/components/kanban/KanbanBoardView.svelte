@@ -99,7 +99,8 @@
       }
     });
 
-    // Fallback timeout: timedPool uses 2s, allow extra margin
+    // Fallback: fetchEvents completes within timedPool's 10 s cap; keep the
+    // skeleton short on a slow relay
     const fallbackTimer = setTimeout(() => {
       if (cardsLoading) cardsLoading = false;
     }, 4000);

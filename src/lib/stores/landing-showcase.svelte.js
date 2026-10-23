@@ -152,12 +152,7 @@ export function useLandingShowcase() {
         continue;
       }
       started.push(type);
-      subs.push(
-        fetchEvents(relays(), filters).subscribe({
-          complete: () => markSettled(type),
-          error: () => markSettled(type)
-        })
-      );
+      subs.push(fetchEvents(relays(), filters).subscribe({ complete: () => markSettled(type) }));
       subs.push(
         /** @type {any} */ (eventStore.model(TimelineModel, withoutLimit(filters))).subscribe(
           (/** @type {any[]} */ events) => {

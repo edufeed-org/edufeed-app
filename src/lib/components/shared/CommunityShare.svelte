@@ -197,9 +197,7 @@
     const shareLoaderSub = fetchEvents(
       lookupRelays,
       shareFilters.map((/** @type {any} */ f) => ({ ...f, limit: 50 }))
-    ).subscribe({
-      error: (err) => console.warn('CommunityShare: Share loader error:', err)
-    });
+    ).subscribe();
 
     // SharesModel handles kind 6/16 matching (no author filter, uses buildCommonEventRelationFilters)
     const sharesModelSub = eventStore.model(SharesModel, event).subscribe((repostEvents) => {

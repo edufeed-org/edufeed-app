@@ -1,6 +1,6 @@
 ---
 name: amb-educational
-description: AMB educational resources (kind 30142): NIP-50 search via pool.request (createTimelineLoader strips the search field), SKOS concept-ID filters, and the resource form variant registry with NIP-32 labeling. Use when working on educational search, amb-search.js, searchQueryBuilder.js, ResourceFormWizard, or resource-form-variants.js.
+description: AMB educational resources (kind 30142): NIP-50 search via pool.request (a ranked search is one response per relay, never a feed window or a cached one-shot), SKOS concept-ID filters, and the resource form variant registry with NIP-32 labeling. Use when working on educational search, amb-search.js, searchQueryBuilder.js, ResourceFormWizard, or resource-form-variants.js.
 ---
 
 ## Educational Content (AMB - kind 30142)
@@ -13,7 +13,7 @@ Educational content uses the AMB (Allgemeines Metadatenprofil) spec with JSON-fl
 
 ### NIP-50 Search Implementation
 
-**IMPORTANT:** Use `pool.request()` directly for NIP-50 searches, NOT `createTimelineLoader` — `createTimelineLoader` strips unknown filter fields including `search`. See `src/lib/loaders/amb-search.js` and `src/lib/helpers/educational/searchQueryBuilder.js`.
+**IMPORTANT:** Use `pool.request()` directly for NIP-50 searches, NOT `fetchEvents` or `createTimelineFeed` — a ranked search is one response per relay (relevance scores are only comparable within one response, see `searchRank.js`) and must not be served from the IDB cache or paged as a window. See `src/lib/loaders/amb-search.js` and `src/lib/helpers/educational/searchQueryBuilder.js`.
 
 ### SKOS Filter Pattern
 

@@ -328,6 +328,29 @@ describe('createTimelineFeed', () => {
     sub.unsubscribe();
   });
 
+  it('reports failing while a relay is in backoff, and not once every relay is covered', async () => {
+    const t = now();
+    const { request } = fakeRelays({ [RB]: series('b', 5, { now: t, gap: 90 }) }, (relay) =>
+      relay === RA ? throwError(() => new Error('connection refused')) : undefined
+    );
+    const { feed } = makeFeed({ request });
+    const sub = feed.events$.subscribe();
+    await flush(10);
+    expect(feed.getStatus().failing).toBe(true);
+    sub.unsubscribe();
+
+    const healthy = fakeRelays({
+      [RA]: series('a', 5, { now: t }),
+      [RB]: series('b', 5, { now: t, gap: 90 })
+    });
+    const ok = makeFeed({ request: healthy.request });
+    const sub2 = ok.feed.events$.subscribe();
+    await flush(10);
+    expect(ok.feed.getStatus().failing).toBe(false);
+    expect(ok.feed.getStatus().exhausted).toBe(true);
+    sub2.unsubscribe();
+  });
+
   it('an erroring relay is incomplete and counts as done; its sibling is unaffected', async () => {
     const t = now();
     const { request } = fakeRelays({ [RB]: series('b', 5, { now: t, gap: 90 }) }, (relay) =>

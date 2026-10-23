@@ -86,6 +86,7 @@ import { cacheRequest } from '$lib/stores/event-cache.svelte.js';
  * @property {boolean} pending - `loadMore()` asked for a page the buffer does not hold yet
  * @property {boolean} settled - Every relay is `covered` or `incomplete` (nothing loading or prefetching)
  * @property {boolean} exhausted - Every relay is `incomplete` or covered to 0 (or there are no relays)
+ * @property {boolean} failing - Some relay is `incomplete`: its last request failed and the SDK retries it after a backoff
  * @property {number} since
  * @property {number} until
  * @property {TimelineStatus[]} relays - The SDK's per-relay (and per author group) coverage
@@ -190,6 +191,7 @@ export function createTimelineFeed(options) {
       pending,
       settled: none || (reported && current.every(isSettled)),
       exhausted: none || (reported && current.every(isDone)),
+      failing: current.some((s) => s.state === 'incomplete'),
       since: window$.value.since,
       until: window$.value.until,
       relays: current

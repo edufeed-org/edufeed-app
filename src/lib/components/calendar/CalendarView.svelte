@@ -248,11 +248,7 @@
     newRelays.forEach((r) => initialCalendarRelays.add(r));
 
     // Create a loader for just the new relays
-    const sub = fetchEvents(newRelays, { kinds: [31922, 31923], limit: 40 }).subscribe({
-      error: (/** @type {any} */ err) => {
-        console.error('📅 CalendarView: Supplemental relay loader error:', err);
-      }
-    });
+    const sub = fetchEvents(newRelays, { kinds: [31922, 31923], limit: 40 }).subscribe();
 
     return () => sub.unsubscribe();
   });

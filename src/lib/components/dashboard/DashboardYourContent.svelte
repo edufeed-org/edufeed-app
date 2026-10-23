@@ -135,11 +135,7 @@
     getWriteRelays(pubkey).then((writeRelays) => {
       if (cancelled || writeRelays.length === 0) return;
       const filter = { kinds: ALL_CONTENT_KINDS, authors: [pubkey], limit: 100 };
-      subs.push(
-        fetchEvents(writeRelays, filter).subscribe({
-          error: (err) => console.error('DashboardYourContent: write-relay loader error:', err)
-        })
-      );
+      subs.push(fetchEvents(writeRelays, filter).subscribe());
     });
 
     const relayGroups = [
@@ -153,11 +149,7 @@
     for (const { relays, kinds } of relayGroups) {
       if (relays.length === 0) continue;
       const filter = { kinds, authors: [pubkey], limit: 50 };
-      subs.push(
-        fetchEvents(relays, filter).subscribe({
-          error: (err) => console.error('DashboardYourContent: Loader error:', err)
-        })
-      );
+      subs.push(fetchEvents(relays, filter).subscribe());
     }
 
     const modelSub = eventStore

@@ -105,7 +105,7 @@ Render what the EventStore (or a local cache) already holds immediately; network
 - **Lookups by id end when every id has answered** (`takeWhile(() => missing.size > 0, true)`), and skip ids `eventStore.getEvent()` already has.
 - **Config-like lists resolved before content (curated/WoT authors, showcase sources) are cached stale-while-revalidate:** an old cache is served at once and refreshed in the background, never expired into a blocking fetch. The root layout's splash waits on curated authors (`curated-authors-service.svelte.js`), so any wait there blocks the whole app.
 
-Waiting for all relays is only right when the answer needs every relay (NIP-50 search ranking, `/wiki/<topic>` disambiguation across authors) — and then through `timedPool`'s 2 s cap. Measure with Playwright: open page → navigate away → back; REQ frames (`framesent`) starting seconds after the back navigation reveal an upstream wait.
+Waiting for all relays is only right when the answer needs every relay (NIP-50 search ranking, `/wiki/<topic>` disambiguation across authors) — and then through `timedPool`'s 10 s cap. Measure with Playwright: open page → navigate away → back; REQ frames (`framesent`) starting seconds after the back navigation reveal an upstream wait.
 
 ## Svelte 5 Critical Patterns
 

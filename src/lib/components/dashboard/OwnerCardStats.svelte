@@ -59,7 +59,7 @@
         const addr = addressOf(event);
         if (addr) filters.push({ kinds: [6, 16], '#a': [addr] });
 
-        subs.push(fetchEvents(relays, filters).subscribe({ error: () => {} }));
+        subs.push(fetchEvents(relays, filters).subscribe());
         subs.push(
           eventStore.model(TimelineModel, filters).subscribe((list) => {
             shareCount = (list || []).length;
