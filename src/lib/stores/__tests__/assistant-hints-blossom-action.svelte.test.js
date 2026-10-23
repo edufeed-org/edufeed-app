@@ -73,7 +73,7 @@ vi.mock('$lib/stores/nostr-infrastructure.svelte', () => ({
   }
 }));
 vi.mock('$lib/loaders/relay-list-loader.js', () => ({
-  createRelayListLoader: () => () => () => ({ subscribe: () => ({ unsubscribe: () => {} }) })
+  createRelayListLoader: () => ({ subscribe: () => ({ unsubscribe: () => {} }) })
 }));
 vi.mock('$lib/services/relay-service.svelte.js', () => ({
   getRelayListLookupRelays: () => [],
@@ -139,7 +139,7 @@ vi.mock('$lib/stores/config.svelte.js', () => ({
 }));
 
 vi.mock('$lib/loaders/blossom-server-loader.js', () => ({
-  createBlossomServerLoader: () => () => () => ({ subscribe: () => ({ unsubscribe: () => {} }) })
+  createBlossomServerLoader: () => ({ subscribe: () => ({ unsubscribe: () => {} }) })
 }));
 vi.mock('$lib/services/blossom-settings-service.js', () => ({
   parseBlossomServerEvent: (/** @type {any} */ event) =>

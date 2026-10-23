@@ -2,7 +2,7 @@
  * Highlight loader for addressable events (kind 30023, 30818, etc.).
  * Loads kind 9802 highlights that reference an event via #a tag.
  */
-import { createCachedTimelineLoader } from './base.js';
+import { fetchEvents } from './base.js';
 import { getAllLookupRelays } from '$lib/helpers/relay-helper.js';
 
 /**
@@ -25,14 +25,13 @@ export function loadEventHighlights(pointer, communityPubkey) {
   }
 
   const relays = getAllLookupRelays();
-  const loader = createCachedTimelineLoader(relays, filter, { limit: 100 });
 
   /** @type {import('rxjs').Subscription | undefined} */
   let sub;
 
   return {
     loader: () => {
-      sub = loader().subscribe();
+      sub = fetchEvents(relays, { ...filter, limit: 100 }, { cache: true }).subscribe();
       return sub;
     },
     cleanup: () => {

@@ -16,7 +16,7 @@ export function useFormTemplates(getPubkeys) {
     const authors = getPubkeys();
     if (!authors.length) return;
 
-    const loaderSub = formTemplateLoader(authors)().subscribe();
+    const loaderSub = formTemplateLoader(authors).subscribe();
     const modelSub = eventStore
       .model(TimelineModel, { kinds: [30168], authors })
       .subscribe((events) => {

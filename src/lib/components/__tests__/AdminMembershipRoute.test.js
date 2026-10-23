@@ -70,7 +70,7 @@ vi.mock('$lib/loaders/base.js', () => ({
 }));
 
 vi.mock('$lib/loaders/community.js', () => ({
-  formResponseLoader: () => () => ({ subscribe: () => ({ unsubscribe: () => {} }) })
+  formResponseLoader: () => ({ subscribe: () => ({ unsubscribe: () => {} }) })
 }));
 
 vi.mock('$lib/helpers/relay-helper.js', () => ({

@@ -58,7 +58,7 @@ vi.mock('$lib/stores/nostr-infrastructure.svelte', () => ({
   }
 }));
 vi.mock('$lib/loaders/relay-list-loader.js', () => ({
-  createRelayListLoader: () => () => () => ({ subscribe: () => ({ unsubscribe: () => {} }) })
+  createRelayListLoader: () => ({ subscribe: () => ({ unsubscribe: () => {} }) })
 }));
 vi.mock('$lib/services/relay-service.svelte.js', () => ({
   getRelayListLookupRelays: () => [],

@@ -19,7 +19,7 @@ export function useAllCommunities() {
   // Initialize global subscription only once
   if (!globalSubscription) {
     // Bootstrap EventStore with community loader (feeds events into EventStore)
-    const loaderSubscription = communikeyTimelineLoader()().subscribe({
+    const loaderSubscription = communikeyTimelineLoader().subscribe({
       complete: () => {
         globalLoaded = true;
       },

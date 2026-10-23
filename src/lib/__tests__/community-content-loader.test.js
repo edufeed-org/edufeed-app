@@ -32,16 +32,6 @@ vi.mock('$lib/stores/nostr-infrastructure.svelte', () => {
   };
 });
 
-vi.mock('applesauce-loaders/loaders', () => ({
-  createTimelineLoader: vi.fn(() => () => of())
-}));
-// applesauce v7 moved block paging out of the SDK: the app's timeline loader is
-// the local port in $lib/loaders/timeline-loader.js and takes the mock above.
-vi.mock('$lib/loaders/timeline-loader.js', async () => {
-  const loaders = /** @type {any} */ (await import('applesauce-loaders/loaders'));
-  return { createTimelineLoader: loaders.createTimelineLoader };
-});
-
 vi.mock('applesauce-core/models', () => ({
   TimelineModel: 'TimelineModel'
 }));
@@ -95,21 +85,14 @@ vi.mock('$lib/helpers/nostrUtils.js', () => ({
   })
 }));
 
-vi.mock('$lib/loaders/base.js', async () => {
-  const { createTimelineLoader } = /** @type {any} */ (await import('applesauce-loaders/loaders'));
-  return {
-    timedPool: vi.fn(),
-    addressLoader: vi.fn(() => ({ subscribe: vi.fn(() => ({ unsubscribe: vi.fn() })) })),
-    createCachedTimelineLoader: (
-      /** @type {string[]} */ relays,
-      /** @type {any} */ filter,
-      /** @type {any} */ opts = {}
-    ) => createTimelineLoader(vi.fn(), relays, filter, { eventStore: {}, ...opts })
-  };
-});
+vi.mock('$lib/loaders/base.js', () => ({
+  timedPool: vi.fn(),
+  addressLoader: vi.fn(() => ({ subscribe: vi.fn(() => ({ unsubscribe: vi.fn() })) })),
+  fetchEvents: vi.fn(() => ({ subscribe: vi.fn(() => ({ unsubscribe: vi.fn() })) }))
+}));
 
 vi.mock('$lib/loaders/targeted-publications.js', () => ({
-  communityTargetedPublicationsLoader: vi.fn(() => () => ({
+  communityTargetedPublicationsLoader: vi.fn(() => ({
     subscribe: vi.fn(() => ({ unsubscribe: vi.fn() }))
   }))
 }));
@@ -130,12 +113,11 @@ vi.mock('$lib/helpers/relay-helper.js', () => ({
 
 // Import after mocks
 const { createCommunityContentLoader } = await import('$lib/loaders/community-content-loader.js');
-const { createTimelineLoader } = await import('applesauce-loaders/loaders');
+const { fetchEvents, addressLoader } = await import('$lib/loaders/base.js');
 const { communityTargetedPublicationsLoader } = await import(
   '$lib/loaders/targeted-publications.js'
 );
 const { eventStore } = await import('$lib/stores/nostr-infrastructure.svelte');
-const { addressLoader } = await import('$lib/loaders/base.js');
 const { getAllLookupRelays: _getAllLookupRelays } = await import('$lib/helpers/relay-helper.js');
 const { pool } = await import('$lib/stores/nostr-infrastructure.svelte');
 
@@ -159,7 +141,7 @@ describe('createCommunityContentLoader', () => {
 
     expect(result.subscriptions.size).toBe(0);
     expect(typeof result.cleanup).toBe('function');
-    expect(createTimelineLoader).not.toHaveBeenCalled();
+    expect(fetchEvents).not.toHaveBeenCalled();
     expect(communityTargetedPublicationsLoader).not.toHaveBeenCalled();
   });
 
@@ -167,11 +149,10 @@ describe('createCommunityContentLoader', () => {
     const loader = createCommunityContentLoader([30142], getRelays);
     loader(COMMUNITY_PK);
 
-    expect(createTimelineLoader).toHaveBeenCalledWith(
-      expect.any(Function),
+    expect(fetchEvents).toHaveBeenCalledWith(
       ['wss://relay1.example.com', 'wss://relay2.example.com'],
-      { kinds: [30142], '#h': [COMMUNITY_PK] },
-      expect.objectContaining({ eventStore: expect.any(Object), limit: 50 })
+      { kinds: [30142], '#h': [COMMUNITY_PK], limit: 50 },
+      { cache: true }
     );
   });
 
@@ -180,11 +161,10 @@ describe('createCommunityContentLoader', () => {
     loader(COMMUNITY_PK);
 
     // Should create a loader for NIP-18 reposts targeting this community
-    expect(createTimelineLoader).toHaveBeenCalledWith(
-      expect.any(Function),
+    expect(fetchEvents).toHaveBeenCalledWith(
       expect.any(Array),
-      { kinds: [6, 16], '#h': [COMMUNITY_PK] },
-      expect.objectContaining({ eventStore: expect.any(Object), limit: 50 })
+      { kinds: [6, 16], '#h': [COMMUNITY_PK], limit: 50 },
+      { cache: true }
     );
   });
 
@@ -193,15 +173,15 @@ describe('createCommunityContentLoader', () => {
     loader(COMMUNITY_PK);
 
     // Find the repost loader call (kind 6/16 filter)
-    const repostCall = /** @type {any} */ (createTimelineLoader).mock.calls.find(
+    const repostCall = /** @type {any} */ (fetchEvents).mock.calls.find(
       (/** @type {any[]} */ call) => {
-        const filter = call[2];
+        const filter = call[1];
         return filter.kinds?.includes(6) && filter.kinds?.includes(16);
       }
     );
     expect(repostCall).toBeDefined();
 
-    const repostRelays = repostCall[1];
+    const repostRelays = repostCall[0];
     // Must include getAllLookupRelays() relays (broad discovery)
     expect(repostRelays).toContain('wss://lookup1.example.com');
     expect(repostRelays).toContain('wss://lookup2.example.com');
@@ -221,15 +201,15 @@ describe('createCommunityContentLoader', () => {
     const loader = createCommunityContentLoader([30023], getRelays);
     loader(COMMUNITY_PK);
 
-    const directCall = /** @type {any} */ (createTimelineLoader).mock.calls.find(
+    const directCall = /** @type {any} */ (fetchEvents).mock.calls.find(
       (/** @type {any[]} */ call) =>
-        Array.isArray(call[2]?.kinds) &&
-        call[2].kinds.includes(30023) &&
-        Array.isArray(call[2]['#h'])
+        Array.isArray(call[1]?.kinds) &&
+        call[1].kinds.includes(30023) &&
+        Array.isArray(call[1]['#h'])
     );
     expect(directCall).toBeDefined();
-    expect(directCall[2]).toEqual({ kinds: [30023], '#h': [COMMUNITY_PK] });
-    expect(directCall[2].authors).toBeUndefined();
+    expect(directCall[1]).toEqual({ kinds: [30023], '#h': [COMMUNITY_PK], limit: 50 });
+    expect(directCall[1].authors).toBeUndefined();
   });
 
   it('creates targeted publications loader for the community', () => {
@@ -277,9 +257,9 @@ describe('createCommunityContentLoader', () => {
   it('cleanup unsubscribes all subscriptions and clears the map', () => {
     const mockUnsub = vi.fn();
 
-    /** @type {any} */ (createTimelineLoader).mockReturnValue(() => ({
+    /** @type {any} */ (fetchEvents).mockReturnValue({
       subscribe: () => ({ unsubscribe: mockUnsub })
-    }));
+    });
 
     const loader = createCommunityContentLoader([30142], getRelays);
     const { subscriptions, cleanup } = loader(COMMUNITY_PK);
@@ -296,11 +276,10 @@ describe('createCommunityContentLoader', () => {
     const loader = createCommunityContentLoader([31922, 31923], getRelays);
     loader(COMMUNITY_PK);
 
-    expect(createTimelineLoader).toHaveBeenCalledWith(
-      expect.any(Function),
+    expect(fetchEvents).toHaveBeenCalledWith(
       expect.any(Array),
       expect.objectContaining({ kinds: [31922, 31923] }),
-      expect.any(Object)
+      { cache: true }
     );
 
     expect(communityTargetedPublicationsLoader).toHaveBeenCalledWith(COMMUNITY_PK, [31922, 31923]);

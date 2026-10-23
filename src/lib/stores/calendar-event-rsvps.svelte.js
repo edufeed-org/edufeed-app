@@ -39,7 +39,7 @@ export function useCalendarEventRsvps(calendarEvent) {
     loading = true;
 
     // Step 1: Subscribe to loader (continuously fetches RSVPs from relays → EventStore)
-    loaderSubscription = calendarEventRsvpLoader(calendarEvent)().subscribe({
+    loaderSubscription = calendarEventRsvpLoader(calendarEvent).subscribe({
       // Loader handles fetching, we just need the subscription alive
       next: () => {
         // Loader emission - RSVPs are being added to eventStore

@@ -14,7 +14,7 @@
 // Status semantics live in $lib/helpers/assistant-hints.js (pure, tested).
 import { goto } from '$app/navigation';
 import { useActiveUser, manager } from '$lib/stores/accounts.svelte';
-import { pool, eventStore } from '$lib/stores/nostr-infrastructure.svelte';
+import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
 import { createRelayListLoader } from '$lib/loaders/relay-list-loader.js';
 import { getRelayListLookupRelays } from '$lib/services/relay-service.svelte.js';
 import {
@@ -135,8 +135,7 @@ export function useAssistantHints() {
     hasRelayList = false;
     if (!user) return;
 
-    const loader = createRelayListLoader(pool, getRelayListLookupRelays(), eventStore, user.pubkey);
-    const loaderSub = loader()().subscribe();
+    const loaderSub = createRelayListLoader(getRelayListLookupRelays(), user.pubkey).subscribe();
     const sub = eventStore.replaceable(10002, user.pubkey).subscribe((event) => {
       hasRelayList = hasMailboxRelays(event);
     });
@@ -199,13 +198,10 @@ export function useAssistantHints() {
     blossomSettled = false;
     if (!user || !runtimeConfig.blossom?.gated) return;
 
-    const loader = createBlossomServerLoader(
-      pool,
+    const loaderSub = createBlossomServerLoader(
       getRelayListLookupRelays(),
-      eventStore,
       user.pubkey
-    );
-    const loaderSub = loader()().subscribe();
+    ).subscribe();
     const sub = eventStore.replaceable(10063, user.pubkey).subscribe((event) => {
       if (!event) return;
       blossomServers = parseBlossomServerEvent(event).map((s) => s.url);

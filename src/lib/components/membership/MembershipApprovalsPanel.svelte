@@ -152,8 +152,7 @@
     const myPubkey = activePubkey;
     if (!formAddress || !myPubkey) return;
 
-    const loader = formResponseLoader(formAddress, myPubkey);
-    const sub = loader().subscribe();
+    const sub = formResponseLoader(formAddress, myPubkey).subscribe();
 
     const modelSub = eventStore.model(TimelineModel, { kinds: [1069] }).subscribe((events) => {
       responses = selectAdminApplications(

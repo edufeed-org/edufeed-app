@@ -79,7 +79,7 @@ vi.mock('$lib/helpers/forms.js', () => ({
 vi.mock('$lib/helpers/community-signer.js', () => ({ getCommunitySigner: () => null }));
 vi.mock('$lib/helpers/communityRelays.js', () => ({ parseCommunityContentTypes: () => [] }));
 vi.mock('$lib/loaders/community.js', () => ({
-  formResponseLoader: () => () => ({ subscribe: () => ({ unsubscribe: () => {} }) })
+  formResponseLoader: () => ({ subscribe: () => ({ unsubscribe: () => {} }) })
 }));
 vi.mock('$lib/loaders/base.js', () => ({
   addressLoader: () => ({ subscribe: () => ({ unsubscribe: () => {} }) })

@@ -93,7 +93,7 @@ vi.mock('$lib/helpers/reactions.js', async () => {
 });
 
 vi.mock('$lib/loaders/reactions.js', () => ({
-  reactionsLoaderForUrl: vi.fn(() => () => ({
+  reactionsLoaderForUrl: vi.fn(() => ({
     subscribe: () => ({ unsubscribe: vi.fn() })
   }))
 }));

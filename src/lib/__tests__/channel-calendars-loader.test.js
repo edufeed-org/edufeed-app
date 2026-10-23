@@ -1,5 +1,5 @@
 /**
- * channelCalendarsLoader (M5): one timeline loader per group relay, reading
+ * channelCalendarsLoader (M5): one request per channel on its group relay, reading
  * the channels' meetings (and their h-tagged deletions) into the eventStore,
  * authenticated first when a signer is at hand.
  *
@@ -26,30 +26,16 @@ vi.mock('$lib/stores/nostr-infrastructure.svelte', () => ({
   eventStore: { add: vi.fn() }
 }));
 
-vi.mock('applesauce-loaders/loaders', async (importOriginal) => {
-  const orig = /** @type {any} */ (await importOriginal());
-  return {
-    ...orig,
-    createTimelineLoader: vi.fn((_pool, relays, filter) => () => {
-      const id = filter['#h'][0];
-      order.push(`load ${relays.join(',')}`);
-      // pyramid CLOSEs a REQ naming a private group for a non-member
-      if (id === 'private') return throwError(() => new Error('auth-required'));
-      return of({ id: `event-${id}-from-${relays[0]}` });
-    })
-  };
-});
-// applesauce v7 moved block paging out of the SDK: the app's timeline loader is
-// the local port in $lib/loaders/timeline-loader.js and takes the mock above.
-vi.mock('$lib/loaders/timeline-loader.js', async () => {
-  const loaders = /** @type {any} */ (await import('applesauce-loaders/loaders'));
-  return { createTimelineLoader: loaders.createTimelineLoader };
-});
-
 vi.mock('$lib/loaders/base.js', () => ({
+  fetchEvents: vi.fn((/** @type {string[]} */ relays, /** @type {any} */ filter) => {
+    const id = filter['#h'][0];
+    order.push(`load ${relays.join(',')}`);
+    // pyramid CLOSEs a REQ naming a private group for a non-member
+    if (id === 'private') return throwError(() => new Error('auth-required'));
+    return of({ id: `event-${id}-from-${relays[0]}` });
+  }),
   timedPool: vi.fn(() => of()),
-  addressLoader: vi.fn(() => of()),
-  createCachedTimelineLoader: vi.fn(() => () => of())
+  addressLoader: vi.fn(() => of())
 }));
 
 vi.mock('$lib/groups/relay-auth.js', () => ({
@@ -65,10 +51,8 @@ vi.mock('$lib/services/curated-authors-service.svelte.js', () => ({
 }));
 
 const { channelCalendarsLoader } = await import('$lib/loaders/calendar.js');
-const { createTimelineLoader } = await import('applesauce-loaders/loaders');
+const { fetchEvents } = await import('$lib/loaders/base.js');
 const { authenticateOnce } = await import('$lib/groups/relay-auth.js');
-const { timedPool } = await import('$lib/loaders/base.js');
-const { eventStore } = await import('$lib/stores/nostr-infrastructure.svelte');
 
 const R1 = 'wss://groups.example/c/root1';
 const R2 = 'wss://other.example';
@@ -76,7 +60,7 @@ const R2 = 'wss://other.example';
 describe('channelCalendarsLoader', () => {
   beforeEach(() => {
     order.length = 0;
-    vi.mocked(createTimelineLoader).mockClear();
+    vi.mocked(fetchEvents).mockClear();
     vi.mocked(authenticateOnce).mockClear();
   });
 
@@ -86,19 +70,17 @@ describe('channelCalendarsLoader', () => {
         { id: 'a', relay: R1 },
         { id: 'b', relay: R1 },
         { id: 'z', relay: R2 }
-      ])().pipe(toArray())
+      ]).pipe(toArray())
     );
 
-    expect(createTimelineLoader).toHaveBeenCalledTimes(3);
-    expect(vi.mocked(createTimelineLoader).mock.calls[0]).toEqual([
-      timedPool,
+    expect(fetchEvents).toHaveBeenCalledTimes(3);
+    expect(vi.mocked(fetchEvents).mock.calls[0]).toEqual([
       [R1],
-      { kinds: [31923, 5, 9005], '#h': ['a'], limit: 250 },
-      { eventStore }
+      { kinds: [31923, 5, 9005], '#h': ['a'], limit: 250 }
     ]);
     const calls = vi
-      .mocked(createTimelineLoader)
-      .mock.calls.map((c) => [c[1][0], /** @type {any} */ (c[2])['#h']]);
+      .mocked(fetchEvents)
+      .mock.calls.map((c) => [c[0][0], /** @type {any} */ (c[1])['#h']]);
     expect(calls).toEqual([
       [R1, ['a']],
       [R1, ['b']],
@@ -112,7 +94,7 @@ describe('channelCalendarsLoader', () => {
       channelCalendarsLoader([
         { id: 'private', relay: R1 },
         { id: 'open', relay: R1 }
-      ])().pipe(toArray())
+      ]).pipe(toArray())
     );
     expect(events.map((e) => e.id)).toEqual([`event-open-from-${R1}`]);
   });
@@ -125,13 +107,13 @@ describe('channelCalendarsLoader', () => {
           { id: 'b', relay: R1 }
         ],
         { signer: {} }
-      )().pipe(toArray())
+      ).pipe(toArray())
     );
     expect(authenticateOnce).toHaveBeenCalledTimes(1);
   });
 
   it('does not authenticate without a signer', async () => {
-    await lastValueFrom(channelCalendarsLoader([{ id: 'a', relay: R1 }])().pipe(toArray()));
+    await lastValueFrom(channelCalendarsLoader([{ id: 'a', relay: R1 }]).pipe(toArray()));
     expect(authenticateOnce).not.toHaveBeenCalled();
   });
 
@@ -144,7 +126,7 @@ describe('channelCalendarsLoader', () => {
           { id: 'z', relay: R2 }
         ],
         { signer }
-      )().pipe(toArray())
+      ).pipe(toArray())
     );
     expect(authenticateOnce).toHaveBeenCalledTimes(2);
     expect(vi.mocked(authenticateOnce).mock.calls[0][1]).toBe(signer);
@@ -155,16 +137,16 @@ describe('channelCalendarsLoader', () => {
   it('still reads (what is public) when authentication fails', async () => {
     vi.mocked(authenticateOnce).mockResolvedValueOnce({ ok: false, message: 'no challenge' });
     const events = await lastValueFrom(
-      channelCalendarsLoader([{ id: 'a', relay: R1 }], { signer: {} })().pipe(toArray())
+      channelCalendarsLoader([{ id: 'a', relay: R1 }], { signer: {} }).pipe(toArray())
     );
     expect(events).toHaveLength(1);
   });
 
   it('emits nothing for no pointers', async () => {
-    const events = await lastValueFrom(channelCalendarsLoader([])().pipe(toArray()), {
+    const events = await lastValueFrom(channelCalendarsLoader([]).pipe(toArray()), {
       defaultValue: []
     });
     expect(events).toEqual([]);
-    expect(createTimelineLoader).not.toHaveBeenCalled();
+    expect(fetchEvents).not.toHaveBeenCalled();
   });
 });

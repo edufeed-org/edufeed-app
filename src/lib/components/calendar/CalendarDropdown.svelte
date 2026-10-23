@@ -98,7 +98,7 @@
   });
 
   onMount(() => {
-    calendarLoader()().subscribe();
+    calendarLoader().subscribe();
 
     userSubscription = manager.active$.subscribe({
       next: (account) => {

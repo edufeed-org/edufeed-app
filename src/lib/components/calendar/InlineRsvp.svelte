@@ -81,7 +81,7 @@
     }
 
     // Subscribe to loader (fetches RSVPs from relays → EventStore)
-    loaderSubscription = calendarEventRsvpLoader(calendarEvent)().subscribe({
+    loaderSubscription = calendarEventRsvpLoader(calendarEvent).subscribe({
       next: () => {
         // Loader handles fetching
       },

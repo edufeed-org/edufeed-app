@@ -34,17 +34,10 @@ vi.mock('applesauce-loaders/loaders', async (importOriginal) => {
   const orig = /** @type {any} */ (await importOriginal());
   return {
     ...orig,
-    createTimelineLoader: vi.fn(() => () => of()),
     createAddressLoader: vi.fn(() => vi.fn(() => of())),
     createEventLoader: vi.fn(() => vi.fn(() => of())),
     createUnifiedEventLoader: vi.fn(() => vi.fn(() => of()))
   };
-});
-// applesauce v7 moved block paging out of the SDK: the app's timeline loader is
-// the local port in $lib/loaders/timeline-loader.js and takes the mock above.
-vi.mock('$lib/loaders/timeline-loader.js', async () => {
-  const loaders = /** @type {any} */ (await import('applesauce-loaders/loaders'));
-  return { createTimelineLoader: loaders.createTimelineLoader };
 });
 
 vi.mock('../base.js', () => ({
@@ -59,7 +52,7 @@ vi.mock('../base.js', () => ({
   addressLoader: vi.fn(() => of()),
   eventLoader: vi.fn(() => of()),
   unifiedLoader: vi.fn(() => of()),
-  createCachedTimelineLoader: vi.fn(() => () => of())
+  fetchEvents: vi.fn(() => of())
 }));
 
 vi.mock('$lib/helpers/relay-helper.js', async (importOriginal) => {

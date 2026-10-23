@@ -20,7 +20,7 @@ const FORM_ADDRESS = `30168:${ADMIN_PUBKEY}:edufeed-membership`;
 const activeState = { pubkey: ADMIN_PUBKEY };
 const adminState = { pubkeys: [ADMIN_PUBKEY] };
 const timelineState = { events: [] };
-const formResponseLoaderMock = vi.fn(() => () => ({
+const formResponseLoaderMock = vi.fn(() => ({
   subscribe: () => ({ unsubscribe: () => {} })
 }));
 

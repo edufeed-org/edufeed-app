@@ -146,10 +146,10 @@
 
     // Defer relay fetching to avoid blocking content render
     const loaderTimer = setTimeout(() => {
-      const commentLoader = rootUrl
+      const comments$ = rootUrl
         ? createCommentLoaderForUrl(rootUrl, extraRelays)
         : createCommentLoaderForEvent(rootEvent, extraRelays);
-      loaderSubscription = commentLoader().subscribe({
+      loaderSubscription = comments$.subscribe({
         error: (/** @type {any} */ err) => {
           console.error('CommentList: Error in comment loader:', err);
           isLoading = false;

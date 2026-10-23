@@ -8,7 +8,7 @@
 <script>
   import { runtimeConfig } from '$lib/stores/config.svelte.js';
   import { manager } from '$lib/stores/accounts.svelte';
-  import { eventStore, pool } from '$lib/stores/nostr-infrastructure.svelte';
+  import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
   import { TimelineModel } from 'applesauce-core/models';
   import { CloseIcon, PlusIcon } from '$lib/components/icons';
   import { getBlossomUploadServers } from '$lib/services/blossom-settings-service.js';
@@ -74,8 +74,7 @@
   $effect(() => {
     if (!activeUser?.pubkey) return;
     const lookupRelays = getRelayListLookupRelays();
-    const loader = createBlossomServerLoader(pool, lookupRelays, eventStore, activeUser.pubkey);
-    const sub = loader()().subscribe();
+    const sub = createBlossomServerLoader(lookupRelays, activeUser.pubkey).subscribe();
     return () => sub?.unsubscribe();
   });
 

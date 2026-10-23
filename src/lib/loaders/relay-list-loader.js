@@ -1,23 +1,15 @@
 /**
  * Relay List Loader - fetches kind 10002 events (NIP-65)
- * Following applesauce loader pattern
  */
-import { createTimelineLoader } from '$lib/loaders/timeline-loader.js';
+import { fetchEvents } from '$lib/loaders/base.js';
 
 /**
- * Creates a loader for a user's relay list (kind 10002)
- * @param {import('applesauce-relay').RelayPool} pool - Relay pool instance
+ * A user's relay list (kind 10002): one request to the lookup relays, the
+ * newest copy into the EventStore.
  * @param {string[]} lookupRelays - Relays to search for relay lists
- * @param {import('applesauce-core').EventStore} eventStore - EventStore instance
  * @param {string} userPubkey - User's public key
- * @returns {Function} Loader factory that returns an Observable
+ * @returns {import('rxjs').Observable<any>}
  */
-export function createRelayListLoader(pool, lookupRelays, eventStore, userPubkey) {
-  return () =>
-    createTimelineLoader(
-      pool,
-      lookupRelays,
-      { kinds: [10002], authors: [userPubkey], limit: 1 },
-      { eventStore }
-    );
+export function createRelayListLoader(lookupRelays, userPubkey) {
+  return fetchEvents(lookupRelays, { kinds: [10002], authors: [userPubkey], limit: 1 });
 }

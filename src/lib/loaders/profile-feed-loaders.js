@@ -8,11 +8,10 @@
  * only fetches.
  */
 import { map, filter } from 'rxjs';
-import { createTimelineLoader, createOutboxTimelineLoader } from '$lib/loaders/timeline-loader.js';
 import { OutboxModel } from 'applesauce-core/models';
 import { groupPubkeysByRelay } from 'applesauce-core/helpers';
 import { includeFallbackRelays } from 'applesauce-core/observable';
-import { timedPool } from '$lib/loaders/base.js';
+import { fetchEvents, fetchOutbox } from '$lib/loaders/base.js';
 import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
 import { runtimeConfig } from '$lib/stores/config.svelte.js';
 import {
@@ -50,12 +49,7 @@ function startParticipationLoaders(pubkeys) {
   const relays = getEducationalRelays();
   if (relays.length === 0) return [];
   return pubkeys.map((pubkey) =>
-    createTimelineLoader(
-      timedPool,
-      relays,
-      { ...participationFilter(pubkey), limit: 50 },
-      { eventStore }
-    )().subscribe({
+    fetchEvents(relays, { ...participationFilter(pubkey), limit: 50 }).subscribe({
       error: (err) => console.error('profile-feed-loaders: Participation loader error:', err)
     })
   );
@@ -90,27 +84,15 @@ export function startProfileFeedLoaders({ pubkeys, userPubkey = null }) {
         map((pointers) => groupPubkeysByRelay(pointers))
       );
 
-    const feedLoader = createOutboxTimelineLoader(
-      timedPool,
-      outboxMap$,
-      { kinds: ALL_FEED_KINDS, limit: 50 },
-      { eventStore }
-    );
     subs.push(
-      feedLoader().subscribe({
+      fetchOutbox(outboxMap$, { kinds: ALL_FEED_KINDS, limit: 50 }).subscribe({
         error: (err) => console.error('profile-feed-loaders: Outbox loader error:', err)
       })
     );
 
-    // Repost loader via outbox (reposts live on user write relays)
-    const repostOutboxLoader = createOutboxTimelineLoader(
-      timedPool,
-      outboxMap$,
-      { kinds: [6, 16], limit: 50 },
-      { eventStore }
-    );
+    // Reposts via outbox (reposts live on user write relays)
     subs.push(
-      repostOutboxLoader().subscribe({
+      fetchOutbox(outboxMap$, { kinds: [6, 16], limit: 50 }).subscribe({
         error: (err) => console.error('profile-feed-loaders: Repost outbox loader error:', err)
       })
     );
@@ -120,10 +102,8 @@ export function startProfileFeedLoaders({ pubkeys, userPubkey = null }) {
       const relays = source.getRelays();
       if (relays.length === 0) continue;
 
-      const appFilter = { kinds: source.kinds, authors: pubkeys, limit: 50 };
-      const loader = createTimelineLoader(timedPool, relays, appFilter, { eventStore });
       subs.push(
-        loader().subscribe({
+        fetchEvents(relays, { kinds: source.kinds, authors: pubkeys, limit: 50 }).subscribe({
           error: (err) => console.error('profile-feed-loaders: App relay loader error:', err)
         })
       );
@@ -134,10 +114,8 @@ export function startProfileFeedLoaders({ pubkeys, userPubkey = null }) {
       const relays = source.getRelays();
       if (relays.length === 0) continue;
 
-      const sourceFilter = { kinds: source.kinds, authors: pubkeys, limit: 50 };
-      const loader = createTimelineLoader(timedPool, relays, sourceFilter, { eventStore });
       subs.push(
-        loader().subscribe({
+        fetchEvents(relays, { kinds: source.kinds, authors: pubkeys, limit: 50 }).subscribe({
           error: (err) => console.error('profile-feed-loaders: Loader error:', err)
         })
       );
@@ -146,14 +124,8 @@ export function startProfileFeedLoaders({ pubkeys, userPubkey = null }) {
     // Repost loader (classic path)
     const repostRelays = getProfileLookupRelays();
     if (repostRelays.length > 0) {
-      const repostLoader = createTimelineLoader(
-        timedPool,
-        repostRelays,
-        { kinds: [6, 16], authors: pubkeys, limit: 50 },
-        { eventStore }
-      );
       subs.push(
-        repostLoader().subscribe({
+        fetchEvents(repostRelays, { kinds: [6, 16], authors: pubkeys, limit: 50 }).subscribe({
           error: (err) => console.error('profile-feed-loaders: Repost loader error:', err)
         })
       );

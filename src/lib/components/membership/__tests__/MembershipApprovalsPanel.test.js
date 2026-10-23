@@ -16,7 +16,7 @@ const hoisted = vi.hoisted(() => ({
   activeState: { pubkey: 'a'.repeat(64), subscribers: [] },
   /** @type {{ pubkeys: string[] }} */
   adminState: { pubkeys: ['a'.repeat(64)] },
-  formResponseLoaderMock: vi.fn(() => () => ({
+  formResponseLoaderMock: vi.fn(() => ({
     subscribe: () => ({ unsubscribe: () => {} })
   })),
   nip44DecryptMock: vi.fn(),

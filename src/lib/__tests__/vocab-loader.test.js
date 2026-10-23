@@ -5,30 +5,18 @@ vi.mock('$lib/stores/nostr-infrastructure.svelte', () => ({
   eventStore: { add: vi.fn(), model: vi.fn() },
   pool: {}
 }));
-vi.mock('$lib/loaders/base.js', async () => {
-  const { createTimelineLoader } = /** @type {any} */ (await import('applesauce-loaders/loaders'));
-  return {
-    timedPool: vi.fn(),
-    createCachedTimelineLoader: (
-      /** @type {string[]} */ relays,
-      /** @type {any} */ filter,
-      /** @type {any} */ opts = {}
-    ) => createTimelineLoader(vi.fn(), relays, filter, { eventStore: {}, ...opts })
-  };
-});
-vi.mock('applesauce-loaders/loaders', () => ({
-  createAddressLoader: vi.fn(() => () => ({ subscribe: () => ({ unsubscribe: () => {} }) })),
-  createTimelineLoader: vi.fn(() => () => ({ subscribe: () => ({ unsubscribe: () => {} }) }))
+vi.mock('$lib/loaders/base.js', () => ({
+  timedPool: vi.fn(),
+  addressLoader: vi.fn(() => ({ subscribe: () => ({ unsubscribe: () => {} }) })),
+  fetchEvents: vi.fn(() => ({ subscribe: () => ({ unsubscribe: () => {} }) }))
 }));
-// applesauce v7 moved block paging out of the SDK: the app's timeline loader is
-// the local port in $lib/loaders/timeline-loader.js and takes the mock above.
-vi.mock('$lib/loaders/timeline-loader.js', async () => {
-  const loaders = /** @type {any} */ (await import('applesauce-loaders/loaders'));
-  return { createTimelineLoader: loaders.createTimelineLoader };
-});
+vi.mock('applesauce-loaders/loaders', () => ({
+  createAddressLoader: vi.fn(() => () => ({ subscribe: () => ({ unsubscribe: () => {} }) }))
+}));
 
 import { loadConceptScheme, loadSchemeConcepts } from '../loaders/vocab-loader.js';
-import { createAddressLoader, createTimelineLoader } from 'applesauce-loaders/loaders';
+import { createAddressLoader } from 'applesauce-loaders/loaders';
+import { fetchEvents } from '$lib/loaders/base.js';
 import { VOCAB_KIND, CONCEPT_KIND } from 'nostr-vocab-core/constants';
 
 describe('vocab-loader', () => {
@@ -40,11 +28,10 @@ describe('vocab-loader', () => {
   it('loadSchemeConcepts queries CONCEPT_KIND timeline with #a filter on scheme coord', () => {
     const schemeCoord = `${VOCAB_KIND}:abc:schulfaecher`;
     const sub = loadSchemeConcepts(schemeCoord, ['wss://r.example']);
-    expect(createTimelineLoader).toHaveBeenCalledWith(
-      expect.anything(),
+    expect(fetchEvents).toHaveBeenCalledWith(
       ['wss://r.example'],
-      expect.objectContaining({ kinds: [CONCEPT_KIND], '#a': [schemeCoord] }),
-      expect.anything()
+      expect.objectContaining({ kinds: [CONCEPT_KIND], '#a': [schemeCoord], limit: 2000 }),
+      { cache: true }
     );
     sub?.unsubscribe?.();
   });

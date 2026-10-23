@@ -68,8 +68,7 @@
 
   // Load responses
   $effect(() => {
-    const loader = formResponseLoader(formAddress, formEvent.pubkey);
-    const sub = loader().subscribe();
+    const sub = formResponseLoader(formAddress, formEvent.pubkey).subscribe();
 
     const modelSub = eventStore.model(TimelineModel, { kinds: [1069] }).subscribe((events) => {
       const filtered = (events || []).filter((e) =>
