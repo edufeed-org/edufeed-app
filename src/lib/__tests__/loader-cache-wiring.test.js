@@ -13,21 +13,12 @@ const createAddressLoaderSpy = vi.fn((/** @type {any[]} */ ..._args) => addressL
 const createEventLoaderSpy = vi.fn((/** @type {any[]} */ ..._args) => vi.fn());
 /** @type {import('vitest').Mock<(...args: any[]) => any>} */
 const createUnifiedEventLoaderSpy = vi.fn((/** @type {any[]} */ ..._args) => vi.fn());
-/** @type {import('vitest').Mock<(...args: any[]) => any>} */
-const createTimelineLoaderSpy = vi.fn((/** @type {any[]} */ ..._args) => vi.fn());
 
 vi.mock('applesauce-loaders/loaders', () => ({
   createAddressLoader: createAddressLoaderSpy,
   createEventLoader: createEventLoaderSpy,
-  createUnifiedEventLoader: createUnifiedEventLoaderSpy,
-  createTimelineLoader: createTimelineLoaderSpy
+  createUnifiedEventLoader: createUnifiedEventLoaderSpy
 }));
-// applesauce v7 moved block paging out of the SDK: the app's timeline loader is
-// the local port in $lib/loaders/timeline-loader.js and takes the mock above.
-vi.mock('$lib/loaders/timeline-loader.js', async () => {
-  const loaders = /** @type {any} */ (await import('applesauce-loaders/loaders'));
-  return { createTimelineLoader: loaders.createTimelineLoader };
-});
 
 // Stub deps that base.js pulls in.
 vi.mock('$lib/stores/nostr-infrastructure.svelte', () => ({
@@ -75,27 +66,7 @@ describe('base.js loader cache wiring', () => {
   });
 });
 
-describe('createCachedTimelineLoader', () => {
-  it('passes cache: cacheRequest through to createTimelineLoader', async () => {
-    createTimelineLoaderSpy.mockClear();
-    const { createCachedTimelineLoader } = await import('$lib/loaders/base.js');
-    createCachedTimelineLoader(['wss://a'], { kinds: [1] });
-    const callArgs = createTimelineLoaderSpy.mock.calls[0];
-    // Signature: (request, relays, filters, opts)
-    const opts = callArgs[3];
-    expect(opts.cache).toBeTypeOf('function');
-    expect(opts.eventStore).toBeDefined();
-  });
-
-  it('merges caller opts without overwriting cache', async () => {
-    createTimelineLoaderSpy.mockClear();
-    const { createCachedTimelineLoader } = await import('$lib/loaders/base.js');
-    createCachedTimelineLoader(['wss://a'], { kinds: [1] }, { limit: 50 });
-    const opts = createTimelineLoaderSpy.mock.calls[0][3];
-    expect(opts.limit).toBe(50);
-    expect(opts.cache).toBeTypeOf('function');
-  });
-});
+// fetchEvents' cache wiring is covered by fetch-events.test.js.
 
 describe('cache hits are revalidated against relays', () => {
   it('addressLoader re-requests a cached replaceable with cache: false', async () => {

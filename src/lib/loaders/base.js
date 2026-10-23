@@ -1,39 +1,105 @@
 /**
- * Base loaders that bootstrap EventStore with relay knowledge.
- * These must be created before EventStore can intelligently fetch data.
+ * Base loaders that bootstrap EventStore with relay knowledge, plus the two
+ * one-shot request primitives every "latest N" surface uses.
  *
- * The loaders connect the EventStore to the relay pool, enabling automatic
- * data fetching without explicit configuration in each component.
+ * - `fetchEvents(relays, filters, { cache })` — one request (optionally seeded
+ *   from the IDB cache), events into the EventStore, completes when the relays
+ *   answer. This is what lists, detail pages, stats, deletion lookups and
+ *   relay/blossom lists semantically are. Nothing here pages.
+ * - `fetchOutbox(outboxes, filter)` — the same for an outbox map (relay →
+ *   users), requesting each relay once per newly seen author set.
+ *
+ * Surfaces that scroll (discover feeds, the dashboard relay feed) use
+ * `createTimelineFeed` from `./timeline-feed.js` instead — the applesauce v7
+ * window loader with prefetch-driven paging and per-relay status.
  */
-import { EMPTY, defer, of } from 'rxjs';
+import { EMPTY, defer, from, isObservable, merge, mergeAll, mergeMap, of } from 'rxjs';
 import { catchError } from 'rxjs/operators';
 import {
   createAddressLoader,
   createEventLoader,
   createUnifiedEventLoader
 } from 'applesauce-loaders/loaders';
-import { createTimelineLoader } from '$lib/loaders/timeline-loader.js';
+import { mapEventsToStore } from 'applesauce-core/observable';
 import { pool, eventStore } from '$lib/stores/nostr-infrastructure.svelte';
 import { getAllLookupRelays, getEventLoaderLookupRelays } from '$lib/helpers/relay-helper.js';
 import { cacheRequest } from '$lib/stores/event-cache.svelte.js';
 import { createRevalidatingCacheRequest } from '$lib/helpers/cache-revalidate.js';
 
 /**
- * Pool wrapper for use with createTimelineLoader.
+ * @typedef {import('nostr-tools').Filter} Filter
+ * @typedef {import('nostr-tools').Event} NostrEvent
+ * @typedef {import('applesauce-core/helpers/relay-selection').OutboxMap} OutboxMap
+ */
+
+/**
+ * Pool wrapper for one-shot requests.
  *
  * v6 removed the pool-level eoseTimeout (synthetic per-relay EOSE). v7's
  * default group.request() complete strategy (`completeAfterIdle`: 3s grace
  * after the first EOSE, then 1.5s idle, 15s cap) covers the healthy case; the
  * explicit timeout caps the all-relays-dead case, and catchError converts the
  * resulting TimeoutError — or v7's RelayGroupError when every relay failed —
- * into clean completion so pagination can proceed instead of erroring.
+ * into clean completion so callers can treat "done" uniformly.
  *
  * @param {string[]} relays
- * @param {import('nostr-tools').Filter[]} filters
+ * @param {Filter[]} filters
  * @returns {import('rxjs').Observable<any>}
  */
 export const timedPool = (relays, filters) =>
   pool.request(relays, filters, { timeout: 10_000 }).pipe(catchError(() => EMPTY));
+
+/** @param {Filter | Filter[]} filters */
+const asList = (filters) => (Array.isArray(filters) ? filters : [filters]);
+
+/**
+ * One-shot request: the given relays (through `timedPool`) and, with
+ * `cache: true`, the IDB cache for the same filters. Every event is added to
+ * the shared EventStore; the observable emits the new ones and completes once
+ * the relays have answered (or the 10 s cap hit). Put `limit` in the filter.
+ *
+ * @param {string[]} relays
+ * @param {Filter | Filter[]} filters
+ * @param {{ cache?: boolean }} [opts]
+ * @returns {import('rxjs').Observable<NostrEvent>}
+ */
+export function fetchEvents(relays, filters, { cache = false } = {}) {
+  const list = asList(filters);
+  const cache$ = cache ? defer(() => from(cacheRequest(list))).pipe(mergeAll()) : EMPTY;
+  return merge(cache$, timedPool(relays, list)).pipe(mapEventsToStore(eventStore, true));
+}
+
+/**
+ * One-shot request across an outbox map (relay → users). Each relay is asked
+ * for `filter` restricted to its users; when the map emits again (the
+ * OutboxModel re-emits as kind-10002s arrive) a known relay is asked only for
+ * its added users and a new relay for all of its users. Completes once the
+ * map has completed and every request has answered.
+ *
+ * @param {OutboxMap | import('rxjs').Observable<OutboxMap>} outboxes
+ * @param {Omit<Filter, 'authors'>} filter
+ * @returns {import('rxjs').Observable<NostrEvent>}
+ */
+export function fetchOutbox(outboxes, filter) {
+  /** @type {Map<string, Set<string>>} relay → authors already requested there */
+  const asked = new Map();
+  const maps$ = isObservable(outboxes) ? outboxes : of(outboxes);
+  return maps$.pipe(
+    mergeMap((outboxMap) => {
+      /** @type {import('rxjs').Observable<NostrEvent>[]} */
+      const requests = [];
+      for (const [relay, users] of Object.entries(outboxMap)) {
+        const seen = asked.get(relay) ?? new Set();
+        const added = users.map((u) => u.pubkey).filter((pubkey) => !seen.has(pubkey));
+        if (added.length === 0) continue;
+        for (const pubkey of added) seen.add(pubkey);
+        asked.set(relay, seen);
+        requests.push(fetchEvents([relay], { ...filter, authors: added }));
+      }
+      return requests.length > 0 ? merge(...requests) : EMPTY;
+    })
+  );
+}
 
 // lookupRelays is applesauce's fallback-on-miss slot and must include profile
 // indexer relays (e.g. purplepag.es) so kind 0 lookups can resolve when the
@@ -95,52 +161,17 @@ const unifiedLoader = createUnifiedEventLoader(pool, {
 eventStore.eventLoader = unifiedLoader;
 
 /**
- * Wraps createTimelineLoader with the shared pool, eventStore, and IDB cache.
- * Prefer this over calling createTimelineLoader directly so cache wiring
- * stays uniform across the codebase.
- *
- * @param {string[]} relays
- * @param {import('nostr-tools').Filter | import('nostr-tools').Filter[]} filter
- * @param {object} [opts] - extra options (e.g. limit) merged over defaults
- */
-export const createCachedTimelineLoader = (relays, filter, opts = {}) =>
-  createTimelineLoader(timedPool, relays, filter, {
-    eventStore,
-    cache: cacheRequest,
-    ...opts
-  });
-
-/**
- * Factory: Create a timeline loader for user's deletion events (NIP-09)
- * This is a general-purpose deletion loader that can be used for any deletable content.
- *
- * Fetches from all lookup relays (app relays + fallback) to ensure deletions are found
- * regardless of which relays the user published them to.
- *
- * @param {string} userPubkey - The pubkey of the user whose deletions to load
- * @returns {Function} Timeline loader function that returns an Observable
- *
- * @example
- * // Load a user's deletion events
- * const deletionLoader = userDeletionLoader(userPubkey);
- * deletionLoader().subscribe(deletionEvent => {
- *   // Process deletion event
- *   console.log('Deletion event:', deletionEvent);
- * });
- */
-export const userDeletionLoader = (userPubkey) => authorsDeletionLoader([userPubkey]);
-
-/**
- * Factory: Create a timeline loader for the deletion events (NIP-09) of SEVERAL
- * authors at once.
+ * The NIP-09 deletion events of SEVERAL authors at once, from all lookup
+ * relays (app relays + fallback), so deletions are found regardless of which
+ * relays the author published them to.
  *
  * The batched form exists because deletions by OTHER people were never loaded
- * anywhere: `userDeletionLoader` is called only by the calendar paths, and only
- * for the active user. Everything else relied on `hydrateDeletions()`, which
- * only replays kind-5s already sitting in IDB. The effect is that a resource
- * its author deleted keeps rendering for anyone holding a stale copy — and
- * stays shareable, which is how a repost pointing at a resource deleted 17 days
- * earlier got published (laoc, 2026-08-24).
+ * anywhere: the single-author form is called only by the calendar paths, and
+ * only for the active user. Everything else relied on `hydrateDeletions()`,
+ * which only replays kind-5s already sitting in IDB. The effect is that a
+ * resource its author deleted keeps rendering for anyone holding a stale copy
+ * — and stays shareable, which is how a repost pointing at a resource deleted
+ * 17 days earlier got published (laoc, 2026-08-24).
  *
  * Feeding the eventStore is the whole job: applesauce's DeleteManager then
  * drops the deleted events out of every TimelineModel by itself.
@@ -149,16 +180,18 @@ export const userDeletionLoader = (userPubkey) => authorsDeletionLoader([userPub
  * card is what starves a relay connection.
  *
  * @param {string[]} pubkeys - Authors whose deletions to load
- * @returns {Function} Timeline loader function that returns an Observable
+ * @returns {import('rxjs').Observable<NostrEvent>}
  */
-export const authorsDeletionLoader = (pubkeys) =>
-  createTimelineLoader(
-    timedPool,
-    getAllLookupRelays(), // Use all lookup relays to find deletions published anywhere
-    {
-      kinds: [5], // NIP-09 deletion events
-      authors: pubkeys,
-      limit: 500 // Higher limit since deletions accumulate over time
-    },
-    { eventStore }
-  );
+export const fetchAuthorsDeletions = (pubkeys) =>
+  fetchEvents(getAllLookupRelays(), {
+    kinds: [5],
+    authors: pubkeys,
+    limit: 500 // Higher limit since deletions accumulate over time
+  });
+
+/**
+ * The NIP-09 deletion events of ONE user (any deletable content type).
+ * @param {string} userPubkey
+ * @returns {import('rxjs').Observable<NostrEvent>}
+ */
+export const fetchUserDeletions = (userPubkey) => fetchAuthorsDeletions([userPubkey]);
