@@ -3,6 +3,7 @@
  * Manages notification loaders, read state (NIP-78 kind 30078), and reactive counts.
  */
 import { TimelineModel } from 'applesauce-core/models';
+import { filter, map, take } from 'rxjs';
 import { withoutChannelMeetings } from '$lib/helpers/calendar-timing.js';
 import { finalizeDraft } from '$lib/helpers/event-factory.js';
 import { eventStore, pool } from '$lib/stores/nostr-infrastructure.svelte';
@@ -520,21 +521,25 @@ export function initializeInbox(pubkey) {
 
   const calSub = calendar$.subscribe({
     complete: () => {
-      const calModel = eventStore.model(TimelineModel, {
-        kinds: [31922, 31923],
-        authors: [pubkey]
-      });
-      const coordSub = calModel.subscribe((all) => {
-        // A channel meeting's coordinate must not go out in a public RSVP REQ.
-        const events = withoutChannelMeetings(all ?? []);
-        if (!events.length) return;
-        const coords = events.map((e) => {
-          const d = e.tags.find((t) => t[0] === 'd')?.[1] || '';
-          return `${e.kind}:${e.pubkey}:${d}`;
+      // The model replays synchronously on subscribe; take(1) ends the
+      // subscription itself (a self-referencing unsubscribe would hit the
+      // handle before it is initialised).
+      const coordSub = /** @type {import('rxjs').Observable<any[]>} */ (
+        eventStore.model(TimelineModel, { kinds: [31922, 31923], authors: [pubkey] })
+      )
+        .pipe(
+          // A channel meeting's coordinate must not go out in a public RSVP REQ.
+          map((all) => withoutChannelMeetings(all ?? [])),
+          filter((events) => events.length > 0),
+          take(1)
+        )
+        .subscribe((events) => {
+          const coords = events.map((e) => {
+            const d = e.tags.find((/** @type {string[]} */ t) => t[0] === 'd')?.[1] || '';
+            return `${e.kind}:${e.pubkey}:${d}`;
+          });
+          loadRsvpNotifications(coords);
         });
-        loadRsvpNotifications(coords);
-        coordSub.unsubscribe();
-      });
       subscriptions.push(coordSub);
     }
   });
@@ -550,16 +555,16 @@ export function initializeInbox(pubkey) {
 
   const pollSub = polls$.subscribe({
     complete: () => {
-      const pollModel = eventStore.model(TimelineModel, {
-        kinds: [1068],
-        authors: [pubkey]
-      });
-      const idsSub = pollModel.subscribe((events) => {
-        if (!events?.length) return;
-        const ids = events.map((e) => e.id);
-        loadPollResponseNotifications(ids);
-        idsSub.unsubscribe();
-      });
+      const idsSub = /** @type {import('rxjs').Observable<any[]>} */ (
+        eventStore.model(TimelineModel, { kinds: [1068], authors: [pubkey] })
+      )
+        .pipe(
+          filter((events) => !!events?.length),
+          take(1)
+        )
+        .subscribe((events) => {
+          loadPollResponseNotifications(events.map((e) => e.id));
+        });
       subscriptions.push(idsSub);
     }
   });

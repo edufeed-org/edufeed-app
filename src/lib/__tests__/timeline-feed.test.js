@@ -4,6 +4,7 @@
 // the tests pin what the feed asks for and what it reports, not the SDK.
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { EventStore } from 'applesauce-core';
+import { addSeenRelay } from 'applesauce-core/helpers/relays';
 import { concat, NEVER, of, Subject, throwError } from 'rxjs';
 
 vi.mock('$lib/stores/nostr-infrastructure.svelte', () => ({
@@ -61,6 +62,8 @@ function fakeRelays(data, override) {
       )
       .sort((a, b) => b.created_at - a.created_at)
       .slice(0, filter.limit ?? Infinity);
+    // The real pool marks every event with the relay it came from
+    for (const e of events) addSeenRelay(e, relay);
     return override?.(relay, filter, events) ?? of(...events);
   });
   return {
@@ -170,9 +173,14 @@ describe('createTimelineFeed', () => {
 
   it('loadMore() while a prefetch is in flight sets pending and applies once it settles', async () => {
     const t = now();
-    const held = new Subject();
-    const { request } = fakeRelays({ [RA]: series('a', 100, { now: t }) }, (relay, filter) =>
-      filter.since === undefined ? held : undefined
+    const held = /** @type {Subject<any> & { events?: any[] }} */ (new Subject());
+    const { request } = fakeRelays(
+      { [RA]: series('a', 100, { now: t }) },
+      (relay, filter, events) => {
+        if (filter.since !== undefined) return undefined;
+        held.events = events; // served later, all at once
+        return held;
+      }
     );
     const { feed } = makeFeed({ request, getRelays: () => [RA] });
     const sub = feed.events$.subscribe();
@@ -183,7 +191,7 @@ describe('createTimelineFeed', () => {
     expect(feed.getStatus().pending).toBe(true);
     const sinceBefore = feed.getStatus().since;
 
-    for (const e of series('a', 50, { now: t })) held.next(e);
+    for (const e of held.events ?? []) held.next(e);
     held.complete();
     await flush();
     expect(feed.getStatus().pending).toBe(false);
@@ -426,6 +434,95 @@ describe('createTimelineFeed', () => {
     expect(performance.now() - started).toBeLessThan(200);
     await flush();
     expect(calls.length - n).toBeLessThanOrEqual(1);
+    expect(feed.getStatus().pending).toBe(false);
+    sub.unsubscribe();
+  });
+
+  it('counts only events seen on the feed relays when paging: foreign store events do not move the window', async () => {
+    const t = now();
+    const { request } = fakeRelays({ [RA]: series('a', 100, { now: t }) });
+    const { feed, eventStore } = makeFeed({ request, getRelays: () => [RA] });
+    const sub = feed.events$.subscribe();
+    await flush();
+    const { since } = feed.getStatus();
+    // Events of the same kind from elsewhere in the app (another relay, the
+    // IDB cache) sit in the shared store right below the window
+    for (const e of series('foreign', 30, { now: t, gap: 61, step: 1, pubkey: B })) {
+      if (e.created_at < since) eventStore.add(e);
+    }
+    const otherRelay = series('other', 30, { now: t, gap: 62, step: 1, pubkey: B });
+    for (const e of otherRelay) {
+      addSeenRelay(e, 'wss://elsewhere.example/');
+      if (e.created_at < since) eventStore.add(e);
+    }
+
+    feed.loadMore();
+    await flush();
+    const own = eventStore
+      .getTimeline({ kinds: [1], authors: [A], until: since - 1 })
+      .filter((e) => e.id.startsWith('a-'));
+    expect(feed.getStatus().since).toBe(own[19].created_at);
+    sub.unsubscribe();
+  });
+
+  it('applies a pending loadMore() exactly once when several statuses settle in one burst', async () => {
+    const t = now();
+    let authors = [A];
+    const held = /** @type {Subject<any> & { events?: any[] }} */ (new Subject());
+    const data = {
+      [RA]: [
+        ...series('a', 10, { now: t, pubkey: A }),
+        ...series('b', 100, { now: t, gap: 30, pubkey: B })
+      ]
+    };
+    const { request } = fakeRelays(data, (relay, filter, events) => {
+      if (filter.authors?.length === 1 && filter.authors[0] === B && filter.since === undefined) {
+        held.events = events; // deliver B's page later, all at once
+        return held;
+      }
+      return undefined;
+    });
+    const { feed, eventStore } = makeFeed({
+      request,
+      getRelays: () => [RA],
+      getFilter: () => ({ kinds: [1], authors })
+    });
+    const sub = feed.events$.subscribe();
+    await flush();
+    expect(feed.getStatus().exhausted).toBe(true); // A has only 10 events
+
+    authors = [A, B];
+    feed.sync();
+    await flush();
+    expect(feed.getStatus().settled).toBe(false);
+    feed.loadMore();
+    expect(feed.getStatus().pending).toBe(true);
+    const { since: oldSince } = feed.getStatus();
+
+    for (const e of held.events ?? []) held.next(e);
+    held.complete();
+    await flush(10);
+
+    const older = eventStore.getTimeline({ kinds: [1], authors: [A, B], until: oldSince - 1 });
+    expect(feed.getStatus().pending).toBe(false);
+    // One page, not two
+    expect(feed.getStatus().since).toBe(older[19].created_at);
+    sub.unsubscribe();
+  });
+
+  it('does not close the window to 0 while a relay is only failing', async () => {
+    const { request } = fakeRelays({}, (relay) =>
+      relay === RA ? throwError(() => new Error('connection refused')) : undefined
+    );
+    const { feed } = makeFeed({ request, getRelays: () => [RA] });
+    const sub = feed.events$.subscribe();
+    await flush(10);
+    const { since } = feed.getStatus();
+    expect(feed.getStatus().relays[0]?.state).toBe('incomplete');
+
+    feed.loadMore();
+    await flush();
+    expect(feed.getStatus().since).toBe(since);
     expect(feed.getStatus().pending).toBe(false);
     sub.unsubscribe();
   });

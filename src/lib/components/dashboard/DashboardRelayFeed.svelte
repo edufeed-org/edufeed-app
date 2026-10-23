@@ -56,7 +56,10 @@
     const current = createTimelineFeed({
       getRelays: () => [relayUrl],
       getFilter: () => ({ kinds: ALL_FEED_KINDS }),
-      pageSize: PAGE_SIZE
+      pageSize: PAGE_SIZE,
+      // Cached events carry no relay provenance and never pass the display
+      // filter below, so warming the store from IDB only costs a query here.
+      cacheWarmLimit: 0
     });
     feed = current;
     const eventsSub = current.events$.subscribe({

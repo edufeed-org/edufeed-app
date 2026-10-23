@@ -12,9 +12,13 @@
  *   how dense the relay is — a time-based initial span would page a busy relay
  *   sequentially before anything could be shown.
  * - `loadMore()` moves `since` down to the `pageSize`-th buffered older event
- *   (the k-th newest of the union is never older than the k-th newest of any
- *   relay's own buffer, so the widened window is already covered everywhere
- *   and the next page prefetches in the background). With the buffer still
+ *   SEEN ON THIS FEED'S RELAYS (the k-th newest of the union is never older
+ *   than the k-th newest of any relay's own buffer, so the widened window is
+ *   already covered everywhere and the next page prefetches in the
+ *   background). The shared EventStore also holds same-kind events from other
+ *   surfaces and the IDB cache; counting those would move the window by a few
+ *   seconds and leave the relay's buffer untouched — the dashboard relay feed
+ *   would click "load more" with nothing appearing. With the buffer still
  *   filling it waits (`pending`); with every relay paged to the beginning
  *   there is nothing left (`exhausted`).
  * - Relays and the filter are reactive (`sync()`): `loadBlocksFromFilterMap`
@@ -38,6 +42,8 @@
  */
 import { logger as baseLogger } from 'applesauce-core';
 import { isFilterEqual } from 'applesauce-core/helpers/filter';
+import { getSeenRelays } from 'applesauce-core/helpers/relays';
+import { normalizeURL } from 'applesauce-core/helpers/url';
 import { unixNow } from 'applesauce-core/helpers/time';
 import { mapEventsToStore } from 'applesauce-core/observable';
 import { loadBlocksFromFilterMap } from 'applesauce-loaders/loaders';
@@ -140,7 +146,9 @@ const sameList = (a, b) => a.length === b.length && a.every((x, i) => x === b[i]
 /** @param {TimelineStatus} s */
 const isSettled = (s) => s.state === 'covered' || s.state === 'incomplete';
 /** @param {TimelineStatus} s */
-const isDone = (s) => s.state === 'incomplete' || (s.state === 'covered' && s.buffer.since === 0);
+const isCoveredToZero = (s) => s.state === 'covered' && s.buffer.since === 0;
+/** @param {TimelineStatus} s */
+const isDone = (s) => s.state === 'incomplete' || isCoveredToZero(s);
 
 /**
  * @param {TimelineFeedOptions} options
@@ -170,6 +178,7 @@ export function createTimelineFeed(options) {
   let relayStatuses = [];
   let pending = false;
   let active = false;
+  let retryQueued = false;
 
   /** @returns {TimelineFeedStatus} */
   function compute() {
@@ -194,8 +203,16 @@ export function createTimelineFeed(options) {
     status$.next(next);
     // A page the buffer could not serve: retry once the relays have settled.
     // Deferred so a window change never re-enters the loader from its own
-    // status callback.
-    if (pending && next.settled) queueMicrotask(loadMore);
+    // status callback, and queued once: one settle can arrive as a burst of
+    // statuses (one per relay and author group), and a second retry after the
+    // first moved the window would page twice.
+    if (pending && next.settled && !retryQueued) {
+      retryQueued = true;
+      queueMicrotask(() => {
+        retryQueued = false;
+        if (pending) loadMore();
+      });
+    }
   }
 
   /** @param {TimelineStatus} next */
@@ -211,6 +228,20 @@ export function createTimelineFeed(options) {
     publish();
   }
 
+  /**
+   * Events older than the window that one of THIS feed's relays delivered, newest first.
+   * @param {number} since
+   */
+  function bufferedBelow(since) {
+    const relays = new Set(relays$.value.map((r) => normalizeURL(r)));
+    return eventStore.getTimeline({ ...filter$.value, until: since - 1 }).filter((event) => {
+      const seen = getSeenRelays(event);
+      if (!seen) return false;
+      for (const relay of seen) if (relays.has(relay)) return true;
+      return false;
+    });
+  }
+
   function loadMore() {
     if (!active) return;
     const { since, until } = window$.value;
@@ -220,16 +251,24 @@ export function createTimelineFeed(options) {
       return;
     }
     const current = compute();
-    const older = eventStore.getTimeline({ ...filter$.value, until: since - 1 });
+    const older = bufferedBelow(since);
     if (older.length >= pageSize) {
       pending = false;
       window$.next({ since: older[pageSize - 1].created_at, until });
     } else if (!current.settled) {
       pending = true;
     } else {
-      // Nothing more is coming: take what the relays had, or close the window.
       pending = false;
-      window$.next({ since: older.length > 0 ? older[older.length - 1].created_at : 0, until });
+      if (older.length > 0) {
+        // Take what the relays had
+        window$.next({ since: older[older.length - 1].created_at, until });
+      } else if (current.relays.length > 0 && current.relays.every(isCoveredToZero)) {
+        // Every relay is paged to the beginning: nothing is left anywhere
+        window$.next({ since: 0, until });
+      }
+      // Otherwise a relay is failing (backoff) or the store disagrees with the
+      // relays: keep the window — closing it to 0 would make a recovering
+      // relay crawl its whole history as visible gaps.
     }
     publish();
   }
