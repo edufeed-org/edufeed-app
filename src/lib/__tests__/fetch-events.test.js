@@ -9,12 +9,12 @@ import { lastValueFrom, of, Subject, throwError, toArray } from 'rxjs';
 const eventStore = new EventStore({ verifyEvent: () => true });
 const request = vi.fn();
 vi.mock('$lib/stores/nostr-infrastructure.svelte', () => ({
-  pool: { request: (...args) => request(...args) },
+  pool: { request: (/** @type {any[]} */ ...args) => request(...args) },
   eventStore
 }));
 const cacheRequest = vi.fn(async () => [ev(250, 'cached')]);
 vi.mock('$lib/stores/event-cache.svelte.js', () => ({
-  cacheRequest: (...args) => cacheRequest(...args)
+  cacheRequest: (/** @type {any} */ filters) => cacheRequest(filters)
 }));
 vi.mock('$lib/helpers/relay-helper.js', () => ({
   getAllLookupRelays: () => ['wss://lookup.example/'],

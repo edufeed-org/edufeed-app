@@ -25,9 +25,10 @@ export { communikeyTimelineLoader } from './community.js';
 // Profile utilities
 export { profileLoader, loadUserProfile, kind1Loader } from './profile.js';
 
-// Article loaders
-export { articleTimelineLoader } from './articles.js';
-export { ambTimelineLoader } from './amb.js';
+// Discover feeds (applesauce v7 window loader, see timeline-feed.js)
+export { createArticleFeed } from './articles.js';
+export { createAmbFeed } from './amb.js';
+export { createKanbanFeed } from './kanban.js';
 
 // Targeted publications loaders
 export {

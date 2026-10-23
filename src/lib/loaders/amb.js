@@ -2,19 +2,23 @@
  * AMB resource loading utilities for kind 30142 educational resources.
  */
 import { getEducationalRelays } from '$lib/helpers/relay-helper.js';
-import { createCachedTimelineLoader } from './base.js';
+import { createTimelineFeed } from './timeline-feed.js';
 import { applyCuratedFilter } from '$lib/services/curated-authors-service.svelte.js';
 import { createCommunityContentLoader } from './community-content-loader.js';
 
 /**
- * Factory: Create a stateful timeline loader for kind 30142 AMB resources with automatic pagination
- * The returned loader function automatically tracks state and fetches the next chronological block on each call
- * @param {number} limit - Maximum number of resources to load per batch
- * @returns {Function} Stateful timeline loader function (call with no args, returns Observable)
+ * The discover learning feed: kind 30142 from the educational relays,
+ * curated/WoT authors applied. Relays and the filter are re-read on
+ * `feed.sync()`.
+ * @param {number} [pageSize=20] - Resources one "load more" adds
+ * @returns {import('./timeline-feed.js').TimelineFeed}
  */
-export function ambTimelineLoader(limit = 20) {
-  const filter = applyCuratedFilter({ kinds: [30142] });
-  return createCachedTimelineLoader(getEducationalRelays(), filter, { limit });
+export function createAmbFeed(pageSize = 20) {
+  return createTimelineFeed({
+    getRelays: getEducationalRelays,
+    getFilter: () => applyCuratedFilter({ kinds: [30142] }),
+    pageSize
+  });
 }
 
 /** Hook: Load AMB resources for a specific community.
