@@ -1063,3 +1063,30 @@ describe('event-cache deletion sync', () => {
     expect(await stored()).toBeDefined();
   });
 });
+
+describe('event-cache read bound', () => {
+  beforeEach(async () => {
+    vi.resetModules();
+    const FDBFactory = (await import('fake-indexeddb/lib/FDBFactory')).default;
+    globalThis.indexedDB = /** @type {any} */ (new FDBFactory());
+  });
+
+  it('cacheRequest gives up on a cache query that does not answer within the read timeout', async () => {
+    const { cacheRequest, dbReady, nostrIDB, CACHE_READ_TIMEOUT_MS } = await import(
+      '$lib/stores/event-cache.svelte.js'
+    );
+    await dbReady;
+    // A wedged IndexedDB: the query never settles
+    vi.spyOn(/** @type {any} */ (nostrIDB), 'query').mockReturnValue(
+      /** @type {any} */ (new Promise(() => {}))
+    );
+    vi.useFakeTimers();
+    try {
+      const pending = cacheRequest([{ kinds: [30023] }]);
+      await vi.advanceTimersByTimeAsync(CACHE_READ_TIMEOUT_MS + 1);
+      expect(await pending).toEqual([]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
