@@ -31,6 +31,8 @@
     initializeAllCuratedAuthors,
     initializeAllWotAuthors
   } from '$lib/services/curated-authors-service.svelte.js';
+  import { initBlockedAuthors } from '$lib/services/blocked-authors.svelte.js';
+  import { initCalendarHiddenSources } from '$lib/services/calendar-sources.svelte.js';
   import { browser } from '$app/environment';
   import { afterNavigate, beforeNavigate, goto } from '$app/navigation';
   import { resolve } from '$app/paths';
@@ -265,7 +267,14 @@
     if (!browser) return;
     const TIMEOUT_MS = 3_000;
     Promise.race([
-      Promise.all([initializeAllCuratedAuthors(), initializeAllWotAuthors()]),
+      Promise.all([
+        initializeAllCuratedAuthors(),
+        initializeAllWotAuthors(),
+        // Deployment block list + hidden calendar sources: direct pubkeys
+        // apply at once, kind 30000 lists resolve alongside the curated sets
+        initBlockedAuthors(),
+        initCalendarHiddenSources()
+      ]),
       new Promise((resolve) => setTimeout(resolve, TIMEOUT_MS))
     ])
       .then(() => {

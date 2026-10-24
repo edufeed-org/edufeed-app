@@ -267,6 +267,11 @@ export function GET() {
       kanban: resolveWotConfig(env, 'KANBAN')
     },
 
+    // Deployment pubkey lists (npub / hex / kind 30000 list naddrs):
+    // authors hidden everywhere, and bulk calendar sources hidden by default
+    blockedPubkeys: parseArray(env.BLOCKED_PUBKEYS),
+    calendarHiddenPubkeys: parseArray(env.CALENDAR_HIDDEN_PUBKEYS),
+
     // NIP-65 relay list discovery
     relayListLookupRelays: parseArray(env.RELAY_LIST_LOOKUP_RELAYS),
 
