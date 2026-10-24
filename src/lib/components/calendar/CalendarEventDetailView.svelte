@@ -8,7 +8,7 @@
 
 <script>
   import { resolve } from '$app/paths';
-  import { eventStore, pool } from '$lib/stores/nostr-infrastructure.svelte';
+  import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
   import { useActiveUser } from '$lib/stores/accounts.svelte';
   import { runtimeConfig } from '$lib/stores/config.svelte.js';
   import { formatCalendarDate } from '$lib/helpers/calendar.js';
@@ -41,6 +41,8 @@
   import InlineRsvp from '$lib/components/calendar/InlineRsvp.svelte';
   import AttendeeIndicator from '$lib/components/calendar/AttendeeIndicator.svelte';
   import { useCalendarEventRsvps } from '$lib/stores/calendar-event-rsvps.svelte.js';
+  import { fetchEvents } from '$lib/loaders/base.js';
+  import { TimelineModel } from 'applesauce-core/models';
   import { manager } from '$lib/stores/accounts.svelte';
   import { transformRsvps } from '$lib/helpers/rsvpUtils.js';
   import * as m from '$lib/paraglide/messages';
@@ -125,41 +127,28 @@
   // Transform raw RSVPs into grouped data using helper
   const transformedRsvps = $derived(transformRsvps(rsvpData.rsvps, userPubkey));
 
-  // Subscribe to featured calendars
+  // Featured calendars: kind 31924 calendars that reference this event.
+  // Loader → EventStore → model (store first: a calendar already loaded on
+  // another surface shows at once; the request completes when the relays
+  // have answered).
   $effect(() => {
     const address = eventAddress; // read first (effect early-return rule)
     if (!address || channelMeeting) return;
-
     isLoadingCalendars = true;
-
-    // Query for calendars (kind 31924) that reference this event.
-    // v6: request() completes after EOSE (or timeout) and emits only events.
-    const subscription = pool
-      .group(getCalendarRelays())
-      .request({ kinds: [31924], '#a': [address] }, { timeout: 10_000 })
-      .subscribe({
-        next: (event) => {
-          if (event?.kind !== 31924) return;
-
-          // Add to eventStore
-          eventStore.add(event);
-
-          // Add to featured calendars if not already present
-          const existingIndex = featuredCalendars.findIndex((c) => c.id === event.id);
-          if (existingIndex === -1) {
-            featuredCalendars = [...featuredCalendars, event];
-          }
-        },
-        error: (error) => {
-          console.error('Calendar request error:', error);
-          isLoadingCalendars = false;
-        },
-        complete: () => {
-          isLoadingCalendars = false;
-        }
-      });
-
-    return () => subscription.unsubscribe();
+    const filter = { kinds: [31924], '#a': [address] };
+    const loadSub = fetchEvents(getCalendarRelays(), filter).subscribe({
+      complete: () => {
+        isLoadingCalendars = false;
+      }
+    });
+    const modelSub = eventStore.model(TimelineModel, filter).subscribe((calendars) => {
+      featuredCalendars = calendars || [];
+      if (featuredCalendars.length > 0) isLoadingCalendars = false;
+    });
+    return () => {
+      loadSub.unsubscribe();
+      modelSub.unsubscribe();
+    };
   });
 
   /**

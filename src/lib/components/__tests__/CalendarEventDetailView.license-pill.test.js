@@ -32,8 +32,9 @@ const ME = 'a'.repeat(64);
 
 vi.mock('$app/paths', () => ({ resolve: (p) => p }));
 vi.mock('$lib/stores/nostr-infrastructure.svelte', () => ({
-  eventStore: { add: vi.fn() },
-  pool: { group: (...a) => h.group(...a) }
+  // featured calendars: fetchEvents (pool.request) + eventStore.model
+  eventStore: { add: vi.fn(), model: () => NEVER },
+  pool: { group: (...a) => h.group(...a), request: () => NEVER }
 }));
 vi.mock('$lib/stores/accounts.svelte', () => ({
   useActiveUser: () => () => ({ pubkey: ME }),

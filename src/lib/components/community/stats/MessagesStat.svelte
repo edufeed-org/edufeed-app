@@ -1,66 +1,47 @@
 <script>
   import { ChatIcon } from '$lib/components/icons';
-  import { pool } from '$lib/stores/nostr-infrastructure.svelte';
+  import { TimelineModel } from 'applesauce-core/models';
+  import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
+  import { fetchEvents } from '$lib/loaders/base.js';
+  import { getAppRelaysForCategory } from '$lib/services/app-relay-service.svelte.js';
   import { runtimeConfig } from '$lib/stores/config.svelte.js';
   import * as m from '$lib/paraglide/messages';
 
-  // Props
+  /** @type {{ communityId: string }} */
   let { communityId } = $props();
 
-  // Local state - completely isolated
+  // The community's chat messages (kind 9), read from the EventStore like the
+  // chat itself. $state.raw: Nostr events.
   /** @type {any[]} */
   let messages = $state.raw([]);
   let isLoading = $state(true);
-  let error = $state(null);
 
-  /**
-   * Get communikey relays from app config
-   * @returns {string[]}
-   */
-  function getCommunikeyRelays() {
-    return [
-      ...(runtimeConfig.appRelays?.communikey || []),
-      ...(runtimeConfig.fallbackRelays || [])
-    ];
-  }
+  // Same relay set as the community chat (app communikey relays + fallback)
+  const chatRelays = $derived([
+    ...getAppRelaysForCategory('communikey'),
+    ...(runtimeConfig.fallbackRelays || [])
+  ]);
 
-  // Load messages
+  // Loader → EventStore → model. Store first: whatever the chat already
+  // loaded counts at once; the request completes when the relays answer.
   $effect(() => {
-    if (!communityId) {
-      return;
-    }
-
-    // Reset state
-    messages = [];
+    const id = communityId;
+    const relays = chatRelays;
+    if (!id) return;
     isLoading = true;
-    error = null;
-
-    // v6: subscription() emits only events (no 'EOSE' marker) — resolve the
-    // spinner on the first event or via the fallback timer.
-    const spinnerTimer = setTimeout(() => {
-      isLoading = false;
-    }, 4000);
-
-    const sub = pool
-      .group(getCommunikeyRelays())
-      .subscription({ kinds: [9], '#h': [communityId] })
-      .subscribe({
-        next: (/** @type {any} */ event) => {
-          if (event && typeof event === 'object' && event.kind === 9) {
-            isLoading = false;
-            messages = [...messages, event];
-          }
-        },
-        error: (/** @type {any} */ err) => {
-          console.error('💬 MessagesStat: Error loading messages:', err);
-          error = err.message || 'Failed to load messages';
-          isLoading = false;
-        }
-      });
-
+    const filter = { kinds: [9], '#h': [id] };
+    const loadSub = fetchEvents(relays, filter).subscribe({
+      complete: () => {
+        isLoading = false;
+      }
+    });
+    const modelSub = eventStore.model(TimelineModel, filter).subscribe((events) => {
+      messages = events || [];
+      if (messages.length > 0) isLoading = false;
+    });
     return () => {
-      clearTimeout(spinnerTimer);
-      sub.unsubscribe();
+      loadSub.unsubscribe();
+      modelSub.unsubscribe();
     };
   });
 
@@ -76,9 +57,6 @@
     <div class="stat-value text-accent">
       <span class="loading loading-sm loading-spinner"></span>
     </div>
-  {:else if error}
-    <div class="stat-value text-sm text-error">{m.community_stats_messages_error()}</div>
-    <div class="stat-desc text-xs text-error">{error}</div>
   {:else}
     <div class="stat-value text-accent">{messageCount}</div>
   {/if}
