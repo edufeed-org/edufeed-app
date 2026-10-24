@@ -31,6 +31,10 @@ vi.mock('$lib/services/publish-service.js', () => ({
   })
 }));
 
+vi.mock('$lib/helpers/protected-publish-feedback.js', () => ({
+  announceProtectedPublish: vi.fn()
+}));
+
 vi.mock('$lib/services/app-relay-service.svelte.js', () => ({
   getAppRelaysForCategory: vi.fn(() => ['wss://longform.relay'])
 }));
@@ -39,6 +43,7 @@ import { manager } from '$lib/stores/accounts.svelte';
 import { createArticle, updateArticle } from '../stores/article-actions.svelte.js';
 import { publishEventOptimistic } from '$lib/services/publish-service.js';
 import { encodeEventToNaddr } from '$lib/helpers/nostrUtils.js';
+import { announceProtectedPublish } from '$lib/helpers/protected-publish-feedback.js';
 
 describe('createArticle', () => {
   beforeEach(() => {
@@ -198,6 +203,51 @@ describe('createArticle', () => {
       [],
       { communityEvent: null, companions: [licenseEvent] }
     );
+  });
+});
+
+describe('protected articles (NIP-70)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    /** @type {any} */ (manager).active = {
+      pubkey: 'abc123',
+      signEvent: vi.fn(async (/** @type {any} */ template) => {
+        lastSignedEvent = { ...template, id: 'p-id', pubkey: 'abc123', sig: 's' };
+        return lastSignedEvent;
+      })
+    };
+  });
+
+  it('adds the ["-"] tag and reports the accepting relays when protected', async () => {
+    await createArticle({ title: 'T', content: 'Body', protected: true });
+    expect(lastSignedEvent.tags).toContainEqual(['-']);
+    const opts = /** @type {any} */ (publishEventOptimistic).mock.calls[0][2];
+    expect(opts.onStatusChange).toBe(announceProtectedPublish);
+  });
+
+  it('carries no ["-"] tag by default', async () => {
+    await createArticle({ title: 'T', content: 'Body' });
+    expect(lastSignedEvent.tags.some((/** @type {string[]} */ t) => t[0] === '-')).toBe(false);
+    const opts = /** @type {any} */ (publishEventOptimistic).mock.calls[0][2];
+    expect(opts.onStatusChange).toBeUndefined();
+  });
+
+  it('an edit follows the toggle: un-protecting drops the tag', async () => {
+    const existing = {
+      id: 'x',
+      kind: 30023,
+      pubkey: 'abc123',
+      content: 'Old',
+      created_at: 1699000000,
+      tags: [['d', 'slug'], ['title', 'Old'], ['-']],
+      sig: 's'
+    };
+    await updateArticle({ title: 'New', content: 'New body', protected: false }, existing);
+    expect(lastSignedEvent.tags.some((/** @type {string[]} */ t) => t[0] === '-')).toBe(false);
+    await updateArticle({ title: 'New', content: 'New body', protected: true }, existing);
+    expect(lastSignedEvent.tags.filter((/** @type {string[]} */ t) => t[0] === '-')).toEqual([
+      ['-']
+    ]);
   });
 });
 

@@ -4350,5 +4350,12 @@
   "settings_blossom_ineligible": "Der edufeed-Speicher ist Mitgliedern mit einer {domain}-Adresse vorbehalten. Deine Dateien landen auf einem öffentlichen Server.",
   "settings_blossom_badge_default": "edufeed-Speicher",
   "settings_blossom_badge_public": "öffentlich",
-  "settings_blossom_current_target": "Deine Uploads gehen derzeit an {host}."
+  "settings_blossom_current_target": "Deine Uploads gehen derzeit an {host}.",
+  "protected_toggle_label": "Geschützt",
+  "protected_toggle_hint": "Nur Relays, die prüfen, wer veröffentlicht, speichern den Beitrag – und niemand sonst kann ihn auf andere Relays kopieren. Nicht alle Relays unterstützen das: Der Beitrag landet dann auf weniger Relays und wird seltener gefunden.",
+  "protected_toggle_info_aria": "Was bedeutet geschützt?",
+  "protected_badge_label": "Geschützt: bleibt auf den Relays, die die Autorin oder der Autor gewählt hat",
+  "protected_publish_accepted": "Geschützt gespeichert auf: {relays}",
+  "protected_publish_no_relays": "Keines deiner Relays nimmt geschützte Beiträge bisher an. Schalte „Geschützt“ aus, um normal zu veröffentlichen.",
+  "protected_publish_failed": "Kein Relay hat den geschützten Beitrag angenommen."
 }

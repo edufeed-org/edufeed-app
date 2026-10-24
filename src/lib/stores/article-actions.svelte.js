@@ -13,6 +13,7 @@ import { nextCreatedAt } from '$lib/helpers/replaceableUpdates.js';
 import { getAppRelaysForCategory } from '$lib/services/app-relay-service.svelte.js';
 import { getSha256FromURL } from 'applesauce-common/helpers';
 import { collectImetaTags } from '$lib/helpers/imeta.js';
+import { announceProtectedPublish } from '$lib/helpers/protected-publish-feedback.js';
 
 /** Kind number for NIP-23 long-form articles */
 const ARTICLE_KIND = 30023;
@@ -26,6 +27,7 @@ const ARTICLE_KIND = 30023;
  * @property {string} [imageHash] - SHA-256 of the cover image (for NIP-94 license attestation lookup)
  * @property {import('nostr-tools').NostrEvent | null} [imageLicenseEvent] - The cover's kind-1063 license attestation; rebroadcast with the article so its relays can resolve the badge
  * @property {string[]} [hashtags] - Optional hashtags
+ * @property {boolean} [protected] - NIP-70: add the `["-"]` tag, so only relays that AUTH the author store it and nobody can rebroadcast it
  * @property {Array<Partial<import('$lib/helpers/imeta.js').MediaAttachment> & { url?: string }>} [media] - Images inserted into the body this session (NIP-94 fields from the upload); become NIP-92 imeta tags for the URLs still present in `content`
  */
 
@@ -90,6 +92,10 @@ export function buildArticleTags(formData, dTag, communityPubkey, existingTags =
     tags.push(['h', communityPubkey]);
   }
 
+  if (formData.protected) {
+    tags.push(['-']);
+  }
+
   // NIP-92: one imeta per body image whose URL is still in the markdown.
   tags.push(...collectImetaTags(formData.content, formData.media ?? [], existingTags));
 
@@ -134,7 +140,8 @@ export async function createArticle(formData, communityPubkey, communityEvent = 
   // Mentioned users get the article on their read relays too.
   publishEventOptimistic(articleEvent, pTagPubkeys(articleEvent), {
     communityEvent,
-    companions: companionsOf(formData)
+    companions: companionsOf(formData),
+    onStatusChange: formData.protected ? announceProtectedPublish : undefined
   });
 
   const naddr = encodeEventToNaddr(articleEvent, getAppRelaysForCategory('longform'));
@@ -193,7 +200,8 @@ export async function updateArticle(formData, existingEvent, communityEvent = nu
   const updatedEvent = await currentAccount.signEvent(eventTemplate);
   publishEventOptimistic(updatedEvent, pTagPubkeys(updatedEvent), {
     communityEvent,
-    companions: companionsOf(formData)
+    companions: companionsOf(formData),
+    onStatusChange: formData.protected ? announceProtectedPublish : undefined
   });
 
   const naddr = encodeEventToNaddr(updatedEvent, getAppRelaysForCategory('longform'));

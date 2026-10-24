@@ -16,6 +16,7 @@
   import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
   import { useUserProfile } from '$lib/stores/user-profile.svelte.js';
   import ProfileAvatar from '$lib/components/shared/ProfileAvatar.svelte';
+  import ProtectedBadge from '$lib/components/shared/ProtectedBadge.svelte';
 
   /** @type {{ note: any, authorProfile?: any, activeUser?: any, communityPubkey?: string, extraRelays?: string[] }} */
   let {
@@ -120,6 +121,7 @@
       </a>
       <div class="text-sm text-base-content/60">
         {formatRelativeTime(note.created_at)}
+        <ProtectedBadge event={note} class="ml-1" />
       </div>
     </div>
   </div>

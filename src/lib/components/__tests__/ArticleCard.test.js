@@ -20,6 +20,7 @@ vi.mock('../calendar/EventTags.svelte', () => ({ default: () => ({}) }));
 vi.mock('../shared/ImageWithFallback.svelte', () => ({ default: () => ({}) }));
 vi.mock('../shared/ProfileAvatar.svelte', () => ({ default: () => ({}) }));
 vi.mock('$lib/paraglide/messages', () => ({
+  protected_badge_label: () => 'Protected',
   event_tags_view_all_tooltip: () => '',
   event_tags_more_count: () => '',
   debug_panel_raw_nostr_event: () => '',
@@ -115,6 +116,16 @@ describe('ArticleCard', () => {
 
       const card = container.querySelector('.article-card');
       expect(card).toBeTruthy();
+    });
+
+    it('shows a lock on a protected (NIP-70) article', () => {
+      const { container } = render(ArticleCard, {
+        props: {
+          article: { ...mockArticle, tags: [...mockArticle.tags, ['-']] },
+          authorProfile: mockAuthorProfile
+        }
+      });
+      expect(container.querySelector('[data-testid="protected-badge"]')).toBeTruthy();
     });
 
     it('shows article title', () => {

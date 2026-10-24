@@ -9,6 +9,8 @@
   import { createArticle, updateArticle } from '$lib/stores/article-actions.svelte.js';
   import MarkdownEditor from '$lib/components/shared/MarkdownEditor.svelte';
   import EditableList from '$lib/components/shared/EditableList.svelte';
+  import ProtectedToggle from '$lib/components/shared/ProtectedToggle.svelte';
+  import { isProtectedEvent } from 'applesauce-core/helpers/event';
   import LicensedImageInput from '$lib/components/shared/LicensedImageInput.svelte';
   import { useLicenseForHash } from '$lib/stores/image-license.svelte.js';
   import { useActiveUser } from '$lib/stores/accounts.svelte';
@@ -44,6 +46,8 @@
    */
   let bodyMedia = $state.raw([]);
   let hashtags = $state(/** @type {string[]} */ ([]));
+  // NIP-70 protected (off by default; an edit keeps what the article had).
+  let isProtected = $state(false);
 
   // Prefill from a channel app export (webxdc sendToChat → sessionStorage handoff).
   if (data.prefill === 'webxdc') {
@@ -104,6 +108,7 @@
           event.tags
             ?.filter((/** @type {any} */ t) => t[0] === 't')
             .map((/** @type {any} */ t) => t[1]) || [];
+        isProtected = isProtectedEvent(event);
       } catch (err) {
         console.error('Error loading article for edit:', err);
         editError = m.create_edit_error_article_load();
@@ -159,6 +164,7 @@
         imageHash,
         imageLicenseEvent: imageLicenseEvent ?? null,
         hashtags: hashtags.length > 0 ? hashtags : undefined,
+        protected: isProtected,
         media: bodyMedia
       };
 
@@ -264,6 +270,8 @@
         buttonText="+"
         itemType="hashtag"
       />
+
+      <ProtectedToggle bind:checked={isProtected} disabled={isPublishing} />
 
       <!-- Validation Error -->
       {#if validationError}

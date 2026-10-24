@@ -23,6 +23,7 @@
   import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
   import { RepliesModel } from 'applesauce-common/models';
   import { ChatIcon } from '$lib/components/icons';
+  import ProtectedBadge from '$lib/components/shared/ProtectedBadge.svelte';
 
   /**
    * @typedef {Object} Props
@@ -182,6 +183,7 @@
           onclick={(e) => e.stopPropagation()}>{authorName}</a
         >
         · {formatCalendarDate(publishedAt, 'short')}
+        <ProtectedBadge event={article} class="ml-1" />
       </div>
       {#if summary}
         <div class="hidden text-sm text-base-content/50 sm:line-clamp-2 sm:block">{summary}</div>
@@ -226,6 +228,7 @@
         >
         <div class="text-sm text-base-content/60">
           {formatCalendarDate(publishedAt, 'short')}
+          <ProtectedBadge event={article} class="ml-1" />
         </div>
       </div>
     </div>
