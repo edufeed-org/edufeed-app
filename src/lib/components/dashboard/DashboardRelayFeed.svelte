@@ -16,6 +16,7 @@
   import { useActiveUser } from '$lib/stores/accounts.svelte';
   import { ALL_FEED_KINDS } from '$lib/helpers/profile-feed.js';
   import { withoutChannelMeetings } from '$lib/helpers/calendar-timing.js';
+  import { withoutPlaceholderBoards } from '$lib/helpers/kanban-boards.js';
   import { filterEventsForRelay, relayHostLabel } from '$lib/helpers/relay-feed.js';
   import { useProfileMap } from '$lib/stores/profile-map.svelte.js';
   import { getFeedCardData } from '$lib/helpers/feedCardData.js';
@@ -76,8 +77,9 @@
     const modelSub = eventStore
       .model(TimelineModel, { kinds: ALL_FEED_KINDS })
       .subscribe((/** @type {any[]} */ events) => {
-        // Channel meetings share the store but never appear in a feed.
-        modelEvents = withoutChannelMeetings(events || []);
+        // Channel meetings share the store but never appear in a feed; a board
+        // that was never named says nothing to a reader either.
+        modelEvents = withoutPlaceholderBoards(withoutChannelMeetings(events || []));
       });
     return () => {
       eventsSub.unsubscribe();

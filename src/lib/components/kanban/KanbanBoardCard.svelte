@@ -6,6 +6,7 @@
 
 <script>
   import { getDisplayName, getTagValue } from 'applesauce-core/helpers';
+  import { getBoardTitle } from '$lib/helpers/kanban-boards.js';
   import { formatCalendarDate } from '$lib/helpers/calendar.js';
   import ReactionBar from '../reactions/ReactionBar.svelte';
   import EventDebugPanel from '../shared/EventDebugPanel.svelte';
@@ -38,9 +39,7 @@
 
   const isList = $derived(variant === 'list');
 
-  const title = $derived(
-    getTagValue(board, 'title') || getTagValue(board, 'name') || 'Untitled Board'
-  );
+  const title = $derived(getBoardTitle(board));
   const description = $derived(getTagValue(board, 'description') || '');
 
   // Extract column names from 'col' tags

@@ -1,3 +1,5 @@
+import { getBoardTitle } from '$lib/helpers/kanban-boards.js';
+
 /**
  * Maps any Nostr event to normalized feed card display data.
  *
@@ -60,7 +62,7 @@ export function getFeedCardData(event) {
       const colCount = getTags('col').length;
       const description = colCount > 0 ? `${colCount} columns` : undefined;
       return {
-        title: getTag('title') || getTag('name') || 'Untitled Board',
+        title: getBoardTitle(event),
         typeKey: 'board',
         tags,
         description

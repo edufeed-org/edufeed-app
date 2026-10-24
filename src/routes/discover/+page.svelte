@@ -27,6 +27,7 @@
   import { useLearningSearch } from '$lib/stores/learning-search.svelte.js';
   import { useCommunityScopedItems } from '$lib/stores/community-scoped-items.svelte.js';
   import { getTagValue } from 'applesauce-core/helpers';
+  import { withoutPlaceholderBoards } from '$lib/helpers/kanban-boards.js';
   import CreateBoardLink from '$lib/components/kanban/CreateBoardLink.svelte';
   import { getAppRelaysForCategory } from '$lib/services/app-relay-service.svelte.js';
   import {
@@ -517,14 +518,14 @@
           profileTrigger++;
         });
 
-  // Boards with pub=private are not shown
+  // Boards with pub=private and never-named placeholder boards are not shown
   const kanbanModelSub = !isEnabled('boards')
     ? undefined
     : eventStore
         .model(TimelineModel, { kinds: [30301] })
         .pipe(debounceTime(100))
         .subscribe((timeline) => {
-          kanbanBoards = (timeline || []).filter((/** @type {any} */ b) => {
+          kanbanBoards = withoutPlaceholderBoards(timeline || []).filter((/** @type {any} */ b) => {
             const pub = getTagValue(b, 'pub');
             return !pub || pub !== 'private';
           });
