@@ -18,6 +18,7 @@
     MenuIcon,
     LocationIcon
   } from '../icons';
+  import HiddenSourcesToggle from './HiddenSourcesToggle.svelte';
 
   /**
    * @typedef {import('../../types/calendar.js').CalendarViewMode} CalendarViewMode
@@ -31,6 +32,7 @@
     presentationViewMode = 'calendar',
     communityMode = false,
     eventCount = 0,
+    hiddenSources = 0,
     onPrevious = /** @type {() => void} */ (() => {}),
     onNext = /** @type {() => void} */ (() => {}),
     onToday = /** @type {() => void} */ (() => {}),
@@ -276,6 +278,7 @@
 
         <div class="min-w-0 text-base font-semibold whitespace-nowrap text-base-content">
           {displayDate} <span class="font-normal text-base-content/60">· {eventCount} Events</span>
+          <HiddenSourcesToggle hidden={hiddenSources} />
         </div>
       </div>
     {:else}
@@ -283,6 +286,7 @@
       <div class="text-base font-semibold text-base-content">
         {m.calendar_navigation_all_events()}
         <span class="font-normal text-base-content/60">· {eventCount} Events</span>
+        <HiddenSourcesToggle hidden={hiddenSources} />
       </div>
     {/if}
 

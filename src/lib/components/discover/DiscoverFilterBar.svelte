@@ -105,7 +105,6 @@
 {#if contentType === 'events'}
   <div data-testid="tab-filters" class="flex flex-wrap items-center gap-2">
     <EventDateRangeFilter start={eventsRange.start} end={eventsRange.end} {onrangechange} />
-    <HiddenSourcesToggle hidden={hiddenCalendarCount} />
   </div>
 {/if}
 {#if contentType === 'learning'}
@@ -119,9 +118,10 @@
 {/if}
 
 <!-- Results count (communities render their own) -->
-{#if contentType !== 'communities' && resultCount > 0}
+{#if contentType !== 'communities' && (resultCount > 0 || hiddenCalendarCount > 0)}
   <div class="text-center text-sm text-base-content/70">
     {m.discover_results_count({ count: resultCount })}
+    <HiddenSourcesToggle hidden={hiddenCalendarCount} />
     {#if hasMore}
       <span class="ml-2 text-primary">• {m.discover_scroll_for_more()}</span>
     {/if}
