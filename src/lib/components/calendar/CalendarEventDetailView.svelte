@@ -84,7 +84,7 @@
   let activeUser = $derived(getActiveUser());
 
   // Reactive state
-  let featuredCalendars = $state(/** @type {any[]} */ ([]));
+  let featuredCalendars = $state.raw(/** @type {any[]} */ ([]));
   let isLoadingCalendars = $state(true);
 
   // Check if user owns this event

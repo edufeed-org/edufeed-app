@@ -38,7 +38,7 @@ export function useMembershipGrantState() {
   const adminPubkeys = $derived(cfg?.adminPubkeys || []);
 
   /** @type {import('nostr-tools').NostrEvent | null} */
-  let existingResponse = $state(null);
+  let existingResponse = $state.raw(null);
   /** Wished handle from the decrypted (or plaintext) response, e.g. "maria". */
   let wishedHandle = $state('');
   /** Whether the upstream `.well-known` lookup maps wishedHandle → user's pubkey. */

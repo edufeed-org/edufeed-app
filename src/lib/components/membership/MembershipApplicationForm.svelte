@@ -65,7 +65,7 @@
   let partialDelivery = $state(/** @type {{ delivered: number, total: number } | null} */ (null));
 
   /** @type {{ kind: number, pubkey: string, tags: string[][], content: string, created_at: number, id: string, sig: string } | null} */
-  let existingResponse = $state(null);
+  let existingResponse = $state.raw(null);
 
   /**
    * Decrypted values from the user's previous application, used to pre-fill

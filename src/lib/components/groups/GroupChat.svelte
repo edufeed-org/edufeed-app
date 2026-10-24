@@ -284,7 +284,7 @@
       (!getActiveUser()?.pubkey && disclosureLevel !== 'world' && disclosureLevel !== 'unknown')
   );
   let isLoading = $state(true);
-  /** @type {any[]} */ let messages = $state([]);
+  /** @type {any[]} */ let messages = $state.raw([]);
   /** @type {any[]} */ let reactionEvents = $state.raw([]);
   // NIP-29 moderation deletions (kind 9005) for this group — same
   // store-backed pattern as reactions. Timeline rows whose id a 9005 names

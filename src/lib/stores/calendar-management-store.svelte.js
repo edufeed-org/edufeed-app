@@ -52,7 +52,7 @@ import { AddEventToCalendar, RemoveEventFromCalendar } from 'applesauce-actions/
  * @returns {CalendarManagementStore} Calendar management store
  */
 export function createCalendarManagementStore(userPubkey) {
-  let calendars = $state(/** @type {Calendar[]} */ ([]));
+  let calendars = $state.raw(/** @type {Calendar[]} */ ([]));
   let loading = $state(true);
   let error = $state(/** @type {string | null} */ (null));
 

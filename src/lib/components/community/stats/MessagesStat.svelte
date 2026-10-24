@@ -9,7 +9,7 @@
 
   // Local state - completely isolated
   /** @type {any[]} */
-  let messages = $state([]);
+  let messages = $state.raw([]);
   let isLoading = $state(true);
   let error = $state(null);
 

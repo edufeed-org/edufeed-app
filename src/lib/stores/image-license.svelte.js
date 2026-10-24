@@ -18,7 +18,7 @@ import { getAllLookupRelays } from '$lib/helpers/relay-helper.js';
  * @returns {() => { event: import('nostr-tools').NostrEvent | null, status: 'loading' | 'found' | 'missing' }}
  */
 export function useLicenseStatus(getHash) {
-  let state = $state(
+  let state = $state.raw(
     /** @type {{ event: import('nostr-tools').NostrEvent | null, status: 'loading' | 'found' | 'missing' }} */ ({
       event: null,
       status: 'loading'

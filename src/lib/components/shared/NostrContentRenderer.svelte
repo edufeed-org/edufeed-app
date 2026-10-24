@@ -30,10 +30,10 @@
   // Use $state + $effect instead of $derived because parseEventContent and
   // getImetaByUrl mutate the event object (symbol-based caching)
   /** @type {any} */
-  let tree = $state(null);
+  let tree = $state.raw(null);
   let md = /** @type {{ blocks: any[], nodes: any[] } | null} */ ($state(null));
   /** @type {Map<string, any>} */
-  let imeta = $state(new Map());
+  let imeta = $state.raw(new Map());
 
   $effect(() => {
     tree = event && !markdown ? parseEventContent(event) : null;

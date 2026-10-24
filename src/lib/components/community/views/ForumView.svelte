@@ -33,7 +33,7 @@
   let showCreateForm = $state(false);
 
   // Thread events from model — used to derive IDs for batch comment loader
-  let threads = $state(/** @type {any[]} */ ([]));
+  let threads = $state.raw(/** @type {any[]} */ ([]));
 
   // Batch-load commenter profiles for all threads
   let commenterPubkeys = $state(/** @type {string[]} */ ([]));

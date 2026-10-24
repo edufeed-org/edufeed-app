@@ -110,7 +110,7 @@
   let loading = $state(true);
   let minLoadTimeElapsed = $state(false);
   let error = $state(/** @type {string | null} */ (null));
-  let _selectedCalendar = $state(calendarFilters.selectedCalendar);
+  let _selectedCalendar = $state.raw(calendarFilters.selectedCalendar);
 
   // Subscription management for loaders and models
   // Using plain let (not $state) for subscriptions to avoid infinite loops in $effect

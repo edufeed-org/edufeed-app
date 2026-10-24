@@ -50,7 +50,49 @@ const NOT_EVENTS = new Set([
   'cEvents'
 ]);
 
+// Second net, by value instead of by name: an assignment that stores one of
+// these identifiers AS A VALUE (not a property of it, not a call argument)
+// into a deep $state holder. Catches `messages = events`,
+// `existingResponse = events?.[0]`, `[...calendars, event]`,
+// `{ event: latest }`, `threads = loaded || []`.
+// Not matched: a property read (`event.id`), a call argument (`f(event)`), a
+// condition (`event ? … : …`, `event && …`) and words inside string literals.
+const EVENT_VALUE =
+  /(?:^|[\s[,:(|&])(event|events|loaded|latest|timeline|rawEvent|originalEvent)\b(?!\s*[.?]\s*[A-Za-z_$])(?!\s*\))(?!\s*\?)(?!\s*&&)/;
+const STRING_LITERAL = /'(?:[^'\\]|\\.)*'|"(?:[^"\\]|\\.)*"|`(?:[^`\\]|\\.)*`/g;
+// Holders the value rule flags that store a derived primitive, with the reason.
+const NOT_EVENT_VALUES = new Map([]);
+
+/**
+ * Every `name = <rhs>` assignment in the source (top-level or inside a callback).
+ * @param {string} source
+ * @param {string} name
+ */
+function assignmentsOf(source, name) {
+  const re = new RegExp(`(?:^|[;{\\s])${name.replace(/\$/g, '\\$')}\\s*=(?!=)\\s*([^;\\n]*)`, 'g');
+  return [...source.matchAll(re)].map((m) => m[1]);
+}
+
 describe('Nostr events are never held in deep $state', () => {
+  it('every $state that is assigned an event value is $state.raw', () => {
+    /** @type {string[]} */
+    const offenders = [];
+    for (const file of files) {
+      const source = readFileSync(file, 'utf8');
+      for (const match of source.matchAll(DEEP_STATE)) {
+        const name = match[1];
+        if (NOT_EVENT_VALUES.has(name)) continue;
+        const hit = assignmentsOf(source, name).find((rhs) =>
+          EVENT_VALUE.test(rhs.replace(STRING_LITERAL, "''"))
+        );
+        if (!hit) continue;
+        const line = source.slice(0, match.index).split('\n').length;
+        offenders.push(`${file}:${line} let ${name} = $state(…) <- ${hit.trim()}`);
+      }
+    }
+    expect(offenders).toEqual([]);
+  });
+
   it('every event-holding $state in src is $state.raw', () => {
     /** @type {string[]} */
     const offenders = [];

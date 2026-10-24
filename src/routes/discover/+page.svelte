@@ -218,7 +218,7 @@
   let isSearching = $state(false);
   /** @type {ReturnType<typeof setTimeout> | null} */
   let searchingSafetyTimer = null;
-  let learningSearchResults = $state(/** @type {import('nostr-tools').Event[]} */ ([]));
+  let learningSearchResults = $state.raw(/** @type {import('nostr-tools').Event[]} */ ([]));
   // Relevance order of the current search: `kind:pubkey:d` → merged position.
   // Each relay ranks its own response; scores are not comparable across
   // relays, so results are merged by per-relay rank (see searchRank.js).
