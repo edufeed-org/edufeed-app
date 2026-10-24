@@ -43,10 +43,19 @@ describe('canonicalPathFor', () => {
     );
   });
 
-  it('sends wiki articles without community to /wiki/<topic>', () => {
+  it('sends wiki articles to /wiki/<topic>, also when they belong to a community', () => {
     expect(canonicalPathFor(ev(30818, [['d', 'erste schritte']]), { relayHint: HINT })).toBe(
       '/wiki/erste%20schritte'
     );
+    expect(
+      canonicalPathFor(
+        ev(30818, [
+          ['d', 'erste schritte'],
+          ['h', COMMUNITY]
+        ]),
+        { relayHint: HINT }
+      )
+    ).toBe('/wiki/erste%20schritte');
   });
 
   it('encodes regular events as nevent', () => {

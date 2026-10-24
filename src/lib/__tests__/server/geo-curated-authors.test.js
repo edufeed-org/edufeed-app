@@ -83,6 +83,24 @@ describe('resolveCuratedAuthorSet', () => {
   });
 });
 
+describe('resolveCuratedAuthorSet — GEO_INDEX_AUTHORS', () => {
+  it('adds deployment accounts (npub or hex) that are indexed without being curated', async () => {
+    const set = await resolveCuratedAuthorSet(
+      { CURATED_PUBKEYS_LONGFORM: A, GEO_INDEX_AUTHORS: `${nip19.npubEncode(B)}, ${C}, not-a-key` },
+      /** @type {any} */ (vi.fn())
+    );
+    expect([...set].sort()).toEqual([A, B, C].sort());
+  });
+
+  it('works without any curation configured', async () => {
+    const set = await resolveCuratedAuthorSet(
+      { GEO_INDEX_AUTHORS: C },
+      /** @type {any} */ (vi.fn())
+    );
+    expect([...set]).toEqual([C]);
+  });
+});
+
 describe('createCuratedAuthorsCache', () => {
   it('waits at most maxWaitMs for the first resolution', async () => {
     const cache = createCuratedAuthorsCache({ resolve: () => new Promise(() => {}), ttlMs: 1000 });

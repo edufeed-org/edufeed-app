@@ -551,7 +551,8 @@ and a default brand tag set (`static/og-default.png`, `APP_OG_DESCRIPTION`,
 (`src/lib/server/geo/indexability.js`) decides what search/AI crawlers may
 index: articles, wiki entries and learning resources published through this
 deployment (NIP-89 `client` tag = `CLIENT_NAME`) or by curated authors
-(LONGFORM ∪ EDUCATIONAL, cached server-side in `curated-authors.js`), with a
+(LONGFORM ∪ EDUCATIONAL ∪ `GEO_INDEX_AUTHORS`, cached server-side in
+`curated-authors.js`), with a
 minimal quality gate, and found on the deployment's own relays (the client tag
 is forgeable). Those pages get `rel=canonical` (path from `eventRoutePath()`,
 naddr with the first app relay as the only hint — the sitemap uses the same

@@ -8,7 +8,12 @@
  */
 import { nip19 } from 'nostr-tools';
 import { normalizePubkey } from '$lib/helpers/pubkey.js';
-import { parseBool, resolveCuratedConfig, resolveWotConfig } from '$lib/server/env-parse.js';
+import {
+  parseArray,
+  parseBool,
+  resolveCuratedConfig,
+  resolveWotConfig
+} from '$lib/server/env-parse.js';
 import { getRelaysForKind } from '$lib/server/relay-fetch.js';
 
 /** Curation categories whose content the indexability rule covers. */
@@ -60,7 +65,7 @@ export async function resolveAuthors(curated, wotAnchors, fetchFirst) {
 }
 
 /**
- * Union of the curated authors of all covered categories.
+ * Union of the curated authors of all covered categories plus GEO_INDEX_AUTHORS.
  * @param {Record<string, string | undefined>} env
  * @param {FetchFirst} fetchFirst
  * @returns {Promise<Set<string>>}
@@ -76,7 +81,12 @@ export async function resolveCuratedAuthorSet(env, fetchFirst) {
       )
     )
   );
-  return new Set(lists.flatMap((l) => l ?? []));
+  // Deployment accounts indexed without being curated in the app (e.g. the
+  // account publishing the user guides).
+  const extra = parseArray(env.GEO_INDEX_AUTHORS)
+    .map((v) => normalizePubkey(v))
+    .filter(/** @returns {hex is string} */ (hex) => !!hex);
+  return new Set([...lists.flatMap((l) => l ?? []), ...extra]);
 }
 
 /**

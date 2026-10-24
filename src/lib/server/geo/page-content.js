@@ -35,9 +35,6 @@ const esc = (s) =>
 /** @param {{ tags?: string[][] }} event */
 const dTag = (event) => event.tags?.find((t) => t[0] === 'd')?.[1] ?? '';
 
-/** @param {{ tags?: string[][] }} event */
-const hasCommunity = (event) => !!event.tags?.some((t) => t[0] === 'h');
-
 /** @param {string | undefined} value */
 const isHttpUrl = (value) => !!value && /^https?:\/\//i.test(value);
 
@@ -51,9 +48,9 @@ const isHttpUrl = (value) => !!value && /^https?:\/\//i.test(value);
  */
 export function canonicalPathFor(event, { relayHint }) {
   if (!event) return null;
-  if (event.kind === 30818 && !hasCommunity(event)) {
-    return `/wiki/${encodeURIComponent(dTag(event))}`;
-  }
+  // Wiki entries: /wiki/<topic> even for community wikis — it is the URL the
+  // app links to (help links), and one URL per topic keeps them deduplicated.
+  if (event.kind === 30818) return `/wiki/${encodeURIComponent(dTag(event))}`;
   const relays = relayHint ? [relayHint] : [];
   try {
     if (isAddressableKind(event.kind)) {

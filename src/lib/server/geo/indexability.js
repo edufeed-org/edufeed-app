@@ -3,7 +3,8 @@
  *
  * Content pages (articles, wiki entries, learning resources) are indexable when
  * they were published through this deployment — NIP-89 client tag equal to
- * CLIENT_NAME, set by default since 04/2026 — or by a curated author, and pass
+ * CLIENT_NAME, set by default since 04/2026 — or by a curated author (incl.
+ * GEO_INDEX_AUTHORS), and pass
  * a minimal quality gate. Everything else stays fully usable but carries
  * `noindex`: bulk-imported metadata of pages that live elsewhere (Google's
  * "scraped content"), other people's Nostr content reachable under our domain,
