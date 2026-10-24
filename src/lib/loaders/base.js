@@ -49,6 +49,11 @@ import { createRevalidatingCacheRequest } from '$lib/helpers/cache-revalidate.js
 export const timedPool = (relays, filters) =>
   pool.request(relays, filters, { timeout: 10_000 }).pipe(catchError(() => EMPTY));
 
+/** Batches the address/event loaders run at once (applesauce default 4). */
+export const LOADER_CONCURRENT_BATCHES = 16;
+/** Budget per loader stage before unresolved pointers move to the next stage (applesauce default 10 s). */
+export const LOADER_STAGE_TIMEOUT_MS = 5_000;
+
 /** @param {Filter | Filter[]} filters */
 const asList = (filters) => (Array.isArray(filters) ? filters : [filters]);
 
@@ -139,7 +144,17 @@ const revalidatingCacheRequest = createRevalidatingCacheRequest(cacheRequest, (p
 export const addressLoader = createAddressLoader(pool, {
   eventStore,
   cacheRequest: revalidatingCacheRequest,
-  lookupRelays: lookupRelays$
+  lookupRelays: lookupRelays$,
+  // A stage that does not answer must not hold everything else: the batch
+  // engine runs at most `maxConcurrentBatches` lookups at once and each stage
+  // (cache → relay hints → lookup relays) gets `stageTimeout` before its
+  // unresolved pointers move on. With the defaults (4 batches, 10 s per stage)
+  // one stalled IndexedDB cache turned every profile/address lookup in the
+  // app into a 10 s wait and queued the rest behind it (inline previews
+  // appeared 15–20 s after mount). The cache read is additionally bounded in
+  // event-cache.svelte.js.
+  maxConcurrentBatches: LOADER_CONCURRENT_BATCHES,
+  stageTimeout: LOADER_STAGE_TIMEOUT_MS
 });
 
 // Standalone event-by-ID loader for direct use.
@@ -149,7 +164,9 @@ export const addressLoader = createAddressLoader(pool, {
 export const eventLoader = createEventLoader(pool, {
   eventStore,
   cacheRequest,
-  bufferTime: 0
+  bufferTime: 0,
+  maxConcurrentBatches: LOADER_CONCURRENT_BATCHES,
+  stageTimeout: LOADER_STAGE_TIMEOUT_MS
 });
 
 // Unified loader for EventStore - handles both EventPointer and AddressPointer.
@@ -160,7 +177,9 @@ export const eventLoader = createEventLoader(pool, {
 const unifiedLoader = createUnifiedEventLoader(pool, {
   eventStore,
   cacheRequest: revalidatingCacheRequest,
-  lookupRelays: lookupRelays$
+  lookupRelays: lookupRelays$,
+  maxConcurrentBatches: LOADER_CONCURRENT_BATCHES,
+  stageTimeout: LOADER_STAGE_TIMEOUT_MS
 });
 eventStore.eventLoader = unifiedLoader;
 
