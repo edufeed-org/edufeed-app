@@ -566,7 +566,12 @@ for JS clients and the root layout removes it on mount; server-rendered
 markdown/djot MUST go through `sanitizeServerHtml` (`htmlSanitize.js` is a
 no-op outside the browser). `/sitemap.xml` (same rule, stale-while-revalidate,
 shrink guard) and `/robots.txt` are routes; relay reads live in
-`src/lib/server/relay-fetch.js`.
+`src/lib/server/relay-fetch.js`. Measurement: `geoStatsHandle`
+(`src/lib/server/geo/crawler-stats.js`, first in the hooks sequence, active only
+with `GEO_STATS_DIR`) writes daily counters of crawler requests (verified
+against published IP ranges) and AI/search referrals — sums only, never IPs,
+browser user agents or full referrers; keep it that way (no cookie banner and
+no consent needed because nothing personal is stored).
 
 ## Development Environment
 
