@@ -89,6 +89,7 @@ function makeFeed(o) {
     limit: 50,
     eventStore,
     cache: null,
+    live: false,
     ...o
   });
   return { feed, eventStore };
@@ -561,6 +562,125 @@ describe('createTimelineFeed', () => {
     expect(() => feed.loadMore()).not.toThrow();
     await flush();
     expect(calls.length).toBe(n);
+  });
+});
+
+describe('createTimelineFeed live leg', () => {
+  /** A fake pool.subscription: records (relays$, filters), serves a Subject per call. */
+  function fakeLive() {
+    /** @type {{ relays: string[], filter: any, out: Subject<any> }[]} */
+    const subs = [];
+    const subscribe = vi.fn(
+      (
+        /** @type {import('rxjs').Observable<string[]>} */ relays$,
+        /** @type {any[]} */ filters
+      ) => {
+        const entry = {
+          relays: /** @type {string[]} */ ([]),
+          filter: filters[0],
+          out: new Subject()
+        };
+        relays$.subscribe((r) => (entry.relays = r));
+        subs.push(entry);
+        return entry.out;
+      }
+    );
+    return { subscribe, subs };
+  }
+
+  it('subscribes to the feed relays for events newer than the window and stores them, counting them as new', async () => {
+    const t = now();
+    const { request } = fakeRelays({ [RA]: series('a', 30, { now: t }) });
+    const { subscribe, subs } = fakeLive();
+    const { feed, eventStore } = makeFeed({
+      request,
+      getRelays: () => [RA],
+      live: true,
+      subscribe
+    });
+    const sub = feed.events$.subscribe();
+    await flush();
+    const { until } = feed.getStatus();
+    expect(subscribe).toHaveBeenCalledTimes(1);
+    expect(subs[0].filter).toEqual({ kinds: [1], since: until + 1 });
+    expect(subs[0].relays).toEqual([RA]);
+
+    const fresh = ev(until + 5, 'live-1');
+    addSeenRelay(fresh, RA);
+    subs[0].out.next(fresh);
+    await flush();
+    expect(eventStore.hasEvent('live-1')).toBe(true);
+    expect(feed.getStatus().newCount).toBe(1);
+    // A relay that ignores `since` and replays an old event does not count
+    const old = ev(until - 5000, 'live-old');
+    subs[0].out.next(old);
+    await flush();
+    expect(feed.getStatus().newCount).toBe(1);
+    sub.unsubscribe();
+  });
+
+  it('catchUp() moves until to now, asks every relay for the gap and resets the new count', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const t = now();
+    const { request, calls } = fakeRelays({
+      [RA]: series('a', 30, { now: t }),
+      [RB]: series('b', 30, { now: t, gap: 90 })
+    });
+    const { subscribe, subs } = fakeLive();
+    const { feed } = makeFeed({ request, live: true, subscribe });
+    const sub = feed.events$.subscribe();
+    await flush();
+    const { until } = feed.getStatus();
+    const fresh = ev(until + 3, 'live-2');
+    addSeenRelay(fresh, RA);
+    subs[0].out.next(fresh);
+    await flush();
+    expect(feed.getStatus().newCount).toBe(1);
+
+    await vi.advanceTimersByTimeAsync(10_000); // clock moves on
+    const before = calls.length;
+    feed.catchUp();
+    await flush();
+    const s = feed.getStatus();
+    expect(s.until).toBeGreaterThan(until);
+    expect(s.newCount).toBe(0);
+    const gap = calls.slice(before).map((c) => c.filter);
+    expect(gap.some((f) => f.since === until + 1 && f.until === s.until)).toBe(true);
+    expect(new Set(calls.slice(before).map((c) => c.relay))).toEqual(new Set([RA, RB]));
+    sub.unsubscribe();
+  });
+
+  it('a visibility signal triggers catchUp(); unsubscribing closes the live subscription', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const t = now();
+    const { request } = fakeRelays({ [RA]: series('a', 30, { now: t }) });
+    const { subscribe, subs } = fakeLive();
+    const visible$ = new Subject();
+    const { feed } = makeFeed({ request, getRelays: () => [RA], live: true, subscribe, visible$ });
+    const sub = feed.events$.subscribe();
+    await flush();
+    const { until } = feed.getStatus();
+    expect(subs[0].out.observed).toBe(true);
+
+    await vi.advanceTimersByTimeAsync(5_000);
+    visible$.next(undefined);
+    await flush();
+    expect(feed.getStatus().until).toBeGreaterThan(until);
+
+    sub.unsubscribe();
+    expect(subs[0].out.observed).toBe(false);
+  });
+
+  it('live: false opens no subscription', async () => {
+    const t = now();
+    const { request } = fakeRelays({ [RA]: series('a', 30, { now: t }) });
+    const { subscribe } = fakeLive();
+    const { feed } = makeFeed({ request, getRelays: () => [RA], live: false, subscribe });
+    const sub = feed.events$.subscribe();
+    await flush();
+    expect(subscribe).not.toHaveBeenCalled();
+    expect(feed.getStatus().newCount).toBe(0);
+    sub.unsubscribe();
   });
 });
 

@@ -32,6 +32,14 @@
  *   EOSE is cut `hangTimeout` after its last event and its page committed;
  *   connection failures and the group's first-response timeout stay errors.
  *
+ * - A live leg (`live`, default on) keeps a `pool.subscription` open on the feed
+ *   relays for events newer than the window; they land in the EventStore and
+ *   show up through the models at once (store first), counted in `newCount`.
+ *   `catchUp()` moves `until` to now so the SDK fetches whatever the
+ *   subscription missed (a dropped connection, a relay that reconnected); it
+ *   runs on every `visible$` signal — by default when the tab becomes visible
+ *   again.
+ *
  * `status$` is for spinners and "no more" only — models render whatever the
  * EventStore already holds (CLAUDE.md "Store first").
  *
@@ -55,11 +63,17 @@ import {
   defer,
   distinct,
   EMPTY,
+  filter as rxFilter,
   finalize,
+  fromEvent,
+  ignoreElements,
   map,
   merge,
   Observable,
-  share
+  retry,
+  share,
+  switchMap,
+  tap
 } from 'rxjs';
 import { pool, eventStore as sharedEventStore } from '$lib/stores/nostr-infrastructure.svelte';
 import { cacheRequest } from '$lib/stores/event-cache.svelte.js';
@@ -81,12 +95,16 @@ import { cacheRequest } from '$lib/stores/event-cache.svelte.js';
  * @property {(relays: string[], filters: Filter[]) => Observable<NostrEvent>} [request] - Defaults to the shared pool
  * @property {import('applesauce-core').EventStore} [eventStore] - Defaults to the shared store
  * @property {import('applesauce-loaders').CacheRequest | null} [cache] - Defaults to the IDB cache; null = no warm
+ * @property {boolean} [live=true] - Keep a subscription open for events newer than the window
+ * @property {(relays$: Observable<string[]>, filters: Filter[]) => Observable<NostrEvent>} [subscribe] - Live source; defaults to `pool.subscription`
+ * @property {Observable<unknown>} [visible$] - Each emission runs `catchUp()`; defaults to the tab becoming visible
  *
  * @typedef {object} TimelineFeedStatus
  * @property {boolean} pending - `loadMore()` asked for a page the buffer does not hold yet
  * @property {boolean} settled - Every relay is `covered` or `incomplete` (nothing loading or prefetching)
  * @property {boolean} exhausted - Every relay is `incomplete` or covered to 0 (or there are no relays)
  * @property {boolean} failing - Some relay is `incomplete`: its last request failed and the SDK retries it after a backoff
+ * @property {number} newCount - Events the live leg delivered that are newer than the window (reset by `catchUp()`)
  * @property {number} since
  * @property {number} until
  * @property {TimelineStatus[]} relays - The SDK's per-relay (and per author group) coverage
@@ -97,6 +115,7 @@ import { cacheRequest } from '$lib/stores/event-cache.svelte.js';
  * @property {() => TimelineFeedStatus} getStatus
  * @property {() => void} loadMore
  * @property {() => void} sync
+ * @property {() => void} catchUp - Extend the window to now so the SDK fills whatever the live leg missed
  */
 
 /**
@@ -141,6 +160,20 @@ export function completeAfterSilence(ms) {
 const poolRequest = (relays, filters) =>
   pool.request(relays, filters, { complete: RelayGroup.completeOnAllEose() });
 
+/**
+ * Live source: one standing REQ per relay; the pool follows the relay list.
+ * @type {(relays$: Observable<string[]>, filters: Filter[]) => Observable<NostrEvent>}
+ */
+const poolSubscribe = (relays$, filters) => pool.subscription(relays$, filters);
+
+/** The tab becoming visible again (nothing on the server). */
+const defaultVisible$ = () =>
+  typeof document === 'undefined'
+    ? EMPTY
+    : fromEvent(document, 'visibilitychange').pipe(
+        rxFilter(() => document.visibilityState === 'visible')
+      );
+
 /** @param {string[]} a @param {string[]} b */
 const sameList = (a, b) => a.length === b.length && a.every((x, i) => x === b[i]);
 
@@ -165,13 +198,17 @@ export function createTimelineFeed(options) {
     hangTimeout = 10_000,
     request = poolRequest,
     eventStore = sharedEventStore,
-    cache = cacheRequest
+    cache = cacheRequest,
+    live = true,
+    subscribe = poolSubscribe,
+    visible$ = defaultVisible$()
   } = options;
   const log = baseLogger.extend('timeline-feed');
 
-  const until = unixNow();
   /** @type {BehaviorSubject<TimelineWindow>} */
-  const window$ = new BehaviorSubject({ since: until, until });
+  const window$ = new BehaviorSubject({ since: unixNow(), until: unixNow() });
+  /** created_at of every event the live leg delivered, by id */
+  const liveSeen = new Map();
   const relays$ = new BehaviorSubject(getRelays());
   const filter$ = new BehaviorSubject(getFilter());
 
@@ -187,13 +224,17 @@ export function createTimelineFeed(options) {
     const current = relayStatuses.filter((s) => relays.includes(s.source));
     const reported = relays.every((relay) => current.some((s) => s.source === relay));
     const none = relays.length === 0;
+    const { since, until } = window$.value;
+    let newCount = 0;
+    for (const createdAt of liveSeen.values()) if (createdAt > until) newCount++;
     return {
       pending,
       settled: none || (reported && current.every(isSettled)),
       exhausted: none || (reported && current.every(isDone)),
       failing: current.some((s) => s.state === 'incomplete'),
-      since: window$.value.since,
-      until: window$.value.until,
+      newCount,
+      since,
+      until,
       relays: current
     };
   }
@@ -275,6 +316,17 @@ export function createTimelineFeed(options) {
     publish();
   }
 
+  function catchUp() {
+    if (!active) return;
+    const now = unixNow();
+    const { since, until } = window$.value;
+    if (now <= until) return;
+    // The SDK treats the extension as a visible gap and requests
+    // { since: until + 1, until: now } from every relay.
+    window$.next({ since, until: now });
+    publish();
+  }
+
   function sync() {
     const relays = getRelays();
     if (!sameList(relays, relays$.value)) relays$.next(relays);
@@ -307,7 +359,26 @@ export function createTimelineFeed(options) {
         onStatus
       })
     );
-    return merge(warm$, loader$).pipe(
+    // Events newer than the window, for as long as the feed is displayed.
+    // Resubscribed when the filter changes; the pool follows relays$ itself.
+    const live$ = !live
+      ? EMPTY
+      : filter$.pipe(
+          switchMap((filter) =>
+            subscribe(relays$.asObservable(), [{ ...filter, since: window$.value.until + 1 }]).pipe(
+              retry({ delay: 60_000 })
+            )
+          ),
+          tap((event) => {
+            liveSeen.set(event.id, event.created_at);
+            publish();
+          })
+        );
+    const catchUp$ = visible$.pipe(
+      tap(() => catchUp()),
+      ignoreElements()
+    );
+    return merge(warm$, loader$, live$, catchUp$).pipe(
       // Store every arrival before deduplicating output, preserving relay metadata.
       mapEventsToStore(eventStore, false),
       distinct((event) => event.id),
@@ -315,6 +386,7 @@ export function createTimelineFeed(options) {
         active = false;
         pending = false;
         relayStatuses = [];
+        liveSeen.clear();
         publish();
       })
     );
@@ -325,6 +397,7 @@ export function createTimelineFeed(options) {
     status$: status$.asObservable(),
     getStatus: () => status$.value,
     loadMore,
-    sync
+    sync,
+    catchUp
   };
 }
