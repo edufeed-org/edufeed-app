@@ -20,6 +20,7 @@ vi.mock('../calendar/EventTags.svelte', () => ({ default: () => ({}) }));
 vi.mock('../shared/ImageWithFallback.svelte', () => ({ default: () => ({}) }));
 vi.mock('../shared/ProfileAvatar.svelte', () => ({ default: () => ({}) }));
 vi.mock('$lib/paraglide/messages', () => ({
+  article_card_draft: () => 'Entwurf',
   event_tags_view_all_tooltip: () => '',
   event_tags_more_count: () => '',
   debug_panel_raw_nostr_event: () => '',
@@ -278,6 +279,22 @@ describe('ArticleCard', () => {
         props: { article: credited, authorProfile: mockAuthorProfile }
       });
       expect(getByTestId('article-byline').textContent).toContain('Test Author');
+    });
+  });
+
+  describe('drafts', () => {
+    it('marks a kind 30024 draft with a badge', () => {
+      const { queryByTestId } = render(ArticleCard, {
+        props: { article: { ...mockArticle, kind: 30024 }, authorProfile: mockAuthorProfile }
+      });
+      expect(queryByTestId('article-draft-badge')?.textContent).toContain('Entwurf');
+    });
+
+    it('shows no draft badge on a published article', () => {
+      const { queryByTestId } = render(ArticleCard, {
+        props: { article: mockArticle, authorProfile: mockAuthorProfile }
+      });
+      expect(queryByTestId('article-draft-badge')).toBeNull();
     });
   });
 });

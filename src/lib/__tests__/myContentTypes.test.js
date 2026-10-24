@@ -46,7 +46,9 @@ describe('myContentTypes', () => {
   it('exposes a flat list of all authored kinds without duplicates', () => {
     // `interactive` shares kind 30142 with `learning` — the flat kind list
     // (used as a relay filter) must not repeat it.
-    expect(ALL_CONTENT_KINDS).toEqual([31922, 31923, 30142, 30023, 30818, 30168, 1068, 39701]);
+    expect(ALL_CONTENT_KINDS).toEqual([
+      31922, 31923, 30142, 30023, 30024, 30818, 30168, 1068, 39701
+    ]);
   });
 
   describe('eventToContentType', () => {
@@ -108,5 +110,10 @@ describe('myContentTypes', () => {
       expect(total).toBe(1);
       expect(groups.learning.map((e) => e.id)).toEqual(['y']);
     });
+  });
+
+  it('counts NIP-23 drafts (kind 30024) as the article type', () => {
+    expect(ALL_CONTENT_KINDS).toContain(30024);
+    expect(eventToContentType({ kind: 30024, tags: [] })).toBe('article');
   });
 });

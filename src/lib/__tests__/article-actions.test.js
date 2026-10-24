@@ -39,8 +39,18 @@ vi.mock('$lib/services/relay-service.svelte.js', () => ({
   getPrimaryWriteRelay: vi.fn(async () => 'wss://write.relay')
 }));
 
+vi.mock('$lib/helpers/eventDeletion.js', () => ({
+  deleteEvent: vi.fn(async () => ({ success: true }))
+}));
+
 import { manager } from '$lib/stores/accounts.svelte';
-import { createArticle, updateArticle } from '../stores/article-actions.svelte.js';
+import {
+  createArticle,
+  updateArticle,
+  publishDraft,
+  ARTICLE_DRAFT_KIND
+} from '../stores/article-actions.svelte.js';
+import { deleteEvent } from '$lib/helpers/eventDeletion.js';
 import { publishEventOptimistic } from '$lib/services/publish-service.js';
 import { encodeEventToNaddr } from '$lib/helpers/nostrUtils.js';
 
@@ -98,6 +108,16 @@ describe('createArticle', () => {
     });
     const pTags = lastSignedEvent.tags.filter((/** @type {any} */ t) => t[0] === 'p');
     expect(pTags).toEqual([['p', corinna, 'wss://write.relay', 'contributor']]);
+  });
+
+  it('saves a draft as kind 30024 (NIP-23) when asked', async () => {
+    const result = await createArticle({ title: 'T', content: 'body' }, undefined, null, {
+      draft: true
+    });
+    expect(lastSignedEvent.kind).toBe(ARTICLE_DRAFT_KIND);
+    expect(lastSignedEvent.kind).toBe(30024);
+    expect(result.naddr).toBe('naddr1test');
+    expect(deleteEvent).not.toHaveBeenCalled();
   });
 
   it('builds correct NIP-23 tags', async () => {
@@ -327,11 +347,91 @@ describe('updateArticle', () => {
     );
   });
 
+  it('keeps a draft a draft when saving it again (same d-tag, no deletion)', async () => {
+    const draft = { ...existingEvent, kind: 30024 };
+    await updateArticle({ title: 'T', content: 'body' }, draft, null, { draft: true });
+    expect(lastSignedEvent.kind).toBe(30024);
+    expect(lastSignedEvent.tags).toContainEqual(['d', 'my-article-slug']);
+    expect(deleteEvent).not.toHaveBeenCalled();
+  });
+
+  it('publishes a draft as kind 30023 with the same d-tag and retires the draft', async () => {
+    const draft = { ...existingEvent, kind: 30024 };
+    await updateArticle({ title: 'T', content: 'body' }, draft, null);
+    expect(lastSignedEvent.kind).toBe(30023);
+    expect(lastSignedEvent.tags).toContainEqual(['d', 'my-article-slug']);
+    expect(deleteEvent).toHaveBeenCalledWith(draft, /** @type {any} */ (manager).active);
+  });
+
+  it('never demotes a published article to a draft', async () => {
+    await expect(
+      updateArticle({ title: 'T', content: 'body' }, existingEvent, null, { draft: true })
+    ).rejects.toThrow(/published/i);
+    expect(lastSignedEvent).toBeNull();
+  });
+
   it('requires d-tag on existing event', async () => {
     const noDTag = { ...existingEvent, tags: [['title', 'Old']] };
 
     await expect(updateArticle({ title: 'Test', content: 'Body' }, noDTag)).rejects.toThrow(
       'missing d-tag'
     );
+  });
+});
+
+describe('publishDraft', () => {
+  const draft = {
+    id: 'draft-id',
+    kind: 30024,
+    pubkey: 'abc123',
+    created_at: 1700000000,
+    content: '# Draft body',
+    tags: [
+      ['d', 'draft-d'],
+      ['title', 'Draft title'],
+      ['published_at', '1600000000'],
+      ['t', 'test'],
+      ['license:id', 'https://creativecommons.org/licenses/by/4.0/'],
+      ['p', 'c'.repeat(64), 'wss://relay', 'creator']
+    ],
+    sig: 'sig'
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    lastSignedEvent = null;
+    /** @type {any} */ (manager).active = {
+      pubkey: 'abc123',
+      signEvent: vi.fn(async (/** @type {any} */ template) => {
+        lastSignedEvent = { ...template, id: 'published-id', pubkey: 'abc123', sig: 'sig' };
+        return lastSignedEvent;
+      })
+    };
+  });
+
+  it('republishes the draft verbatim as kind 30023, refreshes published_at and retires the draft', async () => {
+    const before = Math.floor(Date.now() / 1000);
+    const result = await publishDraft(draft);
+    expect(lastSignedEvent.kind).toBe(30023);
+    expect(lastSignedEvent.content).toBe('# Draft body');
+    expect(lastSignedEvent.tags).toContainEqual(['d', 'draft-d']);
+    expect(lastSignedEvent.tags).toContainEqual(['title', 'Draft title']);
+    expect(lastSignedEvent.tags).toContainEqual([
+      'license:id',
+      'https://creativecommons.org/licenses/by/4.0/'
+    ]);
+    expect(lastSignedEvent.tags).toContainEqual(['p', 'c'.repeat(64), 'wss://relay', 'creator']);
+    const publishedAt = Number(
+      lastSignedEvent.tags.find((/** @type {any} */ t) => t[0] === 'published_at')[1]
+    );
+    expect(publishedAt).toBeGreaterThanOrEqual(before);
+    expect(publishEventOptimistic).toHaveBeenCalled();
+    expect(deleteEvent).toHaveBeenCalledWith(draft, /** @type {any} */ (manager).active);
+    expect(result.naddr).toBe('naddr1test');
+  });
+
+  it("refuses to publish someone else's draft or a non-draft", async () => {
+    await expect(publishDraft({ ...draft, pubkey: 'other' })).rejects.toThrow(/own/i);
+    await expect(publishDraft({ ...draft, kind: 30023 })).rejects.toThrow(/draft/i);
   });
 });

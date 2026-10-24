@@ -49,6 +49,8 @@
   } = $props();
 
   const isList = $derived(variant === 'list');
+  // NIP-23 draft (kind 30024): only listed on the owner's own surfaces.
+  const isDraft = $derived(article.kind === 30024);
 
   // Extract article metadata using applesauce helpers
   const title = $derived(getArticleTitle(article) || 'Untitled Article');
@@ -208,7 +210,14 @@
       {/if}
     </div>
     <div class="min-w-0 flex-1">
-      <div class="truncate font-semibold text-base-content">{title}</div>
+      <div class="flex items-center gap-2">
+        <span class="truncate font-semibold text-base-content">{title}</span>
+        {#if isDraft}
+          <span class="badge shrink-0 badge-outline badge-sm" data-testid="article-draft-badge"
+            >{m.article_card_draft()}</span
+          >
+        {/if}
+      </div>
       <div class="truncate text-sm text-base-content/60" data-testid="article-byline">
         {#if bylinePubkey}
           <a
@@ -316,6 +325,12 @@
     <div class="space-y-2">
       <!-- Title -->
       <h2 class="line-clamp-2 text-xl font-bold text-base-content {compact ? 'text-lg' : ''}">
+        {#if isDraft}
+          <span
+            class="mr-2 badge badge-outline align-middle badge-sm"
+            data-testid="article-draft-badge">{m.article_card_draft()}</span
+          >
+        {/if}
         {title}
       </h2>
 

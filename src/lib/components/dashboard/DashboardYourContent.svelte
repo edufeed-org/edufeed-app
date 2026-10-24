@@ -141,7 +141,7 @@
     const relayGroups = [
       { relays: getCalendarRelays(), kinds: [31922, 31923] },
       { relays: getEducationalRelays(), kinds: [30142] },
-      { relays: getArticleRelays(), kinds: [30023] },
+      { relays: getArticleRelays(), kinds: [30023, 30024] },
       { relays: getAllLookupRelays(), kinds: [30818, 30168, 39701] },
       { relays: getPollRelays(), kinds: [1068] }
     ];
@@ -202,6 +202,14 @@
     <circle cx="12" cy="12" r="9" />
     <path d="M3 12h18M12 3a13 13 0 0 1 0 18M12 3a13 13 0 0 0 0 18" />
   </svg>
+{/snippet}
+{#snippet status(/** @type {{ draft?: boolean }} */ card)}
+  {#if card.draft}
+    <span class="myc-draft" data-testid="mycontent-status-draft">{m.mycontent_status_draft()}</span>
+  {:else}
+    {@render pubGlobe()}
+    <span>{m.mycontent_status_published()}</span>
+  {/if}
 {/snippet}
 
 <section data-testid="dashboard-your-content" class="myc">
@@ -378,8 +386,7 @@
                   <h4 class="myc-card-title">{card.title}</h4>
                   {#if card.description}<p class="myc-card-desc">{card.description}</p>{/if}
                   <div class="myc-card-foot">
-                    {@render pubGlobe()}
-                    <span>{m.mycontent_status_published()}</span>
+                    {@render status(card)}
                     <span class="myc-card-dot">·</span>
                     <span>{formatRelativeTime(event.created_at)}</span>
                     <OwnerCardStats {event} />
@@ -405,8 +412,7 @@
           <h4 class="myc-card-title">{card.title}</h4>
           {#if card.description}<p class="myc-card-desc">{card.description}</p>{/if}
           <div class="myc-card-foot">
-            {@render pubGlobe()}
-            <span>{m.mycontent_status_published()}</span>
+            {@render status(card)}
             <span class="myc-card-dot">·</span>
             <span>{formatRelativeTime(event.created_at)}</span>
             <OwnerCardStats {event} />
@@ -444,8 +450,7 @@
             >
           </span>
           <span class="myc-row-status">
-            {@render pubGlobe()}
-            {m.mycontent_status_published()}
+            {@render status(card)}
             <OwnerCardStats {event} />
           </span>
         </button>
@@ -638,6 +643,15 @@
     line-clamp: 1;
     -webkit-box-orient: vertical;
     overflow: hidden;
+  }
+  .myc-draft {
+    display: inline-block;
+    padding: 0 0.4rem;
+    border: 1px dashed currentColor;
+    border-radius: 999px;
+    font-size: 0.7rem;
+    line-height: 1.2rem;
+    opacity: 0.8;
   }
   .myc-card-foot {
     display: flex;
