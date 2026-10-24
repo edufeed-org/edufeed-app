@@ -32,7 +32,7 @@ export function isPlaceholderBoard(board) {
 /**
  * Events without placeholder boards; other kinds pass through untouched and
  * the same array is returned when nothing was dropped.
- * @template {import('nostr-tools').Event} T
+ * @template {{ kind: number, tags?: string[][] }} T
  * @param {T[]} events
  * @returns {T[]}
  */
