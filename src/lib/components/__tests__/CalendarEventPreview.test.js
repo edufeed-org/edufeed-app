@@ -11,7 +11,14 @@ import { render, screen, waitFor } from '@testing-library/svelte';
 import * as m from '$lib/paraglide/messages';
 
 const h = vi.hoisted(() => ({ event: null }));
-vi.mock('$lib/helpers/nostrUtils.js', () => ({ fetchEventById: async () => h.event }));
+// The preview resolves its reference through the EventStore (store first)
+vi.mock('$lib/stores/nostr-infrastructure.svelte', async () => {
+  const { of } = await import('rxjs');
+  return { eventStore: { event: () => of(h.event) } };
+});
+// The component only falls back to decoding when no `decoded` prop is passed
+vi.mock('$lib/helpers/nostrUtils.js', () => ({ decodeNostrIdentifier: () => null }));
+vi.mock('$lib/helpers/relay-helper.js', () => ({ getAllLookupRelays: () => [] }));
 vi.mock('$lib/stores/accounts.svelte', () => ({
   useActiveUser: () => () => ({ pubkey: 'a'.repeat(64) })
 }));
@@ -32,6 +39,14 @@ vi.mock(
   '$lib/components/shared/ImageWithFallback.svelte',
   () => import('./__mocks__/EmptyStub.svelte')
 );
+
+/** A decoded naddr for the component (the dispatcher normally passes it) */
+const decoded = {
+  success: true,
+  type: 'naddr',
+  data: { kind: 31923, pubkey: 'b'.repeat(64), identifier: 'm1', relays: [] },
+  identifier: 'naddr1x'
+};
 
 const { default: CalendarEventPreview } = await import(
   '$lib/components/shared/NostrPreviews/CalendarEventPreview.svelte'
@@ -55,7 +70,7 @@ const calendarEvent = (hValue) => ({
 describe('CalendarEventPreview', () => {
   it('renders a neutral card for a channel meeting: no RSVP, no link', async () => {
     h.event = calendarEvent('4c9b50c8c413f15e');
-    const { container } = render(CalendarEventPreview, { identifier: 'naddr1x', decoded: null });
+    const { container } = render(CalendarEventPreview, { identifier: 'naddr1x', decoded });
     const card = await screen.findByTestId('channel-meeting-preview');
     expect(card.textContent).toContain(m.meeting_preview_channel());
     expect(screen.queryByTestId('stub-component')).toBeNull();
@@ -65,7 +80,7 @@ describe('CalendarEventPreview', () => {
 
   it('keeps the full card and RSVP for a community calendar event', async () => {
     h.event = calendarEvent('c'.repeat(64));
-    render(CalendarEventPreview, { identifier: 'naddr1y', decoded: null });
+    render(CalendarEventPreview, { identifier: 'naddr1y', decoded });
     await waitFor(() => expect(screen.getByTestId('calendar-event-preview-card')).toBeTruthy());
     expect(screen.getByTestId('stub-component')).toBeTruthy();
   });

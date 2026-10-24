@@ -158,22 +158,55 @@ async function syncDeletionToCache({ pointer, until }) {
 }
 
 /**
+ * How long a cache read may take before the loaders go on without it. The
+ * cache is the FIRST stage of every address/event lookup (profiles, inline
+ * previews, replaceables), so a read that does not answer blocks the relays
+ * behind it; applesauce's own stage budget is seconds longer and a stalled
+ * IndexedDB (seen on a profile with a 20k-event store) turned every lookup
+ * into a long wait. A miss here only costs one relay request — the event
+ * still lands in the cache through the write side.
+ */
+export const CACHE_READ_TIMEOUT_MS = 1_500;
+let slowCacheWarnedAt = 0;
+
+/**
  * Loader cache-request function. Returns events matching the filters from IDB.
- * Degrades to [] on any failure.
+ * Degrades to [] on any failure, and to [] when the read exceeds
+ * `CACHE_READ_TIMEOUT_MS` (the query keeps running; its result is dropped).
  *
  * @param {import('nostr-tools').Filter[]} filters
  * @returns {Promise<import('nostr-tools').Event[]>}
  */
 export async function cacheRequest(filters) {
   if (!nostrIDB) return [];
+  /** @type {ReturnType<typeof setTimeout> | undefined} */
+  let timer;
+  const timeout = new Promise((resolve) => {
+    timer = setTimeout(() => resolve(/** @type {null} */ (null)), CACHE_READ_TIMEOUT_MS);
+  });
   try {
-    await dbReady;
+    const read = (async () => {
+      await dbReady;
+      return nostrIDB.query(filters);
+    })();
+    const events = await Promise.race([read, timeout]);
+    if (events === null) {
+      if (Date.now() - slowCacheWarnedAt > 60_000) {
+        slowCacheWarnedAt = Date.now();
+        console.warn(
+          `[event-cache] cache read exceeded ${CACHE_READ_TIMEOUT_MS} ms, continuing without it`
+        );
+      }
+      return [];
+    }
     // Channel meetings cached before the write filter existed must not
     // resurface in generic views.
-    return withoutChannelMeetings(await nostrIDB.query(filters));
+    return withoutChannelMeetings(events);
   } catch (err) {
     console.warn('[event-cache] cacheRequest failed', err);
     return [];
+  } finally {
+    clearTimeout(timer);
   }
 }
 
