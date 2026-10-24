@@ -53,7 +53,27 @@
   /** @type {IntersectionObserver | undefined} */
   let cardObserver;
 
-  $effect(() => {
+  /**
+   * The nearest scrolling ancestor. The page scrolls inside <main>, not the
+   * window, and an IntersectionObserver with `root: null` is clipped by that
+   * container: a card below main's visible edge never intersected, whatever
+   * the rootMargin, so nothing was pre-rendered and on a short viewport a
+   * grid that starts below the fold (the learning tab, under its filter
+   * rows) rendered no card at all until the user scrolled.
+   * @param {Element} node
+   * @returns {Element | null}
+   */
+  function scrollParentOf(node) {
+    for (let el = node.parentElement; el; el = el.parentElement) {
+      const { overflowY } = getComputedStyle(el);
+      if (overflowY === 'auto' || overflowY === 'scroll') return el;
+    }
+    return null;
+  }
+
+  /** @param {Element} node */
+  function cardObserverFor(node) {
+    if (cardObserver) return cardObserver;
     cardObserver = new IntersectionObserver(
       (entries) => {
         let changed = false;
@@ -69,10 +89,13 @@
         }
         if (changed) visibleItemIds = new SvelteSet(visibleItemIds);
       },
-      { rootMargin: '800px' } // Pre-render items 800px before viewport for smooth scrolling
+      // Pre-render items 800px before they scroll into the container
+      { root: scrollParentOf(node), rootMargin: '800px' }
     );
-    return () => cardObserver?.disconnect();
-  });
+    return cardObserver;
+  }
+
+  $effect(() => () => cardObserver?.disconnect());
 
   /**
    * @param {HTMLElement} node
@@ -80,7 +103,7 @@
    */
   function observeCard(node, itemId) {
     node.setAttribute('data-item-id', itemId);
-    cardObserver?.observe(node);
+    cardObserverFor(node).observe(node);
     return {
       destroy: () => cardObserver?.unobserve(node),
       update: (/** @type {string} */ newId) => {
@@ -98,7 +121,7 @@
       (entries) => {
         if (entries[0].isIntersecting && !isLoadingMore) onloadmore();
       },
-      { root: null, rootMargin: '200px', threshold: 0.1 }
+      { root: scrollParentOf(sentinel), rootMargin: '200px', threshold: 0.1 }
     );
     observer.observe(sentinel);
     return () => observer.disconnect();
