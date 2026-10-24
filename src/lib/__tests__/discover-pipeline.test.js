@@ -1,3 +1,4 @@
+// @ts-nocheck
 /** @vitest-environment node */
 // The discover content pipeline: raw items → relay filter → author filter →
 // text search → sort. Pure functions over `{type, data}` items; the page's
