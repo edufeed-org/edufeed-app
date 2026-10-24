@@ -22,10 +22,10 @@ const RAW_EVENT = {
 // Login state toggled per test
 let mockUser = /** @type {any} */ (null);
 
-vi.mock('$lib/helpers/nostrUtils.js', async (importOriginal) => {
-  const original = /** @type {any} */ (await importOriginal());
-  return { ...original, fetchEventById: vi.fn(async () => RAW_EVENT) };
-});
+// The preview resolves its event through the EventStore hook (97b436ae).
+vi.mock('$lib/stores/referenced-event.svelte.js', () => ({
+  useReferencedEvent: () => ({ event: RAW_EVENT, isLoading: false })
+}));
 vi.mock('$lib/stores/accounts.svelte', () => ({
   useActiveUser: () => () => mockUser
 }));

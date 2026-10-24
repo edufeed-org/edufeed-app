@@ -205,5 +205,7 @@ describe('ResourceFormWizard edit-mode prefill effect', () => {
 
     const loopErrors = getSvelteRuntimeErrors();
     expect(threw || loopErrors.length > 0).toBe(true);
-  });
+    // Svelte (5.55, dev mode) needs ~5 s to run the 1000 iterations before it
+    // reports effect_update_depth_exceeded — more than the default 5 s timeout.
+  }, 20_000);
 });

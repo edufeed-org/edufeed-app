@@ -222,7 +222,11 @@ describe('EditProfileModal save (own profile)', () => {
     const [action, content] = /** @type {any[]} */ (h.runAction.mock.calls[0]);
     expect(action).toBe(CreateProfile);
     expect(content).toMatchObject({ name: 'Alice' });
-    expect(container.textContent).toContain('profile_edit_modal_success');
+    // The success notice follows the remaining async steps (interests list,
+    // group metadata sync), not the profile action itself.
+    await waitFor(() => {
+      expect(container.textContent).toContain('profile_edit_modal_success');
+    });
   });
 
   it('saves through the UpdateProfile action with an interests-free edufeed object', async () => {

@@ -5,6 +5,10 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { BehaviorSubject, Subject } from 'rxjs';
 
 vi.mock('$app/navigation', () => ({ goto: vi.fn() }));
+// The real accounts store starts async module loads at import time (relay
+// warming, identity rebroadcast, …) that outlive this file's environment and
+// surface as an EnvironmentTeardownError. Notifications get the pubkey passed in.
+vi.mock('$lib/stores/accounts.svelte', () => ({ useActiveUser: () => () => null }));
 vi.mock('$lib/stores/nostr-infrastructure.svelte', () => ({
   eventStore: { getReplaceable: () => undefined }
 }));
