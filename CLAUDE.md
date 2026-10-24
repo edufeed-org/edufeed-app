@@ -157,6 +157,8 @@ let events = $state([]);
 let events = $state.raw([]);
 ```
 
+**Safety net:** every event inserted into the shared EventStore gets its own prototype (`NOSTR_EVENT_PROTOTYPE` in `nostr-infrastructure.svelte.js`), which Svelte never deep-proxies — so an event that came through a loader or model cannot trigger `state_descriptors_fixed` even inside a deep `$state`. Only events read straight from a relay without the store (`pool.…request/subscription` in a component) are still plain objects; those surfaces must hold them in `$state.raw` (`state-raw-events.test.js` checks by name and by assigned value) — or better, route them through the store like everything else.
+
 **When to use `$state.raw()`:**
 
 - Arrays of Nostr events that carry Symbol-based metadata (relay provenance)
