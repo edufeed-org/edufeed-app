@@ -6,70 +6,40 @@
 
 <script>
   import { resolve } from '$app/paths';
-  import { fetchEventById } from '$lib/helpers/nostrUtils.js';
+  import { useReferencedEvent } from '$lib/stores/referenced-event.svelte.js';
+  import { decodeNostrIdentifier } from '$lib/helpers/nostrUtils.js';
+  import FallbackIdentifier from './FallbackIdentifier.svelte';
   import { CalendarIcon } from '$lib/components/icons';
-  import { CopyIcon } from '$lib/components/icons';
   import ImageWithFallback from '$lib/components/shared/ImageWithFallback.svelte';
 
-  let { identifier, decoded: _decoded, inline: _inline = false } = $props();
+  let {
+    identifier,
+    decoded = decodeNostrIdentifier(identifier),
+    inline: _inline = false
+  } = $props();
 
+  // Store first: the referenced calendar (kind 31924) from the EventStore,
+  // loaded on a miss and upgraded when it arrives late.
+  const ref = useReferencedEvent(() => decoded);
+  const isLoading = $derived(ref.isLoading);
   /** @type {{name: string, description: string, image: string | null, eventCount: number} | null} */
-  // $state.raw: replaced whole, never mutated — a deep proxy breaks applesauce's
-  // symbol memoization on the event (state_descriptors_fixed).
-  let calendar = $state.raw(null);
-  let isLoading = $state(true);
-  let error = $state('');
-
-  $effect(() => {
-    isLoading = true;
-    error = '';
-
-    fetchEventById(identifier)
-      .then((rawEvent) => {
-        if (rawEvent && rawEvent.kind === 31924) {
-          // Parse calendar metadata from tags
-          const dTag = rawEvent.tags.find((t) => t[0] === 'd')?.[1] || 'untitled';
-          const descriptionTag = rawEvent.tags.find((t) => t[0] === 'description');
-          const imageTag = rawEvent.tags.find((t) => t[0] === 'image');
-          const eventRefs = rawEvent.tags.filter((t) => t[0] === 'a');
-
-          calendar = {
-            name: dTag,
-            description: descriptionTag?.[1] || '',
-            image: imageTag?.[1] || null,
-            eventCount: eventRefs.length
-          };
-        } else {
-          error = 'Calendar not found';
-        }
-      })
-      .catch((err) => {
-        error = err.message || 'Failed to load calendar';
-      })
-      .finally(() => {
-        isLoading = false;
-      });
+  const calendar = $derived.by(() => {
+    const rawEvent = ref.event;
+    if (!rawEvent || rawEvent.kind !== 31924) return null;
+    return {
+      name: rawEvent.tags.find((/** @type {any} */ t) => t[0] === 'd')?.[1] || 'untitled',
+      description: rawEvent.tags.find((/** @type {any} */ t) => t[0] === 'description')?.[1] || '',
+      image: rawEvent.tags.find((/** @type {any} */ t) => t[0] === 'image')?.[1] || null,
+      eventCount: rawEvent.tags.filter((/** @type {any} */ t) => t[0] === 'a').length
+    };
   });
 
   /** @type {string} */
   let calendarUrl = $derived(resolve(`/calendar/${identifier}`));
-
-  function copyIdentifier() {
-    navigator.clipboard.writeText(identifier);
-  }
 </script>
 
 {#if isLoading}
   <div class="my-2 h-20 w-full skeleton rounded-lg"></div>
-{:else if error}
-  <div class="my-2 alert text-sm alert-error">
-    <div class="flex w-full items-center justify-between">
-      <span>⚠️ {error}</span>
-      <button class="btn btn-ghost btn-xs" onclick={copyIdentifier} title="Copy identifier">
-        <CopyIcon class_="w-3 h-3" />
-      </button>
-    </div>
-  </div>
 {:else if calendar}
   <!-- eslint-disable svelte/no-navigation-without-resolve -- internal: already resolved via resolve() -->
   <a
@@ -112,4 +82,8 @@
     </div>
   </a>
   <!-- eslint-enable svelte/no-navigation-without-resolve -->
+{:else}
+  <!-- Not (yet) available: a plain badge, never an error — the store subscription
+       keeps listening and the card appears if the event arrives later -->
+  <FallbackIdentifier {identifier} {decoded} />
 {/if}

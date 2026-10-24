@@ -8,11 +8,12 @@
   import { resolve as _resolve } from '$app/paths';
   /** @type {(path: string) => string} */
   const resolve = /** @type {any} */ (_resolve);
-  import { fetchEventById } from '$lib/helpers/nostrUtils.js';
+  import { useReferencedEvent } from '$lib/stores/referenced-event.svelte.js';
+  import { decodeNostrIdentifier } from '$lib/helpers/nostrUtils.js';
+  import FallbackIdentifier from './FallbackIdentifier.svelte';
   import { formatCalendarDate } from '$lib/helpers/calendar.js';
   import { CalendarIcon, ClockIcon } from '$lib/components/icons';
   import LocationLink from '../LocationLink.svelte';
-  import { CopyIcon } from '$lib/components/icons';
   import { getCalendarEventStart, getCalendarEventEnd } from 'applesauce-common/helpers';
   import MarkdownRenderer from '../MarkdownRenderer.svelte';
   import InlineRsvp from '$lib/components/calendar/InlineRsvp.svelte';
@@ -21,63 +22,49 @@
   import { isChannelMeeting } from '$lib/helpers/calendar-timing.js';
   import * as m from '$lib/paraglide/messages';
 
-  let { identifier, decoded: _decoded, inline: _inline = false } = $props();
+  let {
+    identifier,
+    decoded = decodeNostrIdentifier(identifier),
+    inline: _inline = false
+  } = $props();
 
   const getActiveUser = useActiveUser();
   let activeUser = $derived(getActiveUser());
 
-  // $state.raw: replaced whole, never mutated — a deep proxy breaks applesauce's
-  // symbol memoization on the event (state_descriptors_fixed).
-  /** @type {any} */
-  let event = $state.raw(null);
-  let isLoading = $state(true);
-  let error = $state('');
-
-  $effect(() => {
-    isLoading = true;
-    error = '';
-
-    fetchEventById(identifier)
-      .then((rawEvent) => {
-        if (rawEvent) {
-          // Parse event tags to extract metadata
-          const titleTag = rawEvent.tags.find((t) => t[0] === 'name' || t[0] === 'title');
-          const summaryTag = rawEvent.tags.find(
-            (t) => t[0] === 'summary' || t[0] === 'description'
-          );
-          const imageTag = rawEvent.tags.find((t) => t[0] === 'image');
-          const locationTags = rawEvent.tags.filter((t) => t[0] === 'location');
-
-          /** @type {import('$lib/types/calendar.js').CalendarEvent} */
-          const parsedEvent = {
-            id: rawEvent.id,
-            pubkey: rawEvent.pubkey,
-            kind: /** @type {import('$lib/types/calendar.js').CalendarEventKind} */ (rawEvent.kind),
-            title: titleTag?.[1] || 'Untitled Event',
-            summary: summaryTag?.[1] || '',
-            image: imageTag?.[1] || '',
-            start: getCalendarEventStart(rawEvent) || 0,
-            end: getCalendarEventEnd(rawEvent) || 0,
-            location: locationTags.map((t) => t[1]).join(', '),
-            participants: [],
-            hashtags: [],
-            references: [],
-            eventReferences: [],
-            communityPubkey: '',
-            createdAt: rawEvent.created_at,
-            originalEvent: rawEvent
-          };
-          event = parsedEvent;
-        } else {
-          error = 'Event not found';
-        }
-      })
-      .catch((err) => {
-        error = err.message || 'Failed to load event';
-      })
-      .finally(() => {
-        isLoading = false;
-      });
+  // Store first: the referenced calendar event from the EventStore, loaded on
+  // a miss and upgraded when it arrives late (see referenced-event.svelte.js).
+  const ref = useReferencedEvent(() => decoded);
+  const isLoading = $derived(ref.isLoading);
+  /** @type {import('$lib/types/calendar.js').CalendarEvent | null} */
+  const event = $derived.by(() => {
+    const rawEvent = ref.event;
+    if (!rawEvent) return null;
+    const titleTag = rawEvent.tags.find(
+      (/** @type {any} */ t) => t[0] === 'name' || t[0] === 'title'
+    );
+    const summaryTag = rawEvent.tags.find(
+      (/** @type {any} */ t) => t[0] === 'summary' || t[0] === 'description'
+    );
+    const imageTag = rawEvent.tags.find((/** @type {any} */ t) => t[0] === 'image');
+    const locationTags = rawEvent.tags.filter((/** @type {any} */ t) => t[0] === 'location');
+    return {
+      id: rawEvent.id,
+      pubkey: rawEvent.pubkey,
+      kind: /** @type {import('$lib/types/calendar.js').CalendarEventKind} */ (rawEvent.kind),
+      title: titleTag?.[1] || 'Untitled Event',
+      summary: summaryTag?.[1] || '',
+      image: imageTag?.[1] || '',
+      start: getCalendarEventStart(rawEvent) || 0,
+      end: getCalendarEventEnd(rawEvent) || 0,
+      location: locationTags.map((/** @type {any} */ t) => t[1]).join(', '),
+      participants: [],
+      hashtags: [],
+      references: [],
+      eventReferences: [],
+      communityPubkey: '',
+      createdAt: rawEvent.created_at,
+      originalEvent: rawEvent
+    };
   });
 
   /** @type {string} */
@@ -90,23 +77,10 @@
   let isAllDay = $derived(event?.kind === 31922);
   /** @type {string} */
   let locationString = $derived(event?.location || '');
-
-  function copyIdentifier() {
-    navigator.clipboard.writeText(identifier);
-  }
 </script>
 
 {#if isLoading}
   <div class="my-2 h-24 w-full skeleton rounded-lg"></div>
-{:else if error}
-  <div class="my-2 alert text-sm alert-error">
-    <div class="flex w-full items-center justify-between">
-      <span>⚠️ {error}</span>
-      <button class="btn btn-ghost btn-xs" onclick={copyIdentifier} title="Copy identifier">
-        <CopyIcon class_="w-3 h-3" />
-      </button>
-    </div>
-  </div>
 {:else if event && isChannelMeeting(event.originalEvent)}
   <!-- A channel meeting lives on its group relay only: no RSVP (a 31925
        would go out through the outbox naming it), no details, no link to the
@@ -196,4 +170,8 @@
       </div>
     {/if}
   </div>
+{:else}
+  <!-- Not (yet) available: a plain badge, never an error — the store subscription
+       keeps listening and the card appears if the event arrives later -->
+  <FallbackIdentifier {identifier} {decoded} />
 {/if}

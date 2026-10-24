@@ -9,69 +9,33 @@
   import { resolve as _resolve } from '$app/paths';
   /** @type {(path: string) => string} */
   const resolve = /** @type {any} */ (_resolve);
-  import { fetchEventById } from '$lib/helpers/nostrUtils.js';
+  import { useReferencedEvent } from '$lib/stores/referenced-event.svelte.js';
+  import { decodeNostrIdentifier } from '$lib/helpers/nostrUtils.js';
+  import FallbackIdentifier from './FallbackIdentifier.svelte';
   import { getArticleTitle, getArticleSummary, getArticleImage } from 'applesauce-common/helpers';
-  import { CopyIcon } from '$lib/components/icons';
   import ImageWithFallback from '../ImageWithFallback.svelte';
 
-  let { identifier, decoded: _decoded, inline: _inline = false } = $props();
+  let {
+    identifier,
+    decoded = decodeNostrIdentifier(identifier),
+    inline: _inline = false
+  } = $props();
 
-  // $state.raw: replaced whole, never mutated — a deep proxy breaks applesauce's
-  // symbol memoization on the event (state_descriptors_fixed).
-  /** @type {any} */
-  let event = $state.raw(null);
-  let isLoading = $state(true);
-  let error = $state('');
-
-  /** @type {string} */
-  let title = $state('');
-  /** @type {string} */
-  let summary = $state('');
-  /** @type {string | undefined} */
-  let image = $state(undefined);
-
-  $effect(() => {
-    isLoading = true;
-    error = '';
-
-    fetchEventById(identifier)
-      .then((rawEvent) => {
-        if (rawEvent) {
-          event = rawEvent;
-          title = getArticleTitle(rawEvent) || 'Untitled Article';
-          summary = getArticleSummary(rawEvent) || '';
-          image = getArticleImage(rawEvent);
-        } else {
-          error = 'Article not found';
-        }
-      })
-      .catch((err) => {
-        error = err.message || 'Failed to load article';
-      })
-      .finally(() => {
-        isLoading = false;
-      });
-  });
+  // Store first: the referenced article from the EventStore, loaded on a miss
+  // and upgraded when it arrives late (see referenced-event.svelte.js).
+  const ref = useReferencedEvent(() => decoded);
+  const event = $derived(ref.event);
+  const isLoading = $derived(ref.isLoading);
+  const title = $derived(event ? getArticleTitle(event) || 'Untitled Article' : '');
+  const summary = $derived(event ? getArticleSummary(event) || '' : '');
+  const image = $derived(event ? getArticleImage(event) : undefined);
 
   /** @type {string} */
   let eventUrl = $derived(resolve(`/${identifier}`));
-
-  function copyIdentifier() {
-    navigator.clipboard.writeText(identifier);
-  }
 </script>
 
 {#if isLoading}
   <div class="my-2 h-24 w-full skeleton rounded-lg"></div>
-{:else if error}
-  <div class="my-2 alert text-sm alert-error">
-    <div class="flex w-full items-center justify-between">
-      <span>⚠️ {error}</span>
-      <button class="btn btn-ghost btn-xs" onclick={copyIdentifier} title="Copy identifier">
-        <CopyIcon class_="w-3 h-3" />
-      </button>
-    </div>
-  </div>
 {:else if event}
   <!-- eslint-disable svelte/no-navigation-without-resolve -- internal: already resolved via resolve() -->
   <a
@@ -102,4 +66,8 @@
     </div>
   </a>
   <!-- eslint-enable svelte/no-navigation-without-resolve -->
+{:else}
+  <!-- Not (yet) available: a plain badge, never an error — the store subscription
+       keeps listening and the card appears if the event arrives later -->
+  <FallbackIdentifier {identifier} {decoded} />
 {/if}
