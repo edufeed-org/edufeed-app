@@ -30,10 +30,13 @@
   /** @typedef {Object} Props
    *  @property {string[]} [featuredAuthors]  Configured featured author pubkeys (hex)
    *  @property {() => void} [onChange]       Fires whenever a people-related selection changes
+   *  @property {'start' | 'end'} [align]     Which edge of the trigger the panel hangs from.
+   *    The desktop filter bar sits at the right edge of the chrome row, so its
+   *    panel must open to the left ('end') or it runs past the viewport.
    */
 
   /** @type {Props} */
-  let { featuredAuthors = [], onChange = () => {} } = $props();
+  let { featuredAuthors = [], onChange = () => {}, align = 'start' } = $props();
 
   let activeUser = $state(manager.active);
   /** @type {import('rxjs').Subscription | undefined} */
@@ -206,7 +209,7 @@
   );
 </script>
 
-<div class="dropdown">
+<div class="dropdown" class:dropdown-end={align === 'end'}>
   <button
     type="button"
     tabindex="0"
@@ -224,7 +227,7 @@
 
   <div
     tabindex="-1"
-    class="dropdown-content z-30 mt-1 w-80 rounded-box border border-base-300 bg-base-100 p-3 shadow-lg"
+    class="dropdown-content z-30 mt-1 w-80 max-w-[calc(100vw-2rem)] rounded-box border border-base-300 bg-base-100 p-3 shadow-lg"
     data-testid="people-filter-panel"
   >
     <!-- Quick toggle row -->

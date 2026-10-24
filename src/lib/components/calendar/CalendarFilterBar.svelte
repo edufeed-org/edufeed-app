@@ -45,8 +45,8 @@
       />
     </div>
 
-    <!-- Tags -->
-    <div class="dropdown">
+    <!-- Tags (right-anchored: the bar sits at the right edge of the chrome row) -->
+    <div class="dropdown dropdown-end">
       <button type="button" tabindex="0" class="btn gap-1 btn-outline btn-sm" data-filter-trigger>
         <span>Tags</span>
         {#if validEvents && validEvents.length >= 0}
@@ -63,7 +63,7 @@
     </div>
 
     <!-- People (replaces Authors + Follow-Listen) -->
-    <PeopleFilter {featuredAuthors} onChange={onPeopleChange} />
+    <PeopleFilter {featuredAuthors} onChange={onPeopleChange} align="end" />
 
     <!-- Advanced (Relays) — pushed right -->
     {#if showRelays}

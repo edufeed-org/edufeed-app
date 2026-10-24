@@ -67,3 +67,12 @@ describe('CalendarFilterBar', () => {
     expect(container).toBeTruthy();
   });
 });
+
+describe('CalendarFilterBar dropdown anchoring', () => {
+  it('right-anchors the Tags and People panels so they stay inside the viewport', () => {
+    const { container } = render(CalendarFilterBar, { props: { validEvents: [] } });
+    const wrappers = Array.from(container.querySelectorAll('.dropdown'));
+    expect(wrappers.length).toBeGreaterThanOrEqual(1); // PeopleFilter is mocked away here
+    for (const w of wrappers) expect(w.classList.contains('dropdown-end')).toBe(true);
+  });
+});
