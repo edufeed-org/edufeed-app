@@ -169,3 +169,26 @@ describe('PeopleFilter search bar', () => {
     expect(calendarFilters.selectedFeaturedAuthors).toEqual([]);
   });
 });
+
+describe('PeopleFilter panel anchoring', () => {
+  beforeEach(() => {
+    calendarFilters.reset();
+  });
+
+  it('anchors the panel to the trigger start by default (drawer placement)', () => {
+    const { container } = render(PeopleFilter, { props: { featuredAuthors: [PUBKEY_ALICE] } });
+    const wrapper = /** @type {HTMLElement} */ (container.querySelector('.dropdown'));
+    expect(wrapper.classList.contains('dropdown-end')).toBe(false);
+  });
+
+  it('anchors the panel to the trigger end when align="end" (right-aligned filter bar)', () => {
+    // The desktop filter bar sits at the right edge of the chrome row; a
+    // left-anchored 20rem panel ran past the viewport and gave the page a
+    // horizontal scrollbar (laoc, 2026-10-24).
+    const { container } = render(PeopleFilter, {
+      props: { featuredAuthors: [PUBKEY_ALICE], align: 'end' }
+    });
+    const wrapper = /** @type {HTMLElement} */ (container.querySelector('.dropdown'));
+    expect(wrapper.classList.contains('dropdown-end')).toBe(true);
+  });
+});

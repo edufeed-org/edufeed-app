@@ -22,6 +22,8 @@ const defaultConfig = {
   clientName: 'Edufeed',
   // NIP-65 relay list discovery relays
   relayListLookupRelays: [],
+  blockedPubkeys: [],
+  calendarHiddenPubkeys: [],
   // Profile indexer relays for bulk profile lookups
   indexerRelays: [],
   // NIP-50 capable relays for free-text profile search (PROFILE_SEARCH_RELAYS)
@@ -316,6 +318,9 @@ export function initializeConfig(runtimeConfig) {
     clientName: runtimeConfig.clientName || defaultConfig.clientName,
     relayListLookupRelays:
       runtimeConfig.relayListLookupRelays || defaultConfig.relayListLookupRelays,
+    blockedPubkeys: runtimeConfig.blockedPubkeys || defaultConfig.blockedPubkeys,
+    calendarHiddenPubkeys:
+      runtimeConfig.calendarHiddenPubkeys || defaultConfig.calendarHiddenPubkeys,
     indexerRelays: runtimeConfig.indexerRelays || defaultConfig.indexerRelays,
     profileSearchRelays: runtimeConfig.profileSearchRelays || defaultConfig.profileSearchRelays,
     profileSearchObserver:
@@ -512,6 +517,14 @@ export const runtimeConfig = {
   },
   get relayListLookupRelays() {
     return config.relayListLookupRelays;
+  },
+  /** @returns {string[]} */
+  get blockedPubkeys() {
+    return config.blockedPubkeys;
+  },
+  /** @returns {string[]} */
+  get calendarHiddenPubkeys() {
+    return config.calendarHiddenPubkeys;
   },
   get indexerRelays() {
     return config.indexerRelays;

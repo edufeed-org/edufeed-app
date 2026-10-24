@@ -69,3 +69,39 @@ describe('CalendarNavigation period buttons', () => {
     expect(queryAllByRole('button', { name: m.common_today() })).toHaveLength(0);
   });
 });
+
+describe('CalendarNavigation hidden sources (design option 1e)', () => {
+  it('appends the hidden-sources fragment to the event count line', () => {
+    const { container, queryByTestId } = render(CalendarNavigation, {
+      props: {
+        currentDate: new Date(2026, 9, 5),
+        viewMode: 'month',
+        presentationViewMode: 'calendar',
+        communityMode: true,
+        eventCount: 22,
+        hiddenSources: 918,
+        onViewModeChange: () => {}
+      }
+    });
+    const toggle = queryByTestId('hidden-sources-toggle');
+    expect(toggle).toBeTruthy();
+    // Same line as "· 22 Events", not a separate block
+    const countLine = /** @type {HTMLElement} */ (toggle?.parentElement);
+    expect(countLine.textContent).toMatch(/22 Events/);
+    expect(container.querySelectorAll('[data-testid="hidden-sources-toggle"]').length).toBe(1);
+  });
+
+  it('renders no fragment when nothing is hidden', () => {
+    const { queryByTestId } = render(CalendarNavigation, {
+      props: {
+        currentDate: new Date(2026, 9, 5),
+        viewMode: 'month',
+        presentationViewMode: 'calendar',
+        communityMode: true,
+        eventCount: 22,
+        onViewModeChange: () => {}
+      }
+    });
+    expect(queryByTestId('hidden-sources-toggle')).toBeNull();
+  });
+});

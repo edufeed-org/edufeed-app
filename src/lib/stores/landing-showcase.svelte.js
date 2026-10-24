@@ -7,6 +7,10 @@
 import { untrack } from 'svelte';
 import { TimelineModel } from 'applesauce-core/models';
 import { fetchEvents } from '$lib/loaders/base.js';
+import {
+  partitionHiddenCalendarSources,
+  getHiddenCalendarSourcesVersion
+} from '$lib/services/calendar-sources.svelte.js';
 import { loadShowcaseSources } from '$lib/loaders/landing-showcase-sources.js';
 import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
 import { runtimeConfig } from '$lib/stores/config.svelte.js';
@@ -172,9 +176,14 @@ export function useLandingShowcase() {
   const resources = $derived(raw.learning.map((event) => formatAMBResource(event)));
   const materials = $derived(pickMaterials(resources));
   const heroMaterial = $derived(pickHeroMaterial(resources));
-  const events = $derived(
-    pickUpcomingEvents(validateAndTransformCalendarEvents(raw.events), nowSec)
-  );
+  // Bulk sources never make the landing's "next events" (no toggle there)
+  const events = $derived.by(() => {
+    void getHiddenCalendarSourcesVersion();
+    return pickUpcomingEvents(
+      partitionHiddenCalendarSources(validateAndTransformCalendarEvents(raw.events)).shown,
+      nowSec
+    );
+  });
   const articles = $derived(pickArticles(raw.articles));
   const authors = $derived(
     unique(
