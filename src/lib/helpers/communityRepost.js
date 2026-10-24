@@ -1,4 +1,5 @@
 import { ShareFactory } from 'applesauce-common/factories';
+import { isProtectedEvent } from 'applesauce-core/helpers/event';
 import { finalizeDraft } from '$lib/helpers/event-factory.js';
 import { publishEventOptimistic } from '$lib/services/publish-service.js';
 import {
@@ -104,8 +105,10 @@ export async function createCommunityReposts(event, communityPubkeys, signer) {
   }
 
   // Clear content for replaceable events (NIP-18: optional when a-tag present)
+  // and ALWAYS for protected ones — NIP-70: reposts MUST NOT embed them, or
+  // the copy would travel to relays the author kept it off.
   const aTag = template.tags.find((/** @type {string[]} */ t) => t[0] === 'a');
-  if (aTag) {
+  if (aTag || isProtectedEvent(event)) {
     template.content = '';
   }
 

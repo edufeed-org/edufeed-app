@@ -11,6 +11,7 @@ import {
   showSlowSignHint,
   trackSlowSign
 } from '$lib/helpers/signer-wait.js';
+import { setRelayAuthSigner } from '$lib/services/relay-publish-auth.js';
 
 /**
  * @typedef {{ name?: string }} AccountMetadata
@@ -19,6 +20,10 @@ import {
 /* Shared manager (keeps same instance across component mounts) */
 export const manager = $state(new AccountManager());
 registerCommonAccountTypes(manager);
+// NIP-42: relays the user publishes to may ask who is writing (protected
+// events, members-only relays). The active account answers; with nobody
+// logged in nothing is signed and no prompt appears.
+setRelayAuthSigner(() => manager.active ?? null);
 
 /**
  * Version counter bridged from AccountManager's own `accounts$`/`active$`
