@@ -1,3 +1,4 @@
+// @ts-nocheck
 /** @vitest-environment node */
 // Kanban boards (kind 30301) that never got a name: the external editor
 // creates "Untitled Board" / "Shared 12345" and most of them stay that way.
