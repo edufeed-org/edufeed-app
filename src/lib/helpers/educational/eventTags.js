@@ -42,6 +42,30 @@ export async function appendCreatorPTags(tags, creators, resolveRelayHint) {
 }
 
 /**
+ * Append the flattened `creator:*` / `contributor:*` run for every person
+ * WITHOUT a Nostr identity (NIP-AMB AMB.md l.81-93) — people with a valid
+ * pubkey are represented by their p-tag alone (appendCreatorPTags), never
+ * twice. Each person's fields are emitted consecutively so readers can
+ * split the run (getAMBCreators).
+ *
+ * @param {string[][]} tags - Mutated
+ * @param {Creator[] | undefined} creators
+ * @returns {void}
+ */
+export function appendFlattenedPeopleTags(tags, creators) {
+  for (const person of creators || []) {
+    const name = person.name?.trim();
+    if (!name || normalizePubkey(person.pubkey)) continue;
+    const prefix = person.role === 'contributor' ? 'contributor' : 'creator';
+    tags.push([`${prefix}:type`, person.type || 'Person']);
+    tags.push([`${prefix}:name`, name]);
+    if (person.honorificPrefix) tags.push([`${prefix}:honorificPrefix`, person.honorificPrefix]);
+    if (person.affiliationName) tags.push([`${prefix}:affiliation:name`, person.affiliationName]);
+    if (person.orcid) tags.push([`${prefix}:id`, person.orcid]);
+  }
+}
+
+/**
  * Append one `["r", trimmedUrl]` tag per non-empty external URL (NIP-24).
  *
  * @param {string[][]} tags - Mutated

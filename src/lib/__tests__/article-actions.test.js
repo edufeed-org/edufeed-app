@@ -35,6 +35,10 @@ vi.mock('$lib/services/app-relay-service.svelte.js', () => ({
   getAppRelaysForCategory: vi.fn(() => ['wss://longform.relay'])
 }));
 
+vi.mock('$lib/services/relay-service.svelte.js', () => ({
+  getPrimaryWriteRelay: vi.fn(async () => 'wss://write.relay')
+}));
+
 import { manager } from '$lib/stores/accounts.svelte';
 import { createArticle, updateArticle } from '../stores/article-actions.svelte.js';
 import { publishEventOptimistic } from '$lib/services/publish-service.js';
@@ -72,6 +76,28 @@ describe('createArticle', () => {
     expect(lastSignedEvent.tags).toContainEqual(['p', bob]);
     expect(lastSignedEvent.content).toContain(`nostr:${nip19.npubEncode(bob)}`);
     expect(/** @type {any} */ (publishEventOptimistic).mock.calls[0][1]).toEqual([alice, bob]);
+  });
+
+  it('credits linked creators with marked p-tags and sends them the article', async () => {
+    const corinna = 'c'.repeat(64);
+    await createArticle({
+      title: 'T',
+      content: 'body',
+      creators: [{ name: 'Corinna', type: 'Person', pubkey: nip19.npubEncode(corinna) }]
+    });
+    expect(lastSignedEvent.tags).toContainEqual(['p', corinna, 'wss://write.relay', 'creator']);
+    expect(/** @type {any} */ (publishEventOptimistic).mock.calls[0][1]).toEqual([corinna]);
+  });
+
+  it('keeps the creator marker when the creator is also mentioned in the body', async () => {
+    const corinna = 'c'.repeat(64);
+    await createArticle({
+      title: 'T',
+      content: `Von nostr:${nip19.npubEncode(corinna)}`,
+      creators: [{ name: 'Corinna', type: 'Person', pubkey: corinna, role: 'contributor' }]
+    });
+    const pTags = lastSignedEvent.tags.filter((/** @type {any} */ t) => t[0] === 'p');
+    expect(pTags).toEqual([['p', corinna, 'wss://write.relay', 'contributor']]);
   });
 
   it('builds correct NIP-23 tags', async () => {
@@ -242,6 +268,20 @@ describe('updateArticle', () => {
     );
     expect(lastSignedEvent.tags).toContainEqual(['p', alice]);
     expect(/** @type {any} */ (publishEventOptimistic).mock.calls[0][1]).toEqual([alice]);
+  });
+
+  it('re-credits creators from the form on update', async () => {
+    const corinna = 'c'.repeat(64);
+    const existing = {
+      ...existingEvent,
+      tags: [...existingEvent.tags, ['p', 'd'.repeat(64), '', 'creator']]
+    };
+    await updateArticle(
+      { title: 'T', content: 'body', creators: [{ name: '', type: 'Person', pubkey: corinna }] },
+      existing
+    );
+    const pTags = lastSignedEvent.tags.filter((/** @type {any} */ t) => t[0] === 'p');
+    expect(pTags).toEqual([['p', corinna, 'wss://write.relay', 'creator']]);
   });
 
   it('preserves existing d-tag', async () => {

@@ -9,6 +9,10 @@
   import { createArticle, updateArticle } from '$lib/stores/article-actions.svelte.js';
   import MarkdownEditor from '$lib/components/shared/MarkdownEditor.svelte';
   import EditableList from '$lib/components/shared/EditableList.svelte';
+  import CreatorInput from '$lib/components/educational/CreatorInput.svelte';
+  import { getLicenseOptions } from '$lib/helpers/educational/licenseOptions.js';
+  import { fetchProfileData } from '$lib/helpers/profile.js';
+  import { articlePeopleToForm, getArticleProvenance } from '$lib/helpers/article-attribution.js';
   import LicensedImageInput from '$lib/components/shared/LicensedImageInput.svelte';
   import { useLicenseForHash } from '$lib/stores/image-license.svelte.js';
   import { useActiveUser } from '$lib/stores/accounts.svelte';
@@ -44,6 +48,20 @@
    */
   let bodyMedia = $state.raw([]);
   let hashtags = $state(/** @type {string[]} */ ([]));
+
+  // Authorship & license (all optional): credit someone else as the author,
+  // name the license, where the text came from and what was changed (TULLU).
+  let creators = $state(
+    /** @type {import('$lib/stores/educational-actions.svelte.js').Creator[]} */ ([])
+  );
+  let license = $state('');
+  let source = $state('');
+  let changes = $state('');
+  const licenseOptions = $derived(getLicenseOptions(license));
+  const hasAttribution = $derived(
+    creators.length > 0 || !!license || !!source.trim() || !!changes.trim()
+  );
+  let attributionOpen = $state(false);
 
   // Prefill from a channel app export (webxdc sendToChat → sessionStorage handoff).
   if (data.prefill === 'webxdc') {
@@ -104,6 +122,13 @@
           event.tags
             ?.filter((/** @type {any} */ t) => t[0] === 't')
             .map((/** @type {any} */ t) => t[1]) || [];
+        creators = articlePeopleToForm(event);
+        const provenance = getArticleProvenance(event);
+        license = provenance.license?.id || '';
+        source = provenance.source || '';
+        changes = provenance.changes || '';
+        attributionOpen = creators.length > 0 || !!license || !!source || !!changes;
+        resolveLinkedCreatorNames();
       } catch (err) {
         console.error('Error loading article for edit:', err);
         editError = m.create_edit_error_article_load();
@@ -125,6 +150,23 @@
     }
   });
 
+  // Linked people arrive from the event without a name (NIP-AMB: only the
+  // p-tag is on the wire). Fill the list rows from their profiles in the
+  // background — best effort, never blocking the form on slow relays.
+  function resolveLinkedCreatorNames() {
+    for (const entry of creators) {
+      if (!entry.pubkey || entry.name) continue;
+      const pubkey = entry.pubkey;
+      fetchProfileData(pubkey)
+        .then((profile) => {
+          const name = typeof profile?.name === 'string' ? profile.name : '';
+          if (!name) return;
+          creators = creators.map((c) => (c.pubkey === pubkey && !c.name ? { ...c, name } : c));
+        })
+        .catch(() => {});
+    }
+  }
+
   function handleBack() {
     history.back();
   }
@@ -144,6 +186,11 @@
       validationError = m.amb_form_validation_image_license_missing();
       return;
     }
+    if (source.trim() && !/^https?:\/\//i.test(source.trim())) {
+      validationError = m.article_editor_validation_source();
+      attributionOpen = true;
+      return;
+    }
 
     isPublishing = true;
     try {
@@ -159,7 +206,11 @@
         imageHash,
         imageLicenseEvent: imageLicenseEvent ?? null,
         hashtags: hashtags.length > 0 ? hashtags : undefined,
-        media: bodyMedia
+        media: bodyMedia,
+        creators,
+        license: license || undefined,
+        source: source.trim() || undefined,
+        changes: changes.trim() || undefined
       };
 
       let naddr;
@@ -255,6 +306,69 @@
         placeholder={m.article_editor_content_placeholder()}
         onmediainsert={(att) => (bodyMedia = [...bodyMedia, att])}
       />
+
+      <!-- Authorship & license (collapsed unless something is set) -->
+      <details
+        class="collapse-arrow collapse rounded-lg border border-base-300 bg-base-100"
+        bind:open={attributionOpen}
+        data-testid="article-attribution"
+      >
+        <summary class="collapse-title font-medium">
+          {m.article_editor_attribution_heading()}
+          {#if hasAttribution && !attributionOpen}
+            <span class="ml-2 badge badge-sm badge-primary">{creators.length || '✓'}</span>
+          {/if}
+        </summary>
+        <div class="collapse-content space-y-4">
+          <p class="text-sm text-base-content/70">{m.article_editor_attribution_hint()}</p>
+
+          <CreatorInput
+            bind:creators
+            label={m.article_editor_creators_label()}
+            helpText={m.article_editor_creators_help()}
+            activeUserPubkey={activeUser?.pubkey ?? ''}
+          />
+
+          <div class="grid gap-4 sm:grid-cols-2">
+            <div>
+              <label class="label" for="article-license">
+                <span class="label-text">{m.article_editor_license_label()}</span>
+              </label>
+              <select id="article-license" class="select w-full" bind:value={license}>
+                <option value="">{m.article_editor_license_none()}</option>
+                {#each licenseOptions as option (option.id)}
+                  <option value={option.id}>{option.label}</option>
+                {/each}
+              </select>
+            </div>
+            <div>
+              <label class="label" for="article-source">
+                <span class="label-text">{m.article_editor_source_label()}</span>
+              </label>
+              <input
+                id="article-source"
+                type="url"
+                class="input w-full"
+                placeholder={m.article_editor_source_placeholder()}
+                bind:value={source}
+              />
+            </div>
+          </div>
+
+          <div>
+            <label class="label" for="article-changes">
+              <span class="label-text">{m.article_editor_changes_label()}</span>
+            </label>
+            <input
+              id="article-changes"
+              type="text"
+              class="input w-full"
+              placeholder={m.article_editor_changes_placeholder()}
+              bind:value={changes}
+            />
+          </div>
+        </div>
+      </details>
 
       <!-- Hashtags -->
       <EditableList
