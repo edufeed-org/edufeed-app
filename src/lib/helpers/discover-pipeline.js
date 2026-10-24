@@ -219,3 +219,21 @@ export function sortItems(items, sortBy, rank = new Map()) {
     return sortBy === 'newest' ? bDate - aDate : aDate - bDate;
   });
 }
+
+/**
+ * What the "My communities" filter should show while it has no communities to
+ * scope to: the membership list is still loading, the user really has none,
+ * or the list could not be loaded — three different messages, none of them
+ * "no content matches your filters".
+ *
+ * @param {string | null} communityFilter
+ * @param {number} joinedCount
+ * @param {'loading' | 'ready' | 'unavailable'} status - From useJoinedCommunitiesState()
+ * @returns {'loading' | 'empty' | 'unavailable' | null}
+ */
+export function joinedFilterState(communityFilter, joinedCount, status) {
+  if (communityFilter !== 'joined' || joinedCount > 0) return null;
+  if (status === 'loading') return 'loading';
+  if (status === 'unavailable') return 'unavailable';
+  return 'empty';
+}

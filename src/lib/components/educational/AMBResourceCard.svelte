@@ -426,7 +426,11 @@
       </div>
       <div class="min-w-0 flex-1 basis-48">
         {#if indexedCreators.length && !singleCreatorPubkey}
-          <span class="block truncate font-medium text-base-content" title={fullCreatorNames}>
+          <span
+            class="block truncate font-medium text-base-content"
+            title={fullCreatorNames}
+            data-testid="amb-card-author"
+          >
             {displayedAuthorName}
           </span>
         {:else}
@@ -434,6 +438,7 @@
             href={resolve(profileLink(singleCreatorPubkey ?? resource.pubkey))}
             class="block truncate font-medium text-base-content hover:underline"
             title={fullCreatorNames}
+            data-testid="amb-card-author"
             onclick={(e) => e.stopPropagation()}
           >
             {displayedAuthorName}

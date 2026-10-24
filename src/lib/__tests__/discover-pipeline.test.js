@@ -14,7 +14,8 @@ import {
   resolveSortBy,
   sortItems,
   getItemTimestamp,
-  getItemRankKey
+  getItemRankKey,
+  joinedFilterState
 } from '$lib/helpers/discover-pipeline.js';
 
 const A = 'a'.repeat(64);
@@ -230,5 +231,19 @@ describe('sorting', () => {
       'old'
     ]);
     expect(items).toEqual(snapshot);
+  });
+});
+
+describe('joinedFilterState', () => {
+  it('is null unless the "joined" community filter is active with no communities', () => {
+    expect(joinedFilterState(null, 0, 'ready')).toBeNull();
+    expect(joinedFilterState('c'.repeat(64), 0, 'ready')).toBeNull();
+    expect(joinedFilterState('joined', 3, 'loading')).toBeNull();
+  });
+
+  it('tells loading, really empty and unavailable apart', () => {
+    expect(joinedFilterState('joined', 0, 'loading')).toBe('loading');
+    expect(joinedFilterState('joined', 0, 'ready')).toBe('empty');
+    expect(joinedFilterState('joined', 0, 'unavailable')).toBe('unavailable');
   });
 });

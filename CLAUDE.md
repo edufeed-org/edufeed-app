@@ -109,6 +109,10 @@ Waiting for all relays is only right when the answer needs every relay (NIP-50 s
 
 ## Svelte 5 Critical Patterns
 
+### IntersectionObserver: root is `<main>`, not the window
+
+The page scrolls inside `<main>` (`overflow-y: auto`), not the window. An `IntersectionObserver` created with `root: null` is clipped by that container, so `rootMargin` never reaches below main's visible edge: nothing is pre-rendered and a sentinel only fires once it is literally on screen. Pass the nearest scrolling ancestor as `root` (see `scrollParentOf` in `DiscoverFeedGrid.svelte`). Same reason `window.scrollTo` is a no-op on these pages — scroll `<main>` or use `scrollIntoView()`.
+
 ### $state() vs Plain let
 
 ```javascript

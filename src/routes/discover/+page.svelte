@@ -49,7 +49,7 @@
   import { resolve } from '$app/paths';
   import { updateQueryParams, parseFeedFilters } from '$lib/helpers/urlParams.js';
   import { encodeEventToNaddr } from '$lib/helpers/nostrUtils.js';
-  import { useJoinedCommunitiesList } from '$lib/stores/joined-communities-list.svelte.js';
+  import { useJoinedCommunitiesState } from '$lib/stores/joined-communities-list.svelte.js';
   import {
     useAllCommunities,
     useAllCommunitiesLoaded
@@ -67,7 +67,8 @@
     filterByAuthors,
     filterBySearch,
     resolveSortBy,
-    sortItems
+    sortItems,
+    joinedFilterState
   } from '$lib/helpers/discover-pipeline.js';
   import * as m from '$lib/paraglide/messages';
   import {
@@ -172,10 +173,13 @@
 
   // ─── Hooks ────────────────────────────────────────────────────────────
   // Community hooks
-  const getJoinedCommunities = useJoinedCommunitiesList();
+  // With status: the "My communities" filter must tell a list that is still
+  // loading (or failed to load) from a user who has joined nothing.
+  const joinedState = useJoinedCommunitiesState();
   const getAllCommunities = useAllCommunities();
   const getCommunitiesLoaded = useAllCommunitiesLoaded();
-  const joinedCommunities = $derived(getJoinedCommunities());
+  const joinedCommunities = $derived(joinedState.list());
+  const joinedStatus = $derived(joinedState.status());
   const allCommunities = $derived(getAllCommunities());
   const communitiesLoaded = $derived(getCommunitiesLoaded());
   const communities = $derived(allCommunities || []);
@@ -303,13 +307,16 @@
     displayLimit = DISPLAY_BATCH;
     searchQuery = '';
     activeSearchQuery = '';
-    if (authorFilter.length > 0) {
-      authorFilter = [];
-      updateQueryParams($page.url.searchParams, { author: null });
-    }
-    // null for the default tab keeps the URL clean
+    authorFilter = [];
+    // One URL update for everything the tab switch resets. Two separate
+    // updates raced: the URL-read effect ran on the first navigation while
+    // the URL still carried the old `search`, and copied it back into state
+    // (the search then stuck to the next tab, e.g. ?search=…&type=communities).
+    // null for the default tab keeps the URL clean.
     updateQueryParams($page.url.searchParams, {
-      type: newType === defaultContentType ? null : newType
+      type: newType === defaultContentType ? null : newType,
+      author: null,
+      search: null
     });
     if (newType !== 'learning') {
       learningFilters = createEmptyFilters();
@@ -678,6 +685,24 @@
     sortItems(searchFilteredItems, effectiveSortBy, learningSearch.rank)
   );
   const displayedContent = $derived(combinedContent.slice(0, displayLimit));
+  // "My communities" with nothing to scope to: loading, really none, or unavailable
+  const joinedFilter = $derived(
+    joinedFilterState(communityFilter, joinedCommunities.length, joinedStatus)
+  );
+  const joinedEmptyMessage = $derived(
+    joinedFilter === 'empty'
+      ? m.discover_joined_filter_empty()
+      : joinedFilter === 'unavailable'
+        ? m.discover_joined_filter_unavailable()
+        : ''
+  );
+  const joinedEmptyHint = $derived(
+    joinedFilter === 'empty'
+      ? m.discover_joined_filter_empty_hint()
+      : joinedFilter === 'unavailable'
+        ? m.discover_joined_filter_unavailable_hint()
+        : ''
+  );
   const hasAnySource = $derived(
     articles.length > 0 ||
       ambResources.length > 0 ||
@@ -779,9 +804,11 @@
       <DiscoverFeedGrid
         items={displayedContent}
         {authorProfiles}
-        {isLoading}
+        isLoading={isLoading || joinedFilter === 'loading'}
         isSearching={learningSearch.isSearching}
         {hasAnySource}
+        emptyMessage={joinedEmptyMessage}
+        emptyHint={joinedEmptyHint}
         hasMore={hasMoreToShow}
         {isLoadingMore}
         failing={discoverFeeds.failing}

@@ -33,11 +33,22 @@
     if (!hasMore) return;
     const sentinel = document.getElementById('load-more-sentinel');
     if (!sentinel) return;
+    // Root = the scrolling <main>: with the viewport as root the sentinel is
+    // clipped by the container and the margin never triggers early.
+    /** @type {Element | null} */
+    let root = null;
+    for (let el = sentinel.parentElement; el; el = el.parentElement) {
+      const { overflowY } = getComputedStyle(el);
+      if (overflowY === 'auto' || overflowY === 'scroll') {
+        root = el;
+        break;
+      }
+    }
     const observer = new IntersectionObserver(
       (entries) => {
         if (entries[0].isIntersecting) displayedCount += BATCH;
       },
-      { root: null, rootMargin: '200px', threshold: 0.1 }
+      { root, rootMargin: '200px', threshold: 0.1 }
     );
     observer.observe(sentinel);
     return () => observer.disconnect();
