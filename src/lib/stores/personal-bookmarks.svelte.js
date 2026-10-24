@@ -20,9 +20,8 @@ import {
 } from '$lib/helpers/bookmark-tag.js';
 import { modifyPublicTags } from 'applesauce-core/operations';
 import { setSingletonTag } from 'applesauce-core/operations/tag/common';
-import { createTimelineLoader } from '$lib/loaders/timeline-loader.js';
 import { TimelineModel } from 'applesauce-core/models';
-import { timedPool } from '$lib/loaders/base.js';
+import { fetchEvents } from '$lib/loaders/base.js';
 import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
 import { manager } from '$lib/stores/accounts.svelte';
 import { createAppEventFactory } from '$lib/helpers/event-factory.js';
@@ -39,7 +38,7 @@ import * as m from '$lib/paraglide/messages';
 // ---------------------------------------------------------------------------
 
 /** @type {import('nostr-tools').NostrEvent | null} */
-let bookmarkListEvent = $state(null);
+let bookmarkListEvent = $state.raw(null);
 
 /** @type {import('nostr-tools').NostrEvent[]} */
 let bookmarkSets = $state.raw([]);
@@ -106,22 +105,14 @@ $effect.root(() => {
       // Fetch from relays
       getWriteRelays(pubkey).then((relays) => {
         // Load kind 10003
-        const listLoader = createTimelineLoader(
-          timedPool,
-          relays,
-          { kinds: [10003], authors: [pubkey], limit: 1 },
-          { eventStore }
-        );
-        loaderSub = listLoader().subscribe();
+        loaderSub = fetchEvents(relays, {
+          kinds: [10003],
+          authors: [pubkey],
+          limit: 1
+        }).subscribe();
 
         // Load kind 30003
-        const setsLoader = createTimelineLoader(
-          timedPool,
-          relays,
-          { kinds: [30003], authors: [pubkey] },
-          { eventStore }
-        );
-        setsLoaderSub = setsLoader().subscribe();
+        setsLoaderSub = fetchEvents(relays, { kinds: [30003], authors: [pubkey] }).subscribe();
       });
     });
 

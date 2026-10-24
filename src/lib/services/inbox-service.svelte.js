@@ -2,12 +2,12 @@
  * Unified inbox service.
  * Manages notification loaders, read state (NIP-78 kind 30078), and reactive counts.
  */
-import { createTimelineLoader } from '$lib/loaders/timeline-loader.js';
 import { TimelineModel } from 'applesauce-core/models';
+import { filter, map, take } from 'rxjs';
 import { withoutChannelMeetings } from '$lib/helpers/calendar-timing.js';
 import { finalizeDraft } from '$lib/helpers/event-factory.js';
 import { eventStore, pool } from '$lib/stores/nostr-infrastructure.svelte';
-import { timedPool, addressLoader, eventLoader } from '$lib/loaders/base.js';
+import { fetchEvents, addressLoader, eventLoader } from '$lib/loaders/base.js';
 import { manager } from '$lib/stores/accounts.svelte';
 import { publishEvent } from '$lib/services/publish-service.js';
 import { excludeMuted } from '$lib/helpers/dm-trust.js';
@@ -464,16 +464,12 @@ export function initializeInbox(pubkey) {
   // Main loader (kinds 1070, 7, 1111, 9)
   const relays = getNotificationRelays();
   const filters = buildMainFilter(pubkey, since);
-  const mainLoader = createTimelineLoader(timedPool, relays, filters, {
-    eventStore,
-    limit: 50
-  });
-
-  const mainSub = mainLoader().subscribe();
-  subscriptions.push(mainSub);
+  const withLimit = (/** @type {any[]} */ list, /** @type {number} */ limit) =>
+    list.map((f) => ({ ...f, limit }));
+  subscriptions.push(fetchEvents(relays, withLimit(filters, 50)).subscribe());
 
   // Standing subscription from now on. The loaders above are one-shot
-  // (timedPool completes after 2 s), so without this the bell only learns
+  // (fetchEvents completes once the relays answer), so without this the bell only learns
   // about a new reaction or reply on the next page load — and the OS toasts
   // (system-notifications.svelte.js) would never fire for the inbox. `since`
   // is the moment we subscribe: history stays with the loaders.
@@ -489,11 +485,7 @@ export function initializeInbox(pubkey) {
     if (activePubkey !== pubkey) return; // inbox was cleaned up or switched user
     const supplementalRelays = getSupplementalNotificationRelays(relays, readRelays);
     if (!supplementalRelays.length) return;
-    const supplementalLoader = createTimelineLoader(timedPool, supplementalRelays, filters, {
-      eventStore,
-      limit: 50
-    });
-    subscriptions.push(supplementalLoader().subscribe());
+    subscriptions.push(fetchEvents(supplementalRelays, withLimit(filters, 50)).subscribe());
     subscribeLive(supplementalRelays, liveFilters);
   });
 
@@ -505,11 +497,7 @@ export function initializeInbox(pubkey) {
   const groupAddedFilter = { kinds: [9000], '#p': [pubkey], since };
   const groupRelays = getGroupsRelays();
   if (groupRelays.length > 0) {
-    const groupAddedLoader = createTimelineLoader(timedPool, groupRelays, [groupAddedFilter], {
-      eventStore,
-      limit: 50
-    });
-    subscriptions.push(groupAddedLoader().subscribe());
+    subscriptions.push(fetchEvents(groupRelays, { ...groupAddedFilter, limit: 50 }).subscribe());
   }
 
   const modelFilters = [...filters, groupAddedFilter].map(({ since: _since, ...rest }) => rest);
@@ -524,63 +512,59 @@ export function initializeInbox(pubkey) {
   subscriptions.push(modelSub);
 
   // RSVP loading: load user's calendar events, then RSVPs on those
-  const calendarLoader = createTimelineLoader(
-    timedPool,
-    getCalendarRelays(),
-    /** @type {any} */ ({
-      kinds: [31922, 31923],
-      authors: [pubkey],
-      since: Math.floor(Date.now() / 1000) - 15552000
-    }),
-    { eventStore, limit: 100 }
-  );
+  const calendar$ = fetchEvents(getCalendarRelays(), {
+    kinds: [31922, 31923],
+    authors: [pubkey],
+    since: Math.floor(Date.now() / 1000) - 15552000,
+    limit: 100
+  });
 
-  const calSub = calendarLoader().subscribe({
+  const calSub = calendar$.subscribe({
     complete: () => {
-      const calModel = eventStore.model(TimelineModel, {
-        kinds: [31922, 31923],
-        authors: [pubkey]
-      });
-      const coordSub = calModel.subscribe((all) => {
-        // A channel meeting's coordinate must not go out in a public RSVP REQ.
-        const events = withoutChannelMeetings(all ?? []);
-        if (!events.length) return;
-        const coords = events.map((e) => {
-          const d = e.tags.find((t) => t[0] === 'd')?.[1] || '';
-          return `${e.kind}:${e.pubkey}:${d}`;
+      // The model replays synchronously on subscribe; take(1) ends the
+      // subscription itself (a self-referencing unsubscribe would hit the
+      // handle before it is initialised).
+      const coordSub = /** @type {import('rxjs').Observable<any[]>} */ (
+        eventStore.model(TimelineModel, { kinds: [31922, 31923], authors: [pubkey] })
+      )
+        .pipe(
+          // A channel meeting's coordinate must not go out in a public RSVP REQ.
+          map((all) => withoutChannelMeetings(all ?? [])),
+          filter((events) => events.length > 0),
+          take(1)
+        )
+        .subscribe((events) => {
+          const coords = events.map((e) => {
+            const d = e.tags.find((/** @type {string[]} */ t) => t[0] === 'd')?.[1] || '';
+            return `${e.kind}:${e.pubkey}:${d}`;
+          });
+          loadRsvpNotifications(coords);
         });
-        loadRsvpNotifications(coords);
-        coordSub.unsubscribe();
-      });
       subscriptions.push(coordSub);
     }
   });
   subscriptions.push(calSub);
 
   // Poll response loading: load user's polls (kind 1068), then responses (kind 1018) on those.
-  const pollLoader = createTimelineLoader(
-    timedPool,
-    getCommunikeyRelays(),
-    /** @type {any} */ ({
-      kinds: [1068],
-      authors: [pubkey],
-      since: Math.floor(Date.now() / 1000) - 15552000
-    }),
-    { eventStore, limit: 100 }
-  );
+  const polls$ = fetchEvents(getCommunikeyRelays(), {
+    kinds: [1068],
+    authors: [pubkey],
+    since: Math.floor(Date.now() / 1000) - 15552000,
+    limit: 100
+  });
 
-  const pollSub = pollLoader().subscribe({
+  const pollSub = polls$.subscribe({
     complete: () => {
-      const pollModel = eventStore.model(TimelineModel, {
-        kinds: [1068],
-        authors: [pubkey]
-      });
-      const idsSub = pollModel.subscribe((events) => {
-        if (!events?.length) return;
-        const ids = events.map((e) => e.id);
-        loadPollResponseNotifications(ids);
-        idsSub.unsubscribe();
-      });
+      const idsSub = /** @type {import('rxjs').Observable<any[]>} */ (
+        eventStore.model(TimelineModel, { kinds: [1068], authors: [pubkey] })
+      )
+        .pipe(
+          filter((events) => !!events?.length),
+          take(1)
+        )
+        .subscribe((events) => {
+          loadPollResponseNotifications(events.map((e) => e.id));
+        });
       subscriptions.push(idsSub);
     }
   });
@@ -596,14 +580,12 @@ export function loadRsvpNotifications(calendarEventCoords) {
 
   const since = Math.floor(Date.now() / 1000) - DEFAULT_LOOKBACK;
 
-  const rsvpLoader = createTimelineLoader(
-    timedPool,
-    getCalendarRelays(),
-    /** @type {any} */ ({ kinds: [31925], '#a': calendarEventCoords, since }),
-    { eventStore, limit: 50 }
-  );
-
-  const sub = rsvpLoader().subscribe();
+  const sub = fetchEvents(getCalendarRelays(), {
+    kinds: [31925],
+    '#a': calendarEventCoords,
+    since,
+    limit: 50
+  }).subscribe();
   subscriptions.push(sub);
 
   const pubkey = activePubkey;
@@ -629,14 +611,12 @@ export function loadPollResponseNotifications(pollIds) {
 
   const since = Math.floor(Date.now() / 1000) - DEFAULT_LOOKBACK;
 
-  const responseLoader = createTimelineLoader(
-    timedPool,
-    getCommunikeyRelays(),
-    /** @type {any} */ ({ kinds: [1018], '#e': pollIds, since }),
-    { eventStore, limit: 100 }
-  );
-
-  const sub = responseLoader().subscribe();
+  const sub = fetchEvents(getCommunikeyRelays(), {
+    kinds: [1018],
+    '#e': pollIds,
+    since,
+    limit: 100
+  }).subscribe();
   subscriptions.push(sub);
 
   const pubkey = activePubkey;

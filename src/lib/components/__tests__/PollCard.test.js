@@ -69,7 +69,7 @@ vi.mock('$lib/services/publish-service.js', () => ({
 // loader itself only matters for relay-fetch behavior, which is covered
 // elsewhere.
 vi.mock('$lib/loaders/polls.js', () => ({
-  pollResponsesLoader: () => () => ({ subscribe: () => ({ unsubscribe: vi.fn() }) })
+  pollResponsesLoader: () => ({ subscribe: () => ({ unsubscribe: vi.fn() }) })
 }));
 
 vi.mock('$lib/stores/accounts.svelte.js', () => ({

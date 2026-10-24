@@ -284,14 +284,14 @@
       (!getActiveUser()?.pubkey && disclosureLevel !== 'world' && disclosureLevel !== 'unknown')
   );
   let isLoading = $state(true);
-  /** @type {any[]} */ let messages = $state([]);
-  /** @type {any[]} */ let reactionEvents = $state([]);
+  /** @type {any[]} */ let messages = $state.raw([]);
+  /** @type {any[]} */ let reactionEvents = $state.raw([]);
   // NIP-29 moderation deletions (kind 9005) for this group — same
   // store-backed pattern as reactions. Timeline rows whose id a 9005 names
   // are hidden client-side; the relay itself drops the event from its store,
   // so this only bridges the gap for events already replayed/live in view.
   /** @type {any[]} */ let deletionEvents = $state.raw([]);
-  /** @type {any[]} */ let voteEvents = $state([]);
+  /** @type {any[]} */ let voteEvents = $state.raw([]);
 
   // Bump to re-run the roster request below (e.g. after an admin action
   // changes the 39001/39002 events) without touching the chat subscription.

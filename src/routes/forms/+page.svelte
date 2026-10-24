@@ -19,8 +19,7 @@
     }
 
     const pubkey = manager.active.pubkey;
-    const loader = formTemplateLoader(pubkey);
-    const loaderSub = loader().subscribe();
+    const loaderSub = formTemplateLoader(pubkey).subscribe();
 
     const modelSub = eventStore
       .model(TimelineModel, { kinds: [30168], authors: [pubkey] })

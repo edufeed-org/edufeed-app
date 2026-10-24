@@ -24,8 +24,7 @@ function toCalendarEvents(timeline) {
 }
 import { calendarTimelineLoader } from '$lib/loaders/calendar.js';
 import { communityTargetedPublicationsLoader } from '$lib/loaders/targeted-publications.js';
-import { userDeletionLoader, addressLoader } from '$lib/loaders/base.js';
-import { createTimelineLoader } from '$lib/loaders/timeline-loader.js';
+import { fetchUserDeletions, fetchEvents, addressLoader } from '$lib/loaders/base.js';
 import { getAllLookupRelays } from '$lib/helpers/relay-helper.js';
 import { runtimeConfig } from '$lib/stores/config.svelte.js';
 import { applyCuratedFilter } from '$lib/services/curated-authors-service.svelte.js';
@@ -120,20 +119,12 @@ export function useCalendarEventLoader(options) {
         return;
       }
 
-      const deletionLoader = userDeletionLoader(pubkey);
-      const loaderResult = deletionLoader();
-
-      // Handle both Observable and Promise returns
-      if (loaderResult && typeof loaderResult.subscribe === 'function') {
-        const sub = loaderResult.subscribe({
-          error: (/** @type {any} */ err) => {
-            console.error('❌ DELETION LOADER ERROR for', pubkey.substring(0, 8), '...:', err);
-          }
-        });
-        deletionSubscriptions.set(pubkey, sub);
-      } else {
-        console.error('❌ DELETION LOADER: Loader result is not subscribable!', loaderResult);
-      }
+      const sub = fetchUserDeletions(pubkey).subscribe({
+        error: (/** @type {any} */ err) => {
+          console.error('❌ DELETION LOADER ERROR for', pubkey.substring(0, 8), '...:', err);
+        }
+      });
+      deletionSubscriptions.set(pubkey, sub);
     });
   }
 
@@ -142,7 +133,7 @@ export function useCalendarEventLoader(options) {
    */
   function startBackgroundLoader() {
     if (!backgroundLoaderSubscription) {
-      backgroundLoaderSubscription = calendarTimelineLoader()().subscribe();
+      backgroundLoaderSubscription = calendarTimelineLoader().subscribe();
     }
   }
 
@@ -346,20 +337,16 @@ export function useCalendarEventLoader(options) {
       targetedPublicationSubscription = communityTargetedPublicationsLoader(
         communityPubkey,
         [31922, 31923]
-      )().subscribe();
+      ).subscribe();
 
       // 2b. NIP-18 reposts (kind 6/16 with h-tag) sharing calendar events into
       // the community — fetched from relays so shares reconstruct on a fresh
       // load instead of only appearing in the sharer's own session.
-      const repostRelayLoaderSubscription = createTimelineLoader(
-        pool,
-        getAllLookupRelays(),
-        { kinds: [6, 16], '#h': [communityPubkey], limit: 50 },
-        { eventStore, limit: 50 }
-      )().subscribe({
-        error: (/** @type {any} */ err) =>
-          console.warn('📅 EventLoader: Community repost loader error:', err)
-      });
+      const repostRelayLoaderSubscription = fetchEvents(getAllLookupRelays(), {
+        kinds: [6, 16],
+        '#h': [communityPubkey],
+        limit: 50
+      }).subscribe();
       deletionSubscriptions.set('repostRelayLoader', repostRelayLoaderSubscription);
 
       /** Load the calendar events referenced by share/repost events on-demand.

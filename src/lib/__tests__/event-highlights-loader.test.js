@@ -1,80 +1,43 @@
 /** @vitest-environment node */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-// Mock all dependencies
-vi.mock('applesauce-loaders/loaders', () => ({
-  createTimelineLoader: vi.fn(),
-  createAddressLoader: vi.fn(() => vi.fn()),
-  createEventLoader: vi.fn(() => vi.fn()),
-  createUnifiedEventLoader: vi.fn(() => vi.fn())
-}));
-// applesauce v7 moved block paging out of the SDK: the app's timeline loader is
-// the local port in $lib/loaders/timeline-loader.js and takes the mock above.
-vi.mock('$lib/loaders/timeline-loader.js', async () => {
-  const loaders = /** @type {any} */ (await import('applesauce-loaders/loaders'));
-  return { createTimelineLoader: loaders.createTimelineLoader };
-});
-vi.mock('applesauce-relay/operators', () => ({
-  onlyEvents: vi.fn()
-}));
-vi.mock('applesauce-core/observable', () => ({
-  mapEventsToStore: vi.fn()
-}));
-vi.mock('$lib/stores/nostr-infrastructure.svelte', () => ({
-  pool: {
-    request: vi.fn(),
-    subscription: vi.fn()
-  },
-  eventStore: {
-    add: vi.fn(),
-    set eventLoader(/** @type {any} */ _) {}
-  }
+vi.mock('$lib/loaders/base.js', () => ({
+  fetchEvents: vi.fn()
 }));
 vi.mock('$lib/helpers/relay-helper.js', () => ({
-  getAllLookupRelays: vi.fn(() => ['wss://relay1.example.com', 'wss://relay2.example.com']),
-  getEventLoaderLookupRelays: () => []
-}));
-vi.mock('$lib/loaders/targeted-publications.js', () => ({
-  communityTargetedPublicationsLoader: vi.fn(() => vi.fn(() => ({ subscribe: vi.fn() })))
+  getAllLookupRelays: vi.fn(() => ['wss://relay1.example.com', 'wss://relay2.example.com'])
 }));
 
-const { createTimelineLoader } = await import('applesauce-loaders/loaders');
+const { fetchEvents } = await import('$lib/loaders/base.js');
 const { loadEventHighlights } = await import('$lib/loaders/event-highlights.js');
+
+/** The (relays, filter, opts) of the last highlight request */
+const lastCall = () => /** @type {any} */ (fetchEvents).mock.calls.at(-1);
 
 describe('loadEventHighlights', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    const mockLoaderFn = vi.fn(() => ({ subscribe: vi.fn() }));
-    /** @type {any} */ (createTimelineLoader).mockReturnValue(mockLoaderFn);
+    /** @type {any} */ (fetchEvents).mockReturnValue({ subscribe: vi.fn() });
   });
 
-  it('builds correct filter with #a tag from AddressPointer', () => {
+  it('requests kind 9802 by #a tag from all lookup relays, cache included', () => {
     const pointer = { kind: 30023, pubkey: 'abc123', identifier: 'my-article' };
 
-    loadEventHighlights(pointer);
+    loadEventHighlights(pointer).loader();
 
-    // createTimelineLoader is called in base.js too, so find the call for 9802
-    const calls = /** @type {any} */ (createTimelineLoader).mock.calls;
-    const highlightCall = calls.find((/** @type {any} */ c) => c[2]?.kinds?.[0] === 9802);
-
-    expect(highlightCall).toBeTruthy();
-    expect(highlightCall[2]).toEqual(
-      expect.objectContaining({
-        kinds: [9802],
-        '#a': ['30023:abc123:my-article']
-      })
-    );
+    expect(lastCall()).toEqual([
+      ['wss://relay1.example.com', 'wss://relay2.example.com'],
+      { kinds: [9802], '#a': ['30023:abc123:my-article'], limit: 100 },
+      { cache: true }
+    ]);
   });
 
   it('includes #h tag when communityPubkey is provided', () => {
     const pointer = { kind: 30023, pubkey: 'abc123', identifier: 'my-article' };
 
-    loadEventHighlights(pointer, 'community456');
+    loadEventHighlights(pointer, 'community456').loader();
 
-    const calls = /** @type {any} */ (createTimelineLoader).mock.calls;
-    const highlightCall = calls.find((/** @type {any} */ c) => c[2]?.kinds?.[0] === 9802);
-
-    expect(highlightCall[2]).toEqual(
+    expect(lastCall()[1]).toEqual(
       expect.objectContaining({
         kinds: [9802],
         '#a': ['30023:abc123:my-article'],
@@ -86,33 +49,35 @@ describe('loadEventHighlights', () => {
   it('does not include #h tag when communityPubkey is undefined', () => {
     const pointer = { kind: 30818, pubkey: 'def789', identifier: 'wiki-page' };
 
-    loadEventHighlights(pointer);
+    loadEventHighlights(pointer).loader();
 
-    const calls = /** @type {any} */ (createTimelineLoader).mock.calls;
-    const highlightCall = calls.find((/** @type {any} */ c) => c[2]?.kinds?.[0] === 9802);
+    expect(lastCall()[1]['#h']).toBeUndefined();
+    expect(lastCall()[1]['#a']).toEqual(['30818:def789:wiki-page']);
+  });
 
-    expect(highlightCall[2]['#h']).toBeUndefined();
-    expect(highlightCall[2]['#a']).toEqual(['30818:def789:wiki-page']);
+  it('does not request anything until loader() is called', () => {
+    loadEventHighlights({ kind: 30023, pubkey: 'abc123', identifier: 'test' });
+    expect(fetchEvents).not.toHaveBeenCalled();
   });
 
   it('returns loader and cleanup functions', () => {
-    const pointer = { kind: 30023, pubkey: 'abc123', identifier: 'test' };
+    const result = loadEventHighlights({ kind: 30023, pubkey: 'abc123', identifier: 'test' });
 
-    const result = loadEventHighlights(pointer);
-
-    expect(result).toHaveProperty('loader');
-    expect(result).toHaveProperty('cleanup');
     expect(typeof result.loader).toBe('function');
     expect(typeof result.cleanup).toBe('function');
   });
 
   it('cleanup unsubscribes after loader is called', () => {
     const mockUnsub = vi.fn();
-    const mockLoaderFn = vi.fn(() => ({ subscribe: vi.fn(() => ({ unsubscribe: mockUnsub })) }));
-    /** @type {any} */ (createTimelineLoader).mockReturnValue(mockLoaderFn);
+    /** @type {any} */ (fetchEvents).mockReturnValue({
+      subscribe: vi.fn(() => ({ unsubscribe: mockUnsub }))
+    });
 
-    const pointer = { kind: 30023, pubkey: 'abc123', identifier: 'test' };
-    const { loader, cleanup } = loadEventHighlights(pointer);
+    const { loader, cleanup } = loadEventHighlights({
+      kind: 30023,
+      pubkey: 'abc123',
+      identifier: 'test'
+    });
 
     loader();
     cleanup();

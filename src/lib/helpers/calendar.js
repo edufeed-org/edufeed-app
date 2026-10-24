@@ -730,7 +730,7 @@ export async function fetchCommunityCalendarEvents(communityPubkey, relays = [])
   try {
     // Fetch direct community calendar events (#h tagged)
     // Use bufferTime to wait for events from multiple relays (3 seconds)
-    const directTimeline$ = communityCalendarTimelineLoader(communityPubkey)();
+    const directTimeline$ = communityCalendarTimelineLoader(communityPubkey);
     /** @type {import('nostr-tools').NostrEvent[]} */
     const directEventsBuffered = await firstValueFrom(
       directTimeline$.pipe(
@@ -762,7 +762,7 @@ export async function fetchCommunityCalendarEvents(communityPubkey, relays = [])
     const targetedPubTimeline$ = communityTargetedPublicationsLoader(
       communityPubkey,
       [31922, 31923]
-    )();
+    );
     /** @type {import('nostr-tools').NostrEvent[]} */
     const targetedPubsBuffered = await firstValueFrom(
       targetedPubTimeline$.pipe(

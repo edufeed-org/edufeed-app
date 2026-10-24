@@ -2,8 +2,8 @@
  * Profile loading utilities for user profiles and notes.
  */
 import { createAddressLoader } from 'applesauce-loaders/loaders';
-import { createTimelineLoader } from '$lib/loaders/timeline-loader.js';
 import { pool, eventStore } from '$lib/stores/nostr-infrastructure.svelte';
+import { fetchEvents } from '$lib/loaders/base.js';
 import { getProfileLookupRelays } from '$lib/helpers/relay-helper.js';
 import { getProfileContent } from 'applesauce-core/helpers';
 import { take, map } from 'rxjs';
@@ -29,20 +29,11 @@ export function loadUserProfile(kind, pubkey) {
 }
 
 /**
- * Factory: Create a timeline loader for kind 1 notes by a specific user
+ * The latest kind 1 notes of a user, from the profile lookup relays.
  * @param {string} pubkey - User's public key
  * @param {number} limit - Maximum number of notes to load
- * @returns {Function} Timeline loader function that returns an Observable
+ * @returns {import('rxjs').Observable<any>}
  */
 export function kind1Loader(pubkey, limit) {
-  return createTimelineLoader(
-    pool,
-    getProfileLookupRelays(),
-    {
-      kinds: [1],
-      authors: [pubkey],
-      limit
-    },
-    { eventStore }
-  );
+  return fetchEvents(getProfileLookupRelays(), { kinds: [1], authors: [pubkey], limit });
 }

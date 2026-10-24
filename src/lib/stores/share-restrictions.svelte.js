@@ -12,11 +12,9 @@
 //
 // Call during component init.
 import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
-import { addressLoader } from '$lib/loaders/base.js';
+import { addressLoader, fetchEvents } from '$lib/loaders/base.js';
 import { getAllLookupRelays, getCommunikeyRelays } from '$lib/helpers/relay-helper.js';
-import { createTimelineLoader } from '$lib/loaders/timeline-loader.js';
 import { TimelineModel } from 'applesauce-core/models';
-import { timedPool } from '$lib/loaders/base.js';
 import {
   sectionGateForKind,
   shareWouldBeVisible,
@@ -121,9 +119,7 @@ export function useShareRestrictions(getKind, getCommunityPubkeys) {
 
     // One batched load + model for every candidate's section override.
     const overrideFilter = { kinds: [SECTION_OVERRIDE_KIND], '#d': pubkeys };
-    subs.push(
-      createTimelineLoader(timedPool, relays, overrideFilter, { eventStore })().subscribe()
-    );
+    subs.push(fetchEvents(relays, overrideFilter).subscribe());
     subs.push(
       eventStore.model(TimelineModel, overrideFilter).subscribe((events) => {
         overrides = events ?? [];

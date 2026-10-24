@@ -2,7 +2,7 @@
   import { SvelteMap } from 'svelte/reactivity';
   import { fade } from 'svelte/transition';
   import { manager } from '$lib/stores/accounts.svelte.js';
-  import { eventStore, pool } from '$lib/stores/nostr-infrastructure.svelte.js';
+  import { eventStore } from '$lib/stores/nostr-infrastructure.svelte.js';
   import { runtimeConfig } from '$lib/stores/config.svelte.js';
   import { parseCordnGroupsConfig } from '$lib/cordn';
   import { getRelayListLookupRelays } from '$lib/services/relay-service.svelte.js';
@@ -132,8 +132,7 @@
     const lookupRelays = getRelayListLookupRelays();
 
     // Create loader for kind 10002
-    const loader = createRelayListLoader(pool, lookupRelays, eventStore, activeAccount.pubkey);
-    const loaderSub = loader()().subscribe();
+    const loaderSub = createRelayListLoader(lookupRelays, activeAccount.pubkey).subscribe();
 
     // Subscribe to the relay list from EventStore
     const subscription = eventStore.replaceable(10002, activeAccount.pubkey).subscribe((event) => {
@@ -172,8 +171,7 @@
     const lookupRelays = getRelayListLookupRelays();
 
     // Create loader for kind 10063
-    const loader = createBlossomServerLoader(pool, lookupRelays, eventStore, activeAccount.pubkey);
-    const loaderSub = loader()().subscribe();
+    const loaderSub = createBlossomServerLoader(lookupRelays, activeAccount.pubkey).subscribe();
 
     // Subscribe to the Blossom server list from EventStore
     const subscription = eventStore.replaceable(10063, activeAccount.pubkey).subscribe((event) => {

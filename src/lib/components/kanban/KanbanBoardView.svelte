@@ -26,8 +26,7 @@
   import { encodeEventToNaddr, profileLink } from '$lib/helpers/nostrUtils.js';
   import { deleteEvent } from '$lib/helpers/eventDeletion.js';
   import { showToast } from '$lib/helpers/toast.js';
-  import { createTimelineLoader } from '$lib/loaders/timeline-loader.js';
-  import { timedPool } from '$lib/loaders/base.js';
+  import { fetchEvents } from '$lib/loaders/base.js';
   import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
   import { getKanbanRelays } from '$lib/helpers/relay-helper.js';
   import { TimelineModel } from 'applesauce-core/models';
@@ -90,20 +89,18 @@
     const boardAddress = `30301:${event.pubkey}:${dTag}`;
     cardsLoading = true;
 
-    const cardLoader = createTimelineLoader(
-      timedPool,
-      getKanbanRelays(),
-      { kinds: [30302], '#a': [boardAddress] },
-      { eventStore, limit: 100 }
-    );
-
-    const loaderSub = cardLoader().subscribe({
+    const loaderSub = fetchEvents(getKanbanRelays(), {
+      kinds: [30302],
+      '#a': [boardAddress],
+      limit: 100
+    }).subscribe({
       complete: () => {
         cardsLoading = false;
       }
     });
 
-    // Fallback timeout: timedPool uses 2s, allow extra margin
+    // Fallback: fetchEvents completes within timedPool's 10 s cap; keep the
+    // skeleton short on a slow relay
     const fallbackTimer = setTimeout(() => {
       if (cardsLoading) cardsLoading = false;
     }, 4000);

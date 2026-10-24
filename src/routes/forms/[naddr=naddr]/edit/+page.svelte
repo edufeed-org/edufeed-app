@@ -8,7 +8,7 @@
   /** @type {{ data: { naddr: string } }} */
   let { data } = $props();
 
-  let formEvent = $state(/** @type {import('nostr-tools').NostrEvent | null} */ (null));
+  let formEvent = $state.raw(/** @type {import('nostr-tools').NostrEvent | null} */ (null));
   let isLoading = $state(true);
   let error = $state('');
 

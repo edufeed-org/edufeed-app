@@ -31,7 +31,7 @@
   const isAuthorized = $derived(!!activePubkey && adminPubkeys.includes(activePubkey));
 
   /** @type {import('nostr-tools').NostrEvent | null} */
-  let formEvent = $state(null);
+  let formEvent = $state.raw(null);
   let isLoadingForm = $state(true);
 
   $effect(() => {

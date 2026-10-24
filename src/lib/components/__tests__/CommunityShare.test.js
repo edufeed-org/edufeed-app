@@ -152,19 +152,13 @@ vi.mock('$lib/stores/nostr-infrastructure.svelte', () => ({
   pool: vi.fn()
 }));
 
-const mockCreateTimelineLoader = vi.fn(() => () => ({
+const mockFetchEvents = vi.fn(() => ({
   subscribe: () => ({ unsubscribe: vi.fn() })
 }));
 
-vi.mock('applesauce-loaders/loaders', () => ({
-  createTimelineLoader: (...args) => mockCreateTimelineLoader(...args)
+vi.mock('$lib/loaders/base.js', () => ({
+  fetchEvents: (/** @type {any[]} */ ...args) => mockFetchEvents(...args)
 }));
-// applesauce v7 moved block paging out of the SDK: the app's timeline loader is
-// the local port in $lib/loaders/timeline-loader.js and takes the mock above.
-vi.mock('$lib/loaders/timeline-loader.js', async () => {
-  const loaders = /** @type {any} */ (await import('applesauce-loaders/loaders'));
-  return { createTimelineLoader: loaders.createTimelineLoader };
-});
 
 vi.mock('applesauce-common/models', () => ({
   SharesModel: 'SharesModel'
@@ -227,7 +221,7 @@ describe('CommunityShare', () => {
     vi.clearAllMocks();
     _sharesModelCallback = () => {};
     _timelineCallback = () => {};
-    mockCreateTimelineLoader.mockImplementation(() => () => ({
+    mockFetchEvents.mockImplementation(() => ({
       subscribe: () => ({ unsubscribe: vi.fn() })
     }));
 
@@ -401,8 +395,8 @@ describe('CommunityShare', () => {
     });
 
     // All loader calls should use the full relay set from getAllLookupRelays
-    for (const call of mockCreateTimelineLoader.mock.calls) {
-      const relays = call[1];
+    for (const call of mockFetchEvents.mock.calls) {
+      const relays = call[0];
       expect(relays).toEqual(['wss://relay.test.com', 'wss://app.relay.com']);
     }
   });
@@ -415,11 +409,11 @@ describe('CommunityShare', () => {
       }
     });
 
-    // One loader call total — every extra loader costs a relay REQ slot
+    // One request total — every extra request costs a relay REQ slot
     // against strfry's 20-per-connection budget (edufeed-app#18).
-    expect(mockCreateTimelineLoader).toHaveBeenCalledTimes(1);
+    expect(mockFetchEvents).toHaveBeenCalledTimes(1);
 
-    const filters = mockCreateTimelineLoader.mock.calls[0][2];
+    const filters = mockFetchEvents.mock.calls[0][1];
     expect(Array.isArray(filters)).toBe(true);
 
     const byE = filters.find((f) => f['#e']);
@@ -441,7 +435,7 @@ describe('CommunityShare', () => {
       }
     });
 
-    const filters = mockCreateTimelineLoader.mock.calls[0][2];
+    const filters = mockFetchEvents.mock.calls[0][1];
     expect(filters.some((f) => f['#a'])).toBe(false);
     expect(filters.some((f) => f['#e'])).toBe(true);
   });

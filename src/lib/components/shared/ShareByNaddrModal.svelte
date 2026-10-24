@@ -57,7 +57,7 @@
   let success = $state('');
 
   /** @type {any} */
-  let fetchedEvent = $state(null);
+  let fetchedEvent = $state.raw(null);
   /** @type {string} */
   let fetchedTitle = $state('');
   /** @type {string} */

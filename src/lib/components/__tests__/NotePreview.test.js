@@ -58,7 +58,10 @@ vi.mock('$lib/paraglide/messages.js', () => ({
 }));
 
 function StubComponent() {}
-vi.mock('../shared/NostrContentRenderer.svelte', () => ({ default: StubComponent }));
+// The content renderer probe records the exact object it receives: applesauce
+// memoizes parsed content on the event with non-enumerable descriptors, which
+// a Svelte deep-state proxy rejects (state_descriptors_fixed).
+vi.mock('../shared/NostrContentRenderer.svelte', () => import('./fixtures/EventPropProbe.svelte'));
 vi.mock('../shared/ProfileAvatar.svelte', () => ({ default: StubComponent }));
 vi.mock('$lib/components/polls/PollCard.svelte', () => ({ default: StubComponent }));
 
@@ -115,6 +118,26 @@ describe('NotePreview', () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it('hands the renderer the plain event, not a deep-state proxy (state_descriptors_fixed)', async () => {
+    const g = /** @type {any} */ (globalThis);
+    g.__eventPropProbe = [];
+    render(NotePreview, { props: { identifier: nevent } });
+    event$.next(mockEvent);
+
+    await waitFor(() => expect(g.__eventPropProbe).toHaveLength(1));
+    const handed = g.__eventPropProbe[0];
+    expect(handed.id).toBe(EVENT_ID);
+    // What applesauce's getOrComputeCachedValue does on first parse
+    expect(() =>
+      Object.defineProperty(handed, Symbol('memo'), {
+        value: 1,
+        enumerable: false,
+        configurable: true,
+        writable: true
+      })
+    ).not.toThrow();
   });
 
   it('unsubscribes from the store on unmount', () => {

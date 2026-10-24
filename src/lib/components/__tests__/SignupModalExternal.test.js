@@ -64,7 +64,7 @@ const mockEventStore = vi.hoisted(() => ({ add: vi.fn() }));
 vi.mock('$lib/stores/nostr-infrastructure.svelte', () => ({ eventStore: mockEventStore }));
 
 vi.mock('$lib/loaders/community.js', () => ({
-  communikeyTimelineLoader: () => () => ({ subscribe: () => ({ unsubscribe: () => {} }) })
+  communikeyTimelineLoader: () => ({ subscribe: () => ({ unsubscribe: () => {} }) })
 }));
 vi.mock('$lib/helpers/communityFollowSet.js', () => ({
   buildCommunityFollowSet: vi.fn().mockResolvedValue({ signed: null, targetPubkeys: [] })

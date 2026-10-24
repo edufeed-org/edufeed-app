@@ -50,7 +50,7 @@
   // Phase D: load the preferred form event so LearningContentFilters can render
   // ext-field facets derived from the form template.
   /** @type {import('nostr-tools').NostrEvent | null} */
-  let preferredFormEvent = $state(null);
+  let preferredFormEvent = $state.raw(null);
 
   $effect(() => {
     preferredFormEvent = null;

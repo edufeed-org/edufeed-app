@@ -31,7 +31,7 @@ vi.mock('$lib/stores/nostr-infrastructure.svelte', () => ({
 }));
 
 vi.mock('$lib/loaders/base.js', () => ({
-  createCachedTimelineLoader: vi.fn()
+  fetchEvents: vi.fn()
 }));
 
 vi.mock('$lib/stores/config.svelte.js', () => ({

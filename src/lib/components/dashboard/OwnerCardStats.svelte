@@ -8,9 +8,8 @@
   prototype's "hide stats when there is no engagement" behaviour).
 -->
 <script>
-  import { createTimelineLoader } from '$lib/loaders/timeline-loader.js';
   import { TimelineModel } from 'applesauce-core/models';
-  import { timedPool } from '$lib/loaders/base.js';
+  import { fetchEvents } from '$lib/loaders/base.js';
   import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
   import { reactionsLoader } from '$lib/loaders/reactions.js';
   import { getAllLookupRelays } from '$lib/helpers/relay-helper.js';
@@ -60,8 +59,7 @@
         const addr = addressOf(event);
         if (addr) filters.push({ kinds: [6, 16], '#a': [addr] });
 
-        const shareLoader = createTimelineLoader(timedPool, relays, filters, { eventStore });
-        subs.push(shareLoader().subscribe({ error: () => {} }));
+        subs.push(fetchEvents(relays, filters).subscribe());
         subs.push(
           eventStore.model(TimelineModel, filters).subscribe((list) => {
             shareCount = (list || []).length;

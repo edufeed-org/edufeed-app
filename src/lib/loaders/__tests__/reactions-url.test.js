@@ -13,10 +13,10 @@ let capturedRelays;
 let capturedFilters;
 
 vi.mock('$lib/loaders/base.js', () => ({
-  createCachedTimelineLoader: vi.fn((relays, filter) => {
+  fetchEvents: vi.fn((relays, filter) => {
     capturedRelays = relays;
     capturedFilters = filter;
-    return () => of();
+    return of();
   })
 }));
 

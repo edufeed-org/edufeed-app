@@ -117,7 +117,7 @@
   // quote (author + first line) so it shows even where the original never
   // arrived (joined later, sender already gone).
   /** @type {import('$lib/services/livekit-connection.svelte.js').CallChatMessage | null} */
-  let replyTarget = $state(null);
+  let replyTarget = $state.raw(null);
   /** The row a quote click just jumped to — highlighted for a moment. */
   /** @type {string | null} */
   let flashId = $state(null);

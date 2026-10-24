@@ -22,7 +22,7 @@
   const addressForProfile = $derived(grant.getAddress());
 
   /** The user's current kind 0 event, if any. */
-  let profileEvent = $state(/** @type {import('nostr-tools').NostrEvent | null} */ (null));
+  let profileEvent = $state.raw(/** @type {import('nostr-tools').NostrEvent | null} */ (null));
   /** UI state for the add-to-profile button. */
   let addState = $state(/** @type {'idle' | 'saving' | 'saved' | 'error'} */ ('idle'));
   /** Hides the CTA immediately after a successful save, before the kind 0 refreshes. */

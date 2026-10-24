@@ -82,7 +82,7 @@
     loaderSub?.unsubscribe();
 
     // 1. Fetch past responses from relays into EventStore.
-    loaderSub = pollResponsesLoader(event)().subscribe();
+    loaderSub = pollResponsesLoader(event).subscribe();
 
     // 2. Subscribe to EventStore for past + live responses.
     modelSub = eventStore

@@ -60,7 +60,7 @@
 
   let searchQuery = $state('');
 
-  let items = $state(/** @type {any[]} */ ([]));
+  let items = $state.raw(/** @type {any[]} */ ([]));
   let isLoading = $state(true);
   let error = $state(/** @type {string | null} */ (null));
   const contentPubkeys = () => {

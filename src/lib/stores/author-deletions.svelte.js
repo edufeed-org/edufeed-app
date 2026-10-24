@@ -3,7 +3,7 @@
  * screen.
  *
  * The gap this closes: nothing in the app ever fetched OTHER people's kind-5s.
- * `userDeletionLoader` is called only by the calendar paths and only for the
+ * `fetchUserDeletions` is called only by the calendar paths and only for the
  * active user; `hydrateDeletions()` (event-cache) replays kind-5s already in
  * IDB but never asks for new ones. So a resource its author deleted kept
  * rendering for whoever held a stale copy, and stayed shareable — a repost was
@@ -24,7 +24,7 @@
  * MUST be called during component init (it uses $effect).
  */
 /* eslint-disable svelte/prefer-svelte-reactivity -- plain bookkeeping + accumulator, never rendered */
-import { authorsDeletionLoader } from '$lib/loaders/base.js';
+import { fetchAuthorsDeletions } from '$lib/loaders/base.js';
 
 const HEX64 = /^[0-9a-f]{64}$/i;
 
@@ -52,7 +52,7 @@ export function useAuthorDeletions(getPubkeys) {
       fresh.push(pubkey);
     }
     if (fresh.length === 0) return;
-    subscriptions.push(authorsDeletionLoader(fresh)().subscribe({ error: () => {} }));
+    subscriptions.push(fetchAuthorsDeletions(fresh).subscribe({ error: () => {} }));
   });
 
   $effect(() => {

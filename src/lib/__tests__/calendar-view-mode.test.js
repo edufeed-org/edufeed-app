@@ -21,7 +21,8 @@ vi.mock('$lib/loaders/targeted-publications.js', () => ({
   communityTargetedPublicationsLoader: () => () => ({ subscribe: () => ({ unsubscribe() {} }) })
 }));
 vi.mock('$lib/loaders/base.js', () => ({
-  userDeletionLoader: () => () => ({ subscribe: () => ({ unsubscribe() {} }) }),
+  fetchUserDeletions: () => ({ subscribe: () => ({ unsubscribe() {} }) }),
+  fetchEvents: () => ({ subscribe: () => ({ unsubscribe() {} }) }),
   addressLoader: () => ({ subscribe: () => ({ unsubscribe() {} }) })
 }));
 vi.mock('$lib/services/curated-authors-service.svelte.js', () => ({

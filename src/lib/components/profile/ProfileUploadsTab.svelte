@@ -12,7 +12,7 @@
   import { untrack } from 'svelte';
   import { TimelineModel } from 'applesauce-core/models';
   import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
-  import { createCachedTimelineLoader } from '$lib/loaders/base.js';
+  import { fetchEvents } from '$lib/loaders/base.js';
   import { getAllLookupRelays } from '$lib/helpers/relay-helper.js';
   import { getWriteRelays } from '$lib/services/relay-service.svelte.js';
   import { getBlossomUploadServers } from '$lib/services/blossom-settings-service.js';
@@ -68,14 +68,14 @@
     // Attestations go out through the outbox (author write relays + fallback),
     // so query the lookup set first and the user's NIP-65 write relays on top.
     const relays = untrack(() => getAllLookupRelays());
-    const loaderSub = createCachedTimelineLoader(relays, filter, { limit: 500 })().subscribe();
+    const loaderSub = fetchEvents(relays, { ...filter, limit: 500 }, { cache: true }).subscribe();
     /** @type {import('rxjs').Subscription | undefined} */
     let writeSub;
     getWriteRelays(pubkey)
       .then((writeRelays) => {
         const extra = writeRelays.filter((r) => !relays.includes(r));
         if (extra.length > 0) {
-          writeSub = createCachedTimelineLoader(extra, filter, { limit: 500 })().subscribe();
+          writeSub = fetchEvents(extra, { ...filter, limit: 500 }, { cache: true }).subscribe();
         }
       })
       .catch(() => {});

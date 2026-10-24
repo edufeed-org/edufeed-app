@@ -24,25 +24,19 @@ vi.mock('$lib/groups/root-roster.svelte.js', () => ({
 
 const loaderCalls = vi.hoisted(() => /** @type {any[]} */ ([]));
 const loaderSubs = vi.hoisted(() => /** @type {any[]} */ ([]));
-vi.mock('applesauce-loaders/loaders', () => ({
-  createTimelineLoader: vi.fn((pool, relays, filter) => {
+vi.mock('$lib/loaders/base.js', () => ({
+  timedPool: () => ({}),
+  fetchEvents: vi.fn((relays, filter) => {
     loaderCalls.push({ relays, filter });
-    return () => ({
+    return {
       subscribe: () => {
         const sub = { unsubscribe: vi.fn() };
         loaderSubs.push(sub);
         return sub;
       }
-    });
+    };
   })
 }));
-// applesauce v7 moved block paging out of the SDK: the app's timeline loader is
-// the local port in $lib/loaders/timeline-loader.js and takes the mock above.
-vi.mock('$lib/loaders/timeline-loader.js', async () => {
-  const loaders = /** @type {any} */ (await import('applesauce-loaders/loaders'));
-  return { createTimelineLoader: loaders.createTimelineLoader };
-});
-vi.mock('$lib/loaders/base.js', () => ({ timedPool: () => ({}) }));
 
 const labels$ = vi.hoisted(() => ({ current: /** @type {any} */ (null) }));
 const modelCalls = vi.hoisted(() => /** @type {any[]} */ ([]));

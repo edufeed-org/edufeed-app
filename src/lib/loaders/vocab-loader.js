@@ -1,7 +1,7 @@
 import { createAddressLoader } from 'applesauce-loaders/loaders';
 import { getReplaceableIdentifier } from 'applesauce-core/helpers';
 import { eventStore, pool } from '$lib/stores/nostr-infrastructure.svelte';
-import { addressLoader, createCachedTimelineLoader } from '$lib/loaders/base.js';
+import { addressLoader, fetchEvents } from '$lib/loaders/base.js';
 import { VOCAB_KIND, CONCEPT_KIND } from 'nostr-vocab-core/constants';
 
 /** Concept addresses already re-requested by `d` this session. */
@@ -52,13 +52,12 @@ export function loadConceptScheme(ref, extraRelays = []) {
  * @returns {import('rxjs').Subscription}
  */
 export function loadSchemeConcepts(schemeCoord, relays) {
-  const loader = createCachedTimelineLoader(
+  return fetchEvents(
     relays,
-    { kinds: [CONCEPT_KIND], '#a': [schemeCoord] },
-    { limit: 2000 }
-  );
-  return loader().subscribe({
-    next: (event) => {
+    { kinds: [CONCEPT_KIND], '#a': [schemeCoord], limit: 2000 },
+    { cache: true }
+  ).subscribe({
+    next: (/** @type {import('nostr-tools').Event} */ event) => {
       const identifier = getReplaceableIdentifier(event);
       const address = `${event.kind}:${event.pubkey}:${identifier}`;
       if (revalidatedConcepts.has(address)) return;
@@ -85,6 +84,5 @@ export function loadSchemeConcepts(schemeCoord, relays) {
  * @returns {import('rxjs').Subscription}
  */
 export function loadAllSchemes(relays) {
-  const loader = createCachedTimelineLoader(relays, { kinds: [VOCAB_KIND] }, { limit: 500 });
-  return loader().subscribe();
+  return fetchEvents(relays, { kinds: [VOCAB_KIND], limit: 500 }, { cache: true }).subscribe();
 }

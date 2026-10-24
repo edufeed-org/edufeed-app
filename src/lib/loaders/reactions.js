@@ -7,7 +7,7 @@ import { switchMap, catchError } from 'rxjs/operators';
 import { createReactionsLoader } from 'applesauce-loaders/loaders';
 import { pool, eventStore } from '$lib/stores/nostr-infrastructure.svelte';
 import { getReadRelays } from '$lib/services/relay-service.svelte.js';
-import { createCachedTimelineLoader } from '$lib/loaders/base.js';
+import { fetchEvents } from '$lib/loaders/base.js';
 import { runtimeConfig } from '$lib/stores/config.svelte.js';
 
 const baseLoader = createReactionsLoader(pool, {
@@ -49,7 +49,7 @@ export function reactionsLoader(event, relays) {
  *
  * @param {string} url - The page URL to load reactions for
  * @param {string[]} [extraRelays] - Additional relays to query
- * @returns {Function} Timeline loader function that returns an Observable
+ * @returns {import('rxjs').Observable<any>} One-shot: cache + relays into the EventStore
  */
 export function reactionsLoaderForUrl(url, extraRelays) {
   if (!url) {
@@ -62,5 +62,5 @@ export function reactionsLoaderForUrl(url, extraRelays) {
   /** @type {import('nostr-tools').Filter} */
   const filter = { kinds: [17], '#i': [url], limit: 100 };
 
-  return createCachedTimelineLoader(uniqueRelays, filter);
+  return fetchEvents(uniqueRelays, filter, { cache: true });
 }

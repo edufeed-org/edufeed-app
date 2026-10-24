@@ -10,7 +10,7 @@ import { debounceTime } from 'rxjs';
 import { TimelineModel } from 'applesauce-core/models';
 import { getTagValue } from 'applesauce-core/helpers';
 import { userCalendarLoader } from '$lib/loaders/calendar.js';
-import { userDeletionLoader } from '$lib/loaders/base.js';
+import { fetchUserDeletions } from '$lib/loaders/base.js';
 import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
 import { getCalendarEventTitle } from 'applesauce-common/helpers';
 import { actionRunner } from '$lib/stores/action-runner.svelte.js';
@@ -52,7 +52,7 @@ import { AddEventToCalendar, RemoveEventFromCalendar } from 'applesauce-actions/
  * @returns {CalendarManagementStore} Calendar management store
  */
 export function createCalendarManagementStore(userPubkey) {
-  let calendars = $state(/** @type {Calendar[]} */ ([]));
+  let calendars = $state.raw(/** @type {Calendar[]} */ ([]));
   let loading = $state(true);
   let error = $state(/** @type {string | null} */ (null));
 
@@ -71,8 +71,7 @@ export function createCalendarManagementStore(userPubkey) {
     error = null;
 
     // 1. Loader: fetch kind 31924 → EventStore
-    const loader = userCalendarLoader(userPubkey);
-    loaderSub = loader().subscribe({
+    loaderSub = userCalendarLoader(userPubkey).subscribe({
       complete: () => {
         loading = false;
       },
@@ -83,8 +82,7 @@ export function createCalendarManagementStore(userPubkey) {
     });
 
     // 2. Deletion loader: fetch kind 5 → EventStore
-    const delLoader = userDeletionLoader(userPubkey);
-    deletionSub = delLoader().subscribe();
+    deletionSub = fetchUserDeletions(userPubkey).subscribe();
 
     // 3. TimelineModel: reactive query with auto-deletion filtering
     modelSub = eventStore

@@ -16,7 +16,7 @@
   import { TimelineModel } from 'applesauce-core/models';
   import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
   import { modalStore } from '$lib/stores/modal.svelte.js';
-  import { createCachedTimelineLoader } from '$lib/loaders/base.js';
+  import { fetchEvents } from '$lib/loaders/base.js';
   import { reactionsLoader } from '$lib/loaders/reactions.js';
   import { reactionsStore } from '$lib/stores/reactions.svelte.js';
   import { deleteReaction, aggregateReactions } from '$lib/helpers/reactions.js';
@@ -136,8 +136,7 @@
     /** @type {import('nostr-tools').Filter} */
     const filter = { kinds: [39701, 9802], '#a': [aTagValue] };
 
-    const loader = createCachedTimelineLoader(relays, filter, { limit: 200 });
-    const loaderSub = loader().subscribe();
+    const loaderSub = fetchEvents(relays, { ...filter, limit: 200 }, { cache: true }).subscribe();
 
     const modelSub = eventStore.model(TimelineModel, filter).subscribe((events) => {
       const items = events || [];
@@ -228,8 +227,11 @@
       { kinds: [1111], '#E': ids }
     ];
 
-    const loader = createCachedTimelineLoader(relays, filters, { limit: 200 });
-    const loaderSub = loader().subscribe();
+    const loaderSub = fetchEvents(
+      relays,
+      filters.map((f) => ({ ...f, limit: 200 })),
+      { cache: true }
+    ).subscribe();
     const modelSub = eventStore.model(TimelineModel, filters).subscribe((events) => {
       bookmarkComments = events || [];
     });

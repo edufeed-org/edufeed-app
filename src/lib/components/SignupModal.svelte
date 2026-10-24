@@ -174,7 +174,7 @@
   // the unmount-without-close path (e.g. parent route navigates away).
   $effect(() => {
     if (currentStep >= 2 && !prewarmSub) {
-      prewarmSub = communikeyTimelineLoader()().subscribe();
+      prewarmSub = communikeyTimelineLoader().subscribe();
     }
   });
 

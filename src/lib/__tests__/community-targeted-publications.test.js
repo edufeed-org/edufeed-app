@@ -8,42 +8,21 @@
  * @vitest-environment node
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { of } from 'rxjs';
 
-// Mock dependencies before importing the module under test
-vi.mock('applesauce-loaders/loaders', async (importOriginal) => {
-  const actual = /** @type {Record<string, any>} */ (await importOriginal());
-  return {
-    ...actual,
-    createTimelineLoader: vi.fn(() => vi.fn()),
-    createAddressLoader: vi.fn(() => vi.fn()),
-    createEventLoader: vi.fn(() => vi.fn())
-  };
-});
-// applesauce v7 moved block paging out of the SDK: the app's timeline loader is
-// the local port in $lib/loaders/timeline-loader.js and takes the mock above.
-vi.mock('$lib/loaders/timeline-loader.js', async () => {
-  const loaders = /** @type {any} */ (await import('applesauce-loaders/loaders'));
-  return { createTimelineLoader: loaders.createTimelineLoader };
-});
-
-vi.mock('$lib/stores/nostr-infrastructure.svelte', () => ({
-  pool: { request: vi.fn() },
-  eventStore: { add: vi.fn() }
+vi.mock('$lib/loaders/base.js', () => ({
+  fetchEvents: vi.fn(() => of())
 }));
 
 vi.mock('$lib/helpers/relay-helper.js', () => ({
-  getCommunikeyRelays: vi.fn(() => ['wss://communikey-relay.example.com']),
-  getAllLookupRelays: vi.fn(() => []),
-  getEventLoaderLookupRelays: () => []
+  getCommunikeyRelays: vi.fn(() => ['wss://communikey-relay.example.com'])
 }));
 
-vi.mock('$lib/stores/config.svelte.js', () => ({
-  runtimeConfig: { appRelays: {} }
-}));
-
-import { createTimelineLoader } from 'applesauce-loaders/loaders';
+import { fetchEvents } from '$lib/loaders/base.js';
 import { getCommunikeyRelays } from '$lib/helpers/relay-helper.js';
 import { communityTargetedPublicationsLoader } from '../loaders/targeted-publications.js';
+
+const filterOf = () => /** @type {any} */ (fetchEvents).mock.calls[0][1];
 
 describe('communityTargetedPublicationsLoader', () => {
   beforeEach(() => {
@@ -51,54 +30,44 @@ describe('communityTargetedPublicationsLoader', () => {
   });
 
   it('uses communikey relays, not content-specific relays', () => {
-    const communityPubkey = 'abc123';
-    communityTargetedPublicationsLoader(communityPubkey, [30142]);
+    communityTargetedPublicationsLoader('abc123', [30142]);
 
     expect(getCommunikeyRelays).toHaveBeenCalled();
-    expect(createTimelineLoader).toHaveBeenCalledWith(
-      expect.anything(),
+    expect(fetchEvents).toHaveBeenCalledWith(
       ['wss://communikey-relay.example.com'],
       expect.any(Object),
-      expect.any(Object)
+      { cache: true }
     );
   });
 
   it('passes correct filter with kind 30222 and community pubkey as #p', () => {
-    const communityPubkey = 'abc123';
-    communityTargetedPublicationsLoader(communityPubkey, [30142]);
-
-    const filter = /** @type {any} */ (createTimelineLoader).mock.calls[0][2];
-    expect(filter.kinds).toEqual([30222]);
-    expect(filter['#p']).toEqual(['abc123']);
+    communityTargetedPublicationsLoader('abc123', [30142]);
+    expect(filterOf().kinds).toEqual([30222]);
+    expect(filterOf()['#p']).toEqual(['abc123']);
   });
 
   it('stringifies content kinds for #k filter', () => {
     communityTargetedPublicationsLoader('abc123', [30142]);
-    const filter = /** @type {any} */ (createTimelineLoader).mock.calls[0][2];
-    expect(filter['#k']).toEqual(['30142']);
+    expect(filterOf()['#k']).toEqual(['30142']);
   });
 
   it('handles multiple content kinds', () => {
     communityTargetedPublicationsLoader('abc123', [31922, 31923]);
-    const filter = /** @type {any} */ (createTimelineLoader).mock.calls[0][2];
-    expect(filter['#k']).toEqual(['31922', '31923']);
+    expect(filterOf()['#k']).toEqual(['31922', '31923']);
   });
 
   it('uses default limit of 100', () => {
     communityTargetedPublicationsLoader('abc123', [30142]);
-    const opts = /** @type {any} */ (createTimelineLoader).mock.calls[0][3];
-    expect(opts.limit).toBe(100);
+    expect(filterOf().limit).toBe(100);
   });
 
   it('accepts custom limit', () => {
     communityTargetedPublicationsLoader('abc123', [30142], 50);
-    const opts = /** @type {any} */ (createTimelineLoader).mock.calls[0][3];
-    expect(opts.limit).toBe(50);
+    expect(filterOf().limit).toBe(50);
   });
 
-  it('passes eventStore to createTimelineLoader options', () => {
-    communityTargetedPublicationsLoader('abc123', [30142]);
-    const opts = /** @type {any} */ (createTimelineLoader).mock.calls[0][3];
-    expect(opts.eventStore).toBeDefined();
+  it('returns the request observable itself (one-shot, no loader function)', () => {
+    const result = communityTargetedPublicationsLoader('abc123', [30142]);
+    expect(typeof result.subscribe).toBe('function');
   });
 });

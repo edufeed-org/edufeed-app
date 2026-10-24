@@ -48,12 +48,12 @@ vi.mock('$lib/stores/nostr-infrastructure.svelte', () => ({
   pool: {}
 }));
 vi.mock('$lib/loaders/calendar.js', () => ({
-  communityCalendarTimelineLoader: () => () => NEVER,
+  communityCalendarTimelineLoader: () => NEVER,
   createDateRangeCalendarLoader: () => () => NEVER,
   createRelayFilteredCalendarLoader: () => () => NEVER,
   calendarEventReferencesLoader: () => () => NEVER,
-  channelCalendarsLoader: () => () => NEVER,
-  calendarTimelineLoader: () => () => NEVER,
+  channelCalendarsLoader: () => NEVER,
+  calendarTimelineLoader: () => NEVER,
   prefetchCalendarData: () => {}
 }));
 vi.mock('$lib/loaders/targeted-publications.js', () => ({
@@ -61,7 +61,8 @@ vi.mock('$lib/loaders/targeted-publications.js', () => ({
 }));
 vi.mock('$lib/loaders/base.js', () => ({
   timedPool: () => NEVER,
-  userDeletionLoader: () => () => NEVER,
+  fetchUserDeletions: () => NEVER,
+  fetchEvents: () => NEVER,
   addressLoader: () => NEVER
 }));
 vi.mock('$lib/loaders/calendar-search.js', () => {

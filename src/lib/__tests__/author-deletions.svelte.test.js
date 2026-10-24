@@ -4,7 +4,7 @@
 /**
  * The app never learned about OTHER people's deletions.
  *
- * `userDeletionLoader` exists but only the calendar paths call it, and only
+ * `fetchUserDeletions` exists but only the calendar paths call it, and only
  * for the active user's own pubkey; `hydrateDeletions()` replays kind-5s
  * already in IDB but never fetches new ones. So a resource its author deleted
  * keeps rendering for anyone holding a stale copy — and stays shareable,
@@ -24,21 +24,19 @@ let loaderCalls;
 let subscriptions;
 
 vi.mock('$lib/loaders/base.js', () => ({
-  authorsDeletionLoader: vi.fn((pubkeys) => {
+  fetchAuthorsDeletions: vi.fn((pubkeys) => {
     loaderCalls.push(pubkeys);
     // Record the subscription the HOOK opens, not one of our own: the point of
     // the teardown test is that the hook closes what it opened.
-    return () => {
-      const subject = new Subject();
-      const subscribe = subject.subscribe.bind(subject);
-      // @ts-expect-error -- test double
-      subject.subscribe = (...args) => {
-        const sub = subscribe(...args);
-        subscriptions.push(sub);
-        return sub;
-      };
-      return subject;
+    const subject = new Subject();
+    const subscribe = subject.subscribe.bind(subject);
+    // @ts-expect-error -- test double
+    subject.subscribe = (...args) => {
+      const sub = subscribe(...args);
+      subscriptions.push(sub);
+      return sub;
     };
+    return subject;
   })
 }));
 

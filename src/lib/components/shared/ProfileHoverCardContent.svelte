@@ -51,7 +51,7 @@
 
   // Subscribe to kind 0 event for WaveButton
   /** @type {any} */
-  let profileEvent = $state(undefined);
+  let profileEvent = $state.raw(undefined);
   $effect(() => {
     const sub = eventStore.replaceable(0, pubkey).subscribe((event) => {
       profileEvent = event;

@@ -35,17 +35,7 @@ vi.mock('$lib/stores/nostr-infrastructure.svelte', async () => {
 
 vi.mock('$lib/loaders/base.js', async () => {
   const { of } = await import('rxjs');
-  return { addressLoader: () => of(), timedPool: () => of() };
-});
-vi.mock('applesauce-loaders/loaders', async () => {
-  const { of } = await import('rxjs');
-  return { createTimelineLoader: () => () => of() };
-});
-// applesauce v7 moved block paging out of the SDK: the app's timeline loader is
-// the local port in $lib/loaders/timeline-loader.js and takes the mock above.
-vi.mock('$lib/loaders/timeline-loader.js', async () => {
-  const loaders = /** @type {any} */ (await import('applesauce-loaders/loaders'));
-  return { createTimelineLoader: loaders.createTimelineLoader };
+  return { addressLoader: () => of(), timedPool: () => of(), fetchEvents: () => of() };
 });
 vi.mock('$lib/helpers/relay-helper.js', () => ({
   getCommunikeyRelays: () => ['wss://communikey.example/'],

@@ -14,7 +14,7 @@
   /** @type {{ data: { naddr: string, initialTab: string } }} */
   let { data } = $props();
 
-  let formEvent = $state(/** @type {import('nostr-tools').NostrEvent | null} */ (null));
+  let formEvent = $state.raw(/** @type {import('nostr-tools').NostrEvent | null} */ (null));
   let isLoading = $state(true);
   let error = $state('');
   // svelte-ignore state_referenced_locally
@@ -60,7 +60,7 @@
   const parsedForm = $derived(formEvent ? parseFormTemplate(formEvent) : null);
   const forkOf = $derived(parsedForm?.forkOf);
 
-  let parentFormEvent = $state(/** @type {import('nostr-tools').NostrEvent | null} */ (null));
+  let parentFormEvent = $state.raw(/** @type {import('nostr-tools').NostrEvent | null} */ (null));
 
   $effect(() => {
     parentFormEvent = null;

@@ -1,24 +1,22 @@
 <!--
   DashboardRelayFeed — recent events seen on a single relay. The relay is
-  the curation: no author/WoT filtering. A timeline loader pages the relay
-  directly; display filters the shared EventStore by relay provenance
-  (getSeenRelays), so only events actually seen on this relay show.
+  the curation: no author/WoT filtering. One createTimelineFeed per relay
+  pages it (the applesauce v7 window loader, prefetch = page size); display
+  filters the shared EventStore by relay provenance (getSeenRelays), so only
+  events actually seen on this relay show.
 -->
 
 <script>
-  import { untrack } from 'svelte';
   import { goto } from '$app/navigation';
   import { resolve } from '$app/paths';
-  import { createTimelineLoader } from '$lib/loaders/timeline-loader.js';
+  import { createTimelineFeed } from '$lib/loaders/timeline-feed.js';
   import { TimelineModel } from 'applesauce-core/models';
   import { getDisplayName, getProfilePicture } from 'applesauce-core/helpers';
   import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
-  import { timedPool } from '$lib/loaders/base.js';
   import { useActiveUser } from '$lib/stores/accounts.svelte';
   import { ALL_FEED_KINDS } from '$lib/helpers/profile-feed.js';
   import { withoutChannelMeetings } from '$lib/helpers/calendar-timing.js';
   import { filterEventsForRelay, relayHostLabel } from '$lib/helpers/relay-feed.js';
-  import { createRelayPageLoader } from '$lib/helpers/relay-page-loader.js';
   import { useProfileMap } from '$lib/stores/profile-map.svelte.js';
   import { getFeedCardData } from '$lib/helpers/feedCardData.js';
   import { getContentEventRoute } from '$lib/helpers/contentNavigation.js';
@@ -42,48 +40,50 @@
   let isLoading = $state(true);
   let exhausted = $state(false);
   let loadingPage = $state(false);
+  // The relay's last request failed and the SDK is backing off before a retry
+  let failing = $state(false);
   let displayCount = $state(DISPLAY_STEP);
 
-  /** @type {(() => import('rxjs').Observable<any>) | undefined} */
-  let loader;
+  /** @type {import('$lib/loaders/timeline-feed.js').TimelineFeed | undefined} */
+  let feed;
 
-  // createTimelineLoader's observable may never complete (timedPool is 2s,
-  // +buffer) — the pager finalizes each page via a 4s safety timeout and is
-  // cancelled on relay switch/unmount so pagination state never goes stale.
-  const pager = createRelayPageLoader({
-    timeout: 4_000,
-    onChange: ({ loading, exhausted: pageExhausted, settled }) => {
-      loadingPage = loading;
-      exhausted = pageExhausted;
-      if (settled) isLoading = false;
-    }
-  });
-
+  // The feed is recreated on relay switch so coverage never carries over
+  // between relays. Its status$ drives the button: `pending` while a page the
+  // buffer does not hold yet is loading, `exhausted` once the relay has
+  // nothing older.
   $effect(() => {
     const relayUrl = relay; // read the dep before anything else
     isLoading = true;
     displayCount = DISPLAY_STEP;
-    // Cancel any in-flight page and clear pagination state for the new relay
-    pager.reset();
-    loader = createTimelineLoader(
-      timedPool,
-      [relayUrl],
-      { kinds: ALL_FEED_KINDS, limit: PAGE_SIZE },
-      { eventStore }
-    );
+    const current = createTimelineFeed({
+      getRelays: () => [relayUrl],
+      getFilter: () => ({ kinds: ALL_FEED_KINDS }),
+      pageSize: PAGE_SIZE,
+      // Cached events carry no relay provenance and never pass the display
+      // filter below, so warming the store from IDB only costs a query here.
+      cacheWarmLimit: 0
+    });
+    feed = current;
+    const eventsSub = current.events$.subscribe({
+      error: (/** @type {any} */ err) => console.error('DashboardRelayFeed: feed error:', err)
+    });
+    const statusSub = current.status$.subscribe((status) => {
+      loadingPage = status.pending;
+      exhausted = status.exhausted;
+      failing = status.failing;
+      if (status.settled) isLoading = false;
+    });
     const modelSub = eventStore
       .model(TimelineModel, { kinds: ALL_FEED_KINDS })
       .subscribe((/** @type {any[]} */ events) => {
         // Channel meetings share the store but never appear in a feed.
         modelEvents = withoutChannelMeetings(events || []);
       });
-    // Untracked: the pager callback writes pagination $state which must not
-    // become an effect dependency — the effect tracks only `relay`.
-    untrack(() => pager.loadPage(loader));
     return () => {
+      eventsSub.unsubscribe();
+      statusSub.unsubscribe();
       modelSub.unsubscribe();
-      pager.cancel();
-      loader = undefined;
+      feed = undefined;
     };
   });
 
@@ -91,15 +91,17 @@
   // timeline to events actually seen on this relay.
   let feedItems = $derived(filterEventsForRelay(modelEvents, relay));
   let visibleItems = $derived(feedItems.slice(0, displayCount));
-  let hasMore = $derived(!exhausted || displayCount < feedItems.length);
+  // While the relay is failing the SDK retries on its own: keep the button
+  // (busy) instead of declaring the relay empty.
+  let hasMore = $derived(!exhausted || failing || displayCount < feedItems.length);
 
   const getProfiles = useProfileMap(() => visibleItems.map((e) => e.pubkey));
   let profiles = $derived(getProfiles());
 
   function loadMore() {
     displayCount += DISPLAY_STEP;
-    // Running low on already-fetched items — pull the next page from the relay
-    if (displayCount >= feedItems.length) pager.loadPage(loader);
+    // Running low on already-fetched items — widen the feed's window by a page
+    if (displayCount >= feedItems.length) feed?.loadMore();
   }
 
   /** @param {any} event */
@@ -117,7 +119,8 @@
 </div>
 <FeedComposer />
 
-{#if isLoading}
+{#if isLoading && visibleItems.length === 0}
+  <!-- Store first: the spinner only while nothing from this relay is rendered yet -->
   <div class="flex justify-center py-12">
     <span class="loading loading-lg loading-spinner text-primary"></span>
   </div>
@@ -164,8 +167,8 @@
 
   {#if hasMore}
     <div class="mt-4 flex justify-center">
-      <button class="btn btn-ghost btn-sm" onclick={loadMore} disabled={loadingPage}>
-        {#if loadingPage}
+      <button class="btn btn-ghost btn-sm" onclick={loadMore} disabled={loadingPage || failing}>
+        {#if loadingPage || failing}
           <span class="loading loading-xs loading-spinner"></span>
         {/if}
         {m.discover_load_more()}

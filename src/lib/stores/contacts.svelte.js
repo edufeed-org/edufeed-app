@@ -8,14 +8,13 @@
  * missing profiles don't block the list.
  */
 
-import { eventStore, pool } from './nostr-infrastructure.svelte.js';
+import { eventStore } from './nostr-infrastructure.svelte.js';
 import { createContactListLoader } from '$lib/loaders/contact-list-loader.js';
-import { createTimelineLoader } from '$lib/loaders/timeline-loader.js';
 import { ContactsModel } from 'applesauce-core/models';
 import { getProfileContent } from 'applesauce-core/helpers';
 import { getWriteRelays } from '$lib/services/relay-service.svelte.js';
 import { getRelayListLookupRelays } from '$lib/services/relay-service.svelte.js';
-import { timedPool } from '$lib/loaders/base.js';
+import { fetchEvents } from '$lib/loaders/base.js';
 import { profileLoader } from '$lib/loaders/profile.js';
 import { getProfileLookupRelays } from '$lib/helpers/relay-helper.js';
 
@@ -68,12 +67,7 @@ export const contactsStore = {
       const relays = await getWriteRelays(userPubkey);
 
       // Step 1: Start background loader to fetch kind 3 event
-      const loaderFactory = createContactListLoader(pool, relays, eventStore, userPubkey);
-      const loaderSubscription = loaderFactory()().subscribe({
-        error: (/** @type {any} */ error) => {
-          console.error('Error loading contact list:', error);
-        }
-      });
+      const loaderSubscription = createContactListLoader(relays, userPubkey).subscribe();
       activeSubscriptions.push(loaderSubscription);
 
       // Step 2: Use applesauce ContactsModel — emits ProfilePointer[] immediately
@@ -93,14 +87,9 @@ export const contactsStore = {
           const lookupRelays = getRelayListLookupRelays();
           if (!mailboxLoadStarted && lookupRelays.length > 0 && pubkeys.length > 0) {
             mailboxLoadStarted = true;
-            const mailboxLoader = createTimelineLoader(
-              timedPool,
-              lookupRelays,
-              { kinds: [10002], authors: pubkeys },
-              { eventStore }
+            activeSubscriptions.push(
+              fetchEvents(lookupRelays, { kinds: [10002], authors: pubkeys }).subscribe()
             );
-            const mailboxSub = mailboxLoader().subscribe();
-            activeSubscriptions.push(mailboxSub);
           }
 
           // Load profiles for contacts

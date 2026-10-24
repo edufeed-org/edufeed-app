@@ -72,7 +72,7 @@ vi.mock('$lib/stores/nostr-infrastructure.svelte', () => ({
 }));
 
 vi.mock('$lib/loaders/calendar.js', () => ({
-  userCalendarLoader: vi.fn(() => () => ({
+  userCalendarLoader: vi.fn(() => ({
     subscribe: vi.fn((/** @type {any} */ handler) => {
       capturedLoaderHandler = handler;
       return { unsubscribe: loaderUnsub };
@@ -81,7 +81,7 @@ vi.mock('$lib/loaders/calendar.js', () => ({
 }));
 
 vi.mock('$lib/loaders/base.js', () => ({
-  userDeletionLoader: vi.fn(() => () => ({
+  fetchUserDeletions: vi.fn(() => ({
     subscribe: vi.fn(() => ({ unsubscribe: deletionUnsub }))
   }))
 }));
@@ -135,7 +135,7 @@ const { createCalendarManagementStore, useCalendarManagement, cleanupCalendarMan
   await import('../stores/calendar-management-store.svelte.js');
 const { eventStore } = await import('../stores/nostr-infrastructure.svelte');
 const { userCalendarLoader } = await import('../loaders/calendar.js');
-const { userDeletionLoader } = await import('../loaders/base.js');
+const { fetchUserDeletions } = await import('../loaders/base.js');
 const { AddEventToCalendar, RemoveEventFromCalendar } = await import('applesauce-actions/actions');
 
 describe('createCalendarManagementStore', () => {
@@ -165,7 +165,7 @@ describe('createCalendarManagementStore', () => {
     const store = createCalendarManagementStore(MOCK_PUBKEY);
 
     expect(userCalendarLoader).toHaveBeenCalledWith(MOCK_PUBKEY);
-    expect(userDeletionLoader).toHaveBeenCalledWith(MOCK_PUBKEY);
+    expect(fetchUserDeletions).toHaveBeenCalledWith(MOCK_PUBKEY);
 
     store.destroy();
   });
@@ -311,7 +311,7 @@ describe('createCalendarManagementStore', () => {
 
     // Loaders should be called again
     expect(userCalendarLoader).toHaveBeenCalledTimes(2);
-    expect(userDeletionLoader).toHaveBeenCalledTimes(2);
+    expect(fetchUserDeletions).toHaveBeenCalledTimes(2);
 
     store.destroy();
   });

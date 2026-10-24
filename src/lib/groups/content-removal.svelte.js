@@ -4,9 +4,8 @@
 // reasoning in ./content-removal.js). One subscription per community page:
 // the layout calls this once and hands the result down through context, so
 // every section view and detail menu filters against the same set.
-import { createTimelineLoader } from '$lib/loaders/timeline-loader.js';
 import { TimelineModel } from 'applesauce-core/models';
-import { timedPool } from '$lib/loaders/base.js';
+import { fetchEvents } from '$lib/loaders/base.js';
 import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
 import { getCommunikeyRelays, getAllLookupRelays } from '$lib/helpers/relay-helper.js';
 import { getCommunityGlobalRelays } from '$lib/helpers/communityRelays.js';
@@ -69,7 +68,7 @@ export function useContentRemovals(getCommunityEvent) {
       '#L': [CONTENT_REMOVAL_NAMESPACE]
     };
 
-    loaderSub = createTimelineLoader(timedPool, relays, filter, { eventStore })().subscribe();
+    loaderSub = fetchEvents(relays, filter).subscribe();
     // eventStore.model(TimelineModel), not eventStore.timeline: a restored
     // item is an undone (kind-5-deleted) label, and only the model drops
     // deleted events.

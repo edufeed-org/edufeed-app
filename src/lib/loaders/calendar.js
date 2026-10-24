@@ -4,11 +4,10 @@
  */
 import { from, merge, EMPTY, defer, of } from 'rxjs';
 import { mergeMap, filter, tap, switchMap, catchError } from 'rxjs/operators';
-import { createTimelineLoader } from '$lib/loaders/timeline-loader.js';
 import { eventStore, pool } from '$lib/stores/nostr-infrastructure.svelte';
 import { authenticateOnce } from '$lib/groups/relay-auth.js';
 import { pointersByRelay } from '$lib/groups/channel-calendar.js';
-import { addressLoader, timedPool, createCachedTimelineLoader } from './base.js';
+import { addressLoader, timedPool, fetchEvents } from './base.js';
 import { backwardPaginateRelay } from './backward-paginate.js';
 import { getCalendarRelays } from '$lib/helpers/relay-helper.js';
 import { parseAddressPointerFromATag } from '$lib/helpers/nostrUtils.js';
@@ -38,15 +37,19 @@ export function prefetchCalendarData() {
   if (relays.length === 0) return;
   _prefetched = true;
   preWarmRelayCapabilitiesCache(relays);
-  calendarTimelineLoader()().subscribe();
+  calendarTimelineLoader().subscribe();
 }
 
-// Global calendar events (kinds 31922, 31923)
-// Lazy factory to ensure relays are read from runtime config at call time, not module load time
-export const calendarTimelineLoader = () => {
-  const filter = applyCuratedFilter({ kinds: [31922, 31923], limit: 40 });
-  return createCachedTimelineLoader(getCalendarRelays(), filter);
-};
+/**
+ * Global calendar events (kinds 31922, 31923): the latest 40, cache + calendar
+ * relays into the EventStore. Relays are read at call time so runtime config
+ * and user overrides apply.
+ * @returns {import('rxjs').Observable<any>}
+ */
+export const calendarTimelineLoader = () =>
+  fetchEvents(getCalendarRelays(), applyCuratedFilter({ kinds: [31922, 31923], limit: 40 }), {
+    cache: true
+  });
 
 /**
  * Create a timeline loader for calendar events with custom relay filtering.
@@ -249,41 +252,37 @@ export function createPaginatedCalendarLoader(afterStartTimestamp, options = {})
   };
 }
 
-// Calendar definition loader for personal calendars (kind 31924)
-// NOTE: This loads ALL calendars without filtering - use userCalendarLoader for user-specific calendars
-// Lazy factory to ensure relays are read from runtime config at call time, not module load time
+/**
+ * Calendar definitions (kind 31924) of everyone — use userCalendarLoader for
+ * one user's calendars. One-shot, cache + calendar relays.
+ * @returns {import('rxjs').Observable<any>}
+ */
 export const calendarLoader = () =>
-  createCachedTimelineLoader(getCalendarRelays(), {
-    kinds: [31924], // Calendar definitions
-    limit: 100
-  });
+  fetchEvents(getCalendarRelays(), { kinds: [31924], limit: 100 }, { cache: true });
 
 /**
- * Factory: Create a timeline loader for user-specific calendar definitions
- * This loader filters calendars by author at the relay level for efficiency
+ * One user's calendar definitions (kind 31924), filtered by author at the relay.
  * @param {string} userPubkey - The pubkey of the user whose calendars to load
- * @returns {Function} Timeline loader function that returns an Observable
+ * @returns {import('rxjs').Observable<any>}
  */
 export const userCalendarLoader = (userPubkey) =>
-  createCachedTimelineLoader(getCalendarRelays(), {
-    kinds: [31924], // Calendar definitions
-    authors: [userPubkey], // Filter by user at relay level
-    limit: 100
-  });
+  fetchEvents(
+    getCalendarRelays(),
+    { kinds: [31924], authors: [userPubkey], limit: 100 },
+    { cache: true }
+  );
 
 /**
- * Factory: Create a timeline loader for community-specific calendar events
+ * A community's calendar events (h-tagged kinds 31922/31923). One-shot.
  * @param {string} communityPubkey - The pubkey of the community
- * @returns {Function} Timeline loader function that returns an Observable
+ * @returns {import('rxjs').Observable<any>}
  */
-export const communityCalendarTimelineLoader = (communityPubkey) => {
-  const filter = applyCuratedFilter({
-    kinds: [31922, 31923],
-    '#h': [communityPubkey],
-    limit: 250
-  });
-  return createCachedTimelineLoader(getCalendarRelays(), filter);
-};
+export const communityCalendarTimelineLoader = (communityPubkey) =>
+  fetchEvents(
+    getCalendarRelays(),
+    applyCuratedFilter({ kinds: [31922, 31923], '#h': [communityPubkey], limit: 250 }),
+    { cache: true }
+  );
 
 /**
  * Factory: the community's CHANNEL calendars (communikey-groups.md, "Channel
@@ -299,35 +298,31 @@ export const communityCalendarTimelineLoader = (communityPubkey) => {
  *
  * With a signer, each relay is NIP-42-authenticated once before its channels
  * are read; a refused or missing auth still reads what the relay serves
- * anonymously. Plain `createTimelineLoader` with the eventStore — no IDB
- * cache request; the cache's write filter never persists channel meetings.
+ * anonymously. Plain `fetchEvents` without the IDB cache; the cache's write
+ * filter never persists channel meetings.
  *
  * @param {Array<{id: string, relay: string}>} groupPointers
  * @param {{signer?: any}} [opts]
- * @returns {() => import('rxjs').Observable<any>}
+ * @returns {import('rxjs').Observable<any>}
  */
 export const channelCalendarsLoader = (groupPointers, { signer } = {}) => {
   const groups = pointersByRelay(groupPointers);
-  return () =>
-    merge(
-      ...groups.map(({ relay, ids }) =>
-        defer(() => (signer ? from(authenticateOnce(pool.relay(relay), signer)) : of(null))).pipe(
-          catchError(() => of(null)),
-          switchMap(() =>
-            merge(
-              ...ids.map((id) =>
-                createTimelineLoader(
-                  timedPool,
-                  [relay],
-                  { kinds: [31923, 5, 9005], '#h': [id], limit: 250 },
-                  { eventStore }
-                )().pipe(catchError(() => EMPTY))
+  return merge(
+    ...groups.map(({ relay, ids }) =>
+      defer(() => (signer ? from(authenticateOnce(pool.relay(relay), signer)) : of(null))).pipe(
+        catchError(() => of(null)),
+        switchMap(() =>
+          merge(
+            ...ids.map((id) =>
+              fetchEvents([relay], { kinds: [31923, 5, 9005], '#h': [id], limit: 250 }).pipe(
+                catchError(() => EMPTY)
               )
             )
           )
         )
       )
-    );
+    )
+  );
 };
 
 /**

@@ -4,9 +4,9 @@
   import { SvelteSet } from 'svelte/reactivity';
   import { untrack } from 'svelte';
   import { onMount } from 'svelte';
-  import { articleTimelineLoader } from '$lib/loaders/articles.js';
-  import { ambTimelineLoader } from '$lib/loaders/amb.js';
-  import { kanbanTimelineLoader } from '$lib/loaders/kanban.js';
+  import { createArticleFeed } from '$lib/loaders/articles.js';
+  import { createAmbFeed } from '$lib/loaders/amb.js';
+  import { createKanbanFeed } from '$lib/loaders/kanban.js';
   import { useCommunityActivityLoader } from '$lib/loaders/community-activity.js';
   import { CommunityActivityModel } from '$lib/models/community-content.js';
   import { subscribeToCommunityAccess } from '$lib/groups/community-access-subscription.js';
@@ -16,7 +16,7 @@
     createPaginatedCalendarLoader
   } from '$lib/loaders/calendar.js';
   import { preWarmRelayCapabilitiesCache } from '$lib/services/relay-capabilities.js';
-  import { timedPool } from '$lib/loaders/base.js';
+  import { fetchEvents } from '$lib/loaders/base.js';
   import { ambRankedSearchLoader } from '$lib/loaders/amb-search.js';
   import {
     hasActiveFilters,
@@ -24,7 +24,6 @@
   } from '$lib/helpers/educational/searchQueryBuilder.js';
   import { buildRankIndex } from '$lib/helpers/educational/searchRank.js';
   import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
-  import { createTimelineLoader } from '$lib/loaders/timeline-loader.js';
   import {
     getEducationalRelays,
     getArticleRelays,
@@ -45,7 +44,10 @@
   import CreateBoardLink from '$lib/components/kanban/CreateBoardLink.svelte';
   import CommunityFilterDropdown from '$lib/components/feed/CommunityFilterDropdown.svelte';
   import RelayFilterDropdown from '$lib/components/feed/RelayFilterDropdown.svelte';
-  import { getAppRelaysForCategory } from '$lib/services/app-relay-service.svelte.js';
+  import {
+    getAppRelaysForCategory,
+    relayUpdateSignal
+  } from '$lib/services/app-relay-service.svelte.js';
   import {
     applyCuratedFilter,
     isAllowedAuthor,
@@ -174,33 +176,24 @@
   // Cleared by the first feed loader/model emission; with no feed type enabled
   // nothing would ever clear it, so start false.
   let isLoading = $state(hasAnyFeedType);
-  let isLoadingMore = $state(false);
   const DISPLAY_BATCH = 20;
   let displayLimit = $state(DISPLAY_BATCH);
-  let hasMoreArticles = $state(true);
   let hasMoreCalendarEvents = $state(true);
-  let hasMoreKanban = $state(true);
 
-  // Track per-relay exhaustion for educational content pagination.
-  // Only stop pagination when ALL educational relays have been exhausted.
-  // This fixes the bug where pagination stopped early when one relay returned 0 events
-  // while another (e.g., user-added localhost:3334) still had content.
-  // IMPORTANT: Use $state.raw() because Svelte 5's $state() proxy breaks Set.prototype.has()
-  /** @type {Set<string>} */
-  let exhaustedEducationalRelays = $state.raw(new Set());
-
-  // Derived: hasMoreAMB is true if ANY educational relay is not yet exhausted
-  const hasMoreAMB = $derived.by(() => {
-    const currentRelays = getEducationalRelays();
-    return currentRelays.some((r) => !exhaustedEducationalRelays.has(r));
-  });
-
-  // Track oldest timestamps PER RELAY for dynamic relay pagination.
-  // This fixes the bug where pagination stopped early because the global `until` timestamp
-  // excluded events from newly-added relays with different timestamp ranges.
-  // Use $state.raw() because Map methods like .get()/.set() don't work through Svelte proxies.
-  /** @type {Map<string, number>} */
-  let perRelayOldestTimestamp = $state.raw(new Map());
+  // Articles, learning and boards page through createTimelineFeed (the
+  // applesauce v7 window loader): per-relay coverage, prefetch and exhaustion
+  // live in the SDK; the page only mirrors each feed's status. Calendar keeps
+  // its own date-range loaders — it pages by event start, not created_at.
+  /** @type {{ type: string, feed: import('$lib/loaders/timeline-feed.js').TimelineFeed }[]} */
+  const FEEDS = /** @type {any[]} */ ([
+    isEnabled('articles') && { type: 'articles', feed: createArticleFeed(DISPLAY_BATCH) },
+    isEnabled('learning') && { type: 'learning', feed: createAmbFeed(DISPLAY_BATCH) },
+    isEnabled('boards') && { type: 'boards', feed: createKanbanFeed(DISPLAY_BATCH) }
+  ]).filter(Boolean);
+  /** Latest status per feed type. $state.raw: replaced wholesale, never mutated. */
+  let feedStatus = $state.raw(
+    /** @type {Record<string, import('$lib/loaders/timeline-feed.js').TimelineFeedStatus>} */ ({})
+  );
 
   // Initialize from URL params (must be before state that depends on it)
   const initialFilters = parseFeedFilters($page.url.searchParams);
@@ -225,7 +218,7 @@
   let isSearching = $state(false);
   /** @type {ReturnType<typeof setTimeout> | null} */
   let searchingSafetyTimer = null;
-  let learningSearchResults = $state(/** @type {import('nostr-tools').Event[]} */ ([]));
+  let learningSearchResults = $state.raw(/** @type {import('nostr-tools').Event[]} */ ([]));
   // Relevance order of the current search: `kind:pubkey:d` → merged position.
   // Each relay ranks its own response; scores are not comparable across
   // relays, so results are merged by per-relay rank (see searchRank.js).
@@ -561,54 +554,35 @@
     }
   }
 
-  // Batch sizes for loading
-  const BATCH_SIZE = 20;
+  // Calendar pagination (the events tab pages by `start` through its own loaders)
   const CALENDAR_BATCH_SIZE = 20; // Events per pagination batch
-  const BATCH_TIMEOUT = 4_000; // Safety timeout per batch (timedPool is 2s + buffer)
+  const BATCH_TIMEOUT = 4_000; // Safety timeout per calendar batch (timedPool + buffer)
 
-  // Step 1: Create stateful loaders
-  const articleLoader = articleTimelineLoader(BATCH_SIZE);
-  const ambLoader = ambTimelineLoader(BATCH_SIZE);
-  const kanbanLoader = kanbanTimelineLoader(BATCH_SIZE);
-  // Calendar events use date range loader (not stateful pagination)
-
-  // Step 2: Initial load (subscriptions captured for cleanup on destroy).
-  // Disabled content types never hit the network.
-  const initialArticleSub = !isEnabled('articles')
-    ? undefined
-    : articleLoader().subscribe({
-        complete: () => {
-          isLoading = false;
-        },
-        error: (/** @type {any} */ error) => {
-          console.error('🔍 Discover: Article loader error:', error);
-          isLoading = false;
-        }
-      });
-
-  const initialAmbSub = !isEnabled('learning')
-    ? undefined
-    : ambLoader().subscribe({
-        complete: () => {
-          isLoading = false;
-        },
-        error: (/** @type {any} */ error) => {
-          console.error('🔍 Discover: AMB loader error:', error);
-          isLoading = false;
-        }
-      });
-
-  const initialKanbanSub = !isEnabled('boards')
-    ? undefined
-    : kanbanLoader().subscribe({
-        complete: () => {
-          isLoading = false;
-        },
-        error: (/** @type {any} */ error) => {
-          console.error('🔍 Discover: Kanban loader error:', error);
-          isLoading = false;
-        }
-      });
+  // Start the feeds. Events flow into the EventStore (the model subscriptions
+  // below render them); status drives the skeleton, the bottom spinner and
+  // "no more". Store first: the skeleton only shows while nothing is rendered.
+  $effect(() => {
+    const subs = FEEDS.flatMap(({ type, feed }) => [
+      feed.events$.subscribe({
+        error: (/** @type {any} */ error) =>
+          console.error(`🔍 Discover: ${type} feed error:`, error)
+      }),
+      feed.status$.subscribe((status) => {
+        // Untracked: status$ replays synchronously inside this effect, and the
+        // merge reads the state it writes.
+        untrack(() => {
+          const wasPending = feedStatus[type]?.pending ?? false;
+          feedStatus = { ...feedStatus, [type]: status };
+          if (FEEDS.every((f) => feedStatus[f.type]?.settled)) isLoading = false;
+          // A page this feed had to wait for has arrived: reveal it. Keyed on
+          // the feed's own transition, so switching tabs while another feed
+          // is pending reveals nothing here.
+          if (wasPending && !status.pending && showsType(type)) revealMore();
+        });
+      })
+    ]);
+    return () => subs.forEach((s) => s.unsubscribe());
+  });
 
   // Pre-warm relay capabilities cache for calendar relays
   // This ensures pagination doesn't wait 2-3s for NIP-52 detection on each scroll
@@ -633,103 +607,47 @@
         }
       });
 
-  // Supplemental relay loading: when user override relays arrive (kind 30002),
-  // the initial loaders above won't include them because they resolved relays
-  // at mount time before the async cache populated. This $effect watches for
-  // relay changes and creates additional loaders for any new relays.
-  const initialEducationalRelays = new SvelteSet(getEducationalRelays());
-  const initialArticleRelays = new SvelteSet(getArticleRelays());
-  const initialCalendarRelays = new SvelteSet(getCalendarRelays());
-  const initialKanbanRelays = new SvelteSet(getKanbanRelays());
-
+  // Feeds re-read their relays and curated filter whenever user relay overrides
+  // (kind 30002) or the curated/WoT author set arrive after mount. The SDK
+  // reconciles per relay: a new relay loads the current window, a grown author
+  // list requests only the added authors.
   $effect(() => {
-    /** @type {import('rxjs').Subscription[]} */
-    const supplementalSubs = [];
-
-    const currentEducational = isEnabled('learning') ? getEducationalRelays() : [];
-    const newEducational = currentEducational.filter((r) => !initialEducationalRelays.has(r));
-    if (newEducational.length > 0) {
-      newEducational.forEach((r) => initialEducationalRelays.add(r));
-      const eduFilter = applyCuratedFilter({ kinds: [30142] });
-      const loader = createTimelineLoader(timedPool, newEducational, eduFilter, {
-        eventStore,
-        limit: BATCH_SIZE
-      });
-      supplementalSubs.push(loader().subscribe());
-    }
-
-    const currentArticle = isEnabled('articles') ? getArticleRelays() : [];
-    const newArticle = currentArticle.filter((r) => !initialArticleRelays.has(r));
-    if (newArticle.length > 0) {
-      newArticle.forEach((r) => initialArticleRelays.add(r));
-      const artFilter = applyCuratedFilter({ kinds: [30023] });
-      const loader = createTimelineLoader(timedPool, newArticle, artFilter, {
-        eventStore,
-        limit: BATCH_SIZE
-      });
-      supplementalSubs.push(loader().subscribe());
-    }
-
-    const currentCalendar = isEnabled('events') ? getCalendarRelays() : [];
-    const newCalendar = currentCalendar.filter((r) => !initialCalendarRelays.has(r));
-    if (newCalendar.length > 0) {
-      newCalendar.forEach((r) => initialCalendarRelays.add(r));
-      const calFilter = applyCuratedFilter({ kinds: [31922, 31923], limit: 40 });
-      const loader = createTimelineLoader(timedPool, newCalendar, calFilter, { eventStore });
-      supplementalSubs.push(loader().subscribe());
-    }
-
-    const currentKanban = isEnabled('boards') ? getKanbanRelays() : [];
-    const newKanban = currentKanban.filter((r) => !initialKanbanRelays.has(r));
-    if (newKanban.length > 0) {
-      newKanban.forEach((r) => initialKanbanRelays.add(r));
-      const kanFilter = applyCuratedFilter({ kinds: [30301] });
-      const loader = createTimelineLoader(timedPool, newKanban, kanFilter, {
-        eventStore,
-        limit: BATCH_SIZE
-      });
-      supplementalSubs.push(loader().subscribe());
-    }
-
-    return () => {
-      supplementalSubs.forEach((sub) => sub.unsubscribe());
-    };
+    const _relays = $relayUpdateSignal;
+    const _curated = getCuratedCacheVersion();
+    for (const { feed } of FEEDS) feed.sync();
   });
 
-  // Supplemental curated author loading: when new authors join the curated set
-  // (user login, WoT anchor load, user follows), fetch their content from relays.
-  const CURATED_CONTENT_CONFIGS = [
-    { type: 'learning', category: 'educational', kinds: [30142], getRelays: getEducationalRelays },
-    { type: 'articles', category: 'longform', kinds: [30023], getRelays: getArticleRelays },
-    { type: 'events', category: 'calendar', kinds: [31922, 31923], getRelays: getCalendarRelays },
-    { type: 'boards', category: 'kanban', kinds: [30301], getRelays: getKanbanRelays }
-  ].filter((c) => isEnabled(c.type));
+  // Calendar keeps the one-shot supplemental pattern: override relays and
+  // curated/WoT authors arriving late get the query the initial load ran.
+  const initialCalendarRelays = new SvelteSet(getCalendarRelays());
+  $effect(() => {
+    const _relays = $relayUpdateSignal;
+    if (!isEnabled('events')) return;
+    const newCalendar = getCalendarRelays().filter((r) => !initialCalendarRelays.has(r));
+    if (newCalendar.length === 0) return;
+    newCalendar.forEach((r) => initialCalendarRelays.add(r));
+    const sub = fetchEvents(
+      newCalendar,
+      applyCuratedFilter({ kinds: [31922, 31923], limit: 40 })
+    ).subscribe();
+    return () => sub.unsubscribe();
+  });
 
-  const baselineCuratedAuthors = Object.fromEntries(
-    CURATED_CONTENT_CONFIGS.map((c) => [c.category, new Set(getCuratedAuthors(c.category) || [])])
-  );
-
+  const baselineCalendarAuthors = new SvelteSet(getCuratedAuthors('calendar') || []);
   $effect(() => {
     const _ver = getCuratedCacheVersion();
-
-    for (const { category, kinds, getRelays } of CURATED_CONTENT_CONFIGS) {
-      const current = getCuratedAuthors(category);
-      if (!current) continue;
-
-      const newAuthors = current.filter((a) => !baselineCuratedAuthors[category].has(a));
-      if (newAuthors.length === 0) continue;
-
-      newAuthors.forEach((a) => baselineCuratedAuthors[category].add(a));
-      const loader = createTimelineLoader(
-        timedPool,
-        getRelays(),
-        { kinds, authors: newAuthors },
-        { eventStore, limit: BATCH_SIZE }
-      );
-      loader().subscribe();
-    }
-    // No cleanup — loaders are one-shot (complete on EOSE or timedPool 2s timeout).
-    // baselineCuratedAuthors tracking prevents duplicate loaders for the same authors.
+    if (!isEnabled('events')) return;
+    const current = getCuratedAuthors('calendar');
+    if (!current) return;
+    const newAuthors = current.filter((a) => !baselineCalendarAuthors.has(a));
+    if (newAuthors.length === 0) return;
+    newAuthors.forEach((a) => baselineCalendarAuthors.add(a));
+    // One-shot; baselineCalendarAuthors keeps it from repeating for the same authors.
+    fetchEvents(getCalendarRelays(), {
+      kinds: [31922, 31923],
+      authors: newAuthors,
+      limit: 20
+    }).subscribe();
   });
 
   // Relay-side author filtering: when authors are selected, fire targeted
@@ -743,23 +661,15 @@
     const subs = [];
 
     if (showsType('articles')) {
-      const loader = createTimelineLoader(
-        timedPool,
-        getArticleRelays(),
-        { kinds: [30023], authors },
-        { eventStore, limit: 100 }
+      subs.push(
+        fetchEvents(getArticleRelays(), { kinds: [30023], authors, limit: 100 }).subscribe()
       );
-      subs.push(loader().subscribe());
     }
 
     if (showsType('learning')) {
-      const loader = createTimelineLoader(
-        timedPool,
-        getEducationalRelays(),
-        { kinds: [30142], authors },
-        { eventStore, limit: 100 }
+      subs.push(
+        fetchEvents(getEducationalRelays(), { kinds: [30142], authors, limit: 100 }).subscribe()
       );
-      subs.push(loader().subscribe());
     }
 
     if (showsType('events')) {
@@ -771,13 +681,9 @@
     }
 
     if (showsType('boards')) {
-      const loader = createTimelineLoader(
-        timedPool,
-        getKanbanRelays(),
-        { kinds: [30301], authors },
-        { eventStore, limit: 100 }
+      subs.push(
+        fetchEvents(getKanbanRelays(), { kinds: [30301], authors, limit: 100 }).subscribe()
       );
-      subs.push(loader().subscribe());
     }
 
     return () => subs.forEach((s) => s.unsubscribe());
@@ -821,35 +727,6 @@
           ambResources = resources || [];
           isLoading = false;
           profileTrigger++; // Trigger profile loading for new resources
-
-          // Track per-relay oldest timestamps for pagination.
-          // This uses getSeenRelays() to determine which relay each event came from.
-          if (resources && resources.length > 0) {
-            const newMap = new Map(perRelayOldestTimestamp); // eslint-disable-line svelte/prefer-svelte-reactivity
-            let mapUpdated = false;
-
-            for (const resource of resources) {
-              const event = resource.event || resource;
-              const ts = event?.created_at;
-              if (!ts) continue;
-
-              // Get which relay(s) this event was seen on
-              const seenRelays = getSeenRelays(event);
-              if (!seenRelays || seenRelays.size === 0) continue;
-
-              for (const relay of seenRelays) {
-                const existing = newMap.get(relay);
-                if (existing === undefined || ts < existing) {
-                  newMap.set(relay, ts);
-                  mapUpdated = true;
-                }
-              }
-            }
-
-            if (mapUpdated) {
-              perRelayOldestTimestamp = newMap; // Reassign to trigger reactivity
-            }
-          }
         });
 
   // Subscribe to calendar events with date range filtering (reactive)
@@ -1111,6 +988,9 @@
     }
   });
 
+  /** Feeds shown on the current tab ("all" merges every enabled feed type). */
+  const activeFeeds = $derived(FEEDS.filter((f) => showsType(f.type)));
+
   /**
    * Whether there are more items to show (either in display buffer or from network)
    */
@@ -1119,21 +999,38 @@
     if (contentType === 'people') return false;
     // More items already loaded but not yet displayed
     if (displayLimit < combinedContent.length) return true;
-    // More items available from network
-    if (contentType === 'events') return hasMoreCalendarEvents;
-    if (contentType === 'articles') return hasMoreArticles;
-    if (contentType === 'learning') return hasMoreAMB;
-    if (contentType === 'boards') return hasMoreKanban;
     if (contentType === 'communities') return hasMoreCommunities;
-    if (contentType === 'all')
-      return (
-        (isEnabled('articles') && hasMoreArticles) ||
-        (isEnabled('learning') && hasMoreAMB) ||
-        (isEnabled('events') && hasMoreCalendarEvents) ||
-        (isEnabled('boards') && hasMoreKanban)
-      );
-    return false;
+    // A NIP-50 learning search is one ranked batch; the feed does not page it
+    const feedsCanPage = activeFeeds.some(
+      (f) =>
+        !(f.type === 'learning' && isLearningSearchActive) &&
+        !(feedStatus[f.type]?.exhausted ?? false)
+    );
+    return feedsCanPage || (showsType('events') && hasMoreCalendarEvents);
   });
+
+  // A network "load more" in flight: a feed waiting on a page it has not
+  // buffered yet, or a calendar batch.
+  let calendarLoadingMore = $state(false);
+  const isLoadingMore = $derived(
+    calendarLoadingMore || activeFeeds.some((f) => feedStatus[f.type]?.pending ?? false)
+  );
+  // A relay of the current tab failed and the SDK is backing off before it
+  // retries: keep the bottom spinner instead of declaring "no more content".
+  const anyFeedFailing = $derived(activeFeeds.some((f) => feedStatus[f.type]?.failing ?? false));
+
+  /** Reveal the next display batch and re-arm the scroll sentinel. */
+  function revealMore() {
+    displayLimit += DISPLAY_BATCH;
+    // The IntersectionObserver won't re-fire if the sentinel is still in the
+    // viewport. Manually re-check after the DOM settles.
+    requestAnimationFrame(() => {
+      const sentinel = document.getElementById('load-more-sentinel');
+      if (!sentinel) return;
+      const rect = sentinel.getBoundingClientRect();
+      if (rect.top < window.innerHeight + 200) loadMoreContent();
+    });
+  }
 
   /**
    * Load more content - reveals buffered items first, then fetches from network
@@ -1170,212 +1067,66 @@
   }
 
   /**
-   * Fetch more content from the network via loaders
+   * Fetch more content from the network: widen each feed's window by one page
+   * and page the calendar forward.
    */
   function fetchMoreFromNetwork() {
     if (isLoadingMore) return;
-    isLoadingMore = true;
 
-    // Use loader next/complete callbacks to track batch completion
-    let pendingLoaders = 0;
+    // Served from the prefetch buffer a loadMore() is synchronous and
+    // `pending` never rises; otherwise the spinner shows until the relays
+    // settle and the feed's status subscription reveals what arrived.
+    for (const { type, feed } of activeFeeds) {
+      if (type === 'learning' && isLearningSearchActive) continue;
+      feed.loadMore();
+    }
 
-    function onLoaderDone() {
-      pendingLoaders--;
-      if (pendingLoaders <= 0) {
-        isLoadingMore = false;
-        // Reveal newly fetched items
-        displayLimit += DISPLAY_BATCH;
-        // The IntersectionObserver won't re-fire if sentinel is still in viewport.
-        // Manually re-check after DOM settles.
-        requestAnimationFrame(() => {
-          const sentinel = document.getElementById('load-more-sentinel');
-          if (!sentinel) return;
-          const rect = sentinel.getBoundingClientRect();
-          if (rect.top < window.innerHeight + 200) {
-            loadMoreContent();
+    if (showsType('events') && hasMoreCalendarEvents) {
+      calendarLoadingMore = true;
+      let count = 0;
+      const calendarCountBefore = calendarEvents.length;
+      const done = () => {
+        calendarLoadingMore = false;
+        revealMore();
+      };
+
+      // Get the highest start timestamp from current events to paginate forward
+      const lastStartTimestamp =
+        calendarEvents.length > 0
+          ? Math.max(...calendarEvents.map((e) => e.start || 0))
+          : Math.floor(Date.now() / 1000);
+
+      const paginatedLoader = createPaginatedCalendarLoader(lastStartTimestamp, {
+        limit: CALENDAR_BATCH_SIZE
+      });
+
+      paginatedLoader()
+        .pipe(takeUntil(timer(BATCH_TIMEOUT)))
+        .subscribe({
+          next: () => {
+            count++;
+          },
+          complete: () => {
+            if (count === 0) {
+              hasMoreCalendarEvents = false;
+              done();
+            } else {
+              // Wait for model debounce + Svelte reactivity to settle
+              setTimeout(() => {
+                if (calendarEvents.length <= calendarCountBefore) hasMoreCalendarEvents = false;
+                done();
+              }, 500);
+            }
+          },
+          error: (/** @type {any} */ error) => {
+            console.error('🔍 Discover: Calendar pagination error:', error);
+            done();
           }
         });
-      }
     }
 
-    if (showsType('events')) {
-      if (hasMoreCalendarEvents) {
-        pendingLoaders++;
-        let count = 0;
-        const calendarCountBefore = calendarEvents.length;
-
-        // Get the highest start timestamp from current events to paginate forward
-        const lastStartTimestamp =
-          calendarEvents.length > 0
-            ? Math.max(...calendarEvents.map((e) => e.start || 0))
-            : Math.floor(Date.now() / 1000);
-
-        const paginatedLoader = createPaginatedCalendarLoader(lastStartTimestamp, {
-          limit: CALENDAR_BATCH_SIZE
-        });
-
-        paginatedLoader()
-          .pipe(takeUntil(timer(BATCH_TIMEOUT)))
-          .subscribe({
-            next: () => {
-              count++;
-            },
-            complete: () => {
-              if (count === 0) {
-                hasMoreCalendarEvents = false;
-                onLoaderDone();
-              } else {
-                // Wait for model debounce + Svelte reactivity to settle
-                setTimeout(() => {
-                  if (calendarEvents.length <= calendarCountBefore) hasMoreCalendarEvents = false;
-                  onLoaderDone();
-                }, 500);
-              }
-            },
-            error: (/** @type {any} */ error) => {
-              console.error('🔍 Discover: Calendar pagination error:', error);
-              onLoaderDone();
-            }
-          });
-      }
-    }
-
-    if (showsType('articles')) {
-      if (hasMoreArticles) {
-        pendingLoaders++;
-        let count = 0;
-        articleLoader()
-          .pipe(takeUntil(timer(BATCH_TIMEOUT)))
-          .subscribe({
-            next: () => {
-              count++;
-            },
-            complete: () => {
-              // v5 filterDuplicateEvents may reduce count by 1 at batch boundaries
-              if (count === 0) hasMoreArticles = false;
-              onLoaderDone();
-            },
-            error: (/** @type {any} */ error) => {
-              console.error('🔍 Discover: Article pagination error:', error);
-              onLoaderDone();
-            }
-          });
-      }
-    }
-
-    if (showsType('learning')) {
-      // Skip AMB pagination when learning search is active - search results are a single batch
-      if (hasMoreAMB && !(contentType === 'learning' && isLearningSearchActive)) {
-        // Get non-exhausted relays for pagination
-        const currentRelays = getEducationalRelays();
-        const activeRelays = currentRelays.filter((r) => !exhaustedEducationalRelays.has(r));
-
-        if (activeRelays.length === 0) {
-          // All relays exhausted, nothing to do
-        } else {
-          // Query each non-exhausted relay individually to track per-relay exhaustion.
-          // Use per-relay timestamps: only apply `until` filter if we've seen events from that relay.
-          // This fixes the bug where pagination stopped early because a global `until` timestamp
-          // excluded events from relays with different (newer) timestamp ranges.
-          let relaysPending = activeRelays.length;
-          pendingLoaders++;
-
-          for (const relay of activeRelays) {
-            let relayCount = 0;
-            let relayOldestTimestamp = Infinity;
-            /** @type {Set<string>} */
-            const batchEventIds = new Set(); // eslint-disable-line svelte/prefer-svelte-reactivity
-
-            /** @type {any} */
-            const paginationFilter = applyCuratedFilter({ kinds: [30142] });
-
-            // Use this relay's specific oldest timestamp (if we've seen events from it)
-            // Subtract 1 to exclude events AT that timestamp (already fetched in previous batch)
-            const relayTimestamp = perRelayOldestTimestamp.get(relay);
-            if (relayTimestamp !== undefined) {
-              paginationFilter.until = relayTimestamp - 1;
-            }
-            // If no timestamp for this relay yet, fetch without `until` to get its newest events
-
-            const relayLoader = createTimelineLoader(timedPool, [relay], paginationFilter, {
-              eventStore,
-              limit: BATCH_SIZE
-            });
-
-            relayLoader()
-              .pipe(takeUntil(timer(BATCH_TIMEOUT)))
-              .subscribe({
-                next: (/** @type {any} */ event) => {
-                  relayCount++;
-                  if (event?.id) batchEventIds.add(event.id);
-                  // Track this relay's oldest timestamp for future pagination
-                  const ts = event?.created_at;
-                  if (ts && ts < relayOldestTimestamp) {
-                    relayOldestTimestamp = ts;
-                  }
-                },
-                complete: () => {
-                  // Update per-relay timestamp if we received events with older timestamps
-                  if (relayOldestTimestamp !== Infinity) {
-                    const newMap = new Map(perRelayOldestTimestamp); // eslint-disable-line svelte/prefer-svelte-reactivity
-                    const existing = newMap.get(relay);
-                    if (existing === undefined || relayOldestTimestamp < existing) {
-                      newMap.set(relay, relayOldestTimestamp);
-                      perRelayOldestTimestamp = newMap; // Reassign to trigger reactivity
-                    }
-                  }
-
-                  if (relayCount === 0) {
-                    // Mark this specific relay as exhausted
-                    exhaustedEducationalRelays = new Set([...exhaustedEducationalRelays, relay]);
-                  }
-
-                  relaysPending--;
-                  if (relaysPending === 0) {
-                    // All relays have completed - debounce model update before checking hasMore
-                    setTimeout(() => {
-                      onLoaderDone();
-                    }, 500);
-                  }
-                },
-                error: (/** @type {any} */ error) => {
-                  console.error('AMB pagination error for relay:', relay, error);
-                  relaysPending--;
-                  if (relaysPending === 0) {
-                    onLoaderDone();
-                  }
-                }
-              });
-          }
-        }
-      }
-    }
-
-    if (showsType('boards')) {
-      if (hasMoreKanban) {
-        pendingLoaders++;
-        let count = 0;
-        kanbanLoader()
-          .pipe(takeUntil(timer(BATCH_TIMEOUT)))
-          .subscribe({
-            next: () => {
-              count++;
-            },
-            complete: () => {
-              if (count === 0) hasMoreKanban = false;
-              onLoaderDone();
-            },
-            error: (/** @type {any} */ error) => {
-              console.error('🔍 Discover: Kanban pagination error:', error);
-              onLoaderDone();
-            }
-          });
-      }
-    }
-
-    if (pendingLoaders === 0) {
-      isLoadingMore = false;
-    }
+    // Nothing is waiting on the network: whatever the buffers held shows now.
+    if (!isLoadingMore) revealMore();
   }
 
   // Filtered communities for the Communities tab
@@ -1410,19 +1161,11 @@
     }
   });
 
-  // Cleanup subscriptions on component destroy
+  // Cleanup subscriptions on component destroy (feeds clean up in their effect)
   $effect(() => {
     return () => {
-      // Unsubscribe initial loader subscriptions
-      initialArticleSub?.unsubscribe();
-      initialAmbSub?.unsubscribe();
       initialCalendarSub?.unsubscribe();
-      initialKanbanSub?.unsubscribe();
-
-      // Unsubscribe date range loader subscription
       dateRangeLoaderSub?.unsubscribe();
-
-      // Unsubscribe model subscriptions
       articleModelSub?.unsubscribe();
       kanbanModelSub?.unsubscribe();
       ambModelSub?.unsubscribe();
@@ -2100,7 +1843,7 @@
 
       <!-- Infinite Scroll Sentinel -->
       <div id="load-more-sentinel" class="mt-8 py-8">
-        {#if isLoadingMore}
+        {#if isLoadingMore || anyFeedFailing}
           <div class="flex justify-center">
             <div class="text-center">
               <div class="loading loading-lg loading-spinner text-primary"></div>

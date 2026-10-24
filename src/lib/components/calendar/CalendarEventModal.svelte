@@ -224,7 +224,7 @@
   });
 
   // Get calendar management and joined communities for authenticated user
-  let calendarManagement = $state(
+  let calendarManagement = $state.raw(
     /** @type {import('../../stores/calendar-management-store.svelte.js').CalendarManagementStore | null} */ (
       null
     )

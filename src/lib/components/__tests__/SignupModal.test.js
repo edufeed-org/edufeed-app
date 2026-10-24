@@ -191,7 +191,7 @@ vi.mock('$lib/helpers/communityFollowSet.js', () => ({
 }));
 
 const mockCommunikeyTimelineLoader = vi.hoisted(() =>
-  vi.fn().mockReturnValue(() => ({ subscribe: () => ({ unsubscribe: vi.fn() }) }))
+  vi.fn().mockReturnValue({ subscribe: () => ({ unsubscribe: vi.fn() }) })
 );
 vi.mock('$lib/loaders/community.js', () => ({
   communikeyTimelineLoader: mockCommunikeyTimelineLoader

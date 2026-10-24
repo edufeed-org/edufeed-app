@@ -59,7 +59,7 @@
    * only stays when no list exists.
    * @type {import('nostr-tools').NostrEvent | null}
    */
-  let interestsListEvent = $state(null);
+  let interestsListEvent = $state.raw(null);
   // Once the user edits interests, stop syncing them from the incoming list.
   let interestsTouched = false;
 

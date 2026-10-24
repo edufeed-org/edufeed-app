@@ -5,7 +5,7 @@
   import { publishEvent } from '$lib/services/publish-service.js';
   import { joinCommunity } from '$lib/helpers/community';
   import { createAppEventFactory } from '$lib/helpers/event-factory.js';
-  import { addressLoader, timedPool } from '$lib/loaders/base.js';
+  import { addressLoader, fetchEvents } from '$lib/loaders/base.js';
   import { getCommunikeyRelays } from '$lib/helpers/relay-helper.js';
   import {
     buildResponseTags,
@@ -15,14 +15,13 @@
     nip44EncryptWith,
     signerHasNip44
   } from '$lib/helpers/forms.js';
-  import { createTimelineLoader } from '$lib/loaders/timeline-loader.js';
   import FormRenderer from '$lib/components/forms/FormRenderer.svelte';
   import * as m from '$lib/paraglide/messages';
 
   /** @type {{ data: { naddr: string } }} */
   let { data } = $props();
 
-  let formEvent = $state(/** @type {import('nostr-tools').NostrEvent | null} */ (null));
+  let formEvent = $state.raw(/** @type {import('nostr-tools').NostrEvent | null} */ (null));
   let isLoading = $state(true);
   let error = $state('');
   let isSubmitting = $state(false);
@@ -84,10 +83,7 @@
     const filter = buildUserResponseFilter(formAddress, manager.active.pubkey);
     const relays = getCommunikeyRelays();
 
-    const loaderSub = createTimelineLoader(timedPool, relays, filter, {
-      eventStore,
-      limit: 1
-    })().subscribe();
+    const loaderSub = fetchEvents(relays, { ...filter, limit: 1 }).subscribe();
 
     const modelSub = eventStore.timeline(filter).subscribe((events) => {
       if (events && events.length > 0) {

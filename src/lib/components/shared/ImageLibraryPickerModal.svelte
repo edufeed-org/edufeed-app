@@ -1,14 +1,13 @@
 <script>
   import { topLayerModal } from '$lib/actions/topLayerModal.js';
   import { onDestroy } from 'svelte';
-  import { createTimelineLoader } from '$lib/loaders/timeline-loader.js';
   import {
     getFileMetadata,
     BLOSSOM_SERVER_LIST_KIND,
     getBlossomServersFromList
   } from 'applesauce-common/helpers';
   import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
-  import { timedPool } from '$lib/loaders/base.js';
+  import { fetchEvents } from '$lib/loaders/base.js';
   import { getAllLookupRelays } from '$lib/helpers/relay-helper.js';
   import { runtimeConfig } from '$lib/stores/config.svelte.js';
   import { manager } from '$lib/stores/accounts.svelte';
@@ -159,15 +158,8 @@
 
     // Timeline subscription: reactive view of all kind 1063 events in the store.
     const filter = { kinds: [1063] };
-    const loader = createTimelineLoader(timedPool, getAllLookupRelays(), filter, {
-      eventStore,
-      limit: 100
-    });
-    loaderSub = loader().subscribe({
+    loaderSub = fetchEvents(getAllLookupRelays(), { ...filter, limit: 100 }).subscribe({
       complete: () => {
-        loading = false;
-      },
-      error: () => {
         loading = false;
       }
     });

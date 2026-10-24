@@ -67,6 +67,7 @@ vi.mock('$lib/stores/nostr-infrastructure.svelte', () => ({
 }));
 vi.mock('$lib/loaders/base.js', () => ({
   timedPool: vi.fn(),
+  fetchEvents: vi.fn(() => ({ subscribe: vi.fn(() => ({ unsubscribe: vi.fn() })) })),
   addressLoader: vi.fn(() => noopObservable),
   eventLoader: vi.fn(() => noopObservable)
 }));
@@ -79,15 +80,6 @@ vi.mock('$lib/helpers/relay-helper.js', () => ({
   getEventLoaderLookupRelays: () => [],
   getGroupsRelays: () => []
 }));
-vi.mock('applesauce-loaders/loaders', () => ({
-  createTimelineLoader: vi.fn(() => () => noopObservable)
-}));
-// applesauce v7 moved block paging out of the SDK: the app's timeline loader is
-// the local port in $lib/loaders/timeline-loader.js and takes the mock above.
-vi.mock('$lib/loaders/timeline-loader.js', async () => {
-  const loaders = /** @type {any} */ (await import('applesauce-loaders/loaders'));
-  return { createTimelineLoader: loaders.createTimelineLoader };
-});
 vi.mock('applesauce-core/models', () => ({
   TimelineModel: 'TimelineModel'
 }));

@@ -107,7 +107,7 @@ vi.mock('$lib/helpers/blossom-trust.js', () => ({
 }));
 
 vi.mock('$lib/loaders/blossom-server-loader.js', () => ({
-  createBlossomServerLoader: () => () => () => ({ subscribe: () => ({ unsubscribe: () => {} }) })
+  createBlossomServerLoader: () => ({ subscribe: () => ({ unsubscribe: () => {} }) })
 }));
 
 vi.mock('$lib/services/relay-service.svelte.js', () => ({

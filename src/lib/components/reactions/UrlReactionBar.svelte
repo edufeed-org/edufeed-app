@@ -24,7 +24,7 @@
   let loaderSubscription;
 
   /** @type {any[]} */
-  let reactions = $state([]);
+  let reactions = $state.raw([]);
   let loadedReactions = new Map();
 
   const getActiveUser = useActiveUser();
@@ -78,8 +78,7 @@
         (entries) => {
           if (entries[0].isIntersecting) {
             observer.disconnect();
-            const loader = reactionsLoaderForUrl(url, relays);
-            loaderSubscription = loader().subscribe({
+            loaderSubscription = reactionsLoaderForUrl(url, relays).subscribe({
               error: (/** @type {any} */ error) =>
                 console.error('UrlReactionBar: Error loading reactions:', error)
             });
@@ -95,8 +94,7 @@
     }
 
     const timer = setTimeout(() => {
-      const loader = reactionsLoaderForUrl(url, relays);
-      loaderSubscription = loader().subscribe({
+      loaderSubscription = reactionsLoaderForUrl(url, relays).subscribe({
         error: (/** @type {any} */ error) =>
           console.error('UrlReactionBar: Error loading reactions:', error)
       });

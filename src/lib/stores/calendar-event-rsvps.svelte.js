@@ -20,7 +20,7 @@ import { calendarEventRsvpLoader } from '$lib/loaders/rsvp.js';
 export function useCalendarEventRsvps(calendarEvent) {
   // Reactive state
   /** @type {any[]} */
-  let rsvps = $state([]);
+  let rsvps = $state.raw([]);
   let loading = $state(true);
 
   // Subscriptions (plain let - not reactive to avoid infinite loops)
@@ -39,7 +39,7 @@ export function useCalendarEventRsvps(calendarEvent) {
     loading = true;
 
     // Step 1: Subscribe to loader (continuously fetches RSVPs from relays → EventStore)
-    loaderSubscription = calendarEventRsvpLoader(calendarEvent)().subscribe({
+    loaderSubscription = calendarEventRsvpLoader(calendarEvent).subscribe({
       // Loader handles fetching, we just need the subscription alive
       next: () => {
         // Loader emission - RSVPs are being added to eventStore

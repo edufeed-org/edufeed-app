@@ -23,7 +23,7 @@ vi.mock('$lib/stores/nostr-infrastructure.svelte', () => ({
   eventStore: { model: () => of([]) }
 }));
 vi.mock('$lib/loaders/rsvp.js', () => ({
-  calendarEventRsvpLoader: () => () => of()
+  calendarEventRsvpLoader: () => of()
 }));
 
 const { default: InlineRsvp } = await import('$lib/components/calendar/InlineRsvp.svelte');

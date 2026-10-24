@@ -7,10 +7,9 @@
 <script>
   import { goto } from '$app/navigation';
   import { resolve } from '$app/paths';
-  import { createTimelineLoader } from '$lib/loaders/timeline-loader.js';
   import { getPointerForEvent, encodeDecodeResult, getSeenRelays } from 'applesauce-core/helpers';
   import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
-  import { timedPool } from '$lib/loaders/base.js';
+  import { fetchEvents } from '$lib/loaders/base.js';
   import { getCommunikeyRelays, getFallbackRelays } from '$lib/helpers/relay-helper.js';
   import { getCommunityGlobalRelays } from '$lib/helpers/communityRelays.js';
   import { useThreadCommunityLoader } from '$lib/loaders/threads.js';
@@ -34,7 +33,7 @@
   let showCreateForm = $state(false);
 
   // Thread events from model — used to derive IDs for batch comment loader
-  let threads = $state(/** @type {any[]} */ ([]));
+  let threads = $state.raw(/** @type {any[]} */ ([]));
 
   // Batch-load commenter profiles for all threads
   let commenterPubkeys = $state(/** @type {string[]} */ ([]));
@@ -88,13 +87,7 @@
     ];
     // Use #E (root scope) to fetch ALL comments including those from clients
     // that only set uppercase E tag (missing lowercase e parent tag)
-    const loader = createTimelineLoader(
-      timedPool,
-      relays,
-      { kinds: [1111], '#E': ids, limit: 500 },
-      { eventStore }
-    );
-    const sub = loader().subscribe({
+    const sub = fetchEvents(relays, { kinds: [1111], '#E': ids, limit: 500 }).subscribe({
       next: (/** @type {any} */ comment) => {
         if (!seenPubkeys.has(comment.pubkey)) {
           seenPubkeys.add(comment.pubkey);

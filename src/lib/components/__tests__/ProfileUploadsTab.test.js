@@ -27,7 +27,7 @@ vi.mock('$lib/stores/nostr-infrastructure.svelte', () => ({
 
 const loaderSubscribe = vi.fn(() => ({ unsubscribe: vi.fn() }));
 vi.mock('$lib/loaders/base.js', () => ({
-  createCachedTimelineLoader: vi.fn(() => () => ({ subscribe: loaderSubscribe }))
+  fetchEvents: vi.fn(() => ({ subscribe: loaderSubscribe }))
 }));
 vi.mock('$lib/helpers/relay-helper.js', () => ({
   getAllLookupRelays: () => ['wss://lookup.test']

@@ -6,9 +6,9 @@
  *     the EventStore (community members, chat authors, feed authors — anyone
  *     the app has seen this session or has in IDB).
  *   - profileNameSearchLoader: NIP-50 search on the configured search relays
- *     (PROFILE_SEARCH_RELAYS). Uses pool.request() directly to preserve the
- *     NIP-50 search field — createTimelineLoader strips unknown filter
- *     fields. Relays that reject `search` simply return nothing; callers
+ *     (PROFILE_SEARCH_RELAYS). Uses pool.request() directly: a ranked
+ *     search is one response per relay, not a feed window or a cached
+ *     one-shot. Relays that reject `search` simply return nothing; callers
  *     must degrade gracefully.
  */
 import { EMPTY, Observable, from, merge, of } from 'rxjs';

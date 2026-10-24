@@ -13,8 +13,7 @@
     getProfilePointersFromList,
     getRelaysFromList
   } from 'applesauce-common/helpers';
-  import { createTimelineLoader } from '$lib/loaders/timeline-loader.js';
-  import { timedPool } from '$lib/loaders/base.js';
+  import { fetchEvents } from '$lib/loaders/base.js';
   import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
   import { useActiveUser } from '$lib/stores/accounts.svelte.js';
   import { useProfileMap } from '$lib/stores/profile-map.svelte.js';
@@ -213,20 +212,19 @@
       const hintRelays = evtPtrs.flatMap((p) => p.relays || []);
       const relays = [...new Set([...hintRelays, ...lookupRelays])];
       const ids = evtPtrs.map((p) => p.id);
-      const loader = createTimelineLoader(timedPool, relays, { ids }, { eventStore });
-      subs.push(loader().subscribe());
+      subs.push(fetchEvents(relays, { ids }).subscribe());
     }
 
     for (const pointer of addrPtrs) {
       const hintRelays = pointer.relays || [];
       const relays = [...new Set([...hintRelays, ...lookupRelays])];
-      const loader = createTimelineLoader(
-        timedPool,
-        relays,
-        { kinds: [pointer.kind], authors: [pointer.pubkey], '#d': [pointer.identifier] },
-        { eventStore }
+      subs.push(
+        fetchEvents(relays, {
+          kinds: [pointer.kind],
+          authors: [pointer.pubkey],
+          '#d': [pointer.identifier]
+        }).subscribe()
       );
-      subs.push(loader().subscribe());
     }
 
     return () => subs.forEach((s) => s.unsubscribe());

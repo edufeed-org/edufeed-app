@@ -8,7 +8,7 @@ import { getCommunityGlobalRelays } from '$lib/helpers/communityRelays.js';
 import { extractPollRelayTags } from '$lib/helpers/polls.js';
 import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
 import { createCommunityContentLoader } from './community-content-loader.js';
-import { createCachedTimelineLoader } from './base.js';
+import { fetchEvents } from './base.js';
 
 export function getPollRelays() {
   return [...new Set([...getCommunikeyRelays(), ...getFallbackRelays()])];
@@ -22,11 +22,10 @@ export const usePollCommunityLoader = createCommunityContentLoader([1068], getPo
  * the union of: the poll's `relay` tags, the targeted community's relays
  * (if the poll has an `h` tag), and our communikey + fallback relays.
  *
- * Kept as a factory (returns a loader fn) so component effects can call it
- * once per poll and subscribe to the resulting Observable.
+ * One-shot: cache + relays into the EventStore.
  *
  * @param {any} poll - kind 1068 event
- * @returns {() => import('rxjs').Observable<any>}
+ * @returns {import('rxjs').Observable<any>}
  */
 export function pollResponsesLoader(poll) {
   const pollRelays = extractPollRelayTags(poll);
@@ -36,5 +35,5 @@ export function pollResponsesLoader(poll) {
 
   const relays = [...new Set([...pollRelays, ...communityRelays, ...getPollRelays()])];
 
-  return createCachedTimelineLoader(relays, { kinds: [1018], '#e': [poll.id], limit: 500 });
+  return fetchEvents(relays, { kinds: [1018], '#e': [poll.id], limit: 500 }, { cache: true });
 }

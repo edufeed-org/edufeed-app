@@ -127,7 +127,7 @@
   );
   const threadsByRoot = $derived(aggregateThreads(getComments()));
   /** Root rumor of the open thread, or null. @type {any} */
-  let threadRoot = $state(null);
+  let threadRoot = $state.raw(null);
 
   // Kind-1018 poll votes, bucketed by the poll they e-reference. The tally
   // itself (latest-per-pubkey, endsAt cutoff) happens per poll row below.

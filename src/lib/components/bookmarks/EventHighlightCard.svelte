@@ -23,7 +23,7 @@
   let { group, authorProfiles, communityPubkey } = $props();
 
   /** @type {any} */
-  let resolvedEvent = $state(undefined);
+  let resolvedEvent = $state.raw(undefined);
 
   // Subscribe to EventStore for reactive title updates + load from network
   $effect(() => {

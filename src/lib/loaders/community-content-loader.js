@@ -10,7 +10,7 @@ import { pool, eventStore } from '$lib/stores/nostr-infrastructure.svelte';
 import { TimelineModel } from 'applesauce-core/models';
 import { getTagValue } from 'applesauce-core/helpers';
 import { parseAddressPointerFromATag } from '$lib/helpers/nostrUtils.js';
-import { addressLoader, createCachedTimelineLoader } from './base.js';
+import { addressLoader, fetchEvents } from './base.js';
 import { communityTargetedPublicationsLoader } from './targeted-publications.js';
 import { getCommunityGlobalRelays } from '$lib/helpers/communityRelays.js';
 import { getAllLookupRelays } from '$lib/helpers/relay-helper.js';
@@ -52,25 +52,29 @@ export function createCommunityContentLoader(kinds, getRelays) {
 
     // 1. Direct community content (events with h-tag matching community).
     // h-tag scoping IS the curation — do NOT add an `authors:` restriction.
-    const directFilter = { kinds, '#h': [communityPubkey] };
-    const directLoader = createCachedTimelineLoader(relays, directFilter, { limit: 50 });
-    subscriptions.set('direct', directLoader().subscribe());
+    subscriptions.set(
+      'direct',
+      fetchEvents(
+        relays,
+        { kinds, '#h': [communityPubkey], limit: 50 },
+        { cache: true }
+      ).subscribe()
+    );
 
     // 2. NIP-18 reposts (kind 6/16 with h-tag targeting this community)
     // Reposts are published to the author's write relays (outbox model), not content-type relays.
     // Use broad relay set to discover them.
-    const repostLoader = createCachedTimelineLoader(
-      lookupRelays,
-      { kinds: [6, 16], '#h': [communityPubkey] },
-      { limit: 50 }
+    subscriptions.set(
+      'reposts',
+      fetchEvents(
+        lookupRelays,
+        { kinds: [6, 16], '#h': [communityPubkey], limit: 50 },
+        { cache: true }
+      ).subscribe()
     );
-    subscriptions.set('reposts', repostLoader().subscribe());
 
     // 3. Legacy targeted publications (kind 30222) — backward compat
-    const targetedPubSub = communityTargetedPublicationsLoader(
-      communityPubkey,
-      kinds
-    )().subscribe();
+    const targetedPubSub = communityTargetedPublicationsLoader(communityPubkey, kinds).subscribe();
     subscriptions.set('targetedPublications', targetedPubSub);
 
     // 4a. Watch legacy 30222 shares and load referenced content on-demand

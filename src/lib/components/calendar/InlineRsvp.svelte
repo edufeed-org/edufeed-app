@@ -41,7 +41,7 @@
   /** @type {import('rxjs').Subscription | undefined} */
   let modelSubscription;
   /** @type {any[]} */
-  let rsvps = $state([]);
+  let rsvps = $state.raw([]);
 
   // Get calendar actions - updates when communityPubkey changes
   // Using $state + $effect instead of $derived because useCalendarActions
@@ -81,7 +81,7 @@
     }
 
     // Subscribe to loader (fetches RSVPs from relays → EventStore)
-    loaderSubscription = calendarEventRsvpLoader(calendarEvent)().subscribe({
+    loaderSubscription = calendarEventRsvpLoader(calendarEvent).subscribe({
       next: () => {
         // Loader handles fetching
       },

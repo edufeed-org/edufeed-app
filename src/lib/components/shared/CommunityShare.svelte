@@ -21,8 +21,8 @@
   import { showToast } from '$lib/helpers/toast';
   import * as m from '$lib/paraglide/messages';
   import { useUserProfile } from '../../stores/user-profile.svelte.js';
-  import { eventStore, pool } from '$lib/stores/nostr-infrastructure.svelte';
-  import { createTimelineLoader } from '$lib/loaders/timeline-loader.js';
+  import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
+  import { fetchEvents } from '$lib/loaders/base.js';
   import { SharesModel } from 'applesauce-common/models';
   import { deleteEvent } from '$lib/helpers/eventDeletion.js';
   import {
@@ -194,13 +194,10 @@
       shareFilters.push({ kinds: [6, 16, 30222], '#a': [address] });
     }
 
-    const shareLoader = createTimelineLoader(pool, lookupRelays, shareFilters, {
-      eventStore,
-      limit: 50
-    });
-    const shareLoaderSub = shareLoader().subscribe({
-      error: (err) => console.warn('CommunityShare: Share loader error:', err)
-    });
+    const shareLoaderSub = fetchEvents(
+      lookupRelays,
+      shareFilters.map((/** @type {any} */ f) => ({ ...f, limit: 50 }))
+    ).subscribe();
 
     // SharesModel handles kind 6/16 matching (no author filter, uses buildCommonEventRelationFilters)
     const sharesModelSub = eventStore.model(SharesModel, event).subscribe((repostEvents) => {

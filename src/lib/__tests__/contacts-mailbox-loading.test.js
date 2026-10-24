@@ -13,21 +13,21 @@ const CONTACT_A = 'contact_a_pubkey';
 const CONTACT_B = 'contact_b_pubkey';
 const CONTACT_C = 'contact_c_pubkey';
 
-// --- Capture what createTimelineLoader receives ---
+// --- Capture what fetchEvents receives ---
 
 /** @type {Array<{args: any[], subscribeFn: ReturnType<typeof vi.fn>}>} */
 const timelineLoaderCalls = [];
 
 /**
- * Each call to createTimelineLoader records its args and returns a loader
- * that records its subscribe call.
+ * Each call to fetchEvents records its (relays, filters) and returns an
+ * observable-like that records its subscribe call.
  * @param {any[]} args
  */
-function mockCreateTimelineLoader(...args) {
+function mockFetchEvents(...args) {
   const subscribeFn = vi.fn(() => ({ unsubscribe: vi.fn() }));
   const entry = { args, subscribeFn };
   timelineLoaderCalls.push(entry);
-  return () => ({ subscribe: subscribeFn });
+  return { subscribe: subscribeFn };
 }
 
 /** @type {{ next?: Function } | null} */
@@ -56,24 +56,15 @@ vi.mock('applesauce-core/helpers', () => ({
   getProfileContent: vi.fn(() => undefined)
 }));
 
-vi.mock('applesauce-loaders/loaders', () => ({
-  createTimelineLoader: (/** @type {any[]} */ ...args) => mockCreateTimelineLoader(...args)
-}));
-// applesauce v7 moved block paging out of the SDK: the app's timeline loader is
-// the local port in $lib/loaders/timeline-loader.js and takes the mock above.
-vi.mock('$lib/loaders/timeline-loader.js', async () => {
-  const loaders = /** @type {any} */ (await import('applesauce-loaders/loaders'));
-  return { createTimelineLoader: loaders.createTimelineLoader };
-});
-
 vi.mock('$lib/loaders/contact-list-loader.js', () => ({
-  createContactListLoader: vi.fn(() => () => () => ({
+  createContactListLoader: vi.fn(() => ({
     subscribe: vi.fn(() => ({ unsubscribe: vi.fn() }))
   }))
 }));
 
 vi.mock('$lib/loaders/base.js', () => ({
-  timedPool: vi.fn()
+  timedPool: vi.fn(),
+  fetchEvents: (/** @type {any[]} */ ...args) => mockFetchEvents(...args)
 }));
 
 vi.mock('$lib/services/relay-service.svelte.js', () => ({
@@ -116,16 +107,16 @@ describe('contacts store — bulk mailbox loading', () => {
       { pubkey: CONTACT_C }
     ]);
 
-    // Find the createTimelineLoader call for kind 10002
-    const mailboxCall = timelineLoaderCalls.find((call) => call.args[2]?.kinds?.[0] === 10002);
+    // Find the fetchEvents call for kind 10002
+    const mailboxCall = timelineLoaderCalls.find((call) => call.args[1]?.kinds?.[0] === 10002);
 
     expect(mailboxCall).toBeDefined();
     // Should include all contact pubkeys in the authors filter
-    expect(mailboxCall?.args[2].authors).toEqual(
+    expect(mailboxCall?.args[1].authors).toEqual(
       expect.arrayContaining([CONTACT_A, CONTACT_B, CONTACT_C])
     );
     // Should use relay list lookup relays
-    expect(mailboxCall?.args[1]).toEqual(
+    expect(mailboxCall?.args[0]).toEqual(
       expect.arrayContaining(['wss://purplepag.es', 'wss://relay.nos.social'])
     );
   });
@@ -134,7 +125,7 @@ describe('contacts store — bulk mailbox loading', () => {
     await contactsStore.loadContacts(USER_PUBKEY);
     capturedModelHandler?.next?.([{ pubkey: CONTACT_A }]);
 
-    const mailboxCall = timelineLoaderCalls.find((call) => call.args[2]?.kinds?.[0] === 10002);
+    const mailboxCall = timelineLoaderCalls.find((call) => call.args[1]?.kinds?.[0] === 10002);
     expect(mailboxCall).toBeDefined();
     expect(mailboxCall?.subscribeFn).toHaveBeenCalled();
   });
@@ -143,7 +134,7 @@ describe('contacts store — bulk mailbox loading', () => {
     await contactsStore.loadContacts(USER_PUBKEY);
     capturedModelHandler?.next?.([]);
 
-    const mailboxCall = timelineLoaderCalls.find((call) => call.args[2]?.kinds?.[0] === 10002);
+    const mailboxCall = timelineLoaderCalls.find((call) => call.args[1]?.kinds?.[0] === 10002);
     expect(mailboxCall).toBeUndefined();
   });
 
@@ -159,7 +150,7 @@ describe('contacts store — bulk mailbox loading', () => {
     await contactsStore.loadContacts(USER_PUBKEY);
     capturedModelHandler?.next?.([{ pubkey: CONTACT_A }]);
 
-    const mailboxCall = timelineLoaderCalls.find((call) => call.args[2]?.kinds?.[0] === 10002);
+    const mailboxCall = timelineLoaderCalls.find((call) => call.args[1]?.kinds?.[0] === 10002);
     expect(mailboxCall).toBeUndefined();
   });
 

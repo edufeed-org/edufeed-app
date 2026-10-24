@@ -24,8 +24,7 @@
   import { hexToNpub } from '$lib/helpers/nostrUtils.js';
   import { TimelineModel } from 'applesauce-core/models';
   import { combineLatest } from 'rxjs';
-  import { createTimelineLoader } from '$lib/loaders/timeline-loader.js';
-  import { timedPool } from '$lib/loaders/base.js';
+  import { fetchEvents } from '$lib/loaders/base.js';
   import { calendarSearchLoader, MIN_QUERY_LENGTH } from '$lib/loaders/calendar-search.js';
   import { useProfileMap } from '$lib/stores/profile-map.svelte.js';
   import { useAuthorDeletions } from '$lib/stores/author-deletions.svelte.js';
@@ -111,7 +110,7 @@
   let loading = $state(true);
   let minLoadTimeElapsed = $state(false);
   let error = $state(/** @type {string | null} */ (null));
-  let _selectedCalendar = $state(calendarFilters.selectedCalendar);
+  let _selectedCalendar = $state.raw(calendarFilters.selectedCalendar);
 
   // Subscription management for loaders and models
   // Using plain let (not $state) for subscriptions to avoid infinite loops in $effect
@@ -249,18 +248,7 @@
     newRelays.forEach((r) => initialCalendarRelays.add(r));
 
     // Create a loader for just the new relays
-    const loader = createTimelineLoader(
-      timedPool,
-      newRelays,
-      { kinds: [31922, 31923], limit: 40 },
-      { eventStore }
-    );
-
-    const sub = loader().subscribe({
-      error: (/** @type {any} */ err) => {
-        console.error('📅 CalendarView: Supplemental relay loader error:', err);
-      }
-    });
+    const sub = fetchEvents(newRelays, { kinds: [31922, 31923], limit: 40 }).subscribe();
 
     return () => sub.unsubscribe();
   });
@@ -548,7 +536,7 @@
     // Bootstrap EventStore with appropriate loader (unless in community mode)
     if (communityMode && communityPubkey) {
       // Bootstrap EventStore with community calendar loader
-      communityCalendarTimelineLoader(communityPubkey)().subscribe({
+      communityCalendarTimelineLoader(communityPubkey).subscribe({
         error: (/** @type {any} */ err) => {
           console.warn('📅 CalendarView: Community calendar loader bootstrap error:', err);
         }
@@ -777,7 +765,7 @@
     const pointers = untrack(() => channelPointers);
     const communityNpub =
       hexToNpub(untrack(() => communityPubkey)) ?? untrack(() => communityPubkey);
-    const loaderSub = channelCalendarsLoader(pointers, { signer })().subscribe({
+    const loaderSub = channelCalendarsLoader(pointers, { signer }).subscribe({
       error: (/** @type {any} */ err) => {
         console.warn('📅 CalendarView: channel calendars loader error:', err);
       }

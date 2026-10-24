@@ -54,7 +54,7 @@
   const handleDomain = $derived(cfg?.handleDomain || '');
 
   /** @type {import('nostr-tools').NostrEvent | null} */
-  let formEvent = $state(null);
+  let formEvent = $state.raw(null);
   let isLoading = $state(true);
   let isSubmitting = $state(false);
   let submitted = $state(false);
@@ -65,7 +65,7 @@
   let partialDelivery = $state(/** @type {{ delivered: number, total: number } | null} */ (null));
 
   /** @type {{ kind: number, pubkey: string, tags: string[][], content: string, created_at: number, id: string, sig: string } | null} */
-  let existingResponse = $state(null);
+  let existingResponse = $state.raw(null);
 
   /**
    * Decrypted values from the user's previous application, used to pre-fill

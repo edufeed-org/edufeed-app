@@ -16,8 +16,10 @@
 
   let { identifier, decoded: _decoded, inline: _inline = false } = $props();
 
+  // $state.raw: replaced whole, never mutated — a deep proxy breaks applesauce's
+  // symbol memoization on the event (state_descriptors_fixed).
   /** @type {any} */
-  let event = $state(null);
+  let event = $state.raw(null);
   let isLoading = $state(true);
   let error = $state('');
 

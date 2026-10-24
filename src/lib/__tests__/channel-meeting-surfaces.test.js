@@ -22,7 +22,7 @@ vi.mock('$lib/loaders/targeted-publications.js', () => ({
   communityTargetedPublicationsLoader: () => () => NEVER
 }));
 vi.mock('$lib/loaders/base.js', () => ({
-  userDeletionLoader: () => () => NEVER,
+  fetchUserDeletions: () => NEVER,
   addressLoader: () => of()
 }));
 vi.mock('$lib/helpers/relay-helper.js', async (orig) => ({

@@ -1,24 +1,16 @@
 /**
  * Contact List Loader
- * Loads user's contact list (kind 3 event - NIP-02) using applesauce pattern
+ * Loads user's contact list (kind 3 event - NIP-02)
  */
-
-import { createTimelineLoader } from '$lib/loaders/timeline-loader.js';
+import { fetchEvents } from '$lib/loaders/base.js';
 
 /**
- * Creates a loader for user's contact list (kind 3)
- * @param {import('applesauce-relay').RelayPool} pool - Relay pool instance
+ * A user's contact list (kind 3): one request, the newest copy into the
+ * EventStore.
  * @param {string[]} defaultRelays - Array of relay URLs
- * @param {import('applesauce-core').EventStore} eventStore - EventStore instance
  * @param {string} userPubkey - User's public key
- * @returns {Function} Loader factory that returns an Observable
+ * @returns {import('rxjs').Observable<any>}
  */
-export function createContactListLoader(pool, defaultRelays, eventStore, userPubkey) {
-  return () =>
-    createTimelineLoader(
-      pool,
-      defaultRelays,
-      { kinds: [3], authors: [userPubkey], limit: 1 },
-      { eventStore }
-    );
+export function createContactListLoader(defaultRelays, userPubkey) {
+  return fetchEvents(defaultRelays, { kinds: [3], authors: [userPubkey], limit: 1 });
 }

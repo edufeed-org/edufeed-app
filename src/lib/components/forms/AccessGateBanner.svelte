@@ -2,10 +2,9 @@
   import { nip19 } from 'nostr-tools';
   import { page } from '$app/stores';
   import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
-  import { timedPool } from '$lib/loaders/base.js';
+  import { fetchEvents } from '$lib/loaders/base.js';
   import { getCommunikeyRelays } from '$lib/helpers/relay-helper.js';
   import { buildUserResponseFilter } from '$lib/helpers/forms.js';
-  import { createTimelineLoader } from '$lib/loaders/timeline-loader.js';
 
   import * as m from '$lib/paraglide/messages';
 
@@ -48,10 +47,7 @@
     const filter = buildUserResponseFilter(formRef, userPubkey);
     const relays = getCommunikeyRelays();
 
-    const loaderSub = createTimelineLoader(timedPool, relays, filter, {
-      eventStore,
-      limit: 1
-    })().subscribe();
+    const loaderSub = fetchEvents(relays, { ...filter, limit: 1 }).subscribe();
 
     const modelSub = eventStore.timeline(filter).subscribe((events) => {
       if (events && events.length > 0) {
