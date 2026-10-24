@@ -7,6 +7,89 @@ merge commits of the nostr PRs that landed since the previous tag.
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-10-24
+
+Nine PRs: the feeds move to applesauce v7's window-based timeline loader
+and gain live updates, /discover is split into hooks and per-tab
+components with four fixes on top, inline previews resolve through the
+EventStore instead of erroring, blog posts get author credits, licence,
+TULLU provenance and drafts with a preview link, and deployments can block
+authors and hide bulk calendar sources. Cut as `v0.10.0-rc.1` on
+dev.edufeed.org before this tag.
+
+### Deploy notes
+
+- New env `BLOCKED_PUBKEYS` (authors hidden everywhere; nothing of theirs
+  enters the EventStore or the cache) and `CALENDAR_HIDDEN_PUBKEYS` (bulk
+  calendar sources hidden from the global calendar, /discover events and
+  the landing by default; readers can show them from the count line).
+  Both take npub, hex or the naddr of a NIP-51 kind 30000 list. Only the
+  listed authors are hidden — a NIP-24 `bot: true` profile alone hides
+  nobody, so OER World Map stays visible while the Bildungsserver and
+  EvBildung mirrors are listed (homelab `deploy_edufeed_app.yml`).
+- Article drafts are kind 30024 on the longform relay
+  (`LONGFORM_CONTENT_RELAY`): its write policy must accept kind 30024
+  next to 30023.
+- Prod and STIL `CALENDAR_RELAYS` drop `wss://dev.calendar-relay.edufeed.org`
+  (the crawlers left it on 2026-10-07; only stale test-mirror events came
+  from there).
+- applesauce 6.2 → 7.0 across all packages. No relay changes.
+
+### Added
+
+- Feeds (/discover articles, learning, boards; dashboard relay feed) keep
+  a live subscription open: events published while the page is open show
+  up at once, and a tab that becomes visible again catches up on what it
+  missed.
+- Blog posts: a collapsible "Urheberschaft & Lizenz" section credits other
+  people as creator or contributor (Nostr contacts or plain names), names
+  the licence, and records origin URL and change note as the TULLU rule
+  asks. A foreign creator takes the byline on the article page and on
+  feed cards ("Veröffentlicht von" names the publisher); the provenance
+  block offers a copyable TULLU citation.
+- Blog drafts: "Als Entwurf speichern" stores the post as NIP-23 kind 30024. The draft has an unlisted preview page with an "Entwurf" banner,
+  appears in no feed, is listed in the owner's "Deine Inhalte", and
+  publishes from the banner with credits, licence and provenance intact.
+- Deployment lists `BLOCKED_PUBKEYS` and `CALENDAR_HIDDEN_PUBKEYS` (see
+  deploy notes); the hidden-sources control sits in the count line
+  ("Oktober 2026 · 22 Events · 918 importierte ausgeblendet · anzeigen",
+  same on /discover's results line).
+
+### Changed
+
+- Feeds run on applesauce v7's window-based timeline loader
+  (`createTimelineFeed`): per-relay coverage, exhaustion, retry and late
+  relays/authors live in the SDK; the v6 block-paging port and its 33 test
+  shims are gone. Every one-shot request goes through `fetchEvents` /
+  `fetchOutbox` and completes, which also wakes code that waited on
+  completion for the first time (inbox RSVP and poll-vote notifications,
+  kanban and calendar-management loading states).
+- /discover is split into a feeds hook, a learning-search hook, a
+  community-scoped-items hook, pure pipeline helpers and per-tab
+  components (the route drops from 1861 to 793 lines). The communities
+  tab now really pages on scroll.
+- Every event inserted into the shared EventStore gets its own prototype,
+  so an event held in a deep `$state` can no longer trip Svelte's
+  `state_descriptors_fixed` on applesauce's memoization.
+
+### Fixed
+
+- Inline references (an article quoted in an event, a calendar event in a
+  post) no longer show "Article not found" or a 15–20 s skeleton: previews
+  resolve store-first through the EventStore, a missing target renders
+  the identifier badge and upgrades in place, the IndexedDB cache read is
+  bounded to 1.5 s, and the loaders run 16 concurrent batches with a 5 s
+  stage timeout.
+- /discover: switching tabs no longer carries the search to the next tab;
+  "Meine Communities" says whether the list is loading, empty or could not
+  be loaded; lazy card rendering and the scroll sentinels observe the
+  scrolling `<main>` (a 720 px viewport rendered no learning card until
+  scrolled); the discover e2e specs match the card variants again.
+- Calendar: the Tags and Personen filter panels open towards the left so
+  the Personen panel no longer runs past the viewport on wide screens.
+- Placeholder boards ("Untitled Board", "Shared 12345") are kept off the
+  discover and dashboard feeds.
+
 ## [0.9.0] - 2026-10-22
 
 Ten fixes and features from the issues of the last twelve days: licences
