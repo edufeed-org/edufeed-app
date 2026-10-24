@@ -27,6 +27,11 @@
   import { useLearningSearch } from '$lib/stores/learning-search.svelte.js';
   import { useCommunityScopedItems } from '$lib/stores/community-scoped-items.svelte.js';
   import { getTagValue } from 'applesauce-core/helpers';
+  import {
+    partitionHiddenCalendarSources,
+    getHiddenCalendarSourcesVersion
+  } from '$lib/services/calendar-sources.svelte.js';
+  import { appSettings } from '$lib/stores/app-settings.svelte.js';
   import CreateBoardLink from '$lib/components/kanban/CreateBoardLink.svelte';
   import { getAppRelaysForCategory } from '$lib/services/app-relay-service.svelte.js';
   import {
@@ -657,6 +662,14 @@
   // ─── Content pipeline (one $derived per step; see discover-pipeline.js) ─
   const learningSearchIds = $derived(learningSearch.isActive ? learningSearch.resultIds : null);
 
+  // Bulk calendar sources are hidden by default (toggle in the filter bar)
+  const calendarSources = $derived.by(() => {
+    void getHiddenCalendarSourcesVersion();
+    return partitionHiddenCalendarSources(calendarEvents, {
+      showHidden: appSettings.showHiddenCalendarSources
+    });
+  });
+
   const rawItems = $derived.by(() => {
     const _cacheVer = getCuratedCacheVersion(); // re-derive when the curated set resolves
     if (communityFilter) {
@@ -666,7 +679,7 @@
       });
     }
     return buildRawItems(
-      { calendarEvents, ambResources, articles, kanbanBoards },
+      { calendarEvents: calendarSources.shown, ambResources, articles, kanbanBoards },
       { showsType, isAllowedAuthor, learningSearchIds }
     );
   });
@@ -772,6 +785,7 @@
       }}
       eventsRange={{ start: eventsDateRangeStart, end: eventsDateRangeEnd }}
       onrangechange={handleEventsDateRangeChange}
+      hiddenCalendarCount={calendarSources.hidden}
       onlearningfilterchange={handleLearningFilterChange}
       learningIsSearching={learningSearch.isActive && learningSearch.results.length === 0}
       searchText={activeSearchQuery}

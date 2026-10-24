@@ -22,6 +22,7 @@ const CONFIG_DEFAULTS_KEY = 'app-settings-config-defaults';
  * @property {string[]} dashboardCustomRelays
  * @property {boolean} linkPreviewsEnabled
  * @property {boolean} systemNotificationsEnabled
+ * @property {boolean} showHiddenCalendarSources
  * @property {boolean} cordnGroupsEnabled
  * @property {boolean} webxdcShowAllApps
  * @property {boolean} instanceMutedWordsEnabled
@@ -105,6 +106,9 @@ function getDefaultSettings() {
     // OS-level (browser Notification API) toasts for DMs, inbox items and
     // Concord channels. Per device on purpose: the browser permission is too.
     systemNotificationsEnabled: false,
+    // Bulk calendar sources (CALENDAR_HIDDEN_PUBKEYS, bot profiles) are hidden
+    // from the global calendar surfaces until the user asks for them.
+    showHiddenCalendarSources: false,
     // Cordn private groups are opt-in per user (deployment flag alone is not enough).
     cordnGroupsEnabled: false,
     // The channel app picker lists only the deployment's curated apps
@@ -140,6 +144,8 @@ function migrateSettings(stored) {
       linkPreviewsEnabled: stored.linkPreviewsEnabled ?? defaults.linkPreviewsEnabled,
       systemNotificationsEnabled:
         stored.systemNotificationsEnabled ?? defaults.systemNotificationsEnabled,
+      showHiddenCalendarSources:
+        stored.showHiddenCalendarSources ?? defaults.showHiddenCalendarSources,
       cordnGroupsEnabled: stored.cordnGroupsEnabled ?? defaults.cordnGroupsEnabled,
       webxdcShowAllApps: stored.webxdcShowAllApps ?? defaults.webxdcShowAllApps,
       instanceMutedWordsEnabled:
@@ -189,6 +195,8 @@ function migrateSettings(stored) {
     linkPreviewsEnabled: stored.linkPreviewsEnabled ?? defaults.linkPreviewsEnabled,
     systemNotificationsEnabled:
       stored.systemNotificationsEnabled ?? defaults.systemNotificationsEnabled,
+    showHiddenCalendarSources:
+      stored.showHiddenCalendarSources ?? defaults.showHiddenCalendarSources,
     cordnGroupsEnabled: stored.cordnGroupsEnabled ?? defaults.cordnGroupsEnabled,
     webxdcShowAllApps: stored.webxdcShowAllApps ?? defaults.webxdcShowAllApps,
     instanceMutedWordsEnabled:
@@ -503,6 +511,16 @@ export const appSettings = {
    */
   set systemNotificationsEnabled(value) {
     settings.systemNotificationsEnabled = value;
+    saveSettings(settings);
+  },
+
+  /** Show events of hidden calendar sources (mirrors, bot profiles) */
+  get showHiddenCalendarSources() {
+    return settings.showHiddenCalendarSources;
+  },
+  /** @param {boolean} value */
+  set showHiddenCalendarSources(value) {
+    settings.showHiddenCalendarSources = value;
     saveSettings(settings);
   },
 

@@ -7,6 +7,7 @@
   import CommunityFilterDropdown from '$lib/components/feed/CommunityFilterDropdown.svelte';
   import RelayFilterDropdown from '$lib/components/feed/RelayFilterDropdown.svelte';
   import EventDateRangeFilter from '$lib/components/calendar/EventDateRangeFilter.svelte';
+  import HiddenSourcesToggle from '$lib/components/calendar/HiddenSourcesToggle.svelte';
   import LearningContentFilters from '$lib/components/educational/LearningContentFilters.svelte';
   import * as m from '$lib/paraglide/messages';
 
@@ -25,6 +26,7 @@
    *   onrelaychange: (value: string | null) => void,
    *   eventsRange: { start: number, end: number },
    *   onrangechange: (range: { start: number, end: number }) => void,
+   *   hiddenCalendarCount?: number,
    *   onlearningfilterchange: (filters: any) => void,
    *   learningIsSearching: boolean,
    *   searchText: string,
@@ -46,6 +48,7 @@
     onrelaychange,
     eventsRange,
     onrangechange,
+    hiddenCalendarCount = 0,
     onlearningfilterchange,
     learningIsSearching,
     searchText,
@@ -100,8 +103,9 @@
 
 <!-- Row 3: Tab-specific filters -->
 {#if contentType === 'events'}
-  <div data-testid="tab-filters">
+  <div data-testid="tab-filters" class="flex flex-wrap items-center gap-2">
     <EventDateRangeFilter start={eventsRange.start} end={eventsRange.end} {onrangechange} />
+    <HiddenSourcesToggle hidden={hiddenCalendarCount} />
   </div>
 {/if}
 {#if contentType === 'learning'}

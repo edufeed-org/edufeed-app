@@ -101,6 +101,8 @@
   "calendar_navigation_calendar_grid_view": "Kalender-Rasteransicht",
   "calendar_navigation_list_view": "Listenansicht",
   "calendar_navigation_map_view": "Kartenansicht",
+  "calendar_hidden_sources_show": "{count} importierte Termine ausgeblendet – anzeigen",
+  "calendar_hidden_sources_hide": "Importierte Termine werden angezeigt – ausblenden",
   "calendar_view_mode_all": "Alle",
   "calendar_view_mode_month": "Monat",
   "calendar_view_mode_week": "Woche",

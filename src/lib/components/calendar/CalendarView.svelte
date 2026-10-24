@@ -1,5 +1,11 @@
 <script>
   import { SvelteDate } from 'svelte/reactivity';
+  import {
+    partitionHiddenCalendarSources,
+    getHiddenCalendarSourcesVersion
+  } from '$lib/services/calendar-sources.svelte.js';
+  import HiddenSourcesToggle from '$lib/components/calendar/HiddenSourcesToggle.svelte';
+  import { appSettings } from '$lib/stores/app-settings.svelte.js';
   import { onMount, getContext, untrack } from 'svelte';
   import { afterNavigate, replaceState, goto } from '$app/navigation';
   import {
@@ -705,7 +711,15 @@
   // leaves the old event alive and every view lists the appointment twice.
   // Collapsed here rather than per loader: community, personal-calendar and
   // global modes each fill `allCalendarEvents` through a different path.
-  let dedupedCalendarEvents = $derived(dedupeCalendarTwins(allCalendarEvents));
+  // Bulk sources (CALENDAR_HIDDEN_PUBKEYS, bot profiles) are hidden by default
+  // on the global calendar; a community calendar shows what was placed there.
+  const hiddenSources = $derived.by(() => {
+    void getHiddenCalendarSourcesVersion();
+    return partitionHiddenCalendarSources(dedupeCalendarTwins(allCalendarEvents), {
+      showHidden: communityMode || appSettings.showHiddenCalendarSources
+    });
+  });
+  let dedupedCalendarEvents = $derived(hiddenSources.shown);
 
   // Derived state: Apply relay filtering via seen-relay post-filter.
   // The loader only queries selected relays, but EventStore may still contain
@@ -919,6 +933,9 @@
           onClearAll={handleClearAllFilters}
         />
       </div>
+      {#if !communityMode}
+        <HiddenSourcesToggle hidden={hiddenSources.hidden} />
+      {/if}
       <!-- Mobile filter drawer trigger -->
       <button
         type="button"
