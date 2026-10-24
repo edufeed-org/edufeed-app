@@ -40,7 +40,7 @@ test.describe('Discover page - infinite scroll', () => {
     await page.waitForTimeout(500);
 
     // Wait for calendar event cards
-    await expect(page.locator('.calendar-event-card-list').first()).toBeVisible({
+    await expect(page.locator('[data-testid="calendar-event-card"]').first()).toBeVisible({
       timeout: 15_000
     });
 
@@ -48,8 +48,8 @@ test.describe('Discover page - infinite scroll', () => {
     expect(count).toBeGreaterThan(0);
 
     // No articles or AMB should be visible
-    expect(await page.locator('.article-card-list').count()).toBe(0);
-    expect(await page.locator('.amb-card-list').count()).toBe(0);
+    expect(await page.locator('.article-card').count()).toBe(0);
+    expect(await page.locator('.amb-card').count()).toBe(0);
   });
 
   test('Learning tab: loads AMB resources and supports infinite scroll', async ({ page }) => {
@@ -59,7 +59,7 @@ test.describe('Discover page - infinite scroll', () => {
     await page.locator('[data-testid="tab-learning"]').click();
     await page.waitForTimeout(500);
 
-    await expect(page.locator('.amb-card-list').first()).toBeVisible({ timeout: 15_000 });
+    await expect(page.locator('.amb-card').first()).toBeVisible({ timeout: 15_000 });
 
     const initialCount = await getCardCount(page);
     expect(initialCount).toBeGreaterThan(0);
@@ -80,14 +80,14 @@ test.describe('Discover page - infinite scroll', () => {
     await page.locator('[data-testid="tab-articles"]').click();
     await page.waitForTimeout(500);
 
-    await expect(page.locator('.article-card-list').first()).toBeVisible({ timeout: 15_000 });
+    await expect(page.locator('.article-card').first()).toBeVisible({ timeout: 15_000 });
 
     const initialCount = await getCardCount(page);
     expect(initialCount).toBeGreaterThan(0);
 
     // No calendar events or AMB should be visible
-    expect(await page.locator('.calendar-event-card-list').count()).toBe(0);
-    expect(await page.locator('.amb-card-list').count()).toBe(0);
+    expect(await page.locator('[data-testid="calendar-event-card"]').count()).toBe(0);
+    expect(await page.locator('.amb-card').count()).toBe(0);
 
     await triggerInfiniteScroll(page);
 
@@ -103,23 +103,23 @@ test.describe('Discover page - infinite scroll', () => {
 
     // Switch to Events
     await page.locator('[data-testid="tab-events"]').click();
-    await expect(page.locator('.calendar-event-card-list').first()).toBeVisible({
+    await expect(page.locator('[data-testid="calendar-event-card"]').first()).toBeVisible({
       timeout: 15_000
     });
-    expect(await page.locator('.article-card-list').count()).toBe(0);
-    expect(await page.locator('.amb-card-list').count()).toBe(0);
+    expect(await page.locator('.article-card').count()).toBe(0);
+    expect(await page.locator('.amb-card').count()).toBe(0);
 
     // Switch to Articles
     await page.locator('[data-testid="tab-articles"]').click();
-    await expect(page.locator('.article-card-list').first()).toBeVisible({ timeout: 15_000 });
-    expect(await page.locator('.calendar-event-card-list').count()).toBe(0);
-    expect(await page.locator('.amb-card-list').count()).toBe(0);
+    await expect(page.locator('.article-card').first()).toBeVisible({ timeout: 15_000 });
+    expect(await page.locator('[data-testid="calendar-event-card"]').count()).toBe(0);
+    expect(await page.locator('.amb-card').count()).toBe(0);
 
     // Switch to Learning
     await page.locator('[data-testid="tab-learning"]').click();
-    await expect(page.locator('.amb-card-list').first()).toBeVisible({ timeout: 15_000 });
-    expect(await page.locator('.article-card-list').count()).toBe(0);
-    expect(await page.locator('.calendar-event-card-list').count()).toBe(0);
+    await expect(page.locator('.amb-card').first()).toBeVisible({ timeout: 15_000 });
+    expect(await page.locator('.article-card').count()).toBe(0);
+    expect(await page.locator('[data-testid="calendar-event-card"]').count()).toBe(0);
 
     // Switch back to All - should have mixed content
     await page.locator('[data-testid="tab-all"]').click();
@@ -134,7 +134,7 @@ test.describe('Discover page - infinite scroll', () => {
 
     await page.locator('[data-testid="tab-learning"]').click();
     await page.waitForTimeout(500);
-    await expect(page.locator('.amb-card-list').first()).toBeVisible({ timeout: 15_000 });
+    await expect(page.locator('.amb-card').first()).toBeVisible({ timeout: 15_000 });
 
     // Inject a counter that tracks how many times the loading spinner appears
     await page.evaluate(() => {
@@ -163,7 +163,7 @@ test.describe('Discover page - infinite scroll', () => {
 
     await page.locator('[data-testid="tab-articles"]').click();
     await page.waitForTimeout(500);
-    await expect(page.locator('.article-card-list').first()).toBeVisible({ timeout: 15_000 });
+    await expect(page.locator('.article-card').first()).toBeVisible({ timeout: 15_000 });
 
     // Scroll repeatedly until all content is exhausted (50 articles / 20 batch = 3 scrolls)
     // Each scroll needs timedPool (2s) + buffer to complete
@@ -188,7 +188,7 @@ test.describe('Discover page - infinite scroll', () => {
 
     await page.locator('[data-testid="tab-learning"]').click();
     await page.waitForTimeout(500);
-    await expect(page.locator('.amb-card-list').first()).toBeVisible({ timeout: 15_000 });
+    await expect(page.locator('.amb-card').first()).toBeVisible({ timeout: 15_000 });
 
     // Scroll repeatedly to trigger loading
     // Each scroll needs timedPool (2s) + buffer to complete
@@ -215,16 +215,13 @@ test.describe('Discover page - infinite scroll', () => {
     await waitForContent(page);
 
     await page.locator('[data-testid="tab-learning"]').click();
-    await expect(page.locator('.amb-card-list').first()).toBeVisible({ timeout: 15_000 });
+    await expect(page.locator('.amb-card').first()).toBeVisible({ timeout: 15_000 });
 
     // Wait for profiles to load asynchronously via useProfileMap
     // Profiles resolve via EventStore batching (bufferTime ~1000ms)
     await expect(async () => {
-      // Get all author name elements from list variant cards
-      // In AMBResourceCard list variant, author name is in the second line div
-      const authorLines = await page
-        .locator('.amb-card-list .text-base-content\\/60')
-        .allTextContents();
+      // Author names of the rendered cards (card variant)
+      const authorLines = await page.locator('[data-testid="amb-card-author"]').allTextContents();
       // At least one card should show a resolved profile name (not a truncated pubkey)
       // Test data uses "Test Author X" naming convention
       const hasProfileName = authorLines.some((line) => line.includes('Test Author'));
@@ -284,5 +281,23 @@ test.describe('Discover page - search input stays put while typing', () => {
     // The filtered result list is shorter, so <main> may clamp a bit lower
     // than before; the bug reset it to the hero at the very top (0).
     expect(after.scrollTop, '<main> must not jump to the top').toBeGreaterThan(100);
+  });
+});
+
+test.describe('Discover page - tab switch resets the search', () => {
+  test('a search typed on one tab does not follow the user to the next tab', async ({ page }) => {
+    await page.goto('/discover');
+    await waitForContent(page);
+
+    await page.locator('[data-testid="tab-learning"]').click();
+    const input = page.getByRole('textbox', { name: /suche|search/i }).first();
+    await input.fill('Mathe');
+    await expect(page).toHaveURL(/search=Mathe/, { timeout: 5_000 });
+
+    await page.locator('[data-testid="tab-communities"]').click();
+    await expect(page).toHaveURL(/type=communities/);
+    // The two URL writes used to race and copy the stale search back
+    await expect(page).not.toHaveURL(/search=/);
+    await expect(input).toHaveValue('');
   });
 });
