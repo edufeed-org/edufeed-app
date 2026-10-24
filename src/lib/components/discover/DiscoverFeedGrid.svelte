@@ -21,6 +21,8 @@
    *   isLoading: boolean,
    *   isSearching: boolean,
    *   hasAnySource: boolean,
+   *   emptyMessage?: string,
+   *   emptyHint?: string,
    *   hasMore: boolean,
    *   isLoadingMore: boolean,
    *   failing: boolean,
@@ -34,6 +36,8 @@
     isLoading,
     isSearching,
     hasAnySource,
+    emptyMessage = '',
+    emptyHint = '',
     hasMore,
     isLoadingMore,
     failing,
@@ -114,7 +118,13 @@
 {:else if items.length === 0}
   <div class="flex justify-center py-12">
     <div class="text-center">
-      {#if !hasAnySource}
+      {#if emptyMessage}
+        <!-- A filter-specific explanation (e.g. "My communities" with none joined) -->
+        <p class="text-xl text-base-content/70" data-testid="discover-empty-message">
+          {emptyMessage}
+        </p>
+        {#if emptyHint}<p class="mt-2 text-base-content/50">{emptyHint}</p>{/if}
+      {:else if !hasAnySource}
         <p class="text-xl text-base-content/70">{m.discover_no_content()}</p>
         <p class="mt-2 text-base-content/50">{m.discover_no_content_subtitle()}</p>
       {:else}
