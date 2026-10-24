@@ -43,7 +43,7 @@
   let { data } = $props();
 
   let profile = $state(/** @type {any} */ (null));
-  let profileEvent = $state(/** @type {any} */ (null));
+  let profileEvent = $state.raw(/** @type {any} */ (null));
   let activeTab = $state('posts');
   let activatedTabs = new SvelteSet(['posts']);
   let loadingState = $state(/** @type {'loading' | 'found' | 'notFound'} */ ('loading'));
@@ -57,13 +57,13 @@
 
   // Kind 10015 interests list (authoritative for interests; legacy kind-0
   // edufeed.interests is the fallback via resolveProfileInterests).
-  let interestsListEvent = $state(/** @type {any} */ (null));
+  let interestsListEvent = $state.raw(/** @type {any} */ (null));
 
   // Kind 10001 pin list (NIP-51 pinned posts)
-  let pinListEvent = $state(/** @type {any} */ (null));
+  let pinListEvent = $state.raw(/** @type {any} */ (null));
 
   // Kind 30078 tab configuration (owner-defined order + hidden tabs)
-  let tabsConfigEvent = $state(/** @type {any} */ (null));
+  let tabsConfigEvent = $state.raw(/** @type {any} */ (null));
   // Draft while the owner is editing; committed on "Fertig".
   let draftOrder = $state(/** @type {string[]} */ ([]));
   let draftHidden = $state(/** @type {string[]} */ ([]));

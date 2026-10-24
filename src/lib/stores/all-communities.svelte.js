@@ -4,7 +4,7 @@ import { TimelineModel } from 'applesauce-core/models';
 import { applyCuratedFilter } from '$lib/services/curated-authors-service.svelte.js';
 
 // Global state that persists across page navigations
-let globalCommunities = $state(/** @type {import('nostr-tools').Event[]} */ ([]));
+let globalCommunities = $state.raw(/** @type {import('nostr-tools').Event[]} */ ([]));
 let globalLoaded = $state(false);
 /** @type {{ unsubscribe: () => void } | null} */
 let globalSubscription = null;

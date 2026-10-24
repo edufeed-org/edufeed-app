@@ -15,7 +15,7 @@
   /** @type {{ data: any }} */
   let { data } = $props();
 
-  let resolvedEvent = $state(/** @type {any} */ (null));
+  let resolvedEvent = $state.raw(/** @type {any} */ (null));
   let focusCommentId = $state(/** @type {string|null} */ (null));
   let parentPointer = $state(/** @type {string|null} */ (null));
   let scrollTo = $state(/** @type {string|null} */ (null));

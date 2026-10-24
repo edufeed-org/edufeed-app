@@ -9,7 +9,7 @@
   let { communityId } = $props();
 
   // Local state
-  let events = $state(/** @type {any[]} */ ([]));
+  let events = $state.raw(/** @type {any[]} */ ([]));
   let isLoading = $state(true);
   let error = $state(/** @type {string | null} */ (null));
   let lastLoadedCommunityId = $state(/** @type {string | null} */ (null));

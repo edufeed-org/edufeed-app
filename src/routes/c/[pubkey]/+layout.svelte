@@ -52,7 +52,7 @@
   // selectedContentType from anywhere else; the effect will overwrite it on
   // the next $page change.
   let selectedContentType = $state('home');
-  let communikeyEvent = $state(/** @type {any} */ (null));
+  let communikeyEvent = $state.raw(/** @type {any} */ (null));
   let communityProfile = $state(/** @type {any} */ (null));
   let communikeyLoaded = $state(false);
 

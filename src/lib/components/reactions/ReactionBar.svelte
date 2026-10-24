@@ -26,7 +26,7 @@
   /** @type {import('rxjs').Subscription | undefined} */
   let removeSubscription;
   /** @type {any[]} */
-  let reactions = $state([]);
+  let reactions = $state.raw([]);
   // Map to track loaded reactions and prevent duplicates
   // Use regular Map - SvelteMap in subscription callbacks can cause effect_update_depth_exceeded
   let loadedReactions = new Map();

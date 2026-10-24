@@ -346,7 +346,7 @@
   // extensionMetadata.js; only this network lookup is impure, so it stays here.
   // (`formRef` is declared above for the "Edit in form" action.)
   const formCoord = $derived(parseFormCoord(formRef?.address));
-  let formEvent = $state(/** @type {any} */ (null));
+  let formEvent = $state.raw(/** @type {any} */ (null));
   $effect(() => {
     formEvent = null;
     if (!formCoord) return;

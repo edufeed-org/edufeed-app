@@ -21,7 +21,7 @@
   let { data } = $props();
 
   // Edit mode state
-  let editEvent = $state(/** @type {any} */ (null));
+  let editEvent = $state.raw(/** @type {any} */ (null));
   let isLoadingEdit = $state(false);
   let editError = $state('');
 
@@ -34,7 +34,7 @@
   let imageUrl = $state('');
   let imageWasUploaded = $state(false);
   /** @type {any} */
-  let imageLicenseEvent = $state(null);
+  let imageLicenseEvent = $state.raw(null);
   /**
    * Body images inserted this session (upload or library pick) with their
    * NIP-94 fields — buildArticleTags turns the ones still in the markdown

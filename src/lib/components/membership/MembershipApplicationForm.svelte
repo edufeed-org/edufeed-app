@@ -54,7 +54,7 @@
   const handleDomain = $derived(cfg?.handleDomain || '');
 
   /** @type {import('nostr-tools').NostrEvent | null} */
-  let formEvent = $state(null);
+  let formEvent = $state.raw(null);
   let isLoading = $state(true);
   let isSubmitting = $state(false);
   let submitted = $state(false);

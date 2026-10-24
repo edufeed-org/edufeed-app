@@ -15,7 +15,7 @@ import { VOCAB_KIND, CONCEPT_KIND } from 'nostr-vocab-core/constants';
  */
 export function useConceptScheme(getAddr) {
   /** @type {import('nostr-tools').NostrEvent | undefined} */
-  let event = $state(undefined);
+  let event = $state.raw(undefined);
 
   $effect(() => {
     const ref = getAddr();

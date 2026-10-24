@@ -41,7 +41,7 @@
   /** @type {import('rxjs').Subscription | undefined} */
   let modelSubscription;
   /** @type {any[]} */
-  let rsvps = $state([]);
+  let rsvps = $state.raw([]);
 
   // Get calendar actions - updates when communityPubkey changes
   // Using $state + $effect instead of $derived because useCalendarActions

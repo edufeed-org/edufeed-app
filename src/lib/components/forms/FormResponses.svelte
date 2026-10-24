@@ -88,7 +88,7 @@
   const getProfiles = useProfileMap(() => responses.map((r) => r.pubkey));
 
   // Load the community event (kind 10222) for the form author to find gated sections
-  let communityEvent = $state(/** @type {import('nostr-tools').NostrEvent | null} */ (null));
+  let communityEvent = $state.raw(/** @type {import('nostr-tools').NostrEvent | null} */ (null));
 
   $effect(() => {
     const relays = getCommunikeyRelays();

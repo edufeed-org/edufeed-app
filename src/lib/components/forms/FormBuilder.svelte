@@ -293,7 +293,7 @@
 
   let previewOpen = $state(false);
   /** @type {import('nostr-tools').NostrEvent | null} */
-  let previewEvent = $state(null);
+  let previewEvent = $state.raw(null);
 
   /**
    * Loaded on demand rather than imported statically: rendering a form pulls in

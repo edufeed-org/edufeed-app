@@ -20,7 +20,7 @@ import { calendarEventRsvpLoader } from '$lib/loaders/rsvp.js';
 export function useCalendarEventRsvps(calendarEvent) {
   // Reactive state
   /** @type {any[]} */
-  let rsvps = $state([]);
+  let rsvps = $state.raw([]);
   let loading = $state(true);
 
   // Subscriptions (plain let - not reactive to avoid infinite loops)

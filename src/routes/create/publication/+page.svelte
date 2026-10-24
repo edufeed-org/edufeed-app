@@ -28,7 +28,7 @@
   let { data } = $props();
 
   // Edit mode state
-  let editEvent = $state(/** @type {any} */ (null));
+  let editEvent = $state.raw(/** @type {any} */ (null));
   let isLoadingEdit = $state(false);
   let editError = $state('');
 

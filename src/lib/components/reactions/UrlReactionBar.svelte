@@ -24,7 +24,7 @@
   let loaderSubscription;
 
   /** @type {any[]} */
-  let reactions = $state([]);
+  let reactions = $state.raw([]);
   let loadedReactions = new Map();
 
   const getActiveUser = useActiveUser();

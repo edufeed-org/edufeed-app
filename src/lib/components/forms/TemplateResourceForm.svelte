@@ -32,7 +32,7 @@
   const decoded = $derived(decodeFormNaddr(templateNaddr));
 
   /** @type {import('nostr-tools').NostrEvent | undefined} */
-  let formEvent = $state(undefined);
+  let formEvent = $state.raw(undefined);
   let parsed = $derived(formEvent ? parseFormTemplate(formEvent) : undefined);
   let submitting = $state(false);
   let error = $state('');
@@ -53,7 +53,7 @@
   });
 
   /** @type {import('nostr-tools').NostrEvent | undefined} */
-  let resourceEvent = $state(undefined);
+  let resourceEvent = $state.raw(undefined);
 
   $effect(() => {
     if (decoded.error || !decoded.pubkey || !decoded.identifier) return;

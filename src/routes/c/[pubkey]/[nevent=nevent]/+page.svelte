@@ -23,7 +23,7 @@
     $page.params.pubkey ? (npubToHex($page.params.pubkey) ?? undefined) : undefined
   );
 
-  let resolvedEvent = $state(/** @type {any} */ (null));
+  let resolvedEvent = $state.raw(/** @type {any} */ (null));
   let focusCommentId = $state(/** @type {string|null} */ (null));
   let parentPointer = $state(/** @type {string|null} */ (null));
   let scrollTo = $state(/** @type {string|null} */ (null));

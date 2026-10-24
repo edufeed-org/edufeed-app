@@ -38,7 +38,7 @@ import * as m from '$lib/paraglide/messages';
 // ---------------------------------------------------------------------------
 
 /** @type {import('nostr-tools').NostrEvent | null} */
-let bookmarkListEvent = $state(null);
+let bookmarkListEvent = $state.raw(null);
 
 /** @type {import('nostr-tools').NostrEvent[]} */
 let bookmarkSets = $state.raw([]);
