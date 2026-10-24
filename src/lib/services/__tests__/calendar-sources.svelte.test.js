@@ -1,9 +1,11 @@
 // @ts-nocheck
 
 /**
- * CALENDAR_HIDDEN_PUBKEYS + NIP-24 `bot: true`: bulk calendar sources (our
- * own event mirrors, imported course catalogues) are hidden from the global
- * calendar surfaces by default and shown on request.
+ * CALENDAR_HIDDEN_PUBKEYS: bulk calendar sources (our own event mirrors,
+ * imported course catalogues) are hidden from the global calendar surfaces by
+ * default and shown on request. The list is the ONLY signal: a NIP-24
+ * `bot: true` profile does not hide an author by itself — OER World Map is a
+ * bot and wanted on the calendar (laoc, 2026-10-24).
  *
  * @vitest-environment jsdom
  */
@@ -48,13 +50,13 @@ describe('calendar sources', () => {
     config.runtimeConfig.calendarHiddenPubkeys = [];
   });
 
-  it('hides a configured source and a NIP-24 bot profile, nothing else', async () => {
+  it('hides a configured source and nothing else — not even a NIP-24 bot profile', async () => {
     config.runtimeConfig.calendarHiddenPubkeys = [MIRROR];
     await initCalendarHiddenSources();
-    profiles.set(BOT, profileEvent(BOT, { name: 'Mirror', bot: true }));
+    profiles.set(BOT, profileEvent(BOT, { name: 'OER World Map', bot: true }));
     profiles.set(HUMAN, profileEvent(HUMAN, { name: 'Ada' }));
     expect(isHiddenCalendarSource(MIRROR)).toBe(true);
-    expect(isHiddenCalendarSource(BOT)).toBe(true);
+    expect(isHiddenCalendarSource(BOT)).toBe(false);
     expect(isHiddenCalendarSource(HUMAN)).toBe(false);
     expect(isHiddenCalendarSource('d'.repeat(64))).toBe(false);
   });

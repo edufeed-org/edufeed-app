@@ -3,15 +3,16 @@
  * drown the global calendar: our own event mirrors (bildungsserver, OER
  * World Map, ev-bildung crawlers), imported course catalogues.
  *
- * Two signals, both opt-in to show: the deployment's
- * `CALENDAR_HIDDEN_PUBKEYS` (npub / hex / kind 30000 list naddrs, see
- * `pubkey-lists`) and the author's own NIP-24 `bot: true` profile flag. The
+ * One signal, opt-in to show: the deployment's `CALENDAR_HIDDEN_PUBKEYS`
+ * (npub / hex / kind 30000 list naddrs, see `pubkey-lists`). A NIP-24
+ * `bot: true` profile does NOT hide an author by itself — being a bot is not
+ * the problem, flooding is, and that is the operator's call per source (OER
+ * World Map is a bot and wanted on the calendar; laoc, 2026-10-24). The
  * global calendar, /discover events and the landing panel hide these by
  * default and offer "Importierte Termine anzeigen"
  * (`appSettings.showHiddenCalendarSources`). Community calendars are not
  * filtered: an h-tagged event was placed there on purpose.
  */
-import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
 import { runtimeConfig } from '$lib/stores/config.svelte.js';
 import { createPubkeyList } from '$lib/services/pubkey-lists.svelte.js';
 
@@ -26,24 +27,10 @@ export async function initCalendarHiddenSources() {
   await list.ready;
 }
 
-/**
- * NIP-24 `bot` flag of the author's stored profile (store first: no fetch).
- * @param {string} pubkey
- */
-function isBotProfile(pubkey) {
-  const profile = eventStore.getReplaceable?.(0, pubkey);
-  if (!profile) return false;
-  try {
-    return JSON.parse(profile.content || '{}')?.bot === true;
-  } catch {
-    return false;
-  }
-}
-
 /** @param {string | undefined} pubkey */
 export function isHiddenCalendarSource(pubkey) {
   if (!pubkey) return false;
-  return (!!list && list.has(pubkey)) || isBotProfile(pubkey);
+  return !!list && list.has(pubkey);
 }
 
 /** Bumps when the configured list resolves (read in a $derived). */
