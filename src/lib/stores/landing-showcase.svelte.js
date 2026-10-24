@@ -6,7 +6,7 @@
 // discover types are neither loaded nor shown.
 import { untrack } from 'svelte';
 import { TimelineModel } from 'applesauce-core/models';
-import { createTimelineLoader } from 'applesauce-loaders/loaders';
+import { createTimelineLoader } from '$lib/loaders/timeline-loader.js';
 import { timedPool } from '$lib/loaders/base.js';
 import { loadShowcaseSources } from '$lib/loaders/landing-showcase-sources.js';
 import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';

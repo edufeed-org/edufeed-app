@@ -13,7 +13,7 @@
     getProfilePointersFromList,
     getRelaysFromList
   } from 'applesauce-common/helpers';
-  import { createTimelineLoader } from 'applesauce-loaders/loaders';
+  import { createTimelineLoader } from '$lib/loaders/timeline-loader.js';
   import { timedPool } from '$lib/loaders/base.js';
   import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
   import { useActiveUser } from '$lib/stores/accounts.svelte.js';

@@ -28,7 +28,7 @@ export function useConceptScheme(getAddr) {
     const modelSub = eventStore
       .model(ReplaceableModel, { kind: Number(kind), pubkey, identifier: d })
       .subscribe((e) => {
-        event = e;
+        event = /** @type {import('nostr-tools').Event | undefined} */ (e);
       });
     return () => {
       loaderSub.unsubscribe();
@@ -64,7 +64,7 @@ export function useSchemeConcepts(getSchemeCoord, getRelays) {
     const modelSub = eventStore
       .model(TimelineModel, { kinds: [CONCEPT_KIND], '#a': [coord] })
       .subscribe((events) => {
-        concepts = events || [];
+        concepts = /** @type {import('nostr-tools').Event[]} */ (events || []);
       });
 
     return () => {
@@ -109,7 +109,7 @@ export function useConceptSchemes(getRelays) {
           const typeTag = e.tags.find((t) => t[0] === 'type')?.[1];
           return !typeTag || typeTag === 'ConceptScheme';
         });
-        schemes = onlySchemes;
+        schemes = /** @type {import('nostr-tools').Event[]} */ (onlySchemes);
       });
 
     return () => {

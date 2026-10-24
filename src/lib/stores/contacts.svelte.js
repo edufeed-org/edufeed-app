@@ -10,7 +10,7 @@
 
 import { eventStore, pool } from './nostr-infrastructure.svelte.js';
 import { createContactListLoader } from '$lib/loaders/contact-list-loader.js';
-import { createTimelineLoader } from 'applesauce-loaders/loaders';
+import { createTimelineLoader } from '$lib/loaders/timeline-loader.js';
 import { ContactsModel } from 'applesauce-core/models';
 import { getProfileContent } from 'applesauce-core/helpers';
 import { getWriteRelays } from '$lib/services/relay-service.svelte.js';

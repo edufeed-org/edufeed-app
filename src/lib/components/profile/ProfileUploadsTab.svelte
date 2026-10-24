@@ -60,7 +60,7 @@
     const filter = { kinds: [1063], authors: [pubkey] };
     const modelSub = eventStore.model(TimelineModel, filter).subscribe({
       next: (loaded) => {
-        rawEvents = loaded || [];
+        rawEvents = /** @type {import('nostr-tools').Event[]} */ (loaded || []);
       },
       error: (err) => console.error('ProfileUploadsTab: Model error:', err)
     });

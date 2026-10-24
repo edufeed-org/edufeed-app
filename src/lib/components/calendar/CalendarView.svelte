@@ -24,7 +24,7 @@
   import { hexToNpub } from '$lib/helpers/nostrUtils.js';
   import { TimelineModel } from 'applesauce-core/models';
   import { combineLatest } from 'rxjs';
-  import { createTimelineLoader } from 'applesauce-loaders/loaders';
+  import { createTimelineLoader } from '$lib/loaders/timeline-loader.js';
   import { timedPool } from '$lib/loaders/base.js';
   import { calendarSearchLoader, MIN_QUERY_LENGTH } from '$lib/loaders/calendar-search.js';
   import { useProfileMap } from '$lib/stores/profile-map.svelte.js';

@@ -25,7 +25,7 @@
     const modelSub = eventStore
       .model(TimelineModel, { kinds: [30168], authors: [pubkey] })
       .subscribe((events) => {
-        forms = events || [];
+        forms = /** @type {import('nostr-tools').Event[]} */ (events || []);
         isLoading = false;
       });
 

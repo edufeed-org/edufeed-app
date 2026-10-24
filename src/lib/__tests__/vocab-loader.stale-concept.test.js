@@ -111,7 +111,7 @@ describe('loadSchemeConcepts with a relay that serves a stale concept version', 
     const modelSub = eventStore
       .model(TimelineModel, { kinds: [CONCEPT_KIND], '#a': [METHODE] })
       .subscribe((events) => {
-        latest = events;
+        latest = /** @type {import('nostr-tools').Event[]} */ (events);
       });
 
     const sub = loadSchemeConcepts(METHODE, RELAYS);

@@ -7,7 +7,7 @@
 <script>
   import { goto } from '$app/navigation';
   import { resolve } from '$app/paths';
-  import { createTimelineLoader } from 'applesauce-loaders/loaders';
+  import { createTimelineLoader } from '$lib/loaders/timeline-loader.js';
   import { getPointerForEvent, encodeDecodeResult, getSeenRelays } from 'applesauce-core/helpers';
   import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
   import { timedPool } from '$lib/loaders/base.js';

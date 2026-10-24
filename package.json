@@ -43,13 +43,13 @@
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/svelte": "^5.3.1",
     "amb-nostr-converter": "https://git.edufeed.org/api/packages/edufeed/npm/amb-nostr-converter/-/0.0.0-2f68a71/amb-nostr-converter-0.0.0-2f68a71.tgz",
-    "applesauce-accounts": "^6.2.0",
-    "applesauce-actions": "^6.2.0",
-    "applesauce-content": "^6.2.0",
-    "applesauce-core": "^6.2.0",
-    "applesauce-loaders": "^6.2.0",
-    "applesauce-relay": "^6.2.1",
-    "applesauce-signers": "^6.2.2",
+    "applesauce-accounts": "^7.0.2",
+    "applesauce-actions": "^7.0.0",
+    "applesauce-content": "^7.0.0",
+    "applesauce-core": "^7.0.3",
+    "applesauce-loaders": "^7.0.2",
+    "applesauce-relay": "^7.0.0",
+    "applesauce-signers": "^7.0.1",
     "asciidoctor": "^3.0.4",
     "blossom-client-sdk": "^4.1.0",
     "daisyui": "^5.5.19",
@@ -95,7 +95,7 @@
     "@napi-rs/canvas": "^1.0.2",
     "@noble/ciphers": "^2.2.0",
     "@noble/hashes": "^1.8.0",
-    "applesauce-common": "^6.2.0",
+    "applesauce-common": "^7.0.0",
     "applesauce-common-concord": "npm:applesauce-common@0.0.0-concord-20260714212055",
     "applesauce-concord": "0.0.0-concord-20260714212055",
     "applesauce-core-concord": "npm:applesauce-core@0.0.0-concord-20260714212055",
@@ -116,7 +116,7 @@
   },
   "pnpm": {
     "patchedDependencies": {
-      "applesauce-content@6.2.0": "patches/applesauce-content@6.2.0.patch",
+      "applesauce-content@7.0.0": "patches/applesauce-content@7.0.0.patch",
       "ts-mls": "patches/ts-mls.patch"
     }
   },

@@ -8,7 +8,7 @@
  * only fetches.
  */
 import { map, filter } from 'rxjs';
-import { createTimelineLoader, createOutboxTimelineLoader } from 'applesauce-loaders/loaders';
+import { createTimelineLoader, createOutboxTimelineLoader } from '$lib/loaders/timeline-loader.js';
 import { OutboxModel } from 'applesauce-core/models';
 import { groupPubkeysByRelay } from 'applesauce-core/helpers';
 import { includeFallbackRelays } from 'applesauce-core/observable';

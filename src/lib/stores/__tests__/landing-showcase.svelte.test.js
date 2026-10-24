@@ -15,6 +15,12 @@ const store = vi.hoisted(() => ({ byKind: {}, modelFilters: [] }));
 vi.mock('applesauce-loaders/loaders', () => ({
   createTimelineLoader: (...a) => loader.create(...a)
 }));
+// applesauce v7 moved block paging out of the SDK: the app's timeline loader is
+// the local port in $lib/loaders/timeline-loader.js and takes the mock above.
+vi.mock('$lib/loaders/timeline-loader.js', async () => {
+  const loaders = /** @type {any} */ (await import('applesauce-loaders/loaders'));
+  return { createTimelineLoader: loaders.createTimelineLoader };
+});
 vi.mock('$lib/loaders/base.js', () => ({ timedPool: 'POOL' }));
 vi.mock('$lib/loaders/landing-showcase-sources.js', () => ({
   loadShowcaseSources: (...a) => loader.sources(...a)

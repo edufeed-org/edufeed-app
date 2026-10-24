@@ -2,7 +2,7 @@
  * Relay List Loader - fetches kind 10002 events (NIP-65)
  * Following applesauce loader pattern
  */
-import { createTimelineLoader } from 'applesauce-loaders/loaders';
+import { createTimelineLoader } from '$lib/loaders/timeline-loader.js';
 
 /**
  * Creates a loader for a user's relay list (kind 10002)

@@ -115,6 +115,12 @@ vi.mock('applesauce-loaders/loaders', () => {
     createReactionsLoader: noopLoader
   };
 });
+// applesauce v7 moved block paging out of the SDK: the app's timeline loader is
+// the local port in $lib/loaders/timeline-loader.js and takes the mock above.
+vi.mock('$lib/loaders/timeline-loader.js', async () => {
+  const loaders = /** @type {any} */ (await import('applesauce-loaders/loaders'));
+  return { createTimelineLoader: loaders.createTimelineLoader };
+});
 
 vi.mock('$lib/helpers/relay-helper.js', () => ({
   getCommunikeyRelays: () => [],

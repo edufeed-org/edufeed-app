@@ -15,7 +15,7 @@
     nip44EncryptWith,
     signerHasNip44
   } from '$lib/helpers/forms.js';
-  import { createTimelineLoader } from 'applesauce-loaders/loaders';
+  import { createTimelineLoader } from '$lib/loaders/timeline-loader.js';
   import FormRenderer from '$lib/components/forms/FormRenderer.svelte';
   import * as m from '$lib/paraglide/messages';
 

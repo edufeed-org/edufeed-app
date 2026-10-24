@@ -41,8 +41,8 @@ export function useAllCommunities() {
     const filter = applyCuratedFilter({ kinds: [10222] });
 
     const timelineSubscription = eventStore.model(TimelineModel, filter).subscribe({
-      next: (/** @type {import('nostr-tools').Event[]} */ events) => {
-        globalCommunities = events;
+      next: (events) => {
+        globalCommunities = /** @type {import('nostr-tools').Event[]} */ (events);
         globalLoaded = true;
       },
       error: (/** @type {any} */ error) => {

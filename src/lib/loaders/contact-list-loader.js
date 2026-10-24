@@ -3,7 +3,7 @@
  * Loads user's contact list (kind 3 event - NIP-02) using applesauce pattern
  */
 
-import { createTimelineLoader } from 'applesauce-loaders/loaders';
+import { createTimelineLoader } from '$lib/loaders/timeline-loader.js';
 
 /**
  * Creates a loader for user's contact list (kind 3)

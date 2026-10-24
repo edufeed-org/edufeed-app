@@ -26,7 +26,7 @@
   import { encodeEventToNaddr, profileLink } from '$lib/helpers/nostrUtils.js';
   import { deleteEvent } from '$lib/helpers/eventDeletion.js';
   import { showToast } from '$lib/helpers/toast.js';
-  import { createTimelineLoader } from 'applesauce-loaders/loaders';
+  import { createTimelineLoader } from '$lib/loaders/timeline-loader.js';
   import { timedPool } from '$lib/loaders/base.js';
   import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
   import { getKanbanRelays } from '$lib/helpers/relay-helper.js';

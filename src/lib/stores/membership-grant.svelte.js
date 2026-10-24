@@ -17,7 +17,7 @@ import { manager } from '$lib/stores/accounts.svelte';
 import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
 import { runtimeConfig } from '$lib/stores/config.svelte.js';
 import { buildUserResponseFilter, parseResponseTags } from '$lib/helpers/forms.js';
-import { createTimelineLoader } from 'applesauce-loaders/loaders';
+import { createTimelineLoader } from '$lib/loaders/timeline-loader.js';
 import { timedPool } from '$lib/loaders/base.js';
 import { getCommunikeyRelays } from '$lib/helpers/relay-helper.js';
 

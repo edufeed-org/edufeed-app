@@ -1,7 +1,8 @@
 /**
  * Profile loading utilities for user profiles and notes.
  */
-import { createAddressLoader, createTimelineLoader } from 'applesauce-loaders/loaders';
+import { createAddressLoader } from 'applesauce-loaders/loaders';
+import { createTimelineLoader } from '$lib/loaders/timeline-loader.js';
 import { pool, eventStore } from '$lib/stores/nostr-infrastructure.svelte';
 import { getProfileLookupRelays } from '$lib/helpers/relay-helper.js';
 import { getProfileContent } from 'applesauce-core/helpers';

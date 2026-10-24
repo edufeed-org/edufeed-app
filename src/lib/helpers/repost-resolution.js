@@ -4,7 +4,7 @@
  * Extracts the repost reference resolution pattern used by both community content
  * loaders and the follows feed. Uses applesauce helpers instead of manual tag parsing.
  */
-import { tap } from 'rxjs';
+import { EMPTY, catchError, tap } from 'rxjs';
 import {
   getEmbededSharedEvent,
   getSharedEventPointer,
@@ -24,8 +24,14 @@ import {
 export function fetchEventsByIds(ids, relays, { pool, eventStore }) {
   if (ids.length === 0) return;
   return pool
-    .request(relays, [{ ids }], /** @type {any} */ ({ timeout: 5000 }))
-    .pipe(tap((event) => eventStore.add(event)))
+    .request(relays, [{ ids }], { timeout: 5000 })
+    .pipe(
+      tap((event) => eventStore.add(event)),
+      // Timeout or (v7) every relay failing: a missing repost target is not
+      // an error for the feed, so swallow instead of surfacing an
+      // unhandled rxjs error.
+      catchError(() => EMPTY)
+    )
     .subscribe();
 }
 

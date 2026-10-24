@@ -5,7 +5,7 @@
   import { timedPool } from '$lib/loaders/base.js';
   import { getCommunikeyRelays } from '$lib/helpers/relay-helper.js';
   import { buildUserResponseFilter } from '$lib/helpers/forms.js';
-  import { createTimelineLoader } from 'applesauce-loaders/loaders';
+  import { createTimelineLoader } from '$lib/loaders/timeline-loader.js';
 
   import * as m from '$lib/paraglide/messages';
 

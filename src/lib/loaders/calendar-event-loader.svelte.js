@@ -25,7 +25,7 @@ function toCalendarEvents(timeline) {
 import { calendarTimelineLoader } from '$lib/loaders/calendar.js';
 import { communityTargetedPublicationsLoader } from '$lib/loaders/targeted-publications.js';
 import { userDeletionLoader, addressLoader } from '$lib/loaders/base.js';
-import { createTimelineLoader } from 'applesauce-loaders/loaders';
+import { createTimelineLoader } from '$lib/loaders/timeline-loader.js';
 import { getAllLookupRelays } from '$lib/helpers/relay-helper.js';
 import { runtimeConfig } from '$lib/stores/config.svelte.js';
 import { applyCuratedFilter } from '$lib/services/curated-authors-service.svelte.js';

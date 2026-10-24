@@ -94,8 +94,10 @@ export function createCalendarManagementStore(userPubkey) {
       })
       .pipe(debounceTime(100))
       .subscribe({
-        next: (/** @type {import('nostr-tools').Event[]} */ events) => {
-          calendars = (events || []).map(convertNDKEventToCalendar);
+        next: (events) => {
+          calendars = /** @type {import('nostr-tools').Event[]} */ (events || []).map(
+            convertNDKEventToCalendar
+          );
           loading = false;
         }
       });

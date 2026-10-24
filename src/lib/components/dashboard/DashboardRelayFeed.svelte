@@ -9,7 +9,7 @@
   import { untrack } from 'svelte';
   import { goto } from '$app/navigation';
   import { resolve } from '$app/paths';
-  import { createTimelineLoader } from 'applesauce-loaders/loaders';
+  import { createTimelineLoader } from '$lib/loaders/timeline-loader.js';
   import { TimelineModel } from 'applesauce-core/models';
   import { getDisplayName, getProfilePicture } from 'applesauce-core/helpers';
   import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';

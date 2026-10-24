@@ -108,7 +108,12 @@ describe('links', () => {
     const { load } = await import('../../routes/call/[pointer]/+page.js');
     const segment = new URL(url).pathname.slice('/call/'.length);
     const { rawPointer } = load({ params: { pointer: segment } });
-    expect(rawPointer).toBe("wss://groups.example/c/eb5658ef84731c8e'4c9b50c8c413f15e");
+    // The serialized form is the shortest one that round-trips (applesauce v7
+    // decodes a relay with a path from the host'id short form, v6 did not):
+    // the contract is that the call page parses it back to the same group.
+    expect(rawPointer).toContain("'4c9b50c8c413f15e");
+    const { parseGroupInput } = await import('$lib/groups/groups.js');
+    expect(parseGroupInput(rawPointer)).toEqual(pointer);
   });
   it('a DM carrying the link linkifies the whole URL, fragment included', async () => {
     const { getParsedContent } = await import('applesauce-content/text');

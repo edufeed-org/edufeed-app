@@ -17,8 +17,8 @@
   import { pool, eventStore } from '$lib/stores/nostr-infrastructure.svelte';
   import { getEducationalRelays, getAllLookupRelays } from '$lib/helpers/relay-helper.js';
   import { WEBXDC_MIME, appFromFileEvent } from '$lib/webxdc/session-events.js';
-  import { of, timer, concat } from 'rxjs';
-  import { map, takeUntil, takeWhile, tap, toArray } from 'rxjs/operators';
+  import { EMPTY, of, timer, concat } from 'rxjs';
+  import { catchError, map, takeUntil, takeWhile, tap, toArray } from 'rxjs/operators';
   import * as m from '$lib/paraglide/messages';
   import { appSettings } from '$lib/stores/app-settings.svelte.js';
 
@@ -90,7 +90,10 @@
             map((ev) => eventStore.add(ev) ?? ev),
             tap((ev) => missing.delete(ev.id)),
             takeWhile(() => missing.size > 0, true),
-            takeUntil(timer(5000))
+            takeUntil(timer(5000)),
+            // applesauce v7 errors the request when every relay fails; the
+            // already-known apps must still render.
+            catchError(() => EMPTY)
           );
     const sub = concat(of(...known), fetched)
       .pipe(toArray())

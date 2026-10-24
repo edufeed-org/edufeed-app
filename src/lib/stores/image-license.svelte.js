@@ -1,4 +1,4 @@
-import { createTimelineLoader } from 'applesauce-loaders/loaders';
+import { createTimelineLoader } from '$lib/loaders/timeline-loader.js';
 import { timedPool } from '$lib/loaders/base.js';
 import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
 import { getAllLookupRelays } from '$lib/helpers/relay-helper.js';

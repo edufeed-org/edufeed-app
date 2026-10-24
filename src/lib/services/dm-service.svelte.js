@@ -947,20 +947,19 @@ function addRelaysToGiftWrapSub(pubkey, relays) {
  * @param {string[]} relays
  */
 function subscribeToGiftWraps(pubkey, relays) {
-  // IMPORTANT: use `group(relays, false)` rather than `pool.subscription(relays, …)`.
-  // The default `pool.subscription` calls `group(relays)` with `ignoreOffline=true`,
-  // which synchronously filters out any relay whose WebSocket isn't `ready` yet
-  // (see applesauce-relay/dist/pool.js:52). On fresh login the DM relays were
-  // *just* created when kind 10050 arrived — none are connected yet — so the
-  // filter would drop them all and the resulting subscription would be silent
-  // forever. Passing `false` keeps the relays in the group so the RelayGroup's
-  // own connection lifecycle delivers events once the sockets come up.
+  // Explicit `group(relays)` without a liveness source: on fresh login the DM
+  // relays were *just* created when kind 10050 arrived — none are connected
+  // yet — and any health filtering here would drop them all and leave the
+  // subscription silent forever (applesauce v6's `ignoreOffline` did exactly
+  // that; v7 replaced it with the pool's opt-in liveness, which this pool does
+  // not configure). The RelayGroup's own connection lifecycle delivers events
+  // once the sockets come up.
   // Request NIP-17 gift wraps (#p=user) plus legacy NIP-04 kind-4 DMs in both
   // directions (#p=user for inbound, authors=user for the user's own historical
   // sends from other clients). All land in the EventStore; the respective
   // applesauce models split them back out.
   const sub = pool
-    .group(relays, false)
+    .group(relays)
     .subscription([
       { kinds: [1059], '#p': [pubkey] },
       { kinds: [4], '#p': [pubkey] },
