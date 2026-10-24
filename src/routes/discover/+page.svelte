@@ -1,73 +1,52 @@
 <script>
   import { runtimeConfig } from '$lib/stores/config.svelte.js';
-  import ImageWithFallback from '$lib/components/shared/ImageWithFallback.svelte';
   import { SvelteSet } from 'svelte/reactivity';
   import { untrack } from 'svelte';
-  import { onMount } from 'svelte';
   import { createArticleFeed } from '$lib/loaders/articles.js';
   import { createAmbFeed } from '$lib/loaders/amb.js';
   import { createKanbanFeed } from '$lib/loaders/kanban.js';
-  import { useCommunityActivityLoader } from '$lib/loaders/community-activity.js';
-  import { CommunityActivityModel } from '$lib/models/community-content.js';
-  import { subscribeToCommunityAccess } from '$lib/groups/community-access-subscription.js';
-  import { filterEventsByAccess } from '$lib/helpers/contentTypes.js';
   import {
     createDateRangeCalendarLoader,
     createPaginatedCalendarLoader
   } from '$lib/loaders/calendar.js';
   import { preWarmRelayCapabilitiesCache } from '$lib/services/relay-capabilities.js';
   import { fetchEvents } from '$lib/loaders/base.js';
-  import { ambRankedSearchLoader } from '$lib/loaders/amb-search.js';
-  import {
-    hasActiveFilters,
-    createEmptyFilters
-  } from '$lib/helpers/educational/searchQueryBuilder.js';
-  import { buildRankIndex } from '$lib/helpers/educational/searchRank.js';
+  import { createEmptyFilters } from '$lib/helpers/educational/searchQueryBuilder.js';
   import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
   import {
     getEducationalRelays,
     getArticleRelays,
     getCalendarRelays,
-    getKanbanRelays,
-    getCommunikeyRelays
+    getKanbanRelays
   } from '$lib/helpers/relay-helper.js';
   import { TimelineModel } from 'applesauce-core/models';
   import { AMBResourceModel, CalendarEventRangeModel } from '$lib/models';
   import { useProfileMap } from '$lib/stores/profile-map.svelte.js';
   import { useAuthorDeletions } from '$lib/stores/author-deletions.svelte.js';
+  import { useDiscoverFeeds } from '$lib/stores/discover-feeds.svelte.js';
+  import { useLearningSearch } from '$lib/stores/learning-search.svelte.js';
+  import { useCommunityScopedItems } from '$lib/stores/community-scoped-items.svelte.js';
   import { getTagValue } from 'applesauce-core/helpers';
-  import { getArticlePublished } from 'applesauce-common/helpers';
-  import ArticleCard from '$lib/components/article/ArticleCard.svelte';
-  import AMBResourceCard from '$lib/components/educational/AMBResourceCard.svelte';
-  import CalendarEventCard from '$lib/components/calendar/CalendarEventCard.svelte';
-  import KanbanBoardCard from '$lib/components/kanban/KanbanBoardCard.svelte';
   import CreateBoardLink from '$lib/components/kanban/CreateBoardLink.svelte';
-  import CommunityFilterDropdown from '$lib/components/feed/CommunityFilterDropdown.svelte';
-  import RelayFilterDropdown from '$lib/components/feed/RelayFilterDropdown.svelte';
-  import {
-    getAppRelaysForCategory,
-    relayUpdateSignal
-  } from '$lib/services/app-relay-service.svelte.js';
+  import { getAppRelaysForCategory } from '$lib/services/app-relay-service.svelte.js';
   import {
     applyCuratedFilter,
     isAllowedAuthor,
     getCuratedCacheVersion,
     getCuratedAuthors
   } from '$lib/services/curated-authors-service.svelte.js';
-  import { getSeenRelays } from 'applesauce-core/helpers/relays';
-  import { normalizeURL } from 'applesauce-core/helpers';
   import PeopleResults from '$lib/components/discover/PeopleResults.svelte';
-  import CommunikeyCard from '$lib/components/CommunikeyCard.svelte';
-  import ContentCardSkeleton from '$lib/components/shared/ContentCardSkeleton.svelte';
-  import LearningContentFilters from '$lib/components/educational/LearningContentFilters.svelte';
-  import EventDateRangeFilter from '$lib/components/calendar/EventDateRangeFilter.svelte';
-  import { SearchIcon } from '$lib/components/icons';
+  import DiscoverHero from '$lib/components/discover/DiscoverHero.svelte';
+  import DiscoverTabs from '$lib/components/discover/DiscoverTabs.svelte';
+  import DiscoverSearchBar from '$lib/components/discover/DiscoverSearchBar.svelte';
+  import DiscoverFilterBar from '$lib/components/discover/DiscoverFilterBar.svelte';
+  import DiscoverFeedGrid from '$lib/components/discover/DiscoverFeedGrid.svelte';
+  import CommunitiesTab from '$lib/components/discover/CommunitiesTab.svelte';
   import { timer, debounceTime } from 'rxjs';
   import { takeUntil } from 'rxjs/operators';
   import { page } from '$app/stores';
   import { goto } from '$app/navigation';
   import { resolve } from '$app/paths';
-  import { getLocale } from '$lib/paraglide/runtime.js';
   import { updateQueryParams, parseFeedFilters } from '$lib/helpers/urlParams.js';
   import { encodeEventToNaddr } from '$lib/helpers/nostrUtils.js';
   import { useJoinedCommunitiesList } from '$lib/stores/joined-communities-list.svelte.js';
@@ -78,13 +57,18 @@
   import { manager } from '$lib/stores/accounts.svelte';
   import { modalStore } from '$lib/stores/modal.svelte.js';
   import {
-    mapCommunityItemsToRawItems,
     getCommunityFilterOptions,
     hasDisplayableCommunityProfile
   } from '$lib/helpers/communityContent.js';
-  import { matchesTextSearch } from '$lib/helpers/contentSearch.js';
-  import AuthorSearchDropdown from '$lib/components/discover/AuthorSearchDropdown.svelte';
-  import ProfileAvatar from '$lib/components/shared/ProfileAvatar.svelte';
+  import {
+    buildRawItems,
+    buildCommunityRawItems,
+    filterByRelay,
+    filterByAuthors,
+    filterBySearch,
+    resolveSortBy,
+    sortItems
+  } from '$lib/helpers/discover-pipeline.js';
   import * as m from '$lib/paraglide/messages';
   import {
     DISCOVER_CONTENT_TYPES,
@@ -94,6 +78,7 @@
     isDiscoverTypeEnabled
   } from '$lib/helpers/discover-content-types.js';
 
+  // ─── Deployment config ────────────────────────────────────────────────
   // Content types this deployment offers (DISCOVER_CONTENT_TYPES → runtimeConfig).
   // Read once at mount: the root layout resolves /api/config before any page
   // renders, and a deployment setting never changes at runtime.
@@ -104,160 +89,36 @@
   const hasAnyFeedType = DISCOVER_FEED_TYPES.some((t) =>
     isDiscoverTypeEnabled(t, enabledContentTypes)
   );
-  /** Static label table — never index the Paraglide namespace by a runtime key. */
-  const TAB_LABELS = {
-    all: m.discover_tab_all,
-    events: m.discover_tab_events,
-    learning: m.discover_tab_learning,
-    articles: m.discover_tab_articles,
-    boards: m.discover_tab_boards,
-    communities: m.discover_tab_communities,
-    people: m.discover_tab_people
-  };
   /** @param {string} type */
   function isEnabled(type) {
     return isDiscoverTypeEnabled(type, enabledContentTypes);
   }
 
-  // State management
-  // Use $state.raw() for event data arrays to avoid deep proxying.
-  // Svelte 5's $state() proxy breaks Symbol-based properties (e.g. getSeenRelays)
-  // because Set.prototype.has() fails on proxied Sets.
-  // These arrays are always replaced entirely, so $state.raw() preserves reactivity.
-  // Use $state.raw() to preserve Symbol-based relay provenance (getSeenRelays)
-  let articles = $state.raw(/** @type {any[]} */ ([]));
-  let ambResources = $state.raw(/** @type {any[]} */ ([]));
-  let calendarEvents = $state.raw(/** @type {any[]} */ ([]));
-  let kanbanBoards = $state.raw(/** @type {any[]} */ ([]));
-  // Items sourced from CommunityActivityModel when a community filter is active.
-  // Bypasses curated/WoT author filtering (h-tag membership IS the curation), and
-  // already includes NIP-18 reposts + legacy 30222 references resolved by the model.
-  let communityScopedItems = $state.raw(/** @type {any[]} */ ([]));
-
-  // Trigger counter to force profile hook re-evaluation when $state.raw() arrays are updated
-  let profileTrigger = $state(0);
-
-  // Profile loading using useProfileMap hook
-  // The getter reads profileTrigger to re-run when data changes (since $state.raw doesn't track)
-  const getAuthorProfiles = useProfileMap(() => {
-    const _ = profileTrigger; // Establish dependency on trigger
-    const __ = getCuratedCacheVersion(); // React to async curated/WoT set resolution
-    return [
-      ...articles.map((a) => a.pubkey),
-      ...ambResources.map((r) => r.pubkey),
-      ...calendarEvents.map((e) => e.pubkey),
-      ...kanbanBoards.map((b) => b.pubkey),
-      ...authorFilter,
-      ...(getCuratedAuthors('calendar') || []),
-      ...(getCuratedAuthors('communikey') || []),
-      ...(getCuratedAuthors('educational') || []),
-      ...(getCuratedAuthors('longform') || []),
-      ...(getCuratedAuthors('kanban') || [])
-    ].filter(Boolean);
-  });
-  let authorProfiles = $derived(getAuthorProfiles());
-
-  // Deletion watcher for the CONTENT authors only (not the curated/WoT sets —
-  // those can be thousands of pubkeys with nothing rendered). Without this,
-  // Discover never loads other authors' kind-5s and deleted content keeps
-  // rendering from a stale local copy (CLAUDE.md convention).
-  useAuthorDeletions(() => {
-    const _ = profileTrigger; // re-run when the $state.raw arrays are replaced
-    return [
-      ...articles.map((a) => a.pubkey),
-      ...ambResources.map((r) => r.pubkey),
-      ...calendarEvents.map((e) => e.pubkey),
-      ...kanbanBoards.map((b) => b.pubkey)
-    ].filter(Boolean);
-  });
-
-  const getCommunityProfiles = useProfileMap(() => allCommunities.map((c) => c.pubkey));
-  let communityProfiles = $derived(getCommunityProfiles());
-  // Cleared by the first feed loader/model emission; with no feed type enabled
-  // nothing would ever clear it, so start false.
-  let isLoading = $state(hasAnyFeedType);
   const DISPLAY_BATCH = 20;
-  let displayLimit = $state(DISPLAY_BATCH);
-  let hasMoreCalendarEvents = $state(true);
+  const CALENDAR_BATCH_SIZE = 20; // Events per calendar pagination batch
+  const BATCH_TIMEOUT = 4_000; // Safety timeout per calendar batch (timedPool + buffer)
+  const DEFAULT_RANGE_SECONDS = 90 * 24 * 60 * 60; // Events tab default: now to +3 months
 
-  // Articles, learning and boards page through createTimelineFeed (the
-  // applesauce v7 window loader): per-relay coverage, prefetch and exhaustion
-  // live in the SDK; the page only mirrors each feed's status. Calendar keeps
-  // its own date-range loaders — it pages by event start, not created_at.
-  /** @type {{ type: string, feed: import('$lib/loaders/timeline-feed.js').TimelineFeed }[]} */
-  const FEEDS = /** @type {any[]} */ ([
-    isEnabled('articles') && { type: 'articles', feed: createArticleFeed(DISPLAY_BATCH) },
-    isEnabled('learning') && { type: 'learning', feed: createAmbFeed(DISPLAY_BATCH) },
-    isEnabled('boards') && { type: 'boards', feed: createKanbanFeed(DISPLAY_BATCH) }
-  ]).filter(Boolean);
-  /** Latest status per feed type. $state.raw: replaced wholesale, never mutated. */
-  let feedStatus = $state.raw(
-    /** @type {Record<string, import('$lib/loaders/timeline-feed.js').TimelineFeedStatus>} */ ({})
-  );
-
-  // Initialize from URL params (must be before state that depends on it)
+  // ─── URL + tab/filter state ───────────────────────────────────────────
   const initialFilters = parseFeedFilters($page.url.searchParams);
 
+  // Unknown or disabled types fall back to the default tab
+  let contentType = $state(resolveDiscoverType(initialFilters.type, discoverTabs));
   let sortBy = $state('newest');
   let searchQuery = $state(initialFilters.search || '');
-
-  // Active search query (set when user presses Enter or clicks search button)
+  // Active search query (set on Enter / search button / debounce)
   let activeSearchQuery = $state(initialFilters.search || '');
-
-  // Lazy rendering - track which items are visible
-  let visibleItemIds = $state(/** @type {Set<string>} */ (new Set()));
-  /** @type {IntersectionObserver | undefined} */
-  let cardObserver;
-
-  // Learning content filter state (assigned via handleLearningFilterChange but not read directly)
-  /** @type {import('$lib/helpers/educational/searchQueryBuilder.js').SearchFilters} */
-  let _learningFilters = $state(createEmptyFilters());
-  let isLearningSearchActive = $state(false);
-  // True while a NIP-50 search request is in flight — gates the empty state
-  // so "no results" doesn't flash before the relay answers.
-  let isSearching = $state(false);
-  /** @type {ReturnType<typeof setTimeout> | null} */
-  let searchingSafetyTimer = null;
-  let learningSearchResults = $state.raw(/** @type {import('nostr-tools').Event[]} */ ([]));
-  // Relevance order of the current search: `kind:pubkey:d` → merged position.
-  // Each relay ranks its own response; scores are not comparable across
-  // relays, so results are merged by per-relay rank (see searchRank.js).
-  // $state.raw because Map methods break through Svelte's deep proxy.
-  /** @type {Map<string, number>} */
-  let learningSearchRank = $state.raw(new Map());
-  /** @type {Map<string, import('nostr-tools').Event[]>} relay → relevance-ordered results */
-  let learningSearchByRelay = new Map(); // eslint-disable-line svelte/prefer-svelte-reactivity -- plain accumulator; learningSearchRank is the reactive projection
-  /** @type {import('rxjs').Subscription | null} */
-  let currentSearchSubscription = null;
-
-  // Get current locale (kept for future i18n features)
-  const _locale = $derived(getLocale());
-
-  // Search input reference for auto-focus
-  let searchInputRef = $state(/** @type {HTMLInputElement | null} */ (null));
-
   let communityFilter = $state(/** @type {string | null} */ (initialFilters.community));
   let relayFilter = $state(/** @type {string | null} */ (null));
-
-  // Events date range state (default: now to +3 months)
-  const DEFAULT_RANGE_SECONDS = 90 * 24 * 60 * 60; // 3 months
+  /** @type {string[]} multi-author filter (hex pubkeys) */
+  let authorFilter = $state(initialFilters.author);
   let eventsDateRangeStart = $state(initialFilters.eventStart ?? Math.floor(Date.now() / 1000));
   let eventsDateRangeEnd = $state(
     initialFilters.eventEnd ?? Math.floor(Date.now() / 1000) + DEFAULT_RANGE_SECONDS
   );
-  /** @type {import('rxjs').Subscription | undefined} */
-  let dateRangeLoaderSub;
-
-  // Initialize contentType from URL; unknown or disabled types fall back to the default tab
-  let contentType = $state(resolveDiscoverType(initialFilters.type, discoverTabs));
-
-  /** Raw feed item `type` → discover content type (for the "all" tab gate). */
-  const RAW_ITEM_CONTENT_TYPE = /** @type {Record<string, string>} */ ({
-    event: 'events',
-    amb: 'learning',
-    article: 'articles',
-    board: 'boards'
-  });
+  // Learning SKOS filters (kept to rebuild the search when the text changes)
+  /** @type {import('$lib/helpers/educational/searchQueryBuilder.js').SearchFilters} */
+  let learningFilters = $state(createEmptyFilters());
 
   /**
    * Whether items of `type` belong on the current tab: the tab itself, or the
@@ -267,14 +128,6 @@
   function showsType(type) {
     return contentType === type || (contentType === 'all' && isEnabled(type));
   }
-
-  // Author filter state (multi-author: array of hex pubkeys)
-  /** @type {string[]} */
-  let authorFilter = $state(initialFilters.author);
-  let showAuthorDropdown = $state(false);
-
-  /** @type {import('$lib/components/discover/AuthorSearchDropdown.svelte').default | undefined} */
-  let authorDropdownRef;
 
   // Relay filter: map current tab to relay category
   const tabRelayCategory = $derived(
@@ -292,7 +145,6 @@
     tabRelayCategory ? getAppRelaysForCategory(tabRelayCategory) : []
   );
 
-  // Active user state
   let activeUser = $state(manager.active);
   $effect(() => {
     const subscription = manager.active$.subscribe((user) => {
@@ -301,51 +153,24 @@
     return () => subscription.unsubscribe();
   });
 
-  // IntersectionObserver for lazy rendering cards.
-  // Rendering is STICKY: once a card rendered it stays rendered. Un-rendering
-  // on exit changes card heights, which rebalances the masonry columns and
-  // shifts cards across the observer boundary — a visible flicker loop.
-  $effect(() => {
-    cardObserver = new IntersectionObserver(
-      (entries) => {
-        let changed = false;
-        for (const entry of entries) {
-          const id = entry.target.getAttribute('data-item-id');
-          if (!id) continue;
+  // ─── Sources: model mirrors ───────────────────────────────────────────
+  // $state.raw: Nostr events carry Symbol-based relay provenance that a deep
+  // proxy breaks; the arrays are always replaced wholesale.
+  let articles = $state.raw(/** @type {any[]} */ ([]));
+  let ambResources = $state.raw(/** @type {any[]} */ ([]));
+  let calendarEvents = $state.raw(/** @type {any[]} */ ([]));
+  let kanbanBoards = $state.raw(/** @type {any[]} */ ([]));
+  // Trigger counter so the profile/deletion getters re-run when the raw arrays are replaced
+  let profileTrigger = $state(0);
 
-          if (entry.isIntersecting && !visibleItemIds.has(id)) {
-            visibleItemIds.add(id);
-            changed = true;
-            // Rendered for good — no need to keep tracking this node.
-            cardObserver?.unobserve(entry.target);
-          }
-        }
-        if (changed) {
-          visibleItemIds = new SvelteSet(visibleItemIds);
-        }
-      },
-      { rootMargin: '800px' } // Pre-render items 800px before viewport for smooth scrolling
-    );
+  // Cleared by the first feed settle / model emission / calendar completion;
+  // with no feed type enabled nothing would ever clear it, so start false.
+  let isLoading = $state(hasAnyFeedType);
+  let displayLimit = $state(DISPLAY_BATCH);
+  let hasMoreCalendarEvents = $state(true);
+  let calendarLoadingMore = $state(false);
 
-    return () => cardObserver?.disconnect();
-  });
-
-  /**
-   * Svelte action for observing card visibility
-   * @param {HTMLElement} node
-   * @param {string} itemId
-   */
-  function observeCard(node, itemId) {
-    node.setAttribute('data-item-id', itemId);
-    cardObserver?.observe(node);
-    return {
-      destroy: () => cardObserver?.unobserve(node),
-      update: (/** @type {string} */ newId) => {
-        node.setAttribute('data-item-id', newId);
-      }
-    };
-  }
-
+  // ─── Hooks ────────────────────────────────────────────────────────────
   // Community hooks
   const getJoinedCommunities = useJoinedCommunitiesList();
   const getAllCommunities = useAllCommunities();
@@ -353,36 +178,92 @@
   const joinedCommunities = $derived(getJoinedCommunities());
   const allCommunities = $derived(getAllCommunities());
   const communitiesLoaded = $derived(getCommunitiesLoaded());
-
-  // Communities state for the Communities tab - derived from allCommunities
   const communities = $derived(allCommunities || []);
-  let hasMoreCommunities = $state(true);
-  let displayedCommunitiesCount = $state(20);
 
-  // Get joined community pubkeys for filtering (already strings from follow set)
-  const joinedCommunityPubkeys = $derived(joinedCommunities);
+  // Community-scoped feed: with a community filter, items come from the
+  // communities' activity models instead of the global curated timelines.
+  const communityScoped = useCommunityScopedItems(() =>
+    !communityFilter ? [] : communityFilter === 'joined' ? joinedCommunities : [communityFilter]
+  );
 
-  // Get community options for dropdown
+  // NIP-50 learning search. A search is a relevance query: default to the
+  // relays' ranking on the learning tab; leaving search mode leaves it too.
+  const learningSearch = useLearningSearch({
+    onActivate: () => {
+      if (contentType === 'learning') sortBy = 'relevance';
+    },
+    onDeactivate: () => {
+      if (sortBy === 'relevance') sortBy = 'newest';
+    }
+  });
+
+  // Articles, learning and boards page through createTimelineFeed (the
+  // applesauce v7 window loader). Calendar keeps its own date-range loaders —
+  // it pages by event start, not created_at.
+  const discoverFeeds = useDiscoverFeeds({
+    feeds: /** @type {any[]} */ ([
+      isEnabled('articles') && { type: 'articles', feed: createArticleFeed(DISPLAY_BATCH) },
+      isEnabled('learning') && { type: 'learning', feed: createAmbFeed(DISPLAY_BATCH) },
+      isEnabled('boards') && { type: 'boards', feed: createKanbanFeed(DISPLAY_BATCH) }
+    ]).filter(Boolean),
+    isShown: showsType,
+    // A NIP-50 learning search is one ranked batch; the feed does not page it
+    isPaged: (type) => !(type === 'learning' && learningSearch.isActive),
+    onReveal: () => revealMore()
+  });
+  $effect(() => {
+    if (discoverFeeds.settled) isLoading = false;
+  });
+
+  // Profiles of everything rendered or selectable, plus the curated sets so
+  // the author autocomplete can offer them.
+  const getAuthorProfiles = useProfileMap(() => {
+    const _ = profileTrigger;
+    const __ = getCuratedCacheVersion(); // React to async curated/WoT set resolution
+    return [
+      ...articles.map((a) => a.pubkey),
+      ...ambResources.map((r) => r.pubkey),
+      ...calendarEvents.map((e) => e.pubkey),
+      ...kanbanBoards.map((b) => b.pubkey),
+      ...communityScoped.items.map((i) => i.pubkey),
+      ...authorFilter,
+      ...(getCuratedAuthors('calendar') || []),
+      ...(getCuratedAuthors('communikey') || []),
+      ...(getCuratedAuthors('educational') || []),
+      ...(getCuratedAuthors('longform') || []),
+      ...(getCuratedAuthors('kanban') || [])
+    ].filter(Boolean);
+  });
+  const authorProfiles = $derived(getAuthorProfiles());
+
+  // Deletion watcher for the CONTENT authors only (not the curated/WoT sets —
+  // those can be thousands of pubkeys with nothing rendered).
+  useAuthorDeletions(() => {
+    const _ = profileTrigger;
+    return [
+      ...articles.map((a) => a.pubkey),
+      ...ambResources.map((r) => r.pubkey),
+      ...calendarEvents.map((e) => e.pubkey),
+      ...kanbanBoards.map((b) => b.pubkey),
+      ...communityScoped.items.map((i) => i.pubkey)
+    ].filter(Boolean);
+  });
+
+  const getCommunityProfiles = useProfileMap(() => allCommunities.map((c) => c.pubkey));
+  const communityProfiles = $derived(getCommunityProfiles());
   const communityOptions = $derived(
     getCommunityFilterOptions(allCommunities, joinedCommunities, communityProfiles)
   );
 
-  // Watch for URL changes and sync to state
+  // ─── URL sync ─────────────────────────────────────────────────────────
   $effect(() => {
     const urlCommunity = $page.url.searchParams.get('community') || null;
-    if (urlCommunity !== communityFilter) {
-      communityFilter = urlCommunity;
-    }
+    if (urlCommunity !== communityFilter) communityFilter = urlCommunity;
 
-    // Sync content type from URL (disabled/unknown types resolve to the default tab)
     const urlType = resolveDiscoverType($page.url.searchParams.get('type'), discoverTabs);
-    if (urlType !== contentType) {
-      contentType = urlType;
-    }
+    if (urlType !== contentType) contentType = urlType;
 
-    // Sync author filter from URL (comma-separated pubkeys)
-    const urlAuthorParam = $page.url.searchParams.get('author') || '';
-    const urlAuthors = urlAuthorParam
+    const urlAuthors = ($page.url.searchParams.get('author') || '')
       .split(',')
       .map((s) => s.trim())
       .filter(Boolean);
@@ -393,9 +274,8 @@
       authorFilter = urlAuthors;
     }
 
-    // Sync search from URL (handles back-navigation)
-    // Use untrack for activeSearchQuery so this effect only re-runs on $page changes,
-    // not when activeSearchQuery is set programmatically (which would race with goto())
+    // Back-navigation: untracked so this only re-runs on $page changes, not
+    // when activeSearchQuery is set programmatically (would race with goto())
     const urlSearch = $page.url.searchParams.get('search') || '';
     if (urlSearch !== untrack(() => activeSearchQuery)) {
       searchQuery = urlSearch;
@@ -403,9 +283,7 @@
     }
   });
 
-  // Write activeSearchQuery to URL (reactive sync — replaces manual updateQueryParams calls)
-  // Use untrack for $page so this effect only triggers on activeSearchQuery changes,
-  // not on every URL change (which would loop with the read effect above)
+  // Write activeSearchQuery to the URL ($page untracked: no loop with the read above)
   $effect(() => {
     const search = activeSearchQuery;
     const urlSearch = untrack(() => $page.url.searchParams.get('search')) || '';
@@ -417,187 +295,135 @@
     }
   });
 
-  /**
-   * Handle content type tab change
-   * @param {string} newType
-   */
+  // ─── Handlers ─────────────────────────────────────────────────────────
+  /** @param {string} newType */
   function handleContentTypeChange(newType) {
     contentType = newType;
     relayFilter = null;
     displayLimit = DISPLAY_BATCH;
-
-    // Clear search and author filter when switching tabs
     searchQuery = '';
     activeSearchQuery = '';
-    showAuthorDropdown = false;
     if (authorFilter.length > 0) {
       authorFilter = [];
       updateQueryParams($page.url.searchParams, { author: null });
     }
-
-    // Update URL - use null for the default tab to keep URL clean
+    // null for the default tab keeps the URL clean
     updateQueryParams($page.url.searchParams, {
       type: newType === defaultContentType ? null : newType
     });
-
-    // Reset learning filters when switching away from learning tab
     if (newType !== 'learning') {
-      _learningFilters = createEmptyFilters();
-      isLearningSearchActive = false;
-      learningSearchResults = [];
-      resetLearningSearchRank();
-      if (currentSearchSubscription) {
-        currentSearchSubscription.unsubscribe();
-        currentSearchSubscription = null;
-      }
+      learningFilters = createEmptyFilters();
+      learningSearch.stop();
     }
   }
 
-  /**
-   * Handle events date range filter changes
-   * @param {{ start: number, end: number }} range
-   */
+  /** @param {{ start: number, end: number }} range */
   function handleEventsDateRangeChange(range) {
     eventsDateRangeStart = range.start;
     eventsDateRangeEnd = range.end;
-    hasMoreCalendarEvents = true; // Reset "has more" state
+    hasMoreCalendarEvents = true;
     displayLimit = DISPLAY_BATCH;
-
-    // Update URL params
     updateQueryParams($page.url.searchParams, {
       eventStart: String(range.start),
       eventEnd: String(range.end)
     });
-
-    // Cancel previous subscription and reload with new range
-    // Use full NIP-52 date filter parameters
+    // Reload with the new range (full NIP-52 date filter parameters)
     dateRangeLoaderSub?.unsubscribe();
-    const loader = createDateRangeCalendarLoader({
+    dateRangeLoaderSub = createDateRangeCalendarLoader({
       rangeStart: range.start,
       rangeEnd: range.end
-    });
-    dateRangeLoaderSub = loader().subscribe({
+    })().subscribe({
       error: (/** @type {any} */ err) => console.error('🔍 Discover: Date range loader error:', err)
     });
   }
 
-  /** Drop the relevance order of the previous search and leave relevance sort. */
-  function resetLearningSearchRank() {
-    learningSearchByRelay = new Map();
-    learningSearchRank = new Map();
-    if (sortBy === 'relevance') sortBy = 'newest';
-  }
-
-  /**
-   * Handle learning content filter changes
-   * @param {import('$lib/helpers/educational/searchQueryBuilder.js').SearchFilters} filters
-   */
+  /** @param {import('$lib/helpers/educational/searchQueryBuilder.js').SearchFilters} filters */
   function handleLearningFilterChange(filters) {
-    _learningFilters = filters;
-
-    // Cancel any pending search
-    if (currentSearchSubscription) {
-      currentSearchSubscription.unsubscribe();
-      currentSearchSubscription = null;
-    }
-
-    // Check if we should use NIP-50 search
-    if (hasActiveFilters(filters)) {
-      isLearningSearchActive = true;
-      learningSearchResults = []; // Clear previous results
-      learningSearchByRelay = new Map();
-      learningSearchRank = new Map();
-      // A search is a relevance query: default to the relays' ranking. The
-      // user can still switch back to a date order via the sort select.
-      if (contentType === 'learning') sortBy = 'relevance';
-
-      // Show the spinner until the relay answers (or the safety timer fires —
-      // the loader's own request timeout is 5s, so this is a pure backstop).
-      isSearching = true;
-      if (searchingSafetyTimer) clearTimeout(searchingSafetyTimer);
-      searchingSafetyTimer = setTimeout(() => {
-        isSearching = false;
-      }, 8000);
-
-      // Start NIP-50 search — one ranked stream per relay. Events are already
-      // added to eventStore by the loader; here we keep the per-relay order so
-      // the merged relevance index can be rebuilt as results arrive.
-      const seenIds = new Set(); // eslint-disable-line svelte/prefer-svelte-reactivity -- local accumulator, not reactive state
-      currentSearchSubscription = ambRankedSearchLoader(filters, 100).subscribe({
-        next: ({ event, relay }) => {
-          const list = learningSearchByRelay.get(relay) ?? [];
-          list.push(event);
-          learningSearchByRelay.set(relay, list);
-          learningSearchRank = buildRankIndex([...learningSearchByRelay.values()]);
-          if (!seenIds.has(event.id)) {
-            seenIds.add(event.id);
-            learningSearchResults = [...learningSearchResults, event];
-          }
-        },
-        error: (error) => {
-          console.error('🔍 Learning search error:', error);
-          isLearningSearchActive = false;
-          isSearching = false;
-          resetLearningSearchRank();
-        },
-        complete: () => {
-          isSearching = false;
-          if (searchingSafetyTimer) clearTimeout(searchingSafetyTimer);
-        }
-      });
-    } else {
-      // No active filters, use normal timeline loading
-      isLearningSearchActive = false;
-      isSearching = false;
-      learningSearchResults = [];
-      resetLearningSearchRank();
-    }
+    learningFilters = filters;
+    learningSearch.apply(filters);
   }
 
-  // Calendar pagination (the events tab pages by `start` through its own loaders)
-  const CALENDAR_BATCH_SIZE = 20; // Events per pagination batch
-  const BATCH_TIMEOUT = 4_000; // Safety timeout per calendar batch (timedPool + buffer)
+  function executeSearch() {
+    activeSearchQuery = searchQuery.trim();
+  }
 
-  // Start the feeds. Events flow into the EventStore (the model subscriptions
-  // below render them); status drives the skeleton, the bottom spinner and
-  // "no more". Store first: the skeleton only shows while nothing is rendered.
+  function clearSearch() {
+    activeSearchQuery = '';
+  }
+
+  /** Add an author to the multi-author filter. @param {any} author */
+  function selectAuthor(author) {
+    if (authorFilter.includes(author.pubkey)) return;
+    authorFilter = [...authorFilter, author.pubkey];
+    activeSearchQuery = '';
+    displayLimit = DISPLAY_BATCH;
+    updateQueryParams($page.url.searchParams, { author: authorFilter.join(',') });
+  }
+
+  /** Remove one author, or all without a pubkey. @param {string} [pubkey] */
+  function clearAuthorFilter(pubkey) {
+    authorFilter = pubkey ? authorFilter.filter((pk) => pk !== pubkey) : [];
+    displayLimit = DISPLAY_BATCH;
+    updateQueryParams($page.url.searchParams, {
+      author: authorFilter.length > 0 ? authorFilter.join(',') : null
+    });
+  }
+
+  /** @param {string | null} newValue */
+  function handleCommunityFilterChange(newValue) {
+    communityFilter = newValue;
+    displayLimit = DISPLAY_BATCH;
+    updateQueryParams($page.url.searchParams, { community: newValue });
+  }
+
+  /** @param {any} event */
+  function handleEventClick(event) {
+    const originalEvent = event.originalEvent || event;
+    const naddr = encodeEventToNaddr(originalEvent);
+    if (naddr) goto(resolve(`/calendar/event/${naddr}`));
+  }
+
+  // Auto-search: debounce searchQuery → activeSearchQuery
+  /** @type {ReturnType<typeof setTimeout> | undefined} */
+  let searchDebounceTimer;
   $effect(() => {
-    const subs = FEEDS.flatMap(({ type, feed }) => [
-      feed.events$.subscribe({
-        error: (/** @type {any} */ error) =>
-          console.error(`🔍 Discover: ${type} feed error:`, error)
-      }),
-      feed.status$.subscribe((status) => {
-        // Untracked: status$ replays synchronously inside this effect, and the
-        // merge reads the state it writes.
-        untrack(() => {
-          const wasPending = feedStatus[type]?.pending ?? false;
-          feedStatus = { ...feedStatus, [type]: status };
-          if (FEEDS.every((f) => feedStatus[f.type]?.settled)) isLoading = false;
-          // A page this feed had to wait for has arrived: reveal it. Keyed on
-          // the feed's own transition, so switching tabs while another feed
-          // is pending reveals nothing here.
-          if (wasPending && !status.pending && showsType(type)) revealMore();
-        });
-      })
-    ]);
-    return () => subs.forEach((s) => s.unsubscribe());
+    const text = searchQuery;
+    if (searchDebounceTimer) clearTimeout(searchDebounceTimer);
+    searchDebounceTimer = setTimeout(() => {
+      activeSearchQuery = text.trim();
+    }, 300);
+    return () => {
+      if (searchDebounceTimer) clearTimeout(searchDebounceTimer);
+    };
   });
 
-  // Pre-warm relay capabilities cache for calendar relays
-  // This ensures pagination doesn't wait 2-3s for NIP-52 detection on each scroll
+  // The learning search follows the active text (plus the selected SKOS filters)
+  let previousActiveSearchQuery = '';
+  $effect(() => {
+    if (showsType('learning') && activeSearchQuery !== previousActiveSearchQuery) {
+      previousActiveSearchQuery = activeSearchQuery;
+      handleLearningFilterChange({
+        searchText: activeSearchQuery,
+        learningResourceType: learningFilters.learningResourceType || [],
+        about: learningFilters.about || [],
+        audience: learningFilters.audience || []
+      });
+    }
+  });
+
+  // ─── Calendar (events tab): date-range loaders, not the window loader ──
+  // Pre-warm relay capabilities so pagination doesn't wait on NIP-52 detection
   if (isEnabled('events')) preWarmRelayCapabilitiesCache(getCalendarRelays());
 
-  // Initial calendar load - load events within the default date range
-  // Uses createDateRangeCalendarLoader with full NIP-52 filter support
+  /** @type {import('rxjs').Subscription | undefined} */
+  let dateRangeLoaderSub;
   // svelte-ignore state_referenced_locally
-  const initialCalendarLoader = createDateRangeCalendarLoader({
-    rangeStart: eventsDateRangeStart,
-    rangeEnd: eventsDateRangeEnd
-  });
   const initialCalendarSub = !isEnabled('events')
     ? undefined
-    : initialCalendarLoader().subscribe({
+    : createDateRangeCalendarLoader({
+        rangeStart: eventsDateRangeStart,
+        rangeEnd: eventsDateRangeEnd
+      })().subscribe({
         complete: () => {
           isLoading = false;
         },
@@ -607,21 +433,11 @@
         }
       });
 
-  // Feeds re-read their relays and curated filter whenever user relay overrides
-  // (kind 30002) or the curated/WoT author set arrive after mount. The SDK
-  // reconciles per relay: a new relay loads the current window, a grown author
-  // list requests only the added authors.
-  $effect(() => {
-    const _relays = $relayUpdateSignal;
-    const _curated = getCuratedCacheVersion();
-    for (const { feed } of FEEDS) feed.sync();
-  });
-
-  // Calendar keeps the one-shot supplemental pattern: override relays and
-  // curated/WoT authors arriving late get the query the initial load ran.
+  // Override relays and curated/WoT authors arriving late get the query the
+  // initial load ran (the feeds handle this through sync(); the calendar is
+  // one-shot).
   const initialCalendarRelays = new SvelteSet(getCalendarRelays());
   $effect(() => {
-    const _relays = $relayUpdateSignal;
     if (!isEnabled('events')) return;
     const newCalendar = getCalendarRelays().filter((r) => !initialCalendarRelays.has(r));
     if (newCalendar.length === 0) return;
@@ -642,7 +458,6 @@
     const newAuthors = current.filter((a) => !baselineCalendarAuthors.has(a));
     if (newAuthors.length === 0) return;
     newAuthors.forEach((a) => baselineCalendarAuthors.add(a));
-    // One-shot; baselineCalendarAuthors keeps it from repeating for the same authors.
     fetchEvents(getCalendarRelays(), {
       kinds: [31922, 31923],
       authors: newAuthors,
@@ -650,46 +465,40 @@
     }).subscribe();
   });
 
-  // Relay-side author filtering: when authors are selected, fire targeted
-  // queries with authors:[pubkeys] to fetch their content from relays.
-  // Events land in EventStore and flow through existing model subscriptions.
+  // Relay-side author filtering: selected authors get targeted queries so
+  // their content is fetched even when it is outside the current windows.
   $effect(() => {
     if (authorFilter.length === 0) return;
-
     const authors = authorFilter;
     /** @type {import('rxjs').Subscription[]} */
     const subs = [];
-
     if (showsType('articles')) {
       subs.push(
         fetchEvents(getArticleRelays(), { kinds: [30023], authors, limit: 100 }).subscribe()
       );
     }
-
     if (showsType('learning')) {
       subs.push(
         fetchEvents(getEducationalRelays(), { kinds: [30142], authors, limit: 100 }).subscribe()
       );
     }
-
     if (showsType('events')) {
-      const loader = createDateRangeCalendarLoader(
-        { rangeStart: eventsDateRangeStart, rangeEnd: eventsDateRangeEnd },
-        { authors }
+      subs.push(
+        createDateRangeCalendarLoader(
+          { rangeStart: eventsDateRangeStart, rangeEnd: eventsDateRangeEnd },
+          { authors }
+        )().subscribe()
       );
-      subs.push(loader().subscribe());
     }
-
     if (showsType('boards')) {
       subs.push(
         fetchEvents(getKanbanRelays(), { kinds: [30301], authors, limit: 100 }).subscribe()
       );
     }
-
     return () => subs.forEach((s) => s.unsubscribe());
   });
 
-  // Subscribe to articles (debounced via RxJS)
+  // ─── Model subscriptions (store first: render whatever the store holds) ─
   const articleModelSub = !isEnabled('articles')
     ? undefined
     : eventStore
@@ -698,27 +507,24 @@
         .subscribe((timeline) => {
           articles = timeline || [];
           isLoading = false;
-          profileTrigger++; // Trigger profile loading for new articles
+          profileTrigger++;
         });
 
-  // Subscribe to kanban boards (debounced via RxJS)
-  // Filter out boards with pub=private (only show published/unset)
+  // Boards with pub=private are not shown
   const kanbanModelSub = !isEnabled('boards')
     ? undefined
     : eventStore
         .model(TimelineModel, { kinds: [30301] })
         .pipe(debounceTime(100))
         .subscribe((timeline) => {
-          kanbanBoards =
-            (timeline || []).filter((/** @type {any} */ b) => {
-              const pub = getTagValue(b, 'pub');
-              return !pub || pub !== 'private';
-            }) || [];
+          kanbanBoards = (timeline || []).filter((/** @type {any} */ b) => {
+            const pub = getTagValue(b, 'pub');
+            return !pub || pub !== 'private';
+          });
           isLoading = false;
-          profileTrigger++; // Trigger profile loading for new boards
+          profileTrigger++;
         });
 
-  // Subscribe to AMB resources (debounced via RxJS)
   const ambModelSub = !isEnabled('learning')
     ? undefined
     : /** @type {import('rxjs').Observable<any[]>} */ (eventStore.model(AMBResourceModel, []))
@@ -726,298 +532,44 @@
         .subscribe((resources) => {
           ambResources = resources || [];
           isLoading = false;
-          profileTrigger++; // Trigger profile loading for new resources
+          profileTrigger++;
         });
 
-  // Subscribe to calendar events with date range filtering (reactive)
-  // Re-subscribes when date range changes to filter events appropriately
-  // Note: Plain let (not $state) to avoid infinite loops in $effect
-  /** @type {import('rxjs').Subscription | undefined} */
-  let calendarModelSub;
-
+  // Calendar events follow the date range (re-subscribed when it changes)
   $effect(() => {
     if (!isEnabled('events')) return;
-    calendarModelSub?.unsubscribe();
-    calendarModelSub = /** @type {import('rxjs').Observable<any[]>} */ (
+    const sub = /** @type {import('rxjs').Observable<any[]>} */ (
       eventStore.model(CalendarEventRangeModel, eventsDateRangeStart, eventsDateRangeEnd)
     )
       .pipe(debounceTime(100))
       .subscribe((events) => {
         calendarEvents = events || [];
         isLoading = false;
-        profileTrigger++; // Trigger profile loading for new events
+        profileTrigger++;
       });
-
-    return () => calendarModelSub?.unsubscribe();
+    return () => sub.unsubscribe();
   });
 
-  // Community-scoped feed: when communityFilter is set, source items directly
-  // from CommunityActivityModel (per-community) instead of the global
-  // curated-author timelines. h-tag membership IS the curation, so author
-  // filtering is intentionally not applied — same pipeline community pages
-  // already use, which is why this fixes the "empty community feed" bug.
   $effect(() => {
-    if (!communityFilter) {
-      communityScopedItems = [];
-      return;
-    }
-
-    /** @type {string[]} */
-    const targets =
-      communityFilter === 'joined'
-        ? /** @type {string[]} */ (joinedCommunityPubkeys)
-        : [communityFilter];
-
-    if (targets.length === 0) {
-      communityScopedItems = [];
-      return;
-    }
-
-    /** @type {Array<() => void>} */
-    const cleanups = [];
-    /** @type {import('rxjs').Subscription[]} */
-    const modelSubs = [];
-    /** @type {Map<string, any[]>} */
-    // eslint-disable-next-line svelte/prefer-svelte-reactivity -- local accumulator, not reactive state
-    const perCommunity = new Map();
-    // Per-community section access (same wiring as DashboardCommunityFeed):
-    // a moderated community's `access` rules are write gating enforced by the
-    // reader, so a share by a non-member must not surface here either. Until
-    // the 10222/roster arrive the feed renders unfiltered rather than empty.
-    /** @type {Map<string, {communityEvent: any, access: {isLoading: boolean, getAllowedAuthors: (name: string) => string[] | null} | null}>} */
-    // eslint-disable-next-line svelte/prefer-svelte-reactivity -- local accumulator, not reactive state
-    const perCommunityAcl = new Map();
-
-    // The 10222 replaceable (and the access subscription it spawns) can emit
-    // synchronously while this effect is still running; the merge writes
-    // state (and `profileTrigger++` also READS it), so it must run untracked
-    // or the effect depends on its own output (effect_update_depth_exceeded).
-    function publishMerged() {
-      untrack(publishMergedNow);
-    }
-
-    function publishMergedNow() {
-      // Merge across all targeted communities, dedupe by id (direct beats reposted).
-      /** @type {Map<string, any>} */
-      // eslint-disable-next-line svelte/prefer-svelte-reactivity -- local accumulator, not reactive state
-      const merged = new Map();
-      for (const [pubkey, arr] of perCommunity) {
-        const acl = perCommunityAcl.get(pubkey);
-        const gated =
-          acl?.communityEvent && acl.access
-            ? filterEventsByAccess(arr, acl.communityEvent, acl.access)
-            : arr;
-        for (const item of gated) {
-          if (!merged.has(item.id)) merged.set(item.id, item);
-        }
-      }
-      communityScopedItems = Array.from(merged.values());
-      profileTrigger++;
-    }
-
-    for (const pubkey of targets) {
-      const { cleanup } = useCommunityActivityLoader(pubkey);
-      cleanups.push(cleanup);
-
-      const sub = eventStore
-        .model(CommunityActivityModel, pubkey)
-        .pipe(debounceTime(100))
-        .subscribe((items) => {
-          perCommunity.set(pubkey, items || []);
-          publishMerged();
-        });
-      modelSubs.push(sub);
-
-      /** @type {(() => void) | undefined} */
-      let aclCleanup;
-      const aclSub = eventStore.replaceable(10222, pubkey).subscribe((communityEvent) => {
-        aclCleanup?.();
-        aclCleanup = undefined;
-        perCommunityAcl.set(pubkey, { communityEvent: communityEvent ?? null, access: null });
-        if (communityEvent) {
-          aclCleanup = subscribeToCommunityAccess(
-            communityEvent,
-            getCommunikeyRelays(),
-            (access) => {
-              const acl = perCommunityAcl.get(pubkey);
-              if (acl) acl.access = access;
-              publishMerged();
-            }
-          ).cleanup;
-        }
-        publishMerged();
-      });
-      modelSubs.push(aclSub);
-      cleanups.push(() => aclCleanup?.());
-    }
-
     return () => {
-      for (const c of cleanups) c();
-      for (const s of modelSubs) s.unsubscribe();
+      initialCalendarSub?.unsubscribe();
+      dateRangeLoaderSub?.unsubscribe();
+      articleModelSub?.unsubscribe();
+      kanbanModelSub?.unsubscribe();
+      ambModelSub?.unsubscribe();
     };
   });
 
-  // Auto-focus search input on mount + click-outside handler for author dropdown
-  onMount(() => {
-    if (searchInputRef) {
-      searchInputRef.focus();
-    }
-
-    function handleClickOutside(/** @type {MouseEvent} */ e) {
-      if (
-        showAuthorDropdown &&
-        searchInputRef &&
-        !searchInputRef.closest('.relative')?.contains(/** @type {Node} */ (e.target))
-      ) {
-        showAuthorDropdown = false;
-      }
-    }
-    document.addEventListener('click', handleClickOutside);
-    return () => document.removeEventListener('click', handleClickOutside);
-  });
-
-  /**
-   * Execute search - triggers when user presses Enter or clicks search button
-   */
-  function executeSearch() {
-    activeSearchQuery = searchQuery.trim();
-  }
-
-  /**
-   * Handle Enter key in search input
-   * @param {KeyboardEvent} event
-   */
-  function handleSearchKeydown(event) {
-    // Let the author dropdown handle keyboard events first
-    if (showAuthorDropdown && authorDropdownRef?.handleKeydown(event)) {
-      return;
-    }
-    if (event.key === 'Enter') {
-      event.preventDefault();
-      showAuthorDropdown = false;
-      executeSearch();
-    }
-    if (event.key === 'Escape') {
-      showAuthorDropdown = false;
-    }
-  }
-
-  /**
-   * Clear search query and active search
-   */
-  function clearSearch() {
-    searchQuery = '';
-    activeSearchQuery = '';
-    showAuthorDropdown = false;
-  }
-
-  /**
-   * Handle author selection from dropdown (additive — adds to multi-author filter)
-   * @param {any} author
-   */
-  function handleAuthorSelect(author) {
-    if (!author) {
-      showAuthorDropdown = false;
-      return;
-    }
-    // Deduplicate: skip if already selected
-    if (authorFilter.includes(author.pubkey)) {
-      showAuthorDropdown = false;
-      searchQuery = '';
-      return;
-    }
-    authorFilter = [...authorFilter, author.pubkey];
-    showAuthorDropdown = false;
-    searchQuery = '';
-    activeSearchQuery = '';
-    displayLimit = DISPLAY_BATCH;
-    updateQueryParams($page.url.searchParams, {
-      author: authorFilter.join(',')
-    });
-  }
-
-  /**
-   * Clear author filter — remove a single author by pubkey, or clear all if no pubkey given
-   * @param {string} [pubkey]
-   */
-  function clearAuthorFilter(pubkey) {
-    if (pubkey) {
-      authorFilter = authorFilter.filter((pk) => pk !== pubkey);
-    } else {
-      authorFilter = [];
-    }
-    displayLimit = DISPLAY_BATCH;
-    updateQueryParams($page.url.searchParams, {
-      author: authorFilter.length > 0 ? authorFilter.join(',') : null
-    });
-  }
-
-  // Auto-search: debounce searchQuery → activeSearchQuery
-  /** @type {ReturnType<typeof setTimeout> | undefined} */
-  let searchDebounceTimer;
-  $effect(() => {
-    const text = searchQuery;
-
-    if (searchDebounceTimer) clearTimeout(searchDebounceTimer);
-    searchDebounceTimer = setTimeout(() => {
-      activeSearchQuery = text.trim();
-    }, 300);
-
-    return () => {
-      if (searchDebounceTimer) clearTimeout(searchDebounceTimer);
-    };
-  });
-
-  // Track previous search query to avoid unnecessary re-triggers
-  let previousActiveSearchQuery = '';
-
-  // Trigger learning search when activeSearchQuery changes (on learning tab)
-  // This directly calls handleLearningFilterChange instead of relying on
-  // LearningContentFilters component's $effect propagation
-  $effect(() => {
-    if (showsType('learning') && activeSearchQuery !== previousActiveSearchQuery) {
-      previousActiveSearchQuery = activeSearchQuery;
-      // Build filters with current search text and any selected SKOS filters
-      const filters = {
-        searchText: activeSearchQuery,
-        learningResourceType: _learningFilters.learningResourceType || [],
-        about: _learningFilters.about || [],
-        audience: _learningFilters.audience || []
-      };
-      handleLearningFilterChange(filters);
-    }
-  });
-
-  /** Feeds shown on the current tab ("all" merges every enabled feed type). */
-  const activeFeeds = $derived(FEEDS.filter((f) => showsType(f.type)));
-
-  /**
-   * Whether there are more items to show (either in display buffer or from network)
-   */
+  // ─── Paging ───────────────────────────────────────────────────────────
+  /** More to show: buffered items not yet displayed, or a source that can still page. */
   const hasMoreToShow = $derived.by(() => {
-    // People search is capped by its own loader; no paging
-    if (contentType === 'people') return false;
-    // More items already loaded but not yet displayed
+    if (contentType === 'people' || contentType === 'communities') return false;
     if (displayLimit < combinedContent.length) return true;
-    if (contentType === 'communities') return hasMoreCommunities;
-    // A NIP-50 learning search is one ranked batch; the feed does not page it
-    const feedsCanPage = activeFeeds.some(
-      (f) =>
-        !(f.type === 'learning' && isLearningSearchActive) &&
-        !(feedStatus[f.type]?.exhausted ?? false)
-    );
-    return feedsCanPage || (showsType('events') && hasMoreCalendarEvents);
+    return discoverFeeds.hasMore || (showsType('events') && hasMoreCalendarEvents);
   });
-
   // A network "load more" in flight: a feed waiting on a page it has not
   // buffered yet, or a calendar batch.
-  let calendarLoadingMore = $state(false);
-  const isLoadingMore = $derived(
-    calendarLoadingMore || activeFeeds.some((f) => feedStatus[f.type]?.pending ?? false)
-  );
-  // A relay of the current tab failed and the SDK is backing off before it
-  // retries: keep the bottom spinner instead of declaring "no more content".
-  const anyFeedFailing = $derived(activeFeeds.some((f) => feedStatus[f.type]?.failing ?? false));
+  const isLoadingMore = $derived(calendarLoadingMore || discoverFeeds.pending);
 
   /** Reveal the next display batch and re-arm the scroll sentinel. */
   function revealMore() {
@@ -1032,54 +584,26 @@
     });
   }
 
-  /**
-   * Load more content - reveals buffered items first, then fetches from network
-   */
+  /** Reveal buffered items first, then fetch from the network. */
   function loadMoreContent() {
     if (isLoadingMore || !hasMoreToShow) return;
-    if (contentType === 'people') return;
-
-    // Communities have their own display count logic
-    if (contentType === 'communities') {
-      const currentCount = displayedCommunitiesCount;
-      const totalCount = filteredCommunities.length;
-      if (currentCount < totalCount) {
-        displayedCommunitiesCount = Math.min(currentCount + 20, totalCount);
-      } else {
-        hasMoreCommunities = false;
-      }
-      return;
-    }
-
-    // If there are loaded items not yet displayed, reveal them first
     if (displayLimit < combinedContent.length) {
       displayLimit += DISPLAY_BATCH;
-
       // Pre-fetch from network if running low on buffer
-      if (combinedContent.length - displayLimit < DISPLAY_BATCH) {
-        fetchMoreFromNetwork();
-      }
+      if (combinedContent.length - displayLimit < DISPLAY_BATCH) fetchMoreFromNetwork();
       return;
     }
-
-    // All loaded items shown — fetch more from network
     fetchMoreFromNetwork();
   }
 
-  /**
-   * Fetch more content from the network: widen each feed's window by one page
-   * and page the calendar forward.
-   */
+  /** Widen each feed's window by one page and page the calendar forward. */
   function fetchMoreFromNetwork() {
     if (isLoadingMore) return;
 
     // Served from the prefetch buffer a loadMore() is synchronous and
     // `pending` never rises; otherwise the spinner shows until the relays
-    // settle and the feed's status subscription reveals what arrived.
-    for (const { type, feed } of activeFeeds) {
-      if (type === 'learning' && isLearningSearchActive) continue;
-      feed.loadMore();
-    }
+    // settle and the feeds hook reveals what arrived.
+    discoverFeeds.loadMore();
 
     if (showsType('events') && hasMoreCalendarEvents) {
       calendarLoadingMore = true;
@@ -1089,18 +613,12 @@
         calendarLoadingMore = false;
         revealMore();
       };
-
-      // Get the highest start timestamp from current events to paginate forward
+      // Page forward from the latest start we have
       const lastStartTimestamp =
         calendarEvents.length > 0
           ? Math.max(...calendarEvents.map((e) => e.start || 0))
           : Math.floor(Date.now() / 1000);
-
-      const paginatedLoader = createPaginatedCalendarLoader(lastStartTimestamp, {
-        limit: CALENDAR_BATCH_SIZE
-      });
-
-      paginatedLoader()
+      createPaginatedCalendarLoader(lastStartTimestamp, { limit: CALENDAR_BATCH_SIZE })()
         .pipe(takeUntil(timer(BATCH_TIMEOUT)))
         .subscribe({
           next: () => {
@@ -1129,276 +647,60 @@
     if (!isLoadingMore) revealMore();
   }
 
-  // Filtered communities for the Communities tab
+  // ─── Content pipeline (one $derived per step; see discover-pipeline.js) ─
+  const learningSearchIds = $derived(learningSearch.isActive ? learningSearch.resultIds : null);
+
+  const rawItems = $derived.by(() => {
+    const _cacheVer = getCuratedCacheVersion(); // re-derive when the curated set resolves
+    if (communityFilter) {
+      return buildCommunityRawItems(communityScoped.items, contentType, {
+        showsType,
+        learningSearchIds
+      });
+    }
+    return buildRawItems(
+      { calendarEvents, ambResources, articles, kanbanBoards },
+      { showsType, isAllowedAuthor, learningSearchIds }
+    );
+  });
+  const relayFilteredItems = $derived(filterByRelay(rawItems, relayFilter));
+  const authorFilteredItems = $derived(filterByAuthors(relayFilteredItems, authorFilter));
+  const searchFilteredItems = $derived(
+    filterBySearch(authorFilteredItems, activeSearchQuery, {
+      profiles: authorProfiles,
+      contentType,
+      isLearningSearchActive: learningSearch.isActive
+    })
+  );
+  const canSortByRelevance = $derived(contentType === 'learning' && learningSearch.isActive);
+  const effectiveSortBy = $derived(resolveSortBy(contentType, sortBy, canSortByRelevance));
+  const combinedContent = $derived(
+    sortItems(searchFilteredItems, effectiveSortBy, learningSearch.rank)
+  );
+  const displayedContent = $derived(combinedContent.slice(0, displayLimit));
+  const hasAnySource = $derived(
+    articles.length > 0 ||
+      ambResources.length > 0 ||
+      calendarEvents.length > 0 ||
+      kanbanBoards.length > 0
+  );
+
+  // Communities tab: named profiles only, searched by name and description
   const filteredCommunities = $derived.by(() => {
-    // Hide communities without a named kind 0 profile —
-    // they'd render as meaningless "Unknown User" cards.
     let filtered = communities.filter((community) =>
       hasDisplayableCommunityProfile(communityProfiles.get(community.pubkey))
     );
-
-    // Apply search filter by name and description
     if (activeSearchQuery.trim()) {
       const query = activeSearchQuery.toLowerCase();
       filtered = filtered.filter((community) => {
         const profile = communityProfiles.get(community.pubkey);
-
         const name = profile?.name?.toLowerCase() || '';
         const about = profile?.about?.toLowerCase() || '';
-
         return name.includes(query) || about.includes(query);
       });
     }
-
     return filtered;
   });
-
-  // Reset displayed count when search changes
-  $effect(() => {
-    if (activeSearchQuery) {
-      displayedCommunitiesCount = 20;
-      hasMoreCommunities = true;
-    }
-  });
-
-  // Cleanup subscriptions on component destroy (feeds clean up in their effect)
-  $effect(() => {
-    return () => {
-      initialCalendarSub?.unsubscribe();
-      dateRangeLoaderSub?.unsubscribe();
-      articleModelSub?.unsubscribe();
-      kanbanModelSub?.unsubscribe();
-      ambModelSub?.unsubscribe();
-      calendarModelSub?.unsubscribe();
-    };
-  });
-
-  // Intersection Observer for infinite scroll
-  $effect(() => {
-    if (!hasMoreToShow || isLoading || displayedContent.length === 0) {
-      return;
-    }
-
-    const sentinel = document.getElementById('load-more-sentinel');
-    if (!sentinel) {
-      return;
-    }
-
-    const observer = new IntersectionObserver(
-      (entries) => {
-        if (entries[0].isIntersecting && !isLoadingMore) {
-          loadMoreContent();
-        }
-      },
-      { root: null, rootMargin: '200px', threshold: 0.1 }
-    );
-
-    observer.observe(sentinel);
-
-    return () => {
-      observer.disconnect();
-    };
-  });
-
-  // Helper functions for filtering (extracted for cleaner derivations)
-  /**
-   * Check if an item matches text search query
-   * @param {{type: string, data: any}} item
-   * @param {string} query - lowercase query
-   * @param {Map<string, any>} profiles
-   * @returns {boolean}
-   */
-  /**
-   * Get timestamp for sorting
-   * @param {{type: string, data: any}} item
-   * @returns {number}
-   */
-  function getItemTimestamp(item) {
-    if (item.type === 'article') {
-      return getArticlePublished(item.data) || 0;
-    } else if (item.type === 'amb') {
-      return item.data.publishedDate || 0;
-    } else if (item.type === 'board') {
-      return item.data.created_at || 0;
-    } else {
-      return item.data.start || 0;
-    }
-  }
-
-  // Combined and filtered content - split into pipeline for better reactivity
-  // Step 1: Build raw items (only runs when source arrays change)
-  // When a community filter is active, source items directly from
-  // CommunityActivityModel (no curated/author filter — h-tag scoping IS the
-  // curation, and reposts/legacy shares are already resolved). Otherwise use
-  // the global curated-author per-kind arrays.
-  const rawItems = $derived.by(() => {
-    // Read curatedCacheVersion to re-derive when curated cache populates asynchronously
-    const _cacheVer = getCuratedCacheVersion();
-
-    if (communityFilter) {
-      const items = mapCommunityItemsToRawItems(
-        communityScopedItems,
-        /** @type {'all'|'events'|'learning'|'articles'|'boards'} */ (contentType)
-      ).filter((i) => showsType(RAW_ITEM_CONTENT_TYPE[i.type] || i.type));
-      // Apply learning NIP-50 search intersection when active.
-      if (
-        contentType === 'learning' &&
-        isLearningSearchActive &&
-        items.some((i) => i.type === 'amb')
-      ) {
-        const searchResultIds = new Set(learningSearchResults.map((e) => e.id));
-        return items.filter(
-          (i) => i.type !== 'amb' || searchResultIds.has(i.data.event?.id || i.data.id)
-        );
-      }
-      return items;
-    }
-
-    /** @type {Array<{type: string, data: any}>} */
-    let items = [];
-
-    if (showsType('events')) {
-      items = [
-        ...items,
-        ...calendarEvents
-          .filter((e) => isAllowedAuthor('calendar', e.pubkey))
-          .map((e) => ({ type: 'event', data: e }))
-      ];
-    }
-
-    if (showsType('learning')) {
-      if (isLearningSearchActive) {
-        const searchResultIds = new Set(learningSearchResults.map((e) => e.id));
-        const filteredAmbResources = ambResources.filter((r) =>
-          searchResultIds.has(r.event?.id || r.id)
-        );
-        items = [...items, ...filteredAmbResources.map((r) => ({ type: 'amb', data: r }))];
-      } else {
-        items = [
-          ...items,
-          ...ambResources
-            .filter((r) => isAllowedAuthor('educational', r.pubkey))
-            .map((r) => ({ type: 'amb', data: r }))
-        ];
-      }
-    }
-
-    if (showsType('articles')) {
-      items = [
-        ...items,
-        ...articles
-          .filter((a) => isAllowedAuthor('longform', a.pubkey))
-          .map((a) => ({ type: 'article', data: a }))
-      ];
-    }
-
-    if (showsType('boards')) {
-      items = [
-        ...items,
-        ...kanbanBoards
-          .filter((b) => isAllowedAuthor('kanban', b.pubkey))
-          .map((b) => ({ type: 'board', data: b }))
-      ];
-    }
-
-    return items;
-  });
-
-  // Step 2: Apply relay filter
-  const relayFilteredItems = $derived.by(() => {
-    if (!relayFilter) return rawItems;
-    const normalizedFilter = normalizeURL(relayFilter);
-    return rawItems.filter((item) => {
-      const event = item.data?.rawEvent || item.data?.originalEvent || item.data;
-      return getSeenRelays(event)?.has(normalizedFilter);
-    });
-  });
-
-  // Step 4: Apply author filter (only runs when author filter changes)
-  const authorFilteredItems = $derived.by(() => {
-    if (authorFilter.length === 0) return relayFilteredItems;
-    const pubkeySet = new Set(authorFilter);
-    return relayFilteredItems.filter((item) => pubkeySet.has(item.data?.pubkey));
-  });
-
-  // Step 5: Apply text search (only runs when search query changes)
-  const searchFilteredItems = $derived.by(() => {
-    if (!activeSearchQuery.trim()) {
-      return authorFilteredItems;
-    }
-    if (contentType === 'learning' && isLearningSearchActive) {
-      return authorFilteredItems;
-    }
-    const query = activeSearchQuery.toLowerCase();
-    return authorFilteredItems.filter((item) => {
-      // AMB items already filtered by NIP-50 relay-side search — let them through
-      if (isLearningSearchActive && item.type === 'amb') return true;
-      return matchesTextSearch(item, query, authorProfiles);
-    });
-  });
-
-  // Step 6: Sort (only runs when filtered items or sort order changes)
-  // Events tab defaults to 'oldest' (soonest first) - this is the expected behavior for calendar views.
-  // 'relevance' only exists while a NIP-50 learning search is active; otherwise fall back to newest.
-  const canSortByRelevance = $derived(contentType === 'learning' && isLearningSearchActive);
-  const effectiveSortBy = $derived(
-    contentType === 'events'
-      ? 'oldest'
-      : sortBy === 'relevance' && !canSortByRelevance
-        ? 'newest'
-        : sortBy
-  );
-
-  /**
-   * Relevance key of a formatted AMB item — must match `searchRankKey(event)`.
-   * @param {{type: string, data: any}} item
-   */
-  function getItemRankKey(item) {
-    const r = item.data;
-    return r.identifier !== undefined ? `${r.kind}:${r.pubkey}:${r.identifier}` : r.id;
-  }
-
-  const combinedContent = $derived.by(() => {
-    if (effectiveSortBy === 'relevance') {
-      const rank = learningSearchRank;
-      return [...searchFilteredItems].sort((a, b) => {
-        const aRank = rank.get(getItemRankKey(a)) ?? Infinity;
-        const bRank = rank.get(getItemRankKey(b)) ?? Infinity;
-        if (aRank !== bRank) return aRank - bRank;
-        return getItemTimestamp(b) - getItemTimestamp(a);
-      });
-    }
-    return [...searchFilteredItems].sort((a, b) => {
-      const aDate = getItemTimestamp(a);
-      const bDate = getItemTimestamp(b);
-      return effectiveSortBy === 'newest' ? bDate - aDate : aDate - bDate;
-    });
-  });
-
-  const displayedContent = $derived(combinedContent.slice(0, displayLimit));
-
-  /**
-   * Handle community filter change
-   * @param {string | null} newValue
-   */
-  function handleCommunityFilterChange(newValue) {
-    communityFilter = newValue;
-    displayLimit = DISPLAY_BATCH;
-    updateQueryParams($page.url.searchParams, { community: newValue });
-  }
-
-  /**
-   * Handle event click - navigate to event detail page
-   * @param {any} event
-   */
-  function handleEventClick(event) {
-    // Navigate to event detail page using the original event for naddr encoding
-    const originalEvent = event.originalEvent || event;
-    const naddr = encodeEventToNaddr(originalEvent);
-    if (naddr) {
-      goto(resolve(`/calendar/event/${naddr}`));
-    }
-  }
 </script>
 
 <svelte:head>
@@ -1407,263 +709,53 @@
 </svelte:head>
 
 <div>
-  <!-- Hero Section — onboarding messaging for visitors; logged-in users go
-       straight to the content -->
-  {#if activeUser}
-    <div class="container mx-auto px-4 pt-8">
-      <h1 class="text-3xl font-extrabold tracking-tight text-base-content">
-        {m.discover_content_title()}
-      </h1>
-    </div>
-  {:else if runtimeConfig.ui?.discoverHeroImage}
-    <div class="relative overflow-hidden py-12 text-primary-content">
-      <ImageWithFallback
-        src={runtimeConfig.ui.discoverHeroImage}
-        alt=""
-        size="hero"
-        loading="eager"
-        fallbackType="banner"
-        class="absolute inset-0 h-full w-full object-cover"
-      />
-      <div class="relative z-10 container mx-auto px-4">
-        <div class="mx-auto max-w-3xl rounded-2xl bg-black/20 p-8 text-center backdrop-blur-sm">
-          <h1 class="mb-4 text-4xl font-bold text-white md:text-5xl">
-            {m.discover_content_title()}
-          </h1>
-          <p class="text-lg text-white/90">
-            {m.discover_content_subtitle()}
-          </p>
-          <p class="mt-3 text-sm text-white/70">
-            <a
-              href="https://onboarding.edufeed.org"
-              target="_blank"
-              rel="noopener noreferrer"
-              class="underline underline-offset-2 transition-colors hover:text-white/90"
-            >
-              {m.discover_onboarding_cta()} ↗
-            </a>
-          </p>
-        </div>
-      </div>
-    </div>
-  {:else}
-    <div class="bg-gradient-to-br from-primary/10 to-secondary/10 py-12">
-      <div class="container mx-auto px-4">
-        <h1 class="mb-4 text-center text-4xl font-bold text-base-content md:text-5xl">
-          {m.discover_content_title()}
-        </h1>
-        <p class="text-center text-lg text-base-content/70">
-          {m.discover_content_subtitle()}
-        </p>
-        <p class="mt-3 text-center text-sm text-base-content/50">
-          <a
-            href="https://onboarding.edufeed.org"
-            target="_blank"
-            rel="noopener noreferrer"
-            class="underline underline-offset-2 transition-colors hover:text-base-content/70"
-          >
-            {m.discover_onboarding_cta()} ↗
-          </a>
-        </p>
-      </div>
-    </div>
-  {/if}
+  <DiscoverHero {activeUser} heroImage={runtimeConfig.ui?.discoverHeroImage} />
 
-  <!-- Content Type Tabs (only the types this deployment enables; a single tab needs no bar) -->
-  {#if discoverTabs.length > 1}
-    <div class="border-b border-base-300">
-      <div class="container mx-auto px-4">
-        <div class="tabs-boxed tabs justify-center bg-transparent py-4">
-          {#each discoverTabs as tab (tab)}
-            <button
-              class="tab {contentType === tab ? 'tab-active' : ''}"
-              data-testid="tab-{tab}"
-              onclick={() => handleContentTypeChange(tab)}
-            >
-              {TAB_LABELS[/** @type {keyof typeof TAB_LABELS} */ (tab)]()}
-            </button>
-          {/each}
-        </div>
-      </div>
-    </div>
-  {/if}
+  <DiscoverTabs tabs={discoverTabs} active={contentType} onchange={handleContentTypeChange} />
 
-  <!-- Unified Filter Section (shown for all content types) -->
+  <!-- Filters (shown for all content types) -->
   <div class="container mx-auto space-y-4 px-4 py-6">
-    <!-- Row 1: Search Input with Button -->
-    <div class="flex w-full gap-2">
-      <div class="relative flex-1">
-        <div class="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2">
-          {#if contentType === 'learning' && isLearningSearchActive && learningSearchResults.length === 0}
-            <span class="loading loading-sm loading-spinner text-primary"></span>
-          {:else}
-            <SearchIcon class_="h-5 w-5 text-base-content/50" />
-          {/if}
-        </div>
-        <input
-          bind:this={searchInputRef}
-          type="text"
-          placeholder={contentType === 'people'
-            ? m.people_search_placeholder()
-            : m.discover_content_search_placeholder()}
-          bind:value={searchQuery}
-          onkeydown={handleSearchKeydown}
-          oninput={() => {
-            if (
-              searchQuery.length >= 2 &&
-              contentType !== 'communities' &&
-              contentType !== 'people'
-            ) {
-              showAuthorDropdown = true;
-            } else {
-              showAuthorDropdown = false;
-            }
-          }}
-          onfocus={() => {
-            if (
-              searchQuery.length >= 2 &&
-              contentType !== 'communities' &&
-              contentType !== 'people'
-            ) {
-              showAuthorDropdown = true;
-            }
-          }}
-          class="input-bordered input w-full pr-10 pl-9"
-          aria-label={m.discover_content_search_aria()}
-        />
-        {#if searchQuery}
-          <button
-            type="button"
-            class="btn absolute top-1/2 right-2 btn-circle -translate-y-1/2 btn-ghost btn-sm"
-            onclick={clearSearch}
-            aria-label={m.discover_content_clear_search()}
-          >
-            ✕
-          </button>
-        {/if}
-        <AuthorSearchDropdown
-          bind:this={authorDropdownRef}
-          searchTerm={searchQuery}
-          profileMap={authorProfiles}
-          onselect={handleAuthorSelect}
-          visible={showAuthorDropdown}
-        />
-      </div>
-      <button type="button" class="btn btn-primary" onclick={executeSearch}>
-        <SearchIcon class_="h-5 w-5" />
-        <span class="sr-only sm:not-sr-only">{m.discover_search_button()}</span>
-      </button>
-    </div>
+    <DiscoverSearchBar
+      bind:value={searchQuery}
+      {contentType}
+      {authorProfiles}
+      {authorFilter}
+      isSearching={contentType === 'learning' &&
+        learningSearch.isActive &&
+        learningSearch.results.length === 0}
+      onsearch={executeSearch}
+      onclear={clearSearch}
+      onauthorselect={selectAuthor}
+      onauthorremove={(pubkey) => clearAuthorFilter(pubkey)}
+      onauthorsclear={() => clearAuthorFilter()}
+    />
 
-    <!-- Author filter badges -->
-    {#if authorFilter.length > 0}
-      <div class="flex flex-wrap items-center gap-2" data-testid="author-filter-badge">
-        {#each authorFilter as pubkey (pubkey)}
-          {@const profile = authorProfiles.get(pubkey)}
-          <div class="badge gap-2 badge-lg badge-primary">
-            <ProfileAvatar {pubkey} {profile} size="xs" fallbackType="robohash" />
-            <span>{profile?.display_name || profile?.name || pubkey.slice(0, 12) + '...'}</span>
-            <button
-              type="button"
-              class="btn btn-circle btn-ghost btn-xs"
-              onclick={() => clearAuthorFilter(pubkey)}
-              aria-label={m.discover_remove_author_filter()}
-            >
-              ✕
-            </button>
-          </div>
-        {/each}
-        {#if authorFilter.length > 1}
-          <button
-            type="button"
-            class="btn btn-ghost btn-xs"
-            onclick={() => clearAuthorFilter()}
-            aria-label={m.discover_clear_author_filters()}
-          >
-            {m.discover_clear_author_filters()}
-          </button>
-        {/if}
-      </div>
-    {/if}
-
-    <!-- Row 2: General filters (sort, community, relay) -->
-    <div class="flex flex-wrap items-end gap-4" data-testid="general-filters">
-      <!-- Sort (not shown for communities / people) -->
-      {#if contentType !== 'communities' && contentType !== 'people'}
-        <div class="form-control w-full sm:w-auto sm:min-w-[160px]">
-          <label for="sort" class="label">
-            <span class="label-text font-medium">{m.discover_sort_label()}</span>
-          </label>
-          <select id="sort" bind:value={sortBy} class="select-bordered select w-full">
-            {#if canSortByRelevance}
-              <option value="relevance">{m.discover_sort_relevance()}</option>
-            {/if}
-            <option value="newest">{m.discover_sort_newest()}</option>
-            <option value="oldest">{m.discover_sort_oldest()}</option>
-          </select>
-        </div>
-      {/if}
-
-      <!-- Community Filter (shown for all except communities / people tabs, only for logged-in users) -->
-      {#if activeUser && contentType !== 'communities' && contentType !== 'people'}
-        <div class="w-full sm:w-auto sm:min-w-[200px]">
-          <CommunityFilterDropdown
-            value={communityFilter}
-            joinedCommunities={communityOptions.joined}
-            discoverCommunities={communityOptions.discover}
-            onchange={handleCommunityFilterChange}
-          />
-        </div>
-      {/if}
-
-      <!-- Relay Filter (shown for tabs with app-specific relays) -->
-      {#if tabRelayCategory && availableRelays.length > 0}
-        <div class="w-full sm:w-auto sm:min-w-[200px]">
-          <RelayFilterDropdown
-            relays={availableRelays}
-            value={relayFilter}
-            onchange={(v) => {
-              relayFilter = v;
-              displayLimit = DISPLAY_BATCH;
-            }}
-            settingsCategory={tabRelayCategory}
-          />
-        </div>
-      {/if}
-    </div>
-
-    <!-- Row 3: Tab-specific filters -->
-    {#if contentType === 'events'}
-      <div data-testid="tab-filters">
-        <EventDateRangeFilter
-          start={eventsDateRangeStart}
-          end={eventsDateRangeEnd}
-          onrangechange={handleEventsDateRangeChange}
-        />
-      </div>
-    {/if}
-    {#if contentType === 'learning'}
-      <div data-testid="tab-filters">
-        <LearningContentFilters
-          onfilterchange={handleLearningFilterChange}
-          isSearching={isLearningSearchActive && learningSearchResults.length === 0}
-          searchText={activeSearchQuery}
-        />
-      </div>
-    {/if}
-
-    <!-- Results count (not shown for communities which has its own) -->
-    {#if contentType !== 'communities' && displayedContent.length > 0}
-      <div class="text-center text-sm text-base-content/70">
-        {m.discover_results_count({ count: displayedContent.length })}
-        {#if hasMoreToShow}
-          <span class="ml-2 text-primary">• {m.discover_scroll_for_more()}</span>
-        {/if}
-      </div>
-    {/if}
+    <DiscoverFilterBar
+      {contentType}
+      bind:sortBy
+      {canSortByRelevance}
+      {activeUser}
+      {communityFilter}
+      {communityOptions}
+      oncommunitychange={handleCommunityFilterChange}
+      relayCategory={tabRelayCategory}
+      {availableRelays}
+      {relayFilter}
+      onrelaychange={(v) => {
+        relayFilter = v;
+        displayLimit = DISPLAY_BATCH;
+      }}
+      eventsRange={{ start: eventsDateRangeStart, end: eventsDateRangeEnd }}
+      onrangechange={handleEventsDateRangeChange}
+      onlearningfilterchange={handleLearningFilterChange}
+      learningIsSearching={learningSearch.isActive && learningSearch.results.length === 0}
+      searchText={activeSearchQuery}
+      resultCount={displayedContent.length}
+      hasMore={hasMoreToShow}
+    />
   </div>
 
-  <!-- Content Grid -->
+  <!-- Content -->
   <div class="container mx-auto px-4 py-8">
     {#if contentType === 'boards'}
       <!-- Boards are authored in the external Kanban editor; shown above the
@@ -1673,189 +765,29 @@
       </div>
     {/if}
     {#if contentType === 'communities'}
-      <!-- Communities Grid -->
-      {#if communities.length === 0 && !communitiesLoaded}
-        <div class="flex justify-center py-12">
-          <div class="text-center">
-            <div class="loading loading-lg loading-spinner text-primary"></div>
-            <p class="mt-4 text-base-content/70">{m.discover_loading()}</p>
-          </div>
-        </div>
-      {:else if filteredCommunities.length === 0}
-        <div class="flex justify-center py-12">
-          <div class="text-center">
-            <p class="text-xl text-base-content/70">{m.discover_no_matches()}</p>
-            <p class="mt-2 text-base-content/50">{m.discover_no_matches_subtitle()}</p>
-
-            {#if activeUser}
-              <button
-                class="btn mt-6 gap-2 btn-primary"
-                onclick={() => modalStore.openModal('createCommunity')}
-              >
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  class="h-5 w-5"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                >
-                  <path
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                    stroke-width="2"
-                    d="M12 4v16m8-8H4"
-                  />
-                </svg>
-                {m.community_create()}
-              </button>
-            {/if}
-          </div>
-        </div>
-      {:else}
-        <!-- Create Community CTA (for logged-in users) -->
-        {#if activeUser}
-          <div class="mb-8 flex justify-center">
-            <button
-              class="btn gap-2 btn-lg btn-primary"
-              onclick={() => modalStore.openModal('createCommunity')}
-            >
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                class="h-6 w-6"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-              >
-                <path
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                  stroke-width="2"
-                  d="M12 4v16m8-8H4"
-                />
-              </svg>
-              {m.community_create()}
-            </button>
-          </div>
-        {/if}
-
-        <!-- Results count -->
-        <div class="mb-6 text-center text-sm text-base-content/70">
-          {m.discover_results_count({ count: filteredCommunities.length })}
-        </div>
-
-        <div class="columns-1 gap-8 sm:columns-2 lg:columns-3 xl:columns-4">
-          {#each filteredCommunities.slice(0, displayedCommunitiesCount) as community (community.pubkey)}
-            <div class="mb-8 inline-block w-full break-inside-avoid">
-              <CommunikeyCard pubkey={community.pubkey} showJoinButton={true} />
-            </div>
-          {/each}
-        </div>
-
-        <!-- Infinite Scroll Sentinel for Communities -->
-        {#if displayedCommunitiesCount < filteredCommunities.length}
-          <div id="load-more-sentinel" class="mt-8 py-8">
-            {#if isLoadingMore}
-              <div class="flex justify-center">
-                <div class="text-center">
-                  <div class="loading loading-lg loading-spinner text-primary"></div>
-                  <p class="mt-4 text-base-content/70">{m.discover_loading_more()}</p>
-                </div>
-              </div>
-            {/if}
-          </div>
-        {:else}
-          <div class="mt-8 flex justify-center py-8">
-            <p class="text-base-content/50">{m.discover_no_more_content()}</p>
-          </div>
-        {/if}
-      {/if}
+      <CommunitiesTab
+        communities={filteredCommunities}
+        loaded={communitiesLoaded}
+        {activeUser}
+        query={activeSearchQuery}
+        oncreate={() => modalStore.openModal('createCommunity')}
+      />
     {:else if contentType === 'people'}
       <!-- People: profile search, follows first, then by NIP-85 trust rank -->
       <PeopleResults query={activeSearchQuery} />
-    {:else if (isLoading || isSearching) && displayedContent.length === 0}
-      <!-- Loading / searching state — only while there is nothing to show:
-           content already in the EventStore (e.g. coming back to /discover)
-           renders at once instead of waiting for the loaders to complete.
-           While a search is in flight, the spinner also stands in for the
-           empty state until results arrive. -->
-      <div class="flex justify-center py-12">
-        <div class="text-center">
-          <div class="loading loading-lg loading-spinner text-primary"></div>
-          <p class="mt-4 text-base-content/70">{m.discover_loading()}</p>
-        </div>
-      </div>
-    {:else if displayedContent.length === 0}
-      <!-- Empty State -->
-      <div class="flex justify-center py-12">
-        <div class="text-center">
-          {#if articles.length === 0 && ambResources.length === 0 && calendarEvents.length === 0 && kanbanBoards.length === 0}
-            <p class="text-xl text-base-content/70">{m.discover_no_content()}</p>
-            <p class="mt-2 text-base-content/50">{m.discover_no_content_subtitle()}</p>
-          {:else}
-            <p class="text-xl text-base-content/70">{m.discover_no_matches()}</p>
-            <p class="mt-2 text-base-content/50">{m.discover_no_matches_subtitle()}</p>
-          {/if}
-        </div>
-      </div>
     {:else}
-      <!-- Content Grid with lazy rendering -->
-      <!-- CSS-columns masonry: cards of different heights pack naturally
-           instead of leaving rigid grid gaps -->
-      <div class="columns-1 gap-6 sm:columns-2 lg:columns-3" data-testid="content-list">
-        {#each displayedContent as item (item.data.id)}
-          <div
-            use:observeCard={item.data.id}
-            class="mb-6 inline-block min-h-[200px] w-full break-inside-avoid"
-            data-testid="content-card"
-          >
-            {#if visibleItemIds.has(item.data.id)}
-              {#if item.type === 'article'}
-                <ArticleCard
-                  article={item.data}
-                  authorProfile={authorProfiles.get(item.data.pubkey)}
-                  variant="card"
-                />
-              {:else if item.type === 'amb'}
-                <AMBResourceCard
-                  resource={item.data}
-                  authorProfile={authorProfiles.get(item.data.pubkey)}
-                  variant="card"
-                />
-              {:else if item.type === 'event'}
-                <CalendarEventCard
-                  event={item.data}
-                  onEventClick={handleEventClick}
-                  variant="card"
-                />
-              {:else if item.type === 'board'}
-                <KanbanBoardCard
-                  board={item.data}
-                  authorProfile={authorProfiles.get(item.data.pubkey)}
-                  variant="card"
-                />
-              {/if}
-            {:else}
-              <ContentCardSkeleton variant="card" />
-            {/if}
-          </div>
-        {/each}
-      </div>
-
-      <!-- Infinite Scroll Sentinel -->
-      <div id="load-more-sentinel" class="mt-8 py-8">
-        {#if isLoadingMore || anyFeedFailing}
-          <div class="flex justify-center">
-            <div class="text-center">
-              <div class="loading loading-lg loading-spinner text-primary"></div>
-              <p class="mt-4 text-base-content/70">{m.discover_loading_more()}</p>
-            </div>
-          </div>
-        {:else if !hasMoreToShow}
-          <div class="flex justify-center">
-            <p class="text-base-content/50">{m.discover_no_more_content()}</p>
-          </div>
-        {/if}
-      </div>
+      <DiscoverFeedGrid
+        items={displayedContent}
+        {authorProfiles}
+        {isLoading}
+        isSearching={learningSearch.isSearching}
+        {hasAnySource}
+        hasMore={hasMoreToShow}
+        {isLoadingMore}
+        failing={discoverFeeds.failing}
+        onEventClick={handleEventClick}
+        onloadmore={loadMoreContent}
+      />
     {/if}
   </div>
 </div>
