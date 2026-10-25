@@ -827,7 +827,7 @@ describe('OG Meta Tags', () => {
       ogCache.clear();
       ogCache.set(
         'profile:'.concat('a'.repeat(64)),
-        '<meta property="og:title" content="Cached" />',
+        { head: '<meta property="og:title" content="Cached" />', body: '' },
         60000
       );
       const { event, resolve, captured } = makeHandleInput(`/p/${npubOfAAAA}`);
@@ -837,7 +837,7 @@ describe('OG Meta Tags', () => {
 
     it('falls back to default tags when the cached value is a negative entry', async () => {
       ogCache.clear();
-      ogCache.set('wiki:missing-topic', '', 60000);
+      ogCache.set('wiki:missing-topic', { head: '', body: '' }, 60000);
       const { event, resolve, captured } = makeHandleInput('/wiki/missing-topic');
       await ogMetaHandle({ event, resolve });
       expect(captured.html).toContain('og-default.png');
@@ -851,11 +851,27 @@ describe('OG Meta Tags', () => {
         { title: "Deal $' now", description: 'd', type: 'profile' },
         'https://app.example.com/p/foo'
       );
-      ogCache.set(key, dangerousTagHtml, 60000);
+      ogCache.set(key, { head: dangerousTagHtml, body: '' }, 60000);
       const { event, resolve, captured } = makeHandleInput(`/p/${npub}`);
       await ogMetaHandle({ event, resolve });
       expect(captured.html).toContain('Deal $&#39; now');
       expect(captured.html.match(/<\/head>/g)?.length).toBe(1);
+    });
+
+    it('injects a cached body before </body> without $-pattern corruption', async () => {
+      ogCache.clear();
+      ogCache.set(
+        'wiki:topic-x',
+        {
+          head: '<meta property="og:title" content="W" />',
+          body: '<article id="geo-content">Deal $\' now</article>'
+        },
+        60000
+      );
+      const { event, resolve, captured } = makeHandleInput('/wiki/topic-x');
+      await ogMetaHandle({ event, resolve });
+      expect(captured.html).toContain('<article id="geo-content">Deal $\' now</article>\n</body>');
+      expect(captured.html.match(/<\/body>/g)?.length).toBe(1);
     });
 
     it('does not touch /api/ paths (no target resolution, no transformPageChunk, nothing cached)', async () => {

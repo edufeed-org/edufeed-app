@@ -6,8 +6,6 @@
  */
 
 import { env } from '$env/dynamic/private';
-import { nip19 } from 'nostr-tools';
-import { verifyEvent } from 'nostr-tools/pure';
 import {
   getCalendarEventTitle,
   getCalendarEventSummary,
@@ -20,217 +18,33 @@ import { getProfileContent } from 'applesauce-core/helpers';
 import { getFeedCardData } from '$lib/helpers/feedCardData.js';
 import { getTagValue } from '$lib/helpers/educational/ambTransform.js';
 import { normalizePubkey, shortNpub as abbreviateNpub } from '$lib/helpers/pubkey.js';
+import {
+  buildCrawlableContent,
+  canonicalPathFor,
+  renderHeadExtras
+} from '$lib/server/geo/page-content.js';
+import {
+  DEFAULT_GEO_SALT,
+  geoContentKey,
+  geoGroup,
+  parseShare
+} from '$lib/server/geo/assignment.js';
+import { INDEXABLE_KINDS, isIndexableEvent, isNoindexPath } from '$lib/server/geo/indexability.js';
+import {
+  createCuratedAuthorsCache,
+  resolveCuratedAuthorSet
+} from '$lib/server/geo/curated-authors.js';
+import { parseArray } from '$lib/server/env-parse.js';
 
-// ─── Relay fetch ──────────────────────────────────────────────────────────────
-
-const FETCH_TIMEOUT = 3000;
-
-/**
- * @param {string | undefined} csv
- * @returns {string[]}
- */
-function parseRelays(csv) {
-  if (!csv) return [];
-  return csv
-    .split(',')
-    .map((s) => s.trim())
-    .filter(Boolean);
-}
-
-/**
- * Get relays to query for a given kind.
- * Mirrors kindToAppRelayCategory in src/lib/services/app-relay-service.svelte.js,
- * reading env directly (server context — no user 30002 overrides for crawlers).
- * @param {number} kind
- * @param {string[]} hintRelays
- * @returns {string[]}
- */
-export function getRelaysForKind(kind, hintRelays) {
-  /** @type {string[]} */
-  let appRelays = [];
-
-  if (kind >= 31922 && kind <= 31925) {
-    appRelays = parseRelays(env.CALENDAR_RELAYS);
-  } else if (kind === 30142) {
-    appRelays = parseRelays(env.AMB_RELAYS);
-  } else if (kind === 30023 || kind === 30024) {
-    appRelays = parseRelays(env.LONGFORM_CONTENT_RELAY);
-  } else if (kind === 30168 || kind === 10222 || kind === 11) {
-    appRelays = parseRelays(env.COMMUNIKEY_RELAYS);
-  } else if (kind === 30301) {
-    appRelays = parseRelays(env.KANBAN_RELAYS);
-  } else if (kind === 30818) {
-    appRelays = [
-      ...parseRelays(env.COMMUNIKEY_RELAYS),
-      ...parseRelays(env.RELAY_LIST_LOOKUP_RELAYS)
-    ];
-  } else if (kind === 0) {
-    appRelays = [...parseRelays(env.RELAY_LIST_LOOKUP_RELAYS), ...parseRelays(env.INDEXER_RELAYS)];
-  }
-
-  const fallback = parseRelays(env.FALLBACK_RELAYS);
-  const all = [...new Set([...hintRelays, ...appRelays, ...fallback])];
-  return all.length > 0 ? all : ['wss://relay.damus.io', 'wss://nos.lol'];
-}
-
-/**
- * Decode a Nostr identifier (naddr or nevent) into its components.
- * @param {string} identifier
- * @returns {{ type: 'naddr', kind: number, pubkey: string, identifier: string, relays: string[] } | { type: 'nevent', id: string, relays: string[], kind?: number } | null}
- */
-export function decodeIdentifier(identifier) {
-  try {
-    const decoded = nip19.decode(identifier);
-    if (decoded.type === 'naddr') {
-      return {
-        type: 'naddr',
-        kind: decoded.data.kind,
-        pubkey: decoded.data.pubkey,
-        identifier: decoded.data.identifier,
-        relays: decoded.data.relays || []
-      };
-    }
-    if (decoded.type === 'nevent') {
-      return {
-        type: 'nevent',
-        id: decoded.data.id,
-        relays: decoded.data.relays || [],
-        kind: decoded.data.kind
-      };
-    }
-    return null;
-  } catch {
-    return null;
-  }
-}
-
-/**
- * Check whether an event satisfies the constraining fields of a filter.
- * Used to reject events a relay claims match a REQ but don't — a malicious
- * or misbehaving relay could otherwise return an arbitrary event and have it
- * treated as the requested one. Never throws.
- * @param {import('nostr-tools').NostrEvent | null | undefined} event
- * @param {import('nostr-tools').Filter} filter
- * @returns {boolean}
- */
-export function eventMatchesFilter(event, filter) {
-  try {
-    if (!event || typeof event !== 'object') return false;
-
-    if (Array.isArray(filter?.kinds) && !filter.kinds.includes(event.kind)) return false;
-    if (Array.isArray(filter?.authors) && !filter.authors.includes(event.pubkey)) return false;
-    if (Array.isArray(filter?.ids) && !filter.ids.includes(event.id)) return false;
-
-    const dFilter = filter?.['#d'];
-    if (Array.isArray(dFilter)) {
-      const dTag = Array.isArray(event.tags)
-        ? event.tags.find((t) => Array.isArray(t) && t[0] === 'd')?.[1]
-        : undefined;
-      if (dTag === undefined || !dFilter.includes(dTag)) return false;
-    }
-
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-/**
- * Fetch the first event matching a filter from the given relays.
- * Races all relays; resolves null after FETCH_TIMEOUT.
- * @param {import('nostr-tools').Filter} filter
- * @param {string[]} relays
- * @returns {Promise<import('nostr-tools').NostrEvent | null>}
- */
-export function fetchFirstEvent(filter, relays) {
-  return new Promise((resolve) => {
-    let resolved = false;
-    const timeout = setTimeout(() => {
-      if (!resolved) {
-        resolved = true;
-        resolve(null);
-      }
-      cleanup();
-    }, FETCH_TIMEOUT);
-
-    /** @type {import('ws').WebSocket[]} */
-    const sockets = [];
-
-    function cleanup() {
-      clearTimeout(timeout);
-      for (const ws of sockets) {
-        try {
-          ws.close();
-        } catch {
-          // ignore
-        }
-      }
-    }
-
-    // Dynamic import ws for server-side WebSocket
-    import('ws').then(({ default: WebSocket }) => {
-      if (resolved) return;
-
-      for (const relay of relays.slice(0, 5)) {
-        try {
-          const ws = new WebSocket(relay);
-          sockets.push(ws);
-
-          ws.on('open', () => {
-            ws.send(JSON.stringify(['REQ', 'og', filter]));
-          });
-
-          ws.on('message', (/** @type {Buffer} */ data) => {
-            try {
-              const msg = JSON.parse(data.toString());
-              if (msg[0] === 'EVENT' && msg[1] === 'og' && msg[2]) {
-                if (!resolved && verifyEvent(msg[2]) && eventMatchesFilter(msg[2], filter)) {
-                  resolved = true;
-                  resolve(msg[2]);
-                  cleanup();
-                }
-                // Non-matching or unverifiable events are ignored; keep
-                // listening on this and other relays until timeout/EOSE —
-                // a malicious relay could otherwise forge a preview by
-                // returning an unrelated (but validly signed) event.
-              }
-              if (msg[0] === 'EOSE' && msg[1] === 'og') {
-                ws.close();
-              }
-            } catch {
-              // ignore parse errors
-            }
-          });
-
-          ws.on('error', () => ws.close());
-        } catch {
-          // skip bad relay URL
-        }
-      }
-    });
-  });
-}
-
-/**
- * Fetch a single event from Nostr relays server-side using WebSocket.
- * @param {string} identifier - naddr1... or nevent1... string
- * @returns {Promise<import('nostr-tools').NostrEvent | null>}
- */
-export async function fetchEventFromRelays(identifier) {
-  const decoded = decodeIdentifier(identifier);
-  if (!decoded) return null;
-
-  if (decoded.type === 'naddr') {
-    return fetchFirstEvent(
-      { kinds: [decoded.kind], authors: [decoded.pubkey], '#d': [decoded.identifier], limit: 1 },
-      getRelaysForKind(decoded.kind, decoded.relays)
-    );
-  }
-  return fetchFirstEvent(
-    { ids: [decoded.id], limit: 1 },
-    getRelaysForKind(decoded.kind || 1, decoded.relays)
-  );
-}
+// Relay reads live in relay-fetch.js; re-exported for existing importers.
+export {
+  getRelaysForKind,
+  decodeIdentifier,
+  eventMatchesFilter,
+  fetchFirstEvent,
+  fetchEventFromRelays
+} from './relay-fetch.js';
+import { getRelaysForKind, fetchFirstEvent, fetchEventFromRelays } from './relay-fetch.js';
 
 // ─── Metadata extraction ──────────────────────────────────────────────────────
 
@@ -478,8 +292,14 @@ export function renderOgTags(meta, url) {
 const MAX_CACHE_ENTRIES = 500;
 
 /**
+ * What the handle injects for one page target. `head` empty = negative entry;
+ * `provisional` entries are cached briefly (verdict may change).
+ * @typedef {{ head: string, body: string, noindex?: boolean, provisional?: boolean }} PageEntry
+ */
+
+/**
  * @typedef {Object} CacheEntry
- * @property {string} value
+ * @property {PageEntry} value
  * @property {number} expiresAt
  */
 
@@ -489,7 +309,7 @@ class OgCache {
 
   /**
    * @param {string} key
-   * @returns {string | null}
+   * @returns {PageEntry | null}
    */
   get(key) {
     const entry = this.#entries.get(key);
@@ -503,7 +323,7 @@ class OgCache {
 
   /**
    * @param {string} key
-   * @param {string} value
+   * @param {PageEntry} value
    * @param {number} ttlMs
    */
   set(key, value, ttlMs) {
@@ -644,8 +464,137 @@ async function fetchTargetEvent(target) {
   }
 }
 
+const AUTHOR_NAME_TIMEOUT = 1500;
+
 /**
- * SvelteKit handle hook for injecting OG meta tags.
+ * Display name of an author for the crawler byline. Short timeout: this runs
+ * before the HTML is sent, also for humans on an uncached page.
+ * @param {string} pubkey
+ * @returns {Promise<string | undefined>}
+ */
+async function fetchAuthorName(pubkey) {
+  const profileEvent = await fetchFirstEvent(
+    { kinds: [0], authors: [pubkey], limit: 1 },
+    getRelaysForKind(0, []),
+    AUTHOR_NAME_TIMEOUT
+  );
+  if (!profileEvent) return undefined;
+  const profile = getProfileContent(profileEvent);
+  return profile?.display_name || profile?.name || undefined;
+}
+
+const OWN_RELAY_TIMEOUT = 2000;
+const CURATED_MAX_WAIT = 2000;
+const NOINDEX_META = '<meta name="robots" content="noindex" />';
+
+/** Curated authors for the indexability rule (stale-while-revalidate, 1 h). */
+export const curatedAuthors = createCuratedAuthorsCache({
+  resolve: () => resolveCuratedAuthorSet(env, fetchFirstEvent),
+  ttlMs: 60 * 60 * 1000
+});
+
+/**
+ * The deployment's own relays for an indexable kind.
+ * @param {number} kind
+ * @returns {string[]}
+ */
+export function ownRelaysForKind(kind) {
+  if (kind === 30023) return parseArray(env.LONGFORM_CONTENT_RELAY);
+  if (kind === 30818) return parseArray(env.COMMUNIKEY_RELAYS);
+  if (kind === 30142) return parseArray(env.AMB_RELAYS);
+  return [];
+}
+
+/**
+ * Whether the event's address resolves on the deployment's own relays. The
+ * client tag is self-declared; this keeps content that only lives on foreign
+ * relays from being indexed under our domain.
+ * @param {import('nostr-tools').NostrEvent} nostrEvent
+ */
+async function isOnOwnRelays(nostrEvent) {
+  const relays = ownRelaysForKind(nostrEvent.kind);
+  if (relays.length === 0) return false;
+  const d = nostrEvent.tags.find((t) => t[0] === 'd')?.[1] ?? '';
+  const found = await fetchFirstEvent(
+    { kinds: [nostrEvent.kind], authors: [nostrEvent.pubkey], '#d': [d], limit: 1 },
+    relays,
+    OWN_RELAY_TIMEOUT
+  );
+  return !!found;
+}
+
+/**
+ * Build what gets injected for a resolved target: OG tags for every target.
+ * Content that passes the indexability rule ($lib/server/geo/indexability.js)
+ * also gets a canonical link and — for pages in the GEO treatment group —
+ * JSON-LD plus a server-rendered body (GEO_SERVER_CONTENT_SHARE). Everything
+ * else is marked noindex.
+ * @param {import('nostr-tools').NostrEvent} nostrEvent
+ * @param {PageTarget} target
+ * @param {URL} url
+ * @param {{ getCurated?: () => Promise<Set<string> | null>, onOwnRelays?: (e: import('nostr-tools').NostrEvent) => Promise<boolean> }} [deps]
+ * @returns {Promise<PageEntry>}
+ */
+export async function buildPageEntry(nostrEvent, target, url, deps = {}) {
+  const { getCurated = () => curatedAuthors.get(CURATED_MAX_WAIT), onOwnRelays = isOnOwnRelays } =
+    deps;
+  const og = renderOgTags(extractMetadata(nostrEvent), url.href);
+  if (target.type === 'community') return { head: og, body: '', noindex: false };
+  if (target.type === 'profile') return { head: og, body: '', noindex: true };
+  if (!INDEXABLE_KINDS.has(nostrEvent.kind)) return { head: og, body: '', noindex: true };
+
+  const curated = await getCurated();
+  const indexable =
+    isIndexableEvent(nostrEvent, {
+      clientName: env.CLIENT_NAME || env.APP_NAME || 'Edufeed',
+      curatedAuthors: curated
+    }) && (await onOwnRelays(nostrEvent));
+  if (!indexable) {
+    // Unknown curation (first resolution still pending): don't pin the
+    // verdict for the full cache lifetime.
+    return { head: og, body: '', noindex: true, provisional: curated === null };
+  }
+
+  const relayHint = getRelaysForKind(nostrEvent.kind, [])[0];
+  const canonicalPath =
+    target.type === 'wiki-topic'
+      ? `/wiki/${encodeURIComponent(target.topic)}`
+      : (canonicalPathFor(nostrEvent, { relayHint }) ?? undefined);
+  const group = geoGroup(
+    geoContentKey(nostrEvent),
+    parseShare(env.GEO_SERVER_CONTENT_SHARE),
+    env.GEO_ASSIGNMENT_SALT || DEFAULT_GEO_SALT
+  );
+
+  if (group === 'V') {
+    const canonicalUrl = `${url.origin}${canonicalPath ?? url.pathname}`;
+    return {
+      head: `${og}\n${renderHeadExtras({ canonicalUrl, jsonLd: null })}`,
+      body: '',
+      noindex: false
+    };
+  }
+
+  const content = await buildCrawlableContent(nostrEvent, {
+    origin: url.origin,
+    appName: env.APP_NAME || 'Edufeed',
+    relayHint,
+    canonicalPath,
+    authorName: nostrEvent.kind === 30142 ? undefined : await fetchAuthorName(nostrEvent.pubkey)
+  });
+  return {
+    head: `${og}\n${renderHeadExtras(content)}`,
+    body: content.bodyHtml ?? '',
+    noindex: false
+  };
+}
+
+/** @type {PageEntry} */
+const NEGATIVE_ENTRY = { head: '', body: '', noindex: true };
+
+/**
+ * SvelteKit handle hook for injecting OG meta tags (and, for content pages,
+ * the GEO canonical/JSON-LD/body or a noindex — see buildPageEntry).
  * Always injects exactly one tag set: content tags when a target resolves,
  * default site tags otherwise (no page ships a bare head).
  * @type {import('@sveltejs/kit').Handle}
@@ -658,43 +607,47 @@ export async function ogMetaHandle({ event, resolve }) {
 
   const target = resolvePageTarget(event.url.pathname);
 
-  /** @type {string | null} */
-  let ogHtml = null;
+  /** @type {PageEntry | null} */
+  let entry = null;
 
   if (target.type !== 'default') {
     const key = targetCacheKey(target);
-    ogHtml = ogCache.get(key);
+    entry = ogCache.get(key);
 
-    if (ogHtml === null) {
+    if (entry === null) {
       try {
         const nostrEvent = await fetchTargetEvent(target);
         if (nostrEvent) {
-          const meta = extractMetadata(nostrEvent);
-          ogHtml = renderOgTags(meta, event.url.href);
-          ogCache.set(key, ogHtml, POSITIVE_TTL);
+          entry = await buildPageEntry(nostrEvent, target, event.url);
+          ogCache.set(key, entry, entry.provisional ? NEGATIVE_TTL : POSITIVE_TTL);
         } else {
-          ogHtml = '';
-          ogCache.set(key, ogHtml, NEGATIVE_TTL);
+          entry = NEGATIVE_ENTRY;
+          ogCache.set(key, entry, NEGATIVE_TTL);
         }
       } catch {
-        ogHtml = '';
-        ogCache.set(key, ogHtml, NEGATIVE_TTL);
+        entry = NEGATIVE_ENTRY;
+        ogCache.set(key, entry, NEGATIVE_TTL);
       }
     }
   }
 
   // Default tags are cheap to render (string ops) and embed the per-request URL.
-  if (!ogHtml) {
-    ogHtml = renderOgTags(buildDefaultMeta(), event.url.href);
-  }
+  // Unresolvable content (empty head) is noindex: an empty shell with 200 is a soft 404.
+  const noindex = entry ? !!entry.noindex || !entry.head : isNoindexPath(event.url);
+  const head =
+    (entry?.head || renderOgTags(buildDefaultMeta(), event.url.href)) +
+    (noindex ? `\n${NOINDEX_META}` : '');
+  const body = entry?.head ? entry.body : '';
 
-  const finalOgHtml = ogHtml;
   return resolve(event, {
     // Use a replacer function, not a replacement string: String.replace
     // interprets `$&`/`` $` ``/`$'`/`$$` patterns in string replacements, and
     // attacker-controlled Nostr content (e.g. a profile title containing
     // `$'`) can corrupt the injected/surrounding HTML — output that then
     // gets cached for POSITIVE_TTL.
-    transformPageChunk: ({ html }) => html.replace('</head>', () => `${finalOgHtml}\n</head>`)
+    transformPageChunk: ({ html }) => {
+      const withHead = html.replace('</head>', () => `${head}\n</head>`);
+      return body ? withHead.replace('</body>', () => `${body}\n</body>`) : withHead;
+    }
   });
 }
