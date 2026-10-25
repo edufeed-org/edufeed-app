@@ -36,7 +36,12 @@ const amb = (d, extra = [['client', 'Edufeed']]) => ({
   created_at: 1760000000,
   content: '',
   sig: '',
-  tags: [['d', d], ['name', `Ressource ${d}`], ['description', 'Beschreibung'], ...extra]
+  tags: [
+    ['d', d],
+    ['name', `Ressource ${d}`],
+    ['description', 'Beschreibung einer Lernressource für den Religionsunterricht.'],
+    ...extra
+  ]
 });
 
 /** First d-tag whose key falls in the wanted group at share 0.5. */

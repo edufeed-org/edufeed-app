@@ -10,6 +10,7 @@ import {
 
 const AUTHOR = 'a'.repeat(64);
 const CURATED = 'b'.repeat(64);
+const LONG_DESC = 'Eine ausführliche Beschreibung der Lernressource für den Unterricht.';
 const words = (/** @type {number} */ n) => Array.from({ length: n }, (_, i) => `w${i}`).join(' ');
 
 /** @param {number} kind @param {string[][]} tags @param {string} [content] @param {string} [pubkey] */
@@ -28,22 +29,49 @@ describe('meetsQuality', () => {
     expect(meetsQuality(ev(30023, [], words(500)))).toBe(false);
   });
 
+  it('rejects placeholder descriptions of test resources', () => {
+    for (const [name, description] of [
+      ['x', 'x'],
+      ['titel', 'beschreibung'],
+      ['noch eine tolle ressource', 'mit einer super berschreibung'],
+      ['Hochgeladener Inhalt', 'Beliebiger Inhalt']
+    ]) {
+      expect(
+        meetsQuality(
+          ev(30142, [
+            ['name', name],
+            ['description', description]
+          ])
+        ),
+        name
+      ).toBe(false);
+    }
+    expect(
+      meetsQuality(
+        ev(30142, [
+          ['name', 'Gebet – Was vom Sommer bleibt'],
+          ['description', 'Gebet zum Ende des Sommers. Autorin: Ulrike Brand.']
+        ])
+      )
+    ).toBe(true);
+  });
+
   it('needs name and description for learning resources', () => {
     expect(
       meetsQuality(
         ev(30142, [
           ['name', 'N'],
-          ['description', 'D']
+          ['description', LONG_DESC]
         ])
       )
     ).toBe(true);
     expect(meetsQuality(ev(30142, [['name', 'N']]))).toBe(false);
-    expect(meetsQuality(ev(30142, [['description', 'D']]))).toBe(false);
+    expect(meetsQuality(ev(30142, [['description', LONG_DESC]]))).toBe(false);
     expect(
       meetsQuality(
         ev(30142, [
           ['name', '  '],
-          ['description', 'D']
+          ['description', LONG_DESC]
         ])
       )
     ).toBe(false);
@@ -103,7 +131,7 @@ describe('isIndexableEvent', () => {
     const res = ev(30142, [
       ['d', 'https://example.org/material'],
       ['name', 'Material'],
-      ['description', 'Eine eigene Beschreibung.'],
+      ['description', LONG_DESC],
       ['client', 'Edufeed']
     ]);
     expect(isIndexableEvent(res, opts)).toBe(true);

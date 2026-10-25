@@ -21,6 +21,9 @@ export const INDEXABLE_KINDS = new Set([30023, 30818, 30142]);
 /** Minimum body length for articles and wiki entries (filters test posts). */
 export const MIN_TEXT_WORDS = 150;
 
+/** Minimum description length for learning resources (filters "x", "beschreibung", …). */
+export const MIN_DESCRIPTION_CHARS = 40;
+
 /** @param {{ tags?: string[][] }} event @param {string} name */
 const tagValue = (event, name) => (event.tags?.find((t) => t[0] === name)?.[1] ?? '').trim();
 
@@ -34,7 +37,8 @@ const wordCount = (text) => (text.match(/\S+/g) ?? []).length;
 export function meetsQuality(event) {
   if (event.kind === 30142) {
     return (
-      !!(tagValue(event, 'name') || tagValue(event, 'title')) && !!tagValue(event, 'description')
+      !!(tagValue(event, 'name') || tagValue(event, 'title')) &&
+      tagValue(event, 'description').length >= MIN_DESCRIPTION_CHARS
     );
   }
   const longEnough = wordCount(event.content ?? '') >= MIN_TEXT_WORDS;
