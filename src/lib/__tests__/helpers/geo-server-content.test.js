@@ -59,6 +59,11 @@ describe('leftServerRenderedPage', () => {
     expect(leftServerRenderedPage(at('/wiki/x'), at('/wiki/x'))).toBe(false);
     expect(leftServerRenderedPage(at('/wiki/x'), at('/wiki/x#faq'))).toBe(false);
   });
+  it('is false when a navigation target carries no url (seen on /discover at start-up)', () => {
+    expect(leftServerRenderedPage({ url: null }, at('/discover'))).toBe(false);
+    expect(leftServerRenderedPage(at('/discover'), { url: null })).toBe(false);
+    expect(leftServerRenderedPage({ url: null }, { url: null })).toBe(false);
+  });
   it('is true once the path changes', () => {
     expect(leftServerRenderedPage(at('/wiki/x'), at('/discover'))).toBe(true);
   });

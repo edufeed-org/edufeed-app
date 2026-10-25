@@ -29,5 +29,9 @@ export function removeServerHeadExtras(doc) {
  * @param {{ url: URL } | null | undefined} to
  */
 export function leftServerRenderedPage(from, to) {
-  return !!from && !!to && from.url.pathname !== to.url.pathname;
+  // SvelteKit hands afterNavigate targets whose `url` can be null (seen on
+  // /discover during start-up); treat those as "still on the first page".
+  const fromPath = from?.url?.pathname;
+  const toPath = to?.url?.pathname;
+  return !!fromPath && !!toPath && fromPath !== toPath;
 }
