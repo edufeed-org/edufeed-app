@@ -89,11 +89,12 @@ vi.mock('$lib/stores/config.svelte.js', () => ({
     }
   }
 }));
-vi.mock('nostr-tools', () => ({
-  nip19: {
-    naddrEncode: () => 'naddr1test'
-  }
-}));
+// Keep the real exports (e.g. `kinds`, read at module load by the DM helpers
+// the card imports transitively) and stub only naddr encoding.
+vi.mock('nostr-tools', async (importOriginal) => {
+  const actual = /** @type {any} */ (await importOriginal());
+  return { ...actual, nip19: { ...actual.nip19, naddrEncode: () => 'naddr1test' } };
+});
 vi.mock('../reactions/ReactionBar.svelte', () => ({ default: () => ({}) }));
 vi.mock('../shared/EventDebugPanel.svelte', () => ({ default: () => ({}) }));
 vi.mock('../calendar/EventTags.svelte', () => ({ default: () => ({}) }));

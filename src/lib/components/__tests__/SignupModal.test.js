@@ -702,7 +702,9 @@ describe('SignupModal — backup step and unsaved-key guard', () => {
 
     await fireEvent.click(utils.getByTestId('signup-unsaved-backup'));
     expect(utils.queryByTestId('signup-unsaved-guard')).toBeNull();
-    expect(utils.getByTestId('signup-backup-step')).toBeTruthy();
+    // "Jetzt sichern" from step 2 publishes the profile first (async), then
+    // shows the backup step — same as the middle-step test below.
+    expect(await utils.findByTestId('signup-backup-step')).toBeTruthy();
   });
 
   it('"Jetzt sichern" from a middle step publishes the profile on the way to the backup step', async () => {
