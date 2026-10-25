@@ -49,7 +49,12 @@ export {
   fetchFirstEvent,
   fetchEventFromRelays
 } from './relay-fetch.js';
-import { getRelaysForKind, fetchFirstEvent, fetchEventFromRelays } from './relay-fetch.js';
+import {
+  getRelaysForKind,
+  fetchFirstEvent,
+  fetchFirstEventResult,
+  fetchEventResultFromRelays
+} from './relay-fetch.js';
 
 // ─── Metadata extraction ──────────────────────────────────────────────────────
 
@@ -351,6 +356,7 @@ export const ogCache = new OgCache();
 
 const POSITIVE_TTL = 60 * 60 * 1000; // 1 hour
 const NEGATIVE_TTL = 5 * 60 * 1000; // 5 minutes
+const TRANSIENT_TTL = 30 * 1000; // relay timeouts / unreached verdicts
 
 const NADDR_RE = /\/(naddr1[qpzry9x8gf2tvdw0s3jn54khce6mua7l]{50,})/;
 const NEVENT_RE = /\/(nevent1[qpzry9x8gf2tvdw0s3jn54khce6mua7l]{50,})/;
@@ -447,25 +453,25 @@ function targetCacheKey(target) {
 /**
  * Fetch the Nostr event backing a page target.
  * @param {PageTarget} target
- * @returns {Promise<import('nostr-tools').NostrEvent | null>}
+ * @returns {Promise<import('./relay-fetch.js').FetchResult>}
  */
-async function fetchTargetEvent(target) {
+async function fetchTarget(target) {
   switch (target.type) {
     case 'event':
-      return fetchEventFromRelays(target.identifier);
+      return fetchEventResultFromRelays(target.identifier);
     case 'profile':
     case 'community':
-      return fetchFirstEvent(
+      return fetchFirstEventResult(
         { kinds: [0], authors: [target.pubkey], limit: 1 },
         getRelaysForKind(0, [])
       );
     case 'wiki-topic':
-      return fetchFirstEvent(
+      return fetchFirstEventResult(
         { kinds: [30818], '#d': [target.topic], limit: 1 },
         getRelaysForKind(30818, [])
       );
     default:
-      return null;
+      return { event: null, complete: true };
   }
 }
 
@@ -515,17 +521,19 @@ export function ownRelaysForKind(kind) {
  * client tag is self-declared; this keeps content that only lives on foreign
  * relays from being indexed under our domain.
  * @param {import('nostr-tools').NostrEvent} nostrEvent
+ * @returns {Promise<boolean | null>} null = the relays didn't answer in time
  */
 async function isOnOwnRelays(nostrEvent) {
   const relays = ownRelaysForKind(nostrEvent.kind);
   if (relays.length === 0) return false;
   const d = nostrEvent.tags.find((t) => t[0] === 'd')?.[1] ?? '';
-  const found = await fetchFirstEvent(
+  const { event, complete } = await fetchFirstEventResult(
     { kinds: [nostrEvent.kind], authors: [nostrEvent.pubkey], '#d': [d], limit: 1 },
     relays,
     OWN_RELAY_TIMEOUT
   );
-  return !!found;
+  if (event) return true;
+  return complete ? false : null;
 }
 
 /**
@@ -537,12 +545,14 @@ async function isOnOwnRelays(nostrEvent) {
  * @param {import('nostr-tools').NostrEvent} nostrEvent
  * @param {PageTarget} target
  * @param {URL} url
- * @param {{ getCurated?: () => Promise<Set<string> | null>, onOwnRelays?: (e: import('nostr-tools').NostrEvent) => Promise<boolean> }} [deps]
+ * @param {{ getCurated?: () => Promise<Set<string> | null>, onOwnRelays?: (e: import('nostr-tools').NostrEvent) => Promise<boolean | null> }} [deps]
  * @returns {Promise<PageEntry>}
  */
 export async function buildPageEntry(nostrEvent, target, url, deps = {}) {
-  const { getCurated = () => curatedAuthors.get(CURATED_MAX_WAIT), onOwnRelays = isOnOwnRelays } =
-    deps;
+  const {
+    getCurated = () => curatedAuthors.get(CURATED_MAX_WAIT),
+    onOwnRelays: checkOwnRelays = isOnOwnRelays
+  } = deps;
   const og = renderOgTags(extractMetadata(nostrEvent), url.href);
   if (target.type === 'community') return { head: og, body: '', noindex: false };
   if (target.type === 'profile') return { head: og, body: '', noindex: true };
@@ -550,16 +560,18 @@ export async function buildPageEntry(nostrEvent, target, url, deps = {}) {
     return { head: og, body: '', noindex: true };
 
   const curated = await getCurated();
-  const indexable =
-    isIndexableEvent(nostrEvent, {
-      clientName: env.CLIENT_NAME || env.APP_NAME || 'Edufeed',
-      curatedAuthors: curated
-    }) && (await onOwnRelays(nostrEvent));
-  if (!indexable) {
-    // Unknown curation (first resolution still pending): don't pin the
-    // verdict for the full cache lifetime.
-    return { head: og, body: '', noindex: true, provisional: curated === null };
+  const byRule = isIndexableEvent(nostrEvent, {
+    clientName: env.CLIENT_NAME || env.APP_NAME || 'Edufeed',
+    curatedAuthors: curated
+  });
+  const ownRelays = byRule ? await checkOwnRelays(nostrEvent) : false;
+  // A verdict we couldn't reach (curation not resolved yet, own relays silent)
+  // is provisional: no body, but no noindex either — a crawler must never be
+  // told "don't index" because a relay was slow. Cached briefly.
+  if ((!byRule && curated === null) || (byRule && ownRelays === null)) {
+    return { head: og, body: '', noindex: false, provisional: true };
   }
+  if (!byRule || !ownRelays) return { head: og, body: '', noindex: true };
 
   const relayHint = getRelaysForKind(nostrEvent.kind, [])[0];
   const canonicalPath =
@@ -598,6 +610,9 @@ export async function buildPageEntry(nostrEvent, target, url, deps = {}) {
 /** @type {PageEntry} */
 const NEGATIVE_ENTRY = { head: '', body: '', noindex: true };
 
+/** Relay timeout: default tags, no noindex, retried soon. @type {PageEntry} */
+const TRANSIENT_ENTRY = { head: '', body: '', noindex: false, provisional: true };
+
 /**
  * SvelteKit handle hook for injecting OG meta tags (and, for content pages,
  * the GEO canonical/JSON-LD/body or a noindex — see buildPageEntry).
@@ -622,26 +637,31 @@ export async function ogMetaHandle({ event, resolve }) {
 
     if (entry === null) {
       try {
-        const nostrEvent = await fetchTargetEvent(target);
+        const { event: nostrEvent, complete } = await fetchTarget(target);
         if (nostrEvent) {
           entry = await buildPageEntry(nostrEvent, target, event.url);
-          ogCache.set(key, entry, entry.provisional ? NEGATIVE_TTL : POSITIVE_TTL);
-        } else {
+          ogCache.set(key, entry, entry.provisional ? TRANSIENT_TTL : POSITIVE_TTL);
+        } else if (complete) {
+          // Every relay answered: the content really isn't there.
           entry = NEGATIVE_ENTRY;
           ogCache.set(key, entry, NEGATIVE_TTL);
+        } else {
+          // Relays didn't answer in time — not a verdict on the page.
+          entry = TRANSIENT_ENTRY;
+          ogCache.set(key, entry, TRANSIENT_TTL);
         }
       } catch {
-        entry = NEGATIVE_ENTRY;
-        ogCache.set(key, entry, NEGATIVE_TTL);
+        entry = TRANSIENT_ENTRY;
+        ogCache.set(key, entry, TRANSIENT_TTL);
       }
     }
   }
 
   // Default tags are cheap to render (string ops) and embed the per-request URL.
-  // Unresolvable content (empty head) is noindex: an empty shell with 200 is a soft 404.
+  // Confirmed-missing content is noindex (an empty shell with 200 is a soft 404);
+  // relay timeouts and unreached verdicts are not (provisional entries).
   const noindex =
-    !isSearchIndexingEnabled(env) ||
-    (entry ? !!entry.noindex || !entry.head : isNoindexPath(event.url));
+    !isSearchIndexingEnabled(env) || (entry ? !!entry.noindex : isNoindexPath(event.url));
   const head =
     (entry?.head || renderOgTags(buildDefaultMeta(), event.url.href)) +
     (noindex ? `\n${NOINDEX_META}` : '');

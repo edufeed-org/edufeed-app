@@ -125,6 +125,15 @@ describe('buildPageEntry — not indexable', () => {
     expect(entry.head).toContain('og:title');
   });
 
+  it('treats an unanswered own-relay check as provisional, not as noindex', async () => {
+    const entry = await buildPageEntry(amb('x'), target, url, {
+      ...ok,
+      onOwnRelays: async () => null
+    });
+    expect(entry).toMatchObject({ noindex: false, provisional: true, body: '' });
+    expect(entry.head).not.toContain('canonical');
+  });
+
   it('marks content missing from our own relays noindex (forged client tag)', async () => {
     const entry = await buildPageEntry(amb('x'), target, url, {
       ...ok,
@@ -150,7 +159,9 @@ describe('buildPageEntry — not indexable', () => {
       ...ok,
       getCurated: async () => null
     });
-    expect(entry).toMatchObject({ noindex: true, provisional: true });
+    // Unknown ≠ "not indexable": no noindex for a verdict we couldn't reach.
+    expect(entry).toMatchObject({ noindex: false, provisional: true, body: '' });
+    expect(entry.head).not.toContain('canonical');
   });
 });
 
@@ -215,5 +226,22 @@ describe('SEARCH_INDEXING=false', () => {
     });
     await ogMetaHandle(/** @type {any} */ ({ event, resolve }));
     expect(captured.html).toContain('<meta name="robots" content="noindex" />');
+  });
+});
+
+describe('ogMetaHandle — relay trouble', () => {
+  it('serves no noindex for a provisional (transient) entry', async () => {
+    ogCache.clear();
+    ogCache.set('wiki:slow', { head: '', body: '', noindex: false, provisional: true }, 60000);
+    /** @type {any} */
+    const captured = {};
+    const event = { url: new URL('https://app.example.com/wiki/slow') };
+    const resolve = vi.fn((_e, opts) => {
+      captured.html = opts.transformPageChunk({ html: '<html><head></head><body></body></html>' });
+      return new Response(captured.html);
+    });
+    await ogMetaHandle(/** @type {any} */ ({ event, resolve }));
+    expect(captured.html).not.toContain('noindex');
+    expect(captured.html).toContain('og:title'); // default tags
   });
 });
