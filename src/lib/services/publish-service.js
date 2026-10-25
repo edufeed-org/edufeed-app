@@ -19,6 +19,9 @@ import {
   getCommunityRelaysByEnforcement
 } from '$lib/helpers/communityRelays.js';
 import * as outbox from './publish-outbox.js';
+import { isProtectedEvent } from 'applesauce-core/helpers/event';
+import { relaySupportsNip } from './relay-capabilities.js';
+import { publishWithAuth } from './relay-publish-auth.js';
 /**
  * @typedef {Object} PublishStatus
  * @property {string} eventId - Event ID being published
@@ -27,6 +30,8 @@ import * as outbox from './publish-outbox.js';
  * @property {number} totalRelays - Total number of relays
  * @property {string} [error] - Error message if failed
  * @property {boolean} [retryQueued] - On failure: at least one relay never answered, so the outbox will retry
+ * @property {string[]} [acceptedRelays] - Relays that accepted the event so far
+ * @property {boolean} [done] - Every relay has answered (or timed out); set on the final update
  */
 
 /** @type {Map<string, PublishStatus>} */
@@ -109,7 +114,23 @@ export async function publishToRelays(signedEvent, relays, opts = {}) {
   // a relay that answers OK:false has made a decision, and resubscribing would
   // just ask a second time and get the same no.
   /** @type {{ ok: boolean, message?: string, from: string }[]} */
-  const responses = await relayPool.publish(targets, signedEvent, { timeout, retries });
+  //
+  // A protected event (NIP-70) is refused with `auth-required` until the
+  // connection has authenticated, so it goes relay by relay through the
+  // AUTH-answering path instead (the outbox replay ends up here).
+  const responses = isProtectedEvent(signedEvent)
+    ? await Promise.all(
+        targets.map((url) =>
+          publishWithAuth(relayPool.relay(url), signedEvent, { timeout }).catch(
+            (/** @type {any} */ err) => ({
+              ok: false,
+              message: String(err?.message ?? err),
+              from: url
+            })
+          )
+        )
+      )
+    : await relayPool.publish(targets, signedEvent, { timeout, retries });
 
   for (const response of responses) {
     if (!response?.ok) {
@@ -150,12 +171,15 @@ export async function publishToRelays(signedEvent, relays, opts = {}) {
  */
 export async function computePublishRelays(signedEvent, taggedPubkeys, opts = {}) {
   const { communityEvent = null, additionalRelays = [] } = opts;
+  const isProtected = isProtectedEvent(signedEvent);
   const relaySet = new Set();
 
-  const outboxRelays = await getPublishRelays(signedEvent.pubkey, taggedPubkeys);
+  // NIP-70: a protected event stays on the author's side. Tagged users' read
+  // relays and the identity broadcast relays are other people's relays.
+  const outboxRelays = await getPublishRelays(signedEvent.pubkey, isProtected ? [] : taggedPubkeys);
   outboxRelays.forEach((r) => relaySet.add(r));
 
-  if (isIdentityKind(signedEvent.kind)) {
+  if (!isProtected && isIdentityKind(signedEvent.kind)) {
     getIdentityBroadcastRelays().forEach((r) => relaySet.add(r));
   }
 
@@ -178,7 +202,29 @@ export async function computePublishRelays(signedEvent, taggedPubkeys, opts = {}
     getFallbackRelays().forEach((r) => relaySet.add(r));
   }
 
-  return Array.from(relaySet);
+  const relays = Array.from(relaySet);
+  return isProtected ? filterProtectedCapableRelays(relays) : relays;
+}
+
+/**
+ * The relays that can actually keep a NIP-70 protected event: NIP-11
+ * advertises 70 (the relay checks the `-` tag) AND 42 (it can ask who is
+ * writing). strfry advertises 70 even with AUTH switched off and then refuses
+ * every protected event ("blocked: event marked as protected"); a relay
+ * without 70 would accept it from anyone, rebroadcasts included. A relay
+ * whose NIP-11 cannot be read is left out — sending a protected event
+ * somewhere unverified is exactly what the author opted out of.
+ *
+ * @param {string[]} relays
+ * @returns {Promise<string[]>}
+ */
+export async function filterProtectedCapableRelays(relays) {
+  const verdicts = await Promise.all(
+    relays.map(
+      async (url) => (await relaySupportsNip(url, 70)) && (await relaySupportsNip(url, 42))
+    )
+  );
+  return relays.filter((_, i) => verdicts[i]);
 }
 
 /**
@@ -197,9 +243,11 @@ export async function computePublishRelays(signedEvent, taggedPubkeys, opts = {}
 async function publishToRelay(relayUrl, signedEvent, timeout) {
   try {
     const relay = pool.relay(relayUrl);
-    // relay.publish RESOLVES with {ok:false, message} when the relay
-    // rejects the event — it only throws on connection/timeout errors.
-    const response = await relay.publish(signedEvent, { timeout });
+    // Resolves with {ok:false, message} when the relay rejects the event —
+    // only throws on connection/timeout errors. An `auth-required` refusal
+    // (NIP-42, e.g. a protected event) is answered with the active account
+    // and re-sent once; see relay-publish-auth.js.
+    const response = await publishWithAuth(relay, signedEvent, { timeout });
     outbox.markRelayDone(signedEvent.id, relayUrl);
     if (response && response.ok === false) {
       console.warn(`Relay ${relayUrl} rejected event:`, response.message);
@@ -248,7 +296,7 @@ function publishCompanions(companions, relays, timeout) {
  * @param {number} [opts.timeout] - Timeout per relay in ms (default 5000)
  * @param {import('nostr-tools').NostrEvent | null} [opts.communityEvent] - Community definition event (kind 10222) if community-targeted
  * @param {string[]} [opts.additionalRelays] - Additional relays to publish to
- * @returns {Promise<{success: boolean, relays: string[], successCount: number, results?: any[]}>}
+ * @returns {Promise<{success: boolean, relays: string[], successCount: number, acceptedRelays: string[], results?: any[]}>}
  */
 export async function publishEvent(signedEvent, taggedPubkeys = [], opts = {}) {
   // Reduced timeout from 15s to 5s - warm connections should be fast
@@ -272,6 +320,7 @@ export async function publishEvent(signedEvent, taggedPubkeys = [], opts = {}) {
     success: successCount > 0,
     relays: publishRelays,
     successCount,
+    acceptedRelays: results.filter((r) => r.success).map((r) => r.relay),
     results
   };
 }
@@ -362,7 +411,8 @@ export function publishEventOptimistic(signedEvent, taggedPubkeys = [], opts = {
     eventId: signedEvent.id,
     status: 'pending',
     successCount: 0,
-    totalRelays: 0
+    totalRelays: 0,
+    acceptedRelays: []
   };
   notifyStatusUpdate(status);
   onStatusChange?.(status);
@@ -387,6 +437,7 @@ export function publishEventOptimistic(signedEvent, taggedPubkeys = [], opts = {
         const result = await publishToRelay(relayUrl, signedEvent, timeout);
         if (result.success) {
           status.successCount++;
+          status.acceptedRelays = [...(status.acceptedRelays ?? []), relayUrl];
           // Mark as success on first successful publish
           status.status = 'success';
           notifyStatusUpdate({ ...status });
@@ -396,8 +447,15 @@ export function publishEventOptimistic(signedEvent, taggedPubkeys = [], opts = {
       })
     );
 
+    if (status.successCount > 0) {
+      status.done = true;
+      notifyStatusUpdate({ ...status });
+      onStatusChange?.({ ...status });
+    }
+
     // If no relays succeeded, mark as failed and remove from EventStore
     if (status.successCount === 0) {
+      status.done = true;
       status.status = 'failed';
       status.error = 'Failed to publish to any relay';
       // A relay that never answered is still pending in the outbox and will

@@ -16,6 +16,7 @@
   import ProfileAvatar from './ProfileAvatar.svelte';
   import MetadataAvatar from './MetadataAvatar.svelte';
   import EventContextMenu from './EventContextMenu.svelte';
+  import ProtectedBadge from './ProtectedBadge.svelte';
   import { profileLink } from '$lib/helpers/nostrUtils.js';
 
   /**
@@ -118,6 +119,7 @@
           {#if stats}
             <span class="opacity-50">&middot; {stats}</span>
           {/if}
+          <ProtectedBadge {event} class="ml-1" />
         </span>
       </div>
     {/if}

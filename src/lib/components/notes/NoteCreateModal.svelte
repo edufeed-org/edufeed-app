@@ -5,7 +5,7 @@
 -->
 
 <script>
-  import { untrack } from 'svelte';
+  import { tick, untrack } from 'svelte';
   import { NoteFactory } from 'applesauce-common/factories';
   import { getDisplayName } from 'applesauce-core/helpers';
   import { modalStore } from '$lib/stores/modal.svelte.js';
@@ -23,6 +23,8 @@
   import { pTagPubkeys } from '$lib/helpers/mention-autocomplete.js';
   import NostrContentRenderer from '$lib/components/shared/NostrContentRenderer.svelte';
   import ComposerInput from '$lib/components/shared/ComposerInput.svelte';
+  import ProtectedToggle from '$lib/components/shared/ProtectedToggle.svelte';
+  import { announceProtectedPublish } from '$lib/helpers/protected-publish-feedback.js';
   import * as m from '$lib/paraglide/messages';
 
   /**
@@ -42,6 +44,9 @@
   let isSubmitting = $state(false);
   let submitError = $state('');
   let community = $state(untrack(() => communityPubkey));
+  // NIP-70: off by default — a protected note reaches only relays that
+  // authenticate the author, i.e. fewer readers.
+  let isProtected = $state(false);
 
   const canSubmit = $derived(content.trim().length > 0 && !isSubmitting);
 
@@ -103,6 +108,7 @@
 
       // NoteFactory doesn't add h-tags; append for community targeting.
       if (community) draft.tags.push(['h', community]);
+      if (isProtected) draft.tags.push(['-']);
 
       const signed = await activeUser.signer.signEvent(draft);
 
@@ -111,12 +117,25 @@
       // their read relays too.
       const result = await publishEvent(signed, pTagPubkeys(signed), { communityEvent });
       if (!result.success) {
-        submitError = m.note_create_modal_error_publish();
+        submitError =
+          isProtected && result.relays.length === 0
+            ? m.protected_publish_no_relays()
+            : m.note_create_modal_error_publish();
         return;
       }
-
       content = '';
       modalStore.closeModal();
+      if (isProtected) {
+        // After the dialog has gone: showToast appends into an open <dialog>
+        // (top layer), so a toast raised before closing vanishes with it.
+        await tick();
+        announceProtectedPublish({
+          status: 'success',
+          done: true,
+          acceptedRelays: result.acceptedRelays ?? [],
+          totalRelays: result.relays.length
+        });
+      }
       // No goto — the feed's EventStore subscription already shows the note.
     } catch (err) {
       submitError = /** @type {any} */ (err)?.message ?? String(err);
@@ -223,6 +242,10 @@
         </select>
       </label>
     {/if}
+
+    <div class="mt-3">
+      <ProtectedToggle bind:checked={isProtected} disabled={isSubmitting} />
+    </div>
 
     {#if submitError}
       <div class="mt-3 alert alert-error" role="alert">

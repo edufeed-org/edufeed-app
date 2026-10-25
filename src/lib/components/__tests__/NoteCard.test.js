@@ -128,6 +128,7 @@ vi.mock('$lib/stores/user-profile.svelte.js', () => ({
 }));
 
 vi.mock('$lib/paraglide/messages', () => ({
+  protected_badge_label: () => 'Protected',
   comments_add: () => 'Add Comment',
   comments_cancel: () => 'Cancel',
   comments_show: () => 'Comments',
@@ -170,6 +171,17 @@ describe('NoteCard', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     repliesModelSubscriber = null;
+  });
+
+  it('shows a lock on a protected (NIP-70) note and none on an ordinary one', () => {
+    const plain = render(NoteCard, { props: { note: mockNote } });
+    expect(plain.container.querySelector('[data-testid="protected-badge"]')).toBeNull();
+    plain.unmount();
+
+    const { container } = render(NoteCard, {
+      props: { note: { ...mockNote, tags: [...(mockNote.tags ?? []), ['-']] } }
+    });
+    expect(container.querySelector('[data-testid="protected-badge"]')).toBeTruthy();
   });
 
   it('renders the chat button', () => {

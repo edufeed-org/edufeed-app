@@ -110,6 +110,21 @@ describe('createCommunityReposts (batch)', () => {
     });
   });
 
+  // NIP-70: "reposts of protected events MUST NOT embed the event". The
+  // reference (e tag + relay hint) stays, so the repost still resolves on the
+  // relays that hold the original.
+  it('never embeds a protected event in the repost', async () => {
+    const protectedNote = { ...fakeNonReplaceableEvent, tags: [['-']] };
+    await createCommunityReposts(protectedNote, ['comm-a'], fakeSigner);
+
+    const signedTemplate = fakeSigner.signEvent.mock.calls[0][0];
+    expect(signedTemplate.content).toBe('');
+    expect(signedTemplate.content).not.toContain('A short note');
+    expect(
+      signedTemplate.tags.some((/** @type {string[]} */ t) => t[0] === 'e' && t[1] === 'event456')
+    ).toBe(true);
+  });
+
   it('returns true immediately for empty community list', async () => {
     const result = await createCommunityReposts(fakeEvent, [], fakeSigner);
 

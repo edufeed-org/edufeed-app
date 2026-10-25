@@ -430,6 +430,8 @@ import { getEducationalRelays } from '$lib/helpers/relay-helper.js';
 
 Use `publishEvent(signedEvent, taggedPubkeys, { communityEvent })` from `$lib/services/publish-service.js`. It unions: author write relays (NIP-65) + tagged users' read relays + app-specific relays for the kind + community relays (if h-tagged). Backed by `relay-service.svelte.js` (NIP-65 helpers) and `relay-list-loader.js` (kind 10002).
 
+**NIP-42 / NIP-70:** every per-relay publish goes through `publishWithAuth` (`relay-publish-auth.js`): an `auth-required` refusal is answered with the active account (`authenticateOnce`, never a second AUTH) and re-sent once; anonymous users never sign anything. A **protected** event (`["-"]`, the `ProtectedToggle` in the note and article composers) skips tagged users' read relays and identity broadcast relays and goes only to relays whose NIP-11 lists both 42 and 70 (`filterProtectedCapableRelays`); reposts never embed it (`communityRepost.js`). strfry only challenges when it refuses something, and applesauce 6's default publish retry parks on `waitForAuth` — never call `relay.publish` with the default retry for user events.
+
 ### Relay Hints
 
 All `a`, `e`, `p` tags should include relay hints. Use `buildATagWithHint` / `buildETagWithHint` / `buildPTagsWithHints` from `$lib/services/publish-service.js` — each returns the tag with a `wss://...` hint appended.

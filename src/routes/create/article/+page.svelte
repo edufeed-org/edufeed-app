@@ -17,6 +17,8 @@
   import { getLicenseOptions } from '$lib/helpers/educational/licenseOptions.js';
   import { fetchProfileData } from '$lib/helpers/profile.js';
   import { articlePeopleToForm, getArticleProvenance } from '$lib/helpers/article-attribution.js';
+  import ProtectedToggle from '$lib/components/shared/ProtectedToggle.svelte';
+  import { isProtectedEvent } from 'applesauce-core/helpers/event';
   import LicensedImageInput from '$lib/components/shared/LicensedImageInput.svelte';
   import { useLicenseForHash } from '$lib/stores/image-license.svelte.js';
   import { useActiveUser } from '$lib/stores/accounts.svelte';
@@ -56,6 +58,8 @@
    */
   let bodyMedia = $state.raw([]);
   let hashtags = $state(/** @type {string[]} */ ([]));
+  // NIP-70 protected (off by default; an edit keeps what the article had).
+  let isProtected = $state(false);
 
   // Authorship & license (all optional): credit someone else as the author,
   // name the license, where the text came from and what was changed (TULLU).
@@ -138,6 +142,7 @@
         changes = provenance.changes || '';
         attributionOpen = creators.length > 0 || !!license || !!source || !!changes;
         resolveLinkedCreatorNames();
+        isProtected = isProtectedEvent(event);
       } catch (err) {
         console.error('Error loading article for edit:', err);
         editError = m.create_edit_error_article_load();
@@ -221,7 +226,8 @@
         creators,
         license: license || undefined,
         source: source.trim() || undefined,
-        changes: changes.trim() || undefined
+        changes: changes.trim() || undefined,
+        protected: isProtected
       };
 
       const options = { draft: asDraft };
@@ -396,6 +402,8 @@
         buttonText="+"
         itemType="hashtag"
       />
+
+      <ProtectedToggle bind:checked={isProtected} disabled={isPublishing} />
 
       <!-- Validation Error -->
       {#if validationError}

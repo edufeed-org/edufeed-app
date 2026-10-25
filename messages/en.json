@@ -4385,5 +4385,12 @@
   "settings_blossom_ineligible": "edufeed storage is reserved for members with an {domain} address. Your files are stored on a public server.",
   "settings_blossom_badge_default": "edufeed storage",
   "settings_blossom_badge_public": "public",
-  "settings_blossom_current_target": "Your uploads currently go to {host}."
+  "settings_blossom_current_target": "Your uploads currently go to {host}.",
+  "protected_toggle_label": "Protected",
+  "protected_toggle_hint": "Only relays that check who is publishing will store it, and nobody else can copy it to other relays. Not all relays support this, so it may end up on fewer relays and be found less often.",
+  "protected_toggle_info_aria": "What does protected mean?",
+  "protected_badge_label": "Protected: stays on the relays the author chose",
+  "protected_publish_accepted": "Stored as protected on: {relays}",
+  "protected_publish_no_relays": "None of your relays accepts protected posts yet. Turn off “Protected” to publish normally.",
+  "protected_publish_failed": "No relay accepted the protected post."
 }

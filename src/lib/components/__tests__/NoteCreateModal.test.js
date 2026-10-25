@@ -28,12 +28,13 @@ import NoteCreateModal from '$lib/components/notes/NoteCreateModal.svelte';
 const PUBKEY = 'deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef';
 const COMMUNITY = 'c0ffeec0ffeec0ffeec0ffeec0ffeec0ffeec0ffeec0ffeec0ffeec0ffeec0ff';
 
-/** @type {{ publishSpy: any, signEventSpy: any, closeSpy: any, addSpy: any, activeUser: any }} */
+/** @type {{ publishSpy: any, signEventSpy: any, closeSpy: any, addSpy: any, announceSpy: any, activeUser: any }} */
 const spies = vi.hoisted(() => ({
   publishSpy: null,
   signEventSpy: null,
   closeSpy: null,
   addSpy: null,
+  announceSpy: null,
   activeUser: null
 }));
 
@@ -43,6 +44,10 @@ vi.mock('$lib/stores/modal.svelte.js', () => ({
 
 vi.mock('$lib/services/publish-service.js', () => ({
   publishEvent: (/** @type {any[]} */ ...args) => spies.publishSpy(...args)
+}));
+
+vi.mock('$lib/helpers/protected-publish-feedback.js', () => ({
+  announceProtectedPublish: (/** @type {any[]} */ ...args) => spies.announceSpy(...args)
 }));
 
 vi.mock('$lib/stores/accounts.svelte.js', () => ({
@@ -107,6 +112,7 @@ describe('NoteCreateModal', () => {
     }));
     spies.closeSpy = vi.fn();
     spies.addSpy = vi.fn();
+    spies.announceSpy = vi.fn();
     spies.activeUser = {
       pubkey: PUBKEY,
       signer: {
@@ -188,6 +194,55 @@ describe('NoteCreateModal', () => {
     expect(signed.content).toBe('Hello feed');
     expect(spies.addSpy).toHaveBeenCalledWith(signed);
     expect(spies.closeSpy).toHaveBeenCalled();
+  });
+
+  it('publishes unprotected by default', async () => {
+    render(NoteCreateModal, { props: {} });
+    const toggle = /** @type {HTMLInputElement} */ (screen.getByTestId('protected-toggle'));
+    expect(toggle.checked).toBe(false);
+    await typeInto(screen.getByTestId('note-content-input'), 'Hello feed');
+    await fireEvent.click(screen.getByTestId('note-publish-button'));
+    await waitFor(() => expect(spies.publishSpy).toHaveBeenCalledTimes(1));
+    const signed = spies.publishSpy.mock.calls[0][0];
+    expect(signed.tags.some((/** @type {string[]} */ t) => t[0] === '-')).toBe(false);
+    expect(spies.announceSpy).not.toHaveBeenCalled();
+  });
+
+  it('marks the note protected (NIP-70) and reports the accepting relays', async () => {
+    spies.publishSpy.mockResolvedValue({
+      success: true,
+      relays: ['wss://relay.example/'],
+      successCount: 1,
+      acceptedRelays: ['wss://relay.example/']
+    });
+    render(NoteCreateModal, { props: {} });
+    await fireEvent.click(screen.getByTestId('protected-toggle'));
+    await typeInto(screen.getByTestId('note-content-input'), 'Only here');
+    await fireEvent.click(screen.getByTestId('note-publish-button'));
+    await waitFor(() => expect(spies.publishSpy).toHaveBeenCalledTimes(1));
+    const signed = spies.publishSpy.mock.calls[0][0];
+    expect(signed.tags).toContainEqual(['-']);
+    expect(spies.announceSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ done: true, acceptedRelays: ['wss://relay.example/'] })
+    );
+    expect(spies.closeSpy).toHaveBeenCalled();
+  });
+
+  it('keeps the modal open with a clear message when no relay accepts protected notes', async () => {
+    spies.publishSpy.mockResolvedValue({
+      success: false,
+      relays: [],
+      successCount: 0,
+      acceptedRelays: []
+    });
+    render(NoteCreateModal, { props: {} });
+    await fireEvent.click(screen.getByTestId('protected-toggle'));
+    await typeInto(screen.getByTestId('note-content-input'), 'Only here');
+    await fireEvent.click(screen.getByTestId('note-publish-button'));
+    await waitFor(() =>
+      expect(screen.getByRole('alert').textContent).toMatch(/Protected|Geschützt/)
+    );
+    expect(spies.closeSpy).not.toHaveBeenCalled();
   });
 
   it('passes mentioned pubkeys to publishEvent so the outbox reaches their read relays', async () => {

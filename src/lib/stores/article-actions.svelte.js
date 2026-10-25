@@ -25,6 +25,7 @@ import {
   ARTICLE_CHANGES_TAG
 } from '$lib/helpers/article-attribution.js';
 import { deleteEvent } from '$lib/helpers/eventDeletion.js';
+import { announceProtectedPublish } from '$lib/helpers/protected-publish-feedback.js';
 
 /** Kind number for NIP-23 long-form articles */
 export const ARTICLE_KIND = 30023;
@@ -46,6 +47,7 @@ export const ARTICLE_DRAFT_KIND = 30024;
  * @property {string} [imageHash] - SHA-256 of the cover image (for NIP-94 license attestation lookup)
  * @property {import('nostr-tools').NostrEvent | null} [imageLicenseEvent] - The cover's kind-1063 license attestation; rebroadcast with the article so its relays can resolve the badge
  * @property {string[]} [hashtags] - Optional hashtags
+ * @property {boolean} [protected] - NIP-70: add the `["-"]` tag, so only relays that AUTH the author store it and nobody can rebroadcast it
  * @property {Array<Partial<import('$lib/helpers/imeta.js').MediaAttachment> & { url?: string }>} [media] - Images inserted into the body this session (NIP-94 fields from the upload); become NIP-92 imeta tags for the URLs still present in `content`
  * @property {import('$lib/stores/educational-actions.svelte.js').Creator[]} [creators] - Credited people (authors / contributors); see `$lib/helpers/article-attribution.js` for the wire form
  * @property {string} [license] - License URL (`license:id`)
@@ -119,6 +121,9 @@ export function buildArticleTags(formData, dTag, communityPubkey, existingTags =
   if (formData.source?.trim()) tags.push([ARTICLE_SOURCE_TAG, formData.source.trim()]);
   if (formData.changes?.trim()) tags.push([ARTICLE_CHANGES_TAG, formData.changes.trim()]);
   appendFlattenedPeopleTags(tags, formData.creators);
+  if (formData.protected) {
+    tags.push(['-']);
+  }
 
   // NIP-92: one imeta per body image whose URL is still in the markdown.
   tags.push(...collectImetaTags(formData.content, formData.media ?? [], existingTags));
@@ -190,7 +195,8 @@ export async function createArticle(
   // Mentioned users get the article on their read relays too.
   publishEventOptimistic(articleEvent, pTagPubkeys(articleEvent), {
     communityEvent,
-    companions: companionsOf(formData)
+    companions: companionsOf(formData),
+    onStatusChange: formData.protected ? announceProtectedPublish : undefined
   });
 
   const naddr = encodeEventToNaddr(articleEvent, getAppRelaysForCategory('longform'));
@@ -258,7 +264,8 @@ export async function updateArticle(formData, existingEvent, communityEvent = nu
   const updatedEvent = await currentAccount.signEvent(eventTemplate);
   publishEventOptimistic(updatedEvent, pTagPubkeys(updatedEvent), {
     communityEvent,
-    companions: companionsOf(formData)
+    companions: companionsOf(formData),
+    onStatusChange: formData.protected ? announceProtectedPublish : undefined
   });
   if (wasDraft && !options.draft) await retireDraft(existingEvent, currentAccount);
 
