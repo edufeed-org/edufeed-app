@@ -14,6 +14,8 @@
  * the event to sit on the deployment's own relays (see isOnOwnRelays).
  */
 
+import { parseBool } from '$lib/server/env-parse.js';
+
 export const INDEXABLE_KINDS = new Set([30023, 30818, 30142]);
 
 /** Minimum body length for articles and wiki entries (filters test posts). */
@@ -94,4 +96,15 @@ export function isNoindexPath(url) {
   }
   // Search/filter variants of discover: endless URL space, same shell.
   return path === '/discover' && url.search !== '';
+}
+
+/**
+ * SEARCH_INDEXING=false turns the whole deployment into "do not index"
+ * (robots.txt disallows everything, no sitemap, noindex on every page) — for
+ * staging such as dev.edufeed.org, which serves the same content as prod.
+ * @param {Record<string, string | undefined>} env
+ * @returns {boolean}
+ */
+export function isSearchIndexingEnabled(env) {
+  return parseBool(env.SEARCH_INDEXING, true);
 }

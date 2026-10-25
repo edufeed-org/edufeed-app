@@ -567,7 +567,8 @@ everyone, never switch on user agent (cloaking); `app.html` hides the block
 for JS clients and the root layout removes it on mount; server-rendered
 markdown/djot MUST go through `sanitizeServerHtml` (`htmlSanitize.js` is a
 no-op outside the browser). `/sitemap.xml` (same rule, stale-while-revalidate,
-shrink guard) and `/robots.txt` are routes; relay reads live in
+shrink guard) and `/robots.txt` are routes; `SEARCH_INDEXING=false` (staging) disallows everything, drops the
+sitemap and marks every page noindex; relay reads live in
 `src/lib/server/relay-fetch.js`. Measurement: `geoStatsHandle`
 (`src/lib/server/geo/crawler-stats.js`, first in the hooks sequence, active only
 with `GEO_STATS_DIR`) writes daily counters of crawler requests (verified

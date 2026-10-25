@@ -1,5 +1,5 @@
 /** @vitest-environment node */
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 const env = vi.hoisted(
   () =>
@@ -185,5 +185,35 @@ describe('ogMetaHandle robots meta', () => {
       60000
     );
     expect(await run('/wiki/ok')).not.toContain('noindex');
+  });
+});
+
+describe('SEARCH_INDEXING=false', () => {
+  beforeEach(() => {
+    env.SEARCH_INDEXING = 'false';
+  });
+  afterEach(() => {
+    delete env.SEARCH_INDEXING;
+  });
+
+  it('marks even indexable content noindex, without body, JSON-LD or canonical', async () => {
+    const entry = await buildPageEntry(amb('https://oer.example/a'), target, url, ok);
+    expect(entry.noindex).toBe(true);
+    expect(entry.body).toBe('');
+    expect(entry.head).not.toContain('canonical');
+    expect(entry.head).not.toContain('ld+json');
+    expect(entry.head).toContain('og:title'); // link previews keep working
+  });
+
+  it('adds noindex to every page, also the home page', async () => {
+    /** @type {any} */
+    const captured = {};
+    const event = { url: new URL('https://dev.example/') };
+    const resolve = vi.fn((_e, opts) => {
+      captured.html = opts.transformPageChunk({ html: '<html><head></head><body></body></html>' });
+      return new Response(captured.html);
+    });
+    await ogMetaHandle(/** @type {any} */ ({ event, resolve }));
+    expect(captured.html).toContain('<meta name="robots" content="noindex" />');
   });
 });

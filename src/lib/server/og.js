@@ -29,7 +29,12 @@ import {
   geoGroup,
   parseShare
 } from '$lib/server/geo/assignment.js';
-import { INDEXABLE_KINDS, isIndexableEvent, isNoindexPath } from '$lib/server/geo/indexability.js';
+import {
+  INDEXABLE_KINDS,
+  isIndexableEvent,
+  isNoindexPath,
+  isSearchIndexingEnabled
+} from '$lib/server/geo/indexability.js';
 import {
   createCuratedAuthorsCache,
   resolveCuratedAuthorSet
@@ -541,7 +546,8 @@ export async function buildPageEntry(nostrEvent, target, url, deps = {}) {
   const og = renderOgTags(extractMetadata(nostrEvent), url.href);
   if (target.type === 'community') return { head: og, body: '', noindex: false };
   if (target.type === 'profile') return { head: og, body: '', noindex: true };
-  if (!INDEXABLE_KINDS.has(nostrEvent.kind)) return { head: og, body: '', noindex: true };
+  if (!INDEXABLE_KINDS.has(nostrEvent.kind) || !isSearchIndexingEnabled(env))
+    return { head: og, body: '', noindex: true };
 
   const curated = await getCurated();
   const indexable =
@@ -633,7 +639,9 @@ export async function ogMetaHandle({ event, resolve }) {
 
   // Default tags are cheap to render (string ops) and embed the per-request URL.
   // Unresolvable content (empty head) is noindex: an empty shell with 200 is a soft 404.
-  const noindex = entry ? !!entry.noindex || !entry.head : isNoindexPath(event.url);
+  const noindex =
+    !isSearchIndexingEnabled(env) ||
+    (entry ? !!entry.noindex || !entry.head : isNoindexPath(event.url));
   const head =
     (entry?.head || renderOgTags(buildDefaultMeta(), event.url.href)) +
     (noindex ? `\n${NOINDEX_META}` : '');

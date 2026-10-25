@@ -4,6 +4,7 @@ import {
   isIndexableEvent,
   meetsQuality,
   isNoindexPath,
+  isSearchIndexingEnabled,
   MIN_TEXT_WORDS
 } from '$lib/server/geo/indexability.js';
 
@@ -169,5 +170,14 @@ describe('isNoindexPath', () => {
     ]) {
       expect(isNoindexPath(new URL(`https://e.example${p}`)), p).toBe(false);
     }
+  });
+});
+
+describe('isSearchIndexingEnabled', () => {
+  it('is on unless SEARCH_INDEXING is explicitly false', () => {
+    expect(isSearchIndexingEnabled({})).toBe(true);
+    expect(isSearchIndexingEnabled({ SEARCH_INDEXING: 'true' })).toBe(true);
+    expect(isSearchIndexingEnabled({ SEARCH_INDEXING: 'false' })).toBe(false);
+    expect(isSearchIndexingEnabled({ SEARCH_INDEXING: '0' })).toBe(false);
   });
 });
