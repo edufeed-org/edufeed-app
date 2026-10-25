@@ -1,6 +1,8 @@
 /** @vitest-environment jsdom */
 import { describe, it, expect, beforeEach } from 'vitest';
-import { readFileSync } from 'node:fs';
+// Vite's ?raw import instead of fs: a node builtin import fails to load under
+// the jsdom environment in this repo's vitest setup ("No such built-in module: node:").
+import appHtml from '../../../app.html?raw';
 import {
   leftServerRenderedPage,
   removeServerBody,
@@ -38,7 +40,7 @@ describe('geo server content cleanup', () => {
 });
 
 describe('app.html', () => {
-  const html = readFileSync('src/app.html', 'utf8');
+  const html = appHtml;
 
   it('marks JavaScript clients before first paint and hides the crawler block for them', () => {
     expect(html).toContain("document.documentElement.classList.add('js')");
