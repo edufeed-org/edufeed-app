@@ -14,8 +14,11 @@ and gain live updates, /discover is split into hooks and per-tab
 components with four fixes on top, inline previews resolve through the
 EventStore instead of erroring, blog posts get author credits, licence,
 TULLU provenance and drafts with a preview link, and deployments can block
-authors and hide bulk calendar sources. Cut as `v0.10.0-rc.1` on
-dev.edufeed.org before this tag.
+authors and hide bulk calendar sources. `rc.2` adds three more PRs:
+NIP-70 protected events with NIP-42 AUTH on the publish path, crawlable
+content with a sitemap for search engines and AI assistants (GEO), and
+repairs for the five test suites that failed on main. Cut as
+`v0.10.0-rc.1`/`rc.2` on dev.edufeed.org before this tag.
 
 ### Deploy notes
 
@@ -33,7 +36,20 @@ dev.edufeed.org before this tag.
 - Prod and STIL `CALENDAR_RELAYS` drop `wss://dev.calendar-relay.edufeed.org`
   (the crawlers left it on 2026-10-07; only stale test-mirror events came
   from there).
-- applesauce 6.2 → 7.0 across all packages. No relay changes.
+- GEO (rc.2): new env `GEO_SERVER_CONTENT_SHARE` (share of indexable pages
+  that get the server-rendered body; prod 0.5 for the A/B experiment),
+  `GEO_ASSIGNMENT_SALT`, `GEO_INDEX_AUTHORS` (accounts whose content is
+  indexable besides content published through this deployment and curated
+  authors), `SITEMAP_AMB_RELAYS` and `GEO_STATS_DIR` with a volume for the
+  daily crawler/referral counters. Prod values are in homelab
+  `deploy_edufeed_app.yml` (`edufeed_app_geo_stats: true`). `/sitemap.xml`
+  and a dynamic `/robots.txt` are new routes.
+- NIP-70 (rc.2): relay.edufeed.org needs NIP-42 AUTH on
+  (`strfry_auth_enabled: true`, homelab `deploy_strfry.yml`) — enable it
+  only AFTER this app version is deployed, since older builds never
+  answered AUTH. Until then the "Protected" toggle reports no accepting
+  relay. dm.edufeed.org and the Concord relay stay without AUTH.
+- applesauce 6.2 → 7.0 across all packages.
 
 ### Added
 
@@ -54,6 +70,20 @@ dev.edufeed.org before this tag.
   deploy notes); the hidden-sources control sits in the count line
   ("Oktober 2026 · 22 Events · 918 importierte ausgeblendet · anzeigen",
   same on /discover's results line).
+- Protected events (NIP-70): a "Protected" toggle (default off) in the
+  note composer and the article editor publishes with the `["-"]` tag only
+  to relays that advertise NIP-42 and NIP-70, answers the relay's AUTH
+  challenge with the active account, names the accepting relays in a
+  toast, and shows a lock on note cards, article cards and detail pages.
+  Reposts never embed a protected event. Not offered for resources,
+  calendar events and comments.
+- Crawlable content (GEO): articles, wiki entries and learning resources
+  published through this deployment or by curated/listed authors get a
+  canonical link, JSON-LD and a server-rendered body that crawlers without
+  JavaScript can read; everything else carries `noindex`. `/sitemap.xml`
+  lists the indexable pages, `/robots.txt` points at it, and daily crawler
+  and referral counters (sums only, no personal data) are written when
+  `GEO_STATS_DIR` is set.
 
 ### Changed
 
@@ -89,6 +119,10 @@ dev.edufeed.org before this tag.
   the Personen panel no longer runs past the viewport on wide screens.
 - Placeholder boards ("Untitled Board", "Shared 12345") are kept off the
   discover and dashboard feeds.
+- Test suites: the five suites that failed on main after v0.10.0
+  (CalendarEventPreview, EditProfileModal, SignupModal,
+  ResourceFormWizard.edit-prefill, AMBResourceCardInteractive,
+  concord-notifications) are repaired; test files only.
 
 ## [0.9.0] - 2026-10-22
 
