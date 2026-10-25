@@ -167,6 +167,18 @@ async function pick(container, file) {
   await new Promise((r) => setTimeout(r, 10));
 }
 
+/**
+ * Pick a package that the pipeline accepts and wait until the license modal
+ * opened — under a loaded full test run the chained promises (pipeline, hash,
+ * license lookup) can take longer than pick()'s fixed 10 ms.
+ * @param {Element} container
+ * @param {File} file
+ */
+async function pickAndWaitForModal(container, file) {
+  await pick(container, file);
+  await vi.waitFor(() => expect(mocks.modalProps.open).toBe(true));
+}
+
 describe('LicensedFileInput — detectInteractive off (default)', () => {
   it('treats a .xdc like any other file, pipeline never runs', async () => {
     const { container } = render(LicensedFileInput, { props: { files: [] } });
@@ -182,7 +194,7 @@ describe('LicensedFileInput — detectInteractive on', () => {
     const { container } = render(LicensedFileInput, {
       props: { files: [], detectInteractive: true }
     });
-    await pick(container, new File(['x'], 'quiz.h5p'));
+    await pickAndWaitForModal(container, new File(['x'], 'quiz.h5p'));
 
     expect(mocks.prepareInteractivePackage).toHaveBeenCalledTimes(1);
     expect(mocks.modalProps.mime).toBe('application/x-webxdc');
@@ -198,7 +210,7 @@ describe('LicensedFileInput — detectInteractive on', () => {
     const { container } = render(LicensedFileInput, {
       props: { files: [], detectInteractive: true }
     });
-    await pick(container, new File(['x'], 'quiz.h5p'));
+    await pickAndWaitForModal(container, new File(['x'], 'quiz.h5p'));
 
     const hashed = mocks.sha256Hex.mock.calls[0][0];
     expect(hashed.name).toBe('peace-quiz.xdc');
@@ -208,7 +220,7 @@ describe('LicensedFileInput — detectInteractive on', () => {
     const { container } = render(LicensedFileInput, {
       props: { files: [], detectInteractive: true }
     });
-    await pick(container, new File(['x'], 'quiz.h5p'));
+    await pickAndWaitForModal(container, new File(['x'], 'quiz.h5p'));
 
     const result = await mocks.modalProps.beforeAttest();
 
@@ -231,7 +243,7 @@ describe('LicensedFileInput — detectInteractive on', () => {
     const { container, findByText } = render(LicensedFileInput, {
       props: { files: [], detectInteractive: true }
     });
-    await pick(container, new File(['x'], 'quiz.h5p'));
+    await pickAndWaitForModal(container, new File(['x'], 'quiz.h5p'));
 
     await mocks.modalProps.beforeAttest();
 
