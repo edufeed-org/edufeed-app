@@ -14,6 +14,7 @@ import {
   PASS_MAX_LIFETIME_S,
   buildMeetingTags,
   meetingCoordinate,
+  meetingLink,
   guestWindow,
   canHaveGuestLink,
   meetingPhase,
@@ -113,6 +114,21 @@ describe('meetingCoordinate', () => {
       tags: [['d', 'meeting-1']]
     };
     expect(meetingCoordinate(event)).toBe('31923:abc123:meeting-1');
+  });
+});
+
+describe('meetingLink', () => {
+  it('is the channel URL the scheduler stored as the location', () => {
+    const event = { tags: [['location', 'https://app.example/c/npub1x?channel=g1']] };
+    expect(meetingLink(event, () => 'fallback')).toBe('https://app.example/c/npub1x?channel=g1');
+  });
+
+  it('falls back to the page-built channel link when the location is missing or not a URL', () => {
+    expect(meetingLink({ tags: [] }, () => 'fallback')).toBe('fallback');
+    expect(meetingLink({ tags: [['location', 'Raum 12']] }, () => 'fallback')).toBe('fallback');
+    expect(meetingLink({ tags: [['location', 'javascript:alert(1)']] }, () => 'fallback')).toBe(
+      'fallback'
+    );
   });
 });
 

@@ -306,6 +306,59 @@ describe('MeetingCard', () => {
     });
   });
 
+  describe('meeting link', () => {
+    // A meeting in a public channel needs no guest pass: anyone can share the
+    // channel link the meeting already carries (issue b0d6876e).
+    it('offers "Link kopieren" to anyone and copies the meeting\'s channel link', async () => {
+      const event = meetingIn(3600, { sk: OTHER_SK });
+      render(MeetingCard, { props: { event, pointer: POINTER, user: me, isAdmin: false } });
+      const button = screen.getByTestId('meeting-card-copy-link');
+      expect(button.textContent?.trim()).toBe(m.meeting_card_copy_link());
+      await fireEvent.click(button);
+      await waitFor(() =>
+        expect(navigator.clipboard.writeText).toHaveBeenCalledWith(
+          'https://app.example/c/npub1x?channel=g1'
+        )
+      );
+      expect(h.showToast).toHaveBeenCalledWith(m.meeting_card_link_copied(), 'success');
+      // Not the organiser: no guest link beside it.
+      expect(screen.queryByTestId('meeting-card-guest-link')).toBeNull();
+    });
+
+    it('is there for a logged-out reader of a public channel and for a past meeting', async () => {
+      render(MeetingCard, {
+        props: { event: meetingIn(-3 * 3600), pointer: POINTER, user: null, isAdmin: false }
+      });
+      await tick();
+      expect(screen.getByTestId('meeting-card-copy-link')).toBeTruthy();
+    });
+
+    it('builds the channel link from the page when the meeting carries no usable location', async () => {
+      const event = meetingIn(3600);
+      event.tags = event.tags.map((t) => (t[0] === 'location' ? ['location', 'Raum 12'] : t));
+      render(MeetingCard, { props: { event, pointer: POINTER, user: me, isAdmin: false } });
+      await fireEvent.click(screen.getByTestId('meeting-card-copy-link'));
+      await waitFor(() =>
+        expect(navigator.clipboard.writeText).toHaveBeenCalledWith(
+          `${window.location.origin}${window.location.pathname}?channel=g1`
+        )
+      );
+    });
+
+    it('says so when the clipboard refuses', async () => {
+      navigator.clipboard.writeText.mockImplementation(async () => {
+        throw new Error('denied');
+      });
+      render(MeetingCard, {
+        props: { event: meetingIn(3600), pointer: POINTER, user: me, isAdmin: false }
+      });
+      await fireEvent.click(screen.getByTestId('meeting-card-copy-link'));
+      await waitFor(() =>
+        expect(h.showToast).toHaveBeenCalledWith(m.meeting_card_link_copy_failed(), 'error')
+      );
+    });
+  });
+
   describe('guest link', () => {
     it("rebuilds the organiser's guest link from the pass in the store and copies it", async () => {
       const event = meetingIn(3600);

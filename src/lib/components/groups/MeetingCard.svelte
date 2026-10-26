@@ -6,7 +6,9 @@
   "Beitreten" is the channel's own call join (`onJoin`, from GroupChat) —
   active from 15 minutes before the start, and after the end only while the
   channel's call still runs (canJoinMeetingNow, shared with the bar). The
-  organiser gets "Gast-Link kopieren": the link is rebuilt from the meeting's
+  Everyone gets "Link kopieren": the meeting's channel link (its `location`),
+  which is all a public channel's meeting needs to be shared. The
+  organiser also gets "Gast-Link kopieren": the link is rebuilt from the meeting's
   pass (self-encrypted code, listed by GroupChat), so it works on any of the
   organiser's devices. "Bearbeiten" (author only) hands the meeting and its
   pass to the opener (`onEdit`, GroupChat), which reopens the schedule dialog
@@ -30,6 +32,7 @@
     meetingTimes,
     meetingPhase,
     meetingCoordinate,
+    meetingLink,
     meetingTitle,
     canJoinMeetingNow,
     nextMeetingBoundary,
@@ -38,6 +41,7 @@
     icsFileName
   } from '$lib/groups/meetings.js';
   import { CALL_PASS_KIND, passLinkFor } from '$lib/groups/call-passes.js';
+  import { buildChannelLink } from '$lib/helpers/message-anchor.js';
   import { deleteMeeting } from '$lib/groups/meeting-actions.js';
 
   /**
@@ -180,6 +184,16 @@
     return findMeetingPass(live, coordinate);
   });
 
+  async function copyLink() {
+    const url = meetingLink(event, () => buildChannelLink(window.location, pointer.id));
+    try {
+      await navigator.clipboard.writeText(url);
+      showToast(m.meeting_card_link_copied(), 'success');
+    } catch {
+      showToast(m.meeting_card_link_copy_failed(), 'error');
+    }
+  }
+
   async function copyGuestLink() {
     if (!guestPass || !user) return;
     const url = await passLinkFor(guestPass, user, pointer, window.location.origin);
@@ -311,6 +325,14 @@
       onclick={downloadIcs}
     >
       {m.meeting_card_ics()}
+    </button>
+    <button
+      type="button"
+      class="btn btn-ghost btn-sm"
+      data-testid="meeting-card-copy-link"
+      onclick={copyLink}
+    >
+      {m.meeting_card_copy_link()}
     </button>
     {#if guestPass}
       <button

@@ -57,6 +57,22 @@ export function buildMeetingTags(formData, { groupId, dTag, channelUrl }) {
 }
 
 /**
+ * The link a meeting card copies: the channel URL the scheduler stored as
+ * the meeting's `location` (what every invitation named), or — for a
+ * meeting without a usable one — the channel link built from the current
+ * page. A public channel needs no guest pass, so this is the link anyone
+ * shares (issue b0d6876e); it never carries a pass code.
+ *
+ * @param {{tags?: string[][]}} event
+ * @param {() => string} fallback - builds the channel link from the page
+ * @returns {string}
+ */
+export function meetingLink(event, fallback) {
+  const location = event.tags?.find((tag) => tag[0] === 'location')?.[1] ?? '';
+  return /^https?:\/\//i.test(location) ? location : fallback();
+}
+
+/**
  * The NIP-52 replaceable-event coordinate (`kind:pubkey:d`) for a meeting
  * event — used to link a call pass's `a` tag back to the meeting.
  *
