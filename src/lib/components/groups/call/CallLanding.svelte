@@ -11,6 +11,7 @@
   import {
     buildMeetingIcs,
     icsFileName,
+    countdownParts,
     GUEST_EARLY_S,
     GUEST_LATE_S
   } from '$lib/groups/meetings.js';
@@ -32,6 +33,7 @@
   } from '$lib/groups/group-call.svelte.js';
   import { trackOnScreen } from '$lib/groups/track-on-screen.js';
   import { getBreakoutState } from '$lib/groups/breakout.svelte.js';
+  import { formatCountdown } from '$lib/groups/breakout.js';
   import { sameRelayUrl } from '$lib/groups/relay-url.js';
   import {
     createGuestAccount,
@@ -314,6 +316,39 @@
     // the same as an invalid/revoked link — it may well still work on retry.
     if (check.reason === 'unreachable') return 'unreachable';
     return 'invalid';
+  });
+
+  // The waiting view's "Beginnt in 3:12:05" button: a per-second tick
+  // aligned to the wall clock (each timeout lands just after the next
+  // whole second), rescheduled after every tick; nothing without a start.
+  const countdownTarget = $derived(view === 'not_yet' && notYetStartTs > 0 ? notYetStartTs : null);
+  $effect(() => {
+    if (countdownTarget === null) return;
+    // `nowS` dates from mount; the target arrives with the pass check,
+    // seconds later — refresh so the first label is not stale.
+    nowS = Math.floor(Date.now() / 1000);
+    /** @type {ReturnType<typeof setTimeout> | undefined} */
+    let timer;
+    function schedule() {
+      timer = setTimeout(
+        () => {
+          nowS = Math.floor(Date.now() / 1000);
+          schedule();
+        },
+        1000 - (Date.now() % 1000) + 20
+      );
+    }
+    schedule();
+    return () => clearTimeout(timer);
+  });
+  const countdownLabel = $derived.by(() => {
+    if (countdownTarget === null) return '';
+    const { days, seconds } = countdownParts(countdownTarget, nowS);
+    const time = formatCountdown(seconds);
+    if (days === 1) return m.call_landing_countdown_one_day({ time });
+    if (days > 1) return m.call_landing_countdown_days({ days, time });
+    if (seconds > 0) return m.call_landing_countdown({ time });
+    return m.call_landing_countdown_now();
   });
 
   // The end screen asks the relay again: a guest who hung up by mistake
@@ -676,6 +711,21 @@
                     data-testid="call-landing-name-early"
                   />
                 </div>
+              {/if}
+              {#if countdownTarget !== null}
+                <!-- Where the real join button will sit once the window
+                     opens; a timer (implicit aria-live="off"), not a live
+                     region, so a per-second change never nags a screen
+                     reader — the date line above carries the information. -->
+                <button
+                  type="button"
+                  class="btn cursor-default self-start btn-primary"
+                  aria-disabled="true"
+                  data-testid="call-landing-countdown"
+                >
+                  <span class="loading loading-xs loading-spinner" aria-hidden="true"></span>
+                  <span role="timer" class="tabular-nums">{countdownLabel}</span>
+                </button>
               {/if}
             </div>
           {:else if view === 'ready'}

@@ -80,6 +80,20 @@ export function guestWindow({ start, end }) {
 }
 
 /**
+ * The guest landing page's "Beginnt in …" countdown: whole seconds left to
+ * `targetS` (clamped at 0), split into days and the remainder for a
+ * clock-style `h:mm:ss` (formatCountdown in breakout.js).
+ *
+ * @param {number} targetS unix seconds
+ * @param {number} nowS unix seconds
+ * @returns {{days: number, seconds: number}}
+ */
+export function countdownParts(targetS, nowS) {
+  const total = Math.max(0, Math.ceil(targetS - nowS));
+  return { days: Math.floor(total / 86400), seconds: total % 86400 };
+}
+
+/**
  * Whether a guest link can be created at all: the relay rejects any pass
  * expiring more than `PASS_MAX_LIFETIME_S` from now.
  *

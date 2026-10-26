@@ -10,6 +10,7 @@ import {
   MEETING_KIND,
   GUEST_EARLY_S,
   GUEST_LATE_S,
+  countdownParts,
   PASS_MAX_LIFETIME_S,
   buildMeetingTags,
   meetingCoordinate,
@@ -123,6 +124,21 @@ describe('guestWindow', () => {
       notBefore: start - 900,
       expiration: end + 1800
     });
+  });
+});
+
+describe('countdownParts', () => {
+  it('splits the remaining seconds into days and the rest of the day', () => {
+    const now = 1_000_000;
+    expect(countdownParts(now + 2 * 86400 + 3 * 3600 + 12 * 60 + 5, now)).toEqual({
+      days: 2,
+      seconds: 3 * 3600 + 12 * 60 + 5
+    });
+    expect(countdownParts(now + 20 * 60, now)).toEqual({ days: 0, seconds: 1200 });
+  });
+  it('clamps at zero once the target has passed', () => {
+    expect(countdownParts(999, 1_000_000)).toEqual({ days: 0, seconds: 0 });
+    expect(countdownParts(1_000_000, 1_000_000)).toEqual({ days: 0, seconds: 0 });
   });
 });
 
