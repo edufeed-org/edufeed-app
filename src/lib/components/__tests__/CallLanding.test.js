@@ -552,6 +552,112 @@ describe('CallLanding', () => {
     click.mockRestore();
   });
 
+  describe('not_yet countdown button', () => {
+    beforeEach(() => {
+      vi.useFakeTimers();
+    });
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it('shows a non-clickable primary button with a spinner counting down to the meeting start', async () => {
+      const now = Math.floor(Date.now() / 1000);
+      // Guest window opens in 3 h, meeting starts 15 min after that.
+      checkCallPass.mockResolvedValue({
+        valid: false,
+        reason: 'not_yet',
+        notBefore: now + 3 * 3600,
+        expiration: now + 5 * 3600,
+        liveCount: 0
+      });
+      render(CallLanding, { props: { pointer: POINTER } });
+      await vi.advanceTimersByTimeAsync(0);
+      const button = screen.getByTestId('call-landing-countdown');
+      expect(button.tagName).toBe('BUTTON');
+      expect(button.classList.contains('btn-primary')).toBe(true);
+      expect(button.getAttribute('aria-disabled')).toBe('true');
+      expect(button.querySelector('.loading-spinner')).toBeTruthy();
+      expect(button.textContent).toContain(m.call_landing_countdown({ time: '3:15:00' }));
+      // Not a real submit/join: clicking does nothing.
+      await fireEvent.click(button);
+      expect(screen.queryByTestId('call-landing-join')).toBeNull();
+    });
+
+    it('sits after the early name field, where the join button will appear', async () => {
+      const now = Math.floor(Date.now() / 1000);
+      checkCallPass.mockResolvedValue({
+        valid: false,
+        reason: 'not_yet',
+        notBefore: now + 3600,
+        expiration: now + 7200,
+        liveCount: 0
+      });
+      render(CallLanding, { props: { pointer: POINTER } });
+      await vi.advanceTimersByTimeAsync(0);
+      const name = screen.getByTestId('call-landing-name-early');
+      const button = screen.getByTestId('call-landing-countdown');
+      expect(name.compareDocumentPosition(button) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    });
+
+    it('ticks every second, aligned to the wall clock', async () => {
+      const now = Math.floor(Date.now() / 1000);
+      checkCallPass.mockResolvedValue({
+        valid: false,
+        reason: 'not_yet',
+        notBefore: now + 20 * 60 - 900, // meeting start in exactly 20 min
+        expiration: now + 7200,
+        liveCount: 0
+      });
+      render(CallLanding, { props: { pointer: POINTER } });
+      await vi.advanceTimersByTimeAsync(0);
+      const button = screen.getByTestId('call-landing-countdown');
+      expect(button.textContent).toContain(m.call_landing_countdown({ time: '20:00' }));
+      await vi.advanceTimersByTimeAsync(1_100);
+      expect(button.textContent).toContain(m.call_landing_countdown({ time: '19:59' }));
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect(button.textContent).toContain(m.call_landing_countdown({ time: '18:59' }));
+    });
+
+    it('names days for a meeting further away, with the one-day form', async () => {
+      const now = Math.floor(Date.now() / 1000);
+      checkCallPass.mockResolvedValue({
+        valid: false,
+        reason: 'not_yet',
+        notBefore: now + 86400 + 2 * 3600 - 900,
+        expiration: now + 2 * 86400,
+        liveCount: 0
+      });
+      render(CallLanding, { props: { pointer: POINTER } });
+      await vi.advanceTimersByTimeAsync(0);
+      expect(screen.getByTestId('call-landing-countdown').textContent).toContain(
+        m.call_landing_countdown_one_day({ time: '2:00:00' })
+      );
+    });
+
+    it('counts down to the meeting start derived from not-before alone', async () => {
+      const now = Math.floor(Date.now() / 1000);
+      checkCallPass.mockResolvedValue({
+        valid: false,
+        reason: 'not_yet',
+        notBefore: now + 45 * 60, // + GUEST_EARLY_S = the start, in 60 min
+        liveCount: 0
+      });
+      render(CallLanding, { props: { pointer: POINTER } });
+      await vi.advanceTimersByTimeAsync(0);
+      expect(screen.getByTestId('call-landing-countdown').textContent).toContain(
+        m.call_landing_countdown({ time: '1:00:00' })
+      );
+    });
+
+    it('shows no countdown when the relay gave no not-before at all', async () => {
+      checkCallPass.mockResolvedValue({ valid: false, reason: 'not_yet', liveCount: 0 });
+      render(CallLanding, { props: { pointer: POINTER } });
+      await vi.advanceTimersByTimeAsync(0);
+      expect(screen.getByTestId('call-landing-not-yet')).toBeTruthy();
+      expect(screen.queryByTestId('call-landing-countdown')).toBeNull();
+    });
+  });
+
   describe('not_yet auto-switch timer', () => {
     beforeEach(() => {
       vi.useFakeTimers();
