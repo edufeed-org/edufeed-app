@@ -34,7 +34,7 @@ this total by a file or two between updates — `rail-layout-sync.test.js`
 | `community-access-filtering.test.js` | 3                     | No   | Profile-list gated forum filtering, open chat                                                                                                                                                                                                                                                                                          |
 | `community-membership.test.js`       | 12                    | Both | Join/leave flows, persistence, error handling                                                                                                                                                                                                                                                                                          |
 | `community-creation.test.js`         | 24                    | Yes  | Both keypair flows, all steps, settings, group-type step absent with flags off                                                                                                                                                                                                                                                         |
-| `discover.test.js`                   | 13                    | No   | Discovery tabs, infinite scroll, profiles, tab-switch search reset                                                                                                                                                                                                                                                                     |
+| `discover.test.js`                   | 14                    | No   | Discovery tabs, infinite scroll, profiles, tab-switch search reset, author pick clears search                                                                                                                                                                                                                                          |
 | `discover-events-filter.test.js`     | 9                     | No   | Events tab date range filter, URL persistence                                                                                                                                                                                                                                                                                          |
 | `learning-search.test.js`            | 14                    | No   | Search input, SKOS filters, tab visibility, layout                                                                                                                                                                                                                                                                                     |
 | `relay-override-pagination.test.js`  | 6                     | Yes  | Kind 30002 relay overrides, multi-relay pagination                                                                                                                                                                                                                                                                                     |
@@ -940,20 +940,21 @@ for follow-up.
 **Route:** `/discover`
 **Auth required:** No
 
-| Test                                                           | What it verifies                        |
-| -------------------------------------------------------------- | --------------------------------------- |
-| All tab: loads initial content                                 | Cards render on page load               |
-| All tab: infinite scroll loads more content                    | Scrolling loads more items              |
-| Events tab: loads calendar events and supports infinite scroll | Tab filters to events only              |
-| Learning tab: loads AMB resources and supports infinite scroll | Tab filters to AMB only                 |
-| Articles tab: loads articles and supports infinite scroll      | Tab filters to articles only            |
-| tab switching displays correct content types                   | Tabs are mutually exclusive             |
-| Learning tab: no loading flicker during infinite scroll        | Spinner doesn't flicker rapidly         |
-| Articles tab: shows "no more content" after all items loaded   | End-of-content message                  |
-| Learning tab: spinner stops after all content loaded           | Tests timedPool timeout (hanging relay) |
-| page loads without critical JavaScript errors                  | No JS errors                            |
-| Learning tab: shows author profile names on resource cards     | Profiles load via useProfileMap hook    |
-| typing a query keeps `<main>` scroll position and input focus  | URL search sync must not reset `<main>` |
+| Test                                                           | What it verifies                         |
+| -------------------------------------------------------------- | ---------------------------------------- |
+| All tab: loads initial content                                 | Cards render on page load                |
+| All tab: infinite scroll loads more content                    | Scrolling loads more items               |
+| Events tab: loads calendar events and supports infinite scroll | Tab filters to events only               |
+| Learning tab: loads AMB resources and supports infinite scroll | Tab filters to AMB only                  |
+| Articles tab: loads articles and supports infinite scroll      | Tab filters to articles only             |
+| tab switching displays correct content types                   | Tabs are mutually exclusive              |
+| Learning tab: no loading flicker during infinite scroll        | Spinner doesn't flicker rapidly          |
+| picking an autocomplete author filters, doesn't search         | author= set, search= cleared, cards show |
+| Articles tab: shows "no more content" after all items loaded   | End-of-content message                   |
+| Learning tab: spinner stops after all content loaded           | Tests timedPool timeout (hanging relay)  |
+| page loads without critical JavaScript errors                  | No JS errors                             |
+| Learning tab: shows author profile names on resource cards     | Profiles load via useProfileMap hook     |
+| typing a query keeps `<main>` scroll position and input focus  | URL search sync must not reset `<main>`  |
 
 **Components exercised:** DiscoverPage, ContentCard, InfiniteScroll sentinel, useProfileMap
 

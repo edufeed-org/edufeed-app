@@ -368,9 +368,20 @@
   function selectAuthor(author) {
     if (authorFilter.includes(author.pubkey)) return;
     authorFilter = [...authorFilter, author.pubkey];
+    // The typed name was only the way to find the person, never a content
+    // search: drop it here together with the author write. Clearing only
+    // activeSearchQuery raced like the tab switch did — the search-write
+    // effect and this author write navigated separately, the URL-read
+    // effect ran between them while the URL still held ?search=<name>, and
+    // copied the name back as an active search (0 results for a person who
+    // has content; laoc, 2026-10-26).
+    searchQuery = '';
     activeSearchQuery = '';
     displayLimit = DISPLAY_BATCH;
-    updateQueryParams($page.url.searchParams, { author: authorFilter.join(',') });
+    updateQueryParams($page.url.searchParams, {
+      author: authorFilter.join(','),
+      search: null
+    });
   }
 
   /** Remove one author, or all without a pubkey. @param {string} [pubkey] */

@@ -57,6 +57,8 @@
   } = $props();
 
   const isListTab = $derived(contentType !== 'communities' && contentType !== 'people');
+  // Hidden calendar sources only concern tabs that show calendar events.
+  const showsCalendar = $derived(contentType === 'events' || contentType === 'all');
 </script>
 
 <!-- Row 2: General filters (sort, community, relay) -->
@@ -118,10 +120,12 @@
 {/if}
 
 <!-- Results count (communities render their own) -->
-{#if contentType !== 'communities' && (resultCount > 0 || hiddenCalendarCount > 0)}
+{#if contentType !== 'communities' && (resultCount > 0 || (showsCalendar && hiddenCalendarCount > 0))}
   <div class="text-center text-sm text-base-content/70">
     {m.discover_results_count({ count: resultCount })}
-    <HiddenSourcesToggle hidden={hiddenCalendarCount} />
+    {#if showsCalendar}
+      <HiddenSourcesToggle hidden={hiddenCalendarCount} />
+    {/if}
     {#if hasMore}
       <span class="ml-2 text-primary">• {m.discover_scroll_for_more()}</span>
     {/if}
