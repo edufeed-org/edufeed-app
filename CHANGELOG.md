@@ -17,8 +17,9 @@ TULLU provenance and drafts with a preview link, and deployments can block
 authors and hide bulk calendar sources. `rc.2` adds three more PRs:
 NIP-70 protected events with NIP-42 AUTH on the publish path, crawlable
 content with a sitemap for search engines and AI assistants (GEO), and
-repairs for the five test suites that failed on main. Cut as
-`v0.10.0-rc.1`/`rc.2` on dev.edufeed.org before this tag.
+repairs for the five test suites that failed on main; `rc.3` adds the
+`SEARCH_INDEXING` switch that keeps staging out of search indexes. Cut as
+`v0.10.0-rc.1`/`rc.2`/`rc.3` on dev.edufeed.org before this tag.
 
 ### Deploy notes
 
@@ -44,6 +45,11 @@ repairs for the five test suites that failed on main. Cut as
   daily crawler/referral counters. Prod values are in homelab
   `deploy_edufeed_app.yml` (`edufeed_app_geo_stats: true`). `/sitemap.xml`
   and a dynamic `/robots.txt` are new routes.
+- `SEARCH_INDEXING` (rc.3, default true): `false` on a staging deployment
+  that mirrors prod content (dev.edufeed.org) gives `robots.txt`
+  `Disallow: /` without a sitemap, a 404 sitemap and `noindex` on every
+  page, so dev never duplicates edufeed.org in search indexes. Prod, STIL
+  and RPI leave it unset. Homelab main sets it for the dev block.
 - NIP-70 (rc.2): relay.edufeed.org needs NIP-42 AUTH on
   (`strfry_auth_enabled: true`, homelab `deploy_strfry.yml`) — enable it
   only AFTER this app version is deployed, since older builds never
@@ -119,6 +125,9 @@ repairs for the five test suites that failed on main. Cut as
   the Personen panel no longer runs past the viewport on wide screens.
 - Placeholder boards ("Untitled Board", "Shared 12345") are kept off the
   discover and dashboard feeds.
+- GEO: a slow relay no longer makes a page answer `noindex` (provisional
+  answer for 30 s instead); learning resources need a real description
+  (40+ characters) to be indexable.
 - Test suites: the five suites that failed on main after v0.10.0
   (CalendarEventPreview, EditProfileModal, SignupModal,
   ResourceFormWizard.edit-prefill, AMBResourceCardInteractive,
