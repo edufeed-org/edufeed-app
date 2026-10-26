@@ -301,3 +301,28 @@ test.describe('Discover page - tab switch resets the search', () => {
     await expect(input).toHaveValue('');
   });
 });
+
+test.describe('Discover page - picking an author from the autocomplete', () => {
+  test('the typed name becomes an author filter, not a content search', async ({ page }) => {
+    await page.goto('/discover?type=learning');
+    await waitForContent(page);
+
+    const input = page.getByRole('textbox', { name: /suche|search/i }).first();
+    await input.fill('Test Au');
+    // Let the debounce turn the typed name into an active search first — that
+    // is the state in which the race happened (?search=… already in the URL).
+    await expect(page).toHaveURL(/search=Test/, { timeout: 5_000 });
+    const option = page.locator('[data-testid="author-option"]').first();
+    await expect(option).toBeVisible({ timeout: 10_000 });
+    await option.click();
+
+    await expect(page).toHaveURL(/author=/, { timeout: 5_000 });
+    // The author write and the search-clear used to navigate separately; the
+    // URL-read effect in between copied ?search=<name> back as a content
+    // search, and a person with content showed "0 Ergebnisse".
+    await expect(page).not.toHaveURL(/search=/);
+    await expect(input).toHaveValue('');
+    await expect(page.locator('[data-testid="author-filter-badge"]')).toBeVisible();
+    await expect(page.locator('.amb-card').first()).toBeVisible({ timeout: 15_000 });
+  });
+});
