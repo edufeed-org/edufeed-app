@@ -21,7 +21,8 @@ repairs for the five test suites that failed on main; `rc.3` adds the
 `SEARCH_INDEXING` switch that keeps staging out of search indexes; `rc.4`
 fixes the author pick on /discover; `rc.5` keeps mirrors of partner
 content out of search indexes and adds a countdown to the guest call
-page. Cut as `v0.10.0-rc.1` to `rc.5` on dev.edufeed.org before this tag.
+page; `rc.6` adds a shareable link to each channel meeting. Cut as
+`v0.10.0-rc.1` to `rc.6` on dev.edufeed.org before this tag.
 
 ### Deploy notes
 
@@ -105,6 +106,11 @@ page. Cut as `v0.10.0-rc.1` to `rc.5` on dev.edufeed.org before this tag.
   of mirrored content". Articles link their source even without a license.
 - Calls (rc.5): the guest landing page shows a countdown button before the
   call window opens.
+- Meetings (rc.6): "Link kopieren" on every meeting card. The link
+  (`?meeting=<d-tag>`, built from the page the reader is on) opens the
+  channel on that meeting: highlighted, with a login prompt when logged
+  out, "only members can join" for non-members, "Beitreten ab <time>"
+  before the join window, and the focus on "Beitreten" once it opens.
 
 ### Changed
 
