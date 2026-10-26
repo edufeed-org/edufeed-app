@@ -13,7 +13,7 @@
 import { verifyEvent } from 'nostr-tools/pure';
 import { parseArray } from '$lib/server/env-parse.js';
 import { eventMatchesFilter, getRelaysForKind } from '$lib/server/relay-fetch.js';
-import { curatedAuthors } from '$lib/server/og.js';
+import { curatedAuthors, mirrorOriginal } from '$lib/server/og.js';
 import { isIndexableEvent } from './indexability.js';
 import { canonicalPathFor } from './page-content.js';
 
@@ -23,6 +23,7 @@ const PAGE_TIMEOUT = 5000;
 const EMPTY_PAGE_RETRY_MS = 2000;
 const MAX_EVENTS_PER_RELAY = 20_000;
 const CURATED_MAX_WAIT = 10_000;
+const MIRROR_CHECK_CONCURRENCY = 8;
 
 /**
  * @typedef {{ kind: number, relays: string[] }} SitemapSource
@@ -127,12 +128,11 @@ async function fetchAllEvents(filter, relays) {
 }
 
 /**
- * Latest version per address, filtered by the indexability rule.
+ * Latest version per address (kind:pubkey:d); events without a d value dropped.
  * @param {import('nostr-tools').NostrEvent[]} events
- * @param {{ origin: string, relayHintFor: (kind: number) => string | undefined, isIndexable: (e: import('nostr-tools').NostrEvent) => boolean }} opts
- * @returns {{ loc: string, lastmod: string }[]}
+ * @returns {Map<string, import('nostr-tools').NostrEvent>}
  */
-export function buildSitemapEntries(events, { origin, relayHintFor, isIndexable }) {
+export function latestByAddress(events) {
   /** @type {Map<string, import('nostr-tools').NostrEvent>} */
   const latest = new Map();
   for (const event of events) {
@@ -142,6 +142,17 @@ export function buildSitemapEntries(events, { origin, relayHintFor, isIndexable 
     const known = latest.get(address);
     if (!known || known.created_at < event.created_at) latest.set(address, event);
   }
+  return latest;
+}
+
+/**
+ * Latest version per address, filtered by the indexability rule.
+ * @param {import('nostr-tools').NostrEvent[]} events
+ * @param {{ origin: string, relayHintFor: (kind: number) => string | undefined, isIndexable: (e: import('nostr-tools').NostrEvent) => boolean }} opts
+ * @returns {{ loc: string, lastmod: string }[]}
+ */
+export function buildSitemapEntries(events, { origin, relayHintFor, isIndexable }) {
+  const latest = latestByAddress(events);
 
   /** @type {Map<string, number>} loc → newest created_at (wiki topics share a loc) */
   const byLoc = new Map();
@@ -179,6 +190,27 @@ export function renderSitemapXml(entries) {
 }
 
 /**
+ * Events that are (or may be) mirrors of partner content: resolve says
+ * anything but null (edufeed original). Checks a few at a time so a sitemap
+ * rebuild never floods a partner site.
+ * @param {import('nostr-tools').NostrEvent[]} events
+ * @param {(event: import('nostr-tools').NostrEvent) => Promise<string | null | undefined>} resolve
+ * @returns {Promise<Set<import('nostr-tools').NostrEvent>>}
+ */
+export async function findMirrors(events, resolve) {
+  /** @type {Set<import('nostr-tools').NostrEvent>} */
+  const mirrors = new Set();
+  for (let i = 0; i < events.length; i += MIRROR_CHECK_CONCURRENCY) {
+    await Promise.all(
+      events.slice(i, i + MIRROR_CHECK_CONCURRENCY).map(async (event) => {
+        if ((await resolve(event)) !== null) mirrors.add(event);
+      })
+    );
+  }
+  return mirrors;
+}
+
+/**
  * @param {string} origin
  * @param {Record<string, string | undefined>} env
  * @returns {Promise<string>}
@@ -192,11 +224,21 @@ export async function buildSitemapXml(origin, env) {
     if (source.relays.length === 0) continue;
     events.push(...(await fetchAllEvents({ kinds: [source.kind] }, source.relays)));
   }
+  const byRule = (/** @type {import('nostr-tools').NostrEvent} */ event) =>
+    isIndexableEvent(event, { clientName, curatedAuthors: curated });
+
+  // Mirrors of partner content stay out — also when the partner site didn't
+  // answer (never list a possible mirror).
+  const excluded = await findMirrors(
+    [...latestByAddress(events).values()].filter(byRule),
+    mirrorOriginal
+  );
+
   return renderSitemapXml(
     buildSitemapEntries(events, {
       origin,
       relayHintFor: (kind) => getRelaysForKind(kind, [])[0],
-      isIndexable: (event) => isIndexableEvent(event, { clientName, curatedAuthors: curated })
+      isIndexable: (event) => byRule(event) && !excluded.has(event)
     })
   );
 }

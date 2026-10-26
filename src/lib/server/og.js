@@ -40,6 +40,11 @@ import {
   resolveCuratedAuthorSet
 } from '$lib/server/geo/curated-authors.js';
 import { parseArray } from '$lib/server/env-parse.js';
+import {
+  createOriginalChecker,
+  parseOriginalTemplates,
+  resolveMirror
+} from '$lib/server/geo/originals.js';
 
 // Relay reads live in relay-fetch.js; re-exported for existing importers.
 export {
@@ -495,6 +500,38 @@ async function fetchAuthorName(pubkey) {
 }
 
 const OWN_RELAY_TIMEOUT = 2000;
+const ORIGINAL_CHECK_TIMEOUT = 3000;
+
+/**
+ * HTTP status of a partner page (HEAD, falling back to GET where HEAD isn't allowed).
+ * @param {string} url
+ */
+async function headStatus(url) {
+  const opts = {
+    redirect: /** @type {const} */ ('follow'),
+    signal: AbortSignal.timeout(ORIGINAL_CHECK_TIMEOUT)
+  };
+  const res = await fetch(url, { ...opts, method: 'HEAD' });
+  if (res.status !== 405 && res.status !== 501) return res.status;
+  const get = await fetch(url, { ...opts, method: 'GET' });
+  await get.body?.cancel();
+  return get.status;
+}
+
+/** Whether a partner's original page exists (cached 24 h). */
+export const originalChecker = createOriginalChecker({
+  head: headStatus,
+  ttlMs: 24 * 60 * 60 * 1000
+});
+
+/**
+ * Original URL when the event mirrors partner content (→ noindex), null for
+ * edufeed-original content, undefined when the partner site didn't answer.
+ * @param {import('nostr-tools').NostrEvent} nostrEvent
+ */
+export function mirrorOriginal(nostrEvent) {
+  return resolveMirror(nostrEvent, parseOriginalTemplates(env.GEO_ORIGINAL_URLS), originalChecker);
+}
 const CURATED_MAX_WAIT = 2000;
 const NOINDEX_META = '<meta name="robots" content="noindex" />';
 
@@ -545,13 +582,14 @@ async function isOnOwnRelays(nostrEvent) {
  * @param {import('nostr-tools').NostrEvent} nostrEvent
  * @param {PageTarget} target
  * @param {URL} url
- * @param {{ getCurated?: () => Promise<Set<string> | null>, onOwnRelays?: (e: import('nostr-tools').NostrEvent) => Promise<boolean | null> }} [deps]
+ * @param {{ getCurated?: () => Promise<Set<string> | null>, onOwnRelays?: (e: import('nostr-tools').NostrEvent) => Promise<boolean | null>, mirrorOf?: (e: import('nostr-tools').NostrEvent) => Promise<string | null | undefined> }} [deps]
  * @returns {Promise<PageEntry>}
  */
 export async function buildPageEntry(nostrEvent, target, url, deps = {}) {
   const {
     getCurated = () => curatedAuthors.get(CURATED_MAX_WAIT),
-    onOwnRelays: checkOwnRelays = isOnOwnRelays
+    onOwnRelays: checkOwnRelays = isOnOwnRelays,
+    mirrorOf = mirrorOriginal
   } = deps;
   const og = renderOgTags(extractMetadata(nostrEvent), url.href);
   if (target.type === 'community') return { head: og, body: '', noindex: false };
@@ -572,6 +610,12 @@ export async function buildPageEntry(nostrEvent, target, url, deps = {}) {
     return { head: og, body: '', noindex: false, provisional: true };
   }
   if (!byRule || !ownRelays) return { head: og, body: '', noindex: true };
+
+  // Partner content mirrored on edufeed: the original keeps the visibility
+  // (Google: syndication partners should block indexing of the copy).
+  const mirror = await mirrorOf(nostrEvent);
+  if (mirror === undefined) return { head: og, body: '', noindex: false, provisional: true };
+  if (mirror) return { head: og, body: '', noindex: true };
 
   const relayHint = getRelaysForKind(nostrEvent.kind, [])[0];
   const canonicalPath =
