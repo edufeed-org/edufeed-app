@@ -14,6 +14,8 @@ import {
   PASS_MAX_LIFETIME_S,
   buildMeetingTags,
   meetingCoordinate,
+  meetingLink,
+  meetingWithD,
   guestWindow,
   canHaveGuestLink,
   meetingPhase,
@@ -113,6 +115,48 @@ describe('meetingCoordinate', () => {
       tags: [['d', 'meeting-1']]
     };
     expect(meetingCoordinate(event)).toBe('31923:abc123:meeting-1');
+  });
+});
+
+describe('meetingLink', () => {
+  const channel = 'https://app.example/c/npub1x?view=channels&channel=g1';
+
+  it("is the page's channel link plus the meeting, named by its d-tag", () => {
+    const event = {
+      tags: [
+        ['d', 'm1'],
+        ['location', 'https://other.example/c/npub1x?channel=g1']
+      ]
+    };
+    expect(meetingLink(event, channel)).toBe(`${channel}&meeting=m1`);
+  });
+
+  it('replaces a stale meeting or message anchor', () => {
+    expect(meetingLink({ tags: [['d', 'm2']] }, `${channel}&message=abc&meeting=old`)).toBe(
+      `${channel}&meeting=m2`
+    );
+  });
+
+  it('is the plain channel link for a meeting without a d-tag', () => {
+    expect(meetingLink({ tags: [] }, channel)).toBe(channel);
+  });
+});
+
+describe('meetingWithD', () => {
+  const ev = (/** @type {number} */ kind, /** @type {string} */ d, /** @type {string} */ id) => ({
+    id,
+    kind,
+    tags: [['d', d]]
+  });
+
+  it('finds the meeting a link names by its d-tag', () => {
+    const events = [ev(9, 'm1', 'chat'), ev(31923, 'm1', 'meet'), ev(31923, 'm2', 'other')];
+    expect(meetingWithD(events, 'm1')?.id).toBe('meet');
+  });
+
+  it('is undefined without a d value or a match', () => {
+    expect(meetingWithD([ev(31923, 'm1', 'a')], null)).toBeUndefined();
+    expect(meetingWithD([ev(31923, 'm1', 'a')], 'x')).toBeUndefined();
   });
 });
 

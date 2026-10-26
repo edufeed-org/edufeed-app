@@ -253,7 +253,8 @@
     // still in the address bar, and must not re-open the channel from it.
     updateQueryParams(new URLSearchParams(window.location.search), {
       channel: null,
-      message: null
+      message: null,
+      meeting: null
     });
   }
 
@@ -272,7 +273,7 @@
   /**
    * Mirror a channel pick into ?channel= so the open room is shareable from
    * the address bar (replaceState'd — switching channels must not spam
-   * history). A ?message= anchor always refers to a message in ONE channel,
+   * history). A ?message= (or ?meeting=) anchor always refers to ONE channel,
    * so switching drops it. The applied trackers are pre-set so the effects
    * above don't redundantly re-apply our own write.
    * @param {string} channelId
@@ -283,13 +284,16 @@
     appliedGroupParam = channelId;
     updateQueryParams(new URLSearchParams(window.location.search), {
       channel: channelId,
-      message: null
+      message: null,
+      meeting: null
     });
   }
 
   // The chat scrolls to + highlights this message once it renders (?message=
   // deep link — consumed by GroupChat/ChannelChat via scrollToChatMessage).
   const anchorMessageId = $derived.by(() => pageUrl?.searchParams.get('message') ?? null);
+  // ?meeting=<d-tag>: a meeting card's link — GroupChat anchors that card.
+  const anchorMeeting = $derived.by(() => pageUrl?.searchParams.get('meeting') ?? null);
 
   // ?invites=1 opens the invite inbox — the sidebar's KANÄLE zone links here
   // since the desktop rail (the inbox's old entry point) became mobile-only.
@@ -946,6 +950,7 @@
               fallbackName={selectedFallbackName}
               communityPubkey={communikeyEvent?.pubkey ?? ''}
               {anchorMessageId}
+              {anchorMeeting}
               onBack={backToChannelList}
               isCommunityRoot={selectedIsRoot}
             />

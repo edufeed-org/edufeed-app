@@ -67,7 +67,8 @@
     MEETING_KIND,
     isMeetingForGroup,
     meetingTimes,
-    meetingTitle
+    meetingTitle,
+    meetingWithD
   } from '$lib/groups/meetings.js';
   import GroupPollModal from '$lib/components/groups/GroupPollModal.svelte';
   import { updatePersonalGroupsList } from '$lib/groups/personal-groups-list.js';
@@ -192,6 +193,8 @@
    * context and leaves it at the default ''.
    * anchorMessageId: a ?message= deep link — once that message is in the
    * loaded window it is scrolled into view and flashed (message-anchor.js).
+   * anchorMeeting: a ?meeting=<d-tag> link (a meeting card's "Link kopieren"):
+   * that meeting's card is anchored the same way and shown focused.
    * onBack: the community pane's "back to the channel list" (design 1a). Only
    * a host that HAS a channel list to go back to passes it — the standalone
    * /groups route keeps its host sidebar and renders no breadcrumb.
@@ -200,12 +203,13 @@
    * ownsDocumentTitle: the standalone /groups/<pointer> route has no other
    * source for the channel's name, so the chat titles the page there. Inside
    * a community the layout does it (and two writers would race).
-   * @type {{pointer: import('$lib/groups/groups.js').GroupPointer, fallbackName?: string, communityPubkey?: string, anchorMessageId?: string | null, onBack?: () => void, isCommunityRoot?: boolean, ownsDocumentTitle?: boolean}} */
+   * @type {{pointer: import('$lib/groups/groups.js').GroupPointer, fallbackName?: string, communityPubkey?: string, anchorMessageId?: string | null, anchorMeeting?: string | null, onBack?: () => void, isCommunityRoot?: boolean, ownsDocumentTitle?: boolean}} */
   let {
     pointer,
     fallbackName = '',
     communityPubkey = '',
     anchorMessageId = null,
+    anchorMeeting = null,
     onBack = undefined,
     isCommunityRoot = false,
     ownsDocumentTitle = false
@@ -1420,8 +1424,11 @@
   let appliedAnchor = null;
   /** @type {ReturnType<typeof setTimeout> | undefined} */
   let anchorTimer;
+  // A ?meeting= link anchors the current version of that meeting (an edit
+  // is a new event under the same d-tag).
+  const linkedMeeting = $derived(meetingWithD(displayed, anchorMeeting));
   $effect(() => {
-    const target = anchorMessageId;
+    const target = anchorMessageId ?? linkedMeeting?.id ?? null;
     const index = threads; // dep — retry/re-settle as the timeline streams in
     if (!target || target === appliedAnchor) return;
     if (!displayed.some((event) => event.id === target)) return;
@@ -2237,6 +2244,7 @@
             onJoin={canJoinMeeting ? joinMeeting : undefined}
             onEdit={openEditMeeting}
             callRunning={callParticipantCount > 0}
+            focused={msg.id === linkedMeeting?.id}
           />
         {/if}
       {/snippet}
