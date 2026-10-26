@@ -15,6 +15,7 @@ import {
   buildMeetingTags,
   meetingCoordinate,
   meetingLink,
+  meetingWithD,
   guestWindow,
   canHaveGuestLink,
   meetingPhase,
@@ -118,17 +119,44 @@ describe('meetingCoordinate', () => {
 });
 
 describe('meetingLink', () => {
-  it('is the channel URL the scheduler stored as the location', () => {
-    const event = { tags: [['location', 'https://app.example/c/npub1x?channel=g1']] };
-    expect(meetingLink(event, () => 'fallback')).toBe('https://app.example/c/npub1x?channel=g1');
+  const channel = 'https://app.example/c/npub1x?view=channels&channel=g1';
+
+  it("is the page's channel link plus the meeting, named by its d-tag", () => {
+    const event = {
+      tags: [
+        ['d', 'm1'],
+        ['location', 'https://other.example/c/npub1x?channel=g1']
+      ]
+    };
+    expect(meetingLink(event, channel)).toBe(`${channel}&meeting=m1`);
   });
 
-  it('falls back to the page-built channel link when the location is missing or not a URL', () => {
-    expect(meetingLink({ tags: [] }, () => 'fallback')).toBe('fallback');
-    expect(meetingLink({ tags: [['location', 'Raum 12']] }, () => 'fallback')).toBe('fallback');
-    expect(meetingLink({ tags: [['location', 'javascript:alert(1)']] }, () => 'fallback')).toBe(
-      'fallback'
+  it('replaces a stale meeting or message anchor', () => {
+    expect(meetingLink({ tags: [['d', 'm2']] }, `${channel}&message=abc&meeting=old`)).toBe(
+      `${channel}&meeting=m2`
     );
+  });
+
+  it('is the plain channel link for a meeting without a d-tag', () => {
+    expect(meetingLink({ tags: [] }, channel)).toBe(channel);
+  });
+});
+
+describe('meetingWithD', () => {
+  const ev = (/** @type {number} */ kind, /** @type {string} */ d, /** @type {string} */ id) => ({
+    id,
+    kind,
+    tags: [['d', d]]
+  });
+
+  it('finds the meeting a link names by its d-tag', () => {
+    const events = [ev(9, 'm1', 'chat'), ev(31923, 'm1', 'meet'), ev(31923, 'm2', 'other')];
+    expect(meetingWithD(events, 'm1')?.id).toBe('meet');
+  });
+
+  it('is undefined without a d value or a match', () => {
+    expect(meetingWithD([ev(31923, 'm1', 'a')], null)).toBeUndefined();
+    expect(meetingWithD([ev(31923, 'm1', 'a')], 'x')).toBeUndefined();
   });
 });
 

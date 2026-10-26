@@ -6,8 +6,8 @@
   "Beitreten" is the channel's own call join (`onJoin`, from GroupChat) —
   active from 15 minutes before the start, and after the end only while the
   channel's call still runs (canJoinMeetingNow, shared with the bar). The
-  Everyone gets "Link kopieren": the meeting's channel link (its `location`),
-  which is all a public channel's meeting needs to be shared. The
+  Everyone gets "Link kopieren": this channel's link plus `?meeting=`, which
+  opens the channel on this card, focused (join row, login hint). The
   organiser also gets "Gast-Link kopieren": the link is rebuilt from the meeting's
   pass (self-encrypted code, listed by GroupChat), so it works on any of the
   organiser's devices. "Bearbeiten" (author only) hands the meeting and its
@@ -19,6 +19,7 @@
 <script>
   import { TimelineModel } from 'applesauce-core/models';
   import * as m from '$lib/paraglide/messages';
+  import { modalStore } from '$lib/stores/modal.svelte.js';
   import { eventStore, pool } from '$lib/stores/nostr-infrastructure.svelte';
   import { useProfileMap } from '$lib/stores/profile-map.svelte.js';
   import ProfileAvatar from '$lib/components/shared/ProfileAvatar.svelte';
@@ -35,6 +36,7 @@
     meetingLink,
     meetingTitle,
     canJoinMeetingNow,
+    GUEST_EARLY_S,
     nextMeetingBoundary,
     findMeetingPass,
     buildMeetingIcs,
@@ -54,6 +56,8 @@
    * @property {((event: any, guestPass: any | null) => void) | undefined} [onEdit] - opens the
    *   edit dialog for the author's own meeting; absent = no editing here
    * @property {boolean} [callRunning] - the channel's call has participants right now
+   * @property {boolean} [focused] - opened from this meeting's link (`?meeting=`):
+   *   highlighted, with what the reader needs to join up front
    */
   /** @type {Props} */
   let {
@@ -63,7 +67,8 @@
     isAdmin,
     onJoin = undefined,
     onEdit = undefined,
-    callRunning = false
+    callRunning = false,
+    focused = false
   } = $props();
 
   // Unique per card: several cards can sit in one timeline.
@@ -148,6 +153,29 @@
   const showJoin = $derived(!!onJoin && (phase !== 'past' || callRunning));
   const joinEnabled = $derived(canJoinMeetingNow(phase, callRunning));
 
+  // Opened from the meeting's link: what stands between the reader and the
+  // call, said once above the buttons. Joinable now → no text, the focus
+  // lands on "Beitreten" (one click: the browser asks for camera and mic
+  // only after a user action, so the link never starts a call by itself).
+  /** @type {HTMLButtonElement | undefined} */
+  let joinButton = $state();
+  const focusNote = $derived.by(() => {
+    if (!focused || !times || (phase === 'past' && !callRunning)) return null;
+    if (!user) return 'login';
+    if (!onJoin) return 'members';
+    if (!joinEnabled) return 'later';
+    return null;
+  });
+  const joinFrom = $derived.by(() => {
+    if (!times) return '';
+    const opens = times.start - GUEST_EARLY_S;
+    const sameDay = dateOf(opens) === dateOf(nowS);
+    return sameDay ? formatTimeOfDay(opens) : `${dateOf(opens)} ${formatTimeOfDay(opens)}`;
+  });
+  $effect(() => {
+    if (focused && joinEnabled && joinButton) joinButton.focus();
+  });
+
   const isAuthor = $derived(!!user && user.pubkey === event.pubkey);
   const canDelete = $derived(!!user && (isAuthor || isAdmin));
   // Only the author can re-sign the addressable event (a moderator cannot).
@@ -185,7 +213,7 @@
   });
 
   async function copyLink() {
-    const url = meetingLink(event, () => buildChannelLink(window.location, pointer.id));
+    const url = meetingLink(event, buildChannelLink(window.location, pointer.id));
     try {
       await navigator.clipboard.writeText(url);
       showToast(m.meeting_card_link_copied(), 'success');
@@ -270,7 +298,9 @@
      so the card reads the same on a primary "own message" bubble. -->
 <div
   data-testid="meeting-card"
-  class="mt-2 w-full min-w-64 rounded-lg border border-base-300 bg-base-100 p-3 text-base-content"
+  class="mt-2 w-full min-w-64 rounded-lg border bg-base-100 p-3 text-base-content {focused
+    ? 'border-primary ring-2 ring-primary/40'
+    : 'border-base-300'}"
 >
   <div class="flex items-start justify-between gap-2">
     <div class="min-w-0">
@@ -305,12 +335,36 @@
     </div>
   {/if}
 
+  {#if focusNote}
+    <div
+      class="mt-3 flex flex-wrap items-center gap-2 rounded-md bg-base-200 px-3 py-2 text-sm"
+      data-testid="meeting-card-focus"
+    >
+      {#if focusNote === 'login'}
+        <span>{m.meeting_card_focus_login()}</span>
+        <button
+          type="button"
+          class="btn btn-sm btn-primary"
+          data-testid="meeting-card-focus-login"
+          onclick={() => modalStore.openModal('login')}
+        >
+          {m.meeting_card_focus_login_button()}
+        </button>
+      {:else if focusNote === 'members'}
+        <span>{m.meeting_card_focus_members_only()}</span>
+      {:else}
+        <span>{m.meeting_card_focus_join_from({ when: joinFrom })}</span>
+      {/if}
+    </div>
+  {/if}
+
   <div class="mt-3 flex flex-wrap gap-2">
     {#if showJoin}
       <button
         type="button"
         class="btn btn-sm btn-primary"
         data-testid="meeting-card-join"
+        bind:this={joinButton}
         disabled={!joinEnabled}
         title={joinEnabled ? m.meeting_card_join() : m.meeting_card_join_hint()}
         onclick={() => onJoin?.()}

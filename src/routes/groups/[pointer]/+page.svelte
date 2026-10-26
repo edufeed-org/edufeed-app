@@ -24,6 +24,7 @@
   // ?message= deep link (a copied message link carries ?channel= too, which
   // is meaningless here — the channel is in the path — and stays ignored).
   const anchorMessageId = $derived($page.url.searchParams.get('message'));
+  const anchorMeeting = $derived($page.url.searchParams.get('meeting'));
 </script>
 
 <!-- A valid pointer: GroupChat titles the page with the channel's name
@@ -41,7 +42,7 @@
       <!-- Keyed on the channel: switching channels must remount the chat, or
            a draft typed in one would still be in the composer of the next. -->
       {#key `${pointer.relay}'${pointer.id}`}
-        <GroupChat {pointer} {anchorMessageId} ownsDocumentTitle />
+        <GroupChat {pointer} {anchorMessageId} {anchorMeeting} ownsDocumentTitle />
       {/key}
     </div>
   </div>

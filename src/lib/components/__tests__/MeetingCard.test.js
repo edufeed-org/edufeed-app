@@ -88,6 +88,9 @@ function meetingIn(inS, { sk = MY_SK, title = 'Elternabend', content = 'Bitte pÃ
   );
 }
 
+/** @param {{tags: string[][]}} event */
+const dOf = (event) => event.tags.find((t) => t[0] === 'd')?.[1];
+
 /** A meeting pass of mine linked to `meeting`. */
 function passFor(meeting) {
   const coordinate = `31923:${meeting.pubkey}:${meeting.tags.find((t) => t[0] === 'd')[1]}`;
@@ -309,7 +312,7 @@ describe('MeetingCard', () => {
   describe('meeting link', () => {
     // A meeting in a public channel needs no guest pass: anyone can share the
     // channel link the meeting already carries (issue b0d6876e).
-    it('offers "Link kopieren" to anyone and copies the meeting\'s channel link', async () => {
+    it('offers "Link kopieren" to anyone and copies this channel\'s link to the meeting', async () => {
       const event = meetingIn(3600, { sk: OTHER_SK });
       render(MeetingCard, { props: { event, pointer: POINTER, user: me, isAdmin: false } });
       const button = screen.getByTestId('meeting-card-copy-link');
@@ -317,7 +320,7 @@ describe('MeetingCard', () => {
       await fireEvent.click(button);
       await waitFor(() =>
         expect(navigator.clipboard.writeText).toHaveBeenCalledWith(
-          'https://app.example/c/npub1x?channel=g1'
+          `${window.location.origin}${window.location.pathname}?channel=g1&meeting=${dOf(event)}`
         )
       );
       expect(h.showToast).toHaveBeenCalledWith(m.meeting_card_link_copied(), 'success');
@@ -333,18 +336,6 @@ describe('MeetingCard', () => {
       expect(screen.getByTestId('meeting-card-copy-link')).toBeTruthy();
     });
 
-    it('builds the channel link from the page when the meeting carries no usable location', async () => {
-      const event = meetingIn(3600);
-      event.tags = event.tags.map((t) => (t[0] === 'location' ? ['location', 'Raum 12'] : t));
-      render(MeetingCard, { props: { event, pointer: POINTER, user: me, isAdmin: false } });
-      await fireEvent.click(screen.getByTestId('meeting-card-copy-link'));
-      await waitFor(() =>
-        expect(navigator.clipboard.writeText).toHaveBeenCalledWith(
-          `${window.location.origin}${window.location.pathname}?channel=g1`
-        )
-      );
-    });
-
     it('says so when the clipboard refuses', async () => {
       navigator.clipboard.writeText.mockImplementation(async () => {
         throw new Error('denied');
@@ -356,6 +347,68 @@ describe('MeetingCard', () => {
       await waitFor(() =>
         expect(h.showToast).toHaveBeenCalledWith(m.meeting_card_link_copy_failed(), 'error')
       );
+    });
+  });
+
+  describe('opened from a meeting link (focused)', () => {
+    const onJoin = vi.fn();
+
+    it('asks a logged-out reader to log in', async () => {
+      render(MeetingCard, {
+        props: {
+          event: meetingIn(600),
+          pointer: POINTER,
+          user: null,
+          isAdmin: false,
+          focused: true
+        }
+      });
+      const focus = await screen.findByTestId('meeting-card-focus');
+      expect(focus.textContent).toContain(m.meeting_card_focus_login());
+      expect(screen.getByTestId('meeting-card-focus-login')).toBeTruthy();
+    });
+
+    it('says from when joining opens while the meeting is still ahead', async () => {
+      const event = meetingIn(3 * 3600);
+      render(MeetingCard, {
+        props: { event, pointer: POINTER, user: me, isAdmin: false, onJoin, focused: true }
+      });
+      const focus = await screen.findByTestId('meeting-card-focus');
+      expect(focus.textContent).toContain(m.meeting_card_focus_join_from({ when: '' }).trim());
+      expect(screen.getByTestId('meeting-card-join').hasAttribute('disabled')).toBe(true);
+    });
+
+    it('puts the focus on "Beitreten" once the meeting can be joined', async () => {
+      render(MeetingCard, {
+        props: {
+          event: meetingIn(600),
+          pointer: POINTER,
+          user: me,
+          isAdmin: false,
+          onJoin,
+          focused: true
+        }
+      });
+      await waitFor(() =>
+        expect(document.activeElement).toBe(screen.getByTestId('meeting-card-join'))
+      );
+      expect(screen.queryByTestId('meeting-card-focus')).toBeNull();
+    });
+
+    it('tells a logged-in reader who cannot join that only channel members can', async () => {
+      render(MeetingCard, {
+        props: { event: meetingIn(600), pointer: POINTER, user: me, isAdmin: false, focused: true }
+      });
+      const focus = await screen.findByTestId('meeting-card-focus');
+      expect(focus.textContent).toContain(m.meeting_card_focus_members_only());
+    });
+
+    it('shows nothing extra when the card was not linked', async () => {
+      render(MeetingCard, {
+        props: { event: meetingIn(600), pointer: POINTER, user: null, isAdmin: false }
+      });
+      await tick();
+      expect(screen.queryByTestId('meeting-card-focus')).toBeNull();
     });
   });
 

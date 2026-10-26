@@ -57,19 +57,46 @@ export function buildMeetingTags(formData, { groupId, dTag, channelUrl }) {
 }
 
 /**
- * The link a meeting card copies: the channel URL the scheduler stored as
- * the meeting's `location` (what every invitation named), or — for a
- * meeting without a usable one — the channel link built from the current
- * page. A public channel needs no guest pass, so this is the link anyone
- * shares (issue b0d6876e); it never carries a pass code.
+ * The link a meeting card copies: the channel link of the page the reader is
+ * on, plus `meeting=<d-tag>`. The channel opens with that meeting's card
+ * scrolled into view and its join row up front (GroupChat). The current
+ * page, not the stored `location`: a meeting scheduled on another
+ * deployment (STIL) would otherwise hand out that deployment's link. The
+ * d-tag, not the event id: a rescheduled meeting is a new event with the
+ * same d-tag, so a shared link survives the edit. Never carries a pass code
+ * (issue b0d6876e).
  *
  * @param {{tags?: string[][]}} event
- * @param {() => string} fallback - builds the channel link from the page
+ * @param {string} channelUrl - the channel link built from the page
  * @returns {string}
  */
-export function meetingLink(event, fallback) {
-  const location = event.tags?.find((tag) => tag[0] === 'location')?.[1] ?? '';
-  return /^https?:\/\//i.test(location) ? location : fallback();
+export function meetingLink(event, channelUrl) {
+  const d = event.tags?.find((tag) => tag[0] === 'd')?.[1] ?? '';
+  if (!d) return channelUrl;
+  try {
+    const url = new URL(channelUrl);
+    url.searchParams.delete('message');
+    url.searchParams.set('meeting', d);
+    return url.toString();
+  } catch {
+    return channelUrl;
+  }
+}
+
+/**
+ * The meeting a `?meeting=<d-tag>` link names, among the loaded channel
+ * events (chat messages, polls and meetings alike).
+ *
+ * @template {{kind?: number, tags?: string[][]}} E
+ * @param {E[]} events
+ * @param {string | null | undefined} d
+ * @returns {E | undefined}
+ */
+export function meetingWithD(events, d) {
+  if (!d) return undefined;
+  return events.find(
+    (event) => event.kind === MEETING_KIND && event.tags?.find((t) => t[0] === 'd')?.[1] === d
+  );
 }
 
 /**
