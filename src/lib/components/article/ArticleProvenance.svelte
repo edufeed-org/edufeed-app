@@ -1,7 +1,8 @@
 <!--
   ArticleProvenance — who wrote a NIP-23 article and under which terms.
   Credited people (authors and contributors), then the license card with the
-  TULLU citation, the original source and the modification note. Renders
+  TULLU citation, the original source and the modification note. The source
+  alone (a mirrored post without license) gets a one-line link. Renders
   nothing for an article that carries none of it (the common case).
   Wire form: $lib/helpers/article-attribution.js
 -->
@@ -69,7 +70,7 @@
   });
 </script>
 
-{#if people.length > 0 || provenance.license}
+{#if people.length > 0 || provenance.license || provenance.source}
   <section class="article-provenance mb-8 space-y-4">
     {#if people.length > 0}
       <div data-testid="article-people">
@@ -151,6 +152,15 @@
           </div>
         {/if}
       </div>
+    {:else if provenance.source}
+      <!-- A mirror without license: still point readers to the original -->
+      <p data-testid="article-source" class="text-sm">
+        <span class="text-base-content/70">{m.article_view_source()}:</span>
+        <!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- external source URL -->
+        <a href={provenance.source} target="_blank" rel="noopener noreferrer" class="link break-all"
+          >{provenance.source}</a
+        >
+      </p>
     {/if}
   </section>
 {/if}

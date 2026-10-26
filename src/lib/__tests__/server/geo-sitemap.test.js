@@ -8,7 +8,8 @@ import {
   sitemapSources,
   buildSitemapEntries,
   renderSitemapXml,
-  createSitemapCache
+  createSitemapCache,
+  findMirrors
 } from '$lib/server/geo/sitemap.js';
 
 const A = 'a'.repeat(64);
@@ -185,5 +186,31 @@ describe('createSitemapCache', () => {
     await cache.get('o', recovered);
     await vi.waitFor(() => expect(recovered).toHaveBeenCalledTimes(1));
     expect(await cache.get('o', recovered)).toBe(xmlWith(9));
+  });
+});
+
+describe('findMirrors', () => {
+  it('excludes mirrors and events whose original could not be checked', async () => {
+    const ev = (/** @type {string} */ d) =>
+      /** @type {import('nostr-tools').NostrEvent} */ ({
+        kind: 30023,
+        pubkey: 'p',
+        tags: [['d', d]]
+      });
+    const events = [
+      'own',
+      'mirror',
+      'unknown',
+      ...Array.from({ length: 20 }, (_, i) => `own${i}`)
+    ].map(ev);
+    const answers = /** @type {Record<string, string | null | undefined>} */ ({
+      mirror: 'https://partner.example/mirror/',
+      unknown: undefined
+    });
+    const mirrors = await findMirrors(events, async (e) => {
+      const d = e.tags[0][1];
+      return d in answers ? answers[d] : null;
+    });
+    expect([...mirrors].map((e) => e.tags[0][1]).sort()).toEqual(['mirror', 'unknown']);
   });
 });

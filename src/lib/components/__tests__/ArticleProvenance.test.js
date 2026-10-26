@@ -59,6 +59,17 @@ describe('ArticleProvenance', () => {
     expect(container.textContent?.trim()).toBe('');
   });
 
+  it('links the original source of a mirrored article even without a license', () => {
+    const { getByTestId } = render(ArticleProvenance, {
+      props: { event: article([['source', 'https://oer.community/beitrag/']]), ...app }
+    });
+    const block = getByTestId('article-source');
+    expect(block.textContent).toContain('Ursprung');
+    const link = block.querySelector('a');
+    expect(link?.getAttribute('href')).toBe('https://oer.community/beitrag/');
+    expect(link?.getAttribute('rel')).not.toContain('nofollow');
+  });
+
   it('lists credited people with resolved names and role badges', () => {
     const { container, getByTestId } = render(ArticleProvenance, {
       props: {

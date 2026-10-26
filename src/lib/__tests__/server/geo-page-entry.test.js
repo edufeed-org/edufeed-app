@@ -25,7 +25,8 @@ const target = /** @type {const} */ ({ type: 'event', identifier: 'naddr1abc' })
 /** Dependencies of a page whose author is curated and whose event is on our relays. */
 const ok = {
   getCurated: async () => new Set([CURATED]),
-  onOwnRelays: async () => true
+  onOwnRelays: async () => true,
+  mirrorOf: async () => null
 };
 
 /** @param {string} d @param {string[][]} [extra] */
@@ -248,5 +249,42 @@ describe('ogMetaHandle — relay trouble', () => {
     await ogMetaHandle(/** @type {any} */ ({ event, resolve }));
     expect(captured.html).not.toContain('noindex');
     expect(captured.html).toContain('og:title'); // default tags
+  });
+});
+
+describe('buildPageEntry — mirrors of partner content', () => {
+  it('gives a mirror noindex and no body or canonical', async () => {
+    const entry = await buildPageEntry(amb('https://oer.example/a'), target, url, {
+      ...ok,
+      mirrorOf: async () => 'https://oer.example/a'
+    });
+    expect(entry.noindex).toBe(true);
+    expect(entry.body).toBe('');
+    expect(entry.head).not.toContain('rel="canonical"');
+    expect(entry.head).toContain('og:title');
+  });
+
+  it('is provisional (no noindex) when the partner site did not answer', async () => {
+    const entry = await buildPageEntry(amb('x'), target, url, {
+      ...ok,
+      mirrorOf: async () => undefined
+    });
+    expect(entry).toMatchObject({ noindex: false, provisional: true, body: '' });
+  });
+
+  it('does not check for mirrors when the rule already rejects the event', async () => {
+    const mirrorOf = vi.fn(async () => null);
+    const entry = await buildPageEntry(amb('x', []), target, url, { ...ok, mirrorOf });
+    expect(entry.noindex).toBe(true);
+    expect(mirrorOf).not.toHaveBeenCalled();
+  });
+
+  it('treats a learning resource with an external URL d-tag as a mirror by default', async () => {
+    const { onOwnRelays, getCurated } = ok;
+    const entry = await buildPageEntry(amb('https://partner.example/m.pdf'), target, url, {
+      onOwnRelays,
+      getCurated
+    });
+    expect(entry.noindex).toBe(true);
   });
 });

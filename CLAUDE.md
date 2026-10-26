@@ -562,7 +562,14 @@ function) and, in the treatment group (`GEO_SERVER_CONTENT_SHARE`, default
 all), JSON-LD plus an `<article id="geo-content">` body before `</body>`.
 Everything else — bulk-imported third-party metadata, other people's Nostr
 content, profiles, social items, app routes (`isNoindexPath`), unresolvable
-content — gets `<meta name="robots" content="noindex">`. Rules: same HTML for
+content — gets `<meta name="robots" content="noindex">`. So do **mirrors of
+partner content** (`src/lib/server/geo/originals.js`, Google's syndication
+advice — the partner's original keeps the visibility): an event with a
+`["source", <url>]` tag (the blog form's "Ursprung"), a learning resource whose
+d-tag is a URL, or — for partners that don't tag yet — a match of the
+per-author `GEO_ORIGINAL_URLS` template whose page exists (HEAD, 24 h cache;
+404 = edufeed original, no answer = provisional). The convention is the wiki
+article `edufeed-original-sources` in edufeed/wikis. Rules: same HTML for
 everyone, never switch on user agent (cloaking); `app.html` hides the block
 for JS clients and the root layout removes it on mount; server-rendered
 markdown/djot MUST go through `sanitizeServerHtml` (`htmlSanitize.js` is a
