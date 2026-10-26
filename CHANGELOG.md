@@ -18,8 +18,9 @@ authors and hide bulk calendar sources. `rc.2` adds three more PRs:
 NIP-70 protected events with NIP-42 AUTH on the publish path, crawlable
 content with a sitemap for search engines and AI assistants (GEO), and
 repairs for the five test suites that failed on main; `rc.3` adds the
-`SEARCH_INDEXING` switch that keeps staging out of search indexes. Cut as
-`v0.10.0-rc.1`/`rc.2`/`rc.3` on dev.edufeed.org before this tag.
+`SEARCH_INDEXING` switch that keeps staging out of search indexes; `rc.4`
+fixes the author pick on /discover. Cut as `v0.10.0-rc.1` to `rc.4` on
+dev.edufeed.org before this tag.
 
 ### Deploy notes
 
@@ -125,6 +126,10 @@ repairs for the five test suites that failed on main; `rc.3` adds the
   the Personen panel no longer runs past the viewport on wide screens.
 - Placeholder boards ("Untitled Board", "Shared 12345") are kept off the
   discover and dashboard feeds.
+- /discover (rc.4): picking a person from the search suggestions no longer
+  keeps the typed name as a content search next to the author chip (a
+  person with content showed 0 results); the imported-events fragment in
+  the results line appears on the events and "all" tabs only.
 - GEO: a slow relay no longer makes a page answer `noindex` (provisional
   answer for 30 s instead); learning resources need a real description
   (40+ characters) to be indexable.
