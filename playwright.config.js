@@ -20,6 +20,18 @@ const BLOSSOM_SERVER_URL = 'http://localhost:13000';
 // port when running two trees at once. Default unchanged.
 const WEB_SERVER_PORT = Number(process.env.E2E_PORT) || 14173;
 
+const CHROMIUM_BIN = process.env.CHROMIUM_BIN || 'chromium';
+// A nix-store chromium carries a full RPATH and must not inherit
+// LD_LIBRARY_PATH: the nixpkgs claude-code wrapper prefixes it with the
+// system's alsa-lib (built against a newer glibc than the flake's chromium),
+// and that libasound shadows chromium's own — the browser dies at launch with
+// `GLIBC_ABI_GNU2_TLS' not found` for every e2e run started from a Claude
+// session (measured 2026-10-26). Hand such a browser a clean one; any other
+// executable keeps the inherited environment untouched.
+const BROWSER_ENV = CHROMIUM_BIN.startsWith('/nix/store/')
+  ? { ...process.env, LD_LIBRARY_PATH: '' }
+  : process.env;
+
 export default defineConfig({
   testDir: 'e2e',
   testMatch: '**/*.test.js',
@@ -49,7 +61,8 @@ export default defineConfig({
       use: {
         browserName: 'chromium',
         launchOptions: {
-          executablePath: process.env.CHROMIUM_BIN || 'chromium',
+          executablePath: CHROMIUM_BIN,
+          env: BROWSER_ENV,
           // Opt-in only: some hosts substitute a PNA-enforcing google-chrome
           // build for CHROMIUM_BIN (broken nix chromium), which blocks the
           // e2e mock relays' localhost WebSockets under Chrome's Local
