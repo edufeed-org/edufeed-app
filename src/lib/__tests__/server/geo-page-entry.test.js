@@ -1,5 +1,5 @@
 /** @vitest-environment node */
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 const env = vi.hoisted(
   () =>
@@ -36,7 +36,12 @@ const amb = (d, extra = [['client', 'Edufeed']]) => ({
   created_at: 1760000000,
   content: '',
   sig: '',
-  tags: [['d', d], ['name', `Ressource ${d}`], ['description', 'Beschreibung'], ...extra]
+  tags: [
+    ['d', d],
+    ['name', `Ressource ${d}`],
+    ['description', 'Beschreibung einer Lernressource für den Religionsunterricht.'],
+    ...extra
+  ]
 });
 
 /** First d-tag whose key falls in the wanted group at share 0.5. */
@@ -125,6 +130,15 @@ describe('buildPageEntry — not indexable', () => {
     expect(entry.head).toContain('og:title');
   });
 
+  it('treats an unanswered own-relay check as provisional, not as noindex', async () => {
+    const entry = await buildPageEntry(amb('x'), target, url, {
+      ...ok,
+      onOwnRelays: async () => null
+    });
+    expect(entry).toMatchObject({ noindex: false, provisional: true, body: '' });
+    expect(entry.head).not.toContain('canonical');
+  });
+
   it('marks content missing from our own relays noindex (forged client tag)', async () => {
     const entry = await buildPageEntry(amb('x'), target, url, {
       ...ok,
@@ -150,7 +164,9 @@ describe('buildPageEntry — not indexable', () => {
       ...ok,
       getCurated: async () => null
     });
-    expect(entry).toMatchObject({ noindex: true, provisional: true });
+    // Unknown ≠ "not indexable": no noindex for a verdict we couldn't reach.
+    expect(entry).toMatchObject({ noindex: false, provisional: true, body: '' });
+    expect(entry.head).not.toContain('canonical');
   });
 });
 
@@ -185,5 +201,52 @@ describe('ogMetaHandle robots meta', () => {
       60000
     );
     expect(await run('/wiki/ok')).not.toContain('noindex');
+  });
+});
+
+describe('SEARCH_INDEXING=false', () => {
+  beforeEach(() => {
+    env.SEARCH_INDEXING = 'false';
+  });
+  afterEach(() => {
+    delete env.SEARCH_INDEXING;
+  });
+
+  it('marks even indexable content noindex, without body, JSON-LD or canonical', async () => {
+    const entry = await buildPageEntry(amb('https://oer.example/a'), target, url, ok);
+    expect(entry.noindex).toBe(true);
+    expect(entry.body).toBe('');
+    expect(entry.head).not.toContain('canonical');
+    expect(entry.head).not.toContain('ld+json');
+    expect(entry.head).toContain('og:title'); // link previews keep working
+  });
+
+  it('adds noindex to every page, also the home page', async () => {
+    /** @type {any} */
+    const captured = {};
+    const event = { url: new URL('https://dev.example/') };
+    const resolve = vi.fn((_e, opts) => {
+      captured.html = opts.transformPageChunk({ html: '<html><head></head><body></body></html>' });
+      return new Response(captured.html);
+    });
+    await ogMetaHandle(/** @type {any} */ ({ event, resolve }));
+    expect(captured.html).toContain('<meta name="robots" content="noindex" />');
+  });
+});
+
+describe('ogMetaHandle — relay trouble', () => {
+  it('serves no noindex for a provisional (transient) entry', async () => {
+    ogCache.clear();
+    ogCache.set('wiki:slow', { head: '', body: '', noindex: false, provisional: true }, 60000);
+    /** @type {any} */
+    const captured = {};
+    const event = { url: new URL('https://app.example.com/wiki/slow') };
+    const resolve = vi.fn((_e, opts) => {
+      captured.html = opts.transformPageChunk({ html: '<html><head></head><body></body></html>' });
+      return new Response(captured.html);
+    });
+    await ogMetaHandle(/** @type {any} */ ({ event, resolve }));
+    expect(captured.html).not.toContain('noindex');
+    expect(captured.html).toContain('og:title'); // default tags
   });
 });

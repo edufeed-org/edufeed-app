@@ -14,10 +14,15 @@
  * the event to sit on the deployment's own relays (see isOnOwnRelays).
  */
 
+import { parseBool } from '$lib/server/env-parse.js';
+
 export const INDEXABLE_KINDS = new Set([30023, 30818, 30142]);
 
 /** Minimum body length for articles and wiki entries (filters test posts). */
 export const MIN_TEXT_WORDS = 150;
+
+/** Minimum description length for learning resources (filters "x", "beschreibung", …). */
+export const MIN_DESCRIPTION_CHARS = 40;
 
 /** @param {{ tags?: string[][] }} event @param {string} name */
 const tagValue = (event, name) => (event.tags?.find((t) => t[0] === name)?.[1] ?? '').trim();
@@ -32,7 +37,8 @@ const wordCount = (text) => (text.match(/\S+/g) ?? []).length;
 export function meetsQuality(event) {
   if (event.kind === 30142) {
     return (
-      !!(tagValue(event, 'name') || tagValue(event, 'title')) && !!tagValue(event, 'description')
+      !!(tagValue(event, 'name') || tagValue(event, 'title')) &&
+      tagValue(event, 'description').length >= MIN_DESCRIPTION_CHARS
     );
   }
   const longEnough = wordCount(event.content ?? '') >= MIN_TEXT_WORDS;
@@ -94,4 +100,15 @@ export function isNoindexPath(url) {
   }
   // Search/filter variants of discover: endless URL space, same shell.
   return path === '/discover' && url.search !== '';
+}
+
+/**
+ * SEARCH_INDEXING=false turns the whole deployment into "do not index"
+ * (robots.txt disallows everything, no sitemap, noindex on every page) — for
+ * staging such as dev.edufeed.org, which serves the same content as prod.
+ * @param {Record<string, string | undefined>} env
+ * @returns {boolean}
+ */
+export function isSearchIndexingEnabled(env) {
+  return parseBool(env.SEARCH_INDEXING, true);
 }

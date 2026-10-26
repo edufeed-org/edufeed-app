@@ -120,22 +120,37 @@ export function eventMatchesFilter(event, filter) {
 }
 
 /**
- * Fetch the first event matching a filter from the given relays.
- * Races all relays; resolves null after FETCH_TIMEOUT.
+ * @typedef {{ event: import('nostr-tools').NostrEvent | null, complete: boolean }} FetchResult
+ * `complete`: every queried relay that could be reached answered (EOSE) — so a
+ * null event is a confirmed miss. false = a timeout or only failed
+ * connections: the event may well exist (transient relay trouble).
+ */
+
+/**
+ * First verified event matching `filter` from up to 5 relays. Resolves as
+ * soon as a match arrives, or as soon as every relay has answered/failed
+ * (a confirmed miss no longer waits for the timeout).
  * @param {import('nostr-tools').Filter} filter
  * @param {string[]} relays
- * @returns {Promise<import('nostr-tools').NostrEvent | null>}
+ * @param {number} [timeoutMs]
+ * @returns {Promise<FetchResult>}
  */
-export function fetchFirstEvent(filter, relays, timeoutMs = FETCH_TIMEOUT) {
+export function fetchFirstEventResult(filter, relays, timeoutMs = FETCH_TIMEOUT) {
   return new Promise((resolve) => {
     let resolved = false;
-    const timeout = setTimeout(() => {
-      if (!resolved) {
-        resolved = true;
-        resolve(null);
-      }
+    const targets = relays.slice(0, 5);
+    let answered = 0;
+    let failed = 0;
+
+    /** @param {FetchResult} result */
+    function finish(result) {
+      if (resolved) return;
+      resolved = true;
+      resolve(result);
       cleanup();
-    }, timeoutMs);
+    }
+
+    const timeout = setTimeout(() => finish({ event: null, complete: false }), timeoutMs);
 
     /** @type {import('ws').WebSocket[]} */
     const sockets = [];
@@ -151,11 +166,31 @@ export function fetchFirstEvent(filter, relays, timeoutMs = FETCH_TIMEOUT) {
       }
     }
 
+    function checkDone() {
+      if (answered + failed < targets.length) return;
+      // A miss counts as confirmed only if at least one relay actually answered.
+      finish({ event: null, complete: answered > 0 });
+    }
+
+    if (targets.length === 0) {
+      finish({ event: null, complete: false });
+      return;
+    }
+
     // Dynamic import ws for server-side WebSocket
     import('ws').then(({ default: WebSocket }) => {
       if (resolved) return;
 
-      for (const relay of relays.slice(0, 5)) {
+      for (const relay of targets) {
+        let settled = false;
+        /** @param {'answered' | 'failed'} how */
+        const settle = (how) => {
+          if (settled) return;
+          settled = true;
+          if (how === 'answered') answered++;
+          else failed++;
+          checkDone();
+        };
         try {
           const ws = new WebSocket(relay);
           sockets.push(ws);
@@ -168,17 +203,16 @@ export function fetchFirstEvent(filter, relays, timeoutMs = FETCH_TIMEOUT) {
             try {
               const msg = JSON.parse(data.toString());
               if (msg[0] === 'EVENT' && msg[1] === 'og' && msg[2]) {
-                if (!resolved && verifyEvent(msg[2]) && eventMatchesFilter(msg[2], filter)) {
-                  resolved = true;
-                  resolve(msg[2]);
-                  cleanup();
+                if (verifyEvent(msg[2]) && eventMatchesFilter(msg[2], filter)) {
+                  finish({ event: msg[2], complete: true });
                 }
                 // Non-matching or unverifiable events are ignored; keep
                 // listening on this and other relays until timeout/EOSE —
                 // a malicious relay could otherwise forge a preview by
                 // returning an unrelated (but validly signed) event.
               }
-              if (msg[0] === 'EOSE' && msg[1] === 'og') {
+              if ((msg[0] === 'EOSE' || msg[0] === 'CLOSED') && msg[1] === 'og') {
+                settle(msg[0] === 'EOSE' ? 'answered' : 'failed');
                 ws.close();
               }
             } catch {
@@ -186,13 +220,48 @@ export function fetchFirstEvent(filter, relays, timeoutMs = FETCH_TIMEOUT) {
             }
           });
 
-          ws.on('error', () => ws.close());
+          ws.on('error', () => {
+            settle('failed');
+            ws.close();
+          });
+          ws.on('close', () => settle('failed'));
         } catch {
-          // skip bad relay URL
+          settle('failed'); // bad relay URL
         }
       }
     });
   });
+}
+
+/**
+ * @param {import('nostr-tools').Filter} filter
+ * @param {string[]} relays
+ * @param {number} [timeoutMs]
+ * @returns {Promise<import('nostr-tools').NostrEvent | null>}
+ */
+export async function fetchFirstEvent(filter, relays, timeoutMs = FETCH_TIMEOUT) {
+  return (await fetchFirstEventResult(filter, relays, timeoutMs)).event;
+}
+
+/**
+ * Fetch the event an naddr/nevent identifier points to.
+ * @param {string} identifier - naddr1... or nevent1... string
+ * @returns {Promise<FetchResult>}
+ */
+export async function fetchEventResultFromRelays(identifier) {
+  const decoded = decodeIdentifier(identifier);
+  if (!decoded) return { event: null, complete: true };
+
+  if (decoded.type === 'naddr') {
+    return fetchFirstEventResult(
+      { kinds: [decoded.kind], authors: [decoded.pubkey], '#d': [decoded.identifier], limit: 1 },
+      getRelaysForKind(decoded.kind, decoded.relays)
+    );
+  }
+  return fetchFirstEventResult(
+    { ids: [decoded.id], limit: 1 },
+    getRelaysForKind(decoded.kind || 1, decoded.relays)
+  );
 }
 
 /**
@@ -201,17 +270,5 @@ export function fetchFirstEvent(filter, relays, timeoutMs = FETCH_TIMEOUT) {
  * @returns {Promise<import('nostr-tools').NostrEvent | null>}
  */
 export async function fetchEventFromRelays(identifier) {
-  const decoded = decodeIdentifier(identifier);
-  if (!decoded) return null;
-
-  if (decoded.type === 'naddr') {
-    return fetchFirstEvent(
-      { kinds: [decoded.kind], authors: [decoded.pubkey], '#d': [decoded.identifier], limit: 1 },
-      getRelaysForKind(decoded.kind, decoded.relays)
-    );
-  }
-  return fetchFirstEvent(
-    { ids: [decoded.id], limit: 1 },
-    getRelaysForKind(decoded.kind || 1, decoded.relays)
-  );
+  return (await fetchEventResultFromRelays(identifier)).event;
 }

@@ -1,10 +1,12 @@
 import { env } from '$env/dynamic/private';
 import { buildSitemapXml, createSitemapCache } from '$lib/server/geo/sitemap.js';
+import { isSearchIndexingEnabled } from '$lib/server/geo/indexability.js';
 
 const cache = createSitemapCache({ ttlMs: 6 * 60 * 60 * 1000 });
 
 /** @type {import('./$types').RequestHandler} */
 export async function GET({ url }) {
+  if (!isSearchIndexingEnabled(env)) return new Response('Not found', { status: 404 });
   try {
     const xml = await cache.get(url.origin, () => buildSitemapXml(url.origin, env));
     return new Response(xml, {

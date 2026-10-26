@@ -25,8 +25,8 @@ export function removeServerHeadExtras(doc) {
 /**
  * Whether a navigation left the page the server rendered. Same-path
  * navigations (a route's replaceState on load, hash changes) don't count.
- * @param {{ url: URL } | null | undefined} from
- * @param {{ url: URL } | null | undefined} to
+ * @param {{ url: URL | null } | null | undefined} from
+ * @param {{ url: URL | null } | null | undefined} to
  */
 export function leftServerRenderedPage(from, to) {
   // SvelteKit hands afterNavigate targets whose `url` can be null (seen on
