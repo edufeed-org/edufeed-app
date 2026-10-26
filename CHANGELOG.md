@@ -19,8 +19,9 @@ NIP-70 protected events with NIP-42 AUTH on the publish path, crawlable
 content with a sitemap for search engines and AI assistants (GEO), and
 repairs for the five test suites that failed on main; `rc.3` adds the
 `SEARCH_INDEXING` switch that keeps staging out of search indexes; `rc.4`
-fixes the author pick on /discover. Cut as `v0.10.0-rc.1` to `rc.4` on
-dev.edufeed.org before this tag.
+fixes the author pick on /discover; `rc.5` keeps mirrors of partner
+content out of search indexes and adds a countdown to the guest call
+page. Cut as `v0.10.0-rc.1` to `rc.5` on dev.edufeed.org before this tag.
 
 ### Deploy notes
 
@@ -51,6 +52,10 @@ dev.edufeed.org before this tag.
   `Disallow: /` without a sitemap, a 404 sitemap and `noindex` on every
   page, so dev never duplicates edufeed.org in search indexes. Prod, STIL
   and RPI leave it unset. Homelab main sets it for the dev block.
+- GEO (rc.5): new env `GEO_ORIGINAL_URLS` (per-account URL templates,
+  `<npub>=https://oer.community/{d}/`, for partners whose events don't
+  carry a `source` tag yet). Homelab main sets it for prod and dev
+  (FOERBICO → oer.community, Jörg Lohrer → joerg-lohrer.de).
 - NIP-70 (rc.2): relay.edufeed.org needs NIP-42 AUTH on
   (`strfry_auth_enabled: true`, homelab `deploy_strfry.yml`) — enable it
   only AFTER this app version is deployed, since older builds never
@@ -91,6 +96,15 @@ dev.edufeed.org before this tag.
   lists the indexable pages, `/robots.txt` points at it, and daily crawler
   and referral counters (sums only, no personal data) are written when
   `GEO_STATS_DIR` is set.
+- GEO (rc.5): mirrors of partner content get `noindex` and stay out of the
+  sitemap, following Google's advice for syndicated content — the
+  partner's original keeps the search visibility. A mirror is an event
+  with a `["source", <url>]` tag (the blog form's "Ursprung"), a learning
+  resource whose d-tag is a URL, or a match of a `GEO_ORIGINAL_URLS`
+  template whose page exists. Convention: wiki article "Original sources
+  of mirrored content". Articles link their source even without a license.
+- Calls (rc.5): the guest landing page shows a countdown button before the
+  call window opens.
 
 ### Changed
 
