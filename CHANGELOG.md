@@ -7,6 +7,45 @@ merge commits of the nostr PRs that landed since the previous tag.
 
 ## [Unreleased]
 
+## [0.11.0] - 2026-10-27
+
+Canonical concept identifiers (NIP-VOCAB revision of 2026-10-27): concepts
+without an external URI are now identified by their canonical Nostr URI
+`nostr:naddr1…` instead of the raw `nostr:<kind>:<pubkey>:<d>` coordinate,
+which was not a NIP-21 URI. Five commits on `main`, no nostr PRs. Cut as
+`v0.11.0-rc.1` on dev.edufeed.org before this tag.
+
+### Changed
+
+- Concept pickers (template forms and ext facets) emit the canonical
+  `nostr:naddr1…` id for Nostr-published concepts and match stored values
+  form-independently, so resources that still carry the legacy form show
+  their concept as selected and are never "healed" into another concept.
+  A matched legacy value is enriched once with its coordinate and relay.
+- Published resources carry one companion
+  `["a", "39738:<pubkey>:<d>", <vocab relay>, "<prefix>"]` tag per
+  Nostr-published concept (`about`, `educationalLevel`, …, `ext:<form>:<field>`),
+  per NIP-VOCAB "Referencing Vocabulary Concepts from Other Events".
+- Relation ids (`isPartOf`/`hasPart`) are relay-less canonical naddr; the
+  relay hint moves to the relation's `a` tag and is recovered from it on
+  edit (NIP-AMB reverse step 9).
+- Every publish path (template form, wizard) canonicalises concept ids
+  before conversion, so the app never emits the legacy form.
+- Ext-facet search filters send both the canonical and the legacy form of a
+  concept id: relays match tag values exactly and existing resources store
+  the legacy form.
+- Dependencies: nostr-vocab-core 0.4.2 (`canonicalIdentifier`,
+  `sameIdentifier`, `decodeNostrIdentifier`), amb-nostr-converter
+  `0.0.0-e7e6c23` (canonical ids, companion tags, relay-less relation ids).
+
+### Deploy notes
+
+- None. No env vars changed; the two package pins come from the Forgejo
+  npm registry via the lockfile.
+- amb-indexer 0db1dad (facet canonicalisation) is already on all three
+  indexers; existing documents keep their legacy facet value until a
+  re-ingest, so one concept can show as two facet values for a while.
+
 ## [0.10.1] - 2026-10-27
 
 Patch release: one fix for the membership admin page. Cut as
