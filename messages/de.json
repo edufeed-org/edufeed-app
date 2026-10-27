@@ -4405,5 +4405,22 @@
   "protected_badge_label": "Geschützt: bleibt auf den Relays, die die Autorin oder der Autor gewählt hat",
   "protected_publish_accepted": "Geschützt gespeichert auf: {relays}",
   "protected_publish_no_relays": "Keines deiner Relays nimmt geschützte Beiträge bisher an. Schalte „Geschützt“ aus, um normal zu veröffentlichen.",
-  "protected_publish_failed": "Kein Relay hat den geschützten Beitrag angenommen."
+  "protected_publish_failed": "Kein Relay hat den geschützten Beitrag angenommen.",
+  "termi_hint_dead_relay_title": "Eines deiner Relays ist nicht mehr erreichbar",
+  "termi_hint_dead_relay_body": "{relay} ist seit {days} Tagen nicht erreichbar. Beiträge und Erwähnungen, die dorthin gehen, kommen dort nicht an. Soll ich es in deiner Relay-Liste durch {replacement} ersetzen?",
+  "termi_hint_dead_relay_body_remove": "{relay} ist seit {days} Tagen nicht erreichbar. Beiträge und Erwähnungen, die dorthin gehen, kommen dort nicht an. Soll ich es aus deiner Relay-Liste entfernen?",
+  "termi_hint_dead_relay_cta": "Ersetzen",
+  "termi_hint_dead_relay_cta_remove": "Entfernen",
+  "termi_hint_dead_relay_doing": "Relay-Liste wird aktualisiert …",
+  "settings_relay_health_checking": "Prüfe Erreichbarkeit …",
+  "settings_relay_health_ok": "Erreichbar",
+  "settings_relay_health_unreachable": "Nicht erreichbar",
+  "settings_relay_health_timeout": "Keine Antwort",
+  "settings_relay_health_holds_list": "hat deine Relay-Liste",
+  "settings_relay_health_missing_list": "hat deine Relay-Liste noch nicht",
+  "settings_relay_health_dead_since": "seit {days} Tagen nicht erreichbar",
+  "settings_relay_health_recheck": "Erneut prüfen",
+  "settings_relay_badge_auth": "Anmeldung nötig",
+  "settings_relay_badge_paid": "Bezahlt",
+  "settings_relay_health_help": "Geprüft von diesem Gerät aus. Ein Relay, das deine Liste nicht hat, wird von anderen Apps unter Umständen nicht gefunden – beim Speichern wird sie dorthin veröffentlicht."
 }

@@ -10,6 +10,9 @@
 //   settled; the action signs + publishes the configured default list.
 // - dm: dm-service's settle-aware kind 10050 self-check reports 'absent';
 //   the action publishes the default DM relay list.
+// - deadRelay: a relay of the user's kind 10002 that this device has seen
+//   fail on separate days for several days (relay-health history); the
+//   action edits the list — swap in a default relay, or remove it.
 //
 // Status semantics live in $lib/helpers/assistant-hints.js (pure, tested).
 import { goto } from '$app/navigation';
@@ -33,8 +36,12 @@ import { modalStore } from '$lib/stores/modal.svelte.js';
 import { isBackupDownloaded } from '$lib/stores/backup-flags.svelte.js';
 import {
   isRelayListBannerDismissed,
-  markRelayListBannerDismissed
+  markRelayListBannerDismissed,
+  isDeadRelayHintDismissed,
+  markDeadRelayHintDismissed
 } from '$lib/stores/relay-list-flags.svelte.js';
+import { findDeadRelays, relayKey } from '$lib/helpers/relay-health.js';
+import { unique } from '$lib/helpers/unique.js';
 import {
   isDmRelayBannerDismissed,
   markDmRelayBannerDismissed
@@ -67,7 +74,8 @@ import {
   deriveNip05Hint,
   deriveBlossomHints,
   buildUpgradedServerList,
-  buildPublicServerList
+  buildPublicServerList,
+  deriveDeadRelayHint
 } from '$lib/helpers/assistant-hints.js';
 import { createBlossomServerLoader } from '$lib/loaders/blossom-server-loader.js';
 import {
@@ -89,12 +97,13 @@ import {
 import { getProfileNip05s } from '$lib/helpers/nip05-verify.js';
 import { runtimeConfig } from '$lib/stores/config.svelte.js';
 
-/** @typedef {'backup' | 'relays' | 'dm' | 'nip05' | 'profile' | 'signer' | 'invites' | 'joinRequests' | 'groupAdded' | 'blossomUpgrade' | 'blossomPublic'} HintId */
+/** @typedef {'backup' | 'relays' | 'deadRelay' | 'dm' | 'nip05' | 'profile' | 'signer' | 'invites' | 'joinRequests' | 'groupAdded' | 'blossomUpgrade' | 'blossomPublic'} HintId */
 /** @typedef {import('$lib/helpers/assistant-hints.js').HintStatus} HintStatus */
 
 export const HINT_IDS = /** @type {HintId[]} */ ([
   'backup',
   'relays',
+  'deadRelay',
   'dm',
   'profile',
   'signer',
@@ -106,12 +115,16 @@ export const HINT_IDS = /** @type {HintId[]} */ ([
   'groupAdded'
 ]);
 
+/** Pubkeys whose relay list was probed this session (one probe per account). */
+// eslint-disable-next-line svelte/prefer-svelte-reactivity -- module-level bookkeeping, never rendered
+const probedThisSession = new Set();
+
 /**
  * Reactive hook for the assistant's hints. Must be called during component
  * initialization (it registers $effects).
  *
  * @returns {{
- *   getHints: () => Array<{id: HintId, status: HintStatus, variant?: string, address?: string, count?: number}>,
+ *   getHints: () => Array<{id: HintId, status: HintStatus, variant?: string, address?: string, count?: number, relay?: string, replacement?: string | null, days?: number}>,
  *   getOpenCount: () => number,
  *   runHint: (id: HintId) => void,
  *   customizeHint: (id: HintId) => void,
@@ -148,6 +161,76 @@ export function useAssistantHints() {
       sub?.unsubscribe();
       clearTimeout(timeout);
     };
+  });
+
+  // Relay health: once per account and session, probe the relays of the
+  // user's kind 10002 and fold the outcomes into the per-device history; the
+  // dead candidates come out of that history (findDeadRelays thresholds). A
+  // later list change (the hint's own edit, the settings page) recomputes
+  // from the stored history without probing again.
+  /** @type {string[]} */
+  let listUrls = $state.raw([]);
+  /** @type {Array<{url: string, days: number}>} */
+  let deadCandidates = $state.raw([]);
+  /** The dead relay last offered, so its disappearance from the list reads as "done". */
+  let offeredDeadUrl = $state('');
+
+  $effect(() => {
+    const user = getActiveUser();
+    listUrls = [];
+    deadCandidates = [];
+    offeredDeadUrl = '';
+    if (!user) return;
+    let cancelled = false;
+
+    const sub = eventStore.replaceable(10002, user.pubkey).subscribe((event) => {
+      const urls = event
+        ? unique(
+            event.tags.filter((t) => t[0] === 'r' && typeof t[1] === 'string').map((t) => t[1])
+          )
+        : [];
+      listUrls = urls;
+      if (!urls.length) {
+        deadCandidates = [];
+        return;
+      }
+      (async () => {
+        try {
+          const health = await import('$lib/services/relay-health.js');
+          let history;
+          if (probedThisSession.has(user.pubkey)) {
+            history = health.loadRelayHealthHistory();
+          } else {
+            probedThisSession.add(user.pubkey);
+            history = (await health.probeAndRecord(urls, user.pubkey)).history;
+          }
+          if (cancelled) return;
+          deadCandidates = findDeadRelays(history, urls, Date.now());
+        } catch (err) {
+          console.warn('[relay-health] probe failed:', err);
+        }
+      })();
+    });
+
+    return () => {
+      cancelled = true;
+      sub?.unsubscribe();
+    };
+  });
+
+  const deadRelayMeta = $derived.by(() => {
+    const user = getActiveUser();
+    if (!user) return null;
+    return deriveDeadRelayHint({
+      listUrls,
+      deadRelays: deadCandidates,
+      defaults: getDefaultRelayList(),
+      isDismissed: (url) => isDeadRelayHintDismissed(user.pubkey, url)
+    });
+  });
+
+  $effect(() => {
+    if (deadRelayMeta) offeredDeadUrl = deadRelayMeta.url;
   });
 
   // NIP-05 presence check: reads the user's own kind 0 (loaded app-wide for
@@ -263,6 +346,7 @@ export function useAssistantHints() {
       return {
         backup: null,
         relays: null,
+        deadRelay: null,
         dm: null,
         nip05: null,
         profile: null,
@@ -352,6 +436,14 @@ export function useAssistantHints() {
         confirmed: hasRelayList,
         running: running.has('relays'),
         everOpen: everOpen.has('relays')
+      }),
+      deadRelay: deriveHintStatus({
+        applicable: !!deadRelayMeta,
+        // The offered relay left the list (our edit or the user's own).
+        confirmed:
+          !!offeredDeadUrl && !listUrls.some((u) => relayKey(u) === relayKey(offeredDeadUrl)),
+        running: running.has('deadRelay'),
+        everOpen: everOpen.has('deadRelay')
       }),
       dm: deriveHintStatus({
         applicable: dmApplicable,
@@ -491,6 +583,19 @@ export function useAssistantHints() {
       if (community) goto(`/c/${nip19.npubEncode(community.pubkey)}?view=members`);
       return;
     }
+    if (id === 'deadRelay') {
+      const user = getActiveUser();
+      const meta = deadRelayMeta;
+      if (!user || !meta || running.has(id)) return;
+      setRunning(id, true);
+      // Edits the latest kind 10002 in place (replaceDeadRelay keeps every
+      // other tag); the store's 10002 subscription confirms reactively.
+      import('$lib/services/relay-settings-service.js')
+        .then(({ replaceDeadRelay }) => replaceDeadRelay(meta.url, meta.replacement, user.pubkey))
+        .catch((err) => console.warn('[relay-health] replace failed:', err))
+        .then(() => setRunning(id, false));
+      return;
+    }
     if (id === 'blossomUpgrade' || id === 'blossomPublic') {
       const user = getActiveUser();
       if (!user || running.has(id)) return;
@@ -530,7 +635,7 @@ export function useAssistantHints() {
 
   /** @param {HintId} id */
   function customizeHint(id) {
-    if (id === 'relays') goto('/settings#relay-settings');
+    if (id === 'relays' || id === 'deadRelay') goto('/settings#relay-settings');
     else if (id === 'dm') goto('/settings#dm-relay-settings');
     else if (id === 'blossomUpgrade' || id === 'blossomPublic') goto('/settings#blossom-settings');
   }
@@ -547,6 +652,8 @@ export function useAssistantHints() {
     if (user && (status === 'open' || status === 'doing')) {
       // 'backup' is session-only on purpose (see backupApplicable above).
       if (id === 'relays') markRelayListBannerDismissed(user.pubkey);
+      else if (id === 'deadRelay' && deadRelayMeta)
+        markDeadRelayHintDismissed(user.pubkey, deadRelayMeta.url);
       else if (id === 'dm') markDmRelayBannerDismissed(user.pubkey);
       else if (id === 'nip05') {
         if (nip05Meta.variant === 'ready') markNip05ReadyHintDismissed(user.pubkey);
@@ -566,8 +673,14 @@ export function useAssistantHints() {
       HINT_IDS.flatMap((id) => {
         const status = statuses[id];
         if (status === null || dismissed.has(id)) return [];
-        /** @type {{id: HintId, status: HintStatus, variant?: string, address?: string, count?: number}} */
+        /** @type {{id: HintId, status: HintStatus, variant?: string, address?: string, count?: number, relay?: string, replacement?: string | null, days?: number}} */
         const entry = { id, status };
+        if (id === 'deadRelay' && deadRelayMeta) {
+          entry.variant = deadRelayMeta.variant;
+          entry.relay = deadRelayMeta.url;
+          entry.replacement = deadRelayMeta.replacement;
+          entry.days = deadRelayMeta.days;
+        }
         if (id === 'nip05') {
           entry.variant = nip05Meta.variant;
           entry.address = nip05Meta.address;

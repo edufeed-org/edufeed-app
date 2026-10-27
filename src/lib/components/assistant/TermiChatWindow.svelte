@@ -18,7 +18,7 @@
    *   expanded?: boolean,
    *   onToggleExpand: () => void,
    *   onClose: () => void,
-   *   hints: Array<{id: string, status: string, variant?: string, address?: string, count?: number}>,
+   *   hints: Array<{id: string, status: string, variant?: string, address?: string, count?: number, relay?: string, replacement?: string | null, days?: number}>,
    *   openCount: number,
    *   runHint: (id: any) => void,
    *   customizeHint: (id: any) => void,
@@ -128,9 +128,28 @@
    * The nip05 hint tracks the membership application: the copy depends on the
    * hint's variant ('apply' reminder, passive 'pending' note, celebratory
    * 'ready' card with one-click activation). Other hints use hintCopy as-is.
-   * @param {{id: string, variant?: string, address?: string, count?: number}} hint
+   * @param {{id: string, variant?: string, address?: string, count?: number, relay?: string, replacement?: string | null, days?: number}} hint
    */
   function copyFor(hint) {
+    if (hint.id === 'deadRelay') {
+      const relay = (hint.relay || '').replace(/^wss?:\/\//, '');
+      const replacement = (hint.replacement || '').replace(/^wss?:\/\//, '');
+      const days = hint.days ?? 0;
+      return {
+        title: m.termi_hint_dead_relay_title(),
+        body:
+          hint.variant === 'remove'
+            ? m.termi_hint_dead_relay_body_remove({ relay, days })
+            : m.termi_hint_dead_relay_body({ relay, days, replacement }),
+        action:
+          hint.variant === 'remove'
+            ? m.termi_hint_dead_relay_cta_remove()
+            : m.termi_hint_dead_relay_cta(),
+        secondary: m.relay_list_banner_customize_cta(),
+        doing: m.termi_hint_dead_relay_doing(),
+        link: null
+      };
+    }
     if (hint.id === 'groupAdded') {
       const count = hint.count ?? 0;
       return {

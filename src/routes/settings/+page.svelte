@@ -10,6 +10,9 @@
   import { saveRelayList, parseRelayListEvent } from '$lib/services/relay-settings-service.js';
   import { normalizeRelayInput } from '$lib/helpers/relay-input.js';
   import { createRelayListLoader } from '$lib/loaders/relay-list-loader.js';
+  import { probeAndRecord } from '$lib/services/relay-health.js';
+  import { findDeadRelays } from '$lib/helpers/relay-health.js';
+  import { untrack } from 'svelte';
   import { createBlossomServerLoader } from '$lib/loaders/blossom-server-loader.js';
   import {
     saveBlossomServers,
@@ -156,6 +159,43 @@
       subscription?.unsubscribe();
       clearTimeout(timeout);
     };
+  });
+
+  // Relay health: one probe per listed relay (its own kind 10002 REQ + NIP-11),
+  // from this device. Re-runs when the set of URLs changes (add/remove) and on
+  // "Erneut prüfen"; read/write toggles leave the URLs alone and don't probe.
+  /** @type {Map<string, import('$lib/services/relay-health.js').RelayProbeResult>} */
+  let relayHealth = $state.raw(new Map());
+  /** @type {Map<string, number>} url → days the relay has been unreachable */
+  let relayDeadDays = $state.raw(new Map());
+  let healthChecking = $state(false);
+  let healthRun = 0;
+
+  async function runHealthCheck() {
+    const pubkey = activeAccount?.pubkey;
+    const urls = relays.map((r) => r.url);
+    if (!pubkey || !urls.length) return;
+    const run = ++healthRun;
+    healthChecking = true;
+    try {
+      const { results, history } = await probeAndRecord(urls, pubkey);
+      if (run !== healthRun) return; // a newer check superseded this one
+      relayHealth = results;
+      relayDeadDays = new Map(
+        findDeadRelays(history, urls, Date.now()).map((d) => [d.url, d.days])
+      );
+    } catch (err) {
+      console.warn('[relay-health] check failed:', err);
+    } finally {
+      if (run === healthRun) healthChecking = false;
+    }
+  }
+
+  $effect(() => {
+    const key = relays.map((r) => r.url).join(' ');
+    const pubkey = activeAccount?.pubkey;
+    if (!key || !pubkey) return;
+    untrack(() => runHealthCheck());
   });
 
   // Load Blossom server list on mount
@@ -748,14 +788,67 @@
             </button>
           {:else}
             <!-- Relay list -->
+            <div class="mb-2 flex items-start justify-between gap-3">
+              <p class="text-xs text-base-content/60">{m.settings_relay_health_help()}</p>
+              <button
+                type="button"
+                class="btn shrink-0 btn-ghost btn-sm"
+                onclick={runHealthCheck}
+                disabled={healthChecking}
+              >
+                {#if healthChecking}<span class="loading loading-xs loading-spinner"></span>{/if}
+                {m.settings_relay_health_recheck()}
+              </button>
+            </div>
             <div class="mb-6 space-y-3">
               {#each relays as relay, index (relay.url)}
+                {@const health = relayHealth.get(relay.url)}
+                {@const deadDays = relayDeadDays.get(relay.url)}
                 <div
                   class="flex items-center gap-3 rounded-lg bg-base-100 p-3"
                   transition:fade={{ duration: 150 }}
                 >
-                  <div class="flex-1 truncate font-mono text-sm" title={relay.url}>
-                    {relay.url}
+                  <div class="min-w-0 flex-1">
+                    <div class="truncate font-mono text-sm" title={relay.url}>
+                      {relay.url}
+                    </div>
+                    <div
+                      class="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-base-content/60"
+                      data-testid="relay-health"
+                    >
+                      {#if !health && healthChecking}
+                        <span class="loading loading-xs loading-spinner"></span>
+                        <span>{m.settings_relay_health_checking()}</span>
+                      {:else if health?.status === 'ok'}
+                        <span class="text-success">● {m.settings_relay_health_ok()}</span>
+                        {#if health.rttMs != null}<span>{health.rttMs} ms</span>{/if}
+                        <span
+                          >· {health.holdsList
+                            ? m.settings_relay_health_holds_list()
+                            : m.settings_relay_health_missing_list()}</span
+                        >
+                      {:else if health?.status === 'unreachable'}
+                        <span class="text-error">● {m.settings_relay_health_unreachable()}</span>
+                        {#if deadDays}
+                          <span>· {m.settings_relay_health_dead_since({ days: deadDays })}</span>
+                        {/if}
+                      {:else if health?.status === 'timeout'}
+                        <span class="text-warning">● {m.settings_relay_health_timeout()}</span>
+                      {/if}
+                      {#if health?.info?.name}
+                        <span class="truncate">· {health.info.name}</span>
+                      {/if}
+                      {#if health?.info?.limitation?.auth_required}
+                        <span class="badge badge-ghost badge-xs"
+                          >{m.settings_relay_badge_auth()}</span
+                        >
+                      {/if}
+                      {#if health?.info?.limitation?.payment_required}
+                        <span class="badge badge-ghost badge-xs"
+                          >{m.settings_relay_badge_paid()}</span
+                        >
+                      {/if}
+                    </div>
                   </div>
                   <div class="flex items-center gap-2">
                     <label class="label cursor-pointer gap-1">

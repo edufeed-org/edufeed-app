@@ -11,7 +11,8 @@ import {
   deriveNip05Hint,
   deriveBlossomHints,
   buildUpgradedServerList,
-  buildPublicServerList
+  buildPublicServerList,
+  deriveDeadRelayHint
 } from '$lib/helpers/assistant-hints.js';
 
 describe('deriveHintStatus', () => {
@@ -357,5 +358,77 @@ describe('blossom server list builders', () => {
       buildPublicServerList([EDUFEED, MINE], [EDUFEED], [PRIMAL, 'https://cdn.satellite.earth'])
     ).toEqual([PRIMAL, MINE, 'https://cdn.satellite.earth']);
     expect(buildPublicServerList([EDUFEED, PRIMAL + '/'], [EDUFEED], [PRIMAL])).toEqual([PRIMAL]);
+  });
+});
+
+describe('deriveDeadRelayHint', () => {
+  const defaults = ['wss://relay.damus.io', 'wss://relay.primal.net', 'wss://relay.edufeed.org'];
+  const never = () => false;
+
+  it('offers the first default the list lacks as replacement for the dead relay', () => {
+    expect(
+      deriveDeadRelayHint({
+        listUrls: ['wss://relay.damus.io', 'wss://nos.lol', 'wss://relay.edufeed.org'],
+        deadRelays: [{ url: 'wss://nos.lol', days: 5 }],
+        defaults,
+        isDismissed: never
+      })
+    ).toEqual({
+      url: 'wss://nos.lol',
+      days: 5,
+      replacement: 'wss://relay.primal.net',
+      variant: 'replace'
+    });
+  });
+
+  it('offers removal when every default is already listed', () => {
+    expect(
+      deriveDeadRelayHint({
+        listUrls: [...defaults, 'wss://nos.lol'],
+        deadRelays: [{ url: 'wss://nos.lol', days: 5 }],
+        defaults,
+        isDismissed: never
+      })
+    ).toMatchObject({ url: 'wss://nos.lol', replacement: null, variant: 'remove' });
+  });
+
+  it('never suggests a default that is itself dead', () => {
+    expect(
+      deriveDeadRelayHint({
+        listUrls: ['wss://nos.lol', 'wss://relay.primal.net'],
+        deadRelays: [
+          { url: 'wss://nos.lol', days: 5 },
+          { url: 'wss://relay.primal.net', days: 4 }
+        ],
+        defaults: ['wss://relay.primal.net', 'wss://relay.edufeed.org'],
+        isDismissed: never
+      })
+    ).toMatchObject({ url: 'wss://nos.lol', replacement: 'wss://relay.edufeed.org' });
+  });
+
+  it('skips dismissed relays and relays no longer in the list', () => {
+    expect(
+      deriveDeadRelayHint({
+        listUrls: ['wss://nos.lol', 'wss://b.example'],
+        deadRelays: [
+          { url: 'wss://nos.lol', days: 5 },
+          { url: 'wss://gone.example', days: 9 },
+          { url: 'wss://b.example', days: 3 }
+        ],
+        defaults,
+        isDismissed: (url) => url === 'wss://nos.lol'
+      })
+    ).toMatchObject({ url: 'wss://b.example', days: 3 });
+  });
+
+  it('is null without a dead relay in the list', () => {
+    expect(
+      deriveDeadRelayHint({
+        listUrls: ['wss://a.example'],
+        deadRelays: [],
+        defaults,
+        isDismissed: never
+      })
+    ).toBeNull();
   });
 });
