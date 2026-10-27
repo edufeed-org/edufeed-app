@@ -36,7 +36,11 @@ export function buildTemplateResourceSubmission({
   const { amb, extras } = formValuesToAmbJson(form, rawValues, selectedConcepts);
   const { success, data, error } = ambToNostr(/** @type {any} */ (amb), {
     pubkey: signerPubkey,
-    defaultRelayHint: formRelay
+    defaultRelayHint: formRelay,
+    // The companion concept a tags are appended below from the selected
+    // concepts, which know the vocabulary's relay; the converter would only
+    // know the form relay.
+    conceptCompanionTags: false
   });
   if (!success || !data) throw new Error(error?.message || 'AMB conversion failed');
 

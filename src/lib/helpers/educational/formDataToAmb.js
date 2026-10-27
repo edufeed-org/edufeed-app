@@ -9,6 +9,7 @@
 import { extractLabelFromUri } from './skosLoader.js';
 import { normalizePubkey } from '$lib/helpers/pubkey.js';
 import { formDataToAmbExt } from './formDataToAmbExt.js';
+import { canonicalIdentifier } from 'nostr-vocab-core/identifiers';
 
 /**
  * @typedef {import('$lib/stores/educational-actions.svelte').EducationalFormData} EducationalFormData
@@ -67,7 +68,7 @@ export function convertFormDataToAMB(formData) {
 
   if (formData.about && formData.about.length > 0) {
     amb.about = formData.about.map((uri, index) => ({
-      id: uri,
+      id: canonicalIdentifier(uri), // NIP-VOCAB: canonical Nostr URI for Nostr-identified concepts
       prefLabel: {
         [lang]: formData.aboutLabels?.[index]?.label || extractLabelFromUri(uri)
       }

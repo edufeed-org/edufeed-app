@@ -20,6 +20,7 @@
  * @vitest-environment node
  */
 import { describe, it, expect } from 'vitest';
+import { identifierFromAddress } from 'nostr-vocab-core/identifiers';
 import { ambToNostr } from 'amb-nostr-converter';
 import { buildResourceData } from '$lib/helpers/educational/buildResourceData.js';
 import { convertFormDataToAMB } from '$lib/helpers/educational/formDataToAmb.js';
@@ -34,6 +35,12 @@ const AUTHOR_PK = 'e'.repeat(64);
 const UNKNOWN_METHOD_ID =
   'nostr:39738:d2689e2f41dabfba953da26655a94ce2aa4e029c383ee921c6a4deafab99a612:rollenspiel';
 const UNKNOWN_METHOD_LABEL = 'Rollenspiel';
+// NIP-VOCAB: producers emit the canonical Nostr URI; the stored legacy form is
+// the same concept and must come out as its canonical id — never dropped or
+// swapped for a same-named concept of the current scheme.
+const UNKNOWN_METHOD_CANONICAL = identifierFromAddress(
+  '39738:d2689e2f41dabfba953da26655a94ce2aa4e029c383ee921c6a4deafab99a612:rollenspiel'
+);
 
 /** @param {any} resourceData */
 function publishTags(resourceData) {
@@ -82,14 +89,15 @@ describe('method concept outside the picker scheme survives edit/save', () => {
     const tags = publishTags(resourceData);
 
     const methodIdTags = tags.filter((t) => t[0] === 'ext:ekw:method:id');
-    expect(methodIdTags).toEqual([['ext:ekw:method:id', UNKNOWN_METHOD_ID]]);
+    expect(methodIdTags).toEqual([['ext:ekw:method:id', UNKNOWN_METHOD_CANONICAL]]);
+    expect(tags).toContainEqual(['ext:ekw:method:prefLabel:de', UNKNOWN_METHOD_LABEL]);
 
-    // 4. Re-prefill after save: the rebuilt event still parses back to the
-    // identical form-state fragment — no loss, no silent id rewrite.
+    // 4. Re-prefill after save: the rebuilt event parses back to the same
+    // concept (now in canonical form) with its label — no loss, no swap.
     const roundTripped = parseEkwTagsToFormData({ tags });
-    expect(roundTripped.methods).toEqual([UNKNOWN_METHOD_ID]);
+    expect(roundTripped.methods).toEqual([UNKNOWN_METHOD_CANONICAL]);
     expect(roundTripped.methodLabels).toEqual([
-      { id: UNKNOWN_METHOD_ID, label: UNKNOWN_METHOD_LABEL }
+      { id: UNKNOWN_METHOD_CANONICAL, label: UNKNOWN_METHOD_LABEL }
     ]);
   });
 });

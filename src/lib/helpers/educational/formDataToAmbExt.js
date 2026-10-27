@@ -1,5 +1,6 @@
 import { EKW_KONFI_NS } from './ekwNamespace.js';
 import { BILDUNGSBEREICHE } from './bildungsbereich.js';
+import { canonicalIdentifier } from 'nostr-vocab-core/identifiers';
 
 /**
  * @typedef {{ id: string, label: string }} ConceptLabel
@@ -23,8 +24,12 @@ import { BILDUNGSBEREICHE } from './bildungsbereich.js';
  */
 function conceptsFromFlatLabels(ids, labels) {
   if (!ids || ids.length === 0) return [];
-  const labelById = new Map((labels || []).map((l) => [l.id, l.label]));
-  return ids.map((id) => {
+  // Labels are keyed by the id as stored in form state (possibly a legacy
+  // nostr:<kind>:<pubkey>:<d>); the emitted id is the canonical Nostr URI
+  // (NIP-VOCAB) — same concept, never dropped or swapped.
+  const labelById = new Map((labels || []).map((l) => [canonicalIdentifier(l.id), l.label]));
+  return ids.map((rawId) => {
+    const id = canonicalIdentifier(rawId);
     const label = labelById.get(id);
     /** @type {Record<string, string>} */
     const prefLabel = label ? { de: label } : {};

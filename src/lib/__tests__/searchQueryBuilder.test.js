@@ -1,4 +1,5 @@
 /** @vitest-environment node */
+import { identifierFromAddress } from 'nostr-vocab-core/identifiers';
 import { describe, test, expect } from 'vitest';
 import {
   buildSearchQuery,
@@ -164,5 +165,31 @@ describe('hasActiveFilters', () => {
 
   test('is false on empty filters', () => {
     expect(hasActiveFilters(createEmptyFilters())).toBe(false);
+  });
+});
+
+describe('buildSearchFilterObject — concept ids in relay tag filters (NIP-VOCAB forms)', () => {
+  const PK = 'd2689e2f41dabfba953da26655a94ce2aa4e029c383ee921c6a4deafab99a612';
+  const canonical = identifierFromAddress(`39738:${PK}:doppelstunde`);
+  const legacy = `nostr:39738:${PK}:doppelstunde`;
+
+  test('a canonical naddr chip id queries both the canonical and the legacy stored form (relays cannot canonicalise)', () => {
+    const out = buildSearchFilterObject({ extFields: { 'ekw:zeitstruktur': [{ id: canonical }] } });
+    const key = Object.keys(out.tagFilters).find((k) => k.endsWith(':id'));
+    expect(out.tagFilters[key]).toEqual([canonical, legacy]);
+  });
+  test('a legacy chip id is normalised to the same pair', () => {
+    const out = buildSearchFilterObject({ extFields: { 'ekw:zeitstruktur': [{ id: legacy }] } });
+    const key = Object.keys(out.tagFilters).find((k) => k.endsWith(':id'));
+    expect(out.tagFilters[key]).toEqual([canonical, legacy]);
+  });
+  test('an external URI and a malformed value stay single, as given', () => {
+    const out = buildSearchFilterObject({
+      extFields: {
+        'ekw:zeitstruktur': [{ id: 'https://w3id.org/kim/x' }, { id: 'nostr:39738:zz:x' }]
+      }
+    });
+    const key = Object.keys(out.tagFilters).find((k) => k.endsWith(':id'));
+    expect(out.tagFilters[key]).toEqual(['https://w3id.org/kim/x', 'nostr:39738:zz:x']);
   });
 });

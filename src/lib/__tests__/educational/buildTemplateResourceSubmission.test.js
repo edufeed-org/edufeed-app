@@ -239,6 +239,12 @@ describe('buildTemplateResourceSubmission (companion concept a tags, NIP-VOCAB)'
     ]);
     expect(aTags.filter((t) => t[1] === `39738:${PK}:5-6`)).toHaveLength(1); // deduplicated
   });
+  it('companion tags carry the vocabulary relay, not the form relay the converter gets as defaultRelayHint', () => {
+    const { tags } = build();
+    const companions = tags.filter((t) => t[0] === 'a' && t[3] !== 'form');
+    expect(companions.length).toBeGreaterThan(0);
+    expect(companions.every((t) => t[2] === 'wss://vocab.example')).toBe(true);
+  });
   it('writes canonical ids only, and keeps the form back-reference as the last tag', () => {
     const { tags } = build();
     expect(tags.filter((t) => t[0] === 'educationalLevel:id').map((t) => t[1])).toEqual([

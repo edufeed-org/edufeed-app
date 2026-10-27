@@ -1,3 +1,5 @@
+import { addressOfIdentifier, canonicalIdentifier } from 'nostr-vocab-core/identifiers';
+
 /**
  * NIP-50 Search Query Builder for Educational Content
  *
@@ -153,7 +155,7 @@ export function buildSearchFilterObject(filters) {
         if (entry?.id) {
           const key = `#${tagKeyBase}:id`;
           if (!tagFilters[key]) tagFilters[key] = [];
-          tagFilters[key].push(entry.id);
+          tagFilters[key].push(...conceptIdFilterValues(entry.id));
         } else if (entry?.value) {
           const key = `#${tagKeyBase}`;
           if (!tagFilters[key]) tagFilters[key] = [];
@@ -205,4 +207,22 @@ export function createEmptyFilters() {
     audience: [],
     extFields: {}
   };
+}
+
+/**
+ * Values to put into a relay `#…:id` filter for one concept id. Relays match
+ * tag values as exact strings and cannot canonicalise, and resources published
+ * before the NIP-VOCAB canonical-naddr revision store the legacy
+ * `nostr:<kind>:<pubkey>:<d>` form — so a Nostr-identified concept is queried
+ * under both forms (values of one filter key are OR'd). External URIs and
+ * unparseable values are sent as given.
+ * @param {string} id
+ * @returns {string[]}
+ */
+export function conceptIdFilterValues(id) {
+  const address = addressOfIdentifier(id);
+  if (!address) return [id];
+  const canonical = canonicalIdentifier(id);
+  const legacy = `nostr:${address}`;
+  return canonical === legacy ? [canonical] : [canonical, legacy];
 }
