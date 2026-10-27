@@ -144,11 +144,14 @@ vi.mock('$lib/components/shared/ProfileAvatar.svelte', () => ({ default: () => (
 import MembershipApprovalsPanel from '../MembershipApprovalsPanel.svelte';
 
 /** @returns {any} */
-function makeResponse(wishedHandle = 'maria', { id = 'resp-1', pTag = ADMIN_PUBKEY } = {}) {
+function makeResponse(
+  wishedHandle = 'maria',
+  { id = 'resp-1', pTag = ADMIN_PUBKEY, pubkey = APPLICANT_PUBKEY } = {}
+) {
   return {
     id,
     kind: 1069,
-    pubkey: APPLICANT_PUBKEY,
+    pubkey,
     created_at: 1_700_000_000,
     content: '<encrypted>',
     tags: [['a', FORM_ADDRESS], ['p', pTag], ['encrypted']],
@@ -212,6 +215,80 @@ describe('MembershipApprovalsPanel', () => {
 
     await findByText(/maria/);
     expect(nip44DecryptMock).toHaveBeenCalledWith(APPLICANT_PUBKEY, '<encrypted>');
+  });
+
+  /** URLs of the upstream `.well-known/nostr.json` lookups a fetch spy saw. */
+  function wellKnownLookups(/** @type {any} */ fetchSpy) {
+    return fetchSpy.mock.calls
+      .map((/** @type {any[]} */ c) => String(c[0]))
+      .filter((/** @type {string} */ u) => u.includes('/.well-known/nostr.json'));
+  }
+
+  const APPLICANT2_PUBKEY = 'd'.repeat(64);
+
+  /**
+   * Two applicants whose decryptions resolve one after the other — as they do
+   * in the real app behind a bunker, where every resolved row re-runs the
+   * panel's effects. Returns a function that releases the second one.
+   */
+  function twoStaggeredApplicants() {
+    timelineState.events = [
+      makeResponse('maria'),
+      makeResponse('paula', { id: 'resp-2', pubkey: APPLICANT2_PUBKEY })
+    ];
+    /** @type {() => void} */
+    let releasePaula = () => {};
+    const paulaGate = new Promise((r) => {
+      releasePaula = /** @type {() => void} */ (r);
+    });
+    nip44DecryptMock.mockImplementation(async (/** @type {string} */ pubkey) => {
+      if (pubkey === APPLICANT_PUBKEY) {
+        return JSON.stringify([['response', 'wished_handle', 'maria']]);
+      }
+      await paulaGate;
+      return JSON.stringify([['response', 'wished_handle', 'paula']]);
+    });
+    return () => releasePaula();
+  }
+
+  it('checks each applicant upstream exactly once, not once per effect re-run', async () => {
+    // Every decrypted row used to re-trigger the upstream check for all rows
+    // whose handle was still unknown — O(n²) requests that got the admin's
+    // IP rate-limited (429) on edufeed.org with a dozen open applications.
+    const releasePaula = twoStaggeredApplicants();
+    const fetchSpy = mockFetch({ wellKnown: emptyWellKnown() });
+
+    const { findByText } = render(MembershipApprovalsPanel);
+    await findByText(/maria@/);
+    await waitFor(() => expect(wellKnownLookups(fetchSpy).length).toBe(1));
+
+    releasePaula();
+    await findByText(/paula@/);
+    await waitFor(() => expect(wellKnownLookups(fetchSpy).length).toBeGreaterThanOrEqual(2));
+    // Let any further effect re-runs settle.
+    await new Promise((r) => setTimeout(r, 50));
+
+    const names = wellKnownLookups(fetchSpy).map((u) => /name=([^&]+)/.exec(u)?.[1]);
+    expect(names.sort()).toEqual(['maria', 'paula']);
+  });
+
+  it('does not retry an upstream lookup that was rate-limited', async () => {
+    const releasePaula = twoStaggeredApplicants();
+    const fetchSpy = mockFetch({
+      wellKnown: new Response('Too Many Requests', { status: 429 })
+    });
+
+    const { findByText } = render(MembershipApprovalsPanel);
+    await findByText(/maria@/);
+    await waitFor(() => expect(wellKnownLookups(fetchSpy).length).toBe(1));
+
+    releasePaula();
+    await findByText(/paula@/);
+    await waitFor(() => expect(wellKnownLookups(fetchSpy).length).toBe(2));
+    await new Promise((r) => setTimeout(r, 50));
+
+    const names = wellKnownLookups(fetchSpy).map((u) => /name=([^&]+)/.exec(u)?.[1]);
+    expect(names.sort()).toEqual(['maria', 'paula']);
   });
 
   it('calls /api/nip05 with NIP-98 Authorization on Approve click', async () => {
