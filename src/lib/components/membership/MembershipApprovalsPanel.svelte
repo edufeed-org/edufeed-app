@@ -176,6 +176,21 @@
     }
   });
 
+  /**
+   * Response ids whose upstream NIP-05 check has been started. Plain Set, not
+   * state: it only guards against re-firing. The effect below re-runs on every
+   * decrypted row and every approval-state change, and a lookup that finds
+   * nothing (the normal case for a pending applicant) or fails writes no
+   * state — so without this guard every re-run re-fetched all still-unknown
+   * handles, O(n²) requests that got the admin rate-limited (429) with a
+   * dozen open applications. One lookup per response per mount is enough;
+   * approving goes through the proxy and sets the row's state itself.
+   *
+   * @type {Set<string>}
+   */
+  // eslint-disable-next-line svelte/prefer-svelte-reactivity -- ephemeral dedup, not reactive state
+  const upstreamChecked = new Set();
+
   // After decryption, check upstream NIP-05 to reflect already-provisioned handles.
   $effect(() => {
     if (!handleDomain) return;
@@ -183,7 +198,8 @@
       const values = decrypted.get(response.id);
       const name = normalizeHandle(values?.wished_handle);
       if (!name) continue;
-      if (approvalState.has(response.id)) continue;
+      if (approvalState.has(response.id) || upstreamChecked.has(response.id)) continue;
+      upstreamChecked.add(response.id);
       checkUpstream(response, name);
     }
   });
