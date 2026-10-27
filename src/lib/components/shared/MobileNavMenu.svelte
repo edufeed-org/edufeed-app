@@ -145,6 +145,13 @@
       {m.navbar_imprint()}
     </a>
   </li>
+  {#if runtimeConfig.privacy?.enabled}
+    <li>
+      <a href={resolve('/privacy')} onclick={onClose} data-testid="privacy-menu-item">
+        {m.navbar_privacy()}
+      </a>
+    </li>
+  {/if}
   <li>
     <button onclick={openLoginModal}>
       {m.common_login()}

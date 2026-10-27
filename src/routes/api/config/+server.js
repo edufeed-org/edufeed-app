@@ -390,6 +390,13 @@ export function GET() {
       url: parseHelpUrl(env.HELP_URL)
     },
 
+    // Privacy policy: PRIVACY_POLICY_PATH names a Markdown file rendered at
+    // /privacy (src/lib/server/privacy-policy.js). The client only learns
+    // whether the page exists — that toggles the "Datenschutz" links.
+    privacy: {
+      enabled: !!(env.PRIVACY_POLICY_PATH || '').trim()
+    },
+
     // Educational content
     educational: {
       searchDebounceMs: parseInt(env.EDUCATIONAL_SEARCH_DEBOUNCE_MS, 300),

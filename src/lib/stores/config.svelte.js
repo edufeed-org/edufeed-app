@@ -173,6 +173,9 @@ const defaultConfig = {
     /** @type {string | null} */
     url: '/wiki/edufeed-erste-schritte'
   },
+  privacy: {
+    enabled: false
+  },
   educational: {
     searchDebounceMs: 300,
     vocabularies: {
@@ -421,6 +424,10 @@ export function initializeConfig(runtimeConfig) {
       ...defaultConfig.help,
       ...runtimeConfig.help
     },
+    privacy: {
+      ...defaultConfig.privacy,
+      ...runtimeConfig.privacy
+    },
     educational: {
       ...defaultConfig.educational,
       ...runtimeConfig.educational,
@@ -585,6 +592,9 @@ export const runtimeConfig = {
   },
   get help() {
     return config.help;
+  },
+  get privacy() {
+    return config.privacy;
   },
   get educational() {
     return config.educational;

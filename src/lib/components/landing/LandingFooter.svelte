@@ -1,6 +1,7 @@
 <!--
   LandingFooter — the pre-login footer of the landing page: user guide
-  (HELP_URL, hidden when a deployment sets it to `none`) and imprint.
+  (HELP_URL, hidden when a deployment sets it to `none`), imprint and the
+  privacy policy (PRIVACY_POLICY_PATH, hidden when none is configured).
   Logged-in users reach both through the account menu instead.
 -->
 <script>
@@ -25,5 +26,10 @@
     <a href={resolve('/imprint')} class="link link-hover" data-testid="landing-imprint-link">
       {m.navbar_imprint()}
     </a>
+    {#if runtimeConfig.privacy?.enabled}
+      <a href={resolve('/privacy')} class="link link-hover" data-testid="landing-privacy-link">
+        {m.navbar_privacy()}
+      </a>
+    {/if}
   </nav>
 </footer>

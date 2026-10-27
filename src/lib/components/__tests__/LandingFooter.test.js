@@ -7,7 +7,8 @@ import { render } from '@testing-library/svelte';
 
 const mockConfig = vi.hoisted(() => ({
   help: /** @type {{url: string | null}} */ ({ url: '/wiki/edufeed-erste-schritte' }),
-  imprint: { enabled: true }
+  imprint: { enabled: true },
+  privacy: { enabled: true }
 }));
 
 vi.mock('$lib/stores/config.svelte.js', () => ({
@@ -17,6 +18,9 @@ vi.mock('$lib/stores/config.svelte.js', () => ({
     },
     get imprint() {
       return mockConfig.imprint;
+    },
+    get privacy() {
+      return mockConfig.privacy;
     }
   }
 }));
@@ -28,6 +32,19 @@ import LandingFooter from '../landing/LandingFooter.svelte';
 describe('LandingFooter', () => {
   beforeEach(() => {
     mockConfig.help = { url: '/wiki/edufeed-erste-schritte' };
+    mockConfig.privacy = { enabled: true };
+  });
+
+  it('links to the privacy policy when the deployment ships one', () => {
+    const { getByTestId } = render(LandingFooter);
+    expect(getByTestId('landing-privacy-link').getAttribute('href')).toBe('/privacy');
+  });
+
+  it('omits the privacy link when no policy is configured', () => {
+    mockConfig.privacy = { enabled: false };
+    const { queryByTestId, getByTestId } = render(LandingFooter);
+    expect(queryByTestId('landing-privacy-link')).toBeNull();
+    expect(getByTestId('landing-imprint-link')).toBeTruthy();
   });
 
   it('links to the guide and the imprint', () => {
