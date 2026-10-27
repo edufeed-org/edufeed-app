@@ -6,10 +6,21 @@
     - appSettings.linkPreviewsEnabled is false
     - the fetch fails or returns success: false
     - the response has no usable metadata
+
+  Privacy: nothing here contacts the linked site from the viewer's browser.
+  Metadata comes from our server (/api/reader), and the OG thumbnail is
+  loaded through /api/image only — a direct <img> from e.g. i.ytimg.com would
+  send every viewer's IP address and user agent to a third party on scroll,
+  without consent. There is deliberately no fallback to the original URL:
+  if the proxy cannot serve the image, the card renders without it.
 -->
 
 <script>
   import { appSettings } from '$lib/stores/app-settings.svelte.js';
+  import { getProxiedImageUrl } from '$lib/helpers/image-proxy.js';
+
+  /** Longest side of the proxied thumbnail: the 150px column at 2x. */
+  const THUMB_SIZE = { w: 300, h: 300 };
 
   /** @type {{ url: string }} */
   let { url } = $props();
@@ -140,7 +151,10 @@
       class="my-2 h-[88px] w-full animate-pulse rounded-lg border border-base-300 bg-base-200"
     ></div>
   {:else if phase === 'ok' && metadata}
-    {@const hasImage = isSafeHttpUrl(metadata.image) && !imageFailed}
+    {@const thumbSrc = isSafeHttpUrl(metadata.image)
+      ? getProxiedImageUrl(metadata.image, THUMB_SIZE)
+      : undefined}
+    {@const hasImage = !!thumbSrc && thumbSrc !== metadata.image && !imageFailed}
     {@const title = metadata.title?.trim()}
     {@const description = metadata.description}
 
@@ -155,7 +169,7 @@
       {#if hasImage}
         <div data-testid="link-preview-thumb" class="w-[150px] shrink-0 bg-base-200">
           <img
-            src={metadata.image}
+            src={thumbSrc}
             alt=""
             loading="lazy"
             referrerpolicy="no-referrer"
