@@ -234,6 +234,14 @@
       {m.navbar_imprint()}
     </a>
   </li>
+  {#if runtimeConfig.privacy?.enabled}
+    <li>
+      <a href={resolve('/privacy')} onclick={onClose} data-testid="privacy-menu-item">
+        <InfoCircleIcon class_="w-4 h-4" />
+        {m.navbar_privacy()}
+      </a>
+    </li>
+  {/if}
 
   <li class="menu-disabled"><hr class="my-1 border-base-300" /></li>
 

@@ -19,12 +19,16 @@ vi.mock('../shared/ConnectionStatus.svelte', () => ({ default: () => ({}) }));
 vi.mock('$app/paths', () => ({ resolve: (/** @type {string} */ p) => p }));
 
 const mockConfig = vi.hoisted(() => ({
-  help: /** @type {{url: string | null}} */ ({ url: '/wiki/edufeed-erste-schritte' })
+  help: /** @type {{url: string | null}} */ ({ url: '/wiki/edufeed-erste-schritte' }),
+  privacy: { enabled: true }
 }));
 vi.mock('$lib/stores/config.svelte.js', () => ({
   runtimeConfig: {
     get help() {
       return mockConfig.help;
+    },
+    get privacy() {
+      return mockConfig.privacy;
     }
   }
 }));
@@ -35,6 +39,23 @@ describe('MobileNavMenu logged-out help row', () => {
   beforeEach(() => {
     active$.next(null);
     mockConfig.help = { url: '/wiki/edufeed-erste-schritte' };
+    mockConfig.privacy = { enabled: true };
+  });
+
+  it('links to the privacy policy and closes the menu on click', async () => {
+    const onClose = vi.fn();
+    const { findByTestId } = render(MobileNavMenu, { onClose });
+    const link = await findByTestId('privacy-menu-item');
+    expect(link.getAttribute('href')).toBe('/privacy');
+    link.click();
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it('omits the privacy row when no policy is configured', async () => {
+    mockConfig.privacy = { enabled: false };
+    const { findByText, queryByTestId } = render(MobileNavMenu, { onClose: vi.fn() });
+    await findByText(/Impressum|Imprint/);
+    expect(queryByTestId('privacy-menu-item')).toBeNull();
   });
 
   it('links to the guide and closes the menu on click', async () => {

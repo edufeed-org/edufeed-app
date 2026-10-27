@@ -55,7 +55,8 @@ vi.mock('$lib/stores/membership-pending.svelte.js', () => ({
 
 const mockRuntimeConfig = vi.hoisted(() => ({
   membership: { adminPubkeys: /** @type {string[]} */ ([]) },
-  help: /** @type {{url: string | null}} */ ({ url: '/wiki/edufeed-erste-schritte' })
+  help: /** @type {{url: string | null}} */ ({ url: '/wiki/edufeed-erste-schritte' }),
+  privacy: { enabled: true }
 }));
 vi.mock('$lib/stores/config.svelte.js', () => ({
   runtimeConfig: mockRuntimeConfig
@@ -83,6 +84,7 @@ vi.mock('$lib/paraglide/messages', () => ({
   common_settings: () => 'Einstellungen',
   navbar_switch_account: () => 'Konto wechseln',
   navbar_imprint: () => 'Impressum',
+  navbar_privacy: () => 'Datenschutz',
   navbar_help: () => 'Hilfe',
   report_issue_menu_item: () => 'Feedback & Fehler melden',
   navbar_logout_current: () => 'Abmelden',
@@ -109,6 +111,7 @@ beforeEach(() => {
   mockDownloaded.pubkeys = [];
   mockRuntimeConfig.membership = { adminPubkeys: [] };
   mockRuntimeConfig.help = { url: '/wiki/edufeed-erste-schritte' };
+  mockRuntimeConfig.privacy = { enabled: true };
 });
 
 describe('AccountMenuSection', () => {
@@ -130,6 +133,23 @@ describe('AccountMenuSection', () => {
     expect(link.getAttribute('href')).toBe('/wiki/edufeed-erste-schritte');
     await fireEvent.click(link);
     expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it('links to the privacy policy next to the imprint and closes the menu', async () => {
+    const onClose = vi.fn();
+    const { findByTestId } = render(AccountMenuSection, { onClose });
+    const link = await findByTestId('privacy-menu-item');
+    expect(link.textContent).toContain('Datenschutz');
+    expect(link.getAttribute('href')).toBe('/privacy');
+    await fireEvent.click(link);
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it('omits the privacy row when no policy is configured', async () => {
+    mockRuntimeConfig.privacy = { enabled: false };
+    const { findByText, queryByTestId } = render(AccountMenuSection, { onClose: vi.fn() });
+    await findByText('Impressum');
+    expect(queryByTestId('privacy-menu-item')).toBeNull();
   });
 
   it('omits the help row when no guide is configured', async () => {

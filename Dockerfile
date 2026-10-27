@@ -47,6 +47,9 @@ RUN pnpm install --frozen-lockfile --prod --ignore-scripts
 # Copy built application from builder
 COPY --from=builder /app/build ./build
 
+# Legal texts a deployment can point PRIVACY_POLICY_PATH at (relative to /app)
+COPY --from=builder /app/legal ./legal
+
 # Create non-root user
 RUN addgroup -g 1001 -S nodejs && \
     adduser -S nodejs -u 1001
