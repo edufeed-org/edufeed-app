@@ -3,7 +3,10 @@
   import { nip19 } from 'nostr-tools';
   import { decodeFormNaddr, parseFormTemplate } from '$lib/helpers/forms.js';
   import { nostrToAmb } from 'amb-nostr-converter';
-  import { ambJsonToFormValues } from '$lib/helpers/educational/ambJsonToFormValues.js';
+  import {
+    ambJsonToFormValues,
+    relationRelayHintsFromTags
+  } from '$lib/helpers/educational/ambJsonToFormValues.js';
   import { buildTemplateResourceSubmission } from '$lib/helpers/educational/buildTemplateResourceSubmission.js';
   import FormRenderer from '$lib/components/forms/FormRenderer.svelte';
   import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
@@ -94,11 +97,11 @@
     if (!parsed || !resourceEvent || !decoded.pubkey || !decoded.identifier) return undefined;
     const { success, data: amb } = nostrToAmb(resourceEvent);
     if (!success || !amb) return undefined;
-    const { values: parsedValues, selectedConcepts } = ambJsonToFormValues(amb, {
-      pubkey: decoded.pubkey,
-      dTag: decoded.identifier,
-      fields: parsed.fields
-    });
+    const { values: parsedValues, selectedConcepts } = ambJsonToFormValues(
+      amb,
+      { pubkey: decoded.pubkey, dTag: decoded.identifier, fields: parsed.fields },
+      { relationRelayHints: relationRelayHintsFromTags(resourceEvent.tags) }
+    );
     /** @type {Record<string, any>} */
     const out = {};
     for (const field of parsed.fields) {

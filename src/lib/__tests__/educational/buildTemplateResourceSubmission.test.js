@@ -260,6 +260,40 @@ describe('buildTemplateResourceSubmission (companion concept a tags, NIP-VOCAB)'
   });
 });
 
+describe('buildTemplateResourceSubmission (relations)', () => {
+  it('emits the relation a tag with its relay hint while the relation id stays relay-less', () => {
+    const relForm = {
+      pubkey: 'edupub',
+      dTag: 'amb-basic',
+      fields: [
+        { id: 'title', type: 'text', output: 'amb:name' },
+        { id: 'parent', type: 'amb-relation', output: 'amb:isPartOf' }
+      ]
+    };
+    const { tags } = buildTemplateResourceSubmission({
+      form: relForm,
+      formRelay: 'wss://relay.example',
+      rawValues: {
+        title: 'X',
+        parent: [
+          { coordinate: `30142:${'cc'.repeat(32)}:series`, relayHint: 'wss://other.example' }
+        ]
+      },
+      selectedConcepts: {},
+      signerPubkey,
+      isEditMode: false
+    });
+    expect(tags).toContainEqual([
+      'a',
+      `30142:${'cc'.repeat(32)}:series`,
+      'wss://other.example',
+      'isPartOf'
+    ]);
+    const id = tags.find((t) => t[0] === 'isPartOf:id')?.[1] || '';
+    expect(id.startsWith('nostr:naddr1')).toBe(true);
+  });
+});
+
 describe('buildTemplateResourceSubmission (edit mode)', () => {
   it('preserves the resource existing d tag, never clobbering it with an amb:id-emitted or generated one', () => {
     const idForm = {

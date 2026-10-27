@@ -37,6 +37,8 @@ export function formValuesToAmbJson(form, values, selectedConcepts) {
   /** @type {any} */
   const amb = { type: ['LearningResource'] };
   const externalUrls = [];
+  /** @type {Record<string, { pubkey: string, dTag: string, relayHint?: string }>} */
+  const relatedEvents = {}; // AMB id → event reference; the converter turns it into the relation `a` tag (with relay hint)
   const CONCEPT_PROPS = new Set(['about', 'learningResourceType', 'educationalLevel', 'audience']);
 
   for (const field of form.fields) {
@@ -78,10 +80,7 @@ export function formValuesToAmbJson(form, values, selectedConcepts) {
       amb[role] = (Array.isArray(raw) ? raw : [])
         .map((r) =>
           r?.coordinate
-            ? {
-                id: 'nostr:' + coordToNaddr(r.coordinate, r.relayHint),
-                type: 'LearningResource'
-              }
+            ? relationObject(r.coordinate, r.relayHint, relatedEvents)
             : r?.name
               ? { name: String(r.name), type: 'CreativeWork' }
               : null
@@ -138,16 +137,23 @@ export function formValuesToAmbJson(form, values, selectedConcepts) {
     if (raw != null && raw !== '') amb[prop] = String(raw);
   }
   if (!amb.id) amb.id = `${form.pubkey}/${form.dTag}`; // ambToNostr needs an id → d; caller reconciles the real d-tag
-  return { amb, extras: { externalUrls } };
+  return { amb, extras: { externalUrls, relatedEvents } };
 }
 
-/** @param {string} coordinate "30142:pub:d" @param {string} [relayHint] */
-function coordToNaddr(coordinate, relayHint) {
+/**
+ * AMB relation object for an addressable event. The identifier is the canonical,
+ * relay-less `nostr:naddr…` (NIP-AMB reverse step 9 / NIP-VOCAB "Canonical Nostr
+ * URI"); the relay hint is not part of the identifier — it is recorded in
+ * `relatedEvents` so the converter emits it on the relation's `a` tag.
+ * @param {string} coordinate "30142:pub:d"
+ * @param {string | undefined} relayHint
+ * @param {Record<string, { pubkey: string, dTag: string, relayHint?: string }>} relatedEvents
+ */
+function relationObject(coordinate, relayHint, relatedEvents) {
   const [kind, pubkey, ...rest] = coordinate.split(':');
-  return nip19.naddrEncode({
-    kind: Number(kind),
-    pubkey,
-    identifier: rest.join(':'),
-    relays: relayHint ? [relayHint] : []
-  });
+  const dTag = rest.join(':');
+  const id =
+    'nostr:' + nip19.naddrEncode({ kind: Number(kind), pubkey, identifier: dTag, relays: [] });
+  relatedEvents[id] = { pubkey, dTag, ...(relayHint ? { relayHint } : {}) };
+  return { id, type: 'LearningResource' };
 }

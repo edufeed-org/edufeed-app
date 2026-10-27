@@ -37,6 +37,7 @@ export function buildTemplateResourceSubmission({
   const { success, data, error } = ambToNostr(/** @type {any} */ (amb), {
     pubkey: signerPubkey,
     defaultRelayHint: formRelay,
+    relatedEvents: extras.relatedEvents,
     // The companion concept a tags are appended below from the selected
     // concepts, which know the vocabulary's relay; the converter would only
     // know the form relay.

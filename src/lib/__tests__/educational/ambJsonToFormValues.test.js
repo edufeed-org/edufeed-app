@@ -1,8 +1,12 @@
+import { nip19 } from 'nostr-tools';
 /** @vitest-environment node */
 import { describe, it, expect } from 'vitest';
 import { ambToNostr, nostrToAmb } from 'amb-nostr-converter';
 import { formValuesToAmbJson } from '$lib/helpers/educational/formValuesToAmbJson.js';
-import { ambJsonToFormValues } from '$lib/helpers/educational/ambJsonToFormValues.js';
+import {
+  ambJsonToFormValues,
+  relationRelayHintsFromTags
+} from '$lib/helpers/educational/ambJsonToFormValues.js';
 
 // reused from Task 1's formValuesToAmbJson.test.js
 const form = {
@@ -103,5 +107,54 @@ describe('ambJsonToFormValues round-trip', () => {
     expect(v.related[0].coordinate).toBe(relCoordinate);
     expect(sc.custom[0].id).toBe('urn:x');
     expect(sc.custom[0].labels.de).toBe('X');
+  });
+
+  it('relations: canonical relay-less naddr id, relay hint via relatedEvents → a tag, recovered on prefill from relayHints (NIP-AMB step 9)', () => {
+    const relationPubkey = 'bb'.repeat(32);
+    const relCoordinate = `30142:${relationPubkey}:some-d`;
+    const relForm = {
+      pubkey: 'pk',
+      dTag: 'demo3',
+      fields: [
+        { id: 'title', type: 'text', output: 'amb:name' },
+        { id: 'related', type: 'amb-relation', output: 'amb:hasPart' }
+      ]
+    };
+    const { amb, extras } = formValuesToAmbJson(
+      relForm,
+      { title: 'T', related: [{ coordinate: relCoordinate, relayHint: 'wss://relay.example/' }] },
+      {}
+    );
+    const canonicalId =
+      'nostr:' +
+      nip19.naddrEncode({ kind: 30142, pubkey: relationPubkey, identifier: 'some-d', relays: [] });
+    expect(amb.hasPart[0].id).toBe(canonicalId); // no relay hint inside the identifier
+    expect(extras.relatedEvents).toEqual({
+      [canonicalId]: { pubkey: relationPubkey, dTag: 'some-d', relayHint: 'wss://relay.example/' }
+    });
+
+    const { data } = ambToNostr(amb, {
+      pubkey: 'pk',
+      timestamp: 0,
+      relatedEvents: extras.relatedEvents
+    });
+    expect(data.tags).toContainEqual(['a', relCoordinate, 'wss://relay.example/', 'hasPart']);
+
+    const event = {
+      kind: 30142,
+      pubkey: 'pk',
+      content: '',
+      created_at: 0,
+      tags: /** @type {any} */ (data).tags
+    };
+    const { data: parsedAmb } = nostrToAmb(event);
+    const hints = relationRelayHintsFromTags(event.tags);
+    expect(hints).toEqual({ [relCoordinate]: 'wss://relay.example/' });
+    const { values: v } = ambJsonToFormValues(parsedAmb, relForm, { relationRelayHints: hints });
+    expect(v.related[0]).toEqual({ coordinate: relCoordinate, relayHint: 'wss://relay.example/' });
+    // without the hints map the coordinate still comes back, just without a hint
+    expect(ambJsonToFormValues(parsedAmb, relForm).values.related[0]).toEqual({
+      coordinate: relCoordinate
+    });
   });
 });

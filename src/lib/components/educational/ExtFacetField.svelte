@@ -57,6 +57,8 @@
     try {
       return identifierFromAddress({ kind: CONCEPT_KIND, pubkey: evt.pubkey, d: parsed.d || '' });
     } catch {
+      // Unencodable (d > 255 bytes, malformed pubkey): no canonical Nostr URI exists;
+      // the raw coordinate is the one sanctioned exception (VOCAB.md).
       return `nostr:${createReplaceableAddress(CONCEPT_KIND, evt.pubkey, parsed.d || '')}`;
     }
   }

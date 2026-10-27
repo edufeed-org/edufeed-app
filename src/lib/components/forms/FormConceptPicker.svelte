@@ -54,7 +54,9 @@
     try {
       return identifierFromAddress({ kind: CONCEPT_KIND, pubkey: evt.pubkey, d: parsed.d || '' });
     } catch {
-      // unencodable (non-hex pubkey in fixtures, d > 255 bytes): fall back to the raw coordinate
+      // Unencodable (non-hex pubkey in fixtures, d > 255 bytes): no canonical Nostr
+      // URI exists (VOCAB.md "Canonical Nostr URI"); the raw coordinate is the one
+      // sanctioned exception so the concept stays addressable in the UI.
       return `nostr:${createReplaceableAddress(CONCEPT_KIND, evt.pubkey, parsed.d || '')}`;
     }
   }
@@ -145,7 +147,16 @@
     }
     let changed = false;
     const healed = value.map((v) => {
-      if (eventFor(v.id)) return v;
+      const known = eventFor(v.id);
+      if (known) {
+        // Same concept (possibly stored in a legacy id form). A value without
+        // nostrCoord cannot produce the companion `a` tag on publish, so fill
+        // coordinate and relay from the event once; keep the stored labels.
+        if (v.nostrCoord) return v;
+        changed = true;
+        const rich = toRichSelected(known);
+        return { ...rich, labels: Object.keys(v.labels || {}).length ? v.labels : rich.labels };
+      }
       if (looksLikeCanonicalId(v.id)) return v;
       const label = pickLabel(v.labels, locale);
       const evt = label ? byLabel[label] : undefined;

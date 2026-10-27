@@ -32,18 +32,41 @@ function decodeCreatorPubkey(id) {
  * @param {string} id
  * @returns {{ coordinate: string, relayHint?: string } | undefined}
  */
-function decodeRelation(id) {
+function decodeRelation(id, relayHints = {}) {
   try {
     const decoded = nip19.decode(id.slice('nostr:'.length));
     if (decoded.type !== 'naddr') return undefined;
     const { kind, pubkey, identifier, relays } = /** @type {any} */ (decoded.data);
-    return {
-      coordinate: `${kind}:${pubkey}:${identifier}`,
-      ...(relays && relays[0] ? { relayHint: relays[0] } : {})
-    };
+    const coordinate = `${kind}:${pubkey}:${identifier}`;
+    // Canonical relation ids carry no relay entries (NIP-AMB step 9); the hint
+    // lives on the event's `a` tag, handed in via `relayHints`. Older ids with
+    // an embedded hint still work.
+    const relayHint = (relays && relays[0]) || relayHints[coordinate];
+    return { coordinate, ...(relayHint ? { relayHint } : {}) };
   } catch {
     return undefined;
   }
+}
+
+/**
+ * Relay hints of the relation `a` tags of a resource event, keyed by coordinate.
+ * @param {string[][]} tags
+ * @returns {Record<string, string>}
+ */
+export function relationRelayHintsFromTags(tags) {
+  /** @type {Record<string, string>} */
+  const out = {};
+  for (const t of tags || []) {
+    if (
+      t[0] === 'a' &&
+      (t[3] === 'isPartOf' || t[3] === 'hasPart' || t[3] === 'isBasedOn') &&
+      t[1] &&
+      t[2]
+    ) {
+      out[t[1]] = t[2];
+    }
+  }
+  return out;
 }
 
 /**
@@ -55,7 +78,7 @@ function decodeRelation(id) {
  * @param {{ pubkey: string, dTag: string, fields: any[] }} form
  * @returns {{ values: Record<string, any>, selectedConcepts: Record<string, any> }}
  */
-export function ambJsonToFormValues(amb, form) {
+export function ambJsonToFormValues(amb, form, { relationRelayHints = {} } = {}) {
   /** @type {Record<string, any>} */
   const values = {};
   /** @type {Record<string, any>} */
@@ -93,7 +116,7 @@ export function ambJsonToFormValues(amb, form) {
       values[field.id] = asArray(amb?.[role])
         .map((r) =>
           typeof r?.id === 'string' && r.id.startsWith('nostr:')
-            ? decodeRelation(r.id)
+            ? decodeRelation(r.id, relationRelayHints)
             : r?.name
               ? { name: r.name }
               : null

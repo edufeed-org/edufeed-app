@@ -127,21 +127,50 @@ describe('FormConceptPicker — canonical naddr identifiers', () => {
     expect(selected[0].id.startsWith('nostr:naddr1')).toBe(true);
   });
 
-  it('shows a stored legacy id as the matching concept (label from the event) without healing it into another concept', async () => {
-    let calls = 0;
+  it('shows a stored legacy id as the matching concept and enriches it once with nostrCoord/relay, never swapping the concept', async () => {
+    /** @type {any[][]} */ const emitted = [];
     const { container } = render(FormConceptPicker, {
       props: {
         field,
         multiple: true,
         value: [{ id: `nostr:39738:${PK}:5-6`, nostrCoord: '', relay: '', labels: {} }],
-        onchange: () => {
-          calls++;
+        onchange: (/** @type {any[]} */ v) => {
+          emitted.push(v);
         }
       }
     });
     const trigger = await openTrigger(container);
     await new Promise((r) => setTimeout(r, 50));
     expect(trigger.textContent).toContain('Klasse 5/6');
+    expect(emitted).toHaveLength(1);
+    expect(emitted[0]).toHaveLength(1);
+    expect(emitted[0][0]).toMatchObject({
+      id: N56,
+      nostrCoord: `39738:${PK}:5-6`,
+      relay: 'wss://r.example',
+      labels: { de: 'Klasse 5/6' }
+    });
+  });
+  it('does not emit when a matching value already carries nostrCoord', async () => {
+    let calls = 0;
+    render(FormConceptPicker, {
+      props: {
+        field,
+        multiple: true,
+        value: [
+          {
+            id: `nostr:39738:${PK}:5-6`,
+            nostrCoord: `39738:${PK}:5-6`,
+            relay: 'wss://r.example',
+            labels: { de: 'Klasse 5/6' }
+          }
+        ],
+        onchange: () => {
+          calls++;
+        }
+      }
+    });
+    await new Promise((r) => setTimeout(r, 50));
     expect(calls).toBe(0);
   });
 
