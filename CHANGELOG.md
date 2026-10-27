@@ -7,6 +7,24 @@ merge commits of the nostr PRs that landed since the previous tag.
 
 ## [Unreleased]
 
+## [0.10.1] - 2026-10-27
+
+Patch release: one fix for the membership admin page. Cut as
+`v0.10.1-rc.1` on dev.edufeed.org before this tag.
+
+### Fixed
+
+- The membership applications page no longer floods edufeed.org with
+  `/.well-known/nostr.json` lookups. The check whether an applicant's
+  wished handle is already provisioned re-ran for every still-unknown
+  handle each time a row decrypted or an approval changed — O(n²)
+  requests that got the admin's IP rate-limited (429) with a dozen open
+  applications. Each applicant is now looked up once per page load.
+
+### Deploy notes
+
+- None.
+
 ## [0.10.0] - 2026-10-24
 
 Nine PRs: the feeds move to applesauce v7's window-based timeline loader

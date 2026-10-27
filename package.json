@@ -2,7 +2,7 @@
   "license": "AGPL-3.0-only",
   "name": "edufeed-app",
   "private": true,
-  "version": "0.10.0",
+  "version": "0.10.1",
   "type": "module",
   "packageManager": "pnpm@10.28.0",
   "scripts": {
