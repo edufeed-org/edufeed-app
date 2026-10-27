@@ -7,6 +7,7 @@ import { invalidateRelayListCache, getRelayListLookupRelays } from './relay-serv
 import { manager } from '$lib/stores/accounts.svelte.js';
 import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
 import { nextCreatedAt, cachePublishedEvent } from '$lib/helpers/replaceableUpdates.js';
+import { replaceRelayInList } from '$lib/helpers/relay-health.js';
 
 /** NIP-65 relay list metadata. */
 const RELAY_LIST_KIND = 10002;
@@ -51,15 +52,50 @@ export async function saveRelayList(relays, userPubkey) {
     return tag;
   });
 
-  // Create the event (kind 10002 - replaceable).
+  return publishRelayListTemplate({ kind: RELAY_LIST_KIND, tags, content: '' }, userPubkey);
+}
+
+/**
+ * Replace a relay in the user's published kind 10002 — the Termi "one of
+ * your relays has been unreachable for days" action. Edits the LATEST list
+ * the store holds (never a rebuilt one) and keeps every tag that is not the
+ * dead relay's r-tag, so a list written by another client survives intact.
+ * `replacementUrl` null removes the relay instead.
+ *
+ * @param {string} deadUrl
+ * @param {string | null} replacementUrl
+ * @param {string} userPubkey
+ * @returns {Promise<Object>} The signed and published event
+ */
+export async function replaceDeadRelay(deadUrl, replacementUrl, userPubkey) {
+  const existing = eventStore.getReplaceable(RELAY_LIST_KIND, userPubkey);
+  if (!existing) {
+    throw new Error('No relay list to edit');
+  }
+  const template = replaceRelayInList(existing, deadUrl, replacementUrl);
+  if (!template.tags.some((t) => t[0] === 'r')) {
+    throw new Error('At least one relay is required');
+  }
+  return publishRelayListTemplate(template, userPubkey);
+}
+
+/**
+ * Sign + publish a kind 10002 template as the user's new relay list.
+ * @param {{kind: number, tags: string[][], content: string}} template
+ * @param {string} userPubkey
+ * @returns {Promise<Object>} The signed and published event
+ */
+async function publishRelayListTemplate(template, userPubkey) {
+  if (!manager.active?.signer) {
+    throw new Error('No signer available. Please login first.');
+  }
+
   // created_at must be strictly newer than the relay list it replaces, or the
   // save is dropped on a same-second tie — see nextCreatedAt for why. (#64)
   const event = {
-    kind: RELAY_LIST_KIND,
+    ...template,
     pubkey: userPubkey,
-    created_at: nextCreatedAt(eventStore.getReplaceable(RELAY_LIST_KIND, userPubkey)),
-    tags,
-    content: ''
+    created_at: nextCreatedAt(eventStore.getReplaceable(RELAY_LIST_KIND, userPubkey))
   };
 
   try {
@@ -78,7 +114,9 @@ export async function saveRelayList(relays, userPubkey) {
     // publish to any relay' on the very save meant to fix it). NIP-65 also
     // wants the list ON the listed relays and findable via indexers.
     const additionalRelays = [
-      ...relays.filter((relay) => relay.write).map((relay) => relay.url),
+      ...parseRelayListEvent(signedEvent)
+        .filter((relay) => relay.write)
+        .map((relay) => relay.url),
       ...getRelayListLookupRelays()
     ];
     const result = await publishEvent(signedEvent, [], { additionalRelays });

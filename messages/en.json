@@ -4403,5 +4403,22 @@
   "protected_badge_label": "Protected: stays on the relays the author chose",
   "protected_publish_accepted": "Stored as protected on: {relays}",
   "protected_publish_no_relays": "None of your relays accepts protected posts yet. Turn off “Protected” to publish normally.",
-  "protected_publish_failed": "No relay accepted the protected post."
+  "protected_publish_failed": "No relay accepted the protected post.",
+  "termi_hint_dead_relay_title": "One of your relays is no longer reachable",
+  "termi_hint_dead_relay_body": "{relay} has been unreachable for {days} days. Posts and mentions routed there never arrive. Shall I replace it with {replacement} in your relay list?",
+  "termi_hint_dead_relay_body_remove": "{relay} has been unreachable for {days} days. Posts and mentions routed there never arrive. Shall I remove it from your relay list?",
+  "termi_hint_dead_relay_cta": "Replace",
+  "termi_hint_dead_relay_cta_remove": "Remove",
+  "termi_hint_dead_relay_doing": "Updating your relay list …",
+  "settings_relay_health_checking": "Checking reachability …",
+  "settings_relay_health_ok": "Reachable",
+  "settings_relay_health_unreachable": "Unreachable",
+  "settings_relay_health_timeout": "No answer",
+  "settings_relay_health_holds_list": "has your relay list",
+  "settings_relay_health_missing_list": "does not have your relay list yet",
+  "settings_relay_health_dead_since": "unreachable for {days} days",
+  "settings_relay_health_recheck": "Check again",
+  "settings_relay_badge_auth": "Login required",
+  "settings_relay_badge_paid": "Paid",
+  "settings_relay_health_help": "Checked from this device. A relay that does not have your list may not be found by other apps – saving publishes the list there."
 }

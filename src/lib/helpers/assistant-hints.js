@@ -4,6 +4,7 @@
 
 import { canSign } from '$lib/helpers/signing-guard.js';
 import { blossomServerKey, uniqueBlossomServers } from '$lib/helpers/blossom-server-key.js';
+import { relayKey, pickReplacementRelay } from '$lib/helpers/relay-health.js';
 
 /**
  * @typedef {'open' | 'doing' | 'done'} HintStatus
@@ -242,4 +243,38 @@ export function buildUpgradedServerList(userServers, defaultServers) {
 export function buildPublicServerList(userServers, defaultServers, publicServers) {
   const ownOthers = userServers.filter((s) => !isOneOf(s, defaultServers));
   return uniqueBlossomServers([publicServers[0], ...ownOthers, ...publicServers.slice(1)]);
+}
+
+/**
+ * Derive the "one of your relays is dead" hint from the probe history.
+ * Pure; the reactive store feeds it the user's current kind 10002 relays and
+ * the dead candidates the per-device history produced (see
+ * $lib/helpers/relay-health.js). One relay at a time: the first dead one that
+ * is still in the list and not dismissed. The replacement is the first
+ * default relay the list does not have yet; with none left the hint offers
+ * to remove the relay instead.
+ *
+ * @param {{
+ *   listUrls: string[],
+ *   deadRelays: Array<{url: string, days: number}>,
+ *   defaults: string[],
+ *   isDismissed: (url: string) => boolean
+ * }} input
+ * @returns {{url: string, days: number, replacement: string | null, variant: 'replace' | 'remove'} | null}
+ */
+export function deriveDeadRelayHint({ listUrls, deadRelays, defaults, isDismissed }) {
+  const inList = new Set(listUrls.map(relayKey));
+  const candidate = deadRelays.find((d) => inList.has(relayKey(d.url)) && !isDismissed(d.url));
+  if (!candidate) return null;
+  const replacement = pickReplacementRelay(
+    defaults,
+    listUrls,
+    deadRelays.map((d) => d.url)
+  );
+  return {
+    url: candidate.url,
+    days: candidate.days,
+    replacement,
+    variant: replacement ? 'replace' : 'remove'
+  };
 }

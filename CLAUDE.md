@@ -446,6 +446,21 @@ Applesauce tracks per-event relay provenance via `Symbol.for("seen-relays")`. Us
 
 User override relays (kind 30002) and the curated/WoT author set resolve asynchronously after login. A feed re-reads both through `feed.sync()` from an `$effect` that tracks `$relayUpdateSignal` and `getCuratedCacheVersion()`; the SDK reconciles per relay (a new relay loads the current window, a grown author list requests only the added authors) and keeps per-relay coverage, so pagination never stops because the smallest relay emptied. One-shot surfaces that must react (the calendar's date-range loaders) keep the older pattern: diff `getXxxRelays()` against an initial `SvelteSet` and `fetchEvents` the new relays once.
 
+### Relay List Health (kind 10002)
+
+Signup publishes a default kind 10002 from `FALLBACK_RELAYS` (every entry must
+stay free, open to new pubkeys and alive — nos.lol died in 2026-10 while still
+in every signup's list). `src/lib/services/relay-health.js` probes the user's
+own listed relays (one REQ for their 10002 each + NIP-11) and folds the
+outcomes into a per-device localStorage history; the pure thresholds in
+`helpers/relay-health.js` (`findDeadRelays`: failures on ≥2 distinct days over
+≥3 days, no answer since) feed the Termi `deadRelay` hint, whose action
+`replaceDeadRelay` edits the LATEST list in place (every other tag kept) —
+never rebuilds it. The settings relay editor shows the same probe per row
+(reachable / unreachable / no answer, "has your list", NIP-11 name + auth/paid
+badges, "Erneut prüfen"). A timeout is no evidence; only a transport failure
+counts.
+
 ### Event Deletion (NIP-09)
 
 Use `deleteEvent(event, activeUser)` from `src/lib/helpers/eventDeletion.js` for any content type. Returns `{success: boolean, error?: string}`. Auto-resolves relay category from event kind, verifies ownership, applies the deletion to EventStore optimistically, and uses `factory.delete([event])` (proper NIP-09 with e-tag + a-tag).
