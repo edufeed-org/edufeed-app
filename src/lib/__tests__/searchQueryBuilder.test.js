@@ -175,12 +175,12 @@ describe('buildSearchFilterObject — concept ids in relay tag filters (NIP-VOCA
 
   test('a canonical naddr chip id queries both the canonical and the legacy stored form (relays cannot canonicalise)', () => {
     const out = buildSearchFilterObject({ extFields: { 'ekw:zeitstruktur': [{ id: canonical }] } });
-    const key = Object.keys(out.tagFilters).find((k) => k.endsWith(':id'));
+    const key = String(Object.keys(out.tagFilters).find((k) => k.endsWith(':id')));
     expect(out.tagFilters[key]).toEqual([canonical, legacy]);
   });
   test('a legacy chip id is normalised to the same pair', () => {
     const out = buildSearchFilterObject({ extFields: { 'ekw:zeitstruktur': [{ id: legacy }] } });
-    const key = Object.keys(out.tagFilters).find((k) => k.endsWith(':id'));
+    const key = String(Object.keys(out.tagFilters).find((k) => k.endsWith(':id')));
     expect(out.tagFilters[key]).toEqual([canonical, legacy]);
   });
   test('an external URI and a malformed value stay single, as given', () => {
@@ -189,7 +189,7 @@ describe('buildSearchFilterObject — concept ids in relay tag filters (NIP-VOCA
         'ekw:zeitstruktur': [{ id: 'https://w3id.org/kim/x' }, { id: 'nostr:39738:zz:x' }]
       }
     });
-    const key = Object.keys(out.tagFilters).find((k) => k.endsWith(':id'));
+    const key = String(Object.keys(out.tagFilters).find((k) => k.endsWith(':id')));
     expect(out.tagFilters[key]).toEqual(['https://w3id.org/kim/x', 'nostr:39738:zz:x']);
   });
 });

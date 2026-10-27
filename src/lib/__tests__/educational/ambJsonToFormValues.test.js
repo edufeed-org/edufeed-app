@@ -138,7 +138,7 @@ describe('ambJsonToFormValues round-trip', () => {
       timestamp: 0,
       relatedEvents: extras.relatedEvents
     });
-    expect(data.tags).toContainEqual(['a', relCoordinate, 'wss://relay.example/', 'hasPart']);
+    expect(data?.tags).toContainEqual(['a', relCoordinate, 'wss://relay.example/', 'hasPart']);
 
     const event = {
       kind: 30142,

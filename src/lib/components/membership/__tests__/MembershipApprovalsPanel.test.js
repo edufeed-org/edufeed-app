@@ -217,7 +217,10 @@ describe('MembershipApprovalsPanel', () => {
     expect(nip44DecryptMock).toHaveBeenCalledWith(APPLICANT_PUBKEY, '<encrypted>');
   });
 
-  /** URLs of the upstream `.well-known/nostr.json` lookups a fetch spy saw. */
+  /**
+   * URLs of the upstream `.well-known/nostr.json` lookups a fetch spy saw.
+   * @returns {string[]}
+   */
   function wellKnownLookups(/** @type {any} */ fetchSpy) {
     return fetchSpy.mock.calls
       .map((/** @type {any[]} */ c) => String(c[0]))
