@@ -30,6 +30,7 @@ function decodeCreatorPubkey(id) {
 /**
  * Decode a `nostr:naddr…` relation id back to a coordinate + relay hint.
  * @param {string} id
+ * @param {Record<string, string>} [relayHints] coordinate → relay hint from the event's `a` tags
  * @returns {{ coordinate: string, relayHint?: string } | undefined}
  */
 function decodeRelation(id, relayHints = {}) {

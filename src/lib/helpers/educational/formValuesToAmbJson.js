@@ -28,17 +28,24 @@ const conceptList = (concepts) => {
 };
 
 /**
+ * Relation targets keyed by canonical AMB id (`nostr:naddr…`); the converter
+ * emits each as an `a` tag with its relay hint.
+ * @typedef {Record<string, { pubkey: string, dTag: string, relayHint?: string }>} RelatedEvents
+ */
+
+/**
  * @param {{ pubkey: string, dTag: string, fields: any[] }} form
  * @param {Record<string, any>} values
  * @param {Record<string, any>} selectedConcepts
- * @returns {{ amb: any, extras: { externalUrls: string[] } }}
+ * @returns {{ amb: any, extras: { externalUrls: string[], relatedEvents: RelatedEvents } }}
  */
 export function formValuesToAmbJson(form, values, selectedConcepts) {
   /** @type {any} */
   const amb = { type: ['LearningResource'] };
   const externalUrls = [];
   /** @type {Record<string, { pubkey: string, dTag: string, relayHint?: string }>} */
-  const relatedEvents = {}; // AMB id → event reference; the converter turns it into the relation `a` tag (with relay hint)
+  /** @type {RelatedEvents} AMB id → event reference; the converter turns it into the relation `a` tag (with relay hint) */
+  const relatedEvents = {};
   const CONCEPT_PROPS = new Set(['about', 'learningResourceType', 'educationalLevel', 'audience']);
 
   for (const field of form.fields) {
@@ -147,7 +154,7 @@ export function formValuesToAmbJson(form, values, selectedConcepts) {
  * `relatedEvents` so the converter emits it on the relation's `a` tag.
  * @param {string} coordinate "30142:pub:d"
  * @param {string | undefined} relayHint
- * @param {Record<string, { pubkey: string, dTag: string, relayHint?: string }>} relatedEvents
+ * @param {RelatedEvents} relatedEvents
  */
 function relationObject(coordinate, relayHint, relatedEvents) {
   const [kind, pubkey, ...rest] = coordinate.split(':');
