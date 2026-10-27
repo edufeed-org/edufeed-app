@@ -92,8 +92,8 @@ importers:
         specifier: ^2.24.1
         version: 2.24.1(typescript@5.9.3)
       nostr-vocab-core:
-        specifier: https://git.edufeed.org/api/packages/edufeed/npm/nostr-vocab-core/-/0.2.3/nostr-vocab-core-0.2.3.tgz
-        version: https://git.edufeed.org/api/packages/edufeed/npm/nostr-vocab-core/-/0.2.3/nostr-vocab-core-0.2.3.tgz
+        specifier: https://git.edufeed.org/api/packages/edufeed/npm/nostr-vocab-core/-/0.4.1/nostr-vocab-core-0.4.1.tgz
+        version: https://git.edufeed.org/api/packages/edufeed/npm/nostr-vocab-core/-/0.4.1/nostr-vocab-core-0.4.1.tgz
       pdfjs-dist:
         specifier: 4.10.38
         version: 4.10.38
@@ -3061,9 +3061,9 @@ packages:
       typescript:
         optional: true
 
-  nostr-vocab-core@https://git.edufeed.org/api/packages/edufeed/npm/nostr-vocab-core/-/0.2.3/nostr-vocab-core-0.2.3.tgz:
-    resolution: {tarball: https://git.edufeed.org/api/packages/edufeed/npm/nostr-vocab-core/-/0.2.3/nostr-vocab-core-0.2.3.tgz}
-    version: 0.2.3
+  nostr-vocab-core@https://git.edufeed.org/api/packages/edufeed/npm/nostr-vocab-core/-/0.4.1/nostr-vocab-core-0.4.1.tgz:
+    resolution: {integrity: sha512-wpX53WRHg4DbZeW4EpciLhyVyL1SileF7BW/Hrjt2mvyh/NLvqMiWQPCyooFRAJvFIZ4U7GWzhvI0Udr5LSLxw==, tarball: https://git.edufeed.org/api/packages/edufeed/npm/nostr-vocab-core/-/0.4.1/nostr-vocab-core-0.4.1.tgz}
+    version: 0.4.1
 
   nostr-wasm@0.1.0:
     resolution: {integrity: sha512-78BTryCLcLYv96ONU8Ws3Q1JzjlAt+43pWQhIl86xZmWeegYCNLPml7yQ+gG3vR6V5h4XGj+TxO+SS5dsThQIA==}
@@ -6771,7 +6771,10 @@ snapshots:
     optionalDependencies:
       typescript: 5.9.3
 
-  nostr-vocab-core@https://git.edufeed.org/api/packages/edufeed/npm/nostr-vocab-core/-/0.2.3/nostr-vocab-core-0.2.3.tgz: {}
+  nostr-vocab-core@https://git.edufeed.org/api/packages/edufeed/npm/nostr-vocab-core/-/0.4.1/nostr-vocab-core-0.4.1.tgz:
+    dependencies:
+      '@noble/hashes': 2.4.0
+      '@scure/base': 1.2.6
 
   nostr-wasm@0.1.0: {}
 

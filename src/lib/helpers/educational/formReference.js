@@ -6,8 +6,8 @@
 
 /**
  * @typedef {Object} SelectedConcept
- * @property {string} id - external URI of the concept
- * @property {string} nostrCoord - addressable Concept coordinate "<kind>:<pubkey>:<d>" (kind 39738 under NIP-VOCAB v0.2)
+ * @property {string} id - concept identifier per NIP-VOCAB: the external URI (`i` tag) or, without one, the canonical Nostr URI `nostr:naddr1…` (relay-less naddr). Stored values may still carry the legacy `nostr:<kind>:<pubkey>:<d>` form; compare with `sameIdentifier`/`canonicalIdentifier`, never by string.
+ * @property {string} nostrCoord - addressable Concept coordinate "<kind>:<pubkey>:<d>" (kind 39738); source of the companion `a` tag on publish
  * @property {string} relay
  * @property {Record<string, string>} labels - { [lang]: label }
  */

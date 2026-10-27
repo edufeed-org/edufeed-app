@@ -54,12 +54,55 @@ export function buildTemplateResourceSubmission({
   const descFallback = descFieldId ? rawValues[descFieldId] : rawValues.description;
   const content = data.content || descFallback || '';
 
+  const converterTags = data.tags.filter((t) => t[0] !== 'd');
   const tags = [
     ['d', dTag],
-    ...data.tags.filter((t) => t[0] !== 'd'),
+    ...converterTags,
     ...extras.externalUrls.map((/** @type {string} */ u) => ['r', u]),
+    ...companionConceptTags(form, selectedConcepts, converterTags),
     ['a', `30168:${form.pubkey}:${form.dTag}`, formRelay, 'form']
   ];
 
   return { tags, content, dTag };
+}
+
+/**
+ * NIP-VOCAB companion tags for the selected concepts that live on Nostr:
+ * `['a', '<kind>:<pubkey>:<d>', <relay>, '<prefix>']`, where `<prefix>` is the
+ * flattened tag prefix the concept appears under (`about`, `educationalLevel`,
+ * …, or `ext:<form.dTag>:<fieldId>`). The `<prefix>:id` tag stays authoritative;
+ * this is an index and a relay hint. One tag per (address, prefix); tags the
+ * converter already emitted are not repeated.
+ *
+ * @param {{ dTag: string, fields: any[] }} form
+ * @param {Record<string, any[]>} selectedConcepts
+ * @param {string[][]} existingTags
+ * @returns {string[][]}
+ */
+export function companionConceptTags(form, selectedConcepts, existingTags) {
+  const seen = new Set(
+    existingTags.filter((t) => t[0] === 'a' && t[3]).map((t) => `${t[1]}\u0000${t[3]}`)
+  );
+  /** @type {string[][]} */
+  const out = [];
+  for (const field of form.fields) {
+    const concepts = selectedConcepts?.[field.id];
+    if (!Array.isArray(concepts) || !concepts.length) continue;
+    const output = field.output || `amb:${field.id}`;
+    const prefix =
+      output === 'ext'
+        ? `ext:${form.dTag}:${field.id}`
+        : output.startsWith('amb:')
+          ? output.slice(4)
+          : field.id;
+    for (const c of concepts) {
+      const address = c?.nostrCoord;
+      if (!address) continue;
+      const key = `${address}\u0000${prefix}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push(['a', address, c.relay || '', prefix]);
+    }
+  }
+  return out;
 }

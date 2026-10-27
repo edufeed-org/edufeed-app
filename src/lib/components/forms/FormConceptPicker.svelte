@@ -7,6 +7,11 @@
   import { parseConcept } from 'nostr-vocab-core/parsers';
   import { CONCEPT_KIND } from 'nostr-vocab-core/constants';
   import { createReplaceableAddress } from 'applesauce-core/helpers';
+  import {
+    identifierFromAddress,
+    canonicalIdentifier,
+    sameIdentifier
+  } from 'nostr-vocab-core/identifiers';
 
   /**
    * @typedef {Object} ParsedConcept
@@ -37,17 +42,21 @@
   const locale = $derived(getLocale());
 
   /**
-   * Derive a stable concept id from a Concept event (kind CONCEPT_KIND):
-   * prefer the external URI (parsed `externalUri`), else fall back to a
-   * Nostr coord URI built from the canonical `createReplaceableAddress`.
+   * Concept identifier per NIP-VOCAB: the external URI (`i` tag) when the
+   * concept has one, else its canonical Nostr URI `nostr:naddr1…` (relay-less
+   * naddr of kind/pubkey/d). Never the raw `nostr:<kind>:<pubkey>:<d>` form.
    * @param {import('nostr-tools').NostrEvent} evt
    * @returns {string}
    */
   function conceptId(evt) {
     const parsed = /** @type {ParsedConcept} */ (parseConcept(evt));
     if (parsed.externalUri) return parsed.externalUri;
-    const coord = createReplaceableAddress(CONCEPT_KIND, evt.pubkey, parsed.d || '');
-    return `nostr:${coord}`;
+    try {
+      return identifierFromAddress({ kind: CONCEPT_KIND, pubkey: evt.pubkey, d: parsed.d || '' });
+    } catch {
+      // unencodable (non-hex pubkey in fixtures, d > 255 bytes): fall back to the raw coordinate
+      return `nostr:${createReplaceableAddress(CONCEPT_KIND, evt.pubkey, parsed.d || '')}`;
+    }
   }
 
   /**
@@ -94,13 +103,17 @@
     };
   }
 
-  // Map of concept id → full event for re-hydrating selections back to the rich shape.
+  // Map of *canonical* concept id → full event for re-hydrating selections back
+  // to the rich shape. Keys and lookups go through canonicalIdentifier so stored
+  // legacy ids (nostr:<kind>:<pubkey>:<d>, hinted naddr) still find their event.
   const eventById = $derived.by(() => {
     /** @type {Record<string, import('nostr-tools').NostrEvent>} */
     const map = {};
-    for (const e of conceptEvents) map[conceptId(e)] = e;
+    for (const e of conceptEvents) map[canonicalIdentifier(conceptId(e))] = e;
     return map;
   });
+  /** @param {string} id */
+  const eventFor = (id) => eventById[canonicalIdentifier(id)];
 
   // A canonical concept id is always a URI (an external URI, or the
   // `nostr:<coord>` shape `toRichSelected` builds): a scheme prefix followed
@@ -132,7 +145,7 @@
     }
     let changed = false;
     const healed = value.map((v) => {
-      if (eventById[v.id]) return v;
+      if (eventFor(v.id)) return v;
       if (looksLikeCanonicalId(v.id)) return v;
       const label = pickLabel(v.labels, locale);
       const evt = label ? byLabel[label] : undefined;
@@ -151,8 +164,17 @@
   );
 
   // Translate incoming rich value[] into SKOSDropdown's { id, label } shape.
+  // A stored id in a legacy form is presented under the id of its loaded
+  // concept event so the dropdown's own equality check marks it selected, and
+  // the label falls back to the event's when the stored value has none.
   const dropdownSelected = $derived(
-    value.map((v) => ({ id: v.id, label: pickLabel(v.labels, locale) }))
+    value.map((v) => {
+      const evt = eventFor(v.id);
+      return {
+        id: evt ? conceptId(evt) : v.id,
+        label: pickLabel(v.labels, locale) || (evt ? pickLabel(labelsFromEvent(evt), locale) : '')
+      };
+    })
   );
 
   /**
@@ -163,11 +185,11 @@
    */
   function handleChange(arr) {
     const out = arr.map((item) => {
-      const evt = eventById[item.id];
+      const evt = eventFor(item.id);
       if (evt) return toRichSelected(evt);
       // Preserve any pre-existing rich entry with the same id (e.g., initial value
       // from an edit flow where the concept event hasn't re-loaded yet).
-      const existing = value.find((v) => v.id === item.id);
+      const existing = value.find((v) => sameIdentifier(v.id, item.id));
       if (existing) return existing;
       // Synthetic fallback — should be rare; only the label is known.
       return {

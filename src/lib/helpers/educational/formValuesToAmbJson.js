@@ -1,14 +1,31 @@
 import { nip19 } from 'nostr-tools';
+import { canonicalIdentifier } from 'nostr-vocab-core/identifiers';
 
-/** @param {Array<{id?: string, labels?: Record<string, string>}> | undefined} concepts */
-const conceptList = (concepts) =>
-  (concepts || [])
-    .filter((c) => c?.id)
-    .map((c) => ({
-      id: c.id,
+/**
+ * AMB concept objects from selected concepts. Ids are canonicalised per
+ * NIP-VOCAB (a stored legacy `nostr:<kind>:<pubkey>:<d>` becomes the canonical
+ * `nostr:naddr1…`; external URIs are NFC-normalised) and deduplicated by that
+ * canonical id, so a producer never emits the legacy form whatever the
+ * converter version does.
+ * @param {Array<{id?: string, labels?: Record<string, string>}> | undefined} concepts
+ */
+const conceptList = (concepts) => {
+  const seen = new Set();
+  /** @type {any[]} */
+  const out = [];
+  for (const c of concepts || []) {
+    if (!c?.id) continue;
+    const id = canonicalIdentifier(c.id);
+    if (seen.has(id)) continue;
+    seen.add(id);
+    out.push({
+      id,
       type: 'Concept',
       ...(c.labels && Object.keys(c.labels).length ? { prefLabel: c.labels } : {})
-    }));
+    });
+  }
+  return out;
+};
 
 /**
  * @param {{ pubkey: string, dTag: string, fields: any[] }} form

@@ -14,6 +14,7 @@
   import { parseConcept } from 'nostr-vocab-core/parsers';
   import { CONCEPT_KIND } from 'nostr-vocab-core/constants';
   import { createReplaceableAddress } from 'applesauce-core/helpers';
+  import { identifierFromAddress, sameIdentifier } from 'nostr-vocab-core/identifiers';
 
   /**
    * @typedef {Object} ParsedConcept
@@ -52,8 +53,12 @@
   function conceptUri(evt) {
     const parsed = /** @type {ParsedConcept} */ (parseConcept(evt));
     if (parsed.externalUri) return parsed.externalUri;
-    const coord = createReplaceableAddress(CONCEPT_KIND, evt.pubkey, parsed.d || '');
-    return `nostr:${coord}`;
+    // NIP-VOCAB canonical Nostr URI (relay-less naddr), never the raw coordinate.
+    try {
+      return identifierFromAddress({ kind: CONCEPT_KIND, pubkey: evt.pubkey, d: parsed.d || '' });
+    } catch {
+      return `nostr:${createReplaceableAddress(CONCEPT_KIND, evt.pubkey, parsed.d || '')}`;
+    }
   }
 
   /**
@@ -74,7 +79,8 @@
    */
   function isSelected(evt) {
     const uri = conceptUri(evt);
-    return value.some((v) => v.id === uri);
+    // form-independent: a stored legacy id of the same concept counts as selected
+    return value.some((v) => !!v.id && sameIdentifier(v.id, uri));
   }
 
   /**
@@ -82,7 +88,7 @@
    */
   function toggleConcept(evt) {
     const uri = conceptUri(evt);
-    const without = value.filter((v) => v.id !== uri);
+    const without = value.filter((v) => !(v.id && sameIdentifier(v.id, uri)));
     const next = without.length === value.length ? [...value, { id: uri }] : without;
     onchange(next);
   }

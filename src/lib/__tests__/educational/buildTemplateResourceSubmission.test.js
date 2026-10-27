@@ -1,6 +1,7 @@
 /** @vitest-environment node */
 import { describe, it, expect } from 'vitest';
 import { buildTemplateResourceSubmission } from '$lib/helpers/educational/buildTemplateResourceSubmission.js';
+import { identifierFromAddress } from 'nostr-vocab-core/identifiers';
 
 const signerPubkey = 'a'.repeat(64);
 
@@ -148,6 +149,108 @@ describe('buildTemplateResourceSubmission (create mode)', () => {
       isEditMode: false
     });
     expect(content).toBe('Fallback description text');
+  });
+});
+
+describe('buildTemplateResourceSubmission (companion concept a tags, NIP-VOCAB)', () => {
+  const PK = 'd2689e2f41dabfba953da26655a94ce2aa4e029c383ee921c6a4deafab99a612';
+  const conceptForm = {
+    pubkey: 'edupub',
+    dTag: 'konfi',
+    fields: [
+      { id: 'title', type: 'text', output: 'amb:name' },
+      {
+        id: 'about',
+        type: 'select',
+        output: 'amb:about',
+        vocab: { address: `39737:${PK}:schulfaecher`, relay: 'wss://vocab.example' }
+      },
+      {
+        id: 'level',
+        type: 'select',
+        output: 'amb:educationalLevel',
+        vocab: { address: `39737:${PK}:klassenstufen`, relay: 'wss://vocab.example' }
+      },
+      {
+        id: 'zeitstruktur',
+        type: 'select',
+        output: 'ext',
+        vocab: { address: `39737:${PK}:zeit`, relay: 'wss://vocab.example' }
+      }
+    ]
+  };
+  const selectedConcepts = {
+    about: [
+      {
+        id: 'http://w3id.org/kim/schulfaecher/s1017',
+        nostrCoord: `39738:${PK}:s1017`,
+        relay: 'wss://vocab.example',
+        labels: { de: 'Mathematik' }
+      }
+    ],
+    level: [
+      {
+        id: identifierFromAddress(`39738:${PK}:5-6`),
+        nostrCoord: `39738:${PK}:5-6`,
+        relay: 'wss://vocab.example',
+        labels: { de: 'Klasse 5/6' }
+      },
+      {
+        id: `nostr:39738:${PK}:5-6`,
+        nostrCoord: `39738:${PK}:5-6`,
+        relay: 'wss://vocab.example',
+        labels: { de: 'Klasse 5/6' }
+      } // legacy duplicate
+    ],
+    zeitstruktur: [
+      {
+        id: identifierFromAddress(`39738:${PK}:dz`),
+        nostrCoord: `39738:${PK}:dz`,
+        relay: 'wss://vocab.example',
+        labels: { de: 'Doppelstunde' }
+      }
+    ]
+  };
+  const build = () =>
+    buildTemplateResourceSubmission({
+      form: conceptForm,
+      formRelay: 'wss://relay.example',
+      rawValues: { title: 'X' },
+      selectedConcepts,
+      signerPubkey,
+      isEditMode: false
+    });
+
+  it('appends one companion a tag per concept with the flattened prefix as marker and the vocab relay as hint', () => {
+    const { tags } = build();
+    const aTags = tags.filter((t) => t[0] === 'a');
+    expect(aTags).toContainEqual(['a', `39738:${PK}:s1017`, 'wss://vocab.example', 'about']);
+    expect(aTags).toContainEqual([
+      'a',
+      `39738:${PK}:5-6`,
+      'wss://vocab.example',
+      'educationalLevel'
+    ]);
+    expect(aTags).toContainEqual([
+      'a',
+      `39738:${PK}:dz`,
+      'wss://vocab.example',
+      'ext:konfi:zeitstruktur'
+    ]);
+    expect(aTags.filter((t) => t[1] === `39738:${PK}:5-6`)).toHaveLength(1); // deduplicated
+  });
+  it('writes canonical ids only, and keeps the form back-reference as the last tag', () => {
+    const { tags } = build();
+    expect(tags.filter((t) => t[0] === 'educationalLevel:id').map((t) => t[1])).toEqual([
+      identifierFromAddress(`39738:${PK}:5-6`)
+    ]);
+    expect(tags.some((t) => typeof t[1] === 'string' && /^nostr:3973\d:/.test(t[1]))).toBe(false);
+    expect(tags[tags.length - 1]).toEqual([
+      'a',
+      '30168:edupub:konfi',
+      'wss://relay.example',
+      'form'
+    ]);
   });
 });
 
