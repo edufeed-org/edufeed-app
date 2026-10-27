@@ -7,6 +7,51 @@ merge commits of the nostr PRs that landed since the previous tag.
 
 ## [Unreleased]
 
+## [0.12.0] - 2026-10-27
+
+Privacy round: the link-preview thumbnail no longer leaks every viewer's IP
+address to the linked site, and edufeed.org gets its Datenschutzerklärung as
+an in-app page. Plus relay-list health for the user's own NIP-65 list.
+Four nostr PRs. Released directly, without an RC on dev (laoc's call).
+
+### Added
+
+- Privacy policy page at `/privacy`: `PRIVACY_POLICY_PATH` names a Markdown
+  file rendered server-side (sanitized, re-read when the file changes); the
+  edufeed.org text ships in the image as `legal/privacy-policy.de.md`.
+  `/api/config` exposes `privacy.enabled`, which shows the "Datenschutz"
+  links in the landing footer, the account menu and the mobile menu. Unset
+  = 404 and no links, so whitelabel deployments stay as they were.
+  (#2bc3456b)
+- Relay-list health for the user's kind 10002: each listed relay is probed
+  (one REQ for the user's own list + NIP-11) into a per-device history;
+  relays that fail on several days get the Termi hint "… ist seit N Tagen
+  nicht erreichbar — ersetzen?", whose action edits the latest list in place.
+  The settings relay editor shows reachable / unreachable / no answer, rtt,
+  "hat deine Relay-Liste", NIP-11 name and auth/paid badges, "Erneut prüfen".
+  (#f536a7b8)
+
+### Fixed
+
+- Link-preview cards loaded their Open Graph thumbnail straight from the
+  linked site (for YouTube: i.ytimg.com), sending every viewer's IP address
+  and user agent to a third party on scroll, without consent. The thumbnail
+  now goes through `/api/image` with no fallback to the original URL; the
+  title and description were already fetched server-side. (#3e0d383e)
+- svelte-check was failing on `main` with 11 type errors since v0.10.1 and
+  the v0.11.0 vocab work, which made the pre-push hook reject every push.
+  Annotations only, no behavior change. (#ab98510f)
+
+### Deploy notes
+
+- New env `PRIVACY_POLICY_PATH=legal/privacy-policy.de.md` on edufeed.org
+  only (homelab `playbooks/deploy_edufeed_app.yml`, prod block). dev, rpi
+  and stil keep no policy page until their operators provide a file.
+- Relay defaults: drop the dead `nos.lol` from `FALLBACK_RELAYS` in favour
+  of `relay.primal.net` and widen `INDEXER_RELAYS` (homelab a3642ec, same
+  deploy). Existing users' lists are repaired by the new Termi hint, not by
+  the config change.
+
 ## [0.11.0] - 2026-10-27
 
 Canonical concept identifiers (NIP-VOCAB revision of 2026-10-27): concepts
