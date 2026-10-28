@@ -228,6 +228,20 @@ describe('validateWizardStep', () => {
       expect(errors).toEqual({ about: 'ERR_SUBJECT' });
     });
 
+    it('accepts one subject from either vocab when several subject vocabs are offered (Extra-Institutionell)', () => {
+      const formData = {
+        ...emptyFormData(),
+        learningResourceType: [{ id: 'x', label: 'X' }]
+      };
+      // subjectsCount sums all per-vocab buckets; one Hochschul-Fach alone is enough
+      const errors = validateWizardStep(
+        4,
+        formData,
+        ctx({ hasSubjectVocab: true, subjectsCount: 1 })
+      );
+      expect(errors).toEqual({});
+    });
+
     it('flags subject for EKW too — Fachrichtung now lives in aboutByVocab and counts', () => {
       const formData = {
         ...emptyFormData(),

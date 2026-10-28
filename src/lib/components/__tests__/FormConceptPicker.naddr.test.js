@@ -70,6 +70,7 @@ vi.mock('$lib/helpers/relay-helper.js', () => ({
 }));
 
 import FormConceptPicker from '../forms/FormConceptPicker.svelte';
+import FormConceptPickerCompactHost from './fixtures/FormConceptPickerCompactHost.svelte';
 
 const field = {
   id: 'educationalLevel',
@@ -189,5 +190,62 @@ describe('FormConceptPicker — canonical naddr identifiers', () => {
     await openTrigger(container);
     await new Promise((r) => setTimeout(r, 50));
     expect(calls).toBe(0);
+  });
+});
+
+// Parents like ResourceFormWizard keep only `{id, label}` and rebuild the rich
+// value (nostrCoord: '') on every render. The heal effect must still settle
+// after one emit — otherwise it ping-pongs with the parent until Svelte throws
+// effect_update_depth_exceeded (prod bug 2026-10-28 in the AMB form).
+describe('FormConceptPicker — parent that strips nostrCoord', () => {
+  it('heals a stored legacy id once and settles when the parent feeds it back without nostrCoord', async () => {
+    const emitted = /** @type {any[][]} */ ([]);
+    const { container, getByTestId } = render(FormConceptPickerCompactHost, {
+      props: {
+        field,
+        initial: [{ id: `nostr:39738:${PK}:5-6`, label: '' }],
+        onemit: (/** @type {any[]} */ v) => emitted.push(v)
+      }
+    });
+    const trigger = await openTrigger(container);
+    await new Promise((r) => setTimeout(r, 50));
+    expect(trigger.textContent).toContain('Klasse 5/6');
+    expect(getByTestId('compact-count').textContent).toBe('1');
+    expect(emitted).toHaveLength(1);
+  });
+
+  it('heals a label-shaped id once even when the parent keeps storing the label as id', async () => {
+    const emitted = /** @type {any[][]} */ ([]);
+    const { container } = render(FormConceptPickerCompactHost, {
+      props: {
+        field,
+        initial: [{ id: 'Klasse 5/6', label: 'Klasse 5/6' }],
+        storeLabelAsId: true,
+        onemit: (/** @type {any[]} */ v) => emitted.push(v)
+      }
+    });
+    const trigger = await openTrigger(container);
+    await new Promise((r) => setTimeout(r, 50));
+    expect(trigger.textContent).toContain('Klasse 5/6');
+    expect(emitted).toHaveLength(1);
+    expect(emitted[0][0].id).toBe(N56);
+  });
+
+  it('does not re-emit after a user pick that the parent stores without nostrCoord', async () => {
+    const emitted = /** @type {any[][]} */ ([]);
+    const { container } = render(FormConceptPickerCompactHost, {
+      props: { field, initial: [], onemit: (/** @type {any[]} */ v) => emitted.push(v) }
+    });
+    const trigger = await openTrigger(container);
+    await fireEvent.click(trigger);
+    const opt = /** @type {HTMLElement} */ (
+      Array.from(container.querySelectorAll('[role="option"]')).find((o) =>
+        o.textContent?.includes('Klasse 7/8')
+      )
+    );
+    await fireEvent.click(opt.querySelector('button') || opt);
+    await new Promise((r) => setTimeout(r, 50));
+    expect(emitted).toHaveLength(1);
+    expect(emitted[0][0].id.startsWith('nostr:naddr1')).toBe(true);
   });
 });
