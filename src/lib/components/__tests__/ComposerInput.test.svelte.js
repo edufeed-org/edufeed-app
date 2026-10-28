@@ -392,6 +392,18 @@ describe('ComposerInput selection API', () => {
     expect(value()).toBe('make me **bold**');
   });
 
+  it('labels the soft keyboard\u2019s Enter key "send" whenever Enter submits, multiline or not', () => {
+    const hint = (props) => {
+      const { editor, unmount } = setup(props);
+      const value = editor.getAttribute('enterkeyhint');
+      unmount();
+      return value;
+    };
+    expect(hint({})).toBe('send');
+    expect(hint({ multiline: true })).toBe('send');
+    expect(hint({ multiline: true, submitOnEnter: false })).toBeNull();
+  });
+
   it('applies minHeight and drops the multiline max-height cap', () => {
     const { editor } = setup({ multiline: true, minHeight: '20rem' });
     expect(editor.style.minHeight).toBe('20rem');

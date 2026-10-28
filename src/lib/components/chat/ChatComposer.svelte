@@ -4,6 +4,12 @@
   implementation. Two composers are live at once (one per surface), so `value`
   and `replyTo` are bindable rather than owned here; publishing stays with the
   caller.
+
+  The field is ComposerInput's multiline mode, like the DM composer: Enter
+  sends, Shift+Enter breaks the line, and the field grows with the text up to
+  ComposerInput's cap and scrolls beyond it. It must NOT get DaisyUI's `input`
+  class — that pins the height to one row (issue dfc435d5: the text vanished
+  and the lines sat a whole field height apart).
 -->
 <script>
   import * as m from '$lib/paraglide/messages';
@@ -86,7 +92,7 @@
 {/if}
 
 <form
-  class="m-4 mt-2 flex shrink-0 items-center gap-2 rounded-full border border-base-300 bg-base-200 p-1.5 data-[dragging=true]:border-primary data-[dragging=true]:bg-primary/10 data-[dragging=true]:ring-2 data-[dragging=true]:ring-primary"
+  class="m-4 mt-2 flex shrink-0 items-end gap-2 rounded-3xl border border-base-300 bg-base-200 p-1.5 data-[dragging=true]:border-primary data-[dragging=true]:bg-primary/10 data-[dragging=true]:ring-2 data-[dragging=true]:ring-primary"
   data-testid="chat-composer-form"
   use:fileDropZone={{
     onFiles: takeFiles,
@@ -149,9 +155,10 @@
     {customEmojiSets}
     {placeholder}
     {disabled}
+    multiline
     onFiles={onAttachFiles ? takeFiles : undefined}
     onSubmit={() => !disabled && !sending && value.trim() && onSubmit()}
-    class="input block w-full input-ghost leading-(--size) focus:outline-none"
+    class="block min-h-[2rem] w-full px-2 py-1.5 leading-snug"
     {testid}
   />
   <button
