@@ -135,6 +135,20 @@
   // Values with a canonical id are never healed: after a vocabulary rename a
   // stored concept may live in another scheme, and a same-named concept here
   // is a coincidence — swapping to it would silently rewrite the user's value.
+  //
+  // "Once" is literal: parents such as ResourceFormWizard keep only `{id,
+  // label}` and rebuild the rich value (nostrCoord: '') on every render. An
+  // id this instance has already healed (or the user picked) is handed back
+  // unchanged, otherwise the effect would ping-pong with the parent until
+  // Svelte throws effect_update_depth_exceeded. Such a parent therefore sees
+  // exactly one onchange per mount of a filled picker, with the values it
+  // already holds — an "unsaved changes" guard must not treat that as a change.
+  // eslint-disable-next-line svelte/prefer-svelte-reactivity -- bookkeeping read inside the effect; a reactive set would re-trigger it
+  const settledIds = new Set();
+  /** @param {string} id */
+  const settle = (id) => settledIds.add(canonicalIdentifier(id));
+  /** @param {string} id */
+  const isSettled = (id) => settledIds.has(canonicalIdentifier(id));
   $effect(() => {
     if (!conceptEvents.length || !value.length) return;
     /** @type {Record<string, import('nostr-tools').NostrEvent>} */
@@ -152,17 +166,21 @@
         // Same concept (possibly stored in a legacy id form). A value without
         // nostrCoord cannot produce the companion `a` tag on publish, so fill
         // coordinate and relay from the event once; keep the stored labels.
-        if (v.nostrCoord) return v;
+        if (v.nostrCoord || isSettled(v.id)) return v;
         changed = true;
+        settle(v.id);
         const rich = toRichSelected(known);
         return { ...rich, labels: Object.keys(v.labels || {}).length ? v.labels : rich.labels };
       }
-      if (looksLikeCanonicalId(v.id)) return v;
+      if (looksLikeCanonicalId(v.id) || isSettled(v.id)) return v;
       const label = pickLabel(v.labels, locale);
       const evt = label ? byLabel[label] : undefined;
       if (!evt) return v;
       changed = true;
-      return toRichSelected(evt);
+      const rich = toRichSelected(evt);
+      settle(v.id); // the label form too, so a parent echoing it settles as well
+      settle(rich.id);
+      return rich;
     });
     if (changed) onchange?.(healed);
   });
@@ -197,7 +215,10 @@
   function handleChange(arr) {
     const out = arr.map((item) => {
       const evt = eventFor(item.id);
-      if (evt) return toRichSelected(evt);
+      if (evt) {
+        settle(item.id);
+        return toRichSelected(evt);
+      }
       // Preserve any pre-existing rich entry with the same id (e.g., initial value
       // from an edit flow where the concept event hasn't re-loaded yet).
       const existing = value.find((v) => sameIdentifier(v.id, item.id));
