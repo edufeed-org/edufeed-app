@@ -2155,6 +2155,7 @@
   "amb_form_validation_url_required": "Please enter a URL or naddr before continuing.",
   "amb_form_help_bildungsbereich": "Pick the educational area. This preselects subject vocabulary and educational level.",
   "amb_form_help_subject_pick_bildungsbereich": "Pick an educational area in step 1 to show subject vocabulary.",
+  "amb_form_help_subject_one_of": "At least one subject from either list – it does not have to be both.",
   "amb_form_help_share": "Share this resource into communities you belong to. You can remove a share again at any time.",
   "amb_form_share_no_communities": "You are not a member of any community yet. You can still publish the resource and share it later.",
   "amb_form_label_identifier": "Resource URL (optional)",

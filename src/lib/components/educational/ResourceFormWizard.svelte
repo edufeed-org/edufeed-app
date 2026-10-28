@@ -39,14 +39,14 @@
   import BibleReferenceInput from './BibleReferenceInput.svelte';
   import CurriculumPicker from './CurriculumPicker.svelte';
   import FormConceptPicker from '$lib/components/forms/FormConceptPicker.svelte';
+  import SubjectVocabPickers from '$lib/components/educational/SubjectVocabPickers.svelte';
   import { createEducationalActions } from '$lib/stores/educational-actions.svelte.js';
   import { createCommunityReposts } from '$lib/helpers/communityRepost.js';
   import { fetchProfileData } from '$lib/helpers/profile.js';
   import { normalizeOrcid } from '$lib/helpers/educational/orcid.js';
   import {
     BILDUNGSBEREICHE,
-    inferBildungsbereichFromEducationalLevels,
-    getSubjectVocabLabel
+    inferBildungsbereichFromEducationalLevels
   } from '$lib/helpers/educational/bildungsbereich.js';
   import { getBildungsbereichKeysForVariant } from '$lib/config/resource-form-variants.js';
   import {
@@ -2545,39 +2545,13 @@
                 </div>
               {/if}
 
-              <!-- Subject pickers — one per Bildungsbereich vocab -->
-              {#if subjectVocabFields.length === 0}
-                <p class="text-sm text-base-content/60">
-                  {m.amb_form_help_subject_pick_bildungsbereich?.() ??
-                    'Pick a Bildungsbereich in step 1 to show subject vocabulary.'}
-                </p>
-              {/if}
-              {#each subjectVocabFields as entry (entry.key)}
-                <div class="form-control">
-                  <div class="label">
-                    <span class="label-text font-medium">
-                      {m.amb_form_label_subject()}
-                      <span class="text-error">*</span>
-                    </span>
-                  </div>
-                  {#if subjectVocabFields.length > 1}
-                    <p class="-mt-1 mb-1 text-xs text-base-content/60">
-                      {getSubjectVocabLabel(entry.key, getLocale())}
-                    </p>
-                  {/if}
-                  <FormConceptPicker
-                    field={entry.field}
-                    multiple={true}
-                    value={(aboutByVocab[entry.key] ?? []).map((c) =>
-                      toRichConcept(c, entry.field.vocab.relay)
-                    )}
-                    onchange={makeAboutHandler(entry.key)}
-                  />
-                </div>
-              {/each}
-              {#if showError('about')}
-                <p class="mt-1 text-xs text-error">{fieldErrors.about}</p>
-              {/if}
+              <!-- Subject pickers — one per Bildungsbereich vocab, ONE subject required overall -->
+              <SubjectVocabPickers
+                fields={subjectVocabFields}
+                valuesByKey={aboutByVocab}
+                onchange={(key, rich) => makeAboutHandler(key)(rich)}
+                error={showError('about') ? fieldErrors.about : undefined}
+              />
             {/if}
 
             {@render keywordsField()}

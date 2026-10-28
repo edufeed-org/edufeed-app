@@ -2155,6 +2155,7 @@
   "amb_form_validation_url_required": "Bitte gib eine URL oder naddr ein, bevor du fortfährst.",
   "amb_form_help_bildungsbereich": "Wähle den Bildungsbereich aus. Dies wählt Fachvokabular und Bildungsstufe vor.",
   "amb_form_help_subject_pick_bildungsbereich": "Wähle in Schritt 1 einen Bildungsbereich, um das Fachvokabular anzuzeigen.",
+  "amb_form_help_subject_one_of": "Mindestens ein Fach aus einer der Listen – es muss nicht aus beiden sein.",
   "amb_form_help_share": "Teile diese Ressource in Communities, denen du angehörst. Jede Freigabe kannst du später jederzeit wieder entfernen.",
   "amb_form_share_no_communities": "Du bist noch kein Mitglied einer Community. Du kannst die Ressource trotzdem veröffentlichen und später teilen.",
   "amb_form_label_identifier": "Ressourcen-URL (optional)",
