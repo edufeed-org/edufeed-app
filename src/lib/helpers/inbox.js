@@ -34,7 +34,9 @@ const HEX_PUBKEY = /^[0-9a-f]{64}$/;
  */
 function isCommunityChat(event) {
   const h = event.tags?.find((t) => t[0] === 'h')?.[1];
-  return typeof h === 'string' && HEX_PUBKEY.test(h);
+  // No `h` at all is not a channel either: a channel IS its `h` tag, so only
+  // a non-pubkey `h` makes one. Everything else keeps the community reading.
+  return typeof h !== 'string' || !h || HEX_PUBKEY.test(h);
 }
 
 /**

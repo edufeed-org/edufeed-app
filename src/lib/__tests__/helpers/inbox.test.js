@@ -375,6 +375,8 @@ describe('NIP-29 channel mentions (kind 9 on a group id)', () => {
   it('tells a channel (group id) from a community (pubkey) by the h tag', () => {
     expect(getMentionSurface(channelMention)).toBe('channel');
     expect(getMentionSurface({ kind: 9, tags: [['h', COMMUNITY]] })).toBe('community');
+    // no `h` tag: not a channel
+    expect(getMentionSurface({ kind: 9, tags: [] })).toBe('community');
   });
 
   it('is a mention when the text names the viewer and a channelReply when only the reply p-tags them', () => {
