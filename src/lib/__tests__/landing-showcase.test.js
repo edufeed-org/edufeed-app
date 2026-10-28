@@ -202,6 +202,14 @@ describe('showcaseFilters', () => {
     const { showcaseFilters } = await import('$lib/helpers/landing-showcase.js');
     expect(showcaseFilters([30142], [], 12)).toEqual([]);
   });
+  it('per author: a busy source cannot use up the window of the others', async () => {
+    const { showcaseFilters } = await import('$lib/helpers/landing-showcase.js');
+    expect(showcaseFilters([30023], ['a', 'b'], 12, 3)).toEqual([
+      { kinds: [30023], authors: ['a'], limit: 3 },
+      { kinds: [30023], authors: ['b'], limit: 3 },
+      { kinds: [30023], '#h': ['a', 'b'], limit: 12 }
+    ]);
+  });
 });
 
 describe('landingCommunities and the showcase lists', () => {

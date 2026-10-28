@@ -38,13 +38,13 @@ import {
 // a panel in its loading state forever.
 const SETTLE_TIMEOUT_MS = 5_000;
 
-/** @type {Record<ShowcaseType, { kinds: number[], limit: number, relays: () => string[] }>} */
+/** @type {Record<ShowcaseType, { kinds: number[], limit: number, perAuthor?: number, relays: () => string[] }>} */
 const SOURCES = {
-  // Limits leave room for one item per author (pickMaterials/pickArticles)
-  // when a single busy source published the newest dozen.
-  learning: { kinds: [30142], limit: 30, relays: getEducationalRelays },
+  // Materials and articles ask every account for its own newest few, so
+  // pickMaterials/pickArticles can show one item per author.
+  learning: { kinds: [30142], limit: 12, perAuthor: 3, relays: getEducationalRelays },
   events: { kinds: [31922, 31923], limit: 30, relays: getCalendarRelays },
-  articles: { kinds: [30023], limit: 20, relays: getArticleRelays }
+  articles: { kinds: [30023], limit: 8, perAuthor: 3, relays: getArticleRelays }
 };
 
 /** @param {any[]} filters */
@@ -192,8 +192,8 @@ export function useLandingShowcase() {
       if (running.get(type)?.key === key) continue;
       running.get(type)?.stop();
 
-      const { kinds, limit, relays } = SOURCES[type];
-      const filters = showcaseFilters(kinds, src, limit);
+      const { kinds, limit, perAuthor, relays } = SOURCES[type];
+      const filters = showcaseFilters(kinds, src, limit, perAuthor);
       if (filters.length === 0) {
         raw = { ...untrack(() => raw), [type]: [] };
         markSettled(type);
@@ -202,11 +202,11 @@ export function useLandingShowcase() {
       }
       const subs = [
         fetchEvents(relays(), filters).subscribe({ complete: () => markSettled(type) }),
-        /** @type {any} */ (eventStore.model(TimelineModel, withoutLimit(filters))).subscribe(
-          (/** @type {any[]} */ events) => {
-            raw = { ...untrack(() => raw), [type]: events || [] };
-          }
-        )
+        /** @type {any} */ (
+          eventStore.model(TimelineModel, withoutLimit(showcaseFilters(kinds, src, limit)))
+        ).subscribe((/** @type {any[]} */ events) => {
+          raw = { ...untrack(() => raw), [type]: events || [] };
+        })
       ];
       const timer = setTimeout(() => markSettled(type), SETTLE_TIMEOUT_MS);
       running.set(type, {

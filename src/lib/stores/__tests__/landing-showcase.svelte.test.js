@@ -134,8 +134,9 @@ describe('useLandingShowcase', () => {
     const [relays, filters] = loader.create.mock.calls[0];
     expect(relays).toEqual(['wss://amb']);
     expect(filters).toEqual([
-      { kinds: [30142], authors: ['src1', 'src2'], limit: 30 },
-      { kinds: [30142], '#h': ['src1', 'src2'], limit: 30 }
+      { kinds: [30142], authors: ['src1'], limit: 3 },
+      { kinds: [30142], authors: ['src2'], limit: 3 },
+      { kinds: [30142], '#h': ['src1', 'src2'], limit: 12 }
     ]);
     // the store side is restricted the same way (no limit on the model)
     expect(store.modelFilters[0]).toEqual([
@@ -261,7 +262,9 @@ describe('useLandingShowcase with per-type lists', () => {
   const sourcesFor = (byList) =>
     loader.sources.mockImplementation(async (lists) => byList[lists.join(',')] ?? []);
   const authorsOf = (kind) =>
-    loader.create.mock.calls.find(([, f]) => f[0].kinds[0] === kind)?.[1][0].authors;
+    loader.create.mock.calls
+      .find(([, f]) => f[0].kinds[0] === kind)?.[1]
+      .flatMap((f) => f.authors ?? []);
 
   it('a per-type list feeds only its own panel; the rest keep the global list', async () => {
     cfg.byType = { learning: ['naddr1mat'] };

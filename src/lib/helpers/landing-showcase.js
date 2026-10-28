@@ -152,14 +152,18 @@ export function heroPending(enabled, settled) {
  * Relay filters for the landing showcase: content BY a listed account, or
  * h-tagged INTO a listed community (Communikey targeting). No sources, no
  * filters — the landing must never fall back to arbitrary network content.
+ * With `perAuthor`, each account is asked for its own newest items: under a
+ * shared limit one busy source fills the whole window and the others are
+ * never fetched, so one-item-per-author picking has nothing to pick from.
  * @param {number[]} kinds
  * @param {string[]} sources - pubkeys from the showcase lists
  * @param {number} limit
+ * @param {number} [perAuthor]
  */
-export function showcaseFilters(kinds, sources, limit) {
+export function showcaseFilters(kinds, sources, limit, perAuthor) {
   if (sources.length === 0) return [];
-  return [
-    { kinds, authors: sources, limit },
-    { kinds, '#h': sources, limit }
-  ];
+  const byAuthor = perAuthor
+    ? sources.map((pubkey) => ({ kinds, authors: [pubkey], limit: perAuthor }))
+    : [{ kinds, authors: sources, limit }];
+  return [...byAuthor, { kinds, '#h': sources, limit }];
 }
