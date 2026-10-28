@@ -12,7 +12,6 @@
  * the plumbing that models can't: relay subscriptions, unlock flow, read state.
  */
 import { mapEventsToStore } from 'applesauce-core/observable';
-import { unique } from '$lib/helpers/unique.js';
 import { filter, tap, firstValueFrom, take } from 'rxjs';
 import { GiftWrapsModel } from 'applesauce-common/models';
 import { WrappedMessagesModel } from 'applesauce-common/models';
@@ -737,13 +736,13 @@ export function initializeDMs(pubkey, signer) {
     }
 
     // Arm the settle deadline only once we know we actually queried somewhere.
-    // If neither write relays nor indexers are available — or the liveness
-    // tracker has parked every one of them, so the pool asked nobody — we
-    // can't conclude absence: leave status 'checking' so the hint stays hidden
-    // and ensureDmRelayList declines to write.
-    const queried = unique([...writeRelays, ...lookupRelays]);
-    const eligible = pool.filterRelays?.(queried) ?? queried;
-    if (dmRelayCheckStatus === 'checking' && !dmRelayCheckTimer && eligible.length > 0) {
+    // If neither write relays nor indexers are available, we can't conclude
+    // absence — leave status 'checking' so the hint stays hidden.
+    if (
+      dmRelayCheckStatus === 'checking' &&
+      !dmRelayCheckTimer &&
+      (writeRelays.length > 0 || lookupRelays.length > 0)
+    ) {
       dmRelayCheckTimer = setTimeout(() => settleDmRelayCheck(pubkey), DM_RELAY_CHECK_SETTLE_MS);
     }
   })();

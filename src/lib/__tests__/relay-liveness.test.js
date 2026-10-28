@@ -12,6 +12,7 @@ import { describe, it, expect } from 'vitest';
 import {
   createLivenessStorage,
   createRelayLiveness,
+  skipParkedRelays,
   RELAY_LIVENESS_STORAGE_PREFIX
 } from '$lib/stores/relay-liveness.js';
 
@@ -87,21 +88,61 @@ describe('createRelayLiveness', () => {
   });
 });
 
-describe('pool with liveness', () => {
-  it('a pool request whose every relay is parked completes empty instead of connecting or hanging', async () => {
+describe('skipParkedRelays', () => {
+  it('drops parked relays from a one-shot cohort', () => {
+    const liveness = createRelayLiveness({ storage: null });
+    liveness.recordFailure('wss://dead.example/');
+    expect(skipParkedRelays(liveness, ['wss://dead.example/', 'wss://ok.example/'])).toEqual([
+      'wss://ok.example/'
+    ]);
+    liveness.destroy();
+  });
+
+  it('never drops every relay — a fully parked cohort is asked as-is', () => {
+    const liveness = createRelayLiveness({ storage: null });
+    liveness.recordFailure('wss://a.example/');
+    liveness.recordFailure('wss://b.example/');
+    expect(skipParkedRelays(liveness, ['wss://a.example/', 'wss://b.example/'])).toEqual([
+      'wss://a.example/',
+      'wss://b.example/'
+    ]);
+    liveness.destroy();
+  });
+
+  it('is the identity without a tracker (mocked infrastructure) or an empty list', () => {
+    expect(skipParkedRelays(undefined, ['wss://a.example/'])).toEqual(['wss://a.example/']);
+    expect(skipParkedRelays(null, [])).toEqual([]);
+    expect(skipParkedRelays(/** @type {any} */ ({}), ['wss://a.example/'])).toEqual([
+      'wss://a.example/'
+    ]);
+  });
+});
+
+describe('pool attachment', () => {
+  it('observes the pool without filtering it — a pool-wide filter would retire relays from the timeline loader and standing groups', async () => {
+    const { RelayPool } = await import('applesauce-relay');
+    const liveness = createRelayLiveness({ storage: null });
+    const pool = new RelayPool();
+    liveness.connectToPool(pool);
+    liveness.recordFailure('wss://dead.example/');
+    expect(liveness.filter(['wss://dead.example/'])).toEqual([]);
+    // the pool itself still hands the relay to every request
+    expect(pool.filterRelays(['wss://dead.example/'])).toEqual(['wss://dead.example/']);
+    liveness.destroy();
+  });
+
+  it('a pool WITH the liveness option completes a fully parked request empty at once (why we do not use it)', async () => {
     const { RelayPool } = await import('applesauce-relay');
     const { lastValueFrom } = await import('rxjs');
     const { toArray } = await import('rxjs/operators');
     const liveness = createRelayLiveness({ storage: null });
     const pool = new RelayPool({ liveness });
     liveness.recordFailure('wss://dead.example/');
-    expect(pool.filterRelays(['wss://dead.example/'])).toEqual([]);
     const events = await lastValueFrom(
       pool.request(['wss://dead.example/'], { kinds: [1], limit: 1 }).pipe(toArray()),
       { defaultValue: [] }
     );
     expect(events).toEqual([]);
-    // no Relay instance was created for the parked url
     expect(pool.relays.has('wss://dead.example/')).toBe(false);
     liveness.destroy();
   });

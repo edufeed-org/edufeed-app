@@ -17,13 +17,10 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 const mockModelSubscribe = vi.fn();
 
-const mockFilterRelays = vi.fn((/** @type {string[]} */ relays) => relays);
-
 vi.mock('$lib/stores/nostr-infrastructure.svelte.js', () => ({
   eventStore: {
     model: () => ({ subscribe: (/** @type {any} */ cb) => mockModelSubscribe(cb) })
-  },
-  pool: { filterRelays: (/** @type {string[]} */ relays) => mockFilterRelays(relays) }
+  }
 }));
 
 vi.mock('$lib/stores/config.svelte.js', () => ({
@@ -66,45 +63,10 @@ beforeEach(() => {
     return { unsubscribe: () => {} };
   });
   mockLoaderSubscribe.mockImplementation(() => ({ unsubscribe: () => {} }));
-  mockFilterRelays.mockImplementation((relays) => relays);
 });
 
 afterEach(() => {
   vi.useRealTimers();
-});
-
-describe('fetchRelayListResolution with parked lookup relays', () => {
-  it("reports 'unknown', not 'absent', when liveness has parked every lookup relay", async () => {
-    // The pool skips parked relays and a request with no eligible relay
-    // completes empty immediately — indistinguishable from a confirmed miss
-    // unless we look at the cohort. 'absent' here would let membership-publish
-    // overwrite a real kind 10002 with the default list.
-    mockFilterRelays.mockImplementation(() => []);
-    mockLoaderSubscribe.mockImplementation((observer) => {
-      observer?.complete?.();
-      return { unsubscribe: () => {} };
-    });
-    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
-
-    const { relayList, outcome } = await fetchRelayListResolution(PUBKEY_A);
-
-    expect(relayList).toBeNull();
-    expect(outcome).toBe('unknown');
-    // the loader still ran (its cache stage may hold the list)
-    expect(mockAddressLoader).toHaveBeenCalledWith(
-      expect.objectContaining({ kind: 10002, pubkey: PUBKEY_A, relays: ['wss://lookup.example'] })
-    );
-    warnSpy.mockRestore();
-  });
-
-  it("still reports 'absent' on completion when the lookup relays were eligible", async () => {
-    mockLoaderSubscribe.mockImplementation((observer) => {
-      observer?.complete?.();
-      return { unsubscribe: () => {} };
-    });
-    const { outcome } = await fetchRelayListResolution(PUBKEY_B);
-    expect(outcome).toBe('absent');
-  });
 });
 
 describe('fetchRelayList', () => {

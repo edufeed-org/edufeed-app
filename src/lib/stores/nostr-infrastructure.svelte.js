@@ -4,7 +4,7 @@
  */
 import { EventStore, DeleteManager } from 'applesauce-core';
 import { RelayPool } from 'applesauce-relay';
-import { createRelayLiveness } from '$lib/stores/relay-liveness.js';
+import { relayLiveness } from '$lib/stores/relay-liveness.js';
 // Side-effect: registers CommentsModel, casts, and other mixins on EventStore
 import 'applesauce-common';
 
@@ -36,15 +36,18 @@ eventStore.insert$.subscribe((event) => {
 // group.request()'s default complete strategy (v7: completeAfterIdle) plus the
 // explicit timeout passed by timedPool (loaders/base.js).
 //
-// Relay liveness (stores/relay-liveness.js): the tracker observes the pool's
-// connections and parks relays that fail to connect, so a dead relay costs
-// one request its timeout instead of every request. Pool-level request /
-// subscription / sync skip parked relays; `pool.relay(url)` never does, which
-// keeps publishing (publish-service) and the settings probe trying every
-// listed relay. State is restored from localStorage in the browser; evidence
-// collected while loading wins over stored state.
-export const relayLiveness = createRelayLiveness();
+//
+// Relay liveness (stores/relay-liveness.js) observes the pool's connections
+// and parks relays that fail to connect. It is deliberately NOT the pool's
+// `liveness` option — that would filter every pool-level request, which
+// breaks the timeline loader (a skipped relay reads as exhausted), standing
+// group subscriptions (filtered once, never re-admitted) and the
+// confirmed-absence verdicts. One-shot `timedPool` requests skip parked
+// relays via `skipParkedRelays`; everything else decides for itself. State is
+// restored from localStorage in the browser; evidence collected while loading
+// wins over stored state.
+export const pool = new RelayPool();
+relayLiveness.connectToPool(pool);
 if (typeof window !== 'undefined') {
   relayLiveness.load().catch((err) => console.warn('[relay-liveness] load failed:', err));
 }
-export const pool = new RelayPool({ liveness: relayLiveness });

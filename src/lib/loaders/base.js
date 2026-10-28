@@ -13,6 +13,7 @@
  * `createTimelineFeed` from `./timeline-feed.js` instead — the applesauce v7
  * window loader with prefetch-driven paging and per-relay status.
  */
+import { skipParkedRelays, relayLiveness } from '$lib/stores/relay-liveness.js';
 import { EMPTY, defer, from, isObservable, merge, mergeAll, mergeMap, of } from 'rxjs';
 import { catchError } from 'rxjs/operators';
 import {
@@ -47,7 +48,12 @@ import { createRevalidatingCacheRequest } from '$lib/helpers/cache-revalidate.js
  * @returns {import('rxjs').Observable<any>}
  */
 export const timedPool = (relays, filters) =>
-  pool.request(relays, filters, { timeout: 10_000 }).pipe(catchError(() => EMPTY));
+  pool
+    // Relays the liveness tracker has parked (recent connection failures) are
+    // left out so one dead relay does not hold this one-shot for the full cap;
+    // never all of them — see skipParkedRelays.
+    .request(skipParkedRelays(relayLiveness, relays), filters, { timeout: 10_000 })
+    .pipe(catchError(() => EMPTY));
 
 /** Batches the address/event loaders run at once (applesauce default 4). */
 export const LOADER_CONCURRENT_BATCHES = 16;
