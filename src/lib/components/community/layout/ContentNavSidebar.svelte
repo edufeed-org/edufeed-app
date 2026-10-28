@@ -37,6 +37,7 @@
     getSelectedGroupChannel,
     requestChannelList
   } from '$lib/groups/group-channel-selection.svelte.js';
+  import { hasUnreadChannelMention } from '$lib/groups/channel-mentions.svelte.js';
   import ConcordUnreadDot from '$lib/components/shared/ConcordUnreadDot.svelte';
   import ChannelRailRow from '../channels/ChannelRailRow.svelte';
   import ChannelCallRoster from '$lib/components/groups/call/ChannelCallRoster.svelte';
@@ -386,7 +387,12 @@
                   worldReadable={row.worldReadable}
                   hidden={row.hidden === true}
                   onclick={() => selectGroupRow(row.pointer)}
-                />
+                >
+                  {#snippet trailing()}
+                    <!-- "@" only: the inbox knows your mentions, not every message -->
+                    <ConcordUnreadDot mentioned={hasUnreadChannelMention(row.pointer?.id)} />
+                  {/snippet}
+                </ChannelRailRow>
               {/if}
             </div>
             {#if favouritePubkey}

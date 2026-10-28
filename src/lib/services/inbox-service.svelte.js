@@ -375,9 +375,20 @@ function applyReadMarkers(pubkey, incoming) {
  * @param {string} eventId
  */
 export function markItemAsRead(eventId) {
+  markItemsAsRead([eventId]);
+}
+
+/**
+ * Mark several notifications read in one write (a channel opened with a
+ * handful of mentions in it, see groups/channel-mentions.svelte.js).
+ * @param {string[]} eventIds
+ */
+export function markItemsAsRead(eventIds) {
   if (!activePubkey) return;
+  const fresh = eventIds.filter((id) => !readItemIds.has(id));
+  if (!fresh.length) return;
   // eslint-disable-next-line svelte/prefer-svelte-reactivity -- $state.raw() with plain Set
-  readItemIds = new Set([...readItemIds, eventId]);
+  readItemIds = new Set([...readItemIds, ...fresh]);
   try {
     localStorage.setItem(LOCALSTORAGE_PREFIX + activePubkey, JSON.stringify([...readItemIds]));
   } catch {

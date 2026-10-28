@@ -10,6 +10,8 @@
   import { getDisplayName, getProfilePicture } from 'applesauce-core/helpers';
   import { useUserProfile } from '$lib/stores/user-profile.svelte';
   import ImageWithFallback from '$lib/components/shared/ImageWithFallback.svelte';
+  import ConcordUnreadDot from '$lib/components/shared/ConcordUnreadDot.svelte';
+  import { useCommunityMention } from '$lib/groups/channel-mentions.svelte.js';
 
   /**
    * @type {{
@@ -23,6 +25,8 @@
 
   const getProfile = useUserProfile(() => pubkey);
   const profile = $derived(getProfile());
+  // "@" while one of the community's channels holds an unread mention of you.
+  const getMentioned = useCommunityMention(() => pubkey);
 </script>
 
 <button
@@ -34,14 +38,19 @@
     ? 'ring-2 ring-primary ring-offset-2 ring-offset-base-200'
     : ''}"
 >
-  <div class="avatar">
-    <div class="{size} rounded-full">
-      <ImageWithFallback
-        src={getProfilePicture(profile) || `https://robohash.org/${pubkey}`}
-        alt={getDisplayName(profile)}
-        fallbackType="community"
-        class="h-full w-full rounded-full object-cover"
-      />
+  <span class="relative shrink-0">
+    <div class="avatar">
+      <div class="{size} rounded-full">
+        <ImageWithFallback
+          src={getProfilePicture(profile) || `https://robohash.org/${pubkey}`}
+          alt={getDisplayName(profile)}
+          fallbackType="community"
+          class="h-full w-full rounded-full object-cover"
+        />
+      </div>
     </div>
-  </div>
+    <span class="absolute -top-0.5 -right-0.5">
+      <ConcordUnreadDot mentioned={getMentioned()} />
+    </span>
+  </span>
 </button>
