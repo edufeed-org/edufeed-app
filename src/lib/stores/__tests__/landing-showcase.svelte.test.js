@@ -9,7 +9,11 @@ import { flushSync } from 'svelte';
 import { of, NEVER } from 'rxjs';
 
 const loader = vi.hoisted(() => ({ create: vi.fn(), sources: vi.fn() }));
-const cfg = vi.hoisted(() => ({ types: ['learning', 'events'], lists: ['naddr1list'] }));
+const cfg = vi.hoisted(() => ({
+  types: ['learning', 'events'],
+  lists: ['naddr1list'],
+  byType: {}
+}));
 const store = vi.hoisted(() => ({ byKind: {}, modelFilters: [] }));
 
 vi.mock('$lib/loaders/base.js', () => ({ fetchEvents: (...a) => loader.create(...a) }));
@@ -36,7 +40,7 @@ vi.mock('$lib/stores/config.svelte.js', () => ({
       return { contentTypes: cfg.types };
     },
     get landing() {
-      return { showcaseLists: cfg.lists };
+      return { showcaseLists: cfg.lists, showcaseListsByType: cfg.byType };
     }
   }
 }));
@@ -87,6 +91,7 @@ beforeEach(() => {
   store.modelFilters = [];
   cfg.types = ['learning', 'events'];
   cfg.lists = ['naddr1list'];
+  cfg.byType = {};
   loader.sources.mockResolvedValue(['src1', 'src2']);
   loader.create.mockReturnValue(of());
   store.byKind = {
@@ -129,8 +134,8 @@ describe('useLandingShowcase', () => {
     const [relays, filters] = loader.create.mock.calls[0];
     expect(relays).toEqual(['wss://amb']);
     expect(filters).toEqual([
-      { kinds: [30142], authors: ['src1', 'src2'], limit: 12 },
-      { kinds: [30142], '#h': ['src1', 'src2'], limit: 12 }
+      { kinds: [30142], authors: ['src1', 'src2'], limit: 30 },
+      { kinds: [30142], '#h': ['src1', 'src2'], limit: 30 }
     ]);
     // the store side is restricted the same way (no limit on the model)
     expect(store.modelFilters[0]).toEqual([
@@ -186,7 +191,8 @@ describe('useLandingShowcase', () => {
     const { api, cleanup } = mount();
     await settle();
     expect(api.sources()).toEqual(['srcX']);
-    expect(JSON.parse(localStorage.getItem('landing-showcase-sources')).pubkeys).toEqual(['srcX']);
+    const stored = JSON.parse(localStorage.getItem('landing-showcase-sources'));
+    expect([stored].flat().find((e) => e.lists[0] === 'naddr1list').pubkeys).toEqual(['srcX']);
     cleanup();
   });
 
@@ -246,6 +252,72 @@ describe('useLandingShowcase', () => {
     expect(loader.create).not.toHaveBeenCalled();
     expect(api.settled('learning')).toBe(true);
     expect(api.materials()).toEqual([]);
+    cleanup();
+  });
+});
+
+describe('useLandingShowcase with per-type lists', () => {
+  /** @param {Record<string, string[]>} byList */
+  const sourcesFor = (byList) =>
+    loader.sources.mockImplementation(async (lists) => byList[lists.join(',')] ?? []);
+  const authorsOf = (kind) =>
+    loader.create.mock.calls.find(([, f]) => f[0].kinds[0] === kind)?.[1][0].authors;
+
+  it('a per-type list feeds only its own panel; the rest keep the global list', async () => {
+    cfg.byType = { learning: ['naddr1mat'] };
+    sourcesFor({ naddr1list: ['src1', 'src2'], naddr1mat: ['m1', 'm2'] });
+    const { api, cleanup } = mount();
+    await settle();
+    expect(authorsOf(30142)).toEqual(['m1', 'm2']);
+    expect(authorsOf(31922)).toEqual(['src1', 'src2']);
+    // the community wall stays on the global list
+    expect(api.sources()).toEqual(['src1', 'src2']);
+    cleanup();
+  });
+
+  it('a per-type list works without a global list', async () => {
+    cfg.lists = [];
+    cfg.byType = { learning: ['naddr1mat'] };
+    sourcesFor({ naddr1mat: ['m1'] });
+    const { api, cleanup } = mount();
+    await settle();
+    expect(authorsOf(30142)).toEqual(['m1']);
+    expect(authorsOf(31922)).toBeUndefined();
+    expect(api.settled('events')).toBe(true);
+    expect(api.sources()).toEqual([]);
+    cleanup();
+  });
+
+  it('a list resolving later does not restart the other panels', async () => {
+    cfg.byType = { learning: ['naddr1mat'] };
+    loader.create.mockReturnValue(NEVER);
+    loader.sources.mockImplementation((lists) =>
+      lists[0] === 'naddr1mat'
+        ? new Promise((resolve) => setTimeout(() => resolve(['m1']), 1000))
+        : Promise.resolve(['src1'])
+    );
+    const { cleanup } = mount();
+    await settle();
+    expect(loader.create).toHaveBeenCalledTimes(1); // events
+    await vi.advanceTimersByTimeAsync(1000);
+    flushSync();
+    expect(loader.create).toHaveBeenCalledTimes(2); // + learning, events kept
+    cleanup();
+  });
+
+  it('remembers each list set separately', async () => {
+    cfg.byType = { learning: ['naddr1mat'] };
+    sourcesFor({ naddr1list: ['src1'], naddr1mat: ['m1'] });
+    const first = mount();
+    await settle();
+    first.cleanup();
+    _resetShowcaseSourcesCache();
+    loader.sources.mockReturnValue(new Promise(() => {}));
+    loader.create.mockClear();
+    const { api, cleanup } = mount();
+    flushSync();
+    expect(api.sources()).toEqual(['src1']);
+    expect(authorsOf(30142)).toEqual(['m1']);
     cleanup();
   });
 });

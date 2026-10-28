@@ -1,9 +1,10 @@
 // Live content for the logged-out landing (Claude Design "Landing Round 3",
 // 5b): the newest materials, the next Fortbildungen and the newest articles —
 // but only content BY the accounts on the deployment's showcase lists or
-// h-tagged INTO the listed communities (LANDING_SHOWCASE_LISTS). The landing
-// is the deployment's shop window: no lists, no live content. Disabled
-// discover types are neither loaded nor shown.
+// h-tagged INTO the listed communities (LANDING_SHOWCASE_LISTS, or a panel's
+// own LANDING_SHOWCASE_LISTS_<TYPE>). The landing is the deployment's shop
+// window: no lists, no live content. Disabled discover types are neither
+// loaded nor shown.
 import { untrack } from 'svelte';
 import { TimelineModel } from 'applesauce-core/models';
 import { fetchEvents } from '$lib/loaders/base.js';
@@ -39,43 +40,57 @@ const SETTLE_TIMEOUT_MS = 5_000;
 
 /** @type {Record<ShowcaseType, { kinds: number[], limit: number, relays: () => string[] }>} */
 const SOURCES = {
-  learning: { kinds: [30142], limit: 12, relays: getEducationalRelays },
+  // Limits leave room for one item per author (pickMaterials/pickArticles)
+  // when a single busy source published the newest dozen.
+  learning: { kinds: [30142], limit: 30, relays: getEducationalRelays },
   events: { kinds: [31922, 31923], limit: 30, relays: getCalendarRelays },
-  articles: { kinds: [30023], limit: 8, relays: getArticleRelays }
+  articles: { kinds: [30023], limit: 20, relays: getArticleRelays }
 };
 
 /** @param {any[]} filters */
 const withoutLimit = (filters) => filters.map(({ limit: _limit, ...rest }) => rest);
 
-// Resolved showcase sources, remembered for the session and across visits:
-// the list fetch waits on relays, and coming back to the landing (or a warm
-// cold start) must render from the EventStore at once. The list is refreshed
-// in the background on every visit.
+// Resolved showcase sources, remembered for the session and across visits
+// (one entry per list set): the list fetch waits on relays, and coming back
+// to the landing (or a warm cold start) must render from the EventStore at
+// once. The lists are refreshed in the background on every visit.
 const STORAGE_KEY = 'landing-showcase-sources';
-/** @type {{ lists: string, pubkeys: string[] } | null} */
-let memorySources = null;
+// eslint-disable-next-line svelte/prefer-svelte-reactivity -- internal bookkeeping, not reactive state
+const memorySources = /** @type {Map<string, string[]>} */ (new Map());
+
+/** @returns {{ lists: string[], pubkeys: string[] }[]} */
+function storedEntries() {
+  try {
+    const stored = JSON.parse(localStorage.getItem(STORAGE_KEY) || 'null');
+    // a single entry is the format before per-type lists
+    return [stored ?? []]
+      .flat()
+      .filter((e) => Array.isArray(e?.lists) && Array.isArray(e?.pubkeys));
+  } catch {
+    // private mode / corrupt entry: just fetch
+    return [];
+  }
+}
 
 /** @param {string[]} lists @returns {string[] | null} */
 function rememberedSources(lists) {
   const key = lists.join(',');
-  if (memorySources?.lists === key) return memorySources.pubkeys;
-  try {
-    const stored = JSON.parse(localStorage.getItem(STORAGE_KEY) || 'null');
-    if (stored && stored.lists?.join(',') === key && Array.isArray(stored.pubkeys)) {
-      memorySources = { lists: key, pubkeys: stored.pubkeys };
-      return stored.pubkeys;
-    }
-  } catch {
-    // private mode / corrupt entry: just fetch
-  }
-  return null;
+  const known = memorySources.get(key);
+  if (known) return known;
+  const entry = storedEntries().find((e) => e.lists.join(',') === key);
+  if (!entry) return null;
+  memorySources.set(key, entry.pubkeys);
+  return entry.pubkeys;
 }
 
 /** @param {string[]} lists @param {string[]} pubkeys */
 function rememberSources(lists, pubkeys) {
-  memorySources = { lists: lists.join(','), pubkeys };
+  const key = lists.join(',');
+  memorySources.set(key, pubkeys);
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({ lists, pubkeys }));
+    const others = storedEntries().filter((e) => e.lists.join(',') !== key);
+    // a handful of list sets at most; drop the oldest beyond that
+    localStorage.setItem(STORAGE_KEY, JSON.stringify([...others, { lists, pubkeys }].slice(-5)));
   } catch {
     // storage unavailable: memory cache still serves this session
   }
@@ -83,13 +98,23 @@ function rememberSources(lists, pubkeys) {
 
 /** Test hook: forget the remembered sources. */
 export function _resetShowcaseSourcesCache() {
-  memorySources = null;
+  memorySources.clear();
 }
 
+/** @type {ShowcaseType[]} */
+const TYPES = /** @type {ShowcaseType[]} */ (Object.keys(SOURCES));
+
+/** The lists a panel draws from: its own, else the global ones. */
+/** @param {ShowcaseType} type @returns {string[]} */
+const listsFor = (type) => {
+  const own = runtimeConfig.landing?.showcaseListsByType?.[type] || [];
+  return own.length > 0 ? own : runtimeConfig.landing?.showcaseLists || [];
+};
+
 export function useLandingShowcase() {
-  /** null while the showcase lists are still resolving */
-  /** @type {string[] | null} */
-  let sources = $state.raw(null);
+  /** Resolved pubkeys per list set (key: the naddrs joined); absent = resolving */
+  /** @type {Record<string, string[]>} */
+  let resolved = $state.raw({});
   /** @type {Record<ShowcaseType, any[]>} */
   let raw = $state.raw({ learning: [], events: [], articles: [] });
   /** @type {Record<ShowcaseType, boolean>} */
@@ -100,6 +125,14 @@ export function useLandingShowcase() {
   /** @param {ShowcaseType} type */
   const enabled = (type) => isDiscoverTypeEnabled(type, runtimeConfig.discover?.contentTypes || []);
 
+  /** @param {string[]} lists @returns {string[] | null} null while resolving */
+  const sourcesOf = (lists) => (lists.length === 0 ? [] : (resolved[lists.join(',')] ?? null));
+
+  /** @param {string} key @param {string[]} pubkeys */
+  const setResolved = (key, pubkeys) => {
+    resolved = { ...untrack(() => resolved), [key]: pubkeys };
+  };
+
   // Runs inside the loader effect (disabled types settle synchronously), so it
   // must not make the effect depend on settledByType — every write would
   // restart all loaders.
@@ -109,69 +142,84 @@ export function useLandingShowcase() {
       if (!settledByType[type]) settledByType = { ...settledByType, [type]: true };
     });
 
-  // 1. Resolve the showcase lists into source pubkeys — remembered ones
-  //    first, then refreshed from the relays (only a changed list re-renders).
+  // 1. Resolve each distinct list set (global + per-type) into source pubkeys
+  //    — remembered ones first, then refreshed from the relays (only a
+  //    changed list re-renders). Only lists something will show are fetched.
   $effect(() => {
-    const lists = runtimeConfig.landing?.showcaseLists || [];
-    if (lists.length === 0) {
-      sources = [];
-      return;
+    const global = runtimeConfig.landing?.showcaseLists || [];
+    // eslint-disable-next-line svelte/prefer-svelte-reactivity -- internal bookkeeping, not reactive state
+    const sets = /** @type {Map<string, string[]>} */ (new Map());
+    for (const lists of [global, ...TYPES.filter(enabled).map(listsFor)]) {
+      if (lists.length > 0) sets.set(lists.join(','), lists);
     }
-    const remembered = rememberedSources(lists);
-    if (remembered) sources = remembered;
     let cancelled = false;
-    loadShowcaseSources(lists)
-      .then((pubkeys) => {
-        if (cancelled) return;
-        // No answer from any relay reads as an empty list — never let that
-        // wipe a list we already know.
-        if (pubkeys.length === 0 && remembered) return;
-        rememberSources(lists, pubkeys);
-        if (pubkeys.join(',') !== remembered?.join(',')) sources = pubkeys;
-      })
-      .catch(() => {
-        if (!cancelled && !remembered) sources = [];
-      });
+    for (const [key, lists] of sets) {
+      const remembered = rememberedSources(lists);
+      if (remembered) untrack(() => setResolved(key, remembered));
+      loadShowcaseSources(lists)
+        .then((pubkeys) => {
+          if (cancelled) return;
+          // No answer from any relay reads as an empty list — never let that
+          // wipe a list we already know.
+          if (pubkeys.length === 0 && remembered) return;
+          rememberSources(lists, pubkeys);
+          if (pubkeys.join(',') !== remembered?.join(',')) setResolved(key, pubkeys);
+        })
+        .catch(() => {
+          if (!cancelled && !remembered) setResolved(key, []);
+        });
+    }
     return () => {
       cancelled = true;
     };
   });
 
-  // 2. Load each enabled type, restricted to the sources.
+  // 2. Load each enabled type, restricted to its sources. Re-runs when any
+  //    list set resolves; a type whose sources did not change keeps its
+  //    loader (see `running`).
+  // eslint-disable-next-line svelte/prefer-svelte-reactivity -- internal bookkeeping, not reactive state
+  const running = /** @type {Map<ShowcaseType, { key: string, stop: () => void }>} */ (new Map());
+  // Stopped on unmount only: a re-run of the loader effect keeps unchanged loaders.
+  $effect(() => () => {
+    running.forEach((r) => r.stop());
+    running.clear();
+  });
   $effect(() => {
-    const src = sources;
-    if (src === null) return;
+    for (const type of TYPES) {
+      const src = enabled(type) ? sourcesOf(listsFor(type)) : [];
+      if (src === null) continue;
+      const key = src.join(',');
+      if (running.get(type)?.key === key) continue;
+      running.get(type)?.stop();
 
-    /** @type {{ unsubscribe(): void }[]} */
-    const subs = [];
-    /** @type {ShowcaseType[]} */
-    const started = [];
-
-    for (const type of /** @type {ShowcaseType[]} */ (Object.keys(SOURCES))) {
       const { kinds, limit, relays } = SOURCES[type];
       const filters = showcaseFilters(kinds, src, limit);
-      if (!enabled(type) || filters.length === 0) {
+      if (filters.length === 0) {
         raw = { ...untrack(() => raw), [type]: [] };
         markSettled(type);
+        running.set(type, { key, stop: () => {} });
         continue;
       }
-      started.push(type);
-      subs.push(fetchEvents(relays(), filters).subscribe({ complete: () => markSettled(type) }));
-      subs.push(
+      const subs = [
+        fetchEvents(relays(), filters).subscribe({ complete: () => markSettled(type) }),
         /** @type {any} */ (eventStore.model(TimelineModel, withoutLimit(filters))).subscribe(
           (/** @type {any[]} */ events) => {
             raw = { ...untrack(() => raw), [type]: events || [] };
           }
         )
-      );
+      ];
+      const timer = setTimeout(() => markSettled(type), SETTLE_TIMEOUT_MS);
+      running.set(type, {
+        key,
+        stop: () => {
+          clearTimeout(timer);
+          subs.forEach((s) => s.unsubscribe());
+        }
+      });
     }
-
-    const timer = setTimeout(() => started.forEach(markSettled), SETTLE_TIMEOUT_MS);
-    return () => {
-      clearTimeout(timer);
-      subs.forEach((s) => s.unsubscribe());
-    };
   });
+
+  const sources = $derived(sourcesOf(runtimeConfig.landing?.showcaseLists || []));
 
   const resources = $derived(raw.learning.map((event) => formatAMBResource(event)));
   const materials = $derived(pickMaterials(resources));
@@ -200,7 +248,7 @@ export function useLandingShowcase() {
     articles: () => articles,
     /** @param {ShowcaseType} type */
     settled: (type) => settledByType[type],
-    /** Pubkeys allowed on the landing; empty until resolved or when unset. */
+    /** Global-list pubkeys (community wall); empty until resolved or when unset. */
     sources: () => sources ?? [],
     sourcesResolved: () => sources !== null,
     authors: () => authors

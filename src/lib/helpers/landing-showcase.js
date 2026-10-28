@@ -25,13 +25,31 @@ function firstPerKey(items, key) {
 }
 
 /**
+ * The first n items, one per author before any author gets a second: a busy
+ * source must not fill a whole panel. Order within each round is kept.
+ * @template {{ pubkey: string }} T
+ * @param {T[]} sorted
+ * @param {number} n
+ * @returns {T[]}
+ */
+function spreadAuthors(sorted, n) {
+  const first = firstPerKey(sorted, (item) => item.pubkey);
+  if (first.length >= n) return first.slice(0, n);
+  const rest = sorted.filter((item) => !first.includes(item));
+  return [...first, ...rest].slice(0, n);
+}
+
+/**
  * @param {any[]} resources - formatted AMB resources (AMBResourceModel)
  * @param {number} [n]
  */
 export function pickMaterials(resources, n = 3) {
   const named = resources.filter((r) => r?.name?.trim());
   const sorted = [...named].sort((a, b) => b.created_at - a.created_at);
-  return firstPerKey(sorted, (r) => `${r.pubkey}:${r.identifier}`).slice(0, n);
+  return spreadAuthors(
+    firstPerKey(sorted, (r) => `${r.pubkey}:${r.identifier}`),
+    n
+  );
 }
 
 /** @param {any[]} resources */
@@ -79,7 +97,10 @@ export function pickArticles(events, n = 3) {
   const when = (/** @type {any} */ e) => Number(tagValue(e, 'published_at')) || e.created_at;
   const titled = events.filter((e) => tagValue(e, 'title')?.trim());
   const sorted = [...titled].sort((a, b) => when(b) - when(a));
-  return firstPerKey(sorted, (e) => `${e.pubkey}:${tagValue(e, 'd') ?? ''}`).slice(0, n);
+  return spreadAuthors(
+    firstPerKey(sorted, (e) => `${e.pubkey}:${tagValue(e, 'd') ?? ''}`),
+    n
+  );
 }
 
 /**
