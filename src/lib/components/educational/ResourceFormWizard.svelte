@@ -1939,7 +1939,7 @@
                           'Die Datei ist für die KI-Analyse zu groß — bitte manuell ausfüllen.'}
                       {:else if enrichmentErrorCode === 'unsupported_type'}
                         {m.amb_form_enrich_error_unsupported_type?.() ??
-                          'Diesen Dateityp kann die KI nicht lesen (nur Webseiten und PDFs) — bitte manuell ausfüllen.'}
+                          'Diesen Dateityp kann die KI nicht lesen (Webseiten, PDFs und Office-Dokumente werden unterstützt) — bitte manuell ausfüllen.'}
                       {:else}
                         {m.amb_form_enrich_error?.() ?? 'KI-Ergänzung ist fehlgeschlagen.'}
                       {/if}
