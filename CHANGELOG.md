@@ -7,6 +7,33 @@ merge commits of the nostr PRs that landed since the previous tag.
 
 ## [Unreleased]
 
+## [0.12.1] - 2026-10-28
+
+Hotfix for the learning-resource form: picking any Bildungsstufe or Fach in
+step 4 crashed the page in 0.12.0. One nostr PR. Released directly, without an
+RC on dev, because every AMB submission with a vocabulary pick was broken.
+
+### Fixed
+
+- "Bildungsressource teilen" died with `effect_update_depth_exceeded` as soon
+  as a concept was picked from a dropdown (level or subject), and also on a
+  restored draft or AI-filled values. The concept picker's heal effect
+  (0.11.0) re-emitted every matched value lacking `nostrCoord`, and the form
+  keeps concepts as compact `{id, label}`, so each emit came straight back
+  until Svelte gave up. The picker now heals or accepts an id once per
+  instance and hands it back unchanged afterwards. The calendar event modal,
+  the publication form and the educator profile had the same latent loop.
+  (#7c8e9419)
+- With Bildungsbereich "Extra-Institutionell" both subject pickers (Schule,
+  Hochschule) were labeled "Fach / Thema \*", which read as "both required";
+  one subject from either list was always enough. The group now shows a
+  single required marker plus the hint "Mindestens ein Fach aus einer der
+  Listen – es muss nicht aus beiden sein." (#7c8e9419)
+
+### Deploy notes
+
+- No new env vars, no relay changes.
+
 ## [0.12.0] - 2026-10-27
 
 Privacy round: the link-preview thumbnail no longer leaks every viewer's IP
