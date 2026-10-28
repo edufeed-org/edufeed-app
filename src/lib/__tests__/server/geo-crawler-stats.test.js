@@ -62,6 +62,21 @@ describe('classifyUserAgent', () => {
     expect(classifyUserAgent('GPTBot/1.2')?.ranges?.length).toBeGreaterThan(0);
     expect(classifyUserAgent('ClaudeBot/1.0')?.ranges ?? []).toEqual([]);
   });
+
+  it("checks Google's common crawlers against common-crawlers.json at its current address", () => {
+    // GoogleOther and Google-InspectionTool are common crawlers, like Googlebot
+    // (Google, "Common crawlers": IP ranges in common-crawlers.json). The old
+    // /static/search/apis/ipranges/ paths only redirect there.
+    const common = 'https://developers.google.com/static/crawling/ipranges/common-crawlers.json';
+    expect(classifyUserAgent('Mozilla/5.0 (compatible; GoogleOther)')?.ranges).toEqual([common]);
+    expect(
+      classifyUserAgent('Mozilla/5.0 (compatible; Google-InspectionTool/1.0)')?.ranges
+    ).toEqual([common]);
+    expect(
+      classifyUserAgent('Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)')
+        ?.ranges
+    ).toEqual([common]);
+  });
 });
 
 describe('classifyReferrer', () => {
@@ -255,8 +270,15 @@ describe('createCrawlerStatsHandle', () => {
   });
   afterEach(() => rmSync(dir, { recursive: true, force: true }));
 
-  /** @param {any} handle @param {string} path @param {Record<string,string>} headers @param {string} [contentType] @param {string} [method] */
-  async function request(handle, path, headers, contentType = 'text/html', method = 'GET') {
+  /** @param {any} handle @param {string} path @param {Record<string,string>} headers @param {string} [contentType] @param {string} [method] @param {number} [status] */
+  async function request(
+    handle,
+    path,
+    headers,
+    contentType = 'text/html',
+    method = 'GET',
+    status = 200
+  ) {
     const event = {
       url: new URL(`https://edufeed.org${path}`),
       request: new Request(`https://edufeed.org${path}`, { method, headers }),
@@ -265,7 +287,7 @@ describe('createCrawlerStatsHandle', () => {
     const resolve = vi.fn(
       async () =>
         new Response('<html></html>', {
-          status: 200,
+          status,
           headers: { 'content-type': contentType, 'content-length': '13' }
         })
     );
@@ -322,6 +344,30 @@ describe('createCrawlerStatsHandle', () => {
     await request(handle, '/_app/x.js', { 'user-agent': 'GPTBot/1.2' }, 'text/javascript');
     store.flush();
     expect(existsSync(join(dir, `${today}.json`))).toBe(false);
+  });
+
+  it('counts no page view or referral for error pages (scanners probing /.env and co.)', async () => {
+    const { handle, store } = createCrawlerStatsHandle({ dir, verifier: { verify: () => null } });
+    const scanner = { 'user-agent': 'Mozilla/5.0 Chrome/130', referer: 'https://evil.example/' };
+    await request(handle, '/.env', scanner, 'text/html', 'GET', 404);
+    await request(handle, '/wp-login.php', scanner, 'text/html', 'GET', 404);
+    await request(
+      handle,
+      '/wiki/a',
+      { 'user-agent': 'Mozilla/5.0 Chrome/130' },
+      'text/html',
+      'GET',
+      500
+    );
+    // a crawler's 404 still counts: it shows what the crawler asked for
+    await request(handle, '/gone', { 'user-agent': 'GPTBot/1.2' }, 'text/html', 'GET', 404);
+    store.flush();
+    const data = read();
+    expect(data.pageviews).toBe(0);
+    expect(data.referrals).toEqual([]);
+    expect(data.crawlers).toContainEqual(
+      expect.objectContaining({ family: 'GPTBot', path: '/gone', status: 404 })
+    );
   });
 
   it('keeps only safe utm_source values', async () => {
