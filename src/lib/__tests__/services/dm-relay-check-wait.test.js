@@ -19,6 +19,7 @@ import { of, Subject } from 'rxjs';
 
 const mockGetReplaceable = vi.hoisted(() => vi.fn(() => /** @type {any} */ (undefined)));
 const mockReplaceable$ = vi.hoisted(() => /** @type {{ current: any }} */ ({ current: null }));
+const mockFilterRelays = vi.hoisted(() => vi.fn((/** @type {string[]} */ relays) => relays));
 vi.mock('$lib/stores/nostr-infrastructure.svelte', () => ({
   eventStore: {
     getReplaceable: mockGetReplaceable,
@@ -30,7 +31,8 @@ vi.mock('$lib/stores/nostr-infrastructure.svelte', () => ({
   pool: {
     request: vi.fn(() => of()),
     group: vi.fn(() => ({ subscription: vi.fn(() => of()) })),
-    relay: vi.fn(() => ({ challenge$: of(null), authenticated: false }))
+    relay: vi.fn(() => ({ challenge$: of(null), authenticated: false })),
+    filterRelays: (/** @type {string[]} */ relays) => mockFilterRelays(relays)
   }
 }));
 
@@ -76,6 +78,7 @@ beforeEach(() => {
   mockReplaceable$.current = new Subject();
   mockWriteRelays.current = ['wss://mine'];
   mockLookupRelays.current = ['wss://index'];
+  mockFilterRelays.mockImplementation((relays) => relays);
 });
 
 afterEach(() => {
@@ -119,6 +122,17 @@ describe('waitForDmRelayCheck', () => {
 
     // No timer advance: an already-settled verdict must not make a caller wait.
     await expect(waitForDmRelayCheck()).resolves.toBe('absent');
+  });
+
+  it('never concludes "absent" while liveness has parked every relay it would ask', async () => {
+    // The pool skips parked relays, so nobody was queried: the settle deadline
+    // must not be armed, exactly as when there are no relays at all.
+    vi.useFakeTimers();
+    mockFilterRelays.mockImplementation(() => []);
+    initializeDMs(PUBKEY, SIGNER);
+    await vi.advanceTimersByTimeAsync(0);
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(getDmRelayCheckStatus()).toBe('checking');
   });
 
   it('resolves "idle" when no session is active', async () => {

@@ -462,6 +462,18 @@ never rebuilds it. The settings relay editor shows the same probe per row
 badges, "Erneut prüfen"). A timeout is no evidence; only a transport failure
 counts.
 
+**Pool liveness** (`stores/relay-liveness.js`, attached in
+`nostr-infrastructure.svelte.js`): applesauce's `RelayLiveness` watches the
+pool's connections and parks a relay that fails to connect (30 s → 5 min
+cooldown, 1 h once "dead"), persisted per device in localStorage. Pool-level
+`request`/`subscription`/`sync` skip parked relays and complete empty when
+every relay is parked; `pool.relay(url)` is never filtered, so publishing and
+the settings probe always try. Consequence for **confirmed-absence verdicts**
+(kind 10002 in `relay-service`, kind 10050 in `dm-service`): a lookup whose
+relays are all parked is `unknown`, never `absent` — check
+`pool.filterRelays(relays)` before arming an absence deadline, or a parked
+indexer would license overwriting a real list with a default one.
+
 ### Event Deletion (NIP-09)
 
 Use `deleteEvent(event, activeUser)` from `src/lib/helpers/eventDeletion.js` for any content type. Returns `{success: boolean, error?: string}`. Auto-resolves relay category from event kind, verifies ownership, applies the deletion to EventStore optimistically, and uses `factory.delete([event])` (proper NIP-09 with e-tag + a-tag).

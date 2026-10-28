@@ -4,6 +4,7 @@
  */
 import { EventStore, DeleteManager } from 'applesauce-core';
 import { RelayPool } from 'applesauce-relay';
+import { createRelayLiveness } from '$lib/stores/relay-liveness.js';
 // Side-effect: registers CommentsModel, casts, and other mixins on EventStore
 import 'applesauce-common';
 
@@ -33,6 +34,17 @@ eventStore.insert$.subscribe((event) => {
 });
 // v6: eoseTimeout was removed. Per-request completion is handled by
 // group.request()'s default complete strategy (v7: completeAfterIdle) plus the
-// explicit timeout passed by timedPool (loaders/base.js). No liveness source
-// is configured: the app decides per surface which relays to skip.
-export const pool = new RelayPool();
+// explicit timeout passed by timedPool (loaders/base.js).
+//
+// Relay liveness (stores/relay-liveness.js): the tracker observes the pool's
+// connections and parks relays that fail to connect, so a dead relay costs
+// one request its timeout instead of every request. Pool-level request /
+// subscription / sync skip parked relays; `pool.relay(url)` never does, which
+// keeps publishing (publish-service) and the settings probe trying every
+// listed relay. State is restored from localStorage in the browser; evidence
+// collected while loading wins over stored state.
+export const relayLiveness = createRelayLiveness();
+if (typeof window !== 'undefined') {
+  relayLiveness.load().catch((err) => console.warn('[relay-liveness] load failed:', err));
+}
+export const pool = new RelayPool({ liveness: relayLiveness });

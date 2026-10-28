@@ -10,10 +10,18 @@ import { of, throwError, NEVER } from 'rxjs';
 
 const request = vi.fn();
 const getInformation = vi.fn(async () => null);
+const relayCalls = [];
 vi.mock('$lib/stores/nostr-infrastructure.svelte', () => ({
   pool: {
-    request: (...args) => request(...args),
-    relay: () => ({ getInformation: () => getInformation() })
+    // The probe must use the per-relay request (never filtered by liveness),
+    // so the pool-level request is deliberately absent here.
+    relay: (url) => {
+      relayCalls.push(url);
+      return {
+        request: (...args) => request([url], ...args),
+        getInformation: () => getInformation()
+      };
+    }
   }
 }));
 
@@ -34,10 +42,12 @@ beforeEach(() => {
 });
 
 describe('probeRelay', () => {
-  it('asks exactly that relay for the user’s kind 10002', async () => {
+  it('asks exactly that relay for the user’s kind 10002, through pool.relay(url)', async () => {
     request.mockReturnValue(of(list));
+    relayCalls.length = 0;
     await probeRelay('wss://x.example', PK, { timeoutMs: 100 });
     expect(request).toHaveBeenCalledTimes(1);
+    expect(relayCalls).toContain('wss://x.example');
     const [relays, filter] = request.mock.calls[0];
     expect(relays).toEqual(['wss://x.example']);
     expect(filter).toMatchObject({ kinds: [10002], authors: [PK], limit: 1 });

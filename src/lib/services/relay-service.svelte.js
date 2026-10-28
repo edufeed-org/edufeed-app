@@ -3,7 +3,7 @@
  * Manages relay list fetching, caching, and selection for outbox model
  */
 import { SvelteMap, SvelteSet } from 'svelte/reactivity';
-import { eventStore } from '$lib/stores/nostr-infrastructure.svelte.js';
+import { eventStore, pool } from '$lib/stores/nostr-infrastructure.svelte.js';
 import { runtimeConfig } from '$lib/stores/config.svelte.js';
 import { RelayListModel } from '$lib/models/relay-list-model.js';
 import { addressLoader } from '$lib/loaders/base.js';
@@ -124,8 +124,22 @@ export async function fetchRelayListResolution(pubkey) {
     // cache→relays→lookup sequence — measured ~1.3s for a confirmed miss —
     // and dedupes concurrent requests for the same pointer.
     if (!resolved) {
-      loaderSub = addressLoader({ kind: 10002, pubkey, relays: getLookupRelays() }).subscribe({
-        complete: () => settle(null, 'absent'),
+      const lookupRelays = getLookupRelays();
+      // Relays the liveness tracker has parked are skipped by the pool, and a
+      // request with no eligible relay completes empty at once. That is not a
+      // confirmed miss: without it a parked indexer would read as "no relay
+      // list" and license the write paths to publish a default over a real one.
+      const eligible = pool.filterRelays?.(lookupRelays) ?? lookupRelays;
+      const allParked = lookupRelays.length > 0 && eligible.length === 0;
+      loaderSub = addressLoader({ kind: 10002, pubkey, relays: lookupRelays }).subscribe({
+        complete: () => {
+          if (allParked) {
+            console.warn(
+              `[relay-service] every kind 10002 lookup relay is parked for ${pubkey.slice(0, 8)}… — absence unknown`
+            );
+            settle(null, 'unknown');
+          } else settle(null, 'absent');
+        },
         error: (/** @type {unknown} */ err) => {
           console.warn(
             `[relay-service] kind 10002 lookup errored for ${pubkey.slice(0, 8)}… — falling back to default relays`,
