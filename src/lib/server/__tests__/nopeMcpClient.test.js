@@ -263,6 +263,46 @@ describe('callExtractMetadata', () => {
     expect(/** @type {any} */ (caught).code).toBe('page_too_large');
   });
 
+  it('throws with code="unsupported_type" when tools/call returns isError for a non-HTML/PDF source', async () => {
+    // nope-mcp ≥ 0.5.0: fetchPage rejects office documents etc. with
+    // "unsupported content type application/vnd.ms-powerpoint for <url>".
+    fetchMock
+      .mockResolvedValueOnce(sseResponse({ jsonrpc: '2.0', id: 1, result: {} }, 'sess'))
+      .mockResolvedValueOnce(new Response(null, { status: 202 }))
+      .mockResolvedValueOnce(
+        sseResponse(
+          {
+            jsonrpc: '2.0',
+            id: 2,
+            result: {
+              isError: true,
+              content: [
+                {
+                  type: 'text',
+                  text: 'unsupported content type application/vnd.ms-powerpoint for https://example.org/M1.PPT'
+                }
+              ]
+            }
+          },
+          'sess'
+        )
+      );
+
+    let caught;
+    try {
+      await callExtractMetadata({
+        mcpUrl: 'https://mcp.example/mcp',
+        bearerToken: 'tok',
+        url: 'https://example.org/M1.PPT',
+        variant: 'ekw',
+        skosSchemes: {}
+      });
+    } catch (err) {
+      caught = err;
+    }
+    expect(/** @type {any} */ (caught).code).toBe('unsupported_type');
+  });
+
   it('throws with code="tool_error" when tools/call returns isError with a generic payload', async () => {
     fetchMock
       .mockResolvedValueOnce(sseResponse({ jsonrpc: '2.0', id: 1, result: {} }, 'sess'))

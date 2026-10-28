@@ -157,10 +157,19 @@ export async function callExtractMetadata({
     // We match on "exceeds size cap" so the wizard can show "page too big"
     // copy instead of the generic AI-failure message.
     const isPageTooLarge = /exceeds size cap/i.test(errStr);
+    // nope-mcp ≥ 0.5.0 rejects office documents and other non-HTML/PDF
+    // bodies with "unsupported content type <mime> for <url>".
+    const isUnsupportedType = /unsupported content type/i.test(errStr);
     const err = /** @type {Error & { code?: string }} */ (
       new Error(`MCP extract_metadata tool error: ${errStr.slice(0, 200)}`)
     );
-    err.code = isOverloaded ? 'overloaded' : isPageTooLarge ? 'page_too_large' : 'tool_error';
+    err.code = isOverloaded
+      ? 'overloaded'
+      : isPageTooLarge
+        ? 'page_too_large'
+        : isUnsupportedType
+          ? 'unsupported_type'
+          : 'tool_error';
     throw err;
   }
 

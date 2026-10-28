@@ -54,6 +54,14 @@ describe('EnrichmentStatusBanner', () => {
     expect(alert?.textContent).toMatch(/zu groß/i);
   });
 
+  it('shows the unsupported-file copy when errorCode is "unsupported_type"', () => {
+    const { container } = render(EnrichmentStatusBanner, {
+      props: { status: 'error', errorCode: 'unsupported_type' }
+    });
+    const alert = container.querySelector('[role="status"]');
+    expect(alert?.textContent).toMatch(/Dateityp/i);
+  });
+
   it('shows the generic error copy when errorCode is unset', () => {
     const { container } = render(EnrichmentStatusBanner, { props: { status: 'error' } });
     const alert = container.querySelector('[role="status"]');

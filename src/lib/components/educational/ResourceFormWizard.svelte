@@ -177,7 +177,7 @@
    * `'network'` on transport failure, `'tool_error'` for upstream tool
    * exceptions). `''` while status is not `'error'`. Drives the banner copy
    * so the user knows whether to wait + retry vs. fill in manually.
-   * @type {'' | 'overloaded' | 'page_too_large' | 'tool_error' | 'network' | 'unknown'}
+   * @type {'' | 'overloaded' | 'page_too_large' | 'unsupported_type' | 'tool_error' | 'network' | 'unknown'}
    */
   let enrichmentErrorCode = $state('');
   /** Stores the source-set key we last enriched, so re-clicking is a no-op. */
@@ -1045,7 +1045,14 @@
         enrichmentStatus = 'error';
         const code = /** @type {string} */ (enriched.code) ?? 'unknown';
         enrichmentErrorCode = /** @type {typeof enrichmentErrorCode} */ (
-          ['overloaded', 'page_too_large', 'tool_error', 'network', 'unknown'].includes(code)
+          [
+            'overloaded',
+            'page_too_large',
+            'unsupported_type',
+            'tool_error',
+            'network',
+            'unknown'
+          ].includes(code)
             ? code
             : 'unknown'
         );
@@ -1930,6 +1937,9 @@
                       {:else if enrichmentErrorCode === 'page_too_large'}
                         {m.amb_form_enrich_error_page_too_large?.() ??
                           'Die Datei ist für die KI-Analyse zu groß — bitte manuell ausfüllen.'}
+                      {:else if enrichmentErrorCode === 'unsupported_type'}
+                        {m.amb_form_enrich_error_unsupported_type?.() ??
+                          'Diesen Dateityp kann die KI nicht lesen (nur Webseiten und PDFs) — bitte manuell ausfüllen.'}
                       {:else}
                         {m.amb_form_enrich_error?.() ?? 'KI-Ergänzung ist fehlgeschlagen.'}
                       {/if}

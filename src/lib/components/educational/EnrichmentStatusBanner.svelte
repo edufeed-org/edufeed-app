@@ -12,7 +12,7 @@
   /**
    * @type {{
    *   status: 'idle' | 'pending' | 'success' | 'error' | 'skipped-amb',
-   *   errorCode?: '' | 'overloaded' | 'page_too_large' | 'tool_error' | 'network' | 'unknown',
+   *   errorCode?: '' | 'overloaded' | 'page_too_large' | 'unsupported_type' | 'tool_error' | 'network' | 'unknown',
    *   ondismiss?: () => void
    * }}
    */
@@ -55,6 +55,11 @@
       <span
         >Die Datei ist für die KI-Analyse zu groß — bitte manuell ausfüllen oder eine kleinere
         Quelle wählen.</span
+      >
+    {:else if errorCode === 'unsupported_type'}
+      <span
+        >Diesen Dateityp kann die KI nicht lesen (nur Webseiten und PDFs) — bitte manuell ausfüllen
+        oder eine PDF-Version wählen.</span
       >
     {:else}
       <span>KI konnte keine Vorschläge erstellen — bitte manuell ausfüllen.</span>
