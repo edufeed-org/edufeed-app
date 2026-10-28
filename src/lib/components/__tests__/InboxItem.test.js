@@ -16,13 +16,29 @@ vi.mock('$lib/stores/app-settings.svelte.js', () => ({
   appSettings: { debugMode: false, gatedMode: false }
 }));
 
+const VIEWER = 'c'.repeat(64);
+const mockType = /** @type {any} */ (vi.fn(() => 'reaction'));
+const mockSurface = /** @type {any} */ (vi.fn(() => null));
+
 vi.mock('$lib/services/inbox-service.svelte.js', () => ({
-  markItemAsRead: (/** @type {any[]} */ ...args) => mockMarkItemAsRead(...args)
+  markItemAsRead: (/** @type {any[]} */ ...args) => mockMarkItemAsRead(...args),
+  getInboxPubkey: () => VIEWER
 }));
 
 vi.mock('$lib/helpers/inbox.js', () => ({
-  getNotificationType: () => 'reaction',
-  getNotificationUrl: () => '/some/url'
+  getNotificationType: (/** @type {any[]} */ ...args) => mockType(...args),
+  getNotificationUrl: (/** @type {any} */ _event, /** @type {any} */ opts) =>
+    opts?.channelHref ?? '/some/url',
+  getMentionSurface: (/** @type {any[]} */ ...args) => mockSurface(...args),
+  getEventTitle: () => ''
+}));
+
+vi.mock('$lib/groups/group-added.svelte.js', () => ({
+  useGroupAddedTarget: () => () => ({ communityPubkey: null, href: null, groupName: null }),
+  useChannelMentionTarget: () => () => ({
+    href: '/groups/groups.example%27chan9?message=event-123',
+    groupName: 'arbeitszimmer'
+  })
 }));
 
 vi.mock('$lib/helpers/waves.js', () => ({
@@ -49,6 +65,11 @@ vi.mock('$lib/paraglide/messages.js', () => ({
   inbox_action_reply: () => 'replied',
   inbox_action_comment: () => 'commented',
   inbox_action_mention: () => 'mentioned you',
+  inbox_action_channel_mention: (/** @type {{channel: string}} */ { channel }) =>
+    `mentioned you in #${channel}`,
+  inbox_action_channel_reply: (/** @type {{channel: string}} */ { channel }) =>
+    `replied to you in #${channel}`,
+  inbox_channel_unnamed: () => 'a channel',
   inbox_action_note_mention: () => 'mentioned you in a note',
   inbox_action_rsvp: () => 'rsvped',
   inbox_action_wave: () => 'waved',
@@ -83,6 +104,8 @@ const mockEvent = {
 describe('InboxItem mark-as-read button', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockType.mockReturnValue('reaction');
+    mockSurface.mockReturnValue(null);
   });
 
   it('shows mark-as-read button when unread', () => {
@@ -185,5 +208,39 @@ describe('InboxItem block menu', () => {
     const clickEvent = new MouseEvent('click', { bubbles: true, cancelable: true });
     trigger.dispatchEvent(clickEvent);
     expect(clickEvent.defaultPrevented).toBe(true);
+  });
+});
+
+describe('InboxItem channel mentions', () => {
+  const channelEvent = {
+    ...mockEvent,
+    kind: 9,
+    content: 'hallo',
+    tags: [
+      ['h', 'chan9'],
+      ['p', VIEWER]
+    ]
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockSurface.mockReturnValue('channel');
+  });
+
+  it('names the channel and opens the message in it', () => {
+    mockType.mockReturnValue('mention');
+    render(InboxItem, { props: { event: channelEvent, unread: false } });
+    expect(screen.getByText(/mentioned you in #arbeitszimmer/)).toBeTruthy();
+    // the row link (the avatar links to the author's profile)
+    const hrefs = screen.getAllByRole('link').map((l) => l.getAttribute('href'));
+    expect(hrefs).toContain('/groups/groups.example%27chan9?message=event-123');
+    // the viewer decides between a mention and a reply to them
+    expect(mockType).toHaveBeenCalledWith(channelEvent, VIEWER);
+  });
+
+  it('reads as a reply when the message answered the viewer', () => {
+    mockType.mockReturnValue('channelReply');
+    render(InboxItem, { props: { event: channelEvent, unread: false } });
+    expect(screen.getByText(/replied to you in #arbeitszimmer/)).toBeTruthy();
   });
 });

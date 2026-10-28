@@ -37,6 +37,7 @@ import { normalizeURL } from 'applesauce-core/helpers';
 import { getUnreadDmCount, markAllDmConversationsAsRead } from '$lib/services/dm-service.svelte.js';
 import { getNip05ReadyCount } from '$lib/stores/nip05-ready-alert.svelte.js';
 import { parseAddressPointerFromATag } from '$lib/helpers/nostrUtils.js';
+import { authenticateOnce } from '$lib/groups/relay-auth.js';
 
 const APP_DATA_D_TAG = 'comcal/inbox/last-seen';
 
@@ -61,6 +62,9 @@ const DEFAULT_LOOKBACK = 604800; // 7 days
 /** @type {Set<string>} IDs of events already prefetched */
 // eslint-disable-next-line svelte/prefer-svelte-reactivity -- not reactive, internal tracking only
 let prefetchedIds = new Set();
+/** @type {Set<string>} NIP-29 group ids whose kind 39000 was already requested */
+// eslint-disable-next-line svelte/prefer-svelte-reactivity -- not reactive, internal tracking only
+let prefetchedGroupIds = new Set();
 
 // --- Pure exported functions (testable) ---
 
@@ -201,7 +205,24 @@ function prefetchReferencedContent(notifications) {
     for (const pointer of eventPointers) {
       eventLoader(pointer).subscribe();
     }
+    if (event.kind === 9) prefetchGroupMetadata(event);
   }
+}
+
+/**
+ * The channel's kind 39000 (its name) for a NIP-29 channel mention row.
+ * Community chat (an `h` tag holding a pubkey) has no group metadata.
+ * @param {import('nostr-tools').NostrEvent} event
+ */
+function prefetchGroupMetadata(event) {
+  const groupId = event.tags?.find((t) => t[0] === 'h')?.[1];
+  if (!groupId || /^[0-9a-f]{64}$/.test(groupId) || prefetchedGroupIds.has(groupId)) return;
+  const relays = getGroupsRelays();
+  if (!relays.length) return;
+  prefetchedGroupIds.add(groupId);
+  subscriptions.push(
+    fetchEvents(relays, { kinds: [39000], '#d': [groupId], limit: 1 }).subscribe()
+  );
 }
 
 // --- Reactive service (Svelte 5 runes) ---
@@ -388,6 +409,41 @@ function subscribeLive(relays, filters) {
 }
 
 /**
+ * History + live REQ on the groups relays. Pyramid serves closed channels
+ * only to an authenticated connection and never challenges on its own — an
+ * anonymous REQ silently omits them, no `auth-required` CLOSE (see
+ * GroupChat's proactive auth). So: read at once for the public part, then
+ * authenticate once with the active signer and read again. The connection
+ * the first REQ opens is what carries the AUTH challenge authenticateOnce
+ * waits for; anonymous users get the public part only.
+ * @param {string} pubkey
+ * @param {import('nostr-tools').Filter[]} filters history filters (with `since`)
+ * @param {number} liveSince
+ */
+function openGroupsLeg(pubkey, filters, liveSince) {
+  const relays = getGroupsRelays();
+  if (!relays.length) return;
+  const history = filters.map((f) => ({ ...f, limit: 50 }));
+  const live = filters.map((f) => ({ ...f, since: liveSince }));
+  const read = () => {
+    subscriptions.push(fetchEvents(relays, history).subscribe());
+    subscribeLive(relays, live);
+  };
+  read();
+  const signer = manager.active?.signer;
+  if (!signer) return;
+  Promise.all(relays.map((url) => authenticateOnce(pool.relay(url), signer))).then((results) => {
+    if (activePubkey !== pubkey) return; // inbox was cleaned up or switched user
+    if (results.some((r) => r.ok)) read();
+  });
+}
+
+/** The inbox owner, for viewer-dependent row copy (channel reply vs mention). */
+export function getInboxPubkey() {
+  return activePubkey;
+}
+
+/**
  * Initialize inbox for logged-in user.
  * @param {string} pubkey
  */
@@ -489,17 +545,19 @@ export function initializeInbox(pubkey) {
     subscribeLive(supplementalRelays, liveFilters);
   });
 
+  // NIP-29 lives on the groups host only: put-user events ("an admin added
+  // you to a group", see groups/group-added.js) and channel messages that
+  // p-tag the user — an @mention or a reply to them (issue 50fc19f1). The
+  // main filter asks the app relays for kind 9 as well, but only the public
+  // community chat is there; a channel message never is.
+  const groupAddedFilter = { kinds: [9000], '#p': [pubkey], since };
+  const channelMentionFilter = { kinds: [9], '#p': [pubkey], since };
+  openGroupsLeg(pubkey, [groupAddedFilter, channelMentionFilter], liveSince);
+
   // Model subscription — watch eventStore for matching events. Derived from the
   // loader filters (minus `since`, the store already holds what was fetched) so
-  // the two can never drift apart on kinds.
-  // NIP-29 put-user events live on the groups host only: "an admin added you
-  // to a group" (community root or channel) — see groups/group-added.js.
-  const groupAddedFilter = { kinds: [9000], '#p': [pubkey], since };
-  const groupRelays = getGroupsRelays();
-  if (groupRelays.length > 0) {
-    subscriptions.push(fetchEvents(groupRelays, { ...groupAddedFilter, limit: 50 }).subscribe());
-  }
-
+  // the two can never drift apart on kinds. (The channel mention filter is the
+  // main filter's kind-9 one again — no extra model filter needed.)
   const modelFilters = [...filters, groupAddedFilter].map(({ since: _since, ...rest }) => rest);
   const modelSub = eventStore.model(TimelineModel, modelFilters).subscribe((events) => {
     const filtered = filterSelfNotifications(
@@ -708,6 +766,7 @@ export function cleanup() {
   // eslint-disable-next-line svelte/prefer-svelte-reactivity -- $state.raw() with plain Set
   readItemIds = new Set();
   prefetchedIds = new Set(); // eslint-disable-line svelte/prefer-svelte-reactivity -- not reactive
+  prefetchedGroupIds = new Set(); // eslint-disable-line svelte/prefer-svelte-reactivity -- not reactive
   activePubkey = null;
 }
 

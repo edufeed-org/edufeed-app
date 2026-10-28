@@ -8,10 +8,10 @@
     getEventTitle
   } from '$lib/helpers/inbox.js';
   import { profileLink } from '$lib/helpers/nostrUtils.js';
-  import { useGroupAddedTarget } from '$lib/groups/group-added.svelte.js';
+  import { useGroupAddedTarget, useChannelMentionTarget } from '$lib/groups/group-added.svelte.js';
   import { useProfileMap } from '$lib/stores/profile-map.svelte.js';
   import { getUserDisplayName } from '$lib/helpers/message-utils.js';
-  import { markItemAsRead } from '$lib/services/inbox-service.svelte.js';
+  import { markItemAsRead, getInboxPubkey } from '$lib/services/inbox-service.svelte.js';
   import { muteUser } from '$lib/stores/mute-list.svelte.js';
   import { publishWave } from '$lib/helpers/waves.js';
   import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
@@ -41,9 +41,14 @@
    */
   let { event, profile, unread, contentTitle = '', formName = '' } = $props();
 
-  const type = $derived(getNotificationType(event));
+  // The viewer tells a channel reply (p-tagged by answering them) from a mention.
+  const type = $derived(getNotificationType(event, getInboxPubkey()));
   // Where a mention happened; threads/articles/wikis name themselves via their title tag.
   const surface = $derived(getMentionSurface(event));
+  // kind 9 in a NIP-29 channel: the message in its channel, named after the
+  // channel's kind 39000.
+  const getChannel = useChannelMentionTarget(() => (surface === 'channel' ? event : null));
+  const channelName = $derived(getChannel().groupName || m.inbox_channel_unnamed());
   const ownTitle = $derived(getEventTitle(event) || m.inbox_action_untitled());
   // kind 9000: where the group lives (community page or group route) and
   // what to call it — the community's profile name, else the group's own.
@@ -60,7 +65,12 @@
     }
     return groupName || m.inbox_group_added_unnamed();
   });
-  const url = $derived(getNotificationUrl(event, { groupAddedHref: getGroupAdded().href }));
+  const url = $derived(
+    getNotificationUrl(event, {
+      groupAddedHref: getGroupAdded().href,
+      channelHref: getChannel().href
+    })
+  );
   const href = $derived(url ? resolve(/** @type {any} */ (url)) : undefined);
   const displayName = $derived(profile?.display_name || profile?.name || event.pubkey.slice(0, 8));
 
@@ -75,6 +85,7 @@
     comment: ChatIcon,
     reply: ChatIcon,
     mention: BellIcon,
+    channelReply: ChatIcon,
     rsvp: CalendarIcon,
     pollVote: PollIcon,
     groupAdded: PeopleIcon
@@ -251,7 +262,7 @@
       {:else if type === 'reply'}
         &nbsp;{m.inbox_action_reply()}
       {:else if type === 'mention'}
-        <!-- kind 9 mentions happen inside a community; notes, threads, articles and wikis do not -->
+        <!-- kind 9 mentions happen inside a community or a channel; notes, threads, articles and wikis do not -->
         &nbsp;{surface === 'note'
           ? m.inbox_action_note_mention()
           : surface === 'thread'
@@ -260,7 +271,11 @@
               ? m.inbox_action_article_mention({ title: ownTitle })
               : surface === 'wiki'
                 ? m.inbox_action_wiki_mention({ title: ownTitle })
-                : m.inbox_action_mention({ communityName: contentTitle })}
+                : surface === 'channel'
+                  ? m.inbox_action_channel_mention({ channel: channelName })
+                  : m.inbox_action_mention({ communityName: contentTitle })}
+      {:else if type === 'channelReply'}
+        &nbsp;{m.inbox_action_channel_reply({ channel: channelName })}
       {:else if type === 'rsvp'}
         &nbsp;{m.inbox_action_rsvp({ eventTitle: contentTitle })}
       {:else if type === 'pollVote'}

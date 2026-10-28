@@ -24,24 +24,47 @@ const KIND_TO_TYPE = {
   9000: 'groupAdded'
 };
 
+const HEX_PUBKEY = /^[0-9a-f]{64}$/;
+
+/**
+ * Kind 9 is two things: the public community chat, whose `h` tag is the
+ * community's PUBKEY, and a NIP-29 channel message, whose `h` tag is the
+ * group id on the groups relay (16 hex chars or a uuid on pyramid).
+ * @param {{tags?: string[][]}} event
+ */
+function isCommunityChat(event) {
+  const h = event.tags?.find((t) => t[0] === 'h')?.[1];
+  return typeof h === 'string' && HEX_PUBKEY.test(h);
+}
+
 /**
  * @param {import('nostr-tools').NostrEvent} event
+ * @param {string | null} [viewer] the inbox owner — needed only to tell a
+ *   channel reply from a channel mention (both p-tag them, see
+ *   buildGroupMessageTemplate); without it a channel message is a mention.
  * @returns {string | null}
  */
-export function getNotificationType(event) {
+export function getNotificationType(event, viewer = null) {
   if (event.kind === 7 && isWave(event)) return 'wave';
   // Kind 1 is both: a NIP-10 reply when it points at another event, otherwise
   // just a note that name-dropped the user.
   if (event.kind === 1) {
     return event.tags?.some((t) => t[0] === 'e') ? 'reply' : 'mention';
   }
+  // A channel message that answers the viewer p-tags them like a mention
+  // does; it is a reply unless the text names them as well.
+  if (event.kind === 9 && viewer && !isCommunityChat(event)) {
+    const isReply = event.tags?.some((t) => t[0] === 'e');
+    if (isReply && !mentionPubkeysIn(event.content ?? '').includes(viewer)) return 'channelReply';
+  }
   return KIND_TO_TYPE[event.kind] ?? null;
 }
 
-/** @type {Record<number, 'note' | 'community' | 'thread' | 'article' | 'wiki'>} */
+/** @typedef {'note' | 'community' | 'channel' | 'thread' | 'article' | 'wiki'} MentionSurface */
+
+/** @type {Record<number, MentionSurface>} */
 const MENTION_SURFACES = {
   1: 'note',
-  9: 'community',
   11: 'thread',
   30023: 'article',
   30818: 'wiki'
@@ -50,9 +73,10 @@ const MENTION_SURFACES = {
 /**
  * Where a mention happened — drives the inbox row copy.
  * @param {import('nostr-tools').NostrEvent} event
- * @returns {'note' | 'community' | 'thread' | 'article' | 'wiki' | null}
+ * @returns {MentionSurface | null}
  */
 export function getMentionSurface(event) {
+  if (event.kind === 9) return isCommunityChat(event) ? 'community' : 'channel';
   return MENTION_SURFACES[event.kind] ?? null;
 }
 
@@ -155,14 +179,18 @@ export function isMembershipApplication(event, membershipFormAddress) {
 
 /**
  * @param {import('nostr-tools').NostrEvent} event
- * @param {{ groupAddedHref?: string | null }} [opts] href for kind-9000 rows, resolved by the caller
+ * @param {{ groupAddedHref?: string | null, channelHref?: string | null }} [opts] hrefs the
+ *   caller resolves from the store: kind-9000 rows and NIP-29 channel messages
  * @returns {string | null}
  */
-export function getNotificationUrl(event, { groupAddedHref = null } = {}) {
+export function getNotificationUrl(event, { groupAddedHref = null, channelHref = null } = {}) {
   const type = getNotificationType(event);
 
   // Resolved by the caller (needs the store: community pointer or group host).
   if (type === 'groupAdded') return groupAddedHref;
+  // A channel message: the group route on its host, anchored on the message
+  // — resolved by the caller too (see groups/group-added.js).
+  if (event.kind === 9 && !isCommunityChat(event)) return channelHref;
 
   if (type === 'formRequest' || type === 'formResponse') {
     const addr = event.tags.find((t) => t[0] === 'a')?.[1];

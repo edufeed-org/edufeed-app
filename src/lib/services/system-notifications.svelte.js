@@ -26,7 +26,11 @@ import {
   getKnownDmConversations,
   isDmConversationUnread
 } from '$lib/services/dm-service.svelte.js';
-import { getNotifications, isNotificationUnread } from '$lib/services/inbox-service.svelte.js';
+import {
+  getNotifications,
+  isNotificationUnread,
+  getInboxPubkey
+} from '$lib/services/inbox-service.svelte.js';
 import { getNotificationType } from '$lib/helpers/inbox.js';
 import { getUserDisplayName } from '$lib/helpers/message-utils.js';
 import {
@@ -126,7 +130,7 @@ function onDms(known) {
 
 /** @param {import('nostr-tools').NostrEvent} event */
 function describeInboxEvent(event) {
-  switch (getNotificationType(event)) {
+  switch (getNotificationType(event, getInboxPubkey())) {
     case 'reaction':
       return m.system_notif_reaction();
     case 'comment':
@@ -135,6 +139,8 @@ function describeInboxEvent(event) {
       return m.inbox_action_reply();
     case 'mention':
       return m.system_notif_mention();
+    case 'channelReply':
+      return m.system_notif_channel_reply();
     case 'wave':
       return m.inbox_action_wave();
     case 'rsvp':

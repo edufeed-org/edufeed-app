@@ -20,7 +20,8 @@ import {
   isMembershipApplication,
   getNotificationUrl,
   extractMentionPubkeys,
-  mergeReadMarkers
+  mergeReadMarkers,
+  getMentionSurface
 } from '$lib/helpers/inbox.js';
 
 describe('getNotificationType', () => {
@@ -225,9 +226,10 @@ describe('getNotificationUrl', () => {
     const event = { kind: 1, id: noteId, tags: [['p', validPubkey]] };
     expect(getNotificationUrl(event)).toMatch(/^\/nevent1/);
   });
-  it('returns community URL for kind 9 with h tag', () => {
-    const event = { kind: 9, tags: [['h', 'communitypubkey123']] };
-    expect(getNotificationUrl(event)).toBe('/c/communitypubkey123');
+  it('returns community URL for kind 9 whose h tag is a community pubkey', () => {
+    const community = 'd'.repeat(64);
+    const event = { kind: 9, tags: [['h', community]] };
+    expect(getNotificationUrl(event)).toBe(`/c/${community}`);
   });
   it('returns naddr URL for reaction with a-tag (last a-tag per NIP-25)', () => {
     const event = {
@@ -341,5 +343,66 @@ describe('extractMentionPubkeys', () => {
   it('skips invalid npub strings', () => {
     const content = 'nostr:npub1invalid';
     expect(extractMentionPubkeys(content)).toEqual([]);
+  });
+});
+
+describe('NIP-29 channel mentions (kind 9 on a group id)', () => {
+  const VIEWER = 'c'.repeat(64);
+  const COMMUNITY = 'd'.repeat(64);
+  const mentionText = `schaut mal nostr:${nip19.npubEncode(VIEWER)}`;
+  const channelMention = {
+    kind: 9,
+    id: 'e'.repeat(64),
+    pubkey: 'b'.repeat(64),
+    content: mentionText,
+    tags: [
+      ['h', '4c9b50c8c413f15e'],
+      ['p', VIEWER]
+    ]
+  };
+  const channelReply = {
+    kind: 9,
+    id: 'f'.repeat(64),
+    pubkey: 'b'.repeat(64),
+    content: 'ja genau',
+    tags: [
+      ['h', '4c9b50c8c413f15e'],
+      ['e', '1'.repeat(64), 'wss://groups.example', 'root'],
+      ['p', VIEWER]
+    ]
+  };
+
+  it('tells a channel (group id) from a community (pubkey) by the h tag', () => {
+    expect(getMentionSurface(channelMention)).toBe('channel');
+    expect(getMentionSurface({ kind: 9, tags: [['h', COMMUNITY]] })).toBe('community');
+  });
+
+  it('is a mention when the text names the viewer and a channelReply when only the reply p-tags them', () => {
+    expect(getNotificationType(channelMention, VIEWER)).toBe('mention');
+    expect(getNotificationType(channelReply, VIEWER)).toBe('channelReply');
+    // a reply that also @mentions the viewer reads as a mention
+    expect(getNotificationType({ ...channelReply, content: mentionText }, VIEWER)).toBe('mention');
+    // without a viewer there is nothing to tell them apart by — stay a mention
+    expect(getNotificationType(channelReply)).toBe('mention');
+    // community chat replies are untouched
+    const communityReply = {
+      ...channelReply,
+      tags: [
+        ['h', COMMUNITY],
+        ['e', '1'.repeat(64)],
+        ['p', VIEWER]
+      ]
+    };
+    expect(getNotificationType(communityReply, VIEWER)).toBe('mention');
+  });
+
+  it('opens the caller-resolved channel href (host + message) and nothing without it', () => {
+    expect(getNotificationUrl(channelMention)).toBeNull();
+    expect(getNotificationUrl(channelMention, { channelHref: '/groups/x?message=y' })).toBe(
+      '/groups/x?message=y'
+    );
+    expect(getNotificationUrl(channelReply, { channelHref: '/groups/x?message=z' })).toBe(
+      '/groups/x?message=z'
+    );
   });
 });

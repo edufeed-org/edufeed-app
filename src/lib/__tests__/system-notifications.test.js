@@ -40,7 +40,8 @@ vi.mock('$lib/services/inbox-service.svelte.js', async () => {
   const fakes = await import('./__mocks__/system-notifications-fakes.svelte.js');
   return {
     getNotifications: fakes.getNotifications,
-    isNotificationUnread: fakes.isNotificationUnread
+    isNotificationUnread: fakes.isNotificationUnread,
+    getInboxPubkey: () => null
   };
 });
 const settings = vi.hoisted(() => ({ systemNotificationsEnabled: false }));

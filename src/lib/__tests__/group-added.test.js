@@ -1,6 +1,11 @@
 /** @vitest-environment node */
 import { describe, it, expect } from 'vitest';
-import { groupIdOf, groupNameOf, resolveGroupAdded } from '$lib/groups/group-added.js';
+import {
+  groupIdOf,
+  groupNameOf,
+  resolveGroupAdded,
+  resolveChannelMention
+} from '$lib/groups/group-added.js';
 import { getNotificationType, getNotificationUrl } from '$lib/helpers/inbox.js';
 
 const OWNER = 'a'.repeat(64);
@@ -59,5 +64,33 @@ describe('kind-9000 "added you" notifications', () => {
     expect(r.href).toMatch(/^\/groups\//);
     expect(r.groupName).toBe('arbeitszimmer');
     expect(resolveGroupAdded({ groupId: null, relay: null }).href).toBeNull();
+  });
+});
+
+describe('kind-9 channel mention target', () => {
+  it('opens the message in the channel on its host and names the channel', () => {
+    const r = resolveChannelMention({
+      groupId: 'chan9',
+      relay: 'wss://groups.example',
+      messageId: 'm1',
+      metadataEvent: {
+        tags: [
+          ['d', 'chan9'],
+          ['name', 'arbeitszimmer']
+        ]
+      }
+    });
+    expect(r.href).toMatch(/^\/groups\/.+\?message=m1$/);
+    expect(r.groupName).toBe('arbeitszimmer');
+  });
+
+  it('yields no target without a group id or a host', () => {
+    expect(
+      resolveChannelMention({ groupId: null, relay: 'wss://g', messageId: 'm' }).href
+    ).toBeNull();
+    expect(resolveChannelMention({ groupId: 'c', relay: null, messageId: 'm' }).href).toBeNull();
+    expect(
+      resolveChannelMention({ groupId: 'c', relay: 'wss://g', messageId: 'm' }).groupName
+    ).toBeNull();
   });
 });
