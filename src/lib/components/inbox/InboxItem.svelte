@@ -53,10 +53,22 @@
   // kind 9000: where the group lives (community page or group route) and
   // what to call it — the community's profile name, else the group's own.
   const getGroupAdded = useGroupAddedTarget(() => (type === 'groupAdded' ? event : null));
+  // Community chat (kind 9 whose `h` is the community's pubkey) names the
+  // community; no parent ever passed `contentTitle` for it, so the row read
+  // "hat dich in  erwähnt".
+  const chatCommunityPubkey = $derived(
+    surface === 'community' ? (event.tags?.find((t) => t[0] === 'h')?.[1] ?? null) : null
+  );
   const getCommunityProfiles = useProfileMap(() => {
-    const pk = getGroupAdded().communityPubkey;
-    return pk ? [pk] : [];
+    const pks = [getGroupAdded().communityPubkey, chatCommunityPubkey];
+    return pks.filter((pk) => typeof pk === 'string');
   });
+  const communityName = $derived(
+    contentTitle ||
+      (chatCommunityPubkey
+        ? getUserDisplayName(chatCommunityPubkey, getCommunityProfiles().get(chatCommunityPubkey))
+        : '')
+  );
   const groupAddedName = $derived.by(() => {
     if (type !== 'groupAdded') return '';
     const { communityPubkey, groupName } = getGroupAdded();
@@ -273,7 +285,7 @@
                 ? m.inbox_action_wiki_mention({ title: ownTitle })
                 : surface === 'channel'
                   ? m.inbox_action_channel_mention({ channel: channelName })
-                  : m.inbox_action_mention({ communityName: contentTitle })}
+                  : m.inbox_action_mention({ communityName })}
       {:else if type === 'channelReply'}
         &nbsp;{m.inbox_action_channel_reply({ channel: channelName })}
       {:else if type === 'rsvp'}

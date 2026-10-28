@@ -33,6 +33,11 @@ vi.mock('$lib/helpers/inbox.js', () => ({
   getEventTitle: () => ''
 }));
 
+const COMMUNITY = 'd'.repeat(64);
+vi.mock('$lib/stores/profile-map.svelte.js', () => ({
+  useProfileMap: () => () => new Map([[COMMUNITY, { name: 'Edufeed' }]])
+}));
+
 vi.mock('$lib/groups/group-added.svelte.js', () => ({
   useGroupAddedTarget: () => () => ({ communityPubkey: null, href: null, groupName: null }),
   useChannelMentionTarget: () => () => ({
@@ -64,7 +69,8 @@ vi.mock('$lib/paraglide/messages.js', () => ({
   inbox_action_reaction: () => 'reacted to your post',
   inbox_action_reply: () => 'replied',
   inbox_action_comment: () => 'commented',
-  inbox_action_mention: () => 'mentioned you',
+  inbox_action_mention: (/** @type {{communityName: string}} */ { communityName }) =>
+    `mentioned you in ${communityName}`,
   inbox_action_channel_mention: (/** @type {{channel: string}} */ { channel }) =>
     `mentioned you in #${channel}`,
   inbox_action_channel_reply: (/** @type {{channel: string}} */ { channel }) =>
@@ -242,5 +248,19 @@ describe('InboxItem channel mentions', () => {
     mockType.mockReturnValue('channelReply');
     render(InboxItem, { props: { event: channelEvent, unread: false } });
     expect(screen.getByText(/replied to you in #arbeitszimmer/)).toBeTruthy();
+  });
+});
+
+describe('InboxItem community chat mentions', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockType.mockReturnValue('mention');
+    mockSurface.mockReturnValue('community');
+  });
+
+  it('names the community the message was posted in (issue: empty "hat dich in  erwähnt")', () => {
+    const event = { ...mockEvent, kind: 9, tags: [['h', COMMUNITY]], content: 'hallo' };
+    render(InboxItem, { props: { event, unread: false } });
+    expect(screen.getByText(/mentioned you in Edufeed/)).toBeTruthy();
   });
 });
