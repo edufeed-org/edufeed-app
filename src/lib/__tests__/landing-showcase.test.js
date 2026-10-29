@@ -59,6 +59,29 @@ describe('pickMaterials and busy authors', () => {
   });
 });
 
+describe('pickMaterials and previews', () => {
+  it('items with an image first; imageless ones only fill up', () => {
+    const r = pickMaterials(
+      [
+        amb(1, 50, { pubkey: 'a' }),
+        amb(2, 40, { pubkey: 'b', image: 'https://x/b.png' }),
+        amb(3, 30, { pubkey: 'c', image: 'https://x/c.png' }),
+        amb(4, 20, { pubkey: 'd', image: 'https://x/d.png' })
+      ],
+      3
+    );
+    expect(r.map((x) => x.id)).toEqual([2, 3, 4]);
+  });
+
+  it('falls back to imageless items when too few have one', () => {
+    const r = pickMaterials(
+      [amb(1, 50, { pubkey: 'a' }), amb(2, 40, { pubkey: 'b', image: 'https://x/b.png' })],
+      3
+    );
+    expect(r.map((x) => x.id)).toEqual([2, 1]);
+  });
+});
+
 describe('pickHeroMaterial', () => {
   it('prefers the newest item with an image', () => {
     expect(pickHeroMaterial([amb(1, 50), amb(2, 10, { image: 'https://x/i.png' })])?.id).toBe(2);

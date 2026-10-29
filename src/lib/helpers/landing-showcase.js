@@ -46,10 +46,19 @@ function spreadAuthors(sorted, n) {
 export function pickMaterials(resources, n = 3) {
   const named = resources.filter((r) => r?.name?.trim());
   const sorted = [...named].sort((a, b) => b.created_at - a.created_at);
-  return spreadAuthors(
-    firstPerKey(sorted, (r) => `${r.pubkey}:${r.identifier}`),
-    n
-  );
+  const unique = firstPerKey(sorted, (r) => `${r.pubkey}:${r.identifier}`);
+  // A card without a preview reads as broken next to ones with one: imageless
+  // items only fill up a panel that has too few with an image.
+  return [
+    ...spreadAuthors(
+      unique.filter((r) => r.image),
+      n
+    ),
+    ...spreadAuthors(
+      unique.filter((r) => !r.image),
+      n
+    )
+  ].slice(0, n);
 }
 
 /** @param {any[]} resources */
