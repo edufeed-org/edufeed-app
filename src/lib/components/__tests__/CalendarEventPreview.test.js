@@ -18,6 +18,11 @@ vi.mock('$lib/stores/nostr-infrastructure.svelte', async () => {
 });
 // The component only falls back to decoding when no `decoded` prop is passed
 vi.mock('$lib/helpers/nostrUtils.js', () => ({ decodeNostrIdentifier: () => null }));
+// The network side of useReferencedEvent; these tests drive the store only.
+vi.mock('$lib/loaders/referenced-event.js', async () => {
+  const { EMPTY } = await import('rxjs');
+  return { loadReferencedEvent: () => EMPTY };
+});
 vi.mock('$lib/helpers/relay-helper.js', () => ({ getAllLookupRelays: () => [] }));
 vi.mock('$lib/stores/accounts.svelte', () => ({
   useActiveUser: () => () => ({ pubkey: 'a'.repeat(64) })

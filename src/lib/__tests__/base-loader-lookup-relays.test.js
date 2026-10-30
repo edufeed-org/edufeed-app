@@ -28,8 +28,10 @@ vi.mock('$lib/stores/event-cache.svelte.js', () => ({
   cacheRequest: vi.fn(async () => [])
 }));
 
+/** @type {string[]} */
+let indexerRelays = [];
 vi.mock('$lib/helpers/relay-helper.js', () => ({
-  getEventLoaderLookupRelays: () => lookupRelays,
+  getEventLoaderLookupRelays: () => [...indexerRelays, ...lookupRelays],
   getAllLookupRelays: () => lookupRelays
 }));
 
@@ -70,5 +72,78 @@ describe('base loaders resolve lookup relays at request time', () => {
 
     expect(request).toHaveBeenCalled();
     expect(request.mock.calls[0][0]).toEqual(['wss://lookup.example/']);
+  });
+
+  // An event pointer without hints (a `note1…`, a bare id, `eventStore.event(id)`)
+  // used to ask no relay at all: the event loaders had no extra relays, so
+  // only the IDB cache was consulted.
+  it('eventLoader asks the lookup relays for an id without hints', async () => {
+    lookupRelays = [];
+    const { eventLoader } = await import('$lib/loaders/base.js');
+    lookupRelays = ['wss://lookup.example/'];
+    indexerRelays = ['wss://indexer.example/'];
+
+    const sub = eventLoader({ id: 'ef'.repeat(32) }).subscribe();
+    await flushBuffer();
+    sub.unsubscribe();
+
+    expect(request).toHaveBeenCalled();
+    // Content lookup relays only: indexers carry profiles and relay lists
+    expect(request.mock.calls.map((c) => c[0]).flat()).toEqual(['wss://lookup.example/']);
+  });
+
+  it('eventStore.event(id) on a cold store asks the lookup relays', async () => {
+    await import('$lib/loaders/base.js');
+    lookupRelays = ['wss://lookup.example/'];
+
+    const sub = eventStore.event('0a'.repeat(32)).subscribe();
+    await flushBuffer();
+    sub.unsubscribe();
+
+    expect(request.mock.calls.map((c) => c[0]).flat()).toContain('wss://lookup.example/');
+  });
+
+  it('does not ask a hinted relay twice when it is also a lookup relay', async () => {
+    const { eventLoader } = await import('$lib/loaders/base.js');
+    lookupRelays = ['wss://lookup.example/', 'wss://other.example/'];
+
+    const sub = eventLoader({ id: '1b'.repeat(32), relays: ['wss://lookup.example/'] }).subscribe();
+    await flushBuffer();
+    sub.unsubscribe();
+
+    const asked = request.mock.calls.map((c) => c[0]).flat();
+    expect(asked.filter((r) => r === 'wss://lookup.example/')).toHaveLength(1);
+    expect(asked).toContain('wss://other.example/');
+  });
+
+  it('the store fallback shares one in-flight request with the standalone event loader', async () => {
+    const { eventLoader } = await import('$lib/loaders/base.js');
+    lookupRelays = ['wss://lookup.example/'];
+    const id = '2c'.repeat(32);
+
+    const a = eventLoader({ id }).subscribe();
+    const b = eventStore.event(id).subscribe();
+    await flushBuffer();
+    a.unsubscribe();
+    b.unsubscribe();
+
+    const forId = request.mock.calls.filter((c) => JSON.stringify(c[1]).includes(id));
+    expect(forId).toHaveLength(1);
+  });
+
+  // Profiles and other replaceables must not wait behind the content relays:
+  // indexers are asked in the same stage as the lookup relays.
+  it('address lookups ask indexers and lookup relays together', async () => {
+    const { addressLoader } = await import('$lib/loaders/base.js');
+    lookupRelays = ['wss://lookup.example/'];
+    indexerRelays = ['wss://indexer.example/'];
+
+    const sub = eventStore.replaceable({ kind: 0, pubkey: '3d'.repeat(32) }).subscribe();
+    await flushBuffer();
+    sub.unsubscribe();
+    void addressLoader;
+
+    const call = request.mock.calls.find((c) => JSON.stringify(c[1]).includes('3d'.repeat(32)));
+    expect(call?.[0]).toEqual(['wss://indexer.example/', 'wss://lookup.example/']);
   });
 });

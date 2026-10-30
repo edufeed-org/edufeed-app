@@ -10,20 +10,21 @@ const addressLoaderFn = vi.fn(() => ({ subscribe: vi.fn() }));
 /** @type {import('vitest').Mock<(...args: any[]) => any>} */
 const createAddressLoaderSpy = vi.fn((/** @type {any[]} */ ..._args) => addressLoaderFn);
 /** @type {import('vitest').Mock<(...args: any[]) => any>} */
-const createEventLoaderSpy = vi.fn((/** @type {any[]} */ ..._args) => vi.fn());
+const eventLoaderFn = vi.fn();
 /** @type {import('vitest').Mock<(...args: any[]) => any>} */
-const createUnifiedEventLoaderSpy = vi.fn((/** @type {any[]} */ ..._args) => vi.fn());
+const createEventLoaderSpy = vi.fn((/** @type {any[]} */ ..._args) => eventLoaderFn);
 
 vi.mock('applesauce-loaders/loaders', () => ({
   createAddressLoader: createAddressLoaderSpy,
-  createEventLoader: createEventLoaderSpy,
-  createUnifiedEventLoader: createUnifiedEventLoaderSpy
+  createEventLoader: createEventLoaderSpy
 }));
 
 // Stub deps that base.js pulls in.
+/** @type {{ eventLoader: any }} */
+const eventStore = { eventLoader: null };
 vi.mock('$lib/stores/nostr-infrastructure.svelte', () => ({
   pool: {},
-  eventStore: { eventLoader: null }
+  eventStore
 }));
 vi.mock('$lib/helpers/relay-helper.js', () => ({
   getAllLookupRelays: () => [],
@@ -60,9 +61,19 @@ describe('base.js loader cache wiring', () => {
     expect(opts.cacheRequest).toBeTypeOf('function');
   });
 
-  it('passes cacheRequest to createUnifiedEventLoader', async () => {
-    const opts = createUnifiedEventLoaderSpy.mock.calls[0][1];
-    expect(opts.cacheRequest).toBeTypeOf('function');
+  // The store fallback is no second loader pair: it routes to the two loaders
+  // above, so it inherits their cache wiring (and shares their in-flight requests).
+  it('the store fallback routes to the shared event and address loaders', async () => {
+    await import('$lib/loaders/base.js');
+    expect(createEventLoaderSpy).toHaveBeenCalledTimes(1);
+    expect(createAddressLoaderSpy).toHaveBeenCalledTimes(1);
+
+    eventStore.eventLoader({ id: 'e'.repeat(64) });
+    expect(eventLoaderFn).toHaveBeenCalledWith({ id: 'e'.repeat(64) });
+
+    addressLoaderFn.mockClear();
+    eventStore.eventLoader({ kind: 0, pubkey: PUBKEY });
+    expect(addressLoaderFn).toHaveBeenCalledWith({ kind: 0, pubkey: PUBKEY });
   });
 });
 
@@ -79,18 +90,6 @@ describe('cache hits are revalidated against relays', () => {
 
     expect(result).toHaveLength(1);
     expect(addressLoaderFn).toHaveBeenCalledWith({ kind: 0, pubkey: PUBKEY, cache: false });
-  });
-
-  it('the unified loader shares the same revalidating cache request', async () => {
-    await import('$lib/loaders/base.js');
-    const opts = createUnifiedEventLoaderSpy.mock.calls[0][1];
-    addressLoaderFn.mockClear();
-    const other = 'q'.repeat(64);
-    rawCacheRequest.mockResolvedValueOnce([cachedProfile({ id: 'b'.repeat(64), pubkey: other })]);
-
-    await opts.cacheRequest([{ kinds: [0], authors: [other] }]);
-
-    expect(addressLoaderFn).toHaveBeenCalledWith({ kind: 0, pubkey: other, cache: false });
   });
 
   it('the plain event loader is left on the raw cache (regular events are immutable)', async () => {

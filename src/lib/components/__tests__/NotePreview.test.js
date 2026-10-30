@@ -10,7 +10,7 @@
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, waitFor } from '@testing-library/svelte';
-import { Subject } from 'rxjs';
+import { BehaviorSubject, Subject } from 'rxjs';
 import { nip19 } from 'nostr-tools';
 import NotePreview from '../shared/NostrPreviews/NotePreview.svelte';
 
@@ -30,11 +30,9 @@ const mockEvent = {
 /** @type {Subject<any>} */
 let event$;
 const eventSpy = vi.fn((/** @type {any} */ _pointer) => event$);
-/** @type {any} */
-let storedEvent;
 /** @type {Subject<any>[]} one per network attempt */
 let loads = [];
-const loaderSpy = vi.fn((/** @type {any} */ _pointer) => {
+const loaderSpy = vi.fn((/** @type {any} */ _pointer, /** @type {any} */ _options) => {
   const load$ = new Subject();
   loads.push(load$);
   return load$;
@@ -42,14 +40,14 @@ const loaderSpy = vi.fn((/** @type {any} */ _pointer) => {
 
 vi.mock('$lib/stores/nostr-infrastructure.svelte', () => ({
   eventStore: {
-    event: (/** @type {any} */ pointer) => eventSpy(pointer),
-    getEvent: () => storedEvent
+    event: (/** @type {any} */ pointer) => eventSpy(pointer)
   },
   pool: {}
 }));
 
-vi.mock('$lib/loaders/base.js', () => ({
-  eventLoader: (/** @type {any} */ pointer) => loaderSpy(pointer)
+vi.mock('$lib/loaders/referenced-event.js', () => ({
+  loadReferencedEvent: (/** @type {any} */ pointer, /** @type {any} */ options) =>
+    loaderSpy(pointer, options)
 }));
 
 vi.mock('$lib/helpers/relay-helper.js', async (importOriginal) => {
@@ -85,7 +83,6 @@ describe('NotePreview', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     event$ = new Subject();
-    storedEvent = undefined;
     loads = [];
   });
 
@@ -96,10 +93,19 @@ describe('NotePreview', () => {
     expect(/** @type {any} */ (eventSpy.mock.calls[0])[0]).toEqual({ id: EVENT_ID });
 
     expect(loaderSpy).toHaveBeenCalledTimes(1);
-    const pointer = /** @type {any} */ (loaderSpy.mock.calls[0])[0];
+    const [pointer, options] = /** @type {any} */ (loaderSpy.mock.calls[0]);
     expect(pointer.id).toBe(EVENT_ID);
     expect(pointer.relays).toContain(HINT_RELAY);
     expect(pointer.relays).toContain('wss://lookup.example.com');
+    // The nevent's author drives the outbox fallback
+    expect(options).toEqual({ author: AUTHOR });
+  });
+
+  it('loads nothing past the nesting limit', () => {
+    const { container } = render(NotePreview, { props: { identifier: nevent, depth: 2 } });
+    expect(eventSpy).not.toHaveBeenCalled();
+    expect(loaderSpy).not.toHaveBeenCalled();
+    expect(container.querySelector('.badge')).toBeTruthy();
   });
 
   // A miss must not be final: the feed's first lookup can lose the race with a
@@ -113,7 +119,7 @@ describe('NotePreview', () => {
   });
 
   it('skips the network when the store already holds the event', () => {
-    storedEvent = mockEvent;
+    event$ = /** @type {any} */ (new BehaviorSubject(mockEvent));
     render(NotePreview, { props: { identifier: nevent } });
     expect(loaderSpy).not.toHaveBeenCalled();
   });

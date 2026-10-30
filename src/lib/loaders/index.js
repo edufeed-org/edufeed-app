@@ -9,6 +9,7 @@
 
 // Base loaders (EventStore bootstrap)
 export { addressLoader, eventLoader, fetchEvents, fetchUserDeletions, timedPool } from './base.js';
+export { loadReferencedEvent } from './referenced-event.js';
 
 // Calendar loaders
 export {

@@ -15,11 +15,8 @@
  */
 import { EMPTY, defer, from, isObservable, merge, mergeAll, mergeMap, of } from 'rxjs';
 import { catchError } from 'rxjs/operators';
-import {
-  createAddressLoader,
-  createEventLoader,
-  createUnifiedEventLoader
-} from 'applesauce-loaders/loaders';
+import { createAddressLoader, createEventLoader } from 'applesauce-loaders/loaders';
+import { isEventPointer } from 'applesauce-core/helpers/pointers';
 import { mapEventsToStore } from 'applesauce-core/observable';
 import { pool, eventStore } from '$lib/stores/nostr-infrastructure.svelte';
 import { getAllLookupRelays, getEventLoaderLookupRelays } from '$lib/helpers/relay-helper.js';
@@ -125,6 +122,14 @@ export function fetchOutbox(outboxes, filter) {
 // Observable for every request, so `defer` reads the live config each time.
 const lookupRelays$ = defer(() => of(getEventLoaderLookupRelays()));
 
+// The event loaders' last stage: the content lookup relays, asked for the ids
+// that the cache and the pointer's own relay hints did not resolve (relays a
+// hint already covered are skipped). Without it an event pointer with no
+// hints — a `note1…`, a bare id, `eventStore.event(id)` — asked no relay at
+// all and only ever resolved from the IDB cache. Indexers are left out: they
+// carry profiles and relay lists, not notes. Same live-config `defer` as above.
+const eventLookupRelays$ = defer(() => of(getAllLookupRelays()));
+
 // Stale-while-revalidate: the address loader stops at the first source that
 // yields an address, so a plain `cacheRequest` would make every cached
 // replaceable final for as long as the row lives in IDB. This wrapper returns
@@ -164,23 +169,31 @@ export const addressLoader = createAddressLoader(pool, {
 export const eventLoader = createEventLoader(pool, {
   eventStore,
   cacheRequest,
+  extraRelays: eventLookupRelays$,
   bufferTime: 0,
   maxConcurrentBatches: LOADER_CONCURRENT_BATCHES,
   stageTimeout: LOADER_STAGE_TIMEOUT_MS
 });
 
-// Unified loader for EventStore - handles both EventPointer and AddressPointer.
-// Drives eventStore.profile() / eventStore.replaceable() auto-loading, so
-// lookupRelays must include profile indexer relays (see addressLoader above).
-// Shares the revalidating cache request so `eventStore.replaceable()` /
-// `eventStore.profile()` cache hits are refreshed too.
-const unifiedLoader = createUnifiedEventLoader(pool, {
-  eventStore,
-  cacheRequest: revalidatingCacheRequest,
-  lookupRelays: lookupRelays$,
-  maxConcurrentBatches: LOADER_CONCURRENT_BATCHES,
-  stageTimeout: LOADER_STAGE_TIMEOUT_MS
-});
+// EventStore fallback loader (`eventStore.event()` / `.replaceable()` /
+// `.profile()` on a miss): routes to the two shared loaders above instead of
+// building a second pair with `createUnifiedEventLoader`. One batch queue and
+// one in-flight map per pointer type, so a store fallback and an explicit
+// `eventLoader(...)` / `addressLoader(...)` for the same pointer share a
+// request. It also keeps `extraRelays` off the address side, where it would
+// run as its own stage BEFORE the lookup relays and make every profile found
+// only on an indexer wait out a hanging content relay first.
+const unifiedLoader = Object.assign(
+  (/** @type {any} */ pointer) =>
+    isEventPointer(pointer) ? eventLoader(pointer) : addressLoader(pointer),
+  (() => {
+    const stop = () => {
+      eventLoader.stop();
+      addressLoader.stop();
+    };
+    return { stop, [Symbol.dispose]: stop };
+  })()
+);
 eventStore.eventLoader = unifiedLoader;
 
 /**

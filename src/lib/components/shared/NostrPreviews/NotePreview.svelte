@@ -7,11 +7,8 @@
 <script>
   import { resolve } from '$app/paths';
   import { goto } from '$app/navigation';
-  import { nip19 } from 'nostr-tools';
-  import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
-  import { eventLoader } from '$lib/loaders/base.js';
-  import { getAllLookupRelays } from '$lib/helpers/relay-helper.js';
-  import { profileLink } from '$lib/helpers/nostrUtils.js';
+  import { decodeNostrIdentifier, profileLink } from '$lib/helpers/nostrUtils.js';
+  import { useReferencedEvent } from '$lib/stores/referenced-event.svelte.js';
   import { useUserProfile } from '$lib/stores/user-profile.svelte.js';
   import { getDisplayName } from 'applesauce-core/helpers';
   import { formatRelativeTime } from '$lib/helpers/calendar.js';
@@ -23,22 +20,17 @@
 
   const MAX_DEPTH = 2;
   const COLLAPSED_HEIGHT_PX = 192; // max-h-48 = 12rem = 192px
-  // How long the skeleton shows before falling back to the badge. The store
-  // subscription stays open, so a late arrival still upgrades the badge.
-  const LOADING_TIMEOUT_MS = 8000;
-  // Network attempts after a miss. The first lookup races the WebSocket
-  // handshakes of a freshly mounted feed (dozens of relays at once; a quote's
-  // only hint relay took 3-4 s to connect against the loader's 5 s stage
-  // budget), so a miss there is no evidence the note is gone.
-  const RETRY_DELAYS_MS = [3000, 10000];
 
   let { identifier, depth = 0 } = $props();
 
-  // $state.raw: replaced whole, never mutated — a deep proxy breaks applesauce's
-  // symbol memoization on the event (state_descriptors_fixed).
-  /** @type {any} */
-  let event = $state.raw(null);
-  let isLoading = $state(true);
+  // Store first, network per mount with retries and the author's outboxes as
+  // fallback (see referenced-event.svelte.js). Nothing is loaded past
+  // MAX_DEPTH: nested quotes stay a badge.
+  const ref = useReferencedEvent(() =>
+    depth >= MAX_DEPTH ? null : decodeNostrIdentifier(identifier)
+  );
+  const event = $derived(ref.event);
+  const isLoading = $derived(ref.isLoading);
   let expanded = $state(false);
   let isOverflowing = $state(false);
 
@@ -47,86 +39,6 @@
 
   const getUserProfile = useUserProfile(() => event?.pubkey);
   let authorProfile = $derived(getUserProfile());
-
-  /**
-   * Decode note/nevent identifier to an EventPointer. Relay hints from the
-   * nevent are unioned with the lookup relays so the store's fallback loader
-   * knows where to fetch from.
-   * @param {string} id
-   * @returns {{ id: string, relays?: string[] } | null}
-   */
-  function toEventPointer(id) {
-    try {
-      const decoded = nip19.decode(id);
-      if (decoded.type === 'nevent') {
-        const hints = decoded.data.relays?.length ? decoded.data.relays : [];
-        return { id: decoded.data.id, relays: [...new Set([...hints, ...getAllLookupRelays()])] };
-      }
-      if (decoded.type === 'note') {
-        return { id: decoded.data, relays: getAllLookupRelays() };
-      }
-    } catch {
-      // fall through to null
-    }
-    return null;
-  }
-
-  // Reactive store subscription (issue #37): an event arriving late (from the
-  // loader below or any other surface) upgrades the badge to the embedded card
-  // without a remount. Subscribed by id only: the store's own fallback loader
-  // runs once per model, and models stay warm for 60 s keyed by their pointer,
-  // so a miss there was inherited by every remount (the note's detail page)
-  // until a full reload. The network lookup is driven here instead, per mount.
-  $effect(() => {
-    if (depth >= MAX_DEPTH) {
-      isLoading = false;
-      return;
-    }
-
-    const pointer = toEventPointer(identifier);
-    if (!pointer) {
-      isLoading = false;
-      return;
-    }
-
-    isLoading = true;
-    let found = false;
-    const sub = eventStore.event({ id: pointer.id }).subscribe((e) => {
-      if (e) {
-        found = true;
-        event = e;
-        isLoading = false;
-      }
-    });
-    const timer = setTimeout(() => {
-      isLoading = false;
-    }, LOADING_TIMEOUT_MS);
-
-    /** @type {import('rxjs').Subscription | undefined} */
-    let loadSub;
-    /** @type {ReturnType<typeof setTimeout> | undefined} */
-    let retryTimer;
-    /** @param {number} attempt */
-    const load = (attempt) => {
-      if (found || eventStore.getEvent(pointer.id)) return;
-      loadSub = eventLoader(pointer).subscribe({
-        complete: () => {
-          const delay = RETRY_DELAYS_MS[attempt];
-          if (!found && delay !== undefined)
-            retryTimer = setTimeout(() => load(attempt + 1), delay);
-        },
-        error: () => {}
-      });
-    };
-    load(0);
-
-    return () => {
-      sub.unsubscribe();
-      loadSub?.unsubscribe();
-      clearTimeout(timer);
-      clearTimeout(retryTimer);
-    };
-  });
 
   // Detect whether the rendered content overflows the collapsed height
   $effect(() => {
