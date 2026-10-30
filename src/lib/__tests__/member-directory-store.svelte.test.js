@@ -23,6 +23,10 @@ vi.mock('$lib/loaders/base.js', () => ({ fetchEvents: loaders.fetchEvents }));
 vi.mock('$lib/helpers/relay-helper.js', () => ({
   getProfileLookupRelays: () => ['wss://lookup.example']
 }));
+const known = vi.hoisted(() => ({ searchKnownProfiles: vi.fn(() => []) }));
+vi.mock('$lib/loaders/profile-search.js', () => ({
+  searchKnownProfiles: known.searchKnownProfiles
+}));
 
 const store = await import('$lib/stores/member-directory.svelte.js');
 
@@ -33,6 +37,8 @@ beforeEach(() => {
   store._resetMemberDirectory();
   cfg.runtimeConfig.membership = { handleDomain: 'edufeed.org' };
   loaders.fetchEvents.mockReset();
+  known.searchKnownProfiles.mockReset();
+  known.searchKnownProfiles.mockReturnValue([]);
   loaders.fetchEvents.mockReturnValue(EMPTY);
 });
 
@@ -105,5 +111,23 @@ describe('ensureMemberDirectory', () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+});
+
+describe('matchMembers', () => {
+  it('names the members whose own profile matches the term, asking the store only for members', async () => {
+    await store.ensureMemberDirectory(answer({ names: { anna: A, ben: B } }));
+    known.searchKnownProfiles.mockReturnValue([{ pubkey: B }]);
+    expect(store.matchMembers('ben')).toEqual([B]);
+    expect(known.searchKnownProfiles).toHaveBeenCalledWith(
+      'ben',
+      expect.any(Number),
+      expect.objectContaining({ authors: [A, B] })
+    );
+  });
+
+  it('is empty without a directory or for a short term', () => {
+    expect(store.matchMembers('ben')).toEqual([]);
+    expect(known.searchKnownProfiles).not.toHaveBeenCalled();
   });
 });

@@ -11,6 +11,8 @@ export const directory = {
   members: new Set(),
   domain: 'edufeed.org',
   ensured: 0,
+  /** @type {string[]} members matchMembers() reports for any term */
+  matched: [],
   bump: () => {
     version++;
   }
@@ -31,4 +33,10 @@ export function getMemberDomain() {
 
 export function ensureMemberDirectory() {
   directory.ensured++;
+}
+
+/** @param {string} _term */
+export function matchMembers(_term) {
+  void version;
+  return [...directory.matched];
 }

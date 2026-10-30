@@ -1189,6 +1189,8 @@
   "people_search_follows_title": "Personen, denen du folgst",
   "people_search_members_title": "Mitglieder · {domain}",
   "people_search_others_title": "Weitere Personen",
+  "discover_people_strip_title": "Personen",
+  "discover_people_strip_show_all": "Alle Personen anzeigen",
   "people_search_searching": "Suche auf Relays…",
   "people_search_no_results": "Niemand mit „{term}“ gefunden",
   "discover_tab_boards": "Boards",

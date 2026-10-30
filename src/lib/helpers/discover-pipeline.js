@@ -27,7 +27,11 @@ import { mapCommunityItemsToRawItems } from '$lib/helpers/communityContent.js';
  * @property {(type: string) => boolean} showsType - Whether the tab shows a discover content type
  * @property {(category: string, pubkey: string) => boolean} isAllowedAuthor - Curated/WoT gate per relay category
  * @property {Set<string> | null} [learningSearchIds] - Ids a NIP-50 learning search returned; set while a search is active
+ * @property {Set<string>} [matchedAuthors] - Deployment members whose name the active search matches: their items pass every gate
  */
+
+/** @type {Set<string>} */
+const NO_AUTHORS = new Set();
 
 /** Raw item `type` → discover content type (for the "all" tab gate). */
 export const RAW_ITEM_CONTENT_TYPE = /** @type {Record<string, string>} */ ({
@@ -53,30 +57,41 @@ const resourceEventId = (resource) => resource.event?.id || resource.id;
  * @param {RawItemOptions} options
  * @returns {RawItem[]}
  */
-export function buildRawItems(sources, { showsType, isAllowedAuthor, learningSearchIds = null }) {
+export function buildRawItems(
+  sources,
+  { showsType, isAllowedAuthor, learningSearchIds = null, matchedAuthors = NO_AUTHORS }
+) {
+  // Someone searched a member by name: the deployment vouches for its members
+  // (they hold its NIP-05 handle), so their work is shown even where the
+  // curated set or the relays' text ranking would leave it out.
+  /** @param {string} category @param {string} pubkey */
+  const allowed = (category, pubkey) =>
+    matchedAuthors.has(pubkey) || isAllowedAuthor(category, pubkey);
   /** @type {RawItem[]} */
   const items = [];
   if (showsType('events')) {
     for (const e of sources.calendarEvents) {
-      if (isAllowedAuthor('calendar', e.pubkey)) items.push({ type: 'event', data: e });
+      if (allowed('calendar', e.pubkey)) items.push({ type: 'event', data: e });
     }
   }
   if (showsType('learning')) {
     for (const r of sources.ambResources) {
-      const allowed = learningSearchIds
-        ? learningSearchIds.has(resourceEventId(r))
-        : isAllowedAuthor('educational', r.pubkey);
-      if (allowed) items.push({ type: 'amb', data: r });
+      const ok = matchedAuthors.has(r.pubkey)
+        ? true
+        : learningSearchIds
+          ? learningSearchIds.has(resourceEventId(r))
+          : isAllowedAuthor('educational', r.pubkey);
+      if (ok) items.push({ type: 'amb', data: r });
     }
   }
   if (showsType('articles')) {
     for (const a of sources.articles) {
-      if (isAllowedAuthor('longform', a.pubkey)) items.push({ type: 'article', data: a });
+      if (allowed('longform', a.pubkey)) items.push({ type: 'article', data: a });
     }
   }
   if (showsType('boards')) {
     for (const b of sources.kanbanBoards) {
-      if (isAllowedAuthor('kanban', b.pubkey)) items.push({ type: 'board', data: b });
+      if (allowed('kanban', b.pubkey)) items.push({ type: 'board', data: b });
     }
   }
   return items;
@@ -141,20 +156,41 @@ export function filterByAuthors(items, authorFilter) {
  *
  * @param {RawItem[]} items
  * @param {string} query
- * @param {{ profiles: Map<string, any>, contentType?: string, isLearningSearchActive?: boolean }} options
+ * @param {{ profiles: Map<string, any>, contentType?: string, isLearningSearchActive?: boolean, matchedAuthors?: Set<string> }} options
  */
 export function filterBySearch(
   items,
   query,
-  { profiles, contentType = 'all', isLearningSearchActive = false }
+  { profiles, contentType = 'all', isLearningSearchActive = false, matchedAuthors = NO_AUTHORS }
 ) {
   if (!query.trim()) return items;
   if (contentType === 'learning' && isLearningSearchActive) return items;
   const lower = query.toLowerCase();
   return items.filter((item) => {
+    if (matchedAuthors.has(item.data?.pubkey)) return true;
     if (isLearningSearchActive && item.type === 'amb') return true;
     return matchesTextSearch(item, lower, profiles);
   });
+}
+
+/**
+ * Search results by the deployment's people first: items of members whose
+ * name the query matched, then items of other members, then everyone else.
+ * Stable — the chosen sort holds inside each tier. Returns the input itself
+ * when no item is by a member.
+ * @param {RawItem[]} items
+ * @param {{ matched: Set<string>, members: Set<string> }} authors
+ * @returns {RawItem[]}
+ */
+export function tierByMembers(items, { matched, members }) {
+  /** @type {RawItem[][]} */
+  const tiers = [[], [], []];
+  for (const item of items) {
+    const pubkey = item.data?.pubkey;
+    tiers[matched.has(pubkey) ? 0 : members.has(pubkey) ? 1 : 2].push(item);
+  }
+  if (tiers[2].length === items.length) return items;
+  return tiers.flat();
 }
 
 /**

@@ -42,6 +42,13 @@
     getCuratedAuthors
   } from '$lib/services/curated-authors-service.svelte.js';
   import PeopleResults from '$lib/components/discover/PeopleResults.svelte';
+  import PeopleStrip from '$lib/components/discover/PeopleStrip.svelte';
+  import {
+    ensureMemberDirectory,
+    getMemberPubkeys,
+    matchMembers
+  } from '$lib/stores/member-directory.svelte.js';
+  import { useMemberContent } from '$lib/stores/member-content.svelte.js';
   import DiscoverHero from '$lib/components/discover/DiscoverHero.svelte';
   import DiscoverTabs from '$lib/components/discover/DiscoverTabs.svelte';
   import DiscoverSearchBar from '$lib/components/discover/DiscoverSearchBar.svelte';
@@ -74,6 +81,7 @@
     filterBySearch,
     resolveSortBy,
     sortItems,
+    tierByMembers,
     joinedFilterState
   } from '$lib/helpers/discover-pipeline.js';
   import * as m from '$lib/paraglide/messages';
@@ -306,13 +314,18 @@
   });
 
   // ─── Handlers ─────────────────────────────────────────────────────────
-  /** @param {string} newType */
-  function handleContentTypeChange(newType) {
+  /**
+   * @param {string} newType
+   * @param {{ keepSearch?: boolean }} [options] - carry the active search over (the
+   *   "Alle" tab's people row hands its query to the "Personen" tab)
+   */
+  function handleContentTypeChange(newType, { keepSearch = false } = {}) {
+    const search = keepSearch ? activeSearchQuery : '';
     contentType = newType;
     relayFilter = null;
     displayLimit = DISPLAY_BATCH;
-    searchQuery = '';
-    activeSearchQuery = '';
+    searchQuery = search;
+    activeSearchQuery = search;
     authorFilter = [];
     // One URL update for everything the tab switch resets. Two separate
     // updates raced: the URL-read effect ran on the first navigation while
@@ -322,7 +335,7 @@
     updateQueryParams($page.url.searchParams, {
       type: newType === defaultContentType ? null : newType,
       author: null,
-      search: null
+      search: search || null
     });
     if (newType !== 'learning') {
       learningFilters = createEmptyFilters();
@@ -674,6 +687,17 @@
   // ─── Content pipeline (one $derived per step; see discover-pipeline.js) ─
   const learningSearchIds = $derived(learningSearch.isActive ? learningSearch.resultIds : null);
 
+  // Members of the deployment's NIP-05 directory whose name the search
+  // matches: their content passes every gate, is fetched when the feeds never
+  // loaded it, and ranks first (then other members' content, then the rest).
+  ensureMemberDirectory();
+  const matchedMembers = $derived(
+    activeSearchQuery && !communityFilter ? matchMembers(activeSearchQuery) : []
+  );
+  // Rebuilt wholesale with the match, never mutated.
+  const matchedMemberSet = $derived(new Set(matchedMembers));
+  useMemberContent(() => matchedMembers, { showsType });
+
   // Bulk calendar sources are hidden by default (toggle in the filter bar)
   const calendarSources = $derived.by(() => {
     void getHiddenCalendarSourcesVersion();
@@ -692,7 +716,7 @@
     }
     return buildRawItems(
       { calendarEvents: calendarSources.shown, ambResources, articles, kanbanBoards },
-      { showsType, isAllowedAuthor, learningSearchIds }
+      { showsType, isAllowedAuthor, learningSearchIds, matchedAuthors: matchedMemberSet }
     );
   });
   const relayFilteredItems = $derived(filterByRelay(rawItems, relayFilter));
@@ -701,13 +725,19 @@
     filterBySearch(authorFilteredItems, activeSearchQuery, {
       profiles: authorProfiles,
       contentType,
-      isLearningSearchActive: learningSearch.isActive
+      isLearningSearchActive: learningSearch.isActive,
+      matchedAuthors: matchedMemberSet
     })
   );
   const canSortByRelevance = $derived(contentType === 'learning' && learningSearch.isActive);
   const effectiveSortBy = $derived(resolveSortBy(contentType, sortBy, canSortByRelevance));
-  const combinedContent = $derived(
+  const sortedContent = $derived(
     sortItems(searchFilteredItems, effectiveSortBy, learningSearch.rank)
+  );
+  const combinedContent = $derived(
+    activeSearchQuery
+      ? tierByMembers(sortedContent, { matched: matchedMemberSet, members: getMemberPubkeys() })
+      : sortedContent
   );
   const displayedContent = $derived(combinedContent.slice(0, displayLimit));
   // "My communities" with nothing to scope to: loading, really none, or unavailable
@@ -827,6 +857,12 @@
       <!-- People: profile search, follows first, then by NIP-85 trust rank -->
       <PeopleResults query={activeSearchQuery} />
     {:else}
+      {#if contentType === 'all' && isEnabled('people') && activeSearchQuery && !communityFilter}
+        <PeopleStrip
+          query={activeSearchQuery}
+          onshowall={() => handleContentTypeChange('people', { keepSearch: true })}
+        />
+      {/if}
       <DiscoverFeedGrid
         items={displayedContent}
         {authorProfiles}

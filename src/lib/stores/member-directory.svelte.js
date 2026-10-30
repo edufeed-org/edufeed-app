@@ -16,6 +16,7 @@ import { configReady, runtimeConfig } from '$lib/stores/config.svelte.js';
 import { fetchEvents } from '$lib/loaders/base.js';
 import { getProfileLookupRelays } from '$lib/helpers/relay-helper.js';
 import { parseDirectoryMembers } from '$lib/helpers/member-directory.js';
+import { searchKnownProfiles } from '$lib/loaders/profile-search.js';
 
 /** Re-read the directory at most this often (new members show up within it). */
 const DIRECTORY_TTL_MS = 10 * 60 * 1000;
@@ -43,6 +44,22 @@ export function getMemberDirectoryVersion() {
 /** The handle domain without "@", or '' when the deployment has none. */
 export function getMemberDomain() {
   return runtimeConfig.membership?.handleDomain || '';
+}
+
+/** Members a single name can match; a directory has few people of one name. */
+const MATCH_LIMIT = 20;
+
+/**
+ * Members whose own profile matches the term (name, display name, NIP-05),
+ * from the profiles already in the EventStore — no network. Reactive on the
+ * directory and its prefetched profiles.
+ * @param {string} term
+ * @returns {string[]}
+ */
+export function matchMembers(term) {
+  void version;
+  if (members.size === 0 || (term || '').trim().length < 2) return [];
+  return searchKnownProfiles(term, MATCH_LIMIT, { authors: [...members] }).map((c) => c.pubkey);
 }
 
 /** Resolve once `/api/config` has been merged into runtimeConfig. */
