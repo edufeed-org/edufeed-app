@@ -93,18 +93,21 @@ function nip05ProfileLeg(address) {
 
 /**
  * Synchronous search over the kind-0 events already in the EventStore.
+ * `authors` narrows it to those pubkeys (the member directory's leg, which
+ * must not lose its rows to the `limit` of a common name).
  * @param {string} term
  * @param {number} [limit=10]
- * @param {{exclude?: string[]}} [options]
+ * @param {{exclude?: string[], authors?: string[]}} [options]
  * @returns {EnrichedContact[]}
  */
-export function searchKnownProfiles(term, limit = 10, { exclude = [] } = {}) {
+export function searchKnownProfiles(term, limit = 10, { exclude = [], authors } = {}) {
   const trimmed = (term || '').trim();
   if (trimmed.length < 2) return [];
+  if (authors && authors.length === 0) return [];
   const excluded = new Set(exclude);
   /** @type {EnrichedContact[]} */
   const results = [];
-  for (const event of eventStore.getByFilters({ kinds: [0] })) {
+  for (const event of eventStore.getByFilters(authors ? { kinds: [0], authors } : { kinds: [0] })) {
     if (excluded.has(event.pubkey)) continue;
     const contact = profileToContact(event);
     if (!profileMatches(contact, trimmed)) continue;

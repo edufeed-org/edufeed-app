@@ -1187,6 +1187,8 @@
   "people_search_placeholder": "Name oder npub eingeben…",
   "people_search_hint": "Namen eingeben, um Personen auf Nostr zu finden",
   "people_search_follows_title": "Personen, denen du folgst",
+  "people_search_members_title": "Mitglieder · {domain}",
+  "people_search_others_title": "Weitere Personen",
   "people_search_searching": "Suche auf Relays…",
   "people_search_no_results": "Niemand mit „{term}“ gefunden",
   "discover_tab_boards": "Boards",

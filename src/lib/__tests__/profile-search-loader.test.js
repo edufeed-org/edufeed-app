@@ -99,6 +99,20 @@ describe('searchKnownProfiles', () => {
     ).not.toContain('0'.repeat(64));
   });
 
+  it('narrows the store query to the given authors', async () => {
+    const { eventStore } = await import('$lib/stores/nostr-infrastructure.svelte');
+    vi.mocked(eventStore.getByFilters).mockClear();
+    searchKnownProfiles('coli', 10, { authors: [COLIBRI] });
+    expect(eventStore.getByFilters).toHaveBeenCalledWith({ kinds: [0], authors: [COLIBRI] });
+  });
+
+  it('an empty authors list matches nobody without asking the store', async () => {
+    const { eventStore } = await import('$lib/stores/nostr-infrastructure.svelte');
+    vi.mocked(eventStore.getByFilters).mockClear();
+    expect(searchKnownProfiles('coli', 10, { authors: [] })).toEqual([]);
+    expect(eventStore.getByFilters).not.toHaveBeenCalled();
+  });
+
   it('skips events with unparseable content instead of throwing', () => {
     storedProfiles = [
       { kind: 0, pubkey: ALICE, tags: [], content: '{broken' },

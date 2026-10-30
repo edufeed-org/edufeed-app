@@ -9,7 +9,8 @@
 import { nip19 } from 'nostr-tools';
 
 /**
- * Accept an npub1… or 64-char hex string, return lowercase hex.
+ * Accept an npub1…, nprofile1… or 64-char hex string — optionally as a
+ * `nostr:` URI, the form other clients copy — and return lowercase hex.
  * Returns null for any input that does not parse as a Nostr public key.
  *
  * @param {unknown} input
@@ -17,13 +18,14 @@ import { nip19 } from 'nostr-tools';
  */
 export function normalizePubkey(input) {
   if (!input || typeof input !== 'string') return null;
-  const trimmed = input.trim();
+  const trimmed = input.trim().replace(/^nostr:/i, '');
   if (!trimmed) return null;
   if (/^[0-9a-f]{64}$/i.test(trimmed)) return trimmed.toLowerCase();
-  if (trimmed.startsWith('npub1')) {
+  if (trimmed.startsWith('npub1') || trimmed.startsWith('nprofile1')) {
     try {
       const decoded = nip19.decode(trimmed);
       if (decoded.type === 'npub') return /** @type {string} */ (decoded.data);
+      if (decoded.type === 'nprofile') return decoded.data.pubkey;
     } catch {
       return null;
     }

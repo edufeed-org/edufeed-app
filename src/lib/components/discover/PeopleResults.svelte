@@ -1,8 +1,10 @@
 <!--
   PeopleResults - body of the discover "Personen" tab (profile / user search).
   Query comes from the page's search box (URL-synced ?search=); results from
-  usePeopleSearch(): follows first, then everyone else by NIP-85 trust rank,
-  scored rows badged "im Vertrauensnetz". Unscored accounts are never hidden.
+  usePeopleSearch(): members of the deployment's NIP-05 domain as their own
+  titled group on top, then everyone else (follows first, then NIP-85 trust
+  rank); scored rows badged "im Vertrauensnetz". Unscored accounts are never
+  hidden. Without matching members there are no group titles.
   Cards show display name, NIP-05 (verified badge) and a clamped bio.
   With an empty query the tab lists the user's follows, or a hint.
 -->
@@ -12,6 +14,7 @@
   import { usePeopleSearch } from '$lib/stores/people-search.svelte.js';
   import { contactsStore } from '$lib/stores/contacts.svelte.js';
   import * as m from '$lib/paraglide/messages';
+  import { getMemberDomain } from '$lib/stores/member-directory.svelte.js';
 
   /** Follows shown for an empty query — enough to be useful, not a directory. */
   const FOLLOWS_PREVIEW = 30;
@@ -27,6 +30,35 @@
       : []
   );
 </script>
+
+{#snippet grid(/** @type {import('$lib/stores/contacts.svelte.js').EnrichedContact[]} */ list)}
+  <div class="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+    {#each list as contact (contact.pubkey)}
+      {@const score = search.scores.get(contact.pubkey)}
+      <div
+        class="flex items-center gap-2 rounded-lg bg-base-100 p-2"
+        data-testid="people-result"
+        data-pubkey={contact.pubkey}
+      >
+        <div class="min-w-0 flex-1">
+          <ProfileCard pubkey={contact.pubkey} size="sm" showIcon={false} showNip05 showAbout />
+        </div>
+        {#if score}
+          <span
+            data-testid="people-wot-badge"
+            class="badge shrink-0 badge-ghost badge-sm"
+            title={m.contact_search_wot_title({
+              hops: score.hops ?? '–',
+              followers: score.followers ?? '–'
+            })}
+          >
+            {m.contact_search_wot_known()}
+          </span>
+        {/if}
+      </div>
+    {/each}
+  </div>
+{/snippet}
 
 <div data-testid="people-results">
   {#if search.tooShort}
@@ -58,33 +90,23 @@
       </div>
     {/if}
 
-    {#if search.results.length > 0}
-      <div class="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-        {#each search.results as contact (contact.pubkey)}
-          {@const score = search.scores.get(contact.pubkey)}
-          <div
-            class="flex items-center gap-2 rounded-lg bg-base-100 p-2"
-            data-testid="people-result"
-            data-pubkey={contact.pubkey}
-          >
-            <div class="min-w-0 flex-1">
-              <ProfileCard pubkey={contact.pubkey} size="sm" showIcon={false} showNip05 showAbout />
-            </div>
-            {#if score}
-              <span
-                data-testid="people-wot-badge"
-                class="badge shrink-0 badge-ghost badge-sm"
-                title={m.contact_search_wot_title({
-                  hops: score.hops ?? '–',
-                  followers: score.followers ?? '–'
-                })}
-              >
-                {m.contact_search_wot_known()}
-              </span>
-            {/if}
-          </div>
-        {/each}
-      </div>
+    {#if search.memberResults.length > 0}
+      <section data-testid="people-members">
+        <h2 class="mb-3 text-sm font-semibold text-base-content/70">
+          {m.people_search_members_title({ domain: `@${getMemberDomain()}` })}
+        </h2>
+        {@render grid(search.memberResults)}
+      </section>
+      {#if search.otherResults.length > 0}
+        <section data-testid="people-others" class="mt-8">
+          <h2 class="mb-3 text-sm font-semibold text-base-content/70">
+            {m.people_search_others_title()}
+          </h2>
+          {@render grid(search.otherResults)}
+        </section>
+      {/if}
+    {:else if search.results.length > 0}
+      {@render grid(search.otherResults)}
     {:else if !search.busy}
       <div class="flex justify-center py-12">
         <p class="text-center text-xl text-base-content/70">

@@ -454,6 +454,8 @@
   "people_search_placeholder": "Enter a name or npub…",
   "people_search_hint": "Type a name to find people on Nostr",
   "people_search_follows_title": "People you follow",
+  "people_search_members_title": "Members · {domain}",
+  "people_search_others_title": "More people",
   "people_search_searching": "Searching relays…",
   "people_search_no_results": "Nobody named “{term}” found",
   "discover_tab_boards": "Boards",

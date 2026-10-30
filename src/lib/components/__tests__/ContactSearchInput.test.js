@@ -12,6 +12,7 @@ import { tick } from 'svelte';
 import { contactsStore } from '$lib/stores/contacts.svelte.js';
 import ContactSearchInput from '../shared/ContactSearchInput.svelte';
 import { trust } from './fixtures/trust-scores-mock.svelte.js';
+import { directory } from './fixtures/member-directory-mock.svelte.js';
 
 // Mock contacts data
 const mockContacts = [
@@ -119,9 +120,17 @@ vi.mock(
   () => import('./fixtures/trust-scores-mock.svelte.js')
 );
 
+// Members of the deployment's NIP-05 directory lead the profile rows.
+vi.mock(
+  '$lib/stores/member-directory.svelte.js',
+  () => import('./fixtures/member-directory-mock.svelte.js')
+);
+
 beforeEach(() => {
   vi.clearAllMocks();
   trust.scores = new Map();
+  directory.members = new Set();
+  directory.ensured = 0;
 });
 
 describe('ContactSearchInput', () => {
@@ -881,6 +890,64 @@ describe('ContactSearchInput — NIP-85 trust ranking (searchProfiles)', () => {
       'Laeserin (fake)',
       'Laeserin (new)'
     ]);
+  });
+
+  it('puts members of the NIP-05 directory first, followed or not', async () => {
+    directory.members = new Set([NOBODY]);
+    profileSearch.searchKnownProfiles.mockReturnValue([
+      known(FAKE, 'Laeserin (fake)'),
+      known(NOBODY, 'Laeserin (new)'),
+      known(REAL, 'Laeserin')
+    ]);
+    trust.scores = new Map([[REAL, { pubkey: REAL, rank: 69, hops: 2, followers: 3409 }]]);
+    vi.mocked(contactsStore.searchContacts).mockReturnValueOnce([mockContacts[0]]);
+    const { container } = render(ContactSearchInput, {
+      props: { value: '', searchProfiles: true }
+    });
+    await fireEvent.input(container.querySelector('input'), { target: { value: 'la' } });
+
+    expect(rowNames(container)).toEqual([
+      'Laeserin (new)',
+      'Alice Smith',
+      'Laeserin',
+      'Laeserin (fake)'
+    ]);
+  });
+
+  it('searches the members on their own so a common name cannot crowd them out', async () => {
+    directory.members = new Set([NOBODY]);
+    profileSearch.searchKnownProfiles.mockImplementation((_t, _l, opts = {}) =>
+      opts.authors ? [known(NOBODY, 'Laeserin (new)')] : [known(FAKE, 'Laeserin (fake)')]
+    );
+    const { container } = render(ContactSearchInput, {
+      props: { value: '', searchProfiles: true }
+    });
+    await fireEvent.input(container.querySelector('input'), { target: { value: 'la' } });
+    expect(rowNames(container)).toEqual(['Laeserin (new)', 'Laeserin (fake)']);
+  });
+
+  it('re-sorts the open list when the directory arrives late', async () => {
+    profileSearch.searchKnownProfiles.mockReturnValue([
+      known(REAL, 'Laeserin'),
+      known(NOBODY, 'Laeserin (new)')
+    ]);
+    const { container } = render(ContactSearchInput, {
+      props: { value: '', searchProfiles: true }
+    });
+    await fireEvent.input(container.querySelector('input'), { target: { value: 'la' } });
+    expect(rowNames(container)).toEqual(['Laeserin', 'Laeserin (new)']);
+
+    directory.members = new Set([NOBODY]);
+    directory.bump();
+    await tick();
+    expect(rowNames(container)).toEqual(['Laeserin (new)', 'Laeserin']);
+  });
+
+  it('loads the directory only in searchProfiles mode', () => {
+    render(ContactSearchInput, { props: { value: '' } });
+    expect(directory.ensured).toBe(0);
+    render(ContactSearchInput, { props: { value: '', searchProfiles: true } });
+    expect(directory.ensured).toBe(1);
   });
 
   it('badges scored rows with the WoT label and a hops/followers title; unscored rows get nothing', async () => {

@@ -1,13 +1,20 @@
 /**
  * Reactive hook: page-level profile search for the discover "Personen" tab.
  *
- * Same three sources and the same order as ContactSearchInput's
- * `searchProfiles` mode — the user's follows, profiles already in the
- * EventStore, then a debounced NIP-50 search on the configured search
- * relays — each pubkey once, follows first, everyone else by NIP-85 trust
- * rank (unscored last, never dropped). Exposed as a result list instead of
- * a dropdown so a page can render cards, and the query can come from the
- * URL.
+ * Same sources and the same order as ContactSearchInput's `searchProfiles`
+ * mode — the user's follows, the deployment's members (member-directory
+ * store), other profiles already in the EventStore, then a debounced NIP-50
+ * search on the configured search relays — each pubkey once, follows first,
+ * everyone else by NIP-85 trust rank (unscored last, never dropped). The
+ * ranked list is then split: members of NIP05_HANDLE_DOMAIN first, as their
+ * own group (`memberResults`), everyone else after (`otherResults`).
+ * `results` is both, in that order.
+ *
+ * A pasted npub / nprofile / hex key (or `nostr:` URI) is not a name: it
+ * yields exactly that person and no relay search.
+ *
+ * Exposed as a result list instead of a dropdown so a page can render
+ * cards, and the query can come from the URL.
  *
  * MUST be called during component init (it uses $effect).
  */
@@ -20,10 +27,26 @@ import {
   profileMatches
 } from '$lib/loaders/profile-search.js';
 import { useTrustScores } from '$lib/stores/trust-scores.svelte.js';
+import {
+  ensureMemberDirectory,
+  getMemberPubkeys,
+  getMemberDirectoryVersion
+} from '$lib/stores/member-directory.svelte.js';
+import { membersFirst } from '$lib/helpers/member-directory.js';
+import { normalizePubkey } from '$lib/helpers/pubkey.js';
 
 const MIN_TERM = 2;
 /** Known-profile and NIP-50 legs need this many chars regardless of minTerm. */
 const MIN_SEARCH_TERM = 2;
+/** @type {EnrichedContact} */
+const EMPTY_CONTACT = {
+  pubkey: '',
+  name: null,
+  display_name: null,
+  picture: null,
+  nip05: null,
+  about: null
+};
 
 /**
  * @typedef {import('$lib/stores/contacts.svelte.js').EnrichedContact} EnrichedContact
@@ -32,6 +55,8 @@ const MIN_SEARCH_TERM = 2;
  *   tooShort: boolean,
  *   busy: boolean,
  *   results: EnrichedContact[],
+ *   memberResults: EnrichedContact[],
+ *   otherResults: EnrichedContact[],
  *   scores: Map<string, import('$lib/loaders/trust-assertions.js').TrustScore>
  * }} PeopleSearchState
  */
@@ -55,6 +80,10 @@ export function usePeopleSearch(
   let follows = $state.raw(/** @type {EnrichedContact[]} */ ([]));
   /** Known + relay hits, in arrival order; ranked in the derived below. */
   let others = $state.raw(/** @type {EnrichedContact[]} */ ([]));
+  /** The person behind a pasted key — replaces the name search entirely. */
+  let pasted = $state.raw(/** @type {EnrichedContact | null} */ (null));
+
+  untrack(() => ensureMemberDirectory());
 
   // Remote-leg bookkeeping — plain lets, never $state (internal refs).
   /** @type {ReturnType<typeof setTimeout> | undefined} */
@@ -72,20 +101,27 @@ export function usePeopleSearch(
 
   const getScores = useTrustScores(() => [...follows, ...others].map((c) => c.pubkey));
 
-  const results = $derived.by(() => {
+  const grouped = $derived.by(() => {
+    if (pasted) return membersFirst([pasted], getMemberPubkeys());
     const scores = getScores();
     /** @param {string} pubkey */
     const rankOf = (pubkey) => scores.get(pubkey)?.rank ?? -1;
     // Stable sort keeps arrival order among ties and in the unscored tail.
-    return [...follows, ...others.toSorted((a, b) => rankOf(b.pubkey) - rankOf(a.pubkey))];
+    const ranked = [...follows, ...others.toSorted((a, b) => rankOf(b.pubkey) - rankOf(a.pubkey))];
+    return membersFirst(ranked, getMemberPubkeys());
   });
 
   $effect(() => {
     const q = (getQuery() || '').trim();
+    // Re-run once the member directory (or its members' profiles) arrives:
+    // members found only in the store would otherwise wait for a new query.
+    getMemberDirectoryVersion();
     untrack(() => {
       cancelRemote();
       term = q;
-      if (q.length < minTerm) {
+      const key = normalizePubkey(q);
+      pasted = key ? { ...EMPTY_CONTACT, pubkey: key } : null;
+      if (key || q.length < minTerm) {
         follows = [];
         others = [];
         return;
@@ -97,7 +133,13 @@ export function usePeopleSearch(
       const seen = new Set(followHits.map((c) => c.pubkey));
       const known = [];
       if (q.length >= MIN_SEARCH_TERM) {
-        for (const c of searchKnownProfiles(q, limit, { exclude: [...seen] })) {
+        const members = [...getMemberPubkeys()];
+        // Members first, on their own: a common name must not push them out
+        // of the store-wide leg's `limit`.
+        const memberHits = members.length
+          ? searchKnownProfiles(q, limit, { exclude: [...seen], authors: members })
+          : [];
+        for (const c of [...memberHits, ...searchKnownProfiles(q, limit, { exclude: [...seen] })]) {
           if (seen.has(c.pubkey)) continue;
           seen.add(c.pubkey);
           known.push(c);
@@ -131,9 +173,11 @@ export function usePeopleSearch(
 
   return () => ({
     term,
-    tooShort: term.length < minTerm,
+    tooShort: !pasted && term.length < minTerm,
     busy,
-    results,
+    results: [...grouped.members, ...grouped.others],
+    memberResults: grouped.members,
+    otherResults: grouped.others,
     scores: getScores()
   });
 }

@@ -24,6 +24,15 @@ describe('normalizePubkey', () => {
     expect(normalizePubkey(VALID_NPUB)).toBe(VALID_HEX);
   });
 
+  it('decodes an nprofile (with relay hints) to hex', () => {
+    const nprofile = nip19.nprofileEncode({ pubkey: VALID_HEX, relays: ['wss://relay.example'] });
+    expect(normalizePubkey(nprofile)).toBe(VALID_HEX);
+  });
+
+  it('accepts a nostr: URI as pasted from other clients', () => {
+    expect(normalizePubkey(`nostr:${VALID_NPUB}`)).toBe(VALID_HEX);
+  });
+
   it('trims surrounding whitespace', () => {
     expect(normalizePubkey(`   ${VALID_NPUB}   `)).toBe(VALID_HEX);
     expect(normalizePubkey(`\t${VALID_HEX}\n`)).toBe(VALID_HEX);
