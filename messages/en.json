@@ -458,6 +458,7 @@
   "people_search_others_title": "More people",
   "discover_people_strip_title": "People",
   "discover_people_strip_show_all": "Show all people",
+  "discover_author_filter_empty": "Nothing from this selection here yet.",
   "people_search_searching": "Searching relays…",
   "people_search_no_results": "Nobody named “{term}” found",
   "discover_tab_boards": "Boards",

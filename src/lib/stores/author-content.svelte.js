@@ -1,9 +1,10 @@
 /**
- * Content of deployment members a search matched by name. The /discover
- * search mostly filters what the feeds already loaded, so a member's older
- * work would simply be missing; this asks each shown type's app relays for
- * it once per member. Events land in the EventStore, where the page's models
- * pick them up and `tierByMembers` ranks them on top.
+ * Content of people the /discover user is looking for — members a search
+ * matched by name, and authors picked in the author filter. The page mostly
+ * filters what the feeds already loaded, so their older work (or anything a
+ * curated feed never asked for) would simply be missing; this asks each shown
+ * type's app relays for it once per author. Events land in the EventStore,
+ * where the page's models pick them up.
  *
  * MUST be called during component init (it uses $effect).
  */
@@ -27,10 +28,10 @@ const SOURCES = [
 ];
 
 /**
- * @param {() => string[]} getAuthors - matched member pubkeys (reactive)
+ * @param {() => string[]} getAuthors - pubkeys to fetch content of (reactive)
  * @param {{ showsType: (type: string) => boolean }} options
  */
-export function useMemberContent(getAuthors, { showsType }) {
+export function useAuthorContent(getAuthors, { showsType }) {
   // Plain refs, never $state: bookkeeping the effect must not track.
   /** @type {Set<string>} */
   const asked = new Set(); // eslint-disable-line svelte/prefer-svelte-reactivity -- internal bookkeeping

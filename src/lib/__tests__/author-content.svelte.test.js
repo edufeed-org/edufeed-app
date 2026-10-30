@@ -2,10 +2,10 @@
 /* eslint-disable no-undef -- $effect / $state are Svelte runes, available in .svelte.js context */
 /** @vitest-environment jsdom */
 /**
- * useMemberContent(getAuthors, { showsType }) — when a search matches
- * deployment members by name, fetch their content for the shown types from
- * each type's app relays, once per member, so it can rank on top even when
- * it was never in the loaded feed window.
+ * useAuthorContent(getAuthors, { showsType }) — fetch the content of the
+ * people /discover is looking for (members a search matched, authors in the
+ * author filter) for the shown types from each type's app relays, once per
+ * author, so it shows even when it was never in the loaded feed window.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { flushSync } from 'svelte';
@@ -22,9 +22,9 @@ vi.mock('$lib/helpers/relay-helper.js', () => ({
   getKanbanRelays: () => ['wss://kanban']
 }));
 
-const { useMemberContent } = await import('$lib/stores/member-content.svelte.js');
+const { useAuthorContent } = await import('$lib/stores/author-content.svelte.js');
 
-describe('useMemberContent', () => {
+describe('useAuthorContent', () => {
   let cleanup;
 
   beforeEach(() => {
@@ -43,7 +43,7 @@ describe('useMemberContent', () => {
   function mount(initial, showsType = () => true) {
     let authors = $state(initial);
     cleanup = $effect.root(() => {
-      useMemberContent(() => authors, { showsType });
+      useAuthorContent(() => authors, { showsType });
     });
     flushSync();
     return (next) => {

@@ -43,12 +43,13 @@
   } from '$lib/services/curated-authors-service.svelte.js';
   import PeopleResults from '$lib/components/discover/PeopleResults.svelte';
   import PeopleStrip from '$lib/components/discover/PeopleStrip.svelte';
+  import SelectedAuthors from '$lib/components/discover/SelectedAuthors.svelte';
   import {
     ensureMemberDirectory,
     getMemberPubkeys,
     matchMembers
   } from '$lib/stores/member-directory.svelte.js';
-  import { useMemberContent } from '$lib/stores/member-content.svelte.js';
+  import { useAuthorContent } from '$lib/stores/author-content.svelte.js';
   import DiscoverHero from '$lib/components/discover/DiscoverHero.svelte';
   import DiscoverTabs from '$lib/components/discover/DiscoverTabs.svelte';
   import DiscoverSearchBar from '$lib/components/discover/DiscoverSearchBar.svelte';
@@ -696,7 +697,13 @@
   );
   // Rebuilt wholesale with the match, never mutated.
   const matchedMemberSet = $derived(new Set(matchedMembers));
-  useMemberContent(() => matchedMembers, { showsType });
+  // People the user is looking for — matched members and picked authors:
+  // their content is fetched and passes the curated/WoT and NIP-50 gates
+  // (picking an author whose work a curated feed never loaded must not end
+  // in an empty list).
+  const soughtAuthors = $derived([...new Set([...matchedMembers, ...authorFilter])]);
+  const soughtAuthorSet = $derived(new Set(soughtAuthors));
+  useAuthorContent(() => soughtAuthors, { showsType });
 
   // Bulk calendar sources are hidden by default (toggle in the filter bar)
   const calendarSources = $derived.by(() => {
@@ -716,7 +723,7 @@
     }
     return buildRawItems(
       { calendarEvents: calendarSources.shown, ambResources, articles, kanbanBoards },
-      { showsType, isAllowedAuthor, learningSearchIds, matchedAuthors: matchedMemberSet }
+      { showsType, isAllowedAuthor, learningSearchIds, matchedAuthors: soughtAuthorSet }
     );
   });
   const relayFilteredItems = $derived(filterByRelay(rawItems, relayFilter));
@@ -744,12 +751,17 @@
   const joinedFilter = $derived(
     joinedFilterState(communityFilter, joinedCommunities.length, joinedStatus)
   );
+  // Picked authors with nothing here: their cards are shown above, so say
+  // that, instead of "try other search terms".
+  const authorsOnly = $derived(authorFilter.length > 0 && !activeSearchQuery);
   const joinedEmptyMessage = $derived(
     joinedFilter === 'empty'
       ? m.discover_joined_filter_empty()
       : joinedFilter === 'unavailable'
         ? m.discover_joined_filter_unavailable()
-        : ''
+        : authorsOnly
+          ? m.discover_author_filter_empty()
+          : ''
   );
   const joinedEmptyHint = $derived(
     joinedFilter === 'empty'
@@ -857,6 +869,7 @@
       <!-- People: profile search, follows first, then by NIP-85 trust rank -->
       <PeopleResults query={activeSearchQuery} />
     {:else}
+      <SelectedAuthors pubkeys={authorFilter} />
       {#if contentType === 'all' && isEnabled('people') && activeSearchQuery && !communityFilter}
         <PeopleStrip
           query={activeSearchQuery}
