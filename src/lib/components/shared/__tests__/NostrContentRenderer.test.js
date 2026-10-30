@@ -47,6 +47,18 @@ describe('NostrContentRenderer link rendering', () => {
     expect(container.textContent).not.toContain('localhost:5173');
   });
 
+  // NotePreview reads these to give a `note1…` quote its author (outbox fallback)
+  it("shares the event's q-tag pointers with the previews it renders", () => {
+    const id = 'd'.repeat(64);
+    const author = 'a'.repeat(64);
+    const event = {
+      ...makeEvent(`Look nostr:${NADDR}`),
+      tags: [['q', id, 'wss://premium.primal.net', author]]
+    };
+    const { getByTestId } = render(NostrContentRenderer, { event });
+    expect(getByTestId('nostr-card').getAttribute('data-quote-authors')).toBe(author);
+  });
+
   it('strips a nostr: prefix from the URL before passing the id to the card', () => {
     const { getByTestId } = render(NostrContentRenderer, {
       event: makeEvent(`https://edufeed.org/nostr:${NADDR}`)

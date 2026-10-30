@@ -7,7 +7,7 @@
  * @vitest-environment node
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { of } from 'rxjs';
+import { EMPTY, of } from 'rxjs';
 
 vi.mock('applesauce-common/helpers', () => ({
   getEmbededSharedEvent: vi.fn(),
@@ -51,14 +51,14 @@ describe('resolveRepostReferences', () => {
   /** @type {any} */
   let eventStore;
   /** @type {any} */
-  let addrLoader;
+  let loadReferenced;
   const relays = ['wss://relay.example.com'];
 
   beforeEach(() => {
     vi.clearAllMocks();
     pool = { request: vi.fn(() => of()) };
-    eventStore = { add: vi.fn() };
-    addrLoader = vi.fn(() => ({ subscribe: vi.fn(() => ({ unsubscribe: vi.fn() })) }));
+    eventStore = { add: vi.fn(), getEvent: vi.fn(() => undefined) };
+    loadReferenced = vi.fn(() => EMPTY);
   });
 
   it('extracts embedded event from content and adds to eventStore', () => {
@@ -72,7 +72,7 @@ describe('resolveRepostReferences', () => {
     resolveRepostReferences([repost], {
       eventStore,
       pool,
-      addressLoader: addrLoader,
+      loadReferenced,
       relays
     });
 
@@ -89,20 +89,21 @@ describe('resolveRepostReferences', () => {
     resolveRepostReferences([repost], {
       eventStore,
       pool,
-      addressLoader: addrLoader,
+      loadReferenced,
       relays
     });
 
     expect(pool.request).toHaveBeenCalledWith(relays, [{ ids: ['evt1'] }], expect.any(Object));
   });
 
-  it('resolves a-tag via addressLoader', () => {
+  it('resolves a-tag via loadReferenced (hints + lookup relays, then the author outboxes)', () => {
     /** @type {any} */ (getEmbededSharedEvent).mockReturnValue(undefined);
     /** @type {any} */ (getSharedEventPointer).mockReturnValue(undefined);
     /** @type {any} */ (getSharedAddressPointer).mockReturnValue({
       kind: 30142,
       pubkey: 'author1',
-      identifier: 'my-resource'
+      identifier: 'my-resource',
+      relays: ['wss://hint.example.com']
     });
 
     const repost = { id: 'rp1', kind: 16, tags: [['a', '30142:author1:my-resource']], content: '' };
@@ -110,16 +111,51 @@ describe('resolveRepostReferences', () => {
     resolveRepostReferences([repost], {
       eventStore,
       pool,
-      addressLoader: addrLoader,
+      loadReferenced,
       relays
     });
 
-    expect(addrLoader).toHaveBeenCalledWith({
+    expect(loadReferenced).toHaveBeenCalledWith({
       kind: 30142,
       pubkey: 'author1',
       identifier: 'my-resource',
-      relays
+      relays: ['wss://hint.example.com', ...relays]
     });
+  });
+
+  // A repost target the lookup relays don't carry used to stay unresolved:
+  // the e-tag's relay hint and the author's outboxes were never asked.
+  it('loads e-tag targets the batch fetch missed from their hint and author outboxes', () => {
+    /** @type {any} */ (getEmbededSharedEvent).mockReturnValue(undefined);
+    /** @type {any} */ (getSharedEventPointer).mockImplementation((/** @type {any} */ r) =>
+      r.id === 'rp1'
+        ? { id: 'evt1', relays: ['wss://hint.example.com'], author: 'author1' }
+        : { id: 'evt2', relays: [] }
+    );
+    /** @type {any} */ (getSharedAddressPointer).mockReturnValue(undefined);
+    pool.request = vi.fn(() => of({ id: 'evt2', kind: 1, pubkey: 'p' }));
+    eventStore.getEvent = vi.fn((/** @type {string} */ id) => (id === 'evt2' ? {} : undefined));
+
+    resolveRepostReferences(
+      [
+        { id: 'rp1', kind: 6, tags: [], content: '' },
+        { id: 'rp2', kind: 6, tags: [], content: '' }
+      ],
+      { eventStore, pool, loadReferenced, relays }
+    );
+
+    // One batch for both ids first …
+    expect(pool.request).toHaveBeenCalledWith(
+      relays,
+      [{ ids: ['evt1', 'evt2'] }],
+      expect.any(Object)
+    );
+    // … then only the missing one, with its hint and author
+    expect(loadReferenced).toHaveBeenCalledTimes(1);
+    expect(loadReferenced).toHaveBeenCalledWith(
+      { id: 'evt1', relays: ['wss://hint.example.com', ...relays] },
+      { author: 'author1' }
+    );
   });
 
   it('deduplicates already-resolved event IDs', () => {
@@ -133,7 +169,7 @@ describe('resolveRepostReferences', () => {
     resolveRepostReferences([repost1, repost2], {
       eventStore,
       pool,
-      addressLoader: addrLoader,
+      loadReferenced,
       relays
     });
 
@@ -153,7 +189,7 @@ describe('resolveRepostReferences', () => {
     resolveRepostReferences([repost], {
       eventStore,
       pool,
-      addressLoader: addrLoader,
+      loadReferenced,
       relays,
       loadedIds
     });
@@ -184,13 +220,13 @@ describe('resolveRepostReferences', () => {
     resolveRepostReferences([repost], {
       eventStore,
       pool,
-      addressLoader: addrLoader,
+      loadReferenced,
       relays
     });
 
     // Both should be resolved
     expect(pool.request).toHaveBeenCalled();
-    expect(addrLoader).toHaveBeenCalled();
+    expect(loadReferenced).toHaveBeenCalled();
   });
 
   it('returns subscriptions for cleanup', () => {
@@ -203,7 +239,7 @@ describe('resolveRepostReferences', () => {
     const subs = resolveRepostReferences([repost], {
       eventStore,
       pool,
-      addressLoader: addrLoader,
+      loadReferenced,
       relays
     });
 

@@ -13,6 +13,8 @@
     formatFileSize
   } from '$lib/helpers/media-meta.js';
   import { previewableNostrId, truncateMiddle, splitNostrIds } from '$lib/helpers/link-render.js';
+  import { QUOTE_POINTERS, quotePointersOf } from '$lib/helpers/quote-pointers.js';
+  import { setContext } from 'svelte';
   import * as m from '$lib/paraglide/messages';
   import NostrIdentifier from './NostrIdentifier.svelte';
   import MediaLightbox from './MediaLightbox.svelte';
@@ -26,6 +28,12 @@
    * withholding it from kind 1 and 1111. Only chat bubbles pass it.
    */
   let { event, class: className = '', depth = 0, markdown = false } = $props();
+
+  // The relay hint + author of every note this event quotes (q tags). The
+  // inline previews read them: a `note1…` reference names neither, and the
+  // author is what lets NotePreview fall back to the author's outboxes.
+  const quotePointers = $derived(quotePointersOf(event));
+  setContext(QUOTE_POINTERS, () => quotePointers);
 
   // Use $state + $effect instead of $derived because parseEventContent and
   // getImetaByUrl mutate the event object (symbol-based caching)

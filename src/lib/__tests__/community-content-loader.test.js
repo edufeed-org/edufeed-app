@@ -27,7 +27,8 @@ vi.mock('$lib/stores/nostr-infrastructure.svelte', () => {
     eventStore: {
       model: vi.fn(() => modelSubject),
       add: vi.fn(),
-      getReplaceable: vi.fn(() => null)
+      getReplaceable: vi.fn(() => null),
+      getEvent: vi.fn(() => undefined)
     }
   };
 });
@@ -84,6 +85,11 @@ vi.mock('$lib/helpers/nostrUtils.js', () => ({
     return null;
   })
 }));
+
+vi.mock('$lib/loaders/referenced-event.js', async () => {
+  const { EMPTY } = await import('rxjs');
+  return { loadReferencedEvent: vi.fn(() => EMPTY) };
+});
 
 vi.mock('$lib/loaders/base.js', () => ({
   timedPool: vi.fn(),
@@ -292,7 +298,8 @@ describe('createCommunityContentLoader', () => {
     );
   });
 
-  it('uses pool.request for e-tag and addressLoader for a-tag when resolving repost references', () => {
+  it('uses pool.request for e-tag and loadReferencedEvent for a-tag when resolving repost references', async () => {
+    const { loadReferencedEvent } = await import('$lib/loaders/referenced-event.js');
     // Set up model mock to emit repost events on the second call (repost watcher)
     const legacySubject = new Subject();
     const repostSubject = new Subject();
@@ -327,8 +334,8 @@ describe('createCommunityContentLoader', () => {
       expect.any(Object)
     );
 
-    // a-tag resolved via addressLoader
-    expect(addressLoader).toHaveBeenCalledWith(
+    // a-tag resolved via loadReferencedEvent (hints + lookup, then the author's outboxes)
+    expect(loadReferencedEvent).toHaveBeenCalledWith(
       expect.objectContaining({
         kind: 30142,
         pubkey: 'author1',

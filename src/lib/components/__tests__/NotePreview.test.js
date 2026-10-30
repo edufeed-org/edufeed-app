@@ -13,6 +13,7 @@ import { render, waitFor } from '@testing-library/svelte';
 import { BehaviorSubject, Subject } from 'rxjs';
 import { nip19 } from 'nostr-tools';
 import NotePreview from '../shared/NostrPreviews/NotePreview.svelte';
+import { QUOTE_POINTERS } from '$lib/helpers/quote-pointers.js';
 
 const EVENT_ID = 'a1b2c3d4e5f6a7b8a1b2c3d4e5f6a7b8a1b2c3d4e5f6a7b8a1b2c3d4e5f6a7b8';
 const AUTHOR = 'deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef';
@@ -98,6 +99,24 @@ describe('NotePreview', () => {
     expect(pointer.relays).toContain(HINT_RELAY);
     expect(pointer.relays).toContain('wss://lookup.example.com');
     // The nevent's author drives the outbox fallback
+    expect(options).toEqual({ author: AUTHOR });
+  });
+
+  // A `note1…` names no author and no relay: the quoting event's q tag does,
+  // and only with the author can the outbox fallback run.
+  it("takes the author and relay hint from the quoting event's q tag", () => {
+    const note = nip19.noteEncode(EVENT_ID);
+    const quotes = new Map([
+      [EVENT_ID, { id: EVENT_ID, relays: ['wss://q-hint.example.com/'], author: AUTHOR }]
+    ]);
+    render(NotePreview, {
+      props: { identifier: note },
+      context: new Map([[QUOTE_POINTERS, () => quotes]])
+    });
+
+    const [pointer, options] = /** @type {any} */ (loaderSpy.mock.calls[0]);
+    expect(pointer.id).toBe(EVENT_ID);
+    expect(pointer.relays).toEqual(['wss://q-hint.example.com/', 'wss://lookup.example.com']);
     expect(options).toEqual({ author: AUTHOR });
   });
 

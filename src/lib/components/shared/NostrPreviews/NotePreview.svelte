@@ -9,6 +9,8 @@
   import { goto } from '$app/navigation';
   import { decodeNostrIdentifier, profileLink } from '$lib/helpers/nostrUtils.js';
   import { useReferencedEvent } from '$lib/stores/referenced-event.svelte.js';
+  import { QUOTE_POINTERS, withQuoteHint } from '$lib/helpers/quote-pointers.js';
+  import { getContext } from 'svelte';
   import { useUserProfile } from '$lib/stores/user-profile.svelte.js';
   import { getDisplayName } from 'applesauce-core/helpers';
   import { formatRelativeTime } from '$lib/helpers/calendar.js';
@@ -23,12 +25,20 @@
 
   let { identifier, depth = 0 } = $props();
 
+  // The quoting event's q tags (set by the NostrContentRenderer around us):
+  // the author and relay hint a `note1…` reference itself does not carry.
+  /** @type {(() => Map<string, { relays?: string[], author?: string }>) | undefined} */
+  const getQuotes = getContext(QUOTE_POINTERS);
+
   // Store first, network per mount with retries and the author's outboxes as
   // fallback (see referenced-event.svelte.js). Nothing is loaded past
   // MAX_DEPTH: nested quotes stay a badge.
-  const ref = useReferencedEvent(() =>
-    depth >= MAX_DEPTH ? null : decodeNostrIdentifier(identifier)
-  );
+  const ref = useReferencedEvent(() => {
+    if (depth >= MAX_DEPTH) return null;
+    const decoded = decodeNostrIdentifier(identifier);
+    const id = decoded.type === 'note' ? decoded.data : decoded.data?.id;
+    return withQuoteHint(decoded, getQuotes?.().get(id));
+  });
   const event = $derived(ref.event);
   const isLoading = $derived(ref.isLoading);
   let expanded = $state(false);

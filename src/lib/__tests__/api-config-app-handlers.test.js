@@ -11,7 +11,9 @@
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-const DEFAULT_RELAYS = ['wss://relay.nostr.band', 'wss://nos.lol', 'wss://relay.damus.io'];
+// relay.nostr.band and nos.lol are dead (2026-10) and relay.damus.io stores no
+// kind 31990 handler announcements; relay.primal.net does.
+const DEFAULT_RELAYS = ['wss://relay.primal.net'];
 
 describe('GET /api/config — appHandlers', () => {
   beforeEach(() => vi.resetModules());

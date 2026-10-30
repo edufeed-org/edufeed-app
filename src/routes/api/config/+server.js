@@ -262,11 +262,9 @@ export function GET() {
     // sets APP_HANDLERS_ENABLED=false (or APP_HANDLER_RELAYS=none).
     appHandlers: {
       enabled: parseBool(env.APP_HANDLERS_ENABLED, true),
-      relays: parseArrayOrNone(env.APP_HANDLER_RELAYS, [
-        'wss://relay.nostr.band',
-        'wss://nos.lol',
-        'wss://relay.damus.io'
-      ])
+      // relay.nostr.band and nos.lol are dead (2026-10); relay.damus.io
+      // stores no kind 31990. Keep legal/privacy-policy.de.md in step.
+      relays: parseArrayOrNone(env.APP_HANDLER_RELAYS, ['wss://relay.primal.net'])
     },
 
     // Optional point of view for WoT-ranked profile search (npub or hex).

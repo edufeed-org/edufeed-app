@@ -1,6 +1,6 @@
 # Datenschutzerklärung
 
-Stand: 27. Oktober 2026
+Stand: 30. Oktober 2026
 
 ## 1 Verantwortlicher
 
@@ -55,7 +55,7 @@ Weil Nostr dezentral ist, verbindet sich dein Browser direkt mit weiteren Server
 | relay.damus.io, relay.primal.net                     | allgemeine Nostr-Relays: Benachrichtigungen; Abruf und Veröffentlichung, wenn du den geschützten Modus in den Einstellungen ausschaltest | Dritte             |
 | purplepag.es                                         | Profile und Relay-Listen anderer Nutzer:innen finden                                                                                     | Dritte             |
 | tags.brainstorm.world, scores.brainstorm.world       | Personensuche und Vertrauenswerte zur Sortierung von Suchergebnissen                                                                     | Dritte             |
-| relay.nostr.band, nos.lol, relay.damus.io            | Hinweise auf andere Nostr-Apps für Inhaltstypen, die edufeed nicht selbst anzeigt (nur auf solchen Detailseiten)                         | Dritte             |
+| relay.primal.net                                     | Hinweise auf andere Nostr-Apps für Inhaltstypen, die edufeed nicht selbst anzeigt (nur auf solchen Detailseiten)                         | Dritte             |
 | tiles.openfreemap.org                                | Kartenkacheln bei Terminen mit Ort                                                                                                       | OpenFreeMap        |
 | iframe.diy                                           | abgeschottete Ausführung interaktiver Inhalte (webxdc, H5P), nur beim Öffnen                                                             | Dritte             |
 | Bild- und Medien-Server in Beiträgen                 | Anzeige von Bildern und Videos, die andere in ihre Beiträge eingebunden haben                                                            | jeweilige Anbieter |

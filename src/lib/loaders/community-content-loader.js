@@ -11,6 +11,7 @@ import { TimelineModel } from 'applesauce-core/models';
 import { getTagValue } from 'applesauce-core/helpers';
 import { parseAddressPointerFromATag } from '$lib/helpers/nostrUtils.js';
 import { addressLoader, fetchEvents } from './base.js';
+import { loadReferencedEvent } from './referenced-event.js';
 import { communityTargetedPublicationsLoader } from './targeted-publications.js';
 import { getCommunityGlobalRelays } from '$lib/helpers/communityRelays.js';
 import { getAllLookupRelays } from '$lib/helpers/relay-helper.js';
@@ -132,7 +133,7 @@ export function createCommunityContentLoader(kinds, getRelays) {
         const subs = resolveRepostReferences(repostEvents, {
           eventStore,
           pool,
-          addressLoader,
+          loadReferenced: loadReferencedEvent,
           relays: lookupRelays,
           loadedIds: repostLoadedEventIds,
           loadedAddresses: repostLoadedAddresses
