@@ -1189,6 +1189,8 @@
   "people_search_follows_title": "Personen, denen du folgst",
   "people_search_members_title": "Mitglieder · {domain}",
   "people_search_others_title": "Weitere Personen",
+  "people_followed_by": "Gefolgt von {names}",
+  "people_followed_by_more": "Gefolgt von {names} und {count} weiteren",
   "discover_people_strip_title": "Personen",
   "discover_people_strip_show_all": "Alle Personen anzeigen",
   "discover_author_filter_empty": "Von dieser Auswahl gibt es hier noch keine Inhalte.",

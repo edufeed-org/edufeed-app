@@ -456,6 +456,8 @@
   "people_search_follows_title": "People you follow",
   "people_search_members_title": "Members · {domain}",
   "people_search_others_title": "More people",
+  "people_followed_by": "Followed by {names}",
+  "people_followed_by_more": "Followed by {names} and {count} more",
   "discover_people_strip_title": "People",
   "discover_people_strip_show_all": "Show all people",
   "discover_author_filter_empty": "Nothing from this selection here yet.",

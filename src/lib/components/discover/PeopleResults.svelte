@@ -15,6 +15,9 @@
   import { contactsStore } from '$lib/stores/contacts.svelte.js';
   import * as m from '$lib/paraglide/messages';
   import { getMemberDomain } from '$lib/stores/member-directory.svelte.js';
+  import { useFollowedBy } from '$lib/stores/followed-by.svelte.js';
+  import FollowedByLine from '$lib/components/people/FollowedByLine.svelte';
+  import EducatorChips from '$lib/components/people/EducatorChips.svelte';
 
   /** Follows shown for an empty query — enough to be useful, not a directory. */
   const FOLLOWS_PREVIEW = 30;
@@ -24,6 +27,10 @@
 
   const getSearch = usePeopleSearch(() => query);
   const search = $derived(getSearch());
+  // "Gefolgt von …" for the result cards — the strongest hint between namesakes
+  const getFollowedBy = useFollowedBy(() =>
+    search.tooShort ? [] : search.results.map((c) => c.pubkey)
+  );
   const follows = $derived(
     search.tooShort && contactsStore.isLoaded
       ? contactsStore.contacts.slice(0, FOLLOWS_PREVIEW)
@@ -42,6 +49,8 @@
       >
         <div class="min-w-0 flex-1">
           <ProfileCard pubkey={contact.pubkey} size="sm" showIcon={false} showNip05 showAbout />
+          <EducatorChips pubkey={contact.pubkey} />
+          <FollowedByLine followers={getFollowedBy().get(contact.pubkey) ?? []} />
         </div>
         {#if score}
           <span
