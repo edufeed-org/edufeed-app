@@ -30,12 +30,26 @@ const mockEvent = {
 /** @type {Subject<any>} */
 let event$;
 const eventSpy = vi.fn((/** @type {any} */ _pointer) => event$);
+/** @type {any} */
+let storedEvent;
+/** @type {Subject<any>[]} one per network attempt */
+let loads = [];
+const loaderSpy = vi.fn((/** @type {any} */ _pointer) => {
+  const load$ = new Subject();
+  loads.push(load$);
+  return load$;
+});
 
 vi.mock('$lib/stores/nostr-infrastructure.svelte', () => ({
   eventStore: {
-    event: (/** @type {any} */ pointer) => eventSpy(pointer)
+    event: (/** @type {any} */ pointer) => eventSpy(pointer),
+    getEvent: () => storedEvent
   },
   pool: {}
+}));
+
+vi.mock('$lib/loaders/base.js', () => ({
+  eventLoader: (/** @type {any} */ pointer) => loaderSpy(pointer)
 }));
 
 vi.mock('$lib/helpers/relay-helper.js', async (importOriginal) => {
@@ -71,16 +85,85 @@ describe('NotePreview', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     event$ = new Subject();
+    storedEvent = undefined;
+    loads = [];
   });
 
-  it('subscribes to the EventStore with the id and relay hints from the nevent', () => {
+  it('subscribes to the EventStore by id and loads from the nevent hints + lookup relays', () => {
     render(NotePreview, { props: { identifier: nevent } });
 
     expect(eventSpy).toHaveBeenCalledTimes(1);
-    const pointer = /** @type {any} */ (eventSpy.mock.calls[0])[0];
+    expect(/** @type {any} */ (eventSpy.mock.calls[0])[0]).toEqual({ id: EVENT_ID });
+
+    expect(loaderSpy).toHaveBeenCalledTimes(1);
+    const pointer = /** @type {any} */ (loaderSpy.mock.calls[0])[0];
     expect(pointer.id).toBe(EVENT_ID);
     expect(pointer.relays).toContain(HINT_RELAY);
     expect(pointer.relays).toContain('wss://lookup.example.com');
+  });
+
+  // A miss must not be final: the feed's first lookup can lose the race with a
+  // slow WebSocket handshake while dozens of relays connect, and the store's
+  // own fallback runs once per (60 s warm) model, so the detail page used to
+  // inherit the miss until a full reload.
+  it('asks the network again on every mount', () => {
+    render(NotePreview, { props: { identifier: nevent } }).unmount();
+    render(NotePreview, { props: { identifier: nevent } });
+    expect(loaderSpy).toHaveBeenCalledTimes(2);
+  });
+
+  it('skips the network when the store already holds the event', () => {
+    storedEvent = mockEvent;
+    render(NotePreview, { props: { identifier: nevent } });
+    expect(loaderSpy).not.toHaveBeenCalled();
+  });
+
+  it('retries after a miss and renders the late answer', async () => {
+    vi.useFakeTimers();
+    try {
+      const { container } = render(NotePreview, { props: { identifier: nevent } });
+      event$.next(undefined);
+      loads[0].complete(); // first attempt found nothing
+
+      await vi.advanceTimersByTimeAsync(10_000);
+      expect(loaderSpy).toHaveBeenCalledTimes(2);
+
+      loads[1].next(mockEvent);
+      event$.next(mockEvent); // the loader feeds the store, the store feeds us
+      await vi.advanceTimersByTimeAsync(0);
+      expect(container.querySelector('a[href*="nevent"]')).toBeTruthy();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('gives up after a few misses', async () => {
+    vi.useFakeTimers();
+    try {
+      render(NotePreview, { props: { identifier: nevent } });
+      for (let i = 0; i < 10; i++) {
+        loads.at(-1)?.complete();
+        await vi.advanceTimersByTimeAsync(60_000);
+      }
+      const attempts = loaderSpy.mock.calls.length;
+      expect(attempts).toBeGreaterThan(1);
+      expect(attempts).toBeLessThanOrEqual(4);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('cancels a pending retry on unmount', async () => {
+    vi.useFakeTimers();
+    try {
+      const { unmount } = render(NotePreview, { props: { identifier: nevent } });
+      loads[0].complete();
+      unmount();
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect(loaderSpy).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('renders the embedded card when the event is already available', async () => {
