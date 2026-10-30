@@ -39,6 +39,11 @@
    *   isFollowing: boolean,
    *   followLoading: boolean,
    *   postsCount: number,
+   *   followersCount?: number,
+   *   followersCapped?: boolean,
+   *   followingCount?: number,
+   *   onShowFollowers?: () => void,
+   *   onShowFollowing?: () => void,
    *   editing: boolean,
    *   isCommunity?: boolean,
    *   onFollow: () => void,
@@ -58,6 +63,11 @@
     isFollowing,
     followLoading,
     postsCount,
+    followersCount = 0,
+    followersCapped = false,
+    followingCount = 0,
+    onShowFollowers = () => {},
+    onShowFollowing = () => {},
     editing,
     isCommunity = false,
     onFollow,
@@ -168,9 +178,33 @@
         </button>
       </div>
 
-      {#if postsCount > 0}
+      {#if postsCount > 0 || followersCount > 0 || followingCount > 0}
         <div class="pf-quick">
-          <span data-testid="stat-posts"><b>{postsCount}</b> {m.profile_stat_posts()}</span>
+          {#if postsCount > 0}
+            <span data-testid="stat-posts"><b>{postsCount}</b> {m.profile_stat_posts()}</span>
+          {/if}
+          {#if followersCount > 0}
+            <button
+              type="button"
+              class="pf-stat"
+              data-testid="stat-followers"
+              onclick={onShowFollowers}
+            >
+              <b>{followersCount}{followersCapped ? '+' : ''}</b>
+              {m.profile_stat_followers()}
+            </button>
+          {/if}
+          {#if followingCount > 0}
+            <button
+              type="button"
+              class="pf-stat"
+              data-testid="stat-following"
+              onclick={onShowFollowing}
+            >
+              <b>{followingCount}</b>
+              {m.profile_stat_following()}
+            </button>
+          {/if}
         </div>
       {/if}
 
@@ -422,6 +456,14 @@
     color: var(--c-ink);
     font-weight: 700;
     font-size: 16px;
+  }
+  .pf-stat {
+    color: inherit;
+    cursor: pointer;
+  }
+  .pf-stat:hover,
+  .pf-stat:focus-visible {
+    text-decoration: underline;
   }
 
   /* ── action buttons ── */

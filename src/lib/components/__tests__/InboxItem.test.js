@@ -21,7 +21,8 @@ vi.mock('$lib/services/inbox-service.svelte.js', () => ({
 }));
 
 vi.mock('$lib/helpers/inbox.js', () => ({
-  getNotificationType: () => 'reaction',
+  // Kind 3 = the follower ledger's synthetic items; everything else a reaction.
+  getNotificationType: (/** @type {any} */ e) => (e.kind === 3 ? 'newFollower' : 'reaction'),
   getNotificationUrl: () => '/some/url'
 }));
 
@@ -52,6 +53,7 @@ vi.mock('$lib/paraglide/messages.js', () => ({
   inbox_action_note_mention: () => 'mentioned you in a note',
   inbox_action_rsvp: () => 'rsvped',
   inbox_action_wave: () => 'waved',
+  inbox_action_new_follower: () => 'followed you',
   inbox_action_poll_vote: () => 'voted',
   inbox_action_form_request: () => 'form request',
   inbox_action_form_response: () => 'form response',
@@ -185,5 +187,26 @@ describe('InboxItem block menu', () => {
     const clickEvent = new MouseEvent('click', { bubbles: true, cancelable: true });
     trigger.dispatchEvent(clickEvent);
     expect(clickEvent.defaultPrevented).toBe(true);
+  });
+});
+
+describe('InboxItem new follower (issue 891be310)', () => {
+  it('says that the person followed you', () => {
+    const follower = 'c'.repeat(64);
+    const { container } = render(InboxItem, {
+      props: {
+        event: {
+          id: `follow:${follower}`,
+          kind: 3,
+          pubkey: follower,
+          created_at: 1700000000,
+          tags: [],
+          content: '',
+          sig: ''
+        },
+        unread: true
+      }
+    });
+    expect(container.textContent).toContain('followed you');
   });
 });

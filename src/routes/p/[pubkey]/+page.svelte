@@ -28,6 +28,8 @@
   import { pinnedPointersFromEvent } from '$lib/helpers/profile-feed.js';
   import ProfileTabEditor from '$lib/components/profile/ProfileTabEditor.svelte';
   import ImpersonationWarning from '$lib/components/profile/ImpersonationWarning.svelte';
+  import FollowListModal from '$lib/components/profile/FollowListModal.svelte';
+  import { useFollowGraph } from '$lib/stores/follow-graph.svelte.js';
   import ProfileHeader from '$lib/components/profile/ProfileHeader.svelte';
   import ProfileRail from '$lib/components/profile/ProfileRail.svelte';
   import ProfileTabBar from '$lib/components/profile/ProfileTabBar.svelte';
@@ -83,6 +85,12 @@
   let activeUser = $derived(getActiveUser());
   let isOwnProfile = $derived(activeUser?.pubkey === data.pubkey);
   let isFollowing = $derived(contactsStore.contacts.includes(data.pubkey));
+
+  // "N Follower · M Gefolgt" and the list behind each (issue 891be310)
+  const getFollowGraph = useFollowGraph(() => data.pubkey);
+  const followGraph = $derived(getFollowGraph());
+  /** @type {'followers' | 'following' | null} */
+  let openFollowList = $state(null);
 
   // All NIP-05 addresses: content nip05 first, then repeated nip05 event tags.
   // Falls back to the parsed content while the raw kind 0 hasn't arrived yet.
@@ -455,12 +463,28 @@
       {isFollowing}
       {followLoading}
       postsCount={tabCounts.posts}
+      followersCount={followGraph.followers.length}
+      followersCapped={followGraph.capped}
+      followingCount={followGraph.following.length}
+      onShowFollowers={() => (openFollowList = 'followers')}
+      onShowFollowing={() => (openFollowList = 'following')}
       editing={editingTabs}
       {isCommunity}
       onFollow={handleFollow}
       onToggleEdit={toggleTabEditing}
       onEditProfile={openEditModal}
     />
+
+    {#if openFollowList}
+      <FollowListModal
+        title={openFollowList === 'followers'
+          ? m.profile_stat_followers()
+          : m.profile_stat_following()}
+        pubkeys={openFollowList === 'followers' ? followGraph.followers : followGraph.following}
+        viewerFollows={contactsStore.contacts}
+        onclose={() => (openFollowList = null)}
+      />
+    {/if}
 
     {#if getNip05Status() === 'unverified' && (profile?.name || profile?.display_name)}
       <ImpersonationWarning

@@ -143,6 +143,8 @@ function describeInboxEvent(event) {
       return m.inbox_action_poll_vote();
     case 'groupAdded':
       return m.system_notif_group_added();
+    case 'newFollower':
+      return m.inbox_action_new_follower();
     case 'formRequest':
       return m.system_notif_form_request();
     case 'formResponse':

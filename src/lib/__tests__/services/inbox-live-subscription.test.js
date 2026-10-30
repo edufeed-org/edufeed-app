@@ -73,7 +73,11 @@ describe('inbox standing subscription', () => {
     // re-fetch that history — its `since` is the moment we subscribed.
     expect(pool.group).toHaveBeenCalledWith(['wss://relay1', 'wss://relay2']);
     const filters = group.subscription.mock.calls[0][0];
-    expect(filters).toEqual(mod.buildMainFilter(PUBKEY, filters[0].since));
+    // …plus the contact lists that name the user, for "X folgt dir jetzt".
+    expect(filters).toEqual([
+      ...mod.buildMainFilter(PUBKEY, filters[0].since),
+      { kinds: [3], '#p': [PUBKEY], since: filters[0].since }
+    ]);
     expect(filters[0].since).toBeGreaterThanOrEqual(before);
     expect(filters[0].since).toBeLessThanOrEqual(before + 5);
     expect(liveSubscription.subscribe).toHaveBeenCalled();

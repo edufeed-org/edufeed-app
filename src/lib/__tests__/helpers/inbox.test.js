@@ -24,6 +24,12 @@ import {
 } from '$lib/helpers/inbox.js';
 
 describe('getNotificationType', () => {
+  it('classifies a (synthetic) follower item as newFollower', () => {
+    expect(
+      getNotificationType({ kind: 3, pubkey: 'a'.repeat(64), tags: [], content: '', created_at: 1 })
+    ).toBe('newFollower');
+  });
+
   it('returns "formRequest" for kind 1070', () => {
     expect(getNotificationType({ kind: 1070 })).toBe('formRequest');
   });
@@ -193,6 +199,19 @@ describe('isMembershipApplication', () => {
 });
 
 describe('getNotificationUrl', () => {
+  it('links a new follower to their profile', () => {
+    const pubkey = 'a'.repeat(64);
+    const url = getNotificationUrl({
+      id: `follow:${pubkey}`,
+      kind: 3,
+      pubkey,
+      tags: [],
+      content: '',
+      created_at: 1
+    });
+    expect(url).toMatch(/^\/p\/npub1/);
+  });
+
   const validPubkey = '3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d';
 
   it('returns form respond URL for kind 1070', () => {

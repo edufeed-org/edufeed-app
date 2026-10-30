@@ -21,7 +21,11 @@ const KIND_TO_TYPE = {
   31925: 'rsvp',
   1018: 'pollVote',
   // NIP-29 put-user: an admin added you to a group (community root or channel).
-  9000: 'groupAdded'
+  9000: 'groupAdded',
+  // A contact list naming the user. Only ever the synthetic, first-sighting
+  // items of services/new-followers.svelte.js reach the inbox (a raw kind 3
+  // reappears whenever its author follows anyone else).
+  3: 'newFollower'
 };
 
 /**
@@ -198,8 +202,8 @@ export function getNotificationUrl(event, { groupAddedHref = null } = {}) {
     return community ? `/c/${community}` : null;
   }
 
-  // Waves — link to waver's profile
-  if (type === 'wave') {
+  // Waves and new followers — link to the person's profile
+  if (type === 'wave' || type === 'newFollower') {
     return `/p/${nip19.npubEncode(event.pubkey)}`;
   }
 
