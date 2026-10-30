@@ -468,8 +468,8 @@ unchanged. These tests cover the routing shape only.
 ### amb-basic-form.test.js (2 tests — 1 live, 1 `fixme`)
 
 **Route:** `/forms/<naddr>/create-resource` (NIP-101-EDU form-template →
-kind-30142 flow, `TemplateResourceForm.svelte`; see
-`docs/nips/nip-101-edu.md`)
+kind-30142 flow, `TemplateResourceForm.svelte`; see the
+"Forms in edufeed" wiki entry, edufeed/wikis `articles/edufeed-forms.md`)
 **Auth required:** Yes
 
 **Test 2 is `test.fixme`-marked** pending confirmation: the publish +

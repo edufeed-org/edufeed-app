@@ -125,7 +125,7 @@ export function formValuesToAmbJson(form, values, selectedConcepts) {
       // Untouched checkbox arrives as '' (FormRenderer's initial value for a
       // field with no default) — omit the tag entirely in that case, matching
       // the retired amb-emitters.js booleanEmitter and the NIP-101 spec
-      // (docs/nips/nip-101-edu.md:204). Explicitly checked/unchecked values
+      // ("Forms in edufeed" wiki entry, AMB output). Explicitly checked/unchecked values
       // arrive as the strings 'true'/'false' and emit true/false respectively.
       if (raw !== undefined && raw !== null && raw !== '') {
         amb.isAccessibleForFree = raw === true || raw === 'true';

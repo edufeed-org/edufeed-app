@@ -1,7 +1,8 @@
 /**
  * E2E tests for the templateNaddr-driven "amb-basic" form → kind-30142
  * resource flow (Phase 1b slice: NIP-101-EDU form templates driving AMB
- * resource creation, see docs/nips/nip-101-edu.md).
+ * resource creation, see the "Forms in edufeed" wiki entry,
+ * edufeed/wikis articles/edufeed-forms.md).
  *
  * There is no `templateNaddr` env var to seed for this deployment (Phase 1b
  * routes directly via `/forms/<naddr>/create-resource`, see
@@ -332,7 +333,7 @@ test.describe('amb-basic template form (templateNaddr → kind 30142)', () => {
 
       // Concept-valued fields: :id/:prefLabel:<lang>/:type triad, NO a-tag —
       // this is the exact NIP-AMB compliance fix documented in
-      // docs/nips/nip-101-edu.md's field-output section.
+      // the field-output section of the "Forms in edufeed" wiki entry.
       expect(tagsFor('learningResourceType:id')[0]?.[1]).toBe(WORKSHEET_URI);
       expect(tagsFor('learningResourceType:type')[0]?.[1]).toBe('Concept');
       expect(tagsFor('learningResourceType:prefLabel:de')[0]?.[1]).toBe('Arbeitsblatt');
