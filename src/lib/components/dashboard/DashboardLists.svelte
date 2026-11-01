@@ -7,15 +7,14 @@
 -->
 <script>
   import * as kinds from 'nostr-tools/kinds';
-  import { fetchEvents } from '$lib/loaders/base.js';
-  import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
   import {
     getEventPointersFromList,
     getAddressPointersFromList,
     getProfilePointersFromList,
     getRelaysFromList
   } from 'applesauce-common/helpers';
-  import { getAllLookupRelays } from '$lib/helpers/relay-helper.js';
+  import { useListItems } from '$lib/stores/list-items.svelte.js';
+  import { uniqueBy } from '$lib/helpers/unique.js';
   import { parseRelayListEvent } from '$lib/services/relay-settings-service.js';
   import { runtimeConfig } from '$lib/stores/config.svelte.js';
   import { getDisplayName, getProfilePicture } from 'applesauce-core/helpers';
@@ -97,8 +96,12 @@
   /** @type {import('nostr-tools').NostrEvent | null} */
   let expandedListEvent = $state.raw(null); // holds a Nostr event — never deep-proxy it
 
+  // Referenced events of the expanded list, store first; loaded (and
+  // retried) through the shared list-item hook. An `e` and an `a` tag can
+  // name the same event — deduped, the cards are keyed by id.
+  const listItems = useListItems(() => expandedListEvent);
   /** @type {import('nostr-tools').NostrEvent[]} */
-  let resolvedEvents = $state.raw([]);
+  let resolvedEvents = $derived(uniqueBy([...listItems.items.values()], (e) => e.id));
 
   const getProfiles = useProfileMap(() => resolvedEvents.map((e) => e.pubkey));
   let profiles = $derived(getProfiles());
@@ -215,67 +218,6 @@
     expandedListId = listId;
     expandedListEvent = listEvent;
   }
-
-  // Fetch + subscribe to referenced events when a list is expanded
-  $effect(() => {
-    if (!expandedListEvent) {
-      resolvedEvents = [];
-      return;
-    }
-
-    /** @type {import('rxjs').Subscription[]} */
-    const subs = [];
-    const eventPointers = getEventPointersFromList(expandedListEvent);
-    const addressPointers = getAddressPointersFromList(expandedListEvent);
-    /** @type {Map<string, import('nostr-tools').NostrEvent>} */
-    // eslint-disable-next-line svelte/prefer-svelte-reactivity -- local to $effect, not reactive state
-    const collected = new Map();
-
-    for (const pointer of eventPointers) {
-      const sub = eventStore.event(pointer.id).subscribe((event) => {
-        if (event && !collected.has(event.id)) {
-          collected.set(event.id, event);
-          resolvedEvents = Array.from(collected.values());
-        }
-      });
-      subs.push(sub);
-    }
-
-    for (const pointer of addressPointers) {
-      const sub = eventStore
-        .replaceable(pointer.kind, pointer.pubkey, pointer.identifier)
-        .subscribe((event) => {
-          if (event && !collected.has(event.id)) {
-            collected.set(event.id, event);
-            resolvedEvents = Array.from(collected.values());
-          }
-        });
-      subs.push(sub);
-    }
-
-    const lookupRelays = getAllLookupRelays();
-
-    if (eventPointers.length > 0) {
-      const hintRelays = eventPointers.flatMap((p) => p.relays || []);
-      const relays = [...new Set([...hintRelays, ...lookupRelays])];
-      const ids = eventPointers.map((p) => p.id);
-      subs.push(fetchEvents(relays, { ids }).subscribe());
-    }
-
-    for (const pointer of addressPointers) {
-      const hintRelays = pointer.relays || [];
-      const relays = [...new Set([...hintRelays, ...lookupRelays])];
-      subs.push(
-        fetchEvents(relays, {
-          kinds: [pointer.kind],
-          authors: [pointer.pubkey],
-          '#d': [pointer.identifier]
-        }).subscribe()
-      );
-    }
-
-    return () => subs.forEach((s) => s.unsubscribe());
-  });
 
   /** @param {any} event */
   function navigateToEvent(event) {

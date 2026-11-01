@@ -13,9 +13,8 @@
   `communityModeration` context); this component does not re-check that.
 -->
 <script>
-  import { eventStore, pool } from '$lib/stores/nostr-infrastructure.svelte';
-  import { addressLoader } from '$lib/loaders/base.js';
-  import { fetchEventsByIds } from '$lib/helpers/repost-resolution.js';
+  import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
+  import { addressLoader, eventLoader } from '$lib/loaders/base.js';
   import { getAllLookupRelays } from '$lib/helpers/relay-helper.js';
   import { getCommunityGlobalRelays } from '$lib/helpers/communityRelays.js';
   import { parseContentRemoval } from '$lib/groups/content-removal.js';
@@ -90,8 +89,6 @@
     const relays = unique([...getCommunityGlobalRelays(communikeyEvent), ...getAllLookupRelays()]);
     /** @type {import('rxjs').Subscription[]} */
     const subs = [];
-    /** @type {string[]} */
-    const missingIds = [];
     for (const label of labels) {
       if (requested.has(label.id)) continue;
       requested.add(label.id);
@@ -110,7 +107,10 @@
         subs.push(addressLoader({ kind, pubkey, identifier, relays }).subscribe());
         source = eventStore.replaceable(kind, pubkey, identifier);
       } else if (target.id) {
-        missingIds.push(target.id);
+        // Through the loader, in the same tick as the store subscription: the
+        // loader merges this with the store's own fallback lookup for the id
+        // (a separate pool request asked the lookup relays twice).
+        subs.push(eventLoader({ id: target.id, relays }).subscribe());
         source = eventStore.event(target.id);
       }
       if (source) {
@@ -122,8 +122,6 @@
         );
       }
     }
-    const byId = fetchEventsByIds(missingIds, relays, { pool, eventStore });
-    if (byId) subs.push(byId);
     return () => {
       for (const sub of subs) sub.unsubscribe();
     };

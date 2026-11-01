@@ -6,17 +6,16 @@
 <script>
   import { resolve } from '$app/paths';
   import { goto } from '$app/navigation';
-  import { SvelteMap } from 'svelte/reactivity';
   import {
     getEventPointersFromList,
     getAddressPointersFromList,
     getProfilePointersFromList,
     getRelaysFromList
   } from 'applesauce-common/helpers';
-  import { fetchEvents } from '$lib/loaders/base.js';
   import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
   import { useActiveUser } from '$lib/stores/accounts.svelte.js';
   import { useProfileMap } from '$lib/stores/profile-map.svelte.js';
+  import { useListItems } from '$lib/stores/list-items.svelte.js';
   import {
     reorderBookmarkSetItem,
     removeItemFromList
@@ -33,7 +32,6 @@
   import { deleteEvent } from '$lib/helpers/eventDeletion.js';
   import { getContentEventRoute } from '$lib/helpers/contentNavigation.js';
   import { getFeedCardData } from '$lib/helpers/feedCardData.js';
-  import { getAllLookupRelays } from '$lib/helpers/relay-helper.js';
   import { parseRelayListEvent } from '$lib/services/relay-settings-service.js';
   import { showToast } from '$lib/helpers/toast.js';
   import FeedCard from '$lib/components/shared/FeedCard.svelte';
@@ -167,68 +165,11 @@
       .map((t) => (t[0] === 'e' ? `e:${t[1]}` : `a:${t[1]}`));
   });
 
-  /** @type {SvelteMap<string, import('nostr-tools').NostrEvent>} */
-  let collectedEvents = $state.raw(new SvelteMap());
-
-  $effect(() => {
-    if (!hasEvents) {
-      collectedEvents = new SvelteMap();
-      return;
-    }
-
-    /** @type {import('rxjs').Subscription[]} */
-    const subs = [];
-    const evtPtrs = getEventPointersFromList(event);
-    const addrPtrs = getAddressPointersFromList(event);
-    /** @type {SvelteMap<string, import('nostr-tools').NostrEvent>} */
-    const collected = new SvelteMap();
-
-    for (const pointer of evtPtrs) {
-      const sub = eventStore.event(pointer.id).subscribe((evt) => {
-        if (evt) {
-          collected.set(`e:${pointer.id}`, evt);
-          collectedEvents = new SvelteMap(collected);
-        }
-      });
-      subs.push(sub);
-    }
-
-    for (const pointer of addrPtrs) {
-      const addrKey = 'a:' + pointer.kind + ':' + pointer.pubkey + ':' + (pointer.identifier ?? '');
-      const sub = eventStore
-        .replaceable(pointer.kind, pointer.pubkey, pointer.identifier)
-        .subscribe((evt) => {
-          if (evt) {
-            collected.set(addrKey, evt);
-            collectedEvents = new SvelteMap(collected);
-          }
-        });
-      subs.push(sub);
-    }
-
-    const lookupRelays = getAllLookupRelays();
-
-    if (evtPtrs.length > 0) {
-      const hintRelays = evtPtrs.flatMap((p) => p.relays || []);
-      const relays = [...new Set([...hintRelays, ...lookupRelays])];
-      const ids = evtPtrs.map((p) => p.id);
-      subs.push(fetchEvents(relays, { ids }).subscribe());
-    }
-
-    for (const pointer of addrPtrs) {
-      const hintRelays = pointer.relays || [];
-      const relays = [...new Set([...hintRelays, ...lookupRelays])];
-      subs.push(
-        fetchEvents(relays, {
-          kinds: [pointer.kind],
-          authors: [pointer.pubkey],
-          '#d': [pointer.identifier]
-        }).subscribe()
-      );
-    }
-
-    return () => subs.forEach((s) => s.unsubscribe());
-  });
+  // The listed events, store first; loaded (and retried) through the shared
+  // list-item hook, keyed `e:<id>` / `a:<kind>:<pubkey>:<d>`. Lists without
+  // event items load nothing.
+  const listItems = useListItems(() => (hasEvents ? event : null));
+  let collectedEvents = $derived(listItems.items);
 
   let resolvedEvents = $derived.by(() => {
     /** @type {import('nostr-tools').NostrEvent[]} */

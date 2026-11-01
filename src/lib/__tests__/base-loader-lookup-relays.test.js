@@ -146,4 +146,28 @@ describe('base loaders resolve lookup relays at request time', () => {
     const call = request.mock.calls.find((c) => JSON.stringify(c[1]).includes('3d'.repeat(32)));
     expect(call?.[0]).toEqual(['wss://indexer.example/', 'wss://lookup.example/']);
   });
+
+  // List views and the removal pane rely on this: an explicit load with
+  // hints and the store's fallback for the same id, started in the same
+  // tick, ask every relay once.
+  it('an explicit load with hints and the store fallback in the same tick ask each relay once', async () => {
+    const { eventLoader } = await import('$lib/loaders/base.js');
+    lookupRelays = ['wss://lookup.example/'];
+    const id = '4e'.repeat(32);
+
+    const a = eventLoader({
+      id,
+      relays: ['wss://community.example/', 'wss://lookup.example/']
+    }).subscribe();
+    const b = eventStore.event(id).subscribe();
+    await flushBuffer();
+    a.unsubscribe();
+    b.unsubscribe();
+
+    const asked = request.mock.calls
+      .filter((c) => JSON.stringify(c[1]).includes(id))
+      .map((c) => c[0])
+      .flat();
+    expect(asked.sort()).toEqual(['wss://community.example/', 'wss://lookup.example/']);
+  });
 });

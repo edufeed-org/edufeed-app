@@ -25,9 +25,7 @@ import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
 import { getAllLookupRelays } from '$lib/helpers/relay-helper.js';
 import { unique } from '$lib/helpers/unique.js';
 import { loadReferencedEvent } from '$lib/loaders/referenced-event.js';
-
-/** Delays before re-asking the network after a miss (one retry per entry). */
-const RETRY_DELAYS_MS = [3000, 10000];
+import { retryWhilePending, RETRY_DELAYS_MS } from '$lib/helpers/retry-while-pending.js';
 
 /**
  * @typedef {import('$lib/helpers/nostrUtils.js').decodeNostrIdentifier} Decode
@@ -108,29 +106,16 @@ export function useReferencedEvent(
     }, timeoutMs);
 
     const author = authorFor(decoded);
-    /** @type {import('rxjs').Subscription | undefined} */
-    let loadSub;
-    /** @type {ReturnType<typeof setTimeout> | undefined} */
-    let retryTimer;
-    /** @param {number} attempt */
-    const load = (attempt) => {
-      if (found) return;
-      loadSub = loadReferencedEvent(/** @type {any} */ (pointer), { author }).subscribe({
-        complete: () => {
-          const delay = retryDelaysMs[attempt];
-          if (!found && delay !== undefined) {
-            retryTimer = setTimeout(() => load(attempt + 1), delay);
-          }
-        }
-      });
-    };
-    load(0);
+    const stopLoading = retryWhilePending(
+      () => loadReferencedEvent(/** @type {any} */ (pointer), { author }),
+      () => !found,
+      retryDelaysMs
+    );
 
     return () => {
       sub.unsubscribe();
-      loadSub?.unsubscribe();
+      stopLoading();
       clearTimeout(timer);
-      clearTimeout(retryTimer);
     };
   });
 
