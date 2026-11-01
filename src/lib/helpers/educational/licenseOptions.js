@@ -30,11 +30,16 @@ export const STATIC_LICENSE_OPTIONS = Object.freeze([
  * rendered <option>.
  *
  * @param {string} [currentUrl] - The currently-selected license URL.
+ * @param {string} [currentLabel] - Label for the synthetic option, when the
+ *   caller knows better than the URL alone (e.g. a KIM license-type set).
  * @returns {Array<{ id: string, label: string }>}
  */
-export function getLicenseOptions(currentUrl) {
+export function getLicenseOptions(currentUrl, currentLabel) {
   if (!currentUrl || STATIC_LICENSE_OPTIONS.some((o) => o.id === currentUrl)) {
     return [...STATIC_LICENSE_OPTIONS];
   }
-  return [...STATIC_LICENSE_OPTIONS, { id: currentUrl, label: formatLicenseUrl(currentUrl) }];
+  return [
+    ...STATIC_LICENSE_OPTIONS,
+    { id: currentUrl, label: currentLabel || formatLicenseUrl(currentUrl) }
+  ];
 }

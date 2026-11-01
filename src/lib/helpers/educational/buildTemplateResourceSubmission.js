@@ -12,6 +12,7 @@
 import { ambToNostr } from 'amb-nostr-converter';
 import { formValuesToAmbJson } from './formValuesToAmbJson.js';
 import { resolveResourceDTag } from './formReference.js';
+import { preserveLicenseIdTags } from './ambHelpers.js';
 
 /**
  * @param {Object} args
@@ -22,6 +23,8 @@ import { resolveResourceDTag } from './formReference.js';
  * @param {string} args.signerPubkey - active account pubkey (converter needs a pubkey for id derivation)
  * @param {boolean} args.isEditMode
  * @param {string} [args.existingDTag] - resource's current `d` tag (edit mode)
+ * @param {string[]} [args.existingLicenseIds] - resource's current license:id
+ *   values (edit mode); extra ones survive while the license field is unchanged
  * @returns {{ tags: string[][], content: string, dTag: string }}
  */
 export function buildTemplateResourceSubmission({
@@ -31,7 +34,8 @@ export function buildTemplateResourceSubmission({
   selectedConcepts,
   signerPubkey,
   isEditMode,
-  existingDTag
+  existingDTag,
+  existingLicenseIds
 }) {
   const { amb, extras } = formValuesToAmbJson(form, rawValues, selectedConcepts);
   const { success, data, error } = ambToNostr(/** @type {any} */ (amb), {
@@ -59,7 +63,10 @@ export function buildTemplateResourceSubmission({
   const descFallback = descFieldId ? rawValues[descFieldId] : rawValues.description;
   const content = data.content || descFallback || '';
 
-  const converterTags = data.tags.filter((t) => t[0] !== 'd');
+  const converterTags = preserveLicenseIdTags(
+    data.tags.filter((t) => t[0] !== 'd'),
+    isEditMode ? existingLicenseIds : undefined
+  );
   const tags = [
     ['d', dTag],
     ...converterTags,

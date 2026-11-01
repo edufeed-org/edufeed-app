@@ -17,6 +17,8 @@ export {
   getAMBSubjects,
   getAMBEducationalLevels,
   getAMBLicense,
+  getAMBLicenseIds,
+  preserveLicenseIdTags,
   isAMBFree,
   getAMBKeywords,
   getAMBLanguages,

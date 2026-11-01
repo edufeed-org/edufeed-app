@@ -75,6 +75,7 @@
   } from '$lib/helpers/educational/applyEnrichedPayload.js';
   import { bucketSubjectsForBildungsbereich } from '$lib/helpers/educational/bucketSubjectsForBildungsbereich.js';
   import { getLicenseOptions } from '$lib/helpers/educational/licenseOptions.js';
+  import { formatLicenseIds } from '$lib/helpers/educational/licenseLabel.js';
   import { getCoverHue } from '$lib/helpers/educational/coverColor.js';
   import CoverColorPicker from './CoverColorPicker.svelte';
   import SmartFillBadge from './SmartFillBadge.svelte';
@@ -650,7 +651,16 @@
 
   // License options. Extracted to $lib/helpers/educational/licenseOptions.js so
   // the image-license modal can reuse the same list.
-  const licenseOptions = $derived(getLicenseOptions(formData.license));
+  // While the picked URI is still the source event's first license:id, label
+  // it by the whole tag set (KIM attribution + shareAlike → "CC BY-SA (KIM)").
+  const licenseOptions = $derived(
+    getLicenseOptions(
+      formData.license,
+      formData.licenseIds?.[0] === formData.license
+        ? formatLicenseIds(formData.licenseIds)?.label
+        : undefined
+    )
+  );
 
   // Language options
   const languageOptions = [
@@ -686,6 +696,7 @@
     getAMBEducationalLevels,
     getAMBKeywords,
     getAMBLicense,
+    getAMBLicenseIds,
     isAMBFree,
     getAMBEncodings,
     getAMBCreators,
@@ -867,6 +878,7 @@
       hasPart: /** @type {AMBRelationRef[]} */ (getAMBHasPart(editEvent)),
       isPartOf: /** @type {AMBRelationRef[]} */ (getAMBIsPartOf(editEvent)),
       license: getAMBLicense(editEvent)?.id || 'https://creativecommons.org/licenses/by/4.0/',
+      licenseIds: getAMBLicenseIds(editEvent),
       isAccessibleForFree: isAMBFree(editEvent),
       coverHue: getCoverHue(editEvent),
       datePublished: toDateInputValue(getAMBDatePublished(editEvent)),
@@ -1191,6 +1203,7 @@
     const license = getAMBLicense(prefillEvent);
     if (license) {
       formData.license = license.id;
+      formData.licenseIds = getAMBLicenseIds(prefillEvent);
       mark('license');
     }
 

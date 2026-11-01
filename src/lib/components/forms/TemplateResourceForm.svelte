@@ -8,6 +8,7 @@
     relationRelayHintsFromTags
   } from '$lib/helpers/educational/ambJsonToFormValues.js';
   import { buildTemplateResourceSubmission } from '$lib/helpers/educational/buildTemplateResourceSubmission.js';
+  import { getAMBLicenseIds } from '$lib/helpers/educational/ambHelpers.js';
   import FormRenderer from '$lib/components/forms/FormRenderer.svelte';
   import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
   import { addressLoader } from '$lib/loaders/base.js';
@@ -158,7 +159,9 @@
         existingDTag:
           isEditMode && resourceEvent
             ? resourceEvent.tags.find((t) => t[0] === 'd')?.[1]
-            : undefined
+            : undefined,
+        existingLicenseIds:
+          isEditMode && resourceEvent ? getAMBLicenseIds(resourceEvent) : undefined
       });
 
       // In edit mode this replaces `resourceEvent`, so created_at must be

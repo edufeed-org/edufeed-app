@@ -11,7 +11,7 @@ import {
   getNestedTagValues,
   getLabelsWithFallback
 } from './ambTransform.js';
-import { formatLicenseUrl } from './licenseLabel.js';
+import { formatLicenseIds } from './licenseLabel.js';
 import { unique } from '$lib/helpers/unique.js';
 
 /**
@@ -84,15 +84,50 @@ export function getAMBEducationalLevels(event, lang = 'en') {
 }
 
 /**
- * Extracts license information from an AMB event
+ * All license URIs of an AMB event in tag order: every `license:id` value
+ * (DINI AG KIM license types come as several tags, e.g. attribution +
+ * shareAlike), falling back to a single plain `license` tag.
+ * @param {any} event - AMB event (kind 30142)
+ * @returns {string[]}
+ */
+export function getAMBLicenseIds(event) {
+  const tags = event?.tags ?? [];
+  const ids = getTagValues(tags, 'license:id')
+    .map((v) => (typeof v === 'string' ? v.trim() : ''))
+    .filter(Boolean);
+  if (ids.length > 0) return ids;
+  const plain = getTagValue(tags, 'license');
+  return typeof plain === 'string' && plain.trim() ? [plain.trim()] : [];
+}
+
+/**
+ * Extracts license information from an AMB event, considering ALL license
+ * tags (see formatLicenseIds for the classification rules).
  * @param {any} event - AMB event (kind 30142)
  * @returns {{id: string, label: string}|null} License info or null
  */
 export function getAMBLicense(event) {
-  const licenseId = getTagValue(event.tags, 'license:id');
-  if (!licenseId) return null;
+  return formatLicenseIds(getAMBLicenseIds(event));
+}
 
-  return { id: licenseId, label: formatLicenseUrl(licenseId) };
+/**
+ * Keeps a resource's additional `license:id` tags across an edit. Forms hold a
+ * single license URI (the first one); when that is still the first original
+ * URI the user did not change the license, so the remaining original values
+ * (e.g. KIM `shareAlike` next to `attribution`) are re-inserted right after
+ * it instead of being silently dropped. Mutates and returns `tags`.
+ *
+ * @param {string[][]} tags - freshly serialized tags
+ * @param {string[] | undefined | null} originalIds - getAMBLicenseIds(original)
+ * @returns {string[][]}
+ */
+export function preserveLicenseIdTags(tags, originalIds) {
+  if (!Array.isArray(originalIds) || originalIds.length < 2) return tags;
+  const positions = tags.flatMap((t, i) => (t[0] === 'license:id' ? [i] : []));
+  if (positions.length !== 1 || tags[positions[0]][1] !== originalIds[0]) return tags;
+  const extra = originalIds.slice(1).map((id) => ['license:id', id]);
+  tags.splice(positions[0] + 1, 0, ...extra);
+  return tags;
 }
 
 /**

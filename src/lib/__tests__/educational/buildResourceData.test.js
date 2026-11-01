@@ -49,6 +49,18 @@ describe('buildResourceData', () => {
     expect(rd.imageLicenseEvent).toEqual({ kind: 1063, tags: [['x', '2d39']] });
   });
 
+  it('passes all original license:id URIs through for edit round-trips', () => {
+    const ids = [
+      'https://w3id.org/kim/license/attribution',
+      'https://w3id.org/kim/license/shareAlike'
+    ];
+    const rd = buildResourceData(
+      { ...filledFormData(), licenseIds: ids },
+      { about, hasNoUrl: false }
+    );
+    expect(rd.licenseIds).toEqual(ids);
+  });
+
   it('passes datePublished and dateCreated through', () => {
     const rd = buildResourceData(filledFormData(), { about, hasNoUrl: false });
     expect(rd.datePublished).toBe('2026-07-01');

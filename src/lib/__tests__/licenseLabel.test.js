@@ -1,6 +1,6 @@
 /** @vitest-environment node */
 import { describe, it, expect } from 'vitest';
-import { formatLicenseUrl } from '$lib/helpers/educational/licenseLabel.js';
+import { formatLicenseUrl, formatLicenseIds } from '$lib/helpers/educational/licenseLabel.js';
 
 describe('formatLicenseUrl', () => {
   it('formats CC 4.0 international variants', () => {
@@ -93,5 +93,99 @@ describe('formatLicenseUrl', () => {
     expect(formatLicenseUrl('https://creativecommons.org/licenses/by-nc-sa/3.0/de')).toBe(
       'CC BY-NC-SA 3.0 DE'
     );
+  });
+});
+
+const KIM = 'https://w3id.org/kim/license/';
+
+describe('formatLicenseUrl — KIM license types and free licences', () => {
+  it('labels a single KIM concept instead of returning the raw URI', () => {
+    expect(formatLicenseUrl(`${KIM}attribution`)).toBe('CC BY (KIM)');
+    expect(formatLicenseUrl(`${KIM}nonCommercial-noDerivatives`)).toBe('CC BY-NC-ND (KIM)');
+    expect(formatLicenseUrl(`${KIM}noLicense`)).toBe('Keine Lizenz');
+    expect(formatLicenseUrl(`${KIM}publicDomain`)).toBe('Public Domain (KIM)');
+    expect(formatLicenseUrl(`${KIM}unknownTerm`)).toBe(`${KIM}unknownTerm`);
+  });
+
+  it('labels GNU, Apache, BSD, MIT and SPDX licence URIs', () => {
+    expect(formatLicenseUrl('https://www.gnu.org/licenses/gpl-3.0-standalone.html')).toBe(
+      'GPL-3.0'
+    );
+    expect(formatLicenseUrl('http://www.gnu.org/licenses/gpl-3.0')).toBe('GPL-3.0');
+    expect(formatLicenseUrl('https://www.gnu.org/licenses/fdl-1.3.html')).toBe('GFDL-1.3');
+    expect(formatLicenseUrl('https://www.gnu.org/licenses/lgpl-2.1.txt')).toBe('LGPL-2.1');
+    expect(formatLicenseUrl('https://opensource.org/license/mit')).toBe('MIT License');
+    expect(formatLicenseUrl('https://www.apache.org/licenses/LICENSE-2.0')).toBe('Apache-2.0');
+    expect(formatLicenseUrl('https://opensource.org/license/bsd-3-clause')).toBe('BSD-3-Clause');
+    expect(formatLicenseUrl('https://spdx.org/licenses/GPL-3.0-or-later.html')).toBe(
+      'GPL-3.0-or-later'
+    );
+    expect(formatLicenseUrl('https://example.org/my-license')).toBe(
+      'https://example.org/my-license'
+    );
+  });
+});
+
+describe('formatLicenseIds — all license:id values of a resource', () => {
+  it('returns null without values', () => {
+    expect(formatLicenseIds([])).toBeNull();
+    expect(formatLicenseIds(['', '  '])).toBeNull();
+  });
+
+  it('single KIM attribution → CC BY (KIM), linked to the KIM concept', () => {
+    expect(formatLicenseIds([`${KIM}attribution`])).toEqual({
+      id: `${KIM}attribution`,
+      label: 'CC BY (KIM)'
+    });
+  });
+
+  it('KIM attribution + shareAlike compose CC BY-SA (KIM)', () => {
+    expect(formatLicenseIds([`${KIM}attribution`, `${KIM}shareAlike`])).toEqual({
+      id: `${KIM}attribution`,
+      label: 'CC BY-SA (KIM)'
+    });
+  });
+
+  it('composes nc/nd variants; attribution is implied', () => {
+    expect(formatLicenseIds([`${KIM}nonCommercial-noDerivatives`])?.label).toBe(
+      'CC BY-NC-ND (KIM)'
+    );
+    expect(formatLicenseIds([`${KIM}attribution`, `${KIM}nonCommercial`])?.label).toBe(
+      'CC BY-NC (KIM)'
+    );
+    expect(
+      formatLicenseIds([`${KIM}nonCommercial`, `${KIM}shareAlike`, `${KIM}attribution`])?.label
+    ).toBe('CC BY-NC-SA (KIM)');
+  });
+
+  it('noLicense → Keine Lizenz; publicDomain alone → Public Domain (KIM)', () => {
+    expect(formatLicenseIds([`${KIM}attribution`, `${KIM}noLicense`])?.label).toBe('Keine Lizenz');
+    expect(formatLicenseIds([`${KIM}publicDomain`])?.label).toBe('Public Domain (KIM)');
+  });
+
+  it('contradictory KIM sets show the raw first URI', () => {
+    expect(formatLicenseIds([`${KIM}shareAlike`, `${KIM}noDerivatives`])).toEqual({
+      id: `${KIM}shareAlike`,
+      label: `${KIM}shareAlike`
+    });
+    expect(formatLicenseIds([`${KIM}publicDomain`, `${KIM}attribution`])?.label).toBe(
+      `${KIM}publicDomain`
+    );
+  });
+
+  it('a Creative Commons URI wins over KIM concepts', () => {
+    expect(
+      formatLicenseIds([`${KIM}attribution`, 'https://creativecommons.org/licenses/by-nc/4.0/'])
+    ).toEqual({ id: 'https://creativecommons.org/licenses/by-nc/4.0/', label: 'CC BY-NC 4.0' });
+  });
+
+  it('otherwise the first labelled value, else the raw first value', () => {
+    expect(
+      formatLicenseIds(['https://example.org/x', 'https://www.gnu.org/licenses/gpl-3.0.html'])
+    ).toEqual({ id: 'https://www.gnu.org/licenses/gpl-3.0.html', label: 'GPL-3.0' });
+    expect(formatLicenseIds(['https://example.org/x'])).toEqual({
+      id: 'https://example.org/x',
+      label: 'https://example.org/x'
+    });
   });
 });
