@@ -8,7 +8,8 @@
  *
  * @vitest-environment node
  */
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
+import { Subject } from 'rxjs';
 import {
   createLivenessStorage,
   createRelayLiveness,
@@ -145,5 +146,50 @@ describe('pool attachment', () => {
     expect(events).toEqual([]);
     expect(pool.relays.has('wss://dead.example/')).toBe(false);
     liveness.destroy();
+  });
+});
+
+// A relay whose address swallows the connection (nos.lol 2026-10: no
+// refusal, no error, "connecting" forever) never produces the failure the
+// tracker parks relays on. The deadline turns "not open after N s" into one.
+describe('watchConnectDeadline', () => {
+  /** @param {boolean} connected */
+  const fakeRelay = (connected = false) => ({
+    url: 'wss://silent.example/',
+    connected,
+    open$: new Subject()
+  });
+
+  it('records a failure when the relay has not opened by the deadline', async () => {
+    vi.useFakeTimers();
+    try {
+      const { watchConnectDeadline } = await import('$lib/stores/relay-liveness.js');
+      const liveness = { recordFailure: vi.fn() };
+      const relay = fakeRelay();
+      watchConnectDeadline(liveness, relay, 15_000);
+      watchConnectDeadline(liveness, relay, 15_000); // one watcher per relay
+      await vi.advanceTimersByTimeAsync(15_000);
+      expect(liveness.recordFailure).toHaveBeenCalledTimes(1);
+      expect(liveness.recordFailure).toHaveBeenCalledWith('wss://silent.example/');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('records nothing for a relay that opens in time or is already connected', async () => {
+    vi.useFakeTimers();
+    try {
+      const { watchConnectDeadline } = await import('$lib/stores/relay-liveness.js');
+      const liveness = { recordFailure: vi.fn() };
+      const slow = { ...fakeRelay(), url: 'wss://slow.example/' };
+      watchConnectDeadline(liveness, slow, 15_000);
+      await vi.advanceTimersByTimeAsync(3_700); // a slow but healthy handshake
+      slow.open$.next(undefined);
+      watchConnectDeadline(liveness, { ...fakeRelay(true), url: 'wss://up.example/' }, 15_000);
+      await vi.advanceTimersByTimeAsync(30_000);
+      expect(liveness.recordFailure).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

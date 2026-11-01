@@ -25,6 +25,7 @@
  * can never be excluded indefinitely from stored evidence alone).
  */
 import { RelayLiveness } from 'applesauce-relay';
+import { take } from 'rxjs';
 
 export const RELAY_LIVENESS_STORAGE_PREFIX = 'relay-liveness:';
 
@@ -105,3 +106,44 @@ export function createRelayLiveness(options = {}) {
  * to the pool and restores its state in the browser.
  */
 export const relayLiveness = createRelayLiveness();
+
+/** How long a relay asked for something may stay unopened before it counts as failed. */
+export const CONNECT_DEADLINE_MS = 15_000;
+
+/** Relays with a deadline running (one watcher per relay). */
+const watched = new Set();
+
+/**
+ * Record one failure for a relay that has not opened its connection
+ * `deadlineMs` after it was asked for something.
+ *
+ * The tracker parks relays on connection errors and closes, but a relay
+ * whose address swallows the connection (nos.lol 2026-10: no refusal, no
+ * error, "connecting" for minutes) produces neither, so it was never parked
+ * and held every lookup stage that asked it for the full stage budget. The
+ * deadline is far above a slow but healthy handshake (3–4 s measured while
+ * a feed opens dozens of sockets), so it only catches relays that do not
+ * connect at all; a later open revives the relay as usual.
+ *
+ * @param {{ recordFailure: (url: string) => void }} liveness
+ * @param {{ url: string, connected: boolean, open$: import('rxjs').Observable<any> }} relay
+ * @param {number} [deadlineMs]
+ */
+export function watchConnectDeadline(liveness, relay, deadlineMs = CONNECT_DEADLINE_MS) {
+  if (relay.connected || watched.has(relay.url)) return;
+  watched.add(relay.url);
+  /** @type {ReturnType<typeof setTimeout> | undefined} */
+  let timer;
+  /** @type {import('rxjs').Subscription | undefined} */
+  let sub;
+  const done = () => {
+    clearTimeout(timer);
+    sub?.unsubscribe();
+    watched.delete(relay.url);
+  };
+  timer = setTimeout(() => {
+    if (!relay.connected) liveness.recordFailure(relay.url);
+    done();
+  }, deadlineMs);
+  sub = relay.open$.pipe(take(1)).subscribe(done);
+}

@@ -472,7 +472,11 @@ instantly-empty page as "exhausted", leaves a `pool.group()` standing
 subscription (inbox, DM wraps, chat) without a relay that recovers, and turns
 a parked indexer into a false "no kind 10002/10050" verdict that the write
 paths would act on. Apply it where skipping is safe: `timedPool` one-shots use
-`skipParkedRelays(relayLiveness, relays)`, which never drops every relay.
+`skipParkedRelays(relayLiveness, relays)`, which never drops every relay, and
+the event/address loaders' upstream `loaderRequest` skips parked relays for
+lookups BY ID only (every filter just `ids`; a lone parked hint relay only
+while other relays are online) — never for replaceables, profiles or relay
+lists.
 
 ### Event Deletion (NIP-09)
 
