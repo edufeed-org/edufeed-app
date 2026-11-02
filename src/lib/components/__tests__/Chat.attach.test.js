@@ -162,6 +162,17 @@ describe('community chat attachments', () => {
     ]);
   });
 
+  it('offers a multiline composer whose Enter key still sends (issue dfc435d5)', async () => {
+    const { getByTestId } = render(Chat, { props });
+    const field = getByTestId('chat-input');
+    expect(field.getAttribute('aria-multiline')).toBe('true');
+    expect(field.classList.contains('single-line')).toBe(false);
+    expect(field.getAttribute('enterkeyhint')).toBe('send');
+    const form = getByTestId('chat-composer-form');
+    expect(form.classList.contains('items-end')).toBe(true);
+    expect(form.classList.contains('rounded-full')).toBe(false);
+  });
+
   it('offers no attach button to someone who cannot publish', () => {
     const { queryByTestId } = render(Chat, { props: { ...props, canPublish: false } });
     expect(queryByTestId('chat-attach-input')).toBeNull();

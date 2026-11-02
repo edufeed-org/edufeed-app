@@ -397,9 +397,9 @@
         (journey-test finding — "input box is not good visible"). -->
       <form
         onsubmit={sendMessage}
-        class="flex items-center gap-2 {replyingTo
-          ? 'rounded-t-none rounded-b-full'
-          : 'rounded-full'} border border-base-300 bg-base-100 px-2 py-1 shadow-md data-[dragging=true]:border-primary data-[dragging=true]:bg-primary/10 data-[dragging=true]:ring-2 data-[dragging=true]:ring-primary"
+        class="flex items-end gap-2 {replyingTo
+          ? 'rounded-t-none rounded-b-3xl'
+          : 'rounded-3xl'} border border-base-300 bg-base-100 px-2 py-1 shadow-md data-[dragging=true]:border-primary data-[dragging=true]:bg-primary/10 data-[dragging=true]:ring-2 data-[dragging=true]:ring-primary"
         data-testid="chat-composer-form"
         use:fileDropZone={{ onFiles: attachFiles, enabled: !isSending && !attachments.uploading }}
       >
@@ -440,12 +440,13 @@
           bind:this={messageInput}
           bind:value={newMessage}
           {customEmojiSets}
+          multiline
           placeholder={m.community_views_chat_input_placeholder()}
           disabled={isSending}
           onfocus={() => (showEmojiPicker = false)}
           onSubmit={() => sendMessage()}
           onFiles={attachFiles}
-          class="py-1"
+          class="min-h-[2rem] py-1.5 leading-snug"
           testid="chat-input"
         />
 

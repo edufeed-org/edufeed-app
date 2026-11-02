@@ -665,7 +665,7 @@
     data-placeholder={placeholder}
     data-testid={testid}
     tabindex="0"
-    enterkeyhint={multiline ? undefined : 'send'}
+    enterkeyhint={submitOnEnter ? 'send' : undefined}
     oninput={onInput}
     onkeyup={onKeyup}
     onclick={refreshQuery}
@@ -676,18 +676,17 @@
 </div>
 
 <style>
+  /* The placeholder stays on one line in every mode: a wrapped "Nachricht an
+     arbeitszimmer" (390/768, QA 2026-10-02 K3) would make an empty multiline
+     chat field two rows tall. */
   .emoji-input:empty::before {
     content: attr(data-placeholder);
-    opacity: 0.5;
-    pointer-events: none;
-  }
-  /* A one-line field keeps its placeholder on one line too ("Nachricht an
-     arbeitszimmer" wrapped at 390/768, QA 2026-10-02 K3). */
-  .emoji-input.single-line:empty::before {
     display: block;
     min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+    opacity: 0.5;
+    pointer-events: none;
   }
 </style>
