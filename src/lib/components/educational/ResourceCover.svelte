@@ -21,7 +21,7 @@
   import { useProfileMap } from '$lib/stores/profile-map.svelte.js';
   import { unique } from '$lib/helpers/unique.js';
   import { getDisplayName } from 'applesauce-core/helpers';
-  import { getSha256FromURL } from 'applesauce-common/helpers';
+  import { sha256FromUrl } from '$lib/helpers/sha256.js';
   import { getLabelsWithFallback } from '$lib/helpers/educational/ambTransform.js';
   import { getCoverHue } from '$lib/helpers/educational/coverColor.js';
   import { getAMBCreatorNames } from '$lib/helpers/educational/ambHelpers.js';
@@ -104,13 +104,7 @@
   const imageHash = $derived.by(() => {
     const xTag = resource?.tags?.find((/** @type {string[]} */ t) => t[0] === 'x')?.[1];
     if (xTag) return xTag;
-    if (!resource?.image) return null;
-    try {
-      // getSha256FromURL does `new URL(...)` and throws on malformed input.
-      return getSha256FromURL(resource.image) ?? null;
-    } catch {
-      return null;
-    }
+    return sha256FromUrl(resource?.image);
   });
   const getLicenseStatus = useLicenseStatus(() => imageHash);
   const licenseStatus = $derived(getLicenseStatus());

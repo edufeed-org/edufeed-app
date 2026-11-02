@@ -13,7 +13,7 @@
 import { ambToNostr } from 'amb-nostr-converter';
 import { convertFormDataToAMB } from './formDataToAmb.js';
 import { formatAMBResource } from './ambHelpers.js';
-import { getSha256FromURL } from 'applesauce-common/helpers';
+import { sha256FromUrl } from '$lib/helpers/sha256.js';
 import { appendCoverColorTag } from './coverColor.js';
 
 const AMB_RESOURCE_KIND = 30142;
@@ -148,16 +148,9 @@ export function buildPreviewResource(formData, pubkey, locale = 'en') {
   if (!hasTag('x') && formData) {
     const licenseEvent = formData.imageLicenseEvent;
     const fromLicense = licenseEvent?.tags?.find((t) => t[0] === 'x')?.[1];
-    // getSha256FromURL does `new URL(...)` and throws on partial input —
-    // this runs in a $derived on every keystroke of the image field, so an
-    // in-progress URL must never crash the preview.
-    let fromUrl;
-    try {
-      fromUrl = formData.image ? getSha256FromURL(formData.image) : undefined;
-    } catch {
-      fromUrl = undefined;
-    }
-    const hash = fromLicense ?? fromUrl;
+    // Runs in a $derived on every keystroke of the image field: an
+    // in-progress URL must never crash the preview (sha256FromUrl never throws).
+    const hash = fromLicense ?? sha256FromUrl(formData.image);
     if (hash) tags.push(['x', hash]);
   }
 

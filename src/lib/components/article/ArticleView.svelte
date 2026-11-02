@@ -23,7 +23,7 @@
   import DetailHeader from '../shared/DetailHeader.svelte';
   import ImageLicenseOverlay from '../shared/ImageLicenseOverlay.svelte';
   import { useLicenseStatus } from '$lib/stores/image-license.svelte.js';
-  import { getSha256FromURL } from 'applesauce-common/helpers';
+  import { sha256FromUrl } from '$lib/helpers/sha256.js';
   import HighlightOverlay from '../shared/HighlightOverlay.svelte';
   import ReactionBar from '../reactions/ReactionBar.svelte';
   import CommentList from '../comments/CommentList.svelte';
@@ -60,7 +60,7 @@
   const imageHash = $derived.by(() => {
     const xTag = event.tags?.find((/** @type {any} */ t) => t[0] === 'x')?.[1];
     if (xTag) return xTag;
-    return image ? (getSha256FromURL(image) ?? null) : null;
+    return sha256FromUrl(image);
   });
 
   const getCoverStatus = useLicenseStatus(() => imageHash);

@@ -15,7 +15,8 @@ vi.mock('blossom-client-sdk', () => ({
 }));
 
 const mockSha256Hex = vi.fn(async (/** @type {Blob} */ _blob) => 'a'.repeat(64));
-vi.mock('$lib/helpers/sha256.js', () => ({
+vi.mock('$lib/helpers/sha256.js', async (importOriginal) => ({
+  ...(await importOriginal()),
   sha256Hex: (/** @type {Blob} */ blob) => mockSha256Hex(blob)
 }));
 

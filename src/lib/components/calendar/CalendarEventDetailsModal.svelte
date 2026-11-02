@@ -40,7 +40,7 @@
   import HeroImage from '$lib/components/shared/HeroImage.svelte';
   import ImageLicenseOverlay from '../shared/ImageLicenseOverlay.svelte';
   import { useLicenseStatus } from '$lib/stores/image-license.svelte.js';
-  import { getSha256FromURL } from 'applesauce-common/helpers';
+  import { sha256FromUrl } from '$lib/helpers/sha256.js';
 
   /**
    * @typedef {import('../../types/calendar.js').CalendarEvent} CalendarEvent
@@ -97,14 +97,7 @@
       : null
   );
 
-  const imageHash = $derived.by(() => {
-    if (!event?.image) return null;
-    try {
-      return getSha256FromURL(event.image) ?? null;
-    } catch {
-      return null;
-    }
-  });
+  const imageHash = $derived(sha256FromUrl(event?.image));
   const getImageStatus = useLicenseStatus(() => imageHash);
   const imageStatus = $derived(getImageStatus());
 

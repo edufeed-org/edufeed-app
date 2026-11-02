@@ -45,14 +45,22 @@ vi.mock('applesauce-common/helpers', () => ({
     event.tags?.find((/** @type {string[]} */ t) => t[0] === 'title')?.[1] || 'Untitled',
   getArticleImage: (/** @type {any} */ event) =>
     event.tags?.find((/** @type {string[]} */ t) => t[0] === 'image')?.[1] || null,
-  getSha256FromURL: () => null
+  // Like the real helper: `new URL(...)` throws on anything that is not a URL.
+  getSha256FromURL: (/** @type {string} */ url) => {
+    new URL(url);
+    return null;
+  }
 }));
 vi.mock('$lib/stores/profile-map.svelte.js', () => ({
   useProfileMap: () => () => new Map([['d'.repeat(64), { name: 'Corinna Profil' }]])
 }));
 vi.mock('$lib/stores/image-license.svelte.js', () => ({
   useLicenseForHash: () => () => null,
-  useLicenseStatus: () => () => ({ event: null, status: 'loading' })
+  // Reads the hash getter like the real hook's effect, so imageHash is evaluated.
+  useLicenseStatus: (/** @type {() => any} */ getHash) => {
+    getHash();
+    return () => ({ event: null, status: 'loading' });
+  }
 }));
 vi.mock('../shared/ImageLicenseOverlay.svelte', () => ({ default: () => ({}) }));
 vi.mock('$lib/helpers/calendar.js', () => ({
@@ -112,6 +120,20 @@ const mockAuthorProfile = {
 };
 
 describe('ArticleCard', () => {
+  // Kind 30023 events on live relays carry `image` tags like a bare filename
+  // or a Markdown image; one of them used to take down all of /discover.
+  it.each(['jonny-gios-SqjhKY9877M-unsplash.jpg', '![image](https://image.nostr.build/x.jpg)'])(
+    'renders when the image tag is not a URL (%j)',
+    (image) => {
+      const article = {
+        ...mockArticle,
+        tags: mockArticle.tags.map((t) => (t[0] === 'image' ? ['image', image] : t))
+      };
+      const { getByText } = render(ArticleCard, { props: { article } });
+      expect(getByText('Test Article Title')).toBeTruthy();
+    }
+  );
+
   describe('default (card) variant', () => {
     it('renders as vertical card layout by default', () => {
       const { container } = render(ArticleCard, {

@@ -4,7 +4,10 @@ import { render, fireEvent, waitFor } from '@testing-library/svelte';
 import LicensedImageInput from '$lib/components/shared/LicensedImageInput.svelte';
 
 vi.mock('blossom-client-sdk', () => ({ BlossomClient: class {} }));
-vi.mock('$lib/helpers/sha256.js', () => ({ sha256Hex: async () => 'a'.repeat(64) }));
+vi.mock('$lib/helpers/sha256.js', async (importOriginal) => ({
+  ...(await importOriginal()),
+  sha256Hex: async () => 'a'.repeat(64)
+}));
 vi.mock('$lib/helpers/image-license.js', async () => {
   const actual = /** @type {any} */ (await vi.importActual('$lib/helpers/image-license.js'));
   return { ...actual, findExistingLicense: vi.fn(async () => null) };
