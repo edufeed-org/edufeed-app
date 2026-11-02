@@ -42,3 +42,24 @@ export function resolveGroupAdded({ groupId, relay, communikeyEvents = [], metad
     groupName
   };
 }
+
+/**
+ * A kind-9 channel message that p-tags the user (an @mention or a reply to
+ * them): open the message inside its channel on the group host — the group
+ * route scrolls to `?message=` — and call the channel by its kind-39000 name.
+ * @param {{
+ *   groupId: string | null,
+ *   relay: string | null,
+ *   messageId: string,
+ *   metadataEvent?: any
+ * }} args
+ * @returns {{ href: string | null, groupName: string | null }}
+ */
+export function resolveChannelMention({ groupId, relay, messageId, metadataEvent = null }) {
+  const groupName = groupNameOf(metadataEvent);
+  if (!groupId || !relay) return { href: null, groupName };
+  return {
+    href: `${groupHref({ relay, id: groupId })}?message=${encodeURIComponent(messageId)}`,
+    groupName
+  };
+}

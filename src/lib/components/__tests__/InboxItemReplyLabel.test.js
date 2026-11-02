@@ -17,10 +17,12 @@ vi.mock('$lib/stores/app-settings.svelte.js', () => ({
 }));
 
 vi.mock('$lib/services/inbox-service.svelte.js', () => ({
-  markItemAsRead: vi.fn()
+  markItemAsRead: vi.fn(),
+  getInboxPubkey: () => null
 }));
 
 vi.mock('$lib/helpers/waves.js', () => ({ publishWave: vi.fn() }));
+vi.mock('$lib/stores/profile-map.svelte.js', () => ({ useProfileMap: () => () => new Map() }));
 
 vi.mock('$lib/stores/nostr-infrastructure.svelte', () => ({
   eventStore: { replaceable: () => ({ subscribe: vi.fn() }) },
@@ -97,7 +99,8 @@ describe('InboxItem kind 1 labels', () => {
   it('still labels a kind 9 community mention with the community name', () => {
     render(InboxItem, {
       props: {
-        event: makeEvent(9, [['h', 'communitypubkey']]),
+        // community chat: the `h` tag is the community's 64-hex pubkey
+        event: makeEvent(9, [['h', 'c'.repeat(64)]]),
         unread: true,
         contentTitle: 'Mathe AG'
       }
