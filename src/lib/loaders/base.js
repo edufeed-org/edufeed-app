@@ -13,7 +13,11 @@
  * `createTimelineFeed` from `./timeline-feed.js` instead — the applesauce v7
  * window loader with prefetch-driven paging and per-relay status.
  */
-import { skipParkedRelays, relayLiveness } from '$lib/stores/relay-liveness.js';
+import {
+  skipParkedRelays,
+  relayLiveness,
+  watchConnectDeadline
+} from '$lib/stores/relay-liveness.js';
 import { EMPTY, defer, from, isObservable, merge, mergeAll, mergeMap, of } from 'rxjs';
 import { catchError } from 'rxjs/operators';
 import {
@@ -54,6 +58,43 @@ export const timedPool = (relays, filters) =>
     // never all of them — see skipParkedRelays.
     .request(skipParkedRelays(relayLiveness, relays), filters, { timeout: 10_000 })
     .pipe(catchError(() => EMPTY));
+
+/**
+ * Upstream request of the event/address loaders below. A loader stage asks
+ * its relays together and moves on only when the stage completes or after
+ * LOADER_STAGE_TIMEOUT_MS, so one relay that never answers held every miss
+ * for the full stage (5.2 s measured with a dead relay in the lookup list —
+ * on the path of every quote/reference not on the lookup relays).
+ *
+ * Lookups BY ID (every filter only `ids`) leave out the relays the liveness
+ * tracker has parked, and arm its connect deadline for the relays they ask
+ * (a relay that hangs at connect is otherwise never parked): nobody draws a conclusion from such a miss beyond
+ * "show a badge, retry later". Everything else — replaceables, profiles,
+ * kind 10002/10050, whose confirmed "absent" verdict write paths act on —
+ * keeps every relay (see the "Pool liveness" rule in CLAUDE.md).
+ *
+ * @param {string[]} relays
+ * @param {Filter[]} filters
+ */
+export const loaderRequest = (relays, filters) => {
+  const byId = filters.every((f) => Object.keys(f).every((key) => key === 'ids'));
+  if (!byId) return pool.request(relays, filters);
+  const eligible = skipParkedRelays(relayLiveness, relays);
+  // skipParkedRelays never empties a list, but the event loader asks each
+  // hint relay in a request of its own: a parked hint relay comes alone. Skip
+  // it while other relays are online (the network works, that relay does
+  // not); with nothing online, asking it beats asking nobody.
+  if (eligible.every((relay) => isParked(relay)) && relayLiveness.online?.length > 0) {
+    return EMPTY;
+  }
+  // A relay that swallows the connection never errors, so nothing would ever
+  // park it: count "not open 15 s after we asked" as a failure.
+  for (const url of eligible) watchConnectDeadline(relayLiveness, pool.relay(url));
+  return pool.request(eligible, filters);
+};
+
+/** @param {string} relay */
+const isParked = (relay) => relayLiveness.filter([relay]).length === 0;
 
 /** Batches the address/event loaders run at once (applesauce default 4). */
 export const LOADER_CONCURRENT_BATCHES = 16;
@@ -147,7 +188,7 @@ const revalidatingCacheRequest = createRevalidatingCacheRequest(cacheRequest, (p
 });
 
 // Standalone address loader for direct use in components/loaders
-export const addressLoader = createAddressLoader(pool, {
+export const addressLoader = createAddressLoader(loaderRequest, {
   eventStore,
   cacheRequest: revalidatingCacheRequest,
   lookupRelays: lookupRelays$,
@@ -167,7 +208,7 @@ export const addressLoader = createAddressLoader(pool, {
 // bufferTime: 0 dispatches the relay request on the next microtask instead of
 // waiting the default 1s — same-tick calls still batch, but a single detail-page
 // fetch no longer burns a full second of its timeout budget before connecting.
-export const eventLoader = createEventLoader(pool, {
+export const eventLoader = createEventLoader(loaderRequest, {
   eventStore,
   cacheRequest,
   bufferTime: 0,
@@ -180,7 +221,7 @@ export const eventLoader = createEventLoader(pool, {
 // lookupRelays must include profile indexer relays (see addressLoader above).
 // Shares the revalidating cache request so `eventStore.replaceable()` /
 // `eventStore.profile()` cache hits are refreshed too.
-const unifiedLoader = createUnifiedEventLoader(pool, {
+const unifiedLoader = createUnifiedEventLoader(loaderRequest, {
   eventStore,
   cacheRequest: revalidatingCacheRequest,
   lookupRelays: lookupRelays$,
