@@ -2,7 +2,13 @@
      it (title, author, delete availability) and still renders the metadata
      snippet so kind badges can be asserted. -->
 <script>
-  let { title = '', authorPubkey = '', onDelete = undefined, metadata = undefined } = $props();
+  let {
+    title = '',
+    authorPubkey = '',
+    onDelete = undefined,
+    bookmark = false,
+    metadata = undefined
+  } = $props();
 </script>
 
 <div
@@ -10,6 +16,7 @@
   data-title={title}
   data-author={authorPubkey}
   data-can-delete={String(!!onDelete)}
+  data-bookmark={String(bookmark)}
 >
   {#if metadata}{@render metadata()}{/if}
 </div>

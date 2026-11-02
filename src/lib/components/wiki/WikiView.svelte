@@ -153,6 +153,7 @@
     onDelete={isAuthor ? handleDelete : undefined}
     deleteTitle={m.wiki_view_delete_confirm_title()}
     deleteItemName={title}
+    bookmark
   >
     {#snippet actions()}
       {#if topic}

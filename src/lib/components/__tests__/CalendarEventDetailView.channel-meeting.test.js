@@ -123,6 +123,7 @@ describe('CalendarEventDetailView — channel meeting', () => {
     render(CalendarEventDetailView, { props: fixture('c'.repeat(64)) });
     expect(screen.queryByTestId('channel-meeting-notice')).toBeNull();
     expect(screen.getByTestId('detail-header-stub').dataset.canEdit).toBe('true');
+    expect(screen.getByTestId('detail-header-stub').dataset.bookmark).toBe('true');
     expect(h.rsvps).toHaveBeenCalled();
   });
 });

@@ -104,6 +104,7 @@
     onDelete={isAuthor ? handleDelete : undefined}
     deleteTitle={m.thread_detail_delete_confirm_title()}
     deleteItemName={title}
+    bookmark
   >
     {#snippet metadata()}
       {#if hashtags.length > 0}

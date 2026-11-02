@@ -221,6 +221,7 @@
     onDelete={isUserEvent && !channelMeeting ? handleDelete : undefined}
     deleteTitle={m.event_management_delete_confirm_title()}
     deleteItemName={event.title || ''}
+    bookmark={!!rawEvent}
   >
     {#snippet actions()}
       {#if !channelMeeting}

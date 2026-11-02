@@ -73,6 +73,7 @@ describe('GenericEventView', () => {
     expect(header.dataset.title).toBe('edufeed-app');
     expect(header.dataset.author).toBe(OWNER);
     expect(header.dataset.canDelete).toBe('false');
+    expect(header.dataset.bookmark).toBe('true');
     expect(screen.getByTestId('generic-event-kind').textContent).toBe(
       m.generic_event_kind_label({ kind: 30617 })
     );
