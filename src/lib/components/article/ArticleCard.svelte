@@ -16,6 +16,7 @@
   import { useAdaptiveAspect } from '$lib/helpers/adaptive-aspect.svelte.js';
   import { getSha256FromURL } from 'applesauce-common/helpers';
   import ReactionBar from '../reactions/ReactionBar.svelte';
+  import BookmarkButton from '../bookmarks/BookmarkButton.svelte';
   import EventTags from '../calendar/EventTags.svelte';
   import EventDebugPanel from '../shared/EventDebugPanel.svelte';
   import { encodeEventToNaddr, profileLink } from '$lib/helpers/nostrUtils.js';
@@ -374,6 +375,12 @@
             </span>
           {/if}
           <ReactionBar event={article} />
+          {#if !isDraft}
+            <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
+            <div class="ml-auto" onclick={(e) => e.stopPropagation()}>
+              <BookmarkButton event={article} />
+            </div>
+          {/if}
         </div>
       {/if}
 

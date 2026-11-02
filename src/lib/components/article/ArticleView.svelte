@@ -26,6 +26,7 @@
   import { getSha256FromURL } from 'applesauce-common/helpers';
   import HighlightOverlay from '../shared/HighlightOverlay.svelte';
   import ReactionBar from '../reactions/ReactionBar.svelte';
+  import BookmarkButton from '../bookmarks/BookmarkButton.svelte';
   import CommentList from '../comments/CommentList.svelte';
   import EventTags from '../calendar/EventTags.svelte';
   import ArticleProvenance from './ArticleProvenance.svelte';
@@ -275,8 +276,11 @@
 
   {#if !isDraft}
     <!-- Reactions -->
-    <div class="mb-8 border-y border-base-300 py-4">
+    <div class="mb-8 flex flex-wrap items-center gap-2 border-y border-base-300 py-4">
       <ReactionBar {event} />
+      <!-- align="start": the button sits at the left of the scrolling content
+           column, an end-aligned menu would be clipped behind the nav sidebar -->
+      <BookmarkButton {event} align="start" />
     </div>
 
     <!-- Comments -->
