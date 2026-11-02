@@ -9,7 +9,11 @@
     "skipLibCheck": true,
     "sourceMap": true,
     "strict": true,
-    "moduleResolution": "bundler"
+    "moduleResolution": "bundler",
+    // Over 20 MB of non-TS files (.js + .svelte) svelte-check drops into the
+    // language service's reduced mode and silently checks ~nothing while
+    // still printing "0 errors". Our JS codebase crossed that in 2026-11.
+    "disableSizeLimit": true
   }
   // Path aliases are handled by https://svelte.dev/docs/kit/configuration#alias
   // except $lib which is handled by https://svelte.dev/docs/kit/configuration#files
