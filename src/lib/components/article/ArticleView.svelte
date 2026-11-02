@@ -8,7 +8,8 @@
   import HeroImage from '$lib/components/shared/HeroImage.svelte';
   import { goto } from '$app/navigation';
   import { resolve } from '$app/paths';
-  import { getArticleTitle, getArticleImage } from 'applesauce-common/helpers';
+  import { getArticleTitle } from 'applesauce-common/helpers';
+  import { getArticleCoverUrl } from '$lib/helpers/article-cover.js';
   import { formatCalendarDate } from '$lib/helpers/calendar.js';
   import { encodeEventToNaddr } from '$lib/helpers/nostrUtils.js';
   import { useActiveUser } from '$lib/stores/accounts.svelte';
@@ -23,7 +24,7 @@
   import DetailHeader from '../shared/DetailHeader.svelte';
   import ImageLicenseOverlay from '../shared/ImageLicenseOverlay.svelte';
   import { useLicenseStatus } from '$lib/stores/image-license.svelte.js';
-  import { getSha256FromURL } from 'applesauce-common/helpers';
+  import { sha256FromUrl } from '$lib/helpers/sha256.js';
   import HighlightOverlay from '../shared/HighlightOverlay.svelte';
   import ReactionBar from '../reactions/ReactionBar.svelte';
   import CommentList from '../comments/CommentList.svelte';
@@ -55,12 +56,12 @@
 
   // Extract article metadata
   const title = $derived(getArticleTitle(event) || 'Untitled Article');
-  const image = $derived(getArticleImage(event));
+  const image = $derived(getArticleCoverUrl(event));
 
   const imageHash = $derived.by(() => {
     const xTag = event.tags?.find((/** @type {any} */ t) => t[0] === 'x')?.[1];
     if (xTag) return xTag;
-    return image ? (getSha256FromURL(image) ?? null) : null;
+    return sha256FromUrl(image);
   });
 
   const getCoverStatus = useLicenseStatus(() => imageHash);

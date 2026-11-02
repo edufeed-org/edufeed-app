@@ -1,12 +1,11 @@
 <script>
-  import { getSha256FromURL } from 'applesauce-common/helpers';
   import * as m from '$lib/paraglide/messages';
   import { runtimeConfig } from '$lib/stores/config.svelte.js';
   import { uploadWithFallback } from '$lib/helpers/blossom-upload.js';
   import { useLicenseForHash } from '$lib/stores/image-license.svelte.js';
   import { findExistingLicense } from '$lib/helpers/image-license.js';
   import { reconcileBlobUrlScheme } from '$lib/helpers/blossom-trust.js';
-  import { sha256Hex } from '$lib/helpers/sha256.js';
+  import { sha256Hex, sha256FromUrl } from '$lib/helpers/sha256.js';
   import LicenseBadge from './LicenseBadge.svelte';
   import ImageWithFallback from './ImageWithFallback.svelte';
   import { PersonIcon } from '$lib/components/icons';
@@ -248,8 +247,8 @@
       imageWasUploaded = false;
       return;
     }
-    const hashFromUrl = getSha256FromURL(imageUrl);
-    currentHash = hashFromUrl ?? null;
+    const hashFromUrl = sha256FromUrl(imageUrl);
+    currentHash = hashFromUrl;
     imageWasUploaded = false;
     if (!hashFromUrl && /^https?:\/\//i.test(imageUrl)) {
       void hashExternalUrl(imageUrl);

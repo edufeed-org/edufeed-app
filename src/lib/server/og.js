@@ -11,9 +11,9 @@ import {
   getCalendarEventSummary,
   getCalendarEventImage,
   getArticleTitle,
-  getArticleSummary,
-  getArticleImage
+  getArticleSummary
 } from 'applesauce-common/helpers';
+import { getArticleCoverUrl } from '$lib/helpers/article-cover.js';
 import { getProfileContent } from 'applesauce-core/helpers';
 import { getFeedCardData } from '$lib/helpers/feedCardData.js';
 import { getTagValue } from '$lib/helpers/educational/ambTransform.js';
@@ -123,7 +123,7 @@ export function extractMetadata(event) {
     const title = getArticleTitle(event) || 'Article';
     const summary = getArticleSummary(event);
     const description = summary || truncate(event.content, 200);
-    const image = getArticleImage(event);
+    const image = getArticleCoverUrl(event);
     const publishedAtTag = getTagValue(event.tags, 'published_at');
     const publishedAtSeconds = publishedAtTag ? parseInt(publishedAtTag, 10) : NaN;
     const publishedAt = Number.isFinite(publishedAtSeconds)

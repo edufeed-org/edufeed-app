@@ -21,7 +21,7 @@
   import ImageLicenseOverlay from '../shared/ImageLicenseOverlay.svelte';
   import { useLicenseStatus } from '$lib/stores/image-license.svelte.js';
   import { useAdaptiveAspect } from '$lib/helpers/adaptive-aspect.svelte.js';
-  import { getSha256FromURL } from 'applesauce-common/helpers';
+  import { sha256FromUrl } from '$lib/helpers/sha256.js';
   import { stripMarkdown } from '$lib/helpers/markdown.js';
   import ProfileAvatar from '../shared/ProfileAvatar.svelte';
   import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
@@ -56,14 +56,7 @@
   // snippet in compact card/list previews rather than rendering it.
   const summaryText = $derived(stripMarkdown(event.summary));
 
-  const imageHash = $derived.by(() => {
-    if (!event.image) return null;
-    try {
-      return getSha256FromURL(event.image) ?? null;
-    } catch {
-      return null;
-    }
-  });
+  const imageHash = $derived(sha256FromUrl(event.image));
   const getImageStatus = useLicenseStatus(() => imageHash);
   const imageStatus = $derived(getImageStatus());
 

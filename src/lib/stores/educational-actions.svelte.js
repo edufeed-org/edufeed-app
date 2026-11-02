@@ -4,7 +4,7 @@
  */
 
 import { ambToNostr } from 'amb-nostr-converter';
-import { getSha256FromURL } from 'applesauce-common/helpers';
+import { sha256FromUrl } from '$lib/helpers/sha256.js';
 import { createAppEventFactory } from '$lib/helpers/event-factory.js';
 import { manager } from '$lib/stores/accounts.svelte';
 import { canSign } from '$lib/helpers/signing-guard.js';
@@ -198,16 +198,8 @@ function resolveImageHash(formData) {
     const xTag = licenseEvent.tags.find((/** @type {string[]} */ t) => t[0] === 'x')?.[1];
     if (xTag) return xTag;
   }
-  if (formData?.image) {
-    // getSha256FromURL does `new URL(...)` — a malformed pasted image URL
-    // must not make the whole publish throw.
-    try {
-      return getSha256FromURL(formData.image) ?? undefined;
-    } catch {
-      return undefined;
-    }
-  }
-  return undefined;
+  // A malformed pasted image URL must not make the whole publish throw.
+  return sha256FromUrl(formData?.image) ?? undefined;
 }
 
 /**

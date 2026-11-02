@@ -6,20 +6,13 @@
   MarkdownRenderer's body-image-license action, one instance per <img>.
 -->
 <script>
-  import { getSha256FromURL } from 'applesauce-common/helpers';
+  import { sha256FromUrl } from '$lib/helpers/sha256.js';
   import { useLicenseStatus } from '$lib/stores/image-license.svelte.js';
   import ImageLicenseOverlay from './ImageLicenseOverlay.svelte';
 
   let { src = '' } = $props();
 
-  const hash = $derived.by(() => {
-    if (!src) return null;
-    try {
-      return getSha256FromURL(src) ?? null;
-    } catch {
-      return null;
-    }
-  });
+  const hash = $derived(sha256FromUrl(src));
 
   const getStatus = useLicenseStatus(() => hash);
   const licenseStatus = $derived(getStatus());

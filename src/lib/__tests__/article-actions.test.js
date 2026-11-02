@@ -125,6 +125,22 @@ describe('createArticle', () => {
     expect(deleteEvent).not.toHaveBeenCalled();
   });
 
+  it('publishes a cover that is not a URL without an x tag instead of throwing', async () => {
+    await createArticle({
+      title: 'Relative cover',
+      content: 'Body',
+      image: 'jonny-gios-SqjhKY9877M-unsplash.jpg'
+    });
+
+    expect(lastSignedEvent).toBeTruthy();
+    const tags = lastSignedEvent.tags;
+    expect(tags.find((/** @type {any} */ t) => t[0] === 'image')).toEqual([
+      'image',
+      'jonny-gios-SqjhKY9877M-unsplash.jpg'
+    ]);
+    expect(tags.find((/** @type {any} */ t) => t[0] === 'x')).toBeUndefined();
+  });
+
   it('builds correct NIP-23 tags', async () => {
     const result = await createArticle({
       title: 'My Article',

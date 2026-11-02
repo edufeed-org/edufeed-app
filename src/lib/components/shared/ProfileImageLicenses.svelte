@@ -13,7 +13,7 @@
    * attestation renders NOTHING — the "Keine Lizenzangabe" caution would sit
    * on every robohash fallback and every externally hosted avatar.
    */
-  import { getSha256FromURL } from 'applesauce-common/helpers';
+  import { sha256FromUrl } from '$lib/helpers/sha256.js';
   import { useLicenseStatus } from '$lib/stores/image-license.svelte.js';
   import ImageLicenseOverlay from './ImageLicenseOverlay.svelte';
   import * as m from '$lib/paraglide/messages';
@@ -24,18 +24,8 @@
     class: className = ''
   } = $props();
 
-  /** @param {string | null | undefined} url */
-  function hashOf(url) {
-    if (!url) return null;
-    try {
-      return getSha256FromURL(url) ?? null;
-    } catch {
-      return null;
-    }
-  }
-
-  const pictureHash = $derived(hashOf(picture));
-  const bannerHash = $derived(hashOf(banner));
+  const pictureHash = $derived(sha256FromUrl(picture));
+  const bannerHash = $derived(sha256FromUrl(banner));
   const getPictureStatus = useLicenseStatus(() => pictureHash);
   const getBannerStatus = useLicenseStatus(() => bannerHash);
 

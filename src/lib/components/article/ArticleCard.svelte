@@ -6,7 +6,8 @@
 <script>
   import * as m from '$lib/paraglide/messages';
   import { getDisplayName } from 'applesauce-core/helpers';
-  import { getArticleTitle, getArticleImage } from 'applesauce-common/helpers';
+  import { getArticleTitle } from 'applesauce-common/helpers';
+  import { getArticleCoverUrl } from '$lib/helpers/article-cover.js';
   import { formatCalendarDate } from '$lib/helpers/calendar.js';
   import { goto } from '$app/navigation';
   import { resolve } from '$app/paths';
@@ -14,7 +15,7 @@
   import ImageLicenseOverlay from '../shared/ImageLicenseOverlay.svelte';
   import { useLicenseStatus } from '$lib/stores/image-license.svelte.js';
   import { useAdaptiveAspect } from '$lib/helpers/adaptive-aspect.svelte.js';
-  import { getSha256FromURL } from 'applesauce-common/helpers';
+  import { sha256FromUrl } from '$lib/helpers/sha256.js';
   import ReactionBar from '../reactions/ReactionBar.svelte';
   import EventTags from '../calendar/EventTags.svelte';
   import EventDebugPanel from '../shared/EventDebugPanel.svelte';
@@ -55,12 +56,12 @@
 
   // Extract article metadata using applesauce helpers
   const title = $derived(getArticleTitle(article) || 'Untitled Article');
-  const image = $derived(getArticleImage(article));
+  const image = $derived(getArticleCoverUrl(article));
 
   const imageHash = $derived.by(() => {
     const xTag = article.tags?.find((/** @type {any} */ t) => t[0] === 'x')?.[1];
     if (xTag) return xTag;
-    return image ? (getSha256FromURL(image) ?? null) : null;
+    return sha256FromUrl(image);
   });
 
   const getCoverStatus = useLicenseStatus(() => imageHash);

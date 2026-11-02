@@ -1,3 +1,5 @@
+import { getSha256FromURL } from 'applesauce-common/helpers';
+
 /**
  * Compute the SHA-256 of a Blob's bytes and return it as a 64-character
  * lowercase hex string. Uses the platform's Web Crypto API; no dependencies.
@@ -15,4 +17,23 @@ export async function sha256Hex(blob) {
   return Array.from(new Uint8Array(digest))
     .map((b) => b.toString(16).padStart(2, '0'))
     .join('');
+}
+
+/**
+ * The SHA-256 a Blossom-style URL carries in its path, or `null`.
+ *
+ * Never throws: applesauce's `getSha256FromURL` does `new URL(...)`, and
+ * image tags from the network are not always URLs (bare filenames, Markdown
+ * images) — a throw inside a `$derived` takes down the whole page.
+ *
+ * @param {string | null | undefined} url
+ * @returns {string | null}
+ */
+export function sha256FromUrl(url) {
+  if (!url) return null;
+  try {
+    return getSha256FromURL(url) ?? null;
+  } catch {
+    return null;
+  }
 }

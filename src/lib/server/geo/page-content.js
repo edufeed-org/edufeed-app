@@ -9,7 +9,8 @@
  * escaped here, and rendered markdown/djot passes `sanitizeServerHtml`.
  */
 import { nip19 } from 'nostr-tools';
-import { getArticleTitle, getArticleSummary, getArticleImage } from 'applesauce-common/helpers';
+import { getArticleTitle, getArticleSummary } from 'applesauce-common/helpers';
+import { getArticleCoverUrl } from '$lib/helpers/article-cover.js';
 import { eventRoutePath, isAddressableKind } from '$lib/helpers/eventRoutePath.js';
 import { renderMarkdown } from '$lib/helpers/markdown.js';
 import { renderWikiContent } from '$lib/helpers/wikiContent.js';
@@ -206,7 +207,7 @@ export async function buildCrawlableContent(event, opts) {
       jsonLd: articleJsonLd(event, canonicalUrl, opts.origin, {
         title,
         description,
-        image: getArticleImage(event),
+        image: getArticleCoverUrl(event),
         authorName: opts.authorName
       }),
       bodyHtml: articleShell(

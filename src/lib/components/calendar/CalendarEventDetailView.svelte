@@ -49,7 +49,7 @@
   import HeroImage from '$lib/components/shared/HeroImage.svelte';
   import ImageLicenseOverlay from '$lib/components/shared/ImageLicenseOverlay.svelte';
   import { useLicenseStatus } from '$lib/stores/image-license.svelte.js';
-  import { getSha256FromURL } from 'applesauce-common/helpers';
+  import { sha256FromUrl } from '$lib/helpers/sha256.js';
 
   /**
    * @typedef {Object} Props
@@ -62,14 +62,7 @@
 
   // Same license lookup as the card and the details modal: the Blossom URL
   // carries the file hash, the kind-1063 attestation is keyed by it.
-  const imageHash = $derived.by(() => {
-    if (!event?.image) return null;
-    try {
-      return getSha256FromURL(event.image) ?? null;
-    } catch {
-      return null;
-    }
-  });
+  const imageHash = $derived(sha256FromUrl(event?.image));
   const getImageStatus = useLicenseStatus(() => imageHash);
   const imageStatus = $derived(getImageStatus());
 

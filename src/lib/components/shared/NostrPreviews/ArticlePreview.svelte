@@ -12,7 +12,8 @@
   import { useReferencedEvent } from '$lib/stores/referenced-event.svelte.js';
   import { decodeNostrIdentifier } from '$lib/helpers/nostrUtils.js';
   import FallbackIdentifier from './FallbackIdentifier.svelte';
-  import { getArticleTitle, getArticleSummary, getArticleImage } from 'applesauce-common/helpers';
+  import { getArticleTitle, getArticleSummary } from 'applesauce-common/helpers';
+  import { getArticleCoverUrl } from '$lib/helpers/article-cover.js';
   import ImageWithFallback from '../ImageWithFallback.svelte';
 
   let {
@@ -28,7 +29,7 @@
   const isLoading = $derived(ref.isLoading);
   const title = $derived(event ? getArticleTitle(event) || 'Untitled Article' : '');
   const summary = $derived(event ? getArticleSummary(event) || '' : '');
-  const image = $derived(event ? getArticleImage(event) : undefined);
+  const image = $derived(getArticleCoverUrl(event));
 
   /** @type {string} */
   let eventUrl = $derived(resolve(`/${identifier}`));

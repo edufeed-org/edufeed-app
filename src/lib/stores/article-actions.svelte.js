@@ -11,7 +11,7 @@ import { encodeEventToNaddr } from '$lib/helpers/nostrUtils.js';
 import { publishEventOptimistic } from '$lib/services/publish-service.js';
 import { nextCreatedAt } from '$lib/helpers/replaceableUpdates.js';
 import { getAppRelaysForCategory } from '$lib/services/app-relay-service.svelte.js';
-import { getSha256FromURL } from 'applesauce-common/helpers';
+import { sha256FromUrl } from '$lib/helpers/sha256.js';
 import { collectImetaTags } from '$lib/helpers/imeta.js';
 import {
   appendCreatorPTags,
@@ -97,9 +97,7 @@ export function buildArticleTags(formData, dTag, communityPubkey, existingTags =
     tags.push(['image', formData.image.trim()]);
   }
 
-  const resolvedHash =
-    formData.imageHash?.trim() ||
-    (formData.image?.trim() ? getSha256FromURL(formData.image.trim()) : null);
+  const resolvedHash = formData.imageHash?.trim() || sha256FromUrl(formData.image?.trim());
   if (resolvedHash) {
     tags.push(['x', resolvedHash]);
   }

@@ -11,7 +11,8 @@
 <script>
   import * as m from '$lib/paraglide/messages';
   import { nip19 } from 'nostr-tools';
-  import { getArticleTitle, getArticleImage } from 'applesauce-common/helpers';
+  import { getArticleTitle } from 'applesauce-common/helpers';
+  import { getArticleCoverUrl } from '$lib/helpers/article-cover.js';
   import { getDisplayName } from 'applesauce-core/helpers';
   import { TimelineModel } from 'applesauce-core/models';
   import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
@@ -96,7 +97,7 @@
   const title = $derived(
     article ? getArticleTitle(article) || pointer.identifier : pointer.identifier
   );
-  const image = $derived(article ? getArticleImage(article) : undefined);
+  const image = $derived(getArticleCoverUrl(article));
   // Hero frame follows the image (square to 16:9) instead of cropping it to 2:1.
   const cover = useAdaptiveAspect();
   const summary = $derived.by(() => {
