@@ -38,14 +38,3 @@ export function followersFrom(events, subject) {
   }
   return [...out];
 }
-
-/**
- * People the viewer follows first, order kept inside both parts.
- * @param {string[]} pubkeys
- * @param {string[]} viewerFollows
- * @returns {string[]}
- */
-export function knownFirst(pubkeys, viewerFollows) {
-  const mine = new Set(viewerFollows);
-  return [...pubkeys.filter((pk) => mine.has(pk)), ...pubkeys.filter((pk) => !mine.has(pk))];
-}
