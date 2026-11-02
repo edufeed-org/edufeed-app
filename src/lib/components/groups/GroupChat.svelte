@@ -79,6 +79,7 @@
   import { unique } from '$lib/helpers/unique.js';
   import { setContext, tick, untrack } from 'svelte';
   import { updateQueryParams } from '$lib/helpers/urlParams.js';
+  import { useMarkChannelMentionsRead } from '$lib/groups/channel-mentions.svelte.js';
   import { GROUP_MEDIA_AUTH } from '$lib/groups/authed-media.js';
   import {
     saveScrollPosition,
@@ -221,6 +222,9 @@
   // every ImageWithFallback below fetches same-host URLs with a signed
   // Blossom get auth instead of the anonymous proxy chain.
   setContext(GROUP_MEDIA_AUTH, { relay: pointer.relay, getUser: getActiveUser });
+  // Opening the channel reads its @mentions: the inbox rows and the "@" pills
+  // on the rail and the channel list clear together.
+  useMarkChannelMentionsRead(() => pointer?.id);
 
   /** @type {any} */ let metadata = $state(null);
   const displayTitle = $derived(metadata?.name ?? (fallbackName || pointer.id));

@@ -11,7 +11,7 @@
  * carry the right navigation payload.
  */
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/svelte';
+import { render, screen, fireEvent, within } from '@testing-library/svelte';
 import { GROUP_METADATA_KIND } from 'applesauce-common/helpers/groups';
 import { buildChannelRows } from '$lib/groups/community-channel-rows.js';
 
@@ -61,6 +61,10 @@ vi.mock('$lib/concord/notifications.svelte.js', () => ({
 
 const selectedChannelFixture = vi.hoisted(() => /** @type {{ value: string }} */ ({ value: '' }));
 const selectConcordChannelSpy = vi.hoisted(() => vi.fn());
+const mentionedGroups = vi.hoisted(() => ({ ids: new Set() }));
+vi.mock('$lib/groups/channel-mentions.svelte.js', () => ({
+  hasUnreadChannelMention: (/** @type {string} */ id) => mentionedGroups.ids.has(id)
+}));
 vi.mock('$lib/concord/active-channel.svelte.js', () => ({
   getSelectedConcordChannel: () => selectedChannelFixture.value,
   selectConcordChannel: (/** @type {string} */ cid, /** @type {string} */ channelId) =>
@@ -296,6 +300,22 @@ describe('ContentNavSidebar — two-zone sidebar', () => {
     // into ?channel=, which is what makes the room deep-linkable (issue: deep
     // links to a specific room).
     expect(onContentTypeSelect).toHaveBeenCalledWith('channels', 'chan-open');
+  });
+
+  it('a NIP-29 row carries the @ pill while it holds an unread mention of you', () => {
+    const row = worldReadableGroupRow();
+    mentionedGroups.ids = new Set(['chan-open']);
+    renderNav({ channelRows: [row], isMember: true });
+    const el = screen.getByTestId(`nav-channel-row-${sanitize(row.key)}`);
+    expect(within(el).getByTestId('concord-mention-pill').textContent).toBe('@');
+    mentionedGroups.ids = new Set();
+  });
+
+  it('a NIP-29 row without a mention shows no pill', () => {
+    const row = worldReadableGroupRow();
+    renderNav({ channelRows: [row], isMember: true });
+    const el = screen.getByTestId(`nav-channel-row-${sanitize(row.key)}`);
+    expect(within(el).queryByTestId('concord-mention-pill')).toBeNull();
   });
 
   // QA 2026-10-02 C-new-7: the desktop sidebar omitted the root channel
