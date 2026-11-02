@@ -7,6 +7,105 @@ merge commits of the nostr PRs that landed since the previous tag.
 
 ## [Unreleased]
 
+## [0.13.0] - 2026-11-02
+
+People round: followers, a member-first people search and channel @mention
+notifications, plus bookmarks on every content page and a set of relay and
+loading fixes. 22 nostr PRs from the 2026-11-02 PR marathon (smoke-tested on
+an integration build first); tested on dev as `v0.13.0-rc.N` before release.
+
+### Added
+
+- Followers: "N Follower · M Gefolgt" on every profile opens the list (your
+  own follows first and marked); the inbox says "X folgt dir jetzt" when a
+  contact list newly names you. Followers are a lower bound from one capped
+  query ("500+"). (#5e18b1f9)
+- People search puts members of the deployment's NIP-05 directory
+  (`NIP05_HANDLE_DOMAIN`, read from its `nostr.json`, not from profile claims)
+  on top as "Mitglieder - @edufeed.org", in the Personen tab and every people
+  picker; a pasted npub / nprofile / hex key shows exactly that person. The
+  "Alle" tab gets members first in the author dropdown, a people row, and
+  member-first ranking while searching. (#df2256fd)
+- Person cards show "Gefolgt von Anna, Jörg und 3 weiteren" (your follows who
+  follow them) and education chips (Bildungsbereich, up to three subjects).
+  (#5f065c4a)
+- Channel @mentions and replies from the groups relay reach the inbox bell
+  ("hat dich in #kanal erwähnt", opening the message), and an "@" pill marks
+  the community rail icon and channel rows with unread mentions. Community
+  chat mention rows now name the community. (#23630822, #12202d07)
+- Bookmark button in the header of every content page, beside the ⋯ menu:
+  articles (new — they had none), learning resources (moved up from under
+  the reactions), calendar events, wikis, forum threads, publications, kanban
+  boards and the generic view; article cards get one too. The bookmark menu
+  closes on a click outside and on Escape. (#72cdb359)
+- List pages: ⋯ menu (share to communities, copy link, raw data; edit and
+  delete for the owner) and a search box plus type chips for mixed lists.
+  (#9dd0df90)
+- Landing: per-panel showcase lists (`LANDING_SHOWCASE_LISTS_LEARNING`,
+  `_ARTICLES`, `_EVENTS`; the global list keeps the community wall), one item
+  per author before anyone gets a second, materials with a preview first,
+  and a rotating community-wall heading. (#f2f00700)
+- Relay liveness: unreachable relays are parked per device (applesauce
+  RelayLiveness, observe-only), one-shot requests skip parked relays (never
+  all of them), and event lookups by id skip them too, so one dead relay no
+  longer holds every quote/reference miss for the full stage timeout.
+  (#881da8b0, #6c90b9d1)
+
+### Fixed
+
+- `/discover` and article pages crashed ("Failed to construct 'URL'") on an
+  article whose `image` tag is a bare filename or a pasted Markdown image;
+  such a cover now shows no image (or the Markdown image's URL) instead of
+  a 404 on our own origin, in cards, previews, OG tags and GEO content.
+  (#b4eb0c54)
+- Quoted notes that live only on their hint relay are retried and fall back
+  to the author's outbox relays instead of staying "not found" until reload;
+  repost targets and `note1` quotes get the same fallback. (#9c4f148a)
+- List views fetched every item twice and never retried missing ones; one
+  shared list-item hook with retries and author outboxes. (#c0ab128e)
+- KIM license types (DINI AG, e.g. LEHRE LADEN resources with attribution +
+  shareAlike) render as "CC BY-SA (KIM)" etc. instead of a raw URI, and all
+  `license:id` tags are read and kept on edit. (#73c4844b)
+- @mentions were unreadable inside your own chat bubbles (#2b2b7033); the
+  channel and community chat composer is multiline again (#a78be2a1).
+- "1 Ergebnis gefunden" instead of "1 Ergebnisse gefunden" (#61d0d00c).
+- GEO stats: GoogleOther is verified against Google's common-crawlers list,
+  and error pages no longer count as visits (#20b8e292).
+- svelte-check had silently stopped checking: past 20 MB of `.js` + `.svelte`
+  the TypeScript language service drops to reduced mode (92 instead of ~9.8k
+  files, still "0 errors"). `disableSizeLimit` in `jsconfig.json` plus a
+  guard test. (#1088ebec)
+- MeetingCard test no longer fails around midnight (#d9f09dd5).
+
+### Changed
+
+- Privacy policy names cleaner.edufeed.org for the optional metadata
+  cleaning on upload, and relay.primal.net for NIP-89 app hints (#3b3cd83b,
+  #9c4f148a). NIP-89 handler discovery defaults to relay.primal.net
+  (`APP_HANDLER_RELAYS`); nos.lol and relay.nostr.band are gone. (#9c4f148a)
+- The NIP-101-EDU forms spec moved to the edufeed wiki ("Forms in edufeed",
+  d=edufeed-forms). (#5f7c9dc9)
+
+### Deploy notes
+
+- Landing showcase: set all four together (Antiope draft lists on
+  relay.edufeed.org; the old `edufeed-landing-schaufenster` list becomes the
+  EVENTS list — never edit it in place):
+  - `LANDING_SHOWCASE_LISTS` = d=edufeed-landing-communities
+    `naddr1qqdk2er4vejk2epdd3skuerfdenj6cm0d4kh2mnfw35k2ucpzamhxue69uhhyetvv9ujuetyw4nx2ety9ehhyeczyq5d0j5uhg8ypavcg0x3e4g8cx539yvhd86yjks08r0jkz4syw9ugqcyqqq82vqtsyfzs`
+  - `LANDING_SHOWCASE_LISTS_LEARNING` = d=edufeed-landing-materialien
+    `naddr1qqdk2er4vejk2epdd3skuerfdenj6mtpw3jhy6tpd35k2mspzamhxue69uhhyetvv9ujuetyw4nx2ety9ehhyeczyq5d0j5uhg8ypavcg0x3e4g8cx539yvhd86yjks08r0jkz4syw9ugqcyqqq82vqhlmahq`
+  - `LANDING_SHOWCASE_LISTS_ARTICLES` = d=edufeed-landing-lesestoff
+    `naddr1qqvk2er4vejk2epdd3skuerfdenj6mr9wdjhxar0venqz9mhwden5te0wfjkccte9ejkgatxv4jkgtn0wfnsygpg6l9fewswgr6ess7drn2s0sdfz2gew605f9dq7wxl9v9tqgutcspsgqqqw5cqnjr72c`
+  - `LANDING_SHOWCASE_LISTS_EVENTS` = d=edufeed-landing-schaufenster
+    `naddr1qqwx2er4vejk2epdd3skuerfdenj6umrdpsh2en9deehgetjqythwumn8ghj7un9d3shjtn9v36kvet9vshx7un8qgsz3472njaqus84nppu68x4qlq6jy53ja5lgj26puud72c2kq3ch3qrqsqqqafstdfx8q`
+- Member-first people search needs `NIP05_HANDLE_DOMAIN` (already set where
+  membership is on) and amb-relay ≥ 280f389 (indexes every directory member;
+  already deployed).
+- `APP_HANDLER_RELAYS`: drop nos.lol / relay.nostr.band wherever it is set
+  explicitly (unset = the new default).
+- No new required env vars.
+
 ## [0.12.1] - 2026-10-28
 
 Hotfix for the learning-resource form: picking any Bildungsstufe or Fach in
