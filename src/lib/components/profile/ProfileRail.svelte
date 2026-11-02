@@ -11,6 +11,7 @@
   import BadgeThumb from '$lib/components/badges/BadgeThumb.svelte';
   import EducatorContextDisplay from '$lib/components/shared/EducatorContextDisplay.svelte';
   import ImageWithFallback from '$lib/components/shared/ImageWithFallback.svelte';
+  import ProfileAboutText from '$lib/components/shared/ProfileAboutText.svelte';
   import { formatCalendarDate } from '$lib/helpers/calendar.js';
   import {
     PeopleIcon,
@@ -113,8 +114,11 @@
           </button>
         {/if}
       </h4>
-      {#if profile?.about}
-        <p class="pf-about">{profile.about}</p>
+      {#if typeof profile?.about === 'string' && profile.about.trim()}
+        <!-- div, not p: the renderer may embed block previews (nevent/naddr) -->
+        <div class="pf-about">
+          <ProfileAboutText about={profile.about.trim()} tags={profileEvent?.tags} />
+        </div>
       {/if}
       {#if profile?.location}
         <div class="pf-meta-row">
