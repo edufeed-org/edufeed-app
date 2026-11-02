@@ -22,7 +22,7 @@
   } from '$lib/helpers/educational/resourceAttribution.js';
   import { formatRelativeTime, parseCalendarStartParts } from '$lib/helpers/calendar.js';
   import { generateKindColorRGB, hexToNpub } from '$lib/helpers/nostrUtils.js';
-  import * as m from '$lib/paraglide/messages';
+  import { feedTypeLabel } from '$lib/helpers/feed-type-label.js';
 
   /**
    * @type {{
@@ -92,19 +92,19 @@
 
   /** @type {Record<string, { label: () => string, icon: any }>} */
   const typeMeta = {
-    calendar: { label: () => m.feed_badge_calendar(), icon: CalendarIcon },
-    learning: { label: () => m.feed_badge_learning(), icon: GraduationCapIcon },
-    article: { label: () => m.feed_badge_article(), icon: ScrollTextIcon },
-    board: { label: () => m.feed_badge_board(), icon: KanbanIcon },
-    wiki: { label: () => m.feed_badge_wiki(), icon: WikipediaIcon },
-    thread: { label: () => m.feed_badge_thread(), icon: ForumIcon },
-    bookmark: { label: () => m.feed_badge_bookmark(), icon: BookmarkIcon },
-    highlight: { label: () => m.feed_badge_highlight(), icon: BookmarkIcon },
-    note: { label: () => m.feed_badge_note(), icon: BookmarkIcon },
-    'page-note': { label: () => m.feed_badge_page_note(), icon: BookmarkIcon },
-    reply: { label: () => m.feed_badge_reply(), icon: ReplyIcon },
-    form: { label: () => m.feed_badge_form(), icon: FilesIcon },
-    poll: { label: () => m.feed_badge_poll(), icon: PollIcon }
+    calendar: { label: () => feedTypeLabel('calendar'), icon: CalendarIcon },
+    learning: { label: () => feedTypeLabel('learning'), icon: GraduationCapIcon },
+    article: { label: () => feedTypeLabel('article'), icon: ScrollTextIcon },
+    board: { label: () => feedTypeLabel('board'), icon: KanbanIcon },
+    wiki: { label: () => feedTypeLabel('wiki'), icon: WikipediaIcon },
+    thread: { label: () => feedTypeLabel('thread'), icon: ForumIcon },
+    bookmark: { label: () => feedTypeLabel('bookmark'), icon: BookmarkIcon },
+    highlight: { label: () => feedTypeLabel('highlight'), icon: BookmarkIcon },
+    note: { label: () => feedTypeLabel('note'), icon: BookmarkIcon },
+    'page-note': { label: () => feedTypeLabel('page-note'), icon: BookmarkIcon },
+    reply: { label: () => feedTypeLabel('reply'), icon: ReplyIcon },
+    form: { label: () => feedTypeLabel('form'), icon: FilesIcon },
+    poll: { label: () => feedTypeLabel('poll'), icon: PollIcon }
   };
 
   let meta = $derived(typeMeta[typeKey]);

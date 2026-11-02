@@ -26,12 +26,18 @@
   import { showToast } from '$lib/helpers/toast.js';
   import FeedCard from '$lib/components/shared/FeedCard.svelte';
   import DeleteConfirmModal from '$lib/components/shared/DeleteConfirmModal.svelte';
+  import EventContextMenu from '$lib/components/shared/EventContextMenu.svelte';
+  import ListItemsFilter from '$lib/components/lists/ListItemsFilter.svelte';
+  import {
+    filterListItems,
+    listItemTypes,
+    buildListItemRows
+  } from '$lib/helpers/list-items-filter.js';
   import {
     BookmarkIcon,
     ChevronLeftIcon,
     ChevronUpIcon,
     ChevronDownIcon,
-    EditIcon,
     TrashIcon
   } from '$lib/components/icons';
   import * as m from '$lib/paraglide/messages';
@@ -184,13 +190,9 @@
     }
   }
 
-  // Delete state
-  let showDeleteConfirm = $state(false);
-  let isDeleting = $state(false);
-
+  // Delete (confirmed inside EventContextMenu)
   async function handleDelete() {
     if (!activeUser) return;
-    isDeleting = true;
     try {
       const result = await deleteEvent(event, activeUser);
       if (result.success) {
@@ -201,11 +203,17 @@
       }
     } catch (_err) {
       showToast(m.bookmark_toast_error(), 'error');
-    } finally {
-      isDeleting = false;
-      showDeleteConfirm = false;
     }
   }
+
+  // Search + type filter over the set's items (issue a0838dc9). Reordering
+  // works on positions in the whole set, so it is offered only unfiltered.
+  let itemQuery = $state('');
+  let itemType = $state('');
+  const itemRows = $derived(buildListItemRows(displayEvents, getProfiles()));
+  const itemTypes = $derived(listItemTypes(itemRows));
+  const shownRows = $derived(filterListItems(itemRows, { query: itemQuery, type: itemType }));
+  const isFiltered = $derived(shownRows !== itemRows);
 
   // Item removal confirmation
   /** @type {import('nostr-tools').NostrEvent | null} */
@@ -271,29 +279,28 @@
         <p class="mt-1 text-sm text-base-content/40">{itemCount} items</p>
       </div>
     </div>
-    {#if isOwner}
-      <div class="flex gap-2">
-        <button class="btn btn-ghost btn-sm" onclick={openEditModal} title={m.bookmark_set_edit()}>
-          <EditIcon class="h-4 w-4" />
-        </button>
-        <button
-          class="btn text-error btn-ghost btn-sm"
-          onclick={() => (showDeleteConfirm = true)}
-          title={m.bookmark_set_delete()}
-        >
-          <TrashIcon class="h-4 w-4" />
-        </button>
-      </div>
-    {/if}
+    <!-- Share, copy, pin, community share — like every other content type;
+         edit and delete for the owner (issue a0838dc9) -->
+    <EventContextMenu
+      {event}
+      onEdit={isOwner ? openEditModal : undefined}
+      onDelete={isOwner ? handleDelete : undefined}
+      deleteTitle={m.bookmark_set_delete_title()}
+      deleteItemName={title}
+    />
   </div>
 
   <!-- Items -->
   {#if displayEvents.length > 0}
+    {#if itemRows.length > 1}
+      <ListItemsFilter types={itemTypes} bind:query={itemQuery} bind:type={itemType} />
+    {/if}
+    {#if isFiltered && shownRows.length === 0}
+      <p class="py-6 text-center text-sm text-base-content/60">{m.list_detail_filter_empty()}</p>
+    {/if}
     <div class="space-y-3">
-      {#each displayEvents as itemEvent, i (itemEvent.id)}
-        {@const cardData = getFeedCardData(itemEvent)}
-        {@const profiles = getProfiles()}
-        {@const authorProfile = profiles.get(itemEvent.pubkey)}
+      {#each shownRows as { itemEvent, cardData }, i (itemEvent.id)}
+        {@const authorProfile = getProfiles().get(itemEvent.pubkey)}
         <div>
           <FeedCard
             title={cardData.title}
@@ -317,22 +324,24 @@
               onclick={(e) => e.stopPropagation()}
               onkeydown={(e) => e.stopPropagation()}
             >
-              <button
-                class="btn text-base-content/50 btn-ghost btn-xs hover:text-base-content"
-                onclick={() => handleReorder(i, i - 1)}
-                disabled={i === 0}
-                title={m.bookmark_set_move_up()}
-              >
-                <ChevronUpIcon class_="w-4 h-4" />
-              </button>
-              <button
-                class="btn text-base-content/50 btn-ghost btn-xs hover:text-base-content"
-                onclick={() => handleReorder(i, i + 1)}
-                disabled={i === displayEvents.length - 1}
-                title={m.bookmark_set_move_down()}
-              >
-                <ChevronDownIcon class_="w-4 h-4" />
-              </button>
+              {#if !isFiltered}
+                <button
+                  class="btn text-base-content/50 btn-ghost btn-xs hover:text-base-content"
+                  onclick={() => handleReorder(i, i - 1)}
+                  disabled={i === 0}
+                  title={m.bookmark_set_move_up()}
+                >
+                  <ChevronUpIcon class_="w-4 h-4" />
+                </button>
+                <button
+                  class="btn text-base-content/50 btn-ghost btn-xs hover:text-base-content"
+                  onclick={() => handleReorder(i, i + 1)}
+                  disabled={i === displayEvents.length - 1}
+                  title={m.bookmark_set_move_down()}
+                >
+                  <ChevronDownIcon class_="w-4 h-4" />
+                </button>
+              {/if}
               <div class="flex-1"></div>
               <button
                 class="btn text-base-content/50 btn-ghost btn-xs hover:text-error"
@@ -410,16 +419,6 @@
     <button class="modal-backdrop" onclick={() => (showEditModal = false)}>close</button>
   </dialog>
 {/if}
-
-<!-- Delete Set Confirmation -->
-<DeleteConfirmModal
-  open={showDeleteConfirm}
-  title={m.bookmark_set_delete_title()}
-  itemName={title}
-  {isDeleting}
-  onconfirm={handleDelete}
-  oncancel={() => (showDeleteConfirm = false)}
-/>
 
 <!-- Remove Item Confirmation -->
 <DeleteConfirmModal

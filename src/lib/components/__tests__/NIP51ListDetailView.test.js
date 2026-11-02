@@ -110,11 +110,13 @@ vi.mock('../shared/ProfileCard.svelte', async () => ({
 vi.mock('../shared/FeedCard.svelte', async () => ({
   default: (await import('./fixtures/StubComponent.svelte')).default
 }));
+vi.mock('../shared/EventContextMenu.svelte', async () => ({
+  default: (await import('./fixtures/EventContextMenuStub.svelte')).default
+}));
 vi.mock('../lists/AddProfileRow.svelte', async () => ({
   default: (await import('./fixtures/StubComponent.svelte')).default
 }));
 
-import * as m from '$lib/paraglide/messages';
 import NIP51ListDetailView from '../shared/NIP51ListDetailView.svelte';
 
 describe('NIP51ListDetailView — Listr follow set (kind 30000)', () => {
@@ -157,7 +159,7 @@ describe('NIP51ListDetailView — Listr follow set (kind 30000)', () => {
     render(NIP51ListDetailView, { event: stored });
     flushSync();
 
-    await fireEvent.click(screen.getByTitle(m.list_detail_edit()));
+    await fireEvent.click(screen.getByTestId('menu-edit'));
     flushSync();
 
     expect(errors).toEqual([]);
@@ -188,5 +190,25 @@ describe('NIP51ListDetailView — Listr follow set (kind 30000)', () => {
     expect(errors).toEqual([]);
     expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('STIL-Finder 2');
     expect(screen.getAllByTestId('profile-card-stub')).toHaveLength(7);
+  });
+
+  describe('⋯ menu (issue a0838dc9: lists must be shareable)', () => {
+    it('shows the shared context menu for the list to visitors, without owner actions', () => {
+      doubles.activeUser = { pubkey: 'b'.repeat(64) };
+      const stored = doubles.eventStore.add(fixture());
+      render(NIP51ListDetailView, { event: stored });
+      flushSync();
+      expect(screen.getByTestId('event-context-menu').dataset.eventId).toBe(stored.id);
+      expect(screen.queryByTestId('menu-edit')).toBeNull();
+      expect(screen.queryByTestId('menu-delete')).toBeNull();
+    });
+
+    it('gives the owner edit and delete inside the menu', () => {
+      const stored = doubles.eventStore.add(fixture());
+      render(NIP51ListDetailView, { event: stored });
+      flushSync();
+      expect(screen.getByTestId('menu-edit')).toBeTruthy();
+      expect(screen.getByTestId('menu-delete')).toBeTruthy();
+    });
   });
 });
