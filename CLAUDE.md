@@ -462,6 +462,18 @@ never rebuilds it. The settings relay editor shows the same probe per row
 badges, "Erneut prüfen"). A timeout is no evidence; only a transport failure
 counts.
 
+**Pool liveness** (`stores/relay-liveness.js`, attached in
+`nostr-infrastructure.svelte.js`): applesauce's `RelayLiveness` watches the
+pool's connections and parks a relay that fails to connect (30 s → 5 min
+cooldown, 1 h once "dead"), persisted per device in localStorage. It is
+attached for observation only — **never pass it as the pool's `liveness`
+option**: a pool-wide filter makes the timeline loader read a skipped relay's
+instantly-empty page as "exhausted", leaves a `pool.group()` standing
+subscription (inbox, DM wraps, chat) without a relay that recovers, and turns
+a parked indexer into a false "no kind 10002/10050" verdict that the write
+paths would act on. Apply it where skipping is safe: `timedPool` one-shots use
+`skipParkedRelays(relayLiveness, relays)`, which never drops every relay.
+
 ### Event Deletion (NIP-09)
 
 Use `deleteEvent(event, activeUser)` from `src/lib/helpers/eventDeletion.js` for any content type. Returns `{success: boolean, error?: string}`. Auto-resolves relay category from event kind, verifies ownership, applies the deletion to EventStore optimistically, and uses `factory.delete([event])` (proper NIP-09 with e-tag + a-tag).

@@ -6,7 +6,9 @@
  * the kind 10002 on every relay it names, so a listed relay without it is
  * worth a badge. A refusal (auth-required, restricted) is reachability too.
  * Only a transport failure is 'unreachable'; a deadline with no answer at all
- * is 'timeout' and no evidence either way (sleeping tab, flaky Wi-Fi).
+ * is 'timeout' and no evidence either way (sleeping tab, flaky Wi-Fi). The
+ * request goes through `pool.relay(url)` so the liveness tracker's parking
+ * never hides a relay from its own health check.
  *
  * Outcomes are folded into a per-device history in localStorage (relay
  * reachability is a property of this device's network, not of the account),
@@ -85,8 +87,12 @@ export async function probeRelay(url, pubkey, opts = {}) {
   let result;
   try {
     const events = await lastValueFrom(
+      // pool.relay(url).request — never the pool-level request: the pool skips
+      // relays the liveness tracker has parked, and a skipped relay would
+      // complete empty and read as "reachable, no list".
       pool
-        .request([url], { kinds: [10002], authors: [pubkey], limit: 1 })
+        .relay(url)
+        .request({ kinds: [10002], authors: [pubkey], limit: 1 })
         .pipe(toArray(), rxTimeout(timeoutMs)),
       { defaultValue: [] }
     );
