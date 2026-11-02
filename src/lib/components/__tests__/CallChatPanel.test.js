@@ -2,6 +2,7 @@
 /** @vitest-environment jsdom */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/svelte';
+import { formatTimeOfDay } from '$lib/helpers/dates.js';
 
 // Polyfill Element.animate for jsdom (HoverCard's popup uses a fade transition).
 // Same shim as HoverCard.test.js — completes instantly so it never blocks the DOM.
@@ -236,6 +237,23 @@ describe('CallChatPanel', () => {
     const msg = screen.getByTestId('call-chat-message');
     expect(msg.textContent).toContain('Bea');
     expect(msg.textContent).toContain('Hallo zusammen');
+  });
+
+  // Issue ec121a1f: the time each message was sent, beside it, so a message
+  // can be found again later in the call. Same HH:MM as the chat export.
+  it('shows the time of day next to each message', () => {
+    const at = Date.UTC(2026, 9, 29, 15, 8, 39);
+    state.callChat = [
+      { id: 'b:1', identity: 'b'.repeat(64) + ':1', text: 'Hallo zusammen', at },
+      { id: 'b:2', identity: 'b'.repeat(64) + ':1', text: 'Noch da?', at: at + 7 * 60_000 }
+    ];
+    render(CallChatPanel, { props });
+    const times = screen.getAllByTestId('call-chat-time');
+    expect(times).toHaveLength(2);
+    expect(times[0].tagName).toBe('TIME');
+    expect(times[0].getAttribute('datetime')).toBe(new Date(at).toISOString());
+    expect(times[0].textContent?.trim()).toBe(formatTimeOfDay(at / 1000));
+    expect(times[1].textContent?.trim()).toBe(formatTimeOfDay(at / 1000 + 7 * 60));
   });
 
   // Task 18: small avatar before the name — reuses ProfileAvatar (profile
