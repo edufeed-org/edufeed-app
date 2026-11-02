@@ -37,28 +37,28 @@
   const parsed = $derived(parseFormTemplate(formEvent));
 
   /**
-   * Map stored optionIds back to labels for display. Non-option fields and
-   * unknown ids pass through unchanged (covers legacy label-valued responses).
+   * Render a parsed answer for display. Multi-valued answers arrive as arrays
+   * (parseResponseTags splits them on ';'); option ids are mapped back to
+   * their labels, vocabulary answers show their concept URIs, unknown ids
+   * pass through unchanged (covers legacy label-valued responses). Entries
+   * are shown comma-separated.
    * @param {import('$lib/helpers/forms.js').FormField} field
-   * @param {string | undefined} raw
+   * @param {string | string[] | undefined} raw
    */
   function displayValue(field, raw) {
-    if (!raw) return raw;
+    if (!raw || raw.length === 0) return '';
+    const entries = Array.isArray(raw) ? raw : [raw];
     /** @type {import('$lib/helpers/forms.js').FormFieldOption[] | undefined} */
     const opts = field.options?.options;
-    if (!opts?.length) return raw;
-    const byId = new Map(opts.map((o) => [o.id, o.label]));
-    return raw
-      .split(';')
-      .map((v) => byId.get(v) ?? v)
-      .join(', ');
+    const byId = new Map((opts || []).map((o) => [o.id, o.label]));
+    return entries.map((v) => byId.get(v) ?? v).join(', ');
   }
 
   /** @type {import('nostr-tools').NostrEvent[]} */
   let responses = $state.raw([]);
   let isLoading = $state(true);
 
-  /** @type {Map<string, Record<string, string>>} event id -> decrypted values */
+  /** @type {Map<string, Record<string, string | string[]>>} event id -> decrypted values */
   let decryptedMap = $state.raw(new Map());
   /** @type {Map<string, string>} event id -> error message */
   let decryptErrors = $state.raw(new Map());
@@ -266,7 +266,7 @@
 
     if (!isEncrypted) {
       const tags = response.tags.filter((t) => t[0] === 'response');
-      const values = parseResponseTags(tags);
+      const values = parseResponseTags(tags, parsed.fields);
       decryptedMap = new Map([...decryptedMap, [response.id, values]]);
       return;
     }
@@ -296,7 +296,7 @@
       try {
         const plaintext = await nip44DecryptWith(signers[i], response.pubkey, response.content);
         const tags = JSON.parse(plaintext);
-        const values = parseResponseTags(tags);
+        const values = parseResponseTags(tags, parsed.fields);
         decryptedMap = new Map([...decryptedMap, [response.id, values]]);
         return;
       } catch (_err) {
