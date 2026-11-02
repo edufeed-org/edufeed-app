@@ -134,6 +134,29 @@ describe('ArticleCard', () => {
     }
   );
 
+  // A bare filename would resolve against our own origin and 404.
+  it('shows no cover image for a bare filename', () => {
+    const article = {
+      ...mockArticle,
+      tags: mockArticle.tags.map((t) =>
+        t[0] === 'image' ? ['image', 'jonny-gios-SqjhKY9877M-unsplash.jpg'] : t
+      )
+    };
+    const { queryByTestId } = render(ArticleCard, { props: { article } });
+    expect(queryByTestId('article-cover-frame')).toBeNull();
+  });
+
+  it('shows the cover of a Markdown image pasted into the tag', () => {
+    const article = {
+      ...mockArticle,
+      tags: mockArticle.tags.map((t) =>
+        t[0] === 'image' ? ['image', '![image](https://image.nostr.build/x.jpg)'] : t
+      )
+    };
+    const { queryByTestId } = render(ArticleCard, { props: { article } });
+    expect(queryByTestId('article-cover-frame')).not.toBeNull();
+  });
+
   describe('default (card) variant', () => {
     it('renders as vertical card layout by default', () => {
       const { container } = render(ArticleCard, {

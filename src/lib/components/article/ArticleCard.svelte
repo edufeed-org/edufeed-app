@@ -6,7 +6,8 @@
 <script>
   import * as m from '$lib/paraglide/messages';
   import { getDisplayName } from 'applesauce-core/helpers';
-  import { getArticleTitle, getArticleImage } from 'applesauce-common/helpers';
+  import { getArticleTitle } from 'applesauce-common/helpers';
+  import { getArticleCoverUrl } from '$lib/helpers/article-cover.js';
   import { formatCalendarDate } from '$lib/helpers/calendar.js';
   import { goto } from '$app/navigation';
   import { resolve } from '$app/paths';
@@ -55,7 +56,7 @@
 
   // Extract article metadata using applesauce helpers
   const title = $derived(getArticleTitle(article) || 'Untitled Article');
-  const image = $derived(getArticleImage(article));
+  const image = $derived(getArticleCoverUrl(article));
 
   const imageHash = $derived.by(() => {
     const xTag = article.tags?.find((/** @type {any} */ t) => t[0] === 'x')?.[1];

@@ -8,7 +8,8 @@
   import HeroImage from '$lib/components/shared/HeroImage.svelte';
   import { goto } from '$app/navigation';
   import { resolve } from '$app/paths';
-  import { getArticleTitle, getArticleImage } from 'applesauce-common/helpers';
+  import { getArticleTitle } from 'applesauce-common/helpers';
+  import { getArticleCoverUrl } from '$lib/helpers/article-cover.js';
   import { formatCalendarDate } from '$lib/helpers/calendar.js';
   import { encodeEventToNaddr } from '$lib/helpers/nostrUtils.js';
   import { useActiveUser } from '$lib/stores/accounts.svelte';
@@ -55,7 +56,7 @@
 
   // Extract article metadata
   const title = $derived(getArticleTitle(event) || 'Untitled Article');
-  const image = $derived(getArticleImage(event));
+  const image = $derived(getArticleCoverUrl(event));
 
   const imageHash = $derived.by(() => {
     const xTag = event.tags?.find((/** @type {any} */ t) => t[0] === 'x')?.[1];
