@@ -54,7 +54,17 @@ vi.mock(
   '$lib/components/shared/ProfileCard.svelte',
   () => import('./fixtures/ProfileCardStub.svelte')
 );
+const followedBy = vi.hoisted(() => ({ map: new Map() }));
+vi.mock('$lib/stores/followed-by.svelte.js', () => ({
+  useFollowedBy: () => () => followedBy.map
+}));
+vi.mock('$lib/stores/profile-map.svelte.js', () => ({
+  useProfileMap: () => () => new Map([['f'.repeat(64), { display_name: 'Anna' }]])
+}));
+vi.mock('$lib/components/people/EducatorChips.svelte', () => import('./fixtures/EmptyStub.svelte'));
 vi.mock('$lib/paraglide/messages', () => ({
+  people_followed_by: ({ names }) => `Followed by ${names}`,
+  people_followed_by_more: ({ names, count }) => `Followed by ${names} and ${count} more`,
   people_search_hint: () => 'Type a name to find people',
   people_search_follows_title: () => 'People you follow',
   people_search_searching: () => 'Searching relays…',
@@ -78,6 +88,7 @@ const cards = (container) =>
   [...container.querySelectorAll('[data-testid="people-result"]')].map((el) => el.dataset.pubkey);
 
 beforeEach(() => {
+  followedBy.map = new Map();
   search.state = { term: '', tooShort: true, busy: false, results: [], scores: new Map() };
   contacts.pubkeys = [];
   contacts.isLoaded = true;
@@ -204,5 +215,22 @@ describe('PeopleResults', () => {
     const { container } = render(PeopleResults, { props: { query: 'lae' } });
     expect(container.textContent).toContain('Members · @edufeed.org');
     expect(container.textContent).not.toContain('More people');
+  });
+
+  it('says which of the viewer’s follows follow a result', () => {
+    followedBy.map = new Map([[REAL, ['f'.repeat(64)]]]);
+    search.state = {
+      term: 'lae',
+      tooShort: false,
+      busy: false,
+      results: [contact(REAL, 'Laeserin'), contact(NOBODY, 'Laeserin (new)')],
+      scores: new Map()
+    };
+    const { container } = render(PeopleResults, { props: { query: 'lae' } });
+    const rows = container.querySelectorAll('[data-testid="people-result"]');
+    expect(rows[0].querySelector('[data-testid="followed-by"]')?.textContent?.trim()).toBe(
+      'Followed by Anna'
+    );
+    expect(rows[1].querySelector('[data-testid="followed-by"]')).toBeNull();
   });
 });

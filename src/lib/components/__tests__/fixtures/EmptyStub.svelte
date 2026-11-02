@@ -1,2 +1,1 @@
-<!-- Test stub that renders nothing (for heavy chrome components). -->
-<div></div>
+<!-- Renders nothing: stands in for decorative children in component tests. -->

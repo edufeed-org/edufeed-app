@@ -23,7 +23,17 @@ vi.mock(
   '$lib/components/shared/ProfileCard.svelte',
   () => import('./fixtures/ProfileCardStub.svelte')
 );
+const followedBy = vi.hoisted(() => ({ map: new Map() }));
+vi.mock('$lib/stores/followed-by.svelte.js', () => ({
+  useFollowedBy: () => () => followedBy.map
+}));
+vi.mock('$lib/stores/profile-map.svelte.js', () => ({
+  useProfileMap: () => () => new Map([['f'.repeat(64), { display_name: 'Anna' }]])
+}));
+vi.mock('$lib/components/people/EducatorChips.svelte', () => import('./fixtures/EmptyStub.svelte'));
 vi.mock('$lib/paraglide/messages', () => ({
+  people_followed_by: ({ names }) => `Followed by ${names}`,
+  people_followed_by_more: ({ names, count }) => `Followed by ${names} and ${count} more`,
   discover_people_strip_title: () => 'People',
   discover_people_strip_show_all: () => 'Show all people'
 }));

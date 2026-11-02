@@ -8,6 +8,9 @@
 <script>
   import ProfileCard from '$lib/components/shared/ProfileCard.svelte';
   import { usePeopleSearch } from '$lib/stores/people-search.svelte.js';
+  import { useFollowedBy } from '$lib/stores/followed-by.svelte.js';
+  import FollowedByLine from '$lib/components/people/FollowedByLine.svelte';
+  import EducatorChips from '$lib/components/people/EducatorChips.svelte';
   import * as m from '$lib/paraglide/messages';
 
   /** Cards in the row; the people tab has the rest. */
@@ -19,6 +22,7 @@
   const getSearch = usePeopleSearch(() => query);
   const search = $derived(getSearch());
   const shown = $derived(search.tooShort ? [] : search.results.slice(0, STRIP_SIZE));
+  const getFollowedBy = useFollowedBy(() => shown.map((c) => c.pubkey));
 </script>
 
 {#if shown.length > 0}
@@ -37,6 +41,8 @@
           data-pubkey={contact.pubkey}
         >
           <ProfileCard pubkey={contact.pubkey} size="sm" showIcon={false} showNip05 showAbout />
+          <EducatorChips pubkey={contact.pubkey} />
+          <FollowedByLine followers={getFollowedBy().get(contact.pubkey) ?? []} />
         </div>
       {/each}
     </div>
