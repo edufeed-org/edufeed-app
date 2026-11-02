@@ -34,7 +34,8 @@
    *   class?: string,
    *   depth?: number,
    *   markdown?: boolean,
-   *   hashtagHref?: (tag: string) => string
+   *   hashtagHref?: (tag: string) => string,
+   *   embeds?: boolean
    * }}
    */
   let {
@@ -42,7 +43,10 @@
     class: className = '',
     depth = 0,
     markdown = false,
-    hashtagHref = undefined
+    hashtagHref = undefined,
+    // false = links stay links: no image/video/file/gallery embeds and no
+    // event preview cards (profile About boxes).
+    embeds = true
   } = $props();
 
   // The relay hint + author of every note this event quotes (q tags). The
@@ -187,6 +191,28 @@
       />
     {:else if node.type === 'mention'}
       <NostrIdentifier identifier={node.encoded} inline={true} {depth} />
+    {:else if node.type === 'link' && !embeds}
+      {#if previewableNostrId(node.href)}
+        <NostrIdentifier identifier={previewableNostrId(node.href)} inline={true} {depth} />
+      {:else}
+        <a
+          href={node.href}
+          target="_blank"
+          rel="noopener noreferrer"
+          class="link link-primary"
+          title={node.value}>{truncateMiddle(node.value)}</a
+        >
+      {/if}
+    {:else if node.type === 'gallery' && !embeds}
+      {#each node.links as link, j (j)}
+        {#if j > 0}<br />{/if}<a
+          href={link}
+          target="_blank"
+          rel="noopener noreferrer"
+          class="link link-primary"
+          title={link}>{truncateMiddle(link)}</a
+        >
+      {/each}
     {:else if node.type === 'link'}
       {#if isImageUrl(node.href)}
         {@const meta = imetaFor(node.href)}

@@ -71,4 +71,27 @@ describe('ProfileAboutText', () => {
     expect(container.querySelector('strong')).toBeNull();
     expect(container.querySelector('.whitespace-pre-wrap')).toBeTruthy();
   });
+
+  // laoc: bare links in the About box — no image, video or event previews.
+  it('shows an image URL as a bare link, not as an image', async () => {
+    const url = 'https://image.nostr.build/abc.jpg';
+    const { container } = render(ProfileAboutText, { props: { about: `Mein Bild ${url} hier` } });
+    await tick();
+
+    expect(container.querySelector('img')).toBeNull();
+    expect(container.querySelector('[data-testid="media-image"]')).toBeNull();
+    const link = screen.getByRole('link', { name: /abc\.jpg/ });
+    expect(link.getAttribute('href')).toBe(url);
+  });
+
+  it('shows several image URLs as bare links, not as a gallery', async () => {
+    const a = 'https://image.nostr.build/a.jpg';
+    const b = 'https://image.nostr.build/b.jpg';
+    const { container } = render(ProfileAboutText, { props: { about: `${a}\n${b}` } });
+    await tick();
+
+    expect(container.querySelector('[data-testid="media-gallery"]')).toBeNull();
+    const hrefs = [...container.querySelectorAll('a')].map((x) => x.getAttribute('href'));
+    expect(hrefs).toEqual(expect.arrayContaining([a, b]));
+  });
 });

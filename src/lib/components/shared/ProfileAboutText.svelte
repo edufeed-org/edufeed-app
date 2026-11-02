@@ -45,4 +45,4 @@
   }
 </script>
 
-<NostrContentRenderer event={aboutEvent} class={className} {hashtagHref} />
+<NostrContentRenderer event={aboutEvent} class={className} {hashtagHref} embeds={false} />
