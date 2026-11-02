@@ -77,7 +77,8 @@
     mention: BellIcon,
     rsvp: CalendarIcon,
     pollVote: PollIcon,
-    groupAdded: PeopleIcon
+    groupAdded: PeopleIcon,
+    newFollower: PeopleIcon
   };
 
   const TypeIcon = $derived(type ? iconMap[type] || BellIcon : BellIcon);
@@ -267,6 +268,8 @@
         &nbsp;{m.inbox_action_poll_vote()}
       {:else if type === 'groupAdded'}
         &nbsp;{m.inbox_action_group_added({ groupName: groupAddedName })}
+      {:else if type === 'newFollower'}
+        &nbsp;{m.inbox_action_new_follower()}
       {/if}
     </div>
     <div class="group mt-0.5 flex items-center gap-2">

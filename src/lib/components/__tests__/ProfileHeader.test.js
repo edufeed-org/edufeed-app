@@ -1,7 +1,7 @@
 // @ts-nocheck
 /** @vitest-environment jsdom */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render } from '@testing-library/svelte';
+import { render, fireEvent } from '@testing-library/svelte';
 import ProfileHeader from '../profile/ProfileHeader.svelte';
 
 // WaveButton spins up loaders/relay subscriptions — irrelevant here.
@@ -297,6 +297,42 @@ describe('<ProfileHeader>', () => {
       );
       expect(container.querySelector('[data-testid="profile-image-licenses"]')).toBeFalsy();
       expect(container.querySelector('[data-testid="license-caution"]')).toBeFalsy();
+    });
+  });
+
+  describe('follow stats (issue 891be310)', () => {
+    it('shows follower and following counts as buttons that open the lists', async () => {
+      const onShowFollowers = vi.fn();
+      const onShowFollowing = vi.fn();
+      const { getByTestId } = render(ProfileHeader, {
+        props: baseProps({
+          followersCount: 108,
+          followingCount: 74,
+          onShowFollowers,
+          onShowFollowing
+        })
+      });
+      const followers = getByTestId('stat-followers');
+      const following = getByTestId('stat-following');
+      expect(followers.textContent).toMatch(/108/);
+      expect(following.textContent).toMatch(/74/);
+      await fireEvent.click(followers);
+      await fireEvent.click(following);
+      expect(onShowFollowers).toHaveBeenCalled();
+      expect(onShowFollowing).toHaveBeenCalled();
+    });
+
+    it('reads 500+ once the follower fetch is capped', () => {
+      const { getByTestId } = render(ProfileHeader, {
+        props: baseProps({ followersCount: 500, followersCapped: true, followingCount: 3 })
+      });
+      expect(getByTestId('stat-followers').textContent).toMatch(/500\+/);
+    });
+
+    it('hides a stat while it is zero or unknown', () => {
+      const { queryByTestId } = render(ProfileHeader, { props: baseProps() });
+      expect(queryByTestId('stat-followers')).toBeNull();
+      expect(queryByTestId('stat-following')).toBeNull();
     });
   });
 });

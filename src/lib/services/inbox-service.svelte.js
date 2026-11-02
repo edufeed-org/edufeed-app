@@ -37,6 +37,7 @@ import { normalizeURL } from 'applesauce-core/helpers';
 import { getUnreadDmCount, markAllDmConversationsAsRead } from '$lib/services/dm-service.svelte.js';
 import { getNip05ReadyCount } from '$lib/stores/nip05-ready-alert.svelte.js';
 import { parseAddressPointerFromATag } from '$lib/helpers/nostrUtils.js';
+import { watchNewFollowers } from '$lib/services/new-followers.svelte.js';
 
 const APP_DATA_D_TAG = 'comcal/inbox/last-seen';
 
@@ -258,13 +259,21 @@ let readItemIds = $state.raw(new Set());
 /** @type {import('rxjs').Subscription[]} */
 let subscriptions = [];
 
+/** "X folgt dir jetzt" — stable items from the follower ledger (new-followers.svelte.js). */
+let followerNotifications = $state.raw(/** @type {import('nostr-tools').NostrEvent[]} */ ([]));
+
 // Merge main + RSVPs + poll responses, sorted by time (newest first).
 // Muted authors and muted words (NIP-51 kind 10000) are dropped display-side
 // — the queries themselves stay ungated (issue #43). Word muting is what
 // survives spam campaigns that rotate pubkeys.
 let notifications = $derived.by(() => {
   return excludeMuted(
-    [...mainNotifications, ...rsvpNotifications, ...pollResponseNotifications],
+    [
+      ...mainNotifications,
+      ...rsvpNotifications,
+      ...pollResponseNotifications,
+      ...followerNotifications
+    ],
     getMutedPubkeys(),
     getMutedWords()
   ).sort((a, b) => b.created_at - a.created_at);
@@ -474,8 +483,19 @@ export function initializeInbox(pubkey) {
   // (system-notifications.svelte.js) would never fire for the inbox. `since`
   // is the moment we subscribe: history stays with the loaders.
   const liveSince = Math.floor(Date.now() / 1000);
-  const liveFilters = buildMainFilter(pubkey, liveSince);
+  // Contact lists naming the user ride the live leg too, so a new follower
+  // reaches the bell (and the OS toast) while the app is open. They never
+  // join the main model: new-followers.svelte.js decides what is a follow.
+  const liveFilters = [
+    ...buildMainFilter(pubkey, liveSince),
+    { kinds: [3], '#p': [pubkey], since: liveSince }
+  ];
   subscribeLive(relays, liveFilters);
+  subscriptions.push(
+    ...watchNewFollowers(pubkey, relays, (items) => {
+      if (activePubkey === pubkey) followerNotifications = /** @type {any[]} */ (items);
+    })
+  );
 
   // Supplemental loader: the user's NIP-65 read relays. Reactions and other
   // p-tagged notifications are published outbox-model to these relays, which
@@ -704,6 +724,7 @@ export function cleanup() {
   rawMainNotifications = [];
   rsvpNotifications = [];
   pollResponseNotifications = [];
+  followerNotifications = [];
   readMarkers = null;
   // eslint-disable-next-line svelte/prefer-svelte-reactivity -- $state.raw() with plain Set
   readItemIds = new Set();
