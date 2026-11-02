@@ -383,20 +383,26 @@
   /*
    * Inside a primary chat bubble the background is `--color-primary`, so
    * `.link-primary` / `.text-primary` (also primary) become invisible. Flip
-   * them to `primary-content` (the on-primary foreground) for contrast.
+   * them to `primary-content` (the on-primary foreground) for contrast. The
+   * same goes for `.text-info`, which @mentions (UserProfilePreview) use: on
+   * the teal bubble the light info blue was unreadable (issue 933ba08f).
    */
   :global(.chat-bubble-primary .link-primary),
-  :global(.chat-bubble-primary .text-primary) {
+  :global(.chat-bubble-primary .text-primary),
+  :global(.chat-bubble-primary .text-info) {
     color: var(--color-primary-content);
   }
 
   /*
    * ...but NOT inside embedded preview cards (.nostr-preview-surface), which
    * paint their own opaque base-100 background — there primary-content would
-   * be white-on-white, so restore the normal primary color.
+   * be white-on-white, so restore the normal colors.
    */
   :global(.chat-bubble-primary .nostr-preview-surface .link-primary),
   :global(.chat-bubble-primary .nostr-preview-surface .text-primary) {
     color: var(--color-primary);
+  }
+  :global(.chat-bubble-primary .nostr-preview-surface .text-info) {
+    color: var(--color-info);
   }
 </style>
