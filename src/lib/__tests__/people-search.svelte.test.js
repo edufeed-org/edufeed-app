@@ -12,6 +12,8 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { Subject } from 'rxjs';
 import { flushSync } from 'svelte';
 import { trust } from '../components/__tests__/fixtures/trust-scores-mock.svelte.js';
+import { directory } from '../components/__tests__/fixtures/member-directory-mock.svelte.js';
+import { nip19 } from 'nostr-tools';
 
 const ALICE = 'a'.repeat(64);
 const REAL = 'd'.repeat(64);
@@ -58,6 +60,10 @@ vi.mock(
   '$lib/stores/trust-scores.svelte.js',
   () => import('../components/__tests__/fixtures/trust-scores-mock.svelte.js')
 );
+vi.mock(
+  '$lib/stores/member-directory.svelte.js',
+  () => import('../components/__tests__/fixtures/member-directory-mock.svelte.js')
+);
 
 const kind0 = (pubkey, name) => ({ kind: 0, pubkey, tags: [], content: JSON.stringify({ name }) });
 
@@ -68,6 +74,8 @@ describe('usePeopleSearch', () => {
   beforeEach(async () => {
     vi.useFakeTimers();
     trust.scores = new Map();
+    directory.members = new Set();
+    directory.ensured = 0;
     contacts.searchContacts.mockReset();
     contacts.searchContacts.mockReturnValue([]);
     profileSearch.searchKnownProfiles.mockReset();
@@ -248,5 +256,97 @@ describe('usePeopleSearch', () => {
     vi.advanceTimersByTime(350);
     flushSync();
     expect(profileSearch.profileNameSearchLoader).toHaveBeenCalledWith('al', 8);
+  });
+  describe("members of the deployment's NIP-05 directory", () => {
+    /** Known-profile mock: the members leg (authors option) answers from `members`. */
+    function knownBy({ members = [], everyone = [] }) {
+      profileSearch.searchKnownProfiles.mockImplementation((_term, _limit, opts = {}) =>
+        opts.authors ? members.filter((c) => opts.authors.includes(c.pubkey)) : everyone
+      );
+    }
+
+    it('loads the directory when the search mounts', () => {
+      mountWith('');
+      expect(directory.ensured).toBe(1);
+    });
+
+    it('puts verified members first, as their own group', () => {
+      directory.members = new Set([REAL]);
+      knownBy({ everyone: [contact(FAKE, 'Laeserin (fake)'), contact(REAL, 'Laeserin')] });
+      trust.scores = new Map([[FAKE, { pubkey: FAKE, rank: 90 }]]);
+      const { get } = mountWith('lae');
+      expect(get().memberResults.map((c) => c.pubkey)).toEqual([REAL]);
+      expect(get().otherResults.map((c) => c.pubkey)).toEqual([FAKE]);
+      expect(get().results.map((c) => c.pubkey)).toEqual([REAL, FAKE]);
+    });
+
+    it('a followed member sits in the members group, other follows lead the rest', () => {
+      directory.members = new Set([REAL]);
+      contacts.searchContacts.mockReturnValue([contact(ALICE, 'Alice'), contact(REAL, 'Al')]);
+      knownBy({ everyone: [contact(FAKE, 'Alfons')] });
+      const { get } = mountWith('al');
+      expect(get().memberResults.map((c) => c.pubkey)).toEqual([REAL]);
+      expect(get().otherResults.map((c) => c.pubkey)).toEqual([ALICE, FAKE]);
+    });
+
+    it('finds members among their own profiles, however many others match', () => {
+      directory.members = new Set([REAL]);
+      knownBy({
+        members: [contact(REAL, 'Paula GR')],
+        everyone: [contact(FAKE, 'Paula Vieira')] // capped list without the member
+      });
+      const { get } = mountWith('paula');
+      expect(profileSearch.searchKnownProfiles).toHaveBeenCalledWith(
+        'paula',
+        expect.any(Number),
+        expect.objectContaining({ authors: [REAL] })
+      );
+      expect(get().memberResults.map((c) => c.pubkey)).toEqual([REAL]);
+    });
+
+    it('re-runs the query once the directory and its profiles arrive', () => {
+      const { get } = mountWith('paula');
+      expect(get().memberResults).toEqual([]);
+      directory.members = new Set([REAL]);
+      knownBy({ members: [contact(REAL, 'Paula GR')] });
+      directory.bump();
+      flushSync();
+      expect(get().memberResults.map((c) => c.pubkey)).toEqual([REAL]);
+    });
+
+    it('relay hits from members join the members group', () => {
+      directory.members = new Set([REAL]);
+      const { get } = mountWith('lae');
+      vi.advanceTimersByTime(350);
+      flushSync();
+      profileSearch.remote.next(kind0(FAKE, 'Laeserin (fake)'));
+      profileSearch.remote.next(kind0(REAL, 'Laeserin'));
+      flushSync();
+      expect(get().memberResults.map((c) => c.pubkey)).toEqual([REAL]);
+      expect(get().otherResults.map((c) => c.pubkey)).toEqual([FAKE]);
+    });
+  });
+
+  describe('a pasted key', () => {
+    it.each([
+      ['npub', () => nip19.npubEncode(REAL)],
+      ['nprofile', () => nip19.nprofileEncode({ pubkey: REAL, relays: ['wss://r.example'] })],
+      ['nostr: URI', () => `nostr:${nip19.npubEncode(REAL)}`],
+      ['hex', () => REAL]
+    ])('an %s shows exactly that person and skips the name search', (_label, key) => {
+      const { get } = mountWith(key());
+      vi.advanceTimersByTime(1000);
+      flushSync();
+      expect(get().tooShort).toBe(false);
+      expect(get().results.map((c) => c.pubkey)).toEqual([REAL]);
+      expect(profileSearch.profileNameSearchLoader).not.toHaveBeenCalled();
+      expect(contacts.searchContacts).not.toHaveBeenCalled();
+    });
+
+    it('a pasted member key lands in the members group', () => {
+      directory.members = new Set([REAL]);
+      const { get } = mountWith(nip19.npubEncode(REAL));
+      expect(get().memberResults.map((c) => c.pubkey)).toEqual([REAL]);
+    });
   });
 });

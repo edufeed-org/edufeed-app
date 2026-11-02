@@ -15,11 +15,13 @@ import {
   sortItems,
   getItemTimestamp,
   getItemRankKey,
-  joinedFilterState
+  joinedFilterState,
+  tierByMembers
 } from '$lib/helpers/discover-pipeline.js';
 
 const A = 'a'.repeat(64);
 const B = 'b'.repeat(64);
+const M = 'c'.repeat(64);
 
 /** @param {Partial<any>} over */
 const article = (over = {}) => ({
@@ -96,6 +98,23 @@ describe('buildRawItems', () => {
       }
     );
     expect(items.map((i) => i.data.id)).toEqual(['hit']);
+  });
+
+  it('lets matched authors through the NIP-50 id gate and the curated set', () => {
+    const items = buildRawItems(
+      {
+        ...sources,
+        ambResources: [amb({ id: 'hit', pubkey: B }), amb({ id: 'mine', pubkey: M })],
+        articles: [article({ id: 'art-m', pubkey: M })]
+      },
+      {
+        showsType: (type) => type === 'learning' || type === 'articles',
+        isAllowedAuthor: () => false,
+        learningSearchIds: new Set(['hit']),
+        matchedAuthors: new Set([M])
+      }
+    );
+    expect(items.map((i) => i.data.id)).toEqual(['hit', 'mine', 'art-m']);
   });
 
   it('matches search results by the wrapped event id as well', () => {
@@ -192,6 +211,35 @@ describe('filters', () => {
       isLearningSearchActive: true
     });
     expect(out.map((i) => i.type)).toEqual(['amb']);
+  });
+});
+
+describe('matched authors in the text search', () => {
+  it('keeps every item of a matched author, whatever its text says', () => {
+    const items = [
+      { type: 'article', data: article({ id: 'm', pubkey: M, tags: [['title', 'zzz']] }) },
+      { type: 'article', data: article({ id: 'x', tags: [['title', 'zzz']] }) }
+    ];
+    const out = filterBySearch(items, 'paula', {
+      profiles: new Map(),
+      matchedAuthors: new Set([M])
+    });
+    expect(out.map((i) => i.data.id)).toEqual(['m']);
+  });
+});
+
+describe('tierByMembers', () => {
+  const item = (id, pubkey) => ({ type: 'article', data: article({ id, pubkey }) });
+
+  it('puts matched members, then other members, then everyone else — order kept inside', () => {
+    const items = [item('x1', A), item('m1', B), item('p1', M), item('x2', A), item('p2', M)];
+    const out = tierByMembers(items, { matched: new Set([M]), members: new Set([M, B]) });
+    expect(out.map((i) => i.data.id)).toEqual(['p1', 'p2', 'm1', 'x1', 'x2']);
+  });
+
+  it('returns the input untouched when no item is by a member', () => {
+    const items = [item('x1', A)];
+    expect(tierByMembers(items, { matched: new Set(), members: new Set([B]) })).toBe(items);
   });
 });
 

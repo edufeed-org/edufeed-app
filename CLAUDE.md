@@ -381,7 +381,7 @@ Gated mode controls content sources for institutional/controlled deployments:
 
 Env vars: `GATED_MODE_DEFAULT`, `GATED_MODE_FORCE` (when true, users cannot toggle off). Toggle in `/settings`; page reloads on change.
 
-Use the relay-helper functions (`getCalendarRelays`, `getEducationalRelays`, `getCommunikeyRelays`, `getLongformRelays`, `getKanbanRelays`) from `$lib/helpers/relay-helper.js` — they automatically respect gated mode + user overrides. Never read `runtimeConfig.appRelays.*` directly.
+Use the relay-helper functions (`getCalendarRelays`, `getEducationalRelays`, `getCommunikeyRelays`, `getArticleRelays`, `getKanbanRelays`) from `$lib/helpers/relay-helper.js` — they automatically respect gated mode + user overrides. Never read `runtimeConfig.appRelays.*` directly.
 
 ### WoT Content Filtering
 

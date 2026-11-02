@@ -23,12 +23,22 @@
     scored rows carry a small "in web of trust" badge — so of two profiles
     named alike, the one the network vouches for sits on top. Unscored
     rows are never hidden: a teacher new to Nostr has no score anywhere.
+    Members of the deployment's NIP-05 directory (NIP05_HANDLE_DOMAIN, see
+    stores/member-directory.svelte.js) lead the list, followed or not, and
+    are searched among their own profiles first so a common name cannot
+    push them past MAX_ITEMS.
 -->
 
 <script>
   import { untrack } from 'svelte';
   import { useProfileMap } from '$lib/stores/profile-map.svelte.js';
   import { useTrustScores } from '$lib/stores/trust-scores.svelte.js';
+  import {
+    ensureMemberDirectory,
+    getMemberPubkeys,
+    getMemberDirectoryVersion
+  } from '$lib/stores/member-directory.svelte.js';
+  import { membersFirst } from '$lib/helpers/member-directory.js';
   import { getDisplayName } from 'applesauce-core/helpers';
   import ProfileAvatar from './ProfileAvatar.svelte';
   import { nip19 } from 'nostr-tools';
@@ -121,12 +131,16 @@
       : []
   );
 
-  // A score that lands after the rows did re-sorts the OPEN list in place.
-  // Only the scores are tracked: navItems/showDropdown are read untracked so
-  // the rebuild's own writes cannot re-trigger this effect, and a closed
-  // list (row picked, field left) is never re-opened by a late score.
+  if (untrack(() => searchProfiles)) ensureMemberDirectory();
+
+  // A score — or the member directory — that lands after the rows did
+  // re-sorts the OPEN list in place. Only those are tracked: navItems/
+  // showDropdown are read untracked so the rebuild's own writes cannot
+  // re-trigger this effect, and a closed list (row picked, field left) is
+  // never re-opened by a late score.
   $effect(() => {
     getTrustScores();
+    getMemberDirectoryVersion();
     untrack(() => {
       if (searchProfiles && showDropdown) rebuildItems(currentTerm);
     });
@@ -201,13 +215,20 @@
     currentTerm = term;
     const follows = term.length >= 2 ? contactsStore.searchContacts(term, MAX_ITEMS) : [];
     /** @type {import('$lib/stores/contacts.svelte.js').EnrichedContact[]} */
-    const merged = [...follows];
+    let merged = [...follows];
     if (searchProfiles && term.length >= 2) {
       // Local dedupe scratch inside one synchronous pass — nothing renders
       // from it, so a reactive SvelteSet would only add proxy overhead.
       // eslint-disable-next-line svelte/prefer-svelte-reactivity
       const seen = new Set(merged.map((c) => c.pubkey));
-      const known = searchKnownProfiles(term, MAX_ITEMS, { exclude: [...seen] });
+      const members = [...getMemberPubkeys()];
+      const memberHits = members.length
+        ? searchKnownProfiles(term, MAX_ITEMS, { exclude: [...seen], authors: members })
+        : [];
+      const known = [
+        ...memberHits,
+        ...searchKnownProfiles(term, MAX_ITEMS, { exclude: [...seen] })
+      ];
       const extras = remoteTerm === term ? [...known, ...remoteMatches] : known;
       /** @type {import('$lib/stores/contacts.svelte.js').EnrichedContact[]} */
       const others = [];
@@ -219,6 +240,8 @@
       // Stable sort: ties (and the unscored tail) keep source order —
       // known profiles before relay hits, relay hits in relay order.
       merged.push(...others.toSorted((a, b) => rankOf(b.pubkey) - rankOf(a.pubkey)));
+      const grouped = membersFirst(merged, getMemberPubkeys());
+      merged = [...grouped.members, ...grouped.others];
     }
     const matches = merged.slice(0, MAX_ITEMS);
 

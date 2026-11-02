@@ -29,8 +29,17 @@ const search = vi.hoisted(() => ({
 const contacts = vi.hoisted(() => ({ pubkeys: [], isLoaded: true }));
 
 vi.mock('$lib/stores/people-search.svelte.js', () => ({
-  usePeopleSearch: () => () => search.state
+  // Tests that only set `results` get the pre-members shape: everyone in others.
+  usePeopleSearch: () => () => ({
+    memberResults: [],
+    otherResults: search.state.results,
+    ...search.state
+  })
 }));
+vi.mock(
+  '$lib/stores/member-directory.svelte.js',
+  () => import('./fixtures/member-directory-mock.svelte.js')
+);
 vi.mock('$lib/stores/contacts.svelte.js', () => ({
   contactsStore: {
     get contacts() {
@@ -51,6 +60,8 @@ vi.mock('$lib/paraglide/messages', () => ({
   people_search_searching: () => 'Searching relays…',
   people_search_no_results: ({ term }) => `Nobody named “${term}” found`,
   discover_results_count: ({ count }) => `${count} results found`,
+  people_search_members_title: ({ domain }) => `Members · ${domain}`,
+  people_search_others_title: () => 'More people',
   contact_search_wot_known: () => 'in web of trust',
   contact_search_wot_title: ({ hops, followers }) => `${hops} hops · ${followers} followers`
 }));
@@ -145,5 +156,53 @@ describe('PeopleResults', () => {
     search.state = { ...search.state, busy: false };
     const { container } = render(PeopleResults, { props: { query: 'zzz' } });
     expect(container.textContent).toContain('Nobody named “zzz” found');
+  });
+  it('shows verified members as their own group above everyone else', () => {
+    search.state = {
+      term: 'lae',
+      tooShort: false,
+      busy: false,
+      results: [contact(REAL, 'Laeserin'), contact(NOBODY, 'Laeserin (new)')],
+      memberResults: [contact(REAL, 'Laeserin')],
+      otherResults: [contact(NOBODY, 'Laeserin (new)')],
+      scores: new Map()
+    };
+    const { container } = render(PeopleResults, { props: { query: 'lae' } });
+    const members = container.querySelector('[data-testid="people-members"]');
+    const others = container.querySelector('[data-testid="people-others"]');
+    expect(members?.textContent).toContain('Members · @edufeed.org');
+    expect(cards(members)).toEqual([REAL]);
+    expect(others?.textContent).toContain('More people');
+    expect(cards(others)).toEqual([NOBODY]);
+    expect(container.textContent).toContain('2 results found');
+  });
+
+  it('shows no group titles when no member matches', () => {
+    search.state = {
+      term: 'lae',
+      tooShort: false,
+      busy: false,
+      results: [contact(NOBODY, 'Laeserin (new)')],
+      scores: new Map()
+    };
+    const { container } = render(PeopleResults, { props: { query: 'lae' } });
+    expect(container.querySelector('[data-testid="people-members"]')).toBeNull();
+    expect(container.textContent).not.toContain('More people');
+    expect(cards(container)).toEqual([NOBODY]);
+  });
+
+  it('omits the second title when only members match', () => {
+    search.state = {
+      term: 'lae',
+      tooShort: false,
+      busy: false,
+      results: [contact(REAL, 'Laeserin')],
+      memberResults: [contact(REAL, 'Laeserin')],
+      otherResults: [],
+      scores: new Map()
+    };
+    const { container } = render(PeopleResults, { props: { query: 'lae' } });
+    expect(container.textContent).toContain('Members · @edufeed.org');
+    expect(container.textContent).not.toContain('More people');
   });
 });

@@ -2,6 +2,9 @@
   import { searchProfileMap } from '$lib/helpers/contentSearch.js';
   import { contactsStore } from '$lib/stores/contacts.svelte.js';
   import ImageWithFallback from '$lib/components/shared/ImageWithFallback.svelte';
+  import { searchKnownProfiles } from '$lib/loaders/profile-search.js';
+  import { ensureMemberDirectory, getMemberPubkeys } from '$lib/stores/member-directory.svelte.js';
+  import { membersFirst } from '$lib/helpers/member-directory.js';
 
   /**
    * @typedef {{pubkey: string, name: string, display_name: string, picture?: string, nip05?: string}} AuthorResult
@@ -16,10 +19,18 @@
 
   let selectedIndex = $state(-1);
 
-  // Merge profile map results with contacts search, deduped by pubkey
+  ensureMemberDirectory();
+
+  // Members of the deployment's NIP-05 directory (whether or not they have
+  // content on the page), then profile map results, then contacts — deduped
+  // by pubkey, members moved to the top.
   const matches = $derived.by(() => {
     if (!visible || searchTerm.length < 2) return [];
 
+    const members = getMemberPubkeys();
+    const memberResults = members.size
+      ? searchKnownProfiles(searchTerm, 8, { authors: [...members] })
+      : [];
     const profileResults = searchProfileMap(searchTerm, profileMap, 8);
     const contactResults = contactsStore.searchContacts(searchTerm, 8);
 
@@ -31,8 +42,8 @@
       deduped.set(r.pubkey, r);
     }
 
-    // Add contacts that aren't already in the map
-    for (const c of contactResults) {
+    // Add members and contacts that aren't already in the map
+    for (const c of [...memberResults, ...contactResults]) {
       if (!deduped.has(c.pubkey)) {
         deduped.set(c.pubkey, {
           pubkey: c.pubkey,
@@ -44,7 +55,8 @@
       }
     }
 
-    return Array.from(deduped.values()).slice(0, 8);
+    const grouped = membersFirst(Array.from(deduped.values()), members);
+    return [...grouped.members, ...grouped.others].slice(0, 8);
   });
 
   // Nothing is highlighted until the user arrows into the list, so Enter

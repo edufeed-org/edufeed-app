@@ -1,11 +1,21 @@
+// @ts-nocheck
 /** @vitest-environment jsdom */
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen } from '@testing-library/svelte';
 import { flushSync } from 'svelte';
 import AuthorSearchDropdown from '$lib/components/discover/AuthorSearchDropdown.svelte';
+import { directory } from './fixtures/member-directory-mock.svelte.js';
 
 vi.mock('$lib/stores/contacts.svelte.js', () => ({
   contactsStore: { searchContacts: vi.fn(() => []) }
+}));
+vi.mock(
+  '$lib/stores/member-directory.svelte.js',
+  () => import('./fixtures/member-directory-mock.svelte.js')
+);
+const known = vi.hoisted(() => ({ searchKnownProfiles: vi.fn(() => []) }));
+vi.mock('$lib/loaders/profile-search.js', () => ({
+  searchKnownProfiles: known.searchKnownProfiles
 }));
 
 const profileMap = new Map([
@@ -24,6 +34,12 @@ function setup() {
   flushSync();
   return { onselect, component };
 }
+
+beforeEach(() => {
+  directory.members = new Set();
+  known.searchKnownProfiles.mockReset();
+  known.searchKnownProfiles.mockReturnValue([]);
+});
 
 describe('AuthorSearchDropdown', () => {
   it('shows suggestions without highlighting any of them', () => {
@@ -55,5 +71,20 @@ describe('AuthorSearchDropdown', () => {
     component.handleKeydown(key('ArrowUp'));
     component.handleKeydown(key('Enter'));
     expect(onselect).toHaveBeenCalledWith(expect.objectContaining({ name: 'alice' }));
+  });
+
+  it('puts members of the NIP-05 directory first, including ones with nothing on the page', () => {
+    const PAULA = 'c'.repeat(64);
+    directory.members = new Set([PAULA, 'a'.repeat(64)]);
+    known.searchKnownProfiles.mockImplementation((_t, _l, opts = {}) =>
+      opts.authors
+        ? [{ pubkey: PAULA, name: 'alma', display_name: 'Alma', nip05: 'alma@edufeed.org' }]
+        : []
+    );
+    setup();
+    const names = screen
+      .getAllByRole('option')
+      .map((o) => o.querySelector('.font-medium')?.textContent?.trim());
+    expect(names).toEqual(['Alice', 'Alma', 'Alfred']); // members (page order kept), then Alfred
   });
 });
