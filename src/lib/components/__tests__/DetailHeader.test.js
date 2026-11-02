@@ -42,6 +42,8 @@ vi.mock('$lib/helpers/nostrUtils.js', () => ({
 // Mock heavy sub-components to avoid deep dependency chains
 vi.mock('../shared/EventContextMenu.svelte', () => ({ default: () => ({}) }));
 vi.mock('../shared/ProfileAvatar.svelte', () => ({ default: () => ({}) }));
+const { BookmarkButtonStub } = vi.hoisted(() => ({ BookmarkButtonStub: vi.fn(() => ({})) }));
+vi.mock('../bookmarks/BookmarkButton.svelte', () => ({ default: BookmarkButtonStub }));
 
 import DetailHeaderTestWrapper from './DetailHeaderTestWrapper.svelte';
 
@@ -85,5 +87,19 @@ describe('DetailHeader', () => {
     });
     const h1 = container.querySelector('h1');
     expect(h1).toBeNull();
+  });
+
+  describe('bookmark', () => {
+    it('puts the bookmark button into the toolbar when asked', () => {
+      BookmarkButtonStub.mockClear();
+      render(DetailHeaderTestWrapper, { props: { bookmark: true } });
+      expect(BookmarkButtonStub).toHaveBeenCalled();
+    });
+
+    it('shows no bookmark button by default', () => {
+      BookmarkButtonStub.mockClear();
+      render(DetailHeaderTestWrapper, { props: {} });
+      expect(BookmarkButtonStub).not.toHaveBeenCalled();
+    });
   });
 });
