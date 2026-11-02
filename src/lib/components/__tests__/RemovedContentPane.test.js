@@ -30,9 +30,8 @@ const store = vi.hoisted(() => ({
 }));
 vi.mock('$lib/stores/nostr-infrastructure.svelte', () => ({ eventStore: store, pool: {} }));
 const addressLoader = vi.hoisted(() => vi.fn(() => ({ subscribe: () => ({ unsubscribe() {} }) })));
-vi.mock('$lib/loaders/base.js', () => ({ addressLoader }));
-const fetchEventsByIds = vi.hoisted(() => vi.fn(() => null));
-vi.mock('$lib/helpers/repost-resolution.js', () => ({ fetchEventsByIds }));
+const eventLoader = vi.hoisted(() => vi.fn(() => ({ subscribe: () => ({ unsubscribe() {} }) })));
+vi.mock('$lib/loaders/base.js', () => ({ addressLoader, eventLoader }));
 vi.mock('$lib/helpers/relay-helper.js', () => ({
   getAllLookupRelays: () => ['wss://lookup.example/']
 }));
@@ -115,12 +114,14 @@ describe('RemovedContentPane', () => {
     expect(screen.getByText('Photosynthesis explained')).toBeTruthy();
     expect(screen.getByText(/Removed by Moderatorin Mia on/)).toBeTruthy();
     expect(screen.getByText('Unknown item (kind 11)')).toBeTruthy();
-    // The unresolved target gets loaded, the resolved one does not.
-    expect(fetchEventsByIds).toHaveBeenCalledWith(
-      ['2'.repeat(64)],
-      ['wss://community.example/', 'wss://lookup.example/'],
-      expect.anything()
-    );
+    // The unresolved target gets loaded through the event loader (same tick
+    // as the store subscription, so the loader merges it with the store's
+    // own fallback lookup instead of a second request), the resolved one not.
+    expect(eventLoader).toHaveBeenCalledTimes(1);
+    expect(eventLoader).toHaveBeenCalledWith({
+      id: '2'.repeat(64),
+      relays: ['wss://community.example/', 'wss://lookup.example/']
+    });
     expect(addressLoader).not.toHaveBeenCalled();
   });
 
