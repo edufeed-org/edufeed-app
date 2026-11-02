@@ -267,6 +267,13 @@ describe('InboxItem community chat mentions', () => {
 });
 
 describe('InboxItem new follower (issue 891be310)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    // Kind 3 = the follower ledger's synthetic items.
+    mockType.mockReturnValue('newFollower');
+    mockSurface.mockReturnValue(null);
+  });
+
   it('says that the person followed you', () => {
     const follower = 'c'.repeat(64);
     const { container } = render(InboxItem, {
