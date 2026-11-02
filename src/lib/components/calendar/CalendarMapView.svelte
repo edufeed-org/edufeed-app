@@ -6,7 +6,7 @@
 <script>
   import { resolve } from '$app/paths';
   import { MapLibre, Marker, Popup } from 'svelte-maplibre';
-  import { parseLocation } from '$lib/helpers/geocoding.js';
+  import { parseLocation, isCoarsePrecision } from '$lib/helpers/geocoding.js';
   import { encodeEventToNaddr } from '$lib/helpers/nostrUtils.js';
   import { formatEventDateTime, filterEventsByViewMode } from '$lib/helpers/calendar.js';
   import { MapIcon, CalendarIcon, ClockIcon } from '$lib/components/icons';
@@ -135,7 +135,14 @@
         if (cancelled) break;
         try {
           const coords = await parseLocation(event.location, event.geohash);
-          myUpdates.set(event.id, coords ? { lat: coords.lat, lng: coords.lng } : null);
+          // A region-level match (state, country) is a centroid, not a venue:
+          // a pin there would claim a place the event is not at.
+          myUpdates.set(
+            event.id,
+            coords && !isCoarsePrecision(coords.precision)
+              ? { lat: coords.lat, lng: coords.lng }
+              : null
+          );
         } catch (err) {
           console.warn(`Failed to parse location for event ${event.id}:`, err);
           myUpdates.set(event.id, null);

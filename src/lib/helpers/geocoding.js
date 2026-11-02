@@ -49,7 +49,76 @@ function isGeocodableAddress(location) {
 }
 
 /**
- * Validate geocoding result from server API
+ * OpenCage result types (`components._type`) whose match covers a whole
+ * region. Their coordinates are a centroid, not a place: the map centers on
+ * them without a pin.
+ */
+const COARSE_PRECISIONS = new Set([
+  'continent',
+  'country',
+  'region',
+  'state',
+  'state_district',
+  'island',
+  'archipelago',
+  'county'
+]);
+
+/** Map zoom per OpenCage result type; anything not listed is street level. */
+const ZOOM_BY_PRECISION = new Map([
+  ['continent', 3],
+  ['country', 5],
+  ['region', 7],
+  ['state', 7],
+  ['state_district', 8],
+  ['island', 8],
+  ['archipelago', 7],
+  ['county', 9],
+  ['city', 11],
+  ['municipality', 11],
+  ['postal_city', 11],
+  ['town', 12],
+  ['village', 12],
+  ['hamlet', 13],
+  ['locality', 12],
+  ['city_district', 12],
+  ['suburb', 13],
+  ['quarter', 13],
+  ['postcode', 13],
+  ['neighbourhood', 13]
+]);
+
+/** Zoom for an exact location (coordinates, geohash, street, building, venue). */
+export const STREET_ZOOM = 15;
+
+/**
+ * Map zoom for a geocoding precision (OpenCage `components._type`).
+ * Missing or unknown types — exact coordinates, roads, buildings and the many
+ * POI types — get street level.
+ * @param {string | null | undefined} precision
+ * @returns {number}
+ */
+export function zoomForPrecision(precision) {
+  return (precision && ZOOM_BY_PRECISION.get(precision)) || STREET_ZOOM;
+}
+
+/**
+ * True when a match only names a region (country, state, county): no pin.
+ * @param {string | null | undefined} precision
+ * @returns {boolean}
+ */
+export function isCoarsePrecision(precision) {
+  return Boolean(precision && COARSE_PRECISIONS.has(precision));
+}
+
+/**
+ * Validate geocoding result from server API.
+ *
+ * OpenCage's `confidence` measures the size of the match's bounding box, not
+ * whether the match is right: a state is always confidence 1, a city 3-6. So
+ * the confidence threshold only applies to street-level matches, where a big
+ * bounding box does mean something went wrong. Settlement and region matches
+ * are accepted and shown zoomed out (`zoomForPrecision`).
  * @param {any} result - Geocoding result object
  * @returns {boolean}
  */
@@ -57,22 +126,24 @@ function validateGeocodeResult(result) {
   const config = getConfig();
   const validation = config.geocoding.validation;
 
-  // Check confidence score
-  if (result.confidence < validation.minConfidenceScore) {
+  // Ensure coordinates are valid
+  if (!isValidCoordinates(result.lat, result.lng)) {
     return false;
   }
 
   // Check component type
   const componentType = result.components?._type;
-  if (componentType && validation.acceptedComponentTypes.length > 0) {
+  if (componentType && validation.acceptedComponentTypes?.length > 0) {
     if (!validation.acceptedComponentTypes.includes(componentType)) {
       return false;
     }
   }
 
-  // Ensure coordinates are valid
-  if (!isValidCoordinates(result.lat, result.lng)) {
-    return false;
+  // Check confidence score — street-level matches only (see above)
+  if (zoomForPrecision(componentType) >= STREET_ZOOM) {
+    if (result.confidence < validation.minConfidenceScore) {
+      return false;
+    }
   }
 
   return true;
@@ -224,7 +295,7 @@ export function geohashToCoordinates(geohash) {
 /**
  * Get cached coordinates for a location
  * @param {string} location - Location string
- * @returns {{ lat: number, lng: number } | null}
+ * @returns {{ lat: number, lng: number, precision?: string } | null}
  */
 export function getCachedCoordinates(location) {
   try {
@@ -237,7 +308,9 @@ export function getCachedCoordinates(location) {
       const maxAge = config.geocoding.cacheDurationDays * 24 * 60 * 60 * 1000;
 
       if (age < maxAge && isValidCoordinates(cached.lat, cached.lng)) {
-        return { lat: cached.lat, lng: cached.lng };
+        return cached.precision
+          ? { lat: cached.lat, lng: cached.lng, precision: cached.precision }
+          : { lat: cached.lat, lng: cached.lng };
       }
     }
   } catch (error) {
@@ -250,7 +323,8 @@ export function getCachedCoordinates(location) {
 /**
  * Set cached coordinates for a location
  * @param {string} location - Location string
- * @param {{ lat: number, lng: number }} coords - Coordinates
+ * @param {{ lat: number, lng: number, precision?: string }} coords - Coordinates, plus the
+ *   geocoding precision (OpenCage `_type`) so a cache hit zooms like the live match
  */
 export function setCachedCoordinates(location, coords) {
   try {
@@ -258,6 +332,7 @@ export function setCachedCoordinates(location, coords) {
     cache[location] = {
       lat: coords.lat,
       lng: coords.lng,
+      ...(coords.precision ? { precision: coords.precision } : {}),
       timestamp: Date.now()
     };
     localStorage.setItem('geocode_cache', JSON.stringify(cache));
@@ -306,7 +381,7 @@ export async function autocompleteAddress(query) {
 /**
  * Geocode an address using server-side geocoding API with validation
  * @param {string} address - Address to geocode
- * @returns {Promise<{ lat: number, lng: number, formatted: string } | null>}
+ * @returns {Promise<{ lat: number, lng: number, formatted: string, precision?: string } | null>}
  */
 export async function geocodeAddress(address) {
   if (!address || typeof address !== 'string') {
@@ -345,7 +420,9 @@ export async function geocodeAddress(address) {
       const coords = {
         lat: result.lat,
         lng: result.lng,
-        formatted: result.formatted // Store formatted address for display
+        formatted: result.formatted, // Store formatted address for display
+        // OpenCage result type (state, city, road, …): drives the map zoom
+        ...(result.components?._type ? { precision: result.components._type } : {})
       };
 
       // Cache the result
@@ -366,7 +443,9 @@ export async function geocodeAddress(address) {
  * Priority: cache > coordinates > address geocoding
  * @param {string} location - Location string
  * @param {string | null} [geohash] - Optional geohash from event
- * @returns {Promise<{ lat: number, lng: number, source: string } | null>}
+ * @returns {Promise<{ lat: number, lng: number, source: string, precision?: string } | null>}
+ *   `precision` is the geocoder's result type (see `zoomForPrecision`); absent
+ *   for exact coordinates and geohashes.
  */
 export async function parseLocation(location, geohash = null) {
   if (!location || typeof location !== 'string') {

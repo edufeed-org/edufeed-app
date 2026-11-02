@@ -13,7 +13,10 @@ const spies = vi.hoisted(() => ({
   parseLocation: vi.fn(async () => null)
 }));
 
-vi.mock('$lib/helpers/geocoding.js', () => ({ parseLocation: spies.parseLocation }));
+vi.mock('$lib/helpers/geocoding.js', () => ({
+  parseLocation: spies.parseLocation,
+  isCoarsePrecision: () => false
+}));
 vi.mock('svelte-maplibre', () => ({
   MapLibre: () => ({}),
   Marker: () => ({}),

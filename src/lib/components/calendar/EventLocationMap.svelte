@@ -6,13 +6,20 @@
 <script>
   import { onMount } from 'svelte';
   import { MapLibre, Marker, Popup } from 'svelte-maplibre';
-  import { parseLocation, detectLocationType } from '$lib/helpers/geocoding.js';
+  import {
+    parseLocation,
+    detectLocationType,
+    zoomForPrecision,
+    isCoarsePrecision
+  } from '$lib/helpers/geocoding.js';
   import { MapIcon } from '$lib/components/icons';
   import * as m from '$lib/paraglide/messages';
 
   let { location = '', geohash = null, compact = true } = $props();
 
-  let coordinates = $state(/** @type {{ lat: number, lng: number } | null} */ (null));
+  let coordinates = $state(
+    /** @type {{ lat: number, lng: number, precision?: string } | null} */ (null)
+  );
   let loading = $state(true);
   let error = $state(/** @type {string | null} */ (null));
   let _isVenue = $state(false);
@@ -20,6 +27,11 @@
 
   // Reactive computed values
   let hasCoordinates = $derived(coordinates !== null);
+
+  // A region-level match (state, country, county) centers a zoomed-out map
+  // without a pin: its coordinates are a centroid, not the venue.
+  let zoom = $derived(zoomForPrecision(coordinates?.precision));
+  let showPin = $derived(!isCoarsePrecision(coordinates?.precision));
 
   // MapLibre uses [lng, lat] order (GeoJSON standard), not [lat, lng] like Leaflet
   let center = $derived(
@@ -32,7 +44,9 @@
 
   let osmUrl = $derived(
     coordinates
-      ? `https://www.openstreetmap.org/?mlat=${coordinates.lat}&mlon=${coordinates.lng}&zoom=15`
+      ? showPin
+        ? `https://www.openstreetmap.org/?mlat=${coordinates.lat}&mlon=${coordinates.lng}#map=${zoom}/${coordinates.lat}/${coordinates.lng}`
+        : `https://www.openstreetmap.org/#map=${zoom}/${coordinates.lat}/${coordinates.lng}`
       : null
   );
 
@@ -58,7 +72,7 @@
       const result = await parseLocation(location, geohash);
 
       if (result) {
-        coordinates = { lat: result.lat, lng: result.lng };
+        coordinates = { lat: result.lat, lng: result.lng, precision: result.precision };
       } else {
         // parseLocation will have logged why geocoding failed
         // Don't show an error UI - just don't display the map
@@ -72,7 +86,9 @@
   });
 </script>
 
-{#if shouldShowMap}
+<!-- Nothing at all once geocoding has come back empty: the fixed-height box
+     would otherwise stay on the page as a blank gap. -->
+{#if shouldShowMap && (loading || error || hasCoordinates)}
   <div class="event-location-map" class:compact>
     {#if loading}
       <div class="map-loading">
@@ -89,20 +105,22 @@
         <MapLibre
           style="https://tiles.openfreemap.org/styles/liberty"
           {center}
-          zoom={15}
+          {zoom}
           class="map"
           attributionControl={false}
         >
-          <Marker lngLat={markerLngLat}>
-            <div class="map-pin">📍</div>
-            {#if location && typeof location === 'string'}
-              <Popup openOn="hover" closeButton={false} offset={[0, -10]}>
-                <div class="popup-content" style="background: #ffffff; color: #1a1a1a;">
-                  {location}
-                </div>
-              </Popup>
-            {/if}
-          </Marker>
+          {#if showPin}
+            <Marker lngLat={markerLngLat}>
+              <div class="map-pin">📍</div>
+              {#if location && typeof location === 'string'}
+                <Popup openOn="hover" closeButton={false} offset={[0, -10]}>
+                  <div class="popup-content" style="background: #ffffff; color: #1a1a1a;">
+                    {location}
+                  </div>
+                </Popup>
+              {/if}
+            </Marker>
+          {/if}
         </MapLibre>
 
         <!-- Attribution and OSM link -->
