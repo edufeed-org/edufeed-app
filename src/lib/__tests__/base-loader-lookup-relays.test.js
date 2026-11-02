@@ -10,7 +10,7 @@
  * @vitest-environment node
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { EMPTY } from 'rxjs';
+import { EMPTY, Subject } from 'rxjs';
 import { EventStore } from 'applesauce-core';
 
 /** @type {string[]} */
@@ -20,7 +20,12 @@ const request = vi.fn(() => EMPTY);
 const eventStore = new EventStore();
 
 vi.mock('$lib/stores/nostr-infrastructure.svelte', () => ({
-  pool: { request: (/** @type {any[]} */ ...args) => request(...args) },
+  pool: {
+    request: (/** @type {any[]} */ ...args) => request(...args),
+    // loaderRequest arms the liveness connect deadline on every relay a
+    // lookup by id asks
+    relay: (/** @type {string} */ url) => ({ url, connected: false, open$: new Subject() })
+  },
   eventStore
 }));
 
