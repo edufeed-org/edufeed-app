@@ -54,7 +54,7 @@ export function getRelaysForKind(kind, hintRelays) {
 
   const fallback = parseRelays(env.FALLBACK_RELAYS);
   const all = [...new Set([...hintRelays, ...appRelays, ...fallback])];
-  return all.length > 0 ? all : ['wss://relay.damus.io', 'wss://nos.lol'];
+  return all.length > 0 ? all : ['wss://relay.damus.io', 'wss://relay.primal.net'];
 }
 
 /**

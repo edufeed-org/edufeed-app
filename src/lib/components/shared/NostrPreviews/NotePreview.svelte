@@ -7,10 +7,10 @@
 <script>
   import { resolve } from '$app/paths';
   import { goto } from '$app/navigation';
-  import { nip19 } from 'nostr-tools';
-  import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
-  import { getAllLookupRelays } from '$lib/helpers/relay-helper.js';
-  import { profileLink } from '$lib/helpers/nostrUtils.js';
+  import { decodeNostrIdentifier, profileLink } from '$lib/helpers/nostrUtils.js';
+  import { useReferencedEvent } from '$lib/stores/referenced-event.svelte.js';
+  import { QUOTE_POINTERS, withQuoteHint } from '$lib/helpers/quote-pointers.js';
+  import { getContext } from 'svelte';
   import { useUserProfile } from '$lib/stores/user-profile.svelte.js';
   import { getDisplayName } from 'applesauce-core/helpers';
   import { formatRelativeTime } from '$lib/helpers/calendar.js';
@@ -22,17 +22,25 @@
 
   const MAX_DEPTH = 2;
   const COLLAPSED_HEIGHT_PX = 192; // max-h-48 = 12rem = 192px
-  // How long the skeleton shows before falling back to the badge. The store
-  // subscription stays open, so a late arrival still upgrades the badge.
-  const LOADING_TIMEOUT_MS = 8000;
 
   let { identifier, depth = 0 } = $props();
 
-  // $state.raw: replaced whole, never mutated — a deep proxy breaks applesauce's
-  // symbol memoization on the event (state_descriptors_fixed).
-  /** @type {any} */
-  let event = $state.raw(null);
-  let isLoading = $state(true);
+  // The quoting event's q tags (set by the NostrContentRenderer around us):
+  // the author and relay hint a `note1…` reference itself does not carry.
+  /** @type {(() => Map<string, { relays?: string[], author?: string }>) | undefined} */
+  const getQuotes = getContext(QUOTE_POINTERS);
+
+  // Store first, network per mount with retries and the author's outboxes as
+  // fallback (see referenced-event.svelte.js). Nothing is loaded past
+  // MAX_DEPTH: nested quotes stay a badge.
+  const ref = useReferencedEvent(() => {
+    if (depth >= MAX_DEPTH) return null;
+    const decoded = decodeNostrIdentifier(identifier);
+    const id = decoded.type === 'note' ? decoded.data : decoded.data?.id;
+    return withQuoteHint(decoded, getQuotes?.().get(id));
+  });
+  const event = $derived(ref.event);
+  const isLoading = $derived(ref.isLoading);
   let expanded = $state(false);
   let isOverflowing = $state(false);
 
@@ -41,62 +49,6 @@
 
   const getUserProfile = useUserProfile(() => event?.pubkey);
   let authorProfile = $derived(getUserProfile());
-
-  /**
-   * Decode note/nevent identifier to an EventPointer. Relay hints from the
-   * nevent are unioned with the lookup relays so the store's fallback loader
-   * knows where to fetch from.
-   * @param {string} id
-   * @returns {{ id: string, relays?: string[] } | null}
-   */
-  function toEventPointer(id) {
-    try {
-      const decoded = nip19.decode(id);
-      if (decoded.type === 'nevent') {
-        const hints = decoded.data.relays?.length ? decoded.data.relays : [];
-        return { id: decoded.data.id, relays: [...new Set([...hints, ...getAllLookupRelays()])] };
-      }
-      if (decoded.type === 'note') {
-        return { id: decoded.data, relays: getAllLookupRelays() };
-      }
-    } catch {
-      // fall through to null
-    }
-    return null;
-  }
-
-  // Reactive store subscription (issue #37): eventStore.event() auto-loads
-  // missing events via the attached eventLoader and keeps emitting, so an
-  // event arriving late (from the loader or any other surface) upgrades the
-  // badge to the embedded card without a remount.
-  $effect(() => {
-    if (depth >= MAX_DEPTH) {
-      isLoading = false;
-      return;
-    }
-
-    const pointer = toEventPointer(identifier);
-    if (!pointer) {
-      isLoading = false;
-      return;
-    }
-
-    isLoading = true;
-    const sub = eventStore.event(pointer).subscribe((e) => {
-      if (e) {
-        event = e;
-        isLoading = false;
-      }
-    });
-    const timer = setTimeout(() => {
-      isLoading = false;
-    }, LOADING_TIMEOUT_MS);
-
-    return () => {
-      sub.unsubscribe();
-      clearTimeout(timer);
-    };
-  });
 
   // Detect whether the rendered content overflows the collapsed height
   $effect(() => {

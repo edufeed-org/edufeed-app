@@ -38,7 +38,7 @@ export function getCalendarRelaysServer(hintRelays = []) {
   const calendarRelays = parseRelays(env.CALENDAR_RELAYS);
   const fallback = parseRelays(env.FALLBACK_RELAYS);
   const all = [...new Set([...hintRelays, ...calendarRelays, ...fallback])];
-  return all.length > 0 ? all : ['wss://relay.damus.io', 'wss://nos.lol'];
+  return all.length > 0 ? all : ['wss://relay.damus.io', 'wss://relay.primal.net'];
 }
 
 /**

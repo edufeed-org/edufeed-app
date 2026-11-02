@@ -11,6 +11,7 @@
   import { getNip10References, getSharedEventPointer } from 'applesauce-common/helpers';
   import { getTagValue } from 'applesauce-core/helpers';
   import { addressLoader, eventLoader } from '$lib/loaders/base.js';
+  import { loadReferencedEvent } from '$lib/loaders/referenced-event.js';
   import { pool, eventStore } from '$lib/stores/nostr-infrastructure.svelte';
   import { startProfileFeedLoaders } from '$lib/loaders/profile-feed-loaders.js';
   import { useProfileMap } from '$lib/stores/profile-map.svelte.js';
@@ -341,7 +342,7 @@
       subs = resolveRepostReferences(repostItems, {
         eventStore,
         pool,
-        addressLoader,
+        loadReferenced: loadReferencedEvent,
         relays: getAllLookupRelays(),
         loadedIds: loadedRepostIds,
         loadedAddresses: loadedRepostAddrs

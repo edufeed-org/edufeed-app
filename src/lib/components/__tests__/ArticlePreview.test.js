@@ -10,7 +10,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/svelte';
 import { BehaviorSubject } from 'rxjs';
 
-const h = vi.hoisted(() => ({ source: null, pointers: [] }));
+const h = vi.hoisted(() => ({ source: null, pointers: [], loads: [] }));
 vi.mock('$lib/stores/nostr-infrastructure.svelte', () => ({
   eventStore: {
     event: (pointer) => {
@@ -21,6 +21,16 @@ vi.mock('$lib/stores/nostr-infrastructure.svelte', () => ({
 }));
 // The component only falls back to decoding when no `decoded` prop is passed
 vi.mock('$lib/helpers/nostrUtils.js', () => ({ decodeNostrIdentifier: () => null }));
+// The network side of useReferencedEvent: recorded, never answers
+vi.mock('$lib/loaders/referenced-event.js', async () => {
+  const { EMPTY } = await import('rxjs');
+  return {
+    loadReferencedEvent: (pointer, options) => {
+      h.loads.push([pointer, options]);
+      return EMPTY;
+    }
+  };
+});
 vi.mock('$lib/helpers/relay-helper.js', () => ({
   getAllLookupRelays: () => ['wss://lookup.example/']
 }));
@@ -60,19 +70,19 @@ describe('ArticlePreview', () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     h.source = new BehaviorSubject(undefined);
     h.pointers = [];
+    h.loads = [];
   });
   afterEach(() => vi.useRealTimers());
 
-  it('asks the store for the address with the hint and lookup relays', () => {
+  it('watches the store for the address and loads it from the hint and lookup relays', () => {
     render(ArticlePreview, { identifier: 'naddr1test', decoded });
-    expect(h.pointers).toEqual([
-      {
-        kind: 30023,
-        pubkey: A,
-        identifier: 'applesauce-v7',
-        relays: ['wss://hint.example/', 'wss://lookup.example/']
-      }
-    ]);
+    expect(h.pointers).toEqual([{ kind: 30023, pubkey: A, identifier: 'applesauce-v7' }]);
+    expect(h.loads[0][0]).toEqual({
+      kind: 30023,
+      pubkey: A,
+      identifier: 'applesauce-v7',
+      relays: ['wss://hint.example/', 'wss://lookup.example/']
+    });
   });
 
   it('renders the card at once when the store already holds the article', async () => {

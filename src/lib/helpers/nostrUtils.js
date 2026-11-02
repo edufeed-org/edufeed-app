@@ -1,5 +1,5 @@
 import { nip19 } from 'nostr-tools';
-import { eventLoader, addressLoader } from '$lib/loaders';
+import { addressLoader, eventLoader, loadReferencedEvent } from '$lib/loaders';
 import { firstValueFrom, timeout, catchError, of } from 'rxjs';
 import { getSeenRelays } from 'applesauce-core/helpers';
 import { getAllLookupRelays, getAppManagedRelays } from '$lib/helpers/relay-helper.js';
@@ -200,6 +200,11 @@ export function isAMBResourceIdentifier(decoded) {
 // take several seconds, especially when the only holder is a slow relay. Keep
 // this generous so the loader's batching buffer doesn't eat the whole window.
 const EVENT_FETCH_TIMEOUT_MS = 8000;
+// References (naddr/nevent) get a second stage when the first misses: the
+// author's NIP-65 outboxes (loadReferencedEvent). It only bites on a miss —
+// an event that exists resolves on its first answer — so the cap is "how long
+// before we call it not found", sized for both stages.
+const REFERENCE_FETCH_TIMEOUT_MS = 15000;
 
 /**
  * Fetches a Nostr event using various identifier types
@@ -238,9 +243,9 @@ export const fetchEventById = async (identifier) => {
           const hintRelays = data.relays?.length ? data.relays : [];
           addressPointer.relays = [...new Set([...hintRelays, ...getAllLookupRelays()])];
 
-          // Use addressLoader for addressable events (fetches from relays)
-          const event$ = addressLoader(addressPointer).pipe(
-            timeout(EVENT_FETCH_TIMEOUT_MS),
+          // Hints + lookup relays, then the author's outboxes on a miss
+          const event$ = loadReferencedEvent(addressPointer).pipe(
+            timeout(REFERENCE_FETCH_TIMEOUT_MS),
             catchError(() => of(null))
           );
           const event = await firstValueFrom(event$, { defaultValue: null });
@@ -267,8 +272,12 @@ export const fetchEventById = async (identifier) => {
           const hintRelays = data.relays?.length ? data.relays : [];
           const lookupRelays = getAllLookupRelays();
           const relays = [...new Set([...hintRelays, ...lookupRelays])];
-          const event$ = eventLoader({ id: data.id, relays }).pipe(
-            timeout(EVENT_FETCH_TIMEOUT_MS),
+          // Hints + lookup relays, then the nevent author's outboxes on a miss
+          const event$ = loadReferencedEvent(
+            { id: data.id, relays },
+            { author: data.author || undefined }
+          ).pipe(
+            timeout(REFERENCE_FETCH_TIMEOUT_MS),
             catchError(() => of(null))
           );
           const event = await firstValueFrom(event$, { defaultValue: null });
