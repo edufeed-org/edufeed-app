@@ -16,7 +16,8 @@ import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 const OPENAI = 'https://openai.com';
-const GOOGLE = 'https://developers.google.com/static/search/apis/ipranges';
+// Moved 2026: the old /static/search/apis/ipranges/ lists only redirect here.
+const GOOGLE = 'https://developers.google.com/static/crawling/ipranges';
 const PERPLEXITY = 'https://www.perplexity.com';
 
 /**
@@ -55,9 +56,10 @@ const CRAWLERS = [
   {
     family: 'GoogleOther',
     ua: /GoogleOther|Google-InspectionTool/i,
-    ranges: [`${GOOGLE}/special-crawlers.json`]
+    // Common crawlers, like Googlebot — not the special-case list (AdsBot & co.)
+    ranges: [`${GOOGLE}/common-crawlers.json`]
   },
-  { family: 'Googlebot', ua: /Googlebot/i, ranges: [`${GOOGLE}/googlebot.json`] },
+  { family: 'Googlebot', ua: /Googlebot/i, ranges: [`${GOOGLE}/common-crawlers.json`] },
   { family: 'bingbot', ua: /bingbot/i, ranges: ['https://www.bing.com/toolbox/bingbot.json'] },
   {
     family: 'Applebot',
@@ -337,6 +339,9 @@ export function createCrawlerStatsHandle({ dir, verifier, store = createStatsSto
       }
 
       if (!/^text\/html/.test(response.headers.get('content-type') ?? '')) return response;
+      // Error pages are no visits: scanners probing /.env or /wp-login.php
+      // get the HTML 404 page and would count as page views and referrals.
+      if (response.status >= 400) return response;
       store.pageview(day);
       const source = classifyReferrer(event.request.headers.get('referer'), hostname);
       const utm = safeUtm(searchParams.get('utm_source'));
