@@ -10,6 +10,7 @@
  */
 import { describe, it, expect, vi } from 'vitest';
 import { render } from '@testing-library/svelte';
+import { tick } from 'svelte';
 import BookmarkButton from '../bookmarks/BookmarkButton.svelte';
 
 vi.mock('$lib/stores/personal-bookmarks.svelte.js', () => ({
@@ -64,5 +65,40 @@ describe('BookmarkButton dropdown alignment', () => {
     const dropdown = dropdownOf(container);
     expect(dropdown.classList.contains('dropdown-start')).toBe(true);
     expect(dropdown.classList.contains('dropdown-end')).toBe(false);
+  });
+});
+
+describe('BookmarkButton closes like a menu', () => {
+  /** @param {HTMLElement} container */
+  async function openMenu(container) {
+    const dropdown = /** @type {HTMLDetailsElement} */ (dropdownOf(container));
+    dropdown.open = true;
+    dropdown.dispatchEvent(new Event('toggle'));
+    await tick();
+    return dropdown;
+  }
+
+  it('closes on a click outside (<details> does not do that by itself)', async () => {
+    const { container } = render(BookmarkButton, { props: { event } });
+    const dropdown = await openMenu(container);
+    document.body.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
+    await tick();
+    expect(dropdown.open).toBe(false);
+  });
+
+  it('stays open on a click inside the menu', async () => {
+    const { container } = render(BookmarkButton, { props: { event } });
+    const dropdown = await openMenu(container);
+    dropdown.querySelector('ul')?.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
+    await tick();
+    expect(dropdown.open).toBe(true);
+  });
+
+  it('closes on Escape', async () => {
+    const { container } = render(BookmarkButton, { props: { event } });
+    const dropdown = await openMenu(container);
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    await tick();
+    expect(dropdown.open).toBe(false);
   });
 });
