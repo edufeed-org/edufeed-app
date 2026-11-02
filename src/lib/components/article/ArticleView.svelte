@@ -210,6 +210,7 @@
     onDelete={isAuthor ? handleDelete : undefined}
     deleteTitle={m.article_view_delete_confirm_title()}
     deleteItemName={title}
+    bookmark={!isDraft}
   >
     {#snippet metadata()}
       {#if hashtags.length > 0}

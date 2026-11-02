@@ -111,6 +111,7 @@
     onDelete={isAuthor ? handleDelete : undefined}
     deleteTitle={m.publication_view_delete_confirm_title()}
     deleteItemName={publication.title}
+    bookmark
   />
 
   <!-- Authors -->

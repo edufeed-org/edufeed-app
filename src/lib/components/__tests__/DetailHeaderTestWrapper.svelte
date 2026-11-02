@@ -2,8 +2,9 @@
   import DetailHeader from '../shared/DetailHeader.svelte';
   import EventTags from '../calendar/EventTags.svelte';
 
-  /** @type {{ title?: string, subtitle?: string, showMetadata?: boolean, tags?: string[], authorPubkey?: string }} */
+  /** @type {{ title?: string, subtitle?: string, showMetadata?: boolean, tags?: string[], authorPubkey?: string, bookmark?: boolean }} */
   let {
+    bookmark = false,
     title = 'Test Title',
     subtitle = undefined,
     showMetadata = false,
@@ -32,5 +33,5 @@
     {/snippet}
   </DetailHeader>
 {:else}
-  <DetailHeader {title} {subtitle} {event} {authorPubkey} />
+  <DetailHeader {title} {subtitle} {event} {authorPubkey} {bookmark} />
 {/if}

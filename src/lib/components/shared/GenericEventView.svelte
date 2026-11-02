@@ -61,6 +61,7 @@
     onDelete={isAuthor ? handleDelete : undefined}
     deleteTitle={m.thread_detail_delete_confirm_title()}
     deleteItemName={title ?? kindLabel}
+    bookmark
   >
     {#snippet metadata()}
       {#if title}

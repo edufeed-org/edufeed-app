@@ -16,7 +16,6 @@
   import { goto } from '$app/navigation';
   import { resolve } from '$app/paths';
   import ReactionBar from '../reactions/ReactionBar.svelte';
-  import BookmarkButton from '../bookmarks/BookmarkButton.svelte';
   import CommentList from '../comments/CommentList.svelte';
   import EventTags from '../calendar/EventTags.svelte';
 
@@ -675,6 +674,7 @@
       : undefined}
     deleteTitle={m.common_delete() + '?'}
     deleteItemName={resource.name}
+    bookmark
   >
     {#snippet metadata()}
       {#each typeKickerLabels as label, i (i)}
@@ -1069,7 +1069,6 @@
   <!-- REACTIONS (Nostr-first: Primary interaction) -->
   <div class="ed-reactions">
     <ReactionBar {event} />
-    <BookmarkButton {event} align="start" />
   </div>
 
   <!-- COMMENTS SECTION (Nostr-first: Primary interaction) -->

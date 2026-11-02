@@ -35,6 +35,8 @@
   let { event, align = 'end' } = $props();
 
   let dropdownOpen = $state(false);
+  /** @type {HTMLDetailsElement | undefined} */
+  let menuEl = $state();
   let showNewSetInput = $state(false);
   let newSetName = $state('');
 
@@ -58,6 +60,26 @@
     showNewSetInput = false;
     newSetName = '';
   }
+
+  // Close on a click outside or Escape — <details> does neither by itself
+  // (same pattern as ShareMenu).
+  $effect(() => {
+    if (!dropdownOpen) return;
+    /** @param {PointerEvent} e */
+    const onPointerDown = (e) => {
+      if (menuEl && !menuEl.contains(/** @type {Node} */ (e.target))) closeDropdown();
+    };
+    /** @param {KeyboardEvent} e */
+    const onKeyDown = (e) => {
+      if (e.key === 'Escape') closeDropdown();
+    };
+    document.addEventListener('pointerdown', onPointerDown, true);
+    document.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.removeEventListener('pointerdown', onPointerDown, true);
+      document.removeEventListener('keydown', onKeyDown);
+    };
+  });
 
   /**
    * @param {string} [identifier]
@@ -131,6 +153,7 @@
 </script>
 
 <details
+  bind:this={menuEl}
   class="dropdown {align === 'start' ? 'dropdown-start' : 'dropdown-end'}"
   bind:open={dropdownOpen}
 >

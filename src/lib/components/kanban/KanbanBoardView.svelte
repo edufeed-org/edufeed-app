@@ -23,6 +23,7 @@
   import { KanbanIcon, TrashIcon, ExternalLinkIcon } from '$lib/components/icons';
   import DeleteConfirmModal from '../shared/DeleteConfirmModal.svelte';
   import EventContextMenu from '../shared/EventContextMenu.svelte';
+  import BookmarkButton from '../bookmarks/BookmarkButton.svelte';
   import { encodeEventToNaddr, profileLink } from '$lib/helpers/nostrUtils.js';
   import { deleteEvent } from '$lib/helpers/eventDeletion.js';
   import { showToast } from '$lib/helpers/toast.js';
@@ -249,6 +250,7 @@
             {m.common_delete()}
           </button>
         {/if}
+        <BookmarkButton {event} />
         <EventContextMenu {event} />
       </div>
     </div>

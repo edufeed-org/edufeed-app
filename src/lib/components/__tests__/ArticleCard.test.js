@@ -9,6 +9,11 @@ import { describe, it, expect, vi } from 'vitest';
 import { render } from '@testing-library/svelte';
 import ArticleCard from '../article/ArticleCard.svelte';
 
+const { BookmarkButtonStub } = vi.hoisted(() => ({
+  BookmarkButtonStub: vi.fn(() => ({}))
+}));
+vi.mock('../bookmarks/BookmarkButton.svelte', () => ({ default: BookmarkButtonStub }));
+
 // Mock dependencies
 vi.mock('$lib/stores/app-settings.svelte.js', () => ({
   appSettings: { debugMode: false, gatedMode: false }
@@ -351,6 +356,30 @@ describe('ArticleCard', () => {
         props: { article: mockArticle, authorProfile: mockAuthorProfile }
       });
       expect(queryByTestId('article-draft-badge')).toBeNull();
+    });
+  });
+
+  describe('bookmark button', () => {
+    it('lets the reader bookmark a published article', () => {
+      BookmarkButtonStub.mockClear();
+      render(ArticleCard, { props: { article: mockArticle, authorProfile: mockAuthorProfile } });
+      expect(BookmarkButtonStub).toHaveBeenCalled();
+    });
+
+    it('offers no bookmark on a compact card', () => {
+      BookmarkButtonStub.mockClear();
+      render(ArticleCard, {
+        props: { article: mockArticle, authorProfile: mockAuthorProfile, compact: true }
+      });
+      expect(BookmarkButtonStub).not.toHaveBeenCalled();
+    });
+
+    it('offers no bookmark on a draft', () => {
+      BookmarkButtonStub.mockClear();
+      render(ArticleCard, {
+        props: { article: { ...mockArticle, kind: 30024 }, authorProfile: mockAuthorProfile }
+      });
+      expect(BookmarkButtonStub).not.toHaveBeenCalled();
     });
   });
 });

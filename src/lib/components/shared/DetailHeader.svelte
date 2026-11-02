@@ -18,6 +18,7 @@
   import EventContextMenu from './EventContextMenu.svelte';
   import ProtectedBadge from './ProtectedBadge.svelte';
   import { profileLink } from '$lib/helpers/nostrUtils.js';
+  import BookmarkButton from '../bookmarks/BookmarkButton.svelte';
 
   /**
    * @typedef {Object} Props
@@ -36,6 +37,7 @@
    * @property {(() => void | Promise<void>) | undefined} [onDelete] - Passed to EventContextMenu
    * @property {string} [deleteTitle] - For DeleteConfirmModal title
    * @property {string} [deleteItemName] - For DeleteConfirmModal item name
+   * @property {boolean} [bookmark] - Show the bookmark button beside the context menu
    * @property {import('svelte').Snippet} [actions] - Optional type-specific controls
    * @property {import('svelte').Snippet} [titleContent] - Override default title rendering
    * @property {import('svelte').Snippet} [metadata] - Optional metadata in toolbar (e.g. tags)
@@ -55,6 +57,7 @@
     onDelete = undefined,
     deleteTitle = '',
     deleteItemName = '',
+    bookmark = false,
     actions = undefined,
     titleContent = undefined,
     metadata = undefined
@@ -142,7 +145,11 @@
       </div>
     {/if}
 
-    <div class="order-3 sm:order-last">
+    <!-- Bookmark sits with the context menu, so it stays on row 1 on mobile -->
+    <div class="order-3 flex items-center sm:order-last">
+      {#if bookmark}
+        <BookmarkButton {event} />
+      {/if}
       <EventContextMenu {event} {onEdit} {onDelete} {deleteTitle} {deleteItemName} />
     </div>
   </div>
