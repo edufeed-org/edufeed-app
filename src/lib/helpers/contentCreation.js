@@ -16,6 +16,7 @@ export const CONTENT_CREATION = {
   },
   learning: { type: 'resource' },
   article: { type: 'route', path: '/create/article' },
+  publication: { type: 'route', path: '/create/publication' },
   wiki: { type: 'route', path: '/create/wiki' },
   form: { type: 'route', path: '/forms/new' },
   poll: { type: 'modal', modal: 'createPoll' },

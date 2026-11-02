@@ -44,7 +44,8 @@
     BookmarkIcon,
     GlobeIcon,
     PlusIcon,
-    PuzzleIcon
+    PuzzleIcon,
+    BookOpenIcon
   } from '$lib/components/icons';
   import * as m from '$lib/paraglide/messages';
 
@@ -76,6 +77,11 @@
       icon: ScrollTextIcon,
       label: () => m.feed_badge_article(),
       cta: () => m.article_fab_write()
+    },
+    publication: {
+      icon: BookOpenIcon,
+      label: () => m.feed_badge_publication(),
+      cta: () => m.publication_fab_create()
     },
     wiki: { icon: WikipediaIcon, label: () => m.feed_badge_wiki(), cta: () => m.wiki_fab_write() },
     form: {
@@ -140,7 +146,9 @@
 
     const relayGroups = [
       { relays: getCalendarRelays(), kinds: [31922, 31923] },
-      { relays: getEducationalRelays(), kinds: [30142] },
+      // 30040 publications are published to the educational relays too
+      // (app-relay-service: [30142, 1063, 30040] -> 'educational').
+      { relays: getEducationalRelays(), kinds: [30142, 30040] },
       { relays: getArticleRelays(), kinds: [30023, 30024] },
       { relays: getAllLookupRelays(), kinds: [30818, 30168, 39701] },
       { relays: getPollRelays(), kinds: [1068] }

@@ -11,7 +11,8 @@
     BookmarkIcon,
     ReplyIcon,
     FilesIcon,
-    PollIcon
+    PollIcon,
+    BookOpenIcon
   } from '$lib/components/icons';
   import ProfileAvatar from '$lib/components/shared/ProfileAvatar.svelte';
   import CreatorAvatarStack from '$lib/components/shared/CreatorAvatarStack.svelte';
@@ -104,7 +105,8 @@
     'page-note': { label: () => m.feed_badge_page_note(), icon: BookmarkIcon },
     reply: { label: () => m.feed_badge_reply(), icon: ReplyIcon },
     form: { label: () => m.feed_badge_form(), icon: FilesIcon },
-    poll: { label: () => m.feed_badge_poll(), icon: PollIcon }
+    poll: { label: () => m.feed_badge_poll(), icon: PollIcon },
+    publication: { label: () => m.feed_badge_publication(), icon: BookOpenIcon }
   };
 
   let meta = $derived(typeMeta[typeKey]);
