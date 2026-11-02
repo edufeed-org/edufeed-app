@@ -262,7 +262,9 @@ describe('buildCalendarEventTags', () => {
       expect(findTagValue(tags, 'start')).toBe('2024-06-15');
     });
 
-    it('should use ISO 8601 date strings for kind 31922 end', () => {
+    // The form's end date is the inclusive last day; NIP-52's end is
+    // exclusive, so the tag names the day after it.
+    it('should use ISO 8601 date strings for kind 31922 end (exclusive)', () => {
       const formData = {
         startDate: '2024-06-15',
         endDate: '2024-06-16',
@@ -283,7 +285,7 @@ describe('buildCalendarEventTags', () => {
       );
 
       expect(findTagValue(tags, 'start')).toBe('2024-06-15');
-      expect(findTagValue(tags, 'end')).toBe('2024-06-16');
+      expect(findTagValue(tags, 'end')).toBe('2024-06-17');
     });
 
     it('should use Unix timestamp strings for kind 31923 start', () => {

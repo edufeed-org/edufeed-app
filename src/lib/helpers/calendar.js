@@ -11,6 +11,8 @@ import * as m from '$lib/paraglide/messages';
 import {
   parseCalendarTimestamp,
   getIcsEventTiming,
+  allDayEndTagValue,
+  calendarEventEnd,
   dedupeReplaceableEvents,
   dedupeCalendarTwins
 } from '$lib/helpers/calendar-timing.js';
@@ -180,8 +182,9 @@ export function isEventInDateRange(event, start, end) {
  * The UTC day span an event covers, as integer day indices (floor(ts/86400)).
  *
  * End-bound conventions differ by kind:
- *  - 31922 (date-based): the app's writer stores the user's chosen end date
- *    as-is (inclusive), so the end day itself counts.
+ *  - 31922 (date-based): a CalendarEvent's end is the midnight of the last
+ *    day (the exclusive NIP-52 end tag minus one day, see
+ *    `calendarEventEnd`), so the end day itself counts.
  *  - 31923 (time-based): NIP-52 ends are exclusive — an event ending exactly
  *    at midnight must not bleed into the next day.
  * Implausible spans are capped at 92 days.
@@ -933,10 +936,12 @@ export function buildCalendarEventTags(formData, eventData, dTag, hTag) {
 
   // Start/end tags — format depends on event kind
   if (eventData.kind === 31922) {
-    // Kind 31922 (date-based): NIP-52 requires ISO 8601 date strings
+    // Kind 31922 (date-based): NIP-52 requires ISO 8601 date strings. The
+    // form's end date is the inclusive last day; NIP-52's `end` is exclusive.
     tags.push(['start', formData.startDate]);
-    if (formData.endDate) {
-      tags.push(['end', formData.endDate]);
+    const end = allDayEndTagValue(formData.startDate, formData.endDate);
+    if (end) {
+      tags.push(['end', end]);
     }
   } else {
     // Kind 31923 (time-based): Unix timestamp strings
@@ -1121,9 +1126,9 @@ export function isRawEventInDateRange(event, rangeStart, rangeEnd) {
   const eventStart = parseCalendarTimestamp(startTag[1], event.kind);
   if (!eventStart) return false;
 
-  // Extract end timestamp from tags (optional)
+  // Extract end timestamp from tags (optional; a 31922 end is exclusive)
   const endTag = event.tags.find((/** @type {string[]} */ tag) => tag[0] === 'end');
-  const eventEnd = endTag && endTag[1] ? parseCalendarTimestamp(endTag[1], event.kind) : eventStart;
+  const eventEnd = calendarEventEnd(endTag?.[1], eventStart, event.kind) || eventStart;
 
   // Check for overlap: eventStart < rangeEnd AND eventEnd >= rangeStart
   return eventStart < rangeEnd && eventEnd >= rangeStart;
@@ -1156,14 +1161,15 @@ export function getEventStartTimestamp(event) {
 }
 
 /**
- * Get the end timestamp from an event
+ * Get the end timestamp from an event — for kind 31922 the midnight of the
+ * last day (NIP-52's `end` tag is exclusive), see `calendarEventEnd`.
  * @param {import('nostr-tools').NostrEvent} event - Raw Nostr event
  * @returns {number} The end timestamp, or 0 if not found
  */
 export function getEventEndTimestamp(event) {
   if (!event || !event.tags) return 0;
   const endTag = event.tags.find((/** @type {string[]} */ tag) => tag[0] === 'end');
-  return endTag ? parseCalendarTimestamp(endTag[1], event.kind) : 0;
+  return endTag ? calendarEventEnd(endTag[1], getEventStartTimestamp(event), event.kind) : 0;
 }
 
 /**

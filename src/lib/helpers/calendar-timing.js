@@ -49,10 +49,64 @@ export function parseCalendarTimestamp(value, _eventKind) {
 }
 
 /**
+ * The `end` tag value for an all-day (31922) event whose form names its
+ * inclusive last day. NIP-52's `end` is exclusive and must be after `start`,
+ * so a one-day event (no last day, or last day == start) gets no end at all
+ * and a longer one gets the day after its last day. A last day before the
+ * start is not an end either (form validation rejects it).
+ *
+ * @param {string} startDate - `YYYY-MM-DD`
+ * @param {string | undefined} lastDay - `YYYY-MM-DD`, inclusive
+ * @returns {string | undefined}
+ */
+export function allDayEndTagValue(startDate, lastDay) {
+  const start = parseIsoDay(startDate);
+  const last = parseIsoDay(lastDay);
+  if (start === null || last === null || last <= start) return undefined;
+  return new Date((last + SECONDS_PER_DAY) * 1000).toISOString().slice(0, 10);
+}
+
+/**
+ * @param {string | undefined} value
+ * @returns {number | null} unix seconds of UTC midnight, or null for anything but a real day
+ */
+function parseIsoDay(value) {
+  if (!value || !ISO_DATE_PATTERN.test(value)) return null;
+  const ms = Date.parse(`${value}T00:00:00Z`);
+  // Date.parse rolls 2026-02-31 over; only accept days that round-trip.
+  if (!Number.isFinite(ms) || new Date(ms).toISOString().slice(0, 10) !== value) return null;
+  return ms / 1000;
+}
+
+/**
+ * The end an app-side CalendarEvent carries for a raw `end` tag value.
+ *
+ * - 31923: the end timestamp as-is (0 without one).
+ * - 31922: NIP-52's `end` is exclusive, the app's CalendarEvent `end` is the
+ *   midnight of the LAST day (what the form shows and the views draw), so
+ *   one day is subtracted. Events written by app versions before this rule
+ *   stored the last day itself; their one-day form (`end == start`) can only
+ *   mean one day and reads as ending on the start day. A legacy multi-day
+ *   event cannot be told apart from a conformant one and reads one day
+ *   shorter. Without an end the result is 0 (ends on its start day).
+ *
+ * @param {string | undefined} endValue - the raw `end` tag value
+ * @param {number} start - the parsed start (unix seconds)
+ * @param {number} kind - 31922 or 31923
+ * @returns {number}
+ */
+export function calendarEventEnd(endValue, start, kind) {
+  const end = parseCalendarTimestamp(endValue, kind);
+  if (!end || kind !== 31922) return end;
+  return Math.max(start, end - SECONDS_PER_DAY);
+}
+
+/**
  * Start/end bounds for exporting a raw calendar event to ICS.
  *
- * - 31922: the app's writer stores the end date inclusively, so DTEND
- *   (exclusive per RFC 5545) is end + 1 day; without an end the event spans
+ * - 31922: NIP-52's `end` is exclusive like RFC 5545's DTEND, so it is used
+ *   as-is. Without an end — or with a legacy one not after the start (older
+ *   app versions wrote `end == start` for one-day events) — the event spans
  *   exactly its start day.
  * - 31923: the end timestamp is used as-is; without an end we return null so
  *   the exporter omits DTEND instead of fabricating a duration.
@@ -70,8 +124,7 @@ export function getIcsEventTiming(event) {
   const endParsed = parseCalendarTimestamp(tagValue('end'), event.kind);
 
   if (isAllDay) {
-    const end =
-      endParsed && endParsed >= start ? endParsed + SECONDS_PER_DAY : start + SECONDS_PER_DAY;
+    const end = endParsed && endParsed > start ? endParsed : start + SECONDS_PER_DAY;
     return { isAllDay, start, end };
   }
   return { isAllDay, start, end: endParsed && endParsed > start ? endParsed : null };
