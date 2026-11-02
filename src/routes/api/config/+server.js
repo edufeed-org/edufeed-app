@@ -464,8 +464,15 @@ export function GET() {
     // Logged-out landing: kind 30000 lists (naddrs) whose members — accounts
     // and communities — may appear in its live showcase. Unset = no live
     // content (the landing is the deployment's shop window, not a feed).
+    // A per-type list replaces the global one for that panel only; the
+    // community wall always follows the global list.
     landing: {
-      showcaseLists: parseArray(env.LANDING_SHOWCASE_LISTS)
+      showcaseLists: parseArray(env.LANDING_SHOWCASE_LISTS),
+      showcaseListsByType: {
+        learning: parseArray(env.LANDING_SHOWCASE_LISTS_LEARNING),
+        events: parseArray(env.LANDING_SHOWCASE_LISTS_EVENTS),
+        articles: parseArray(env.LANDING_SHOWCASE_LISTS_ARTICLES)
+      }
     },
 
     // UI settings

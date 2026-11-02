@@ -67,9 +67,11 @@ const defaultConfig = {
     contentTypes: /** @type {string[]} */ ([...DISCOVER_CONTENT_TYPES])
   },
   // Logged-out landing showcase lists (LANDING_SHOWCASE_LISTS, kind 30000
-  // naddrs). Empty = the landing shows no live content.
+  // naddrs). Empty = the landing shows no live content. Per-type lists
+  // (LANDING_SHOWCASE_LISTS_{LEARNING,EVENTS,ARTICLES}) replace it per panel.
   landing: {
-    showcaseLists: /** @type {string[]} */ ([])
+    showcaseLists: /** @type {string[]} */ ([]),
+    showcaseListsByType: /** @type {Record<string, string[]>} */ ({})
   },
   // Gated mode: when enabled, fetch only from app relays (exclude fallback relays)
   gatedMode: {
@@ -358,7 +360,9 @@ export function initializeConfig(runtimeConfig) {
       )
     },
     landing: {
-      showcaseLists: runtimeConfig.landing?.showcaseLists || defaultConfig.landing.showcaseLists
+      showcaseLists: runtimeConfig.landing?.showcaseLists || defaultConfig.landing.showcaseLists,
+      showcaseListsByType:
+        runtimeConfig.landing?.showcaseListsByType || defaultConfig.landing.showcaseListsByType
     },
     gatedMode: {
       default: runtimeConfig.gatedMode?.default ?? defaultConfig.gatedMode.default,

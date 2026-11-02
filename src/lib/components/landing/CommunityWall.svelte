@@ -18,6 +18,29 @@
    */
   let { communities, loaded } = $props();
 
+  // The heading's last word rotates (colleagues → friends → …): playful, but
+  // screen readers get the one static title, and reduced motion stands still.
+  // Static message calls, never m[key] (see message-lookup.js).
+  const words = [
+    m.landing_wall_word_1(),
+    m.landing_wall_word_2(),
+    m.landing_wall_word_3(),
+    m.landing_wall_word_4()
+  ];
+  const ROTATE_MS = 2800;
+  let wordIndex = $state(0);
+  /** The word that just left: it slides out upwards, the next comes from below. */
+  let leavingIndex = $state(-1);
+
+  $effect(() => {
+    if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return;
+    const timer = setInterval(() => {
+      leavingIndex = wordIndex;
+      wordIndex = (wordIndex + 1) % words.length;
+    }, ROTATE_MS);
+    return () => clearInterval(timer);
+  });
+
   const tile =
     'flex w-24 shrink-0 snap-start flex-col items-center gap-2 text-center text-sm leading-tight font-semibold md:w-28';
 </script>
@@ -25,7 +48,23 @@
 {#if communities.length > 0 || !loaded}
   <section data-testid="landing-wall" class="container mx-auto px-4 pt-2 pb-12">
     <div class="mb-5 flex items-baseline justify-between gap-4">
-      <h2 class="text-2xl font-bold text-balance">{m.landing_wall_title()}</h2>
+      <h2 class="text-2xl font-bold text-balance">
+        <span class="sr-only">{m.landing_wall_title()}</span>
+        <span aria-hidden="true">
+          {m.landing_wall_title_before()}
+          <!-- all words share one grid cell, so the heading keeps the width
+               of the longest and nothing below it jumps -->
+          <span class="rotating inline-grid text-primary">
+            {#each words as word, i (i)}
+              <span
+                data-active={i === wordIndex}
+                class:active={i === wordIndex}
+                class:leaving={i === leavingIndex}>{word}</span
+              >
+            {/each}
+          </span>
+        </span>
+      </h2>
       <a
         data-testid="landing-wall-all"
         href={resolve('/discover?type=communities')}
@@ -84,3 +123,32 @@
     </div>
   </section>
 {/if}
+
+<style>
+  /* clipped like a slot machine; the padding keeps descenders visible */
+  .rotating {
+    overflow: hidden;
+    padding-bottom: 0.12em;
+    margin-bottom: -0.12em;
+  }
+  .rotating > span {
+    grid-area: 1 / 1;
+    opacity: 0;
+    transform: translateY(100%);
+    transition:
+      opacity 0.4s ease,
+      transform 0.4s ease;
+  }
+  .rotating > span.leaving {
+    transform: translateY(-100%);
+  }
+  .rotating > span.active {
+    opacity: 1;
+    transform: none;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .rotating > span {
+      transition: none;
+    }
+  }
+</style>

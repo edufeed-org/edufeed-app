@@ -35,6 +35,53 @@ describe('pickMaterials', () => {
   });
 });
 
+describe('pickMaterials and busy authors', () => {
+  it('one item per author, so a busy source cannot fill the panel', () => {
+    const r = pickMaterials(
+      [
+        amb(1, 50, { pubkey: 'busy' }),
+        amb(2, 40, { pubkey: 'busy' }),
+        amb(3, 30, { pubkey: 'busy' }),
+        amb(4, 20, { pubkey: 'quiet' }),
+        amb(5, 10, { pubkey: 'other' })
+      ],
+      3
+    );
+    expect(r.map((x) => x.id)).toEqual([1, 4, 5]);
+  });
+
+  it('fills up from the busy author when there are too few authors', () => {
+    const r = pickMaterials(
+      [amb(1, 50, { pubkey: 'busy' }), amb(2, 40, { pubkey: 'busy' }), amb(3, 30, { pubkey: 'q' })],
+      3
+    );
+    expect(r.map((x) => x.id)).toEqual([1, 3, 2]);
+  });
+});
+
+describe('pickMaterials and previews', () => {
+  it('items with an image first; imageless ones only fill up', () => {
+    const r = pickMaterials(
+      [
+        amb(1, 50, { pubkey: 'a' }),
+        amb(2, 40, { pubkey: 'b', image: 'https://x/b.png' }),
+        amb(3, 30, { pubkey: 'c', image: 'https://x/c.png' }),
+        amb(4, 20, { pubkey: 'd', image: 'https://x/d.png' })
+      ],
+      3
+    );
+    expect(r.map((x) => x.id)).toEqual([2, 3, 4]);
+  });
+
+  it('falls back to imageless items when too few have one', () => {
+    const r = pickMaterials(
+      [amb(1, 50, { pubkey: 'a' }), amb(2, 40, { pubkey: 'b', image: 'https://x/b.png' })],
+      3
+    );
+    expect(r.map((x) => x.id)).toEqual([2, 1]);
+  });
+});
+
 describe('pickHeroMaterial', () => {
   it('prefers the newest item with an image', () => {
     expect(pickHeroMaterial([amb(1, 50), amb(2, 10, { image: 'https://x/i.png' })])?.id).toBe(2);
@@ -97,6 +144,27 @@ describe('pickArticles', () => {
   });
 });
 
+describe('pickArticles and busy authors', () => {
+  /** @param {string} id @param {string} pubkey @param {number} created_at */
+  const art = (id, pubkey, created_at) => ({
+    id,
+    pubkey,
+    kind: 30023,
+    created_at,
+    tags: [
+      ['d', id],
+      ['title', `T${id}`]
+    ]
+  });
+  it('one article per author first, then the rest by date', () => {
+    const r = pickArticles(
+      [art('1', 'a', 50), art('2', 'a', 40), art('3', 'b', 30), art('4', 'a', 20)],
+      3
+    );
+    expect(r.map((e) => e.id)).toEqual(['1', '3', '2']);
+  });
+});
+
 describe('panelState', () => {
   it('loading only while unsettled and short', () => {
     expect(panelState([], false)).toBe('loading');
@@ -156,6 +224,14 @@ describe('showcaseFilters', () => {
   it('no sources, no filters — nothing may be loaded', async () => {
     const { showcaseFilters } = await import('$lib/helpers/landing-showcase.js');
     expect(showcaseFilters([30142], [], 12)).toEqual([]);
+  });
+  it('per author: a busy source cannot use up the window of the others', async () => {
+    const { showcaseFilters } = await import('$lib/helpers/landing-showcase.js');
+    expect(showcaseFilters([30023], ['a', 'b'], 12, 3)).toEqual([
+      { kinds: [30023], authors: ['a'], limit: 3 },
+      { kinds: [30023], authors: ['b'], limit: 3 },
+      { kinds: [30023], '#h': ['a', 'b'], limit: 12 }
+    ]);
   });
 });
 

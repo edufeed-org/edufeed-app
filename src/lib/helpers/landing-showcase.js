@@ -25,13 +25,40 @@ function firstPerKey(items, key) {
 }
 
 /**
+ * The first n items, one per author before any author gets a second: a busy
+ * source must not fill a whole panel. Order within each round is kept.
+ * @template {{ pubkey: string }} T
+ * @param {T[]} sorted
+ * @param {number} n
+ * @returns {T[]}
+ */
+function spreadAuthors(sorted, n) {
+  const first = firstPerKey(sorted, (item) => item.pubkey);
+  if (first.length >= n) return first.slice(0, n);
+  const rest = sorted.filter((item) => !first.includes(item));
+  return [...first, ...rest].slice(0, n);
+}
+
+/**
  * @param {any[]} resources - formatted AMB resources (AMBResourceModel)
  * @param {number} [n]
  */
 export function pickMaterials(resources, n = 3) {
   const named = resources.filter((r) => r?.name?.trim());
   const sorted = [...named].sort((a, b) => b.created_at - a.created_at);
-  return firstPerKey(sorted, (r) => `${r.pubkey}:${r.identifier}`).slice(0, n);
+  const unique = firstPerKey(sorted, (r) => `${r.pubkey}:${r.identifier}`);
+  // A card without a preview reads as broken next to ones with one: imageless
+  // items only fill up a panel that has too few with an image.
+  return [
+    ...spreadAuthors(
+      unique.filter((r) => r.image),
+      n
+    ),
+    ...spreadAuthors(
+      unique.filter((r) => !r.image),
+      n
+    )
+  ].slice(0, n);
 }
 
 /** @param {any[]} resources */
@@ -79,7 +106,10 @@ export function pickArticles(events, n = 3) {
   const when = (/** @type {any} */ e) => Number(tagValue(e, 'published_at')) || e.created_at;
   const titled = events.filter((e) => tagValue(e, 'title')?.trim());
   const sorted = [...titled].sort((a, b) => when(b) - when(a));
-  return firstPerKey(sorted, (e) => `${e.pubkey}:${tagValue(e, 'd') ?? ''}`).slice(0, n);
+  return spreadAuthors(
+    firstPerKey(sorted, (e) => `${e.pubkey}:${tagValue(e, 'd') ?? ''}`),
+    n
+  );
 }
 
 /**
@@ -131,14 +161,18 @@ export function heroPending(enabled, settled) {
  * Relay filters for the landing showcase: content BY a listed account, or
  * h-tagged INTO a listed community (Communikey targeting). No sources, no
  * filters — the landing must never fall back to arbitrary network content.
+ * With `perAuthor`, each account is asked for its own newest items: under a
+ * shared limit one busy source fills the whole window and the others are
+ * never fetched, so one-item-per-author picking has nothing to pick from.
  * @param {number[]} kinds
  * @param {string[]} sources - pubkeys from the showcase lists
  * @param {number} limit
+ * @param {number} [perAuthor]
  */
-export function showcaseFilters(kinds, sources, limit) {
+export function showcaseFilters(kinds, sources, limit, perAuthor) {
   if (sources.length === 0) return [];
-  return [
-    { kinds, authors: sources, limit },
-    { kinds, '#h': sources, limit }
-  ];
+  const byAuthor = perAuthor
+    ? sources.map((pubkey) => ({ kinds, authors: [pubkey], limit: perAuthor }))
+    : [{ kinds, authors: sources, limit }];
+  return [...byAuthor, { kinds, '#h': sources, limit }];
 }
