@@ -1,6 +1,6 @@
 # Datenschutzerklärung
 
-Stand: 27. Oktober 2026
+Stand: 2. November 2026
 
 ## 1 Verantwortlicher
 
@@ -46,7 +46,7 @@ Benachrichtigungen des Betriebssystems über neue Nachrichten kannst du in den E
 
 Weil Nostr dezentral ist, verbindet sich dein Browser direkt mit weiteren Servern. Diese erhalten dabei technisch bedingt deine IP-Adresse und können sie nach eigenen Regeln verarbeiten.
 
-**Von uns betriebene Server** (für ihre Protokolle gilt Abschnitt 3): relay.edufeed.org (Inhalte, Communities, Termine), amb-relay.edufeed.org und oersi.edufeed.org (Lernressourcen), dm.edufeed.org (Direktnachrichten), groups.edufeed.org (Kanäle), livekit.edufeed.org und turn.edufeed.org (Audio- und Videokonferenzen), blossom.edufeed.org (Dateien), nip05.edufeed.org (verifizierte Adressen), mcp.edufeed.org (Metadaten-Vorschläge) sowie sparql.mem.edufeed.org (Lehrplandaten). relay-rpi.edufeed.org (Kanban-Boards) wird für das Comenius-Institut auf der Infrastruktur des Verantwortlichen betrieben.
+**Von uns betriebene Server** (für ihre Protokolle gilt Abschnitt 3): relay.edufeed.org (Inhalte, Communities, Termine), amb-relay.edufeed.org und oersi.edufeed.org (Lernressourcen), dm.edufeed.org (Direktnachrichten), groups.edufeed.org (Kanäle), livekit.edufeed.org und turn.edufeed.org (Audio- und Videokonferenzen), blossom.edufeed.org (Dateien), nip05.edufeed.org (verifizierte Adressen), cleaner.edufeed.org (Metadaten aus Dateien entfernen), mcp.edufeed.org (Metadaten-Vorschläge) sowie sparql.mem.edufeed.org (Lehrplandaten). relay-rpi.edufeed.org (Kanban-Boards) wird für das Comenius-Institut auf der Infrastruktur des Verantwortlichen betrieben.
 
 **Server Dritter**, die dein Browser je nach Funktion kontaktiert:
 
@@ -68,6 +68,7 @@ Rechtsgrundlage: Art. 6 Abs. 1 lit. b DSGVO (Bereitstellung der von dir genutzte
 ## 7 Einzelne Funktionen
 
 - **Dateien hochladen:** Bilder und Dateien werden auf unseren Server blossom.edufeed.org oder auf von dir gewählte Server geladen und sind dort öffentlich abrufbar. Bedenke, dass Fotos Metadaten wie Aufnahmeort und -zeit enthalten können.
+- **Metadaten aus Dateien entfernen (optional):** Nur wenn du es beim Hochladen auswählst, sendet unser Server die Datei an unseren Dienst cleaner.edufeed.org. Er zeigt die enthaltenen Metadaten an, entfernt sie auf Wunsch (z. B. Aufnahmeort, Autor, Software) und verkleinert PDFs. Die Datei wird dort nur für diese Bearbeitung zwischengespeichert und nach spätestens 15 Minuten gelöscht.
 - **Orte bei Terminen:** Gibst du eine Adresse ein, sendet unser Server diesen Text an den Geokodierungsdienst OpenCage (OpenCage GmbH, Deutschland), um Koordinaten zu ermitteln. Deine IP-Adresse wird dabei nicht übermittelt.
 - **Link-Vorschauen:** Für die Vorschaukarte zu einem Weblink ruft unser Server die verlinkte Seite und ihr Vorschaubild selbst ab; der fremde Server sieht dabei unsere, nicht deine IP-Adresse. Link-Vorschauen lassen sich in den Einstellungen abschalten.
 - **Direktnachrichten:** Ende-zu-Ende-verschlüsselt nach NIP-17; wir können den Inhalt nicht lesen. Die verschlüsselten Nachrichten liegen auf dm.edufeed.org und den Relays der Empfänger:innen.
