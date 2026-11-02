@@ -23,7 +23,11 @@
     resolveProfileInterests
   } from '$lib/helpers/educational/educatorProfile.js';
   import { useProfileContent } from '$lib/stores/profile-content.svelte.js';
-  import { PROFILE_TABS_D_TAG, parseProfileTabsEvent } from '$lib/helpers/profile-tabs.js';
+  import {
+    PROFILE_TABS_D_TAG,
+    parseProfileTabsEvent,
+    tabForPostsStat
+  } from '$lib/helpers/profile-tabs.js';
   import { saveProfileTabs } from '$lib/services/profile-tabs-service.js';
   import { pinnedPointersFromEvent } from '$lib/helpers/profile-feed.js';
   import ProfileTabEditor from '$lib/components/profile/ProfileTabEditor.svelte';
@@ -359,6 +363,21 @@
     ...(isOwnProfile ? [{ id: UPLOADS_TAB_ID, label: m.profile_tab_uploads(), count: 0 }] : [])
   ]);
 
+  // Target of the header's "N Beiträge" stat (null = no visible tab shows
+  // the counted content; the stat then stays plain text).
+  let postsStatTab = $derived(tabForPostsStat(tabsConfig));
+
+  /** @type {HTMLDivElement | null} */
+  let tabsAnchor = $state(null);
+
+  function showPostsTab() {
+    if (!postsStatTab) return;
+    switchTab(postsStatTab);
+    // The page scrolls inside <main>, so window.scrollTo would be a no-op.
+    const reduceMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+    tabsAnchor?.scrollIntoView({ behavior: reduceMotion ? 'auto' : 'smooth', block: 'start' });
+  }
+
   // If the active tab got hidden (config arrived or owner hid it), fall back
   // to the first visible tab.
   $effect(() => {
@@ -466,6 +485,7 @@
       followersCount={followGraph.followers.length}
       followersCapped={followGraph.capped}
       followingCount={followGraph.following.length}
+      onShowPosts={postsStatTab ? showPostsTab : undefined}
       onShowFollowers={() => (openFollowList = 'followers')}
       onShowFollowing={() => (openFollowList = 'following')}
       editing={editingTabs}
@@ -495,6 +515,9 @@
       />
     {/if}
 
+    <!-- Scroll target of the posts stat; a wrapper would end the tab bar's
+         sticky range, so this sits before it as an empty marker. -->
+    <div bind:this={tabsAnchor} aria-hidden="true"></div>
     {#if isOwnProfile && editingTabs}
       <ProfileTabEditor
         tabs={editorTabs}

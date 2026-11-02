@@ -250,6 +250,24 @@ describe('<ProfileHeader>', () => {
     const withoutCount = render(ProfileHeader, baseProps({ postsCount: 0 }));
     expect(withoutCount.container.querySelector('[data-testid="stat-posts"]')).toBeFalsy();
   });
+
+  it('renders the posts stat as a button that jumps to the posts tab', async () => {
+    const onShowPosts = vi.fn();
+    const { getByTestId } = render(ProfileHeader, baseProps({ postsCount: 12, onShowPosts }));
+    const posts = getByTestId('stat-posts');
+    expect(posts.tagName).toBe('BUTTON');
+    expect(posts.getAttribute('type')).toBe('button');
+    expect(posts.classList.contains('pf-stat')).toBe(true);
+    expect(posts.textContent).toMatch(/12/);
+    await fireEvent.click(posts);
+    expect(onShowPosts).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps the posts stat plain text when there is no tab to jump to', () => {
+    const { getByTestId } = render(ProfileHeader, baseProps({ postsCount: 12 }));
+    expect(getByTestId('stat-posts').tagName).toBe('SPAN');
+  });
+
   // Issue 1ff3b524: a profile picture uploaded through the app carries a
   // kind-1063 license like any other upload, but the page never showed it.
   describe('image licenses', () => {
