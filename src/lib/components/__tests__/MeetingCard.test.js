@@ -125,7 +125,26 @@ afterEach(() => {
 });
 
 describe('MeetingCard', () => {
+  it('names both dates for a meeting that crosses midnight', () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date(2026, 9, 14, 20, 30)); // 23:30–00:30 local
+    const event = meetingIn(3 * 3600);
+    render(MeetingCard, { props: { event, pointer: POINTER, user: me, isAdmin: false } });
+    const start = Number(event.tags.find((t) => t[0] === 'start')[1]);
+    const end = start + 3600;
+    /** @param {number} ts */
+    const dateOf = (ts) =>
+      formatTimestamp(ts, { day: '2-digit', month: '2-digit', year: 'numeric' });
+    expect(screen.getByTestId('meeting-card-time').textContent.trim()).toBe(
+      `${dateOf(start)} ${formatTimeOfDay(start)} – ${dateOf(end)} ${formatTimeOfDay(end)}`
+    );
+  });
+
   it('shows title, DD.MM.YYYY HH:MM–HH:MM, description and the invitees once each', () => {
+    // A fixed daytime clock: built from the real time, a meeting 3 h ahead
+    // crosses midnight when the suite runs between 20:00 and 21:00 local.
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date(2026, 9, 14, 10, 0));
     const event = meetingIn(3 * 3600);
     render(MeetingCard, { props: { event, pointer: POINTER, user: me, isAdmin: false } });
     const start = Number(event.tags.find((t) => t[0] === 'start')[1]);
