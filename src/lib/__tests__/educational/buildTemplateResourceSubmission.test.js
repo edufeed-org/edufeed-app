@@ -317,3 +317,42 @@ describe('buildTemplateResourceSubmission (edit mode)', () => {
     expect(findTag(tags, 'd')?.[1]).toBe('existing-resource-id');
   });
 });
+
+describe('buildTemplateResourceSubmission — multiple license:id tags (KIM)', () => {
+  const KIM = 'https://w3id.org/kim/license/';
+  const licForm = {
+    ...form,
+    fields: [...form.fields, { id: 'lic', type: 'select', output: 'amb:license' }]
+  };
+  const base = {
+    form: licForm,
+    formRelay: 'wss://relay.example',
+    selectedConcepts: {},
+    signerPubkey,
+    isEditMode: true,
+    existingDTag: 'https://lehreladen.rub.de/',
+    existingLicenseIds: [`${KIM}attribution`, `${KIM}shareAlike`]
+  };
+  /** @param {string[][]} tags */
+  const licenseIds = (tags) => tags.filter((t) => t[0] === 'license:id').map((t) => t[1]);
+
+  it('keeps every original license:id when the license field is unchanged', () => {
+    const { tags } = buildTemplateResourceSubmission({
+      ...base,
+      rawValues: { title: 'Startseite', description: 'd', lic: `${KIM}attribution` }
+    });
+    expect(licenseIds(tags)).toEqual([`${KIM}attribution`, `${KIM}shareAlike`]);
+  });
+
+  it('emits only the new license when the user changed it', () => {
+    const { tags } = buildTemplateResourceSubmission({
+      ...base,
+      rawValues: {
+        title: 'Startseite',
+        description: 'd',
+        lic: 'https://creativecommons.org/licenses/by/4.0/'
+      }
+    });
+    expect(licenseIds(tags)).toEqual(['https://creativecommons.org/licenses/by/4.0/']);
+  });
+});

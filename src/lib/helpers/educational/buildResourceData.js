@@ -81,6 +81,7 @@ export function buildResourceData(formData, { about, hasNoUrl }) {
     })),
     inLanguage: formData.inLanguage,
     license: formData.license,
+    licenseIds: formData.licenseIds,
     coverHue: formData.coverHue,
     // Thumbnail + its NIP-94 license attestation (drives the `image` and
     // `x` tags on the published event).

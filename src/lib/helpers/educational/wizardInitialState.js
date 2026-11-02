@@ -73,6 +73,10 @@ export function createInitialFormData() {
 
     // Step 7: Rights
     license: 'https://creativecommons.org/licenses/by/4.0/',
+    // All license:id URIs of the edited/prefilled source event (KIM license
+    // types come as several tags); `license` holds the first one. Re-emitted
+    // on save while `license` is unchanged — see preserveLicenseIdTags.
+    licenseIds: /** @type {string[]} */ ([]),
     isAccessibleForFree: true,
 
     // EKW-only (variantId === 'ekw'); ignored for AMB

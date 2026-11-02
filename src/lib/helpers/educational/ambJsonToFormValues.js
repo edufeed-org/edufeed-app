@@ -151,7 +151,11 @@ export function ambJsonToFormValues(amb, form, { relationRelayHints = {} } = {})
       continue;
     }
     if (prop === 'license') {
-      values[field.id] = amb?.license?.id ?? '';
+      // nostrToAmb yields an array when the event carries several license:id
+      // tags (KIM license types); the form field holds the first URI and
+      // buildTemplateResourceSubmission re-emits the rest on save.
+      const lic = Array.isArray(amb?.license) ? amb.license[0] : amb?.license;
+      values[field.id] = lic?.id ?? '';
       continue;
     }
     if (prop === 'isAccessibleForFree') {

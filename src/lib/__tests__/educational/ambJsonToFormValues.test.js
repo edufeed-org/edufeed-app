@@ -158,3 +158,26 @@ describe('ambJsonToFormValues round-trip', () => {
     });
   });
 });
+
+describe('ambJsonToFormValues — license array (several license:id tags)', () => {
+  it('prefills the first license URI instead of an empty value', () => {
+    const KIM = 'https://w3id.org/kim/license/';
+    const { data } = nostrToAmb({
+      kind: 30142,
+      pubkey: 'pk',
+      content: '',
+      created_at: 0,
+      id: '0'.repeat(64),
+      sig: '',
+      tags: [
+        ['d', 'https://oer.example/res1'],
+        ['type', 'LearningResource'],
+        ['name', 'n'],
+        ['license:id', `${KIM}attribution`],
+        ['license:id', `${KIM}shareAlike`]
+      ]
+    });
+    const { values } = ambJsonToFormValues(/** @type {any} */ (data), form);
+    expect(values.lic).toBe(`${KIM}attribution`);
+  });
+});

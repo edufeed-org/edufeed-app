@@ -20,7 +20,7 @@ import {
   getLabelsWithFallback,
   getLanguageDisplayName
 } from '$lib/helpers/educational/ambTransform.js';
-import { formatLicenseUrl } from '$lib/helpers/educational/licenseLabel.js';
+import { getAMBLicense } from '$lib/helpers/educational/ambHelpers.js';
 import { buildAMBJsonLd } from '$lib/helpers/educational/ambJsonLd.js';
 import { shortNpub } from '$lib/helpers/pubkey.js';
 import { sanitizeServerHtml } from './sanitize.js';
@@ -156,10 +156,11 @@ function ambBody(event) {
   const tags = event.tags ?? [];
   const labels = (/** @type {string} */ prefix) =>
     getLabelsWithFallback(tags, prefix, 'de').map((l) => l.label);
-  const license = getTagValue(tags, 'license:id');
+  // All license:id tags (KIM license types come as several), same rules as the UI.
+  const license = getAMBLicense(event);
   const original = dTag(event);
   const rows = [
-    metaRow('Lizenz', license ? [formatLicenseUrl(license) || license] : []),
+    metaRow('Lizenz', license ? [license.label || license.id] : []),
     metaRow(
       'Sprache',
       getTagValues(tags, 'inLanguage').map((c) => getLanguageDisplayName(c, 'de'))

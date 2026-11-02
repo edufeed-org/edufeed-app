@@ -1,0 +1,68 @@
+{
+  "kind": 30142,
+  "created_at": 1793561675,
+  "content": "Lehrende im Fokus Es geht um Sie als Lehrperson: Stimme und Körpersprache, Präsentation, Umgang mit schwierigen Situationen, Selbst- und Zeitmanagement, Lehrevaluation, Resilienz im Lehralltag, Rolle und Haltung, u.v.m. Planung Planung und Durchführung kompetenzorientierter Lehre besteht u.a. aus: Lernzielen, Feedback, Prüfung, KI in der Lehre, Leistungsbeurteilung, Beratung Studierender, Visualisierung und Stoffreduktion. Methodik Lehrformate und Methoden können [&hellip;]",
+  "tags": [
+    ["d", "https://lehreladen.rub.de/"],
+    ["type", "https://hof-halle-wittenberg.github.io/vocabs/type/LearningResource"],
+    ["name", "Startseite"],
+    [
+      "description",
+      "Lehrende im Fokus Es geht um Sie als Lehrperson: Stimme und Körpersprache, Präsentation, Umgang mit schwierigen Situationen, Selbst- und Zeitmanagement, Lehrevaluation, Resilienz im Lehralltag, Rolle und Haltung, u.v.m. Planung Planung und Durchführung kompetenzorientierter Lehre besteht u.a. aus: Lernzielen, Feedback, Prüfung, KI in der Lehre, Leistungsbeurteilung, Beratung Studierender, Visualisierung und Stoffreduktion. Methodik Lehrformate und Methoden können [&hellip;]"
+    ],
+    ["inLanguage", "de"],
+    ["publisher:name", "LEHRE LADEN"],
+    ["publisher:type", "Organization"],
+    ["license:id", "https://w3id.org/kim/license/attribution"],
+    ["license:id", "https://w3id.org/kim/license/shareAlike"],
+    ["isAccessibleForFree", "true"],
+    ["conditionsOfAccess:id", "http://w3id.org/kim/conditionsOfAccess/no_login"],
+    ["conditionsOfAccess:prefLabel:de", "Keine Anmeldung erforderlich"],
+    ["conditionsOfAccess:type", "Concept"],
+    [
+      "about:id",
+      "https://hof-halle-wittenberg.github.io/vocabs/organisationalContext/DidacticSupport"
+    ],
+    ["about:prefLabel:de", "didaktischer Support"],
+    ["about:type", "Concept"],
+    ["about:id", "https://hof-halle-wittenberg.github.io/vocabs/didacticUseCase/TeachingMethods"],
+    ["about:prefLabel:de", "Didaktische Methoden und Lehrformen"],
+    ["about:type", "Concept"],
+    ["about:id", "https://hof-halle-wittenberg.github.io/vocabs/didacticUseCase/Competences"],
+    ["about:prefLabel:de", "Kompetenzen und Fähigkeiten"],
+    ["about:type", "Concept"],
+    ["about:id", "https://hof-halle-wittenberg.github.io/vocabs/didacticUseCase/LearningProcesses"],
+    ["about:prefLabel:de", "Lern- und Lehrprozesse"],
+    ["about:type", "Concept"],
+    [
+      "about:id",
+      "https://hof-halle-wittenberg.github.io/vocabs/didacticUseCase/MotivationInteraction"
+    ],
+    ["about:prefLabel:de", "Motivation und Interaktion"],
+    ["about:type", "Concept"],
+    [
+      "about:id",
+      "https://hof-halle-wittenberg.github.io/vocabs/didacticUseCase/TeachingCompetences"
+    ],
+    ["about:prefLabel:de", "Lehrkompetenzen und -entwicklung"],
+    ["about:type", "Concept"],
+    [
+      "about:id",
+      "https://hof-halle-wittenberg.github.io/vocabs/didacticUseCase/SpecificEducationalGoals"
+    ],
+    ["about:prefLabel:de", "Spezifische Bildungsziele"],
+    ["about:type", "Concept"],
+    ["audience:id", "https://hof-halle-wittenberg.github.io/vocabs/audience/Teacher"],
+    ["audience:prefLabel:de", "Lehrperson"],
+    ["audience:type", "Concept"],
+    ["learningResourceType:id", "https://w3id.org/kim/hcrt/lesson_plan"],
+    ["learningResourceType:prefLabel:de", "Unterrichtsplanung"],
+    ["learningResourceType:type", "Concept"],
+    ["datePublished", "2012-09-27T21:16:53+02:00"],
+    ["dateCreated", "2012-09-27T21:16:53+02:00"],
+    ["dateModified", "2026-01-29T16:29:39+02:00"],
+    ["interactivityType:id", "http://purl.org/dcx/lrmi-vocabs/interactivityType/mixed"],
+    ["interactivityType:prefLabel:de", "gemischt"],
+    ["interactivityType:type", "Concept"]
+  ]
+}

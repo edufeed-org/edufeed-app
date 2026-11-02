@@ -9,6 +9,7 @@ import { createAppEventFactory } from '$lib/helpers/event-factory.js';
 import { manager } from '$lib/stores/accounts.svelte';
 import { canSign } from '$lib/helpers/signing-guard.js';
 import { convertFormDataToAMB } from '$lib/helpers/educational/formDataToAmb.js';
+import { preserveLicenseIdTags } from '$lib/helpers/educational/ambHelpers.js';
 import { encodeEventToNaddr } from '$lib/helpers/nostrUtils.js';
 import { publishEventOptimistic } from '$lib/services/publish-service.js';
 import { nextCreatedAt } from '$lib/helpers/replaceableUpdates.js';
@@ -57,6 +58,7 @@ import { bildungsbereichToNip32Tags } from '$lib/helpers/educational/bildungsber
  * @property {{id: string, label: string}[]} aboutLabels - Array of {id, label} objects
  * @property {string} inLanguage - ISO 639-1 language code
  * @property {string} license - License URI
+ * @property {string[]} [licenseIds] - All license:id URIs of the source event; extra ones are kept while `license` is unchanged
  * @property {number | null} [coverHue] - User-chosen cover hue (null = auto)
  * @property {string} [image] - Thumbnail image URL; emitted as an `image` tag
  * @property {import('nostr-tools').NostrEvent | null} [imageLicenseEvent] - NIP-94 license attestation for the thumbnail; its `x` tag becomes the resource's `x` tag
@@ -168,7 +170,10 @@ function buildAMBEventTagsFromFormData(formData, pubkey) {
     const msg = result.error?.message ?? 'Unknown conversion error';
     throw new Error(`AMB serialization failed: ${msg}`);
   }
-  return { tags: result.data.tags, content: result.data.content ?? '' };
+  // A form holds one license URI; keep the source event's further license:id
+  // tags (e.g. KIM attribution + shareAlike) when the user left it unchanged.
+  const tags = preserveLicenseIdTags(result.data.tags, formData.licenseIds);
+  return { tags, content: result.data.content ?? '' };
 }
 
 /**
