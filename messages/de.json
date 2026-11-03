@@ -4473,5 +4473,6 @@
   "settings_relay_health_help": "Geprüft von diesem Gerät aus. Ein Relay, das deine Liste nicht hat, wird von anderen Apps unter Umständen nicht gefunden – beim Speichern wird sie dorthin veröffentlicht.",
   "dashboard_communities_find": "Finden",
   "dashboard_communities_row_new": "neu",
-  "community_sections_count": "{count} Bereiche"
+  "community_sections_count": "{count} Bereiche",
+  "fab_section_more": "Weitere"
 }

@@ -2,7 +2,7 @@
   import { goto } from '$app/navigation';
   import { resolve } from '$app/paths';
   import { page } from '$app/stores';
-  import { PlusIcon, CloseIcon } from '$lib/components/icons';
+  import { PlusIcon, CloseIcon, ChevronRightIcon } from '$lib/components/icons';
   import { modalStore } from '$lib/stores/modal.svelte.js';
   import { createHub } from '$lib/stores/create-hub.svelte.js';
   import { npubToHex } from '$lib/helpers/nostrUtils.js';
@@ -14,6 +14,7 @@
   import { manager } from '$lib/stores/accounts.svelte';
   import { requireSigningOrToast } from '$lib/helpers/signing-guard.js';
   import * as m from '$lib/paraglide/messages';
+  import { phoneCreateGroups } from '$lib/helpers/create-hub-phone.js';
   import {
     CREATE_ACTIONS,
     filterActionsForCommunity,
@@ -132,6 +133,9 @@
     return ids.map((id) => visibleActions.find((a) => a.id === id)).filter((a) => a !== undefined);
   });
 
+  // Phone grouping (below lg): quick tiles + rows, see create-hub-phone.js.
+  let phoneGroups = $derived(phoneCreateGroups(visibleActions, suggestedActions));
+
   let sections = $derived(
     [
       { key: 'suggested', title: m.fab_section_suggested(), actions: suggestedActions },
@@ -234,7 +238,67 @@
         </button>
       </div>
 
-      <div class="space-y-5 px-4 pt-2 pb-6">
+      <!-- Phone: quick tiles + rows (create-hub-phone.js); desktop keeps the
+           sectioned grid below. Only one of the two is visible per viewport. -->
+      <div data-testid="fab-phone" class="px-4 pt-2 pb-6 lg:hidden">
+        {#if phoneGroups.suggested.length > 0}
+          <div class="mb-2 text-xs font-semibold tracking-wide text-base-content/60 uppercase">
+            {m.fab_section_suggested()}
+          </div>
+          <div class="mb-4 grid grid-cols-3 gap-2">
+            {#each phoneGroups.suggested as action (action.id)}
+              <button
+                type="button"
+                onclick={() => runAction(action)}
+                aria-label={action.ariaLabel()}
+                class="flex flex-col items-center gap-1.5 rounded-xl bg-base-200 p-3 text-center"
+              >
+                <span class="text-primary"><action.icon class_="h-5 w-5" /></span>
+                <span class="text-xs leading-tight">{action.label()}</span>
+              </button>
+            {/each}
+          </div>
+        {/if}
+        {#if phoneGroups.quick.length > 0}
+          <div data-testid="fab-phone-quick" class="grid grid-cols-3 gap-2">
+            {#each phoneGroups.quick as action (action.id)}
+              <button
+                type="button"
+                onclick={() => runAction(action)}
+                aria-label={action.ariaLabel()}
+                class="flex min-h-[88px] flex-col items-center justify-center gap-2 rounded-2xl p-3 text-center text-sm font-semibold {action.id ===
+                'note'
+                  ? 'bg-accent text-accent-content'
+                  : 'bg-primary/10 text-primary'}"
+              >
+                <action.icon class_="h-7 w-7" />
+                <span class="leading-tight">{action.label()}</span>
+              </button>
+            {/each}
+          </div>
+        {/if}
+        {#if phoneGroups.more.length > 0}
+          <div class="mt-4 mb-1 text-xs font-semibold tracking-wide text-base-content/60 uppercase">
+            {m.fab_section_more()}
+          </div>
+          <div data-testid="fab-phone-more" class="flex flex-col">
+            {#each phoneGroups.more as action (action.id)}
+              <button
+                type="button"
+                onclick={() => runAction(action)}
+                aria-label={action.ariaLabel()}
+                class="flex h-12 items-center gap-3 border-t border-base-300 text-left text-sm"
+              >
+                <span class="text-base-content/60"><action.icon class_="h-5 w-5" /></span>
+                <span class="flex-1">{action.label()}</span>
+                <ChevronRightIcon class_="h-4 w-4 text-base-content/40" />
+              </button>
+            {/each}
+          </div>
+        {/if}
+      </div>
+
+      <div data-testid="fab-desktop" class="hidden space-y-5 px-4 pt-2 pb-6 lg:block">
         {#each sections as section (section.key)}
           <section>
             <h3 class="mb-2 text-xs font-semibold tracking-wide text-base-content/60 uppercase">

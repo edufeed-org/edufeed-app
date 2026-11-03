@@ -72,6 +72,7 @@ vi.mock('$lib/paraglide/messages', () => ({
   fab_section_create: () => 'Create',
   fab_section_add: () => 'Add',
   fab_section_share: () => 'Share',
+  fab_section_more: () => 'More',
   // Picker modal keys (rendered only when variantPickerOpen becomes true)
   resource_variant_picker_title: () => 'Welche Art?',
   resource_variant_picker_description: () => 'Wähle eine Form.',
@@ -258,8 +259,9 @@ describe('GlobalFAB', () => {
   it('shows a disambiguating tooltip on event/calendar/bookmark/share tiles only', async () => {
     const { container } = await renderOpen();
     const tipFor = (/** @type {string} */ ariaLabel) => {
+      // Tooltips are a desktop-grid affordance; the phone block has none.
       const tile = /** @type {HTMLElement} */ (
-        container.querySelector(`[aria-label="${ariaLabel}"]`)
+        container.querySelector(`[data-testid="fab-desktop"] [aria-label="${ariaLabel}"]`)
       );
       return { tip: tile.getAttribute('data-tip'), hasClass: tile.classList.contains('tooltip') };
     };
@@ -596,5 +598,44 @@ describe('GlobalFAB — detail pages', () => {
     expect(queryByTestId('global-fab-button')).toBeNull();
     createHub.requested = true;
     await findByRole('menu');
+  });
+});
+
+// Phone layout (below lg): Notiz / Lesezeichen / Termin as big tiles, every
+// other visible action as a row under "Weitere". The desktop sectioned grid
+// stays in the DOM (lg-only), so the counts above are unchanged.
+describe('GlobalFAB phone layout', () => {
+  beforeEach(() => {
+    setPage('/settings');
+    communityState.event = null;
+  });
+
+  it('quick row holds Notiz, Lesezeichen, Termin in that order', async () => {
+    const { container } = await renderOpen();
+    const quick = /** @type {HTMLElement} */ (
+      container.querySelector('[data-testid="fab-phone-quick"]')
+    );
+    const labels = Array.from(quick.querySelectorAll('button')).map((b) =>
+      b.querySelector('span:last-child')?.textContent?.trim()
+    );
+    expect(labels).toEqual(['Write a note', 'Add Bookmark', 'Create Event']);
+  });
+
+  it('every other visible action is a row under Weitere', async () => {
+    const { container } = await renderOpen();
+    const more = /** @type {HTMLElement} */ (
+      container.querySelector('[data-testid="fab-phone-more"]')
+    );
+    expect(more.querySelectorAll('button').length).toBe(11 - 3);
+    expect(container.querySelector('[data-testid="fab-phone"]')?.textContent).toContain('More');
+  });
+
+  it('the quick note tile runs the note action', async () => {
+    const { container } = await renderOpen();
+    const quick = /** @type {HTMLElement} */ (
+      container.querySelector('[data-testid="fab-phone-quick"]')
+    );
+    await fireEvent.click(/** @type {HTMLElement} */ (quick.querySelector('button')));
+    expect(mockOpenModal).toHaveBeenCalledWith('createNote', {});
   });
 });
