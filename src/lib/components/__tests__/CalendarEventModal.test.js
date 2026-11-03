@@ -923,3 +923,97 @@ describe('CalendarEventModal — end time follows the start time', () => {
     }
   });
 });
+
+// "Als Termin übernehmen": a calendar form response opens the modal prefilled
+// from its composed draft — create semantics (fresh d-tag via createEvent),
+// published through the normal path.
+describe('CalendarEventModal — prefilled from a form response draft', () => {
+  const LEVEL_C = 'https://w3id.org/kim/educationalLevel/level_C';
+
+  it('fills an all-day draft, showing the inclusive last day, and creates a new event', async () => {
+    h.modalStore.modalProps = {
+      mode: 'create',
+      communityPubkey: 'comm',
+      prefillDraft: {
+        kind: 31922,
+        content: 'Zwei Tage Barcamp',
+        tags: [
+          ['title', 'OER-Camp'],
+          ['start', '2026-12-03'],
+          ['end', '2026-12-05'],
+          ['location', 'Bibliothek'],
+          ['t', 'oer'],
+          ['participant', 'Jane Doe', '', 'speaker'],
+          ['registrationRequired', 'true'],
+          ['eventAttendanceMode', 'https://schema.org/OfflineEventAttendanceMode'],
+          ['educationalLevel:id', LEVEL_C],
+          ['educationalLevel:prefLabel:de', 'Fortbildung'],
+          ['educationalLevel:type', 'Concept']
+        ]
+      }
+    };
+    const r = render(CalendarEventModal);
+    await tick();
+    expect(r.getByText(m.event_modal_title_create())).toBeTruthy();
+    expect(r.container.querySelector('#title').value).toBe('OER-Camp');
+    expect(r.container.querySelector('#summary').value).toBe('Zwei Tage Barcamp');
+    expect(r.container.querySelector('#startDate').value).toBe('2026-12-03');
+    expect(r.container.querySelector('#endDate').value).toBe('2026-12-04');
+    expect(r.container.querySelector('#event-attr-registration').value).toBe('true');
+    expect(r.container.querySelector('#event-attr-mode').value).toBe('offline');
+
+    await fireEvent.submit(r.container.querySelector('form:not(.modal-backdrop)'));
+    await settle();
+    expect(h.updateEvent).not.toHaveBeenCalled();
+    expect(h.createEvent).toHaveBeenCalledTimes(1);
+    const [form, communities] = h.createEvent.mock.calls[0];
+    expect(communities).toEqual(['comm']);
+    expect(form).toMatchObject({
+      title: 'OER-Camp',
+      summary: 'Zwei Tage Barcamp',
+      isAllDay: true,
+      eventType: 'date',
+      startDate: '2026-12-03',
+      endDate: '2026-12-04',
+      location: 'Bibliothek',
+      hashtags: ['oer'],
+      participants: [{ name: 'Jane Doe', role: 'speaker' }],
+      attributes: {
+        registrationRequired: true,
+        attendanceMode: 'offline',
+        educationalLevels: [{ id: LEVEL_C, labels: { de: 'Fortbildung' } }]
+      }
+    });
+  });
+
+  it('fills a timed draft with its local start and end', async () => {
+    const start = Math.floor(new Date(2026, 10, 20, 14, 0).getTime() / 1000);
+    h.modalStore.modalProps = {
+      mode: 'create',
+      prefillDraft: {
+        kind: 31923,
+        content: '',
+        tags: [
+          ['title', 'OER-Werkstatt'],
+          ['start', String(start)],
+          ['end', String(start + 7200)],
+          ['start_tzid', 'Europe/Berlin'],
+          ['end_tzid', 'Europe/Berlin']
+        ]
+      }
+    };
+    const r = render(CalendarEventModal);
+    await tick();
+    expect(r.container.querySelector('#startDate').value).toBe('2026-11-20');
+    expect(r.container.querySelector('#startTime').value).toBe('14:00');
+    expect(r.container.querySelector('#endTime').value).toBe('16:00');
+    await fireEvent.submit(r.container.querySelector('form:not(.modal-backdrop)'));
+    await settle();
+    expect(h.createEvent.mock.calls[0][0]).toMatchObject({
+      eventType: 'time',
+      isAllDay: false,
+      startTimezone: 'Europe/Berlin',
+      endTimezone: 'Europe/Berlin'
+    });
+  });
+});

@@ -18,7 +18,15 @@
   import { parseCommunityContentTypes } from '$lib/helpers/communityRelays.js';
   import { formResponseLoader } from '$lib/loaders/community.js';
   import { addressLoader } from '$lib/loaders/base.js';
-  import { getCommunikeyRelays } from '$lib/helpers/relay-helper.js';
+  import { getCommunikeyRelays, getAllLookupRelays } from '$lib/helpers/relay-helper.js';
+  import { useSchemeConcepts } from '$lib/stores/vocab-store.svelte.js';
+  import { modalStore } from '$lib/stores/modal.svelte.js';
+  import { parseConcept } from 'nostr-vocab-core/parsers';
+  import {
+    CalendarComposeError,
+    isCalendarOutputTemplate,
+    responseToCalendarDraft
+  } from '$lib/helpers/forms/calendar-output.js';
   import { useProfileMap } from '$lib/stores/profile-map.svelte.js';
   import { formatTimestamp } from '$lib/helpers/dates.js';
   import { resolve } from '$app/paths';
@@ -35,6 +43,79 @@
   let { formEvent, formAddress } = $props();
 
   const parsed = $derived(parseFormTemplate(formEvent));
+
+  // Calendar forms (settings.output = nip52-calendar): each response can be
+  // taken over as a calendar event — composed by responseToCalendarDraft,
+  // reviewed and published through CalendarEventModal like a native event.
+  const isCalendarForm = $derived(isCalendarOutputTemplate(parsed));
+  const levelField = $derived(
+    isCalendarForm
+      ? parsed.fields.find((f) => f.output === 'cal:educationalLevel' && f.vocab)
+      : undefined
+  );
+  // Bildungsstufe labels come from the bound scheme's concepts (prefLabel by
+  // language, keyed by the concept's external URI — the answer's value).
+  const getLevelConcepts = useSchemeConcepts(
+    () => levelField?.vocab?.address,
+    () =>
+      /** @type {string[]} */ ([levelField?.vocab?.relay, ...getAllLookupRelays()].filter(Boolean))
+  );
+  const levelLabels = $derived.by(() => {
+    // eslint-disable-next-line svelte/prefer-svelte-reactivity -- built fresh per derivation, never mutated after
+    const byUri = /** @type {Map<string, Record<string, string>>} */ (new Map());
+    for (const evt of getLevelConcepts()) {
+      const concept =
+        /** @type {{ externalUri?: string, prefLabels?: { value: string, lang: string }[] }} */ (
+          parseConcept(evt)
+        );
+      if (!concept.externalUri || byUri.has(concept.externalUri)) continue;
+      /** @type {Record<string, string>} */
+      const labels = {};
+      for (const { value, lang } of concept.prefLabels || []) {
+        if (value && lang && !labels[lang]) labels[lang] = value;
+      }
+      byUri.set(concept.externalUri, labels);
+    }
+    return byUri;
+  });
+
+  /** @type {Map<string, string>} response id -> why it cannot become an event */
+  let calendarErrors = $state.raw(new Map());
+
+  /**
+   * Open the event modal prefilled from a response (create semantics: a new
+   * event with a fresh d-tag). A form published by a community targets that
+   * community with the event's h-tag.
+   * @param {import('nostr-tools').NostrEvent} response
+   * @param {Record<string, string | string[]>} values
+   */
+  function takeAsCalendarEvent(response, values) {
+    let prefillDraft;
+    try {
+      prefillDraft = responseToCalendarDraft(parsed, values, {
+        conceptLabels: (uri) => levelLabels.get(uri)
+      });
+    } catch (err) {
+      const fieldId = err instanceof CalendarComposeError ? err.fieldId : '';
+      const label = parsed.fields.find((f) => f.id === fieldId)?.label || fieldId;
+      const message = label
+        ? m.form_responses_to_calendar_invalid({ field: label })
+        : m.form_responses_to_calendar_failed();
+      calendarErrors = new Map([...calendarErrors, [response.id, message]]);
+      return;
+    }
+    if (calendarErrors.has(response.id)) {
+      // eslint-disable-next-line svelte/prefer-svelte-reactivity -- $state.raw() map, replaced not mutated
+      const next = new Map(calendarErrors);
+      next.delete(response.id);
+      calendarErrors = next;
+    }
+    modalStore.openModal('calendarEvent', {
+      mode: 'create',
+      communityPubkey: communityEvent ? formEvent.pubkey : '',
+      prefillDraft
+    });
+  }
 
   /**
    * Render a parsed answer for display. Multi-valued answers arrive as arrays
@@ -377,7 +458,9 @@
                 href={resolve(profileLink(response.pubkey))}
                 class="block text-sm font-semibold hover:underline"
               >
-                {profile?.name || response.pubkey.slice(0, 8) + '...'}
+                <!-- A responder without a profile is anonymous: a visitor's
+                     one-time key (NIP-101-EDU) never has one. -->
+                {profile?.name || m.form_responses_anonymous()}
               </a>
               <div class="text-xs text-base-content/40">
                 {formatTimestamp(response.created_at)}
@@ -407,6 +490,21 @@
                   <div>{value}</div>
                 </div>
               {/each}
+              {#if isCalendarForm}
+                <div class="flex flex-wrap items-center gap-2 border-t border-base-content/10 pt-3">
+                  <button
+                    type="button"
+                    class="btn btn-sm btn-primary"
+                    onclick={() => takeAsCalendarEvent(response, values)}
+                    >{m.form_responses_to_calendar()}</button
+                  >
+                  {#if calendarErrors.get(response.id)}
+                    <div role="alert" class="alert-sm alert alert-error">
+                      {calendarErrors.get(response.id)}
+                    </div>
+                  {/if}
+                </div>
+              {/if}
             {:else}
               <div class="flex justify-center p-2">
                 <span class="loading loading-sm loading-spinner"></span>

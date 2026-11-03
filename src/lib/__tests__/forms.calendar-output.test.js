@@ -545,7 +545,7 @@ describe('calendarDraftToFormData — prefill for CalendarEventModal', () => {
     expect(new Date(`${form.startDate}T${form.startTime}`).getTime() / 1000).toBe(1795179600);
     expect(new Date(`${form.endDate}T${form.endTime}`).getTime() / 1000).toBe(1795186800);
     expect(form.participants).toEqual([{ name: 'Jane Doe', role: 'speaker' }]);
-    expect(form.attributes.educationalLevels).toEqual([
+    expect(form.attributes?.educationalLevels).toEqual([
       { id: LEVEL_C, labels: { de: 'Fortbildung', en: 'Advanced training' } }
     ]);
   });
