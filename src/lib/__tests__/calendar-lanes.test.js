@@ -7,11 +7,25 @@
  * visible span, and days where a higher lane is occupied but a lower one is
  * free get an explicit empty slot so bars stay vertically aligned.
  *
+ * These dates are all-day (31922) cases or exercise exclusivity at a UTC
+ * day boundary, so the suite pins TZ=UTC: 31922 day-spans are UTC-anchored
+ * by design (unaffected either way), but 31923 day-spans follow the
+ * *viewer's* calendar day (see calendar-grid-timezone.test.js) and would
+ * otherwise drift with whatever zone the test machine happens to run in.
+ *
  * @vitest-environment node
  */
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { getEventDaySpan } from '$lib/helpers/calendar.js';
 import { isMultiDayEvent, layoutWeekLanes } from '$lib/helpers/calendar-lanes.js';
+
+const originalTZ = process.env.TZ;
+beforeAll(() => {
+  process.env.TZ = 'UTC';
+});
+afterAll(() => {
+  process.env.TZ = originalTZ;
+});
 
 const DAY = 86400;
 const OCT_1 = Date.UTC(2026, 9, 1) / 1000; // Thursday
