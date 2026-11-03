@@ -7,6 +7,79 @@ merge commits of the nostr PRs that landed since the previous tag.
 
 ## [Unreleased]
 
+## [0.14.0] - 2026-11-03
+
+Calendar round: NIP-52 conformance (exclusive all-day ends, time zones,
+locations, RSVPs, ICS feeds), calendar events from NIP-101 forms, plus
+scientific publications on the profile and in "Meine Inhalte". 28 nostr PRs
+from the 2026-11-03 PR marathon (smoke-tested on an integration build first,
+two of them by the outside agent Vonk); tested on dev as `v0.14.0-rc.N`
+before release.
+
+### Added
+
+- Calendar events via NIP-101 forms: a `datetime` field (date + time, time
+  hidden while the all-day field is checked), anonymous one-time-key
+  responses shown as "Anonym", and "Als Termin übernehmen" on every response
+  of a calendar form, which opens the event editor prefilled per the
+  edufeed calendar-forms wiki rules (same output as the WordPress plugin).
+  (#1e6d613e, #591a8993)
+- Scientific publications (kind 30040): a "Publikation" shelf in "Meine
+  Inhalte" (#0027e257) and a "Publikationen" tab on the profile, shown when
+  the person has publications and configurable in the tab editor like the
+  other tabs.
+- Follower list: search, A–Z index and follow buttons, sorted by name
+  (#4ff2ae4e). "N Beiträge" in the profile header jumps to the content tab
+  (#966eec52). Links, mentions and hashtags in the profile's About box are
+  clickable (#1ecf5a39).
+- Video-call chat shows the time of day next to each message (#da53fd46).
+
+### Fixed
+
+- All-day (31922) ends are written and read as NIP-52 exclusive ends: no
+  end tag for a one-day event, last day + 1 otherwise. Before, a Mon–Tue
+  event read as Monday only in conformant clients. All-day events stay
+  visible on their first day (#013d3a5d, #09548e43) and their dates show in
+  UTC instead of the viewer's local day (#e7775d8b).
+- Time zones: times show in the event's `start_tzid`, an omitted `end_tzid`
+  inherits it (#436622e6); the edit form shows and parses times in that zone
+  (#47ca9628); a no-op edit keeps timestamps and zone tags exactly
+  (#027ed1dc); the grid places timed events on the viewer's actual local day
+  (#299b2685); a form draft's times are read in its own zone (#591a8993).
+- Time-based (31923) events without an end end instantaneously instead of at
+  the end of the UTC day (#b706e396).
+- Every `location` tag is kept on edit and shown on cards (#d8f840d8); the
+  deprecated `name` tag is read as a title fallback (#0b194e76); tag relay
+  hints no longer leak into references, impossible dates like 2026-02-31 are
+  rejected (#e0a308dc); address coordinates whose d-tag contains colons
+  resolve (#11c909a4).
+- The event detail page follows the newest revision and deletions
+  (#ad937114); deleting a calendar twin deletes both kind coordinates
+  (#01ae4299); renaming a calendar keeps relay hints and foreign tags
+  (#33e25c5c).
+- RSVPs are also looked up on the event's seen relays and the author's inbox
+  relays (#bea77220); an RSVP without a valid status no longer counts as
+  accepted (#4cbf416e).
+- ICS feeds: DESCRIPTION from the event content, a stable UID per address
+  (#28f21cad); events are verified, only the newest revision is kept and
+  NIP-09 deletions are honoured (#20216933).
+- Security: relay hints in server-side relay reads (OG tags, sitemap, ICS)
+  are checked against SSRF before they are dialed (#1c194d85).
+- Forms: multi-valued answers are serialised per NIP-101 (`;`-joined)
+  instead of "[object Object]" (#3f20da5b).
+- Profiles load the author's own content from their NIP-65 write relays too
+  (one limit per content type), so a profile no longer shows less than
+  "Meine Inhalte"; the "Meine Inhalte" type chips wrap instead of being cut
+  off at the edge.
+
+### Deploy notes
+
+- No new env vars.
+- All-day events with several days that app versions up to v0.13.0 wrote
+  (inclusive end) now read one day shorter; they cannot be told apart from
+  conformant events and there is no migration. Re-saving such an event in
+  the app keeps the shorter range.
+
 ## [0.13.0] - 2026-11-02
 
 People round: followers, a member-first people search and channel @mention
