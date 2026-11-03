@@ -486,15 +486,17 @@
     margin-bottom: 1.25rem;
     flex-wrap: wrap;
   }
+  /* Wrap, don't scroll: the scrollbar is hidden, so a chip past the right
+     edge was simply cut off once the nine content types no longer fit.
+     The 20rem basis sends the view toggle to its own line on phones
+     instead of squeezing the chips into a column beside it. */
   .myc-filters {
     display: flex;
+    flex-wrap: wrap;
+    flex: 1 1 20rem;
+    min-width: 0;
     gap: 0.5rem;
-    overflow-x: auto;
-    scrollbar-width: none;
     padding-bottom: 2px;
-  }
-  .myc-filters::-webkit-scrollbar {
-    display: none;
   }
   .myc-chip {
     display: inline-flex;
