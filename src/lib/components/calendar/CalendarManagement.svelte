@@ -4,6 +4,7 @@
   import { useCalendarManagement } from '$lib/stores/calendar-management-store.svelte.js';
   import { manager } from '$lib/stores/accounts.svelte';
   import { createAppEventFactory } from '$lib/helpers/event-factory.js';
+  import { buildCalendarRenameTemplate } from '$lib/helpers/calendar-rename.js';
   import { publishEvent } from '$lib/services/publish-service.js';
   import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
   import { encodeEventToNaddr } from '$lib/helpers/nostrUtils.js';
@@ -82,24 +83,17 @@
     updateError = null;
 
     try {
-      // Build tags for the updated calendar
-      const tags = [
-        ['d', calendar.dTag],
-        ['title', editTitle]
-      ];
-
-      // Add all existing event references as 'a' tags
-      calendar.eventReferences.forEach((/** @type {string} */ ref) => {
-        tags.push(['a', ref]);
-      });
-
-      // Create the updated calendar event using EventFactory
+      // Start from the calendar's own event and only replace the title (and
+      // content) — keeps relay hints on 'a' tags and any foreign tag another
+      // client added (image, t, summary, ...). Rebuilding the tag array from
+      // scratch here used to drop both.
       const eventFactory = createAppEventFactory();
-      const eventTemplate = await eventFactory.build({
-        kind: 31924,
-        content: editDescription,
-        tags: tags
-      });
+      const eventTemplate = await buildCalendarRenameTemplate(
+        eventFactory,
+        calendar.originalEvent,
+        editTitle,
+        editDescription
+      );
 
       // Sign the event
       const signedEvent = await activeUser.signEvent(eventTemplate);
