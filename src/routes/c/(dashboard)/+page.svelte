@@ -9,12 +9,14 @@
   import DashboardRelayFeed from '$lib/components/dashboard/DashboardRelayFeed.svelte';
   import DashboardMyStuff from '$lib/components/dashboard/DashboardMyStuff.svelte';
   import DashboardCommunities from '$lib/components/dashboard/DashboardCommunities.svelte';
+  import { resolveDashboardView } from '$lib/helpers/dashboardView.js';
+  import { useIsDesktop } from '$lib/stores/viewport.svelte.js';
 
-  let activeSection = $derived.by(() => {
-    const view = $page.url.searchParams.get('view') || 'home';
-    // Backward compat: old 'your-content' URL maps to 'my-stuff'
-    return view === 'your-content' ? 'my-stuff' : view;
-  });
+  // Phones render the feed for the root: see resolveDashboardView.
+  const isDesktop = useIsDesktop();
+  let activeSection = $derived(
+    resolveDashboardView($page.url.searchParams.get('view'), isDesktop())
+  );
 </script>
 
 <svelte:head><title>{m.dashboard_title()}</title></svelte:head>
