@@ -48,11 +48,12 @@ beforeEach(() => {
 });
 
 describe('CONTENT_CREATION', () => {
-  it('has entries for calendar, learning, article, wiki, form, poll, bookmark', () => {
+  it('has entries for calendar, learning, article, publication, wiki, form, poll, bookmark', () => {
     expect(Object.keys(CONTENT_CREATION)).toEqual([
       'calendar',
       'learning',
       'article',
+      'publication',
       'wiki',
       'form',
       'poll',
@@ -117,6 +118,11 @@ describe('navigateToCreate', () => {
   it('navigates to route for article', () => {
     navigateToCreate('article');
     expect(goto).toHaveBeenCalledWith('/create/article');
+  });
+
+  it('navigates to route for publication', () => {
+    navigateToCreate('publication');
+    expect(goto).toHaveBeenCalledWith('/create/publication');
   });
 
   it('navigates to route for wiki', () => {

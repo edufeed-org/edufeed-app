@@ -11,7 +11,8 @@
     BookmarkIcon,
     ReplyIcon,
     FilesIcon,
-    PollIcon
+    PollIcon,
+    BookOpenIcon
   } from '$lib/components/icons';
   import ProfileAvatar from '$lib/components/shared/ProfileAvatar.svelte';
   import CreatorAvatarStack from '$lib/components/shared/CreatorAvatarStack.svelte';
@@ -104,7 +105,8 @@
     'page-note': { label: () => feedTypeLabel('page-note'), icon: BookmarkIcon },
     reply: { label: () => feedTypeLabel('reply'), icon: ReplyIcon },
     form: { label: () => feedTypeLabel('form'), icon: FilesIcon },
-    poll: { label: () => feedTypeLabel('poll'), icon: PollIcon }
+    poll: { label: () => feedTypeLabel('poll'), icon: PollIcon },
+    publication: { label: () => feedTypeLabel('publication'), icon: BookOpenIcon }
   };
 
   let meta = $derived(typeMeta[typeKey]);

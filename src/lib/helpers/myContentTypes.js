@@ -44,6 +44,13 @@ export const CONTENT_TYPES = [
   },
   // 30024 = NIP-23 draft; "your content" is the one place drafts are listed.
   { key: 'article', kinds: [30023, 30024], ctaKey: 'article', accent: 'var(--ct-article)' },
+  // 30040 = scientific publication (NKBIP-01 index, "Wiss. Publikation").
+  {
+    key: 'publication',
+    kinds: [30040],
+    ctaKey: 'publication',
+    accent: 'var(--ct-publication)'
+  },
   { key: 'wiki', kinds: [30818], ctaKey: 'wiki', accent: 'var(--ct-wiki)' },
   { key: 'form', kinds: [30168], ctaKey: 'form', accent: 'var(--ct-form)' },
   { key: 'poll', kinds: [1068], ctaKey: 'poll', accent: 'var(--ct-poll)' },

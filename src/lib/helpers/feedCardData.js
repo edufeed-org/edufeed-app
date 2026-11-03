@@ -31,6 +31,14 @@ export function getFeedCardData(event) {
         ...(event.kind === 30024 ? { draft: true } : {})
       };
     }
+    case 30040:
+      // Scientific publication (NKBIP-01 index): metadata only, empty content.
+      return {
+        title: getTag('title') || 'Untitled Publication',
+        typeKey: 'publication',
+        tags,
+        description: truncate(getTag('summary'), 120)
+      };
     case 30142: {
       // AMB flattens learningResourceType into `learningResourceType:id` +
       // `learningResourceType:prefLabel:<lang>` tags, one per type. List every

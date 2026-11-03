@@ -320,4 +320,39 @@ describe('getFeedCardData', () => {
       expect(result.description).toBeUndefined();
     });
   });
+
+  describe('kind 30040 (scientific publication)', () => {
+    // Tag shape written by the "Wiss. Publikation" form (publicationTags.js),
+    // as in the two real events from issue 55b555fd: no h tag, empty content.
+    const event = {
+      kind: 30040,
+      content: '',
+      tags: [
+        ['d', 'kann-ki-spiritualitaet'],
+        ['title', 'Kann KI Spiritualität?'],
+        ['type', 'academic'],
+        ['published_on', '2025-03-01'],
+        ['summary', 'Ein Beitrag über KI und Spiritualität.'],
+        ['t', 'religionspaedagogik']
+      ]
+    };
+
+    it('returns typeKey "publication" with the title tag as title', () => {
+      const result = getFeedCardData(event);
+      expect(result.typeKey).toBe('publication');
+      expect(result.title).toBe('Kann KI Spiritualität?');
+    });
+
+    it('uses the summary (abstract) as description and keeps hashtags', () => {
+      const result = getFeedCardData(event);
+      expect(result.description).toBe('Ein Beitrag über KI und Spiritualität.');
+      expect(result.tags).toEqual(['religionspaedagogik']);
+    });
+
+    it('falls back to "Untitled Publication" without a title tag', () => {
+      expect(getFeedCardData({ kind: 30040, content: '', tags: [] }).title).toBe(
+        'Untitled Publication'
+      );
+    });
+  });
 });

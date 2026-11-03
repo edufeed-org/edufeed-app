@@ -14,12 +14,13 @@ const WEBXDC_EVENT = { kind: 30142, id: 'ix', tags: [['m', 'application/x-webxdc
 const PLAIN_LEARNING_EVENT = { kind: 30142, id: 'pl', tags: [['m', 'application/pdf']] };
 
 describe('myContentTypes', () => {
-  it('defines all eight content types in shelf order', () => {
+  it('defines all nine content types in shelf order', () => {
     expect(SHELF_ORDER).toEqual([
       'calendar',
       'learning',
       'interactive',
       'article',
+      'publication',
       'wiki',
       'form',
       'poll',
@@ -32,6 +33,7 @@ describe('myContentTypes', () => {
     expect(kindToContentType(31923)).toBe('calendar');
     expect(kindToContentType(30142)).toBe('learning');
     expect(kindToContentType(30023)).toBe('article');
+    expect(kindToContentType(30040)).toBe('publication');
     expect(kindToContentType(30818)).toBe('wiki');
     expect(kindToContentType(30168)).toBe('form');
     expect(kindToContentType(1068)).toBe('poll');
@@ -47,7 +49,7 @@ describe('myContentTypes', () => {
     // `interactive` shares kind 30142 with `learning` — the flat kind list
     // (used as a relay filter) must not repeat it.
     expect(ALL_CONTENT_KINDS).toEqual([
-      31922, 31923, 30142, 30023, 30024, 30818, 30168, 1068, 39701
+      31922, 31923, 30142, 30023, 30024, 30040, 30818, 30168, 1068, 39701
     ]);
   });
 
