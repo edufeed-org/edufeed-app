@@ -1,8 +1,10 @@
 import { test, expect } from './fixtures.js';
 import { TEST_AUTHOR } from './test-data.js';
 
-// Phone bottom bar (pr/mobile-dock): five labeled items, no floating create
-// button and no Termi bubble below lg; the center item opens the create sheet.
+// Phone bottom bar (pr/mobile-dock, tabs reworked in pr/mobile-nav): five
+// labeled items — Feed · Communities · Erstellen · Posteingang · Entdecken —
+// no floating create button and no Termi bubble below lg; the center item
+// opens the create sheet with the phone quick row.
 test.describe('Mobile dock', () => {
   test('logged-in dock shows five labeled items and no floating buttons', async ({
     authenticatedPage: page
@@ -22,6 +24,28 @@ test.describe('Mobile dock', () => {
     await expect(page.getByTestId('termi-launcher')).toBeHidden();
     await page.getByTestId('dock-create').click();
     await expect(page.getByRole('menu')).toBeVisible();
+    await expect(page.getByTestId('fab-phone-quick').locator('button')).toHaveCount(3);
+  });
+
+  test('the dashboard root is the feed on phones and the Feed tab is active', async ({
+    authenticatedPage: page
+  }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto('/c/');
+    await expect(page.getByTestId('dock-feed')).toHaveAttribute('aria-current', 'page');
+    await expect(page.getByTestId('dashboard-home')).toHaveCount(0);
+  });
+
+  test('the Communities tab is a list with Finden and the create card', async ({
+    authenticatedPage: page
+  }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto('/c/?view=communities');
+    await expect(page.getByTestId('communities-phone')).toBeVisible();
+    await expect(page.getByTestId('communities-find')).toBeVisible();
+    await expect(page.getByTestId('communities-phone-create')).toBeVisible();
+    await expect(page.getByTestId('dock-communities')).toHaveAttribute('aria-current', 'page');
+    await expect(page.getByTestId('header-drawer-toggle')).toHaveCount(0);
   });
 
   test('inside a community the dock stays and Bereiche opens the section sheet', async ({
@@ -31,6 +55,8 @@ test.describe('Mobile dock', () => {
     await page.goto(`/c/${TEST_AUTHOR.npub}`);
     await expect(page.getByTestId('mobile-dock')).toBeVisible();
     await expect(page.getByTestId('header-back')).toBeVisible();
+    await expect(page.getByTestId('header-switch')).toHaveCount(0);
+    await expect(page.getByTestId('section-count')).toBeVisible();
     await page.getByTestId('section-open').click();
     await expect(page.getByTestId('section-sheet')).toBeVisible();
     await page.getByTestId('section-tile-calendar').click();
