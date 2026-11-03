@@ -60,6 +60,14 @@ vi.mock('$lib/stores/config.svelte.js', () => ({
 
 function StubComponent() {}
 
+const viewport = vi.hoisted(() => ({ desktop: true }));
+vi.mock('$lib/stores/viewport.svelte.js', () => ({
+  useIsDesktop: () => () => viewport.desktop
+}));
+vi.mock('$lib/components/dashboard/DashboardCommunitiesPhone.svelte', async () => ({
+  default: (await import('./fixtures/CommunitiesPhoneStub.svelte')).default
+}));
+
 vi.mock('$lib/components/CommunikeyCard.svelte', () => ({
   default: StubComponent
 }));
@@ -72,12 +80,20 @@ vi.mock('$lib/components/icons', () => ({
 
 beforeEach(() => {
   vi.clearAllMocks();
+  viewport.desktop = true;
   mockJoinedCommunities.mockReturnValue([]);
   mockStatus.mockReturnValue('ready');
   mockDiscoverContentTypes = ['events', 'learning', 'articles', 'boards', 'communities', 'people'];
 });
 
 describe('DashboardCommunities', () => {
+  it('mounts the phone list instead of the grid below lg', () => {
+    viewport.desktop = false;
+    const { getByTestId, queryByTestId } = render(DashboardCommunities);
+    expect(getByTestId('communities-phone-stub')).toBeTruthy();
+    expect(queryByTestId('dashboard-communities-grid')).toBeNull();
+  });
+
   it('renders the section with title', () => {
     const { getByTestId, getByText } = render(DashboardCommunities);
     expect(getByTestId('dashboard-communities')).toBeTruthy();

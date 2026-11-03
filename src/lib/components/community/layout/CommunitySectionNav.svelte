@@ -3,26 +3,11 @@
   // current section) and a bottom sheet with every section as a tile.
   // Replaces the horizontally scrolling BottomTabBar (QA 2026-10-13: Kalender
   // and Einstellungen were two arrow taps away, locks unexplained).
-  import {
-    HomeIcon,
-    ChatIcon,
-    CalendarIcon,
-    SettingsIcon,
-    WikipediaIcon,
-    GraduationCapIcon,
-    KanbanIcon,
-    ScrollTextIcon,
-    ForumIcon,
-    BookmarkShareIcon,
-    PollIcon,
-    LockIcon,
-    LockOpenIcon,
-    ChannelsIcon,
-    GridIcon
-  } from '$lib/components/icons';
+  import { LockIcon, LockOpenIcon, GridIcon } from '$lib/components/icons';
   import { useConcordCommunity } from '$lib/concord/community.svelte.js';
   import { parseGroupPointers } from '$lib/groups/community-pointer.js';
   import { communityNavTabIds } from './community-nav.js';
+  import { sectionLabel, sectionIcon } from './section-labels.js';
   import { requestChannelList } from '$lib/groups/group-channel-selection.svelte.js';
   import { areaUnreadState } from '$lib/concord/notifications.svelte.js';
   import ConcordUnreadDot from '$lib/components/shared/ConcordUnreadDot.svelte';
@@ -51,38 +36,6 @@
   const getConcord = useConcordCommunity(() => communityEvent);
   const concordAreaFlags = $derived(areaUnreadState(getConcord().pointer?.communityId));
 
-  /** @type {Record<string, any>} */
-  const iconMap = {
-    home: HomeIcon,
-    chat: ChatIcon,
-    calendar: CalendarIcon,
-    learning: GraduationCapIcon,
-    boards: KanbanIcon,
-    articles: ScrollTextIcon,
-    forum: ForumIcon,
-    wikis: WikipediaIcon,
-    'social-bookmarks': BookmarkShareIcon,
-    polls: PollIcon,
-    settings: SettingsIcon,
-    channels: ChannelsIcon
-  };
-
-  /** @type {Record<string, () => string>} */
-  const labelMap = {
-    home: () => m.community_layout_bottom_tab_bar_home(),
-    chat: () => m.community_layout_bottom_tab_bar_chat(),
-    calendar: () => m.community_layout_bottom_tab_bar_calendar(),
-    learning: () => m.community_layout_bottom_tab_bar_learning(),
-    boards: () => m.community_layout_bottom_tab_bar_boards(),
-    articles: () => m.community_layout_bottom_tab_bar_articles(),
-    forum: () => m.community_layout_bottom_tab_bar_forum(),
-    wikis: () => m.community_wikis_title(),
-    'social-bookmarks': () => m.community_layout_bottom_tab_bar_social_bookmarks(),
-    polls: () => m.community_layout_bottom_tab_bar_polls(),
-    settings: () => m.community_layout_bottom_tab_bar_settings(),
-    channels: () => m.concord_tab_label()
-  };
-
   const sections = $derived.by(() => {
     const concord = getConcord();
     return communityNavTabIds({
@@ -91,7 +44,7 @@
       pointer: concord.pointer,
       isMember: concord.membership === 'member',
       hasGroupChannels: parseGroupPointers(communityEvent).length > 0
-    }).map((id) => ({ id, label: labelMap[id]?.() ?? id, icon: iconMap[id] ?? ChatIcon }));
+    }).map((id) => ({ id, label: sectionLabel(id), icon: sectionIcon(id) }));
   });
   const currentLabel = $derived(sections.find((s) => s.id === selectedContentType)?.label ?? '');
 

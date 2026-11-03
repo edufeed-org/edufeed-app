@@ -4470,5 +4470,7 @@
   "settings_relay_health_recheck": "Check again",
   "settings_relay_badge_auth": "Login required",
   "settings_relay_badge_paid": "Paid",
-  "settings_relay_health_help": "Checked from this device. A relay that does not have your list may not be found by other apps – saving publishes the list there."
+  "settings_relay_health_help": "Checked from this device. A relay that does not have your list may not be found by other apps – saving publishes the list there.",
+  "dashboard_communities_find": "Find",
+  "dashboard_communities_row_new": "new"
 }
