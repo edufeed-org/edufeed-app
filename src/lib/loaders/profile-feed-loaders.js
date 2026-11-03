@@ -37,6 +37,10 @@ export const FEED_RELAY_SOURCES = [
   { kinds: [1068], getRelays: getCommunikeyRelays }
 ];
 
+/** Profile-page-only sources: publications have their own profile tab but
+ *  no feed mixes them in (see TAB_KINDS.publications in profile-tabs.js). */
+const PROFILE_TAB_RELAY_SOURCES = [{ kinds: [30040], getRelays: getEducationalRelays }];
+
 /**
  * "Beteiligt an": resources by OTHER authors that name one of the profiles
  * as creator/contributor through a NIP-AMB p-tag live on the educational
@@ -58,13 +62,22 @@ function startParticipationLoaders(pubkeys) {
  * at call time — callers inside $effect should invoke this via untrack (or a
  * timeout) to avoid registering relay-config dependencies.
  *
- * @param {{ pubkeys: string[], userPubkey?: string | null }} options
+ * `profileTabs` (the profile page) also loads the profile-only tab kinds.
+ *
+ * @param {{ pubkeys: string[], userPubkey?: string | null, profileTabs?: boolean }} options
  * @returns {import('rxjs').Subscription[]} live subscriptions; caller unsubscribes on cleanup
  */
-export function startProfileFeedLoaders({ pubkeys, userPubkey = null }) {
+export function startProfileFeedLoaders({ pubkeys, userPubkey = null, profileTabs = false }) {
   /** @type {import('rxjs').Subscription[]} */
   const subs = [];
   if (!pubkeys?.length) return subs;
+
+  const sources = profileTabs
+    ? [...FEED_RELAY_SOURCES, ...PROFILE_TAB_RELAY_SOURCES]
+    : FEED_RELAY_SOURCES;
+  const outboxKinds = profileTabs
+    ? [...ALL_FEED_KINDS, ...PROFILE_TAB_RELAY_SOURCES.flatMap((s) => s.kinds)]
+    : ALL_FEED_KINDS;
 
   subs.push(...startParticipationLoaders(pubkeys));
 
@@ -82,13 +95,13 @@ export function startProfileFeedLoaders({ pubkeys, userPubkey = null }) {
         map((pointers) => groupPubkeysByRelay(pointers))
       );
 
-    subs.push(fetchOutbox(outboxMap$, { kinds: ALL_FEED_KINDS, limit: 50 }).subscribe());
+    subs.push(fetchOutbox(outboxMap$, { kinds: outboxKinds, limit: 50 }).subscribe());
 
     // Reposts via outbox (reposts live on user write relays)
     subs.push(fetchOutbox(outboxMap$, { kinds: [6, 16], limit: 50 }).subscribe());
 
     // Supplemental: app-specific relays for content that also lives on dedicated relays
-    for (const source of FEED_RELAY_SOURCES) {
+    for (const source of sources) {
       const relays = source.getRelays();
       if (relays.length === 0) continue;
 
@@ -98,7 +111,7 @@ export function startProfileFeedLoaders({ pubkeys, userPubkey = null }) {
     }
   } else {
     // --- Classic path: all pubkeys to all relays per content type ---
-    for (const source of FEED_RELAY_SOURCES) {
+    for (const source of sources) {
       const relays = source.getRelays();
       if (relays.length === 0) continue;
 

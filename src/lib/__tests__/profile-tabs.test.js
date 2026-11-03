@@ -17,7 +17,11 @@ import {
   parseProfileTabsEvent,
   buildProfileTabsTags,
   tabCountsFromEvents,
-  tabForPostsStat
+  tabForPostsStat,
+  autoTabIds,
+  withAutoTabs,
+  tabsToSave,
+  PROFILE_CONTENT_KINDS
 } from '$lib/helpers/profile-tabs.js';
 
 function tabsEvent(tags) {
@@ -31,11 +35,12 @@ function tabsEvent(tags) {
 }
 
 describe('constants', () => {
-  it('defines the eight profile tabs', () => {
+  it('defines the nine profile tabs', () => {
     expect(PROFILE_TAB_IDS).toEqual([
       'posts',
       'content',
       'articles',
+      'publications',
       'events',
       'polls',
       'bookmarks',
@@ -58,6 +63,13 @@ describe('constants', () => {
     expect(TAB_KINDS.events).toEqual([31922, 31923]);
     expect(TAB_KINDS.polls).toEqual([1068]);
     expect(TAB_KINDS.bookmarks).toEqual([39701, 9802, 1111]);
+    expect(TAB_KINDS.publications).toEqual([30040]);
+  });
+
+  // Publications have their own tab only: no feed mixes them in.
+  it('loads publications on the profile without adding them to the feeds', () => {
+    expect(PROFILE_CONTENT_KINDS).toContain(30040);
+    expect(PROFILE_CONTENT_KINDS).toEqual(expect.arrayContaining(TAB_KINDS.bookmarks));
   });
 });
 
@@ -158,6 +170,7 @@ describe('buildProfileTabsTags', () => {
       'posts',
       'content',
       'articles',
+      'publications',
       'events',
       'polls',
       'bookmarks'
@@ -187,7 +200,8 @@ describe('tabCountsFromEvents', () => {
       articles: 1,
       events: 2,
       polls: 1,
-      bookmarks: 0
+      bookmarks: 0,
+      publications: 0
     });
   });
 
@@ -231,7 +245,8 @@ describe('tabCountsFromEvents', () => {
       articles: 0,
       events: 0,
       polls: 0,
-      bookmarks: 0
+      bookmarks: 0,
+      publications: 0
     });
     expect(tabCountsFromEvents([]).posts).toBe(0);
     expect(tabCountsFromEvents(null).posts).toBe(0);
@@ -276,5 +291,66 @@ describe('tabForPostsStat', () => {
       )
     );
     expect(tabForPostsStat(config)).toBeNull();
+  });
+});
+
+describe('publications tab (kind 30040)', () => {
+  it('counts publications in their own tab, not in the posts total', () => {
+    const counts = tabCountsFromEvents([
+      { kind: 30040, tags: [] },
+      { kind: 30040, tags: [] },
+      { kind: 30023, tags: [] }
+    ]);
+    expect(counts.publications).toBe(2);
+    expect(counts.posts).toBe(1);
+  });
+
+  it('is an auto tab while the owner has not placed it explicitly', () => {
+    expect(autoTabIds(null)).toEqual(['publications']);
+    expect(autoTabIds(tabsEvent([['tab', 'posts']]))).toEqual(['publications']);
+    expect(autoTabIds(tabsEvent([['tab', 'publications']]))).toEqual([]);
+    expect(autoTabIds(tabsEvent([['tab', 'publications', 'hidden']]))).toEqual([]);
+  });
+
+  it('hides an auto tab without entries and shows it once there are some', () => {
+    const config = parseProfileTabsEvent(null);
+    const auto = autoTabIds(null);
+    expect(withAutoTabs(config, auto, { publications: 0 }).hidden).toEqual(['publications']);
+    expect(withAutoTabs(config, auto, {}).hidden).toEqual(['publications']);
+    expect(withAutoTabs(config, auto, { publications: 3 }).hidden).toEqual([]);
+    // order is untouched
+    expect(withAutoTabs(config, auto, {}).order).toEqual(config.order);
+  });
+
+  it('an explicit choice wins over the entry count', () => {
+    const event = tabsEvent([['tab', 'publications']]);
+    const shown = withAutoTabs(parseProfileTabsEvent(event), autoTabIds(event), {});
+    expect(shown.hidden).not.toContain('publications');
+
+    const hiddenEvent = tabsEvent([['tab', 'publications', 'hidden']]);
+    const hidden = withAutoTabs(parseProfileTabsEvent(hiddenEvent), autoTabIds(hiddenEvent), {
+      publications: 5
+    });
+    expect(hidden.hidden).toContain('publications');
+  });
+
+  it('does not save an empty auto tab the owner left hidden', () => {
+    const order = [...DEFAULT_TAB_ORDER];
+    const saved = tabsToSave(order, ['publications', 'polls'], ['publications'], {});
+    expect(saved.order).not.toContain('publications');
+    expect(saved.hidden).toEqual(['polls']);
+    // so it stays an auto tab after the round trip
+    const event = tabsEvent(buildProfileTabsTags(saved.order, saved.hidden).slice(1));
+    expect(autoTabIds(event)).toEqual(['publications']);
+  });
+
+  it('saves the auto tab once the owner shows it, or hides it while it has entries', () => {
+    const order = [...DEFAULT_TAB_ORDER];
+    expect(tabsToSave(order, [], ['publications'], {}).order).toContain('publications');
+    const hiddenWithEntries = tabsToSave(order, ['publications'], ['publications'], {
+      publications: 2
+    });
+    expect(hiddenWithEntries.order).toContain('publications');
+    expect(hiddenWithEntries.hidden).toEqual(['publications']);
   });
 });

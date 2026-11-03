@@ -26,7 +26,10 @@
   import {
     PROFILE_TABS_D_TAG,
     parseProfileTabsEvent,
-    tabForPostsStat
+    tabForPostsStat,
+    autoTabIds,
+    withAutoTabs,
+    tabsToSave
   } from '$lib/helpers/profile-tabs.js';
   import { saveProfileTabs } from '$lib/services/profile-tabs-service.js';
   import { pinnedPointersFromEvent } from '$lib/helpers/profile-feed.js';
@@ -338,6 +341,7 @@
     posts: m.profile_tab_posts,
     content: m.profile_tab_content,
     articles: m.profile_tab_articles,
+    publications: m.profile_tab_publications,
     events: m.profile_tab_events,
     polls: m.profile_tab_polls,
     bookmarks: m.profile_tab_bookmarks,
@@ -346,11 +350,15 @@
   };
 
   /** Tab ids rendered by ProfileContentTab (model-only panels)
-   * @type {Array<'content' | 'articles' | 'events' | 'polls' | 'bookmarks'>} */
-  const CONTENT_TAB_IDS = ['content', 'articles', 'events', 'polls', 'bookmarks'];
+   * @type {Array<'content' | 'articles' | 'publications' | 'events' | 'polls' | 'bookmarks'>} */
+  const CONTENT_TAB_IDS = ['content', 'articles', 'publications', 'events', 'polls', 'bookmarks'];
 
   // Owner-defined order + hidden tabs (kind 30078), applied for all viewers.
-  let tabsConfig = $derived(parseProfileTabsEvent(tabsConfigEvent));
+  // Auto tabs (publications) the owner has not placed show only with entries.
+  let autoTabs = $derived(autoTabIds(tabsConfigEvent));
+  let tabsConfig = $derived(
+    withAutoTabs(parseProfileTabsEvent(tabsConfigEvent), autoTabs, tabCounts)
+  );
 
   let visibleTabs = $derived([
     ...tabsConfig.order
@@ -405,7 +413,8 @@
     if (dirty) {
       savingTabs = true;
       try {
-        await saveProfileTabs(draftOrder, draftHidden);
+        const { order, hidden } = tabsToSave(draftOrder, draftHidden, autoTabs, tabCounts);
+        await saveProfileTabs(order, hidden);
       } catch (err) {
         console.error('Failed to save tab config:', err);
         showToast(m.profile_tabs_save_error(), 'error');

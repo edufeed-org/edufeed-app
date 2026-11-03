@@ -1,6 +1,6 @@
 <!--
   ProfileContentTab — generic per-type tab panel of the redesigned profile
-  page (content / articles / events / polls / bookmarks). Model-only: the
+  page (content / articles / publications / events / polls / bookmarks). Model-only: the
   page-level useProfileContent hook runs the network loaders; this component
   just subscribes to the EventStore for its tab's kinds and renders the
   matching card component.
@@ -28,13 +28,18 @@
   import PollCard from '$lib/components/polls/PollCard.svelte';
   import UrlCard from '$lib/components/bookmarks/UrlCard.svelte';
   import EventHighlightCard from '$lib/components/bookmarks/EventHighlightCard.svelte';
+  import FeedCard from '$lib/components/shared/FeedCard.svelte';
+  import { getFeedCardData } from '$lib/helpers/feedCardData.js';
+  import { getContentEventRoute } from '$lib/helpers/contentNavigation.js';
+  import { goto } from '$app/navigation';
+  import { resolve } from '$app/paths';
   import { FilesIcon } from '$lib/components/icons';
   import * as m from '$lib/paraglide/messages';
 
   /**
    * @type {{
    *   pubkey: string,
-   *   tabId: 'content' | 'articles' | 'events' | 'polls' | 'bookmarks',
+   *   tabId: 'content' | 'articles' | 'publications' | 'events' | 'polls' | 'bookmarks',
    *   pinnedPointers?: import('$lib/helpers/profile-feed.js').PinPointer[],
    *   canPin?: boolean
    * }}
@@ -63,6 +68,12 @@
 
   /** @type {string | null} */
   let pinBusy = $state(null);
+
+  /** @param {any} event */
+  function openEvent(event) {
+    const route = getContentEventRoute(event);
+    if (route) goto(resolve(/** @type {any} */ (route)));
+  }
 
   /** @param {any} event */
   async function togglePin(event) {
@@ -234,6 +245,33 @@
             article={event}
             authorProfile={authorProfiles.get(event.pubkey) || null}
             compact={false}
+          />
+        </div>
+      {/each}
+    </div>
+  {:else if tabId === 'publications'}
+    <div class="space-y-4">
+      {#each events as event (event.id)}
+        {@const card = getFeedCardData(event)}
+        {@const author = authorProfiles.get(event.pubkey)}
+        <div
+          class="relative"
+          class:pf-pinned-card={isEntryPinned({ data: event }, pinnedPointers)}
+          class:mt-3={isEntryPinned({ data: event }, pinnedPointers)}
+        >
+          {@render pinRow(event)}
+          <FeedCard
+            title={card.title}
+            typeKey={card.typeKey}
+            kind={event.kind}
+            tags={card.tags}
+            description={card.description}
+            authorName={author?.displayName || author?.name}
+            authorAvatar={author?.picture}
+            authorPubkey={event.pubkey}
+            {event}
+            timestamp={event.created_at}
+            onclick={() => openEvent(event)}
           />
         </div>
       {/each}

@@ -20,7 +20,9 @@ vi.mock('$lib/stores/nostr-infrastructure.svelte', () => ({
         next([]);
         return { unsubscribe: vi.fn() };
       }
-    }))
+    })),
+    // FeedCard's ProfileAvatar (publications tab) subscribes to a profile.
+    profile: vi.fn(() => ({ subscribe: () => ({ unsubscribe: vi.fn() }) }))
   },
   pool: {}
 }));
@@ -204,5 +206,23 @@ describe('<ProfileContentTab>', () => {
     ]);
     expect(container.querySelectorAll('[data-testid="stub-component"]')).toHaveLength(1);
     expect(container.querySelectorAll('[data-testid="pin-toggle"]')).toHaveLength(1);
+  });
+
+  // Scientific publications (kind 30040): title + abstract as feed cards.
+  it('lists publications with their title on the publications tab', async () => {
+    const r = render(ProfileContentTab, { pubkey: PUBKEY, tabId: 'publications' });
+    expect(_modelFilters[0]).toEqual({ kinds: [30040], authors: [PUBKEY] });
+    await emit([
+      ev(30040, {
+        tags: [
+          ['d', 'ki'],
+          ['title', 'Kann KI Spiritualität?'],
+          ['summary', 'Ein Beitrag über KI.']
+        ]
+      })
+    ]);
+    expect(r.queryByTestId('tab-empty')).toBeNull();
+    expect(r.container.textContent).toContain('Kann KI Spiritualität?');
+    expect(r.container.textContent).toContain('Ein Beitrag über KI.');
   });
 });

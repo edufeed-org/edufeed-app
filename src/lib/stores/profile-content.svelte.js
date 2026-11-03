@@ -10,8 +10,7 @@ import { untrack } from 'svelte';
 import { TimelineModel } from 'applesauce-core/models';
 import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
 import { startProfileFeedLoaders } from '$lib/loaders/profile-feed-loaders.js';
-import { ALL_FEED_KINDS } from '$lib/helpers/profile-feed.js';
-import { tabCountsFromEvents } from '$lib/helpers/profile-tabs.js';
+import { tabCountsFromEvents, PROFILE_CONTENT_KINDS } from '$lib/helpers/profile-tabs.js';
 import { withoutChannelMeetings } from '$lib/helpers/calendar-timing.js';
 
 /**
@@ -32,7 +31,7 @@ export function useProfileContent(getPubkey, getUserPubkey = () => null) {
     if (!pubkey) return;
 
     const modelSub = eventStore
-      .model(TimelineModel, { kinds: ALL_FEED_KINDS, authors: [pubkey] })
+      .model(TimelineModel, { kinds: PROFILE_CONTENT_KINDS, authors: [pubkey] })
       .subscribe({
         next: (events) => {
           counts = tabCountsFromEvents(withoutChannelMeetings(events));
@@ -45,7 +44,7 @@ export function useProfileContent(getPubkey, getUserPubkey = () => null) {
     /** @type {import('rxjs').Subscription[]} */
     let loaderSubs = [];
     const loaderTimer = setTimeout(() => {
-      loaderSubs = startProfileFeedLoaders({ pubkeys: [pubkey], userPubkey });
+      loaderSubs = startProfileFeedLoaders({ pubkeys: [pubkey], userPubkey, profileTabs: true });
     }, 100);
 
     return () => {

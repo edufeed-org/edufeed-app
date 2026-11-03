@@ -9,7 +9,7 @@
  * custom tabs backed by kind-777 spells; those entries are ignored for now.
  */
 import { getNip10References } from 'applesauce-common/helpers';
-import { kindToFeedCategory } from '$lib/helpers/profile-feed.js';
+import { kindToFeedCategory, ALL_FEED_KINDS } from '$lib/helpers/profile-feed.js';
 import { filterSocialBookmarks, groupByUrl, groupByEventRef } from '$lib/helpers/urlGrouping.js';
 
 /** @type {string[]} */
@@ -17,6 +17,7 @@ export const PROFILE_TAB_IDS = [
   'posts',
   'content',
   'articles',
+  'publications',
   'events',
   'polls',
   'bookmarks',
@@ -35,8 +36,23 @@ export const TAB_KINDS = {
   articles: [30023],
   events: [31922, 31923],
   polls: [1068],
-  bookmarks: [39701, 9802, 1111]
+  bookmarks: [39701, 9802, 1111],
+  // Scientific publications: own tab only, no feed (Beiträge, dashboard)
+  // mixes them in — so they stay out of ALL_FEED_KINDS.
+  publications: [30040]
 };
+
+/** Kinds the profile page loads and counts: the feed kinds plus the
+ *  profile-only publication tab. */
+export const PROFILE_CONTENT_KINDS = [...ALL_FEED_KINDS, ...TAB_KINDS.publications];
+
+/**
+ * Tabs that, until the owner places them in the tab editor, show only when
+ * they have entries — few people publish 30040s, and an always-empty tab on
+ * every profile is noise.
+ * @type {string[]}
+ */
+export const AUTO_TAB_IDS = ['publications'];
 
 const KNOWN_IDS = new Set(PROFILE_TAB_IDS);
 
@@ -63,11 +79,24 @@ const CATEGORY_TO_TAB = {
  */
 export function tabCountsFromEvents(events) {
   /** @type {Record<string, number>} */
-  const counts = { posts: 0, content: 0, articles: 0, events: 0, polls: 0, bookmarks: 0 };
+  const counts = {
+    posts: 0,
+    content: 0,
+    articles: 0,
+    events: 0,
+    polls: 0,
+    bookmarks: 0,
+    publications: 0
+  };
 
   /** @type {any[]} */
   const bookmarkEvents = [];
   for (const event of events || []) {
+    // Publications have their own tab only — not part of the posts total.
+    if (TAB_KINDS.publications.includes(event.kind)) {
+      counts.publications += 1;
+      continue;
+    }
     const category = kindToFeedCategory(event.kind);
     if (!category) continue;
 
@@ -129,6 +158,46 @@ export function parseProfileTabsEvent(event) {
   }
 
   return { order, hidden };
+}
+
+/**
+ * Auto tabs the owner has not placed explicitly (no `tab` tag for them).
+ * @param {{ tags?: string[][] } | null | undefined} event
+ * @returns {string[]}
+ */
+export function autoTabIds(event) {
+  const explicit = new Set((event?.tags || []).filter((t) => t[0] === 'tab').map((t) => t[1]));
+  return AUTO_TAB_IDS.filter((id) => !explicit.has(id));
+}
+
+/**
+ * The tab config as shown: auto tabs without entries count as hidden.
+ * @param {{ order: string[], hidden: string[] }} config
+ * @param {string[]} auto - from autoTabIds
+ * @param {Record<string, number>} counts
+ * @returns {{ order: string[], hidden: string[] }}
+ */
+export function withAutoTabs(config, auto, counts) {
+  const empty = auto.filter((id) => !(counts[id] > 0) && !config.hidden.includes(id));
+  return { order: config.order, hidden: [...config.hidden, ...empty] };
+}
+
+/**
+ * What the tab editor saves: an empty auto tab the owner left hidden is
+ * not written, so it keeps showing up by itself once it has entries.
+ * Showing it, or hiding it while it has entries, is an explicit choice.
+ * @param {string[]} order
+ * @param {string[]} hidden
+ * @param {string[]} auto - from autoTabIds
+ * @param {Record<string, number>} counts
+ * @returns {{ order: string[], hidden: string[] }}
+ */
+export function tabsToSave(order, hidden, auto, counts) {
+  const omit = new Set(auto.filter((id) => !(counts[id] > 0) && hidden.includes(id)));
+  return {
+    order: order.filter((id) => !omit.has(id)),
+    hidden: hidden.filter((id) => !omit.has(id))
+  };
 }
 
 /** Per-type tabs whose entries are all part of the posts count. */
