@@ -28,6 +28,8 @@ describe('getDashboardActiveSection', () => {
     expect(active('/c/messages/abc', sp())).toBe('messages');
     expect(active('/c/groups', sp())).toBe('groups');
     expect(active('/c/agents', sp())).toBe('agents');
+    // Legacy dashboard thread route (/c/<nevent>) stays a dashboard page.
+    expect(active('/c/nevent1abc', sp())).toBe('home');
     expect(active('/discover', sp('type=learning'))).toBe('discover');
     expect(active('/settings', sp())).toBeNull();
   });

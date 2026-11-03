@@ -7,6 +7,7 @@ import {
   LAST_VIEW_MAX,
   LAST_VIEW_TTL_SECONDS,
   isRememberableView,
+  isExplicitCommunityView,
   readCommunityView,
   rememberCommunityView
 } from '../community-last-view.js';
@@ -42,6 +43,51 @@ describe('isRememberableView', () => {
   });
 });
 
+describe('isExplicitCommunityView', () => {
+  // A thread/detail sub-route (/c/<npub>/<nevent>) has no view of its own:
+  // its transient 'home' must not overwrite what the user last opened.
+  it('is true for the community root, a ?view= param or a child content view', () => {
+    expect(
+      isExplicitCommunityView({
+        routeId: '/c/[pubkey]',
+        viewParam: null,
+        childContentView: undefined
+      })
+    ).toBe(true);
+    expect(
+      isExplicitCommunityView({
+        routeId: '/c/[pubkey]/[nevent=nevent]',
+        viewParam: 'forum',
+        childContentView: undefined
+      })
+    ).toBe(true);
+    expect(
+      isExplicitCommunityView({
+        routeId: '/c/[pubkey]/[naddr=naddr]',
+        viewParam: null,
+        childContentView: 'calendar'
+      })
+    ).toBe(true);
+  });
+
+  it('is false for a sub-route without any view', () => {
+    expect(
+      isExplicitCommunityView({
+        routeId: '/c/[pubkey]/[nevent=nevent]',
+        viewParam: null,
+        childContentView: undefined
+      })
+    ).toBe(false);
+    expect(
+      isExplicitCommunityView({
+        routeId: '/c/[pubkey]/[nevent=nevent]',
+        viewParam: 'bogus',
+        childContentView: 'bogus'
+      })
+    ).toBe(false);
+  });
+});
+
 describe('rememberCommunityView / readCommunityView', () => {
   it('remembers a content view and the visit time', () => {
     rememberCommunityView(A, 'calendar', 1000, mem);
@@ -57,6 +103,14 @@ describe('rememberCommunityView / readCommunityView', () => {
 
   it('a settings-only visit still records the time with home as the view', () => {
     rememberCommunityView(B, 'members', 500, mem);
+    expect(readCommunityView(B, 500, mem)).toEqual({ view: 'home', at: 500 });
+  });
+
+  it('view null keeps the previous view and only refreshes the time (leaving a community)', () => {
+    rememberCommunityView(A, 'calendar', 1000, mem);
+    rememberCommunityView(A, null, 2000, mem);
+    expect(readCommunityView(A, 2000, mem)).toEqual({ view: 'calendar', at: 2000 });
+    rememberCommunityView(B, null, 500, mem);
     expect(readCommunityView(B, 500, mem)).toEqual({ view: 'home', at: 500 });
   });
 

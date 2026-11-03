@@ -42,7 +42,9 @@ export function getDashboardActiveSection(pathname, searchParams) {
   if (normalized === resolvedGroups || normalized.startsWith(resolvedGroups + '/')) return 'groups';
   if (normalized === resolvedAgents || normalized.startsWith(resolvedAgents + '/')) return 'agents';
   if (normalized === resolvedInbox) return 'inbox';
-  if (normalized !== resolvedBase) return 'communities';
+  // /c/<nevent> is the legacy dashboard thread route, not a community.
+  const firstSegment = normalized.slice(resolvedBase.length + 1).split('/')[0];
+  if (normalized !== resolvedBase && !firstSegment.startsWith('nevent1')) return 'communities';
   const view = searchParams.get('view') || 'home';
   // Backward compat: old 'your-content' URL maps to 'my-stuff'
   if (view === 'your-content') return 'my-stuff';

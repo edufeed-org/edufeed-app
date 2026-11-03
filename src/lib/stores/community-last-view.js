@@ -21,11 +21,27 @@ export const LAST_VIEW_MAX = 200;
 const NOT_REMEMBERED = new Set(['settings', 'members']);
 
 /**
- * @param {string} view
+ * @param {string | null | undefined} view
  * @returns {boolean}
  */
 export function isRememberableView(view) {
-  return VALID_CONTENT_VIEWS.has(view) && !NOT_REMEMBERED.has(view);
+  return !!view && VALID_CONTENT_VIEWS.has(view) && !NOT_REMEMBERED.has(view);
+}
+
+/**
+ * Whether the community layout's resolved view is the user's own choice —
+ * the community root, a `?view=` param, or a child route's content view —
+ * as opposed to the transient `home` a thread/detail sub-route
+ * (`/c/<npub>/<nevent>`) resolves to. Only an explicit view may overwrite
+ * what was remembered; the sub-route merely refreshes the visit time.
+ *
+ * @param {{ routeId: string | null | undefined, viewParam: string | null, childContentView: string | undefined }} args
+ * @returns {boolean}
+ */
+export function isExplicitCommunityView({ routeId, viewParam, childContentView }) {
+  if (childContentView && VALID_CONTENT_VIEWS.has(childContentView)) return true;
+  if (viewParam && VALID_CONTENT_VIEWS.has(viewParam)) return true;
+  return routeId === '/c/[pubkey]';
 }
 
 /**
@@ -45,7 +61,9 @@ function readMap(storage) {
 
 /**
  * @param {string} pubkey
- * @param {string} view
+ * @param {string | null} view - a content view to remember; `null` (or
+ *   settings/members) keeps the previous view and only refreshes `at` —
+ *   that is how leaving a community stamps the visit time.
  * @param {number} now - unix seconds
  * @param {Storage | undefined} [storage]
  */
@@ -53,7 +71,7 @@ export function rememberCommunityView(pubkey, view, now, storage = globalThis.lo
   try {
     const map = readMap(storage);
     const previous = map[pubkey];
-    const nextView = isRememberableView(view) ? view : (previous?.view ?? 'home');
+    const nextView = view && isRememberableView(view) ? view : (previous?.view ?? 'home');
     map[pubkey] = { view: nextView, at: now };
 
     for (const [key, entry] of Object.entries(map)) {
