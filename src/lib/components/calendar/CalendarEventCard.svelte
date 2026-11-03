@@ -211,7 +211,7 @@
         </div>
       {:else if locations.length > 0}
         <div class="truncate text-sm text-base-content/50">
-          📍 {locations[0].name || locations[0].address || ''}
+          📍 {locations[0]}
         </div>
       {:else if summaryText}
         <div class="truncate text-sm text-base-content/50">{summaryText}</div>

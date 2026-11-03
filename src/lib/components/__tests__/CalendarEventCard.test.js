@@ -76,7 +76,7 @@ const mockTimeEvent = {
   end: Math.floor(Date.now() / 1000) + 3600,
   image: 'https://example.com/event.jpg',
   summary: 'A talk about testing in JavaScript.',
-  locations: [{ name: 'Room 42' }],
+  locations: ['Room 42'],
   hashtags: ['testing', 'javascript'],
   createdAt: Math.floor(Date.now() / 1000),
   originalEvent: {
@@ -298,7 +298,7 @@ describe('CalendarEventCard', () => {
     const meetingEvent = {
       ...mockTimeEvent,
       title: 'Teamtreffen',
-      locations: [{ name: 'https://app.example/c/npub1x?channel=chan1' }],
+      locations: ['https://app.example/c/npub1x?channel=chan1'],
       originalEvent: {
         ...mockTimeEvent.originalEvent,
         tags: [
@@ -352,6 +352,23 @@ describe('CalendarEventCard', () => {
       render(CalendarEventCard, { props: { event: mockTimeEvent } });
       expect(spies.useRsvps).toHaveBeenCalled();
       expect(spies.reactionBar).toHaveBeenCalled();
+    });
+  });
+
+  describe('location (issue: cards showed none)', () => {
+    // getCalendarEventMetadata's own `locations` parsing (every `location`
+    // tag, not just the first) is covered unmocked in
+    // src/lib/__tests__/calendar-tags.test.js; here the fixture just mirrors
+    // its output shape to verify the card actually renders it.
+    it('shows the first location when the event carries more than one', () => {
+      const event = {
+        ...mockTimeEvent,
+        locations: ['Aula, Schulstraße 1, Berlin', 'https://meet.example/room']
+      };
+
+      const { getByText } = render(CalendarEventCard, { props: { event, variant: 'list' } });
+
+      expect(getByText('📍 Aula, Schulstraße 1, Berlin')).toBeTruthy();
     });
   });
 });

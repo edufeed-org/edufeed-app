@@ -86,7 +86,10 @@ export function getCalendarEventMetadata(event) {
     endTimezone: getTagValue('end_tzid'),
     start,
     end,
+    // NIP-52 allows `location` to repeat (address, GPS coordinates, video
+    // call link, …); keep every value, not just the first.
     location: getTagValue('location'),
+    locations: getTagValues('location'),
     participants: dedupedParticipants,
     hashtags: getTagValues('t'),
     references: getTagValues('r'),

@@ -11,7 +11,8 @@ import {
   convertFormDataToEvent,
   buildCalendarEventTags,
   mergeFormOwnedTags,
-  CALENDAR_FORM_OWNED_TAGS
+  CALENDAR_FORM_OWNED_TAGS,
+  CALENDAR_FORM_SINGLE_OWNED_TAGS
 } from '../helpers/calendar.js';
 import { calendarStore } from './calendar-events.svelte.js';
 import { getCalendarEventMetadata } from '../helpers/eventUtils.js';
@@ -206,7 +207,8 @@ export function createCalendarActions(_communityPubkey) {
         const tags = mergeFormOwnedTags(
           existingEvent.tags,
           buildCalendarEventTags(formData, eventData, dTag, hTags),
-          CALENDAR_FORM_OWNED_TAGS
+          CALENDAR_FORM_OWNED_TAGS,
+          CALENDAR_FORM_SINGLE_OWNED_TAGS
         );
 
         // Build and sign the updated calendar event.
