@@ -46,19 +46,20 @@ export function formatRelativeTime(unixSeconds) {
  * Format a date for calendar display using configured locale
  * @param {Date} date - Date to format
  * @param {string} format - Format string ('YYYY-MM-DD', 'MM/DD', 'full', 'long', 'short', 'time')
- * @param {{ utc?: boolean }} [options] - utc: format in UTC (date-based events
- *   are anchored at UTC midnight, so local-time rendering shifts the day west
- *   of UTC)
+ * @param {{ utc?: boolean, timeZone?: string }} [options] - utc: format in UTC
+ *   (date-based events are anchored at UTC midnight, so local-time rendering
+ *   shifts the day west of UTC); timeZone: format in this IANA zone instead of
+ *   the viewer's (must be valid — see isValidTimeZone)
  * @returns {string} Formatted date string
  */
-export function formatCalendarDate(date, format, { utc = false } = {}) {
+export function formatCalendarDate(date, format, { utc = false, timeZone } = {}) {
   if (!date || !(date instanceof Date)) return '';
 
   // The app (Paraglide) locale, not the deployment's CALENDAR_LOCALE: the
   // English UI showed "Oktober 2026" (QA round 3 K5).
   const locale = activeDateLocale();
   const use24Hour = runtimeConfig.calendar.timeFormat === '24h';
-  const tz = utc ? { timeZone: 'UTC' } : {};
+  const tz = utc ? { timeZone: 'UTC' } : timeZone ? { timeZone } : {};
 
   switch (format) {
     case 'YYYY-MM-DD':
@@ -349,6 +350,64 @@ export function formatEventDateTime(event) {
   const dateStr = formatCalendarDate(startDate, 'short', { utc: allDay });
   if (allDay) return dateStr;
   return `${dateStr} at ${formatCalendarDate(startDate, 'time')}`;
+}
+
+/**
+ * Whether `timeZone` is an IANA zone Intl can format in. Tags are untrusted
+ * input; an unknown zone makes Intl throw a RangeError.
+ * @param {unknown} timeZone
+ * @returns {timeZone is string}
+ */
+export function isValidTimeZone(timeZone) {
+  if (typeof timeZone !== 'string' || !timeZone) return false;
+  try {
+    new Intl.DateTimeFormat('en', { timeZone });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Date and time of a timed event's start or end, in the event's own zone
+ * (NIP-52 start_tzid/end_tzid), so the printed time matches the zone label.
+ * When the viewer's wall-clock time differs, `local` carries it (with the
+ * viewer's date only when that is another day; `label` joins the parts). Without a valid event zone
+ * the time is the viewer's, unlabelled.
+ *
+ * @param {Date} date
+ * @param {string | undefined} eventTimeZone
+ * @param {{ viewerTimeZone?: string }} [options]
+ * @returns {{ date: string, time: string, zone: string,
+ *   local: { date: string | null, time: string, zone: string, label: string } | null }}
+ */
+export function formatZonedDateTime(
+  date,
+  eventTimeZone,
+  { viewerTimeZone = getCurrentTimezone() } = {}
+) {
+  const viewer = isValidTimeZone(viewerTimeZone) ? { timeZone: viewerTimeZone } : {};
+  const localDate = formatCalendarDate(date, 'long', viewer);
+  const localTime = formatCalendarDate(date, 'time', viewer);
+  if (!isValidTimeZone(eventTimeZone)) {
+    return { date: localDate, time: localTime, zone: '', local: null };
+  }
+  const zoned = { timeZone: eventTimeZone };
+  const eventDate = formatCalendarDate(date, 'long', zoned);
+  const eventTime = formatCalendarDate(date, 'time', zoned);
+  const sameWallClock = eventDate === localDate && eventTime === localTime;
+  return {
+    date: eventDate,
+    time: eventTime,
+    zone: eventTimeZone,
+    local: sameWallClock ? null : localPart()
+  };
+
+  function localPart() {
+    const day = eventDate === localDate ? null : formatCalendarDate(date, 'short', viewer);
+    const label = `${day ? `${day}, ` : ''}${localTime} ${viewerTimeZone}`;
+    return { date: day, time: localTime, zone: viewerTimeZone, label };
+  }
 }
 
 /**

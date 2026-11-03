@@ -87,7 +87,8 @@ export function getCalendarEventMetadata(event) {
     summary: event.content || getTagValue('summary') || getTagValue('description'),
     image: getCalendarEventImage(event) || '',
     startTimezone: getTagValue('start_tzid'),
-    endTimezone: getTagValue('end_tzid'),
+    // NIP-52: an omitted end_tzid means the end is in start_tzid's zone.
+    endTimezone: getTagValue('end_tzid') || getTagValue('start_tzid'),
     start,
     end,
     location: getTagValue('location'),

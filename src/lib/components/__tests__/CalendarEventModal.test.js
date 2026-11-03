@@ -288,6 +288,35 @@ describe('CalendarEventModal — normal calendar event (regression)', () => {
     expect(r.container.querySelector('#endDate').value).toBe('2026-11-04');
   });
 
+  // NIP-52: an omitted end_tzid is start_tzid's zone. Editing such an event
+  // wrote the editor's own zone as end_tzid, contradicting start_tzid.
+  it("keeps start_tzid's zone for the end when the edited event has no end_tzid", async () => {
+    const start = Math.floor(new Date('2026-11-02T15:00:00Z').getTime() / 1000);
+    h.modalStore.modalProps = {
+      communityPubkey: 'comm',
+      mode: 'edit',
+      existingRawEvent: { id: 'f'.repeat(64), kind: 31923, pubkey: ME, tags: [['d', 'y']] },
+      existingEvent: {
+        kind: 31923,
+        title: 'Webinar',
+        start,
+        end: start + 3600,
+        startTimezone: 'America/New_York',
+        hashtags: [],
+        references: [],
+        participants: []
+      }
+    };
+    h.updateEvent.mockImplementation(async () => ({ id: 'ev3', kind: 31923, tags: [] }));
+    const r = render(CalendarEventModal);
+    await tick();
+    await fireEvent.submit(r.container.querySelector('form:not(.modal-backdrop)'));
+    await settle();
+    expect(h.updateEvent).toHaveBeenCalledTimes(1);
+    expect(h.updateEvent.mock.calls[0][0].startTimezone).toBe('America/New_York');
+    expect(h.updateEvent.mock.calls[0][0].endTimezone).toBe('America/New_York');
+  });
+
   // The default day is the LOCAL date: east of UTC just after midnight,
   // toISOString() still names yesterday (M2 review).
   // (The worker's zone cannot be switched at runtime, so the instant is
