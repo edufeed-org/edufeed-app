@@ -2,7 +2,7 @@
 // Logged-in avatar menu: Meine Inhalte and Gruppen moved here from the phone
 // dock, and the inbox entry links to the /c route (not the legacy redirect).
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render } from '@testing-library/svelte';
+import { render, waitFor } from '@testing-library/svelte';
 const { active$, holders } = await vi.hoisted(async () => {
   const { BehaviorSubject } = await import('rxjs');
   return {
@@ -46,6 +46,21 @@ describe('MobileNavMenu logged-in entries', () => {
     const { findByTestId } = render(MobileNavMenu, { onClose: vi.fn() });
     expect((await findByTestId('menu-my-stuff')).getAttribute('href')).toBe('/c/?view=my-stuff');
     expect((await findByTestId('menu-inbox')).getAttribute('href')).toBe('/c/inbox');
+  });
+
+  it('logged in: no Communities and no Home row (the dock owns both)', async () => {
+    const { findByTestId, container } = render(MobileNavMenu, { onClose: vi.fn() });
+    await findByTestId('menu-my-stuff');
+    expect(container.querySelector('a[href="/communities"]')).toBeNull();
+    expect(container.querySelector('a[href="/c/"]')).toBeNull();
+    expect(container.querySelector('a[href="/discover"]')).not.toBeNull();
+  });
+
+  it('logged out: the Communities row stays', async () => {
+    active$.next(null);
+    const { container } = render(MobileNavMenu, { onClose: vi.fn() });
+    await waitFor(() => expect(container.querySelector('a[href="/imprint"]')).not.toBeNull());
+    expect(container.querySelector('a[href="/communities"]')).not.toBeNull();
   });
 
   it('shows Gruppen only when the deployment and the user enable it', async () => {
