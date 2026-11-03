@@ -14,6 +14,7 @@
     sendCallFile
   } from '$lib/services/livekit-connection.svelte.js';
   import { formatFileSize } from '$lib/helpers/media-meta.js';
+  import { formatTimeOfDay } from '$lib/helpers/dates.js';
   import { showToast } from '$lib/helpers/toast.js';
   import { getGroupCallState } from '$lib/groups/group-call.svelte.js';
   import { useProfileMap } from '$lib/stores/profile-map.svelte.js';
@@ -714,6 +715,15 @@
               {/each}
             {/if}
           </div>
+          {#if Number.isFinite(msg.at)}
+            <!-- When it was sent (issue ec121a1f): finds a message again later
+               in the call; same HH:MM as the chat export. -->
+            <time
+              datetime={new Date(msg.at).toISOString()}
+              class="shrink-0 pt-0.5 text-xs text-base-content/50 tabular-nums"
+              data-testid="call-chat-time">{formatTimeOfDay(msg.at / 1000)}</time
+            >
+          {/if}
           {#if canSend}
             <!-- Hover/focus reveals it; on a touch screen (no hover) it stays
                visible and a long-press on the row does the same. -->
