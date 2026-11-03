@@ -120,6 +120,22 @@ describe('FeedCard indexed resource attribution', () => {
     expect(badge?.className).toContain('self-start');
   });
 
+  // A single-type list (the profile's Publikationen tab) has no use for the
+  // badge, and the owner's pin pill sits in that corner.
+  it('omits the type badge with showBadge={false}', () => {
+    const badge = (/** @type {HTMLElement} */ c) =>
+      [...c.querySelectorAll('div.rounded-full')].some((el) =>
+        el.textContent?.includes('Learning')
+      );
+    const shown = render(FeedCard, { props: { ...baseProps, event: indexedEvent } });
+    expect(badge(shown.container)).toBe(true);
+    shown.unmount();
+    const hidden = render(FeedCard, {
+      props: { ...baseProps, event: indexedEvent, showBadge: false }
+    });
+    expect(badge(hidden.container)).toBe(false);
+  });
+
   it('shows all creator names in a hover title on the name line', () => {
     const multiEvent = {
       ...indexedEvent,

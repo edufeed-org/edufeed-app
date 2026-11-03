@@ -250,6 +250,8 @@
       {/each}
     </div>
   {:else if tabId === 'publications'}
+    <!-- No type badge: every card here is a publication, and the pin pill
+         straddles the card's top-right corner where the badge sits. -->
     <div class="space-y-4">
       {#each events as event (event.id)}
         {@const card = getFeedCardData(event)}
@@ -271,6 +273,7 @@
             authorPubkey={event.pubkey}
             {event}
             timestamp={event.created_at}
+            showBadge={false}
             onclick={() => openEvent(event)}
           />
         </div>

@@ -42,6 +42,7 @@
    *   communityPubkey?: string,
    *   timestamp: number,
    *   event?: any,
+   *   showBadge?: boolean,
    *   onclick?: () => void
    * }}
    */
@@ -61,6 +62,7 @@
     communityPubkey,
     timestamp,
     event = undefined,
+    showBadge = true,
     onclick
   } = $props();
 
@@ -262,7 +264,7 @@
     {/if}
   </div>
 
-  {#if meta}
+  {#if meta && showBadge}
     {@const Icon = meta.icon}
     <!-- In flex flow (not absolute) so long author names/titles truncate
          before the badge instead of running underneath it. -->
