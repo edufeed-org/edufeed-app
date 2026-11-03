@@ -5,7 +5,7 @@ import {
   fetchEventFromRelays,
   fetchEventsFromRelays
 } from '$lib/server/nostr-fetch.js';
-import { getIcsEventTiming, dedupeReplaceableEvents } from '$lib/helpers/calendar-timing.js';
+import { tagValue, generateICSContent } from '$lib/server/calendar-ics.js';
 
 /**
  * Server-side ICS feed for both NIP-52 calendars (`naddr`) and community
@@ -26,30 +26,6 @@ function detectIdentifierType(identifier) {
   if (identifier.startsWith('naddr1')) return 'naddr';
   if (identifier.startsWith('npub1') || HEX_PUBKEY_RE.test(identifier)) return 'pubkey';
   return 'unknown';
-}
-
-/**
- * Pure tag accessor — first value of a single-occurrence tag.
- * @param {import('nostr-tools').NostrEvent} event
- * @param {string} name
- * @returns {string | undefined}
- */
-function tagValue(event, name) {
-  const t = event.tags.find((tag) => tag[0] === name);
-  return t ? t[1] : undefined;
-}
-
-/**
- * Encode a parameterized replaceable event as an naddr for ICS URL building.
- * @param {import('nostr-tools').NostrEvent} event
- * @returns {string}
- */
-function eventToNaddr(event) {
-  return nip19.naddrEncode({
-    kind: event.kind,
-    pubkey: event.pubkey,
-    identifier: tagValue(event, 'd') || ''
-  });
 }
 
 /**
@@ -243,105 +219,4 @@ function jsonError(message, status) {
     status,
     headers: { 'Content-Type': 'application/json' }
   });
-}
-
-/**
- * Build the ICS body. Pure — operates on plain Nostr events.
- *
- * @param {{title: string, summary: string}} calendarMetadata
- * @param {import('nostr-tools').NostrEvent[]} events
- * @param {URL} url
- * @returns {string}
- */
-function generateICSContent(calendarMetadata, events, url) {
-  const now = new Date();
-
-  /**
-   * @param {string|number|undefined|null} timestamp
-   * @returns {string}
-   */
-  const formatDateTime = (timestamp) => {
-    if (timestamp === undefined || timestamp === null || isNaN(Number(timestamp))) return '';
-    const num = typeof timestamp === 'string' ? parseInt(timestamp) : timestamp;
-    if (!isFinite(num)) return '';
-    const date = new Date(num * 1000);
-    if (isNaN(date.getTime())) return '';
-    return date.toISOString().replace(/[-:]/g, '').split('.')[0] + 'Z';
-  };
-
-  /**
-   * @param {string|number|undefined|null} timestamp
-   * @returns {string}
-   */
-  const formatDateOnly = (timestamp) => {
-    if (timestamp === undefined || timestamp === null || isNaN(Number(timestamp))) return '';
-    const num = typeof timestamp === 'string' ? parseInt(timestamp) : timestamp;
-    if (!isFinite(num)) return '';
-    const date = new Date(num * 1000);
-    if (isNaN(date.getTime())) return '';
-    const year = date.getUTCFullYear();
-    const month = String(date.getUTCMonth() + 1).padStart(2, '0');
-    const day = String(date.getUTCDate()).padStart(2, '0');
-    return `${year}${month}${day}`;
-  };
-
-  /**
-   * @param {string} text
-   * @returns {string}
-   */
-  const escapeText = (text) =>
-    text.replace(/\\/g, '\\\\').replace(/;/g, '\\;').replace(/,/g, '\\,').replace(/\n/g, '\\n');
-
-  /** @type {string[]} */
-  const ics = [
-    'BEGIN:VCALENDAR',
-    'VERSION:2.0',
-    'PRODID:-//Edufeed//Calendar//EN',
-    'CALSCALE:GREGORIAN',
-    'METHOD:PUBLISH',
-    `X-WR-CALNAME:${escapeText(calendarMetadata.title || 'Edufeed Calendar')}`,
-    `X-WR-CALDESC:${escapeText(calendarMetadata.summary || '')}`,
-    'X-WR-TIMEZONE:UTC',
-    `LAST-MODIFIED:${formatDateTime(now.getTime() / 1000)}`
-  ];
-
-  for (const event of dedupeReplaceableEvents(events)) {
-    const timing = getIcsEventTiming(event);
-    if (!timing) continue;
-
-    let dtStartProperty;
-    let dtEndProperty;
-    if (timing.isAllDay) {
-      dtStartProperty = `DTSTART;VALUE=DATE:${formatDateOnly(timing.start)}`;
-      dtEndProperty = `DTEND;VALUE=DATE:${formatDateOnly(timing.end)}`;
-    } else {
-      dtStartProperty = `DTSTART:${formatDateTime(timing.start)}`;
-      // No end tag = open end (NIP-52: ends same day) — omit DTEND rather
-      // than fabricating a duration.
-      dtEndProperty = timing.end ? `DTEND:${formatDateTime(timing.end)}` : '';
-    }
-
-    const eventNaddr = eventToNaddr(event);
-    const baseUrl = url.origin;
-    const title = tagValue(event, 'title') || 'Untitled Event';
-    const summary = tagValue(event, 'summary') || '';
-    const location = tagValue(event, 'location');
-
-    ics.push(
-      'BEGIN:VEVENT',
-      `UID:${event.id}@edufeed.com`,
-      dtStartProperty,
-      dtEndProperty,
-      `SUMMARY:${escapeText(title)}`,
-      `DESCRIPTION:${escapeText(summary)}`,
-      location ? `LOCATION:${escapeText(location)}` : '',
-      `URL:${baseUrl}/calendar/event/${eventNaddr}`,
-      `CREATED:${formatDateTime(event.created_at)}`,
-      `LAST-MODIFIED:${formatDateTime(event.created_at)}`,
-      'END:VEVENT'
-    );
-  }
-
-  ics.push('END:VCALENDAR');
-  return ics.filter((line) => line !== '').join('\r\n');
 }
