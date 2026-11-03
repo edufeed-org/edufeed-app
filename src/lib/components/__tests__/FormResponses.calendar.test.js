@@ -7,12 +7,11 @@
  * the wiki's worked example publishes.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
 import { render, screen, fireEvent, waitFor } from '@testing-library/svelte';
-
-// jsdom's import.meta.url is not a file URL; tests run from the repo root.
-const dir = resolve('src/lib/__tests__/fixtures/calendar-forms') + '/';
+// Vite imports, not node:fs: the jsdom environment has no node built-ins.
+import communityCopy from '../../__tests__/fixtures/calendar-forms/community-copy.json?raw';
+import workedExample from '../../__tests__/fixtures/calendar-forms/response-worked-example.json?raw';
+import communitySecret from '../../__tests__/fixtures/calendar-forms/THROWAWAY-community-secret.hex?raw';
 
 const h = vi.hoisted(() => ({
   /** @type {any} */ copy: null,
@@ -25,13 +24,11 @@ const h = vi.hoisted(() => ({
 }));
 h.openModal = vi.fn();
 
-h.copy = JSON.parse(readFileSync(dir + 'community-copy.json', 'utf8'));
-h.response = JSON.parse(readFileSync(dir + 'response-worked-example.json', 'utf8'));
+h.copy = JSON.parse(communityCopy);
+h.response = JSON.parse(workedExample);
 const { PrivateKeySigner } = await import('applesauce-signers');
 const { hexToBytes } = await import('nostr-tools/utils');
-h.signer = new PrivateKeySigner(
-  hexToBytes(readFileSync(dir + 'THROWAWAY-community-secret.hex', 'utf8').trim())
-);
+h.signer = new PrivateKeySigner(hexToBytes(communitySecret.trim()));
 
 const LEVEL_C = 'https://w3id.org/kim/educationalLevel/level_C';
 h.concepts = [
