@@ -4,7 +4,7 @@
  * entry "Calendar events from forms in edufeed" (the `nip52-calendar`
  * output and its `cal:` targets).
  */
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, afterEach } from 'vitest';
 import { nip19 } from 'nostr-tools';
 import { parseFormTemplate, parseResponseTags } from '$lib/helpers/forms.js';
 import {
@@ -14,6 +14,7 @@ import {
   responseToCalendarDraft,
   calendarDraftToFormData
 } from '$lib/helpers/forms/calendar-output.js';
+import { convertFormDataToEvent } from '$lib/helpers/calendar.js';
 
 const LEVEL_C = 'https://w3id.org/kim/educationalLevel/level_C';
 const LEVEL_A = 'https://w3id.org/kim/educationalLevel/level_A';
@@ -287,6 +288,21 @@ describe('responseToCalendarDraft — dates and times', () => {
     ]);
   });
 
+  it('writes no D for the day an end at midnight UTC only touches', () => {
+    const withTz = template([...BASE, ['tz', 'text', 'cal:tzid']]);
+    const draft = responseToCalendarDraft(withTz, {
+      title: 'Late',
+      allday: 'false',
+      start: '2026-11-20T22:00',
+      end: '2026-11-21T00:00',
+      tz: 'UTC'
+    });
+    const start = Date.UTC(2026, 10, 20, 22) / 1000;
+    expect(draft.tags.filter((t) => t[0] === 'D')).toEqual([
+      ['D', String(Math.floor(start / 86400))]
+    ]);
+  });
+
   it('rejects an unknown time zone', () => {
     const withTz = template([...BASE, ['tz', 'text', 'cal:tzid']]);
     expect(() =>
@@ -536,17 +552,67 @@ describe('calendarDraftToFormData — prefill for CalendarEventModal', () => {
     expect(form.endDate).toBe('2026-12-03');
   });
 
-  it('maps a timed draft to local wall-clock fields that convert back to the same instant', () => {
+  it("maps a timed draft to wall-clock fields in the draft's zone", () => {
     const form = calendarDraftToFormData({ kind: 31923, content: '', tags: WORKED_EVENT_TAGS });
     expect(form.isAllDay).toBe(false);
     expect(form.eventType).toBe('time');
-    expect(form.startTimezone).toBe('Europe/Berlin');
-    expect(form.endTimezone).toBe('Europe/Berlin');
-    expect(new Date(`${form.startDate}T${form.startTime}`).getTime() / 1000).toBe(1795179600);
-    expect(new Date(`${form.endDate}T${form.endTime}`).getTime() / 1000).toBe(1795186800);
+    expect(form).toMatchObject({
+      startDate: '2026-11-20',
+      startTime: '14:00',
+      endDate: '2026-11-20',
+      endTime: '16:00',
+      startTimezone: 'Europe/Berlin',
+      endTimezone: 'Europe/Berlin'
+    });
     expect(form.participants).toEqual([{ name: 'Jane Doe', role: 'speaker' }]);
     expect(form.attributes?.educationalLevels).toEqual([
       { id: LEVEL_C, labels: { de: 'Fortbildung', en: 'Advanced training' } }
     ]);
+  });
+
+  describe('round trip through the edit form, whatever the reviewer zone', () => {
+    // Node re-reads process.env.TZ per date operation (see upcoming-date-parts).
+    const ORIGINAL_TZ = process.env.TZ;
+    afterEach(() => {
+      if (ORIGINAL_TZ === undefined) delete process.env.TZ;
+      else process.env.TZ = ORIGINAL_TZ;
+    });
+
+    for (const tz of ['Europe/Berlin', 'America/New_York', 'Europe/London', 'Asia/Tokyo']) {
+      it(`keeps the draft's instants for a reviewer in ${tz}`, () => {
+        process.env.TZ = tz;
+        const form = calendarDraftToFormData({ kind: 31923, content: '', tags: WORKED_EVENT_TAGS });
+        expect(form.startTime).toBe('14:00');
+        const event = convertFormDataToEvent(form, '');
+        expect(event.start).toBe(1795179600);
+        expect(event.end).toBe(1795186800);
+      });
+    }
+
+    it('reads the end in start_tzid when the draft has no end_tzid', () => {
+      process.env.TZ = 'Europe/Berlin';
+      const start = Date.UTC(2026, 10, 21, 4) / 1000; // 23:00 New York, 05:00 Berlin
+      const end = Date.UTC(2026, 10, 21, 6, 30) / 1000;
+      const form = calendarDraftToFormData({
+        kind: 31923,
+        content: '',
+        tags: [
+          ['title', 'NY'],
+          ['start', String(start)],
+          ['end', String(end)],
+          ['start_tzid', 'America/New_York']
+        ]
+      });
+      expect(form).toMatchObject({
+        startDate: '2026-11-20',
+        startTime: '23:00',
+        endDate: '2026-11-21',
+        endTime: '01:30',
+        endTimezone: 'America/New_York'
+      });
+      const event = convertFormDataToEvent(form, '');
+      expect(event.start).toBe(start);
+      expect(event.end).toBe(end);
+    });
   });
 });

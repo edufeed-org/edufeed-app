@@ -18,6 +18,7 @@
  */
 import { nip19 } from 'nostr-tools';
 import { parseFormTemplate } from './format.js';
+import { zonedWallClock } from '../calendar.js';
 import {
   buildCalendarEventAttributeTags,
   normalizePriceAmount,
@@ -278,7 +279,9 @@ function timedTags(answers, options) {
   // One time zone field serves both ends.
   if (end !== null) tags.push(['end_tzid', tzid]);
 
-  const lastDay = Math.floor((end ?? start) / SECONDS_PER_DAY);
+  // NIP-52 end is exclusive: an end at 00:00 UTC does not cover that day.
+  const lastDay =
+    end === null ? Math.floor(start / SECONDS_PER_DAY) : Math.floor((end - 1) / SECONDS_PER_DAY);
   for (let day = Math.floor(start / SECONDS_PER_DAY); day <= lastDay; day++) {
     tags.push(['D', String(day)]);
   }
@@ -485,28 +488,13 @@ function isTimeZone(tzid) {
   }
 }
 
-/** @param {number} n */
-const pad = (n) => String(n).padStart(2, '0');
-
-/**
- * Local (browser) date and time strings for unix seconds — the same reading
- * CalendarEventModal's edit mode uses, so converting back with
- * `new Date(`${date}T${time}`)` gives the same instant.
- * @param {number} seconds
- */
-function localParts(seconds) {
-  const d = new Date(seconds * 1000);
-  return {
-    date: `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`,
-    time: `${pad(d.getHours())}:${pad(d.getMinutes())}`
-  };
-}
-
 /**
  * CalendarEventModal form state for a calendar draft, for the create-from-
  * response flow. The all-day end shows the inclusive last day the form works
  * with (NIP-52 end − 1 day, or the start day without an end); timed fields
- * are local wall-clock values that convert back to the draft's instants.
+ * are wall-clock values in the draft's zones (start in start_tzid, end in
+ * end_tzid or else start_tzid), the zones the edit form reads them back in,
+ * so the reviewer's own zone never shifts the draft's instants.
  *
  * @param {CalendarDraft} draft
  * @param {{ fallbackTimezone?: string }} [options]
@@ -521,6 +509,8 @@ export function calendarDraftToFormData(draft, options = {}) {
 
   const isAllDay = draft?.kind === KIND_ALL_DAY;
   const fallbackTz = options.fallbackTimezone || DEFAULT_CALENDAR_TZID;
+  const startTimezone = first('start_tzid') || fallbackTz;
+  const endTimezone = first('end_tzid') || startTimezone;
 
   let startDate = '';
   let startTime = '09:00';
@@ -535,11 +525,11 @@ export function calendarDraftToFormData(draft, options = {}) {
   } else {
     const start = Number(first('start'));
     if (Number.isFinite(start) && start > 0) {
-      ({ date: startDate, time: startTime } = localParts(start));
+      ({ date: startDate, time: startTime } = zonedWallClock(start, startTimezone));
     }
     const end = Number(first('end'));
     if (first('end') && Number.isFinite(end) && end > 0) {
-      ({ date: endDate, time: endTime } = localParts(end));
+      ({ date: endDate, time: endTime } = zonedWallClock(end, endTimezone));
     }
   }
 
@@ -573,8 +563,8 @@ export function calendarDraftToFormData(draft, options = {}) {
     startTime,
     endDate,
     endTime,
-    startTimezone: first('start_tzid') || fallbackTz,
-    endTimezone: first('end_tzid') || first('start_tzid') || fallbackTz,
+    startTimezone,
+    endTimezone,
     location: first('location'),
     isAllDay,
     eventType: isAllDay ? 'date' : 'time',
