@@ -76,7 +76,35 @@ describe('parseChannelEvents', () => {
     expect(events[0].title).toBe('Standup v2');
   });
 
-  it('drops events missing a title or start', () => {
+  it('falls back to the deprecated `name` tag when `title` is missing', () => {
+    const events = parseChannelEvents([
+      timeEvent({
+        tags: [
+          ['d', 'standup'],
+          ['name', 'Legacy Standup'],
+          ['start', '1800000000']
+        ]
+      })
+    ]);
+    expect(events).toHaveLength(1);
+    expect(events[0].title).toBe('Legacy Standup');
+  });
+
+  it('prefers `title` over `name` when both are present', () => {
+    const events = parseChannelEvents([
+      timeEvent({
+        tags: [
+          ['d', 'standup'],
+          ['title', 'Current Title'],
+          ['name', 'Old Name'],
+          ['start', '1800000000']
+        ]
+      })
+    ]);
+    expect(events[0].title).toBe('Current Title');
+  });
+
+  it('drops events missing a title, name, or start', () => {
     expect(
       parseChannelEvents([
         timeEvent({

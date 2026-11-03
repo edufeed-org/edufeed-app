@@ -73,7 +73,8 @@ export function parseChannelEvents(rumors) {
   /** @type {ChannelCalendarEvent[]} */
   const events = [];
   for (const rumor of newest.values()) {
-    const title = tagValue(rumor, 'title');
+    // NIP-52: `name` is deprecated in favor of `title`, use only as fallback.
+    const title = tagValue(rumor, 'title') || tagValue(rumor, 'name');
     const start = tagValue(rumor, 'start');
     if (!title || !start) continue;
     events.push({

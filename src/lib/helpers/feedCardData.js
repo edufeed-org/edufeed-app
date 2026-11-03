@@ -79,7 +79,8 @@ export function getFeedCardData(event) {
     }
     case 31922:
     case 31923: {
-      const title = getTag('title') || 'Untitled Event';
+      // NIP-52: `name` is deprecated in favor of `title`, use only as fallback.
+      const title = getTag('title') || getTag('name') || 'Untitled Event';
       const startStr = getTag('start');
       return { title, subtitle: startStr, typeKey: 'calendar', tags, location: getTag('location') };
     }

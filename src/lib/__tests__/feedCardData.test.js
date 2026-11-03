@@ -255,6 +255,31 @@ describe('getFeedCardData', () => {
       };
       expect(getFeedCardData(event).typeKey).toBe('calendar');
     });
+
+    it('falls back to the deprecated `name` tag when `title` is missing', () => {
+      const event = {
+        kind: 31923,
+        content: '',
+        tags: [
+          ['name', 'Legacy Meetup'],
+          ['start', '1700000000']
+        ]
+      };
+      expect(getFeedCardData(event).title).toBe('Legacy Meetup');
+    });
+
+    it('prefers `title` over `name` when both are present', () => {
+      const event = {
+        kind: 31922,
+        content: '',
+        tags: [
+          ['title', 'Current Title'],
+          ['name', 'Old Name'],
+          ['start', '2024-01-01']
+        ]
+      };
+      expect(getFeedCardData(event).title).toBe('Current Title');
+    });
   });
 
   describe('kind 30142 (learning resource)', () => {
