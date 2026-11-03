@@ -26,6 +26,11 @@ vi.mock('$app/stores', async () => {
 vi.mock('$lib/stores/accounts.svelte', () => ({
   useActiveUser: () => () => holders.user
 }));
+// useIsDesktop() keeps one MediaQuery for the whole app; this test flips the
+// viewport between renders, so it answers from the holder instead.
+vi.mock('$lib/stores/viewport.svelte.js', () => ({
+  useIsDesktop: () => () => holders.desktop
+}));
 vi.mock('$lib/stores/config.svelte.js', () => ({
   runtimeConfig: { appName: 'Edufeed', appLogo: '' }
 }));
