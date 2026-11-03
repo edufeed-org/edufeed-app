@@ -6,8 +6,9 @@
  * covers, not just its start day.
  *
  * End-bound conventions:
- * - kind 31922 (date-based): the app's own writer stores the user's chosen
- *   end date as-is (inclusive), so the end day is included.
+ * - kind 31922 (date-based): a CalendarEvent's end is the midnight of the
+ *   last day (the exclusive NIP-52 end tag minus one day), so the end day
+ *   is included.
  * - kind 31923 (time-based): NIP-52 end timestamps are exclusive, so an
  *   event ending exactly at midnight does not bleed into the next day.
  *

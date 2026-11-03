@@ -378,8 +378,9 @@
       imageLicenseEvent: null,
       startDate: startDay,
       startTime: slot?.startTime ?? '09:00',
-      // A new event ends the day it starts (GitHub #9). All-day ends are
-      // stored inclusively, so for kind 31922 this is a one-day event.
+      // A new event ends the day it starts (GitHub #9). The form's all-day
+      // end is the inclusive last day, so for kind 31922 this is a one-day
+      // event (written without an end tag, see allDayEndTagValue).
       endDate: slot?.endDate ?? startDay,
       endTime: slot?.endTime ?? '10:00',
       startTimezone: getCurrentTimezone(),
@@ -437,7 +438,13 @@
       imageLicenseEvent: null,
       startDate: startDay,
       startTime: startDate.toTimeString().slice(0, 5),
-      endDate: endDate ? formDateFromTimestamp(existingEvent.end, existingEvent.kind) : '',
+      // A one-day all-day event has no NIP-52 end; the form shows its
+      // (inclusive) last day, the start day.
+      endDate: endDate
+        ? formDateFromTimestamp(existingEvent.end, existingEvent.kind)
+        : isAllDay
+          ? startDay
+          : '',
       endTime: endDate ? endDate.toTimeString().slice(0, 5) : '10:00',
       startTimezone: existingEvent.startTimezone || getCurrentTimezone(),
       endTimezone: existingEvent.endTimezone || getCurrentTimezone(),
@@ -454,8 +461,9 @@
         parseCalendarEventAttributes(existingRawEvent?.tags)
     };
     // An existing event's stored end is a choice: it stays put and only
-    // follows when the start is moved past it.
-    endDateEdited = true;
+    // follows when the start is moved past it. A one-day all-day event has
+    // none, so its end follows the start like a new event's.
+    endDateEdited = Boolean(endDate) || !isAllDay;
     lastValidStart = startDay;
     // Only a stored end is a choice; without one the end time is a default.
     endTimeEdited = Boolean(endDate);

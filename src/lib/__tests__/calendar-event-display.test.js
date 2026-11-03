@@ -5,8 +5,8 @@
  *
  * NIP-52 rules under test:
  * - kind 31922 (date-based / all-day): start/end are ISO "YYYY-MM-DD" dates.
- *   NO time may ever be displayed — not even 00:00. The app's own writer
- *   stores the end date inclusively.
+ *   NO time may ever be displayed — not even 00:00. The `end` date is
+ *   exclusive (NIP-52); the app's CalendarEvent `end` is the last day.
  * - kind 31923 (time-based): start/end are unix timestamp strings; times are
  *   displayed.
  * - A missing `end` tag means the event has an open end and ends on the same
@@ -144,14 +144,14 @@ describe('getIcsEventTiming — ICS export bounds', () => {
   const allDay = (tags) => ({ kind: 31922, tags });
   const timed = (tags) => ({ kind: 31923, tags });
 
-  it('parses a 31922 ISO end date (inclusive) into an exclusive DTEND day', () => {
+  it('uses a 31922 ISO end date (exclusive per NIP-52) as the DTEND day', () => {
     const t = getIcsEventTiming(
       allDay([
         ['start', '2026-01-05'],
         ['end', '2026-01-07']
       ])
     );
-    expect(t).toEqual({ isAllDay: true, start: JAN_5, end: JAN_5 + 3 * DAY });
+    expect(t).toEqual({ isAllDay: true, start: JAN_5, end: JAN_5 + 2 * DAY });
   });
 
   it('31922 without end spans exactly one day', () => {

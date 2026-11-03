@@ -1,6 +1,6 @@
 import { getCalendarEventTitle, getCalendarEventImage } from 'applesauce-common/helpers';
 import { parseCalendarTimestamp, dedupeCalendarTwins } from '$lib/helpers/calendar.js';
-import { withoutChannelMeetings } from '$lib/helpers/calendar-timing.js';
+import { withoutChannelMeetings, calendarEventEnd } from '$lib/helpers/calendar-timing.js';
 import { validateCalendarEvent } from '$lib/helpers/eventValidation.js';
 import { uniqueBy } from '$lib/helpers/unique.js';
 import { parseCalendarEventAttributes } from '$lib/helpers/calendar-attributes.js';
@@ -52,7 +52,8 @@ export function getCalendarEventMetadata(event) {
   const endValue = getTagValue('end');
 
   const start = parseCalendarTimestamp(startValue, event.kind);
-  const end = parseCalendarTimestamp(endValue, event.kind);
+  // 31922: the exclusive NIP-52 end becomes the midnight of the last day.
+  const end = calendarEventEnd(endValue, start, event.kind);
 
   // Parse participants from p tags according to NIP-52
   // Format: ["p", "<pubkey>", "<optional relay>", "<optional role>"]

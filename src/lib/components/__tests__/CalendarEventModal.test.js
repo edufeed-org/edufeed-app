@@ -261,6 +261,33 @@ describe('CalendarEventModal — normal calendar event (regression)', () => {
     expect(h.updateEvent.mock.calls[0][0].hashtags).toEqual(['oer', 'nostr']);
   });
 
+  // NIP-52: a one-day all-day event has no `end` tag. The form still shows
+  // its (inclusive) last day — the start day — and, since no end was
+  // stored, lets it follow the start like a new event's end.
+  it('shows the start day as the end of a one-day all-day event being edited', async () => {
+    const start = Math.floor(new Date('2026-11-02T00:00:00Z').getTime() / 1000);
+    h.modalStore.modalProps = {
+      communityPubkey: 'comm',
+      mode: 'edit',
+      existingRawEvent: { id: 'e'.repeat(64), kind: 31922, pubkey: ME, tags: [['d', 'x']] },
+      existingEvent: {
+        kind: 31922,
+        title: 'Fortbildung',
+        start,
+        end: 0,
+        hashtags: [],
+        references: [],
+        participants: []
+      }
+    };
+    const r = render(CalendarEventModal);
+    await tick();
+    expect(r.container.querySelector('#endDate').value).toBe('2026-11-02');
+    await setInput(r.container, '#startDate', '2026-11-04');
+    await tick();
+    expect(r.container.querySelector('#endDate').value).toBe('2026-11-04');
+  });
+
   // The default day is the LOCAL date: east of UTC just after midnight,
   // toISOString() still names yesterday (M2 review).
   // (The worker's zone cannot be switched at runtime, so the instant is
@@ -273,8 +300,8 @@ describe('CalendarEventModal — normal calendar event (regression)', () => {
     expect(r.container.querySelector('#startDate').value).toBe(localIso(day));
   });
 
-  // GitHub #9: a new event ends the day it starts (all-day ends are stored
-  // inclusively, so this is a one-day event there too).
+  // GitHub #9: a new event ends the day it starts (the form's all-day end
+  // is the inclusive last day, so this is a one-day event there too).
   it('defaults the end date to the start date', async () => {
     const day = new Date('2026-10-05T10:00:00Z');
     h.modalStore.modalProps = { ...h.modalStore.modalProps, selectedDate: day };
