@@ -9,7 +9,7 @@
   import { resolve as _resolve } from '$app/paths';
   /** @type {(path: string) => string} */
   const resolve = /** @type {any} */ (_resolve);
-  import { formatCalendarDate } from '../../helpers/calendar.js';
+  import { formatCalendarDate, formatZonedDateTime } from '../../helpers/calendar.js';
   import { modalStore } from '../../stores/modal.svelte.js';
   import { isChannelMeeting } from '$lib/helpers/calendar-timing.js';
   import { manager } from '$lib/stores/accounts.svelte';
@@ -104,6 +104,13 @@
   // Format event data for display
   let startDate = $derived(event ? new Date(event.start * 1000) : null);
   let endDate = $derived(event && event.end ? new Date(event.end * 1000) : null);
+  // Times in the event's own zone (NIP-52 start_tzid; end_tzid defaults to it).
+  let startZoned = $derived(
+    startDate ? formatZonedDateTime(startDate, event?.startTimezone) : null
+  );
+  let endZoned = $derived(
+    endDate ? formatZonedDateTime(endDate, event?.endTimezone || event?.startTimezone) : null
+  );
   let isAllDay = $derived(event ? event.kind === 31922 : false);
   let isMultiDay = $derived(
     event && endDate && startDate ? startDate.toDateString() !== endDate.toDateString() : false
@@ -375,29 +382,32 @@
             </div>
           {:else}
             <div class="space-y-2">
-              {#if startDate}
+              {#if startZoned}
                 <div class="flex items-center gap-2">
                   <ClockIcon class_="w-5 h-5 text-primary" />
                   <span class="font-medium text-base-content">{m.event_details_start()}</span>
-                  <span class="text-base-content/80">
-                    {formatCalendarDate(startDate, 'long')} at {formatCalendarDate(
-                      startDate,
-                      'time'
-                    )}
-                    {#if event.startTimezone}
-                      <span class="text-xs text-base-content/60">({event.startTimezone})</span>
+                  <span class="text-base-content/80" data-testid="event-start-time">
+                    {startZoned.date} at {startZoned.time}
+                    {#if startZoned.zone}
+                      <span class="text-xs text-base-content/60">{startZoned.zone}</span>
+                    {/if}
+                    {#if startZoned.local}
+                      <span class="text-xs text-base-content/60">({startZoned.local.label})</span>
                     {/if}
                   </span>
                 </div>
               {/if}
-              {#if endDate}
+              {#if endZoned}
                 <div class="flex items-center gap-2">
                   <ClockIcon class_="w-5 h-5 text-secondary" />
                   <span class="font-medium text-base-content">{m.event_details_end()}</span>
-                  <span class="text-base-content/80">
-                    {formatCalendarDate(endDate, 'long')} at {formatCalendarDate(endDate, 'time')}
-                    {#if event.endTimezone}
-                      <span class="text-xs text-base-content/60">({event.endTimezone})</span>
+                  <span class="text-base-content/80" data-testid="event-end-time">
+                    {endZoned.date} at {endZoned.time}
+                    {#if endZoned.zone}
+                      <span class="text-xs text-base-content/60">{endZoned.zone}</span>
+                    {/if}
+                    {#if endZoned.local}
+                      <span class="text-xs text-base-content/60">({endZoned.local.label})</span>
                     {/if}
                   </span>
                 </div>
