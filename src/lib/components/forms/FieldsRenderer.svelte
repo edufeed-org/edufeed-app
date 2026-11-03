@@ -74,6 +74,7 @@
           value={values[field.id] ?? ''}
           error={errors[field.id] ?? null}
           {readonly}
+          {values}
           onchange={(/** @type {any} */ v) => onchange(field.id, v)}
           onprefill={onprefill ? (/** @type {any} */ p) => onprefill(field.id, p) : undefined}
         />

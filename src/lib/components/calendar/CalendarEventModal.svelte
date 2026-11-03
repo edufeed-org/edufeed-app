@@ -45,6 +45,7 @@
   import { formatDateParam } from '$lib/helpers/urlParams.js';
   import { followStartDate, followStartTime } from '$lib/helpers/event-form-dates.js';
   import { formDateFromTimestamp, isChannelMeeting } from '$lib/helpers/calendar-timing.js';
+  import { calendarDraftToFormData } from '$lib/helpers/forms/calendar-output.js';
 
   /**
    * @typedef {import('../../types/calendar.js').EventFormData} EventFormData
@@ -69,6 +70,14 @@
   );
   let existingRawEvent = $derived(
     /** @type {any} */ (/** @type {any} */ (modalStore.modalProps)?.existingRawEvent) || null
+  );
+  // Create mode prefilled from an unsigned calendar draft { kind, content,
+  // tags } — "Als Termin übernehmen" on a calendar form response
+  // (responseToCalendarDraft). Still a NEW event: fresh d-tag, createEvent.
+  let prefillDraft = $derived(
+    /** @type {import('$lib/helpers/forms/calendar-output.js').CalendarDraft | null} */ (
+      /** @type {any} */ (modalStore.modalProps)?.prefillDraft
+    ) || null
   );
   // "Termin planen" / "Bearbeiten" in a NIP-29 channel (scheduled meetings):
   // the opener passes { pointer: {id, relay}, channelName, channelUrl,
@@ -310,6 +319,9 @@
               .filter((/** @type {string[]} */ t) => t[0] === 'h' && t[1])
               .map((/** @type {string[]} */ t) => t[1]);
         allowGuests = isGroupMeeting && !!groupMeeting?.guestPass;
+      } else if (prefillDraft && !isGroupMeeting) {
+        initializeFormFromDraft(prefillDraft);
+        selectedCommunityIds = [];
       } else {
         initializeForm();
         selectedCommunityIds = [];
@@ -399,6 +411,27 @@
     lastValidStart = startDay;
     durationFromTime = slot?.startTime ?? '09:00';
 
+    validationErrors = [];
+    isSubmitting = false;
+    submitError = '';
+    allowGuests = false;
+  }
+
+  /**
+   * Initialize a NEW event from a calendar draft (a form response composed by
+   * responseToCalendarDraft). The draft's end is a choice like a stored one.
+   * @param {import('$lib/helpers/forms/calendar-output.js').CalendarDraft} draft
+   */
+  function initializeFormFromDraft(draft) {
+    const next = calendarDraftToFormData($state.snapshot(draft), {
+      fallbackTimezone: getCurrentTimezone()
+    });
+    const hasEnd = (draft.tags || []).some((t) => t[0] === 'end' && t[1]);
+    formData = next;
+    endDateEdited = hasEnd;
+    lastValidStart = next.startDate;
+    endTimeEdited = hasEnd;
+    durationFromTime = next.startTime;
     validationErrors = [];
     isSubmitting = false;
     submitError = '';

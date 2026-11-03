@@ -1,0 +1,27 @@
+{
+  "kind": 31922,
+  "content": "Zwei Tage **Barcamp**.\n\nMit Abendprogramm.",
+  "tags": [
+    ["title", "OER-Camp"],
+    ["start", "2026-12-03"],
+    ["end", "2026-12-05"],
+    ["image", "https://example.org/camp.png"],
+    ["location", "Bibliothek, Raum 2"],
+    ["t", "oer"],
+    ["t", "barcamp"],
+    ["r", "https://example.org/camp"],
+    ["r", "https://example.org/anmeldung"],
+    ["p", "28d7ca9cba0e40f59843cd1cd507c1a912919769f4495a0f38df2b0ab0238bc4", "", "speaker"],
+    ["participant", "Jane Doe", "", "speaker"],
+    ["participant", "Max Muster", "", "organizer"],
+    ["registrationRequired", "true"],
+    ["price", "12.50", "EUR"],
+    ["eventAttendanceMode", "https://schema.org/OfflineEventAttendanceMode"],
+    ["educationalLevel:id", "https://w3id.org/kim/educationalLevel/level_C"],
+    ["educationalLevel:prefLabel:de", "Fortbildung"],
+    ["educationalLevel:prefLabel:en", "Advanced training"],
+    ["educationalLevel:type", "Concept"],
+    ["educationalLevel:id", "https://w3id.org/kim/educationalLevel/level_A"],
+    ["educationalLevel:type", "Concept"]
+  ]
+}

@@ -27,7 +27,7 @@ export const CHOICE_TYPES = ['select', 'checkbox', 'radio'];
  *
  * @typedef {Object} FormField
  * @property {string} id
- * @property {string} type - rich type: text|textarea|text-array|number|email|url|select|checkbox|radio|date
+ * @property {string} type - rich type: text|textarea|text-array|number|email|url|select|checkbox|radio|date|datetime
  * @property {string} label
  * @property {string} [defaultValue]
  * @property {Record<string, any>} [options] - { required?, placeholder?, min?, max?, multiple?, allowCustom?, customLabel?, customButtonLabel?, customPlaceholder?, displayIf?, options?: FormFieldOption[] }
@@ -50,6 +50,7 @@ export const CHOICE_TYPES = ['select', 'checkbox', 'radio'];
  * @property {string} confirmationMessage
  * @property {boolean} autoResponse
  * @property {FormSection[]} sections
+ * @property {string} output - settings.output: which event the answers compose ('nip52-calendar'); '' for AMB output and plain forms
  * @property {{ address: string, relay: string }} [forkOf] - parent form this one was forked from
  */
 
@@ -255,6 +256,7 @@ export function parseFormTemplate(event) {
       ),
       (s) => s.id
     ),
+    output: typeof settings.output === 'string' ? settings.output : '',
     forkOf: forkTag ? { address: forkTag[1], relay: forkTag[2] || '' } : undefined
   };
 }
@@ -305,6 +307,7 @@ function parseLegacyFormTemplate(event) {
     confirmationMessage: tags.find((t) => t[0] === 'confirmation_message')?.[1] || '',
     autoResponse: tags.find((t) => t[0] === 'auto_response')?.[1] === 'true',
     sections: [],
+    output: '',
     forkOf: forkTag ? { address: forkTag[1], relay: forkTag[2] || '' } : undefined
   };
 }

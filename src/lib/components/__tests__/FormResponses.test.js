@@ -94,7 +94,8 @@ vi.mock('../shared/ProfileAvatar.svelte', () => ({ default: function Stub() {} }
 
 vi.mock('$lib/paraglide/messages', () => ({
   form_responses_empty: () => 'No responses yet.',
-  form_responses_decrypt_failed: () => 'Could not decrypt this response.'
+  form_responses_decrypt_failed: () => 'Could not decrypt this response.',
+  form_responses_anonymous: () => 'Anonymous'
 }));
 
 const { default: FormResponses } = await import('$lib/components/forms/FormResponses.svelte');

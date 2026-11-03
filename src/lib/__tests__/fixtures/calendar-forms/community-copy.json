@@ -1,0 +1,126 @@
+{
+  "kind": 30168,
+  "id": "d074fc28a6c022739b4f2d3e400fd925ced9522a7cb73c82b1185f16552f7f1e",
+  "sig": "9dac6b6481d984e0d4cdb3f8c9ed18c06a9551046d6fe2a03ff230e3785f3eaab97595fcc66538787229c4bc6dd375598f9e3595c037d7def6f70baf3e69e74e",
+  "pubkey": "88413971b29d28b7ff487bc45a4bcdeb77b3b141c4949186dcdf36eab5e2d459",
+  "content": "",
+  "created_at": 1793704204,
+  "tags": [
+    ["d", "edufeed-calendar-event"],
+    ["name", "Veranstaltung vorschlagen"],
+    [
+      "settings",
+      "{\"output\":\"nip52-calendar\",\"confirmationMessage\":\"Danke! Wir prüfen den Vorschlag.\"}"
+    ],
+    ["field", "title", "text", "Titel", "[]", "{\"renderElement\":\"text\",\"required\":true}"],
+    ["field", "description", "text", "Beschreibung", "[]", "{\"renderElement\":\"textarea\"}"],
+    ["field", "allday", "text", "Ganztägig", "[]", "{\"renderElement\":\"checkbox\"}"],
+    [
+      "field",
+      "start",
+      "text",
+      "Beginn",
+      "[]",
+      "{\"renderElement\":\"datetime\",\"required\":true,\"allDayField\":\"allday\"}"
+    ],
+    [
+      "field",
+      "end",
+      "text",
+      "Ende",
+      "[]",
+      "{\"renderElement\":\"datetime\",\"allDayField\":\"allday\"}"
+    ],
+    [
+      "field",
+      "tzid",
+      "text",
+      "Zeitzone",
+      "[]",
+      "{\"renderElement\":\"text\",\"defaultValue\":\"Europe/Berlin\"}"
+    ],
+    ["field", "location", "text", "Ort", "[]", "{\"renderElement\":\"text\"}"],
+    [
+      "field",
+      "mode",
+      "option",
+      "Format",
+      "[[\"https://schema.org/OnlineEventAttendanceMode\",\"Online\"],[\"https://schema.org/OfflineEventAttendanceMode\",\"Präsenz\"],[\"https://schema.org/MixedEventAttendanceMode\",\"Hybrid\"]]",
+      "{\"renderElement\":\"radio\"}"
+    ],
+    ["field", "image", "text", "Bild", "[]", "{\"renderElement\":\"url\"}"],
+    ["field", "hashtags", "text", "Schlagwörter", "[]", "{\"renderElement\":\"text-array\"}"],
+    ["field", "links", "text", "Links", "[]", "{\"renderElement\":\"text-array\"}"],
+    [
+      "field",
+      "speakers",
+      "text",
+      "Vortragende",
+      "[]",
+      "{\"renderElement\":\"text-array\",\"participantRole\":\"speaker\"}"
+    ],
+    [
+      "field",
+      "organizers",
+      "text",
+      "Organisation",
+      "[]",
+      "{\"renderElement\":\"text-array\",\"participantRole\":\"organizer\"}"
+    ],
+    [
+      "field",
+      "registration",
+      "option",
+      "Anmeldung erforderlich",
+      "[[\"true\",\"Ja\"],[\"false\",\"Nein\"]]",
+      "{\"renderElement\":\"radio\"}"
+    ],
+    ["field", "price", "text", "Preis", "[]", "{\"renderElement\":\"number\"}"],
+    [
+      "field",
+      "currency",
+      "text",
+      "Währung",
+      "[]",
+      "{\"renderElement\":\"text\",\"defaultValue\":\"EUR\"}"
+    ],
+    [
+      "field",
+      "level",
+      "text",
+      "Bildungsstufe",
+      "[]",
+      "{\"renderElement\":\"select\",\"multiple\":true}"
+    ],
+    [
+      "field-vocab",
+      "level",
+      "a",
+      "39737:d2689e2f41dabfba953da26655a94ce2aa4e029c383ee921c6a4deafab99a612:educational-level",
+      "wss://relay.edufeed.org"
+    ],
+    ["field-output", "title", "cal:title"],
+    ["field-output", "description", "cal:content"],
+    ["field-output", "allday", "cal:allDay"],
+    ["field-output", "start", "cal:start"],
+    ["field-output", "end", "cal:end"],
+    ["field-output", "tzid", "cal:tzid"],
+    ["field-output", "location", "cal:location"],
+    ["field-output", "mode", "cal:eventAttendanceMode"],
+    ["field-output", "image", "cal:image"],
+    ["field-output", "hashtags", "cal:t"],
+    ["field-output", "links", "cal:r"],
+    ["field-output", "speakers", "cal:participant"],
+    ["field-output", "organizers", "cal:participant"],
+    ["field-output", "registration", "cal:registrationRequired"],
+    ["field-output", "price", "cal:price"],
+    ["field-output", "currency", "cal:currency"],
+    ["field-output", "level", "cal:educationalLevel"],
+    [
+      "a",
+      "30168:bdc21f93b1e2cb75608cecd7a0a00a779779d9367dc9798bd9f213f06c95bc48:edufeed-calendar-event",
+      "wss://relay.edufeed.org",
+      "forkOf"
+    ]
+  ]
+}
