@@ -9,6 +9,32 @@ import {
 } from '$lib/services/app-relay-service.svelte.js';
 
 /**
+ * NIP-52 splits one appointment across kind 31922 (all-day) and 31923
+ * (timed), replaceable per kind:pubkey:d — see calendarTwinKey in
+ * calendar-timing.js. The other kind for a given calendar kind.
+ */
+const CALENDAR_TWIN_KIND = { 31922: 31923, 31923: 31922 };
+
+/**
+ * Find the cross-kind twin of a calendar event already known to the local
+ * EventStore, if any. A publisher that flips an appointment's kind under a
+ * stable d-tag (e.g. an importer rewriting timed events as all-day ones)
+ * leaves both coordinates live; `dedupeCalendarTwins` only hides the losing
+ * one from lists, it does not delete it, so without this lookup that twin
+ * resurfaces the moment the visible one is deleted.
+ *
+ * @param {string} pubkey
+ * @param {number} kind
+ * @param {string} dTag
+ * @returns {import('nostr-tools').NostrEvent | undefined}
+ */
+function findCalendarTwin(pubkey, kind, dTag) {
+  const twinKind = CALENDAR_TWIN_KIND[/** @type {31922 | 31923} */ (kind)];
+  if (!twinKind) return undefined;
+  return eventStore.getReplaceable(twinKind, pubkey, dTag);
+}
+
+/**
  * Delete a calendar event using NIP-09 deletion
  * Thin wrapper around deleteEvent() with calendar-specific validation
  * @param {any} event - The calendar event to delete (can be raw event or processed)
@@ -22,7 +48,10 @@ export async function deleteCalendarEvent(event, activeUser) {
     return { success: false, error: 'Invalid calendar event: missing d-tag' };
   }
 
-  return deleteEvent(event, activeUser);
+  const twin =
+    event?.pubkey && event?.kind ? findCalendarTwin(event.pubkey, event.kind, dTag) : undefined;
+
+  return deleteEvent(event, activeUser, twin ? { extraEvents: [twin] } : {});
 }
 
 /**
@@ -30,9 +59,12 @@ export async function deleteCalendarEvent(event, activeUser) {
  * Automatically determines relay category from event kind
  * @param {any} event - The Nostr event to delete
  * @param {any} activeUser - The active user with signer
- * @param {{additionalRelays?: string[]}} [opts] - Extra relays the request must
- *   reach (e.g. a community's relays for a kind with no app category and no
- *   seen-relay provenance yet, such as a freshly published moderation label)
+ * @param {{additionalRelays?: string[], extraEvents?: import('nostr-tools').NostrEvent[]}} [opts]
+ *   - additionalRelays: extra relays the request must reach (e.g. a
+ *   community's relays for a kind with no app category and no seen-relay
+ *   provenance yet, such as a freshly published moderation label).
+ *   - extraEvents: other events to fold into the SAME NIP-09 deletion (e.g. a
+ *   calendar event's cross-kind twin) so one kind 5 covers every coordinate.
  * @returns {Promise<{success: boolean, error?: string}>}
  */
 export async function deleteEvent(event, activeUser, opts = {}) {
@@ -60,8 +92,12 @@ export async function deleteEvent(event, activeUser, opts = {}) {
 
     // Use factory.delete() - properly constructs NIP-09 deletion events
     const eventToDelete = event.originalEvent || event;
+    const extraEvents = opts.extraEvents ?? [];
 
-    const deleteTemplate = await factory.delete([eventToDelete]);
+    // Folding extraEvents into the SAME factory.delete() call produces one
+    // kind 5 with e/a/k tags for every event, instead of one deletion per
+    // coordinate — fewer signatures, and relays see the whole intent at once.
+    const deleteTemplate = await factory.delete([eventToDelete, ...extraEvents]);
     const signedDelete = await factory.sign(deleteTemplate);
 
     // OPTIMISTIC UI: filter the original out of the in-memory store immediately.
@@ -82,9 +118,11 @@ export async function deleteEvent(event, activeUser, opts = {}) {
     // community relay an event was h-tagged to — which the author's NIP-65 write
     // relays alone would miss.
     const seenRelays = getSeenRelays(eventToDelete);
+    const extraSeenRelays = extraEvents.flatMap((e) => Array.from(getSeenRelays(e) ?? []));
     const additionalRelays = [
       ...categoryRelays,
       ...(seenRelays ? Array.from(seenRelays) : []),
+      ...extraSeenRelays,
       ...(opts.additionalRelays ?? [])
     ];
 
