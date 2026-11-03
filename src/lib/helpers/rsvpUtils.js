@@ -2,7 +2,7 @@
  * RSVP Utilities
  * Shared helper functions for processing and transforming RSVP data
  */
-import { getTagValue } from 'applesauce-core/helpers';
+import { getRSVPStatus } from 'applesauce-common/helpers';
 
 /**
  * Transform raw RSVP events into grouped data structure
@@ -33,9 +33,12 @@ export function transformRsvps(rsvps, userPubkey = null) {
     }
   }
 
-  // Group deduplicated RSVPs by status
+  // Group deduplicated RSVPs by status. NIP-52 requires `status` to be one
+  // of accepted/declined/tentative; an RSVP with no status tag (or an
+  // invalid one) is skipped rather than defaulted to "accepted".
   for (const rsvp of rsvpMap.values()) {
-    const status = getTagValue(rsvp, 'status') || 'accepted';
+    const status = getRSVPStatus(rsvp);
+    if (!status) continue;
 
     // Check if this is the user's RSVP
     if (userPubkey && rsvp.pubkey === userPubkey) {

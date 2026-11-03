@@ -93,4 +93,30 @@ describe('InlineRsvp button readability', () => {
     expect(going.className).toContain('btn-success');
     expect(going.getAttribute('aria-pressed')).toBe('true');
   });
+
+  it('treats the user own RSVP with no status tag as no answer, not accepted', () => {
+    mockRsvps = [
+      {
+        id: 'rsvp1',
+        pubkey: mockUser.pubkey,
+        kind: 31925,
+        created_at: 1718452900,
+        tags: [['e', CALENDAR_EVENT.id]] // no `status` tag — malformed per NIP-52
+      }
+    ];
+
+    const { getByLabelText } = render(InlineRsvp, {
+      calendarEvent: CALENDAR_EVENT,
+      compact: true,
+      size: 'sm'
+    });
+
+    for (const label of STATUS_LABELS) {
+      const btn = getByLabelText(label);
+      expect(btn.getAttribute('aria-pressed'), label).toBe('false');
+      expect(btn.className, `${label} must not look selected`).not.toMatch(
+        /btn-(success|warning|error)/
+      );
+    }
+  });
 });
