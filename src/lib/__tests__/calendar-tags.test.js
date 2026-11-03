@@ -238,6 +238,38 @@ describe('buildCalendarEventTags', () => {
       expect(dTags).toHaveLength(1);
       expect(dTags[0][1]).toBe(Math.floor(1718452800 / 86400).toString());
     });
+
+    it('should not spill a D tag onto the next day for an exclusive midnight end', () => {
+      // 2024-06-15T22:00:00 UTC -> 2024-06-16T00:00:00 UTC (exclusive end,
+      // NIP-52): the event never touches the 16th, so only one D tag.
+      const formData = {
+        startDate: '2024-06-15',
+        startTime: '22:00',
+        endDate: '2024-06-16',
+        endTime: '00:00',
+        eventType: 'time',
+        title: 'Midnight End'
+      };
+      const startTs = Date.UTC(2024, 5, 15, 22, 0, 0) / 1000;
+      const endTs = Date.UTC(2024, 5, 16, 0, 0, 0) / 1000;
+
+      const eventData = {
+        kind: 31923,
+        title: 'Midnight End',
+        start: startTs,
+        end: endTs
+      };
+
+      const tags = buildCalendarEventTags(
+        /** @type {any} */ (formData),
+        /** @type {any} */ (eventData),
+        'test-d-tag'
+      );
+      const dTags = findTags(tags, 'D');
+
+      expect(dTags).toHaveLength(1);
+      expect(dTags[0][1]).toBe(Math.floor(startTs / 86400).toString());
+    });
   });
 
   describe('start/end format', () => {

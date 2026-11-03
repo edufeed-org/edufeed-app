@@ -51,8 +51,10 @@
   // Current timestamp for comparison
   let now = $derived(Date.now());
 
-  // Upcoming = still running or in the future. Events without an end tag
-  // have an open end and count until their start day is over (NIP-52).
+  // Upcoming = still running or in the future. An all-day (31922) event
+  // without an end tag has an open end and counts until its start day is
+  // over; a time-based (31923) event without an end tag ends instantaneously
+  // at its start (NIP-52) — see getEffectiveEventEnd.
   let upcomingEvents = $derived.by(() => {
     return filteredEvents.filter(
       (/** @type {CalendarEvent} */ event) => getEffectiveEventEnd(event) * 1000 >= now
