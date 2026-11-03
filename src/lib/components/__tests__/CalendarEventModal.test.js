@@ -4,7 +4,7 @@
  * "Termin planen" group-meeting mode (M2 of scheduled meetings).
  * @vitest-environment jsdom
  */
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, fireEvent } from '@testing-library/svelte';
 import { tick } from 'svelte';
 import { of } from 'rxjs';
@@ -137,6 +137,7 @@ vi.mock('$lib/helpers/educational/vocabResolver.js', () => ({
 }));
 
 import CalendarEventModal from '../calendar/CalendarEventModal.svelte';
+import { convertFormDataToEvent } from '$lib/helpers/calendar.js';
 
 const GROUP_MEETING = {
   pointer: { id: 'g1', relay: 'wss://groups.example/' },
@@ -315,6 +316,103 @@ describe('CalendarEventModal — normal calendar event (regression)', () => {
     expect(h.updateEvent).toHaveBeenCalledTimes(1);
     expect(h.updateEvent.mock.calls[0][0].startTimezone).toBe('America/New_York');
     expect(h.updateEvent.mock.calls[0][0].endTimezone).toBe('America/New_York');
+  });
+
+  // The form showed and parsed times in the editor's zone next to the
+  // event's start_tzid: a 10:00 New York event read 16:00 in Berlin.
+  describe("times in the event's start_tzid", () => {
+    const ORIGINAL_TZ = process.env.TZ;
+    beforeEach(() => {
+      process.env.TZ = 'Europe/Berlin';
+    });
+    afterEach(() => {
+      if (ORIGINAL_TZ === undefined) delete process.env.TZ;
+      else process.env.TZ = ORIGINAL_TZ;
+    });
+
+    /** @param {number} start @param {number} end @param {string | undefined} zone */
+    async function openEdit(start, end, zone) {
+      h.modalStore.modalProps = {
+        communityPubkey: 'comm',
+        mode: 'edit',
+        existingRawEvent: { id: 'f'.repeat(64), kind: 31923, pubkey: ME, tags: [['d', 'y']] },
+        existingEvent: {
+          kind: 31923,
+          title: 'Webinar',
+          start,
+          end,
+          startTimezone: zone,
+          hashtags: [],
+          references: [],
+          participants: []
+        }
+      };
+      h.updateEvent.mockImplementation(async () => ({ id: 'ev4', kind: 31923, tags: [] }));
+      const r = render(CalendarEventModal);
+      await tick();
+      return r;
+    }
+
+    /** @param {ReturnType<typeof render>} r */
+    async function save(r) {
+      await fireEvent.submit(r.container.querySelector('form:not(.modal-backdrop)'));
+      await settle();
+      expect(h.updateEvent).toHaveBeenCalledTimes(1);
+      return convertFormDataToEvent(h.updateEvent.mock.calls[0][0], 'comm');
+    }
+
+    it('shows a New York 10:00 event as 10:00 in Berlin and a no-op edit keeps the timestamps', async () => {
+      expect(Intl.DateTimeFormat().resolvedOptions().timeZone).toBe('Europe/Berlin');
+      const start = Date.parse('2026-11-10T15:00:00Z') / 1000; // 10:00 EST
+      const r = await openEdit(start, start + 5400, 'America/New_York');
+      expect(r.container.querySelector('#startDate').value).toBe('2026-11-10');
+      expect(r.container.querySelector('#startTime').value).toBe('10:00');
+      expect(r.container.querySelector('#endTime').value).toBe('11:30');
+      const saved = await save(r);
+      expect(saved.start).toBe(start);
+      expect(saved.end).toBe(start + 5400);
+      expect(saved.startTimezone).toBe('America/New_York');
+    });
+
+    it("shows the event zone's day when it differs from the editor's", async () => {
+      const start = Date.parse('2026-11-11T04:30:00Z') / 1000; // 23:30 EST, 05:30 in Berlin
+      const r = await openEdit(start, start + 3600, 'America/New_York');
+      expect(r.container.querySelector('#startDate').value).toBe('2026-11-10');
+      expect(r.container.querySelector('#startTime').value).toBe('23:30');
+      expect(r.container.querySelector('#endDate').value).toBe('2026-11-11');
+      expect(r.container.querySelector('#endTime').value).toBe('00:30');
+      const saved = await save(r);
+      expect(saved.start).toBe(start);
+      expect(saved.end).toBe(start + 3600);
+    });
+
+    // US clocks went forward on 2026-03-08, Berlin's only on 2026-03-29.
+    it('keeps the timestamps of an event on the US DST change day', async () => {
+      const start = Date.parse('2026-03-08T14:00:00Z') / 1000; // 10:00 EDT, 15:00 CET
+      const r = await openEdit(start, start + 3600, 'America/New_York');
+      expect(r.container.querySelector('#startTime').value).toBe('10:00');
+      const saved = await save(r);
+      expect(saved.start).toBe(start);
+      expect(saved.end).toBe(start + 3600);
+    });
+
+    it('a changed start time is read in the event zone', async () => {
+      const start = Date.parse('2026-11-10T15:00:00Z') / 1000;
+      const r = await openEdit(start, start + 3600, 'America/New_York');
+      await setInput(r.container, '#startTime', '12:00');
+      await tick();
+      const saved = await save(r);
+      expect(saved.start).toBe(Date.parse('2026-11-10T17:00:00Z') / 1000);
+    });
+
+    it("falls back to the editor's zone for an invalid start_tzid", async () => {
+      const start = Date.parse('2026-11-10T15:00:00Z') / 1000;
+      const r = await openEdit(start, start + 3600, 'Mars/Olympus');
+      expect(r.container.querySelector('#startTime').value).toBe('16:00');
+      const saved = await save(r);
+      expect(saved.start).toBe(start);
+      expect(saved.end).toBe(start + 3600);
+    });
   });
 
   // The default day is the LOCAL date: east of UTC just after midnight,

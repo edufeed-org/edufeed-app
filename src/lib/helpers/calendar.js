@@ -368,6 +368,95 @@ export function isValidTimeZone(timeZone) {
   }
 }
 
+const pad2 = (/** @type {number} */ n) => String(n).padStart(2, '0');
+
+/**
+ * Wall-clock fields of an instant in `timeZone` (a valid zone), as the ms of
+ * the same fields read as UTC — the difference to `ms` is the zone offset.
+ * @param {number} ms
+ * @param {string} timeZone
+ */
+function wallClockAsUtcMs(ms, timeZone) {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone,
+    hourCycle: 'h23',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit'
+  }).formatToParts(new Date(ms));
+  const get = (/** @type {string} */ type) =>
+    Number(parts.find((p) => p.type === type)?.value ?? 0);
+  return Date.UTC(
+    get('year'),
+    get('month') - 1,
+    get('day'),
+    get('hour') % 24,
+    get('minute'),
+    get('second')
+  );
+}
+
+/**
+ * The `YYYY-MM-DD` day and `HH:MM` time a timed event's form shows for a
+ * stored instant: the wall-clock time in the event's zone (NIP-52
+ * start_tzid/end_tzid), or the editor's own zone when that is missing or
+ * invalid.
+ *
+ * @param {number} seconds - Unix timestamp
+ * @param {string | undefined | null} timeZone
+ * @returns {{ date: string, time: string }}
+ */
+export function zonedWallClock(seconds, timeZone) {
+  const ms = seconds * 1000;
+  const d = isValidTimeZone(timeZone)
+    ? new Date(wallClockAsUtcMs(ms, timeZone))
+    : new Date(Date.UTC(...localFields(new Date(ms))));
+  return {
+    date: d.toISOString().slice(0, 10),
+    time: `${pad2(d.getUTCHours())}:${pad2(d.getUTCMinutes())}`
+  };
+}
+
+/** @param {Date} d @returns {[number, number, number, number, number]} */
+function localFields(d) {
+  return [d.getFullYear(), d.getMonth(), d.getDate(), d.getHours(), d.getMinutes()];
+}
+
+/**
+ * Unix timestamp of a form's `YYYY-MM-DD` + `HH:MM` read as wall-clock time
+ * in `timeZone` (the editor's own zone when missing or invalid). Like a local
+ * `Date`, a time skipped by a DST change moves forward by the gap and a
+ * repeated time takes its first occurrence. NaN for an incomplete value.
+ *
+ * @param {string} date
+ * @param {string} time
+ * @param {string | undefined | null} timeZone
+ * @returns {number}
+ */
+export function wallClockToTimestamp(date, time, timeZone) {
+  if (!date || !time) return NaN;
+  if (!isValidTimeZone(timeZone)) {
+    const ms = new Date(`${date}T${time}`).getTime();
+    return Number.isFinite(ms) ? Math.floor(ms / 1000) : NaN;
+  }
+  const wall = Date.parse(`${date}T${time}Z`);
+  if (!Number.isFinite(wall)) return NaN;
+  // A zone changes its offset at most once within a day either side: try
+  // the offsets before and after, keep those that give back this wall clock.
+  const offsetAt = (/** @type {number} */ ms) => wallClockAsUtcMs(ms, timeZone) - ms;
+  const before = wall - offsetAt(wall - DAY_MS);
+  const after = wall - offsetAt(wall + DAY_MS);
+  const fits = [before, after].filter((ms) => wallClockAsUtcMs(ms, timeZone) === wall);
+  // Gap (no fit): the offset before the change pushes the time forward.
+  const ms = fits.length ? Math.min(...fits) : before;
+  return Math.floor(ms / 1000);
+}
+
+const DAY_MS = 86_400_000;
+
 /**
  * Date and time of a timed event's start or end, in the event's own zone
  * (NIP-52 start_tzid/end_tzid), so the printed time matches the zone label.
@@ -544,12 +633,20 @@ export function convertFormDataToEvent(formData, communityPubkey) {
   } else {
     // Time-based event (kind 31923)
     event.kind = 31923;
-    const startDateTime = new Date(`${formData.startDate}T${formData.startTime}`);
-    event.start = Math.floor(startDateTime.getTime() / 1000);
+    // The form shows wall-clock times in the event's zones (start_tzid /
+    // end_tzid), so read them back in those zones, not the editor's.
+    event.start = wallClockToTimestamp(
+      formData.startDate,
+      formData.startTime,
+      formData.startTimezone
+    );
 
     if (formData.endDate && formData.endTime) {
-      const endDateTime = new Date(`${formData.endDate}T${formData.endTime}`);
-      event.end = Math.floor(endDateTime.getTime() / 1000);
+      event.end = wallClockToTimestamp(
+        formData.endDate,
+        formData.endTime,
+        formData.endTimezone || formData.startTimezone
+      );
     }
 
     // Add timezone information
