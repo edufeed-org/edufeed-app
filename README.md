@@ -357,9 +357,9 @@ Optional quiet opt-in backed by a [metadata-cleaner](https://git.edufeed.org/edu
 - `GEOCODING_API_KEY`: **SECRET** - OpenCage API key (never expose to client)
 - `GEOCODING_CACHE_DURATION_DAYS`: Cache duration for geocoded results
 - `GEOCODING_MIN_ADDRESS_LENGTH`: Minimum address length for geocoding
-- `GEOCODING_MIN_CONFIDENCE_SCORE`: Minimum confidence score (0-10)
+- `GEOCODING_MIN_CONFIDENCE_SCORE`: Minimum OpenCage confidence (0-10) for street-level matches. Confidence measures the size of the match's bounding box, so city, county, state and country matches are exempt: they are shown zoomed out (states/countries without a pin)
 - `GEOCODING_REQUIRE_ADDRESS_COMPONENTS`: Require address components (true/false)
-- `GEOCODING_ACCEPTED_COMPONENT_TYPES`: Accepted component types (comma-separated)
+- `GEOCODING_ACCEPTED_COMPONENT_TYPES`: Accepted OpenCage component types (comma-separated); the type also sets the map zoom
 
 **Imprint/Legal Information**
 

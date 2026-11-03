@@ -363,7 +363,8 @@
 
           <!-- Map Preview — not for online events, whose location is a link or "online" (#8) -->
           {#if event.attributes?.attendanceMode !== 'online'}
-            <div class="mt-4">
+            <!-- empty:hidden — the map renders nothing when the location has no coordinates -->
+            <div class="mt-4 empty:hidden">
               <EventLocationMap location={event.location} geohash={event.geohash} compact={true} />
             </div>
           {/if}

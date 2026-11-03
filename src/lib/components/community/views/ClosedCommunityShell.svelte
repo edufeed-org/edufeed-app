@@ -16,6 +16,7 @@
   import { getCommunityAbout } from '$lib/helpers/communityRelays.js';
   import { nip19 } from 'nostr-tools';
   import ImageWithFallback from '../../shared/ImageWithFallback.svelte';
+  import ProfileAboutText from '../../shared/ProfileAboutText.svelte';
   import * as m from '$lib/paraglide/messages';
 
   // isInsider: owner ∪ roster ∪ Concord member (layout's zoneMember signal).
@@ -72,7 +73,11 @@
     </div>
 
     {#if description}
-      <p class="mb-4 text-sm text-base-content/70">{description}</p>
+      <ProfileAboutText
+        about={description}
+        tags={communityProfile?.tags}
+        class="mb-4 text-sm text-base-content/70"
+      />
     {/if}
 
     {#if isInsider}

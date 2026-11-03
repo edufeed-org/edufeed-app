@@ -26,8 +26,28 @@
    * render callers are notes, comments, DMs, previews and thread detail —
    * and ThreadDetailView deliberately gives markdown to kind 11 while
    * withholding it from kind 1 and 1111. Only chat bubbles pass it.
+   *
+   * `hashtagHref` (opt-in) turns hashtags into links: tag name → href. Without
+   * it a hashtag stays a coloured span, as in notes.
+   * @type {{
+   *   event: any,
+   *   class?: string,
+   *   depth?: number,
+   *   markdown?: boolean,
+   *   hashtagHref?: (tag: string) => string,
+   *   embeds?: boolean
+   * }}
    */
-  let { event, class: className = '', depth = 0, markdown = false } = $props();
+  let {
+    event,
+    class: className = '',
+    depth = 0,
+    markdown = false,
+    hashtagHref = undefined,
+    // false = links stay links: no image/video/file/gallery embeds and no
+    // event preview cards (profile About boxes).
+    embeds = true
+  } = $props();
 
   // The relay hint + author of every note this event quotes (q tags). The
   // inline previews read them: a `note1…` reference names neither, and the
@@ -171,6 +191,28 @@
       />
     {:else if node.type === 'mention'}
       <NostrIdentifier identifier={node.encoded} inline={true} {depth} />
+    {:else if node.type === 'link' && !embeds}
+      {#if previewableNostrId(node.href)}
+        <NostrIdentifier identifier={previewableNostrId(node.href)} inline={true} {depth} />
+      {:else}
+        <a
+          href={node.href}
+          target="_blank"
+          rel="noopener noreferrer"
+          class="link link-primary"
+          title={node.value}>{truncateMiddle(node.value)}</a
+        >
+      {/if}
+    {:else if node.type === 'gallery' && !embeds}
+      {#each node.links as link, j (j)}
+        {#if j > 0}<br />{/if}<a
+          href={link}
+          target="_blank"
+          rel="noopener noreferrer"
+          class="link link-primary"
+          title={link}>{truncateMiddle(link)}</a
+        >
+      {/each}
     {:else if node.type === 'link'}
       {#if isImageUrl(node.href)}
         {@const meta = imetaFor(node.href)}
@@ -239,7 +281,14 @@
         >
       {/if}
     {:else if node.type === 'hashtag'}
-      <span class="text-primary">#{node.name}</span>
+      {#if hashtagHref}
+        <!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- the caller resolves the href -->
+        <a href={hashtagHref(node.name)} class="link link-primary no-underline hover:underline"
+          >#{node.name}</a
+        >
+      {:else}
+        <span class="text-primary">#{node.name}</span>
+      {/if}
     {:else if node.type === 'gallery'}
       {@const start = imageStartIndex[i] ?? 0}
       {@const count = node.links.length}
