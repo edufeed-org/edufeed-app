@@ -18,6 +18,7 @@
     getSectionNameForContentType,
     VALID_CONTENT_VIEWS
   } from '$lib/helpers/contentTypes.js';
+  import { rememberCommunityView } from '$lib/stores/community-last-view.js';
   import { useCommunityAccess } from '$lib/stores/community-access.svelte.js';
   import { useCommunityMembership } from '$lib/stores/joined-communities-list.svelte.js';
   import { getCommunityWideFormRef } from '$lib/helpers/communityFormDefaults.js';
@@ -78,6 +79,13 @@
     // loaded and says no.
     selectedContentType =
       requested === 'channels' && communikeyLoaded && !communityOffersChannels ? 'home' : requested;
+
+    // Per-device "where was I": the phone Communities list resumes here.
+    // Only once the 10222 is loaded — the transient home fallback above is
+    // not a visit to home.
+    if (communikeyLoaded && data.pubkey) {
+      rememberCommunityView(data.pubkey, selectedContentType, Math.floor(Date.now() / 1000));
+    }
   });
 
   // Load community's kind:10222 event for content type configuration
