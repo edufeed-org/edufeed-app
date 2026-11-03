@@ -107,10 +107,16 @@ export function getCalendarEventMetadata(event) {
  */
 export function parseAddressReference(addressRef) {
   try {
-    const parts = addressRef.split(':');
-    if (parts.length !== 3) return null;
+    // The d-tag identifier may itself contain colons (e.g. a URL used as the
+    // d-tag), so only the first two colons delimit kind/pubkey/d-tag -
+    // everything after the second colon is the d-tag, verbatim.
+    const firstColon = addressRef.indexOf(':');
+    const secondColon = firstColon === -1 ? -1 : addressRef.indexOf(':', firstColon + 1);
+    if (firstColon === -1 || secondColon === -1) return null;
 
-    const [kindStr, pubkey, dTag] = parts;
+    const kindStr = addressRef.slice(0, firstColon);
+    const pubkey = addressRef.slice(firstColon + 1, secondColon);
+    const dTag = addressRef.slice(secondColon + 1);
     const kind = parseInt(kindStr, 10);
 
     if (isNaN(kind) || !pubkey || !dTag) return null;
