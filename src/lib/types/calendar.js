@@ -47,8 +47,8 @@
  * @property {number} [end] - Optional end time as Unix timestamp (seconds) - ALWAYS UNIX TIMESTAMP
  * @property {string} [startTimezone] - Start timezone (IANA format)
  * @property {string} [endTimezone] - End timezone (IANA format)
- * @property {string} [location] - First location value, for backward compatibility
- * @property {string[]} [locations] - All `location` tag values (NIP-52 allows repeats)
+ * @property {string} location - First `location` tag value
+ * @property {string[]} locations - All `location` tag values (NIP-52 allows repeats)
  * @property {CalendarEventParticipant[]} participants - Event participants
  * @property {string[]} hashtags - Event hashtags
  * @property {string[]} references - Referenced event IDs
