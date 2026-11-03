@@ -44,7 +44,7 @@ export function useProfileContent(getPubkey, getUserPubkey = () => null) {
     /** @type {import('rxjs').Subscription[]} */
     let loaderSubs = [];
     const loaderTimer = setTimeout(() => {
-      loaderSubs = startProfileFeedLoaders({ pubkeys: [pubkey], userPubkey, profileTabs: true });
+      loaderSubs = startProfileFeedLoaders({ pubkeys: [pubkey], userPubkey, profilePage: true });
     }, 100);
 
     return () => {

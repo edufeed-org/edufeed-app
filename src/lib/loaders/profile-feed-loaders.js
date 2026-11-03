@@ -7,7 +7,7 @@
  * using ProfileFeedView standalone. Models subscribe separately; this module
  * only fetches.
  */
-import { map, filter } from 'rxjs';
+import { map, filter, Subscription } from 'rxjs';
 import { OutboxModel } from 'applesauce-core/models';
 import { groupPubkeysByRelay } from 'applesauce-core/helpers';
 import { includeFallbackRelays } from 'applesauce-core/observable';
@@ -22,6 +22,7 @@ import {
   getAllLookupRelays,
   getCommunikeyRelays
 } from '$lib/helpers/relay-helper.js';
+import { getWriteRelays } from '$lib/services/relay-service.svelte.js';
 import { ALL_FEED_KINDS } from '$lib/helpers/profile-feed.js';
 import { participationFilter } from '$lib/helpers/educational/participation.js';
 
@@ -58,28 +59,58 @@ function startParticipationLoaders(pubkeys) {
 }
 
 /**
+ * One request per author to their own write relays, once those are known —
+ * one filter per kind group, each with its own limit: in a shared limit an
+ * author's many notes pushed older publications and articles out.
+ * The returned subscription also cancels requests still waiting on the
+ * relay list.
+ * @param {string[]} pubkeys
+ * @param {number[][]} kindGroups
+ * @returns {Subscription}
+ */
+function startWriteRelayLoaders(pubkeys, kindGroups) {
+  const group = new Subscription();
+  for (const pubkey of pubkeys) {
+    getWriteRelays(pubkey)
+      .then((relays) => {
+        if (group.closed || relays.length === 0) return;
+        const filters = kindGroups.map((kinds) => ({ kinds, authors: [pubkey], limit: 50 }));
+        group.add(fetchEvents(relays, filters).subscribe());
+      })
+      .catch((err) => console.warn('profile write relays:', err));
+  }
+  return group;
+}
+
+/**
  * Start all feed loaders for the given authors. Relay getters are resolved
  * at call time — callers inside $effect should invoke this via untrack (or a
  * timeout) to avoid registering relay-config dependencies.
  *
- * `profileTabs` (the profile page) also loads the profile-only tab kinds.
+ * `profilePage` (the profile page) also loads the profile-only tab kinds,
+ * and asks each author's NIP-65 write relays for all of them: own content
+ * often lives only there (an article on a personal relay, bookmarks, …), so
+ * the app relays alone left a cold profile emptier than "Meine Inhalte".
  *
- * @param {{ pubkeys: string[], userPubkey?: string | null, profileTabs?: boolean }} options
+ * @param {{ pubkeys: string[], userPubkey?: string | null, profilePage?: boolean }} options
  * @returns {import('rxjs').Subscription[]} live subscriptions; caller unsubscribes on cleanup
  */
-export function startProfileFeedLoaders({ pubkeys, userPubkey = null, profileTabs = false }) {
+export function startProfileFeedLoaders({ pubkeys, userPubkey = null, profilePage = false }) {
   /** @type {import('rxjs').Subscription[]} */
   const subs = [];
   if (!pubkeys?.length) return subs;
 
-  const sources = profileTabs
+  const sources = profilePage
     ? [...FEED_RELAY_SOURCES, ...PROFILE_TAB_RELAY_SOURCES]
     : FEED_RELAY_SOURCES;
-  const outboxKinds = profileTabs
+  const outboxKinds = profilePage
     ? [...ALL_FEED_KINDS, ...PROFILE_TAB_RELAY_SOURCES.flatMap((s) => s.kinds)]
     : ALL_FEED_KINDS;
 
   subs.push(...startParticipationLoaders(pubkeys));
+  if (profilePage) {
+    subs.push(startWriteRelayLoaders(pubkeys, [...sources.map((s) => s.kinds), [6, 16]]));
+  }
 
   if (userPubkey) {
     // --- Outbox path: uses OutboxModel to send targeted filters per relay ---
