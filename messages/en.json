@@ -2568,6 +2568,7 @@
   "rsvp_not_registration_hint_short": "Not a registration with the organizer",
   "calendar_detail_reactions": "Reactions",
   "calendar_detail_not_found": "Event not found",
+  "calendar_detail_deleted": "This event was deleted by its author.",
   "calendar_detail_your_event": "Your Event",
   "generic_event_kind_label": "Kind {kind}",
   "generic_event_limited_notice": "There is no dedicated view for this content type (kind {kind}) yet. Shown is what the app can read from it.",

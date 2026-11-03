@@ -20,7 +20,11 @@ vi.mock('$lib/helpers/eventUtils', () => ({
 vi.mock('$lib/stores/config.svelte.js', () => ({
   initializeConfig: vi.fn()
 }));
+vi.mock('$lib/helpers/relay-helper.js', () => ({
+  getAllLookupRelays: vi.fn(() => ['wss://lookup.test', 'wss://hint.test'])
+}));
 
+import { nip19 } from 'nostr-tools';
 import { fetchEventById } from '$lib/helpers/nostrUtils';
 import { initializeConfig } from '$lib/stores/config.svelte.js';
 import { load } from '../../routes/calendar/event/[naddr]/+page.js';
@@ -50,5 +54,30 @@ describe('/calendar/event/[naddr] load', () => {
 
     expect(initializeConfig).not.toHaveBeenCalled();
     expect(fetchEventById).toHaveBeenCalledWith('naddr1test');
+  });
+
+  it('returns the address pointer so the page can follow newer revisions', async () => {
+    const pubkey = 'a'.repeat(64);
+    const naddr = nip19.naddrEncode({
+      kind: 31923,
+      pubkey,
+      identifier: 'workshop',
+      relays: ['wss://hint.test']
+    });
+
+    const data = await load({ params: { naddr }, parent: async () => ({}) });
+
+    expect(data.pointer).toEqual({
+      kind: 31923,
+      pubkey,
+      identifier: 'workshop',
+      relays: ['wss://hint.test', 'wss://lookup.test']
+    });
+  });
+
+  it('returns no pointer for an identifier that is not an naddr', async () => {
+    const data = await load({ params: { naddr: 'naddr1test' }, parent: async () => ({}) });
+
+    expect(data.pointer).toBeNull();
   });
 });
