@@ -19,7 +19,8 @@
     BookmarkIcon,
     PlusIcon,
     ChevronDownIcon,
-    PuzzleIcon
+    PuzzleIcon,
+    BookOpenIcon
   } from '$lib/components/icons';
   import * as m from '$lib/paraglide/messages';
 
@@ -34,6 +35,7 @@
     learning: { icon: GraduationCapIcon, label: () => m.fab_create_learning() },
     interactive: { icon: PuzzleIcon, label: () => m.fab_create_interactive() },
     article: { icon: ScrollTextIcon, label: () => m.article_fab_write() },
+    publication: { icon: BookOpenIcon, label: () => m.publication_fab_create() },
     wiki: { icon: WikipediaIcon, label: () => m.wiki_fab_write() },
     form: { icon: FilesIcon, label: () => m.fab_create_form() },
     poll: { icon: PollIcon, label: () => m.fab_create_poll() },
