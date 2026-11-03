@@ -109,6 +109,42 @@ describe('isUpcoming', () => {
   });
 });
 
+describe('isUpcoming — date-based (31922) events', () => {
+  const DAY = 86400;
+  const TODAY = Date.UTC(2027, 0, 15) / 1000; // 2027-01-15T00:00Z
+  const NOON = TODAY + 12 * 3600;
+
+  /** @param {string} start @param {string} [end] */
+  function allDay(start, end) {
+    const tags = [
+      ['d', 'retreat'],
+      ['title', 'Retreat'],
+      ['start', start]
+    ];
+    if (end) tags.push(['end', end]);
+    return parseChannelEvents([dateEvent({ tags })])[0];
+  }
+
+  it('keeps an end-less event upcoming for the whole of its own day', () => {
+    expect(isUpcoming(allDay('2027-01-15'), NOON)).toBe(true);
+    expect(isUpcoming(allDay('2027-01-15'), TODAY + DAY - 1)).toBe(true);
+  });
+
+  it('drops an end-less event once its day is over', () => {
+    expect(isUpcoming(allDay('2027-01-14'), NOON)).toBe(false);
+  });
+
+  it('reads a legacy end == start as a one-day event', () => {
+    expect(isUpcoming(allDay('2027-01-15', '2027-01-15'), NOON)).toBe(true);
+  });
+
+  it('reads an end tag as exclusive', () => {
+    const ev = allDay('2027-01-14', '2027-01-16'); // Jan 14-15
+    expect(isUpcoming(ev, NOON)).toBe(true);
+    expect(isUpcoming(ev, TODAY + DAY + 1)).toBe(false);
+  });
+});
+
 describe('collectRsvps + tallyRsvps', () => {
   /** @param {string} pubkey @param {string} status @param {number} ms @param {string} [target] */
   function rsvp(pubkey, status, ms, target = 'ev-time') {
