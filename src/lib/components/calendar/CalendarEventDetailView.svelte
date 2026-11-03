@@ -97,9 +97,18 @@
     endDate ? formatZonedDateTime(endDate, event.endTimezone || event.startTimezone) : null
   );
   let isAllDay = $derived(event ? event.kind === 31922 : false);
-  let isMultiDay = $derived(
-    event && endDate && startDate ? startDate.toDateString() !== endDate.toDateString() : false
-  );
+  // 31922 timestamps are UTC midnight, so the day boundary must be compared
+  // in UTC (local comparison shows the day before, west of UTC). A 31923's
+  // end is exclusive: comparing it as-is shows a two-day span for an event
+  // that merely ends at local midnight, so compare end minus one second.
+  let isMultiDay = $derived.by(() => {
+    if (!event || !endDate || !startDate) return false;
+    if (isAllDay) {
+      return startDate.toISOString().slice(0, 10) !== endDate.toISOString().slice(0, 10);
+    }
+    const compareEnd = new Date(endDate.getTime() - 1000);
+    return startDate.toDateString() !== compareEnd.toDateString();
+  });
 
   // First reference = event website (shown with date/time, #7); rest = further links
   let links = $derived(splitEventLinks(event?.references));
@@ -273,9 +282,13 @@
           </div>
           <div class="ml-8 text-base-content/70">
             {#if isMultiDay && endDate && startDate}
-              {formatCalendarDate(startDate, 'long')} - {formatCalendarDate(endDate, 'long')}
+              {formatCalendarDate(startDate, 'long', { utc: isAllDay })} - {formatCalendarDate(
+                endDate,
+                'long',
+                { utc: isAllDay }
+              )}
             {:else if startDate}
-              {formatCalendarDate(startDate, 'long')}
+              {formatCalendarDate(startDate, 'long', { utc: isAllDay })}
             {/if}
           </div>
         </div>

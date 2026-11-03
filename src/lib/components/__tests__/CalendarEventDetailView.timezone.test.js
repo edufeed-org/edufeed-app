@@ -155,3 +155,64 @@ describe('CalendarEventDetailView — event time zone', () => {
     expect(start).not.toContain('(');
   });
 });
+
+// M1: 31922 (date-based) timestamps are UTC midnight. Formatting them
+// without `{ utc: true }` renders the day before for a viewer west of UTC.
+describe('CalendarEventDetailView — all-day dates west of UTC (M1)', () => {
+  const ORIGINAL_TZ = process.env.TZ;
+  beforeEach(() => {
+    process.env.TZ = 'America/New_York';
+  });
+  afterEach(() => {
+    if (ORIGINAL_TZ === undefined) delete process.env.TZ;
+    else process.env.TZ = ORIGINAL_TZ;
+  });
+
+  // 2026-11-03 as a NIP-52 date-based event: UTC midnight.
+  const ALL_DAY_START = Date.UTC(2026, 10, 3) / 1000;
+  const ALL_DAY_END = Date.UTC(2026, 10, 5) / 1000;
+
+  function allDayFixture(extra = {}) {
+    const rawEvent = {
+      id: 'f'.repeat(64),
+      kind: 31922,
+      pubkey: ME,
+      created_at: 1_700_000_000,
+      content: '',
+      tags: [
+        ['d', 'ad'],
+        ['title', 'Conference']
+      ]
+    };
+    return {
+      event: {
+        id: rawEvent.id,
+        kind: 31922,
+        pubkey: ME,
+        title: 'Conference',
+        start: ALL_DAY_START,
+        dTag: 'ad',
+        participants: [],
+        hashtags: [],
+        references: [],
+        originalEvent: rawEvent,
+        ...extra
+      },
+      rawEvent
+    };
+  }
+
+  it('single-day: shows the event day, not the day before', () => {
+    render(CalendarEventDetailView, { props: allDayFixture() });
+    const body = document.body.textContent || '';
+    expect(body).toMatch(/\b3\b/);
+    expect(body).not.toMatch(/\b2\b/);
+  });
+
+  it('multi-day: shows both the correct start and end days', () => {
+    render(CalendarEventDetailView, { props: allDayFixture({ end: ALL_DAY_END }) });
+    const body = document.body.textContent || '';
+    expect(body).toMatch(/\b3\b/);
+    expect(body).toMatch(/\b5\b/);
+  });
+});
