@@ -103,19 +103,34 @@ describe('CalendarEventsList', () => {
     }
   });
 
-  it('keeps an ongoing open-ended event (no end tag) in Upcoming until its day ends', () => {
-    // Started 2h ago, no end tag: NIP-52 open end = ends the same day, so it
-    // is still running and must not be filed under "Past".
+  it('files a started open-ended event (no end tag) under Past (NIP-52: ends instantaneously)', () => {
+    // Started 2h ago, no end tag: NIP-52 says the event ends instantaneously
+    // at `start`, so it must already be filed under "Past", not "Upcoming".
     const nowSec = Math.floor(Date.now() / 1000);
-    const ongoingEvent = {
+    const startedEvent = {
       ...futureEvent,
       id: 'c'.repeat(64),
-      // 2h ago, clamped to the current UTC day so the test can't straddle midnight
-      start: Math.max(nowSec - 2 * 3600, Math.floor(nowSec / 86400) * 86400),
+      start: nowSec - 2 * 3600,
       end: 0
     };
     const { queryByText } = render(CalendarEventsList, {
-      props: { events: [ongoingEvent], viewMode: 'month', currentDate: new Date() }
+      props: { events: [startedEvent], viewMode: 'month', currentDate: new Date() }
+    });
+
+    expect(queryByText('No upcoming events')).not.toBeNull();
+    expect(queryByText('No past events')).toBeNull();
+  });
+
+  it('keeps a not-yet-started open-ended event (no end tag) in Upcoming', () => {
+    const nowSec = Math.floor(Date.now() / 1000);
+    const notYetStartedEvent = {
+      ...futureEvent,
+      id: 'e'.repeat(64),
+      start: nowSec + 3600,
+      end: 0
+    };
+    const { queryByText } = render(CalendarEventsList, {
+      props: { events: [notYetStartedEvent], viewMode: 'month', currentDate: new Date() }
     });
 
     expect(queryByText('No upcoming events')).toBeNull();

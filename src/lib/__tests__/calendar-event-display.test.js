@@ -45,7 +45,7 @@ describe('isAllDayEvent', () => {
   });
 });
 
-describe('getEffectiveEventEnd — missing end means open end, same day', () => {
+describe('getEffectiveEventEnd — missing end means open end for 31922, instantaneous for 31923', () => {
   it('31922 without end ends at the end of the start day', () => {
     expect(getEffectiveEventEnd({ kind: 31922, start: JAN_5, end: 0 })).toBe(JAN_5 + DAY);
   });
@@ -61,12 +61,12 @@ describe('getEffectiveEventEnd — missing end means open end, same day', () => 
     );
   });
 
-  it('31923 without end ends at the end of the start day (open end)', () => {
-    expect(getEffectiveEventEnd({ kind: 31923, start: JAN_5_15H, end: 0 })).toBe(JAN_5 + DAY);
+  it('31923 without end ends instantaneously, at start (NIP-52)', () => {
+    expect(getEffectiveEventEnd({ kind: 31923, start: JAN_5_15H, end: 0 })).toBe(JAN_5_15H);
   });
 
-  it('ignores an end before the start', () => {
-    expect(getEffectiveEventEnd({ kind: 31923, start: JAN_5_15H, end: JAN_5 })).toBe(JAN_5 + DAY);
+  it('ignores an end before (or equal to) the start — ends at start', () => {
+    expect(getEffectiveEventEnd({ kind: 31923, start: JAN_5_15H, end: JAN_5 })).toBe(JAN_5_15H);
   });
 });
 

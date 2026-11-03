@@ -231,11 +231,14 @@ export function isAllDayEvent(event) {
 /**
  * When an event effectively ends, as a unix timestamp (seconds).
  *
- * A missing `end` tag means the event has an open end and ends on the same
- * day as `start` (NIP-52 / issue "Better support for calendar appointments"),
- * so we return the end of the start's UTC day. With an `end` present:
- * 31923 ends exactly then; 31922 ends at the end of its (inclusive) end day
- * via getEventDaySpan.
+ * Kind 31922 (date-based): a missing `end` means an open end on the same
+ * day as `start`; with an `end` present, it ends at the end of its
+ * (inclusive) end day — both via getEventDaySpan.
+ *
+ * Kind 31923 (time-based): `end` is an exclusive unix timestamp, so a
+ * present-and-later `end` ends exactly then. NIP-52: "If omitted, the
+ * calendar event ends instantaneously" — so a missing (or not-after-start)
+ * `end` means the event ends at `start`, not at the end of that day.
  *
  * @param {CalendarEvent} event
  * @returns {number}
@@ -243,9 +246,12 @@ export function isAllDayEvent(event) {
 export function getEffectiveEventEnd(event) {
   const SECONDS_PER_DAY = 86400;
   const start = typeof event.start === 'number' ? event.start : 0;
-  if (event.kind !== 31922 && event.end && event.end > start) return event.end;
-  const { endDay } = getEventDaySpan(event, start);
-  return (endDay + 1) * SECONDS_PER_DAY;
+  if (event.kind === 31922) {
+    const { endDay } = getEventDaySpan(event, start);
+    return (endDay + 1) * SECONDS_PER_DAY;
+  }
+  if (event.end && event.end > start) return event.end;
+  return start;
 }
 
 /**
@@ -958,10 +964,15 @@ export function buildCalendarEventTags(formData, eventData, dTag, hTag) {
     }
   }
 
-  // D tags (day-granularity) — only for kind 31923
+  // D tags (day-granularity) — only for kind 31923. `end` is exclusive
+  // (NIP-52), so an end landing exactly on midnight must not pull in the
+  // next day — subtract a second before flooring to the day index.
   if (eventData.kind === 31923 && eventData.start) {
     const startDay = Math.floor(eventData.start / 86400);
-    const endDay = eventData.end ? Math.floor(eventData.end / 86400) : startDay;
+    const endDay =
+      eventData.end && eventData.end > eventData.start
+        ? Math.floor((eventData.end - 1) / 86400)
+        : startDay;
     for (let day = startDay; day <= endDay; day++) {
       tags.push(['D', day.toString()]);
     }
