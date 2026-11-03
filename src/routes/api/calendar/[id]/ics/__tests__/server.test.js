@@ -27,6 +27,12 @@ vi.mock('$lib/server/nostr-fetch.js', async () => {
   };
 });
 
+// Hint relays are DNS-checked (SSRF guard); resolve every name publicly here
+// so tests never touch the network.
+vi.mock('node:dns/promises', () => ({
+  default: { lookup: vi.fn(async () => [{ address: '93.184.216.34', family: 4 }]) }
+}));
+
 import { GET } from '../+server.js';
 
 const COMMUNITY_PUBKEY = 'a'.repeat(64);
@@ -52,7 +58,13 @@ function makeEvent(overrides) {
 beforeEach(() => {
   fetchEventFromRelays.mockReset();
   fetchEventsFromRelays.mockReset();
+  // Default: no events, no deletions.
+  fetchEventsFromRelays.mockResolvedValue([]);
 });
+
+/** @param {any} filter */
+const isDeletionQuery = (filter) =>
+  (Array.isArray(filter) ? filter : [filter]).every((f) => f.kinds?.includes(5));
 
 describe('ICS endpoint - community calendar (hex pubkey)', () => {
   it('returns a text/calendar response with VEVENT entries', async () => {
@@ -192,5 +204,203 @@ describe('ICS endpoint - NIP-52 calendar (naddr)', () => {
       params: { id: naddr }
     });
     expect(response.status).toBe(404);
+  });
+});
+
+describe('ICS endpoint - relay order, SSRF guard, deletions', () => {
+  const calendarEvent = (aTags) => ({
+    id: 'cal'.padEnd(64, '0'),
+    pubkey: CALENDAR_AUTHOR,
+    kind: 31924,
+    tags: [['d', 'my-cal'], ['title', 'My Calendar'], ...aTags],
+    content: '',
+    created_at: 1,
+    sig: 's'.repeat(128)
+  });
+  const referenced = (dTag, title) =>
+    makeEvent({
+      id: dTag.padEnd(64, '0'),
+      kind: 31923,
+      pubkey: CALENDAR_AUTHOR,
+      created_at: 1_700_000_000,
+      tags: [
+        ['d', dTag],
+        ['title', title],
+        ['start', '1700001000'],
+        ['end', '1700004600']
+      ]
+    });
+
+  it('queries configured relays before naddr hints and drops private hints', async () => {
+    const naddr = nip19.naddrEncode({
+      kind: 31924,
+      pubkey: CALENDAR_AUTHOR,
+      identifier: 'my-cal',
+      relays: ['ws://plain.example.com', 'wss://127.0.0.1:7777', 'wss://hint.example.com']
+    });
+    fetchEventFromRelays.mockResolvedValueOnce(
+      calendarEvent([['a', `31923:${CALENDAR_AUTHOR}:x`, 'wss://10.0.0.1']])
+    );
+    fetchEventFromRelays.mockResolvedValueOnce(null);
+
+    await GET({
+      url: new URL(`https://example.org/api/calendar/${naddr}/ics`),
+      params: { id: naddr }
+    });
+
+    expect(fetchEventFromRelays.mock.calls[0][1]).toEqual([
+      'wss://cal.example.com',
+      'wss://fallback.example.com',
+      'wss://hint.example.com'
+    ]);
+    // The private `a`-tag hint is dropped; only configured relays remain.
+    expect(fetchEventFromRelays.mock.calls[1][1]).toEqual([
+      'wss://cal.example.com',
+      'wss://fallback.example.com'
+    ]);
+  });
+
+  it('drops a referenced event its author deleted (NIP-09 a-deletion)', async () => {
+    const naddr = nip19.naddrEncode({
+      kind: 31924,
+      pubkey: CALENDAR_AUTHOR,
+      identifier: 'my-cal',
+      relays: []
+    });
+    fetchEventFromRelays.mockResolvedValueOnce(
+      calendarEvent([
+        ['a', `31923:${CALENDAR_AUTHOR}:kept`],
+        ['a', `31923:${CALENDAR_AUTHOR}:gone`]
+      ])
+    );
+    fetchEventFromRelays.mockResolvedValueOnce(referenced('kept', 'Kept Event'));
+    fetchEventFromRelays.mockResolvedValueOnce(referenced('gone', 'Deleted Event'));
+    fetchEventsFromRelays.mockImplementation(async (filter) => {
+      if (!isDeletionQuery(filter)) return [];
+      return [
+        {
+          id: 'd'.repeat(64),
+          kind: 5,
+          pubkey: CALENDAR_AUTHOR,
+          created_at: 1_700_000_500,
+          tags: [['a', `31923:${CALENDAR_AUTHOR}:gone`]],
+          content: '',
+          sig: 's'.repeat(128)
+        }
+      ];
+    });
+
+    const response = await GET({
+      url: new URL(`https://example.org/api/calendar/${naddr}/ics`),
+      params: { id: naddr }
+    });
+    const body = await response.text();
+    expect(body).toContain('SUMMARY:Kept Event');
+    expect(body).not.toContain('Deleted Event');
+
+    const deletionCall = fetchEventsFromRelays.mock.calls.find(([f]) => isDeletionQuery(f));
+    expect(deletionCall[0]).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          kinds: [5],
+          authors: [CALENDAR_AUTHOR],
+          '#a': expect.arrayContaining([`31923:${CALENDAR_AUTHOR}:gone`])
+        })
+      ])
+    );
+  });
+
+  it('returns 404 when the calendar itself was deleted', async () => {
+    const naddr = nip19.naddrEncode({
+      kind: 31924,
+      pubkey: CALENDAR_AUTHOR,
+      identifier: 'my-cal',
+      relays: []
+    });
+    fetchEventFromRelays.mockResolvedValueOnce(calendarEvent([]));
+    fetchEventsFromRelays.mockImplementation(async (filter) =>
+      isDeletionQuery(filter)
+        ? [
+            {
+              id: 'd'.repeat(64),
+              kind: 5,
+              pubkey: CALENDAR_AUTHOR,
+              created_at: 5,
+              tags: [['a', `31924:${CALENDAR_AUTHOR}:my-cal`]],
+              content: '',
+              sig: 's'.repeat(128)
+            }
+          ]
+        : []
+    );
+    const response = await GET({
+      url: new URL(`https://example.org/api/calendar/${naddr}/ics`),
+      params: { id: naddr }
+    });
+    expect(response.status).toBe(404);
+  });
+
+  it('drops deleted community events and private community relays', async () => {
+    fetchEventFromRelays.mockResolvedValueOnce(null); // profile
+    fetchEventFromRelays.mockResolvedValueOnce({
+      id: 'f'.repeat(64),
+      pubkey: COMMUNITY_PUBKEY,
+      kind: 10222,
+      tags: [
+        ['r', 'wss://community.example.com'],
+        ['r', 'wss://192.168.0.2']
+      ],
+      content: '',
+      created_at: 1,
+      sig: 's'.repeat(128)
+    });
+    const kept = makeEvent({
+      id: '1'.repeat(64),
+      tags: [
+        ['d', 'kept'],
+        ['title', 'Kept'],
+        ['start', '1700001000'],
+        ['h', COMMUNITY_PUBKEY]
+      ]
+    });
+    const gone = makeEvent({
+      id: '2'.repeat(64),
+      tags: [
+        ['d', 'gone'],
+        ['title', 'Gone'],
+        ['start', '1700001000'],
+        ['h', COMMUNITY_PUBKEY]
+      ]
+    });
+    fetchEventsFromRelays.mockImplementation(async (filter) =>
+      isDeletionQuery(filter)
+        ? [
+            {
+              id: 'd'.repeat(64),
+              kind: 5,
+              pubkey: COMMUNITY_PUBKEY,
+              created_at: 1,
+              tags: [['e', gone.id]],
+              content: '',
+              sig: 's'.repeat(128)
+            }
+          ]
+        : [kept, gone]
+    );
+
+    const response = await GET({
+      url: new URL(`https://example.org/api/calendar/${COMMUNITY_PUBKEY}/ics`),
+      params: { id: COMMUNITY_PUBKEY }
+    });
+    const body = await response.text();
+    expect(body).toContain('SUMMARY:Kept');
+    expect(body).not.toContain('SUMMARY:Gone');
+
+    const eventsCall = fetchEventsFromRelays.mock.calls.find(([f]) => !isDeletionQuery(f));
+    expect(eventsCall[1]).toEqual([
+      'wss://cal.example.com',
+      'wss://fallback.example.com',
+      'wss://community.example.com'
+    ]);
   });
 });

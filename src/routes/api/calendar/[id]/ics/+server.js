@@ -1,9 +1,12 @@
 import { nip19 } from 'nostr-tools';
 import {
   getCalendarRelaysServer,
+  safeHintRelays,
   decodeIdentifier,
   fetchEventFromRelays,
-  fetchEventsFromRelays
+  fetchEventsFromRelays,
+  deletionFiltersFor,
+  dropDeletedEvents
 } from '$lib/server/nostr-fetch.js';
 import { tagValue, generateICSContent } from '$lib/server/calendar-ics.js';
 
@@ -11,7 +14,10 @@ import { tagValue, generateICSContent } from '$lib/server/calendar-ics.js';
  * Server-side ICS feed for both NIP-52 calendars (`naddr`) and community
  * calendars (hex pubkey / npub). Fetches events from relays directly via
  * `$lib/server/nostr-fetch.js` so this endpoint does not depend on the
- * browser-only EventStore + runtimeConfig stack.
+ * browser-only EventStore + runtimeConfig stack. Those fetchers only accept
+ * verified, filter-matching events and keep the newest revision; relay hints
+ * (naddr, `a` tags, community `r` tags) are SSRF-guarded and queried after
+ * the configured relays; NIP-09 deletions by the authors are honoured.
  */
 
 const HEX_PUBKEY_RE = /^[0-9a-f]{64}$/i;
@@ -71,7 +77,7 @@ async function handleNaddrCalendar(naddr, url) {
     return jsonError('Invalid calendar naddr', 400);
   }
 
-  const relays = getCalendarRelaysServer(decoded.relays);
+  const relays = getCalendarRelaysServer(await safeHintRelays(decoded.relays));
 
   const calendar = await fetchEventFromRelays(
     {
@@ -102,7 +108,7 @@ async function handleNaddrCalendar(naddr, url) {
       const kind = Number.parseInt(kindStr, 10);
       if (!Number.isFinite(kind) || (kind !== 31922 && kind !== 31923)) return null;
 
-      const eventRelays = getCalendarRelaysServer(hint ? [hint] : []);
+      const eventRelays = getCalendarRelaysServer(await safeHintRelays(hint ? [hint] : []));
       return fetchEventFromRelays(
         {
           kinds: [kind],
@@ -115,7 +121,13 @@ async function handleNaddrCalendar(naddr, url) {
     })
   );
 
-  const events = /** @type {import('nostr-tools').NostrEvent[]} */ (referenced.filter(Boolean));
+  const found = /** @type {import('nostr-tools').NostrEvent[]} */ (referenced.filter(Boolean));
+
+  const deletions = await fetchDeletions([calendar, ...found], relays);
+  if (dropDeletedEvents([calendar], deletions).length === 0) {
+    return jsonError('Calendar not found', 404);
+  }
+  const events = dropDeletedEvents(found, deletions);
 
   const ics = generateICSContent(
     {
@@ -176,11 +188,13 @@ async function handleCommunityCalendar(pubkeyOrNpub, url) {
   }
 
   const communityRelays = communityDefEvent
-    ? communityDefEvent.tags.filter((t) => t[0] === 'r' && t[1]).map((t) => t[1])
+    ? await safeHintRelays(
+        communityDefEvent.tags.filter((t) => t[0] === 'r' && t[1]).map((t) => t[1])
+      )
     : [];
-  const allRelays = [...new Set([...baseRelays, ...communityRelays])];
+  const allRelays = getCalendarRelaysServer(communityRelays);
 
-  const events = await fetchEventsFromRelays(
+  const fetched = await fetchEventsFromRelays(
     {
       kinds: [31922, 31923],
       '#h': [communityPubkey],
@@ -188,9 +202,23 @@ async function handleCommunityCalendar(pubkeyOrNpub, url) {
     },
     allRelays
   );
+  const events = dropDeletedEvents(fetched, await fetchDeletions(fetched, allRelays));
 
   const ics = generateICSContent({ title, summary }, events, url);
   return icsResponse(ics, title || 'community-calendar');
+}
+
+/**
+ * NIP-09 deletions of `events` by their own authors (one REQ: `#a` for the
+ * addresses, `#e` for the ids).
+ * @param {import('nostr-tools').NostrEvent[]} events
+ * @param {string[]} relays
+ * @returns {Promise<import('nostr-tools').NostrEvent[]>}
+ */
+async function fetchDeletions(events, relays) {
+  const filters = deletionFiltersFor(events);
+  if (filters.length === 0) return [];
+  return (await fetchEventsFromRelays(filters, relays)) || [];
 }
 
 /**
