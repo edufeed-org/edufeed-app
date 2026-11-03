@@ -1,0 +1,85 @@
+// NIP-29 pinned messages — the pure read side.
+//
+// A group's pin list lives on its relay. Moderators publish kind 9010
+// `update-pin-list` carrying the FULL list (`e` tags for regular events, `a`
+// for addressables); the relay applies it and regenerates kind 39005 "group
+// pinned events" (`d` = group id), signed with its own key. Both shapes carry
+// the whole list, so whichever is newest is the truth — and on a relay that
+// stores the accepted 9010 but never emits a 39005 (groups.edufeed.org,
+// pyramid edufeed-v1.23, probed 2026-11-03: a moderator's 9010 is stored and
+// readable, a member's is refused, no 39005 appears) the newest stored 9010 IS
+// the list. A relay only ever stores the 9010s it accepted, so reading them
+// back is as authoritative as the 39005 it would have derived from them.
+//
+// Only `e` tags are read: the chat pins messages (kind 9); meetings (kind
+// 31923, addressable) are deliberately not pinnable, like they are not
+// deletable from the chat.
+
+/** NIP-29 `update-pin-list` moderation event. */
+export const UPDATE_PIN_LIST_KIND = 9010;
+/** NIP-29 relay-generated "group pinned events" (d = group id). */
+export const PINNED_EVENTS_KIND = 39005;
+/**
+ * App-side cap. NIP-29 lets the relay limit the list and says nothing
+ * else; CORD-04 §7 caps Concord pins at 25, so the two lanes agree.
+ */
+export const MAX_PINS = 25;
+
+const HEX64 = /^[0-9a-f]{64}$/;
+
+/**
+ * The pinned event ids of a 39005 or 9010, in list order, deduped and
+ * validated — tag values are network input and a repeated id would crash a
+ * keyed `{#each}`.
+ * @param {{tags?: string[][]} | null | undefined} event
+ * @returns {string[]}
+ */
+export function getPinnedIds(event) {
+  /** @type {string[]} */
+  const ids = [];
+  for (const tag of event?.tags ?? []) {
+    if (tag[0] !== 'e') continue;
+    const id = tag[1];
+    if (typeof id !== 'string' || !HEX64.test(id) || ids.includes(id)) continue;
+    ids.push(id);
+  }
+  return ids;
+}
+
+/** @param {{tags?: string[][]}} event @param {string} name */
+function tagValue(event, name) {
+  return event.tags?.find((t) => t[0] === name)?.[1];
+}
+
+/**
+ * The current pinned ids of `groupId`: the newest list among the relay's
+ * 39005s (bound by `d`) and the stored 9010s (bound by `h`). On a tie the
+ * 39005 wins — the relay regenerated it FROM that 9010 with the same stamp.
+ * An empty list is still a list: a 9010 with no `e` tags clears the pins.
+ *
+ * @param {{groupId: string, pinnedEvents: any[], updateEvents: any[]}} args
+ * @returns {string[]}
+ */
+export function resolvePinnedIds({ groupId, pinnedEvents, updateEvents }) {
+  /** @type {{event: any, relay: boolean} | null} */
+  let best = null;
+  const consider = (/** @type {any} */ event, /** @type {boolean} */ relay) => {
+    if (!event) return;
+    if (
+      !best ||
+      event.created_at > best.event.created_at ||
+      (event.created_at === best.event.created_at && relay && !best.relay)
+    ) {
+      best = { event, relay };
+    }
+  };
+  for (const event of pinnedEvents ?? []) {
+    if (event?.kind === PINNED_EVENTS_KIND && tagValue(event, 'd') === groupId)
+      consider(event, true);
+  }
+  for (const event of updateEvents ?? []) {
+    if (event?.kind === UPDATE_PIN_LIST_KIND && tagValue(event, 'h') === groupId)
+      consider(event, false);
+  }
+  return best ? getPinnedIds(/** @type {{event: any}} */ (best).event) : [];
+}

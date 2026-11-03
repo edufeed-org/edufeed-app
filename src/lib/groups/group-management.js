@@ -13,6 +13,7 @@ import {
   GROUP_METADATA_KIND,
   GROUP_ADMINS_KIND
 } from 'applesauce-common/helpers/groups';
+import { UPDATE_PIN_LIST_KIND } from './pins.js';
 import { firstValueFrom } from 'rxjs';
 import { defaultIfEmpty } from 'rxjs/operators';
 import { authenticateOnce } from './relay-auth.js';
@@ -132,6 +133,17 @@ export function buildDeleteEventTemplate(groupId, eventId) {
     ['h', groupId],
     ['e', eventId]
   ]);
+}
+
+/**
+ * NIP-29 update-pin-list (9010): a moderator replaces the group's pin list
+ * WHOLE — pinning, unpinning, reordering and clearing are all "publish the
+ * new list"; zero `e` tags clears it. The relay regenerates kind 39005 from
+ * it (see pins.js for the relays that don't).
+ * @param {string} groupId @param {string[]} pinnedIds the full list, in display order
+ */
+export function buildUpdatePinListTemplate(groupId, pinnedIds) {
+  return template(UPDATE_PIN_LIST_KIND, [['h', groupId], ...pinnedIds.map((id) => ['e', id])]);
 }
 
 /**

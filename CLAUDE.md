@@ -260,34 +260,35 @@ async function handleClick() {
 
 ### Replaceable / Parameterized Kinds
 
-| Kind  | NIP        | Description                                                                                           |
-| ----- | ---------- | ----------------------------------------------------------------------------------------------------- |
-| 10002 | NIP-65     | Relay list (read/write relays for outbox model)                                                       |
-| 10030 | NIP-51     | User emoji list (+ kind 30030 emoji packs)                                                            |
-| 10050 | NIP-17     | DM relay list (published as a default at signup, `DM_RELAYS` env)                                     |
-| 10063 | —          | Blossom server list (preferred file upload servers)                                                   |
-| 10222 | Communikey | Community definition                                                                                  |
-| 13302 | CORD       | Concord community list (self-encrypted; kind 13303 = invite list)                                     |
-| 30002 | NIP-51     | Relay set (user app relay overrides per category)                                                     |
-| 30009 | NIP-58     | Badge definition — **legacy access control**, read/delete only, no longer written                     |
-| 30023 | NIP-23     | Long-form article (`ArticlesView`, article editor)                                                    |
-| 30024 | NIP-23     | Article draft: same shape as 30023, unlisted preview page, `publishDraft` turns it into a 30023       |
-| 30040 | —          | Publication — create + view work; discover integration and relay support still pending                |
-| 30142 | AMB        | Educational resource (OER with SKOS metadata)                                                         |
-| 30168 | —          | Form template (metadata/membership forms; responses are kind 1069)                                    |
-| 30222 | Communikey | Targeted publication — **read-only legacy**, no longer created. Old communities may still have these. |
-| 30301 | —          | Kanban board                                                                                          |
-| 30302 | —          | Kanban card (config only)                                                                             |
-| 39004 | NIP-29     | LiveKit participants — relay-signed "who is in the call" of an AV group (see Groups relay below)      |
-| 30818 | NIP-54     | Wiki article (`WikisView`, `/wiki/<topic>` route)                                                     |
-| 30000 | NIP-51     | Follow set (d="communities" for community membership; also community section profile lists)           |
-| 31922 | NIP-52     | Date-based calendar event                                                                             |
-| 31923 | NIP-52     | Time-based calendar event                                                                             |
-| 31924 | NIP-52     | Calendar collection                                                                                   |
-| 31925 | NIP-52     | Calendar RSVP                                                                                         |
-| 33301 | CORD-05    | Concord invite bundle                                                                                 |
-| 39701 | NIP-B0     | Web bookmark (social bookmarks)                                                                       |
-| 39737 | NIP-VOCAB  | SKOS ConceptScheme (vocabularies for resource forms; published from the `edufeed/vocabs` repo)        |
+| Kind  | NIP        | Description                                                                                            |
+| ----- | ---------- | ------------------------------------------------------------------------------------------------------ |
+| 10002 | NIP-65     | Relay list (read/write relays for outbox model)                                                        |
+| 10030 | NIP-51     | User emoji list (+ kind 30030 emoji packs)                                                             |
+| 10050 | NIP-17     | DM relay list (published as a default at signup, `DM_RELAYS` env)                                      |
+| 10063 | —          | Blossom server list (preferred file upload servers)                                                    |
+| 10222 | Communikey | Community definition                                                                                   |
+| 13302 | CORD       | Concord community list (self-encrypted; kind 13303 = invite list)                                      |
+| 30002 | NIP-51     | Relay set (user app relay overrides per category)                                                      |
+| 30009 | NIP-58     | Badge definition — **legacy access control**, read/delete only, no longer written                      |
+| 30023 | NIP-23     | Long-form article (`ArticlesView`, article editor)                                                     |
+| 30024 | NIP-23     | Article draft: same shape as 30023, unlisted preview page, `publishDraft` turns it into a 30023        |
+| 30040 | —          | Publication — create + view work; discover integration and relay support still pending                 |
+| 30142 | AMB        | Educational resource (OER with SKOS metadata)                                                          |
+| 30168 | —          | Form template (metadata/membership forms; responses are kind 1069)                                     |
+| 30222 | Communikey | Targeted publication — **read-only legacy**, no longer created. Old communities may still have these.  |
+| 30301 | —          | Kanban board                                                                                           |
+| 30302 | —          | Kanban card (config only)                                                                              |
+| 39004 | NIP-29     | LiveKit participants — relay-signed "who is in the call" of an AV group (see Groups relay below)       |
+| 39005 | NIP-29     | Group pinned events — relay mirror of the latest kind 9010 (`groups/pins.js` folds the 9010 if absent) |
+| 30818 | NIP-54     | Wiki article (`WikisView`, `/wiki/<topic>` route)                                                      |
+| 30000 | NIP-51     | Follow set (d="communities" for community membership; also community section profile lists)            |
+| 31922 | NIP-52     | Date-based calendar event                                                                              |
+| 31923 | NIP-52     | Time-based calendar event                                                                              |
+| 31924 | NIP-52     | Calendar collection                                                                                    |
+| 31925 | NIP-52     | Calendar RSVP                                                                                          |
+| 33301 | CORD-05    | Concord invite bundle                                                                                  |
+| 39701 | NIP-B0     | Web bookmark (social bookmarks)                                                                        |
+| 39737 | NIP-VOCAB  | SKOS ConceptScheme (vocabularies for resource forms; published from the `edufeed/vocabs` repo)         |
 
 ### Regular Kinds
 
@@ -295,6 +296,7 @@ async function handleClick() {
 | ---- | ------ | ------------------------------------------------------------------------------------------------------------- |
 | 1063 | NIP-94 | File metadata — image license attestation; also NIP-DC webxdc discovery (`m application/x-webxdc`), see below |
 | 8571 | —      | Kanban patch (config only)                                                                                    |
+| 9010 | NIP-29 | `update-pin-list` — a moderator replaces the WHOLE pin list (`e` tags, none = clear); pins in `GroupChat`     |
 
 ## Media Attestations (kind 1063) & webxdc
 
