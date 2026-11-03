@@ -601,12 +601,56 @@ export function validateEventForm(formData) {
 }
 
 /**
+ * The exact `start`/`end`/`start_tzid`/`end_tzid` tags of a raw NIP-52 event,
+ * undefaulted (unlike `getCalendarEventMetadata`, which falls `endTimezone`
+ * back to `startTimezone`) — used to tell a true no-op edit from a changed
+ * one. `null` for a non-timed (31922) or tagless event.
+ *
+ * @param {any} [rawEvent]
+ * @returns {{ start: number | undefined, end: number | undefined,
+ *   startTimezone: string | undefined, endTimezone: string | undefined } | null}
+ */
+function readStoredTimedFields(rawEvent) {
+  if (!rawEvent?.tags || rawEvent.kind !== 31923) return null;
+  const tagValue = (/** @type {string} */ name) =>
+    rawEvent.tags.find((/** @type {string[]} */ t) => t[0] === name)?.[1];
+  const start = Number(tagValue('start'));
+  const endRaw = tagValue('end');
+  return {
+    start: Number.isFinite(start) ? start : undefined,
+    end: endRaw !== undefined ? Number(endRaw) : undefined,
+    startTimezone: tagValue('start_tzid') || undefined,
+    endTimezone: tagValue('end_tzid') || undefined
+  };
+}
+
+/**
+ * Whether a form's date/time still shows the same wall-clock values the
+ * stored instant would show in `zone` — i.e. the field was never touched.
+ *
+ * @param {string} date @param {string} time @param {string | undefined} zone
+ * @param {number | undefined} storedSeconds
+ * @returns {boolean}
+ */
+function formStillShows(date, time, zone, storedSeconds) {
+  if (storedSeconds === undefined) return false;
+  const shown = zonedWallClock(storedSeconds, zone);
+  return shown.date === date && shown.time === time;
+}
+
+/**
  * Convert form data to calendar event object
  * @param {EventFormData} formData - Form data to convert
  * @param {string} communityPubkey - Target community public key
+ * @param {any} [originalEvent] - The raw event being edited, if any. A no-op
+ *   edit — date, time and zone all still showing what `originalEvent` stored —
+ *   keeps the stored instant exactly (including seconds, which the HH:MM form
+ *   cannot otherwise represent) and leaves a zone-less event zone-less,
+ *   instead of adopting the editor's zone. Only a field the user actually
+ *   changed is read in the shown zone and may gain a zone tag.
  * @returns {Partial<CalendarEvent>} Partial calendar event object
  */
-export function convertFormDataToEvent(formData, communityPubkey) {
+export function convertFormDataToEvent(formData, communityPubkey, originalEvent) {
   /** @type {Partial<CalendarEvent>} */
   const event = {
     title: formData.title.trim(),
@@ -633,28 +677,47 @@ export function convertFormDataToEvent(formData, communityPubkey) {
   } else {
     // Time-based event (kind 31923)
     event.kind = 31923;
+    const stored = readStoredTimedFields(originalEvent);
+
     // The form shows wall-clock times in the event's zones (start_tzid /
-    // end_tzid), so read them back in those zones, not the editor's.
-    event.start = wallClockToTimestamp(
+    // end_tzid), so read them back in those zones, not the editor's — unless
+    // nothing changed, in which case keep the stored instant exactly.
+    const startUnchanged = formStillShows(
       formData.startDate,
       formData.startTime,
-      formData.startTimezone
+      formData.startTimezone,
+      stored?.start
     );
+    event.start = startUnchanged
+      ? /** @type {number} */ (stored?.start)
+      : wallClockToTimestamp(formData.startDate, formData.startTime, formData.startTimezone);
 
-    if (formData.endDate && formData.endTime) {
-      event.end = wallClockToTimestamp(
-        formData.endDate,
-        formData.endTime,
-        formData.endTimezone || formData.startTimezone
-      );
+    const hasEnd = Boolean(formData.endDate && formData.endTime);
+    const endZone = formData.endTimezone || formData.startTimezone;
+    const endUnchanged =
+      hasEnd && formStillShows(formData.endDate, formData.endTime, endZone, stored?.end);
+
+    if (hasEnd) {
+      event.end = endUnchanged
+        ? /** @type {number} */ (stored?.end)
+        : wallClockToTimestamp(formData.endDate, formData.endTime, endZone);
     }
 
-    // Add timezone information
-    if (formData.startTimezone) {
+    // Timezone tags: a no-op field keeps the original's zone presence
+    // exactly (including staying zone-less) — only a field the user actually
+    // changed adopts the shown zone.
+    if (startUnchanged) {
+      if (stored?.startTimezone) event.startTimezone = stored.startTimezone;
+    } else if (formData.startTimezone) {
       event.startTimezone = formData.startTimezone;
     }
-    if (formData.endTimezone) {
-      event.endTimezone = formData.endTimezone;
+
+    if (hasEnd) {
+      if (endUnchanged) {
+        if (stored?.endTimezone) event.endTimezone = stored.endTimezone;
+      } else if (formData.endTimezone) {
+        event.endTimezone = formData.endTimezone;
+      }
     }
   }
 
@@ -1129,7 +1192,10 @@ export function buildCalendarEventTags(formData, eventData, dTag, hTag) {
     if (eventData.startTimezone) {
       tags.push(['start_tzid', eventData.startTimezone]);
     }
-    if (eventData.endTimezone) {
+    // end_tzid only means anything alongside an end — writing it without one
+    // (e.g. a stale formData.endTimezone when the end was removed) would
+    // contradict NIP-52's "omitted end_tzid is start_tzid's zone" rule.
+    if (eventData.endTimezone && eventData.end) {
       tags.push(['end_tzid', eventData.endTimezone]);
     }
   }
