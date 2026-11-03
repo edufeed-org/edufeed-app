@@ -10,13 +10,7 @@
   import CommunitySidebar from '$lib/components/community/layout/CommunitySidebar.svelte';
   import MobileNavMenu from '$lib/components/shared/MobileNavMenu.svelte';
   import ProfileAvatar from '$lib/components/shared/ProfileAvatar.svelte';
-  import {
-    CloseIcon,
-    ChevronRightIcon,
-    ChevronLeftIcon,
-    ChevronDownIcon,
-    SettingsIcon
-  } from '$lib/components/icons';
+  import { ChevronLeftIcon, SettingsIcon } from '$lib/components/icons';
   import ImageWithFallback from '$lib/components/shared/ImageWithFallback.svelte';
   import TermiLauncherButton from '$lib/components/shared/TermiLauncherButton.svelte';
   import { runtimeConfig } from '$lib/stores/config.svelte.js';
@@ -34,8 +28,6 @@
   // /c is ssr = false, so the viewport is known on first render.
   const isDesktop = useIsDesktop();
   const hasWorkspaceShell = getContext('workspaceShell');
-
-  let leftDrawerOpen = $state(false);
 
   // Mobile header info — child layouts can update this via context
   let mobileHeaderTitle = $state(runtimeConfig.appName);
@@ -57,16 +49,10 @@
     if (npub) {
       goto(resolve(/** @type {any} */ (buildCommunityPath(npub, $page.url.searchParams))));
     }
-    leftDrawerOpen = false;
   }
 
   function handleHomeSelect() {
     goto(resolve('/c/'));
-    leftDrawerOpen = false;
-  }
-
-  function toggleDrawer() {
-    leftDrawerOpen = !leftDrawerOpen;
   }
 
   // Provide context for child layouts to update mobile header
@@ -81,9 +67,6 @@
       mobileHeaderSettingsHref = info.settingsHref ?? '';
     }
   );
-
-  // Provide toggleDrawer for child layouts if needed
-  setContext('toggleDrawer', toggleDrawer);
 
   function closeDropdown() {
     const dropdownTrigger = /** @type {HTMLElement} */ (document.activeElement);
@@ -116,136 +99,88 @@
     instead of the timeline (laoc, 2026-10-01). Long views still overflow
     into <main>, which stays the scroll surface. -->
   <div class="flex min-h-0 flex-1 flex-col">
-    <div class="drawer min-h-0 flex-1">
-      <input
-        id="community-drawer"
-        type="checkbox"
-        class="drawer-toggle"
-        bind:checked={leftDrawerOpen}
-      />
-      <div class="drawer-content flex h-full min-h-0 flex-col">
-        <!-- Unified Mobile Header -->
-        <div
-          data-testid="mobile-community-header"
-          class="sticky top-0 z-30 flex items-center justify-between bg-base-200 p-4"
-        >
-          {#if isDashboardActive}
-            <!-- Dashboard: app logo + chevron → opens the community drawer -->
-            <button
-              data-testid="header-drawer-toggle"
-              onclick={toggleDrawer}
-              class="btn gap-0 rounded-full px-1 btn-ghost"
-              aria-label={m.community_layout_title()}
-            >
+    <div class="flex h-full min-h-0 flex-col">
+      <!-- Unified Mobile Header -->
+      <div
+        data-testid="mobile-community-header"
+        class="sticky top-0 z-30 flex items-center justify-between bg-base-200 p-4"
+      >
+        {#if isDashboardActive}
+          <!-- Dashboard: plain logo; the Communities dock tab is the switcher -->
+          <div class="avatar px-1">
+            <div class="w-8 rounded-full">
+              <ImageWithFallback
+                src={runtimeConfig.appLogo}
+                alt={m.community_layout_title()}
+                fallbackType="generic"
+                class="h-full w-full object-cover"
+              />
+            </div>
+          </div>
+          <h1 class="min-w-0 flex-1 truncate text-center text-base font-semibold">
+            {runtimeConfig.appName}
+          </h1>
+        {:else}
+          <!-- Community: back to the list, name as plain text -->
+          <a
+            data-testid="header-back"
+            href={resolve('/c/') + '?view=communities'}
+            class="btn btn-circle btn-ghost"
+            aria-label={m.community_header_back_aria()}
+          >
+            <ChevronLeftIcon class_="w-6 h-6" />
+          </a>
+          <div data-testid="header-title" class="flex min-w-0 flex-1 items-center gap-2 px-2">
+            {#if mobileHeaderAvatarUrl}
               <div class="avatar">
-                <div class="w-8 rounded-full">
+                <div class="w-7 rounded-full ring-1 ring-base-300">
                   <ImageWithFallback
-                    src={runtimeConfig.appLogo}
-                    alt={m.community_layout_title()}
-                    fallbackType="generic"
-                    class="h-full w-full object-cover"
+                    src={mobileHeaderAvatarUrl}
+                    alt=""
+                    fallbackType="community"
+                    size="avatar_sm"
+                    class="h-full w-full rounded-full object-cover"
                   />
                 </div>
               </div>
-              <ChevronRightIcon class_="w-4 h-4 opacity-50" />
-            </button>
-            <h1 class="min-w-0 flex-1 truncate text-center text-base font-semibold">
-              {runtimeConfig.appName}
-            </h1>
-          {:else}
-            <!-- Community: back to the list, name opens the switcher drawer -->
-            <a
-              data-testid="header-back"
-              href={resolve('/c/') + '?view=communities'}
-              class="btn btn-circle btn-ghost"
-              aria-label={m.community_header_back_aria()}
-            >
-              <ChevronLeftIcon class_="w-6 h-6" />
-            </a>
-            <button
-              data-testid="header-switch"
-              onclick={toggleDrawer}
-              class="btn min-w-0 flex-1 gap-2 btn-ghost"
-              aria-label="{mobileHeaderTitle} – {m.community_header_switch_aria()}"
-            >
-              {#if mobileHeaderAvatarUrl}
-                <div class="avatar">
-                  <div class="w-7 rounded-full ring-1 ring-base-300">
-                    <ImageWithFallback
-                      src={mobileHeaderAvatarUrl}
-                      alt=""
-                      fallbackType="community"
-                      size="avatar_sm"
-                      class="h-full w-full rounded-full object-cover"
-                    />
-                  </div>
-                </div>
-              {/if}
-              <span class="truncate text-base font-semibold">{mobileHeaderTitle}</span>
-              <ChevronDownIcon class_="w-4 h-4 opacity-50" />
-            </button>
-          {/if}
+            {/if}
+            <span class="truncate text-base font-semibold">{mobileHeaderTitle}</span>
+          </div>
+        {/if}
 
-          <!-- Right: Termi launcher + user avatar → global nav dropdown -->
-          {#if activeUser()}
-            <div class="flex items-center gap-1">
-              {#if !isDashboardActive && mobileHeaderShowSettings}
-                <a
-                  data-testid="header-settings"
-                  href={mobileHeaderSettingsHref}
-                  class="btn btn-circle btn-ghost"
-                  aria-label={m.community_header_settings_aria()}
-                >
-                  <SettingsIcon class_="w-6 h-6" />
-                </a>
-              {/if}
-              <TermiLauncherButton />
-              <div class="dropdown dropdown-end">
-                <div tabindex="0" role="button" class="btn btn-circle btn-ghost">
-                  <ProfileAvatar pubkey={activeUser().pubkey} size="sm" fallbackType="robohash" />
-                </div>
-                <ul
-                  class="dropdown-content menu z-[60] mt-3 w-56 rounded-box bg-base-100 p-2 shadow-lg"
-                >
-                  <MobileNavMenu onClose={closeDropdown} />
-                </ul>
+        <!-- Right: Termi launcher + user avatar → global nav dropdown -->
+        {#if activeUser()}
+          <div class="flex items-center gap-1">
+            {#if !isDashboardActive && mobileHeaderShowSettings}
+              <a
+                data-testid="header-settings"
+                href={mobileHeaderSettingsHref}
+                class="btn btn-circle btn-ghost"
+                aria-label={m.community_header_settings_aria()}
+              >
+                <SettingsIcon class_="w-6 h-6" />
+              </a>
+            {/if}
+            <TermiLauncherButton />
+            <div class="dropdown dropdown-end">
+              <div tabindex="0" role="button" class="btn btn-circle btn-ghost">
+                <ProfileAvatar pubkey={activeUser().pubkey} size="sm" fallbackType="robohash" />
               </div>
+              <ul
+                class="dropdown-content menu z-[60] mt-3 w-56 rounded-box bg-base-100 p-2 shadow-lg"
+              >
+                <MobileNavMenu onClose={closeDropdown} />
+              </ul>
             </div>
-          {:else}
-            <div class="w-10"></div>
-          {/if}
-        </div>
-
-        <!-- Main Content (child layout renders here) -->
-        <div class="flex min-h-0 flex-1 flex-col">
-          {@render children()}
-        </div>
+          </div>
+        {:else}
+          <div class="w-10"></div>
+        {/if}
       </div>
 
-      <!-- Drawer Side (Community List) -->
-      <div class="drawer-side z-50">
-        <label
-          for="community-drawer"
-          aria-label={m.community_layout_close_sidebar()}
-          class="drawer-overlay"
-        ></label>
-        <div class="min-h-full w-80 bg-base-200">
-          <div class="flex items-center justify-between border-b border-base-300 p-4">
-            <h2 class="text-lg font-semibold">{m.community_layout_title()}</h2>
-            <button onclick={toggleDrawer} class="btn btn-circle btn-ghost btn-sm">
-              <CloseIcon class_="w-5 h-5" />
-            </button>
-          </div>
-          <div class="h-[calc(100dvh-4rem)] overflow-y-auto">
-            <CommunitySidebar
-              currentCommunityId={currentCommunityPubkey}
-              currentPath={$page.url.pathname}
-              {isDashboardActive}
-              onCommunitySelect={handleCommunitySelect}
-              onHomeSelect={handleHomeSelect}
-            />
-          </div>
-        </div>
+      <!-- Main Content (child layout renders here) -->
+      <div class="flex min-h-0 flex-1 flex-col">
+        {@render children()}
       </div>
     </div>
   </div>
