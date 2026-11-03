@@ -1036,13 +1036,17 @@ export function buildCalendarEventTags(formData, eventData, dTag, hTag) {
  * `content`, not this tag), `a`, `L`/`l` and `g` (`convertFormDataToEvent` never
  * sets a geohash, so the builder never writes one on edit). `client` is listed
  * because the event factory owns it: it re-adds it when the user opted in and
- * an edit by this app must not keep another client's attribution.
+ * an edit by this app must not keep another client's attribution. `name` is
+ * listed even though the form never emits it: it's NIP-52's deprecated
+ * precursor to `title`, so an edit that writes `title` must drop a stale
+ * `name` rather than carry it along forever.
  * @type {readonly string[]}
  */
 export const CALENDAR_FORM_OWNED_TAGS = Object.freeze([
   'd',
   'h',
   'title',
+  'name',
   'start',
   'end',
   'start_tzid',

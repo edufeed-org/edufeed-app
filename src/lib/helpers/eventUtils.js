@@ -34,11 +34,14 @@ export function validateAndTransformCalendarEvents(rawEvents) {
 export function getCalendarEventMetadata(event) {
   const tagMap = new Map();
   event.tags.forEach((/** @type {any[]} */ tag) => {
-    const [key, ...values] = tag;
+    // Only the value slot (tag[1]) belongs here — later slots are relay
+    // hints, markers, or roles (e.g. NIP-52's own ["r", url, "x"] or
+    // ["p", pubkey, relay, role]), never additional values for this tag.
+    const [key, value] = tag;
     if (!tagMap.has(key)) {
       tagMap.set(key, []);
     }
-    tagMap.get(key).push(...values);
+    tagMap.get(key).push(value);
   });
 
   const getTagValue = (/** @type {string} */ tagName) => tagMap.get(tagName)?.[0];
