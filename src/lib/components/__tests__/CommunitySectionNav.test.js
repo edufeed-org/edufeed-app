@@ -21,7 +21,8 @@ vi.mock('$lib/concord/notifications.svelte.js', () => ({
 vi.mock('$lib/groups/group-channel-selection.svelte.js', () => ({
   requestChannelList: (/** @type {string} */ pk) => state.requested.push(pk)
 }));
-vi.mock('$lib/components/community/layout/community-nav.js', () => ({
+vi.mock('$lib/components/community/layout/community-nav.js', async (orig) => ({
+  ...(await orig()),
   communityNavTabIds: () => state.tabs
 }));
 vi.mock('$lib/paraglide/messages', () => ({

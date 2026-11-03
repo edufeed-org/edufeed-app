@@ -9,21 +9,40 @@
   import { LockIcon, LockOpenIcon, ChevronDownIcon } from '$lib/components/icons';
   import { useConcordCommunity } from '$lib/concord/community.svelte.js';
   import { parseGroupPointers } from '$lib/groups/community-pointer.js';
-  import { communityNavTabIds } from './community-nav.js';
+  import { communityNavTabIds, buildSidebarZones } from './community-nav.js';
   import { sectionLabel, sectionIcon } from './section-labels.js';
-  import { requestChannelList } from '$lib/groups/group-channel-selection.svelte.js';
-  import { areaUnreadState } from '$lib/concord/notifications.svelte.js';
+  import {
+    requestChannelList,
+    selectGroupChannel,
+    getSelectedGroupChannel
+  } from '$lib/groups/group-channel-selection.svelte.js';
+  import {
+    selectConcordChannel,
+    getSelectedConcordChannel,
+    requestChannelCreate
+  } from '$lib/concord/active-channel.svelte.js';
+  import { channelKey } from '$lib/groups/community-pointer.js';
+  import { splitFavouriteRows } from '$lib/groups/channel-sections.js';
+  import { readFavouriteChannels } from '$lib/groups/favourite-channels.svelte.js';
+  import { hasUnreadChannelMention } from '$lib/groups/channel-mentions.svelte.js';
+  import { areaUnreadState, channelUnreadState } from '$lib/concord/notifications.svelte.js';
+  import { isCommunityOwner } from '$lib/helpers/community-signer.js';
+  import { useActiveUser } from '$lib/stores/accounts.svelte';
   import ConcordUnreadDot from '$lib/components/shared/ConcordUnreadDot.svelte';
+  import ChannelRailRow from '../channels/ChannelRailRow.svelte';
   import BottomSheet from '$lib/components/shared/BottomSheet.svelte';
   import * as m from '$lib/paraglide/messages';
 
   /**
    * @type {{
    *   selectedContentType: string,
-   *   onContentTypeSelect: (type: string) => void,
+   *   onContentTypeSelect: (type: string, channelId?: string) => void,
    *   communityEvent?: any,
    *   restrictedTabs?: Set<string>,
-   *   accessibleTabs?: Set<string>
+   *   accessibleTabs?: Set<string>,
+   *   channelRows?: import('$lib/groups/community-channel-rows.js').ChannelRow[],
+   *   isMember?: boolean,
+   *   isRootAdmin?: boolean
    * }}
    */
   let {
@@ -31,7 +50,10 @@
     onContentTypeSelect,
     communityEvent = null,
     restrictedTabs = new Set(),
-    accessibleTabs = new Set()
+    accessibleTabs = new Set(),
+    channelRows = [],
+    isMember = false,
+    isRootAdmin = false
   } = $props();
 
   let open = $state(false);
@@ -39,7 +61,7 @@
   const getConcord = useConcordCommunity(() => communityEvent);
   const concordAreaFlags = $derived(areaUnreadState(getConcord().pointer?.communityId));
 
-  const sections = $derived.by(() => {
+  const tabIds = $derived.by(() => {
     const concord = getConcord();
     return communityNavTabIds({
       communityEvent,
@@ -47,8 +69,54 @@
       pointer: concord.pointer,
       isMember: concord.membership === 'member',
       hasGroupChannels: parseGroupPointers(communityEvent).length > 0
-    }).map((id) => ({ id, label: sectionLabel(id), icon: sectionIcon(id) }));
+    });
   });
+  const sections = $derived(
+    tabIds.map((id) => ({ id, label: sectionLabel(id), icon: sectionIcon(id) }))
+  );
+
+  // Kanäle zone: the same split + visitor filter + create gate the desktop
+  // sidebar uses (ContentNavSidebar), so a channel is two taps away on a
+  // phone: button → row.
+  const isOwner = $derived(isCommunityOwner(communityEvent?.pubkey));
+  const zones = $derived(
+    buildSidebarZones({ tabs: tabIds, channelRows, isMember, isOwner, isRootAdmin })
+  );
+  const getActiveUser = useActiveUser();
+  const favouritePubkey = $derived(getActiveUser()?.pubkey);
+  const kanaele = $derived(
+    splitFavouriteRows(zones.kanaele, readFavouriteChannels(favouritePubkey))
+  );
+  const showChannelZone = $derived(
+    zones.kanaele.length > 0 || zones.showLockHint || zones.showCreateEntry
+  );
+  const concordCommunityId = $derived(getConcord().pointer?.communityId);
+
+  /** @param {string} key */
+  function rowTestId(key) {
+    return `section-channel-row-${key.replace(/[^a-zA-Z0-9]/g, '-')}`;
+  }
+
+  /** @param {string} channelId */
+  function selectConcordRow(channelId) {
+    if (concordCommunityId) selectConcordChannel(concordCommunityId, channelId);
+    open = false;
+    onContentTypeSelect('channels', channelId);
+  }
+
+  /** @param {{id: string, relay: string}} pointer */
+  function selectGroupRow(pointer) {
+    const key = channelKey(pointer);
+    if (key && communityEvent?.pubkey) selectGroupChannel(communityEvent.pubkey, key);
+    open = false;
+    onContentTypeSelect('channels', pointer.id);
+  }
+
+  function createChannel() {
+    requestChannelCreate();
+    open = false;
+    onContentTypeSelect('channels');
+  }
   const current = $derived(sections.find((s) => s.id === selectedContentType));
   const currentLabel = $derived(current?.label ?? '');
   const currentIcon = $derived(current?.icon ?? null);
@@ -146,4 +214,74 @@
       </button>
     {/each}
   </div>
+  {#if showChannelZone}
+    <div data-testid="section-channels" class="mt-4">
+      <div class="mb-1 px-1 text-xs font-semibold tracking-wide text-base-content/60 uppercase">
+        {m.community_nav_kanaele()}
+      </div>
+      {#snippet channelRow(/** @type {any} */ row)}
+        {#if row.source === 'concord'}
+          {@const flags = channelUnreadState(concordCommunityId, row.channel_id)}
+          <ChannelRailRow
+            symbol={row.symbol}
+            name={row.name}
+            locked={row.locked}
+            testid={rowTestId(row.key)}
+            active={selectedContentType === 'channels' &&
+              getSelectedConcordChannel(concordCommunityId) === row.channel_id}
+            dimmed={!row.accessible}
+            bold={flags.unread}
+            onclick={() => selectConcordRow(row.channel_id)}
+          >
+            {#snippet trailing()}
+              <ConcordUnreadDot unread={flags.unread} mentioned={flags.mentioned} />
+            {/snippet}
+          </ChannelRailRow>
+        {:else}
+          <ChannelRailRow
+            testid={rowTestId(row.key)}
+            symbol={row.symbol}
+            name={row.name}
+            locked={row.locked}
+            active={selectedContentType === 'channels' &&
+              getSelectedGroupChannel(communityEvent?.pubkey) === channelKey(row.pointer)}
+            dimmed={row.pending}
+            worldReadable={row.worldReadable}
+            hidden={row.hidden === true}
+            onclick={() => selectGroupRow(row.pointer)}
+          >
+            {#snippet trailing()}
+              <ConcordUnreadDot mentioned={hasUnreadChannelMention(row.pointer?.id)} />
+            {/snippet}
+          </ChannelRailRow>
+        {/if}
+      {/snippet}
+      <div class="flex flex-col">
+        {#each kanaele.favourites as row (row.key)}
+          {@render channelRow(row)}
+        {/each}
+        {#if kanaele.favourites.length > 0 && kanaele.rest.length > 0}
+          <div class="my-1 border-t border-base-content/10"></div>
+        {/if}
+        {#each kanaele.rest as row (row.key)}
+          {@render channelRow(row)}
+        {/each}
+      </div>
+      {#if zones.showCreateEntry}
+        <button
+          type="button"
+          data-testid="section-channel-create"
+          onclick={createChannel}
+          class="mt-1 flex w-full items-center gap-2 rounded-lg border border-dashed border-base-content/25 px-4 py-2.5 text-left text-sm text-base-content/70"
+        >
+          + {m.concord_new_channel()}
+        </button>
+      {/if}
+      {#if zones.showLockHint}
+        <p data-testid="section-lock-hint" class="px-4 py-2 text-xs text-base-content/50">
+          {m.community_nav_lock_hint()}
+        </p>
+      {/if}
+    </div>
+  {/if}
 </BottomSheet>

@@ -432,6 +432,9 @@
     communityEvent={effectiveCommunityEvent}
     {restrictedTabs}
     {accessibleTabs}
+    {channelRows}
+    isMember={zoneMember}
+    isRootAdmin={zoneRootAdmin}
   />
 </div>
 
