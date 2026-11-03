@@ -1,4 +1,4 @@
-import { getCalendarTitle, getCalendarEventImage } from 'applesauce-common/helpers';
+import { getCalendarEventTitle, getCalendarEventImage } from 'applesauce-common/helpers';
 import { parseCalendarTimestamp, dedupeCalendarTwins } from '$lib/helpers/calendar.js';
 import { withoutChannelMeetings } from '$lib/helpers/calendar-timing.js';
 import { validateCalendarEvent } from '$lib/helpers/eventValidation.js';
@@ -82,7 +82,7 @@ export function getCalendarEventMetadata(event) {
     id: event.id,
     pubkey: event.pubkey,
     kind: /** @type {import('$lib/types/calendar.js').CalendarEventKind} */ (event.kind),
-    title: getCalendarTitle(event) || 'Untitled Event',
+    title: getCalendarEventTitle(event) || 'Untitled Event',
     summary: event.content || getTagValue('summary') || getTagValue('description'),
     image: getCalendarEventImage(event) || '',
     startTimezone: getTagValue('start_tzid'),
