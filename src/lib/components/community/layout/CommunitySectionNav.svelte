@@ -1,9 +1,12 @@
 <script>
-  // Phone section switcher for a community: a sticky row (Bereiche chip +
-  // current section) and a bottom sheet with every section as a tile.
-  // Replaces the horizontally scrolling BottomTabBar (QA 2026-10-13: Kalender
-  // and Einstellungen were two arrow taps away, locks unexplained).
-  import { LockIcon, LockOpenIcon, GridIcon } from '$lib/components/icons';
+  // Phone section switcher for a community: a sticky full-width button
+  // (current section's icon + name, "N Bereiche", chevron) and a bottom
+  // sheet with every section as a tile. The button replaced a "Bereiche"
+  // chip nobody read as the menu (issue "mobile: navigation is too
+  // complicated", round 2); the sheet replaced the horizontally scrolling
+  // BottomTabBar (QA 2026-10-13: Kalender and Einstellungen were two arrow
+  // taps away, locks unexplained).
+  import { LockIcon, LockOpenIcon, ChevronDownIcon } from '$lib/components/icons';
   import { useConcordCommunity } from '$lib/concord/community.svelte.js';
   import { parseGroupPointers } from '$lib/groups/community-pointer.js';
   import { communityNavTabIds } from './community-nav.js';
@@ -46,7 +49,9 @@
       hasGroupChannels: parseGroupPointers(communityEvent).length > 0
     }).map((id) => ({ id, label: sectionLabel(id), icon: sectionIcon(id) }));
   });
-  const currentLabel = $derived(sections.find((s) => s.id === selectedContentType)?.label ?? '');
+  const current = $derived(sections.find((s) => s.id === selectedContentType));
+  const currentLabel = $derived(current?.label ?? '');
+  const currentIcon = $derived(current?.icon ?? null);
 
   /** @param {string} id */
   function select(id) {
@@ -60,23 +65,30 @@
 
 <!-- top-18 = the /c mobile header's 4.5rem (p-4 + btn), which pins above
      this row at z-30 in the same scroll surface. -->
-<div
-  data-testid="section-row"
-  class="sticky top-18 z-20 flex items-center gap-2 bg-base-200 px-4 py-2"
->
+<div data-testid="section-row" class="sticky top-18 z-20 bg-base-200 px-4 py-2">
   <button
     type="button"
     data-testid="section-open"
-    class="btn gap-1.5 rounded-full btn-sm btn-neutral"
+    class="flex h-13 w-full items-center gap-2.5 rounded-2xl border border-base-300 bg-base-100 px-3 text-left"
     aria-haspopup="dialog"
     aria-expanded={open}
-    aria-label={m.community_sections_open_aria()}
     onclick={() => (open = true)}
   >
-    <GridIcon class_="h-4 w-4" />
-    {m.community_sections_title()}
+    {#if currentIcon}
+      {@const CurrentIcon = currentIcon}
+      <span class="grid size-8 shrink-0 place-items-center rounded-lg bg-primary/10 text-primary">
+        <CurrentIcon class_="h-4 w-4" />
+      </span>
+    {/if}
+    <span data-testid="section-current" class="flex min-w-0 flex-1 items-center gap-1.5">
+      <span class="truncate text-base font-semibold">{currentLabel}</span>
+      <ConcordUnreadDot unread={concordAreaFlags.unread} mentioned={concordAreaFlags.mentioned} />
+    </span>
+    <span data-testid="section-count" class="shrink-0 text-xs text-base-content/60"
+      >{m.community_sections_count({ count: sections.length })}</span
+    >
+    <ChevronDownIcon class_="h-5 w-5 shrink-0 text-base-content/60" />
   </button>
-  <span data-testid="section-current" class="truncate text-sm font-medium">{currentLabel}</span>
 </div>
 
 <BottomSheet

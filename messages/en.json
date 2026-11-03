@@ -4472,5 +4472,6 @@
   "settings_relay_badge_paid": "Paid",
   "settings_relay_health_help": "Checked from this device. A relay that does not have your list may not be found by other apps – saving publishes the list there.",
   "dashboard_communities_find": "Find",
-  "dashboard_communities_row_new": "new"
+  "dashboard_communities_row_new": "new",
+  "community_sections_count": "{count} sections"
 }
