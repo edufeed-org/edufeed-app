@@ -159,8 +159,10 @@ export function createCalendarActions(_communityPubkey) {
       }
 
       try {
-        // Convert form data to event object
-        const eventData = convertFormDataToEvent(formData, existingEvent.pubkey);
+        // Convert form data to event object. Passing the raw existing event
+        // lets a no-op edit keep the stored start/end exactly (incl. seconds)
+        // and leave a zone-less event zone-less — see convertFormDataToEvent.
+        const eventData = convertFormDataToEvent(formData, existingEvent.pubkey, existingEvent);
 
         // An update MUST NOT change the kind.
         //

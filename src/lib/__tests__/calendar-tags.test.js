@@ -66,6 +66,39 @@ describe('buildCalendarEventTags', () => {
       expect(findTags(tags, 'end_tz')).toHaveLength(0);
     });
 
+    // edufeed-app issue 06e6709d: end_tzid was written whenever
+    // eventData.endTimezone was truthy, even without an end — contradicting
+    // NIP-52's rule that an omitted end_tzid means start_tzid's zone.
+    it('should not produce end_tzid when there is no end, even if endTimezone is set', () => {
+      const formData = {
+        startDate: '2024-06-15',
+        startTime: '14:00',
+        endDate: '',
+        endTime: '',
+        startTimezone: 'Europe/Berlin',
+        endTimezone: 'Europe/Berlin',
+        eventType: 'time',
+        title: 'Test Event'
+      };
+      const eventData = {
+        kind: 31923,
+        title: 'Test Event',
+        start: 1718452800, // 2024-06-15T14:00:00 UTC
+        startTimezone: 'Europe/Berlin',
+        endTimezone: 'Europe/Berlin' // stale value, no matching `end`
+      };
+
+      const tags = buildCalendarEventTags(
+        /** @type {any} */ (formData),
+        /** @type {any} */ (eventData),
+        'test-d-tag'
+      );
+
+      expect(findTagValue(tags, 'start_tzid')).toBe('Europe/Berlin');
+      expect(findTags(tags, 'end')).toHaveLength(0);
+      expect(findTags(tags, 'end_tzid')).toHaveLength(0);
+    });
+
     it('should not produce timezone tags for kind 31923 without timezones', () => {
       const formData = {
         startDate: '2024-06-15',
