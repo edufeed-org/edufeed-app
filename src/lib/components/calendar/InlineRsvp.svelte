@@ -11,7 +11,7 @@
   import { CalendarEventRSVPsModel } from 'applesauce-common/models';
   import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
   import { calendarEventRsvpLoader } from '$lib/loaders/rsvp.js';
-  import { getTagValue } from 'applesauce-core/helpers';
+  import { getRSVPStatus } from 'applesauce-common/helpers';
   import * as m from '$lib/paraglide/messages';
 
   let {
@@ -70,8 +70,9 @@
 
     if (!userRsvp) return null;
 
-    // Extract status tag
-    return getTagValue(userRsvp, 'status') || 'accepted';
+    // Extract status tag. NIP-52 requires a valid status; an RSVP with no
+    // status tag (or an invalid one) is treated as "no answer", not accepted.
+    return getRSVPStatus(userRsvp) ?? null;
   });
 
   // Load RSVPs reactively when calendarEvent changes
