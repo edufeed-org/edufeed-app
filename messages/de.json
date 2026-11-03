@@ -2680,6 +2680,7 @@
   "form_section_back": "Zurück",
   "form_section_next": "Weiter",
   "form_responses_linked_to": "Verknüpft mit:",
+  "form_datetime_time_label": "Uhrzeit",
   "form_responses_empty": "Noch keine Antworten.",
   "form_responses_decrypt_failed": "Antwort konnte nicht entschlüsselt werden",
   "form_responses_field_removed": "(Feld entfernt)",
