@@ -14,7 +14,7 @@ import {
   resolveCuratedConfig,
   resolveWotConfig
 } from '$lib/server/env-parse.js';
-import { getRelaysForKind } from '$lib/server/relay-fetch.js';
+import { guardedRelaysForKind } from '$lib/server/relay-fetch.js';
 
 /** Curation categories whose content the indexability rule covers. */
 const CATEGORIES = ['LONGFORM', 'EDUCATIONAL'];
@@ -27,9 +27,10 @@ const CATEGORIES = ['LONGFORM', 'EDUCATIONAL'];
  * @param {{ sets: string[], direct: string[] } | null} curated
  * @param {string[]} wotAnchors
  * @param {FetchFirst} fetchFirst
+ * @param {{ lookup?: import('$lib/server/httpUrl.js').DnsLookupAll }} [options] lookup injectable for tests
  * @returns {Promise<string[] | null>} null = nothing configured; [] = configured but nobody resolved
  */
-export async function resolveAuthors(curated, wotAnchors, fetchFirst) {
+export async function resolveAuthors(curated, wotAnchors, fetchFirst, options = {}) {
   const sets = curated?.sets ?? [];
   const direct = curated?.direct ?? [];
   if (sets.length === 0 && direct.length === 0 && wotAnchors.length === 0) return null;
@@ -46,9 +47,11 @@ export async function resolveAuthors(curated, wotAnchors, fetchFirst) {
         const decoded = nip19.decode(naddr);
         if (decoded.type !== 'naddr') return null;
         const { kind, pubkey, identifier, relays = [] } = decoded.data;
+        // The set naddr's relay hints go through the same SSRF guard as
+        // hints from a request.
         return fetchFirst(
           { kinds: [kind], authors: [pubkey], '#d': [identifier], limit: 1 },
-          getRelaysForKind(kind, relays)
+          await guardedRelaysForKind(kind, relays, options)
         );
       } catch {
         return null;

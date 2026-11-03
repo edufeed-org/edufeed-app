@@ -6,8 +6,21 @@
 import { env } from '$env/dynamic/private';
 import { nip19 } from 'nostr-tools';
 import { verifyEvent } from 'nostr-tools/pure';
+import { safeHintRelays } from '$lib/server/nostr-fetch.js';
 
 const FETCH_TIMEOUT = 3000;
+
+/** Configured relays dialed per read (the historical cap of the race). */
+const MAX_CONFIGURED_RELAYS = 5;
+/** Hint relays dialed on top of the configured ones. */
+const MAX_HINT_RELAYS = 2;
+/**
+ * Hints considered at all: each costs a DNS lookup in {@link safeHintRelays},
+ * and an naddr can carry any number of them.
+ */
+const MAX_HINT_CANDIDATES = 5;
+/** Sockets one read may open: configured relays plus hints. */
+const MAX_RELAYS_PER_READ = MAX_CONFIGURED_RELAYS + MAX_HINT_RELAYS;
 
 /**
  * @param {string | undefined} csv
@@ -25,11 +38,18 @@ function parseRelays(csv) {
  * Get relays to query for a given kind.
  * Mirrors kindToAppRelayCategory in src/lib/services/app-relay-service.svelte.js,
  * reading env directly (server context — no user 30002 overrides for crawlers).
+ *
+ * Order: the configured app relays, then `FALLBACK_RELAYS` (at most
+ * {@link MAX_CONFIGURED_RELAYS}), then at most {@link MAX_HINT_RELAYS} hints —
+ * so a hint can never crowd the operator's relays out of the read's cap, and
+ * `[0]` stays the deployment's own relay (used as the canonical naddr hint).
+ * Hints are attacker-choosable (naddr/nevent in a public URL): pass them
+ * through {@link safeHintRelays} first, as {@link guardedRelaysForKind} does.
  * @param {number} kind
- * @param {string[]} hintRelays
+ * @param {string[]} [hintRelays]
  * @returns {string[]}
  */
-export function getRelaysForKind(kind, hintRelays) {
+export function getRelaysForKind(kind, hintRelays = []) {
   /** @type {string[]} */
   let appRelays = [];
 
@@ -53,8 +73,26 @@ export function getRelaysForKind(kind, hintRelays) {
   }
 
   const fallback = parseRelays(env.FALLBACK_RELAYS);
-  const all = [...new Set([...hintRelays, ...appRelays, ...fallback])];
-  return all.length > 0 ? all : ['wss://relay.damus.io', 'wss://relay.primal.net'];
+  const configured = [...new Set([...appRelays, ...fallback])];
+  const base = (
+    configured.length > 0 ? configured : ['wss://relay.damus.io', 'wss://relay.primal.net']
+  ).slice(0, MAX_CONFIGURED_RELAYS);
+  const hints = [...new Set(hintRelays)].filter((r) => !base.includes(r)).slice(0, MAX_HINT_RELAYS);
+  return [...base, ...hints];
+}
+
+/**
+ * {@link getRelaysForKind} with untrusted hints: only public `wss://` hints
+ * survive (no `ws:`, no loopback/private/link-local literal or name, no name
+ * resolving to such an address — see {@link safeHintRelays}).
+ * @param {number} kind
+ * @param {unknown[]} hintRelays
+ * @param {{ lookup?: import('$lib/server/httpUrl.js').DnsLookupAll }} [options] lookup injectable for tests
+ * @returns {Promise<string[]>}
+ */
+export async function guardedRelaysForKind(kind, hintRelays, { lookup } = {}) {
+  const candidates = Array.isArray(hintRelays) ? hintRelays.slice(0, MAX_HINT_CANDIDATES) : [];
+  return getRelaysForKind(kind, await safeHintRelays(candidates, lookup));
 }
 
 /**
@@ -127,7 +165,8 @@ export function eventMatchesFilter(event, filter) {
  */
 
 /**
- * First verified event matching `filter` from up to 5 relays. Resolves as
+ * First verified event matching `filter` from up to 7 relays (5 configured +
+ * 2 hints, see {@link getRelaysForKind}). Resolves as
  * soon as a match arrives, or as soon as every relay has answered/failed
  * (a confirmed miss no longer waits for the timeout).
  * @param {import('nostr-tools').Filter} filter
@@ -138,7 +177,7 @@ export function eventMatchesFilter(event, filter) {
 export function fetchFirstEventResult(filter, relays, timeoutMs = FETCH_TIMEOUT) {
   return new Promise((resolve) => {
     let resolved = false;
-    const targets = relays.slice(0, 5);
+    const targets = relays.slice(0, MAX_RELAYS_PER_READ);
     let answered = 0;
     let failed = 0;
 
@@ -244,23 +283,25 @@ export async function fetchFirstEvent(filter, relays, timeoutMs = FETCH_TIMEOUT)
 }
 
 /**
- * Fetch the event an naddr/nevent identifier points to.
+ * Fetch the event an naddr/nevent identifier points to. The identifier comes
+ * from a public URL, so its relay hints go through the SSRF guard.
  * @param {string} identifier - naddr1... or nevent1... string
+ * @param {{ lookup?: import('$lib/server/httpUrl.js').DnsLookupAll }} [options] lookup injectable for tests
  * @returns {Promise<FetchResult>}
  */
-export async function fetchEventResultFromRelays(identifier) {
+export async function fetchEventResultFromRelays(identifier, options = {}) {
   const decoded = decodeIdentifier(identifier);
   if (!decoded) return { event: null, complete: true };
 
   if (decoded.type === 'naddr') {
     return fetchFirstEventResult(
       { kinds: [decoded.kind], authors: [decoded.pubkey], '#d': [decoded.identifier], limit: 1 },
-      getRelaysForKind(decoded.kind, decoded.relays)
+      await guardedRelaysForKind(decoded.kind, decoded.relays, options)
     );
   }
   return fetchFirstEventResult(
     { ids: [decoded.id], limit: 1 },
-    getRelaysForKind(decoded.kind || 1, decoded.relays)
+    await guardedRelaysForKind(decoded.kind || 1, decoded.relays, options)
   );
 }
 
