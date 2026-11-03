@@ -165,16 +165,22 @@ export function isEventInDateRange(event, start, end) {
   // Convert UNIX timestamps to UTC dates for comparison
   // event.start and event.end are UNIX timestamps (seconds)
   const eventStartDateUTC = new Date(event.start * 1000);
-  const eventEndDateUTC = event.end
-    ? new Date(event.end * 1000) // Exclusive end date
-    : eventStartDateUTC; // Same day if no end
+  // A 31922 CalendarEvent's end is the midnight of its last day (or absent
+  // for a one-day event), so its exclusive end is the following midnight —
+  // see getEffectiveEventEnd. A 31923 end is exclusive as-is.
+  const eventEndDateUTC =
+    event.kind === 31922
+      ? new Date(getEffectiveEventEnd(event) * 1000)
+      : event.end
+        ? new Date(event.end * 1000)
+        : eventStartDateUTC; // Same day if no end
 
   // Use the provided date range directly - they already have proper time precision
   // Previously, we were recreating UTC dates which lost the time information (00:00:00 always)
   // This caused events to be filtered out incorrectly in list view
 
   // Check for overlap: eventStart < rangeEnd AND eventEnd > rangeStart
-  // Note: NIP-52 end date is exclusive, so we use > instead of >=
+  // Note: the end is exclusive, so we use > instead of >=
   return eventStartDateUTC < end && eventEndDateUTC > start;
 }
 

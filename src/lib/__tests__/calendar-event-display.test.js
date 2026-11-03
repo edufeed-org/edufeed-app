@@ -21,6 +21,7 @@ vi.mock('$lib/paraglide/runtime.js', () => ({ getLocale: () => 'de' }));
 const {
   isAllDayEvent,
   getEffectiveEventEnd,
+  isEventInDateRange,
   parseCalendarStartParts,
   formatCalendarSubtitle,
   formatEventDateTime,
@@ -67,6 +68,50 @@ describe('getEffectiveEventEnd — missing end means open end for 31922, instant
 
   it('ignores an end before (or equal to) the start — ends at start', () => {
     expect(getEffectiveEventEnd({ kind: 31923, start: JAN_5_15H, end: JAN_5 })).toBe(JAN_5_15H);
+  });
+});
+
+describe('isEventInDateRange — all-day events on the first day of a week/month range', () => {
+  // Week/month ranges start at UTC midnight and end at 23:59:59.999 UTC.
+  const rangeStart = new Date(JAN_5 * 1000);
+  const rangeEnd = new Date((JAN_5 + 7 * DAY) * 1000 - 1);
+
+  it('includes a one-day 31922 event without end on the range start day', () => {
+    expect(isEventInDateRange({ kind: 31922, start: JAN_5, end: 0 }, rangeStart, rangeEnd)).toBe(
+      true
+    );
+  });
+
+  it('includes a legacy one-day 31922 event with end == start on the range start day', () => {
+    expect(
+      isEventInDateRange({ kind: 31922, start: JAN_5, end: JAN_5 }, rangeStart, rangeEnd)
+    ).toBe(true);
+  });
+
+  it('includes a multi-day 31922 event whose (inclusive) last day is the range start day', () => {
+    // Jan 3-5: CalendarEvent.end is the midnight of the last day
+    const event = { kind: 31922, start: JAN_5 - 2 * DAY, end: JAN_5 };
+    expect(isEventInDateRange(event, rangeStart, rangeEnd)).toBe(true);
+  });
+
+  it('excludes a 31922 event that ends on the day before the range', () => {
+    const event = { kind: 31922, start: JAN_5 - 2 * DAY, end: JAN_5 - DAY };
+    expect(isEventInDateRange(event, rangeStart, rangeEnd)).toBe(false);
+    expect(
+      isEventInDateRange({ kind: 31922, start: JAN_5 - DAY, end: 0 }, rangeStart, rangeEnd)
+    ).toBe(false);
+  });
+
+  it('excludes a 31922 event on the day after the range', () => {
+    expect(
+      isEventInDateRange({ kind: 31922, start: JAN_5 + 7 * DAY, end: 0 }, rangeStart, rangeEnd)
+    ).toBe(false);
+  });
+
+  it('includes a 31922 event on the last day of the range', () => {
+    expect(
+      isEventInDateRange({ kind: 31922, start: JAN_5 + 6 * DAY, end: 0 }, rangeStart, rangeEnd)
+    ).toBe(true);
   });
 });
 

@@ -34,14 +34,18 @@ export function startEpoch(event) {
 }
 
 /**
- * An event's end as an epoch second, falling back to its start.
+ * An event's end as an epoch second. A time-based event without an end falls
+ * back to its start. A date-based end tag is exclusive (NIP-52) and used
+ * as-is; without one — or with a legacy one not after the start (older app
+ * versions wrote `end == start`) — the event lasts its whole start day.
  * @param {ChannelCalendarEvent} event
  */
 export function endEpoch(event) {
-  if (!event.end) return startEpoch(event);
-  if (!event.dateBased) return Number(event.end) || startEpoch(event);
-  const ms = Date.parse(`${event.end}T00:00:00Z`);
-  return Number.isNaN(ms) ? startEpoch(event) : Math.floor(ms / 1000);
+  const start = startEpoch(event);
+  if (!event.dateBased) return (event.end && Number(event.end)) || start;
+  const ms = event.end ? Date.parse(`${event.end}T00:00:00Z`) : NaN;
+  const end = Number.isNaN(ms) ? 0 : Math.floor(ms / 1000);
+  return end > start ? end : start + 86400;
 }
 
 /**
