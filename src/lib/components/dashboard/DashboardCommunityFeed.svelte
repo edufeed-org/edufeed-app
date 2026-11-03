@@ -24,20 +24,11 @@
   } from '$lib/helpers/profile-feed.js';
   import { withoutChannelMeetings } from '$lib/helpers/calendar-timing.js';
   import { startProfileFeedLoaders } from '$lib/loaders/profile-feed-loaders.js';
-  import { addressLoader } from '$lib/loaders/base.js';
-  import { getCommunikeyRelays } from '$lib/helpers/relay-helper.js';
   import { getFeedCardData } from '$lib/helpers/feedCardData.js';
-  import { filterUpcomingEvents, mergeCommunityActivity } from '$lib/helpers/dashboardFilters.js';
-  import { filterEventsByAccess } from '$lib/helpers/contentTypes.js';
-  import { subscribeToCommunityAccess } from '$lib/groups/community-access-subscription.js';
+  import { filterUpcomingEvents } from '$lib/helpers/dashboardFilters.js';
   import { useProfileMap } from '$lib/stores/profile-map.svelte.js';
   import { useJoinedCommunitiesList } from '$lib/stores/joined-communities-list.svelte.js';
-  import { useCommunityActivityLoader } from '$lib/loaders/community-activity.js';
-  import { useSocialBookmarksCommunityLoader } from '$lib/loaders/social-bookmarks.js';
-  import {
-    CommunityActivityModel,
-    CommunitySocialBookmarkModel
-  } from '$lib/models/community-content.js';
+  import { useJoinedCommunityItems } from '$lib/stores/joined-community-items.svelte.js';
   import { getContentEventRoute, resolveCommunityPubkey } from '$lib/helpers/contentNavigation.js';
   import FeedCard from '$lib/components/shared/FeedCard.svelte';
   import RichFeedEntry from '$lib/components/dashboard/RichFeedEntry.svelte';
@@ -63,15 +54,23 @@
 
   const getActiveUser = useActiveUser();
 
-  /** @type {Map<string, any[]>} */
-  let perCommunityItems = new Map();
-  let allItems = $state.raw(/** @type {any[]} */ ([]));
   let followItems = $state.raw(/** @type {any[]} */ ([]));
-  let isLoading = $state(true);
   let displayCount = $state(15);
 
   const getJoinedCommunities = useJoinedCommunitiesList();
   let joinedCommunities = $derived(getJoinedCommunities());
+
+  // Per-community loaders + models, shared with the phone Communities list.
+  const getJoinedItems = useJoinedCommunityItems(() => joinedCommunities);
+  let allItems = $derived(getJoinedItems().items);
+  let isLoading = $derived(getJoinedItems().isLoading);
+
+  // The saved page size is re-read whenever the community list changes
+  // (the loaders restart then, as they always did).
+  $effect(() => {
+    void joinedCommunities;
+    displayCount = feedStateCache.get('dashboard-community-feed')?.displayCount ?? 15;
+  });
 
   // Community profiles for name badges
   const getCommunityProfiles = useProfileMap(() => joinedCommunities);
@@ -144,142 +143,6 @@
   );
   let hasMore = $derived(previewCount === 0 && displayCount < filteredItems.length);
 
-  // Per-community cleanup functions
-  /** @type {Map<string, () => void>} */
-  let cleanupMap = new Map();
-
-  // Per-community ACL state: community event + ready access object for filtering
-  /** @type {Map<string, { communityEvent: any, access: { isLoading: boolean, getAllowedAuthors: (name: string) => string[] | null } | null }>} */
-  let perCommunityAcl = new Map();
-
-  $effect(() => {
-    const communities = joinedCommunities;
-
-    // Clean up previous subscriptions
-    for (const cleanup of cleanupMap.values()) cleanup();
-    cleanupMap.clear();
-    perCommunityItems = new Map();
-    perCommunityAcl = new Map();
-    displayCount = feedStateCache.get('dashboard-community-feed')?.displayCount ?? 15;
-
-    if (communities.length === 0) {
-      allItems = [];
-      isLoading = false;
-      return;
-    }
-
-    for (const pubkey of communities) {
-      // Ensure community kind 10222 event is in EventStore for relay discovery
-      const addrSub = addressLoader({
-        kind: 10222,
-        pubkey,
-        relays: getCommunikeyRelays()
-      }).subscribe();
-
-      // Load all content sources (direct + reposts + legacy 30222)
-      const { cleanup: activityCleanup } = useCommunityActivityLoader(pubkey);
-      const { cleanup: bookmarkCleanup } = useSocialBookmarksCommunityLoader(pubkey);
-
-      // Merge activity + bookmark models per community (same pattern as HomeView)
-      /** @type {any[]} */
-      let activityItems = [];
-      /** @type {any[]} */
-      let bookmarkItems = [];
-
-      function mergeAndUpdate() {
-        const seen = new Set();
-        let merged = [...activityItems, ...bookmarkItems].filter((e) => {
-          if (seen.has(e.id)) return false;
-          seen.add(e.id);
-          return true;
-        });
-
-        // Apply ACL filtering if community event and access data are available
-        const acl = perCommunityAcl.get(pubkey);
-        if (acl?.communityEvent && acl.access) {
-          merged = filterEventsByAccess(merged, acl.communityEvent, acl.access);
-        }
-
-        perCommunityItems.set(pubkey, merged);
-        allItems = mergeCommunityActivity(perCommunityItems);
-        isLoading = false;
-      }
-
-      // Subscribe to community event for ACL setup
-      /** @type {(() => void) | undefined} */
-      let aclCleanup;
-      const communitySub = eventStore.replaceable(10222, pubkey).subscribe((communityEvent) => {
-        // Clean up previous ACL subscriptions when community event updates
-        if (aclCleanup) aclCleanup();
-
-        if (!communityEvent) {
-          perCommunityAcl.set(pubkey, {
-            communityEvent: null,
-            access: null
-          });
-          mergeAndUpdate();
-          return;
-        }
-
-        perCommunityAcl.set(pubkey, {
-          communityEvent,
-          access: null
-        });
-
-        const { cleanup: accessCleanup, hasRestrictedSections } = subscribeToCommunityAccess(
-          communityEvent,
-          getCommunikeyRelays(),
-          (access) => {
-            const acl = perCommunityAcl.get(pubkey);
-            if (acl) acl.access = access;
-            mergeAndUpdate();
-          }
-        );
-
-        if (!hasRestrictedSections) {
-          mergeAndUpdate();
-        }
-
-        aclCleanup = accessCleanup;
-      });
-
-      const activitySub = eventStore.model(CommunityActivityModel, pubkey).subscribe({
-        next: (loaded) => {
-          activityItems = loaded || [];
-          mergeAndUpdate();
-        },
-        error: (err) => {
-          console.error(`DashboardCommunityFeed: Activity error for ${pubkey}:`, err);
-        }
-      });
-
-      const bookmarkSub = eventStore.model(CommunitySocialBookmarkModel, pubkey).subscribe({
-        next: (loaded) => {
-          bookmarkItems = loaded || [];
-          mergeAndUpdate();
-        },
-        error: (err) => {
-          console.error(`DashboardCommunityFeed: Bookmark error for ${pubkey}:`, err);
-        }
-      });
-
-      cleanupMap.set(pubkey, () => {
-        addrSub.unsubscribe();
-        communitySub.unsubscribe();
-        if (aclCleanup) aclCleanup();
-        activitySub.unsubscribe();
-        bookmarkSub.unsubscribe();
-        activityCleanup();
-        bookmarkCleanup();
-      });
-    }
-
-    return () => {
-      for (const cleanup of cleanupMap.values()) cleanup();
-      cleanupMap.clear();
-    };
-  });
-
   // Combined mode: subscribe to content authored by the user's follows.
   // Same model + loaders as the follows feed (ProfileFeedView), rendered
   // here uniformly as FeedCards.
@@ -321,7 +184,7 @@
 
   /** @param {any} event */
   function navigateToEvent(event) {
-    const communityPubkey = resolveCommunityPubkey(event, perCommunityItems);
+    const communityPubkey = resolveCommunityPubkey(event, getJoinedItems().perCommunity);
     const route = getContentEventRoute(event, { communityPubkey });
     if (route) goto(resolve(/** @type {any} */ (route)));
   }
