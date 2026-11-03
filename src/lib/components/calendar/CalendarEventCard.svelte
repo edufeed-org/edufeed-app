@@ -96,7 +96,18 @@
   let startDate = $derived(new Date(event.start * 1000));
   let endDate = $derived(event.end ? new Date(event.end * 1000) : null);
   let isAllDay = $derived(event.kind === 31922); // Date-based events are all-day
-  let isMultiDay = $derived(endDate && startDate.toDateString() !== endDate.toDateString());
+  // 31922 timestamps are UTC midnight, so the day boundary must be compared
+  // in UTC (local comparison shows the day before, west of UTC). A 31923's
+  // end is exclusive: comparing it as-is shows a two-day span for an event
+  // that merely ends at local midnight, so compare end minus one second.
+  let isMultiDay = $derived.by(() => {
+    if (!endDate) return false;
+    if (isAllDay) {
+      return startDate.toISOString().slice(0, 10) !== endDate.toISOString().slice(0, 10);
+    }
+    const compareEnd = new Date(endDate.getTime() - 1000);
+    return startDate.toDateString() !== compareEnd.toDateString();
+  });
 
   let commentCount = $state(0);
 
@@ -192,9 +203,9 @@
     <div class="min-w-0 flex-1">
       <div class="truncate font-semibold text-base-content">{event.title}</div>
       <div class="truncate text-sm text-base-content/60">
-        {formatCalendarDate(startDate, 'short')}
+        {formatCalendarDate(startDate, 'short', { utc: isAllDay })}
         {#if isMultiDay && endDate}
-          - {formatCalendarDate(endDate, 'short')}
+          - {formatCalendarDate(endDate, 'short', { utc: isAllDay })}
         {/if}
         {#if !isAllDay}
           · {formatCalendarDate(startDate, 'time')}
@@ -312,9 +323,9 @@
           >
             <span class="flex items-center gap-1.5">
               <CalendarIcon class_="h-4 w-4 flex-shrink-0 text-base-content/50" title="" />
-              {formatCalendarDate(startDate, 'short')}
+              {formatCalendarDate(startDate, 'short', { utc: isAllDay })}
               {#if isMultiDay && endDate}
-                - {formatCalendarDate(endDate, 'short')}
+                - {formatCalendarDate(endDate, 'short', { utc: isAllDay })}
               {/if}
             </span>
             {#if isAllDay}
@@ -343,9 +354,9 @@
           <!-- Compact date display for multi-day -->
           {#if isMultiDay}
             <div class="mb-1 text-xs text-base-content/50">
-              {formatCalendarDate(startDate, 'short')}
+              {formatCalendarDate(startDate, 'short', { utc: isAllDay })}
               {#if endDate}
-                - {formatCalendarDate(endDate, 'short')}
+                - {formatCalendarDate(endDate, 'short', { utc: isAllDay })}
               {/if}
             </div>
           {/if}

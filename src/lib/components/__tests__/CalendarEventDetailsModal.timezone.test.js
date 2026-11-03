@@ -15,6 +15,16 @@ const h = vi.hoisted(() => ({ modal: null, goto: null }));
 
 vi.mock('$app/navigation', () => ({ goto: (...a) => h.goto(...a) }));
 vi.mock('$app/paths', () => ({ resolve: (p) => p }));
+// Pin the "today"/"tomorrow" compact-header labels so the M1 test below does
+// not depend on the active paraglide locale; every other message is real.
+vi.mock('$lib/paraglide/messages', async () => {
+  const actual = await vi.importActual('$lib/paraglide/messages');
+  return {
+    ...actual,
+    event_details_today: () => 'TODAY_LABEL',
+    event_details_tomorrow: () => 'TOMORROW_LABEL'
+  };
+});
 vi.mock('$lib/stores/modal.svelte.js', () => ({
   get modalStore() {
     return h.modal;
@@ -138,5 +148,65 @@ describe('CalendarEventDetailsModal — event time zone', () => {
     const end = screen.getByTestId('event-end-time').textContent;
     expect(end).toContain('11:30');
     expect(end).toContain('America/New_York');
+  });
+});
+
+// M1: 31922 (date-based) timestamps are UTC midnight. Formatting them
+// without `{ utc: true }` renders the day before for a viewer west of UTC —
+// including the compact header's "today"/"tomorrow" date, which read the
+// UTC-midnight instant with local getters.
+describe('CalendarEventDetailsModal — all-day dates west of UTC (M1)', () => {
+  const ORIGINAL_TZ = process.env.TZ;
+  beforeEach(() => {
+    HTMLDialogElement.prototype.showModal ??= function () {
+      this.open = true;
+    };
+    HTMLDialogElement.prototype.close ??= function () {
+      this.open = false;
+    };
+    h.goto = vi.fn();
+    process.env.TZ = 'America/New_York';
+  });
+  afterEach(() => {
+    if (ORIGINAL_TZ === undefined) delete process.env.TZ;
+    else process.env.TZ = ORIGINAL_TZ;
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+  });
+
+  // 2026-11-03 as a NIP-52 date-based event: UTC midnight.
+  const ALL_DAY_START = Date.UTC(2026, 10, 3) / 1000;
+  const ALL_DAY_END = Date.UTC(2026, 10, 5) / 1000;
+
+  function allDayFixture(overrides = {}) {
+    return fixture({
+      kind: 31922,
+      start: ALL_DAY_START,
+      end: null,
+      originalEvent: null,
+      ...overrides
+    });
+  }
+
+  it('date-and-time card: single-day shows the event day, not the day before', () => {
+    open(allDayFixture());
+    const body = document.body.textContent || '';
+    expect(body).toMatch(/\b3\b/);
+    expect(body).not.toMatch(/\b2\b/);
+  });
+
+  it('date-and-time card: multi-day shows both the correct start and end days', () => {
+    open(allDayFixture({ end: ALL_DAY_END }));
+    const body = document.body.textContent || '';
+    expect(body).toMatch(/\b3\b/);
+    expect(body).toMatch(/\b5\b/);
+  });
+
+  it('compact header date: labels the event "today" by its UTC calendar day, not a day early', () => {
+    vi.useFakeTimers();
+    // Noon UTC = 07:00 EST, still 2026-11-03 in both UTC and America/New_York.
+    vi.setSystemTime(new Date(Date.UTC(2026, 10, 3, 12, 0)));
+    open(allDayFixture());
+    expect(document.body.textContent).toContain('TODAY_LABEL');
   });
 });
