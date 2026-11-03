@@ -2568,6 +2568,7 @@
   "rsvp_not_registration_hint_short": "Keine Anmeldung beim Veranstalter",
   "calendar_detail_reactions": "Reaktionen",
   "calendar_detail_not_found": "Event nicht gefunden",
+  "calendar_detail_deleted": "Dieses Event wurde von seiner Autorin oder seinem Autor gelöscht.",
   "calendar_detail_your_event": "Dein Event",
   "generic_event_kind_label": "Kind {kind}",
   "generic_event_limited_notice": "Für diesen Inhaltstyp (Kind {kind}) gibt es hier noch keine eigene Ansicht. Angezeigt wird, was die App daraus lesen kann.",
