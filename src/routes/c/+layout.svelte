@@ -3,8 +3,8 @@
   import { resolve } from '$app/paths';
   import { page } from '$app/stores';
   import { getContext, setContext } from 'svelte';
-  import { MediaQuery } from 'svelte/reactivity';
   import { useActiveUser } from '$lib/stores/accounts.svelte';
+  import { useIsDesktop } from '$lib/stores/viewport.svelte.js';
   import { hexToNpub } from '$lib/helpers/nostrUtils.js';
   import { buildCommunityPath } from '$lib/helpers/communityNavigation.js';
   import CommunitySidebar from '$lib/components/community/layout/CommunitySidebar.svelte';
@@ -32,7 +32,7 @@
   // CSS mounted every /c page twice — hidden twins still ran their effects
   // and click handlers, so one Follow click toasted and published twice.
   // /c is ssr = false, so the viewport is known on first render.
-  const isDesktop = new MediaQuery('(min-width: 1024px)');
+  const isDesktop = useIsDesktop();
   const hasWorkspaceShell = getContext('workspaceShell');
 
   let leftDrawerOpen = $state(false);
@@ -93,7 +93,7 @@
   }
 </script>
 
-{#if isDesktop.current}
+{#if isDesktop()}
   <!-- Desktop Layout -->
   <div class="contents">
     {#if activeUser() && !hasWorkspaceShell}
