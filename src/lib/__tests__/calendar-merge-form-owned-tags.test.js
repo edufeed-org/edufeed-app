@@ -10,6 +10,7 @@ import { describe, it, expect } from 'vitest';
 import {
   mergeFormOwnedTags,
   CALENDAR_FORM_OWNED_TAGS,
+  CALENDAR_FORM_SINGLE_OWNED_TAGS,
   buildCalendarEventTags,
   convertFormDataToEvent
 } from '../helpers/calendar.js';
@@ -107,6 +108,68 @@ describe('mergeFormOwnedTags', () => {
     expect(result[0]).toEqual(kept);
     expect(result[0]).not.toBe(kept);
   });
+
+  describe('singleOwnedNames (NIP-52 repeated `location`)', () => {
+    it('keeps a second existing `location` tag after an edit', () => {
+      const existing = [
+        ['d', 'ev-1'],
+        ['location', 'Old address'],
+        ['location', 'https://meet.example/old']
+      ];
+      const form = [
+        ['d', 'ev-1'],
+        ['location', 'New address']
+      ];
+
+      expect(mergeFormOwnedTags(existing, form, ['d'], ['location'])).toEqual([
+        ['d', 'ev-1'],
+        ['location', 'New address'],
+        ['location', 'https://meet.example/old']
+      ]);
+    });
+
+    it('drops only the first `location` tag when the form clears the field', () => {
+      const existing = [
+        ['d', 'ev-1'],
+        ['location', 'Old address'],
+        ['location', 'https://meet.example/old']
+      ];
+      const form = [['d', 'ev-1']];
+
+      expect(mergeFormOwnedTags(existing, form, ['d'], ['location'])).toEqual([
+        ['d', 'ev-1'],
+        ['location', 'https://meet.example/old']
+      ]);
+    });
+
+    it('with CALENDAR_FORM_OWNED_TAGS + CALENDAR_FORM_SINGLE_OWNED_TAGS, keeps extra locations', () => {
+      const existing = [
+        ['d', 'ev-1'],
+        ['title', 'Old'],
+        ['location', 'Old address'],
+        ['location', 'https://meet.example/old']
+      ];
+      const form = [
+        ['d', 'ev-1'],
+        ['title', 'New'],
+        ['location', 'New address']
+      ];
+
+      expect(
+        mergeFormOwnedTags(
+          existing,
+          form,
+          CALENDAR_FORM_OWNED_TAGS,
+          CALENDAR_FORM_SINGLE_OWNED_TAGS
+        )
+      ).toEqual([
+        ['d', 'ev-1'],
+        ['title', 'New'],
+        ['location', 'New address'],
+        ['location', 'https://meet.example/old']
+      ]);
+    });
+  });
 });
 
 describe('CALENDAR_FORM_OWNED_TAGS', () => {
@@ -141,9 +204,13 @@ describe('CALENDAR_FORM_OWNED_TAGS', () => {
     const tags = buildCalendarEventTags(/** @type {any} */ (formData), eventData, 'd-1', ['h1']);
     const names = new Set(tags.map((t) => t[0]));
 
-    // Every emitted name is owned, so the merge drops the stale copy.
+    // Every emitted name is owned (fully, or as the single existing instance
+    // for `location` — see CALENDAR_FORM_SINGLE_OWNED_TAGS), so the merge
+    // drops the stale copy.
     const stale = [...names].map((n) => [n, 'stale']);
-    expect(mergeFormOwnedTags(stale, [], CALENDAR_FORM_OWNED_TAGS)).toEqual([]);
+    expect(
+      mergeFormOwnedTags(stale, [], CALENDAR_FORM_OWNED_TAGS, CALENDAR_FORM_SINGLE_OWNED_TAGS)
+    ).toEqual([]);
   });
 
   it('drops a stale deprecated name tag when the edit writes title', () => {

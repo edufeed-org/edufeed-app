@@ -531,6 +531,54 @@ describe('buildCalendarEventTags', () => {
       expect(findTagValue(tags, 'location')).toBe('Berlin, Germany');
     });
 
+    it('should round-trip every `location` tag through getCalendarEventMetadata (#locations)', async () => {
+      // NIP-52: "location (optional, repeated)" — an event can list an
+      // address AND a video-call link. getCalendarEventMetadata must keep
+      // every value, not just the first.
+      const { getCalendarEventMetadata } = await import('../helpers/eventUtils.js');
+      const parsed = getCalendarEventMetadata(
+        /** @type {any} */ ({
+          id: 'e1',
+          pubkey: 'c'.repeat(64),
+          kind: 31922,
+          content: '',
+          created_at: 1718452800,
+          tags: [
+            ['d', 'd1'],
+            ['title', 'T'],
+            ['start', '2024-06-15'],
+            ['location', 'Aula, Schulstraße 1, Berlin'],
+            ['location', 'https://meet.example/room']
+          ]
+        })
+      );
+      expect(parsed.locations).toEqual([
+        'Aula, Schulstraße 1, Berlin',
+        'https://meet.example/room'
+      ]);
+      expect(parsed.location).toBe('Aula, Schulstraße 1, Berlin');
+    });
+
+    it('should expose an empty locations array when the event has no location tag', async () => {
+      const { getCalendarEventMetadata } = await import('../helpers/eventUtils.js');
+      const parsed = getCalendarEventMetadata(
+        /** @type {any} */ ({
+          id: 'e1',
+          pubkey: 'c'.repeat(64),
+          kind: 31922,
+          content: '',
+          created_at: 1718452800,
+          tags: [
+            ['d', 'd1'],
+            ['title', 'T'],
+            ['start', '2024-06-15']
+          ]
+        })
+      );
+      expect(parsed.locations).toEqual([]);
+      expect(parsed.location).toBeUndefined();
+    });
+
     it('should include image when present', () => {
       const formData = {
         startDate: '2024-06-15',

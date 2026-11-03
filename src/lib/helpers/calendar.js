@@ -1323,7 +1323,8 @@ export function buildCalendarEventTags(formData, eventData, dTag, hTag) {
  * an edit by this app must not keep another client's attribution. `name` is
  * listed even though the form never emits it: it's NIP-52's deprecated
  * precursor to `title`, so an edit that writes `title` must drop a stale
- * `name` rather than carry it along forever.
+ * `name` rather than carry it along forever. `location` is NOT listed here —
+ * see `CALENDAR_FORM_SINGLE_OWNED_TAGS`.
  * @type {readonly string[]}
  */
 export const CALENDAR_FORM_OWNED_TAGS = Object.freeze([
@@ -1337,7 +1338,6 @@ export const CALENDAR_FORM_OWNED_TAGS = Object.freeze([
   'end_tzid',
   'D',
   'image',
-  'location',
   't',
   'r',
   'p',
@@ -1350,33 +1350,59 @@ export const CALENDAR_FORM_OWNED_TAGS = Object.freeze([
 ]);
 
 /**
+ * Tag names the form only partly owns: NIP-52 allows `location` to repeat
+ * (address, GPS coordinates, video-call link, …), but the edit form has a
+ * single location field. Only the FIRST existing tag of each of these names
+ * is treated as the form's to replace; any further occurrence survives the
+ * edit untouched, in its original order.
+ * @type {readonly string[]}
+ */
+export const CALENDAR_FORM_SINGLE_OWNED_TAGS = Object.freeze(['location']);
+
+/**
  * Merge a form's freshly built tags into an existing event's tags: tags whose
  * name the form owns are dropped from the existing event and replaced by the
  * form's tags; every other existing tag is kept, in its original order, after
  * the form's tags. Any name the form actually emitted counts as owned too, so
  * the result never carries a stale duplicate.
  *
+ * `singleOwnedNames` covers tag names NIP-52 allows to repeat but the form
+ * only edits one of (e.g. `location`): just the first existing tag of that
+ * name is dropped (replaced by the form's, if any); later ones are kept.
+ *
  * Pure function.
  *
  * @param {string[][]} existingTags - Tags of the event being edited (untrusted)
  * @param {string[][]} formTags - Tags built from the form
  * @param {Iterable<string>} ownedNames - Owned tag names; `prefix*` matches by prefix
+ * @param {Iterable<string>} [singleOwnedNames] - Names where only the first existing tag is owned
  * @returns {string[][]}
  */
-export function mergeFormOwnedTags(existingTags, formTags, ownedNames) {
-  const exact = new Set(formTags.map((t) => t[0]));
+export function mergeFormOwnedTags(existingTags, formTags, ownedNames, singleOwnedNames = []) {
+  const single = new Set(singleOwnedNames);
+  const exact = new Set(formTags.map((t) => t[0]).filter((name) => !single.has(name)));
   /** @type {string[]} */
   const prefixes = [];
   for (const name of ownedNames) {
     if (name.endsWith('*')) prefixes.push(name.slice(0, -1));
-    else exact.add(name);
+    else if (!single.has(name)) exact.add(name);
   }
 
   /** @param {string} name */
   const isOwned = (name) => exact.has(name) || prefixes.some((p) => name.startsWith(p));
 
+  const singleDropped = new Set();
   const kept = (Array.isArray(existingTags) ? existingTags : [])
-    .filter((t) => Array.isArray(t) && typeof t[0] === 'string' && !isOwned(t[0]))
+    .filter((t) => {
+      if (!Array.isArray(t) || typeof t[0] !== 'string') return false;
+      const name = t[0];
+      if (isOwned(name)) return false;
+      if (single.has(name) && !singleDropped.has(name)) {
+        singleDropped.add(name);
+        return false;
+      }
+      return true;
+    })
     .map((t) => [...t]);
 
   return [...formTags, ...kept];

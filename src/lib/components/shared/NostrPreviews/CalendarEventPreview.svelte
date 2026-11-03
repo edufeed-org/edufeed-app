@@ -62,6 +62,7 @@
       start: getCalendarEventStart(rawEvent) || 0,
       end: getCalendarEventEnd(rawEvent) || 0,
       location: locationTags.map((/** @type {any} */ t) => t[1]).join(', '),
+      locations: locationTags.map((/** @type {any} */ t) => t[1]),
       participants: [],
       hashtags: [],
       references: [],
