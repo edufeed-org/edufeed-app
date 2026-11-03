@@ -38,6 +38,8 @@ export function feedTypeLabel(typeKey) {
       return m.feed_badge_form();
     case 'poll':
       return m.feed_badge_poll();
+    case 'publication':
+      return m.feed_badge_publication();
     default:
       return '';
   }
