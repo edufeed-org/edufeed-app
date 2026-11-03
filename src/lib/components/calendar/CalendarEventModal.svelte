@@ -440,7 +440,8 @@
       endDate: endDate ? formDateFromTimestamp(existingEvent.end, existingEvent.kind) : '',
       endTime: endDate ? endDate.toTimeString().slice(0, 5) : '10:00',
       startTimezone: existingEvent.startTimezone || getCurrentTimezone(),
-      endTimezone: existingEvent.endTimezone || getCurrentTimezone(),
+      // NIP-52: an omitted end_tzid is start_tzid's zone, not the editor's.
+      endTimezone: existingEvent.endTimezone || existingEvent.startTimezone || getCurrentTimezone(),
       location: location,
       isAllDay: isAllDay,
       eventType: eventType,
