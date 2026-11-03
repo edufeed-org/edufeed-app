@@ -11,6 +11,7 @@ import {
 } from '../community-row-target.js';
 
 const tabs = ['home', 'chat', 'calendar', 'channels'];
+/** @param {number} kind @param {number} created_at */
 const item = (kind, created_at) => ({ kind, created_at, id: `${kind}-${created_at}` });
 
 describe('newestCommunityItem', () => {
