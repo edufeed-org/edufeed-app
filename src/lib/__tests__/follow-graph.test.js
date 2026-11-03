@@ -5,7 +5,7 @@
  * contact list), and the ordering for the list modal.
  */
 import { describe, it, expect } from 'vitest';
-import { followingOf, followersFrom, knownFirst } from '$lib/helpers/follow-graph.js';
+import { followingOf, followersFrom } from '$lib/helpers/follow-graph.js';
 
 const A = 'a'.repeat(64);
 const B = 'b'.repeat(64);
@@ -41,11 +41,5 @@ describe('followersFrom', () => {
 
   it('never counts the subject following itself', () => {
     expect(followersFrom([kind3(SELF, [SELF])], SELF)).toEqual([]);
-  });
-});
-
-describe('knownFirst', () => {
-  it('puts the people the viewer follows first, keeping order inside', () => {
-    expect(knownFirst([A, B, C], [C, A])).toEqual([A, C, B]);
   });
 });
