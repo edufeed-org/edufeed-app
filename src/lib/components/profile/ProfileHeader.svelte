@@ -21,8 +21,10 @@
     LightningIcon,
     MessageSquareIcon,
     PeopleIcon,
-    PlusIcon
+    PlusIcon,
+    QrCodeIcon
   } from '$lib/components/icons';
+  import { modalStore } from '$lib/stores/modal.svelte.js';
   import * as m from '$lib/paraglide/messages';
   import { getDisplayName } from '$lib/helpers/displayName.js';
 
@@ -89,6 +91,11 @@
   // A community is an npub, so its key also carries a plain kind 0 and lands
   // here like any person. The community page lives at /c/<npub> (hex 308s).
   let communityHref = $derived(resolve(`/c/${npub || pubkey}`));
+
+  // Issue 9f7816e3: the profile as a QR code (and the scanner behind it).
+  function showQr() {
+    modalStore.openModal('profileQr', { pubkey, npub });
+  }
 
   async function copyNpub() {
     try {
@@ -177,6 +184,14 @@
           {:else}
             <CopyIcon class_="w-3.5 h-3.5" />
           {/if}
+        </button>
+        <button
+          onclick={showQr}
+          title={m.profile_show_qr()}
+          aria-label={m.profile_show_qr()}
+          data-testid="show-qr"
+        >
+          <QrCodeIcon class_="w-3.5 h-3.5" />
         </button>
       </div>
 

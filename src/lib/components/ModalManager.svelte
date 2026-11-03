@@ -77,7 +77,8 @@
     callPreJoin: lazyComponent(() => import('./groups/CallPreJoinModal.svelte')),
     breakoutAssignment: lazyComponent(() => import('./groups/BreakoutAssignmentModal.svelte')),
     connectionStatus: lazyComponent(() => import('./shared/ConnectionStatusModal.svelte')),
-    reportIssue: lazyComponent(() => import('./shared/ReportIssueModal.svelte'))
+    reportIssue: lazyComponent(() => import('./shared/ReportIssueModal.svelte')),
+    profileQr: lazyComponent(() => import('./profile/ProfileQrModal.svelte'))
   };
 
   /** @type {any} */
@@ -196,6 +197,12 @@
         return { onClose: () => modal.closeModal() };
       case 'nip05Activated':
         return { address: /** @type {string} */ (props?.address) || '' };
+      case 'profileQr':
+        return {
+          pubkey: /** @type {string} */ (props?.pubkey) || '',
+          npub: /** @type {string} */ (props?.npub) || '',
+          onClose: () => modal.closeModal()
+        };
       default:
         return modalId ? { modalId } : {};
     }

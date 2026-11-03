@@ -31,8 +31,10 @@
     QuestionCircleIcon,
     CheckIcon,
     ChatTextIcon,
-    KeyIcon
+    KeyIcon,
+    QrCodeIcon
   } from '$lib/components/icons';
+  import { nip19 } from 'nostr-tools';
 
   /** @type {{ onClose?: () => void }} */
   let { onClose = () => {} } = $props();
@@ -69,6 +71,14 @@
 
   // User guide (HELP_URL); null hides the row.
   const helpLink = $derived(helpLinkAttrs(runtimeConfig.help?.url));
+
+  // Issue 9f7816e3: the own QR code one tap away on every page.
+  function openQrCode() {
+    const pubkey = activeAccount?.pubkey;
+    if (!pubkey) return;
+    modalStore.openModal('profileQr', { pubkey, npub: nip19.npubEncode(pubkey) });
+    onClose();
+  }
 
   function openReportIssue() {
     onClose?.();
@@ -172,6 +182,12 @@
       <GearIcon class_="w-4 h-4" />
       {m.common_settings()}
     </a>
+  </li>
+  <li>
+    <button onclick={openQrCode} data-testid="qr-code-menu-item">
+      <QrCodeIcon class_="w-4 h-4" />
+      {m.navbar_qr_code()}
+    </button>
   </li>
   {#if isMembershipAdmin}
     <li>

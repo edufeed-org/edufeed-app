@@ -3,6 +3,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, fireEvent } from '@testing-library/svelte';
 import ProfileHeader from '../profile/ProfileHeader.svelte';
+import { modalStore } from '$lib/stores/modal.svelte.js';
 
 // WaveButton spins up loaders/relay subscriptions — irrelevant here.
 vi.mock('../waves/WaveButton.svelte', async () => {
@@ -161,6 +162,19 @@ describe('<ProfileHeader>', () => {
     );
     expect(container.querySelector('.pf-banner img')).toBeTruthy();
     expect(container.querySelector('.pf-head')?.className).not.toMatch(/no-banner/);
+  });
+
+  // Issue 9f7816e3: the pill's QR button opens the profile's QR code (and
+  // from there the scanner) — on every profile, not just the own one.
+  it('opens the profile QR modal from the npub pill', async () => {
+    modalStore.closeModal();
+    const { container } = render(ProfileHeader, baseProps());
+    const button = container.querySelector('[data-testid="npub-pill"] [data-testid="show-qr"]');
+    expect(button).toBeTruthy();
+    await fireEvent.click(button);
+    expect(modalStore.activeModal).toBe('profileQr');
+    expect(modalStore.modalProps).toEqual({ pubkey: PUBKEY, npub: NPUB });
+    modalStore.closeModal();
   });
 
   it('shows a truncated npub pill', () => {

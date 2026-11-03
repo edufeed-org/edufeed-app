@@ -91,6 +91,7 @@ vi.mock('$lib/paraglide/messages', () => ({
   navbar_logout_all: () => 'Alle Konten abmelden',
   navbar_logout_all_confirm: () => 'Sure?',
   navbar_backup_key: () => 'Schlüssel sichern',
+  navbar_qr_code: () => 'Mein QR-Code',
   admin_membership_title: () => 'Mitgliedschaftsanträge'
 }));
 
@@ -115,6 +116,20 @@ beforeEach(() => {
 });
 
 describe('AccountMenuSection', () => {
+  // Issue 9f7816e3: own QR code one tap away from any page on mobile.
+  it('opens the own profile QR modal from the personal group and closes the menu', async () => {
+    const onClose = vi.fn();
+    const { findByTestId } = render(AccountMenuSection, { onClose });
+    const row = await findByTestId('qr-code-menu-item');
+    expect(row.textContent).toContain('Mein QR-Code');
+    await fireEvent.click(row);
+    expect(mockModalStore.openModal).toHaveBeenCalledWith('profileQr', {
+      pubkey: PUBKEY_A,
+      npub: expect.stringMatching(/^npub1/)
+    });
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
   it('opens the issue report modal from the info group and closes the menu', async () => {
     const onClose = vi.fn();
     const { findByTestId } = render(AccountMenuSection, { onClose });
