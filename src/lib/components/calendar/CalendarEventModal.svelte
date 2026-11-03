@@ -9,7 +9,12 @@
   import * as m from '$lib/paraglide/messages';
   import { goto, invalidateAll } from '$app/navigation';
   import { resolve } from '$app/paths';
-  import { validateEventForm, getCurrentTimezone } from '../../helpers/calendar.js';
+  import {
+    validateEventForm,
+    getCurrentTimezone,
+    wallClockToTimestamp,
+    zonedWallClock
+  } from '../../helpers/calendar.js';
   import { encodeEventToNaddr } from '../../helpers/nostrUtils.js';
   import { getCalendarRelays } from '$lib/helpers/relay-helper.js';
   import { useCalendarActions } from '../../stores/calendar-actions.svelte.js';
@@ -188,8 +193,12 @@
     const date = formData.endDate || formData.startDate;
     const time = formData.endTime || formData.startTime;
     if (!date || !time) return null;
-    const ms = new Date(`${date}T${time}`).getTime();
-    return Number.isFinite(ms) ? Math.floor(ms / 1000) : null;
+    const seconds = wallClockToTimestamp(
+      date,
+      time,
+      formData.endTimezone || formData.startTimezone
+    );
+    return Number.isFinite(seconds) ? seconds : null;
   });
   let guestsTooFar = $derived(
     isGroupMeeting &&
@@ -410,15 +419,27 @@
   function initializeFormForEdit() {
     if (!existingEvent) return;
 
-    // Convert Unix timestamps to Date objects
-    const startDate = new SvelteDate(existingEvent.start * 1000);
-    const endDate = existingEvent.end ? new SvelteDate(existingEvent.end * 1000) : null;
-
-    // All-day days are UTC days, timed ones local (formDateFromTimestamp).
-    const startDay = formDateFromTimestamp(existingEvent.start, existingEvent.kind);
-
     // Determine event type
     const isAllDay = existingEvent.kind === 31922;
+
+    const startTimezone = existingEvent.startTimezone || getCurrentTimezone();
+    // NIP-52: an omitted end_tzid is start_tzid's zone, not the editor's.
+    const endTimezone =
+      existingEvent.endTimezone || existingEvent.startTimezone || getCurrentTimezone();
+    const hasEnd = Boolean(existingEvent.end);
+
+    // All-day days are UTC days (formDateFromTimestamp). Timed ones show the
+    // wall-clock time in the event's own zones — the form reads them back in
+    // the same zones on save, so a no-op edit keeps the timestamps whatever
+    // the editor's zone (an invalid zone falls back to the editor's).
+    /** @param {number} seconds @param {string} timeZone */
+    const formValue = (seconds, timeZone) =>
+      isAllDay
+        ? { ...zonedWallClock(seconds, null), date: formDateFromTimestamp(seconds, 31922) }
+        : zonedWallClock(seconds, timeZone);
+    const start = formValue(existingEvent.start, startTimezone);
+    const end = hasEnd ? formValue(/** @type {number} */ (existingEvent.end), endTimezone) : null;
+    const startDay = start.date;
     const eventType = isAllDay ? 'date' : 'time';
 
     // Extract location from event (handle both single string and array formats)
@@ -436,12 +457,11 @@
       imageWasUploaded: false,
       imageLicenseEvent: null,
       startDate: startDay,
-      startTime: startDate.toTimeString().slice(0, 5),
-      endDate: endDate ? formDateFromTimestamp(existingEvent.end, existingEvent.kind) : '',
-      endTime: endDate ? endDate.toTimeString().slice(0, 5) : '10:00',
-      startTimezone: existingEvent.startTimezone || getCurrentTimezone(),
-      // NIP-52: an omitted end_tzid is start_tzid's zone, not the editor's.
-      endTimezone: existingEvent.endTimezone || existingEvent.startTimezone || getCurrentTimezone(),
+      startTime: start.time,
+      endDate: end ? end.date : '',
+      endTime: end ? end.time : '10:00',
+      startTimezone,
+      endTimezone,
       location: location,
       isAllDay: isAllDay,
       eventType: eventType,
@@ -459,8 +479,8 @@
     endDateEdited = true;
     lastValidStart = startDay;
     // Only a stored end is a choice; without one the end time is a default.
-    endTimeEdited = Boolean(endDate);
-    durationFromTime = startDate.toTimeString().slice(0, 5);
+    endTimeEdited = hasEnd;
+    durationFromTime = start.time;
 
     validationErrors = [];
     isSubmitting = false;
