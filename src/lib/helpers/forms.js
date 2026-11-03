@@ -92,7 +92,15 @@ export function validateField(field, value) {
   }
 
   // Skip further checks if empty and not required
-  if (field.type === 'text-array') return null;
+  if (field.type === 'text-array') {
+    // Entries are stored joined by ';' (Edufeed Forms, "Answers with several
+    // values"), so an entry may not contain one.
+    const arr = Array.isArray(value) ? value : [];
+    if (arr.some((v) => typeof v === 'string' && v.includes(';'))) {
+      return `${label}: entries must not contain ";"`;
+    }
+    return null;
+  }
   if (field.vocab) return null;
   // Nothing below applies to a checkbox, and its value may be a boolean rather
   // than the string the remaining checks assume.
@@ -143,26 +151,106 @@ export function validateField(field, value) {
   return null;
 }
 
+/** Delimiter between the values of one multi-valued answer (Edufeed Forms, NIP-101). */
+export const RESPONSE_VALUE_DELIMITER = ';';
+
+/**
+ * One entry of a multi-valued answer as a string: a text-array entry or
+ * option id as-is, a vocabulary answer (FormConceptPicker's SelectedConcept)
+ * as its concept id — the external URI, or the canonical `nostr:` URI for a
+ * concept without one.
+ * @param {unknown} entry
+ * @returns {string}
+ */
+function responseEntryString(entry) {
+  if (entry && typeof entry === 'object' && 'id' in entry) {
+    return String(/** @type {{ id: unknown }} */ (entry).id ?? '');
+  }
+  return String(entry ?? '');
+}
+
+/**
+ * Whether a field's answer holds several values (Edufeed Forms, "Answers with
+ * several values"): vocabulary-bound fields, `text-array`, a checkbox group
+ * and a `select` with `multiple`. An optionless checkbox is a boolean.
+ * @param {FormField} field
+ * @returns {boolean}
+ */
+export function isMultiValueField(field) {
+  if (field.vocab) return true;
+  if (field.type === 'text-array') return true;
+  if (field.type === 'checkbox') return (field.options?.options?.length ?? 0) > 0;
+  return field.type === 'select' && field.options?.multiple === true;
+}
+
+/**
+ * Split a stored multi-valued answer on `;`, dropping empty entries.
+ * @param {string | undefined | null} raw
+ * @returns {string[]}
+ */
+export function splitResponseValue(raw) {
+  if (!raw) return [];
+  return String(raw)
+    .split(RESPONSE_VALUE_DELIMITER)
+    .filter((v) => v.length > 0);
+}
+
 /**
  * Build response tags from field values.
- * @param {Record<string, string>} values - field ID to value
+ *
+ * Every answer is ONE `response` tag. An array value (vocabulary-bound field,
+ * `text-array`) is serialised per Edufeed Forms / NIP-101: its entries joined
+ * by `;`, empty entries dropped, concepts as their URIs. Checkbox groups
+ * arrive already joined by FieldsRenderer and pass through unchanged.
+ *
+ * @param {Record<string, unknown>} values - field ID to value
  * @returns {string[][]}
+ * @throws {Error} when an entry of an array value contains `;` — it could not
+ *   be told apart from two entries on read. FormRenderer rejects such
+ *   text-array input before submit (validateField).
  */
 export function buildResponseTags(values) {
-  return Object.entries(values).map(([id, value]) => ['response', id, String(value ?? ''), '{}']);
+  return Object.entries(values).map(([id, value]) => {
+    if (!Array.isArray(value)) return ['response', id, String(value ?? ''), '{}'];
+    const entries = value.map(responseEntryString).filter((v) => v.length > 0);
+    const bad = entries.find((v) => v.includes(RESPONSE_VALUE_DELIMITER));
+    if (bad !== undefined) {
+      throw new Error(`Answer "${id}" has an entry containing ";": ${bad}`);
+    }
+    return ['response', id, entries.join(RESPONSE_VALUE_DELIMITER), '{}'];
+  });
 }
 
 /**
  * Parse response tags into a values map.
+ *
+ * Without `fields` every answer stays the raw stored string. With the
+ * template's fields, multi-valued answers (see isMultiValueField) are split on
+ * `;` into string arrays, empty entries dropped — vocabulary answers become
+ * concept URIs. Answers for fields the template no longer has stay strings.
+ *
+ * @overload
  * @param {string[][]} tags
  * @returns {Record<string, string>}
  */
-export function parseResponseTags(tags) {
-  /** @type {Record<string, string>} */
+/**
+ * @overload
+ * @param {string[][]} tags
+ * @param {FormField[]} fields
+ * @returns {Record<string, string | string[]>}
+ */
+/**
+ * @param {string[][]} tags
+ * @param {FormField[]} [fields]
+ * @returns {Record<string, string | string[]>}
+ */
+export function parseResponseTags(tags, fields) {
+  const multi = new Set((fields || []).filter(isMultiValueField).map((f) => f.id));
+  /** @type {Record<string, string | string[]>} */
   const values = {};
   for (const tag of tags) {
     if (tag[0] === 'response' && tag.length >= 3) {
-      values[tag[1]] = tag[2];
+      values[tag[1]] = multi.has(tag[1]) ? splitResponseValue(tag[2]) : tag[2];
     }
   }
   return values;
