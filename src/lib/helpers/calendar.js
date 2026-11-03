@@ -815,14 +815,17 @@ export async function fetchCommunityCalendarEvents(communityPubkey, relays = [])
           continue;
         }
 
-        // Parse address: kind:pubkey:dtag
+        // Parse address: kind:pubkey:dtag - the d-tag itself may contain
+        // colons (e.g. a URL), so only the first two colons are delimiters;
+        // everything after them is rejoined into the d-tag verbatim.
         const parts = aTag.split(':');
         if (parts.length < 3) {
           console.warn(`📅 fetchCommunityCalendarEvents: Invalid address format: ${aTag}`);
           continue;
         }
 
-        const [kindStr, pubkey, dTag] = parts;
+        const [kindStr, pubkey, ...dTagParts] = parts;
+        const dTag = dTagParts.join(':');
         const kind = parseInt(kindStr);
 
         // Validate it's a calendar event kind
