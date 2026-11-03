@@ -135,4 +135,31 @@ describe('generateICSContent', () => {
     const ics = generateICSContent({ title: '', summary: '' }, [event], BASE_URL);
     expect(ics).not.toContain('DTEND');
   });
+
+  it('uses the deprecated `name` tag as SUMMARY when there is no title', () => {
+    const event = timedEvent({
+      tags: [
+        ['d', 'my-event'],
+        ['name', 'Legacy Name'],
+        ['start', '1700003600']
+      ]
+    });
+    const ics = generateICSContent({ title: '', summary: '' }, [event], BASE_URL);
+    expect(unfoldLines(ics)).toContain('SUMMARY:Legacy Name');
+  });
+
+  it('prefers title over name when both are present', () => {
+    const event = timedEvent({
+      tags: [
+        ['d', 'my-event'],
+        ['title', 'Current Title'],
+        ['name', 'Legacy Name'],
+        ['start', '1700003600']
+      ]
+    });
+    const ics = generateICSContent({ title: '', summary: '' }, [event], BASE_URL);
+    const lines = unfoldLines(ics);
+    expect(lines).toContain('SUMMARY:Current Title');
+    expect(lines).not.toContain('SUMMARY:Legacy Name');
+  });
 });

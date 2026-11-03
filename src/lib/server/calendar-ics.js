@@ -130,7 +130,8 @@ export function generateICSContent(calendarMetadata, events, url) {
 
     const eventNaddr = eventToNaddr(event);
     const baseUrl = url.origin;
-    const title = tagValue(event, 'title') || 'Untitled Event';
+    // NIP-52: `name` is deprecated — "use only if title is not available".
+    const title = tagValue(event, 'title') || tagValue(event, 'name') || 'Untitled Event';
     // NIP-52: "The `.content` of these events SHOULD be a description of
     // the calendar event", while `summary` is only an optional "brief
     // description" — prefer `content` and fall back to `summary` for
