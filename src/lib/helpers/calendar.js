@@ -152,7 +152,13 @@ export function getMonthDates(date) {
 }
 
 /**
- * Check if an event falls within a date range using UTC comparisons
+ * Check if an event falls within a date range using UTC comparisons.
+ *
+ * Not used by `filterEventsByViewMode` any more (see there) — comparing a
+ * real instant against a range whose boundaries are the view's local days
+ * reinterpreted as UTC instants shifts by the viewer's offset, same bug
+ * class as the grid's old day-bucketing. Kept exported for any caller that
+ * truly wants a UTC-instant-vs-UTC-range check.
  * @param {CalendarEvent} event - Calendar event to check
  * @param {Date} start - Start of date range (should be UTC date with time precision)
  * @param {Date} end - End of date range (should be UTC date with time precision)
@@ -177,8 +183,53 @@ export function isEventInDateRange(event, start, end) {
   return eventStartDateUTC < end && eventEndDateUTC > start;
 }
 
+const DAY_SECONDS = 86400;
+
 /**
- * The UTC day span an event covers, as integer day indices (floor(ts/86400)).
+ * Integer calendar-day index for a Date's LOCAL y/m/d (the runtime's
+ * configured zone: the viewer's zone in a browser, `TZ` in Node). Built via
+ * `Date.UTC` purely as an arithmetic trick so day indices are cheap to
+ * compare and add/subtract — it does not mean the day is "in UTC".
+ * Comparable to the day indices `createDateKey` strings encode, and to
+ * `dayIndexFromKey` in calendar-lanes.js (both use the same trick on a
+ * calendar-date label).
+ *
+ * @param {Date} date
+ * @returns {number}
+ */
+function calendarDayIndex(date) {
+  return Math.floor(
+    Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()) / 1000 / DAY_SECONDS
+  );
+}
+
+/**
+ * The calendar-day index a timestamp belongs to, in the frame its event kind
+ * calls for:
+ *  - 31922 (date-based): the stored value already IS a UTC calendar date
+ *    (midnight UTC) — its day is the plain UTC day, the same for every
+ *    viewer, and must not shift with the viewer's zone.
+ *  - anything else, in particular 31923 (time-based): a real instant — it
+ *    belongs on whichever calendar day it falls on for the viewer, so this
+ *    uses the runtime's local getters (see calendarDayIndex).
+ *
+ * @param {number} seconds - unix seconds
+ * @param {number | undefined} kind
+ * @returns {number}
+ */
+function dayIndexForKind(seconds, kind) {
+  if (kind === 31922) return Math.floor(seconds / DAY_SECONDS);
+  return calendarDayIndex(new Date(seconds * 1000));
+}
+
+/**
+ * The day span an event covers, as integer day indices comparable to
+ * `createDateKey` / `dayIndexFromKey` day numbers. The frame depends on the
+ * event's kind (see `dayIndexForKind`): the UTC calendar day for 31922
+ * (date-based — the stored value already is one, unaffected by the viewer's
+ * zone), the viewer's local calendar day for 31923 (time-based — a real
+ * instant, shown on whichever day it falls on for the person looking at the
+ * grid).
  *
  * End-bound conventions differ by kind:
  *  - 31922 (date-based): the app's writer stores the user's chosen end date
@@ -192,7 +243,6 @@ export function isEventInDateRange(event, start, end) {
  * @returns {{startDay: number, endDay: number}}
  */
 export function getEventDaySpan(event, startTimestamp) {
-  const SECONDS_PER_DAY = 86400;
   const MAX_SPAN_DAYS = 92;
 
   const start =
@@ -201,11 +251,11 @@ export function getEventDaySpan(event, startTimestamp) {
   const endTimestamp =
     typeof event.end === 'number' ? event.end : parseCalendarTimestamp(String(event.end ?? ''));
 
-  const startDay = Math.floor(start / SECONDS_PER_DAY);
+  const startDay = dayIndexForKind(start, event.kind);
   let endDay = startDay;
   if (endTimestamp && endTimestamp > start) {
     const effectiveEnd = event.kind === 31922 ? endTimestamp : endTimestamp - 1;
-    endDay = Math.max(startDay, Math.floor(effectiveEnd / SECONDS_PER_DAY));
+    endDay = Math.max(startDay, dayIndexForKind(effectiveEnd, event.kind));
     if (endDay - startDay > MAX_SPAN_DAYS) {
       console.warn(
         '📅 getEventDaySpan: Capping implausible event span of',
@@ -433,12 +483,18 @@ export function groupEventsByDate(events) {
     }
 
     // Multi-day events appear on EVERY day they cover, not just the start day.
-    const SECONDS_PER_DAY = 86400;
     const { startDay, endDay } = getEventDaySpan(event, startTimestamp);
 
     for (let day = startDay; day <= endDay; day++) {
-      // Convert UNIX timestamp to UTC date and create consistent date key
-      const dateKey = createDateKey(new Date(day * SECONDS_PER_DAY * 1000));
+      // day already encodes the right frame per event kind (UTC calendar day
+      // for 31922, the viewer's calendar day for 31923 — see
+      // dayIndexForKind), so turn it straight into its ISO date. Routing it
+      // through createDateKey's local-getter conversion here would
+      // reinterpret that day index a second time and shift it again by the
+      // viewer's offset (edufeed-app follow-up: calendar grid placed
+      // all-day events a day early for viewers west of UTC, and timed
+      // events on the wrong day entirely).
+      const dateKey = new Date(day * DAY_SECONDS * 1000).toISOString().slice(0, 10);
       if (!groupedEvents.has(dateKey)) {
         groupedEvents.set(dateKey, []);
       }
@@ -668,50 +724,31 @@ export function filterEventsByViewMode(events, viewMode, currentDate) {
     return dayEvents;
   }
 
-  // Calculate date range based on viewMode (for week/month)
-  let startDate, endDate;
-
+  // Day-index range for the view (for week/month), in the same frame
+  // getEventDaySpan uses per kind. An event is "in view" when its day span
+  // overlaps the view's days — not when its raw instant falls inside a
+  // window built by reinterpreting the view's local days as UTC instants
+  // (isEventInDateRange's old approach here), which silently dropped or
+  // misplaced timed events near local midnight for viewers off UTC.
+  let viewDates;
   switch (viewMode) {
-    case 'week': {
-      // Get week dates in local time
-      const weekDates = getWeekDates(currentDate);
-
-      // Convert first day to UTC start
-      const firstDay = weekDates[0];
-      startDate = new Date(
-        Date.UTC(firstDay.getFullYear(), firstDay.getMonth(), firstDay.getDate(), 0, 0, 0, 0)
-      );
-
-      // Convert last day to UTC end
-      const lastDay = weekDates[weekDates.length - 1];
-      endDate = new Date(
-        Date.UTC(lastDay.getFullYear(), lastDay.getMonth(), lastDay.getDate(), 23, 59, 59, 999)
-      );
+    case 'week':
+      viewDates = getWeekDates(currentDate);
       break;
-    }
-    case 'month': {
-      // Get month dates in local time
-      const monthDates = getMonthDates(currentDate);
-
-      // Convert first day to UTC start
-      const firstDay = monthDates[0];
-      startDate = new Date(
-        Date.UTC(firstDay.getFullYear(), firstDay.getMonth(), firstDay.getDate(), 0, 0, 0, 0)
-      );
-
-      // Convert last day to UTC end
-      const lastDay = monthDates[monthDates.length - 1];
-      endDate = new Date(
-        Date.UTC(lastDay.getFullYear(), lastDay.getMonth(), lastDay.getDate(), 23, 59, 59, 999)
-      );
+    case 'month':
+      viewDates = getMonthDates(currentDate);
       break;
-    }
     default:
       return events;
   }
+  const viewStartDay = calendarDayIndex(viewDates[0]);
+  const viewEndDay = calendarDayIndex(viewDates[viewDates.length - 1]);
 
-  // Filter events that fall within the date range
-  const filtered = events.filter((event) => isEventInDateRange(event, startDate, endDate));
+  // Filter events whose day span overlaps the view's day range
+  const filtered = events.filter((event) => {
+    const { startDay, endDay } = getEventDaySpan(event);
+    return startDay <= viewEndDay && endDay >= viewStartDay;
+  });
 
   // Sort by start date/time (chronological order) - filtered array is already a new array from .filter()
   return filtered.sort((a, b) => (a.start || 0) - (b.start || 0));

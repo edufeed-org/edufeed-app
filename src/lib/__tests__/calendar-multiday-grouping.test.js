@@ -11,10 +11,23 @@
  * - kind 31923 (time-based): NIP-52 end timestamps are exclusive, so an
  *   event ending exactly at midnight does not bleed into the next day.
  *
+ * 31923 events bucket by the *viewer's* calendar day (see
+ * calendar-grid-timezone.test.js for that), so this suite pins TZ=UTC to
+ * keep its UTC-midnight-crossing assertions deterministic regardless of the
+ * machine it runs on. 31922 events are UTC-anchored either way.
+ *
  * @vitest-environment node
  */
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { groupEventsByDate } from '$lib/helpers/calendar.js';
+
+const originalTZ = process.env.TZ;
+beforeAll(() => {
+  process.env.TZ = 'UTC';
+});
+afterAll(() => {
+  process.env.TZ = originalTZ;
+});
 
 const DAY = 86400;
 // 2026-10-01T00:00:00Z
