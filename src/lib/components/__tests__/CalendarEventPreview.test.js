@@ -6,7 +6,7 @@
  *
  * @vitest-environment jsdom
  */
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeAll, afterAll } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/svelte';
 import * as m from '$lib/paraglide/messages';
 
@@ -88,5 +88,40 @@ describe('CalendarEventPreview', () => {
     render(CalendarEventPreview, { identifier: 'naddr1y', decoded });
     await waitFor(() => expect(screen.getByTestId('calendar-event-preview-card')).toBeTruthy());
     expect(screen.getByTestId('stub-component')).toBeTruthy();
+  });
+});
+
+describe('CalendarEventPreview — all-day (31922) date west of UTC', () => {
+  const originalTz = process.env.TZ;
+  beforeAll(() => {
+    process.env.TZ = 'America/New_York';
+  });
+  afterAll(() => {
+    process.env.TZ = originalTz;
+  });
+
+  it('shows the start date itself, not the day before', async () => {
+    h.event = {
+      id: 'f'.repeat(64),
+      kind: 31922,
+      pubkey: 'b'.repeat(64),
+      created_at: 1_700_000_000,
+      content: '',
+      tags: [
+        ['d', 'fair'],
+        ['title', 'Bildungsmesse'],
+        ['start', '2026-11-20'],
+        ['h', 'c'.repeat(64)]
+      ]
+    };
+    // Guard: the forced zone really is in effect (UTC midnight is the 19th there)
+    expect(new Date(Date.UTC(2026, 10, 20)).getDate()).toBe(19);
+    render(CalendarEventPreview, {
+      identifier: 'naddr1z',
+      decoded: { ...decoded, data: { ...decoded.data, kind: 31922, identifier: 'fair' } }
+    });
+    const card = await screen.findByTestId('calendar-event-preview-card');
+    expect(card.textContent).toMatch(/\b20\b/);
+    expect(card.textContent).not.toMatch(/\b19\b/);
   });
 });

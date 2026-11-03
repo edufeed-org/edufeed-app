@@ -121,7 +121,7 @@
               {#if startDate}
                 <div class="flex items-center gap-2">
                   <CalendarIcon class_="w-4 h-4 flex-shrink-0" />
-                  <span>{formatCalendarDate(startDate, 'short')}</span>
+                  <span>{formatCalendarDate(startDate, 'short', { utc: isAllDay })}</span>
                 </div>
               {/if}
 
