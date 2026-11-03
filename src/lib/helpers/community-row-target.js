@@ -43,6 +43,11 @@ export function communityRowTarget({ newest, lastVisit, remembered, tabs }) {
     const section = kindToContentType(newest.kind);
     if (section && offered.has(section)) return section;
   }
+  // 'channels' is never in getCommunityTabs() (communityNavTabIds adds it for
+  // the sheet), but it was only remembered because the community showed that
+  // tab at the time — and the community layout falls back to home itself if
+  // the tab is gone. Honour it unconditionally.
+  if (remembered === 'channels') return 'channels';
   if (remembered && offered.has(remembered)) return remembered;
   return 'home';
 }

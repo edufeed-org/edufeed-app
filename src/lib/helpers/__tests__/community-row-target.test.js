@@ -46,6 +46,20 @@ describe('communityRowTarget', () => {
     ).toBe('home');
   });
 
+  it('a remembered channels view is honoured even though getCommunityTabs never lists it', () => {
+    // 'channels' is added by communityNavTabIds (sheet), not getCommunityTabs
+    // (what the Communities list has); the layout falls back to home itself
+    // when a community no longer offers channels.
+    expect(
+      communityRowTarget({
+        newest: null,
+        lastVisit: 10,
+        remembered: 'channels',
+        tabs: ['home', 'chat']
+      })
+    ).toBe('channels');
+  });
+
   it('no last visit → nothing is new → remembered or home', () => {
     expect(
       communityRowTarget({ newest: item(31923, 50), lastVisit: null, remembered: null, tabs })

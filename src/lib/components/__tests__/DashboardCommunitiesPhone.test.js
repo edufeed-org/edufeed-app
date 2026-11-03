@@ -148,6 +148,12 @@ describe('DashboardCommunitiesPhone', () => {
     expect(rows[1].textContent).toContain('Chat');
   });
 
+  it('a row remembered in Kanäle links to ?view=channels although the tabs mock lacks it', () => {
+    state.lastView = { [A]: { view: 'channels', at: 400 }, [B]: null };
+    const { getByTestId } = render(Phone);
+    expect(getByTestId(`community-row-${A}`).getAttribute('href')).toBe('/c/npub-a?view=channels');
+  });
+
   it('badges only rows with activity newer than the last visit', () => {
     const { queryByTestId } = render(Phone);
     expect(queryByTestId(`community-row-new-${A}`)).not.toBeNull();
