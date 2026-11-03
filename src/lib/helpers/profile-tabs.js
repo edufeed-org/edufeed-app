@@ -131,6 +131,24 @@ export function parseProfileTabsEvent(event) {
   return { order, hidden };
 }
 
+/** Per-type tabs whose entries are all part of the posts count. */
+const POSTS_STAT_FALLBACK_TABS = new Set(['content', 'articles', 'events', 'polls', 'bookmarks']);
+
+/**
+ * Tab the header's "N Beiträge" stat jumps to. The count is the mixed posts
+ * feed (`tabCountsFromEvents` sums every displayed entry), so that is the
+ * target; when the owner hid it, the first visible per-type tab in their
+ * order shows part of the same content. Null = nothing visible to jump to.
+ *
+ * @param {{ order: string[], hidden: string[] }} tabsConfig
+ * @returns {string | null}
+ */
+export function tabForPostsStat(tabsConfig) {
+  const visible = tabsConfig.order.filter((id) => !tabsConfig.hidden.includes(id));
+  if (visible.includes('posts')) return 'posts';
+  return visible.find((id) => POSTS_STAT_FALLBACK_TABS.has(id)) ?? null;
+}
+
 /**
  * Build the tag list for a kind 30078 profile-tabs event.
  * @param {string[]} order - all tab ids in display order

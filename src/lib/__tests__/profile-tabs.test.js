@@ -16,7 +16,8 @@ import {
   TAB_KINDS,
   parseProfileTabsEvent,
   buildProfileTabsTags,
-  tabCountsFromEvents
+  tabCountsFromEvents,
+  tabForPostsStat
 } from '$lib/helpers/profile-tabs.js';
 
 function tabsEvent(tags) {
@@ -234,5 +235,46 @@ describe('tabCountsFromEvents', () => {
     });
     expect(tabCountsFromEvents([]).posts).toBe(0);
     expect(tabCountsFromEvents(null).posts).toBe(0);
+  });
+});
+
+describe('tabForPostsStat', () => {
+  it('picks the mixed posts tab by default (the count sums that feed)', () => {
+    expect(tabForPostsStat(parseProfileTabsEvent(null))).toBe('posts');
+  });
+
+  it('keeps the posts tab when the owner only reordered tabs', () => {
+    const config = parseProfileTabsEvent(
+      tabsEvent([
+        ['tab', 'badges'],
+        ['tab', 'posts']
+      ])
+    );
+    expect(tabForPostsStat(config)).toBe('posts');
+  });
+
+  it('falls back to the first visible per-type content tab when posts is hidden', () => {
+    const config = parseProfileTabsEvent(
+      tabsEvent([
+        ['tab', 'communities'],
+        ['tab', 'posts', 'hidden'],
+        ['tab', 'articles'],
+        ['tab', 'content']
+      ])
+    );
+    expect(tabForPostsStat(config)).toBe('articles');
+  });
+
+  it('returns null when no tab shows any of the counted content', () => {
+    const config = parseProfileTabsEvent(
+      tabsEvent(
+        ['posts', 'content', 'articles', 'events', 'polls', 'bookmarks'].map((id) => [
+          'tab',
+          id,
+          'hidden'
+        ])
+      )
+    );
+    expect(tabForPostsStat(config)).toBeNull();
   });
 });

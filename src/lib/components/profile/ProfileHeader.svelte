@@ -42,6 +42,7 @@
    *   followersCount?: number,
    *   followersCapped?: boolean,
    *   followingCount?: number,
+   *   onShowPosts?: () => void,
    *   onShowFollowers?: () => void,
    *   onShowFollowing?: () => void,
    *   editing: boolean,
@@ -66,6 +67,7 @@
     followersCount = 0,
     followersCapped = false,
     followingCount = 0,
+    onShowPosts = undefined,
     onShowFollowers = () => {},
     onShowFollowing = () => {},
     editing,
@@ -180,7 +182,14 @@
 
       {#if postsCount > 0 || followersCount > 0 || followingCount > 0}
         <div class="pf-quick">
-          {#if postsCount > 0}
+          {#if postsCount > 0 && onShowPosts}
+            <!-- Jumps to the tab the count refers to — the tabs below already
+                 list the posts, so no modal like the follow stats. -->
+            <button type="button" class="pf-stat" data-testid="stat-posts" onclick={onShowPosts}>
+              <b>{postsCount}</b>
+              {m.profile_stat_posts()}
+            </button>
+          {:else if postsCount > 0}
             <span data-testid="stat-posts"><b>{postsCount}</b> {m.profile_stat_posts()}</span>
           {/if}
           {#if followersCount > 0}
