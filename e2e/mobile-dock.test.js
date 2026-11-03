@@ -12,11 +12,11 @@ test.describe('Mobile dock', () => {
     const dock = page.getByTestId('mobile-dock');
     await expect(dock).toBeVisible();
     await expect(dock.locator('.dock-label')).toHaveText([
-      /Start/,
-      /Entdecken|Discover/,
+      /Feed/,
+      /Communities/,
       /Erstellen|Create/,
       /Posteingang|Inbox/,
-      /Communities/
+      /Entdecken|Discover/
     ]);
     await expect(page.getByTestId('global-fab-button')).toBeHidden();
     await expect(page.getByTestId('termi-launcher')).toBeHidden();

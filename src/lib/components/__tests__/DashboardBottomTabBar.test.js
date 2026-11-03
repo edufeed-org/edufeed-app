@@ -20,7 +20,7 @@ vi.mock('$lib/stores/create-hub.svelte.js', () => ({
   openCreateHub: () => state.openCreateHub()
 }));
 vi.mock('$lib/paraglide/messages', () => ({
-  dashboard_nav_start: () => 'Start',
+  dashboard_nav_feed: () => 'Feed',
   navbar_discover: () => 'Entdecken',
   dashboard_nav_create: () => 'Erstellen',
   dashboard_nav_inbox: () => 'Posteingang',
@@ -44,12 +44,12 @@ describe('DashboardBottomTabBar', () => {
     const labels = [...nav.querySelectorAll('[data-testid^="dock-"] .dock-label')].map((el) =>
       el.textContent?.trim()
     );
-    expect(labels).toEqual(['Start', 'Entdecken', 'Erstellen', 'Posteingang', 'Communities']);
+    expect(labels).toEqual(['Feed', 'Communities', 'Erstellen', 'Posteingang', 'Entdecken']);
   });
 
-  it('links Start, Entdecken, Posteingang and Communities to their routes', () => {
+  it('links Feed, Communities, Posteingang and Entdecken to their routes', () => {
     const { getByTestId } = render(Dock);
-    expect(getByTestId('dock-home').getAttribute('href')).toBe('/c/');
+    expect(getByTestId('dock-feed').getAttribute('href')).toBe('/c/?view=feed');
     expect(getByTestId('dock-discover').getAttribute('href')).toBe('/discover');
     expect(getByTestId('dock-inbox').getAttribute('href')).toBe('/c/inbox');
     expect(getByTestId('dock-communities').getAttribute('href')).toBe('/c/?view=communities');
@@ -70,7 +70,23 @@ describe('DashboardBottomTabBar', () => {
     stores.__setUrl(new URL('http://localhost/discover?type=learning'));
     const { getByTestId } = render(Dock);
     expect(getByTestId('dock-discover').getAttribute('aria-current')).toBe('page');
-    expect(getByTestId('dock-home').getAttribute('aria-current')).toBeNull();
+    expect(getByTestId('dock-feed').getAttribute('aria-current')).toBeNull();
+  });
+
+  it('Feed is active on the dashboard root and on ?view=feed', () => {
+    stores.__setUrl(new URL('http://localhost/c/'));
+    const root = render(Dock);
+    expect(root.getByTestId('dock-feed').getAttribute('aria-current')).toBe('page');
+    root.unmount();
+    stores.__setUrl(new URL('http://localhost/c/?view=feed'));
+    expect(render(Dock).getByTestId('dock-feed').getAttribute('aria-current')).toBe('page');
+  });
+
+  it('Communities is active inside a community, whatever section is open', () => {
+    stores.__setUrl(new URL('http://localhost/c/npub1x?view=calendar'));
+    const { getByTestId } = render(Dock);
+    expect(getByTestId('dock-communities').getAttribute('aria-current')).toBe('page');
+    expect(getByTestId('dock-feed').getAttribute('aria-current')).toBeNull();
   });
 
   it('shows the unread badge on Posteingang and hides it at zero', () => {
@@ -91,7 +107,7 @@ describe('DashboardBottomTabBar', () => {
 
   it('gives every item the dock-item class that sets the 56px touch height', () => {
     const { getByTestId } = render(Dock);
-    for (const id of ['home', 'discover', 'create', 'inbox', 'communities']) {
+    for (const id of ['feed', 'communities', 'create', 'inbox', 'discover']) {
       expect(getByTestId(`dock-${id}`).className).toContain('dock-item');
     }
   });
