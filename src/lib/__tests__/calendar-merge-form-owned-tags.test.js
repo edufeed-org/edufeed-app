@@ -146,6 +146,23 @@ describe('CALENDAR_FORM_OWNED_TAGS', () => {
     expect(mergeFormOwnedTags(stale, [], CALENDAR_FORM_OWNED_TAGS)).toEqual([]);
   });
 
+  it('drops a stale deprecated name tag when the edit writes title', () => {
+    const existing = [
+      ['d', 'ev-1'],
+      ['name', 'Old deprecated name'],
+      ['title', 'Old title']
+    ];
+    const form = [
+      ['d', 'ev-1'],
+      ['title', 'New title']
+    ];
+
+    expect(mergeFormOwnedTags(existing, form, CALENDAR_FORM_OWNED_TAGS)).toEqual([
+      ['d', 'ev-1'],
+      ['title', 'New title']
+    ]);
+  });
+
   it('does not own tags the form cannot edit', () => {
     const foreign = [
       ['summary', 's'],

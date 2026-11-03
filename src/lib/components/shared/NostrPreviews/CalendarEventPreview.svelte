@@ -39,9 +39,11 @@
   const event = $derived.by(() => {
     const rawEvent = ref.event;
     if (!rawEvent) return null;
-    const titleTag = rawEvent.tags.find(
-      (/** @type {any} */ t) => t[0] === 'name' || t[0] === 'title'
-    );
+    // `title` is current NIP-52; `name` is its deprecated precursor — prefer
+    // title when both are present, regardless of tag order.
+    const titleTag =
+      rawEvent.tags.find((/** @type {any} */ t) => t[0] === 'title') ||
+      rawEvent.tags.find((/** @type {any} */ t) => t[0] === 'name');
     const summaryTag = rawEvent.tags.find(
       (/** @type {any} */ t) => t[0] === 'summary' || t[0] === 'description'
     );
@@ -52,7 +54,10 @@
       pubkey: rawEvent.pubkey,
       kind: /** @type {import('$lib/types/calendar.js').CalendarEventKind} */ (rawEvent.kind),
       title: titleTag?.[1] || 'Untitled Event',
-      summary: summaryTag?.[1] || '',
+      // App-written events carry their description in `content` (NIP-52's
+      // `summary` tag is a short teaser the UI never populates); fall back
+      // to summary/description only for events that use the tag instead.
+      summary: rawEvent.content || summaryTag?.[1] || '',
       image: imageTag?.[1] || '',
       start: getCalendarEventStart(rawEvent) || 0,
       end: getCalendarEventEnd(rawEvent) || 0,

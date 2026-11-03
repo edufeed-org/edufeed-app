@@ -37,7 +37,7 @@ vi.mock(
 );
 vi.mock(
   '$lib/components/shared/MarkdownRenderer.svelte',
-  () => import('./__mocks__/EmptyStub.svelte')
+  () => import('./fixtures/MarkdownRendererContentStub.svelte')
 );
 vi.mock('$lib/components/shared/LocationLink.svelte', () => import('./__mocks__/EmptyStub.svelte'));
 vi.mock(
@@ -88,5 +88,58 @@ describe('CalendarEventPreview', () => {
     render(CalendarEventPreview, { identifier: 'naddr1y', decoded });
     await waitFor(() => expect(screen.getByTestId('calendar-event-preview-card')).toBeTruthy());
     expect(screen.getByTestId('stub-component')).toBeTruthy();
+  });
+
+  it('prefers title over the deprecated name tag, regardless of tag order', async () => {
+    h.event = {
+      id: 'e'.repeat(64),
+      kind: 31923,
+      pubkey: 'b'.repeat(64),
+      created_at: 1_700_000_000,
+      content: '',
+      tags: [
+        ['d', 'm1'],
+        ['name', 'Deprecated name'],
+        ['title', 'Current title'],
+        ['start', '2000000000']
+      ]
+    };
+    render(CalendarEventPreview, { identifier: 'naddr1z', decoded });
+    await screen.findByText('Current title');
+    expect(screen.queryByText('Deprecated name')).toBeNull();
+  });
+
+  it('falls back to the deprecated name tag when there is no title', async () => {
+    h.event = {
+      id: 'e'.repeat(64),
+      kind: 31923,
+      pubkey: 'b'.repeat(64),
+      created_at: 1_700_000_000,
+      content: '',
+      tags: [
+        ['d', 'm1'],
+        ['name', 'Only a name'],
+        ['start', '2000000000']
+      ]
+    };
+    render(CalendarEventPreview, { identifier: 'naddr1z2', decoded });
+    await screen.findByText('Only a name');
+  });
+
+  it('reads the description from content when there is no summary/description tag', async () => {
+    h.event = {
+      id: 'e'.repeat(64),
+      kind: 31923,
+      pubkey: 'b'.repeat(64),
+      created_at: 1_700_000_000,
+      content: 'Written straight into content by the app',
+      tags: [
+        ['d', 'm1'],
+        ['title', 'App-written event'],
+        ['start', '2000000000']
+      ]
+    };
+    render(CalendarEventPreview, { identifier: 'naddr1z3', decoded });
+    await screen.findByText('Written straight into content by the app');
   });
 });
