@@ -61,7 +61,10 @@ vi.mock('$lib/helpers/image-license.js', async () => {
   return { ...actual, findExistingLicense: mocks.findExistingLicense };
 });
 
-vi.mock('$lib/helpers/sha256.js', () => ({
+// Keep the real exports (sha256FromUrl is pure): a factory with only
+// sha256Hex made the URL-hash path throw "No sha256FromUrl export".
+vi.mock('$lib/helpers/sha256.js', async (importOriginal) => ({
+  ...(await importOriginal()),
   sha256Hex: mocks.sha256Hex
 }));
 
