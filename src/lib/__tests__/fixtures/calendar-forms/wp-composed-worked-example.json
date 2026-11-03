@@ -1,0 +1,18 @@
+{
+  "kind": 31923,
+  "content": "",
+  "tags": [
+    ["title", "OER-Werkstatt"],
+    ["start", "1795179600"],
+    ["end", "1795186800"],
+    ["start_tzid", "Europe/Berlin"],
+    ["end_tzid", "Europe/Berlin"],
+    ["D", "20777"],
+    ["participant", "Jane Doe", "", "speaker"],
+    ["eventAttendanceMode", "https://schema.org/OnlineEventAttendanceMode"],
+    ["educationalLevel:id", "https://w3id.org/kim/educationalLevel/level_C"],
+    ["educationalLevel:prefLabel:de", "Fortbildung"],
+    ["educationalLevel:prefLabel:en", "Advanced training"],
+    ["educationalLevel:type", "Concept"]
+  ]
+}
