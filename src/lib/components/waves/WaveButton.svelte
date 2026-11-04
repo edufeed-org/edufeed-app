@@ -5,8 +5,9 @@
   import { showToast } from '$lib/helpers/toast';
   import * as m from '$lib/paraglide/messages.js';
 
-  /** @type {{ profileEvent: any, pubkey: string }} */
-  let { profileEvent, pubkey } = $props();
+  /** @type {{ profileEvent: any, pubkey: string , label?: string }} */
+  /** `label` renders a labelled pill (profile header row) instead of the icon circle. */
+  let { profileEvent, pubkey, label = '' } = $props();
 
   /** @type {any[]} */
   let reactions = $state.raw([]);
@@ -53,11 +54,12 @@
 </script>
 
 <button
-  class="btn btn-circle transition-colors btn-sm
-    {waved || !cooldownState.canWave ? 'btn-success' : 'btn-ghost'}"
+  class="btn transition-colors btn-sm {label ? 'gap-2 rounded-[10px] px-4' : 'btn-circle'}
+    {waved || !cooldownState.canWave ? 'btn-success' : label ? 'btn-outline' : 'btn-ghost'}"
   onclick={handleWave}
   disabled={!cooldownState.canWave}
   title={cooldownState.canWave ? m.wave_button_tooltip() : m.wave_cooldown_tooltip()}
 >
   <span class="text-lg">👋</span>
+  {#if label}<span class="font-semibold">{label}</span>{/if}
 </button>

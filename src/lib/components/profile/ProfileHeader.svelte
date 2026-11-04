@@ -22,9 +22,12 @@
     MessageSquareIcon,
     PeopleIcon,
     PlusIcon,
-    QrCodeIcon
+    QrCodeIcon,
+    ChevronRightIcon,
+    MoreIcon
   } from '$lib/components/icons';
   import { modalStore } from '$lib/stores/modal.svelte.js';
+  import { MediaQuery } from 'svelte/reactivity';
   import * as m from '$lib/paraglide/messages';
   import { getDisplayName } from '$lib/helpers/displayName.js';
 
@@ -97,6 +100,15 @@
     modalStore.openModal('profileQr', { pubkey, npub });
   }
 
+  // Phone layout (the stylesheet's 780px breakpoint): the wave sits on the
+  // avatar and the community link is a card; wider, the wave is a button in
+  // the row and the community chip is the link. Guarded for jsdom/SSR.
+  const narrowQuery =
+    typeof window !== 'undefined' && typeof window.matchMedia === 'function'
+      ? new MediaQuery('(max-width: 780px)')
+      : null;
+  const isNarrow = $derived(narrowQuery?.current ?? false);
+
   async function copyNpub() {
     try {
       await navigator.clipboard.writeText(npub || pubkey);
@@ -107,6 +119,28 @@
     }
   }
 </script>
+
+{#snippet identityItems()}
+  <li>
+    <button data-testid="show-qr" onclick={showQr}>
+      <QrCodeIcon class_="w-4 h-4" />
+      {m.profile_show_qr()}
+    </button>
+  </li>
+  <li>
+    <button data-testid="copy-npub" onclick={copyNpub}>
+      {#if copied}
+        <CheckIcon class_="w-4 h-4 text-success" />
+      {:else}
+        <CopyIcon class_="w-4 h-4" />
+      {/if}
+      <span class="flex min-w-0 flex-col items-start">
+        <span>{m.profile_copy_pubkey()}</span>
+        <span class="font-mono text-xs opacity-60">{npubShort}</span>
+      </span>
+    </button>
+  </li>
+{/snippet}
 
 <!-- No banner set → the design's no-banner variant: avatar sits in flow with
      breathing room. The pattern gradient only backstops a failed image load. -->
@@ -120,80 +154,66 @@
 
 <div class="pf-head" class:no-banner={!bannerUrl}>
   <div class="pf-head-row">
-    <div class="pf-avatar">
-      <ImageWithFallback
-        src={profile?.picture || `https://robohash.org/${pubkey}`}
-        alt={displayName}
-        fallbackType="avatar"
-        robohash={false}
-        class="block h-full w-full object-cover"
-      />
+    <div class="pf-avatar-wrap">
+      <div class="pf-avatar">
+        <ImageWithFallback
+          src={profile?.picture || `https://robohash.org/${pubkey}`}
+          alt={displayName}
+          fallbackType="avatar"
+          robohash={false}
+          class="block h-full w-full object-cover"
+        />
+      </div>
+      {#if isNarrow && !isOwnProfile && activeUser}
+        <!-- Winken is a gesture at the person: on phones it sits on the avatar. -->
+        <div class="pf-wave-avatar" data-testid="wave-avatar">
+          <WaveButton {profileEvent} pubkey={activeUser.pubkey} />
+        </div>
+      {/if}
     </div>
 
     <div class="pf-identity">
       <h1>
         {displayName}
-        {#if nip05Status === 'verified'}
-          <!-- The chip explains itself (issue "Erklärung/Anleitung Verifizierung"):
-               hover, tap or Enter opens the plain-language NIP-05 card. Fixed
-               positioning escapes the header's overflow clipping. -->
-          <HoverCard
-            fixed
-            position="bottom"
-            enterDelay={100}
-            class="relative inline-flex"
-            triggerClass="contents"
-          >
-            {#snippet trigger()}
-              <span class="pf-chip verified" data-testid="profile-verified-chip">
-                <CheckIcon class_="w-3 h-3" />
-                {m.profile_verified_chip()}
-              </span>
-            {/snippet}
-            {#snippet content()}
-              <Nip05InfoCard nip05={nip05s[0] ?? null} />
-            {/snippet}
-          </HoverCard>
-        {:else if nip05Status === 'unverified'}
+        {#if nip05Status === 'unverified'}
           <span class="pf-chip unverified" data-testid="profile-unverified-chip">
             <AlertIcon class_="w-3 h-3" />
             {m.profile_unverified_chip()}
           </span>
         {/if}
-        {#if isCommunity}
+        {#if isCommunity && !isNarrow}
+          <!-- The chip IS the way into the community (no extra button). -->
           <a class="pf-chip community" href={communityHref} data-testid="profile-community-chip">
             <PeopleIcon class_="w-3 h-3" />
-            {m.profile_community_chip()}
+            {m.profile_open_community_button()}
+            <ChevronRightIcon class_="w-3 h-3" />
           </a>
         {/if}
       </h1>
 
       {#if nip05Status === 'verified' && nip05s.length > 0}
-        <div class="pf-nip05s">
-          {#each nip05s as nip05 (nip05)}
-            <Nip05VerifiedBadge {pubkey} {nip05} />
-          {/each}
-        </div>
-      {/if}
-
-      <div class="pf-npub-pill" data-testid="npub-pill">
-        {npubShort}
-        <button onclick={copyNpub} title={m.profile_copy_pubkey()}>
-          {#if copied}
-            <CheckIcon class_="w-3.5 h-3.5 text-success" />
-          {:else}
-            <CopyIcon class_="w-3.5 h-3.5" />
-          {/if}
-        </button>
-        <button
-          onclick={showQr}
-          title={m.profile_show_qr()}
-          aria-label={m.profile_show_qr()}
-          data-testid="show-qr"
+        <!-- The line explains itself (issue "Erklärung/Anleitung Verifizierung"):
+             hover, tap or Enter opens the plain-language NIP-05 card. Fixed
+             positioning escapes the header's overflow clipping. -->
+        <HoverCard
+          fixed
+          position="bottom"
+          enterDelay={100}
+          class="relative inline-flex"
+          triggerClass="contents"
         >
-          <QrCodeIcon class_="w-3.5 h-3.5" />
-        </button>
-      </div>
+          {#snippet trigger()}
+            <div class="pf-nip05s" data-testid="profile-nip05-line">
+              {#each nip05s as nip05 (nip05)}
+                <Nip05VerifiedBadge {pubkey} {nip05} />
+              {/each}
+            </div>
+          {/snippet}
+          {#snippet content()}
+            <Nip05InfoCard nip05={nip05s[0] ?? null} />
+          {/snippet}
+        </HoverCard>
+      {/if}
 
       {#if postsCount > 0 || followersCount > 0 || followingCount > 0}
         <div class="pf-quick">
@@ -238,12 +258,6 @@
     </div>
 
     <div class="pf-btns">
-      {#if isCommunity}
-        <a class="pf-btn ghost" href={communityHref} data-testid="open-community-button">
-          <PeopleIcon class_="w-4 h-4" />
-          {m.profile_open_community_button()}
-        </a>
-      {/if}
       {#if isOwnProfile}
         <button
           class="pf-btn solid"
@@ -263,55 +277,119 @@
           <button class="pf-btn ghost icon" title={m.profile_more_button()} tabindex="0">
             <GearIcon class_="w-4 h-4" />
           </button>
-          <ul class="dropdown-content menu z-40 w-56 rounded-box bg-base-100 p-2 shadow-lg">
+          <ul
+            class="dropdown-content menu z-40 w-64 rounded-box bg-base-100 p-2 shadow-lg"
+            data-testid="profile-more-menu"
+          >
             <li>
               <button data-testid="edit-profile" onclick={onEditProfile}>
                 <EditIcon class_="w-4 h-4" />
                 {m.profile_edit_modal_title()}
               </button>
             </li>
+            {@render identityItems()}
           </ul>
         </div>
-      {:else if activeUser}
-        <WaveButton {profileEvent} pubkey={activeUser.pubkey} />
-        <button
-          class="pf-btn solid"
-          class:following={isFollowing}
-          data-testid="follow-button"
-          disabled={followLoading}
-          onclick={onFollow}
-        >
-          {#if followLoading}
-            <span class="loading loading-xs loading-spinner"></span>
-          {:else if isFollowing}
-            <CheckIcon class_="w-4 h-4" />
-            {m.profile_unfollow_button()}
-          {:else}
-            <PlusIcon class_="w-4 h-4" />
-            {m.profile_follow_button()}
-          {/if}
-        </button>
-        <a
-          href={resolve(`/c/messages?to=${pubkey}`)}
-          class="pf-btn ghost"
-          aria-label={m.dm_title()}
-        >
-          <MessageSquareIcon class_="w-4 h-4" />
-          {m.profile_message_button()}
-        </a>
-        {#if profile?.lud16}
-          <!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- external: lightning wallet -->
+      {:else}
+        {#if activeUser}
           <a
-            href={`lightning:${profile.lud16}`}
-            class="pf-btn ghost icon zap"
-            title={m.profile_zap_button()}
-            data-testid="zap-link"
+            href={resolve(`/c/messages?to=${pubkey}`)}
+            class="pf-btn"
+            class:solid={isFollowing}
+            class:ghost={!isFollowing}
+            aria-label={m.dm_title()}
           >
-            <LightningIcon class_="w-4 h-4" />
+            <MessageSquareIcon class_="w-4 h-4" />
+            {m.profile_message_button()}
           </a>
+          {#if !isNarrow}
+            <span data-testid="wave-row" class="contents">
+              <WaveButton
+                {profileEvent}
+                pubkey={activeUser.pubkey}
+                label={m.wave_button_tooltip()}
+              />
+            </span>
+          {/if}
+          {#if isFollowing}
+            <!-- Following reads as state; Entfolgen is rare and lives one tap down. -->
+            <div class="dropdown dropdown-end">
+              <button
+                class="pf-btn ghost"
+                data-testid="follow-button"
+                tabindex="0"
+                aria-haspopup="menu"
+                disabled={followLoading}
+              >
+                {#if followLoading}
+                  <span class="loading loading-xs loading-spinner"></span>
+                {:else}
+                  <CheckIcon class_="w-4 h-4" />
+                {/if}
+                {m.profile_following_button()}
+              </button>
+              <ul class="dropdown-content menu z-40 w-48 rounded-box bg-base-100 p-2 shadow-lg">
+                <li>
+                  <button data-testid="unfollow-button" class="text-error" onclick={onFollow}>
+                    {m.profile_unfollow_button()}
+                  </button>
+                </li>
+              </ul>
+            </div>
+          {:else}
+            <button
+              class="pf-btn solid"
+              data-testid="follow-button"
+              disabled={followLoading}
+              onclick={onFollow}
+            >
+              {#if followLoading}
+                <span class="loading loading-xs loading-spinner"></span>
+              {:else}
+                <PlusIcon class_="w-4 h-4" />
+              {/if}
+              {m.profile_follow_button()}
+            </button>
+          {/if}
         {/if}
+        <div class="dropdown dropdown-end">
+          <button
+            class="pf-btn ghost icon"
+            title={m.profile_more_button()}
+            aria-label={m.profile_more_button()}
+            data-testid="profile-more-button"
+            tabindex="0"
+          >
+            <MoreIcon class_="w-4 h-4" />
+          </button>
+          <ul
+            class="dropdown-content menu z-40 w-64 rounded-box bg-base-100 p-2 shadow-lg"
+            data-testid="profile-more-menu"
+          >
+            {#if profile?.lud16}
+              <li>
+                <!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- external: lightning wallet -->
+                <a href={`lightning:${profile.lud16}`} data-testid="zap-link">
+                  <LightningIcon class_="w-4 h-4" />
+                  {m.profile_zap_button()}
+                </a>
+              </li>
+            {/if}
+            {@render identityItems()}
+          </ul>
+        </div>
       {/if}
     </div>
+    {#if isCommunity && isNarrow}
+      <a class="pf-comcard" href={communityHref} data-testid="open-community-button">
+        <span class="pf-comcard-ic"><PeopleIcon class_="w-5 h-5" /></span>
+        <span class="pf-comcard-tx">
+          <b>{m.profile_open_community_button()}</b>
+          <span>{m.profile_open_community_hint()}</span>
+        </span>
+        <ChevronRightIcon class_="w-5 h-5 opacity-50" />
+      </a>
+    {/if}
   </div>
 </div>
 
@@ -359,6 +437,16 @@
     align-items: flex-end;
     position: relative;
     padding-top: 18px;
+  }
+  .pf-avatar-wrap {
+    position: relative;
+    flex-shrink: 0;
+    align-self: flex-start;
+  }
+  .pf-wave-avatar {
+    position: absolute;
+    right: -4px;
+    bottom: 4px;
   }
   .pf-avatar {
     width: 116px;
@@ -427,6 +515,7 @@
   }
 
   .pf-nip05s {
+    cursor: help;
     margin-top: 9px;
     display: flex;
     flex-wrap: wrap;
@@ -434,37 +523,6 @@
     gap: 4px 14px;
     font-size: 14px;
     color: var(--c-ink-soft);
-  }
-
-  .pf-npub-pill {
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-    margin-top: 11px;
-    font-family: ui-monospace, 'JetBrains Mono', monospace;
-    font-size: 12px;
-    line-height: 1;
-    color: var(--c-ink-soft);
-    background: var(--c-paper);
-    border: 1px solid var(--c-rule);
-    border-radius: 999px;
-    padding: 6px 8px 6px 12px;
-    white-space: nowrap;
-  }
-  .pf-npub-pill button {
-    border: 0;
-    background: transparent;
-    width: 24px;
-    height: 24px;
-    border-radius: 999px;
-    display: grid;
-    place-items: center;
-    cursor: pointer;
-    color: var(--c-ink-soft);
-  }
-  .pf-npub-pill button:hover {
-    background: var(--c-bg);
-    color: var(--c-ink);
   }
 
   .pf-quick {
@@ -496,7 +554,10 @@
     gap: 9px;
     padding-bottom: 6px;
     align-items: center;
-    flex-wrap: wrap;
+    /* One row of four on wide screens: the group must not shrink or wrap
+       below the identity column; phones wrap (media query below). */
+    flex-shrink: 0;
+    flex-wrap: nowrap;
   }
   .pf-btn {
     display: inline-flex;
@@ -540,9 +601,41 @@
     width: 46px;
     justify-content: center;
   }
-  .pf-btn.zap:hover {
-    color: var(--c-cta);
-    box-shadow: inset 0 0 0 1.5px var(--c-cta);
+  .pf-comcard {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-top: 10px;
+    padding: 10px 12px;
+    border-radius: 14px;
+    background: var(--c-paper);
+    box-shadow: inset 0 0 0 1px var(--c-rule);
+    color: var(--c-ink);
+    text-decoration: none;
+  }
+  .pf-comcard-ic {
+    width: 38px;
+    height: 38px;
+    border-radius: 10px;
+    background: var(--c-cta);
+    color: var(--c-ink);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+  .pf-comcard-tx {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    flex: 1;
+  }
+  .pf-comcard-tx b {
+    font-size: 14px;
+  }
+  .pf-comcard-tx span {
+    font-size: 12px;
+    color: var(--c-ink-soft);
   }
 
   /* No-banner variant: avatar in flow, header gets breathing room. */
@@ -567,6 +660,7 @@
     }
     .pf-btns {
       padding-bottom: 0;
+      flex-wrap: wrap;
     }
   }
 </style>
