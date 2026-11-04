@@ -12,7 +12,9 @@ import {
   PINNED_EVENTS_KIND,
   MAX_PINS,
   getPinnedIds,
-  resolvePinnedIds
+  getPinnedRefs,
+  resolvePinnedIds,
+  resolvePinnedRefs
 } from '$lib/groups/pins.js';
 
 const A = 'a'.repeat(64);
@@ -204,5 +206,86 @@ describe('resolvePinnedIds', () => {
     expect(
       resolvePinnedIds({ groupId: 'g', pinnedEvents: [other], updateEvents: [otherUpdate] })
     ).toEqual([]);
+  });
+});
+
+// NIP-29 lets a pin list carry addressable events as `a` tags next to the
+// `e` tags. The chat shows only messages, but every list we publish is the
+// FULL list — so `a` entries other clients pinned must survive a pin or
+// unpin from here, in their place.
+const MEETING = `31923:${'d'.repeat(64)}:meeting-1`;
+
+describe('getPinnedRefs', () => {
+  it('keeps e and a entries in list order', () => {
+    const list = ev(
+      39005,
+      [
+        ['d', 'g'],
+        ['e', A],
+        ['a', MEETING],
+        ['e', B]
+      ],
+      10
+    );
+    expect(getPinnedRefs(list)).toEqual([
+      { type: 'e', value: A },
+      { type: 'a', value: MEETING },
+      { type: 'e', value: B }
+    ]);
+    expect(getPinnedIds(list)).toEqual([A, B]);
+  });
+
+  it('drops malformed and repeated entries of both kinds', () => {
+    const list = ev(
+      9010,
+      [
+        ['h', 'g'],
+        ['a', MEETING],
+        ['a', MEETING],
+        ['a', '30023:x:y'],
+        ['a'],
+        ['e', 'nope'],
+        ['e', A]
+      ],
+      10
+    );
+    expect(getPinnedRefs(list)).toEqual([
+      { type: 'a', value: MEETING },
+      { type: 'e', value: A }
+    ]);
+  });
+});
+
+describe('resolvePinnedRefs', () => {
+  it('returns the newest list with its a entries; resolvePinnedIds is its e side', () => {
+    const args = {
+      groupId: 'g',
+      pinnedEvents: [
+        ev(
+          39005,
+          [
+            ['d', 'g'],
+            ['a', MEETING],
+            ['e', C]
+          ],
+          20
+        )
+      ],
+      updateEvents: [
+        ev(
+          9010,
+          [
+            ['h', 'g'],
+            ['e', A]
+          ],
+          10
+        )
+      ]
+    };
+    expect(resolvePinnedRefs(args)).toEqual([
+      { type: 'a', value: MEETING },
+      { type: 'e', value: C }
+    ]);
+    expect(resolvePinnedIds(args)).toEqual([C]);
   });
 });

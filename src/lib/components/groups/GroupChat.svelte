@@ -82,7 +82,7 @@
     PINNED_EVENTS_KIND,
     UPDATE_PIN_LIST_KIND,
     MAX_PINS,
-    resolvePinnedIds
+    resolvePinnedRefs
   } from '$lib/groups/pins.js';
   import PinnedMessagesBar from '$lib/components/groups/PinnedMessagesBar.svelte';
   import { useChatAttachments, appendUrlToDraft } from '$lib/stores/chat-attachments.svelte.js';
@@ -587,16 +587,21 @@
   );
   const meetings = $derived(displayed.filter((event) => event.kind === MEETING_KIND));
 
-  // The channel's pinned message ids, newest pin first (groups/pins.js). A
-  // message deleted since it was pinned drops out here — and out of the next
-  // list a moderator publishes, which is how the relay copy gets tidied.
-  const pinnedIds = $derived(
-    resolvePinnedIds({
+  // The channel's pin list, every entry, newest pin first (groups/pins.js).
+  // A message deleted since it was pinned drops out here — and out of the
+  // next list a moderator publishes, which is how the relay copy gets
+  // tidied. An `a` entry (an addressable event another client pinned) is
+  // not a chat message, so the bar does not show it, but it rides along in
+  // its place in every list published from here.
+  const pinnedRefs = $derived(
+    resolvePinnedRefs({
       groupId: pointer.id,
       pinnedEvents: pinnedListEvents,
       updateEvents: pinUpdateEvents
-    }).filter((id) => !deletedMessageIds.has(id))
+    }).filter((ref) => ref.type !== 'e' || !deletedMessageIds.has(ref.value))
   );
+  /** The pinned message ids — the `e` side of the list. */
+  const pinnedIds = $derived(pinnedRefs.filter((ref) => ref.type === 'e').map((ref) => ref.value));
   const pinnedIdSet = $derived(new Set(pinnedIds));
   // Rows for the bar: resolved against the loaded window; a pin older than
   // the replay is listed as not loaded rather than dropped (it IS pinned).
@@ -1649,12 +1654,12 @@
   // echoes a 39005 (groups/pins.js). One change in flight at a time — two
   // quick clicks would otherwise each build on the same stale list.
   let pinBusy = false;
-  /** @param {string[]} ids the full new list, in display order */
-  async function publishPinList(ids) {
+  /** @param {import('$lib/groups/pins.js').PinRef[]} refs the full new list, in display order */
+  async function publishPinList(refs) {
     if (pinBusy) return;
     pinBusy = true;
     try {
-      const signed = await signAndPublish(buildUpdatePinListTemplate(pointer.id, ids));
+      const signed = await signAndPublish(buildUpdatePinListTemplate(pointer.id, refs));
       eventStore.add(signed);
     } catch (err) {
       console.error('group pin update failed', err);
@@ -1662,21 +1667,23 @@
     }
     pinBusy = false;
   }
+  /** The list without the message `id` — `a` entries untouched. @param {string} id */
+  const withoutMessage = (id) => pinnedRefs.filter((ref) => ref.type !== 'e' || ref.value !== id);
   /** The row's pin button: pin when unpinned, unpin when pinned. @param {any} message */
   function togglePin(message) {
     if (pinnedIdSet.has(message.id)) {
-      publishPinList(pinnedIds.filter((id) => id !== message.id));
+      publishPinList(withoutMessage(message.id));
       return;
     }
-    if (pinnedIds.length >= MAX_PINS) {
+    if (pinnedRefs.length >= MAX_PINS) {
       showToast(m.groups_pin_limit({ max: MAX_PINS }), 'warning');
       return;
     }
-    publishPinList([message.id, ...pinnedIds]);
+    publishPinList([{ type: 'e', value: message.id }, ...pinnedRefs]);
   }
   /** @param {string} id */
   function unpinById(id) {
-    publishPinList(pinnedIds.filter((pinned) => pinned !== id));
+    publishPinList(withoutMessage(id));
   }
   /** @param {string} id */
   function jumpToPinned(id) {

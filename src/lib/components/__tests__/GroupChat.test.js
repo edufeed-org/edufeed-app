@@ -281,13 +281,18 @@ const pinChatSecond = signWith(
   },
   OTHER_SK
 );
+const PIN_CHAT_MEETING = `31923:${OTHER}:pinchat-meeting`;
 const pinnedEventPin = signWith(
   {
     kind: 39005,
     created_at: 1700000003,
     tags: [
       ['d', 'pinchat'],
-      ['e', pinChatSecond.id]
+      ['e', pinChatSecond.id],
+      // an addressable pin set by another client (NIP-29 `a` entry): not a
+      // chat message, so the bar does not show it — but every list we
+      // publish must carry it on, in its place
+      ['a', PIN_CHAT_MEETING]
     ]
   },
   RELAY_SK
@@ -2876,7 +2881,8 @@ describe('GroupChat', () => {
         expect(update.tags).toEqual([
           ['h', 'pinchat'],
           ['e', pinChatFirst.id],
-          ['e', pinChatSecond.id]
+          ['e', pinChatSecond.id],
+          ['a', PIN_CHAT_MEETING]
         ]);
         expect(update.pubkey).toBe(ME);
       });
@@ -2899,7 +2905,11 @@ describe('GroupChat', () => {
       await waitFor(() => {
         const update = publishMock.mock.calls.map(([e]) => e).find((e) => e?.kind === 9010);
         expect(update).toBeTruthy();
-        expect(update.tags).toEqual([['h', 'pinchat']]);
+        // the other client's addressable pin stays; only the message goes
+        expect(update.tags).toEqual([
+          ['h', 'pinchat'],
+          ['a', PIN_CHAT_MEETING]
+        ]);
       });
       await waitFor(() => expect(screen.queryByTestId('pinned-bar')).toBeNull());
       expect(pinButtonOf(container, pinChatSecond.id)?.getAttribute('aria-pressed')).toBe('false');
@@ -2916,7 +2926,10 @@ describe('GroupChat', () => {
       await fireEvent.click(/** @type {HTMLElement} */ (pinButtonOf(container, pinChatSecond.id)));
       await waitFor(() => {
         const update = publishMock.mock.calls.map(([e]) => e).find((e) => e?.kind === 9010);
-        expect(update?.tags).toEqual([['h', 'pinchat']]);
+        expect(update?.tags).toEqual([
+          ['h', 'pinchat'],
+          ['a', PIN_CHAT_MEETING]
+        ]);
       });
     });
 

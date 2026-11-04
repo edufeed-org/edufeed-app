@@ -11,9 +11,13 @@
 // the list. A relay only ever stores the 9010s it accepted, so reading them
 // back is as authoritative as the 39005 it would have derived from them.
 //
-// Only `e` tags are read: the chat pins messages (kind 9); meetings (kind
-// 31923, addressable) are deliberately not pinnable, like they are not
-// deletable from the chat.
+// The chat itself pins only messages (kind 9, `e` entries); meetings (kind
+// 31923, addressable) are deliberately not pinnable from here, like they are
+// not deletable from the chat. But NIP-29 lets a list carry addressable
+// events as `a` entries, and every list we publish is the FULL list — so an
+// `a` entry another client pinned is read, kept in its place and written
+// back untouched (`getPinnedRefs` / `resolvePinnedRefs`); only the `e` side
+// (`getPinnedIds` / `resolvePinnedIds`) is shown.
 
 /** NIP-29 `update-pin-list` moderation event. */
 export const UPDATE_PIN_LIST_KIND = 9010;
@@ -26,24 +30,48 @@ export const PINNED_EVENTS_KIND = 39005;
 export const MAX_PINS = 25;
 
 const HEX64 = /^[0-9a-f]{64}$/;
+/** `<kind>:<pubkey>:<d>` — the d-identifier may be empty. */
+const COORDINATE = /^\d+:[0-9a-f]{64}:/;
 
 /**
- * The pinned event ids of a 39005 or 9010, in list order, deduped and
- * validated — tag values are network input and a repeated id would crash a
- * keyed `{#each}`.
+ * One entry of a pin list: a regular event (`e`, id) or an addressable one
+ * (`a`, `kind:pubkey:d` coordinate).
+ * @typedef {{type: 'e' | 'a', value: string}} PinRef
+ */
+
+/**
+ * The entries of a 39005 or 9010, in list order, deduped and validated — tag
+ * values are network input and a repeated value would crash a keyed
+ * `{#each}`.
+ * @param {{tags?: string[][]} | null | undefined} event
+ * @returns {PinRef[]}
+ */
+export function getPinnedRefs(event) {
+  /** @type {PinRef[]} */
+  const refs = [];
+  const seen = new Set();
+  for (const tag of event?.tags ?? []) {
+    const type = tag[0];
+    const value = tag[1];
+    if ((type !== 'e' && type !== 'a') || typeof value !== 'string') continue;
+    if (type === 'e' ? !HEX64.test(value) : !COORDINATE.test(value)) continue;
+    const key = `${type}:${value}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    refs.push({ type, value });
+  }
+  return refs;
+}
+
+/**
+ * The pinned event ids (the `e` entries) of a 39005 or 9010, in list order.
  * @param {{tags?: string[][]} | null | undefined} event
  * @returns {string[]}
  */
 export function getPinnedIds(event) {
-  /** @type {string[]} */
-  const ids = [];
-  for (const tag of event?.tags ?? []) {
-    if (tag[0] !== 'e') continue;
-    const id = tag[1];
-    if (typeof id !== 'string' || !HEX64.test(id) || ids.includes(id)) continue;
-    ids.push(id);
-  }
-  return ids;
+  return getPinnedRefs(event)
+    .filter((ref) => ref.type === 'e')
+    .map((ref) => ref.value);
 }
 
 /** @param {{tags?: string[][]}} event @param {string} name */
@@ -52,15 +80,16 @@ function tagValue(event, name) {
 }
 
 /**
- * The current pinned ids of `groupId`: the newest list among the relay's
- * 39005s (bound by `d`) and the stored 9010s (bound by `h`). On a tie the
- * 39005 wins — the relay regenerated it FROM that 9010 with the same stamp.
- * An empty list is still a list: a 9010 with no `e` tags clears the pins.
+ * The current pin list of `groupId`, every entry: the newest list among the
+ * relay's 39005s (bound by `d`) and the stored 9010s (bound by `h`). On a
+ * tie the 39005 wins — the relay regenerated it FROM that 9010 with the same
+ * stamp. An empty list is still a list: a 9010 with no entries clears the
+ * pins.
  *
  * @param {{groupId: string, pinnedEvents: any[], updateEvents: any[]}} args
- * @returns {string[]}
+ * @returns {PinRef[]}
  */
-export function resolvePinnedIds({ groupId, pinnedEvents, updateEvents }) {
+export function resolvePinnedRefs({ groupId, pinnedEvents, updateEvents }) {
   /** @type {{event: any, relay: boolean} | null} */
   let best = null;
   const consider = (/** @type {any} */ event, /** @type {boolean} */ relay) => {
@@ -81,5 +110,17 @@ export function resolvePinnedIds({ groupId, pinnedEvents, updateEvents }) {
     if (event?.kind === UPDATE_PIN_LIST_KIND && tagValue(event, 'h') === groupId)
       consider(event, false);
   }
-  return best ? getPinnedIds(/** @type {{event: any}} */ (best).event) : [];
+  return best ? getPinnedRefs(/** @type {{event: any}} */ (best).event) : [];
+}
+
+/**
+ * The current pinned event ids of `groupId` — the `e` side of
+ * {@link resolvePinnedRefs}.
+ * @param {{groupId: string, pinnedEvents: any[], updateEvents: any[]}} args
+ * @returns {string[]}
+ */
+export function resolvePinnedIds(args) {
+  return resolvePinnedRefs(args)
+    .filter((ref) => ref.type === 'e')
+    .map((ref) => ref.value);
 }

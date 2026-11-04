@@ -456,6 +456,21 @@ describe('buildUpdatePinListTemplate', () => {
     expect(t.content).toBe('');
   });
 
+  it('carries a entries (addressable pins from other clients) in their place', async () => {
+    const { buildUpdatePinListTemplate } = await import('$lib/groups/group-management.js');
+    const a = 'a'.repeat(64);
+    const meeting = `31923:${'d'.repeat(64)}:meeting-1`;
+    const t = buildUpdatePinListTemplate(ID, [
+      { type: 'e', value: a },
+      { type: 'a', value: meeting }
+    ]);
+    expect(t.tags).toEqual([
+      ['h', ID],
+      ['e', a],
+      ['a', meeting]
+    ]);
+  });
+
   it('an empty list is a bare h tag — NIP-29 clears the pins with zero e tags', async () => {
     const { buildUpdatePinListTemplate } = await import('$lib/groups/group-management.js');
     expect(buildUpdatePinListTemplate(ID, []).tags).toEqual([['h', ID]]);
