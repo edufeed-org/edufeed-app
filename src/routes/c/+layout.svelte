@@ -201,7 +201,17 @@
       </div>
 
       <!-- Main Content (child layout renders here) -->
-      <div data-testid="mobile-slot" class="flex flex-1 flex-col" class:min-h-0={boundedChain}>
+      <!-- Flowing pages get a BLOCK slot: as a flex item with auto margins a
+             page's `mx-auto max-w-3xl` box is sized to its content, and one
+             no-wrap line (a truncated DM preview) pushed it to 768px in a
+             640px viewport — the whole page scrolled sideways. -->
+      <div
+        data-testid="mobile-slot"
+        class="flex-1"
+        class:flex={boundedChain}
+        class:flex-col={boundedChain}
+        class:min-h-0={boundedChain}
+      >
         {@render children()}
       </div>
     </div>

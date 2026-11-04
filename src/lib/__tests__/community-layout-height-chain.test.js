@@ -35,9 +35,11 @@ describe('community layout: height chain below lg', () => {
     expect(column).not.toContain('h-dvh');
   });
 
-  test('the child-layout slot below the mobile header is a flex column with conditional min-h-0', () => {
+  test('the child-layout slot is a flex column only on bounded pages, a block otherwise', () => {
     const slot = source.match(/<div\s+data-testid="mobile-slot"[^>]*>/)?.[0] ?? '';
-    expect(slot).toMatch(/class="[^"]*\bflex\b[^"]*\bflex-1\b[^"]*\bflex-col\b/);
+    expect(slot).toMatch(/class="flex-1"/);
+    expect(slot).toMatch(/class:flex=\{boundedChain\}/);
+    expect(slot).toMatch(/class:flex-col=\{boundedChain\}/);
     expect(slot).toMatch(/class:min-h-0=\{boundedChain\}/);
   });
 

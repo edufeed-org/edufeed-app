@@ -95,6 +95,16 @@ describe('/c mobile layout height chain', () => {
     expect(shell.contains('flex-1')).toBe(true);
   });
 
+  it('the flowing slot is a block, not a flex column: a page box with mx-auto must take the container width', () => {
+    // As a flex item with auto margins the page's `mx-auto max-w-3xl` box is
+    // sized to its content: one no-wrap line (a truncated DM preview) pushed
+    // it to 768px in a 640px viewport and the whole page scrolled sideways.
+    const { slot } = mount('http://localhost/c/inbox');
+    expect(slot.contains('flex')).toBe(false);
+    expect(slot.contains('flex-col')).toBe(false);
+    expect(slot.contains('flex-1')).toBe(true);
+  });
+
   it('flows on a community content page (calendar)', () => {
     const { shell, column } = mount('http://localhost/c/npub1x?view=calendar', community);
     expect(shell.contains('min-h-0')).toBe(false);
@@ -109,6 +119,8 @@ describe('/c mobile layout height chain', () => {
       expect(column.contains('min-h-0')).toBe(true);
       expect(slot.contains('min-h-0')).toBe(true);
       expect(slot.contains('flex-1')).toBe(true);
+      expect(slot.contains('flex')).toBe(true);
+      expect(slot.contains('flex-col')).toBe(true);
     }
   });
 
