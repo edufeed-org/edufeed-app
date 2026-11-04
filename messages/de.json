@@ -69,6 +69,7 @@
   "auth_logout_backup_action": "Sicherungsdatei herunterladen",
   "auth_logout_anyway_action": "Trotzdem abmelden",
   "navbar_menu": "Navigationsmenü",
+  "mobile_menu_title": "Menü",
   "navbar_language": "Sprache",
   "landing_cta_create_account": "Kostenlos mitmachen",
   "landing_cta_browse": "Erst mal umsehen",

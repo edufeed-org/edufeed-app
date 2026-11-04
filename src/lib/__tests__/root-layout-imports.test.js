@@ -56,7 +56,7 @@ describe('root layout static imports', () => {
   it.each([
     'inbox/InboxDropdown.svelte',
     'shared/AccountMenuSection.svelte',
-    'shared/MobileNavMenu.svelte'
+    'shared/MobileMenuSheet.svelte'
   ])('Navbar does not statically import %s', (needle) => {
     expect(staticImportsOf(navbarSource).filter((s) => s.endsWith(needle))).toEqual([]);
   });

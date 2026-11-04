@@ -44,7 +44,7 @@ this total by a file or two between updates — `rail-layout-sync.test.js`
 | `signup-normie-path.test.js`         | 1                     | No   | Signup wizard skip path: CTA → name → profile → educator context → communities skip (→ handle skip) → backup step → "Später sichern" guard → Termi backup hint                                                                                                                                                                                                                                                                                                                                     |
 | `settings.test.js`                   | 18                    | Both | Single-theme check, relays, relay editing, gated/debug                                                                                                                                                                                                                                                                                                                                                                                                                                             |
 | `settings-blossom.test.js`           | 6                     | Yes  | Blossom server management                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
-| `mobile-navigation.test.js`          | 10                    | No   | Mobile hamburger menu, responsive layout, landing Anmelden button + account CTA, landing 5b copy + no overflow                                                                                                                                                                                                                                                                                                                                                                                     |
+| `mobile-navigation.test.js`          | 10                    | No   | Mobile menu sheet, responsive layout, landing Anmelden button + account CTA, landing 5b copy + no overflow                                                                                                                                                                                                                                                                                                                                                                                         |
 | `mobile-dock.test.js`                | 5                     | Yes  | Phone bottom bar: Feed · Communities · Erstellen · Posteingang · Entdecken, FAB and Termi bubble hidden below lg, Erstellen opens the create sheet with the three quick tiles; dashboard root is the feed (Feed tab active); Communities tab is the phone list (Finden, create card, no drawer toggle); inside a community the dock stays, header back arrow, no switcher, section button with count opens the Bereiche sheet which navigates, section row stays pinned under the header on scroll |
 | `list-management.test.js`            | 9                     | Both | Dashboard Lists tab, New list modal, people-list CRUD affordances                                                                                                                                                                                                                                                                                                                                                                                                                                  |
 | `cache-warm-boot.test.js`            | 1                     | No   | Persistent event cache — warm reload renders calendar from IDB with WebSockets blocked                                                                                                                                                                                                                                                                                                                                                                                                             |
@@ -1333,13 +1333,13 @@ detection, hint show/hide flags) is covered by Vitest component tests:
 | Test                                                   | What it verifies                                  |
 | ------------------------------------------------------ | ------------------------------------------------- |
 | hamburger menu is visible and desktop nav links hidden | Hamburger visible, desktop nav hidden             |
-| hamburger click opens dropdown with nav links          | Dropdown shows Communities, Discover, Calendar    |
+| hamburger tap opens the menu sheet with nav links      | Sheet shows Communities, Discover, Calendar       |
 | nav link click navigates correctly                     | Discover link navigates to /discover              |
-| login button is accessible in mobile dropdown          | Login button present in dropdown                  |
+| login button is accessible in the mobile menu sheet    | Login button at the bottom of the sheet           |
 | no horizontal overflow on mobile                       | Document width <= viewport width                  |
 | landing shows Anmelden in the row and the account CTA  | Navbar Anmelden visible, CTA opens signup         |
 | landing 5b: copy A, browse link, no overflow           | Hero copy, browse → /discover, no overflow on `/` |
-| no critical JavaScript errors on mobile                | No JS errors during hamburger interaction         |
+| no critical JavaScript errors on mobile                | No JS errors opening + closing the menu sheet     |
 
 #### Desktop Viewport - 1280x720 (2 tests)
 
@@ -1348,7 +1348,7 @@ detection, hint show/hide flags) is covered by Vitest component tests:
 | navbar logo src matches configured APP_LOGO from API config | Logo img src matches /api/config      |
 | desktop nav links visible and hamburger is hidden           | Desktop nav visible, hamburger hidden |
 
-**Components exercised:** Navbar (mobile hamburger dropdown, desktop nav)
+**Components exercised:** Navbar (mobile menu sheet via MobileMenuSheet, desktop nav)
 
 ---
 

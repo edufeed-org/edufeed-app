@@ -10,7 +10,7 @@ test.describe('Mobile navigation', () => {
       await page.waitForTimeout(2000);
 
       // Hamburger button should be visible
-      const hamburger = page.locator('.lg\\:hidden .dropdown .btn-ghost.btn-circle');
+      const hamburger = page.getByTestId('navbar-mobile-menu');
       await expect(hamburger).toBeVisible({ timeout: 5000 });
 
       // Desktop nav links should be hidden
@@ -18,17 +18,14 @@ test.describe('Mobile navigation', () => {
       await expect(desktopNav).not.toBeVisible();
     });
 
-    test('hamburger click opens dropdown with nav links', async ({ page }) => {
+    test('hamburger tap opens the menu sheet with nav links', async ({ page }) => {
       await page.goto('/');
       await page.waitForTimeout(2000);
 
-      // Click hamburger
-      const hamburger = page.locator('.lg\\:hidden .dropdown .btn-ghost.btn-circle');
-      await hamburger.click();
-      await page.waitForTimeout(300);
+      // Tap hamburger — the phone menu is a bottom sheet, not a dropdown
+      await page.getByTestId('navbar-mobile-menu').click();
 
-      // Dropdown menu should appear with nav links
-      const dropdown = page.locator('.lg\\:hidden .dropdown-content');
+      const dropdown = page.getByTestId('mobile-menu-sheet');
       await expect(dropdown).toBeVisible({ timeout: 5000 });
 
       // Should contain Communities, Discover, Calendar links
@@ -43,13 +40,12 @@ test.describe('Mobile navigation', () => {
       await page.goto('/');
       await page.waitForTimeout(2000);
 
-      // Open hamburger
-      const hamburger = page.locator('.lg\\:hidden .dropdown .btn-ghost.btn-circle');
-      await hamburger.click();
-      await page.waitForTimeout(300);
+      // Open the menu sheet
+      await page.getByTestId('navbar-mobile-menu').click();
 
       // Click Discover link
-      const dropdown = page.locator('.lg\\:hidden .dropdown-content');
+      const dropdown = page.getByTestId('mobile-menu-sheet');
+      await expect(dropdown).toBeVisible({ timeout: 5000 });
       await dropdown
         .locator('a')
         .filter({ hasText: /Discover|Entdecken/ })
@@ -59,18 +55,16 @@ test.describe('Mobile navigation', () => {
       await expect(page).toHaveURL(/\/discover/);
     });
 
-    test('login button is accessible in mobile dropdown', async ({ page }) => {
+    test('login button is accessible in the mobile menu sheet', async ({ page }) => {
       await page.goto('/');
       await page.waitForTimeout(2000);
 
-      // Open hamburger
-      const hamburger = page.locator('.lg\\:hidden .dropdown .btn-ghost.btn-circle');
-      await hamburger.click();
-      await page.waitForTimeout(300);
+      await page.getByTestId('navbar-mobile-menu').click();
 
-      // Login button should be in the dropdown
-      const dropdown = page.locator('.lg\\:hidden .dropdown-content');
-      await expect(dropdown.locator('button').filter({ hasText: /Login|Anmelden/ })).toBeVisible();
+      // Login button sits at the bottom of the sheet
+      const dropdown = page.getByTestId('mobile-menu-sheet');
+      await expect(dropdown).toBeVisible({ timeout: 5000 });
+      await expect(dropdown.getByTestId('sheet-login')).toBeVisible();
     });
 
     test('landing shows Anmelden in the row and the account CTA opens signup', async ({ page }) => {
@@ -121,10 +115,11 @@ test.describe('Mobile navigation', () => {
       await page.goto('/');
       await page.waitForTimeout(2000);
 
-      // Open and close hamburger
-      const hamburger = page.locator('.lg\\:hidden .dropdown .btn-ghost.btn-circle');
-      await hamburger.click();
-      await page.waitForTimeout(300);
+      // Open and close the menu sheet
+      await page.getByTestId('navbar-mobile-menu').click();
+      await expect(page.getByTestId('mobile-menu-sheet')).toBeVisible({ timeout: 5000 });
+      await page.getByTestId('bottom-sheet-close').click();
+      await expect(page.getByTestId('mobile-menu-sheet')).not.toBeVisible();
 
       errorCapture.assertNoCriticalErrors();
     });

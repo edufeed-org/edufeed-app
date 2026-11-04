@@ -44,7 +44,7 @@ vi.mock('$lib/stores/config.svelte.js', () => ({
 vi.mock('$lib/components/community/layout/CommunitySidebar.svelte', async () => ({
   default: (await import('./__mocks__/EmptyStub.svelte')).default
 }));
-vi.mock('$lib/components/shared/MobileNavMenu.svelte', async () => ({
+vi.mock('$lib/components/shared/MobileMenuSheet.svelte', async () => ({
   default: (await import('./__mocks__/EmptyStub.svelte')).default
 }));
 vi.mock('$lib/components/shared/ProfileAvatar.svelte', async () => ({

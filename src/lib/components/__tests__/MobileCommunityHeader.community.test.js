@@ -37,7 +37,7 @@ vi.mock('$lib/stores/config.svelte.js', () => ({
 vi.mock('$lib/components/community/layout/CommunitySidebar.svelte', async () => ({
   default: (await import('./__mocks__/EmptyStub.svelte')).default
 }));
-vi.mock('$lib/components/shared/MobileNavMenu.svelte', async () => ({
+vi.mock('$lib/components/shared/MobileMenuSheet.svelte', async () => ({
   default: (await import('./__mocks__/EmptyStub.svelte')).default
 }));
 vi.mock('$lib/components/shared/ProfileAvatar.svelte', async () => ({
@@ -54,7 +54,8 @@ vi.mock('$lib/paraglide/messages', () => ({
   community_layout_close_sidebar: () => 'Schließen',
   community_header_back_aria: () => 'Zurück',
   community_header_switch_aria: () => 'Community wechseln',
-  community_header_settings_aria: () => 'Einstellungen'
+  community_header_settings_aria: () => 'Einstellungen',
+  navbar_menu: () => 'Navigationsmenü'
 }));
 
 const { default: Harness } = await import('./__mocks__/MobileHeaderHarness.svelte');

@@ -37,7 +37,11 @@
   // fires before the body is visible; `pointerenter` warms it on hover.
   const lazyInboxDropdown = lazyComponent(() => import('./inbox/InboxDropdown.svelte'));
   const lazyAccountMenu = lazyComponent(() => import('./shared/AccountMenuSection.svelte'));
-  const lazyMobileNavMenu = lazyComponent(() => import('./shared/MobileNavMenu.svelte'));
+  // The phone menu is a bottom sheet (avatar when logged in, hamburger when
+  // logged out); it loads on the first touch/focus of its trigger and the
+  // click waits for that import via `.Component`.
+  const lazyMobileMenuSheet = lazyComponent(() => import('./shared/MobileMenuSheet.svelte'));
+  let mobileMenuOpen = $state(false);
 
   /** @type {{ hideMobileNavbar?: boolean }} */
   let { hideMobileNavbar = false } = $props();
@@ -199,24 +203,29 @@
         {m.common_login()}
       </button>
     {/if}
-    <div class="dropdown dropdown-end">
-      <div
-        tabindex="0"
-        role="button"
-        class="btn relative btn-circle btn-ghost"
-        aria-label={m.navbar_menu()}
-        onpointerenter={lazyMobileNavMenu.load}
-        onfocusin={lazyMobileNavMenu.load}
-      >
+    <button
+      type="button"
+      class="btn relative btn-circle btn-ghost"
+      aria-label={m.navbar_menu()}
+      aria-haspopup="dialog"
+      aria-expanded={mobileMenuOpen}
+      data-testid="navbar-mobile-menu"
+      onpointerenter={lazyMobileMenuSheet.load}
+      onfocusin={lazyMobileMenuSheet.load}
+      onclick={() => (mobileMenuOpen = true)}
+    >
+      {#if activeAccount}
+        <ProfileAvatar pubkey={activeAccount.pubkey} size="md" fallbackType="robohash" />
+      {:else}
         <MenuIcon class_="w-6 h-6" />
-        <ConnectionStatus variant="badge" />
-      </div>
-      <ul class="dropdown-content menu z-[60] mt-3 w-64 rounded-box bg-base-100 p-2 shadow-lg">
-        {#if lazyMobileNavMenu.loaded}
-          {@const MobileNavMenu = lazyMobileNavMenu.loaded}
-          <MobileNavMenu onClose={closeDropdown} />
-        {/if}
-      </ul>
-    </div>
+      {/if}
+      <ConnectionStatus variant="badge" />
+    </button>
+    {#if mobileMenuOpen}
+      {@const MobileMenuSheet = lazyMobileMenuSheet.Component}
+      {#if MobileMenuSheet}
+        <MobileMenuSheet open={mobileMenuOpen} onClose={() => (mobileMenuOpen = false)} />
+      {/if}
+    {/if}
   </div>
 </div>

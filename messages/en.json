@@ -69,6 +69,7 @@
   "auth_logout_backup_action": "Download backup file",
   "auth_logout_anyway_action": "Log out anyway",
   "navbar_menu": "Navigation menu",
+  "mobile_menu_title": "Menu",
   "navbar_language": "Language",
   "landing_cta_create_account": "Join for free",
   "landing_cta_browse": "Look around first",

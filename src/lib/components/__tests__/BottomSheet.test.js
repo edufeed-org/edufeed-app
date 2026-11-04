@@ -49,6 +49,19 @@ describe('BottomSheet', () => {
     expect(onClose).toHaveBeenCalledTimes(2);
   });
 
+  // The phone menu sheet puts the account identity where the title would be;
+  // the title then only labels the dialog for assistive tech.
+  it('a header snippet replaces the visible title but keeps the aria-label and close button', () => {
+    const header = createRawSnippet(() => ({
+      render: () => '<a data-testid="sheet-header">Alice</a>'
+    }));
+    const { getByTestId, queryByText } = render(BottomSheet, props({ header }));
+    expect(getByTestId('sheet-header')).toBeTruthy();
+    expect(queryByText('Bereiche')).toBeNull();
+    expect(getByTestId('bottom-sheet').getAttribute('aria-label')).toBe('Bereiche');
+    expect(getByTestId('bottom-sheet-close')).toBeTruthy();
+  });
+
   it('restores body scroll on unmount', () => {
     const { unmount } = render(BottomSheet, props());
     unmount();
