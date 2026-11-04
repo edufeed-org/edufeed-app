@@ -7,6 +7,39 @@ merge commits of the nostr PRs that landed since the previous tag.
 
 ## [Unreleased]
 
+## [0.15.2] - 2026-11-04
+
+Hotfix for NIP-46 signer logins (Amber, nsec.app). One nostr PR. Released
+directly, without an RC on dev: every bunker login ended in a lasting
+"Waiting for your signing app…" toast and a second approval round.
+
+### Fixed
+
+- Neither NIP-46 connect flow asked the signer for permissions, so Amber
+  approved only the pairing and queued the first signature of every kind for
+  manual approval. Login itself triggers one: the groups relay challenges
+  with NIP-42 AUTH on connect and the inbox answers it right after login, so
+  a kind 22242 sat in Amber's queue and the app's slow-signer hint toasted
+  "open your signing app" — that was the second approval the reporter had to
+  give, repeated on every reconnect. Both connects (the nostrconnect:// QR
+  URI and link, the bunker:// connect, and the Google/Pomegranate login)
+  now request `get_public_key`, `sign_event:<kind>` for the kinds the app
+  signs on its own (relay AUTH, DM seals, app data, identity lists, webxdc
+  frames) plus everyday member kinds — all kinds of one action together,
+  e.g. join = 9021 + 10009 — and the nip04/nip44 methods. Signers that
+  ignore permissions behave as before; admin, moderator and Concord kinds
+  deliberately still prompt once.
+- The permission list rides inside the nostrconnect QR code, so it is capped
+  (test: the real URI stays at QR version ≤ 25 with error correction L) and
+  the QR is rendered at 320 px instead of 250 px; it scales down as a
+  square on narrow phones instead of distorting.
+
+### Deploy notes
+
+- No new env vars. Users who paired Amber before this release keep their old
+  grant: permissions travel only with the initial connect, so they must log
+  out and pair again (QR or "In Signer-App öffnen") to get silent signing.
+
 ## [0.15.1] - 2026-11-04
 
 Hotfix for the "added you to a group" inbox notice. One nostr PR. Released
