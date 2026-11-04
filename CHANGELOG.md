@@ -7,6 +7,28 @@ merge commits of the nostr PRs that landed since the previous tag.
 
 ## [Unreleased]
 
+## [0.15.1] - 2026-11-04
+
+Hotfix for the "added you to a group" inbox notice. One nostr PR. Released
+directly, without an RC on dev: every channel invitation sent through the
+groups relay landed on the wrong page.
+
+### Fixed
+
+- "X hat dich zu … hinzugefügt" for a NIP-29 channel opened the raw group
+  route on the host (`/groups/<relay>'<id>`, with the whole relay's channel
+  list beside it) instead of the channel inside its community. The resolver
+  matched the group id against the kind-10222 membership roots only; a
+  channel's kind 39000 has carried `["parent", rootId]` since subtree
+  discovery, which is now followed to `/c/<npub>?view=channels&channel=<id>`.
+  Channel @mention and reply rows take the same path, keeping their
+  `?message=` anchor. Groups with no known community still open on the host.
+- The inbox fetched a group's kind 39000 only for channel mention rows, so an
+  "added you" row read "einer Gruppe" and, without the parent, could not find
+  its community unless some other page had loaded that event. The 39000 is
+  now fetched for kind-9000 rows too; a channel row reads "… zu 🤗 Willkommen!
+  · Edufeed hinzugefügt", a community root keeps the community's name.
+
 ## [0.15.0] - 2026-11-04
 
 Mobile round: the phone navigation redesign (issue "mobile: navigation is
