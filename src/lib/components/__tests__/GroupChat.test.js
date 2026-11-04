@@ -239,6 +239,131 @@ const modChatDeletion = signWith(
   },
   RELAY_SK
 );
+// `pinchat`: ME is a 39001 admin, OTHER a member; two messages from OTHER and
+// a relay-served kind 39005 pinning the SECOND — the NIP-29 pin tests (pin a
+// second message, unpin from the bar). Isolated so the pin bar and the
+// pinned-row marker never show up in other groups' assertions.
+const metadataEventPin = signWith(
+  { kind: 39000, tags: [['d', 'pinchat'], ['name', 'Pin Chat'], ['private']] },
+  RELAY_SK
+);
+const adminsEventPin = signWith(
+  {
+    kind: 39001,
+    tags: [
+      ['d', 'pinchat'],
+      ['p', ME, 'admin']
+    ]
+  },
+  RELAY_SK
+);
+const membersEventPin = signWith(
+  {
+    kind: 39002,
+    tags: [
+      ['d', 'pinchat'],
+      ['p', OTHER],
+      ['p', ME]
+    ]
+  },
+  RELAY_SK
+);
+const pinChatFirst = signWith(
+  { kind: 9, content: 'first pinnable note', created_at: 1700000001, tags: [['h', 'pinchat']] },
+  OTHER_SK
+);
+const pinChatSecond = signWith(
+  {
+    kind: 9,
+    content: 'rules: https://x.y/z read them',
+    created_at: 1700000002,
+    tags: [['h', 'pinchat']]
+  },
+  OTHER_SK
+);
+const pinnedEventPin = signWith(
+  {
+    kind: 39005,
+    created_at: 1700000003,
+    tags: [
+      ['d', 'pinchat'],
+      ['e', pinChatSecond.id]
+    ]
+  },
+  RELAY_SK
+);
+// `pinviewchat`: the same shape with ME as a PLAIN member — the read-only
+// view of a pin list (bar, marker, no pin/unpin affordance).
+const metadataEventPinView = signWith(
+  { kind: 39000, tags: [['d', 'pinviewchat'], ['name', 'Pin View Chat'], ['private']] },
+  RELAY_SK
+);
+const membersEventPinView = signWith(
+  {
+    kind: 39002,
+    tags: [
+      ['d', 'pinviewchat'],
+      ['p', OTHER],
+      ['p', ME]
+    ]
+  },
+  RELAY_SK
+);
+const pinViewMessage = signWith(
+  { kind: 9, content: 'the pinned announcement', tags: [['h', 'pinviewchat']] },
+  OTHER_SK
+);
+const pinnedEventPinView = signWith(
+  {
+    kind: 39005,
+    created_at: 1700000003,
+    tags: [
+      ['d', 'pinviewchat'],
+      ['e', pinViewMessage.id]
+    ]
+  },
+  RELAY_SK
+);
+// `pincapchat`: ME admin, the relay's 39005 already holds 25 ids — the cap.
+const metadataEventPinCap = signWith(
+  { kind: 39000, tags: [['d', 'pincapchat'], ['name', 'Pin Cap Chat'], ['private']] },
+  RELAY_SK
+);
+const adminsEventPinCap = signWith(
+  {
+    kind: 39001,
+    tags: [
+      ['d', 'pincapchat'],
+      ['p', ME, 'admin']
+    ]
+  },
+  RELAY_SK
+);
+const membersEventPinCap = signWith(
+  {
+    kind: 39002,
+    tags: [
+      ['d', 'pincapchat'],
+      ['p', OTHER]
+    ]
+  },
+  RELAY_SK
+);
+const pinCapMessage = signWith(
+  { kind: 9, content: 'one too many', tags: [['h', 'pincapchat']] },
+  OTHER_SK
+);
+const pinnedEventPinCap = signWith(
+  {
+    kind: 39005,
+    created_at: 1700000003,
+    tags: [
+      ['d', 'pincapchat'],
+      ...Array.from({ length: 25 }, (_, i) => ['e', i.toString(16).padStart(2, '0').repeat(32)])
+    ]
+  },
+  RELAY_SK
+);
 // `webxdcchat`: a private group with ME as a member, whose single message is
 // a webxdc app share — isolated from `beechat`'s shared default subscription
 // branch so this fixture's own message doesn't leak into every other test's
@@ -687,6 +812,19 @@ vi.mock('$lib/stores/nostr-infrastructure.svelte', async () => {
           if (d === 'adminchat')
             return rxOf(metadataEventAdmin, adminsEventAdmin, membersEventAdmin);
           if (d === 'modchat') return rxOf(metadataEventMod, membersEventMod);
+          // The relay bundles its 39005 with the rest of the group's
+          // relay-signed addressables on the roster REQ.
+          if (d === 'pinchat')
+            return rxOf(metadataEventPin, adminsEventPin, membersEventPin, pinnedEventPin);
+          if (d === 'pinviewchat')
+            return rxOf(metadataEventPinView, membersEventPinView, pinnedEventPinView);
+          if (d === 'pincapchat')
+            return rxOf(
+              metadataEventPinCap,
+              adminsEventPinCap,
+              membersEventPinCap,
+              pinnedEventPinCap
+            );
           if (d === 'webxdcchat') return rxOf(metadataEventWebxdc, membersEventWebxdc);
           if (d === 'pollchat') return rxOf(metadataEventPoll, membersEventPoll);
           if (d === 'callchat') return rxOf(metadataEventCall, membersEventCall);
@@ -781,6 +919,9 @@ vi.mock('$lib/stores/nostr-infrastructure.svelte', async () => {
             return rxMerge(rxOf(modChatMessage, modChatKeptMessage, modChatDeletion), rxNever);
           // webxdcchat: isolated timeline holding only the webxdc share.
           if (h === 'webxdcchat') return rxMerge(rxOf(webxdcShareEvent), rxNever);
+          if (h === 'pinchat') return rxMerge(rxOf(pinChatFirst, pinChatSecond), rxNever);
+          if (h === 'pinviewchat') return rxMerge(rxOf(pinViewMessage), rxNever);
+          if (h === 'pincapchat') return rxMerge(rxOf(pinCapMessage), rxNever);
           // pollchat: isolated timeline holding the poll and one vote.
           if (h === 'pollchat') return rxMerge(rxOf(pollEvent, pollVoteOther), rxNever);
           // meetchat: a meeting, a malformed two-group meeting, a message.
@@ -922,6 +1063,9 @@ vi.mock('$lib/stores/app-settings.svelte.js', async (importOriginal) => {
 });
 vi.mock('$lib/components/icons', () => ({
   ReplyIcon: Stub,
+  PinIcon: Stub,
+  ChevronDownIcon: Stub,
+  ChevronUpIcon: Stub,
   CloseIcon: Stub,
   PeopleIcon: Stub,
   MoreIcon: Stub,
@@ -1189,6 +1333,18 @@ vi.mock('$lib/paraglide/messages', () => ({
   groups_message_delete_confirm_body: () => 'The message is removed from the channel for everyone.',
   groups_message_delete_confirm_action: () => 'Delete',
   groups_message_delete_failed: () => 'Message could not be deleted',
+  groups_message_pin: () => 'Pin message',
+  groups_message_unpin: () => 'Unpin message',
+  groups_message_pinned: () => 'Pinned',
+  groups_pin_failed: () => 'The relay refused the pin change',
+  groups_pin_limit: (/** @type {{ max: number }} */ { max }) =>
+    `At most ${max} pinned messages per channel. Unpin one first.`,
+  groups_pinned_bar_label: () => 'Pinned messages',
+  groups_pinned_count: (/** @type {{ count: number }} */ { count }) => `${count} pinned`,
+  groups_pinned_show: () => 'Show all pinned messages',
+  groups_pinned_hide: () => 'Hide the pinned messages',
+  groups_pinned_missing: () => 'Message not loaded',
+  groups_pinned_jump: () => 'Go to message',
   groups_input_placeholder: (/** @type {{ name: string }} */ { name }) => `Message ${name}`,
   groups_badge_members_only: () => 'Members only',
   groups_badge_invite_only: () => 'Invite only',
@@ -2658,6 +2814,144 @@ describe('GroupChat', () => {
       });
       await waitFor(() => expect(bubbleTexts(container)).toContain('this one stays'));
       expect(bubbleTexts(container)).not.toContain('about to be moderated away');
+    });
+  });
+
+  // NIP-29 pinned messages: moderators publish kind 9010 (update-pin-list,
+  // the WHOLE list) to the group relay; the list is read from the relay's
+  // 39005 or the newest stored 9010 (groups/pins.js) and shown above the chat.
+  describe('pinned messages', () => {
+    // A published 9010 lands in the SHARED eventStore and would outrank the
+    // relay's 39005 fixture in every later test here; drop them after each.
+    afterEach(() => {
+      for (const event of eventStore.getByFilters({ kinds: [9010], authors: [ME] })) {
+        eventStore.remove(event);
+      }
+    });
+    /** The rendered text contents of every message bubble. @param {HTMLElement} container */
+    const bubbleTexts = (container) =>
+      [...container.querySelectorAll('[data-testid="ncr-content"]')].map((el) => el.textContent);
+    /** @param {HTMLElement} container @param {string} id */
+    const pinButtonOf = (container, id) =>
+      /** @type {HTMLElement | null} */ (
+        container.querySelector(`[data-message-id="${id}"] [data-testid="chat-message-pin"]`)
+      );
+
+    it('a plain member sees the relay-served pin list above the chat and a marker on the row, nothing to click', async () => {
+      const { container } = render(GroupChat, {
+        props: { pointer: { relay: GROUP_RELAY, id: 'pinviewchat' } }
+      });
+      await waitFor(() => expect(bubbleTexts(container)).toContain('the pinned announcement'));
+      const bar = await screen.findByTestId('pinned-bar');
+      expect(bar.textContent).toContain('1 pinned');
+      expect(bar.textContent).toContain('the pinned announcement');
+      expect(
+        container.querySelector(
+          `[data-message-id="${pinViewMessage.id}"] [data-testid="chat-message-pinned"]`
+        )
+      ).not.toBeNull();
+      expect(screen.queryByTestId('chat-message-pin')).toBeNull();
+      await fireEvent.click(screen.getByTestId('pinned-bar-toggle'));
+      expect(screen.getAllByTestId('pinned-bar-row')).toHaveLength(1);
+      expect(screen.queryByTestId('pinned-bar-unpin')).toBeNull();
+    });
+
+    it('an admin pins a message: one 9010 carrying the WHOLE list, new pin first, to the group relay', async () => {
+      const { container } = render(GroupChat, {
+        props: { pointer: { relay: GROUP_RELAY, id: 'pinchat' } }
+      });
+      await waitFor(() => expect(bubbleTexts(container)).toContain('first pinnable note'));
+      const bar = await screen.findByTestId('pinned-bar');
+      expect(bar.textContent).toContain('1 pinned');
+      // The already-pinned row's button is pressed, the other's is not.
+      await waitFor(() =>
+        expect(pinButtonOf(container, pinChatSecond.id)?.getAttribute('aria-pressed')).toBe('true')
+      );
+      expect(pinButtonOf(container, pinChatFirst.id)?.getAttribute('aria-pressed')).toBe('false');
+
+      await fireEvent.click(/** @type {HTMLElement} */ (pinButtonOf(container, pinChatFirst.id)));
+      await waitFor(() => {
+        const update = publishMock.mock.calls.map(([e]) => e).find((e) => e?.kind === 9010);
+        expect(update).toBeTruthy();
+        expect(update.tags).toEqual([
+          ['h', 'pinchat'],
+          ['e', pinChatFirst.id],
+          ['e', pinChatSecond.id]
+        ]);
+        expect(update.pubkey).toBe(ME);
+      });
+      // The bar follows the accepted 9010 at once, without waiting for a 39005.
+      await waitFor(() =>
+        expect(screen.getByTestId('pinned-bar').textContent).toContain('2 pinned')
+      );
+      expect(screen.getByTestId('pinned-bar-newest').textContent).toContain('first pinnable note');
+      expect(pinButtonOf(container, pinChatFirst.id)?.getAttribute('aria-pressed')).toBe('true');
+    });
+
+    it('unpinning from the bar publishes the list without that message, and the bar goes away', async () => {
+      const { container } = render(GroupChat, {
+        props: { pointer: { relay: GROUP_RELAY, id: 'pinchat' } }
+      });
+      await waitFor(() => expect(bubbleTexts(container)).toContain('first pinnable note'));
+      await screen.findByTestId('pinned-bar');
+      await fireEvent.click(screen.getByTestId('pinned-bar-toggle'));
+      await fireEvent.click(await screen.findByTestId('pinned-bar-unpin'));
+      await waitFor(() => {
+        const update = publishMock.mock.calls.map(([e]) => e).find((e) => e?.kind === 9010);
+        expect(update).toBeTruthy();
+        expect(update.tags).toEqual([['h', 'pinchat']]);
+      });
+      await waitFor(() => expect(screen.queryByTestId('pinned-bar')).toBeNull());
+      expect(pinButtonOf(container, pinChatSecond.id)?.getAttribute('aria-pressed')).toBe('false');
+    });
+
+    it('the pin button on a pinned row unpins it', async () => {
+      const { container } = render(GroupChat, {
+        props: { pointer: { relay: GROUP_RELAY, id: 'pinchat' } }
+      });
+      await waitFor(() => expect(bubbleTexts(container)).toContain('first pinnable note'));
+      await waitFor(() =>
+        expect(pinButtonOf(container, pinChatSecond.id)?.getAttribute('aria-pressed')).toBe('true')
+      );
+      await fireEvent.click(/** @type {HTMLElement} */ (pinButtonOf(container, pinChatSecond.id)));
+      await waitFor(() => {
+        const update = publishMock.mock.calls.map(([e]) => e).find((e) => e?.kind === 9010);
+        expect(update?.tags).toEqual([['h', 'pinchat']]);
+      });
+    });
+
+    it('refuses the 26th pin with a hint and publishes nothing', async () => {
+      const { showToast } = await import('$lib/helpers/toast');
+      /** @type {any} */ (showToast).mockClear();
+      const { container } = render(GroupChat, {
+        props: { pointer: { relay: GROUP_RELAY, id: 'pincapchat' } }
+      });
+      await waitFor(() => expect(bubbleTexts(container)).toContain('one too many'));
+      await waitFor(() => expect(pinButtonOf(container, pinCapMessage.id)).not.toBeNull());
+      await fireEvent.click(/** @type {HTMLElement} */ (pinButtonOf(container, pinCapMessage.id)));
+      await waitFor(() =>
+        expect(showToast).toHaveBeenCalledWith(
+          'At most 25 pinned messages per channel. Unpin one first.',
+          'warning'
+        )
+      );
+      expect(publishMock.mock.calls.some(([e]) => e?.kind === 9010)).toBe(false);
+    });
+
+    it('a relay refusal of the pin change tells the user and keeps the list', async () => {
+      const { showToast } = await import('$lib/helpers/toast');
+      /** @type {any} */ (showToast).mockClear();
+      publishMock.mockResolvedValueOnce({ ok: false, message: 'restricted: not a moderator' });
+      const { container } = render(GroupChat, {
+        props: { pointer: { relay: GROUP_RELAY, id: 'pinchat' } }
+      });
+      await waitFor(() => expect(bubbleTexts(container)).toContain('first pinnable note'));
+      await waitFor(() => expect(pinButtonOf(container, pinChatFirst.id)).not.toBeNull());
+      await fireEvent.click(/** @type {HTMLElement} */ (pinButtonOf(container, pinChatFirst.id)));
+      await waitFor(() =>
+        expect(showToast).toHaveBeenCalledWith('The relay refused the pin change', 'error')
+      );
+      expect(screen.getByTestId('pinned-bar').textContent).toContain('1 pinned');
     });
   });
 

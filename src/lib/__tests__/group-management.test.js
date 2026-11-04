@@ -440,3 +440,24 @@ describe('invite-code generation', () => {
     ]);
   });
 });
+
+describe('buildUpdatePinListTemplate', () => {
+  it('is a kind 9010 carrying the group and the FULL pinned list as e tags, in order', async () => {
+    const { buildUpdatePinListTemplate } = await import('$lib/groups/group-management.js');
+    const a = 'a'.repeat(64);
+    const b = 'b'.repeat(64);
+    const t = buildUpdatePinListTemplate(ID, [b, a]);
+    expect(t.kind).toBe(9010);
+    expect(t.tags).toEqual([
+      ['h', ID],
+      ['e', b],
+      ['e', a]
+    ]);
+    expect(t.content).toBe('');
+  });
+
+  it('an empty list is a bare h tag — NIP-29 clears the pins with zero e tags', async () => {
+    const { buildUpdatePinListTemplate } = await import('$lib/groups/group-management.js');
+    expect(buildUpdatePinListTemplate(ID, []).tags).toEqual([['h', ID]]);
+  });
+});

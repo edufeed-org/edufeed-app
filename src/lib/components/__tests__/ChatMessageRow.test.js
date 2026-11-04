@@ -59,3 +59,36 @@ describe('ChatMessageRow message anchor', () => {
     expect(screen.getByTestId('badge').textContent).toBe(baseProps.message.pubkey);
   });
 });
+
+describe('ChatMessageRow pin action', () => {
+  it('renders a pin button when onPin is provided and forwards the message', async () => {
+    const onPin = vi.fn();
+    render(ChatMessageRow, { props: { ...baseProps, onPin, pinTitle: 'Anpinnen' } });
+    const button = screen.getByTestId('chat-message-pin');
+    expect(button.getAttribute('title')).toBe('Anpinnen');
+    expect(button.getAttribute('aria-pressed')).toBe('false');
+    await fireEvent.click(button);
+    expect(onPin).toHaveBeenCalledWith(message);
+  });
+
+  it('a pinned message keeps its pin button visible and pressed', () => {
+    render(ChatMessageRow, {
+      props: { ...baseProps, onPin: vi.fn(), pinTitle: 'Lösen', pinned: true }
+    });
+    const button = screen.getByTestId('chat-message-pin');
+    expect(button.getAttribute('aria-pressed')).toBe('true');
+    expect(button.className).not.toContain('opacity-0');
+  });
+
+  it('a pinned message without onPin (not a moderator) shows a passive marker', () => {
+    render(ChatMessageRow, { props: { ...baseProps, pinned: true, pinTitle: 'Angepinnt' } });
+    expect(screen.queryByTestId('chat-message-pin')).toBeNull();
+    expect(screen.getByTestId('chat-message-pinned').getAttribute('title')).toBe('Angepinnt');
+  });
+
+  it('renders neither button nor marker by default', () => {
+    render(ChatMessageRow, { props: baseProps });
+    expect(screen.queryByTestId('chat-message-pin')).toBeNull();
+    expect(screen.queryByTestId('chat-message-pinned')).toBeNull();
+  });
+});

@@ -14,7 +14,7 @@
   import NostrContentRenderer from '$lib/components/shared/NostrContentRenderer.svelte';
   import LinkPreviewList from '$lib/components/shared/LinkPreviewList.svelte';
   import ProfileAvatar from '$lib/components/shared/ProfileAvatar.svelte';
-  import { LinkIcon, ReplyIcon, TrashIcon } from '$lib/components/icons';
+  import { LinkIcon, PinIcon, ReplyIcon, TrashIcon } from '$lib/components/icons';
   import { profileLink } from '$lib/helpers/nostrUtils.js';
 
   /**
@@ -32,6 +32,9 @@
    * @property {string} [deleteTitle] - title attribute for the delete button (default "Delete", override for i18n)
    * @property {((message: any) => void) | null} [onCopyLink] - shows a hover-reveal copy-link button in the header when provided (message deep links)
    * @property {string} [copyLinkTitle] - title attribute for the copy-link button (default "Copy link", override for i18n)
+   * @property {((message: any) => void) | null} [onPin] - shows a hover-reveal pin/unpin button in the header when provided (caller owns permission checks; `pinned` says which way it toggles)
+   * @property {string} [pinTitle] - title attribute for the pin button, or for the passive marker when `pinned` without `onPin` (override for i18n)
+   * @property {boolean} [pinned] - the message is on the channel's pin list: the pin button stays visible and pressed; without `onPin` a passive marker shows instead
    * @property {boolean} [showLinkPreviews] - render LinkPreviewList below the message content (default false)
    * @property {boolean} [showContent] - render the message content in the bubble (default true; false when an attachment card shows it itself, e.g. a meeting's description)
    * @property {number} [replyCount] - shows an "N replies" affordance in the footer when > 0 and `onOpenThread` is set
@@ -57,6 +60,9 @@
     deleteTitle = 'Delete',
     onCopyLink = null,
     copyLinkTitle = 'Copy link',
+    onPin = null,
+    pinTitle = 'Pin',
+    pinned = false,
     showLinkPreviews = false,
     showContent = true,
     replyCount = 0,
@@ -106,6 +112,29 @@
       >
         <TrashIcon class="h-3.5 w-3.5" />
       </button>
+    {/if}
+    {#if onPin}
+      <button
+        type="button"
+        data-testid="chat-message-pin"
+        aria-pressed={pinned}
+        onclick={() => onPin(message)}
+        class="mx-0.5 transition-opacity hover:!opacity-100 {pinned
+          ? 'text-primary opacity-70'
+          : 'opacity-0 group-hover:opacity-70'}"
+        title={pinTitle}
+      >
+        <PinIcon class_="h-3.5 w-3.5" title="" />
+      </button>
+    {:else if pinned}
+      <span
+        data-testid="chat-message-pinned"
+        class="mx-0.5 inline-flex text-primary"
+        title={pinTitle}
+        aria-label={pinTitle}
+      >
+        <PinIcon class_="h-3.5 w-3.5" title="" />
+      </span>
     {/if}
     {#if onCopyLink}
       <button

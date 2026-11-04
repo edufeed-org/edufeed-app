@@ -64,6 +64,7 @@ Kinds the app **publishes to the group's host relay** (all h-tagged):
 | 9007         | create group                        | `buildCreateGroupTemplate` — carries the metadata inline because name-validating relays reject a bare create                                                                                                           |
 | 9008         | delete group                        | `buildDeleteGroupTemplate`                                                                                                                                                                                             |
 | 9009         | create invite code                  | `buildCreateInviteTemplate` (`code` tag)                                                                                                                                                                               |
+| 9010         | update pin list                     | `buildUpdatePinListTemplate` — the WHOLE list as `e` tags, newest pin first; zero `e` tags clears it. Moderators only (the relay refuses others). Read side: `groups/pins.js`                                          |
 | 9021         | join request                        | `buildJoinRequestTemplate` (optional `code` tag)                                                                                                                                                                       |
 | 9022         | leave request                       | `buildLeaveRequestTemplate`                                                                                                                                                                                            |
 
@@ -76,6 +77,13 @@ own key_, addressed by `d` tag = group id, never published by clients:
 | 39001 | Group admins                                     |
 | 39002 | Group members                                    |
 | 39004 | LiveKit participants (who is in the AV room now) |
+| 39005 | Group pinned events (mirror of the latest 9010)  |
+
+groups.edufeed.org (pyramid edufeed-v1.23) stores an accepted 9010 but emits
+no 39005 yet, so `resolvePinnedIds` (`groups/pins.js`) takes whichever is
+newest of the relay's 39005 and the stored 9010s — the relay only ever
+stores the 9010s it accepted, which makes them as authoritative as the
+39005 it would derive from them.
 
 Related kinds that do **not** go to the group relay:
 
@@ -480,6 +488,7 @@ deleted meeting never leaves a working guest link behind.
 | ---------------------------------------- | --------------------------------------------------------------------------------------------------- |
 | `src/lib/groups/groups.js`               | Pointer parsing, chat/join/leave templates, 10009 list template                                     |
 | `src/lib/groups/group-management.js`     | Moderation templates (9000–9009), `publishToGroupRelay`, `createGroupOnRelay`, error classifiers    |
+| `src/lib/groups/pins.js`                 | NIP-29 pins: kinds 9010/39005, `getPinnedIds`, `resolvePinnedIds` (newest list wins)                |
 | `src/lib/groups/relay-auth.js`           | NIP-42 `authenticateOnce`                                                                           |
 | `src/lib/groups/personal-groups-list.js` | Kind-10009 updates (outbox, not group relay)                                                        |
 | `src/lib/helpers/relay-helper.js`        | `getGroupsRelays()`                                                                                 |

@@ -73,7 +73,18 @@
   import GroupPollModal from '$lib/components/groups/GroupPollModal.svelte';
   import { updatePersonalGroupsList } from '$lib/groups/personal-groups-list.js';
   import { useMyGroups } from '$lib/groups/unlinked-groups.svelte.js';
-  import { publishToGroupRelay, buildDeleteEventTemplate } from '$lib/groups/group-management.js';
+  import {
+    publishToGroupRelay,
+    buildDeleteEventTemplate,
+    buildUpdatePinListTemplate
+  } from '$lib/groups/group-management.js';
+  import {
+    PINNED_EVENTS_KIND,
+    UPDATE_PIN_LIST_KIND,
+    MAX_PINS,
+    resolvePinnedIds
+  } from '$lib/groups/pins.js';
+  import PinnedMessagesBar from '$lib/components/groups/PinnedMessagesBar.svelte';
   import { useChatAttachments, appendUrlToDraft } from '$lib/stores/chat-attachments.svelte.js';
   import { isModerator, roleOptionsFromAdmins } from '$lib/groups/roles.js';
   import { unique } from '$lib/helpers/unique.js';
@@ -300,6 +311,10 @@
   // so this only bridges the gap for events already replayed/live in view.
   /** @type {any[]} */ let deletionEvents = $state.raw([]);
   /** @type {any[]} */ let voteEvents = $state.raw([]);
+  // NIP-29 pins: the relay's kind 39005 (d = group id) and the stored kind
+  // 9010 update-pin-lists (h = group id); resolvePinnedIds picks the newest.
+  /** @type {any[]} */ let pinnedListEvents = $state.raw([]);
+  /** @type {any[]} */ let pinUpdateEvents = $state.raw([]);
 
   // Bump to re-run the roster request below (e.g. after an admin action
   // changes the 39001/39002 events) without touching the chat subscription.
@@ -348,7 +363,7 @@
       .request(
         [
           {
-            kinds: [GROUP_METADATA_KIND, GROUP_ADMINS_KIND, GROUP_MEMBERS_KIND],
+            kinds: [GROUP_METADATA_KIND, GROUP_ADMINS_KIND, GROUP_MEMBERS_KIND, PINNED_EVENTS_KIND],
             '#d': [pointer.id]
           },
           // My own stored join request, so "pending" survives a reload.
@@ -485,7 +500,11 @@
         { kinds: [5], '#h': [pointer.id], limit: 100 },
         { kinds: [7], '#h': [pointer.id], limit: 200 },
         { kinds: [DELETE_EVENT_KIND], '#h': [pointer.id], limit: 100 },
-        { kinds: [1018], '#h': [pointer.id], limit: 500 }
+        { kinds: [1018], '#h': [pointer.id], limit: 500 },
+        // Pins (groups/pins.js): the stored 9010s and the relay's 39005, live
+        // — another moderator's pin shows up without a reload.
+        { kinds: [UPDATE_PIN_LIST_KIND], '#h': [pointer.id], limit: 10 },
+        { kinds: [PINNED_EVENTS_KIND], '#d': [pointer.id] }
       ])
       .pipe(storeEvents(eventStore))
       .subscribe({
@@ -518,6 +537,16 @@
       .subscribe((events) => {
         voteEvents = events;
       });
+    const pinUpdatesSub = eventStore
+      .model(TimelineModel, { kinds: [UPDATE_PIN_LIST_KIND], '#h': [pointer.id] })
+      .subscribe((events) => {
+        pinUpdateEvents = events;
+      });
+    const pinnedListSub = eventStore
+      .model(TimelineModel, { kinds: [PINNED_EVENTS_KIND], '#d': [pointer.id] })
+      .subscribe((events) => {
+        pinnedListEvents = events;
+      });
 
     return () => {
       clearTimeout(fallbackTimer);
@@ -526,6 +555,8 @@
       reactionsSub.unsubscribe();
       deletionsSub.unsubscribe();
       votesSub.unsubscribe();
+      pinUpdatesSub.unsubscribe();
+      pinnedListSub.unsubscribe();
     };
   });
 
@@ -555,6 +586,34 @@
       .toReversed()
   );
   const meetings = $derived(displayed.filter((event) => event.kind === MEETING_KIND));
+
+  // The channel's pinned message ids, newest pin first (groups/pins.js). A
+  // message deleted since it was pinned drops out here — and out of the next
+  // list a moderator publishes, which is how the relay copy gets tidied.
+  const pinnedIds = $derived(
+    resolvePinnedIds({
+      groupId: pointer.id,
+      pinnedEvents: pinnedListEvents,
+      updateEvents: pinUpdateEvents
+    }).filter((id) => !deletedMessageIds.has(id))
+  );
+  const pinnedIdSet = $derived(new Set(pinnedIds));
+  // Rows for the bar: resolved against the loaded window; a pin older than
+  // the replay is listed as not loaded rather than dropped (it IS pinned).
+  const pinRows = $derived(
+    pinnedIds.map((id) => {
+      const message = displayed.find((event) => event.id === id);
+      return message
+        ? {
+            id,
+            displayName: getUserDisplayName(message.pubkey, getProfiles().get(message.pubkey)),
+            content: quoteText(message),
+            timestamp: formatMessageTimestamp(message.created_at),
+            missing: false
+          }
+        : { id, displayName: '', content: '', timestamp: '', missing: true };
+    })
+  );
 
   // Guest links of my meetings: the channel's passes are listed ONCE per
   // visit (and per account) into the store, where each MeetingCard finds its
@@ -1584,6 +1643,46 @@
     deleting = false;
   }
 
+  // NIP-29 pins: a moderator publishes the WHOLE list as a kind 9010 to the
+  // group relay (the relay refuses anyone else); the signed event goes into
+  // the store so the bar follows at once, whether or not the relay ever
+  // echoes a 39005 (groups/pins.js). One change in flight at a time — two
+  // quick clicks would otherwise each build on the same stale list.
+  let pinBusy = false;
+  /** @param {string[]} ids the full new list, in display order */
+  async function publishPinList(ids) {
+    if (pinBusy) return;
+    pinBusy = true;
+    try {
+      const signed = await signAndPublish(buildUpdatePinListTemplate(pointer.id, ids));
+      eventStore.add(signed);
+    } catch (err) {
+      console.error('group pin update failed', err);
+      showToast(m.groups_pin_failed(), 'error');
+    }
+    pinBusy = false;
+  }
+  /** The row's pin button: pin when unpinned, unpin when pinned. @param {any} message */
+  function togglePin(message) {
+    if (pinnedIdSet.has(message.id)) {
+      publishPinList(pinnedIds.filter((id) => id !== message.id));
+      return;
+    }
+    if (pinnedIds.length >= MAX_PINS) {
+      showToast(m.groups_pin_limit({ max: MAX_PINS }), 'warning');
+      return;
+    }
+    publishPinList([message.id, ...pinnedIds]);
+  }
+  /** @param {string} id */
+  function unpinById(id) {
+    publishPinList(pinnedIds.filter((pinned) => pinned !== id));
+  }
+  /** @param {string} id */
+  function jumpToPinned(id) {
+    scrollToChatMessage(document, id);
+  }
+
   // NIP-88 polls in the room (Armada interop): the poll modal builds a
   // kind-1068 timeline row, votes are kind-1018 side events — both h-tagged
   // and published to the group relay ONLY, so membership stays enforced.
@@ -2191,6 +2290,13 @@
       showContent={message.kind !== MEETING_KIND}
       onDelete={isAdmin && message.kind !== MEETING_KIND ? (msg) => (deleteTarget = msg) : null}
       deleteTitle={m.groups_message_delete()}
+      onPin={isAdmin && message.kind !== MEETING_KIND ? togglePin : null}
+      pinned={pinnedIdSet.has(message.id)}
+      pinTitle={pinnedIdSet.has(message.id)
+        ? isAdmin
+          ? m.groups_message_unpin()
+          : m.groups_message_pinned()
+        : m.groups_message_pin()}
       onCopyLink={copyMessageLink}
       copyLinkTitle={m.chat_copy_message_link()}
       replyCount={threads.replyCount(message.id)}
@@ -2283,6 +2389,11 @@
           callRunning={callParticipantCount > 0}
         />
       {/if}
+      <PinnedMessagesBar
+        pins={pinRows}
+        onJump={jumpToPinned}
+        onUnpin={isAdmin ? unpinById : undefined}
+      />
       {#if resumeOffer}
         <div
           class="flex items-center justify-between gap-2 border-b border-base-300 bg-base-200 px-4 py-2 text-sm"
