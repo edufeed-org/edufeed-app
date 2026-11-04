@@ -206,13 +206,15 @@ function prefetchReferencedContent(notifications) {
     for (const pointer of eventPointers) {
       eventLoader(pointer).subscribe();
     }
-    if (event.kind === 9) prefetchGroupMetadata(event);
+    if (event.kind === 9 || event.kind === 9000) prefetchGroupMetadata(event);
   }
 }
 
 /**
- * The channel's kind 39000 (its name) for a NIP-29 channel mention row.
- * Community chat (an `h` tag holding a pubkey) has no group metadata.
+ * The group's kind 39000 for a NIP-29 channel mention row or a kind-9000
+ * "added you" row: its name, and — through its `parent` tag — the community
+ * the row should open (groups/group-added.js). Community chat (an `h` tag
+ * holding a pubkey) has no group metadata.
  * @param {import('nostr-tools').NostrEvent} event
  */
 function prefetchGroupMetadata(event) {

@@ -51,7 +51,8 @@
   const channelName = $derived(getChannel().groupName || m.inbox_channel_unnamed());
   const ownTitle = $derived(getEventTitle(event) || m.inbox_action_untitled());
   // kind 9000: where the group lives (community page or group route) and
-  // what to call it — the community's profile name, else the group's own.
+  // what to call it — a community root by the community's profile name, a
+  // channel by its own name plus the community's, a foreign group by its own.
   const getGroupAdded = useGroupAddedTarget(() => (type === 'groupAdded' ? event : null));
   // Community chat (kind 9 whose `h` is the community's pubkey) names the
   // community; no parent ever passed `contentTitle` for it, so the row read
@@ -71,11 +72,13 @@
   );
   const groupAddedName = $derived.by(() => {
     if (type !== 'groupAdded') return '';
-    const { communityPubkey, groupName } = getGroupAdded();
-    if (communityPubkey) {
-      return getUserDisplayName(communityPubkey, getCommunityProfiles().get(communityPubkey));
-    }
-    return groupName || m.inbox_group_added_unnamed();
+    const { communityPubkey, groupName, channel } = getGroupAdded();
+    const community = communityPubkey
+      ? getUserDisplayName(communityPubkey, getCommunityProfiles().get(communityPubkey))
+      : '';
+    if (community && !channel) return community;
+    const own = groupName || m.inbox_group_added_unnamed();
+    return community ? `${own} · ${community}` : own;
   });
   const url = $derived(
     getNotificationUrl(event, {

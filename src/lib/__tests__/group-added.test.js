@@ -46,6 +46,7 @@ describe('kind-9000 "added you" notifications', () => {
     });
     expect(r.communityPubkey).toBe(OWNER);
     expect(r.href).toMatch(/^\/c\/npub1/);
+    expect(r.channel).toBe(false);
   });
 
   it('opens a channel inside its community when its parent is a known membership root', () => {
@@ -64,6 +65,8 @@ describe('kind-9000 "added you" notifications', () => {
     expect(r.communityPubkey).toBe(OWNER);
     expect(r.href).toMatch(/^\/c\/npub1[a-z0-9]+\?view=channels&channel=chan9$/);
     expect(r.groupName).toBe('Willkommen!');
+    // A channel row names the channel (and its community), not the community alone.
+    expect(r.channel).toBe(true);
   });
 
   it('falls back to the group route on the host for foreign groups and unknown parents', () => {
@@ -80,6 +83,7 @@ describe('kind-9000 "added you" notifications', () => {
       }
     });
     expect(foreign.communityPubkey).toBeNull();
+    expect(foreign.channel).toBe(true);
     expect(foreign.href).toMatch(/^\/groups\//);
     expect(foreign.groupName).toBe('arbeitszimmer');
     // No 39000 yet (still loading): nothing to follow, host route for now.

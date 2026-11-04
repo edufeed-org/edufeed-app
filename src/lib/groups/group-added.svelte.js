@@ -10,7 +10,7 @@ import { groupIdOf, resolveGroupAdded, resolveChannelMention } from './group-add
 /**
  * Call during component init.
  * @param {() => any} getEvent the kind-9000 event
- * @returns {() => { communityPubkey: string | null, href: string | null, groupName: string | null }}
+ * @returns {() => ReturnType<typeof resolveGroupAdded>}
  */
 export function useGroupAddedTarget(getEvent) {
   let communikeyEvents = $state.raw(/** @type {any[]} */ ([]));

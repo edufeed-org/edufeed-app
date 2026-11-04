@@ -142,6 +142,39 @@ describe('inbox: channel mentions from the groups relay', () => {
     expect(groupsFetches()).toHaveLength(1);
   });
 
+  it('fetches the kind 39000 of a group that added the user, so the row can name it and find its community', () => {
+    const callbacks = [];
+    const filters = [];
+    eventStore.model.mockImplementation((_model, f) => {
+      filters.push(f);
+      return { subscribe: (cb) => (callbacks.push(cb), noopSub) };
+    });
+    mod.initializeInbox(PUBKEY);
+    const mainIndex = filters.findIndex((f) => JSON.stringify(f).includes('9000'));
+    expect(mainIndex).toBeGreaterThanOrEqual(0);
+    callbacks[mainIndex]([
+      {
+        id: 'put1',
+        kind: 9000,
+        pubkey: 'b'.repeat(64),
+        created_at: 1,
+        content: '',
+        tags: [
+          ['h', '8fa08194-62c5-462e-a5b0-1f8bbb38aaf7'],
+          ['p', PUBKEY, 'admin']
+        ],
+        sig: ''
+      }
+    ]);
+    expect(groupsFetches()).toContainEqual(
+      expect.objectContaining({
+        kinds: [39000],
+        '#d': ['8fa08194-62c5-462e-a5b0-1f8bbb38aaf7'],
+        limit: 1
+      })
+    );
+  });
+
   it('exposes the inbox pubkey for viewer-dependent row copy', () => {
     expect(mod.getInboxPubkey()).toBeNull();
     mod.initializeInbox(PUBKEY);

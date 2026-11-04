@@ -29,23 +29,32 @@ export function groupNameOf(event) {
  *   communikeyEvents?: any[],
  *   metadataEvent?: any
  * }} args
- * @returns {{ communityPubkey: string | null, href: string | null, groupName: string | null }}
+ * @returns {{
+ *   communityPubkey: string | null,
+ *   href: string | null,
+ *   groupName: string | null,
+ *   channel: boolean
+ * }} `channel`: the group is a channel (its 39000 has a parent) rather than a
+ *   community root — the row then names the channel, not just the community.
  */
 export function resolveGroupAdded({ groupId, relay, communikeyEvents = [], metadataEvent = null }) {
-  if (!groupId) return { communityPubkey: null, href: null, groupName: null };
+  if (!groupId) return { communityPubkey: null, href: null, groupName: null, channel: false };
   const groupName = groupNameOf(metadataEvent);
+  const channel = !!parentOf(metadataEvent);
   const home = communityHome({ groupId, communikeyEvents, metadataEvent });
   if (home) {
     return {
       communityPubkey: home.communityPubkey,
       href: home.isRoot ? home.communityHref : channelHref(home, groupId),
-      groupName
+      groupName,
+      channel: !home.isRoot
     };
   }
   return {
     communityPubkey: null,
     href: relay ? groupHref({ id: groupId, relay }) : null,
-    groupName
+    groupName,
+    channel
   };
 }
 
