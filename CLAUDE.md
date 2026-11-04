@@ -435,6 +435,23 @@ Use `publishEvent(signedEvent, taggedPubkeys, { communityEvent })` from `$lib/se
 
 **NIP-42 / NIP-70:** every per-relay publish goes through `publishWithAuth` (`relay-publish-auth.js`): an `auth-required` refusal is answered with the active account (`authenticateOnce`, never a second AUTH) and re-sent once; anonymous users never sign anything. A **protected** event (`["-"]`, the `ProtectedToggle` in the note and article composers) skips tagged users' read relays and identity broadcast relays and goes only to relays whose NIP-11 lists both 42 and 70 (`filterProtectedCapableRelays`); reposts never embed it (`communityRepost.js`). strfry only challenges when it refuses something, and applesauce 6's default publish retry parks on `waitForAuth` — never call `relay.publish` with the default retry for user events.
 
+### NIP-46 Signer Permissions
+
+Both bunker connects (`bunker-connection.js`: the `nostrconnect://` QR URI's
+`perms` and the `bunker://` `connect`) request `buildNip46Permissions()` from
+`$lib/helpers/nip46-permissions.js`: `get_public_key`, `sign_event:<kind>` for
+`NIP46_SIGNED_KINDS` — every kind signed WITHOUT a user action (22242 relay
+AUTH, 13 DM seals, 30078 app data, the identity lists) plus everyday member
+kinds — and the nip04/nip44 methods. Amber signs only pre-approved kinds
+silently; anything else waits in its approval queue behind "Waiting for your
+signing app…" — and login alone signs a kind 22242 AUTH for the groups relay,
+so a bunker login without permissions always ended in that toast (laoc,
+2026-11-04). Amber drops a bare `sign_event`, so **a kind the app starts
+signing in the background must be added to `NIP46_SIGNED_KINDS`**. The list
+is capped (test: ≤ 800 chars of perms) because it travels inside the
+nostrconnect:// QR code — admin/moderator/beta kinds deliberately prompt once
+in Amber instead. Community-key events never reach the bunker.
+
 ### Relay Hints
 
 All `a`, `e`, `p` tags should include relay hints. Use `buildATagWithHint` / `buildETagWithHint` / `buildPTagsWithHints` from `$lib/services/publish-service.js` — each returns the tag with a `wss://...` hint appended.

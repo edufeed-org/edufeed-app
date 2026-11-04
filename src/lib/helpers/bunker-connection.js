@@ -1,6 +1,7 @@
 import { NostrConnectSigner, PrivateKeySigner } from 'applesauce-signers';
 import { NostrConnectAccount } from 'applesauce-accounts/accounts';
 import { generateSecretKey } from 'nostr-tools';
+import { buildNip46Permissions } from '$lib/helpers/nip46-permissions.js';
 
 /**
  * Validate a bunker:// URL
@@ -28,6 +29,15 @@ export function validateBunkerUrl(url) {
 const BUNKER_REQUEST_TIMEOUT = 0;
 
 /**
+ * Permissions requested with every connect (`perms` in the nostrconnect://
+ * URI, the third `connect` param for bunker://). A signer that honours them
+ * (Amber, nsec.app) shows them once on its pairing screen and then signs
+ * those kinds without a prompt; one that ignores them behaves as before.
+ * See nip46-permissions.js for why login depends on this.
+ */
+const CONNECT_PERMISSIONS = buildNip46Permissions();
+
+/**
  * Connect to a remote signer via bunker:// URI (signer-initiated flow)
  * @param {string} url - bunker:// URI
  * @param {{ pool: any, onAuth?: (url: string) => Promise<void> }} options
@@ -48,7 +58,8 @@ export async function connectWithBunkerUrl(url, { pool, onAuth }) {
   const signer = await NostrConnectSigner.fromBunkerURI(url, {
     signer: clientSigner,
     onAuth,
-    timeout: BUNKER_REQUEST_TIMEOUT
+    timeout: BUNKER_REQUEST_TIMEOUT,
+    permissions: CONNECT_PERMISSIONS
   });
 
   const pubkey = await signer.getPublicKey();
@@ -90,7 +101,7 @@ export function buildClientConnectRelays(fallbackRelays) {
 /**
  * Create a client-initiated connection (for QR code flow)
  * @param {string[]} relays
- * @param {{ pool: any, onAuth?: (url: string) => Promise<void>, appMetadata: { name: string, url: string } }} options
+ * @param {{ pool: any, onAuth?: (url: string) => Promise<void>, appMetadata: { name: string, url: string, image?: string } }} options
  * @returns {{ signer: NostrConnectSigner, uri: string, open: () => Promise<void>, waitForSigner: (signal?: AbortSignal) => Promise<void> }}
  */
 export function createClientConnection(relays, { pool, onAuth, appMetadata }) {
@@ -109,7 +120,7 @@ export function createClientConnection(relays, { pool, onAuth, appMetadata }) {
     timeout: BUNKER_REQUEST_TIMEOUT
   });
 
-  const uri = signer.getNostrConnectURI(appMetadata);
+  const uri = signer.getNostrConnectURI({ ...appMetadata, permissions: CONNECT_PERMISSIONS });
 
   return {
     signer,

@@ -61,6 +61,7 @@ import {
   buildClientConnectRelays
 } from '../helpers/bunker-connection.js';
 import { NostrConnectSigner } from 'applesauce-signers';
+import { buildNip46Permissions } from '../helpers/nip46-permissions.js';
 
 describe('validateBunkerUrl', () => {
   it('rejects empty input', () => {
@@ -118,6 +119,15 @@ describe('connectWithBunkerUrl', () => {
     );
   });
 
+  it('requests the signing permissions with the connect (bunker:// flow)', async () => {
+    const url = 'bunker://abc123?relay=wss://relay.example.com';
+    await connectWithBunkerUrl(url, { pool: mockPool, onAuth: mockOnAuth });
+    expect(NostrConnectSigner.fromBunkerURI).toHaveBeenCalledWith(
+      url,
+      expect.objectContaining({ permissions: buildNip46Permissions() })
+    );
+  });
+
   it('calls getPublicKey but NOT a redundant open/connect after fromBunkerURI', async () => {
     // NostrConnectSigner.fromBunkerURI already calls .connect() (which itself
     // calls .open()) internally with the secret parsed from the bunker URI.
@@ -167,14 +177,24 @@ describe('createClientConnection', () => {
     expect(typeof result.waitForSigner).toBe('function');
   });
 
-  it('calls getNostrConnectURI with app metadata', () => {
+  it('calls getNostrConnectURI with app metadata AND the signing permissions', () => {
+    // Without `perms` in the nostrconnect:// URI Amber approves only the
+    // connection; the first signature of every kind then waits in its
+    // approval queue — the "Waiting for your signing app…" toast right after
+    // login (the kind 22242 AUTH for the groups relay) was exactly that.
     const metadata = { name: 'ComCal', url: 'https://example.com' };
     createClientConnection(relays, {
       pool: mockPool,
       onAuth: mockOnAuth,
       appMetadata: metadata
     });
-    expect(mockSignerInstance.getNostrConnectURI).toHaveBeenCalledWith(metadata);
+    expect(mockSignerInstance.getNostrConnectURI).toHaveBeenCalledWith({
+      ...metadata,
+      permissions: buildNip46Permissions()
+    });
+    const perms = mockSignerInstance.getNostrConnectURI.mock.calls[0][0].permissions;
+    expect(perms).toContain('sign_event:22242');
+    expect(perms).toContain('nip44_decrypt');
   });
 });
 

@@ -78,15 +78,29 @@
    */
   $effect(() => {
     if (qrCanvas && nostrConnectUri) {
-      QRCode.toCanvas(qrCanvas, nostrConnectUri, {
-        width: 250,
+      // The URI carries the NIP-46 permission list (nip46-permissions.js),
+      // ~1.2 KB → QR version 25. Error correction L and 320 px keep it at
+      // ~2.5 px per module, which a phone camera still resolves on a laptop
+      // screen; the canvas scales down with CSS on narrow phones, where the
+      // "Open in Signer App" link is the way in anyway.
+      const canvas = qrCanvas;
+      QRCode.toCanvas(canvas, nostrConnectUri, {
+        width: 320,
         margin: 2,
+        errorCorrectionLevel: 'L',
         color: { dark: '#000000', light: '#FFFFFF' }
-      }).catch(
-        /** @param {Error} err */ (err) => {
-          console.error('QR code generation error:', err);
-        }
-      );
+      })
+        .then(() => {
+          // qrcode pins the CSS size inline (320×320); drop it so the
+          // `max-w-full h-auto` classes can shrink the square on narrow phones.
+          canvas.style.removeProperty('width');
+          canvas.style.removeProperty('height');
+        })
+        .catch(
+          /** @param {Error} err */ (err) => {
+            console.error('QR code generation error:', err);
+          }
+        );
     }
   });
 
@@ -340,7 +354,8 @@
         <div class="flex flex-col items-center gap-3">
           {#if nostrConnectUri}
             <div class="rounded-lg bg-white p-4">
-              <canvas bind:this={qrCanvas} aria-label={m.bunker_qr_aria()}></canvas>
+              <canvas bind:this={qrCanvas} class="h-auto max-w-full" aria-label={m.bunker_qr_aria()}
+              ></canvas>
             </div>
             <a href={nostrConnectUri} class="btn btn-outline btn-sm">
               {m.auth_bunker_open_in_signer()}
@@ -350,7 +365,7 @@
             </p>
           {:else}
             <div
-              class="flex h-[250px] w-[250px] items-center justify-center rounded-lg bg-base-200"
+              class="flex h-[320px] w-[320px] max-w-full items-center justify-center rounded-lg bg-base-200"
             >
               <span class="loading loading-lg loading-spinner"></span>
             </div>
