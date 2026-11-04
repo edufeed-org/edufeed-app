@@ -252,7 +252,7 @@
           {@const cardData = getFeedCardData(event)}
           {@const kindColor = generateKindColorRGB(event.kind)}
           <button
-            class="w-[200px] max-w-[240px] rounded-lg border border-l-4 border-base-300 bg-base-100 p-3 text-left shadow-sm transition-shadow hover:border-primary hover:shadow-md"
+            class="w-full rounded-lg border border-l-4 border-base-300 bg-base-100 p-3 text-left shadow-sm transition-shadow hover:border-primary hover:shadow-md sm:w-[200px] sm:max-w-[240px]"
             style:border-left-color="rgb({kindColor.r},{kindColor.g},{kindColor.b})"
             onclick={() => onNavigateToEvent?.(event)}
           >
