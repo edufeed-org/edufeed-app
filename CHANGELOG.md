@@ -7,6 +7,71 @@ merge commits of the nostr PRs that landed since the previous tag.
 
 ## [Unreleased]
 
+## [0.15.0] - 2026-11-04
+
+Mobile round: the phone navigation redesign (issue "mobile: navigation is
+too complicated"), long pages no longer ending under the dock, a calmer
+profile header, QR codes for profiles, pinned messages in NIP-29 channels
+and publication chapters. 7 nostr PRs from the 2026-11-04 PR marathon
+(smoke-tested on an integration build first); tested on dev as
+`v0.15.0-rc.N` before release.
+
+### Added
+
+- Phone dock: Feed – Communities – Erstellen – Posteingang – Entdecken.
+  The dashboard root shows the feed on phones. The Communities tab lists
+  the joined communities by newest activity with a "neu" badge and opens
+  each one in its newest unread section, else the section last opened on
+  this device (remembered for 90 days). Inside a community the Bereiche
+  chip is a full-width button naming the current section; its sheet also
+  lists the channels, so a channel is two taps from anywhere. The phone
+  create sheet leads with Notiz, Lesezeichen and Termin. (#6abc231a)
+- Pinned messages in NIP-29 channels: moderators pin and unpin chat
+  messages (kind 9010 update-pin-list, relay kind 39005, 25 pins), everyone
+  sees a bar above the chat with the newest pin and an expandable list; a
+  click jumps to the message. Concord channels follow in a separate issue.
+  (#887d5a5b)
+- QR code for every profile (`nostr:<npub>`, what other Nostr clients
+  encode) from the profile menu, and "Mein QR-Code" in the account menu.
+  "QR-Code scannen" opens the camera (native BarcodeDetector, else jsQR)
+  and opens scanned profiles, notes, events and NIP-05 addresses; an nsec
+  is refused with a warning. (#75e55646)
+- Profile Publikationen tab nests a book's chapters (NKBIP-01 kind 30040
+  sub-indexes) under the book as an "N Kapitel" list; the tab counts
+  books, not chapters. (#177709ca)
+
+### Changed
+
+- Profile header: two actions (Nachricht, Folgen) and a "…" menu with Zap,
+  QR code and npub copy. The VERIFIZIERT and npub pills are gone; the
+  NIP-05 line is the verified marker and keeps its explainer. On phones the
+  wave sits on the avatar and the community link is a card; on wider
+  screens the actions are one row of equal icon squares with tooltips.
+  Follow uses the person-add icon; while following, the person-dash button
+  named Entfolgen opens a small confirm dropdown. (#d002a254)
+- The phone header loses the community switcher drawer, and the avatar
+  menu drops its duplicate Communities and Home rows. (#6abc231a)
+
+### Fixed
+
+- Long /c pages on phones no longer end under the dock: only chat,
+  channels and DM pages are bounded to the viewport, every other page flows
+  and the dock padding includes the safe-area inset. Flowing /c pages no
+  longer scroll sideways (a truncated DM preview widened the inbox), and
+  pinned cards on a community's Startseite are full width on phones.
+  (#8456a7b9)
+- A full `vitest run` exited 1 on an incomplete sha256 mock in the
+  LicensedImageInput metaclean test. (#84280348)
+
+### Deploy notes
+
+- No new environment variables.
+- Pins: groups.edufeed.org (pyramid edufeed-v1.23) stores a moderator's
+  kind 9010 but does not regenerate kind 39005 yet; the app folds the
+  stored 9010s, so pins work without a relay change. The pyramid branch
+  `pr/pins-39005` adds the regeneration (optional).
+- New dependency `jsqr` (scanner fallback), loaded lazily.
+
 ## [0.14.0] - 2026-11-03
 
 Calendar round: NIP-52 conformance (exclusive all-day ends, time zones,
