@@ -128,6 +128,23 @@ describe('rememberCommunityView / readCommunityView', () => {
     expect(readCommunityView(String(LAST_VIEW_MAX).padStart(64, '0'), 5000, mem)).not.toBeNull();
   });
 
+  it('tolerates a localStorage getter that throws (site data blocked) when no storage is passed', () => {
+    const desc = Object.getOwnPropertyDescriptor(globalThis, 'localStorage');
+    Object.defineProperty(globalThis, 'localStorage', {
+      configurable: true,
+      get() {
+        throw new Error('SecurityError');
+      }
+    });
+    try {
+      expect(() => rememberCommunityView(A, 'calendar', 1)).not.toThrow();
+      expect(readCommunityView(A, 1)).toBeNull();
+    } finally {
+      if (desc) Object.defineProperty(globalThis, 'localStorage', desc);
+      else delete /** @type {any} */ (globalThis).localStorage;
+    }
+  });
+
   it('tolerates garbage in storage and a storage that throws', () => {
     mem.setItem(LAST_VIEW_KEY, '{not json');
     expect(readCommunityView(A, 1, mem)).toBeNull();

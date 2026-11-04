@@ -22,7 +22,11 @@ const state = vi.hoisted(() => ({
   lastView: /** @type {Record<string, {view: string, at: number} | null>} */ ({}),
   discoverTypes: ['events', 'communities'],
   openModal: vi.fn(),
-  retry: vi.fn()
+  retry: vi.fn(),
+  requestChannelList: vi.fn()
+}));
+vi.mock('$lib/groups/group-channel-selection.svelte.js', () => ({
+  requestChannelList: (/** @type {string} */ pk) => state.requestChannelList(pk)
 }));
 
 vi.mock('$app/paths', () => ({ resolve: (/** @type {string} */ p) => p }));
@@ -152,6 +156,16 @@ describe('DashboardCommunitiesPhone', () => {
     state.lastView = { [A]: { view: 'channels', at: 400 }, [B]: null };
     const { getByTestId } = render(Phone);
     expect(getByTestId(`community-row-${A}`).getAttribute('href')).toBe('/c/npub-a?view=channels');
+  });
+
+  it('tapping a row that resumes in Kanäle lands in the channel list, not the last open channel', async () => {
+    state.lastView = { [A]: { view: 'channels', at: 400 }, [B]: null };
+    state.requestChannelList.mockReset();
+    const { getByTestId } = render(Phone);
+    await fireEvent.click(getByTestId(`community-row-${A}`));
+    expect(state.requestChannelList).toHaveBeenCalledWith(A);
+    await fireEvent.click(getByTestId(`community-row-${B}`));
+    expect(state.requestChannelList).toHaveBeenCalledTimes(1);
   });
 
   it('badges only rows with activity newer than the last visit', () => {

@@ -95,6 +95,13 @@ describe('useJoinedCommunitiesState', () => {
     expect(state.list()).toEqual([C1]);
   });
 
+  it('dedupes a follow set with a repeated p tag (keyed lists would crash on it)', () => {
+    probeMock.mockImplementation(() => new Promise(() => {}));
+    store$.next(followSet([C1, C1]));
+    mount();
+    expect(state.list()).toEqual([C1]);
+  });
+
   it("is 'ready' and empty only when the network confirmed there is no list", async () => {
     probeResult = 'absent';
     mount();

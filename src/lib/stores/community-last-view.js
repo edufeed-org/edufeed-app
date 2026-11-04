@@ -45,6 +45,22 @@ export function isExplicitCommunityView({ routeId, viewParam, childContentView }
 }
 
 /**
+ * `globalThis.localStorage` itself can throw (Chrome with site data blocked,
+ * sandboxed embeds) — resolve it inside a guard so a blocked store reads as
+ * "nothing remembered" instead of killing the Communities list.
+ * @param {Storage | undefined | null} storage
+ * @returns {Storage | undefined}
+ */
+function resolveStorage(storage) {
+  if (storage !== undefined && storage !== null) return storage;
+  try {
+    return globalThis.localStorage;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
  * @param {Storage | undefined} storage
  * @returns {Record<string, { view: string, at: number }>}
  */
@@ -65,11 +81,12 @@ function readMap(storage) {
  *   settings/members) keeps the previous view and only refreshes `at` —
  *   that is how leaving a community stamps the visit time.
  * @param {number} now - unix seconds
- * @param {Storage | undefined} [storage]
+ * @param {Storage | undefined} [storage] - defaults to localStorage, resolved inside a guard
  */
-export function rememberCommunityView(pubkey, view, now, storage = globalThis.localStorage) {
+export function rememberCommunityView(pubkey, view, now, storage = undefined) {
   try {
-    const map = readMap(storage);
+    const store = resolveStorage(storage);
+    const map = readMap(store);
     const previous = map[pubkey];
     const nextView = view && isRememberableView(view) ? view : (previous?.view ?? 'home');
     map[pubkey] = { view: nextView, at: now };
@@ -86,7 +103,7 @@ export function rememberCommunityView(pubkey, view, now, storage = globalThis.lo
         .slice(0, keys.length - LAST_VIEW_MAX)
         .forEach((key) => delete map[key]);
     }
-    storage?.setItem(LAST_VIEW_KEY, JSON.stringify(map));
+    store?.setItem(LAST_VIEW_KEY, JSON.stringify(map));
   } catch {
     // private mode / quota: behave as if nothing were remembered
   }
@@ -98,8 +115,8 @@ export function rememberCommunityView(pubkey, view, now, storage = globalThis.lo
  * @param {Storage | undefined} [storage]
  * @returns {{ view: string, at: number } | null}
  */
-export function readCommunityView(pubkey, now, storage = globalThis.localStorage) {
-  const entry = readMap(storage)[pubkey];
+export function readCommunityView(pubkey, now, storage = undefined) {
+  const entry = readMap(resolveStorage(storage))[pubkey];
   if (!entry || typeof entry.at !== 'number' || typeof entry.view !== 'string') return null;
   if (now - entry.at > LAST_VIEW_TTL_SECONDS) return null;
   return { view: entry.view, at: entry.at };

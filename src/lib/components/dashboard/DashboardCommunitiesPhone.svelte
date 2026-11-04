@@ -29,6 +29,7 @@
   import { getFeedCardData } from '$lib/helpers/feedCardData.js';
   import { formatRelativeTime } from '$lib/helpers/calendar.js';
   import { hexToNpub } from '$lib/helpers/nostrUtils.js';
+  import { requestChannelList } from '$lib/groups/group-channel-selection.svelte.js';
   import { sectionLabel } from '$lib/components/community/layout/section-labels.js';
   import ImageWithFallback from '$lib/components/shared/ImageWithFallback.svelte';
   import { SearchIcon, PlusIcon, ChevronRightIcon } from '$lib/components/icons';
@@ -90,6 +91,7 @@
       return {
         pubkey,
         index,
+        target,
         name: profile?.display_name || profile?.name || npub.slice(0, 12),
         picture: getProfilePicture(profile) ?? null,
         newest,
@@ -170,6 +172,11 @@
         <a
           href={row.href}
           data-testid="community-row-{row.pubkey}"
+          onclick={() => {
+            // Resume in the channel LIST: the selection store would otherwise
+            // reopen the last channel of this session (spec B3).
+            if (row.target === 'channels') requestChannelList(row.pubkey);
+          }}
           class="flex min-h-[60px] items-center gap-3 rounded-2xl bg-base-100 px-3.5 py-3"
         >
           <span class="avatar">
