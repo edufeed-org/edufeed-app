@@ -180,6 +180,9 @@
 
   // Phone dock: one bar everywhere (also inside communities since PR 2 of the
   // mobile chrome redesign); desktop keeps showDashboardNav for the sidebar.
+  // <main> pads for it by 5.75rem + the safe-area inset: 4px top padding +
+  // 56px items + 1px border + the 24px raised Erstellen circle (+ 7px air),
+  // plus the home-indicator inset phones add below the dock.
   let showMobileDock = $derived(
     mobileDockVisible({
       hasUser: !!getActiveUser(),
@@ -564,9 +567,9 @@
     {/if}
     <main
       bind:this={mainElement}
-      class="flex min-h-0 flex-1 flex-col overflow-y-auto"
-      class:pb-20={showMobileDock}
-      class:lg:pb-0={showMobileDock}
+      class="flex min-h-0 flex-1 flex-col overflow-y-auto {showMobileDock
+        ? 'pb-[calc(5.75rem+env(safe-area-inset-bottom))] lg:pb-0'
+        : ''}"
     >
       {#if curatedReady}
         <!-- Route-level error boundary: a page that throws during render
