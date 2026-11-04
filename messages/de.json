@@ -4501,5 +4501,6 @@
   "dashboard_communities_find": "Finden",
   "dashboard_communities_row_new": "neu",
   "community_sections_count": "{count} Bereiche",
-  "fab_section_more": "Weitere"
+  "fab_section_more": "Weitere",
+  "profile_open_community_hint": "Termine, Material und Austausch"
 }

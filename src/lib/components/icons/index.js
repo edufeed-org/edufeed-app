@@ -48,6 +48,8 @@ export { default as GraduationCapIcon } from './ui/GraduationCapIcon.svelte';
 export { default as KanbanIcon } from './ui/KanbanIcon.svelte';
 export { default as InfoIcon } from './ui/InfoIcon.svelte';
 export { default as PersonIcon } from './ui/PersonIcon.svelte';
+export { default as PersonAddIcon } from './ui/PersonAddIcon.svelte';
+export { default as PersonDashIcon } from './ui/PersonDashIcon.svelte';
 export { default as PhotoIcon } from './ui/PhotoIcon.svelte';
 export { default as GearIcon } from './ui/GearIcon.svelte';
 export { default as ArrowLeftRightIcon } from './ui/ArrowLeftRightIcon.svelte';

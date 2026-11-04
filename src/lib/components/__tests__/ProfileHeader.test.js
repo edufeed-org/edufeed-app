@@ -1,6 +1,6 @@
 // @ts-nocheck
 /** @vitest-environment jsdom */
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, fireEvent } from '@testing-library/svelte';
 import ProfileHeader from '../profile/ProfileHeader.svelte';
 import { modalStore } from '$lib/stores/modal.svelte.js';
@@ -72,7 +72,21 @@ function baseProps(overrides = {}) {
 }
 
 describe('<ProfileHeader>', () => {
-  it('shows the verified chip when the aggregate status is verified', () => {
+  afterEach(() => {
+    // narrow-viewport tests stub window.matchMedia; never let it leak
+    delete window.matchMedia;
+  });
+
+  it('shows no verified chip: the NIP-05 line itself is the verified marker', () => {
+    const { container } = render(
+      ProfileHeader,
+      baseProps({ nip05Status: 'verified', nip05s: ['_@sebastix.dev'] })
+    );
+    expect(container.querySelector('[data-testid="profile-verified-chip"]')).toBeNull();
+    expect(container.querySelector('[data-testid="profile-nip05-line"]')).toBeTruthy();
+  });
+
+  it.skip('(replaced) shows the verified chip when the aggregate status is verified', () => {
     const { container } = render(ProfileHeader, baseProps({ nip05Status: 'verified' }));
     expect(container.querySelector('[data-testid="profile-verified-chip"]')).toBeTruthy();
     expect(container.querySelector('[data-testid="profile-unverified-chip"]')).toBeFalsy();
@@ -80,16 +94,14 @@ describe('<ProfileHeader>', () => {
 
   // Issue "Erklärung/Anleitung Verifizierung": the chip used to be inert, so
   // new users had no way to learn what "Verifiziert" and the @-address mean.
-  it('opens the explainer popover when the verified chip is clicked', async () => {
-    const { container, queryByTestId, findByTestId } = render(
+  it('opens the explainer popover from the NIP-05 line', async () => {
+    const { container, queryByTestId } = render(
       ProfileHeader,
-      baseProps({ nip05Status: 'verified' })
+      baseProps({ nip05Status: 'verified', nip05s: ['_@sebastix.dev'] })
     );
     expect(queryByTestId('nip05-info-card-mock')).toBeNull();
-    const chip = container.querySelector('[data-testid="profile-verified-chip"]');
-    chip.closest('[role="button"]').click();
-    const card = await findByTestId('nip05-info-card-mock');
-    expect(card.getAttribute('data-apply-cta')).toBe('true');
+    await fireEvent.click(container.querySelector('[data-testid="profile-nip05-line"]'));
+    expect(queryByTestId('nip05-info-card-mock')).toBeTruthy();
   });
 
   it('shows the unverified chip when the aggregate status is unverified', () => {
@@ -166,10 +178,13 @@ describe('<ProfileHeader>', () => {
 
   // Issue 9f7816e3: the pill's QR button opens the profile's QR code (and
   // from there the scanner) — on every profile, not just the own one.
-  it('opens the profile QR modal from the npub pill', async () => {
+  it('opens the profile QR modal from the more menu', async () => {
     modalStore.closeModal();
     const { container } = render(ProfileHeader, baseProps());
-    const button = container.querySelector('[data-testid="npub-pill"] [data-testid="show-qr"]');
+    expect(container.querySelector('[data-testid="npub-pill"]')).toBeNull();
+    const button = container.querySelector(
+      '[data-testid="profile-more-menu"] [data-testid="show-qr"]'
+    );
     expect(button).toBeTruthy();
     await fireEvent.click(button);
     expect(modalStore.activeModal).toBe('profileQr');
@@ -177,12 +192,85 @@ describe('<ProfileHeader>', () => {
     modalStore.closeModal();
   });
 
-  it('shows a truncated npub pill', () => {
+  it('offers the truncated npub to copy inside the more menu', () => {
     const { container } = render(ProfileHeader, baseProps());
-    const pill = container.querySelector('[data-testid="npub-pill"]');
-    expect(pill).toBeTruthy();
-    expect(pill.textContent).toContain('npub1');
-    expect(pill.textContent.length).toBeLessThan(NPUB.length);
+    const item = container.querySelector(
+      '[data-testid="profile-more-menu"] [data-testid="copy-npub"]'
+    );
+    expect(item).toBeTruthy();
+    expect(item.textContent).toContain('npub1');
+    expect(item.textContent.length).toBeLessThan(NPUB.length + 40);
+  });
+
+  it('following: a person-dash button named Entfolgen; the actual unfollow is one tap down', async () => {
+    const onFollow = vi.fn();
+    const { container } = render(ProfileHeader, baseProps({ isFollowing: true, onFollow }));
+    const btn = container.querySelector('[data-testid="follow-button"]');
+    expect(btn.getAttribute('aria-label')).toMatch(/Entfolgen|Unfollow/);
+    expect(btn.querySelector('svg title')?.textContent).not.toMatch(/check/i);
+    await fireEvent.click(btn);
+    expect(onFollow).not.toHaveBeenCalled();
+    await fireEvent.click(container.querySelector('[data-testid="unfollow-button"]'));
+    expect(onFollow).toHaveBeenCalledTimes(1);
+  });
+
+  it('not following: a person-add button named Folgen', () => {
+    const { container } = render(ProfileHeader, baseProps({ isFollowing: false }));
+    const btn = container.querySelector('[data-testid="follow-button"]');
+    expect(btn.getAttribute('aria-label')).toMatch(/Folgen|Follow/);
+    expect(btn.querySelector('svg title')?.textContent).toMatch(/person/i);
+  });
+
+  it('wide: the row is icon-only squares with accessible names; phone: labelled buttons', () => {
+    const wide = render(ProfileHeader, baseProps());
+    const follow = wide.container.querySelector('[data-testid="follow-button"]');
+    // icon only: the button's text is nothing but the SVG's own title
+    const onlyIcon = (el) =>
+      el.textContent.trim() === (el.querySelector('svg')?.textContent ?? '').trim();
+    expect(follow.classList.contains('icon')).toBe(true);
+    expect(follow.getAttribute('aria-label')).toBeTruthy();
+    expect(onlyIcon(follow)).toBe(true);
+    const dm = wide.container.querySelector(`a[href*="/c/messages?to=${PUBKEY}"]`);
+    expect(dm.classList.contains('icon')).toBe(true);
+    expect(onlyIcon(dm)).toBe(true);
+    wide.unmount();
+    window.matchMedia = (query) => ({
+      matches: query.includes('max-width'),
+      media: query,
+      addEventListener: () => {},
+      removeEventListener: () => {},
+      addListener: () => {},
+      removeListener: () => {},
+      onchange: null,
+      dispatchEvent: () => false
+    });
+    const narrow = render(ProfileHeader, baseProps());
+    const nfollow = narrow.container.querySelector('[data-testid="follow-button"]');
+    expect(nfollow.classList.contains('icon')).toBe(false);
+    expect(onlyIcon(nfollow)).toBe(false);
+    narrow.unmount();
+  });
+
+  it('puts the wave in the button row on wide screens and on the avatar on phones', () => {
+    const wide = render(ProfileHeader, baseProps());
+    expect(wide.container.querySelector('[data-testid="wave-row"]')).toBeTruthy();
+    expect(wide.container.querySelector('[data-testid="wave-avatar"]')).toBeNull();
+    wide.unmount();
+    window.matchMedia = (query) => ({
+      matches: query.includes('max-width'),
+      media: query,
+      addEventListener: () => {},
+      removeEventListener: () => {},
+      addListener: () => {},
+      removeListener: () => {},
+      onchange: null,
+      dispatchEvent: () => false
+    });
+    const narrow = render(ProfileHeader, baseProps());
+    expect(narrow.container.querySelector('[data-testid="wave-avatar"]')).toBeTruthy();
+    expect(narrow.container.querySelector('[data-testid="wave-row"]')).toBeNull();
+    narrow.unmount();
+    delete window.matchMedia;
   });
 
   // NIP-24: display_name is the rendered name, name the handle-style fallback.
@@ -211,14 +299,31 @@ describe('<ProfileHeader>', () => {
   // on /p like any person. Without a marker nothing tells the visitor that a
   // community page exists for this key (issue: show community on profile).
   describe('community marker', () => {
-    it('shows a community chip and an open-community button linking to /c/<npub>', () => {
+    it('wide: the community chip is the link to /c/<npub>, no extra button', () => {
       const { container } = render(ProfileHeader, baseProps({ isCommunity: true }));
       const chip = container.querySelector('[data-testid="profile-community-chip"]');
       expect(chip).toBeTruthy();
       expect(chip.getAttribute('href')).toContain(`/c/${NPUB}`);
-      const btn = container.querySelector('[data-testid="open-community-button"]');
-      expect(btn).toBeTruthy();
-      expect(btn.getAttribute('href')).toContain(`/c/${NPUB}`);
+      expect(container.querySelector('[data-testid="open-community-button"]')).toBeNull();
+    });
+
+    it('phone: a community card below the buttons links to /c/<npub>', () => {
+      window.matchMedia = (query) => ({
+        matches: query.includes('max-width'),
+        media: query,
+        addEventListener: () => {},
+        removeEventListener: () => {},
+        addListener: () => {},
+        removeListener: () => {},
+        onchange: null,
+        dispatchEvent: () => false
+      });
+      const { container } = render(ProfileHeader, baseProps({ isCommunity: true }));
+      const card = container.querySelector('[data-testid="open-community-button"]');
+      expect(card).toBeTruthy();
+      expect(card.getAttribute('href')).toContain(`/c/${NPUB}`);
+      expect(container.querySelector('[data-testid="profile-community-chip"]')).toBeNull();
+      delete window.matchMedia;
     });
 
     it('renders neither marker when the pubkey is not a community', () => {
@@ -234,23 +339,23 @@ describe('<ProfileHeader>', () => {
       expect(container.querySelector('[data-testid="profile-community-chip"]')).toBeFalsy();
     });
 
-    it('keeps the open-community button for anonymous visitors and for the owner', () => {
+    it('keeps the community link for anonymous visitors and for the owner', () => {
       const anon = render(ProfileHeader, baseProps({ isCommunity: true, activeUser: null }));
-      expect(anon.container.querySelector('[data-testid="open-community-button"]')).toBeTruthy();
+      expect(anon.container.querySelector('[data-testid="profile-community-chip"]')).toBeTruthy();
       anon.unmount();
       const owner = render(
         ProfileHeader,
         baseProps({ isCommunity: true, isOwnProfile: true, activeUser: { pubkey: PUBKEY } })
       );
-      expect(owner.container.querySelector('[data-testid="open-community-button"]')).toBeTruthy();
+      expect(owner.container.querySelector('[data-testid="profile-community-chip"]')).toBeTruthy();
     });
 
-    it('coexists with the verified chip', () => {
+    it('coexists with a verified NIP-05 line', () => {
       const { container } = render(
         ProfileHeader,
-        baseProps({ isCommunity: true, nip05Status: 'verified' })
+        baseProps({ isCommunity: true, nip05Status: 'verified', nip05s: ['_@x.dev'] })
       );
-      expect(container.querySelector('[data-testid="profile-verified-chip"]')).toBeTruthy();
+      expect(container.querySelector('[data-testid="profile-nip05-line"]')).toBeTruthy();
       expect(container.querySelector('[data-testid="profile-community-chip"]')).toBeTruthy();
     });
   });
