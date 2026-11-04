@@ -109,4 +109,31 @@ describe('PinnedSection', () => {
     });
     expect(screen.getByText('Pinned')).toBeTruthy();
   });
+
+  it('pin cards are full width on phones and fixed tiles from sm up', async () => {
+    // A 200px tile alone in a phone column left a narrow card with empty
+    // space beside it (laoc, 2026-11-04); phones get full-width cards.
+    const { eventStore } = await import('$lib/stores/nostr-infrastructure.svelte');
+    /** @type {any} */ (eventStore.model).mockImplementation(() => ({
+      subscribe: (/** @type {(v: any) => void} */ cb) => {
+        cb([{ id: 'e1' }]);
+        return { unsubscribe: vi.fn() };
+      }
+    }));
+    /** @type {any} */ (eventStore.getEvent).mockImplementation((/** @type {string} */ id) =>
+      id === 'e1'
+        ? { id: 'e1', kind: 30023, created_at: 1, pubkey: 'ab'.repeat(32), tags: [], content: '' }
+        : null
+    );
+    const { container } = render(PinnedSection, {
+      props: { communityId: communityPubkey, isAdmin: false }
+    });
+    const card = /** @type {HTMLElement} */ (container.querySelector('button'));
+    expect(card).not.toBeNull();
+    expect(card.textContent).toContain('Test Title');
+    expect(card.classList.contains('w-full')).toBe(true);
+    expect(card.classList.contains('sm:w-[200px]')).toBe(true);
+    expect(card.classList.contains('sm:max-w-[240px]')).toBe(true);
+    expect(card.classList.contains('w-[200px]')).toBe(false);
+  });
 });

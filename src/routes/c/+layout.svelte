@@ -5,6 +5,7 @@
   import { getContext, setContext } from 'svelte';
   import { useActiveUser } from '$lib/stores/accounts.svelte';
   import { useIsDesktop } from '$lib/stores/viewport.svelte.js';
+  import { hasStaticOwnBottomUI } from '$lib/helpers/bottomUiVisibility.js';
   import { hexToNpub } from '$lib/helpers/nostrUtils.js';
   import { buildCommunityPath } from '$lib/helpers/communityNavigation.js';
   import CommunitySidebar from '$lib/components/community/layout/CommunitySidebar.svelte';
@@ -28,6 +29,22 @@
   // /c is ssr = false, so the viewport is known on first render.
   const isDesktop = useIsDesktop();
   const hasWorkspaceShell = getContext('workspaceShell');
+
+  // Bounded height chain (h-full + min-h-0 flex-1 down to the child layout)
+  // ONLY for pages that own their bottom edge — the chat composer, the
+  // channels view, the DM thread — which size themselves against it. Every
+  // other page flows: a long page used to overflow the bounded box, and
+  // <main>'s dock padding sat at the box end instead of after the content,
+  // so the last 80px hid under the dock (issue "mobile: bottom nav bar hides
+  // content"). /c/messages stays bounded as a whole: the open thread is a
+  // page-supplied signal the root layout has, this layout has not.
+  const resolvedMessages = resolve('/c/messages');
+  const boundedChain = $derived(
+    hasStaticOwnBottomUI({
+      pathname: $page.url.pathname,
+      viewParam: $page.url.searchParams.get('view')
+    }) || $page.url.pathname.startsWith(resolvedMessages)
+  );
 
   // Mobile header info — child layouts can update this via context
   let mobileHeaderTitle = $state(runtimeConfig.appName);
@@ -98,8 +115,13 @@
     A plain block here let them grow with their content, so the page scrolled
     instead of the timeline (laoc, 2026-10-01). Long views still overflow
     into <main>, which stays the scroll surface. -->
-  <div class="flex min-h-0 flex-1 flex-col">
-    <div class="flex h-full min-h-0 flex-col">
+  <div data-testid="mobile-shell" class="flex flex-1 flex-col" class:min-h-0={boundedChain}>
+    <div
+      data-testid="mobile-column"
+      class="flex flex-col"
+      class:h-full={boundedChain}
+      class:min-h-0={boundedChain}
+    >
       <!-- Unified Mobile Header -->
       <div
         data-testid="mobile-community-header"
@@ -180,7 +202,17 @@
       </div>
 
       <!-- Main Content (child layout renders here) -->
-      <div class="flex min-h-0 flex-1 flex-col">
+      <!-- Flowing pages get a BLOCK slot: as a flex item with auto margins a
+             page's `mx-auto max-w-3xl` box is sized to its content, and one
+             no-wrap line (a truncated DM preview) pushed it to 768px in a
+             640px viewport — the whole page scrolled sideways. -->
+      <div
+        data-testid="mobile-slot"
+        class="flex-1"
+        class:flex={boundedChain}
+        class:flex-col={boundedChain}
+        class:min-h-0={boundedChain}
+      >
         {@render children()}
       </div>
     </div>
