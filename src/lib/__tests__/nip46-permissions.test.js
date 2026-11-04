@@ -14,6 +14,8 @@ import {
   buildNip46Permissions
 } from '$lib/helpers/nip46-permissions.js';
 import { IDENTITY_KINDS } from '$lib/helpers/identity-kinds.js';
+import { createNostrConnectURI } from 'applesauce-signers/helpers/nostr-connect';
+import QRCode from 'qrcode';
 
 describe('NIP46_SIGNED_KINDS', () => {
   it('is a sorted list of unique kind numbers', () => {
@@ -31,12 +33,12 @@ describe('NIP46_SIGNED_KINDS', () => {
     expect(NIP46_SIGNED_KINDS).toContain(27235); // NIP-98 (LiveKit token)
   });
 
-  it('stays small enough for the nostrconnect:// QR code to scan from a laptop screen', () => {
-    // ~17 chars per kind. 800 chars of perms keep the QR (with the secret,
-    // app metadata and five relays) at version <= 25 — about 2.5 px per
-    // module on the 320 px canvas. The full kind catalogue would be
-    // version 36 at 1.5 px per module, which phone cameras cannot resolve.
-    expect(buildNip46Permissions().join(',').length).toBeLessThanOrEqual(800);
+  it('covers every kind of one user action: joining a channel signs 9021 and 10009', () => {
+    for (const kind of [9021, 9022, 10009]) expect(NIP46_SIGNED_KINDS).toContain(kind);
+  });
+
+  it('covers the webxdc frames an app signs while it runs', () => {
+    for (const kind of [9450, 24450]) expect(NIP46_SIGNED_KINDS).toContain(kind);
   });
 
   it('covers the identity kinds and the calendar kinds', () => {
@@ -71,5 +73,40 @@ describe('buildNip46Permissions', () => {
     );
     expect(perms[0]).toBe('get_public_key');
     expect(new Set(perms).size).toBe(perms.length);
+  });
+});
+
+describe('nostrconnect:// URI with the permissions', () => {
+  // The real URI as LoginWithBunker shows it: client pubkey, secret, app
+  // metadata, the rendezvous relay plus a typical fallback set.
+  const uri = createNostrConnectURI({
+    client: 'a'.repeat(64),
+    connectSecret: '0123456789abcdef',
+    relays: [
+      'wss://relay.nsec.app',
+      'wss://relay.damus.io',
+      'wss://relay.primal.net',
+      'wss://nostr.wine',
+      'wss://relay.edufeed.org'
+    ],
+    metadata: {
+      name: 'Edufeed',
+      url: 'https://edufeed.org',
+      permissions: buildNip46Permissions()
+    }
+  });
+
+  it('carries the permissions as `perms` (applesauce-signers contract the login relies on)', () => {
+    const params = new URL(uri.replace('nostrconnect://', 'https://x/')).searchParams;
+    expect(params.get('perms')?.split(',')).toEqual(buildNip46Permissions());
+    expect(uri).toContain('perms=get_public_key%2Csign_event%3A0%2C');
+  });
+
+  it('fits a QR code a phone can scan from a laptop screen (version <= 25 at EC L)', () => {
+    // LoginWithBunker renders at 320 px with error correction L: version 25
+    // is 117 modules, ~2.5 px per module. The full kind catalogue would be
+    // version 36 at 1.5 px per module, which phone cameras cannot resolve.
+    const { version } = QRCode.create(uri, { errorCorrectionLevel: 'L' });
+    expect(version).toBeLessThanOrEqual(25);
   });
 });

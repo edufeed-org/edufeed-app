@@ -437,19 +437,23 @@ Use `publishEvent(signedEvent, taggedPubkeys, { communityEvent })` from `$lib/se
 
 ### NIP-46 Signer Permissions
 
-Both bunker connects (`bunker-connection.js`: the `nostrconnect://` QR URI's
-`perms` and the `bunker://` `connect`) request `buildNip46Permissions()` from
-`$lib/helpers/nip46-permissions.js`: `get_public_key`, `sign_event:<kind>` for
-`NIP46_SIGNED_KINDS` — every kind signed WITHOUT a user action (22242 relay
-AUTH, 13 DM seals, 30078 app data, the identity lists) plus everyday member
-kinds — and the nip04/nip44 methods. Amber signs only pre-approved kinds
+Every bunker connect (`bunker-connection.js`: the `nostrconnect://` QR URI's
+`perms`, the `bunker://` `connect`, and the Google/Pomegranate login that
+goes through the same `connectWithBunkerUrl`) requests `buildNip46Permissions()`
+from `$lib/helpers/nip46-permissions.js`: `get_public_key`, `sign_event:<kind>`
+for `NIP46_SIGNED_KINDS` — every kind signed WITHOUT a user action (22242 relay
+AUTH, 13 DM seals, 30078 app data, the identity lists, 9450/24450 webxdc
+frames) plus everyday member kinds, all kinds of one action together (join =
+9021 + 10009) — and the nip04/nip44 methods. Permissions travel only with the
+initial `connect`, so a pairing made before this list existed keeps its old
+grant until the user logs out and pairs again. Amber signs only pre-approved kinds
 silently; anything else waits in its approval queue behind "Waiting for your
 signing app…" — and login alone signs a kind 22242 AUTH for the groups relay,
 so a bunker login without permissions always ended in that toast (laoc,
 2026-11-04). Amber drops a bare `sign_event`, so **a kind the app starts
 signing in the background must be added to `NIP46_SIGNED_KINDS`**. The list
-is capped (test: ≤ 800 chars of perms) because it travels inside the
-nostrconnect:// QR code — admin/moderator/beta kinds deliberately prompt once
+is capped (test: the real URI stays ≤ QR version 25 at EC L) because it
+travels inside the nostrconnect:// QR code — admin/moderator/beta kinds deliberately prompt once
 in Amber instead. Community-key events never reach the bunker.
 
 ### Relay Hints

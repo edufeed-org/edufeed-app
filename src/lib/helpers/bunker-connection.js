@@ -30,10 +30,13 @@ const BUNKER_REQUEST_TIMEOUT = 0;
 
 /**
  * Permissions requested with every connect (`perms` in the nostrconnect://
- * URI, the third `connect` param for bunker://). A signer that honours them
- * (Amber, nsec.app) shows them once on its pairing screen and then signs
- * those kinds without a prompt; one that ignores them behaves as before.
- * See nip46-permissions.js for why login depends on this.
+ * URI, the third `connect` param for bunker:// — also the Google/Pomegranate
+ * login, which goes through connectWithBunkerUrl). A signer that honours
+ * them (Amber, nsec.app) shows them once on its pairing screen and then
+ * signs those kinds without a prompt; one that ignores them behaves as
+ * before. They are sent only with the initial `connect`: a session paired
+ * before they existed keeps its old grant until the user logs out and pairs
+ * again. See nip46-permissions.js for why login depends on this.
  */
 const CONNECT_PERMISSIONS = buildNip46Permissions();
 
@@ -101,7 +104,7 @@ export function buildClientConnectRelays(fallbackRelays) {
 /**
  * Create a client-initiated connection (for QR code flow)
  * @param {string[]} relays
- * @param {{ pool: any, onAuth?: (url: string) => Promise<void>, appMetadata: { name: string, url: string, image?: string } }} options
+ * @param {{ pool: any, onAuth?: (url: string) => Promise<void>, appMetadata: { name: string, url: string } }} options
  * @returns {{ signer: NostrConnectSigner, uri: string, open: () => Promise<void>, waitForSigner: (signal?: AbortSignal) => Promise<void> }}
  */
 export function createClientConnection(relays, { pool, onAuth, appMetadata }) {

@@ -23,18 +23,21 @@
 /**
  * Event kinds the app signs with the logged-in user's key that are either
  * signed WITHOUT a user action (relay AUTH, DM seals, app data, identity
- * lists) or everyday member actions. Ascending.
+ * lists, webxdc frames) or everyday member actions. Ascending. A user
+ * action that signs several kinds (joining a channel: 9021 + 10009) has to
+ * list all of them, or the prompt simply moves to the second one.
  *
  * Deliberately not the whole catalogue: the list travels inside the
- * nostrconnect:// QR code, and every kind costs ~17 characters of QR
- * payload. ~40 kinds keep the code at QR version ≤ 25 (≈2.5 px per module
- * on the 320 px canvas, scannable from a laptop screen); the full catalogue
- * would be version 36 at 1.5 px per module and fail to scan. Admin,
- * moderator and beta kinds (NIP-29 moderation 9000-9010, call passes 9025,
- * form templates 30168, kanban 8571/30301/30302, labels 1985, Concord
- * 13302/13303/33301, the rarer NIP-51 lists) fall back to one Amber prompt
- * on first use, with "remember my choice". `nip46-permissions.test.js`
- * guards the payload budget.
+ * nostrconnect:// QR code, and every kind costs ~21 characters of
+ * URL-encoded payload. ~40 kinds keep the code at QR version ≤ 25 with
+ * error correction L (≈2.5 px per module on the 320 px canvas, scannable
+ * from a laptop screen); the full catalogue would be version 36 at 1.5 px
+ * per module and fail to scan. Admin, moderator and beta kinds (NIP-29
+ * moderation 9000-9010, call passes 9025, form templates 30168, kanban
+ * 8571/30301/30302, labels 1985, Concord 13302/13303/33301, the rarer
+ * NIP-51 lists, issue reports 1621) fall back to one Amber prompt on first
+ * use, with "remember my choice". `nip46-permissions.test.js` builds the
+ * real URI and guards the QR version.
  */
 export const NIP46_SIGNED_KINDS = [
   0, // profile
@@ -54,14 +57,17 @@ export const NIP46_SIGNED_KINDS = [
   1111, // NIP-22 comment
   9021, // NIP-29 join request
   9022, // NIP-29 leave request
+  9450, // webxdc state frame — signed while an app runs, no user action
   9802, // highlight
   10000, // mute list
   10002, // NIP-65 relay list — published at signup and by the relay editor
   10003, // bookmark list
+  10009, // NIP-29 groups list — written with every channel join/leave
   10050, // NIP-17 DM relay list — published at signup
   10063, // Blossom server list
   22242, // NIP-42 relay AUTH — signed at login for the groups relay
   24242, // Blossom upload auth
+  24450, // webxdc realtime frame — signed while an app runs, no user action
   27235, // NIP-98 HTTP auth (LiveKit token)
   30000, // follow set (community membership)
   30002, // relay set (app relay overrides)
