@@ -1,30 +1,42 @@
 <script>
   // Phone bottom bar: five labeled destinations, Erstellen in the middle.
-  // Feed lives on Start (filter chips + "Zum Feed"), Meine Inhalte and
-  // Gruppen in the avatar menu, Nachrichten inside Posteingang (?tab=messages).
+  // Feed is the first tab (the dashboard root renders the feed on phones, so
+  // it is active for both ?view=home and ?view=feed); Communities is active
+  // anywhere inside a community. Meine Inhalte and Gruppen live in the avatar
+  // menu, Nachrichten inside Posteingang (?tab=messages).
   import { page } from '$app/stores';
   import { resolve } from '$app/paths';
-  import { HomeIcon, SearchIcon, PlusIcon, BellIcon, PeopleIcon } from '$lib/components/icons';
+  import { GridIcon, SearchIcon, PlusIcon, BellIcon, PeopleIcon } from '$lib/components/icons';
   import { getTotalUnreadCount } from '$lib/services/inbox-service.svelte.js';
   import { openCreateHub } from '$lib/stores/create-hub.svelte.js';
   import { getDashboardActiveSection } from '$lib/helpers/dashboardNavigation.js';
   import * as m from '$lib/paraglide/messages';
 
   const items = [
-    { id: 'home', href: resolve('/c/'), icon: HomeIcon, label: () => m.dashboard_nav_start() },
     {
-      id: 'discover',
-      href: resolve('/discover'),
-      icon: SearchIcon,
-      label: () => m.navbar_discover()
+      id: 'feed',
+      href: resolve('/c/') + '?view=feed',
+      icon: GridIcon,
+      label: () => m.dashboard_nav_feed()
     },
-    { id: 'create', href: null, icon: PlusIcon, label: () => m.dashboard_nav_create() },
-    { id: 'inbox', href: resolve('/c/inbox'), icon: BellIcon, label: () => m.dashboard_nav_inbox() },
     {
       id: 'communities',
       href: resolve('/c/') + '?view=communities',
       icon: PeopleIcon,
       label: () => m.dashboard_nav_communities()
+    },
+    { id: 'create', href: null, icon: PlusIcon, label: () => m.dashboard_nav_create() },
+    {
+      id: 'inbox',
+      href: resolve('/c/inbox'),
+      icon: BellIcon,
+      label: () => m.dashboard_nav_inbox()
+    },
+    {
+      id: 'discover',
+      href: resolve('/discover'),
+      icon: SearchIcon,
+      label: () => m.navbar_discover()
     }
   ];
 
@@ -42,14 +54,12 @@
   <div class="mx-auto flex items-stretch px-1 pt-1">
     {#each items as item (item.id)}
       {@const Icon = item.icon}
-      {@const isActive = activeSection === item.id}
+      {@const isActive =
+        item.id === 'feed'
+          ? activeSection === 'home' || activeSection === 'feed'
+          : activeSection === item.id}
       {#if item.id === 'create'}
-        <button
-          type="button"
-          data-testid="dock-create"
-          class="dock-item"
-          onclick={openCreateHub}
-        >
+        <button type="button" data-testid="dock-create" class="dock-item" onclick={openCreateHub}>
           <span
             class="-mt-6 grid size-13 place-items-center rounded-full bg-accent text-accent-content shadow-lg"
           >
@@ -70,7 +80,7 @@
             {#if item.id === 'inbox' && unread > 0}
               <span
                 data-testid="dock-inbox-badge"
-                class="absolute -top-1 -right-2 badge h-4 min-w-4 badge-sm px-1 text-[10px] badge-secondary"
+                class="absolute -top-1 -right-2 badge h-4 min-w-4 px-1 badge-sm text-[10px] badge-secondary"
               >
                 {unread > 99 ? '99+' : unread}
               </span>

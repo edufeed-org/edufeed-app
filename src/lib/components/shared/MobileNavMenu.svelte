@@ -17,7 +17,6 @@
     PeopleIcon,
     SearchIcon,
     CalendarIcon,
-    HomeIcon,
     BellIcon,
     MessageSquareIcon,
     FilesIcon,
@@ -65,13 +64,17 @@
   }
 </script>
 
-<!-- Navigation Links -->
-<li>
-  <a href={resolve('/communities')} onclick={onClose}>
-    <PeopleIcon class_="w-5 h-5" />
-    {m.navbar_communities()}
-  </a>
-</li>
+<!-- Navigation Links. Logged in, the phone dock owns Feed/Communities/
+     Posteingang, so this menu lists only what the dock lacks; the public
+     Communities directory is a logged-out entry (mobile nav round 2). -->
+{#if !activeAccount}
+  <li>
+    <a href={resolve('/communities')} onclick={onClose}>
+      <PeopleIcon class_="w-5 h-5" />
+      {m.navbar_communities()}
+    </a>
+  </li>
+{/if}
 <li>
   <a href={resolve('/discover')} onclick={onClose}>
     <SearchIcon class_="w-5 h-5" />
@@ -89,12 +92,6 @@
 
 <!-- Auth Section -->
 {#if activeAccount}
-  <li>
-    <a href={resolve('/c/')} onclick={onClose}>
-      <HomeIcon class_="w-5 h-5" />
-      {m.navbar_dashboard()}
-    </a>
-  </li>
   <li>
     <a href={resolve('/c/inbox')} onclick={onClose} data-testid="menu-inbox">
       <BellIcon class_="w-5 h-5" />

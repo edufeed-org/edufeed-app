@@ -1,10 +1,11 @@
 // @ts-nocheck
 /** @vitest-environment jsdom */
 // The /c mobile header in community mode: back arrow to the communities
-// list, the community name opens the switcher drawer, a gear for admins and
-// owners. In dashboard mode the logo still toggles the drawer.
+// list, the community name as plain text (the Communities dock tab is the
+// switcher — no drawer on phones since mobile nav round 2), a gear for
+// admins and owners. In dashboard mode: plain logo + app name.
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, fireEvent } from '@testing-library/svelte';
+import { render } from '@testing-library/svelte';
 
 const holders = vi.hoisted(() => ({
   user: { pubkey: 'a'.repeat(64) },
@@ -79,16 +80,13 @@ describe('/c mobile header in community mode', () => {
     expect(getByTestId('header-back').getAttribute('href')).toBe('/c/?view=communities');
   });
 
-  it('center button shows the name and toggles the drawer', async () => {
-    const { getByTestId, container } = render(Harness, { title: 'Fortbildungsnetz' });
-    const sw = getByTestId('header-switch');
-    expect(sw.textContent).toContain('Fortbildungsnetz');
-    // Screen readers must still hear which community this is.
-    expect(sw.getAttribute('aria-label')).toContain('Fortbildungsnetz');
-    const toggle = container.querySelector('#community-drawer');
-    expect(toggle.checked).toBe(false);
-    await fireEvent.click(sw);
-    expect(toggle.checked).toBe(true);
+  it('shows the community name as plain text, no switcher and no drawer', () => {
+    const { getByTestId, queryByTestId, container } = render(Harness, {
+      title: 'Fortbildungsnetz'
+    });
+    expect(getByTestId('header-title').textContent).toContain('Fortbildungsnetz');
+    expect(queryByTestId('header-switch')).toBeNull();
+    expect(container.querySelector('#community-drawer')).toBeNull();
   });
 
   it('no gear without showSettings', () => {
@@ -105,11 +103,13 @@ describe('/c mobile header in community mode', () => {
     expect(getByTestId('header-settings').getAttribute('href')).toBe('/c/npub1x?view=settings');
   });
 
-  it('dashboard mode keeps the logo drawer toggle', () => {
+  it('dashboard mode has no drawer toggle and no back arrow', () => {
     holders.pageParams = {};
     holders.pageData = {};
-    const { getByTestId, queryByTestId } = render(Harness, { title: 'Edufeed' });
-    expect(getByTestId('header-drawer-toggle')).toBeTruthy();
+    const { queryByTestId, container } = render(Harness, { title: 'Edufeed' });
+    expect(queryByTestId('header-drawer-toggle')).toBeNull();
     expect(queryByTestId('header-back')).toBeNull();
+    expect(container.querySelector('#community-drawer')).toBeNull();
+    expect(container.querySelector('[data-testid="mobile-community-header"]')).not.toBeNull();
   });
 });

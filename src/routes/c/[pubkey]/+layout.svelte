@@ -18,6 +18,10 @@
     getSectionNameForContentType,
     VALID_CONTENT_VIEWS
   } from '$lib/helpers/contentTypes.js';
+  import {
+    rememberCommunityView,
+    isExplicitCommunityView
+  } from '$lib/stores/community-last-view.js';
   import { useCommunityAccess } from '$lib/stores/community-access.svelte.js';
   import { useCommunityMembership } from '$lib/stores/joined-communities-list.svelte.js';
   import { getCommunityWideFormRef } from '$lib/helpers/communityFormDefaults.js';
@@ -78,6 +82,30 @@
     // loaded and says no.
     selectedContentType =
       requested === 'channels' && communikeyLoaded && !communityOffersChannels ? 'home' : requested;
+
+    // Per-device "where was I": the phone Communities list resumes here.
+    // Only once the 10222 is loaded — the transient home fallback above is
+    // not a visit to home — and only an explicit view may overwrite the
+    // remembered one: a thread route (/c/<npub>/<nevent>) resolves to home
+    // without the user having chosen it. The cleanup stamps the visit time
+    // on every change and on leaving, so "neu" means new since you left,
+    // not since you arrived (your own posts during the visit are not new).
+    const pubkey = data.pubkey;
+    if (communikeyLoaded && pubkey) {
+      const explicit = isExplicitCommunityView({
+        routeId: $page.route.id,
+        viewParam,
+        childContentView
+      });
+      rememberCommunityView(
+        pubkey,
+        explicit ? selectedContentType : null,
+        Math.floor(Date.now() / 1000)
+      );
+    }
+    return () => {
+      if (pubkey) rememberCommunityView(pubkey, null, Math.floor(Date.now() / 1000));
+    };
   });
 
   // Load community's kind:10222 event for content type configuration
@@ -424,6 +452,9 @@
     communityEvent={effectiveCommunityEvent}
     {restrictedTabs}
     {accessibleTabs}
+    {channelRows}
+    isMember={zoneMember}
+    isRootAdmin={zoneRootAdmin}
   />
 </div>
 

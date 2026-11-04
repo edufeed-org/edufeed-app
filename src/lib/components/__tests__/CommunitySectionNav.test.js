@@ -1,6 +1,8 @@
 /** @vitest-environment jsdom */
-// Phone section switcher: sticky row (Bereiche chip + current section) and a
-// sheet with every section as a tile. Replaces the scrolling BottomTabBar.
+// Phone section switcher: a sticky full-width button naming the current
+// section (+ count) that opens a sheet with every section as a tile.
+// Replaces the Bereiche chip (mobile nav round 2) and before it the
+// scrolling BottomTabBar.
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, fireEvent } from '@testing-library/svelte';
 import { flushSync } from 'svelte';
@@ -19,12 +21,14 @@ vi.mock('$lib/concord/notifications.svelte.js', () => ({
 vi.mock('$lib/groups/group-channel-selection.svelte.js', () => ({
   requestChannelList: (/** @type {string} */ pk) => state.requested.push(pk)
 }));
-vi.mock('$lib/components/community/layout/community-nav.js', () => ({
+vi.mock('$lib/components/community/layout/community-nav.js', async (orig) => ({
+  ...(await orig()),
   communityNavTabIds: () => state.tabs
 }));
 vi.mock('$lib/paraglide/messages', () => ({
   aria_close_modal: () => 'Schließen',
   community_sections_title: () => 'Bereiche',
+  community_sections_count: (/** @type {{count: number}} */ { count }) => `${count} Bereiche`,
   community_sections_open_aria: () => 'Bereiche öffnen',
   community_sections_legend_members_only: () => 'nur für Mitglieder',
   community_layout_bottom_tab_bar_home: () => 'Startseite',
@@ -61,9 +65,14 @@ describe('CommunitySectionNav', () => {
     document.body.style.overflow = '';
   });
 
-  it('shows the current section in the row and no sheet until tapped', () => {
+  it('the row is one button naming the current section and the count', () => {
     const { getByTestId, queryByTestId } = render(Nav, base());
+    const btn = getByTestId('section-open');
+    expect(btn.tagName).toBe('BUTTON');
+    expect(btn.getAttribute('aria-expanded')).toBe('false');
+    expect(btn.getAttribute('aria-haspopup')).toBe('dialog');
     expect(getByTestId('section-current').textContent).toContain('Kalender');
+    expect(getByTestId('section-count').textContent).toBe('5 Bereiche');
     expect(queryByTestId('section-sheet')).toBeNull();
   });
 

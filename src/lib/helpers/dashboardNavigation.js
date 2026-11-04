@@ -17,14 +17,19 @@ const resolvedBase = stripTrailingSlash(resolve('/c/'));
 const resolvedInbox = stripTrailingSlash(resolve('/c/inbox'));
 const resolvedMessages = stripTrailingSlash(resolve('/c/messages'));
 const resolvedGroups = stripTrailingSlash(resolve('/c/groups'));
+const resolvedAgents = stripTrailingSlash(resolve('/c/agents'));
 const resolvedDiscover = stripTrailingSlash(resolve('/discover'));
 
 /**
  * Derive the active section for DashboardNavSidebar / DashboardBottomTabBar.
  *
+ * A community route (`/c/<npub>…`, anything under /c that is not one of the
+ * dashboard sub-routes) counts as 'communities': inside a community you are
+ * in the Communities place, whatever section is open (mobile nav round 2).
+ *
  * @param {string} pathname - Current URL pathname
  * @param {URLSearchParams} searchParams - Current URL search params
- * @returns {'home' | 'feed' | 'inbox' | 'messages' | 'groups' | 'my-stuff' | 'communities' | 'discover' | null}
+ * @returns {'home' | 'feed' | 'inbox' | 'messages' | 'groups' | 'agents' | 'my-stuff' | 'communities' | 'discover' | null}
  */
 export function getDashboardActiveSection(pathname, searchParams) {
   const normalized = stripTrailingSlash(pathname);
@@ -35,7 +40,11 @@ export function getDashboardActiveSection(pathname, searchParams) {
   if (normalized === resolvedMessages || normalized.startsWith(resolvedMessages + '/'))
     return 'messages';
   if (normalized === resolvedGroups || normalized.startsWith(resolvedGroups + '/')) return 'groups';
+  if (normalized === resolvedAgents || normalized.startsWith(resolvedAgents + '/')) return 'agents';
   if (normalized === resolvedInbox) return 'inbox';
+  // /c/<nevent> is the legacy dashboard thread route, not a community.
+  const firstSegment = normalized.slice(resolvedBase.length + 1).split('/')[0];
+  if (normalized !== resolvedBase && !firstSegment.startsWith('nevent1')) return 'communities';
   const view = searchParams.get('view') || 'home';
   // Backward compat: old 'your-content' URL maps to 'my-stuff'
   if (view === 'your-content') return 'my-stuff';

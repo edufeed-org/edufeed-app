@@ -2,6 +2,7 @@ import { manager } from '$lib/stores/accounts.svelte';
 import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
 import { addressLoader } from '$lib/loaders/base.js';
 import { getProfilePointersFromList } from 'applesauce-common/helpers';
+import { unique } from '$lib/helpers/unique.js';
 import { getAllLookupRelays } from '$lib/helpers/relay-helper.js';
 import { getWriteRelays } from '$lib/services/relay-service.svelte.js';
 import { probeCommunitiesFollowSet } from '$lib/helpers/follow-set-probe.js';
@@ -103,7 +104,9 @@ function useJoinedCommunities(withStatus) {
       .subscribe((event) => {
         if (event) {
           const pointers = getProfilePointersFromList(event);
-          joinedCommunities = pointers.map((p) => p.pubkey);
+          // Tag-derived: another client may repeat a p tag, and a duplicate
+          // key crashes every keyed {#each} over this list (CLAUDE.md).
+          joinedCommunities = unique(pointers.map((p) => p.pubkey));
         } else {
           joinedCommunities = [];
         }

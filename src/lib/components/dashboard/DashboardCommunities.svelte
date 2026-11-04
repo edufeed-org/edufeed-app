@@ -2,6 +2,8 @@
   DashboardCommunities — Shows the user's joined communities as a card grid.
   The grid always leads with a Discover tile + a Create tile so both actions
   are equally discoverable. Joined communities (if any) follow.
+  Below lg the phone list (DashboardCommunitiesPhone) replaces the grid —
+  one mounted branch, never both (hidden twins run their loaders twice).
 -->
 
 <script>
@@ -13,6 +15,10 @@
   import { SearchIcon, PlusIcon } from '$lib/components/icons';
   import { runtimeConfig } from '$lib/stores/config.svelte.js';
   import { isDiscoverTypeEnabled } from '$lib/helpers/discover-content-types.js';
+  import { useIsDesktop } from '$lib/stores/viewport.svelte.js';
+  import DashboardCommunitiesPhone from './DashboardCommunitiesPhone.svelte';
+
+  const isDesktop = useIsDesktop();
 
   const joined = useJoinedCommunitiesState();
   let joinedCommunities = $derived(joined.list());
@@ -61,46 +67,50 @@
   </button>
 {/snippet}
 
-<section data-testid="dashboard-communities">
-  <div class="mb-4">
-    <h2 class="text-lg font-bold">{m.dashboard_communities_title()}</h2>
-  </div>
+{#if !isDesktop()}
+  <DashboardCommunitiesPhone />
+{:else}
+  <section data-testid="dashboard-communities">
+    <div class="mb-4">
+      <h2 class="text-lg font-bold">{m.dashboard_communities_title()}</h2>
+    </div>
 
-  <!-- An empty list only means "you follow nothing" once it's confirmed.
+    <!-- An empty list only means "you follow nothing" once it's confirmed.
        Showing that for a list that failed to load made a user re-follow and
        overwrite their real memberships (2026-09-30). -->
-  {#if status === 'unavailable'}
-    <div
-      role="alert"
-      data-testid="dashboard-communities-unavailable"
-      class="mb-4 alert alert-warning"
-    >
-      <span class="text-sm">{m.dashboard_communities_unavailable()}</span>
-      <button
-        type="button"
-        data-testid="dashboard-communities-retry"
-        class="btn shrink-0 whitespace-nowrap btn-sm"
-        onclick={() => joined.retry()}
+    {#if status === 'unavailable'}
+      <div
+        role="alert"
+        data-testid="dashboard-communities-unavailable"
+        class="mb-4 alert alert-warning"
       >
-        {m.dashboard_communities_retry()}
-      </button>
-    </div>
-  {:else if joinedCommunities.length === 0}
-    <p class="mb-4 text-sm text-base-content/60">
-      {status === 'loading' ? m.dashboard_communities_loading() : m.dashboard_communities_empty()}
-    </p>
-  {/if}
-
-  <div
-    data-testid="dashboard-communities-grid"
-    class="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3"
-  >
-    {#if canDiscoverCommunities}
-      {@render discoverCard()}
+        <span class="text-sm">{m.dashboard_communities_unavailable()}</span>
+        <button
+          type="button"
+          data-testid="dashboard-communities-retry"
+          class="btn shrink-0 whitespace-nowrap btn-sm"
+          onclick={() => joined.retry()}
+        >
+          {m.dashboard_communities_retry()}
+        </button>
+      </div>
+    {:else if joinedCommunities.length === 0}
+      <p class="mb-4 text-sm text-base-content/60">
+        {status === 'loading' ? m.dashboard_communities_loading() : m.dashboard_communities_empty()}
+      </p>
     {/if}
-    {@render createCard()}
-    {#each joinedCommunities as pubkey (pubkey)}
-      <CommunikeyCard {pubkey} />
-    {/each}
-  </div>
-</section>
+
+    <div
+      data-testid="dashboard-communities-grid"
+      class="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3"
+    >
+      {#if canDiscoverCommunities}
+        {@render discoverCard()}
+      {/if}
+      {@render createCard()}
+      {#each joinedCommunities as pubkey (pubkey)}
+        <CommunikeyCard {pubkey} />
+      {/each}
+    </div>
+  </section>
+{/if}
