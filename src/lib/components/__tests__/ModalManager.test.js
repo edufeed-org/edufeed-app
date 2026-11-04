@@ -47,6 +47,10 @@ vi.mock('../groups/BreakoutAssignmentModal.svelte', async () => {
   const mock = await import('./__mocks__/DialogModalStub.svelte');
   return { default: mock.default };
 });
+vi.mock('../profile/ProfileQrModal.svelte', async () => {
+  const mock = await import('./__mocks__/DialogModalStub.svelte');
+  return { default: mock.default };
+});
 vi.mock('../groups/CallPreJoinModal.svelte', async () => {
   const mock = await import('./__mocks__/DialogModalStub.svelte');
   return { default: mock.default };
@@ -205,6 +209,15 @@ describe('ModalManager lazy loading', () => {
     const dialog = await screen.findByTestId('dialog-stub');
     expect(dialog.dataset.props.split(',')).toEqual(
       expect.arrayContaining(['onCancel', 'onConfirm', 'title'])
+    );
+  });
+
+  it('renders the profile QR modal with the profile and a close callback (issue 9f7816e3)', async () => {
+    render(ModalManager);
+    modalStore.openModal('profileQr', { pubkey: 'a'.repeat(64), npub: 'npub1x' });
+    const dialog = await screen.findByTestId('dialog-stub');
+    expect(dialog.dataset.props.split(',')).toEqual(
+      expect.arrayContaining(['pubkey', 'npub', 'onClose'])
     );
   });
 

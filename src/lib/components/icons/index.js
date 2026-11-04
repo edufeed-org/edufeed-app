@@ -66,6 +66,7 @@ export { default as BibleIcon } from './ui/BibleIcon.svelte';
 export { default as PuzzleIcon } from './ui/PuzzleIcon.svelte';
 export { default as SmartphoneIcon } from './ui/SmartphoneIcon.svelte';
 export { default as KeyIcon } from './ui/KeyIcon.svelte';
+export { default as QrCodeIcon } from './ui/QrCodeIcon.svelte';
 
 // Action Icons
 export { default as CopyIcon } from './actions/CopyIcon.svelte';

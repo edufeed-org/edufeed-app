@@ -79,6 +79,9 @@ importers:
       h5p-standalone:
         specifier: ^3.8.2
         version: 3.8.2
+      jsqr:
+        specifier: ^1.4.0
+        version: 1.4.0
       light-bolt11-decoder:
         specifier: 3.2.0
         version: 3.2.0
@@ -2692,6 +2695,9 @@ packages:
   jsonld@8.3.3:
     resolution: {integrity: sha512-9YcilrF+dLfg9NTEof/mJLMtbdX1RJ8dbWtJgE00cMOIohb1lIyJl710vFiTaiHTl6ZYODJuBd32xFvUhmv3kg==}
     engines: {node: '>=14'}
+
+  jsqr@1.4.0:
+    resolution: {integrity: sha512-dxLob7q65Xg2DvstYkRpkYtmKm2sPJ9oFhrhmudT1dZvNFFTlroai3AWSpLey/w5vMcLBXRgOJsbXpdN9HzU/A==}
 
   jstransformer@1.0.0:
     resolution: {integrity: sha512-C9YK3Rf8q6VAPDCCU9fnqo3mAfOH6vUGnMcP4AQAYIEpWtfGLpwOTmZ+igtdK5y+VvI2n3CyYSzy4Qh34eq24A==}
@@ -6308,6 +6314,8 @@ snapshots:
       rdf-canonize: 3.4.0
     transitivePeerDependencies:
       - web-streams-polyfill
+
+  jsqr@1.4.0: {}
 
   jstransformer@1.0.0:
     dependencies:
