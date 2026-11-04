@@ -46,9 +46,10 @@ describe('kind-9000 "added you" notifications', () => {
     });
     expect(r.communityPubkey).toBe(OWNER);
     expect(r.href).toMatch(/^\/c\/npub1/);
+    expect(r.channel).toBe(false);
   });
 
-  it('falls back to the group route on the host for channels and foreign groups', () => {
+  it('opens a channel inside its community when its parent is a known membership root', () => {
     const r = resolveGroupAdded({
       groupId: 'chan9',
       relay: 'wss://groups.example',
@@ -56,13 +57,43 @@ describe('kind-9000 "added you" notifications', () => {
       metadataEvent: {
         tags: [
           ['d', 'chan9'],
-          ['name', 'arbeitszimmer']
+          ['name', 'Willkommen!'],
+          ['parent', 'root1']
         ]
       }
     });
-    expect(r.communityPubkey).toBeNull();
-    expect(r.href).toMatch(/^\/groups\//);
-    expect(r.groupName).toBe('arbeitszimmer');
+    expect(r.communityPubkey).toBe(OWNER);
+    expect(r.href).toMatch(/^\/c\/npub1[a-z0-9]+\?view=channels&channel=chan9$/);
+    expect(r.groupName).toBe('Willkommen!');
+    // A channel row names the channel (and its community), not the community alone.
+    expect(r.channel).toBe(true);
+  });
+
+  it('falls back to the group route on the host for foreign groups and unknown parents', () => {
+    const foreign = resolveGroupAdded({
+      groupId: 'chan9',
+      relay: 'wss://groups.example',
+      communikeyEvents: [community],
+      metadataEvent: {
+        tags: [
+          ['d', 'chan9'],
+          ['name', 'arbeitszimmer'],
+          ['parent', 'someone-elses-root']
+        ]
+      }
+    });
+    expect(foreign.communityPubkey).toBeNull();
+    expect(foreign.channel).toBe(true);
+    expect(foreign.href).toMatch(/^\/groups\//);
+    expect(foreign.groupName).toBe('arbeitszimmer');
+    // No 39000 yet (still loading): nothing to follow, host route for now.
+    const unknown = resolveGroupAdded({
+      groupId: 'chan9',
+      relay: 'wss://groups.example',
+      communikeyEvents: [community]
+    });
+    expect(unknown.communityPubkey).toBeNull();
+    expect(unknown.href).toMatch(/^\/groups\//);
     expect(resolveGroupAdded({ groupId: null, relay: null }).href).toBeNull();
   });
 });
@@ -82,6 +113,35 @@ describe('kind-9 channel mention target', () => {
     });
     expect(r.href).toMatch(/^\/groups\/.+\?message=m1$/);
     expect(r.groupName).toBe('arbeitszimmer');
+  });
+
+  it('opens the message inside the community page when the channel belongs to a known root', () => {
+    const r = resolveChannelMention({
+      groupId: 'chan9',
+      relay: 'wss://groups.example',
+      messageId: 'm1',
+      communikeyEvents: [community],
+      metadataEvent: {
+        tags: [
+          ['d', 'chan9'],
+          ['name', 'Willkommen!'],
+          ['parent', 'root1']
+        ]
+      }
+    });
+    expect(r.href).toMatch(/^\/c\/npub1[a-z0-9]+\?view=channels&channel=chan9&message=m1$/);
+    expect(r.groupName).toBe('Willkommen!');
+  });
+
+  it('opens a message in the membership root itself on the community page', () => {
+    const r = resolveChannelMention({
+      groupId: 'root1',
+      relay: 'wss://groups.example',
+      messageId: 'm1',
+      communikeyEvents: [community],
+      metadataEvent: { tags: [['d', 'root1']] }
+    });
+    expect(r.href).toMatch(/^\/c\/npub1[a-z0-9]+\?view=channels&channel=root1&message=m1$/);
   });
 
   it('yields no target without a group id or a host', () => {

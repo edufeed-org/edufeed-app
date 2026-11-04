@@ -1,6 +1,7 @@
 // Reactive resolution of a kind-9000 "added you" notification: which community
-// (kind 10222 whose membership pointer names the group) or, failing that,
-// which group host, plus the group's own name from its kind 39000.
+// (kind 10222 whose membership pointer names the group, or the group's
+// `parent` for a channel) or, failing that, which group host, plus the
+// group's own name from its kind 39000.
 import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
 import { TimelineModel } from 'applesauce-core/models';
 import { getGroupsRelays } from '$lib/helpers/relay-helper.js';
@@ -9,7 +10,7 @@ import { groupIdOf, resolveGroupAdded, resolveChannelMention } from './group-add
 /**
  * Call during component init.
  * @param {() => any} getEvent the kind-9000 event
- * @returns {() => { communityPubkey: string | null, href: string | null, groupName: string | null }}
+ * @returns {() => ReturnType<typeof resolveGroupAdded>}
  */
 export function useGroupAddedTarget(getEvent) {
   let communikeyEvents = $state.raw(/** @type {any[]} */ ([]));
@@ -54,18 +55,26 @@ export function useGroupAddedTarget(getEvent) {
  * @returns {() => { href: string | null, groupName: string | null }}
  */
 export function useChannelMentionTarget(getEvent) {
+  let communikeyEvents = $state.raw(/** @type {any[]} */ ([]));
   let metadataEvent = $state.raw(/** @type {any} */ (null));
 
   $effect(() => {
     const groupId = groupIdOf(getEvent());
+    communikeyEvents = [];
     metadataEvent = null;
     if (!groupId) return;
-    const sub = eventStore
+    const communitySub = eventStore.model(TimelineModel, { kinds: [10222] }).subscribe((events) => {
+      communikeyEvents = events ?? [];
+    });
+    const metaSub = eventStore
       .model(TimelineModel, { kinds: [39000], '#d': [groupId] })
       .subscribe((events) => {
         metadataEvent = events?.[0] ?? null;
       });
-    return () => sub.unsubscribe();
+    return () => {
+      communitySub.unsubscribe();
+      metaSub.unsubscribe();
+    };
   });
 
   return () => {
@@ -76,6 +85,7 @@ export function useChannelMentionTarget(getEvent) {
       // is where the inbox fetched the message from.
       relay: getGroupsRelays()[0] ?? null,
       messageId: event?.id ?? '',
+      communikeyEvents,
       metadataEvent
     });
   };
