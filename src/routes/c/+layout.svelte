@@ -106,12 +106,13 @@
         class="sticky top-0 z-30 flex items-center justify-between bg-base-200 p-4"
       >
         {#if isDashboardActive}
-          <!-- Dashboard: plain logo; the Communities dock tab is the switcher -->
+          <!-- Dashboard: plain logo (decorative: the h1 beside it names the app);
+                 the Communities dock tab is the switcher -->
           <div class="avatar px-1">
             <div class="w-8 rounded-full">
               <ImageWithFallback
                 src={runtimeConfig.appLogo}
-                alt={m.community_layout_title()}
+                alt=""
                 fallbackType="generic"
                 class="h-full w-full object-cover"
               />

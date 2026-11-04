@@ -27,7 +27,7 @@ import {
 } from '$lib/models/community-content.js';
 
 /**
- * @typedef {{ items: any[], perCommunity: Map<string, any[]>, isLoading: boolean }} JoinedCommunityItems
+ * @typedef {{ items: any[], perCommunity: Map<string, any[]>, communityEvents: Map<string, any>, isLoading: boolean }} JoinedCommunityItems
  */
 
 /**
@@ -37,6 +37,11 @@ import {
 export function useJoinedCommunityItems(getPubkeys) {
   let items = $state.raw(/** @type {any[]} */ ([]));
   let perCommunity = $state.raw(/** @type {Map<string, any[]>} */ (new Map()));
+  // Each community's kind 10222 (or null until it arrives) — exposed so the
+  // Communities list reads the tabs from here instead of subscribing again.
+  let communityEvents = $state.raw(/** @type {Map<string, any>} */ (new Map()));
+  // true only until the first merge after mount: a later list change keeps
+  // what is already there on screen while the new community loads.
   let isLoading = $state(true);
 
   $effect(() => {
@@ -49,14 +54,16 @@ export function useJoinedCommunityItems(getPubkeys) {
     /** @type {Map<string, { communityEvent: any, access: { isLoading: boolean, getAllowedAuthors: (name: string) => string[] | null } | null }>} */
     const perCommunityAcl = new Map();
 
+    /** @type {Map<string, any>} */
+    const events = new Map(communities.map((pubkey) => [pubkey, null]));
+    communityEvents = new Map(events);
+
     if (communities.length === 0) {
       items = [];
       perCommunity = new Map();
       isLoading = false;
       return;
     }
-
-    isLoading = true;
 
     for (const pubkey of communities) {
       // Ensure community kind 10222 event is in EventStore for relay discovery
@@ -99,6 +106,8 @@ export function useJoinedCommunityItems(getPubkeys) {
       let aclCleanup;
       const communitySub = eventStore.replaceable(10222, pubkey).subscribe((communityEvent) => {
         if (aclCleanup) aclCleanup();
+        events.set(pubkey, communityEvent ?? null);
+        communityEvents = new Map(events);
 
         if (!communityEvent) {
           perCommunityAcl.set(pubkey, { communityEvent: null, access: null });
@@ -160,5 +169,5 @@ export function useJoinedCommunityItems(getPubkeys) {
     };
   });
 
-  return () => ({ items, perCommunity, isLoading });
+  return () => ({ items, perCommunity, communityEvents, isLoading });
 }

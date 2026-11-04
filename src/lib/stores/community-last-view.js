@@ -110,6 +110,23 @@ export function rememberCommunityView(pubkey, view, now, storage = undefined) {
 }
 
 /**
+ * Every live entry in one read — the Communities list calls this once per
+ * recompute instead of parsing the map once per community.
+ * @param {number} now - unix seconds
+ * @param {Storage | undefined} [storage]
+ * @returns {Map<string, { view: string, at: number }>}
+ */
+export function readAllCommunityViews(now, storage = undefined) {
+  const out = new Map();
+  for (const [pubkey, entry] of Object.entries(readMap(resolveStorage(storage)))) {
+    if (!entry || typeof entry.at !== 'number' || typeof entry.view !== 'string') continue;
+    if (now - entry.at > LAST_VIEW_TTL_SECONDS) continue;
+    out.set(pubkey, { view: entry.view, at: entry.at });
+  }
+  return out;
+}
+
+/**
  * @param {string} pubkey
  * @param {number} now - unix seconds
  * @param {Storage | undefined} [storage]

@@ -23,7 +23,8 @@ const state = vi.hoisted(() => ({
   discoverTypes: ['events', 'communities'],
   openModal: vi.fn(),
   retry: vi.fn(),
-  requestChannelList: vi.fn()
+  requestChannelList: vi.fn(),
+  readAllCalls: 0
 }));
 vi.mock('$lib/groups/group-channel-selection.svelte.js', () => ({
   requestChannelList: (/** @type {string} */ pk) => state.requestChannelList(pk)
@@ -44,6 +45,12 @@ vi.mock('$lib/stores/joined-community-items.svelte.js', () => ({
   useJoinedCommunityItems: () => () => ({
     items: [],
     perCommunity: state.perCommunity,
+    communityEvents: new Map(
+      [...state.perCommunity.keys(), A, B, C].map((pk) => [
+        pk,
+        { kind: 10222, pubkey: pk, tags: [], content: '' }
+      ])
+    ),
     isLoading: state.isLoading
   })
 }));
@@ -56,16 +63,16 @@ vi.mock('$lib/stores/profile-map.svelte.js', () => ({
     ])
 }));
 vi.mock('$lib/stores/community-last-view.js', () => ({
-  readCommunityView: (/** @type {string} */ pk) => state.lastView[pk] ?? null
+  readAllCommunityViews: () => {
+    state.readAllCalls++;
+    return new Map(Object.entries(state.lastView).filter(([, v]) => v));
+  }
 }));
 vi.mock('$lib/stores/nostr-infrastructure.svelte', () => ({
   eventStore: {
-    replaceable: (_kind, _pk) => ({
-      subscribe: (/** @type {(e: any) => void} */ cb) => {
-        cb({ kind: 10222, pubkey: _pk, tags: [], content: '' });
-        return { unsubscribe: () => {} };
-      }
-    })
+    replaceable: () => {
+      throw new Error('the Communities list must not subscribe to the store itself');
+    }
   }
 }));
 vi.mock('$lib/helpers/contentTypes.js', async (orig) => ({
@@ -135,6 +142,16 @@ describe('DashboardCommunitiesPhone', () => {
     state.lastView = { [A]: { view: 'chat', at: 200 }, [B]: null };
     state.discoverTypes = ['events', 'communities'];
     state.openModal.mockReset();
+    state.readAllCalls = 0;
+  });
+
+  it('titles the list with an h2 (the phone header already carries the h1) and reads storage once', () => {
+    const { container } = render(Phone);
+    expect(container.querySelector('[data-testid="communities-phone"] h1')).toBeNull();
+    expect(container.querySelector('[data-testid="communities-phone"] h2')?.textContent).toContain(
+      'Communities'
+    );
+    expect(state.readAllCalls).toBe(1);
   });
 
   it('orders rows by newest activity and links each to its target section', () => {

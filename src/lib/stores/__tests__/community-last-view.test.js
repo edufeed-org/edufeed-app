@@ -8,6 +8,7 @@ import {
   LAST_VIEW_TTL_SECONDS,
   isRememberableView,
   isExplicitCommunityView,
+  readAllCommunityViews,
   readCommunityView,
   rememberCommunityView
 } from '../community-last-view.js';
@@ -114,6 +115,24 @@ describe('rememberCommunityView / readCommunityView', () => {
     expect(readCommunityView(B, 500, mem)).toEqual({ view: 'home', at: 500 });
   });
 
+  it('readAllCommunityViews returns every live entry in one read (expired ones dropped)', () => {
+    rememberCommunityView(A, 'calendar', 1000, mem);
+    rememberCommunityView(B, 'chat', 2000, mem);
+    const all = readAllCommunityViews(2000 + LAST_VIEW_TTL_SECONDS - 500, mem);
+    expect(all.get(B)).toEqual({ view: 'chat', at: 2000 });
+    expect(all.has(A)).toBe(false);
+    expect(
+      readAllCommunityViews(
+        1,
+        /** @type {any} */ ({
+          getItem: () => {
+            throw new Error('x');
+          }
+        })
+      ).size
+    ).toBe(0);
+  });
+
   it('expires entries after 90 days', () => {
     rememberCommunityView(A, 'calendar', 1000, mem);
     expect(readCommunityView(A, 1000 + LAST_VIEW_TTL_SECONDS - 1, mem)).not.toBeNull();
@@ -141,7 +160,7 @@ describe('rememberCommunityView / readCommunityView', () => {
       expect(readCommunityView(A, 1)).toBeNull();
     } finally {
       if (desc) Object.defineProperty(globalThis, 'localStorage', desc);
-      else delete /** @type {any} */ (globalThis).localStorage;
+      else delete (/** @type {any} */ (globalThis).localStorage);
     }
   });
 

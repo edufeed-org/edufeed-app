@@ -18,7 +18,11 @@ const spies = vi.hoisted(() => ({
   activityCleanup: vi.fn(),
   bookmarkCleanup: vi.fn(),
   /** @type {Map<string, {next: (v: any[]) => void}>} */
-  subjects: new Map()
+  subjects: new Map(),
+  /** when true, model subscriptions emit nothing on subscribe (async relay) */
+  silentModels: false,
+  /** @type {Map<string, (e: any) => void>} */
+  replaceables: new Map()
 }));
 
 vi.mock('$lib/loaders/base.js', () => ({
@@ -46,14 +50,15 @@ vi.mock('$lib/stores/nostr-infrastructure.svelte', () => ({
     model: (model, pubkey) => ({
       subscribe: (obs) => {
         spies.subjects.set(`${model}:${pubkey}`, obs);
-        obs.next([]);
+        if (!spies.silentModels) obs.next([]);
         return { unsubscribe: () => spies.subjects.delete(`${model}:${pubkey}`) };
       }
     }),
-    replaceable: () => ({
+    replaceable: (_kind, pubkey) => ({
       subscribe: (cb) => {
+        spies.replaceables.set(pubkey, cb);
         cb(undefined);
-        return { unsubscribe: () => {} };
+        return { unsubscribe: () => spies.replaceables.delete(pubkey) };
       }
     })
   }
@@ -78,6 +83,47 @@ describe('useJoinedCommunityItems', () => {
     spies.activityCleanup.mockClear();
     spies.bookmarkCleanup.mockClear();
     spies.subjects.clear();
+    spies.replaceables.clear();
+    spies.silentModels = false;
+  });
+
+  it("exposes each community's kind 10222 event so consumers need no second subscription", () => {
+    let pubkeys = $state.raw([A]);
+    let snapshot;
+    const stop = $effect.root(() => {
+      const get = useJoinedCommunityItems(() => pubkeys);
+      $effect(() => {
+        snapshot = get();
+      });
+    });
+    flushSync();
+    expect(snapshot.communityEvents.get(A)).toBeNull();
+    const event = { kind: 10222, pubkey: A, tags: [], content: '' };
+    spies.replaceables.get(A)?.(event);
+    flushSync();
+    expect(snapshot.communityEvents.get(A)).toBe(event);
+    stop();
+  });
+
+  it('does not flip back to loading when the list changes and the models have not answered yet', () => {
+    let pubkeys = $state.raw([A]);
+    let snapshot;
+    const stop = $effect.root(() => {
+      const get = useJoinedCommunityItems(() => pubkeys);
+      $effect(() => {
+        snapshot = get();
+      });
+    });
+    flushSync();
+    emit('activity', A, [ev(A, 10)]);
+    flushSync();
+    expect(snapshot.isLoading).toBe(false);
+    spies.silentModels = true;
+    pubkeys = [A, B];
+    flushSync();
+    // store first: what is already there keeps rendering while B loads
+    expect(snapshot.isLoading).toBe(false);
+    stop();
   });
 
   it('starts one activity + one bookmark loader per community and merges their models', () => {

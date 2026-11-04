@@ -8,15 +8,13 @@
 -->
 
 <script>
-  /* eslint-disable svelte/prefer-svelte-reactivity -- Map replaced wholesale in $state.raw, never mutated reactively */
   import { resolve } from '$app/paths';
   import { getProfilePicture } from 'applesauce-core/helpers';
   import * as m from '$lib/paraglide/messages';
   import { useJoinedCommunitiesState } from '$lib/stores/joined-communities-list.svelte.js';
   import { useJoinedCommunityItems } from '$lib/stores/joined-community-items.svelte.js';
   import { useProfileMap } from '$lib/stores/profile-map.svelte.js';
-  import { readCommunityView } from '$lib/stores/community-last-view.js';
-  import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
+  import { readAllCommunityViews } from '$lib/stores/community-last-view.js';
   import { modalStore } from '$lib/stores/modal.svelte.js';
   import { runtimeConfig } from '$lib/stores/config.svelte.js';
   import { isDiscoverTypeEnabled } from '$lib/helpers/discover-content-types.js';
@@ -48,21 +46,6 @@
     canDiscoverCommunities ? resolve('/discover?type=communities') : resolve('/communities')
   );
 
-  // Kind 10222 per community (the items hook's address loader fills the
-  // store; this only reads it) — decides which sections a row may target.
-  let communityEvents = $state.raw(/** @type {Map<string, any>} */ (new Map()));
-  $effect(() => {
-    const pubkeys = joinedCommunities;
-    const next = new Map();
-    const subs = pubkeys.map((pubkey) =>
-      eventStore.replaceable(10222, pubkey).subscribe((event) => {
-        next.set(pubkey, event ?? null);
-        communityEvents = new Map(next);
-      })
-    );
-    return () => subs.forEach((s) => s.unsubscribe());
-  });
-
   /** @param {any} event */
   function itemTitle(event) {
     const data = /** @type {any} */ (getFeedCardData(event));
@@ -72,12 +55,13 @@
 
   let rows = $derived.by(() => {
     const now = Math.floor(Date.now() / 1000);
-    const { perCommunity } = getItems();
+    const { perCommunity, communityEvents } = getItems();
     const profiles = getProfiles();
+    const lastViews = readAllCommunityViews(now);
     const list = joinedCommunities.map((pubkey, index) => {
       const profile = profiles.get(pubkey);
       const newest = newestCommunityItem(perCommunity.get(pubkey) ?? []);
-      const last = readCommunityView(pubkey, now);
+      const last = lastViews.get(pubkey) ?? null;
       const lastVisit = last?.at ?? null;
       const tabs = getCommunityTabs(communityEvents.get(pubkey) ?? null);
       const target = communityRowTarget({
@@ -119,7 +103,7 @@
 
 <section data-testid="communities-phone">
   <div class="mb-4 flex items-center gap-3">
-    <h1 class="flex-1 text-2xl font-bold">{m.dashboard_communities_title()}</h1>
+    <h2 class="flex-1 text-2xl font-bold">{m.dashboard_communities_title()}</h2>
     <a href={findHref} data-testid="communities-find" class="btn btn-outline btn-sm">
       <SearchIcon class_="h-4 w-4" />
       {m.dashboard_communities_find()}
