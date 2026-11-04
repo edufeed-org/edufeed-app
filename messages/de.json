@@ -4486,6 +4486,5 @@
   "settings_relay_badge_auth": "Anmeldung nötig",
   "settings_relay_badge_paid": "Bezahlt",
   "settings_relay_health_help": "Geprüft von diesem Gerät aus. Ein Relay, das deine Liste nicht hat, wird von anderen Apps unter Umständen nicht gefunden – beim Speichern wird sie dorthin veröffentlicht.",
-  "profile_following_button": "Folgst du",
   "profile_open_community_hint": "Termine, Material und Austausch"
 }

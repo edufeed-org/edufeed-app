@@ -21,7 +21,8 @@
     LightningIcon,
     MessageSquareIcon,
     PeopleIcon,
-    PlusIcon,
+    PersonAddIcon,
+    PersonDashIcon,
     QrCodeIcon,
     ChevronRightIcon,
     MoreIcon
@@ -312,7 +313,8 @@
             </span>
           {/if}
           {#if isFollowing}
-            <!-- Following reads as state; Entfolgen is rare and lives one tap down. -->
+            <!-- Following: the button is named for what it does (Entfolgen); the actual
+                 unfollow is confirmed one tap down so a stray tap cannot drop a follow. -->
             <div class="dropdown dropdown-end">
               <button
                 class="pf-btn ghost"
@@ -320,16 +322,16 @@
                 data-testid="follow-button"
                 tabindex="0"
                 aria-haspopup="menu"
-                aria-label={m.profile_following_button()}
-                title={isNarrow ? undefined : m.profile_following_button()}
+                aria-label={m.profile_unfollow_button()}
+                title={isNarrow ? undefined : m.profile_unfollow_button()}
                 disabled={followLoading}
               >
                 {#if followLoading}
                   <span class="loading loading-xs loading-spinner"></span>
                 {:else}
-                  <CheckIcon class_="w-4 h-4" />
+                  <PersonDashIcon class_="w-4 h-4" />
                 {/if}
-                {#if isNarrow}{m.profile_following_button()}{/if}
+                {#if isNarrow}{m.profile_unfollow_button()}{/if}
               </button>
               <ul class="dropdown-content menu z-40 w-48 rounded-box bg-base-100 p-2 shadow-lg">
                 <li>
@@ -352,7 +354,7 @@
               {#if followLoading}
                 <span class="loading loading-xs loading-spinner"></span>
               {:else}
-                <PlusIcon class_="w-4 h-4" />
+                <PersonAddIcon class_="w-4 h-4" />
               {/if}
               {#if isNarrow}{m.profile_follow_button()}{/if}
             </button>

@@ -4486,6 +4486,5 @@
   "settings_relay_badge_auth": "Login required",
   "settings_relay_badge_paid": "Paid",
   "settings_relay_health_help": "Checked from this device. A relay that does not have your list may not be found by other apps – saving publishes the list there.",
-  "profile_following_button": "Following",
   "profile_open_community_hint": "Events, materials and exchange"
 }

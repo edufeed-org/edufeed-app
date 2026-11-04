@@ -202,14 +202,23 @@ describe('<ProfileHeader>', () => {
     expect(item.textContent.length).toBeLessThan(NPUB.length + 40);
   });
 
-  it('following: the follow button reads as state and unfollow lives in its dropdown', async () => {
+  it('following: a person-dash button named Entfolgen; the actual unfollow is one tap down', async () => {
     const onFollow = vi.fn();
     const { container } = render(ProfileHeader, baseProps({ isFollowing: true, onFollow }));
     const btn = container.querySelector('[data-testid="follow-button"]');
+    expect(btn.getAttribute('aria-label')).toMatch(/Entfolgen|Unfollow/);
+    expect(btn.querySelector('svg title')?.textContent).not.toMatch(/check/i);
     await fireEvent.click(btn);
     expect(onFollow).not.toHaveBeenCalled();
     await fireEvent.click(container.querySelector('[data-testid="unfollow-button"]'));
     expect(onFollow).toHaveBeenCalledTimes(1);
+  });
+
+  it('not following: a person-add button named Folgen', () => {
+    const { container } = render(ProfileHeader, baseProps({ isFollowing: false }));
+    const btn = container.querySelector('[data-testid="follow-button"]');
+    expect(btn.getAttribute('aria-label')).toMatch(/Folgen|Follow/);
+    expect(btn.querySelector('svg title')?.textContent).toMatch(/person/i);
   });
 
   it('wide: the row is icon-only squares with accessible names; phone: labelled buttons', () => {
