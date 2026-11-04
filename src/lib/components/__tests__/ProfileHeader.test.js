@@ -1,6 +1,6 @@
 // @ts-nocheck
 /** @vitest-environment jsdom */
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, fireEvent } from '@testing-library/svelte';
 import ProfileHeader from '../profile/ProfileHeader.svelte';
 import { modalStore } from '$lib/stores/modal.svelte.js';
@@ -72,6 +72,11 @@ function baseProps(overrides = {}) {
 }
 
 describe('<ProfileHeader>', () => {
+  afterEach(() => {
+    // narrow-viewport tests stub window.matchMedia; never let it leak
+    delete window.matchMedia;
+  });
+
   it('shows no verified chip: the NIP-05 line itself is the verified marker', () => {
     const { container } = render(
       ProfileHeader,
@@ -205,6 +210,36 @@ describe('<ProfileHeader>', () => {
     expect(onFollow).not.toHaveBeenCalled();
     await fireEvent.click(container.querySelector('[data-testid="unfollow-button"]'));
     expect(onFollow).toHaveBeenCalledTimes(1);
+  });
+
+  it('wide: the row is icon-only squares with accessible names; phone: labelled buttons', () => {
+    const wide = render(ProfileHeader, baseProps());
+    const follow = wide.container.querySelector('[data-testid="follow-button"]');
+    // icon only: the button's text is nothing but the SVG's own title
+    const onlyIcon = (el) =>
+      el.textContent.trim() === (el.querySelector('svg')?.textContent ?? '').trim();
+    expect(follow.classList.contains('icon')).toBe(true);
+    expect(follow.getAttribute('aria-label')).toBeTruthy();
+    expect(onlyIcon(follow)).toBe(true);
+    const dm = wide.container.querySelector(`a[href*="/c/messages?to=${PUBKEY}"]`);
+    expect(dm.classList.contains('icon')).toBe(true);
+    expect(onlyIcon(dm)).toBe(true);
+    wide.unmount();
+    window.matchMedia = (query) => ({
+      matches: query.includes('max-width'),
+      media: query,
+      addEventListener: () => {},
+      removeEventListener: () => {},
+      addListener: () => {},
+      removeListener: () => {},
+      onchange: null,
+      dispatchEvent: () => false
+    });
+    const narrow = render(ProfileHeader, baseProps());
+    const nfollow = narrow.container.querySelector('[data-testid="follow-button"]');
+    expect(nfollow.classList.contains('icon')).toBe(false);
+    expect(onlyIcon(nfollow)).toBe(false);
+    narrow.unmount();
   });
 
   it('puts the wave in the button row on wide screens and on the avatar on phones', () => {

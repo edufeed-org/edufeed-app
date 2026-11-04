@@ -5,9 +5,10 @@
   import { showToast } from '$lib/helpers/toast';
   import * as m from '$lib/paraglide/messages.js';
 
-  /** @type {{ profileEvent: any, pubkey: string , label?: string }} */
-  /** `label` renders a labelled pill (profile header row) instead of the icon circle. */
-  let { profileEvent, pubkey, label = '' } = $props();
+  /** @type {{ profileEvent: any, pubkey: string, variant?: 'circle' | 'header' }} */
+  /** `variant: 'header'` renders the profile header's 46px square (matches its
+   *  sibling buttons there) instead of the DaisyUI icon circle. */
+  let { profileEvent, pubkey, variant = 'circle' } = $props();
 
   /** @type {any[]} */
   let reactions = $state.raw([]);
@@ -53,13 +54,51 @@
   }
 </script>
 
-<button
-  class="btn transition-colors btn-sm {label ? 'gap-2 rounded-[10px] px-4' : 'btn-circle'}
-    {waved || !cooldownState.canWave ? 'btn-success' : label ? 'btn-outline' : 'btn-ghost'}"
-  onclick={handleWave}
-  disabled={!cooldownState.canWave}
-  title={cooldownState.canWave ? m.wave_button_tooltip() : m.wave_cooldown_tooltip()}
->
-  <span class="text-lg">👋</span>
-  {#if label}<span class="font-semibold">{label}</span>{/if}
-</button>
+{#if variant === 'header'}
+  <button
+    class="wave-header"
+    class:done={waved || !cooldownState.canWave}
+    onclick={handleWave}
+    disabled={!cooldownState.canWave}
+    title={cooldownState.canWave ? m.wave_button_tooltip() : m.wave_cooldown_tooltip()}
+    aria-label={cooldownState.canWave ? m.wave_button_tooltip() : m.wave_cooldown_tooltip()}
+  >
+    <span class="text-lg">👋</span>
+  </button>
+{:else}
+  <button
+    class="btn btn-circle transition-colors btn-sm
+      {waved || !cooldownState.canWave ? 'btn-success' : 'btn-ghost'}"
+    onclick={handleWave}
+    disabled={!cooldownState.canWave}
+    title={cooldownState.canWave ? m.wave_button_tooltip() : m.wave_cooldown_tooltip()}
+  >
+    <span class="text-lg">👋</span>
+  </button>
+{/if}
+
+<style>
+  /* Same metrics as ProfileHeader's .pf-btn.ghost.icon (46px, 10px radius,
+     paper + rule ring) so the header row reads as one set of squares. */
+  .wave-header {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 46px;
+    height: 46px;
+    border-radius: 10px;
+    border: 0;
+    cursor: pointer;
+    background: var(--c-paper);
+    color: var(--c-ink);
+    box-shadow: inset 0 0 0 1.5px var(--c-rule);
+    transition: background 0.15s;
+  }
+  .wave-header:hover {
+    background: var(--c-bg);
+  }
+  .wave-header.done {
+    background: var(--c-band);
+    cursor: default;
+  }
+</style>

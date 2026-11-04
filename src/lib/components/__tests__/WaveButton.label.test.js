@@ -1,7 +1,7 @@
 // @ts-nocheck
 /** @vitest-environment jsdom */
-// The profile header's desktop row renders the wave as a labelled pill;
-// everywhere else it stays the icon circle.
+// The profile header's desktop row renders the wave as a 46px square that
+// matches its sibling buttons; everywhere else it stays the DaisyUI circle.
 import { describe, it, expect, vi } from 'vitest';
 import { render } from '@testing-library/svelte';
 
@@ -56,10 +56,12 @@ describe('WaveButton', () => {
     expect(btn.textContent).not.toContain('Winken');
   });
 
-  it('renders a labelled pill when given a label', () => {
-    const { container } = render(WaveButton, { ...props, label: 'Winken' });
+  it('renders a 46px header square (no DaisyUI btn sizing) in the header variant', () => {
+    const { container } = render(WaveButton, { ...props, variant: 'header' });
     const btn = container.querySelector('button');
-    expect(btn.classList.contains('btn-circle')).toBe(false);
-    expect(btn.textContent).toContain('Winken');
+    expect(btn.classList.contains('btn')).toBe(false);
+    expect(btn.classList.contains('wave-header')).toBe(true);
+    expect(btn.getAttribute('aria-label')).toBe('Winken');
+    expect(btn.textContent).not.toContain('Winken');
   });
 });

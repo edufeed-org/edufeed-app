@@ -292,23 +292,23 @@
         </div>
       {:else}
         {#if activeUser}
+          <!-- Wide screens: four equal 46px squares (icons, names as tooltip
+               + aria-label); phones: labelled Nachricht / Folgen. -->
           <a
             href={resolve(`/c/messages?to=${pubkey}`)}
             class="pf-btn"
-            class:solid={isFollowing}
-            class:ghost={!isFollowing}
-            aria-label={m.dm_title()}
+            class:solid={isFollowing && isNarrow}
+            class:ghost={!(isFollowing && isNarrow)}
+            class:icon={!isNarrow}
+            title={isNarrow ? undefined : m.profile_message_button()}
+            aria-label={m.profile_message_button()}
           >
             <MessageSquareIcon class_="w-4 h-4" />
-            {m.profile_message_button()}
+            {#if isNarrow}{m.profile_message_button()}{/if}
           </a>
           {#if !isNarrow}
             <span data-testid="wave-row" class="contents">
-              <WaveButton
-                {profileEvent}
-                pubkey={activeUser.pubkey}
-                label={m.wave_button_tooltip()}
-              />
+              <WaveButton {profileEvent} pubkey={activeUser.pubkey} variant="header" />
             </span>
           {/if}
           {#if isFollowing}
@@ -316,9 +316,12 @@
             <div class="dropdown dropdown-end">
               <button
                 class="pf-btn ghost"
+                class:icon={!isNarrow}
                 data-testid="follow-button"
                 tabindex="0"
                 aria-haspopup="menu"
+                aria-label={m.profile_following_button()}
+                title={isNarrow ? undefined : m.profile_following_button()}
                 disabled={followLoading}
               >
                 {#if followLoading}
@@ -326,7 +329,7 @@
                 {:else}
                   <CheckIcon class_="w-4 h-4" />
                 {/if}
-                {m.profile_following_button()}
+                {#if isNarrow}{m.profile_following_button()}{/if}
               </button>
               <ul class="dropdown-content menu z-40 w-48 rounded-box bg-base-100 p-2 shadow-lg">
                 <li>
@@ -339,7 +342,10 @@
           {:else}
             <button
               class="pf-btn solid"
+              class:icon={!isNarrow}
               data-testid="follow-button"
+              aria-label={m.profile_follow_button()}
+              title={isNarrow ? undefined : m.profile_follow_button()}
               disabled={followLoading}
               onclick={onFollow}
             >
@@ -348,7 +354,7 @@
               {:else}
                 <PlusIcon class_="w-4 h-4" />
               {/if}
-              {m.profile_follow_button()}
+              {#if isNarrow}{m.profile_follow_button()}{/if}
             </button>
           {/if}
         {/if}
