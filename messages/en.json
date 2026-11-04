@@ -1896,6 +1896,7 @@
   "profile_tab_resources": "Resources",
   "profile_tab_articles": "Articles",
   "profile_tab_publications": "Publications",
+  "profile_publication_chapters": "{count} chapters",
   "profile_tab_communities": "Communities",
   "profile_tab_bookmarks": "Bookmarks",
   "profile_tab_polls": "Polls",

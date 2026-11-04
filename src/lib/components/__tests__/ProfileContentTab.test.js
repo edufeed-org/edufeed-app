@@ -225,4 +225,37 @@ describe('<ProfileContentTab>', () => {
     expect(r.container.textContent).toContain('Kann KI Spiritualität?');
     expect(r.container.textContent).toContain('Ein Beitrag über KI.');
   });
+
+  // NKBIP-01: a book's chapters (30040 sub-indexes it references) are listed
+  // under the book instead of as publications of their own.
+  it('lists the chapters of a book under it, not as separate publications', async () => {
+    const r = render(ProfileContentTab, { pubkey: PUBKEY, tabId: 'publications' });
+    await emit([
+      ev(30040, {
+        tags: [
+          ['d', 'book'],
+          ['title', 'Das Buch'],
+          ['a', `30040:${PUBKEY}:ch2`],
+          ['a', `30040:${PUBKEY}:ch1`]
+        ]
+      }),
+      ev(30040, {
+        tags: [
+          ['d', 'ch1'],
+          ['title', 'Kapitel Eins']
+        ]
+      }),
+      ev(30040, {
+        tags: [
+          ['d', 'ch2'],
+          ['title', 'Kapitel Zwei']
+        ]
+      })
+    ]);
+    expect(r.getAllByTestId('publication-entry')).toHaveLength(1);
+    const chapters = r.getByTestId('publication-chapters');
+    const links = [...chapters.querySelectorAll('a')];
+    expect(links.map((a) => a.textContent?.trim())).toEqual(['Kapitel Zwei', 'Kapitel Eins']);
+    for (const a of links) expect(a.getAttribute('href')).toMatch(/naddr1/);
+  });
 });

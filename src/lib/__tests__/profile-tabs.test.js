@@ -297,12 +297,34 @@ describe('tabForPostsStat', () => {
 describe('publications tab (kind 30040)', () => {
   it('counts publications in their own tab, not in the posts total', () => {
     const counts = tabCountsFromEvents([
-      { kind: 30040, tags: [] },
-      { kind: 30040, tags: [] },
+      { kind: 30040, pubkey: 'a', tags: [['d', 'one']] },
+      { kind: 30040, pubkey: 'a', tags: [['d', 'two']] },
       { kind: 30023, tags: [] }
     ]);
     expect(counts.publications).toBe(2);
     expect(counts.posts).toBe(1);
+  });
+
+  // NKBIP-01: chapters (sub-indexes) of a loaded book are listed under it,
+  // so the tab counts books, not every chapter.
+  it('counts a book with its chapters once', () => {
+    const P = 'a'.repeat(64);
+    const pub = (d, tags = []) => ({
+      kind: 30040,
+      pubkey: P,
+      created_at: 1,
+      tags: [['d', d], ...tags]
+    });
+    const counts = tabCountsFromEvents([
+      pub('book', [
+        ['a', `30040:${P}:ch1`],
+        ['a', `30040:${P}:ch2`]
+      ]),
+      pub('ch1'),
+      pub('ch2'),
+      pub('other')
+    ]);
+    expect(counts.publications).toBe(2);
   });
 
   it('is an auto tab while the owner has not placed it explicitly', () => {

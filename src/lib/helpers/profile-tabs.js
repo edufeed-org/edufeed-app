@@ -10,6 +10,7 @@
  */
 import { getNip10References } from 'applesauce-common/helpers';
 import { kindToFeedCategory, ALL_FEED_KINDS } from '$lib/helpers/profile-feed.js';
+import { groupPublicationChapters } from '$lib/helpers/publication-tree.js';
 import { filterSocialBookmarks, groupByUrl, groupByEventRef } from '$lib/helpers/urlGrouping.js';
 
 /** @type {string[]} */
@@ -91,10 +92,12 @@ export function tabCountsFromEvents(events) {
 
   /** @type {any[]} */
   const bookmarkEvents = [];
+  /** @type {any[]} */
+  const publicationEvents = [];
   for (const event of events || []) {
     // Publications have their own tab only — not part of the posts total.
     if (TAB_KINDS.publications.includes(event.kind)) {
-      counts.publications += 1;
+      publicationEvents.push(event);
       continue;
     }
     const category = kindToFeedCategory(event.kind);
@@ -116,6 +119,9 @@ export function tabCountsFromEvents(events) {
     const tab = CATEGORY_TO_TAB[category];
     if (tab && tab !== 'posts') counts[tab] += 1;
   }
+
+  // The tab lists books; their chapters (NKBIP-01 sub-indexes) sit inside.
+  counts.publications = groupPublicationChapters(publicationEvents).length;
 
   if (bookmarkEvents.length > 0) {
     counts.bookmarks =

@@ -31,6 +31,7 @@
   import FeedCard from '$lib/components/shared/FeedCard.svelte';
   import { getFeedCardData } from '$lib/helpers/feedCardData.js';
   import { getContentEventRoute } from '$lib/helpers/contentNavigation.js';
+  import { groupPublicationChapters } from '$lib/helpers/publication-tree.js';
   import { goto } from '$app/navigation';
   import { resolve } from '$app/paths';
   import { FilesIcon } from '$lib/components/icons';
@@ -68,6 +69,28 @@
 
   /** @type {string | null} */
   let pinBusy = $state(null);
+
+  // NKBIP-01: chapters (30040 sub-indexes a book references) sit under the
+  // book instead of being listed as publications of their own.
+  let publicationGroups = $derived(
+    tabId === 'publications' ? groupPublicationChapters(events) : []
+  );
+
+  /** @param {any} event */
+  function chapterTitle(event) {
+    const tags = event.tags || [];
+    return (
+      tags.find((/** @type {string[]} */ t) => t[0] === 'title')?.[1] ||
+      tags.find((/** @type {string[]} */ t) => t[0] === 'd')?.[1] ||
+      ''
+    );
+  }
+
+  /** @param {any} event */
+  function chapterHref(event) {
+    const route = getContentEventRoute(event);
+    return route ? resolve(/** @type {any} */ (route)) : undefined;
+  }
 
   /** @param {any} event */
   function openEvent(event) {
@@ -253,29 +276,51 @@
     <!-- No type badge: every card here is a publication, and the pin pill
          straddles the card's top-right corner where the badge sits. -->
     <div class="space-y-4">
-      {#each events as event (event.id)}
+      {#each publicationGroups as group (group.event.id)}
+        {@const event = group.event}
         {@const card = getFeedCardData(event)}
         {@const author = authorProfiles.get(event.pubkey)}
-        <div
-          class="relative"
-          class:pf-pinned-card={isEntryPinned({ data: event }, pinnedPointers)}
-          class:mt-3={isEntryPinned({ data: event }, pinnedPointers)}
-        >
-          {@render pinRow(event)}
-          <FeedCard
-            title={card.title}
-            typeKey={card.typeKey}
-            kind={event.kind}
-            tags={card.tags}
-            description={card.description}
-            authorName={author?.displayName || author?.name}
-            authorAvatar={author?.picture}
-            authorPubkey={event.pubkey}
-            {event}
-            timestamp={event.created_at}
-            showBadge={false}
-            onclick={() => openEvent(event)}
-          />
+        <div data-testid="publication-entry">
+          <div
+            class="relative"
+            class:pf-pinned-card={isEntryPinned({ data: event }, pinnedPointers)}
+            class:mt-3={isEntryPinned({ data: event }, pinnedPointers)}
+          >
+            {@render pinRow(event)}
+            <FeedCard
+              title={card.title}
+              typeKey={card.typeKey}
+              kind={event.kind}
+              tags={card.tags}
+              description={card.description}
+              authorName={author?.displayName || author?.name}
+              authorAvatar={author?.picture}
+              authorPubkey={event.pubkey}
+              {event}
+              timestamp={event.created_at}
+              showBadge={false}
+              onclick={() => openEvent(event)}
+            />
+          </div>
+          {#if group.chapters.length > 0}
+            <!-- Open for a short book, collapsed for a long one. -->
+            <details
+              class="pf-chapters"
+              data-testid="publication-chapters"
+              open={group.chapters.length <= 3}
+            >
+              <summary>{m.profile_publication_chapters({ count: group.chapters.length })}</summary>
+              <ol>
+                {#each group.chapters as chapter (chapter.id)}
+                  <li>
+                    <a class="link link-hover" href={chapterHref(chapter)}
+                      >{chapterTitle(chapter)}</a
+                    >
+                  </li>
+                {/each}
+              </ol>
+            </details>
+          {/if}
         </div>
       {/each}
     </div>
@@ -381,6 +426,25 @@
   }
   .pf-pin-unpin:hover {
     background: color-mix(in oklch, var(--color-warning) 32%, var(--color-base-100));
+  }
+  .pf-chapters {
+    margin: 0.375rem 0 0 1rem;
+    padding-left: 0.75rem;
+    border-left: 2px solid var(--c-rule);
+    font-size: 0.875rem;
+    color: var(--c-ink-soft);
+  }
+  .pf-chapters summary {
+    cursor: pointer;
+    font-weight: 600;
+  }
+  .pf-chapters ol {
+    margin-top: 0.25rem;
+    list-style: decimal;
+    padding-left: 1.25rem;
+  }
+  .pf-chapters a {
+    color: var(--c-ink);
   }
   .pf-pinned-card > :global(*:last-child) {
     border-color: color-mix(in oklch, var(--color-warning) 55%, transparent);
