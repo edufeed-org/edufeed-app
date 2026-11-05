@@ -1,6 +1,5 @@
 import { AccountManager } from 'applesauce-accounts';
 import { registerCommonAccountTypes } from 'applesauce-accounts/accounts';
-import { NostrConnectSigner } from 'applesauce-signers';
 import { showToast } from '$lib/helpers/toast.js';
 import * as m from '$lib/paraglide/messages';
 import {
@@ -217,7 +216,8 @@ async function initializeAccountPersistence() {
     // Step 1: Set pool on NostrConnectSigner BEFORE restoring accounts
     // so that restored bunker signers can communicate with relays
     const { pool, eventStore } = await import('$lib/stores/nostr-infrastructure.svelte');
-    NostrConnectSigner.pool = pool;
+    const { useNostrConnectPool } = await import('$lib/helpers/bunker-connection.js');
+    useNostrConnectPool(pool);
 
     // Step 1b: Flush identity-scoped session state when the active account
     // changes (switch or logout). Registered BEFORE the restore in Step 3 so

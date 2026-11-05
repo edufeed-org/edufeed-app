@@ -41,6 +41,54 @@ const BUNKER_REQUEST_TIMEOUT = 0;
 const CONNECT_PERMISSIONS = buildNip46Permissions();
 
 /**
+ * NIP-46 publish: done as soon as ONE relay accepts the request.
+ *
+ * applesauce's default (`pool.publish`) resolves only after every relay has
+ * answered, and the signer awaits that before it even looks at the reply —
+ * so one dead or write-restricted relay in the session (relay.nsec.app went
+ * dark in 2026-11; nostr.wine refuses non-members) held every request,
+ * `get_public_key` right after pairing included, for the 30 s publish
+ * timeout plus retries while the signer's answer was already in. The other
+ * relays keep publishing in the background; it only fails when all refuse.
+ *
+ * @param {any} pool
+ * @returns {(relays: string[], event: any) => Promise<void>}
+ */
+export function firstAcceptedPublish(pool) {
+  return (relays, event) =>
+    new Promise((resolve, reject) => {
+      /** @type {string[]} */
+      const errors = [];
+      let pending = relays.length;
+      if (pending === 0) return reject(new Error('No relays to publish to'));
+      const failed = (/** @type {string} */ reason) => {
+        errors.push(reason);
+        if (--pending === 0) reject(new Error(`NIP-46 request not accepted: ${errors.join('; ')}`));
+      };
+      for (const url of relays) {
+        Promise.resolve()
+          .then(() => pool.relay(url).publish(event))
+          .then(
+            (/** @type {any} */ res) =>
+              res?.ok ? resolve() : failed(`${url}: ${res?.message || 'rejected'}`),
+            (/** @type {any} */ err) => failed(`${url}: ${err?.message || err}`)
+          );
+      }
+    });
+}
+
+/**
+ * Point every NostrConnectSigner — new pairings and sessions restored from
+ * storage — at the app pool, publishing through {@link firstAcceptedPublish}.
+ * A class-level publishMethod wins over the class-level pool.
+ * @param {any} pool
+ */
+export function useNostrConnectPool(pool) {
+  NostrConnectSigner.pool = pool;
+  NostrConnectSigner.publishMethod = firstAcceptedPublish(pool);
+}
+
+/**
  * Connect to a remote signer via bunker:// URI (signer-initiated flow)
  * @param {string} url - bunker:// URI
  * @param {{ pool: any, onAuth?: (url: string) => Promise<void> }} options
@@ -50,7 +98,7 @@ export async function connectWithBunkerUrl(url, { pool, onAuth }) {
   const clientSecretKey = generateSecretKey();
   const clientSigner = new PrivateKeySigner(clientSecretKey);
 
-  NostrConnectSigner.pool = pool;
+  useNostrConnectPool(pool);
 
   // fromBunkerURI parses the URI, builds the signer, AND calls .connect(secret,
   // permissions) internally — see applesauce-signers nostr-connect-signer.js
@@ -111,7 +159,7 @@ export function createClientConnection(relays, { pool, onAuth, appMetadata }) {
   const clientSecretKey = generateSecretKey();
   const clientSigner = new PrivateKeySigner(clientSecretKey);
 
-  NostrConnectSigner.pool = pool;
+  useNostrConnectPool(pool);
 
   const signer = new NostrConnectSigner({
     relays,

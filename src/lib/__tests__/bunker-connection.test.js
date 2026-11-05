@@ -58,7 +58,9 @@ import {
   connectWithBunkerUrl,
   createClientConnection,
   registerBunkerAccount,
-  buildClientConnectRelays
+  buildClientConnectRelays,
+  firstAcceptedPublish,
+  useNostrConnectPool
 } from '../helpers/bunker-connection.js';
 import { NostrConnectSigner } from 'applesauce-signers';
 import { buildNip46Permissions } from '../helpers/nip46-permissions.js';
@@ -274,5 +276,42 @@ describe('buildClientConnectRelays', () => {
 
   it('returns an array', () => {
     expect(Array.isArray(buildClientConnectRelays(['wss://nos.lol']))).toBe(true);
+  });
+});
+
+describe('firstAcceptedPublish', () => {
+  /** A pool whose relays answer after `ms` with `ok`, or never (ms = null). */
+  function poolWith(answers) {
+    return {
+      relay: (url) => ({
+        publish: () => {
+          const a = answers[url];
+          if (a === null) return new Promise(() => {});
+          if (a instanceof Error) return Promise.reject(a);
+          return Promise.resolve({ ok: a, from: url, message: a ? '' : 'restricted' });
+        }
+      })
+    };
+  }
+
+  it('resolves as soon as ONE relay accepts, without waiting for a dead relay', async () => {
+    const publish = firstAcceptedPublish(
+      poolWith({ 'wss://dead': null, 'wss://paid': false, 'wss://ok': true })
+    );
+    await expect(publish(['wss://dead', 'wss://paid', 'wss://ok'], {})).resolves.toBeUndefined();
+  });
+
+  it('rejects once every relay has refused or failed', async () => {
+    const publish = firstAcceptedPublish(
+      poolWith({ 'wss://paid': false, 'wss://broken': new Error('closed') })
+    );
+    await expect(publish(['wss://paid', 'wss://broken'], {})).rejects.toThrow(/restricted|closed/);
+  });
+
+  it('is installed as the class publishMethod by useNostrConnectPool', () => {
+    const pool = poolWith({});
+    useNostrConnectPool(pool);
+    expect(NostrConnectSigner.pool).toBe(pool);
+    expect(typeof NostrConnectSigner.publishMethod).toBe('function');
   });
 });
