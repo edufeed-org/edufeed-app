@@ -7,6 +7,39 @@ merge commits of the nostr PRs that landed since the previous tag.
 
 ## [Unreleased]
 
+## [0.15.3] - 2026-11-05
+
+Fix release for the phone menu. One nostr PR, released directly without an
+RC on dev: the menu was unusable on phones (rows cut off, nothing scrolled).
+
+### Changed
+
+- The account menu on phones is a bottom sheet instead of the dropdown that
+  stacked the hamburger entries on top of the account section: 20 rows in a
+  popover taller than the screen, no scroll, two icon sizes, the identity
+  buried in the middle, Imprint next to Notifications. The sheet opens from
+  the avatar in the community header and from the Navbar's mobile trigger,
+  which now shows the avatar when logged in. Logged in it leads with the
+  identity row, then three tiles for what people open the menu for
+  (Profil, Einstellungen, QR-Code), then Posteingang, Nachrichten, Meine
+  Inhalte and Kalender, then Konto wechseln (and Mitgliedsanträge for
+  admins), Hilfe and Feedback, a quiet block with the language toggle,
+  Verbindung and Impressum/Datenschutz, and Abmelden last. Entdecken and
+  Gruppen are gone from the menu (the dock has them); Schlüssel sichern
+  lives in Einstellungen. Logged out, the hamburger opens the same sheet
+  with Entdecken, Communities, Kalender, Hilfe and an Anmelden button.
+  The desktop dropdown is unchanged.
+
+### Fixed
+
+- On community pages the sheet is rendered outside the sticky header: inside
+  it the fixed sheet was capped by the header's stacking context and the
+  phone dock covered its last rows.
+
+### Deploy notes
+
+- No new env vars.
+
 ## [0.15.2] - 2026-11-04
 
 Hotfix for NIP-46 signer logins (Amber, nsec.app). One nostr PR. Released
