@@ -5,6 +5,10 @@
 
 import { json, error } from '@sveltejs/kit';
 import { serverConfig } from '$lib/server/config.js';
+import { createRateLimiter, clientKey, tooManyRequests } from '$lib/server/rate-limit.js';
+
+// Each call spends OpenCage quota; autocomplete fires while typing, so stay generous.
+const limit = createRateLimiter({ max: 120, windowMs: 10 * 60_000 });
 
 /**
  * GET /api/geocode?q=address&mode=geocode
@@ -14,7 +18,10 @@ import { serverConfig } from '$lib/server/config.js';
  * - geocode: Full geocoding of an address
  * - autocomplete: Address suggestions for autocomplete
  */
-export async function GET({ url }) {
+export async function GET({ url, getClientAddress }) {
+  const retryAfter = limit(clientKey({ getClientAddress }));
+  if (retryAfter) return tooManyRequests(retryAfter);
+
   const query = url.searchParams.get('q');
   const mode = url.searchParams.get('mode') || 'geocode';
 

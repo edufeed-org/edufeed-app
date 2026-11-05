@@ -17,6 +17,10 @@ import { callExtractMetadata } from '$lib/server/nopeMcpClient.js';
 import { getNopeMcpToken } from '$lib/server/nopeMcpToken.js';
 import { nopeMcpEnv } from '$lib/server/nopeMcpEnv.js';
 import { parseHttpUrl } from '$lib/server/httpUrl.js';
+import { createRateLimiter, clientKey, tooManyRequests } from '$lib/server/rate-limit.js';
+
+// Every call runs an LLM extraction (up to MAX_SOURCE_URLS sources) on our bill.
+const limit = createRateLimiter({ max: 30, windowMs: 10 * 60_000 });
 
 const VARIANTS = new Set(['amb', 'ekw', 'konfi']);
 const BILDUNGSBEREICHE = new Set(['schule', 'hochschule', 'extra', 'konfi']);
@@ -123,7 +127,10 @@ function buildSkosSchemes(variant, bildungsbereich) {
 }
 
 /** @type {import('@sveltejs/kit').RequestHandler} */
-export async function POST({ request }) {
+export async function POST({ request, getClientAddress }) {
+  const retryAfter = limit(clientKey({ getClientAddress }));
+  if (retryAfter) return tooManyRequests(retryAfter);
+
   /** @type {{ url?: string, urls?: unknown, variant?: string, bildungsbereich?: string }} */
   let body;
   try {
