@@ -145,9 +145,6 @@
   }
 
   function getRelays() {
-    // Always include wss://relay.nsec.app (the NIP-46 rendezvous relay) —
-    // most bunkers publish their Connect ack only there. See
-    // buildClientConnectRelays for the full rationale.
     return buildClientConnectRelays(runtimeConfig.fallbackRelays);
   }
 

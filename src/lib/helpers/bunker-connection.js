@@ -2,6 +2,7 @@ import { NostrConnectSigner, PrivateKeySigner } from 'applesauce-signers';
 import { NostrConnectAccount } from 'applesauce-accounts/accounts';
 import { generateSecretKey } from 'nostr-tools';
 import { buildNip46Permissions } from '$lib/helpers/nip46-permissions.js';
+import { AUTH_AWARE_PUBLISH_RETRY } from '$lib/services/relay-publish-auth.js';
 
 /**
  * Validate a bunker:// URL
@@ -41,6 +42,49 @@ const BUNKER_REQUEST_TIMEOUT = 0;
 const CONNECT_PERMISSIONS = buildNip46Permissions();
 
 /**
+ * NIP-46 publish: done as soon as ONE relay accepts the request.
+ *
+ * applesauce's `pool.publish` resolves only after every relay answered, and
+ * the signer awaits it before reading the reply — so one dead or
+ * write-restricted relay (relay.nsec.app went dark in 2026-11; nostr.wine
+ * refuses non-members) held every request for the 30 s publish timeout. The
+ * auth-aware retry makes an `auth-required` relay fail instead of parking in
+ * waitForAuth (which suspends the timeout), so all-AUTH relays error out.
+ *
+ * @param {any} pool
+ * @returns {(relays: string[], event: any) => Promise<void>}
+ */
+export function firstAcceptedPublish(pool) {
+  return (relays, event) =>
+    Promise.any(
+      relays.map(async (url) => {
+        const res = await pool
+          .relay(url)
+          .publish(event, { timeout: 10_000, retries: AUTH_AWARE_PUBLISH_RETRY });
+        if (!res?.ok) throw new Error(`${url}: ${res?.message || 'rejected'}`);
+      })
+    ).then(
+      () => undefined,
+      (/** @type {AggregateError} */ e) => {
+        throw new Error(
+          `NIP-46 request not accepted: ${e.errors.map((x) => x.message).join('; ')}`
+        );
+      }
+    );
+}
+
+/**
+ * Point every NostrConnectSigner — new pairings and sessions restored from
+ * storage — at the app pool, publishing through {@link firstAcceptedPublish}.
+ * A class-level publishMethod wins over the class-level pool.
+ * @param {any} pool
+ */
+export function useNostrConnectPool(pool) {
+  NostrConnectSigner.pool = pool;
+  NostrConnectSigner.publishMethod = firstAcceptedPublish(pool);
+}
+
+/**
  * Connect to a remote signer via bunker:// URI (signer-initiated flow)
  * @param {string} url - bunker:// URI
  * @param {{ pool: any, onAuth?: (url: string) => Promise<void> }} options
@@ -50,7 +94,7 @@ export async function connectWithBunkerUrl(url, { pool, onAuth }) {
   const clientSecretKey = generateSecretKey();
   const clientSigner = new PrivateKeySigner(clientSecretKey);
 
-  NostrConnectSigner.pool = pool;
+  useNostrConnectPool(pool);
 
   // fromBunkerURI parses the URI, builds the signer, AND calls .connect(secret,
   // permissions) internally — see applesauce-signers nostr-connect-signer.js
@@ -79,26 +123,24 @@ function generateSecret() {
 }
 
 /**
- * The NIP-46 rendezvous relay. Most popular bunkers (nsec.app, recent Amber)
- * publish their Connect-RPC ack ONLY to this relay regardless of what the
- * client lists in the `nostrconnect://` URI's `relay=` params. If our QR URI
- * doesn't list this relay, we never see the ack and `waitForSigner` hangs.
- * The official applesauce example (`signers/bunker`) uses this relay alone
- * for the same reason.
+ * Used only when a deployment configures no fallback relays: a
+ * nostrconnect:// URI without relays cannot pair at all.
  */
-const NIP46_RENDEZVOUS_RELAY = 'wss://relay.nsec.app';
+const DEFAULT_CONNECT_RELAYS = ['wss://relay.damus.io', 'wss://relay.primal.net'];
 
 /**
- * Build the list of relays for a client-initiated nostrconnect:// URI.
- * Always includes the NIP-46 rendezvous relay, deduplicated against the
- * caller-supplied fallback list.
+ * Build the list of relays for a client-initiated nostrconnect:// URI: the
+ * deployment's fallback relays, deduplicated. The signer answers on the
+ * relays the URI lists (Amber does). We used to force wss://relay.nsec.app
+ * in as a "rendezvous relay"; it went dark in 2026-11, and a listed dead
+ * relay costs QR size and, before firstAcceptedPublish, 30 s per request.
  *
  * @param {string[] | undefined | null} fallbackRelays
  * @returns {string[]}
  */
 export function buildClientConnectRelays(fallbackRelays) {
   const fallback = Array.isArray(fallbackRelays) ? fallbackRelays.filter(Boolean) : [];
-  return Array.from(new Set([NIP46_RENDEZVOUS_RELAY, ...fallback]));
+  return Array.from(new Set(fallback.length > 0 ? fallback : DEFAULT_CONNECT_RELAYS));
 }
 
 /**
@@ -111,7 +153,7 @@ export function createClientConnection(relays, { pool, onAuth, appMetadata }) {
   const clientSecretKey = generateSecretKey();
   const clientSigner = new PrivateKeySigner(clientSecretKey);
 
-  NostrConnectSigner.pool = pool;
+  useNostrConnectPool(pool);
 
   const signer = new NostrConnectSigner({
     relays,

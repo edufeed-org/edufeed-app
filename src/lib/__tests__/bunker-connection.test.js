@@ -58,9 +58,12 @@ import {
   connectWithBunkerUrl,
   createClientConnection,
   registerBunkerAccount,
-  buildClientConnectRelays
+  buildClientConnectRelays,
+  firstAcceptedPublish,
+  useNostrConnectPool
 } from '../helpers/bunker-connection.js';
 import { NostrConnectSigner } from 'applesauce-signers';
+import { AUTH_AWARE_PUBLISH_RETRY } from '../services/relay-publish-auth.js';
 import { buildNip46Permissions } from '../helpers/nip46-permissions.js';
 
 describe('validateBunkerUrl', () => {
@@ -243,36 +246,79 @@ describe('registerBunkerAccount', () => {
 });
 
 describe('buildClientConnectRelays', () => {
-  // The QR-mode `nostrconnect://` URI must list the relays where the bunker app
-  // will publish its Connect-RPC ack. Most bunkers (nsec.app, recent Amber)
-  // publish ONLY to wss://relay.nsec.app — if it's missing from our URI we
-  // listen on different relays and `waitForSigner` hangs forever even after
-  // the user scans. The official applesauce example (`signers/bunker`) uses
-  // wss://relay.nsec.app exactly for this reason — it is the de-facto NIP-46
-  // rendezvous relay. We must always include it.
-  const NIP46_RENDEZVOUS = 'wss://relay.nsec.app';
-
-  it('always includes the NIP-46 rendezvous relay even when fallback list is empty', () => {
-    expect(buildClientConnectRelays([])).toContain(NIP46_RENDEZVOUS);
-    expect(buildClientConnectRelays(undefined)).toContain(NIP46_RENDEZVOUS);
+  // The QR-mode `nostrconnect://` URI lists the relays the signer answers on.
+  // It used to force wss://relay.nsec.app in as a "rendezvous relay"; that
+  // relay went dark in 2026-11 and, being listed, made every NIP-46 request
+  // wait for its publish timeout. The deployment's fallback relays suffice.
+  it('is the deduplicated fallback list, without relay.nsec.app', () => {
+    expect(
+      buildClientConnectRelays(['wss://relay.damus.io', 'wss://nos.lol', 'wss://relay.damus.io'])
+    ).toEqual(['wss://relay.damus.io', 'wss://nos.lol']);
   });
 
-  it('always includes the NIP-46 rendezvous relay when fallback list does NOT contain it', () => {
-    const fallback = ['wss://relay.damus.io', 'wss://nos.lol'];
-    const result = buildClientConnectRelays(fallback);
-    expect(result).toContain(NIP46_RENDEZVOUS);
-    expect(result).toContain('wss://relay.damus.io');
-    expect(result).toContain('wss://nos.lol');
+  it('never adds relay.nsec.app on its own', () => {
+    expect(buildClientConnectRelays(['wss://relay.damus.io'])).not.toContain(
+      'wss://relay.nsec.app'
+    );
   });
 
-  it('does not duplicate the rendezvous relay if already in the fallback list', () => {
-    const fallback = ['wss://relay.nsec.app', 'wss://nos.lol'];
-    const result = buildClientConnectRelays(fallback);
-    const occurrences = result.filter((r) => r === NIP46_RENDEZVOUS).length;
-    expect(occurrences).toBe(1);
+  it('falls back to public relays when the deployment configures none (a QR without relays cannot pair)', () => {
+    for (const empty of [[], undefined, null, ['']]) {
+      const relays = buildClientConnectRelays(empty);
+      expect(relays.length).toBeGreaterThan(0);
+      expect(relays.every((r) => r.startsWith('wss://'))).toBe(true);
+    }
+  });
+});
+
+describe('firstAcceptedPublish', () => {
+  /** A pool whose relays answer after `ms` with `ok`, or never (ms = null). */
+  function poolWith(answers) {
+    return {
+      relay: (url) => ({
+        publish: () => {
+          const a = answers[url];
+          if (a === null) return new Promise(() => {});
+          if (a instanceof Error) return Promise.reject(a);
+          return Promise.resolve({ ok: a, from: url, message: a ? '' : 'restricted' });
+        }
+      })
+    };
+  }
+
+  it('resolves as soon as ONE relay accepts, without waiting for a dead relay', async () => {
+    const publish = firstAcceptedPublish(
+      poolWith({ 'wss://dead': null, 'wss://paid': false, 'wss://ok': true })
+    );
+    await expect(publish(['wss://dead', 'wss://paid', 'wss://ok'], {})).resolves.toBeUndefined();
   });
 
-  it('returns an array', () => {
-    expect(Array.isArray(buildClientConnectRelays(['wss://nos.lol']))).toBe(true);
+  it('rejects once every relay has refused or failed', async () => {
+    const publish = firstAcceptedPublish(
+      poolWith({ 'wss://paid': false, 'wss://broken': new Error('closed') })
+    );
+    await expect(publish(['wss://paid', 'wss://broken'], {})).rejects.toThrow(/restricted|closed/);
+  });
+
+  it('publishes with a timeout and the auth-aware retry, so an auth-required relay cannot park it', async () => {
+    const calls = [];
+    const pool = {
+      relay: (url) => ({
+        publish: (_event, opts) => {
+          calls.push(opts);
+          return Promise.resolve({ ok: true, from: url });
+        }
+      })
+    };
+    await firstAcceptedPublish(pool)(['wss://a'], {});
+    expect(calls[0].timeout).toBeGreaterThan(0);
+    expect(calls[0].retries).toBe(AUTH_AWARE_PUBLISH_RETRY);
+  });
+
+  it('is installed as the class publishMethod by useNostrConnectPool', () => {
+    const pool = poolWith({});
+    useNostrConnectPool(pool);
+    expect(NostrConnectSigner.pool).toBe(pool);
+    expect(typeof NostrConnectSigner.publishMethod).toBe('function');
   });
 });

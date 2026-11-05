@@ -342,8 +342,12 @@
               </ul>
             </div>
           {:else}
+            <!-- Wide: a paper square like its three neighbours; phones: the
+                 labelled ink CTA. -->
             <button
-              class="pf-btn solid"
+              class="pf-btn"
+              class:solid={isNarrow}
+              class:ghost={!isNarrow}
               class:icon={!isNarrow}
               data-testid="follow-button"
               aria-label={m.profile_follow_button()}
