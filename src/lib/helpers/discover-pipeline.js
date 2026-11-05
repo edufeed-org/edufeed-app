@@ -176,13 +176,16 @@ export function filterBySearch(
 /**
  * Search results by the deployment's people first: items of members whose
  * name the query matched, then items of other members, then everyone else.
+ * Under relevance only the matched tier is lifted: an importer account in the
+ * member directory would otherwise push its weakest hits above better ones.
  * Stable — the chosen sort holds inside each tier. Returns the input itself
  * when no item is by a member.
  * @param {RawItem[]} items
- * @param {{ matched: Set<string>, members: Set<string> }} authors
+ * @param {{ matched: Set<string>, members: Set<string>, sortBy?: SortBy }} authors
  * @returns {RawItem[]}
  */
-export function tierByMembers(items, { matched, members }) {
+export function tierByMembers(items, { matched, members, sortBy }) {
+  if (sortBy === 'relevance') members = NO_AUTHORS;
   /** @type {RawItem[][]} */
   const tiers = [[], [], []];
   for (const item of items) {

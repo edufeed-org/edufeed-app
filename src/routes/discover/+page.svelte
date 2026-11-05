@@ -743,7 +743,11 @@
   );
   const combinedContent = $derived(
     activeSearchQuery
-      ? tierByMembers(sortedContent, { matched: matchedMemberSet, members: getMemberPubkeys() })
+      ? tierByMembers(sortedContent, {
+          matched: matchedMemberSet,
+          members: getMemberPubkeys(),
+          sortBy: effectiveSortBy
+        })
       : sortedContent
   );
   const displayedContent = $derived(combinedContent.slice(0, displayLimit));
