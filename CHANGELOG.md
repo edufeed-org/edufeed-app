@@ -7,6 +7,31 @@ merge commits of the nostr PRs that landed since the previous tag.
 
 ## [Unreleased]
 
+## [0.15.7] - 2026-11-05
+
+Fix release: one nostr PR, released directly without an RC on dev.
+
+### Fixed
+
+- Logging in with a signer app (Amber, bunker QR code or `bunker://` link)
+  no longer hangs after the pairing. Every request to the signer waited
+  until all relays had answered, and two never accept it: relay.nsec.app,
+  which went offline, and nostr.wine, which only takes events from its
+  members. So the login, and every signature after it, sat out a 30 s
+  timeout although the signer had long replied (measured: 30 / 60 / 67 s
+  until pairing, public key and first signature; now 0.6 / 1.1 / 1.5 s). A
+  request now goes out as soon as one relay accepts it, also for logins
+  restored from an earlier visit.
+- The login QR code no longer lists relay.nsec.app, so it is also a little
+  smaller. Logins paired before this release still carry that relay; pairing
+  again removes it if signing stays slow.
+- On wide screens the follow button on a profile has the same light
+  background as the other three buttons next to it.
+
+### Deploy notes
+
+- No new env vars.
+
 ## [0.15.6] - 2026-11-05
 
 Fix release: one nostr PR, released directly without an RC on dev.
