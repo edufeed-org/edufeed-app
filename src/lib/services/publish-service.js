@@ -21,6 +21,7 @@ import {
 } from '$lib/helpers/communityRelays.js';
 import * as outbox from './publish-outbox.js';
 import { isProtectedEvent } from 'applesauce-core/helpers/event';
+import { normalizeURL } from 'applesauce-core/helpers';
 import { relaySupportsNip } from './relay-capabilities.js';
 import { publishWithAuth } from './relay-publish-auth.js';
 /**
@@ -211,7 +212,20 @@ export async function computePublishRelays(signedEvent, taggedPubkeys, opts = {}
     getFallbackRelays().forEach((r) => relaySet.add(r));
   }
 
-  const relays = Array.from(relaySet);
+  // The sources spell relays differently ("wss://x" vs "wss://x/"); dedupe on
+  // the normalized URL so one relay is neither published to nor counted twice.
+  /** @type {Map<string, string>} */
+  const byUrl = new Map();
+  for (const relay of relaySet) {
+    let key = relay;
+    try {
+      key = normalizeURL(relay);
+    } catch {
+      // Not a URL: keep it as its own entry, publishToRelay reports it.
+    }
+    if (!byUrl.has(key)) byUrl.set(key, relay);
+  }
+  const relays = Array.from(byUrl.values());
   return isProtected ? filterProtectedCapableRelays(relays) : relays;
 }
 
