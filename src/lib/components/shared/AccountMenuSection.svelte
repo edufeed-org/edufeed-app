@@ -1,9 +1,10 @@
 <!--
   AccountMenuSection — shared menu block for the active account.
 
-  Used by Navbar.svelte (desktop profile dropdown) and MobileNavMenu.svelte
-  (mobile hamburger menu). Renders an identity header followed by four
-  separated groups: personal actions, account management, info, destructive.
+  Used by Navbar.svelte (desktop profile dropdown). Phones open MobileMenuSheet
+  instead; the logout/QR actions both share live in helpers/account-menu-actions.
+  Renders an identity header followed by four separated groups: personal
+  actions, account management, info, destructive.
 
   The consumer wraps this in a <ul class="menu …"> (or equivalent) and passes
   an `onClose` callback that is fired after every interactive row.
@@ -20,8 +21,7 @@
   import { useMembershipPendingCount } from '$lib/stores/membership-pending.svelte.js';
   import { profileLink } from '$lib/helpers/nostrUtils.js';
   import { helpLinkAttrs } from '$lib/helpers/help-link.js';
-  import { isBackupDownloaded } from '$lib/stores/backup-flags.svelte.js';
-  import { accountNeedsBackup, unsavedAccounts } from '$lib/helpers/account-backup.js';
+  import { openOwnQrCode, logoutCurrent, logoutAll } from '$lib/helpers/account-menu-actions.js';
   import ProfileAvatar from './ProfileAvatar.svelte';
   import ConnectionStatus from './ConnectionStatus.svelte';
   import {
@@ -34,7 +34,6 @@
     KeyIcon,
     QrCodeIcon
   } from '$lib/components/icons';
-  import { nip19 } from 'nostr-tools';
 
   /** @type {{ onClose?: () => void }} */
   let { onClose = () => {} } = $props();
@@ -72,14 +71,6 @@
   // User guide (HELP_URL); null hides the row.
   const helpLink = $derived(helpLinkAttrs(runtimeConfig.help?.url));
 
-  // Issue 9f7816e3: the own QR code one tap away on every page.
-  function openQrCode() {
-    const pubkey = activeAccount?.pubkey;
-    if (!pubkey) return;
-    modalStore.openModal('profileQr', { pubkey, npub: nip19.npubEncode(pubkey) });
-    onClose();
-  }
-
   function openReportIssue() {
     onClose?.();
     modalStore.openModal('reportIssue');
@@ -97,53 +88,6 @@
   function openBackup() {
     modalStore.openModal('recovery-download');
     onClose();
-  }
-
-  /**
-   * Ask before a logout that would lose a never-backed-up key. The dialog
-   * is a global modal so it survives this dropdown closing.
-   * @param {{mode: 'current' | 'all', count: number, canDownload: boolean}} props
-   * @param {() => void} remove
-   */
-  function confirmLogout(props, remove) {
-    modalStore.openModal('logoutConfirm', props, {
-      onConfirm: () => {
-        remove();
-        modalStore.closeModal();
-      },
-      onCancel: () => modalStore.closeModal(),
-      onBackup: () => modalStore.openModal('recovery-download')
-    });
-    onClose();
-  }
-
-  function handleLogoutCurrent() {
-    const account = activeAccount;
-    if (!account) {
-      onClose();
-      return;
-    }
-    if (accountNeedsBackup(account, isBackupDownloaded)) {
-      confirmLogout({ mode: 'current', count: 1, canDownload: true }, () =>
-        manager.removeAccount(account.id)
-      );
-      return;
-    }
-    manager.removeAccount(account.id);
-    onClose();
-  }
-
-  function handleLogoutAll() {
-    const accounts = [...manager.accounts];
-    const unsaved = unsavedAccounts(accounts, isBackupDownloaded);
-    confirmLogout(
-      {
-        mode: 'all',
-        count: unsaved.length,
-        canDownload: unsaved.some((a) => a.pubkey === activeAccount?.pubkey)
-      },
-      () => accounts.forEach((account) => manager.removeAccount(account.id))
-    );
   }
 </script>
 
@@ -184,7 +128,10 @@
     </a>
   </li>
   <li>
-    <button onclick={openQrCode} data-testid="qr-code-menu-item">
+    <button
+      onclick={() => openOwnQrCode(activeAccount?.pubkey, onClose)}
+      data-testid="qr-code-menu-item"
+    >
       <QrCodeIcon class_="w-4 h-4" />
       {m.navbar_qr_code()}
     </button>
@@ -263,13 +210,13 @@
 
   <!-- Group 4: destructive -->
   <li>
-    <button class="text-error" onclick={handleLogoutCurrent}>
+    <button class="text-error" onclick={() => logoutCurrent(activeAccount, onClose)}>
       {m.navbar_logout_current()}
     </button>
   </li>
   {#if accountCount > 1}
     <li>
-      <button class="text-error" onclick={handleLogoutAll}>
+      <button class="text-error" onclick={() => logoutAll(activeAccount?.pubkey, onClose)}>
         {m.navbar_logout_all()}
       </button>
     </li>

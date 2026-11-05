@@ -12,10 +12,13 @@
    *   onClose: () => void,
    *   testid?: string,
    *   children: import('svelte').Snippet,
-   *   legend?: import('svelte').Snippet
+   *   legend?: import('svelte').Snippet,
+   *   header?: import('svelte').Snippet
    * }}
    */
-  let { open, title, onClose, testid = 'bottom-sheet', children, legend } = $props();
+  // `header` replaces the visible title (the phone menu puts the account
+  // identity there); `title` still labels the dialog for assistive tech.
+  let { open, title, onClose, testid = 'bottom-sheet', children, legend, header } = $props();
 
   $effect(() => {
     if (!open) return;
@@ -51,7 +54,11 @@
       <div class="h-1 w-12 rounded-full bg-base-content/20"></div>
     </div>
     <div class="flex items-center gap-2 px-4 pb-2">
-      <h2 class="flex-1 text-lg font-semibold">{title}</h2>
+      {#if header}
+        <div class="min-w-0 flex-1">{@render header()}</div>
+      {:else}
+        <h2 class="flex-1 text-lg font-semibold">{title}</h2>
+      {/if}
       {#if legend}
         <div class="text-xs text-base-content/60">{@render legend()}</div>
       {/if}

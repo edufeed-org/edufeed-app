@@ -9,7 +9,7 @@
   import { hexToNpub } from '$lib/helpers/nostrUtils.js';
   import { buildCommunityPath } from '$lib/helpers/communityNavigation.js';
   import CommunitySidebar from '$lib/components/community/layout/CommunitySidebar.svelte';
-  import MobileNavMenu from '$lib/components/shared/MobileNavMenu.svelte';
+  import MobileMenuSheet from '$lib/components/shared/MobileMenuSheet.svelte';
   import ProfileAvatar from '$lib/components/shared/ProfileAvatar.svelte';
   import { ChevronLeftIcon, SettingsIcon } from '$lib/components/icons';
   import ImageWithFallback from '$lib/components/shared/ImageWithFallback.svelte';
@@ -85,12 +85,8 @@
     }
   );
 
-  function closeDropdown() {
-    const dropdownTrigger = /** @type {HTMLElement} */ (document.activeElement);
-    if (dropdownTrigger && dropdownTrigger.closest('.dropdown')) {
-      dropdownTrigger.blur();
-    }
-  }
+  // The avatar opens the phone menu sheet (MobileMenuSheet).
+  let mobileMenuOpen = $state(false);
 </script>
 
 {#if isDesktop()}
@@ -171,7 +167,7 @@
           </div>
         {/if}
 
-        <!-- Right: Termi launcher + user avatar → global nav dropdown -->
+        <!-- Right: Termi launcher + user avatar → phone menu sheet -->
         {#if activeUser()}
           <div class="flex items-center gap-1">
             {#if !isDashboardActive && mobileHeaderShowSettings}
@@ -185,21 +181,29 @@
               </a>
             {/if}
             <TermiLauncherButton />
-            <div class="dropdown dropdown-end">
-              <div tabindex="0" role="button" class="btn btn-circle btn-ghost">
-                <ProfileAvatar pubkey={activeUser().pubkey} size="sm" fallbackType="robohash" />
-              </div>
-              <ul
-                class="dropdown-content menu z-[60] mt-3 w-56 rounded-box bg-base-100 p-2 shadow-lg"
-              >
-                <MobileNavMenu onClose={closeDropdown} />
-              </ul>
-            </div>
+            <button
+              type="button"
+              class="btn btn-circle btn-ghost"
+              aria-label={m.navbar_menu()}
+              aria-haspopup="dialog"
+              aria-expanded={mobileMenuOpen}
+              data-testid="header-avatar-menu"
+              onclick={() => (mobileMenuOpen = true)}
+            >
+              <ProfileAvatar pubkey={activeUser().pubkey} size="sm" fallbackType="robohash" />
+            </button>
           </div>
         {:else}
           <div class="w-10"></div>
         {/if}
       </div>
+
+      <!-- The menu sheet sits outside the sticky z-30 header: inside it the
+           fixed sheet would be capped by that stacking context and the z-50
+           phone dock would cover its last rows. -->
+      {#if activeUser()}
+        <MobileMenuSheet open={mobileMenuOpen} onClose={() => (mobileMenuOpen = false)} />
+      {/if}
 
       <!-- Main Content (child layout renders here) -->
       <!-- Flowing pages get a BLOCK slot: as a flex item with auto margins a
