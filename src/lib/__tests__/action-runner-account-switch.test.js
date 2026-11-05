@@ -32,6 +32,10 @@ vi.mock('$lib/services/publish-service.js', () => ({
   publishEvent: vi.fn(async (/** @type {any} */ event) => {
     published.push(event);
     return { success: true };
+  }),
+  publishEventOptimistic: vi.fn((/** @type {any} */ event) => {
+    published.push(event);
+    eventStore.add(event);
   })
 }));
 vi.mock('$lib/services/gift-wrap-publish.js', () => ({

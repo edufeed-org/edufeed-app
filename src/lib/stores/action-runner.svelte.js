@@ -27,7 +27,7 @@ import { ActionRunner } from 'applesauce-actions';
 import { setClient } from 'applesauce-core/operations';
 import { eventStore } from './nostr-infrastructure.svelte';
 import { manager } from './accounts.svelte';
-import { publishEvent } from '$lib/services/publish-service.js';
+import { publishEvent, publishEventOptimistic } from '$lib/services/publish-service.js';
 import { publishGiftWrap, GIFT_WRAP_KIND } from '$lib/services/gift-wrap-publish.js';
 import { appSettings } from '$lib/stores/app-settings.svelte.js';
 import { runtimeConfig } from '$lib/stores/config.svelte.js';
@@ -55,8 +55,16 @@ const clientTagSigner = {
 };
 
 /**
- * Publish wrapper adapting our publishEvent to applesauce's PublishMethod signature.
- * Kind 1059 gift wraps bypass the generic outbox model and go only to the
+ * Both runners set `saveToStore = false` and store events here instead.
+ * applesauce's ActionRunner adds an event to the store BEFORE publishing,
+ * which evicts the replaceable version it supersedes — so when no relay
+ * accepted it, there was nothing left to roll back to and the unpublished
+ * version stayed in the store (and in IDB).
+ */
+
+/**
+ * Blocking publish: the event reaches the store only once a relay accepted
+ * it. Kind 1059 gift wraps bypass the generic outbox model and go only to the
  * recipient's DM relays (see gift-wrap-publish.js / NIP-17).
  * @param {import('nostr-tools').NostrEvent} event
  * @param {string[]} [relays]
@@ -65,30 +73,30 @@ const publish = async (event, relays) => {
   if (event.kind === GIFT_WRAP_KIND) {
     const result = await publishGiftWrap(event, relays);
     if (!result.success) throw new Error('Failed to publish gift wrap to any relay');
-    return;
+  } else {
+    const result = await publishEvent(event, [], { additionalRelays: relays || [] });
+    if (!result.success) throw new Error('Failed to publish event to any relay');
   }
-  const result = await publishEvent(event, [], { additionalRelays: relays || [] });
-  if (!result.success) throw new Error('Failed to publish event to any relay');
+  eventStore.add(event);
 };
 
 /**
- * Fire-and-forget variant: returns immediately so ActionRunner can complete and
- * the EventStore can be updated optimistically. Publish failures are logged but
- * do not propagate to the caller — relays may have rejected the event without
- * the user knowing, but the local view stays responsive.
+ * Fire-and-forget variant: returns immediately so ActionRunner can complete
+ * and the UI updates at once. `publishEventOptimistic` stores the event,
+ * rolls it back to the replaced version if no relay accepts it and reports
+ * the failure through the publish status toast.
  * @param {import('nostr-tools').NostrEvent} event
  * @param {string[]} [relays]
  */
 const publishOptimistic = async (event, relays) => {
   if (event.kind === GIFT_WRAP_KIND) {
+    eventStore.add(event);
     publishGiftWrap(event, relays).catch((err) =>
       console.error('Background gift-wrap publish failed', err)
     );
     return;
   }
-  publishEvent(event, [], { additionalRelays: relays || [] }).catch((err) => {
-    console.error('Background publish failed', err);
-  });
+  publishEventOptimistic(event, [], { additionalRelays: relays || [] });
 };
 
 /**
@@ -117,8 +125,10 @@ class AccountAwareActionRunner extends ActionRunner {
 }
 
 export const actionRunner = new AccountAwareActionRunner(eventStore, clientTagSigner, publish);
+actionRunner.saveToStore = false;
 export const actionRunnerOptimistic = new AccountAwareActionRunner(
   eventStore,
   clientTagSigner,
   publishOptimistic
 );
+actionRunnerOptimistic.saveToStore = false;
