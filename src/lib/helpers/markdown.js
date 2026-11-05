@@ -6,6 +6,7 @@ import { Marked } from 'marked';
 import { preprocessNostrMentions } from '$lib/helpers/markdownNostr.js';
 import { sanitizeHtml } from '$lib/helpers/htmlSanitize.js';
 import { createSlugger, headingAnchorLink } from '$lib/helpers/headingAnchor.js';
+import { escapeHtml } from '$lib/helpers/educational/citation.js';
 
 /**
  * @typedef {{ alt?: string, dimensions?: string }} ImetaFields
@@ -139,6 +140,7 @@ export function renderMarkdown(content, options = {}) {
     return sanitizeHtml(rawHtml);
   } catch (error) {
     console.error('Markdown parsing error:', error);
-    return content.replace(/\n/g, '<br>');
+    // Untrusted content: escape, never hand the raw text to {@html}
+    return escapeHtml(content).replace(/\n/g, '<br>');
   }
 }

@@ -58,6 +58,7 @@
     CheckIcon,
     PlusIcon
   } from '$lib/components/icons';
+  import { isHttpUrl } from '$lib/helpers/safeUrl.js';
 
   /**
    * @type {{
@@ -67,6 +68,8 @@
    * }}
    */
   let { url, communityPubkey = undefined, targetHighlightId = null } = $props();
+  // `url` comes from the route param: only http(s) may become a link
+  const sourceHref = $derived(isHttpUrl(url) ? url : undefined);
 
   const getActiveUser = useActiveUser();
   const activeUser = $derived(getActiveUser());
@@ -836,7 +839,7 @@
           class="mt-6 flex flex-wrap items-center gap-3 border-y border-base-300 py-4 text-sm text-base-content/60"
         >
           <a
-            href={url}
+            href={sourceHref}
             target="_blank"
             rel="noopener noreferrer"
             class="inline-flex items-center gap-1.5 font-semibold text-base-content hover:text-primary"
@@ -873,7 +876,7 @@
             <div>
               {m.web_bookmark_reader_unavailable()}
               <a
-                href={url}
+                href={sourceHref}
                 target="_blank"
                 rel="noopener noreferrer"
                 class="ml-1 inline-flex items-center gap-1 font-semibold text-primary hover:underline"

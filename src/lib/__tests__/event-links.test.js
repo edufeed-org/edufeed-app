@@ -37,6 +37,16 @@ describe('splitEventLinks', () => {
     expect(splitEventLinks(['not a url', 'https://example.org']).primary).toBeNull();
   });
 
+  it('drops script and unknown schemes from the further links, keeps mailto', () => {
+    const result = splitEventLinks([
+      'https://example.org',
+      'javascript:alert(1)',
+      'mailto:info@example.org',
+      'data:text/html,<script>alert(1)</script>'
+    ]);
+    expect(result.others).toEqual(['mailto:info@example.org']);
+  });
+
   it('rejects javascript: and other schemes', () => {
     expect(splitEventLinks(['javascript:alert(1)']).primary).toBeNull();
     expect(splitEventLinks(['ftp://example.org/file']).primary).toBeNull();

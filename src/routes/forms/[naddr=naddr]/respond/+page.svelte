@@ -7,6 +7,7 @@
   import { createAppEventFactory } from '$lib/helpers/event-factory.js';
   import { addressLoader, fetchEvents } from '$lib/loaders/base.js';
   import { getCommunikeyRelays } from '$lib/helpers/relay-helper.js';
+  import { safeInternalPath } from '$lib/helpers/safeUrl.js';
   import {
     buildResponseTags,
     decodeFormNaddr,
@@ -38,7 +39,8 @@
   /** @type {{ pubkey: string, identifier: string } | null} */
   let decodedForm = $state(null);
 
-  let returnTo = $derived($page.url.searchParams.get('returnTo'));
+  // Only in-app paths: the value comes from the URL and lands in an href
+  let returnTo = $derived(safeInternalPath($page.url.searchParams.get('returnTo')));
   // Still set by legacy gated-section links (AccessGateBanner) — drives the
   // kind-30000 auto-join after submit, nothing else.
   let communityId = $derived($page.url.searchParams.get('communityId'));

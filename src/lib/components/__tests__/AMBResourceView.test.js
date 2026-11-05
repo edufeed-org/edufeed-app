@@ -150,7 +150,8 @@ vi.mock('$lib/stores/skos-cache.svelte.js', () => ({
   ensureVocabularyLoaded: vi.fn()
 }));
 vi.mock('$lib/helpers/educational/ambJsonLd.js', () => ({
-  buildAMBJsonLd: () => ({})
+  buildAMBJsonLd: () => ({}),
+  serializeJsonLd: (/** @type {unknown} */ v) => JSON.stringify(v)
 }));
 vi.mock('$lib/stores/user-profile.svelte.js', () => ({
   useUserProfile: () => () => null

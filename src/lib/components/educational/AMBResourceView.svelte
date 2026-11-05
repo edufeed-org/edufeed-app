@@ -26,7 +26,8 @@
   } from '$lib/helpers/educational/ambTransform.js';
   import { getCachedConcepts, ensureVocabularyLoaded } from '$lib/stores/skos-cache.svelte.js';
   import MetadataCardGrid from './MetadataCardGrid.svelte';
-  import { buildAMBJsonLd } from '$lib/helpers/educational/ambJsonLd.js';
+  import { buildAMBJsonLd, serializeJsonLd } from '$lib/helpers/educational/ambJsonLd.js';
+  import { isHttpUrl } from '$lib/helpers/safeUrl.js';
   import { parseExtensionTags } from '$lib/helpers/educational/parseExtensionTags.js';
   import {
     buildExtensionSections,
@@ -563,7 +564,7 @@
   // Pre-computed script tag to avoid ESLint parsing issues with template literals
   // Split closing tag to prevent parser from thinking script block is ending
   const jsonLdScriptTag = $derived(
-    '<script type="application/ld+json">' + JSON.stringify(jsonLd) + '</' + 'script>'
+    '<script type="application/ld+json">' + serializeJsonLd(jsonLd) + '</' + 'script>'
   );
 
   // TULLU citation ("cite this resource"), only for licensed resources.
@@ -809,7 +810,7 @@
             <h3 class="ed-panel-head">{m.amb_resource_license()}</h3>
             <!-- eslint-disable svelte/no-navigation-without-resolve -- external: license URL -->
             <a
-              href={resource.license.id}
+              href={isHttpUrl(resource.license.id) ? resource.license.id : undefined}
               target="_blank"
               rel="noopener noreferrer"
               class="ed-license-link"

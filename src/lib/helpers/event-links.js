@@ -27,6 +27,18 @@ function parseHttpUrl(value) {
   }
 }
 
+/** Schemes a further link may use; anything else (javascript:, data:) is dropped. */
+const LINK_SCHEMES = ['http:', 'https:', 'mailto:'];
+
+/** @param {string} value */
+function isLinkable(value) {
+  try {
+    return LINK_SCHEMES.includes(new URL(value).protocol);
+  } catch {
+    return false;
+  }
+}
+
 /**
  * @param {unknown[] | null | undefined} references
  * @returns {{ primary: { url: string, host: string } | null, others: string[] }}
@@ -41,10 +53,10 @@ export function splitEventLinks(references) {
   }
 
   const first = parseHttpUrl(links[0]);
-  if (!first) return { primary: null, others: links };
+  if (!first) return { primary: null, others: links.filter(isLinkable) };
 
   return {
     primary: { url: links[0], host: first.hostname.replace(/^www\./, '') },
-    others: links.slice(1)
+    others: links.slice(1).filter(isLinkable)
   };
 }
