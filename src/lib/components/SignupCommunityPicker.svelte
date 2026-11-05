@@ -1,5 +1,5 @@
 <script>
-  import { nip19 } from 'nostr-tools';
+  import { normalizePubkey } from '$lib/helpers/pubkey.js';
   import { SvelteSet } from 'svelte/reactivity';
   import { TimelineModel } from 'applesauce-core/models';
   import * as m from '$lib/paraglide/messages';
@@ -15,22 +15,9 @@
   let communities = $state.raw(/** @type {any[]} */ ([]));
   let searchQuery = $state('');
 
-  /** @param {string} id */
-  function normalizeToHex(id) {
-    if (!id || typeof id !== 'string') return null;
-    if (/^[0-9a-f]{64}$/i.test(id)) return id.toLowerCase();
-    if (!id.startsWith('npub1')) return null;
-    try {
-      const decoded = nip19.decode(id);
-      return decoded.type === 'npub' ? /** @type {string} */ (decoded.data) : null;
-    } catch {
-      return null;
-    }
-  }
-
   const suggestedPubkeys = $derived.by(() => {
     const ids = runtimeConfig.signup?.suggestedCommunities || [];
-    return new Set(/** @type {string[]} */ (ids.map(normalizeToHex).filter(Boolean)));
+    return new Set(/** @type {string[]} */ (ids.map(normalizePubkey).filter(Boolean)));
   });
 
   $effect(() => {

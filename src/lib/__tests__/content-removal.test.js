@@ -10,7 +10,6 @@ import {
   CONTENT_REMOVAL_KIND,
   CONTENT_REMOVAL_NAMESPACE,
   CONTENT_REMOVAL_LABEL,
-  eventAddress,
   buildContentRemovalTemplate,
   parseContentRemoval,
   removalAuthorities,
@@ -86,15 +85,6 @@ const label = (over = {}) => ({
     ['e', article.id, ''],
     ['a', `30023:${AUTHOR}:my-article`, '']
   ]
-});
-
-describe('eventAddress', () => {
-  it('is kind:pubkey:d for addressable kinds and null otherwise', () => {
-    expect(eventAddress(article)).toBe(`30023:${AUTHOR}:my-article`);
-    expect(eventAddress(note)).toBeNull();
-    expect(eventAddress({ ...article, tags: [] })).toBeNull();
-    expect(eventAddress(null)).toBeNull();
-  });
 });
 
 describe('buildContentRemovalTemplate', () => {

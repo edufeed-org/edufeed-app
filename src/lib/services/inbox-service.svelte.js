@@ -47,6 +47,7 @@ import { parseAddressPointerFromATag } from '$lib/helpers/nostrUtils.js';
 import { watchNewFollowers } from '$lib/services/new-followers.svelte.js';
 import { authenticateOnce } from '$lib/groups/relay-auth.js';
 import { loadProfileBadgeLists } from '$lib/loaders/profile-badges.js';
+import { eventCoordinate } from '$lib/helpers/event-address.js';
 
 const APP_DATA_D_TAG = 'comcal/inbox/last-seen';
 
@@ -681,11 +682,7 @@ export function initializeInbox(pubkey) {
           take(1)
         )
         .subscribe((events) => {
-          const coords = events.map((e) => {
-            const d = e.tags.find((/** @type {string[]} */ t) => t[0] === 'd')?.[1] || '';
-            return `${e.kind}:${e.pubkey}:${d}`;
-          });
-          loadRsvpNotifications(coords);
+          loadRsvpNotifications(events.map(eventCoordinate));
         });
       subscriptions.push(coordSub);
     }

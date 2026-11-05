@@ -9,18 +9,9 @@
  * Pure on purpose: callers use it inside `$derived`, where applesauce's
  * caching address helpers would mutate the events.
  */
+import { eventCoordinate } from '$lib/helpers/event-address.js';
 
 const KIND = 30040;
-
-/**
- * `30040:<pubkey>:<d>` of a publication.
- * @param {{ kind: number, pubkey: string, tags?: string[][] }} event
- * @returns {string}
- */
-export function publicationCoordinate(event) {
-  const d = event.tags?.find((t) => t[0] === 'd')?.[1] ?? '';
-  return `${event.kind}:${event.pubkey}:${d}`;
-}
 
 /**
  * Group publications into top-level entries with their chapters.
@@ -45,11 +36,11 @@ export function groupPublicationChapters(events) {
   /** @type {Map<string, E>} */
   const byCoord = new Map();
   for (const event of list) {
-    const coord = publicationCoordinate(event);
+    const coord = eventCoordinate(event);
     const seen = byCoord.get(coord);
     if (!seen || event.created_at > seen.created_at) byCoord.set(coord, event);
   }
-  const unique = list.filter((e) => byCoord.get(publicationCoordinate(e)) === e);
+  const unique = list.filter((e) => byCoord.get(eventCoordinate(e)) === e);
 
   /** @type {Map<E, E[]>} direct chapters per event, in a-tag order */
   const children = new Map();

@@ -5,7 +5,7 @@
   import { PlusIcon, CloseIcon, ChevronRightIcon } from '$lib/components/icons';
   import { modalStore } from '$lib/stores/modal.svelte.js';
   import { createHub } from '$lib/stores/create-hub.svelte.js';
-  import { npubToHex } from '$lib/helpers/nostrUtils.js';
+  import { normalizePubkey } from '$lib/helpers/pubkey.js';
   import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
   import { addressLoader } from '$lib/loaders/base.js';
   import { getCommunikeyRelays } from '$lib/helpers/relay-helper.js';
@@ -70,7 +70,7 @@
   // Detect community context from route (convert npub param to hex for consistent matching)
   let communityPubkey = $derived(
     $page.route.id?.startsWith('/c/')
-      ? (npubToHex(/** @type {string} */ ($page.params.pubkey)) ?? '')
+      ? (normalizePubkey(/** @type {string} */ ($page.params.pubkey)) ?? '')
       : ''
   );
 

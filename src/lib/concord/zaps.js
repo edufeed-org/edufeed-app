@@ -12,17 +12,11 @@
 // Hashing uses WebCrypto like blob-media.js, so verifyZapRumor is async;
 // callers cache verdicts per rumor id (tags never change).
 import { decode as decodeBolt11 } from 'light-bolt11-decoder';
+import { bytesToHex } from 'nostr-tools/utils';
 
 /** @param {{tags?: string[][]}} rumor @param {string} name */
 function tagValue(rumor, name) {
   return rumor.tags?.find((t) => t[0] === name)?.[1];
-}
-
-/** @param {Uint8Array} bytes */
-function bytesToHex(bytes) {
-  return Array.from(bytes)
-    .map((b) => b.toString(16).padStart(2, '0'))
-    .join('');
 }
 
 /** @param {string} hex */

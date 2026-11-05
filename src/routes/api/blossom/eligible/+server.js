@@ -10,7 +10,8 @@
  * — the client sends it right after a NIP-05 handle was granted.
  */
 import { json } from '@sveltejs/kit';
-import { getEligibilityChecker, normalizePubkey } from '$lib/server/blossom-eligibility.js';
+import { getEligibilityChecker } from '$lib/server/blossom-eligibility.js';
+import { normalizePubkey } from '$lib/helpers/pubkey.js';
 
 const CORS = { 'Access-Control-Allow-Origin': '*' };
 

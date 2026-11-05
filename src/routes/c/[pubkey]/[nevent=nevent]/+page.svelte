@@ -7,7 +7,8 @@
   import PollCard from '$lib/components/polls/PollCard.svelte';
   import ReactionBar from '$lib/components/reactions/ReactionBar.svelte';
   import CommentList from '$lib/components/comments/CommentList.svelte';
-  import { npubToHex, fetchEventById } from '$lib/helpers/nostrUtils';
+  import { fetchEventById } from '$lib/helpers/nostrUtils';
+  import { normalizePubkey } from '$lib/helpers/pubkey.js';
   import { resolveThreadContext } from '$lib/helpers/threadContext.js';
   import { getCanonicalEventRoute } from '$lib/helpers/eventRouteRedirect.js';
   import { getContentViewForKind } from '$lib/helpers/contentViewForKind.js';
@@ -20,7 +21,7 @@
 
   // Convert community npub from URL to hex for #h tags on comments
   const communityPubkey = $derived(
-    $page.params.pubkey ? (npubToHex($page.params.pubkey) ?? undefined) : undefined
+    $page.params.pubkey ? (normalizePubkey($page.params.pubkey) ?? undefined) : undefined
   );
 
   let resolvedEvent = $state.raw(/** @type {any} */ (null));

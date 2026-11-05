@@ -1,6 +1,6 @@
 /** @vitest-environment node */
 import { describe, it, expect } from 'vitest';
-import { groupPublicationChapters, publicationCoordinate } from '$lib/helpers/publication-tree.js';
+import { groupPublicationChapters } from '$lib/helpers/publication-tree.js';
 
 const A = 'a'.repeat(64);
 const B = 'b'.repeat(64);
@@ -17,12 +17,6 @@ function pub(d, tags = [], pubkey = A, at = 100) {
   };
 }
 const ref = (/** @type {string} */ d, pubkey = A) => ['a', `30040:${pubkey}:${d}`];
-
-describe('publicationCoordinate', () => {
-  it('builds kind:pubkey:d', () => {
-    expect(publicationCoordinate(pub('book'))).toBe(`30040:${A}:book`);
-  });
-});
 
 describe('groupPublicationChapters', () => {
   it('lists unrelated publications as they are, in input order', () => {

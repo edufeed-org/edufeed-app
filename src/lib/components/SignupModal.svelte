@@ -15,6 +15,7 @@
   import { clearCallGuest } from '$lib/groups/guest-account.js';
   import { SvelteSet } from 'svelte/reactivity';
   import { nip19 } from 'nostr-tools';
+  import { normalizePubkey } from '$lib/helpers/pubkey.js';
   import { communikeyTimelineLoader } from '$lib/loaders/community.js';
   import ChevronRightIcon from './icons/ui/ChevronRightIcon.svelte';
   import AvatarUploader from './shared/AvatarUploader.svelte';
@@ -325,22 +326,9 @@
     currentStep = 4;
   }
 
-  /** @param {string} id */
-  function normalizeIdToHex(id) {
-    if (!id || typeof id !== 'string') return null;
-    if (/^[0-9a-f]{64}$/i.test(id)) return id.toLowerCase();
-    if (!id.startsWith('npub1')) return null;
-    try {
-      const decoded = nip19.decode(id);
-      return decoded.type === 'npub' ? /** @type {string} */ (decoded.data) : null;
-    } catch {
-      return null;
-    }
-  }
-
   function suggestedCommunityPubkeys() {
     const ids = runtimeConfig.signup?.suggestedCommunities || [];
-    return ids.map(normalizeIdToHex).filter(/** @returns {pk is string} */ (pk) => pk !== null);
+    return ids.map(normalizePubkey).filter(/** @returns {pk is string} */ (pk) => pk !== null);
   }
 
   /**

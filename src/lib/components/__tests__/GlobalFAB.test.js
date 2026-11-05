@@ -83,10 +83,6 @@ vi.mock('$lib/paraglide/messages', () => ({
   resource_form_variant_ekw_description: () => 'EKW-Metadatenprofil'
 }));
 
-vi.mock('$lib/helpers/nostrUtils.js', () => ({
-  npubToHex: (/** @type {string} */ npub) => npub
-}));
-
 // Community definition (kind 10222) — tests emit an event via __setCommunityEvent.
 const communityState = vi.hoisted(() => ({ event: /** @type {any} */ (null) }));
 vi.mock('$lib/stores/nostr-infrastructure.svelte', () => ({

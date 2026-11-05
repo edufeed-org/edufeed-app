@@ -2,11 +2,8 @@
 /** @vitest-environment node */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { nip19 } from 'nostr-tools';
-import {
-  parseEligibilityConfig,
-  createEligibilityChecker,
-  normalizePubkey
-} from '../blossom-eligibility.js';
+import { parseEligibilityConfig, createEligibilityChecker } from '../blossom-eligibility.js';
+import { normalizePubkey } from '$lib/helpers/pubkey.js';
 
 const ALICE = 'a'.repeat(64);
 const BOB = 'b'.repeat(64);
