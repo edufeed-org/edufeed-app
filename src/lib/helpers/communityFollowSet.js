@@ -1,27 +1,6 @@
-import { nip19 } from 'nostr-tools';
+import { normalizePubkey } from '$lib/helpers/pubkey.js';
 
 const COMMUNITIES_SET_ID = 'communities';
-
-/**
- * Normalize an npub or hex pubkey to lowercase hex. Returns null if invalid.
- * Inlined (rather than importing `normalizeToHex` from nostrUtils.js) so this
- * module stays leaf-level — nostrUtils.js drags in relay-helper / app-settings,
- * which require `window` and pull stores into a Node test environment.
- *
- * @param {unknown} identifier
- * @returns {string | null}
- */
-function normalizeToHex(identifier) {
-  if (!identifier || typeof identifier !== 'string') return null;
-  if (/^[0-9a-f]{64}$/i.test(identifier)) return identifier.toLowerCase();
-  if (!identifier.startsWith('npub1')) return null;
-  try {
-    const decoded = nip19.decode(identifier);
-    return decoded.type === 'npub' ? decoded.data : null;
-  } catch {
-    return null;
-  }
-}
 
 /**
  * @typedef {Object} SignerLike
@@ -55,7 +34,7 @@ export async function buildCommunityFollowSet(signer, pubkey, identifiers) {
   }
 
   const targetPubkeys = identifiers
-    .map((id) => normalizeToHex(id))
+    .map((id) => normalizePubkey(id))
     .filter(/** @returns {pk is string} */ (pk) => pk !== null);
 
   if (targetPubkeys.length === 0) {

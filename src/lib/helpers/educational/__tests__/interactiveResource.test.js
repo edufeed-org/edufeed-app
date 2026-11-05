@@ -7,11 +7,7 @@ vi.mock('$lib/helpers/eventDeletion.js', () => ({
   deleteEvent: vi.fn(async () => ({ success: true }))
 }));
 
-import {
-  findInteractiveEncoding,
-  resourceAppKey,
-  deleteCompanionLicense
-} from '../interactiveResource.js';
+import { findInteractiveEncoding, deleteCompanionLicense } from '../interactiveResource.js';
 import { findExistingLicense } from '$lib/helpers/image-license.js';
 import { deleteEvent } from '$lib/helpers/eventDeletion.js';
 
@@ -26,13 +22,6 @@ describe('findInteractiveEncoding', () => {
     expect(findInteractiveEncoding(resource)?.sha256).toBe('aa');
     expect(findInteractiveEncoding({ encodings: [] })).toBeNull();
     expect(findInteractiveEncoding(null)).toBeNull();
-  });
-});
-
-describe('resourceAppKey', () => {
-  it('builds kind:pubkey:d', () => {
-    const event = { kind: 30142, pubkey: 'pk', tags: [['d', 'https://x/app.xdc']] };
-    expect(resourceAppKey(event)).toBe('30142:pk:https://x/app.xdc');
   });
 });
 

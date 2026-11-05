@@ -17,6 +17,7 @@
   import { getSeenRelays } from 'applesauce-core/helpers';
   import { ambSearchLoader } from '$lib/loaders/amb-search.js';
   import { fetchEventById } from '$lib/helpers/nostrUtils.js';
+  import { eventCoordinate } from '$lib/helpers/event-address.js';
   import * as m from '$lib/paraglide/messages.js';
 
   /**
@@ -58,13 +59,6 @@
   let sub;
   /** @type {any} */
   let timer;
-
-  /** @param {import('nostr-tools').NostrEvent} event */
-  function coordinateOf(event) {
-    if (!event) return '';
-    const dTag = event.tags?.find((t) => t[0] === 'd')?.[1] || '';
-    return `${event.kind}:${event.pubkey}:${dTag}`;
-  }
 
   /** @param {string} input */
   function tryDecodeAMBNaddr(input) {
@@ -129,7 +123,7 @@
     /** @type {NavItem[]} */
     const items = [];
     for (const ev of results) {
-      const coord = coordinateOf(ev);
+      const coord = eventCoordinate(ev);
       if (!coord) continue;
       if (exclude.includes(coord)) continue;
       if (excludeSelf && coord === excludeSelf) continue;
@@ -167,7 +161,7 @@
       if (!event) return;
     }
 
-    const coordinate = coordinateOf(event);
+    const coordinate = eventCoordinate(event);
     const dTag = event.tags?.find((t) => t[0] === 'd')?.[1] ?? '';
     const seen = getSeenRelays(/** @type {any} */ (event));
     const relayHint = seen && seen.size > 0 ? seen.values().next().value : undefined;

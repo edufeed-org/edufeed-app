@@ -4,15 +4,11 @@
  * vectors (name, description, admin_pubkeys, icon, image_url). Pure module —
  * no ts-mls dependency.
  */
+import { bytesToHex } from 'nostr-tools/utils';
 
 export const CORDN_GROUP_METADATA_EXTENSION_TYPE = 0xc04d;
 
 const decoder = new TextDecoder();
-
-/** @param {Uint8Array} bytes */
-function bytesToHex(bytes) {
-  return Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
-}
 
 /**
  * Decode a CordnGroupMetadata payload. Returns undefined for malformed

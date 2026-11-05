@@ -1,7 +1,7 @@
 <script>
   import { manager } from '$lib/stores/accounts.svelte';
   import { ReadonlyAccount } from 'applesauce-accounts/accounts';
-  import { nip19 } from 'nostr-tools';
+  import { normalizePubkey } from '$lib/helpers/pubkey.js';
   import { modalStore } from '$lib/stores/modal.svelte.js';
   import * as m from '$lib/paraglide/messages';
 
@@ -34,23 +34,6 @@
   });
 
   /**
-   * Normalize npub or 64-char hex input to a hex pubkey, or null when invalid.
-   * @param {string} value
-   * @returns {string | null}
-   */
-  function normalizeToHex(value) {
-    const trimmed = value.trim();
-    if (/^[0-9a-f]{64}$/i.test(trimmed)) return trimmed.toLowerCase();
-    if (!trimmed.startsWith('npub1')) return null;
-    try {
-      const decoded = nip19.decode(trimmed);
-      return decoded.type === 'npub' ? /** @type {string} */ (decoded.data) : null;
-    } catch {
-      return null;
-    }
-  }
-
-  /**
    * End the login flow: close this dialog, then tell the parent the flow is
    * done so it can clear the modal store. Order matters — `onAccountCreated`
    * unmounts this component, so anything still on screen (the "already added"
@@ -68,7 +51,7 @@
     errorMessage = '';
     infoMessage = '';
 
-    const pubkey = normalizeToHex(input);
+    const pubkey = normalizePubkey(input);
     if (!pubkey) {
       errorMessage = m.auth_login_npub_error_invalid();
       return;

@@ -1,4 +1,4 @@
-import { npubToHex } from '$lib/helpers/nostrUtils.js';
+import { normalizePubkey } from '$lib/helpers/pubkey.js';
 
 export const ssr = false;
 export const prerender = false;
@@ -7,7 +7,7 @@ export const prerender = false;
 export function load({ url }) {
   const communityParam = url.searchParams.get('community') || '';
   const communityPubkey = communityParam.startsWith('npub1')
-    ? npubToHex(communityParam) || ''
+    ? normalizePubkey(communityParam) || ''
     : communityParam;
 
   return {

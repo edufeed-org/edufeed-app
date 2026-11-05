@@ -59,9 +59,9 @@
   import { useLicenseForHash } from '$lib/stores/image-license.svelte.js';
   import {
     findInteractiveEncoding,
-    resourceAppKey,
     deleteCompanionLicense
   } from '$lib/helpers/educational/interactiveResource.js';
+  import { eventCoordinate } from '$lib/helpers/event-address.js';
   import {
     EditIcon,
     ExternalLinkIcon,
@@ -984,7 +984,7 @@
         sha256={interactiveEncoding.sha256 ?? ''}
         name={resource.name}
         iconUrl={interactiveIconUrl}
-        appKey={resourceAppKey(event)}
+        appKey={eventCoordinate(event)}
       />
     </div>
   {/if}

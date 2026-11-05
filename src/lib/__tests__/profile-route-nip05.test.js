@@ -15,23 +15,6 @@ vi.mock('$lib/helpers/nip05-verify.js', async (importOriginal) => {
   const original = /** @type {any} */ (await importOriginal());
   return { ...original, resolveNip05: lookup.resolveNip05 };
 });
-// nostrUtils drags browser-only modules (app settings → localStorage) into
-// this node test; the two helpers the route needs are trivial to stand in.
-vi.mock('$lib/helpers/nostrUtils', async () => {
-  const { npubEncode, decode } = await import('nostr-tools/nip19');
-  return {
-    hexToNpub: (/** @type {string} */ hex) => npubEncode(hex),
-    normalizeToHex: (/** @type {string} */ id) => {
-      if (/^[0-9a-f]{64}$/i.test(id)) return id.toLowerCase();
-      try {
-        const d = decode(id);
-        return d.type === 'npub' ? d.data : null;
-      } catch {
-        return null;
-      }
-    }
-  };
-});
 vi.mock('@sveltejs/kit', () => ({
   redirect: (/** @type {number} */ status, /** @type {string} */ location) => {
     const err = /** @type {any} */ (new Error('Redirect'));

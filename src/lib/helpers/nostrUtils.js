@@ -37,27 +37,6 @@ export function parseAddressPointerFromATag(aTag) {
 }
 
 /**
- * Convert npub to hex pubkey
- * @param {string} npub - npub1... identifier
- * @returns {string|null} hex pubkey or null if invalid
- */
-export function npubToHex(npub) {
-  if (!npub || typeof npub !== 'string') return null;
-  if (!npub.startsWith('npub1')) return null;
-
-  try {
-    const decoded = nip19.decode(npub);
-    if (decoded.type === 'npub') {
-      return decoded.data;
-    }
-    return null;
-  } catch (error) {
-    console.error('Error decoding npub:', error);
-    return null;
-  }
-}
-
-/**
  * Build a profile route path (`/p/<npub>`) for a pubkey.
  * Accepts hex or npub; falls back to the original value if npub encoding fails
  * so the route's hex/npub-tolerant param matcher can still resolve it.
@@ -68,24 +47,6 @@ export function profileLink(pubkey) {
   if (pubkey.startsWith('npub1')) return `/p/${pubkey}`;
   const npub = hexToNpub(pubkey);
   return `/p/${npub || pubkey}`;
-}
-
-/**
- * Normalize pubkey identifier to hex format
- * Accepts both hex and npub, returns hex
- * @param {string} identifier - hex pubkey or npub
- * @returns {string|null} hex pubkey or null if invalid
- */
-export function normalizeToHex(identifier) {
-  if (!identifier || typeof identifier !== 'string') return null;
-
-  // Already hex format
-  if (/^[0-9a-f]{64}$/i.test(identifier)) {
-    return identifier.toLowerCase();
-  }
-
-  // Try decoding as npub
-  return npubToHex(identifier);
 }
 
 /**

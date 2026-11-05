@@ -37,6 +37,7 @@ import {
   wireformats
 } from 'ts-mls';
 import { verifyEvent } from 'nostr-tools/pure';
+import { bytesToHex } from 'nostr-tools/utils';
 
 export const CORDN_CIPHERSUITE = 'MLS_128_DHKEMX25519_AES128GCM_SHA256_Ed25519';
 /** spec/01 §2 — advertise metadata-extension support for interop with cordn-web groups. */
@@ -82,11 +83,6 @@ function metadataCapabilities() {
     }
   }
   return capabilities;
-}
-
-/** @param {Uint8Array} bytes */
-function bytesToHex(bytes) {
-  return Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
 }
 
 /**

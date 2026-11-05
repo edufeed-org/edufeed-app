@@ -24,14 +24,17 @@
 //     would be `x`/`sha256`). So verification here hashes the plaintext
 //     AFTER decrypting, never the downloaded bytes directly.
 //
-// No package imports on purpose: everything needed (AES-256-GCM, SHA-256) is
-// the platform Web Crypto API (`crypto.subtle`), already this app's
-// convention for hashing (see `helpers/sha256.js`, `helpers/nip98.js`) — so
-// this module carries zero SSR-chunk risk regardless of where it's imported
-// from. Actual browser-only behavior (`fetch`, `URL.createObjectURL`) is
-// still real: callers must only invoke `fetchDecryptedBlobUrl` from
+// The only package import is `nostr-tools/utils` (already in every chunk, the
+// SSR-safe source of bytesToHex — see pomegranate.js); the crypto itself
+// (AES-256-GCM, SHA-256) is the platform Web Crypto API (`crypto.subtle`),
+// this app's convention for hashing (see `helpers/sha256.js`,
+// `helpers/nip98.js`) — so this module carries no SSR-chunk risk regardless
+// of where it's imported from. Actual browser-only behavior (`fetch`,
+// `URL.createObjectURL`) is still real: callers must only invoke `fetchDecryptedBlobUrl` from
 // browser-side code (a Svelte `$effect`, never during SSR/module-load) — see
 // `blob-media.svelte.js`'s `useConcordAreaIcon`, the only intended caller.
+
+import { bytesToHex } from 'nostr-tools/utils';
 
 /**
  * @typedef {{url?: string, key?: string, nonce?: string, hash?: string}} BlobPointerLike
@@ -51,13 +54,6 @@ function hexToBytes(hex) {
     bytes[i] = byte;
   }
   return bytes;
-}
-
-/** @param {Uint8Array} bytes */
-function bytesToHex(bytes) {
-  return Array.from(bytes)
-    .map((b) => b.toString(16).padStart(2, '0'))
-    .join('');
 }
 
 /**

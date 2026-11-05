@@ -9,7 +9,7 @@
   import { getProfilePicture, getDisplayName } from 'applesauce-core/helpers';
   import { useUserProfile } from '$lib/stores/user-profile.svelte';
   import { fetchProfileData } from '$lib/helpers/profile.js';
-  import { normalizeToHex } from '$lib/helpers/nostrUtils.js';
+  import { normalizePubkey } from '$lib/helpers/pubkey.js';
   import { normalizeOrcid } from '$lib/helpers/educational/orcid.js';
   import ContactSearchInput from '$lib/components/shared/ContactSearchInput.svelte';
   import ImageWithFallback from '$lib/components/shared/ImageWithFallback.svelte';
@@ -50,7 +50,7 @@
   // set the name field mirrors the profile read-only; a different name means
   // dropping the link (name-only creator, flattened creator:* tags).
   const linkedPubkey = $derived(
-    newCreator.pubkey?.trim() ? normalizeToHex(newCreator.pubkey.trim()) || '' : ''
+    newCreator.pubkey?.trim() ? normalizePubkey(newCreator.pubkey.trim()) || '' : ''
   );
   const getLinkedProfile = useUserProfile(() => linkedPubkey);
   // Same resolution as the citation in AMBResourceView (display_name first).
@@ -131,7 +131,7 @@
     // Normalize the Nostr identity to a hex pubkey; block save on anything
     // that doesn't normalize (nsec, typos) so no secret/garbage gets published
     const pubkeyInput = newCreator.pubkey?.trim();
-    const normalizedPubkey = pubkeyInput ? normalizeToHex(pubkeyInput) : '';
+    const normalizedPubkey = pubkeyInput ? normalizePubkey(pubkeyInput) : '';
     pubkeyInvalid = Boolean(pubkeyInput && !normalizedPubkey);
     if (pubkeyInvalid) return;
 
@@ -240,7 +240,7 @@
   function handlePubkeyBlur() {
     const input = newCreator.pubkey?.trim();
     if (!input) return;
-    const hexPubkey = normalizeToHex(input);
+    const hexPubkey = normalizePubkey(input);
     if (hexPubkey) newCreator.pubkey = hexPubkey;
   }
 </script>

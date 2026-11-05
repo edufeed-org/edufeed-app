@@ -33,6 +33,7 @@
 // stops showing it. Spec: docs/nips/communikey-groups.md, "Removing content".
 import { deriveCommunityType } from './community-membership.js';
 import { hasModerationRole, moderationPubkeys } from './roles.js';
+import { eventAddress } from '$lib/helpers/event-address.js';
 
 export const CONTENT_REMOVAL_KIND = 1985;
 export const CONTENT_REMOVAL_NAMESPACE = 'communikey.moderation';
@@ -56,21 +57,6 @@ export const NO_REMOVALS = Object.freeze({ ids: new Set(), addresses: new Set() 
  */
 function tagValue(event, name) {
   return event?.tags?.find((/** @type {string[]} */ t) => t[0] === name)?.[1];
-}
-
-/**
- * `kind:pubkey:d` for addressable kinds (30000–39999) carrying a `d` tag,
- * else null. Pure: no applesauce caching (CLAUDE.md, "Applesauce Functions
- * That Mutate").
- * @param {any} event
- * @returns {string | null}
- */
-export function eventAddress(event) {
-  if (!event || typeof event.kind !== 'number' || !event.pubkey) return null;
-  if (event.kind < 30000 || event.kind >= 40000) return null;
-  const d = tagValue(event, 'd');
-  if (d === undefined) return null;
-  return `${event.kind}:${event.pubkey}:${d}`;
 }
 
 /**
