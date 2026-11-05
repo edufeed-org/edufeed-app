@@ -145,6 +145,35 @@ describe('BottomSheet', () => {
         vi.useRealTimers();
       }
     });
+
+    // Phones: the content keeps the default touch-action, so Chrome claims a
+    // downward drag for panning and sends pointercancel — the pull never
+    // closed the sheet from its content (only from the handle). A drag that
+    // moves down at scroll-top must keep the browser from panning.
+    it('keeps the browser from panning a downward pull that started on the content', async () => {
+      const { getByTestId } = render(BottomSheet, props());
+      const body = getByTestId('sheet-body');
+      const sheet = /** @type {HTMLElement} */ (body.closest('[role="dialog"]'));
+      const touchMove = () => {
+        const e = new Event('touchmove', { bubbles: true, cancelable: true });
+        body.dispatchEvent(e);
+        return e.defaultPrevented;
+      };
+
+      // No drag yet: scrolling is the browser's business.
+      expect(touchMove()).toBe(false);
+
+      await fireEvent.pointerDown(body, { pointerId: 1, clientY: 100, isPrimary: true });
+      await fireEvent.pointerMove(sheet, { pointerId: 1, clientY: 130, isPrimary: true });
+      expect(touchMove()).toBe(true);
+
+      // Moving back up (scrolling the content) stays native.
+      await fireEvent.pointerMove(sheet, { pointerId: 1, clientY: 90, isPrimary: true });
+      expect(touchMove()).toBe(false);
+
+      await fireEvent.pointerUp(sheet, { pointerId: 1, clientY: 90, isPrimary: true });
+      expect(touchMove()).toBe(false);
+    });
   });
 
   it('restores body scroll on unmount', () => {

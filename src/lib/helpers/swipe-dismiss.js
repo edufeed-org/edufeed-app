@@ -44,7 +44,7 @@ export function shouldDismiss({ dy, elapsed, height }) {
  */
 export function swipeDismiss(node, params) {
   let onDismiss = params.onDismiss;
-  /** @type {{ id: number, startY: number, startedAt: number } | null} */
+  /** @type {{ id: number, startY: number, startedAt: number, dy: number } | null} */
   let drag = null;
 
   /** @param {EventTarget | null} target */
@@ -78,7 +78,7 @@ export function swipeDismiss(node, params) {
   function onPointerDown(e) {
     if (drag || e.isPrimary === false) return;
     if (node.scrollTop > 0 && !fromHandle(e.target)) return;
-    drag = { id: e.pointerId, startY: e.clientY, startedAt: Date.now() };
+    drag = { id: e.pointerId, startY: e.clientY, startedAt: Date.now(), dy: 0 };
     node.style.transition = 'none';
     capture('setPointerCapture', e.pointerId);
   }
@@ -87,7 +87,21 @@ export function swipeDismiss(node, params) {
   function onPointerMove(e) {
     if (!drag || e.pointerId !== drag.id) return;
     const dy = Math.max(0, e.clientY - drag.startY);
+    drag.dy = dy;
     node.style.transform = `translateY(${dy}px)`;
+  }
+
+  /**
+   * The content keeps the default touch-action so it can scroll; on a phone
+   * the browser would therefore claim a downward drag for panning and cancel
+   * the pointer, and a pull that started on the content never closed the
+   * sheet. While a drag is moving the sheet down, keep the touch from panning
+   * (pointermove runs before touchmove for the same input). Moving up — i.e.
+   * scrolling the content — stays native.
+   * @param {TouchEvent} e
+   */
+  function onTouchMove(e) {
+    if (drag && drag.dy > 0 && e.cancelable) e.preventDefault();
   }
 
   /** @param {PointerEvent} e */
@@ -113,6 +127,7 @@ export function swipeDismiss(node, params) {
   node.addEventListener('pointermove', onPointerMove);
   node.addEventListener('pointerup', onPointerUp);
   node.addEventListener('pointercancel', onPointerCancel);
+  node.addEventListener('touchmove', onTouchMove, { passive: false });
 
   return {
     /** @param {{ onDismiss: () => void }} next */
@@ -124,6 +139,7 @@ export function swipeDismiss(node, params) {
       node.removeEventListener('pointermove', onPointerMove);
       node.removeEventListener('pointerup', onPointerUp);
       node.removeEventListener('pointercancel', onPointerCancel);
+      node.removeEventListener('touchmove', onTouchMove);
       reset();
     }
   };
