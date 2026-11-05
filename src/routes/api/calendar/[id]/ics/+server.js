@@ -9,6 +9,7 @@ import {
   dropDeletedEvents
 } from '$lib/server/nostr-fetch.js';
 import { tagValue, generateICSContent } from '$lib/server/calendar-ics.js';
+import { parseCommunityContentTypes } from '$lib/helpers/communityRelays.js';
 
 /**
  * Server-side ICS feed for both NIP-52 calendars (`naddr`) and community
@@ -21,6 +22,11 @@ import { tagValue, generateICSContent } from '$lib/server/calendar-ics.js';
  */
 
 const HEX_PUBKEY_RE = /^[0-9a-f]{64}$/i;
+const CALENDAR_EVENT_KINDS = [31922, 31923];
+/** Upper bound on the `a` tags one calendar may make us resolve. */
+const MAX_A_TAGS = 500;
+/** Distinct `a`-tag relay hints worth a DNS check (the fetch caps sockets at 7 anyway). */
+const MAX_A_TAG_HINTS = 4;
 
 /**
  * Detect identifier type without pulling in client-only helpers.
@@ -41,7 +47,8 @@ function detectIdentifierType(identifier) {
  */
 function encodeFilename(filename) {
   const name = filename.replace(/\.ics$/, '');
-  const asciiFallback = name.replace(/[^\x20-\x7E]/g, '').trim() || 'calendar';
+  // `"` and `\` would end or escape the quoted-string; drop them with non-ASCII.
+  const asciiFallback = name.replace(/[^\x20-\x7E]|["\\]/g, '').trim() || 'calendar';
   const encoded = encodeURIComponent(name).replace(/['()]/g, escape);
   return `attachment; filename="${asciiFallback}.ics"; filename*=UTF-8''${encoded}.ics`;
 }
@@ -93,35 +100,7 @@ async function handleNaddrCalendar(naddr, url) {
     return jsonError('Calendar not found', 404);
   }
 
-  // Resolve referenced events from `a` tags. Each entry is `kind:pubkey:dtag`
-  // optionally followed by a relay hint.
-  const aTags = calendar.tags.filter((t) => t[0] === 'a');
-  const referenced = await Promise.all(
-    aTags.map(async (tag) => {
-      const value = tag[1];
-      const hint = tag[2];
-      if (!value) return null;
-      const parts = value.split(':');
-      if (parts.length < 3) return null;
-      const [kindStr, pubkey, ...dParts] = parts;
-      const dTag = dParts.join(':');
-      const kind = Number.parseInt(kindStr, 10);
-      if (!Number.isFinite(kind) || (kind !== 31922 && kind !== 31923)) return null;
-
-      const eventRelays = getCalendarRelaysServer(await safeHintRelays(hint ? [hint] : []));
-      return fetchEventFromRelays(
-        {
-          kinds: [kind],
-          authors: [pubkey],
-          '#d': [dTag],
-          limit: 1
-        },
-        eventRelays
-      );
-    })
-  );
-
-  const found = /** @type {import('nostr-tools').NostrEvent[]} */ (referenced.filter(Boolean));
+  const found = await fetchReferencedEvents(calendar);
 
   const deletions = await fetchDeletions([calendar, ...found], relays);
   if (dropDeletedEvents([calendar], deletions).length === 0) {
@@ -194,18 +173,105 @@ async function handleCommunityCalendar(pubkeyOrNpub, url) {
     : [];
   const allRelays = getCalendarRelaysServer(communityRelays);
 
-  const fetched = await fetchEventsFromRelays(
-    {
-      kinds: [31922, 31923],
-      '#h': [communityPubkey],
-      limit: 500
-    },
-    allRelays
-  );
-  const events = dropDeletedEvents(fetched, await fetchDeletions(fetched, allRelays));
+  const [fetched, allowedAuthors] = await Promise.all([
+    fetchEventsFromRelays(
+      {
+        kinds: CALENDAR_EVENT_KINDS,
+        '#h': [communityPubkey],
+        limit: 500
+      },
+      allRelays
+    ),
+    fetchCalendarAllowedAuthors(communityDefEvent, allRelays)
+  ]);
+  const permitted = allowedAuthors
+    ? fetched.filter((ev) => allowedAuthors.has(ev.pubkey))
+    : fetched;
+  const events = dropDeletedEvents(permitted, await fetchDeletions(permitted, allRelays));
 
   const ics = generateICSContent({ title, summary }, events, url);
   return icsResponse(ics, title || 'community-calendar');
+}
+
+/**
+ * Resolve the events a kind-31924 calendar lists in its `a` tags
+ * (`kind:pubkey:d`, optional relay hint) with one REQ: one filter per kind
+ * carrying every author and d-tag. The authors × d-tags cross product can match
+ * coordinates the calendar does not list, so results are narrowed back to the
+ * listed ones, keeping the newest revision of each.
+ * @param {import('nostr-tools').NostrEvent} calendar
+ * @returns {Promise<import('nostr-tools').NostrEvent[]>}
+ */
+async function fetchReferencedEvents(calendar) {
+  /** @type {Map<number, { authors: Set<string>, dTags: Set<string> }>} */
+  const byKind = new Map();
+  /** @type {Set<string>} */
+  const wanted = new Set();
+  /** @type {Set<string>} */
+  const hints = new Set();
+
+  for (const tag of calendar.tags.filter((t) => t[0] === 'a').slice(0, MAX_A_TAGS)) {
+    const parts = (tag[1] || '').split(':');
+    if (parts.length < 3) continue;
+    const [kindStr, pubkey, ...dParts] = parts;
+    const kind = Number.parseInt(kindStr, 10);
+    if (!CALENDAR_EVENT_KINDS.includes(kind) || !HEX_PUBKEY_RE.test(pubkey)) continue;
+    const dTag = dParts.join(':');
+
+    const entry = byKind.get(kind) ?? { authors: new Set(), dTags: new Set() };
+    entry.authors.add(pubkey);
+    entry.dTags.add(dTag);
+    byKind.set(kind, entry);
+    wanted.add(`${kind}:${pubkey}:${dTag}`);
+    if (tag[2]) hints.add(tag[2]);
+  }
+  if (byKind.size === 0) return [];
+
+  const filters = [...byKind].map(([kind, { authors, dTags }]) => ({
+    kinds: [kind],
+    authors: [...authors],
+    '#d': [...dTags]
+  }));
+  const relays = getCalendarRelaysServer(
+    await safeHintRelays([...hints].slice(0, MAX_A_TAG_HINTS))
+  );
+  const fetched = (await fetchEventsFromRelays(filters, relays)) || [];
+
+  /** @type {Map<string, import('nostr-tools').NostrEvent>} */
+  const newest = new Map();
+  for (const ev of fetched) {
+    const address = `${ev.kind}:${ev.pubkey}:${tagValue(ev, 'd') ?? ''}`;
+    if (!wanted.has(address)) continue;
+    const prev = newest.get(address);
+    if (!prev || ev.created_at > prev.created_at) newest.set(address, ev);
+  }
+  return [...newest.values()];
+}
+
+/**
+ * The community's allowed calendar authors — the same rule the /c page
+ * applies client-side (`useProfileListAccess` → `filterEventsByAccess`): the
+ * section holding the calendar kinds names a kind-30000 profile list, and only
+ * its `p` members' events are shown. A list that cannot be found allows nobody,
+ * as on the client.
+ * @param {import('nostr-tools').NostrEvent | null} communityDefEvent
+ * @param {string[]} relays
+ * @returns {Promise<Set<string> | null>} null when the calendar is not gated
+ */
+async function fetchCalendarAllowedAuthors(communityDefEvent, relays) {
+  const section = parseCommunityContentTypes(communityDefEvent).find((s) =>
+    s.kinds.some((k) => CALENDAR_EVENT_KINDS.includes(k))
+  );
+  if (!section?.profileList) return null;
+
+  const [, pubkey, ...idParts] = section.profileList.split(':');
+  if (!HEX_PUBKEY_RE.test(pubkey ?? '')) return new Set();
+  const hint = section.profileListRelay ? await safeHintRelays([section.profileListRelay]) : [];
+  const list = await fetchEventFromRelays(
+    { kinds: [30000], authors: [pubkey], '#d': [idParts.join(':')], limit: 1 },
+    [...new Set([...hint, ...relays])]
+  );
+  return new Set((list?.tags ?? []).filter((t) => t[0] === 'p' && t[1]).map((t) => t[1]));
 }
 
 /**

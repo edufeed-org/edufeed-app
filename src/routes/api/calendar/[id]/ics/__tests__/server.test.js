@@ -162,8 +162,8 @@ describe('ICS endpoint - NIP-52 calendar (naddr)', () => {
       sig: 's'.repeat(128)
     });
 
-    // Referenced event lookup
-    fetchEventFromRelays.mockResolvedValueOnce(
+    // Referenced event lookup (one batched REQ)
+    fetchEventsFromRelays.mockResolvedValueOnce([
       makeEvent({
         id: 'evtx'.padEnd(64, '0'),
         kind: 31923,
@@ -175,7 +175,7 @@ describe('ICS endpoint - NIP-52 calendar (naddr)', () => {
           ['end', '1700004600']
         ]
       })
-    );
+    ]);
 
     const response = await GET({
       url: new URL(`https://example.org/api/calendar/${naddr}/ics`),
@@ -241,7 +241,6 @@ describe('ICS endpoint - relay order, SSRF guard, deletions', () => {
     fetchEventFromRelays.mockResolvedValueOnce(
       calendarEvent([['a', `31923:${CALENDAR_AUTHOR}:x`, 'wss://10.0.0.1']])
     );
-    fetchEventFromRelays.mockResolvedValueOnce(null);
 
     await GET({
       url: new URL(`https://example.org/api/calendar/${naddr}/ics`),
@@ -254,7 +253,7 @@ describe('ICS endpoint - relay order, SSRF guard, deletions', () => {
       'wss://hint.example.com'
     ]);
     // The private `a`-tag hint is dropped; only configured relays remain.
-    expect(fetchEventFromRelays.mock.calls[1][1]).toEqual([
+    expect(fetchEventsFromRelays.mock.calls[0][1]).toEqual([
       'wss://cal.example.com',
       'wss://fallback.example.com'
     ]);
@@ -273,10 +272,10 @@ describe('ICS endpoint - relay order, SSRF guard, deletions', () => {
         ['a', `31923:${CALENDAR_AUTHOR}:gone`]
       ])
     );
-    fetchEventFromRelays.mockResolvedValueOnce(referenced('kept', 'Kept Event'));
-    fetchEventFromRelays.mockResolvedValueOnce(referenced('gone', 'Deleted Event'));
     fetchEventsFromRelays.mockImplementation(async (filter) => {
-      if (!isDeletionQuery(filter)) return [];
+      if (!isDeletionQuery(filter)) {
+        return [referenced('kept', 'Kept Event'), referenced('gone', 'Deleted Event')];
+      }
       return [
         {
           id: 'd'.repeat(64),
@@ -402,5 +401,203 @@ describe('ICS endpoint - relay order, SSRF guard, deletions', () => {
       'wss://fallback.example.com',
       'wss://community.example.com'
     ]);
+  });
+
+  it('resolves all a-tags in one batched REQ per kind, keeping only listed coordinates', async () => {
+    const OTHER = 'e'.repeat(64);
+    const naddr = nip19.naddrEncode({
+      kind: 31924,
+      pubkey: CALENDAR_AUTHOR,
+      identifier: 'my-cal',
+      relays: []
+    });
+    fetchEventFromRelays.mockResolvedValueOnce(
+      calendarEvent([
+        ['a', `31923:${CALENDAR_AUTHOR}:one`],
+        ['a', `31923:${OTHER}:two`],
+        ['a', `31922:${CALENDAR_AUTHOR}:day`],
+        ['a', `1:${CALENDAR_AUTHOR}:ignored`]
+      ])
+    );
+    // The authors × #d cross product also matches OTHER's "one", which the
+    // calendar does not list — it must not leak into the feed.
+    const stray = makeEvent({
+      id: '9'.repeat(64),
+      pubkey: OTHER,
+      tags: [
+        ['d', 'one'],
+        ['title', 'Stray'],
+        ['start', '1700001000']
+      ]
+    });
+    fetchEventsFromRelays.mockImplementation(async (filter) =>
+      isDeletionQuery(filter) ? [] : [referenced('one', 'Listed One'), stray]
+    );
+
+    const response = await GET({
+      url: new URL(`https://example.org/api/calendar/${naddr}/ics`),
+      params: { id: naddr }
+    });
+    const body = await response.text();
+    expect(body).toContain('SUMMARY:Listed One');
+    expect(body).not.toContain('Stray');
+
+    const eventCalls = fetchEventsFromRelays.mock.calls.filter(([f]) => !isDeletionQuery(f));
+    expect(eventCalls).toHaveLength(1);
+    expect(fetchEventFromRelays).toHaveBeenCalledTimes(1); // only the calendar itself
+    const filters = eventCalls[0][0];
+    expect(filters).toEqual(
+      expect.arrayContaining([
+        {
+          kinds: [31923],
+          authors: expect.arrayContaining([CALENDAR_AUTHOR, OTHER]),
+          '#d': expect.arrayContaining(['one', 'two'])
+        },
+        { kinds: [31922], authors: [CALENDAR_AUTHOR], '#d': ['day'] }
+      ])
+    );
+    expect(filters).toHaveLength(2);
+  });
+
+  it('caps the a-tags it resolves at 500', async () => {
+    const naddr = nip19.naddrEncode({
+      kind: 31924,
+      pubkey: CALENDAR_AUTHOR,
+      identifier: 'my-cal',
+      relays: []
+    });
+    const aTags = Array.from({ length: 2000 }, (_, i) => [
+      'a',
+      `31923:${CALENDAR_AUTHOR}:evt-${i}`
+    ]);
+    fetchEventFromRelays.mockResolvedValueOnce(calendarEvent(aTags));
+
+    await GET({
+      url: new URL(`https://example.org/api/calendar/${naddr}/ics`),
+      params: { id: naddr }
+    });
+
+    const [filters] = fetchEventsFromRelays.mock.calls.find(([f]) => !isDeletionQuery(f));
+    expect(filters[0]['#d']).toHaveLength(500);
+  });
+});
+
+describe('ICS endpoint - community profile-list access', () => {
+  const MEMBER = '1'.repeat(64);
+  const OUTSIDER = '2'.repeat(64);
+  const LIST_AUTHOR = '3'.repeat(64);
+
+  const communityDef = (sectionTags) => ({
+    id: 'f'.repeat(64),
+    pubkey: COMMUNITY_PUBKEY,
+    kind: 10222,
+    tags: sectionTags,
+    content: '',
+    created_at: 1,
+    sig: 's'.repeat(128)
+  });
+  const calEvent = (id, pubkey, title) =>
+    makeEvent({
+      id: id.repeat(64),
+      pubkey,
+      tags: [
+        ['d', title],
+        ['title', title],
+        ['start', '1700001000'],
+        ['h', COMMUNITY_PUBKEY]
+      ]
+    });
+
+  it('keeps only events by profile-list members when the calendar section is gated', async () => {
+    fetchEventFromRelays.mockResolvedValueOnce(null); // profile
+    fetchEventFromRelays.mockResolvedValueOnce(
+      communityDef([
+        ['content', 'Calendar'],
+        ['k', '31922'],
+        ['k', '31923'],
+        ['a', `30000:${LIST_AUTHOR}:cal-publishers`, 'wss://list.example.com']
+      ])
+    );
+    fetchEventFromRelays.mockResolvedValueOnce({
+      id: '4'.repeat(64),
+      pubkey: LIST_AUTHOR,
+      kind: 30000,
+      tags: [
+        ['d', 'cal-publishers'],
+        ['p', MEMBER]
+      ],
+      content: '',
+      created_at: 1,
+      sig: 's'.repeat(128)
+    });
+    fetchEventsFromRelays.mockImplementation(async (filter) =>
+      isDeletionQuery(filter)
+        ? []
+        : [calEvent('a', MEMBER, 'MemberEvent'), calEvent('b', OUTSIDER, 'OutsiderEvent')]
+    );
+
+    const response = await GET({
+      url: new URL(`https://example.org/api/calendar/${COMMUNITY_PUBKEY}/ics`),
+      params: { id: COMMUNITY_PUBKEY }
+    });
+    const body = await response.text();
+    expect(body).toContain('SUMMARY:MemberEvent');
+    expect(body).not.toContain('OutsiderEvent');
+
+    const listCall = fetchEventFromRelays.mock.calls[2];
+    expect(listCall[0]).toMatchObject({
+      kinds: [30000],
+      authors: [LIST_AUTHOR],
+      '#d': ['cal-publishers']
+    });
+    expect(listCall[1]).toContain('wss://list.example.com');
+  });
+
+  it('keeps every event when the calendar section has no profile list', async () => {
+    fetchEventFromRelays.mockResolvedValueOnce(null); // profile
+    fetchEventFromRelays.mockResolvedValueOnce(
+      communityDef([
+        ['content', 'Calendar'],
+        ['k', '31923']
+      ])
+    );
+    fetchEventsFromRelays.mockImplementation(async (filter) =>
+      isDeletionQuery(filter)
+        ? []
+        : [calEvent('a', MEMBER, 'MemberEvent'), calEvent('b', OUTSIDER, 'OutsiderEvent')]
+    );
+
+    const response = await GET({
+      url: new URL(`https://example.org/api/calendar/${COMMUNITY_PUBKEY}/ics`),
+      params: { id: COMMUNITY_PUBKEY }
+    });
+    const body = await response.text();
+    expect(body).toContain('SUMMARY:MemberEvent');
+    expect(body).toContain('SUMMARY:OutsiderEvent');
+    expect(fetchEventFromRelays).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('ICS endpoint - Content-Disposition', () => {
+  it('never puts a double quote or CR/LF into the ASCII filename fallback', async () => {
+    fetchEventFromRelays.mockResolvedValueOnce({
+      id: 'p'.repeat(64),
+      pubkey: COMMUNITY_PUBKEY,
+      kind: 0,
+      tags: [],
+      content: JSON.stringify({ name: 'Evil"; filename="x.exe' }),
+      created_at: 1,
+      sig: 's'.repeat(128)
+    });
+    fetchEventFromRelays.mockResolvedValueOnce(null);
+
+    const response = await GET({
+      url: new URL(`https://example.org/api/calendar/${COMMUNITY_PUBKEY}/ics`),
+      params: { id: COMMUNITY_PUBKEY }
+    });
+    const disposition = response.headers.get('Content-Disposition');
+    const fallback = disposition.match(/filename="([^"]*)"/)[1];
+    expect(fallback).not.toContain('\\');
+    expect(disposition.match(/"/g)).toHaveLength(2);
   });
 });

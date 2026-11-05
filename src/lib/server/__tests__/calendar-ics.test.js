@@ -45,6 +45,18 @@ function unfoldLines(ics) {
 }
 
 describe('generateICSContent', () => {
+  it('never emits a raw CR: CRLF becomes \\n, a lone CR is dropped', () => {
+    const event = timedEvent({
+      content: 'line1\r\nline2\rX-INJECTED:1',
+      tags: [...timedEvent().tags.filter((t) => t[0] !== 'title'), ['title', 'A\rB']]
+    });
+    const ics = generateICSContent({ title: 'Cal\r', summary: '' }, [event], BASE_URL);
+    expect(ics.replace(/\r\n/g, '')).not.toContain('\r');
+    const lines = unfoldLines(ics);
+    expect(lines).toContain('DESCRIPTION:line1\\nline2X-INJECTED:1');
+    expect(lines).toContain('SUMMARY:AB');
+  });
+
   it('uses event.content as DESCRIPTION when there is no summary tag', () => {
     const event = timedEvent({ content: 'Agenda' });
     const ics = generateICSContent({ title: '', summary: '' }, [event], BASE_URL);
