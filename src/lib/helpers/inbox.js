@@ -163,12 +163,29 @@ export function mergeReadMarkers(current, incoming) {
 }
 
 /**
+ * A NIP-58 badge award the user issued to themselves (badge issuers award
+ * their own badges). It is the user's own event, yet the inbox row is the
+ * only place to accept it into the profile badges list.
+ * @param {{ kind: number, pubkey: string, tags?: string[][] }} event
+ * @param {string | null | undefined} userPubkey
+ */
+export function isSelfIssuedAward(event, userPubkey) {
+  return (
+    event.kind === 8 &&
+    !!userPubkey &&
+    event.pubkey === userPubkey &&
+    !!event.tags?.some((t) => t[0] === 'p' && t[1] === userPubkey)
+  );
+}
+
+/**
+ * Drop the user's own events — except a badge award to themselves.
  * @param {import('nostr-tools').NostrEvent[]} events
  * @param {string} userPubkey
  * @returns {import('nostr-tools').NostrEvent[]}
  */
 export function filterSelfNotifications(events, userPubkey) {
-  return events.filter((e) => e.pubkey !== userPubkey);
+  return events.filter((e) => e.pubkey !== userPubkey || isSelfIssuedAward(e, userPubkey));
 }
 
 /**

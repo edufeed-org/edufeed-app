@@ -177,6 +177,20 @@ describe('filterSelfNotifications', () => {
   it('returns empty array when all events are self', () => {
     expect(filterSelfNotifications([{ pubkey: 'aaa', kind: 7 }], 'aaa')).toEqual([]);
   });
+  // A badge issuer may award their own badge (laoc's MOERFI 2026, 2026-11-05):
+  // the award must reach the inbox, the only place to accept it.
+  it('keeps a badge award the user issued to themselves', () => {
+    const selfAward = {
+      pubkey: 'aaa',
+      kind: 8,
+      tags: [
+        ['a', '30009:aaa:x'],
+        ['p', 'aaa']
+      ]
+    };
+    const ownReaction = { pubkey: 'aaa', kind: 7, tags: [['p', 'aaa']] };
+    expect(filterSelfNotifications([selfAward, ownReaction], 'aaa')).toEqual([selfAward]);
+  });
 });
 
 describe('isMembershipApplication', () => {
