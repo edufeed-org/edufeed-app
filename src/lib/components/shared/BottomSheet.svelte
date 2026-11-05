@@ -1,8 +1,11 @@
 <script>
   // Phone bottom sheet: scrim, grab handle, title row, Esc + scrim + close
-  // button all call onClose; body scroll is locked while open. The create
-  // sheet in GlobalFAB predates this primitive and keeps its own markup.
+  // button all call onClose, and so does pulling the sheet down (swipeDismiss:
+  // from the handle/header always, from the content while scrolled to the
+  // top); body scroll is locked while open. The create sheet in GlobalFAB
+  // predates this primitive and keeps its own markup.
   import { CloseIcon } from '$lib/components/icons';
+  import { swipeDismiss } from '$lib/helpers/swipe-dismiss.js';
   import * as m from '$lib/paraglide/messages';
 
   /**
@@ -48,29 +51,37 @@
     data-testid={testid}
     role="dialog"
     aria-label={title}
-    class="pb-safe fixed inset-x-0 bottom-0 z-[60] max-h-[80vh] overflow-y-auto rounded-t-2xl bg-base-100 shadow-2xl"
+    class="pb-safe fixed inset-x-0 bottom-0 z-[60] max-h-[80vh] overflow-y-auto rounded-t-2xl bg-base-100 shadow-2xl transition-transform duration-200 ease-out"
+    use:swipeDismiss={{ onDismiss: onClose }}
   >
-    <div class="flex items-center justify-center pt-2 pb-1">
-      <div class="h-1 w-12 rounded-full bg-base-content/20"></div>
-    </div>
-    <div class="flex items-center gap-2 px-4 pb-2">
-      {#if header}
-        <div class="min-w-0 flex-1">{@render header()}</div>
-      {:else}
-        <h2 class="flex-1 text-lg font-semibold">{title}</h2>
-      {/if}
-      {#if legend}
-        <div class="text-xs text-base-content/60">{@render legend()}</div>
-      {/if}
-      <button
-        type="button"
-        data-testid="bottom-sheet-close"
-        class="btn btn-circle btn-ghost btn-sm"
-        aria-label={m.aria_close_modal()}
-        onclick={onClose}
+    <!-- Handle + header: the pull-down zone that always starts a drag, so
+         it opts out of browser panning (touch-none). -->
+    <div data-swipe-handle class="touch-none">
+      <div
+        data-testid="bottom-sheet-handle"
+        class="flex cursor-grab items-center justify-center pt-2 pb-1 active:cursor-grabbing"
       >
-        <CloseIcon class_="h-5 w-5" />
-      </button>
+        <div class="h-1 w-12 rounded-full bg-base-content/20"></div>
+      </div>
+      <div class="flex items-center gap-2 px-4 pb-2">
+        {#if header}
+          <div class="min-w-0 flex-1">{@render header()}</div>
+        {:else}
+          <h2 class="flex-1 text-lg font-semibold">{title}</h2>
+        {/if}
+        {#if legend}
+          <div class="text-xs text-base-content/60">{@render legend()}</div>
+        {/if}
+        <button
+          type="button"
+          data-testid="bottom-sheet-close"
+          class="btn btn-circle btn-ghost btn-sm"
+          aria-label={m.aria_close_modal()}
+          onclick={onClose}
+        >
+          <CloseIcon class_="h-5 w-5" />
+        </button>
+      </div>
     </div>
     <div class="px-4 pt-1 pb-6">
       {@render children()}
