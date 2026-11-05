@@ -230,6 +230,9 @@ describe('<ProfileHeader>', () => {
     expect(follow.classList.contains('icon')).toBe(true);
     expect(follow.getAttribute('aria-label')).toBeTruthy();
     expect(onlyIcon(follow)).toBe(true);
+    // same paper square as Nachricht / wave / more — not the ink CTA
+    expect(follow.classList.contains('ghost')).toBe(true);
+    expect(follow.classList.contains('solid')).toBe(false);
     const dm = wide.container.querySelector(`a[href*="/c/messages?to=${PUBKEY}"]`);
     expect(dm.classList.contains('icon')).toBe(true);
     expect(onlyIcon(dm)).toBe(true);
@@ -248,6 +251,7 @@ describe('<ProfileHeader>', () => {
     const nfollow = narrow.container.querySelector('[data-testid="follow-button"]');
     expect(nfollow.classList.contains('icon')).toBe(false);
     expect(onlyIcon(nfollow)).toBe(false);
+    expect(nfollow.classList.contains('solid')).toBe(true);
     narrow.unmount();
   });
 
