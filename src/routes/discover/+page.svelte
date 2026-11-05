@@ -89,6 +89,7 @@
   import {
     DISCOVER_CONTENT_TYPES,
     DISCOVER_FEED_TYPES,
+    DISCOVER_LEARNING_KINDS,
     getDiscoverTabs,
     resolveDiscoverType,
     isDiscoverTypeEnabled
@@ -132,9 +133,6 @@
   let eventsDateRangeEnd = $state(
     initialFilters.eventEnd ?? Math.floor(Date.now() / 1000) + DEFAULT_RANGE_SECONDS
   );
-  // Learning SKOS filters (kept to rebuild the search when the text changes)
-  /** @type {import('$lib/helpers/educational/searchQueryBuilder.js').SearchFilters} */
-  let learningFilters = $state(createEmptyFilters());
 
   /**
    * Whether items of `type` belong on the current tab: the tab itself, or the
@@ -338,10 +336,7 @@
       author: null,
       search: search || null
     });
-    if (newType !== 'learning') {
-      learningFilters = createEmptyFilters();
-      learningSearch.stop();
-    }
+    if (newType !== 'learning') learningSearch.stop();
   }
 
   /** @param {{ start: number, end: number }} range */
@@ -362,12 +357,6 @@
     })().subscribe({
       error: (/** @type {any} */ err) => console.error('🔍 Discover: Date range loader error:', err)
     });
-  }
-
-  /** @param {import('$lib/helpers/educational/searchQueryBuilder.js').SearchFilters} filters */
-  function handleLearningFilterChange(filters) {
-    learningFilters = filters;
-    learningSearch.apply(filters);
   }
 
   function executeSearch() {
@@ -435,17 +424,13 @@
     };
   });
 
-  // The learning search follows the active text (plus the selected SKOS filters)
+  // The learning search follows the active text. No SKOS filters on /discover:
+  // they match AMB-only tags and would hide the 30040 publications on this tab.
   let previousActiveSearchQuery = '';
   $effect(() => {
     if (showsType('learning') && activeSearchQuery !== previousActiveSearchQuery) {
       previousActiveSearchQuery = activeSearchQuery;
-      handleLearningFilterChange({
-        searchText: activeSearchQuery,
-        learningResourceType: learningFilters.learningResourceType || [],
-        about: learningFilters.about || [],
-        audience: learningFilters.audience || []
-      });
+      learningSearch.apply({ ...createEmptyFilters(), searchText: activeSearchQuery });
     }
   });
 
@@ -517,7 +502,11 @@
     }
     if (showsType('learning')) {
       subs.push(
-        fetchEvents(getEducationalRelays(), { kinds: [30142], authors, limit: 100 }).subscribe()
+        fetchEvents(getEducationalRelays(), {
+          kinds: [...DISCOVER_LEARNING_KINDS],
+          authors,
+          limit: 100
+        }).subscribe()
       );
     }
     if (showsType('events')) {
@@ -840,9 +829,6 @@
       eventsRange={{ start: eventsDateRangeStart, end: eventsDateRangeEnd }}
       onrangechange={handleEventsDateRangeChange}
       hiddenCalendarCount={calendarSources.hidden}
-      onlearningfilterchange={handleLearningFilterChange}
-      learningIsSearching={learningSearch.isActive && learningSearch.results.length === 0}
-      searchText={activeSearchQuery}
       resultCount={displayedContent.length}
       hasMore={hasMoreToShow}
     />

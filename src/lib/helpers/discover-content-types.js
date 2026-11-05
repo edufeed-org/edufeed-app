@@ -24,6 +24,9 @@ export const DISCOVER_CONTENT_TYPES = Object.freeze([
   'communities'
 ]);
 
+/** Kinds on the "Lernen" tab: AMB resources plus scientific publications (NKBIP-01). */
+export const DISCOVER_LEARNING_KINDS = Object.freeze([30142, 30040]);
+
 /** Content types that are merged into the "All" feed. */
 export const DISCOVER_FEED_TYPES = Object.freeze(['events', 'learning', 'articles', 'boards']);
 

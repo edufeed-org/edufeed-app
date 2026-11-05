@@ -85,6 +85,12 @@ describe('ambRankedSearchLoader', () => {
     expect(filter).not.toHaveProperty('authors');
   });
 
+  it('searches the given kinds (the discover tab adds 30040 publications)', () => {
+    ambRankedSearchLoader({ searchText: 'klima' }, 25, [30142, 30040]).subscribe();
+
+    expect(requestMock.mock.calls[0][1].kinds).toEqual([30142, 30040]);
+  });
+
   it('emits each event with its relay and 1-based rank within that relay', async () => {
     relayResponses = {
       'wss://amb-relay.example.com': respondWith([ev('a1'), ev('a2')]),

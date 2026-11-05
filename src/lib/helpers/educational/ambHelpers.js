@@ -20,7 +20,8 @@ import { unique } from '$lib/helpers/unique.js';
  * @returns {string} Resource name or "Untitled Resource"
  */
 export function getAMBName(event) {
-  return getTagValue(event.tags, 'name') || 'Untitled Resource';
+  // `title`: kind 30040 publications share the discover learning tab
+  return getTagValue(event.tags, 'name') || getTagValue(event.tags, 'title') || 'Untitled Resource';
 }
 
 /**
@@ -29,7 +30,7 @@ export function getAMBName(event) {
  * @returns {string} Resource description or empty string
  */
 export function getAMBDescription(event) {
-  return getTagValue(event.tags, 'description') || '';
+  return getTagValue(event.tags, 'description') || getTagValue(event.tags, 'summary') || '';
 }
 
 /**
@@ -166,7 +167,8 @@ export function getAMBLanguages(event) {
  */
 export function getAMBPublishedDate(event) {
   // Try datePublished first
-  const datePublished = getTagValue(event.tags, 'datePublished');
+  const datePublished =
+    getTagValue(event.tags, 'datePublished') || getTagValue(event.tags, 'published_on');
   if (datePublished) {
     return new Date(datePublished).getTime() / 1000;
   }
@@ -256,7 +258,9 @@ export function getAMBCompetencyRequired(event, lang = 'en') {
 export function getAMBCreatorNames(event) {
   // Deduped: events in the wild repeat the whole creator run, and the names
   // feed keyed {#each} blocks where duplicates crash the page.
-  return unique(getNestedTagValues(event.tags, 'creator:name'));
+  const names = getNestedTagValues(event.tags, 'creator:name');
+  // NKBIP-01 `author` tags: a 30040 whose creators are all p-tagged has no creator:name run
+  return unique(names.length ? names : getNestedTagValues(event.tags, 'author'));
 }
 
 /**

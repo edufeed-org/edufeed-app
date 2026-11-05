@@ -38,9 +38,10 @@ function empty() {
  * @param {SearchFilters} filters
  * @param {number} limit
  * @param {Record<string, any>} [extra] - Additional filter fields (e.g. `#h`)
+ * @param {readonly number[]} [kinds]
  * @returns {Record<string, any> | null}
  */
-function buildFilter(filters, limit, extra = {}) {
+function buildFilter(filters, limit, extra = {}, kinds = [30142]) {
   if (!hasActiveFilters(filters)) return null;
 
   // NIP-50 search query + dual-emit #ext:... tag filters.
@@ -49,7 +50,7 @@ function buildFilter(filters, limit, extra = {}) {
   if (!searchQuery && Object.keys(tagFilters).length === 0) return null;
 
   /** @type {Record<string, any>} */
-  const filter = { kinds: [30142], ...extra, limit, ...tagFilters };
+  const filter = { kinds: [...kinds], ...extra, limit, ...tagFilters };
   if (searchQuery) filter.search = searchQuery;
   return filter;
 }
@@ -85,10 +86,11 @@ function rankedRequest(filter) {
  *
  * @param {SearchFilters} filters - The search filters
  * @param {number} limit - Maximum number of results per relay
+ * @param {readonly number[]} [kinds] - Kinds to search
  * @returns {Observable<RankedSearchResult>}
  */
-export function ambRankedSearchLoader(filters, limit = 50) {
-  return rankedRequest(buildFilter(filters, limit));
+export function ambRankedSearchLoader(filters, limit = 50, kinds = [30142]) {
+  return rankedRequest(buildFilter(filters, limit, {}, kinds));
 }
 
 /**

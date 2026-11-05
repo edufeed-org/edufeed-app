@@ -29,6 +29,7 @@ vi.mock('$lib/stores/image-license.svelte.js', () => ({
 }));
 vi.mock('$lib/paraglide/messages.js', () => ({
   amb_resource_free: () => 'Free',
+  feed_badge_publication: () => 'Publication',
   amb_resource_view_content: () => 'View Content',
   amb_resource_open_content: () => 'Open Content',
   event_tags_view_all_tooltip: () => '',
@@ -228,6 +229,31 @@ describe('AMBResourceCard', () => {
       expect(cover).toBeTruthy();
       expect(cover?.className).toMatch(/aspect-video/);
       expect(cover?.className).not.toMatch(/aspect-\[2\/1\]/);
+    });
+  });
+
+  describe('scientific publication (kind 30040)', () => {
+    const publication = {
+      ...mockResource,
+      kind: 30040,
+      rawEvent: { ...mockResource.rawEvent, kind: 30040 }
+    };
+
+    it.each(/** @type {const} */ (['card', 'list']))(
+      '%s variant badges it as a publication',
+      (variant) => {
+        const { getByTestId } = render(AMBResourceCard, {
+          props: { resource: publication, authorProfile: mockAuthorProfile, variant }
+        });
+        expect(getByTestId('publication-badge').textContent).toContain('Publication');
+      }
+    );
+
+    it('does not badge a learning resource', () => {
+      const { queryByTestId } = render(AMBResourceCard, {
+        props: { resource: mockResource, authorProfile: mockAuthorProfile }
+      });
+      expect(queryByTestId('publication-badge')).toBeNull();
     });
   });
 

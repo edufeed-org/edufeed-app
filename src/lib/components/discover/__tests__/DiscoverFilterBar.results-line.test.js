@@ -12,9 +12,6 @@ import { render } from '@testing-library/svelte';
 vi.mock('$lib/components/feed/CommunityFilterDropdown.svelte', () => ({ default: () => null }));
 vi.mock('$lib/components/feed/RelayFilterDropdown.svelte', () => ({ default: () => null }));
 vi.mock('$lib/components/calendar/EventDateRangeFilter.svelte', () => ({ default: () => null }));
-vi.mock('$lib/components/educational/LearningContentFilters.svelte', () => ({
-  default: () => null
-}));
 
 import DiscoverFilterBar from '../DiscoverFilterBar.svelte';
 
@@ -36,14 +33,18 @@ function renderBar(contentType, resultCount) {
       eventsRange: { start: 0, end: 1 },
       onrangechange: () => {},
       hiddenCalendarCount: 244,
-      onlearningfilterchange: () => {},
-      learningIsSearching: false,
-      searchText: '',
       resultCount,
       hasMore: false
     }
   });
 }
+
+describe('DiscoverFilterBar learning tab', () => {
+  it('renders no SKOS filter row (it would hide 30040 publications)', () => {
+    const { queryByTestId } = renderBar('learning', 20);
+    expect(queryByTestId('tab-filters')).toBeNull();
+  });
+});
 
 describe('DiscoverFilterBar results line', () => {
   it('shows the hidden-sources fragment on the events tab', () => {

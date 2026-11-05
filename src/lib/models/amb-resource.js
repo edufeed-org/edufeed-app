@@ -1,6 +1,6 @@
 /**
  * AMB Resource Model
- * Provides reactive access to AMB educational resources (kind 30142) from the timeline
+ * Provides reactive access to AMB educational resources (kind 30142, plus 30040 publications on the discover learning tab) from the timeline
  *
  * Uses TimelineModel from applesauce-core which automatically:
  * - Filters out deleted events (NIP-09 deletion events)
@@ -18,6 +18,7 @@
 import { TimelineModel } from 'applesauce-core/models';
 import { map } from 'rxjs/operators';
 import { formatAMBResource } from '$lib/helpers/educational/index.js';
+import { DISCOVER_LEARNING_KINDS } from '$lib/helpers/discover-content-types.js';
 
 /**
  * @param {string[]} [authors]
@@ -27,7 +28,7 @@ export function AMBResourceModel(authors = []) {
     // Build filter for timeline query
     /** @type {any} */
     const filter = {
-      kinds: [30142],
+      kinds: [...DISCOVER_LEARNING_KINDS],
       limit: 300
     };
 
