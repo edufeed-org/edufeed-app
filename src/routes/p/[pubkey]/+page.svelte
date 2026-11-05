@@ -341,6 +341,7 @@
     posts: m.profile_tab_posts,
     content: m.profile_tab_content,
     articles: m.profile_tab_articles,
+    wikis: m.profile_tab_wikis,
     publications: m.profile_tab_publications,
     events: m.profile_tab_events,
     polls: m.profile_tab_polls,
@@ -350,8 +351,16 @@
   };
 
   /** Tab ids rendered by ProfileContentTab (model-only panels)
-   * @type {Array<'content' | 'articles' | 'publications' | 'events' | 'polls' | 'bookmarks'>} */
-  const CONTENT_TAB_IDS = ['content', 'articles', 'publications', 'events', 'polls', 'bookmarks'];
+   * @type {Array<'content' | 'articles' | 'wikis' | 'publications' | 'events' | 'polls' | 'bookmarks'>} */
+  const CONTENT_TAB_IDS = [
+    'content',
+    'articles',
+    'wikis',
+    'publications',
+    'events',
+    'polls',
+    'bookmarks'
+  ];
 
   // Owner-defined order + hidden tabs (kind 30078), applied for all viewers.
   // Auto tabs (publications) the owner has not placed show only with entries.

@@ -38,9 +38,13 @@ export const FEED_RELAY_SOURCES = [
   { kinds: [1068], getRelays: getCommunikeyRelays }
 ];
 
-/** Profile-page-only sources: publications have their own profile tab but
- *  no feed mixes them in (see TAB_KINDS.publications in profile-tabs.js). */
-const PROFILE_TAB_RELAY_SOURCES = [{ kinds: [30040], getRelays: getEducationalRelays }];
+/** Profile-page-only sources: publications and wikis have their own profile
+ *  tab but no feed mixes them in (see TAB_KINDS in profile-tabs.js). Wikis
+ *  use the all-lookup set, like the /wiki/<topic> route. */
+const PROFILE_TAB_RELAY_SOURCES = [
+  { kinds: [30040], getRelays: getEducationalRelays },
+  { kinds: [30818], getRelays: getAllLookupRelays }
+];
 
 /**
  * "Beteiligt an": resources by OTHER authors that name one of the profiles

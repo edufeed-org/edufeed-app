@@ -35,11 +35,12 @@ function tabsEvent(tags) {
 }
 
 describe('constants', () => {
-  it('defines the nine profile tabs', () => {
+  it('defines the ten profile tabs', () => {
     expect(PROFILE_TAB_IDS).toEqual([
       'posts',
       'content',
       'articles',
+      'wikis',
       'publications',
       'events',
       'polls',
@@ -64,11 +65,13 @@ describe('constants', () => {
     expect(TAB_KINDS.polls).toEqual([1068]);
     expect(TAB_KINDS.bookmarks).toEqual([39701, 9802, 1111]);
     expect(TAB_KINDS.publications).toEqual([30040]);
+    expect(TAB_KINDS.wikis).toEqual([30818]);
   });
 
   // Publications have their own tab only: no feed mixes them in.
   it('loads publications on the profile without adding them to the feeds', () => {
     expect(PROFILE_CONTENT_KINDS).toContain(30040);
+    expect(PROFILE_CONTENT_KINDS).toContain(30818);
     expect(PROFILE_CONTENT_KINDS).toEqual(expect.arrayContaining(TAB_KINDS.bookmarks));
   });
 });
@@ -170,6 +173,7 @@ describe('buildProfileTabsTags', () => {
       'posts',
       'content',
       'articles',
+      'wikis',
       'publications',
       'events',
       'polls',
@@ -201,7 +205,8 @@ describe('tabCountsFromEvents', () => {
       events: 2,
       polls: 1,
       bookmarks: 0,
-      publications: 0
+      publications: 0,
+      wikis: 0
     });
   });
 
@@ -246,7 +251,8 @@ describe('tabCountsFromEvents', () => {
       events: 0,
       polls: 0,
       bookmarks: 0,
-      publications: 0
+      publications: 0,
+      wikis: 0
     });
     expect(tabCountsFromEvents([]).posts).toBe(0);
     expect(tabCountsFromEvents(null).posts).toBe(0);
@@ -328,18 +334,21 @@ describe('publications tab (kind 30040)', () => {
   });
 
   it('is an auto tab while the owner has not placed it explicitly', () => {
-    expect(autoTabIds(null)).toEqual(['publications']);
-    expect(autoTabIds(tabsEvent([['tab', 'posts']]))).toEqual(['publications']);
-    expect(autoTabIds(tabsEvent([['tab', 'publications']]))).toEqual([]);
-    expect(autoTabIds(tabsEvent([['tab', 'publications', 'hidden']]))).toEqual([]);
+    expect(autoTabIds(null)).toEqual(['publications', 'wikis']);
+    expect(autoTabIds(tabsEvent([['tab', 'posts']]))).toEqual(['publications', 'wikis']);
+    expect(autoTabIds(tabsEvent([['tab', 'publications']]))).toEqual(['wikis']);
+    expect(autoTabIds(tabsEvent([['tab', 'publications', 'hidden']]))).toEqual(['wikis']);
   });
 
   it('hides an auto tab without entries and shows it once there are some', () => {
     const config = parseProfileTabsEvent(null);
     const auto = autoTabIds(null);
-    expect(withAutoTabs(config, auto, { publications: 0 }).hidden).toEqual(['publications']);
-    expect(withAutoTabs(config, auto, {}).hidden).toEqual(['publications']);
-    expect(withAutoTabs(config, auto, { publications: 3 }).hidden).toEqual([]);
+    expect(withAutoTabs(config, auto, { publications: 0 }).hidden).toEqual([
+      'publications',
+      'wikis'
+    ]);
+    expect(withAutoTabs(config, auto, {}).hidden).toEqual(['publications', 'wikis']);
+    expect(withAutoTabs(config, auto, { publications: 3, wikis: 1 }).hidden).toEqual([]);
     // order is untouched
     expect(withAutoTabs(config, auto, {}).order).toEqual(config.order);
   });
@@ -374,5 +383,37 @@ describe('publications tab (kind 30040)', () => {
     });
     expect(hiddenWithEntries.order).toContain('publications');
     expect(hiddenWithEntries.hidden).toEqual(['publications']);
+  });
+});
+
+// NIP-54 wiki articles (kind 30818): an own tab, like publications — few
+// people write wikis, so it shows only once there are entries.
+describe('wikis tab (kind 30818)', () => {
+  it('counts wikis in their own tab, not in the posts total', () => {
+    const counts = tabCountsFromEvents([
+      { kind: 30818, pubkey: 'a', tags: [['d', 'one']] },
+      { kind: 30818, pubkey: 'a', tags: [['d', 'two']] },
+      { kind: 30023, tags: [] }
+    ]);
+    expect(counts.wikis).toBe(2);
+    expect(counts.posts).toBe(1);
+  });
+
+  it('shows up by itself once the profile has wikis', () => {
+    const config = parseProfileTabsEvent(null);
+    const auto = autoTabIds(null);
+    expect(withAutoTabs(config, auto, { wikis: 0 }).hidden).toContain('wikis');
+    expect(withAutoTabs(config, auto, { wikis: 4 }).hidden).not.toContain('wikis');
+  });
+
+  // An owner who saved a tab order before the wikis tab existed has no
+  // `tab` tag for it: it stays an auto tab instead of being forced on.
+  it('stays an auto tab for tab configs saved before it existed', () => {
+    const event = tabsEvent([
+      ['tab', 'posts'],
+      ['tab', 'articles', 'hidden']
+    ]);
+    expect(autoTabIds(event)).toContain('wikis');
+    expect(parseProfileTabsEvent(event).order).toContain('wikis');
   });
 });

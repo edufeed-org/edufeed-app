@@ -42,6 +42,9 @@ vi.mock('$lib/components/article/ArticleCard.svelte', async () => ({
 vi.mock('$lib/components/calendar/CalendarEventCard.svelte', async () => ({
   default: (await import('./fixtures/StubComponent.svelte')).default
 }));
+vi.mock('$lib/components/wiki/WikiCard.svelte', async () => ({
+  default: (await import('./fixtures/StubComponent.svelte')).default
+}));
 vi.mock('$lib/components/polls/PollCard.svelte', async () => ({
   default: (await import('./fixtures/StubComponent.svelte')).default
 }));
@@ -206,6 +209,14 @@ describe('<ProfileContentTab>', () => {
     ]);
     expect(container.querySelectorAll('[data-testid="stub-component"]')).toHaveLength(1);
     expect(container.querySelectorAll('[data-testid="pin-toggle"]')).toHaveLength(1);
+  });
+
+  it('renders one wiki card per wiki article on the wikis tab', async () => {
+    const { container } = render(ProfileContentTab, { pubkey: PUBKEY, tabId: 'wikis' });
+    expect(_modelFilters[0]).toEqual({ kinds: [30818], authors: [PUBKEY] });
+    await emit([ev(30818, { tags: [['d', 'one']] }), ev(30818, { tags: [['d', 'two']] })]);
+    expect(container.querySelectorAll('[data-testid="stub-component"]')).toHaveLength(2);
+    expect(container.querySelectorAll('[data-testid="pin-toggle"]')).toHaveLength(0);
   });
 
   // Scientific publications (kind 30040): title + abstract as feed cards.

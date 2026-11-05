@@ -1,6 +1,6 @@
 <!--
   ProfileContentTab — generic per-type tab panel of the redesigned profile
-  page (content / articles / publications / events / polls / bookmarks). Model-only: the
+  page (content / articles / wikis / publications / events / polls / bookmarks). Model-only: the
   page-level useProfileContent hook runs the network loaders; this component
   just subscribes to the EventStore for its tab's kinds and renders the
   matching card component.
@@ -24,6 +24,7 @@
   import { filterSocialBookmarks, groupByUrl, groupByEventRef } from '$lib/helpers/urlGrouping.js';
   import AMBResourceCard from '$lib/components/educational/AMBResourceCard.svelte';
   import ArticleCard from '$lib/components/article/ArticleCard.svelte';
+  import WikiCard from '$lib/components/wiki/WikiCard.svelte';
   import CalendarEventCard from '$lib/components/calendar/CalendarEventCard.svelte';
   import PollCard from '$lib/components/polls/PollCard.svelte';
   import UrlCard from '$lib/components/bookmarks/UrlCard.svelte';
@@ -40,7 +41,7 @@
   /**
    * @type {{
    *   pubkey: string,
-   *   tabId: 'content' | 'articles' | 'publications' | 'events' | 'polls' | 'bookmarks',
+   *   tabId: 'content' | 'articles' | 'wikis' | 'publications' | 'events' | 'polls' | 'bookmarks',
    *   pinnedPointers?: import('$lib/helpers/profile-feed.js').PinPointer[],
    *   canPin?: boolean
    * }}
@@ -269,6 +270,19 @@
             authorProfile={authorProfiles.get(event.pubkey) || null}
             compact={false}
           />
+        </div>
+      {/each}
+    </div>
+  {:else if tabId === 'wikis'}
+    <div class="space-y-4">
+      {#each events as event (event.id)}
+        <div
+          class="relative"
+          class:pf-pinned-card={isEntryPinned({ data: event }, pinnedPointers)}
+          class:mt-3={isEntryPinned({ data: event }, pinnedPointers)}
+        >
+          {@render pinRow(event)}
+          <WikiCard wiki={event} authorProfile={authorProfiles.get(event.pubkey) || null} />
         </div>
       {/each}
     </div>
