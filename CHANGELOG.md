@@ -7,6 +7,22 @@ merge commits of the nostr PRs that landed since the previous tag.
 
 ## [Unreleased]
 
+## [0.15.6] - 2026-11-05
+
+Fix release: one nostr PR, released directly without an RC on dev.
+
+### Fixed
+
+- A badge you awarded yourself (badge issuers often do) now shows up in the
+  inbox with the "Annehmen" button. The inbox hid all of your own events, so
+  such an award could not be accepted anywhere in the app. The row counts as
+  already read: no bell count, notification or Termi hint for something you
+  did yourself.
+
+### Deploy notes
+
+- No new env vars.
+
 ## [0.15.5] - 2026-11-05
 
 Fix release: one nostr PR, released directly without an RC on dev. Accepted
