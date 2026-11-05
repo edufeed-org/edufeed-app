@@ -8,7 +8,7 @@
 
 <script>
   import { calendarFilters } from '$lib/stores/calendar-filters.svelte.js';
-  import { runtimeConfig } from '$lib/stores/config.svelte.js';
+  import { getCalendarRelays } from '$lib/helpers/relay-helper.js';
   import { normalizeRelayInput } from '$lib/helpers/relay-input.js';
   import { CloseIcon, PlusIcon, RelayIcon } from '../icons';
   import * as m from '$lib/paraglide/messages';
@@ -25,9 +25,7 @@
   let error = $state(/** @type {string | null} */ (null));
 
   /** @type {string[]} */
-  const defaultRelays = Array.from(
-    new Set([...(runtimeConfig.appRelays?.calendar || []), ...(runtimeConfig.fallbackRelays || [])])
-  );
+  const defaultRelays = Array.from(new Set(getCalendarRelays()));
 
   let selectedRelays = $derived(calendarFilters.selectedRelays);
 
@@ -48,7 +46,7 @@
     if (!customRelayInput.trim()) return;
 
     // Bare URLs (no trailing slash): defaultRelays comes straight from
-    // runtimeConfig and the checkboxes below compare with ===, so a canonical
+    // the configured relay lists and the checkboxes below compare with ===, so a canonical
     // "wss://host/" would read as a relay nobody has configured.
     const relayUrl = normalizeRelayInput(customRelayInput, { trailingSlash: false });
     if (!relayUrl) {

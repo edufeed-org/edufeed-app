@@ -25,8 +25,7 @@ function toCalendarEvents(timeline) {
 import { calendarTimelineLoader } from '$lib/loaders/calendar.js';
 import { communityTargetedPublicationsLoader } from '$lib/loaders/targeted-publications.js';
 import { fetchUserDeletions, fetchEvents, addressLoader } from '$lib/loaders/base.js';
-import { getAllLookupRelays } from '$lib/helpers/relay-helper.js';
-import { runtimeConfig } from '$lib/stores/config.svelte.js';
+import { getAllLookupRelays, getCalendarRelays } from '$lib/helpers/relay-helper.js';
 import { applyCuratedFilter } from '$lib/services/curated-authors-service.svelte.js';
 import { calendarFilters } from '$lib/stores/calendar-filters.svelte.js';
 import { parseCalendarFilters, parseDateParam } from '$lib/helpers/urlParams.js';
@@ -165,10 +164,7 @@ export function useCalendarEventLoader(options) {
       stopBackgroundLoader();
 
       // Use default relays from config if no specific relays selected
-      const relaysToUse =
-        selectedRelays.length > 0
-          ? selectedRelays
-          : [...(runtimeConfig.appRelays?.calendar || []), ...(runtimeConfig.fallbackRelays || [])];
+      const relaysToUse = selectedRelays.length > 0 ? selectedRelays : getCalendarRelays();
       loadByRelays(relaysToUse, selectedAuthors);
     } else {
       // Default behavior: use EventStore model

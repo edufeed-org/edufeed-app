@@ -4,6 +4,7 @@
  */
 
 import { runtimeConfig } from '$lib/stores/config.svelte.js';
+import { getCalendarRelays } from '$lib/helpers/relay-helper.js';
 import { getSeenRelays, normalizeURL } from 'applesauce-core/helpers';
 import { activeDateLocale, formatDate } from '$lib/helpers/dates.js';
 import { normalizeHashtags } from '$lib/helpers/hashtags.js';
@@ -1115,10 +1116,7 @@ export async function fetchCommunityCalendarEvents(communityPubkey, relays = [])
           let relayList = relays;
           // Use default relays as fallback if no relays provided
           if (relayList.length === 0) {
-            relayList = [
-              ...(runtimeConfig.appRelays?.calendar || []),
-              ...(runtimeConfig.fallbackRelays || [])
-            ];
+            relayList = getCalendarRelays();
           }
 
           const loadPromise = firstValueFrom(
