@@ -60,7 +60,7 @@ describe('inbox-service pure functions', () => {
     it('creates combined filter array with #p and #P', () => {
       const filters = buildMainFilter('userpubkey', 1000);
       expect(filters).toEqual([
-        { kinds: [1, 1070, 1069, 7, 9], '#p': ['userpubkey'], since: 1000 },
+        { kinds: [1, 1070, 1069, 7, 9, 8], '#p': ['userpubkey'], since: 1000 },
         { kinds: [1111], '#p': ['userpubkey'], since: 1000 },
         { kinds: [1111], '#P': ['userpubkey'], since: 1000 },
         { kinds: [11, 30023, 30818], '#p': ['userpubkey'], since: 1000 }

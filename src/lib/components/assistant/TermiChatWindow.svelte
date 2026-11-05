@@ -164,6 +164,20 @@
         link: null
       };
     }
+    if (hint.id === 'badgeAward') {
+      const count = hint.count ?? 0;
+      return {
+        title: m.termi_hint_badge_award_title(),
+        body:
+          count === 1
+            ? m.termi_hint_badge_award_body_one()
+            : m.termi_hint_badge_award_body({ count }),
+        action: m.termi_hint_badge_award_cta(),
+        secondary: null,
+        doing: null,
+        link: null
+      };
+    }
     if (hint.id === 'joinRequests') {
       const count = hint.count ?? 0;
       return {

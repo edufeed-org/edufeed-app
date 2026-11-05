@@ -20,6 +20,9 @@ const KIND_TO_TYPE = {
   30818: 'mention',
   31925: 'rsvp',
   1018: 'pollVote',
+  // NIP-58 badge award naming the user; the row offers to accept it into the
+  // profile badges list (actions/badge-actions.js).
+  8: 'badgeAward',
   // NIP-29 put-user: an admin added you to a group (community root or channel).
   9000: 'groupAdded',
   // A contact list naming the user. Only ever the synthetic, first-sighting
@@ -232,8 +235,8 @@ export function getNotificationUrl(event, { groupAddedHref = null, channelHref =
     return community ? `/c/${community}` : null;
   }
 
-  // Waves and new followers — link to the person's profile
-  if (type === 'wave' || type === 'newFollower') {
+  // Waves, new followers and badge awards — link to the person's profile
+  if (type === 'wave' || type === 'newFollower' || type === 'badgeAward') {
     return `/p/${nip19.npubEncode(event.pubkey)}`;
   }
 

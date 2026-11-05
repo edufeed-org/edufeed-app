@@ -31,6 +31,21 @@ describe('getNotificationType', () => {
     ).toBe('newFollower');
   });
 
+  it('classifies a kind 8 badge award as badgeAward', () => {
+    expect(
+      getNotificationType({
+        kind: 8,
+        pubkey: 'a'.repeat(64),
+        tags: [
+          ['a', `30009:${'a'.repeat(64)}:bravery`],
+          ['p', 'b'.repeat(64)]
+        ],
+        content: '',
+        created_at: 1
+      })
+    ).toBe('badgeAward');
+  });
+
   it('returns "formRequest" for kind 1070', () => {
     expect(getNotificationType({ kind: 1070 })).toBe('formRequest');
   });
@@ -211,6 +226,22 @@ describe('getNotificationUrl', () => {
       created_at: 1
     });
     expect(url).toMatch(/^\/p\/npub1/);
+  });
+
+  it("links a badge award to the issuer's profile", () => {
+    const issuer = 'a'.repeat(64);
+    const url = getNotificationUrl({
+      id: 'f'.repeat(64),
+      kind: 8,
+      pubkey: issuer,
+      tags: [
+        ['a', `30009:${issuer}:bravery`],
+        ['p', 'b'.repeat(64)]
+      ],
+      content: '',
+      created_at: 1
+    });
+    expect(url).toBe(`/p/${nip19.npubEncode(issuer)}`);
   });
 
   const validPubkey = '3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d';

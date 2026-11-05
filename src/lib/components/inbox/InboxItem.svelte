@@ -11,7 +11,21 @@
   import { useGroupAddedTarget, useChannelMentionTarget } from '$lib/groups/group-added.svelte.js';
   import { useProfileMap } from '$lib/stores/profile-map.svelte.js';
   import { getUserDisplayName } from '$lib/helpers/message-utils.js';
-  import { markItemAsRead, getInboxPubkey } from '$lib/services/inbox-service.svelte.js';
+  import {
+    markItemAsRead,
+    getInboxPubkey,
+    getAcceptedAwardIds
+  } from '$lib/services/inbox-service.svelte.js';
+  import { actionRunner } from '$lib/stores/action-runner.svelte.js';
+  import { AcceptBadgeAward } from '$lib/actions/badge-actions.js';
+  import {
+    getBadgeAwardPointer,
+    getBadgeName,
+    getBadgeDescription,
+    getBadgeImage,
+    getBadgeThumbnails
+  } from 'applesauce-common/helpers';
+  import { untrack } from 'svelte';
   import { muteUser } from '$lib/stores/mute-list.svelte.js';
   import { publishWave } from '$lib/helpers/waves.js';
   import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
@@ -24,8 +38,10 @@
     ScrollTextIcon,
     PollIcon,
     MoreIcon,
-    PeopleIcon
+    PeopleIcon,
+    BadgeIcon
   } from '$lib/components/icons';
+  import BadgeThumb from '$lib/components/badges/BadgeThumb.svelte';
   import ProfileAvatar from '$lib/components/shared/ProfileAvatar.svelte';
   import UnreadDot from '$lib/components/shared/UnreadDot.svelte';
   import * as m from '$lib/paraglide/messages.js';
@@ -91,6 +107,67 @@
 
   let wavedBack = $state(false);
 
+  /**
+   * kind 8: the badge's kind 30009 definition, read from the store (the
+   * inbox prefetches it through the award's `a` tag). The identifier stands
+   * in for the name until it lands.
+   * @type {{ name: string, description: string, thumb: string, image: string } | null}
+   */
+  let badge = $state.raw(null);
+  $effect(() => {
+    badge = null;
+    if (type !== 'badgeAward') return;
+    // applesauce helpers memoize on the event; keep that out of the dependency graph
+    const pointer = untrack(() => getBadgeAwardPointer(event));
+    if (!pointer) return;
+    badge = {
+      name: pointer.identifier || m.inbox_badge_unnamed(),
+      description: '',
+      thumb: '',
+      image: ''
+    };
+    const sub = eventStore
+      .replaceable(pointer.kind, pointer.pubkey, pointer.identifier)
+      .subscribe((definition) => {
+        if (!definition) return;
+        badge = {
+          name: getBadgeName(definition) || pointer.identifier || m.inbox_badge_unnamed(),
+          description: getBadgeDescription(definition) || '',
+          thumb: getBadgeThumbnails(definition)[0]?.url ?? '',
+          image: getBadgeImage(definition)?.url ?? ''
+        };
+      });
+    return () => sub?.unsubscribe();
+  });
+
+  let accepting = $state(false);
+  let acceptedNow = $state(false);
+  // The profile badges list is what makes an award "accepted" (NIP-58); the
+  // local flag only bridges the moment until the new list reaches the store.
+  const accepted = $derived(acceptedNow || getAcceptedAwardIds().has(event.id));
+
+  /** @param {MouseEvent} e */
+  function handleAccept(e) {
+    e.stopPropagation();
+    e.preventDefault();
+    if (accepting || accepted) return;
+    accepting = true;
+    actionRunner
+      .run(AcceptBadgeAward, event)
+      .then(() => {
+        acceptedNow = true;
+        markItemAsRead(event.id);
+        showToast(m.badge_accept_success(), 'success');
+      })
+      .catch((err) => {
+        console.error('Failed to accept badge award:', err);
+        showToast(m.badge_accept_error(), 'error');
+      })
+      .finally(() => {
+        accepting = false;
+      });
+  }
+
   /** @type {Record<string, any>} */
   const iconMap = {
     formRequest: ScrollTextIcon,
@@ -104,7 +181,8 @@
     rsvp: CalendarIcon,
     pollVote: PollIcon,
     groupAdded: PeopleIcon,
-    newFollower: PeopleIcon
+    newFollower: PeopleIcon,
+    badgeAward: BadgeIcon
   };
 
   const TypeIcon = $derived(type ? iconMap[type] || BellIcon : BellIcon);
@@ -300,8 +378,26 @@
         &nbsp;{m.inbox_action_group_added({ groupName: groupAddedName })}
       {:else if type === 'newFollower'}
         &nbsp;{m.inbox_action_new_follower()}
+      {:else if type === 'badgeAward'}
+        &nbsp;{m.inbox_action_badge_award()}
       {/if}
     </div>
+    {#if badge}
+      <div class="mt-1.5 flex items-center gap-2">
+        <BadgeThumb
+          thumb={badge.thumb}
+          image={badge.image}
+          alt={badge.name}
+          class="h-9 w-9 flex-shrink-0 rounded-lg"
+        />
+        <div class="min-w-0">
+          <div class="truncate text-sm font-medium">{badge.name}</div>
+          {#if badge.description}
+            <div class="line-clamp-1 text-xs text-base-content/60">{badge.description}</div>
+          {/if}
+        </div>
+      </div>
+    {/if}
     <div class="group mt-0.5 flex items-center gap-2">
       <span class="text-xs text-base-content/50">{formatTime(event.created_at)}</span>
       {#if type === 'wave'}
@@ -310,6 +406,17 @@
           onclick={handleWaveBack}
         >
           👋 {wavedBack ? m.wave_success() : m.wave_back_button()}
+        </button>
+      {/if}
+      {#if type === 'badgeAward'}
+        <!-- btn-sm, not the wave button's btn-xs: a text action (CLAUDE.md "Buttons") -->
+        <button
+          class="btn btn-sm {accepted ? 'text-success btn-ghost' : 'btn-primary'}"
+          disabled={accepted || accepting}
+          onclick={handleAccept}
+        >
+          {#if accepting}<span class="loading loading-xs loading-spinner"></span>{/if}
+          {accepted ? m.inbox_badge_accepted() : m.inbox_badge_accept()}
         </button>
       {/if}
     </div>

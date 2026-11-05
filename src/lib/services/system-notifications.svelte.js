@@ -151,6 +151,8 @@ function describeInboxEvent(event) {
       return m.system_notif_group_added();
     case 'newFollower':
       return m.inbox_action_new_follower();
+    case 'badgeAward':
+      return m.inbox_action_badge_award();
     case 'formRequest':
       return m.system_notif_form_request();
     case 'formResponse':

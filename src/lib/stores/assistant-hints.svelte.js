@@ -97,7 +97,7 @@ import {
 import { getProfileNip05s } from '$lib/helpers/nip05-verify.js';
 import { runtimeConfig } from '$lib/stores/config.svelte.js';
 
-/** @typedef {'backup' | 'relays' | 'deadRelay' | 'dm' | 'nip05' | 'profile' | 'signer' | 'invites' | 'joinRequests' | 'groupAdded' | 'blossomUpgrade' | 'blossomPublic'} HintId */
+/** @typedef {'backup' | 'relays' | 'deadRelay' | 'dm' | 'nip05' | 'profile' | 'signer' | 'invites' | 'joinRequests' | 'groupAdded' | 'badgeAward' | 'blossomUpgrade' | 'blossomPublic'} HintId */
 /** @typedef {import('$lib/helpers/assistant-hints.js').HintStatus} HintStatus */
 
 export const HINT_IDS = /** @type {HintId[]} */ ([
@@ -112,7 +112,8 @@ export const HINT_IDS = /** @type {HintId[]} */ ([
   'blossomPublic',
   'invites',
   'joinRequests',
-  'groupAdded'
+  'groupAdded',
+  'badgeAward'
 ]);
 
 /** Pubkeys whose relay list was probed this session (one probe per account). */
@@ -355,7 +356,8 @@ export function useAssistantHints() {
         blossomPublic: null,
         invites: null,
         joinRequests: null,
-        groupAdded: null
+        groupAdded: null,
+        badgeAward: null
       };
 
     const backupConfirmed = isBackupDownloaded(user.pubkey);
@@ -507,6 +509,14 @@ export function useAssistantHints() {
         running: false,
         confirmed: false,
         everOpen: everOpen.has('groupAdded')
+      }),
+      badgeAward: deriveHintStatus({
+        // "Someone awarded you a badge": the inbox's unread kind-8 rows carry
+        // the accept button; clears as they are accepted/marked read.
+        applicable: (getUnreadByType().badgeAward ?? 0) > 0,
+        running: false,
+        confirmed: false,
+        everOpen: everOpen.has('badgeAward')
       })
     };
   });
@@ -570,8 +580,9 @@ export function useAssistantHints() {
       modalStore.openModal('concordInvites');
       return;
     }
-    if (id === 'groupAdded') {
-      // The inbox rows carry the per-group targets; opening one marks it read.
+    if (id === 'groupAdded' || id === 'badgeAward') {
+      // The inbox rows carry the per-group targets / the accept button;
+      // opening one marks it read.
       goto('/inbox');
       return;
     }
@@ -695,6 +706,9 @@ export function useAssistantHints() {
         }
         if (id === 'groupAdded') {
           entry.count = getUnreadByType().groupAdded ?? 0;
+        }
+        if (id === 'badgeAward') {
+          entry.count = getUnreadByType().badgeAward ?? 0;
         }
         return [entry];
       }),
