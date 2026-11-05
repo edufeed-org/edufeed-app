@@ -7,6 +7,32 @@ merge commits of the nostr PRs that landed since the previous tag.
 
 ## [Unreleased]
 
+## [0.15.4] - 2026-11-05
+
+Fix release: two nostr PRs, released directly without an RC on dev.
+
+### Added
+
+- Badge awards (NIP-58 kind 8) that name you show up in the inbox with a
+  preview of the badge (image, name, description) and an "Annehmen" button.
+  Accepting adds the badge to your profile badges list (kind 10008; an old
+  kind 30008 list is carried over), so it appears on your profile. A row
+  reads "Angenommen" once the award is in your list, also when another
+  client accepted it. New awards get an OS notification and a Termi hint
+  while unread. Like every inbox item, only the last seven days are loaded.
+
+### Fixed
+
+- Phone bottom sheets (account menu, community sections) close when pulled
+  down, as the grab handle promised: a long pull or a quick flick closes,
+  a short pull snaps back. The pull works from the handle and header, and
+  from the content while it is scrolled to the top; once the content is
+  scrolled, pulling it down scrolls it back as before.
+
+### Deploy notes
+
+- No new env vars.
+
 ## [0.15.3] - 2026-11-05
 
 Fix release for the phone menu. One nostr PR, released directly without an
