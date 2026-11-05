@@ -34,6 +34,12 @@ import {
   getWriteRelays
 } from '$lib/services/relay-service.svelte.js';
 import { normalizeURL } from 'applesauce-core/helpers';
+import {
+  PROFILE_BADGES_KIND,
+  LEGACY_PROFILE_BADGES_KIND,
+  LEGACY_PROFILE_BADGES_IDENTIFIER,
+  getProfileBadgeSlots
+} from 'applesauce-common/helpers';
 import { getUnreadDmCount, markAllDmConversationsAsRead } from '$lib/services/dm-service.svelte.js';
 import { getNip05ReadyCount } from '$lib/stores/nip05-ready-alert.svelte.js';
 import { parseAddressPointerFromATag } from '$lib/helpers/nostrUtils.js';
@@ -78,9 +84,10 @@ let prefetchedGroupIds = new Set();
 export function buildMainFilter(pubkey, since) {
   // Kind 1 is in here for NIP-10 replies and note mentions: most Nostr clients
   // answer a note with a kind 1 reply rather than a NIP-22 kind 1111 comment,
-  // and the thread view renders both (see loaders/comments.js).
+  // and the thread view renders both (see loaders/comments.js). Kind 8 is a
+  // NIP-58 badge award naming the user.
   return [
-    { kinds: [1, 1070, 1069, 7, 9], '#p': [pubkey], since },
+    { kinds: [1, 1070, 1069, 7, 9, 8], '#p': [pubkey], since },
     { kinds: [1111], '#p': [pubkey], since },
     { kinds: [1111], '#P': [pubkey], since },
     // @mentions in forum threads, long-form articles and wiki pages
@@ -278,6 +285,14 @@ let activePubkey = $state(null);
 /** @type {Set<string>} */
 
 let readItemIds = $state.raw(new Set());
+/**
+ * Ids of the kind 8 awards the user has accepted: the a/e slots of their
+ * profile badges list (kind 10008, plus the deprecated kind 30008
+ * `profile_badges`, which other clients may still maintain). Lets a badge
+ * award row show "accepted" instead of the accept button.
+ * @type {Set<string>}
+ */
+let acceptedAwardIds = $state.raw(new Set());
 
 /** @type {import('rxjs').Subscription[]} */
 let subscriptions = [];
@@ -466,6 +481,46 @@ export function getInboxPubkey() {
 }
 
 /**
+ * Load the user's profile badges list (both spec kinds) once and keep
+ * `acceptedAwardIds` in step with the store, so a kind 8 row knows whether
+ * its award is already accepted — and flips the moment AcceptBadgeAward
+ * writes the new list back.
+ * @param {string} pubkey
+ */
+function watchAcceptedBadgeAwards(pubkey) {
+  const relays = getAllLookupRelays();
+  // Kind 10008 is a plain replaceable event with NO d tag — an identifier
+  // would poison the batched relay filter with #d for every other replaceable
+  // kind loaded in the same second (see badge-awards.svelte.js).
+  const pointers = [
+    { kind: PROFILE_BADGES_KIND, pubkey, relays },
+    {
+      kind: LEGACY_PROFILE_BADGES_KIND,
+      pubkey,
+      identifier: LEGACY_PROFILE_BADGES_IDENTIFIER,
+      relays
+    }
+  ];
+  /** @type {Map<number, import('nostr-tools').NostrEvent>} newest list per kind */
+  // eslint-disable-next-line svelte/prefer-svelte-reactivity -- bookkeeping; the Set below is the state
+  const latestByKind = new Map();
+  for (const pointer of pointers) {
+    if (relays.length) subscriptions.push(addressLoader(pointer).subscribe());
+    subscriptions.push(
+      eventStore.replaceable(pointer.kind, pubkey, pointer.identifier).subscribe((event) => {
+        if (!event || activePubkey !== pubkey) return;
+        latestByKind.set(event.kind, event);
+        acceptedAwardIds = new Set(
+          [...latestByKind.values()].flatMap((list) =>
+            getProfileBadgeSlots(list).map((slot) => slot.award.id)
+          )
+        );
+      })
+    );
+  }
+}
+
+/**
  * Initialize inbox for logged-in user.
  * @param {string} pubkey
  */
@@ -601,6 +656,10 @@ export function initializeInbox(pubkey) {
     prefetchReferencedContent(filtered);
   });
   subscriptions.push(modelSub);
+
+  // Badge awards (kind 8) ride the main filter; the user's own profile badges
+  // list tells the rows which of them are already accepted.
+  watchAcceptedBadgeAwards(pubkey);
 
   // RSVP loading: load user's calendar events, then RSVPs on those
   const calendar$ = fetchEvents(getCalendarRelays(), {
@@ -799,6 +858,8 @@ export function cleanup() {
   readMarkers = null;
   // eslint-disable-next-line svelte/prefer-svelte-reactivity -- $state.raw() with plain Set
   readItemIds = new Set();
+  // eslint-disable-next-line svelte/prefer-svelte-reactivity -- $state.raw() with plain Set
+  acceptedAwardIds = new Set();
   prefetchedIds = new Set(); // eslint-disable-line svelte/prefer-svelte-reactivity -- not reactive
   prefetchedGroupIds = new Set(); // eslint-disable-line svelte/prefer-svelte-reactivity -- not reactive
   activePubkey = null;
@@ -829,6 +890,10 @@ export function getUnreadByType() {
 }
 export function getReadMarkers() {
   return readMarkers;
+}
+/** Ids of the kind 8 awards already in the user's profile badges list. */
+export function getAcceptedAwardIds() {
+  return acceptedAwardIds;
 }
 /** @returns {(event: import('nostr-tools').NostrEvent) => boolean} */
 export function getIsNotificationUnread() {

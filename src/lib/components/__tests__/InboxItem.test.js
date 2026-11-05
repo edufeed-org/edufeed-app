@@ -20,10 +20,23 @@ const VIEWER = 'c'.repeat(64);
 const mockType = /** @type {any} */ (vi.fn(() => 'reaction'));
 const mockSurface = /** @type {any} */ (vi.fn(() => null));
 
+const acceptedIds = vi.hoisted(() => ({ current: new Set() }));
 vi.mock('$lib/services/inbox-service.svelte.js', () => ({
   markItemAsRead: (/** @type {any[]} */ ...args) => mockMarkItemAsRead(...args),
-  getInboxPubkey: () => VIEWER
+  getInboxPubkey: () => VIEWER,
+  getAcceptedAwardIds: () => acceptedIds.current
 }));
+
+const mockActionRun = vi.hoisted(() => vi.fn(async () => {}));
+vi.mock('$lib/stores/action-runner.svelte.js', () => ({
+  actionRunner: { run: mockActionRun },
+  actionRunnerOptimistic: { run: vi.fn() }
+}));
+vi.mock('$lib/actions/badge-actions.js', () => ({
+  AcceptBadgeAward: 'AcceptBadgeAward'
+}));
+/** The kind 30009 definition the store hands back for a badge pointer (null = not loaded). */
+const badgeDefinition = vi.hoisted(() => ({ current: /** @type {any} */ (null) }));
 
 vi.mock('$lib/helpers/inbox.js', () => ({
   getNotificationType: (/** @type {any[]} */ ...args) => mockType(...args),
@@ -51,7 +64,14 @@ vi.mock('$lib/helpers/waves.js', () => ({
 }));
 
 vi.mock('$lib/stores/nostr-infrastructure.svelte', () => ({
-  eventStore: { replaceable: () => ({ subscribe: vi.fn() }) },
+  eventStore: {
+    replaceable: (/** @type {number} */ kind) => ({
+      subscribe: vi.fn((/** @type {any} */ next) => {
+        if (kind === 30009) next(badgeDefinition.current ?? undefined);
+        return { unsubscribe: vi.fn() };
+      })
+    })
+  },
   pool: { request: vi.fn() }
 }));
 
@@ -91,7 +111,13 @@ vi.mock('$lib/paraglide/messages.js', () => ({
   dm_block_failed: () => 'block failed',
   wave_back_button: () => 'Wave back',
   wave_success: () => 'waved back',
-  wave_error: () => 'wave failed'
+  wave_error: () => 'wave failed',
+  inbox_action_badge_award: () => 'awarded you a badge',
+  inbox_badge_unnamed: () => 'Badge',
+  inbox_badge_accept: () => 'Accept',
+  inbox_badge_accepted: () => 'Accepted',
+  badge_accept_success: () => 'badge accepted',
+  badge_accept_error: () => 'accept failed'
 }));
 
 vi.mock('$app/paths', () => ({
@@ -291,5 +317,90 @@ describe('InboxItem new follower (issue 891be310)', () => {
       }
     });
     expect(container.textContent).toContain('followed you');
+  });
+});
+
+describe('InboxItem badge award (NIP-58 kind 8)', () => {
+  const ISSUER = 'a'.repeat(64);
+  const awardEvent = {
+    id: 'award-1',
+    kind: 8,
+    pubkey: ISSUER,
+    created_at: 1700000000,
+    tags: [
+      ['a', `30009:${ISSUER}:bravery`],
+      ['p', VIEWER]
+    ],
+    content: '',
+    sig: ''
+  };
+  const definition = {
+    id: 'def-1',
+    kind: 30009,
+    pubkey: ISSUER,
+    created_at: 1600000000,
+    tags: [
+      ['d', 'bravery'],
+      ['name', 'Medal of Bravery'],
+      ['description', 'Awarded to users demonstrating bravery'],
+      ['image', 'https://img.example/bravery.png', '1024x1024'],
+      ['thumb', 'https://img.example/bravery_64.png', '64x64']
+    ],
+    content: '',
+    sig: ''
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockType.mockReturnValue('badgeAward');
+    mockSurface.mockReturnValue(null);
+    acceptedIds.current = new Set();
+    badgeDefinition.current = definition;
+    mockActionRun.mockResolvedValue(undefined);
+  });
+
+  it('says the person awarded a badge and previews it by name and thumbnail', () => {
+    const { container } = render(InboxItem, { props: { event: awardEvent, unread: true } });
+    expect(container.textContent).toContain('awarded you a badge');
+    expect(container.textContent).toContain('Medal of Bravery');
+    const img = container.querySelector('img');
+    expect(img?.getAttribute('src')).toBe('https://img.example/bravery_64.png');
+  });
+
+  it('falls back to the badge identifier while the definition is not loaded', () => {
+    badgeDefinition.current = null;
+    const { container } = render(InboxItem, { props: { event: awardEvent, unread: true } });
+    expect(container.textContent).toContain('bravery');
+    expect(screen.getByRole('button', { name: 'Accept' })).toBeTruthy();
+  });
+
+  it('accepts the award through the action runner without navigating', async () => {
+    render(InboxItem, { props: { event: awardEvent, unread: true } });
+    const btn = screen.getByRole('button', { name: 'Accept' });
+    const clickEvent = new MouseEvent('click', { bubbles: true, cancelable: true });
+    btn.dispatchEvent(clickEvent);
+    expect(clickEvent.defaultPrevented).toBe(true);
+    expect(mockActionRun).toHaveBeenCalledWith('AcceptBadgeAward', awardEvent);
+    await vi.waitFor(() => expect(mockShowToast).toHaveBeenCalledWith('badge accepted', 'success'));
+    // the row flips to "accepted" and counts as read
+    expect(screen.getByRole('button', { name: 'Accepted' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Accept' })).toBeNull();
+    expect(mockMarkItemAsRead).toHaveBeenCalledWith('award-1');
+  });
+
+  it('reports a failed accept and keeps the button', async () => {
+    mockActionRun.mockRejectedValueOnce(new Error('relay down'));
+    render(InboxItem, { props: { event: awardEvent, unread: true } });
+    screen.getByRole('button', { name: 'Accept' }).click();
+    await vi.waitFor(() => expect(mockShowToast).toHaveBeenCalledWith('accept failed', 'error'));
+    expect(screen.getByRole('button', { name: 'Accept' })).toBeTruthy();
+  });
+
+  it('shows the award as accepted when it is already in the profile badges list', () => {
+    acceptedIds.current = new Set(['award-1']);
+    render(InboxItem, { props: { event: awardEvent, unread: false } });
+    const btn = screen.getByRole('button', { name: 'Accepted' });
+    expect(/** @type {HTMLButtonElement} */ (btn).disabled).toBe(true);
+    expect(screen.queryByRole('button', { name: 'Accept' })).toBeNull();
   });
 });
