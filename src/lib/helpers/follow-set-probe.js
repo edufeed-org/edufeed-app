@@ -14,7 +14,7 @@ const PROBE_DEADLINE = 8_000;
 
 /** @typedef {'found' | 'absent' | 'unknown'} FollowSetProbeResult */
 
-/** @type {Map<string, Promise<FollowSetProbeResult>>} */
+/** @type {Map<string, Promise<FollowSetProbeResult>>} keyed by `kind:pubkey` */
 const inflight = new Map();
 
 /**
@@ -55,23 +55,52 @@ const inflight = new Map();
  * @returns {Promise<FollowSetProbeResult>}
  */
 export function probeCommunitiesFollowSet(pubkey) {
-  const pending = inflight.get(pubkey);
+  return singleFlight(`30000:${pubkey}`, () =>
+    runProbe(pubkey, {
+      kind: 30000,
+      identifier: COMMUNITIES_SET_ID,
+      appRelays: getAppRelaysForCategory('communikey')
+    })
+  );
+}
+
+/**
+ * Same question for the user's kind 3 contact list, which applesauce's
+ * FollowUser/UnfollowUser recreate from scratch when they don't see it within
+ * a second. No app relay category holds kind 3: the write relays decide.
+ *
+ * @param {string} pubkey
+ * @returns {Promise<FollowSetProbeResult>}
+ */
+export function probeContactList(pubkey) {
+  return singleFlight(`3:${pubkey}`, () => runProbe(pubkey, { kind: 3, appRelays: [] }));
+}
+
+/**
+ * @param {string} key
+ * @param {() => Promise<FollowSetProbeResult>} run
+ */
+function singleFlight(key, run) {
+  const pending = inflight.get(key);
   if (pending) return pending;
 
-  const probe = runProbe(pubkey).finally(() => inflight.delete(pubkey));
-  inflight.set(pubkey, probe);
+  const probe = run().finally(() => inflight.delete(key));
+  inflight.set(key, probe);
   return probe;
 }
 
 /**
  * @param {string} pubkey
+ * @param {{ kind: number, identifier?: string, appRelays: string[] }} target
  * @returns {Promise<FollowSetProbeResult>}
  */
-async function runProbe(pubkey) {
-  const inStore = () => Boolean(eventStore.getReplaceable(30000, pubkey, COMMUNITIES_SET_ID));
+async function runProbe(pubkey, { kind, identifier, appRelays: targetAppRelays }) {
+  const inStore = () => Boolean(eventStore.getReplaceable(kind, pubkey, identifier));
   if (inStore()) return 'found';
 
-  const filter = { kinds: [30000], authors: [pubkey], '#d': [COMMUNITIES_SET_ID] };
+  /** @type {import('nostr-tools').Filter} */
+  const filter = { kinds: [kind], authors: [pubkey] };
+  if (identifier !== undefined) filter['#d'] = [identifier];
 
   const cached = await cacheRequest([filter]);
   for (const event of cached) eventStore.add(event);
@@ -85,7 +114,7 @@ async function runProbe(pubkey) {
       : getDefaultRelays()
     ).map(normalizeURL)
   );
-  const appRelays = new Set(getAppRelaysForCategory('communikey').map(normalizeURL));
+  const appRelays = new Set(targetAppRelays.map(normalizeURL));
   const all = new Set([...writeRelays, ...appRelays, ...getAllLookupRelays().map(normalizeURL)]);
 
   return new Promise((resolve) => {

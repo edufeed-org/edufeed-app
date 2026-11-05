@@ -1865,6 +1865,7 @@
   "profile_follow_success": "Du folgst jetzt diesem Nutzer",
   "profile_unfollow_success": "Du folgst diesem Nutzer nicht mehr",
   "profile_follow_error": "Follow-Status konnte nicht aktualisiert werden",
+  "profile_follow_list_unavailable": "Deine Folgen-Liste konnte gerade nicht geladen werden. Versuch es gleich noch einmal.",
   "wave_button_tooltip": "Winken",
   "wave_cooldown_tooltip": "Du hast bereits kürzlich gewinkt",
   "wave_success": "Gewinkt!",
