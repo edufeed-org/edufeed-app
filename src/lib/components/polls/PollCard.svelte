@@ -10,6 +10,7 @@
   import { finalizeDraft } from '$lib/helpers/event-factory.js';
   import { publishEvent } from '$lib/services/publish-service.js';
   import { deleteEvent } from '$lib/helpers/eventDeletion.js';
+  import { showToast } from '$lib/helpers/toast.js';
   import * as m from '$lib/paraglide/messages.js';
   import { resolve } from '$app/paths';
   import ProfileAvatar from '$lib/components/shared/ProfileAvatar.svelte';
@@ -115,7 +116,8 @@
     const account = manager.active;
     if (!account || !isAuthor) return;
     try {
-      await deleteEvent(event, account);
+      const result = await deleteEvent(event, account);
+      if (!result.success) showToast(m.event_delete_error(), 'error');
     } catch (err) {
       console.warn('Poll delete failed', err);
     }

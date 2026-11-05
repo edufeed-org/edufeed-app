@@ -11,6 +11,8 @@
   import { aggregateReactions, publishReactionForUrl } from '$lib/helpers/reactions.js';
   import { reactionsLoaderForUrl } from '$lib/loaders/reactions.js';
   import { deleteEvent } from '$lib/helpers/eventDeletion.js';
+  import { showToast } from '$lib/helpers/toast.js';
+  import * as m from '$lib/paraglide/messages';
   import ReactionChips from './ReactionChips.svelte';
 
   /** @type {{ url: string, lazy?: boolean, relays?: string[] }} */
@@ -115,9 +117,13 @@
     if (!activeUser) return;
 
     if (summary.userReacted && summary.userReactionEvent) {
-      deleteEvent(summary.userReactionEvent, activeUser).catch((err) => {
-        console.error('UrlReactionBar: Failed to delete reaction:', err);
-      });
+      deleteEvent(summary.userReactionEvent, activeUser)
+        .then((result) => {
+          if (!result.success) showToast(m.event_delete_error(), 'error');
+        })
+        .catch((err) => {
+          console.error('UrlReactionBar: Failed to delete reaction:', err);
+        });
     } else {
       publishReactionForUrl(url, emoji).catch((err) => {
         console.error('UrlReactionBar: Failed to publish reaction:', err);

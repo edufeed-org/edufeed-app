@@ -4,7 +4,9 @@ import { finalizeEvent, generateSecretKey, getPublicKey } from 'nostr-tools/pure
 
 // Isolate deleteEvent() from network/IDB side effects; keep the real
 // applesauce EventStore so kind-5 propagation is exercised for real.
-vi.mock('$lib/services/publish-service.js', () => ({ publishEventOptimistic: vi.fn() }));
+vi.mock('$lib/services/publish-service.js', () => ({
+  publishEvent: vi.fn(async () => ({ success: true }))
+}));
 vi.mock('$lib/stores/event-cache.svelte.js', () => ({ cacheDeletion: vi.fn() }));
 vi.mock('$lib/services/app-relay-service.svelte.js', () => ({
   kindToAppRelayCategory: (/** @type {number} */ kind) => (kind === 30142 ? 'educational' : null),
@@ -14,7 +16,7 @@ vi.mock('$lib/stores/config.svelte.js', () => ({ runtimeConfig: {} }));
 vi.mock('$lib/stores/app-settings.svelte.js', () => ({ appSettings: {} }));
 
 import { deleteEvent } from '$lib/helpers/eventDeletion.js';
-import { publishEventOptimistic } from '$lib/services/publish-service.js';
+import { publishEvent } from '$lib/services/publish-service.js';
 import { cacheDeletion } from '$lib/stores/event-cache.svelte.js';
 import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
 
@@ -59,8 +61,8 @@ describe('deleteEvent — applesauce EventStore propagation', () => {
     const result = await deleteEvent(resource, activeUser);
     expect(result.success).toBe(true);
 
-    expect(publishEventOptimistic).toHaveBeenCalledTimes(1);
-    const [signedDelete, , opts] = vi.mocked(publishEventOptimistic).mock.calls[0];
+    expect(publishEvent).toHaveBeenCalledTimes(1);
+    const [signedDelete, , opts] = vi.mocked(publishEvent).mock.calls[0];
     expect(signedDelete.kind).toBe(5);
     expect(signedDelete.tags).toContainEqual(['e', resource.id]);
     expect(
@@ -74,7 +76,7 @@ describe('deleteEvent — applesauce EventStore propagation', () => {
     expect(cacheDeletion).toHaveBeenCalledWith(signedDelete);
   });
 
-  it('removes the resource from the EventStore immediately (optimistic UI)', async () => {
+  it('removes the resource from the EventStore once a relay accepted the deletion', async () => {
     const resource = makeResource(1_000_000, 'del-test-optimistic');
     eventStore.add(resource);
     expect(eventStore.getEvent(resource.id)).toBeTruthy();
@@ -97,6 +99,23 @@ describe('deleteEvent — applesauce EventStore propagation', () => {
     expect(eventStore.getReplaceable(30142, pubkey, 'del-test-stale')).toBeUndefined();
   });
 
+  it('reports failure and keeps the resource when no relay accepts the deletion', async () => {
+    vi.mocked(publishEvent).mockResolvedValueOnce(
+      /** @type {any} */ ({ success: false, relays: ['wss://a'], successCount: 0 })
+    );
+    const resource = makeResource(1_000_000, 'del-test-rejected');
+    eventStore.add(resource);
+
+    const result = await deleteEvent(resource, activeUser);
+
+    expect(result.success).toBe(false);
+    expect(result.error).toBeTruthy();
+    // Nothing applied locally: a kind 5 in the DeleteManager cannot be undone,
+    // and the IDB copy would be dropped for a deletion no relay holds.
+    expect(eventStore.getEvent(resource.id)).toBeTruthy();
+    expect(cacheDeletion).not.toHaveBeenCalled();
+  });
+
   it('refuses to delete events owned by someone else', async () => {
     const otherSk = generateSecretKey();
     const foreign = finalizeEvent(
@@ -105,6 +124,6 @@ describe('deleteEvent — applesauce EventStore propagation', () => {
     );
     const result = await deleteEvent(foreign, activeUser);
     expect(result.success).toBe(false);
-    expect(publishEventOptimistic).not.toHaveBeenCalled();
+    expect(publishEvent).not.toHaveBeenCalled();
   });
 });

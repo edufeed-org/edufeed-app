@@ -23,7 +23,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { finalizeEvent, generateSecretKey, getPublicKey } from 'nostr-tools/pure';
 
-vi.mock('$lib/services/publish-service.js', () => ({ publishEventOptimistic: vi.fn() }));
+vi.mock('$lib/services/publish-service.js', () => ({
+  publishEvent: vi.fn(async () => ({ success: true }))
+}));
 vi.mock('$lib/stores/event-cache.svelte.js', () => ({ cacheDeletion: vi.fn() }));
 vi.mock('$lib/services/app-relay-service.svelte.js', () => ({
   kindToAppRelayCategory: (/** @type {number} */ kind) =>
@@ -34,7 +36,7 @@ vi.mock('$lib/stores/config.svelte.js', () => ({ runtimeConfig: {} }));
 vi.mock('$lib/stores/app-settings.svelte.js', () => ({ appSettings: {} }));
 
 import { deleteCalendarEvent } from '$lib/helpers/eventDeletion.js';
-import { publishEventOptimistic } from '$lib/services/publish-service.js';
+import { publishEvent } from '$lib/services/publish-service.js';
 import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
 
 const sk = generateSecretKey();
@@ -78,8 +80,8 @@ describe('deleteCalendarEvent — cross-kind twins', () => {
     expect(result.success).toBe(true);
 
     // Exactly one kind-5 published — not two.
-    expect(publishEventOptimistic).toHaveBeenCalledTimes(1);
-    const [signedDelete] = vi.mocked(publishEventOptimistic).mock.calls[0];
+    expect(publishEvent).toHaveBeenCalledTimes(1);
+    const [signedDelete] = vi.mocked(publishEvent).mock.calls[0];
     expect(signedDelete.kind).toBe(5);
 
     // It must address BOTH coordinates: e-tags for both ids, a-tags for both
@@ -103,8 +105,8 @@ describe('deleteCalendarEvent — cross-kind twins', () => {
     const result = await deleteCalendarEvent(timed, activeUser);
     expect(result.success).toBe(true);
 
-    expect(publishEventOptimistic).toHaveBeenCalledTimes(1);
-    const [signedDelete] = vi.mocked(publishEventOptimistic).mock.calls[0];
+    expect(publishEvent).toHaveBeenCalledTimes(1);
+    const [signedDelete] = vi.mocked(publishEvent).mock.calls[0];
     expect(signedDelete.tags).toContainEqual(['a', `31923:${pubkey}:twin-test-2`]);
     expect(signedDelete.tags.filter((/** @type {string[]} */ t) => t[0] === 'a')).toHaveLength(1);
 
@@ -121,7 +123,7 @@ describe('deleteCalendarEvent — cross-kind twins', () => {
     const result = await deleteCalendarEvent(allDay, activeUser);
     expect(result.success).toBe(true);
 
-    const [signedDelete] = vi.mocked(publishEventOptimistic).mock.calls[0];
+    const [signedDelete] = vi.mocked(publishEvent).mock.calls[0];
     expect(signedDelete.tags).toContainEqual(['a', `31922:${pubkey}:twin-test-3`]);
     expect(signedDelete.tags).toContainEqual(['a', `31923:${pubkey}:twin-test-3`]);
 
