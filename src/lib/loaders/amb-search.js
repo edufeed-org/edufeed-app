@@ -9,8 +9,8 @@
  *   are only meaningful within one response, so callers that want relevance
  *   ordering must merge by per-relay rank (see `searchRank.js`).
  */
-import { Observable, merge } from 'rxjs';
-import { distinct, map, tap } from 'rxjs/operators';
+import { EMPTY, Observable, merge } from 'rxjs';
+import { catchError, distinct, map, tap } from 'rxjs/operators';
 import { pool, eventStore } from '$lib/stores/nostr-infrastructure.svelte';
 import { getEducationalRelays } from '$lib/helpers/relay-helper.js';
 import {
@@ -57,7 +57,9 @@ function buildFilter(filters, limit, extra = {}) {
 /**
  * Query every educational relay separately and emit each result with the
  * relay it came from and its 1-based rank within that relay's response.
- * The same event may be emitted once per relay that returned it.
+ * The same event may be emitted once per relay that returned it. A relay
+ * that errors or times out ends only its own leg: the results it already
+ * sent and every other relay's results stay.
  *
  * @param {Record<string, any> | null} filter
  * @returns {Observable<RankedSearchResult>}
@@ -74,7 +76,11 @@ function rankedRequest(filter) {
         .request(filter, { timeout: REQUEST_TIMEOUT_MS })
         .pipe(
           tap((event) => eventStore.add(event)), // Add to eventStore for caching
-          map((event) => ({ event, relay, rank: ++rank }))
+          map((event) => ({ event, relay, rank: ++rank })),
+          catchError((error) => {
+            console.warn(`🔍 AMB search: ${relay} failed`, error);
+            return EMPTY;
+          })
         );
     })
   );

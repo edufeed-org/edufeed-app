@@ -85,6 +85,27 @@ describe('ambRankedSearchLoader', () => {
     expect(filter).not.toHaveProperty('authors');
   });
 
+  it("keeps every relay's results when one relay times out", async () => {
+    // oersi often needs 2-5 s for NIP-50 against the 5 s per-relay timeout; its
+    // TimeoutError used to error the merged stream and blank the whole search.
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    relayResponses = {
+      'wss://amb-relay.example.com': respondWith([ev('a1'), ev('a2')]),
+      'wss://oersi-relay.example.com': new Observable((sub) => {
+        sub.next(ev('b1'));
+        sub.error(new Error('TimeoutError'));
+      })
+    };
+
+    const results = await lastValueFrom(
+      ambRankedSearchLoader({ searchText: 'test' }).pipe(toArray())
+    );
+
+    expect(results.map((r) => r.event.id).sort()).toEqual(['a1', 'a2', 'b1']);
+    expect(warn).toHaveBeenCalled();
+    warn.mockRestore();
+  });
+
   it('emits each event with its relay and 1-based rank within that relay', async () => {
     relayResponses = {
       'wss://amb-relay.example.com': respondWith([ev('a1'), ev('a2')]),
