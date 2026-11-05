@@ -2,6 +2,7 @@ import { NostrConnectSigner, PrivateKeySigner } from 'applesauce-signers';
 import { NostrConnectAccount } from 'applesauce-accounts/accounts';
 import { generateSecretKey } from 'nostr-tools';
 import { buildNip46Permissions } from '$lib/helpers/nip46-permissions.js';
+import { AUTH_AWARE_PUBLISH_RETRY } from '$lib/services/relay-publish-auth.js';
 
 /**
  * Validate a bunker:// URL
@@ -40,6 +41,9 @@ const BUNKER_REQUEST_TIMEOUT = 0;
  */
 const CONNECT_PERMISSIONS = buildNip46Permissions();
 
+/** Per-relay budget for one NIP-46 request publish. */
+const PUBLISH_TIMEOUT = 10_000;
+
 /**
  * NIP-46 publish: done as soon as ONE relay accepts the request.
  *
@@ -50,6 +54,9 @@ const CONNECT_PERMISSIONS = buildNip46Permissions();
  * `get_public_key` right after pairing included, for the 30 s publish
  * timeout plus retries while the signer's answer was already in. The other
  * relays keep publishing in the background; it only fails when all refuse.
+ * The auth-aware retry turns an `auth-required` refusal into a failure
+ * instead of parking in waitForAuth, whose phase suspends the timeout — so
+ * a session whose relays all demand AUTH errors out rather than hanging.
  *
  * @param {any} pool
  * @returns {(relays: string[], event: any) => Promise<void>}
@@ -67,7 +74,11 @@ export function firstAcceptedPublish(pool) {
       };
       for (const url of relays) {
         Promise.resolve()
-          .then(() => pool.relay(url).publish(event))
+          .then(() =>
+            pool
+              .relay(url)
+              .publish(event, { timeout: PUBLISH_TIMEOUT, retries: AUTH_AWARE_PUBLISH_RETRY })
+          )
           .then(
             (/** @type {any} */ res) =>
               res?.ok ? resolve() : failed(`${url}: ${res?.message || 'rejected'}`),
@@ -127,26 +138,24 @@ function generateSecret() {
 }
 
 /**
- * The NIP-46 rendezvous relay. Most popular bunkers (nsec.app, recent Amber)
- * publish their Connect-RPC ack ONLY to this relay regardless of what the
- * client lists in the `nostrconnect://` URI's `relay=` params. If our QR URI
- * doesn't list this relay, we never see the ack and `waitForSigner` hangs.
- * The official applesauce example (`signers/bunker`) uses this relay alone
- * for the same reason.
+ * Used only when a deployment configures no fallback relays: a
+ * nostrconnect:// URI without relays cannot pair at all.
  */
-const NIP46_RENDEZVOUS_RELAY = 'wss://relay.nsec.app';
+const DEFAULT_CONNECT_RELAYS = ['wss://relay.damus.io', 'wss://relay.primal.net'];
 
 /**
- * Build the list of relays for a client-initiated nostrconnect:// URI.
- * Always includes the NIP-46 rendezvous relay, deduplicated against the
- * caller-supplied fallback list.
+ * Build the list of relays for a client-initiated nostrconnect:// URI: the
+ * deployment's fallback relays, deduplicated. The signer answers on the
+ * relays the URI lists (Amber does). We used to force wss://relay.nsec.app
+ * in as a "rendezvous relay"; it went dark in 2026-11, and a listed dead
+ * relay costs QR size and, before firstAcceptedPublish, 30 s per request.
  *
  * @param {string[] | undefined | null} fallbackRelays
  * @returns {string[]}
  */
 export function buildClientConnectRelays(fallbackRelays) {
   const fallback = Array.isArray(fallbackRelays) ? fallbackRelays.filter(Boolean) : [];
-  return Array.from(new Set([NIP46_RENDEZVOUS_RELAY, ...fallback]));
+  return Array.from(new Set(fallback.length > 0 ? fallback : DEFAULT_CONNECT_RELAYS));
 }
 
 /**

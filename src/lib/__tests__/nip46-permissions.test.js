@@ -78,12 +78,11 @@ describe('buildNip46Permissions', () => {
 
 describe('nostrconnect:// URI with the permissions', () => {
   // The real URI as LoginWithBunker shows it: client pubkey, secret, app
-  // metadata, the rendezvous relay plus a typical fallback set.
+  // metadata and a typical fallback relay set.
   const uri = createNostrConnectURI({
     client: 'a'.repeat(64),
     connectSecret: '0123456789abcdef',
     relays: [
-      'wss://relay.nsec.app',
       'wss://relay.damus.io',
       'wss://relay.primal.net',
       'wss://nostr.wine',
