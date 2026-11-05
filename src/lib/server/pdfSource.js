@@ -19,7 +19,7 @@ import { mkdir, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { env } from '$env/dynamic/private';
-import { fetchGuardedRedirects } from '$lib/server/httpUrl.js';
+import { fetchGuardedRedirects, readCapped } from '$lib/server/httpUrl.js';
 
 export const MAX_UPSTREAM_SIZE = 50 * 1024 * 1024; // 50MB
 export const FETCH_TIMEOUT = 20_000;
@@ -99,8 +99,13 @@ export async function fetchPdfBytes(url) {
     return { ok: false, response: new Response('PDF too large', { status: 502 }) };
   }
 
-  const bytes = new Uint8Array(await upstream.arrayBuffer());
-  if (bytes.byteLength > MAX_UPSTREAM_SIZE) {
+  let bytes;
+  try {
+    bytes = await readCapped(upstream, MAX_UPSTREAM_SIZE);
+  } catch {
+    return { ok: false, response: new Response('Failed to fetch PDF', { status: 502 }) };
+  }
+  if (!bytes) {
     return { ok: false, response: new Response('PDF too large', { status: 502 }) };
   }
 

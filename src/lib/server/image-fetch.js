@@ -1,4 +1,4 @@
-import { isBlockedHost, fetchGuardedRedirects } from '$lib/server/httpUrl.js';
+import { isBlockedHost, fetchGuardedRedirects, readCapped } from '$lib/server/httpUrl.js';
 
 /** Upstream bytes the image endpoints are willing to pull. */
 export const MAX_UPSTREAM_IMAGE_SIZE = 25 * 1024 * 1024; // 25MB
@@ -70,12 +70,12 @@ export async function fetchPublicImage(
       return { ok: false, status: 502, message: 'Upstream image too large' };
     }
 
-    const buffer = Buffer.from(await upstream.arrayBuffer());
-    if (buffer.length > maxSize) {
+    const bytes = await readCapped(upstream, maxSize);
+    if (!bytes) {
       return { ok: false, status: 502, message: 'Upstream image too large' };
     }
 
-    return { ok: true, buffer, contentType };
+    return { ok: true, buffer: Buffer.from(bytes), contentType };
   } catch (err) {
     if (err instanceof Error && err.name === 'AbortError') {
       return { ok: false, status: 504, message: 'Upstream image fetch timed out' };

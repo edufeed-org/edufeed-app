@@ -8,14 +8,19 @@
  * No transcode (unlike /api/image): we hash exactly what the source served.
  *
  * Same SSRF threat model as /api/image (arbitrary URLs from search results):
- * http(s) only + shared isBlockedHost guard, non-image rejection, size + timeout
+ * http(s) only + shared isBlockedHost guard (re-checked on every redirect hop), non-image rejection, size + timeout
  * caps. On the homelab the upstream proxy/imgproxy adds ASSET_PROXY_ALLOWED_
  * DOMAINS + network isolation for defence in depth.
  */
 
 import { json } from '@sveltejs/kit';
 import { createHash } from 'node:crypto';
-import { parseHttpUrl, isBlockedHost } from '$lib/server/httpUrl.js';
+import {
+  parseHttpUrl,
+  isBlockedHost,
+  fetchGuardedRedirects,
+  readCapped
+} from '$lib/server/httpUrl.js';
 
 const MAX_SIZE = 25 * 1024 * 1024; // 25MB
 const FETCH_TIMEOUT = 15_000;
@@ -34,7 +39,7 @@ export async function GET({ url }) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), FETCH_TIMEOUT);
   try {
-    const upstream = await fetch(parsed.toString(), {
+    const upstream = await fetchGuardedRedirects(parsed.toString(), {
       signal: controller.signal,
       headers: { Accept: 'image/*' }
     });
@@ -45,10 +50,11 @@ export async function GET({ url }) {
     if (!mime.startsWith('image/')) {
       return json({ error: 'Upstream resource is not an image' }, { status: 502 });
     }
-    const buffer = Buffer.from(await upstream.arrayBuffer());
-    if (buffer.length > MAX_SIZE) {
+    const bytes = await readCapped(upstream, MAX_SIZE);
+    if (!bytes) {
       return json({ error: 'Upstream image too large' }, { status: 502 });
     }
+    const buffer = Buffer.from(bytes);
     const sha256 = createHash('sha256').update(buffer).digest('hex');
     return json({ sha256, mime, size: buffer.length }, { status: 200 });
   } catch (err) {

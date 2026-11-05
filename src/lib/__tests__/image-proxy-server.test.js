@@ -32,15 +32,9 @@ async function makeSourceAnimatedGif(width = 64, height = 64) {
 function stubUpstream(buffer, contentType = 'image/png') {
   vi.stubGlobal(
     'fetch',
-    vi.fn(async () => ({
-      ok: true,
-      headers: {
-        get: (/** @type {string} */ name) =>
-          name.toLowerCase() === 'content-type' ? contentType : null
-      },
-      arrayBuffer: async () =>
-        buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength)
-    }))
+    vi.fn(
+      async () => new Response(new Uint8Array(buffer), { headers: { 'content-type': contentType } })
+    )
   );
 }
 

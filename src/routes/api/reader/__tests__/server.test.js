@@ -70,3 +70,33 @@ describe('/api/reader (PDF short-circuit for mode=metadata)', () => {
     expect(body.error).toMatch(/too large/i);
   });
 });
+
+describe('/api/reader (streamed size cap)', () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  it('stops reading an HTML body that passes 5MB without a Content-Length', async () => {
+    let pulled = 0;
+    let cancelled = false;
+    const chunk = new Uint8Array(1024 * 1024).fill(0x61);
+    const body = new ReadableStream({
+      pull(controller) {
+        pulled++;
+        if (pulled > 64) controller.close();
+        else controller.enqueue(chunk);
+      },
+      cancel() {
+        cancelled = true;
+      }
+    });
+    vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
+      new Response(body, { status: 200, headers: { 'content-type': 'text/html' } })
+    );
+
+    const res = await GET(makeEvent({ url: 'https://example.com/huge.html' }));
+
+    expect(res.status).toBe(502);
+    expect((await res.json()).error).toMatch(/too large/i);
+    expect(cancelled).toBe(true);
+    expect(pulled).toBeLessThan(10);
+  });
+});
