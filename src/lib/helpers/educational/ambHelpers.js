@@ -160,26 +160,33 @@ export function getAMBLanguages(event) {
 }
 
 /**
- * Gets the published date for an AMB resource
- * Falls back to dateCreated or created_at
+ * A date tag value in Unix seconds, NaN when unparseable. DD.MM.YYYY (German
+ * imports) is read as day.month — `new Date()` takes it as month.day or fails.
+ * @param {string} value
+ * @returns {number}
+ */
+function parseTagDate(value) {
+  const de = /^(\d{1,2})\.(\d{1,2})\.(\d{4})$/.exec(value.trim());
+  const iso = de ? `${de[3]}-${de[2].padStart(2, '0')}-${de[1].padStart(2, '0')}` : value;
+  return new Date(iso).getTime() / 1000;
+}
+
+/**
+ * Gets the published date for an AMB resource (or a kind 30040 `published_on`)
+ * Falls back to dateCreated, then created_at, skipping unparseable values
  * @param {any} event - AMB event (kind 30142)
  * @returns {number} Unix timestamp in seconds
  */
 export function getAMBPublishedDate(event) {
-  // Try datePublished first
-  const datePublished =
-    getTagValue(event.tags, 'datePublished') || getTagValue(event.tags, 'published_on');
-  if (datePublished) {
-    return new Date(datePublished).getTime() / 1000;
+  const candidates = [
+    getTagValue(event.tags, 'datePublished') || getTagValue(event.tags, 'published_on'),
+    getTagValue(event.tags, 'dateCreated')
+  ];
+  for (const value of candidates) {
+    if (!value) continue;
+    const seconds = parseTagDate(value);
+    if (!Number.isNaN(seconds)) return seconds;
   }
-
-  // Fallback to dateCreated
-  const dateCreated = getTagValue(event.tags, 'dateCreated');
-  if (dateCreated) {
-    return new Date(dateCreated).getTime() / 1000;
-  }
-
-  // Final fallback to event created_at
   return event.created_at;
 }
 

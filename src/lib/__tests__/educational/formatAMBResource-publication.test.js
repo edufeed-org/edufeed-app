@@ -45,3 +45,25 @@ describe('formatAMBResource with a kind 30040 publication', () => {
     expect(resource.kind).toBe(30040);
   });
 });
+
+describe('getAMBPublishedDate with German-format and broken dates', () => {
+  /** @param {string} value */
+  const withDate = (value) =>
+    /** @type {any} */ (
+      formatAMBResource({
+        ...publication,
+        tags: [
+          ['d', 'x'],
+          ['published_on', value]
+        ]
+      })
+    );
+
+  it('reads DD.MM.YYYY as day.month.year', () => {
+    expect(withDate('04.07.1776').publishedDate).toBe(Date.UTC(1776, 6, 4) / 1000);
+  });
+
+  it('falls back to created_at when the date cannot be parsed', () => {
+    expect(withDate('irgendwann').publishedDate).toBe(publication.created_at);
+  });
+});
