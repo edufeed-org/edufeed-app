@@ -60,7 +60,8 @@ async function verifyNip98Header(authHeader, url, method, rawBody) {
   if (!uTag || uTag[1] !== url) return null;
 
   const methodTag = event.tags?.find((/** @type {string[]} */ t) => t[0] === 'method');
-  if (!methodTag || methodTag[1].toUpperCase() !== method.toUpperCase()) return null;
+  if (typeof methodTag?.[1] !== 'string' || methodTag[1].toUpperCase() !== method.toUpperCase())
+    return null;
 
   if (rawBody) {
     const payloadTag = event.tags?.find((/** @type {string[]} */ t) => t[0] === 'payload');
@@ -99,15 +100,20 @@ export async function POST({ request, url }) {
     return json({ error: 'Forbidden' }, { status: 403 });
   }
 
-  const upstreamRes = await fetch(`${serviceUrl.replace(/\/$/, '')}/api/nip05`, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${serviceApiKey}`,
-      'Content-Type': 'application/json'
-    },
-    body: rawBody
-  });
-  const upstreamBody = await upstreamRes.text();
+  let upstreamRes, upstreamBody;
+  try {
+    upstreamRes = await fetch(`${serviceUrl.replace(/\/$/, '')}/api/nip05`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${serviceApiKey}`,
+        'Content-Type': 'application/json'
+      },
+      body: rawBody
+    });
+    upstreamBody = await upstreamRes.text();
+  } catch {
+    return json({ error: 'nip-05 service unreachable' }, { status: 502 });
+  }
   return new Response(upstreamBody, {
     status: upstreamRes.status,
     headers: { 'content-type': upstreamRes.headers.get('content-type') || 'application/json' }

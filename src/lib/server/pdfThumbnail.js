@@ -13,6 +13,34 @@
 /** Target thumbnail width in CSS pixels. */
 export const THUMBNAIL_WIDTH = 400;
 
+/** pdf.js parses and canvas renders are CPU- and memory-heavy: at most this many at once. */
+const MAX_PDF_JOBS = 2;
+let runningPdfJobs = 0;
+
+/**
+ * Claim one of the shared PDF job slots (`/api/pdf-thumbnail`, `/api/pdf-info`).
+ *
+ * @returns {(() => void) | null} a release function, or null when all slots are taken
+ */
+export function tryAcquirePdfSlot() {
+  if (runningPdfJobs >= MAX_PDF_JOBS) return null;
+  runningPdfJobs++;
+  let released = false;
+  return () => {
+    if (released) return;
+    released = true;
+    runningPdfJobs--;
+  };
+}
+
+/** The answer while every PDF job slot is taken. */
+export function pdfBusyResponse() {
+  return new Response('PDF processing busy, retry shortly', {
+    status: 503,
+    headers: { 'retry-after': '5' }
+  });
+}
+
 /**
  * Render the first page of a PDF to a WebP thumbnail buffer.
  *
@@ -35,7 +63,10 @@ export async function renderPdfThumbnail(data, width = THUMBNAIL_WIDTH) {
     const scale = width / base.width;
     const viewport = page.getViewport({ scale });
 
-    const canvas = createCanvas(Math.ceil(viewport.width), Math.ceil(viewport.height));
+    // A page with an absurd aspect ratio must not allocate a giant canvas; the
+    // top of the page is all a cover needs.
+    const height = Math.min(Math.ceil(viewport.height), width * 4);
+    const canvas = createCanvas(Math.ceil(viewport.width), height);
     const ctx = canvas.getContext('2d');
     // White page background — PDFs assume an opaque white canvas
     ctx.fillStyle = '#ffffff';

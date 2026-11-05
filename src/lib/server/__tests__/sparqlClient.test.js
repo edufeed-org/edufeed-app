@@ -71,4 +71,15 @@ describe('sparqlClient.query', () => {
     fetchMock.mockResolvedValueOnce(new Response('<html>not json</html>', { status: 200 }));
     await expect(query({ endpoint: ENDPOINT, sparql: 'SELECT * WHERE {}' })).rejects.toThrow();
   });
+
+  it('gives the request a timeout signal so a hung endpoint cannot hold the request', async () => {
+    fetchMock.mockResolvedValueOnce(
+      new Response(JSON.stringify({ head: { vars: [] }, results: { bindings: [] } }), {
+        status: 200
+      })
+    );
+    await query({ endpoint: ENDPOINT, sparql: 'ASK {}' });
+    const [, init] = fetchMock.mock.calls[0];
+    expect(init.signal).toBeInstanceOf(AbortSignal);
+  });
 });

@@ -10,6 +10,9 @@
  * SPARQL 1.1 JSON results format: `{ head: { vars }, results: { bindings } }`.
  */
 
+/** A hung endpoint must not hold the /api/curricula request open indefinitely. */
+const QUERY_TIMEOUT = 15_000;
+
 /**
  * Run a SPARQL query and return the parsed SPARQL-JSON response.
  *
@@ -25,7 +28,8 @@ export async function query({ endpoint, sparql }) {
       'Content-Type': 'application/sparql-query',
       Accept: 'application/sparql-results+json'
     },
-    body: sparql
+    body: sparql,
+    signal: AbortSignal.timeout(QUERY_TIMEOUT)
   });
   if (!res.ok) {
     throw new Error(`SPARQL endpoint returned HTTP ${res.status}`);

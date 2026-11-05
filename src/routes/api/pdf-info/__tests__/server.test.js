@@ -12,6 +12,7 @@ process.env.PDF_THUMBNAIL_CACHE_DIR = CACHE_DIR;
 const { GET } = await import('../+server.js');
 const { GET: THUMBNAIL_GET } = await import('../../pdf-thumbnail/+server.js');
 const { pdfCacheDir } = await import('$lib/server/pdfSource.js');
+const { tryAcquirePdfSlot } = await import('$lib/server/pdfThumbnail.js');
 
 /** Minimal valid one-page PDF (200x300, blank). Parses in pdf.js. */
 const MINIMAL_PDF =
@@ -74,6 +75,20 @@ describe('/api/pdf-info', () => {
     expect((await GET(makeEvent({ url: 'http://192.168.0.1/y.pdf' }))).status).toBe(400);
     // Nothing was fetched on any of the rejections.
     expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it('answers 503 with Retry-After while two PDF jobs are already running', async () => {
+    const releases = [tryAcquirePdfSlot(), tryAcquirePdfSlot()];
+    try {
+      const res = await GET(
+        makeEvent({ url: `https://journal.example/busy-${crypto.randomUUID()}.pdf` })
+      );
+      expect(res.status).toBe(503);
+      expect(res.headers.get('retry-after')).toBeTruthy();
+      expect(fetchSpy).not.toHaveBeenCalled();
+    } finally {
+      for (const release of releases) release?.();
+    }
   });
 
   it('derives the page count from the file and caches it', async () => {

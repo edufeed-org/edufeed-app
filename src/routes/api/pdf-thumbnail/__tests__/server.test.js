@@ -9,6 +9,7 @@ const CACHE_DIR = mkdtempSync(path.join(tmpdir(), 'pdf-thumb-test-'));
 process.env.PDF_THUMBNAIL_CACHE_DIR = CACHE_DIR;
 
 const { GET } = await import('../+server.js');
+const { tryAcquirePdfSlot, renderPdfThumbnail } = await import('$lib/server/pdfThumbnail.js');
 
 /** Minimal valid one-page PDF (200x300, blank). Parses in pdf.js. */
 const MINIMAL_PDF =
@@ -89,5 +90,33 @@ describe('/api/pdf-thumbnail', () => {
     );
     const res = await GET(makeEvent({ url: 'https://journal.example/broken.pdf' }));
     expect(res.status).toBe(502);
+  });
+
+  it('answers 503 with Retry-After while two PDF jobs are already running', async () => {
+    const releases = [tryAcquirePdfSlot(), tryAcquirePdfSlot()];
+    try {
+      expect(releases).not.toContain(null);
+      const res = await GET(
+        makeEvent({ url: `https://journal.example/busy-${crypto.randomUUID()}.pdf` })
+      );
+      expect(res.status).toBe(503);
+      expect(res.headers.get('retry-after')).toBeTruthy();
+      expect(fetchSpy).not.toHaveBeenCalled();
+    } finally {
+      for (const release of releases) release?.();
+    }
+    // Slots are free again afterwards.
+    const release = tryAcquirePdfSlot();
+    expect(release).not.toBeNull();
+    release?.();
+  });
+
+  it('clamps the canvas height of an extremely tall page', async () => {
+    const tall = MINIMAL_PDF.replace('[0 0 200 300]', '[0 0 10 14000]');
+    const { webp } = await renderPdfThumbnail(new TextEncoder().encode(tall), 100);
+    const { default: sharp } = await import('sharp');
+    const meta = await sharp(webp).metadata();
+    expect(meta.width).toBe(100);
+    expect(meta.height).toBeLessThanOrEqual(400);
   });
 });
