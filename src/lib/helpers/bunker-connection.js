@@ -41,51 +41,36 @@ const BUNKER_REQUEST_TIMEOUT = 0;
  */
 const CONNECT_PERMISSIONS = buildNip46Permissions();
 
-/** Per-relay budget for one NIP-46 request publish. */
-const PUBLISH_TIMEOUT = 10_000;
-
 /**
  * NIP-46 publish: done as soon as ONE relay accepts the request.
  *
- * applesauce's default (`pool.publish`) resolves only after every relay has
- * answered, and the signer awaits that before it even looks at the reply —
- * so one dead or write-restricted relay in the session (relay.nsec.app went
- * dark in 2026-11; nostr.wine refuses non-members) held every request,
- * `get_public_key` right after pairing included, for the 30 s publish
- * timeout plus retries while the signer's answer was already in. The other
- * relays keep publishing in the background; it only fails when all refuse.
- * The auth-aware retry turns an `auth-required` refusal into a failure
- * instead of parking in waitForAuth, whose phase suspends the timeout — so
- * a session whose relays all demand AUTH errors out rather than hanging.
+ * applesauce's `pool.publish` resolves only after every relay answered, and
+ * the signer awaits it before reading the reply — so one dead or
+ * write-restricted relay (relay.nsec.app went dark in 2026-11; nostr.wine
+ * refuses non-members) held every request for the 30 s publish timeout. The
+ * auth-aware retry makes an `auth-required` relay fail instead of parking in
+ * waitForAuth (which suspends the timeout), so all-AUTH relays error out.
  *
  * @param {any} pool
  * @returns {(relays: string[], event: any) => Promise<void>}
  */
 export function firstAcceptedPublish(pool) {
   return (relays, event) =>
-    new Promise((resolve, reject) => {
-      /** @type {string[]} */
-      const errors = [];
-      let pending = relays.length;
-      if (pending === 0) return reject(new Error('No relays to publish to'));
-      const failed = (/** @type {string} */ reason) => {
-        errors.push(reason);
-        if (--pending === 0) reject(new Error(`NIP-46 request not accepted: ${errors.join('; ')}`));
-      };
-      for (const url of relays) {
-        Promise.resolve()
-          .then(() =>
-            pool
-              .relay(url)
-              .publish(event, { timeout: PUBLISH_TIMEOUT, retries: AUTH_AWARE_PUBLISH_RETRY })
-          )
-          .then(
-            (/** @type {any} */ res) =>
-              res?.ok ? resolve() : failed(`${url}: ${res?.message || 'rejected'}`),
-            (/** @type {any} */ err) => failed(`${url}: ${err?.message || err}`)
-          );
+    Promise.any(
+      relays.map(async (url) => {
+        const res = await pool
+          .relay(url)
+          .publish(event, { timeout: 10_000, retries: AUTH_AWARE_PUBLISH_RETRY });
+        if (!res?.ok) throw new Error(`${url}: ${res?.message || 'rejected'}`);
+      })
+    ).then(
+      () => undefined,
+      (/** @type {AggregateError} */ e) => {
+        throw new Error(
+          `NIP-46 request not accepted: ${e.errors.map((x) => x.message).join('; ')}`
+        );
       }
-    });
+    );
 }
 
 /**
