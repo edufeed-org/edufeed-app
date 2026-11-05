@@ -2,7 +2,7 @@
  * Relay Selection Service - NIP-65 implementation
  * Manages relay list fetching, caching, and selection for outbox model
  */
-import { SvelteMap, SvelteSet } from 'svelte/reactivity';
+import { SvelteSet } from 'svelte/reactivity';
 import { eventStore } from '$lib/stores/nostr-infrastructure.svelte.js';
 import { runtimeConfig } from '$lib/stores/config.svelte.js';
 import { RelayListModel } from '$lib/models/relay-list-model.js';
@@ -26,8 +26,9 @@ export function getDefaultRelays() {
 }
 
 // Cache for relay lists (pubkey -> { writeRelays, readRelays, fetchedAt })
-/** @type {SvelteMap<string, {writeRelays: string[], readRelays: string[], fetchedAt: number}>} */
-const relayListCache = new SvelteMap();
+/** @type {Map<string, {writeRelays: string[], readRelays: string[], fetchedAt: number}>} */
+// eslint-disable-next-line svelte/prefer-svelte-reactivity -- lookup cache, nothing renders from it
+const relayListCache = new Map();
 const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 
 // Hard cap for the kind 10002 lookup. With completion-aware resolution the
@@ -60,6 +61,7 @@ export async function fetchRelayListResolution(pubkey) {
   if (cached && Date.now() - cached.fetchedAt < CACHE_TTL) {
     return { relayList: cached, outcome: 'found' };
   }
+  if (cached) relayListCache.delete(pubkey);
 
   // Fetch from relays
   return new Promise((resolve) => {
