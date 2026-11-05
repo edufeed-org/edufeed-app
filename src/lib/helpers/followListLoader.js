@@ -196,27 +196,3 @@ export function parseFollowSetEvent(event) {
 
   return followSet;
 }
-
-/**
- * Get pubkeys from multiple follow lists
- * @param {FollowList[]} followLists - Array of follow lists
- * @param {string[]} selectedListIds - IDs of lists to include
- * @returns {string[]} Unique array of pubkeys
- */
-export function getAuthorsFromFollowLists(followLists, selectedListIds) {
-  if (selectedListIds.length === 0) {
-    return [];
-  }
-
-  const selectedLists = followLists.filter((list) => selectedListIds.includes(list.id));
-
-  // Collect all pubkeys and deduplicate
-  const pubkeysSet = new Set();
-  selectedLists.forEach((list) => {
-    list.pubkeys.forEach((pubkey) => pubkeysSet.add(pubkey));
-  });
-
-  const uniquePubkeys = Array.from(pubkeysSet);
-
-  return uniquePubkeys;
-}

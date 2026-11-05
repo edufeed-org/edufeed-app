@@ -4,7 +4,7 @@
  */
 
 import { json, error } from '@sveltejs/kit';
-import { serverConfig } from '$lib/server/config.js';
+import { env } from '$env/dynamic/private';
 import { createRateLimiter, clientKey, tooManyRequests } from '$lib/server/rate-limit.js';
 
 // Each call spends OpenCage quota; autocomplete fires while typing, so stay generous.
@@ -29,7 +29,7 @@ export async function GET({ url, getClientAddress }) {
     throw error(400, 'Query parameter "q" must be at least 3 characters');
   }
 
-  const apiKey = serverConfig.geocoding?.apiKey;
+  const apiKey = env.GEOCODING_API_KEY;
   if (!apiKey) {
     // Return graceful response instead of error - geocoding is optional
     return json({ success: false, error: 'not_configured' });
