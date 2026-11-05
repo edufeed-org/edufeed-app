@@ -20,6 +20,9 @@ vi.mock('$lib/loaders/base.js', () => ({
   addressLoader: vi.fn(() => noopObservable),
   eventLoader: vi.fn(() => noopObservable)
 }));
+vi.mock('$lib/loaders/profile-badges.js', () => ({
+  loadProfileBadgeLists: () => ({ subscribe: () => ({ unsubscribe() {} }) })
+}));
 vi.mock('$lib/helpers/relay-helper.js', () => ({
   getCommunikeyRelays: () => ['wss://relay1'],
   getCalendarRelays: () => ['wss://relay2'],

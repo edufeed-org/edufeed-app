@@ -18,7 +18,11 @@ export const IDENTITY_KINDS = new Set([
   3, // NIP-02 contact list
   10002, // NIP-65 relay list
   10050, // NIP-17 DM relay list
-  10063 // Blossom server list
+  10063, // Blossom server list
+  // NIP-58 profile badges: the badges a user accepted. What a profile shows,
+  // so it must reach everyone who opens that profile — written to the outbox
+  // only, it stayed on one relay the profile page never asks (2026-11-05).
+  10008
 ]);
 
 /**

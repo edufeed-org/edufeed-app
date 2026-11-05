@@ -8,14 +8,14 @@
  * Flow:
  * 1. Subscribe to kind 10008 + 30008 profile_badges events; pick the most recent.
  * 2. Extract (badgeAddress, awardId) slots from its `a`/`e` tag pairs.
- * 3. For each slot, load the kind 8 award (by id) + kind 30009 definition (by address).
+ * 3. For each slot, load the kind 8 award (by id) + kind 30009 definition (by address),
+ *    from the lookup relays and the issuer's / owner's NIP-65 relays.
  * 4. Compose display items in slot order.
  */
 /* eslint-disable svelte/prefer-svelte-reactivity -- Map used intentionally to avoid infinite loops */
 import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
-import { addressLoader, eventLoader } from '$lib/loaders/base.js';
 import { untrack } from 'svelte';
-import { getAllLookupRelays } from '$lib/helpers/relay-helper.js';
+import { loadProfileBadgeLists, loadBadgeSlot } from '$lib/loaders/profile-badges.js';
 
 const PROFILE_BADGES_KIND = 10008;
 const LEGACY_PROFILE_BADGES_KIND = 30008;
@@ -172,14 +172,19 @@ export function useProfileBadges(getPubkey) {
 
   /** Subscribe to a single slot's award + definition. Idempotent per key.
    * @param {ProfileBadgeSlot} slot
-   * @param {string[]} relays
+   * @param {string} ownerPubkey
    */
-  function subscribeSlot(slot, relays) {
-    // Award (kind 8) — fetch by id, subscribe to store
+  function subscribeSlot(slot, ownerPubkey) {
+    // Network: lookup relays, then the issuer's outbox and the owner's inbox
+    // (loaders/profile-badges.js). The store subscriptions below pick it up.
+    const loadKey = 'load:' + slot.awardId + ':' + slot.badgeAddress;
+    if (!slotSubscriptions.has(loadKey)) {
+      slotSubscriptions.set(loadKey, untrack(() => loadBadgeSlot(slot, ownerPubkey)).subscribe());
+    }
+
+    // Award (kind 8) — subscribe to store
     const awardKey = 'award:' + slot.awardId;
     if (!slotSubscriptions.has(awardKey)) {
-      const loaderSub = eventLoader({ id: slot.awardId, relays }).subscribe();
-      slotSubscriptions.set(awardKey + ':loader', loaderSub);
       const storeSub = eventStore.event(slot.awardId).subscribe((event) => {
         if (event) {
           awardsMap.set(slot.awardId, event);
@@ -196,13 +201,6 @@ export function useProfileBadges(getPubkey) {
 
     const defKey = 'def:' + slot.badgeAddress;
     if (!slotSubscriptions.has(defKey)) {
-      const loaderSub = addressLoader({
-        kind,
-        pubkey: defPubkey,
-        identifier: identifier || '',
-        relays
-      }).subscribe();
-      slotSubscriptions.set(defKey + ':loader', loaderSub);
       const storeSub = eventStore
         .replaceable(kind, defPubkey, identifier || '')
         .subscribe((event) => {
@@ -234,9 +232,6 @@ export function useProfileBadges(getPubkey) {
     badges = [];
     isLoading = true;
 
-    // Capture relays once (untrack avoids reactive deps through the SvelteMap)
-    const relays = untrack(() => getAllLookupRelays());
-
     /** Newest profile_badges event per kind — different clients maintain
      *  different kinds, so acceptances from both must be merged rather than
      *  letting the globally newest event shadow the other list. */
@@ -259,26 +254,14 @@ export function useProfileBadges(getPubkey) {
       clearSlotSubscriptions();
       awardsMap = new Map();
       definitionsMap = new Map();
-      for (const slot of slots) subscribeSlot(slot, relays);
+      for (const slot of slots) subscribeSlot(slot, pubkey);
 
       recompute();
     }
 
-    // Kick off network fetches for both spec kinds.
-    // Kind 10008 is a plain replaceable event with NO d tag — an identifier
-    // here would poison the batched relay filter with #d for every other
-    // replaceable kind loaded in the same second (10015, 10050, 10222, ...).
-    const pbLoaderNew = addressLoader({
-      kind: PROFILE_BADGES_KIND,
-      pubkey,
-      relays
-    }).subscribe();
-    const pbLoaderLegacy = addressLoader({
-      kind: LEGACY_PROFILE_BADGES_KIND,
-      pubkey,
-      identifier: PROFILE_BADGES_IDENTIFIER,
-      relays
-    }).subscribe();
+    // Both spec kinds, from the lookup relays AND the owner's write relays
+    // (the list is published outbox-model; see loaders/profile-badges.js).
+    const pbLoader = untrack(() => loadProfileBadgeLists(pubkey)).subscribe();
 
     // Subscribe to store for whichever lands first / is newer
     const pbStoreNew = eventStore
@@ -294,8 +277,7 @@ export function useProfileBadges(getPubkey) {
     }, 3000);
 
     return () => {
-      pbLoaderNew.unsubscribe();
-      pbLoaderLegacy.unsubscribe();
+      pbLoader.unsubscribe();
       pbStoreNew.unsubscribe();
       pbStoreLegacy.unsubscribe();
       clearSlotSubscriptions();

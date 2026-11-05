@@ -4,7 +4,7 @@
  * Contract follows the applesauce `Action` type:
  *   `(params) => async ({ user, publish, sign }) => Promise<void>`
  */
-import { lastValueFrom, merge } from 'rxjs';
+import { lastValueFrom } from 'rxjs';
 import { addSlot } from 'applesauce-common/operations/profile-badges';
 import {
   PROFILE_BADGES_KIND,
@@ -17,8 +17,7 @@ import {
 } from 'applesauce-common/helpers';
 import { getSeenRelays } from 'applesauce-core/helpers';
 import { createAppEventFactory } from '$lib/helpers/event-factory.js';
-import { addressLoader } from '$lib/loaders/base.js';
-import { getAllLookupRelays } from '$lib/helpers/relay-helper.js';
+import { loadProfileBadgeLists as loadLists } from '$lib/loaders/profile-badges.js';
 
 /** Longest we wait for the relays to answer for the current list. */
 const LIST_LOAD_TIMEOUT = 5000;
@@ -31,23 +30,9 @@ const LIST_LOAD_TIMEOUT = 5000;
  * @param {string} pubkey
  */
 async function loadProfileBadgeLists(pubkey) {
-  const relays = getAllLookupRelays();
-  if (!relays.length) return;
-  // Kind 10008 is a plain replaceable event with NO d tag — an identifier
-  // would poison the batched relay filter with #d for every other replaceable
-  // kind loaded in the same second (see badge-awards.svelte.js).
-  const load = lastValueFrom(
-    merge(
-      addressLoader({ kind: PROFILE_BADGES_KIND, pubkey, relays }),
-      addressLoader({
-        kind: LEGACY_PROFILE_BADGES_KIND,
-        pubkey,
-        identifier: LEGACY_PROFILE_BADGES_IDENTIFIER,
-        relays
-      })
-    ),
-    { defaultValue: undefined }
-  );
+  // Lookup relays AND the user's own write relays: on a fresh device the
+  // list may only live on the outbox (loaders/profile-badges.js).
+  const load = lastValueFrom(loadLists(pubkey), { defaultValue: undefined });
   await Promise.race([
     load.catch(() => undefined),
     new Promise((resolve) => setTimeout(resolve, LIST_LOAD_TIMEOUT))

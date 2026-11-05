@@ -62,6 +62,7 @@ export const NIP46_SIGNED_KINDS = [
   10000, // mute list
   10002, // NIP-65 relay list — published at signup and by the relay editor
   10003, // bookmark list
+  10008, // NIP-58 profile badges — accepting a badge in the inbox
   10009, // NIP-29 groups list — written with every channel join/leave
   10050, // NIP-17 DM relay list — published at signup
   10063, // Blossom server list

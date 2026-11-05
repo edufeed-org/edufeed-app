@@ -495,7 +495,10 @@ export function GET() {
       enabled: parseBool(env.MEMBERSHIP_ENABLED, false),
       handleDomain: env.NIP05_HANDLE_DOMAIN || '',
       formAddress: env.MEMBERSHIP_FORM_ADDRESS || '',
-      adminPubkeys: parseArray(env.MEMBERSHIP_ADMIN_PUBKEYS)
+      adminPubkeys: parseArray(env.MEMBERSHIP_ADMIN_PUBKEYS),
+      // Relays every member (pubkey in the NIP-05 directory of handleDomain)
+      // also publishes to, besides their own outbox — see member-relays.js.
+      relays: parseArray(env.MEMBER_RELAYS)
     },
 
     // Cordn MLS private groups spike (evaluation track alongside Concord).

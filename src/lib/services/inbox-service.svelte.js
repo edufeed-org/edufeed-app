@@ -45,6 +45,7 @@ import { getNip05ReadyCount } from '$lib/stores/nip05-ready-alert.svelte.js';
 import { parseAddressPointerFromATag } from '$lib/helpers/nostrUtils.js';
 import { watchNewFollowers } from '$lib/services/new-followers.svelte.js';
 import { authenticateOnce } from '$lib/groups/relay-auth.js';
+import { loadProfileBadgeLists } from '$lib/loaders/profile-badges.js';
 
 const APP_DATA_D_TAG = 'comcal/inbox/last-seen';
 
@@ -488,24 +489,16 @@ export function getInboxPubkey() {
  * @param {string} pubkey
  */
 function watchAcceptedBadgeAwards(pubkey) {
-  const relays = getAllLookupRelays();
-  // Kind 10008 is a plain replaceable event with NO d tag — an identifier
-  // would poison the batched relay filter with #d for every other replaceable
-  // kind loaded in the same second (see badge-awards.svelte.js).
+  // Lookup relays + the user's own write relays (loaders/profile-badges.js).
+  subscriptions.push(loadProfileBadgeLists(pubkey).subscribe());
   const pointers = [
-    { kind: PROFILE_BADGES_KIND, pubkey, relays },
-    {
-      kind: LEGACY_PROFILE_BADGES_KIND,
-      pubkey,
-      identifier: LEGACY_PROFILE_BADGES_IDENTIFIER,
-      relays
-    }
+    { kind: PROFILE_BADGES_KIND },
+    { kind: LEGACY_PROFILE_BADGES_KIND, identifier: LEGACY_PROFILE_BADGES_IDENTIFIER }
   ];
   /** @type {Map<number, import('nostr-tools').NostrEvent>} newest list per kind */
   // eslint-disable-next-line svelte/prefer-svelte-reactivity -- bookkeeping; the Set below is the state
   const latestByKind = new Map();
   for (const pointer of pointers) {
-    if (relays.length) subscriptions.push(addressLoader(pointer).subscribe());
     subscriptions.push(
       eventStore.replaceable(pointer.kind, pubkey, pointer.identifier).subscribe((event) => {
         if (!event || activePubkey !== pubkey) return;

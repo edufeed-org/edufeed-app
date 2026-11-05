@@ -224,7 +224,9 @@ const defaultConfig = {
     enabled: false,
     handleDomain: '',
     formAddress: '',
-    adminPubkeys: /** @type {string[]} */ ([])
+    adminPubkeys: /** @type {string[]} */ ([]),
+    /** MEMBER_RELAYS: every member also publishes here (services/member-relays.js) */
+    relays: /** @type {string[]} */ ([])
   },
   // Cordn MLS private groups spike
   cordnGroups: {

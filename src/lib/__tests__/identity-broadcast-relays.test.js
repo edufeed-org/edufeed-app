@@ -45,6 +45,8 @@ vi.mock('$lib/helpers/relay-helper.js', () => ({
   getFallbackRelays: vi.fn(() => []),
   getIdentityBroadcastRelays: vi.fn(() => IDENTITY_RELAYS)
 }));
+const getMemberRelays = vi.hoisted(() => vi.fn(async () => []));
+vi.mock('$lib/services/member-relays.js', () => ({ getMemberRelays }));
 
 const { computePublishRelays } = await import('$lib/services/publish-service.js');
 const { isIdentityKind } = await import('$lib/helpers/identity-kinds.js');
@@ -61,7 +63,8 @@ const ev = (kind) => ({
 
 describe('isIdentityKind', () => {
   it('covers the kinds that describe who a user is and where to reach them', () => {
-    for (const kind of [0, 3, 10002, 10050, 10063]) {
+    // 10008: accepted badges (NIP-58 profile badges) — what a profile shows
+    for (const kind of [0, 3, 10002, 10050, 10063, 10008]) {
       expect(isIdentityKind(kind)).toBe(true);
     }
   });
@@ -97,5 +100,22 @@ describe('computePublishRelays for identity kinds', () => {
     getPublishRelays.mockResolvedValueOnce(['wss://purplepag.es']);
     const relays = await computePublishRelays(ev(0), []);
     expect(relays.filter((r) => r === 'wss://purplepag.es')).toHaveLength(1);
+  });
+});
+
+describe('computePublishRelays for members of the deployment', () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it('adds the member relays to every publish of a member', async () => {
+    getMemberRelays.mockResolvedValueOnce(['wss://relay.edufeed.org']);
+    const relays = await computePublishRelays(ev(1), []);
+    expect(getMemberRelays).toHaveBeenCalledWith('a'.repeat(64));
+    expect(relays).toContain('wss://relay.edufeed.org');
+    expect(relays).toContain('wss://own-write.example');
+  });
+
+  it('adds nothing for everyone else', async () => {
+    const relays = await computePublishRelays(ev(1), []);
+    expect(relays).toEqual(['wss://own-write.example']);
   });
 });
