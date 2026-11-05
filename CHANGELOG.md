@@ -7,6 +7,37 @@ merge commits of the nostr PRs that landed since the previous tag.
 
 ## [Unreleased]
 
+## [0.15.5] - 2026-11-05
+
+Fix release: one nostr PR, released directly without an RC on dev. Accepted
+badges were invisible to everyone but their owner.
+
+### Fixed
+
+- Profile badges are found where they actually are. The badges list (kind
+  10008, and the deprecated kind 30008 that older clients like Badger still
+  write; both are read and merged, only 10008 is written) is now also looked
+  for on the owner's own relays, and each badge's image, name and award on
+  the issuer's and owner's relays. Before, a badge accepted in Edufeed often
+  showed only for its owner (from the local cache), and a profile with badges
+  from other clients showed one of eight, or blank cards dated 1 Jan.
+- Accepting a badge on a new device can no longer replace a badges list it
+  did not find, dropping badges accepted earlier.
+- The badges list is published like a profile: to the profile indexers and
+  the deployment's relays, not only to the owner's relays.
+
+### Added
+
+- Members of the deployment (accounts in the NIP-05 directory of
+  `NIP05_HANDLE_DOMAIN`) publish everything to `MEMBER_RELAYS` as well,
+  whatever their relay list says, so their posts, profile and badges are
+  always on the deployment's own relay.
+
+### Deploy notes
+
+- New env var `MEMBER_RELAYS` (comma-separated). edufeed.org and
+  dev.edufeed.org: `MEMBER_RELAYS=wss://relay.edufeed.org`. Unset = off.
+
 ## [0.15.4] - 2026-11-05
 
 Fix release: two nostr PRs, released directly without an RC on dev.
