@@ -106,6 +106,20 @@ describe('ambRankedSearchLoader', () => {
     warn.mockRestore();
   });
 
+  it('errors when every relay fails, so the search store falls back to local matches', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const fail = () => new Observable((sub) => sub.error(new Error('TimeoutError')));
+    relayResponses = {
+      'wss://amb-relay.example.com': fail(),
+      'wss://oersi-relay.example.com': fail()
+    };
+
+    await expect(
+      lastValueFrom(ambRankedSearchLoader({ searchText: 'test' }).pipe(toArray()))
+    ).rejects.toThrow('TimeoutError');
+    warn.mockRestore();
+  });
+
   it('emits each event with its relay and 1-based rank within that relay', async () => {
     relayResponses = {
       'wss://amb-relay.example.com': respondWith([ev('a1'), ev('a2')]),

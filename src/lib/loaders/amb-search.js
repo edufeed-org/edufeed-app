@@ -59,7 +59,9 @@ function buildFilter(filters, limit, extra = {}) {
  * relay it came from and its 1-based rank within that relay's response.
  * The same event may be emitted once per relay that returned it. A relay
  * that errors or times out ends only its own leg: the results it already
- * sent and every other relay's results stay.
+ * sent and every other relay's results stay. When every relay fails the
+ * stream errors, so the caller can fall back (useLearningSearch filters the
+ * loaded feed locally then).
  *
  * @param {Record<string, any> | null} filter
  * @returns {Observable<RankedSearchResult>}
@@ -68,6 +70,7 @@ function rankedRequest(filter) {
   if (!filter) return empty();
 
   const relays = getEducationalRelays();
+  let failed = 0;
   return merge(
     ...relays.map((relay) => {
       let rank = 0;
@@ -78,6 +81,7 @@ function rankedRequest(filter) {
           tap((event) => eventStore.add(event)), // Add to eventStore for caching
           map((event) => ({ event, relay, rank: ++rank })),
           catchError((error) => {
+            if (++failed === relays.length) throw error;
             console.warn(`🔍 AMB search: ${relay} failed`, error);
             return EMPTY;
           })
