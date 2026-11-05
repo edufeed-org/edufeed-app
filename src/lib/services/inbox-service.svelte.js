@@ -24,6 +24,7 @@ import {
   getNotificationType,
   isUnread,
   filterSelfNotifications,
+  isSelfIssuedAward,
   isMembershipApplication,
   mergeReadMarkers
 } from '$lib/helpers/inbox.js';
@@ -326,6 +327,9 @@ let notifications = $derived.by(() => {
  */
 export function isNotificationUnread(event) {
   if (readItemIds.has(event.id)) return false;
+  // The user issued it: the row stays (to accept it), but it is no news —
+  // no bell count, no OS toast, no Termi hint.
+  if (isSelfIssuedAward(event, activePubkey)) return false;
   return isUnread(event, readMarkers);
 }
 

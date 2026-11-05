@@ -166,4 +166,27 @@ describe('inbox: badge awards', () => {
     mod.cleanup();
     expect(mod.getAcceptedAwardIds().size).toBe(0);
   });
+
+  it('lists a self-issued award but never counts it as unread', () => {
+    const selfAward = {
+      id: 'e'.repeat(64),
+      kind: 8,
+      pubkey: PUBKEY,
+      created_at: Math.floor(Date.now() / 1000),
+      content: '',
+      sig: '',
+      tags: [
+        ['a', `30009:${PUBKEY}:moerfi`],
+        ['p', PUBKEY]
+      ]
+    };
+    eventStore.model.mockImplementation((_model, filters) =>
+      Array.isArray(filters) ? emitting([selfAward]) : noopObservable
+    );
+    mod.initializeInbox(PUBKEY);
+
+    expect(mod.getNotifications().map((e) => e.id)).toContain(selfAward.id);
+    expect(mod.isNotificationUnread(selfAward)).toBe(false);
+    expect(mod.getUnreadCount()).toBe(0);
+  });
 });
