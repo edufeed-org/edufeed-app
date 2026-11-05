@@ -34,6 +34,12 @@ vi.mock('$lib/helpers/relay-helper.js', () => ({
   getAllLookupRelays: () => ['wss://relay.test']
 }));
 
+// The owner's outbox is asked too (loaders/profile-badges.js); never resolves here.
+vi.mock('$lib/services/relay-service.svelte.js', () => ({
+  getWriteRelays: vi.fn(() => new Promise(() => {})),
+  getReadRelays: vi.fn(() => new Promise(() => {}))
+}));
+
 const { useProfileBadges } = await import('../badge-awards.svelte.js');
 
 const PUBKEY = 'a'.repeat(64);
@@ -42,9 +48,7 @@ describe('useProfileBadges pointer contract', () => {
   beforeEach(() => {
     addressLoaderMock.mockReset();
     replaceableMock.mockReset();
-    addressLoaderMock.mockImplementation(() => ({
-      subscribe: vi.fn(() => ({ unsubscribe: vi.fn() }))
-    }));
+    addressLoaderMock.mockImplementation(() => new Subject());
     replaceableMock.mockImplementation(() => new Subject());
   });
 

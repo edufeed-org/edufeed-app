@@ -13,6 +13,7 @@ import { getPublishRelays, getPrimaryWriteRelay } from './relay-service.svelte.j
 import { getAppRelaysForCategory, kindToAppRelayCategory } from './app-relay-service.svelte.js';
 import { getFallbackRelays, getIdentityBroadcastRelays } from '$lib/helpers/relay-helper.js';
 import { isIdentityKind } from '$lib/helpers/identity-kinds.js';
+import { getMemberRelays } from './member-relays.js';
 import {
   getRelaysForKind,
   getCommunityGlobalRelays,
@@ -155,10 +156,12 @@ export async function publishToRelays(signedEvent, relays, opts = {}) {
  *    alone strands a profile wherever the user's kind 10002 happens to point,
  *    which is how a name set in this app stopped reaching other clients
  *    entirely (see getIdentityBroadcastRelays).
- * 3. App-specific relays for the kind's category
- * 4. Community relays (communikey app relay, per-kind, global, enforced)
- * 5. Explicit additional relays
- * 6. Safety net: a fresh account (no NIP-65 write relays) publishing a kind
+ * 3. Members of the deployment (NIP-05 directory of NIP05_HANDLE_DOMAIN):
+ *    the deployment's own MEMBER_RELAYS, whatever their kind 10002 says
+ * 4. App-specific relays for the kind's category
+ * 5. Community relays (communikey app relay, per-kind, global, enforced)
+ * 6. Explicit additional relays
+ * 7. Safety net: a fresh account (no NIP-65 write relays) publishing a kind
  *    without an app-relay category (kind 1 note, kind 1068 poll, kind 1063
  *    attestation) can end up with an EMPTY set — the event would silently go
  *    nowhere. Fall back to the deployment fallback relays (empty in gated
@@ -176,8 +179,14 @@ export async function computePublishRelays(signedEvent, taggedPubkeys, opts = {}
 
   // NIP-70: a protected event stays on the author's side. Tagged users' read
   // relays and the identity broadcast relays are other people's relays.
-  const outboxRelays = await getPublishRelays(signedEvent.pubkey, isProtected ? [] : taggedPubkeys);
+  const [outboxRelays, memberRelays] = await Promise.all([
+    getPublishRelays(signedEvent.pubkey, isProtected ? [] : taggedPubkeys),
+    getMemberRelays(signedEvent.pubkey)
+  ]);
   outboxRelays.forEach((r) => relaySet.add(r));
+  // The member's own home relays are the author's side, protected or not
+  // (a protected event is still filtered to NIP-70 capable relays below).
+  memberRelays.forEach((r) => relaySet.add(r));
 
   if (!isProtected && isIdentityKind(signedEvent.kind)) {
     getIdentityBroadcastRelays().forEach((r) => relaySet.add(r));

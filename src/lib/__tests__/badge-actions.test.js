@@ -9,21 +9,15 @@
  * @vitest-environment node
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { EMPTY } from 'rxjs';
 
 const factoryRef = vi.hoisted(() => ({ current: /** @type {any} */ (null) }));
 vi.mock('$lib/helpers/event-factory.js', () => ({
   createAppEventFactory: () => factoryRef.current
 }));
 
-const addressLoader = vi.hoisted(() =>
-  vi.fn(() => ({
-    subscribe: (/** @type {any} */ observer) => (observer?.complete?.(), { unsubscribe() {} })
-  }))
-);
-vi.mock('$lib/loaders/base.js', () => ({ addressLoader }));
-vi.mock('$lib/helpers/relay-helper.js', () => ({
-  getAllLookupRelays: () => ['wss://lookup.example/']
-}));
+const loadProfileBadgeLists = vi.hoisted(() => vi.fn());
+vi.mock('$lib/loaders/profile-badges.js', () => ({ loadProfileBadgeLists }));
 
 import { AcceptBadgeAward } from '../actions/badge-actions.js';
 
@@ -93,7 +87,10 @@ const pairs = (event) =>
   event.tags.filter((/** @type {string[]} */ t) => t[0] === 'a' || t[0] === 'e');
 
 describe('AcceptBadgeAward', () => {
-  beforeEach(() => vi.clearAllMocks());
+  beforeEach(() => {
+    vi.clearAllMocks();
+    loadProfileBadgeLists.mockReturnValue(EMPTY);
+  });
 
   it('rejects an event that is not a badge award', async () => {
     const ctx = createContext();
@@ -124,24 +121,10 @@ describe('AcceptBadgeAward', () => {
     expect(relays).toEqual(['wss://out.example']);
   });
 
-  it('loads both profile-badges kinds from the lookup relays before deciding', async () => {
+  it("loads the user's lists (lookup relays + own outbox) before deciding", async () => {
     const ctx = createContext();
     await AcceptBadgeAward(/** @type {any} */ (award))(ctx);
-
-    const pointers = /** @type {any[][]} */ (addressLoader.mock.calls).map((call) => call[0]);
-    expect(pointers).toEqual(
-      expect.arrayContaining([
-        { kind: 10008, pubkey: USER, relays: ['wss://lookup.example/'] },
-        {
-          kind: 30008,
-          pubkey: USER,
-          identifier: 'profile_badges',
-          relays: ['wss://lookup.example/']
-        }
-      ])
-    );
-    // 10008 is a plain replaceable: no identifier (it would poison the batched #d filter)
-    expect(pointers.find((p) => p.kind === 10008)).not.toHaveProperty('identifier');
+    expect(loadProfileBadgeLists).toHaveBeenCalledWith(USER);
   });
 
   it('appends to an existing kind 10008 list, keeping its slots', async () => {

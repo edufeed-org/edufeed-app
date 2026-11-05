@@ -21,6 +21,10 @@ const fetchEvents = vi.hoisted(() =>
 );
 const addressLoader = vi.hoisted(() => vi.fn());
 const manager = vi.hoisted(() => ({ active: /** @type {any} */ (null) }));
+const loadProfileBadgeLists = vi.hoisted(() =>
+  vi.fn(() => ({ subscribe: () => ({ unsubscribe() {} }) }))
+);
+vi.mock('$lib/loaders/profile-badges.js', () => ({ loadProfileBadgeLists }));
 
 vi.mock('$lib/stores/nostr-infrastructure.svelte', () => ({ eventStore, pool }));
 vi.mock('$lib/loaders/base.js', () => ({
@@ -103,17 +107,9 @@ describe('inbox: badge awards', () => {
     expect(modelCall[1].flatMap((f) => f.kinds)).toContain(8);
   });
 
-  it("loads the user's profile-badges list in both kinds from the lookup relays", () => {
+  it("loads the user's profile-badges lists through the shared loader (lookup + own outbox)", () => {
     mod.initializeInbox(PUBKEY);
-
-    const pointers = addressLoader.mock.calls.map(([p]) => p);
-    expect(pointers).toEqual(
-      expect.arrayContaining([
-        { kind: 10008, pubkey: PUBKEY, relays: ['wss://lookup1'] },
-        { kind: 30008, pubkey: PUBKEY, identifier: 'profile_badges', relays: ['wss://lookup1'] }
-      ])
-    );
-    expect(pointers.find((p) => p.kind === 10008)).not.toHaveProperty('identifier');
+    expect(loadProfileBadgeLists).toHaveBeenCalledWith(PUBKEY);
   });
 
   it('exposes the accepted award ids from both lists', () => {
