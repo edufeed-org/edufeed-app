@@ -94,7 +94,8 @@ function formatIsoDate(value) {
 /** @param {any} event */
 function publishedSeconds(event) {
   const tag = Number.parseInt(getTagValue(event.tags, 'published_at') ?? '', 10);
-  return Number.isFinite(tag) ? tag : event.created_at;
+  // Beyond ±8.64e12 s a Date is invalid and toISOString() would throw.
+  return Number.isFinite(tag) && Math.abs(tag) <= 8.64e12 ? tag : event.created_at;
 }
 
 /**

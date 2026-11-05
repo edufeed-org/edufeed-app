@@ -127,15 +127,14 @@ const safeUtm = (value) =>
   value && /^[a-z0-9._-]{1,50}$/i.test(value) ? value.toLowerCase() : null;
 
 /**
- * Client IP: the edge proxy (VPS Traefik) replaces untrusted X-Forwarded-For
- * and the homelab Traefik appends its hop, so the left-most entry is the client.
- * @param {Headers} headers
+ * Client IP as SvelteKit reports it. Never the left-most X-Forwarded-For entry:
+ * a client can prepend any address there and pass as a verified crawler.
+ * Behind proxies, adapter-node needs ADDRESS_HEADER=X-Forwarded-For and
+ * XFF_DEPTH=<trusted proxy hops> to resolve the real client.
  * @param {() => string} getClientAddress
  * @returns {string | null}
  */
-export function clientIp(headers, getClientAddress) {
-  const forwarded = headers.get('x-forwarded-for')?.split(',')[0]?.trim();
-  if (forwarded) return forwarded;
+export function clientIp(getClientAddress) {
   try {
     return getClientAddress();
   } catch {
@@ -206,6 +205,9 @@ export function createRangeVerifier({ fetchJson, ttlMs, now = Date.now }) {
  * @typedef {{ day: string, pageviews: number, crawlers: Map<string, CrawlerRow>, unknownBots: Map<string, number>, referrals: Map<string, ReferralRow>, dirty: boolean }} DayStats
  */
 
+/** Distinct rows per day and map; past it, new paths / UAs count as "other". */
+const MAX_KEYS_PER_DAY = 5000;
+
 /**
  * In-memory day counters, persisted as `<dir>/<YYYY-MM-DD>.json`. A day file
  * that already exists (e.g. after a restart) is continued, not overwritten.
@@ -256,7 +258,11 @@ export function createStatsStore({ dir }) {
      */
     crawler(day, { bytes, ...r }) {
       const stats = getDay(day);
-      const key = crawlerKey(r);
+      let key = crawlerKey(r);
+      if (!stats.crawlers.has(key) && stats.crawlers.size >= MAX_KEYS_PER_DAY) {
+        r = { ...r, path: 'other' };
+        key = crawlerKey(r);
+      }
       const row = stats.crawlers.get(key) ?? { ...r, count: 0, bytes: 0 };
       row.count += 1;
       row.bytes += bytes ?? 0;
@@ -266,14 +272,19 @@ export function createStatsStore({ dir }) {
     /** @param {string} day @param {string} ua */
     unknownBot(day, ua) {
       const stats = getDay(day);
-      const key = ua.slice(0, 200);
+      let key = ua.slice(0, 200);
+      if (!stats.unknownBots.has(key) && stats.unknownBots.size >= MAX_KEYS_PER_DAY) key = 'other';
       stats.unknownBots.set(key, (stats.unknownBots.get(key) ?? 0) + 1);
       stats.dirty = true;
     },
     /** @param {string} day @param {{ source: string | null, path: string, utm: string | null }} r */
     referral(day, r) {
       const stats = getDay(day);
-      const key = referralKey(r);
+      let key = referralKey(r);
+      if (!stats.referrals.has(key) && stats.referrals.size >= MAX_KEYS_PER_DAY) {
+        r = { ...r, path: 'other' };
+        key = referralKey(r);
+      }
       const row = stats.referrals.get(key) ?? { ...r, count: 0 };
       row.count += 1;
       stats.referrals.set(key, row);
@@ -320,12 +331,15 @@ export function createCrawlerStatsHandle({ dir, verifier, store = createStatsSto
       const { pathname, searchParams, hostname } = event.url;
       if (event.request.method !== 'GET' || pathname.startsWith('/api/')) return response;
       if (!COUNTED_TYPES.test(response.headers.get('content-type') ?? '')) return response;
+      // Error pages are no visits, and a bot's probed 404 paths would only
+      // flood the day file: scanners hitting /.env, /wp-login.php and co.
+      if (response.status >= 400) return response;
 
       const day = new Date().toISOString().slice(0, 10);
       const ua = event.request.headers.get('user-agent');
       const bot = classifyUserAgent(ua);
       if (bot) {
-        const ip = clientIp(event.request.headers, event.getClientAddress);
+        const ip = clientIp(event.getClientAddress);
         const length = Number(response.headers.get('content-length'));
         store.crawler(day, {
           family: bot.family,
@@ -339,9 +353,6 @@ export function createCrawlerStatsHandle({ dir, verifier, store = createStatsSto
       }
 
       if (!/^text\/html/.test(response.headers.get('content-type') ?? '')) return response;
-      // Error pages are no visits: scanners probing /.env or /wp-login.php
-      // get the HTML 404 page and would count as page views and referrals.
-      if (response.status >= 400) return response;
       store.pageview(day);
       const source = classifyReferrer(event.request.headers.get('referer'), hostname);
       const utm = safeUtm(searchParams.get('utm_source'));

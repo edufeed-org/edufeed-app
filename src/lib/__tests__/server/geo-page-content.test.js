@@ -94,6 +94,22 @@ describe('buildCrawlableContent — article (30023)', () => {
     expect(out.bodyHtml?.startsWith('<article id="geo-content"')).toBe(true);
   });
 
+  it('falls back to created_at when published_at is beyond the representable date range', async () => {
+    const odd = ev(30023, [
+      ['d', 'a2'],
+      ['title', 'Zukunft'],
+      ['published_at', '9999999999999']
+    ]);
+    const out = await buildCrawlableContent(odd, {
+      origin: ORIGIN,
+      appName: 'Edufeed',
+      relayHint: HINT,
+      authorName: 'Ada'
+    });
+    expect(out.jsonLd).toMatchObject({ datePublished: '2025-10-09T08:53:20.000Z' });
+    expect(out.bodyHtml).toContain('<h1>Zukunft</h1>');
+  });
+
   it('builds a schema.org Article', async () => {
     const out = await buildCrawlableContent(article, {
       origin: ORIGIN,

@@ -159,6 +159,26 @@ describe('OG Meta Tags', () => {
       expect(meta.publishedAt).toBe(new Date(1780444800 * 1000).toISOString());
     });
 
+    it('omits publishedAt instead of throwing for an out-of-range published_at', () => {
+      getArticleTitle.mockReturnValue('Far Future');
+      const event = {
+        kind: 30023,
+        pubkey: 'abc',
+        content: 'body',
+        tags: [
+          ['d', 'far-future'],
+          ['published_at', '9999999999999']
+        ],
+        created_at: 1700000000,
+        id: 'event-far'
+      };
+
+      const meta = extractMetadata(event);
+
+      expect(meta.title).toBe('Far Future');
+      expect(meta.publishedAt).toBeUndefined();
+    });
+
     it('extracts educational resource (30142) metadata from tags', () => {
       const event = {
         kind: 30142,

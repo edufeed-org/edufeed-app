@@ -126,9 +126,11 @@ export function extractMetadata(event) {
     const image = getArticleCoverUrl(event);
     const publishedAtTag = getTagValue(event.tags, 'published_at');
     const publishedAtSeconds = publishedAtTag ? parseInt(publishedAtTag, 10) : NaN;
-    const publishedAt = Number.isFinite(publishedAtSeconds)
-      ? new Date(publishedAtSeconds * 1000).toISOString()
-      : undefined;
+    // Beyond ±8.64e12 s a Date is invalid and toISOString() would throw.
+    const publishedAt =
+      Number.isFinite(publishedAtSeconds) && Math.abs(publishedAtSeconds) <= 8.64e12
+        ? new Date(publishedAtSeconds * 1000).toISOString()
+        : undefined;
     return { title, description, image, type: 'article', publishedAt };
   }
 
@@ -537,7 +539,7 @@ const NOINDEX_META = '<meta name="robots" content="noindex" />';
 
 /** Curated authors for the indexability rule (stale-while-revalidate, 1 h). */
 export const curatedAuthors = createCuratedAuthorsCache({
-  resolve: () => resolveCuratedAuthorSet(env, fetchFirstEvent),
+  resolve: () => resolveCuratedAuthorSet(env, fetchFirstEventResult),
   ttlMs: 60 * 60 * 1000
 });
 
@@ -657,6 +659,38 @@ const NEGATIVE_ENTRY = { head: '', body: '', noindex: true };
 /** Relay timeout: default tags, no noindex, retried soon. @type {PageEntry} */
 const TRANSIENT_ENTRY = { head: '', body: '', noindex: false, provisional: true };
 
+/** @type {Map<string, Promise<PageEntry>>} cache key → entry being loaded */
+const inflight = new Map();
+
+/**
+ * Fetch and build the entry for a page target and cache it. Never rejects.
+ * @param {PageTarget} target
+ * @param {string} key
+ * @param {URL} url
+ * @returns {Promise<PageEntry>}
+ */
+async function loadPageEntry(target, key, url) {
+  try {
+    const { event: nostrEvent, complete } = await fetchTarget(target);
+    if (nostrEvent) {
+      const entry = await buildPageEntry(nostrEvent, target, url);
+      ogCache.set(key, entry, entry.provisional ? TRANSIENT_TTL : POSITIVE_TTL);
+      return entry;
+    }
+    if (complete) {
+      // Every relay answered: the content really isn't there.
+      ogCache.set(key, NEGATIVE_ENTRY, NEGATIVE_TTL);
+      return NEGATIVE_ENTRY;
+    }
+    // Relays didn't answer in time — not a verdict on the page.
+    ogCache.set(key, TRANSIENT_ENTRY, TRANSIENT_TTL);
+    return TRANSIENT_ENTRY;
+  } catch {
+    ogCache.set(key, TRANSIENT_ENTRY, TRANSIENT_TTL);
+    return TRANSIENT_ENTRY;
+  }
+}
+
 /**
  * SvelteKit handle hook for injecting OG meta tags (and, for content pages,
  * the GEO canonical/JSON-LD/body or a noindex — see buildPageEntry).
@@ -680,24 +714,13 @@ export async function ogMetaHandle({ event, resolve }) {
     entry = ogCache.get(key);
 
     if (entry === null) {
-      try {
-        const { event: nostrEvent, complete } = await fetchTarget(target);
-        if (nostrEvent) {
-          entry = await buildPageEntry(nostrEvent, target, event.url);
-          ogCache.set(key, entry, entry.provisional ? TRANSIENT_TTL : POSITIVE_TTL);
-        } else if (complete) {
-          // Every relay answered: the content really isn't there.
-          entry = NEGATIVE_ENTRY;
-          ogCache.set(key, entry, NEGATIVE_TTL);
-        } else {
-          // Relays didn't answer in time — not a verdict on the page.
-          entry = TRANSIENT_ENTRY;
-          ogCache.set(key, entry, TRANSIENT_TTL);
-        }
-      } catch {
-        entry = TRANSIENT_ENTRY;
-        ogCache.set(key, entry, TRANSIENT_TTL);
+      // Concurrent requests for one uncached page share a single relay fetch.
+      let pending = inflight.get(key);
+      if (!pending) {
+        pending = loadPageEntry(target, key, event.url).finally(() => inflight.delete(key));
+        inflight.set(key, pending);
       }
+      entry = await pending;
     }
   }
 
