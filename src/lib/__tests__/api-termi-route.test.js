@@ -8,7 +8,7 @@ const BASE_ENV = {
   TERMI_EMBED_API_KEY: 'k'
 };
 
-/** @param {Request} request @param {string} [ip] */
+/** @param {Request} request @param {string} [ip] @returns {any} */
 function ev(request, ip = '1.2.3.4') {
   return { request, getClientAddress: () => ip };
 }

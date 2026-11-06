@@ -31,7 +31,7 @@ describe('TERMI_SKILLS catalogue', () => {
     const createSkills = TERMI_SKILLS.filter((s) => s.kind === 'create');
     expect(createSkills.length).toBe(CREATE_ACTIONS.length);
     for (const skill of createSkills) {
-      expect(createActionIds.has(skill.actionId)).toBe(true);
+      expect(skill.actionId && createActionIds.has(skill.actionId)).toBe(true);
     }
     // every CREATE_ACTIONS id is covered, not just a subset
     const coveredActionIds = new Set(createSkills.map((s) => s.actionId));
@@ -69,7 +69,7 @@ describe('extractQuery', () => {
     ['ich suche was', 'de', ''],
     ['Photosynthese', 'de', 'Photosynthese']
   ])('extractQuery(%j, %j) === %j', (text, locale, expected) => {
-    expect(extractQuery(text, locale)).toBe(expected);
+    expect(extractQuery(text, /** @type {'de'|'en'} */ (locale))).toBe(expected);
   });
 });
 
@@ -149,6 +149,7 @@ describe('decide', () => {
     ];
     const result = decide(matches, { mode: 'embed' });
     expect(result.kind).toBe('maybe');
+    if (result.kind !== 'maybe') throw new Error('expected maybe');
     expect(new Set(result.skills)).toEqual(new Set(['a', 'b']));
   });
 

@@ -29,7 +29,7 @@ export async function embedTexts(texts, inputType, { url, apiKey, timeoutMs = 10
 /**
  * Whether Termi's embedding leg is fully configured — shared by `/api/config`
  * (capability flag) and `/api/termi` (whether to build the router index).
- * @param {{ TERMI_AI_ENABLED?: string, TERMI_EMBED_URL?: string, TERMI_EMBED_API_KEY?: string }} env
+ * @param {Record<string, string|undefined>} env
  * @returns {boolean}
  */
 export function isEmbedConfigured(env) {

@@ -9,7 +9,11 @@ const SKILLS = [
   { id: 'calendar', phrases: { de: ['Zeig den Kalender'], en: ['Show the calendar'] } }
 ];
 
-/** A unit vector along axis `i` of a space with `dims` dimensions. */
+/**
+ * A unit vector along axis `i` of a space with `dims` dimensions.
+ * @param {number} i
+ * @param {number} [dims]
+ */
 function axisVector(i, dims = 4) {
   return Array.from({ length: dims }, (_, j) => (j === i ? 1 : 0));
 }
@@ -20,8 +24,10 @@ function axisVector(i, dims = 4) {
  * everything else axis 0 — query text follows the same rule.
  */
 function fakeEmbed() {
-  return vi.fn(async (texts) =>
-    texts.map((t) => (/calendar|kalender/i.test(t) ? axisVector(1) : axisVector(0)))
+  return vi.fn(
+    /** @param {string[]} texts @param {'query'|'passage'} _inputType */
+    async (texts, _inputType) =>
+      texts.map((t) => (/calendar|kalender/i.test(t) ? axisVector(1) : axisVector(0)))
   );
 }
 
@@ -35,7 +41,10 @@ describe('createRouterIndex', () => {
   it('warmUp embeds all phrases in chunks of at most 32, as "passage"', async () => {
     const manyPhrases = Array.from({ length: 70 }, (_, i) => `phrase ${i}`);
     const skills = [{ id: 'x', phrases: { de: manyPhrases, en: [] } }];
-    const embed = vi.fn(async (texts) => texts.map(() => axisVector(0)));
+    const embed = vi.fn(
+      /** @param {string[]} texts @param {'query'|'passage'} _inputType */
+      async (texts, _inputType) => texts.map(() => axisVector(0))
+    );
     const index = createRouterIndex({ embed, skills });
     await index.warmUp();
     expect(embed).toHaveBeenCalledTimes(3); // 70 / 32 -> 3 chunks

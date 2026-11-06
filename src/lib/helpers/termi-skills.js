@@ -680,6 +680,10 @@ export function extractQuery(text, locale) {
   return s;
 }
 
+/**
+ * @param {string} text
+ * @returns {string}
+ */
 function foldUmlauts(text) {
   return text.replace(/ä/g, 'ae').replace(/ö/g, 'oe').replace(/ü/g, 'ue').replace(/ß/g, 'ss');
 }
@@ -763,12 +767,20 @@ const STOPWORDS = new Set([
   'there'
 ]);
 
+/**
+ * @param {string} text
+ * @returns {string[]}
+ */
 function tokenize(text) {
   return foldUmlauts(text.toLowerCase()).match(/[a-z0-9]+/g) ?? [];
 }
 
+/**
+ * @param {string} text
+ * @returns {string[]}
+ */
 function contentTokens(text) {
-  return tokenize(text).filter((t) => !STOPWORDS.has(t));
+  return tokenize(text).filter((/** @type {string} */ t) => !STOPWORDS.has(t));
 }
 
 /**
@@ -814,6 +826,7 @@ export function availableSkills(skills, { loggedIn, discoverTypes, llm }) {
     if (skill.requiresUser && !loggedIn) return false;
     if (skill.kind === 'search') {
       if (skill.discoverType === 'all') return tabs.includes('all');
+      if (!skill.discoverType) return false;
       return isDiscoverTypeEnabled(skill.discoverType, types);
     }
     if (skill.kind === 'assistant') {

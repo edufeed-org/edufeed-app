@@ -98,7 +98,7 @@ export async function POST({ request, getClientAddress }) {
     const matches = await Promise.race([index.rank(text, locale), timeoutAfter(RANK_TIMEOUT_MS)]);
     return json({ matches });
   } catch (err) {
-    console.error('[/api/termi] rank failed:', err?.name || 'unknown error');
+    console.error('[/api/termi] rank failed:', err instanceof Error ? err.name : 'unknown error');
     return json({ error: 'rank_failed' }, { status: 503 });
   }
 }
