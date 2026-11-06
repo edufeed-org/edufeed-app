@@ -3321,6 +3321,7 @@
   "termi_quota": "I've searched enough for today — my quota is used up. The regular search still finds everything:",
   "termi_quota_link": "Go to search",
   "termi_search_all": "Show all",
+  "termi_search_failed": "The search didn't work just now.",
   "termi_ai_notice": "Termi answers with AI and can be wrong — check the sources.",
   "termi_route_go": "This way:",
   "termi_route_maybe": "Did you mean …?",

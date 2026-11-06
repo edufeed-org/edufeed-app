@@ -236,6 +236,71 @@ describe('TermiChatWindow assistant mode', () => {
     const view = renderWindow();
     await type(view, 'Finde Materialien zu Brüchen');
     await waitFor(() => view.getByText(m.termi_assistant_retry()));
+    // A way out to the plain search, too.
+    expect(view.getByText(m.termi_quota_link()).getAttribute('href')).toBe(
+      '/discover?type=learning&search=Br%C3%BCchen'
+    );
+  });
+
+  it('a failed search without model text → a short note plus the learning search link', async () => {
+    stubFetch(() =>
+      createUIMessageStreamResponse({
+        stream: createUIMessageStream({
+          execute: ({ writer }) => {
+            writer.write({ type: 'start-step' });
+            writer.write({
+              type: 'tool-input-available',
+              toolCallId: 'c1',
+              toolName: 'search_resources',
+              input: { query: 'Brüche' }
+            });
+            writer.write({
+              type: 'tool-output-error',
+              toolCallId: 'c1',
+              errorText: 'termi:upstream'
+            });
+            writer.write({ type: 'finish-step' });
+          }
+        })
+      })
+    );
+    const view = renderWindow();
+    await type(view, 'Finde Materialien zu Brüchen');
+    await waitFor(() => view.getByText(m.termi_search_failed(), { exact: false }));
+    expect(view.getByText(m.termi_quota_link()).getAttribute('href')).toBe(
+      '/discover?type=learning&search=Br%C3%BCchen'
+    );
+    expect(view.queryByText(m.termi_assistant_retry())).toBeNull();
+  });
+
+  it('closing the window while the chat module loads sends nothing', async () => {
+    chatCalls = [];
+    /** @type {ReturnType<typeof renderWindow>} */
+    let view;
+    let routed = false;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (/** @type {string} */ url, /** @type {RequestInit} */ init) => {
+        if (url === '/api/termi') {
+          // Unmount while the assistant start is still ahead (router answered, import pending).
+          queueMicrotask(() => view.unmount());
+          routed = true;
+          return new Response(
+            JSON.stringify({ matches: [{ skill: 'assistant.search', score: 0.92 }] })
+          );
+        }
+        chatCalls.push({ url, init });
+        return streamAnswer();
+      })
+    );
+    const signEvent = vi.spyOn(user.current.signer, 'signEvent');
+    view = renderWindow();
+    await type(view, 'Finde Materialien zu Brüchen');
+    await waitFor(() => expect(routed).toBe(true));
+    await new Promise((r) => setTimeout(r, 200));
+    expect(chatCalls).toHaveLength(0);
+    expect(signEvent).not.toHaveBeenCalled();
+    signEvent.mockRestore();
   });
 
   it('message list is a polite live log; static notice replaced with the flag on', async () => {

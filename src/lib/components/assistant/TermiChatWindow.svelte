@@ -324,7 +324,10 @@
     }, 900);
   }
 
+  // Plain let: an assistant start still waiting on its chunk must not sign or send after close.
+  let destroyed = false;
   $effect(() => () => {
+    destroyed = true;
     clearTimeout(replyTimer);
     assistant?.chat.stop();
   });
@@ -354,8 +357,21 @@
           (p.type === 'dynamic-tool' && p.toolName === 'search_resources')) &&
         p.state === 'output-available'
     );
+  // A failed search with no model text to explain it gets a note of its own.
   /** @param {any} msg */
-  const visible = (msg) => msg.role === 'user' || !!textOf(msg) || searchPartsOf(msg).length > 0;
+  const searchFailed = (msg) =>
+    msg.role === 'assistant' &&
+    !textOf(msg) &&
+    msg.parts.some(
+      (/** @type {any} */ p) =>
+        (p.type === 'tool-search_resources' ||
+          (p.type === 'dynamic-tool' && p.toolName === 'search_resources')) &&
+        p.state === 'output-error'
+    ) &&
+    !(chatBusy && assistant?.chat.messages.at(-1)?.id === msg.id);
+  /** @param {any} msg */
+  const visible = (msg) =>
+    msg.role === 'user' || !!textOf(msg) || searchPartsOf(msg).length > 0 || searchFailed(msg);
   const chatQuery = $derived.by(() => {
     const lastUser = assistant?.chat.messages.findLast((x) => x.role === 'user');
     return lastUser ? extractQuery(textOf(lastUser), getLocale() === 'en' ? 'en' : 'de') : '';
@@ -367,6 +383,7 @@
   async function startAssistant(text) {
     const user = getActiveUser();
     const { createTermiChat } = await import('./termi-chat.svelte.js');
+    if (destroyed) return;
     assistant = createTermiChat({
       task: 'search',
       user: /** @type {any} */ (user)
@@ -719,6 +736,13 @@
               {/each}
               {#if textOf(msg)}
                 <div class="whitespace-pre-line">{textOf(msg)}</div>
+              {:else if searchFailed(msg)}
+                {m.termi_search_failed()}
+                <div class="mt-2">
+                  <a href={learningHref(chatQuery)} class="btn btn-sm btn-primary">
+                    {m.termi_quota_link()}
+                  </a>
+                </div>
               {/if}
             </div>
           </div>
@@ -740,7 +764,10 @@
               </div>
             {:else}
               {m.termi_assistant_error()}
-              <div class="mt-2">
+              <div class="mt-2 flex flex-wrap gap-2">
+                <a href={learningHref(chatQuery)} class="btn btn-ghost btn-sm">
+                  {m.termi_quota_link()}
+                </a>
                 <button
                   type="button"
                   class="btn btn-sm btn-primary"

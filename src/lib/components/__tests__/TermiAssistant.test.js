@@ -20,8 +20,10 @@ import { tick, flushSync } from 'svelte';
 import { render, fireEvent } from '@testing-library/svelte';
 
 // Message catalog: echo the key (params ignored).
-vi.mock('$lib/paraglide/messages', () =>
-  Object.fromEntries(
+// Unlisted keys keep their real messages, so modules reading others at load still work.
+vi.mock('$lib/paraglide/messages', async (importOriginal) => ({
+  ...(await importOriginal()),
+  ...Object.fromEntries(
     [
       'termi_launcher_aria',
       'termi_header_sub',
@@ -79,7 +81,7 @@ vi.mock('$lib/paraglide/messages', () =>
       'termi_hint_nip05_ready_doing'
     ].map((key) => [key, () => key])
   )
-);
+}));
 
 const mockGoto = vi.hoisted(() => vi.fn());
 vi.mock('$app/navigation', () => ({ goto: mockGoto }));

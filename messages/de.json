@@ -3321,6 +3321,7 @@
   "termi_quota": "Für heute habe ich genug gesucht — mein Kontingent ist aufgebraucht. In der normalen Suche findest du weiter alles:",
   "termi_quota_link": "Zur Suche",
   "termi_search_all": "Alle anzeigen",
+  "termi_search_failed": "Die Suche hat gerade nicht geklappt.",
   "termi_ai_notice": "Termi antwortet mit KI und kann sich irren — prüfe die Quellen.",
   "termi_route_go": "Hier entlang:",
   "termi_route_maybe": "Meinst du …?",
