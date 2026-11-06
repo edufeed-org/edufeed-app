@@ -14,6 +14,7 @@ import {
   resolveWotConfig
 } from '$lib/server/env-parse.js';
 import { getEligibilityConfig } from '$lib/server/blossom-eligibility.js';
+import { isExternalModelId } from '$lib/server/termi/model-guard.js';
 
 /**
  * Like parseArray, but the literal `none` yields [] — the way to switch a
@@ -387,6 +388,21 @@ export function GET() {
     help: {
       url: parseHelpUrl(env.HELP_URL)
     },
+
+    // Termi LLM assistant — capability booleans only, keys never leave the
+    // server. `embed`/`llm` additionally require their own env group to be
+    // fully set; `llm` also refuses an external (non-SAIA) model id.
+    termi: (() => {
+      const enabled = parseBool(env.TERMI_AI_ENABLED, false);
+      const embed = enabled && !!env.TERMI_EMBED_URL && !!env.TERMI_EMBED_API_KEY;
+      const llm =
+        enabled &&
+        !!env.TERMI_LLM_BASE_URL &&
+        !!env.TERMI_LLM_API_KEY &&
+        !!env.TERMI_LLM_MODEL &&
+        !isExternalModelId(env.TERMI_LLM_MODEL);
+      return { enabled, embed, llm };
+    })(),
 
     // Privacy policy: PRIVACY_POLICY_PATH names a Markdown file rendered at
     // /privacy (src/lib/server/privacy-policy.js). The client only learns
