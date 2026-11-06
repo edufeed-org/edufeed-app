@@ -469,3 +469,38 @@ describe('callNopeMcpTool', () => {
     ).rejects.toThrow(/search blew up/);
   });
 });
+
+describe('callNopeMcpTool HTTP errors', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('carries the HTTP status on an initialize failure', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce(new Response('', { status: 401 })));
+    await expect(
+      callNopeMcpTool({
+        mcpUrl: 'https://mcp.example/mcp',
+        bearerToken: undefined,
+        name: 'x',
+        args: {}
+      })
+    ).rejects.toMatchObject({ status: 401 });
+  });
+
+  it('carries the HTTP status on a tools/call failure', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi
+        .fn()
+        .mockResolvedValueOnce(sseResponse({ jsonrpc: '2.0', id: 1, result: {} }, 'sess'))
+        .mockResolvedValueOnce(new Response(null, { status: 202 }))
+        .mockResolvedValueOnce(new Response('', { status: 401 }))
+    );
+    await expect(
+      callNopeMcpTool({
+        mcpUrl: 'https://mcp.example/mcp',
+        bearerToken: undefined,
+        name: 'x',
+        args: {}
+      })
+    ).rejects.toMatchObject({ status: 401 });
+  });
+});

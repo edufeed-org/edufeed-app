@@ -1,0 +1,82 @@
+/**
+ * POST /api/termi/chat — the Termi assistant. Body `{ task, messages }`
+ * (AI SDK v6 UIMessages), NIP-98 signed over the raw body; answers with a UI
+ * message stream from SAIA (open-weight model, see `termi/llm.js`).
+ *
+ * 503 flag/LLM/nope-mcp off · 401 bad NIP-98 · 400 bad body/task · 429 our
+ * quota (`{ error: 'quota', scope }`). Upstream failures happen inside the
+ * stream and surface as the error text `termi:upstream`. Never logs user text.
+ */
+import { json } from '@sveltejs/kit';
+import { env } from '$env/dynamic/private';
+import { convertToModelMessages, stepCountIs, streamText } from 'ai';
+import { verifyNip98Header } from '$lib/server/nip98-verify.js';
+import { nopeMcpEnv } from '$lib/server/nopeMcpEnv.js';
+import { getNopeMcpToken } from '$lib/server/nopeMcpToken.js';
+import { createTermiModel, streamErrorMessage } from '$lib/server/termi/llm.js';
+import { createQuota } from '$lib/server/termi/quota.js';
+import { SYSTEM_PROMPTS } from '$lib/server/termi/prompts.js';
+import { buildTermiTools } from '$lib/server/termi/tools.js';
+import { compactHistory } from '$lib/server/termi/compact-history.js';
+
+const MAX_BODY_CHARS = 200_000;
+
+const quota = createQuota({ perUserDaily: 40, globalMonthly: 2800 });
+
+/** @type {import('@sveltejs/kit').RequestHandler} */
+export async function POST({ request, url }) {
+  const model = createTermiModel(env);
+  const mcpUrl = nopeMcpEnv(env, 'URL');
+  if (!model || !mcpUrl) return json({ error: 'termi_llm_disabled' }, { status: 503 });
+
+  const rawBody = await request.text();
+  // An empty body would skip verifyNip98Header's payload check.
+  if (!rawBody) return json({ error: 'invalid_json' }, { status: 400 });
+  if (rawBody.length > MAX_BODY_CHARS) return json({ error: 'too_large' }, { status: 413 });
+
+  const pubkey = await verifyNip98Header(
+    request.headers.get('authorization'),
+    url.toString(),
+    'POST',
+    rawBody
+  );
+  if (!pubkey) return json({ error: 'Unauthorized' }, { status: 401 });
+
+  /** @type {{ task?: unknown, messages?: unknown }} */
+  let body;
+  try {
+    body = JSON.parse(rawBody);
+  } catch {
+    return json({ error: 'invalid_json' }, { status: 400 });
+  }
+  if (typeof body?.task !== 'string' || !Object.hasOwn(SYSTEM_PROMPTS, body.task)) {
+    return json({ error: 'unknown_task' }, { status: 400 });
+  }
+  const task = /** @type {keyof typeof SYSTEM_PROMPTS} */ (body.task);
+  if (!Array.isArray(body.messages)) {
+    return json({ error: 'invalid_messages' }, { status: 400 });
+  }
+
+  const tools = buildTermiTools(task, { mcpUrl, getToken: getNopeMcpToken });
+  // The client owns only its own turns: a client-sent system message would
+  // override the prompt.
+  const history = body.messages.filter((m) => m?.role === 'user' || m?.role === 'assistant');
+  let messages;
+  try {
+    messages = await convertToModelMessages(compactHistory(history), { tools });
+  } catch {
+    return json({ error: 'invalid_messages' }, { status: 400 });
+  }
+
+  const scope = quota.take(pubkey);
+  if (scope !== 'ok') return json({ error: 'quota', scope }, { status: 429 });
+
+  const result = streamText({
+    model,
+    system: SYSTEM_PROMPTS[task],
+    messages,
+    tools,
+    stopWhen: stepCountIs(8)
+  });
+  return result.toUIMessageStreamResponse({ onError: streamErrorMessage });
+}

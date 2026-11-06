@@ -33,6 +33,15 @@ function buildHeaders(bearerToken, sessionId) {
 }
 
 /**
+ * An HTTP-level failure; `status` lets callers detect e.g. a 401 cleanly.
+ * @param {string} message
+ * @param {number} status
+ */
+function httpError(message, status) {
+  return Object.assign(new Error(message), { status });
+}
+
+/**
  * Parse a streamable-HTTP SSE body and return the inlined JSON-RPC payload.
  * Server returns one `event: message` + one `data: {...}` line.
  *
@@ -73,7 +82,7 @@ async function mcpHandshake(mcpUrl, bearerToken) {
     })
   });
   if (!initRes.ok) {
-    throw new Error(`MCP initialize failed: HTTP ${initRes.status}`);
+    throw httpError(`MCP initialize failed: HTTP ${initRes.status}`, initRes.status);
   }
   const sessionId = initRes.headers.get('mcp-session-id') ?? undefined;
   if (!sessionId) {
@@ -142,7 +151,7 @@ export async function callNopeMcpTool({ mcpUrl, bearerToken, name, args }) {
     })
   });
   if (!callRes.ok) {
-    throw new Error(`MCP tools/call failed: HTTP ${callRes.status}`);
+    throw httpError(`MCP tools/call failed: HTTP ${callRes.status}`, callRes.status);
   }
   const callBody = await callRes.text();
   const callRpc = parseSseJsonRpc(callBody);

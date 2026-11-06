@@ -1,5 +1,5 @@
 /** @vitest-environment node */
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { finalizeEvent, generateSecretKey } from 'nostr-tools/pure';
 import { verifyNip98Header } from '../nip98-verify.js';
 
@@ -86,5 +86,22 @@ describe('verifyNip98Header', () => {
 
   it('returns null when the header is missing', async () => {
     expect(await verifyNip98Header(null, URL_STR, 'GET')).toBeNull();
+  });
+
+  it('returns null (does not throw) when tags is not an array', async () => {
+    // Reach the tag lookups even with a non-array `tags`: stub the signature check.
+    vi.resetModules();
+    vi.doMock('nostr-tools/pure', async (orig) => ({
+      .../** @type {object} */ (await orig()),
+      verifyEvent: () => true
+    }));
+    try {
+      const { verifyNip98Header: verify } = await import('../nip98-verify.js');
+      const event = { kind: 27235, created_at: Math.floor(Date.now() / 1000), tags: 'x' };
+      const auth = 'Nostr ' + btoa(JSON.stringify(event));
+      expect(await verify(auth, URL_STR, 'GET')).toBeNull();
+    } finally {
+      vi.doUnmock('nostr-tools/pure');
+    }
   });
 });

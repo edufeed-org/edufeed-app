@@ -39,20 +39,20 @@ export async function verifyNip98Header(authHeader, url, method, rawBody) {
   } catch {
     return null;
   }
-  if (!event || event.kind !== 27235) return null;
+  if (!event || event.kind !== 27235 || !Array.isArray(event.tags)) return null;
   if (!verifyEvent(event)) return null;
 
   const now = Math.floor(Date.now() / 1000);
   if (Math.abs(now - (event.created_at ?? 0)) > TIMESTAMP_TOLERANCE_S) return null;
 
-  const uTag = event.tags?.find((/** @type {string[]} */ t) => t[0] === 'u');
+  const uTag = event.tags.find((/** @type {string[]} */ t) => t[0] === 'u');
   if (!uTag || uTag[1] !== url) return null;
 
-  const methodTag = event.tags?.find((/** @type {string[]} */ t) => t[0] === 'method');
+  const methodTag = event.tags.find((/** @type {string[]} */ t) => t[0] === 'method');
   if (!methodTag || methodTag[1].toUpperCase() !== method.toUpperCase()) return null;
 
   if (rawBody) {
-    const payloadTag = event.tags?.find((/** @type {string[]} */ t) => t[0] === 'payload');
+    const payloadTag = event.tags.find((/** @type {string[]} */ t) => t[0] === 'payload');
     if (!payloadTag) return null;
     const expected = await sha256Hex(rawBody);
     if (payloadTag[1] !== expected) return null;

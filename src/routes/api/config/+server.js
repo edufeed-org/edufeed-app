@@ -14,7 +14,7 @@ import {
   resolveWotConfig
 } from '$lib/server/env-parse.js';
 import { getEligibilityConfig } from '$lib/server/blossom-eligibility.js';
-import { isExternalModelId } from '$lib/server/termi/model-guard.js';
+import { isTermiLlmConfigured } from '$lib/server/termi/model-guard.js';
 import { isEmbedConfigured } from '$lib/server/termi/embed.js';
 
 /**
@@ -396,12 +396,7 @@ export function GET() {
     termi: (() => {
       const enabled = parseBool(env.TERMI_AI_ENABLED, false);
       const embed = isEmbedConfigured(env);
-      const llm =
-        enabled &&
-        !!env.TERMI_LLM_BASE_URL &&
-        !!env.TERMI_LLM_API_KEY &&
-        !!env.TERMI_LLM_MODEL &&
-        !isExternalModelId(env.TERMI_LLM_MODEL);
+      const llm = isTermiLlmConfigured(env);
       return { enabled, embed, llm };
     })(),
 

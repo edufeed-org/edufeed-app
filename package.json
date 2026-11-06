@@ -83,6 +83,7 @@
     "ws": "^8.20.0"
   },
   "dependencies": {
+    "@ai-sdk/openai": "^3.0.48",
     "@contextvm/mcp-sdk": "^1.30.0",
     "@contextvm/sdk": "^0.13.10",
     "@fiatjaf/promenade-trusted-dealer": "npm:@jsr/fiatjaf__promenade-trusted-dealer@^0.4.3",
@@ -95,6 +96,7 @@
     "@napi-rs/canvas": "^1.0.2",
     "@noble/ciphers": "^2.2.0",
     "@noble/hashes": "^1.8.0",
+    "ai": "^6.0.141",
     "applesauce-common": "^7.0.0",
     "applesauce-common-concord": "npm:applesauce-common@0.0.0-concord-20260714212055",
     "applesauce-concord": "0.0.0-concord-20260714212055",
