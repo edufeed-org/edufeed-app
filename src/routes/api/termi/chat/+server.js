@@ -59,8 +59,15 @@ export async function POST({ request, url }) {
 
   const tools = buildTermiTools(task, { mcpUrl, getToken: getNopeMcpToken });
   // The client owns only its own turns: a client-sent system message would
-  // override the prompt.
-  const history = body.messages.filter((m) => m?.role === 'user' || m?.role === 'assistant');
+  // override the prompt, and a user file part makes the SDK fetch its URL
+  // server-side — the search task needs text only.
+  const history = body.messages
+    .filter((m) => m?.role === 'user' || m?.role === 'assistant')
+    .map((m) =>
+      m.role === 'user' && Array.isArray(m.parts)
+        ? { ...m, parts: m.parts.filter((/** @type {any} */ p) => p?.type === 'text') }
+        : m
+    );
   let messages;
   try {
     messages = await convertToModelMessages(compactHistory(history), { tools });
@@ -68,7 +75,7 @@ export async function POST({ request, url }) {
     return json({ error: 'invalid_messages' }, { status: 400 });
   }
 
-  const scope = quota.take(pubkey);
+  const scope = quota.check(pubkey);
   if (scope !== 'ok') return json({ error: 'quota', scope }, { status: 429 });
 
   const result = streamText({
@@ -76,7 +83,23 @@ export async function POST({ request, url }) {
     system: SYSTEM_PROMPTS[task],
     messages,
     tools,
-    stopWhen: stepCountIs(8)
+    // Each step is one SAIA call: charge it up front (failed calls count at
+    // SAIA too) and stop once the quota is gone.
+    prepareStep: () => {
+      quota.charge(pubkey);
+      return undefined;
+    },
+    stopWhen: [stepCountIs(8), () => quota.check(pubkey) !== 'ok'],
+    // The client handles errors; a retry would only spend quota.
+    maxRetries: 0,
+    // The SDK default logs the whole error, whose requestBodyValues carry the
+    // prompt (user text). Status or name only.
+    onError: ({ error }) => {
+      const e = /** @type {{ statusCode?: number, name?: string } | null} */ (
+        error && typeof error === 'object' ? error : null
+      );
+      console.error('[/api/termi/chat] stream error:', e?.statusCode ?? e?.name ?? 'unknown');
+    }
   });
   return result.toUIMessageStreamResponse({ onError: streamErrorMessage });
 }

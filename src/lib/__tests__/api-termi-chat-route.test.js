@@ -15,34 +15,98 @@ const ENV = {
 const USER_MSG = { id: 'u1', role: 'user', parts: [{ type: 'text', text: 'Bruchrechnung' }] };
 
 /**
- * Fresh route import per test with env, the NIP-98 verifier and `streamText`
- * mocked (the rest of `ai` stays real so convertToModelMessages runs).
+ * Fresh route import per test with env and the NIP-98 verifier mocked.
+ * `streamText` is a spy unless `realStream` is set; then the real loop runs
+ * against `model` (a MockLanguageModelV3) with nope-mcp stubbed. The route's
+ * quota instance is exposed (and its per-user cap overridable).
  *
  * @param {Record<string, string>} env
- * @param {{ signer?: string | null }} [opts]
+ * @param {{ signer?: string | null, realStream?: boolean, model?: any, perUserDaily?: number }} [opts]
  */
-async function importRoute(env, { signer = PUBKEY } = {}) {
+async function importRoute(env, { signer = PUBKEY, realStream = false, model, perUserDaily } = {}) {
   vi.resetModules();
   vi.doMock('$env/dynamic/private', () => ({ env }));
   const verify = vi.fn(async () => signer);
   vi.doMock('$lib/server/nip98-verify.js', () => ({ verifyNip98Header: verify }));
   const toUIMessageStreamResponse = vi.fn(() => new Response('stream'));
-  const streamText = vi.fn(() => ({ toUIMessageStreamResponse }));
-  vi.doMock('ai', async (importOriginal) => ({
-    .../** @type {object} */ (await importOriginal()),
-    streamText
+  /** @type {import('vitest').Mock<(...args: any[]) => any>} */
+  let streamText = vi.fn(() => ({ toUIMessageStreamResponse }));
+  vi.doMock('ai', async (importOriginal) => {
+    const real = /** @type {any} */ (await importOriginal());
+    if (realStream) streamText = vi.fn((/** @type {any[]} */ ...a) => real.streamText(...a));
+    return { ...real, streamText: (/** @type {any[]} */ ...a) => streamText(...a) };
+  });
+  if (model) {
+    vi.doMock('$lib/server/termi/llm.js', async (importOriginal) => ({
+      .../** @type {object} */ (await importOriginal()),
+      createTermiModel: () => model
+    }));
+  }
+  vi.doMock('$lib/server/nopeMcpClient.js', () => ({
+    callNopeMcpTool: vi.fn(async () => ({ resources: [{ name: 'Bruch' }] }))
   }));
+  /** @type {{ quota?: any }} */
+  const holder = {};
+  vi.doMock('$lib/server/termi/quota.js', async (importOriginal) => {
+    const real = /** @type {any} */ (await importOriginal());
+    return {
+      createQuota: (/** @type {any} */ opts) =>
+        (holder.quota = real.createQuota({ ...opts, ...(perUserDaily ? { perUserDaily } : {}) }))
+    };
+  });
   const mod = await import('../../routes/api/termi/chat/+server.js');
   const { SYSTEM_PROMPTS } = await import('$lib/server/termi/prompts.js');
   const { streamErrorMessage } = await import('$lib/server/termi/llm.js');
   return {
     POST: mod.POST,
     verify,
-    streamText,
+    get streamText() {
+      return streamText;
+    },
     toUIMessageStreamResponse,
     SYSTEM_PROMPTS,
-    streamErrorMessage
+    streamErrorMessage,
+    quota: holder.quota
   };
+}
+
+/**
+ * A fake SAIA model: calls search_resources on its first `toolSteps` calls,
+ * then answers with text.
+ * @param {number} toolSteps
+ */
+async function fakeModel(toolSteps) {
+  const { MockLanguageModelV3 } = await import('ai/test');
+  const { simulateReadableStream } = await import('ai');
+  let calls = 0;
+  const usage = {
+    inputTokens: { total: 1, noCache: 1, cacheRead: 0, cacheWrite: 0 },
+    outputTokens: { total: 1, text: 1, reasoning: 0 }
+  };
+  const model = new MockLanguageModelV3({
+    doStream: async () => {
+      calls++;
+      const chunks =
+        calls <= toolSteps
+          ? [
+              {
+                type: 'tool-call',
+                toolCallId: `c${calls}`,
+                toolName: 'search_resources',
+                input: JSON.stringify({ query: 'Bruch' })
+              },
+              { type: 'finish', finishReason: { unified: 'tool-calls', raw: undefined }, usage }
+            ]
+          : [
+              { type: 'text-start', id: 't' },
+              { type: 'text-delta', id: 't', delta: 'Fertig.' },
+              { type: 'text-end', id: 't' },
+              { type: 'finish', finishReason: { unified: 'stop', raw: undefined }, usage }
+            ];
+      return { stream: simulateReadableStream({ chunks: /** @type {any[]} */ (chunks) }) };
+    }
+  });
+  return { model, calls: () => calls };
 }
 
 /** @param {unknown} body @param {Record<string, string>} [headers] @returns {any} */
@@ -59,6 +123,10 @@ afterEach(() => {
   vi.doUnmock('$env/dynamic/private');
   vi.doUnmock('$lib/server/nip98-verify.js');
   vi.doUnmock('ai');
+  vi.doUnmock('$lib/server/termi/llm.js');
+  vi.doUnmock('$lib/server/nopeMcpClient.js');
+  vi.doUnmock('$lib/server/termi/quota.js');
+  vi.restoreAllMocks();
 });
 
 describe('POST /api/termi/chat', () => {
@@ -103,13 +171,71 @@ describe('POST /api/termi/chat', () => {
     expect(verify).toHaveBeenCalledTimes(1);
   });
 
-  it('returns 429 { error: "quota", scope: "user" } past the daily per-user quota', async () => {
-    const { POST } = await importRoute(ENV);
-    const body = { task: 'search', messages: [USER_MSG] };
-    for (let i = 0; i < 40; i++) expect((await POST(ev(body))).status).toBe(200);
-    const res = await POST(ev(body));
+  it('returns 429 { error: "quota", scope: "user" } once the per-user steps are used up', async () => {
+    const { POST, quota, streamText } = await importRoute(ENV);
+    for (let i = 0; i < 40; i++) quota.charge(PUBKEY);
+    const res = await POST(ev({ task: 'search', messages: [USER_MSG] }));
     expect(res.status).toBe(429);
     expect(await res.json()).toEqual({ error: 'quota', scope: 'user' });
+    expect(streamText).not.toHaveBeenCalled();
+  });
+
+  it('charges the quota once per model step', async () => {
+    const { model, calls } = await fakeModel(2);
+    const { POST, quota } = await importRoute(ENV, { realStream: true, model });
+    const charge = vi.spyOn(quota, 'charge');
+    const res = await POST(ev({ task: 'search', messages: [USER_MSG] }));
+    expect(res.status).toBe(200);
+    await res.text();
+    expect(calls()).toBe(3);
+    expect(charge).toHaveBeenCalledTimes(3);
+    expect(charge).toHaveBeenCalledWith(PUBKEY);
+  });
+
+  it('stops further steps when the quota runs out mid-conversation', async () => {
+    const { model, calls } = await fakeModel(5);
+    const { POST } = await importRoute(ENV, { realStream: true, model, perUserDaily: 2 });
+    const res = await POST(ev({ task: 'search', messages: [USER_MSG] }));
+    expect(res.status).toBe(200);
+    await res.text();
+    expect(calls()).toBe(2);
+  });
+
+  it('never retries upstream calls and logs no message or prompt on stream errors', async () => {
+    const { POST, streamText } = await importRoute(ENV);
+    await POST(ev({ task: 'search', messages: [USER_MSG] }));
+    const args = /** @type {any} */ (streamText.mock.calls[0])[0];
+    expect(args.maxRetries).toBe(0);
+    expect(typeof args.onError).toBe('function');
+    const log = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const error = Object.assign(new Error('MARKER-msg'), {
+      statusCode: 500,
+      requestBodyValues: { messages: [{ content: 'MARKER-user-text' }] }
+    });
+    args.onError({ error });
+    expect(log).toHaveBeenCalled();
+    expect(JSON.stringify(log.mock.calls)).not.toContain('MARKER');
+    expect(log.mock.calls.flat()).not.toContain(error);
+  });
+
+  it('drops user file parts before the model sees them', async () => {
+    const { POST, streamText } = await importRoute(ENV);
+    const messages = [
+      {
+        id: 'u1',
+        role: 'user',
+        parts: [
+          { type: 'text', text: 'Bruchrechnung' },
+          { type: 'file', mediaType: 'image/png', url: 'https://evil.example/x.png' }
+        ]
+      }
+    ];
+    const res = await POST(ev({ task: 'search', messages }));
+    expect(res.status).toBe(200);
+    const args = /** @type {any} */ (streamText.mock.calls[0])[0];
+    const sent = JSON.stringify(args.messages);
+    expect(sent).toContain('Bruchrechnung');
+    expect(sent).not.toContain('evil.example');
   });
 
   it('streams with the search prompt, search_resources only, a step cap and compacted history', async () => {
