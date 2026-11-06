@@ -70,6 +70,15 @@ describe('createRouterIndex', () => {
     expect(matches[0].skill).toBe('calendar');
   });
 
+  it('warmUp fails (so it can be retried) when the embed response length does not match the batch', async () => {
+    // SKILLS flattens to 5 phrases total; returning only 1 vector simulates
+    // a truncated/malformed embed-service response.
+    const embed = vi.fn().mockResolvedValue([axisVector(0)]);
+    const index = createRouterIndex({ embed, skills: SKILLS });
+    await expect(index.warmUp()).rejects.toThrow(/malformed/);
+    expect(index.ready()).toBe(false);
+  });
+
   it('scores pick the max dot product per skill, top 5, locale-filtered', async () => {
     const embed = fakeEmbed();
     const index = createRouterIndex({ embed, skills: SKILLS });

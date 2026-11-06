@@ -19,13 +19,13 @@ function ev(request, ip = '1.2.3.4') {
  * of the single module-level index the route creates at import time.
  *
  * @param {Record<string, string>} env
- * @param {{ ready?: boolean, rank?: (...args: any[]) => Promise<any> }} [indexBehavior]
+ * @param {{ ready?: boolean, rank?: (...args: any[]) => Promise<any>, warmUp?: (...args: any[]) => Promise<any> }} [indexBehavior]
  */
 async function importRoute(env, indexBehavior) {
   vi.resetModules();
   vi.doMock('$env/dynamic/private', () => ({ env }));
   const createRouterIndexMock = vi.fn(() => ({
-    warmUp: () => Promise.resolve(),
+    warmUp: indexBehavior?.warmUp ?? (() => Promise.resolve()),
     ready: () => indexBehavior?.ready ?? true,
     rank: indexBehavior?.rank ?? (async () => [{ skill: 'home', score: 0.9 }])
   }));
@@ -67,6 +67,25 @@ describe('POST /api/termi', () => {
     const res = await POST(ev(postJson('/api/termi', { text: 'hallo', locale: 'de' })));
     expect(res.status).toBe(503);
     expect(rank).not.toHaveBeenCalled();
+  });
+
+  it('retries a failed warm-up in the background when not ready, respecting a cooldown', async () => {
+    vi.useFakeTimers();
+    const warmUp = vi.fn().mockResolvedValue(undefined);
+    const { POST } = await importRoute(BASE_ENV, { ready: false, warmUp });
+    // Module load already kicked off the first attempt.
+    expect(warmUp).toHaveBeenCalledTimes(1);
+
+    // Within the 30s cooldown: a 503 request must not start a second attempt.
+    const res1 = await POST(ev(postJson('/api/termi', { text: 'hallo', locale: 'de' })));
+    expect(res1.status).toBe(503);
+    expect(warmUp).toHaveBeenCalledTimes(1);
+
+    // Cooldown elapsed: the next 503 request retries warm-up.
+    await vi.advanceTimersByTimeAsync(30_001);
+    const res2 = await POST(ev(postJson('/api/termi', { text: 'hallo', locale: 'de' })));
+    expect(res2.status).toBe(503);
+    expect(warmUp).toHaveBeenCalledTimes(2);
   });
 
   it('returns 503 when rank() takes too long (bounded well under the 4s embed delay)', async () => {

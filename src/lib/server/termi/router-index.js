@@ -74,6 +74,13 @@ export function createRouterIndex({ embed, skills }) {
         batch.map((item) => item.phrase),
         'passage'
       );
+      if (
+        !Array.isArray(embedded) ||
+        embedded.length !== batch.length ||
+        embedded.some((v) => !Array.isArray(v))
+      ) {
+        throw new Error('embed service returned a malformed response');
+      }
       batch.forEach((item, i) => collected.push({ ...item, vector: embedded[i] }));
     }
     vectors = collected;

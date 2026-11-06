@@ -20,9 +20,28 @@ const LOCALES = new Set(['de', 'en']);
 const RANK_TIMEOUT_MS = 3_500;
 const RATE_LIMIT = 30;
 const RATE_WINDOW_MS = 60_000;
+// Cooldown between background warm-up retries triggered by a 503 request —
+// without it, a fast connection-refused would restart warm-up on every
+// request to a dead embed service.
+const WARMUP_RETRY_COOLDOWN_MS = 30_000;
 
 /** @type {ReturnType<typeof createRouterIndex> | null} */
 let index = null;
+let lastWarmUpAttempt = 0;
+
+/** Kick (or re-kick) warm-up, respecting the retry cooldown. `warmUp()` itself
+ * dedupes concurrent in-flight calls, so this only guards how often a NEW
+ * attempt is started after a failure. */
+function retryWarmUp() {
+  if (!index) return;
+  const now = Date.now();
+  if (now - lastWarmUpAttempt < WARMUP_RETRY_COOLDOWN_MS) return;
+  lastWarmUpAttempt = now;
+  index.warmUp().catch((err) => {
+    console.error('[/api/termi] warm-up failed:', err?.message || 'unknown error');
+  });
+}
+
 if (isEmbedConfigured(env)) {
   /** @param {string[]} texts @param {'query'|'passage'} inputType */
   const embed = (texts, inputType) =>
@@ -32,9 +51,7 @@ if (isEmbedConfigured(env)) {
       timeoutMs: inputType === 'query' ? 3_000 : undefined
     });
   index = createRouterIndex({ embed, skills: TERMI_SKILLS });
-  index.warmUp().catch((err) => {
-    console.error('[/api/termi] warm-up failed:', err?.message || 'unknown error');
-  });
+  retryWarmUp();
 }
 
 const limiter = createRateLimiter({ limit: RATE_LIMIT, windowMs: RATE_WINDOW_MS });
@@ -72,14 +89,8 @@ export async function POST({ request, getClientAddress }) {
   }
   const locale = /** @type {'de'|'en'} */ (body.locale);
 
-  // shortcut: this fast-path only covers "warm-up still in progress after
-  // boot" (the expected case). If warm-up fails outright, index.ready()
-  // stays false forever and every request 503s here without ever calling
-  // rank() (which would otherwise lazily retry); the client's keyword
-  // fallback keeps Termi usable meanwhile. Upgrade: if the embed service
-  // flaps in practice, drop this check and let rank()'s own retry run
-  // behind the 3.5s race below instead.
   if (!index.ready()) {
+    retryWarmUp();
     return json({ error: 'not_ready' }, { status: 503 });
   }
 
