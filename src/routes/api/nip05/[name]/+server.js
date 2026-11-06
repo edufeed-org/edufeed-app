@@ -8,39 +8,8 @@
  * token.
  */
 import { env } from '$env/dynamic/private';
-import { verifyEvent } from 'nostr-tools/pure';
 import { json } from '@sveltejs/kit';
-
-const TIMESTAMP_TOLERANCE_S = 60;
-
-/**
- * @param {string | null} authHeader
- * @param {string} url
- * @param {string} method
- * @returns {Promise<string | null>}
- */
-async function verifyNip98Header(authHeader, url, method) {
-  if (!authHeader?.startsWith('Nostr ')) return null;
-  let event;
-  try {
-    event = JSON.parse(atob(authHeader.slice(6)));
-  } catch {
-    return null;
-  }
-  if (!event || event.kind !== 27235) return null;
-  if (!verifyEvent(event)) return null;
-
-  const now = Math.floor(Date.now() / 1000);
-  if (Math.abs(now - (event.created_at ?? 0)) > TIMESTAMP_TOLERANCE_S) return null;
-
-  const uTag = event.tags?.find((/** @type {string[]} */ t) => t[0] === 'u');
-  if (!uTag || uTag[1] !== url) return null;
-
-  const methodTag = event.tags?.find((/** @type {string[]} */ t) => t[0] === 'method');
-  if (!methodTag || methodTag[1].toUpperCase() !== method.toUpperCase()) return null;
-
-  return event.pubkey;
-}
+import { verifyNip98Header } from '$lib/server/nip98-verify.js';
 
 /** @type {import('@sveltejs/kit').RequestHandler} */
 export async function DELETE({ request, params, url }) {
