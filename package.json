@@ -84,6 +84,7 @@
   },
   "dependencies": {
     "@ai-sdk/openai": "^3.0.48",
+    "@ai-sdk/svelte": "^4.0.323",
     "@contextvm/mcp-sdk": "^1.30.0",
     "@contextvm/sdk": "^0.13.10",
     "@fiatjaf/promenade-trusted-dealer": "npm:@jsr/fiatjaf__promenade-trusted-dealer@^0.4.3",

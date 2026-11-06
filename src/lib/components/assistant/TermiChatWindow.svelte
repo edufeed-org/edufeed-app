@@ -14,11 +14,12 @@
   import { CheckIcon, CloseIcon, SendIcon } from '$lib/components/icons';
   import TermiAvatar from './TermiAvatar.svelte';
   import TermiAnswer from './TermiAnswer.svelte';
+  import TermiSearchHits from './TermiSearchHits.svelte';
   import { goto } from '$app/navigation';
   import { resolve } from '$app/paths';
   import { nip19 } from 'nostr-tools';
   import { getLocale } from '$lib/paraglide/runtime';
-  import { TERMI_SKILLS, learningSearchSkill } from '$lib/helpers/termi-skills.js';
+  import { TERMI_SKILLS, learningSearchSkill, extractQuery } from '$lib/helpers/termi-skills.js';
   import { runCreateAction } from '$lib/helpers/run-create-action.js';
   import { routeQuestion, skillAction, answerableSkill, helpAnswer } from './termi-router.js';
 
@@ -298,6 +299,12 @@
   /** @param {string} q */
   function ask(q) {
     if (!q.trim() || botTyping) return;
+    if (assistant) {
+      if (chatBusy) return;
+      input = '';
+      talk((chat) => chat.sendMessage({ text: q.trim() }));
+      return;
+    }
     const match = matchSuggestion(q, suggestions);
     msgs = [...msgs, { role: 'user', text: q.trim() }];
     input = '';
@@ -317,7 +324,86 @@
     }, 900);
   }
 
-  $effect(() => () => clearTimeout(replyTimer));
+  $effect(() => () => {
+    clearTimeout(replyTimer);
+    assistant?.chat.stop();
+  });
+
+  // Assistant mode: an AI chat (/api/termi/chat), started by a confident
+  // `assistant.search` decision. Memory only; the window owns it.
+  /** @typedef {{ chat: import('@ai-sdk/svelte').Chat, reset: () => void }} TermiAssistantChat */
+  let assistant = $state.raw(/** @type {TermiAssistantChat | null} */ (null));
+  const chatBusy = $derived(
+    !!assistant && (assistant.chat.status === 'submitted' || assistant.chat.status === 'streaming')
+  );
+  const chatError = $derived(
+    /** @type {(Error & { status?: number }) | undefined} */ (assistant?.chat.error)
+  );
+  /** @param {any} msg */
+  const textOf = (msg) =>
+    msg.parts
+      .filter((/** @type {any} */ p) => p.type === 'text')
+      .map((/** @type {any} */ p) => p.text)
+      .join('');
+  // Both tool-part shapes: `tool-<name>` and `dynamic-tool` with `toolName`.
+  /** @param {any} msg */
+  const searchPartsOf = (msg) =>
+    msg.parts.filter(
+      (/** @type {any} */ p) =>
+        (p.type === 'tool-search_resources' ||
+          (p.type === 'dynamic-tool' && p.toolName === 'search_resources')) &&
+        p.state === 'output-available'
+    );
+  /** @param {any} msg */
+  const visible = (msg) => msg.role === 'user' || !!textOf(msg) || searchPartsOf(msg).length > 0;
+  const chatQuery = $derived.by(() => {
+    const lastUser = assistant?.chat.messages.findLast((x) => x.role === 'user');
+    return lastUser ? extractQuery(textOf(lastUser), getLocale() === 'en' ? 'en' : 'de') : '';
+  });
+  const learningHref = (/** @type {string} */ q) =>
+    q ? `/discover?type=learning&search=${encodeURIComponent(q)}` : '/discover?type=learning';
+
+  /** @param {string} text the user's question, already shown as the router bubble */
+  async function startAssistant(text) {
+    const user = getActiveUser();
+    const { createTermiChat } = await import('./termi-chat.svelte.js');
+    assistant = createTermiChat({
+      task: 'search',
+      user: /** @type {any} */ (user)
+    });
+    botTyping = false;
+    await talk((chat) => chat.sendMessage({ text }));
+  }
+
+  /** @param {(chat: import('@ai-sdk/svelte').Chat) => Promise<void>} run */
+  async function talk(run) {
+    const current = assistant;
+    if (!current) return;
+    await run(current.chat);
+    // 503: LLM or nope-mcp not configured — back to the router with the plain search.
+    if (current === assistant && chatError?.status === 503) {
+      const q = chatQuery;
+      leaveAssistant();
+      msgs = [
+        ...msgs,
+        {
+          role: 'bot',
+          text: m.termi_assistant_unavailable(),
+          actions: [{ label: m.termi_quota_link(), href: learningHref(q) }]
+        }
+      ];
+    }
+  }
+
+  function leaveAssistant() {
+    assistant?.reset();
+    assistant = null;
+  }
+
+  function restart() {
+    leaveAssistant();
+    msgs = [];
+  }
 
   /** @param {string} text */
   async function routeAnswer(text) {
@@ -336,6 +422,11 @@
           llm: !!runtimeConfig.termi?.llm
         }
       });
+      if (decision.kind === 'confident' && decision.skill === 'assistant.search') {
+        // availableSkills offers it only with the LLM on and someone logged in.
+        await startAssistant(text);
+        return;
+      }
       reply = routerReply(decision, query, available, user?.pubkey);
     } catch {
       reply = { role: 'bot', text: m.termi_fallback() };
@@ -410,6 +501,8 @@
     void msgs;
     void botTyping;
     void hints;
+    void assistant?.chat.messages.at(-1);
+    void assistant?.chat.status;
     if (bodyEl) bodyEl.scrollTop = bodyEl.scrollHeight;
   });
 
@@ -484,7 +577,12 @@
   </div>
 
   <!-- messages -->
-  <div bind:this={bodyEl} class="flex flex-1 flex-col gap-3 overflow-y-auto p-4">
+  <div
+    bind:this={bodyEl}
+    role="log"
+    aria-live="polite"
+    class="flex flex-1 flex-col gap-3 overflow-y-auto p-4"
+  >
     <div class="flex items-end gap-2.5">
       <TermiAvatar />
       <div
@@ -596,7 +694,68 @@
       </div>
     {/each}
 
-    {#if botTyping}
+    {#if assistant}
+      <!-- the first message is the question, already shown as the router bubble -->
+      {#each assistant.chat.messages.slice(1).filter(visible) as msg (msg.id)}
+        {#if msg.role === 'user'}
+          <div class="flex items-end justify-end gap-2.5">
+            <div
+              class="max-w-[82%] rounded-2xl rounded-br-md bg-primary px-3.5 py-2.5 text-sm leading-relaxed whitespace-pre-line text-primary-content"
+            >
+              {textOf(msg)}
+            </div>
+          </div>
+        {:else}
+          <div class="flex items-end gap-2.5">
+            <TermiAvatar />
+            <div
+              class="max-w-[88%] rounded-2xl rounded-bl-md border border-base-300 bg-base-200 px-3.5 py-2.5 text-sm leading-relaxed"
+            >
+              {#each searchPartsOf(msg) as part (part.toolCallId)}
+                <TermiSearchHits
+                  hits={part.output?.hits ?? []}
+                  query={String(part.input?.query ?? chatQuery)}
+                />
+              {/each}
+              {#if textOf(msg)}
+                <div class="whitespace-pre-line">{textOf(msg)}</div>
+              {/if}
+            </div>
+          </div>
+        {/if}
+      {/each}
+
+      {#if chatError && !chatBusy}
+        <div class="flex items-end gap-2.5">
+          <TermiAvatar />
+          <div
+            class="max-w-[82%] rounded-2xl rounded-bl-md border border-base-300 bg-base-200 px-3.5 py-2.5 text-sm leading-relaxed"
+          >
+            {#if chatError.status === 429}
+              {m.termi_quota()}
+              <div class="mt-2">
+                <a href={learningHref(chatQuery)} class="btn btn-sm btn-primary">
+                  {m.termi_quota_link()}
+                </a>
+              </div>
+            {:else}
+              {m.termi_assistant_error()}
+              <div class="mt-2">
+                <button
+                  type="button"
+                  class="btn btn-sm btn-primary"
+                  onclick={() => talk((chat) => chat.regenerate())}
+                >
+                  {m.termi_assistant_retry()}
+                </button>
+              </div>
+            {/if}
+          </div>
+        </div>
+      {/if}
+    {/if}
+
+    {#if botTyping || (chatBusy && !visible(assistant?.chat.messages.at(-1) ?? { role: 'user', parts: [] }))}
       <div class="flex items-end gap-2.5">
         <TermiAvatar />
         <div class="rounded-2xl rounded-bl-md border border-base-300 bg-base-200 px-3.5 py-3">
@@ -606,14 +765,25 @@
     {/if}
   </div>
 
-  <!-- beta notice: answers are canned until the AI backend lands -->
-  <p class="px-4 pb-1.5 text-center text-[11px] leading-snug text-base-content/50">
-    {m.termi_static_notice()}
-  </p>
+  <!-- beta notice: answers are canned without TERMI_AI_ENABLED -->
+  {#if assistant}
+    <p class="px-4 pb-1.5 text-center text-[11px] leading-snug text-base-content/50">
+      {m.termi_ai_notice()}
+    </p>
+  {:else if !runtimeConfig.termi?.enabled}
+    <p class="px-4 pb-1.5 text-center text-[11px] leading-snug text-base-content/50">
+      {m.termi_static_notice()}
+    </p>
+  {/if}
 
-  <!-- canned suggestions -->
+  <!-- canned suggestions (router mode) / restart (assistant mode) -->
   <div class="flex flex-wrap gap-2 px-4 pb-2.5">
-    {#each suggestions as sugg (sugg.q)}
+    {#if assistant}
+      <button type="button" class="btn btn-ghost btn-sm" onclick={restart}>
+        {m.termi_assistant_restart()}
+      </button>
+    {/if}
+    {#each assistant ? [] : suggestions as sugg (sugg.q)}
       <button
         type="button"
         class="rounded-full border border-base-300 bg-base-100 px-3 py-1.5 text-xs text-base-content/70 hover:bg-base-200 hover:text-base-content"
@@ -642,6 +812,7 @@
     <button
       type="submit"
       data-testid="termi-send"
+      disabled={chatBusy}
       class="btn h-10 w-10 rounded-xl p-0 btn-primary"
       aria-label={m.termi_send_aria()}
     >

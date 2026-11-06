@@ -221,9 +221,12 @@ describe('TermiChatWindow router answers', () => {
     );
   });
 
-  it('assistant.search falls back to the learning-search link until the chat exists', async () => {
+  it('assistant.search among "maybe" choices offers the learning-search link', async () => {
     mockConfig.termi = { enabled: true, embed: true, llm: true };
-    stubRouter([{ skill: 'assistant.search', score: 0.9 }]);
+    stubRouter([
+      { skill: 'assistant.search', score: 0.78 },
+      { skill: 'calendar', score: 0.76 }
+    ]);
     const view = renderWindow();
     await type(view, 'Finde Materialien zu Demokratie');
     const [link] = await answerActions(view);
