@@ -15,6 +15,7 @@ import {
 } from '$lib/server/env-parse.js';
 import { getEligibilityConfig } from '$lib/server/blossom-eligibility.js';
 import { isExternalModelId } from '$lib/server/termi/model-guard.js';
+import { isEmbedConfigured } from '$lib/server/termi/embed.js';
 
 /**
  * Like parseArray, but the literal `none` yields [] — the way to switch a
@@ -394,7 +395,7 @@ export function GET() {
     // fully set; `llm` also refuses an external (non-SAIA) model id.
     termi: (() => {
       const enabled = parseBool(env.TERMI_AI_ENABLED, false);
-      const embed = enabled && !!env.TERMI_EMBED_URL && !!env.TERMI_EMBED_API_KEY;
+      const embed = isEmbedConfigured(env);
       const llm =
         enabled &&
         !!env.TERMI_LLM_BASE_URL &&
