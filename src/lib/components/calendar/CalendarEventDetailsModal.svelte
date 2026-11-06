@@ -236,7 +236,9 @@
   function getCompactDate() {
     if (!startDate) return '';
 
-    const now = new SvelteDate();
+    // Date.now(), not new SvelteDate(): SvelteDate extends the Date captured at
+    // import, so a bare constructor ignores the clock vitest fake timers set.
+    const now = new SvelteDate(Date.now());
     const today = new SvelteDate(now.getFullYear(), now.getMonth(), now.getDate());
     const tomorrow = new SvelteDate(today);
     tomorrow.setDate(tomorrow.getDate() + 1);
