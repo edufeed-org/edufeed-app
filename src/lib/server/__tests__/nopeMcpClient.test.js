@@ -1,6 +1,6 @@
 /** @vitest-environment node */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { callExtractMetadata } from '../nopeMcpClient.js';
+import { callExtractMetadata, callNopeMcpTool } from '../nopeMcpClient.js';
 
 /**
  * Build a Response that mimics the streamable-HTTP MCP server: SSE body with a
@@ -357,5 +357,115 @@ describe('callExtractMetadata', () => {
         skosSchemes: {}
       })
     ).rejects.toThrow(/tool blew up/);
+  });
+});
+
+describe('callNopeMcpTool', () => {
+  /** @type {ReturnType<typeof vi.fn>} */
+  let fetchMock;
+
+  beforeEach(() => {
+    fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('sends the given tool name and arguments', async () => {
+    fetchMock
+      .mockResolvedValueOnce(sseResponse({ jsonrpc: '2.0', id: 1, result: {} }, 'sess'))
+      .mockResolvedValueOnce(new Response(null, { status: 202 }))
+      .mockResolvedValueOnce(
+        sseResponse(
+          { jsonrpc: '2.0', id: 2, result: { content: [{ type: 'text', text: '{}' }] } },
+          'sess'
+        )
+      );
+
+    await callNopeMcpTool({
+      mcpUrl: 'https://mcp.example/mcp',
+      bearerToken: 'tok',
+      name: 'search_resources',
+      args: { query: 'photosynthesis' }
+    });
+
+    const callBody = JSON.parse(fetchMock.mock.calls[2][1].body);
+    expect(callBody.method).toBe('tools/call');
+    expect(callBody.params.name).toBe('search_resources');
+    expect(callBody.params.arguments).toEqual({ query: 'photosynthesis' });
+  });
+
+  it('omits Authorization header when no bearerToken is given', async () => {
+    fetchMock
+      .mockResolvedValueOnce(sseResponse({ jsonrpc: '2.0', id: 1, result: {} }, 'sess'))
+      .mockResolvedValueOnce(new Response(null, { status: 202 }))
+      .mockResolvedValueOnce(
+        sseResponse(
+          { jsonrpc: '2.0', id: 2, result: { content: [{ type: 'text', text: '{}' }] } },
+          'sess'
+        )
+      );
+
+    await callNopeMcpTool({
+      mcpUrl: 'https://mcp.example/mcp',
+      bearerToken: undefined,
+      name: 'search_resources',
+      args: {}
+    });
+
+    for (const call of fetchMock.mock.calls) {
+      expect(call[1].headers.Authorization).toBeUndefined();
+    }
+  });
+
+  it('returns result.structuredContent when present, without parsing text content', async () => {
+    fetchMock
+      .mockResolvedValueOnce(sseResponse({ jsonrpc: '2.0', id: 1, result: {} }, 'sess'))
+      .mockResolvedValueOnce(new Response(null, { status: 202 }))
+      .mockResolvedValueOnce(
+        sseResponse(
+          {
+            jsonrpc: '2.0',
+            id: 2,
+            result: {
+              structuredContent: { items: [{ id: 'abc' }] },
+              content: [{ type: 'text', text: 'not json' }]
+            }
+          },
+          'sess'
+        )
+      );
+
+    const result = await callNopeMcpTool({
+      mcpUrl: 'https://mcp.example/mcp',
+      bearerToken: 'tok',
+      name: 'search_resources',
+      args: {}
+    });
+
+    expect(result).toEqual({ items: [{ id: 'abc' }] });
+  });
+
+  it('throws with the JSON-RPC error message when tools/call returns an error', async () => {
+    fetchMock
+      .mockResolvedValueOnce(sseResponse({ jsonrpc: '2.0', id: 1, result: {} }, 'sess'))
+      .mockResolvedValueOnce(new Response(null, { status: 202 }))
+      .mockResolvedValueOnce(
+        sseResponse(
+          { jsonrpc: '2.0', id: 2, error: { code: -32000, message: 'search blew up' } },
+          'sess'
+        )
+      );
+
+    await expect(
+      callNopeMcpTool({
+        mcpUrl: 'https://mcp.example/mcp',
+        bearerToken: 'tok',
+        name: 'search_resources',
+        args: {}
+      })
+    ).rejects.toThrow(/search blew up/);
   });
 });
