@@ -15,7 +15,7 @@ const NPUB = nip19.npubEncode(PUBKEY);
 
 const mockConfig = vi.hoisted(() => ({
   termi: { enabled: true, embed: true, llm: false },
-  help: { url: '/wiki/edufeed-erste-schritte' }
+  help: /** @type {{ url: string | null }} */ ({ url: '/wiki/edufeed-erste-schritte' })
 }));
 
 vi.mock('$lib/stores/config.svelte.js', () => ({
@@ -92,6 +92,7 @@ async function answerActions(view) {
 describe('TermiChatWindow router answers', () => {
   beforeEach(() => {
     mockConfig.termi = { enabled: true, embed: true, llm: false };
+    mockConfig.help = { url: '/wiki/edufeed-erste-schritte' };
     runCreateAction.mockClear();
   });
   afterEach(() => {
@@ -227,6 +228,36 @@ describe('TermiChatWindow router answers', () => {
     await type(view, 'Finde Materialien zu Demokratie');
     const [link] = await answerActions(view);
     expect(link.getAttribute('href')).toBe('/discover?type=learning&search=Demokratie');
+  });
+
+  it('a stalled /api/termi request times out into the keyword answer', async () => {
+    vi.useFakeTimers();
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(
+        (/** @type {string} */ _url, /** @type {RequestInit} */ init) =>
+          new Promise((_resolve, reject) => {
+            init.signal?.addEventListener('abort', () => reject(init.signal?.reason));
+          })
+      )
+    );
+    const view = renderWindow();
+    await type(view, 'Zeig mir den Kalender');
+    expect(view.container.querySelector('.termi-typing')).toBeTruthy();
+    await vi.advanceTimersByTimeAsync(4_100);
+    const box = view.getByTestId('termi-answer-actions');
+    expect(box.querySelector('a')?.getAttribute('href')).toBe('/calendar');
+    expect(view.container.querySelector('.termi-typing')).toBeNull();
+  });
+
+  it('without a help URL the getting-started help skill is never the answer', async () => {
+    mockConfig.help = { url: null };
+    stubRouter([{ skill: 'help.3', score: 0.95 }]);
+    const view = renderWindow();
+    await type(view, 'Wie fange ich an?');
+    await answerActions(view);
+    expect(view.queryByText(m.termi_sugg_4_a(), { exact: false })).toBeNull();
+    expect(view.getByText(m.termi_fallback(), { exact: false })).toBeTruthy();
   });
 
   it('a suggestion chip still gets its canned answer', async () => {

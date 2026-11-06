@@ -31,11 +31,16 @@ export async function routeQuestion(text, { locale, fetch, skills = TERMI_SKILLS
   let mode = 'embed';
   /** @type {Array<{ skill: string, score: number }>} */
   let matches;
+  // A stalled request must not keep the chat blocked: abort → keyword path.
+  // (A plain setTimeout rather than AbortSignal.timeout, so fake timers drive it in tests.)
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 4_000);
   try {
     const res = await fetch('/api/termi', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ text, locale })
+      body: JSON.stringify({ text, locale }),
+      signal: controller.signal
     });
     if (!res.ok) throw new Error(String(res.status));
     const body = await res.json();
@@ -44,6 +49,8 @@ export async function routeQuestion(text, { locale, fetch, skills = TERMI_SKILLS
   } catch {
     mode = 'keyword';
     matches = keywordMatch(text, available, locale);
+  } finally {
+    clearTimeout(timer);
   }
   // The server ranks the whole catalogue; drop what this user can't use.
   matches = matches.filter((x) => ids.has(x.skill));

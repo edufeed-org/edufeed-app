@@ -18,7 +18,7 @@
   import { resolve } from '$app/paths';
   import { nip19 } from 'nostr-tools';
   import { getLocale } from '$lib/paraglide/runtime';
-  import { learningSearchSkill } from '$lib/helpers/termi-skills.js';
+  import { TERMI_SKILLS, learningSearchSkill } from '$lib/helpers/termi-skills.js';
   import { runCreateAction } from '$lib/helpers/run-create-action.js';
   import { routeQuestion, skillAction, answerableSkill, helpAnswer } from './termi-router.js';
 
@@ -328,6 +328,8 @@
       const { decision, query, available } = await routeQuestion(text, {
         locale: getLocale() === 'en' ? 'en' : 'de',
         fetch,
+        // help.3 points at the guide: like its chip, only offered with a HELP_URL.
+        skills: helpLink ? TERMI_SKILLS : TERMI_SKILLS.filter((s) => s.id !== 'help.3'),
         ctx: {
           loggedIn: !!user,
           discoverTypes: runtimeConfig.discover?.contentTypes ?? [],
