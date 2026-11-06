@@ -21,7 +21,8 @@ import {
   autoTabIds,
   withAutoTabs,
   tabsToSave,
-  PROFILE_CONTENT_KINDS
+  PROFILE_CONTENT_KINDS,
+  initialProfileTab
 } from '$lib/helpers/profile-tabs.js';
 
 function tabsEvent(tags) {
@@ -374,5 +375,31 @@ describe('publications tab (kind 30040)', () => {
     });
     expect(hiddenWithEntries.order).toContain('publications');
     expect(hiddenWithEntries.hidden).toEqual(['publications']);
+  });
+});
+
+describe('initialProfileTab', () => {
+  it('picks the tab named by ?tab= when it is visible', () => {
+    expect(
+      initialProfileTab(new URLSearchParams('tab=bookmarks'), ['posts', 'bookmarks'], 'posts')
+    ).toBe('bookmarks');
+  });
+
+  it('falls back when the tab is unknown', () => {
+    expect(
+      initialProfileTab(new URLSearchParams('tab=nope'), ['posts', 'bookmarks'], 'posts')
+    ).toBe('posts');
+  });
+
+  it('falls back when the tab is not currently visible', () => {
+    expect(initialProfileTab(new URLSearchParams('tab=bookmarks'), ['posts'], 'posts')).toBe(
+      'posts'
+    );
+  });
+
+  it('falls back when there is no tab param', () => {
+    expect(initialProfileTab(new URLSearchParams(''), ['posts', 'bookmarks'], 'posts')).toBe(
+      'posts'
+    );
   });
 });

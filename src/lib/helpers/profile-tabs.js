@@ -225,6 +225,21 @@ export function tabForPostsStat(tabsConfig) {
 }
 
 /**
+ * Initial active tab, seeded once from the page URL's `?tab=` param (e.g. a
+ * Termi deep link to someone's bookmarks). Unknown or currently-hidden ids
+ * fall back — the caller still runs its own "active tab got hidden" effect
+ * as the ongoing safety net.
+ * @param {URLSearchParams} searchParams
+ * @param {string[]} visibleTabIds
+ * @param {string} fallback
+ * @returns {string}
+ */
+export function initialProfileTab(searchParams, visibleTabIds, fallback) {
+  const tab = searchParams.get('tab');
+  return tab && visibleTabIds.includes(tab) ? tab : fallback;
+}
+
+/**
  * Build the tag list for a kind 30078 profile-tabs event.
  * @param {string[]} order - all tab ids in display order
  * @param {string[]} hidden - ids that are hidden

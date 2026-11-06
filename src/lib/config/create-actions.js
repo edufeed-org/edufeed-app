@@ -24,7 +24,7 @@ import {
 } from '$lib/components/icons';
 /**
  * @typedef {Object} CreateActionContext
- * @property {string} communityPubkey - Hex pubkey of the current community, or '' outside community routes
+ * @property {string} [communityPubkey] - Hex pubkey of the current community, or '' outside community routes
  * @property {(name: string, props?: Object) => void} openModal
  * @property {(url: string) => void} goto
  * @property {(path: string) => string} resolve
