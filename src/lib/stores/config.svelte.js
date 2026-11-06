@@ -175,6 +175,8 @@ const defaultConfig = {
     /** @type {string | null} */
     url: '/wiki/edufeed-erste-schritte'
   },
+  // Termi router/assistant capabilities (TERMI_AI_ENABLED et al.).
+  termi: { enabled: false, embed: false, llm: false },
   privacy: {
     enabled: false
   },
@@ -430,6 +432,10 @@ export function initializeConfig(runtimeConfig) {
       ...defaultConfig.help,
       ...runtimeConfig.help
     },
+    termi: {
+      ...defaultConfig.termi,
+      ...runtimeConfig.termi
+    },
     privacy: {
       ...defaultConfig.privacy,
       ...runtimeConfig.privacy
@@ -598,6 +604,9 @@ export const runtimeConfig = {
   },
   get help() {
     return config.help;
+  },
+  get termi() {
+    return config.termi;
   },
   get privacy() {
     return config.privacy;

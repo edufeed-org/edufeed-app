@@ -1,7 +1,8 @@
 <script>
   // Termi chat window — popover (default) or side panel (expanded). Account
   // hints render as proactive bot messages with real actions; free-text input
-  // is matched against canned suggestions (no LLM backend yet).
+  // is matched against canned suggestions; with TERMI_AI_ENABLED anything
+  // else goes through the router (/api/termi, keyword fallback).
   import { getFirstPendingInvite } from '$lib/concord/pending-invites.svelte.js';
   import * as m from '$lib/paraglide/messages';
   import { modalStore } from '$lib/stores/modal.svelte.js';
@@ -12,6 +13,14 @@
   import { matchSuggestion } from '$lib/helpers/assistant-hints.js';
   import { CheckIcon, CloseIcon, SendIcon } from '$lib/components/icons';
   import TermiAvatar from './TermiAvatar.svelte';
+  import TermiAnswer from './TermiAnswer.svelte';
+  import { goto } from '$app/navigation';
+  import { resolve } from '$app/paths';
+  import { nip19 } from 'nostr-tools';
+  import { getLocale } from '$lib/paraglide/runtime';
+  import { learningSearchSkill } from '$lib/helpers/termi-skills.js';
+  import { runCreateAction } from '$lib/helpers/run-create-action.js';
+  import { routeQuestion, skillAction, answerableSkill, helpAnswer } from './termi-router.js';
 
   /**
    * @type {{
@@ -274,7 +283,10 @@
     { q: m.termi_sugg_3_q(), a: m.termi_sugg_3_a() }
   ]);
 
-  /** @type {Array<{role: 'user' | 'bot', text: string, link?: Suggestion['link']}>} */
+  /** @typedef {import('./termi-router.js').TermiAction} TermiAction */
+  /** @typedef {{role: 'user' | 'bot', text: string, link?: Suggestion['link'], actions?: TermiAction[]}} ChatMessage */
+
+  /** @type {ChatMessage[]} */
   let msgs = $state.raw([]);
   let input = $state('');
   let botTyping = $state(false);
@@ -290,6 +302,10 @@
     msgs = [...msgs, { role: 'user', text: q.trim() }];
     input = '';
     botTyping = true;
+    if (!match && runtimeConfig.termi?.enabled) {
+      routeAnswer(q.trim());
+      return;
+    }
     replyTimer = setTimeout(() => {
       botTyping = false;
       msgs = [
@@ -302,6 +318,89 @@
   }
 
   $effect(() => () => clearTimeout(replyTimer));
+
+  /** @param {string} text */
+  async function routeAnswer(text) {
+    /** @type {ChatMessage} */
+    let reply;
+    try {
+      const user = getActiveUser();
+      const { decision, query, available } = await routeQuestion(text, {
+        locale: getLocale() === 'en' ? 'en' : 'de',
+        fetch,
+        ctx: {
+          loggedIn: !!user,
+          discoverTypes: runtimeConfig.discover?.contentTypes ?? [],
+          llm: !!runtimeConfig.termi?.llm
+        }
+      });
+      reply = routerReply(decision, query, available, user?.pubkey);
+    } catch {
+      reply = { role: 'bot', text: m.termi_fallback() };
+    }
+    botTyping = false;
+    msgs = [...msgs, reply];
+  }
+
+  /** @param {import('$lib/helpers/termi-skills.js').TermiSkill} skill @returns {ChatMessage} */
+  function helpReply(skill) {
+    const guide = skill.helpIndex === 3 && helpLink;
+    return {
+      role: 'bot',
+      text: helpAnswer(skill),
+      ...(guide ? { actions: [{ label: m.termi_sugg_4_link(), ...guide }] } : {})
+    };
+  }
+
+  /**
+   * @param {ReturnType<typeof import('$lib/helpers/termi-skills.js').decide>} decision
+   * @param {string} query
+   * @param {import('$lib/helpers/termi-skills.js').TermiSkill[]} available
+   * @param {string | undefined} pubkey
+   * @returns {ChatMessage}
+   */
+  function routerReply(decision, query, available, pubkey) {
+    const ctx = {
+      query,
+      npub: pubkey ? nip19.npubEncode(pubkey) : null,
+      runCreate: (/** @type {import('$lib/config/create-actions.js').CreateAction} */ action) =>
+        runCreateAction(action, { goto, resolve: (path) => resolve(/** @type {any} */ (path)) }),
+      runHelp: (/** @type {import('$lib/helpers/termi-skills.js').TermiSkill} */ skill) => {
+        msgs = [...msgs, helpReply(skill)];
+      }
+    };
+    /** @param {string} id */
+    const skillOf = (id) => available.find((s) => s.id === answerableSkill(id));
+    /** @param {string} id @param {string} [q] */
+    const actionOf = (id, q = query) => {
+      const skill = skillOf(id);
+      return skill ? skillAction(skill, { ...ctx, query: q }) : null;
+    };
+    /** @param {Array<TermiAction | null>} list @returns {TermiAction[]} */
+    const present = (list) => /** @type {TermiAction[]} */ (list.filter(Boolean));
+
+    if (decision.kind === 'confident') {
+      const skill = skillOf(decision.skill);
+      if (skill?.kind === 'help') return helpReply(skill);
+      const action = actionOf(decision.skill);
+      if (action) return { role: 'bot', text: m.termi_route_go(), actions: [action] };
+    }
+    if (decision.kind === 'maybe') {
+      const ids = [...new Set(decision.skills.map(answerableSkill))];
+      const actions = present(ids.map((id) => actionOf(id)));
+      if (actions.length) return { role: 'bot', text: m.termi_route_maybe(), actions };
+    }
+    return {
+      role: 'bot',
+      text: `${m.termi_fallback()} ${m.termi_route_fallback_actions()}`,
+      actions: present([
+        actionOf('home'),
+        // Unrecognised text is no search query: offer the plain search page.
+        actionOf(learningSearchSkill(available), ''),
+        helpLink ? { label: m.termi_sugg_4_link(), ...helpLink } : actionOf('help.1')
+      ])
+    };
+  }
 
   // Keep the newest message in view. Read the reactive deps before touching
   // the DOM so the effect re-runs on every change.
@@ -477,7 +576,11 @@
             ? 'rounded-br-md bg-primary text-primary-content'
             : 'rounded-bl-md border border-base-300 bg-base-200'}"
         >
-          {msg.text}
+          {#if msg.actions}
+            <TermiAnswer text={msg.text} actions={msg.actions} />
+          {:else}
+            {msg.text}
+          {/if}
           {#if msg.link}
             <a
               {...msg.link.attrs}
