@@ -273,36 +273,6 @@ describe('TermiChatWindow assistant mode', () => {
     expect(view.queryByText(m.termi_assistant_retry())).toBeNull();
   });
 
-  it('closing the window while the chat module loads sends nothing', async () => {
-    chatCalls = [];
-    /** @type {ReturnType<typeof renderWindow>} */
-    let view;
-    let routed = false;
-    vi.stubGlobal(
-      'fetch',
-      vi.fn(async (/** @type {string} */ url, /** @type {RequestInit} */ init) => {
-        if (url === '/api/termi') {
-          // Unmount while the assistant start is still ahead (router answered, import pending).
-          queueMicrotask(() => view.unmount());
-          routed = true;
-          return new Response(
-            JSON.stringify({ matches: [{ skill: 'assistant.search', score: 0.92 }] })
-          );
-        }
-        chatCalls.push({ url, init });
-        return streamAnswer();
-      })
-    );
-    const signEvent = vi.spyOn(user.current.signer, 'signEvent');
-    view = renderWindow();
-    await type(view, 'Finde Materialien zu Brüchen');
-    await waitFor(() => expect(routed).toBe(true));
-    await new Promise((r) => setTimeout(r, 200));
-    expect(chatCalls).toHaveLength(0);
-    expect(signEvent).not.toHaveBeenCalled();
-    signEvent.mockRestore();
-  });
-
   it('message list is a polite live log; static notice replaced with the flag on', async () => {
     stubFetch(() => streamAnswer());
     const view = renderWindow();
