@@ -206,10 +206,13 @@ export async function POST({ request, getClientAddress }) {
           bearerToken: await getNopeMcpToken(),
           urls,
           variant,
-          skosSchemes: buildSkosSchemes(variant, bildungsbereich)
+          skosSchemes: buildSkosSchemes(variant, bildungsbereich),
+          // A closed tab must not keep the paid LLM extraction running.
+          signal: request.signal
         });
         controller.enqueue(enc.encode(JSON.stringify(result)));
       } catch (err) {
+        if (request.signal.aborted) return; // client gone: nobody to answer
         console.error('[/api/enrich] extract_metadata failed:', err);
         const code = /** @type {{ code?: unknown }} */ (err)?.code;
         const body = {
@@ -219,7 +222,11 @@ export async function POST({ request, getClientAddress }) {
         controller.enqueue(enc.encode(JSON.stringify(body)));
       } finally {
         clearInterval(heartbeat);
-        controller.close();
+        try {
+          controller.close();
+        } catch {
+          // stream already cancelled by the disconnect; ignore
+        }
       }
     }
   });

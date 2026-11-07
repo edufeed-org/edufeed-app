@@ -65,10 +65,12 @@ function parseSseJsonRpc(body) {
  * @param {string[]} [params.urls] - Multiple http(s) pages to extract together (multi-source).
  * @param {'amb' | 'ekw' | 'konfi'} params.variant
  * @param {Record<string, string>} params.skosSchemes - form-field → scheme naddr.
+ * @param {AbortSignal} [params.signal] - Aborts the exchange early (e.g. the browser disconnected).
  * @returns {Promise<{ source: string, payload: object, evidence: object, baseline: object }>}
  */
 export async function callExtractMetadata(params) {
-  const signal = AbortSignal.timeout(EXTRACT_TIMEOUT_MS);
+  const timeout = AbortSignal.timeout(EXTRACT_TIMEOUT_MS);
+  const signal = params.signal ? AbortSignal.any([timeout, params.signal]) : timeout;
   try {
     return await extractMetadata(params, signal);
   } catch (err) {
