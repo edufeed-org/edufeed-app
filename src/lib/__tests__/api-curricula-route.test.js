@@ -375,6 +375,20 @@ describe('POST /api/curricula (SPARQL backend)', () => {
     expect(sparql).toMatch(/ORDER\s+BY\s+DESC\(\s*\?hasChildren\s*\)/i);
   });
 
+  it('get_node_children: caps the result size with a LIMIT', async () => {
+    queryMock.mockResolvedValueOnce(sparqlResponse(['child', 'childLabel'], []));
+    const { POST } = await import('../../routes/api/curricula/+server.js');
+    await POST(
+      ev(
+        postRequest({
+          tool: 'get_node_children',
+          args: { nodeUri: 'https://lp-rlp.org/resource/141' }
+        })
+      )
+    );
+    expect(queryMock.mock.calls[0][0].sparql).toMatch(/LIMIT 1000\s*$/);
+  });
+
   it('get_node_children: rejects malformed nodeUri (injection guard)', async () => {
     const { POST } = await import('../../routes/api/curricula/+server.js');
     const res = await POST(

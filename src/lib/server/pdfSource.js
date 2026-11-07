@@ -15,7 +15,7 @@
  */
 
 import { createHash } from 'node:crypto';
-import { mkdir, writeFile } from 'node:fs/promises';
+import { mkdir, readdir, stat, unlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { env } from '$env/dynamic/private';
@@ -24,6 +24,8 @@ import { fetchGuardedRedirects, readCapped } from '$lib/server/httpUrl.js';
 export const MAX_UPSTREAM_SIZE = 50 * 1024 * 1024; // 50MB
 export const FETCH_TIMEOUT = 20_000;
 export const PDF_CONTENT_TYPES = ['application/pdf', 'application/octet-stream'];
+/** Entry cap on the disk cache: the key is the source URL, so `?n=` variations would grow it forever. */
+export const MAX_CACHE_FILES = 2000;
 
 /** Cache root. Shared by every derived artifact so one env var configures all. */
 export function pdfCacheDir() {
@@ -54,9 +56,30 @@ export async function writePdfCache(file, contents, label) {
   try {
     await mkdir(pdfCacheDir(), { recursive: true });
     await writeFile(file, contents);
+    await evictOldest(pdfCacheDir());
   } catch (err) {
     console.warn(`[${label}] cache write failed:`, /** @type {any} */ (err)?.message);
   }
+}
+
+/**
+ * Delete the oldest files (by mtime) until at most {@link MAX_CACHE_FILES} remain.
+ * Files that vanish meanwhile (a concurrent eviction) are skipped.
+ * @param {string} dir
+ */
+async function evictOldest(dir) {
+  const names = await readdir(dir);
+  if (names.length <= MAX_CACHE_FILES) return;
+  const files = await Promise.all(
+    names.map(async (name) => {
+      const file = path.join(dir, name);
+      return { file, mtime: (await stat(file).catch(() => null))?.mtimeMs ?? 0 };
+    })
+  );
+  files.sort((a, b) => a.mtime - b.mtime);
+  await Promise.all(
+    files.slice(0, files.length - MAX_CACHE_FILES).map(({ file }) => unlink(file).catch(() => {}))
+  );
 }
 
 /**

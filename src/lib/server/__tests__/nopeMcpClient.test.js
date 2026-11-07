@@ -358,4 +358,31 @@ describe('callExtractMetadata', () => {
       })
     ).rejects.toThrow(/tool blew up/);
   });
+
+  it('bounds every request with an abort signal and throws code="timeout" when it fires', async () => {
+    fetchMock
+      .mockResolvedValueOnce(sseResponse({ jsonrpc: '2.0', id: 1, result: {} }, 'sess'))
+      .mockResolvedValueOnce(new Response(null, { status: 202 }))
+      .mockRejectedValueOnce(
+        new DOMException('The operation was aborted due to timeout', 'TimeoutError')
+      );
+
+    /** @type {unknown} */
+    let caught;
+    try {
+      await callExtractMetadata({
+        mcpUrl: 'https://mcp.example/mcp',
+        bearerToken: 'tok',
+        url: 'https://example.org',
+        variant: 'amb',
+        skosSchemes: {}
+      });
+    } catch (err) {
+      caught = err;
+    }
+    expect(/** @type {any} */ (caught)?.code).toBe('timeout');
+    for (const [, init] of fetchMock.mock.calls) {
+      expect(init.signal).toBeInstanceOf(AbortSignal);
+    }
+  });
 });
