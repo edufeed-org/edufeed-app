@@ -2,6 +2,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { createKnowledgeTools, DEFAULT_SEARCH_RELAYS } from '../termi/knowledge-tools.js';
 import { buildTermiTools } from '../termi/tools.js';
+import { nip19 } from 'nostr-tools';
 import searchContent from './fixtures/nope-mcp/search_content.json';
 import searchResources from './fixtures/nope-mcp/search_resources.json';
 import calendar from './fixtures/nope-mcp/search_calendar_events.json';
@@ -101,6 +102,24 @@ describe('createKnowledgeTools', () => {
       limit: 4
     });
     expect(out.items[0].type).toBe('passage');
+  });
+
+  it('searchPassages without a relay sends all configured relays', async () => {
+    const { callTool, tools } = setup();
+    await tools.searchPassages('Aktivierung');
+    expect(callTool.mock.calls[0][1].relays).toEqual(['amb-relay', 'oersi', 'sodix']);
+  });
+
+  it('maps known short relay names to hint URLs when relaysSearched is missing', async () => {
+    const { relaysSearched, ...noEcho } = searchContent;
+    const tools = createKnowledgeTools({
+      callTool: async () => noEcho,
+      relays: ['oersi', 'unknown', 'wss://x.example/']
+    });
+    const { items } = await tools.searchContent('x');
+    const data = /** @type {any} */ (nip19.decode(String(items[1].href).slice(1))).data;
+    expect(data.relays).toEqual(['wss://oersi.edufeed.org', 'wss://x.example/']);
+    expect(relaysSearched).toHaveLength(3);
   });
 
   it('findPeople resolves authors', async () => {

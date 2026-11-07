@@ -10,15 +10,14 @@
       "pubkey": "77a0aa1e04e5165f572dd4000940c7387194d67daf2fd9aad97e0f5f0a1f34a8",
       "npub": "npub1w7s258syu5t974ed6sqqjsx88pcef4na4uhan2ke0c847zslxj5q8www9d",
       "name": "Laura K",
-      "nip05": "laurak@getalby.com",
-      "about": "Short Story Writer, Podcast Host of \"Laura K\", Femininity, Bitcoin, Freedom."
+      "nip05": "laura@example.org",
+      "about": "Beispieltext für ein Profil."
     },
     {
       "pubkey": "75d2e92bb47b33463c128c03643f16ada667e3c191e10da16e01c68a4e9baa11",
       "npub": "npub1whfwj2a50ve5v0qj3spkg0ck4knx0c7pj8ssmgtwq8rg5n5m4ggsexheqs",
       "name": "Falco 🦅",
-      "nip05": "Falco@nostrcheck.me",
-      "about": "Handball Player 🤾‍♀️\nLiquidity Manager 📊\n🟠 \"Forever Laura\" 🟠"
+      "about": "Weiterer Beispieltext."
     }
   ]
 }

@@ -14,6 +14,13 @@ import {
 /** Short names nope-mcp's `list_relays` accepts (hostname first label). */
 export const DEFAULT_SEARCH_RELAYS = ['amb-relay', 'oersi', 'sodix'];
 
+/** Hint URLs for the short names, used when nope-mcp doesn't report `relaysSearched`. */
+const SHORT_RELAY_URLS = /** @type {Record<string, string>} */ ({
+  'amb-relay': 'wss://amb-relay.edufeed.org',
+  oersi: 'wss://oersi.edufeed.org',
+  sodix: 'wss://sodix.edufeed.org'
+});
+
 const CONTENT_TYPES = ['resource', 'article', 'wiki', 'project', 'measure', 'publication'];
 const RESOURCE_FILTERS = [
   'publisherName',
@@ -54,7 +61,7 @@ export function createKnowledgeTools({ callTool, relays = DEFAULT_SEARCH_RELAYS,
   const queriedUrls = (result) =>
     Array.isArray(result?.relaysSearched)
       ? result.relaysSearched
-      : relays.filter((r) => /^wss?:\/\//.test(r));
+      : relays.map((r) => (/^wss?:\/\//.test(r) ? r : SHORT_RELAY_URLS[r])).filter(Boolean);
 
   /** @param {string} name @param {Record<string, any>} args @param {(r: any) => ToolResult} map */
   async function optional(name, args, map) {
@@ -107,7 +114,7 @@ export function createKnowledgeTools({ callTool, relays = DEFAULT_SEARCH_RELAYS,
       const r = await callTool('search_passages', {
         question,
         kinds: PASSAGE_KINDS,
-        ...(relay ? { relays: [relay] } : {}),
+        relays: relay ? [relay] : relays,
         limit: 4
       });
       return toResult(r, normalizePassage, r?.passages);

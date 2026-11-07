@@ -116,9 +116,62 @@ describe('normalizeEvent', () => {
       location: ev.locations[0],
       creator: 'Deutscher Bildungsserver Test-Mirror',
       bot: true,
-      sourceUrl: ev.sourcePage
+      sourceUrl: ev.sourcePage,
+      end: ev.end,
+      allDay: false
     });
     expect(item?.description?.length).toBeLessThanOrEqual(300);
+  });
+
+  it('never turns a //host path into an href', () => {
+    const ev = calendar.events[0];
+    const item = normalizeEvent({
+      ...ev,
+      url: 'https://edufeed.org//evil.example/x',
+      naddr: undefined
+    });
+    expect(item?.href).toBeUndefined();
+    expect(item?.sourceUrl).toBe(ev.sourcePage);
+  });
+
+  it('drops the href for a bogus naddr, keeps the item for its source', () => {
+    const ev = calendar.events[0];
+    const item = normalizeEvent({
+      ...ev,
+      url: 'https://edufeed.org/naddr1bogus',
+      naddr: 'naddr1bogus'
+    });
+    expect(item?.href).toBeUndefined();
+    expect(item?.sourceUrl).toBe(ev.sourcePage);
+    expect(
+      normalizeEvent({ ...ev, url: undefined, naddr: 'nope', sourcePage: undefined })
+    ).toBeUndefined();
+  });
+
+  it('falls back to the naddr field when the url has none', () => {
+    const ev = calendar.events[0];
+    expect(normalizeEvent({ ...ev, url: 'https://edufeed.org/' })?.href).toBe(`/${ev.naddr}`);
+  });
+});
+
+describe('line clipping', () => {
+  it('clips titles and names at 200 chars', () => {
+    const long = 'T'.repeat(500);
+    const item = normalizeContent(
+      {
+        ...searchContent.results[0],
+        title: long,
+        creator: [{ name: long }],
+        publisher: [{ name: long }]
+      },
+      QUERIED
+    );
+    expect(item?.title.length).toBe(200);
+    expect(item?.creator?.length).toBe(200);
+    expect(item?.publisher?.length).toBe(200);
+    expect(normalizeCommunity({ ...findCommunity.communities[0], name: long })?.title.length).toBe(
+      200
+    );
   });
 });
 
@@ -129,9 +182,16 @@ describe('normalizePerson', () => {
       type: 'person',
       id: c.pubkey,
       title: 'Laura K',
-      subtitle: 'laurak@getalby.com',
+      subtitle: 'laura@example.org',
       href: `/p/${c.npub}`
     });
+  });
+
+  it('drops a candidate with a malformed npub or pubkey', () => {
+    const c = resolveAuthor.candidates[1];
+    expect(normalizePerson({ ...c, npub: 'npub1garbage' })).toBeUndefined();
+    expect(normalizePerson({ ...c, pubkey: 'xyz' })).toBeUndefined();
+    expect(normalizePerson({ ...c, npub: resolveAuthor.candidates[0].npub })).toBeUndefined();
   });
 });
 
@@ -147,6 +207,12 @@ describe('normalizeCommunity', () => {
       relay: c.relay,
       href: `/c/${c.npub}`
     });
+  });
+
+  it('drops a community with a malformed npub or pubkey', () => {
+    const c = findCommunity.communities[0];
+    expect(normalizeCommunity({ ...c, npub: 'nsec1abc' })).toBeUndefined();
+    expect(normalizeCommunity({ ...c, pubkey: 'A'.repeat(64) })).toBeUndefined();
   });
 });
 

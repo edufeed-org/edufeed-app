@@ -1,7 +1,8 @@
 /**
  * nope-mcp results → the typed items Termi's cards render and the model sees.
  * Handles the pre-2a shapes (no `relay`, no `lexical`) and the 2a ones.
- * A result without a usable in-app link is dropped (normaliser returns undefined).
+ * A result without any usable link is dropped (normaliser returns undefined);
+ * an event may keep only its external `sourceUrl`.
  */
 import { nip19 } from 'nostr-tools';
 
@@ -9,13 +10,15 @@ import { nip19 } from 'nostr-tools';
  * @typedef {{
  *   type: 'community'|'event'|'resource'|'person'|'passage',
  *   id: string, title: string, subtitle?: string, description?: string,
- *   href: string, sourceUrl?: string, license?: string, creator?: string,
- *   publisher?: string, picture?: string, date?: string, location?: string,
+ *   href?: string, sourceUrl?: string, license?: string, creator?: string,
+ *   publisher?: string, picture?: string, date?: string, end?: string,
+ *   allDay?: boolean, location?: string,
  *   bot?: boolean, relay?: string, score?: number, weak?: boolean
  * }} Item
  */
 
 const MAX_DESCRIPTION = 300;
+const MAX_LINE = 200;
 
 /** Only absolute http(s) URLs; anything else (javascript:, data:, relative) → undefined. @param {unknown} u */
 export function safeUrl(u) {
@@ -28,10 +31,34 @@ export function safeUrl(u) {
   }
 }
 
-/** @param {unknown} s */
-function clip(s) {
+/** @param {unknown} s @param {number} [max] */
+function clip(s, max = MAX_DESCRIPTION) {
   if (typeof s !== 'string' || !s) return undefined;
-  return s.length > MAX_DESCRIPTION ? `${s.slice(0, MAX_DESCRIPTION - 1)}…` : s;
+  return s.length > max ? `${s.slice(0, max - 1)}…` : s;
+}
+
+/** @param {unknown} s */
+const line = (s) => clip(s, MAX_LINE);
+
+/** @param {unknown} s @returns {nip19.AddressPointer | undefined} */
+function decodeNaddr(s) {
+  try {
+    const decoded = nip19.decode(/** @type {string} */ (s));
+    return decoded.type === 'naddr' ? decoded.data : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/** A well-formed npub whose key matches `pubkey` (64 hex), else undefined. @param {any} o */
+function validNpub(o) {
+  if (typeof o?.pubkey !== 'string' || !/^[0-9a-f]{64}$/.test(o.pubkey)) return undefined;
+  try {
+    const decoded = nip19.decode(/** @type {string} */ (o.npub));
+    return decoded.type === 'npub' && decoded.data === o.pubkey ? o.npub : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 /** `[{name}]` (AMB entities) or `['name']` (passage metadata) → "a, b". @param {unknown} list */
@@ -63,28 +90,21 @@ function contentSubtitle(hit) {
  * @returns {Item | undefined}
  */
 export function normalizeContent(hit, queriedRelays) {
-  const naddr = hit?.naddr ?? hit?.nostr?.naddr;
-  /** @type {nip19.AddressPointer} */
-  let pointer;
-  try {
-    const decoded = nip19.decode(/** @type {string} */ (naddr));
-    if (decoded.type !== 'naddr') return undefined;
-    pointer = decoded.data;
-  } catch {
-    return undefined;
-  }
+  // Without a decodable naddr there is no in-app target; nope-mcp always sends one, so drop the hit.
+  const pointer = decodeNaddr(hit?.naddr ?? hit?.nostr?.naddr);
+  if (!pointer) return undefined;
   const relays = hit.relay ? [hit.relay] : queriedRelays;
   return compact({
     type: 'resource',
     id: `${pointer.kind}:${pointer.pubkey}:${pointer.identifier}`,
-    title: hit.title ?? hit.name ?? '',
-    subtitle: contentSubtitle(hit),
+    title: line(hit.title ?? hit.name) ?? '',
+    subtitle: line(contentSubtitle(hit)),
     description: clip(hit.description ?? hit.summary ?? hit.excerpt),
     href: `/${nip19.naddrEncode({ ...pointer, relays })}`,
     sourceUrl: safeUrl(hit.sourcePage ?? hit.sourceUrl),
     license: hit.license?.label,
-    creator: names(hit.creator),
-    publisher: names(hit.publisher),
+    creator: line(names(hit.creator)),
+    publisher: line(names(hit.publisher)),
     picture: safeUrl(hit.image),
     relay: hit.relay,
     score: hit.score,
@@ -93,21 +113,29 @@ export function normalizeContent(hit, queriedRelays) {
   });
 }
 
-/** search_calendar_events event → event item (href = path of nope-mcp's app URL). @param {any} ev @returns {Item | undefined} */
+/**
+ * search_calendar_events event → event item. href = `/<naddr>` from the last
+ * path segment of nope-mcp's app URL (or `naddr`), only when it decodes as an
+ * naddr — never a raw path (`//host/x` would leave the app).
+ * @param {any} ev @returns {Item | undefined}
+ */
 export function normalizeEvent(ev) {
-  const url = safeUrl(ev?.url);
-  const href = url ? new URL(url).pathname : ev?.naddr ? `/${ev.naddr}` : undefined;
-  if (!href) return undefined;
+  if (!ev) return undefined;
+  const fromUrl = typeof ev.url === 'string' ? ev.url.split(/[/?#]/).filter(Boolean) : [];
+  const naddr = [fromUrl.at(-1), ev.naddr].find((s) => decodeNaddr(s));
+  if (!naddr && !safeUrl(ev.sourcePage)) return undefined;
   return compact({
     type: 'event',
     id: `${ev.kind}:${ev.nostr?.pubkey}:${ev.identifier}`,
-    title: ev.title ?? '',
+    title: line(ev.title) ?? '',
     description: clip(ev.summary ?? ev.description),
-    href,
+    href: naddr ? `/${naddr}` : undefined,
     sourceUrl: safeUrl(ev.sourcePage),
-    creator: ev.author?.name,
+    creator: line(ev.author?.name),
     bot: ev.author?.bot,
     date: ev.start,
+    end: ev.end,
+    allDay: ev.allDay,
     location: ev.locations?.[0],
     relay: ev.relay
   });
@@ -115,27 +143,29 @@ export function normalizeEvent(ev) {
 
 /** resolve_author candidate → person item. @param {any} cand @returns {Item | undefined} */
 export function normalizePerson(cand) {
-  if (!cand?.npub) return undefined;
+  const npub = validNpub(cand);
+  if (!npub) return undefined;
   return compact({
     type: 'person',
     id: cand.pubkey,
-    title: cand.name ?? `${cand.npub.slice(0, 12)}…`,
-    subtitle: cand.nip05,
+    title: line(cand.name) ?? `${npub.slice(0, 12)}…`,
+    subtitle: line(cand.nip05),
     description: clip(cand.about),
-    href: `/p/${cand.npub}`,
+    href: `/p/${npub}`,
     picture: safeUrl(cand.picture)
   });
 }
 
 /** find_community community → community item. @param {any} c @returns {Item | undefined} */
 export function normalizeCommunity(c) {
-  if (!c?.npub) return undefined;
+  const npub = validNpub(c);
+  if (!npub) return undefined;
   return compact({
     type: 'community',
     id: c.pubkey,
-    title: c.name ?? '',
+    title: line(c.name) ?? `${npub.slice(0, 12)}…`,
     description: clip(c.description),
-    href: `/c/${c.npub}`,
+    href: `/c/${npub}`,
     picture: safeUrl(c.picture),
     relay: c.relay
   });
@@ -148,13 +178,13 @@ export function normalizePassage(p) {
   return compact({
     type: 'passage',
     id: p.chunk_id,
-    title: p.amb?.name ?? '',
-    subtitle: p.heading,
+    title: line(p.amb?.name) ?? '',
+    subtitle: line(p.heading),
     description: clip(p.text ?? p.snippet),
     href: sourceUrl,
     sourceUrl,
     license: p.license?.label,
-    publisher: names(p.publisher ?? p.amb?.publisher),
+    publisher: line(names(p.publisher ?? p.amb?.publisher)),
     relay: p.relay,
     score: p.score
   });

@@ -5,6 +5,7 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 
+/** @type {any[]} */
 const fixtures = JSON.parse(
   readFileSync(new URL('../../../scripts/fixtures/termi-questions.json', import.meta.url), 'utf-8')
 );
@@ -28,21 +29,24 @@ describe('termi-questions fixture', () => {
 
   const ids = new Set(fixtures.map((f) => f.id));
 
-  it.each(fixtures.map((f) => [f.id, f]))('%s is well-formed', (_id, f) => {
-    expect(typeof f.id).toBe('string');
-    expect(f.id.length).toBeGreaterThan(0);
-    expect(typeof f.text).toBe('string');
-    expect(f.text.length).toBeGreaterThan(0);
-    expect(['de', 'en']).toContain(f.locale);
-    expect(Array.isArray(f.expect?.types)).toBe(true);
-    expect(f.expect.types.length).toBeGreaterThan(0);
-    if (f.expect.match !== undefined) {
-      expect(() => new RegExp(f.expect.match)).not.toThrow();
+  it.each(/** @type {[string, any][]} */ (fixtures.map((f) => [f.id, f])))(
+    '%s is well-formed',
+    (_id, f) => {
+      expect(typeof f.id).toBe('string');
+      expect(f.id.length).toBeGreaterThan(0);
+      expect(typeof f.text).toBe('string');
+      expect(f.text.length).toBeGreaterThan(0);
+      expect(['de', 'en']).toContain(f.locale);
+      expect(Array.isArray(f.expect?.types)).toBe(true);
+      expect(f.expect.types.length).toBeGreaterThan(0);
+      if (f.expect.match !== undefined) {
+        expect(() => new RegExp(f.expect.match)).not.toThrow();
+      }
+      if (f.variantOf !== undefined) {
+        expect(ids.has(f.variantOf)).toBe(true);
+      }
     }
-    if (f.variantOf !== undefined) {
-      expect(ids.has(f.variantOf)).toBe(true);
-    }
-  });
+  );
 
   it('has unique ids', () => {
     expect(ids.size).toBe(fixtures.length);
