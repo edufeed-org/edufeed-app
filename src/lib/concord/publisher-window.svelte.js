@@ -25,6 +25,7 @@ import { publishEvent } from '$lib/services/publish-service.js';
 import { publishCommunityUpdate } from '$lib/helpers/publishCommunityUpdate.js';
 import { communityUpdateTemplate } from '$lib/groups/community-flips.js';
 import { getCommunikeyRelays, getAllLookupRelays } from '$lib/helpers/relay-helper.js';
+import { getCommunityGlobalRelays } from '$lib/helpers/communityRelays.js';
 import { useActiveUser } from '$lib/stores/accounts.svelte';
 
 /**
@@ -182,7 +183,9 @@ export async function syncPublishersList({
 
   const template = buildPublishersListTemplate(shouldList, listEvent);
   const signed = await communitySigner.signEvent({ ...template, pubkey: communityPubkey });
-  const result = await publishEvent(signed, [], { additionalRelays: getCommunikeyRelays() });
+  const result = await publishEvent(signed, [], {
+    additionalRelays: [...getCommunikeyRelays(), ...getCommunityGlobalRelays(communikeyEvent)]
+  });
   if (!result.success) throw new Error('Failed to publish publishers list to any relay');
   eventStore.add(signed);
 }

@@ -116,6 +116,40 @@ describe('deleteEvent — applesauce EventStore propagation', () => {
     expect(cacheDeletion).not.toHaveBeenCalled();
   });
 
+  it('sends the deletion to the relays of the community the event is h-tagged to', async () => {
+    // A freshly published (or IDB-cached) event has no seen-relays: only its
+    // h tag says which community relays hold it.
+    const communitySk = generateSecretKey();
+    const community = finalizeEvent(
+      {
+        kind: 10222,
+        created_at: 1_000_000,
+        tags: [['r', 'wss://community-relay.example/', 'enforced']],
+        content: ''
+      },
+      communitySk
+    );
+    eventStore.add(community);
+    const resource = finalizeEvent(
+      {
+        kind: 30142,
+        created_at: 1_000_000,
+        tags: [
+          ['d', 'del-test-community'],
+          ['h', community.pubkey]
+        ],
+        content: ''
+      },
+      sk
+    );
+    eventStore.add(resource);
+
+    await deleteEvent(resource, activeUser);
+
+    const [, , opts] = vi.mocked(publishEvent).mock.calls[0];
+    expect(opts?.additionalRelays).toContain('wss://community-relay.example/');
+  });
+
   it('refuses to delete events owned by someone else', async () => {
     const otherSk = generateSecretKey();
     const foreign = finalizeEvent(

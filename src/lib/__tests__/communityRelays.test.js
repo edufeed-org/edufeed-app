@@ -4,7 +4,11 @@ import {
   parseCommunityContentTypes,
   getPreferredFormForKind,
   hasStrictContentMarker,
-  sectionIsGated
+  sectionIsGated,
+  getCommunityGlobalRelays,
+  getRelaysForKind,
+  getCommunityRelaysByEnforcement,
+  getAllCommunityRelays
 } from '../helpers/communityRelays.js';
 
 /**
@@ -181,5 +185,51 @@ describe('sectionIsGated', () => {
     expect(sectionIsGated({ profileList: null, access: { tier: 'all' } })).toBe(false);
     expect(sectionIsGated({ profileList: null })).toBe(false);
     expect(sectionIsGated(null)).toBe(false);
+  });
+});
+
+describe('community relay getters only return relay URLs', () => {
+  // r values are untrusted network input: a publish to them must not try
+  // "https://…", "", or a relative path.
+  const event = {
+    kind: 10222,
+    tags: [
+      ['r', 'wss://Relay.Example'],
+      ['r', 'https://not-a-relay.example'],
+      ['r', ''],
+      ['r'],
+      ['r', 'ws://plain.example/', 'enforced'],
+      ['r', 'wss://', 'enforced'],
+      ['content', 'Article'],
+      ['k', '30023'],
+      ['r', 'wss://articles.example', 'content'],
+      ['r', 'javascript:alert(1)', 'content']
+    ]
+  };
+
+  it('getCommunityGlobalRelays keeps valid ws(s) URLs, normalized and deduped', () => {
+    expect(getCommunityGlobalRelays(event)).toEqual([
+      'wss://relay.example/',
+      'ws://plain.example/'
+    ]);
+  });
+
+  it('getRelaysForKind filters per-section relays too', () => {
+    expect(getRelaysForKind(event, 30023)).toEqual(['wss://articles.example/']);
+  });
+
+  it('getCommunityRelaysByEnforcement filters both lists', () => {
+    expect(getCommunityRelaysByEnforcement(event)).toEqual({
+      enforced: ['ws://plain.example/'],
+      open: ['wss://relay.example/']
+    });
+  });
+
+  it('getAllCommunityRelays is the deduped union', () => {
+    expect(getAllCommunityRelays(event)).toEqual([
+      'wss://relay.example/',
+      'ws://plain.example/',
+      'wss://articles.example/'
+    ]);
   });
 });

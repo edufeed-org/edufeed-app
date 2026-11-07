@@ -11,7 +11,10 @@ vi.mock('$lib/services/publish-service.js', () => ({
   publishEvent: (/** @type {any[]} */ ...args) => mockState.publish(...args)
 }));
 vi.mock('$lib/stores/nostr-infrastructure.svelte', () => ({
-  eventStore: { add: (/** @type {any} */ e) => mockState.added.push(e) }
+  eventStore: {
+    add: (/** @type {any} */ e) => mockState.added.push(e),
+    getReplaceable: () => undefined
+  }
 }));
 vi.mock('$lib/helpers/communityRelays.js', () => ({
   getCommunityGlobalRelays: () => ['wss://community.example']

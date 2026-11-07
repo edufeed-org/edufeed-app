@@ -9,7 +9,8 @@ import { plainTemplate } from './plain-template.js';
 import { buildContentRemovalTemplate, removalAuthorities } from '$lib/groups/content-removal.js';
 import { isModerator } from '$lib/groups/roles.js';
 import { getCommunitySigner } from '$lib/helpers/community-signer.js';
-import { getCommunityGlobalRelays } from '$lib/helpers/communityRelays.js';
+import { getSeenRelays } from 'applesauce-core/helpers';
+import { getCommunityGlobalRelays, getRelaysForKind } from '$lib/helpers/communityRelays.js';
 import { getCommunikeyRelays } from '$lib/helpers/relay-helper.js';
 import { unique } from '$lib/helpers/unique.js';
 
@@ -62,7 +63,15 @@ export async function removeFromCommunity(event, communityEvent, { admins, activ
   if (!picked) throw new Error('Not allowed to remove content from this community');
 
   const relays = removalRelays(communityEvent);
-  const template = buildContentRemovalTemplate(communityEvent.pubkey, event, relays[0] ?? '');
+  // Hint where the removed event is: a relay it was seen on, else the
+  // community relay its kind is published to (publishEvent sends h-tagged
+  // content there).
+  const hint =
+    getSeenRelays(event)?.values().next().value ??
+    getRelaysForKind(communityEvent, event.kind)[0] ??
+    relays[0] ??
+    '';
+  const template = buildContentRemovalTemplate(communityEvent.pubkey, event, hint);
   const created_at = Math.floor(Date.now() / 1000);
   const signed = await picked.signer.signEvent(plainTemplate({ ...template, created_at }));
 

@@ -336,9 +336,9 @@ describe('getCommunityGlobalRelays', () => {
       ['r', 'wss://section.relay', 'content']
     ]);
     const result = getCommunityGlobalRelays(event);
-    expect(result).toContain('wss://global.relay');
-    expect(result).toContain('wss://global2.relay');
-    expect(result).not.toContain('wss://section.relay');
+    expect(result).toContain('wss://global.relay/');
+    expect(result).toContain('wss://global2.relay/');
+    expect(result).not.toContain('wss://section.relay/');
   });
 });
 
@@ -350,7 +350,7 @@ describe('getRelaysForKind', () => {
       ['k', '30142'],
       ['r', 'wss://edu.relay', 'content']
     ]);
-    expect(getRelaysForKind(event, 30142)).toEqual(['wss://edu.relay']);
+    expect(getRelaysForKind(event, 30142)).toEqual(['wss://edu.relay/']);
   });
 
   it('falls back to global relays', () => {
@@ -359,7 +359,7 @@ describe('getRelaysForKind', () => {
       ['content', 'Learning'],
       ['k', '30142']
     ]);
-    expect(getRelaysForKind(event, 30142)).toEqual(['wss://global.relay']);
+    expect(getRelaysForKind(event, 30142)).toEqual(['wss://global.relay/']);
   });
 });
 
@@ -372,8 +372,8 @@ describe('getAllCommunityRelays', () => {
       ['r', 'wss://edu.relay', 'content']
     ]);
     const result = getAllCommunityRelays(event);
-    expect(result).toContain('wss://global.relay');
-    expect(result).toContain('wss://edu.relay');
+    expect(result).toContain('wss://global.relay/');
+    expect(result).toContain('wss://edu.relay/');
   });
 });
 
@@ -386,8 +386,8 @@ describe('getCommunityRelaysByEnforcement', () => {
       ['k', '9']
     ]);
     const result = getCommunityRelaysByEnforcement(event);
-    expect(result.enforced).toEqual(['wss://enforced.relay']);
-    expect(result.open).toEqual(['wss://open.relay']);
+    expect(result.enforced).toEqual(['wss://enforced.relay/']);
+    expect(result.open).toEqual(['wss://open.relay/']);
   });
 
   it('returns empty arrays for null event', () => {
@@ -405,7 +405,7 @@ describe('getCommunityRelaysByEnforcement', () => {
     ]);
     const result = getCommunityRelaysByEnforcement(event);
     expect(result.enforced).toEqual([]);
-    expect(result.open).toEqual(['wss://r1.relay', 'wss://r2.relay']);
+    expect(result.open).toEqual(['wss://r1.relay/', 'wss://r2.relay/']);
   });
 });
 

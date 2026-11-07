@@ -2,6 +2,19 @@
  * Community Relays Helper
  * Utilities for getting the appropriate relays for different content types within a community
  */
+import { mergeRelaySets } from 'applesauce-core/helpers';
+
+/**
+ * Relay URLs from untrusted `r` tag values: ws:// / wss:// only (applesauce
+ * would turn an https:// value into wss://), normalized, deduped.
+ * @param {unknown[]} urls
+ * @returns {string[]}
+ */
+function relayUrls(urls) {
+  return mergeRelaySets(
+    urls.filter((u) => typeof u === 'string' && /^wss?:\/\//i.test(u.trim())).map(String)
+  );
+}
 
 /**
  * @typedef {Object} ContentTypeConfig
@@ -230,9 +243,11 @@ export function getCommunityGlobalRelays(communityEvent) {
     return [];
   }
 
-  return communityEvent.tags
-    .filter((/** @type {string[]} */ t) => t[0] === 'r' && t[2] !== 'content')
-    .map((/** @type {string[]} */ t) => t[1]);
+  return relayUrls(
+    communityEvent.tags
+      .filter((/** @type {string[]} */ t) => t[0] === 'r' && t[2] !== 'content')
+      .map((/** @type {string[]} */ t) => t[1])
+  );
 }
 
 /**
@@ -252,8 +267,9 @@ export function getRelaysForKind(communityEvent, kind) {
   const contentType = contentTypes.find((ct) => ct.kinds.includes(kind));
 
   // Use content-specific relays if defined
-  if (contentType && contentType.relays && contentType.relays.length > 0) {
-    return contentType.relays;
+  const sectionRelays = relayUrls(contentType?.relays ?? []);
+  if (sectionRelays.length > 0) {
+    return sectionRelays;
   }
 
   // Fall back to community's global relays
@@ -278,8 +294,9 @@ export function getRelaysForContentType(communityEvent, contentTypeName) {
   );
 
   // Use content-specific relays if defined
-  if (contentType && contentType.relays && contentType.relays.length > 0) {
-    return contentType.relays;
+  const sectionRelays = relayUrls(contentType?.relays ?? []);
+  if (sectionRelays.length > 0) {
+    return sectionRelays;
   }
 
   // Fall back to community's global relays
@@ -307,7 +324,7 @@ export function getAllCommunityRelays(communityEvent) {
   // Add content-specific relays
   const contentTypes = parseCommunityContentTypes(communityEvent);
   for (const ct of contentTypes) {
-    for (const relay of ct.relays || []) {
+    for (const relay of relayUrls(ct.relays || [])) {
       allRelays.add(relay);
     }
   }
@@ -323,8 +340,8 @@ export function getAllCommunityRelays(communityEvent) {
 export function getCommunityRelaysByEnforcement(communityEvent) {
   const metadata = parseCommunityMetadata(communityEvent);
   return {
-    enforced: metadata.relays.filter((r) => r.enforced).map((r) => r.url),
-    open: metadata.relays.filter((r) => !r.enforced).map((r) => r.url)
+    enforced: relayUrls(metadata.relays.filter((r) => r.enforced).map((r) => r.url)),
+    open: relayUrls(metadata.relays.filter((r) => !r.enforced).map((r) => r.url))
   };
 }
 

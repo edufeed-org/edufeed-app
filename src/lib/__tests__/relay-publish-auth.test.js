@@ -72,6 +72,14 @@ describe('publishWithAuth', () => {
     setRelayAuthSigner(() => SIGNER);
   });
 
+  it('never parks on applesauce v7 waitForAuth (default 30 s): refuses at once so we answer AUTH ourselves', async () => {
+    const relay = strfryLikeRelay();
+    await publishWithAuth(relay, EVENT, { timeout: 1000 });
+    for (const call of relay.publish.mock.calls) {
+      expect(call[1]).toMatchObject({ waitForAuth: false });
+    }
+  });
+
   it('answers the auth-required refusal with the active signer and re-sends once', async () => {
     const relay = strfryLikeRelay();
     const res = await publishWithAuth(relay, EVENT, { timeout: 1000 });

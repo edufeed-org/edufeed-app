@@ -7,6 +7,10 @@ import {
   kindToAppRelayCategory,
   getAppRelaysForCategory
 } from '$lib/services/app-relay-service.svelte.js';
+import {
+  getTargetCommunityPubkeys,
+  resolveCommunityPublishRelays
+} from '$lib/helpers/community-publish-relays.js';
 
 /**
  * NIP-52 splits one appointment across kind 31922 (all-day) and 31923
@@ -111,10 +115,18 @@ export async function deleteEvent(event, activeUser, opts = {}) {
     // relays alone would miss.
     const seenRelays = getSeenRelays(eventToDelete);
     const extraSeenRelays = extraEvents.flatMap((e) => Array.from(getSeenRelays(e) ?? []));
+    // Seen-relays are absent for a freshly published or IDB-cached event; its
+    // h tags still name the community relays it was published to.
+    const communityRelays = await Promise.all(
+      [eventToDelete, ...extraEvents].map((e) =>
+        resolveCommunityPublishRelays(e.kind, getTargetCommunityPubkeys(e))
+      )
+    );
     const additionalRelays = [
       ...categoryRelays,
       ...(seenRelays ? Array.from(seenRelays) : []),
       ...extraSeenRelays,
+      ...communityRelays.flat(),
       ...(opts.additionalRelays ?? [])
     ];
 

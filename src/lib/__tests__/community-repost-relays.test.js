@@ -34,6 +34,12 @@ vi.mock('$lib/helpers/communityRelays.js', () => ({
     optional: []
   }))
 }));
+// A 10222 missing from the store is looked up; here nothing answers.
+vi.mock('$lib/loaders/base.js', async () => {
+  const { EMPTY } = await import('rxjs');
+  return { addressLoader: () => EMPTY };
+});
+vi.mock('$lib/helpers/relay-helper.js', () => ({ getAllLookupRelays: () => [] }));
 const getReplaceable = vi.fn();
 vi.mock('$lib/stores/nostr-infrastructure.svelte.js', () => ({
   eventStore: { getReplaceable: (...args) => getReplaceable(...args) }

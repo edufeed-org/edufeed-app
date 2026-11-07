@@ -15,10 +15,9 @@ import { getFallbackRelays, getIdentityBroadcastRelays } from '$lib/helpers/rela
 import { isIdentityKind } from '$lib/helpers/identity-kinds.js';
 import { getMemberRelays } from './member-relays.js';
 import {
-  getRelaysForKind,
-  getCommunityGlobalRelays,
-  getCommunityRelaysByEnforcement
-} from '$lib/helpers/communityRelays.js';
+  getTargetCommunityPubkeys,
+  resolveCommunityPublishRelays
+} from '$lib/helpers/community-publish-relays.js';
 import * as outbox from './publish-outbox.js';
 import { isProtectedEvent } from 'applesauce-core/helpers/event';
 import { normalizeURL } from 'applesauce-core/helpers';
@@ -94,36 +93,37 @@ function notifyStatusUpdate(status) {
  * @param {number} [opts.timeout] - Timeout per relay in ms (default 5000)
  * @param {number} [opts.retries] - Transport-error retries per relay (default 2)
  * @param {string} [opts.label] - Prefix for the rejection warning, e.g. '[membership]'
+ * @param {boolean} [opts.auth] - Answer NIP-42 AUTH with the active account (default true).
+ *   Gift wraps pass false: authenticating would tell the recipient's relay who sent them.
  * @param {any} [opts.pool] - Relay pool (injectable for tests)
  * @returns {Promise<{success: boolean, relays: string[], successCount: number, results: { ok: boolean, message?: string, from: string }[]}>}
  */
 export async function publishToRelays(signedEvent, relays, opts = {}) {
-  const { timeout = 5000, retries = 2, label = '', pool: relayPool = pool } = opts;
+  const { timeout = 5000, retries = 2, label = '', auth = true, pool: relayPool = pool } = opts;
   const targets = [...new Set((relays || []).filter(Boolean))];
   if (targets.length === 0) {
     return { success: false, relays: [], successCount: 0, results: [] };
   }
 
-  // pool.publish is applesauce's own multi-relay fan-out, and it does what our
-  // hand-rolled Promise.allSettled did plus one thing it could not: it retries
-  // a relay that failed to *reach*. Errors stay isolated per relay
-  // (errorToPublishResponse turns them into { ok: false }), so one dead relay
-  // still cannot reject the whole publish.
+  // Every relay is published to independently and a relay that throws becomes
+  // { ok: false }, so one dead relay cannot reject the whole publish. A relay
+  // that failed to *reach* is retried.
   //
-  // Both defaults are overridden deliberately. The library's 30s timeout is far
+  // Both library defaults are overridden deliberately. The library's 30s timeout is far
   // too long behind a submit button, and retries are capped so a fully dead
   // relay set cannot stack 3 x 30s. Retries fire only on a *thrown* error —
   // a relay that answers OK:false has made a decision, and resubscribing would
   // just ask a second time and get the same no.
-  /** @type {{ ok: boolean, message?: string, from: string }[]} */
   //
-  // A protected event (NIP-70) is refused with `auth-required` until the
-  // connection has authenticated, so it goes relay by relay through the
-  // AUTH-answering path instead (the outbox replay ends up here).
-  const responses = isProtectedEvent(signedEvent)
+  // A user event goes relay by relay through the AUTH-answering path: a
+  // members-only relay (or a NIP-70 protected event) is refused with
+  // `auth-required` until the connection has authenticated, and the pool's
+  // default retry would park on waitForAuth and stall that connection.
+  /** @type {{ ok: boolean, message?: string, from: string }[]} */
+  const responses = auth
     ? await Promise.all(
         targets.map((url) =>
-          publishWithAuth(relayPool.relay(url), signedEvent, { timeout }).catch(
+          publishWithAuth(relayPool.relay(url), signedEvent, { timeout, retries }).catch(
             (/** @type {any} */ err) => ({
               ok: false,
               message: String(err?.message ?? err),
@@ -160,7 +160,8 @@ export async function publishToRelays(signedEvent, relays, opts = {}) {
  * 3. Members of the deployment (NIP-05 directory of NIP05_HANDLE_DOMAIN):
  *    the deployment's own MEMBER_RELAYS, whatever their kind 10002 says
  * 4. App-specific relays for the kind's category
- * 5. Community relays (communikey app relay, per-kind, global, enforced)
+ * 5. Community relays (communikey app relay, per-kind, global, enforced) of
+ *    every community the event's `h` tags target, plus `communityEvent`
  * 6. Explicit additional relays
  * 7. Safety net: a fresh account (no NIP-65 write relays) publishing a kind
  *    without an app-relay category (kind 1 note, kind 1068 poll, kind 1063
@@ -180,9 +181,14 @@ export async function computePublishRelays(signedEvent, taggedPubkeys, opts = {}
 
   // NIP-70: a protected event stays on the author's side. Tagged users' read
   // relays and the identity broadcast relays are other people's relays.
-  const [outboxRelays, memberRelays] = await Promise.all([
+  const [outboxRelays, memberRelays, communityRelays] = await Promise.all([
     getPublishRelays(signedEvent.pubkey, isProtected ? [] : taggedPubkeys),
-    getMemberRelays(signedEvent.pubkey)
+    getMemberRelays(signedEvent.pubkey),
+    resolveCommunityPublishRelays(
+      signedEvent.kind,
+      getTargetCommunityPubkeys(signedEvent),
+      communityEvent ? [communityEvent] : []
+    )
   ]);
   outboxRelays.forEach((r) => relaySet.add(r));
   // The member's own home relays are the author's side, protected or not
@@ -198,13 +204,7 @@ export async function computePublishRelays(signedEvent, taggedPubkeys, opts = {}
     getAppRelaysForCategory(category).forEach((r) => relaySet.add(r));
   }
 
-  if (communityEvent) {
-    getAppRelaysForCategory('communikey').forEach((r) => relaySet.add(r));
-    getRelaysForKind(communityEvent, signedEvent.kind).forEach((r) => relaySet.add(r));
-    getCommunityGlobalRelays(communityEvent).forEach((r) => relaySet.add(r));
-    const { enforced } = getCommunityRelaysByEnforcement(communityEvent);
-    enforced.forEach((r) => relaySet.add(r));
-  }
+  communityRelays.forEach((r) => relaySet.add(r));
 
   additionalRelays.forEach((r) => relaySet.add(r));
 
