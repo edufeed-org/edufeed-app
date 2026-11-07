@@ -6,11 +6,7 @@ import {
   getAppRelaysForCategory,
   kindToAppRelayCategory
 } from '$lib/services/app-relay-service.svelte.js';
-import {
-  getRelaysForKind,
-  getCommunityGlobalRelays,
-  getCommunityRelaysByEnforcement
-} from '$lib/helpers/communityRelays.js';
+import { resolveCommunityPublishRelays } from '$lib/helpers/community-publish-relays.js';
 import { eventStore } from '$lib/stores/nostr-infrastructure.svelte.js';
 
 /**
@@ -20,11 +16,14 @@ import { eventStore } from '$lib/stores/nostr-infrastructure.svelte.js';
  * 10222. The default publish path only covers the sharer's outbox — which
  * made shares invisible to the community (edufeed-app#21).
  *
+ * The community relays are those for the SHARED kind; the publish path adds
+ * the repost kind's own from the repost's `h` tags.
+ *
  * @param {any} event - the event being shared
  * @param {string[]} communityPubkeys
- * @returns {string[]}
+ * @returns {Promise<string[]>}
  */
-function repostTargetRelays(event, communityPubkeys) {
+async function repostTargetRelays(event, communityPubkeys) {
   const relays = new Set(getAppRelaysForCategory('communikey'));
 
   const category = kindToAppRelayCategory(event.kind);
@@ -32,13 +31,7 @@ function repostTargetRelays(event, communityPubkeys) {
     for (const r of getAppRelaysForCategory(category)) relays.add(r);
   }
 
-  for (const pubkey of communityPubkeys) {
-    const communityEvent = eventStore.getReplaceable(10222, pubkey);
-    if (!communityEvent) continue;
-    for (const r of getRelaysForKind(communityEvent, event.kind)) relays.add(r);
-    for (const r of getCommunityGlobalRelays(communityEvent)) relays.add(r);
-    for (const r of getCommunityRelaysByEnforcement(communityEvent).enforced) relays.add(r);
-  }
+  for (const r of await resolveCommunityPublishRelays(event.kind, communityPubkeys)) relays.add(r);
 
   return Array.from(relays);
 }
@@ -116,7 +109,7 @@ export async function createCommunityReposts(event, communityPubkeys, signer) {
 
   // Optimistic publish: adds to EventStore immediately, publishes in background
   publishEventOptimistic(signedEvent, communityPubkeys, {
-    additionalRelays: repostTargetRelays(event, communityPubkeys)
+    additionalRelays: await repostTargetRelays(event, communityPubkeys)
   });
 
   return true;

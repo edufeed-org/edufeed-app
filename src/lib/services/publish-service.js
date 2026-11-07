@@ -15,10 +15,9 @@ import { getFallbackRelays, getIdentityBroadcastRelays } from '$lib/helpers/rela
 import { isIdentityKind } from '$lib/helpers/identity-kinds.js';
 import { getMemberRelays } from './member-relays.js';
 import {
-  getRelaysForKind,
-  getCommunityGlobalRelays,
-  getCommunityRelaysByEnforcement
-} from '$lib/helpers/communityRelays.js';
+  getTargetCommunityPubkeys,
+  resolveCommunityPublishRelays
+} from '$lib/helpers/community-publish-relays.js';
 import * as outbox from './publish-outbox.js';
 import { isProtectedEvent } from 'applesauce-core/helpers/event';
 import { normalizeURL } from 'applesauce-core/helpers';
@@ -160,7 +159,8 @@ export async function publishToRelays(signedEvent, relays, opts = {}) {
  * 3. Members of the deployment (NIP-05 directory of NIP05_HANDLE_DOMAIN):
  *    the deployment's own MEMBER_RELAYS, whatever their kind 10002 says
  * 4. App-specific relays for the kind's category
- * 5. Community relays (communikey app relay, per-kind, global, enforced)
+ * 5. Community relays (communikey app relay, per-kind, global, enforced) of
+ *    every community the event's `h` tags target, plus `communityEvent`
  * 6. Explicit additional relays
  * 7. Safety net: a fresh account (no NIP-65 write relays) publishing a kind
  *    without an app-relay category (kind 1 note, kind 1068 poll, kind 1063
@@ -180,9 +180,14 @@ export async function computePublishRelays(signedEvent, taggedPubkeys, opts = {}
 
   // NIP-70: a protected event stays on the author's side. Tagged users' read
   // relays and the identity broadcast relays are other people's relays.
-  const [outboxRelays, memberRelays] = await Promise.all([
+  const [outboxRelays, memberRelays, communityRelays] = await Promise.all([
     getPublishRelays(signedEvent.pubkey, isProtected ? [] : taggedPubkeys),
-    getMemberRelays(signedEvent.pubkey)
+    getMemberRelays(signedEvent.pubkey),
+    resolveCommunityPublishRelays(
+      signedEvent.kind,
+      getTargetCommunityPubkeys(signedEvent),
+      communityEvent ? [communityEvent] : []
+    )
   ]);
   outboxRelays.forEach((r) => relaySet.add(r));
   // The member's own home relays are the author's side, protected or not
@@ -198,13 +203,7 @@ export async function computePublishRelays(signedEvent, taggedPubkeys, opts = {}
     getAppRelaysForCategory(category).forEach((r) => relaySet.add(r));
   }
 
-  if (communityEvent) {
-    getAppRelaysForCategory('communikey').forEach((r) => relaySet.add(r));
-    getRelaysForKind(communityEvent, signedEvent.kind).forEach((r) => relaySet.add(r));
-    getCommunityGlobalRelays(communityEvent).forEach((r) => relaySet.add(r));
-    const { enforced } = getCommunityRelaysByEnforcement(communityEvent);
-    enforced.forEach((r) => relaySet.add(r));
-  }
+  communityRelays.forEach((r) => relaySet.add(r));
 
   additionalRelays.forEach((r) => relaySet.add(r));
 
