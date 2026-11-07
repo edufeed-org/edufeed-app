@@ -836,10 +836,18 @@ export function availableSkills(skills, { loggedIn, discoverTypes, llm }) {
   });
 }
 
-/** Initial score thresholds; Task 11 tunes these against real traffic. */
+/**
+ * Score thresholds. `embed` stays at its initial values — the dev embedding
+ * key doesn't exist yet, so the embed path hasn't been run through
+ * `scripts/termi-eval.js` (see that script's report). `keyword` is tuned
+ * from the eval: keyword phrase-overlap scores vary a lot with phrase
+ * length, so "confident" here means "this candidate has no close rival"
+ * (large MARGIN) rather than a high absolute score (low CONFIDENT floor
+ * just screens out near-zero single matches).
+ */
 export const THRESHOLDS = {
   embed: { CONFIDENT: 0.82, MAYBE: 0.72, MARGIN: 0.05 },
-  keyword: { CONFIDENT: 0.6, MAYBE: 0.35, MARGIN: 0.15 }
+  keyword: { CONFIDENT: 0.3, MAYBE: 0.15, MARGIN: 0.55 }
 };
 
 /**
