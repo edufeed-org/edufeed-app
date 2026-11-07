@@ -13,6 +13,15 @@ const ENV = {
   TERMI_ELIGIBLE_NIP05_DOMAINS: 'edufeed.org'
 };
 
+const ASK_TOOLS = [
+  'find_community',
+  'find_people',
+  'search_content',
+  'search_events',
+  'search_passages',
+  'search_resources'
+];
+
 const USER_MSG = { id: 'u1', role: 'user', parts: [{ type: 'text', text: 'Bruchrechnung' }] };
 
 /**
@@ -307,7 +316,7 @@ describe('POST /api/termi/chat', () => {
     expect(sent).not.toContain('evil.example');
   });
 
-  it('streams with the search prompt, search_resources only, a step cap and compacted history', async () => {
+  it('streams with the ask prompt, the six knowledge tools, a step cap and compacted history', async () => {
     const { POST, streamText, toUIMessageStreamResponse, SYSTEM_PROMPTS, streamErrorMessage } =
       await importRoute(ENV);
     const big = 'A'.repeat(10_000);
@@ -330,12 +339,12 @@ describe('POST /api/termi/chat', () => {
       },
       { id: 'u2', role: 'user', parts: [{ type: 'text', text: 'mehr' }] }
     ];
-    const res = await POST(ev({ task: 'search', messages }));
+    const res = await POST(ev({ task: 'ask', messages }));
     expect(res.status).toBe(200);
 
     const args = /** @type {any} */ (streamText.mock.calls[0])[0];
-    expect(args.system).toBe(SYSTEM_PROMPTS.search);
-    expect(Object.keys(args.tools)).toEqual(['search_resources']);
+    expect(args.system).toBe(SYSTEM_PROMPTS.ask);
+    expect(Object.keys(args.tools).sort()).toEqual(ASK_TOOLS);
     expect(args.stopWhen).toBeDefined();
     expect(args.model.modelId).toBe('qwen3-30b-a3b-instruct-2507');
     const sent = JSON.stringify(args.messages);
@@ -346,5 +355,14 @@ describe('POST /api/termi/chat', () => {
     expect(args.messages.every((/** @type {any} */ m) => m.role !== 'system')).toBe(true);
 
     expect(toUIMessageStreamResponse).toHaveBeenCalledWith({ onError: streamErrorMessage });
+  });
+
+  it('keeps task search as an alias of ask for one release', async () => {
+    const { POST, streamText, SYSTEM_PROMPTS } = await importRoute(ENV);
+    const res = await POST(ev({ task: 'search', messages: [USER_MSG] }));
+    expect(res.status).toBe(200);
+    const args = /** @type {any} */ (streamText.mock.calls[0])[0];
+    expect(args.system).toBe(SYSTEM_PROMPTS.ask);
+    expect(Object.keys(args.tools).sort()).toEqual(ASK_TOOLS);
   });
 });

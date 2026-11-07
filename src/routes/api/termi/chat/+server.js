@@ -25,6 +25,9 @@ import { getTermiEligibilityChecker } from '$lib/server/termi/eligibility.js';
 
 const MAX_BODY_CHARS = 200_000;
 
+// shortcut: Plan 1 clients still send `search`; drop the alias one release after `ask` ships.
+const TASK_ALIASES = /** @type {const} */ ({ search: 'ask' });
+
 const quota = createQuota({ perUserDaily: 40, globalMonthly: 2800 });
 
 /** @type {import('@sveltejs/kit').RequestHandler} */
@@ -57,10 +60,14 @@ export async function POST({ request, url }) {
   } catch {
     return json({ error: 'invalid_json' }, { status: 400 });
   }
-  if (typeof body?.task !== 'string' || !Object.hasOwn(SYSTEM_PROMPTS, body.task)) {
+  const requested =
+    typeof body?.task === 'string' && Object.hasOwn(TASK_ALIASES, body.task)
+      ? TASK_ALIASES[/** @type {keyof typeof TASK_ALIASES} */ (body.task)]
+      : body?.task;
+  if (typeof requested !== 'string' || !Object.hasOwn(SYSTEM_PROMPTS, requested)) {
     return json({ error: 'unknown_task' }, { status: 400 });
   }
-  const task = /** @type {keyof typeof SYSTEM_PROMPTS} */ (body.task);
+  const task = /** @type {keyof typeof SYSTEM_PROMPTS} */ (requested);
   if (!Array.isArray(body.messages)) {
     return json({ error: 'invalid_messages' }, { status: 400 });
   }
@@ -68,7 +75,7 @@ export async function POST({ request, url }) {
   const tools = buildTermiTools(task, { mcpUrl, getToken: getNopeMcpToken });
   // The client owns only its own turns: a client-sent system message would
   // override the prompt, and a user file part makes the SDK fetch its URL
-  // server-side — the search task needs text only. Assistant tool/file parts
+  // server-side — the ask task needs text only. Assistant tool/file parts
   // pass through: harmless while no tool has toModelOutput content — strip them if one ever does.
   const history = body.messages
     .filter((m) => m?.role === 'user' || m?.role === 'assistant')
