@@ -188,7 +188,9 @@ describe('TermiChatWindow router answers', () => {
   it('/api/termi 503 → the keyword path still answers', async () => {
     stubRouter(503);
     const view = renderWindow();
-    await type(view, 'Zeig mir den Kalender');
+    // Exact calendar phrase: no other skill's phrase shares enough tokens to
+    // stay within the tuned keyword MARGIN, so this stays "confident" (one link).
+    await type(view, 'Was ist diese Woche los?');
     const actions = await answerActions(view);
     expect(actions).toHaveLength(1);
     expect(actions[0].getAttribute('href')).toBe('/calendar');
