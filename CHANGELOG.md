@@ -7,6 +7,70 @@ merge commits of the nostr PRs that landed since the previous tag.
 
 ## [Unreleased]
 
+## [0.15.8] - 2026-11-07
+
+Fix release: five nostr PRs from a full code audit (security, server
+hardening, failed-publish handling, community relays, cleanup), tested as
+`v0.15.8-rc.1` on dev and promoted on the same commit.
+
+### Security
+
+- Content from relays (posts, wikis, learning resources, calendar events,
+  bookmarks) can no longer run scripts in the app: the renderers' error
+  fallbacks escape their input, structured data can't close its script tag,
+  and links taken from event tags or URL parameters only open http(s) or
+  in-app addresses. Untrusted HTML keeps only the app's own CSS classes, and
+  links opening a new tab always get `rel="noopener noreferrer"`.
+- Following or unfollowing someone no longer replaces your whole follow list
+  when it hasn't loaded yet or the app only has an old cached copy: the list
+  is confirmed on your relays first, and the action is refused with a retry
+  hint when that isn't possible.
+- Shared webxdc apps in a group can no longer make members sign events
+  without limit: state updates keep the advertised one-per-second rate and a
+  session stops signing after 500 updates (3,000 live messages).
+- Server proxies (`/api/image`, `/api/pdf*`, `/api/reader`, `/api/oer/asset`)
+  follow redirects only through the private-network guard and stop reading at
+  their size limits; PDF rendering runs at most two jobs at a time.
+- `/api/enrich`, `/api/geocode` and metaclean uploads are rate-limited per
+  visitor.
+
+### Fixed
+
+- Community content (articles, wikis, calendar events, learning resources,
+  forum threads, comments, highlights, bookmarks) now also goes to the relays
+  the community declares, enforced ones included; before, most of it reached
+  only the app's own relays. Deleting such content reaches those relays too.
+- Publishing to a relay that requires login (members-only community relays)
+  answers the login itself instead of stalling every later publish on that
+  connection.
+- Deleting, joining or leaving a community, muting and similar actions report
+  an error and undo the change when no relay accepted it, instead of showing
+  success and reverting after a reload. Deleting now waits for a relay's
+  answer (up to 5 s).
+- After switching accounts, the previous account's relay settings and
+  follows no longer leak into the new session.
+- Calendar pages respect gated mode and personal relay overrides.
+- Changes to curated author lists are picked up by background refreshes.
+- Calendar subscriptions (ICS): a community feed only lists events from
+  people allowed to post in that section (profile lists and NIP-29 group
+  rosters); large calendars no longer open thousands of relay connections.
+- Link previews, the sitemap and page metadata survive events with invalid
+  dates; cached link previews no longer carry the first visitor's query.
+- The resource wizard says when the AI metadata lookup timed out, and closing
+  the page stops the lookup.
+
+### Removed
+
+- About 11,600 lines of unused code, the stale `package-lock.json` and the
+  unused `@sveltejs/adapter-auto` dependency; duplicate pubkey, address and
+  hex helpers were merged.
+
+### Deploy notes
+
+- New env var `ADDRESS_HEADER=X-Real-IP` (already live on prod and dev since
+  homelab 6b53bd1); without it all visitors share one rate-limit bucket.
+- No relay changes needed.
+
 ## [0.15.7] - 2026-11-05
 
 Fix release: one nostr PR, released directly without an RC on dev.
