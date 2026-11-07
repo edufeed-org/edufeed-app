@@ -578,6 +578,163 @@ describe('ICS endpoint - community profile-list access', () => {
   });
 });
 
+describe('ICS endpoint - moderated community roster access', () => {
+  const MEMBER = '1'.repeat(64);
+  const OUTSIDER = '2'.repeat(64);
+  const ADMIN = '3'.repeat(64);
+  const PUBLISHER = '4'.repeat(64);
+  const GROUP_RELAY = 'wss://groups.example.com';
+
+  const signed = (kind, pubkey, tags, createdAt = 10) => ({
+    id: String(kind).padEnd(64, '0'),
+    pubkey,
+    kind,
+    tags,
+    content: '',
+    created_at: createdAt,
+    sig: 's'.repeat(128)
+  });
+  const communityDef = (calendarTags) =>
+    signed(
+      10222,
+      COMMUNITY_PUBKEY,
+      [
+        ['content', 'Calendar'],
+        ['k', '31923'],
+        ...calendarTags,
+        ['membership', 'root1', GROUP_RELAY]
+      ],
+      5
+    );
+  const calEvent = (id, pubkey, title) =>
+    makeEvent({
+      id: id.repeat(64),
+      pubkey,
+      tags: [
+        ['d', title],
+        ['title', title],
+        ['start', '1700001000'],
+        ['h', COMMUNITY_PUBKEY]
+      ]
+    });
+  const allEvents = [
+    calEvent('a', MEMBER, 'MemberEvent'),
+    calEvent('b', OUTSIDER, 'OutsiderEvent'),
+    calEvent('c', ADMIN, 'AdminEvent'),
+    calEvent('d', PUBLISHER, 'PublisherEvent'),
+    calEvent('e', COMMUNITY_PUBKEY, 'OwnerEvent')
+  ];
+  const roster = [
+    signed(39002, 'f'.repeat(64), [
+      ['d', 'root1'],
+      ['p', MEMBER]
+    ]),
+    signed(39001, 'f'.repeat(64), [
+      ['d', 'root1'],
+      ['p', ADMIN, 'admin'],
+      ['p', PUBLISHER, 'publisher']
+    ])
+  ];
+
+  /** @param {{roster?: any[], overrides?: any[]}} opts */
+  const routeFetches = ({ roster: rosterEvents = roster, overrides = [] } = {}) =>
+    fetchEventsFromRelays.mockImplementation(async (filter) => {
+      const f = Array.isArray(filter) ? filter[0] : filter;
+      if (isDeletionQuery(filter)) return [];
+      if (f.kinds.includes(39002)) return rosterEvents;
+      if (f.kinds.includes(30223)) return overrides;
+      return allEvents;
+    });
+
+  const get = async (def) => {
+    fetchEventFromRelays.mockResolvedValueOnce(null); // profile
+    fetchEventFromRelays.mockResolvedValueOnce(def);
+    const response = await GET({
+      url: new URL(`https://example.org/api/calendar/${COMMUNITY_PUBKEY}/ics`),
+      params: { id: COMMUNITY_PUBKEY }
+    });
+    return response.text();
+  };
+
+  it('keeps only owner + root-group members (admins included) for a members-tier section', async () => {
+    routeFetches();
+    const body = await get(communityDef([['access', 'members']]));
+    for (const title of ['MemberEvent', 'AdminEvent', 'PublisherEvent', 'OwnerEvent']) {
+      expect(body).toContain(`SUMMARY:${title}`);
+    }
+    expect(body).not.toContain('OutsiderEvent');
+
+    const rosterCall = fetchEventsFromRelays.mock.calls.find(([f]) => f.kinds?.includes(39002));
+    expect(rosterCall[0]).toMatchObject({ kinds: [39001, 39002], '#d': ['root1'] });
+    expect(rosterCall[1]).toEqual([GROUP_RELAY]);
+  });
+
+  it('keeps only owner + role holders for a role-tier section', async () => {
+    routeFetches();
+    const body = await get(communityDef([['access', 'role', 'publisher']]));
+    expect(body).toContain('SUMMARY:PublisherEvent');
+    expect(body).toContain('SUMMARY:OwnerEvent');
+    expect(body).not.toContain('MemberEvent');
+    expect(body).not.toContain('AdminEvent');
+  });
+
+  it('allows only the owner when the roster cannot be fetched', async () => {
+    routeFetches({ roster: [] });
+    const body = await get(communityDef([['access', 'members']]));
+    expect(body).toContain('SUMMARY:OwnerEvent');
+    expect(body).not.toContain('MemberEvent');
+    expect(body).not.toContain('AdminEvent');
+  });
+
+  it('keeps every event when the section is open', async () => {
+    routeFetches();
+    const body = await get(communityDef([]));
+    expect(body).toContain('SUMMARY:OutsiderEvent');
+    expect(body).toContain('SUMMARY:MemberEvent');
+  });
+
+  it("applies a moderator's newer kind-30223 section override", async () => {
+    routeFetches({
+      overrides: [
+        signed(
+          30223,
+          ADMIN,
+          [
+            ['d', COMMUNITY_PUBKEY],
+            ['h', COMMUNITY_PUBKEY],
+            ['content', 'Calendar'],
+            ['k', '31923'],
+            ['access', 'members']
+          ],
+          20
+        )
+      ]
+    });
+    const body = await get(communityDef([]));
+    expect(body).toContain('SUMMARY:MemberEvent');
+    expect(body).not.toContain('OutsiderEvent');
+  });
+
+  it("ignores a publisher's section override", async () => {
+    routeFetches({
+      overrides: [
+        signed(
+          30223,
+          PUBLISHER,
+          [
+            ['d', COMMUNITY_PUBKEY],
+            ['content', 'Calendar'],
+            ['k', '31923']
+          ],
+          20
+        )
+      ]
+    });
+    const body = await get(communityDef([['access', 'members']]));
+    expect(body).not.toContain('OutsiderEvent');
+  });
+});
+
 describe('ICS endpoint - Content-Disposition', () => {
   it('never puts a double quote or CR/LF into the ASCII filename fallback', async () => {
     fetchEventFromRelays.mockResolvedValueOnce({

@@ -9,7 +9,13 @@ import {
   dropDeletedEvents
 } from '$lib/server/nostr-fetch.js';
 import { tagValue, generateICSContent } from '$lib/server/calendar-ics.js';
+import { getRelaysForKind } from '$lib/server/relay-fetch.js';
 import { parseCommunityContentTypes } from '$lib/helpers/communityRelays.js';
+import { deriveCommunityType, parseMembershipPointer } from '$lib/groups/community-membership.js';
+import { rosterFromEvents } from '$lib/groups/root-roster.js';
+import { sectionAllowedAuthors } from '$lib/groups/roster-access.js';
+import { moderationPubkeys } from '$lib/groups/roles.js';
+import { SECTION_OVERRIDE_KIND, applySectionOverride } from '$lib/groups/section-override.js';
 
 /**
  * Server-side ICS feed for both NIP-52 calendars (`naddr`) and community
@@ -182,7 +188,9 @@ async function handleCommunityCalendar(pubkeyOrNpub, url) {
       },
       allRelays
     ),
-    fetchCalendarAllowedAuthors(communityDefEvent, allRelays)
+    communityDefEvent && deriveCommunityType(communityDefEvent) === 'moderated'
+      ? fetchRosterAllowedAuthors(communityDefEvent, communityRelays)
+      : fetchCalendarAllowedAuthors(communityDefEvent, allRelays)
   ]);
   const permitted = allowedAuthors
     ? fetched.filter((ev) => allowedAuthors.has(ev.pubkey))
@@ -259,9 +267,7 @@ async function fetchReferencedEvents(calendar) {
  * @returns {Promise<Set<string> | null>} null when the calendar is not gated
  */
 async function fetchCalendarAllowedAuthors(communityDefEvent, relays) {
-  const section = parseCommunityContentTypes(communityDefEvent).find((s) =>
-    s.kinds.some((k) => CALENDAR_EVENT_KINDS.includes(k))
-  );
+  const section = calendarSection(communityDefEvent);
   if (!section?.profileList) return null;
 
   const [, pubkey, ...idParts] = section.profileList.split(':');
@@ -272,6 +278,58 @@ async function fetchCalendarAllowedAuthors(communityDefEvent, relays) {
     [...new Set([...hint, ...relays])]
   );
   return new Set((list?.tags ?? []).filter((t) => t[0] === 'p' && t[1]).map((t) => t[1]));
+}
+
+/**
+ * Allowed calendar authors of a MODERATED community — the client rule
+ * (`useCommunityAccess` → `sectionAllowedAuthors`): the calendar section's
+ * `access` tier against the root group's roster (39001 admins + 39002
+ * members) from the `membership` pointer's relay, the owner always allowed,
+ * with the sections a moderator's kind-30223 override reshapes
+ * (`useEffectiveCommunity`). A roster that cannot be fetched allows only the
+ * owner, like an empty one.
+ * @param {import('nostr-tools').NostrEvent} communityDefEvent
+ * @param {string[]} communityRelays SSRF-guarded community `r` relays
+ * @returns {Promise<Set<string> | null>} null when the calendar is not gated
+ */
+async function fetchRosterAllowedAuthors(communityDefEvent, communityRelays) {
+  const pointer = /** @type {{id: string, relay: string}} */ (
+    parseMembershipPointer(communityDefEvent)
+  );
+  const owner = communityDefEvent.pubkey;
+  // Same relays the client reads overrides from: communikey + community relays.
+  const overrideRelays = getRelaysForKind(10222, communityRelays);
+  const [rosterEvents, overrides] = await Promise.all([
+    fetchEventsFromRelays(
+      { kinds: [39001, 39002], '#d': [pointer.id] },
+      await safeHintRelays([pointer.relay])
+    ),
+    fetchEventsFromRelays({ kinds: [SECTION_OVERRIDE_KIND], '#d': [owner] }, overrideRelays)
+  ]);
+  const roster = rosterFromEvents(pointer, rosterEvents ?? []);
+  const liveOverrides = dropDeletedEvents(
+    overrides ?? [],
+    await fetchDeletions(overrides ?? [], overrideRelays)
+  );
+  const { event } = applySectionOverride(
+    communityDefEvent,
+    liveOverrides,
+    moderationPubkeys(roster.admins)
+  );
+  const allowed = sectionAllowedAuthors(calendarSection(event), roster, owner);
+  return allowed ? new Set(allowed) : null;
+}
+
+/**
+ * @param {any} communityEvent kind 10222
+ * @returns {import('$lib/helpers/communityRelays.js').ContentTypeConfig | null}
+ */
+function calendarSection(communityEvent) {
+  return (
+    parseCommunityContentTypes(communityEvent).find((s) =>
+      s.kinds.some((k) => CALENDAR_EVENT_KINDS.includes(k))
+    ) ?? null
+  );
 }
 
 /**

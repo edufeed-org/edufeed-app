@@ -5,6 +5,12 @@
 // docs/nips/communikey-groups.md. Admins (39001) are unioned into members:
 // NIP-29 counts users with privileged roles as members, and some relays
 // return 39001 without a 39002.
+import {
+  GROUP_ADMINS_KIND,
+  GROUP_MEMBERS_KIND,
+  getGroupAdmins,
+  getGroupMembers
+} from 'applesauce-common/helpers/groups';
 import { channelKey } from './community-pointer.js';
 import { isPublisher } from './roles.js';
 
@@ -55,4 +61,31 @@ export function rosterView(pointer, membersByKey, adminsByKey, fetchedKeys) {
     isMember: (pubkey) => members.has(pubkey),
     rolesOf: (pubkey) => admins.find((admin) => admin.pubkey === pubkey)?.roles ?? []
   };
+}
+
+/**
+ * Roster from a plain list of 39001/39002 events (newest of each kind for the
+ * pointer's group id) — for callers outside the eventStore, like the ICS
+ * endpoint. Nothing arrived = an empty, settled roster.
+ * @param {{id: string, relay: string}} pointer
+ * @param {any[]} events
+ * @returns {RosterView}
+ */
+export function rosterFromEvents(pointer, events) {
+  /** @type {Record<number, any>} */
+  const newest = {};
+  for (const ev of events ?? []) {
+    if (ev?.kind !== GROUP_MEMBERS_KIND && ev?.kind !== GROUP_ADMINS_KIND) continue;
+    if (ev.tags?.find((/** @type {string[]} */ t) => t[0] === 'd')?.[1] !== pointer.id) continue;
+    if (!newest[ev.kind] || ev.created_at > newest[ev.kind].created_at) newest[ev.kind] = ev;
+  }
+  const key = channelKey(pointer) ?? '';
+  const members = newest[GROUP_MEMBERS_KIND];
+  const admins = newest[GROUP_ADMINS_KIND];
+  return rosterView(
+    pointer,
+    members ? { [key]: new Set(getGroupMembers(members) ?? []) } : {},
+    admins ? { [key]: getGroupAdmins(admins) ?? [] } : {},
+    new Set([key])
+  );
 }

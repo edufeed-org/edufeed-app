@@ -1,7 +1,7 @@
 /** @vitest-environment node */
 // src/lib/__tests__/root-roster.test.js
 import { describe, it, expect } from 'vitest';
-import { rosterView } from '$lib/groups/root-roster.js';
+import { rosterView, rosterFromEvents } from '$lib/groups/root-roster.js';
 import { channelKey } from '$lib/groups/community-pointer.js';
 
 const RELAY = 'wss://groups.example.com';
@@ -89,5 +89,33 @@ describe('rosterView', () => {
     // and they are members like any other role holder
     expect(view.isMember(PUBLISHER)).toBe(true);
     expect(view.isMember(STRANGER)).toBe(false);
+  });
+});
+
+describe('rosterFromEvents', () => {
+  /** @param {number} kind @param {number} createdAt @param {string[][]} tags @param {string} [d] */
+  const ev = (kind, createdAt, tags, d = 'root1') => ({
+    kind,
+    created_at: createdAt,
+    pubkey: 'f'.repeat(64),
+    tags: [['d', d], ...tags]
+  });
+
+  it('folds the newest 39002 and 39001 for the pointer id into a roster', () => {
+    const view = rosterFromEvents(POINTER, [
+      ev(39002, 1, [['p', STRANGER]]),
+      ev(39002, 2, [['p', MEMBER]]),
+      ev(39001, 1, [['p', ADMIN, 'publisher']]),
+      ev(39002, 3, [['p', STRANGER]], 'other-group')
+    ]);
+    expect(view.members).toEqual(new Set([MEMBER, ADMIN]));
+    expect(view.rolesOf(ADMIN)).toEqual(['publisher']);
+    expect(view.publishers).toEqual(new Set([ADMIN]));
+  });
+
+  it('is an empty roster when nothing arrived', () => {
+    const view = rosterFromEvents(POINTER, []);
+    expect(view.members.size).toBe(0);
+    expect(view.admins).toEqual([]);
   });
 });
