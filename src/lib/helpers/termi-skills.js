@@ -785,26 +785,30 @@ function contentTokens(text) {
 
 /**
  * Score every skill's best phrase match (share of a phrase's non-stopword
- * tokens present in the input) and return the top 5, descending.
+ * tokens present in the input) and return the top 5, descending. `full`
+ * marks a skill with a phrase of ≥2 content words matched completely.
  *
  * @param {string} text
  * @param {TermiSkill[]} skills
  * @param {'de'|'en'} locale
- * @returns {Array<{ skill: string, score: number }>}
+ * @returns {Array<{ skill: string, score: number, full?: boolean }>}
  */
 export function keywordMatch(text, skills, locale) {
   const inputTokens = new Set(tokenize(text));
   const scored = skills.map((skill) => {
     const phrases = skill.phrases?.[locale] ?? [];
     let best = 0;
+    let full = false;
     for (const phrase of phrases) {
       const tokens = contentTokens(phrase);
       if (tokens.length === 0) continue;
       const hits = tokens.filter((t) => inputTokens.has(t)).length;
       const score = hits / tokens.length;
       if (score > best) best = score;
+      // A one-word phrase ("kannst", "eigentlich") matched in full proves nothing.
+      if (hits === tokens.length && tokens.length >= 2) full = true;
     }
-    return { skill: skill.id, score: best };
+    return full ? { skill: skill.id, score: best, full } : { skill: skill.id, score: best };
   });
   return scored
     .filter((m) => m.score > 0)
@@ -843,7 +847,8 @@ export function availableSkills(skills, { loggedIn, discoverTypes, llm }) {
  * from the eval: keyword phrase-overlap scores vary a lot with phrase
  * length, so "confident" here means "this candidate has no close rival"
  * (large MARGIN) rather than a high absolute score (low CONFIDENT floor
- * just screens out near-zero single matches).
+ * just screens out near-zero single matches) — or a multi-word catalogue
+ * phrase matched in full that no rival also matches in full (see `decide`).
  */
 export const THRESHOLDS = {
   embed: { CONFIDENT: 0.82, MAYBE: 0.72, MARGIN: 0.05 },
@@ -853,7 +858,7 @@ export const THRESHOLDS = {
 /**
  * Turn ranked matches into a routing decision.
  *
- * @param {Array<{ skill: string, score: number }>} matches
+ * @param {Array<{ skill: string, score: number, full?: boolean }>} matches
  * @param {{ mode: 'embed'|'keyword' }} opts
  * @returns {{ kind: 'confident', skill: string } | { kind: 'maybe', skills: string[] } | { kind: 'none' }}
  */
@@ -862,7 +867,11 @@ export function decide(matches, { mode }) {
   if (!matches || matches.length === 0) return { kind: 'none' };
   const sorted = [...matches].sort((a, b) => b.score - a.score);
   const [top, second] = sorted;
-  if (top.score >= t.CONFIDENT && (!second || top.score - second.score >= t.MARGIN)) {
+  const clearLead = !second || top.score - second.score >= t.MARGIN;
+  // A catalogue phrase matched in full is a clear pick unless a rival also has
+  // one: shared verbs ("zeig") give rivals 0.5, so the margin alone can't clear it.
+  const fullPhrase = mode === 'keyword' && !!top.full && !sorted.some((m) => m !== top && m.full);
+  if (top.score >= t.CONFIDENT && (clearLead || fullPhrase)) {
     return { kind: 'confident', skill: top.skill };
   }
   if (top.score >= t.MAYBE) {

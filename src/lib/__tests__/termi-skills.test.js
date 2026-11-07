@@ -162,6 +162,42 @@ describe('decide', () => {
     expect(decide([], { mode: 'embed' })).toEqual({ kind: 'none' });
   });
 
+  it.each([
+    ['Zeig mir den Kalender', 'de', 'calendar'],
+    ['Zeig meine Lesezeichen', 'de', 'bookmarks'],
+    ['Show me the calendar', 'en', 'calendar'],
+    ['Finde Materialien zu Demokratie', 'de', 'assistant.search']
+  ])('keyword mode: verbatim catalogue phrase "%s" is confident', (text, locale, skill) => {
+    const available = availableSkills(TERMI_SKILLS, {
+      loggedIn: true,
+      discoverTypes: ['events', 'learning', 'articles', 'boards', 'communities', 'people'],
+      llm: true
+    });
+    const matches = keywordMatch(text, available, /** @type {'de'|'en'} */ (locale));
+    expect(decide(matches, { mode: 'keyword' })).toEqual({ kind: 'confident', skill });
+  });
+
+  it('keyword mode: a fully matched one-word phrase or two full matches stay maybe', () => {
+    expect(
+      decide(
+        [
+          { skill: 'a', score: 1 },
+          { skill: 'b', score: 0.5 }
+        ],
+        { mode: 'keyword' }
+      ).kind
+    ).toBe('maybe');
+    expect(
+      decide(
+        [
+          { skill: 'a', score: 1, full: true },
+          { skill: 'b', score: 1, full: true }
+        ],
+        { mode: 'keyword' }
+      ).kind
+    ).toBe('maybe');
+  });
+
   it('exposes the threshold values for both modes', () => {
     // embed is untuned (Task 11 ran without the dev embedding key, see
     // scripts/termi-eval.js); keyword is tuned from the eval fixture.

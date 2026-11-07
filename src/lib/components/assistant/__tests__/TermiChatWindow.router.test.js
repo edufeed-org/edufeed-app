@@ -223,7 +223,7 @@ describe('TermiChatWindow router answers', () => {
     );
   });
 
-  it('assistant.search among "maybe" choices offers the learning-search link', async () => {
+  it('assistant.search among "maybe" choices offers its own assistant button', async () => {
     mockConfig.termi = { enabled: true, embed: true, llm: true };
     stubRouter([
       { skill: 'assistant.search', score: 0.78 },
@@ -231,8 +231,10 @@ describe('TermiChatWindow router answers', () => {
     ]);
     const view = renderWindow();
     await type(view, 'Finde Materialien zu Demokratie');
-    const [link] = await answerActions(view);
-    expect(link.getAttribute('href')).toBe('/discover?type=learning&search=Demokratie');
+    const [button] = await answerActions(view);
+    // Starting the chat from it is covered in TermiChatWindow.assistant.test.js.
+    expect(button.tagName).toBe('BUTTON');
+    expect(button.textContent?.trim()).toBe(m.termi_route_assistant());
   });
 
   it('a stalled /api/termi request times out into the keyword answer', async () => {

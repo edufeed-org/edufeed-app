@@ -21,6 +21,7 @@
   import { getLocale } from '$lib/paraglide/runtime';
   import { TERMI_SKILLS, learningSearchSkill, extractQuery } from '$lib/helpers/termi-skills.js';
   import { runCreateAction } from '$lib/helpers/run-create-action.js';
+  import { canSign } from '$lib/helpers/signing-guard.js';
   import { routeQuestion, skillAction, answerableSkill, helpAnswer } from './termi-router.js';
 
   /**
@@ -340,7 +341,7 @@
     !!assistant && (assistant.chat.status === 'submitted' || assistant.chat.status === 'streaming')
   );
   const chatError = $derived(
-    /** @type {(Error & { status?: number }) | undefined} */ (assistant?.chat.error)
+    /** @type {(Error & { status?: number, scope?: string }) | undefined} */ (assistant?.chat.error)
   );
   /** @param {any} msg */
   const textOf = (msg) =>
@@ -437,7 +438,8 @@
         ctx: {
           loggedIn: !!user,
           discoverTypes: runtimeConfig.discover?.contentTypes ?? [],
-          llm: !!runtimeConfig.termi?.llm
+          // The assistant signs every request: a readonly (npub) account can't use it.
+          llm: !!runtimeConfig.termi?.llm && canSign(user)
         }
       });
       if (decision.kind === 'confident' && decision.skill === 'assistant.search') {
@@ -445,7 +447,7 @@
         await startAssistant(text);
         return;
       }
-      reply = routerReply(decision, query, available, user?.pubkey);
+      reply = routerReply(decision, query, available, user?.pubkey, text);
     } catch {
       reply = { role: 'bot', text: m.termi_fallback() };
     }
@@ -468,9 +470,10 @@
    * @param {string} query
    * @param {import('$lib/helpers/termi-skills.js').TermiSkill[]} available
    * @param {string | undefined} pubkey
+   * @param {string} text the user's question, handed to the assistant button
    * @returns {ChatMessage}
    */
-  function routerReply(decision, query, available, pubkey) {
+  function routerReply(decision, query, available, pubkey, text) {
     const ctx = {
       query,
       npub: pubkey ? nip19.npubEncode(pubkey) : null,
@@ -497,8 +500,19 @@
       if (action) return { role: 'bot', text: m.termi_route_go(), actions: [action] };
     }
     if (decision.kind === 'maybe') {
-      const ids = [...new Set(decision.skills.map(answerableSkill))];
-      const actions = present(ids.map((id) => actionOf(id)));
+      // assistant.search keeps its own button: it starts the chat with the question.
+      const ids = [
+        ...new Set(
+          decision.skills.map((id) => (id === 'assistant.search' ? id : answerableSkill(id)))
+        )
+      ];
+      const actions = present(
+        ids.map((id) =>
+          id === 'assistant.search'
+            ? { label: m.termi_route_assistant(), run: () => startAssistant(text) }
+            : actionOf(id)
+        )
+      );
       if (actions.length) return { role: 'bot', text: m.termi_route_maybe(), actions };
     }
     return {
@@ -757,7 +771,8 @@
             class="max-w-[82%] rounded-2xl rounded-bl-md border border-base-300 bg-base-200 px-3.5 py-2.5 text-sm leading-relaxed"
           >
             {#if chatError.status === 429}
-              {m.termi_quota()}
+              <!-- 'user' = today's own cap; the monthly global cap and the per-IP rate read alike. -->
+              {chatError.scope === 'user' ? m.termi_quota() : m.termi_quota_global()}
               <div class="mt-2">
                 <a href={learningHref(chatQuery)} class="btn btn-sm btn-primary">
                   {m.termi_quota_link()}

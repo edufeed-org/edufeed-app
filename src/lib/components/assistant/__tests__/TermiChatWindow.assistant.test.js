@@ -190,6 +190,66 @@ describe('TermiChatWindow assistant mode', () => {
     expect(link.getAttribute('href')).toBe('/discover?type=learning&search=Br%C3%BCchen');
   });
 
+  it.each([
+    [{ error: 'quota', scope: 'global' }, 'global monthly cap'],
+    [{ error: 'rate' }, 'per-IP rate']
+  ])('HTTP 429 %o → the non-daily quota line plus the learning search link (%s)', async (body) => {
+    stubFetch(() => new Response(JSON.stringify(body), { status: 429 }));
+    const view = renderWindow();
+    await type(view, 'Finde Materialien zu Brüchen');
+    await waitFor(() => view.getByText(m.termi_quota_global(), { exact: false }));
+    expect(view.queryByText(m.termi_quota(), { exact: false })).toBeNull();
+    expect(view.getByText(m.termi_quota_link()).getAttribute('href')).toBe(
+      '/discover?type=learning&search=Br%C3%BCchen'
+    );
+  });
+
+  it('a readonly (npub) account gets no assistant: the learning search link instead', async () => {
+    const real = user.current;
+    user.current = { pubkey: real.pubkey, type: 'readonly' };
+    try {
+      stubFetch(() => streamAnswer());
+      const view = renderWindow();
+      await type(view, 'Finde Materialien zu Brüchen');
+      const box = await waitFor(() => view.getByTestId('termi-answer-actions'));
+      const hrefs = [...box.querySelectorAll('a')].map((a) => a.getAttribute('href'));
+      expect(hrefs).toContain('/discover?type=learning');
+      expect(chatCalls).toHaveLength(0);
+    } finally {
+      user.current = real;
+    }
+  });
+
+  it('a maybe answer with assistant.search offers a button that starts the chat', async () => {
+    chatCalls = [];
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (/** @type {string} */ url, /** @type {RequestInit} */ init) => {
+        if (url === '/api/termi') {
+          return new Response(
+            JSON.stringify({
+              matches: [
+                { skill: 'assistant.search', score: 0.78 },
+                { skill: 'search.learning', score: 0.76 }
+              ]
+            })
+          );
+        }
+        chatCalls.push({ url, init });
+        return streamAnswer();
+      })
+    );
+    const view = renderWindow();
+    await type(view, 'Materialien Brüche?');
+    const button = await waitFor(() => view.getByText(m.termi_route_assistant()));
+    expect(chatCalls).toHaveLength(0);
+    await fireEvent.click(button);
+    await waitFor(() => view.getByText('Hier sind Treffer.'));
+    expect(chatCalls).toHaveLength(1);
+    const parsed = JSON.parse(/** @type {string} */ (chatCalls[0].init.body));
+    expect(parsed.messages.at(-1).parts[0].text).toBe('Materialien Brüche?');
+  });
+
   it('HTTP 503 → short line, learning search link, back to router mode', async () => {
     stubFetch(() => new Response('{}', { status: 503 }));
     const view = renderWindow();
