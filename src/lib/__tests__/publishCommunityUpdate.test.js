@@ -15,7 +15,10 @@ vi.mock('$lib/stores/nostr-infrastructure.svelte', () => ({
   eventStore: { add: eventStoreAdd, getReplaceable }
 }));
 vi.mock('$lib/helpers/communityRelays.js', () => ({
-  getCommunityGlobalRelays: (e) => (e?.tags ?? []).filter((t) => t[0] === 'r').map((t) => t[1])
+  getCommunityGlobalRelays: (/** @type {any} */ e) =>
+    (e?.tags ?? [])
+      .filter((/** @type {string[]} */ t) => t[0] === 'r')
+      .map((/** @type {string[]} */ t) => t[1])
 }));
 
 import { publishCommunityUpdate } from '$lib/helpers/publishCommunityUpdate.js';

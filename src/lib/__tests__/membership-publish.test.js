@@ -81,7 +81,7 @@ describe('getApplicationRelays', () => {
 });
 
 describe('publishApplicationCopy', () => {
-  /** @type {ReturnType<typeof vi.fn>} */
+  /** @type {import('vitest').Mock<(from: string) => Promise<any>>} */
   let poolPublish;
   /** @type {{ relay: (url: string) => any }} */
   let pool;
