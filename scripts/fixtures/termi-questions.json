@@ -48,7 +48,7 @@
     "locale": "de",
     "expect": {
       "types": ["passage", "resource"],
-      "match": "Filter|Aktivier|Aufmerksam",
+      "match": "Filter|Aktivier|Aufmerksam|Tipps|Beteiligung|offene Fragen",
       "tools": ["search_passages"]
     }
   },
@@ -59,7 +59,7 @@
     "locale": "de",
     "expect": {
       "types": ["passage", "resource"],
-      "match": "Filter|Aktivier|Aufmerksam",
+      "match": "Filter|Aktivier|Aufmerksam|Tipps|Beteiligung|offene Fragen",
       "tools": ["search_passages"]
     }
   },
@@ -70,7 +70,7 @@
     "locale": "de",
     "expect": {
       "types": ["passage", "resource"],
-      "match": "Filter|Aktivier|Aufmerksam",
+      "match": "Filter|Aktivier|Aufmerksam|Tipps|Beteiligung|offene Fragen",
       "tools": ["search_passages"]
     }
   },
