@@ -362,7 +362,7 @@
 
   let visibleTabs = $derived([
     ...tabsConfig.order
-      .filter((id) => !tabsConfig.hidden.includes(id))
+      .filter((id) => !tabsConfig.hidden.includes(id) && tabCounts[id] > 0)
       .map((id) => ({
         id,
         label: TAB_LABELS[id](),
