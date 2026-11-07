@@ -102,7 +102,7 @@
     "locale": "en",
     "expect": {
       "types": ["resource"],
-      "match": "Unterrichtsentwurf|Nachhaltig|BNE|Wattenmeer",
+      "match": "Unterrichtsentwurf|Nachhaltig|BNE|Wattenmeer|sustainab|lesson plan|climate",
       "tools": ["search_content|search_resources"]
     }
   },

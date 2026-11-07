@@ -29,7 +29,7 @@
  * - `types` — OR: the top 3 items must contain at least one item whose
  *   type is in this list (not all of them).
  * - `match` — a regex source (matched case-insensitively) that at least
- *   one of the top-3 items' title/name must satisfy, when given.
+ *   one of the top-3 items' title/subtitle/description must satisfy, when given.
  * - `tools` — tier 2 only, ignored for tier 1. AND across array elements
  *   (every element must be satisfied); `|` inside one element is OR
  *   between tool names, e.g. `["search_content|search_resources"]` means
@@ -79,22 +79,26 @@ function itemsOf(output) {
 /**
  * @param {any[]} rawItems
  * @param {string} [toolName]
- * @returns {{ type: string, label: string }[]}
+ * @returns {{ type: string, label: string, text: string }[]}
  */
 function normalizeItems(rawItems, toolName) {
   return rawItems.map((r) => ({
     type: r?.type || DEFAULT_TYPE_BY_TOOL[toolName ?? ''] || 'resource',
-    label: r?.title ?? r?.name ?? r?.heading ?? ''
+    label: r?.title ?? r?.name ?? r?.heading ?? '',
+    // `match` also sees subtitle + description: a passage's text lives in description
+    text: [r?.title ?? r?.name, r?.subtitle ?? r?.heading, r?.description]
+      .filter(Boolean)
+      .join(' | ')
   }));
 }
 
 /**
- * @param {{ type: string, label: string }[]} top3
+ * @param {{ type: string, label: string, text: string }[]} top3
  * @param {{ types: string[], match?: string }} expect
  */
 function matchesExpect(top3, expect) {
   const typeHit = top3.some((i) => expect.types.includes(i.type));
-  const matchHit = !expect.match || top3.some((i) => new RegExp(expect.match, 'i').test(i.label));
+  const matchHit = !expect.match || top3.some((i) => new RegExp(expect.match, 'i').test(i.text));
   return typeHit && matchHit;
 }
 
@@ -115,11 +119,11 @@ function sleep(ms) {
 
 /**
  * @param {string} label
- * @param {{ fixture: any, items: {type:string,label:string}[], toolsUsed: string[], unavailable: boolean, ms: number }} r
+ * @param {{ fixture: any, items: {type:string,label:string,text:string}[], toolsUsed: string[], unavailable: boolean, ms: number, sourcesUnavailable?: string[] }} r
  * @param {{ requireTools?: boolean }} [opts] tier 2 also checks `expect.tools`; tier 1 has no tool concept.
  */
 function printCase(label, r, { requireTools = false } = {}) {
-  const { fixture, items, toolsUsed, unavailable, ms } = r;
+  const { fixture, items, toolsUsed, unavailable, ms, sourcesUnavailable = [] } = r;
   const top3 = items.slice(0, 3);
   const hit =
     unavailable ||
@@ -132,7 +136,9 @@ function printCase(label, r, { requireTools = false } = {}) {
     }`
   );
   console.log(
-    `  hit: ${hit ? 'yes' : 'no'}${unavailable ? ' (source unavailable, accepted)' : ''}  ms: ${ms}`
+    `  hit: ${hit ? 'yes' : 'no'}${unavailable ? ' (source unavailable, accepted)' : ''}  ms: ${ms}${
+      sourcesUnavailable.length ? `  sourcesUnavailable: ${sourcesUnavailable.join(', ')}` : ''
+    }`
   );
   return hit;
 }
@@ -156,7 +162,9 @@ async function runTier1Eval() {
     const ms = Date.now() - start;
     const items = normalizeItems(Array.isArray(result) ? result : (result?.items ?? []));
     const unavailable = Boolean(fixture.mayBeUnavailable && result?.sourcesUnavailable?.length);
-    if (printCase('tier1', { fixture, items, toolsUsed: [], unavailable, ms })) hits++;
+    const sourcesUnavailable = result?.sourcesUnavailable ?? [];
+    if (printCase('tier1', { fixture, items, toolsUsed: [], unavailable, ms, sourcesUnavailable }))
+      hits++;
   }
   console.log(`\n=== tier1 summary ===`);
   console.log(

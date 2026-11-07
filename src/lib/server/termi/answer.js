@@ -11,6 +11,8 @@ import { createKnowledgeTools, DEFAULT_SEARCH_RELAYS, nopeMcpCaller } from './kn
 
 const MAX_ITEMS = 8;
 const DIVERSE_TOP = 4;
+// Below this a passage is a loose fit ("Lehrformate & Methoden" for a Vorkurs question) and ranks with the content.
+const PASSAGE_FIRST_SCORE = 0.5;
 
 /** @typedef {import('./items.js').Item} Item */
 /** @typedef {ReturnType<typeof createKnowledgeTools>} KnowledgeTools */
@@ -33,6 +35,26 @@ function toolsFromProcessEnv() {
     callTool: nopeMcpCaller({ mcpUrl, getToken, callTool: callNopeMcpTool }),
     relays: parseSearchRelays(process.env.TERMI_SEARCH_RELAYS)
   });
+}
+
+/** Words that start a capitalised pair without being a name. */
+const NOT_NAMES = /^(?:Sie|Ihr|Ihre|Ihnen|Wissen|Thema|Fach|Bereich)$/;
+
+/**
+ * A person's name in the sentence: quoted, after namens/named, or two
+ * capitalised words not at the start ("Jörg Lohrer") — German capitalises
+ * every noun, so a single capitalised word is no name.
+ * @param {string} text
+ */
+function personName(text) {
+  const quoted = text.match(/["„“]([^"„“”]{2,80})["“”]/)?.[1];
+  if (quoted) return quoted.trim();
+  const named = text.match(/\b(?:namens|named)\s+(.+?)[?!.]*$/i)?.[1];
+  if (named) return named.trim();
+  for (const m of text.matchAll(/(?<=\s)(\p{Lu}[\p{Ll}-]+)\s+(\p{Lu}[\p{Ll}-]+)/gu)) {
+    if (!NOT_NAMES.test(m[1])) return `${m[1]} ${m[2]}`;
+  }
+  return undefined;
 }
 
 /** @param {string} s */
@@ -59,8 +81,12 @@ export async function answerQuestion(text, locale, tools = toolsFromProcessEnv()
     ['find_community', () => tools.findCommunity(topic)],
     ['search_content', () => tools.searchContent(contentQuery)]
   ];
-  if (cues.person) calls.push(['find_people', () => tools.findPeople(topic)]);
+  const name = cues.person && personName(text);
+  if (name) calls.push(['find_people', () => tools.findPeople(name)]);
+  if (cues.person) calls.push(['find_people', () => tools.aggregatePeople(contentQuery)]);
   if (cues.event) calls.push(['search_events', () => tools.searchEvents(topic)]);
+  if (cues.question)
+    calls.push(['search_passages', () => tools.searchPassages(text, { limit: 3 })]);
 
   const settled = await Promise.allSettled(calls.map(([, run]) => run()));
   /** @type {Item[]} */
@@ -78,18 +104,17 @@ export async function answerQuestion(text, locale, tools = toolsFromProcessEnv()
   });
 
   const topicWords = words(topic);
-  /** @param {Item} it */
-  const communityFirst = (it) =>
+  /** 0 = community matched by name, 1 = confident passage answering a question, 2 = the rest. @param {Item} it */
+  const tier = (it) =>
     it.type === 'community' &&
-    (cues.community || topicWords.some((w) => it.title.toLowerCase().includes(w)));
+    (cues.community || topicWords.some((w) => it.title.toLowerCase().includes(w)))
+      ? 0
+      : it.type === 'passage' && cues.question && (it.score ?? 0) >= PASSAGE_FIRST_SCORE
+        ? 1
+        : 2;
   const ranked = all
     .map((it, i) => ({ it, i }))
-    .sort(
-      (a, b) =>
-        Number(communityFirst(b.it)) - Number(communityFirst(a.it)) ||
-        (b.it.score ?? 0) - (a.it.score ?? 0) ||
-        a.i - b.i
-    )
+    .sort((a, b) => tier(a.it) - tier(b.it) || (b.it.score ?? 0) - (a.it.score ?? 0) || a.i - b.i)
     .map(({ it }) => it);
 
   // Type diversity: the best item of every type makes the top 4 (in rank order), the rest follows.

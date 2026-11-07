@@ -31,6 +31,7 @@ const RESOURCE_FILTERS = [
   'licenseFilter'
 ];
 const PASSAGE_KINDS = [30142, 30023, 30818, 30040, 30041];
+const MAX_PEOPLE = 5;
 
 /** @typedef {import('./items.js').Item} Item */
 /** @typedef {{ items: Item[], sourcesUnavailable: string[] }} ToolResult */
@@ -125,13 +126,13 @@ export function createKnowledgeTools({ callTool, relays = DEFAULT_SEARCH_RELAYS,
       return toResult(r, normalizeEvent, r?.events);
     },
 
-    /** @param {string} question @param {{ relay?: string }} [opts] */
-    async searchPassages(question, { relay } = {}) {
+    /** @param {string} question @param {{ relay?: string, limit?: number }} [opts] */
+    async searchPassages(question, { relay, limit = 4 } = {}) {
       const r = await callTool('search_passages', {
         question,
         kinds: PASSAGE_KINDS,
         relays: relay ? [relay] : relays,
-        limit: 4
+        limit
       });
       return toResult(r, normalizePassage, r?.passages);
     },
@@ -141,6 +142,51 @@ export function createKnowledgeTools({ callTool, relays = DEFAULT_SEARCH_RELAYS,
       return optional('find_community', { query: q }, (r) =>
         toResult(r, normalizeCommunity, r?.communities)
       );
+    },
+
+    /**
+     * People behind the content on a topic: Person creators/publishers of the
+     * first relay's hits (our own relay — catalogue creators are rarely in the
+     * network and would crowd them out), most frequent first, then by best hit
+     * score; each resolved via resolve_author, kept as a linked person only on
+     * an exact name match, else name-only (no href).
+     * @param {string} topic
+     */
+    async aggregatePeople(topic) {
+      const r = await callTool('search_content', {
+        query: topic,
+        relays: relays.slice(0, 1),
+        limit: 20
+      });
+      /** @type {Map<string, { count: number, best: number }>} */
+      const tally = new Map();
+      for (const hit of Array.isArray(r?.results) ? r.results : []) {
+        for (const e of [...(hit?.creator ?? []), ...(hit?.publisher ?? [])]) {
+          const name = typeof e?.name === 'string' ? e.name.trim() : '';
+          if (e?.type !== 'Person' || !name) continue;
+          const t = tally.get(name) ?? { count: 0, best: 0 };
+          tally.set(name, { count: t.count + 1, best: Math.max(t.best, hit.score ?? 0) });
+        }
+      }
+      const names = [...tally]
+        .sort(([, a], [, b]) => b.count - a.count || b.best - a.best)
+        .slice(0, MAX_PEOPLE)
+        .map(([name]) => name);
+      const items = await Promise.all(
+        names.map(async (name) => {
+          const res = await callTool('resolve_author', { name, limit: 5 }).catch(() => null);
+          const match = (Array.isArray(res?.candidates) ? res.candidates : []).find(
+            (/** @type {any} */ c) => c?.name?.trim().toLowerCase() === name.toLowerCase()
+          );
+          return (
+            (match && normalizePerson(match)) ?? { type: 'person', id: `name:${name}`, title: name }
+          );
+        })
+      );
+      return {
+        items: /** @type {Item[]} */ (items),
+        sourcesUnavailable: Array.isArray(r?.relaysIncomplete) ? r.relaysIncomplete : []
+      };
     },
 
     /** @param {string} q */

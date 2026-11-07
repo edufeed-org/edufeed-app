@@ -131,6 +131,57 @@ describe('createKnowledgeTools', () => {
     );
   });
 
+  it('searchPassages takes a limit', async () => {
+    const { callTool, tools } = setup();
+    await tools.searchPassages('Aktivierung', { limit: 3 });
+    expect(callTool.mock.calls[0][1].limit).toBe(3);
+  });
+
+  it('aggregatePeople ranks Person creators of first-relay hits and resolves exact names', async () => {
+    const lohrer = resolveAuthor.candidates[1];
+    const hits = [
+      {
+        score: 0.3,
+        creator: [
+          { name: 'Laura Mößle', type: 'Person' },
+          { name: 'Viera Pirker', type: 'Person' }
+        ]
+      },
+      {
+        score: 0.1,
+        creator: [{ name: 'Laura Mößle', type: 'Person' }],
+        publisher: [{ name: 'LEHRE LADEN', type: 'Organization' }]
+      },
+      { score: 0.05, creator: [{ name: 'Jörg Lohrer', type: 'Person' }] },
+      ...['A', 'B', 'C', 'D'].map((n) => ({
+        score: 0.01,
+        creator: [{ name: `P ${n}`, type: 'Person' }]
+      }))
+    ];
+    const { callTool, tools } = setup(async (name, args) => {
+      if (name === 'search_content') return { results: hits, relaysIncomplete: [] };
+      if (args.name === 'Jörg Lohrer') return { candidates: [{ ...lohrer, name: 'jörg lohrer' }] };
+      if (args.name === 'Viera Pirker') throw new Error('down');
+      return { candidates: [{ ...lohrer, name: 'Someone Else' }] };
+    });
+    const out = await tools.aggregatePeople('OER Lizenzen');
+    expect(callTool).toHaveBeenCalledWith('search_content', {
+      query: 'OER Lizenzen',
+      relays: ['amb-relay'],
+      limit: 20
+    });
+    expect(callTool.mock.calls.filter(([n]) => n === 'resolve_author')).toHaveLength(5);
+    expect(out.items.map((i) => i.title)).toEqual([
+      'Laura Mößle',
+      'Viera Pirker',
+      'jörg lohrer',
+      'P A',
+      'P B'
+    ]);
+    expect(out.items[0]).toEqual({ type: 'person', id: 'name:Laura Mößle', title: 'Laura Mößle' });
+    expect(out.items[2].href).toBe(`/p/${lohrer.npub}`);
+  });
+
   it('findCommunity maps communities (2a)', async () => {
     const { tools } = setup();
     const out = await tools.findCommunity('e-teaching');

@@ -703,7 +703,7 @@ export function extractQuery(text, locale) {
  * Which extra Termi knowledge sources a sentence asks for.
  *
  * @param {string} text
- * @returns {{ event: boolean, person: boolean, community: boolean }}
+ * @returns {{ event: boolean, person: boolean, community: boolean, question: boolean }}
  */
 export function questionCues(text) {
   const s = String(text ?? '');
@@ -713,7 +713,11 @@ export function questionCues(text) {
         s
       ),
     person: /\bwer\b|\bwho\b|\bnamens\b|\bnamed\b|"[^"]+"|„[^“]+“/i.test(s),
-    community: /com+unit(?:y|ies)|gemeinschaft/i.test(s)
+    community: /com+unit(?:y|ies)|gemeinschaft/i.test(s),
+    question:
+      /\b(?:wie|was|warum|wieso|weshalb|kann\s+ich|soll(?:te)?\s+ich|verbessern|tipps|how|what|why|can\s+i|should\s+i|improve)\b/i.test(
+        s
+      )
   };
 }
 

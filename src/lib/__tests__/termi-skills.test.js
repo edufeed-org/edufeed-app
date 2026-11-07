@@ -123,45 +123,58 @@ describe('extractQuery', () => {
 
 describe('questionCues', () => {
   it.each([
-    ['ich suche die e-teaching community', { event: false, person: false, community: true }],
-    ["I'm looking for the e-teaching community", { event: false, person: false, community: true }],
+    [
+      'ich suche die e-teaching community',
+      { event: false, person: false, community: true, question: false }
+    ],
+    [
+      "I'm looking for the e-teaching community",
+      { event: false, person: false, community: true, question: false }
+    ],
     [
       'ich suche nach Fortbildungen zum Thema X, im Fach Y',
-      { event: true, person: false, community: false }
+      { event: true, person: false, community: false, question: false }
     ],
     [
       'ich suche fortbildungn zum thema medienkompetenz im fach deutsch',
-      { event: true, person: false, community: false }
+      { event: true, person: false, community: false, question: false }
     ],
     [
       'meine Studierenden/Schüler sind unaufmerksam, was kann ich verbessern?',
-      { event: false, person: false, community: false }
+      { event: false, person: false, community: false, question: true }
     ],
     [
       'ich suche nach Unterrichtsentwürfen zum Thema Nachhaltigkeit',
-      { event: false, person: false, community: false }
+      { event: false, person: false, community: false, question: false }
     ],
     [
       'wie bereite ich mich auf den Statistik-Vorkurs vor?',
-      { event: false, person: false, community: false }
+      { event: false, person: false, community: false, question: true }
     ],
     [
       'wer beschäftigt sich mit dem Thema OER-Lizenzen in Deutschland?',
-      { event: false, person: true, community: false }
+      { event: false, person: true, community: false, question: false }
     ],
     [
       'who works on OER licensing topics in Germany',
-      { event: false, person: true, community: false }
+      { event: false, person: true, community: false, question: false }
     ],
     [
       'welche comunity beschäftigt sich mit religionspädagogik',
-      { event: false, person: false, community: true }
+      { event: false, person: false, community: true, question: false }
     ],
     [
       'welche Projekte werden im Bereich gendersensibler Unterricht durchgeführt?',
-      { event: false, person: false, community: false }
+      { event: false, person: false, community: false, question: false }
     ],
-    ['Wo finde ich Leute namens Jörg?', { event: false, person: true, community: false }]
+    [
+      'how can I improve attention',
+      { event: false, person: false, community: false, question: true }
+    ],
+    [
+      'Wo finde ich Leute namens Jörg?',
+      { event: false, person: true, community: false, question: false }
+    ]
   ])('questionCues(%j)', (text, expected) => {
     expect(questionCues(text)).toEqual(expected);
   });

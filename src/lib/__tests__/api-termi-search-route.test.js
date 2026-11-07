@@ -7,6 +7,7 @@ const ENV = { TERMI_AI_ENABLED: 'true', NOPE_MCP_URL: 'https://mcp.example/mcp' 
 
 /** @param {Partial<import('$lib/server/termi/items.js').Item>} p @returns {any} */
 const item = (p) => ({ id: p.title, title: 'x', href: '/x', ...p });
+/** @type {{ items: any[], sourcesUnavailable: string[] }} */
 const none = { items: [], sourcesUnavailable: [] };
 
 /** Fake knowledge tools; every one answers nothing unless overridden. @param {Record<string, any>} [over] */
@@ -18,6 +19,7 @@ function fakeTools(over = {}) {
     searchPassages: vi.fn(async () => none),
     findCommunity: vi.fn(async () => none),
     findPeople: vi.fn(async () => none),
+    aggregatePeople: vi.fn(async () => none),
     ...over
   };
 }
@@ -71,12 +73,65 @@ describe('answerQuestion', () => {
     ).toBe(true);
   });
 
-  it('runs findPeople on a person cue', async () => {
-    const tools = fakeTools();
-    await answerQuestion('wer beschäftigt sich mit dem Thema OER-Lizenzen?', 'de', tools);
-    expect(tools.findPeople).toHaveBeenCalledWith('OER-Lizenzen');
+  it('aggregates people for "wer …", resolve_author by name only for a named person', async () => {
+    const tools = fakeTools({
+      searchContent: vi.fn(async () => ({
+        items: [1, 2, 3].map((i) => item({ type: 'resource', title: `r${i}`, score: 0.7 })),
+        sourcesUnavailable: []
+      })),
+      aggregatePeople: vi.fn(async () => ({
+        items: [item({ type: 'person', title: 'Laura Mößle', href: undefined })],
+        sourcesUnavailable: []
+      }))
+    });
+    const { items } = await answerQuestion(
+      'wer beschäftigt sich mit dem Thema OER-Lizenzen?',
+      'de',
+      tools
+    );
+    expect(tools.aggregatePeople).toHaveBeenCalledWith('OER Lizenzen');
+    expect(tools.findPeople).not.toHaveBeenCalled();
     // the relay's NIP-50 search misses hyphenated compounds
     expect(tools.searchContent).toHaveBeenCalledWith('OER Lizenzen');
+    expect(items.slice(0, 3).map((i) => i.type)).toContain('person');
+
+    await answerQuestion('wer ist Jörg Lohrer?', 'de', tools);
+    expect(tools.findPeople).toHaveBeenCalledWith('Jörg Lohrer');
+    await answerQuestion('Wo finde ich Leute namens Jörg?', 'de', tools);
+    expect(tools.findPeople).toHaveBeenLastCalledWith('Jörg');
+  });
+
+  it('runs searchPassages (limit 3) on a question cue and puts passages before content', async () => {
+    const tools = fakeTools({
+      searchContent: vi.fn(async () => ({
+        items: [1, 2, 3].map((i) => item({ type: 'resource', title: `r${i}`, score: 0.9 })),
+        sourcesUnavailable: []
+      })),
+      searchPassages: vi.fn(async () => ({
+        items: [item({ type: 'passage', title: 'p1', score: 0.7 })],
+        sourcesUnavailable: []
+      }))
+    });
+    const text = 'meine Schüler sind unaufmerksam, was kann ich verbessern?';
+    const { items } = await answerQuestion(text, 'de', tools);
+    expect(tools.searchPassages).toHaveBeenCalledWith(text, { limit: 3 });
+    expect(items[0]).toMatchObject({ type: 'passage', title: 'p1' });
+
+    // a loose passage ranks with the content
+    tools.searchPassages.mockResolvedValueOnce({
+      items: [item({ type: 'passage', title: 'loose', score: 0.3 })],
+      sourcesUnavailable: []
+    });
+    const loose = await answerQuestion(text, 'de', tools);
+    expect(loose.items[0].title).toBe('r1');
+
+    tools.searchPassages.mockClear();
+    await answerQuestion(
+      'ich suche nach Unterrichtsentwürfen zum Thema Nachhaltigkeit',
+      'de',
+      tools
+    );
+    expect(tools.searchPassages).not.toHaveBeenCalled();
   });
 
   it('drops weak items', async () => {
