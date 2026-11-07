@@ -54,10 +54,12 @@ import TermiChatWindow from '../TermiChatWindow.svelte';
 
 /** @param {Array<{skill: string, score: number}> | number} answer matches, or an HTTP status */
 function stubRouter(answer) {
-  const fetchMock = vi.fn(async () =>
-    typeof answer === 'number'
-      ? new Response('', { status: answer })
-      : new Response(JSON.stringify({ matches: answer }), { status: 200 })
+  const fetchMock = vi.fn(async (/** @type {string} */ url) =>
+    url.startsWith('/api/termi/eligible')
+      ? new Response(JSON.stringify({ eligible: true, gated: true }))
+      : typeof answer === 'number'
+        ? new Response('', { status: answer })
+        : new Response(JSON.stringify({ matches: answer }), { status: 200 })
   );
   vi.stubGlobal('fetch', fetchMock);
   return fetchMock;

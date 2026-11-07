@@ -69,6 +69,9 @@ describe('TermiChatWindow assistant start after close', () => {
     vi.stubGlobal(
       'fetch',
       vi.fn(async (/** @type {string} */ url) => {
+        if (url.startsWith('/api/termi/eligible')) {
+          return new Response(JSON.stringify({ eligible: true, gated: true }));
+        }
         if (url === '/api/termi') {
           return new Response(
             JSON.stringify({ matches: [{ skill: 'assistant.search', score: 0.92 }] })

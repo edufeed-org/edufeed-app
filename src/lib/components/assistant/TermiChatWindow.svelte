@@ -22,7 +22,15 @@
   import { TERMI_SKILLS, learningSearchSkill, extractQuery } from '$lib/helpers/termi-skills.js';
   import { runCreateAction } from '$lib/helpers/run-create-action.js';
   import { canSign } from '$lib/helpers/signing-guard.js';
-  import { routeQuestion, skillAction, answerableSkill, helpAnswer } from './termi-router.js';
+  import { untrack } from 'svelte';
+  import {
+    routeQuestion,
+    skillAction,
+    answerableSkill,
+    helpAnswer,
+    isTermiEligible,
+    markTermiIneligible
+  } from './termi-router.js';
 
   /**
    * @type {{
@@ -381,11 +389,47 @@
   const learningHref = (/** @type {string} */ q) =>
     q ? `/discover?type=learning&search=${encodeURIComponent(q)}` : '/discover?type=learning';
 
+  /**
+   * The assistant signs every request (no readonly account) and is gated by
+   * NIP-05 domain on the server; the probe predicts that answer.
+   * @param {ReturnType<typeof getActiveUser>} user
+   */
+  const canUseAssistant = (user) => !!runtimeConfig.termi?.llm && canSign(user);
+  /** @param {ReturnType<typeof getActiveUser>} user */
+  const assistantAllowed = async (user) =>
+    canUseAssistant(user) && (await isTermiEligible(/** @type {any} */ (user).pubkey, fetch));
+
+  /** Back to router mode with a line and the plain learning search. @param {string} text @param {string} q */
+  function fallBackToSearch(text, q) {
+    leaveAssistant();
+    botTyping = false;
+    msgs = [
+      ...msgs,
+      { role: 'bot', text, actions: [{ label: m.termi_quota_link(), href: learningHref(q) }] }
+    ];
+  }
+
+  // Pubkey the current assistant chat signs as; plain let, read by the account-switch effect.
+  /** @type {string | undefined} */
+  let assistantPubkey;
+
   /** @param {string} text the user's question, already shown as the router bubble */
   async function startAssistant(text) {
     const user = getActiveUser();
-    const { createTermiChat } = await import('./termi-chat.svelte.js');
+    // The "maybe" button may be clicked long after it was offered: check again.
+    const allowed = await assistantAllowed(user);
     if (destroyed) return;
+    if (!allowed || user?.pubkey !== getActiveUser()?.pubkey) {
+      const q = extractQuery(text, getLocale() === 'en' ? 'en' : 'de');
+      fallBackToSearch(
+        canUseAssistant(user) ? m.termi_assistant_not_eligible() : m.termi_assistant_unavailable(),
+        q
+      );
+      return;
+    }
+    const { createTermiChat } = await import('./termi-chat.svelte.js');
+    if (destroyed || user?.pubkey !== getActiveUser()?.pubkey) return;
+    assistantPubkey = /** @type {any} */ (user).pubkey;
     assistant = createTermiChat({
       task: 'search',
       user: /** @type {any} */ (user)
@@ -394,23 +438,24 @@
     await talk((chat) => chat.sendMessage({ text }));
   }
 
+  // An account switch ends the chat: it was signed, and gated, as the old account.
+  $effect(() => {
+    const pubkey = getActiveUser()?.pubkey;
+    if (assistant && pubkey !== assistantPubkey) untrack(restart);
+  });
+
   /** @param {(chat: import('@ai-sdk/svelte').Chat) => Promise<void>} run */
   async function talk(run) {
     const current = assistant;
     if (!current) return;
     await run(current.chat);
+    if (current !== assistant) return;
     // 503: LLM or nope-mcp not configured — back to the router with the plain search.
-    if (current === assistant && chatError?.status === 503) {
-      const q = chatQuery;
-      leaveAssistant();
-      msgs = [
-        ...msgs,
-        {
-          role: 'bot',
-          text: m.termi_assistant_unavailable(),
-          actions: [{ label: m.termi_quota_link(), href: learningHref(q) }]
-        }
-      ];
+    if (chatError?.status === 503) fallBackToSearch(m.termi_assistant_unavailable(), chatQuery);
+    // 403: the NIP-05 gate refused this account (the probe was stale).
+    else if (chatError?.status === 403) {
+      if (assistantPubkey) markTermiIneligible(assistantPubkey);
+      fallBackToSearch(m.termi_assistant_not_eligible(), chatQuery);
     }
   }
 
@@ -438,8 +483,7 @@
         ctx: {
           loggedIn: !!user,
           discoverTypes: runtimeConfig.discover?.contentTypes ?? [],
-          // The assistant signs every request: a readonly (npub) account can't use it.
-          llm: !!runtimeConfig.termi?.llm && canSign(user)
+          llm: await assistantAllowed(user)
         }
       });
       if (decision.kind === 'confident' && decision.skill === 'assistant.search') {
@@ -771,7 +815,7 @@
             class="max-w-[82%] rounded-2xl rounded-bl-md border border-base-300 bg-base-200 px-3.5 py-2.5 text-sm leading-relaxed"
           >
             {#if chatError.status === 429}
-              <!-- 'user' = today's own cap; the monthly global cap and the per-IP rate read alike. -->
+              <!-- 'user' = today's own cap; anything else is the monthly global cap. -->
               {chatError.scope === 'user' ? m.termi_quota() : m.termi_quota_global()}
               <div class="mt-2">
                 <a href={learningHref(chatQuery)} class="btn btn-sm btn-primary">

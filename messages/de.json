@@ -3318,6 +3318,7 @@
   "termi_assistant_error": "Das hat gerade nicht geklappt.",
   "termi_assistant_retry": "Erneut senden",
   "termi_assistant_unavailable": "Die KI-Suche ist gerade nicht verfügbar. Hier geht es zur normalen Suche:",
+  "termi_assistant_not_eligible": "Die KI-Suche ist für Mitglieder ausgewählter Einrichtungen freigeschaltet.",
   "termi_quota": "Für heute habe ich genug gesucht — mein Kontingent ist aufgebraucht. In der normalen Suche findest du weiter alles:",
   "termi_quota_global": "Gerade wird sehr viel gesucht — die KI-Suche pausiert vorerst. In der normalen Suche findest du weiter alles:",
   "termi_quota_link": "Zur Suche",

@@ -80,6 +80,9 @@ function streamAnswer({ toolName = 'search_resources', text = 'Hier sind Treffer
   });
 }
 
+/** The NIP-05 gate's probe says yes (the gate itself: TermiChatWindow.eligibility). */
+const eligibleAnswer = () => new Response(JSON.stringify({ eligible: true, gated: true }));
+
 /** @type {Array<{ url: string, init: RequestInit }>} */
 let chatCalls;
 
@@ -89,6 +92,7 @@ function stubFetch(chatAnswer, skill = 'assistant.search') {
   vi.stubGlobal(
     'fetch',
     vi.fn(async (/** @type {string} */ url, /** @type {RequestInit} */ init) => {
+      if (url.startsWith('/api/termi/eligible')) return eligibleAnswer();
       if (url === '/api/termi') {
         return new Response(JSON.stringify({ matches: [{ skill, score: 0.92 }] }));
       }
@@ -190,10 +194,7 @@ describe('TermiChatWindow assistant mode', () => {
     expect(link.getAttribute('href')).toBe('/discover?type=learning&search=Br%C3%BCchen');
   });
 
-  it.each([
-    [{ error: 'quota', scope: 'global' }, 'global monthly cap'],
-    [{ error: 'rate' }, 'per-IP rate']
-  ])(
+  it.each([[{ error: 'quota', scope: 'global' }, 'global monthly cap']])(
     'HTTP 429 %o → the non-daily quota line plus the learning search link (%s)',
     async (body, _label) => {
       stubFetch(() => new Response(JSON.stringify(body), { status: 429 }));
@@ -228,6 +229,7 @@ describe('TermiChatWindow assistant mode', () => {
     vi.stubGlobal(
       'fetch',
       vi.fn(async (/** @type {string} */ url, /** @type {RequestInit} */ init) => {
+        if (url.startsWith('/api/termi/eligible')) return eligibleAnswer();
         if (url === '/api/termi') {
           return new Response(
             JSON.stringify({

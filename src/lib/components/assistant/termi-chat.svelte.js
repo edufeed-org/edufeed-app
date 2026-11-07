@@ -7,7 +7,7 @@ import { Chat } from '@ai-sdk/svelte';
 import { DefaultChatTransport } from 'ai';
 import { buildSignedChatRequest } from './termi-chat-request.js';
 
-/** A non-stream answer the window handles itself (429 quota/rate, 503 off). */
+/** A non-stream answer the window handles itself (429 quota, 403 not eligible, 503 off). */
 export class TermiChatHttpError extends Error {
   /** @param {number} status @param {string} [scope] 429 quota: 'user' | 'global' */
   constructor(status, scope) {
@@ -45,7 +45,7 @@ export function createTermiChat({
         const body = await res.json().catch(() => null);
         throw new TermiChatHttpError(429, body?.scope);
       }
-      if (res.status === 503) throw new TermiChatHttpError(503);
+      if (res.status === 503 || res.status === 403) throw new TermiChatHttpError(res.status);
       return res;
     }
   });

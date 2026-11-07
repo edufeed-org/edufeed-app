@@ -153,3 +153,39 @@ export function skillAction(skill, { query, npub, runCreate, runHelp }) {
       return null;
   }
 }
+
+/** pubkey → the probe's definitive answer, for this session (page load). */
+const eligibility = new Map();
+
+/**
+ * Whether the assistant's NIP-05 gate admits this pubkey (/api/termi/eligible).
+ * `null` (a directory not loaded yet) and errors count as "no" without being
+ * remembered, so a later question asks again.
+ *
+ * @param {string} pubkey
+ * @param {typeof fetch} fetchImpl
+ * @returns {Promise<boolean>}
+ */
+export async function isTermiEligible(pubkey, fetchImpl) {
+  if (eligibility.has(pubkey)) return eligibility.get(pubkey);
+  try {
+    const res = await fetchImpl(`/api/termi/eligible?pubkey=${pubkey}`, {
+      signal: AbortSignal.timeout(4_000)
+    });
+    const body = res.ok ? await res.json() : null;
+    if (typeof body?.eligible === 'boolean') eligibility.set(pubkey, body.eligible);
+    return body?.eligible === true;
+  } catch {
+    return false;
+  }
+}
+
+/** The chat route said 403 not_eligible: believe it over an older probe. @param {string} pubkey */
+export function markTermiIneligible(pubkey) {
+  eligibility.set(pubkey, false);
+}
+
+/** Test seam. */
+export function _resetTermiEligibilityForTests() {
+  eligibility.clear();
+}
