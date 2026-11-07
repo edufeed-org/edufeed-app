@@ -4,6 +4,9 @@
  * routing paths (keyword always; embedding only when TERMI_EMBED_URL +
  * TERMI_EMBED_API_KEY are set) and reports hit rate + a confusion list per
  * path. Used to tune `THRESHOLDS` in src/lib/helpers/termi-skills.js (Task 11).
+ * Also runs every content question of scripts/fixtures/termi-questions.json
+ * through the keyword path: each must come out `none` (→ content path); any
+ * other decision is a hijack by a navigate/create/help skill.
  *
  *   node scripts/termi-eval.js
  *
@@ -86,6 +89,22 @@ function runPath(label, getMatches, mode) {
 }
 
 runPath('keyword', (text, locale) => keywordMatch(text, TERMI_SKILLS, locale), 'keyword');
+
+const questions = JSON.parse(
+  readFileSync(new URL('./fixtures/termi-questions.json', import.meta.url), 'utf-8')
+);
+const hijacks = questions
+  .map((/** @type {{ text: string, locale: 'de'|'en' }} */ { text, locale }) => ({
+    text,
+    decision: decide(keywordMatch(text, TERMI_SKILLS, locale), { mode: 'keyword' })
+  }))
+  .filter(({ decision }) => decision.kind !== 'none');
+console.log('\n=== keyword: content questions (termi-questions.json, expect none) ===');
+console.log(`hijacked: ${hijacks.length} of ${questions.length}`);
+for (const { text, decision } of hijacks) {
+  const got = decision.kind === 'confident' ? decision.skill : `maybe:${decision.skills.join(',')}`;
+  console.log(`  "${text}" got=${got}`);
+}
 
 const embedUrl = process.env.TERMI_EMBED_URL;
 const embedApiKey = process.env.TERMI_EMBED_API_KEY;

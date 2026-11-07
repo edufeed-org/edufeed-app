@@ -710,12 +710,9 @@ export function availableSkills(skills, { loggedIn }) {
 /**
  * Score thresholds. `embed` stays at its initial values — the dev embedding
  * key doesn't exist yet, so the embed path hasn't been run through
- * `scripts/termi-eval.js` (see that script's report). `keyword` is tuned
- * from the eval: keyword phrase-overlap scores vary a lot with phrase
- * length, so "confident" here means "this candidate has no close rival"
- * (large MARGIN) rather than a high absolute score (low CONFIDENT floor
- * just screens out near-zero single matches) — or a multi-word catalogue
- * phrase matched in full that no rival also matches in full (see `decide`).
+ * `scripts/termi-eval.js` (see that script's report). The keyword path no
+ * longer uses scores to decide (see `decide`); its values only document the
+ * old tuning and are kept for the eval's comparison.
  */
 export const THRESHOLDS = {
   embed: { CONFIDENT: 0.82, MAYBE: 0.72, MARGIN: 0.05 },
@@ -725,6 +722,11 @@ export const THRESHOLDS = {
 /**
  * Turn ranked matches into a routing decision.
  *
+ * Keyword mode counts only multi-word catalogue phrases matched in full:
+ * exactly one such skill = confident, several = maybe, none = `none` (the
+ * content path). Partial overlap ("termine", "wer") would otherwise let a
+ * navigate/create/help skill capture a content question.
+ *
  * @param {Array<{ skill: string, score: number, full?: boolean }>} matches
  * @param {{ mode: 'embed'|'keyword' }} opts
  * @returns {{ kind: 'confident', skill: string } | { kind: 'maybe', skills: string[] } | { kind: 'none' }}
@@ -733,12 +735,15 @@ export function decide(matches, { mode }) {
   const t = THRESHOLDS[mode];
   if (!matches || matches.length === 0) return { kind: 'none' };
   const sorted = [...matches].sort((a, b) => b.score - a.score);
+  if (mode === 'keyword') {
+    const full = sorted.filter((m) => m.full);
+    if (full.length === 1) return { kind: 'confident', skill: full[0].skill };
+    if (full.length > 1) return { kind: 'maybe', skills: full.slice(0, 3).map((m) => m.skill) };
+    return { kind: 'none' };
+  }
   const [top, second] = sorted;
   const clearLead = !second || top.score - second.score >= t.MARGIN;
-  // A catalogue phrase matched in full is a clear pick unless a rival also has
-  // one: shared verbs ("zeig") give rivals 0.5, so the margin alone can't clear it.
-  const fullPhrase = mode === 'keyword' && !!top.full && !sorted.some((m) => m !== top && m.full);
-  if (top.score >= t.CONFIDENT && (clearLead || fullPhrase)) {
+  if (top.score >= t.CONFIDENT && clearLead) {
     return { kind: 'confident', skill: top.skill };
   }
   if (top.score >= t.MAYBE) {

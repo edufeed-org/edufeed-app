@@ -521,11 +521,17 @@
     /** @type {TermiAction[]} */
     const actions = [];
     for (const item of items) {
-      if (item.href) actions.push({ label: item.title, href: item.href });
-      else if (item.sourceUrl) {
+      if (!item.title) continue; // no unlabelled buttons
+      // Classified here, whatever the field: passages carry their external URL in `href`.
+      if (item.href?.startsWith('/') && !item.href.startsWith('//')) {
+        actions.push({ label: item.title, href: item.href });
+        continue;
+      }
+      const external = [item.href, item.sourceUrl].find((u) => u && /^https?:\/\//i.test(u));
+      if (external) {
         actions.push({
           label: item.title,
-          href: item.sourceUrl,
+          href: external,
           target: '_blank',
           rel: 'noopener noreferrer'
         });

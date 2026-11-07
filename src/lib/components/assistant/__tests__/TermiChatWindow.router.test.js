@@ -187,6 +187,30 @@ describe('TermiChatWindow router answers', () => {
     expect(actions[1].getAttribute('rel')).toBe('noopener noreferrer');
   });
 
+  it('content links: external passages open safely, unsafe hrefs and empty titles get no button', async () => {
+    stubRouter(
+      [],
+      [
+        { type: 'passage', id: 'p1', title: 'Passage', href: 'https://example.org/p' },
+        { type: 'resource', id: 'r1', title: 'Protocol-relative', href: '//evil.example/x' },
+        { type: 'resource', id: 'r2', title: 'Script', href: 'javascript:alert(1)' },
+        { type: 'resource', id: 'r3', title: '', href: '/r/naddr1x' },
+        { type: 'community', id: 'c1', title: 'Intern', href: '/c/npub1abc' }
+      ]
+    );
+    const view = renderWindow();
+    await type(view, 'Was ist OER?');
+    const actions = await answerActions(view);
+    expect(actions.map((a) => [a.textContent?.trim(), a.getAttribute('href')])).toEqual([
+      ['Passage', 'https://example.org/p'],
+      ['Intern', '/c/npub1abc']
+    ]);
+    expect(actions[0].getAttribute('target')).toBe('_blank');
+    expect(actions[0].getAttribute('rel')).toBe('noopener noreferrer');
+    expect(actions[1].getAttribute('target')).toBeNull();
+    expect(view.queryByText('Protocol-relative')).toBeNull();
+  });
+
   it('"Zeig mir den Kalender" → confident navigate, no content search', async () => {
     const fetchMock = stubRouter([{ skill: 'calendar', score: 0.95 }]);
     const view = renderWindow();

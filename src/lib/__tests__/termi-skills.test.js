@@ -262,16 +262,16 @@ describe('decide', () => {
     expect(decide(matches, { mode: 'keyword' })).toEqual({ kind: 'confident', skill });
   });
 
-  it('keyword mode: a fully matched one-word phrase or two full matches stay maybe', () => {
+  it('keyword mode: one full phrase = confident, several = maybe, partial overlap only = none', () => {
     expect(
       decide(
         [
-          { skill: 'a', score: 1 },
-          { skill: 'b', score: 0.5 }
+          { skill: 'a', score: 0.6, full: true },
+          { skill: 'b', score: 0.9 }
         ],
         { mode: 'keyword' }
-      ).kind
-    ).toBe('maybe');
+      )
+    ).toEqual({ kind: 'confident', skill: 'a' });
     expect(
       decide(
         [
@@ -279,8 +279,42 @@ describe('decide', () => {
           { skill: 'b', score: 1, full: true }
         ],
         { mode: 'keyword' }
-      ).kind
-    ).toBe('maybe');
+      )
+    ).toEqual({ kind: 'maybe', skills: ['a', 'b'] });
+    // A high partial score (or a one-word phrase, never `full`) is no evidence.
+    expect(
+      decide(
+        [
+          { skill: 'a', score: 1 },
+          { skill: 'b', score: 0.2 }
+        ],
+        { mode: 'keyword' }
+      )
+    ).toEqual({ kind: 'none' });
+  });
+
+  it.each([
+    'ich suche nach Unterrichtsentwürfen zum Thema Nachhaltigkeit',
+    'wer beschäftigt sich mit dem Thema OER-Lizenzen in Deutschland?',
+    'Gibt es Termine zu KI in Hamburg?'
+  ])('keyword mode: content question "%s" is none (content path)', (text) => {
+    const available = availableSkills(TERMI_SKILLS, { loggedIn: true });
+    expect(decide(keywordMatch(text, available, 'de'), { mode: 'keyword' })).toEqual({
+      kind: 'none'
+    });
+  });
+
+  it('keyword mode: no content question of termi-questions.json is hijacked', () => {
+    const path = fileURLToPath(
+      new URL('../../../scripts/fixtures/termi-questions.json', import.meta.url)
+    );
+    const questions = JSON.parse(readFileSync(path, 'utf-8'));
+    const available = availableSkills(TERMI_SKILLS, { loggedIn: true });
+    const hijacked = questions.filter(
+      (/** @type {{ text: string, locale: 'de'|'en' }} */ q) =>
+        decide(keywordMatch(q.text, available, q.locale), { mode: 'keyword' }).kind !== 'none'
+    );
+    expect(hijacked.map((/** @type {{ text: string }} */ q) => q.text)).toEqual([]);
   });
 
   it('exposes the threshold values for both modes', () => {
