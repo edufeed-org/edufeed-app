@@ -110,6 +110,26 @@ describe('buildCrawlableContent — article (30023)', () => {
     expect(out.bodyHtml).toContain('<h1>Zukunft</h1>');
   });
 
+  it('omits the dates instead of throwing when created_at is beyond the date range', async () => {
+    const odd = {
+      ...ev(30023, [
+        ['d', 'a3'],
+        ['title', 'Zeitreise']
+      ]),
+      created_at: 9e15
+    };
+    const out = await buildCrawlableContent(odd, {
+      origin: ORIGIN,
+      appName: 'Edufeed',
+      relayHint: HINT,
+      authorName: 'Ada'
+    });
+    expect(out.jsonLd).not.toHaveProperty('dateModified');
+    expect(out.jsonLd).not.toHaveProperty('datePublished');
+    expect(out.bodyHtml).toContain('<h1>Zeitreise</h1>');
+    expect(out.bodyHtml).not.toContain('<time');
+  });
+
   it('builds a schema.org Article', async () => {
     const out = await buildCrawlableContent(article, {
       origin: ORIGIN,

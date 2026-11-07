@@ -45,6 +45,8 @@ const dTag = (event) => (event.tags?.find((t) => t[0] === 'd')?.[1] ?? '').trim(
 const isRelativePath = (d) =>
   d !== '' &&
   !/[\\?#\s:]/.test(d) &&
+  // Encoded dots/slashes: new URL() decodes %2e%2e to a dot-segment.
+  !/%(2e|2f|5c)/i.test(d) &&
   d.split('/').every((segment) => segment !== '' && segment !== '.' && segment !== '..');
 
 /**

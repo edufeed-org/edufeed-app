@@ -21,6 +21,7 @@ import { normalizePubkey, shortNpub as abbreviateNpub } from '$lib/helpers/pubke
 import {
   buildCrawlableContent,
   canonicalPathFor,
+  isoFromSeconds,
   renderHeadExtras
 } from '$lib/server/geo/page-content.js';
 import {
@@ -125,12 +126,7 @@ export function extractMetadata(event) {
     const description = summary || truncate(event.content, 200);
     const image = getArticleCoverUrl(event);
     const publishedAtTag = getTagValue(event.tags, 'published_at');
-    const publishedAtSeconds = publishedAtTag ? parseInt(publishedAtTag, 10) : NaN;
-    // Beyond ±8.64e12 s a Date is invalid and toISOString() would throw.
-    const publishedAt =
-      Number.isFinite(publishedAtSeconds) && Math.abs(publishedAtSeconds) <= 8.64e12
-        ? new Date(publishedAtSeconds * 1000).toISOString()
-        : undefined;
+    const publishedAt = isoFromSeconds(publishedAtTag ? parseInt(publishedAtTag, 10) : NaN);
     return { title, description, image, type: 'article', publishedAt };
   }
 
@@ -593,7 +589,8 @@ export async function buildPageEntry(nostrEvent, target, url, deps = {}) {
     onOwnRelays: checkOwnRelays = isOnOwnRelays,
     mirrorOf = mirrorOriginal
   } = deps;
-  const og = renderOgTags(extractMetadata(nostrEvent), url.href);
+  // Cached per target for every requester: no query string (or fragment) in og:url.
+  const og = renderOgTags(extractMetadata(nostrEvent), `${url.origin}${url.pathname}`);
   if (target.type === 'community') return { head: og, body: '', noindex: false };
   if (target.type === 'profile') return { head: og, body: '', noindex: true };
   if (!INDEXABLE_KINDS.has(nostrEvent.kind) || !isSearchIndexingEnabled(env))
