@@ -28,8 +28,10 @@ vi.mock('$lib/stores/accounts.svelte', () => ({
 }));
 
 const mockProbe = vi.fn();
+const mockRefresh = vi.fn();
 vi.mock('$lib/helpers/follow-set-probe.js', () => ({
-  probeContactList: (/** @type {string} */ pk) => mockProbe(pk)
+  probeContactList: (/** @type {string} */ pk) => mockProbe(pk),
+  refreshContactList: (/** @type {string} */ pk) => mockRefresh(pk)
 }));
 
 const mockToast = vi.fn();
@@ -50,6 +52,8 @@ beforeEach(() => {
   mockRun.mockClear();
   mockGetReplaceable.mockReset();
   mockProbe.mockReset();
+  mockRefresh.mockReset();
+  mockRefresh.mockResolvedValue(true);
   mockToast.mockClear();
 });
 
@@ -89,5 +93,31 @@ describe('toggleFollow', () => {
     mockProbe.mockResolvedValue('unknown');
     expect(await toggleFollow(THEM, true)).toBe(false);
     expect(mockRun).not.toHaveBeenCalled();
+  });
+
+  it('refreshes a list already in the store before modifying it (it may be a stale cached copy)', async () => {
+    mockGetReplaceable.mockReturnValue({ kind: 3 });
+    /** @type {string[]} */
+    const order = [];
+    mockRefresh.mockImplementation(async () => (order.push('refresh'), true));
+    mockRun.mockImplementation(async () => void order.push('run'));
+    expect(await toggleFollow(THEM, false)).toBe(true);
+    expect(mockRefresh).toHaveBeenCalledWith(ME);
+    expect(order).toEqual(['refresh', 'run']);
+  });
+
+  it('refuses when no write relay confirmed the stored list', async () => {
+    mockGetReplaceable.mockReturnValue({ kind: 3 });
+    mockRefresh.mockResolvedValue(false);
+    expect(await toggleFollow(THEM, true)).toBe(false);
+    expect(mockRun).not.toHaveBeenCalled();
+    expect(mockToast).toHaveBeenCalledWith('list unavailable', 'error');
+  });
+
+  it('creates a first list without a refresh when the probe confirmed it absent', async () => {
+    mockGetReplaceable.mockReturnValue(undefined);
+    mockProbe.mockResolvedValue('absent');
+    expect(await toggleFollow(THEM, false)).toBe(true);
+    expect(mockRefresh).not.toHaveBeenCalled();
   });
 });

@@ -7,7 +7,7 @@ import { FollowUser, UnfollowUser } from 'applesauce-actions/actions';
 import { actionRunner } from '$lib/stores/action-runner.svelte.js';
 import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
 import { manager } from '$lib/stores/accounts.svelte';
-import { probeContactList } from '$lib/helpers/follow-set-probe.js';
+import { probeContactList, refreshContactList } from '$lib/helpers/follow-set-probe.js';
 import { showToast } from '$lib/helpers/toast';
 import * as m from '$lib/paraglide/messages.js';
 
@@ -28,6 +28,12 @@ export async function toggleFollow(pubkey, isFollowing) {
         showToast(m.profile_follow_list_unavailable(), 'error');
         return false;
       }
+    }
+    // The list in the store may be a stale IDB copy; editing it would drop
+    // follows added in another client since. Confirm it against the network.
+    if (me && eventStore.getReplaceable(3, me) && !(await refreshContactList(me))) {
+      showToast(m.profile_follow_list_unavailable(), 'error');
+      return false;
     }
     if (isFollowing) {
       await actionRunner.run(UnfollowUser, pubkey);
