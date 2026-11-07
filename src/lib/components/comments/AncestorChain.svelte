@@ -9,6 +9,7 @@
   import { getDisplayName } from 'applesauce-core/helpers';
   import { formatRelativeTime } from '$lib/helpers/calendar.js';
   import ProfileAvatar from '$lib/components/shared/ProfileAvatar.svelte';
+  import NostrContentRenderer from '$lib/components/shared/NostrContentRenderer.svelte';
 
   import { generateAuthorColorRGB, profileLink } from '$lib/helpers/nostrUtils';
   import { resolve } from '$app/paths';
@@ -69,7 +70,11 @@
             <span class="shrink-0 text-xs text-base-content/40">{timestamp}</span>
           </div>
           {#if ancestor.content}
-            <p class="mt-0.5 text-xs text-base-content/60">{ancestor.content}</p>
+            <NostrContentRenderer
+              event={ancestor}
+              embeds={false}
+              class="mt-0.5 text-xs text-base-content/60"
+            />
           {/if}
         </div>
       </div>
