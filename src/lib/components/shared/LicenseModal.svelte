@@ -25,6 +25,7 @@
   import { getLocale } from '$lib/paraglide/runtime.js';
   import { lazyComponent } from '$lib/helpers/lazy-component.svelte.js';
   import { uniqueBy } from '$lib/helpers/unique.js';
+  import { isHttpUrl } from '$lib/helpers/safeUrl.js';
 
   // The subject pickers pull the vocabulary stack (SKOS tree, concept
   // loaders); load them only once someone opens the indexing section.
@@ -451,7 +452,7 @@
                 <dd>
                   <!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- external link -->
                   <a
-                    href={existingLicenseUrl}
+                    href={isHttpUrl(existingLicenseUrl) ? existingLicenseUrl : undefined}
                     target="_blank"
                     rel="noopener noreferrer"
                     class="link">{existingLicenseLabel}</a
@@ -470,8 +471,11 @@
                 <dt class="w-24 font-medium">{m.license_modal_source_label()}</dt>
                 <dd class="break-all">
                   <!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- external link -->
-                  <a href={existingSource} target="_blank" rel="noopener noreferrer" class="link"
-                    >{existingSource}</a
+                  <a
+                    href={isHttpUrl(existingSource) ? existingSource : undefined}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    class="link">{existingSource}</a
                   >
                 </dd>
               </div>

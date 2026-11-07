@@ -21,9 +21,11 @@ import {
   getLanguageDisplayName
 } from '$lib/helpers/educational/ambTransform.js';
 import { getAMBLicense } from '$lib/helpers/educational/ambHelpers.js';
-import { buildAMBJsonLd } from '$lib/helpers/educational/ambJsonLd.js';
+import { buildAMBJsonLd, serializeJsonLd } from '$lib/helpers/educational/ambJsonLd.js';
 import { shortNpub } from '$lib/helpers/pubkey.js';
 import { sanitizeServerHtml } from './sanitize.js';
+
+export { serializeJsonLd };
 
 /** @param {unknown} s */
 const esc = (s) =>
@@ -245,18 +247,6 @@ export async function buildCrawlableContent(event, opts) {
   }
 
   return { canonicalUrl, jsonLd: null, bodyHtml: null };
-}
-
-/**
- * JSON for an inline <script>: `<` and the JS line separators are escaped so
- * attacker-controlled strings can't close the script element.
- * @param {unknown} value
- */
-export function serializeJsonLd(value) {
-  return JSON.stringify(value)
-    .replace(/</g, '\\u003c')
-    .replace(/\u2028/g, '\\u2028')
-    .replace(/\u2029/g, '\\u2029');
 }
 
 /**

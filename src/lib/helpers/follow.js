@@ -5,6 +5,9 @@
  */
 import { FollowUser, UnfollowUser } from 'applesauce-actions/actions';
 import { actionRunner } from '$lib/stores/action-runner.svelte.js';
+import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
+import { manager } from '$lib/stores/accounts.svelte';
+import { probeContactList, refreshContactList } from '$lib/helpers/follow-set-probe.js';
 import { showToast } from '$lib/helpers/toast';
 import * as m from '$lib/paraglide/messages.js';
 
@@ -15,6 +18,23 @@ import * as m from '$lib/paraglide/messages.js';
  */
 export async function toggleFollow(pubkey, isFollowing) {
   try {
+    // FollowUser/UnfollowUser publish a brand-new list when the user's kind 3
+    // hasn't arrived within a second, replacing every follow on every relay.
+    // A list we haven't seen must be confirmed absent first.
+    const me = manager.active?.pubkey;
+    if (me && !eventStore.getReplaceable(3, me)) {
+      const probe = await probeContactList(me);
+      if (probe === 'unknown') {
+        showToast(m.profile_follow_list_unavailable(), 'error');
+        return false;
+      }
+    }
+    // The list in the store may be a stale IDB copy; editing it would drop
+    // follows added in another client since. Confirm it against the network.
+    if (me && eventStore.getReplaceable(3, me) && !(await refreshContactList(me))) {
+      showToast(m.profile_follow_list_unavailable(), 'error');
+      return false;
+    }
     if (isFollowing) {
       await actionRunner.run(UnfollowUser, pubkey);
       showToast(m.profile_unfollow_success(), 'success');

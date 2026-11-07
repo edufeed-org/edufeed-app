@@ -1936,6 +1936,7 @@
   "profile_follow_success": "Now following this user",
   "profile_unfollow_success": "Unfollowed this user",
   "profile_follow_error": "Failed to update follow status",
+  "profile_follow_list_unavailable": "Your follow list couldn't be loaded right now. Please try again in a moment.",
   "wave_button_tooltip": "Wave",
   "wave_cooldown_tooltip": "You already waved recently",
   "wave_success": "Waved!",

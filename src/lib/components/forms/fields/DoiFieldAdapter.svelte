@@ -2,6 +2,7 @@
   import { normalizeDoi, doiUrl } from '$lib/helpers/publication/doi.js';
   import { fetchDoiPrefill } from '$lib/helpers/publication/crossref.js';
   import * as m from '$lib/paraglide/messages';
+  import { isHttpUrl } from '$lib/helpers/safeUrl.js';
 
   /** Registry-contract adapter for the `doi` field type.
    *  value = the canonical `https://doi.org/<doi>` URL once the input parses as
@@ -77,8 +78,11 @@
 
 {#if readonly}
   {#if value}
-    <a href={value} target="_blank" rel="noopener noreferrer" class="link break-all link-primary"
-      >{value}</a
+    <a
+      href={isHttpUrl(value) ? value : undefined}
+      target="_blank"
+      rel="noopener noreferrer"
+      class="link break-all link-primary">{value}</a
     >
   {:else}
     <span class="text-base-content/50">—</span>

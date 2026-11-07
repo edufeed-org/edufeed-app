@@ -6,6 +6,7 @@ import { preprocessWikilinks } from '$lib/helpers/markdownNostr.js';
 import { preprocessNostrMentions } from '$lib/helpers/markdownNostr.js';
 import { sanitizeHtml } from '$lib/helpers/htmlSanitize.js';
 import { createSlugger, headingAnchorLink } from '$lib/helpers/headingAnchor.js';
+import { escapeHtml } from '$lib/helpers/educational/citation.js';
 
 /**
  * Detect if content is AsciiDoc based on distinctive syntax patterns.
@@ -62,7 +63,8 @@ export async function renderWikiContent(content) {
     return renderDjot(processed);
   } catch (error) {
     console.error('Wiki content rendering error:', error);
-    return content.replace(/\n/g, '<br>');
+    // Untrusted content: escape, never hand the raw text to {@html}
+    return escapeHtml(content).replace(/\n/g, '<br>');
   }
 }
 

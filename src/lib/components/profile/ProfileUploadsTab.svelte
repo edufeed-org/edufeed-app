@@ -29,6 +29,7 @@
   import ImageLicenseOverlay from '$lib/components/shared/ImageLicenseOverlay.svelte';
   import { FilesIcon } from '$lib/components/icons';
   import * as m from '$lib/paraglide/messages';
+  import { isHttpUrl } from '$lib/helpers/safeUrl.js';
 
   /**
    * @type {{
@@ -187,7 +188,7 @@
             {/if}
             <div class="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-base-content/60">
               <span>{formatTimestamp(event.created_at)}</span>
-              {#if url}
+              {#if isHttpUrl(url)}
                 <a href={url} target="_blank" rel="noopener noreferrer" class="link truncate">
                   {shortUrl(url)}
                 </a>

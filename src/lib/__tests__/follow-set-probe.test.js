@@ -79,7 +79,11 @@ vi.mock('$lib/helpers/relay-helper.js', () => ({
   getAllLookupRelays: () => mockLookupRelays()
 }));
 
-const { probeCommunitiesFollowSet } = await import('../helpers/follow-set-probe.js');
+const { probeCommunitiesFollowSet, refreshContactList } = await import(
+  '../helpers/follow-set-probe.js'
+);
+const { EventStore } = await import('applesauce-core');
+const { finalizeEvent, generateSecretKey, getPublicKey } = await import('nostr-tools/pure');
 
 const FOLLOW_SET = {
   id: 'x',
@@ -333,5 +337,100 @@ describe('probeCommunitiesFollowSet', () => {
     expect(mockCacheRequest).toHaveBeenCalledTimes(2);
     for (const url of relays.keys()) send(url, { type: 'EOSE' });
     await c;
+  });
+});
+
+describe('refreshContactList', () => {
+  const sk = generateSecretKey();
+  const me = getPublicKey(sk);
+  /** @param {number} created_at @param {string[]} follows */
+  const signed = (created_at, follows) =>
+    finalizeEvent({ kind: 3, created_at, tags: follows.map((p) => ['p', p]), content: '' }, sk);
+  /** @param {string} n distinct pubkey per test (the freshness memo is module-wide) */
+  const other = (n) => PUBKEY.replace(/1$/, n);
+
+  it('asks write + lookup relays and lets a newer network list replace a stale cached one', async () => {
+    const store = new EventStore();
+    mockEventStoreAdd.mockImplementation((event) => store.add(event));
+    store.add(signed(1, ['a'.repeat(64)]));
+
+    const promise = refreshContactList(me);
+    await flush();
+    expect([...relays.keys()].sort()).toEqual(['wss://lookup.example', 'wss://write.example']);
+
+    send('wss://write.example', {
+      type: 'EVENT',
+      event: signed(2, ['a'.repeat(64), 'b'.repeat(64)])
+    });
+    send('wss://write.example', { type: 'EOSE' });
+    send('wss://lookup.example', { type: 'EOSE' });
+
+    await expect(promise).resolves.toBe(true);
+    expect(store.getReplaceable(3, me)?.created_at).toBe(2);
+  });
+
+  it('passes on an empty EOSE from every write relay and keeps the cached list (no lockout)', async () => {
+    const sk2 = generateSecretKey();
+    const pk = getPublicKey(sk2);
+    const cached = finalizeEvent(
+      { kind: 3, created_at: 1, tags: [['p', 'a'.repeat(64)]], content: '' },
+      sk2
+    );
+    const store = new EventStore();
+    mockEventStoreAdd.mockImplementation((event) => store.add(event));
+    store.add(cached);
+
+    const promise = refreshContactList(pk);
+    await flush();
+    send('wss://write.example', { type: 'EOSE' });
+    send('wss://lookup.example', { type: 'EOSE' });
+
+    await expect(promise).resolves.toBe(true);
+    expect(store.getReplaceable(3, pk)).toBe(cached);
+  });
+
+  it('is false when write relays stay silent, even if a lookup relay delivered the list', async () => {
+    const pk = other('2');
+    const promise = refreshContactList(pk);
+    await flush();
+    send('wss://lookup.example', { type: 'EVENT', event: { ...FOLLOW_SET, kind: 3, pubkey: pk } });
+    send('wss://lookup.example', { type: 'EOSE' });
+    // wss://write.example stays silent: the deadline ends the refresh.
+    await vi.advanceTimersByTimeAsync(5_000);
+    await expect(promise).resolves.toBe(false);
+    await flush();
+    expect(unsubscribed).toEqual(new Set(relays.keys()));
+  });
+
+  it('is false when every write relay errors or sends CLOSED', async () => {
+    relayListResolution = {
+      relayList: { writeRelays: ['wss://write.example', 'wss://write2.example'], readRelays: [] },
+      outcome: 'found'
+    };
+    const promise = refreshContactList(other('6'));
+    await flush();
+    relays.get('wss://write.example')?.error(new Error('connection refused'));
+    send('wss://write2.example', { type: 'CLOSED', reason: 'auth-required: sign in' });
+    send('wss://lookup.example', { type: 'EOSE' });
+    await expect(promise).resolves.toBe(false);
+  });
+
+  it('is false without asking anyone when the relay list could not be fetched', async () => {
+    relayListResolution = { relayList: null, outcome: 'unknown' };
+    await expect(refreshContactList(other('3'))).resolves.toBe(false);
+    expect(relays.size).toBe(0);
+  });
+
+  it('sends no further request while a confirmation is fresh', async () => {
+    const pk = other('4');
+    const first = refreshContactList(pk);
+    await flush();
+    for (const url of relays.keys()) send(url, { type: 'EOSE' });
+    await expect(first).resolves.toBe(true);
+
+    relays.clear();
+    await expect(refreshContactList(pk)).resolves.toBe(true);
+    expect(relays.size).toBe(0);
+    expect(mockFetchRelayListResolution).toHaveBeenCalledTimes(1);
   });
 });

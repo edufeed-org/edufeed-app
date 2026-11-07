@@ -13,6 +13,7 @@ import {
 } from './ambTransform.js';
 import { formatLicenseIds } from './licenseLabel.js';
 import { unique } from '$lib/helpers/unique.js';
+import { isHttpUrl } from '$lib/helpers/safeUrl.js';
 
 /**
  * Extracts the resource name from an AMB event
@@ -442,9 +443,10 @@ export function formatAMBResource(event, lang = 'en') {
     creatorNames: getAMBCreatorNames(event),
     resourceURLs: getAMBResourceURLs(event),
     primaryURL: getAMBPrimaryURL(event),
-    encodings: getAMBEncodings(event),
+    // Display links: tag values are untrusted, only http(s) may reach an href
+    encodings: getAMBEncodings(event).filter((e) => isHttpUrl(e.url)),
     externalUrl: getAMBExternalUrl(event), // Deprecated: use externalUrls
-    externalUrls: getAMBExternalUrls(event),
+    externalUrls: getAMBExternalUrls(event).filter(isHttpUrl),
     tags: event.tags, // Keep original tags for reference
     rawEvent: event // Keep original raw Nostr event for debug purposes
   };

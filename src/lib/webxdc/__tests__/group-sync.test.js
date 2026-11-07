@@ -437,4 +437,105 @@ describe('createGroupSync', () => {
     // Only the leading publish went out; stop() dropped the pending trailing one.
     expect(publish).toHaveBeenCalledTimes(1);
   });
+  it('rate-limits sendState host-side: burst of 5, then 1/s, in order, nothing dropped', async () => {
+    vi.useFakeTimers();
+    try {
+      const relay = makeRelay([[]]);
+      const publish = vi.fn(async (t) => ({ ...t, id: `s${publish.mock.calls.length}` }));
+      const sync = createGroupSync({ relayConn: relay, groupId: GROUP, sessionId: SID, publish });
+
+      for (let n = 0; n < 8; n++) sync.sendState({ n });
+      expect(publish).toHaveBeenCalledTimes(5); // burst
+
+      await vi.advanceTimersByTimeAsync(1000);
+      expect(publish).toHaveBeenCalledTimes(6);
+      await vi.advanceTimersByTimeAsync(2000);
+      expect(publish).toHaveBeenCalledTimes(8);
+      // Queued updates keep their order (webxdc serials must not reshuffle).
+      expect(publish.mock.calls.map((c) => JSON.parse(c[0].content).n)).toEqual([
+        0, 1, 2, 3, 4, 5, 6, 7
+      ]);
+      await vi.advanceTimersByTimeAsync(10_000);
+      expect(publish).toHaveBeenCalledTimes(8);
+      sync.stop();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('halts all signing once a looping app overflows the state queue', async () => {
+    vi.useFakeTimers();
+    try {
+      const relay = makeRelay([[]]);
+      const onError = vi.fn();
+      const publish = vi.fn(async (t) => ({ ...t, id: `s${publish.mock.calls.length}` }));
+      const sync = createGroupSync({
+        relayConn: relay,
+        groupId: GROUP,
+        sessionId: SID,
+        publish,
+        onError
+      });
+
+      for (let n = 0; n < 10_000; n++) sync.sendState({ n });
+      expect(publish).toHaveBeenCalledTimes(5);
+      expect(onError).toHaveBeenCalledTimes(1);
+      expect(onError).toHaveBeenCalledWith(expect.any(Error), 'write');
+
+      await vi.advanceTimersByTimeAsync(600_000);
+      sync.sendRealtime(Uint8Array.from([1]));
+      expect(publish).toHaveBeenCalledTimes(5); // queue dropped, realtime refused too
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('caps state writes per session even when the app respects the interval', async () => {
+    vi.useFakeTimers();
+    try {
+      const relay = makeRelay([[]]);
+      const onError = vi.fn();
+      const publish = vi.fn(async (t) => ({ ...t, id: `s${publish.mock.calls.length}` }));
+      const sync = createGroupSync({
+        relayConn: relay,
+        groupId: GROUP,
+        sessionId: SID,
+        publish,
+        onError
+      });
+      for (let n = 0; n < 600; n++) {
+        sync.sendState({ n });
+        await vi.advanceTimersByTimeAsync(1000);
+      }
+      expect(publish).toHaveBeenCalledTimes(500);
+      expect(onError).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('caps realtime publishes per session', async () => {
+    vi.useFakeTimers();
+    try {
+      const relay = makeRelay([[]]);
+      const onError = vi.fn();
+      const publish = vi.fn(async (t) => ({ ...t, id: `r${publish.mock.calls.length}` }));
+      const sync = createGroupSync({
+        relayConn: relay,
+        groupId: GROUP,
+        sessionId: SID,
+        publish,
+        onError
+      });
+      for (let n = 0; n < 4000; n++) {
+        sync.sendRealtime(Uint8Array.from([n & 255]));
+        await vi.advanceTimersByTimeAsync(100);
+      }
+      expect(publish).toHaveBeenCalledTimes(3000);
+      expect(onError).toHaveBeenCalledTimes(1);
+      expect(onError).toHaveBeenCalledWith(expect.any(Error), 'write');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });

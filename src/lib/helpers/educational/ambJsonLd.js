@@ -13,6 +13,18 @@
 import { nostrToAmb } from 'amb-nostr-converter';
 
 /**
+ * JSON for an inline <script>: `<` and the JS line separators are escaped so
+ * attacker-controlled strings can't close the script element.
+ * @param {unknown} value
+ */
+export function serializeJsonLd(value) {
+  return JSON.stringify(value)
+    .replace(/</g, '\\u003c')
+    .replace(/\u2028/g, '\\u2028')
+    .replace(/\u2029/g, '\\u2029');
+}
+
+/**
  * @typedef {Object} AMBResource
  * @property {string} [identifier] - Resource identifier (d-tag value)
  * @property {string} name - Resource name

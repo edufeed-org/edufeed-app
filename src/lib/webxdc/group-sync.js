@@ -40,6 +40,18 @@ const REALTIME_THROTTLE_MS = 100;
  * older than our newest — `since = newest` would filter them out forever
  * (silent CRDT divergence). seenIds absorbs the replayed overlap. */
 const LIVE_OVERLAP_SEC = 300;
+/** Host-side enforcement of the advertised `sendUpdateInterval: 1000`
+ * (webxdc-host.js): every state update is a signed 9450 the user never sees,
+ * so a looping app would otherwise sign without bound. Token bucket: a burst
+ * of STATE_BURST, then one per STATE_REFILL_MS. Excess updates QUEUE in order
+ * (sendUpdate must not drop or reorder); a queue past STATE_QUEUE_MAX or a
+ * session past the hard caps halts all signing for the session. */
+const STATE_BURST = 5;
+const STATE_REFILL_MS = 1000;
+const STATE_QUEUE_MAX = 100;
+const STATE_SESSION_CAP = 500;
+/** 5 minutes of realtime at the full 100 ms throttle rate. */
+const REALTIME_SESSION_CAP = 3000;
 
 /**
  * @param {{relayConn: any, groupId: string, sessionId: string,
@@ -297,7 +309,64 @@ export function createGroupSync({
   /** @type {Uint8Array | null} */
   let realtimePending = null;
 
+  let stateTokens = STATE_BURST;
+  /** @type {ReturnType<typeof setTimeout> | null} */
+  let stateRefill = null;
+  /** @type {any[]} */
+  let stateQueue = [];
+  let stateSent = 0;
+  let realtimeSent = 0;
+  let writesHalted = false;
+
+  const clearWriteTimers = () => {
+    if (realtimeCooldown) clearTimeout(realtimeCooldown);
+    realtimeCooldown = null;
+    realtimePending = null;
+    if (stateRefill) clearTimeout(stateRefill);
+    stateRefill = null;
+    stateQueue = [];
+  };
+
+  /** Stops signing for the rest of the session and surfaces why, once.
+   * @param {string} reason */
+  const haltWrites = (reason) => {
+    if (writesHalted) return;
+    writesHalted = true;
+    clearWriteTimers();
+    console.warn(`webxdc group-sync: writes halted — ${reason}`);
+    onError?.(new Error(reason), 'write');
+  };
+
+  const pumpState = () => {
+    while (stateTokens > 0 && stateQueue.length > 0 && !writesHalted) {
+      if (stateSent >= STATE_SESSION_CAP) {
+        haltWrites(`app exceeded ${STATE_SESSION_CAP} state updates this session`);
+        return;
+      }
+      stateTokens--;
+      stateSent++;
+      publish(stateQueue.shift())
+        .then((signed) => {
+          if (append(signed)) notify();
+        })
+        .catch((err) => onError?.(err, 'write'));
+    }
+    if (stateTokens < STATE_BURST && !stateRefill && !stopped && !writesHalted) {
+      stateRefill = setTimeout(() => {
+        stateRefill = null;
+        stateTokens++;
+        pumpState();
+      }, STATE_REFILL_MS);
+    }
+  };
+
   const publishRealtime = (/** @type {Uint8Array} */ bytes) => {
+    if (writesHalted) return;
+    if (realtimeSent >= REALTIME_SESSION_CAP) {
+      haltWrites(`app exceeded ${REALTIME_SESSION_CAP} realtime frames this session`);
+      return;
+    }
+    realtimeSent++;
     publish(buildRealtimeTemplate(groupId, sessionId, bytes)).catch((err) =>
       onError?.(err, 'write')
     );
@@ -318,15 +387,17 @@ export function createGroupSync({
     getUpdates: () => [...updates],
 
     sendState(payload, meta) {
-      const template = buildStateTemplate(groupId, sessionId, payload, meta);
-      publish(template)
-        .then((signed) => {
-          if (append(signed)) notify();
-        })
-        .catch((err) => onError?.(err, 'write'));
+      if (writesHalted || stopped) return;
+      if (stateQueue.length >= STATE_QUEUE_MAX) {
+        haltWrites(`app sent state updates faster than 1 per ${STATE_REFILL_MS} ms`);
+        return;
+      }
+      stateQueue.push(buildStateTemplate(groupId, sessionId, payload, meta));
+      pumpState();
     },
 
     sendRealtime(bytes) {
+      if (writesHalted || stopped) return;
       if (realtimeCooldown) {
         realtimePending = bytes;
         return;
@@ -364,9 +435,7 @@ export function createGroupSync({
 
     stop() {
       stopped = true;
-      if (realtimeCooldown) clearTimeout(realtimeCooldown);
-      realtimeCooldown = null;
-      realtimePending = null;
+      clearWriteTimers();
       // Cancel an in-flight backfill page and unstick the `await fetchPage`
       // inside fetchBackfill's loop (unsubscribing alone would never
       // settle that promise) — the loop then sees a short/empty page,
