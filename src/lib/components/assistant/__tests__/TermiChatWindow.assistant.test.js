@@ -273,6 +273,16 @@ describe('TermiChatWindow assistant mode', () => {
     expect(view.queryByText(m.termi_assistant_retry())).toBeNull();
   });
 
+  it('trims leading/trailing blank lines from the model text (seen with qwen)', async () => {
+    stubFetch(() => streamAnswer({ text: '\n\nHallo' }));
+    const view = renderWindow();
+    await type(view, 'Finde Materialien zu Brüchen');
+    // Default exact match (RTL's own normalizer would hide the bug); the
+    // greeting bubble's longer text does not match "Hallo" exactly.
+    const bubble = await waitFor(() => view.getByText('Hallo'));
+    expect(bubble.textContent).toBe('Hallo');
+  });
+
   it('message list is a polite live log; static notice replaced with the flag on', async () => {
     stubFetch(() => streamAnswer());
     const view = renderWindow();

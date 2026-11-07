@@ -347,7 +347,8 @@
     msg.parts
       .filter((/** @type {any} */ p) => p.type === 'text')
       .map((/** @type {any} */ p) => p.text)
-      .join('');
+      .join('')
+      .trim(); // some models (qwen) lead with blank lines
   // Both tool-part shapes: `tool-<name>` and `dynamic-tool` with `toolName`.
   /** @param {any} msg */
   const searchPartsOf = (msg) =>
