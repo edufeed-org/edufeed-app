@@ -15,7 +15,9 @@ vi.mock('$lib/stores/config.svelte.js', () => ({
   runtimeConfig: { calendar: { timeFormat: '24h', weekStartDay: 1 } }
 }));
 
-const { getWeekdayHeaders, formatCalendarDate } = await import('$lib/helpers/calendar.js');
+const { getWeekdayHeaders, formatCalendarDate, formatRelativeTime } = await import(
+  '$lib/helpers/calendar.js'
+);
 
 const OCT_2 = new Date(2026, 9, 2, 12, 0);
 
@@ -34,5 +36,16 @@ describe('calendar names follow the app locale', () => {
     expect(getWeekdayHeaders()).toEqual(['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']);
     expect(formatCalendarDate(OCT_2, 'month')).toBe('October 2026');
     expect(formatCalendarDate(OCT_2, 'long')).toContain('Friday');
+  });
+});
+
+describe("'short' dates carry the year once it is not the current one", () => {
+  it('this year: "15. Jan."; last year: "12. Dez. <year>" (cards, relative times)', () => {
+    const now = new Date();
+    const thisYear = new Date(now.getFullYear(), 0, 15, 12);
+    const lastYear = new Date(now.getFullYear() - 1, 11, 12, 12);
+    expect(formatCalendarDate(thisYear, 'short')).toBe('15. Jan.');
+    expect(formatCalendarDate(lastYear, 'short')).toBe(`12. Dez. ${now.getFullYear() - 1}`);
+    expect(formatRelativeTime(lastYear.getTime() / 1000)).toBe(`12. Dez. ${now.getFullYear() - 1}`);
   });
 });
