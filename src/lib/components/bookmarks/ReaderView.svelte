@@ -4,7 +4,7 @@
 -->
 <script>
   import { browser } from '$app/environment';
-  import DOMPurify from 'dompurify';
+  import { renderReaderHtml } from '$lib/helpers/readerHtml.js';
   import BookmarkChip from './BookmarkChip.svelte';
   import BookmarkItem from './BookmarkItem.svelte';
   import CommentList from '$lib/components/comments/CommentList.svelte';
@@ -75,52 +75,11 @@
     return () => abortController.abort();
   });
 
-  // Sanitize fetched HTML
-  let sanitizedHtml = $derived.by(() => {
-    if (!article?.content || !browser) return '';
-    if (typeof DOMPurify?.sanitize === 'function') {
-      return DOMPurify.sanitize(article.content, {
-        ALLOWED_TAGS: [
-          'p',
-          'br',
-          'strong',
-          'em',
-          'u',
-          's',
-          'del',
-          'code',
-          'pre',
-          'a',
-          'ul',
-          'ol',
-          'li',
-          'blockquote',
-          'h1',
-          'h2',
-          'h3',
-          'h4',
-          'h5',
-          'h6',
-          'hr',
-          'table',
-          'thead',
-          'tbody',
-          'tr',
-          'th',
-          'td',
-          'img',
-          'figure',
-          'figcaption',
-          'mark',
-          'span',
-          'div',
-          'section'
-        ],
-        ALLOWED_ATTR: ['href', 'target', 'rel', 'src', 'alt', 'title', 'class']
-      });
-    }
-    return article.content;
-  });
+  // Sanitize fetched HTML (shared reader sanitizer: app classes, foreign ids
+  // and handlers never pass).
+  let sanitizedHtml = $derived(
+    article?.content && browser ? renderReaderHtml(article.content) : ''
+  );
 </script>
 
 <div class="reader-view">
