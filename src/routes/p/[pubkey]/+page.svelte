@@ -60,8 +60,9 @@
   // Seeded once from ?tab= (e.g. a Termi deep link to someone's bookmarks);
   // the "active tab got hidden" effect below stays the ongoing safety net
   // once the owner's real tab config/counts arrive.
-  let activeTab = $state(initialProfileTab($page.url.searchParams, PROFILE_TAB_IDS, 'posts'));
-  let activatedTabs = new SvelteSet(initialActivatedTabs(activeTab));
+  const initialTab = initialProfileTab($page.url.searchParams, PROFILE_TAB_IDS, 'posts');
+  let activeTab = $state(initialTab);
+  let activatedTabs = new SvelteSet(initialActivatedTabs(initialTab));
   let loadingState = $state(/** @type {'loading' | 'found' | 'notFound'} */ ('loading'));
   let timeoutId = /** @type {ReturnType<typeof setTimeout> | null} */ (null);
   let followLoading = $state(false);

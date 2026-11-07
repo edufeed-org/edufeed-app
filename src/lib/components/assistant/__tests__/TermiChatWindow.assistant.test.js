@@ -193,16 +193,19 @@ describe('TermiChatWindow assistant mode', () => {
   it.each([
     [{ error: 'quota', scope: 'global' }, 'global monthly cap'],
     [{ error: 'rate' }, 'per-IP rate']
-  ])('HTTP 429 %o → the non-daily quota line plus the learning search link (%s)', async (body) => {
-    stubFetch(() => new Response(JSON.stringify(body), { status: 429 }));
-    const view = renderWindow();
-    await type(view, 'Finde Materialien zu Brüchen');
-    await waitFor(() => view.getByText(m.termi_quota_global(), { exact: false }));
-    expect(view.queryByText(m.termi_quota(), { exact: false })).toBeNull();
-    expect(view.getByText(m.termi_quota_link()).getAttribute('href')).toBe(
-      '/discover?type=learning&search=Br%C3%BCchen'
-    );
-  });
+  ])(
+    'HTTP 429 %o → the non-daily quota line plus the learning search link (%s)',
+    async (body, _label) => {
+      stubFetch(() => new Response(JSON.stringify(body), { status: 429 }));
+      const view = renderWindow();
+      await type(view, 'Finde Materialien zu Brüchen');
+      await waitFor(() => view.getByText(m.termi_quota_global(), { exact: false }));
+      expect(view.queryByText(m.termi_quota(), { exact: false })).toBeNull();
+      expect(view.getByText(m.termi_quota_link()).getAttribute('href')).toBe(
+        '/discover?type=learning&search=Br%C3%BCchen'
+      );
+    }
+  );
 
   it('a readonly (npub) account gets no assistant: the learning search link instead', async () => {
     const real = user.current;
