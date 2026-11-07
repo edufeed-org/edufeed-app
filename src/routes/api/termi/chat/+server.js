@@ -4,7 +4,7 @@
  * message stream from SAIA (open-weight model, see `termi/llm.js`).
  *
  * 503 flag/LLM/nope-mcp off · 401 bad NIP-98 · 400 bad body/task · 429 our
- * quota (`{ error: 'quota', scope }`). Upstream failures happen inside the
+ * quota (`{ error: 'quota', scope }`) or the per-IP rate (`{ error: 'rate' }`). Upstream failures happen inside the
  * stream and surface as the error text `termi:upstream`. Never logs user text.
  */
 import { json } from '@sveltejs/kit';
@@ -18,13 +18,16 @@ import { createQuota } from '$lib/server/termi/quota.js';
 import { SYSTEM_PROMPTS } from '$lib/server/termi/prompts.js';
 import { buildTermiTools } from '$lib/server/termi/tools.js';
 import { compactHistory } from '$lib/server/termi/compact-history.js';
+import { createRateLimiter } from '$lib/server/rate-limit.js';
 
 const MAX_BODY_CHARS = 200_000;
 
 const quota = createQuota({ perUserDaily: 40, globalMonthly: 2800 });
+// Throwaway keys are free: per IP, too, so they can't drain the global quota.
+const ipLimiter = createRateLimiter({ limit: 10, windowMs: 60_000 });
 
 /** @type {import('@sveltejs/kit').RequestHandler} */
-export async function POST({ request, url }) {
+export async function POST({ request, url, getClientAddress }) {
   const model = createTermiModel(env);
   const mcpUrl = nopeMcpEnv(env, 'URL');
   if (!model || !mcpUrl) return json({ error: 'termi_llm_disabled' }, { status: 503 });
@@ -60,7 +63,8 @@ export async function POST({ request, url }) {
   const tools = buildTermiTools(task, { mcpUrl, getToken: getNopeMcpToken });
   // The client owns only its own turns: a client-sent system message would
   // override the prompt, and a user file part makes the SDK fetch its URL
-  // server-side — the search task needs text only.
+  // server-side — the search task needs text only. Assistant tool/file parts
+  // pass through: harmless while no tool has toModelOutput content — strip them if one ever does.
   const history = body.messages
     .filter((m) => m?.role === 'user' || m?.role === 'assistant')
     .map((m) =>
@@ -75,6 +79,7 @@ export async function POST({ request, url }) {
     return json({ error: 'invalid_messages' }, { status: 400 });
   }
 
+  if (!ipLimiter.take(getClientAddress())) return json({ error: 'rate' }, { status: 429 });
   const scope = quota.check(pubkey);
   if (scope !== 'ok') return json({ error: 'quota', scope }, { status: 429 });
 
@@ -93,13 +98,8 @@ export async function POST({ request, url }) {
     // The client handles errors; a retry would only spend quota.
     maxRetries: 0,
     // The SDK default logs the whole error, whose requestBodyValues carry the
-    // prompt (user text). Status or name only.
-    onError: ({ error }) => {
-      const e = /** @type {{ statusCode?: number, name?: string } | null} */ (
-        error && typeof error === 'object' ? error : null
-      );
-      console.error('[/api/termi/chat] stream error:', e?.statusCode ?? e?.name ?? 'unknown');
-    }
+    // prompt (user text). Silenced: streamErrorMessage logs it once, status only.
+    onError: () => {}
   });
   return result.toUIMessageStreamResponse({ onError: streamErrorMessage });
 }

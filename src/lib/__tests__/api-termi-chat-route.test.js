@@ -109,14 +109,14 @@ async function fakeModel(toolSteps) {
   return { model, calls: () => calls };
 }
 
-/** @param {unknown} body @param {Record<string, string>} [headers] @returns {any} */
-function ev(body, headers = { authorization: 'Nostr x' }) {
+/** @param {unknown} body @param {Record<string, string>} [headers] @param {string} [ip] @returns {any} */
+function ev(body, headers = { authorization: 'Nostr x' }, ip = '192.0.2.1') {
   const request = new Request(ROUTE_URL, {
     method: 'POST',
     headers: { 'content-type': 'application/json', ...headers },
     body: typeof body === 'string' ? body : JSON.stringify(body)
   });
-  return { request, url: new URL(ROUTE_URL) };
+  return { request, url: new URL(ROUTE_URL), getClientAddress: () => ip };
 }
 
 afterEach(() => {
@@ -212,10 +212,30 @@ describe('POST /api/termi/chat', () => {
       statusCode: 500,
       requestBodyValues: { messages: [{ content: 'MARKER-user-text' }] }
     });
+    // streamText's own hook stays silent; the response mapper logs once, status only.
     args.onError({ error });
-    expect(log).toHaveBeenCalled();
+    expect(log).not.toHaveBeenCalled();
+    const { streamErrorMessage } = await import('$lib/server/termi/llm.js');
+    expect(streamErrorMessage(error)).toBe('termi:upstream');
+    expect(log).toHaveBeenCalledTimes(1);
     expect(JSON.stringify(log.mock.calls)).not.toContain('MARKER');
     expect(log.mock.calls.flat()).not.toContain(error);
+  });
+
+  it('returns 429 { error: "rate" } after 10 requests a minute from one IP, before the quota', async () => {
+    const { POST, quota } = await importRoute(ENV);
+    const check = vi.spyOn(quota, 'check');
+    for (let i = 0; i < 10; i++) {
+      expect((await POST(ev({ task: 'search', messages: [USER_MSG] }))).status).toBe(200);
+    }
+    check.mockClear();
+    const res = await POST(ev({ task: 'search', messages: [USER_MSG] }));
+    expect(res.status).toBe(429);
+    expect(await res.json()).toEqual({ error: 'rate' });
+    expect(check).not.toHaveBeenCalled();
+    // Another IP is unaffected.
+    const other = await POST(ev({ task: 'search', messages: [USER_MSG] }, undefined, '192.0.2.2'));
+    expect(other.status).toBe(200);
   });
 
   it('drops user file parts before the model sees them', async () => {
