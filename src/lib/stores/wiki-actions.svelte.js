@@ -12,9 +12,23 @@ import { encodeEventToNaddr } from '$lib/helpers/nostrUtils.js';
 import { publishEventOptimistic } from '$lib/services/publish-service.js';
 import { nextCreatedAt } from '$lib/helpers/replaceableUpdates.js';
 import { getAppRelaysForCategory } from '$lib/services/app-relay-service.svelte.js';
+import { getPrimaryWriteRelay } from '$lib/services/relay-service.svelte.js';
 
 /** Kind number for NIP-54 wiki articles */
 const WIKI_KIND = 30818;
+
+/**
+ * naddr relay hints a wiki is actually published to: the communikey app
+ * relays get a 30818 only when it is h-tagged to a community; otherwise the
+ * author's write relay.
+ * @param {import('nostr-tools').NostrEvent} event
+ * @returns {Promise<string[]>}
+ */
+async function wikiRelayHints(event) {
+  if (event.tags.some((t) => t[0] === 'h')) return getAppRelaysForCategory('communikey');
+  const writeRelay = await getPrimaryWriteRelay(event.pubkey);
+  return writeRelay ? [writeRelay] : [];
+}
 
 /**
  * @typedef {Object} WikiFormData
@@ -99,7 +113,7 @@ export async function createWiki(formData, communityPubkey, communityEvent = nul
   // Mentioned users get the page on their read relays too.
   publishEventOptimistic(wikiEvent, pTagPubkeys(wikiEvent), { communityEvent });
 
-  const naddr = encodeEventToNaddr(wikiEvent, getAppRelaysForCategory('communikey'));
+  const naddr = encodeEventToNaddr(wikiEvent, await wikiRelayHints(wikiEvent));
 
   return { event: wikiEvent, naddr };
 }
@@ -155,7 +169,7 @@ export async function updateWiki(formData, existingEvent, communityEvent = null)
   const updatedEvent = await currentAccount.signEvent(eventTemplate);
   publishEventOptimistic(updatedEvent, pTagPubkeys(updatedEvent), { communityEvent });
 
-  const naddr = encodeEventToNaddr(updatedEvent, getAppRelaysForCategory('communikey'));
+  const naddr = encodeEventToNaddr(updatedEvent, await wikiRelayHints(updatedEvent));
 
   return { event: updatedEvent, naddr };
 }

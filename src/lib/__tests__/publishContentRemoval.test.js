@@ -127,6 +127,30 @@ describe('removeFromCommunity', () => {
     expect(eventStore.add).toHaveBeenCalledWith(signed);
   });
 
+  // The hint must name a relay the removed event is actually on.
+  it('hints a relay the event was seen on', async () => {
+    const { addSeenRelay } = await import('applesauce-core/helpers');
+    const seen = { ...article, id: '2'.repeat(64) };
+    addSeenRelay(seen, 'wss://seen.example/');
+    const activeUser = { pubkey: ADMIN, signer: signerFor(ADMIN) };
+
+    const signed = await removeFromCommunity(seen, moderatedCommunity, { admins, activeUser });
+
+    expect(signed.tags).toContainEqual(['e', seen.id, 'wss://seen.example/']);
+  });
+
+  it("otherwise hints the community relay for the event's kind (where h-tagged content goes)", async () => {
+    const withSectionRelay = {
+      ...moderatedCommunity,
+      tags: [...moderatedCommunity.tags, ['r', 'wss://articles.example/', 'content']]
+    };
+    const activeUser = { pubkey: ADMIN, signer: signerFor(ADMIN) };
+
+    const signed = await removeFromCommunity(article, withSectionRelay, { admins, activeUser });
+
+    expect(signed.tags).toContainEqual(['e', article.id, 'wss://articles.example/']);
+  });
+
   it('signs with the community key when no own authority exists', async () => {
     signers.byPubkey[COMMUNITY] = signerFor(COMMUNITY);
     const activeUser = { pubkey: 'c'.repeat(64), signer: signerFor('c'.repeat(64)) };

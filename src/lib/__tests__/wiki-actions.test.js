@@ -27,9 +27,14 @@ vi.mock('$lib/services/app-relay-service.svelte.js', () => ({
   getAppRelaysForCategory: vi.fn().mockReturnValue(['wss://relay.example.com'])
 }));
 
+vi.mock('$lib/services/relay-service.svelte.js', () => ({
+  getPrimaryWriteRelay: vi.fn(async () => 'wss://author-write.example')
+}));
+
 const { createWiki, updateWiki } = await import('$lib/stores/wiki-actions.svelte.js');
 const { manager } = await import('$lib/stores/accounts.svelte');
 const { publishEventOptimistic } = await import('$lib/services/publish-service.js');
+const { encodeEventToNaddr } = await import('$lib/helpers/nostrUtils.js');
 
 /** @type {any} */
 let lastSignedEvent = null;
@@ -58,6 +63,18 @@ describe('createWiki', () => {
     await expect(createWiki({ title: 'Test', content: 'Content', topic: 'test' })).rejects.toThrow(
       'No account selected'
     );
+  });
+
+  // The naddr's relay hint must name a relay the 30818 actually goes to: the
+  // communikey app relays only get it when it is h-tagged to a community.
+  it("hints the author's write relay for a wiki outside any community", async () => {
+    await createWiki({ title: 'T', content: 'C', topic: 'x' });
+    expect(vi.mocked(encodeEventToNaddr).mock.calls[0][1]).toEqual(['wss://author-write.example']);
+  });
+
+  it('hints the communikey relays for a community wiki', async () => {
+    await createWiki({ title: 'T', content: 'C', topic: 'x' }, 'c'.repeat(64));
+    expect(vi.mocked(encodeEventToNaddr).mock.calls[0][1]).toEqual(['wss://relay.example.com']);
   });
 
   it('throws when title is missing', async () => {
