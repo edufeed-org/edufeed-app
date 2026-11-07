@@ -3,8 +3,11 @@
  * (AI SDK v6 UIMessages), NIP-98 signed over the raw body; answers with a UI
  * message stream from SAIA (open-weight model, see `termi/llm.js`).
  *
- * 503 flag/LLM/nope-mcp off · 401 bad NIP-98 · 400 bad body/task · 429 our
- * quota (`{ error: 'quota', scope }`) or the per-IP rate (`{ error: 'rate' }`). Upstream failures happen inside the
+ * 503 flag/LLM/nope-mcp/NIP-05 domains off · 401 bad NIP-98 · 403 signer not
+ * listed by a TERMI_ELIGIBLE_NIP05_DOMAINS domain (`{ error: 'not_eligible' }`)
+ * · 503 `{ error: 'eligibility_unknown' }` while a directory is not loaded yet
+ * · 400 bad body/task · 429 our quota (`{ error: 'quota', scope }`). No per-IP
+ * limit: the gate plus the per-pubkey quota bound it, so no IP is kept. Upstream failures happen inside the
  * stream and surface as the error text `termi:upstream`. Never logs user text.
  */
 import { json } from '@sveltejs/kit';
@@ -18,16 +21,14 @@ import { createQuota } from '$lib/server/termi/quota.js';
 import { SYSTEM_PROMPTS } from '$lib/server/termi/prompts.js';
 import { buildTermiTools } from '$lib/server/termi/tools.js';
 import { compactHistory } from '$lib/server/termi/compact-history.js';
-import { createRateLimiter } from '$lib/server/rate-limit.js';
+import { getTermiEligibilityChecker } from '$lib/server/termi/eligibility.js';
 
 const MAX_BODY_CHARS = 200_000;
 
 const quota = createQuota({ perUserDaily: 40, globalMonthly: 2800 });
-// Throwaway keys are free: per IP, too, so they can't drain the global quota.
-const ipLimiter = createRateLimiter({ limit: 10, windowMs: 60_000 });
 
 /** @type {import('@sveltejs/kit').RequestHandler} */
-export async function POST({ request, url, getClientAddress }) {
+export async function POST({ request, url }) {
   const model = createTermiModel(env);
   const mcpUrl = nopeMcpEnv(env, 'URL');
   if (!model || !mcpUrl) return json({ error: 'termi_llm_disabled' }, { status: 503 });
@@ -44,6 +45,10 @@ export async function POST({ request, url, getClientAddress }) {
     rawBody
   );
   if (!pubkey) return json({ error: 'Unauthorized' }, { status: 401 });
+
+  const eligible = await getTermiEligibilityChecker().isEligible(pubkey);
+  if (eligible === false) return json({ error: 'not_eligible' }, { status: 403 });
+  if (eligible === null) return json({ error: 'eligibility_unknown' }, { status: 503 });
 
   /** @type {{ task?: unknown, messages?: unknown }} */
   let body;
@@ -79,7 +84,6 @@ export async function POST({ request, url, getClientAddress }) {
     return json({ error: 'invalid_messages' }, { status: 400 });
   }
 
-  if (!ipLimiter.take(getClientAddress())) return json({ error: 'rate' }, { status: 429 });
   const scope = quota.check(pubkey);
   if (scope !== 'ok') return json({ error: 'quota', scope }, { status: 429 });
 

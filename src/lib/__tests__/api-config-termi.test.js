@@ -47,9 +47,22 @@ describe('GET /api/config — termi', () => {
       TERMI_LLM_BASE_URL: 'http://l',
       TERMI_LLM_API_KEY: 'k2',
       TERMI_LLM_MODEL: 'gemma-4-31b-it',
-      NOPE_MCP_URL: 'https://mcp.example/mcp'
+      NOPE_MCP_URL: 'https://mcp.example/mcp',
+      TERMI_ELIGIBLE_NIP05_DOMAINS: 'edufeed.org'
     });
     expect(body.termi).toEqual({ enabled: true, embed: true, llm: true });
+  });
+
+  it('all LLM vars set but no TERMI_ELIGIBLE_NIP05_DOMAINS → llm false (no gate-less assistant)', async () => {
+    const body = await configWith({
+      TERMI_AI_ENABLED: 'true',
+      TERMI_LLM_BASE_URL: 'http://l',
+      TERMI_LLM_API_KEY: 'k2',
+      TERMI_LLM_MODEL: 'gemma-4-31b-it',
+      NOPE_MCP_URL: 'https://mcp.example/mcp',
+      TERMI_ELIGIBLE_NIP05_DOMAINS: ' , '
+    });
+    expect(body.termi.llm).toBe(false);
   });
 
   it('the legacy AMB_MCP_URL counts as the nope-mcp URL', async () => {
@@ -58,7 +71,8 @@ describe('GET /api/config — termi', () => {
       TERMI_LLM_BASE_URL: 'http://l',
       TERMI_LLM_API_KEY: 'k2',
       TERMI_LLM_MODEL: 'gemma-4-31b-it',
-      AMB_MCP_URL: 'https://mcp.example/mcp'
+      AMB_MCP_URL: 'https://mcp.example/mcp',
+      TERMI_ELIGIBLE_NIP05_DOMAINS: 'edufeed.org'
     });
     expect(body.termi.llm).toBe(true);
   });

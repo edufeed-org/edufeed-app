@@ -9,7 +9,8 @@ const ENV = {
   TERMI_LLM_BASE_URL: 'https://chat-ai.academiccloud.de/v1',
   TERMI_LLM_API_KEY: 'k',
   TERMI_LLM_MODEL: 'qwen3-30b-a3b-instruct-2507',
-  NOPE_MCP_URL: 'https://mcp.example/mcp'
+  NOPE_MCP_URL: 'https://mcp.example/mcp',
+  TERMI_ELIGIBLE_NIP05_DOMAINS: 'edufeed.org'
 };
 
 const USER_MSG = { id: 'u1', role: 'user', parts: [{ type: 'text', text: 'Bruchrechnung' }] };
@@ -19,12 +20,31 @@ const USER_MSG = { id: 'u1', role: 'user', parts: [{ type: 'text', text: 'Bruchr
  * `streamText` is a spy unless `realStream` is set; then the real loop runs
  * against `model` (a MockLanguageModelV3) with nope-mcp stubbed. The route's
  * quota instance is exposed (and its per-user cap overridable).
+ * `eligible` is what the NIP-05 gate answers for the signer.
  *
  * @param {Record<string, string>} env
- * @param {{ signer?: string | null, realStream?: boolean, model?: any, perUserDaily?: number }} [opts]
+ * @param {{ signer?: string | null, realStream?: boolean, model?: any, perUserDaily?: number, eligible?: boolean | null }} [opts]
  */
-async function importRoute(env, { signer = PUBKEY, realStream = false, model, perUserDaily } = {}) {
+async function importRoute(
+  env,
+  { signer = PUBKEY, realStream = false, model, perUserDaily, eligible = true } = {}
+) {
   vi.resetModules();
+  const isEligible = vi.fn(async () => eligible);
+  vi.doMock('$lib/server/termi/eligibility.js', async (importOriginal) => ({
+    .../** @type {object} */ (await importOriginal()),
+    getTermiEligibilityChecker: () => ({ gated: true, isEligible })
+  }));
+  const rateLimit = vi.fn();
+  vi.doMock('$lib/server/rate-limit.js', async (importOriginal) => {
+    const real = /** @type {any} */ (await importOriginal());
+    return {
+      ...real,
+      createRateLimiter: (/** @type {any[]} */ ...a) => (
+        rateLimit(...a), real.createRateLimiter(...a)
+      )
+    };
+  });
   vi.doMock('$env/dynamic/private', () => ({ env }));
   const verify = vi.fn(async () => signer);
   vi.doMock('$lib/server/nip98-verify.js', () => ({ verifyNip98Header: verify }));
@@ -60,6 +80,8 @@ async function importRoute(env, { signer = PUBKEY, realStream = false, model, pe
   return {
     POST: mod.POST,
     verify,
+    isEligible,
+    rateLimit,
     get streamText() {
       return streamText;
     },
@@ -126,6 +148,8 @@ afterEach(() => {
   vi.doUnmock('$lib/server/termi/llm.js');
   vi.doUnmock('$lib/server/nopeMcpClient.js');
   vi.doUnmock('$lib/server/termi/quota.js');
+  vi.doUnmock('$lib/server/termi/eligibility.js');
+  vi.doUnmock('$lib/server/rate-limit.js');
   vi.restoreAllMocks();
 });
 
@@ -222,20 +246,45 @@ describe('POST /api/termi/chat', () => {
     expect(log.mock.calls.flat()).not.toContain(error);
   });
 
-  it('returns 429 { error: "rate" } after 10 requests a minute from one IP, before the quota', async () => {
-    const { POST, quota } = await importRoute(ENV);
-    const check = vi.spyOn(quota, 'check');
-    for (let i = 0; i < 10; i++) {
+  it('uses no per-IP limiter: the NIP-05 gate and the per-pubkey quota bound the route', async () => {
+    const { POST, rateLimit } = await importRoute(ENV);
+    for (let i = 0; i < 12; i++) {
       expect((await POST(ev({ task: 'search', messages: [USER_MSG] }))).status).toBe(200);
     }
-    check.mockClear();
+    expect(rateLimit).not.toHaveBeenCalled();
+  });
+
+  it('returns 503 when no TERMI_ELIGIBLE_NIP05_DOMAINS is configured (no gate-less fallback)', async () => {
+    const { POST, streamText } = await importRoute({ ...ENV, TERMI_ELIGIBLE_NIP05_DOMAINS: '' });
     const res = await POST(ev({ task: 'search', messages: [USER_MSG] }));
-    expect(res.status).toBe(429);
-    expect(await res.json()).toEqual({ error: 'rate' });
+    expect(res.status).toBe(503);
+    expect(streamText).not.toHaveBeenCalled();
+  });
+
+  it('checks the verified signer against the NIP-05 gate and streams when eligible', async () => {
+    const { POST, isEligible, streamText } = await importRoute(ENV);
+    const res = await POST(ev({ task: 'search', messages: [USER_MSG] }));
+    expect(res.status).toBe(200);
+    expect(isEligible).toHaveBeenCalledWith(PUBKEY);
+    expect(streamText).toHaveBeenCalledTimes(1);
+  });
+
+  it('returns 403 { error: "not_eligible" } for a signer no domain lists, before body checks and quota', async () => {
+    const { POST, streamText, quota } = await importRoute(ENV, { eligible: false });
+    const check = vi.spyOn(quota, 'check');
+    const res = await POST(ev({ task: 'toString', messages: [USER_MSG] }));
+    expect(res.status).toBe(403);
+    expect(await res.json()).toEqual({ error: 'not_eligible' });
+    expect(streamText).not.toHaveBeenCalled();
     expect(check).not.toHaveBeenCalled();
-    // Another IP is unaffected.
-    const other = await POST(ev({ task: 'search', messages: [USER_MSG] }, undefined, '192.0.2.2'));
-    expect(other.status).toBe(200);
+  });
+
+  it('returns 503 { error: "eligibility_unknown" } while a directory is not loaded yet', async () => {
+    const { POST, streamText } = await importRoute(ENV, { eligible: null });
+    const res = await POST(ev({ task: 'search', messages: [USER_MSG] }));
+    expect(res.status).toBe(503);
+    expect(await res.json()).toEqual({ error: 'eligibility_unknown' });
+    expect(streamText).not.toHaveBeenCalled();
   });
 
   it('drops user file parts before the model sees them', async () => {

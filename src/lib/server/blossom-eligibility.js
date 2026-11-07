@@ -66,7 +66,7 @@ export function normalizePubkey(input) {
  * @param {string} raw
  * @returns {string}
  */
-function normalizeDomain(raw) {
+export function normalizeDomain(raw) {
   return raw
     .trim()
     .toLowerCase()
