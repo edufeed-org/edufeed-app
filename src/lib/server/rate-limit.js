@@ -17,6 +17,9 @@ const SWEEP_SIZE_THRESHOLD = 10_000;
 export function createRateLimiter({ limit, windowMs }) {
   /** @type {Map<string, number[]>} */
   const hits = new Map();
+  /** A key is dropped windowMs after its last allowed call, traffic or not. */
+  /** @type {Map<string, ReturnType<typeof setTimeout>>} */
+  const expiry = new Map();
   let lastSweep = Date.now();
 
   /** @param {number} now */
@@ -45,6 +48,13 @@ export function createRateLimiter({ limit, windowMs }) {
       }
       recent.push(now);
       hits.set(key, recent);
+      clearTimeout(expiry.get(key));
+      const timer = setTimeout(() => {
+        hits.delete(key);
+        expiry.delete(key);
+      }, windowMs);
+      timer.unref?.();
+      expiry.set(key, timer);
       return true;
     },
     /** @returns {number} number of keys currently tracked (test hook) */

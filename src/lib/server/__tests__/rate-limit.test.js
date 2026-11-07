@@ -36,6 +36,19 @@ describe('createRateLimiter', () => {
     expect(limiter.size()).toBe(1);
   });
 
+  it('forgets a key windowMs after its last allowed call, with no further traffic', () => {
+    // The privacy policy promises the router keeps an IP at most a minute.
+    vi.useFakeTimers();
+    const limiter = createRateLimiter({ limit: 5, windowMs: 1_000 });
+    limiter.take('a');
+    vi.advanceTimersByTime(600);
+    limiter.take('a');
+    vi.advanceTimersByTime(999);
+    expect(limiter.size()).toBe(1);
+    vi.advanceTimersByTime(1);
+    expect(limiter.size()).toBe(0);
+  });
+
   it('never grows size() beyond distinct keys seen within one window', () => {
     vi.useFakeTimers();
     vi.setSystemTime(0);

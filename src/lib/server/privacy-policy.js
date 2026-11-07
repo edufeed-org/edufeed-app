@@ -10,6 +10,10 @@
  * content, but `renderMarkdown`'s own sanitizer is a no-op outside the
  * browser, so nothing is trusted on the way to `{@html}`.
  *
+ * Text between `<!-- if:termi -->` and `<!-- endif:termi -->` (inline, or
+ * the markers on lines of their own around a block or table row) appears
+ * only with TERMI_AI_ENABLED on; off, it is cut together with the markers.
+ *
  * Unset path, missing or unreadable file → `null`; `/privacy` then answers
  * 404 and `/api/config` reports `privacy.enabled: false` so the links hide.
  */
@@ -18,8 +22,16 @@ import { resolve } from 'node:path';
 import { env } from '$env/dynamic/private';
 import { renderMarkdown } from '$lib/helpers/markdown.js';
 import { sanitizeServerHtml } from '$lib/server/geo/sanitize.js';
+import { parseBool } from '$lib/server/env-parse.js';
 
-/** @type {{ path: string, mtimeMs: number, html: string } | null} */
+/** @param {string} markdown @param {boolean} termi */
+function applyTermiSections(markdown, termi) {
+  return termi
+    ? markdown.replace(/<!-- (?:end)?if:termi -->\n?/g, '')
+    : markdown.replace(/<!-- if:termi -->[\s\S]*?<!-- endif:termi -->\n?/g, '');
+}
+
+/** @type {{ path: string, mtimeMs: number, termi: boolean, html: string } | null} */
 let cache = null;
 
 /** @returns {string | null} absolute path of the configured policy file */
@@ -39,7 +51,8 @@ export async function loadPrivacyPolicy() {
   } catch {
     return null;
   }
-  if (cache && cache.path === path && cache.mtimeMs === info.mtimeMs) {
+  const termi = parseBool(env.TERMI_AI_ENABLED, false);
+  if (cache && cache.path === path && cache.mtimeMs === info.mtimeMs && cache.termi === termi) {
     return { html: cache.html };
   }
 
@@ -49,7 +62,7 @@ export async function loadPrivacyPolicy() {
   } catch {
     return null;
   }
-  const html = sanitizeServerHtml(renderMarkdown(markdown));
-  cache = { path, mtimeMs: info.mtimeMs, html };
+  const html = sanitizeServerHtml(renderMarkdown(applyTermiSections(markdown, termi)));
+  cache = { path, mtimeMs: info.mtimeMs, termi, html };
   return { html };
 }

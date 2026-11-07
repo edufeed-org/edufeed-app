@@ -86,6 +86,79 @@ describe('loadPrivacyPolicy', () => {
     expect(/** @type {any} */ (await loadPrivacyPolicy()).html).toContain('Version zwei');
   });
 
+  describe('Termi sections (<!-- if:termi --> markers)', () => {
+    const SHIPPED = join(process.cwd(), 'legal', 'privacy-policy.de.md');
+
+    it('flag off: the shipped policy names neither Termi nor GWDG', async () => {
+      const { loadPrivacyPolicy } = await policyWith({ PRIVACY_POLICY_PATH: SHIPPED });
+      const html = /** @type {any} */ (await loadPrivacyPolicy()).html;
+      // "Termin(e)" (calendar events) stays, of course.
+      expect(html).not.toMatch(/Termi(?!n)/);
+      expect(html).not.toContain('GWDG');
+      expect(html).not.toContain('if:termi');
+      expect(html).not.toContain('prettier-ignore');
+      expect(html).toContain('mcp.edufeed.org (Metadaten-Vorschläge)');
+    });
+
+    it('flag on: both appear, the markers never leak, the table stays a table', async () => {
+      const { loadPrivacyPolicy } = await policyWith({
+        PRIVACY_POLICY_PATH: SHIPPED,
+        TERMI_AI_ENABLED: 'true'
+      });
+      const html = /** @type {any} */ (await loadPrivacyPolicy()).html;
+      expect(html).toContain('Termi');
+      expect(html).toContain('GWDG');
+      expect(html).toContain('Termi-Materialsuche');
+      expect(html).not.toContain('if:termi');
+      expect(html).not.toContain('prettier-ignore');
+      expect(html).toMatch(/<td>chat-ai\.academiccloud\.de/);
+      expect(html).toContain('NIP-05');
+    });
+
+    it('strips block and inline sections when off, only the markers when on', async () => {
+      const file = join(dir, 'policy.md');
+      writeFileSync(
+        file,
+        [
+          'A<!-- if:termi -->, inline<!-- endif:termi -->.',
+          '',
+          '| x | y |',
+          '|---|---|',
+          '| 1 | 2 |',
+          '<!-- if:termi -->',
+          '| row | termi |',
+          '<!-- endif:termi -->',
+          '| 3 | 4 |',
+          ''
+        ].join('\n')
+      );
+      const off = await policyWith({ PRIVACY_POLICY_PATH: file });
+      const offHtml = /** @type {any} */ (await off.loadPrivacyPolicy()).html;
+      expect(offHtml).not.toContain('inline');
+      expect(offHtml).not.toContain('termi');
+      expect(offHtml).toContain('<td>3</td>');
+
+      vi.resetModules();
+      const on = await policyWith({ PRIVACY_POLICY_PATH: file, TERMI_AI_ENABLED: 'true' });
+      const onHtml = /** @type {any} */ (await on.loadPrivacyPolicy()).html;
+      expect(onHtml).toContain('A, inline.');
+      expect(onHtml).toContain('<td>termi</td>');
+      expect(onHtml).toContain('<td>3</td>');
+      expect(onHtml).not.toContain('if:termi');
+    });
+
+    it('the cache key includes the flag', async () => {
+      const file = join(dir, 'policy.md');
+      writeFileSync(file, 'A<!-- if:termi --> Termi<!-- endif:termi -->\n');
+      /** @type {Record<string, string>} */
+      const env = { PRIVACY_POLICY_PATH: file };
+      const { loadPrivacyPolicy } = await policyWith(env);
+      expect(/** @type {any} */ (await loadPrivacyPolicy()).html).not.toContain('Termi');
+      env.TERMI_AI_ENABLED = 'true';
+      expect(/** @type {any} */ (await loadPrivacyPolicy()).html).toContain('Termi');
+    });
+  });
+
   it('resolves a relative path against the working directory', async () => {
     const { resolvePolicyPath } = await policyWith({ PRIVACY_POLICY_PATH: 'legal/x.md' });
     expect(resolvePolicyPath()).toBe(join(process.cwd(), 'legal', 'x.md'));
