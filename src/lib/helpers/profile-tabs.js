@@ -240,6 +240,16 @@ export function initialProfileTab(searchParams, visibleTabIds, fallback) {
 }
 
 /**
+ * Tabs whose panels render from the start: posts (the default) plus the
+ * initial tab, so a ?tab= deep link doesn't open an empty, never-activated panel.
+ * @param {string} activeTab
+ * @returns {string[]}
+ */
+export function initialActivatedTabs(activeTab) {
+  return ['posts', activeTab];
+}
+
+/**
  * Build the tag list for a kind 30078 profile-tabs event.
  * @param {string[]} order - all tab ids in display order
  * @param {string[]} hidden - ids that are hidden

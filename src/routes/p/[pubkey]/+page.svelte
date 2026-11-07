@@ -32,7 +32,8 @@
     autoTabIds,
     withAutoTabs,
     tabsToSave,
-    initialProfileTab
+    initialProfileTab,
+    initialActivatedTabs
   } from '$lib/helpers/profile-tabs.js';
   import { saveProfileTabs } from '$lib/services/profile-tabs-service.js';
   import { pinnedPointersFromEvent } from '$lib/helpers/profile-feed.js';
@@ -59,10 +60,8 @@
   // Seeded once from ?tab= (e.g. a Termi deep link to someone's bookmarks);
   // the "active tab got hidden" effect below stays the ongoing safety net
   // once the owner's real tab config/counts arrive.
-  let activeTab = $state(
-    untrack(() => initialProfileTab($page.url.searchParams, PROFILE_TAB_IDS, 'posts'))
-  );
-  let activatedTabs = new SvelteSet(['posts']);
+  let activeTab = $state(initialProfileTab($page.url.searchParams, PROFILE_TAB_IDS, 'posts'));
+  let activatedTabs = new SvelteSet(initialActivatedTabs(activeTab));
   let loadingState = $state(/** @type {'loading' | 'found' | 'notFound'} */ ('loading'));
   let timeoutId = /** @type {ReturnType<typeof setTimeout> | null} */ (null);
   let followLoading = $state(false);

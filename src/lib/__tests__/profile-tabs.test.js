@@ -22,7 +22,8 @@ import {
   withAutoTabs,
   tabsToSave,
   PROFILE_CONTENT_KINDS,
-  initialProfileTab
+  initialProfileTab,
+  initialActivatedTabs
 } from '$lib/helpers/profile-tabs.js';
 
 function tabsEvent(tags) {
@@ -375,6 +376,17 @@ describe('publications tab (kind 30040)', () => {
     });
     expect(hiddenWithEntries.order).toContain('publications');
     expect(hiddenWithEntries.hidden).toEqual(['publications']);
+  });
+});
+
+describe('initialActivatedTabs', () => {
+  it('activates a deep-linked tab alongside posts', () => {
+    const tab = initialProfileTab(
+      new URLSearchParams('tab=bookmarks'),
+      ['posts', 'bookmarks'],
+      'posts'
+    );
+    expect(initialActivatedTabs(tab)).toEqual(expect.arrayContaining(['posts', 'bookmarks']));
   });
 });
 
