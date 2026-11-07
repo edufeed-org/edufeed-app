@@ -628,20 +628,37 @@ export const TERMI_SKILLS = [
  */
 const LEADING_PATTERNS = {
   de: [
-    /^ich\s+suche\s+(?:nach\s+)?(?:materialien|material|ressourcen|ressource|artikel|leute|personen|jemanden)?\s*(?:zur|zu|über|nach|von|namens|mit\s+dem\s+namen)?\s*/i,
+    /^ich\s+such(?:e)?\s+(?:nach\s+)?(?:materialien|material|ressourcen|ressource|artikel|leute|personen|jemanden)?\s*(?:zur|zu|über|nach|von|namens|mit\s+dem\s+namen)?\s*(?:(?:die|den|das|der|einen|eine)\s+)?/i,
+    // Knowledge questions (scripts/fixtures/termi-questions.json)
+    /^(?:wissen\s+sie,?\s+)?wer\s+(?:\S+\s+)?sich\s+(?:mit|um)\s+/i,
+    /^welche\s+\S*com+unit\S*\s+(?:\S+\s+)?sich\s+mit\s+/i,
+    /^welche\s+projekte\s+.*?\bim\s+bereich\s+/i,
+    /^wie\s+\S+\s+(?:ich|sie|man)\s+(?:mich|sich)\s+(?:am\s+besten\s+)?(?:auf|für)\s+(?:(?:den|die|das|dem|der)\s+)?/i,
     /^suche\s+(?:nach\s+)?/i,
     /^finde\s+(?:mir\s+)?(?:materialien|material|ressourcen|ressource|artikel|leute|personen|jemanden)?\s*(?:zur|zu|über|nach|von|namens|mit\s+dem\s+namen)?\s*/i,
     /^wo\s+finde\s+ich\s+(?:leute|personen|jemanden)?\s*(?:namens|mit\s+dem\s+namen)?\s*/i,
     /^zeig(?:e)?\s+mir\s+/i
   ],
   en: [
-    /^(?:i'?m\s+)?looking\s+for\s+(?:resources?|materials?|articles?|people)?\s*(?:about|on|named)?\s*/i,
+    /^(?:i'?m\s+)?looking\s+for\s+(?:resources?|materials?|articles?|people)?\s*(?:about|on|named)?\s*(?:(?:the|an?)\s+)?/i,
+    /^who\s+(?:works|is\s+working|deals)\s+(?:on|with)\s+/i,
+    /^which\s+communit(?:y|ies)\s+\S+\s+(?:on|with)\s+/i,
     /^find\s+(?:resources?|materials?|articles?|people)?\s*(?:about|on|named)?\s*/i,
     /^where\s+can\s+i\s+find\s+(?:someone|people)?\s*(?:named)?\s*/i,
     /^search\s+(?:for\s+)?/i,
     /^show\s+me\s+/i
   ]
 };
+
+/** Trailing chunks of a knowledge question that are not part of the topic (de only so far). */
+const TRAILING_PATTERNS = [
+  /,?\s*(?:können|könnten)\s+sie\s+mir\s+helfen$/i,
+  /,?\s*was\s+(?:kann|können|soll)\s+(?:ich|sie|man)\b.*$/i,
+  /\s+(?:vor|durchgeführt|beschäftigt|befasst)$/i
+];
+
+/** "… zum Thema X" — X is the topic. */
+const TOPIC_RE = /(?:^|\s)(?:zum|zu\s+dem|dem|das)\s+thema\s+(.+)$/i;
 
 /** Bare filler words meaning "something"/"someone" — a leading-strip that leaves only one of these found nothing real. */
 const FILLER_WORDS = new Set([
@@ -676,8 +693,28 @@ export function extractQuery(text, locale) {
     .trim()
     .replace(/[?!.]+$/, '')
     .trim();
+  for (const re of TRAILING_PATTERNS) s = s.replace(re, '').trim();
+  s = (s.match(TOPIC_RE)?.[1] ?? s).trim();
   if (FILLER_WORDS.has(s.toLowerCase())) return '';
   return s;
+}
+
+/**
+ * Which extra Termi knowledge sources a sentence asks for.
+ *
+ * @param {string} text
+ * @returns {{ event: boolean, person: boolean, community: boolean }}
+ */
+export function questionCues(text) {
+  const s = String(text ?? '');
+  return {
+    event:
+      /fortbildung|veranstaltung|termin|workshop|tagung|webinar|konferenz|seminar\s+am|kurs\s+am|\bevents?\b|training/i.test(
+        s
+      ),
+    person: /\bwer\b|\bwho\b|\bnamens\b|\bnamed\b|"[^"]+"|„[^“]+“/i.test(s),
+    community: /com+unit(?:y|ies)|gemeinschaft/i.test(s)
+  };
 }
 
 /**

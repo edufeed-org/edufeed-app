@@ -44,6 +44,22 @@ function toResult(result, normalize, list) {
   return { items, sourcesUnavailable: Array.isArray(incomplete) ? incomplete : [] };
 }
 
+/**
+ * `(name, args) => result` over nope-mcp: anonymous first, a client-credentials
+ * token only when the server demands one (401).
+ * @param {{ mcpUrl: string, getToken: () => Promise<string>, callTool: (p: { mcpUrl: string, bearerToken: string | undefined, name: string, args: object }) => Promise<any> }} deps
+ */
+export function nopeMcpCaller({ mcpUrl, getToken, callTool }) {
+  return async (/** @type {string} */ name, /** @type {object} */ args) => {
+    try {
+      return await callTool({ mcpUrl, bearerToken: undefined, name, args });
+    } catch (err) {
+      if (/** @type {any} */ (err)?.status !== 401) throw err;
+      return callTool({ mcpUrl, bearerToken: await getToken(), name, args });
+    }
+  };
+}
+
 /** An older nope-mcp without the tool answers "Tool <name> not found". @param {any} err */
 function isUnknownTool(err) {
   return err?.isToolError === true && /tool \S+ not found/i.test(String(err.message));

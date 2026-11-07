@@ -13,6 +13,7 @@ import { CREATE_ACTIONS } from '$lib/config/create-actions.js';
 import {
   TERMI_SKILLS,
   extractQuery,
+  questionCues,
   keywordMatch,
   availableSkills,
   decide,
@@ -67,9 +68,102 @@ describe('extractQuery', () => {
     ['Wo finde ich Leute namens Jörg?', 'de', 'Jörg'],
     ['looking for resources about fractions', 'en', 'fractions'],
     ['ich suche was', 'de', ''],
-    ['Photosynthese', 'de', 'Photosynthese']
+    ['Photosynthese', 'de', 'Photosynthese'],
+    // The eight Termi knowledge questions (scripts/fixtures/termi-questions.json)
+    ['ich suche die e-teaching community', 'de', 'e-teaching community'],
+    ['ich such die e-teching community', 'de', 'e-teching community'],
+    ["I'm looking for the e-teaching community", 'en', 'e-teaching community'],
+    ['ich suche nach Fortbildungen zum Thema X, im Fach Y', 'de', 'X, im Fach Y'],
+    [
+      'Ich suche nach Fortbildungen zum Thema Medienkompetenz im Fach Deutsch, können Sie mir helfen?',
+      'de',
+      'Medienkompetenz im Fach Deutsch'
+    ],
+    [
+      'meine Studierenden/Schüler sind unaufmerksam, was kann ich verbessern?',
+      'de',
+      'meine Studierenden/Schüler sind unaufmerksam'
+    ],
+    ['ich suche nach Unterrichtsentwürfen zum Thema Nachhaltigkeit', 'de', 'Nachhaltigkeit'],
+    ['wie bereite ich mich auf den Statistik-Vorkurs vor?', 'de', 'Statistik-Vorkurs'],
+    ['Wie bereiten Sie sich am besten auf den Statistik-Vorkurs vor?', 'de', 'Statistik-Vorkurs'],
+    [
+      'wer beschäftigt sich mit dem Thema OER-Lizenzen in Deutschland?',
+      'de',
+      'OER-Lizenzen in Deutschland'
+    ],
+    [
+      'Wissen Sie, wer sich mit dem Thema OER-Lizenzen in Deutschland beschäftigt?',
+      'de',
+      'OER-Lizenzen in Deutschland'
+    ],
+    ['who works on OER licensing topics in Germany', 'en', 'OER licensing topics in Germany'],
+    ['welche Community beschäftigt sich mit Religionspädagogik?', 'de', 'Religionspädagogik'],
+    ['welche comunity beschäftigt sich mit religionspädagogik', 'de', 'religionspädagogik'],
+    ['which community focuses on religious education', 'en', 'religious education'],
+    [
+      'welche Projekte werden im Bereich gendersensibler Unterricht durchgeführt?',
+      'de',
+      'gendersensibler Unterricht'
+    ],
+    [
+      'Welche Projekte werden Ihrer Kenntnis nach im Bereich gendersensibler Unterricht durchgeführt?',
+      'de',
+      'gendersensibler Unterricht'
+    ],
+    [
+      'welche projekte gibt es im bereich gendersensibeler unterricht',
+      'de',
+      'gendersensibeler unterricht'
+    ]
   ])('extractQuery(%j, %j) === %j', (text, locale, expected) => {
     expect(extractQuery(text, /** @type {'de'|'en'} */ (locale))).toBe(expected);
+  });
+});
+
+describe('questionCues', () => {
+  it.each([
+    ['ich suche die e-teaching community', { event: false, person: false, community: true }],
+    ["I'm looking for the e-teaching community", { event: false, person: false, community: true }],
+    [
+      'ich suche nach Fortbildungen zum Thema X, im Fach Y',
+      { event: true, person: false, community: false }
+    ],
+    [
+      'ich suche fortbildungn zum thema medienkompetenz im fach deutsch',
+      { event: true, person: false, community: false }
+    ],
+    [
+      'meine Studierenden/Schüler sind unaufmerksam, was kann ich verbessern?',
+      { event: false, person: false, community: false }
+    ],
+    [
+      'ich suche nach Unterrichtsentwürfen zum Thema Nachhaltigkeit',
+      { event: false, person: false, community: false }
+    ],
+    [
+      'wie bereite ich mich auf den Statistik-Vorkurs vor?',
+      { event: false, person: false, community: false }
+    ],
+    [
+      'wer beschäftigt sich mit dem Thema OER-Lizenzen in Deutschland?',
+      { event: false, person: true, community: false }
+    ],
+    [
+      'who works on OER licensing topics in Germany',
+      { event: false, person: true, community: false }
+    ],
+    [
+      'welche comunity beschäftigt sich mit religionspädagogik',
+      { event: false, person: false, community: true }
+    ],
+    [
+      'welche Projekte werden im Bereich gendersensibler Unterricht durchgeführt?',
+      { event: false, person: false, community: false }
+    ],
+    ['Wo finde ich Leute namens Jörg?', { event: false, person: true, community: false }]
+  ])('questionCues(%j)', (text, expected) => {
+    expect(questionCues(text)).toEqual(expected);
   });
 });
 

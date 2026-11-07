@@ -5,7 +5,7 @@
  */
 import { jsonSchema, tool } from 'ai';
 import { callNopeMcpTool } from '../nopeMcpClient.js';
-import { createKnowledgeTools, DEFAULT_SEARCH_RELAYS } from './knowledge-tools.js';
+import { createKnowledgeTools, DEFAULT_SEARCH_RELAYS, nopeMcpCaller } from './knowledge-tools.js';
 
 const LICENSE_FILTERS = ['open', 'cc-any', 'any'];
 const MAX_LIMIT = 10;
@@ -63,15 +63,7 @@ function knowledgeTool(description, properties, required, run) {
  * @param {{ mcpUrl: string, getToken: () => Promise<string>, callTool?: typeof callNopeMcpTool, relays?: string[], now?: () => number }} deps
  */
 function buildAskTools({ mcpUrl, getToken, callTool = callNopeMcpTool, relays, now }) {
-  /** Anonymous first; a client-credentials token only when the server demands one. @param {string} name @param {object} args */
-  async function call(name, args) {
-    try {
-      return await callTool({ mcpUrl, bearerToken: undefined, name, args });
-    } catch (err) {
-      if (/** @type {any} */ (err)?.status !== 401) throw err;
-      return callTool({ mcpUrl, bearerToken: await getToken(), name, args });
-    }
-  }
+  const call = nopeMcpCaller({ mcpUrl, getToken, callTool });
   const k = createKnowledgeTools({ callTool: call, relays, now });
   const query = { type: 'string', description: 'Suchbegriffe (nur das Thema)' };
 
