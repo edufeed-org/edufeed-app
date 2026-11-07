@@ -2,7 +2,8 @@
   // Termi chat window — popover (default) or side panel (expanded). Account
   // hints render as proactive bot messages with real actions; free-text input
   // is matched against canned suggestions; with TERMI_AI_ENABLED anything
-  // else goes through the router (/api/termi, keyword fallback).
+  // else goes through the router (/api/termi, keyword fallback) for
+  // navigate/create/help, and every other question to the content path.
   import { getFirstPendingInvite } from '$lib/concord/pending-invites.svelte.js';
   import * as m from '$lib/paraglide/messages';
   import { modalStore } from '$lib/stores/modal.svelte.js';
@@ -19,15 +20,17 @@
   import { resolve } from '$app/paths';
   import { nip19 } from 'nostr-tools';
   import { getLocale } from '$lib/paraglide/runtime';
-  import { TERMI_SKILLS, learningSearchSkill, extractQuery } from '$lib/helpers/termi-skills.js';
+  import { TERMI_SKILLS, extractQuery } from '$lib/helpers/termi-skills.js';
+  import { isDiscoverTypeEnabled } from '$lib/helpers/discover-content-types.js';
   import { runCreateAction } from '$lib/helpers/run-create-action.js';
   import { canSign } from '$lib/helpers/signing-guard.js';
   import { untrack } from 'svelte';
   import {
     routeQuestion,
     skillAction,
-    answerableSkill,
     helpAnswer,
+    searchContent,
+    discoverHref,
     isTermiEligible,
     markTermiIneligible
   } from './termi-router.js';
@@ -341,8 +344,8 @@
     assistant?.chat.stop();
   });
 
-  // Assistant mode: an AI chat (/api/termi/chat), started by a confident
-  // `assistant.search` decision. Memory only; the window owns it.
+  // Assistant mode: an AI chat (/api/termi/chat, task `ask`), started by a
+  // content question when the account may use it. Memory only; the window owns it.
   /** @typedef {{ chat: import('@ai-sdk/svelte').Chat, reset: () => void }} TermiAssistantChat */
   let assistant = $state.raw(/** @type {TermiAssistantChat | null} */ (null));
   const chatBusy = $derived(
@@ -386,8 +389,7 @@
     const lastUser = assistant?.chat.messages.findLast((x) => x.role === 'user');
     return lastUser ? extractQuery(textOf(lastUser), getLocale() === 'en' ? 'en' : 'de') : '';
   });
-  const learningHref = (/** @type {string} */ q) =>
-    q ? `/discover?type=learning&search=${encodeURIComponent(q)}` : '/discover?type=learning';
+  const learningHref = (/** @type {string} */ q) => discoverHref('learning', q);
 
   /**
    * The assistant signs every request (no readonly account) and is gated by
@@ -416,7 +418,7 @@
   /** @param {string} text the user's question, already shown as the router bubble */
   async function startAssistant(text) {
     const user = getActiveUser();
-    // The "maybe" button may be clicked long after it was offered: check again.
+    // Answered from the probe cache: routeAnswer already asked.
     const allowed = await assistantAllowed(user);
     if (destroyed) return;
     // Switched meanwhile: the question belonged to the other account, drop it quietly.
@@ -436,7 +438,7 @@
     if (destroyed || user?.pubkey !== getActiveUser()?.pubkey) return;
     assistantPubkey = /** @type {any} */ (user).pubkey;
     assistant = createTermiChat({
-      task: 'search',
+      task: 'ask',
       user: /** @type {any} */ (user)
     });
     botTyping = false;
@@ -476,34 +478,100 @@
 
   /** @param {string} text */
   async function routeAnswer(text) {
-    /** @type {ChatMessage} */
+    /** @type {ChatMessage | null} */
     let reply;
+    const locale = getLocale() === 'en' ? 'en' : 'de';
+    const user = getActiveUser();
+    // The eligibility probe runs alongside the router request.
+    const llm = canUseAssistant(user)
+      ? isTermiEligible(/** @type {any} */ (user).pubkey, fetch)
+      : Promise.resolve(false);
     try {
-      const user = getActiveUser();
-      const { decision, query, available } = await routeQuestion(text, {
-        locale: getLocale() === 'en' ? 'en' : 'de',
+      const { decision, available } = await routeQuestion(text, {
+        locale,
         fetch,
         // help.3 points at the guide: like its chip, only offered with a HELP_URL.
         skills: helpLink ? TERMI_SKILLS : TERMI_SKILLS.filter((s) => s.id !== 'help.3'),
-        ctx: {
-          loggedIn: !!user,
-          discoverTypes: runtimeConfig.discover?.contentTypes ?? [],
-          llm: canUseAssistant(user)
-            ? isTermiEligible(/** @type {any} */ (user).pubkey, fetch)
-            : false
-        }
+        ctx: { loggedIn: !!user }
       });
-      if (decision.kind === 'confident' && decision.skill === 'assistant.search') {
-        // availableSkills offers it only with the LLM on and someone logged in.
-        await startAssistant(text);
-        return;
+      reply = routerReply(decision, available, user?.pubkey);
+      if (!reply) {
+        // A content question: tier 2 (the `ask` chat) when allowed, else tier 1.
+        if (await llm) {
+          await startAssistant(text);
+          return;
+        }
+        reply = contentReply(await searchContent(text, { locale, fetch }));
       }
-      reply = routerReply(decision, query, available, user?.pubkey, text);
     } catch {
-      reply = { role: 'bot', text: m.termi_fallback() };
+      reply = fallbackReply();
     }
+    if (destroyed) return;
     botTyping = false;
     msgs = [...msgs, reply];
+  }
+
+  /**
+   * Tier 1 items as a plain link list.
+   * shortcut: title-only links; Task 6 replaces them with typed cards.
+   * @param {Array<import('$lib/server/termi/items.js').Item>} items
+   * @returns {ChatMessage}
+   */
+  function contentReply(items) {
+    /** @type {TermiAction[]} */
+    const actions = [];
+    for (const item of items) {
+      if (item.href) actions.push({ label: item.title, href: item.href });
+      else if (item.sourceUrl) {
+        actions.push({
+          label: item.title,
+          href: item.sourceUrl,
+          target: '_blank',
+          rel: 'noopener noreferrer'
+        });
+      }
+    }
+    return actions.length ? { role: 'bot', text: m.termi_route_go(), actions } : fallbackReply();
+  }
+
+  /** The "can't answer" line plus home, the learning search and help. @returns {ChatMessage} */
+  function fallbackReply() {
+    const home = TERMI_SKILLS.find((s) => s.id === 'home');
+    const help = TERMI_SKILLS.find((s) => s.id === 'help.1');
+    const types = runtimeConfig.discover?.contentTypes ?? [];
+    /** @type {Array<TermiAction | null>} */
+    const list = [
+      home ? skillAction(home, skillCtx()) : null,
+      // Unrecognised text is no search query: offer the plain search page.
+      isDiscoverTypeEnabled('learning', types)
+        ? {
+            label: m.termi_route_browse_label({ type: m.discover_tab_learning() }),
+            href: discoverHref('learning')
+          }
+        : null,
+      helpLink
+        ? { label: m.termi_sugg_4_link(), ...helpLink }
+        : help
+          ? skillAction(help, skillCtx())
+          : null
+    ];
+    return {
+      role: 'bot',
+      text: `${m.termi_fallback()} ${m.termi_route_fallback_actions()}`,
+      actions: /** @type {TermiAction[]} */ (list.filter(Boolean))
+    };
+  }
+
+  /** @param {string} [pubkey] */
+  function skillCtx(pubkey) {
+    return {
+      npub: pubkey ? nip19.npubEncode(pubkey) : null,
+      runCreate: (/** @type {import('$lib/config/create-actions.js').CreateAction} */ action) =>
+        runCreateAction(action, { goto, resolve: (path) => resolve(/** @type {any} */ (path)) }),
+      runHelp: (/** @type {import('$lib/helpers/termi-skills.js').TermiSkill} */ skill) => {
+        msgs = [...msgs, helpReply(skill)];
+      }
+    };
   }
 
   /** @param {import('$lib/helpers/termi-skills.js').TermiSkill} skill @returns {ChatMessage} */
@@ -517,32 +585,21 @@
   }
 
   /**
+   * A navigate/create/help answer, or null for a content question.
    * @param {ReturnType<typeof import('$lib/helpers/termi-skills.js').decide>} decision
-   * @param {string} query
    * @param {import('$lib/helpers/termi-skills.js').TermiSkill[]} available
    * @param {string | undefined} pubkey
-   * @param {string} text the user's question, handed to the assistant button
-   * @returns {ChatMessage}
+   * @returns {ChatMessage | null}
    */
-  function routerReply(decision, query, available, pubkey, text) {
-    const ctx = {
-      query,
-      npub: pubkey ? nip19.npubEncode(pubkey) : null,
-      runCreate: (/** @type {import('$lib/config/create-actions.js').CreateAction} */ action) =>
-        runCreateAction(action, { goto, resolve: (path) => resolve(/** @type {any} */ (path)) }),
-      runHelp: (/** @type {import('$lib/helpers/termi-skills.js').TermiSkill} */ skill) => {
-        msgs = [...msgs, helpReply(skill)];
-      }
-    };
+  function routerReply(decision, available, pubkey) {
+    const ctx = skillCtx(pubkey);
     /** @param {string} id */
-    const skillOf = (id) => available.find((s) => s.id === answerableSkill(id));
-    /** @param {string} id @param {string} [q] */
-    const actionOf = (id, q = query) => {
+    const skillOf = (id) => available.find((s) => s.id === id);
+    /** @param {string} id */
+    const actionOf = (id) => {
       const skill = skillOf(id);
-      return skill ? skillAction(skill, { ...ctx, query: q }) : null;
+      return skill ? skillAction(skill, ctx) : null;
     };
-    /** @param {Array<TermiAction | null>} list @returns {TermiAction[]} */
-    const present = (list) => /** @type {TermiAction[]} */ (list.filter(Boolean));
 
     if (decision.kind === 'confident') {
       const skill = skillOf(decision.skill);
@@ -550,32 +607,12 @@
       const action = actionOf(decision.skill);
       if (action) return { role: 'bot', text: m.termi_route_go(), actions: [action] };
     }
+    // "Meinst du …?" only between ≥ 2 skills; one weak match is a content question.
     if (decision.kind === 'maybe') {
-      // assistant.search keeps its own button: it starts the chat with the question.
-      const ids = [
-        ...new Set(
-          decision.skills.map((id) => (id === 'assistant.search' ? id : answerableSkill(id)))
-        )
-      ];
-      const actions = present(
-        ids.map((id) =>
-          id === 'assistant.search'
-            ? { label: m.termi_route_assistant(), run: () => startAssistant(text) }
-            : actionOf(id)
-        )
-      );
-      if (actions.length) return { role: 'bot', text: m.termi_route_maybe(), actions };
+      const actions = /** @type {TermiAction[]} */ (decision.skills.map(actionOf).filter(Boolean));
+      if (actions.length >= 2) return { role: 'bot', text: m.termi_route_maybe(), actions };
     }
-    return {
-      role: 'bot',
-      text: `${m.termi_fallback()} ${m.termi_route_fallback_actions()}`,
-      actions: present([
-        actionOf('home'),
-        // Unrecognised text is no search query: offer the plain search page.
-        actionOf(learningSearchSkill(available), ''),
-        helpLink ? { label: m.termi_sugg_4_link(), ...helpLink } : actionOf('help.1')
-      ])
-    };
+    return null;
   }
 
   // Keep the newest message in view. Read the reactive deps before touching

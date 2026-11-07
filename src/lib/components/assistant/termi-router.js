@@ -1,6 +1,7 @@
 /**
- * Termi router client glue: ask `/api/termi` for ranked skills (keyword
- * fallback on any failure), decide, and turn a skill into a chat action.
+ * Termi router client glue: ask `/api/termi` for ranked navigate/create/help
+ * skills (keyword fallback on any failure), decide, and turn a skill into a
+ * chat action. Everything else is a content question (`searchContent`).
  */
 import * as m from '$lib/paraglide/messages';
 import {
@@ -21,12 +22,10 @@ import { CREATE_ACTIONS } from '$lib/config/create-actions.js';
  *   locale: 'de'|'en',
  *   fetch: typeof fetch,
  *   skills?: TermiSkill[],
- *   ctx: { loggedIn: boolean, discoverTypes: string[], llm: boolean | Promise<boolean> }
+ *   ctx: { loggedIn: boolean }
  * }} opts
  */
 export async function routeQuestion(text, { locale, fetch, skills = TERMI_SKILLS, ctx }) {
-  // `llm` may be the pending eligibility probe: it runs alongside the router request.
-  const llm = Promise.resolve(ctx.llm);
   /** @type {'embed'|'keyword'} */
   let mode = 'embed';
   /** @type {Array<{ skill: string, score: number }> | null} */
@@ -51,7 +50,7 @@ export async function routeQuestion(text, { locale, fetch, skills = TERMI_SKILLS
   } finally {
     clearTimeout(timer);
   }
-  const available = availableSkills(skills, { ...ctx, llm: await llm });
+  const available = availableSkills(skills, ctx);
   const ids = new Set(available.map((s) => s.id));
   // The server ranks the whole catalogue; drop what this user can't use.
   matches = (matches ?? keywordMatch(text, available, locale)).filter((x) => ids.has(x.skill));
@@ -64,14 +63,38 @@ export async function routeQuestion(text, { locale, fetch, skills = TERMI_SKILLS
 }
 
 /**
- * Seam for Task 10: assistant skills open the chat there. Until then they
- * fall back to the plain learning-search link so nothing dead-ends.
+ * Termi tier 1: the content items for a question (`/api/termi/search`), or
+ * `[]` when that fails — the caller then shows the fallback line.
  *
- * @param {string} skillId
- * @returns {string}
+ * @param {string} text
+ * @param {{ locale: 'de'|'en', fetch: typeof fetch }} opts
+ * @returns {Promise<Array<import('$lib/server/termi/items.js').Item>>}
  */
-export function answerableSkill(skillId) {
-  return skillId === 'assistant.search' ? 'search.learning' : skillId;
+export async function searchContent(text, { locale, fetch }) {
+  try {
+    const res = await fetch('/api/termi/search', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ text, locale }),
+      signal: AbortSignal.timeout(15_000)
+    });
+    const body = res.ok ? await res.json() : null;
+    return Array.isArray(body?.items) ? body.items : [];
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * The /discover search for one type ("Alle anzeigen").
+ *
+ * @param {string} type a discover tab id (learning, events, …)
+ * @param {string} [query]
+ */
+export function discoverHref(type, query = '') {
+  return query
+    ? `/discover?type=${type}&search=${encodeURIComponent(query)}`
+    : `/discover?type=${type}`;
 }
 
 const NAVIGATE_LABELS = /** @type {Record<string, () => string>} */ ({
@@ -82,16 +105,6 @@ const NAVIGATE_LABELS = /** @type {Record<string, () => string>} */ ({
   inbox: m.termi_route_inbox,
   settings: m.termi_route_settings,
   'my-communities': m.termi_route_my_communities
-});
-
-const TYPE_LABELS = /** @type {Record<string, () => string>} */ ({
-  all: m.discover_tab_all,
-  events: m.discover_tab_events,
-  learning: m.discover_tab_learning,
-  articles: m.discover_tab_articles,
-  boards: m.discover_tab_boards,
-  communities: m.discover_tab_communities,
-  people: m.discover_tab_people
 });
 
 /** Help skills → the canned Q&A they stand for (help.4 "Wer bist du?" → the greeting). */
@@ -114,14 +127,13 @@ export function helpAnswer(skill) {
 /**
  * @param {TermiSkill} skill
  * @param {{
- *   query: string,
  *   npub: string | null,
  *   runCreate: (action: import('$lib/config/create-actions.js').CreateAction) => void,
  *   runHelp: (skill: TermiSkill) => void
  * }} ctx
  * @returns {TermiAction | null}
  */
-export function skillAction(skill, { query, npub, runCreate, runHelp }) {
+export function skillAction(skill, { npub, runCreate, runHelp }) {
   switch (skill.kind) {
     case 'navigate': {
       let href = skill.href ?? '/';
@@ -130,19 +142,6 @@ export function skillAction(skill, { query, npub, runCreate, runHelp }) {
         href = `/p/${npub}${href.slice('profile'.length)}`;
       }
       return { label: NAVIGATE_LABELS[skill.id]?.() ?? href, href };
-    }
-    case 'search': {
-      const type = skill.discoverType ?? 'all';
-      const typeLabel = TYPE_LABELS[type]?.() ?? type;
-      return query
-        ? {
-            label: m.termi_route_search_label({ query, type: typeLabel }),
-            href: `/discover?type=${type}&search=${encodeURIComponent(query)}`
-          }
-        : {
-            label: m.termi_route_browse_label({ type: typeLabel }),
-            href: `/discover?type=${type}`
-          };
     }
     case 'create': {
       const action = CREATE_ACTIONS.find((a) => a.id === skill.actionId);

@@ -20,7 +20,7 @@ export class TermiChatHttpError extends Error {
 
 /**
  * @param {{
- *   task: 'search',
+ *   task: 'ask',
  *   user: { pubkey: string, signer: { signEvent: (draft: any) => Promise<any> } },
  *   fetch?: typeof fetch
  * }} opts

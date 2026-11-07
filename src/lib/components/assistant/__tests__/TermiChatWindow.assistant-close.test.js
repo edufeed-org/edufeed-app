@@ -73,9 +73,7 @@ describe('TermiChatWindow assistant start after close', () => {
           return new Response(JSON.stringify({ eligible: true, gated: true }));
         }
         if (url === '/api/termi') {
-          return new Response(
-            JSON.stringify({ matches: [{ skill: 'assistant.search', score: 0.92 }] })
-          );
+          return new Response(JSON.stringify({ matches: [] }));
         }
         chatCalls.push(url);
         return new Response('', { status: 500 });

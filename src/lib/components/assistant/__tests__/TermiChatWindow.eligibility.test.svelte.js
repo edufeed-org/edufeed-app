@@ -76,17 +76,16 @@ let chatCalls;
  *   chat?: () => Response
  * }} opts
  */
-function stubFetch({
-  eligible = {},
-  matches = [{ skill: 'assistant.search', score: 0.92 }],
-  chat = streamAnswer
-}) {
+function stubFetch({ eligible = {}, matches = [], chat = streamAnswer }) {
   probes = [];
   chatCalls = [];
   vi.stubGlobal(
     'fetch',
     vi.fn(async (/** @type {string} */ url) => {
       if (url === '/api/termi') return new Response(JSON.stringify({ matches }));
+      if (url === '/api/termi/search') {
+        return new Response(JSON.stringify({ items: [], sourcesUnavailable: [] }));
+      }
       if (url.startsWith('/api/termi/eligible')) {
         const pubkey = new URL(url, 'http://x').searchParams.get('pubkey') || '';
         probes.push(pubkey);
@@ -136,13 +135,12 @@ describe('TermiChatWindow — assistant NIP-05 gate', () => {
     stubFetch({ eligible: { [ALICE.pubkey]: false } });
     const view = renderWindow();
     await type(view, 'Finde Materialien zu Brüchen');
-    // As for a readonly account: assistant.search is not offered, the plain search is.
+    // As for a readonly account: tier 1 answers (here: nothing found → the plain search).
     expect(await answerHrefs(view)).toContain('/discover?type=learning');
     await type(view, 'Finde Materialien zu Brüchen');
     await waitFor(() => expect(view.getAllByTestId('termi-answer-actions')).toHaveLength(2));
     expect(chatCalls).toEqual([]);
     expect(probes).toEqual([ALICE.pubkey]);
-    expect(view.queryByText(m.termi_route_assistant())).toBeNull();
   });
 
   it.each([
@@ -193,24 +191,6 @@ describe('TermiChatWindow — assistant NIP-05 gate', () => {
     expect(view.getByText(m.termi_sugg_1_q())).toBeTruthy();
   });
 
-  it('the "maybe" assistant button re-checks the account before starting', async () => {
-    stubFetch({
-      eligible: { [ALICE.pubkey]: true },
-      matches: [
-        { skill: 'assistant.search', score: 0.78 },
-        { skill: 'search.learning', score: 0.76 }
-      ]
-    });
-    const view = renderWindow();
-    await type(view, 'Materialien Brüche?');
-    const button = await waitFor(() => view.getByText(m.termi_route_assistant()));
-    activeUser = { pubkey: ALICE.pubkey, type: 'readonly' };
-    await fireEvent.click(button);
-    await waitFor(() => view.getByText(m.termi_assistant_unavailable(), { exact: false }));
-    expect(chatCalls).toEqual([]);
-    expect(view.queryByText(m.termi_assistant_restart())).toBeNull();
-  });
-
   it('the probe runs alongside the router request, not before it', async () => {
     /** @type {(r: Response) => void} */
     let releaseProbe = () => {};
@@ -223,11 +203,7 @@ describe('TermiChatWindow — assistant NIP-05 gate', () => {
         if (url.startsWith('/api/termi/eligible')) {
           return new Promise((r) => (releaseProbe = r));
         }
-        if (url === '/api/termi') {
-          return new Response(
-            JSON.stringify({ matches: [{ skill: 'assistant.search', score: 0.92 }] })
-          );
-        }
+        if (url === '/api/termi') return new Response(JSON.stringify({ matches: [] }));
         return streamAnswer();
       })
     );
@@ -240,18 +216,7 @@ describe('TermiChatWindow — assistant NIP-05 gate', () => {
   });
 
   it('an account switch while the start probe is in flight drops the start silently', async () => {
-    stubFetch({
-      eligible: { [ALICE.pubkey]: true },
-      matches: [
-        { skill: 'assistant.search', score: 0.78 },
-        { skill: 'search.learning', score: 0.76 }
-      ]
-    });
-    const view = renderWindow();
-    await type(view, 'Materialien Brüche?');
-    const button = await waitFor(() => view.getByText(m.termi_route_assistant()));
-    // Hold the next probe open so the switch lands while it is in flight.
-    _resetTermiEligibilityForTests();
+    stubFetch({ eligible: { [ALICE.pubkey]: true } });
     /** @type {(r: Response) => void} */
     let releaseProbe = () => {};
     const inner = /** @type {any} */ (globalThis.fetch);
@@ -263,7 +228,8 @@ describe('TermiChatWindow — assistant NIP-05 gate', () => {
           : inner(url, init)
       )
     );
-    await fireEvent.click(button);
+    const view = renderWindow();
+    await type(view, 'Finde Materialien zu Brüchen');
     activeUser = BOB;
     releaseProbe(new Response(JSON.stringify({ eligible: true, gated: true })));
     await new Promise((r) => setTimeout(r, 50));
@@ -271,23 +237,5 @@ describe('TermiChatWindow — assistant NIP-05 gate', () => {
     expect(view.queryByText(m.termi_assistant_unavailable(), { exact: false })).toBeNull();
     expect(view.queryByText(m.termi_assistant_restart())).toBeNull();
     expect(chatCalls).toEqual([]);
-  });
-
-  it('the "maybe" assistant button re-checks eligibility for a switched account', async () => {
-    stubFetch({
-      eligible: { [ALICE.pubkey]: true, [BOB.pubkey]: false },
-      matches: [
-        { skill: 'assistant.search', score: 0.78 },
-        { skill: 'search.learning', score: 0.76 }
-      ]
-    });
-    const view = renderWindow();
-    await type(view, 'Materialien Brüche?');
-    const button = await waitFor(() => view.getByText(m.termi_route_assistant()));
-    activeUser = BOB;
-    await fireEvent.click(button);
-    await waitFor(() => view.getByText(m.termi_assistant_not_eligible(), { exact: false }));
-    expect(chatCalls).toEqual([]);
-    expect(probes).toEqual([ALICE.pubkey, BOB.pubkey]);
   });
 });

@@ -8,17 +8,13 @@
  * imported from `$lib/config/create-actions.js` (which pulls in both);
  * `termi-skills.test.js` cross-checks them against `CREATE_ACTIONS`.
  */
-import { isDiscoverTypeEnabled, getDiscoverTabs } from './discover-content-types.js';
-
 /**
  * @typedef {Object} TermiSkill
  * @property {string} id
- * @property {'navigate'|'search'|'create'|'help'|'assistant'} kind
+ * @property {'navigate'|'create'|'help'} kind
  * @property {{ de: string[], en: string[] }} phrases
  * @property {string} [href]
- * @property {string} [discoverType]
  * @property {string} [actionId]
- * @property {'search'|'resource'|'events'} [task]
  * @property {1|2|3|4} [helpIndex]
  * @property {boolean} [requiresUser]
  */
@@ -176,137 +172,6 @@ const NAVIGATE_SKILLS = [
     }
   }
 ];
-
-/** @type {Array<{ type: string, de: string[], en: string[] }>} */
-const SEARCH_TYPES = [
-  {
-    type: 'all',
-    de: [
-      'Zeig mir alles',
-      'Was gibt es Neues auf der Plattform?',
-      'Durchsuche alle Inhalte',
-      'Ich will alles durchstöbern',
-      'Zeig mir die neuesten Inhalte'
-    ],
-    en: [
-      'Show me everything',
-      "What's new on the platform?",
-      'Search all content',
-      'I want to browse everything',
-      'Show me the latest content'
-    ]
-  },
-  {
-    type: 'learning',
-    de: [
-      'Ich suche Materialien zur Aktivierung von Studierenden',
-      'Finde Lernmaterial zu Photosynthese',
-      'Wo finde ich Unterrichtsmaterial?',
-      'Suche Bildungsressourcen',
-      'Zeig mir Materialien zum Thema Klimawandel'
-    ],
-    en: [
-      "I'm looking for resources about fractions",
-      'Find learning material on photosynthesis',
-      'Where can I find teaching materials?',
-      'Search for educational resources',
-      'Show me materials about climate change'
-    ]
-  },
-  {
-    type: 'articles',
-    de: [
-      'Finde Artikel über Klimawandel',
-      'Ich suche einen Artikel zu OER',
-      'Zeig mir Artikel zum Thema Bildung',
-      'Wo finde ich Fachartikel?',
-      'Suche nach Blogbeiträgen'
-    ],
-    en: [
-      'Find articles about climate change',
-      "I'm looking for an article on OER",
-      'Show me articles about education',
-      'Where can I find essays?',
-      'Search for blog posts'
-    ]
-  },
-  {
-    type: 'events',
-    de: [
-      'Welche Veranstaltungen gibt es demnächst?',
-      'Finde Events zu Medienkompetenz',
-      'Ich suche einen Workshop',
-      'Zeig mir anstehende Termine',
-      'Gibt es ein Webinar zu KI?'
-    ],
-    en: [
-      'What events are coming up?',
-      'Find events about media literacy',
-      "I'm looking for a workshop",
-      'Show me upcoming events',
-      'Is there a webinar on AI?'
-    ]
-  },
-  {
-    type: 'boards',
-    de: [
-      'Zeig mir Kanban-Boards',
-      'Ich suche ein Board zur Projektplanung',
-      'Wo finde ich Boards?',
-      'Suche nach einem Boards-Projekt',
-      'Gibt es ein Board zu diesem Thema?'
-    ],
-    en: [
-      'Show me kanban boards',
-      "I'm looking for a project planning board",
-      'Where can I find boards?',
-      'Search for a board project',
-      'Is there a board on this topic?'
-    ]
-  },
-  {
-    type: 'people',
-    de: [
-      'Wo finde ich Leute namens Jörg?',
-      'Ich suche eine Person',
-      'Zeig mir Nutzer:innen',
-      'Finde jemanden mit dem Namen Maria',
-      'Wie finde ich andere Mitglieder?'
-    ],
-    en: [
-      'Where can I find people named Jörg?',
-      "I'm looking for a person",
-      'Show me users',
-      'Find someone named Maria',
-      'How do I find other members?'
-    ]
-  },
-  {
-    type: 'communities',
-    de: [
-      'Welche Communities gibt es?',
-      'Ich suche eine passende Community',
-      'Zeig mir alle Communities',
-      'Wo finde ich Gruppen zu einem Thema?',
-      'Gibt es eine Community für Lehrkräfte?'
-    ],
-    en: [
-      'What communities are there?',
-      "I'm looking for a suitable community",
-      'Show me all communities',
-      'Where can I find groups on a topic?',
-      'Is there a community for teachers?'
-    ]
-  }
-];
-
-/** @type {TermiSkill[]} */
-const SEARCH_SKILLS = SEARCH_TYPES.map(({ type, de, en }) => ({
-  id: `search.${type}`,
-  kind: 'search',
-  discoverType: type,
-  phrases: { de, en }
-}));
 
 /**
  * Create-action ids, hardcoded (see module docstring). Verified against
@@ -587,39 +452,12 @@ const HELP_SKILLS = [
   }
 ];
 
-/** @type {TermiSkill[]} */
-const ASSISTANT_SKILLS = [
-  {
-    id: 'assistant.search',
-    kind: 'assistant',
-    task: 'search',
-    phrases: {
-      de: [
-        'Finde Materialien zu Demokratie',
-        'Ich suche gezielt nach Lernressourcen',
-        'Hilf mir bei der Materialsuche',
-        'Finde passende Lehrmaterialien für mich',
-        'Suche intelligent nach Bildungsinhalten'
-      ],
-      en: [
-        'Find materials about democracy',
-        "I'm specifically looking for learning resources",
-        'Help me search for materials',
-        'Find suitable teaching materials for me',
-        'Search intelligently for educational content'
-      ]
-    }
-  }
-];
-
-/** @type {TermiSkill[]} */
-export const TERMI_SKILLS = [
-  ...NAVIGATE_SKILLS,
-  ...SEARCH_SKILLS,
-  ...CREATE_SKILLS,
-  ...HELP_SKILLS,
-  ...ASSISTANT_SKILLS
-];
+/**
+ * Only navigate/create/help: anything else is a content question and goes
+ * to Termi's content path (tier 1 search or the `ask` chat), not the router.
+ * @type {TermiSkill[]}
+ */
+export const TERMI_SKILLS = [...NAVIGATE_SKILLS, ...CREATE_SKILLS, ...HELP_SKILLS];
 
 /**
  * Leading-strip regexes per locale, in priority order. The first pattern
@@ -859,27 +697,14 @@ export function keywordMatch(text, skills, locale) {
 }
 
 /**
- * Filter the catalogue down to what this user/deployment may currently use.
+ * Filter the catalogue down to what this user may currently use.
  *
  * @param {TermiSkill[]} skills
- * @param {{ loggedIn: boolean, discoverTypes: string[], llm: boolean }} ctx
+ * @param {{ loggedIn: boolean }} ctx
  * @returns {TermiSkill[]}
  */
-export function availableSkills(skills, { loggedIn, discoverTypes, llm }) {
-  const types = discoverTypes ?? [];
-  const tabs = getDiscoverTabs(types);
-  return skills.filter((skill) => {
-    if (skill.requiresUser && !loggedIn) return false;
-    if (skill.kind === 'search') {
-      if (skill.discoverType === 'all') return tabs.includes('all');
-      if (!skill.discoverType) return false;
-      return isDiscoverTypeEnabled(skill.discoverType, types);
-    }
-    if (skill.kind === 'assistant') {
-      return !(!llm || !loggedIn);
-    }
-    return true;
-  });
+export function availableSkills(skills, { loggedIn }) {
+  return skills.filter((skill) => !skill.requiresUser || loggedIn);
 }
 
 /**
@@ -924,17 +749,4 @@ export function decide(matches, { mode }) {
     return { kind: 'maybe', skills };
   }
   return { kind: 'none' };
-}
-
-/**
- * The learning-search destination: the AI assistant replaces the plain
- * discover link once it's available.
- *
- * @param {TermiSkill[]} available
- * @returns {'assistant.search'|'search.learning'}
- */
-export function learningSearchSkill(available) {
-  return available.some((s) => s.id === 'assistant.search')
-    ? 'assistant.search'
-    : 'search.learning';
 }

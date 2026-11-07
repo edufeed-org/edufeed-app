@@ -6,21 +6,6 @@
   { "text": "hab ich neue nachrichten?", "locale": "de", "expect": "inbox" },
   { "text": "wie änder ich die einstellungen", "locale": "de", "expect": "settings" },
   { "text": "zeig mir meine communities mal", "locale": "de", "expect": "my-communities" },
-  { "text": "zeig mir einfach alles was es neu gibt", "locale": "de", "expect": "search.all" },
-  {
-    "text": "ich such grad materialien zu bruchrechnung",
-    "locale": "de",
-    "expect": "search.learning"
-  },
-  { "text": "gibt's artikel über klimawandel?", "locale": "de", "expect": "search.articles" },
-  { "text": "was für veranstaltungen gibt's bald", "locale": "de", "expect": "search.events" },
-  { "text": "wo find ich kanban boards", "locale": "de", "expect": "search.boards" },
-  { "text": "ich such jemanden namens Peter", "locale": "de", "expect": "search.people" },
-  {
-    "text": "welche communities gibt's für lehrkräfte",
-    "locale": "de",
-    "expect": "search.communities"
-  },
   {
     "text": "wie kann ich ne bildungsressource hochladen",
     "locale": "de",
@@ -53,35 +38,15 @@
   { "text": "bin neu hier, wie fang ich an", "locale": "de", "expect": "help.3" },
   { "text": "bist du ne KI oder echt", "locale": "de", "expect": "help.4" },
   {
-    "text": "kannst du für mich gezielt nach lernmaterial suchen",
-    "locale": "de",
-    "expect": "assistant.search"
-  },
-  {
     "text": "Könnten Sie mir bitte zeigen, wo meine Beiträge sind?",
     "locale": "de",
     "expect": "my-content"
   },
   { "text": "Kannst du mir die calendar page zeigen?", "locale": "de", "expect": "calendar" },
-  {
-    "text": "Ich such nach learning resources zu Mathe",
-    "locale": "de",
-    "expect": "search.learning"
-  },
   { "text": "show me my bookmarks pls", "locale": "en", "expect": "bookmarks" },
   { "text": "what's up this week", "locale": "en", "expect": "calendar" },
-  {
-    "text": "can u help me find people called Maria",
-    "locale": "en",
-    "expect": "search.people"
-  },
   { "text": "wanna create a poll real quick", "locale": "en", "expect": "create.poll" },
   { "text": "how do i even get started here", "locale": "en", "expect": "help.3" },
-  {
-    "text": "is there a workshop on media literacy coming up",
-    "locale": "en",
-    "expect": "search.events"
-  },
   { "text": "take me to my account settings", "locale": "en", "expect": "settings" },
   { "text": "Wie ist das Wetter heute in Hannover?", "locale": "de", "expect": "none" },
   { "text": "Erzähl mir einen Witz", "locale": "de", "expect": "none" },

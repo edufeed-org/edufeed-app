@@ -17,8 +17,7 @@ import {
   keywordMatch,
   availableSkills,
   decide,
-  THRESHOLDS,
-  learningSearchSkill
+  THRESHOLDS
 } from '$lib/helpers/termi-skills.js';
 
 describe('TERMI_SKILLS catalogue', () => {
@@ -39,6 +38,11 @@ describe('TERMI_SKILLS catalogue', () => {
     for (const id of createActionIds) {
       expect(coveredActionIds.has(id)).toBe(true);
     }
+  });
+
+  it('holds only navigate/create/help skills: content questions skip the router', () => {
+    const kinds = new Set(TERMI_SKILLS.map((s) => s.kind));
+    expect(kinds).toEqual(new Set(['navigate', 'create', 'help']));
   });
 
   it('every skill has at least 5 de and 5 en phrases', () => {
@@ -207,42 +211,15 @@ describe('keywordMatch', () => {
 });
 
 describe('availableSkills', () => {
-  const discoverTypes = ['people', 'events', 'learning', 'articles', 'boards', 'communities'];
-
-  it('drops requiresUser skills and assistant.search when logged out', () => {
-    const available = availableSkills(TERMI_SKILLS, { loggedIn: false, discoverTypes, llm: true });
-    const ids = new Set(available.map((s) => s.id));
-    expect(ids.has('my-content')).toBe(false);
-    expect(ids.has('bookmarks')).toBe(false);
-    expect(ids.has('inbox')).toBe(false);
-    expect(ids.has('assistant.search')).toBe(false);
-  });
-
-  it('keeps requiresUser skills and assistant.search when logged in with llm on', () => {
-    const available = availableSkills(TERMI_SKILLS, { loggedIn: true, discoverTypes, llm: true });
-    const ids = new Set(available.map((s) => s.id));
-    expect(ids.has('my-content')).toBe(true);
-    expect(ids.has('bookmarks')).toBe(true);
-    expect(ids.has('inbox')).toBe(true);
-    expect(ids.has('assistant.search')).toBe(true);
-  });
-
-  it('drops search skills for disabled discover types, and search.all when the All tab does not exist', () => {
-    const available = availableSkills(TERMI_SKILLS, {
-      loggedIn: true,
-      discoverTypes: ['events'],
-      llm: true
-    });
-    const ids = new Set(available.map((s) => s.id));
-    expect(ids.has('search.learning')).toBe(false);
-    expect(ids.has('search.all')).toBe(false);
-    expect(ids.has('search.events')).toBe(true);
-  });
-
-  it('drops assistant.* when llm is off', () => {
-    const available = availableSkills(TERMI_SKILLS, { loggedIn: true, discoverTypes, llm: false });
-    const ids = new Set(available.map((s) => s.id));
-    expect(ids.has('assistant.search')).toBe(false);
+  it('drops requiresUser skills when logged out, keeps them when logged in', () => {
+    const out = new Set(availableSkills(TERMI_SKILLS, { loggedIn: false }).map((s) => s.id));
+    expect(out.has('my-content')).toBe(false);
+    expect(out.has('bookmarks')).toBe(false);
+    expect(out.has('inbox')).toBe(false);
+    expect(out.has('calendar')).toBe(true);
+    const inn = new Set(availableSkills(TERMI_SKILLS, { loggedIn: true }).map((s) => s.id));
+    expect(inn.has('my-content')).toBe(true);
+    expect(inn.has('inbox')).toBe(true);
   });
 });
 
@@ -278,14 +255,9 @@ describe('decide', () => {
   it.each([
     ['Zeig mir den Kalender', 'de', 'calendar'],
     ['Zeig meine Lesezeichen', 'de', 'bookmarks'],
-    ['Show me the calendar', 'en', 'calendar'],
-    ['Finde Materialien zu Demokratie', 'de', 'assistant.search']
+    ['Show me the calendar', 'en', 'calendar']
   ])('keyword mode: verbatim catalogue phrase "%s" is confident', (text, locale, skill) => {
-    const available = availableSkills(TERMI_SKILLS, {
-      loggedIn: true,
-      discoverTypes: ['events', 'learning', 'articles', 'boards', 'communities', 'people'],
-      llm: true
-    });
+    const available = availableSkills(TERMI_SKILLS, { loggedIn: true });
     const matches = keywordMatch(text, available, /** @type {'de'|'en'} */ (locale));
     expect(decide(matches, { mode: 'keyword' })).toEqual({ kind: 'confident', skill });
   });
@@ -316,19 +288,5 @@ describe('decide', () => {
     // scripts/termi-eval.js); keyword is tuned from the eval fixture.
     expect(THRESHOLDS.embed).toEqual({ CONFIDENT: 0.82, MAYBE: 0.72, MARGIN: 0.05 });
     expect(THRESHOLDS.keyword).toEqual({ CONFIDENT: 0.3, MAYBE: 0.15, MARGIN: 0.55 });
-  });
-});
-
-describe('learningSearchSkill', () => {
-  it('prefers assistant.search when available', () => {
-    const available = TERMI_SKILLS.filter((s) =>
-      ['assistant.search', 'search.learning'].includes(s.id)
-    );
-    expect(learningSearchSkill(available)).toBe('assistant.search');
-  });
-
-  it('falls back to search.learning otherwise', () => {
-    const available = TERMI_SKILLS.filter((s) => s.id === 'search.learning');
-    expect(learningSearchSkill(available)).toBe('search.learning');
   });
 });

@@ -1,7 +1,8 @@
 /** @vitest-environment jsdom */
-// Assistant mode (TERMI_AI_ENABLED + LLM + logged in): a confident
-// `assistant.search` decision starts an AI chat against /api/termi/chat with
-// the user's text; later input goes to the chat until "Neu anfangen".
+// Assistant mode (TERMI_AI_ENABLED + LLM + a signing, eligible account): a
+// content question (no confident navigate/create/help skill) starts an AI
+// chat (task `ask`) against /api/termi/chat with the user's text; later input
+// goes to the chat until "Neu anfangen".
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, fireEvent, waitFor } from '@testing-library/svelte';
 import { createUIMessageStream, createUIMessageStreamResponse } from 'ai';
@@ -87,14 +88,16 @@ const eligibleAnswer = () => new Response(JSON.stringify({ eligible: true, gated
 let chatCalls;
 
 /** @param {() => Response | Promise<Response>} chatAnswer */
-function stubFetch(chatAnswer, skill = 'assistant.search') {
+function stubFetch(chatAnswer) {
   chatCalls = [];
   vi.stubGlobal(
     'fetch',
     vi.fn(async (/** @type {string} */ url, /** @type {RequestInit} */ init) => {
       if (url.startsWith('/api/termi/eligible')) return eligibleAnswer();
-      if (url === '/api/termi') {
-        return new Response(JSON.stringify({ matches: [{ skill, score: 0.92 }] }));
+      // No skill fits a content question: the router hands it to the content path.
+      if (url === '/api/termi') return new Response(JSON.stringify({ matches: [] }));
+      if (url === '/api/termi/search') {
+        return new Response(JSON.stringify({ items: [], sourcesUnavailable: [] }));
       }
       chatCalls.push({ url, init });
       return chatAnswer();
@@ -128,7 +131,7 @@ describe('TermiChatWindow assistant mode', () => {
   });
   afterEach(() => vi.unstubAllGlobals());
 
-  it('assistant.search starts the chat with the user text, signed over the sent body', async () => {
+  it('a content question starts the chat with the user text, signed over the sent body', async () => {
     stubFetch(() => streamAnswer());
     const view = renderWindow();
     await type(view, 'Finde Materialien zu Brüchen');
@@ -142,7 +145,7 @@ describe('TermiChatWindow assistant mode', () => {
     expect(url).toBe('/api/termi/chat');
     const body = /** @type {string} */ (init.body);
     const parsed = JSON.parse(body);
-    expect(parsed.task).toBe('search');
+    expect(parsed.task).toBe('ask');
     expect(parsed.messages.at(-1).parts[0].text).toBe('Finde Materialien zu Brüchen');
     // The transport lower-cases header names.
     const auth = /** @type {Record<string, string>} */ (init.headers).authorization;
@@ -222,37 +225,6 @@ describe('TermiChatWindow assistant mode', () => {
     } finally {
       user.current = real;
     }
-  });
-
-  it('a maybe answer with assistant.search offers a button that starts the chat', async () => {
-    chatCalls = [];
-    vi.stubGlobal(
-      'fetch',
-      vi.fn(async (/** @type {string} */ url, /** @type {RequestInit} */ init) => {
-        if (url.startsWith('/api/termi/eligible')) return eligibleAnswer();
-        if (url === '/api/termi') {
-          return new Response(
-            JSON.stringify({
-              matches: [
-                { skill: 'assistant.search', score: 0.78 },
-                { skill: 'search.learning', score: 0.76 }
-              ]
-            })
-          );
-        }
-        chatCalls.push({ url, init });
-        return streamAnswer();
-      })
-    );
-    const view = renderWindow();
-    await type(view, 'Materialien Brüche?');
-    const button = await waitFor(() => view.getByText(m.termi_route_assistant()));
-    expect(chatCalls).toHaveLength(0);
-    await fireEvent.click(button);
-    await waitFor(() => view.getByText('Hier sind Treffer.'));
-    expect(chatCalls).toHaveLength(1);
-    const parsed = JSON.parse(/** @type {string} */ (chatCalls[0].init.body));
-    expect(parsed.messages.at(-1).parts[0].text).toBe('Materialien Brüche?');
   });
 
   it('HTTP 503 → short line, learning search link, back to router mode', async () => {

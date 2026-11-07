@@ -52,14 +52,19 @@ vi.mock('$app/paths', () => ({ resolve: (/** @type {string} */ p) => p }));
 
 import TermiChatWindow from '../TermiChatWindow.svelte';
 
-/** @param {Array<{skill: string, score: number}> | number} answer matches, or an HTTP status */
-function stubRouter(answer) {
+/**
+ * @param {Array<{skill: string, score: number}> | number} answer matches, or an HTTP status
+ * @param {any[]} [items] what tier 1 (/api/termi/search) finds
+ */
+function stubRouter(answer, items = []) {
   const fetchMock = vi.fn(async (/** @type {string} */ url) =>
     url.startsWith('/api/termi/eligible')
       ? new Response(JSON.stringify({ eligible: true, gated: true }))
-      : typeof answer === 'number'
-        ? new Response('', { status: answer })
-        : new Response(JSON.stringify({ matches: answer }), { status: 200 })
+      : url === '/api/termi/search'
+        ? new Response(JSON.stringify({ items, sourcesUnavailable: [] }))
+        : typeof answer === 'number'
+          ? new Response('', { status: answer })
+          : new Response(JSON.stringify({ matches: answer }), { status: 200 })
   );
   vi.stubGlobal('fetch', fetchMock);
   return fetchMock;
@@ -138,28 +143,10 @@ describe('TermiChatWindow router answers', () => {
     expect(link.getAttribute('href')).toBe(`/p/${NPUB}`);
   });
 
-  it('search with a query → discover link carrying the query', async () => {
-    stubRouter([{ skill: 'search.learning', score: 0.9 }]);
-    const view = renderWindow();
-    await type(view, 'Ich suche Materialien zur Aktivierung von Studierenden');
-    const [link] = await answerActions(view);
-    expect(link.getAttribute('href')).toBe(
-      '/discover?type=learning&search=Aktivierung%20von%20Studierenden'
-    );
-  });
-
-  it('search with nothing left after extraction → link without search=', async () => {
-    stubRouter([{ skill: 'search.learning', score: 0.9 }]);
-    const view = renderWindow();
-    await type(view, 'ich suche was');
-    const [link] = await answerActions(view);
-    expect(link.getAttribute('href')).toBe('/discover?type=learning');
-  });
-
   it('maybe → "Meinst du …?" with up to three buttons', async () => {
     stubRouter([
       { skill: 'calendar', score: 0.78 },
-      { skill: 'search.events', score: 0.76 },
+      { skill: 'inbox', score: 0.76 },
       { skill: 'settings', score: 0.74 },
       { skill: 'home', score: 0.73 }
     ]);
@@ -169,16 +156,52 @@ describe('TermiChatWindow router answers', () => {
     expect(view.getByText(m.termi_route_maybe(), { exact: false })).toBeTruthy();
     expect(actions.map((a) => a.getAttribute('href'))).toEqual([
       '/calendar',
-      '/discover?type=events&search=irgendwas%20mit%20terminen',
+      '/inbox',
       '/settings'
     ]);
   });
 
-  it('none → fallback line plus home, search and help buttons', async () => {
-    stubRouter([{ skill: 'home', score: 0.2 }]);
+  it('a content question takes the content path, never "Meinst du …?"', async () => {
+    const fetchMock = stubRouter(
+      [{ skill: 'my-communities', score: 0.76 }],
+      [
+        { type: 'community', id: 'c1', title: 'e-teaching.org', href: '/c/npub1abc' },
+        { type: 'resource', id: 'r1', title: 'Extern', sourceUrl: 'https://example.org/x' }
+      ]
+    );
+    const view = renderWindow();
+    await type(view, 'ich suche die e-teaching community');
+    const actions = await answerActions(view);
+    expect(view.queryByText(m.termi_route_maybe(), { exact: false })).toBeNull();
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/termi/search',
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({ text: 'ich suche die e-teaching community', locale: 'de' })
+      })
+    );
+    expect(actions.map((a) => [a.textContent?.trim(), a.getAttribute('href')])).toEqual([
+      ['e-teaching.org', '/c/npub1abc'],
+      ['Extern', 'https://example.org/x']
+    ]);
+    expect(actions[1].getAttribute('rel')).toBe('noopener noreferrer');
+  });
+
+  it('"Zeig mir den Kalender" → confident navigate, no content search', async () => {
+    const fetchMock = stubRouter([{ skill: 'calendar', score: 0.95 }]);
+    const view = renderWindow();
+    await type(view, 'Zeig mir den Kalender');
+    const actions = await answerActions(view);
+    expect(actions.map((a) => a.getAttribute('href'))).toEqual(['/calendar']);
+    expect(fetchMock).not.toHaveBeenCalledWith('/api/termi/search', expect.anything());
+  });
+
+  it('off-topic: the content path finds nothing → fallback line plus home, search and help buttons', async () => {
+    const fetchMock = stubRouter([{ skill: 'home', score: 0.2 }]);
     const view = renderWindow();
     await type(view, 'Wie wird das Wetter morgen?');
     const actions = await answerActions(view);
+    expect(fetchMock).toHaveBeenCalledWith('/api/termi/search', expect.anything());
     expect(view.getByText(m.termi_fallback(), { exact: false })).toBeTruthy();
     expect(actions.map((a) => a.getAttribute('href'))).toEqual([
       '/c/',
@@ -223,20 +246,6 @@ describe('TermiChatWindow router answers', () => {
       expect.objectContaining({ id: 'article' }),
       expect.any(Object)
     );
-  });
-
-  it('assistant.search among "maybe" choices offers its own assistant button', async () => {
-    mockConfig.termi = { enabled: true, embed: true, llm: true };
-    stubRouter([
-      { skill: 'assistant.search', score: 0.78 },
-      { skill: 'calendar', score: 0.76 }
-    ]);
-    const view = renderWindow();
-    await type(view, 'Finde Materialien zu Demokratie');
-    const [button] = await answerActions(view);
-    // Starting the chat from it is covered in TermiChatWindow.assistant.test.js.
-    expect(button.tagName).toBe('BUTTON');
-    expect(button.textContent?.trim()).toBe(m.termi_route_assistant());
   });
 
   it('a stalled /api/termi request times out into the keyword answer', async () => {
