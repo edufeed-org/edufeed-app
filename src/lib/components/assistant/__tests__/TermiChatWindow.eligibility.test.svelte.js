@@ -148,7 +148,7 @@ describe('TermiChatWindow — assistant NIP-05 gate', () => {
   it.each([
     [{ [ALICE.pubkey]: null }, 'undetermined'],
     ['error', 'probe failed']
-  ])('probe %o (%s) → not eligible for routing, no error shown', async (eligible) => {
+  ])('probe %o (%s) → not eligible for routing, no error shown', async (eligible, _label) => {
     stubFetch({ eligible: /** @type {any} */ (eligible) });
     const view = renderWindow();
     await type(view, 'Finde Materialien zu Brüchen');
