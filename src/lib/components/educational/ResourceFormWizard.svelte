@@ -178,7 +178,7 @@
    * `'network'` on transport failure, `'tool_error'` for upstream tool
    * exceptions). `''` while status is not `'error'`. Drives the banner copy
    * so the user knows whether to wait + retry vs. fill in manually.
-   * @type {'' | 'overloaded' | 'page_too_large' | 'unsupported_type' | 'tool_error' | 'network' | 'unknown'}
+   * @type {'' | 'overloaded' | 'page_too_large' | 'unsupported_type' | 'timeout' | 'tool_error' | 'network' | 'unknown'}
    */
   let enrichmentErrorCode = $state('');
   /** Stores the source-set key we last enriched, so re-clicking is a no-op. */
@@ -1061,6 +1061,7 @@
             'overloaded',
             'page_too_large',
             'unsupported_type',
+            'timeout',
             'tool_error',
             'network',
             'unknown'
@@ -1953,6 +1954,9 @@
                       {:else if enrichmentErrorCode === 'unsupported_type'}
                         {m.amb_form_enrich_error_unsupported_type?.() ??
                           'Diesen Dateityp kann die KI nicht lesen (Webseiten, PDFs und Office-Dokumente werden unterstützt) — bitte manuell ausfüllen.'}
+                      {:else if enrichmentErrorCode === 'timeout'}
+                        {m.amb_form_enrich_error_timeout?.() ??
+                          'Die KI hat zu lange gebraucht — bitte nochmal versuchen.'}
                       {:else}
                         {m.amb_form_enrich_error?.() ?? 'KI-Ergänzung ist fehlgeschlagen.'}
                       {/if}
