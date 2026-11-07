@@ -77,7 +77,10 @@ async function publishOnce(relay, event, timeout, retries) {
       ? AUTH_AWARE_PUBLISH_RETRY
       : { ...AUTH_AWARE_PUBLISH_RETRY, count: retries };
   try {
-    return await relay.publish(event, { timeout, retries: retry });
+    // waitForAuth: false — applesauce-relay 7 otherwise parks the publish for up
+    // to 30 s waiting for someone else to authenticate; refusing at once hands
+    // the auth-required back to publishWithAuth, which answers it itself.
+    return await relay.publish(event, { timeout, retries: retry, waitForAuth: false });
   } catch (err) {
     if (isAuthRequiredError(err)) {
       return {
