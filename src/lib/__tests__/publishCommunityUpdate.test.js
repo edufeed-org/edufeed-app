@@ -9,12 +9,13 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 const publishEvent = vi.fn().mockResolvedValue(undefined);
 const eventStoreAdd = vi.fn();
+const getReplaceable = vi.fn();
 vi.mock('$lib/services/publish-service.js', () => ({ publishEvent }));
 vi.mock('$lib/stores/nostr-infrastructure.svelte', () => ({
-  eventStore: { add: eventStoreAdd }
+  eventStore: { add: eventStoreAdd, getReplaceable }
 }));
 vi.mock('$lib/helpers/communityRelays.js', () => ({
-  getCommunityGlobalRelays: () => []
+  getCommunityGlobalRelays: (e) => (e?.tags ?? []).filter((t) => t[0] === 'r').map((t) => t[1])
 }));
 
 import { publishCommunityUpdate } from '$lib/helpers/publishCommunityUpdate.js';
@@ -45,6 +46,7 @@ describe('publishCommunityUpdate', () => {
   beforeEach(() => {
     publishEvent.mockClear();
     eventStoreAdd.mockClear();
+    getReplaceable.mockReset();
     extensionSigner.signEvent.mockClear();
   });
 
@@ -83,5 +85,23 @@ describe('publishCommunityUpdate', () => {
     const signed = await publishCommunityUpdate(template, nsecSigner);
     expect(signed.id).toBe('plain-signed');
     expect(nsecSigner.signEvent.mock.calls[0][0].tags).toEqual([['d', 'x']]);
+  });
+
+  it('also publishes to relays the previous version listed, so a dropped relay is updated', async () => {
+    // Otherwise the stale definition stays on the dropped relay and anyone
+    // reading there keeps the old one.
+    getReplaceable.mockReturnValue({ kind: 10222, tags: [['r', 'wss://dropped/']] });
+    const signer = { signEvent: vi.fn(async (t) => ({ ...t, id: 'new', pubkey: 'p' })) };
+
+    await publishCommunityUpdate(
+      { kind: 10222, content: '', created_at: 1, tags: [['r', 'wss://kept/']] },
+      signer
+    );
+
+    expect(getReplaceable).toHaveBeenCalledWith(10222, 'p');
+    expect(publishEvent.mock.calls[0][2].additionalRelays).toEqual([
+      'wss://kept/',
+      'wss://dropped/'
+    ]);
   });
 });

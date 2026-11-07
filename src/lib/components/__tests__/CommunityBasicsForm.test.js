@@ -433,3 +433,80 @@ describe('CommunityBasicsForm — relay fallback comes from config', () => {
     expect(relays).toEqual(['ws://config-relay.test']);
   });
 });
+
+// Relays the community-signed events must reach beyond the outbox union.
+describe('CommunityBasicsForm — community relays on publish', () => {
+  beforeEach(() => {
+    extensionSigner.signEvent.mockClear();
+    publishEventOptimistic.mockClear();
+    sectionList.value = null;
+  });
+
+  /** @param {number} kind */
+  const optsFor = (kind) =>
+    publishEventOptimistic.mock.calls.find((c) => c[0].kind === kind)?.[2]?.additionalRelays;
+
+  it('sends the edited 10222 to a relay the edit drops, too', async () => {
+    // Otherwise the stale definition stays on the dropped relay.
+    const communikeyEvent = {
+      kind: 10222,
+      id: 'evt-drop',
+      pubkey: OWNER,
+      created_at: 1000,
+      content: '',
+      tags: [
+        ['name', 'Drop'],
+        ['r', 'wss://kept.example'],
+        ['r', 'wss://dropped.example']
+      ]
+    };
+
+    render(CommunityBasicsForm, { props: { communikeyEvent } });
+    const removes = await screen.findAllByRole('button', { name: /remove relay/i });
+    await fireEvent.click(removes[1]);
+    await fireEvent.click(await screen.findByTestId('basics-save'));
+
+    await waitFor(() => expect(optsFor(10222)).toBeDefined());
+    const signedRelays = extensionSigner.signEvent.mock.calls[0][0].tags
+      .filter((/** @type {string[]} */ t) => t[0] === 'r')
+      .map((/** @type {string[]} */ t) => t[1]);
+    expect(signedRelays).not.toContain('wss://dropped.example');
+    expect(optsFor(10222)).toEqual(expect.arrayContaining(['wss://dropped.example/']));
+  });
+
+  it("republishes a section's profile list to the community's relays", async () => {
+    sectionList.value = {
+      kind: 30000,
+      id: 'list2',
+      pubkey: OWNER,
+      created_at: 500,
+      content: '',
+      tags: [
+        ['d', 'Chat'],
+        ['form', `30168:${OWNER}:apply`]
+      ]
+    };
+    const communikeyEvent = {
+      kind: 10222,
+      id: 'evt-list-relays',
+      pubkey: OWNER,
+      created_at: 1000,
+      content: '',
+      tags: [
+        ['d', 'edufeed'],
+        ['r', 'wss://community.example'],
+        ['strict', 'content'],
+        ['content', 'Chat'],
+        ['k', '9'],
+        ['a', `30000:${OWNER}:Chat`],
+        ['a', `30168:${OWNER}:apply`, '', 'form']
+      ]
+    };
+
+    render(CommunityBasicsForm, { props: { communikeyEvent } });
+    await fireEvent.click(await screen.findByTestId('basics-save'));
+
+    await waitFor(() => expect(optsFor(30000)).toBeDefined());
+    expect(optsFor(30000)).toEqual(expect.arrayContaining(['wss://community.example/']));
+  });
+});

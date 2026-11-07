@@ -25,7 +25,12 @@ export async function publishCommunityUpdate(template, communitySigner) {
     import('$lib/stores/nostr-infrastructure.svelte'),
     import('$lib/helpers/communityRelays.js')
   ]);
-  await publishEvent(signed, [], { additionalRelays: getCommunityGlobalRelays(signed) });
+  // The previous version's relays too: one this edit drops would keep serving
+  // the stale definition otherwise.
+  const previous = eventStore.getReplaceable(10222, signed.pubkey);
+  await publishEvent(signed, [], {
+    additionalRelays: [...getCommunityGlobalRelays(signed), ...getCommunityGlobalRelays(previous)]
+  });
   eventStore.add(signed);
   return signed;
 }

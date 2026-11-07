@@ -280,7 +280,12 @@
       // postMessage boundary) can't clone — DataCloneError otherwise.
       const signedEvent = await signer.signEvent(plainTemplate(template));
       publishEventOptimistic(signedEvent, [], {
-        additionalRelays: getCommunityGlobalRelays(signedEvent)
+        // The previous version's relays too: a relay this edit drops would
+        // keep serving the stale definition otherwise.
+        additionalRelays: [
+          ...getCommunityGlobalRelays(signedEvent),
+          ...getCommunityGlobalRelays(communikeyEvent)
+        ]
       });
 
       // Legacy per-section profile lists (non-moderated only, and only where
@@ -305,7 +310,9 @@
             tags: mergeSectionProfileListTags(existing?.tags, ct.name, ct.formRef),
             content: existing?.content || ''
           };
-          publishEventOptimistic(await signer.signEvent(plainTemplate(profileListEvent)));
+          publishEventOptimistic(await signer.signEvent(plainTemplate(profileListEvent)), [], {
+            additionalRelays: getCommunityGlobalRelays(signedEvent)
+          });
         }
       }
 
