@@ -152,7 +152,11 @@ async function handleCommunityCalendar(pubkeyOrNpub, url) {
   // Profile (kind 0) and community def (kind 10222) in parallel.
   const [profileEvent, communityDefEvent] = await Promise.all([
     fetchEventFromRelays({ kinds: [0], authors: [communityPubkey], limit: 1 }, baseRelays),
-    fetchEventFromRelays({ kinds: [10222], authors: [communityPubkey], limit: 1 }, baseRelays)
+    // Community defs live on the communikey relays, like the client's getCommunikeyRelays().
+    fetchEventFromRelays(
+      { kinds: [10222], authors: [communityPubkey], limit: 1 },
+      getCalendarRelaysServer(getRelaysForKind(10222))
+    )
   ]);
 
   let title = 'Community Calendar';

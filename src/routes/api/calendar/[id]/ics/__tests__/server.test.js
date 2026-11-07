@@ -7,7 +7,8 @@ import { nip19 } from 'nostr-tools';
 vi.mock('$env/dynamic/private', () => ({
   env: {
     CALENDAR_RELAYS: 'wss://cal.example.com',
-    FALLBACK_RELAYS: 'wss://fallback.example.com'
+    FALLBACK_RELAYS: 'wss://fallback.example.com',
+    COMMUNIKEY_RELAYS: 'wss://communikey.example.com'
   }
 }));
 
@@ -479,6 +480,24 @@ describe('ICS endpoint - relay order, SSRF guard, deletions', () => {
 
     const [filters] = fetchEventsFromRelays.mock.calls.find(([f]) => !isDeletionQuery(f));
     expect(filters[0]['#d']).toHaveLength(500);
+  });
+});
+
+describe('ICS endpoint - community definition relays', () => {
+  it('reads the kind 10222 from the communikey relays plus calendar + fallback', async () => {
+    fetchEventFromRelays.mockResolvedValue(null);
+    await GET({
+      url: new URL(`https://example.org/api/calendar/${COMMUNITY_PUBKEY}/ics`),
+      params: { id: COMMUNITY_PUBKEY }
+    });
+    const defCall = fetchEventFromRelays.mock.calls.find(([f]) => f.kinds?.includes(10222));
+    expect(defCall[1]).toEqual(
+      expect.arrayContaining([
+        'wss://communikey.example.com',
+        'wss://cal.example.com',
+        'wss://fallback.example.com'
+      ])
+    );
   });
 });
 
