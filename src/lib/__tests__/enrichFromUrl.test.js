@@ -107,7 +107,7 @@ describe('enrichFromUrl', () => {
     });
     const promise = enrichFromUrl('https://example.org', 'amb', { fetchFn, timeoutMs: 10 });
     const result = await promise;
-    expect(result).toEqual({ error: 'ai_unavailable', code: 'network' });
+    expect(result).toEqual({ error: 'ai_unavailable', code: 'timeout' });
     expect(abortSignal?.aborted).toBe(true);
   });
 });

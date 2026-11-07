@@ -309,3 +309,38 @@ export async function fetchGuardedRedirects(url, init, maxRedirects = 5, lookup)
   }
   throw new Error('Too many redirects');
 }
+
+/**
+ * Read a response body into memory, but never more than `maxBytes`: the body
+ * is streamed and the reader cancelled as soon as the count passes the cap, so
+ * a lying or missing Content-Length cannot make the server buffer an
+ * arbitrarily large upstream.
+ *
+ * @param {Response} response
+ * @param {number} maxBytes
+ * @returns {Promise<Uint8Array | null>} the bytes, or null when over the cap
+ */
+export async function readCapped(response, maxBytes) {
+  if (!response.body) return new Uint8Array(0);
+  const reader = response.body.getReader();
+  /** @type {Uint8Array[]} */
+  const chunks = [];
+  let total = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    total += value.byteLength;
+    if (total > maxBytes) {
+      await reader.cancel().catch(() => {});
+      return null;
+    }
+    chunks.push(value);
+  }
+  const bytes = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return bytes;
+}

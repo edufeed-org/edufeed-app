@@ -135,4 +135,31 @@ describe('POST /api/nip05', () => {
     expect(res.status).toBe(401);
     expect(fetchSpy).not.toHaveBeenCalled();
   });
+
+  it('returns 401 (not 500) for a method tag without a value', async () => {
+    const targetUrl = 'http://localhost/api/nip05';
+    const event = finalizeEvent(
+      {
+        kind: 27235,
+        created_at: Math.floor(Date.now() / 1000),
+        tags: [['u', targetUrl], ['method']],
+        content: ''
+      },
+      adminSk
+    );
+    const auth = 'Nostr ' + btoa(JSON.stringify(event));
+
+    const res = await POST(makeRequest({ url: targetUrl, body: '', authHeader: auth }));
+    expect(res.status).toBe(401);
+  });
+
+  it('returns 502 when the nip-05-service is unreachable', async () => {
+    fetchSpy.mockRejectedValueOnce(new TypeError('fetch failed'));
+    const targetUrl = 'http://localhost/api/nip05';
+    const body = JSON.stringify({ name: 'maria', pubkey: 'a'.repeat(64) });
+    const auth = await buildAuthHeader(adminSk, targetUrl, 'POST', body);
+
+    const res = await POST(makeRequest({ url: targetUrl, body, authHeader: auth }));
+    expect(res.status).toBe(502);
+  });
 });

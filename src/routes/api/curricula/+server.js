@@ -170,7 +170,7 @@ WHERE {
   OPTIONAL { ?child skos:prefLabel ?pl . }
   BIND(COALESCE(?rl, ?pl) AS ?lbl)
   BIND(IF(EXISTS { ?child obo:BFO_0000051 ?gc }, 1, 0) AS ?hc)
-} GROUP BY ?child ORDER BY DESC(?hasChildren) ?childLabel`;
+} GROUP BY ?child ORDER BY DESC(?hasChildren) ?childLabel LIMIT 1000`;
     }
 
     default:

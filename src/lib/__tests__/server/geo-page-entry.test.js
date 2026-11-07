@@ -148,6 +148,15 @@ describe('buildPageEntry — not indexable', () => {
     expect(entry.noindex).toBe(true);
   });
 
+  it('keeps the request query string out of the cached og:url', async () => {
+    const withQuery = new URL('https://edufeed.example/naddr1abc?utm_source=x&ref=y');
+    const entry = await buildPageEntry(amb('x'), target, withQuery, ok);
+    expect(entry.head).toContain(
+      '<meta property="og:url" content="https://edufeed.example/naddr1abc" />'
+    );
+    expect(entry.head).not.toContain('utm_source');
+  });
+
   it('marks other kinds and profiles noindex, leaves community pages alone', async () => {
     const note = { ...amb('x'), kind: 1, tags: [['client', 'Edufeed']], content: 'hi' };
     expect((await buildPageEntry(note, target, url, ok)).noindex).toBe(true);

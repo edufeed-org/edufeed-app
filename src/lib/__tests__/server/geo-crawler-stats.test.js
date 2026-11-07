@@ -103,15 +103,11 @@ describe('classifyReferrer', () => {
 });
 
 describe('clientIp', () => {
-  it('takes the left-most X-Forwarded-For entry (set by the edge proxy)', () => {
-    const headers = new Headers({ 'x-forwarded-for': '203.0.113.7, 10.0.0.1' });
-    expect(clientIp(headers, () => '10.0.0.2')).toBe('203.0.113.7');
-  });
-
-  it('falls back to the socket address', () => {
-    expect(clientIp(new Headers(), () => '198.51.100.4')).toBe('198.51.100.4');
+  it("uses SvelteKit's client address, never a spoofable left-most X-Forwarded-For", () => {
+    // adapter-node resolves ADDRESS_HEADER / XFF_DEPTH inside getClientAddress.
+    expect(clientIp(() => '198.51.100.4')).toBe('198.51.100.4');
     expect(
-      clientIp(new Headers(), () => {
+      clientIp(() => {
         throw new Error('no address');
       })
     ).toBeNull();
@@ -255,6 +251,35 @@ describe('createStatsStore', () => {
     ]);
   });
 
+  it('caps distinct paths and unknown UAs per day, then counts into "other"', () => {
+    const store = createStatsStore({ dir });
+    const day = '2026-11-04';
+    for (let i = 0; i < 5100; i++) {
+      store.crawler(day, {
+        family: 'GPTBot',
+        verified: null,
+        path: `/p${i}`,
+        status: 200,
+        bytes: 1
+      });
+      store.referral(day, { source: 'other', path: `/p${i}`, utm: null });
+      store.unknownBot(day, `bot-${i}`);
+    }
+    store.flush();
+    const data = JSON.parse(readFileSync(join(dir, `${day}.json`), 'utf8'));
+    expect(data.crawlers.length).toBeLessThanOrEqual(5001);
+    expect(data.referrals.length).toBeLessThanOrEqual(5001);
+    expect(data.unknownBots.length).toBeLessThanOrEqual(5001);
+    expect(data.crawlers.find((/** @type {any} */ r) => r.path === 'other')?.count).toBe(100);
+    expect(data.referrals.find((/** @type {any} */ r) => r.path === 'other')?.count).toBe(100);
+    expect(data.unknownBots.find((/** @type {any} */ r) => r.ua === 'other')?.count).toBe(100);
+    // Known keys keep counting past the cap.
+    store.crawler(day, { family: 'GPTBot', verified: null, path: '/p0', status: 200, bytes: 1 });
+    store.flush();
+    const again = JSON.parse(readFileSync(join(dir, `${day}.json`), 'utf8'));
+    expect(again.crawlers.find((/** @type {any} */ r) => r.path === '/p0')?.count).toBe(2);
+  });
+
   it('only writes days that changed', () => {
     const store = createStatsStore({ dir });
     store.flush();
@@ -359,15 +384,21 @@ describe('createCrawlerStatsHandle', () => {
       'GET',
       500
     );
-    // a crawler's 404 still counts: it shows what the crawler asked for
+    // nor a bot's: every probed path would become a row of its own
     await request(handle, '/gone', { 'user-agent': 'GPTBot/1.2' }, 'text/html', 'GET', 404);
+    await request(handle, '/x.php', { 'user-agent': 'evilscan-bot/1' }, 'text/html', 'GET', 404);
     store.flush();
-    const data = read();
-    expect(data.pageviews).toBe(0);
-    expect(data.referrals).toEqual([]);
-    expect(data.crawlers).toContainEqual(
-      expect.objectContaining({ family: 'GPTBot', path: '/gone', status: 404 })
-    );
+    expect(existsSync(join(dir, `${today}.json`))).toBe(false);
+  });
+
+  it('verifies a crawler against the address getClientAddress reports, not X-Forwarded-For', async () => {
+    const verify = vi.fn(() => true);
+    const { handle } = createCrawlerStatsHandle({ dir, verifier: { verify } });
+    await request(handle, '/wiki/a', {
+      'user-agent': 'GPTBot/1.2',
+      'x-forwarded-for': '20.15.240.9, 10.0.0.1'
+    });
+    expect(verify).toHaveBeenCalledWith(expect.any(Array), '10.0.0.2');
   });
 
   it('keeps only safe utm_source values', async () => {

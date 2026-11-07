@@ -3,7 +3,12 @@ import { parseHTML } from 'linkedom';
 import { isPdfResponse, extractPdfContent } from '$lib/helpers/pdfExtractor.js';
 import { extractMetadataFromHtml } from '$lib/server/metadataExtraction.js';
 import { isHedgedocPage, extractHedgedocArticle } from '$lib/helpers/hedgedocExtractor.js';
-import { parseHttpUrl, isBlockedHost, fetchGuardedRedirects } from '$lib/server/httpUrl.js';
+import {
+  parseHttpUrl,
+  isBlockedHost,
+  fetchGuardedRedirects,
+  readCapped
+} from '$lib/server/httpUrl.js';
 
 const MAX_SIZE = 5 * 1024 * 1024; // 5MB
 const FETCH_TIMEOUT = 10_000;
@@ -32,10 +37,11 @@ export async function GET({ url }) {
     );
   }
 
+  // Covers the body read too, not just the headers: a slow-drip body must not
+  // hold the request open past the timeout.
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), FETCH_TIMEOUT);
   try {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), FETCH_TIMEOUT);
-
     const response = await fetchGuardedRedirects(articleUrl, {
       signal: controller.signal,
       headers: {
@@ -43,8 +49,6 @@ export async function GET({ url }) {
         'User-Agent': 'Mozilla/5.0 (compatible; ReaderBot/1.0)'
       }
     });
-
-    clearTimeout(timeout);
 
     if (!response.ok) {
       return Response.json(
@@ -72,12 +76,13 @@ export async function GET({ url }) {
 
     // PDF branch
     if (isPdfResponse(response.headers, articleUrl)) {
-      const buffer = await response.arrayBuffer();
-      if (buffer.byteLength > MAX_SIZE) {
+      const bytes = await readCapped(response, MAX_SIZE);
+      if (!bytes) {
         return Response.json({ success: false, error: 'Content too large' }, { status: 502 });
       }
+      clearTimeout(timeout);
 
-      const pdfArticle = await extractPdfContent(buffer);
+      const pdfArticle = await extractPdfContent(/** @type {ArrayBuffer} */ (bytes.buffer));
 
       if (!pdfArticle.textContent) {
         return Response.json(
@@ -106,10 +111,12 @@ export async function GET({ url }) {
     }
 
     // HTML branch
-    const html = await response.text();
-    if (html.length > MAX_SIZE) {
+    const htmlBytes = await readCapped(response, MAX_SIZE);
+    if (!htmlBytes) {
       return Response.json({ success: false, error: 'Content too large' }, { status: 502 });
     }
+    clearTimeout(timeout);
+    const html = new TextDecoder().decode(htmlBytes);
 
     // Metadata-only branch: skip Readability, extract AMB JSON-LD or Open Graph
     if (mode === 'metadata') {
@@ -167,5 +174,7 @@ export async function GET({ url }) {
       return Response.json({ success: false, error: 'Fetch timed out' }, { status: 504 });
     }
     return Response.json({ success: false, error: 'Failed to process article' }, { status: 502 });
+  } finally {
+    clearTimeout(timeout);
   }
 }

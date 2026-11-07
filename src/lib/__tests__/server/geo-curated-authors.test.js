@@ -28,13 +28,16 @@ describe('resolveAuthors', () => {
       relays: ['wss://r.example']
     });
     const fetchFirst = vi.fn(async () => ({
-      kind: 30000,
-      pubkey: A,
-      tags: [
-        ['d', 'list'],
-        ['p', B],
-        ['p', 'junk']
-      ]
+      complete: true,
+      event: {
+        kind: 30000,
+        pubkey: A,
+        tags: [
+          ['d', 'list'],
+          ['p', B],
+          ['p', 'junk']
+        ]
+      }
     }));
     const authors = await resolveAuthors(
       { sets: [set], direct: [nip19.npubEncode(A)] },
@@ -48,15 +51,26 @@ describe('resolveAuthors', () => {
     );
   });
 
-  it('returns an empty list when curated sets cannot be resolved', async () => {
+  it('returns an empty list when every relay confirmed the curated set does not exist', async () => {
     const set = nip19.naddrEncode({ kind: 30000, pubkey: A, identifier: 'list', relays: [] });
     expect(
       await resolveAuthors(
         { sets: [set], direct: [] },
         [],
-        vi.fn(async () => null)
+        vi.fn(async () => ({ event: null, complete: true }))
       )
     ).toEqual([]);
+  });
+
+  it('rejects when a curated set did not answer in time, instead of resolving an incomplete set', async () => {
+    const set = nip19.naddrEncode({ kind: 30000, pubkey: A, identifier: 'list', relays: [] });
+    await expect(
+      resolveAuthors(
+        { sets: [set], direct: [B] },
+        [],
+        vi.fn(async () => ({ event: null, complete: false }))
+      )
+    ).rejects.toThrow();
   });
 });
 
@@ -98,6 +112,18 @@ describe('resolveCuratedAuthorSet — GEO_INDEX_AUTHORS', () => {
       /** @type {any} */ (vi.fn())
     );
     expect([...set]).toEqual([C]);
+  });
+});
+
+describe('resolveCuratedAuthorSet — incomplete resolution', () => {
+  it('rejects so the cache keeps its previous set', async () => {
+    const set = nip19.naddrEncode({ kind: 30000, pubkey: A, identifier: 'list', relays: [] });
+    await expect(
+      resolveCuratedAuthorSet(
+        { CURATED_PUBKEYS_SETS: set },
+        vi.fn(async () => ({ event: null, complete: false }))
+      )
+    ).rejects.toThrow();
   });
 });
 

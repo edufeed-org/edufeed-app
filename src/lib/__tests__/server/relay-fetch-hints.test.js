@@ -96,7 +96,7 @@ describe('relay-fetch hint relays (SSRF)', () => {
 
   it('curated sets: only public wss hints reach the fetcher', async () => {
     const set = nip19.naddrEncode({ kind: 30000, pubkey: PK, identifier: 'l', relays: HOSTILE });
-    const fetchFirst = vi.fn(async () => null);
+    const fetchFirst = vi.fn(async () => ({ event: null, complete: true }));
     await resolveAuthors({ sets: [set], direct: [] }, [], fetchFirst, { lookup });
     const relays = /** @type {any} */ (fetchFirst.mock.calls[0])[1];
     expect(relays).toContain('wss://public-hint.example');

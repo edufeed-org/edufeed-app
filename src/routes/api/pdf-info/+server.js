@@ -18,7 +18,7 @@
 
 import { readFile } from 'node:fs/promises';
 import { parseHttpUrl, isBlockedHost } from '$lib/server/httpUrl.js';
-import { readPdfPageCount } from '$lib/server/pdfThumbnail.js';
+import { readPdfPageCount, tryAcquirePdfSlot, pdfBusyResponse } from '$lib/server/pdfThumbnail.js';
 import { fetchPdfBytes, pdfCachePath, writePdfCache } from '$lib/server/pdfSource.js';
 
 /** A given URL's page count does not change; cache it as long as thumbnails. */
@@ -62,6 +62,22 @@ export async function GET({ url }) {
     // miss — derive below
   }
 
+  // The slot covers the fetch too, so the buffered upstream bytes are bounded as well.
+  const release = tryAcquirePdfSlot();
+  if (!release) return pdfBusyResponse();
+  try {
+    return await fetchAndDerive(canonicalUrl, file);
+  } finally {
+    release();
+  }
+}
+
+/**
+ * @param {string} canonicalUrl
+ * @param {string} file - cache path for the derived artifact
+ * @returns {Promise<Response>}
+ */
+async function fetchAndDerive(canonicalUrl, file) {
   const source = await fetchPdfBytes(canonicalUrl);
   if (!source.ok) return source.response;
 

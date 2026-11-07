@@ -15,7 +15,7 @@ import { parseArray } from '$lib/server/env-parse.js';
 import { eventMatchesFilter, getRelaysForKind } from '$lib/server/relay-fetch.js';
 import { curatedAuthors, mirrorOriginal } from '$lib/server/og.js';
 import { isIndexableEvent } from './indexability.js';
-import { canonicalPathFor } from './page-content.js';
+import { canonicalPathFor, isoFromSeconds } from './page-content.js';
 
 // amb-relay caps at 250 and answers some requests at exactly that limit empty.
 const PAGE_SIZE = 200;
@@ -149,7 +149,7 @@ export function latestByAddress(events) {
  * Latest version per address, filtered by the indexability rule.
  * @param {import('nostr-tools').NostrEvent[]} events
  * @param {{ origin: string, relayHintFor: (kind: number) => string | undefined, isIndexable: (e: import('nostr-tools').NostrEvent) => boolean }} opts
- * @returns {{ loc: string, lastmod: string }[]}
+ * @returns {{ loc: string, lastmod?: string }[]}
  */
 export function buildSitemapEntries(events, { origin, relayHintFor, isIndexable }) {
   const latest = latestByAddress(events);
@@ -165,7 +165,7 @@ export function buildSitemapEntries(events, { origin, relayHintFor, isIndexable 
   }
   return [...byLoc].map(([loc, createdAt]) => ({
     loc,
-    lastmod: new Date(createdAt * 1000).toISOString().slice(0, 10)
+    lastmod: isoFromSeconds(createdAt)?.slice(0, 10)
   }));
 }
 
@@ -174,12 +174,15 @@ const escXml = (s) =>
   s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
 /**
- * @param {{ loc: string, lastmod: string }[]} entries
+ * @param {{ loc: string, lastmod?: string }[]} entries
  * @returns {string}
  */
 export function renderSitemapXml(entries) {
   const urls = entries
-    .map((e) => `<url><loc>${escXml(e.loc)}</loc><lastmod>${e.lastmod}</lastmod></url>`)
+    .map(
+      (e) =>
+        `<url><loc>${escXml(e.loc)}</loc>${e.lastmod ? `<lastmod>${e.lastmod}</lastmod>` : ''}</url>`
+    )
     .join('\n');
   return (
     '<?xml version="1.0" encoding="UTF-8"?>\n' +

@@ -8,15 +8,20 @@
  */
 
 /**
+ * RFC 5545 TEXT escaping. CRLF counts as one newline; any other CR is dropped,
+ * since a raw CR in the output would end the content line.
+ *
  * @param {string | number} text
  * @returns {string}
  */
 export function escapeIcsText(text) {
   return String(text ?? '')
+    .replace(/\r\n/g, '\n')
+    .replace(/\r/g, '')
     .replace(/\\/g, '\\\\')
     .replace(/;/g, '\\;')
     .replace(/,/g, '\\,')
-    .replace(/\r?\n/g, '\\n');
+    .replace(/\n/g, '\\n');
 }
 
 /**

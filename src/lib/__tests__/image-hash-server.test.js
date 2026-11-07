@@ -9,20 +9,16 @@ import { GET } from '../../routes/api/image-hash/+server.js';
  * @param {{ contentType?: string, contentLength?: string, status?: number }} [opts]
  */
 function stubUpstream(buffer, { contentType = 'image/png', contentLength, status = 200 } = {}) {
-  const fetchMock = vi.fn(async () => ({
-    ok: status >= 200 && status < 300,
-    status,
-    headers: {
-      get: (/** @type {string} */ name) => {
-        const key = name.toLowerCase();
-        if (key === 'content-type') return contentType;
-        if (key === 'content-length') return contentLength ?? null;
-        return null;
-      }
-    },
-    arrayBuffer: async () =>
-      buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength)
-  }));
+  const fetchMock = vi.fn(
+    async () =>
+      new Response(new Uint8Array(buffer), {
+        status,
+        headers: {
+          'content-type': contentType,
+          ...(contentLength ? { 'content-length': contentLength } : {})
+        }
+      })
+  );
   vi.stubGlobal('fetch', fetchMock);
   return fetchMock;
 }

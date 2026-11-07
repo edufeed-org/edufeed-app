@@ -10,6 +10,10 @@
 
 import { json } from '@sveltejs/kit';
 import { env } from '$env/dynamic/private';
+import { createRateLimiter, clientKey, tooManyRequests } from '$lib/server/rate-limit.js';
+
+// Uploads (POST files) make the cleaner process a file of up to 200 MB.
+const limitUploads = createRateLimiter({ max: 30, windowMs: 10 * 60_000 });
 
 const SESSION_ID = /^[A-Za-z0-9_-]+$/;
 
@@ -42,6 +46,10 @@ async function proxy(event) {
   const upstreamPath = resolveUpstreamPath(event.params.path ?? '', method);
   if (!upstreamPath) {
     return json({ error: 'Not found' }, { status: 404 });
+  }
+  if (upstreamPath === '/api/files') {
+    const retryAfter = limitUploads(clientKey(event));
+    if (retryAfter) return tooManyRequests(retryAfter);
   }
 
   /** @type {RequestInit} */

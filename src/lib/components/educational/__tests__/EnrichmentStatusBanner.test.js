@@ -62,6 +62,14 @@ describe('EnrichmentStatusBanner', () => {
     expect(alert?.textContent).toMatch(/Dateityp/i);
   });
 
+  it('shows the timeout copy when errorCode is "timeout"', () => {
+    const { container } = render(EnrichmentStatusBanner, {
+      props: { status: 'error', errorCode: 'timeout' }
+    });
+    const alert = container.querySelector('[role="status"]');
+    expect(alert?.textContent).toMatch(/zu lange/i);
+  });
+
   it('shows the generic error copy when errorCode is unset', () => {
     const { container } = render(EnrichmentStatusBanner, { props: { status: 'error' } });
     const alert = container.querySelector('[role="status"]');

@@ -93,10 +93,26 @@ function formatIsoDate(value) {
   return m ? `${m[3]}.${m[2]}.${m[1]}` : value;
 }
 
+/**
+ * Beyond ±8.64e12 s a Date is invalid and toISOString() would throw.
+ * @param {unknown} seconds
+ * @returns {seconds is number}
+ */
+const isDateSeconds = (seconds) =>
+  typeof seconds === 'number' && Number.isFinite(seconds) && Math.abs(seconds) <= 8.64e12;
+
+/**
+ * @param {unknown} seconds - Unix seconds from an event (untrusted)
+ * @returns {string | undefined} ISO timestamp, undefined when not a representable date
+ */
+export function isoFromSeconds(seconds) {
+  return isDateSeconds(seconds) ? new Date(seconds * 1000).toISOString() : undefined;
+}
+
 /** @param {any} event */
 function publishedSeconds(event) {
   const tag = Number.parseInt(getTagValue(event.tags, 'published_at') ?? '', 10);
-  return Number.isFinite(tag) ? tag : event.created_at;
+  return isDateSeconds(tag) ? tag : event.created_at;
 }
 
 /**
@@ -115,11 +131,11 @@ const articleShell = (title, byline, inner) =>
 function byline(event, origin, authorName) {
   const npub = nip19.npubEncode(event.pubkey);
   const name = authorName || shortNpub(event.pubkey);
-  return (
-    `<p>Von <a href="/p/${npub}">${esc(name)}</a> · ` +
-    `<time datetime="${new Date(publishedSeconds(event) * 1000).toISOString()}">` +
-    `${formatDate(publishedSeconds(event))}</time></p>`
-  );
+  const iso = isoFromSeconds(publishedSeconds(event));
+  const time = iso
+    ? ` · <time datetime="${iso}">${formatDate(publishedSeconds(event))}</time>`
+    : '';
+  return `<p>Von <a href="/p/${npub}">${esc(name)}</a>${time}</p>`;
 }
 
 /**
@@ -129,13 +145,15 @@ function byline(event, origin, authorName) {
  * @param {{ title: string, description?: string, image?: string, authorName?: string }} f
  */
 function articleJsonLd(event, canonicalUrl, origin, f) {
+  const published = isoFromSeconds(publishedSeconds(event));
+  const modified = isoFromSeconds(event.created_at);
   return {
     '@context': 'https://schema.org',
     '@type': 'Article',
     headline: f.title,
     ...(f.description ? { description: f.description } : {}),
-    datePublished: new Date(publishedSeconds(event) * 1000).toISOString(),
-    dateModified: new Date(event.created_at * 1000).toISOString(),
+    ...(published ? { datePublished: published } : {}),
+    ...(modified ? { dateModified: modified } : {}),
     ...(isHttpUrl(f.image) ? { image: f.image } : {}),
     url: canonicalUrl,
     author: {

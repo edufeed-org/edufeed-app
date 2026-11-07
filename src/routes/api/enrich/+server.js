@@ -17,6 +17,10 @@ import { callExtractMetadata } from '$lib/server/nopeMcpClient.js';
 import { getNopeMcpToken } from '$lib/server/nopeMcpToken.js';
 import { nopeMcpEnv } from '$lib/server/nopeMcpEnv.js';
 import { parseHttpUrl } from '$lib/server/httpUrl.js';
+import { createRateLimiter, clientKey, tooManyRequests } from '$lib/server/rate-limit.js';
+
+// Every call runs an LLM extraction (up to MAX_SOURCE_URLS sources) on our bill.
+const limit = createRateLimiter({ max: 30, windowMs: 10 * 60_000 });
 
 const VARIANTS = new Set(['amb', 'ekw', 'konfi']);
 const BILDUNGSBEREICHE = new Set(['schule', 'hochschule', 'extra', 'konfi']);
@@ -123,7 +127,10 @@ function buildSkosSchemes(variant, bildungsbereich) {
 }
 
 /** @type {import('@sveltejs/kit').RequestHandler} */
-export async function POST({ request }) {
+export async function POST({ request, getClientAddress }) {
+  const retryAfter = limit(clientKey({ getClientAddress }));
+  if (retryAfter) return tooManyRequests(retryAfter);
+
   /** @type {{ url?: string, urls?: unknown, variant?: string, bildungsbereich?: string }} */
   let body;
   try {
@@ -199,10 +206,13 @@ export async function POST({ request }) {
           bearerToken: await getNopeMcpToken(),
           urls,
           variant,
-          skosSchemes: buildSkosSchemes(variant, bildungsbereich)
+          skosSchemes: buildSkosSchemes(variant, bildungsbereich),
+          // A closed tab must not keep the paid LLM extraction running.
+          signal: request.signal
         });
         controller.enqueue(enc.encode(JSON.stringify(result)));
       } catch (err) {
+        if (request.signal.aborted) return; // client gone: nobody to answer
         console.error('[/api/enrich] extract_metadata failed:', err);
         const code = /** @type {{ code?: unknown }} */ (err)?.code;
         const body = {
@@ -212,7 +222,11 @@ export async function POST({ request }) {
         controller.enqueue(enc.encode(JSON.stringify(body)));
       } finally {
         clearInterval(heartbeat);
-        controller.close();
+        try {
+          controller.close();
+        } catch {
+          // stream already cancelled by the disconnect; ignore
+        }
       }
     }
   });

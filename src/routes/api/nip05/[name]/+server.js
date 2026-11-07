@@ -37,7 +37,8 @@ async function verifyNip98Header(authHeader, url, method) {
   if (!uTag || uTag[1] !== url) return null;
 
   const methodTag = event.tags?.find((/** @type {string[]} */ t) => t[0] === 'method');
-  if (!methodTag || methodTag[1].toUpperCase() !== method.toUpperCase()) return null;
+  if (typeof methodTag?.[1] !== 'string' || methodTag[1].toUpperCase() !== method.toUpperCase())
+    return null;
 
   return event.pubkey;
 }
@@ -72,17 +73,22 @@ export async function DELETE({ request, params, url }) {
     return json({ error: 'name parameter required' }, { status: 400 });
   }
 
-  const upstreamRes = await fetch(
-    `${serviceUrl.replace(/\/$/, '')}/api/nip05/${encodeURIComponent(name)}`,
-    {
-      method: 'DELETE',
-      headers: { Authorization: `Bearer ${serviceApiKey}` }
-    }
-  );
-  // Null-body statuses (204/205/304) per Fetch spec — Response constructor
-  // throws if a body is passed, which would surface as a misleading 500.
-  const hasBody = ![204, 205, 304].includes(upstreamRes.status);
-  const upstreamBody = hasBody ? await upstreamRes.text() : null;
+  let upstreamRes, upstreamBody;
+  try {
+    upstreamRes = await fetch(
+      `${serviceUrl.replace(/\/$/, '')}/api/nip05/${encodeURIComponent(name)}`,
+      {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${serviceApiKey}` }
+      }
+    );
+    // Null-body statuses (204/205/304) per Fetch spec — Response constructor
+    // throws if a body is passed, which would surface as a misleading 500.
+    const hasBody = ![204, 205, 304].includes(upstreamRes.status);
+    upstreamBody = hasBody ? await upstreamRes.text() : null;
+  } catch {
+    return json({ error: 'nip-05 service unreachable' }, { status: 502 });
+  }
   return new Response(upstreamBody, {
     status: upstreamRes.status,
     headers: {

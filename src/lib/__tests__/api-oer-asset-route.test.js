@@ -14,13 +14,10 @@ function ev(rawUrl) {
 
 /** Stub global.fetch to return image bytes with a content-type. */
 function stubFetch({ bytes, contentType = 'image/jpeg', ok = true, status = 200 }) {
-  return vi.fn(async () => ({
-    ok,
-    status,
-    headers: { get: (h) => (h.toLowerCase() === 'content-type' ? contentType : null) },
-    arrayBuffer: async () =>
-      bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength)
-  }));
+  return vi.fn(
+    async () =>
+      new Response(ok ? bytes : null, { status, headers: { 'content-type': contentType } })
+  );
 }
 
 describe('GET /api/oer/asset', () => {
@@ -56,6 +53,18 @@ describe('GET /api/oer/asset', () => {
     const res = await GET(ev('https://upload.wikimedia.org/x.png'));
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ sha256: expectedSha, mime: 'image/png', size: 5 });
+  });
+
+  it('refuses a redirect to a private host instead of following it (SSRF)', async () => {
+    const fetchMock = vi.fn(
+      async () =>
+        new Response(null, { status: 302, headers: { location: 'http://169.254.169.254/latest' } })
+    );
+    vi.stubGlobal('fetch', fetchMock);
+    const res = await GET(ev('https://upload.wikimedia.org/x.png'));
+    expect(res.status).toBe(502);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock.mock.calls[0][1]).toMatchObject({ redirect: 'manual' });
   });
 
   it('returns 502 on a non-ok upstream response', async () => {

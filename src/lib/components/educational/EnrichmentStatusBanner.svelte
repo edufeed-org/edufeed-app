@@ -12,7 +12,7 @@
   /**
    * @type {{
    *   status: 'idle' | 'pending' | 'success' | 'error' | 'skipped-amb',
-   *   errorCode?: '' | 'overloaded' | 'page_too_large' | 'unsupported_type' | 'tool_error' | 'network' | 'unknown',
+   *   errorCode?: '' | 'overloaded' | 'page_too_large' | 'unsupported_type' | 'timeout' | 'tool_error' | 'network' | 'unknown',
    *   ondismiss?: () => void
    * }}
    */
@@ -61,6 +61,8 @@
         >Diesen Dateityp kann die KI nicht lesen (nur Webseiten und PDFs) — bitte manuell ausfüllen
         oder eine PDF-Version wählen.</span
       >
+    {:else if errorCode === 'timeout'}
+      <span>Die KI hat zu lange gebraucht — bitte nochmal versuchen oder manuell ausfüllen.</span>
     {:else}
       <span>KI konnte keine Vorschläge erstellen — bitte manuell ausfüllen.</span>
     {/if}

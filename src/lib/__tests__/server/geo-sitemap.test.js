@@ -111,6 +111,19 @@ describe('buildSitemapEntries', () => {
   });
 });
 
+describe('buildSitemapEntries - out-of-range created_at', () => {
+  it('omits lastmod for that entry instead of failing the sitemap', () => {
+    const entries = buildSitemapEntries([ev(30023, A, 'x', 9e15), ev(30023, B, 'y', 1700000000)], {
+      origin: ORIGIN,
+      relayHintFor: hint,
+      isIndexable: all
+    });
+    expect(entries).toHaveLength(2);
+    expect(entries.filter((e) => e.lastmod === undefined)).toHaveLength(1);
+    expect(renderSitemapXml(entries).match(/<lastmod>/g)).toHaveLength(1);
+  });
+});
+
 describe('renderSitemapXml', () => {
   it('renders an escaped urlset', () => {
     const xml = renderSitemapXml([

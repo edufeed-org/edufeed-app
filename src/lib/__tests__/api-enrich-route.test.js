@@ -196,6 +196,39 @@ describe('POST /api/enrich', () => {
     vi.useRealTimers();
   });
 
+  it('aborts the upstream call and stops the heartbeat when the client disconnects', async () => {
+    vi.useFakeTimers();
+    try {
+      /** @type {AbortSignal | undefined} */
+      let upstreamSignal;
+      callExtractMetadataMock.mockImplementationOnce(
+        (/** @type {{ signal: AbortSignal }} */ input) =>
+          new Promise((_resolve, reject) => {
+            upstreamSignal = input.signal;
+            input.signal.addEventListener('abort', () => reject(input.signal.reason));
+          })
+      );
+      const client = new AbortController();
+      const request = new Request('http://localhost/api/enrich', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ url: 'https://example.org', variant: 'amb' }),
+        signal: client.signal
+      });
+      const res = await POST(ev(request));
+      await vi.advanceTimersByTimeAsync(0);
+      expect(upstreamSignal?.aborted).toBe(false);
+
+      client.abort();
+      await vi.advanceTimersByTimeAsync(0);
+      expect(upstreamSignal?.aborted).toBe(true);
+      expect(vi.getTimerCount()).toBe(0);
+      await res.body?.cancel();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('passes mcpUrl, bearerToken, and skosSchemes to the client', async () => {
     callExtractMetadataMock.mockResolvedValueOnce({
       source: 'llm-enriched',
@@ -325,5 +358,18 @@ describe('POST /api/enrich NOPE_MCP_URL / AMB_MCP_URL fallback', () => {
     expect(callExtractMetadataMock).toHaveBeenCalledWith(
       expect.objectContaining({ mcpUrl: 'https://amb.example/mcp' })
     );
+  });
+});
+
+describe('POST /api/enrich rate limit', () => {
+  it('answers 429 with Retry-After once one client exceeds 30 calls in 10 minutes', async () => {
+    const flood = () => ({
+      ...ev(makeRequest({ variant: 'amb' })),
+      getClientAddress: () => '203.0.113.9'
+    });
+    for (let i = 0; i < 30; i++) expect((await POST(flood())).status).toBe(400);
+    const res = await POST(flood());
+    expect(res.status).toBe(429);
+    expect(Number(res.headers.get('Retry-After'))).toBeGreaterThan(0);
   });
 });

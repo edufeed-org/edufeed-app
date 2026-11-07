@@ -146,4 +146,30 @@ describe('DELETE /api/nip05/[name]', () => {
     expect(res.status).toBe(401);
     expect(fetchSpy).not.toHaveBeenCalled();
   });
+
+  it('returns 401 (not 500) for a method tag without a value', async () => {
+    const targetUrl = 'http://localhost/api/nip05/maria';
+    const event = finalizeEvent(
+      {
+        kind: 27235,
+        created_at: Math.floor(Date.now() / 1000),
+        tags: [['u', targetUrl], ['method']],
+        content: ''
+      },
+      adminSk
+    );
+    const auth = 'Nostr ' + btoa(JSON.stringify(event));
+
+    const res = await DELETE(makeRequest({ url: targetUrl, authHeader: auth, name: 'maria' }));
+    expect(res.status).toBe(401);
+  });
+
+  it('returns 502 when the nip-05-service is unreachable', async () => {
+    fetchSpy.mockRejectedValueOnce(new TypeError('fetch failed'));
+    const targetUrl = 'http://localhost/api/nip05/maria';
+    const auth = await buildAuthHeader(adminSk, targetUrl, 'DELETE');
+
+    const res = await DELETE(makeRequest({ url: targetUrl, authHeader: auth, name: 'maria' }));
+    expect(res.status).toBe(502);
+  });
 });

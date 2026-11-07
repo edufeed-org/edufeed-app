@@ -15,6 +15,12 @@
 const PROTOCOL_VERSION = '2025-06-18';
 const CLIENT_NAME = 'edufeed-app';
 const CLIENT_VERSION = '0.1.0';
+/**
+ * Budget for the whole initialize + extract exchange. The wizard
+ * (enrichFromUrl.js) gives up after 60 s, so work past that is paid for and
+ * thrown away; undici's own defaults would wait 300 s.
+ */
+export const EXTRACT_TIMEOUT_MS = 60_000;
 
 /**
  * @param {string | undefined} bearerToken
@@ -59,16 +65,30 @@ function parseSseJsonRpc(body) {
  * @param {string[]} [params.urls] - Multiple http(s) pages to extract together (multi-source).
  * @param {'amb' | 'ekw' | 'konfi'} params.variant
  * @param {Record<string, string>} params.skosSchemes - form-field → scheme naddr.
+ * @param {AbortSignal} [params.signal] - Aborts the exchange early (e.g. the browser disconnected).
  * @returns {Promise<{ source: string, payload: object, evidence: object, baseline: object }>}
  */
-export async function callExtractMetadata({
-  mcpUrl,
-  bearerToken,
-  url,
-  urls,
-  variant,
-  skosSchemes
-}) {
+export async function callExtractMetadata(params) {
+  const timeout = AbortSignal.timeout(EXTRACT_TIMEOUT_MS);
+  const signal = params.signal ? AbortSignal.any([timeout, params.signal]) : timeout;
+  try {
+    return await extractMetadata(params, signal);
+  } catch (err) {
+    if (/** @type {any} */ (err)?.name !== 'TimeoutError') throw err;
+    const timeout = /** @type {Error & { code?: string }} */ (
+      new Error(`MCP extract_metadata timed out after ${EXTRACT_TIMEOUT_MS} ms`)
+    );
+    timeout.code = 'timeout';
+    throw timeout;
+  }
+}
+
+/**
+ * @param {Parameters<typeof callExtractMetadata>[0]} params
+ * @param {AbortSignal} signal
+ * @returns {Promise<{ source: string, payload: object, evidence: object, baseline: object }>}
+ */
+async function extractMetadata({ mcpUrl, bearerToken, url, urls, variant, skosSchemes }, signal) {
   const sourceUrls = urls ?? (url ? [url] : []);
   if (sourceUrls.length === 0) {
     throw new Error('callExtractMetadata requires `url` or a non-empty `urls` array.');
@@ -83,6 +103,7 @@ export async function callExtractMetadata({
   // 1. initialize — capture session id from response header
   const initRes = await fetch(mcpUrl, {
     method: 'POST',
+    signal,
     headers: buildHeaders(bearerToken, undefined),
     body: JSON.stringify({
       jsonrpc: '2.0',
@@ -112,6 +133,7 @@ export async function callExtractMetadata({
   // 2. initialized notification (no response payload)
   await fetch(mcpUrl, {
     method: 'POST',
+    signal,
     headers: buildHeaders(bearerToken, sessionId),
     body: JSON.stringify({
       jsonrpc: '2.0',
@@ -122,6 +144,7 @@ export async function callExtractMetadata({
   // 3. tools/call extract_metadata
   const callRes = await fetch(mcpUrl, {
     method: 'POST',
+    signal,
     headers: buildHeaders(bearerToken, sessionId),
     body: JSON.stringify({
       jsonrpc: '2.0',

@@ -92,6 +92,8 @@ export async function enrichFromUrls(urls, variant, options = {}) {
       return networkError();
     }
   } catch {
+    // Our own timer fired: same wording as the server's nope-mcp timeout.
+    if (controller.signal.aborted) return { error: 'ai_unavailable', code: 'timeout' };
     return networkError();
   } finally {
     clearTimeout(timer);

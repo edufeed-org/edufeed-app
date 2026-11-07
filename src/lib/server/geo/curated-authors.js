@@ -20,7 +20,7 @@ import { guardedRelaysForKind } from '$lib/server/relay-fetch.js';
 const CATEGORIES = ['LONGFORM', 'EDUCATIONAL'];
 
 /**
- * @typedef {(filter: import('nostr-tools').Filter, relays: string[], timeoutMs?: number) => Promise<import('nostr-tools').NostrEvent | null>} FetchFirst
+ * @typedef {(filter: import('nostr-tools').Filter, relays: string[], timeoutMs?: number) => Promise<import('$lib/server/relay-fetch.js').FetchResult>} FetchFirst
  */
 
 /**
@@ -29,6 +29,8 @@ const CATEGORIES = ['LONGFORM', 'EDUCATIONAL'];
  * @param {FetchFirst} fetchFirst
  * @param {{ lookup?: import('$lib/server/httpUrl.js').DnsLookupAll }} [options] lookup injectable for tests
  * @returns {Promise<string[] | null>} null = nothing configured; [] = configured but nobody resolved
+ * @throws when a set's relays did not all answer — an incomplete author set
+ *   must not be cached in place of the previous one
  */
 export async function resolveAuthors(curated, wotAnchors, fetchFirst, options = {}) {
   const sets = curated?.sets ?? [];
@@ -43,19 +45,24 @@ export async function resolveAuthors(curated, wotAnchors, fetchFirst, options = 
   }
   const lists = await Promise.all(
     sets.map(async (naddr) => {
+      /** @type {import('nostr-tools').nip19.AddressPointer} */
+      let pointer;
       try {
         const decoded = nip19.decode(naddr);
         if (decoded.type !== 'naddr') return null;
-        const { kind, pubkey, identifier, relays = [] } = decoded.data;
-        // The set naddr's relay hints go through the same SSRF guard as
-        // hints from a request.
-        return fetchFirst(
-          { kinds: [kind], authors: [pubkey], '#d': [identifier], limit: 1 },
-          await guardedRelaysForKind(kind, relays, options)
-        );
+        pointer = decoded.data;
       } catch {
-        return null;
+        return null; // misconfigured entry: nothing to fetch, now or later
       }
+      const { kind, pubkey, identifier, relays = [] } = pointer;
+      // The set naddr's relay hints go through the same SSRF guard as
+      // hints from a request.
+      const { event, complete } = await fetchFirst(
+        { kinds: [kind], authors: [pubkey], '#d': [identifier], limit: 1 },
+        await guardedRelaysForKind(kind, relays, options)
+      );
+      if (!event && !complete) throw new Error(`Curated set ${identifier} did not resolve`);
+      return event;
     })
   );
   for (const list of lists) {

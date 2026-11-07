@@ -1,6 +1,6 @@
 import { nip19 } from 'nostr-tools';
 import { getIcsEventTiming, dedupeReplaceableEvents } from '$lib/helpers/calendar-timing.js';
-import { foldIcsLine, sanitizeIcsUid } from '$lib/helpers/ics-text.js';
+import { escapeIcsText as escapeText, foldIcsLine, sanitizeIcsUid } from '$lib/helpers/ics-text.js';
 
 /**
  * Pure ICS-building helpers for the calendar export endpoint
@@ -89,13 +89,6 @@ export function generateICSContent(calendarMetadata, events, url) {
     const day = String(date.getUTCDate()).padStart(2, '0');
     return `${year}${month}${day}`;
   };
-
-  /**
-   * @param {string} text
-   * @returns {string}
-   */
-  const escapeText = (text) =>
-    text.replace(/\\/g, '\\\\').replace(/;/g, '\\;').replace(/,/g, '\\,').replace(/\n/g, '\\n');
 
   /** @type {string[]} */
   const ics = [

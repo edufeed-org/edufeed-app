@@ -87,6 +87,11 @@ describe('originalCandidate', () => {
     expect(originalCandidate(ev(30023, FOERBICO, 'x?y'), templates)).toBeNull();
     expect(originalCandidate(ev(30023, FOERBICO, 'nostr:kanban:abc'), templates)).toBeNull();
     expect(originalCandidate(ev(30023, FOERBICO, ''), templates)).toBeNull();
+    // Percent-encoded dots/slashes: the URL parser decodes %2e%2e into a dot-segment.
+    expect(originalCandidate(ev(30023, FOERBICO, '%2e%2e/x'), templates)).toBeNull();
+    expect(originalCandidate(ev(30023, FOERBICO, 'a/.%2E/b'), templates)).toBeNull();
+    expect(originalCandidate(ev(30023, FOERBICO, 'a%2fb'), templates)).toBeNull();
+    expect(originalCandidate(ev(30023, FOERBICO, 'a%5Cb'), templates)).toBeNull();
   });
 });
 
