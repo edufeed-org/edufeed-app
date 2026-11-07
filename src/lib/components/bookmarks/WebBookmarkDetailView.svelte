@@ -10,7 +10,6 @@
 <script>
   import { browser } from '$app/environment';
   import { tick } from 'svelte';
-  import DOMPurify from 'dompurify';
   import * as m from '$lib/paraglide/messages';
   import { getDisplayName } from 'applesauce-core/helpers';
   import { TimelineModel } from 'applesauce-core/models';
@@ -59,6 +58,7 @@
     PlusIcon
   } from '$lib/components/icons';
   import { isHttpUrl } from '$lib/helpers/safeUrl.js';
+  import { renderReaderHtml } from '$lib/helpers/readerHtml.js';
 
   /**
    * @type {{
@@ -120,79 +120,10 @@
     return () => ac.abort();
   });
 
-  // Sanitize fetched HTML and inject heading ids so the TOC + scroll anchors work.
-  const htmlContent = $derived.by(() => {
-    if (!webArticle?.content || !browser) return '';
-    const clean =
-      typeof DOMPurify?.sanitize === 'function'
-        ? DOMPurify.sanitize(webArticle.content, {
-            ALLOWED_TAGS: [
-              'p',
-              'br',
-              'strong',
-              'em',
-              'u',
-              's',
-              'del',
-              'code',
-              'pre',
-              'a',
-              'ul',
-              'ol',
-              'li',
-              'blockquote',
-              'h1',
-              'h2',
-              'h3',
-              'h4',
-              'h5',
-              'h6',
-              'hr',
-              'table',
-              'thead',
-              'tbody',
-              'tr',
-              'th',
-              'td',
-              'img',
-              'figure',
-              'figcaption',
-              'mark',
-              'span',
-              'div',
-              'section'
-            ],
-            ALLOWED_ATTR: ['href', 'target', 'rel', 'src', 'alt', 'title', 'class']
-          })
-        : webArticle.content;
-    return injectHeadingIds(clean);
-  });
-
-  /** @param {string} html */
-  function injectHeadingIds(html) {
-    if (typeof document === 'undefined') return html;
-    const doc = new DOMParser().parseFromString(html, 'text/html');
-    // eslint-disable-next-line svelte/prefer-svelte-reactivity -- transient set for slug dedup
-    const used = new Set();
-    doc.querySelectorAll('h2, h3').forEach((el) => {
-      if (el.id) {
-        used.add(el.id);
-        return;
-      }
-      const base =
-        (el.textContent || '')
-          .trim()
-          .toLowerCase()
-          .replace(/[^a-z0-9]+/g, '-')
-          .replace(/^-|-$/g, '') || 'section';
-      let id = base;
-      let n = 1;
-      while (used.has(id)) id = `${base}-${++n}`;
-      used.add(id);
-      el.id = id;
-    });
-    return doc.body.innerHTML;
-  }
+  // Inject heading ids (TOC + scroll anchors), then sanitize the fetched HTML.
+  const htmlContent = $derived(
+    webArticle?.content && browser ? renderReaderHtml(webArticle.content) : ''
+  );
 
   const readMinutes = $derived.by(() => {
     if (!webArticle?.content) return 0;
