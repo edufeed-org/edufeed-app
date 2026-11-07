@@ -21,6 +21,22 @@
  *
  * Never logs user text beyond the fixture's own (our test data, not a
  * live user's input).
+ *
+ * Fixture schema (scripts/fixtures/termi-questions.json): each entry is
+ * `{ id, text, locale: 'de'|'en', expect: { types: string[], match?: string,
+ * tools?: string[] }, variantOf?: string, mayBeUnavailable?: boolean }`.
+ * `variantOf` points at the base sentence's `id` (a paraphrase). `expect`:
+ * - `types` — OR: the top 3 items must contain at least one item whose
+ *   type is in this list (not all of them).
+ * - `match` — a regex source (matched case-insensitively) that at least
+ *   one of the top-3 items' title/name must satisfy, when given.
+ * - `tools` — tier 2 only, ignored for tier 1. AND across array elements
+ *   (every element must be satisfied); `|` inside one element is OR
+ *   between tool names, e.g. `["search_content|search_resources"]` means
+ *   "either tool", while `["search_content", "find_people"]` means "both".
+ * - `mayBeUnavailable` — a source may legitimately be unreachable (e.g.
+ *   the calendar relay); when set and the run reports the source as
+ *   unavailable, the case counts as a hit regardless of `types`/`match`.
  */
 import 'dotenv/config';
 import { readFileSync } from 'node:fs';
@@ -83,6 +99,8 @@ function matchesExpect(top3, expect) {
 }
 
 /**
+ * AND across `expectTools` elements, OR between `|`-separated tool names
+ * within one element — see the fixture schema note in the file header.
  * @param {string[]} toolsUsed
  * @param {string[]} [expectTools]
  */

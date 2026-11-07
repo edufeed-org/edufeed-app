@@ -174,21 +174,33 @@
     "id": "q7",
     "text": "welche Community beschäftigt sich mit Religionspädagogik?",
     "locale": "de",
-    "expect": { "types": ["community"], "match": "religion|relilab", "tools": ["find_community"] }
+    "expect": {
+      "types": ["community"],
+      "match": "Relilab|religionsbezogene Bildung",
+      "tools": ["find_community"]
+    }
   },
   {
     "id": "q7-typo",
     "variantOf": "q7",
     "text": "welche comunity beschäftigt sich mit religionspädagogik",
     "locale": "de",
-    "expect": { "types": ["community"], "match": "religion|relilab", "tools": ["find_community"] }
+    "expect": {
+      "types": ["community"],
+      "match": "Relilab|religionsbezogene Bildung",
+      "tools": ["find_community"]
+    }
   },
   {
     "id": "q7-en",
     "variantOf": "q7",
     "text": "which community focuses on religious education",
     "locale": "en",
-    "expect": { "types": ["community"], "match": "religion|relilab", "tools": ["find_community"] }
+    "expect": {
+      "types": ["community"],
+      "match": "Relilab|religionsbezogene Bildung",
+      "tools": ["find_community"]
+    }
   },
   {
     "id": "q8",
