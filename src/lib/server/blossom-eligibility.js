@@ -20,10 +20,9 @@
  * Lives in $lib/server because a `+server.js` may only export route handlers.
  */
 import { env } from '$env/dynamic/private';
-import { nip19 } from 'nostr-tools';
+import { normalizePubkey } from '$lib/helpers/pubkey.js';
 import { parseArray } from './env-parse.js';
 
-const HEX64 = /^[0-9a-f]{64}$/;
 const NOSTR_JSON_TIMEOUT_MS = 5000;
 /** After a failed fetch with no cached copy, don't hammer the domain for this long. */
 const FAILURE_RETRY_MS = 30_000;
@@ -41,26 +40,6 @@ const FAILURE_RETRY_MS = 30_000;
  * "no" there would make the client reroute a member and nudge them off the
  * deployment server over a transient outage.
  */
-
-/**
- * Hex (any case) or npub → lowercase hex, null for anything else.
- * @param {string | null | undefined} input
- * @returns {string | null}
- */
-export function normalizePubkey(input) {
-  const value = (input || '').trim();
-  if (!value) return null;
-  if (HEX64.test(value.toLowerCase())) return value.toLowerCase();
-  if (value.startsWith('npub1')) {
-    try {
-      const decoded = nip19.decode(value);
-      if (decoded.type === 'npub') return decoded.data;
-    } catch {
-      /* fall through */
-    }
-  }
-  return null;
-}
 
 /**
  * @param {string} raw

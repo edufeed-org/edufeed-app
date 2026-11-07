@@ -26,6 +26,7 @@ import {
 import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
 import { getCommunitySigner } from '$lib/helpers/community-signer.js';
 import { publishEvent } from '$lib/services/publish-service.js';
+import { eventCoordinate } from '$lib/helpers/event-address.js';
 
 /**
  * Get the current pin list event for the given owner pubkey.
@@ -35,16 +36,6 @@ import { publishEvent } from '$lib/services/publish-service.js';
 function getCurrentPinList(ownerPubkey) {
   if (!ownerPubkey) return null;
   return eventStore.getReplaceable(10001, ownerPubkey) ?? null;
-}
-
-/**
- * Build an addressable coordinate string for an event
- * @param {import('nostr-tools').NostrEvent} event
- * @returns {string}
- */
-function getCoordinate(event) {
-  const dTag = event.tags.find((t) => t[0] === 'd')?.[1] || '';
-  return `${event.kind}:${event.pubkey}:${dTag}`;
 }
 
 /**
@@ -58,7 +49,7 @@ export function isPinned(event, communityPubkey) {
   if (!pinList) return false;
 
   if (isAddressableKind(event.kind)) {
-    const coord = getCoordinate(event);
+    const coord = eventCoordinate(event);
     return pinList.tags.some((t) => t[0] === 'a' && t[1] === coord);
   }
   return pinList.tags.some((t) => t[0] === 'e' && t[1] === event.id);

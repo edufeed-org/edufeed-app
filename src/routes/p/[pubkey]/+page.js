@@ -1,5 +1,5 @@
 import { error, redirect } from '@sveltejs/kit';
-import { normalizeToHex, hexToNpub } from '$lib/helpers/nostrUtils';
+import { normalizePubkey, hexToNpub } from '$lib/helpers/pubkey.js';
 import { isNip05Address, resolveNip05 } from '$lib/helpers/nip05-verify.js';
 
 export const ssr = false;
@@ -17,7 +17,7 @@ export async function load({ params }) {
     redirect(307, `/p/${hexToNpub(resolved)}`);
   }
 
-  const hexPubkey = normalizeToHex(params.pubkey);
+  const hexPubkey = normalizePubkey(params.pubkey);
 
   if (!hexPubkey) {
     throw error(

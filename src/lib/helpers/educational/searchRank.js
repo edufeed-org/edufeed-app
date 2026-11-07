@@ -8,6 +8,8 @@
  * pure so it can be unit-tested and reused by any search surface.
  */
 
+import { eventAddress } from '$lib/helpers/event-address.js';
+
 /**
  * @typedef {import('nostr-tools').Event} NostrEvent
  */
@@ -24,11 +26,7 @@
  * @returns {string}
  */
 export function searchRankKey(event) {
-  if (event.kind >= 30000 && event.kind < 40000) {
-    const d = event.tags?.find((t) => t[0] === 'd')?.[1];
-    if (d !== undefined) return `${event.kind}:${event.pubkey}:${d}`;
-  }
-  return event.id;
+  return eventAddress(event) ?? event.id;
 }
 
 /**

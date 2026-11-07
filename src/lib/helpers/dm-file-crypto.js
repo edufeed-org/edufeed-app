@@ -2,6 +2,7 @@
 // parameters as Amethyst (quartz nip17Dm/files) and dark-wisp
 // (EncryptedMedia.kt): 12-byte nonce, 128-bit auth tag. WebCrypto only — no
 // new dependency.
+import { bytesToHex } from 'nostr-tools/utils';
 
 /** Algorithms we can decrypt. Anything else must surface, never silently fail. */
 export const SUPPORTED_FILE_ALGORITHMS = ['aes-gcm'];
@@ -21,11 +22,6 @@ function hexToBytes(hex, label) {
   const out = new Uint8Array(hex.length / 2);
   for (let i = 0; i < out.length; i++) out[i] = parseInt(hex.slice(i * 2, i * 2 + 2), 16);
   return out;
-}
-
-/** @param {Uint8Array} bytes */
-function bytesToHex(bytes) {
-  return Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
 }
 
 /**
