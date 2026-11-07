@@ -1,0 +1,225 @@
+[
+  {
+    "id": "q1",
+    "text": "ich suche die e-teaching community",
+    "locale": "de",
+    "expect": { "types": ["community"], "match": "e-teaching", "tools": ["find_community"] }
+  },
+  {
+    "id": "q1-typo",
+    "variantOf": "q1",
+    "text": "ich such die e-teching community",
+    "locale": "de",
+    "expect": { "types": ["community"], "match": "e-teaching", "tools": ["find_community"] }
+  },
+  {
+    "id": "q1-en",
+    "variantOf": "q1",
+    "text": "I'm looking for the e-teaching community",
+    "locale": "en",
+    "expect": { "types": ["community"], "match": "e-teaching", "tools": ["find_community"] }
+  },
+  {
+    "id": "q2",
+    "text": "ich suche nach Fortbildungen zum Thema X, im Fach Y",
+    "locale": "de",
+    "mayBeUnavailable": true,
+    "expect": { "types": ["event"], "tools": ["search_events"] }
+  },
+  {
+    "id": "q2-sie",
+    "variantOf": "q2",
+    "text": "Ich suche nach Fortbildungen zum Thema Medienkompetenz im Fach Deutsch, können Sie mir helfen?",
+    "locale": "de",
+    "mayBeUnavailable": true,
+    "expect": { "types": ["event"], "tools": ["search_events"] }
+  },
+  {
+    "id": "q2-typo",
+    "variantOf": "q2",
+    "text": "ich suche fortbildungn zum thema medienkompetenz im fach deutsch",
+    "locale": "de",
+    "mayBeUnavailable": true,
+    "expect": { "types": ["event"], "tools": ["search_events"] }
+  },
+  {
+    "id": "q3",
+    "text": "meine Studierenden/Schüler sind unaufmerksam, was kann ich verbessern?",
+    "locale": "de",
+    "expect": {
+      "types": ["passage", "resource"],
+      "match": "Filter|Aktivier|Aufmerksam",
+      "tools": ["search_passages"]
+    }
+  },
+  {
+    "id": "q3-sie",
+    "variantOf": "q3",
+    "text": "Meine Studierenden sind im Seminar sehr unaufmerksam, was können Sie mir empfehlen?",
+    "locale": "de",
+    "expect": {
+      "types": ["passage", "resource"],
+      "match": "Filter|Aktivier|Aufmerksam",
+      "tools": ["search_passages"]
+    }
+  },
+  {
+    "id": "q3-typo",
+    "variantOf": "q3",
+    "text": "meine schüler sind unaufmerksamm was kann ich verbesern",
+    "locale": "de",
+    "expect": {
+      "types": ["passage", "resource"],
+      "match": "Filter|Aktivier|Aufmerksam",
+      "tools": ["search_passages"]
+    }
+  },
+  {
+    "id": "q4",
+    "text": "ich suche nach Unterrichtsentwürfen zum Thema Nachhaltigkeit",
+    "locale": "de",
+    "expect": {
+      "types": ["resource"],
+      "match": "Unterrichtsentwurf|Nachhaltig|BNE|Wattenmeer",
+      "tools": ["search_content|search_resources"]
+    }
+  },
+  {
+    "id": "q4-typo",
+    "variantOf": "q4",
+    "text": "ich such unterichtsentwürfe zum thema nachhaltigkeit",
+    "locale": "de",
+    "expect": {
+      "types": ["resource"],
+      "match": "Unterrichtsentwurf|Nachhaltig|BNE|Wattenmeer",
+      "tools": ["search_content|search_resources"]
+    }
+  },
+  {
+    "id": "q4-en",
+    "variantOf": "q4",
+    "text": "I'm looking for lesson plans on sustainability",
+    "locale": "en",
+    "expect": {
+      "types": ["resource"],
+      "match": "Unterrichtsentwurf|Nachhaltig|BNE|Wattenmeer",
+      "tools": ["search_content|search_resources"]
+    }
+  },
+  {
+    "id": "q5",
+    "text": "wie bereite ich mich auf den Statistik-Vorkurs vor?",
+    "locale": "de",
+    "expect": {
+      "types": ["resource"],
+      "match": "Vorkurs Mathematik.*Stochastik",
+      "tools": ["search_content|search_resources"]
+    }
+  },
+  {
+    "id": "q5-sie",
+    "variantOf": "q5",
+    "text": "Wie bereiten Sie sich am besten auf den Statistik-Vorkurs vor?",
+    "locale": "de",
+    "expect": {
+      "types": ["resource"],
+      "match": "Vorkurs Mathematik.*Stochastik",
+      "tools": ["search_content|search_resources"]
+    }
+  },
+  {
+    "id": "q5-typo",
+    "variantOf": "q5",
+    "text": "wie berreite ich mich auf den statistik vorkurs vor",
+    "locale": "de",
+    "expect": {
+      "types": ["resource"],
+      "match": "Vorkurs Mathematik.*Stochastik",
+      "tools": ["search_content|search_resources"]
+    }
+  },
+  {
+    "id": "q6",
+    "text": "wer beschäftigt sich mit dem Thema OER-Lizenzen in Deutschland?",
+    "locale": "de",
+    "expect": {
+      "types": ["person"],
+      "match": "Mößle|Buchwald|Lohrer|Link|Görlich",
+      "tools": ["search_content", "find_people"]
+    }
+  },
+  {
+    "id": "q6-sie",
+    "variantOf": "q6",
+    "text": "Wissen Sie, wer sich mit dem Thema OER-Lizenzen in Deutschland beschäftigt?",
+    "locale": "de",
+    "expect": {
+      "types": ["person"],
+      "match": "Mößle|Buchwald|Lohrer|Link|Görlich",
+      "tools": ["search_content", "find_people"]
+    }
+  },
+  {
+    "id": "q6-en",
+    "variantOf": "q6",
+    "text": "who works on OER licensing topics in Germany",
+    "locale": "en",
+    "expect": {
+      "types": ["person"],
+      "match": "Mößle|Buchwald|Lohrer|Link|Görlich",
+      "tools": ["search_content", "find_people"]
+    }
+  },
+  {
+    "id": "q7",
+    "text": "welche Community beschäftigt sich mit Religionspädagogik?",
+    "locale": "de",
+    "expect": { "types": ["community"], "match": "religion|relilab", "tools": ["find_community"] }
+  },
+  {
+    "id": "q7-typo",
+    "variantOf": "q7",
+    "text": "welche comunity beschäftigt sich mit religionspädagogik",
+    "locale": "de",
+    "expect": { "types": ["community"], "match": "religion|relilab", "tools": ["find_community"] }
+  },
+  {
+    "id": "q7-en",
+    "variantOf": "q7",
+    "text": "which community focuses on religious education",
+    "locale": "en",
+    "expect": { "types": ["community"], "match": "religion|relilab", "tools": ["find_community"] }
+  },
+  {
+    "id": "q8",
+    "text": "welche Projekte werden im Bereich gendersensibler Unterricht durchgeführt?",
+    "locale": "de",
+    "expect": {
+      "types": ["resource", "project"],
+      "match": "gender|Geschlechter",
+      "tools": ["search_content|search_resources"]
+    }
+  },
+  {
+    "id": "q8-sie",
+    "variantOf": "q8",
+    "text": "Welche Projekte werden Ihrer Kenntnis nach im Bereich gendersensibler Unterricht durchgeführt?",
+    "locale": "de",
+    "expect": {
+      "types": ["resource", "project"],
+      "match": "gender|Geschlechter",
+      "tools": ["search_content|search_resources"]
+    }
+  },
+  {
+    "id": "q8-typo",
+    "variantOf": "q8",
+    "text": "welche projekte gibt es im bereich gendersensibeler unterricht",
+    "locale": "de",
+    "expect": {
+      "types": ["resource", "project"],
+      "match": "gender|Geschlechter",
+      "tools": ["search_content|search_resources"]
+    }
+  }
+]
