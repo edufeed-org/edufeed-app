@@ -46,9 +46,31 @@ describe('GET /api/config — termi', () => {
       TERMI_EMBED_API_KEY: 'k',
       TERMI_LLM_BASE_URL: 'http://l',
       TERMI_LLM_API_KEY: 'k2',
-      TERMI_LLM_MODEL: 'gemma-4-31b-it'
+      TERMI_LLM_MODEL: 'gemma-4-31b-it',
+      NOPE_MCP_URL: 'https://mcp.example/mcp'
     });
     expect(body.termi).toEqual({ enabled: true, embed: true, llm: true });
+  });
+
+  it('the legacy AMB_MCP_URL counts as the nope-mcp URL', async () => {
+    const body = await configWith({
+      TERMI_AI_ENABLED: 'true',
+      TERMI_LLM_BASE_URL: 'http://l',
+      TERMI_LLM_API_KEY: 'k2',
+      TERMI_LLM_MODEL: 'gemma-4-31b-it',
+      AMB_MCP_URL: 'https://mcp.example/mcp'
+    });
+    expect(body.termi.llm).toBe(true);
+  });
+
+  it('all LLM vars set but no nope-mcp URL → llm false (the chat route would 503)', async () => {
+    const body = await configWith({
+      TERMI_AI_ENABLED: 'true',
+      TERMI_LLM_BASE_URL: 'http://l',
+      TERMI_LLM_API_KEY: 'k2',
+      TERMI_LLM_MODEL: 'gemma-4-31b-it'
+    });
+    expect(body.termi.llm).toBe(false);
   });
 
   it('flag off but all env set → everything false', async () => {

@@ -6,7 +6,8 @@ const ENV = {
   TERMI_AI_ENABLED: 'true',
   TERMI_LLM_BASE_URL: 'https://chat-ai.academiccloud.de/v1',
   TERMI_LLM_API_KEY: 'k',
-  TERMI_LLM_MODEL: 'qwen3-30b-a3b-instruct-2507'
+  TERMI_LLM_MODEL: 'qwen3-30b-a3b-instruct-2507',
+  NOPE_MCP_URL: 'https://mcp.example/mcp'
 };
 
 describe('createTermiModel', () => {

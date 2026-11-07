@@ -45,17 +45,24 @@ export async function verifyNip98Header(authHeader, url, method, rawBody) {
   const now = Math.floor(Date.now() / 1000);
   if (Math.abs(now - (event.created_at ?? 0)) > TIMESTAMP_TOLERANCE_S) return null;
 
-  const uTag = event.tags.find((/** @type {string[]} */ t) => t[0] === 'u');
-  if (!uTag || uTag[1] !== url) return null;
+  // verifyEvent already rejects malformed tags (nostr-tools validateEvent);
+  // guarded here too so a verifier change can't turn them into a thrown 500.
+  /** @param {string} name @returns {string | undefined} */
+  const tagValue = (name) => {
+    const tag = event.tags.find((/** @type {unknown} */ t) => Array.isArray(t) && t[0] === name);
+    return typeof tag?.[1] === 'string' ? tag[1] : undefined;
+  };
 
-  const methodTag = event.tags.find((/** @type {string[]} */ t) => t[0] === 'method');
-  if (!methodTag || methodTag[1].toUpperCase() !== method.toUpperCase()) return null;
+  if (tagValue('u') !== url) return null;
+
+  const methodValue = tagValue('method');
+  if (!methodValue || methodValue.toUpperCase() !== method.toUpperCase()) return null;
 
   if (rawBody) {
-    const payloadTag = event.tags.find((/** @type {string[]} */ t) => t[0] === 'payload');
-    if (!payloadTag) return null;
+    const payload = tagValue('payload');
+    if (!payload) return null;
     const expected = await sha256Hex(rawBody);
-    if (payloadTag[1] !== expected) return null;
+    if (payload !== expected) return null;
   }
 
   return event.pubkey;

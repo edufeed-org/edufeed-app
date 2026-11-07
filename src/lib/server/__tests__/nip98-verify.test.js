@@ -36,7 +36,49 @@ async function buildAuthHeader({
   return 'Nostr ' + btoa(JSON.stringify(event));
 }
 
+/**
+ * A 27235 event with arbitrary (malformed) tags. nostr-tools refuses to sign
+ * those, so id/sig come from a well-formed sibling: the verifier must reject
+ * it (401) without throwing (500).
+ * @param {any[]} tags
+ */
+function signedWithTags(tags) {
+  const created_at = Math.floor(Date.now() / 1000);
+  const good = finalizeEvent({ kind: 27235, created_at, tags: [], content: '' }, sk);
+  return 'Nostr ' + btoa(JSON.stringify({ ...good, tags }));
+}
+
 describe('verifyNip98Header', () => {
+  it.each([
+    ['a non-array tag', ['oops', ['u', URL_STR], ['method', 'GET']]],
+    [
+      'a numeric method value',
+      [
+        ['u', URL_STR],
+        ['method', 1]
+      ]
+    ],
+    [
+      'a numeric u value',
+      [
+        ['u', 1],
+        ['method', 'GET']
+      ]
+    ],
+    ['a null tag', [null, ['u', URL_STR], ['method', 'GET']]]
+  ])('returns null (no throw) for %s', async (_label, tags) => {
+    expect(await verifyNip98Header(signedWithTags(tags), URL_STR, 'GET')).toBeNull();
+  });
+
+  it('returns null (no throw) for a numeric payload value', async () => {
+    const auth = signedWithTags([
+      ['u', URL_STR],
+      ['method', 'POST'],
+      ['payload', 1]
+    ]);
+    expect(await verifyNip98Header(auth, URL_STR, 'POST', '{"a":1}')).toBeNull();
+  });
+
   it('returns the signer pubkey for a valid GET request', async () => {
     const auth = await buildAuthHeader({ method: 'GET' });
     const pubkey = await verifyNip98Header(auth, URL_STR, 'GET');
