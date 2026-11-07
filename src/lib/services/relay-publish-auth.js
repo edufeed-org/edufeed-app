@@ -68,11 +68,16 @@ export const AUTH_AWARE_PUBLISH_RETRY = {
  * @param {any} relay
  * @param {any} event
  * @param {number} timeout
+ * @param {number} [retries] - transport retries (default AUTH_AWARE_PUBLISH_RETRY.count)
  * @returns {Promise<PublishResponse>}
  */
-async function publishOnce(relay, event, timeout) {
+async function publishOnce(relay, event, timeout, retries) {
+  const retry =
+    retries === undefined
+      ? AUTH_AWARE_PUBLISH_RETRY
+      : { ...AUTH_AWARE_PUBLISH_RETRY, count: retries };
   try {
-    return await relay.publish(event, { timeout, retries: AUTH_AWARE_PUBLISH_RETRY });
+    return await relay.publish(event, { timeout, retries: retry });
   } catch (err) {
     if (isAuthRequiredError(err)) {
       return {
@@ -93,11 +98,11 @@ async function publishOnce(relay, event, timeout) {
  *
  * @param {any} relay an applesauce Relay
  * @param {any} event signed event
- * @param {{ timeout?: number }} [opts]
+ * @param {{ timeout?: number, retries?: number }} [opts]
  * @returns {Promise<PublishResponse>}
  */
-export async function publishWithAuth(relay, event, { timeout = 5000 } = {}) {
-  const first = await publishOnce(relay, event, timeout);
+export async function publishWithAuth(relay, event, { timeout = 5000, retries } = {}) {
+  const first = await publishOnce(relay, event, timeout, retries);
   if (!isAuthRequiredResponse(first)) return first;
 
   const signer = getSigner();
@@ -115,5 +120,5 @@ export async function publishWithAuth(relay, event, { timeout = 5000 } = {}) {
     console.warn(`[nip42] could not authenticate with ${relay.url}:`, auth.message);
     return first;
   }
-  return publishOnce(relay, event, timeout);
+  return publishOnce(relay, event, timeout, retries);
 }

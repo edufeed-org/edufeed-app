@@ -83,18 +83,27 @@ describe('getApplicationRelays', () => {
 describe('publishApplicationCopy', () => {
   /** @type {ReturnType<typeof vi.fn>} */
   let poolPublish;
-  /** @type {{ publish: ReturnType<typeof vi.fn> }} */
+  /** @type {{ relay: (url: string) => any }} */
   let pool;
+  /** @type {string[]} */
+  let published;
 
   const signed = { kind: 1069, id: 'app1', pubkey: 'applicant', tags: [], content: 'enc' };
 
   beforeEach(() => {
-    // applesauce's pool.publish answers with one PublishResponse per relay, and
-    // reports an unreachable relay as { ok: false } rather than throwing.
-    poolPublish = vi.fn(async (/** @type {string[]} */ relays) =>
-      relays.map((from) => ({ ok: true, from }))
-    );
-    pool = { publish: poolPublish };
+    // Each relay is published to on its own (NIP-42 aware path); poolPublish
+    // stands in for the per-relay answer.
+    published = [];
+    poolPublish = vi.fn(async (/** @type {string} */ from) => ({ ok: true, from }));
+    pool = {
+      relay: (url) => ({
+        url,
+        publish: async () => {
+          published.push(url);
+          return poolPublish(url);
+        }
+      })
+    };
   });
 
   /** @param {object} [deps] */
@@ -114,16 +123,13 @@ describe('publishApplicationCopy', () => {
   it('publishes to exactly the application relays', async () => {
     const result = await run();
 
-    expect(poolPublish).toHaveBeenCalledTimes(1);
-    expect(poolPublish.mock.calls[0][0]).toEqual(APP_RELAYS);
+    expect(published).toEqual(APP_RELAYS);
     expect(result.success).toBe(true);
     expect(result.relays).toEqual(APP_RELAYS);
   });
 
   it('reports failure when every relay rejects the event', async () => {
-    poolPublish.mockResolvedValue(
-      APP_RELAYS.map((from) => ({ ok: false, message: 'blocked', from }))
-    );
+    poolPublish.mockImplementation(async (from) => ({ ok: false, message: 'blocked', from }));
     const result = await run();
 
     expect(result.success).toBe(false);
@@ -131,10 +137,9 @@ describe('publishApplicationCopy', () => {
   });
 
   it('succeeds when at least one relay accepts', async () => {
-    poolPublish.mockResolvedValue([
-      { ok: false, message: 'offline', from: APP_RELAYS[0] },
-      { ok: true, from: APP_RELAYS[1] }
-    ]);
+    poolPublish.mockImplementation(async (from) =>
+      from === APP_RELAYS[0] ? { ok: false, message: 'offline', from } : { ok: true, from }
+    );
     const result = await run();
 
     expect(result.success).toBe(true);

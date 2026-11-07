@@ -165,10 +165,6 @@ describe('publishEventOptimistic outbox wiring', () => {
     outboxRelays = ['wss://ok/', 'wss://dead/'];
     relayMocks.set('wss://ok/', ok('wss://ok/'));
     relayMocks.set('wss://dead/', dead());
-    poolPublish = vi.fn(async () => [
-      { ok: true, from: 'wss://ok/' },
-      { ok: false, from: 'wss://dead/', message: 'timeout' }
-    ]);
 
     publishEventOptimistic(EVENT, [], { companions: [COMPANION] });
     await flush();
@@ -176,14 +172,12 @@ describe('publishEventOptimistic outbox wiring', () => {
     expect(enqueue).toHaveBeenCalledWith(
       expect.objectContaining({ event: COMPANION, pending: ['wss://ok/', 'wss://dead/'] })
     );
-    expect(poolPublish).toHaveBeenCalledWith(
-      ['wss://ok/', 'wss://dead/'],
-      COMPANION,
-      expect.anything()
-    );
+    // Relay by relay through the AUTH-answering path, like the event itself.
+    expect(poolPublish).not.toHaveBeenCalled();
+    expect(relayMocks.get('wss://ok/').publish).toHaveBeenCalledWith(COMPANION, expect.anything());
     expect(markRelayDone).toHaveBeenCalledWith(COMPANION.id, 'wss://ok/');
-    // pool.publish folds transport errors into ok:false with no way to tell
-    // them from rejections, so a companion's relay is only cleared on ok:true.
+    // publishToRelays folds transport errors into ok:false, so a companion's
+    // relay is only cleared on ok:true.
     expect(markRelayDone).not.toHaveBeenCalledWith(COMPANION.id, 'wss://dead/');
   });
 });

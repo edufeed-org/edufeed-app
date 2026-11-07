@@ -44,6 +44,9 @@ export async function publishGiftWrap(event, relays, deps = {}) {
   return publishToRelays(event, targets, {
     timeout: PUBLISH_TIMEOUT_MS,
     label: '[gift-wrap]',
+    // Never AUTH as the user on a recipient's relay: it would name the sender
+    // the wrap exists to hide.
+    auth: false,
     pool
   });
 }
