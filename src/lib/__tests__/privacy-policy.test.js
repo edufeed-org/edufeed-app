@@ -147,6 +147,35 @@ describe('loadPrivacyPolicy', () => {
       expect(onHtml).not.toContain('if:termi');
     });
 
+    it('the shipped file balances every if:termi with an endif:termi', async () => {
+      const { readFileSync } = await import('node:fs');
+      const text = readFileSync(SHIPPED, 'utf8');
+      const opens = text.match(/<!-- if:termi -->/g)?.length ?? 0;
+      expect(opens).toBeGreaterThan(0);
+      expect(text.match(/<!-- endif:termi -->/g)?.length).toBe(opens);
+    });
+
+    it('a missing endif leaks its section (fails safe) instead of deleting the next one', async () => {
+      const file = join(dir, 'policy.md');
+      writeFileSync(
+        file,
+        [
+          'A<!-- if:termi --> leaked',
+          '',
+          'Wichtiger Absatz.',
+          '',
+          'B<!-- if:termi --> cut<!-- endif:termi -->.',
+          ''
+        ].join('\n')
+      );
+      const { loadPrivacyPolicy } = await policyWith({ PRIVACY_POLICY_PATH: file });
+      const html = /** @type {any} */ (await loadPrivacyPolicy()).html;
+      expect(html).toContain('Wichtiger Absatz.');
+      expect(html).toContain('leaked');
+      expect(html).not.toContain('cut');
+      expect(html).toContain('B.');
+    });
+
     it('the cache key includes the flag', async () => {
       const file = join(dir, 'policy.md');
       writeFileSync(file, 'A<!-- if:termi --> Termi<!-- endif:termi -->\n');

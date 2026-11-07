@@ -28,7 +28,11 @@ import { parseBool } from '$lib/server/env-parse.js';
 function applyTermiSections(markdown, termi) {
   return termi
     ? markdown.replace(/<!-- (?:end)?if:termi -->\n?/g, '')
-    : markdown.replace(/<!-- if:termi -->[\s\S]*?<!-- endif:termi -->\n?/g, '');
+    : // Never across another opening marker: a missing endif leaks its section, never eats the next.
+      markdown.replace(
+        /<!-- if:termi -->(?:(?!<!-- if:termi -->)[\s\S])*?<!-- endif:termi -->\n?/g,
+        ''
+      );
 }
 
 /** @type {{ path: string, mtimeMs: number, termi: boolean, html: string } | null} */

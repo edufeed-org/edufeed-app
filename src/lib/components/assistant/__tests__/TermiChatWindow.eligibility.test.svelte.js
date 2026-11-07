@@ -211,6 +211,68 @@ describe('TermiChatWindow — assistant NIP-05 gate', () => {
     expect(view.queryByText(m.termi_assistant_restart())).toBeNull();
   });
 
+  it('the probe runs alongside the router request, not before it', async () => {
+    /** @type {(r: Response) => void} */
+    let releaseProbe = () => {};
+    /** @type {string[]} */
+    const order = [];
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (/** @type {string} */ url) => {
+        order.push(url.split('?')[0]);
+        if (url.startsWith('/api/termi/eligible')) {
+          return new Promise((r) => (releaseProbe = r));
+        }
+        if (url === '/api/termi') {
+          return new Response(
+            JSON.stringify({ matches: [{ skill: 'assistant.search', score: 0.92 }] })
+          );
+        }
+        return streamAnswer();
+      })
+    );
+    const view = renderWindow();
+    await type(view, 'Finde Materialien zu Brüchen');
+    // The router request is out while the probe is still pending.
+    await waitFor(() => expect(order).toEqual(['/api/termi/eligible', '/api/termi']));
+    releaseProbe(new Response(JSON.stringify({ eligible: true, gated: true })));
+    await waitFor(() => view.getByText('Hier sind Treffer.'));
+  });
+
+  it('an account switch while the start probe is in flight drops the start silently', async () => {
+    stubFetch({
+      eligible: { [ALICE.pubkey]: true },
+      matches: [
+        { skill: 'assistant.search', score: 0.78 },
+        { skill: 'search.learning', score: 0.76 }
+      ]
+    });
+    const view = renderWindow();
+    await type(view, 'Materialien Brüche?');
+    const button = await waitFor(() => view.getByText(m.termi_route_assistant()));
+    // Hold the next probe open so the switch lands while it is in flight.
+    _resetTermiEligibilityForTests();
+    /** @type {(r: Response) => void} */
+    let releaseProbe = () => {};
+    const inner = /** @type {any} */ (globalThis.fetch);
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((/** @type {string} */ url, /** @type {any} */ init) =>
+        url.startsWith('/api/termi/eligible')
+          ? new Promise((r) => (releaseProbe = r))
+          : inner(url, init)
+      )
+    );
+    await fireEvent.click(button);
+    activeUser = BOB;
+    releaseProbe(new Response(JSON.stringify({ eligible: true, gated: true })));
+    await new Promise((r) => setTimeout(r, 50));
+    expect(view.queryByText(m.termi_assistant_not_eligible(), { exact: false })).toBeNull();
+    expect(view.queryByText(m.termi_assistant_unavailable(), { exact: false })).toBeNull();
+    expect(view.queryByText(m.termi_assistant_restart())).toBeNull();
+    expect(chatCalls).toEqual([]);
+  });
+
   it('the "maybe" assistant button re-checks eligibility for a switched account', async () => {
     stubFetch({
       eligible: { [ALICE.pubkey]: true, [BOB.pubkey]: false },

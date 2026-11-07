@@ -21,16 +21,16 @@ import { CREATE_ACTIONS } from '$lib/config/create-actions.js';
  *   locale: 'de'|'en',
  *   fetch: typeof fetch,
  *   skills?: TermiSkill[],
- *   ctx: { loggedIn: boolean, discoverTypes: string[], llm: boolean }
+ *   ctx: { loggedIn: boolean, discoverTypes: string[], llm: boolean | Promise<boolean> }
  * }} opts
  */
 export async function routeQuestion(text, { locale, fetch, skills = TERMI_SKILLS, ctx }) {
-  const available = availableSkills(skills, ctx);
-  const ids = new Set(available.map((s) => s.id));
+  // `llm` may be the pending eligibility probe: it runs alongside the router request.
+  const llm = Promise.resolve(ctx.llm);
   /** @type {'embed'|'keyword'} */
   let mode = 'embed';
-  /** @type {Array<{ skill: string, score: number }>} */
-  let matches;
+  /** @type {Array<{ skill: string, score: number }> | null} */
+  let matches = null;
   // A stalled request must not keep the chat blocked: abort → keyword path.
   // (A plain setTimeout rather than AbortSignal.timeout, so fake timers drive it in tests.)
   const controller = new AbortController();
@@ -48,12 +48,13 @@ export async function routeQuestion(text, { locale, fetch, skills = TERMI_SKILLS
     matches = body.matches;
   } catch {
     mode = 'keyword';
-    matches = keywordMatch(text, available, locale);
   } finally {
     clearTimeout(timer);
   }
+  const available = availableSkills(skills, { ...ctx, llm: await llm });
+  const ids = new Set(available.map((s) => s.id));
   // The server ranks the whole catalogue; drop what this user can't use.
-  matches = matches.filter((x) => ids.has(x.skill));
+  matches = (matches ?? keywordMatch(text, available, locale)).filter((x) => ids.has(x.skill));
   return {
     decision: decide(matches, { mode }),
     query: extractQuery(text, locale),
@@ -170,7 +171,8 @@ export async function isTermiEligible(pubkey, fetchImpl) {
   if (eligibility.has(pubkey)) return eligibility.get(pubkey);
   try {
     const res = await fetchImpl(`/api/termi/eligible?pubkey=${pubkey}`, {
-      signal: AbortSignal.timeout(4_000)
+      // Above the server's 5 s nostr.json timeout, so a cold directory still answers.
+      signal: AbortSignal.timeout(6_000)
     });
     const body = res.ok ? await res.json() : null;
     if (typeof body?.eligible === 'boolean') eligibility.set(pubkey, body.eligible);

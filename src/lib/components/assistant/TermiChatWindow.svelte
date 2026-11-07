@@ -419,7 +419,12 @@
     // The "maybe" button may be clicked long after it was offered: check again.
     const allowed = await assistantAllowed(user);
     if (destroyed) return;
-    if (!allowed || user?.pubkey !== getActiveUser()?.pubkey) {
+    // Switched meanwhile: the question belonged to the other account, drop it quietly.
+    if (user?.pubkey !== getActiveUser()?.pubkey) {
+      botTyping = false;
+      return;
+    }
+    if (!allowed) {
       const q = extractQuery(text, getLocale() === 'en' ? 'en' : 'de');
       fallBackToSearch(
         canUseAssistant(user) ? m.termi_assistant_not_eligible() : m.termi_assistant_unavailable(),
@@ -483,7 +488,9 @@
         ctx: {
           loggedIn: !!user,
           discoverTypes: runtimeConfig.discover?.contentTypes ?? [],
-          llm: await assistantAllowed(user)
+          llm: canUseAssistant(user)
+            ? isTermiEligible(/** @type {any} */ (user).pubkey, fetch)
+            : false
         }
       });
       if (decision.kind === 'confident' && decision.skill === 'assistant.search') {
