@@ -6,8 +6,10 @@
     buildCommentTree,
     countComments,
     getParentChain,
+    getParentCommentId,
     getSubtree
   } from '$lib/helpers/commentThreading.js';
+  import { loadReferencedEvent } from '$lib/loaders/referenced-event.js';
   import CommentThread from './CommentThread.svelte';
   import CommentInput from './CommentInput.svelte';
   import AncestorChain from './AncestorChain.svelte';
@@ -173,6 +175,29 @@
       timelineSubscription?.unsubscribe();
       loaderSubscription?.unsubscribe();
     };
+  });
+
+  // A reply can arrive without its parent: the parent lives only on its
+  // author's relays (not the root's, not ours). Fetch it by id via the e tag's
+  // hint and the author's outboxes; it lands in the store, the model picks it
+  // up, and its own parent is checked on the next emission. Asked once each.
+  /** @type {Set<string>} */
+  // eslint-disable-next-line svelte/prefer-svelte-reactivity -- bookkeeping only, never rendered
+  const askedParents = new Set();
+  $effect(() => {
+    const known = new Set(flatComments.map((c) => c.id));
+    for (const comment of flatComments) {
+      const parentId = getParentCommentId(comment);
+      if (!parentId || known.has(parentId) || askedParents.has(parentId)) continue;
+      askedParents.add(parentId);
+      const tag = comment.tags.find(
+        (/** @type {string[]} */ t) => t[0] === 'e' && t[1] === parentId
+      );
+      // NIP-22: ["e", id, hint, pubkey]; NIP-10: ["e", id, hint, marker, pubkey]
+      const author = tag?.slice(3).find((/** @type {string} */ v) => /^[0-9a-f]{64}$/.test(v));
+      const relays = tag?.[2]?.startsWith('wss://') ? [tag[2]] : undefined;
+      loadReferencedEvent({ id: parentId, relays }, { author }).subscribe();
+    }
   });
 
   /**
