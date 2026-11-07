@@ -23,10 +23,17 @@ describe('SYSTEM_PROMPTS.ask', () => {
   });
 
   it('routes question types to their tools', () => {
-    expect(prompt).toMatch(/„wie“, „was“, „warum“[^\n]*search_passages/);
+    expect(prompt).toMatch(/WIE etwas geht oder WARUM[^\n]*search_passages/);
+    // Listing questions ("was gibt es") must not route to passages.
+    expect(prompt).not.toMatch(/„was“[^\n]*search_passages/);
+    expect(prompt).toMatch(
+      /Materialien, Angeboten oder Beispielen \(was gibt es[^\n]*search_content oder search_resources/
+    );
     expect(prompt).toContain('Titel, Herausgeber und Lizenz');
     expect(prompt).toMatch(/„wer …“[^\n]*find_people/);
-    expect(prompt).toMatch(/„welche Community …“[^\n]*find_community/);
+    expect(prompt).toMatch(
+      /„welche Community …“[^\n]*find_community und nenne die Community \(oder Communities\) im Satz/
+    );
     expect(prompt).toContain('höchstens zweimal search_passages');
   });
 
