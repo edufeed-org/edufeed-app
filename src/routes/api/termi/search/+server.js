@@ -11,10 +11,9 @@ import { getNopeMcpToken } from '$lib/server/nopeMcpToken.js';
 import { callNopeMcpTool } from '$lib/server/nopeMcpClient.js';
 import { createKnowledgeTools, nopeMcpCaller } from '$lib/server/termi/knowledge-tools.js';
 import { answerQuestion, parseSearchRelays } from '$lib/server/termi/answer.js';
-import { createRateLimiter } from '$lib/server/rate-limit.js';
+import { termiLimiter as limiter } from '$lib/server/termi/limiter.js';
 
 const LOCALES = new Set(['de', 'en']);
-const limiter = createRateLimiter({ limit: 30, windowMs: 60_000 });
 
 /** @type {import('@sveltejs/kit').RequestHandler} */
 export async function POST({ request, getClientAddress }) {

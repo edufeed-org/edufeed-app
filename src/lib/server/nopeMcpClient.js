@@ -16,6 +16,9 @@ const PROTOCOL_VERSION = '2025-06-18';
 const CLIENT_NAME = 'edufeed-app';
 const CLIENT_VERSION = '0.1.0';
 
+/** Whole-call deadline (handshake + tools/call). process.env, not $env: the eval script imports this module from plain node. */
+const DEFAULT_TIMEOUT_MS = Number(process.env.NOPE_MCP_TIMEOUT_MS) || 8000;
+
 /**
  * @param {string | undefined} bearerToken
  * @param {string | undefined} sessionId
@@ -64,11 +67,13 @@ function parseSseJsonRpc(body) {
  *
  * @param {string} mcpUrl
  * @param {string | undefined} bearerToken
+ * @param {AbortSignal | undefined} signal
  * @returns {Promise<string>}
  */
-async function mcpHandshake(mcpUrl, bearerToken) {
+async function mcpHandshake(mcpUrl, bearerToken, signal) {
   const initRes = await fetch(mcpUrl, {
     method: 'POST',
+    signal,
     headers: buildHeaders(bearerToken, undefined),
     body: JSON.stringify({
       jsonrpc: '2.0',
@@ -97,6 +102,7 @@ async function mcpHandshake(mcpUrl, bearerToken) {
 
   await fetch(mcpUrl, {
     method: 'POST',
+    signal,
     headers: buildHeaders(bearerToken, sessionId),
     body: JSON.stringify({
       jsonrpc: '2.0',
@@ -135,13 +141,22 @@ function toolErrorText(result) {
  * @param {string | undefined} params.bearerToken - If set, sent as `Authorization: Bearer <token>`.
  * @param {string} params.name - MCP tool name.
  * @param {object} params.args - Tool arguments.
+ * @param {number | null} [params.timeoutMs] - Whole-call deadline; default `NOPE_MCP_TIMEOUT_MS` or 8000, `null` = none.
  * @returns {Promise<any>}
  */
-export async function callNopeMcpTool({ mcpUrl, bearerToken, name, args }) {
-  const sessionId = await mcpHandshake(mcpUrl, bearerToken);
+export async function callNopeMcpTool({
+  mcpUrl,
+  bearerToken,
+  name,
+  args,
+  timeoutMs = DEFAULT_TIMEOUT_MS
+}) {
+  const signal = timeoutMs === null ? undefined : AbortSignal.timeout(timeoutMs);
+  const sessionId = await mcpHandshake(mcpUrl, bearerToken, signal);
 
   const callRes = await fetch(mcpUrl, {
     method: 'POST',
+    signal,
     headers: buildHeaders(bearerToken, sessionId),
     body: JSON.stringify({
       jsonrpc: '2.0',
@@ -213,7 +228,9 @@ export async function callExtractMetadata({
       mcpUrl,
       bearerToken,
       name: 'extract_metadata',
-      args: toolArguments
+      args: toolArguments,
+      // An LLM extraction runs far past the search deadline; /api/enrich has always waited for it.
+      timeoutMs: null
     });
   } catch (err) {
     if (!(err instanceof Error) || !(/** @type {any} */ (err).isToolError)) {

@@ -709,10 +709,11 @@ export function questionCues(text) {
   const s = String(text ?? '');
   return {
     event:
-      /fortbildung|veranstaltung|termin|workshop|tagung|webinar|konferenz|seminar\s+am|kurs\s+am|\bevents?\b|training/i.test(
+      /fortbildung|veranstaltung|\btermin|workshop|tagung|webinar|konferenz|seminar\s+am|kurs\s+am|\bevents?\b|training/i.test(
         s
       ),
-    person: /\bwer\b|\bwho\b|\bnamens\b|\bnamed\b|"[^"]+"|„[^“]+“/i.test(s),
+    // a quoted phrase alone is a topic ("Material zu „Klimawandel“"), not a person
+    person: /\bwer\b|\bwho\b|\bnamens\b|\bnamed\b/i.test(s),
     community: /com+unit(?:y|ies)|gemeinschaft/i.test(s),
     question:
       /\b(?:wie|was|warum|wieso|weshalb|kann\s+ich|soll(?:te)?\s+ich|verbessern|tipps|how|what|why|can\s+i|should\s+i|improve)\b/i.test(

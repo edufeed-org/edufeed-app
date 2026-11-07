@@ -7,12 +7,27 @@
 import { extractQuery, questionCues } from '../../helpers/termi-skills.js';
 import { callNopeMcpTool } from '../nopeMcpClient.js';
 import { nopeMcpEnv } from '../nopeMcpEnv.js';
+import { uniqueBy } from '../../helpers/unique.js';
 import { createKnowledgeTools, DEFAULT_SEARCH_RELAYS, nopeMcpCaller } from './knowledge-tools.js';
 
 const MAX_ITEMS = 8;
 const DIVERSE_TOP = 4;
 // Below this a passage is a loose fit ("Lehrformate & Methoden" for a Vorkurs question) and ranks with the content.
 const PASSAGE_FIRST_SCORE = 0.5;
+// Per-tool deadline: the answer never waits longer than this for one source (nopeMcpClient's own is 8 s).
+const TOOL_DEADLINE_MS = 6_000;
+
+/** @template T @param {Promise<T>} promise @returns {Promise<T>} */
+function withDeadline(promise) {
+  /** @type {ReturnType<typeof setTimeout> | undefined} */
+  let timer;
+  const deadline = new Promise((_, reject) => {
+    timer = setTimeout(() => reject(new Error('tool deadline')), TOOL_DEADLINE_MS);
+  });
+  return /** @type {Promise<T>} */ (Promise.race([promise, deadline])).finally(() =>
+    clearTimeout(timer)
+  );
+}
 
 /** @typedef {import('./items.js').Item} Item */
 /** @typedef {ReturnType<typeof createKnowledgeTools>} KnowledgeTools */
@@ -39,11 +54,13 @@ function toolsFromProcessEnv() {
 
 /** Words that start a capitalised pair without being a name. */
 const NOT_NAMES = /^(?:Sie|Ihr|Ihre|Ihnen|Wissen|Thema|Fach|Bereich)$/;
+const TOPIC_PREPOSITIONS = /^(?:mit|von|über|zu|zum|zur)$/i;
 
 /**
  * A person's name in the sentence: quoted, after namens/named, or two
  * capitalised words not at the start ("Jörg Lohrer") — German capitalises
- * every noun, so a single capitalised word is no name.
+ * every noun, so a single capitalised word is no name, and a pair after a
+ * topic preposition ("mit Künstlicher Intelligenz") is a topic.
  * @param {string} text
  */
 function personName(text) {
@@ -51,8 +68,9 @@ function personName(text) {
   if (quoted) return quoted.trim();
   const named = text.match(/\b(?:namens|named)\s+(.+?)[?!.]*$/i)?.[1];
   if (named) return named.trim();
-  for (const m of text.matchAll(/(?<=\s)(\p{Lu}[\p{Ll}-]+)\s+(\p{Lu}[\p{Ll}-]+)/gu)) {
-    if (!NOT_NAMES.test(m[1])) return `${m[1]} ${m[2]}`;
+  for (const m of text.matchAll(/(?<=(\S*)\s)(\p{Lu}[\p{Ll}-]+)\s+(\p{Lu}[\p{Ll}-]+)/gu)) {
+    if (TOPIC_PREPOSITIONS.test(m[1]) || NOT_NAMES.test(m[2])) continue;
+    return `${m[2]} ${m[3]}`;
   }
   return undefined;
 }
@@ -88,9 +106,9 @@ export async function answerQuestion(text, locale, tools = toolsFromProcessEnv()
   if (cues.question)
     calls.push(['search_passages', () => tools.searchPassages(text, { limit: 3 })]);
 
-  const settled = await Promise.allSettled(calls.map(([, run]) => run()));
+  const settled = await Promise.allSettled(calls.map(([, run]) => withDeadline(run())));
   /** @type {Item[]} */
-  const all = [];
+  let all = [];
   /** @type {string[]} */
   const sourcesUnavailable = [];
   settled.forEach((r, i) => {
@@ -102,6 +120,9 @@ export async function answerQuestion(text, locale, tools = toolsFromProcessEnv()
     all.push(...r.value.items.filter((it) => !it.weak));
     sourcesUnavailable.push(...r.value.sourcesUnavailable);
   });
+
+  // findPeople and aggregatePeople can both return the same person
+  all = uniqueBy(all, (it) => `${it.type}:${it.id}`);
 
   const topicWords = words(topic);
   /** 0 = community matched by name, 1 = confident passage answering a question, 2 = the rest. @param {Item} it */

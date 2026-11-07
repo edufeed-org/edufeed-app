@@ -134,6 +134,79 @@ describe('answerQuestion', () => {
     expect(tools.searchPassages).not.toHaveBeenCalled();
   });
 
+  it('a tool that never answers lands in sourcesUnavailable after the deadline', async () => {
+    vi.useFakeTimers();
+    try {
+      const tools = fakeTools({
+        searchContent: vi.fn(async () => ({
+          items: [item({ type: 'resource', title: 'r' })],
+          sourcesUnavailable: []
+        })),
+        findCommunity: vi.fn(() => new Promise(() => {}))
+      });
+      const pending = answerQuestion('Photosynthese', 'de', tools);
+      await vi.advanceTimersByTimeAsync(6_000);
+      const { items, sourcesUnavailable } = await pending;
+      expect(sourcesUnavailable).toEqual(['find_community']);
+      expect(items.map((i) => i.title)).toEqual(['r']);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('one person item when findPeople and aggregatePeople return the same person', async () => {
+    const lohrer = item({ type: 'person', id: 'pk-lohrer', title: 'Jörg Lohrer' });
+    const tools = fakeTools({
+      findPeople: vi.fn(async () => ({ items: [lohrer], sourcesUnavailable: [] })),
+      aggregatePeople: vi.fn(async () => ({ items: [lohrer], sourcesUnavailable: [] }))
+    });
+    const { items } = await answerQuestion('Wer ist Jörg Lohrer?', 'de', tools);
+    expect(tools.findPeople).toHaveBeenCalledWith('Jörg Lohrer');
+    expect(items.filter((i) => i.type === 'person')).toHaveLength(1);
+  });
+
+  it('a quoted topic is no person; a capitalised pair after "mit" is no name', async () => {
+    const tools = fakeTools();
+    await answerQuestion('Material zu „Klimawandel“', 'de', tools);
+    expect(tools.findPeople).not.toHaveBeenCalled();
+    expect(tools.aggregatePeople).not.toHaveBeenCalled();
+
+    await answerQuestion('Wer beschäftigt sich mit Künstlicher Intelligenz', 'de', tools);
+    expect(tools.findPeople).not.toHaveBeenCalled();
+    expect(tools.aggregatePeople).toHaveBeenCalledWith('Künstlicher Intelligenz');
+  });
+
+  it('a passage below 0.5 stays in the content tier', async () => {
+    const tools = fakeTools({
+      searchContent: vi.fn(async () => ({
+        items: [item({ type: 'resource', title: 'r', score: 0.4 })],
+        sourcesUnavailable: []
+      })),
+      searchPassages: vi.fn(async () => ({
+        items: [item({ type: 'passage', title: 'p', score: 0.3 })],
+        sourcesUnavailable: []
+      }))
+    });
+    const { items } = await answerQuestion('was kann ich tun?', 'de', tools);
+    expect(items.map((i) => i.title)).toEqual(['r', 'p']);
+  });
+
+  it('diversity pulls a lower-scored type into the top 4', async () => {
+    const tools = fakeTools({
+      searchContent: vi.fn(async () => ({
+        items: [1, 2, 3, 4, 5].map((i) => item({ type: 'resource', title: `r${i}`, score: 0.9 })),
+        sourcesUnavailable: []
+      })),
+      searchEvents: vi.fn(async () => ({
+        items: [item({ type: 'event', title: 'e', score: 0.1 })],
+        sourcesUnavailable: []
+      }))
+    });
+    const { items } = await answerQuestion('Workshop Medien', 'de', tools);
+    expect(items.slice(0, 4).map((i) => i.title)).toContain('e');
+    expect(items.map((i) => i.title)).toEqual(['r1', 'e', 'r2', 'r3', 'r4', 'r5']);
+  });
+
   it('drops weak items', async () => {
     const tools = fakeTools({
       searchContent: vi.fn(async () => ({

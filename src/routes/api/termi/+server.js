@@ -14,12 +14,10 @@ import { env } from '$env/dynamic/private';
 import { TERMI_SKILLS } from '$lib/helpers/termi-skills.js';
 import { embedTexts, isEmbedConfigured } from '$lib/server/termi/embed.js';
 import { createRouterIndex } from '$lib/server/termi/router-index.js';
-import { createRateLimiter } from '$lib/server/rate-limit.js';
+import { termiLimiter as limiter } from '$lib/server/termi/limiter.js';
 
 const LOCALES = new Set(['de', 'en']);
 const RANK_TIMEOUT_MS = 3_500;
-const RATE_LIMIT = 30;
-const RATE_WINDOW_MS = 60_000;
 // Cooldown between background warm-up retries triggered by a 503 request —
 // without it, a fast connection-refused would restart warm-up on every
 // request to a dead embed service.
@@ -53,8 +51,6 @@ if (isEmbedConfigured(env)) {
   index = createRouterIndex({ embed, skills: TERMI_SKILLS });
   retryWarmUp();
 }
-
-const limiter = createRateLimiter({ limit: RATE_LIMIT, windowMs: RATE_WINDOW_MS });
 
 /** @param {number} ms */
 function timeoutAfter(ms) {

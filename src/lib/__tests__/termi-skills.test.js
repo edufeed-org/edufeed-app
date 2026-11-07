@@ -174,7 +174,13 @@ describe('questionCues', () => {
     [
       'Wo finde ich Leute namens Jörg?',
       { event: false, person: true, community: false, question: false }
-    ]
+    ],
+    [
+      'Material zu „Klimawandel“',
+      { event: false, person: false, community: false, question: false }
+    ],
+    ['Determinismus', { event: false, person: false, community: false, question: false }],
+    ['Termine im Mai', { event: true, person: false, community: false, question: false }]
   ])('questionCues(%j)', (text, expected) => {
     expect(questionCues(text)).toEqual(expected);
   });

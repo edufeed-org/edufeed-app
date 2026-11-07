@@ -153,6 +153,11 @@ describe('createKnowledgeTools', () => {
         publisher: [{ name: 'LEHRE LADEN', type: 'Organization' }]
       },
       { score: 0.05, creator: [{ name: 'Jörg Lohrer', type: 'Person' }] },
+      // a "name" over 100 chars is skipped, even when frequent
+      ...[1, 2, 3].map(() => ({
+        score: 0.9,
+        creator: [{ name: 'x'.repeat(101), type: 'Person' }]
+      })),
       ...['A', 'B', 'C', 'D'].map((n) => ({
         score: 0.01,
         creator: [{ name: `P ${n}`, type: 'Person' }]

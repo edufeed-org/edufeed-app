@@ -163,7 +163,8 @@ export function createKnowledgeTools({ callTool, relays = DEFAULT_SEARCH_RELAYS,
       for (const hit of Array.isArray(r?.results) ? r.results : []) {
         for (const e of [...(hit?.creator ?? []), ...(hit?.publisher ?? [])]) {
           const name = typeof e?.name === 'string' ? e.name.trim() : '';
-          if (e?.type !== 'Person' || !name) continue;
+          // third-party metadata: a 100+ char "name" is a sentence, not a person
+          if (e?.type !== 'Person' || !name || name.length > 100) continue;
           const t = tally.get(name) ?? { count: 0, best: 0 };
           tally.set(name, { count: t.count + 1, best: Math.max(t.best, hit.score ?? 0) });
         }

@@ -71,6 +71,8 @@ describe('callExtractMetadata', () => {
 
     expect(result).toEqual(payload);
     expect(fetchMock).toHaveBeenCalledTimes(3);
+    // extract_metadata (an LLM call) gets no search deadline
+    expect(fetchMock.mock.calls.every(([, init]) => init.signal === undefined)).toBe(true);
 
     // Each call carries Authorization + Accept negotiation
     for (const call of fetchMock.mock.calls) {
@@ -395,6 +397,28 @@ describe('callNopeMcpTool', () => {
     expect(callBody.method).toBe('tools/call');
     expect(callBody.params.name).toBe('search_resources');
     expect(callBody.params.arguments).toEqual({ query: 'photosynthesis' });
+    // one deadline signal shared by initialize, initialized and tools/call
+    const signals = fetchMock.mock.calls.map(([, init]) => init.signal);
+    expect(signals[0]).toBeInstanceOf(AbortSignal);
+    expect(new Set(signals).size).toBe(1);
+  });
+
+  it('rejects when nope-mcp hangs past the deadline', async () => {
+    fetchMock.mockImplementation(
+      (/** @type {string} */ _url, /** @type {RequestInit} */ init) =>
+        new Promise((_, reject) =>
+          init.signal?.addEventListener('abort', () => reject(init.signal?.reason))
+        )
+    );
+    await expect(
+      callNopeMcpTool({
+        mcpUrl: 'https://mcp.example/mcp',
+        bearerToken: undefined,
+        name: 'x',
+        args: {},
+        timeoutMs: 20
+      })
+    ).rejects.toThrow(/timed out|abort/i);
   });
 
   it('omits Authorization header when no bearerToken is given', async () => {
