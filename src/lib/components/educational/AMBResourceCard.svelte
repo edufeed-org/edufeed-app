@@ -20,7 +20,7 @@
     getLanguageDisplayName
   } from '$lib/helpers/educational/ambTransform.js';
   import { getCachedConcepts, ensureVocabularyLoaded } from '$lib/stores/skos-cache.svelte.js';
-  import { runtimeConfig } from '$lib/stores/config.svelte.js';
+  import { getAppRelaysForCategory } from '$lib/services/app-relay-service.svelte.js';
   import * as m from '$lib/paraglide/messages.js';
   import MarkdownRenderer from '../shared/MarkdownRenderer.svelte';
   import ProfileAvatar from '../shared/ProfileAvatar.svelte';
@@ -219,7 +219,7 @@
     // Get relay hints from resource's seen relays or use AMB relays from config
     const relayHints = resource.event?.seen_on
       ? Array.from(resource.event.seen_on).slice(0, 3)
-      : runtimeConfig.appRelays.educational.slice(0, 3);
+      : getAppRelaysForCategory('educational').slice(0, 3);
 
     return nip19.naddrEncode({
       kind: resource.kind,

@@ -75,4 +75,18 @@ describe('publishEvent empty relay set fallback', () => {
     expect(fallbackSpy).not.toHaveBeenCalled();
     expect(result.relays).toEqual(['wss://explicit.example']);
   });
+
+  it('publishes once to a relay listed with and without a trailing slash', async () => {
+    const publishSpy = vi.fn(async () => ({ ok: true }));
+    relayMocks.set('wss://explicit.example', { publish: publishSpy });
+    relayMocks.set('wss://explicit.example/', { publish: publishSpy });
+
+    const result = await publishEvent(NOTE, [], {
+      additionalRelays: ['wss://explicit.example', 'wss://EXPLICIT.example/']
+    });
+
+    expect(publishSpy).toHaveBeenCalledTimes(1);
+    expect(result.relays).toEqual(['wss://explicit.example']);
+    expect(result.successCount).toBe(1);
+  });
 });

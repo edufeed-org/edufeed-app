@@ -10,7 +10,7 @@
   import { resolve } from '$app/paths';
   import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
   import { useActiveUser } from '$lib/stores/accounts.svelte';
-  import { runtimeConfig } from '$lib/stores/config.svelte.js';
+  import { getCalendarRelays } from '$lib/helpers/relay-helper.js';
   import { formatCalendarDate, formatZonedDateTime } from '$lib/helpers/calendar.js';
   import { isChannelMeeting } from '$lib/helpers/calendar-timing.js';
   import { encodeEventToNaddr } from '$lib/helpers/nostrUtils';
@@ -65,14 +65,6 @@
   const imageHash = $derived(sha256FromUrl(event?.image));
   const getImageStatus = useLicenseStatus(() => imageHash);
   const imageStatus = $derived(getImageStatus());
-
-  /**
-   * Get calendar relays from app config
-   * @returns {string[]}
-   */
-  function getCalendarRelays() {
-    return [...(runtimeConfig.appRelays?.calendar || []), ...(runtimeConfig.fallbackRelays || [])];
-  }
 
   // Use the proper reactive hook for active user
   const getActiveUser = useActiveUser();

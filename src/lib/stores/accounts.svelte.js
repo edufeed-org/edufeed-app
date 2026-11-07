@@ -209,6 +209,14 @@ export function hardenExtensionAccounts(accounts, opts = {}) {
   }
 }
 
+// Per-login store subscriptions (kind 30002 overrides, kind 3 follows). Each
+// active$ emission replaces them; left open, the previous account's late
+// events would be applied while the next account is active.
+/** @type {import('rxjs').Subscription[]} */
+let relaySetSubscriptions = [];
+/** @type {import('rxjs').Subscription | undefined} */
+let followsSubscription;
+
 // Initialize account persistence
 async function initializeAccountPersistence() {
   if (typeof window === 'undefined') return; // Only run on client side
@@ -303,6 +311,8 @@ async function initializeAccountPersistence() {
   });
 
   combineLatest([configReady$, manager.active$]).subscribe(async ([isConfigReady, account]) => {
+    relaySetSubscriptions.forEach((sub) => sub.unsubscribe());
+    relaySetSubscriptions = [];
     const {
       clearUserOverrideCache,
       updateUserOverrideCache,
@@ -344,10 +354,13 @@ async function initializeAccountPersistence() {
         relays: lookupRelays
       }).subscribe();
 
-      eventStore.replaceable(30002, account.pubkey, dTag).subscribe((event) => {
-        const relays = parseRelaySetEvent(event);
-        updateUserOverrideCache(category, relays);
-      });
+      relaySetSubscriptions.push(
+        eventStore.replaceable(30002, account.pubkey, dTag).subscribe((event) => {
+          if (manager.active?.pubkey !== account.pubkey) return;
+          const relays = parseRelaySetEvent(event);
+          updateUserOverrideCache(category, relays);
+        })
+      );
     }
 
     // Prefetch the user's NIP-65 relay list (kind 10002) so the session's
@@ -419,6 +432,7 @@ async function initializeAccountPersistence() {
 
   // Step 9: Set WoT user follows and active user pubkey on login/logout
   manager.active$.subscribe(async (account) => {
+    followsSubscription?.unsubscribe();
     const { setUserFollows, clearUserFollows, setActiveUserPubkey, clearActiveUserPubkey } =
       await import('$lib/services/curated-authors-service.svelte.js');
 
@@ -433,13 +447,17 @@ async function initializeAccountPersistence() {
 
     // Subscribe to user's kind 3 contact list and extract follow pubkeys
     const { eventStore } = await import('$lib/stores/nostr-infrastructure.svelte');
-    eventStore
+    // A switch during the awaits above already started the next account's run.
+    if (manager.active?.pubkey !== account.pubkey) return;
+    followsSubscription?.unsubscribe();
+    followsSubscription = eventStore
       .timeline({
         kinds: [3],
         authors: [account.pubkey],
         limit: 1
       })
       .subscribe((events) => {
+        if (manager.active?.pubkey !== account.pubkey) return;
         if (events.length > 0) {
           const latestEvent = events[events.length - 1];
           const pubkeys = latestEvent.tags

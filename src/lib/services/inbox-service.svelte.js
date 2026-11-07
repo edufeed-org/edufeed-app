@@ -99,6 +99,13 @@ export function buildMainFilter(pubkey, since) {
 }
 
 /**
+ * The newest notifications the inbox processes. The main TimelineModel (newest
+ * first) has no limit and the live leg keeps adding to it for the whole
+ * session; everything past this is older than anyone scrolls to.
+ */
+export const MAX_INBOX_NOTIFICATIONS = 500;
+
+/**
  * Get deduplicated relay union for notification queries.
  * @returns {string[]}
  */
@@ -649,7 +656,7 @@ export function initializeInbox(pubkey) {
     const filtered = filterSelfNotifications(
       /** @type {import('nostr-tools').Event[]} */ (events || []),
       pubkey
-    );
+    ).slice(0, MAX_INBOX_NOTIFICATIONS);
     rawMainNotifications = filtered;
     prefetchReferencedContent(filtered);
   });

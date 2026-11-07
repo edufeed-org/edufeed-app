@@ -25,7 +25,9 @@ import { pool } from '$lib/stores/nostr-infrastructure.svelte';
 import { runtimeConfig } from '$lib/stores/config.svelte.js';
 import { kindToAppRelayCategory } from '$lib/services/app-relay-service.svelte.js';
 import { getAllLookupRelays } from '$lib/helpers/relay-helper.js';
-import { firstValueFrom } from 'rxjs';
+import { firstValueFrom, lastValueFrom, toArray } from 'rxjs';
+import { timedPool } from '$lib/loaders/base.js';
+import { unique } from '$lib/helpers/unique.js';
 
 /** @typedef {'calendar' | 'communikey' | 'educational' | 'longform' | 'kanban'} CuratedCategory */
 
@@ -373,16 +375,7 @@ export function decodeNaddrs(naddrs) {
  * @returns {string[]}
  */
 export function extractPubkeysFromFollowSets(events) {
-  /** @type {string[]} */
-  const pubkeys = [];
-  for (const event of events) {
-    for (const tag of event.tags) {
-      if (tag[0] === 'p' && tag[1] && !pubkeys.includes(tag[1])) {
-        pubkeys.push(tag[1]);
-      }
-    }
-  }
-  return pubkeys;
+  return unique(events.flatMap((e) => e.tags.filter((t) => t[0] === 'p' && t[1]).map((t) => t[1])));
 }
 
 /**
@@ -406,12 +399,32 @@ async function firstAnswer(relays, filter, label) {
 }
 
 /**
+ * Fetch one replaceable event from every relay (through timedPool) and
+ * resolve with the newest copy. For the background refreshes: nothing waits
+ * on them, and first-answer would let a fast relay holding a stale list win
+ * on every visit.
+ * @param {string[]} relays
+ * @param {import('nostr-tools').Filter} filter
+ * @returns {Promise<import('nostr-tools').Event[]>}
+ */
+async function newestAnswer(relays, filter) {
+  const events = await lastValueFrom(timedPool(relays, [filter]).pipe(toArray()));
+  const newest = events.reduce(
+    (/** @type {import('nostr-tools').Event | undefined} */ best, e) =>
+      !best || e.created_at > best.created_at ? e : best,
+    undefined
+  );
+  return newest ? [newest] : [];
+}
+
+/**
  * Initialize curated authors for a specific category.
  * Parses direct pubkeys and fetches follow sets from network.
  * Safe to call multiple times — subsequent calls are no-ops.
  * @param {string} category
+ * @param {{ refresh?: boolean }} [opts] - refresh: collect every relay's answer, keep the newest
  */
-export async function initializeCuratedAuthors(category) {
+export async function initializeCuratedAuthors(category, { refresh = false } = {}) {
   if (followSetsInitialized.has(category)) return;
   if (!isCuratedModeConfigured(category)) return;
 
@@ -419,7 +432,9 @@ export async function initializeCuratedAuthors(category) {
 
   // Step 1: Ensure direct pubkeys are parsed
   ensureDirectPubkeysInitialized(category);
-  const directPubkeys = curatedAuthorsCache.get(category) ?? [];
+  // From the config, not the cache: on a refresh the cache still holds the
+  // previous union, and an author dropped from a set would never leave it.
+  const directPubkeys = parseDirectPubkeys(getCategoryConfig(category).direct);
 
   // Step 2: Fetch follow sets
   const { sets } = getCategoryConfig(category);
@@ -440,7 +455,7 @@ export async function initializeCuratedAuthors(category) {
     // background refresh.
     const allEvents = await Promise.all(
       pointers.map((pointer) =>
-        firstAnswer(
+        (refresh ? newestAnswer : firstAnswer)(
           pointer.relays.length > 0 ? pointer.relays : fallbackRelays,
           { kinds: [30000], authors: [pointer.pubkey], '#d': [pointer.identifier] },
           `Curated authors [${category}]: follow set ${pointer.identifier}`
@@ -451,9 +466,7 @@ export async function initializeCuratedAuthors(category) {
     const followSetPubkeys = extractPubkeysFromFollowSets(allEvents.flat());
 
     // Union direct + follow set pubkeys (deduplicated)
-    const allPubkeys = [...directPubkeys, ...followSetPubkeys].filter(
-      (pk, i, arr) => arr.indexOf(pk) === i
-    );
+    const allPubkeys = unique([...directPubkeys, ...followSetPubkeys]);
 
     if (allPubkeys.length > 0) {
       curatedAuthorsCache.set(category, allPubkeys);
@@ -520,7 +533,7 @@ async function _refreshAllCuratedAuthors() {
     directPubkeysInitialized.delete(cat);
     followSetsInitialized.delete(cat);
   }
-  await Promise.all(ALL_CATEGORIES.map((cat) => initializeCuratedAuthors(cat)));
+  await Promise.all(ALL_CATEGORIES.map((cat) => initializeCuratedAuthors(cat, { refresh: true })));
   if (browser) saveCachedAuthors(curatedAuthorsCache, wotAuthorsCache);
 }
 
@@ -545,8 +558,9 @@ function getWotCategoryConfig(category) {
  * Fetches kind 3 (contact list) events for anchor pubkeys and extracts their follows.
  * Safe to call multiple times — subsequent calls are no-ops.
  * @param {string} category
+ * @param {{ refresh?: boolean }} [opts] - refresh: collect every relay's answer, keep the newest
  */
-export async function initializeWotAuthors(category) {
+export async function initializeWotAuthors(category, { refresh = false } = {}) {
   if (wotInitialized.has(category)) return;
   if (!runtimeConfig.wotMode?.enabled) return;
 
@@ -565,7 +579,7 @@ export async function initializeWotAuthors(category) {
     const events = (
       await Promise.all(
         anchorPubkeys.map((pubkey) =>
-          firstAnswer(
+          (refresh ? newestAnswer : firstAnswer)(
             relays,
             { kinds: [3], authors: [pubkey] },
             `WoT authors [${category}]: contacts of ${pubkey}`
@@ -578,9 +592,7 @@ export async function initializeWotAuthors(category) {
     const followPubkeys = extractPubkeysFromFollowSets(events);
 
     // Union anchor pubkeys + their follows (deduplicated)
-    const allPubkeys = [...anchorPubkeys, ...followPubkeys].filter(
-      (pk, i, arr) => arr.indexOf(pk) === i
-    );
+    const allPubkeys = unique([...anchorPubkeys, ...followPubkeys]);
 
     if (allPubkeys.length > 0) {
       wotAuthorsCache.set(category, allPubkeys);
@@ -623,7 +635,7 @@ async function _refreshAllWotAuthors() {
   for (const cat of ALL_CATEGORIES) {
     wotInitialized.delete(cat);
   }
-  await Promise.all(ALL_CATEGORIES.map((cat) => initializeWotAuthors(cat)));
+  await Promise.all(ALL_CATEGORIES.map((cat) => initializeWotAuthors(cat, { refresh: true })));
   if (browser) saveCachedAuthors(curatedAuthorsCache, wotAuthorsCache);
 }
 

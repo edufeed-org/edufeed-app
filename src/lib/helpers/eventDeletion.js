@@ -1,6 +1,6 @@
 import { getSeenRelays } from 'applesauce-core/helpers';
 import { createAppEventFactory } from '$lib/helpers/event-factory.js';
-import { publishEventOptimistic } from '$lib/services/publish-service.js';
+import { publishEvent } from '$lib/services/publish-service.js';
 import { eventStore } from '$lib/stores/nostr-infrastructure.svelte';
 import { cacheDeletion } from '$lib/stores/event-cache.svelte.js';
 import {
@@ -100,14 +100,6 @@ export async function deleteEvent(event, activeUser, opts = {}) {
     const deleteTemplate = await factory.delete([eventToDelete, ...extraEvents]);
     const signedDelete = await factory.sign(deleteTemplate);
 
-    // OPTIMISTIC UI: filter the original out of the in-memory store immediately.
-    eventStore.add(signedDelete);
-    // Persist the deletion to IDB so hydrateDeletions() replays it on the next
-    // boot. The EventStore routes kind 5 to its DeleteManager and never emits it
-    // on insert$, so the cache write pipeline misses it — without this the
-    // deleted event is read back from cache and reappears across reloads.
-    cacheDeletion(signedDelete);
-
     // Determine additional relays based on event kind
     const category = kindToAppRelayCategory(kind);
     const categoryRelays = category ? getAppRelaysForCategory(category) : [];
@@ -126,10 +118,21 @@ export async function deleteEvent(event, activeUser, opts = {}) {
       ...(opts.additionalRelays ?? [])
     ];
 
-    // Publish in background
-    publishEventOptimistic(signedDelete, [], {
-      additionalRelays
-    });
+    // Not optimistic: a kind 5 in the EventStore's DeleteManager cannot be
+    // taken back, and the deleted$ mirror drops the target from IDB. Applying
+    // it before a relay accepted it would hide content that every relay still
+    // serves — gone until the next reload, then back.
+    const published = await publishEvent(signedDelete, [], { additionalRelays });
+    if (!published.success) {
+      return { success: false, error: 'No relay accepted the deletion' };
+    }
+
+    eventStore.add(signedDelete);
+    // Persist the deletion to IDB so hydrateDeletions() replays it on the next
+    // boot. The EventStore routes kind 5 to its DeleteManager and never emits it
+    // on insert$, so the cache write pipeline misses it — without this the
+    // deleted event is read back from cache and reappears across reloads.
+    cacheDeletion(signedDelete);
 
     return { success: true };
   } catch (error) {

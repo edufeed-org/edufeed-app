@@ -37,6 +37,16 @@ vi.mock('$lib/stores/config.svelte.js', () => ({
   }
 }));
 
+// The background refreshes collect every answer through timedPool; route it
+// to whichever pool.request mock the test installed.
+vi.mock('$lib/loaders/base.js', async () => {
+  const { pool } = await import('$lib/stores/nostr-infrastructure.svelte');
+  return {
+    timedPool: (/** @type {string[]} */ relays, /** @type {any} */ filters) =>
+      pool.request(relays, filters)
+  };
+});
+
 vi.mock('$lib/helpers/relay-helper.js', () => ({
   getAllLookupRelays: vi.fn(() => ['wss://relay.example.com']),
   getEventLoaderLookupRelays: () => []
@@ -1389,6 +1399,10 @@ describe('curated-authors-service', () => {
         pool: { request },
         eventStore: { add: vi.fn() }
       }));
+      vi.doMock('$lib/loaders/base.js', () => ({
+        timedPool: (/** @type {string[]} */ relays, /** @type {any} */ filters) =>
+          request(relays, filters)
+      }));
       vi.doMock('nostr-tools', () => ({
         nip19: {
           decode: vi.fn((/** @type {string} */ naddr) => ({
@@ -1494,6 +1508,64 @@ describe('curated-authors-service', () => {
       slow.next(followSet('list-a', ['follow1']));
       await pending;
       expect(service.getCuratedAuthors('calendar')).toEqual(['follow1', 'follow2']);
+    });
+
+    it('a background refresh keeps the newest follow set, not the fastest relay', async () => {
+      const { of } = await import('rxjs');
+      // The fast relay holds a stale copy, a slower one the current list.
+      const request = vi.fn(() =>
+        of({ ...followSet('list-a', ['new']), created_at: 2 }, followSet('list-a', ['stale']))
+      );
+      mockDeps(request, { curatedMode: curatedConfig({ calendar: ['naddr1a'] }) });
+      storage.set(
+        CACHE_KEY,
+        JSON.stringify({
+          version: 1,
+          timestamp: Date.now(),
+          curated: { calendar: [CACHED] },
+          wot: {}
+        })
+      );
+
+      const service = await import('../services/curated-authors-service.svelte.js');
+      await service.initializeAllCuratedAuthors();
+
+      await vi.waitFor(() => expect(service.getCuratedAuthors('calendar')).toEqual(['new']));
+    });
+
+    it('a background WoT refresh keeps the newest contact list', async () => {
+      const { of } = await import('rxjs');
+      const anchor = 'b'.repeat(64);
+      const stale = 'c'.repeat(64);
+      const current = 'd'.repeat(64);
+      mockDeps(
+        vi.fn(() =>
+          of(
+            { kind: 3, pubkey: anchor, created_at: 1, tags: [['p', stale]] },
+            { kind: 3, pubkey: anchor, created_at: 2, tags: [['p', current]] }
+          )
+        ),
+        {
+          curatedMode: curatedConfig(),
+          wotMode: { enabled: true, includeUserFollows: false, calendar: { anchors: [anchor] } }
+        }
+      );
+      storage.set(
+        CACHE_KEY,
+        JSON.stringify({
+          version: 1,
+          timestamp: Date.now(),
+          curated: {},
+          wot: { calendar: [anchor, stale] }
+        })
+      );
+
+      const service = await import('../services/curated-authors-service.svelte.js');
+      await service.initializeAllWotAuthors();
+
+      await vi.waitFor(() =>
+        expect(service.getCuratedAuthors('calendar')).toEqual([anchor, current])
+      );
     });
 
     it('resolves WoT anchors on their first answers', async () => {
