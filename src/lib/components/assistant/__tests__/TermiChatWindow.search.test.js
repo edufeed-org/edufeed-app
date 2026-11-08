@@ -340,6 +340,54 @@ describe('TermiChatWindow nothing found → the router’s best guess', () => {
   });
 });
 
+describe('TermiChatWindow "Material von …" in the assistant', () => {
+  beforeEach(() => {
+    mockConfig.termi = { enabled: true, embed: true, llm: true };
+    _resetTermiEligibilityForTests();
+  });
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('asks the model with the person key, so it can pass it to `authors`', async () => {
+    const PK = 'a'.repeat(64);
+    const fetchMock = stubFetch({
+      chat: () =>
+        createUIMessageStreamResponse({
+          stream: createUIMessageStream({
+            execute: ({ writer }) => {
+              writer.write({ type: 'start-step' });
+              writer.write({
+                type: 'tool-input-available',
+                toolCallId: 'c1',
+                toolName: 'find_people',
+                input: { query: 'Ada' }
+              });
+              writer.write({
+                type: 'tool-output-available',
+                toolCallId: 'c1',
+                output: {
+                  items: [{ type: 'person', id: PK, pubkey: PK, title: 'Ada', href: '/p/npub1a' }],
+                  sourcesUnavailable: []
+                }
+              });
+              writer.write({ type: 'finish-step' });
+            }
+          })
+        })
+    });
+    const view = renderWindow();
+    await type(view, 'Wer ist Ada?');
+    const label = m.termi_card_author_search({ name: 'Ada' });
+    const chats = () => fetchMock.mock.calls.filter(([u]) => u === '/api/termi/chat');
+    // The card shows while the stream still runs; a click then is ignored, so retry until sent.
+    await waitFor(async () => {
+      if (chats().length < 2) await fireEvent.click(view.getByText(label));
+      expect(chats()).toHaveLength(2);
+    });
+    const [, init] = /** @type {any[]} */ (chats().at(-1));
+    expect(String(init.body)).toContain(`${label} (${PK})`);
+  });
+});
+
 describe('TermiChatWindow pending state and locale', () => {
   beforeEach(() => {
     mockConfig.termi = { enabled: true, embed: true, llm: false };

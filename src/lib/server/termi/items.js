@@ -97,7 +97,9 @@ export function normalizeContent(hit, queriedRelays) {
   // Without a decodable naddr there is no in-app target; nope-mcp always sends one, so drop the hit.
   const pointer = decodeNaddr(hit?.naddr ?? hit?.nostr?.naddr);
   if (!pointer) return undefined;
-  const relays = hit.relay ? [hit.relay] : queriedRelays;
+  // Only a wss:// URL is a usable hint; anything else falls back to the queried relays.
+  const hint = typeof hit.relay === 'string' && /^wss:\/\/\S+$/.test(hit.relay) ? hit.relay : '';
+  const relays = hint ? [hint] : queriedRelays;
   return compact({
     type: 'resource',
     id: `${pointer.kind}:${pointer.pubkey}:${pointer.identifier}`,
@@ -111,7 +113,7 @@ export function normalizeContent(hit, queriedRelays) {
     creator: line(names(hit.creator)),
     publisher: line(names(hit.publisher)),
     picture: safeUrl(hit.image),
-    relay: hit.relay,
+    relay: hint || undefined,
     score: hit.score,
     // 2a: the relay's NIP-50 search matched it, but no query word did — tier 1 drops these.
     weak: hit.lexical === 0 && hit.score === undefined ? true : undefined

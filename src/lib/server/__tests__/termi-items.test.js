@@ -68,6 +68,15 @@ describe('normalizeContent', () => {
     expect(item?.id).toBe(`${original.kind}:${original.pubkey}:${original.identifier}`);
   });
 
+  it.each(['oersi', 'https://oersi.edufeed.org', 'javascript:x', 42])(
+    'a non-wss hit relay (%j) is no hint: the queried relays instead',
+    (relay) => {
+      const item = normalizeContent({ ...article, relay }, QUERIED);
+      expect(hintsOf(/** @type {string} */ (item?.href)).relays).toEqual(QUERIED);
+      expect(item?.relay).toBeUndefined();
+    }
+  );
+
   it('uses the hit relay as the only hint when present (2a shape)', () => {
     const item = normalizeContent({ ...article, relay: 'wss://oersi.edufeed.org' }, QUERIED);
     expect(hintsOf(/** @type {string} */ (item?.href)).relays).toEqual(['wss://oersi.edufeed.org']);

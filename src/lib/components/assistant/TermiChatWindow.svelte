@@ -631,7 +631,8 @@
    */
   function searchAuthor(person) {
     const label = m.termi_card_author_search({ name: person.title });
-    if (assistant) return ask(label);
+    // The model needs the hex key to pass as `authors`; a name alone would be a text search.
+    if (assistant) return ask(person.pubkey ? `${label} (${person.pubkey})` : label);
     if (botTyping) return;
     msgs = [...msgs, { role: 'user', text: label }];
     contentSearch(person.title, person.pubkey ? [person.pubkey] : undefined);
