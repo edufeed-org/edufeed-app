@@ -6,6 +6,7 @@
 import * as m from '$lib/paraglide/messages';
 import {
   TERMI_SKILLS,
+  THRESHOLDS,
   availableSkills,
   decide,
   extractQuery,
@@ -54,8 +55,19 @@ export async function routeQuestion(text, { locale, fetch, skills = TERMI_SKILLS
   const ids = new Set(available.map((s) => s.id));
   // The server ranks the whole catalogue; drop what this user can't use.
   matches = (matches ?? keywordMatch(text, available, locale)).filter((x) => ids.has(x.skill));
+  const byId = new Map(available.map((s) => [s.id, s]));
   return {
     decision: decide(matches, { mode }),
+    // "Meinst du …?" on an empty content answer: the two best weak matches.
+    guesses: [...matches]
+      .sort((a, b) => b.score - a.score)
+      .filter(
+        (x) =>
+          x.score >= THRESHOLDS[mode].MAYBE &&
+          ['navigate', 'create', 'help'].includes(byId.get(x.skill)?.kind ?? '')
+      )
+      .slice(0, 2)
+      .map((x) => x.skill),
     query: extractQuery(text, locale),
     mode,
     available

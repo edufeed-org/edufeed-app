@@ -321,6 +321,7 @@
     if (assistant) {
       if (chatBusy) return;
       input = '';
+      guessSkills = []; // a follow-up was never routed
       talk((chat) => chat.sendMessage({ text: q.trim() }));
       return;
     }
@@ -386,24 +387,42 @@
     msg.parts.filter(
       (/** @type {any} */ p) => isKnowledgePart(p) && p.state === 'output-available'
     );
+  /** @param {any} msg */
+  const lastStreaming = (msg) => chatBusy && assistant?.chat.messages.at(-1)?.id === msg.id;
   // A failed search with no model text to explain it gets a note of its own.
   /** @param {any} msg */
   const searchFailed = (msg) =>
     msg.role === 'assistant' &&
     !textOf(msg) &&
     msg.parts.some((/** @type {any} */ p) => isKnowledgePart(p) && p.state === 'output-error') &&
-    !(chatBusy && assistant?.chat.messages.at(-1)?.id === msg.id);
+    !lastStreaming(msg);
+  // Neither text nor a card nor a failed search: the fallback line with the router's guesses.
+  /** @param {any} msg */
+  const emptyAnswer = (msg) =>
+    msg.role === 'assistant' &&
+    !textOf(msg) &&
+    !searchFailed(msg) &&
+    !searchPartsOf(msg).some((/** @type {any} */ p) => (p.output?.items ?? []).some(keepItem)) &&
+    !lastStreaming(msg) &&
+    !chatError;
   /** @param {any} msg */
   const visible = (msg) =>
-    msg.role === 'user' || !!textOf(msg) || searchPartsOf(msg).length > 0 || searchFailed(msg);
+    msg.role === 'user' ||
+    !!textOf(msg) ||
+    searchPartsOf(msg).length > 0 ||
+    searchFailed(msg) ||
+    emptyAnswer(msg);
   // Only the latest answer can be regenerated.
   const lastAssistantId = $derived(
     assistant?.chat.messages.findLast((x) => x.role === 'assistant')?.id
   );
-  const chatQuery = $derived.by(() => {
+  const chatSentence = $derived.by(() => {
     const lastUser = assistant?.chat.messages.findLast((x) => x.role === 'user');
-    return lastUser ? extractQuery(textOf(lastUser), getLocale() === 'en' ? 'en' : 'de') : '';
+    return lastUser ? textOf(lastUser) : '';
   });
+  const chatQuery = $derived(
+    chatSentence ? extractQuery(chatSentence, getLocale() === 'en' ? 'en' : 'de') : ''
+  );
   const learningHref = (/** @type {string} */ q) => discoverHref('learning', q);
 
   /**
@@ -416,15 +435,41 @@
   const assistantAllowed = async (user) =>
     canUseAssistant(user) && (await isTermiEligible(/** @type {any} */ (user).pubkey, fetch));
 
-  /** Back to router mode with a line and the plain learning search. @param {string} text @param {string} q */
-  function fallBackToSearch(text, q) {
+  /**
+   * Tier 2 refused (gate, off): back to router mode with its line and one
+   * tier-1 search for the same sentence — cards, or the plain learning search.
+   * @param {string} line @param {string} sentence
+   */
+  async function fallBackToContent(line, sentence) {
     leaveAssistant();
+    botTyping = true;
+    const locale = getLocale() === 'en' ? 'en' : 'de';
+    const result = await searchContent(sentence, { locale, fetch });
+    if (destroyed) return;
     botTyping = false;
+    const reply = contentReply(result, sentence);
     msgs = [
       ...msgs,
-      { role: 'bot', text, actions: [{ label: m.termi_quota_link(), href: learningHref(q) }] }
+      reply.items
+        ? { ...reply, text: line }
+        : {
+            role: 'bot',
+            text: line,
+            actions: [
+              { label: m.termi_quota_link(), href: learningHref(extractQuery(sentence, locale)) }
+            ]
+          }
     ];
   }
+
+  // Tier 1 under a quota / stream-error line (the chat stays); once per sentence.
+  /** @type {{ sentence: string, items: Array<import('$lib/server/termi/items.js').Item>, sourcesUnavailable: string[] } | null} */
+  let rescue = $state.raw(null);
+
+  /** The router's weak navigate/create/help matches for the routed sentence ("Meinst du …?"). */
+  let guessSkills = $state.raw(
+    /** @type {import('$lib/helpers/termi-skills.js').TermiSkill[]} */ ([])
+  );
 
   // Pubkey the current assistant chat signs as; plain let, read by the account-switch effect.
   /** @type {string | undefined} */
@@ -442,10 +487,9 @@
       return;
     }
     if (!allowed) {
-      const q = extractQuery(text, getLocale() === 'en' ? 'en' : 'de');
-      fallBackToSearch(
+      fallBackToContent(
         canUseAssistant(user) ? m.termi_assistant_not_eligible() : m.termi_assistant_unavailable(),
-        q
+        text
       );
       return;
     }
@@ -472,12 +516,23 @@
     if (!current) return;
     await run(current.chat);
     if (current !== assistant) return;
-    // 503: LLM or nope-mcp not configured — back to the router with the plain search.
-    if (chatError?.status === 503) fallBackToSearch(m.termi_assistant_unavailable(), chatQuery);
+    const sentence = chatSentence;
+    // 503: LLM/nope-mcp off or eligibility_unknown — back to the router, tier 1 instead.
+    if (chatError?.status === 503) fallBackToContent(m.termi_assistant_unavailable(), sentence);
     // 403: the NIP-05 gate refused this account (the probe was stale).
     else if (chatError?.status === 403) {
       if (assistantPubkey) markTermiIneligible(assistantPubkey);
-      fallBackToSearch(m.termi_assistant_not_eligible(), chatQuery);
+      fallBackToContent(m.termi_assistant_not_eligible(), sentence);
+    } else if (
+      (chatError?.status === 429 || chatError?.message === 'termi:upstream') &&
+      rescue?.sentence !== sentence
+    ) {
+      botTyping = true;
+      const locale = getLocale() === 'en' ? 'en' : 'de';
+      const result = await searchContent(sentence, { locale, fetch });
+      if (destroyed || current !== assistant) return;
+      botTyping = false;
+      rescue = { sentence, ...result };
     }
   }
 
@@ -502,7 +557,7 @@
       ? isTermiEligible(/** @type {any} */ (user).pubkey, fetch)
       : Promise.resolve(false);
     try {
-      const { decision, available } = await routeQuestion(text, {
+      const { decision, available, guesses } = await routeQuestion(text, {
         locale,
         fetch,
         // help.3 points at the guide: like its chip, only offered with a HELP_URL.
@@ -510,13 +565,17 @@
         ctx: { loggedIn: !!user }
       });
       reply = routerReply(decision, available, user?.pubkey);
+      guessSkills = /** @type {import('$lib/helpers/termi-skills.js').TermiSkill[]} */ (
+        guesses.map((id) => available.find((s) => s.id === id)).filter(Boolean)
+      );
       if (!reply) {
         // A content question: tier 2 (the `ask` chat) when allowed, else tier 1.
         if (await llm) {
           await startAssistant(text);
           return;
         }
-        reply = contentReply(await searchContent(text, { locale, fetch }), text);
+        const result = await searchContent(text, { locale, fetch });
+        reply = contentReply(result, text, undefined, guessSkills);
       }
     } catch {
       reply = fallbackReply();
@@ -531,12 +590,13 @@
    * @param {Awaited<ReturnType<typeof searchContent>>} result
    * @param {string} text the question, for "Erneut versuchen" and "Alle anzeigen"
    * @param {string[]} [authors] set for "Material von …": no topic, no "Alle anzeigen"
+   * @param {import('$lib/helpers/termi-skills.js').TermiSkill[]} [guesses] the router's guesses, for an empty answer
    * @returns {ChatMessage}
    */
-  function contentReply({ items, sourcesUnavailable }, text, authors) {
+  function contentReply({ items, sourcesUnavailable }, text, authors, guesses) {
     const retry = () => contentSearch(text, authors);
     const kept = items.filter(keepItem);
-    if (kept.length === 0) return { ...fallbackReply(), sourcesUnavailable, retry };
+    if (kept.length === 0) return { ...fallbackReply(guesses), sourcesUnavailable, retry };
     const query = authors ? '' : extractQuery(text, getLocale() === 'en' ? 'en' : 'de');
     return { role: 'bot', text: m.termi_route_go(), items: kept, sourcesUnavailable, retry, query };
   }
@@ -565,13 +625,26 @@
     contentSearch(person.title, person.pubkey ? [person.pubkey] : undefined);
   }
 
-  /** The "can't answer" line plus home, the learning search and help. @returns {ChatMessage} */
-  function fallbackReply() {
+  /**
+   * The "can't answer" line plus home, the learning search and help, led by
+   * the router's guesses when it had any ("Meinst du …?").
+   * @param {import('$lib/helpers/termi-skills.js').TermiSkill[]} [guesses]
+   * @returns {ChatMessage}
+   */
+  function fallbackReply(guesses = []) {
     const home = TERMI_SKILLS.find((s) => s.id === 'home');
     const help = TERMI_SKILLS.find((s) => s.id === 'help.1');
     const types = runtimeConfig.discover?.contentTypes ?? [];
+    const ctx = skillCtx(getActiveUser()?.pubkey);
+    const guessed = /** @type {TermiAction[]} */ (
+      guesses
+        .filter((s) => s.id !== 'home')
+        .map((s) => skillAction(s, ctx))
+        .filter(Boolean)
+    );
     /** @type {Array<TermiAction | null>} */
     const list = [
+      ...guessed,
       home ? skillAction(home, skillCtx()) : null,
       // Unrecognised text is no search query: offer the plain search page.
       isDiscoverTypeEnabled('learning', types)
@@ -588,7 +661,7 @@
     ];
     return {
       role: 'bot',
-      text: `${m.termi_fallback()} ${m.termi_route_fallback_actions()}`,
+      text: `${m.termi_fallback()} ${guessed.length ? m.termi_route_maybe() : m.termi_route_fallback_actions()}`,
       actions: /** @type {TermiAction[]} */ (list.filter(Boolean))
     };
   }
@@ -891,6 +964,9 @@
                     {m.termi_quota_link()}
                   </a>
                 </div>
+              {:else if emptyAnswer(msg)}
+                {@const reply = fallbackReply(guessSkills)}
+                <TermiAnswer text={reply.text} actions={reply.actions ?? []} />
               {/if}
             </div>
           </div>
@@ -925,6 +1001,14 @@
                   {m.termi_assistant_retry()}
                 </button>
               </div>
+            {/if}
+            {#if rescue && rescue.sentence === chatSentence && rescue.items.some(keepItem)}
+              <ItemCards
+                items={rescue.items}
+                sourcesUnavailable={rescue.sourcesUnavailable}
+                query={chatQuery}
+                onSearchAuthor={searchAuthor}
+              />
             {/if}
           </div>
         </div>
