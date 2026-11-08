@@ -71,9 +71,8 @@ async function importRoute(
       createTermiModel: () => model
     }));
   }
-  vi.doMock('$lib/server/nopeMcpClient.js', () => ({
-    callNopeMcpTool: vi.fn(async () => ({ resources: [{ name: 'Bruch' }] }))
-  }));
+  const callNopeMcpTool = vi.fn(async () => ({ resources: [{ name: 'Bruch' }] }));
+  vi.doMock('$lib/server/nopeMcpClient.js', () => ({ callNopeMcpTool }));
   /** @type {{ quota?: any }} */
   const holder = {};
   vi.doMock('$lib/server/termi/quota.js', async (importOriginal) => {
@@ -91,6 +90,7 @@ async function importRoute(
     verify,
     isEligible,
     rateLimit,
+    callNopeMcpTool,
     get streamText() {
       return streamText;
     },
@@ -355,6 +355,32 @@ describe('POST /api/termi/chat', () => {
     expect(args.messages.every((/** @type {any} */ m) => m.role !== 'system')).toBe(true);
 
     expect(toUIMessageStreamResponse).toHaveBeenCalledWith({ onError: streamErrorMessage });
+  });
+
+  it('forwards TERMI_SEARCH_RELAYS to nope-mcp tool calls', async () => {
+    const { model, calls } = await fakeModel(1);
+    const { POST, callNopeMcpTool } = await importRoute(
+      { ...ENV, TERMI_SEARCH_RELAYS: 'amb-relay,oersi' },
+      { realStream: true, model }
+    );
+    const res = await POST(ev({ task: 'ask', messages: [USER_MSG] }));
+    expect(res.status).toBe(200);
+    await res.text();
+    expect(calls()).toBe(2);
+    const mcpCalls = /** @type {any[]} */ (callNopeMcpTool.mock.calls);
+    const call = mcpCalls.find((c) => c[0].name === 'search_resources');
+    expect(call[0].args.relays).toEqual(['amb-relay', 'oersi']);
+  });
+
+  it('defaults to the three knowledge-tools relays when TERMI_SEARCH_RELAYS is unset', async () => {
+    const { model } = await fakeModel(1);
+    const { POST, callNopeMcpTool } = await importRoute(ENV, { realStream: true, model });
+    const res = await POST(ev({ task: 'ask', messages: [USER_MSG] }));
+    expect(res.status).toBe(200);
+    await res.text();
+    const mcpCalls = /** @type {any[]} */ (callNopeMcpTool.mock.calls);
+    const call = mcpCalls.find((c) => c[0].name === 'search_resources');
+    expect(call[0].args.relays).toEqual(['amb-relay', 'oersi', 'sodix']);
   });
 
   it('keeps task search as an alias of ask for one release', async () => {

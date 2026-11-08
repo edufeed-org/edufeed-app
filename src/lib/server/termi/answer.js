@@ -8,7 +8,9 @@ import { extractQuery, questionCues } from '../../helpers/termi-skills.js';
 import { callNopeMcpTool } from '../nopeMcpClient.js';
 import { nopeMcpEnv } from '../nopeMcpEnv.js';
 import { uniqueBy } from '../../helpers/unique.js';
-import { createKnowledgeTools, DEFAULT_SEARCH_RELAYS, nopeMcpCaller } from './knowledge-tools.js';
+import { createKnowledgeTools, nopeMcpCaller, parseSearchRelays } from './knowledge-tools.js';
+
+export { parseSearchRelays };
 
 const MAX_ITEMS = 8;
 const DIVERSE_TOP = 4;
@@ -31,15 +33,6 @@ function withDeadline(promise) {
 
 /** @typedef {import('./items.js').Item} Item */
 /** @typedef {ReturnType<typeof createKnowledgeTools>} KnowledgeTools */
-
-/** `TERMI_SEARCH_RELAYS` (comma list) → relay short names/URLs, default the three. @param {string | undefined} value */
-export function parseSearchRelays(value) {
-  const list = (value ?? '')
-    .split(',')
-    .map((r) => r.trim())
-    .filter(Boolean);
-  return list.length > 0 ? list : DEFAULT_SEARCH_RELAYS;
-}
 
 /** shortcut: for scripts/termi-eval-ask.js only (no SvelteKit env, no token); routes pass their tools. */
 function toolsFromProcessEnv() {

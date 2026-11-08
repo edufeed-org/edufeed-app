@@ -16,6 +16,20 @@ export const MAX_AUTHORS = 5;
 /** Short names nope-mcp's `list_relays` accepts (hostname first label). */
 export const DEFAULT_SEARCH_RELAYS = ['amb-relay', 'oersi', 'sodix'];
 
+/**
+ * `TERMI_SEARCH_RELAYS` (comma list) → relay short names/URLs, default the
+ * three. The one parser both Termi routes (tier 1 `/api/termi/search` and
+ * tier 2 `/api/termi/chat`) use, so the env var applies to both.
+ * @param {string | undefined} value
+ */
+export function parseSearchRelays(value) {
+  const list = (value ?? '')
+    .split(',')
+    .map((r) => r.trim())
+    .filter(Boolean);
+  return list.length > 0 ? list : DEFAULT_SEARCH_RELAYS;
+}
+
 /** Hint URLs for the short names, used when nope-mcp doesn't report `relaysSearched`. */
 const SHORT_RELAY_URLS = /** @type {Record<string, string>} */ ({
   'amb-relay': 'wss://amb-relay.edufeed.org',

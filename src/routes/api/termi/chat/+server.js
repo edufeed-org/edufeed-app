@@ -20,6 +20,7 @@ import { createTermiModel, streamErrorMessage } from '$lib/server/termi/llm.js';
 import { createQuota } from '$lib/server/termi/quota.js';
 import { SYSTEM_PROMPTS } from '$lib/server/termi/prompts.js';
 import { buildTermiTools } from '$lib/server/termi/tools.js';
+import { parseSearchRelays } from '$lib/server/termi/knowledge-tools.js';
 import { compactHistory } from '$lib/server/termi/compact-history.js';
 import { getTermiEligibilityChecker } from '$lib/server/termi/eligibility.js';
 
@@ -72,7 +73,11 @@ export async function POST({ request, url }) {
     return json({ error: 'invalid_messages' }, { status: 400 });
   }
 
-  const tools = buildTermiTools(task, { mcpUrl, getToken: getNopeMcpToken });
+  const tools = buildTermiTools(task, {
+    mcpUrl,
+    getToken: getNopeMcpToken,
+    relays: parseSearchRelays(env.TERMI_SEARCH_RELAYS)
+  });
   // The client owns only its own turns: a client-sent system message would
   // override the prompt, and a user file part makes the SDK fetch its URL
   // server-side — the ask task needs text only. Assistant tool/file parts
