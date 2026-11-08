@@ -81,8 +81,8 @@ export async function routeQuestion(text, { locale, fetch, skills = TERMI_SKILLS
 
 /**
  * Termi tier 1: the content items for a question (`/api/termi/search`) and
- * the sources that failed; no items when the request fails — the caller then
- * shows the fallback line.
+ * the sources that failed; a failed request is one unavailable source
+ * ('search') so the generic sources line and its retry button show.
  *
  * @param {string} text
  * @param {{ locale: 'de'|'en', fetch: typeof fetch, authors?: string[] }} opts authors = hex pubkeys ("Material von …")
@@ -96,13 +96,14 @@ export async function searchContent(text, { locale, fetch, authors }) {
       body: JSON.stringify(authors?.length ? { text, locale, authors } : { text, locale }),
       signal: AbortSignal.timeout(15_000)
     });
-    const body = res.ok ? await res.json() : null;
+    if (!res.ok) return { items: [], sourcesUnavailable: ['search'] };
+    const body = await res.json();
     return {
       items: Array.isArray(body?.items) ? body.items : [],
       sourcesUnavailable: Array.isArray(body?.sourcesUnavailable) ? body.sourcesUnavailable : []
     };
   } catch {
-    return { items: [], sourcesUnavailable: [] };
+    return { items: [], sourcesUnavailable: ['search'] };
   }
 }
 

@@ -1,6 +1,6 @@
 /** @vitest-environment node */
 import { describe, it, expect, vi } from 'vitest';
-import { routeQuestion } from '$lib/components/assistant/termi-router.js';
+import { routeQuestion, searchContent } from '$lib/components/assistant/termi-router.js';
 
 /** @param {any} answer matches, or an HTTP status */
 const fetchWith = (answer) =>
@@ -43,5 +43,20 @@ describe('routeQuestion guesses', () => {
       ctx: { loggedIn: false }
     });
     expect(guesses).toEqual([]);
+  });
+});
+
+describe('searchContent', () => {
+  it('a failed request reports the search as unavailable (retry line), not "nothing found"', async () => {
+    for (const fetch of [
+      fetchWith(429),
+      fetchWith(502),
+      /** @type {any} */ (vi.fn(async () => Promise.reject(new Error('timeout'))))
+    ]) {
+      expect(await searchContent('x', { locale: 'de', fetch })).toEqual({
+        items: [],
+        sourcesUnavailable: ['search']
+      });
+    }
   });
 });
