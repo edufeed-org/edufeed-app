@@ -115,6 +115,23 @@ describe('loadPrivacyPolicy', () => {
       expect(html).toContain('NIP-05');
     });
 
+    it('flag on: "Termine aus Partnerquellen" stays a top-level sibling bullet, not nested under Termi', async () => {
+      // Regression: an indented endif:termi marker (prettier may reindent a
+      // marker line under the Termi bullet's nested Ohne-KI/Mit-KI sublist)
+      // must not leave stray leading whitespace behind — that previously
+      // turned this next bullet into a sub-bullet of the Termi item.
+      const { loadPrivacyPolicy } = await policyWith({
+        PRIVACY_POLICY_PATH: SHIPPED,
+        TERMI_AI_ENABLED: 'true'
+      });
+      const html = /** @type {any} */ (await loadPrivacyPolicy()).html;
+      const i = html.indexOf('Termine aus Partnerquellen');
+      expect(i).toBeGreaterThan(-1);
+      // The nested Ohne-KI/Mit-KI </ul> and the Termi </li> both close
+      // before this bullet's own top-level <li> opens — never inside them.
+      expect(html.slice(0, i)).toMatch(/<\/ul>\s*(?:<\/li>\s*)?<li>(?:<p>)?\s*<strong>$/);
+    });
+
     it('strips block and inline sections when off, only the markers when on', async () => {
       const file = join(dir, 'policy.md');
       writeFileSync(

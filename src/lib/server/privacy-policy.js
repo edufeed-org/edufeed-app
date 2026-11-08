@@ -27,7 +27,14 @@ import { parseBool } from '$lib/server/env-parse.js';
 /** @param {string} markdown @param {boolean} termi */
 function applyTermiSections(markdown, termi) {
   return termi
-    ? markdown.replace(/<!-- (?:end)?if:termi -->\n?/g, '')
+    ? // A marker alone on its own line (prettier may indent it under a list
+      // item) drops the whole line, indentation and all — leaving only the
+      // leading spaces behind would turn the next line into a sub-bullet of
+      // the preceding one. An inline marker (more text before/after it on
+      // the same line) just has its own text removed, nothing else.
+      markdown
+        .replace(/^[ \t]*<!-- (?:end)?if:termi -->[ \t]*\n/gm, '')
+        .replace(/<!-- (?:end)?if:termi -->/g, '')
     : // Never across another opening marker: a missing endif leaks its section, never eats the next.
       markdown.replace(
         /<!-- if:termi -->(?:(?!<!-- if:termi -->)[\s\S])*?<!-- endif:termi -->\n?/g,
