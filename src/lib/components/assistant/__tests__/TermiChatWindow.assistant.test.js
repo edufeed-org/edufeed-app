@@ -54,13 +54,23 @@ vi.mock('$app/paths', () => ({ resolve: (/** @type {string} */ p) => p }));
 
 import TermiChatWindow from '../TermiChatWindow.svelte';
 
-const HITS = [
-  { title: 'Brüche verstehen', url: 'https://example.org/1', license: 'CC BY 4.0' },
-  { title: 'Bruchrechnen üben', url: 'https://example.org/2' }
+const ITEMS = [
+  {
+    type: 'resource',
+    id: '30142:pk:1',
+    title: 'Brüche verstehen',
+    href: '/naddr1one',
+    license: 'CC BY 4.0'
+  },
+  { type: 'resource', id: '30142:pk:2', title: 'Bruchrechnen üben', href: '/naddr1two' }
 ];
 
-/** A finished assistant turn: a search_resources call plus a text answer. */
-function streamAnswer({ toolName = 'search_resources', text = 'Hier sind Treffer.' } = {}) {
+/** A finished assistant turn: a search_content call plus a text answer. */
+function streamAnswer({
+  toolName = 'search_content',
+  text = 'Hier sind Treffer.',
+  sourcesUnavailable = /** @type {string[]} */ ([])
+} = {}) {
   return createUIMessageStreamResponse({
     stream: createUIMessageStream({
       execute: ({ writer }) => {
@@ -71,7 +81,11 @@ function streamAnswer({ toolName = 'search_resources', text = 'Hier sind Treffer
           toolName,
           input: { query: 'Brüche' }
         });
-        writer.write({ type: 'tool-output-available', toolCallId: 'c1', output: { hits: HITS } });
+        writer.write({
+          type: 'tool-output-available',
+          toolCallId: 'c1',
+          output: { items: ITEMS, sourcesUnavailable }
+        });
         writer.write({ type: 'finish-step' });
         writer.write({ type: 'text-start', id: 't1' });
         writer.write({ type: 'text-delta', id: 't1', delta: text });
@@ -135,7 +149,7 @@ describe('TermiChatWindow assistant mode', () => {
     stubFetch(() => streamAnswer());
     const view = renderWindow();
     await type(view, 'Finde Materialien zu Brüchen');
-    await waitFor(() => expect(view.getAllByTestId('termi-hit')).toHaveLength(2));
+    await waitFor(() => expect(view.getAllByTestId('termi-card-resource')).toHaveLength(2));
     await waitFor(() => view.getByText('Hier sind Treffer.'));
     // The question shows once, not as router bubble + chat bubble.
     expect(view.getAllByText('Finde Materialien zu Brüchen')).toHaveLength(1);
@@ -171,11 +185,31 @@ describe('TermiChatWindow assistant mode', () => {
 
     await waitFor(() => view.getByText(m.termi_assistant_restart()));
     await fireEvent.click(view.getByText(m.termi_assistant_restart()));
-    expect(view.queryAllByTestId('termi-hit')).toHaveLength(0);
+    expect(view.queryAllByTestId('termi-card-resource')).toHaveLength(0);
     // Back in router mode: the canned chips are back and new text goes to /api/termi.
     expect(view.getByText(m.termi_sugg_1_q())).toBeTruthy();
     await type(view, 'Finde Materialien zu Brüchen');
     await waitFor(() => expect(chatCalls).toHaveLength(3));
+  });
+
+  it.each(['search_events', 'find_people'])('%s results render as cards', async (toolName) => {
+    stubFetch(() => streamAnswer({ toolName }));
+    const view = renderWindow();
+    await type(view, 'Finde Materialien zu Brüchen');
+    await waitFor(() => expect(view.getAllByTestId('termi-card-resource')).toHaveLength(2));
+    expect(view.getAllByText(m.termi_card_open())[0].getAttribute('href')).toBe('/naddr1one');
+  });
+
+  it('a tool reporting an unreachable source shows the note; retry regenerates', async () => {
+    stubFetch(() => streamAnswer({ sourcesUnavailable: ['search_events'] }));
+    const view = renderWindow();
+    await type(view, 'Finde Materialien zu Brüchen');
+    await waitFor(() => view.getByText(m.termi_sources_events()));
+    await waitFor(() =>
+      expect(/** @type {HTMLButtonElement} */ (view.getByTestId('termi-send')).disabled).toBe(false)
+    );
+    await fireEvent.click(view.getByText(m.termi_sources_retry()));
+    await waitFor(() => expect(chatCalls).toHaveLength(2));
   });
 
   it('other tool parts render nothing', async () => {
@@ -183,7 +217,7 @@ describe('TermiChatWindow assistant mode', () => {
     const view = renderWindow();
     await type(view, 'Finde Materialien zu Brüchen');
     await waitFor(() => view.getByText('Hier sind Treffer.'));
-    expect(view.queryAllByTestId('termi-hit')).toHaveLength(0);
+    expect(view.queryAllByTestId('termi-card-resource')).toHaveLength(0);
   });
 
   it('HTTP 429 → quota line plus the learning search link', async () => {

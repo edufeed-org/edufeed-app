@@ -90,6 +90,16 @@ async function type(view, text) {
   await fireEvent.click(view.getByTestId('termi-send'));
 }
 
+/** The primary/secondary links of every result card. @param {ReturnType<typeof renderWindow>} view */
+async function cardLinks(view) {
+  await waitFor(() =>
+    expect(view.container.querySelector('article[data-testid^="termi-card-"]')).toBeTruthy()
+  );
+  return /** @type {HTMLElement[]} */ ([
+    ...view.container.querySelectorAll('article[data-testid^="termi-card-"] a')
+  ]);
+}
+
 /** @param {ReturnType<typeof renderWindow>} view */
 async function answerActions(view) {
   const box = await waitFor(() => view.getByTestId('termi-answer-actions'));
@@ -171,7 +181,7 @@ describe('TermiChatWindow router answers', () => {
     );
     const view = renderWindow();
     await type(view, 'ich suche die e-teaching community');
-    const actions = await answerActions(view);
+    const links = await cardLinks(view);
     expect(view.queryByText(m.termi_route_maybe(), { exact: false })).toBeNull();
     expect(fetchMock).toHaveBeenCalledWith(
       '/api/termi/search',
@@ -180,14 +190,15 @@ describe('TermiChatWindow router answers', () => {
         body: JSON.stringify({ text: 'ich suche die e-teaching community', locale: 'de' })
       })
     );
-    expect(actions.map((a) => [a.textContent?.trim(), a.getAttribute('href')])).toEqual([
-      ['e-teaching.org', '/c/npub1abc'],
-      ['Extern', 'https://example.org/x']
+    expect(view.getByText('e-teaching.org')).toBeTruthy();
+    expect(links.map((a) => a.getAttribute('href'))).toEqual([
+      '/c/npub1abc',
+      'https://example.org/x'
     ]);
-    expect(actions[1].getAttribute('rel')).toBe('noopener noreferrer');
+    expect(links[1].getAttribute('rel')).toBe('noopener noreferrer');
   });
 
-  it('content links: external passages open safely, unsafe hrefs and empty titles get no button', async () => {
+  it('content links: external passages open safely, unsafe hrefs and empty titles get no card', async () => {
     stubRouter(
       [],
       [
@@ -200,15 +211,58 @@ describe('TermiChatWindow router answers', () => {
     );
     const view = renderWindow();
     await type(view, 'Was ist OER?');
-    const actions = await answerActions(view);
-    expect(actions.map((a) => [a.textContent?.trim(), a.getAttribute('href')])).toEqual([
-      ['Passage', 'https://example.org/p'],
-      ['Intern', '/c/npub1abc']
+    const links = await cardLinks(view);
+    expect(links.map((a) => a.getAttribute('href'))).toEqual([
+      'https://example.org/p',
+      '/c/npub1abc'
     ]);
-    expect(actions[0].getAttribute('target')).toBe('_blank');
-    expect(actions[0].getAttribute('rel')).toBe('noopener noreferrer');
-    expect(actions[1].getAttribute('target')).toBeNull();
-    expect(view.queryByText('Protocol-relative')).toBeNull();
+    expect(links[0].getAttribute('target')).toBe('_blank');
+    expect(links[0].getAttribute('rel')).toBe('noopener noreferrer');
+    expect(links[1].getAttribute('target')).toBeNull();
+    expect(view.container.innerHTML).not.toContain('//evil.example');
+    expect(view.container.innerHTML).not.toContain('javascript:');
+  });
+
+  it('a failed source shows the note; "Erneut versuchen" asks tier 1 again', async () => {
+    const fetchMock = vi.fn(async (/** @type {string} */ url) =>
+      url === '/api/termi/search'
+        ? new Response(
+            JSON.stringify({
+              items: [{ type: 'community', id: 'c1', title: 'Intern', href: '/c/npub1abc' }],
+              sourcesUnavailable: ['search_events']
+            })
+          )
+        : new Response(JSON.stringify({ matches: [] }))
+    );
+    vi.stubGlobal('fetch', fetchMock);
+    const view = renderWindow();
+    await type(view, 'Welche Fortbildungen gibt es zu OER?');
+    await waitFor(() => view.getByText(m.termi_sources_events()));
+    await fireEvent.click(view.getByText(m.termi_sources_retry()));
+    await waitFor(() => expect(view.getAllByText(m.termi_sources_events())).toHaveLength(2));
+    const searches = fetchMock.mock.calls.filter(([u]) => u === '/api/termi/search');
+    expect(searches).toHaveLength(2);
+    expect(JSON.parse(String(/** @type {any} */ (searches[1])[1].body)).text).toBe(
+      'Welche Fortbildungen gibt es zu OER?'
+    );
+  });
+
+  it('"Material von …" on a person card runs tier 1 with the name', async () => {
+    const fetchMock = stubRouter(
+      [],
+      [{ type: 'person', id: 'name:Ada Lovelace', title: 'Ada Lovelace' }]
+    );
+    const view = renderWindow();
+    await type(view, 'Wer schreibt über Mathematik?');
+    const label = m.termi_card_author_search({ name: 'Ada Lovelace' });
+    await fireEvent.click(await waitFor(() => view.getByText(label)));
+    await waitFor(() =>
+      expect(
+        /** @type {any[][]} */ (fetchMock.mock.calls)
+          .filter(([u]) => u === '/api/termi/search')
+          .map(([, init]) => JSON.parse(String(init.body)).text)
+      ).toEqual(['Wer schreibt über Mathematik?', 'Ada Lovelace'])
+    );
   });
 
   it('"Zeig mir den Kalender" → confident navigate, no content search', async () => {

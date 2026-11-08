@@ -63,12 +63,13 @@ export async function routeQuestion(text, { locale, fetch, skills = TERMI_SKILLS
 }
 
 /**
- * Termi tier 1: the content items for a question (`/api/termi/search`), or
- * `[]` when that fails — the caller then shows the fallback line.
+ * Termi tier 1: the content items for a question (`/api/termi/search`) and
+ * the sources that failed; no items when the request fails — the caller then
+ * shows the fallback line.
  *
  * @param {string} text
  * @param {{ locale: 'de'|'en', fetch: typeof fetch }} opts
- * @returns {Promise<Array<import('$lib/server/termi/items.js').Item>>}
+ * @returns {Promise<{ items: Array<import('$lib/server/termi/items.js').Item>, sourcesUnavailable: string[] }>}
  */
 export async function searchContent(text, { locale, fetch }) {
   try {
@@ -79,9 +80,12 @@ export async function searchContent(text, { locale, fetch }) {
       signal: AbortSignal.timeout(15_000)
     });
     const body = res.ok ? await res.json() : null;
-    return Array.isArray(body?.items) ? body.items : [];
+    return {
+      items: Array.isArray(body?.items) ? body.items : [],
+      sourcesUnavailable: Array.isArray(body?.sourcesUnavailable) ? body.sourcesUnavailable : []
+    };
   } catch {
-    return [];
+    return { items: [], sourcesUnavailable: [] };
   }
 }
 

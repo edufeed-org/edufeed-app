@@ -15,7 +15,7 @@
   import { CheckIcon, CloseIcon, SendIcon } from '$lib/components/icons';
   import TermiAvatar from './TermiAvatar.svelte';
   import TermiAnswer from './TermiAnswer.svelte';
-  import TermiSearchHits from './TermiSearchHits.svelte';
+  import ItemCards from './cards/ItemCards.svelte';
   import { goto } from '$app/navigation';
   import { resolve } from '$app/paths';
   import { nip19 } from 'nostr-tools';
@@ -297,7 +297,13 @@
   ]);
 
   /** @typedef {import('./termi-router.js').TermiAction} TermiAction */
-  /** @typedef {{role: 'user' | 'bot', text: string, link?: Suggestion['link'], actions?: TermiAction[]}} ChatMessage */
+  /**
+   * @typedef {{
+   *   role: 'user' | 'bot', text: string, link?: Suggestion['link'], actions?: TermiAction[],
+   *   items?: Array<import('$lib/server/termi/items.js').Item>, sourcesUnavailable?: string[],
+   *   retry?: () => void
+   * }} ChatMessage
+   */
 
   /** @type {ChatMessage[]} */
   let msgs = $state.raw([]);
@@ -361,26 +367,30 @@
       .map((/** @type {any} */ p) => p.text)
       .join('')
       .trim(); // some models (qwen) lead with blank lines
+  // The `ask` task's knowledge tools (buildTermiTools('ask')); their outputs are `{ items, sourcesUnavailable }`.
+  const KNOWLEDGE_TOOLS = new Set([
+    'search_content',
+    'search_resources',
+    'search_events',
+    'search_passages',
+    'find_community',
+    'find_people'
+  ]);
   // Both tool-part shapes: `tool-<name>` and `dynamic-tool` with `toolName`.
+  /** @param {any} p */
+  const isKnowledgePart = (p) =>
+    KNOWLEDGE_TOOLS.has(p.type === 'dynamic-tool' ? p.toolName : p.type.replace(/^tool-/, ''));
   /** @param {any} msg */
   const searchPartsOf = (msg) =>
     msg.parts.filter(
-      (/** @type {any} */ p) =>
-        (p.type === 'tool-search_resources' ||
-          (p.type === 'dynamic-tool' && p.toolName === 'search_resources')) &&
-        p.state === 'output-available'
+      (/** @type {any} */ p) => isKnowledgePart(p) && p.state === 'output-available'
     );
   // A failed search with no model text to explain it gets a note of its own.
   /** @param {any} msg */
   const searchFailed = (msg) =>
     msg.role === 'assistant' &&
     !textOf(msg) &&
-    msg.parts.some(
-      (/** @type {any} */ p) =>
-        (p.type === 'tool-search_resources' ||
-          (p.type === 'dynamic-tool' && p.toolName === 'search_resources')) &&
-        p.state === 'output-error'
-    ) &&
+    msg.parts.some((/** @type {any} */ p) => isKnowledgePart(p) && p.state === 'output-error') &&
     !(chatBusy && assistant?.chat.messages.at(-1)?.id === msg.id);
   /** @param {any} msg */
   const visible = (msg) =>
@@ -501,7 +511,7 @@
           await startAssistant(text);
           return;
         }
-        reply = contentReply(await searchContent(text, { locale, fetch }));
+        reply = contentReply(await searchContent(text, { locale, fetch }), text);
       }
     } catch {
       reply = fallbackReply();
@@ -512,32 +522,35 @@
   }
 
   /**
-   * Tier 1 items as a plain link list.
-   * shortcut: title-only links; Task 6 replaces them with typed cards.
-   * @param {Array<import('$lib/server/termi/items.js').Item>} items
+   * Tier 1 results as cards; nothing found → the fallback line (plus the sources note).
+   * @param {Awaited<ReturnType<typeof searchContent>>} result
+   * @param {string} text the question, for "Erneut versuchen"
    * @returns {ChatMessage}
    */
-  function contentReply(items) {
-    /** @type {TermiAction[]} */
-    const actions = [];
-    for (const item of items) {
-      if (!item.title) continue; // no unlabelled buttons
-      // Classified here, whatever the field: passages carry their external URL in `href`.
-      if (item.href?.startsWith('/') && !item.href.startsWith('//')) {
-        actions.push({ label: item.title, href: item.href });
-        continue;
-      }
-      const external = [item.href, item.sourceUrl].find((u) => u && /^https?:\/\//i.test(u));
-      if (external) {
-        actions.push({
-          label: item.title,
-          href: external,
-          target: '_blank',
-          rel: 'noopener noreferrer'
-        });
-      }
-    }
-    return actions.length ? { role: 'bot', text: m.termi_route_go(), actions } : fallbackReply();
+  function contentReply({ items, sourcesUnavailable }, text) {
+    const retry = () => contentSearch(text);
+    if (items.length > 0)
+      return { role: 'bot', text: m.termi_route_go(), items, sourcesUnavailable, retry };
+    return { ...fallbackReply(), sourcesUnavailable, retry };
+  }
+
+  /** Tier 1 again (retry, "Material von …"), outside the router. @param {string} text */
+  async function contentSearch(text) {
+    if (botTyping) return;
+    botTyping = true;
+    const result = await searchContent(text, { locale: getLocale() === 'en' ? 'en' : 'de', fetch });
+    if (destroyed) return;
+    botTyping = false;
+    msgs = [...msgs, contentReply(result, text)];
+  }
+
+  /** "Material von …" on a person card: in the chat when one runs, else tier 1 with the name. @param {string} name */
+  function searchAuthor(name) {
+    const label = m.termi_card_author_search({ name });
+    if (assistant) return ask(label);
+    if (botTyping) return;
+    msgs = [...msgs, { role: 'user', text: label }];
+    contentSearch(name);
   }
 
   /** The "can't answer" line plus home, the learning search and help. @returns {ChatMessage} */
@@ -807,6 +820,14 @@
           {:else}
             {msg.text}
           {/if}
+          {#if msg.items || msg.sourcesUnavailable}
+            <ItemCards
+              items={msg.items}
+              sourcesUnavailable={msg.sourcesUnavailable}
+              onRetry={msg.retry}
+              onSearchAuthor={searchAuthor}
+            />
+          {/if}
           {#if msg.link}
             <a
               {...msg.link.attrs}
@@ -838,9 +859,11 @@
               class="max-w-[88%] rounded-2xl rounded-bl-md border border-base-300 bg-base-200 px-3.5 py-2.5 text-sm leading-relaxed"
             >
               {#each searchPartsOf(msg) as part (part.toolCallId)}
-                <TermiSearchHits
-                  hits={part.output?.hits ?? []}
-                  query={String(part.input?.query ?? chatQuery)}
+                <ItemCards
+                  items={part.output?.items ?? []}
+                  sourcesUnavailable={part.output?.sourcesUnavailable ?? []}
+                  onRetry={() => talk((chat) => chat.regenerate())}
+                  onSearchAuthor={searchAuthor}
                 />
               {/each}
               {#if textOf(msg)}
