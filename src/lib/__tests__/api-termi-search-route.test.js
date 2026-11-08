@@ -319,6 +319,18 @@ describe('POST /api/termi/search', () => {
     expect((await POST(ev(postJson('/api/termi/search', body), '5.6.7.8'))).status).toBe(200);
   });
 
+  it('returns 429 once 300 requests per minute arrive across all IPs', async () => {
+    const { POST } = await importRoute(ENV);
+    const body = { text: 'hallo', locale: 'de' };
+    for (let i = 0; i < 300; i++) {
+      const res = await POST(ev(postJson('/api/termi/search', body), `10.0.${i % 20}.1`));
+      expect(res.status).toBe(200);
+    }
+    const res = await POST(ev(postJson('/api/termi/search', body), '9.9.9.9'));
+    expect(res.status).toBe(429);
+    expect(await res.json()).toEqual({ error: 'rate' });
+  });
+
   it('answers with items and sourcesUnavailable, using TERMI_SEARCH_RELAYS', async () => {
     const tools = fakeTools({
       findCommunity: vi.fn(async () => ({

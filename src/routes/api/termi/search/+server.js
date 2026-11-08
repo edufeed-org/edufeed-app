@@ -16,7 +16,10 @@ import {
   MAX_AUTHORS
 } from '$lib/server/termi/knowledge-tools.js';
 import { answerQuestion, parseSearchRelays } from '$lib/server/termi/answer.js';
-import { termiLimiter as limiter } from '$lib/server/termi/limiter.js';
+import {
+  termiLimiter as limiter,
+  termiSearchGlobalLimiter as globalLimiter
+} from '$lib/server/termi/limiter.js';
 
 const LOCALES = new Set(['de', 'en']);
 
@@ -29,6 +32,10 @@ export async function POST({ request, getClientAddress }) {
 
   if (!limiter.take(getClientAddress())) {
     return json({ error: 'rate_limited' }, { status: 429 });
+  }
+  // After the per-IP check, so one noisy IP cannot use up everyone's budget.
+  if (!globalLimiter.take('global')) {
+    return json({ error: 'rate' }, { status: 429 });
   }
 
   /** @type {{ text?: unknown, locale?: unknown, authors?: unknown }} */
