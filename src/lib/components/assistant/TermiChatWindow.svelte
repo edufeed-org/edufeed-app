@@ -443,23 +443,20 @@
   async function fallBackToContent(line, sentence) {
     leaveAssistant();
     botTyping = true;
+    const pubkey = getActiveUser()?.pubkey;
     const locale = getLocale() === 'en' ? 'en' : 'de';
     const result = await searchContent(sentence, { locale, fetch });
     if (destroyed) return;
     botTyping = false;
+    // Switched meanwhile: the answer belonged to the other account.
+    if (pubkey !== getActiveUser()?.pubkey) return;
     const reply = contentReply(result, sentence);
-    msgs = [
-      ...msgs,
-      reply.items
-        ? { ...reply, text: line }
-        : {
-            role: 'bot',
-            text: line,
-            actions: [
-              { label: m.termi_quota_link(), href: learningHref(extractQuery(sentence, locale)) }
-            ]
-          }
-    ];
+    // Nothing kept: the line plus the learning search; the sources note and retry stay.
+    const search = {
+      label: m.termi_quota_link(),
+      href: learningHref(extractQuery(sentence, locale))
+    };
+    msgs = [...msgs, { ...reply, text: line, ...(reply.items ? {} : { actions: [search] }) }];
   }
 
   // Tier 1 under a quota / stream-error line (the chat stays); once per sentence.
@@ -467,6 +464,7 @@
   let rescue = $state.raw(null);
 
   /** The router's weak navigate/create/help matches for the routed sentence ("Meinst du …?"). */
+  // shortcut: one set for the whole chat — an empty tier-2 answer's guess buttons drop to the plain fallback once a follow-up is sent; store per message id if that matters.
   let guessSkills = $state.raw(
     /** @type {import('$lib/helpers/termi-skills.js').TermiSkill[]} */ ([])
   );
@@ -530,8 +528,9 @@
       botTyping = true;
       const locale = getLocale() === 'en' ? 'en' : 'de';
       const result = await searchContent(sentence, { locale, fetch });
-      if (destroyed || current !== assistant) return;
+      if (destroyed) return;
       botTyping = false;
+      if (current !== assistant) return; // restarted / switched meanwhile
       rescue = { sentence, ...result };
     }
   }

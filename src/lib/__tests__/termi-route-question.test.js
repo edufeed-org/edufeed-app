@@ -13,15 +13,15 @@ const fetchWith = (answer) =>
   );
 
 describe('routeQuestion guesses', () => {
-  it('keyword path: the best weak matches, at most two', async () => {
+  it('keyword path: only strong matches near the best one', async () => {
     const { decision, guesses } = await routeQuestion('hab ich neue nachrichten?', {
       locale: 'de',
       fetch: fetchWith(503),
       ctx: { loggedIn: true }
     });
     expect(decision.kind).toBe('none');
-    expect(guesses[0]).toBe('inbox');
-    expect(guesses.length).toBeLessThanOrEqual(2);
+    // create.* share one token (0.33): no guess.
+    expect(guesses).toEqual(['inbox']);
   });
 
   it('embed path: only matches at or above the embed MAYBE threshold', async () => {

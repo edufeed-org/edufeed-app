@@ -56,15 +56,20 @@ export async function routeQuestion(text, { locale, fetch, skills = TERMI_SKILLS
   // The server ranks the whole catalogue; drop what this user can't use.
   matches = (matches ?? keywordMatch(text, available, locale)).filter((x) => ids.has(x.skill));
   const byId = new Map(available.map((s) => [s.id, s]));
+  const sorted = [...matches].sort((a, b) => b.score - a.score);
+  const top = sorted[0]?.score ?? 0;
+  // Keyword overlap is noisy: a guess needs half the tokens and to stay near the best one.
+  /** @param {{ score: number }} x */
+  const strong = (x) =>
+    mode === 'keyword'
+      ? x.score >= 0.5 && x.score >= 0.75 * top
+      : x.score >= THRESHOLDS.embed.MAYBE;
   return {
     decision: decide(matches, { mode }),
     // "Meinst du …?" on an empty content answer: the two best weak matches.
-    guesses: [...matches]
-      .sort((a, b) => b.score - a.score)
+    guesses: sorted
       .filter(
-        (x) =>
-          x.score >= THRESHOLDS[mode].MAYBE &&
-          ['navigate', 'create', 'help'].includes(byId.get(x.skill)?.kind ?? '')
+        (x) => strong(x) && ['navigate', 'create', 'help'].includes(byId.get(x.skill)?.kind ?? '')
       )
       .slice(0, 2)
       .map((x) => x.skill),

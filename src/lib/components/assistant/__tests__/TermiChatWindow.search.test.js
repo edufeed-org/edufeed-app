@@ -165,6 +165,84 @@ describe('TermiChatWindow tier 2 failure → tier 1', () => {
     expect(searchBodies(fetchMock)).toEqual([{ text: Q, locale: 'de' }]);
   });
 
+  it('"Erneut senden" failing again → still one search, the same cards', async () => {
+    const fetchMock = stubFetch({
+      chat: () =>
+        createUIMessageStreamResponse({
+          stream: createUIMessageStream({
+            execute: ({ writer }) => writer.write({ type: 'error', errorText: 'termi:upstream' })
+          })
+        }),
+      items: ITEMS
+    });
+    const view = renderWindow();
+    await type(view, Q);
+    await waitFor(() => expect(view.getAllByTestId('termi-card-resource')).toHaveLength(2));
+    const chats = () => fetchMock.mock.calls.filter(([u]) => u === '/api/termi/chat').length;
+    expect(chats()).toBe(1);
+    await fireEvent.click(view.getByText(m.termi_assistant_retry()));
+    await waitFor(() => expect(chats()).toBe(2));
+    await waitFor(() => expect(view.getAllByTestId('termi-card-resource')).toHaveLength(2));
+    expect(view.getByText(m.termi_assistant_retry())).toBeTruthy();
+    expect(searchBodies(fetchMock)).toHaveLength(1);
+  });
+
+  it('"Neu anfangen" while the rescue search runs → no stuck typing dots, new questions go out', async () => {
+    /** @type {(r: Response) => void} */
+    let answer = () => {};
+    const fetchMock = stubFetch({
+      chat: () => new Response(JSON.stringify({ error: 'quota', scope: 'user' }), { status: 429 }),
+      items: () => new Promise((resolve) => (answer = resolve))
+    });
+    const view = renderWindow();
+    await type(view, Q);
+    await waitFor(() => expect(searchBodies(fetchMock)).toHaveLength(1));
+    await fireEvent.click(view.getByText(m.termi_assistant_restart()));
+    answer(new Response(JSON.stringify({ items: ITEMS, sourcesUnavailable: [] })));
+    await waitFor(() => expect(view.container.querySelector('.termi-typing')).toBeNull());
+    const routed = () => fetchMock.mock.calls.filter(([u]) => u === '/api/termi').length;
+    await type(view, 'Noch eine Frage');
+    await waitFor(() => expect(routed()).toBe(2));
+  });
+
+  it('an account switch during the fallback search drops its answer', async () => {
+    const real = user.current;
+    /** @type {(r: Response) => void} */
+    let answer = () => {};
+    const fetchMock = stubFetch({
+      chat: () => new Response(JSON.stringify({ error: 'not_eligible' }), { status: 403 }),
+      items: () => new Promise((resolve) => (answer = resolve))
+    });
+    try {
+      const view = renderWindow();
+      await type(view, Q);
+      await waitFor(() => expect(searchBodies(fetchMock)).toHaveLength(1));
+      user.current = { ...real, pubkey: 'd'.repeat(64) };
+      answer(new Response(JSON.stringify({ items: ITEMS, sourcesUnavailable: [] })));
+      await waitFor(() => expect(view.container.querySelector('.termi-typing')).toBeNull());
+      expect(view.queryAllByTestId('termi-card-resource')).toHaveLength(0);
+      expect(view.queryByText(m.termi_assistant_not_eligible(), { exact: false })).toBeNull();
+    } finally {
+      user.current = real;
+    }
+  });
+
+  it('fallback search with an unreachable source → the sources note and retry, not "nothing"', async () => {
+    stubFetch({
+      chat: () => new Response(JSON.stringify({ error: 'eligibility_unknown' }), { status: 503 }),
+      items: async () =>
+        new Response(JSON.stringify({ items: [], sourcesUnavailable: ['search_events'] }))
+    });
+    const view = renderWindow();
+    await type(view, Q);
+    await waitFor(() => view.getByText(m.termi_sources_events()));
+    expect(view.getByText(m.termi_sources_retry())).toBeTruthy();
+    expect(view.getByText(m.termi_assistant_unavailable(), { exact: false })).toBeTruthy();
+    expect(view.getByText(m.termi_quota_link()).getAttribute('href')).toBe(
+      '/discover?type=learning&search=Br%C3%BCchen'
+    );
+  });
+
   it('tier 1 finds nothing as well → the line plus the learning search link', async () => {
     stubFetch({
       chat: () => new Response(JSON.stringify({ error: 'quota', scope: 'user' }), { status: 429 })
