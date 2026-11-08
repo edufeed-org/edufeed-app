@@ -305,9 +305,26 @@ describe('TermiChatWindow nothing found → the router’s best guess', () => {
     expect([...box.querySelectorAll('a')].map((a) => a.getAttribute('href'))).toContain('/inbox');
   });
 
-  it('tier 1 with cards: the guess buttons still show above the cards', async () => {
+  it.each([
+    'hab ich neue nachrichten?',
+    'ich suche nach Unterrichtsentwürfen zum Thema Nachhaltigkeit'
+  ])(
+    'tier 1 keyword path with cards: a partial phrase match is no guess above them (%s)',
+    async (q) => {
+      mockConfig.termi = { enabled: true, embed: true, llm: false };
+      stubFetch({ router: 503, items: ITEMS });
+      const view = renderWindow();
+      await type(view, q);
+      await waitFor(() => expect(view.getAllByTestId('termi-card-resource')).toHaveLength(2));
+      expect(view.queryByTestId('termi-answer-actions')).toBeNull();
+      expect(view.queryByText(m.termi_route_maybe(), { exact: false })).toBeNull();
+      expect(view.getByText(m.termi_route_go())).toBeTruthy();
+    }
+  );
+
+  it('tier 1 embed path with cards: the guess buttons show above the cards', async () => {
     mockConfig.termi = { enabled: true, embed: true, llm: false };
-    stubFetch({ router: 503, items: ITEMS });
+    stubFetch({ router: [{ skill: 'inbox', score: 0.75 }], items: ITEMS });
     const view = renderWindow();
     await type(view, 'hab ich neue nachrichten?');
     await waitFor(() => expect(view.getAllByTestId('termi-card-resource')).toHaveLength(2));

@@ -14,7 +14,7 @@ const fetchWith = (answer) =>
 
 describe('routeQuestion guesses', () => {
   it('keyword path: only strong matches near the best one', async () => {
-    const { decision, guesses } = await routeQuestion('hab ich neue nachrichten?', {
+    const { decision, guesses, strongGuesses } = await routeQuestion('hab ich neue nachrichten?', {
       locale: 'de',
       fetch: fetchWith(503),
       ctx: { loggedIn: true }
@@ -22,10 +22,21 @@ describe('routeQuestion guesses', () => {
     expect(decision.kind).toBe('none');
     // create.* share one token (0.33): no guess.
     expect(guesses).toEqual(['inbox']);
+    // A 0.67 partial phrase: fine for an empty answer, never above real cards.
+    expect(strongGuesses).toEqual([]);
+  });
+
+  it('keyword path: a 0.5 partial (q4) guesses for an empty answer only', async () => {
+    const { guesses, strongGuesses } = await routeQuestion(
+      'ich suche nach Unterrichtsentwürfen zum Thema Nachhaltigkeit',
+      { locale: 'de', fetch: fetchWith(503), ctx: { loggedIn: true } }
+    );
+    expect(guesses.length).toBeGreaterThan(0);
+    expect(strongGuesses).toEqual([]);
   });
 
   it('embed path: only matches at or above the embed MAYBE threshold', async () => {
-    const { guesses } = await routeQuestion('x', {
+    const { guesses, strongGuesses } = await routeQuestion('x', {
       locale: 'de',
       fetch: fetchWith([
         { skill: 'home', score: 0.2 },
@@ -34,6 +45,7 @@ describe('routeQuestion guesses', () => {
       ctx: { loggedIn: true }
     });
     expect(guesses).toEqual(['inbox']);
+    expect(strongGuesses).toEqual(['inbox']);
   });
 
   it('skills the user cannot use are no guess', async () => {

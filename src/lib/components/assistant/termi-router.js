@@ -64,14 +64,18 @@ export async function routeQuestion(text, { locale, fetch, skills = TERMI_SKILLS
     mode === 'keyword'
       ? x.score >= 0.5 && x.score >= 0.75 * top
       : x.score >= THRESHOLDS.embed.MAYBE;
+  const guessed = sorted
+    .filter(
+      (x) => strong(x) && ['navigate', 'create', 'help'].includes(byId.get(x.skill)?.kind ?? '')
+    )
+    .slice(0, 2);
   return {
     decision: decide(matches, { mode }),
     // "Meinst du …?" on an empty content answer: the two best weak matches.
-    guesses: sorted
-      .filter(
-        (x) => strong(x) && ['navigate', 'create', 'help'].includes(byId.get(x.skill)?.kind ?? '')
-      )
-      .slice(0, 2)
+    guesses: guessed.map((x) => x.skill),
+    // Above real cards a wrong guess costs more: keyword mode needs a full multi-word phrase.
+    strongGuesses: guessed
+      .filter((x) => mode === 'embed' || /** @type {{ full?: boolean }} */ (x).full)
       .map((x) => x.skill),
     query: extractQuery(text, locale),
     mode,

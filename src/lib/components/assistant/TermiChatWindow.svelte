@@ -415,8 +415,9 @@
   const firstAssistantId = $derived(
     assistant?.chat.messages.find((x) => x.role === 'assistant')?.id
   );
-  /** @param {any} msg */
-  const guessesFor = (msg) => (msg.id === firstAssistantId ? guessSkills : []);
+  /** @param {any} msg @param {boolean} [beside] next to a real answer: the strict list */
+  const guessesFor = (msg, beside = false) =>
+    msg.id === firstAssistantId ? (beside ? strongGuessSkills : guessSkills) : [];
   // Only the latest answer can be regenerated.
   const lastAssistantId = $derived(
     assistant?.chat.messages.findLast((x) => x.role === 'assistant')?.id
@@ -470,6 +471,10 @@
 
   /** The router's weak navigate/create/help matches for the routed sentence ("Meinst du …?"). */
   let guessSkills = $state.raw(
+    /** @type {import('$lib/helpers/termi-skills.js').TermiSkill[]} */ ([])
+  );
+  /** The subset safe to show beside real results (keyword mode: full phrase matches only). */
+  let strongGuessSkills = $state.raw(
     /** @type {import('$lib/helpers/termi-skills.js').TermiSkill[]} */ ([])
   );
 
@@ -560,7 +565,7 @@
       ? isTermiEligible(/** @type {any} */ (user).pubkey, fetch)
       : Promise.resolve(false);
     try {
-      const { decision, available, guesses } = await routeQuestion(text, {
+      const { decision, available, guesses, strongGuesses } = await routeQuestion(text, {
         locale,
         fetch,
         // help.3 points at the guide: like its chip, only offered with a HELP_URL.
@@ -568,9 +573,13 @@
         ctx: { loggedIn: !!user }
       });
       reply = routerReply(decision, available, user?.pubkey);
-      guessSkills = /** @type {import('$lib/helpers/termi-skills.js').TermiSkill[]} */ (
-        guesses.map((id) => available.find((s) => s.id === id)).filter(Boolean)
-      );
+      /** @param {string[]} list */
+      const toSkills = (list) =>
+        /** @type {import('$lib/helpers/termi-skills.js').TermiSkill[]} */ (
+          list.map((id) => available.find((s) => s.id === id)).filter(Boolean)
+        );
+      guessSkills = toSkills(guesses);
+      strongGuessSkills = toSkills(strongGuesses);
       if (!reply) {
         // A content question: tier 2 (the `ask` chat) when allowed, else tier 1.
         if (await llm) {
@@ -578,7 +587,10 @@
           return;
         }
         const result = await searchContent(text, { locale, fetch });
-        reply = contentReply(result, text, undefined, guessSkills);
+        reply = contentReply(result, text, undefined, {
+          loose: guessSkills,
+          strict: strongGuessSkills
+        });
       }
     } catch {
       reply = fallbackReply();
@@ -593,15 +605,15 @@
    * @param {Awaited<ReturnType<typeof searchContent>>} result
    * @param {string} text the question, for "Erneut versuchen" and "Alle anzeigen"
    * @param {string[]} [authors] set for "Material von …": no topic, no "Alle anzeigen"
-   * @param {import('$lib/helpers/termi-skills.js').TermiSkill[]} [guesses] the router's guesses ("Meinst du …?")
+   * @param {{ loose: import('$lib/helpers/termi-skills.js').TermiSkill[], strict: import('$lib/helpers/termi-skills.js').TermiSkill[] }} [guesses] the router's guesses ("Meinst du …?"): loose for an empty answer, strict beside cards
    * @returns {ChatMessage}
    */
   function contentReply({ items, sourcesUnavailable }, text, authors, guesses) {
     const retry = () => contentSearch(text, authors);
     const kept = items.filter(keepItem);
-    if (kept.length === 0) return { ...fallbackReply(guesses), sourcesUnavailable, retry };
+    if (kept.length === 0) return { ...fallbackReply(guesses?.loose), sourcesUnavailable, retry };
     const query = authors ? '' : extractQuery(text, getLocale() === 'en' ? 'en' : 'de');
-    const actions = guessActions(guesses);
+    const actions = guessActions(guesses?.strict);
     return {
       role: 'bot',
       text: actions.length ? m.termi_route_maybe() : m.termi_route_go(),
@@ -990,8 +1002,8 @@
                 {@const reply = fallbackReply(guessesFor(msg))}
                 <TermiAnswer text={reply.text} actions={reply.actions ?? []} />
               {/if}
-              {#if !emptyAnswer(msg) && !lastStreaming(msg) && guessesFor(msg).length > 0}
-                {@const guessed = guessActions(guessesFor(msg))}
+              {#if !emptyAnswer(msg) && !lastStreaming(msg) && guessesFor(msg, true).length > 0}
+                {@const guessed = guessActions(guessesFor(msg, true))}
                 {#if guessed.length > 0}
                   <div class="mt-2">
                     <TermiAnswer text={m.termi_route_maybe()} actions={guessed} />
