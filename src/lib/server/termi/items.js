@@ -13,7 +13,8 @@ import { nip19 } from 'nostr-tools';
  *   href?: string, sourceUrl?: string, license?: string, creator?: string,
  *   publisher?: string, picture?: string, date?: string, end?: string,
  *   allDay?: boolean, location?: string,
- *   bot?: boolean, relay?: string, score?: number, weak?: boolean
+ *   bot?: boolean, relay?: string, score?: number, weak?: boolean,
+ *   pubkey?: string
  * }} Item
  */
 
@@ -39,6 +40,9 @@ function clip(s, max = MAX_DESCRIPTION) {
 
 /** @param {unknown} s */
 const line = (s) => clip(s, MAX_LINE);
+
+/** The author's key when it is 64 hex (the client drops blocked authors by it). @param {unknown} s */
+const hexKey = (s) => (typeof s === 'string' && /^[0-9a-f]{64}$/.test(s) ? s : undefined);
 
 /** @param {unknown} s @returns {nip19.AddressPointer | undefined} */
 function decodeNaddr(s) {
@@ -97,6 +101,7 @@ export function normalizeContent(hit, queriedRelays) {
   return compact({
     type: 'resource',
     id: `${pointer.kind}:${pointer.pubkey}:${pointer.identifier}`,
+    pubkey: hexKey(pointer.pubkey),
     title: line(hit.title ?? hit.name) ?? '',
     subtitle: line(contentSubtitle(hit)),
     description: clip(hit.description ?? hit.summary ?? hit.excerpt),
@@ -127,6 +132,7 @@ export function normalizeEvent(ev) {
   return compact({
     type: 'event',
     id: `${ev.kind}:${ev.nostr?.pubkey}:${ev.identifier}`,
+    pubkey: hexKey(ev.nostr?.pubkey ?? ev.author?.pubkey),
     title: line(ev.title) ?? '',
     description: clip(ev.summary ?? ev.description),
     href: naddr ? `/${naddr}` : undefined,
@@ -148,6 +154,7 @@ export function normalizePerson(cand) {
   return compact({
     type: 'person',
     id: cand.pubkey,
+    pubkey: cand.pubkey,
     title: line(cand.name) ?? `${npub.slice(0, 12)}…`,
     subtitle: line(cand.nip05),
     description: clip(cand.about),
@@ -163,6 +170,7 @@ export function normalizeCommunity(c) {
   return compact({
     type: 'community',
     id: c.pubkey,
+    pubkey: c.pubkey,
     title: line(c.name) ?? `${npub.slice(0, 12)}…`,
     description: clip(c.description),
     href: `/c/${npub}`,
@@ -178,6 +186,7 @@ export function normalizePassage(p) {
   return compact({
     type: 'passage',
     id: p.chunk_id,
+    pubkey: hexKey(typeof p.event_coord === 'string' ? p.event_coord.split(':')[1] : undefined),
     title: line(p.amb?.name) ?? '',
     subtitle: line(p.heading),
     description: clip(p.text ?? p.snippet),

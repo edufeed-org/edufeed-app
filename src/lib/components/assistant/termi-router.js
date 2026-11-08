@@ -68,15 +68,15 @@ export async function routeQuestion(text, { locale, fetch, skills = TERMI_SKILLS
  * shows the fallback line.
  *
  * @param {string} text
- * @param {{ locale: 'de'|'en', fetch: typeof fetch }} opts
+ * @param {{ locale: 'de'|'en', fetch: typeof fetch, authors?: string[] }} opts authors = hex pubkeys ("Material von …")
  * @returns {Promise<{ items: Array<import('$lib/server/termi/items.js').Item>, sourcesUnavailable: string[] }>}
  */
-export async function searchContent(text, { locale, fetch }) {
+export async function searchContent(text, { locale, fetch, authors }) {
   try {
     const res = await fetch('/api/termi/search', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ text, locale }),
+      body: JSON.stringify(authors?.length ? { text, locale, authors } : { text, locale }),
       signal: AbortSignal.timeout(15_000)
     });
     const body = res.ok ? await res.json() : null;

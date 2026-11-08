@@ -1,7 +1,7 @@
 <script>
   // Calendar event; imported (bot) sources are de-emphasised.
   import * as m from '$lib/paraglide/messages';
-  import { formatTimestamp, formatTimeOfDay, isoToGermanDate } from '$lib/helpers/dates.js';
+  import { formatTimeOfDay, isoToGermanDate } from '$lib/helpers/dates.js';
   import { linkFor } from './links.js';
 
   /** @type {{ item: import('$lib/server/termi/items.js').Item }} */
@@ -13,7 +13,12 @@
     const s = String(item.date ?? '');
     if (!/^\d+$/.test(s)) return isoToGermanDate(s);
     const sec = Number(s);
-    const day = formatTimestamp(sec, { day: '2-digit', month: '2-digit', year: 'numeric' });
+    // DD.MM.YYYY in every UI locale, like the ISO path (en-GB would give slashes).
+    const day = new Date(sec * 1000).toLocaleDateString('de-DE', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric'
+    });
     return item.allDay ? day : `${day}, ${formatTimeOfDay(sec)}`;
   });
   const meta = $derived([when, item.location].filter(Boolean).join(' · '));

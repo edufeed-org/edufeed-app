@@ -228,6 +228,31 @@ describe('answerQuestion', () => {
     const { sourcesUnavailable } = await answerQuestion('Workshop Medien', 'de', tools);
     expect(sourcesUnavailable).toEqual(['wss://oersi/', 'search_events']);
   });
+
+  it('with authors: only their content, no query, no other tools, weak items kept', async () => {
+    const pk = 'd'.repeat(64);
+    const tools = fakeTools({
+      searchContent: vi.fn(async () => ({
+        items: [item({ type: 'resource', title: 'von Ada', weak: true })],
+        sourcesUnavailable: []
+      }))
+    });
+    const out = await answerQuestion('Ada Lovelace', 'de', tools, { authors: [pk] });
+    expect(tools.searchContent).toHaveBeenCalledWith('', { authors: [pk] });
+    expect(tools.findCommunity).not.toHaveBeenCalled();
+    expect(out.items.map((i) => i.title)).toEqual(['von Ada']);
+  });
+
+  it('with authors: a failing search names search_content', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    const tools = fakeTools({
+      searchContent: vi.fn(async () => {
+        throw new Error('down');
+      })
+    });
+    const out = await answerQuestion('Ada', 'de', tools, { authors: ['d'.repeat(64)] });
+    expect(out).toEqual({ items: [], sourcesUnavailable: ['search_content'] });
+  });
 });
 
 describe('parseSearchRelays', () => {
@@ -321,6 +346,29 @@ describe('POST /api/termi/search', () => {
     expect(createKnowledgeTools).toHaveBeenCalledWith(
       expect.objectContaining({ relays: ['amb-relay', 'oersi'] })
     );
+  });
+
+  it.each([
+    ['not an array', 'abc'],
+    ['an npub', ['npub1abc']],
+    ['six keys', Array.from({ length: 6 }, (_, i) => String(i).repeat(64))]
+  ])('returns 400 for authors: %s', async (_label, authors) => {
+    const { POST } = await importRoute(ENV);
+    const res = await POST(
+      ev(postJson('/api/termi/search', { text: 'Ada', locale: 'de', authors }))
+    );
+    expect(res.status).toBe(400);
+  });
+
+  it('passes valid authors to search_content', async () => {
+    const tools = fakeTools();
+    const { POST } = await importRoute(ENV, tools);
+    const pk = 'e'.repeat(64);
+    const res = await POST(
+      ev(postJson('/api/termi/search', { text: 'Ada', locale: 'de', authors: [pk] }))
+    );
+    expect(res.status).toBe(200);
+    expect(tools.searchContent).toHaveBeenCalledWith('', { authors: [pk] });
   });
 
   it('never logs the user text', async () => {

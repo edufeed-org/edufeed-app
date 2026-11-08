@@ -238,3 +238,24 @@ describe('normalizePassage', () => {
     ).toBeUndefined();
   });
 });
+
+describe('item pubkey (the client drops blocked authors by it)', () => {
+  it('every type carries its author key', () => {
+    const content = normalizeContent(searchContent.results[0], QUERIED);
+    expect(content?.pubkey).toMatch(/^[0-9a-f]{64}$/);
+    expect(content?.pubkey).toBe(content?.id.split(':')[1]);
+    expect(normalizeEvent(calendar.events[0])?.pubkey).toBe(calendar.events[0].nostr.pubkey);
+    expect(normalizePerson(resolveAuthor.candidates[0])?.pubkey).toBe(
+      resolveAuthor.candidates[0].pubkey
+    );
+    expect(normalizeCommunity(findCommunity.communities[0])?.pubkey).toBe(
+      findCommunity.communities[0].pubkey
+    );
+    const p = passages.passages[0];
+    expect(normalizePassage(p)?.pubkey).toBe(p.event_coord.split(':')[1]);
+  });
+
+  it('a passage without a well-formed event_coord has no pubkey', () => {
+    expect(normalizePassage({ ...passages.passages[0], event_coord: 'x' })?.pubkey).toBeUndefined();
+  });
+});

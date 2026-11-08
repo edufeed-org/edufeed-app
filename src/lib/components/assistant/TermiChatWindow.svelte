@@ -16,6 +16,7 @@
   import TermiAvatar from './TermiAvatar.svelte';
   import TermiAnswer from './TermiAnswer.svelte';
   import ItemCards from './cards/ItemCards.svelte';
+  import { keepItem } from './cards/filter.js';
   import { goto } from '$app/navigation';
   import { resolve } from '$app/paths';
   import { nip19 } from 'nostr-tools';
@@ -301,7 +302,7 @@
    * @typedef {{
    *   role: 'user' | 'bot', text: string, link?: Suggestion['link'], actions?: TermiAction[],
    *   items?: Array<import('$lib/server/termi/items.js').Item>, sourcesUnavailable?: string[],
-   *   retry?: () => void
+   *   retry?: () => void, query?: string
    * }} ChatMessage
    */
 
@@ -395,6 +396,10 @@
   /** @param {any} msg */
   const visible = (msg) =>
     msg.role === 'user' || !!textOf(msg) || searchPartsOf(msg).length > 0 || searchFailed(msg);
+  // Only the latest answer can be regenerated.
+  const lastAssistantId = $derived(
+    assistant?.chat.messages.findLast((x) => x.role === 'assistant')?.id
+  );
   const chatQuery = $derived.by(() => {
     const lastUser = assistant?.chat.messages.findLast((x) => x.role === 'user');
     return lastUser ? extractQuery(textOf(lastUser), getLocale() === 'en' ? 'en' : 'de') : '';
@@ -522,35 +527,42 @@
   }
 
   /**
-   * Tier 1 results as cards; nothing found → the fallback line (plus the sources note).
+   * Tier 1 results as cards; nothing left after the card filter → the fallback line (plus the sources note).
    * @param {Awaited<ReturnType<typeof searchContent>>} result
-   * @param {string} text the question, for "Erneut versuchen"
+   * @param {string} text the question, for "Erneut versuchen" and "Alle anzeigen"
+   * @param {string[]} [authors] set for "Material von …": no topic, no "Alle anzeigen"
    * @returns {ChatMessage}
    */
-  function contentReply({ items, sourcesUnavailable }, text) {
-    const retry = () => contentSearch(text);
-    if (items.length > 0)
-      return { role: 'bot', text: m.termi_route_go(), items, sourcesUnavailable, retry };
-    return { ...fallbackReply(), sourcesUnavailable, retry };
+  function contentReply({ items, sourcesUnavailable }, text, authors) {
+    const retry = () => contentSearch(text, authors);
+    const kept = items.filter(keepItem);
+    if (kept.length === 0) return { ...fallbackReply(), sourcesUnavailable, retry };
+    const query = authors ? '' : extractQuery(text, getLocale() === 'en' ? 'en' : 'de');
+    return { role: 'bot', text: m.termi_route_go(), items: kept, sourcesUnavailable, retry, query };
   }
 
-  /** Tier 1 again (retry, "Material von …"), outside the router. @param {string} text */
-  async function contentSearch(text) {
+  /** Tier 1 again (retry, "Material von …"), outside the router. @param {string} text @param {string[]} [authors] */
+  async function contentSearch(text, authors) {
     if (botTyping) return;
     botTyping = true;
-    const result = await searchContent(text, { locale: getLocale() === 'en' ? 'en' : 'de', fetch });
+    const locale = getLocale() === 'en' ? 'en' : 'de';
+    const result = await searchContent(text, { locale, fetch, authors });
     if (destroyed) return;
     botTyping = false;
-    msgs = [...msgs, contentReply(result, text)];
+    msgs = [...msgs, contentReply(result, text, authors)];
   }
 
-  /** "Material von …" on a person card: in the chat when one runs, else tier 1 with the name. @param {string} name */
-  function searchAuthor(name) {
-    const label = m.termi_card_author_search({ name });
+  /**
+   * "Material von …" on a person card: in the chat when one runs, else tier 1
+   * by the person's key (a name-only person: by the name as text).
+   * @param {import('$lib/server/termi/items.js').Item} person
+   */
+  function searchAuthor(person) {
+    const label = m.termi_card_author_search({ name: person.title });
     if (assistant) return ask(label);
     if (botTyping) return;
     msgs = [...msgs, { role: 'user', text: label }];
-    contentSearch(name);
+    contentSearch(person.title, person.pubkey ? [person.pubkey] : undefined);
   }
 
   /** The "can't answer" line plus home, the learning search and help. @returns {ChatMessage} */
@@ -812,7 +824,7 @@
         {/if}
         <div
           class="max-w-[82%] rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed {msg.role === 'user'
-            ? 'rounded-br-md bg-primary text-primary-content'
+            ? 'rounded-br-md bg-primary break-words text-primary-content'
             : 'rounded-bl-md border border-base-300 bg-base-200'}"
         >
           {#if msg.actions}
@@ -824,6 +836,7 @@
             <ItemCards
               items={msg.items}
               sourcesUnavailable={msg.sourcesUnavailable}
+              query={msg.query}
               onRetry={msg.retry}
               onSearchAuthor={searchAuthor}
             />
@@ -847,7 +860,7 @@
         {#if msg.role === 'user'}
           <div class="flex items-end justify-end gap-2.5">
             <div
-              class="max-w-[82%] rounded-2xl rounded-br-md bg-primary px-3.5 py-2.5 text-sm leading-relaxed whitespace-pre-line text-primary-content"
+              class="max-w-[82%] rounded-2xl rounded-br-md bg-primary px-3.5 py-2.5 text-sm leading-relaxed break-words whitespace-pre-line text-primary-content"
             >
               {textOf(msg)}
             </div>
@@ -862,7 +875,10 @@
                 <ItemCards
                   items={part.output?.items ?? []}
                   sourcesUnavailable={part.output?.sourcesUnavailable ?? []}
-                  onRetry={() => talk((chat) => chat.regenerate())}
+                  query={String(part.input?.query ?? '')}
+                  onRetry={msg.id === lastAssistantId
+                    ? () => talk((chat) => chat.regenerate())
+                    : undefined}
                   onSearchAuthor={searchAuthor}
                 />
               {/each}

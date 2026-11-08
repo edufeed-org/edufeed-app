@@ -47,6 +47,10 @@ vi.mock('$lib/stores/user-profile.svelte.js', () => ({
 
 const runCreateAction = vi.hoisted(() => vi.fn(() => true));
 vi.mock('$lib/helpers/run-create-action.js', () => ({ runCreateAction }));
+vi.mock('$lib/services/blocked-authors.svelte.js', () => ({
+  isBlockedAuthor: (/** @type {string} */ pk) => pk === 'b'.repeat(64),
+  getBlockedAuthorsVersion: () => 0
+}));
 vi.mock('$app/navigation', () => ({ goto: vi.fn() }));
 vi.mock('$app/paths', () => ({ resolve: (/** @type {string} */ p) => p }));
 
@@ -247,21 +251,53 @@ describe('TermiChatWindow router answers', () => {
     );
   });
 
-  it('"Material von …" on a person card runs tier 1 with the name', async () => {
+  it('"Material von …" searches by the person key; a name-only person by the name', async () => {
+    const pk = 'c'.repeat(64);
     const fetchMock = stubRouter(
       [],
-      [{ type: 'person', id: 'name:Ada Lovelace', title: 'Ada Lovelace' }]
+      [
+        { type: 'person', id: pk, pubkey: pk, title: 'Ada Lovelace', href: '/p/npub1ada' },
+        { type: 'person', id: 'name:Grace Hopper', title: 'Grace Hopper' }
+      ]
     );
     const view = renderWindow();
     await type(view, 'Wer schreibt über Mathematik?');
-    const label = m.termi_card_author_search({ name: 'Ada Lovelace' });
-    await fireEvent.click(await waitFor(() => view.getByText(label)));
-    await waitFor(() =>
-      expect(
-        /** @type {any[][]} */ (fetchMock.mock.calls)
-          .filter(([u]) => u === '/api/termi/search')
-          .map(([, init]) => JSON.parse(String(init.body)).text)
-      ).toEqual(['Wer schreibt über Mathematik?', 'Ada Lovelace'])
+    const searches = () =>
+      /** @type {any[][]} */ (fetchMock.mock.calls)
+        .filter(([u]) => u === '/api/termi/search')
+        .map(([, init]) => JSON.parse(String(init.body)));
+    const ada = m.termi_card_author_search({ name: 'Ada Lovelace' });
+    await fireEvent.click(await waitFor(() => view.getAllByText(ada)[0]));
+    await waitFor(() => expect(searches()).toHaveLength(2));
+    expect(searches()[1]).toEqual({ text: 'Ada Lovelace', locale: 'de', authors: [pk] });
+    await waitFor(() => expect(view.getAllByText(m.termi_route_go())).toHaveLength(2));
+    const grace = m.termi_card_author_search({ name: 'Grace Hopper' });
+    await fireEvent.click(view.getAllByText(grace)[0]);
+    await waitFor(() => expect(searches()).toHaveLength(3));
+    expect(searches()[2]).toEqual({ text: 'Grace Hopper', locale: 'de' });
+  });
+
+  it('only blocked items: the fallback line, no empty "Hier entlang:"', async () => {
+    stubRouter(
+      [],
+      [{ type: 'resource', id: 'r1', pubkey: 'b'.repeat(64), title: 'Spam', href: '/naddr1s' }]
+    );
+    const view = renderWindow();
+    await type(view, 'Material zu Brüchen');
+    await waitFor(() => view.getByText(m.termi_fallback(), { exact: false }));
+    expect(view.queryByText(m.termi_route_go())).toBeNull();
+    expect(view.queryByText('Spam')).toBeNull();
+  });
+
+  it('tier 1 cards carry "Alle anzeigen" for the topic', async () => {
+    stubRouter([], [{ type: 'resource', id: 'r1', title: 'Brüche', href: '/naddr1b' }]);
+    const view = renderWindow();
+    await type(view, 'Finde Materialien zu Brüchen');
+    const all = await waitFor(() =>
+      view.getByText(m.termi_card_all({ type: m.discover_tab_learning(), topic: 'Brüchen' }))
+    );
+    expect(all.closest('a')?.getAttribute('href')).toBe(
+      '/discover?type=learning&search=Br%C3%BCchen'
     );
   });
 

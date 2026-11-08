@@ -19,7 +19,7 @@
 >
   {#if item.description}
     <blockquote
-      class="border-l-2 border-base-300 pl-2 text-xs text-base-content/80 italic {expanded
+      class="border-l-2 border-base-300 pl-2 text-xs break-words text-base-content/80 italic {expanded
         ? ''
         : 'line-clamp-3'}"
     >
@@ -38,7 +38,12 @@
         </a>
       {/if}
       {#if long}
-        <button type="button" class="btn btn-ghost btn-sm" onclick={() => (expanded = !expanded)}>
+        <button
+          type="button"
+          class="btn btn-ghost btn-sm"
+          aria-expanded={expanded}
+          onclick={() => (expanded = !expanded)}
+        >
           {expanded ? m.termi_card_less() : m.termi_card_more()}
         </button>
       {/if}

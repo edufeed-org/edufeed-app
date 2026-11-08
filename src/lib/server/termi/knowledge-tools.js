@@ -11,6 +11,8 @@ import {
   normalizePassage
 } from './items.js';
 
+export const MAX_AUTHORS = 5;
+
 /** Short names nope-mcp's `list_relays` accepts (hostname first label). */
 export const DEFAULT_SEARCH_RELAYS = ['amb-relay', 'oersi', 'sodix'];
 
@@ -61,6 +63,15 @@ export function nopeMcpCaller({ mcpUrl, getToken, callTool }) {
   };
 }
 
+/** At most 5 well-formed hex pubkeys; anything else is dropped. @param {unknown} list @returns {string[]} */
+export function validAuthors(list) {
+  if (!Array.isArray(list)) return [];
+  return [...new Set(list.filter((a) => typeof a === 'string' && /^[0-9a-f]{64}$/.test(a)))].slice(
+    0,
+    MAX_AUTHORS
+  );
+}
+
 /** An older nope-mcp without the tool answers "Tool <name> not found". @param {any} err */
 function isUnknownTool(err) {
   return err?.isToolError === true && /tool \S+ not found/i.test(String(err.message));
@@ -91,14 +102,19 @@ export function createKnowledgeTools({ callTool, relays = DEFAULT_SEARCH_RELAYS,
   }
 
   return {
-    /** @param {string} q @param {{ types?: string[] }} [opts] */
-    async searchContent(q, { types } = {}) {
+    /**
+     * @param {string} q empty = no topic (with `authors`: everything by them)
+     * @param {{ types?: string[], authors?: string[] }} [opts] authors = hex pubkeys
+     */
+    async searchContent(q, { types, authors } = {}) {
       const picked = (types ?? []).filter((t) => CONTENT_TYPES.includes(t));
+      const keys = validAuthors(authors);
       const r = await callTool('search_content', {
-        query: q,
+        ...(q ? { query: q } : {}),
         relays,
         limit: 20,
-        ...(picked.length > 0 ? { types: picked } : {})
+        ...(picked.length > 0 ? { types: picked } : {}),
+        ...(keys.length > 0 ? { authors: keys } : {})
       });
       return toResult(r, (h) => normalizeContent(h, queriedUrls(r)), r?.results);
     },

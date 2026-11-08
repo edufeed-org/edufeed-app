@@ -9,7 +9,12 @@ import { parseBool } from '$lib/server/env-parse.js';
 import { nopeMcpEnv } from '$lib/server/nopeMcpEnv.js';
 import { getNopeMcpToken } from '$lib/server/nopeMcpToken.js';
 import { callNopeMcpTool } from '$lib/server/nopeMcpClient.js';
-import { createKnowledgeTools, nopeMcpCaller } from '$lib/server/termi/knowledge-tools.js';
+import {
+  createKnowledgeTools,
+  nopeMcpCaller,
+  validAuthors,
+  MAX_AUTHORS
+} from '$lib/server/termi/knowledge-tools.js';
 import { answerQuestion, parseSearchRelays } from '$lib/server/termi/answer.js';
 import { termiLimiter as limiter } from '$lib/server/termi/limiter.js';
 
@@ -26,7 +31,7 @@ export async function POST({ request, getClientAddress }) {
     return json({ error: 'rate_limited' }, { status: 429 });
   }
 
-  /** @type {{ text?: unknown, locale?: unknown }} */
+  /** @type {{ text?: unknown, locale?: unknown, authors?: unknown }} */
   let body;
   try {
     body = await request.json();
@@ -45,10 +50,20 @@ export async function POST({ request, getClientAddress }) {
     return json({ error: 'invalid_locale' }, { status: 400 });
   }
   const locale = /** @type {'de'|'en'} */ (body.locale);
+  // Optional: hex pubkeys ("Material von …"); anything malformed is refused, not trimmed.
+  const authors = body.authors === undefined ? [] : validAuthors(body.authors);
+  if (
+    body.authors !== undefined &&
+    (!Array.isArray(body.authors) ||
+      body.authors.length > MAX_AUTHORS ||
+      authors.length !== new Set(body.authors).size)
+  ) {
+    return json({ error: 'invalid_authors' }, { status: 400 });
+  }
 
   const tools = createKnowledgeTools({
     callTool: nopeMcpCaller({ mcpUrl, getToken: getNopeMcpToken, callTool: callNopeMcpTool }),
     relays: parseSearchRelays(env.TERMI_SEARCH_RELAYS)
   });
-  return json(await answerQuestion(text, locale, tools));
+  return json(await answerQuestion(text, locale, tools, { authors }));
 }

@@ -53,10 +53,20 @@ function buildAskTools({ mcpUrl, getToken, callTool = callNopeMcpTool, relays, n
             type: 'string',
             enum: ['resource', 'article', 'wiki', 'project', 'measure', 'publication']
           }
+        },
+        authors: {
+          type: 'array',
+          maxItems: 5,
+          items: { type: 'string', pattern: '^[0-9a-f]{64}$' },
+          description: 'Nur Inhalte dieser Personen (hex-pubkeys, z. B. aus find_people)'
         }
       },
       ['query'],
-      (i) => k.searchContent(text(i.query), { types: Array.isArray(i.types) ? i.types : [] })
+      (i) =>
+        k.searchContent(text(i.query), {
+          types: Array.isArray(i.types) ? i.types : [],
+          authors: i.authors
+        })
     ),
     search_resources: knowledgeTool(
       'Sucht Lernmaterialien (OER) mit Filtern nach Fach, Materialart, Bildungsstufe, Urheber oder Herausgeber.',

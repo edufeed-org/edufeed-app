@@ -57,6 +57,19 @@ describe('createKnowledgeTools', () => {
     expect(out.sourcesUnavailable).toEqual([]);
   });
 
+  it('searchContent passes up to 5 valid hex authors; an empty query is omitted', async () => {
+    const { callTool, tools } = setup();
+    const keys = Array.from({ length: 7 }, (_, i) => String(i).repeat(64));
+    await tools.searchContent('', { authors: [...keys, 'npub1x', 'A'.repeat(64)] });
+    expect(callTool).toHaveBeenCalledWith('search_content', {
+      relays: ['amb-relay', 'oersi', 'sodix'],
+      limit: 20,
+      authors: keys.slice(0, 5)
+    });
+    await tools.searchContent('x', { authors: ['bogus'] });
+    expect(callTool.mock.calls[1][1]).not.toHaveProperty('authors');
+  });
+
   it('searchResources whitelists filters', async () => {
     const { callTool, tools } = setup();
     const out = await tools.searchResources('Nachhaltigkeit', {
@@ -245,6 +258,19 @@ describe("buildTermiTools('ask')", () => {
     });
     expect(callTool.mock.calls[1][0].bearerToken).toBe('tok');
     expect(out.items).toHaveLength(3);
+  });
+
+  it('search_content offers an authors filter to the model and passes it on', async () => {
+    const callTool = vi.fn(async () => searchContent);
+    const tools = ask(callTool);
+    const schema = tools.search_content.inputSchema.jsonSchema;
+    expect(schema.properties.authors).toMatchObject({
+      type: 'array',
+      items: { pattern: '^[0-9a-f]{64}$' }
+    });
+    const pk = 'c'.repeat(64);
+    await run(tools.search_content, { query: 'Statistik', authors: [pk, 'bogus'] });
+    expect(/** @type {any} */ (callTool.mock.calls[0])[0].args.authors).toEqual([pk]);
   });
 
   it('caps items for the model at 8 and descriptions at 300 chars', async () => {

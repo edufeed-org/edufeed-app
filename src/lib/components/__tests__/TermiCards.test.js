@@ -1,6 +1,7 @@
 /** @vitest-environment jsdom */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, fireEvent } from '@testing-library/svelte';
+import { tick } from 'svelte';
 import * as m from '$lib/paraglide/messages';
 import { overwriteGetLocale } from '$lib/paraglide/runtime.js';
 
@@ -11,14 +12,26 @@ const HIDDEN = 'h'.repeat(64);
 const PK = 'a'.repeat(64);
 const settings = vi.hoisted(() => ({ showHiddenCalendarSources: false }));
 
-vi.mock('$lib/services/blocked-authors.svelte.js', () => ({
-  isBlockedAuthor: (/** @type {string} */ pk) => pk === 'b'.repeat(64)
-}));
-vi.mock('$lib/services/calendar-sources.svelte.js', () => ({
-  isHiddenCalendarSource: (/** @type {string} */ pk) => pk === 'h'.repeat(64)
-}));
+vi.mock('$lib/services/blocked-authors.svelte.js', async () => {
+  const l = await import('./termi-cards-lists.svelte.js');
+  return {
+    isBlockedAuthor: (/** @type {string} */ pk) => l.blocked.includes(pk),
+    getBlockedAuthorsVersion: () => l.versions.blocked
+  };
+});
+vi.mock('$lib/services/calendar-sources.svelte.js', async () => {
+  const l = await import('./termi-cards-lists.svelte.js');
+  return {
+    isHiddenCalendarSource: (/** @type {string} */ pk) => l.hidden.includes(pk),
+    getHiddenCalendarSourcesVersion: () => l.versions.hidden
+  };
+});
 vi.mock('$lib/stores/app-settings.svelte.js', () => ({ appSettings: settings }));
+vi.mock('$lib/stores/config.svelte.js', () => ({
+  runtimeConfig: { discover: { contentTypes: ['learning', 'events', 'people'] } }
+}));
 
+import { blocked, hidden, versions } from './termi-cards-lists.svelte.js';
 import ItemCards from '$lib/components/assistant/cards/ItemCards.svelte';
 import SourcesNote from '$lib/components/assistant/cards/SourcesNote.svelte';
 
@@ -35,6 +48,8 @@ const buttons = (el) =>
 describe('Termi result cards', () => {
   beforeEach(() => {
     settings.showHiddenCalendarSources = false;
+    blocked.splice(0, blocked.length, BLOCKED);
+    hidden.splice(0, hidden.length, HIDDEN);
   });
 
   it('resource: title, type chip, publisher/creator, license, Öffnen in-app + Quelle external', () => {
@@ -97,6 +112,18 @@ describe('Termi result cards', () => {
     expect(timed.querySelector('a')?.getAttribute('href')).toBe('/naddr1ev');
   });
 
+  it('event dates use dots in the English UI too', () => {
+    overwriteGetLocale(() => 'en');
+    try {
+      const view = renderCards([
+        { type: 'event', id: `31923:${PK}:en`, title: 'Talk', date: '1794560400', href: '/naddr1t' }
+      ]);
+      expect(view.getByTestId('termi-card-event').textContent).toMatch(/\d{2}\.\d{2}\.\d{4}/);
+    } finally {
+      overwriteGetLocale(() => 'de');
+    }
+  });
+
   it('community: picture, name, description → Öffnen', () => {
     const view = renderCards([
       {
@@ -135,7 +162,9 @@ describe('Termi result cards', () => {
     expect(card.textContent).toContain('Mathematikerin');
     expect(view.getByText(m.termi_card_profile()).getAttribute('href')).toBe('/p/npub1ada');
     await fireEvent.click(view.getByText(m.termi_card_author_search({ name: 'Ada Lovelace' })));
-    expect(onSearchAuthor).toHaveBeenCalledWith('Ada Lovelace');
+    expect(onSearchAuthor).toHaveBeenCalledWith(
+      expect.objectContaining({ id: PK, title: 'Ada Lovelace' })
+    );
   });
 
   it('passage: quoted text clamped with mehr/weniger, source, publisher, license → Quelle öffnen', async () => {
@@ -156,7 +185,10 @@ describe('Termi result cards', () => {
       expect(card.textContent).toContain(t);
     const quote = /** @type {HTMLElement} */ (card.querySelector('blockquote'));
     expect(quote.className).toContain('line-clamp-3');
-    await fireEvent.click(view.getByText(m.termi_card_more()));
+    const more = view.getByText(m.termi_card_more());
+    expect(more.getAttribute('aria-expanded')).toBe('false');
+    await fireEvent.click(more);
+    expect(more.getAttribute('aria-expanded')).toBe('true');
     expect(quote.className).not.toContain('line-clamp-3');
     expect(view.getByText(m.termi_card_less())).toBeTruthy();
     const open = view.getByText(m.termi_card_open_source());
@@ -223,21 +255,102 @@ describe('Termi result cards', () => {
     expect(html).not.toContain('data:text');
   });
 
-  it('drops blocked authors (person by id, resource/event by address pubkey)', () => {
+  it('drops blocked authors: person/community by id, everything else by its pubkey', () => {
     const view = renderCards([
       { type: 'person', id: BLOCKED, title: 'Spam Person', href: '/p/npub1s' },
-      { type: 'resource', id: `30142:${BLOCKED}:x`, title: 'Spam Material', href: '/naddr1s' },
-      { type: 'resource', id: `30142:${PK}:ok`, title: 'Gutes Material', href: '/naddr1ok' }
+      {
+        type: 'resource',
+        id: `30142:${BLOCKED}:x`,
+        pubkey: BLOCKED,
+        title: 'Spam Material',
+        href: '/naddr1s'
+      },
+      {
+        type: 'passage',
+        id: 'abc:1',
+        pubkey: BLOCKED,
+        title: 'Spam Passage',
+        href: 'https://example.org/s'
+      },
+      {
+        type: 'resource',
+        id: `30142:${PK}:ok`,
+        pubkey: PK,
+        title: 'Gutes Material',
+        href: '/naddr1ok'
+      }
     ]);
     expect(view.queryByText('Spam Person')).toBeNull();
     expect(view.queryByText('Spam Material')).toBeNull();
+    expect(view.queryByText('Spam Passage')).toBeNull();
     expect(view.getByText('Gutes Material')).toBeTruthy();
+  });
+
+  it('a block that resolves after the answer hides the card', async () => {
+    blocked.length = 0;
+    const view = renderCards([
+      {
+        type: 'resource',
+        id: `30142:${PK}:late`,
+        pubkey: PK,
+        title: 'Spät gesperrt',
+        href: '/naddr1l'
+      }
+    ]);
+    expect(view.getByText('Spät gesperrt')).toBeTruthy();
+    blocked.push(PK);
+    versions.blocked++;
+    await tick();
+    expect(view.queryByText('Spät gesperrt')).toBeNull();
+  });
+
+  it('"Alle anzeigen": one link per shown, enabled type, topic truncated', () => {
+    const topic = 'Bruchrechnung in der Sekundarstufe eins mit vielen Beispielen';
+    const view = renderCards(
+      [
+        { type: 'resource', id: `30142:${PK}:a`, pubkey: PK, title: 'R1', href: '/naddr1a' },
+        { type: 'resource', id: `30142:${PK}:b`, pubkey: PK, title: 'R2', href: '/naddr1b' },
+        { type: 'event', id: `31923:${PK}:e`, pubkey: PK, title: 'E', href: '/naddr1e' },
+        { type: 'community', id: PK, title: 'C', href: '/c/npub1c' },
+        { type: 'passage', id: 'x:1', title: 'P', href: 'https://example.org/p' }
+      ],
+      { query: topic }
+    );
+    const short = `${topic.slice(0, 39)}…`;
+    const links = view.getAllByText(
+      (_, el) =>
+        /^(Lernmaterialien|Veranstaltungen|Communities|Personen):/.test(el?.textContent ?? '') &&
+        el?.tagName === 'A'
+    );
+    expect(links.map((a) => [a.textContent?.trim(), a.getAttribute('href')])).toEqual([
+      [
+        m.termi_card_all({ type: m.discover_tab_learning(), topic: short }),
+        `/discover?type=learning&search=${encodeURIComponent(topic)}`
+      ],
+      [
+        m.termi_card_all({ type: m.discover_tab_events(), topic: short }),
+        `/discover?type=events&search=${encodeURIComponent(topic)}`
+      ]
+    ]);
+  });
+
+  it('no "Alle anzeigen" without a query', () => {
+    const view = renderCards([
+      { type: 'resource', id: `30142:${PK}:a`, title: 'R1', href: '/naddr1a' }
+    ]);
+    expect(view.container.querySelectorAll('a').length).toBe(1);
   });
 
   it('hidden calendar sources: hidden by default, shown with the setting', () => {
     const items = [
-      { type: 'event', id: `31923:${HIDDEN}:m`, title: 'Gespiegelt', href: '/naddr1m' },
-      { type: 'event', id: `31923:${PK}:o`, title: 'Eigen', href: '/naddr1o' }
+      {
+        type: 'event',
+        id: `31923:${HIDDEN}:m`,
+        pubkey: HIDDEN,
+        title: 'Gespiegelt',
+        href: '/naddr1m'
+      },
+      { type: 'event', id: `31923:${PK}:o`, pubkey: PK, title: 'Eigen', href: '/naddr1o' }
     ];
     const hidden = renderCards(items);
     expect(hidden.queryByText('Gespiegelt')).toBeNull();

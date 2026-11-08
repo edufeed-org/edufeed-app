@@ -3,7 +3,7 @@
   import * as m from '$lib/paraglide/messages';
   import { externalLink, linkFor } from './links.js';
 
-  /** @type {{ item: import('$lib/server/termi/items.js').Item, onSearchAuthor?: (name: string) => void }} */
+  /** @type {{ item: import('$lib/server/termi/items.js').Item, onSearchAuthor?: (item: import('$lib/server/termi/items.js').Item) => void }} */
   let { item, onSearchAuthor } = $props();
 
   const open = $derived(linkFor(item));
@@ -38,7 +38,7 @@
           <button
             type="button"
             class="btn max-w-full btn-ghost btn-sm"
-            onclick={() => onSearchAuthor(item.title)}
+            onclick={() => onSearchAuthor(item)}
           >
             <span class="min-w-0 truncate">{m.termi_card_author_search({ name: item.title })}</span>
           </button>

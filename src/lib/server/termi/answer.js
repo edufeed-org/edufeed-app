@@ -82,9 +82,28 @@ const words = (s) => s.toLowerCase().match(/[\p{L}\p{N}]{3,}/gu) ?? [];
  * @param {string} text already validated (1–300 chars)
  * @param {'de'|'en'} locale
  * @param {KnowledgeTools} [tools]
+ * @param {{ authors?: string[] }} [opts] authors (validated hex): "Material von …" — only their content, no topic
  * @returns {Promise<{ items: Item[], sourcesUnavailable: string[] }>}
  */
-export async function answerQuestion(text, locale, tools = toolsFromProcessEnv()) {
+export async function answerQuestion(
+  text,
+  locale,
+  tools = toolsFromProcessEnv(),
+  { authors } = {}
+) {
+  if (authors?.length) {
+    try {
+      // No query: the name would dilute the ranking; `weak` needs a query, so nothing is dropped.
+      const r = await withDeadline(tools.searchContent('', { authors }));
+      return { items: r.items.slice(0, MAX_ITEMS), sourcesUnavailable: r.sourcesUnavailable };
+    } catch (err) {
+      console.error(
+        '[termi/answer] search_content failed:',
+        /** @type {any} */ (err)?.name || 'unknown error'
+      );
+      return { items: [], sourcesUnavailable: ['search_content'] };
+    }
+  }
   const cues = questionCues(text);
   const topic =
     extractQuery(text, locale)

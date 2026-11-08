@@ -1,11 +1,14 @@
 <script>
   // Termi content results (tier 1 and tier 2 tool parts) as one card per item,
-  // plus the sources note. Blocked authors are dropped; hidden calendar
-  // sources follow the calendar's "Importierte Termine anzeigen" setting.
+  // one "Alle anzeigen" link per shown type, plus the sources note.
+  import * as m from '$lib/paraglide/messages';
   import { uniqueBy } from '$lib/helpers/unique.js';
-  import { isBlockedAuthor } from '$lib/services/blocked-authors.svelte.js';
-  import { isHiddenCalendarSource } from '$lib/services/calendar-sources.svelte.js';
-  import { appSettings } from '$lib/stores/app-settings.svelte.js';
+  import { getBlockedAuthorsVersion } from '$lib/services/blocked-authors.svelte.js';
+  import { getHiddenCalendarSourcesVersion } from '$lib/services/calendar-sources.svelte.js';
+  import { runtimeConfig } from '$lib/stores/config.svelte.js';
+  import { isDiscoverTypeEnabled } from '$lib/helpers/discover-content-types.js';
+  import { discoverHref } from '../termi-router.js';
+  import { keepItem } from './filter.js';
   import CommunityCard from './CommunityCard.svelte';
   import EventCard from './EventCard.svelte';
   import ResourceCard from './ResourceCard.svelte';
@@ -18,11 +21,12 @@
    * @type {{
    *   items?: Item[],
    *   sourcesUnavailable?: string[],
+   *   query?: string,
    *   onRetry?: () => void,
-   *   onSearchAuthor?: (name: string) => void
+   *   onSearchAuthor?: (item: Item) => void
    * }}
    */
-  let { items = [], sourcesUnavailable = [], onRetry, onSearchAuthor } = $props();
+  let { items = [], sourcesUnavailable = [], query = '', onRetry, onSearchAuthor } = $props();
 
   const CARDS = {
     community: CommunityCard,
@@ -32,24 +36,37 @@
     passage: PassageCard
   };
 
-  /** Person/community ids are pubkeys; event/resource ids are `kind:pubkey:d`. @param {Item} it */
-  const pubkeyOf = (it) =>
-    it.type === 'person' || it.type === 'community' ? it.id : String(it.id).split(':')[1];
+  /** Item type → /discover tab and its label; passages have no listing. */
+  const ALL_LINKS = /** @type {const} */ ([
+    ['resource', 'learning', m.discover_tab_learning],
+    ['event', 'events', m.discover_tab_events],
+    ['community', 'communities', m.discover_tab_communities],
+    ['person', 'people', m.discover_tab_people]
+  ]);
 
-  /** @param {Item} it */
-  const keep = (it) =>
-    !!it?.title &&
-    Object.hasOwn(CARDS, it.type) &&
-    !isBlockedAuthor(pubkeyOf(it)) &&
-    !(
-      it.type === 'event' &&
-      !appSettings.showHiddenCalendarSources &&
-      isHiddenCalendarSource(pubkeyOf(it))
+  const shown = $derived.by(() => {
+    // Lists that resolve after the answer re-filter the cards.
+    void getBlockedAuthorsVersion();
+    void getHiddenCalendarSourcesVersion();
+    return uniqueBy(
+      (Array.isArray(items) ? items : []).filter(keepItem),
+      (it) => `${it.type}:${it.id}`
     );
+  });
 
-  const shown = $derived(
-    uniqueBy((Array.isArray(items) ? items : []).filter(keep), (it) => `${it.type}:${it.id}`)
-  );
+  const allLinks = $derived.by(() => {
+    const q = String(query ?? '').trim();
+    if (!q) return [];
+    const topic = q.length > 40 ? `${q.slice(0, 39)}…` : q;
+    const enabled = runtimeConfig.discover?.contentTypes ?? [];
+    return ALL_LINKS.filter(
+      ([type, tab]) => shown.some((it) => it.type === type) && isDiscoverTypeEnabled(tab, enabled)
+    ).map(([, tab, label]) => ({
+      tab,
+      href: discoverHref(tab, q),
+      label: m.termi_card_all({ type: label(), topic })
+    }));
+  });
 </script>
 
 {#if shown.length > 0 || sourcesUnavailable.length > 0}
@@ -58,6 +75,15 @@
       {@const Card = CARDS[item.type]}
       <Card {item} {onSearchAuthor} />
     {/each}
+    {#if allLinks.length > 0}
+      <div class="flex min-w-0 flex-wrap gap-1.5">
+        {#each allLinks as link (link.tab)}
+          <a href={link.href} class="btn max-w-full btn-ghost btn-sm">
+            <span class="min-w-0 truncate">{link.label}</span>
+          </a>
+        {/each}
+      </div>
+    {/if}
     <SourcesNote sources={sourcesUnavailable} {onRetry} />
   </div>
 {/if}

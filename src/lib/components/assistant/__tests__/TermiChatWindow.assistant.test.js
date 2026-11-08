@@ -212,6 +212,30 @@ describe('TermiChatWindow assistant mode', () => {
     await waitFor(() => expect(chatCalls).toHaveLength(2));
   });
 
+  it('only the latest answer offers a retry; cards link "Alle anzeigen" with the tool query', async () => {
+    stubFetch(() => streamAnswer({ sourcesUnavailable: ['search_events'] }));
+    const view = renderWindow();
+    const idle = () =>
+      waitFor(() =>
+        expect(/** @type {HTMLButtonElement} */ (view.getByTestId('termi-send')).disabled).toBe(
+          false
+        )
+      );
+    await type(view, 'Finde Materialien zu Brüchen');
+    await waitFor(() => view.getByText(m.termi_sources_events()));
+    await idle();
+    await type(view, 'Und für Klasse 6?');
+    await waitFor(() => expect(view.getAllByText(m.termi_sources_events())).toHaveLength(2));
+    await idle();
+    expect(view.getAllByText(m.termi_sources_retry())).toHaveLength(1);
+    const all = view.getAllByText(
+      m.termi_card_all({ type: m.discover_tab_learning(), topic: 'Brüche' })
+    );
+    expect(all[0].closest('a')?.getAttribute('href')).toBe(
+      '/discover?type=learning&search=Br%C3%BCche'
+    );
+  });
+
   it('other tool parts render nothing', async () => {
     stubFetch(() => streamAnswer({ toolName: 'something_else' }));
     const view = renderWindow();
