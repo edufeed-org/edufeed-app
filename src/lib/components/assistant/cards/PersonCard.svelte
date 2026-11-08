@@ -1,13 +1,14 @@
 <script>
   // A person; name-only people (no npub match) keep just "Material von …".
   import * as m from '$lib/paraglide/messages';
+  import { getProxiedImageUrl } from '$lib/helpers/image-proxy.js';
   import { externalLink, linkFor } from './links.js';
 
   /** @type {{ item: import('$lib/server/termi/items.js').Item, onSearchAuthor?: (item: import('$lib/server/termi/items.js').Item) => void }} */
   let { item, onSearchAuthor } = $props();
 
   const open = $derived(linkFor(item));
-  const picture = $derived(externalLink(item.picture)?.href);
+  const picture = $derived(getProxiedImageUrl(externalLink(item.picture)?.href, 'avatar_sm'));
 </script>
 
 <article
@@ -30,7 +31,13 @@
     {#if open || onSearchAuthor}
       <div class="mt-1.5 flex flex-wrap gap-1.5">
         {#if open}
-          <a href={open.href} target={open.target} rel={open.rel} class="btn btn-sm btn-primary">
+          <a
+            href={open.href}
+            target={open.target}
+            rel={open.rel}
+            class="btn btn-sm btn-primary"
+            aria-label="{m.termi_card_profile()}: {item.title}"
+          >
             {m.termi_card_profile()}
           </a>
         {/if}

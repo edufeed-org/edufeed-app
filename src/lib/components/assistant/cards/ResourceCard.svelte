@@ -36,7 +36,13 @@
   {#if open || source}
     <div class="mt-1.5 flex flex-wrap gap-1.5">
       {#if open}
-        <a href={open.href} target={open.target} rel={open.rel} class="btn btn-sm btn-primary">
+        <a
+          href={open.href}
+          target={open.target}
+          rel={open.rel}
+          class="btn btn-sm btn-primary"
+          aria-label="{m.termi_card_open()}: {item.title}"
+        >
           {m.termi_card_open()}
         </a>
       {/if}

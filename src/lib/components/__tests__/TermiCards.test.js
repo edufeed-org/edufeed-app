@@ -137,8 +137,11 @@ describe('Termi result cards', () => {
     ]);
     const card = view.getByTestId('termi-card-community');
     expect(card.textContent).toContain('Wissen rund ums digitale Lehren');
-    expect(card.querySelector('img')?.getAttribute('src')).toBe('https://example.org/c.png');
+    expect(card.querySelector('img')?.getAttribute('src')).toBe(
+      `/api/image?url=${encodeURIComponent('https://example.org/c.png')}&w=64&h=64&q=80`
+    );
     expect(view.getByText(m.termi_card_open()).getAttribute('href')).toBe('/c/npub1abc');
+    expect(view.getByRole('link', { name: `${m.termi_card_open()}: e-teaching.org` })).toBeTruthy();
   });
 
   it('person: avatar, name, nip05 → Profil + "Material von …" calls onSearchAuthor', async () => {
@@ -160,6 +163,7 @@ describe('Termi result cards', () => {
     const card = view.getByTestId('termi-card-person');
     expect(card.textContent).toContain('ada@edufeed.org');
     expect(card.textContent).toContain('Mathematikerin');
+    expect(card.querySelector('img')?.getAttribute('src')).toMatch(/^\/api\/image\?url=https/);
     expect(view.getByText(m.termi_card_profile()).getAttribute('href')).toBe('/p/npub1ada');
     await fireEvent.click(view.getByText(m.termi_card_author_search({ name: 'Ada Lovelace' })));
     expect(onSearchAuthor).toHaveBeenCalledWith(

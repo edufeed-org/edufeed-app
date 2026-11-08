@@ -1,12 +1,13 @@
 <script>
   import * as m from '$lib/paraglide/messages';
+  import { getProxiedImageUrl } from '$lib/helpers/image-proxy.js';
   import { externalLink, linkFor } from './links.js';
 
   /** @type {{ item: import('$lib/server/termi/items.js').Item }} */
   let { item } = $props();
 
   const open = $derived(linkFor(item));
-  const picture = $derived(externalLink(item.picture)?.href);
+  const picture = $derived(getProxiedImageUrl(externalLink(item.picture)?.href, 'avatar_sm'));
 </script>
 
 <article
@@ -25,7 +26,13 @@
     {/if}
     {#if open}
       <div class="mt-1.5 flex flex-wrap gap-1.5">
-        <a href={open.href} target={open.target} rel={open.rel} class="btn btn-sm btn-primary">
+        <a
+          href={open.href}
+          target={open.target}
+          rel={open.rel}
+          class="btn btn-sm btn-primary"
+          aria-label="{m.termi_card_open()}: {item.title}"
+        >
           {m.termi_card_open()}
         </a>
       </div>
