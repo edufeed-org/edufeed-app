@@ -175,7 +175,7 @@ describe('TermiChatWindow router answers', () => {
     ]);
   });
 
-  it('a content question takes the content path, never "Meinst du …?"', async () => {
+  it('a content question takes the content path; a weak match only adds a guess beside the cards', async () => {
     const fetchMock = stubRouter(
       [{ skill: 'my-communities', score: 0.76 }],
       [
@@ -186,7 +186,8 @@ describe('TermiChatWindow router answers', () => {
     const view = renderWindow();
     await type(view, 'ich suche die e-teaching community');
     const links = await cardLinks(view);
-    expect(view.queryByText(m.termi_route_maybe(), { exact: false })).toBeNull();
+    // The weak match is no answer of its own, just a "Meinst du …?" button above the cards.
+    expect(view.getByText(m.termi_route_maybe(), { exact: false })).toBeTruthy();
     expect(fetchMock).toHaveBeenCalledWith(
       '/api/termi/search',
       expect.objectContaining({
@@ -284,7 +285,7 @@ describe('TermiChatWindow router answers', () => {
     );
     const view = renderWindow();
     await type(view, 'Material zu Brüchen');
-    await waitFor(() => view.getByText(m.termi_fallback(), { exact: false }));
+    await waitFor(() => view.getByText(m.termi_nothing_found(), { exact: false }));
     expect(view.queryByText(m.termi_route_go())).toBeNull();
     expect(view.queryByText('Spam')).toBeNull();
   });
@@ -316,7 +317,7 @@ describe('TermiChatWindow router answers', () => {
     await type(view, 'Wie wird das Wetter morgen?');
     const actions = await answerActions(view);
     expect(fetchMock).toHaveBeenCalledWith('/api/termi/search', expect.anything());
-    expect(view.getByText(m.termi_fallback(), { exact: false })).toBeTruthy();
+    expect(view.getByText(m.termi_nothing_found(), { exact: false })).toBeTruthy();
     expect(actions.map((a) => a.getAttribute('href'))).toEqual([
       '/c/',
       '/discover?type=learning',
@@ -389,7 +390,7 @@ describe('TermiChatWindow router answers', () => {
     await type(view, 'Wie fange ich an?');
     await answerActions(view);
     expect(view.queryByText(m.termi_sugg_4_a(), { exact: false })).toBeNull();
-    expect(view.getByText(m.termi_fallback(), { exact: false })).toBeTruthy();
+    expect(view.getByText(m.termi_nothing_found(), { exact: false })).toBeTruthy();
   });
 
   it('a suggestion chip still gets its canned answer', async () => {

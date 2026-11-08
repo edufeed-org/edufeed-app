@@ -3310,6 +3310,7 @@
   "termi_sugg_4_a": "Start with the \"Erste Schritte\" guide: it walks you through your account and profile, discovering materials and events, communities with channels and video calls, and ends with a short hands-on to try things out.",
   "termi_sugg_4_link": "Open the guide",
   "termi_fallback": "Good question! I can't answer it just yet — my answers are pre-written for now, and real AI support is coming soon. Until then, feel free to try one of the suggestions below.",
+  "termi_nothing_found": "I couldn't find anything on that.",
   "termi_input_placeholder": "Ask Termi …",
   "termi_input_aria": "Message to Termi",
   "termi_send_aria": "Send",

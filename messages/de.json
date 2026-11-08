@@ -3310,6 +3310,7 @@
   "termi_sugg_4_a": "Am besten mit der Anleitung „Erste Schritte“: Sie zeigt dir Konto und Profil, das Entdecken von Materialien und Veranstaltungen, Communities mit Kanälen und Videoanrufen – und am Ende gibt es ein kurzes Hands-on zum Ausprobieren.",
   "termi_sugg_4_link": "Anleitung öffnen",
   "termi_fallback": "Gute Frage! Beantworten kann ich sie leider noch nicht — meine Antworten sind im Moment vorgefertigt, echte KI-Unterstützung kommt bald. Bis dahin probiere gern einen der Vorschläge unten.",
+  "termi_nothing_found": "Dazu habe ich nichts gefunden.",
   "termi_input_placeholder": "Frag Termi …",
   "termi_input_aria": "Nachricht an Termi",
   "termi_send_aria": "Senden",

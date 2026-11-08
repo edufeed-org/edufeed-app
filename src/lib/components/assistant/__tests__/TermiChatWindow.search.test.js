@@ -300,7 +300,42 @@ describe('TermiChatWindow nothing found → the router’s best guess', () => {
     const view = renderWindow();
     await type(view, 'hab ich neue nachrichten?');
     const box = await waitFor(() => view.getByTestId('termi-answer-actions'));
-    expect(view.getByText(m.termi_fallback(), { exact: false })).toBeTruthy();
+    expect(view.getByText(m.termi_nothing_found(), { exact: false })).toBeTruthy();
+    expect(view.queryByText(m.termi_fallback(), { exact: false })).toBeNull();
+    expect([...box.querySelectorAll('a')].map((a) => a.getAttribute('href'))).toContain('/inbox');
+  });
+
+  it('tier 1 with cards: the guess buttons still show above the cards', async () => {
+    mockConfig.termi = { enabled: true, embed: true, llm: false };
+    stubFetch({ router: 503, items: ITEMS });
+    const view = renderWindow();
+    await type(view, 'hab ich neue nachrichten?');
+    await waitFor(() => expect(view.getAllByTestId('termi-card-resource')).toHaveLength(2));
+    const box = view.getByTestId('termi-answer-actions');
+    expect(view.getByText(m.termi_route_maybe(), { exact: false })).toBeTruthy();
+    expect([...box.querySelectorAll('a')].map((a) => a.getAttribute('href'))).toContain('/inbox');
+  });
+
+  it('tier 2 with a text answer: the guess buttons show under it', async () => {
+    mockConfig.termi = { enabled: true, embed: true, llm: true };
+    stubFetch({
+      router: [{ skill: 'inbox', score: 0.75 }],
+      chat: () =>
+        createUIMessageStreamResponse({
+          stream: createUIMessageStream({
+            execute: ({ writer }) => {
+              writer.write({ type: 'text-start', id: 't1' });
+              writer.write({ type: 'text-delta', id: 't1', delta: 'Nachrichten findest du …' });
+              writer.write({ type: 'text-end', id: 't1' });
+            }
+          })
+        })
+    });
+    const view = renderWindow();
+    await type(view, 'hab ich neue nachrichten?');
+    await waitFor(() => view.getByText('Nachrichten findest du …'));
+    const box = await waitFor(() => view.getByTestId('termi-answer-actions'));
+    expect(view.getByText(m.termi_route_maybe(), { exact: false })).toBeTruthy();
     expect([...box.querySelectorAll('a')].map((a) => a.getAttribute('href'))).toContain('/inbox');
   });
 });

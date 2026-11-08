@@ -321,7 +321,6 @@
     if (assistant) {
       if (chatBusy) return;
       input = '';
-      guessSkills = []; // a follow-up was never routed
       talk((chat) => chat.sendMessage({ text: q.trim() }));
       return;
     }
@@ -412,6 +411,12 @@
     searchPartsOf(msg).length > 0 ||
     searchFailed(msg) ||
     emptyAnswer(msg);
+  // The router's guesses belong to the answer to the routed question; follow-ups were never routed.
+  const firstAssistantId = $derived(
+    assistant?.chat.messages.find((x) => x.role === 'assistant')?.id
+  );
+  /** @param {any} msg */
+  const guessesFor = (msg) => (msg.id === firstAssistantId ? guessSkills : []);
   // Only the latest answer can be regenerated.
   const lastAssistantId = $derived(
     assistant?.chat.messages.findLast((x) => x.role === 'assistant')?.id
@@ -464,7 +469,6 @@
   let rescue = $state.raw(null);
 
   /** The router's weak navigate/create/help matches for the routed sentence ("Meinst du …?"). */
-  // shortcut: one set for the whole chat — an empty tier-2 answer's guess buttons drop to the plain fallback once a follow-up is sent; store per message id if that matters.
   let guessSkills = $state.raw(
     /** @type {import('$lib/helpers/termi-skills.js').TermiSkill[]} */ ([])
   );
@@ -589,7 +593,7 @@
    * @param {Awaited<ReturnType<typeof searchContent>>} result
    * @param {string} text the question, for "Erneut versuchen" and "Alle anzeigen"
    * @param {string[]} [authors] set for "Material von …": no topic, no "Alle anzeigen"
-   * @param {import('$lib/helpers/termi-skills.js').TermiSkill[]} [guesses] the router's guesses, for an empty answer
+   * @param {import('$lib/helpers/termi-skills.js').TermiSkill[]} [guesses] the router's guesses ("Meinst du …?")
    * @returns {ChatMessage}
    */
   function contentReply({ items, sourcesUnavailable }, text, authors, guesses) {
@@ -597,7 +601,16 @@
     const kept = items.filter(keepItem);
     if (kept.length === 0) return { ...fallbackReply(guesses), sourcesUnavailable, retry };
     const query = authors ? '' : extractQuery(text, getLocale() === 'en' ? 'en' : 'de');
-    return { role: 'bot', text: m.termi_route_go(), items: kept, sourcesUnavailable, retry, query };
+    const actions = guessActions(guesses);
+    return {
+      role: 'bot',
+      text: actions.length ? m.termi_route_maybe() : m.termi_route_go(),
+      ...(actions.length ? { actions } : {}),
+      items: kept,
+      sourcesUnavailable,
+      retry,
+      query
+    };
   }
 
   /** Tier 1 again (retry, "Material von …"), outside the router. @param {string} text @param {string[]} [authors] */
@@ -634,13 +647,7 @@
     const home = TERMI_SKILLS.find((s) => s.id === 'home');
     const help = TERMI_SKILLS.find((s) => s.id === 'help.1');
     const types = runtimeConfig.discover?.contentTypes ?? [];
-    const ctx = skillCtx(getActiveUser()?.pubkey);
-    const guessed = /** @type {TermiAction[]} */ (
-      guesses
-        .filter((s) => s.id !== 'home')
-        .map((s) => skillAction(s, ctx))
-        .filter(Boolean)
-    );
+    const guessed = guessActions(guesses);
     /** @type {Array<TermiAction | null>} */
     const list = [
       ...guessed,
@@ -660,9 +667,24 @@
     ];
     return {
       role: 'bot',
-      text: `${m.termi_fallback()} ${guessed.length ? m.termi_route_maybe() : m.termi_route_fallback_actions()}`,
+      text: `${m.termi_nothing_found()} ${guessed.length ? m.termi_route_maybe() : m.termi_route_fallback_actions()}`,
       actions: /** @type {TermiAction[]} */ (list.filter(Boolean))
     };
+  }
+
+  /**
+   * The router's guesses as buttons; home is left to the fallback's own home button.
+   * @param {import('$lib/helpers/termi-skills.js').TermiSkill[]} [guesses]
+   * @returns {TermiAction[]}
+   */
+  function guessActions(guesses = []) {
+    const ctx = skillCtx(getActiveUser()?.pubkey);
+    return /** @type {TermiAction[]} */ (
+      guesses
+        .filter((s) => s.id !== 'home')
+        .map((s) => skillAction(s, ctx))
+        .filter(Boolean)
+    );
   }
 
   /** @param {string} [pubkey] */
@@ -964,8 +986,16 @@
                   </a>
                 </div>
               {:else if emptyAnswer(msg)}
-                {@const reply = fallbackReply(guessSkills)}
+                {@const reply = fallbackReply(guessesFor(msg))}
                 <TermiAnswer text={reply.text} actions={reply.actions ?? []} />
+              {/if}
+              {#if !emptyAnswer(msg) && !lastStreaming(msg) && guessesFor(msg).length > 0}
+                {@const guessed = guessActions(guessesFor(msg))}
+                {#if guessed.length > 0}
+                  <div class="mt-2">
+                    <TermiAnswer text={m.termi_route_maybe()} actions={guessed} />
+                  </div>
+                {/if}
               {/if}
             </div>
           </div>
