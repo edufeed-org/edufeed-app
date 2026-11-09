@@ -29,7 +29,7 @@ vi.mock('$lib/services/publish-service.js', () => ({
   publishEventOptimistic: vi.fn((...args) => {
     _lastPublishCall = args;
   }),
-  publishEvent: vi.fn(async () => ({ success: true }))
+  publishEvent: vi.fn(async () => ({ success: true, acceptedRelays: ['wss://write.relay/'] }))
 }));
 
 vi.mock('$lib/helpers/protected-publish-feedback.js', () => ({
@@ -137,6 +137,10 @@ describe('createArticle', () => {
     expect(pub).toHaveBeenCalledTimes(1);
     expect(publishEventOptimistic).not.toHaveBeenCalled();
     expect(result.naddr).toBe('naddr1test');
+    // the hint is the relay that accepted, not the (refusing) configured longform relay
+    const hints = /** @type {any} */ (encodeEventToNaddr).mock.calls.at(-1)[1];
+    expect(hints).toEqual(['wss://write.relay/']);
+    expect(hints).not.toContain('wss://longform.relay');
     pub.mockResolvedValueOnce({ success: false });
     await expect(
       createArticle({ title: 'T', content: 'body' }, undefined, null, { awaitPublish: true })

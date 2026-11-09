@@ -226,7 +226,7 @@
           // the player reads only the naddr's hints: never leave it without one
           encodeEventToNaddr(
             event,
-            getSeenRelays(event)?.size ? [] : getArticleRelays().slice(0, 1)
+            getSeenRelays(event)?.size ? [] : getArticleRelays().slice(0, 3)
           )
         )}
         target="_blank"

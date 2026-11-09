@@ -223,13 +223,23 @@ describe('the export starts at the document', () => {
     );
     expect(documentMarkdown(`${NOTES}Nur Text.`, [], 'de')).toBe(`${NOTES.trim()}\n\nNur Text.`);
   });
+  it('a code block with a # line is no document start; a long opening is kept', () => {
+    const code = 'So geht es:\n\n```bash\n# x\necho 1\n```\n\nFertig.';
+    expect(documentMarkdown(code, [], 'de')).toBe(code);
+    const long = `${'Langer Vorlauf. '.repeat(30)}\n\n# Titel\n\nText`;
+    expect(documentMarkdown(long, [], 'de')).toBe(long.trim());
+  });
 });
 
 describe('citedItems', () => {
   /** @type {Item[]} */
   const FOUND = [
     { type: 'resource', id: '1', title: 'Aktivierende Lehrmethoden in der Hochschule' },
-    { type: 'passage', id: '2', title: 'Think-Pair-Share – Methodenkoffer der Universität Kassel' },
+    {
+      type: 'resource',
+      id: '2',
+      title: 'Think-Pair-Share – Methodenkoffer der Universität Kassel'
+    },
     { type: 'resource', id: '3', title: 'Cyclobutan (Molekül, 3D-Modell)' },
     { type: 'resource', id: '4', title: 'Taylorpolynom zweiten Grades' }
   ];
@@ -250,5 +260,37 @@ describe('citedItems', () => {
   });
   it('nothing cited: all sources stay', () => {
     expect(citedItems('# T\n\nText', FOUND)).toEqual(FOUND);
+  });
+  it('passages and untitled items always stay', () => {
+    /** @type {Item[]} */
+    const items = [
+      { type: 'passage', id: 'p', title: 'Irgendein Abschnitt' },
+      { type: 'resource', id: 'u', title: '' },
+      ...FOUND
+    ];
+    expect(citedItems(TEXT, items).map((i) => i.id)).toEqual(['p', 'u', '1', '2']);
+  });
+  it('»…« quotes match the description too', () => {
+    /** @type {Item[]} */
+    const items = [
+      {
+        type: 'resource',
+        id: 'd',
+        title: 'Sammlung 7',
+        description: 'Methode Gruppenpuzzle für große Kurse'
+      },
+      FOUND[2]
+    ];
+    expect(
+      citedItems('Das »Gruppenpuzzle für große Kurse« hilft.', items).map((i) => i.id)
+    ).toEqual(['d']);
+  });
+  it('dashes are one dash', () => {
+    const items = [FOUND[1], FOUND[3]];
+    expect(
+      citedItems('Siehe Think-Pair-Share — Methodenkoffer der Universität Kassel.', items).map(
+        (i) => i.id
+      )
+    ).toEqual(['2']);
   });
 });

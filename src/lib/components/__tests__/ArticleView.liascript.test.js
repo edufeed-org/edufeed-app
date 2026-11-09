@@ -79,12 +79,12 @@ describe('ArticleView LiaScript link', () => {
     const href = link.getAttribute('href') ?? '';
     const prefix = 'https://liascript.github.io/course/?nostr:';
     expect(href.startsWith(prefix)).toBe(true);
-    // no seen relay: the first longform relay is the hint
+    // no seen relay: the longform relays are the hints
     expect(nip19.decode(href.slice(prefix.length)).data).toEqual({
       kind,
       pubkey: OWNER,
       identifier: 'kurs',
-      relays: ['wss://relay.edufeed.org/']
+      relays: ['wss://relay.edufeed.org/', 'wss://other.example/']
     });
     expect(link.textContent?.trim()).toBe(m.termi_liascript_open());
     expect(link.target).toBe('_blank');

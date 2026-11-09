@@ -1613,7 +1613,11 @@
         {#if draftOf(msg)}
           <p class="mt-1 text-xs" data-testid="termi-doc-draft-saved">
             {m.termi_doc_draft_saved()}
-            <a href={resolve(`/${draftOf(msg)}`)} class="link">{m.termi_doc_draft_edit()}</a>
+            <a
+              href={resolve('/create/article') + `?edit=${draftOf(msg)}`}
+              onclick={onClose}
+              class="link">{m.termi_doc_draft_edit()}</a
+            >
           </p>
         {:else if liaState[text] === 'failed'}
           <p class="mt-1 text-xs text-error" data-testid="termi-doc-draft-failed">

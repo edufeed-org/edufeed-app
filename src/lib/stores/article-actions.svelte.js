@@ -196,6 +196,11 @@ export async function createArticle(
     const result = await publishEvent(articleEvent, pTagPubkeys(articleEvent), { communityEvent });
     if (!result.success) throw new Error('publish_failed');
     cachePublishedEvent(articleEvent, result);
+    // hints only where it IS: a reader (LiaScript) asks exactly these relays
+    return {
+      event: articleEvent,
+      naddr: encodeEventToNaddr(articleEvent, result.acceptedRelays.slice(0, 3))
+    };
   } else {
     publishEventOptimistic(articleEvent, pTagPubkeys(articleEvent), {
       communityEvent,

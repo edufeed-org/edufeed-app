@@ -635,7 +635,7 @@ describe('TermiChatWindow history', () => {
       await waitFor(() => view.getByTestId('termi-doc-draft-saved'));
       expect(
         view.getByTestId('termi-doc-draft-saved').querySelector('a')?.getAttribute('href')
-      ).toBe(`/${NADDR}`);
+      ).toBe(`/create/article?edit=${NADDR}`);
       await fireEvent.click(view.getByTestId('termi-doc-liascript'));
       expect(createArticle).not.toHaveBeenCalled();
       expect(window.open).toHaveBeenCalledWith(COURSE, '_blank', 'noopener');

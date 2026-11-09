@@ -593,7 +593,8 @@ describe('TermiChatWindow assistant mode', () => {
 
       it('saves the document as an unlisted draft once, then opens it from Nostr', async () => {
         createArticle.mockResolvedValue({ naddr: 'naddr1draft' });
-        const view = await docView();
+        const onClose = vi.fn();
+        const view = await docView(onClose);
         const button = view.getByTestId('termi-doc-liascript');
         expect(button.textContent?.trim()).toBe(m.termi_doc_liascript());
         await fireEvent.click(button);
@@ -614,12 +615,17 @@ describe('TermiChatWindow assistant mode', () => {
         expect(tab.opener).toBeNull();
         expect(tab.location.href).toBe(COURSE);
         const edit = view.getByTestId('termi-doc-draft-saved').querySelector('a');
-        expect(edit?.getAttribute('href')).toBe('/naddr1draft');
+        expect(edit?.getAttribute('href')).toBe('/create/article?edit=naddr1draft');
         expect(edit?.textContent?.trim()).toBe(m.termi_doc_draft_edit());
 
         await fireEvent.click(view.getByTestId('termi-doc-liascript'));
         expect(createArticle).toHaveBeenCalledTimes(1);
         expect(window.open).toHaveBeenLastCalledWith(COURSE, '_blank', 'noopener');
+
+        // the editor link opens the editor and closes Termi, like the article-draft action
+        edit?.addEventListener('click', (e) => e.preventDefault()); // jsdom: no navigation
+        await fireEvent.click(/** @type {HTMLAnchorElement} */ (edit));
+        expect(onClose).toHaveBeenCalled();
       });
 
       it('busy until a relay accepted the draft; the tab waits on about:blank', async () => {

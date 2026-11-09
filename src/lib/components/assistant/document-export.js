@@ -104,25 +104,36 @@ function fillAuthor(text, author) {
 const fromDocumentStart = (text) => {
   const t = (text ?? '').trim();
   const start = t.search(/^(?:<!--|#[ \t])/m);
-  return start > 0 ? t.slice(start) : t;
+  // only a short opening note, never a `# ` line inside a code block
+  const note = start > 0 && start <= 400 && !t.slice(0, start).includes('```');
+  return note ? t.slice(start) : t;
 };
 
 /** @param {string} s */
-const norm = (s) => s.toLowerCase().replace(/\s+/g, ' ').trim();
+const norm = (s) => s.toLowerCase().replace(/[–—]/g, '-').replace(/\s+/g, ' ').trim();
 
 /**
- * Attribution covers what the text used: an item whose title (first 40
- * characters) appears in it, or whose title holds a phrase the text quotes
- * („…“ / "…"). Nothing matched: all of them, so sources never vanish.
+ * Attribution covers what the text used: passages (the evidence), items
+ * without a title (nothing to judge), an item whose title (first 40
+ * characters) appears in the text, or whose title or description holds a
+ * phrase the text quotes („…“ "…" »…«). Nothing kept: all of them, so
+ * sources never vanish.
  * @param {string} text @param {Item[]} items
  */
 export function citedItems(text, items) {
   const body = norm(text ?? '');
-  const quotes = [...(text ?? '').matchAll(/[„"“]([^„"“”]{8,}?)[“”"]/g)].map((q) => norm(q[1]));
+  const quotes = [...(text ?? '').matchAll(/[„"“»«]([^„"“”»«]{8,}?)[“”"«»]/g)].map((q) =>
+    norm(q[1])
+  );
   const cited = items.filter((i) => {
     const title = norm(i.title ?? '');
-    if (!title) return false;
-    return body.includes(title.slice(0, 40)) || quotes.some((q) => title.includes(q));
+    const description = norm(i.description ?? '');
+    return (
+      i.type === 'passage' ||
+      !title ||
+      body.includes(title.slice(0, 40)) ||
+      quotes.some((q) => title.includes(q) || description.includes(q))
+    );
   });
   return cited.length ? cited : items;
 }
