@@ -26,6 +26,7 @@
   import { localToday } from './termi-chat-request.js';
   import TermiAnswer from './TermiAnswer.svelte';
   import ItemCards from './cards/ItemCards.svelte';
+  import { unique } from '$lib/helpers/unique.js';
   import ImportPreviewCard from './import/ImportPreviewCard.svelte';
   import { keepItem } from './cards/filter.js';
   import { goto } from '$app/navigation';
@@ -431,6 +432,19 @@
     msg.parts.filter(
       (/** @type {any} */ p) => isKnowledgePart(p) && p.state === 'output-available'
     );
+  // All knowledge tool outputs of one answer as ONE card list: the model often calls
+  // several tools for one question; ItemCards dedupes the items by type:id.
+  /** @param {any} msg */
+  const searchOf = (msg) => {
+    const parts = searchPartsOf(msg);
+    return {
+      items: parts.flatMap((/** @type {any} */ p) => p.output?.items ?? []),
+      sourcesUnavailable: unique(
+        parts.flatMap((/** @type {any} */ p) => p.output?.sourcesUnavailable ?? [])
+      ),
+      query: String(parts[0]?.input?.query ?? '')
+    };
+  };
   // show_pages is not a knowledge tool: never counts toward emptyAnswer/searchFailed.
   /** @param {any} p */
   const isShowPagesPart = (p) =>
@@ -725,9 +739,11 @@
       toTier1Message({
         ...t,
         items: outputs.flatMap((o) => o.items ?? []),
-        sourcesUnavailable: outputs.flatMap((o) => o.sourcesUnavailable ?? [])
+        sourcesUnavailable: unique(outputs.flatMap((o) => o.sourcesUnavailable ?? []))
       })
     );
+    const query = /** @type {any} */ (t.toolParts.find((p) => p.output?.items)?.input)?.query;
+    if (typeof query === 'string') msg.query = query;
     return actions.length ? { ...msg, actions } : msg;
   }
 
@@ -1534,17 +1550,18 @@
                 {#if pageActionsOf(msg).length > 0}
                   <TermiAnswer text="" actions={pageActionsOf(msg)} />
                 {/if}
-                {#each searchPartsOf(msg) as part (part.toolCallId)}
+                {#if searchPartsOf(msg).length > 0}
+                  {@const search = searchOf(msg)}
                   <ItemCards
-                    items={part.output?.items ?? []}
-                    sourcesUnavailable={part.output?.sourcesUnavailable ?? []}
-                    query={String(part.input?.query ?? '')}
+                    items={search.items}
+                    sourcesUnavailable={search.sourcesUnavailable}
+                    query={search.query}
                     onRetry={msg.id === lastAssistantId
                       ? () => talk((chat) => chat.regenerate())
                       : undefined}
                     onSearchAuthor={searchAuthor}
                   />
-                {/each}
+                {/if}
                 {#if !emptyAnswer(msg) && !lastStreaming(msg) && pageActionsOf(msg).length === 0 && guessesFor(msg, true).length > 0}
                   {@const guessed = guessActions(guessesFor(msg, true))}
                   {#if guessed.length > 0}

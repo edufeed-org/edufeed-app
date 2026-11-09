@@ -65,28 +65,35 @@ const ITEMS = [
   { type: 'resource', id: '30142:pk:2', title: 'Bruchrechnen üben', href: '/naddr1two' }
 ];
 
-/** A finished assistant turn: a search_content call plus a text answer. */
+/**
+ * A finished assistant turn: knowledge tool calls (default one search_content) plus a text answer.
+ * @param {{ toolName?: string, text?: string, sourcesUnavailable?: string[],
+ *   calls?: Array<{ toolName: string, items: any[], sourcesUnavailable: string[] }> }} [opts]
+ */
 function streamAnswer({
   toolName = 'search_content',
   text = 'Hier sind Treffer.',
-  sourcesUnavailable = /** @type {string[]} */ ([])
+  sourcesUnavailable = /** @type {string[]} */ ([]),
+  calls = [{ toolName, items: ITEMS, sourcesUnavailable }]
 } = {}) {
   return createUIMessageStreamResponse({
     stream: createUIMessageStream({
       execute: ({ writer }) => {
-        writer.write({ type: 'start-step' });
-        writer.write({
-          type: 'tool-input-available',
-          toolCallId: 'c1',
-          toolName,
-          input: { query: 'Brüche' }
+        calls.forEach((call, i) => {
+          writer.write({ type: 'start-step' });
+          writer.write({
+            type: 'tool-input-available',
+            toolCallId: `c${i + 1}`,
+            toolName: call.toolName,
+            input: { query: i === 0 ? 'Brüche' : `Brüche ${i}` }
+          });
+          writer.write({
+            type: 'tool-output-available',
+            toolCallId: `c${i + 1}`,
+            output: { items: call.items, sourcesUnavailable: call.sourcesUnavailable }
+          });
+          writer.write({ type: 'finish-step' });
         });
-        writer.write({
-          type: 'tool-output-available',
-          toolCallId: 'c1',
-          output: { items: ITEMS, sourcesUnavailable }
-        });
-        writer.write({ type: 'finish-step' });
         writer.write({ type: 'text-start', id: 't1' });
         writer.write({ type: 'text-delta', id: 't1', delta: text });
         writer.write({ type: 'text-end', id: 't1' });
@@ -238,6 +245,44 @@ describe('TermiChatWindow assistant mode', () => {
     expect(all[0].closest('a')?.getAttribute('href')).toBe(
       '/discover?type=learning&search=Br%C3%BCche'
     );
+  });
+
+  it('several knowledge tool calls in one answer render each card once, one fold row', async () => {
+    const more = [3, 4, 5, 6, 7].map((n) => ({
+      type: 'resource',
+      id: `30142:pk:${n}`,
+      title: `Treffer ${n}`,
+      href: `/naddr1x${n}`
+    }));
+    stubFetch(() =>
+      streamAnswer({
+        calls: [
+          {
+            toolName: 'search_content',
+            items: [...ITEMS, ...more.slice(0, 2)],
+            sourcesUnavailable: []
+          },
+          {
+            toolName: 'search_resources',
+            items: [ITEMS[1], ...more],
+            sourcesUnavailable: ['search_events']
+          },
+          { toolName: 'search_passages', items: [ITEMS[0]], sourcesUnavailable: ['search_events'] }
+        ]
+      })
+    );
+    const view = renderWindow();
+    await type(view, 'Finde Materialien zu Brüchen');
+    await waitFor(() => view.getByText('Hier sind Treffer.'));
+    // 7 distinct items, folded at 6: each title once, one "more" row, one sources note.
+    expect(view.getAllByTestId('termi-card-resource')).toHaveLength(6);
+    expect(view.getAllByText('Brüche verstehen')).toHaveLength(1);
+    expect(view.getAllByText(m.termi_cards_more({ n: 4 }))).toHaveLength(1);
+    expect(view.getAllByText(m.termi_sources_events())).toHaveLength(1);
+    // "Alle anzeigen" uses the first tool call's query.
+    expect(
+      view.getAllByText(m.termi_card_all({ type: m.discover_tab_learning(), topic: 'Brüche' }))
+    ).toHaveLength(1);
   });
 
   it('other tool parts render nothing', async () => {
