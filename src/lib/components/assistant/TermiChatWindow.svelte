@@ -1660,7 +1660,7 @@
               >
                 {#if textOf(msg)}
                   {@render markdownAnswer(textOf(msg))}
-                  {#if !lastStreaming(msg) && isDocumentAnswer(textOf(msg))}
+                  {#if !lastStreaming(msg) && isDocumentAnswer(textOf(msg)) && !(/** @type {any} */ (msg.metadata)?.sourcesLost)}
                     {@render docActions(textOf(msg), searchOf(msg).items)}
                   {/if}
                 {:else if searchFailed(msg)}

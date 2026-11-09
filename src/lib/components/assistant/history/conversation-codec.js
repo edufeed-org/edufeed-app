@@ -154,7 +154,14 @@ export function fromUIMessage(msg) {
     }));
   const role = msg.role === 'user' ? 'user' : 'assistant';
   return /** @type {Turn} */ (
-    compact({ role, text, tier: 2, toolParts: toolParts.length ? toolParts : undefined })
+    compact({
+      role,
+      text,
+      tier: 2,
+      toolParts: toolParts.length ? toolParts : undefined,
+      // a capped turn carried back into a running chat stays capped when re-saved
+      sourcesLost: msg.metadata?.sourcesLost || undefined
+    })
   );
 }
 
@@ -163,7 +170,8 @@ export function toUIMessage(turn, id) {
   return {
     id,
     role: turn.role,
-    parts: [...(turn.toolParts ?? []), ...(turn.text ? [{ type: 'text', text: turn.text }] : [])]
+    parts: [...(turn.toolParts ?? []), ...(turn.text ? [{ type: 'text', text: turn.text }] : [])],
+    ...(turn.sourcesLost ? { metadata: { sourcesLost: true } } : {})
   };
 }
 
