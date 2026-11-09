@@ -12,6 +12,9 @@ import {
 
 const words = (/** @type {number} */ n) => Array.from({ length: n }, () => 'Wort').join(' ');
 
+/** @typedef {import('$lib/server/termi/items.js').Item} Item */
+
+/** @type {Item[]} */
 const ITEMS = [
   {
     type: 'resource',
@@ -67,7 +70,7 @@ describe('buildSourcesSection', () => {
     expect(out).toBe('## Sources and licences\n\n- Ohne Link, licence not stated');
   });
   it('passages of one resource collapse into one line', () => {
-    const p = { type: 'passage', title: 'T', sourceUrl: 'https://x.org/' };
+    const p = /** @type {const} */ ({ type: 'passage', title: 'T', sourceUrl: 'https://x.org/' });
     expect(
       buildSourcesSection(
         [

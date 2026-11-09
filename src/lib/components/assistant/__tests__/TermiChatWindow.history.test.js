@@ -468,6 +468,27 @@ describe('TermiChatWindow history', () => {
     expect(answer.querySelector('a')).toBeNull();
   });
 
+  it('a restored document answer offers copy + download, the article draft only when logged in', async () => {
+    user.current = null;
+    fake.store = makeStore({
+      id: 'c5',
+      title: 'Doc',
+      createdAt: 1,
+      updatedAt: 1,
+      turns: [
+        { role: 'user', text: 'Fasse zusammen', tier: 2 },
+        { role: 'assistant', text: '# Titel\n\nText.', tier: 2 }
+      ]
+    });
+    const view = renderWindow();
+    await openStored(view);
+    const box = await waitFor(() => view.getByTestId('termi-doc-actions'));
+    expect([...box.querySelectorAll('button')].map((b) => b.dataset.testid)).toEqual([
+      'termi-doc-copy',
+      'termi-doc-download'
+    ]);
+  });
+
   it('a tier-1 answer arriving after an account switch is dropped, not recorded', async () => {
     /** @type {(r: Response) => void} */
     let answer = () => {};

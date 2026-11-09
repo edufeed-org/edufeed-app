@@ -30,6 +30,13 @@
   import { renderMarkdown } from '$lib/helpers/markdown.js';
   import ImportPreviewCard from './import/ImportPreviewCard.svelte';
   import { keepItem } from './cards/filter.js';
+  import {
+    isDocumentAnswer,
+    documentMarkdown,
+    documentTitle,
+    documentFilename,
+    stashArticlePrefill
+  } from './document-export.js';
   import { goto } from '$app/navigation';
   import { resolve } from '$app/paths';
   import { nip19 } from 'nostr-tools';
@@ -395,6 +402,7 @@
   $effect(() => () => {
     destroyed = true;
     clearTimeout(replyTimer);
+    clearTimeout(copiedTimer);
     assistant?.chat.stop();
   });
 
@@ -470,6 +478,41 @@
   };
   /** @param {any} msg */
   const lastStreaming = (msg) => chatBusy && assistant?.chat.messages.at(-1)?.id === msg.id;
+
+  // Document mode: a long answer can be copied, downloaded or opened as an article draft.
+  /** The document text last copied (its button reads "Kopiert" for 2 s). */
+  let copiedDoc = $state('');
+  /** @type {ReturnType<typeof setTimeout> | undefined} */
+  let copiedTimer;
+  /** @param {string} text @param {Array<import('$lib/server/termi/items.js').Item>} items */
+  async function copyDocument(text, items) {
+    await navigator.clipboard.writeText(documentMarkdown(text, items, getLocale()));
+    copiedDoc = text;
+    clearTimeout(copiedTimer);
+    copiedTimer = setTimeout(() => (copiedDoc = ''), 2000);
+  }
+  /** @param {string} text @param {Array<import('$lib/server/termi/items.js').Item>} items */
+  function downloadDocument(text, items) {
+    const url = URL.createObjectURL(
+      new Blob([documentMarkdown(text, items, getLocale())], {
+        type: 'text/markdown;charset=utf-8'
+      })
+    );
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = documentFilename(text);
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+  /** @param {string} text @param {Array<import('$lib/server/termi/items.js').Item>} items */
+  function openAsArticle(text, items) {
+    stashArticlePrefill({
+      title: documentTitle(text),
+      content: documentMarkdown(text, items, getLocale())
+    });
+    goto(resolve('/create/article') + '?prefill=termi');
+    onClose();
+  }
   // A failed search with no model text to explain it gets a note of its own.
   /** @param {any} msg */
   const searchFailed = (msg) =>
@@ -1444,6 +1487,40 @@
         </div>
       {/snippet}
 
+      {#snippet docActions(
+        /** @type {string} */ text,
+        /** @type {Array<import('$lib/server/termi/items.js').Item>} */ items
+      )}
+        <div class="mt-2 flex flex-wrap gap-2" data-testid="termi-doc-actions">
+          <button
+            type="button"
+            class="btn btn-sm btn-primary"
+            data-testid="termi-doc-copy"
+            onclick={() => copyDocument(text, items)}
+          >
+            {copiedDoc === text ? m.termi_doc_copied() : m.termi_doc_copy()}
+          </button>
+          <button
+            type="button"
+            class="btn btn-sm btn-primary"
+            data-testid="termi-doc-download"
+            onclick={() => downloadDocument(text, items)}
+          >
+            {m.termi_doc_download()}
+          </button>
+          {#if getActiveUser()}
+            <button
+              type="button"
+              class="btn btn-sm btn-primary"
+              data-testid="termi-doc-article"
+              onclick={() => openAsArticle(text, items)}
+            >
+              {m.termi_doc_article()}
+            </button>
+          {/if}
+        </div>
+      {/snippet}
+
       {#snippet bubble(/** @type {ChatMessage} */ msg)}
         <div class="flex items-end gap-2.5 {msg.role === 'user' ? 'justify-end' : ''}">
           {#if msg.role === 'bot'}
@@ -1499,6 +1576,9 @@
               {/if}
             {:else if msg.markdown}
               {@render markdownAnswer(msg.text)}
+              {#if isDocumentAnswer(msg.text)}
+                {@render docActions(msg.text, msg.items ?? [])}
+              {/if}
               {#if msg.actions}
                 <TermiAnswer text="" actions={msg.actions} />
               {/if}
@@ -1552,6 +1632,9 @@
               >
                 {#if textOf(msg)}
                   {@render markdownAnswer(textOf(msg))}
+                  {#if !lastStreaming(msg) && isDocumentAnswer(textOf(msg))}
+                    {@render docActions(textOf(msg), searchOf(msg).items)}
+                  {/if}
                 {:else if searchFailed(msg)}
                   {m.termi_search_failed()}
                   <div class="mt-2">

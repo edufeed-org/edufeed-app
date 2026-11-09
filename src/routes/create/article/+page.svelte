@@ -25,6 +25,7 @@
   import { useUserProfile } from '$lib/stores/user-profile.svelte.js';
   import { getDisplayName } from 'applesauce-core/helpers';
   import { takeExport, exportTitle } from '$lib/webxdc/export-share.js';
+  import { takeArticlePrefill } from '$lib/components/assistant/document-export.js';
   import * as m from '$lib/paraglide/messages';
 
   /** @type {{ data: { communityPubkey: string, editNaddr: string, prefill: string } }} */
@@ -75,12 +76,19 @@
   );
   let attributionOpen = $state(false);
 
-  // Prefill from a channel app export (webxdc sendToChat → sessionStorage handoff).
+  // Prefill from a sessionStorage handoff: a channel app export (webxdc sendToChat) or Termi.
   if (data.prefill === 'webxdc') {
     const exported = takeExport();
     if (exported) {
       title = exportTitle(exported.name);
       editorContent = exported.plainText;
+    }
+  } else if (data.prefill === 'termi') {
+    // A Termi document answer ("Als Artikel-Entwurf öffnen"), sources section included.
+    const prefill = takeArticlePrefill();
+    if (prefill) {
+      title = prefill.title;
+      editorContent = prefill.content;
     }
   }
 

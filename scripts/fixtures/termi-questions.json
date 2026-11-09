@@ -247,5 +247,12 @@
     "locale": "de",
     "tier2Only": true,
     "expect": { "tools": ["search_events"] }
+  },
+  {
+    "id": "q11",
+    "text": "kannst du mir eine A4-seitige Zusammenfassung zum Thema Studierendenaktivierung zusammenstellen?",
+    "locale": "de",
+    "tier2Only": true,
+    "expect": { "tools": ["search_passages"], "match": "^# " }
   }
 ]

@@ -27,7 +27,8 @@
  * tools?: string[] }, variantOf?: string, mayBeUnavailable?: boolean,
  * tier2Only?: boolean }`. `tier2Only` (e.g. the show_pages case) skips tier 1,
  * which has no concept of a page answer; `expect.types` is then omitted and
- * `match` is checked against the raw tool output instead of item text.
+ * `match` is checked against the raw tool output and, separately, the model's
+ * answer text (so `^# ` tests a document answer's heading) instead of item text.
  * `variantOf` points at the base sentence's `id` (a paraphrase). `expect`:
  * - `types` — OR: the top 3 items must contain at least one item whose
  *   type is in this list (not all of them).
@@ -98,14 +99,14 @@ function normalizeItems(rawItems, toolName) {
 /**
  * @param {{ type: string, label: string, text: string }[]} top3
  * @param {{ types?: string[], match?: string }} expect
- * @param {string} [rawText] the tool outputs' raw JSON, for a tier2Only fixture with no items
+ * @param {string[]} [rawTexts] the tool outputs' raw JSON and the answer text, for a tier2Only fixture
  */
-function matchesExpect(top3, expect, rawText = '') {
+function matchesExpect(top3, expect, rawTexts = []) {
   const typeHit = !expect.types || top3.some((i) => expect.types.includes(i.type));
   const matchHit =
     !expect.match ||
     top3.some((i) => new RegExp(expect.match, 'i').test(i.text)) ||
-    new RegExp(expect.match, 'i').test(rawText);
+    rawTexts.some((t) => new RegExp(expect.match, 'i').test(t));
   return typeHit && matchHit;
 }
 
@@ -126,17 +127,26 @@ function sleep(ms) {
 
 /**
  * @param {string} label
- * @param {{ fixture: any, items: {type:string,label:string,text:string}[], toolsUsed: string[], unavailable: boolean, ms: number, sourcesUnavailable?: string[], rawText?: string }} r
+ * @param {{ fixture: any, items: {type:string,label:string,text:string}[], toolsUsed: string[], unavailable: boolean, ms: number, sourcesUnavailable?: string[], rawText?: string, answerText?: string }} r
  * @param {{ requireTools?: boolean }} [opts] tier 2 also checks `expect.tools`; tier 1 has no tool concept.
  */
 function printCase(label, r, { requireTools = false } = {}) {
-  const { fixture, items, toolsUsed, unavailable, ms, sourcesUnavailable = [], rawText = '' } = r;
+  const {
+    fixture,
+    items,
+    toolsUsed,
+    unavailable,
+    ms,
+    sourcesUnavailable = [],
+    rawText = '',
+    answerText = ''
+  } = r;
   const top3 = items.slice(0, 3);
   // rawText is a fallback for fixtures with no item concept (show_pages'
   // {ids}); a normal fixture must keep matching on the top-3 titles only.
   const hit =
     unavailable ||
-    (matchesExpect(top3, fixture.expect, fixture.tier2Only ? rawText : '') &&
+    (matchesExpect(top3, fixture.expect, fixture.tier2Only ? [rawText, answerText] : []) &&
       (!requireTools || toolsHit(toolsUsed, fixture.expect.tools)));
   console.log(`[${label}] ${fixture.id} "${fixture.text}"`);
   console.log(
@@ -254,6 +264,11 @@ async function runTier2Eval() {
       normalizeItems(itemsOf(c.output), toolNameByCallId.get(c.toolCallId))
     );
     const rawText = JSON.stringify(outputChunks.map((c) => c.output));
+    const answerText = chunks
+      .filter((c) => c.type === 'text-delta')
+      .map((c) => c.delta)
+      .join('')
+      .trim();
     const unavailable = Boolean(
       fixture.mayBeUnavailable && chunks.some((c) => c.type === 'tool-output-error')
     );
@@ -261,7 +276,7 @@ async function runTier2Eval() {
     if (
       printCase(
         'tier2',
-        { fixture, items, toolsUsed, unavailable, ms, rawText },
+        { fixture, items, toolsUsed, unavailable, ms, rawText, answerText },
         { requireTools: true }
       )
     ) {

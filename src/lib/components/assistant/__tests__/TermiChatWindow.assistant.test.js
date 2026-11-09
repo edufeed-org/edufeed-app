@@ -53,6 +53,8 @@ vi.mock('$app/navigation', () => ({ goto: vi.fn() }));
 vi.mock('$app/paths', () => ({ resolve: (/** @type {string} */ p) => p }));
 
 import TermiChatWindow from '../TermiChatWindow.svelte';
+import { goto } from '$app/navigation';
+import { takeArticlePrefill } from '../document-export.js';
 
 const ITEMS = [
   {
@@ -452,5 +454,80 @@ describe('TermiChatWindow assistant mode', () => {
     const log = view.getByRole('log');
     expect(log.getAttribute('aria-live')).toBe('polite');
     expect(view.queryByText(m.termi_static_notice())).toBeNull();
+  });
+
+  describe('document mode', () => {
+    const DOC = '# Titel\n\n## Abschnitt\n\nText.';
+    const SOURCES =
+      '## Quellen und Lizenzen\n\n' +
+      `- Brüche verstehen, CC BY 4.0, ${location.origin}/naddr1one\n` +
+      `- Bruchrechnen üben, Lizenz nicht angegeben, ${location.origin}/naddr1two`;
+    /** @param {() => void} [onClose] */
+    async function docView(onClose = () => {}) {
+      stubFetch(() => streamAnswer({ toolName: 'search_passages', text: DOC }));
+      const view = render(TermiChatWindow, {
+        props: {
+          onToggleExpand: () => {},
+          onClose,
+          hints: [],
+          openCount: 0,
+          runHint: vi.fn(),
+          customizeHint: vi.fn(),
+          dismissHint: vi.fn()
+        }
+      });
+      await type(view, 'Fasse Brüche auf einer A4-Seite zusammen');
+      await waitFor(() => view.getByTestId('termi-doc-actions'));
+      return view;
+    }
+
+    it('a short answer offers no document actions', async () => {
+      stubFetch(() => streamAnswer());
+      const view = renderWindow();
+      await type(view, 'Finde Materialien zu Brüchen');
+      await waitFor(() => view.getByText('Hier sind Treffer.'));
+      expect(view.queryByTestId('termi-doc-actions')).toBeNull();
+    });
+
+    it('copy writes the markdown plus the sources section, then reads "Kopiert"', async () => {
+      const writeText = vi.fn(async () => {});
+      vi.stubGlobal('navigator', { ...navigator, clipboard: { writeText } });
+      const view = await docView();
+      expect(view.getByTestId('termi-doc-actions').querySelectorAll('button')).toHaveLength(3);
+      await fireEvent.click(view.getByTestId('termi-doc-copy'));
+      expect(writeText).toHaveBeenCalledWith(`${DOC}\n\n${SOURCES}`);
+      await waitFor(() =>
+        expect(view.getByTestId('termi-doc-copy').textContent?.trim()).toBe(m.termi_doc_copied())
+      );
+    });
+
+    it('download saves termi-titel.md as text/markdown', async () => {
+      /** @type {Blob[]} */
+      const blobs = [];
+      URL.createObjectURL = vi.fn((/** @type {Blob} */ b) => (blobs.push(b), 'blob:x'));
+      URL.revokeObjectURL = vi.fn();
+      /** @type {string[]} */
+      const names = [];
+      const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(
+        /** @this {HTMLAnchorElement} */ function () {
+          names.push(this.download);
+        }
+      );
+      const view = await docView();
+      await fireEvent.click(view.getByTestId('termi-doc-download'));
+      expect(names).toEqual(['termi-titel.md']);
+      expect(blobs[0].type).toBe('text/markdown;charset=utf-8');
+      expect(await blobs[0].text()).toBe(`${DOC}\n\n${SOURCES}`);
+      click.mockRestore();
+    });
+
+    it('article draft stashes title + content, navigates and closes the window', async () => {
+      const onClose = vi.fn();
+      const view = await docView(onClose);
+      await fireEvent.click(view.getByTestId('termi-doc-article'));
+      expect(goto).toHaveBeenCalledWith('/create/article?prefill=termi');
+      expect(onClose).toHaveBeenCalled();
+      expect(takeArticlePrefill()).toEqual({ title: 'Titel', content: `${DOC}\n\n${SOURCES}` });
+    });
   });
 });
