@@ -10,31 +10,22 @@
  * limit: the gate plus the per-pubkey quota bound it, so no IP is kept. Upstream failures happen inside the
  * stream and surface as the error text `termi:upstream`. Never logs user text.
  */
-import path from 'node:path';
 import { json } from '@sveltejs/kit';
 import { env } from '$env/dynamic/private';
 import { convertToModelMessages, hasToolCall, stepCountIs, streamText } from 'ai';
-import { verifyNip98Header } from '$lib/server/nip98-verify.js';
 import { nopeMcpEnv } from '$lib/server/nopeMcpEnv.js';
 import { getNopeMcpToken } from '$lib/server/nopeMcpToken.js';
 import { createTermiModel, streamErrorMessage } from '$lib/server/termi/llm.js';
-import { createQuota } from '$lib/server/termi/quota.js';
 import { SYSTEM_PROMPTS } from '$lib/server/termi/prompts.js';
 import { buildTermiTools } from '$lib/server/termi/tools.js';
 import { parseSearchRelays } from '$lib/server/termi/knowledge-tools.js';
 import { compactHistory } from '$lib/server/termi/compact-history.js';
-import { getTermiEligibilityChecker } from '$lib/server/termi/eligibility.js';
+import { authorizeTermiRequest, termiQuota as quota } from '$lib/server/termi/authorize.js';
 
 const MAX_BODY_CHARS = 200_000;
 
-const quota = createQuota({
-  perUserDaily: 40,
-  globalMonthly: 2800,
-  stateFile: env.TERMI_STATE_DIR ? path.join(env.TERMI_STATE_DIR, 'termi-quota.json') : undefined
-});
-
 /** @type {import('@sveltejs/kit').RequestHandler} */
-export async function POST({ request, url }) {
+export async function POST({ request }) {
   const model = createTermiModel(env);
   const mcpUrl = nopeMcpEnv(env, 'URL');
   if (!model || !mcpUrl) return json({ error: 'termi_llm_disabled' }, { status: 503 });
@@ -44,17 +35,9 @@ export async function POST({ request, url }) {
   if (!rawBody) return json({ error: 'invalid_json' }, { status: 400 });
   if (rawBody.length > MAX_BODY_CHARS) return json({ error: 'too_large' }, { status: 413 });
 
-  const pubkey = await verifyNip98Header(
-    request.headers.get('authorization'),
-    url.toString(),
-    'POST',
-    rawBody
-  );
-  if (!pubkey) return json({ error: 'Unauthorized' }, { status: 401 });
-
-  const eligible = await getTermiEligibilityChecker().isEligible(pubkey);
-  if (eligible === false) return json({ error: 'not_eligible' }, { status: 403 });
-  if (eligible === null) return json({ error: 'eligibility_unknown' }, { status: 503 });
+  const auth = await authorizeTermiRequest(request, rawBody);
+  if (auth instanceof Response) return auth;
+  const { pubkey } = auth;
 
   /** @type {{ task?: unknown, messages?: unknown }} */
   let body;
@@ -93,9 +76,6 @@ export async function POST({ request, url }) {
   } catch {
     return json({ error: 'invalid_messages' }, { status: 400 });
   }
-
-  const scope = quota.check(pubkey);
-  if (scope !== 'ok') return json({ error: 'quota', scope }, { status: 429 });
 
   const result = streamText({
     model,
