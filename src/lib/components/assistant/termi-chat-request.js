@@ -8,9 +8,16 @@ import { rejectAfter } from '$lib/helpers/signer-wait.js';
 
 const SIGN_TIMEOUT_MS = 30_000;
 
+/** The browser's local date as YYYY-MM-DD. */
+export function localToday() {
+  const d = new Date();
+  const pad = (/** @type {number} */ n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
 /**
  * @param {{
- *   body: { task: string, messages: unknown[] },
+ *   body: { task: string, messages: unknown[], today?: string, tz?: string },
  *   user: { pubkey: string, signer: { signEvent: (draft: any) => Promise<any> } },
  *   url: string
  * }} opts

@@ -5,7 +5,7 @@
  */
 import { Chat } from '@ai-sdk/svelte';
 import { DefaultChatTransport } from 'ai';
-import { buildSignedChatRequest } from './termi-chat-request.js';
+import { buildSignedChatRequest, localToday } from './termi-chat-request.js';
 
 /** A non-stream answer the window handles itself (429 quota, 403 not eligible, 503 off). */
 export class TermiChatHttpError extends Error {
@@ -35,8 +35,20 @@ export function createTermiChat({
   const transport = new DefaultChatTransport({
     api: '/api/termi/chat',
     // A string body on purpose (typed `object`): see `fetch` below.
+    // today/tz: the model resolves "nächste Woche" against the user's own date.
     prepareSendMessagesRequest: ({ messages }) =>
-      /** @type {Promise<any>} */ (buildSignedChatRequest({ body: { task, messages }, user, url })),
+      /** @type {Promise<any>} */ (
+        buildSignedChatRequest({
+          body: {
+            task,
+            messages,
+            today: localToday(),
+            tz: Intl.DateTimeFormat().resolvedOptions().timeZone
+          },
+          user,
+          url
+        })
+      ),
     // The transport JSON.stringifies the prepared body; unwrap it so the
     // signed string goes out byte for byte.
     fetch: async (input, init) => {

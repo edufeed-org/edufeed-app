@@ -71,9 +71,10 @@ function showPagesTool() {
 }
 
 /**
- * @param {{ mcpUrl: string, getToken: () => Promise<string>, callTool?: typeof callNopeMcpTool, relays?: string[], now?: () => number }} deps
+ * @param {{ mcpUrl: string, getToken: () => Promise<string>, callTool?: typeof callNopeMcpTool, relays?: string[], now?: () => number, tz?: string }} deps
+ *   tz = the user's IANA zone (validated by the route) for search_events from/to
  */
-function buildAskTools({ mcpUrl, getToken, callTool = callNopeMcpTool, relays, now }) {
+function buildAskTools({ mcpUrl, getToken, callTool = callNopeMcpTool, relays, now, tz }) {
   const call = nopeMcpCaller({ mcpUrl, getToken, callTool });
   const k = createKnowledgeTools({ callTool: call, relays, now });
   const query = { type: 'string', description: 'Suchbegriffe (nur das Thema)' };
@@ -124,9 +125,11 @@ function buildAskTools({ mcpUrl, getToken, callTool = callNopeMcpTool, relays, n
       }
     ),
     search_events: knowledgeTool(
-      'Sucht kommende Veranstaltungen (Fortbildungen, Workshops, Tagungen) im Edufeed-Kalender.',
+      'Sucht kommende Veranstaltungen (Fortbildungen, Workshops, Tagungen) im Edufeed-Kalender. Für Fragen mit Zeitbezug (nächste Woche, im Dezember) immer from/to setzen.',
       {
         query,
+        from: { type: 'string', description: 'Erster Tag, YYYY-MM-DD' },
+        to: { type: 'string', description: 'Letzter Tag (einschließlich), YYYY-MM-DD' },
         level: {
           type: 'string',
           description:
@@ -134,7 +137,13 @@ function buildAskTools({ mcpUrl, getToken, callTool = callNopeMcpTool, relays, n
         }
       },
       ['query'],
-      (i) => k.searchEvents(text(i.query), { level: text(i.level) || undefined })
+      (i) =>
+        k.searchEvents(text(i.query), {
+          level: text(i.level) || undefined,
+          from: text(i.from) || undefined,
+          to: text(i.to) || undefined,
+          tz
+        })
     ),
     search_passages: knowledgeTool(
       'Findet Textstellen aus offenen Materialien, die eine Frage beantworten ("wie/was kann ich …"), mit Quelle, Herausgeber und Lizenz.',
@@ -163,7 +172,7 @@ function buildAskTools({ mcpUrl, getToken, callTool = callNopeMcpTool, relays, n
 
 /**
  * @param {'ask'} task
- * @param {{ mcpUrl: string, getToken: () => Promise<string>, callTool?: typeof callNopeMcpTool, relays?: string[], now?: () => number }} deps
+ * @param {{ mcpUrl: string, getToken: () => Promise<string>, callTool?: typeof callNopeMcpTool, relays?: string[], now?: () => number, tz?: string }} deps
  */
 export function buildTermiTools(task, deps) {
   if (task !== 'ask') throw new Error(`unknown Termi task: ${task}`);

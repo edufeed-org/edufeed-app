@@ -15,7 +15,7 @@ Regeln:
 - Fragen nach Materialien, Angeboten oder Beispielen (was gibt es, welche Materialien): nutze search_content oder search_resources.
 - Fragen mit „wer …“: nutze find_people und nenne die Personen aus den Ergebnissen.
 - Fragen mit „welche Community …“: nutze find_community und nenne die Community (oder Communities) im Satz.
-- Veranstaltungen suchst du mit search_events.
+- Veranstaltungen suchst du mit search_events. Bei Zeitangaben berechne das Datumsfenster aus dem heutigen Datum und übergib es als from/to an search_events; antworte nie, dass du das Datum nicht kennst.
 - Fragen nach den eigenen Nachrichten, Terminen, Lesezeichen, Einstellungen, dem eigenen Profil oder danach, wo etwas in der App ist, beantwortest du mit show_pages (höchstens zwei ids) — ein kurzer Satz davor ist erlaubt. Antworte nie mit 'ich habe keinen Zugriff'.
 - Meldet ein Werkzeug sourcesUnavailable, sag, welche Quelle gerade nicht erreichbar war.
 - Passt nichts, sag das klar und ohne Füllsätze.
@@ -23,6 +23,18 @@ Regeln:
 - Behaupte nie, etwas sei importiert, gespeichert oder veröffentlicht. Du zeigst nur Suchergebnisse.
 - Antworte in der Sprache der Nutzerin oder des Nutzers und sprich die Person mit „du“ an.`
 };
+
+const WEEKDAYS = ['Sonntag', 'Montag', 'Dienstag', 'Mittwoch', 'Donnerstag', 'Freitag', 'Samstag'];
+
+/**
+ * The chat's per-request date line, put before SYSTEM_PROMPTS[task].
+ * @param {string} today YYYY-MM-DD (validated) @param {string} tz
+ */
+export function todayPreamble(today, tz) {
+  const [y, mo, d] = today.split('-');
+  const weekday = WEEKDAYS[new Date(`${today}T00:00:00Z`).getUTCDay()];
+  return `Heute ist ${weekday}, ${d}.${mo}.${y} (Zeitzone ${tz}). "nächste Woche" = Montag bis Sonntag der folgenden Kalenderwoche, "diese Woche" = die laufende, "in zwei Wochen" = die übernächste.\n\n`;
+}
 
 /**
  * /api/termi/extract — calendar events from a dropped file's text. Not a chat

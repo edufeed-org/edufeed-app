@@ -317,6 +317,28 @@ describe('POST /api/termi/chat', () => {
     expect(sent).not.toContain('evil.example');
   });
 
+  it('prepends today and the time zone to the system prompt', async () => {
+    const { POST, streamText, SYSTEM_PROMPTS } = await importRoute(ENV);
+    await POST(ev({ task: 'ask', messages: [USER_MSG], today: '2026-11-09', tz: 'Europe/Berlin' }));
+    const { system } = /** @type {any} */ (streamText.mock.calls[0])[0];
+    expect(system).toMatch(
+      /^Heute ist Montag, 09\.11\.2026 \(Zeitzone Europe\/Berlin\)\. "nächste Woche" = Montag bis Sonntag/
+    );
+    expect(system.endsWith(SYSTEM_PROMPTS.ask)).toBe(true);
+  });
+
+  it.each([
+    ['a malformed date', { today: '9.11.2026', tz: 'Europe/Berlin' }],
+    ['an impossible date', { today: '2026-02-31', tz: 'Europe/Berlin' }],
+    ['an unknown zone', { today: '2026-11-09', tz: 'Mars/Olympus' }],
+    ['an over-long zone', { today: '2026-11-09', tz: 'x'.repeat(65) }]
+  ])('ignores %s', async (_label, extra) => {
+    const { POST, streamText, SYSTEM_PROMPTS } = await importRoute(ENV);
+    const res = await POST(ev({ task: 'ask', messages: [USER_MSG], ...extra }));
+    expect(res.status).toBe(200);
+    expect(/** @type {any} */ (streamText.mock.calls[0])[0].system).toBe(SYSTEM_PROMPTS.ask);
+  });
+
   it('streams with the ask prompt, the six knowledge tools, a step cap and compacted history', async () => {
     const { POST, streamText, toUIMessageStreamResponse, SYSTEM_PROMPTS, streamErrorMessage } =
       await importRoute(ENV);

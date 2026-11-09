@@ -216,7 +216,12 @@ async function runTier2Eval() {
     const messages = [
       { id: `m-${fixture.id}`, role: 'user', parts: [{ type: 'text', text: fixture.text }] }
     ];
-    const body = JSON.stringify({ task: 'ask', messages });
+    const body = JSON.stringify({
+      task: 'ask',
+      messages,
+      today: new Date().toISOString().slice(0, 10),
+      tz: 'Europe/Berlin'
+    });
     const Authorization = await createNIP98AuthHeader(chatUrl, 'POST', body, (draft) =>
       finalizeEvent(draft, sk)
     );

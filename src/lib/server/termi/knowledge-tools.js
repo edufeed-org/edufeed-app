@@ -86,6 +86,37 @@ export function validAuthors(list) {
   );
 }
 
+/**
+ * Unix seconds of midnight starting `ymd` (YYYY-MM-DD) in `tz`; undefined for
+ * anything else. Calendar helpers can't be reused here (paraglide/stores).
+ * @param {unknown} ymd @param {string} tz a valid IANA zone
+ */
+export function zonedDayStart(ymd, tz) {
+  if (typeof ymd !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(ymd)) return undefined;
+  const wall = Date.parse(`${ymd}T00:00:00Z`);
+  if (!Number.isFinite(wall) || new Date(wall).toISOString().slice(0, 10) !== ymd) return undefined;
+  /** @param {number} ms the zone's UTC offset at that instant */
+  const offset = (ms) => {
+    const p = Object.fromEntries(
+      new Intl.DateTimeFormat('en-US', {
+        timeZone: tz,
+        hourCycle: 'h23',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit'
+      })
+        .formatToParts(new Date(ms))
+        .map((x) => [x.type, x.value])
+    );
+    return Date.UTC(+p.year, +p.month - 1, +p.day, +p.hour, +p.minute, +p.second) - ms;
+  };
+  // second pass settles a DST change between the two offsets
+  return (wall - offset(wall - offset(wall))) / 1000;
+}
+
 /** An older nope-mcp without the tool answers "Tool <name> not found". @param {any} err */
 function isUnknownTool(err) {
   return err?.isToolError === true && /tool \S+ not found/i.test(String(err.message));
@@ -145,11 +176,25 @@ export function createKnowledgeTools({ callTool, relays = DEFAULT_SEARCH_RELAYS,
       return toResult(r, (h) => normalizeContent(h, queriedUrls(r)), r?.resources);
     },
 
-    /** @param {string} q @param {{ level?: string }} [opts] level = KIM educationalLevel URI */
-    async searchEvents(q, { level } = {}) {
+    /**
+     * @param {string} q
+     * @param {{ level?: string, from?: string, to?: string, tz?: string }} [opts]
+     *   level = KIM educationalLevel URI; from/to = YYYY-MM-DD (to inclusive) in `tz`
+     */
+    async searchEvents(q, { level, from, to, tz = 'UTC' } = {}) {
+      const startAfter = zonedDayStart(from, tz);
+      // end of `to` = start of the next day
+      const startBefore =
+        zonedDayStart(to, tz) === undefined
+          ? undefined
+          : zonedDayStart(
+              new Date(Date.parse(`${to}T00:00:00Z`) + 86_400_000).toISOString().slice(0, 10),
+              tz
+            );
       const r = await callTool('search_calendar_events', {
         query: q,
-        endAfter: Math.floor(now() / 1000),
+        ...(startAfter === undefined ? { endAfter: Math.floor(now() / 1000) } : { startAfter }),
+        ...(startBefore === undefined ? {} : { startBefore }),
         limit: 10,
         ...(level ? { educationalLevel: level } : {})
       });

@@ -160,6 +160,10 @@ describe('TermiChatWindow assistant mode', () => {
     const body = /** @type {string} */ (init.body);
     const parsed = JSON.parse(body);
     expect(parsed.task).toBe('ask');
+    const d = new Date();
+    const pad = (/** @type {number} */ n) => String(n).padStart(2, '0');
+    expect(parsed.today).toBe(`${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`);
+    expect(parsed.tz).toBe(Intl.DateTimeFormat().resolvedOptions().timeZone);
     expect(parsed.messages.at(-1).parts[0].text).toBe('Finde Materialien zu Brüchen');
     // The transport lower-cases header names.
     const auth = /** @type {Record<string, string>} */ (init.headers).authorization;

@@ -105,6 +105,33 @@ describe('createKnowledgeTools', () => {
     expect(out.sourcesUnavailable).toEqual(['wss://calendar.example']);
   });
 
+  it('searchEvents with from/to asks for that window in the zone, no endAfter', async () => {
+    const { callTool, tools } = setup();
+    await tools.searchEvents('relilab', {
+      from: '2026-11-16',
+      to: '2026-11-22',
+      tz: 'Europe/Berlin'
+    });
+    expect(callTool).toHaveBeenCalledWith('search_calendar_events', {
+      query: 'relilab',
+      // 2026-11-16 00:00 CET and 2026-11-23 00:00 CET (to is inclusive)
+      startAfter: Date.UTC(2026, 10, 15, 23) / 1000,
+      startBefore: Date.UTC(2026, 10, 22, 23) / 1000,
+      limit: 10
+    });
+  });
+
+  it('searchEvents with only to keeps endAfter now; bad dates are ignored', async () => {
+    const { callTool, tools } = setup();
+    await tools.searchEvents('x', { from: '16.11.2026', to: '2026-11-22' });
+    expect(callTool.mock.calls[0][1]).toEqual({
+      query: 'x',
+      endAfter: NOW_MS / 1000,
+      startBefore: Date.UTC(2026, 10, 23) / 1000,
+      limit: 10
+    });
+  });
+
   it('searchPassages queries the five content kinds', async () => {
     const { callTool, tools } = setup();
     const out = await tools.searchPassages('Aktivierung im Seminar', { relay: 'oersi' });
@@ -272,6 +299,27 @@ describe("buildTermiTools('ask')", () => {
     const pk = 'c'.repeat(64);
     await run(tools.search_content, { query: 'Statistik', authors: [pk, 'bogus'] });
     expect(/** @type {any} */ (callTool.mock.calls[0])[0].args.authors).toEqual([pk]);
+  });
+
+  it('search_events offers from/to and maps them in the request time zone', async () => {
+    const callTool = vi.fn(async () => calendar);
+    const tools = /** @type {any} */ (
+      buildTermiTools('ask', {
+        mcpUrl: 'https://mcp.example/mcp',
+        callTool,
+        getToken: vi.fn(),
+        tz: 'Europe/Berlin'
+      })
+    );
+    const schema = tools.search_events.inputSchema.jsonSchema;
+    expect(schema.properties.from).toMatchObject({ type: 'string' });
+    expect(schema.properties.to).toMatchObject({ type: 'string' });
+    expect(tools.search_events.description).toContain('from/to');
+    await run(tools.search_events, { query: 'relilab', from: '2026-07-01', to: '2026-07-01' });
+    const args = /** @type {any} */ (callTool.mock.calls[0])[0].args;
+    expect(args.startAfter).toBe(Date.UTC(2026, 5, 30, 22) / 1000); // CEST
+    expect(args.startBefore).toBe(Date.UTC(2026, 6, 1, 22) / 1000);
+    expect(args.endAfter).toBeUndefined();
   });
 
   it('caps items for the model at 8 and descriptions at 300 chars', async () => {

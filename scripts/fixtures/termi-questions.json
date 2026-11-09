@@ -240,5 +240,12 @@
     "locale": "de",
     "tier2Only": true,
     "expect": { "tools": ["show_pages"], "match": "inbox" }
+  },
+  {
+    "id": "q10",
+    "text": "welche Termine veranstaltet das relilab nächste Woche?",
+    "locale": "de",
+    "tier2Only": true,
+    "expect": { "tools": ["search_events"] }
   }
 ]

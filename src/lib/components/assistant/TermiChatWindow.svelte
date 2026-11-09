@@ -23,6 +23,7 @@
     toUIMessage
   } from './history/conversation-codec.js';
   import TermiAvatar from './TermiAvatar.svelte';
+  import { localToday } from './termi-chat-request.js';
   import TermiAnswer from './TermiAnswer.svelte';
   import ItemCards from './cards/ItemCards.svelte';
   import ImportPreviewCard from './import/ImportPreviewCard.svelte';
@@ -1060,12 +1061,6 @@
         done: 0
       }
     });
-  }
-
-  function localToday() {
-    const d = new Date();
-    const pad = (/** @type {number} */ n) => String(n).padStart(2, '0');
-    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
   }
 
   /** "Senden": read the file, send its text, show the preview. @param {number} id */

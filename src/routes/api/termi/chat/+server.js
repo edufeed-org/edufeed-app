@@ -1,6 +1,6 @@
 /**
- * POST /api/termi/chat — the Termi assistant. Body `{ task, messages }`
- * (AI SDK v6 UIMessages), NIP-98 signed over the raw body; answers with a UI
+ * POST /api/termi/chat — the Termi assistant. Body `{ task, messages, today?, tz? }`
+ * (AI SDK v6 UIMessages; today = the browser's YYYY-MM-DD, tz its IANA zone), NIP-98 signed over the raw body; answers with a UI
  * message stream from SAIA (open-weight model, see `termi/llm.js`).
  *
  * 503 flag/LLM/nope-mcp/NIP-05 domains off · 401 bad NIP-98 · 403 signer not
@@ -16,13 +16,23 @@ import { convertToModelMessages, hasToolCall, stepCountIs, streamText } from 'ai
 import { nopeMcpEnv } from '$lib/server/nopeMcpEnv.js';
 import { getNopeMcpToken } from '$lib/server/nopeMcpToken.js';
 import { createTermiModel, streamErrorMessage } from '$lib/server/termi/llm.js';
-import { SYSTEM_PROMPTS } from '$lib/server/termi/prompts.js';
+import { SYSTEM_PROMPTS, todayPreamble } from '$lib/server/termi/prompts.js';
 import { buildTermiTools } from '$lib/server/termi/tools.js';
-import { parseSearchRelays } from '$lib/server/termi/knowledge-tools.js';
+import { parseSearchRelays, zonedDayStart } from '$lib/server/termi/knowledge-tools.js';
 import { compactHistory } from '$lib/server/termi/compact-history.js';
 import { authorizeTermiRequest, termiQuota as quota } from '$lib/server/termi/authorize.js';
 
 const MAX_BODY_CHARS = 200_000;
+
+/** @param {string} tz */
+function isTimeZone(tz) {
+  try {
+    new Intl.DateTimeFormat('en-US', { timeZone: tz });
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 /** @type {import('@sveltejs/kit').RequestHandler} */
 export async function POST({ request }) {
@@ -39,7 +49,7 @@ export async function POST({ request }) {
   if (auth instanceof Response) return auth;
   const { pubkey } = auth;
 
-  /** @type {{ task?: unknown, messages?: unknown }} */
+  /** @type {{ task?: unknown, messages?: unknown, today?: unknown, tz?: unknown }} */
   let body;
   try {
     body = JSON.parse(rawBody);
@@ -54,10 +64,18 @@ export async function POST({ request }) {
     return json({ error: 'invalid_messages' }, { status: 400 });
   }
 
+  // Optional and untrusted: a bad value is ignored, never an error.
+  const tz =
+    typeof body.tz === 'string' && body.tz.length <= 64 && isTimeZone(body.tz)
+      ? body.tz
+      : undefined;
+  const today = tz && zonedDayStart(body.today, tz) !== undefined ? String(body.today) : undefined;
+
   const tools = buildTermiTools(task, {
     mcpUrl,
     getToken: getNopeMcpToken,
-    relays: parseSearchRelays(env.TERMI_SEARCH_RELAYS)
+    relays: parseSearchRelays(env.TERMI_SEARCH_RELAYS),
+    tz
   });
   // The client owns only its own turns: a client-sent system message would
   // override the prompt, and a user file part makes the SDK fetch its URL
@@ -79,7 +97,7 @@ export async function POST({ request }) {
 
   const result = streamText({
     model,
-    system: SYSTEM_PROMPTS[task],
+    system: (today && tz ? todayPreamble(today, tz) : '') + SYSTEM_PROMPTS[task],
     messages,
     tools,
     // Each step is one SAIA call: charge it up front (failed calls count at
