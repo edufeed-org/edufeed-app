@@ -34,6 +34,7 @@ vi.mock('$lib/stores/config.svelte.js', () => ({
 import { blocked, hidden, versions } from './termi-cards-lists.svelte.js';
 import ItemCards from '$lib/components/assistant/cards/ItemCards.svelte';
 import SourcesNote from '$lib/components/assistant/cards/SourcesNote.svelte';
+import { clampQuote } from '$lib/components/assistant/cards/quote.js';
 
 const LONG_TITLE = 'T'.repeat(200);
 const LONG_LINE = 'Ein sehr langer Satz ohne Ende '.repeat(10);
@@ -433,6 +434,74 @@ describe('Termi result cards', () => {
     const five = renderCards(itemsOf(5));
     const button = five.getByText(m.termi_cards_more({ n: 2 /* 5 - fold(3) */ })).closest('button');
     expect(button?.className).toContain('@sm:hidden');
+  });
+});
+
+describe('passages', () => {
+  /** @param {number} n */
+  const passagesOf = (n) =>
+    Array.from({ length: n }, (_, i) => ({
+      type: 'passage',
+      id: `chunk${i}`,
+      title: `Quelle ${i}`,
+      description: 'Ein Zitat.',
+      href: `https://example.org/${i}`
+    }));
+  /** @param {number} n */
+  const resourcesOf = (n) =>
+    Array.from({ length: n }, (_, i) => ({
+      type: 'resource',
+      id: `30142:${PK}:${i}`,
+      title: `Material ${i}`,
+      href: `/naddr1${i}`
+    }));
+
+  it('render in their own single column below the grid, title → source → quote', () => {
+    const view = renderCards([...passagesOf(1), ...resourcesOf(2)]);
+    const grid = /** @type {HTMLElement} */ (view.container.querySelector('.grid'));
+    const card = view.getByTestId('termi-card-passage');
+    expect(grid.contains(card)).toBe(false);
+    expect(grid.compareDocumentPosition(card) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(card.closest('[class*="grid-cols"]')).toBeNull();
+    const title = /** @type {HTMLElement} */ (
+      view.getAllByTestId('termi-card-title').find((t) => card.contains(t))
+    );
+    expect(title.className).toContain('line-clamp-2');
+    const quote = /** @type {HTMLElement} */ (card.querySelector('blockquote'));
+    expect(title.compareDocumentPosition(quote) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it('fold at 2, counted apart from the grid fold', async () => {
+    const view = renderCards([...resourcesOf(2), ...passagesOf(5)]);
+    expect(view.getAllByTestId('termi-card-passage')).toHaveLength(2);
+    expect(view.getAllByTestId('termi-card-resource')).toHaveLength(2);
+    // the grid (2 ≤ fold) offers no "more"; the passages do: 5 - 2
+    expect(view.getAllByText(m.termi_cards_more({ n: 3 }))).toHaveLength(1);
+    await fireEvent.click(view.getByText(m.termi_cards_more({ n: 3 })));
+    expect(view.getAllByTestId('termi-card-passage')).toHaveLength(5);
+  });
+});
+
+describe('clampQuote', () => {
+  it('drops a leading word fragment and marks the cut', () => {
+    expect(clampQuote('nn, wenn eigene Werke geteilt werden.')).toBe(
+      '…wenn eigene Werke geteilt werden.'
+    );
+  });
+  it('keeps a text that starts at a word', () => {
+    expect(clampQuote('Wenn eigene Werke geteilt werden.')).toBe(
+      'Wenn eigene Werke geteilt werden.'
+    );
+  });
+  it('cuts at a word boundary under max and marks it', () => {
+    expect(clampQuote('Eins zwei drei vier', 12)).toBe('Eins zwei…');
+  });
+  it('a server-clipped tail (mid-word …) is cut back to the last whole word', () => {
+    expect(clampQuote('Eins zwei dr…')).toBe('Eins zwei…');
+  });
+  it('collapses whitespace; empty in → empty out', () => {
+    expect(clampQuote('  Eins\n\nzwei ')).toBe('Eins zwei');
+    expect(clampQuote(undefined)).toBe('');
   });
 });
 

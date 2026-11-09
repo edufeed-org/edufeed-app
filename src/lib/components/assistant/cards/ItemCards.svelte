@@ -39,13 +39,15 @@
   // Folded: 3 cards always shown + 3 more revealed only once the panel is
   // wide enough (@sm, two columns) via CSS — no JS width measurement.
   let showAll = $state(false);
+  // Passages: one column below the grid (a quote needs the width), folded at 2.
+  let showAllPassages = $state(false);
+  const PASSAGE_FOLD = 2;
 
   const CARDS = {
     community: CommunityCard,
     event: EventCard,
     resource: ResourceCard,
-    person: PersonCard,
-    passage: PassageCard
+    person: PersonCard
   };
 
   /** Item type → /discover tab and its label; passages have no listing. */
@@ -66,7 +68,10 @@
     );
   });
 
-  const visible = $derived(showAll ? shown : shown.slice(0, fold * 2));
+  const gridItems = $derived(shown.filter((it) => it.type !== 'passage'));
+  const passages = $derived(shown.filter((it) => it.type === 'passage'));
+  const visible = $derived(showAll ? gridItems : gridItems.slice(0, fold * 2));
+  const visiblePassages = $derived(showAllPassages ? passages : passages.slice(0, PASSAGE_FOLD));
 
   const allLinks = $derived.by(() => {
     const q = String(query ?? '').trim();
@@ -85,24 +90,45 @@
 
 {#if shown.length > 0 || sourcesUnavailable.length > 0}
   <div class="mt-2 flex min-w-0 flex-col gap-2">
-    <div class="grid min-w-0 gap-2 @sm:grid-cols-2">
-      {#each visible as item, i (`${item.type}:${item.id}`)}
-        {@const Card = CARDS[item.type]}
-        <div class={i >= fold && !showAll ? 'hidden @sm:block' : ''}>
-          <Card {item} {onSearchAuthor} />
-        </div>
-      {/each}
-    </div>
-    {#if !showAll && shown.length > fold}
+    {#if gridItems.length > 0}
+      <div class="grid min-w-0 gap-2 @sm:grid-cols-2">
+        {#each visible as item, i (`${item.type}:${item.id}`)}
+          {@const Card = CARDS[/** @type {Exclude<Item['type'], 'passage'>} */ (item.type)]}
+          <div class={i >= fold && !showAll ? 'hidden @sm:block' : ''}>
+            <Card {item} {onSearchAuthor} />
+          </div>
+        {/each}
+      </div>
+    {/if}
+    {#if !showAll && gridItems.length > fold}
       <div class="flex min-w-0 flex-wrap gap-1.5">
         <button
           type="button"
-          class="btn w-full btn-ghost btn-sm {shown.length <= fold * 2 ? '@sm:hidden' : ''}"
+          class="btn w-full btn-ghost btn-sm {gridItems.length <= fold * 2 ? '@sm:hidden' : ''}"
           onclick={() => (showAll = true)}
         >
-          <span class="@sm:hidden">{m.termi_cards_more({ n: shown.length - fold })}</span>
-          <span class="hidden @sm:inline">{m.termi_cards_more({ n: shown.length - fold * 2 })}</span
+          <span class="@sm:hidden">{m.termi_cards_more({ n: gridItems.length - fold })}</span>
+          <span class="hidden @sm:inline"
+            >{m.termi_cards_more({ n: gridItems.length - fold * 2 })}</span
           >
+        </button>
+      </div>
+    {/if}
+    {#if passages.length > 0}
+      <div class="flex min-w-0 flex-col gap-2">
+        {#each visiblePassages as item (item.id)}
+          <PassageCard {item} />
+        {/each}
+      </div>
+    {/if}
+    {#if !showAllPassages && passages.length > PASSAGE_FOLD}
+      <div class="flex min-w-0 flex-wrap gap-1.5">
+        <button
+          type="button"
+          class="btn w-full btn-ghost btn-sm"
+          onclick={() => (showAllPassages = true)}
+        >
+          {m.termi_cards_more({ n: passages.length - PASSAGE_FOLD })}
         </button>
       </div>
     {/if}

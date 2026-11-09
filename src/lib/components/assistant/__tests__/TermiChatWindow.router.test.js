@@ -217,13 +217,14 @@ describe('TermiChatWindow router answers', () => {
     const view = renderWindow();
     await type(view, 'Was ist OER?');
     const links = await cardLinks(view);
+    // passages render below the card grid
     expect(links.map((a) => a.getAttribute('href'))).toEqual([
-      'https://example.org/p',
-      '/c/npub1abc'
+      '/c/npub1abc',
+      'https://example.org/p'
     ]);
-    expect(links[0].getAttribute('target')).toBe('_blank');
-    expect(links[0].getAttribute('rel')).toBe('noopener noreferrer');
-    expect(links[1].getAttribute('target')).toBeNull();
+    expect(links[1].getAttribute('target')).toBe('_blank');
+    expect(links[1].getAttribute('rel')).toBe('noopener noreferrer');
+    expect(links[0].getAttribute('target')).toBeNull();
     expect(view.container.innerHTML).not.toContain('//evil.example');
     expect(view.container.innerHTML).not.toContain('javascript:');
   });
