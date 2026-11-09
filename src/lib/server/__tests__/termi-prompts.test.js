@@ -15,10 +15,12 @@ describe('SYSTEM_PROMPTS.ask', () => {
     expect(prompt.split('\n').length).toBeLessThanOrEqual(25);
   });
 
-  it('says the results show as cards: plain sentences, no markdown, links or lists', () => {
+  it('says the results show as cards: short answers, markdown structure, no links', () => {
     expect(prompt).toContain('als Karten');
     expect(prompt).toContain('ein bis drei kurzen Sätzen');
-    expect(prompt).toContain('ohne Markdown');
+    expect(prompt).toContain(
+      'Gliedere längere Antworten mit kurzen Überschriften und Listen (Markdown); keine Links im Text — Quellen erscheinen als Karten.'
+    );
     expect(prompt).toContain('keine Trefferliste, keine Links, keine URLs');
   });
 

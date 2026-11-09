@@ -285,6 +285,25 @@ describe('TermiChatWindow assistant mode', () => {
     ).toHaveLength(1);
   });
 
+  it('the answer renders as safe markdown: headings and lists, links only as text', async () => {
+    stubFetch(() =>
+      streamAnswer({
+        text: '# Überblick\n\n- erster Punkt\n- [Quelle](https://evil.example)\n\n<img src=x onerror="alert(1)">'
+      })
+    );
+    const view = renderWindow();
+    await type(view, 'Finde Materialien zu Brüchen');
+    const heading = await waitFor(() => view.getByText('Überblick'));
+    expect(heading.tagName).toBe('H3');
+    const answer = /** @type {HTMLElement} */ (heading.parentElement);
+    expect([...answer.querySelectorAll('li')].map((li) => li.textContent)).toEqual([
+      'erster Punkt',
+      'Quelle'
+    ]);
+    expect(answer.querySelector('a, img')).toBeNull();
+    expect(answer.textContent).toContain('<img src=x onerror="alert(1)">');
+  });
+
   it('other tool parts render nothing', async () => {
     stubFetch(() => streamAnswer({ toolName: 'something_else' }));
     const view = renderWindow();

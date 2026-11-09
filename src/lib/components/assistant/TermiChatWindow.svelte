@@ -27,6 +27,7 @@
   import TermiAnswer from './TermiAnswer.svelte';
   import ItemCards from './cards/ItemCards.svelte';
   import { unique } from '$lib/helpers/unique.js';
+  import { renderMarkdown } from '$lib/helpers/markdown.js';
   import ImportPreviewCard from './import/ImportPreviewCard.svelte';
   import { keepItem } from './cards/filter.js';
   import { goto } from '$app/navigation';
@@ -315,7 +316,7 @@
    * @typedef {{
    *   role: 'user' | 'bot', text: string, link?: Suggestion['link'], actions?: TermiAction[],
    *   items?: Array<import('$lib/server/termi/items.js').Item>, sourcesUnavailable?: string[],
-   *   retry?: () => void, query?: string,
+   *   retry?: () => void, query?: string, markdown?: boolean,
    *   importId?: number, file?: File, import?: ImportState, importOf?: number
    * }} ChatMessage
    */
@@ -722,10 +723,11 @@
 
   /** A stored turn as a read-only window message; tier-2 tool outputs become cards. @param {Turn} t @returns {ChatMessage} */
   function restoredMessage(t) {
-    if (t.tier !== 2 || t.role !== 'assistant' || !t.toolParts) {
+    if (t.tier !== 2 || t.role !== 'assistant') {
       return /** @type {ChatMessage} */ (toTier1Message(t));
     }
-    const outputs = t.toolParts.map((p) => p.output ?? {});
+    const toolParts = t.toolParts ?? [];
+    const outputs = toolParts.map((p) => p.output ?? {});
     const ctx = skillCtx(getActiveUser()?.pubkey);
     const actions = /** @type {TermiAction[]} */ (
       outputs
@@ -742,7 +744,8 @@
         sourcesUnavailable: unique(outputs.flatMap((o) => o.sourcesUnavailable ?? []))
       })
     );
-    const query = /** @type {any} */ (t.toolParts.find((p) => p.output?.items)?.input)?.query;
+    msg.markdown = true;
+    const query = /** @type {any} */ (toolParts.find((p) => p.output?.items)?.input)?.query;
     if (typeof query === 'string') msg.query = query;
     return actions.length ? { ...msg, actions } : msg;
   }
@@ -1433,6 +1436,14 @@
         </div>
       {/each}
 
+      <!-- A tier-2 answer: the model's markdown, links/images/raw HTML only as text (links come through cards). -->
+      {#snippet markdownAnswer(/** @type {string} */ text)}
+        <div class="termi-md whitespace-normal">
+          <!-- eslint-disable-next-line svelte/no-at-html-tags -- safe: renderMarkdown allowLinks:false escapes raw HTML, drops links/images, DOMPurify -->
+          {@html renderMarkdown(text, { allowLinks: false })}
+        </div>
+      {/snippet}
+
       {#snippet bubble(/** @type {ChatMessage} */ msg)}
         <div class="flex items-end gap-2.5 {msg.role === 'user' ? 'justify-end' : ''}">
           {#if msg.role === 'bot'}
@@ -1486,6 +1497,11 @@
                   onReextract={() => sendImport(id)}
                 />
               {/if}
+            {:else if msg.markdown}
+              {@render markdownAnswer(msg.text)}
+              {#if msg.actions}
+                <TermiAnswer text="" actions={msg.actions} />
+              {/if}
             {:else if msg.actions}
               <TermiAnswer text={msg.text} actions={msg.actions} />
             {:else}
@@ -1535,7 +1551,7 @@
                 class="max-w-[88%] rounded-2xl rounded-bl-md border border-base-300 bg-base-200 px-3.5 py-2.5 text-sm leading-relaxed"
               >
                 {#if textOf(msg)}
-                  <div class="whitespace-pre-line">{textOf(msg)}</div>
+                  {@render markdownAnswer(textOf(msg))}
                 {:else if searchFailed(msg)}
                   {m.termi_search_failed()}
                   <div class="mt-2">
@@ -1755,6 +1771,48 @@
 </div>
 
 <style>
+  /* Tier-2 answers: compact markdown inside a chat bubble. */
+  .termi-md > :global(:first-child) {
+    margin-top: 0;
+  }
+  .termi-md > :global(:last-child) {
+    margin-bottom: 0;
+  }
+  .termi-md :global(:is(h3, h4, h5, h6)) {
+    margin: 0.75em 0 0.25em;
+    font-size: 1em;
+    font-weight: 600;
+  }
+  .termi-md :global(:is(p, ul, ol, blockquote, pre)) {
+    margin: 0.4em 0;
+  }
+  .termi-md :global(:is(ul, ol)) {
+    padding-left: 1.25em;
+  }
+  .termi-md :global(ul) {
+    list-style: disc;
+  }
+  .termi-md :global(ol) {
+    list-style: decimal;
+  }
+  .termi-md :global(li + li) {
+    margin-top: 0.15em;
+  }
+  .termi-md :global(blockquote) {
+    border-left: 2px solid var(--color-base-300);
+    padding-left: 0.6em;
+    font-style: italic;
+  }
+  .termi-md :global(code) {
+    border-radius: 0.25em;
+    background: var(--color-base-300);
+    padding: 0 0.25em;
+    font-size: 0.9em;
+  }
+  .termi-md :global(pre) {
+    overflow-x: auto;
+    white-space: pre;
+  }
   /* Launcher slot: one step above the create FAB (which sits at
      bottom calc(4rem + safe-area + 0.75rem) on mobile, 1.5rem on lg). */
   .termi-slot {

@@ -448,6 +448,26 @@ describe('TermiChatWindow history', () => {
     expect(links[0].getAttribute('href')).toBe('/calendar');
   });
 
+  it('a restored tier-2 answer renders as safe markdown', async () => {
+    fake.store = makeStore({
+      id: 'c4',
+      title: 'Brüche',
+      createdAt: 1,
+      updatedAt: 1,
+      turns: [
+        { role: 'user', text: 'Wie erkläre ich Brüche?', tier: 2 },
+        { role: 'assistant', text: '## Schritte\n\n1. [Pizza](https://x) teilen', tier: 2 }
+      ]
+    });
+    const view = renderWindow();
+    await openStored(view);
+    const heading = await waitFor(() => view.getByText('Schritte'));
+    expect(heading.tagName).toBe('H4');
+    const answer = /** @type {HTMLElement} */ (heading.parentElement);
+    expect(answer.querySelector('ol li')?.textContent).toBe('Pizza teilen');
+    expect(answer.querySelector('a')).toBeNull();
+  });
+
   it('a tier-1 answer arriving after an account switch is dropped, not recorded', async () => {
     /** @type {(r: Response) => void} */
     let answer = () => {};

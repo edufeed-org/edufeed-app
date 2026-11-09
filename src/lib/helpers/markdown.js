@@ -117,21 +117,46 @@ export function stripMarkdown(content) {
 }
 
 /**
+ * `allowLinks: false`: links (incl. autolinks) collapse to their text, images
+ * to their alt, raw HTML renders as the typed characters, headings start at h3.
+ * For text a model wrote from untrusted tool results (Termi): links only via cards.
+ * @type {import('marked').RendererObject}
+ */
+const TEXT_ONLY_RENDERER = {
+  link({ tokens }) {
+    return /** @type {any} */ (this).parser.parseInline(tokens);
+  },
+  image({ text }) {
+    return escapeAttr(text ?? '');
+  },
+  html({ text }) {
+    return escapeAttr(text);
+  },
+  heading({ tokens, depth }) {
+    const h = Math.min(depth + 2, 6);
+    return `<h${h}>${/** @type {any} */ (this).parser.parseInline(tokens)}</h${h}>`;
+  }
+};
+
+/**
  * Render markdown content to sanitized HTML string.
  * @param {string | null | undefined} content - Raw markdown content
- * @param {{ headingAnchors?: boolean, imeta?: Map<string, ImetaFields> }} [options]
+ * @param {{ headingAnchors?: boolean, imeta?: Map<string, ImetaFields>, allowLinks?: boolean }} [options]
  *   `imeta`: url -> NIP-92 fields of the event (see `imetaByUrl` in
  *   helpers/imeta.js); images in the body get width/height and a fallback alt
- *   from it.
+ *   from it. `allowLinks: false`: see TEXT_ONLY_RENDERER.
  * @returns {string} Sanitized HTML
  */
 export function renderMarkdown(content, options = {}) {
   if (!content || typeof content !== 'string') return '';
+  const textOnly = options.allowLinks === false;
 
   try {
     const m = new Marked({ breaks: true, gfm: true });
     m.use({
-      renderer: buildRenderer({ headingAnchors: !!options.headingAnchors, imeta: options.imeta })
+      renderer: textOnly
+        ? TEXT_ONLY_RENDERER
+        : buildRenderer({ headingAnchors: !!options.headingAnchors, imeta: options.imeta })
     });
     const rawHtml = /** @type {string} */ (
       m.parse(preprocessNostrMentions(content), { async: false })
@@ -139,6 +164,6 @@ export function renderMarkdown(content, options = {}) {
     return sanitizeHtml(rawHtml);
   } catch (error) {
     console.error('Markdown parsing error:', error);
-    return content.replace(/\n/g, '<br>');
+    return (textOnly ? escapeAttr(content) : content).replace(/\n/g, '<br>');
   }
 }
