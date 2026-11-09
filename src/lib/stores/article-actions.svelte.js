@@ -8,8 +8,8 @@ import { createAppEventFactory } from '$lib/helpers/event-factory.js';
 import { pTagPubkeys } from '$lib/helpers/mention-autocomplete.js';
 import { manager } from '$lib/stores/accounts.svelte';
 import { encodeEventToNaddr } from '$lib/helpers/nostrUtils.js';
-import { publishEventOptimistic } from '$lib/services/publish-service.js';
-import { nextCreatedAt } from '$lib/helpers/replaceableUpdates.js';
+import { publishEvent, publishEventOptimistic } from '$lib/services/publish-service.js';
+import { nextCreatedAt, cachePublishedEvent } from '$lib/helpers/replaceableUpdates.js';
 import { getAppRelaysForCategory } from '$lib/services/app-relay-service.svelte.js';
 import { sha256FromUrl } from '$lib/helpers/sha256.js';
 import { collectImetaTags } from '$lib/helpers/imeta.js';
@@ -36,7 +36,7 @@ export const ARTICLE_KIND = 30023;
  */
 export const ARTICLE_DRAFT_KIND = 30024;
 
-/** @typedef {{ draft?: boolean }} ArticlePublishOptions - `draft: true` saves a kind 30024 */
+/** @typedef {{ draft?: boolean, awaitPublish?: boolean }} ArticlePublishOptions - `draft: true` saves a kind 30024; `awaitPublish` (createArticle) waits for the relays and rejects with `publish_failed` when none accepted */
 
 /**
  * @typedef {Object} ArticleFormData
@@ -191,11 +191,18 @@ export async function createArticle(
 
   const articleEvent = await currentAccount.signEvent(eventTemplate);
   // Mentioned users get the article on their read relays too.
-  publishEventOptimistic(articleEvent, pTagPubkeys(articleEvent), {
-    communityEvent,
-    companions: companionsOf(formData),
-    onStatusChange: formData.protected ? announceProtectedPublish : undefined
-  });
+  if (options.awaitPublish) {
+    // shortcut: no companions / protected feedback — its one caller (Termi) sends neither
+    const result = await publishEvent(articleEvent, pTagPubkeys(articleEvent), { communityEvent });
+    if (!result.success) throw new Error('publish_failed');
+    cachePublishedEvent(articleEvent, result);
+  } else {
+    publishEventOptimistic(articleEvent, pTagPubkeys(articleEvent), {
+      communityEvent,
+      companions: companionsOf(formData),
+      onStatusChange: formData.protected ? announceProtectedPublish : undefined
+    });
+  }
 
   const naddr = encodeEventToNaddr(articleEvent, getAppRelaysForCategory('longform'));
 

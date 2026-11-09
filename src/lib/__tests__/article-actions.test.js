@@ -28,7 +28,8 @@ vi.mock('$lib/helpers/nostrUtils.js', () => ({
 vi.mock('$lib/services/publish-service.js', () => ({
   publishEventOptimistic: vi.fn((...args) => {
     _lastPublishCall = args;
-  })
+  }),
+  publishEvent: vi.fn(async () => ({ success: true }))
 }));
 
 vi.mock('$lib/helpers/protected-publish-feedback.js', () => ({
@@ -55,7 +56,7 @@ import {
   ARTICLE_DRAFT_KIND
 } from '../stores/article-actions.svelte.js';
 import { deleteEvent } from '$lib/helpers/eventDeletion.js';
-import { publishEventOptimistic } from '$lib/services/publish-service.js';
+import { publishEvent, publishEventOptimistic } from '$lib/services/publish-service.js';
 import { encodeEventToNaddr } from '$lib/helpers/nostrUtils.js';
 import { announceProtectedPublish } from '$lib/helpers/protected-publish-feedback.js';
 
@@ -123,6 +124,23 @@ describe('createArticle', () => {
     expect(lastSignedEvent.kind).toBe(30024);
     expect(result.naddr).toBe('naddr1test');
     expect(deleteEvent).not.toHaveBeenCalled();
+  });
+
+  it('awaitPublish waits for a relay and rejects when none accepted', async () => {
+    const pub = /** @type {any} */ (publishEvent);
+    pub.mockClear();
+    /** @type {any} */ (publishEventOptimistic).mockClear();
+    const result = await createArticle({ title: 'T', content: 'body' }, undefined, null, {
+      draft: true,
+      awaitPublish: true
+    });
+    expect(pub).toHaveBeenCalledTimes(1);
+    expect(publishEventOptimistic).not.toHaveBeenCalled();
+    expect(result.naddr).toBe('naddr1test');
+    pub.mockResolvedValueOnce({ success: false });
+    await expect(
+      createArticle({ title: 'T', content: 'body' }, undefined, null, { awaitPublish: true })
+    ).rejects.toThrow('publish_failed');
   });
 
   it('publishes a cover that is not a URL without an x tag instead of throwing', async () => {

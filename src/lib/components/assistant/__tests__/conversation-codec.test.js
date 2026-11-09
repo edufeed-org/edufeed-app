@@ -294,3 +294,29 @@ describe('conversation codec', () => {
     expect(generateTitle('  kurz  ')).toBe('kurz');
   });
 });
+
+describe('a document turn keeps its LiaScript draft naddr', () => {
+  const NADDR = 'naddr1qqxnzd3cxqmrzv3exgmr2wfeqgsxu35yyt0mwjjh8pcz4zprhxegz69t4wr9t74vk';
+
+  it('tier 1 and tier 2 round-trip it as a plain string', () => {
+    const t1 = fromTier1Message({ role: 'bot', text: '# Doc', draftNaddr: NADDR });
+    const t2 = fromUIMessage({
+      id: 'x',
+      role: 'assistant',
+      parts: [{ type: 'text', text: '# Doc' }],
+      metadata: { draftNaddr: NADDR }
+    });
+    const back = roundTrip(conv([{ role: 'user', text: 'q', tier: 1 }, t1, t2]));
+    expect(back.turns[1].draftNaddr).toBe(NADDR);
+    expect(back.turns[2].draftNaddr).toBe(NADDR);
+    expect(toTier1Message(back.turns[1]).draftNaddr).toBe(NADDR);
+    expect(toUIMessage(back.turns[2], 'id').metadata).toEqual({ draftNaddr: NADDR });
+  });
+
+  it('anything but an naddr is dropped on restore', () => {
+    const json = {
+      messages: [{ id: 'a', role: 'assistant', content: 'x', draftNaddr: 'javascript:alert(1)' }]
+    };
+    expect(fromContent(json).turns[0].draftNaddr).toBeUndefined();
+  });
+});

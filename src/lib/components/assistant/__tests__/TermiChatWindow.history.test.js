@@ -48,6 +48,8 @@ vi.mock('$lib/helpers/calendar-import/index.js', async (importOriginal) => ({
   .../** @type {object} */ (await importOriginal()),
   extractText: async () => ({ text: 'Elternabend 01.12. 19 Uhr', kind: 'zip', truncated: false })
 }));
+const createArticle = vi.hoisted(() => vi.fn());
+vi.mock('$lib/stores/article-actions.svelte.js', () => ({ createArticle }));
 vi.mock('../history/conversation-store.svelte.js', () => ({
   createRelaySync: vi.fn(() => ({})),
   createConversationStore: vi.fn(({ scope }) => {
@@ -587,6 +589,57 @@ describe('TermiChatWindow history', () => {
     const view = await liveChatThenOpen();
     await waitFor(() => view.getByText('Titel'));
     expect(view.queryByTestId('termi-doc-actions')).toBeNull();
+  });
+
+  describe('the LiaScript draft naddr stays on the turn', () => {
+    const NADDR = 'naddr1qqxnzd3cxqmrzv3exgmr2wfeqgsxu35yyt0mwjjh8pcz4zprhxegz69t4wr9t74vk';
+    const COURSE = `https://liascript.github.io/course/?nostr:${NADDR}`;
+    const stored = () =>
+      makeStore({
+        id: 'c10',
+        title: 'Doc',
+        createdAt: 1,
+        updatedAt: 1,
+        turns: [
+          { role: 'user', text: 'Fasse zusammen', tier: 2 },
+          { role: 'assistant', text: '# Titel\n\nText.', tier: 2, draftNaddr: NADDR }
+        ]
+      });
+    beforeEach(() => {
+      createArticle.mockReset();
+      vi.stubGlobal(
+        'open',
+        vi.fn(() => null)
+      );
+    });
+
+    it('a saved draft is recorded with the answer', async () => {
+      loginEligible();
+      chatAnswer = () => streamText('# Titel\n\nText.');
+      createArticle.mockResolvedValue({ naddr: NADDR });
+      const view = renderWindow();
+      await type(view, 'Fasse Brüche zusammen');
+      await fireEvent.click(await waitFor(() => view.getByTestId('termi-doc-liascript')));
+      await waitFor(() =>
+        expect(fake.store.record.mock.calls.at(-1)[0].at(-1).draftNaddr).toBe(NADDR)
+      );
+    });
+
+    it.each([
+      ['read-only', async () => (loginEligible(), renderWindow())],
+      ['into a running chat', async () => liveChatThenOpen()]
+    ])('restored %s: no second draft, the course opens from the stored naddr', async (_, open) => {
+      fake.store = stored();
+      const view = await open();
+      if (!view.queryByTestId('termi-doc-actions')) await openStored(view);
+      await waitFor(() => view.getByTestId('termi-doc-draft-saved'));
+      expect(
+        view.getByTestId('termi-doc-draft-saved').querySelector('a')?.getAttribute('href')
+      ).toBe(`/${NADDR}`);
+      await fireEvent.click(view.getByTestId('termi-doc-liascript'));
+      expect(createArticle).not.toHaveBeenCalled();
+      expect(window.open).toHaveBeenCalledWith(COURSE, '_blank', 'noopener');
+    });
   });
 
   it('a tier-1 answer arriving after an account switch is dropped, not recorded', async () => {

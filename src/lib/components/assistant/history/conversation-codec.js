@@ -8,12 +8,13 @@
  * @typedef {{ type: string, toolName?: string, toolCallId: string, state: string,
  *   input?: unknown, output?: any }} UIMessagePart
  * @typedef {{ role: 'user'|'assistant', text: string, tier: 1|2, items?: SlimItem[],
- *   sourcesUnavailable?: string[], toolParts?: UIMessagePart[], sourcesLost?: boolean }} Turn
+ *   sourcesUnavailable?: string[], toolParts?: UIMessagePart[], sourcesLost?: boolean,
+ *   draftNaddr?: string }} Turn
  * @typedef {{ id: string, title: string, createdAt: number, updatedAt: number, turns: Turn[] }} Conversation
  * @typedef {{ toolCallId: string, toolName: string, input: unknown, output?: any,
  *   state: 'output-available' }} SerializableToolInvocation
  * @typedef {{ id: string, role: 'user'|'assistant', content: string,
- *   toolInvocations?: SerializableToolInvocation[] }} SerializableMessage
+ *   toolInvocations?: SerializableToolInvocation[], draftNaddr?: string }} SerializableMessage
  * @typedef {{ id: string, title: string, createdAt: number, updatedAt: number,
  *   messages: SerializableMessage[] }} ConversationContent
  */
@@ -64,6 +65,9 @@ function slimItem(it) {
 
 /** @param {unknown} v */
 const str = (v) => (typeof v === 'string' && v ? v : undefined);
+/** A document's LiaScript draft (kind 30024 naddr), else nothing. @param {unknown} v */
+const naddrOf = (v) =>
+  typeof v === 'string' && /^naddr1[02-9ac-hj-np-z]+$/.test(v) ? v : undefined;
 /** @param {unknown} u */
 const httpUrl = (u) => (typeof u === 'string' && /^https?:\/\//i.test(u) ? u : undefined);
 
@@ -116,6 +120,7 @@ export function fromTier1Message(msg) {
     turn.items = (msg.items ?? []).map(slimItem);
     turn.sourcesUnavailable = strings(msg.sourcesUnavailable);
     if (msg.sourcesLost) turn.sourcesLost = true;
+    if (naddrOf(msg.draftNaddr)) turn.draftNaddr = msg.draftNaddr;
   }
   return turn;
 }
@@ -127,7 +132,8 @@ export function toTier1Message(turn) {
     text: turn.text,
     items: turn.items?.map(({ start, ...it }) => compact({ ...it, date: start })),
     sourcesUnavailable: turn.sourcesUnavailable,
-    sourcesLost: turn.sourcesLost
+    sourcesLost: turn.sourcesLost,
+    draftNaddr: turn.draftNaddr
   });
 }
 
@@ -160,7 +166,8 @@ export function fromUIMessage(msg) {
       tier: 2,
       toolParts: toolParts.length ? toolParts : undefined,
       // a capped turn carried back into a running chat stays capped when re-saved
-      sourcesLost: msg.metadata?.sourcesLost || undefined
+      sourcesLost: msg.metadata?.sourcesLost || undefined,
+      draftNaddr: naddrOf(msg.metadata?.draftNaddr)
     })
   );
 }
@@ -171,7 +178,9 @@ export function toUIMessage(turn, id) {
     id,
     role: turn.role,
     parts: [...(turn.toolParts ?? []), ...(turn.text ? [{ type: 'text', text: turn.text }] : [])],
-    ...(turn.sourcesLost ? { metadata: { sourcesLost: true } } : {})
+    ...(turn.sourcesLost || turn.draftNaddr
+      ? { metadata: compact({ sourcesLost: turn.sourcesLost, draftNaddr: turn.draftNaddr }) }
+      : {})
   };
 }
 
@@ -186,6 +195,7 @@ export function toContent(conv) {
       /** @type {SerializableMessage} */
       const m = { id: `${conv.id}-${i}`, role: t.role, content: t.text };
       if (t.role !== 'assistant') return m;
+      if (t.draftNaddr) m.draftNaddr = t.draftNaddr;
       if (t.tier === 1) {
         m.toolInvocations = [
           {
@@ -243,6 +253,7 @@ export function fromContent(json) {
             (i.toolName === TIER1_TOOL || STORED_TOOLS.has(i.toolName)) &&
             !i.output
         ) || undefined;
+      const draftNaddr = naddrOf(m.draftNaddr);
       const search = inv.find((/** @type {any} */ i) => i.toolName === TIER1_TOOL);
       if (search) {
         const out = slimOutput(search.output);
@@ -252,7 +263,8 @@ export function fromContent(json) {
           tier: 1,
           items: out?.items ?? [],
           sourcesUnavailable: out?.sourcesUnavailable ?? [],
-          sourcesLost
+          sourcesLost,
+          draftNaddr
         });
       }
       const toolParts = inv.map((/** @type {any} */ i) => ({
@@ -268,7 +280,8 @@ export function fromContent(json) {
         text,
         tier: 2,
         toolParts: toolParts.length ? toolParts : undefined,
-        sourcesLost
+        sourcesLost,
+        draftNaddr
       });
     });
   turns.forEach((t, i) => {

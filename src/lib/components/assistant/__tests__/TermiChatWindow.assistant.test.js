@@ -607,7 +607,7 @@ describe('TermiChatWindow assistant mode', () => {
           },
           undefined,
           null,
-          { draft: true }
+          { draft: true, awaitPublish: true }
         );
         // the tab opens inside the click (popup blockers), the course URL follows
         expect(window.open).toHaveBeenCalledWith('about:blank', '_blank');
@@ -622,8 +622,23 @@ describe('TermiChatWindow assistant mode', () => {
         expect(window.open).toHaveBeenLastCalledWith(COURSE, '_blank', 'noopener');
       });
 
-      it('a failed save closes the tab and says so', async () => {
-        createArticle.mockRejectedValue(new Error('signer refused'));
+      it('busy until a relay accepted the draft; the tab waits on about:blank', async () => {
+        /** @type {(v: any) => void} */
+        let accept = () => {};
+        createArticle.mockReturnValue(new Promise((r) => (accept = r)));
+        const view = await docView();
+        const button = /** @type {HTMLButtonElement} */ (view.getByTestId('termi-doc-liascript'));
+        await fireEvent.click(button);
+        await waitFor(() => expect(button.disabled).toBe(true));
+        expect(button.querySelector('.loading')).not.toBeNull();
+        expect(tab.location.href).toBe('about:blank');
+        accept({ naddr: 'naddr1draft' });
+        await waitFor(() => expect(tab.location.href).toBe(COURSE));
+        expect(button.disabled).toBe(false);
+      });
+
+      it('no relay accepted the draft: no LiaScript tab, the error shows', async () => {
+        createArticle.mockRejectedValue(new Error('publish_failed'));
         vi.spyOn(console, 'error').mockImplementation(() => {});
         const view = await docView();
         await fireEvent.click(view.getByTestId('termi-doc-liascript'));
@@ -633,6 +648,7 @@ describe('TermiChatWindow assistant mode', () => {
           )
         );
         expect(tab.close).toHaveBeenCalled();
+        expect(tab.location.href).toBe('about:blank');
         expect(view.queryByTestId('termi-doc-draft-saved')).toBeNull();
       });
     });

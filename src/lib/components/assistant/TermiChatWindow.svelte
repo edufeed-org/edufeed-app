@@ -534,39 +534,58 @@
   }
   /**
    * "Als LiaScript-Kurs öffnen": LiaScript reads a course only from Nostr, so the
-   * document becomes the user's unlisted draft (kind 30024) first — once per text.
-   * @type {Record<string, { busy?: boolean, naddr?: string, failed?: boolean }>}
+   * document becomes the user's unlisted draft (kind 30024) first. Its naddr
+   * lives on the message (and in the history), so a restored chat reuses it.
+   * @param {any} msg
    */
-  let liaDrafts = $state({});
-  /** @param {string} text @param {Array<import('$lib/server/termi/items.js').Item>} items */
-  async function openAsCourse(text, items) {
-    const saved = liaDrafts[text];
-    if (saved?.busy) return;
-    if (saved?.naddr) {
-      window.open(liascriptCourseUrl(saved.naddr), '_blank', 'noopener');
+  const draftOf = (msg) => msg.draftNaddr ?? msg.metadata?.draftNaddr;
+  /** @param {any} msg @param {string} naddr */
+  function keepDraft(msg, naddr) {
+    if (msg.parts && assistant) {
+      assistant.chat.messages = assistant.chat.messages.map((x) =>
+        x.id === msg.id
+          ? /** @type {any} */ ({
+              ...x,
+              metadata: { .../** @type {any} */ (x).metadata, draftNaddr: naddr }
+            })
+          : x
+      );
+    } else msgs = msgs.map((x) => (x === msg ? { ...x, draftNaddr: naddr } : x));
+    saveHistory();
+  }
+  /** Transient per document text: saving, or the last save failed. @type {Record<string, 'busy' | 'failed'>} */
+  let liaState = $state({});
+  /** @param {any} msg @param {string} text @param {Array<import('$lib/server/termi/items.js').Item>} items */
+  async function openAsCourse(msg, text, items) {
+    if (liaState[text] === 'busy') return;
+    const saved = draftOf(msg);
+    if (saved) {
+      window.open(liascriptCourseUrl(saved), '_blank', 'noopener');
       return;
     }
     // Opened before the signer's await: a popup blocker refuses a later open.
     const tab = window.open('about:blank', '_blank');
     if (tab) tab.opener = null;
-    liaDrafts[text] = { busy: true };
+    liaState[text] = 'busy';
     try {
       // lazy: the publish stack stays out of the Termi chunk until someone needs it
       const { createArticle } = await import('$lib/stores/article-actions.svelte.js');
       const { title, content } = articleDraft(text, sourceItems(items), getLocale(), userName());
+      // awaitPublish: LiaScript asks the relays at once — the draft must be on one first
       const { naddr } = await createArticle(
         { title, content, summary: draftSummary(content), image: '' },
         undefined,
         null,
-        { draft: true }
+        { draft: true, awaitPublish: true }
       );
-      liaDrafts[text] = { naddr };
+      delete liaState[text];
+      keepDraft(msg, naddr);
       if (tab) tab.location.href = liascriptCourseUrl(naddr);
       else window.open(liascriptCourseUrl(naddr), '_blank', 'noopener');
     } catch (err) {
       console.error('Termi: saving the LiaScript draft failed', err);
       tab?.close();
-      liaDrafts[text] = { failed: true };
+      liaState[text] = 'failed';
     }
   }
   // A failed search with no model text to explain it gets a note of its own.
@@ -1543,6 +1562,7 @@
       {/snippet}
 
       {#snippet docActions(
+        /** @type {any} */ msg,
         /** @type {string} */ text,
         /** @type {Array<import('$lib/server/termi/items.js').Item>} */ items
       )}
@@ -1580,24 +1600,22 @@
               type="button"
               class="btn btn-ghost btn-sm"
               data-testid="termi-doc-liascript"
-              disabled={liaDrafts[text]?.busy}
-              onclick={() => openAsCourse(text, items)}
+              disabled={liaState[text] === 'busy'}
+              onclick={() => openAsCourse(msg, text, items)}
             >
-              {#if liaDrafts[text]?.busy}
+              {#if liaState[text] === 'busy'}
                 <span class="loading loading-xs loading-spinner"></span>
               {/if}
               {m.termi_doc_liascript()}
             </button>
           {/if}
         </div>
-        {#if liaDrafts[text]?.naddr}
+        {#if draftOf(msg)}
           <p class="mt-1 text-xs" data-testid="termi-doc-draft-saved">
             {m.termi_doc_draft_saved()}
-            <a href={resolve(`/${liaDrafts[text].naddr}`)} class="link"
-              >{m.termi_doc_draft_edit()}</a
-            >
+            <a href={resolve(`/${draftOf(msg)}`)} class="link">{m.termi_doc_draft_edit()}</a>
           </p>
-        {:else if liaDrafts[text]?.failed}
+        {:else if liaState[text] === 'failed'}
           <p class="mt-1 text-xs text-error" data-testid="termi-doc-draft-failed">
             {m.termi_doc_draft_failed()}
           </p>
@@ -1662,7 +1680,7 @@
               {@render markdownAnswer(msg.text)}
               <!-- sourcesLost: the history cap dropped the outputs — no export without its sources -->
               {#if isDocumentAnswer(msg.text) && !msg.sourcesLost}
-                {@render docActions(msg.text, msg.items ?? [])}
+                {@render docActions(msg, msg.text, msg.items ?? [])}
               {/if}
               {#if msg.actions}
                 <TermiAnswer text="" actions={msg.actions} />
@@ -1716,7 +1734,7 @@
                 {#if textOf(msg)}
                   {@render markdownAnswer(textOf(msg))}
                   {#if !lastStreaming(msg) && isDocumentAnswer(textOf(msg)) && !(/** @type {any} */ (msg.metadata)?.sourcesLost)}
-                    {@render docActions(textOf(msg), searchOf(msg).items)}
+                    {@render docActions(msg, textOf(msg), searchOf(msg).items)}
                   {/if}
                 {:else if searchFailed(msg)}
                   {m.termi_search_failed()}
