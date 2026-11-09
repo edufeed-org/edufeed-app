@@ -21,7 +21,7 @@ const MAX_BODY_CHARS = 2 * MAX_TEXT_CHARS + 2_000;
 
 const str = /** @type {const} */ ({ type: 'string' });
 /** @type {import('ai').JSONSchema7} */
-export const EXTRACT_SCHEMA = {
+const EXTRACT_SCHEMA = {
   type: 'object',
   properties: {
     events: {

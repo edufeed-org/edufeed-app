@@ -252,7 +252,9 @@ const byteLength = (v) => new TextEncoder().encode(JSON.stringify(v)).length;
  * @returns {ConversationContent}
  */
 export function capContent(content, maxBytes = 28 * 1024) {
-  const out = structuredClone(content);
+  // A JSON round-trip, not structuredClone: messages can carry Svelte-reactive
+  // proxies (tool `input`), which structuredClone's class/brand check rejects.
+  const out = JSON.parse(JSON.stringify(content));
   for (const m of out.messages) {
     if (byteLength(out) <= maxBytes) return out;
     for (const inv of m.toolInvocations ?? []) delete inv.output;
