@@ -71,4 +71,23 @@ describe('extractText', () => {
     expect(lines).toHaveLength(3);
     expect(lines[1]).toContain('10.09.2026');
   });
+
+  it('falls back to plain text when a PK-sniffed file with no Office name/MIME is not really a zip', async () => {
+    const bytes = new Uint8Array([
+      ...[0x50, 0x4b, 0x03, 0x04, 0, 0, 0, 0],
+      ...new TextEncoder().encode('hello from a weird file')
+    ]);
+    const file = new File([bytes], 'mystery.unknown');
+    const { text, kind } = await extractText(file);
+    expect(kind).toBe('text');
+    expect(text).toContain('hello from a weird file');
+  });
+
+  it('resolves empty text (never rejects) for a corrupt file with a real Office extension', async () => {
+    const bytes = new Uint8Array([0x50, 0x4b, 0x03, 0x04, 1, 2, 3, 4]);
+    const file = new File([bytes], 'broken.docx');
+    const { text, kind } = await extractText(file);
+    expect(kind).toBe('zip');
+    expect(text).toBe('');
+  });
 });

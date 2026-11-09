@@ -51,17 +51,27 @@ describe('toImportEvents', () => {
     expect(event.title).toBe('?');
   });
 
-  it('gives identical rows the same dTag, and a changed title a different one', () => {
-    const [a, b, c] = toImportEvents({
+  it('collapses two identical rows into a single event (same key for a keyed {#each})', () => {
+    const events = toImportEvents({
+      events: [
+        { title: 'Teamsitzung', startDate: '2026-09-10', startTime: '09:00' },
+        { title: 'Teamsitzung', startDate: '2026-09-10', startTime: '09:00' }
+      ]
+    });
+    expect(events).toHaveLength(1);
+  });
+
+  it('drops a later duplicate dTag but keeps a row with a changed title', () => {
+    const events = toImportEvents({
       events: [
         { title: 'Same', startDate: '2026-09-10', startTime: '09:00' },
         { title: 'Same', startDate: '2026-09-10', startTime: '09:00' },
         { title: 'Different', startDate: '2026-09-10', startTime: '09:00' }
       ]
     });
-    expect(a.dTag).toBe(b.dTag);
-    expect(a.dTag).not.toBe(c.dTag);
-    expect(a.key).toBe(a.dTag);
+    expect(events).toHaveLength(2);
+    expect(events[0].dTag).not.toBe(events[1].dTag);
+    expect(events[0].key).toBe(events[0].dTag);
   });
 
   it('resets an endDate earlier than startDate back to startDate', () => {
@@ -69,6 +79,43 @@ describe('toImportEvents', () => {
       events: [{ title: 'Oops', startDate: '2026-09-10', endDate: '2026-09-01' }]
     });
     expect(event.endDate).toBe('2026-09-10');
+  });
+
+  it('resets an unparseable or impossible endDate back to startDate', () => {
+    const [garbage] = toImportEvents({
+      events: [{ title: 'A', startDate: '2026-09-10', endDate: 'garbage' }]
+    });
+    expect(garbage.endDate).toBe('2026-09-10');
+
+    const [impossible] = toImportEvents({
+      events: [{ title: 'B', startDate: '2026-09-10', endDate: '2026-02-30' }]
+    });
+    expect(impossible.endDate).toBe('2026-09-10');
+  });
+
+  it('rejects out-of-range minutes, leaving the row without a time (allDay)', () => {
+    const [event] = toImportEvents({
+      events: [{ title: 'Odd time', startDate: '2026-09-10', startTime: '9:75' }]
+    });
+    expect(event.startTime).toBeUndefined();
+    expect(event.allDay).toBe(true);
+  });
+
+  it('drops a stray startTime/endTime when the row is marked allDay', () => {
+    const [event] = toImportEvents({
+      events: [
+        {
+          title: 'Forced all-day',
+          startDate: '2026-09-10',
+          startTime: '09:00',
+          endTime: '10:00',
+          allDay: true
+        }
+      ]
+    });
+    expect(event.allDay).toBe(true);
+    expect(event.startTime).toBeUndefined();
+    expect(event.endTime).toBeUndefined();
   });
 
   it('uses a row-index key for problem rows', () => {

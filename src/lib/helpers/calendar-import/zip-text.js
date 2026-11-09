@@ -3,11 +3,24 @@
 // end-of-central-directory record; supports store (method 0) and deflate
 // (method 8) entries via DecompressionStream. zip64 and streamed
 // (data-descriptor) entries are skipped — none of the supported formats
-// produce them for documents this small.
+// produce them for documents this small. Only entries zipToText actually
+// reads are ever decompressed, and each is capped at MAX_ENTRY_BYTES —
+// defense against a zip bomb hidden in an unrelated part/sheet.
 
 const EOCD_SIGNATURE = 0x06054b50;
 const CENTRAL_DIR_SIGNATURE = 0x02014b50;
 const LOCAL_HEADER_SIGNATURE = 0x04034b50;
+const MAX_ENTRY_BYTES = 20 * 1024 * 1024;
+
+/** @param {string} name */
+function isRelevantEntryName(name) {
+  return (
+    name === 'word/document.xml' ||
+    name === 'xl/sharedStrings.xml' ||
+    name === 'content.xml' ||
+    /^xl\/worksheets\/sheet\d+\.xml$/.test(name)
+  );
+}
 
 /**
  * @param {DataView} view
@@ -23,15 +36,41 @@ function findEndOfCentralDirectory(view) {
 }
 
 /**
+ * Decompresses a deflate-raw entry, bounded at MAX_ENTRY_BYTES against a zip
+ * bomb — both the declared size (cheap, no inflate needed) and the actual
+ * decompressed byte count (in case the header understates it).
  * @param {Uint8Array} compressed
+ * @param {number} declaredSize
  * @returns {Promise<Uint8Array>}
  */
-async function inflateRaw(compressed) {
+async function inflateRaw(compressed, declaredSize) {
+  if (declaredSize > MAX_ENTRY_BYTES) {
+    throw new Error(`Zip entry too large to decompress (${declaredSize} bytes declared)`);
+  }
   const stream = new Blob([compressed.slice()])
     .stream()
     .pipeThrough(new DecompressionStream('deflate-raw'));
-  const buf = await new Response(stream).arrayBuffer();
-  return new Uint8Array(buf);
+  const reader = stream.getReader();
+  /** @type {Uint8Array[]} */
+  const chunks = [];
+  let total = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    total += value.byteLength;
+    if (total > MAX_ENTRY_BYTES) {
+      await reader.cancel().catch(() => {});
+      throw new Error('Zip entry exceeded the decompression size limit');
+    }
+    chunks.push(value);
+  }
+  const buf = new Uint8Array(total);
+  let pos = 0;
+  for (const chunk of chunks) {
+    buf.set(chunk, pos);
+    pos += chunk.byteLength;
+  }
+  return buf;
 }
 
 /**
@@ -40,9 +79,17 @@ async function inflateRaw(compressed) {
  * @param {number} localHeaderOffset
  * @param {number} method
  * @param {number} compressedSize
+ * @param {number} uncompressedSize
  * @returns {Promise<Uint8Array>}
  */
-async function readLocalEntry(bytes, view, localHeaderOffset, method, compressedSize) {
+async function readLocalEntry(
+  bytes,
+  view,
+  localHeaderOffset,
+  method,
+  compressedSize,
+  uncompressedSize
+) {
   if (view.getUint32(localHeaderOffset, true) !== LOCAL_HEADER_SIGNATURE) {
     throw new Error('Corrupt zip local header');
   }
@@ -50,7 +97,7 @@ async function readLocalEntry(bytes, view, localHeaderOffset, method, compressed
   const extraLen = view.getUint16(localHeaderOffset + 28, true);
   const dataStart = localHeaderOffset + 30 + nameLen + extraLen;
   const compressed = bytes.subarray(dataStart, dataStart + compressedSize);
-  return method === 0 ? new Uint8Array(compressed) : inflateRaw(compressed);
+  return method === 0 ? new Uint8Array(compressed) : inflateRaw(compressed, uncompressedSize);
 }
 
 /**
@@ -86,10 +133,23 @@ export async function readZipEntries(bytes) {
     const hasDataDescriptor = (flags & 0x0008) !== 0;
     const isDirectory = name.endsWith('/');
 
-    if (!isZip64 && !hasDataDescriptor && !isDirectory && (method === 0 || method === 8)) {
+    if (
+      !isZip64 &&
+      !hasDataDescriptor &&
+      !isDirectory &&
+      (method === 0 || method === 8) &&
+      isRelevantEntryName(name)
+    ) {
       entries.set(
         name,
-        await readLocalEntry(bytes, view, localHeaderOffset, method, compressedSize)
+        await readLocalEntry(
+          bytes,
+          view,
+          localHeaderOffset,
+          method,
+          compressedSize,
+          uncompressedSize
+        )
       );
     }
 
@@ -115,26 +175,60 @@ function decodeXml(bytes) {
   return new TextDecoder('utf-8').decode(bytes);
 }
 
+/**
+ * Joins every `<tagName>…</tagName>` text run in an XML fragment, decoding
+ * entities. Used for xlsx shared strings and inline strings (`t`).
+ * @param {string} xml
+ * @param {string} tagName
+ */
+function joinT(xml, tagName) {
+  const re = new RegExp(`<${tagName}(?:\\s[^>]*)?>([\\s\\S]*?)<\\/${tagName}>`, 'g');
+  return [...xml.matchAll(re)].map((m) => decodeEntities(m[1])).join('');
+}
+
+/**
+ * One paragraph's runs, in document order: `<w:t>` text, `<w:tab/>` → tab,
+ * `<w:br/>` → newline. The word-boundary-safe `<w:t(?:\s[^>]*)?>` keeps this
+ * from also matching `<w:tabs>`/`<w:tab>` the way a plain `<w:t[^>]*>` does
+ * (those live in `<w:pPr>` tab-stop definitions, not run content, and must
+ * not leak into the text or be read as a run).
+ * @param {string} paragraph
+ */
+function paragraphToText(paragraph) {
+  const RUN_RE = /<w:t(?:\s[^>]*)?>([\s\S]*?)<\/w:t>|<w:tab\s*\/>|<w:br\s*\/>/g;
+  let text = '';
+  /** @type {RegExpExecArray | null} */
+  let match;
+  while ((match = RUN_RE.exec(paragraph))) {
+    if (match[1] !== undefined) text += decodeEntities(match[1]);
+    else if (match[0].startsWith('<w:tab')) text += '\t';
+    else text += '\n';
+  }
+  return text;
+}
+
 /** @param {string} xml */
 function docxToText(xml) {
   const paragraphs = xml.match(/<w:p[ >][\s\S]*?<\/w:p>/g) ?? [];
-  return paragraphs
-    .map((p) => {
-      const texts = [...p.matchAll(/<w:t[^>]*>([\s\S]*?)<\/w:t>/g)].map((m) =>
-        decodeEntities(m[1])
-      );
-      return texts.join('');
-    })
-    .join('\n');
+  return paragraphs.map(paragraphToText).join('\n');
 }
 
 /** @param {string} xml sharedStrings.xml content */
 function parseSharedStrings(xml) {
   const items = xml.match(/<si>[\s\S]*?<\/si>/g) ?? [];
-  return items.map((si) => {
-    const texts = [...si.matchAll(/<t[^>]*>([\s\S]*?)<\/t>/g)].map((m) => decodeEntities(m[1]));
-    return texts.join('');
-  });
+  return items.map((si) => joinT(si, 't'));
+}
+
+/**
+ * Column letters ("A", "AA", …) to a 0-based column index.
+ * @param {string} ref a cell reference, e.g. "C7"
+ */
+function columnIndex(ref) {
+  const letters = /^([A-Z]+)\d+$/.exec(ref)?.[1];
+  if (!letters) return -1;
+  let n = 0;
+  for (const ch of letters) n = n * 26 + (ch.charCodeAt(0) - 64);
+  return n - 1;
 }
 
 /**
@@ -149,10 +243,7 @@ function parseCellValue(attrs, inner, sharedStrings) {
     const index = Number(/<v>([^<]*)<\/v>/.exec(inner)?.[1]);
     return sharedStrings[index] ?? '';
   }
-  if (type === 'inlineStr') {
-    const texts = [...inner.matchAll(/<t[^>]*>([\s\S]*?)<\/t>/g)].map((m) => decodeEntities(m[1]));
-    return texts.join('');
-  }
+  if (type === 'inlineStr') return joinT(inner, 't');
   const value = /<v>([^<]*)<\/v>/.exec(inner)?.[1];
   return value === undefined ? '' : decodeEntities(value);
 }
@@ -166,9 +257,21 @@ function worksheetToText(xml, sharedStrings) {
   return rows
     .map((row) => {
       const cells = [...row.matchAll(/<c\b([^>]*?)(?:\/>|>([\s\S]*?)<\/c>)/g)];
-      return cells
-        .map(([, attrs, inner]) => parseCellValue(attrs, inner, sharedStrings))
-        .join('\t');
+      // Cells carry their own column ("r=\"C1\""); a dropped/empty column
+      // between two cells must come out as an empty field, not be skipped.
+      /** @type {string[]} */
+      const values = [];
+      let nextIndex = 0;
+      for (const [, attrs, inner] of cells) {
+        const ref = /\br="([A-Z]+\d+)"/.exec(attrs)?.[1];
+        const index = ref ? columnIndex(ref) : -1;
+        const safeIndex = index >= 0 ? index : nextIndex;
+        values[safeIndex] = parseCellValue(attrs, inner, sharedStrings);
+        nextIndex = safeIndex + 1;
+      }
+      const line = [];
+      for (let i = 0; i < values.length; i++) line.push(values[i] ?? '');
+      return line.join('\t');
     })
     .join('\n');
 }
@@ -190,27 +293,46 @@ function xlsxToText(entries) {
     .join('\n\n');
 }
 
+/**
+ * Replaces the ODF inline markers `<text:tab/>` and `<text:s/>` with their
+ * plain-text equivalents, strips any remaining tags (e.g. `<text:span>`),
+ * then decodes entities.
+ * @param {string} fragment
+ */
+function odfRunsToText(fragment) {
+  return decodeEntities(
+    fragment
+      .replace(/<text:tab\s*\/>/g, '\t')
+      .replace(/<text:s\s*\/>/g, ' ')
+      .replace(/<[^>]+>/g, '')
+  );
+}
+
+// `<text:(p|h)…` with a backreference on the closing tag — not just
+// `<text:p`, which would also grab unrelated elements like a hypothetical
+// `<text:page-number>` by prefix.
+const ODF_PARAGRAPH_RE = /<text:(p|h)\b[^>]*>([\s\S]*?)<\/text:\1>/g;
+
 /** @param {string} xml ODF content.xml */
 function odfToText(xml) {
   const lines = [];
   const blockRe =
-    /<table:table-row\b[^>]*>([\s\S]*?)<\/table:table-row>|<text:p\b[^>]*>([\s\S]*?)<\/text:p>/g;
+    /<table:table-row\b[^>]*>([\s\S]*?)<\/table:table-row>|<text:(p|h)\b[^>]*>([\s\S]*?)<\/text:\2>/g;
+  /** @type {RegExpExecArray | null} */
   let match;
   while ((match = blockRe.exec(xml))) {
-    const [, rowInner, paragraphInner] = match;
+    const [, rowInner, , paragraphInner] = match;
     if (rowInner !== undefined) {
       const cells = [
         ...rowInner.matchAll(/<table:table-cell\b[^>]*>([\s\S]*?)<\/table:table-cell>/g)
       ];
       const cellTexts = cells.map(([, cellInner]) => {
-        const texts = [...cellInner.matchAll(/<text:p\b[^>]*>([\s\S]*?)<\/text:p>/g)].map((m) =>
-          decodeEntities(m[1])
-        );
-        return texts.join(' ');
+        const paragraphs = [...cellInner.matchAll(ODF_PARAGRAPH_RE)];
+        return paragraphs.map((p) => odfRunsToText(p[2])).join(' ');
       });
       lines.push(cellTexts.join('\t'));
     } else {
-      lines.push(decodeEntities(paragraphInner));
+      lines.push(odfRunsToText(paragraphInner));
     }
   }
   return lines.join('\n');

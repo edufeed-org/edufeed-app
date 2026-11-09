@@ -21,7 +21,7 @@ import { bytesToHex } from '@noble/hashes/utils';
  */
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
-const TIME_RE = /^(\d{1,2}):(\d{2})\s*(AM|PM)?$/i;
+const TIME_RE = /^(\d{1,2}):([0-5]\d)\s*(AM|PM)?$/i;
 
 /** @param {string} dateStr */
 function isValidDate(dateStr) {
@@ -76,8 +76,8 @@ function toImportEvent(row, index) {
   const endTime = normalizeTime(row?.endTime);
   const allDay = !!row?.allDay || !startTime;
 
-  let endDate = typeof row?.endDate === 'string' && row.endDate ? row.endDate : startDate;
-  if (endDate < startDate) endDate = startDate;
+  const endDateOk = isValidDate(row?.endDate) && row.endDate >= startDate;
+  const endDate = endDateOk ? row.endDate : startDate;
 
   const kind = allDay ? 31922 : 31923;
   const problem = !titleOk ? 'title' : !dateOk ? 'date' : undefined;
@@ -86,8 +86,8 @@ function toImportEvent(row, index) {
 
   /** @type {ImportEvent} */
   const event = { key, title, startDate, endDate, allDay, kind };
-  if (startTime) event.startTime = startTime;
-  if (endTime) event.endTime = endTime;
+  if (!allDay && startTime) event.startTime = startTime;
+  if (!allDay && endTime) event.endTime = endTime;
   if (typeof row?.location === 'string' && row.location) event.location = row.location;
   if (typeof row?.description === 'string' && row.description) event.description = row.description;
   if (dTag) event.dTag = dTag;
@@ -105,5 +105,21 @@ export function toImportEvents(raw, _options = {}) {
   const rows = Array.isArray(/** @type {any} */ (raw)?.events)
     ? /** @type {any} */ (raw).events
     : [];
-  return rows.map((row, index) => toImportEvent(row, index));
+
+  // Same title+start twice (a re-run on the same text, or the LLM echoing a
+  // row) would otherwise produce two events with the same dTag — and the
+  // same `key`, which crashes a keyed {#each}. Keep only the first.
+  /** @type {Set<string>} */
+  const seenDTags = new Set();
+  /** @type {ImportEvent[]} */
+  const events = [];
+  rows.forEach((row, index) => {
+    const event = toImportEvent(row, index);
+    if (event.dTag) {
+      if (seenDTags.has(event.dTag)) return;
+      seenDTags.add(event.dTag);
+    }
+    events.push(event);
+  });
+  return events;
 }

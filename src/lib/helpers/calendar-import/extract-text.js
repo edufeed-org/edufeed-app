@@ -32,6 +32,17 @@ function stripBom(text) {
   return text.charCodeAt(0) === 0xfeff ? text.slice(1) : text;
 }
 
+/**
+ * @param {File} file
+ * @param {string} ext
+ */
+async function readPlainText(file, ext) {
+  const isHtml = ext === '.html' || ext === '.htm' || file.type === 'text/html';
+  let raw = stripBom(await file.text());
+  if (isHtml) raw = stripHtml(raw);
+  return /�/.test(raw.slice(0, 1000)) ? '' : raw;
+}
+
 /** @param {string} html */
 function stripHtml(html) {
   return html
@@ -71,11 +82,12 @@ export async function defaultLoadPdf(bytes) {
  */
 export async function extractText(file, { loadPdf = defaultLoadPdf, maxChars = 60_000 } = {}) {
   const ext = extensionOf(file.name);
+  const looksLikeZipFormat = ZIP_EXTENSIONS.has(ext) || ZIP_MIME_TYPES.has(file.type);
 
   /** @type {'text'|'pdf'|'zip'} */
   let kind;
   if (ext === '.pdf' || file.type === 'application/pdf') kind = 'pdf';
-  else if (ZIP_EXTENSIONS.has(ext) || ZIP_MIME_TYPES.has(file.type)) kind = 'zip';
+  else if (looksLikeZipFormat) kind = 'zip';
   else if (await sniffsAsZip(file)) kind = 'zip';
   else kind = 'text';
 
@@ -86,13 +98,22 @@ export async function extractText(file, { loadPdf = defaultLoadPdf, maxChars = 6
     text = pages.join('\n\n');
   } else if (kind === 'zip') {
     const bytes = new Uint8Array(await file.arrayBuffer());
-    const entries = await readZipEntries(bytes);
-    text = zipToText(entries);
+    try {
+      const entries = await readZipEntries(bytes);
+      text = zipToText(entries);
+    } catch {
+      // Corrupt zip, an over-the-limit entry (zip-bomb guard), or a
+      // false-positive PK sniff on a file whose name/MIME never claimed to
+      // be an Office doc — a read failure never reaches the caller.
+      if (looksLikeZipFormat) {
+        text = '';
+      } else {
+        kind = 'text';
+        text = await readPlainText(file, ext);
+      }
+    }
   } else {
-    const isHtml = ext === '.html' || ext === '.htm' || file.type === 'text/html';
-    let raw = stripBom(await file.text());
-    if (isHtml) raw = stripHtml(raw);
-    text = /�/.test(raw.slice(0, 1000)) ? '' : raw;
+    text = await readPlainText(file, ext);
   }
 
   const truncated = text.length > maxChars;
